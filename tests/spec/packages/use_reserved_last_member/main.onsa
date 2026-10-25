@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// §15.1, §18.1: the same as `use_reserved_list_member` with the reserved word at the end of a path
+// (`use kp.clock`): E0200, and `zzz` is E0302 (the rule for the last element and for an element of a list is
+// the same, §15.1).
+use kp.clock                                        //~ E0200
+
+pub fn t() -> I32 {
+  zzz()                                             //~ E0302
+}

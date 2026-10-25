@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§11.6", "§18.1"]
+// fixes = 0
+
+// R-50, §15.1: what a `use` can take is a package, a module, an item of a module, a child module, the
+// namespace of a flow and an item of it. The enumerators of an enum (`Shape.Circle`), the associated functions
+// and constants of a type (`Point.new`, `Point.ORIGIN`) are not names a `use` can take (E0302; the text
+// says why and how to write them: through the type, `use shapes.{Shape}` and `Shape.Circle`). The names are
+// failed names, so where they are used nothing more is reported. The type itself is taken as always.
+use shapes.{Shape, Point}
+use shapes.Shape.{Circle}                           //~ E0302
+use shapes.Point.{new}                              //~ E0302
+use shapes.Point.{ORIGIN}                           //~ E0302
+
+pub fn the_failed_names_are_silent() -> Point {
+  let c = Circle(1.0)
+  new(1.0, 2.0)
+}
+
+pub fn the_types_are_taken(s: Shape) -> Shape {
+  s
+}

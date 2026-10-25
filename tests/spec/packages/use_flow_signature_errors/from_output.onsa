@@ -1,0 +1,5 @@
+use dsp.output.bad.{process_inplace}
+
+pub fn f_output() -> I32 {
+  1
+}

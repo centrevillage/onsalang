@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§18.1"]
+
+// S-661, S-670: a `target` member of an `impl` is read by the syntax stage as the top-level declaration is, and a
+// package other than `std` gets the E0200 of the names stage for the whole member. A body in braces is E0002 as
+// in the top-level (target_user_body.onsa), and `target type` and `target const` are not members (E0002).
+struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  target fn level(self) -> F32                      //~ E0200
+  target rt fn bump(inout self)                     //~ E0200
+}
+
+struct Mixer {
+  gain: F32,
+}
+
+impl Mixer {
+  target fn level(self) -> F32 { 1.0 }              //~ E0002
+}
+
+struct Tuner {
+  gain: F32,
+}
+
+impl Tuner {
+  target type Sample                                //~ E0002
+}
+
+struct Clock {
+  gain: F32,
+}
+
+impl Clock {
+  target const RATE: I32 = 1                        //~ E0002
+}

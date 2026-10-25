@@ -82,7 +82,7 @@ priv flow module_flow(x: F32 at sample) -> F32 at sample {
   x
 }
 
-pub use std.math.{sqrt}
+pub use std.math.{sqrt}                             //~ E0200 @1
 
 use std.math.{sin}
 

@@ -1,0 +1,10 @@
+pub struct St {
+  a: F32,
+  b: Nope,                                          //~ E0302
+}
+
+pub flow bad(
+  x: St at sample,
+) -> F32 at sample {
+  1.0
+}

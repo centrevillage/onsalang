@@ -5,9 +5,10 @@
 // The three visibilities across modules (§15.1): `pub` is outside the package, none is inside the package (so
 // another module of it can take the name with a `use`), and `priv` is inside the module alone. The names that
 // the module `util` has with `priv` are E0303 here, whatever the item is (a function, a constant, a struct,
-// an enum, a type). `pub use` takes only a `pub` item (E0303 for one with no visibility word). Taking a name
-// that does not exist is E0302. The meaning of a visibility is checked from W4-03; `pub(pkg)` is not a
-// visibility (E0020), and util.onsa has the item that it was used for with no visibility word.
+// an enum, a type). Taking a name that does not exist is E0302. The meaning of a visibility is checked from
+// W4-03; `pub(pkg)` is not a visibility (E0020), and util.onsa has the item that it was used for with no
+// visibility word (`SHARED`, which another module of the package takes). The re-export `pub use` is E0200 in
+// this version (S-596), so the visibility of a name that it takes is not asked here.
 use util.{in_package}
 use util.{hidden} //~ E0303
 use util.{SECRET} //~ E0303
@@ -15,8 +16,9 @@ use util.{Inner}  //~ E0303
 use util.{Mode}   //~ E0303
 use util.{Sample} //~ E0303
 use util.{Point}
+use util.{SHARED}
 use util.{missing} //~ E0302
-pub use util.{shown}
-pub use util.{SHARED} //~ E0303
+pub use util.{shown}                                //~ E0200 @1
+pub use util.{shown, in_package}                    //~ E0200 @1
 
 pub fn run() -> I32 { shown() + in_package() }

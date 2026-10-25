@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§11.6"]
+// fixes = 0
+
+// §15.1: two `use` of one name are an E0304 on the later `use` in the source, with a note on the earlier one.
+// Here the earlier one takes `process_inplace` from the namespace of a flow (an item the namespace has,
+// §11.6) and the later one takes a function of that name from a module.
+use dsp.synth.gain.{process_inplace}
+use dsp.other.{process_inplace}                     //~ E0304

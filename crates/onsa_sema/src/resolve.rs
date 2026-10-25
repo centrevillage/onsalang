@@ -134,6 +134,9 @@ pub struct ModInfo {
     /// The names its `use` bound: of its body only (S-611). The first of a
     /// name is in the table.
     pub uses: HashMap<String, UseBinding>,
+    /// The names its `pub use` take, the E0200 (§15.1, S-596): failed, and
+    /// an error where another `use` takes them from it ([`UseBinding::Failed`]).
+    pub pub_use_names: HashSet<String>,
     /// Every name its `use` bound, in the order written (E0304,
     /// `crate::names::clash`).
     pub bound: Vec<(String, Span)>,
@@ -173,6 +176,13 @@ pub enum ResolveError {
         span: Span,
         defined: Span,
     },
+    /// `use kp.Shape.{Circle}`: a variant or an associated item of the
+    /// type `ty`, which a `use` does not take (§15.1, R-50).
+    OfAType {
+        ty: String,
+        name: String,
+        span: Span,
+    },
     /// `a.b` where `a` has no members.
     NotANamespace {
         name: String,
@@ -211,6 +221,17 @@ impl ResolveError {
             )
             .with_found(name)
             .with_note(defined, "defined here"),
+            ResolveError::OfAType { ty, name, span } => Diagnostic::new(
+                Stage::Names,
+                Code::E0302,
+                span,
+                format!(
+                    "`{ty}.{name}` is not taken by a `use`: the variants, the associated functions and the \
+                     associated constants of a type are named through it"
+                ),
+            )
+            .with_found(name.clone())
+            .with_rule(format!("take `{ty}`, and write `{ty}.{name}` where it is used")),
             ResolveError::NotANamespace { name, span } => {
                 Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` has no members")).with_found(name)
             }

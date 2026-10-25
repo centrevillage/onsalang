@@ -5,8 +5,11 @@ use std::collections::HashMap;
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, Failed, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit, UseDecl};
+use onsa_syntax::ast::{
+    Ast, ExprId, ExprKind, Failed, GenericParam, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit, UseDecl, Vis,
+};
 
+use super::clash::Unbindable;
 use crate::def::*;
 use crate::resolve::{Import, ModInfo, UseAt};
 use crate::sig::Sema;
@@ -94,19 +97,26 @@ impl<'p> Sema<'p> {
                 let mut at = Place { m, ast, id, item, error, unit, target: false };
                 match &item.kind {
                     ItemKind::Use(u) if matches!(item.failed, Some(Failed::Body | Failed::Heading)) => {
-                        self.cut_use(m, u)
+                        self.cut_use(m, u, item.vis)
                     }
-                    ItemKind::Use(u) => self.a.modules.get_mut(m).imports.push(Import {
-                        path: u.path.clone(),
-                        names: u.names.clone(),
-                        vis: item.vis,
-                        span: item.span,
-                        item: id,
-                    }),
+                    ItemKind::Use(u) => self.collect_use(m, item, id, u),
                     ItemKind::Impl(decl) => self.collect_impl(&at, decl),
-                    ItemKind::Extern(_) => {
+                    ItemKind::Extern(e) => {
                         let d = self.add_def(at.def("<extern>".into(), item.span, DefKind::Unsupported));
                         self.unsupported(d, item.span, Feature::Extern, &[]);
+                        // Its functions and types are names of the module, each
+                        // of its own visibility (§18.1, R-246, S-491), and E0200
+                        // defs, whose uses get no diagnostic.
+                        for &sub in &e.items {
+                            let member = Place { id: sub, item: ast.item(sub), ..at };
+                            let (ItemKind::Fn(onsa_syntax::ast::FnDecl { name, .. }) | ItemKind::OpaqueType { name }) =
+                                &member.item.kind
+                            else {
+                                continue;
+                            };
+                            let md = self.add_def(member.def(name.name.clone(), name.span, DefKind::Unsupported));
+                            self.declare(m, name, md);
+                        }
                     }
                     ItemKind::Test { name, body } => self.collect_test(&at, name, *body, &mut tests),
                     ItemKind::Target(inner) => {
@@ -130,12 +140,61 @@ impl<'p> Sema<'p> {
     /// list, the last name of its path, `double` of `use util.double.`), and
     /// every name not found in the body is an error. One read whole in a unit
     /// with an error of the syntax stage is resolved (S-435).
-    fn cut_use(&mut self, m: ModId, u: &UseDecl) {
-        let read = if u.names.is_none() { u.path.segments.last() } else { None };
-        for name in u.names.iter().flatten().chain(read) {
-            self.fail(m, name);
-        }
+    fn cut_use(&mut self, m: ModId, u: &UseDecl, vis: Vis) {
+        self.fail_taken(m, u, vis);
         self.a.modules.get_mut(m).unread_use = true;
+    }
+
+    /// The names a `use` of `m` takes are failed (S-462), and of a `pub use`
+    /// in the namespace too (S-596).
+    fn fail_taken(&mut self, m: ModId, u: &UseDecl, vis: Vis) {
+        for name in taken_names(u) {
+            self.fail(m, name);
+            if vis == Vis::Pub {
+                self.a.modules.get_mut(m).pub_use_names.insert(name.name.clone());
+            }
+        }
+    }
+
+    /// A `use` of `m` read whole, resolved later ([`Sema::resolve_imports`])
+    /// unless it stops here: a name taken that is no name of a declaration
+    /// (R-266), or a `pub use`, the E0200 at `pub` (§15.1, S-596) whose names
+    /// are failed in the namespace too. The names of one that stops are
+    /// failed, and make no dependency (§18.1).
+    fn collect_use(&mut self, m: ModId, item: &Item, id: ItemId, u: &UseDecl) {
+        // The names taken, and the path before them. Of a list, only
+        // `static` is left to read here: the syntax stage reads the keywords.
+        let before = match (&u.names, u.path.segments.split_last()) {
+            (None, Some((_, before))) => before,
+            _ => &u.path.segments[..],
+        };
+        let stop = taken_names(u).find_map(|name| not_a_declared_name(name, before));
+        let stop = match item.vis {
+            Vis::Pub => Some(stop.unwrap_or_else(|| {
+                let at = item.vis_span.unwrap_or(item.span);
+                let mut form: Vec<&str> = u.path.segments.iter().map(|s| s.name.as_str()).collect();
+                let list = u.names.as_ref().map(|l| l.iter().map(|n| n.name.as_str()).collect::<Vec<_>>().join(", "));
+                let list = list.map(|l| format!("{{{l}}}"));
+                form.extend(list.as_deref());
+                let rule = format!(
+                    "a module that uses the names takes them from the module that defines them (`use {}`)",
+                    form.join(".")
+                );
+                Feature::Reexports.diagnostic(Stage::Names, at, &[]).with_rule(rule)
+            })),
+            _ => stop,
+        };
+        match stop {
+            Some(d) => {
+                self.report_mod(d);
+                self.fail_taken(m, u, item.vis);
+            }
+            None => {
+                let names = u.names.clone();
+                let import = Import { path: u.path.clone(), names, vis: item.vis, span: item.span, item: id };
+                self.a.modules.get_mut(m).imports.push(import);
+            }
+        }
     }
 
     /// The def of a `test`, whose name is one in its module (E0306, §11.8).
@@ -174,11 +233,18 @@ impl<'p> Sema<'p> {
                 DefKind::Flow(FlowDef { inputs: Vec::new(), out: at.error, body: f.body, members: Vec::new() }),
                 None,
             ),
-            ItemKind::Struct(s) => (&s.name, DefKind::Struct(struct_def(Fields::Named(Vec::new()))), None),
+            ItemKind::Struct(s) => {
+                let def = StructDef { generics: at.generics(&s.generics), ..struct_def(Fields::Named(Vec::new())) };
+                (&s.name, DefKind::Struct(def), None)
+            }
             ItemKind::OpaqueType { name } => (name, DefKind::Struct(struct_def(Fields::Opaque)), None),
             ItemKind::Enum(e) => (
                 &e.name,
-                DefKind::Enum(EnumDef { generics: Vec::new(), variants: Vec::new(), derives: Some(Vec::new()) }),
+                DefKind::Enum(EnumDef {
+                    generics: at.generics(&e.generics),
+                    variants: Vec::new(),
+                    derives: Some(Vec::new()),
+                }),
                 None,
             ),
             ItemKind::TypeAlias { name, .. } => (name, DefKind::Alias(at.error), None),
@@ -189,6 +255,9 @@ impl<'p> Sema<'p> {
             _ => return None,
         };
         let d = self.add_def(at.def(name.name.clone(), name.span, kind));
+        if self.a.def(d).as_flow().is_some() {
+            self.generated_defs(d);
+        }
         self.declare(at.m, name, d);
         if let Some(f) = feature {
             self.unsupported(d, item.span, f, &[]);
@@ -279,6 +348,23 @@ impl Place<'_> {
         }
     }
 
+    /// The generic parameters of a type as written, until the signatures
+    /// lower them: a type lowered before names it with their number, and
+    /// which are `const` (§4.5, R-197).
+    fn generics(&self, gs: &[GenericParam]) -> Vec<GenericDef> {
+        let one = |g: &GenericParam| {
+            let (name, kind) = match g {
+                GenericParam::Type { name, .. } => {
+                    (name, GenericKind::Type { bounds: Vec::new(), dup: true, unknown: false })
+                }
+                GenericParam::Const { name, .. } => (name, GenericKind::Const(self.error)),
+                GenericParam::Effect { name } => (name, GenericKind::Effect),
+            };
+            GenericDef { name: name.name.clone(), span: name.span, kind }
+        };
+        gs.iter().map(one).collect()
+    }
+
     /// A `const` and its value when the initializer is an integer literal.
     fn const_def(&self, value: Option<ExprId>) -> ConstDef {
         let int_value = value.and_then(|v| match &self.ast.expr(v).kind {
@@ -304,6 +390,45 @@ impl Place<'_> {
     }
 }
 
+/// The names a `use` takes: those of its list, or with none the last of its
+/// path (`double` of `use util.double`, also when it was cut after it).
+fn taken_names(u: &UseDecl) -> impl Iterator<Item = &Ident> {
+    let last = if u.names.is_none() { u.path.segments.last() } else { None };
+    u.names.iter().flatten().chain(last)
+}
+
+/// The last element of the path of a `use` with no list, read as the name of
+/// a declaration (§15.1, §2.2, R-266): a keyword is E0002, a reserved word its
+/// E0200 (`_` is no element of a path, the syntax stage's E0002). The
+/// elements `before` it are read as names of modules.
+fn not_a_declared_name(name: &Ident, before: &[Ident]) -> Option<Diagnostic> {
+    match super::clash::unbindable(&name.name)? {
+        Unbindable::Reserved(feature) => {
+            return Some(feature.diagnostic(Stage::Names, name.span, &[]).with_found(name.name.clone()));
+        }
+        Unbindable::Keyword => {}
+        // A builtin name of a flow: the E0304 of the names bound.
+        Unbindable::FlowBuiltin => return None,
+    }
+    let n = &name.name;
+    let rule = match before.split_last() {
+        Some((parent, _)) => {
+            let path: Vec<&str> = before.iter().map(|s| s.name.as_str()).collect();
+            let path = path.join(".");
+            format!(
+                "`{n}` is a keyword, which a `use` does not bind: take names from it with a list \
+                 (`use {path}.{n}.{{…}}`), or take `{p}` and write the path from it (`use {path}`, then `{p}.{n}.…`)",
+                p = parent.name
+            )
+        }
+        None => {
+            format!("`{n}` is a keyword, which a `use` does not bind: take names from it with a list (`use {n}.{{…}}`)")
+        }
+    };
+    let msg = format!("expected imported name, found `{n}`");
+    Some(Diagnostic::new(Stage::Names, Code::E0002, name.span, msg).with_found(n.clone()).with_rule(rule))
+}
+
 fn struct_def(fields: Fields) -> StructDef {
     StructDef { generics: Vec::new(), fields, derives: Some(Vec::new()), flow_ty: None }
 }
@@ -318,6 +443,7 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
         children: HashMap::new(),
         items: HashMap::new(),
         uses: HashMap::new(),
+        pub_use_names: Default::default(),
         bound: Vec::new(),
         imports: Vec::new(),
         deps: Vec::new(),

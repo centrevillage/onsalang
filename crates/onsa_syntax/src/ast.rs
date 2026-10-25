@@ -271,6 +271,9 @@ pub struct Item {
     pub span: Span,
     pub attrs: Vec<Attr>,
     pub vis: Vis,
+    /// The first word of [`Item::vis`] when one was kept (the E0200 of
+    /// `pub use`, §15.1, S-596).
+    pub vis_span: Option<Span>,
     pub kind: ItemKind,
     /// The unit of the item has a diagnostic of the syntax stage (spec §18.1,
     /// S-59, R-71): the later stages do not check its body, and its uses get

@@ -1,0 +1,6 @@
+use a.{g}
+use b.{g}
+
+pub fn through_the_chain() -> I32 {
+  g()
+}

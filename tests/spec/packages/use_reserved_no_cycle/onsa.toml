@@ -1,0 +1,3 @@
+[package]
+name = "use_reserved_no_cycle"
+edition = "2026"

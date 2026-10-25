@@ -1,0 +1,5 @@
+use a.{f}
+
+pub fn tick() -> I32 {
+  f()
+}

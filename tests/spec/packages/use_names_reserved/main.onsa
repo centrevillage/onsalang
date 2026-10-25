@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§2.2", "§18.1"]
+// fixes = 0
+
+// R-266: the name a `use` takes is E0200 when it is a reserved word (`clock`, `when`, `reset_if`, `ser`), at the
+// word: the last name of a path (`use kp.clock`), the head of a path of one name (`use clock`) and an element of
+// a list (`use kp.{clock}`). The three lines that take `clock` clash with nothing (a failed name is no binding),
+// and the word where it is used is the E0200 of the word and nothing more.
+use kp.clock                                        //~ E0200 @8
+use clock                                           //~ E0200 @5
+use kp.{clock}                                      //~ E0200 @9
+use kp.when                                         //~ E0200 @8
+use kp.{reset_if}                                   //~ E0200 @9
+use ser                                             //~ E0200 @5
+
+pub fn the_word_where_a_name_is_read() -> U32 {
+  clock.beat()                                      //~ E0200 @3
+}

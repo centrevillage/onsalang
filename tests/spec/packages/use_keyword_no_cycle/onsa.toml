@@ -1,0 +1,3 @@
+[package]
+name = "use_keyword_no_cycle"
+edition = "2026"

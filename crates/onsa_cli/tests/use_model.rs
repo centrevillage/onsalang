@@ -45,20 +45,23 @@
 //!   is nothing (E0302 or E0308, W4-04);
 //! - the empty list and the broken syntax (`use_shapes.rs`), an item of the own module taken by a `use`
 //!   (E0304, S-675), a module named like the package, a path headed by a name another `use` bound to a
-//!   module that is not the new head (the spec says "bound by a `use` of the module"), `fx.` followed by
-//!   the path of the module itself (the part of the package name and the part of the module taken off in
-//!   one candidate);
-//! - the module that takes itself with modules below it or with other names in the list, and a `use` that
-//!   fails in the middle of a path where the module read last has modules below it or is not at the root, or
-//!   in a list with other names (S-678, the edges of a failed `use`).
+//!   module that is not the new head (the spec says "bound by a `use` of the module");
+//! - the module that takes itself with modules below it, and a `use` that fails in the middle of a path where
+//!   the module read last has modules below it or is not at the root, or in a list with other names that
+//!   is not the module itself (S-678, the edges of a failed `use`).
+//!
+//! The decisions of the group 60 are in the model: a list that has the module itself and other names
+//! (`use d.{b, e}` in `d/b.onsa`) fails in the one element and takes the others (S-685); a candidate that adds
+//! a `use` on a cycle that is there already closes the cycle (S-686); the module at the root that is read
+//! first and closes a cycle leaves no candidate and does not move to the own name (S-687); the package name
+//! followed by the own absolute path is taken off whole (`fx.a.b.f()` in `a/b.onsa` is `f()`, S-684).
 //!
 //! Provisional (the spec has not decided; the model follows the implementation of today, and each is in
-//! one place): the edges of a failed `use` (`failed_use_edges`, S-678) and the cases where the E0310 of a
-//! cycle hides the E0302 of a failed `use` of the cycle (`expect`); the note of E0310 that shows how to
-//! narrow the path (`narrowing_cuts`, S-683). Two cases the model leaves to either answer: a `use` that
-//! joins a cycle there is already (`safety`), and a path read both from the module at the root and from the
-//! module itself when the first closes a cycle (`body_cand`). The candidates of the names stage after an
-//! E0304 (S-675) are not in the model: it writes no E0304.
+//! one place): the cases where the E0310 of a cycle hides the E0302 of a failed `use` of the cycle
+//! (`expect`: the place of the E0310 is not fixed, so the E0302 of a `use` that is partly bound is left to
+//! either answer in a module of a cycle); the note of E0310 that shows how to narrow the path
+//! (`narrowing_cuts`, S-683). The candidates of the names stage after an E0304 (S-675) are not in the model:
+//! it writes no E0304.
 //!
 //! The packages: seed `n` of 160, in four tests (40 each) that run side by side, and the loop of candidates
 //! in two (every fourth seed, 40 each); the modules come from a pool of 14 paths (some with no file of
@@ -370,24 +373,23 @@ fn resolve_use(t: &Tree, mid: usize, u: &Use) -> (Option<Why>, Vec<Bind>) {
             }
         }
     }
-    for b in &binds {
-        match &b.ent {
-            Ent::Mod(id) if *id == mid => return (Some(Why::SelfUse), vec![]),
-            Ent::Item(m, _) if *m == mid => return (Some(Why::OwnItem), vec![]),
-            _ => {}
-        }
+    if binds.iter().any(|b| matches!(&b.ent, Ent::Item(m, _) if *m == mid)) {
+        return (Some(Why::OwnItem), vec![]);
+    }
+    // S-679, S-685: the module itself is the one element that fails; the other elements of the list are taken.
+    if binds.iter().any(|b| matches!(&b.ent, Ent::Mod(id) if *id == mid)) {
+        binds.retain(|b| !matches!(&b.ent, Ent::Mod(id) if *id == mid));
+        return (Some(Why::SelfUse), binds);
     }
     (None, binds)
 }
 
 /// The modules a `use` depends on (S-594): a module taken is the module and every module below it, an item
-/// taken is the module of the item; the module that writes the `use` and `std` are left out. A `use` that
-/// failed in the names stage makes none (§15.1, S-678; the generator writes no list that fails in part).
-fn use_edges(t: &Tree, mid: usize, why: &Option<Why>, binds: &[Bind]) -> Vec<usize> {
+/// taken is the module of the item; the module that writes the `use` and `std` are left out. A name that
+/// failed in the names stage is no dependency (§15.1, S-678), and only the names that were bound are in
+/// `binds` (a `use` that fails whole has none).
+fn use_edges(t: &Tree, mid: usize, binds: &[Bind]) -> Vec<usize> {
     let mut out = Vec::new();
-    if why.is_some() {
-        return out;
-    }
     for b in binds {
         match &b.ent {
             Ent::Mod(id) if !t.nodes[*id].ext => out.extend(t.below(*id).into_iter().filter(|&x| x != mid)),
@@ -428,7 +430,7 @@ fn scope(p: &Prog, mid: usize) -> Scope {
         .collect();
     let mut map: BTreeMap<String, Bind> = BTreeMap::new();
     let mut clash = false;
-    for e in evals.iter().filter(|e| e.why.is_none()) {
+    for e in &evals {
         for b in &e.binds {
             if map.contains_key(&b.name) || t.nodes[mid].items.contains(&b.name) {
                 clash = true;
@@ -444,9 +446,9 @@ fn scope(p: &Prog, mid: usize) -> Scope {
                 e.why = Some(Why::Bound(b.clone()));
             }
         }
-        e.edges = use_edges(t, mid, &e.why, &e.binds);
+        e.edges = use_edges(t, mid, &e.binds);
         if e.why.is_some() {
-            failed.extend(u.names());
+            failed.extend(u.names().into_iter().filter(|n| !e.binds.iter().any(|b| &b.name == n)));
         }
     }
     Scope { evals, binds: map, clash, failed }
@@ -497,7 +499,7 @@ fn narrowing_cuts(p: &Prog, comp: &BTreeSet<usize>) -> bool {
     let t = &p.tree;
     let mut edges: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
     for m in &p.mods {
-        for e in scope(p, m.id).evals.iter().filter(|e| e.why.is_none()) {
+        for e in &scope(p, m.id).evals {
             for b in &e.binds {
                 let targets = match &b.ent {
                     Ent::Mod(c) if !t.nodes[*c].file => t.below(*c),
@@ -545,6 +547,8 @@ enum Class {
     OwnName,
     /// The head is the own package name.
     OwnPkg,
+    /// The head is the own package name and the own absolute path of the module follows it: its length.
+    OwnPkgAbs(usize),
     /// The head is a module at the root that no `use` took.
     Root,
     /// The head is a module at the root, and the name of the module itself, the module being below the root.
@@ -594,7 +598,8 @@ fn classify(p: &Prog, mid: usize, sc: &Scope, b: &Body) -> Class {
         return Class::OwnAbs(k);
     }
     if head == "fx" {
-        return Class::OwnPkg;
+        let rest = &b.segs[1..];
+        return if rest.len() > k && rest[..k] == own[..] { Class::OwnPkgAbs(k) } else { Class::OwnPkg };
     }
     if *head == own[k - 1] {
         return match t.child(ROOT, head) {
@@ -635,8 +640,6 @@ enum Cand {
     None,
     /// One is given, and this is what it does.
     Some(Edit),
-    /// The spec has no single answer for this fault (the generator keeps these few).
-    Either,
 }
 
 fn apply_edit(p: &Prog, e: &Edit) -> Prog {
@@ -656,28 +659,19 @@ fn apply_edit(p: &Prog, e: &Edit) -> Prog {
     q
 }
 
-#[derive(PartialEq)]
-enum Safety {
-    Safe,
-    Unsafe,
-    /// Safe by every rule but one that the spec leaves open: the `use` joins a cycle that is there already.
-    Unclear,
-}
-
-// SPEC-GAP(S-686): R-268 says the `use` "closes no cycle". When the module and the module the new `use` takes
-// are in one component already, no cycle is closed that was not there, and one more is joined; the spec
-// does not say which of the two it means, so the candidate is `Unclear` and either answer passes.
-/// §18.1: the candidate is safe when, applied alone, what it was given for is read whole, no name is bound
-/// twice and no cycle is closed (the components of the dependencies are the same).
-fn safety(p: &Prog, e: &Edit) -> Safety {
+/// §18.1, S-686: the candidate is safe when, applied alone, what it was given for is read whole, no name is
+/// bound twice and no cycle is closed: the components of the dependencies are the same, and the edges that
+/// the new `use` lines add are on no cycle (a `use` between two modules of a cycle that is there already
+/// closes a cycle too).
+fn safe(p: &Prog, e: &Edit) -> bool {
     let after = apply_edit(p, e);
     let before_comps = comps(p);
     if before_comps != comps(&after) {
-        return Safety::Unsafe;
+        return false;
     }
     let sc = scope(&after, e.mid());
     if sc.clash {
-        return Safety::Unsafe;
+        return false;
     }
     let read_whole = match e {
         Edit::Use { ui, repl, .. } => (*ui..*ui + repl.len()).all(|i| sc.evals[i].why.is_none()),
@@ -687,27 +681,22 @@ fn safety(p: &Prog, e: &Edit) -> Safety {
         }
     };
     if !read_whole {
-        return Safety::Unsafe;
+        return false;
     }
     // The modules the new `use` lines take: a cycle through the module and one of them is closed by the
-    // line, or is the one there already when the two are in one component.
+    // line, or is the one there already when the two are in one component (S-686).
     let fresh: Vec<usize> = match e {
         Edit::Use { ui, repl, .. } => (*ui..*ui + repl.len()).flat_map(|i| sc.evals[i].edges.clone()).collect(),
         Edit::Body { add: Some(_), .. } => sc.evals.last().unwrap().edges.clone(),
         Edit::Body { add: None, .. } => vec![],
     };
-    let joins = fresh.iter().any(|t| before_comps.iter().any(|c| c.contains(&e.mid()) && c.contains(t)));
-    if joins { Safety::Unclear } else { Safety::Safe }
+    !fresh.iter().any(|t| before_comps.iter().any(|c| c.contains(&e.mid()) && c.contains(t)))
 }
 
 fn checked(p: &Prog, e: Option<Edit>) -> Cand {
     match e {
-        Some(e) => match safety(p, &e) {
-            Safety::Safe => Cand::Some(e),
-            Safety::Unsafe => Cand::None,
-            Safety::Unclear => Cand::Either,
-        },
-        None => Cand::None,
+        Some(e) if safe(p, &e) => Cand::Some(e),
+        _ => Cand::None,
     }
 }
 
@@ -767,23 +756,21 @@ fn body_cand(p: &Prog, mid: usize, bi: usize) -> Cand {
         ),
         Class::RootTie => {
             // The module at the root is read first; when the path is not read whole that way, the name of
-            // the module itself is (S-673).
-            // SPEC-GAP(S-687): when the root reading is read whole and closes a cycle, the spec does not
-            // say whether the name of the module itself is read then; either answer passes.
+            // the module itself is (S-673). When the root reading is read whole and closes a cycle there is
+            // no candidate: the name of the module itself is not read then (S-687).
             let root = Edit::Body { mid, bi, segs: b.segs.clone(), add: add_head(&sc, std::slice::from_ref(head)) };
             let after = apply_edit(p, &root);
             let sc2 = scope(&after, mid);
             if classify(&after, mid, &sc2, &after.module(mid).bodies[bi]) == Class::Ok {
-                match safety(p, &root) {
-                    Safety::Safe => Cand::Some(root),
-                    _ => Cand::Either,
-                }
+                checked(p, Some(root))
             } else {
                 checked(p, strip_own(p, mid, &sc, bi, &b.segs[1..]))
             }
         }
         Class::OwnName => checked(p, strip_own(p, mid, &sc, bi, &b.segs[1..])),
         Class::OwnAbs(k) => checked(p, strip_own(p, mid, &sc, bi, &b.segs[k..])),
+        // S-684: the package name and the own absolute path that follows it are taken off together.
+        Class::OwnPkgAbs(k) => checked(p, strip_own(p, mid, &sc, bi, &b.segs[1 + k..])),
         Class::OwnPkg => {
             let rest = &b.segs[1..];
             if rest.len() < 2 {
@@ -883,10 +870,19 @@ fn gen_use(r: &mut Rng, p: &Prog, mid: usize) -> Option<Use> {
             _ => Use::new(&["zz"], Some(&["f"])),
         }),
         85..=89 => {
-            // The module takes itself (S-679); only in a module with no module below it.
+            // The module takes itself (S-679); only in a module with no module below it. In a list it can have
+            // other names of the module above (S-685: they are taken, the module itself is the one that fails).
             let own = t.path(mid);
             if own.len() >= 2 && r.chance(50) {
-                Some(Use { segs: own[..own.len() - 1].to_vec(), list: Some(vec![own.last().unwrap().clone()]) })
+                let last = own.last().unwrap().clone();
+                let parent = t.nodes[mid].parent.unwrap();
+                let others: Vec<String> = t.members(parent).into_iter().filter(|m| *m != last).collect();
+                let mut names = vec![last];
+                if !others.is_empty() && r.chance(60) {
+                    names.extend(pick_some(r, &others, 1, 2));
+                    r.shuffle(&mut names);
+                }
+                Some(Use { segs: own[..own.len() - 1].to_vec(), list: Some(names) })
             } else {
                 Some(Use { segs: own, list: None })
             }
@@ -957,8 +953,6 @@ fn add_use(p: &mut Prog, mid: usize, u: Use, acyclic: bool) -> bool {
     match &ev.why {
         Some(Why::OwnItem) => return false,
         Some(Why::SelfUse) if !t.is_leaf(mid) => return false,
-        // SPEC-GAP(S-685): a list that has the module itself among other names (`use d.{b, e}` in `d/b.onsa`).
-        Some(Why::SelfUse) if u.list.as_ref().is_some_and(|l| l.len() > 1) => return false,
         Some(Why::Stopped(l)) if !t.nodes[*l].ext => {
             let zz_list = u.segs.len() == 1 && u.list.as_deref() == Some(&["zz".to_string()][..]);
             let planned = t.is_leaf(*l)
@@ -1092,6 +1086,7 @@ fn add_body(p: &mut Prog, mid: usize, b: Body) -> bool {
                 None => return false,
             }
         }
+        Class::OwnPkgAbs(k) => b.segs.get(1 + k).and_then(|r0| t.child(mid, r0).map(|c| (r0.clone(), Ent::Mod(c)))),
         Class::OwnName | Class::OwnAbs(_) | Class::RootTie => {
             let k = if let Class::OwnAbs(k) = class { k } else { 1 };
             match b.segs.get(k) {
@@ -1106,17 +1101,6 @@ fn add_body(p: &mut Prog, mid: usize, b: Body) -> bool {
             if bound.ent != ent {
                 return false;
             }
-        }
-    }
-    if matches!(class, Class::OwnPkg) {
-        // SPEC-GAP(S-684): the candidate of `fx.` followed by the module itself (`fx.a.b.g()` in `a/b.onsa`,
-        // `fx.d.f()` in `d.onsa`): the part of the package name is taken off and what is left names the
-        // module itself, which S-673 takes off too; the spec does not say that the two are taken off in one
-        // candidate. The generator does not write the form.
-        let own = t.path(mid);
-        let rest = &b.segs[1..];
-        if t.nodes[mid].items.contains(&rest[0]) || rest.starts_with(&own) || rest[0] == own[own.len() - 1] {
-            return false;
         }
     }
     *p = q;
@@ -1208,18 +1192,29 @@ fn key_in(texts: &Texts, d: &Diag) -> String {
 struct Expect {
     /// The sites of an E0302.
     e0302: BTreeSet<Site>,
+    /// The sites of an E0302 that may be there or not: a `use` that is partly bound (S-685), in a module of a
+    /// cycle, where the E0310 may be the diagnostic that the unit reports (§18.1; the place of the E0310 is
+    /// not fixed).
+    maybe: BTreeSet<Site>,
     comps: BTreeSet<BTreeSet<usize>>,
 }
 
 fn expect(p: &Prog) -> Expect {
     let cs = comps(p);
     let mut e0302 = BTreeSet::new();
+    let mut maybe = BTreeSet::new();
     for m in &p.mods {
         let sc = scope(p, m.id);
         for (i, ev) in sc.evals.iter().enumerate() {
-            // A failed `use` makes no dependency (S-678), so no E0310 hides its E0302.
+            // A `use` that failed whole makes no dependency (S-678), so no E0310 hides its E0302. One that
+            // is partly bound has the edges of the names that were bound, and in a module of a cycle the
+            // E0310 may be on it.
             if ev.why.is_some() {
-                e0302.insert(Site::Use(m.id, i));
+                if !ev.binds.is_empty() && cs.iter().any(|c| c.contains(&m.id)) {
+                    maybe.insert(Site::Use(m.id, i));
+                } else {
+                    e0302.insert(Site::Use(m.id, i));
+                }
             }
         }
         for bi in 0..m.bodies.len() {
@@ -1230,7 +1225,7 @@ fn expect(p: &Prog) -> Expect {
             }
         }
     }
-    Expect { e0302, comps: cs }
+    Expect { e0302, maybe, comps: cs }
 }
 
 fn cand_of(p: &Prog, s: &Site) -> Cand {
@@ -1299,8 +1294,9 @@ struct Stats {
     body_faults: usize,
     given: usize,
     withheld: usize,
-    either: usize,
     applied: usize,
+    /// The `use` lines that have the module itself and other names (S-685).
+    partial_self: usize,
     shapes_compared: usize,
     cycles: usize,
     notes_checked: usize,
@@ -1347,6 +1343,12 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
     st.packages += 1;
     st.with_cycles += !ex.comps.is_empty() as usize;
     st.use_faults += ex.e0302.iter().filter(|s| matches!(s, Site::Use(..))).count();
+    st.partial_self += p
+        .mods
+        .iter()
+        .flat_map(|m| scope(&p, m.id).evals)
+        .filter(|ev| ev.why == Some(Why::SelfUse) && !ev.binds.is_empty())
+        .count();
     st.body_faults += ex.e0302.iter().filter(|s| matches!(s, Site::Body(..))).count();
     let what = format!("seed {seed}");
     let mut problems = Vec::new();
@@ -1363,8 +1365,9 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
             problems.push(format!("{what}: no E0302 for {k}"));
         }
     }
+    let maybe: BTreeSet<String> = ex.maybe.iter().map(|s| key_of(&p, s)).collect();
     for k in sites.keys() {
-        if !expected.contains(k) {
+        if !expected.contains(k) && !maybe.contains(k) {
             problems.push(format!("{what}: an E0302 for {k}, which the model reads whole"));
         }
     }
@@ -1430,10 +1433,6 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
             Cand::Some(_) => {
                 st.given += 1;
                 "given"
-            }
-            Cand::Either => {
-                st.either += 1;
-                "either"
             }
         };
         *st.kinds.entry(format!("{} {outcome}", kind_of(&p, site))).or_default() += 1;
@@ -1513,13 +1512,16 @@ fn sweep(chunk: u64) {
     assert!(st.given >= 150 && st.withheld >= 250, "candidates: {st:?}");
     assert!(st.shapes_compared >= 150 && st.applied >= 150, "applied: {st:?}");
     assert!(st.notes_checked >= 2, "notes of E0310: {st:?}");
+    assert!(st.partial_self >= 1, "a `use` with the module itself and other names (S-685): {st:?}");
     for kind in [
         "body OwnAbs given",
         "body OwnName given",
         "body OwnPkg given",
+        "body OwnPkgAbs given",
         "body Root given",
         "body Std given",
         "body RootTie given",
+        "body RootTie withheld",
         "body Unknown withheld",
         "use Bound-module given",
         "use Bound-item withheld",

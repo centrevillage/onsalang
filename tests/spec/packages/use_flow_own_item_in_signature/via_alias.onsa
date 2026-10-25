@@ -1,0 +1,5 @@
+use via_alias.f.{process_inplace}
+type T = process_inplace                              //~ E0302
+pub flow f(x: T at sample) -> F32 at sample {
+  1.0
+}

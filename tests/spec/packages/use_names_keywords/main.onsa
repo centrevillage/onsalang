@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§2.2", "§18.1"]
+// fixes = 0
+
+// R-266: the name a `use` takes (an element of the list, or the last name of a path with no list) is read
+// by the rule of the name of a declaration: a keyword is E0002 (`use std.test`, `use match`).
+// The elements before it are module names, and the keyword is a name there (`match.onsa`, `std.test`).
+// The same name twice (`test` here is taken by two lines) clashes with nothing: a failed name is no binding.
+use std.test                                        //~ E0002
+use std.{test}                                      //~ E0002
+use match                                           //~ E0002
+
+pub fn fine() -> I32 {
+  1
+}

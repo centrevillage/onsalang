@@ -26,13 +26,14 @@ pub(crate) use cycles::ImportGraph;
 /// candidates read the graph). A `use` reads the tables of the tree, the
 /// prelude and the items, never another `use` (§15.1), so the modules are
 /// resolved in any order. The names of the clashes are errors where they
-/// are used (§18.1, S-675), so they are known before what reads them.
+/// are used (§18.1, S-675), so they are known before what reads them. The
+/// items a flow generates are made with it, and a `use` of one its signature
+/// does not give fails once the signatures are lowered
+/// ([`Sema::fail_ungenerated`], R-50).
 pub(crate) fn collect_names(s: &mut Sema<'_>) {
     s.build_module_tree();
     prelude::build(&mut s.a);
     s.collect_items();
-    // Before the signatures for now; after the generated items of the flows
-    // that are absent from W4-03 U3b2, whose `use` fail (S-462).
     s.check_item_clashes();
     for m in 0..s.a.modules.mods.len() {
         s.resolve_imports(ModId(m as u32));

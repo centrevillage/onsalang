@@ -770,13 +770,6 @@ reasons = ["S-110", "S-101", "S-116", "S-29", "S-44"]
 until = "W7-07"
 note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/pkg_modules"
-reasons = ["R-84"]
-until = "W4-03"
-note = "at は W3-10 で通るが、use dsp.synth.limited.{Params}（flow の名前空間の項目の use、§11.6）が E0302。収集と use の段は W4-03。その use を外すと 4 件の test が通る"
-
 # --- W1-06: 生成した C の検査（gate の C の項目）の実装待ち（2026-10-07）
 
 [[pending]]
@@ -1473,13 +1466,6 @@ target = "tests/spec/semantics/infer_pkg"
 reasons = ["R-06", "S-174", "R-157"]
 until = "W8-06"
 note = "main.onsa の値の match（リテラルのパターン、列挙子の中のリテラル）が降下で E0200。推論は W2-06 で通る（§4.5、§15.1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/imported_generic_pkg"
-reasons = ["R-152"]
-until = "W4-05"
-note = "main より後ろに並ぶモジュールの総称の struct を、シグネチャで型引数付きで使うと E0302（takes 0 type argument(s)）。R-152"
 
 [[pending]]
 kind = "test-case"
@@ -2257,20 +2243,6 @@ note = "取り込んだモジュールに無い名前の E0302 が今は E0401�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/use_flow_generated_items"
-reasons = ["R-50"]
-until = "W4-03"
-note = "flow の生成項目（State、Params）を use で取り込めない（U3b）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow/generated_before_flow.onsa"
-reasons = ["R-50"]
-until = "W4-03"
-note = "flow より前に書いた const と fn の型の g.Params が E0302（生成項目を作る段。U3b か U5）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/module/overlap_local_stops_unit.onsa"
 reasons = ["S-681", "S-79"]
 until = "W4-04"
@@ -2282,3 +2254,53 @@ target = "tests/spec/packages/failed_use_empty_list"
 reasons = ["S-515"]
 until = "W5-11"
 note = "空の並び use util.{} の E0002（S-515）が出ない。何も取り込まず何も黙らせない部分は failed_names.rs の an_empty_list_takes_no_name_and_silences_nothing（U3b1）で通る"
+
+# --- W4-03 U3b2: 名前の段の E0200 と生成項目の事例のうち、後の単位・作業の機能で通るもの（2026-10-25）。
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/generic_struct_import_counts"
+reasons = ["R-258", "R-197"]
+until = "W4-05"
+note = "取り込んだ総称の型の型引数の数の誤りは型の位置の E0412（S-103）。今は E0302 で、型引数の無い Pair は何も出ない"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/target_user_impl.onsa"
+reasons = ["S-661", "S-670"]
+until = "W5-02"
+note = "impl のメンバの target fn を構文の段が読み、std の外は名前の段の E0200。今は構文の段の E0002"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_flow_rendered"
+reasons = ["R-264"]
+until = "W7-03"
+note = "flow の名前空間に Rendered を作らない（R-264）。use と使う所が E0302"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_flow_params_default"
+reasons = ["S-625", "R-147"]
+until = "W7-03"
+note = "params_default は Onsa の名前空間から外れる（S-625）。今は名前空間にあり、use が通る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/pub_use_child_module_missing_name"
+reasons = ["R-254", "S-611"]
+until = "W4-04"
+note = "取り込んだ子モジュールに無い名前の inner.g() が E0302 でなく E0401（R-254）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/extern_block_members_other_module"
+reasons = ["R-246", "S-36"]
+until = "W4-03"
+note = "可視性の語の無い extern のメンバをパッケージの中に見せる意味は U4。今は他のモジュールの use が E0303"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_reserved_list_member"
+reasons = ["R-272"]
+until = "W4-03"
+note = "並びの要素の予約語の use kp.{clock} がモジュールの見つからない名前を全て黙らせる（R-272、U3d）"

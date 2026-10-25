@@ -1,0 +1,5 @@
+pub flow bad(
+  x: [Nope; 2] at sample,                              //~ E0302
+) -> [F32; 2] at sample {
+  [1.0, 1.0]
+}

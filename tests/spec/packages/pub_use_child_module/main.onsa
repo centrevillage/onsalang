@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-596: the `pub use` of `util.inner` is E0200, and `main` has a child module of the same name
+// (`main/inner.onsa`). The `use` of another module reads `main.inner` as the child module, so `use main.{inner}`
+// takes the child (`inner.h()` is the child's `h`, not the `inner` of `util`), and the path through it,
+// `use main.inner.{h}`, is fine. (The name the child does not have, `inner.g()`, is in
+// `pub_use_child_module_missing_name`.)
+pub use util.inner                                  //~ E0200 @1

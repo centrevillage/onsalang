@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§2.2"]
+// fixes = 0
+
+// R-266, S-678: a `use` that takes a name that is a keyword is E0002 and a failed name, so it is no
+// dependency (E0310, §15.1). `match.onsa` takes `a` and `a` takes `match` (here), and `kw/match.onsa` takes `b`
+// while `b` takes `match` by a list: no cycle. The only diagnostics are the two E0002.
+use match                                           //~ E0002
+
+pub fn f() -> I32 {
+  1
+}

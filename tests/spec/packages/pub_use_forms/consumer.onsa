@@ -1,0 +1,7 @@
+// The names that a `pub use` of `main` took are failed names for the module that takes them from `main`
+// too: no E0302 for them, and nothing where they are used (S-596, §18.1).
+use main.{shown, other}
+
+pub fn through_main() -> I32 {
+  shown() + other()
+}

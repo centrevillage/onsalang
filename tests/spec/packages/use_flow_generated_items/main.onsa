@@ -7,6 +7,8 @@
 // `use dsp.synth.voice.{State, Params}` takes items of it (§11.6, §15.1). The generated names are
 // also written through the namespace (`voice.Params`). No diagnostic. This is the taking of the
 // generated items (W4-03 U3b); the case is kept apart from `use_flow_namespace_position` for it.
+// (The call of `voice.init` is not here: the arguments of it depend on the inputs of the flow, R-264.)
+// `State` is Affine (§11.6), so `keep` takes and returns it as an owned value (`move s`, §5.2, §5.4).
 use dsp.synth.{voice}
 use dsp.synth.voice.{State, Params}
 
@@ -18,6 +20,6 @@ pub fn mk2() -> voice.Params {
   voice.Params { gain: 1.0 }
 }
 
-pub fn start() -> State {
-  voice.init(48000.0)
+pub fn keep(move s: State) -> State {
+  s
 }

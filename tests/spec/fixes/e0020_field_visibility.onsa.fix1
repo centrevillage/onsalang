@@ -53,6 +53,6 @@ struct Inner {
   priv b: I32,
 }
 
-pub use std.dsp.{db_to_amp}
+pub use std.dsp.{db_to_amp}                         //~ E0200 @1
 
 use std.math.{sin}

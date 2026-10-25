@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// R-39 (`tests/review-phase1/types/reexp`): a chain of re-exports, `a` re-exports `b`'s, which re-exports `c`'s.
+// Each `pub use` is E0200 in this version (S-596), and the name `g` that they take is a failed name for the
+// `use` of `d`: two `use` lines of the name `g` from two modules clash with nothing and `g()` is silent.
+pub use b.{g}                                       //~ E0200 @1

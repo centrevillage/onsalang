@@ -1,0 +1,3 @@
+pub fn after() -> U32 {
+  4
+}

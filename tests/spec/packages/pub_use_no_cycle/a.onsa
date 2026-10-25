@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-596, S-678: a name taken by an E0200 `pub use` is a failed name, so it is no dependency (E0310, §15.1).
+// `a` and `b` take each other with `pub use` and there is no cycle; `c` takes `d` with `pub use` while `d`
+// takes `c` with a plain `use`, and there is no cycle either. The only diagnostics are the E0200.
+pub use b.{g}                                       //~ E0200 @1
+
+pub fn f() -> I32 {
+  1
+}

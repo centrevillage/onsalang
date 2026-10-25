@@ -1,0 +1,5 @@
+use dsp.missing_clock.bad.{process_inplace}
+
+pub fn f_missing_clock() -> I32 {
+  1
+}

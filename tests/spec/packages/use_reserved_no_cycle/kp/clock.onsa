@@ -1,0 +1,5 @@
+use c.{j}
+
+pub fn tick() -> I32 {
+  j()
+}

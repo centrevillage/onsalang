@@ -1,0 +1,3 @@
+[package]
+name = "use_flow_nested_error_types"
+edition = "2026"

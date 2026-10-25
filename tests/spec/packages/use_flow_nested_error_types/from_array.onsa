@@ -1,0 +1,5 @@
+use dsp.array.bad.{process_inplace}
+
+pub fn f_array() -> I32 {
+  1
+}

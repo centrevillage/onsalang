@@ -1,0 +1,11 @@
+pub fn f() -> I32 {
+  1
+}
+
+pub fn g() -> I32 {
+  2
+}
+
+pub fn h() -> I32 {
+  util.g()                                          //~ E0302
+}

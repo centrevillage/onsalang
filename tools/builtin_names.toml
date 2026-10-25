@@ -280,20 +280,20 @@
 "U32" = 1
 
 [allow."crates/onsa_sema/src/sig/flow_sig.rs"]
-"BULK_SIZE" = 2
-"Config" = 2
-"Out" = 2
-"Params" = 2
-"SIZE" = 2
-"State" = 2
+"BULK_SIZE" = 1
+"Config" = 1
+"Out" = 1
+"Params" = 1
+"SIZE" = 1
+"State" = 1
 "cfg" = 2
 "frames" = 1
-"init" = 2
+"init" = 1
 "params" = 3
-"process" = 2
-"process_inplace" = 2
-"render" = 2
-"reset" = 2
+"process" = 1
+"process_inplace" = 1
+"render" = 1
+"reset" = 1
 "sample_rate" = 2
 
 [allow."crates/onsa_sema/src/sig/types.rs"]

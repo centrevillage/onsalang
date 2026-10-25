@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§12.4"]
+// fixes = 0
+
+// S-32, §11.6: the size of the state (`SIZE`, `BULK_SIZE`) is not in the namespace of a flow: it depends on
+// the target and the width of a pointer, so only the C header and `onsa interface --target` show it (§12.4).
+// Each `use` is E0302, and the names of the failed `use` lines are silent where they are used. The `use` of
+// `g.State` is the control: it is an item of the namespace.
+use dsp.g.{State}
+use dsp.g.{SIZE}                                    //~ E0302
+use dsp.g.{BULK_SIZE}                               //~ E0302
+
+pub fn the_failed_names_are_silent() -> U32 {
+  SIZE + BULK_SIZE
+}
+
+pub fn keep(move s: State) -> State {
+  s
+}

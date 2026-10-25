@@ -1,0 +1,5 @@
+use dsp.struct_out.bad.{process_inplace}
+
+pub fn f_struct_out() -> I32 {
+  1
+}

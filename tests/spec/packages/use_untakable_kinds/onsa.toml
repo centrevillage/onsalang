@@ -1,0 +1,3 @@
+[package]
+name = "use_untakable_kinds"
+edition = "2026"

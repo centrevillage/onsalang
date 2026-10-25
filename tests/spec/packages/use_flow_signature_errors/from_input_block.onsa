@@ -1,0 +1,5 @@
+use dsp.input_block.bad.{process_inplace}
+
+pub fn f_input_block() -> I32 {
+  1
+}

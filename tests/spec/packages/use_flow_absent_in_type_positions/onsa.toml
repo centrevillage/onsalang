@@ -1,0 +1,3 @@
+[package]
+name = "use_flow_absent_in_type_positions"
+edition = "2026"

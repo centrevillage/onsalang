@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§2.2"]
+// fixes = 0
+
+// S-596, S-443: a `pub use` that takes a name that is a reserved word has the E0200 of the word first (the
+// syntax stage, at the word), and the unit is read no further: the E0200 of the `pub use` of the names
+// stage is not added. One diagnostic for each line.
+pub use kp.clock                                    //~ E0200 @12
+pub use kp.{clock}                                  //~ E0200 @13

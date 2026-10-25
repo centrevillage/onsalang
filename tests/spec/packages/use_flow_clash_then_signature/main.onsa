@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§11.6"]
+// fixes = 0
+
+// §18.1: a name that is an E0304 is read by neither side where it is used (the name is a failed name), so the
+// signature that reads `process_inplace` after two `use` of it (the item of a flow and a function of a
+// module) says nothing: the only diagnostic is the E0304. The same when the function comes first
+// (`function_first.onsa`), and for a `use` of the item and an item of the module of the same name
+// (`item.onsa`; the E0304 is on the `use`, §15.1).
+use dsp.synth.gain.{process_inplace}
+use dsp.other.{process_inplace}                                    //~ E0304
+
+pub fn f(x: process_inplace) -> I32 {
+  1
+}

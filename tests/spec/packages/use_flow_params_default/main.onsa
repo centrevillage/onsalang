@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+// fixes = 0
+
+// S-625, §11.6: `params_default` is a name of the C header (`<p>_params_default`, §14.2) and no item of the
+// namespace of a flow: the namespace has no such function (§11.6), whatever the `@param` of the inputs say.
+// The `use` is E0302 (§15.1), also for a flow (`one`) whose only `block` input has a `@param`.
+// The name of the failed `use` is silent where it is used. The case is kept apart from
+// `use_flow_items_not_taken` because the namespace still has the function (S-625, W7-03).
+use dsp.synth.one.{params_default}                  //~ E0302
+
+pub fn the_failed_name_is_silent() -> I32 {
+  params_default()
+}

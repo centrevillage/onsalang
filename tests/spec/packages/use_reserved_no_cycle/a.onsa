@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§2.2"]
+// fixes = 0
+
+// R-266, S-678: a `use` that takes a name that is a reserved word is E0200 and a failed name, so it is no
+// dependency (E0310, §15.1). `b/clock.onsa` takes `a`, `a` takes `b.clock` by a path (here) and `c` takes
+// `kp.clock` by a list (below): neither is a cycle. The only diagnostics are the two E0200.
+use b.clock                                         //~ E0200 @7
+
+pub fn f() -> I32 {
+  1
+}

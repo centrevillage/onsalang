@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§2.2", "§18.1"]
+
+// R-266: `_` is no name for a `use` to take (the rule of the name of a declaration): E0002, as an element of a
+// list and as the last name of a path.
+use util.{_}                                        //~ E0002
+use util._                                          //~ E0002
+
+pub fn fine() -> I32 {
+  1
+}

@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+
+// R-50, §11.6: `Rendered`, the result of `render`, is one of the types generated for a flow, and it is taken
+// from the namespace with a `use` like `State` and `Params`; it is used by the name it has there, and for
+// a flow with one scalar output its field `out` is a `Buf[F32]`. No diagnostic. The case is kept apart from
+// `use_flow_items_taken` because the namespace does not have `Rendered` yet (R-264, W7-03).
+use dsp.synth.{gain}
+use dsp.synth.gain.{Rendered}
+
+pub fn frames(r: Rendered) -> U32 {
+  r.out.len()
+}
+
+pub fn through_the_namespace(r: gain.Rendered) -> U32 {
+  r.out.len()
+}

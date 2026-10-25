@@ -62,6 +62,7 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
     };
     crate::names::collect_names(&mut s);
     s.lower_all();
+    s.fail_ungenerated();
     s.a
 }
 
@@ -127,8 +128,9 @@ impl<'p> Sema<'p> {
         let n = self.a.defs.len();
         for i in 0..n {
             let id = DefId(i as u32);
-            if self.a.defs[i].owner.is_some() {
-                continue; // lowered with their owner (impl / flow)
+            // Lowered with their owner (impl / flow), or an E0200 (S-224).
+            if self.a.defs[i].owner.is_some() || matches!(self.a.defs[i].kind, DefKind::Unsupported) {
+                continue;
             }
             let _scope = onsa_diag::internal::item_scope(self.a.defs[i].span);
             self.lower_def(id);

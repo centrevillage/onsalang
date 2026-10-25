@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-596, S-611, R-254: the `pub use` of `util.inner` is E0200, and `main` has a child module of the same name
+// (`main/inner.onsa`, which has `h` and no `g`). The `use` of another module reads `main.inner` as the child
+// module, so `use main.{inner}` takes the child, and `inner.g()` is a name the child module does not have: an
+// E0302 of the names stage (§18.1), not a type error. The case is kept apart from `pub_use_child_module`
+// because that error is a type error now (R-254, W4-04).
+pub use util.inner                                  //~ E0200 @1

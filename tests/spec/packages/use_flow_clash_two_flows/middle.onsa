@@ -1,0 +1,3 @@
+use dsp.synth.gain.{process_inplace}
+use dsp.other.{process_inplace}                                    //~ E0304
+use dsp.synth.gain2.{process_inplace}                              //~ E0304

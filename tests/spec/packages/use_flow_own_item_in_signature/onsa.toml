@@ -1,0 +1,3 @@
+[package]
+name = "use_flow_own_item_in_signature"
+edition = "2026"

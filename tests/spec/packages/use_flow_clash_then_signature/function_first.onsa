@@ -1,0 +1,6 @@
+use dsp.other.{process_inplace}
+use dsp.synth.gain.{process_inplace}                              //~ E0304
+
+pub fn f(x: process_inplace) -> I32 {
+  1
+}

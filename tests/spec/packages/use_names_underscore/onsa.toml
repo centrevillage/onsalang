@@ -1,0 +1,3 @@
+[package]
+name = "use_names_underscore"
+edition = "2026"

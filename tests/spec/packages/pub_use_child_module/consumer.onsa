@@ -1,0 +1,6 @@
+use main.{inner}
+use main.inner.{h}
+
+pub fn through_the_child_module() -> I32 {
+  inner.h() + h()
+}

@@ -1,0 +1,15 @@
+pub fn shown() -> I32 {
+  1
+}
+
+pub fn other() -> I32 {
+  1
+}
+
+pub fn third() -> I32 {
+  1
+}
+
+pub fn fourth() -> I32 {
+  1
+}

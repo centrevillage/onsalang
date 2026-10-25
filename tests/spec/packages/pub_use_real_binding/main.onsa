@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-596: a failed name is no binding (§18.1), so the `use` of the same name next to a `pub use` is the real
+// binding: no E0304, and the uses of the name are checked as always (`fifth()` is an `I32`, not a `Bool`).
+pub use util.{fifth}                                //~ E0200 @1
+use util.{fifth}
+
+pub fn the_real_binding_is_checked() -> I32 {
+  let _: Bool = fifth()                             //~ E0401
+  0
+}

@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§11.6"]
+// fixes = 0
+
+// §15.1: of the `use` of one name, each one after the first is an E0304 on its own line, in the source order:
+// a `use` is not left out because the one before it was an E0304 too. Here two of the `use` take the item of
+// the namespace of two flows (`gain`, `gain2`) and one takes a function of a module; in `main.onsa` the
+// function comes last, in `middle.onsa` between the two flows, in `first.onsa` first. The note of each E0304
+// is not fixed by the spec.
+use dsp.synth.gain.{process_inplace}
+use dsp.synth.gain2.{process_inplace}                              //~ E0304
+use dsp.other.{process_inplace}                                    //~ E0304

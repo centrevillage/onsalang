@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+// fixes = 0
+
+// R-50, §11.6: what the namespace of a flow has is fixed by the list of §11.6, and no item of the module is in
+// it. `process_inplace` is made only for a flow whose sample inputs and outputs are of the same types in
+// order: `one` has no sample input, so its namespace has none. `helper` is a function of the module
+// `dsp.synth`, no item of the namespace. Each is E0302. The names of the failed `use` lines are silent where
+// they are used. The `use` of `gain.{process_inplace}` in `control.onsa` is the control: `gain` has the item
+// (in another module, as two `use` of one name in a module are an E0304). (The name `params_default` of the
+// C header is in `use_flow_params_default`.)
+use dsp.synth.one.{process_inplace}                 //~ E0302
+use dsp.synth.gain.{helper}                         //~ E0302
+
+pub fn the_failed_names_are_silent() -> I32 {
+  helper()
+}

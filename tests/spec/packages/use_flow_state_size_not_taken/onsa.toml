@@ -1,0 +1,3 @@
+[package]
+name = "use_flow_state_size_not_taken"
+edition = "2026"

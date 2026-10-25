@@ -1,0 +1,5 @@
+use kp.{clock}                                      //~ E0200 @9
+
+pub fn j() -> I32 {
+  1
+}

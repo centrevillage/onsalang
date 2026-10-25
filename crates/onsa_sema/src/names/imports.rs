@@ -8,10 +8,10 @@
 //! candidate reads what the other `use` bound, never its binding.
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use onsa_syntax::ast::{Ident, Vis};
+use onsa_syntax::ast::Ident;
 
 use crate::Analysis;
-use crate::def::{DefKind, ModId};
+use crate::def::{DefId, DefKind, ModId};
 use crate::resolve::{Dep, DepTarget, Entity, Import, ResolveError, UseBinding};
 
 use super::lookup::OWN_ITEMS;
@@ -61,6 +61,14 @@ fn walk<'i>(a: &Analysis, m: ModId, segs: &'i [Ident], names: Option<&'i [Ident]
         .map(|name| {
             let entity = match from {
                 None => head_of(a, m, name),
+                // A name of a `pub use` of the module, which is failed (§18.1,
+                // S-596); never in the path before the names.
+                Some(Entity::Module(c)) if a.modules.get(c).pub_use_names.contains(&name.name) => {
+                    step(a, Entity::Module(c), name, m).map_err(|e| match e {
+                        ResolveError::NotFound { .. } => ResolveError::Failed,
+                        e => e,
+                    })
+                }
                 Some(e) => step(a, e, name, m),
             };
             (name, entity)
@@ -122,13 +130,44 @@ impl<'p> Sema<'p> {
     fn bind(&mut self, m: ModId, name: &Ident, entity: Entity) {
         let info = self.a.modules.get_mut(m);
         info.bound.push((name.name.clone(), name.span));
-        let binding = UseBinding::Bound { entity, span: name.span };
-        match info.uses.get(&name.name) {
-            Some(UseBinding::Bound { .. }) => {}
-            _ => {
-                info.uses.insert(name.name.clone(), binding);
+        if !matches!(info.uses.get(&name.name), Some(UseBinding::Bound { .. })) {
+            info.uses.insert(name.name.clone(), UseBinding::Bound { entity, span: name.span });
+        }
+    }
+
+    /// The names the `use` of each module bound to an item a flow generates
+    /// by the types of its signature and does not (§11.6, R-50, S-694), once
+    /// every signature is lowered and before the bodies: the E0302 of the
+    /// `use`, and the name is failed (§18.1). When an error in the signature
+    /// leaves it unknown, no diagnostic. The names stage resolved the `use`,
+    /// so its E0304 and its dependency (E0310) stand.
+    pub(crate) fn fail_ungenerated(&mut self) {
+        for i in 0..self.a.modules.mods.len() {
+            let m = ModId(i as u32);
+            let mut absent: Vec<(String, Span, DefId)> = (self.a.modules.get(m).uses.iter())
+                .filter_map(|(name, u)| match *u {
+                    UseBinding::Bound { entity: Entity::Member(d), span } => Some((name.clone(), span, d)),
+                    _ => None,
+                })
+                .filter_map(|(name, span, d)| self.not_generated(d).map(|flow| (name, span, flow)))
+                .collect();
+            absent.sort_by_key(|&(_, span, _)| span.start);
+            for (name, span, flow) in absent {
+                if !self.members_unknown(flow) {
+                    let shown = format!("{}.{name}", self.a.def(flow).name);
+                    self.report_mod(ResolveError::NotFound { name: shown, span }.into_diagnostic());
+                }
+                self.a.modules.get_mut(m).uses.insert(name, UseBinding::Failed { span });
             }
         }
+    }
+
+    /// The flow of `d` when `d` is an item it made but did not generate: not
+    /// in its members once its signature is lowered.
+    fn not_generated(&self, d: DefId) -> Option<DefId> {
+        let flow = self.a.def(d).owner?;
+        let members = &self.a.def(flow).as_flow()?.members;
+        (!members.iter().any(|&(_, x)| x == d)).then_some(flow)
     }
 
     /// `name` of a `use` of `m` that failed (S-462): no binding, and held
@@ -209,7 +248,7 @@ impl<'p> Sema<'p> {
                 // `fx.{` and `}` taken off, and a `use` before each element
                 // after the first.
                 ([], Some(list)) => {
-                    let kw = if imp.vis == Vis::Pub { "\npub use " } else { "\nuse " };
+                    let kw = "\nuse ";
                     let (first, last) = (&list[0], &list[list.len() - 1]);
                     let mut edits = vec![Edit::delete(span(head.span.start, first.span.start))];
                     edits.extend(list.windows(2).map(|w| Edit::replace(span(w[0].span.end, w[1].span.start), kw)));
@@ -305,7 +344,20 @@ fn head_of(a: &Analysis, m: ModId, name: &Ident) -> Result<Entity, ResolveError>
 }
 
 /// The element `name` after `cur` in the path of a `use` written in `from`
-/// (R-250, S-611): the same as after the head of any other path.
+/// (R-250, S-611): the same as after the head of any other path, but that the
+/// variants and the associated items of a type are not taken (§15.1, R-50),
+/// and a path through an E0200 (a trait, an effect, a member of an `extern`
+/// block) is an error with no diagnostic (§18.1).
 fn step(a: &Analysis, cur: Entity, name: &Ident, from: ModId) -> Result<Entity, ResolveError> {
+    if let Entity::Def(d) | Entity::Member(d) = cur {
+        let def = a.def(d);
+        match def.kind {
+            DefKind::Struct(_) | DefKind::Enum(_) => {
+                return Err(ResolveError::OfAType { ty: def.name.clone(), name: name.name.clone(), span: name.span });
+            }
+            DefKind::Unsupported => return Err(ResolveError::Failed),
+            _ => {}
+        }
+    }
     a.modules.member(cur, name, from, &a.defs, &a.builtin_key)
 }

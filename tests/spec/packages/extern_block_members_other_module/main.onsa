@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§15.1"]
+// fixes = 0
+
+// R-246, S-36: the members of an `extern` block have a visibility of their own (§14.1): `c_abs` and `Handle` have
+// none written, so the whole package sees them (§15.1). The blocks (`main.onsa`, `ffi.onsa`) are E0200 in this
+// version, and their members are names that are read (§18.1), so the `use` of them in another module is no
+// error and the places that use them report nothing. The only diagnostics are the E0200 of the blocks. The
+// case is kept apart from `extern_block_members` because a `use` of a name with no visibility written, from
+// another module, is E0303 until the package sees such names (W4-03, U4).
+extern "C" lib "m" {                                //~ E0200
+  fn c_abs(x: I32) -> I32
+  type Handle
+}

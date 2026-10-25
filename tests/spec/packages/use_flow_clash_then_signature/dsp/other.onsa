@@ -1,0 +1,3 @@
+pub fn process_inplace() -> I32 {
+  1
+}

@@ -1,0 +1,5 @@
+pub flow bad(
+  x: F32 at sample,
+) -> Nope at sample {                  //~ E0302
+  1.0
+}

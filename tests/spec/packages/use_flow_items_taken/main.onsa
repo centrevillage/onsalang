@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+
+// R-50, §11.6: the items generated for a flow are taken from its namespace with a `use`: the types (`State`,
+// `Params`) and the functions (`init`, `reset`, `process`, `process_inplace`, `render`), and they are
+// used by the name they have in the namespace. `process_inplace` is there because the sample input and the
+// sample output of `gain` are of one type. No diagnostic. (The shape of the arguments of `init` and `render`,
+// which depends on the inputs of the flow, is R-264; they are taken here and not called. `Rendered` is in
+// `use_flow_rendered`.)
+use dsp.synth.{gain}
+use dsp.synth.gain.{State, Params, init, reset, process, process_inplace, render}
+
+pub fn restart(inout s: State) {
+  reset(inout s)
+}
+
+pub fn step(inout s: State, p: Params, x: Span[F32], inout y: Span[F32]) {
+  process(inout s, p, x, inout y)
+}
+
+pub fn step_in_place(inout s: State, p: Params, inout y: Span[F32]) {
+  process_inplace(inout s, p, inout y)
+}
+
+pub fn through_the_namespace(inout s: gain.State) {
+  gain.reset(inout s)
+}

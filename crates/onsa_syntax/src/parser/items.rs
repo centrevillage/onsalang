@@ -569,6 +569,12 @@ impl<'a> Parser<'a> {
                 self.bump();
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
+                        // A keyword is read as the name of a declaration
+                        // (§15.1, R-266): its rule shows the forms that take it.
+                        let t = p.peek();
+                        if t.kind.is_keyword() && t.kind.reserved().is_none() {
+                            return Err(p.fail_noting(Want::Other, "imported name", t, USE_KEYWORD_RULE));
+                        }
                         p.parse_ident("imported name")?;
                         if p.eat(TokenKind::Comma).is_none() {
                             break;
@@ -786,3 +792,8 @@ pub(super) enum VisRead {
 
 /// The note of a visibility of another language (§15.1).
 const VISIBILITY_RULE: &str = "the visibility is `pub` (out of the package), no word (within the package) or `priv` (within the module); there is no other form (§15.1)";
+
+/// The rule of a keyword in the list of a `use` (§15.1, R-266).
+const USE_KEYWORD_RULE: &str = "a keyword is no name a `use` binds: take names from the module of that name with a \
+     list (`use std.test.{…}`), or take the module before it and write the path from it (`use std`, then \
+     `std.test.…`)";

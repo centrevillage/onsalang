@@ -1,0 +1,3 @@
+// The control of `main.onsa`: `gain` has a sample input and output of one type, so its namespace has
+// `process_inplace` (§11.6).
+use dsp.synth.gain.{process_inplace}

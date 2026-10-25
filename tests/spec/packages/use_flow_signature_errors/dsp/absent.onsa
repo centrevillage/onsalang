@@ -1,0 +1,6 @@
+pub flow one(
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  g
+}

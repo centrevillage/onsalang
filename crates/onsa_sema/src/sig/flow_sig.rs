@@ -3,7 +3,118 @@
 
 use super::*;
 
+/// An item a flow generates (§11.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Generated {
+    Type(FlowTy),
+    Size,
+    BulkSize,
+    Fn(FlowFn),
+}
+
+/// The items a flow generates, in their order (§11.6): the one list the
+/// names stage makes their defs of ([`Sema::generated_defs`]) and the
+/// signature fills ([`Sema::flow_members`]).
+const GENERATED: &[(&str, Generated)] = &[
+    ("State", Generated::Type(FlowTy::State)),
+    ("Config", Generated::Type(FlowTy::Config)),
+    ("Params", Generated::Type(FlowTy::Params)),
+    ("Out", Generated::Type(FlowTy::Out)),
+    ("SIZE", Generated::Size),
+    ("BULK_SIZE", Generated::BulkSize),
+    ("init", Generated::Fn(FlowFn::Init)),
+    ("reset", Generated::Fn(FlowFn::Reset)),
+    ("process", Generated::Fn(FlowFn::Process)),
+    ("process_inplace", Generated::Fn(FlowFn::ProcessInplace)),
+    ("render", Generated::Fn(FlowFn::Render)),
+    ("params_default", Generated::Fn(FlowFn::ParamsDefault)),
+];
+
 impl<'p> Sema<'p> {
+    /// The defs of every item the flow `flow` may generate, made with it in
+    /// the names stage, so that a `use` and a type written before the flow
+    /// find them (§11.6, §15.1, R-50): of their kinds, with no types until the
+    /// signature of the flow fills them. Of a flow whose heading was cut, they
+    /// are cut too (their uses are errors, R-71).
+    pub(crate) fn generated_defs(&mut self, flow: DefId) {
+        let d = self.a.def(flow);
+        let (module, vis, span, name_span) = (d.module, d.vis, d.span, d.name_span);
+        let (u32, unit) = (self.a.types.int(IntKind::U32), self.a.types.unit());
+        let mut members = Vec::new();
+        for &(name, g) in GENERATED {
+            let kind = match g {
+                Generated::Type(t) => {
+                    let fields = if t == FlowTy::State { Fields::Opaque } else { Fields::Named(Vec::new()) };
+                    let derives = Some(Vec::new());
+                    DefKind::Struct(StructDef { generics: Vec::new(), fields, derives, flow_ty: Some(t) })
+                }
+                Generated::Size | Generated::BulkSize => {
+                    DefKind::Const(ConstDef { ty: u32, value: None, int_value: None })
+                }
+                Generated::Fn(which) => DefKind::Fn(FnDef {
+                    generics: Vec::new(),
+                    self_mode: None,
+                    params: Vec::new(),
+                    ret: unit,
+                    rt: false,
+                    effects: EffectSet::default(),
+                    body: None,
+                    target: false,
+                    flow_fn: Some(which),
+                    fp_relaxed: false,
+                }),
+            };
+            let def = Def { name: name.to_string(), module, vis, span, name_span, kind, item: None, owner: Some(flow) };
+            let m = self.add_def(def);
+            if self.a.heading_failed(flow) {
+                self.a.failed.insert(m, onsa_syntax::ast::Failed::Heading);
+            }
+            members.push((name.to_string(), m));
+        }
+        if let DefKind::Flow(fd) = &mut self.a.defs[flow.0 as usize].kind {
+            fd.members = members;
+        }
+    }
+
+    /// Whether the items `flow` generates by the types of its signature are
+    /// not known: an input or the output has the error type in it (a type not
+    /// found, a clock not read, a cut heading; also as an element, a field or
+    /// a type argument), and a `use` of one is failed with no diagnostic
+    /// (§18.1, R-50).
+    pub(crate) fn members_unknown(&self, flow: DefId) -> bool {
+        let Some(f) = self.a.def(flow).as_flow() else { return false };
+        let mut seen = HashSet::new();
+        std::iter::once(f.out).chain(f.inputs.iter().map(|i| i.ty)).any(|t| self.has_error(t, &mut seen))
+    }
+
+    /// Whether `ty` has the error type in it; of a struct, in its fields
+    /// (`seen`: the structs looked at, so that a cycle ends).
+    fn has_error(&self, ty: TyId, seen: &mut HashSet<DefId>) -> bool {
+        let each = |ts: &[TyId], seen: &mut HashSet<DefId>| ts.iter().any(|&t| self.has_error(t, seen));
+        match self.a.types.get(ty) {
+            Ty::Error => true,
+            Ty::Array(e, _) => self.has_error(*e, seen),
+            Ty::Tuple(ts) | Ty::Builtin(_, ts) => each(ts, seen),
+            Ty::Fn(f) => {
+                let ts: Vec<TyId> = f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect();
+                each(&ts, seen)
+            }
+            Ty::Named(d, args) => {
+                if each(args, seen) {
+                    return true;
+                }
+                let fields: Vec<TyId> = match &self.a.def(*d).kind {
+                    DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) if seen.insert(*d) => {
+                        fs.iter().map(|f| f.ty).collect()
+                    }
+                    _ => Vec::new(),
+                };
+                each(&fields, seen)
+            }
+            _ => false,
+        }
+    }
+
     // ------------------------------------------------------------ flows
 
     pub(super) fn lower_flow(&mut self, cx: Cx<'p>, id: DefId, f: &onsa_syntax::ast::FlowDecl) {
@@ -288,35 +399,36 @@ impl<'p> Sema<'p> {
         Some(meta)
     }
 
-    /// Generated namespace items of a flow (§11.6).
+    /// The def of `g` that [`Sema::generated_defs`] made for `flow`, of the
+    /// kind its signature gives.
+    fn fill_generated(&mut self, flow: DefId, g: Generated, kind: DefKind) -> DefId {
+        let at = GENERATED.iter().position(|&(_, x)| x == g);
+        let made = self.a.def(flow).as_flow().zip(at).and_then(|(f, at)| f.members.get(at));
+        let Some(&(_, d)) = made else {
+            onsa_diag::internal::bug(Some(self.a.def(flow).name_span), "a generated item with no def")
+        };
+        self.a.defs[d.0 as usize].kind = kind;
+        d
+    }
+
+    /// The items the flow generates (§11.6), of the types of its signature:
+    /// the kinds of the defs [`Sema::generated_defs`] made. The ones its types
+    /// do not give (`process_inplace`, `params_default`) are not in its
+    /// namespace, and a `use` of them fails ([`Sema::fail_ungenerated`]).
     fn flow_members(&mut self, cx: &Cx<'p>, flow: DefId, inputs: &[FlowInput], out: TyId) -> Vec<(String, DefId)> {
-        let (module, vis, span, name_span) = {
-            let d = &self.a.defs[flow.0 as usize];
-            (d.module, d.vis, d.span, d.name_span)
-        };
-        let mk = |s: &mut Self, name: &str, kind: DefKind| -> DefId {
-            s.add_def(Def { name: name.to_string(), module, vis, span, name_span, kind, item: None, owner: Some(flow) })
-        };
-        let mk_struct = |s: &mut Self, name: &str, fields: Vec<FieldDef>, flow_ty: FlowTy| -> DefId {
+        let name_span = self.a.def(flow).name_span;
+        let mk_struct = |s: &mut Self, fields: Vec<FieldDef>, flow_ty: FlowTy| -> DefId {
             let fields = if flow_ty == FlowTy::State { Fields::Opaque } else { Fields::Named(fields) };
-            mk(
-                s,
-                name,
-                DefKind::Struct(StructDef {
-                    generics: Vec::new(),
-                    fields,
-                    derives: Some(Vec::new()),
-                    flow_ty: Some(flow_ty),
-                }),
-            )
+            let def = StructDef { generics: Vec::new(), fields, derives: Some(Vec::new()), flow_ty: Some(flow_ty) };
+            s.fill_generated(flow, Generated::Type(flow_ty), DefKind::Struct(def))
         };
         let field = |name: &str, ty: TyId| FieldDef { name: name.to_string(), ty, vis: Vis::Pub, span: name_span };
 
-        let state = mk_struct(self, "State", Vec::new(), FlowTy::State);
+        let state = mk_struct(self, Vec::new(), FlowTy::State);
         let config_fields = inputs.iter().filter(|i| i.rate == Rate::Init).map(|i| field(&i.name, i.ty)).collect();
-        let config = mk_struct(self, "Config", config_fields, FlowTy::Config);
+        let config = mk_struct(self, config_fields, FlowTy::Config);
         let params_fields = inputs.iter().filter(|i| i.rate == Rate::Ctl).map(|i| field(&i.name, i.ty)).collect();
-        let params = mk_struct(self, "Params", params_fields, FlowTy::Params);
+        let params = mk_struct(self, params_fields, FlowTy::Params);
 
         let outputs = self.boundary_outputs(out).unwrap_or_default();
         let out_fields = outputs
@@ -330,13 +442,14 @@ impl<'p> Sema<'p> {
                 field(n, t)
             })
             .collect();
-        let out_struct = mk_struct(self, "Out", out_fields, FlowTy::Out);
+        let out_struct = mk_struct(self, out_fields, FlowTy::Out);
 
         let u32 = self.a.types.int(IntKind::U32);
         let f32 = self.a.types.float(FloatKind::F32);
         let unit = self.a.types.unit();
-        let size = mk(self, "SIZE", DefKind::Const(ConstDef { ty: u32, value: None, int_value: None }));
-        let bulk = mk(self, "BULK_SIZE", DefKind::Const(ConstDef { ty: u32, value: None, int_value: None }));
+        for g in [Generated::Size, Generated::BulkSize] {
+            self.fill_generated(flow, g, DefKind::Const(ConstDef { ty: u32, value: None, int_value: None }));
+        }
 
         let state_ty = self.a.types.intern(Ty::Named(state, Vec::new()));
         let config_ty = self.a.types.intern(Ty::Named(config, Vec::new()));
@@ -355,25 +468,21 @@ impl<'p> Sema<'p> {
                 None => span,
             }
         };
-        let mk_fn =
-            |s: &mut Self, name: &str, params: Vec<ParamSig>, ret: TyId, rt: bool, alloc: bool, which: FlowFn| {
-                mk(
-                    s,
-                    name,
-                    DefKind::Fn(FnDef {
-                        generics: Vec::new(),
-                        self_mode: None,
-                        params,
-                        ret,
-                        rt,
-                        effects: EffectSet { alloc, ..Default::default() },
-                        body: None,
-                        target: false,
-                        flow_fn: Some(which),
-                        fp_relaxed: false,
-                    }),
-                )
+        let mk_fn = |s: &mut Self, params: Vec<ParamSig>, ret: TyId, rt: bool, alloc: bool, which: FlowFn| {
+            let f = FnDef {
+                generics: Vec::new(),
+                self_mode: None,
+                params,
+                ret,
+                rt,
+                effects: EffectSet { alloc, ..Default::default() },
+                body: None,
+                target: false,
+                flow_fn: Some(which),
+                fp_relaxed: false,
             };
+            s.fill_generated(flow, Generated::Fn(which), DefKind::Fn(f));
+        };
 
         // Sig inputs become `name: Span[T]` (or `[Span[T]; N]` for planar channels, §5.3).
         let sig_inputs: Vec<(String, TyId, Option<Len>)> = inputs
@@ -385,37 +494,20 @@ impl<'p> Sema<'p> {
             })
             .collect();
 
-        let init = {
-            let ps = vec![sp(self, "cfg", Mode::Borrow, config_ty), sp(self, "sample_rate", Mode::Borrow, f32)];
-            mk_fn(self, "init", ps, state_ty, false, false, FlowFn::Init)
-        };
-        let reset = {
-            let ps = vec![sp(self, "s", Mode::Inout, state_ty)];
-            mk_fn(self, "reset", ps, unit, true, false, FlowFn::Reset)
-        };
-        let process = {
-            let mut ps = vec![sp(self, "s", Mode::Inout, state_ty), sp(self, "params", Mode::Borrow, params_ty)];
-            for (n, e, l) in &sig_inputs {
-                let t = span_of(self, *e, *l);
-                ps.push(sp(self, n, Mode::Borrow, t));
-            }
-            for (n, e, l) in &outputs {
-                let t = span_of(self, *e, *l);
-                ps.push(sp(self, n, Mode::Inout, t));
-            }
-            mk_fn(self, "process", ps, unit, true, false, FlowFn::Process)
-        };
-        let mut members = vec![
-            ("State".to_string(), state),
-            ("Config".to_string(), config),
-            ("Params".to_string(), params),
-            ("Out".to_string(), out_struct),
-            ("SIZE".to_string(), size),
-            ("BULK_SIZE".to_string(), bulk),
-            ("init".to_string(), init),
-            ("reset".to_string(), reset),
-            ("process".to_string(), process),
-        ];
+        let ps = vec![sp(self, "cfg", Mode::Borrow, config_ty), sp(self, "sample_rate", Mode::Borrow, f32)];
+        mk_fn(self, ps, state_ty, false, false, FlowFn::Init);
+        let ps = vec![sp(self, "s", Mode::Inout, state_ty)];
+        mk_fn(self, ps, unit, true, false, FlowFn::Reset);
+        let mut ps = vec![sp(self, "s", Mode::Inout, state_ty), sp(self, "params", Mode::Borrow, params_ty)];
+        for (n, e, l) in &sig_inputs {
+            let t = span_of(self, *e, *l);
+            ps.push(sp(self, n, Mode::Borrow, t));
+        }
+        for (n, e, l) in &outputs {
+            let t = span_of(self, *e, *l);
+            ps.push(sp(self, n, Mode::Inout, t));
+        }
+        mk_fn(self, ps, unit, true, false, FlowFn::Process);
         // `process_inplace` only when inputs and outputs pair up by type (§11.6).
         let pairs = sig_inputs.len() == outputs.len()
             && !outputs.is_empty()
@@ -426,31 +518,32 @@ impl<'p> Sema<'p> {
                 let t = span_of(self, *e, *l);
                 ps.push(sp(self, n, Mode::Inout, t));
             }
-            let f = mk_fn(self, "process_inplace", ps, unit, true, false, FlowFn::ProcessInplace);
-            members.push(("process_inplace".into(), f));
+            mk_fn(self, ps, unit, true, false, FlowFn::ProcessInplace);
         }
-        let render = {
-            let mut ps = vec![sp(self, "cfg", Mode::Borrow, config_ty), sp(self, "params", Mode::Borrow, params_ty)];
-            for (n, e, l) in &sig_inputs {
-                let t = span_of(self, *e, *l);
-                ps.push(sp(self, n, Mode::Borrow, t));
-            }
-            if sig_inputs.is_empty() {
-                ps.push(sp(self, "frames", Mode::Borrow, u32));
-            }
-            ps.push(sp(self, "sample_rate", Mode::Borrow, f32));
-            mk_fn(self, "render", ps, out_ty, false, true, FlowFn::Render)
-        };
-        members.push(("render".into(), render));
+        let mut ps = vec![sp(self, "cfg", Mode::Borrow, config_ty), sp(self, "params", Mode::Borrow, params_ty)];
+        for (n, e, l) in &sig_inputs {
+            let t = span_of(self, *e, *l);
+            ps.push(sp(self, n, Mode::Borrow, t));
+        }
+        if sig_inputs.is_empty() {
+            ps.push(sp(self, "frames", Mode::Borrow, u32));
+        }
+        ps.push(sp(self, "sample_rate", Mode::Borrow, f32));
+        mk_fn(self, ps, out_ty, false, true, FlowFn::Render);
         let all_defaults = inputs
             .iter()
             .filter(|i| i.rate == Rate::Ctl)
             .all(|i| i.param.as_ref().is_some_and(|p| p.default.is_some()));
         if all_defaults {
-            let f = mk_fn(self, "params_default", Vec::new(), params_ty, false, false, FlowFn::ParamsDefault);
-            members.push(("params_default".into(), f));
+            mk_fn(self, Vec::new(), params_ty, false, false, FlowFn::ParamsDefault);
         }
         let _ = cx;
-        members
+        let absent = |g: Generated| match g {
+            Generated::Fn(FlowFn::ProcessInplace) => !pairs,
+            Generated::Fn(FlowFn::ParamsDefault) => !all_defaults,
+            _ => false,
+        };
+        let made = self.a.def(flow).as_flow().map(|f| f.members.clone()).unwrap_or_default();
+        made.into_iter().zip(GENERATED).filter(|(_, (_, g))| !absent(*g)).map(|(m, _)| m).collect()
     }
 }

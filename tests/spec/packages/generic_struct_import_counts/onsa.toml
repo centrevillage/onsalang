@@ -1,0 +1,3 @@
+[package]
+name = "generic_struct_import_counts"
+edition = "2026"

@@ -1,0 +1,5 @@
+use a.b.{k}
+
+pub fn g() -> I32 {
+  k()
+}

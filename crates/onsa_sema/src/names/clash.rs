@@ -14,6 +14,7 @@
 
 use std::collections::HashMap;
 
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::TokenKind;
 
@@ -25,23 +26,27 @@ const UNLEXED_RESERVED: &str = "static";
 
 /// Why a `use` cannot bind a name, whatever it takes (§15.1, §2.2).
 pub(crate) enum Unbindable {
-    /// A keyword or a reserved word: E0002 or E0200 (R-266, W4-03 U3b).
+    /// A keyword: E0002 (R-266).
     Keyword,
+    /// A reserved word: the E0200 of its feature (R-266).
+    Reserved(Feature),
     /// A builtin name of a flow, which a flow body sees: E0304 (S-542).
     FlowBuiltin,
 }
 
-/// Whether a `use` can bind `name`: the one test of the E0304 here and of the
-/// candidates that add a `use` (`super::lookup`).
+/// Whether a `use` can bind `name`: the one test of the names a `use` takes
+/// (`super::collect`), of the E0304 here and of the candidates that add a
+/// `use` (`super::lookup`).
 pub(crate) fn unbindable(name: &str) -> Option<Unbindable> {
     // `static` is reserved (§2.2, S-615) but not yet a keyword of the lexer:
     // W5-11 adds it to `onsa_syntax::token::KEYWORDS`, and this goes.
-    if TokenKind::keyword(name).is_some() || name == UNLEXED_RESERVED {
-        Some(Unbindable::Keyword)
-    } else if crate::flow_names::is_builtin(name) {
-        Some(Unbindable::FlowBuiltin)
-    } else {
-        None
+    if name == UNLEXED_RESERVED {
+        return Some(Unbindable::Reserved(Feature::StaticMarks));
+    }
+    match TokenKind::keyword(name) {
+        Some(kw) => Some(kw.reserved().map_or(Unbindable::Keyword, Unbindable::Reserved)),
+        None if crate::flow_names::is_builtin(name) => Some(Unbindable::FlowBuiltin),
+        None => None,
     }
 }
 
@@ -97,20 +102,29 @@ impl<'p> Sema<'p> {
         let bound = self.a.modules.get(m).bound.clone();
         let mut first: HashMap<&str, Span> = HashMap::new();
         for (name, span) in &bound {
-            let item = self.a.modules.get(m).items.get(name).copied();
-            let diag = if let Some(diag) = self.body_clash(name, *span, "a `use`") {
-                diag
-            } else if let Some(d) = item {
-                already(*span, name).with_note(self.a.def(d).name_span, "declared here")
-            } else if let Some(&at) = first.get(name.as_str()) {
-                already(*span, name).with_note(at, "first bound here")
-            } else {
-                first.insert(name, *span);
-                continue;
-            };
-            self.a.modules.get_mut(m).clashed.body.insert(name.clone());
-            self.report_mod(diag);
+            match self.use_clash(m, name, *span, first.get(name.as_str()).copied()) {
+                Some(diag) => {
+                    self.a.modules.get_mut(m).clashed.body.insert(name.clone());
+                    self.report_mod(diag);
+                }
+                None => {
+                    first.insert(name, *span);
+                }
+            }
         }
+    }
+
+    /// The E0304 of `name` a `use` of `m` binds at `span`: of the prelude or
+    /// a builtin name of a flow, of an item of `m`, or of the name bound
+    /// `first` before.
+    pub(super) fn use_clash(&self, m: ModId, name: &str, span: Span, first: Option<Span>) -> Option<Diagnostic> {
+        if let Some(diag) = self.body_clash(name, span, "a `use`") {
+            return Some(diag);
+        }
+        if let Some(&d) = self.a.modules.get(m).items.get(name) {
+            return Some(already(span, name).with_note(self.a.def(d).name_span, "declared here"));
+        }
+        first.map(|at| already(span, name).with_note(at, "first bound here"))
     }
 
     /// A name of the body of a module (`what` binds it at `span`) that the
@@ -199,8 +213,11 @@ mod tests {
 
     #[test]
     fn a_use_binds_no_keyword_and_no_builtin_name_of_a_flow() {
-        for name in ["match", "test", "clock", "ser", "static"] {
+        for name in ["match", "test"] {
             assert!(matches!(unbindable(name), Some(Unbindable::Keyword)), "{name}");
+        }
+        for name in ["clock", "ser", "static"] {
+            assert!(matches!(unbindable(name), Some(Unbindable::Reserved(_))), "{name}");
         }
         for name in ["prev", "delay", "vdelay", "sample_rate", "sample_tick"] {
             assert!(matches!(unbindable(name), Some(Unbindable::FlowBuiltin)), "{name}");

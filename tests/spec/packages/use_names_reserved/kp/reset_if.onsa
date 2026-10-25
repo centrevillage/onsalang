@@ -1,0 +1,3 @@
+pub fn latch() -> U32 {
+  5
+}

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§19.1"]
+// fixes = 0
+
+// S-596: the re-export (`pub use`) is decided with the dependencies other than std in the second phase
+// (§19.1). In this version a `pub use` is E0200 at the `pub`, in the names stage, whatever it takes: an
+// item, a list, a module, a module of `std`. There is no candidate (a note shows how to take the name from
+// its definition, `use util.inner.{g}`). The names it takes are failed names (§18.1): nothing is reported
+// where they are used, in this module and in `consumer.onsa`, and they are no binding that another name of
+// the same spelling can clash with.
+pub use util.{shown}                                //~ E0200 @1
+pub use util.other                                  //~ E0200 @1
+pub use util.{third, fourth}                        //~ E0200 @1
+pub use util.inner                                  //~ E0200 @1
+pub use std.math.{sqrt}                             //~ E0200 @1
+pub use std.math                                    //~ E0200 @1
+
+pub fn failed_item_names_are_silent() -> I32 {
+  shown() + other() + third() + fourth() + inner.g()
+}
+
+pub fn failed_std_names_are_silent(x: F32) -> F32 {
+  sqrt(x) + math.sin(x)
+}

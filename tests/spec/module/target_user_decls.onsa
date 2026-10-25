@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§18.1"]
+// fixes = 0
+
+// S-629, S-670: in this version a `target` declaration of a package other than `std` is E0200 (the build target
+// gives the implementation; the declarations of a user are for the second phase, §19.1), whatever its form: a
+// function, an `rt` function, a type, with a visibility or none. The names stage reports it, one E0200 for each
+// declaration, the same for each (the syntax stage reads them all in one rule).
+target fn open(sample_rate: F32) -> I32             //~ E0200
+pub target fn close(d: I32)                         //~ E0200
+target rt fn read_input(inout buf: Span[F32])       //~ E0200
+target type Device                                  //~ E0200
+pub target type Handle                              //~ E0200

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1"]
+// fixes = 0
+
+// R-197, S-103: the number of the type arguments of a type taken from another module is counted from its
+// definition: too many, none for a type that has a parameter, the `const` argument left out, and an
+// argument for a type that has no parameter are each E0412.
+use shapes.{Pair, Ring, Point}
+
+fn too_many(p: Pair[I32, I32]) -> I32 {             //~ E0412
+  0
+}
+
+fn none_given(p: Pair) -> I32 {                     //~ E0412
+  0
+}
+
+fn const_argument_left_out(r: Ring[F32]) -> I32 {   //~ E0412
+  0
+}
+
+fn argument_for_a_plain_type(p: Point[I32]) -> I32 { //~ E0412
+  0
+}

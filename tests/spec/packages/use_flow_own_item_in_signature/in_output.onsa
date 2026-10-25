@@ -1,0 +1,4 @@
+use in_output.f.{process_inplace}
+pub flow f(x: F32 at sample) -> process_inplace at sample {  //~ E0302
+  x
+}

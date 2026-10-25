@@ -1,0 +1,7 @@
+pub fn k() -> I32 {
+  1
+}
+
+pub fn j() -> I32 {
+  fx.a.b.inner.g()                                  //~ E0302
+}

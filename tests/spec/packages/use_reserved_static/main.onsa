@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1"]
+// fixes = 0
+
+// §2.2, §15.1: `static` is a reserved word, so a `use` that takes the name is E0200, in each form: at the end
+// of a path, in a list and alone. Each form is in a module of its own (`main.onsa`, `in_list.onsa`,
+// `alone.onsa`), so that no other `use` of the same name is in the way.
+use kp.static                                       //~ E0200

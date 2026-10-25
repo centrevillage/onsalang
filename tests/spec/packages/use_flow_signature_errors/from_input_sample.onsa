@@ -1,0 +1,5 @@
+use dsp.input_sample.bad.{process_inplace}
+
+pub fn f_input_sample() -> I32 {
+  1
+}

@@ -1,0 +1,3 @@
+[package]
+name = "pub_use_child_module_missing_name"
+edition = "2026"

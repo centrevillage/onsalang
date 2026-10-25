@@ -104,17 +104,17 @@ impl Modules {
         if own_name {
             readings.push((1, member(1)));
         }
-        // The first reading given, and the first kept back as its `use`
-        // closes a cycle (S-682).
+        // The first reading given. One read whole whose `use` closes a cycle
+        // is the reading too, with no candidate (S-682, S-687): the next
+        // reading is of a path that is not read whole.
         let (mut fix, mut cycle) = (None, None);
         for (k, entity) in readings {
             match self.body_fix(from, path, k, entity, names) {
-                Ok(f) => {
-                    fix = Some(f);
-                    break;
-                }
-                Err(c) => cycle = cycle.or(c),
+                Ok(f) => fix = Some(f),
+                Err(Some(c)) => cycle = Some(c),
+                Err(None) => continue,
             }
+            break;
         }
         let names_own = own_pkg || own_path || (own_name && is_head.is_none());
         let rule = match (&fix, cycle) {
@@ -276,13 +276,22 @@ impl Modules {
                         defined: def.name_span,
                     });
                 }
+                // SPEC-GAP(S-693): a name of a `pub use` of `m` is not found
+                // here, also at the end of a path in a body (`inner.g()`); the
+                // last name of a `use` is failed instead (`imports::walk`).
                 Err(ResolveError::NotFound { name: name.name.clone(), span: name.span })
             }
             Entity::Def(d) => {
                 let def = &defs[d.0 as usize];
                 match &def.kind {
                     DefKind::Flow(f) => {
-                        if let Some((_, m)) = f.members.iter().find(|(n, _)| n == &name.name) {
+                        // The sizes of the state (`SIZE`, `BULK_SIZE`, the
+                        // consts of a flow) are not in its namespace: the C
+                        // header and `onsa interface` read them (§11.6, S-32).
+                        let named = |(n, m): &&(String, crate::DefId)| {
+                            n == &name.name && !matches!(defs[m.0 as usize].kind, DefKind::Const(_))
+                        };
+                        if let Some((_, m)) = f.members.iter().find(named) {
                             return Ok(Entity::Member(*m));
                         }
                     }

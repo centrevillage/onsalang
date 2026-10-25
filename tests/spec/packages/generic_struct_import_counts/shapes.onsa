@@ -1,0 +1,19 @@
+pub struct Pair[T] {
+  first: T,
+  second: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub enum Maybe[T] {
+  Just(T),
+  Nothing,
+}
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}

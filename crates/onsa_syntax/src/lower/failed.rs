@@ -21,8 +21,9 @@ impl<'a> Lower<'a> {
     /// that was not read, or that the table refused, is incomplete: no
     /// attribute), the visibility and the modifiers written (§18.1).
     pub(super) fn head(&mut self, n: NodeId) -> Head {
-        let mut head = Head { attrs: Vec::new(), vis: Vis::Default, rt: false, unread_attr: false, decl: None };
-        let mut words: Vec<Vis> = Vec::new();
+        let mut head =
+            Head { attrs: Vec::new(), vis: Vis::Default, vis_span: None, rt: false, unread_attr: false, decl: None };
+        let mut words: Vec<(Vis, Span)> = Vec::new();
         let mut vis_form = false;
         for c in self.nodes(n) {
             let complete = self.cst.is_complete(c);
@@ -31,15 +32,15 @@ impl<'a> Lower<'a> {
                 NodeKind::Docs => {}
                 NodeKind::Attr if complete => head.attrs.push(self.attr(c)),
                 NodeKind::Attr => head.unread_attr = true,
-                NodeKind::Vis if complete => words.push(self.vis(c)),
+                NodeKind::Vis if complete => words.push((self.vis(c), self.span(c))),
                 NodeKind::Vis => vis_form = true,
                 // The modifiers the parser read on after (S-464): out of
                 // order, with words of other languages, before a keyword.
                 NodeKind::Error => {
                     for t in self.toks(c) {
                         match self.kind_of(t) {
-                            TokenKind::KwPub => words.push(Vis::Pub),
-                            TokenKind::KwPriv => words.push(Vis::Priv),
+                            TokenKind::KwPub => words.push((Vis::Pub, self.cst.token(t).span)),
+                            TokenKind::KwPriv => words.push((Vis::Priv, self.cst.token(t).span)),
                             TokenKind::KwRt => head.rt = true,
                             _ => {}
                         }
@@ -55,10 +56,11 @@ impl<'a> Lower<'a> {
         // was read on after another form; a visibility of another language,
         // and `pub` with `priv`, are the default.
         if !vis_form
-            && let Some(&first) = words.first()
-            && words.iter().all(|&w| w == first)
+            && let Some(&(first, at)) = words.first()
+            && words.iter().all(|&(w, _)| w == first)
         {
             head.vis = first;
+            head.vis_span = Some(at);
         }
         head
     }
@@ -73,7 +75,7 @@ impl<'a> Lower<'a> {
         mut kind: ItemKind,
         failed: Option<Failed>,
     ) -> ItemId {
-        let Head { attrs, vis, rt, unread_attr, .. } = head;
+        let Head { attrs, vis, vis_span, rt, unread_attr, .. } = head;
         match &mut kind {
             ItemKind::Fn(f) => f.rt |= rt,
             ItemKind::Struct(s) if unread_attr => {
@@ -85,7 +87,7 @@ impl<'a> Lower<'a> {
             _ => {}
         }
         let span = self.span(n);
-        self.add_item(n, Item { span, attrs, vis, kind, failed })
+        self.add_item(n, Item { span, attrs, vis, vis_span, kind, failed })
     }
 
     /// The name of a declaration when it was read whole.
@@ -384,6 +386,7 @@ impl<'a> Lower<'a> {
 pub(super) struct Head {
     attrs: Vec<Attr>,
     vis: Vis,
+    vis_span: Option<Span>,
     /// An `rt` written out of order before the declaration's keyword.
     rt: bool,
     /// An attribute that was not read (S-460).

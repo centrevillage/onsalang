@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-596: `main` has no module `inner` of its own, only the `pub use` of `util.inner`, which is E0200. The name
+// is a failed name for the `use` of another module (`use main.{inner}` is silent, and so are the uses), but a
+// path that goes through it (`use main.inner.{g}`) reads the middle of the path from the child modules and
+// the definitions of `main` alone, and there is no `inner` there: E0302.
+pub use util.inner                                  //~ E0200 @1

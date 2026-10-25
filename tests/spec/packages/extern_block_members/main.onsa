@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1"]
+// fixes = 0
+
+// R-246: an `extern` block is E0200 in this version, and its members are names that are read (a function, a
+// type): "a declaration with an error is a name for name resolution if its name can be read" (§18.1), so the
+// places that use them, in this module, report nothing. The only diagnostics are the E0200 of the block and
+// the E0302 of a name that no block has. (The `use` of a member of a block from another module, where the member
+// has no visibility written, is in `extern_block_members_other_module`.)
+extern "C" lib "m" {                                //~ E0200
+  fn c_abs(x: I32) -> I32
+  type Handle
+}
+
+pub fn same_module() -> I32 {
+  c_abs(1)
+}
+
+pub fn same_module_type(h: Handle) -> I32 {
+  1
+}
+
+pub fn a_name_that_no_block_has() -> I32 {
+  c_missing(1)                                      //~ E0302
+}

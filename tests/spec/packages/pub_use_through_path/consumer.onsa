@@ -1,0 +1,6 @@
+use main.inner.{g}                                  //~ E0302
+use main.{inner}
+
+pub fn through_the_failed_name() -> I32 {
+  inner.g() + g()
+}

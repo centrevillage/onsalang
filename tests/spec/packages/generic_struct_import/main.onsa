@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// R-197: a generic type of another module (a struct with a type parameter, a struct with a type parameter and a
+// `const` parameter, an enum) that a `use` took is used with the type arguments of its definition, as
+// one of the same module is (`Pair[I32]`, `Ring[F32, 4]`, `Maybe[I32]`), in the signature, in the
+// struct literal and in the pattern. No diagnostic.
+use shapes.{Pair, Ring, Maybe}
+
+fn sum(p: Pair[I32]) -> I32 {
+  p.first + p.second
+}
+
+fn make_pair() -> Pair[I32] {
+  Pair { first: 1, second: 2 }
+}
+
+fn make_ring() -> Ring[F32, 4] {
+  Ring { data: [0.0; 4], head: 3 }
+}
+
+fn keep(m: Maybe[I32]) -> Maybe[I32] {
+  m
+}
+
+test "the generic types of another module" {
+  assert sum(make_pair()) == 3
+  assert make_ring().head == 3
+  match keep(Maybe.Just(5)) {
+    Maybe.Just(v) => {
+      assert v == 5
+    },
+    Maybe.Nothing => {
+      assert false
+    },
+  }
+}

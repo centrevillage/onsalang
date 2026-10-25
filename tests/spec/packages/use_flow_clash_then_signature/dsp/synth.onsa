@@ -1,0 +1,11 @@
+pub flow gain(
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+pub flow gain2(
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}

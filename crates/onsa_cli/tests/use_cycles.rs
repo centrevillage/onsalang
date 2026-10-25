@@ -28,7 +28,8 @@
 //!
 //! A `use` that failed in the names stage is no dependency (S-678), the note of a candidate that is left
 //! out for a cycle shows the form and the module of the cycle (S-682), and the note that narrows a `use`
-//! counts only the narrowings that can be written (S-683): the last three groups of tests (W4-03 U3b1).
+//! counts only the narrowings that can be written (S-683): three groups of tests (W4-03 U3b1). The last
+//! group is the decisions of the group 60 (S-684 to S-687; W4-03 U3b2).
 //!
 //! Not written here: the clash of the names (E0304 / E0305, U3a1), the names of the failed `use` that
 //! stay silent (`failed_names.rs`), the visibility (U4).
@@ -662,15 +663,16 @@ fn the_own_package_name_before_a_name_that_is_nothing_has_no_candidate() {
 }
 
 /// §15.1, §18.1: a list with no name after the own package name (`use fx.{}`, on two lines, with a comment
-/// in it, `pub use`, after a module) has no candidate, and the check ends with its E0302, not an internal
-/// error. (Its E0002 is S-515, W5-11.)
+/// in it, after a module) has no candidate, and the check ends with its E0302, not an internal error.
+/// (Its E0002 is S-515, W5-11. A `pub use` of the empty list is not here: the `pub use` is an E0200 at
+/// `pub` and its path is not resolved further, S-596, and after S-515 the empty list is a syntax error that
+/// comes first.)
 #[test]
 fn an_empty_list_after_the_own_package_name_has_no_candidate() {
     let cases = [
         ("one_line", "main.onsa", "use fx.{}\n"),
         ("lines", "main.onsa", "use fx.{\n}\n"),
         ("comment", "dsp/synth.onsa", "use fx.{ // c\n}\n"),
-        ("pub", "main.onsa", "pub use fx.{}\n"),
         ("module", "main.onsa", "use fx.util.{}\n"),
     ];
     for (tag, file, text) in cases {
@@ -743,7 +745,7 @@ fn modules_that_take_each_other_by_the_own_package_name_end_in_the_cycle() {
 /// diagnostic. (The same case with tests is `tests/spec/packages/use_own_name_module`.)
 #[test]
 fn a_root_module_with_the_name_of_the_package_is_what_the_name_points_to() {
-    let d = fx("own_module", &[("fx.onsa", &f("g")), ("main.onsa", "use fx.{g}\nuse fx\n")]);
+    let d = fx("own_use_after_list", &[("fx.onsa", &f("g")), ("main.onsa", "use fx.{g}\nuse fx\n")]);
     assert_clean(&d, "use fx.{g} and use fx with the module fx");
 }
 
@@ -1062,4 +1064,159 @@ fn the_narrowing_note_is_given_only_for_a_use_that_can_be_written_narrower() {
         false,
     );
     assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+// ---- the decisions of the group 60 (S-684, S-685, S-686, S-687; W4-03 U3b2) --------------------------------
+
+/// The package has exactly one E0302 in `file`, with no candidate; the text of its notes is returned.
+fn lone_e0302_without_candidate(d: &Dir, file: &str, what: &str) -> String {
+    let (out, doc) = check_json(d.root(), &["."]);
+    assert_eq!(out.code, 1, "{what}: {}{}", out.stdout, out.stderr);
+    let found = of_code(&doc, "E0302");
+    assert_eq!(found.len(), 1, "{what}: {doc}");
+    assert_eq!(span_of(&found[0]["span"]).file, file, "{what}: {doc}");
+    assert!(fixes_of(found[0]).is_empty(), "{what}: no candidate: {}", found[0]);
+    note_text(found[0])
+}
+
+/// §15.1 (S-686): a `use` is on a cycle when its edge is on one, and an edge added between two modules of a
+/// cycle that is there already is on it. `a` takes `b`, `b` takes `c`, `c` takes `a`; `c.h()` in `a` would be
+/// `use c`, which is a second way from `a` to `c` in the cycle: no candidate, and the note shows the form. The
+/// cycle is cut in the control (`c` takes nothing), and the candidate is given.
+#[test]
+fn a_use_between_two_modules_of_a_cycle_that_is_there_already_closes_the_cycle() {
+    let a = "use b.{g}\n\npub fn f() -> I32 {\n  c.h()\n}\n";
+    let b = "use c.{h}\n\npub fn g() -> I32 {\n  h()\n}\n";
+    let d =
+        pkg("ring_inside", &[("a.onsa", a), ("b.onsa", b), ("c.onsa", "use a.{f}\n\npub fn h() -> I32 {\n  f()\n}\n")]);
+    let (out, doc) = check_json(d.root(), &["."]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(codes(&doc), set(&["E0302", "E0310"]), "{doc}");
+    let found = of_code(&doc, "E0302");
+    assert_eq!(found.len(), 1, "{doc}");
+    assert!(fixes_of(found[0]).is_empty(), "the candidate would add an edge on the cycle: {}", found[0]);
+    assert!(note_text(found[0]).contains("use c"), "the note shows the form that was left out: {}", found[0]);
+
+    let d = pkg("ring_inside_cut", &[("a.onsa", a), ("b.onsa", b), ("c.onsa", &f("h"))]);
+    assert_body_candidate(&d, "a.onsa", &["use b.{g}", "use c"], "the ring is cut: `use c` closes no cycle");
+}
+
+/// §15.1 (S-686, S-663): the same meaning for the candidate of the head of a `use`: `use fx.c.{h}` in `a` is
+/// `use c.{h}`, an edge from `a` to `c` inside the cycle `a`, `b`, `c` that is there already: no candidate.
+#[test]
+fn the_head_candidate_of_a_use_inside_a_cycle_that_is_there_already_is_left_out() {
+    let a = "use b.{g}\nuse fx.c.{h}\n\npub fn f() -> I32 {\n  h()\n}\n";
+    let b = "use c.{h}\n\npub fn g() -> I32 {\n  h()\n}\n";
+    let d = fx(
+        "ring_inside_head",
+        &[("a.onsa", a), ("b.onsa", b), ("c.onsa", "use a.{f}\n\npub fn h() -> I32 {\n  f()\n}\n")],
+    );
+    let (_, doc) = check_json(d.root(), &["."]);
+    let found: Vec<&Value> =
+        of_code(&doc, "E0302").into_iter().filter(|e| span_of(&e["span"]).file == "a.onsa").collect();
+    assert_eq!(found.len(), 1, "{doc}");
+    assert!(fixes_of(found[0]).is_empty(), "{}", found[0]);
+    assert!(note_text(found[0]).contains("use c.{h}"), "the form that was left out: {}", found[0]);
+}
+
+/// The two modules of S-687: `util.onsa` takes `f` of `dsp/util.onsa` when `takes_dsp_util` (an edge from `util`
+/// to `dsp.util`), and `dsp/util.onsa` calls `util.g()` with no `use`. `util_has_g` says whether the module at
+/// the root has `g`.
+fn root_tie(tag: &str, util_has_g: bool, takes_dsp_util: bool) -> Dir {
+    let util = format!(
+        "{}{}{}",
+        if takes_dsp_util { "use dsp.util.{f}\n\n" } else { "" },
+        "pub fn k() -> I32 {\n  1\n}\n",
+        if util_has_g { "\npub fn g() -> I32 {\n  3\n}\n" } else { "" }
+    );
+    let dsp_util = format!("{}\n{}\npub fn j() -> I32 {{\n  util.g()\n}}\n", f("f"), f("g"));
+    pkg(tag, &[("util.onsa", &util), ("dsp/util.onsa", &dsp_util)])
+}
+
+/// §15.1 (S-687): the head `util` of `dsp/util.onsa` is a module at the root and the own name of the module.
+/// The module at the root is read first. When `util.g()` is read whole that way and the `use util` it needs
+/// would close a cycle (`util` takes an item of `dsp/util.onsa`), there is no candidate, and the own name is
+/// not read then (`g()` is not given); the note shows `use util`. With no edge from `util` the candidate is
+/// the `use util`.
+#[test]
+fn the_root_reading_that_closes_a_cycle_leaves_no_candidate_and_the_own_name_is_not_read() {
+    let d = root_tie("tie_closes", true, true);
+    let note = lone_e0302_without_candidate(&d, "dsp/util.onsa", "util has g and takes dsp.util");
+    assert!(note.contains("use util"), "the note shows the form and the module: {note:?}");
+
+    let d = root_tie("tie_free", true, false);
+    assert_body_candidate(&d, "dsp/util.onsa", &["use util"], "util has g and takes nothing");
+}
+
+/// §15.1 (S-687): when the module at the root has no `g`, `util.g()` is not read whole that way and the own
+/// name is read: the candidate takes `util.` off and adds no `use`, so it closes no cycle, whatever `util`
+/// takes.
+#[test]
+fn the_own_name_is_read_when_the_root_reading_is_not_read_whole() {
+    let d = root_tie("tie_falls_back", false, true);
+    assert_body_candidate(&d, "dsp/util.onsa", &[], "util has no g");
+}
+
+/// §15.1 (S-684, S-673): the part of the package name is followed by the root; when the own absolute path
+/// follows it, the two are taken off in one candidate: `fx.a.b.f()` in `a/b.onsa` is `f()`, `fx.d.f()` in
+/// `d.onsa` is `f()`, and `fx.a.b.inner.g()` is `use a.b.inner` and `inner.g()`.
+#[test]
+fn the_package_name_and_the_own_absolute_path_are_taken_off_together() {
+    let call = |c: &str| format!("{}\npub fn j() -> I32 {{\n  {c}\n}}\n", f("f"));
+    let d = fx("own_abs_b", &[("a/b.onsa", &call("fx.a.b.f()"))]);
+    assert_body_candidate(&d, "a/b.onsa", &[], "fx.a.b.f()");
+    let d = fx("own_abs_d", &[("d.onsa", &call("fx.d.f()"))]);
+    assert_body_candidate(&d, "d.onsa", &[], "fx.d.f()");
+    let d = fx("own_abs_child", &[("a/b.onsa", &call("fx.a.b.inner.g()")), ("a/b/inner.onsa", &f("g"))]);
+    assert_body_candidate(&d, "a/b.onsa", &["use a.b.inner"], "fx.a.b.inner.g()");
+}
+
+/// §15.1 (S-684): a path after the package name that is not the own absolute path is the root path, and the
+/// general candidate applies: `fx.b.g()` in `a/b.onsa` is `use b` and `b.g()` when the module `b` is at the
+/// root. With no `b` at the root there is no candidate (the part after the package name does not name a module
+/// at the root).
+#[test]
+fn the_package_name_before_the_name_of_the_module_itself_is_the_root_path() {
+    let call = "pub fn j() -> I32 {\n  fx.b.g()\n}\n";
+    let d = fx("own_name_root", &[("a/b.onsa", call), ("b.onsa", &f("g"))]);
+    assert_body_candidate(&d, "a/b.onsa", &["use b"], "fx.b.g() with b at the root");
+    let d = fx("own_name_no_root", &[("a/b.onsa", &format!("{}\n{call}", f("g")))]);
+    lone_e0302_without_candidate(&d, "a/b.onsa", "fx.b.g() with no b at the root");
+}
+
+/// §15.1 (S-684, S-682): `fx.a.b.inner.g()` in `a/b.onsa` would be `use a.b.inner` and `inner.g()`; when
+/// `a/b/inner.onsa` takes an item of `a/b.onsa` that `use` closes a cycle, so there is no candidate, and the
+/// note shows `use a.b.inner` (the form that was left out, with the module of the cycle).
+#[test]
+fn the_candidate_through_a_child_that_closes_a_cycle_is_left_out_with_a_note() {
+    let b = "pub fn k() -> I32 {\n  1\n}\n\npub fn j() -> I32 {\n  fx.a.b.inner.g()\n}\n";
+    let inner = "use a.b.{k}\n\npub fn g() -> I32 {\n  k()\n}\n";
+    let d = fx("own_abs_child_cycle", &[("a/b.onsa", b), ("a/b/inner.onsa", inner)]);
+    let note = lone_e0302_without_candidate(&d, "a/b.onsa", "inner takes a.b");
+    assert!(note.contains("use a.b.inner"), "the note shows the form that was left out: {note:?}");
+}
+
+/// §15.1, §18.1 (S-685): a list that has the module itself and other names fails in the one element (the
+/// module itself, S-679, with no candidate) and takes the others. `use d.{b, e}` in `d/b.onsa`: one E0302,
+/// and `e` is taken, so `e.f()` is fine; the dependency on `d.e` counts (S-678: the names of a list that
+/// are there are dependencies), so with `d/e.onsa` taking `d.b` the two are a cycle (E0310).
+#[test]
+fn a_list_with_the_module_itself_and_other_names_takes_the_others() {
+    let b = "use d.{b, e}\n\npub fn j() -> I32 {\n  e.f()\n}\n";
+    let d = pkg("list_with_self_d", &[("d/b.onsa", b), ("d/e.onsa", &f("f"))]);
+    let (out, doc) = check_json(d.root(), &["."]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
+    assert_eq!(diagnostics(&doc).len(), 1, "{doc}");
+    assert_eq!(span_of(&diagnostics(&doc)[0]["span"]).line, 1, "{doc}");
+    assert!(fixes_of(&diagnostics(&doc)[0]).is_empty(), "{doc}");
+
+    let d = pkg("self_list_cycle", &[("d/b.onsa", b), ("d/e.onsa", &format!("use d.b\n\n{}", f("f")))]);
+    let (_, doc) = check_json(d.root(), &["."]);
+    let cycles = of_code(&doc, "E0310");
+    assert!(!cycles.is_empty(), "the dependency on d.e counts: {doc}");
+    for c in cycles {
+        let m = str_of(c, "message");
+        assert!(m.contains("`d.b`") && m.contains("`d.e`"), "the modules of the cycle: {m:?}");
+    }
 }

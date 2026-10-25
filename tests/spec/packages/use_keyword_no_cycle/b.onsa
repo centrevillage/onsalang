@@ -1,0 +1,5 @@
+use kw.{match}                                      //~ E0002
+
+pub fn j() -> I32 {
+  1
+}

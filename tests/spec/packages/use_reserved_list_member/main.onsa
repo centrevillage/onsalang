@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// §15.1, §18.1 (a reading of §18.1 that no decision states yet): the name `clock` in the list of `use kp.{clock}` is
+// a reserved word, E0200, and the name is read as a whole, so the `use` is not one whose names could not all
+// be read: the name `zzz`, which no `use` takes, is E0302 in the module as in a module without the `use`.
+use kp.{clock}                                      //~ E0200
+
+pub fn t() -> I32 {
+  zzz()                                             //~ E0302
+}

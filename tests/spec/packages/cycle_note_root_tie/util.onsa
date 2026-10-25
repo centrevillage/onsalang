@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-687: the head `util` of `dsp/util.onsa` is a module at the root and the own name of that module. The module
+// at the root is read first, and `util.g()` is read whole that way, but the `use util` that it needs would
+// close a cycle (this module takes an item of `dsp/util.onsa`). The reading of the own name (`g()`) is not
+// taken then: there is no candidate, and the note shows `use util` and the module of the cycle
+// (crates/onsa_cli/tests/use_cycles.rs).
+use dsp.util.{f}
+
+pub fn g() -> I32 {
+  f()
+}

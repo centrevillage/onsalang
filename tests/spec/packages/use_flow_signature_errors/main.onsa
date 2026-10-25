@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// §18.1: what a declaration with an error could not read is an error type, and the places that use it report
+// no chain of errors. The flows of `dsp/` have an error in the signature (the type `Nope`, the clock `nosuch`,
+// no clock); the error is reported once, for the flow (the expected marks are in the files of `dsp/`). Whether
+// the namespace of such a flow has `process_inplace` depends on the types that could not be read, so the `use`
+// of it in another module (the files `from_*.onsa`) is silent. The controls are `from_absent.onsa` (a flow
+// without error and without a sample input: E0302) and `from_present.onsa` (a flow without error and with the
+// item: nothing).
+pub fn f() -> I32 {
+  1
+}

@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-684, S-682: the path after the package name is read from the root, and its own absolute path is taken off
+// with the package name: `fx.a.b.inner.g()` in `a/b.onsa` is `use a.b.inner` and `inner.g()`. That `use`
+// would close a cycle (`a/b/inner.onsa` takes an item of `a/b.onsa`), so there is no candidate, and the note
+// shows the form and the module of the cycle (crates/onsa_cli/tests/use_cycles.rs).
+pub fn run() -> I32 {
+  1
+}

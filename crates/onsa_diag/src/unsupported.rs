@@ -86,6 +86,9 @@ features! {
     /// `{}`: the effect's name.
     Effects: Language, "effects other than `Alloc` (`{}`)", None;
     Extern: Language, "`extern` blocks", None;
+    /// S-596: with the dependencies other than `std` (§19.1). Its note is
+    /// the `use` of the module that defines the names (`onsa_sema`).
+    Reexports: Language, "re-exports (`pub use`)", None;
     Unsafe: Language, "`unsafe` blocks (FFI)", None;
     Ptr: Language, "`Ptr` (FFI)", None;
     UserTargets: Language, "`target` declarations outside `std` (they need a build target)", None;
@@ -181,6 +184,9 @@ features! {
     ConditionalInstances: Language, "running an instance on a condition (the reserved word `when`)", None;
     ResetInstances: Language, "resetting an instance to its initial state (the reserved word `reset_if`)", None;
     SerialFlows: Language, "the serial copies of a flow (the reserved word `ser`)", None;
+    /// Not yet a keyword of the lexer (W5-11): read where a name is
+    /// declared or taken (`onsa_sema`).
+    StaticMarks: Language, "the mark of what is static only (the reserved word `static`)", None;
     /// S-96, R-122: the role of the root's `tests/` is the second phase's
     /// (§15.1, §19.1); each `.onsa` file there is one, at its head.
     PackageTests: Language, "the `tests/` directory of the package root (its `.onsa` files are not modules)",

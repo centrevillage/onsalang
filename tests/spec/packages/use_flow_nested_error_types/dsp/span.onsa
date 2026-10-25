@@ -1,0 +1,5 @@
+pub flow bad(
+  x: Span[Nope] at sample,                             //~ E0302
+) -> F32 at sample {
+  1.0
+}

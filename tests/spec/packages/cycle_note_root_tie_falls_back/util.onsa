@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// S-687: the same as `cycle_note_root_tie`, but the module at the root has no `g`, so `util.g()` is not read
+// whole that way and the reading of the own name is taken: the candidate takes `util.` off (`g()`), which
+// adds no `use` and so closes no cycle.
+use dsp.util.{f}
+
+pub fn k() -> I32 {
+  f()
+}

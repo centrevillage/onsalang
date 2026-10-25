@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§18.1"]
+
+// S-629, S-670: a body in braces is not what a `target` declaration has in any package (std's body is an `else`
+// body, §15.2): E0002 in the syntax stage, and the declaration is not reported as unsupported.
+target fn open() -> I32 { 1 }                       //~ E0002
+target rt fn read_input() { }                       //~ E0002
+pub target fn close(d: I32) -> I32 { d }            //~ E0002

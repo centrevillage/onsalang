@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-694, §11.6: the name `process_inplace` that a signature reads is the name of a function, so a flow that
+// writes it as the type of its input or its output (here the flow takes the item of its own namespace) has
+// the E0302 of a name that is no type, at that place. The flow has a signature with an error, so whether its
+// namespace has `process_inplace` is not decided, and the `use` of it is silent (§18.1). The check ends with
+// the E0302 of the place of the type, in each of the modules (`main.onsa`: the type of a sample input;
+// `in_output.onsa`: the type of the output; `in_block.onsa`: the type of a block input; `via_alias.onsa`: the type
+// through a type alias, whose error is the one of the alias).
+use main.f.{process_inplace}
+pub flow f(x: process_inplace at sample) -> F32 at sample {  //~ E0302
+  1.0
+}
