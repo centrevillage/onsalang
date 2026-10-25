@@ -26,6 +26,7 @@
 - **Windows の junction（55 回目、2026-10-23、S-592）:** パッケージの木の中の Windows の junction を、シンボリックリンクと同じに辿らないか（Rust の `FileType::is_symlink` が junction を含むかは未確認）を、Windows で動かす作業で確かめる。
 - **再公開（57 回目、2026-10-23、S-596）:** `pub use` を、std 以外の依存と一緒に入れる（§19.1）。第 1 期は `pub` の位置の E0200。決めること: 取り込めるのを項目だけにするか、モジュールとパッケージも再公開できるか、再公開した束縛を経路の途中に通すか、`onsa interface` の表示、失敗した `pub use` の名前の扱い（S-462）。
   材料は S-596 の下書き（`decisions/S/S-596.draft.md` の形の表 23 行と、独立のレビューの結論。下書きと助言は「項目だけ」で一致した）と `target/notes/57/gap41/`。第 1 期の `pub use` の事例（W4-03 で E0200 に直す 4 か所）の項目の再公開の正例と E0303 の否定例を、入れるときに戻す。
+  W4-03 U3b2（69 回目）で E0200 に直す前の形: `tests/spec/packages/visibility/main.onsa` の `pub use util.{shown}`（`pub` の項目の再公開の正例）と `pub use util.{SHARED} //~ E0303`（可視性の語の無い項目の再公開は E0303）、`tests/spec/types/visibility.onsa` の `pub use std.math.{sqrt}`、`tests/spec/fixes/e0020_field_visibility.onsa` の `pub use std.dsp.{db_to_amp}`（std の項目の再公開の正例）、R-39 の `tests/review-phase1/types/reexp`（`a.onsa` の `pub use b.{g}`、`b.onsa` の `pub use c.{g}`、`c.onsa` の `pub fn g() -> I32 { 1 }` の再公開の連鎖。U3b2 で `tests/spec/packages/pub_use_chain` に写した）。
 - **解放の起きない破棄（58 回目、2026-10-24、S-613 の範囲の外のまとめ）:** 規則は `Alloc` を求めるが、実行時には確保も解放も起きない場面（今の制限）を、ケースごとに利用者が時期を決めた。
   第 1 期は `Str` を持つ関数の `build` と `test` が E0200 なので、緩めるケース（L1〜L4）はどれも第 1 期に違うのは `check` の結果だけである。材料は `target/notes/58/alloc58/draft.md`（形の表と試した入力）。
   共通の見方（仕様の文から組み立てた分析で、決まった規則ではない）: 効果行が rt 効果だけの関数（閉じた文脈）では、ヒープのオブジェクトは作られず解放もされない。破棄が参照カウントを 0 にしうるのは、`move` の引数（`move self` を含む）から来た参照を持つ値だけである。
