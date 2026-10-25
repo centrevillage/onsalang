@@ -1,0 +1,7 @@
+pub flow g(x: F32 at sample) -> St at sample {
+  St { a: x, b: x }
+}
+pub struct St { a: F32, b: F32 }
+pub fn k(move s: g.State) -> g.State {
+  s
+}

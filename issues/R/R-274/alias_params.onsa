@@ -1,0 +1,5 @@
+pub type Al[T] = (T, T)
+
+pub fn f(a: Al[I32]) -> I32 {
+  1
+}
