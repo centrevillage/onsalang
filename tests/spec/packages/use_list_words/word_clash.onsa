@@ -1,0 +1,3 @@
+// The element after the keyword is bound: the later `use` of the name `h` clashes with it (S-462).
+use kp.{g, match, h}                                //~ E0002
+use other.{h}                                       //~ E0304

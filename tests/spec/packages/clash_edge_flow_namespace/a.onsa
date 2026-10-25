@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§15.1", "§18.1"]
+
+// S-688: `gain` of `b` is a flow and a function of one name, E0305 on the later (§11.2). The name is an error
+// name for the other modules (§18.1), so the `use b.{gain}` of `a` is silent and no dependency (E0310): `b`
+// takes `a` back and there is no cycle. The only diagnostic is the E0305.
+use b.{gain}
+
+pub fn f() -> I32 {
+  1
+}

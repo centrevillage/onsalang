@@ -1,0 +1,15 @@
+use kp.{g, match, h}                               //~ E0002
+
+pub fn no_such_name() -> I32 {
+  zzz()                                             //~ E0302
+}
+
+pub fn bound_g() -> I32 {
+  let _: Bool = g()                                 //~ E0401
+  0
+}
+
+pub fn bound_h() -> I32 {
+  let _: Bool = h()                                 //~ E0401
+  0
+}

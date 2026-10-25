@@ -130,21 +130,7 @@ impl<'a> Lower<'a> {
             }
             NodeKind::Use => {
                 let tree = self.need(n, NodeKind::UseTree);
-                let segments = self
-                    .toks(tree)
-                    .into_iter()
-                    .filter(|&t| self.kind_of(t) != TokenKind::Dot)
-                    .map(|t| self.ident(t))
-                    .collect();
-                let path = Path { segments, span: self.span(tree) };
-                let names = self.child(tree, NodeKind::UseNames).map(|u| {
-                    self.toks(u)
-                        .into_iter()
-                        .filter(|&t| self.kind_of(t) == TokenKind::Ident)
-                        .map(|t| self.ident(t))
-                        .collect()
-                });
-                ItemKind::Use(UseDecl { path, names })
+                ItemKind::Use(self.use_decl(tree))
             }
             NodeKind::Extern => {
                 let strs: Vec<TokenIdx> =
@@ -307,5 +293,18 @@ impl<'a> Lower<'a> {
         let segments =
             self.toks(n).into_iter().filter(|&t| self.kind_of(t) != TokenKind::Dot).map(|t| self.ident(t)).collect();
         Path { segments, span: self.span(n) }
+    }
+
+    /// The `UseTree` `tree` of a `use`, read whole or cut (R-180): its path
+    /// and the names of its list read, a keyword among them (R-272).
+    pub(super) fn use_decl(&self, tree: NodeId) -> UseDecl {
+        let names = self.child(tree, NodeKind::UseNames).map(|u| {
+            let names = self
+                .toks(u)
+                .into_iter()
+                .filter(|&t| self.kind_of(t) == TokenKind::Ident || self.kind_of(t).is_keyword());
+            names.map(|t| self.ident(t)).collect()
+        });
+        UseDecl { path: self.path(tree), names }
     }
 }

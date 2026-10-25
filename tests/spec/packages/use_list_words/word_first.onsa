@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// R-272, S-462: a reserved word or a keyword that is an element of the list of a `use` is the failed name of
+// that element only. The elements after it are read and taken (`g` is bound: the call is read as the
+// function, `Bool` is E0401), and the module is not silenced: `zzz`, which no `use` takes, is E0302.
+// Each form is in a module of its own (word first, in the middle, last).
+use kp.{clock, g}                                   //~ E0200
+
+pub fn no_such_name() -> I32 {
+  zzz()                                             //~ E0302
+}
+
+pub fn bound_g() -> I32 {
+  let _: Bool = g()                                 //~ E0401
+  0
+}

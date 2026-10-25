@@ -1,0 +1,10 @@
+use kp.{a, static}                                   //~ E0200
+
+pub fn no_such_name() -> I32 {
+  zzz()                                             //~ E0302
+}
+
+pub fn bound_a() -> I32 {
+  let _: Bool = a()                                 //~ E0401
+  0
+}

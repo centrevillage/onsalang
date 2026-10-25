@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-688: two `use` of the name `b`: the later one is E0304 (§15.1), and neither is a dependency (§18.1). The
+// earlier `use b`, which the E0304 is not on, would close a cycle (`b` takes `a`), and it is not counted
+// either: a rule that left out only the one that was reported would give an E0310 here. The only
+// diagnostic is the E0304.
+use b
+use kp.b                                            //~ E0304
+
+pub fn f() -> I32 {
+  1
+}

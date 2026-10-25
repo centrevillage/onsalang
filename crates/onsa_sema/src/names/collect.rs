@@ -9,7 +9,6 @@ use onsa_syntax::ast::{
     Ast, ExprId, ExprKind, Failed, GenericParam, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit, UseDecl, Vis,
 };
 
-use super::clash::Unbindable;
 use crate::def::*;
 use crate::resolve::{Import, ModInfo, UseAt};
 use crate::sig::Sema;
@@ -157,44 +156,28 @@ impl<'p> Sema<'p> {
     }
 
     /// A `use` of `m` read whole, resolved later ([`Sema::resolve_imports`])
-    /// unless it stops here: a name taken that is no name of a declaration
-    /// (R-266), or a `pub use`, the E0200 at `pub` (§15.1, S-596) whose names
-    /// are failed in the namespace too. The names of one that stops are
-    /// failed, and make no dependency (§18.1).
+    /// unless it is a `pub use`, the E0200 at `pub` (§15.1, S-596) whose names
+    /// are failed in the namespace too, and make no dependency (§18.1). A
+    /// name taken that is a keyword or a reserved word, the syntax stage's
+    /// E0002 or E0200 (R-266, R-275), is failed alone (R-272).
     fn collect_use(&mut self, m: ModId, item: &Item, id: ItemId, u: &UseDecl) {
-        // The names taken, and the path before them. Of a list, only
-        // `static` is left to read here: the syntax stage reads the keywords.
-        let before = match (&u.names, u.path.segments.split_last()) {
-            (None, Some((_, before))) => before,
-            _ => &u.path.segments[..],
-        };
-        let stop = taken_names(u).find_map(|name| not_a_declared_name(name, before));
-        let stop = match item.vis {
-            Vis::Pub => Some(stop.unwrap_or_else(|| {
-                let at = item.vis_span.unwrap_or(item.span);
-                let mut form: Vec<&str> = u.path.segments.iter().map(|s| s.name.as_str()).collect();
-                let list = u.names.as_ref().map(|l| l.iter().map(|n| n.name.as_str()).collect::<Vec<_>>().join(", "));
-                let list = list.map(|l| format!("{{{l}}}"));
-                form.extend(list.as_deref());
-                let rule = format!(
-                    "a module that uses the names takes them from the module that defines them (`use {}`)",
-                    form.join(".")
-                );
-                Feature::Reexports.diagnostic(Stage::Names, at, &[]).with_rule(rule)
-            })),
-            _ => stop,
-        };
-        match stop {
-            Some(d) => {
-                self.report_mod(d);
-                self.fail_taken(m, u, item.vis);
-            }
-            None => {
-                let names = u.names.clone();
-                let import = Import { path: u.path.clone(), names, vis: item.vis, span: item.span, item: id };
-                self.a.modules.get_mut(m).imports.push(import);
-            }
+        if item.vis == Vis::Pub {
+            let at = item.vis_span.unwrap_or(item.span);
+            let mut form: Vec<&str> = u.path.segments.iter().map(|s| s.name.as_str()).collect();
+            let list = u.names.as_ref().map(|l| l.iter().map(|n| n.name.as_str()).collect::<Vec<_>>().join(", "));
+            let list = list.map(|l| format!("{{{l}}}"));
+            form.extend(list.as_deref());
+            let rule = format!(
+                "a module that uses the names takes them from the module that defines them (`use {}`)",
+                form.join(".")
+            );
+            self.report_mod(Feature::Reexports.diagnostic(Stage::Names, at, &[]).with_rule(rule));
+            self.fail_taken(m, u, item.vis);
+            return;
         }
+        let names = u.names.clone();
+        let import = Import { path: u.path.clone(), names, vis: item.vis, span: item.span, item: id };
+        self.a.modules.get_mut(m).imports.push(import);
     }
 
     /// The def of a `test`, whose name is one in its module (E0306, §11.8).
@@ -395,38 +378,6 @@ impl Place<'_> {
 fn taken_names(u: &UseDecl) -> impl Iterator<Item = &Ident> {
     let last = if u.names.is_none() { u.path.segments.last() } else { None };
     u.names.iter().flatten().chain(last)
-}
-
-/// The last element of the path of a `use` with no list, read as the name of
-/// a declaration (§15.1, §2.2, R-266): a keyword is E0002, a reserved word its
-/// E0200 (`_` is no element of a path, the syntax stage's E0002). The
-/// elements `before` it are read as names of modules.
-fn not_a_declared_name(name: &Ident, before: &[Ident]) -> Option<Diagnostic> {
-    match super::clash::unbindable(&name.name)? {
-        Unbindable::Reserved(feature) => {
-            return Some(feature.diagnostic(Stage::Names, name.span, &[]).with_found(name.name.clone()));
-        }
-        Unbindable::Keyword => {}
-        // A builtin name of a flow: the E0304 of the names bound.
-        Unbindable::FlowBuiltin => return None,
-    }
-    let n = &name.name;
-    let rule = match before.split_last() {
-        Some((parent, _)) => {
-            let path: Vec<&str> = before.iter().map(|s| s.name.as_str()).collect();
-            let path = path.join(".");
-            format!(
-                "`{n}` is a keyword, which a `use` does not bind: take names from it with a list \
-                 (`use {path}.{n}.{{…}}`), or take `{p}` and write the path from it (`use {path}`, then `{p}.{n}.…`)",
-                p = parent.name
-            )
-        }
-        None => {
-            format!("`{n}` is a keyword, which a `use` does not bind: take names from it with a list (`use {n}.{{…}}`)")
-        }
-    };
-    let msg = format!("expected imported name, found `{n}`");
-    Some(Diagnostic::new(Stage::Names, Code::E0002, name.span, msg).with_found(n.clone()).with_rule(rule))
 }
 
 fn struct_def(fields: Fields) -> StructDef {

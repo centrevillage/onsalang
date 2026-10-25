@@ -1,0 +1,2 @@
+// A `pub use` that is cut at `3`: `g` was read, `h` was not (S-596).
+pub use kp.{g, 3, h}                                //~ E0002

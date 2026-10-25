@@ -1,0 +1,10 @@
+// A list that is cut in the middle (`3` is no name, §15.1) is the other kind: the names it read are failed
+// names and the module is silenced for the names it did not find (§18.1), so there is no E0302 or E0401 below.
+use kp.{g, 3, h}                                    //~ E0002
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  let _: Bool = g()
+  let _: Bool = h()
+  0
+}

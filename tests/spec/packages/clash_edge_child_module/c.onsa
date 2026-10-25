@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-688: the item `sub` of `a.onsa` and the child module `a/sub.onsa` are one name in the namespace of the
+// module `a`, E0304 on the item (§15.1). The `use a.sub` of `c` takes that name, which is an error name, so it is
+// silent and no dependency (E0310): `a.sub` takes `c` back and there is no cycle. The only diagnostic is the E0304.
+use a.sub
+
+pub fn f() -> I32 {
+  1
+}

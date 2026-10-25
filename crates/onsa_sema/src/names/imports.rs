@@ -14,6 +14,7 @@ use crate::Analysis;
 use crate::def::{DefId, DefKind, ModId};
 use crate::resolve::{Dep, DepTarget, Entity, Import, ResolveError, UseBinding};
 
+use super::clash::{Unbindable, unbindable};
 use super::lookup::OWN_ITEMS;
 use crate::sig::Sema;
 
@@ -60,6 +61,9 @@ fn walk<'i>(a: &Analysis, m: ModId, segs: &'i [Ident], names: Option<&'i [Ident]
         .into_iter()
         .map(|name| {
             let entity = match from {
+                // A keyword or a reserved word, the syntax stage's E0002 or
+                // E0200: failed alone (§18.1, R-272, R-275).
+                _ if matches!(unbindable(&name.name), Some(Unbindable::NotAName)) => Err(ResolveError::Failed),
                 None => head_of(a, m, name),
                 // A name of a `pub use` of the module, which is failed (§18.1,
                 // S-596); never in the path before the names.
@@ -104,6 +108,9 @@ impl<'p> Sema<'p> {
         }
         for (name, entity) in &w.names {
             match *entity {
+                // SPEC-GAP(S-695): only the module itself is taken here; a name
+                // of a flow of `m` through its path (`use main.f.{process_inplace}`
+                // in `main.onsa`) is taken.
                 Ok(Entity::Module(c)) if c == m => {
                     self.report_mod(takes_itself(name));
                     self.fail(m, name);

@@ -1,0 +1,9 @@
+use pub_middle.{g}
+use pub_middle.{h}
+use pub_middle.{zzz}                                //~ E0302
+
+pub fn silent() -> I32 {
+  let _: Bool = g()
+  let _: Bool = h()
+  0
+}

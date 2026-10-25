@@ -1,0 +1,19 @@
+pub fn g() -> I32 {
+  1
+}
+
+pub fn h() -> I32 {
+  2
+}
+
+pub fn a() -> I32 {
+  3
+}
+
+pub fn half(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub struct Wrap[T] {
+  v: T,
+}

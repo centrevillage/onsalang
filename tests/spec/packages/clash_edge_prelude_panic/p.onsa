@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§5.1"]
+
+// S-688: the same as `clash_edge_builtin_names` with the prelude function `panic`, which the table of the prelude
+// takes in only in U5 (W4-03): `q` takes `p` back, and `use q.{panic}` is E0304 and no dependency.
+use q.{panic}                                       //~ E0304
+
+pub fn f() -> I32 {
+  1
+}

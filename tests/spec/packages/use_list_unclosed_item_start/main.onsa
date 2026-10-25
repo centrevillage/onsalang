@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// R-272, §18.1: a list that is not closed ends at the item on the next line, a keyword at the head of the line
+// too (`fn` here): the E0002 is the one of the `{` that is never closed, and the items that follow are read
+// (the E0401 inside `m` and inside `bad`). The keyword inside a closed list is another case
+// (`use_list_words`, `word_middle.onsa`).
+use kp.{g,                                          //~ E0002
+fn m() -> I32 {
+  true                                              //~ E0401
+}
+
+pub fn bad() -> I32 {
+  true                                              //~ E0401
+}

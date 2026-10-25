@@ -1,0 +1,5 @@
+use p.{f}
+
+pub fn panic() -> I32 { //~ E0304
+  1
+}

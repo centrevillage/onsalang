@@ -556,7 +556,8 @@ impl<'a> Parser<'a> {
         // The head of the path of a `use` reads a keyword as a name, as
         // after a `.` (S-20, S-37, S-371: `use test.{Gen}` in std).
         // SPEC-GAP(S-443): a reserved word there too (`use clock.{x}`).
-        self.parse_name_after_dot("module path")?;
+        let mut path = vec![self.parse_name_after_dot("module path")?];
+        let mut listed = false;
         loop {
             if self.dot_apart() {
                 return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
@@ -567,15 +568,17 @@ impl<'a> Parser<'a> {
             if self.at(TokenKind::LBrace) {
                 let n = self.start(NodeKind::UseNames)?;
                 self.bump();
+                let base = self.braces.len();
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
-                        // A keyword is read as the name of a declaration
-                        // (§15.1, R-266): its rule shows the forms that take it.
-                        let t = p.peek();
-                        if t.kind.is_keyword() && t.kind.reserved().is_none() {
-                            return Err(p.fail_noting(Want::Other, "imported name", t, USE_KEYWORD_RULE));
+                        // The `{` is never closed and an item starts the line:
+                        // the top-level recovery reports the `{` (§18.1), before
+                        // a keyword is read as a name.
+                        if p.list_ends_unclosed(base) {
+                            return Err(ParseError);
                         }
-                        p.parse_ident("imported name")?;
+                        let t = p.parse_name_after_dot("imported name")?;
+                        p.check_taken(t, &path);
                         if p.eat(TokenKind::Comma).is_none() {
                             break;
                         }
@@ -584,6 +587,7 @@ impl<'a> Parser<'a> {
                     Ok(())
                 })?;
                 self.complete(n, NodeKind::UseNames);
+                listed = true;
                 break;
             }
             if self.at(TokenKind::Star) {
@@ -594,11 +598,42 @@ impl<'a> Parser<'a> {
                     "there is no glob import; list the names in `{ }` (§15.1)",
                 ));
             }
-            self.parse_name_after_dot("module path")?;
+            path.push(self.parse_name_after_dot("module path")?);
+        }
+        if let (false, Some((&last, before))) = (listed, path.split_last()) {
+            self.check_taken(last, before);
         }
         self.complete(tree, NodeKind::UseTree);
         self.complete(m, NodeKind::Use);
         Ok(())
+    }
+
+    /// A name a `use` takes (`t`, after the path `before`), read as the name
+    /// of a declaration (§15.1, §2.2, R-266, R-275): a keyword is E0002 and a
+    /// reserved word its E0200, and the `use` is read on (R-272).
+    fn check_taken(&mut self, t: Token, before: &[Token]) {
+        let word = self.token_text(t).to_string();
+        let d = match crate::token::not_a_name(&word) {
+            None => return,
+            Some(NotAName::Reserved(feature)) => feature.diagnostic(Stage::Syntax, t.span, &[]),
+            Some(NotAName::Keyword) => {
+                let path: Vec<&str> = before.iter().map(|&s| self.token_text(s)).collect();
+                let (path, n) = (path.join("."), &word);
+                let rule = match before.last() {
+                    Some(&parent) => format!(
+                        "`{n}` is a keyword, which a `use` does not bind: take names from it with a list \
+                         (`use {path}.{n}.{{…}}`), or take `{p}` and write the path from it (`use {path}`, then `{p}.{n}.…`)",
+                        p = self.token_text(parent)
+                    ),
+                    None => format!(
+                        "`{n}` is a keyword, which a `use` does not bind: take names from it with a list (`use {n}.{{…}}`)"
+                    ),
+                };
+                Diagnostic::new(Stage::Syntax, Code::E0002, t.span, format!("expected imported name, found `{n}`"))
+                    .with_rule(rule)
+            }
+        };
+        self.report(d.with_found(word));
     }
 
     pub(super) fn parse_extern(&mut self, _: ItemCtx) -> PResult<()> {
@@ -792,8 +827,3 @@ pub(super) enum VisRead {
 
 /// The note of a visibility of another language (§15.1).
 const VISIBILITY_RULE: &str = "the visibility is `pub` (out of the package), no word (within the package) or `priv` (within the module); there is no other form (§15.1)";
-
-/// The rule of a keyword in the list of a `use` (§15.1, R-266).
-const USE_KEYWORD_RULE: &str = "a keyword is no name a `use` binds: take names from the module of that name with a \
-     list (`use std.test.{…}`), or take the module before it and write the path from it (`use std`, then \
-     `std.test.…`)";

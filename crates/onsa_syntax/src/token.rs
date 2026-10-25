@@ -462,6 +462,29 @@ pub struct Keyword {
     pub reserved: Option<Feature>,
 }
 
+/// Why a word is no name of a declaration (§2.2): a keyword is E0002, a
+/// reserved word the E0200 of its feature.
+#[derive(Debug, Clone, Copy)]
+pub enum NotAName {
+    Keyword,
+    Reserved(Feature),
+}
+
+/// The reserved word the lexer does not read as one yet (§2.2, S-615):
+/// W5-11 adds it to [`KEYWORDS`], and this goes.
+const UNLEXED_RESERVED: (&str, Feature) = ("static", Feature::StaticMarks);
+
+/// Whether the word `text` is no name of a declaration, and why: the one
+/// table of the names a `use` takes (§15.1, R-266, R-275), which the syntax
+/// stage reads and `onsa_sema`'s names stage reads after it.
+pub fn not_a_name(text: &str) -> Option<NotAName> {
+    if text == UNLEXED_RESERVED.0 {
+        return Some(NotAName::Reserved(UNLEXED_RESERVED.1));
+    }
+    let kind = TokenKind::keyword(text)?;
+    Some(kind.reserved().map_or(NotAName::Keyword, NotAName::Reserved))
+}
+
 const fn kw(text: &'static str, kind: TokenKind) -> Keyword {
     Keyword { text, kind, reserved: None }
 }
@@ -596,5 +619,18 @@ mod tests {
             assert!(!not.is_keyword(), "{not:?}");
         }
         assert_eq!(TokenKind::keyword("loop"), None);
+    }
+
+    #[test]
+    fn a_keyword_and_a_reserved_word_are_no_names_of_declarations() {
+        for name in ["match", "test", "fn"] {
+            assert!(matches!(not_a_name(name), Some(NotAName::Keyword)), "{name}");
+        }
+        for name in ["clock", "ser", "static"] {
+            assert!(matches!(not_a_name(name), Some(NotAName::Reserved(_))), "{name}");
+        }
+        for name in ["util", "prev", "statics", "Option"] {
+            assert!(not_a_name(name).is_none(), "{name}");
+        }
     }
 }

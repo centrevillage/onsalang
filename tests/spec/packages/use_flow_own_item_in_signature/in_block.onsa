@@ -1,4 +1,4 @@
 use in_block.f.{process_inplace}
-pub flow f(x: F32 at sample, g: process_inplace at block) -> F32 at sample {  //~ E0302
+pub flow f(x: F32 at sample, g: Nope at block) -> F32 at sample {  //~ E0302
   x
 }

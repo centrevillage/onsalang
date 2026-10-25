@@ -1,0 +1,3 @@
+[package]
+name = "clash_edge_prelude_panic"
+edition = "2026"

@@ -1,0 +1,9 @@
+use a.{f}
+
+pub flow gain(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn gain() -> F32 {                              //~ E0305
+  1.0
+}

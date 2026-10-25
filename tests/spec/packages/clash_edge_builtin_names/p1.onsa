@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§5.1"]
+
+// S-688: the name that a `use` takes is E0304 with the name of the prelude (the enum `Option`), of a built-in type
+// (`F32`) or of a built-in flow (`prev`), and such a `use` is no dependency (E0310): each `q` takes its `p` back,
+// and there is no cycle in any of the three pairs. The item of each `q` with the name is E0304 in its own
+// module too (§15.1), which is the second mark of each pair. (The function `panic` is in
+// `clash_edge_prelude_panic`.)
+use q1.{Option}                                     //~ E0304
+
+pub fn f1() -> I32 {
+  1
+}

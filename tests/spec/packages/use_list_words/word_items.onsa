@@ -1,0 +1,11 @@
+// The elements after the word are taken whatever they are: a generic struct and a function.
+use kp.{clock, Wrap, half}                          //~ E0200
+
+pub fn wrap(w: Wrap[I32]) -> I32 {
+  w                                                 //~ E0401
+}
+
+pub fn halve() -> I32 {
+  let _: Bool = half(1.0)                           //~ E0401
+  0
+}

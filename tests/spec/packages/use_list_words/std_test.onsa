@@ -1,0 +1,5 @@
+use std.{test}                                        //~ E0002
+
+pub fn no_such_name() -> I32 {
+  zzz()                                             //~ E0302
+}

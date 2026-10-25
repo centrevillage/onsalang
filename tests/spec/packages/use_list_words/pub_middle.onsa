@@ -1,0 +1,4 @@
+// S-596, S-462: a `pub use` with a keyword in its list is the E0002 of the word and nothing more (the unit stops at the
+// syntax stage). The names it read (`g`, `h`) are failed names for the modules that take them from here,
+// and the module is not cut: a name it has not is E0302 (`taker.onsa`).
+pub use kp.{g, match, h}                            //~ E0002

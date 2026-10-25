@@ -1,0 +1,3 @@
+[package]
+name = "clash_edge_flow_namespace"
+edition = "2026"

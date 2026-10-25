@@ -1,0 +1,6 @@
+// The same with the item written before the `use`: the E0304 is on the `use` and `c` and `d` are no cycle.
+pub fn d() -> I32 {
+  2
+}
+
+use d                                               //~ E0304

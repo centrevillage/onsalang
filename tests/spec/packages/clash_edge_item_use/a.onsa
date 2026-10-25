@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-688: the item `b` of this module and the `use b` (the module `b`) are one name, so the `use` is E0304 (the
+// `use` gets it whichever is written first, §15.1). The name is an error name, so the `use` that takes it is
+// no dependency (E0310, §15.1, §18.1): `b` takes `a` back and there is no cycle. The only diagnostic of the
+// pair is the E0304. (With the item named otherwise it is a cycle.)
+use b                                               //~ E0304
+
+pub fn b() -> I32 {
+  1
+}

@@ -2298,9 +2298,24 @@ reasons = ["R-246", "S-36"]
 until = "W4-03"
 note = "可視性の語の無い extern のメンバをパッケージの中に見せる意味は U4。今は他のモジュールの use が E0303"
 
+# --- W4-03 U3d: E0304 の名前の辺と並びの要素の読み続けの事例のうち、後の単位・作業で通るもの（2026-10-25）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/use_reserved_list_member"
-reasons = ["R-272"]
+target = "tests/spec/packages/clash_edge_prelude_panic"
+reasons = ["S-688", "S-611", "R-103"]
 until = "W4-03"
-note = "並びの要素の予約語の use kp.{clock} がモジュールの見つからない名前を全て黙らせる（R-272、U3d）"
+note = "prelude の panic との E0304 は、panic が prelude の表に入る U5 で出る（overlap_prelude_panic と同じ）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_flow_absent_type_position_kinds"
+reasons = ["S-103"]
+until = "W4-04"
+note = "値（関数を含む）を型の位置に書く誤りの E0308 は W4-04 U7 のコードの割り当て。今は E0302"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_flow_own_item_signature_kind"
+reasons = ["S-103"]
+until = "W4-04"
+note = "自分の生成項目の関数の名前を署名の型に書く誤りの E0308 は W4-04 U7。今は E0302"

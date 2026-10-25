@@ -354,14 +354,7 @@ impl<'a> Lower<'a> {
             // the names of its list read so far.
             NodeKind::Use => {
                 let tree = self.child(d, NodeKind::UseTree)?;
-                let segments =
-                    self.toks(tree).into_iter().filter(|&t| self.kind_of(t) != TokenKind::Dot).map(|t| self.ident(t));
-                let path = Path { segments: segments.collect(), span: self.span(tree) };
-                let names = self.child(tree, NodeKind::UseNames).map(|u| {
-                    let names = self.toks(u).into_iter().filter(|&t| self.kind_of(t) == TokenKind::Ident);
-                    names.map(|t| self.ident(t)).collect()
-                });
-                return Some((ItemKind::Use(UseDecl { path, names }), Failed::Heading));
+                return Some((ItemKind::Use(self.use_decl(tree)), Failed::Heading));
             }
             // What is not a declaration.
             _ => return None,

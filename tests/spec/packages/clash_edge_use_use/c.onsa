@@ -1,0 +1,8 @@
+// The swapped pair: here the earlier `use kp.d` closes no cycle and the later `use d`, the one the E0304 is on,
+// would (`d` takes `c`). Not counted either, so no E0310: the result does not depend on the order of the lines.
+use kp.d
+use d                                               //~ E0304
+
+pub fn j() -> I32 {
+  1
+}

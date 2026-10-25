@@ -1,0 +1,2 @@
+use pub_cut.{g}
+use pub_cut.{h}                                     //~ E0302

@@ -53,7 +53,7 @@ use crate::layout::Lines;
 use crate::literal::Literals;
 use crate::scan::pattern_alternative;
 use crate::starts::{declares_a_function, starts_operand};
-use crate::token::{Gap, Token, TokenKind};
+use crate::token::{Gap, NotAName, Token, TokenKind};
 
 mod chain;
 mod cursor;

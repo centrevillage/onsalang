@@ -12,41 +12,30 @@
 //! from outside the source, the `use` against an item, and the later of two
 //! of a kind; the side not reported is checked.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::TokenKind;
 
 use crate::def::{DefId, ModId};
 use crate::sig::Sema;
 
-/// The reserved word the lexer does not read as one yet (W5-11).
-const UNLEXED_RESERVED: &str = "static";
-
 /// Why a `use` cannot bind a name, whatever it takes (§15.1, §2.2).
 pub(crate) enum Unbindable {
-    /// A keyword: E0002 (R-266).
-    Keyword,
-    /// A reserved word: the E0200 of its feature (R-266).
-    Reserved(Feature),
+    /// A keyword or a reserved word: the syntax stage's E0002 or E0200
+    /// (R-266, R-275), of the one table [`onsa_syntax::token::not_a_name`].
+    NotAName,
     /// A builtin name of a flow, which a flow body sees: E0304 (S-542).
     FlowBuiltin,
 }
 
 /// Whether a `use` can bind `name`: the one test of the names a `use` takes
-/// (`super::collect`), of the E0304 here and of the candidates that add a
+/// (`super::imports`), of the E0304 here and of the candidates that add a
 /// `use` (`super::lookup`).
 pub(crate) fn unbindable(name: &str) -> Option<Unbindable> {
-    // `static` is reserved (§2.2, S-615) but not yet a keyword of the lexer:
-    // W5-11 adds it to `onsa_syntax::token::KEYWORDS`, and this goes.
-    if name == UNLEXED_RESERVED {
-        return Some(Unbindable::Reserved(Feature::StaticMarks));
-    }
-    match TokenKind::keyword(name) {
-        Some(kw) => Some(kw.reserved().map_or(Unbindable::Keyword, Unbindable::Reserved)),
-        None if crate::flow_names::is_builtin(name) => Some(Unbindable::FlowBuiltin),
-        None => None,
+    if onsa_syntax::token::not_a_name(name).is_some() {
+        Some(Unbindable::NotAName)
+    } else {
+        crate::flow_names::is_builtin(name).then_some(Unbindable::FlowBuiltin)
     }
 }
 
@@ -64,7 +53,18 @@ impl<'p> Sema<'p> {
     pub(crate) fn check_use_clashes(&mut self) {
         for i in 0..self.a.modules.mods.len() {
             self.use_clashes(ModId(i as u32));
+            self.drop_clashed_deps(ModId(i as u32));
         }
+    }
+
+    /// The names of an E0304 or an E0305 in the body of `m` make no
+    /// dependency (§15.1, §18.1, S-688): of each `use` that binds one, the
+    /// side reported or not; the other names of the `use` make theirs (S-685).
+    fn drop_clashed_deps(&mut self, m: ModId) {
+        let info = self.a.modules.get_mut(m);
+        let clashed: HashSet<Span> =
+            info.bound.iter().filter(|(name, _)| info.clashed.body.contains(name)).map(|&(_, span)| span).collect();
+        info.deps.retain(|d| !clashed.contains(&d.name));
     }
 
     /// The items of `m` of a name of the prelude or a builtin name of a
@@ -213,11 +213,8 @@ mod tests {
 
     #[test]
     fn a_use_binds_no_keyword_and_no_builtin_name_of_a_flow() {
-        for name in ["match", "test"] {
-            assert!(matches!(unbindable(name), Some(Unbindable::Keyword)), "{name}");
-        }
-        for name in ["clock", "ser", "static"] {
-            assert!(matches!(unbindable(name), Some(Unbindable::Reserved(_))), "{name}");
+        for name in ["match", "test", "clock", "ser", "static"] {
+            assert!(matches!(unbindable(name), Some(Unbindable::NotAName)), "{name}");
         }
         for name in ["prev", "delay", "vdelay", "sample_rate", "sample_tick"] {
             assert!(matches!(unbindable(name), Some(Unbindable::FlowBuiltin)), "{name}");

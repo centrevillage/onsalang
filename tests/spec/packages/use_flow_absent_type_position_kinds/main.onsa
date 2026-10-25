@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-694, §11.6, S-103: in the place of a type, `process_inplace` is the name of a function whatever the flow
+// has (`one` has no sample input, so the namespace has none, and the `use` of it is E0302 after the
+// signatures), and a function written where a type is read is E0308 (§15.1: a value in the place of a
+// type), the same as `reset` (a function of every namespace) in the same place. `nosuch`, a name of a plain
+// failed `use`, is silent in all of them: it is the control of the failed name. The same places with the
+// `use` marks only are in `use_flow_absent_in_type_positions`.
+use dsp.synth.one.{process_inplace}                 //~ E0302
+use dsp.synth.one.{reset}
+use dsp.synth.{nosuch}                              //~ E0302
+
+pub fn in_a_signature(x: process_inplace) -> I32 {  //~ E0308
+  1
+}
+
+pub fn in_a_signature_reset(x: reset) -> I32 {      //~ E0308
+  1
+}
+
+pub fn in_a_signature_control(x: nosuch) -> I32 {
+  1
+}
+
+pub fn in_a_result() -> process_inplace {           //~ E0308
+  1
+}
+
+pub fn in_a_result_reset() -> reset {               //~ E0308
+  1
+}
+
+pub fn in_a_result_control() -> nosuch {
+  1
+}
+
+pub struct InAField {
+  a: process_inplace,                               //~ E0308
+}
+
+pub struct InAFieldReset {
+  a: reset,                                         //~ E0308
+}
+
+pub struct InAFieldControl {
+  a: nosuch,
+}
+
+type InAnAlias = process_inplace                    //~ E0308
+
+type InAnAliasReset = reset                         //~ E0308
+
+type InAnAliasControl = nosuch

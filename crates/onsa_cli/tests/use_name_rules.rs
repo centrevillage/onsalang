@@ -223,3 +223,81 @@ fn the_e0304_of_two_uses_of_one_name_is_on_the_later_use_in_the_source() {
         assert_eq!(span_of(&notes[0]["span"]).line, 1, "{tag}: the earlier use is the note: {doc}");
     }
 }
+
+/// The forms of a `use` that takes a word, with the code of the word: the last name of a path, the head of a
+/// path of one name, an element of a list, a keyword and a reserved word of each kind (§2.2, §15.1).
+const WORD_FORMS: [(&str, &str); 9] = [
+    ("use kp.clock", "E0200"),
+    ("use clock", "E0200"),
+    ("use kp.static", "E0200"),
+    ("use kp.{clock}", "E0200"),
+    ("use kp.{g, static, h}", "E0200"),
+    ("use std.test", "E0002"),
+    ("use match", "E0002"),
+    ("use kp.{test}", "E0002"),
+    ("use kp.{g, match, h}", "E0002"),
+];
+
+/// §18.2, §18.1, R-275: a `use` that takes a reserved word or a keyword is a diagnostic of the syntax stage
+/// (the E0200 of §2.2 and the E0002 of §15.1 are listed by §18.1), so `onsa fmt` does not rewrite the file and ends
+/// with the exit code 2, and `fmt --check` also (not 1, which is "not formatted"), with the diagnostic of
+/// the check on the standard output. The file is left as it was, whether the text is formatted or not.
+#[test]
+fn fmt_ends_with_exit_code_2_on_a_use_that_takes_a_word() {
+    let mut problems = Vec::new();
+    for (i, (line, code)) in WORD_FORMS.iter().enumerate() {
+        for (tag, text) in
+            [("canonical", format!("{line}\n")), ("loose", format!("{}\n\n\n", line.replacen(' ', "   ", 1)))]
+        {
+            let d = Dir::pkg(&format!("rules_fmt_word_{i}_{tag}"));
+            d.write("main.onsa", &text);
+            for args in [vec!["fmt", "--check", "main.onsa"], vec!["fmt", "main.onsa"]] {
+                let out = run(d.root(), &args);
+                if out.code != 2 || !out.stdout.contains(code) {
+                    problems.push(format!(
+                        "{line} ({tag}) {args:?}: want exit code 2 and {code} on the output: {} {} {}",
+                        out.code, out.stdout, out.stderr
+                    ));
+                }
+                if std::fs::read_to_string(d.root().join("main.onsa")).unwrap() != text {
+                    problems.push(format!("{line} ({tag}) {args:?}: the file is rewritten"));
+                }
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §18.2, R-275: the control is a `use` whose error is of the names stage (`use kp.prev`: the item `prev` of `kp`
+/// has the name of a built-in flow, E0304 in `kp`; the `use` that takes it is E0304 too): fmt is not
+/// stopped. A formatted file passes `fmt --check` (exit code 0), a loose one is rewritten to the formatted
+/// text (exit code 0), and the formatted text is not changed by a second run.
+#[test]
+fn fmt_is_not_stopped_by_a_use_that_is_an_error_of_the_names_stage() {
+    for (i, line) in ["use kp.prev"].iter().enumerate() {
+        let want = "use kp.prev\n";
+        let d = Dir::pkg(&format!("rules_fmt_name_stage_{i}"));
+        d.write("kp.onsa", &f("prev"));
+        d.write("main.onsa", want);
+        let out = run(d.root(), &["fmt", "--check", "main.onsa"]);
+        assert_eq!(out.code, 0, "{line}: {}{}", out.stdout, out.stderr);
+        d.write("main.onsa", &format!("{}\n\n\n", line.replacen(' ', "   ", 1)));
+        let out = run(d.root(), &["fmt", "main.onsa"]);
+        assert_eq!(out.code, 0, "{line}: {}{}", out.stdout, out.stderr);
+        let once = std::fs::read_to_string(d.root().join("main.onsa")).unwrap();
+        assert_eq!(once, want, "{line}");
+        let out = run(d.root(), &["fmt", "main.onsa"]);
+        assert_eq!(out.code, 0);
+        assert_eq!(std::fs::read_to_string(d.root().join("main.onsa")).unwrap(), once, "{line}: twice");
+    }
+}
+
+/// §18.2, §15.1: a list with no word is formatted as it is read (`use kp.{g,h}` becomes `use kp.{g, h}`).
+#[test]
+fn fmt_puts_the_elements_of_a_list_apart() {
+    let d = Dir::pkg("rules_fmt_list");
+    d.write("main.onsa", "use kp.{g,h}\n");
+    let out = run(d.root(), &["fmt", "main.onsa"]);
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert_eq!(std::fs::read_to_string(d.root().join("main.onsa")).unwrap(), "use kp.{g, h}\n");
+}

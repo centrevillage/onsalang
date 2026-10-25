@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// S-682, S-688: `use fx.a` has the candidate that takes the package name off (`use a`, §15.1). That `use` would
+// be a dependency on `a.sub`, which takes an item of `b`, but the `use b.{g}` of `a/sub.onsa` is E0304 (the
+// item `g` is written there too), so it is no dependency and the candidate closes no cycle. It is given,
+// and applying it leaves the E0304 of `a/sub.onsa` and no E0310.
+use a                                            //~ E0302
+
+pub fn g() -> I32 {
+  1
+}
