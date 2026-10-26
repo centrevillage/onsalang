@@ -70,9 +70,9 @@
 - モジュール間の循環 import は禁止（E0310）。依存は `use` だけで決まるので、この検査は `use` の一覧で閉じる。
   モジュール（パッケージを含む）を取り込む `use` は、取り込んだ束縛から下の全てのモジュールへ辿れるので、そのモジュールと下の全てのモジュールへの依存として数える（自分自身は除く）。本体の経路が実際に指すモジュールは見ない。§18.1 の名前の段の失敗した名前と、E0304・E0305 になった名前は数えない（並びのうち束縛になった名前は数える）。
   この数え方で循環になるときは、取り込む経路を狭めて直し、E0310 の note で狭め方を示す。note を付けるのは、モジュールを取り込む `use` を項目の取り込みに狭めて切れるときだけで（自分のファイルが無くディレクトリだけで在るモジュールは項目を持たないので、その狭め方は数えない）、切れなければ狭めても切れないことを示す。
-- 暗黙の prelude は、`Option Result Some None Ok Err panic Alloc`、§6.3 の演算子 trait と標準 trait（数の trait と `Ordinal` を含む）、種の制約 `Copy` と `Dup`（§4.6）、組込み型だけである。
-  クロックの名前（`init` `block` `sample` `event`）は prelude ではなく、クロックの名前空間にある（§11.3）。`panic`、種の制約、組込み型はコンパイラが与え、`Option` と `Result`（とその列挙子）、`Alloc`、trait は std の宣言である。
-  prelude の名前は隠せないので（§5.1）、同じ名前の項目（型、trait、関数、定数、flow）を宣言するか `use` で取り込むと E0304 になる（`fn panic`、`use kp.panic`。prelude の名前を定義元から取り込み直す `use std.<モジュール>.{Option}` も同じで、修正候補は無い）。他の標準の効果と std の項目は `use` で取り込む。
+- 暗黙の prelude は、`Option Result Some None Ok Err panic Alloc Block`、§6.3 の演算子 trait と標準 trait（数の trait と `Ordinal` を含む）、種の制約 `Copy` と `Dup`（§4.6）、組込み型だけである。
+  クロックの名前（`init` `block` `sample` `event`）は prelude ではなく、クロックの名前空間にある（§11.3）。`panic`、種の制約、組込み型はコンパイラが与え、`Option` と `Result`（とその列挙子）、`Alloc`、`Block`、trait は std の宣言で、モジュール `std.core` の `pub` の項目である。
+  prelude の名前は隠せないので（§5.1）、同じ名前の項目（型、trait、関数、定数、flow）を宣言するか `use` で取り込むと E0304 になる（`fn panic`、`use kp.panic`。prelude の名前を定義元から取り込み直す `use std.core.{Option}` も同じで、修正候補は無い）。他の標準の効果と std の項目は `use` で取り込む。
 
 ### 15.2 target 宣言（条件コンパイルの代替）
 
