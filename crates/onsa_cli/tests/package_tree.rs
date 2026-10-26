@@ -256,10 +256,8 @@ fn a_nested_package_is_not_a_child_module_that_clashes_with_an_item() {
 }
 
 /// The contrast of the test above (§15.1): the same tree without the manifest in `a/` makes `b.onsa`
-/// the child module `a.b`, which clashes with the item `b` of `a.onsa` (E0304). The module tree is
-/// W4-03's, so this waits for it.
+/// the child module `a.b`, which clashes with the item `b` of `a.onsa` (E0304).
 #[test]
-#[ignore = "W4-03"]
 fn without_the_manifest_the_same_tree_is_the_clash_of_an_item_and_a_child_module() {
     let d = Dir::pkg("nested_clash_module");
     d.write("a.onsa", "pub fn b() -> I32 {\n  1\n}\n");
