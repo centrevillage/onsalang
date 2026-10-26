@@ -1861,6 +1861,15 @@ reasons = ["R-225", "S-236"]
 until = "W4-12"
 note = "fix-same-place: fix|E0812|remove `…`|E0413。メソッドの無い a.pv~(n0) の E0812 の候補（~ を除く）が、a.pv(n0) の E0413（fn() has no method）を作る。~ を除いた形が呼べるときだけ候補を出す"
 
+# --- 71 回目: gate の自動の掃引（9357676）が見つけた修正候補の型（74c0608 でも出る）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/a872709d.onsa"
+reasons = ["R-281"]
+until = "W5-11"
+note = "fix-same-place: fix|E0020|write the attribute with `…`|E0005。閉じない { の回復が、属性で始まる行を次の項目と読まず本体の文として読むので、@ の候補を当てると E0005 が残る"
+
 
 [[pending]]
 kind = "fix-contract"

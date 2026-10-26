@@ -1,0 +1,2 @@
+fn f(x:F)->F{
+#[fp(relaxed)]fn s
