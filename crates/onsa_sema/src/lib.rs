@@ -187,6 +187,9 @@ pub struct Analysis {
     pub alloc: Option<DefId>,
     /// `TyId` keys of generic builtins in `Modules::assoc_builtin`.
     pub builtin_key: HashMap<ty::BuiltinTy, TyId>,
+    /// The names of each body, resolved by the names stage
+    /// ([`names::body::walk_bodies`]).
+    pub(crate) names: HashMap<DefId, names::body::BodyNames>,
     /// Typed bodies of functions, tests and `const` initializers (T2-5).
     pub bodies: HashMap<DefId, BodyInfo>,
     /// Values of `const` items evaluated at check time (T2-11).
@@ -369,6 +372,7 @@ pub fn analyze(pkg: &Package) -> Analysis {
 /// and `layout_of`. Diagnostics are pushed to `Analysis.diagnostics`; the
 /// driver keeps the first per item (P-01).
 pub fn check_bodies(pkg: &Package, analysis: &mut Analysis) {
+    names::body::walk_bodies(pkg, analysis);
     body::check_all(pkg, analysis);
     let moved = modes::check_all(pkg, analysis);
     rt::check_all(pkg, analysis, &moved);

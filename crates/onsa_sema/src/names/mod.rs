@@ -6,8 +6,9 @@
 //! `prelude` (the names in scope everywhere), `imports` (each `use`),
 //! `clash` (the E0304 of two names of one space), `cycles` (the E0310 of
 //! the dependencies of the `use`) and `lookup` (the lookups of a path, for a
-//! `use` and outside one).
+//! `use` and outside one). The names of the bodies are in `body`.
 
+pub(crate) mod body;
 mod clash;
 mod collect;
 mod cycles;
