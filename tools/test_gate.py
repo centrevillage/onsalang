@@ -3381,7 +3381,7 @@ def code(t):
     return re.findall(r"\w+|[^\s\w]", re.sub(r"//[^\n]*", "", t))
 def read(p):
     return open(p, encoding="utf-8", newline="").read()
-if args[0] == "fmt":
+if args[0] in ("fmt", "--fmt"):  # `onsa fmt --check FILE`, `onsa_cases --fmt FILE` (fmt on the standard output)
     path = args[-1]
     t = read(path)
     if "PANIC" in t:
@@ -3390,9 +3390,13 @@ if args[0] == "fmt":
     if "REJECT" in t and re.search(r"[ ]$", t, re.M):
         sys.stderr.write(path + ":1:1: error[E0002]: no\n")
         sys.exit(2)
-    if args[1] == "--check":
+    if args[0] == "--fmt":
+        sys.stdout.buffer.write((norm(t) + (" " if "NOT_IDEMPOTENT" in t else "")).encode())
+    elif args[1] == "--check":
         sys.exit(0 if norm(t) == t else 1)
-    open(path, "w", encoding="utf-8").write(norm(t) + (" " if "NOT_IDEMPOTENT" in t else ""))
+    else:  # the item formats no file in place (X-1 U12: it would sync the file to the disk)
+        sys.stderr.write("fake onsa: fmt in place\n")
+        sys.exit(3)
 elif args[0] == "diff":
     a, b = (read(p) for p in args[-2:])
     sys.exit(0 if code(a) == code(b) else 1)
@@ -3458,7 +3462,7 @@ class FmtProps(TempRepo):
                   for p, m, s in cases]
         cmd = self.cases_cmd(listed)
         lines = []
-        code = fmt_props.run(self.repo.root, self.argv, prop, per_kind, "t", 2, cmd, out=lines.append,
+        code = fmt_props.run(self.repo.root, self.argv, prop, per_kind, "t", 2, cmd, self.argv, out=lines.append,
                              minimize=minimize)
         return code, "\n".join(lines)
 
@@ -3719,6 +3723,22 @@ class FmtProps(TempRepo):
                 self.assertIn(failure, text)
         self.assertFalse((self.repo.root / "tests" / "spec" / "a.onsa").read_text().count("fmtprop"))
 
+    def test_no_file_is_formatted_in_place(self):
+        # X-1 U12: fmt(p) is the standard output of `onsa_cases --fmt`; the compiler is asked `fmt --check` alone
+        # (`onsa fmt FILE` would sync the file to the disk), and the item writes the file of fmt(p) itself.
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  let x = g( a, b ) // c\n  x\n}\n")
+        calls, call = [], fmt_props.Onsa.call
+
+        def spy(argv):
+            calls.append(argv)
+            return call(argv)
+
+        with mock.patch.object(fmt_props.Onsa, "call", staticmethod(spy)):
+            code, text = self.go()
+        self.assertEqual(code, 0, text)
+        self.assertTrue([a for a in calls if a[-2] == "--fmt"], calls)
+        self.assertEqual([a for a in calls if "fmt" in a and "--check" not in a], [])
+
     def test_the_meaning_compares_the_exit_code_and_the_codes_alone(self):
         # fmt moves the line of the diagnostic (it drops the blank lines): its place and its text change,
         # its code does not, so the meaning holds. The fake `check` of a file fmt does not change is not asked.
@@ -3764,7 +3784,7 @@ class FmtProps(TempRepo):
                                         (None, 6, "skipped); ")):
             with self.subTest(selection=selection):
                 lines = []
-                code = fmt_props.run(self.repo.root, self.argv, "cst", 1, "t", 2, self.cases_cmd(listed),
+                code = fmt_props.run(self.repo.root, self.argv, "cst", 1, "t", 2, self.cases_cmd(listed), self.argv,
                                      out=lines.append, selection=selection)
                 text = "\n".join(lines)
                 self.assertEqual(code, 0, text)
@@ -3782,7 +3802,7 @@ class FmtProps(TempRepo):
                 cmd = (sys.executable, "-B", "-c",
                        f"import json, sys; print({answer!r} if '--continuing' in sys.argv else json.dumps({listed!r}))")
                 lines = []
-                code = fmt_props.run(self.repo.root, self.argv, "core", 1, "t", 2, cmd, out=lines.append)
+                code = fmt_props.run(self.repo.root, self.argv, "core", 1, "t", 2, cmd, self.argv, out=lines.append)
                 self.assertEqual(code, 2, lines)
                 self.assertIn("cannot read the symbols of the lexer", "\n".join(lines))
         fmt_props.load_symbols(self.repo.root, self.cases_cmd([]))

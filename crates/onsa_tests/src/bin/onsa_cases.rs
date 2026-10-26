@@ -21,6 +21,8 @@
 //!                            the fix candidates applied again and again until the loop stops
 //!                            (S-236, rules/criteria.md 7.27, W3-22; `onsa_tests::fix_loop`)
 //! onsa_cases --fix-loop-gate [ROOT]  the gate item fix-loop (`onsa_tests::fix_loop::gate`)
+//! onsa_cases --fmt FILE      what `onsa fmt FILE` would write, on the standard output; the file is
+//!                            not written (tools/fmt_props.py, X-1 U12)
 //! ```
 //!
 //! The first form prints:
@@ -94,6 +96,13 @@
 //! `no-candidate` (at most 20: `cycle`, then `diverge`, `internal`,
 //! `cannot-apply`, `limit`). Exits 0, 2 on a usage error.
 //!
+//! `--fmt FILE` formats with the command's function (`onsa_driver::format_file`,
+//! with its check of the output, `spec/tools.md` §3.5) and ends as `onsa fmt`
+//! does: 2 when the file cannot be read or has a syntax diagnostic (§3.1;
+//! the diagnostics go to the standard error, as text, since the standard
+//! output is the formatted text), 101 on an internal error, printed as the
+//! command prints it (`onsa: internal error: …`).
+//!
 //! `--fix-loop-gate` is the gate item `fix-loop` over ROOT (default: the
 //! repository; `onsa_tests::fix_loop::gate`). Exits 1 when it fails to walk
 //! what it says, never on what the walks find.
@@ -103,7 +112,7 @@ use std::process::ExitCode;
 
 const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | --continuing | --symbols | \
      --std-names | --builtin-members | --fix-same-place FILE... | --default-inits FILE... | --fix-loop [--json] [--branches] [--pick first|last] \
-     [--steps N] [--states N] [--diverge N] FILE... | --fix-loop-gate [ROOT]";
+     [--steps N] [--states N] [--diverge N] FILE... | --fix-loop-gate [ROOT] | --fmt FILE";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -118,6 +127,7 @@ fn main() -> ExitCode {
     let too_many = match mode {
         "" | "--run" | "--fix-loop-gate" => rest.len() > 1,
         "--c" | "--vectors" => rest.is_empty() || rest.len() > 2,
+        "--fmt" => rest.len() != 1,
         "--fix-same-place" | "--fix-loop" | "--default-inits" => rest.is_empty(),
         _ => !rest.is_empty(),
     };
@@ -188,6 +198,7 @@ fn main() -> ExitCode {
             println!("{}", g.text);
             if g.failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
         }
+        "--fmt" => fmt(&rest[0]),
         "--c-items" => {
             print(&serde_json::json!(onsa_tests::c::ITEMS.iter().map(|i| i.name).collect::<Vec<_>>()));
             ExitCode::SUCCESS
@@ -321,6 +332,46 @@ fn fix_loop_args(args: &[String]) -> Result<(onsa_tests::fix_loop::Options, bool
         return Err("--fix-loop needs a file".into());
     }
     Ok((options, json, files))
+}
+
+/// `--fmt FILE`: the text `onsa fmt FILE` would write, on the standard output.
+fn fmt(path: &str) -> ExitCode {
+    // Read and refused as the command reads them (a file that is not UTF-8 too).
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln!("onsa: cannot read {path}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let mut sources = onsa_diag::SourceMap::default();
+    let file = sources.add(onsa_driver::slash_path(std::path::Path::new(path)), text);
+    // The diagnostics are made inside the guard, as the command makes them: a broken span is an internal error.
+    let formatted = onsa_driver::guard_on_stack(|| {
+        onsa_driver::format_file(&sources, file).map(|f| match f {
+            onsa_driver::Formatted::Text(out) => Ok(out),
+            onsa_driver::Formatted::Syntax(d) => Err(onsa_diag::to_text(&sources, &d)),
+        })
+    });
+    match formatted.and_then(|r| r) {
+        Ok(Ok(out)) => {
+            use std::io::Write;
+            let mut stdout = std::io::stdout().lock();
+            if let Err(e) = stdout.write_all(out.as_bytes()).and_then(|()| stdout.flush()) {
+                eprintln!("onsa: cannot write to standard output: {e}");
+                return ExitCode::from(2);
+            }
+            ExitCode::SUCCESS
+        }
+        Ok(Err(diagnostics)) => {
+            eprint!("{diagnostics}");
+            ExitCode::from(2)
+        }
+        Err(e) => {
+            eprint!("onsa: {}", e.render(&sources));
+            ExitCode::from(101)
+        }
+    }
 }
 
 fn print(v: &serde_json::Value) {

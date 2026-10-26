@@ -123,6 +123,11 @@ The properties (`--property`):
               syntax errors: `onsa dump --cst <file>` prints the file byte for
               byte (the CST round trip: the text of the leaves of the tree).
 
+fmt(p) is the standard output of `onsa_cases --fmt p` (`--cases-binary`),
+which formats with the function of `onsa fmt` and ends as it does, but
+writes no file: `onsa fmt p` would replace the file and sync it to the disk
+(`spec/tools.md` §3.6) for nearly every input (X-1 U12).
+
 The perturbations come from a generator seeded with the version, the path,
 the source, the kind and the index (`fuzz.seeded_random`): the same tree
 gives the same inputs on every machine. The failing inputs that are shown
@@ -134,7 +139,7 @@ internal, ast, idempotence, comment-text, docs, items, depth, breaks,
 meaning.
 
     tools/fmt_props.py [--property core|cst] [--per-kind N]
-                       [--version V] [--jobs N] [--binary PATH]
+                       [--version V] [--jobs N] [--binary PATH] [--cases-binary PATH]
                        [--time-budget S] [--minimize] [--show N] [--verbose]
                        [--changed-since REV|auto] [--code-cap N]
                        [--sample F --salt ID] [--shard I/K]
@@ -994,15 +999,24 @@ class Failure:
 
 
 class Onsa:
-    def __init__(self, argv, work):
+    def __init__(self, argv, work, fmt_argv):
         self.argv = list(argv)
+        self.fmt_argv = list(fmt_argv)  # `onsa_cases`
         self.work = Path(work)
         self.work.mkdir(parents=True, exist_ok=True)
 
     def run(self, *args):
-        """(exit code, stdout bytes, stderr str); the code is None on a timeout."""
+        """(exit code, stdout bytes, stderr str) of the compiler; the code is None on a timeout."""
+        return self.call([*self.argv, *map(str, args)])
+
+    def fmt(self, path):
+        """The same of `onsa_cases --fmt path`: on the standard output, what `onsa fmt path` would write."""
+        return self.call([*self.fmt_argv, "--fmt", str(path)])
+
+    @staticmethod
+    def call(argv):
         try:
-            r = subprocess.run([*self.argv, *map(str, args)], capture_output=True, timeout=TIMEOUT)
+            r = subprocess.run(argv, capture_output=True, timeout=TIMEOUT)
         except subprocess.TimeoutExpired:
             return None, b"", f"more than {TIMEOUT} s"
         return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace")
@@ -1020,16 +1034,19 @@ def write(path, text):
 
 
 def fmt_text(onsa, path, text):
-    """Format `text` written to `path`: (the formatted text or None, the failure or None).
-    The failure is ("internal", what) or ("rejected", what)."""
+    """Format `text` written to `path`: (the formatted text or None, the failure or None). The failure is
+    ("internal", what) or ("rejected", what). Formatted, `path` holds the formatted text, as after
+    `onsa fmt path`, but written here (no sync; `onsa_cases --fmt` writes no file)."""
     write(path, text)
-    code, _, err = onsa.run("fmt", path)
+    code, out, err = onsa.fmt(path)
     crash = onsa.crash(("fmt",), code, err)
     if crash:
         return None, ("internal", crash)
     if code != 0:
         return None, ("rejected", f"fmt exit {code}: " + " | ".join(err.strip().splitlines()[:2]))
-    return fuzz.decode(path.read_bytes()), None
+    if out != fuzz.encode(text):
+        path.write_bytes(out)
+    return fuzz.decode(out), None
 
 
 @dataclass(frozen=True)
@@ -1269,14 +1286,14 @@ def sources(root, cmd):
     return out
 
 
-def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_dir=None,
+def run(root, argv, prop, per_kind, version, jobs, cases_cmd, fmt_argv, out=print, target_dir=None,
         time_budget=TIME_BUDGET, minimize=False, show=20, verbose=False, selection=None):
-    """The gate item. `selection` (`narrowing.Selection`, None for the whole run)
-    picks the sources. Returns the exit code."""
+    """The gate item. `argv` runs the compiler, `fmt_argv` `onsa_cases` (for `--fmt`); `selection`
+    (`narrowing.Selection`, None for the whole run) picks the sources. Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fmt_props"
     tmp = work / f"work-{os.getpid()}"  # one per process: two runs do not share it
-    onsa = Onsa(argv, tmp)
+    onsa = Onsa(argv, tmp, fmt_argv)
     start = time.time()
     deadline = time.monotonic() + time_budget
     try:
@@ -1417,6 +1434,8 @@ def main(argv=None):
     ap.add_argument("--version", default=VERSION)
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--binary", type=Path, help="the compiler (default: build <target directory>/debug/onsa)")
+    ap.add_argument("--cases-binary", type=Path,
+                    help="onsa_cases, for --fmt (default: build <target directory>/debug/onsa_cases)")
     ap.add_argument("--time-budget", type=float, default=TIME_BUDGET, help="seconds for the whole run")
     ap.add_argument("--minimize", action="store_true", help="shrink the failing inputs that are shown")
     ap.add_argument("--show", type=int, default=20, help="failures to show (-1: all)")
@@ -1435,8 +1454,14 @@ def main(argv=None):
             print("fmt-props: cannot build the compiler (cargo build -p onsa_cli)", file=sys.stderr)
             return 2
         binary = target / "debug" / "onsa"
+    cases = args.cases_binary
+    if cases is None:
+        if not fuzz.build(args.root, cases=True):
+            print("fmt-props: cannot build onsa_cases (cargo build -p onsa_tests --bin onsa_cases)", file=sys.stderr)
+            return 2
+        cases = target / "debug" / "onsa_cases"
     return run(
-        args.root, [str(binary)], args.property, args.per_kind, args.version, args.jobs, repo.CASES_CMD,
+        args.root, [str(binary)], args.property, args.per_kind, args.version, args.jobs, repo.CASES_CMD, [str(cases)],
         target_dir=target, time_budget=args.time_budget, minimize=args.minimize, show=args.show,
         verbose=args.verbose, selection=selection,
     )
