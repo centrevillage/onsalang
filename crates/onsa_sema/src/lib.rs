@@ -125,10 +125,6 @@ impl Package {
     pub fn std(modules: Vec<Module>) -> Package {
         Package { name: STD_PACKAGE.into(), modules, deps: Vec::new(), role: PackageRole::Std }
     }
-
-    pub fn is_std(&self) -> bool {
-        self.role == PackageRole::Std
-    }
 }
 
 /// The name of the embedded standard library's package.

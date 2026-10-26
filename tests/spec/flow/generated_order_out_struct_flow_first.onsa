@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§15.1"]
+
+// R-273 (`issues/R/R-273/flow_before_struct.onsa`): the items generated for a flow (§11.6) do not depend on the
+// order in which the flow and the types of its heading are declared in a module (§15.1: the items of a module
+// are found in any order). The output of the flows here is a struct, so the namespace has its fields: the result
+// of `render` has a `Buf` for each field, and the field `v` of `Wide` is an array of the length `N` that is
+// declared with the types.
+// Here the flow is declared above the types (the pair is `generated_order_out_struct_types_first`).
+// The two files differ only in the order of the declarations. Every test passes in both.
+
+// No sample input: `render` takes the number of frames, and gives a `Buf` for each field of the struct.
+pub flow tone(seed: F32 at init, gain: F32 at block) -> Pair at sample {
+  Pair { l: gain + seed, r: gain - seed }
+}
+
+// A sample input: `render` takes its `Span`, and the field `v` is an array of `N` channels.
+pub flow spread(k: F32 at block, x: F32 at sample) -> Wide at sample {
+  Wide { v: [x * k, x + k], g: k }
+}
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub struct Wide {
+  v: [F32; N],
+  g: F32,
+}
+
+pub const N: U32 = 2
+
+test "the fields of a struct output without a sample input" {
+  let o = tone.render(tone.Config { seed: 1.0 }, tone.Params { gain: 3.0 }, 4, 8.0)
+  assert o.l[0] == 4.0
+  assert o.l[3] == 4.0
+  assert o.r[0] == 2.0
+  assert o.r[3] == 2.0
+}
+
+test "the fields of a struct output, one of them an array of channels" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o            = spread.render(spread.Config {}, spread.Params { k: 2.0 }, xs, 8.0)
+  assert o.v[0][2] == 6.0
+  assert o.v[1][2] == 5.0
+  assert o.g[0] == 2.0
+}
+
+test "the state of a flow with a struct output is made and reset" {
+  var st = tone.init(tone.Config { seed: 0.0 }, 8.0)
+  tone.reset(inout st)
+}

@@ -1,10 +1,15 @@
 //! Lowering of signatures (T2-3), after the names stage (`crate::names`:
 //! the module tree, the item defs and scopes, the imports): every item's
-//! signature.
+//! signature, then the items flows generate.
 //!
-//! The parts are in a module each, an `impl` of `Sema`: `types` (the types,
-//! also those written in a body) and `flow_sig` (the signatures of flows).
-//! The rest of the lowering of signatures is here.
+//! The stages, in the order of [`collect_and_lower`], each reading the
+//! tables of the one before: the names stage, the types of the signatures
+//! ([`Sema::lower_signatures`], here: every def in its order, a flow's
+//! inputs and output by `flow_sig`), the items flows generate and `@param`
+//! (`generated`), then the `use` of an item a flow does not generate
+//! ([`Sema::fail_ungenerated`]). The parts are in a module each, an `impl` of
+//! `Sema`: `types` (the types, also those written in a body), `flow_sig` and
+//! `generated`.
 
 use std::collections::HashSet;
 
@@ -22,12 +27,15 @@ use crate::resolve::{Builtin, Entity};
 use crate::ty::*;
 use crate::{Analysis, Module, Package, flatten};
 mod flow_sig;
+mod generated;
 mod types;
+
+use flow_sig::FlowHeading;
 
 pub(crate) use types::lower_type_in_body;
 
 pub(crate) struct Sema<'p> {
-    pub(crate) a: Analysis,
+    pub(crate) a: &'p mut Analysis,
     pub(crate) flat: Vec<&'p Package>,
     /// Defs that already have a diagnostic (P-01: first error per item).
     reported: HashSet<DefId>,
@@ -49,7 +57,6 @@ struct Cx<'p> {
     generics: Vec<GenericDef>,
     self_ty: Option<TyId>,
     def: DefId,
-    is_std: bool,
     /// How far the heading being lowered is seen (§15.1, S-665): a type
     /// named in it that reaches less far is an E0303. `None` out of a
     /// heading (a body, the type of an `impl`).
@@ -57,27 +64,24 @@ struct Cx<'p> {
 }
 
 pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
-    let mut s = Sema {
-        a: Analysis::default(),
-        flat: flatten(pkg),
-        reported: HashSet::new(),
-        expanding: HashSet::new(),
-        kind_heads: Vec::new(),
-    };
+    let mut a = Analysis::default();
+    let mut s = Sema::new(&mut a, flatten(pkg));
     crate::names::collect_names(&mut s);
-    s.lower_all();
+    let flows = s.lower_signatures();
+    s.lower_generated(flows);
     s.fail_ungenerated();
-    s.a
+    s.name_non_copy_fields();
+    a
 }
 
 impl<'p> Sema<'p> {
+    fn new(a: &'p mut Analysis, flat: Vec<&'p Package>) -> Self {
+        Sema { a, flat, reported: HashSet::new(), expanding: HashSet::new(), kind_heads: Vec::new() }
+    }
+
     pub(crate) fn module(&self, m: ModId) -> Option<&'p Module> {
         let info = self.a.modules.get(m);
         self.flat.get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
-    }
-
-    pub(crate) fn is_std(&self, m: ModId) -> bool {
-        self.flat[self.a.modules.pkg_of(m)].is_std()
     }
 
     // ------------------------------------------------------------ diagnostics
@@ -128,8 +132,11 @@ impl<'p> Sema<'p> {
 
     // ------------------------------------------------------------ lowering
 
-    fn lower_all(&mut self) {
+    /// The stage of the types of the signatures: every def, in the order of
+    /// the defs. The headings of the flows it lowered, for the next stage.
+    fn lower_signatures(&mut self) -> Vec<FlowHeading> {
         let n = self.a.defs.len();
+        let mut flows = Vec::new();
         for i in 0..n {
             let id = DefId(i as u32);
             // Lowered with their owner (impl / flow), or an E0200 (S-224).
@@ -137,15 +144,16 @@ impl<'p> Sema<'p> {
                 continue;
             }
             let _scope = onsa_diag::internal::item_scope(self.a.defs[i].span);
-            self.lower_def(id);
+            flows.extend(self.lower_def(id));
         }
-        self.name_non_copy_fields();
+        flows
     }
 
     /// The note of each `copy_bound` diagnostic that names the first field
     /// (or element of a variant) whose kind is not Copy (§4.6): the kinds are
-    /// known once every signature is lowered. A field whose kind is not
-    /// known (a type parameter, an error) is not named.
+    /// known once every signature and the items flows generate are lowered.
+    /// A field whose kind is not known (a type parameter, an error) is not
+    /// named.
     fn name_non_copy_fields(&mut self) {
         for (at, def, dup) in std::mem::take(&mut self.kind_heads) {
             let fields: Vec<(String, TyId, Span)> = match &self.a.def(def).kind {
@@ -163,7 +171,7 @@ impl<'p> Sema<'p> {
             use crate::kind::Kind;
             // `Dup` is Copy or Shared: an Affine field does not meet it.
             let fails = |k: Kind| if dup { k == Kind::Affine } else { k != Kind::Copy };
-            let shown = fields.into_iter().find(|(_, t, _)| crate::kind::kind_of(&self.a, *t).is_some_and(fails));
+            let shown = fields.into_iter().find(|(_, t, _)| crate::kind::kind_of(self.a, *t).is_some_and(fails));
             if let Some((what, _, span)) = shown {
                 let (kind, name) = if dup { ("Affine", foreign::DUP) } else { ("not Copy", foreign::COPY) };
                 let d = self.a.diagnostics[at].clone();
@@ -182,15 +190,15 @@ impl<'p> Sema<'p> {
             generics: extra,
             self_ty,
             def: id,
-            is_std: self.is_std(def.module),
             reach: Some(def.vis),
         })
     }
 
-    fn lower_def(&mut self, id: DefId) {
+    /// The signature of `id`; of a flow, its heading.
+    fn lower_def(&mut self, id: DefId) -> Option<FlowHeading> {
         let def = &self.a.defs[id.0 as usize];
-        let Some(item_id) = def.item else { return };
-        let Some(cx) = self.cx_for(id, Vec::new(), None) else { return };
+        let item_id = def.item?;
+        let cx = self.cx_for(id, Vec::new(), None)?;
         let item = cx.ast.item(item_id);
         let mut kind = &item.kind;
         if let ItemKind::Target(inner) = kind {
@@ -198,7 +206,7 @@ impl<'p> Sema<'p> {
         }
         match kind {
             ItemKind::Fn(f) => self.lower_fn(cx, id, f),
-            ItemKind::Flow(f) => self.lower_flow(cx, id, f),
+            ItemKind::Flow(f) => return self.lower_flow(cx, id, f),
             ItemKind::Struct(s) => {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &s.generics);
@@ -252,7 +260,7 @@ impl<'p> Sema<'p> {
             }
             ItemKind::Impl(i) => {
                 if i.trait_.is_some() {
-                    return;
+                    return None;
                 }
                 // The heading of an `impl` has no visibility (§15.1).
                 let mut cx = Cx { reach: None, ..cx };
@@ -338,6 +346,7 @@ impl<'p> Sema<'p> {
             ItemKind::Test { .. } => {}
             _ => {}
         }
+        None
     }
 
     /// How far the member `sub` of an inherent `impl` of a type of `ty_vis`
@@ -478,9 +487,9 @@ impl<'p> Sema<'p> {
     /// ([`read_effects`]): each other name is an E0200 of its own (but in
     /// `std`), and the lowering goes on.
     fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
-        let (mut set, others) = read_effects(&mut self.a, cx.def, cx.m, &cx.generics, row);
+        let (mut set, others) = read_effects(self.a, cx.def, cx.m, &cx.generics, row);
         for n in others {
-            if !cx.is_std {
+            if !self.a.modules.is_std(cx.m) {
                 self.unsupported(cx.def, n.span, Feature::Effects, &[&n.name]);
             }
             set.other.push(n.name.clone());
@@ -588,7 +597,6 @@ fn cx_clone<'p>(cx: &Cx<'p>) -> Cx<'p> {
         generics: cx.generics.clone(),
         self_ty: cx.self_ty,
         def: cx.def,
-        is_std: cx.is_std,
         reach: cx.reach,
     }
 }

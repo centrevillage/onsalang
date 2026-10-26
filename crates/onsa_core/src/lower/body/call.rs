@@ -189,7 +189,7 @@ fn lower_target_call(
 ) -> R<Expr> {
     let span = cx.expr(e).span;
     let d = lw.a.def(def);
-    if !lw.is_std_def(def) {
+    if !lw.a.modules.is_std(d.module) {
         // Sema stops a `target` declaration outside `std` (`UserTargets` of
         // the list of S-224): lowering never sees a call to one.
         return Err(internal(span, "a call to a `target` declaration outside `std`"));

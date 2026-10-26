@@ -1,0 +1,12 @@
+use second.{Stereo, Wide}
+use third.{Pair}
+
+// The outputs are a struct named through an alias in the heading (the body writes the struct itself), and a
+// struct with an array of a constant length (the constant is in the second module).
+pub flow tone(seed: F32 at init, gain: F32 at block) -> Stereo at sample {
+  Pair { l: gain + seed, r: gain - seed }
+}
+
+pub flow spread(k: F32 at block, x: F32 at sample) -> Wide at sample {
+  Wide { v: [x * k, x + k], g: k }
+}

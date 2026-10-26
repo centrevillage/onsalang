@@ -26,6 +26,7 @@ impl<'p> Sema<'p> {
             let root = self.a.modules.add(new_module(String::new(), pkg, None));
             self.a.modules.roots.push(root);
             self.a.modules.names.push(p.name.clone());
+            self.a.modules.roles.push(p.role);
             for (i, m) in p.modules.iter().enumerate() {
                 let at = self.module_at(root, &m.segments, Span::empty(m.file, 0));
                 let info = self.a.modules.get_mut(at);
@@ -121,7 +122,7 @@ impl<'p> Sema<'p> {
                     ItemKind::Target(inner) => {
                         at.target = true;
                         if let Some(d) = self.collect_named(&at, inner)
-                            && !self.is_std(m)
+                            && !self.a.modules.is_std(m)
                         {
                             self.unsupported(d, item.span, Feature::UserTargets, &[]);
                         }

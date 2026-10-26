@@ -2251,6 +2251,13 @@ note = "impl のメンバの target fn を構文の段が読み、std の外は�
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/module/target_user_else.onsa"
+reasons = ["S-669", "S-670"]
+until = "W5-02"
+note = "利用者の target fn の else の本体を構文の段が読み、名前の段の E0200（§15.2）。今は構文の段の E0002"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/packages/use_flow_rendered"
 reasons = ["R-264"]
 until = "W7-03"

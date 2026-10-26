@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.3"]
+// fixes = 0
+
+// R-273: a nested array cannot be at the boundary of a flow, and a field of the struct of an output is at the
+// boundary (§11.6: "入れ子の配列は境界に出せない"). The same E0810, at the heading of the flow, whichever of the
+// flow and the struct is declared first (§15.1). Here the flow is declared above the struct.
+// The two files (`generated_order_nested_array_field_types_first`, `generated_order_nested_array_field_flow_first`)
+// differ only in the order of the declarations.
+
+pub flow g(x: F32 at sample) -> St at sample { //~ E0810
+  St { a: [[x, x], [x, x]] }
+}
+
+pub struct St {
+  a: [[F32; 2]; 2],
+}

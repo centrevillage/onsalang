@@ -1,0 +1,1 @@
+target fn sqrt(x: F32) -> F32 //~ E0200

@@ -1,0 +1,1 @@
+pub target rt fn marker() -> I32 //~ E0200

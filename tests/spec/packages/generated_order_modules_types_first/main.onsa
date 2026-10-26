@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§15.1"]
+
+// R-273: the items generated for a flow (§11.6) do not depend on the order in which the modules are read
+// when the types of the heading of the flow are declared in other modules (§15.1). Here the module of the flow (`third`) is read after the modules of the types.
+// The two packages (`generated_order_modules_types_first`, `generated_order_modules_flow_first`) differ
+// only in which module has which declarations. Every test passes in both.
+
+use third.{tone, spread}
+
+test "the fields of the struct behind the alias" {
+  let o = tone.render(tone.Config { seed: 1.0 }, tone.Params { gain: 3.0 }, 4, 8.0)
+  assert o.l[0] == 4.0
+  assert o.l[3] == 4.0
+  assert o.r[0] == 2.0
+  assert o.r[3] == 2.0
+}
+
+test "the fields of the struct with an array of the declared length" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o            = spread.render(spread.Config {}, spread.Params { k: 2.0 }, xs, 8.0)
+  assert o.v[0][2] == 6.0
+  assert o.v[1][2] == 5.0
+  assert o.g[0] == 2.0
+}

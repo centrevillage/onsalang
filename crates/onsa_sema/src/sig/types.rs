@@ -153,7 +153,7 @@ impl<'p> Sema<'p> {
                 self.a.types.error()
             }
             (TypeKind::ConstArg(e), Some(true)) => {
-                match crate::constarg::expr(&mut self.a, cx.m, cx.ast, cx.text, &cx.generics, *e) {
+                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, &cx.generics, *e) {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
                     Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
@@ -175,7 +175,7 @@ impl<'p> Sema<'p> {
                         return self.a.types.intern(Ty::Param(i as u32));
                     }
                 } else {
-                    match crate::constarg::named(&mut self.a, cx.m, cx.ast, cx.text, path, te.span) {
+                    match crate::constarg::named(self.a, cx.m, cx.ast, cx.text, path, te.span) {
                         Ok(Some(v)) => return self.a.types.intern(Ty::ConstVal(v)),
                         Ok(None) => {}
                         Err(crate::constarg::ConstErr::Unknown) => return self.a.types.error(),
@@ -356,7 +356,7 @@ impl<'p> Sema<'p> {
     /// Array length (§4.1): an integer literal, a `const` with a literal
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
-        match crate::constarg::expr(&mut self.a, cx.m, cx.ast, cx.text, &cx.generics, e) {
+        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, &cx.generics, e) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
             Err(crate::constarg::ConstErr::Unknown) => None,
@@ -370,30 +370,24 @@ impl<'p> Sema<'p> {
 
 /// Lower a type written inside a body (T2-5): same rules as signatures, with
 /// the item's generics and `Self` in scope. Diagnostics are returned, not
-/// pushed, so the body checker keeps its first-error rule.
+/// pushed, so the body checker keeps its first-error rule. The signatures
+/// are lowered: it reads them, and writes only the types it interns and
+/// [`Analysis::read_held`] (with no package, no alias is lowered again).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn lower_type_in_body(
-    a: &mut Analysis,
+pub(crate) fn lower_type_in_body<'p>(
+    a: &'p mut Analysis,
     m: ModId,
-    ast: &Ast,
-    text: &str,
+    ast: &'p Ast,
+    text: &'p str,
     generics: &[GenericDef],
     self_ty: Option<TyId>,
     def: DefId,
     t: TypeId,
 ) -> (TyId, Vec<Diagnostic>) {
     let before = a.diagnostics.len();
-    let mut s = Sema {
-        a: std::mem::take(a),
-        flat: Vec::new(),
-        reported: HashSet::new(),
-        expanding: HashSet::new(),
-        kind_heads: Vec::new(),
-    };
-    let is_std = s.a.modules.pkg_of(m) < s.a.modules.names.len() && s.a.modules.names[s.a.modules.pkg_of(m)] == "std";
-    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, is_std, reach: None };
+    let mut s = Sema::new(a, Vec::new());
+    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None };
     let ty = s.lower_type(&cx, t);
-    *a = s.a;
-    let diags = a.diagnostics.drain(before..).collect();
+    let diags = s.a.diagnostics.drain(before..).collect();
     (ty, diags)
 }

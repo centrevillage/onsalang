@@ -1,0 +1,10 @@
+use third.{Pair}
+
+pub type Stereo = Pair
+
+pub struct Wide {
+  v: [F32; N],
+  g: F32,
+}
+
+pub const N: U32 = 2

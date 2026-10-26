@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§15.1"]
+
+// R-273: the items generated for a flow (§11.6) do not depend on the order in which the flow and the types of
+// its heading are declared in a module (§15.1). The types here are the type of a `block` input and of an
+// `init` input (structs), an alias of an array whose length is a constant, and the aliases of one type that
+// decide that the namespace has `process_inplace`. These shapes were right in both orders when R-273 was
+// found (only the struct output was wrong, `generated_order_out_struct_*`); the pair keeps them right when
+// the stage of the signatures is rebuilt.
+// Here the types are declared above the flows (the pair is `generated_order_inputs_flow_first`).
+// The two files differ only in the order of the declarations. Every test passes in both.
+
+pub struct Gain {
+  v: F32,
+}
+
+pub struct Seed {
+  v: F32,
+}
+
+pub type Chans = [F32; M]
+
+pub const M: U32 = 2
+
+pub type Level = F32
+
+pub type Count = I32
+
+// The type of a `block` input is a struct: the field `gain` of `Params` has it.
+pub flow scaled(gain: Gain at block, x: F32 at sample) -> F32 at sample {
+  x * gain.v
+}
+
+// The type of an `init` input is a struct: the field `seed` of `Config` has it.
+pub flow offset(seed: Seed at init, x: F32 at sample) -> F32 at sample {
+  x + seed.v
+}
+
+// The output is an alias of an array whose length is a constant declared with the types.
+pub flow widen(x: F32 at sample) -> Chans at sample {
+  [x, x * 2.0]
+}
+
+// The input is such an alias.
+pub flow narrow(x: Chans at sample) -> F32 at sample {
+  x[0] + x[1]
+}
+
+// The input and the output are aliases of one type, so the namespace has `process_inplace`.
+pub flow halve(x: Level at sample) -> F32 at sample {
+  x * 0.5
+}
+
+test "a struct as the type of a block input" {
+  var st           = scaled.init(scaled.Config {}, 8.0)
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  scaled.process(inout st, scaled.Params { gain: Gain { v: 2.0 } }, xs, inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 4.0
+}
+
+test "a struct as the type of an init input" {
+  var st           = offset.init(offset.Config { seed: Seed { v: 1.0 } }, 8.0)
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  offset.process(inout st, offset.Params {}, xs, inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 3.0
+}
+
+test "an alias of an array with a declared length as the output" {
+  var st                = widen.init(widen.Config {}, 8.0)
+  let xs: [F32; 3]      = [1.0, 2.0, 3.0]
+  var ys: [[F32; 3]; 2] = [[0.0; 3]; 2]
+  widen.process(inout st, widen.Params {}, xs, inout ys)
+  assert ys[0][2] == 3.0
+  assert ys[1][2] == 6.0
+}
+
+test "an alias of an array with a declared length as the input" {
+  var st                = narrow.init(narrow.Config {}, 8.0)
+  let xs: [[F32; 2]; 2] = [[1.0, 2.0], [10.0, 20.0]]
+  var ys: [F32; 2]      = [0.0; 2]
+  narrow.process(inout st, narrow.Params {}, xs, inout ys)
+  assert ys[0] == 11.0
+  assert ys[1] == 22.0
+}
+
+test "aliases of one type give process_inplace" {
+  var st           = halve.init(halve.Config {}, 8.0)
+  var xs: [F32; 2] = [1.0, 2.0]
+  halve.process_inplace(inout st, halve.Params {}, inout xs)
+  assert xs[0] == 0.5
+  assert xs[1] == 1.0
+}

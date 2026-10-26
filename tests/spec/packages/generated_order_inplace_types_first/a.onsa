@@ -1,0 +1,33 @@
+pub struct Mono {
+  v: F32,
+}
+
+pub struct Wide {
+  l: F32,
+  r: F32,
+}
+
+pub type Level = F32
+
+pub type Count = I32
+
+// One input and a struct output of one field: the fields of the struct are counted, so there is one output of
+// the type of the input.
+pub flow mono(x: F32 at sample) -> Mono at sample {
+  Mono { v: x }
+}
+
+// One input and a struct output of two fields: the numbers differ.
+pub flow pan(x: F32 at sample) -> Wide at sample {
+  Wide { l: x, r: x }
+}
+
+// The types are the same through an alias.
+pub flow halve(x: Level at sample) -> F32 at sample {
+  x * 0.5
+}
+
+// The types differ through an alias (`F32` and `I32`).
+pub flow cvt(x: F32 at sample) -> Count at sample {
+  x.trunc_i32()
+}

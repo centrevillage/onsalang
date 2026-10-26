@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§18.1"]
+// fixes = 0
+
+// §15.2: the `else` body of a `target fn` is a way of writing that only `std` has ("std だけに許す書き方"), and
+// the syntax stage reads the files of every package by the same rule, so a package other than `std` that
+// writes it has the E0200 of the names stage for the declaration, whatever its form (a function, an `rt`
+// function, a `pub` one), and not an error of the syntax. The body after `else` is not read as a body of the
+// package, so there is one E0200 for each declaration.
+target fn open() -> I32 else { 1 }                  //~ E0200
+pub target rt fn close(x: F32) -> F32 else { x }    //~ E0200
+target fn plain(sample_rate: F32) -> I32            //~ E0200
+
+struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  target fn level(self) -> F32 else { self.gain }   //~ E0200
+}

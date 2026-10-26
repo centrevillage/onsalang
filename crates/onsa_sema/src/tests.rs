@@ -241,11 +241,15 @@ fn flatten_tells_packages_apart_by_value_not_by_name() {
     assert!(!std::ptr::eq(flat[0], flat[1]));
 }
 
-/// The role, not the name, marks the embedded std (R-88 (1)).
+/// The role, not the name, marks the embedded std (R-88 (1)): a package
+/// named `std` that depends on it is an ordinary one.
 #[test]
 fn the_role_marks_std() {
-    assert!(Package::std(Vec::new()).is_std());
-    assert!(!Package::new(crate::STD_PACKAGE, Vec::new(), Vec::new()).is_std());
+    let std = std::sync::Arc::new(Package::std(Vec::new()));
+    let a = crate::analyze(&Package::new(crate::STD_PACKAGE, Vec::new(), vec![std]));
+    assert_eq!(a.modules.names, [crate::STD_PACKAGE, crate::STD_PACKAGE]);
+    assert!(a.modules.is_std(a.modules.roots[0]));
+    assert!(!a.modules.is_std(a.modules.roots[1]));
 }
 
 /// S-666 (until it is decided): a `use` takes the module of a directory with

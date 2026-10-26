@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.3", "§5.3"]
+// fixes = 0
+
+// R-273: the input of a flow is a `Copy` value type (E0810, §11.3), and `g.Out`, the generated type of the
+// output of `g` that holds `Span`s, is not (§5.3: it is a second-class value that is only in the place of an
+// argument). The same E0810 at the heading of `h` whichever of the two flows is declared first (§15.1). Here `h`, which writes `g.Out`, is declared first.
+// The two files (`generated_order_out_as_input_h_first`, `generated_order_out_as_input_g_first`) differ only
+// in the order of the two flows.
+
+pub struct St {
+  a: F32,
+}
+
+pub flow h(x: g.Out at sample) -> F32 at sample { //~ E0810
+  0.0
+}
+
+pub flow g(x: F32 at sample) -> St at sample {
+  St { a: x }
+}

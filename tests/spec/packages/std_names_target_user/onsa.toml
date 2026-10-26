@@ -1,0 +1,3 @@
+[package]
+name = "std_names_target_user"
+edition = "2026"

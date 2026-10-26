@@ -300,6 +300,8 @@ pub struct Modules {
     pub roots: Vec<ModId>,
     /// Package names (`std`, the user package), by package index.
     pub names: Vec<String>,
+    /// Package roles, by package index (R-88 (1)): what [`Self::is_std`] reads.
+    pub roles: Vec<crate::PackageRole>,
     /// The heads of the paths of `use` (§15.1, S-37), by package index: the
     /// modules under the package's root and the roots of the packages it
     /// depends on, by name.
@@ -335,6 +337,12 @@ impl Modules {
 
     pub fn pkg_of(&self, m: ModId) -> usize {
         self.get(m).pkg
+    }
+
+    /// Whether `m` is a module of the embedded std, by its package's role
+    /// (R-88 (1)): the privileges of std read this.
+    pub fn is_std(&self, m: ModId) -> bool {
+        self.roles[self.pkg_of(m)] == crate::PackageRole::Std
     }
 
     /// Whether `vis` declared in `decl` is usable from `from` (§15.1, S-36):

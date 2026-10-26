@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§11.3"]
+
+// R-273: a flow whose heading writes an item generated for another flow (`g.Params`) is the same whichever
+// of the two flows is declared first (§15.1: the items of a module are found in any order). Here `g`, whose `Params` it is, is declared first.
+// The two files (`generated_order_params_as_output_h_first`, `generated_order_params_as_output_g_first`)
+// differ only in the order of the two flows. Every test passes in both.
+
+pub flow g(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+// The output type of `h` is the struct `Params` that is generated for `g` (a `Copy` struct of scalars, so it is
+// a value type a flow can give).
+pub flow h(c: F32 at init, m: F32 at block, x: F32 at sample) -> g.Params at sample {
+  g.Params { k: x * m + c }
+}
+
+test "the generated Params of another flow is the output type" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o            = h.render(h.Config { c: 1.0 }, h.Params { m: 2.0 }, xs, 8.0)
+  assert o.k[0] == 3.0
+  assert o.k[2] == 7.0
+}
+
+test "the flow whose Params it is works as before" {
+  var st           = g.init(g.Config {}, 8.0)
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  g.process(inout st, g.Params { k: 3.0 }, xs, inout ys)
+  assert ys[1] == 6.0
+}

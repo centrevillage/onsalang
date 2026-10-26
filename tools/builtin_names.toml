@@ -279,7 +279,7 @@
 "Show" = 1
 "U32" = 1
 
-[allow."crates/onsa_sema/src/sig/flow_sig.rs"]
+[allow."crates/onsa_sema/src/sig/generated.rs"]
 "BULK_SIZE" = 1
 "Config" = 1
 "Out" = 1
@@ -295,9 +295,6 @@
 "render" = 1
 "reset" = 1
 "sample_rate" = 2
-
-[allow."crates/onsa_sema/src/sig/types.rs"]
-"std" = 1
 
 [allow."crates/onsa_sema/src/ty.rs"]
 "Alloc" = 1
@@ -385,7 +382,7 @@
 [same_spelling."crates/onsa_sema/src/builtin.rs"]
 "u32" = { count = 1, note = "narrow_ / trunc_ の名前を作る型の接尾辞（std.test.gen の u32 と同じ綴り）" }
 
-[same_spelling."crates/onsa_sema/src/sig/flow_sig.rs"]
+[same_spelling."crates/onsa_sema/src/sig/generated.rs"]
 "log" = { count = 1, note = "@param の scale の値（std.math.log と同じ綴り）" }
 "max" = { count = 2, note = "@param のキー（std.math.max と同じ綴り）" }
 "min" = { count = 2, note = "@param のキー（std.math.min と同じ綴り）" }

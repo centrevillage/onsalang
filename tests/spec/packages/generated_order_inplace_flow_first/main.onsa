@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// R-273, S-694, §11.6: whether the namespace of a flow has `process_inplace` is decided by the types of the
+// flow (the sample inputs and outputs are of the same number and types in order, a struct output being counted
+// by its fields), and not by the order of the declarations of the flow and of the types. `mono` and `halve`
+// have it (the `use` of it is no diagnostic), `pan` and `cvt` do not (E0302, in the modules of their own: two
+// failed names of one name are not a clash here). Here the flows are declared above the types.
+// The two packages (`generated_order_inplace_types_first`, `generated_order_inplace_flow_first`) differ only in
+// the order of the declarations in `a.onsa`.
+use a.mono.{process_inplace}
+
+pub fn the_control() -> I32 {
+  1
+}

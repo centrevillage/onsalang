@@ -326,7 +326,10 @@ impl<'a> Lowerer<'a> {
         self.a.def(id).generics().iter().map(|g| g.kind.clone()).collect()
     }
 
-    pub(crate) fn is_std_def(&self, id: DefId) -> bool {
+    /// The def is of a dependency, not of the user's package: its qualified
+    /// name starts with its package's name. A place; the privileges of std
+    /// read the role (`Modules::is_std`).
+    fn is_dep_def(&self, id: DefId) -> bool {
         self.a.modules.get(self.a.def(id).module).pkg != self.user_pkg
     }
 
@@ -335,7 +338,7 @@ impl<'a> Lowerer<'a> {
         let def = self.a.def(id);
         let mut parts = Vec::new();
         let info = self.a.modules.get(def.module);
-        if self.is_std_def(id) {
+        if self.is_dep_def(id) {
             parts.push(self.a.modules.names[info.pkg].clone());
         }
         if !info.path.is_empty() {

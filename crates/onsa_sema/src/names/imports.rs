@@ -96,7 +96,7 @@ impl<'p> Sema<'p> {
     fn resolve_import(&mut self, m: ModId, imp: &Import) {
         // A head that is no head of a `use` is reported after every `use`
         // ([`Sema::report_use_heads`]).
-        let w = walk(&self.a, m, &imp.path.segments, imp.names.as_deref());
+        let w = walk(self.a, m, &imp.path.segments, imp.names.as_deref());
         let head_fails = imp.path.segments.first().is_some_and(|h| self.a.modules.head(m, &h.name).is_none());
         let report = |s: &mut Self, e: &ResolveError| {
             if let Some(d) = e.clone().diagnostic().filter(|_| !head_fails) {
@@ -309,7 +309,7 @@ impl<'p> Sema<'p> {
         if segs.first().is_none_or(|h| self.a.modules.head(m, &h.name).is_none()) || !names.is_none_or(distinct) {
             return Err(None);
         }
-        let w = walk(&self.a, m, segs, names);
+        let w = walk(self.a, m, segs, names);
         let modules = &self.a.modules;
         w.prefix.as_ref().map_err(|_| None)?;
         let mut cycle = None;

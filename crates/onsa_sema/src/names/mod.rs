@@ -32,7 +32,7 @@ pub(crate) use cycles::ImportGraph;
 /// ([`Sema::fail_ungenerated`], R-50).
 pub(crate) fn collect_names(s: &mut Sema<'_>) {
     s.build_module_tree();
-    prelude::build(&mut s.a);
+    prelude::build(s.a);
     s.collect_items();
     s.check_item_clashes();
     for m in 0..s.a.modules.mods.len() {

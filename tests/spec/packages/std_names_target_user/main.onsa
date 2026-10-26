@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§15.2"]
+// fixes = 0
+
+// §15.2: the `target` declarations of `std` are the ones the implementation gives, and a package other than
+// `std` has none (E0200 in the names stage) even when its modules have the paths of modules of std. The
+// package here has a module `math` and a module `dsp.test`, as `std` has `std.math` and `std.dsp.test`
+// (§15.1: the head of a path is the root module of the package or a dependency, so these are not std's):
+// their `target` declarations are E0200, and `std.math.{sqrt}`, taken here, is std's and has none.
+use std.math.{sqrt}
+
+pub fn root(x: F32) -> F32 {
+  sqrt(x)
+}
