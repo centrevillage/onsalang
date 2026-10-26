@@ -111,7 +111,7 @@ pub fn remaining() -> Option<usize> {
 
 /// For tests and measurements only; no path of the compiler calls it. Run
 /// `f` on the current thread (a thread spawned here) with about `left` bytes
-/// of its stack left: between `left` and `left` + 12 K. The stack above is
+/// of its stack left: between `left` and `left` + 20 K. The stack above is
 /// used by frames of this function, never beyond `left`, so `f` meets a stack
 /// that is nearly used up without a deep input (the safety net of the
 /// interpreter, `onsa_interp::STACK_RESERVE`, is tested and measured this
@@ -133,7 +133,7 @@ pub fn with_stack_left<T>(left: usize, f: impl FnOnce() -> T) -> T {
 fn use_down_to<T>(left: usize, f: &mut Option<impl FnOnce() -> T>) -> T {
     let pad = std::hint::black_box([0u8; STEP]);
     let now = remaining().unwrap_or(0);
-    let r = if now < left + 3 * STEP { (f.take().expect("called once"))() } else { use_down_to(left, f) };
+    let r = if now < left + BAND { (f.take().expect("called once"))() } else { use_down_to(left, f) };
     // The pad lives across the call.
     std::hint::black_box(&pad);
     r
@@ -141,6 +141,11 @@ fn use_down_to<T>(left: usize, f: &mut Option<impl FnOnce() -> T>) -> T {
 
 /// The bytes one frame of [`with_stack_left`] uses, at least.
 const STEP: usize = 4 << 10;
+
+/// The stack above `left` at which [`with_stack_left`] stops and calls `f`: a frame (up to 3 × [`STEP`]
+/// in a debug build) and the frames of `f` before it measures must fit in it (X-16: with the line tables
+/// alone, 3 × [`STEP`] left `f` about 3 K below `left`, and 4 × [`STEP`] about 1 K above it).
+const BAND: usize = 5 * STEP;
 
 #[cfg(test)]
 mod tests {
@@ -189,7 +194,7 @@ mod tests {
     fn with_stack_left_leaves_about_that_much() {
         for left in [8usize << 20, 1 << 20, 64 << 10] {
             let got = spawn("t", move || with_stack_left(left, || remaining().unwrap())).unwrap().join().unwrap();
-            assert!(got >= left && got <= left + 3 * STEP, "asked {left}, got {got}");
+            assert!(got >= left && got <= left + BAND, "asked {left}, got {got}");
         }
     }
 
