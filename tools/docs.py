@@ -2206,7 +2206,8 @@ TICKET_FIELDS = (
 # X9-67 d: the fields of a ticket of a handover (`U2/i-handover`) the parent fills, with their guides (rules/leader.md 2.10 points here)
 HANDOVER_FIELDS = (
     ("読む順", "<作業票、設計メモ、親の返事、前の報告と、その「次の担当へ」の節>"),
-    ("状態の基", "<前の担当の作業ツリーの枝と、その WIP のコミットと、親が `work.py patch` で作ったパッチ。"
+    ("状態の基", "<主のツリーなら、基のコミット（と、未コミットのまま引き継ぐ変更）。"
+                "作業ツリーなら、前の担当の作業ツリーの枝と、その WIP のコミットと、親が `work.py patch` で作ったパッチ。"
                 "新しい担当は自分の作業ツリーで `work.py sync --apply <パッチ>` で当てる>"),
     ("道具", "<`tools/` の道具（`run_cases.py`、`compare.py`、`handback.py`）と、前の担当が scratchpad に作った道具。"
              "ファズの許可の一覧（`tests/fuzz/allowed.toml`）に項目と示す入力を足させるときは、"
