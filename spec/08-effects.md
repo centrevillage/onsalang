@@ -46,12 +46,12 @@ pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Allo
 - `Block` は操作を持たない `blocking` の効果（`std.core` の `pub blocking effect Block {}`）で、prelude にある（§15.1）。extern 関数がブロックすることを主張するのに使う（§14.1）。`Block` の handler を書くには `unsafe` が要る（`Alloc` と同じ、§8.4）。処理すると、待つことが効果行から消えるためである。
 - `rt fn` の効果行には rt 効果しか書けない（§10）。`Alloc` と `blocking` の効果は rt 効果ではない。
 
-標準ライブラリの主な効果:
+標準ライブラリの主な効果（ネットワークの `Net` は延期、§19.1）:
 
 | 効果 | モジュール | `blocking` | rt 効果 | 内容 |
 |---|---|---|---|---|
 | `Fs` | `std.fs` | ○ | × | ファイルの入出力 |
-| `Stdout`, `Stdin` | `std.io` | ○ | × | 標準の入出力（`Net` は延期、§19.1） |
+| `Stdout`, `Stdin` | `std.io` | ○ | × | 標準の入出力 |
 | `Clock` | `std.time` | × | ○ | 現在時刻の取得 |
 | `Random` | `std.random` | × | ○ | 乱数 |
 | `Log` | `std.log` | × | ○ | ログ（handler はブロックもヒープ確保もしない書き方に限られる）。`Str` を受ける操作のほかに、`Span[U8]` を受ける rt の操作を持つ（`FixedStr`、§4.2。名前は §19.1） |
