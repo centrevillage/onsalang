@@ -1,0 +1,3 @@
+pub struct W1 {
+  b: Buf[Str],
+}

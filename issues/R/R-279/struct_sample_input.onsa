@@ -1,0 +1,8 @@
+pub struct St {
+  a: F32,
+  b: F32,
+}
+
+pub flow g(x: St at sample) -> F32 at sample {
+  x.a
+}
