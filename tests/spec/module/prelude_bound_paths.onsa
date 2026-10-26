@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// The path of a trait in a bound is looked up like any path (R-278, §15.1): its head is a module or a
+// package that a `use` bound, and the rest is looked up in that module. `core.PartialOrd` after
+// `use std.core` is the trait of the prelude; a head that nothing bound, or a name that the module does not
+// have, is E0302 (no candidate), also in a second bound of a list and in the heading of an `impl`.
+
+use std
+use std.core
+
+pub fn through_module[T: core.PartialOrd](x: T) -> T {
+  x
+}
+
+pub fn through_package[T: std.core.PartialOrd](x: T) -> T {
+  x
+}
+
+pub fn second_bound[T: Copy + core.PartialOrd](x: T) -> T {
+  x
+}
+
+pub fn head_nothing[T: zzz.PartialOrd](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn head_not_taken[T: io.PartialOrd](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn name_not_in_module[T: core.Nope](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn second_is_missing[T: PartialOrd + zzz.Eq](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn no_such_name[T: Nope](x: T) -> T {   //~ E0302
+  x
+}
+
+pub struct Wrap[T] {
+  a: T,
+}
+
+impl[T: zzz.PartialOrd] Wrap[T] {   //~ E0302
+  pub fn get(self) -> I32 {
+    1
+  }
+}

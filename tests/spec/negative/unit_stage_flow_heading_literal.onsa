@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.3", "§11.7"]
+
+// The text decides that the input `y` has no clock (the names stage, S-710), and a float literal that has
+// no value (E0408) is an error of a later stage, so the E0810 is reported though the literal is first by
+// position.
+
+pub flow clock_before_literal(@param(min: 99999999999999999999999999999999999999999.0) x: F32 at block, y: F32) -> F32 at sample {   //~ E0810
+  y
+}

@@ -19,7 +19,7 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{ExprId, ExprKind, Lit};
 
-use crate::body::{Checker, LocalId, R, bound_name};
+use crate::body::{Checker, LocalId, R};
 use crate::def::Bound;
 use crate::infer::Cause;
 use crate::ty::{FloatKind, IntKind, Ty, TyId};
@@ -257,10 +257,9 @@ impl<'a> Checker<'a> {
                     Required::Param { param, owner } if *bound == Bound::Dup => format!(
                         "`{shown}` is not Copy or Shared, so it does not satisfy `{param}: Dup` of {owner}; a type parameter takes only Copy or Shared types unless it is declared `{param}: ?Dup` (§4.5)"
                     ),
-                    Required::Param { param, owner } => format!(
-                        "`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)",
-                        bound_name(*bound)
-                    ),
+                    Required::Param { param, owner } => {
+                        format!("`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)", bound.name())
+                    }
                 };
                 let mut d = Diagnostic::new(Stage::Types, Code::E0416, item.span, msg).with_found(self.src(item.span));
                 d = self.decided_note(d, item.ty, &shown);

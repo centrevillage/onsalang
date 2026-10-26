@@ -234,6 +234,11 @@ impl<'p> Sema<'p> {
             ItemKind::TypeAlias { name, .. } => (name, DefKind::Alias(at.error), None),
             ItemKind::Const(c) => (&c.name, DefKind::Const(at.const_def(c.value)), None),
             ItemKind::Trait(t) => (&t.name, DefKind::Unsupported, Some(Feature::TraitDefinitions)),
+            // An effect of std, with no operations in this version (D-08,
+            // S-659); a user's is an E0200.
+            ItemKind::Effect(e) if self.a.modules.is_std(at.m) => {
+                (&e.name, DefKind::Effect { blocking: e.blocking }, None)
+            }
             ItemKind::Effect(e) => (&e.name, DefKind::Unsupported, Some(Feature::EffectDefinitions)),
             ItemKind::Handler(h) => (&h.name, DefKind::Unsupported, Some(Feature::HandlerDefinitions)),
             _ => return None,

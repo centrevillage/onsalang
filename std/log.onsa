@@ -1,0 +1,4 @@
+//! Logging (spec §8.1, §8.2, S-659).
+
+/// Writing to a log. Its operations come in phase 2.
+pub effect Log {}

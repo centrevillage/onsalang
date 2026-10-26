@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§8.2", "§15.1", "§5.1", "§6.3"]
+
+// The prelude is not hidden (§5.1, §15.1, S-611): a type of the name of an effect of the prelude
+// (`Alloc`, `Block`, S-702) or of a trait (`Num`, `PartialOrd`, `Float`) is E0304, whatever its kind (a
+// struct, an enum, a type alias). The declarations that do not clash, with other names, are checked as
+// usual and so is the use of the built-in types in them.
+
+pub struct Block {   //~ E0304
+  v: U32,
+}
+
+pub enum Alloc {   //~ E0304
+  Heap,
+}
+
+pub type PartialOrd = U32   //~ E0304
+
+pub struct Num {   //~ E0304
+  v: U32,
+}
+
+pub enum Float {   //~ E0304
+  Wide,
+}
+
+pub struct Panel {
+  v: U32,
+}
+
+pub fn fine(p: Panel) -> U32 {
+  p.v + 1
+}

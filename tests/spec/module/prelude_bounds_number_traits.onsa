@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§4.5"]
+
+// The number traits of §6.3 (`AnyNum` `Num` `Float` `Int` `Unsigned`) are in the prelude (S-107): each is
+// written in a bound with no `use`, and the joined bounds of the example (`T: Num + Int`, §6.3).
+
+pub fn takes_anynum[T: AnyNum](x: T) -> T {
+  x
+}
+
+pub fn takes_int[T: Int](x: T) -> T {
+  x
+}
+
+pub fn takes_unsigned[T: Unsigned](x: T) -> T {
+  x
+}
+
+pub fn signed[T: Num + Int](x: T) -> T {
+  x
+}

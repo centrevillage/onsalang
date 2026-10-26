@@ -5,7 +5,7 @@
 // S-689 (1), S-692 (c): the `impl` whose heading has a name that failed (the type of the `impl`, or a type
 // argument of it) is not a heading with an error: the type of `self` is an error type, and each member is a
 // unit that is checked (a real error is reported, `self.foo()` and `self + 1` are not). The `impl` whose
-// heading has a diagnostic of its own (an E0302 of the type, an E0200 of a bound, a syntax error) is one
+// heading has a diagnostic of its own (an E0302 of the type, an E0302 of a bound, a syntax error) is one
 // unit, and its members are not checked. The modules take the failed name from a `use` that failed
 // (`by_use`), an E0304 (`by_clash`) and a member cut off by a syntax error (`by_cut`); `by_heading_error`
 // and `by_syntax` have the headings with a diagnostic.

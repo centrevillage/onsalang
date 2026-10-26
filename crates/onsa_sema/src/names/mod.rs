@@ -20,8 +20,8 @@ use crate::sig::Sema;
 
 pub(crate) use cycles::ImportGraph;
 
-/// The names stage, in its order: the tree, the prelude, the items and
-/// their clashes, each `use` and the clashes of their names, the cycles of
+/// The names stage, in its order: the tree, the prelude, the items (those
+/// of `std.core` then in the prelude, S-659) and their clashes, each `use` and the clashes of their names, the cycles of
 /// their dependencies, then the `use` whose head is no head (their
 /// candidates read the graph). A `use` reads the tables of the tree, the
 /// prelude and the items, never another `use` (§15.1), so the modules are
@@ -34,6 +34,7 @@ pub(crate) fn collect_names(s: &mut Sema<'_>) {
     s.build_module_tree();
     prelude::build(s.a);
     s.collect_items();
+    prelude::declared(s.a);
     s.check_item_clashes();
     for m in 0..s.a.modules.mods.len() {
         s.resolve_imports(ModId(m as u32));

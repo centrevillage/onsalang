@@ -6,7 +6,7 @@
 //!
 //! Where the code is: this module holds the tables ([`BodyInfo`], the locals,
 //! the targets), the checker (`Checker`, `check_all`), its helpers and
-//! scopes, the accessors that the later passes read, and `bound_name`. The
+//! scopes, and the accessors that the later passes read. The
 //! rest of the checking is in a module per part, each an `impl` of
 //! `Checker`: `entry` (a function body, a `const`), `bounds`, `generics`,
 //! `names`, `expressions`, `calls`, `statements` and `patterns`. The tests
@@ -628,21 +628,5 @@ impl<'a> Checker<'a> {
         // An error with no diagnostic (a name held as an error, a member of a
         // def a syntax error cut): the check goes on (§18.1, S-690).
         Ok(ty)
-    }
-}
-
-pub(crate) fn bound_name(b: Bound) -> &'static str {
-    match b {
-        Bound::Num => "Num",
-        Bound::Float => "Float",
-        Bound::PartialEq => "PartialEq",
-        Bound::PartialOrd => "PartialOrd",
-        Bound::Eq => "Eq",
-        Bound::Ord => "Ord",
-        Bound::Copy => onsa_syntax::foreign::COPY,
-        Bound::Dup => onsa_syntax::foreign::DUP,
-        Bound::Hash => "Hash",
-        Bound::Show => "Show",
-        Bound::Default => "Default",
     }
 }

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// A `use` that fails in the names stage is E0302 with no candidate, whether it takes a name of the prelude
+// or not, and one diagnostic for the `use` whatever the number of its names (S-703 adds a note for the names of
+// the prelude; the notes are checked in crates/onsa_cli/tests/prelude_names.rs, not here).
+
+use std.option.{Option}   //~ E0302
+
+use std.math.{Option}   //~ E0302
+
+use option.{Result}   //~ E0302
+
+use std.option.Option   //~ E0302
+
+use std.option.{Option, Foo}   //~ E0302
+
+use std.option.{Foo, Bar}   //~ E0302
+
+use std.math.{panic}   //~ E0302

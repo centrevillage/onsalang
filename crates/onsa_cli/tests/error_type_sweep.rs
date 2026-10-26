@@ -570,8 +570,8 @@ fn unknown_bound_silences_what_depends_on_the_trait() {
                 .replace("Gone2", name)
                 .as_str(),
         );
-        // a bound nothing binds is E0200 and the body is not checked
-        src.unit("ctl_unbound", "pub fn ctl_unbound[T: Nope](x: T) -> I32 { @@E0200\n  let a: I32 = true\n  a\n}\n\n");
+        // a bound nothing binds is E0302 and the body is not checked
+        src.unit("ctl_unbound", "pub fn ctl_unbound[T: Nope](x: T) -> I32 { @@E0302\n  let a: I32 = true\n  a\n}\n\n");
         problems.extend(verify(&format!("bound_{tag}"), &src));
     }
     assert!(units >= 2 * 5 * 60, "only {units} functions were checked");

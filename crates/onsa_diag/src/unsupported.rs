@@ -85,6 +85,9 @@ features! {
     EffectHandlers: Language, "effect handlers (`handle ... with`)", None;
     /// `{}`: the effect's name.
     Effects: Language, "effects other than `Alloc` (`{}`)", None;
+    /// W5-08: `panic` (§9.2) is a name of the prelude (S-107), not checked
+    /// or run yet.
+    Panic: Language, "the prelude function `panic`", None;
     Extern: Language, "`extern` blocks", None;
     /// S-596: with the dependencies other than `std` (§19.1). Its note is
     /// the `use` of the module that defines the names (`onsa_sema`).

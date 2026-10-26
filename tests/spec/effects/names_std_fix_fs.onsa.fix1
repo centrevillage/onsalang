@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// The effect `Fs` is std's, with no `use` it is E0302 and the candidate is the `use` of it (§8.1, S-659
+// (3)): one candidate, since a single declaration of std has the name. After it the name is found, and
+// in this version it is an E0200 at the name in the row (D-08), so the candidate does not leave a
+// diagnostic of the stage of the E0302 in the touched units (§18.1). The text after the candidate is
+// the copy `.fix1`.
+
+use std.fs.{Fs}
+pub fn read_it() uses {Fs} {}   //~ E0302

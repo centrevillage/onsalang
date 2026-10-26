@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§15.1", "§4.5"]
+
+// `Ordinal` (§6.4) is a standard trait, so it is in the prelude (S-107): it is written in a bound with
+// no `use`.
+
+pub fn ordinal_of[T: Ordinal](x: T) -> T {
+  x
+}

@@ -1,0 +1,9 @@
+//! The items of the prelude that std declares (spec §15.1, S-659): in scope
+//! everywhere with no `use`. `Option`, `Result` and the traits are the
+//! compiler's in this version, named as items of this module too (W5-03).
+
+/// Allocation on the heap (§8.2, §12): an explicit effect with no operations.
+pub effect Alloc {}
+
+/// That an `extern` function may block (§8.2, §14.1). It has no operations.
+pub blocking effect Block {}

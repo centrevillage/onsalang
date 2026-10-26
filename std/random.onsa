@@ -1,0 +1,4 @@
+//! Random numbers (spec §8.1, §8.2, S-659).
+
+/// A source of random numbers. Its operations come in phase 2.
+pub effect Random {}

@@ -1,5 +1,7 @@
 // E0200: features outside phase 1 (D-08, S-03, S-13).
-pub fn reads(p: Str) -> U32 uses {Fs} {   //~ E0200
+// `Fs` is an effect of std (S-659): with no `use` it is not found, E0302 (the effect, found, is an E0200 at
+// the name: tests/spec/effects/names_std_use_e0200.onsa).
+pub fn reads(p: Str) -> U32 uses {Fs} {   //~ E0302
   p.len()
 }
 

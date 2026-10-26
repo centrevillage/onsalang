@@ -11,7 +11,7 @@ impl Nope {                                         //~ E0302
   }
 }
 
-impl[T: Nope] S[T] {                                //~ E0200
+impl[T: Nope] S[T] {                                //~ E0302
   pub fn m2(self) -> I32 {
     let a: I32 = true
     a

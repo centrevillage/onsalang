@@ -6,13 +6,13 @@
 use std::collections::HashMap;
 
 use onsa_diag::{Edit, Fix, Span};
-use onsa_syntax::ast::{Ident, Path};
+use onsa_syntax::ast::{Ident, Path, Vis};
 
 use crate::def::{Def, DefKind, ModId};
 use crate::resolve::{Builtin, DepTarget, Entity, Modules, ResolveError, UseAt, UseBinding};
 
 /// The tables a path outside a `use` reads after its head.
-type Names<'a> = (&'a HashMap<String, Builtin>, &'a [Def], &'a HashMap<BuiltinTy, TyId>);
+pub(crate) type Names<'a> = (&'a HashMap<String, Entity>, &'a [Def], &'a HashMap<BuiltinTy, TyId>);
 use crate::ty::{BuiltinTy, TyId};
 
 /// The rule of a path or a `use` that names its own module (§15.1, S-673,
@@ -30,7 +30,7 @@ impl Modules {
     /// name a `use` binds, of nothing of the prelude, the items or the `use`
     /// of `from`. The name of a `use` that failed binds nothing, and is no
     /// partner of an E0304 (§18.1, S-462): it is free.
-    pub(crate) fn free_in_body(&self, from: ModId, name: &str, prelude: &HashMap<String, Builtin>) -> bool {
+    pub(crate) fn free_in_body(&self, from: ModId, name: &str, prelude: &HashMap<String, Entity>) -> bool {
         let info = self.get(from);
         super::clash::unbindable(name).is_none()
             && !prelude.contains_key(name)
@@ -43,13 +43,13 @@ impl Modules {
     /// bound, which are apart but for an E0304 (`crate::names::clash`), whose
     /// name is none of them (§18.1, S-675). Never another module or a
     /// package: they are named through a `use` alone (R-39).
-    pub fn lookup(&self, from: ModId, name: &str, prelude: &HashMap<String, Builtin>) -> Option<Entity> {
+    pub fn lookup(&self, from: ModId, name: &str, prelude: &HashMap<String, Entity>) -> Option<Entity> {
         let info = self.get(from);
         if info.clashed.body.contains(name) {
             return None;
         }
-        if let Some(&b) = prelude.get(name) {
-            return Some(Entity::Builtin(b));
+        if let Some(&e) = prelude.get(name) {
+            return Some(e);
         }
         if let Some(&d) = info.items.get(name) {
             return Some(Entity::Def(d));
@@ -91,8 +91,7 @@ impl Modules {
         if is_head.is_none() && !own_pkg && !own_name {
             return ResolveError::NotFound { name: head.name.clone(), span: head.span };
         }
-        let member =
-            |k: usize| segs.get(k).and_then(|s| self.member(Entity::Module(from), s, from, names.1, names.2).ok());
+        let member = |k: usize| segs.get(k).and_then(|s| self.member(Entity::Module(from), s, from, names).ok());
         let root_child = || segs.get(1).and_then(|s| self.get(self.root_of(from)).children.get(&s.name).copied());
         let mut readings = Vec::new();
         if own_path {
@@ -175,7 +174,7 @@ impl Modules {
         entity: Option<Entity>,
         names: Names<'_>,
     ) -> Result<Fix, Option<(String, DepTarget)>> {
-        let (prelude, defs, builtin_key) = names;
+        let prelude = names.0;
         let segs = &path.segments;
         let (Some(entity), Some(seg)) = (entity, segs.get(k)) else { return Err(None) };
         let add = match (self.lookup(from, &seg.name, prelude), entity) {
@@ -187,7 +186,7 @@ impl Modules {
         };
         let mut cur = entity;
         for s in &segs[k + 1..] {
-            match self.member(cur, s, from, defs, builtin_key) {
+            match self.member(cur, s, from, names) {
                 Ok(e) => cur = e,
                 // A value: the rest is its fields and methods (the types).
                 Err(ResolveError::NotANamespace { .. }) => break,
@@ -211,12 +210,38 @@ impl Modules {
         }
         if let Some(added) = add {
             title.push(format!("add `use {added}`"));
-            edits.push(match info.use_at.ok_or(None)? {
-                UseAt::After(offset) => Edit::insert(file, offset, format!("\nuse {added}")),
-                UseAt::Before(offset) => Edit::insert(file, offset, format!("use {added}\n")),
-            });
+            edits.push(self.use_edit(from, &added).ok_or(None)?);
         }
         Ok(Fix::new(title.join(" and "), edits))
+    }
+
+    /// The edit that adds `use {added}` to the file of `from`, at its place
+    /// ([`UseAt`]); none for a module with no file.
+    fn use_edit(&self, from: ModId, added: &str) -> Option<Edit> {
+        let info = self.get(from);
+        let file = info.file?;
+        Some(match info.use_at? {
+            UseAt::After(offset) => Edit::insert(file, offset, format!("\nuse {added}")),
+            UseAt::Before(offset) => Edit::insert(file, offset, format!("use {added}\n")),
+        })
+    }
+
+    /// The candidate of the effect `name` not found in an effect row of
+    /// `from` (§8.1, S-659 (3)): the `use` of the `pub` effect of std of that
+    /// very name, when std declares one alone, the name is free in the body
+    /// of `from` and the `use` closes no cycle (§18.1).
+    pub(crate) fn std_effect_use(&self, from: ModId, name: &str, names: Names<'_>) -> Option<Fix> {
+        let (prelude, defs, _) = names;
+        let mut found = (defs.iter().enumerate()).filter(|(_, d)| {
+            d.name == name && d.vis == Vis::Pub && matches!(d.kind, DefKind::Effect { .. }) && self.is_std(d.module)
+        });
+        let (Some((d, def)), None) = (found.next(), found.next()) else { return None };
+        let taken = Entity::Def(crate::DefId(d as u32));
+        if !self.free_in_body(from, name, prelude) || self.take_cycle(from, taken, Some(def.module)).is_some() {
+            return None;
+        }
+        let added = format!("{}.{{{name}}}", self.abs_path(from, def.module).join("."));
+        Some(Fix::new(format!("add `use {added}`"), vec![self.use_edit(from, &added)?]))
     }
 
     /// The rule of a candidate kept back as its `use` of `form`, a dependency
@@ -266,14 +291,8 @@ impl Modules {
     /// namespace: its items and its child modules, not the names its `use`
     /// bound (S-611, R-250). `builtin_key` maps a generic builtin to the
     /// `TyId` its associated items are keyed by.
-    pub fn member(
-        &self,
-        entity: Entity,
-        name: &Ident,
-        from: ModId,
-        defs: &[Def],
-        builtin_key: &HashMap<BuiltinTy, TyId>,
-    ) -> Result<Entity, ResolveError> {
+    pub fn member(&self, entity: Entity, name: &Ident, from: ModId, names: Names<'_>) -> Result<Entity, ResolveError> {
+        let (prelude, defs, builtin_key) = names;
         match entity {
             Entity::Module(m) => {
                 // Of an E0304 or E0305, neither (§18.1, S-675).
@@ -295,6 +314,18 @@ impl Modules {
                         defined: def.name_span,
                         why: self.hidden_why(def.vis, None, from),
                     });
+                }
+                // The names `std.core` declares that are the compiler's in
+                // this version (S-659 (C)): `Option`, `Result` and the traits;
+                // never a variant, `panic`, a kind constraint or a builtin type.
+                if Some(m) == self.core
+                    && let Some(
+                        &e @ Entity::Builtin(
+                            Builtin::Generic(BuiltinTy::Option | BuiltinTy::Result) | Builtin::Trait(_),
+                        ),
+                    ) = prelude.get(&name.name)
+                {
+                    return Ok(e);
                 }
                 // SPEC-GAP(S-693): a name of a `pub use` of `m` is not found
                 // here, also at the end of a path in a body (`inner.g()`); the
@@ -330,37 +361,42 @@ impl Modules {
             }
             Entity::Member(d) => {
                 // `voice.State` is a struct: it may have associated items too.
-                self.member(Entity::Def(d), name, from, defs, builtin_key)
+                self.member(Entity::Def(d), name, from, names)
             }
             Entity::Builtin(Builtin::Scalar(t)) => self.builtin_member(t, name, from, defs),
             Entity::Builtin(Builtin::Generic(b)) => match builtin_key.get(&b) {
                 Some(&t) => self.builtin_member(t, name, from, defs),
                 None => Err(ResolveError::NotFound { name: name.name.clone(), span: name.span }),
             },
-            Entity::Builtin(_) | Entity::Variant(..) => {
-                Err(ResolveError::NotANamespace { name: name.name.clone(), span: name.span })
+            // The owner's name, as of a def above (`Num.ZERO`: `Num`).
+            Entity::Variant(d, i) => {
+                let owner = match &defs[d.0 as usize].kind {
+                    DefKind::Enum(e) => e.variants.get(i as usize).map(|v| v.name.clone()),
+                    _ => None,
+                };
+                let owner = owner.unwrap_or_else(|| onsa_diag::internal::bug(Some(name.span), "a variant of no enum"));
+                Err(ResolveError::NotANamespace { name: owner, span: name.span })
+            }
+            Entity::Builtin(_) => {
+                let owner = prelude.iter().filter(|&(_, &e)| e == entity).map(|(n, _)| n).min();
+                let owner =
+                    owner.unwrap_or_else(|| onsa_diag::internal::bug(Some(name.span), "a builtin of no prelude name"));
+                Err(ResolveError::NotANamespace { name: owner.clone(), span: name.span })
             }
         }
     }
 
     /// Resolve a full path written outside a `use` in `from`.
-    pub fn resolve_path(
-        &self,
-        from: ModId,
-        path: &Path,
-        prelude: &HashMap<String, Builtin>,
-        defs: &[Def],
-        builtin_key: &HashMap<BuiltinTy, TyId>,
-    ) -> Result<Entity, ResolveError> {
+    pub fn resolve_path(&self, from: ModId, path: &Path, names: Names<'_>) -> Result<Entity, ResolveError> {
         let first = &path.segments[0];
-        let names = (prelude, defs, builtin_key);
+        let prelude = names.0;
         let mut cur = match self.lookup(from, &first.name, prelude) {
             Some(e) => e,
             None if self.held_as_error(from, &first.name) => return Err(ResolveError::Failed),
             None => return Err(self.not_in_body(from, path, names)),
         };
         for seg in &path.segments[1..] {
-            cur = self.member(cur, seg, from, defs, builtin_key)?;
+            cur = self.member(cur, seg, from, names)?;
         }
         Ok(cur)
     }

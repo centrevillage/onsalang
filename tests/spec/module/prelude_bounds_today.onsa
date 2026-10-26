@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§4.5"]
+
+// The standard traits are in the prelude (§6.3, S-107): they are written in a bound with no `use`. The
+// example of §6.3 (`clamp[T: PartialOrd]`), two bounds joined by `+`, and the kind constraints `Copy` and
+// `Dup` (§4.6).
+
+pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
+  if x < lo {
+    lo
+  } else if x > hi {
+    hi
+  } else {
+    x
+  }
+}
+
+pub fn double[T: Num](x: T) -> T {
+  x + x
+}
+
+pub fn joined[T: Eq + Ord](x: T) -> T {
+  x
+}
+
+pub fn kinds[T: Copy + Dup](x: T) -> T {
+  x
+}
+
+pub fn takes_partialeq[T: PartialEq](x: T) -> T {
+  x
+}
+
+pub fn takes_partialord[T: PartialOrd](x: T) -> T {
+  x
+}
+
+pub fn takes_eq[T: Eq](x: T) -> T {
+  x
+}
+
+pub fn takes_ord[T: Ord](x: T) -> T {
+  x
+}
+
+pub fn takes_hash[T: Hash](x: T) -> T {
+  x
+}
+
+pub fn takes_show[T: Show](x: T) -> T {
+  x
+}
+
+pub fn takes_default[T: Default](x: T) -> T {
+  x
+}
+
+pub fn takes_num[T: Num](x: T) -> T {
+  x
+}
+
+pub fn takes_float[T: Float](x: T) -> T {
+  x
+}
+
+pub fn takes_copy[T: Copy](x: T) -> T {
+  x
+}
+
+pub fn takes_dup[T: Dup](x: T) -> T {
+  x
+}

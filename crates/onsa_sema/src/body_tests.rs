@@ -7,18 +7,26 @@ use crate::consteval::ConstValue;
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Len, Ty};
 use crate::{Analysis, Module, Package, analyze};
 
-fn check(src: &str) -> Analysis {
+/// The analysis of `src` alone, with std when `with_std` (whose bodies are
+/// then in the tables too).
+fn check_in(src: &str, with_std: bool) -> Analysis {
     let modules = vec![Module {
         segments: vec!["main".into()],
         file: FileId(0),
         text: src.to_string(),
         parsed: onsa_syntax::parse(FileId(0), src),
     }];
-    analyze(&Package::new("t", modules, Vec::new()))
+    let deps = if with_std { vec![crate::flow_tests::std_package()] } else { Vec::new() };
+    analyze(&Package::new("t", modules, deps))
 }
 
+fn check(src: &str) -> Analysis {
+    check_in(src, false)
+}
+
+/// The codes, with std: its `Alloc` is in the prelude (S-659).
 fn codes(src: &str) -> Vec<Code> {
-    let a = check(src);
+    let a = check_in(src, true);
     let mut v: Vec<Code> = a.diagnostics.iter().map(|d| d.code).collect();
     v.sort();
     v

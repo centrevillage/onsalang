@@ -393,3 +393,10 @@ left = "expected module path, found `…`"
 input = "tests/fuzz/332a8990.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a blank after the `.` of a `use` path, and a `(` where the next name of the path goes"
+
+[[allowed]]
+class = "fix|E0302|add `…`|E0200"
+left = "this version does not support effects other than `…` (`…`)"
+input = "tests/fuzz/b28474c1.onsa"
+reasons = ["S-659"]
+note = "an effect row with a standard effect and no `use`: the candidate `use std.fs.{Fs}` resolves the name, and the effect is then an E0200 on the same name, as D-08 says of a name that resolves (S-659 (3))"

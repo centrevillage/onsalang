@@ -134,10 +134,7 @@ impl Units {
         }
         // Both the E0020 of a form and the E0002 of its place may be found at
         // one token (`1.` among the items): the order chooses, here alone.
-        let key = |i: usize| {
-            let d = diagnostics[i];
-            (d.stage.check_rank().unwrap_or(usize::MAX), d.order_in_file(), i)
-        };
+        let key = |i: usize| (diagnostics[i].unit_order(), i);
         let mut best: Vec<Option<usize>> = vec![None; self.list.len()];
         for (i, a) in assigned.iter().enumerate() {
             if let Some(u) = *a

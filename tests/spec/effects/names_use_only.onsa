@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1"]
+
+// A `use` of a standard effect, or of its module, that no effect row writes passes (S-659 (2)): the
+// modules of the table of §8.2 (`std.fs`, `std.io`, `std.time`, `std.random`, `std.log`) hold the
+// effects, and a module is taken as a whole too.
+
+use std.fs.{Fs}
+use std.io.{Stdout, Stdin}
+use std.time.{Clock}
+use std.random.{Random}
+use std.log.{Log}
+use std.fs
+use std.io
+use std.time
+use std.random
+use std.log
+use std.core
+
+pub fn plain(x: U32) -> U32 {
+  x + 1
+}

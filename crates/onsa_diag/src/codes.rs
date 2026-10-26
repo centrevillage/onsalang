@@ -253,7 +253,7 @@ codes! {
         "feature not supported in this version of the compiler";
     E0302 = 302, Names, [Names, Types, Build], Optional, Optional,
         "cannot find this name";
-    E0303 = 303, Names, [Names, Build], Optional, Optional,
+    E0303 = 303, Names, [Names, Types, Build], Optional, Optional,
         "name is not visible here";
     E0304 = 304, Names, [Names, Types], Optional, Optional,
         "a binding with this name is already visible (no shadowing)";
@@ -367,7 +367,7 @@ codes! {
         "name used before its definition in a flow (a later `let` is read as `^name` in the first argument of a delay)";
     E0805 = 805, Flow, [Flow], Optional, Optional,
         "a function with effects cannot be called from a flow";
-    E0806 = 806, Flow, [Flow], Optional, Optional,
+    E0806 = 806, Flow, [Names, Flow], Optional, Optional,
         "this form is not allowed in a flow body";
     E0807 = 807, Flow, [Flow], Optional, Optional,
         "`delay~` with length 1; write `prev~` instead";
@@ -375,7 +375,7 @@ codes! {
         "delay length or `par` range out of its allowed values (a non-constant one is E0417)";
     E0809 = 809, Flow, [Flow, Build], Optional, Optional,
         "`@param` is missing, misplaced, or malformed";
-    E0810 = 810, Flow, [Flow], Optional, Optional,
+    E0810 = 810, Flow, [Names, Flow], Optional, Optional,
         "a flow input or output without `at`, an output clock other than `sample`, or a value type that cannot cross";
     E0811 = 811, Flow, [Flow], Required, Optional,
         "calling a flow creates a stateful instance and needs `~`";

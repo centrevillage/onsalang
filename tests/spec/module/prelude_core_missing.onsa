@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.1", "§4.6", "§18.1"]
+// fixes = 0
+
+// `std.core` has the items that std declares, and not the other names of the prelude: an enumerator
+// (`Some`, `Ok`, `Err`, `None`, §15.1 takes them with their enum), `panic`, the kind constraints `Copy` and
+// `Dup` (§4.6), and the built-in types (§4.1) are the compiler's. Taking one of them, or a name that
+// nothing has, is E0302 (S-659 (1)) and has no candidate.
+
+use std.core.{Some}   //~ E0302
+use std.core.{None}   //~ E0302
+use std.core.{Ok}   //~ E0302
+use std.core.{Err}   //~ E0302
+use std.core.{panic}   //~ E0302
+use std.core.{Copy}   //~ E0302
+use std.core.{Dup}   //~ E0302
+use std.core.{I32}   //~ E0302
+use std.core.{F32}   //~ E0302
+use std.core.{Bool}   //~ E0302
+use std.core.{Str}   //~ E0302
+use std.core.{Buf}   //~ E0302
+use std.core.{Array}   //~ E0302
+use std.core.{Nope}   //~ E0302

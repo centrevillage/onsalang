@@ -118,6 +118,9 @@ impl<'a> Checker<'a> {
                     ) => {
                         return self.check_fn_call(e, callee, entity, &name, args, expected, kind);
                     }
+                    Ok(Entity::Builtin(Builtin::Panic)) => {
+                        return Err(self.unsupported(name.span, Feature::Panic, &[]));
+                    }
                     Ok(_) => {
                         return Err(self.err(Code::E0401, name.span, format!("`{}` is not a function", name.name)));
                     }

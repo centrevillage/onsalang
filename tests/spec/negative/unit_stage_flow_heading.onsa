@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.2", "§11.3"]
+
+// The errors of the heading of a flow that its text decides (§18.1, S-710): a clock that is missing on an
+// input or on the output, a clock of an output that is not allowed (`sample`, `event`, `sample / N` and
+// `sample * N` are, §11.3), and a mode on an input (`inout`, `move`, E0806, §11.2) are errors of the
+// names stage. So they are chosen by the position, with the other errors of that stage: the heading comes
+// before the body, and the E0302 of the body is not the one reported. (The heading errors that the
+// values decide are of later stages: the flow_before_* cases below.)
+
+pub flow input_clock_missing(x: F32, y: F32 at sample) -> F32 at sample {   //~ E0810
+  nosuch
+}
+
+pub flow output_clock_missing(x: F32 at sample) -> F32 {   //~ E0810
+  nosuch
+}
+
+pub flow output_clock_block(x: F32 at sample) -> F32 at block {   //~ E0810
+  nosuch
+}
+
+pub flow input_inout(inout x: F32 at sample) -> F32 at sample {   //~ E0806
+  nosuch
+}
+
+pub flow input_move(move x: F32 at sample) -> F32 at sample {   //~ E0806
+  nosuch
+}
+
+// Alone, the heading error is reported as it was.
+pub flow clock_alone(x: F32, y: F32 at sample) -> F32 at sample {   //~ E0810
+  y
+}
+
+pub flow mode_alone(inout x: F32 at sample) -> F32 at sample {   //~ E0806
+  x
+}

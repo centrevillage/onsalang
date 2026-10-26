@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1", "§18.1"]
+
+// The names of an effect row are the names of the module (§8.1, §15.1): what a `use` takes in one module is
+// not seen from another. `a.onsa` takes `Fs`, so its rows find it (an E0200 in this version,
+// D-08); `b.onsa` takes nothing, so `Fs` and `fs.Fs` are not found there (E0302). `Alloc` is in the prelude of
+// every module, and so is the effect `Block` (E0200 in this version). `c.onsa` takes the module `std.fs` with
+// no list and writes the effect through it.
+
+pub fn fine() -> U32 uses {Alloc} {
+  1
+}

@@ -152,17 +152,6 @@
 "SIZE" = 1
 "State" = 3
 
-[allow."crates/onsa_sema/src/body.rs"]
-"Default" = 1
-"Eq" = 1
-"Float" = 1
-"Hash" = 1
-"Num" = 1
-"Ord" = 1
-"PartialEq" = 1
-"PartialOrd" = 1
-"Show" = 1
-
 [allow."crates/onsa_sema/src/builtin.rs"]
 "BITS" = 1
 "EPSILON" = 1
@@ -214,15 +203,40 @@
 "zeroed" = 1
 
 [allow."crates/onsa_sema/src/def.rs"]
+"Add" = 1
+"AnyNum" = 1
+"BitAnd" = 1
+"BitOr" = 1
+"BitXor" = 1
 "Default" = 1
+"Div" = 1
+"Drop" = 1
 "Eq" = 1
 "Float" = 1
 "Hash" = 1
+"Int" = 1
+"IntoIter" = 1
+"Iter" = 1
+"Mul" = 1
+"Neg" = 1
+"Not" = 1
 "Num" = 1
 "Ord" = 1
+"Ordinal" = 1
 "PartialEq" = 1
 "PartialOrd" = 1
+"Rem" = 1
+"SaturatingAdd" = 1
+"SaturatingMul" = 1
+"SaturatingSub" = 1
+"Shl" = 1
 "Show" = 1
+"Shr" = 1
+"Sub" = 1
+"Unsigned" = 1
+"WrappingAdd" = 1
+"WrappingMul" = 1
+"WrappingSub" = 1
 
 [allow."crates/onsa_sema/src/effects.rs"]
 "zeroed" = 1
@@ -247,6 +261,7 @@
 "std" = 1
 
 [allow."crates/onsa_sema/src/names/prelude.rs"]
+"Alloc" = 1
 "Bool" = 1
 "Char" = 1
 "Err" = 1
@@ -263,12 +278,13 @@
 "U32" = 1
 "U64" = 1
 "U8" = 1
+"core" = 1
+"panic" = 1
 
 [allow."crates/onsa_sema/src/rt.rs"]
 "zeroed" = 1
 
 [allow."crates/onsa_sema/src/sig.rs"]
-"Alloc" = 1
 "Default" = 1
 "Eq" = 1
 "Hash" = 1

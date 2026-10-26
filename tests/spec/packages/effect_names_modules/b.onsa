@@ -1,0 +1,7 @@
+pub fn read_b() uses {Fs} {}   //~ E0302
+
+pub fn read_path() uses {fs.Fs} {}   //~ E0302
+
+pub fn alloc_b() uses {Alloc} {}
+
+pub fn block_b() uses {Block} {}   //~ E0200 @24

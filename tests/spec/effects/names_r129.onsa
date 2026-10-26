@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1"]
+
+// R-129 (S-74): an effect row is read like any other name (§8.1), and the file is the case of
+// tests/review-phase1/parent/r129.onsa. `Alloc` is std's and in the prelude. `Random` and `Fs` are std's
+// effects that need a `use` (S-659), so with none the name is not found (E0302), and so is a name that
+// no module has.
+
+fn a() uses {Alloc} {}
+
+fn r() uses {Random} {}   //~ E0302
+
+fn f() uses {Fs} {}   //~ E0302
+
+fn n() uses {Nope} {}   //~ E0302

@@ -24,6 +24,13 @@ pub enum Builtin {
     Ok,
     /// `Err`
     Err,
+    /// `panic` (§9.2), E0200 where it is used until W5-08.
+    Panic,
+    /// An operator trait or a standard trait (§6.3): its row of
+    /// [`crate::def::TRAITS`]. The compiler's until std declares it (S-659).
+    Trait(u8),
+    /// A kind constraint, `Copy` or `Dup` (§4.6).
+    Kind(crate::def::Bound),
 }
 
 /// What a path resolves to.
@@ -316,6 +323,9 @@ pub struct Modules {
     /// keyed by the scalar's `TyId`, or by `Builtin(b, [])` for generic
     /// builtins (`Buf.zeroed`).
     pub assoc_builtin: HashMap<TyId, HashMap<String, DefId>>,
+    /// The module `std.core`, where the names of the prelude std declares are
+    /// (§15.1, S-659); set by `crate::names::prelude::declared`.
+    pub core: Option<ModId>,
     /// The graph of the dependencies of the `use` (E0310), made once every
     /// `use` is resolved (`crate::names::cycles`).
     pub(crate) graph: Option<crate::names::ImportGraph>,

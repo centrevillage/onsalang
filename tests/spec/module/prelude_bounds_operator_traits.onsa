@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§4.5"]
+
+// The operator traits of §6.3 are in the prelude (S-107): each is written in a bound with no `use`.
+
+pub fn takes_add[T: Add](x: T) -> T {
+  x
+}
+
+pub fn takes_sub[T: Sub](x: T) -> T {
+  x
+}
+
+pub fn takes_mul[T: Mul](x: T) -> T {
+  x
+}
+
+pub fn takes_div[T: Div](x: T) -> T {
+  x
+}
+
+pub fn takes_rem[T: Rem](x: T) -> T {
+  x
+}
+
+pub fn takes_neg[T: Neg](x: T) -> T {
+  x
+}
+
+pub fn takes_bitand[T: BitAnd](x: T) -> T {
+  x
+}
+
+pub fn takes_bitor[T: BitOr](x: T) -> T {
+  x
+}
+
+pub fn takes_bitxor[T: BitXor](x: T) -> T {
+  x
+}
+
+pub fn takes_shl[T: Shl](x: T) -> T {
+  x
+}
+
+pub fn takes_shr[T: Shr](x: T) -> T {
+  x
+}
+
+pub fn takes_not[T: Not](x: T) -> T {
+  x
+}
+
+pub fn takes_wrappingadd[T: WrappingAdd](x: T) -> T {
+  x
+}
+
+pub fn takes_wrappingsub[T: WrappingSub](x: T) -> T {
+  x
+}
+
+pub fn takes_wrappingmul[T: WrappingMul](x: T) -> T {
+  x
+}
+
+pub fn takes_saturatingadd[T: SaturatingAdd](x: T) -> T {
+  x
+}
+
+pub fn takes_saturatingsub[T: SaturatingSub](x: T) -> T {
+  x
+}
+
+pub fn takes_saturatingmul[T: SaturatingMul](x: T) -> T {
+  x
+}

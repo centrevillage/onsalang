@@ -1,0 +1,5 @@
+use std.fs.{Fs}
+
+pub fn read_a() uses {Fs} {}   //~ E0200 @23
+
+pub fn alloc_a() uses {Alloc} {}

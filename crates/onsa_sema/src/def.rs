@@ -12,7 +12,8 @@ pub struct DefId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ModId(pub u32);
 
-/// Builtin trait names usable as bounds (§6.3). User traits are phase 2.
+/// What a bound is in this version (§6.3, §4.6): a trait of the provisional
+/// rows of [`TRAITS`] (S-72; user traits are phase 2), or a kind constraint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Bound {
     Num,
@@ -28,22 +29,59 @@ pub enum Bound {
     Default,
 }
 
+/// The operator traits and the standard traits (§6.3), names of the prelude
+/// (§15.1, S-107): the one table of their names. Each row has the bound the
+/// trait is in this version (S-72), or `None` when a bound of it is an E0200
+/// (the operator and number traits W5-05, `Ordinal` W5-06).
+pub const TRAITS: [(&str, Option<Bound>); 34] = [
+    ("Add", None),
+    ("Sub", None),
+    ("Mul", None),
+    ("Div", None),
+    ("Rem", None),
+    ("Neg", None),
+    ("PartialEq", Some(Bound::PartialEq)),
+    ("PartialOrd", Some(Bound::PartialOrd)),
+    ("BitAnd", None),
+    ("BitOr", None),
+    ("BitXor", None),
+    ("Shl", None),
+    ("Shr", None),
+    ("Not", None),
+    ("WrappingAdd", None),
+    ("WrappingSub", None),
+    ("WrappingMul", None),
+    ("SaturatingAdd", None),
+    ("SaturatingSub", None),
+    ("SaturatingMul", None),
+    ("Eq", Some(Bound::Eq)),
+    ("Ord", Some(Bound::Ord)),
+    ("Hash", Some(Bound::Hash)),
+    ("Show", Some(Bound::Show)),
+    ("Default", Some(Bound::Default)),
+    ("Iter", None),
+    ("IntoIter", None),
+    ("Drop", None),
+    ("AnyNum", None),
+    ("Num", Some(Bound::Num)),
+    ("Float", Some(Bound::Float)),
+    ("Int", None),
+    ("Unsigned", None),
+    ("Ordinal", None),
+];
+
 impl Bound {
-    pub fn parse(s: &str) -> Option<Bound> {
-        Some(match s {
-            "Num" => Bound::Num,
-            "Float" => Bound::Float,
-            "PartialEq" => Bound::PartialEq,
-            "PartialOrd" => Bound::PartialOrd,
-            "Eq" => Bound::Eq,
-            "Ord" => Bound::Ord,
-            s if s == onsa_syntax::foreign::COPY => Bound::Copy,
-            s if s == onsa_syntax::foreign::DUP => Bound::Dup,
-            "Hash" => Bound::Hash,
-            "Show" => Bound::Show,
-            "Default" => Bound::Default,
-            _ => return None,
-        })
+    /// The name of the bound: of its row of [`TRAITS`], or of the kind
+    /// constraint (§4.6).
+    pub fn name(self) -> &'static str {
+        match self {
+            Bound::Copy => onsa_syntax::foreign::COPY,
+            Bound::Dup => onsa_syntax::foreign::DUP,
+            b => match TRAITS.iter().find(|(_, t)| *t == Some(b)) {
+                Some((name, _)) => name,
+                None => onsa_diag::internal::bug(None, format!("the bound {b:?} is in no row of the traits")),
+            },
+        }
     }
 }
 
@@ -253,6 +291,12 @@ pub enum DefKind {
     Test {
         name: String,
         body: ExprId,
+    },
+    /// An `effect` of std (§8.1, D-08, S-659), with no operations in this
+    /// version: whether it is `blocking` is recorded, and nothing is computed
+    /// from it (E0904, E0905 in phase 2). A user `effect` is `Unsupported`.
+    Effect {
+        blocking: bool,
     },
     /// A declaration phase 1 does not support (E0200 reported); kept so that
     /// names resolve without cascading errors.

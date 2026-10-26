@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1", "§18.1"]
+
+// A standard effect taken by a `use` is found, and in this version an effect other than `Alloc` in a row
+// is E0200 at the name in the row (D-08, S-659 (2)). It is the same for the six effects and in every
+// place a row is written. The `use` itself passes, and a row is read by the unit that writes it, so each
+// unit has one diagnostic. A row of several names has one (the first, by position), as every unit has.
+
+use std.fs.{Fs}
+use std.io.{Stdout, Stdin}
+use std.time.{Clock}
+use std.random.{Random}
+use std.log.{Log}
+
+pub fn with_fs() uses {Fs} {}   //~ E0200 @24
+
+pub fn with_stdout() uses {Stdout} {}   //~ E0200 @28
+
+pub fn with_stdin() uses {Stdin} {}   //~ E0200 @27
+
+pub fn with_clock() uses {Clock} {}   //~ E0200 @27
+
+pub fn with_random() uses {Random} {}   //~ E0200 @28
+
+pub fn with_log() uses {Log} {}   //~ E0200 @25
+
+pub fn after_alloc() uses {Alloc, Fs} {}   //~ E0200 @35
+
+pub fn two_names() uses {Random, Log} {}   //~ E0200 @26
+
+pub fn takes(f: fn() -> U32 uses {Clock}) -> U32 {   //~ E0200 @35
+  1
+}
+
+pub type Maker = fn(U32) -> U32 uses {Stdout}   //~ E0200 @39
+
+pub fn closure() -> U32 {
+  let g = fn(x: U32) -> U32 uses {Random} { x }   //~ E0200 @35
+  1
+}
+
+pub fn call(f: fn(U32) -> U32) -> U32 {
+  f(1)
+}
+
+pub fn captures(k: U32) -> U32 {
+  call(fn(i: U32) -> U32 uses {Log} { i + k })   //~ E0200 @32
+}
+
+pub struct Unit {
+  id: U32,
+}
+
+impl Unit {
+  pub fn read(self) -> U32 uses {Stdin} {   //~ E0200 @34
+    self.id
+  }
+}

@@ -219,6 +219,15 @@ impl Diagnostic {
         (self.span.start, self.span.end, self.code.as_str(), self.message.as_str())
     }
 
+    /// The order of the diagnostics of one unit (§18.1, S-214): the earliest
+    /// check stage, wherever it is, then [`Diagnostic::order_in_file`]; a
+    /// diagnostic of no check stage is last. A check reports the first of a
+    /// unit in this order (`onsa_syntax::units::Units::choose`), and a stage
+    /// that keeps one diagnostic of an item keeps the first in it.
+    pub fn unit_order(&self) -> (usize, (u32, u32, &str, &str)) {
+        (self.stage.check_rank().unwrap_or(usize::MAX), self.order_in_file())
+    }
+
     pub fn with_found(mut self, found: impl Into<String>) -> Diagnostic {
         self.found = Some(found.into());
         self

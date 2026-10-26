@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§5.1"]
+
+// The operator traits and the standard traits of §6.3 are all in the prelude (S-107, §15.1), so a type of
+// the same name is E0304: one struct for each name of the list.
+
+pub struct Add {   //~ E0304
+  v: U32,
+}
+
+pub struct Sub {   //~ E0304
+  v: U32,
+}
+
+pub struct Mul {   //~ E0304
+  v: U32,
+}
+
+pub struct Div {   //~ E0304
+  v: U32,
+}
+
+pub struct Rem {   //~ E0304
+  v: U32,
+}
+
+pub struct Neg {   //~ E0304
+  v: U32,
+}
+
+pub struct PartialEq {   //~ E0304
+  v: U32,
+}
+
+pub struct PartialOrd {   //~ E0304
+  v: U32,
+}
+
+pub struct BitAnd {   //~ E0304
+  v: U32,
+}
+
+pub struct BitOr {   //~ E0304
+  v: U32,
+}
+
+pub struct BitXor {   //~ E0304
+  v: U32,
+}
+
+pub struct Shl {   //~ E0304
+  v: U32,
+}
+
+pub struct Shr {   //~ E0304
+  v: U32,
+}
+
+pub struct Not {   //~ E0304
+  v: U32,
+}
+
+pub struct WrappingAdd {   //~ E0304
+  v: U32,
+}
+
+pub struct WrappingSub {   //~ E0304
+  v: U32,
+}
+
+pub struct WrappingMul {   //~ E0304
+  v: U32,
+}
+
+pub struct SaturatingAdd {   //~ E0304
+  v: U32,
+}
+
+pub struct SaturatingSub {   //~ E0304
+  v: U32,
+}
+
+pub struct SaturatingMul {   //~ E0304
+  v: U32,
+}
+
+pub struct Eq {   //~ E0304
+  v: U32,
+}
+
+pub struct Ord {   //~ E0304
+  v: U32,
+}
+
+pub struct Hash {   //~ E0304
+  v: U32,
+}
+
+pub struct Show {   //~ E0304
+  v: U32,
+}
+
+pub struct Default {   //~ E0304
+  v: U32,
+}
+
+pub struct Iter {   //~ E0304
+  v: U32,
+}
+
+pub struct IntoIter {   //~ E0304
+  v: U32,
+}
+
+pub struct Drop {   //~ E0304
+  v: U32,
+}
+
+pub struct AnyNum {   //~ E0304
+  v: U32,
+}
+
+pub struct Num {   //~ E0304
+  v: U32,
+}
+
+pub struct Float {   //~ E0304
+  v: U32,
+}
+
+pub struct Int {   //~ E0304
+  v: U32,
+}
+
+pub struct Unsigned {   //~ E0304
+  v: U32,
+}
+
+pub struct Ordinal {   //~ E0304
+  v: U32,
+}

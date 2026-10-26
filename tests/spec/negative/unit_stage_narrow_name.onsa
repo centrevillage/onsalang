@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// A name in a heading that is narrower than the reach of the declaration is E0303 (§15.1), and that is an
+// error of the types stage (§18.1, S-698): the E0302 of a name in the body, which is of the names stage, is
+// the one reported, wherever the narrow name is. A narrow name alone is reported as it was, and with a
+// type error of the body it comes first in the text, as both are of the types stage.
+
+struct Hid {
+  a: I32,
+}
+
+pub fn narrow_alone(h: Hid) -> I32 {   //~ E0303
+  1
+}
+
+pub fn narrow_argument(h: Hid) -> I32 {
+  nosuch   //~ E0302
+}
+
+pub fn narrow_result() -> Hid {
+  nosuch   //~ E0302
+}
+
+pub fn narrow_then_type_error(h: Hid) -> I32 {   //~ E0303
+  let a: I32 = true
+  a
+}
+
+pub struct Pkg {
+  v: I32,
+}
+
+impl Pkg {
+  pub fn leak() -> Hid {
+    nosuch   //~ E0302
+  }
+}
+
+struct Narrow {
+  l: F32,
+  r: F32,
+}
+
+pub flow narrow_output(x: F32 at sample) -> Narrow at sample {
+  nosuch   //~ E0302
+}
+
+pub flow narrow_output_alone(x: F32 at sample) -> Narrow at sample {   //~ E0303
+  Narrow { l: x, r: x }
+}

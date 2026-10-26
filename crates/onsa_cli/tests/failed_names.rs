@@ -121,15 +121,16 @@ fn with_main(tag: &str, main: &str) -> Dir {
 /// §18.1 (S-462, S-675): an effect row (of a function, of a function type, of a closure), a bound and the
 /// list of derived traits name a trait or an effect by its spelling; a failed name or the name of an E0304
 /// written there is silent too, so the package has the one diagnostic of the `use` or of the E0304. The
-/// same forms with a name nothing binds keep their own diagnostic (E0200, E0416).
+/// same forms with a name nothing binds keep their own diagnostic (E0302 in a row and in a bound: the name is not
+/// found, §15.1, S-74, R-278; E0416 in a derive list).
 #[test]
 fn a_failed_name_is_silent_where_it_is_read_by_its_spelling() {
     // (tag, the form, the code of the form with a name nothing binds)
     let forms = [
-        ("effects", "pub fn f() -> I32 uses {Fs, Alloc} {\n  1\n}\n", "E0200"),
-        ("fn_type", "pub fn f(g: fn() -> I32 uses {Fs}) -> I32 {\n  1\n}\n", "E0200"),
-        ("closure", "pub fn f() -> I32 {\n  let g = fn(x: I32) -> I32 uses {Fs} { x }\n  1\n}\n", "E0200"),
-        ("bound", "pub fn f[T: Fs](x: T) -> I32 {\n  1\n}\n", "E0200"),
+        ("effects", "pub fn f() -> I32 uses {Fs, Alloc} {\n  1\n}\n", "E0302"),
+        ("fn_type", "pub fn f(g: fn() -> I32 uses {Fs}) -> I32 {\n  1\n}\n", "E0302"),
+        ("closure", "pub fn f() -> I32 {\n  let g = fn(x: I32) -> I32 uses {Fs} { x }\n  1\n}\n", "E0302"),
+        ("bound", "pub fn f[T: Fs](x: T) -> I32 {\n  1\n}\n", "E0302"),
         ("derive", "pub struct S: Fs + PartialEq {\n  a: I32,\n}\n\npub enum E: Fs {\n  A,\n}\n", "E0416"),
     ];
     // (tag, the lines before the form, the code and line of their diagnostic)
@@ -187,7 +188,7 @@ fn the_effects_read_next_to_a_failed_name_stay() {
 }
 
 /// §18.1: the other names of a row with a failed name keep their own diagnostic, whatever their order
-/// (`Nope` binds nothing, an E0200 in each of `f1` and `f2`); a row of a failed name and `Alloc` has none.
+/// (`Nope` binds nothing, an E0302 in each of `f1` and `f2`); a row of a failed name and `Alloc` has none.
 #[test]
 fn the_other_names_of_a_row_with_a_failed_name_keep_their_diagnostic() {
     let main = "use util.{Gone}\n\npub fn f1() -> I32 uses {Gone, Nope} {\n  1\n}\n\n\
@@ -196,15 +197,15 @@ fn the_other_names_of_a_row_with_a_failed_name_keep_their_diagnostic() {
     let d = with_main("multi_effect", main);
     let (out, doc) = check_json(d.root(), &["."]);
     assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-    assert_eq!(codes(&doc), set(&["E0302", "E0200"]), "{doc}");
+    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
     assert_eq!(lines_of(&doc), vec![1, 3, 7], "{doc}");
-    for d in diagnostics(&doc).iter().filter(|d| str_of(d, "code") == "E0200") {
-        assert!(d.to_string().contains("Nope"), "the E0200 is of `Nope`: {d}");
+    for d in diagnostics(&doc).iter().filter(|d| span_of(&d["span"]).line != 1) {
+        assert!(d.to_string().contains("Nope"), "the E0302 is of `Nope`: {d}");
     }
 }
 
 /// §8.1, §15.1: a row of a closure is read as one of a signature. `util.Alloc` is not the `Alloc` of the
-/// prelude (`util` has no `Alloc`), so it is an E0200 in a signature and in a closure alike; and the
+/// prelude (`util` has no `Alloc`), so it is an E0302 in a signature and in a closure alike (the name is not found); and the
 /// effect variable `e` of the function is an effect variable in the row of a closure in its body.
 #[test]
 fn a_closure_reads_its_effect_row_as_a_signature_does() {
@@ -213,7 +214,7 @@ fn a_closure_reads_its_effect_row_as_a_signature_does() {
     let d = with_main("alloc_path", main);
     let (out, doc) = check_json(d.root(), &["."]);
     assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-    assert_eq!(codes(&doc), set(&["E0200"]), "{doc}");
+    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
     assert_eq!(lines_of(&doc), vec![3, 8], "{doc}");
     let main = "pub fn apply[e](f: fn() -> I32 uses {e}) -> I32 uses {e} {\n  \
                 let g = fn(h: fn() -> I32 uses {e}) -> I32 uses {e} { h() }\n  g(f)\n}\n";
@@ -225,7 +226,7 @@ fn a_closure_reads_its_effect_row_as_a_signature_does() {
 /// §18.1, S-689 (1): a failed name in a bound of the heading of an `impl` is a bound that is not known, so the
 /// members are checked: the `<` and the `.foo()` of a `T` with that bound have no diagnostic (no E0401, no
 /// E0413), and a real error of a member is reported. An `impl` whose bound is a name nothing binds has a
-/// diagnostic of its heading (E0200), so its members are not checked: the `bad` is silent there.
+/// diagnostic of its heading (E0302), so its members are not checked: the `bad` is silent there.
 #[test]
 fn the_members_of_an_impl_whose_bound_is_a_failed_name_are_checked() {
     let members = "pub struct S[T] {\n  a: T,\n}\n\n\
@@ -238,13 +239,13 @@ fn the_members_of_an_impl_whose_bound_is_a_failed_name_are_checked() {
     assert_eq!(codes(&doc), set(&["E0302", "E0401"]), "{doc}");
     assert_eq!(diagnostics(&doc).len(), 2, "the `use` and the `bad`: {doc}");
     assert_eq!(lines_of(&doc), vec![1, 17], "{doc}");
-    // The bound nothing binds: an E0200 of the heading, the members are not checked.
+    // The bound nothing binds: an E0302 of the heading, the members are not checked.
     let d = with_main("impl_bound_unbound", &members.replace("Gone", "Nope"));
     let (_, doc) = check_json(d.root(), &["."]);
     assert_eq!(
         codes(&doc),
-        set(&["E0200"]),
-        "a bound nothing binds is an E0200, and the members are not checked: {doc}"
+        set(&["E0302"]),
+        "a bound nothing binds is an E0302, and the members are not checked: {doc}"
     );
     assert_eq!(diagnostics(&doc).len(), 1, "{doc}");
 }
@@ -523,8 +524,8 @@ fn a_bound_that_is_a_failed_name_is_not_known() {
         ("plain_method", "pub fn u[T](x: T) -> I32 {\n  x.foo() @@E0413\n}\n"),
         ("plain_int_op", "pub fn u[T: Num](x: T) -> T {\n  x & x @@E0401\n}\n"),
         ("plain_not", "pub fn u[T: Num](x: T) -> T {\n  !x @@E0401\n}\n"),
-        ("unbound", "pub fn u[T: Nope](x: T) -> Bool { @@E0200\n  x < x\n}\n"),
-        ("unbound_body_not_checked", "pub fn u[T: Nope](x: T) -> I32 { @@E0200\n  let a: I32 = true\n  a\n}\n"),
+        ("unbound", "pub fn u[T: Nope](x: T) -> Bool { @@E0302\n  x < x\n}\n"),
+        ("unbound_body_not_checked", "pub fn u[T: Nope](x: T) -> I32 { @@E0302\n  let a: I32 = true\n  a\n}\n"),
         (
             "plain_impl",
             "pub struct P[T] {\n  a: T,\n}\n\nimpl[T] P[T] {\n  pub fn lt(self) -> Bool {\n    self.a < self.a @@E0401\n  }\n\n  \
@@ -538,7 +539,7 @@ fn a_bound_that_is_a_failed_name_is_not_known() {
 }
 
 /// §18.1 (the unit paragraph, S-689): an `impl` whose heading has a diagnostic of its own (an E0302 of the type
-/// or of a type argument, an E0200 of a bound, a syntax error) is one unit, and its members are not checked;
+/// or of a type argument, an E0302 of a bound, a syntax error) is one unit, and its members are not checked;
 /// an `impl` whose heading is right has its members checked. The failed name in a heading is no diagnostic of
 /// the heading (the test above and `a_unit_goes_on_after_a_failed_name_in_a_type_place`).
 #[test]
@@ -549,7 +550,7 @@ fn an_impl_whose_heading_has_a_diagnostic_does_not_check_its_members() {
     for (tag, heading) in [
         ("type", "impl Nope { @@E0302"),
         ("type_arg", "impl S[Nope] { @@E0302"),
-        ("bound", "impl[T: Nope] S[T] { @@E0200"),
+        ("bound", "impl[T: Nope] S[T] { @@E0302"),
         ("syntax_empty", "impl { @@E0002"),
         ("syntax_number", "impl 1 { @@E0002"),
         ("syntax_where", "impl S[T] where T { @@E0002"),

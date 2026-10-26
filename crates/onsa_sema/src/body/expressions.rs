@@ -635,11 +635,17 @@ impl<'a> Checker<'a> {
             },
         };
         let effects = match effects {
-            // Read as the row of a signature; but another name is the first
-            // error of the body, whose check stops there (§18.1).
-            Some(row) => match crate::sig::read_effects(self.a, self.def, self.m, &self.generics, Some(row)) {
-                (_, others) if !others.is_empty() => {
-                    return Err(self.unsupported(others[0].span, Feature::Effects, &[&others[0].name]));
+            // Read as the row of a signature; but its first error is the
+            // first error of the body, whose check stops there (§18.1).
+            Some(row) => match crate::sig::read_effects(
+                self.a,
+                self.def,
+                self.m,
+                (&self.generics, self.self_ty.is_some()),
+                Some(row),
+            ) {
+                (_, errors) if !errors.is_empty() => {
+                    return Err(self.diag(errors.into_iter().next().unwrap()));
                 }
                 (set, _) => set,
             },
@@ -739,11 +745,7 @@ impl<'a> Checker<'a> {
                     Err(self.err(
                         Code::E0401,
                         span,
-                        format!(
-                            "`{}` is not defined for `{shown}` (it needs `{}`; §3.2)",
-                            op.symbol(),
-                            bound_name(bound)
-                        ),
+                        format!("`{}` is not defined for `{shown}` (it needs `{}`; §3.2)", op.symbol(), bound.name()),
                     ))
                 }
             }

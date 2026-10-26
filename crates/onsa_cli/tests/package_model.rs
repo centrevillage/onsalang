@@ -273,7 +273,8 @@ fn std_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// The names of the prelude (spec §15.1): `use std.<module>.{Option}` for one of them is E0304,
 /// so they are not taken here.
-const PRELUDE: [&str; 11] = ["Option", "Result", "Some", "None", "Ok", "Err", "panic", "Alloc", "Copy", "Dup", "Show"];
+const PRELUDE: [&str; 12] =
+    ["Option", "Result", "Some", "None", "Ok", "Err", "panic", "Alloc", "Block", "Copy", "Dup", "Show"];
 
 /// Spec §15.1 (R-80 (4)): the path of a module of std is the path of its file under `std/`, so
 /// each file with a `pub` item is reached by `use std.<path>.{item}` and the item is found. A

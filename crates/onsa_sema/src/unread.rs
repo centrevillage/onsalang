@@ -99,7 +99,7 @@ impl Analysis {
             DefKind::Const(c) => vec![c.ty],
             DefKind::Impl(i) => vec![i.self_ty],
             DefKind::Flow(f) => f.inputs.iter().map(|i| i.ty).chain([f.out]).collect(),
-            DefKind::Test { .. } | DefKind::Unsupported => Vec::new(),
+            DefKind::Test { .. } | DefKind::Effect { .. } | DefKind::Unsupported => Vec::new(),
         }
     }
 

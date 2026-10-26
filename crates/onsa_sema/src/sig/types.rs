@@ -305,9 +305,14 @@ impl<'p> Sema<'p> {
                 self.a.types.error()
             }
             Entity::Builtin(_) | Entity::Variant(..) => {
+                let what = match entity {
+                    Entity::Builtin(Builtin::Trait(_)) => "a trait",
+                    Entity::Builtin(Builtin::Kind(_)) => "a kind constraint",
+                    _ => "a value",
+                };
                 self.report(
                     cx.def,
-                    Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is a value, not a type")),
+                    Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is {what}, not a type")),
                 );
                 self.a.types.error()
             }
@@ -333,7 +338,12 @@ impl<'p> Sema<'p> {
                 self.a.types.named(t)
             }
             // Not a type: an E0302 of its own.
-            DefKind::Fn(_) | DefKind::Flow(_) | DefKind::Const(_) | DefKind::Impl(_) | DefKind::Test { .. } => vec![],
+            DefKind::Fn(_)
+            | DefKind::Flow(_)
+            | DefKind::Const(_)
+            | DefKind::Impl(_)
+            | DefKind::Test { .. }
+            | DefKind::Effect { .. } => vec![],
         };
         let vis = |n: DefId| self.a.def(n).vis;
         let narrowest =
@@ -347,7 +357,7 @@ impl<'p> Sema<'p> {
             crate::resolve::seen(reach),
             crate::resolve::hidden_words(def.vis)
         );
-        let d = Diagnostic::new(Stage::Names, Code::E0303, path.span, msg)
+        let d = Diagnostic::new(Stage::Types, Code::E0303, path.span, msg)
             .with_found(name)
             .with_note(def.name_span, "defined here");
         self.report(cx.def, d);

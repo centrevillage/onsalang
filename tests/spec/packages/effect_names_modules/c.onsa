@@ -1,0 +1,5 @@
+use std.fs
+
+pub fn read_c() uses {fs.Fs} {}   //~ E0200
+
+pub fn bare_c() uses {Fs} {}   //~ E0302

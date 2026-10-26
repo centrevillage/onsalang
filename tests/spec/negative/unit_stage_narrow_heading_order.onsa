@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§11.2", "§11.3"]
+// fixes = 0
+
+// The forms of unit_stage_narrow_heading.onsa with the order the other way, and with no error of the names
+// stage in the heading. A name that is not found in a heading is E0302 wherever it stands, a narrow name
+// alone is E0303 (types stage), and two narrow names are the first one (the same stage, so the position
+// decides). These do not depend on the stage of the narrow name, so they hold before and after it is moved.
+
+struct Hid {
+  a: I32,
+}
+
+struct Other {
+  b: I32,
+}
+
+pub fn missing_first_argument(n: Nope, h: Hid) -> I32 {   //~ E0302
+  1
+}
+
+pub fn missing_argument_result_narrow(n: Nope) -> Hid {   //~ E0302
+  1
+}
+
+pub fn missing_generic_bound[T: Nope](h: Hid, x: T) -> I32 {   //~ E0302
+  1
+}
+
+pub struct Fields {
+  n: Nope,   //~ E0302
+  h: Hid,
+}
+
+pub enum Variants {
+  A(Nope),   //~ E0302
+  B(Hid),
+}
+
+pub type Alias = fn(Nope) -> Hid   //~ E0302
+
+pub struct Pkg {
+  v: I32,
+}
+
+impl Pkg {
+  pub fn member(self, n: Nope, h: Hid) -> I32 {   //~ E0302
+    1
+  }
+}
+
+// A narrow name alone is E0303 and the first of two narrow names is the one reported.
+pub fn narrow_alone(h: Hid) -> I32 {   //~ E0303
+  1
+}
+
+pub fn narrow_result_alone() -> Hid {   //~ E0303
+  Hid { a: 1 }
+}
+
+pub fn narrow_twice(h: Hid, o: Other) -> I32 {   //~ E0303
+  1
+}
+
+pub struct FieldAlone {
+  h: Hid,   //~ E0303
+}
+
+pub enum VariantAlone {
+  A(Hid),   //~ E0303
+}
+
+pub type AliasAlone = fn(Hid) -> I32   //~ E0303
+
+impl Pkg {
+  pub fn member_alone(self, h: Hid) -> I32 {   //~ E0303
+    1
+  }
+}
+
+// A flow: the error of the heading that its text decides comes first in the text, or is alone.
+pub flow clock_before_narrow(y: F32, h: Hid at sample) -> F32 at sample {   //~ E0810
+  y
+}
+
+pub flow mode_before_narrow(inout h: Hid at sample) -> F32 at sample {   //~ E0806
+  1.0
+}
+
+pub flow narrow_alone_flow(h: Hid at sample) -> F32 at sample {   //~ E0303
+  1.0
+}
+
+pub flow narrow_output_alone(x: F32 at sample) -> Hid at sample {   //~ E0303
+  Hid { a: 1 }
+}

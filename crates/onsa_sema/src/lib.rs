@@ -179,8 +179,12 @@ pub struct Analysis {
     pub modules: Modules,
     pub defs: Vec<Def>,
     pub types: Types,
-    /// Prelude and builtin type names (§15.1).
-    pub prelude: HashMap<String, Builtin>,
+    /// Prelude and builtin type names (§15.1): the compiler's, and the
+    /// items of `std.core` (S-659).
+    pub prelude: HashMap<String, Entity>,
+    /// The effect `Alloc` of `std.core`, a lang item (D-08): the one effect
+    /// of an effect row phase 1 gives a meaning (`crate::sig::read_effects`).
+    pub alloc: Option<DefId>,
     /// `TyId` keys of generic builtins in `Modules::assoc_builtin`.
     pub builtin_key: HashMap<ty::BuiltinTy, TyId>,
     /// Typed bodies of functions, tests and `const` initializers (T2-5).
@@ -234,7 +238,7 @@ impl Analysis {
 
     /// Resolve a path from inside module `from`.
     pub fn resolve_path(&self, from: ModId, path: &onsa_syntax::ast::Path) -> Result<Entity, ResolveError> {
-        self.modules.resolve_path(from, path, &self.prelude, &self.defs, &self.builtin_key)
+        self.modules.resolve_path(from, path, (&self.prelude, &self.defs, &self.builtin_key))
     }
 
     /// Whether the path names what the names stage holds as an error (§18.1,

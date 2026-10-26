@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1", "§18.1"]
+
+// `Block` is std's effect (`std.core`, an effect with no operations that is `blocking`) and it is in the
+// prelude (S-702, §8.2), so it is found with no `use`. In this version an effect other than `Alloc` in a
+// row is E0200 at the name (D-08), and that is what `Block` is: found, then E0200, not E0302. It is the
+// same in a signature, a function type, an alias and an anonymous function.
+
+pub fn sig() uses {Block} {}   //~ E0200 @20
+
+pub fn after_alloc() uses {Alloc, Block} {}   //~ E0200 @35
+
+pub fn takes(f: fn() -> U32 uses {Block}) -> U32 {   //~ E0200 @35
+  1
+}
+
+pub type Maker = fn(U32) -> U32 uses {Block}   //~ E0200 @39
+
+pub fn closure() -> U32 {
+  let g = fn(x: U32) -> U32 uses {Block} { x }   //~ E0200 @35
+  1
+}

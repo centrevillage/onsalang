@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§8.2", "§15.1", "§6.3", "§18.1"]
+// fixes = 0
+
+// The names of the prelude that std declares are the items of the module `std.core`: `Option`, `Result`,
+// `Alloc`, `Block` and the operator traits and standard traits of §6.3 (S-659 (B), (C)). Taking one from
+// there again is E0304 with no candidate (§15.1, S-611: the prelude is not hidden, and it is not
+// taken twice). Each `use` is a unit of its own.
+
+use std.core.{Option}   //~ E0304
+use std.core.{Result}   //~ E0304
+use std.core.{Alloc}   //~ E0304
+use std.core.{Block}   //~ E0304
+use std.core.{Add}   //~ E0304
+use std.core.{Sub}   //~ E0304
+use std.core.{Mul}   //~ E0304
+use std.core.{Div}   //~ E0304
+use std.core.{Rem}   //~ E0304
+use std.core.{Neg}   //~ E0304
+use std.core.{PartialEq}   //~ E0304
+use std.core.{PartialOrd}   //~ E0304
+use std.core.{BitAnd}   //~ E0304
+use std.core.{BitOr}   //~ E0304
+use std.core.{BitXor}   //~ E0304
+use std.core.{Shl}   //~ E0304
+use std.core.{Shr}   //~ E0304
+use std.core.{Not}   //~ E0304
+use std.core.{WrappingAdd}   //~ E0304
+use std.core.{WrappingSub}   //~ E0304
+use std.core.{WrappingMul}   //~ E0304
+use std.core.{SaturatingAdd}   //~ E0304
+use std.core.{SaturatingSub}   //~ E0304
+use std.core.{SaturatingMul}   //~ E0304
+use std.core.{Eq}   //~ E0304
+use std.core.{Ord}   //~ E0304
+use std.core.{Hash}   //~ E0304
+use std.core.{Show}   //~ E0304
+use std.core.{Default}   //~ E0304
+use std.core.{Iter}   //~ E0304
+use std.core.{IntoIter}   //~ E0304
+use std.core.{Drop}   //~ E0304
+use std.core.{AnyNum}   //~ E0304
+use std.core.{Num}   //~ E0304
+use std.core.{Float}   //~ E0304
+use std.core.{Int}   //~ E0304
+use std.core.{Unsigned}   //~ E0304
+use std.core.{Ordinal}   //~ E0304

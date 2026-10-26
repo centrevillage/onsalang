@@ -76,7 +76,9 @@ impl<'p> Sema<'p> {
         for d in items {
             let def = self.a.def(d);
             let (name, span) = (def.name.clone(), def.name_span);
-            let body = self.body_clash(&name, span, "an item");
+            // An item of `std.core` is itself the name of the prelude (S-659).
+            let own = self.a.prelude.get(&name) == Some(&crate::resolve::Entity::Def(d));
+            let body = if own { None } else { self.body_clash(&name, span, "an item") };
             let child = self.a.modules.get(m).children.get(&name).copied().map(|c| {
                 clash(span, &name, format!("`{name}` is also the name of a child module"))
                     .with_note(self.module_head(c), "the child module")

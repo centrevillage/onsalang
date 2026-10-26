@@ -7,8 +7,8 @@ pub fn plain_method[T](x: T) -> I32 {
   x.foo()                                           //~ E0413
 }
 
-// A name that nothing binds is not a bound that is not known: it is an E0200 as before.
-pub fn unbound[T: Nope](x: T) -> Bool {             //~ E0200
+// A name that nothing binds is not a bound that is not known: it is an E0302 (§15.1), and the unit stops there.
+pub fn unbound[T: Nope](x: T) -> Bool {             //~ E0302
   x < x
 }
 
@@ -26,7 +26,7 @@ impl[T] P[T] {
   }
 }
 
-pub fn unbound_with_body[T: Nope](x: T) -> I32 {    //~ E0200
+pub fn unbound_with_body[T: Nope](x: T) -> I32 {    //~ E0302
   let a: I32 = true
   a
 }

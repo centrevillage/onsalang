@@ -360,7 +360,6 @@ fn an_item_or_a_use_with_a_prelude_or_built_in_name_is_e0304() {
 
 /// [`an_item_or_a_use_with_a_prelude_or_built_in_name_is_e0304`] for the prelude function `panic`.
 #[test]
-#[ignore = "W4-03: panic is in the table of the prelude from U5"]
 fn an_item_or_a_use_named_panic_is_e0304() {
     prelude_items_are_e0304(&[
         ("fn_panic", "pub fn panic() -> I32 {\n  1\n}\n"),
@@ -422,7 +421,6 @@ fn a_body_path_whose_head_cannot_be_bound_by_a_use_has_no_use_candidate() {
 
 /// [`a_body_path_whose_head_cannot_be_bound_by_a_use_has_no_use_candidate`] for the prelude name `panic`.
 #[test]
-#[ignore = "W4-03: panic is in the table of the prelude from U5"]
 fn a_body_path_whose_head_is_panic_has_no_use_candidate() {
     heads_have_no_use_candidate("unbindable_head_panic", &["panic"]);
 }

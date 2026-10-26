@@ -186,7 +186,7 @@ fn name_diagnostics() {
     let a = check("test \"a\" { assert true }\ntest \"a\" { assert true }\n");
     assert_eq!(codes(&a), vec![Code::E0306]);
     let a = check("pub fn f(x: Str) uses {Fs} {}\n");
-    assert_eq!(codes(&a), vec![Code::E0200]);
+    assert_eq!(codes(&a), vec![Code::E0302]);
     let a = analyze(&pkg(&[("a", "use b.{g}\npub fn f() {}\n"), ("b", "use a.{f}\npub fn g() {}\n")]));
     assert_eq!(codes(&a), vec![Code::E0310]);
     // A `priv` item is within its module (§15.1, S-36).

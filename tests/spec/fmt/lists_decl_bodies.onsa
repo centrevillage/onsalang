@@ -15,7 +15,7 @@
 
 pub struct OneLine { x: F32, y: F32 }
 
-pub struct Block {
+pub struct Panel {
   x: F32,
   y: F32,
 }
@@ -50,7 +50,7 @@ impl OneLine {
 
 impl OneField { pub fn gx(self) -> F32 { self.x } }
 
-impl Block {
+impl Panel {
   pub fn gx(self) -> F32 { self.x }
   pub fn gy(self) -> F32 { self.y }
 }

@@ -1,0 +1,7 @@
+//! The standard input and output (spec §8.1, §8.2, S-659).
+
+/// Writing to the standard output. Its operations come in phase 2.
+pub blocking effect Stdout {}
+
+/// Reading the standard input. Its operations come in phase 2.
+pub blocking effect Stdin {}

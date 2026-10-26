@@ -275,13 +275,6 @@ note = "効果を持つ fn の呼び出し。rt でない fn は巻き上げる�
 
 [[pending]]
 kind = "diag-code"
-target = "E0806"
-reasons = ["S-125", "S-151", "S-110", "S-48"]
-until = "W7-06"
-note = "本体で使える式の閉じた一覧（W7-04）、短絡の右辺の状態を持つもの（W7-06）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0808"
 reasons = ["S-88", "R-100", "S-151", "S-132"]
 until = "W7-04"
@@ -1195,20 +1188,6 @@ target = "tests/spec/fixes/pkg_rename/util.onsa:1:8 E0320 fix1"
 reasons = ["S-82", "R-87"]
 until = "W4-04"
 note = "E0320 の候補が他のモジュールの使用を改名せず、main.onsa に E0302 が残る（clean）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/overlap_prelude_panic"
-reasons = ["S-611", "R-103"]
-until = "W4-03"
-note = "prelude の panic と同じ名前の項目と use の E0304。panic が prelude の表に入るのは U5（他の名前は U3a1 で E0304）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/overlap_prelude_traits_effects"
-reasons = ["S-611", "R-103"]
-until = "W4-03"
-note = "prelude の trait と種の制約の名前の E0304。trait が prelude の表に入るのは U5"
 
 [[pending]]
 kind = "test-case"
@@ -2303,13 +2282,6 @@ note = "use で取り込んだ名前を他のモジュールから経路で引�
 # --- W4-03 U3d: E0304 の名前の辺と並びの要素の読み続けの事例のうち、後の単位・作業で通るもの（2026-10-25）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/clash_edge_prelude_panic"
-reasons = ["S-688", "S-611", "R-103"]
-until = "W4-03"
-note = "prelude の panic との E0304 は、panic が prelude の表に入る U5 で出る（overlap_prelude_panic と同じ）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/packages/use_flow_absent_type_position_kinds"
 reasons = ["S-103"]
 until = "W4-04"
@@ -2321,3 +2293,25 @@ target = "tests/spec/packages/use_flow_own_item_signature_kind"
 reasons = ["S-103"]
 until = "W4-04"
 note = "自分の生成項目の関数の名前を署名の型に書く誤りの E0308 は W4-04 U7。今は E0302"
+
+# --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/prelude_bounds_operator_traits.onsa"
+reasons = ["S-107"]
+until = "W5-05"
+note = "演算子 trait は prelude の名前（S-107）だが、境界としての意味は W5-05。今は E0200（user-defined traits as bounds）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/prelude_bounds_number_traits.onsa"
+reasons = ["S-107"]
+until = "W5-05"
+note = "数の trait（AnyNum・Int・Unsigned）は prelude の名前（S-107）だが、境界としての意味は W5-05。今は E0200"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/prelude_bounds_ordinal.onsa"
+reasons = ["S-107"]
+until = "W5-06"
+note = "Ordinal は prelude の名前（S-107）だが、境界としての意味は W5-06。今は E0200"

@@ -1,0 +1,4 @@
+//! Time (spec §8.1, §8.2, S-659).
+
+/// Reading the time. Its operations come in phase 2.
+pub effect Clock {}

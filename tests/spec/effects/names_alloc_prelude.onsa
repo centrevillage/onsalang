@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1"]
+
+// `Alloc` is std's effect and it is in the prelude (§8.2, §15.1): it is written in an effect row with no
+// `use`, in a signature, in a function type (a parameter, an alias), in an anonymous function that
+// captures and in one that does not, and in the member of an `impl`. All of these are the same name.
+
+pub type Maker = fn(U32) -> U32 uses {Alloc}
+
+pub fn plain() uses {Alloc} {}
+
+pub fn takes(f: fn() -> U32 uses {Alloc}) -> U32 {
+  1
+}
+
+pub fn closure() -> U32 {
+  let g = fn(x: U32) -> U32 uses {Alloc} { x }
+  1
+}
+
+pub fn call(f: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f(1)
+}
+
+pub fn captures(k: U32) -> U32 uses {Alloc} {
+  call(fn(i: U32) -> U32 uses {Alloc} { i + k })
+}
+
+pub struct Holder {
+  id: U32,
+}
+
+impl Holder {
+  pub fn read(self) -> U32 uses {Alloc} {
+    self.id
+  }
+}

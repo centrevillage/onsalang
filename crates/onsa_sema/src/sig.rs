@@ -11,7 +11,7 @@
 //! `Sema`: `types` (the types, also those written in a body), `flow_sig` and
 //! `generated`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
@@ -37,8 +37,9 @@ pub(crate) use types::lower_type_in_body;
 pub(crate) struct Sema<'p> {
     pub(crate) a: &'p mut Analysis,
     pub(crate) flat: Vec<&'p Package>,
-    /// Defs that already have a diagnostic (P-01: first error per item).
-    reported: HashSet<DefId>,
+    /// Defs that already have a diagnostic, and its index in the
+    /// diagnostics (P-01: one error per item, [`Sema::report`]).
+    reported: HashMap<DefId, usize>,
     /// Aliases being expanded (cycle guard).
     expanding: HashSet<DefId>,
     /// The `copy_bound` diagnostics reported (their index in the
@@ -76,7 +77,7 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
 
 impl<'p> Sema<'p> {
     fn new(a: &'p mut Analysis, flat: Vec<&'p Package>) -> Self {
-        Sema { a, flat, reported: HashSet::new(), expanding: HashSet::new(), kind_heads: Vec::new() }
+        Sema { a, flat, reported: HashMap::new(), expanding: HashSet::new(), kind_heads: Vec::new() }
     }
 
     pub(crate) fn module(&self, m: ModId) -> Option<&'p Module> {
@@ -87,9 +88,26 @@ impl<'p> Sema<'p> {
     // ------------------------------------------------------------ diagnostics
 
     pub(crate) fn report(&mut self, def: DefId, d: Diagnostic) {
-        if self.reported.insert(def) {
+        self.keep(def, d);
+    }
+
+    /// The one diagnostic of `def`: the first in the order of a unit
+    /// ([`Diagnostic::unit_order`], §18.1), whatever the order the stages
+    /// find them in (a heading's narrow name before a name of a later
+    /// parameter that is not found, S-698). Its index in the diagnostics
+    /// when `d` is the one kept.
+    fn keep(&mut self, def: DefId, d: Diagnostic) -> Option<usize> {
+        let Some(&at) = self.reported.get(&def) else {
+            self.reported.insert(def, self.a.diagnostics.len());
             self.a.diagnostics.push(d);
+            return Some(self.a.diagnostics.len() - 1);
+        };
+        if d.unit_order() >= self.a.diagnostics[at].unit_order() {
+            return None;
         }
+        self.kind_heads.retain(|&(k, _, _)| k != at);
+        self.a.diagnostics[at] = d;
+        Some(at)
     }
 
     pub(crate) fn report_mod(&mut self, d: Diagnostic) {
@@ -395,20 +413,44 @@ impl<'p> Sema<'p> {
 
     fn lower_generics(&mut self, cx: &Cx<'p>, gs: &[GenericParam]) -> Vec<GenericDef> {
         let mut out = cx.generics.clone();
+        // The names of the list, each seen in every bound of it.
+        let listed: Vec<&str> = gs
+            .iter()
+            .map(|g| match g {
+                GenericParam::Type { name, .. } | GenericParam::Const { name, .. } | GenericParam::Effect { name } => {
+                    name.name.as_str()
+                }
+            })
+            .chain(cx.generics.iter().map(|g| g.name.as_str()))
+            .collect();
         for g in gs {
             let def = match g {
                 GenericParam::Type { name, bounds } => {
                     let mut bs = Vec::new();
                     let mut dup = true;
                     let mut unknown = false;
+                    // The path of a bound is resolved as any other (§15.1,
+                    // R-278): a trait of the prelude, or a kind constraint.
                     for b in bounds {
                         let n = b.path.segments.last().unwrap();
-                        match Bound::parse(&n.name) {
-                            Some(Bound::Dup) if b.relaxed => dup = false,
-                            Some(bound) => bs.push(bound),
+                        if heading_binds(&b.path, &listed, cx.self_ty.is_some()) {
+                            self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]);
+                            continue;
+                        }
+                        match self.a.resolve_path(cx.m, &b.path) {
+                            Ok(Entity::Builtin(Builtin::Kind(Bound::Dup))) if b.relaxed => dup = false,
+                            Ok(Entity::Builtin(Builtin::Kind(bound))) => bs.push(bound),
+                            Ok(Entity::Builtin(Builtin::Trait(i))) => match TRAITS[i as usize].1 {
+                                Some(bound) => bs.push(bound),
+                                None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
+                            },
+                            // A name that is no trait (`T: I32`), or a user
+                            // trait: the E0308 of the kinds of names is W4-04's
+                            // (also for a parameter, above).
+                            Ok(_) => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             // An unknown bound (§18.1, S-689).
-                            None if self.a.record_if_held(cx.def, cx.m, &b.path) => unknown = true,
-                            None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
+                            Err(e) if self.a.unread_path(cx.def, cx.m, &b.path, &e) => unknown = true,
+                            Err(e) => self.report(cx.def, e.into_diagnostic()),
                         }
                     }
                     let kind = GenericKind::Type { bounds: bs, dup, unknown };
@@ -457,9 +499,7 @@ impl<'p> Sema<'p> {
                 Some((_, None)) => self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]),
                 None if foreign::KIND_CONSTRAINTS.contains(&n.name.as_str()) => {
                     let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_derive(cx, paths, k)]);
-                    let at = self.a.diagnostics.len();
-                    self.report(cx.def, d);
-                    if self.a.diagnostics.len() > at {
+                    if let Some(at) = self.keep(cx.def, d) {
                         self.kind_heads.push((at, cx.def, n.name == foreign::DUP));
                     }
                 }
@@ -484,15 +524,11 @@ impl<'p> Sema<'p> {
     }
 
     /// The effects of a row of a signature or a function type
-    /// ([`read_effects`]): each other name is an E0200 of its own (but in
-    /// `std`), and the lowering goes on.
+    /// ([`read_effects`]): its errors are reported, and the lowering goes on.
     fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
-        let (mut set, others) = read_effects(self.a, cx.def, cx.m, &cx.generics, row);
-        for n in others {
-            if !self.a.modules.is_std(cx.m) {
-                self.unsupported(cx.def, n.span, Feature::Effects, &[&n.name]);
-            }
-            set.other.push(n.name.clone());
+        let (set, errors) = read_effects(self.a, cx.def, cx.m, (&cx.generics, cx.self_ty.is_some()), row);
+        for d in errors {
+            self.report(cx.def, d);
         }
         set
     }
@@ -637,32 +673,73 @@ fn src(cx: &Cx<'_>, span: Span) -> String {
     cx.text[span.start as usize..span.end as usize].to_string()
 }
 
-/// The one reading of an effect row (§8.1), of a signature, of a function
-/// type and of a closure, by the spelling of its names: a single name `Alloc`,
-/// a single name of an effect variable of `generics`, and a name the names
-/// stage holds as an error, left out with no diagnostic (§18.1; read by
-/// `def`, [`Analysis::record_if_held`]). The other names, E0200 in this version,
-/// go back to the caller, which reports them.
+/// The one reading of an effect row (§8.1, S-74, D-08), of a signature, of a
+/// function type and of a closure: a single name of an effect variable of
+/// `generics`, else a path resolved as any other (§15.1). `Alloc` (the lang
+/// item) is read; another effect is an E0200 at its name, but in std, which
+/// declares them (S-659); so is a name of another kind, also a parameter of
+/// `generics` or a `Self` that is seen (the bool, [`heading_binds`]). A name
+/// not found is its E0302, with the `use` of the effect std declares of that
+/// name as the candidate (S-659 (3)); a name
+/// the check does not read is left out with no diagnostic (§18.1; read by
+/// `def`, [`Analysis::unread_path`]). The errors go back to the caller,
+/// which reports them.
 // The effects read stay when a name held as an error is left out, as an
 // unknown effect of an open row, and the check goes on (§18.1, S-691).
-pub(crate) fn read_effects<'r>(
+pub(crate) fn read_effects(
     a: &mut Analysis,
     def: DefId,
     from: crate::ModId,
-    generics: &[GenericDef],
-    row: Option<&'r EffectRow>,
-) -> (EffectSet, Vec<&'r onsa_syntax::ast::Ident>) {
+    (generics, self_seen): (&[GenericDef], bool),
+    row: Option<&EffectRow>,
+) -> (EffectSet, Vec<Diagnostic>) {
     let mut set = EffectSet::default();
-    let mut others = Vec::new();
+    let mut errors = Vec::new();
+    let names: Vec<&str> = generics.iter().map(|g| g.name.as_str()).collect();
     for p in row.map_or(&[][..], |r| &r.effects[..]) {
         let n = p.segments.last().unwrap();
         let var = generics.iter().position(|g| g.name == n.name && matches!(g.kind, GenericKind::Effect));
-        match (p.segments.len(), var) {
-            (1, _) if n.name == "Alloc" => set.alloc = true,
-            (1, Some(i)) => set.vars.push(i as u32),
-            _ if a.record_if_held(def, from, p) => {}
-            _ => others.push(n),
+        if let (1, Some(i)) = (p.segments.len(), var) {
+            set.vars.push(i as u32);
+            continue;
+        }
+        let found = if heading_binds(p, &names, self_seen) { None } else { Some(a.resolve_path(from, p)) };
+        match found {
+            Some(Ok(Entity::Def(d))) if Some(d) == a.alloc => set.alloc = true,
+            Some(Ok(Entity::Def(d))) if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) => {
+                set.other.push(n.name.clone());
+            }
+            // Another effect; or a name that is no effect (`uses {I32}`,
+            // `uses {T}`), whose E0308 of the kinds of names is W4-04's.
+            None | Some(Ok(_)) => {
+                errors.push(Feature::Effects.diagnostic(Stage::Names, n.span, &[&n.name]));
+                set.other.push(n.name.clone());
+            }
+            Some(Err(e)) if a.unread_path(def, from, p, &e) => {}
+            Some(Err(e)) => {
+                let fix = match (&e, p.segments.as_slice()) {
+                    (crate::ResolveError::NotFound { .. }, [_]) => {
+                        a.modules.std_effect_use(from, &n.name, (&a.prelude, &a.defs, &a.builtin_key))
+                    }
+                    _ => None,
+                };
+                let d = e.into_diagnostic();
+                errors.push(match fix {
+                    Some(fix) => d.with_fix(fix),
+                    None => d,
+                });
+            }
         }
     }
-    (set, others)
+    (set, errors)
+}
+
+/// Whether the head of `p` is a name a heading binds that is no item of a
+/// module: one of `names` (the generic parameters seen), or `Self` where it
+/// is seen (`self_seen`: in an `impl`, §2.2). It is found, so no E0302; in a
+/// bound or an effect row it is a name of another kind (E0200 until the
+/// E0308 of the kinds of names, W4-04).
+fn heading_binds(p: &Path, names: &[&str], self_seen: bool) -> bool {
+    let head = p.segments[0].name.as_str();
+    names.contains(&head) || (self_seen && head == "Self")
 }

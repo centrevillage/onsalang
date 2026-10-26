@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§9.2", "§18.1"]
+
+// `panic` is in the prelude (§15.1), so its name is found with no `use`; calling it is not built yet
+// (W5-08), so until then it is E0200 as any feature that the spec has and this version does not
+// build (§18.1), not E0302.
+
+pub fn boom() -> I32 {
+  panic("x")   //~ E0200
+}

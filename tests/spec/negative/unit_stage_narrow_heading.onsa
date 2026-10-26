@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§11.2", "§11.3"]
+// fixes = 0
+
+// A narrow name in a heading is E0303 and an error of the types stage (§15.1, §18.1, S-698), and what is
+// not found in a heading, a clock that a flow heading lacks or may not have (E0810), and a mode on an input
+// (E0806, §11.2) are errors of the names stage (S-710). The names stage is before the types stage, so the
+// error of the names stage is the one reported wherever the two stand in the one heading: here the narrow
+// name is first in the text. (In the body, in the heading before a narrow name, and alone, see
+// unit_stage_narrow_name.onsa and unit_stage_narrow_heading_order.onsa.)
+
+struct Hid {
+  a: I32,
+}
+
+pub fn missing_argument(h: Hid, n: Nope) -> I32 {   //~ E0302
+  1
+}
+
+pub fn missing_result(h: Hid) -> Nope {   //~ E0302
+  1
+}
+
+pub fn missing_effect(h: Hid) -> I32 uses {Nope} {   //~ E0302
+  1
+}
+
+pub fn narrow_result_then_effect() -> Hid uses {Nope} {   //~ E0302
+  Hid { a: 1 }
+}
+
+pub fn missing_in_function_type(f: fn(Hid) -> Nope) -> I32 {   //~ E0302
+  1
+}
+
+pub fn missing_inside_types(h: Option[Hid], n: Option[Nope]) -> I32 {   //~ E0302
+  1
+}
+
+pub struct Fields {
+  h: Hid,
+  n: Nope,   //~ E0302
+}
+
+pub enum Variants {
+  A(Hid),
+  B(Nope),   //~ E0302
+}
+
+pub type Alias = fn(Hid) -> Nope   //~ E0302
+
+pub struct Pkg {
+  v: I32,
+}
+
+impl Pkg {
+  pub fn member(self, h: Hid) -> Nope {   //~ E0302
+    1
+  }
+}
+
+// A flow: the narrow name is an input type or the output type, and the error after it is in the heading.
+pub flow input_clock_missing(h: Hid at sample, y: F32) -> F32 at sample {   //~ E0810
+  y
+}
+
+pub flow same_input_clock_missing(h: Hid) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow output_clock_missing(h: Hid at sample) -> F32 {   //~ E0810
+  1.0
+}
+
+pub flow output_clock_block(h: Hid at sample) -> F32 at block {   //~ E0810
+  1.0
+}
+
+pub flow output_narrow_clock_missing(x: F32 at sample) -> Hid {   //~ E0810
+  x
+}
+
+pub flow input_inout(h: Hid at sample, inout y: F32 at sample) -> F32 at sample {   //~ E0806
+  y
+}
+
+pub flow input_move(h: Hid at sample, move y: F32 at sample) -> F32 at sample {   //~ E0806
+  y
+}
+
+pub flow missing_flow_argument(h: Hid at sample, n: Nope at sample) -> F32 at sample {   //~ E0302
+  1.0
+}
+
+pub flow missing_flow_result(h: Hid at sample) -> Nope at sample {   //~ E0302
+  1.0
+}

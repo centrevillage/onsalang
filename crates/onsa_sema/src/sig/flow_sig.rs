@@ -46,7 +46,7 @@ impl<'p> Sema<'p> {
                 self.report(
                     id,
                     Diagnostic::new(
-                        Stage::Flow,
+                        Stage::Names,
                         Code::E0806,
                         p.span,
                         "flow inputs have no `inout` / `move`; they are read-only signals",
@@ -69,7 +69,7 @@ impl<'p> Sema<'p> {
                     self.report(
                         id,
                         Diagnostic::new(
-                            Stage::Flow,
+                            Stage::Names,
                             Code::E0810,
                             tspan,
                             "a flow input needs a clock after its type: `at init`, `at block` or `at sample` (§11.3)",
@@ -102,7 +102,7 @@ impl<'p> Sema<'p> {
                 Ok(Rate::Sig) => None,
                 Ok(_) => Some(
                     Diagnostic::new(
-                        Stage::Flow,
+                        Stage::Names,
                         Code::E0810,
                         c.span,
                         "the output of a flow is at the clock `sample` in this version (§11.6)",
@@ -113,7 +113,7 @@ impl<'p> Sema<'p> {
             },
             None => Some(
                 Diagnostic::new(
-                    Stage::Flow,
+                    Stage::Names,
                     Code::E0810,
                     rspan,
                     "a flow output needs its clock after its type: `-> T at sample` (§11.3)",

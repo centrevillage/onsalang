@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// A standard effect that no `use` took, written in an effect row, is E0302 with the candidate that adds the
+// `use` (§8.1). It is an error of the names stage, so it is the one reported when a narrow name (E0303, the
+// types stage, §18.1, S-698) stands before it in the heading; the narrow name is not a candidate of the
+// unit, as the `use` is the candidate of the error that is reported. After the candidate the unit reports
+// the narrow name, with no candidate, and the loop stops there.
+
+struct Hid {
+  a: I32,
+}
+
+pub fn narrow_then_effect(h: Hid) -> I32 uses {Fs} {   //~ E0302
+  1
+}

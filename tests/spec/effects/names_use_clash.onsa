@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+
+// A standard effect taken by a `use` is a name of the module like any other (§15.1): an item of the same
+// name is E0304 on the `use` (whichever is written first), a second `use` of it is E0304 on the later
+// `use`, and the name of an E0304 is an error where it is used, so a row that writes it has no diagnostic
+// of its own (§18.1).
+
+use std.fs.{Fs}   //~ E0304
+
+pub struct Fs {
+  v: U32,
+}
+
+pub fn reads() uses {Fs} {}
+
+use std.io.{Stdout}
+use std.io.{Stdout}   //~ E0304
+
+pub fn writes() uses {Stdout} {}

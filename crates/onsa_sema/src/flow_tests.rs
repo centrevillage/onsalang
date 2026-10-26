@@ -11,7 +11,7 @@ use crate::{Analysis, DefId, Module, Package, analyze};
 
 /// The embedded standard library (D-07, R-80 (4)), so that the spec examples
 /// (`use std.math.{exp, cos}`) check here as they do in the driver.
-fn std_package() -> Arc<Package> {
+pub(crate) fn std_package() -> Arc<Package> {
     let modules = crate::std_modules()
         .iter()
         .enumerate()

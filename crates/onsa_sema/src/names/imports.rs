@@ -98,13 +98,15 @@ impl<'p> Sema<'p> {
         // ([`Sema::report_use_heads`]).
         let w = walk(self.a, m, &imp.path.segments, imp.names.as_deref());
         let head_fails = imp.path.segments.first().is_some_and(|h| self.a.modules.head(m, &h.name).is_none());
-        let report = |s: &mut Self, e: &ResolveError| {
+        let report = |s: &mut Self, e: &ResolveError, taken: &[&Ident]| {
             if let Some(d) = e.clone().diagnostic().filter(|_| !head_fails) {
+                let d = s.prelude_rule(d, taken);
                 s.report_mod(d);
             }
         };
         if let Err(e) = &w.prefix {
-            report(self, e);
+            let taken: Vec<&Ident> = w.names.iter().map(|&(n, _)| n).collect();
+            report(self, e, &taken);
         }
         for (name, entity) in &w.names {
             match *entity {
@@ -124,7 +126,7 @@ impl<'p> Sema<'p> {
                     self.bind(m, name, e);
                 }
                 Err(ref e) => {
-                    report(self, e);
+                    report(self, e, &[name]);
                     self.fail(m, name);
                 }
             }
@@ -204,8 +206,28 @@ impl<'p> Sema<'p> {
                 if let Some(rule) = rule {
                     d = d.with_rule(rule);
                 }
+                let taken: Vec<&Ident> = match &imp.names {
+                    Some(list) => list.iter().collect(),
+                    None => imp.path.segments.last().into_iter().collect(),
+                };
+                let d = self.prelude_rule(d, &taken);
                 self.report_mod(d);
             }
+        }
+    }
+
+    /// The E0302 `d` of a `use` that fails in the names stage, with the rule
+    /// that the names of the prelude it would take are written with no `use`
+    /// (§15.1, S-703): one rule, of every such name in `taken`. The one table
+    /// of the prelude says which names are.
+    fn prelude_rule(&self, d: Diagnostic, taken: &[&Ident]) -> Diagnostic {
+        let names: Vec<String> =
+            (taken.iter()).filter(|n| self.a.prelude.contains_key(&n.name)).map(|n| format!("`{}`", n.name)).collect();
+        match names.as_slice() {
+            _ if d.code != Code::E0302 => d,
+            [] => d,
+            [one] => d.with_rule(format!("{one} is a name of the prelude, written with no `use` (§15.1)")),
+            _ => d.with_rule(format!("{} are names of the prelude, written with no `use` (§15.1)", names.join(", "))),
         }
     }
 
@@ -366,5 +388,5 @@ fn step(a: &Analysis, cur: Entity, name: &Ident, from: ModId) -> Result<Entity, 
             _ => {}
         }
     }
-    a.modules.member(cur, name, from, &a.defs, &a.builtin_key)
+    a.modules.member(cur, name, from, (&a.prelude, &a.defs, &a.builtin_key))
 }

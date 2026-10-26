@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1", "§18.1"]
+
+// The standard effects (`Fs` `Stdout` `Stdin` `Clock` `Random` `Log`) are std's `effect` declarations,
+// taken by a `use` (§8.1, S-659). With no `use` the name is not found: E0302 (the candidate, a `use`
+// of the name, is in names_std_fix_fs.onsa and in effect_names.rs). It is the same for each of the six
+// effects, and in every place a row is written.
+
+pub fn with_fs() uses {Fs} {}   //~ E0302
+
+pub fn with_stdout() uses {Stdout} {}   //~ E0302
+
+pub fn with_stdin() uses {Stdin} {}   //~ E0302
+
+pub fn with_clock() uses {Clock} {}   //~ E0302
+
+pub fn with_random() uses {Random} {}   //~ E0302
+
+pub fn with_log() uses {Log} {}   //~ E0302
+
+// `Alloc` of the prelude next to a name that needs a `use`, in either order.
+pub fn alloc_first() uses {Alloc, Fs} {}   //~ E0302
+
+pub fn alloc_last() uses {Log, Alloc} {}   //~ E0302
+
+pub fn takes(f: fn() -> U32 uses {Clock}) -> U32 {   //~ E0302
+  1
+}
+
+pub type Maker = fn(U32) -> U32 uses {Stdout}   //~ E0302
+
+pub fn closure() -> U32 {
+  let g = fn(x: U32) -> U32 uses {Random} { x }   //~ E0302
+  1
+}
+
+pub struct Unit {
+  id: U32,
+}
+
+impl Unit {
+  pub fn read(self) -> U32 uses {Stdin} {   //~ E0302
+    self.id
+  }
+}

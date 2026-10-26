@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+
+// A unit stops at its first error (§18.1): a row with two names that are not found has one E0302, and a
+// name error of the row hides the type error of the body (names come before types) even though the
+// body is written later. A unit without a row error is checked as before: its own type error is
+// reported, and a row error of another unit does not hide it.
+
+pub fn two_names() uses {Nope, Zilch} {}   //~ E0302
+
+pub fn row_before_body() -> U32 uses {Nope} {   //~ E0302
+  let a: U32 = true
+  a
+}
+
+pub fn row_before_body_name() -> U32 uses {Nope} {   //~ E0302
+  missing
+}
+
+pub fn row_with_std_name() -> U32 uses {Fs} {   //~ E0302
+  let a: U32 = true
+  a
+}
+
+pub fn type_error_alone() -> U32 {
+  let a: U32 = true   //~ E0401
+  a
+}
+
+pub fn alloc_is_fine() -> U32 uses {Alloc} {
+  let a: U32 = true   //~ E0401
+  a
+}

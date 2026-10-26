@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// A name that no module and no prelude has, in an effect row, is E0302 (§8.1, §15.1) and has no
+// candidate (a candidate is a `use` of a name that a module of std declares, S-659 (3); a spelling that
+// is near is no candidate, §15.1). It is the same in every place an effect row is written: a signature,
+// the type of a parameter, an alias, a field, an anonymous function (which captures or does not), and the
+// member of an `impl`.
+
+pub fn sig() uses {Nope} {}   //~ E0302
+
+pub fn takes(f: fn() -> U32 uses {Nope}) -> U32 {   //~ E0302
+  1
+}
+
+pub type Maker = fn(U32) -> U32 uses {Nope}   //~ E0302
+
+pub struct Holder {
+  f: fn() -> U32 uses {Nope},   //~ E0302
+}
+
+pub fn closure() -> U32 {
+  let g = fn(x: U32) -> U32 uses {Nope} { x }   //~ E0302
+  1
+}
+
+pub fn call(f: fn(U32) -> U32) -> U32 {
+  f(1)
+}
+
+pub fn captures(k: U32) -> U32 {
+  call(fn(i: U32) -> U32 uses {Nope} { i + k })   //~ E0302
+}
+
+pub struct Unit {
+  id: U32,
+}
+
+impl Unit {
+  pub fn read(self) -> U32 uses {Nope} {   //~ E0302
+    self.id
+  }
+}
+
+// The row of an anonymous function that is inside a branch, and inside another anonymous function.
+pub fn in_branch(c: Bool) -> U32 {
+  if c {
+    let g = fn(x: U32) -> U32 uses {Nope} { x }   //~ E0302
+    1
+  } else {
+    0
+  }
+}
+
+pub fn nested() -> U32 {
+  let g = fn(x: U32) -> U32 uses {Alloc} {
+    let h = fn(y: U32) -> U32 uses {Nope} { y }   //~ E0302
+    x
+  }
+  1
+}
+
+// A name is not a candidate for a near spelling of an effect that exists (`Fss`), and the head of a path
+// that nothing binds is not found either.
+pub fn spelled() uses {Fss} {}   //~ E0302
+
+pub fn path_head() uses {zzz.Alloc} {}   //~ E0302
