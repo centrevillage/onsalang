@@ -1,0 +1,11 @@
+idle:30	exit 0	30 s	7 MB written	0.2 MB/s
+fmt-props-after	exit 0	48 s	79 MB written	1.7 MB/s
+fmt-props-before	exit 1	2 s	1 MB written	0.5 MB/s
+fmt-cst	exit 0	12 s	28 MB written	2.3 MB/s
+fuzz	exit 0	21 s	35 MB written	1.7 MB/s
+cargo-test-warm	exit 0	89 s	701 MB written	7.9 MB/s
+fresh-build-default	exit 0	40 s	1990 MB written	49.8 MB/s
+1.9G	/private/tmp/claude-501/-Users-centrevillage-projects-onsalang/a2556302-b53b-4d28-907e-23e1286e4458/scratchpad/diskw/tdir1
+fresh-build-line-tables	exit 0	29 s	1604 MB written	55.8 MB/s
+1.6G	/private/tmp/claude-501/-Users-centrevillage-projects-onsalang/a2556302-b53b-4d28-907e-23e1286e4458/scratchpad/diskw/tdir2
+idle:30	exit 0	30 s	29 MB written	1.0 MB/s
