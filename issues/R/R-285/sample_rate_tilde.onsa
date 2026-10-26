@@ -1,0 +1,4 @@
+pub flow a(x: F32 at sample) -> F32 at sample {
+  let f = sample_rate~()
+  x
+}
