@@ -19,11 +19,11 @@ pub struct Hz {
 
 struct Gain {
   priv value: F32,
-}                                  //~ E0020
+}                                    //~ E0020
 
 priv struct Level {
   value: I32,
-}                                  //~ E0020
+}                              //~ E0020
 
 pub struct Wrap[T] {
   priv value: T,
@@ -37,7 +37,7 @@ pub fn takes(h: Hz) -> Hz {
   h
 }
 
-pub fn gain_of(g: Gain) -> Gain {
+fn gain_of(g: Gain) -> Gain {
   g
 }
 

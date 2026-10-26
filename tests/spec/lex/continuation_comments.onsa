@@ -17,7 +17,7 @@ const LIMIT: I32 =
   // (a second comment line)
   8
 
-type Gain =
+pub type Gain =
   // the sample type
 
   F32

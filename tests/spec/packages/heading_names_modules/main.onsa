@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§11.6"]
+// fixes = 0
+
+// S-144, S-665 (§15.1): a name written in a head is judged by the visibility it was declared with, wherever the
+// declaration is: `Shared` has no word in `util.onsa`, so it reaches the package, and a `pub` function of this
+// module that names it (taken with a `use` or by the path `util.Shared`) is E0303 on the name, as one of the
+// module that declares it is (`util.onsa`). A function with no word in this module, or `priv`, names it
+// freely. An alias makes no new type and is judged by the type it stands for (§4.4, S-700): `SharedAlias` has
+// no word and `ShownAlias` is `pub`, and both stand for `Open`, so a `pub` function names either. The error is
+// on the name that was written and has no candidate. A type that is not a head's is fine to use in a body.
+use util
+use util.{Open, Shared, ShownAlias, SharedAlias, Wrap, new_shared}
+
+pub fn pub_open(a: Open) -> Open {
+  a
+}
+
+pub fn pub_shown_alias(a: ShownAlias) -> ShownAlias {
+  a
+}
+
+pub fn pub_wrap_open(w: Wrap[Open]) -> Wrap[Open] {
+  w
+}
+
+pub fn pub_shared(a: Shared) -> I32 {               //~ E0303
+  a.x
+}
+
+pub fn pub_shared_return() -> Shared {              //~ E0303
+  new_shared()
+}
+
+pub fn pub_shared_by_path(a: util.Shared) -> I32 {  //~ E0303
+  a.x
+}
+
+pub fn pub_shared_in_a_type(w: Wrap[Shared]) -> I32 {   //~ E0303
+  0
+}
+
+pub fn pub_shared_alias(a: SharedAlias) -> I32 {
+  a.x
+}
+
+fn package_shared(a: Shared) -> Shared {
+  a
+}
+
+fn package_shared_by_path(a: util.Shared) -> I32 {
+  a.x
+}
+
+fn package_alias(a: SharedAlias) -> SharedAlias {
+  a
+}
+
+priv fn module_shared(a: Shared) -> Wrap[Shared] {
+  Wrap { v: a }
+}
+
+pub struct PubWrapper {
+  o: Open,
+  s: Shared,                                        //~ E0303
+}
+
+struct PackageWrapper {
+  o: Open,
+  s: Shared,
+}
+
+pub struct PubPrivWrapper {
+  priv s: Shared,
+  o: Open,
+}
+
+pub enum PubChoice {
+  A(Shared),                                        //~ E0303
+}
+
+enum PackageChoice {
+  A(Shared),
+}
+
+pub type PubAlias = Shared                          //~ E0303
+
+type PackageAlias = Shared
+
+pub const PUB_C: Shared = Shared { x: 1 }           //~ E0303
+
+const PACKAGE_C: Shared = Shared { x: 1 }
+
+pub flow pub_out(x: F32 at sample) -> Shared at sample {    //~ E0303
+  Shared { x: 1 }
+}
+
+flow package_out(x: F32 at sample) -> Shared at sample {
+  Shared { x: 1 }
+}
+
+pub fn body_names_shared() -> I32 {
+  let s: Shared = new_shared()
+  s.x
+}

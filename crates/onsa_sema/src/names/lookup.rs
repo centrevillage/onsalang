@@ -253,9 +253,9 @@ impl Modules {
     /// `name` in `from`: an E0303 when it is not visible there. It reaches as
     /// far as the narrower of its visibility and the type's (§15.1, R-38,
     /// S-491), whether named through the type (`Point.m()`) or called on a
-    /// value (`p.m()`).
+    /// value (`p.m()`). The `impl` is in the module of the type (§6.3).
     pub(crate) fn member_reach(&self, ty: &Def, member: &Def, name: &Ident, from: ModId) -> Result<(), ResolveError> {
-        if self.visible(member.vis, member.module, from) && self.visible(ty.vis, ty.module, from) {
+        if self.visible(crate::resolve::narrower(member.vis, ty.vis), ty.module, from) {
             return Ok(());
         }
         let why = self.hidden_why(member.vis, Some(("type", ty)), from);

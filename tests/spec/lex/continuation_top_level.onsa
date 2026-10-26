@@ -10,7 +10,7 @@
 // are what the one-line items give, and a continued line that turned into two statements would be an error.
 
 // `type` and `const`: the `=` ends the line.
-type Gain =
+pub type Gain =
   F32
 
 const LIMIT: I32 =

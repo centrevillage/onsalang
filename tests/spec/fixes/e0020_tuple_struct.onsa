@@ -27,7 +27,7 @@ pub fn takes(h: Hz) -> Hz {
   h
 }
 
-pub fn gain_of(g: Gain) -> Gain {
+fn gain_of(g: Gain) -> Gain {
   g
 }
 

@@ -2272,10 +2272,10 @@ note = "取り込んだ子モジュールに無い名前の inner.g() が E0302 
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/extern_block_members_pub_heading"
-reasons = ["S-144", "S-665"]
-until = "W4-03"
-note = "無指定の extern のメンバ Handle を pub fn の見出しに書くと E0303（U4b）"
+target = "tests/spec/flow/heading_names_event.onsa"
+reasons = ["S-664", "S-665"]
+until = "W7-11"
+note = "イベントの入出力の見出し。`at event` のクロックが読めるのは W7-11（今は E0302）"
 
 [[pending]]
 kind = "test-case"

@@ -49,7 +49,7 @@ pub fn ranges(n: U32) -> U32 {
 const LIMIT: I32 =
   8
 
-type Gain =
+pub type Gain =
   F32
 
 pub fn after_equals(a: I32) -> I32 {
@@ -68,7 +68,7 @@ pub fn scale(x: Gain, k: Gain) ->
   x * k
 }
 
-type Op =
+pub type Op =
   fn(I32) ->
   I32
 

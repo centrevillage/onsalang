@@ -1,0 +1,160 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-662 (§15.1): a member of an inherent `impl` does not reach further than its type, so a `pub` on a member of
+// a type with no word or `priv` is redundant: E0020, and the candidate is to take the word off (the rows of
+// `spec/foreign-forms.toml` hold the candidates). A member with no word and a `priv` member can be written for
+// every type, and a `pub` member of a `pub` type is the one that reaches the world. The error of a unit is the
+// only one of the unit (§18.1), so each member is a unit of its own. The member is read on after the word, so
+// its other checks go on (the body here has no error).
+struct Pkg {
+  x: I32,
+}
+
+priv struct Hidden {
+  x: I32,
+}
+
+pub struct Open {
+  x: I32,
+}
+
+struct Holder[T] {
+  v: T,
+}
+
+priv struct HiddenHolder[T] {
+  v: T,
+}
+
+pub struct OpenHolder[T] {
+  v: T,
+}
+
+impl Pkg {
+  pub fn make() -> Pkg {                            //~ E0020 @3
+    Pkg { x: 1 }
+  }
+
+  pub fn get(self) -> I32 {                         //~ E0020 @3
+    self.x
+  }
+
+  pub rt fn rt_get(self) -> I32 {                   //~ E0020 @3
+    self.x
+  }
+
+  pub const LIMIT: I32 = 8                          //~ E0020 @3
+
+  fn plain(self) -> I32 {
+    self.x
+  }
+
+  rt fn plain_rt(self) -> I32 {
+    self.x
+  }
+
+  const PLAIN: I32 = 1
+
+  priv fn narrow(self) -> I32 {
+    self.x
+  }
+
+  priv rt fn narrow_rt(self) -> I32 {
+    self.x
+  }
+
+  priv const NARROW: I32 = 2
+}
+
+impl Hidden {
+  pub fn make() -> Hidden {                         //~ E0020 @3
+    Hidden { x: 1 }
+  }
+
+  pub fn get(self) -> I32 {                         //~ E0020 @3
+    self.x
+  }
+
+  pub const LIMIT: I32 = 8                          //~ E0020 @3
+
+  fn plain(self) -> I32 {
+    self.x
+  }
+
+  const PLAIN: I32 = 1
+
+  priv fn narrow(self) -> I32 {
+    self.x
+  }
+
+  priv const NARROW: I32 = 2
+}
+
+impl Open {
+  pub fn make() -> Open {
+    Open { x: 1 }
+  }
+
+  pub rt fn get(self) -> I32 {
+    self.x
+  }
+
+  pub const LIMIT: I32 = 8
+
+  fn plain(self) -> I32 {
+    self.x
+  }
+
+  const PLAIN: I32 = 1
+
+  priv fn narrow(self) -> I32 {
+    self.x
+  }
+
+  priv const NARROW: I32 = 2
+}
+
+// A generic `impl` is the same.
+impl[T: Copy] Holder[T] {
+  pub fn get(self) -> T {                           //~ E0020 @3
+    self.v
+  }
+
+  fn plain(self) -> T {
+    self.v
+  }
+
+  priv fn narrow(self) -> T {
+    self.v
+  }
+}
+
+impl[T: Copy] HiddenHolder[T] {
+  pub fn get(self) -> T {                           //~ E0020 @3
+    self.v
+  }
+
+  fn plain(self) -> T {
+    self.v
+  }
+
+  priv fn narrow(self) -> T {
+    self.v
+  }
+}
+
+impl[T: Copy] OpenHolder[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  fn plain(self) -> T {
+    self.v
+  }
+
+  priv fn narrow(self) -> T {
+    self.v
+  }
+}

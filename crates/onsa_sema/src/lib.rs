@@ -291,6 +291,16 @@ impl Analysis {
         parts.join(".")
     }
 
+    /// The name of a def as its module writes it: of an item a flow
+    /// generates, with the flow (`voice.State`).
+    pub fn shown_name(&self, id: DefId) -> String {
+        let def = self.def(id);
+        match def.owner {
+            Some(o) if matches!(self.def(o).kind, DefKind::Flow(_)) => format!("{}.{}", self.def(o).name, def.name),
+            _ => def.name.clone(),
+        }
+    }
+
     /// Render a type with user types by their short names.
     pub fn display_type(&self, ty: TyId) -> String {
         self.types.display(ty, &|d| self.def(d).name.clone(), &|i| format!("<{i}>"))

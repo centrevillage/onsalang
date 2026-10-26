@@ -7854,6 +7854,139 @@ pub struct W[T] {
 }
 ''']
 
+# 型の可視性より広い `pub` を固有の `impl` のメンバに書く（S-662、§15.1）。メンバは型の可視性を超えて届かない
+# ので、無指定と `priv` の型のメンバの `pub` は冗長で、候補は `pub` を外す形（一つ）。`pub` の型のメンバの
+# `pub` と、語の無いメンバと `priv` のメンバは、どの型にも書けるので対象でない。
+[[form]]
+id = "impl_member_pub"
+kind = "redundant"
+origin = "Rust と Java"
+stage = "names"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "固有の `impl` のメンバは型の可視性を超えて届かない。無指定と `priv` の型のメンバの `pub` は冗長で、メンバの可視性は型と同じかそれより狭い"
+
+[[form.example]]
+source = '''
+struct Inner {
+  x: I32,
+}
+
+impl Inner {
+  pub fn get(self) -> I32 {
+    self.x
+  }
+}
+'''
+at = "6:3"
+fixed = ['''
+struct Inner {
+  x: I32,
+}
+
+impl Inner {
+  fn get(self) -> I32 {
+    self.x
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+priv struct Hidden {
+  x: I32,
+}
+
+impl Hidden {
+  pub fn make() -> Hidden {
+    Hidden { x: 1 }
+  }
+}
+'''
+at = "6:3"
+fixed = ['''
+priv struct Hidden {
+  x: I32,
+}
+
+impl Hidden {
+  fn make() -> Hidden {
+    Hidden { x: 1 }
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+struct Inner {
+  x: I32,
+}
+
+impl Inner {
+  pub rt fn get(self) -> I32 {
+    self.x
+  }
+}
+'''
+at = "6:3"
+fixed = ['''
+struct Inner {
+  x: I32,
+}
+
+impl Inner {
+  rt fn get(self) -> I32 {
+    self.x
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+struct Inner {
+  x: I32,
+}
+
+impl Inner {
+  pub const LIMIT: I32 = 8
+}
+'''
+at = "6:3"
+fixed = ['''
+struct Inner {
+  x: I32,
+}
+
+impl Inner {
+  const LIMIT: I32 = 8
+}
+''']
+
+[[form.example]]
+source = '''
+struct Holder[T] {
+  v: T,
+}
+
+impl[T: Copy] Holder[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+'''
+at = "6:3"
+fixed = ['''
+struct Holder[T] {
+  v: T,
+}
+
+impl[T: Copy] Holder[T] {
+  fn get(self) -> T {
+    self.v
+  }
+}
+''']
+
 # `pub(pkg)` と、空白を挟んだ `pub (pkg)`（S-412）は一つの誤りで、候補は可視性の全体を外す形。外すと無指定
 # （パッケージ内に公開）になる。項目、`use`、`impl` のメンバ、無指定と `priv` の struct のフィールドが対象で、
 # `pub struct` のフィールドは `field_pub_crate` の行（候補なし）。

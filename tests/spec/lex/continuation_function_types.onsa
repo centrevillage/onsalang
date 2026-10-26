@@ -17,10 +17,10 @@ pub fn f(x: I32) ->
   x
 }
 
-type Alias =
+pub type Alias =
   I32
 
-type Op =
+pub type Op =
   fn(I32) ->
     I32
 

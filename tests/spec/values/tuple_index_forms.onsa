@@ -11,7 +11,7 @@
 
 use std.array
 
-type Eleven = (I32, I32, I32, I32, I32, I32, I32, I32, I32, I32, I32)
+pub type Eleven = (I32, I32, I32, I32, I32, I32, I32, I32, I32, I32, I32)
 
 pub struct Wrap {
   pair: (I32, I32),

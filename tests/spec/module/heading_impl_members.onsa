@@ -1,0 +1,186 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+// fixes = 0
+
+// S-144, S-665 (§15.1): a member of an inherent `impl` reaches as far as the narrower of the member and its type,
+// and the names written in its head (the arguments, the return type, the type of a constant) cannot be narrower
+// than that. `priv struct Hid { .. }` with `impl Hid { fn make() -> Hid }`: `make` reaches the module alone, as
+// `Hid` does, so it is fine; `impl P { pub fn leak() -> Inner }` for a `pub struct P` is E0303, because `leak`
+// reaches the whole world and `Inner` the package. The word `pub` that is wider than the type has its own
+// diagnostic (E0020, S-662; in `heading_impl_member_pub`), so this file has no member like that. The error is on
+// the name that was written and has no candidate. The error of a unit is the only one of the unit (§18.1), so
+// each form is a member of its own.
+struct Inner {
+  x: I32,
+}
+
+priv struct Hid {
+  x: I32,
+}
+
+pub struct Open {
+  x: I32,
+}
+
+pub struct P {
+  x: I32,
+}
+
+struct Pkg {
+  x: I32,
+}
+
+priv struct Hidden {
+  x: I32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+impl P {
+  pub fn make(x: I32) -> P {
+    P { x: x }
+  }
+
+  pub fn open(self) -> Open {
+    Open { x: self.x }
+  }
+
+  pub fn leak() -> Inner {                          //~ E0303
+    Inner { x: 1 }
+  }
+
+  pub fn leak_module() -> Hid {                     //~ E0303
+    Hid { x: 1 }
+  }
+
+  pub fn leak_arg(a: Inner) -> I32 {                //~ E0303
+    a.x
+  }
+
+  pub fn leak_method(self) -> Option[Inner] {       //~ E0303
+    None
+  }
+
+  pub rt fn leak_rt(a: Hid) -> I32 {                //~ E0303
+    a.x
+  }
+
+  pub const LEAK: Inner = Inner { x: 1 }            //~ E0303
+
+  pub const FINE: Open = Open { x: 1 }
+
+  // A member with no word reaches the package alone: the package types are fine, the module types are not.
+  fn package_inner() -> Inner {
+    Inner { x: 2 }
+  }
+
+  fn package_arg(a: Inner) -> I32 {
+    a.x
+  }
+
+  fn package_hid() -> Hid {                         //~ E0303
+    Hid { x: 2 }
+  }
+
+  fn package_hid_method(self) -> Option[Hid] {      //~ E0303
+    None
+  }
+
+  const PACKAGE: Inner = Inner { x: 3 }
+
+  const PACKAGE_HID: Hid = Hid { x: 3 }             //~ E0303
+
+  // A `priv` member reaches the module alone, and every type of the module is as wide.
+  priv fn module_hid() -> Hid {
+    Hid { x: 3 }
+  }
+
+  priv fn module_inner(a: Hid) -> Inner {
+    Inner { x: a.x }
+  }
+
+  priv const MODULE: Hid = Hid { x: 4 }
+}
+
+impl Pkg {
+  fn make() -> Pkg {
+    Pkg { x: 1 }
+  }
+
+  fn package_inner(self) -> Inner {
+    Inner { x: self.x }
+  }
+
+  fn package_hid(self) -> Hid {                     //~ E0303
+    Hid { x: self.x }
+  }
+
+  priv fn module_hid(self) -> Hid {
+    Hid { x: self.x }
+  }
+
+  const HID: Hid = Hid { x: 1 }                     //~ E0303
+}
+
+// A type with `priv` reaches the module alone, so its members do (S-665): a member with no word and a `priv`
+// one are the same here.
+impl Hidden {
+  fn make() -> Hidden {
+    Hidden { x: 1 }
+  }
+
+  fn inner(self) -> Inner {
+    Inner { x: self.x }
+  }
+
+  fn hid(self) -> Hid {
+    Hid { x: self.x }
+  }
+
+  priv fn priv_hid(self) -> Hid {
+    Hid { x: self.x }
+  }
+
+  priv fn priv_inner() -> Inner {
+    Inner { x: 1 }
+  }
+
+  const HID: Hid = Hid { x: 5 }
+
+  priv const INNER: Inner = Inner { x: 5 }
+}
+
+// A generic `impl`.
+impl[T: Copy] Holder[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn leak(self) -> Inner {                      //~ E0303
+    Inner { x: 1 }
+  }
+
+  fn package(self) -> Inner {
+    Inner { x: 2 }
+  }
+
+  fn package_hid(self) -> Hid {                     //~ E0303
+    Hid { x: 3 }
+  }
+
+  priv fn module_hid(self) -> Hid {
+    Hid { x: 4 }
+  }
+}
+
+// The body is not a head.
+impl Open {
+  pub fn body_names(self) -> I32 {
+    let h: Hid = Hid { x: self.x }
+    let i: Inner = Inner { x: 2 }
+    h.x + i.x
+  }
+}

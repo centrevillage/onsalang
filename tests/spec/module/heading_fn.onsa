@@ -1,0 +1,215 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+// fixes = 0
+
+// S-144, S-665 (§15.1): a name written in the head of a function (the arguments and the return type, not the body)
+// cannot be narrower than the function: a `pub` function names only `pub` types, a function with no word names
+// the types of the package (no word or `pub`), and a `priv` function names any. The types inside a type count
+// (`Option[Inner]`, `[Inner; 4]`, a tuple, `fn(Inner) -> I32`, `Wrap[Inner]`). The error is on the name that was
+// written and has no candidate (`fixes = 0` checks that). The body and the type of a `let` are not the head, so
+// a narrow type is fine there. The error of a unit is the only one of the unit (§18.1), so each form is a
+// function of its own, and a head with two narrow names has the one error.
+struct Inner {
+  x: I32,
+}
+
+priv struct Hid {
+  x: I32,
+}
+
+pub struct Open {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+struct Pkg[T] {
+  v: T,
+}
+
+// The types the function reaches as far as: no error.
+pub fn pub_open(a: Open) -> Open {
+  a
+}
+
+pub fn pub_builtin(a: Option[I32], b: [F32; 4]) -> (I32, F32) {
+  (1, b[0])
+}
+
+pub fn pub_generic_open(w: Wrap[Open]) -> Wrap[I32] {
+  Wrap { v: w.v.x }
+}
+
+fn package_package(a: Inner) -> Inner {
+  a
+}
+
+fn package_open(a: Open) -> Inner {
+  Inner { x: a.x }
+}
+
+priv fn module_module(a: Hid) -> Hid {
+  a
+}
+
+priv fn module_package(a: Inner) -> Option[Hid] {
+  Some(Hid { x: a.x })
+}
+
+pub rt fn pub_rt_open(a: Open) -> I32 {
+  a.x
+}
+
+priv rt fn module_rt(a: Hid) -> Hid {
+  a
+}
+
+// The body names the narrow types and the head does not.
+pub fn body_names(a: Open) -> I32 {
+  let h: Hid = Hid { x: a.x }
+  let i: Inner = Inner { x: 2 }
+  let f: fn(Hid) -> I32 = fn(q: Hid) -> I32 { q.x }
+  f.(h) + i.x
+}
+
+pub fn body_names_in_a_branch_and_a_loop(c: Bool) -> I32 {
+  var total = 0
+  for i in 0 ..< 3 {
+    if c {
+      let h = Hid { x: i }
+      total = total + h.x
+    } else {
+      let q = Inner { x: i }
+      total = total + q.x
+    }
+  }
+  total
+}
+
+// A `pub` function names a type of the package or of the module.
+pub fn pub_arg_package(a: Inner) -> I32 {           //~ E0303
+  a.x
+}
+
+pub fn pub_arg_module(a: Hid) -> I32 {              //~ E0303
+  a.x
+}
+
+pub fn pub_return_package() -> Inner {              //~ E0303
+  Inner { x: 1 }
+}
+
+pub fn pub_return_module() -> Hid {                 //~ E0303
+  Hid { x: 1 }
+}
+
+pub fn pub_inout(inout a: Inner) {                  //~ E0303
+  a.x = 2
+}
+
+pub fn pub_move(move a: Hid) -> I32 {               //~ E0303
+  a.x
+}
+
+pub rt fn pub_rt_arg(a: Inner) -> I32 {             //~ E0303
+  a.x
+}
+
+pub rt fn pub_rt_return() -> Hid {                  //~ E0303
+  Hid { x: 3 }
+}
+
+// A function with no word names a type of the module, and that is narrower.
+fn package_arg_module(a: Hid) -> I32 {              //~ E0303
+  a.x
+}
+
+fn package_return_module() -> Hid {                 //~ E0303
+  Hid { x: 4 }
+}
+
+rt fn package_rt_arg(a: Hid) -> I32 {               //~ E0303
+  a.x
+}
+
+// The types in a type.
+pub fn nested_option(a: Option[Inner]) -> I32 {     //~ E0303
+  0
+}
+
+pub fn nested_option_return() -> Option[Hid] {      //~ E0303
+  None
+}
+
+pub fn nested_array(a: [Inner; 4]) -> I32 {         //~ E0303
+  0
+}
+
+pub fn nested_array_return() -> [Hid; 2] {          //~ E0303
+  [Hid { x: 1 }, Hid { x: 2 }]
+}
+
+pub fn nested_tuple(a: (I32, Inner)) -> I32 {       //~ E0303
+  a.0
+}
+
+pub fn nested_result(a: Result[I32, Hid]) -> I32 {  //~ E0303
+  0
+}
+
+pub fn nested_fn_arg(f: fn(Inner) -> I32) -> I32 {  //~ E0303
+  0
+}
+
+pub fn nested_fn_return(f: fn(I32) -> Hid) -> I32 { //~ E0303
+  0
+}
+
+pub fn nested_fn_returned() -> fn() -> Inner {      //~ E0303
+  fn() -> Inner { Inner { x: 1 } }
+}
+
+pub fn nested_generic_arg(w: Wrap[Inner]) -> I32 {  //~ E0303
+  0
+}
+
+pub fn nested_generic_module(w: Wrap[Hid]) -> I32 { //~ E0303
+  0
+}
+
+pub fn nested_generic_outer(w: Pkg[I32]) -> I32 {   //~ E0303
+  w.v
+}
+
+pub fn nested_deep(a: Option[[(I32, Inner); 2]]) -> I32 {   //~ E0303
+  0
+}
+
+pub fn nested_package_fn(a: Option[Inner]) -> I32 { //~ E0303
+  0
+}
+
+fn nested_package_module(a: Option[Hid]) -> I32 {   //~ E0303
+  0
+}
+
+// A type parameter and a narrow name together.
+pub fn generic_param_and_narrow[T](x: T, y: Inner) -> T {   //~ E0303
+  x
+}
+
+pub fn generic_wrap[T](w: Wrap[T], i: Hid) -> T {   //~ E0303
+  w.v
+}
+
+// Two narrow names in one head give the one error.
+pub fn two_narrow(a: Inner, b: Hid) -> Inner {      //~ E0303
+  a
+}
+
+pub fn three_narrow(a: Option[Inner], b: Hid) -> (Inner, Hid) {   //~ E0303
+  (Inner { x: 1 }, b)
+}

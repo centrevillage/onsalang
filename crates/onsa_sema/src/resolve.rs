@@ -253,6 +253,45 @@ impl ResolveError {
     }
 }
 
+/// The order of the visibilities (§15.1): `priv` < no word < `pub`.
+fn rank(vis: Vis) -> u8 {
+    match vis {
+        Vis::Priv => 0,
+        Vis::Default => 1,
+        Vis::Pub => 2,
+    }
+}
+
+/// The narrower of two visibilities: how far a member of an inherent `impl`
+/// reaches, of its own and its type's (§15.1, S-665), in a heading and in a
+/// use (`Modules::member_reach`).
+pub fn narrower(a: Vis, b: Vis) -> Vis {
+    if rank(a) <= rank(b) { a } else { b }
+}
+
+/// Whether a name of `vis` reaches as far as `reach` (§15.1, S-665).
+pub fn reaches(vis: Vis, reach: Vis) -> bool {
+    rank(vis) >= rank(reach)
+}
+
+/// Where a name of `vis` is seen (§15.1): the one wording of the reaches.
+pub fn seen(vis: Vis) -> &'static str {
+    match vis {
+        Vis::Priv => "in its module",
+        Vis::Default => "in its package",
+        Vis::Pub => "out of its package",
+    }
+}
+
+/// Why a name of `vis` does not reach a place out of it (§15.1): it is
+/// `priv` out of its module, or has no word out of its package.
+pub fn hidden_words(vis: Vis) -> String {
+    match vis {
+        Vis::Priv => format!("is `priv`, seen {} alone", seen(Vis::Priv)),
+        Vis::Default | Vis::Pub => format!("is not `pub`, seen {} alone", seen(Vis::Default)),
+    }
+}
+
 /// The module graph and the tables of names. Owned by `Analysis`.
 #[derive(Debug, Default)]
 pub struct Modules {
@@ -315,15 +354,11 @@ impl Modules {
     /// type, else by its own visibility. Not visible, a name is `priv` out of
     /// its module or has no word out of its package.
     pub fn hidden_why(&self, own: Vis, owner: Option<(&str, &crate::def::Def)>, from: ModId) -> String {
-        let why = |vis: Vis| match vis {
-            Vis::Priv => "is `priv`, seen in its module alone",
-            Vis::Default | Vis::Pub => "is not `pub`, seen in its package alone",
-        };
         match owner {
             Some((kind, ty)) if !self.visible(ty.vis, ty.module, from) => {
-                format!("its {kind} `{}` {}", ty.name, why(ty.vis))
+                format!("its {kind} `{}` {}", ty.name, hidden_words(ty.vis))
             }
-            _ => format!("it {}", why(own)),
+            _ => format!("it {}", hidden_words(own)),
         }
     }
 

@@ -351,7 +351,7 @@ fn c_impl_docs_and_return() -> Case {
     case(
         "a method with a doc comment and a return, in an impl",
         &[
-            "struct P {",
+            "pub struct P {",
             "  x: F32,",
             "  y: F32",
             "}",
@@ -370,7 +370,7 @@ fn c_impl_docs_and_return() -> Case {
             "}",
         ],
         &[
-            "struct P {",
+            "pub struct P {",
             "  x: F32,",
             "  y: F32,",
             "}",

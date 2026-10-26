@@ -59,7 +59,7 @@ pub fn twice_max() -> U32 {
 
 type _Alias = I32 //~ E0320
 
-pub fn alias(x: _Alias) -> _Alias {
+fn alias(x: _Alias) -> _Alias {
   x
 }
 

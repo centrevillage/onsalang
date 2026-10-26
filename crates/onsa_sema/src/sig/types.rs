@@ -249,6 +249,7 @@ impl<'p> Sema<'p> {
                 self.a.types.builtin(b, args)
             }
             Entity::Def(d) | Entity::Member(d) => {
+                self.check_reach(cx, d, path);
                 let def = &self.a.defs[d.0 as usize];
                 match &def.kind {
                     // A heading a syntax error cut (S-59): its generic parameters
@@ -268,22 +269,21 @@ impl<'p> Sema<'p> {
                         self.alias_ty(d)
                     }
                     DefKind::Flow(_) => {
-                        self.report(
-                            cx.def,
-                            Diagnostic::new(
-                                Stage::Names,
-                                Code::E0302,
-                                span,
-                                format!("`{name}` is a flow, not a type; its state type is `{name}.State` (§11.6)"),
-                            )
-                            // The type arguments after the path, if any, are what
-                            // changes: `Sig[F32]` is `Sig.State` (§18.1, S-251).
-                            .with_fix(Fix::replace(
-                                format!("write `{name}.State`"),
-                                Span { start: path.span.end, ..span },
-                                ".State",
-                            )),
+                        let mut d = Diagnostic::new(
+                            Stage::Names,
+                            Code::E0302,
+                            span,
+                            format!("`{name}` is a flow, not a type; its state type is `{name}.State` (§11.6)"),
                         );
+                        // The type arguments after the path, if any, are what
+                        // changes: `Sig[F32]` is `Sig.State` (§18.1, S-251). Not
+                        // when `State`, of the flow's visibility, would be an
+                        // E0303 there (§15.1).
+                        if cx.reach.is_none_or(|r| crate::resolve::reaches(def.vis, r)) {
+                            let at = Span { start: path.span.end, ..span };
+                            d = d.with_fix(Fix::replace(format!("write `{name}.State`"), at, ".State"));
+                        }
+                        self.report(cx.def, d);
                         self.a.types.error()
                     }
                     DefKind::Unsupported => self.a.types.error(),
@@ -312,6 +312,45 @@ impl<'p> Sema<'p> {
                 self.a.types.error()
             }
         }
+    }
+
+    /// A type named in a heading that reaches less far than the heading
+    /// (§15.1, S-144, S-665): E0303 at the name written, with no candidate.
+    /// An alias is judged by the names of the type it stands for, the
+    /// narrowest of them (§4.4, S-700); its right side is judged where it is
+    /// declared. The type is lowered on (the name is known). A def whose kind
+    /// is not known (an E0200, a member of an `extern` block) is judged too.
+    // A constant named as the length of an array or a const argument is not
+    // judged: it is no type, trait or effect (S-699).
+    fn check_reach(&mut self, cx: &Cx<'p>, d: DefId, path: &onsa_syntax::ast::Path) {
+        // Nothing reaches less far than `priv`.
+        let Some(reach) = cx.reach.filter(|&r| r != Vis::Priv) else { return };
+        // Every kind is named, so that a new one is judged or not by choice.
+        let named = match self.a.def(d).kind {
+            DefKind::Struct(_) | DefKind::Enum(_) | DefKind::Unsupported => vec![d],
+            DefKind::Alias(_) => {
+                let t = self.alias_ty(d);
+                self.a.types.named(t)
+            }
+            // Not a type: an E0302 of its own.
+            DefKind::Fn(_) | DefKind::Flow(_) | DefKind::Const(_) | DefKind::Impl(_) | DefKind::Test { .. } => vec![],
+        };
+        let vis = |n: DefId| self.a.def(n).vis;
+        let narrowest =
+            named.into_iter().reduce(|a, b| if crate::resolve::narrower(vis(a), vis(b)) == vis(a) { a } else { b });
+        let Some(n) = narrowest.filter(|&n| !crate::resolve::reaches(vis(n), reach)) else { return };
+        let def = self.a.def(n);
+        let name = src(cx, path.span);
+        let it = if n == d { "it".to_string() } else { format!("it stands for `{}`, which", self.a.shown_name(n)) };
+        let msg = format!(
+            "`{name}` is named in a heading seen {}, but {it} {} (§15.1)",
+            crate::resolve::seen(reach),
+            crate::resolve::hidden_words(def.vis)
+        );
+        let d = Diagnostic::new(Stage::Names, Code::E0303, path.span, msg)
+            .with_found(name)
+            .with_note(def.name_span, "defined here");
+        self.report(cx.def, d);
     }
 
     /// Array length (§4.1): an integer literal, a `const` with a literal
@@ -352,7 +391,7 @@ pub(crate) fn lower_type_in_body(
         kind_heads: Vec::new(),
     };
     let is_std = s.a.modules.pkg_of(m) < s.a.modules.names.len() && s.a.modules.names[s.a.modules.pkg_of(m)] == "std";
-    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, is_std };
+    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, is_std, reach: None };
     let ty = s.lower_type(&cx, t);
     *a = s.a;
     let diags = a.diagnostics.drain(before..).collect();

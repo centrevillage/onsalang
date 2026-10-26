@@ -50,6 +50,10 @@ struct Cx<'p> {
     self_ty: Option<TyId>,
     def: DefId,
     is_std: bool,
+    /// How far the heading being lowered is seen (§15.1, S-665): a type
+    /// named in it that reaches less far is an E0303. `None` out of a
+    /// heading (a body, the type of an `impl`).
+    reach: Option<Vis>,
 }
 
 pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
@@ -179,6 +183,7 @@ impl<'p> Sema<'p> {
             self_ty,
             def: id,
             is_std: self.is_std(def.module),
+            reach: Some(def.vis),
         })
     }
 
@@ -200,18 +205,16 @@ impl<'p> Sema<'p> {
                 let derives = self.lower_derives(&cx, &s.derives);
                 // A field has the visibility of its struct, narrowed by
                 // `priv` alone (§15.1, S-35, S-672).
+                // It is seen as far as it reaches (S-665).
                 let inherited = self.a.def(id).vis;
-                let fields = Fields::Named(
-                    s.fields
-                        .iter()
-                        .map(|f| FieldDef {
-                            name: f.name.name.clone(),
-                            ty: self.lower_type(&cx, f.ty),
-                            vis: if f.vis == Vis::Priv { Vis::Priv } else { inherited },
-                            span: f.span,
-                        })
-                        .collect(),
-                );
+                let mut fields = Vec::new();
+                for f in &s.fields {
+                    let vis = if f.vis == Vis::Priv { Vis::Priv } else { inherited };
+                    cx.reach = Some(vis);
+                    let ty = self.lower_type(&cx, f.ty);
+                    fields.push(FieldDef { name: f.name.name.clone(), ty, vis, span: f.span });
+                }
+                let fields = Fields::Named(fields);
                 if let DefKind::Struct(sd) = &mut self.a.defs[id.0 as usize].kind {
                     sd.generics = cx.generics;
                     sd.fields = fields;
@@ -251,7 +254,8 @@ impl<'p> Sema<'p> {
                 if i.trait_.is_some() {
                     return;
                 }
-                let mut cx = cx;
+                // The heading of an `impl` has no visibility (§15.1).
+                let mut cx = Cx { reach: None, ..cx };
                 cx.generics = self.lower_generics(&cx, &i.generics);
                 let self_ty = self.lower_type(&cx, i.self_ty);
                 let (fns, consts) = match &self.a.defs[id.0 as usize].kind {
@@ -293,8 +297,10 @@ impl<'p> Sema<'p> {
                         self.a.read_held.insert(sub);
                     }
                     let sub_item = self.a.defs[sub.0 as usize].item.unwrap();
+                    let ty_vis = key_def.map(|d| self.a.def(d).vis).or(key_builtin.map(|_| Vis::Pub));
+                    let reach = ty_vis.map(|t| self.member_reach(&cx, sub, t));
                     let sub_cx =
-                        Cx { generics: cx.generics.clone(), self_ty: Some(self_ty), def: sub, ..cx_clone(&cx) };
+                        Cx { generics: cx.generics.clone(), self_ty: Some(self_ty), def: sub, reach, ..cx_clone(&cx) };
                     match &cx.ast.item(sub_item).kind {
                         ItemKind::Fn(f) => self.lower_fn(sub_cx, sub, f),
                         ItemKind::Const(c) => {
@@ -332,6 +338,23 @@ impl<'p> Sema<'p> {
             ItemKind::Test { .. } => {}
             _ => {}
         }
+    }
+
+    /// How far the member `sub` of an inherent `impl` of a type of `ty_vis`
+    /// reaches: the narrower of its visibility and its type's (§15.1, S-665).
+    /// A `pub` on it wider than the type is redundant (E0020, S-662).
+    // The E0020, reported first, is the one error of the member; an E0303 of
+    // a name in its heading comes once it is fixed (S-698).
+    fn member_reach(&mut self, cx: &Cx<'p>, sub: DefId, ty_vis: Vis) -> Vis {
+        let own = self.a.def(sub).vis;
+        let at = self.a.def(sub).item.and_then(|i| cx.ast.item(i).vis_span);
+        if let (Vis::Pub, Vis::Default | Vis::Priv, Some(at)) = (own, ty_vis, at) {
+            let blanks =
+                cx.text[at.end as usize..].len() - cx.text[at.end as usize..].trim_start_matches([' ', '\t']).len();
+            let fix = Fix::delete("remove `pub`", Span { end: at.end + blanks as u32, ..at });
+            self.report(sub, foreign::report(RowId::ImplMemberPub, cx.text, at, vec![fix]));
+        }
+        crate::resolve::narrower(own, ty_vis)
     }
 
     fn alias_ty(&mut self, id: DefId) -> TyId {
@@ -566,6 +589,7 @@ fn cx_clone<'p>(cx: &Cx<'p>) -> Cx<'p> {
         self_ty: cx.self_ty,
         def: cx.def,
         is_std: cx.is_std,
+        reach: cx.reach,
     }
 }
 

@@ -1,7 +1,7 @@
 //! Types (spec §4, `design/03-types.md`). Interned: a `TyId`
 //! identifies one structural type, so equality is `TyId` equality.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use onsa_syntax::ast::Mode;
 
@@ -326,6 +326,38 @@ impl Types {
     /// of `onsa interface` (W3-20/b, W3-10).
     pub fn parens_before_uses(&self, ty: TyId, follows: bool) -> bool {
         follows && matches!(self.get(ty), Ty::Fn(_))
+    }
+
+    /// The user types named in `id`, its types within types included (the
+    /// arguments, the elements, the parameters and result of a function
+    /// type), in the order written (§15.1, S-700). Each type is visited once,
+    /// so the work is linear in the types interned, not in the tree they
+    /// stand for (`type A2 = (A1, A1)`).
+    pub fn named(&self, id: TyId) -> Vec<DefId> {
+        let mut out = Vec::new();
+        self.named_in(id, &mut HashSet::new(), &mut out);
+        out
+    }
+
+    fn named_in(&self, id: TyId, seen: &mut HashSet<TyId>, out: &mut Vec<DefId>) {
+        if !seen.insert(id) {
+            return;
+        }
+        let mut each = |ts: &[TyId], out: &mut Vec<DefId>| ts.iter().for_each(|&t| self.named_in(t, seen, out));
+        match self.get(id) {
+            Ty::Named(d, args) => {
+                out.push(*d);
+                each(args, out);
+            }
+            Ty::Array(t, _) => each(&[*t], out),
+            Ty::Tuple(ts) | Ty::Builtin(_, ts) => each(ts, out),
+            Ty::Fn(f) => {
+                let ts: Vec<TyId> = f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect();
+                each(&ts, out);
+            }
+            Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit => {}
+            Ty::Param(_) | Ty::ConstVal(_) | Ty::Var(_) | Ty::Error => {}
+        }
     }
 
     /// Source-like rendering, with user types by name via `name_of`.

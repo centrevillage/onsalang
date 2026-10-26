@@ -1,5 +1,5 @@
-//! `onsa interface` (T3-11; spec §18.2): the public signatures of a package,
-//! each type's kind (§4.6) and size (§12.1), `@param` metadata (§11.7) and
+//! `onsa interface` (T3-11; spec §18.2): the signatures of a package, of the
+//! items and members of `pub` and of no word (not `priv`, S-660), each type's kind (§4.6) and size (§12.1), `@param` metadata (§11.7) and
 //! the generated API of every flow in the form of §11.6. The data lives in
 //! [`Interface`]; `render_text` / `render_json` print it, so the LSP and the
 //! web API can reuse it.
@@ -16,7 +16,7 @@
 //!       "ret": "F32", "effects": [], "signature": "pub rt fn wrap01(x: F32) -> F32" },
 //!     { "kind": "struct", "name": "Poly", "vis": "pub", "value_kind": "Affine",
 //!       "size": 1234, "align": 8, "generics": [],
-//!       "fields": [ { "name": "voices", "ty": "[voice.State; 8]", "offset": 0 } ] },
+//!       "fields": [ { "name": "voices", "vis": "", "ty": "[voice.State; 8]", "offset": 0 } ] },
 //!     { "kind": "enum", "name": "Shape", ..., "variants": [ { "name": "Circle", "fields": ["F32"] } ] },
 //!     { "kind": "const", "name": "MAX_VOICES", "ty": "U32", "value": "8" },
 //!     { "kind": "alias", "name": "Samples", "ty": "Buf[F32]" },
@@ -131,6 +131,8 @@ pub struct TypeIface {
 #[derive(Debug, Clone, Serialize)]
 pub struct FieldIface {
     pub name: String,
+    /// `priv`, or empty: the field has the visibility of its struct.
+    pub vis: String,
     pub ty: String,
     pub offset: Option<u32>,
 }
@@ -182,6 +184,18 @@ pub struct ParamIfaceMeta {
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+}
+
+/// Whether an item or a member of `v` is shown: `pub` and no word, not
+/// `priv` (§18.2, S-660).
+fn shown(v: Vis) -> bool {
+    v != Vis::Priv
+}
+
+/// The fields of a struct value in braces, `{}` when it has none (as `fmt`
+/// writes it).
+fn braced(each: &[String]) -> String {
+    if each.is_empty() { "{}".into() } else { format!("{{ {} }}", each.join(", ")) }
 }
 
 fn vis_str(v: Vis) -> &'static str {
@@ -252,11 +266,7 @@ impl Builder<'_> {
 
     /// Flow members print as `voice.State` (§11.6); everything else by its name.
     fn display_name(&self, d: DefId) -> String {
-        let def = self.a.def(d);
-        match def.owner {
-            Some(o) if matches!(self.a.def(o).kind, DefKind::Flow(_)) => format!("{}.{}", self.a.def(o).name, def.name),
-            _ => def.name.clone(),
-        }
+        self.a.shown_name(d)
     }
 
     fn generics(&self, gs: &[onsa_sema::def::GenericDef]) -> Vec<String> {
@@ -393,8 +403,11 @@ impl Builder<'_> {
                             let offset = layout
                                 .as_ref()
                                 .and_then(|l| l.fields.iter().find(|(n, _)| *n == f.name).map(|(_, o)| *o));
+                            // The word written: `priv` alone (§15.1, S-660).
+                            let vis = if f.vis == Vis::Priv { vis_str(Vis::Priv) } else { "" };
                             iface.fields.push(FieldIface {
                                 name: f.name.clone(),
+                                vis: vis.into(),
                                 ty: self.ty(f.ty, &generics),
                                 offset,
                             });
@@ -427,35 +440,58 @@ impl Builder<'_> {
             .a
             .const_values
             .get(&d)
-            .map(|v| format!("{:?}", self.shown(v, c.ty)))
+            .map(|v| self.value_text(v, Some(c.ty)))
             .or_else(|| c.int_value.map(|v| v.to_string()));
         Item::Const { name: display.to_string(), vis: vis_str(def.vis).into(), ty: self.ty(c.ty, &[]), value }
     }
 
-    /// The value `v` of the type `ty` as it is shown: each float in its type
-    /// ([`onsa_syntax::float_shown`]), through the arrays, tuples and structs.
-    fn shown(&self, v: &ConstValue, ty: TyId) -> ConstValue {
-        let each = |vs: &[ConstValue], tys: Vec<TyId>| -> Option<Vec<ConstValue>> {
-            (vs.len() == tys.len()).then(|| vs.iter().zip(tys).map(|(v, t)| self.shown(v, t)).collect())
+    /// The value `v` of the type `ty` as it is written in the source (§2.4,
+    /// §4.1): each float in its type ([`onsa_syntax::float_shown`]), a char
+    /// with its escapes (§2.4), and the arrays, tuples and structs of them
+    /// (`P { x: 1, y: 2.5 }`).
+    /// Of no type known (`None`), the floats are as they are held.
+    fn value_text(&self, v: &ConstValue, ty: Option<TyId>) -> String {
+        let ty = ty.map(|t| self.a.types.get(t));
+        let list = |vs: &[ConstValue], tys: &[TyId]| -> Vec<String> {
+            vs.iter().enumerate().map(|(i, v)| self.value_text(v, tys.get(i).copied())).collect()
         };
-        let shown = match (v, self.a.types.get(ty)) {
-            (ConstValue::Float(x), Ty::Float(k)) => Some(ConstValue::Float(onsa_syntax::float_shown(*x, k.width()))),
-            (ConstValue::Array(vs), Ty::Array(elem, _)) => each(vs, vec![*elem; vs.len()]).map(ConstValue::Array),
-            (ConstValue::Tuple(vs), Ty::Tuple(tys)) => each(vs, tys.clone()).map(ConstValue::Tuple),
-            (ConstValue::Struct(vs), Ty::Named(s, args)) => {
-                let tys = match &self.a.def(*s).kind {
-                    DefKind::Struct(s) => match &s.fields {
-                        Fields::Named(fs) => fs.iter().map(|f| f.ty).collect(),
+        match (v, ty) {
+            (ConstValue::Int(x), _) => x.to_string(),
+            (ConstValue::Float(x), Some(Ty::Float(k))) => format!("{:?}", onsa_syntax::float_shown(*x, k.width())),
+            (ConstValue::Float(x), _) => format!("{x:?}"),
+            (ConstValue::FloatText(t), _) => t.clone(),
+            (ConstValue::Bool(b), _) => b.to_string(),
+            (ConstValue::Char(c), _) => format!("'{}'", c.escape_default()),
+            (ConstValue::Unit, _) => "()".into(),
+            (ConstValue::Array(vs), Some(Ty::Array(elem, _))) => {
+                format!("[{}]", list(vs, &vec![*elem; vs.len()]).join(", "))
+            }
+            (ConstValue::Array(vs), _) => format!("[{}]", list(vs, &[]).join(", ")),
+            (ConstValue::Tuple(vs), Some(Ty::Tuple(tys))) => format!("({})", list(vs, tys).join(", ")),
+            (ConstValue::Tuple(vs), _) => format!("({})", list(vs, &[]).join(", ")),
+            (ConstValue::Struct(vs), Some(Ty::Named(s, args))) => {
+                let fields: Vec<(String, TyId)> = match &self.a.def(*s).kind {
+                    DefKind::Struct(sd) => match &sd.fields {
+                        Fields::Named(fs) => {
+                            fs.iter().map(|f| (f.name.clone(), onsa_sema::layout::subst(self.a, f.ty, args))).collect()
+                        }
                         Fields::Opaque => Vec::new(),
                     },
                     _ => Vec::new(),
                 };
-                let tys = tys.into_iter().map(|t| onsa_sema::layout::subst(self.a, t, args)).collect();
-                each(vs, tys).map(ConstValue::Struct)
+                let tys: Vec<TyId> = fields.iter().map(|(_, t)| *t).collect();
+                let each: Vec<String> = list(vs, &tys)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, v)| match fields.get(i) {
+                        Some((name, _)) => format!("{name}: {v}"),
+                        None => v,
+                    })
+                    .collect();
+                format!("{} {}", self.display_name(*s), braced(&each))
             }
-            _ => None,
-        };
-        shown.unwrap_or_else(|| v.clone())
+            (ConstValue::Struct(vs), _) => braced(&list(vs, &[])),
+        }
     }
 
     fn flow_item(&self, d: DefId) -> Item {
@@ -493,6 +529,7 @@ impl Builder<'_> {
                             .chain(l.bulk_fields.iter().map(|f| (f, "bulk")))
                             .map(|(f, region)| FieldIface {
                                 name: f.name.clone(),
+                                vis: String::new(),
                                 ty: format!("{} bytes, align {}, {region}", f.size, f.align),
                                 offset: Some(f.offset),
                             })
@@ -526,15 +563,22 @@ impl Builder<'_> {
         })
     }
 
+    /// Whether the type of an `impl` is shown (§18.2, S-660): a builtin type,
+    /// or one not `priv` (of a flow, the flow's visibility).
+    fn shown_type(&self, t: TyId) -> bool {
+        match self.a.types.get(t) {
+            Ty::Named(d, _) => shown(self.a.def(*d).vis),
+            _ => true,
+        }
+    }
+
     fn module_items(&self, m: ModId) -> Vec<Item> {
         let mut defs: Vec<(DefId, &onsa_sema::Def)> =
             self.a.defs_of_module(m).filter(|(_, d)| d.owner.is_none()).collect();
         defs.sort_by_key(|(_, d)| d.span.start);
         let mut items = Vec::new();
         for (id, def) in defs {
-            // Until W4-03 the items with no visibility word are read as within
-            // their module (`onsa_sema::resolve::Resolver::visible`): only `pub` is shown.
-            let public = def.vis == Vis::Pub;
+            let public = shown(def.vis);
             match &def.kind {
                 DefKind::Fn(f) if public && f.flow_fn.is_none() => items.push(Item::Fn(self.fn_item(id, &def.name))),
                 DefKind::Struct(s) if public && s.flow_ty.is_none() => items.push(self.type_item(id, &def.name)),
@@ -546,17 +590,18 @@ impl Builder<'_> {
                 }),
                 DefKind::Const(_) if public => items.push(self.const_item(id, &def.name)),
                 DefKind::Flow(_) if public => items.push(self.flow_item(id)),
-                DefKind::Impl(i) => {
+                // The `impl` of a type not shown is not shown (R-265).
+                DefKind::Impl(i) if self.shown_type(i.self_ty) => {
                     let fns: Vec<FnIface> = i
                         .fns
                         .iter()
-                        .filter(|&&f| self.a.def(f).vis == Vis::Pub)
+                        .filter(|&&f| shown(self.a.def(f).vis))
                         .map(|&f| self.fn_item(f, &self.a.def(f).name))
                         .collect();
                     let consts: Vec<Item> = i
                         .consts
                         .iter()
-                        .filter(|&&c| self.a.def(c).vis == Vis::Pub)
+                        .filter(|&&c| shown(self.a.def(c).vis))
                         .map(|&c| self.const_item(c, &self.a.def(c).name))
                         .collect();
                     if !fns.is_empty() || !consts.is_empty() {
@@ -636,12 +681,13 @@ fn type_header(t: &TypeIface, keyword: &str, out: &mut String, indent: &str) {
 fn render_type(t: &TypeIface, keyword: &str, out: &mut String, indent: &str) {
     type_header(t, keyword, out, indent);
     for f in &t.fields {
+        let v = if f.vis.is_empty() { String::new() } else { format!("{} ", f.vis) };
         match f.offset {
             Some(o) => {
-                let _ = writeln!(out, "{indent}  {}: {}  // offset {o}", f.name, f.ty);
+                let _ = writeln!(out, "{indent}  {v}{}: {}  // offset {o}", f.name, f.ty);
             }
             None => {
-                let _ = writeln!(out, "{indent}  {}: {}", f.name, f.ty);
+                let _ = writeln!(out, "{indent}  {v}{}: {}", f.name, f.ty);
             }
         }
     }

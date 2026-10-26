@@ -13,7 +13,7 @@
 
 use util.{from_crate, Pt, lp, constant, exported, both, narrower}
 
-pub fn run(p: Pt) -> I32 {
+fn run(p: Pt) -> I32 {
   from_crate(p.x) + constant(2) + exported(3) + both(4) + narrower()
 }
 

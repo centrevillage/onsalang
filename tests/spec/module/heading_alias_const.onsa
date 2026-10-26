@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.4"]
+// fixes = 0
+
+// S-144, S-665 (§15.1): the right side of a type alias and the type of a constant are heads (the initializer is
+// not), so a name written there cannot be narrower than the alias or the constant. An alias makes no new type
+// (§4.4, S-700): it is judged by the names of the type it stands for, so `pub fn f(a: Closed)` is clean when
+// `Closed` is `priv type Closed = Open` and `Open` is `pub`. An alias that names a narrow type is E0303 on its
+// right side, where the type is written, and again where a wider head names it. The error is on the name that was
+// written and has no candidate.
+struct Inner {
+  x: I32,
+}
+
+priv struct Hid {
+  x: I32,
+}
+
+pub struct Open {
+  x: I32,
+}
+
+// The right side of an alias.
+pub type OpenAlias = Open
+
+pub type OpenNested = Option[Open]
+
+pub type PubPackage = Inner                         //~ E0303
+
+pub type PubModule = Hid                            //~ E0303
+
+type PkgModule = Hid                                //~ E0303
+
+type PkgPackage = Inner
+
+priv type ModModule = Hid
+
+priv type ModPackage = Inner
+
+pub type NestedOption = Option[Inner]               //~ E0303
+
+pub type NestedArray = [Hid; 2]                     //~ E0303
+
+pub type NestedTuple = (I32, Inner)                 //~ E0303
+
+pub type NestedFn = fn(Inner) -> I32                //~ E0303
+
+pub type NestedFnReturn = fn() -> Hid               //~ E0303
+
+type PkgNestedModule = Option[Hid]                  //~ E0303
+
+priv type ModNested = Option[Hid]
+
+// An alias is judged by the type it stands for, whatever its own visibility.
+priv type Closed = Open
+
+type PackageAlias = Open
+
+pub type Shown = Open
+
+pub type Wide = PackageAlias
+
+type Mid = Shown
+
+pub type ThroughShown = Shown
+
+pub type ThroughMid = Mid
+
+pub fn through_shown(a: Shown) -> Shown {
+  a
+}
+
+pub fn through_closed(a: Closed) -> I32 {
+  a.x
+}
+
+pub fn through_package(a: PackageAlias) -> I32 {
+  a.x
+}
+
+pub fn through_closed_return() -> Closed {
+  Open { x: 1 }
+}
+
+fn package_through_package(a: PackageAlias) -> I32 {
+  a.x
+}
+
+fn package_through_closed(a: Closed) -> I32 {
+  a.x
+}
+
+priv fn module_through_closed(a: Closed) -> I32 {
+  a.x
+}
+
+pub fn through_inner_alias(a: PkgPackage) -> I32 {  //~ E0303
+  a.x
+}
+
+fn package_through_inner_alias(a: PkgPackage) -> I32 {
+  a.x
+}
+
+// The alias `NestedOption` is `pub` and names a narrow type on its right side (E0303 there, above), and the
+// function that names it is judged by the type it stands for: a second error, at the name of the alias.
+pub fn through_nested_alias(a: NestedOption) -> I32 { //~ E0303
+  0
+}
+
+// The type of a constant.
+pub const OPEN_C: Open = Open { x: 1 }
+
+pub const PUB_PACKAGE: Inner = Inner { x: 1 }       //~ E0303
+
+pub const PUB_MODULE: Hid = Hid { x: 1 }            //~ E0303
+
+const PKG_PACKAGE: Inner = Inner { x: 1 }
+
+const PKG_MODULE: Hid = Hid { x: 1 }                //~ E0303
+
+priv const MOD_MODULE: Hid = Hid { x: 1 }
+
+pub const PUB_NESTED: Option[Inner] = None          //~ E0303
+
+pub const PUB_ARRAY: [Hid; 1] = [Hid { x: 1 }]      //~ E0303
+
+pub const PUB_TUPLE: (I32, Inner) = (1, Inner { x: 2 })   //~ E0303
+
+pub const PUB_THROUGH_CLOSED: Closed = Open { x: 1 }
+
+pub const PUB_SHOWN: Shown = Open { x: 1 }
+
+pub const PUB_SIZES: [I32; 2] = [1, 2]
+
+// The initializer is not the head: a narrow type is fine in it.
+pub const INIT_NAMES_NARROW: I32 = Inner { x: 1 }.x + Hid { x: 2 }.x

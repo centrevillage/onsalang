@@ -17,7 +17,7 @@ pub fn same_module() -> I32 {
   c_abs(1)
 }
 
-pub fn same_module_type(h: Handle) -> I32 {
+fn same_module_type(h: Handle) -> I32 {
   1
 }
 

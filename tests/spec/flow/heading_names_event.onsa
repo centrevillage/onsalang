@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.11", "§15.1"]
+// fixes = 0
+
+// S-664, S-665 (§11.6, §11.11, §15.1): the type of an event input and of an event output of a flow is written in
+// its head too, so it cannot be narrower than the flow (the same rule as `heading_names` has for the `sample`,
+// `block` and `init` ones). This file is apart from that one because the `event` clock is not in this version
+// (W7-11), so a flow with an event input is not read until then. The types here are aliases of `U8`, and an
+// alias makes no new type and is judged by the type it stands for (§4.4, S-700), so no head is narrower.
+type Note = U8
+
+pub type PubNote = U8
+
+priv type ModNote = U8
+
+// No error: the type reaches as far as the flow does.
+pub flow pub_event_in(n: PubNote at event) -> U8 at sample {
+  n
+}
+
+pub flow pub_event_out(x: F32 at sample) -> PubNote at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow package_event_in(n: Note at event) -> U8 at sample {
+  n
+}
+
+priv flow module_event_in(n: ModNote at event) -> U8 at sample {
+  n
+}
+
+// The `pub` flow and the flow with no word name an alias with a narrower word, judged by `U8`: no error.
+pub flow event_input(n: Note at event) -> U8 at sample {
+  n
+}
+
+pub flow event_output(x: F32 at sample) -> Note at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+pub flow event_input_module(n: ModNote at event) -> U8 at sample {
+  n
+}
+
+flow package_event_module(n: ModNote at event) -> U8 at sample {
+  n
+}
+
+// An event and a `block` input of aliases with narrower words: no error.
+pub flow event_and_block(n: Note at event, g: ModNote at block) -> U8 at sample {
+  n
+}

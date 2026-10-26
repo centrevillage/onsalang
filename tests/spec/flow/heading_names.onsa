@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+// fixes = 0
+
+// S-664, S-665 (§11.6, §15.1): the types of the inputs and the outputs of a flow (`sample`, `block` and `init`;
+// the event ones are in `heading_names_event`) are written in its head, so they cannot be narrower than the
+// flow: `pub flow split(..) -> Pair at sample` is E0303 when `Pair` has no word. A flow gives the items of its
+// namespace (`State`, `Params`, `Config`, `In`, `Out`, `Event`, `init`, `process`, `render`) its own
+// visibility, and they hold the same types, but the check is on the head of the flow and once: there is the
+// one error, on the name that was written, and none on the generated items (`fixes = 0` checks that there is
+// no candidate, and the marks that there is no other diagnostic). A `priv` flow names any type, and a flow
+// with no word the types of the package. An alias makes no new type and is judged by the type it stands for
+// (§4.4, S-700), so the aliases of `F32` (`Gain`, `Level`) are fine in any head. The error of a unit is the only
+// one of the unit (§18.1), so a head with two narrow names has the one error.
+struct Pair {
+  a: F32,
+  b: F32,
+}
+
+priv struct Hid {
+  a: F32,
+}
+
+pub struct Open {
+  a: F32,
+}
+
+type Gain = F32
+
+type Note = U8
+
+priv type Level = F32
+
+pub type PubGain = F32
+
+// No error: the types reach as far as the flow does.
+pub flow open_out(x: F32 at sample) -> Open at sample {
+  Open { a: x }
+}
+
+pub flow open_in(o: Open at sample) -> F32 at sample {
+  o.a
+}
+
+pub flow pub_gain(x: F32 at sample, g: PubGain at block) -> F32 at sample {
+  x * g
+}
+
+flow package_out(x: F32 at sample) -> Pair at sample {
+  Pair { a: x, b: x }
+}
+
+flow package_in(p: Pair at sample, g: Gain at block) -> F32 at sample {
+  p.a * g
+}
+
+priv flow module_out(x: F32 at sample) -> Hid at sample {
+  Hid { a: x }
+}
+
+priv flow module_in(h: Hid at sample, g: Level at block, k: Gain at init) -> F32 at sample {
+  h.a * g * k
+}
+
+// The body of a flow is not a head: a narrow type is fine in it, in a `let`, in a `par` and in a branch.
+pub flow body_names(x: F32 at sample) -> F32 at sample {
+  let h = Hid { a: x }
+  let p = Pair { a: h.a, b: x }
+  let c = par i in 0 ..< 2 {
+    Pair { a: p.a * 0.5, b: p.b }.a
+  }
+  c[0] + c[1] + p.b
+}
+
+// The `pub` flow names a type of the package or of the module.
+pub flow split(x: F32 at sample) -> Pair at sample {    //~ E0303
+  Pair { a: x, b: x }
+}
+
+pub flow merge(p: Pair at sample) -> F32 at sample {    //~ E0303
+  p.a + p.b
+}
+
+pub flow module_type_out(x: F32 at sample) -> Hid at sample {   //~ E0303
+  Hid { a: x }
+}
+
+pub flow module_type_in(h: Hid at sample) -> F32 at sample {    //~ E0303
+  h.a
+}
+
+// An alias of `F32`, of any word, is judged by `F32`: no error.
+pub flow block_input(x: F32 at sample, g: Gain at block) -> F32 at sample {
+  x * g
+}
+
+pub flow init_input(x: F32 at sample, k: Gain at init) -> F32 at sample {
+  x * k
+}
+
+pub flow block_module_alias(x: F32 at sample, g: Level at block) -> F32 at sample {
+  x * g
+}
+
+pub flow nested_option_block(x: F32 at sample, g: Option[Pair] at block) -> F32 at sample {   //~ E0303
+  x
+}
+
+pub flow nested_array_init(x: F32 at sample, k: [Hid; 2] at init) -> F32 at sample {   //~ E0303
+  x
+}
+
+pub flow nested_tuple_block(x: F32 at sample, g: (F32, Pair) at block) -> F32 at sample {   //~ E0303
+  x
+}
+
+// The flow with no word names a type of the module.
+flow package_module_out(x: F32 at sample) -> Hid at sample {  //~ E0303
+  Hid { a: x }
+}
+
+flow package_module_in(h: Hid at sample) -> F32 at sample {   //~ E0303
+  h.a
+}
+
+// `Level` is a `priv` alias of `F32`, judged by `F32`: no error.
+flow package_level(x: F32 at sample, g: Level at block) -> F32 at sample {
+  x * g
+}
+
+// Two narrow names in one head give the one error.
+pub flow both(p: Pair at sample, g: Gain at block) -> Pair at sample {  //~ E0303
+  Pair { a: p.a * g, b: p.b }
+}
+
+pub flow three(p: Pair at sample, h: Hid at sample) -> Hid at sample {  //~ E0303
+  h
+}

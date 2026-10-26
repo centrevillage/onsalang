@@ -1,0 +1,165 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.4"]
+// fixes = 0
+
+// S-144, S-665 (§15.1, §4.4): the type of a field and the contents of a variant are heads, and they reach as far
+// as the field or the enum does. A field takes the visibility of its struct, so a `pub struct` with a field of a
+// narrower type is E0303 on the type written in the field. A `priv` field reaches the module alone, so
+// `pub struct P { priv i: Inner }` is fine, and so are the fields of a struct with no word or `priv` when the
+// types are as wide as they are. The contents of a variant take the visibility of the enum. The error is on the
+// name that was written and has no candidate. The error of a unit is the only one of the unit (§18.1): a struct
+// or an enum is one unit, so a struct with two narrow fields has the one error (`PubTwoNarrow`, on one line).
+struct Inner {
+  x: I32,
+}
+
+priv struct Hid {
+  x: I32,
+}
+
+pub struct Open {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+// Fields.
+pub struct PubOpen {
+  o: Open,
+  n: Option[Open],
+}
+
+pub struct PubPackageField {
+  i: Inner,                                         //~ E0303
+}
+
+pub struct PubModuleField {
+  a: I32,
+  h: Hid,                                           //~ E0303
+}
+
+pub struct PubNested {
+  a: Option[Inner],                                 //~ E0303
+}
+
+pub struct PubArray {
+  a: [Hid; 3],                                      //~ E0303
+}
+
+pub struct PubTuple {
+  a: (I32, Inner),                                  //~ E0303
+}
+
+pub struct PubFn {
+  f: fn(Inner) -> I32,                              //~ E0303
+}
+
+pub struct PubGeneric {
+  w: Wrap[Hid],                                     //~ E0303
+}
+
+pub struct PubTwoNarrow { i: Inner, h: Hid }        //~ E0303
+
+// A `priv` field reaches the module alone.
+pub struct PubPrivFields {
+  priv i: Inner,
+  priv h: Hid,
+  priv n: Option[Hid],
+  o: Open,
+}
+
+pub struct PubPrivFieldWithNarrow {
+  priv h: Hid,
+  i: Inner,                                         //~ E0303
+}
+
+struct PackageOk {
+  i: Inner,
+  o: Open,
+  priv h: Hid,
+}
+
+struct PackageModuleField {
+  i: Inner,
+  h: Hid,                                           //~ E0303
+}
+
+priv struct ModuleOk {
+  i: Inner,
+  h: Hid,
+  priv g: Hid,
+}
+
+// A generic struct has the heads of its fields too.
+pub struct GenericHolder[T] {
+  v: T,
+  o: Option[Open],
+}
+
+pub struct GenericNarrow[T] {
+  v: T,
+  i: Inner,                                         //~ E0303
+}
+
+struct GenericPackage[T] {
+  v: T,
+  h: Wrap[Hid],                                     //~ E0303
+}
+
+// Variants.
+pub enum PubOpenEnum {
+  A(Open),
+  B(I32, Option[Open]),
+  C,
+}
+
+pub enum PubPackageVariant {
+  A(I32),
+  B(Inner),                                         //~ E0303
+}
+
+pub enum PubModuleVariant {
+  A(Hid),                                           //~ E0303
+}
+
+pub enum PubNestedVariant {
+  A(I32, Option[Hid]),                              //~ E0303
+}
+
+pub enum PubFnVariant {
+  A(fn(Inner) -> I32),                              //~ E0303
+}
+
+pub enum PubSecondField {
+  A(I32, Inner),                                    //~ E0303
+}
+
+enum PackageVariantOk {
+  A(Inner),
+  B(Open),
+}
+
+enum PackageModuleVariant {
+  A(Inner),
+  B(Hid),                                           //~ E0303
+}
+
+priv enum ModuleEnumOk {
+  A(Hid),
+  B(Inner),
+}
+
+pub enum GenericEnum[T] {
+  A(T),
+  B(Inner),                                         //~ E0303
+}
+
+// The body is not a head.
+pub fn uses_the_fields() -> I32 {
+  let a = PackageOk { i: Inner { x: 1 }, o: Open { x: 2 }, h: Hid { x: 3 } }
+  let b = PubPrivFields { i: Inner { x: 4 }, h: Hid { x: 5 }, n: None, o: Open { x: 6 } }
+  a.i.x + a.o.x + a.h.x + b.i.x + b.h.x
+}

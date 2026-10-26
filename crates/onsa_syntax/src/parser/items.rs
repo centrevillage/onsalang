@@ -577,6 +577,8 @@ impl<'a> Parser<'a> {
                         if p.list_ends_unclosed(base) {
                             return Err(ParseError);
                         }
+                        // An element that is not a name (`3`, `g as h`, `_`) cuts the list here.
+                        // SPEC-GAP(S-696): whether the elements after it are read on.
                         let t = p.parse_name_after_dot("imported name")?;
                         p.check_taken(t, &path);
                         if p.eat(TokenKind::Comma).is_none() {

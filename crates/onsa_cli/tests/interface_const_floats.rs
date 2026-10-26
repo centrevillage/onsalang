@@ -1,6 +1,7 @@
 //! The floats of a `const` in `onsa interface` (§18.2): each value is shown in its type, as the
 //! numbers of `@param` are, the shortest decimal that reads as it (`F32` 0.1 is `0.1`, not the digits
-//! of the `f64` that holds the `F32` value), through arrays, tuples and structs (W3-05).
+//! of the `f64` that holds the `F32` value), through arrays, tuples and structs (W3-05), each
+//! written as in the source (`P { a: 0.1, b: 0.1 }`).
 
 use std::process::Command;
 
@@ -32,12 +33,12 @@ fn the_floats_of_a_const_are_shown_in_their_type() {
     assert_eq!(
         consts,
         [
-            "pub const K: F32 = Float(0.1)",
+            "pub const K: F32 = 0.1",
             // The F32 value next above 1 (the literal rounds up to it once, R-20).
-            "pub const A: [F32; 2] = Array([Float(0.1), Float(1.0000001)])",
-            "pub const S: P = Struct([Float(0.1), Float(0.1)])",
-            "pub const T: (F32, F64) = Tuple([Float(0.3), Float(0.3)])",
-            "pub const D: F64 = Float(0.1)",
+            "pub const A: [F32; 2] = [0.1, 1.0000001]",
+            "pub const S: P = P { a: 0.1, b: 0.1 }",
+            "pub const T: (F32, F64) = (0.3, 0.3)",
+            "pub const D: F64 = 0.1",
         ]
     );
 }

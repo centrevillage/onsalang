@@ -1,0 +1,48 @@
+// The types of this module that the other module names in its heads: `Open` is `pub`, `Shared` has no word (the
+// package's), and `Secret` is `priv` (this module's, so the other module cannot name it). The two aliases of
+// `Open` are judged by `Open` where a head names them (S-700), whatever their own word.
+pub struct Open {
+  x: I32,
+}
+
+struct Shared {
+  x: I32,
+}
+
+priv struct Secret {
+  x: I32,
+}
+
+pub type ShownAlias = Open
+
+type SharedAlias = Open
+
+pub type WideAlias = Shared                         //~ E0303
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub fn make_open() -> Open {
+  Open { x: 1 }
+}
+
+pub fn make_shared() -> Shared {                    //~ E0303
+  Shared { x: 2 }
+}
+
+fn new_shared() -> Shared {
+  Shared { x: 3 }
+}
+
+priv fn make_secret() -> Secret {
+  Secret { x: 4 }
+}
+
+fn make_secret_in_the_package() -> Secret {         //~ E0303
+  Secret { x: 5 }
+}
+
+pub fn use_shared_in_the_package() -> I32 {
+  new_shared().x + make_secret().x
+}
