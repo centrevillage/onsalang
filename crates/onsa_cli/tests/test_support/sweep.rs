@@ -3,8 +3,8 @@
 //! with its diagnostics read, and the application of one candidate (a `fixes` entry of a diagnostic).
 //!
 //! A sweep writes a package from its texts, runs the command, and compares the diagnostics with what the
-//! spec fixes. A candidate is applied to the texts and the package is written again, so every trial is a
-//! fresh run of the command on a scratch directory (`Dir`, removed on drop).
+//! spec fixes. A candidate is applied to the texts and the files it changed are written again, so every
+//! trial is a fresh run of the command on a scratch directory (`Dir`, removed on drop).
 
 #![allow(dead_code)]
 
@@ -70,9 +70,14 @@ pub fn package(tag: &str, name: &str, texts: &Texts) -> Dir {
     d
 }
 
-/// Write the files of `texts` (the manifest stays).
+/// Write the files of `texts` (the manifest stays, and so does a file that `texts` does not name). A file
+/// whose text on the disk is already the same is not written again: a trial changes one file or two, and
+/// each file written costs the disk a block whatever its size (X-16).
 pub fn write_texts(d: &Dir, texts: &Texts) {
     for (f, t) in texts {
+        if std::fs::read(d.root().join(f)).is_ok_and(|old| old == t.as_bytes()) {
+            continue;
+        }
         d.write(f, t);
     }
 }

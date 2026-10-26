@@ -41,9 +41,12 @@
 //! `fmt_spaces_lists.rs` that waited for unit U3 (a `use` list and a pattern in the block form and the continuation, an attribute
 //! of an input in the block form) are there and are not written again.
 //!
-//! Every test uses only the binary (`onsa fmt`). Expected texts are written from the spec; none is taken
+//! The texts of `fmt` are made by the function `onsa fmt` calls (`test_support::fmt`, no file written), the
+//! refused files and the CR LF file by the binary. Expected texts are written from the spec; none is taken
 //! from the output of the compiler. The tests that wait for W3-11 are `#[ignore]`d; each ignore names the
 //! work that removes it and what differs.
+
+mod test_support;
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -119,38 +122,10 @@ fn text(what: impl Into<String>, input: &str, expected: &str) -> Case {
     Case { what: what.into(), input: input.to_string(), expected: expected.to_string() }
 }
 
-/// Runs `onsa fmt` on every input (one command, so the files are written one after the other), compares
-/// the whole text of each output, and checks that the output is a fixed point: `fmt --check` ends with 0
-/// and another `fmt` does not change the file. Before that, the expected text is checked to have no
-/// diagnostic of the syntax stage (`fmt --check` ends with 0 or 1, not with 2).
+/// `onsa fmt` on every input gives the expected text, which is a fixed point (`test_support::fmt`).
 fn expect_fmt(tag: &str, cases: &[Case]) {
-    assert!(!cases.is_empty(), "no case to run");
-    let d = Dir::new(tag);
-    for (i, c) in cases.iter().enumerate() {
-        let p = d.file(&format!("e{i}.onsa"), &c.expected);
-        let out = onsa(&["fmt", "--check", &p]);
-        assert_ne!(code(&out), 2, "{}: the expected text has a diagnostic of the syntax stage: {out:?}", c.what);
-    }
-    let paths: Vec<String> = cases.iter().enumerate().map(|(i, c)| d.file(&format!("c{i}.onsa"), &c.input)).collect();
-    let mut args = vec!["fmt"];
-    args.extend(paths.iter().map(String::as_str));
-    let out = onsa(&args);
-    assert_eq!(code(&out), 0, "onsa fmt: {out:?}");
-    let mut wrong = Vec::new();
-    for (c, path) in cases.iter().zip(&paths) {
-        let got = read(path);
-        if got != c.expected {
-            wrong.push(format!("{}\n--- input\n{}--- expected\n{}--- got\n{got}", c.what, c.input, c.expected));
-        }
-    }
-    assert!(wrong.is_empty(), "{} of {} files are not as expected:\n{}", wrong.len(), cases.len(), wrong.join("\n"));
-    for (c, path) in cases.iter().zip(&paths) {
-        let out = onsa(&["fmt", "--check", path]);
-        assert_eq!(code(&out), 0, "{}: the output is not a fixed point of fmt --check: {out:?}", c.what);
-        let out = onsa(&["fmt", path]);
-        assert_eq!(code(&out), 0, "{}: {out:?}", c.what);
-        assert_eq!(read(path), c.expected, "{}: a second fmt changes the output", c.what);
-    }
+    let cases: Vec<_> = cases.iter().map(|c| (c.what.as_str(), c.input.as_str(), c.expected.as_str())).collect();
+    test_support::fmt::expect_fmt(tag, &cases);
 }
 
 /// Every input is refused: `onsa fmt` ends with 2, names `diag` in its output (diagnostics go to the

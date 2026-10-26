@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 
+pub mod fmt;
 pub mod sweep;
 
 use std::path::{Path, PathBuf};
