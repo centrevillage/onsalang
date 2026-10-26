@@ -42,6 +42,23 @@ def report_prefix(agent_type, agent_id) -> str:
     return f"{safe(agent_type)}-{safe(agent_id)}-"
 
 
+NO_BODY = "（本文なし: "  # the start of the body of a saved report when no SubagentHandback came (`saved`)
+
+
+def saved(head, body) -> str:
+    """The text of a saved report in `<scratchpad>/REPORTS/`: the head line (the usage), a blank line, the body (the
+    report, or NO_BODY and how to take it out: the hook of SubagentStop writes it). `no_body` reads it."""
+    return f"{head}\n\n{body}\n"
+
+
+def no_body(path) -> bool:
+    """The saved report `path` has no body (`saved`), or cannot be read: `work.py` counts it as not saved."""
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace").partition("\n\n")[2].startswith(NO_BODY)
+    except OSError:
+        return True
+
+
 def records(path: Path):
     """The lines of a record that are JSON objects (the hook of SubagentStop reads it: no line stops it)."""
     with path.open(encoding="utf-8", errors="replace") as f:

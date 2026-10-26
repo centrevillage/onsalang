@@ -2,7 +2,8 @@
 """Before and after: the diagnostics, the formatting, the Core and the time of `onsa` binaries (rules/refactoring.md 8;
 X-9 X9-18, X9-19; X-6 B1).
 
-Its commands are `diags`, `fmt`, `core` and `speed` (COMMANDS, rules/tools.md 9.1); `compare.py help` shows them.
+Its commands are `diags`, `fmt`, `core`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1); `compare.py help` shows
+them.
 `diags` runs `check --json` of both binaries on every case of tests/: the seed files of the gate's fuzz
 (`fuzz.seeds`), a file in a package (a directory below tests/ with an `onsa.toml`, the outermost, as the case
 harness `onsa_tests::case::collect`) giving way to its directory. It lists the cases whose diagnostics differ in
@@ -20,10 +21,14 @@ the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inp
 (exit 0) get `dump --core`. Each binary is named by its place in the arguments and the path past the directories they
 share; each run shows the wall seconds and the cpu seconds (user + sys of the children). The cpu seconds swing under
 load too (about 55% in an A/A of one binary, 2026-10-20): judge on a quiet machine.
+`probe` writes the cases of a file (`probe_cases`) as packages below `--out` and runs every binary on each, `check
+--json` or `--cmd`, named as in `speed` (W4-03, 70th session: the scripts the agents copied per worktree).
 """
 import json
 import os
+import re
 import resource
+import shlex
 import shutil
 import subprocess
 import sys
@@ -41,6 +46,8 @@ ROOT = repo.ROOT
 TIMEOUT = 30  # seconds per run of `diags`, `fmt` and `core`
 REVIEW = "tests/review-phase1"  # left by `core`: some of its inputs fall on lowering (rules/common.md 3.2)
 PARTS = ((2, "message"), (3, "fix titles"), (4, "fix edits"), (5, "notes"))  # the parts of `diagnostic` a pair names
+CASE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")  # a case of `probe`: a directory below --out
+DIAG_LINE = re.compile(r"^(.+?):(\d+):(\d+): \w+\[(\w+)\]", re.M)  # the text form: `file:line:col: error[E…]`
 
 
 def packaged(root, rels) -> list:
@@ -295,6 +302,95 @@ def speed(a) -> int:
     return 0
 
 
+def probe_cases(text) -> list:
+    """[(name, {path: text})] of a file of cases: `=== <name>` starts a case (a package), `--- <path>` a file of it,
+    the lines before its first `---` are `main.onsa` (blank ones dropped), `onsa.toml` is added when not given.
+    Raises ValueError (the line) on a line before the first case, and on a name or a path that is not new or would
+    leave the directory of the case."""
+    cases, files, path = {}, None, None
+    for n, line in enumerate(text.split("\n"), 1):
+        if line.startswith("=== "):
+            name, files, path = line[4:].strip(), {}, None
+            if not CASE_NAME.fullmatch(name) or name in cases:
+                raise ValueError(f"line {n}: {name!r} is not a new name of a case (letters, digits, _ . -)")
+            cases[name] = files
+        elif files is None and line.strip():
+            raise ValueError(f"line {n}: before the first `=== <name>`")
+        elif line.startswith("--- ") or (files is not None and path is None and line.strip()):
+            path = line[4:].strip() if line.startswith("--- ") else "main.onsa"
+            if path in files or not path or Path(path).is_absolute() or ".." in Path(path).parts:
+                raise ValueError(f"line {n}: {path!r} is not a new path inside the case")
+            files[path] = [] if line.startswith("--- ") else [line]
+        elif path is not None:
+            files[path].append(line)
+    toml = '[package]\nname = "{}"\nedition = "2026"\n'
+    return [(name, {"onsa.toml": toml.format(name), **{p: "\n".join(ls).rstrip() + "\n" for p, ls in files.items()}})
+            for name, files in cases.items()]  # fmt: skip
+
+
+def probed(binary, argv, d):
+    """(`x<exit>`, or how it fell; stdout; stderr) of `binary <argv> <d>`, the directory `d/` taken out."""
+    try:
+        r = subprocess.run([binary, *argv, str(d)], capture_output=True, timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return f"timeout ({TIMEOUT} s)", "", ""
+    out, err = (x.decode("utf-8", "replace").rstrip().replace(f"{d}/", "") for x in (r.stdout, r.stderr))
+    return (f"x{r.returncode}" if r.returncode >= 0 else f"signal {-r.returncode}"), out, err
+
+
+def probe_line(argv, result) -> str:
+    """The exit and the diagnostics `code@file:line:col` of a run: from the JSON with `--json`, else from the lines
+    of the text form (when none, the number of lines of the output)."""
+    code, out, err = result
+    if "--json" in argv:
+        try:
+            spans = [(d.get("code"), d.get("span") or {}) for d in json.loads(out)["diagnostics"]]
+            marks = [f"{c}@{s.get('file')}:{s.get('line')}:{s.get('col')}" if s else str(c) for c, s in spans]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            marks = ["(not JSON)"] if out else []
+    else:
+        text = "\n".join(x for x in (out, err) if x)
+        marks = [f"{m[4]}@{m[1]}:{m[2]}:{m[3]}" for m in DIAG_LINE.finditer(text)]
+        marks = marks or ([f"({text.count(chr(10)) + 1} lines)"] if text else [])
+    return " ".join([code, *marks])
+
+
+def probe(a) -> int:
+    bins = [executable(a.parser_, b) for b in a.binaries]
+    try:
+        cases = probe_cases(Path(a.cases).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"probe: {a.cases}: {e}")
+        return 1
+    cases = [c for c in cases if a.only in (None, c[0])]
+    if not cases:
+        print(f"probe: no case{f' {a.only}' if a.only else ''} in {a.cases}")
+        return 1
+    argv, names = shlex.split(a.cmd), labels(a.binaries)
+    width = max(map(len, names))
+    for name, files in cases:
+        d = Path(a.out).resolve() / name
+        shutil.rmtree(d, ignore_errors=True)
+        for rel, text in files.items():
+            (d / rel).parent.mkdir(parents=True, exist_ok=True)
+            (d / rel).write_text(text, encoding="utf-8")
+        results = [probed(b, argv, d) for b in bins]
+        same = all(r == results[0] for r in results)
+        if a.full:
+            print(f"##### {name}")
+            for label, (code, out, err) in [("all", results[0])] if same else zip(names, results):
+                print(f"[{label}] {code}", *[x for x in (out, err) if x], sep="\n")
+            continue
+        lines = [probe_line(argv, r) for r in results]
+        if same:
+            print(f"{name}: {lines[0]}")
+            continue
+        print(f"{name}:" + ("  (the same lines; the outputs differ: --full)" if len(set(lines)) == 1 else ""))
+        for label, line in zip(names, lines):
+            print(f"   {label:{width}} {line}")
+    return 0
+
+
 def diags_args(p):
     p.add_argument("before")
     p.add_argument("after")
@@ -316,6 +412,18 @@ def speed_args(p):
     p.add_argument("binaries", nargs="+", metavar="binary")
 
 
+def probe_args(p):
+    p.add_argument("cases", help="the file of the cases: `=== <name>` starts a case (a package), `--- <path>` a file "
+                   "of it (none: main.onsa); onsa.toml is added when not given")
+    p.add_argument("--out", required=True, help="the directory the packages are written below (<out>/<name>/, emptied first)")
+    p.add_argument("--full", action="store_true", help="every output, not a line of the codes per binary")
+    p.add_argument("--only", metavar="NAME", help="that case alone")
+    p.add_argument("--cmd", default="check --json", help="the command of onsa before the directory (default "
+                   "%(default)s; the text form gives the codes of its lines `file:line:col: error[E…]`)")
+    p.add_argument("binaries", nargs="+", metavar="binary")
+    p.set_defaults(parser_=p)
+
+
 C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
 COMMANDS = {
     "diags": C(diags_args, diags, ("parent", "i", "b"),
@@ -334,6 +442,10 @@ COMMANDS = {
                "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小（壁時計と cpu）を、引数の順の番号と経路の違う部分の名前で並べる",
                "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）。前のバイナリは diags と同じ",
                "compare.py speed all <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
+    "probe": C(probe_args, probe, ("i", "b"),
+               "一つのファイルに書いた事例（=== でパッケージ、--- でファイル）を --out の下に書き、バイナリごとの終了コードと診断（コードと位置）を事例ごとに一行で並べる（全てのバイナリで同じなら一行）",
+               "前からある挙動かを、dev のバイナリと作業のバイナリで比べるとき（壊す側、実装の担当）。dev のバイナリは diags と同じ。--full で全ての出力、--only で一つの事例、--cmd で check --json 以外の命令",
+               "compare.py probe cases.txt --out <scratchpad>/probe <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
 }  # fmt: skip
 
 

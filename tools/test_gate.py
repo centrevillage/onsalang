@@ -1044,7 +1044,6 @@ class GateForms(GateRun):
         git_in(self.root, "add", "-A")
         git_in(self.root, "commit", "-qm", "base")
         git_in(self.root, "branch", "dev")
-        git_in(self.root, "config", "core.hooksPath", "tools/hooks")
         self.saved = []  # a whole run saves the base (X-1 U4): no cargo here
         saving = mock.patch.object(gate_runs, "save_base", lambda root, keep, **kw: self.saved.append(root) or 0)
         saving.start()
@@ -4479,9 +4478,46 @@ sys.exit(code)
 """
 
 
+# A made-up `onsa` of `Compare.test_probe`: E0302 on each file of the package with `bad` (the one named `new`: with
+# `new` too), as JSON with `--json`, else as text (`new` adds to the message); `kill` in main.onsa kills it.
+FAKE_PROBE = """#!{exe}
+import json, os, signal, sys
+d, new = sys.argv[-1], os.path.basename(sys.argv[0]) == "new"
+files = sorted(os.path.relpath(os.path.join(r, f), d) for r, _, fs in os.walk(d) for f in fs)
+text = {{f: open(os.path.join(d, f)).read() for f in files}}
+if "kill" in text.get("main.onsa", ""):
+    os.kill(os.getpid(), signal.SIGKILL)
+bad = [f for f in files if "bad" in text[f] or (new and "new" in text[f])]
+if "--json" in sys.argv:
+    print(json.dumps({{"diagnostics": [{{"code": "E0302", "span": {{"file": f, "line": 1, "col": 2}}}} for f in bad]}}))
+else:
+    print("\\n".join(f"{{d}}/{{f}}:1:2: error[E0302]: m" + " (new)" * new for f in bad) or " ".join(sys.argv[1:-1]))
+sys.exit(1 if bad else 0)
+"""
+
+CASES = """
+=== a
+pub fn f() {}
+=== b
+
+--- main.onsa
+bad
+--- sub/x.onsa
+new
+=== c
+--- onsa.toml
+[package]
+name = "own"
+=== d
+bad
+=== k
+kill
+"""
+
+
 class Compare(unittest.TestCase):
-    """tools/compare.py diags / speed (X-9 U15): the differences of the diagnostics, the cases of the fuzz's seeds, the
-    order of the binaries turned round every other round, and the help."""
+    """tools/compare.py diags / speed / probe (X-9 U15, W4-03): the differences of the diagnostics, the cases of the
+    fuzz's seeds, the order of the binaries turned round every other round, the cases of a file, and the help."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -4650,6 +4686,46 @@ class Compare(unittest.TestCase):
         self.assertEqual((code, lines[0].split(";")[0]), (0, "7 files (3 for core), 0 long inputs, 1 rounds"))
         self.assertEqual((self.bin / "log").read_text().split(), ["b1"] * (5 + 17) + ["b2"] * 17)
 
+    def test_probe(self):
+        old, new = (self.bin / n for n in ("old", "new"))
+        for b in (old, new):
+            b.write_text(FAKE_PROBE.format(exe=sys.executable))
+            b.chmod(0o755)
+        cases, out = self.root / "cases.txt", self.root / "out"
+        cases.write_text(CASES)
+        probe = lambda *argv: quiet_out(compare.main, ["probe", str(cases), "--out", str(out), *argv])  # noqa: E731
+        self.assertEqual(probe(str(old), str(new)), (0, [
+            "a: x0", "b:", "   1:old x1 E0302@main.onsa:1:2", "   2:new x1 E0302@main.onsa:1:2 E0302@sub/x.onsa:1:2",
+            "c: x0", "d: x1 E0302@main.onsa:1:2", "k: signal 9"]))  # fmt: skip
+        written = {p.relative_to(out).as_posix(): p.read_text() for p in out.rglob("*") if p.is_file()}
+        self.assertEqual(written, {
+            "a/onsa.toml": '[package]\nname = "a"\nedition = "2026"\n', "a/main.onsa": "pub fn f() {}\n",
+            "b/onsa.toml": '[package]\nname = "b"\nedition = "2026"\n', "b/main.onsa": "bad\n", "b/sub/x.onsa": "new\n",
+            "c/onsa.toml": '[package]\nname = "own"\n', "d/onsa.toml": '[package]\nname = "d"\nedition = "2026"\n',
+            "d/main.onsa": "bad\n", "k/onsa.toml": '[package]\nname = "k"\nedition = "2026"\n',
+            "k/main.onsa": "kill\n"})  # fmt: skip
+        self.assertEqual(probe("--only", "d", "--cmd", "check", str(old), str(new)), (0, [
+            "d:  (the same lines; the outputs differ: --full)", "   1:old x1 E0302@main.onsa:1:2",
+            "   2:new x1 E0302@main.onsa:1:2"]))  # fmt: skip
+        self.assertEqual(probe("--only", "a", "--cmd", "dump --core", str(old), str(new)), (0, ["a: x0 (1 lines)"]))
+        self.assertEqual(probe("--only", "d", "--cmd", "check", "--full", str(old), str(new)), (0, [
+            "##### d", "[1:old] x1", "main.onsa:1:2: error[E0302]: m", "[2:new] x1",
+            "main.onsa:1:2: error[E0302]: m (new)"]))  # fmt: skip
+        self.assertEqual(probe("--only", "a", "--full", str(old), str(new)), (0, [
+            "##### a", "[all] x0", '{"diagnostics": []}']))  # fmt: skip
+        self.assertEqual(probe("--only", "z", str(old)), (1, [f"probe: no case z in {cases}"]))
+        for text, why in (("x\n=== a\n", "line 1: before the first `=== <name>`"),
+                          ("=== a\n=== a\n", "line 2: 'a' is not a new name of a case"),
+                          ("=== ../a\n", "line 1: '../a' is not a new name"),
+                          ("=== a\n--- ../x.onsa\n", "line 2: '../x.onsa' is not a new path inside the case"),
+                          ("=== a\nx\n--- main.onsa\n", "line 3: 'main.onsa' is not a new path"),
+                          ("=== a\n--- /x.onsa\n", "line 2: '/x.onsa' is not a new path"), ("", "no case in")):  # fmt: skip
+            with self.subTest(text=text):
+                cases.write_text(text)
+                code, lines = probe(str(old))
+                self.assertEqual(code, 1)
+                self.assertIn(why, lines[0])
+
     def test_help(self):
         # rules/tools.md 9.4, as `Work.test_help`
         for name, c in compare.COMMANDS.items():
@@ -4669,7 +4745,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "fmt", "core", "speed"])
+        self.assertEqual(names, ["diags", "fmt", "core", "speed", "probe"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()
@@ -4835,7 +4911,6 @@ class Take(unittest.TestCase):
         self.main, self.wt, self.patch = t / "main", t / "wt", t / "p.patch"
         self.main.mkdir()
         git_in(self.main, "init", "-q")
-        git_in(self.main, "config", "core.hooksPath", "tools/hooks")
         for name in ("a.txt", "b.txt", "c.txt"):
             (self.main / name).write_text(self.LINES)
         git_in(self.main, "add", "-A")
@@ -5281,6 +5356,17 @@ class Work(unittest.TestCase):
         code, lines = self.clean("done", "c2", "--scratchpad", scratch)
         self.assertEqual(code, 0, lines)
         self.assertFalse([x for x in lines if "reports:" in x])
+        # X-13 T8: a saved report with no body (the hook's, `handback.saved`) is not counted as saved
+        wt = work.new("c3", self.main)
+        self.record(wt, finished=True)
+        empty = scratch / "handback" / "onsa-impl-c3-002.md"
+        empty.write_text(handback.saved("usage: x", f"{handback.NO_BODY}… ）\n取り出し直す: …"))
+        (scratch / "handback" / "onsa-impl-c3-001.md").write_text(handback.saved("usage: x", "報告"))
+        (scratch / "handback" / "onsa-impl-c3-003.md").write_text(f"報告 3\n\n引いた: {handback.NO_BODY}\n")  # save's
+        code, lines = self.clean("done", "c3", "--scratchpad", scratch)
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([x for x in lines if "reports:" in x],
+                         [f"  reports: no body in {empty} for onsa-impl c3: take it out with the command in it"])
 
     def test_done_live_by_the_lock_and_records_of_a_wrong_form(self):
         wt = work.new("k1", self.main)
@@ -5730,7 +5816,8 @@ class WorkSync(unittest.TestCase):
         code, lines = self.commit("-m", "subject", "-m", "a paragraph", "a.txt", "c.txt", "d", "nosuch.txt")
         self.assertEqual(code, 0, lines)
         self.assertEqual(lines[0], "commit: no change in nosuch.txt")
-        self.assertRegex(lines[-1], r"^commit \w+ on dev: 3 file\(s\); 2 uncommitted change\(s\) not in it$")
+        self.assertRegex(lines[-2], r"^commit \w+ on dev: 3 file\(s\); 2 uncommitted change\(s\) not in it$")
+        self.assertEqual(lines[-1], NOTHING)  # X-1 U13
         self.assertEqual(self.files_of(), ["a.txt", "c.txt", "d/n.txt"])
         self.assertEqual(git_in(self.main, "log", "-1", "--format=%B"), "subject\n\na paragraph\n\n")
         self.assertEqual(sorted(git_in(self.main, "status", "--porcelain").splitlines()), ["?? e.txt", "M  b.txt"])
@@ -5752,7 +5839,7 @@ class WorkSync(unittest.TestCase):
         code, lines = self.commit("-m", "take in the check", "-F", body, "a.txt", "--docs-checked", rng, "X-9",
                                   "--co-author", "A B <a@b.c>")  # fmt: skip
         self.assertEqual(code, 0, lines)
-        self.assertEqual(len(lines), 1, lines)  # docs.last_docs_check reads it: no line
+        self.assertEqual(len(lines), 2, lines)  # docs.last_docs_check reads it: no line
         value = f"{written} (X-9, onsa-docs)"
         self.assertEqual(git_in(self.main, "log", "-1", "--format=%B"),
                          f"take in the check\n\nfrom a file\n\nDocs-Checked: {value}\nCo-Authored-By: A B <a@b.c>\n\n")
@@ -5822,9 +5909,11 @@ class WorkSync(unittest.TestCase):
 import after_commit  # noqa: E402
 
 START_RUNNER = after_commit.start_runner  # the real one, for `AutoSweep.test_now`
+NOTHING = "auto sweep: nothing (the commit touches neither the code nor the cases)"  # `on_commit`
 
 # The gate of the made-up tree of `AutoSweep`: logs HEAD, writes a line of a sweep, exits with
-# `target/gate-code`; with `target/meanwhile`, commits and calls the hook while it runs.
+# `target/gate-code`; with `target/meanwhile`, commits and calls `on_commit` while it runs. With
+# `--save-base`, logs HEAD in `target/base-log` alone and exits with `target/base-code`.
 FAKE_GATE = """\
 import os, subprocess, sys
 sys.path.insert(0, os.environ["AUTO_TOOLS"])
@@ -5833,15 +5922,17 @@ root = os.getcwd()
 def git(*a):
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *a],
                           cwd=root, capture_output=True, text=True, check=True).stdout
-with open("target/gate-log", "a") as f:
+with open("target/base-log" if "--save-base" in sys.argv else "target/gate-log", "a") as f:
     f.write(git("rev-parse", "HEAD").strip() + "\\n")
+if "--save-base" in sys.argv:
+    sys.exit(int(open("target/base-code").read()) if os.path.exists("target/base-code") else 0)
 if os.path.exists("target/meanwhile"):
     os.remove("target/meanwhile")
     open("crates/m.rs", "a").write("x\\n")
     git("add", "-A")
     git("commit", "-qm", "meanwhile")
     import after_commit
-    after_commit.main(["--root", root])
+    after_commit.on_commit(root)
 code = int(open("target/gate-code").read()) if os.path.exists("target/gate-code") else 0
 shard = gate_runs.next_shard(gate_runs.read_history(root)[0], 2)
 verdict = "FAIL" if code else "PASS"
@@ -5851,9 +5942,10 @@ sys.exit(code)
 
 
 class AutoSweep(unittest.TestCase):
-    """tools/after_commit.py (X-1 U4): the hook, the runner, the hold, `--now` and the line `auto sweep:`,
-    in a made-up main tree whose `tools/gate.sh` is FAKE_GATE. The runner runs in this process
-    (`drive`) with short waits; starting one (`start_runner`) is recorded, except in `test_now`."""
+    """tools/after_commit.py (X-1 U4, U13): the request after a commit (`on_commit`, `work.py commit`), the
+    runner, the hold, `--now` and the line `auto sweep:`, in a made-up main tree whose `tools/gate.sh` is
+    FAKE_GATE. The runner runs in this process (`drive`) with short waits; starting one (`start_runner`) is
+    recorded, except in `test_now`."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -5868,7 +5960,6 @@ class AutoSweep(unittest.TestCase):
         git_in(self.root, "add", "-A")
         git_in(self.root, "commit", "-qm", "base")
         git_in(self.root, "branch", "dev")
-        git_in(self.root, "config", "core.hooksPath", "tools/hooks")
         (self.root / "target").mkdir()
         self.started = []
         for name, value in (("QUIET", 0.3), ("NAP", 0.05), ("CLEAN_POLL", 0.05), ("CLEAN_WAIT", 0.3),
@@ -5894,6 +5985,9 @@ class AutoSweep(unittest.TestCase):
         git_in(root or self.root, "commit", "-qm", rel)
 
     def hook(self, *args, root=None):
+        """`after_commit.py <args>`, or with none what a commit runs (`on_commit`): (the exit, stdout)."""
+        if not args:
+            return 0, after_commit.on_commit(root or self.root) + "\n"
         with mock.patch.object(sys, "stdout", io.StringIO()) as out, mock.patch.object(sys, "stderr", io.StringIO()):
             code = after_commit.main(["--root", str(root or self.root), *args])
         return code, out.getvalue()
@@ -5904,16 +5998,16 @@ class AutoSweep(unittest.TestCase):
     def request(self):
         return gate_runs.read_json(self.root, "request")
 
-    def gate_log(self):
-        p = self.root / "target" / "gate-log"
+    def gate_log(self, name="gate-log"):
+        p = self.root / "target" / name
         return p.read_text().split() if p.exists() else []
 
     def line(self):
         return gate_runs.auto_line(self.root, gate_runs.read_history(self.root)[0], 2)
 
-    def test_the_hook(self):
+    def test_on_commit(self):
         self.commit("docs/e.md")  # documents only: nothing
-        self.assertEqual(self.hook(), (0, ""))
+        self.assertEqual(self.hook(), (0, f"{NOTHING}\n"))
         self.assertIsNone(self.request())
         self.assertEqual(self.line(), "auto sweep: no sweep yet")
         self.assertFalse((self.root / gate_runs.AUTO).exists())
@@ -5928,36 +6022,20 @@ class AutoSweep(unittest.TestCase):
         git_in(self.root, "worktree", "add", "-q", "-b", "work", str(wt))
         before = self.request()
         self.commit("crates/w.rs", root=wt)
-        self.assertEqual(self.hook(root=wt), (0, ""))
+        self.assertEqual(self.hook(root=wt), (0, "auto sweep: nothing (not the main tree; the sweep is the parent's)\n"))
         self.assertEqual(self.hook("--now", root=wt)[0], 2)
         self.assertEqual((self.request(), len(self.started)), (before, 3))
         self.assertFalse((wt / gate_runs.AUTO).exists())
 
-    def test_the_environment_of_the_hook(self):
-        """The hook's GIT_* go: with them, the git of the tool would read another tree or index."""
+    def test_the_environment_of_git(self):
+        """A git's GIT_* go: with them, the git of the tool would read another tree or index."""
         self.commit("crates/e.rs")
         seen = []
         env = {"GIT_DIR": str(self.root.parent / "nowhere"), "GIT_INDEX_FILE": ".git/index", "GIT_PREFIX": "sub/"}
         with mock.patch.dict(os.environ, env), \
                 mock.patch.object(after_commit, "start_runner", lambda root: seen.append([k for k in os.environ if k.startswith("GIT_")])):  # fmt: skip
-            self.assertEqual(self.hook()[0], 0)
+            self.assertEqual(self.hook("--now")[0], 0)
         self.assertEqual((seen, self.request()["commit"]), ([[]], self.head()))
-
-    def test_the_hook_file(self):
-        """tools/hooks/post-commit calls the tree's tools/after_commit.py from the top; without it, nothing."""
-        (self.root / "tools/hooks").mkdir()
-        shutil.copy2(Path(after_commit.__file__).parent / "hooks" / "post-commit", self.root / "tools/hooks/post-commit")
-        self.write("tools/after_commit.py", "import json, os\nopen('target/hook.json', 'w').write(json.dumps("
-                   "{'cwd': os.getcwd(), 'git': sorted(k for k in os.environ if k.startswith('GIT_'))}))\n")  # fmt: skip
-        git_in(self.root, "config", "core.hooksPath", "tools/hooks")
-        self.commit("docs/f.md")
-        got = json.loads((self.root / "target/hook.json").read_text())
-        self.assertEqual(got["cwd"], str(self.root))
-        self.assertIn("GIT_INDEX_FILE", got["git"])  # what `main` takes away
-        (self.root / "target/hook.json").unlink()
-        git_in(self.root, "rm", "-q", "tools/after_commit.py")
-        git_in(self.root, "commit", "-qm", "no tool")  # exits 0
-        self.assertFalse((self.root / "target/hook.json").exists())
 
     def test_commits_in_a_row_run_once(self):
         for i in range(3):
@@ -6075,34 +6153,65 @@ class AutoSweep(unittest.TestCase):
         gate_runs.record(self.root, "sweep 0/2", [], {"fuzz": ["PASS", 1.0]}, "PASS", 1.0)
         self.assertTrue(self.line().endswith(f"last PASS at {h[:7]} (0 commits ago)"), self.line())
 
-    def test_the_setting_of_the_hook(self):
-        """X-1 U5: the line starts with `hook not set` unless core.hooksPath names the tree's tools/hooks."""
-        unset = "auto sweep: hook not set (git config core.hooksPath tools/hooks); no sweep yet"
-        self.assertEqual(self.line(), "auto sweep: no sweep yet")
-        for value, ok in (("tools/hooks/", True), (str(self.root / "tools" / "hooks"), True), ("other/hooks", False),
-                          (str(self.root.parent / "tools" / "hooks"), False)):  # fmt: skip
-            with self.subTest(value=value):
-                git_in(self.root, "config", "core.hooksPath", value)
-                self.assertEqual(self.line(), "auto sweep: no sweep yet" if ok else unset)
-        git_in(self.root, "config", "--unset", "core.hooksPath")
-        if subprocess.run(["git", "-C", str(self.root), "config", "--get", "core.hooksPath"],
-                          capture_output=True).returncode == 1:  # no global setting either  # fmt: skip
-            self.assertEqual(self.line(), unset)
-        self.assertEqual(gate_runs.auto_line(self.root.parent, [], 2), unset)  # not a git tree: git cannot read it
-        gate_runs.record(self.root, "sweep 0/2", [], {"fuzz": ["PASS", 1.0]}, "PASS", 1.0)
-        self.assertTrue(self.line().startswith("auto sweep: hook not set (git config core.hooksPath tools/hooks); "
-                                               "last PASS at "), self.line())  # fmt: skip
+    def test_work_commit(self):
+        """X-1 U13: `work.py commit` asks for the sweep after a commit of the code or the cases; with `--no-sweep`, for
+        the base alone after one of the code, else nothing; a sweep asked for and not run yet stays one."""
+        def commit(rel, *flags):
+            self.write(rel)
+            return quiet_out(work.main, ["commit", "-m", rel, rel, "--tree", str(self.root), *flags])[1][-1]
+
+        base = "auto sweep: left out (--no-sweep); the base requested; the runner starts"
+        same = "auto sweep: left out (--no-sweep); no change of the code, no base to save"
+        for rel, flags, line, sweep in (("docs/a.md", (), NOTHING, None), ("docs/b.md", ("--no-sweep",), same, None),
+                                        ("tests/a.onsa", ("--no-sweep",), same, None),
+                                        ("crates/a.rs", ("--no-sweep",), base, False),
+                                        ("tools/a.py", ("--no-sweep",), base, False),
+                                        ("tests/b.onsa", (), "auto sweep: requested; the runner starts", True),
+                                        ("crates/b.rs", ("--no-sweep",), base.replace(
+                                            "requested", "requested (with the sweep asked for before)"), True),
+                                        ("docs/c.md", ("--no-sweep",), same, True)):  # fmt: skip
+            with self.subTest(rel=rel, flags=flags):
+                self.assertEqual(commit(rel, *flags), line)
+                self.assertEqual(self.request() and self.request()["sweep"], sweep)
+        self.assertEqual(self.started, [self.root] * 4)
+        after_commit.drive(self.root)  # the sweep saves the base too
+        self.assertEqual((self.gate_log(), self.gate_log("base-log"), self.request()), ([self.head()], [], None))
+
+    def test_the_base_alone(self):
+        """X-1 U13: a request of the base alone runs `gate.sh --save-base` (not the sweep); a request after the run
+        of a sweep began stays of the base; a failure shows in the line."""
+        self.commit("crates/x.rs")
+        self.assertEqual(after_commit.request(self.root, sweep=False), "requested; the runner starts")
+        first = self.head()
+        self.write("target/base-code", "1\n")
+        after_commit.drive(self.root)
+        self.assertEqual((self.gate_log(), self.gate_log("base-log"), self.request()), ([], [first], None))
+        out = gate_runs.read_json(self.root, "state")["out"]
+        self.assertTrue(out.endswith(f"-{first[:7]}-base.out"), out)
+        self.assertEqual(self.line(), f"auto sweep: save-base exit 1 at {first[:7]} ({out}); no sweep yet")
+        self.commit("crates/y.rs")
+        after_commit.request(self.root)
+        gate_runs.write_json(self.root, "request", {**self.request(), "taken": True})  # its run began
+        after_commit.request(self.root, sweep=False)
+        self.assertFalse(self.request()["sweep"])
+        with gate_runs.request_lock(self.root):
+            lock = gate_runs.try_runner(self.root)
+        state = {"time": time.time(), "state": "running", "commit": first, "sweep": False}
+        gate_runs.write_json(self.root, "state", state)
+        self.assertTrue(self.line().startswith(f"auto sweep: saving the base at {first[:7]} since "), self.line())
+        lock.close()
 
     def test_the_help(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out), mock.patch.dict(os.environ), self.assertRaises(SystemExit):
             after_commit.main(["--help"])
         text = " ".join(out.getvalue().split())
-        for part in ("The post-commit hook calls it; by hand, use --now.", "--now run the sweep of HEAD now",
-                     "--drive be the runner (the hook starts it; not by hand)", "--root ROOT the main tree",
+        for part in ("tools/work.py commit calls it; by hand, use --now.", "--now run the sweep of HEAD now",
+                     "--drive be the runner (a commit starts it; not by hand)", "--root ROOT the main tree",
                      "after a restart of the machine", "stop it: touch target/gate/hold",
                      "requested at …, no runner", "example: python3 -B tools/after_commit.py --now",
-                     "hook not set (…) core.hooksPath of this clone does not name tools/hooks",
+                     "commits start it: tools/work.py commit (the main tree; --no-sweep: the base binaries alone)",
+                     "save-base exit N at <commit> the base binaries were not saved",
                      "right after --now it says so too", "the inputs the fuzzing made small, in target/fuzz/new/",
                      "until the class is in tests/fuzz/allowed.toml or in an R", "it can take 2 sweeps"):  # fmt: skip
             self.assertIn(part, text)
@@ -8332,7 +8441,7 @@ class ClaudeHook(unittest.TestCase):
             self.assertEqual(out["hookEventName"], "SessionStart")
             self.assertLessEqual(len(text), claude_hook.SUMMARY_MAX)
             for part in ("git status --short: 40 件", "git worktree list: 1 件", "dev・main の外の枝: 1", "auto sweep: ",
-                         "core.hooksPath: (無し)", "担当の定義: onsa-x", "docs due の文書: 0",
+                         "担当の定義: onsa-x", "docs due の文書: 0",
                          "parent: no commit from HEAD has a `Docs-Checked:` trailer"):
                 self.assertIn(part, text)
             self.assertEqual(sum(x.startswith("?? new") for x in text.split("\n")), 10)

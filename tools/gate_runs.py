@@ -20,14 +20,14 @@ fuzzing of the works after it and the runs of the code after it (`narrowing.reso
 the files of what builds them have no change, nor a new file (`narrowing.code_changes`); a whole run
 of the main tree saves them at its end too (`tools/gate.py`).
 
-The auto sweep (`tools/after_commit.py`, X-1 U4) in `target/gate/auto/`: `request` (the last
-commit of the code or the cases: `time`, `commit`, `now`), `state` (what the runner does: `time`,
-`state` waiting / waiting-clean / held / skipped / running / done, and its fields), `lock` (held
+The auto sweep (`tools/after_commit.py`, X-1 U4, U13) in `target/gate/auto/`: `request` (the last
+commit of the code or the cases: `time`, `commit`, `now`, `sweep` (false: the base alone), `taken`
+(its run began)), `state` (what the runner does: `time`, `state` waiting / waiting-clean / held /
+skipped / running / done, and its fields, `sweep` among them), `lock` (held
 by the runner while it lives), `request.lock` (short: every read and write of `request` and every
 try of `lock` are made under it, so a request is never left with no runner told), `job/` (bg.py)
 and `runs/` (the output of the last RUNS_KEPT sweeps). `target/gate/hold` stops it. `auto_line`
-is the line `auto sweep: …` of the gate's summary and of `work.py patch`; it starts with `hook not
-set` when `core.hooksPath` does not name `HOOKS` (`hook_set`; the setting is the clone's, X-1 U5).
+is the line `auto sweep: …` of the gate's summary and of `work.py patch`.
 """
 import contextlib
 import datetime
@@ -45,7 +45,6 @@ import repo
 HISTORY = Path("target") / "gate" / "history.jsonl"
 AUTO = Path("target") / "gate" / "auto"
 HOLD = Path("target") / "gate" / "hold"
-HOOKS = Path("tools") / "hooks"
 RUNS_KEPT = 10
 BASE_NAME = re.compile(r"[0-9a-f]{%d}" % narrowing.SHORT)
 
@@ -207,20 +206,11 @@ def _clock(t):
     return time.strftime("%m-%d %H:%M:%S", time.localtime(t)) if isinstance(t, (int, float)) else "?"
 
 
-def hook_set(root):
-    """`core.hooksPath` names the tree's `HOOKS` (relative or not); False when git cannot read it."""
-    try:
-        path = narrowing.git(root, "config", "--get", "core.hooksPath").strip()
-    except narrowing.NarrowError:
-        return False
-    return bool(path) and (Path(root) / path).resolve() == (Path(root) / HOOKS).resolve()
-
-
 def auto_line(root, rows, k):
     """`auto sweep: <what the runner does>; <the outcome of the sweeps>` (X-1 U4): the part of now
     from the hold, the request, the runner's lock and its state; the outcome from the last row of
     each shard (`_sweeps`; one shard's failure stays until that shard passes)."""
-    root, live = Path(root), [] if hook_set(root) else [f"hook not set (git config core.hooksPath {HOOKS})"]
+    root, live = Path(root), []
     short = lambda c: str(c or "?")[:narrowing.SHORT]  # noqa: E731
     req, runner = None, None
     if (root / AUTO).is_dir():  # nothing written before the first commit of the code
@@ -238,7 +228,8 @@ def auto_line(root, rows, k):
         live.append(f"waiting (quiet until {_clock(state.get('until'))})" if s == "waiting" else
                     f"waiting for a clean tree (uncommitted {state.get('path')}, until {_clock(state.get('until'))})"
                     if s == "waiting-clean" else
-                    f"running at {short(state.get('commit'))} since {_clock(state.get('time'))}" if s == "running"
+                    f"{'running' if state.get('sweep', True) else 'saving the base'} at {short(state.get('commit'))} "
+                    f"since {_clock(state.get('time'))}" if s == "running"
                     else "the runner is on")  # fmt: skip
     elif req is not None:
         if state.get("state") == "skipped" and state.get("time", 0) >= req.get("time", 0):
@@ -246,8 +237,9 @@ def auto_line(root, rows, k):
         else:
             live.append(f"requested at {short(req.get('commit'))} {_clock(req.get('time'))}, no runner "
                         f"({AUTO / 'job' / 'out'}; {now})")  # fmt: skip
-    elif state.get("state") == "done" and state.get("code") not in (0, 1):
-        live.append(f"gate exit {state.get('code')} at {short(state.get('commit'))} ({state.get('out')})")
+    elif state.get("state") == "done" and state.get("code") not in ((0, 1) if state.get("sweep", True) else (0,)):
+        live.append(f"{'gate' if state.get('sweep', True) else 'save-base'} exit {state.get('code')} at "
+                    f"{short(state.get('commit'))} ({state.get('out')})")
     last, order = dict(_sweeps(rows, k)), {id(r): i for i, r in enumerate(rows)}
     if not last:
         return "auto sweep: " + "; ".join(live + ["no sweep yet"])

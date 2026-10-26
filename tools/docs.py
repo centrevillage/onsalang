@@ -2317,7 +2317,8 @@ COMMANDS = {
               "作業票に書く ID が登録済みかを確かめるとき（`docs.py path <ID>` で引ける）。ID や § の経路を引くとき",
               "docs.py path S-537 §6.1 --abs"),
     "back": C(back_args, cmd_back, ("parent", "docs"), "ID を名指す頭の欄と本文の行を逆引きする",
-              "ID を名指す所を逆引きするとき（`--history` で `history/` も）", "docs.py back S-537"),
+              "ID を名指す所を逆引きするとき（`--history` で `history/` も）。作業を単位や別の作業に分けた後に、"
+              "元の作業を名指す所を文書ごとに並べ、指し直す所を探すとき", "docs.py back S-537"),
     "refs": C(refs_args, cmd_refs, ("parent", "docs"), "ID のファイルか文書が名指す ID を、状態・場所・題と並べる",
               "ファイルが名指す ID の状態と場所を一度に見るとき", "docs.py refs W3-05"),
     "graph": C(graph_args, cmd_graph, ("parent",), "決定の関係を、その場で作ったグラフで出す（`--back` はその上に立つもの）",

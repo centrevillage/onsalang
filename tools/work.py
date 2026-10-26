@@ -12,7 +12,7 @@
     tools/work.py sync [--apply PATCH] [-m SUBJECT] [--tree DIR]
     tools/work.py lines [--base B] [--estimate N] [--tree DIR]
     tools/work.py commit -m SUBJECT [-m TEXT ...] [-F FILE] [PATH ...] [--done ID] [--docs-checked A..B WORK]
-                         [--co-author "NAME <MAIL>"] [--tree DIR]
+                         [--co-author "NAME <MAIL>"] [--no-sweep] [--tree DIR]
     tools/work.py help [--role ROLE] [COMMAND]
 
 `new` makes the worktree `<main>/.claude/worktrees/<name>` (`WORKTREES`) of the main tree of DIR (default
@@ -78,14 +78,14 @@ too, is its HEAD's tree); taken, it goes with `-D` (TAKEN has the patch of what 
 the main tree, or its patch from the base applies in reverse in the main tree); else it stays, with the files
 changed and the commits after dev. One that would go with ignored files outside `target/` stays too. Before a
 removal: the registrations of a directory gone are pruned, the saved reports of its agents looked for under
-`--scratchpad` (a line when none; not looked for without it), its fuzzing inputs copied (a failure keeps it),
-what it holds read again (changed after the verdict: it stays), its lock taken off. Only a BRANCH_PREFIX branch
-it checked out goes, with the hash of its tip printed; dev, main and the main tree never. `done --discard`
-removes a changed one too (or one with ignored files, listed), after writing its last patch from the base
-under `<main>/DISCARDED`. `close --dry-run` removes and prunes nothing. `done` and `remove` exit 1 when it stays
-(`remove` with the reason on stderr; 0 when neither the worktree nor its branch is there); `close` exits 1 when
-a removal failed. Claude Code's records are under `$ONSA_CLAUDE_RECORDS` (`RECORDS_ENV`), else
-`handback.PROJECT`.
+`--scratchpad` (a line when none, and one for each with no body, `handback.no_body`; not looked for without
+it), its fuzzing inputs copied (a failure keeps it), what it holds read again (changed after the verdict: it
+stays), its lock taken off. Only a BRANCH_PREFIX branch it checked out goes, with the hash of its tip
+printed; dev, main and the main tree never. `done --discard` removes a changed one too (or one with ignored
+files, listed), after writing its last patch from the base under `<main>/DISCARDED`. `close --dry-run`
+removes and prunes nothing. `done` and `remove` exit 1 when it stays (`remove` with the reason on stderr; 0
+when neither the worktree nor its branch is there); `close` exits 1 when a removal failed. Claude Code's
+records are under `$ONSA_CLAUDE_RECORDS` (`RECORDS_ENV`), else `handback.PROJECT`.
 
 `sync` (an agent, in its worktree `--tree`, default the tree of this tool; X9-14) does nothing and exits 1 in
 the main tree, out of a git tree, on no branch or in a merge (MERGE_HEAD). Else: when DEV is in HEAD, nothing is
@@ -114,8 +114,10 @@ file to the paths. `--docs-checked A..B WORK` (both ends commits of the tree: th
 for an uncommitted diff) writes the trailer
 `<docs.DOCS_CHECKED>: A..B (WORK, onsa-docs)`, the ends as short hashes (X-12), and checks after the commit that `docs.last_docs_check` reads it,
 a line when not; `--co-author` writes `Co-Authored-By:` after it. When the commit fails, the untracked files
-it added to the index leave it and the file of `--done` gets back what it held. Last, a line: the commit, the
-branch, its files, the uncommitted changes not in it.
+it added to the index leave it and the file of `--done` gets back what it held. Then a line: the commit, the
+branch, its files, the uncommitted changes not in it. Last, the line `auto sweep: …` of what it started in the
+main tree (`after_commit.on_commit`): the sweep after a commit of the code or the cases, with `--no-sweep` the
+base binaries alone after a commit of the code, else nothing (exit 1 when it cannot ask: the commit stays).
 
 But for the worktree `new` makes, the removals above, `sync` and `commit`, nothing here commits, stashes, resets
 the tree or checks paths out. Exit 0 on success, 1 when a step fails, the patch does not apply or `take` stops
@@ -134,6 +136,7 @@ from typing import NamedTuple
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import after_commit  # noqa: E402
 import docs  # noqa: E402
 import fuzz  # noqa: E402
 import gate_runs  # noqa: E402
@@ -795,8 +798,11 @@ def settle(main, e, args, discard=False, dry=False, err=False):
     if args.scratchpad is None:
         print("  reports: not checked (no --scratchpad)")
     for kind, agent in v.agents if args.scratchpad else ():
-        if not any((Path(args.scratchpad) / handback.REPORTS).glob(handback.report_prefix(kind, agent) + "*.md")):
+        found = sorted((Path(args.scratchpad) / handback.REPORTS).glob(handback.report_prefix(kind, agent) + "*.md"))
+        if not found:
             print(f"  reports: none saved for {kind} {agent} in {args.scratchpad}/{handback.REPORTS}/")
+        for p in filter(handback.no_body, found):  # the hook's "no body": not saved (rules/leader.md 2.9)
+            print(f"  reports: no body in {p} for {kind} {agent}: take it out with the command in it")
     if dry:
         return True
     if not v.flag:  # discarded: its last patch first, and the ignored files that go with it
@@ -1046,6 +1052,11 @@ def commit(args):
     branch = git(tree, "branch", "--show-current").stdout.decode().strip() or "no branch"
     print(f"commit {short(tree)} on {branch}: {len(files)} file(s); "
           f"{len(uncommitted(tree))} uncommitted change(s) not in it")  # fmt: skip
+    try:
+        print(after_commit.on_commit(tree.resolve(), sweep=not args.no_sweep))
+    except (narrowing.NarrowError, OSError) as e:
+        print(f"auto sweep: not asked: {e} (the commit is made; tools/after_commit.py --now)")
+        return 1
     return 0
 
 
@@ -1079,6 +1090,7 @@ def commit_args(p):
                    help=f"the trailer `{docs.DOCS_CHECKED}: A..B (WORK, {DOCS_AGENT})` (docs.py due reads it): A..B is "
                    "the range checked, the HEAD of then at both ends for an uncommitted diff")
     p.add_argument("--co-author", type=co_author, metavar='"NAME <MAIL>"', help=f"the trailer {CO_AUTHOR}:, last")
+    p.add_argument("--no-sweep", action="store_true", help="網羅の検査を外す（いつ外すかは rules/process.md 8.5）")
     p.add_argument("--tree", default=ROOT, help="the tree (default the one of this tool)")
 
 
@@ -1208,7 +1220,7 @@ COMMANDS = {
                "check を読んだ後。担当の引き継ぎのパッチは、自分の作業ツリーで `work.py sync --apply <パッチ>` が当てて WIP を置く",
                "work.py apply /tmp/x1.patch --to .claude/worktrees/x2"),
     "commit": C(commit_args, failing(commit), ("parent",),
-                "名指した経路の今の中身だけをコミットし（未追跡と削除も。他の変更と索引は残す）、--done で作業を DONE に、--docs-checked と --co-author で trailer を書く",
+                "名指した経路の今の中身だけをコミットし（未追跡と削除も。他の変更と索引は残す）、--done で作業を DONE に、--docs-checked と --co-author で trailer を書く。主のツリーでコードか事例に触れたら網羅の検査を裏で起こす（--no-sweep で外し、コードに触れたら基のバイナリだけを保存する）",
                 "親が主のツリーでコミットするとき。git の commit が失敗したら、索引と --done のファイルを元に戻す",
                 "work.py commit -m 'Add sync and commit to the work tool (X-9/U6)' tools/work.py --done X-9 --co-author 'Claude <noreply@anthropic.com>'"),
     "done": C(done_args, failing(done), ("parent",),

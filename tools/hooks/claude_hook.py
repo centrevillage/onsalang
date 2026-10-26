@@ -349,7 +349,7 @@ def state(cwd):
              f"git worktree list: {len(trees)} 件", *trees[:10],
              f"dev・main の外の枝: {len(branches)}",
              *[x for x in due if not DUE_DOC.match(x)], f"docs due の文書: {sum(bool(DUE_DOC.match(x)) for x in due)}",
-             auto, f"core.hooksPath: {run(['git', 'config', 'core.hooksPath'], cwd, (0, 1)) or '(無し)'}",
+             auto,
              f"担当の定義: {' '.join(agents)}"]  # fmt: skip
     text = "\n".join(parts)
     return text if len(text) <= SUMMARY_MAX else text[: SUMMARY_MAX - 1] + "…"
@@ -418,10 +418,10 @@ def subagent_stop(event):
     if report is not None:
         body = report
     else:
-        body = (f"（本文なし: 今の呼び出しの SubagentHandback が、{waited:.1f} 秒待っても記録に無い。"
+        body = (f"{handback.NO_BODY}今の呼び出しの SubagentHandback が、{waited:.1f} 秒待っても記録に無い。"
                 f"最後の文: {event.get('last_assistant_message')!r}）\n取り出し直す: python3 -B tools/handback.py save "
                 f"{shlex.quote(str(record))} {shlex.quote(str(path))}")  # fmt: skip
-    path.write_text(f"{head}\n\n{body}\n", encoding="utf-8")
+    path.write_text(handback.saved(head, body), encoding="utf-8")
     return None
 
 
@@ -512,7 +512,7 @@ COMMANDS = {
                      "echo '{\"tool_name\":\"SendMessage\",\"tool_input\":{\"to\":\"main\",\"message\":\"…\"},"
                      "\"scratchpad_dir\":\"/tmp/s\"}' | python3 -B tools/hooks/claude_hook.py PostToolUse"),
     "SessionStart": C(lambda p: None, hook(session_start), ("parent",),
-                      "セッションの始めと圧縮の後に、状態の要約（git、作業ツリー、枝、docs due、網羅の検査、hooksPath、担当の定義）を文脈に足す",
+                      "セッションの始めと圧縮の後に、状態の要約（git、作業ツリー、枝、docs due、網羅の検査、担当の定義）を文脈に足す",
                       "設定の SessionStart（matcher `startup|resume|compact`）が呼ぶ。2,000 字以内",
                       "echo '{\"cwd\":\"/Users/centrevillage/projects/onsalang\"}' | python3 -B tools/hooks/claude_hook.py SessionStart"),
     "SubagentStop": C(lambda p: None, hook(subagent_stop), ("parent",),
