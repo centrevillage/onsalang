@@ -32,7 +32,8 @@ The forms of a run (X-1; `tools/gate.py` builds the arguments):
 - the work check (`--work ID`) narrows the items with `narrows` (`--changed-since
   auto --sample SAMPLE --salt <the first ID>`, `tools/narrowing.py`) unless the diff
   touches their tools, and runs an item with `touches` only when the diff touches
-  those places (the self-test: `tools/`);
+  those places other than its `touches_except` (the self-test: `tools/` other than
+  SELFTEST_UNREAD, the data it does not read);
 - the sweep (`--sweep`, the main tree only) runs `save-base`, the `static` items,
   the next of the SHARDS shards of the items with `narrows` (`--shard k/K`), and the
   items with `sweep`;
@@ -62,6 +63,9 @@ PARENT = 3  # the exit of an item whose findings wait for the parent (M-5): not 
 # The tools of the narrowable items: a diff that touches them runs the item whole.
 FUZZ_TOOLS = ("tools/fuzz.py", "tools/narrowing.py")
 FMT_TOOLS = ("tools/fmt_props.py", "tools/narrowing.py")
+# The data under tools/ the self-test does not read: a diff in tools/ that touches only these does not run it in a
+# work check (X-1 U10). The self-test writes its own table of the allowed names; `builtin-names` checks the real one.
+SELFTEST_UNREAD = ("tools/builtin_names.toml",)
 # The C checks (Q-07, W1-06): one item per row of `onsa_tests::c::ITEMS`.
 C_CHECK = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--c")
 # The test vectors against an implementation (W2-02): `interp` or `c`.
@@ -83,6 +87,7 @@ class Step:
     stage_end_only: bool = False  # runs only at a stage end (`--stage-end`)
     narrows: tuple = ()  # its tools: narrowed in a work check, a shard in a sweep (X-1)
     touches: tuple = ()  # a work check runs it only when the diff touches one of these
+    touches_except: tuple = ()  # the places in `touches` that do not count
     static: bool = False  # a static check: in every sweep, `--only static`
     sweep: bool = False  # in the sweep (the `static` and `narrows` items are, without it)
     sweep_only: bool = False  # only in the sweep; the other forms do not list it
@@ -134,7 +139,8 @@ STEPS = [
     Step("ignored-files", (*PY, str(TOOLS / "ignored_files.py"))),
     # The keywords of the lexer against the list of §2.2 (W3-02): one case per word, `keywords/<word>`.
     Step("keywords", (*PY, str(TOOLS / "keywords.py")), pendable=True, by_case_only=True),
-    Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py")), slow=True, touches=("tools/",), sweep=True),
+    Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py")), slow=True, touches=("tools/",),
+         touches_except=SELFTEST_UNREAD, sweep=True),
     Step("golden", (*PY, str(TOOLS / "gate.py"), "--golden"), info=True),
     Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),
     # The generated C (Q-07, W1-06): Clang and gcc-15 with -Wall -Wextra -Werror -pedantic and

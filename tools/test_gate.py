@@ -1194,8 +1194,23 @@ class GateForms(GateRun):
         self.run_main(["--work", "W3-07"], steps)
         self.assertEqual(self.argv_of("fz")[:2], ["--changed-since", "auto"])
         self.assertTrue(self.ran("st"))
-        # the whole and the stage end: as before
         (self.root / "tools/other.py").unlink()
+        # the places in `touches_except` do not count (X-1 U10): the table of the allowed names alone does not run
+        # the self-test (the made-up root's own table), with a tool it does
+        real = next(s for s in gate_steps.STEPS if s.name == "gate-selftest")
+        data = [fake("st", touches=real.touches, touches_except=real.touches_except)]
+        self.repo.write("tools/builtin_names.toml", "x = 1\n")
+        self.forget()
+        code, out = self.run_main(["--work", "W3-07"], data)
+        self.assertEqual((code, self.ran("st")), (0, False))
+        self.assertIn("the diff does not touch tools/ other than tools/builtin_names.toml", out)
+        self.repo.write("tools/other.py", "x = 1\n")
+        self.forget()
+        self.run_main(["--work", "W3-07"], data)
+        self.assertTrue(self.ran("st"))
+        for p in ("tools/builtin_names.toml", "tools/other.py"):
+            (self.root / p).unlink()
+        # the whole and the stage end: as before
         for argv in ([], ["--stage-end", "W3"], ["--stage-end", "W3", "--work", "W3-07"]):
             with self.subTest(argv=argv):
                 self.forget()
@@ -1683,6 +1698,12 @@ class RealSteps(unittest.TestCase):
             for p in s.narrows:
                 self.assertTrue((gate.ROOT / p).is_file(), p)
         self.assertEqual({s.name: s.touches for s in steps if s.touches}, {"gate-selftest": ("tools/",)})
+        # the self-test is not run by a diff of the table of the allowed names alone (X-1 U10)
+        self.assertEqual({s.name: s.touches_except for s in steps if s.touches_except},
+                         {"gate-selftest": ("tools/builtin_names.toml",)})  # fmt: skip
+        for s in steps:
+            for p in s.touches_except:
+                self.assertTrue((gate.ROOT / p).is_file(), p)
         self.assertEqual([s.name for s in steps if s.parent], ["docs-due", "gap-marks"])
         # the documents changed after the last docs check (X-9 U1): `--stage-end` makes it fail
         due = next(s for s in steps if s.name == "docs-due")

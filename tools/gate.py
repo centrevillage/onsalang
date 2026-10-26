@@ -15,7 +15,8 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
                 `until` names), narrows
                 the heavy items to the seeds of the diff and a sample salted with
                 the first ID, and runs the self-test only when the diff touches
-                `tools/` (`gate_steps`: the forms; X-1).
+                `tools/` other than the data the self-test does not read
+                (`gate_steps`: the forms; X-1).
 --stage-end W3  also fails when `tests/pending.toml` still has entries whose
                 `until` is a work of W3 (rules/process.md 8.6, the end of a stage), and
                 runs every item listed whole.
@@ -251,8 +252,10 @@ def _skipped(step, entry, form, named=None):
     if entry is not None and form.stage_end is None and entry.until not in form.w_works:
         return f"listed until {entry.until}: runs with --work {entry.until} or --stage-end"
     if step.touches and form.work and named is None and form.changed is not None:
-        if not any(narrowing.under(p, step.touches) for p in form.changed):
-            return f"the diff does not touch {', '.join(step.touches)}"
+        hit = (p for p in form.changed if not narrowing.under(p, step.touches_except))
+        if not any(narrowing.under(p, step.touches) for p in hit):
+            but = f" other than {', '.join(step.touches_except)}" if step.touches_except else ""
+            return f"the diff does not touch {', '.join(step.touches)}{but}"
     return None
 
 
