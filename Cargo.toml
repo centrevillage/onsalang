@@ -27,10 +27,10 @@ toml = "0.8"
 [workspace.lints.clippy]
 all = "warn"
 
-# Line tables only in the dev profile (X-16, 2026-10-26): the full debug
-# information was the most of what a build writes to the disk (a build from
-# nothing 1990 MB, 1604 MB with this). A panic still names its file and line;
-# no debugger is used on these builds. It changes no generated code.
+# Line tables only in the dev profile (X-16, 2026-10-26): a build from nothing
+# takes 1.6 GB of the disk with this, 1.9 GB with the full debug information.
+# A panic still names its file and line; no debugger is used on these builds.
+# It changes no generated code.
 [profile.dev]
 debug = "line-tables-only"
 

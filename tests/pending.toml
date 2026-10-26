@@ -600,7 +600,7 @@ kind = "test-case"
 target = "tests/spec/semantics/match_panic.onsa"
 reasons = ["S-40"]
 until = "W5-08"
-note = "panic が prelude に無い（E0302、§9.2）"
+note = "panic の値と呼び出しは W5-08 まで E0200（名前は prelude にある、§9.2・§15.1）"
 
 [[pending]]
 kind = "test-case"
@@ -1541,7 +1541,7 @@ kind = "test-case"
 target = "tests/spec/c_runtime/c_match_panic_arm.onsa"
 reasons = ["S-40"]
 until = "W5-08"
-note = "panic が prelude に無い（E0302、§9.2）。W5-08 の後、値を返す match の最後の腕が panic の C が R-145 の警告に落ちないかを確かめる"
+note = "panic の値と呼び出しは W5-08 まで E0200（名前は prelude にある、§9.2・§15.1）。W5-08 の後、値を返す match の最後の腕が panic の C が R-145 の警告に落ちないかを確かめる"
 # --- W3-17: 修正候補の約束（§18.1、S-236）を破る候補。候補ごとに載せ、直す作業が外す（2026-10-08）
 
 [[pending]]
