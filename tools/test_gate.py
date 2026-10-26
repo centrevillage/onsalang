@@ -1668,15 +1668,13 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(by_name["ignores"].stage_args and not by_name["ignores"].pendable)
         self.assertFalse(by_name["fmt-props"].pendable)
         # `--quick` leaves out the fuzzing, the self-test, the C and the fmt properties (2026-10-08)
-        slow = ["save-base", "fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
+        slow = ["save-base", "fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-cst"]
         self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
         # the deep fuzzing runs only at a stage end (W3-03)
         self.assertEqual([s.name for s in gate_steps.STEPS if s.stage_end_only], ["fuzz-deep"])
         # the only items that may be listed: the test vectors against the interpreter and the C
-        # (W2-02, by case only), the C checks (W1-06), and the fmt property that waits for W3-11 (R-70)
-        self.assertEqual(
-            gate_steps.pendable(), ["vectors-interp", "keywords"] + self.c_items() + ["vectors-c", "fmt-comments"]
-        )
+        # (W2-02, by case only), the keywords (W3-02, by case only) and the C checks (W1-06)
+        self.assertEqual(gate_steps.pendable(), ["vectors-interp", "keywords"] + self.c_items() + ["vectors-c"])
         vectors = [s for s in gate_steps.STEPS if s.argv[: len(gate_steps.VECTORS)] == gate_steps.VECTORS]
         self.assertEqual([(s.name, s.argv[len(gate_steps.VECTORS) :]) for s in vectors],
                          [("vectors-interp", ("interp",)), ("vectors-c", ("c",))])  # fmt: skip
@@ -1693,7 +1691,7 @@ class RealSteps(unittest.TestCase):
              "spec-sections", "default-inits", "docs", "docs-fmt", "docs-due"]))  # fmt: skip
         self.assertEqual({s.name: s.narrows for s in steps if s.narrows},
                          {"fuzz": ("tools/fuzz.py", "tools/narrowing.py"),
-                          **{n: ("tools/fmt_props.py", "tools/narrowing.py") for n in ("fmt-props", "fmt-comments", "fmt-cst")}})  # fmt: skip
+                          **{n: ("tools/fmt_props.py", "tools/narrowing.py") for n in ("fmt-props", "fmt-cst")}})  # fmt: skip
         for s in steps:
             for p in s.narrows:
                 self.assertTrue((gate.ROOT / p).is_file(), p)
@@ -1711,8 +1709,8 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(due.stage_args and not due.pendable and not due.slow)
         sweep = [s.name for s in steps if gate._in_form(s, gate.Form(sweep=(0, 2)), None)]
         self.assertEqual(sweep[0], "save-base")
-        self.assertEqual(sorted(sweep), sorted(["save-base", "gate-selftest", "fuzz", "fmt-props", "fmt-comments",
-                                                "fmt-cst"] + gate_steps.static_names()))  # fmt: skip
+        self.assertEqual(sorted(sweep), sorted(["save-base", "gate-selftest", "fuzz", "fmt-props", "fmt-cst"]
+                                               + gate_steps.static_names()))  # fmt: skip
         for form in (gate.Form(), gate.Form(works=("W3-07",)), gate.Form(stage_end="W3"), gate.Form(quick=True)):
             self.assertEqual([s.name for s in steps if not gate._in_form(s, form, None)], ["save-base"])
         # the narrowed runs keep the cap of the tools: the gate holds no copy of it
@@ -3359,6 +3357,8 @@ import re, sys
 args = sys.argv[1:]
 def norm(t):
     t = t.replace("\r\n", "\n")
+    if "LAYOUT" in t and re.search(r"[,(]$", t, re.M):  # a rewrite that depends on the line breaks
+        t = t.replace('"a.b"', '"a. b"')
     lines = [re.sub(r" +([)\],:])", r"\1", re.sub(r"([(\[]) +", r"\1", re.sub(r"[ \t]+", " ", l.strip())))
              for l in t.split("\n")]
     if "KEEP_INDENT" in t:
@@ -3369,6 +3369,9 @@ def norm(t):
         lines = [re.sub(r" *// lose.*", "", l) for l in lines]
     if "LOSE_DOC" in t:
         lines = [l for l in lines if not l.startswith("///")]
+    if "MOVE_COMMENT" in t:  # the comment `// mv` at a line end goes to a line of its own before it
+        moved = [re.match(r"(.*\S) +(// mv.*)$", l) for l in lines]
+        lines = [y for l, m in zip(lines, moved) for y in ((m.group(2), m.group(1)) if m else (l,))]
     for i in range(len(lines) - 1):  # the line break after it is lost (once: the joined line ends otherwise)
         if lines[i].endswith("JOIN_KEPT = 1"):
             lines[i:i + 2] = [lines[i] + " " + lines[i + 1]]
@@ -3400,6 +3403,7 @@ elif args[0] == "check":
     lines = t.split("\n")
     found = [(1, "the verdict") for _ in re.findall(r"VERDICT {2,}", t)]
     found += [(i + 1, f"at line {i + 1}") for i, l in enumerate(lines) if "PLACE" in l]
+    found += [(1, "the string") for _ in re.findall(r'"a\. b"', t)]
     for line, what in found:
         sys.stdout.write(f"{args[-1]}:{line}:1: error[E0401]: {what}\n")
     sys.exit(1 if found or "SILENT" in t else 0)
@@ -3447,7 +3451,7 @@ class FmtProps(TempRepo):
         self.argv = [sys.executable, "-B", str(self.fake)]
         fmt_props.load_symbols(self.repo.root, self.cases_cmd([]))
 
-    def go(self, prop="core", per_kind=3, cases=None, minimize=False):
+    def go(self, prop="core", per_kind=1, cases=None, minimize=False):
         """Run the item over `tests/spec/a.onsa` (or `cases`: [(path, mode, syntax_errors)])."""
         cases = cases or [("tests/spec/a.onsa", "check", False)]
         listed = [{"path": p, "kind": "file", "mode": m, "files": [{"path": p, "syntax_errors": s}]}
@@ -3668,19 +3672,32 @@ class FmtProps(TempRepo):
 
     def test_run(self):
         self.repo.write("tests/spec/a.onsa", "fn f() {\n  let x = g(a, b) // c\n  x\n}\n")
-        code, text = self.go()
+        code, text = self.go(per_kind=3)
         self.assertEqual(code, 0, text)
         self.assertIn("no failure", text)
         code, text = self.go("cst")
         self.assertEqual(code, 0, text)
         for marker, failure in (
             ("let x = g(a, b) // DROP\n  drop(x)", "FAIL ast: tests/spec/a.onsa [source]"),  # not the same program
-            ("let KEEP_INDENT = g(a, b)", "FAIL convergence: tests/spec/a.onsa [space#"),  # no normal form
+            # No normal form: fmt(p) is not fmt(x), and fmt(p) without the markers formatted again is not either.
+            ("let KEEP_INDENT = g(a, b)", "FAIL convergence: tests/spec/a.onsa [space#0]: fmt(p) is not fmt(x)"),
+            ("let KEEP_INDENT = g(a, b)",
+             "FAIL convergence: tests/spec/a.onsa [mixed#0]: fmt(p) without the markers is not fmt(x)"),
+            # A comment that fmt moves off the line of its element (R-70).
+            ("let MOVE_COMMENT = g(a, b) // mv",
+             "FAIL comments: tests/spec/a.onsa [source]: `// mv`: was at a line end, now on its own line"),
+            # A rewrite of a perturbed input that is not that of the source: the depth and the meaning run on it.
+            ('let LAYOUT = g("a.b", b)',
+             "FAIL meaning: tests/spec/a.onsa [break#0]: onsa check before fmt: exit 0, no diagnostic; after fmt: "
+             "exit 1, E0401"),
             ("let x = g(a, b) // REJECT", "FAIL rejected: tests/spec/a.onsa ["),  # a perturbed input refused
             ("let x = g(a, b) // NOT_IDEMPOTENT", "FAIL idempotence: tests/spec/a.onsa [source]"),
             ("let x = g(a, b) // lose LOSE_COMMENT", "FAIL comment-text: tests/spec/a.onsa [source]: comment: 1 lost"),
             ("/// d LOSE_DOC\n  let x = 1", "FAIL docs: tests/spec/a.onsa [source]: doc comment: 1 lost"),
             ("let DEEPER = g(a, b)", "FAIL depth: tests/spec/a.onsa [source]: item 1: 1 levels before fmt, 2 after"),
+            # The depth and the meaning on an input with markers too (against the levels of the source).
+            ("let DEEPER = g(a, b)", "FAIL depth: tests/spec/a.onsa [comment#0]: item 1: 1 levels before fmt, 2 after"),
+            ("let VERDICT  = g(a, b)", "FAIL meaning: tests/spec/a.onsa [comment#0]: onsa check before fmt: exit 1"),
             # A rewrite that changes what `onsa check` says (spec §18.2, W3-12/b2 3).
             ("let VERDICT  = g(a, b)",
              "FAIL meaning: tests/spec/a.onsa [source]: onsa check before fmt: exit 1, E0401; after fmt: exit 0, "
@@ -3709,6 +3726,26 @@ class FmtProps(TempRepo):
         code, text = self.go()
         self.assertNotIn("FAIL meaning", text)
         self.assertIn("inputs from 1 sources", text)
+
+    def test_the_depth_and_the_meaning_run_on_the_source_and_the_inputs_with_markers(self):
+        # A perturbation changes no program, so the rewrites of fmt are those of the source; a comment may
+        # stop one (`spec/tools.md` §3.4). The other inputs ask neither `dump --levels` nor `check`.
+        source = "fn f() {\n  let x = g(a, b) // c\n  x\n}\n"
+        self.repo.write("tests/spec/a.onsa", source)
+        inputs = fmt_props.inputs_of("tests/spec/a.onsa", source, 2, "t")
+        want = {str(k) for k, (_, kind, _) in enumerate(inputs) if kind in (None, "comment", "mixed")}
+        self.assertTrue({"space", "blank", "break", "comment", "mixed"} <= {kind for _, kind, _ in inputs}, inputs)
+        asked, run = {"check": set(), "dump": set()}, fmt_props.Onsa.run
+
+        def spy(onsa, *args):
+            if args[0] in asked:
+                asked[args[0]].add(Path(args[-1]).parent.parent.name)  # <work>/<input>/{a,b}/<name>
+            return run(onsa, *args)
+
+        with mock.patch.object(fmt_props.Onsa, "run", spy):
+            code, text = self.go(per_kind=2)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(asked, {"check": want, "dump": want})
 
     def test_a_narrowed_run(self):
         # X-1: the cases of fmt always, a sample of one source per group (the first 3 parts of the

@@ -74,7 +74,8 @@ The properties (`--property`):
               5. the depth: `fmt` makes no declaration deeper (spec §2.5: the
                  rewrites take parentheses and `return` away, never add a
                  level): the levels of each item, `onsa dump --levels`, of
-                 `fmt(p)` are at most those of `p` (W3-14);
+                 `fmt(p)` are at most those of `x` (W3-14; `p` is the
+                 program of `x`, 0);
               6. the line breaks of the writer (`spec/tools.md` §3.2,
                  R-143, S-497): fmt keeps the line breaks after the opening
                  bracket of a list, between its elements (and a blank line
@@ -84,35 +85,40 @@ The properties (`--property`):
                  the text alone; the line breaks fmt adds or removes by the
                  form of a list or a block and round attributes, and the
                  gaps of what the rewrites of §3.3 drop, are not counted);
-              7. the normal form of the code: for space and blank, `fmt(p)` and
-                 `fmt(x)`, each without its comments and formatted again, are
-                 the same. Where the comments go is the item `fmt-comments`;
-                 break and continue keep the author's line breaks (`spec/tools.md` §3.2),
-                 comment and mixed move comments, and inside opens a body of
-                 one line whose element had a line break (S-525), so they have
-                 no such property here;
+              7. the comments and the normal form (R-70, W3-11, `spec/tools.md`
+                 §3.4): every comment (the markers and the source's own) stays
+                 on the line of the same element (failure `comments`): a
+                 comment at a line end at the end of the same line, a comment
+                 on a line of its own on its own line before the same next
+                 line (or at the end). The lines of the input and of the
+                 output are paired by their order and their tokens
+                 (`pair_lines`: a token fmt drops, a `return` or a
+                 parenthesis, is a deletion of the sequence; `,` and the
+                 spelling of numbers do not count; a line of brackets alone
+                 is paired by its brackets, so a comment after a closing
+                 bracket goes with it, `)` as `]` and `}`, S-528; a line of a
+                 `,` alone is no code line, and its comment counts as a line
+                 of a comment, S-529). And the normal form with the comments
+                 (failure `convergence`): `fmt(p) == fmt(x)` for space and
+                 blank; `fmt(p)` without the markers, formatted again, equals
+                 `fmt(x)` for comment and mixed. break and continue keep the
+                 author's line breaks (`spec/tools.md` §3.2), and inside opens
+                 a body of one line whose element had a line break (S-525),
+                 so they have no normal form here;
               8. the meaning: when `fmt(p)` is not `p`, `onsa check` ends with
                  the same exit code on both and reports the same codes in the
                  same order (spec §18.2: no rewrite of fmt changes the verdict
                  of a stage; `spec/tools.md` §3.3). The texts and the
                  places of the diagnostics are not compared (a rewrite may
                  change the text alone, W3-12/b2 6).
+              5 and 8 run on `x` and on the comment and mixed inputs alone: the
+              rewrites of fmt (§3.3) are decided by the program, which a
+              perturbation does not change (0), so they are those of `x`, but
+              a comment may stop one (§3.4). An input of another kind runs them
+              too when the code tokens of `fmt(p)` are not those of `fmt(x)`
+              (`written_tokens`): its rewrites differ, which the spec does not
+              allow and the item does not take on trust.
               Every run ends in 0, 1 or 2 (an internal error or a signal fails).
-    comments  (`fmt-comments`, R-70, W3-11) for `x` and every `p`:
-              every comment (the markers and the source's own) stays on the
-              line of the same element: a comment at a line end at the end of
-              the same line, a comment on a line of its own on its own line
-              before the same next line (or at the end). The lines of the input
-              and of the output are paired by their order and their tokens
-              (`pair_lines`: a token fmt drops, a `return` or a parenthesis,
-              is a deletion of the sequence; `,` and the spelling of numbers
-              do not count; a line of brackets alone is
-              paired by its brackets, so a comment after a closing bracket
-              goes with it, `)` as `]` and `}`, S-528; a line of a `,` alone
-              is no code line, and its comment counts as a line of a comment,
-              S-529). And the normal form with the
-              comments: `fmt(p) == fmt(x)` for space and blank; `fmt(p)` without the
-              markers, formatted again, equals `fmt(x)` for comment and mixed.
     cst       (`fmt-cst`, R-86, W3-01) for `x` and every `p`, with or without
               syntax errors: `onsa dump --cst <file>` prints the file byte for
               byte (the CST round trip: the text of the leaves of the tree).
@@ -127,7 +133,7 @@ characters, `fuzz.ddmin`) where the property holds on its own: rejected,
 internal, ast, idempotence, comment-text, docs, items, depth, breaks,
 meaning.
 
-    tools/fmt_props.py [--property core|comments|cst] [--per-kind N]
+    tools/fmt_props.py [--property core|cst] [--per-kind N]
                        [--version V] [--jobs N] [--binary PATH]
                        [--time-budget S] [--minimize] [--show N] [--verbose]
                        [--changed-since REV|auto] [--code-cap N]
@@ -169,7 +175,7 @@ VERSION = "1"
 PER_KIND = 2
 TIMEOUT = 20  # seconds per run
 TIME_BUDGET = 300  # seconds for the whole run
-PROPERTIES = ("core", "comments", "cst")
+PROPERTIES = ("core", "cst")
 KINDS = ("space", "blank", "comment", "break", "continue", "inside", "mixed")
 # The kinds whose fmt output is the normal form of the source, as it is or
 # with the markers removed.
@@ -679,8 +685,12 @@ def pair_lines(before, after):
 
     tb, ta = tokens(before), tokens(after)
     first, last = {}, {}
-    matcher = difflib.SequenceMatcher(None, [k for k, _ in tb], [k for k, _ in ta], autojunk=False)
-    for i, j, size in matcher.get_matching_blocks():
+    keys = [k for k, _ in tb], [k for k, _ in ta]
+    if keys[0] == keys[1]:  # the same tokens (the common case): no matching to do
+        blocks = [(0, 0, len(tb))]
+    else:
+        blocks = difflib.SequenceMatcher(None, *keys, autojunk=False).get_matching_blocks()
+    for i, j, size in blocks:
         for k in range(size):
             n, m = tb[i + k][1], ta[j + k][1]
             first.setdefault(n, m)
@@ -944,7 +954,7 @@ def break_problems(before, after):
     no judgement with the formatter. The gaps are paired by their tokens (a
     difference in the tokens, which the rewrites of §3.3 that `break_places`
     leaves out do not make, is a problem too); a gap whose comment moved (the
-    item `fmt-comments`) is not judged."""
+    failure `comments`) is not judged."""
     want, got = break_places(before), break_places(after)
     keys = [w[0] for w in want], [g[0] for g in got]
     problems = []
@@ -1026,7 +1036,15 @@ def fmt_text(onsa, path, text):
 class Baseline:
     path: Path  # the source, written
     formatted: str  # fmt(x)
-    code: str  # fmt(x) without the comments, formatted again
+    tokens: tuple  # written_tokens(fmt(x))
+    levels: list  # the levels of the items of x (`dump --levels`), None when they failed
+
+
+def written_tokens(text):
+    """The code tokens of `text` but `,`, which fmt adds and drops by the form
+    of a list (`spec/tools.md` §3.2): two outputs of fmt with the same rewrites
+    (§3.3) of the same program have the same."""
+    return tuple(t.text for t in tokenize(text) if t.kind == "code" and t.text != ",")
 
 
 def diff_ast(onsa, a, b):
@@ -1061,36 +1079,24 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
         return fails, None
 
     a = write(d / "a" / name, text)
-    if base is not None and prop == "core":
+    if base is not None:
         # The perturbation itself changes no program (§2.5).
         problem = diff_ast(onsa, base.path, a)
         if problem:
             fail("perturbation" if problem[0] == "ast" else problem[0], "x and p: " + problem[1])
 
-    formatted, problem = fmt_text(onsa, d / "b" / name, text)
+    b = d / "b" / name
+    formatted, problem = fmt_text(onsa, b, text)
     if problem:
         # The caller decides whether the source itself may be unread.
         if problem[0] == "internal" or label != "source":
             fail(*problem)
         return fails, None
 
-    if prop == "comments":
-        for p in comment_problems(text, formatted):
-            fail("comments", p)
-        if base is not None and kind in CONVERGES and formatted != base.formatted:
-            fail("comments", "fmt(p) is not fmt(x): " + first_difference(base.formatted, formatted))
-        if base is not None and kind in CONVERGES_STRIPPED:
-            again, problem = fmt_text(onsa, d / "c" / name, strip_markers(formatted))
-            if problem:
-                fail(problem[0], "on fmt(p) without the markers: " + problem[1])
-            elif again != base.formatted:
-                fail("comments", "fmt(p) without the markers is not fmt(x): " + first_difference(base.formatted, again))
-        return fails, Baseline(a, formatted, "")
-
-    problem = diff_ast(onsa, a, d / "b" / name)
+    problem = diff_ast(onsa, a, b)
     if problem:
         fail(*problem)
-    code, out, err = onsa.run("fmt", "--check", d / "b" / name)
+    code, out, err = onsa.run("fmt", "--check", b)
     crash = onsa.crash(("fmt", "--check"), code, err)
     if crash:
         fail("internal", crash)
@@ -1112,20 +1118,44 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
     if problems:
         more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
         fail("breaks", problems[0] + more)
-    problem = depth_problem(onsa, a, d / "b" / name, bool(item_heads(text)))
-    if problem:
-        fail(*problem)
-    if formatted != text:
-        problem = meaning_problem(onsa, a, d / "b" / name)
+    for problem in comment_problems(text, formatted):
+        fail("comments", problem)
+    if base is not None:
+        convergence_problems(onsa, d / "c" / name, kind, formatted, base, fail)
+
+    # 5 and 8 on `x`, on the inputs with markers, and on an input whose rewrites differ from those of `x`.
+    tokens, levels = written_tokens(formatted), None if base is None else base.levels
+    if base is None:
+        levels, problem = levels_of(onsa, a)
+        if not problem and item_heads(text) and not levels:
+            levels, problem = None, ("depth", "dump --levels printed no item")
         if problem:
             fail(*problem)
-    code_only, problem = fmt_text(onsa, d / "c" / name, strip_comments(formatted))
-    if problem:
-        fail(problem[0], "on fmt(p) without the comments: " + problem[1])
-        return fails, Baseline(a, formatted, "")
-    if base is not None and kind in CONVERGES and code_only != base.code:
-        fail("convergence", "without the comments: " + first_difference(base.code, code_only))
-    return fails, Baseline(a, formatted, code_only)
+    elif kind not in CONVERGES_STRIPPED and tokens == base.tokens:
+        return fails, Baseline(a, formatted, tokens, levels)
+    if levels is not None:
+        problem = depth_problem(onsa, levels, b)
+        if problem:
+            fail(*problem)
+    if formatted != text:
+        problem = meaning_problem(onsa, a, b)
+        if problem:
+            fail(*problem)
+    return fails, Baseline(a, formatted, tokens, levels)
+
+
+def convergence_problems(onsa, path, kind, formatted, base, fail):
+    """The normal form with the comments (7): `fmt(p) == fmt(x)` for space and
+    blank; for comment and mixed, `fmt(p)` without the markers, written to
+    `path` and formatted again, is `fmt(x)`."""
+    if kind in CONVERGES and formatted != base.formatted:
+        fail("convergence", "fmt(p) is not fmt(x): " + first_difference(base.formatted, formatted))
+    if kind in CONVERGES_STRIPPED:
+        again, problem = fmt_text(onsa, path, strip_markers(formatted))
+        if problem:
+            fail(problem[0], "on fmt(p) without the markers: " + problem[1])
+        elif again != base.formatted:
+            fail("convergence", "fmt(p) without the markers is not fmt(x): " + first_difference(base.formatted, again))
 
 
 def levels_of(onsa, path):
@@ -1139,14 +1169,9 @@ def levels_of(onsa, path):
     return [int(x) for x in fuzz.decode(out).split()], None
 
 
-def depth_problem(onsa, before, after, has_items):
-    """The failure when `after` (fmt of `before`) has an item deeper than in `before`, or None.
-    `has_items`: `before` has items (`item_heads`), so the levels of none is a failure."""
-    want, problem = levels_of(onsa, before)
-    if problem:
-        return problem
-    if has_items and not want:
-        return "depth", "dump --levels printed no item"
+def depth_problem(onsa, want, after):
+    """The failure when `after` (fmt of a program whose items have the levels `want`) has an item
+    deeper, or None."""
     got, problem = levels_of(onsa, after)
     if problem:
         return problem

@@ -5,8 +5,8 @@ To add an item, add one `Step`. An item may be listed in `tests/pending.toml`
 complete (formatting, lints, tests, the fuzzing, the spec examples, the list
 itself, the static checks of W1-02, the self-tests, the fmt properties of W1-07)
 are never pending. Later works add checks that wait for a later decision as
-pendable items (the C checks of W1-06; the comment places of fmt, W1-07). The
-CST round trip (W3-01) is never pending.
+pendable items (the C checks of W1-06). The CST round trip (W3-01) is never
+pending.
 
 A pendable item may also apply the list case by case: the entries
 `<item>/<case>` are the item's own to apply (the C checks, `onsa_tests::ccheck`;
@@ -158,11 +158,9 @@ STEPS = [
     # one case per operation and toolchain, `vectors-c/<op>[<toolchain>]`.
     Step("vectors-c", (*VECTORS, "c"), pendable=True, by_case_only=True, counts_rows=True, slow=True),
     # The properties of `onsa fmt` on perturbed case sources (Q-03, W1-07): the
-    # same program, idempotence, the normal form of the code.
+    # same program, idempotence, the comments on the line of their element
+    # (R-70), the normal form.
     Step("fmt-props", (*PY, str(TOOLS / "fmt_props.py")), slow=True, narrows=FMT_TOOLS),
-    # Comments stay on the line of their element (R-70); listed until W3-11.
-    Step("fmt-comments", (*PY, str(TOOLS / "fmt_props.py"), "--property", "comments"), pendable=True, slow=True,
-         narrows=FMT_TOOLS),  # fmt: skip
     # The CST gives the source back byte for byte (R-86, W3-01).
     Step("fmt-cst", (*PY, str(TOOLS / "fmt_props.py"), "--property", "cst"), slow=True, narrows=FMT_TOOLS),
 ]
