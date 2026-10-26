@@ -23,6 +23,7 @@
   VST3・AU の作業で決めるもの（VST3 のクラスの ID の関数の中身、隠したパラメータの ID の式と上限、AU の SDK の探し方）は、仕様のプラグインの出力の項の「VST3・AU の作業で決めるもの」。
 - **trait の定義（X-8、2026-10-23、54 回目）:** 利用者が宣言した trait（`trait` の宣言、それの `impl`、それを境界に使うこと）は第 2 期（`history/implementation-plan.md` §2.3 の「ユーザ定義 trait は第 2 期」、S-72）。今は E0200（`onsa_diag::unsupported` の `TraitDefinitions`・`TraitImpls`・`TraitBounds`）。
   - S-712（2026-10-26、73 回目）: 第 2 期で利用者の trait の宣言を開けば、§15.1 のとおり E0304 になる（第 1 期は prelude の名前の宣言 `pub trait Show` も E0200 のまま、`tests/spec/negative/unsupported.onsa`）。
+  - S-649（2026-10-27、75 回目の文書の点検）: §5.1 は型パラメータの名前の重なりの相手に外の `impl` の並びを挙げ、trait の並びを挙げない。trait の宣言を開くときに、`trait Tr[T]` のメンバの `fn m[T]` を同じく E0304 にするかを決める。
   - 実装するときに、W3-03 で `tests/spec/negative/unit_members.onsa` から外した trait のメンバの単位の事例を足す。
   - `impl Drop` を入れるときに、`Drop` を実装する型のリテラル（`G { id: 1 }`、`G { id: v }`）が静的な値にも破棄の要らないリテラルにもならず所有の行になる事例を足す（S-610・S-613 の補い F7、§5.4）。
     形: `pub trait Measure {` の中に、既定の本体を持つ `fn width(self) -> I32 { let = 1 //~ E0002 … }`、`fn height` も同じ E0002、`fn depth(self) -> I32 { let bad: Bool = 1 //~ E0401 … }`、署名だけの `fn signature_only(self) -> I32`。
@@ -30,7 +31,7 @@
 - **正確な循環の検査（55 回目、2026-10-23、S-594）:** E0310 の辺を、本体の経路が実際に指すモジュールで張る形にする。今はモジュール（パッケージを含む）を取り込む `use` を、そのモジュールと下の全てのモジュールへの辺として数え、偽の循環は取り込む経路を狭めて直す。
   正確な辺は今の辺の一部なので、緩める向きで壊れない。入れるときに §15.1 の「この検査は `use` の一覧で閉じる」を改める。
 - **Windows の junction（55 回目、2026-10-23、S-592）:** パッケージの木の中の Windows の junction を、シンボリックリンクと同じに辿らないか（Rust の `FileType::is_symlink` が junction を含むかは未確認）を、Windows で動かす作業で確かめる。
-- **再公開（57 回目、2026-10-23、S-596）:** `pub use` を、std 以外の依存と一緒に入れる（§19.1）。第 1 期は `pub` の位置の E0200。決めること: 取り込めるのを項目だけにするか、モジュールとパッケージも再公開できるか、再公開した束縛を経路の途中に通すか、`onsa interface` の表示、失敗した `pub use` の名前の扱い（S-462）。
+- **再公開（57 回目、2026-10-23、S-596）:** `pub use` を、std 以外の依存と一緒に入れる（§19.1）。第 1 期は `pub` の位置の E0200。決めること: 取り込めるのを項目だけにするか、モジュールとパッケージも再公開できるか、再公開した束縛を経路の途中に通すか、`onsa interface` の表示、失敗した `pub use` の名前の扱い（S-462。第 1 期は他のモジュールの本体の経路の最後の要素も E0302、S-693）。
   材料は S-596 の下書き（`decisions/S/S-596.draft.md` の形の表 23 行と、独立のレビューの結論。下書きと助言は「項目だけ」で一致した）と `target/notes/57/gap41/`。第 1 期の `pub use` の事例（W4-03 で E0200 に直す 4 か所）の項目の再公開の正例と E0303 の否定例を、入れるときに戻す。
   W4-03 U3b2（69 回目）で E0200 に直す前の形: `tests/spec/packages/visibility/main.onsa` の `pub use util.{shown}`（`pub` の項目の再公開の正例）と `pub use util.{SHARED} //~ E0303`（可視性の語の無い項目の再公開は E0303）、`tests/spec/types/visibility.onsa` の `pub use std.math.{sqrt}`、`tests/spec/fixes/e0020_field_visibility.onsa` の `pub use std.dsp.{db_to_amp}`（std の項目の再公開の正例）、R-39 の `tests/review-phase1/types/reexp`（`a.onsa` の `pub use b.{g}`、`b.onsa` の `pub use c.{g}`、`c.onsa` の `pub fn g() -> I32 { 1 }` の再公開の連鎖。U3b2 で `tests/spec/packages/pub_use_chain` に写した）。
 - **解放の起きない破棄（58 回目、2026-10-24、S-613 の範囲の外のまとめ）:** 規則は `Alloc` を求めるが、実行時には確保も解放も起きない場面（今の制限）を、ケースごとに利用者が時期を決めた。
