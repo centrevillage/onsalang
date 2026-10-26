@@ -400,3 +400,17 @@ left = "this version does not support effects other than `…` (`…`)"
 input = "tests/fuzz/b28474c1.onsa"
 reasons = ["S-659"]
 note = "an effect row with a standard effect and no `use`: the candidate `use std.fs.{Fs}` resolves the name, and the effect is then an E0200 on the same name, as D-08 says of a name that resolves (S-659 (3))"
+
+[[allowed]]
+class = "fix|E0302|write `…`|E0810"
+left = "a flow input needs a clock after its type: `…`, `…` or `…` (§#.#)"
+input = "tests/fuzz/8f0a4d28.onsa"
+reasons = ["S-236", "S-710"]
+note = "an input with two errors of the names stage at one place: a flow written as the type of an input (`a: Sig[2]`, the candidate `Sig.State`) and the missing clock of that input, which S-710 put in the names stage, so the E0810 comes next"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "the `…` of a flow call is written right after the name"
+input = "tests/fuzz/d6acd0a4.onsa"
+reasons = ["S-236"]
+note = "an input with several syntax errors (a line that starts with `-`, a `~(` never closed): joining the line leaves the `~` of the joined text; the same before W4-03 U5b"

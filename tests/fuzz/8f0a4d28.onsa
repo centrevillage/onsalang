@@ -1,0 +1,3 @@
+pub flow Sig
+pub flow k(a:Sig[2])->g[o] {
+}
