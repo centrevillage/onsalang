@@ -73,6 +73,7 @@
 - 暗黙の prelude は、`Option Result Some None Ok Err panic Alloc Block`、§6.3 の演算子 trait と標準 trait（数の trait と `Ordinal` を含む）、種の制約 `Copy` と `Dup`（§4.6）、組込み型だけである。
   クロックの名前（`init` `block` `sample` `event`）は prelude ではなく、クロックの名前空間にある（§11.3）。`panic`、種の制約、組込み型はコンパイラが与え、`Option` と `Result`（とその列挙子）、`Alloc`、`Block`、trait は std の宣言である。列挙子を除くこれらは、モジュール `std.core` の `pub` の項目である。
   prelude の名前は隠せないので（§5.1）、同じ名前の項目（型、trait、関数、定数、flow）を宣言するか `use` で取り込むと E0304 になる（`fn panic`、`use kp.panic`。prelude の名前を定義元から取り込み直す `use std.core.{Option}` も同じで、修正候補は無い）。他の標準の効果と std の項目は `use` で取り込む。
+  名前の段で失敗した `use`（E0302）の取り込む名前が prelude の名前なら、修正候補は無く、note でその名前は `use` 無しで書けることを示す（`use std.option.{Option}`、`use std.math.{Option}`）。
 
 ### 15.2 target 宣言（条件コンパイルの代替）
 
