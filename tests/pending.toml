@@ -2285,14 +2285,14 @@ kind = "test-case"
 target = "tests/spec/packages/use_flow_absent_type_position_kinds"
 reasons = ["S-103"]
 until = "W4-04"
-note = "値（関数を含む）を型の位置に書く誤りの E0308 は W4-04 U7 のコードの割り当て。今は E0302"
+note = "値（関数を含む）を型の位置に書く誤りの E0308 は W4-04 U8 のコードの割り当て。今は E0302"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/packages/use_flow_own_item_signature_kind"
 reasons = ["S-103"]
 until = "W4-04"
-note = "自分の生成項目の関数の名前を署名の型に書く誤りの E0308 は W4-04 U7。今は E0302"
+note = "自分の生成項目の関数の名前を署名の型に書く誤りの E0308 は W4-04 U8。今は E0302"
 
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
 [[pending]]
