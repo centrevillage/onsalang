@@ -414,3 +414,10 @@ left = "the `…` of a flow call is written right after the name"
 input = "tests/fuzz/d6acd0a4.onsa"
 reasons = ["S-236"]
 note = "an input with several syntax errors (a line that starts with `-`, a `~(` never closed): joining the line leaves the `~` of the joined text; the same before W4-03 U5b"
+
+[[allowed]]
+class = "fix|E0020|write it against its operand|E0020"
+left = "a callee that is no path of names is a function value; it is called with `…`"
+input = "tests/fuzz/2988ecc4.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a prefix `^` at the end of a line before its operand, and the `(` of the call and the body's `{` never closed at the end of the file (closed, the candidate joins the operand and the loop is clean)"
