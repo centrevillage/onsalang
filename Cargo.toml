@@ -27,12 +27,16 @@ toml = "0.8"
 [workspace.lints.clippy]
 all = "warn"
 
-# Line tables only in the dev profile (X-16, 2026-10-26): a build from nothing
-# takes 1.6 GB of the disk with this, 1.9 GB with the full debug information.
-# A panic still names its file and line; no debugger is used on these builds.
-# It changes no generated code.
+# The dev profile, for fewer writes to the disk (X-16, 2026-10-26). Line tables
+# only: a build from nothing took 1.9 GB of the disk with the full debug
+# information, 1.6 GB without; a panic still names its file and line, and no
+# debugger is used on these builds. No incremental compilation: its cache was
+# most of the rest (a build from nothing is 0.8 GB without it), and a small
+# edit rebuilds 1 to 1.5 s slower with 40 to 60 % fewer writes. Neither
+# changes the generated code.
 [profile.dev]
 debug = "line-tables-only"
+incremental = false
 
 [profile.release]
 opt-level = 3
