@@ -5632,8 +5632,7 @@ class Work(unittest.TestCase):
         merge = subprocess.run(["git", "-C", str(wt), "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "dev"],
                                capture_output=True)  # fmt: skip
         self.assertEqual(merge.returncode, 1)  # stopped on the conflict in a.txt: `add -A` and `reset` would end it
-        for tree, says in ((self.main, "the main tree; lines is for a worktree"), (plain, "not the top of a git tree"),
-                           (wt, "in a merge (MERGE_HEAD): finish or abort it")):  # fmt: skip
+        for tree, says in ((plain, "not the top of a git tree"), (wt, "in a merge (MERGE_HEAD): finish or abort it")):
             with self.subTest(tree=tree):
                 self.assertEqual(quiet_out(work.main, ["lines", "--tree", str(tree)]),
                                  (1, [f"lines: {tree}: {says}; nothing done"]))
@@ -5646,6 +5645,29 @@ class Work(unittest.TestCase):
         self.assertFalse(out.exists())
         self.assertEqual(git_in(wt, "diff", "--name-only", "--diff-filter=U"), "a.txt\n")
         self.assertTrue(git_in(wt, "rev-parse", "-q", "--verify", "MERGE_HEAD").strip())
+
+    def test_lines_in_the_main_tree(self):
+        # X-17: in the main tree, from HEAD (an agent there commits nothing), the uncommitted change and the untracked
+        # file counted, the data left out, the index left empty; --base as in a worktree
+        (self.main / "d.py").write_text("y = 2\n")
+        git_in(self.main, "add", "d.py")
+        git_in(self.main, "commit", "-qm", "d")
+        head = self.head(self.main)
+        (self.main / "d.py").write_text("y = 3\nz = 4\n")
+        (self.main / "c.py").write_text("x = 1\n" * 3)
+        (self.main / "a.txt").write_text("data\n")
+        code, lines = quiet_out(work.main, ["lines", "--tree", str(self.main)])
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[0], f"lines: {self.main} from {head[:9]} (HEAD of the main tree), uncommitted changes "
+                                   "and untracked files too")  # fmt: skip
+        self.assertIn("  3 file(s), +6 -10; without the tests and the data: +5 -1", lines)
+        self.assertIn("       3      0  c.py  (new)", lines)
+        self.assertEqual(git_in(self.main, "diff", "--cached", "--name-only"), "")
+        self.assertIn("?? c.py", git_in(self.main, "status", "--porcelain"))
+        code, lines = quiet_out(work.main, ["lines", "--base", self.dev, "--tree", str(self.main)])
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[0], f"lines: {self.main} from {self.dev}, uncommitted changes and untracked files too")
+        self.assertIn("  3 file(s), +6 -9; without the tests and the data: +5 -0", lines)
 
     def test_help(self):
         for name, c in work.COMMANDS.items():

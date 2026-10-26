@@ -98,13 +98,14 @@ uncommitted changes in its files is not applied; one that does not apply, or app
 committed (exit 1). Last, a line: the branch, HEAD and DEV, the commits after DEV, the commits of DEV taken in,
 the uncommitted changes. git runs inside the command (no shell chains: rules/common.md 1.7), no editor opened.
 
-`lines` (an agent, in its worktree `--tree`, default the tree of this tool; X9-20) prints the lines of what the
-worktree holds (uncommitted changes and untracked files too) from the base `take` takes (`--base`, by default
-`base_of`; an agent who took over a unit passes the WIP commit of the unit before: rules/common.md 2.4), counted as
+`lines` (an agent, in its tree `--tree`, default the tree of this tool; X9-20, X-17) prints the lines of what the
+tree holds (uncommitted changes and untracked files too) from a base (`--base`): in a worktree by default the base
+`take` takes (`base_of`; an agent who took over a unit passes the WIP commit of the unit before: rules/common.md
+2.4), in the main tree by default HEAD (an agent there commits nothing: rules/common.md 2.3). It counts them as
 `patch` counts them (`staged_diff`, `summary`: the same lines, the index left empty alike), and with `--estimate N`
-the line `estimate: …` of `take`. As `sync`, it does nothing and exits 1 in the main tree, out of a git tree or in
-a merge (`in_merge`: the `add -A` and `reset` of `staged_diff` would end it); `patch` (and so `take`) stops alike
-in a worktree in a merge.
+prints the line `estimate: …` of `take`. It does nothing and exits 1 out of a git tree or in a merge (`in_merge`:
+the `add -A` and `reset` of `staged_diff` would end it); `patch` (and so `take`) stops alike in a worktree in a
+merge.
 
 `commit` (the parent, in the main tree `--tree`; X9-17) commits the named paths alone, as they are now (untracked
 files and removals too; `git commit --only`): the changes of the other paths and the index stay. A named path
@@ -964,15 +965,15 @@ def sync(args):
 def lines(args):
     tree = Path(args.tree)
     kind = repo.tree_kind(tree)
-    why = ("not the top of a git tree" if kind is None else "the main tree; lines is for a worktree" if kind == "main"
-           else in_merge(tree))  # fmt: skip
+    why = "not the top of a git tree" if kind is None else in_merge(tree)
     if why:
         print(f"lines: {tree}: {why}; nothing done")
         return 1
-    base = args.base or base_of(tree)
+    main = kind == "main"
+    base = args.base or (git(tree, "rev-parse", "HEAD").stdout.decode().strip() if main else base_of(tree))
     _, stats, new, inner = staged_diff(tree, base)
-    print(f"lines: {tree} from {args.base or f'{base[:9]} (git merge-base {DEV} HEAD)'}, uncommitted changes and "
-          "untracked files too")
+    how = "HEAD of the main tree" if main else f"git merge-base {DEV} HEAD"
+    print(f"lines: {tree} from {args.base or f'{base[:9]} ({how})'}, uncommitted changes and untracked files too")
     code = summary(stats, new, inner)
     if args.estimate:
         print(estimate_line(code[0], args.estimate, tree))
@@ -1068,10 +1069,10 @@ def sync_args(p):
 
 
 def lines_args(p):
-    p.add_argument("--base", help="the commit to count from (default: git merge-base dev HEAD; after a unit taken "
-                   "over, its WIP commit)")
+    p.add_argument("--base", help="the commit to count from (default: in a worktree git merge-base dev HEAD, after a "
+                   "unit taken over its WIP commit; in the main tree HEAD)")
     p.add_argument("--estimate", type=positive, help="the lines of the code estimated before the work")
-    p.add_argument("--tree", default=ROOT, help="the worktree (default the one of this tool)")
+    p.add_argument("--tree", default=ROOT, help="the worktree or the main tree (default the one of this tool)")
 
 
 def co_author(text):
@@ -1196,8 +1197,8 @@ COMMANDS = {
               "作業ツリーで動く担当の始めと、親が dev の取り込みを指示したとき。主のツリーと merge の途中では何もせず終了 1",
               "work.py sync --apply /tmp/x1.patch -m 'WIP: X-9 U6'"),
     "lines": C(lines_args, failing(lines), ("t", "i", "b", "parent"),
-               "作業ツリーの基（take と同じ git merge-base dev HEAD）からの差の行数を、未コミットと未追跡も含めて take・patch と同じ数え方（テストとデータ、Rust のテストのモジュールを除く）で出す。--estimate で take と同じ比の行",
-               "実装の担当が報告に見積もりと実際の行数を書く前。前の単位を引き継いだ担当は、その WIP のコミットを --base に渡す。主のツリー、git の外、merge の途中では何もせず終了 1",
+               "作業ツリーの基（take と同じ git merge-base dev HEAD）か主のツリーの HEAD からの差の行数を、未コミットと未追跡も含めて take・patch と同じ数え方（テストとデータ、Rust のテストのモジュールを除く）で出す。--estimate で take と同じ比の行",
+               "実装の担当が報告に見積もりと実際の行数を書く前。前の単位を引き継いだ作業ツリーの担当は、その WIP のコミットを --base に渡す。git の外と merge の途中では何もせず終了 1",
                "work.py lines --estimate 40"),
     "new": C(new_args, failing(run_new), ("parent",),
              "主のツリーの .claude/worktrees/<名前> に、dev から枝 worktree-<名前> の作業ツリーを作り、経路を最後の行に出す",
