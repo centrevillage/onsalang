@@ -1,3 +1,0 @@
-pub flow voice(gain: Ctl[F32], x: Sig[F32]) -> Sig[F32] {
-  x * gain
-}

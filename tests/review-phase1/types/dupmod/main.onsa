@@ -1,2 +1,0 @@
-use a.b.{one}
-pub fn x() -> I32 { one() }

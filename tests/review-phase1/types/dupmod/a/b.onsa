@@ -1,1 +1,0 @@
-pub fn two() -> I32 { "not an int" + 1 }
