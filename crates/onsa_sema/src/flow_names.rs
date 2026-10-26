@@ -31,14 +31,33 @@ pub(crate) fn clock_rate(c: &Clock) -> Result<Rate, Diagnostic> {
 /// The builtin of a flow that is no delay and is checked (§11.4).
 pub(crate) const SAMPLE_RATE: &str = "sample_rate";
 
-/// The builtin names of a flow that are no delay (§11.4): `sample_tick` is
-/// not checked yet, but its name is reserved as the others.
-const OTHER_BUILTINS: [&str; 2] = [SAMPLE_RATE, "sample_tick"];
+/// The builtin of a flow that is no delay and is not checked yet; its name
+/// is reserved as the others (§11.4).
+const SAMPLE_TICK: &str = "sample_tick";
+
+/// A builtin name of a flow (§2.2, §11.4), as the names stage records a
+/// flow body naming one (`prev~(x)`, `sample_rate()`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FlowBuiltin {
+    Delay(Delay),
+    SampleRate,
+    SampleTick,
+}
+
+impl FlowBuiltin {
+    pub(crate) fn named(name: &str) -> Option<FlowBuiltin> {
+        match name {
+            SAMPLE_RATE => Some(FlowBuiltin::SampleRate),
+            SAMPLE_TICK => Some(FlowBuiltin::SampleTick),
+            _ => Delay::named(name).map(FlowBuiltin::Delay),
+        }
+    }
+}
 
 /// `name` is a builtin name of a flow (§2.2): no binding a flow body sees
 /// (an item of a module, a name a `use` binds) takes it (E0304, S-542).
 pub(crate) fn is_builtin(name: &str) -> bool {
-    Delay::named(name).is_some() || OTHER_BUILTINS.contains(&name)
+    FlowBuiltin::named(name).is_some()
 }
 
 /// A built-in delay (§11.4): the one table of their names and arguments.

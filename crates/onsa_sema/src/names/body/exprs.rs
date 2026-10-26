@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 
 use onsa_syntax::ast::{
-    Block, ExprId, ExprKind, HandlerRef, Lit, MatchArm, Param, ParamName, PatId, PatKind, Path, StmtId, StmtKind,
-    StrLit, StrSeg,
+    Block, ExprId, ExprKind, HandlerRef, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind, StrLit,
+    StrSeg,
 };
 
 use super::{BindingId, BindingKind, Origin, PatRes, PathRes, Stop, W, Walker};
@@ -28,10 +28,14 @@ impl Walker<'_> {
         let ast = self.ast;
         match &ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => self.interp(e, s),
-            ExprKind::Path(p) => {
-                self.path(e, p);
-                Ok(())
-            }
+            ExprKind::Path(_) | ExprKind::Field { .. } => match self.chain(e) {
+                Some(chain) => {
+                    self.name_chain(&chain);
+                    Ok(())
+                }
+                // A field of a value that is no name (`f().x`).
+                None => self.exprs(ast.sub_exprs(e)),
+            },
             ExprKind::Feedback(name) => {
                 if let Some(b) = self.lookup(&name.name) {
                     self.out.paths.insert(e, PathRes::Local(b));
@@ -43,6 +47,10 @@ impl Walker<'_> {
             // `Feature::TypeArgsInExpressions`, reported by the types stage).
             ExprKind::TypeArgs { .. } => Err(Stop),
             ExprKind::Struct { type_args, .. } if !type_args.is_empty() => Err(Stop),
+            ExprKind::Struct { path, .. } => {
+                self.struct_lit(e, path);
+                self.exprs(ast.sub_exprs(e))
+            }
             ExprKind::Block(b) => self.block(b),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
             ExprKind::Closure { params, body, .. } => self.closure(e, params, *body),
@@ -70,21 +78,14 @@ impl Walker<'_> {
         es.into_iter().try_for_each(|e| self.expr(e))
     }
 
-    /// A path whose head is a local: its record. Another head is resolved
-    /// from W4-04 U2b.
-    fn path(&mut self, e: ExprId, p: &Path) {
-        if let Some(b) = self.lookup(&p.segments[0].name) {
-            self.out.paths.insert(e, PathRes::Local(b));
-        }
-    }
-
-    /// The holes of a string literal (§2.4) whose head is a local.
+    /// The holes of a string literal (§2.4).
     fn interp(&mut self, e: ExprId, s: &StrLit) -> W {
         for (k, seg) in s.segments.iter().enumerate() {
             if let StrSeg::Interp(p) = seg
-                && let Some(b) = self.lookup(&p.segments[0].name)
+                && let Some(records) = self.resolve(&p.segments.iter().collect::<Vec<_>>())
             {
-                self.out.interp.insert((e, k as u32), vec![(0, PathRes::Local(b))]);
+                let records = (0..).zip(records).collect();
+                self.out.interp.insert((e, k as u32), records);
             }
         }
         Ok(())
@@ -102,7 +103,7 @@ impl Walker<'_> {
         Ok(())
     }
 
-    fn stmt(&mut self, s: StmtId) -> W {
+    pub(super) fn stmt(&mut self, s: StmtId) -> W {
         let ast = self.ast;
         match &ast.stmt(s).kind {
             StmtKind::Let { pat, init, .. } => {
@@ -178,9 +179,9 @@ impl Walker<'_> {
         Ok(())
     }
 
-    /// The names a pattern binds, in the innermost scope. Its constructors
-    /// are resolved from W4-04 U2b.
-    fn pattern(&mut self, p: PatId, kind: BindingKind, origin: Origin) {
+    /// The names a pattern binds, in the innermost scope, and the items its
+    /// paths name.
+    pub(super) fn pattern(&mut self, p: PatId, kind: BindingKind, origin: Origin) {
         let ast = self.ast;
         match &ast.pat(p).kind {
             PatKind::Bind(name) => {
@@ -196,10 +197,16 @@ impl Walker<'_> {
                     c.cur.insert(name.name.clone(), b);
                 }
             }
-            PatKind::Tuple(ps) | PatKind::TupleStruct { elems: ps, .. } => {
-                ps.iter().for_each(|&q| self.pattern(q, kind, origin));
+            PatKind::Tuple(ps) => ps.iter().for_each(|&q| self.pattern(q, kind, origin)),
+            PatKind::TupleStruct { path, elems } => {
+                self.ctor(p, path);
+                elems.iter().for_each(|&q| self.pattern(q, kind, origin));
             }
-            PatKind::Struct { fields, .. } => fields.iter().for_each(|(_, q)| self.pattern(*q, kind, origin)),
+            PatKind::Struct { path, fields, .. } => {
+                self.ctor(p, path);
+                fields.iter().for_each(|(_, q)| self.pattern(*q, kind, origin));
+            }
+            PatKind::Path(path) => self.ctor(p, path),
             PatKind::Or(alts) => {
                 self.choices.push(Choice::default());
                 for &alt in alts {
@@ -214,7 +221,7 @@ impl Walker<'_> {
                     c.cur.extend(done.prev);
                 }
             }
-            PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) => {}
+            PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) => {}
         }
     }
 

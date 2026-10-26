@@ -237,14 +237,19 @@ const ASSOC_CONSTS: &[(Recv, &str, ConstTy)] = &[
     (Recv::Int, "BITS", ConstTy::U32),
 ];
 
-/// Associated constant `Type.NAME` of a scalar type (`F32.PI`, `I32.MAX`).
-pub fn assoc_const(types: &mut Types, scalar: TyId, name: &str) -> Option<TyId> {
+/// The row of the associated constant `name` of a scalar type.
+fn assoc_const_row(types: &Types, scalar: TyId, name: &str) -> Option<ConstTy> {
     let family = match types.get(scalar) {
         Ty::Float(_) => Recv::Float,
         Ty::Int(_) => Recv::Int,
         _ => return None,
     };
-    let (_, _, ty) = ASSOC_CONSTS.iter().find(|(r, n, _)| *r == family && *n == name)?;
+    ASSOC_CONSTS.iter().find(|(r, n, _)| *r == family && *n == name).map(|&(_, _, ty)| ty)
+}
+
+/// Associated constant `Type.NAME` of a scalar type (`F32.PI`, `I32.MAX`).
+pub fn assoc_const(types: &mut Types, scalar: TyId, name: &str) -> Option<TyId> {
+    let ty = assoc_const_row(types, scalar, name)?;
     Some(match ty {
         ConstTy::Scalar => scalar,
         ConstTy::U32 => types.int(IntKind::U32),
@@ -274,18 +279,36 @@ pub fn assoc_fn(
     generic_arg: TyId,
 ) -> Option<(Vec<TyId>, TyId)> {
     let u32 = types.int(IntKind::U32);
-    let (_, f) = ASSOC_FNS.iter().find(|(n, _)| *n == name)?;
-    match (scalar.map(|t| types.get(t).clone()), builtin, f) {
-        (Some(Ty::Float(k)), _, AssocFn::FromBits) => {
+    match (scalar.map(|t| types.get(t).clone()), assoc_fn_row(types, scalar, builtin, name)?) {
+        (Some(Ty::Float(k)), AssocFn::FromBits) => {
             let bits = types.int(if k == FloatKind::F32 { IntKind::U32 } else { IntKind::U64 });
             Some((vec![bits], scalar.unwrap()))
         }
-        (_, Some(BuiltinTy::Buf), AssocFn::Zeroed) => {
+        (_, AssocFn::Zeroed) => {
             let buf = types.builtin(BuiltinTy::Buf, vec![generic_arg]);
             Some((vec![u32], buf))
         }
         _ => None,
     }
+}
+
+/// The row of the associated function `name` of a builtin type (a
+/// `scalar`, or a generic `builtin`).
+fn assoc_fn_row(types: &Types, scalar: Option<TyId>, builtin: Option<BuiltinTy>, name: &str) -> Option<AssocFn> {
+    let (_, f) = ASSOC_FNS.iter().find(|(n, _)| *n == name)?;
+    let owns = match f {
+        AssocFn::FromBits => scalar.is_some_and(|t| matches!(types.get(t), Ty::Float(_))),
+        AssocFn::Zeroed => builtin == Some(BuiltinTy::Buf),
+    };
+    owns.then_some(*f)
+}
+
+/// Whether a builtin type (a `scalar`, or a generic `builtin`) has the
+/// associated constant or function `name`: the question of the names stage,
+/// which makes no type (`Type.name` is resolved before it is typed).
+pub(crate) fn has_assoc(types: &Types, scalar: Option<TyId>, builtin: Option<BuiltinTy>, name: &str) -> bool {
+    scalar.is_some_and(|t| assoc_const_row(types, t, name).is_some())
+        || assoc_fn_row(types, scalar, builtin, name).is_some()
 }
 
 /// The names of every builtin method, associated constant and associated

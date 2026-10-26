@@ -4,24 +4,27 @@
 //! types stage, modes and the later stages read (D-15).
 //!
 //! The parts: this module (the record and the entry [`walk_bodies`]),
-//! `scope` (the tree of the scopes, the bindings and the lookup of a local)
-//! and `exprs` (the walk of the statements, expressions and patterns).
+//! `scope` (the tree of the scopes, the bindings and the lookup of a local),
+//! `exprs` (the walk of the statements, expressions and patterns, and of
+//! a flow body) and `paths` (the names whose head is no local).
 //!
 //! The walk makes the record only, and no diagnostic: the types stage
 //! resolves the names of a body as before and reports their errors, until it
 //! reads the record (W4-04 U3a, U3b).
-#![allow(dead_code, reason = "the record is read from W4-04 U3a; the walk fills the rest of it in U2b")]
+#![allow(dead_code, reason = "the record is read from W4-04 U3a")]
 
 mod exprs;
+mod paths;
 mod scope;
 #[cfg(test)]
 mod tests;
 
 use std::collections::HashMap;
 
-use onsa_syntax::ast::{Ast, ExprId, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId};
+use onsa_syntax::ast::{Ast, ExprId, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind};
 
-use crate::def::DefKind;
+use crate::def::{DefKind, FlowInput, GenericDef, ModId};
+use crate::flow_names::FlowBuiltin;
 use crate::resolve::Entity;
 use crate::ty::TyId;
 use crate::{Analysis, DefId, Package, flatten};
@@ -153,30 +156,42 @@ pub(crate) enum PathRes {
     /// A namespace the chain passes: a module, a flow, a type, an alias or
     /// `Self` (the nodes before the end).
     Namespace(Entity),
-    /// A value of an item: through a module, a flow, a type, an alias or
+    /// The end of the chain, an item: a value (a function, a constant, a
+    /// variant, an associated item), whose fields and methods follow, or
+    /// what the place of a value does not take (a module, a type), which
+    /// the types stage reports. Through a module, a flow, a type, an alias or
     /// `Self`; `owner` is the type it is a member of as the chain names it
-    /// (an alias or `Self` as the type they stand for).
+    /// (an alias or `Self` as the type they stand for, from W4-04 U6).
     Item {
         entity: Entity,
         owner: Option<TyId>,
     },
-    /// An associated item of a builtin type (`F32.PI`, `Buf.zeroed`).
+    /// An associated item of a builtin type in the compiler's table
+    /// (`F32.PI`, `Buf.zeroed`, `crate::builtin`); `ty` is the type it is a
+    /// member of (a generic one by its key, [`Analysis::builtin_key`]).
     BuiltinAssoc {
         ty: TyId,
         name: String,
     },
-    /// A builtin name of a flow (§11.4), as `crate::flow_names` spells it.
-    FlowBuiltin(&'static str),
+    /// A builtin name of a flow body (§2.2, §11.4).
+    FlowBuiltin(FlowBuiltin),
 }
 
 /// What a pattern binds or names.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PatRes {
     Bind(BindingId),
-    Ctor { entity: Entity, owner: Option<TyId> },
+    /// The item the path of a pattern names (`None`, `Shape.Circle(r)`,
+    /// `Point { x, y }`): a constructor, or what the types stage reports as
+    /// none; `owner` as of [`PathRes::Item`].
+    Ctor {
+        entity: Entity,
+        owner: Option<TyId>,
+    },
 }
 
-/// The struct a struct literal makes, and the type the literal names it by.
+/// The def the path of a struct literal names (a struct, or what the types
+/// stage reports as none), and the type the literal names it by.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct StructRes {
     pub def: DefId,
@@ -195,10 +210,10 @@ pub(crate) struct ScopeInfo {
 struct Stop;
 type W = Result<(), Stop>;
 
-/// Walk the body of every function, test and `const` initializer of the
-/// package and its dependencies (the defs `crate::body::check_all` checks),
-/// after the names of the modules and the signatures are known, and keep
-/// their records in [`Analysis::names`].
+/// Walk the body of every function, test, `const` initializer and flow of
+/// the package and its dependencies (the defs `crate::body::check_all`
+/// checks), after the names of the modules and the signatures are known,
+/// and keep their records in [`Analysis::names`].
 pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
     let mut names = HashMap::new();
@@ -214,25 +229,33 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
             continue;
         };
         let ast = &module.parsed.ast;
-        let (body, params): (ExprId, &[Param]) = match &def.kind {
+        // The type and const parameters a body sees: of the function, or of
+        // the `impl` of an associated `const`.
+        let owner_generics = || def.owner.map_or(&[][..], |o| a.def(o).generics());
+        let (body, params, generics): (ExprId, &[Param], &[GenericDef]) = match &def.kind {
             DefKind::Fn(f) => match f.body {
-                Some(b) => (b, fn_params(ast, item)),
+                Some(b) => (b, fn_params(ast, item), &f.generics),
                 None => continue,
             },
-            DefKind::Test { body, .. } => (*body, &[]),
+            DefKind::Test { body, .. } => (*body, &[], &[]),
             DefKind::Const(c) => match c.value {
-                Some(v) => (v, &[]),
+                Some(v) => (v, &[], owner_generics()),
                 None => continue,
             },
-            // A flow body (from W4-04 U2b).
+            DefKind::Flow(f) => (f.body, &[], &[]),
             _ => continue,
         };
         // A panic names this declaration (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
-        // `self` is a binding of a method of an `impl`.
-        let has_self = def.owner.is_some_and(|o| matches!(a.def(o).kind, DefKind::Impl(_)));
-        let mut w = Walker::new(ast);
-        let done = w.walk_fn(params, has_self, body);
+        let mut w = Walker::new(a, def.module, ast, generics);
+        let done = match &def.kind {
+            DefKind::Flow(f) => w.walk_flow(&f.inputs, body),
+            _ => {
+                // `self` is a binding of a method of an `impl`.
+                let has_self = def.owner.is_some_and(|o| matches!(a.def(o).kind, DefKind::Impl(_)));
+                w.walk_fn(params, has_self, body)
+            }
+        };
         w.out.complete = done.is_ok();
         names.insert(id, w.out);
     }
@@ -251,17 +274,32 @@ fn fn_params(ast: &Ast, item: onsa_syntax::ast::ItemId) -> &[Param] {
     }
 }
 
-/// The walk of one body.
+/// The walk of one body of the module `m`.
 struct Walker<'a> {
+    a: &'a Analysis,
+    m: ModId,
     ast: &'a Ast,
+    /// The type and const parameters of the heading (§4.5).
+    generics: &'a [GenericDef],
+    /// A flow body, whose builtin names are its own (§2.2, §11.4).
+    flow: bool,
     out: BodyNames,
     scopes: scope::Scopes,
     choices: Vec<exprs::Choice>,
 }
 
 impl<'a> Walker<'a> {
-    fn new(ast: &'a Ast) -> Walker<'a> {
-        Walker { ast, out: BodyNames::default(), scopes: scope::Scopes::default(), choices: Vec::new() }
+    fn new(a: &'a Analysis, m: ModId, ast: &'a Ast, generics: &'a [GenericDef]) -> Walker<'a> {
+        Walker {
+            a,
+            m,
+            ast,
+            generics,
+            flow: false,
+            out: BodyNames::default(),
+            scopes: scope::Scopes::default(),
+            choices: Vec::new(),
+        }
     }
 
     /// A body with the parameters of its heading.
@@ -283,6 +321,40 @@ impl<'a> Walker<'a> {
             }
         }
         self.expr(body)?;
+        self.close_scope();
+        Ok(())
+    }
+
+    /// A flow body (§11.2), in the order the types stage declares: the
+    /// inputs, the names of every `let` of the body, then the body. Its
+    /// assignments are not walked: their errors are the flow stage's (E0806)
+    /// until W7-04 reports them in the names stage.
+    fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
+        self.flow = true;
+        self.open_scope();
+        for (k, input) in inputs.iter().enumerate() {
+            let name = Ident { name: input.name.clone(), span: input.span };
+            self.declare(&name, BindingKind::FlowInput, Origin::FlowInput(k as u32), None);
+        }
+        let ast = self.ast;
+        let onsa_syntax::ast::ExprKind::Block(b) = &ast.expr(body).kind else { return self.expr(body) };
+        for &s in &b.stmts {
+            if let StmtKind::Let { pat, .. } = ast.stmt(s).kind {
+                self.pattern(pat, BindingKind::FlowLet, Origin::Let(s));
+            }
+        }
+        self.open_scope();
+        for &s in &b.stmts {
+            match &ast.stmt(s).kind {
+                StmtKind::Let { init, .. } => self.expr(*init)?,
+                StmtKind::Assign { .. } => {}
+                _ => self.stmt(s)?,
+            }
+        }
+        if let Some(t) = b.tail {
+            self.expr(t)?;
+        }
+        self.close_scope();
         self.close_scope();
         Ok(())
     }
