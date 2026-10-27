@@ -1,0 +1,4 @@
+pub const X: I32 = {
+  let r = 1
+  r
+}
