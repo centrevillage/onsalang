@@ -1,0 +1,9 @@
+pub struct B2[const N: U32] { a: [F32; N] }
+impl[const N: U32] B2[N] {
+  pub const LEN: U32 = N
+  pub fn len(self) -> U32 { Self.LEN }
+}
+test "t" {
+  let b: B2[3] = B2 { a: [0.0; 3] }
+  assert b.len() == 3
+}

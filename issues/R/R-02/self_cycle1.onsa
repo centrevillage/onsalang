@@ -1,0 +1,4 @@
+pub struct P { x: F32 }
+impl P {
+  pub const M: U32 = Self.M
+}
