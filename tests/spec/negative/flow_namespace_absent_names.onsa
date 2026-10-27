@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-707, R-147, §11.6, §15.1: the items of the namespace of a flow are a closed list, so a name that is
+// not in it is a name that is not found: E0302 in the names stage (not E0401, the code of a flow named in
+// the place of a value), whether it is called (`g.nosuch(1)`), read as a function value (`let f = g.nosuch`)
+// or used in another place of a body. `process_inplace` is a name of the list that the types of a flow decide
+// (§11.6: the sample inputs and the outputs of the same types in order): for `one`, which has no sample
+// input, the name is not in the namespace, and it is not found in a value position either. The state size
+// (`SIZE`) is not in the namespace (§11.6). The calls of `process_inplace` that are not found are in
+// `flow_inplace_absent.onsa`. No candidate (`fixes = 0`, S-258). One error in each unit (§18.1).
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow one() -> F32 at sample {
+  1.0
+}
+
+pub fn a_call_of_a_name_that_is_not_in_the_namespace() -> F32 {
+  g.nosuch(1.0)                                     //~ E0302
+}
+
+pub fn a_function_value_of_a_name_that_is_not_in_the_namespace() -> F32 {
+  let f = g.nosuch                                  //~ E0302
+  f.(1.0)
+}
+
+pub fn a_function_value_of_process_inplace_that_is_not_made() -> F32 {
+  let f = one.process_inplace                       //~ E0302
+  1.0
+}
+
+pub fn a_read_of_the_state_size() -> U32 {
+  g.SIZE                                            //~ E0302
+}
+
+pub fn a_name_of_another_flow() -> F32 {
+  one.nosuch                                        //~ E0302
+}
+
+pub fn a_call_in_a_branch(c: Bool) -> F32 {
+  if c {
+    g.nosuch(1.0)                                   //~ E0302
+  } else {
+    2.0
+  }
+}
+
+pub fn a_call_in_a_closure() -> F32 {
+  let h = fn(x: F32) -> F32 { g.nosuch(x) }         //~ E0302
+  h.(1.0)
+}
+
+pub fn a_call_in_a_generic_function[T](x: T) -> F32 {
+  g.nosuch(1.0)                                     //~ E0302
+}
+
+pub fn a_call_in_an_argument() -> F32 {
+  twice(g.nosuch(1.0))                              //~ E0302
+}
+
+pub fn twice(x: F32) -> F32 {
+  x + x
+}
+
+pub fn the_names_that_are_there(inout s: g.State) {
+  g.reset(inout s)
+}

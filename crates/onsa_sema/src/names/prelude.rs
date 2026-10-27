@@ -25,14 +25,21 @@ const GENERICS: [BuiltinTy; 10] = [
     BuiltinTy::Result,
 ];
 
-/// The variants of the prelude, and `panic`.
-const VALUES: [(&str, Builtin); 5] = [
-    ("Some", Builtin::Some),
-    ("None", Builtin::None),
-    ("Ok", Builtin::Ok),
-    ("Err", Builtin::Err),
-    ("panic", Builtin::Panic),
+/// The variants of the prelude, with the type each is a variant of, and
+/// `panic`.
+const VALUES: [(&str, Builtin, Option<BuiltinTy>); 5] = [
+    ("Some", Builtin::Some, Some(BuiltinTy::Option)),
+    ("None", Builtin::None, Some(BuiltinTy::Option)),
+    ("Ok", Builtin::Ok, Some(BuiltinTy::Result)),
+    ("Err", Builtin::Err, Some(BuiltinTy::Result)),
+    ("panic", Builtin::Panic, None),
 ];
+
+/// The type whose variant the name of the prelude `b` is (§4.1): `Option`
+/// of `None` and `Some`, `Result` of `Ok` and `Err`.
+pub(crate) fn variant_of(b: Builtin) -> Option<BuiltinTy> {
+    VALUES.iter().find(|&&(_, v, _)| v == b).and_then(|&(_, _, ty)| ty)
+}
 
 /// The module of std whose `pub` items are in the prelude (§15.1, S-659).
 const CORE: &str = "core";
@@ -48,7 +55,7 @@ pub(super) fn build(a: &mut Analysis) {
     for (i, (name, _)) in TRAITS.iter().enumerate() {
         put(name, Builtin::Trait(i as u8));
     }
-    for (name, b) in VALUES {
+    for (name, b, _) in VALUES {
         put(name, b);
     }
     put(onsa_syntax::foreign::COPY, Builtin::Kind(Bound::Copy));

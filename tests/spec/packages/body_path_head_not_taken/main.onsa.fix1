@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// S-258, §15.1: another module is named in a body only through a name that a `use` took. `use kp.clk` takes
+// `clk` and not `kp`, so the path `kp.clk.TICKS` starts from a name that this module has not taken: E0302,
+// with one candidate, the `use` of the head (`use kp`). The path is not read through the `clk` that is taken
+// (that would be a spelling guess, S-258). One path with no `use` in each module of this package (two
+// candidates that add the same `use` to one module would be an E0304 of the second), and the same in
+// the modules `second.onsa` (a function), `third.onsa` (a variant) and `fourth.onsa` (a name taken in a list).
+use kp.clk
+use kp
+
+pub fn a_constant() -> U32 {
+  kp.clk.TICKS                                      //~ E0302
+}

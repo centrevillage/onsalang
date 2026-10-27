@@ -1,0 +1,20 @@
+use kp
+
+pub fn a_unit_variant() -> kp.inner.Mode {
+  kp.inner.Mode.Z                                   //~ E0302
+}
+
+pub fn a_tuple_variant() -> kp.inner.Mode {
+  kp.inner.Mode.Z(1)                                //~ E0302
+}
+
+pub fn a_pattern(m: kp.inner.Mode) -> I32 {
+  match m {
+    kp.inner.Mode.Z => 0,                           //~ E0302
+    _ => 1,
+  }
+}
+
+pub fn a_module_the_package_does_not_have() -> I32 {
+  kp.nosuch.g()                                     //~ E0302
+}

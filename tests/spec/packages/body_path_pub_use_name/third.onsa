@@ -1,0 +1,14 @@
+use main.inner
+
+pub fn a_function_that_pub_use_takes() -> I32 {
+  inner.g()                                         //~ E0302
+}
+
+pub fn a_variant_of_a_type_that_pub_use_takes() -> I32 {
+  let _ = inner.Mode.A                              //~ E0302
+  1
+}
+
+pub fn an_item_of_the_child() -> I32 {
+  inner.h()
+}

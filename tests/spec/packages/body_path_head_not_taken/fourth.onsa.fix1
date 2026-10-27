@@ -1,0 +1,6 @@
+use kp.inner.{Mode, g}
+use kp
+
+pub fn a_function_beside_the_names_taken() -> I32 {
+  g() + kp.inner.g()                                //~ E0302
+}

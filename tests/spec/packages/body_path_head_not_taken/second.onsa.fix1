@@ -1,0 +1,6 @@
+use kp.clk
+use kp
+
+pub fn a_function() -> I32 {
+  kp.clk.c()                                        //~ E0302
+}

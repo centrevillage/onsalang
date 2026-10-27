@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.1", "§15.1"]
+
+// S-607, S-305, §4.1: the variants of `Option` and `Result` by their names alone (the checked forms are in
+// `prelude_variants_bare.onsa`), run: the value a name makes is the value of the variant of the prelude
+// enum, and a pattern with a bare name selects it. Every test passes.
+
+pub fn none() -> Option[I32] {
+  None
+}
+
+pub fn some() -> Option[I32] {
+  Some(1)
+}
+
+pub fn ok() -> Result[I32, I32] {
+  Ok(1)
+}
+
+pub fn err(e: I32) -> Result[I32, I32] {
+  Err(e)
+}
+
+pub fn or_zero(o: Option[I32]) -> I32 {
+  match o {
+    None => 0,
+    Some(v) => v,
+  }
+}
+
+test "the variants of Option by their names" {
+  assert or_zero(none()) == 0
+  assert or_zero(some()) == 1
+  assert or_zero(Some(5)) == 5
+  assert or_zero(None) == 0
+  assert none() == None
+  assert some() == Some(1)
+  assert some() != None
+}
+
+test "the variants of Result by their names" {
+  assert ok() == Ok(1)
+  assert err(7) == Err(7)
+  assert ok() != err(7)
+}

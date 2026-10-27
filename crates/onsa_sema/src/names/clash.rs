@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::def::{DefId, ModId};
+use crate::resolve::UseBinding;
 use crate::sig::Sema;
 
 /// Why a `use` cannot bind a name, whatever it takes (§15.1, §2.2).
@@ -106,7 +107,15 @@ impl<'p> Sema<'p> {
         for (name, span) in &bound {
             match self.use_clash(m, name, *span, first.get(name.as_str()).copied()) {
                 Some(diag) => {
-                    self.a.modules.get_mut(m).clashed.body.insert(name.clone());
+                    let info = self.a.modules.get_mut(m);
+                    info.clashed.body.insert(name.clone());
+                    // The binding of the table has the E0304 (of an item or
+                    // of the prelude): it is failed, and a later error of the
+                    // `use` is not reported (the E0302 of an item a flow does
+                    // not generate, S-709).
+                    if matches!(info.uses.get(name), Some(&UseBinding::Bound { span: at, .. }) if at == *span) {
+                        info.uses.insert(name.clone(), UseBinding::Failed { span: *span });
+                    }
                     self.report_mod(diag);
                 }
                 None => {

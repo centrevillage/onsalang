@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// R-254, R-249, S-258, S-611, §15.1: a variant that the enum of another module does not have is a name that is
+// not found: E0302 in the names stage, and not a type error (E0401 "is not a value", E0413 "does not exist"),
+// whether the enum is reached as `inner.Mode` (after `use kp.inner`), `Mode` (after `use kp.inner.{Mode}`, in
+// `second.onsa`) or `kp.inner.Mode` (after `use kp`, in `third.onsa`), as an expression, called, as a function
+// value or in a pattern. A near spelling is not a candidate (`fixes = 0`). The variants that are there
+// (`inner.Mode.A`, `inner.Mode.B`) are the controls. One error in each unit (§18.1).
+use kp.inner
+
+pub fn a_unit_variant() -> inner.Mode {
+  inner.Mode.Z                                      //~ E0302
+}
+
+pub fn a_tuple_variant() -> inner.Mode {
+  inner.Mode.Z(1)                                   //~ E0302
+}
+
+pub fn a_misspelt_variant() -> inner.Mode {
+  inner.Mode.Bb(1)                                  //~ E0302
+}
+
+pub fn a_function_value() -> I32 {
+  let f = inner.Mode.Z                              //~ E0302
+  1
+}
+
+pub fn a_pattern(m: inner.Mode) -> I32 {
+  match m {
+    inner.Mode.Z => 0,                              //~ E0302
+    _ => 1,
+  }
+}
+
+pub fn a_pattern_with_a_field(m: inner.Mode) -> I32 {
+  match m {
+    inner.Mode.Z(v) => v,                           //~ E0302
+    _ => 1,
+  }
+}
+
+pub fn a_function_the_module_does_not_have() -> I32 {
+  inner.nosuch()                                    //~ E0302
+}
+
+pub fn a_type_the_module_does_not_have() -> I32 {
+  inner.Nosuch.A                                    //~ E0302
+}
+
+pub fn the_variants_that_are_there(m: inner.Mode) -> I32 {
+  match m {
+    inner.Mode.A => 0,
+    inner.Mode.B(v) => v,
+  }
+}

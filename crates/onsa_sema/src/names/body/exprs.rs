@@ -4,11 +4,11 @@
 
 use std::collections::HashMap;
 
-use onsa_diag::Stage;
 use onsa_diag::unsupported::Feature;
+use onsa_diag::{Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Block, CallKind, ExprId, ExprKind, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind, StrLit,
-    StrSeg, TypeId, UnOp,
+    StrSeg, TypeId,
 };
 
 use super::paths::Place;
@@ -108,20 +108,13 @@ impl Walker<'_> {
     }
 
     /// A constant expression (§4.5: the length of `[x; n]`, a bound of
-    /// `par`, the constant of a delay): the names of its leaves under
-    /// parentheses, `-` and the operators (as `flow/consts.rs` reads them)
-    /// are at [`Place::Const`], until W4-04 U5 makes the words of the errors
-    /// of a path one.
+    /// `par`, the constant of a delay), walked as any expression; a name in
+    /// it has no candidate that would leave it no constant (§18.1, S-236).
     fn const_expr(&mut self, e: ExprId) -> W {
-        match &self.ast.expr(e).kind {
-            ExprKind::Paren(x) | ExprKind::Unary { op: UnOp::Neg, expr: x } => self.const_expr(*x),
-            ExprKind::Binary { lhs, rhs, .. } => {
-                self.const_expr(*lhs)?;
-                self.const_expr(*rhs)
-            }
-            ExprKind::Path(_) | ExprKind::Field { .. } => self.name_at(e, Place::Const),
-            _ => self.expr(e),
-        }
+        let outer = std::mem::replace(&mut self.in_const, true);
+        let r = self.expr(e);
+        self.in_const = outer;
+        r
     }
 
     /// E0200 for the type arguments at `span` of an expression.
@@ -137,13 +130,41 @@ impl Walker<'_> {
         for (k, seg) in (0..).zip(&s.segments) {
             if let StrSeg::Interp(p) = seg {
                 let (records, fail) = self.resolve(&p.segments.iter().collect::<Vec<_>>(), Place::Value);
-                if let Some(f) = fail {
-                    return Err(self.fail(f));
+                match fail {
+                    Some(Fail::Report(d)) => {
+                        let d = self.in_literal(d, self.ast.expr(e).span);
+                        return Err(self.fail(Fail::Report(d)));
+                    }
+                    Some(f) => return Err(self.fail(f)),
+                    None => {}
                 }
                 self.out.interp.insert((e, k), (0..).zip(records).collect());
             }
         }
         Ok(())
+    }
+
+    /// The candidates of the error `d` of a hole of the string literal at
+    /// `lit`: an edit inside the literal, which is one token, becomes the
+    /// replacement of the literal with the edits inside it (§18.1).
+    fn in_literal(&self, mut d: Diagnostic, lit: Span) -> Diagnostic {
+        let inside = |e: &Edit| e.span.file == lit.file && lit.start < e.span.start && e.span.end < lit.end;
+        for fix in &mut d.fixes {
+            let (inner, mut edits): (Vec<Edit>, Vec<Edit>) = fix.edits().iter().cloned().partition(inside);
+            if inner.is_empty() {
+                continue;
+            }
+            let (mut text, mut pos) = (String::new(), lit.start as usize);
+            for e in &inner {
+                text.push_str(&self.text[pos..e.span.start as usize]);
+                text.push_str(&e.replace);
+                pos = e.span.end as usize;
+            }
+            text.push_str(&self.text[pos..lit.end as usize]);
+            edits.push(Edit::replace(lit, text));
+            *fix = Fix::new(fix.title(), edits);
+        }
+        d
     }
 
     fn block(&mut self, b: &Block) -> W {

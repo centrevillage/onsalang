@@ -390,6 +390,8 @@ struct Walker<'a> {
     /// it reaches its `let` (§18.1: in the order of the text).
     prescan: Option<StmtId>,
     flow_stop: Option<(StmtId, Fail)>,
+    /// In a constant expression of §4.5 (`Walker::const_expr`).
+    in_const: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -408,6 +410,7 @@ impl<'a> Walker<'a> {
             type_sites: Vec::new(),
             prescan: None,
             flow_stop: None,
+            in_const: false,
         }
     }
 

@@ -1,0 +1,3 @@
+[package]
+name = "use_flow_absent_clash"
+edition = "2026"

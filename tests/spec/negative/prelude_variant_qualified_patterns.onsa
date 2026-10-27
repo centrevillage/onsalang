@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§7", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-607, S-305, §4.1: a pattern that qualifies a variant of `Option` or `Result` by the type
+// (`Option.None =>`, `Option.Some(v) =>`, `Result.Ok(v) =>`, `Result.Err(e) =>`) names a variant that the
+// type namespace does not give: E0302 in the names stage (§15.1), as in an expression. The one candidate
+// takes the qualifier off (`None`, `Some(v)`), and applying it leaves no diagnostic in the unit. The error
+// is at the pattern (the first one of the unit is reported, §18.1), so each form is in a function of its
+// own. The patterns that are right are the bare names, in the last functions.
+
+pub fn unit_variant(o: Option[I32]) -> I32 {
+  match o {
+    Option.None => 0,                               //~ E0302
+    Some(v) => v,
+  }
+}
+
+pub fn tuple_variant(o: Option[I32]) -> I32 {
+  match o {
+    Option.Some(v) => v,                            //~ E0302
+    None => 0,
+  }
+}
+
+pub fn ok_variant(r: Result[I32, I32]) -> I32 {
+  match r {
+    Result.Ok(v) => v,                              //~ E0302
+    Err(_) => 0,
+  }
+}
+
+pub fn err_variant(r: Result[I32, I32]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Result.Err(e) => e,                             //~ E0302
+  }
+}
+
+pub fn nested_in_a_pattern(o: Option[Option[I32]]) -> I32 {
+  match o {
+    Some(Option.Some(v)) => v,                      //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn in_an_or_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Option.None | Some(0) => 0,                     //~ E0302
+    Some(v) => v,
+  }
+}
+
+pub fn with_a_guard(o: Option[I32]) -> I32 {
+  match o {
+    Option.Some(v) if v > 1 => v,                   //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn bare_names_are_fine(o: Option[I32], r: Result[I32, I32]) -> I32 {
+  let a = match o {
+    None => 0,
+    Some(v) => v,
+  }
+  let b = match r {
+    Ok(v) => v,
+    Err(e) => e,
+  }
+  a + b
+}

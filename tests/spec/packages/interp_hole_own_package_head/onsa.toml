@@ -1,0 +1,3 @@
+[package]
+name = "interp_hole_own_package_head"
+edition = "2026"

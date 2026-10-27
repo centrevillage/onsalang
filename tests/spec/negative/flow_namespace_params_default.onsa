@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// R-147, S-625, §11.6: the defaults of `@param` are not in the namespace of a flow (the attribute values are
+// read by the tools, and the Onsa code writes the defaults as a `Params` literal), so `params_default` is
+// a name that is not in the namespace of any flow: E0302 in a value position, for a flow whose `block` input
+// has a `@param` with a `default` (`amp`) and for a flow with no `block` input (`g`), called or read as a
+// function value. (A flow whose `block` input has no `@param` is in
+// `flow_namespace_params_default_no_param.onsa`.) The `use` of it is in `packages/use_flow_params_default`.
+// No candidate (`fixes = 0`). One error in each unit (§18.1).
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow amp(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub fn a_call_for_a_param_with_a_default() -> I32 {
+  let _ = amp.params_default()                      //~ E0302
+  1
+}
+
+pub fn a_function_value_for_a_param_with_a_default() -> I32 {
+  let f = amp.params_default                        //~ E0302
+  1
+}
+
+pub fn a_call_for_a_flow_with_no_block_input() -> I32 {
+  let _ = g.params_default()                        //~ E0302
+  1
+}
+
+pub fn a_function_value_for_a_flow_with_no_block_input() -> I32 {
+  let f = g.params_default                          //~ E0302
+  1
+}

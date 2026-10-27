@@ -1,0 +1,10 @@
+use kp.inner.{Mode}
+
+test "a variant through the type taken by name" {
+  let m = Mode.B(3)
+  let v = match m {
+    Mode.A => 0,
+    Mode.B(x) => x,
+  }
+  assert v == 3
+}

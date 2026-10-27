@@ -14,36 +14,14 @@ impl<'a> Checker<'a> {
         let u32 = self.u32();
         let mut shape = ConstShape { leaves: Vec::new(), arith: true, neg: false, ops: false };
         self.const_shape(e, &mut shape);
-        // Each leaf, its names read as the constants of type positions are
-        // (`constarg::named`: `N`, `cfg.N`, `I32.BITS`).
+        // Each leaf: its name as the record has it, read as the constants
+        // of type positions are (`constarg::of_entity`: `N`, `cfg.N`;
+        // `constarg::of_builtin`: `I32.BITS`).
         let mut leaves = Vec::new();
         for &l in &shape.leaves {
             let leaf = match &self.expr(l).kind {
                 ExprKind::Lit(Lit::Int { value, .. }) => Leaf::Int(*value),
-                ExprKind::Path(_) | ExprKind::Field { .. } => match crate::constarg::path_of(self.ast, l) {
-                    // A local, or a field of one.
-                    Some(_) if self.of_a_local(l) => Leaf::Other,
-                    Some(p) => {
-                        let lspan = self.expr(l).span;
-                        match crate::constarg::named(self.a, self.m, self.ast, self.text, &p, lspan) {
-                            Ok(Some(v)) => match self.names.paths.get(&l) {
-                                Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. }) => {
-                                    Leaf::Value(v, Some(d))
-                                }
-                                _ => Leaf::Value(v, None),
-                            },
-                            Ok(None) => Leaf::Other,
-                            Err(crate::constarg::ConstErr::Uncomputed(_)) => Leaf::Uncomputed,
-                            Err(crate::constarg::ConstErr::Report(d)) => Leaf::Error(d),
-                            // A constant whose unit failed (S-59): no diagnostic.
-                            Err(crate::constarg::ConstErr::Unknown) => {
-                                self.failed = true;
-                                return Err(crate::body::Stop);
-                            }
-                        }
-                    }
-                    None => Leaf::Other,
-                },
+                ExprKind::Path(_) | ExprKind::Field { .. } => self.const_leaf(l)?,
                 _ => Leaf::Other,
             };
             leaves.push((l, leaf));
@@ -92,6 +70,51 @@ impl<'a> Checker<'a> {
         };
         self.record(e, u32);
         Ok(value)
+    }
+
+    /// The leaf `l` of a constant expression that is a chain of names, by
+    /// its record: a local or a field of one is no constant.
+    fn const_leaf(&mut self, l: ExprId) -> R<Leaf> {
+        let lspan = self.expr(l).span;
+        let value = match self.names.paths.get(&l).cloned() {
+            _ if self.of_a_local(l) => return Ok(Leaf::Other),
+            Some(PathRes::Item { entity, .. }) => {
+                let d = match entity {
+                    Entity::Def(d) | Entity::Member(d) => Some(d),
+                    _ => None,
+                };
+                crate::constarg::of_entity(self.a, self.m, self.ast, self.text, entity, lspan)
+                    .map(|v| v.map(|v| (v, d)))
+            }
+            Some(PathRes::BuiltinAssoc { ty, name }) => {
+                match crate::constarg::of_builtin(self.a, ty, &name, self.text, lspan) {
+                    Some(r) => r.map(|v| v.map(|v| (v, None))),
+                    None => {
+                        onsa_diag::internal::bug(Some(lspan), "an associated constant the names stage did not find")
+                    }
+                }
+            }
+            // A field after a value (`K.n`), which has no record: the error
+            // of its path, as a type position has it (W5-08 types the whole
+            // grammar).
+            _ => match crate::constarg::path_of(self.ast, l) {
+                Some(p) => {
+                    crate::constarg::named(self.a, self.m, self.ast, self.text, &p, lspan).map(|v| v.map(|v| (v, None)))
+                }
+                None => return Ok(Leaf::Other),
+            },
+        };
+        Ok(match value {
+            Ok(Some((v, d))) => Leaf::Value(v, d),
+            Ok(None) => Leaf::Other,
+            Err(crate::constarg::ConstErr::Uncomputed(_)) => Leaf::Uncomputed,
+            Err(crate::constarg::ConstErr::Report(d)) => Leaf::Error(d),
+            // A constant whose unit failed (S-59): no diagnostic.
+            Err(crate::constarg::ConstErr::Unknown) => {
+                self.failed = true;
+                return Err(crate::body::Stop);
+            }
+        })
     }
 
     /// The leaves of `e` under parentheses, prefix `-` and binary operators,

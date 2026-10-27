@@ -1,0 +1,11 @@
+pub fn some() -> Option[I32] {
+  Some(1)
+}
+
+pub fn none() -> Option[I32] {
+  None
+}
+
+pub fn qualified_in_the_module_that_has_the_function() -> Result[I32, I32] {
+  Result.Ok(1)                                      //~ E0302
+}

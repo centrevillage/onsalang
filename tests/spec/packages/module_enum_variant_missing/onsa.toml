@@ -1,0 +1,3 @@
+[package]
+name = "module_enum_variant_missing"
+edition = "2026"

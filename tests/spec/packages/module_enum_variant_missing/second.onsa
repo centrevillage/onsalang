@@ -1,0 +1,16 @@
+use kp.inner.{Mode}
+
+pub fn a_unit_variant() -> Mode {
+  Mode.Z                                            //~ E0302
+}
+
+pub fn a_tuple_variant() -> Mode {
+  Mode.Z(1)                                         //~ E0302
+}
+
+pub fn a_pattern(m: Mode) -> I32 {
+  match m {
+    Mode.Z => 0,                                    //~ E0302
+    _ => 1,
+  }
+}

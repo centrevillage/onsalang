@@ -1,0 +1,5 @@
+// S-709: the `use` of the item of a flow that has it (`gain`), then the `use` of the one of a flow that does not
+// (`one`). Both are resolved bindings of the names stage, so the later one is E0304. The `use` of `gain` is a
+// true binding, silent.
+use dsp.synth.gain.{process_inplace}
+use dsp.synth.one.{process_inplace}                 //~ E0304

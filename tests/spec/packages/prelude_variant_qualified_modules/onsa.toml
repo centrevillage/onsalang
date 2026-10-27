@@ -1,0 +1,3 @@
+[package]
+name = "prelude_variant_qualified_modules"
+edition = "2026"

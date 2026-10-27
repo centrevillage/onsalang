@@ -1,0 +1,5 @@
+// S-709: the function of another module first, then the `use` of `process_inplace` of the flow that does not have
+// it. The E0304 is on the later `use`; that `use` has an error of the names stage, so the types stage does not
+// report it again as E0302.
+use dsp.other.{process_inplace}
+use dsp.synth.one.{process_inplace}                 //~ E0304

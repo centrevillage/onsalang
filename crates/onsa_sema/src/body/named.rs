@@ -72,18 +72,14 @@ impl<'a> Checker<'a> {
     }
 
     /// The type of the hole `k` of the string literal `e` (§2.4), whose path
-    /// is `path`: the value its records end at (the namespaces they pass as
-    /// [`Self::namespaces_before`] reads them), then its fields and tuple
+    /// is `path`: the value its records end at (the namespaces they pass
+    /// read as an expression's, [`Self::namespaces`]), then its fields and tuple
     /// elements. A hole with no record has a name held as an error.
     pub(super) fn check_hole(&mut self, e: ExprId, k: u32, path: &Path) -> R<TyId> {
         let records = self.names.interp.get(&(e, k)).cloned().unwrap_or_default();
         let Some((at, last)) = records.last().cloned() else { return Err(self.held_stop()) };
         let segs = &path.segments;
-        let passed = records.iter().filter_map(|(i, r)| match r {
-            PathRes::Namespace(entity) => Some((e, *entity, segs[*i as usize].clone())),
-            _ => None,
-        });
-        self.namespaces(passed.collect())?;
+        self.namespaces(records.iter().map(|(i, r)| (e, r.clone(), segs[*i as usize].clone())).collect())?;
         let name = &segs[at as usize];
         let span = Span::new(name.span.file, segs[0].span.start, name.span.end);
         let mut t = self.value_of_record(last, e, name, span, None)?;
@@ -103,26 +99,28 @@ impl<'a> Checker<'a> {
         Ok(t)
     }
 
-    /// The namespaces a chain passes before `e`, from its head: none is a
-    /// value but a flow, an error there (§11.6).
+    /// The namespaces a chain passes before `e`, from its head, by the
+    /// records of the nodes before it.
     fn namespaces_before(&mut self, e: ExprId) -> R<()> {
-        let mut passed = Vec::new();
+        let mut records = Vec::new();
         let mut cur = e;
         while let ExprKind::Field { base, .. } = &self.expr(cur).kind {
             cur = *base;
-            if let Some(&PathRes::Namespace(entity)) = self.names.paths.get(&cur) {
-                passed.push((cur, entity));
+            if let Some(r) = self.names.paths.get(&cur) {
+                records.push((cur, r.clone(), self.last_name(cur)));
             }
         }
-        let passed = passed.into_iter().rev().map(|(node, entity)| (node, entity, self.last_name(node))).collect();
-        self.namespaces(passed)
+        records.reverse();
+        self.namespaces(records)
     }
 
-    /// The namespaces a chain passes, from its head, each at its node and
-    /// with its name; the namespace of a def whose heading a syntax error
+    /// The namespaces a chain passes, of its records from its head, each at
+    /// its node and with its name: none is a value but a flow, an error
+    /// there (§11.6). The namespace of a def whose heading a syntax error
     /// cut is not known (S-59, R-71).
-    fn namespaces(&mut self, passed: Vec<(ExprId, Entity, Ident)>) -> R<()> {
-        for (node, entity, name) in passed {
+    fn namespaces(&mut self, records: Vec<(ExprId, PathRes, Ident)>) -> R<()> {
+        for (node, r, name) in records {
+            let PathRes::Namespace(entity) = r else { continue };
             if !matches!(entity, Entity::Def(d) if self.a.heading_failed(d)) {
                 let span = self.expr(node).span;
                 self.value_of_entity(entity, node, &name, span, None)?;

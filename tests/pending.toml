@@ -2236,6 +2236,13 @@ note = "params_default は Onsa の名前空間から外れる（S-625）。今�
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/negative/flow_namespace_params_default.onsa"
+reasons = ["S-625", "R-147"]
+until = "W7-03"
+note = "本体の経路の amp.params_default() と let f = amp.params_default は E0302（S-625）。今は呼び出しが通り、関数値は E0401（W4-04 U5/t）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/flow/heading_names_event.onsa"
 reasons = ["S-664", "S-665"]
 until = "W7-11"

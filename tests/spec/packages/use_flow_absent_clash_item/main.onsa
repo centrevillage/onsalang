@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§11.6"]
+// fixes = 0
+
+// S-709, S-694, §15.1, §18.1: the `use` of `process_inplace` of a flow that does not have it (`one`, no sample
+// input) is a resolved binding in the names stage, so it also counts against an item of the module of the
+// same name: the E0304 is on the `use` whatever the order is (§15.1: of an item and a `use` binding, the
+// `use` has it), with a note on the item. The `use` has an error of the names stage, so the types stage does
+// not report it again as E0302 (§18.1). The order of the item and the `use` is the other way in
+// `item_first.onsa`. The item is a function that no code calls.
+use dsp.synth.one.{process_inplace}                 //~ E0304
+
+pub fn process_inplace() -> I32 {
+  1
+}

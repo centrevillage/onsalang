@@ -166,7 +166,7 @@ impl Modules {
     /// at the place of a value or a type (`let x = util`) is not fixed by it.
     /// When only the cycle keeps it back, the error has the path of the `use`
     /// and the module of the cycle (S-682).
-    fn body_fix(
+    pub(crate) fn body_fix(
         &self,
         from: ModId,
         path: &Path,
@@ -323,9 +323,9 @@ impl Modules {
                 {
                     return Ok(e);
                 }
-                // SPEC-GAP(S-693): a name of a `pub use` of `m` is not found
-                // here, also at the end of a path in a body (`inner.g()`); the
-                // last name of a `use` is failed instead (`imports::walk`).
+                // A name of a `pub use` of `m` is not found here, also at the
+                // end of a path in a body (`inner.g()`, S-693); the last name
+                // of a `use` is failed instead (`imports::walk`, S-596).
                 Err(ResolveError::NotFound { name: name.name.clone(), span: name.span })
             }
             Entity::Def(d) => {

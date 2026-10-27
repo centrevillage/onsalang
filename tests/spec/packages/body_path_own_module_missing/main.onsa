@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// R-254, S-258, §15.1: a path in a body that names the module itself (`main.double(1)`), its package (`fx.util`)
+// or a child module through the module (`main.inner`) is E0302, because the module does not take its own name
+// (`use main` in `main.onsa` is E0302 too), and the candidate that takes the own name or the package name
+// off exists only when the path that is left is found in the names stage to its end: a name that the
+// module does not have (`double`, `K`, `nosuch`) leaves a path that is not found, so there is no candidate
+// (`fixes = 0`). The cases that have a candidate are in `tests/spec/fixes/pkg_own_name`. One error in each
+// unit (§18.1).
+
+pub fn own() -> I32 {
+  1
+}
+
+pub fn a_call_of_an_item_the_module_does_not_have() -> I32 {
+  main.double(1)                                    //~ E0302
+}
+
+pub fn a_constant_the_module_does_not_have() -> U32 {
+  main.K                                            //~ E0302
+}
+
+pub fn a_function_value_the_module_does_not_have() -> I32 {
+  let f = main.double                               //~ E0302
+  1
+}
+
+pub fn a_name_of_a_child_module_that_is_not_there() -> I32 {
+  main.inner.nosuch()                               //~ E0302
+}
+
+pub fn a_module_that_is_not_there() -> I32 {
+  main.nosuch.h()                                   //~ E0302
+}
+
+pub fn the_package_name_and_a_name_that_is_not_there() -> I32 {
+  fx.util.nosuch()                                  //~ E0302
+}
+
+pub fn the_package_name_and_a_module_that_is_not_there() -> I32 {
+  fx.nosuch.here()                                  //~ E0302
+}
+
+pub fn in_a_branch(c: Bool) -> I32 {
+  if c {
+    main.double(1)                                  //~ E0302
+  } else {
+    own()
+  }
+}

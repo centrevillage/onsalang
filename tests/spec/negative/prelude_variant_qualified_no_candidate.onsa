@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-607, S-305, R-249, §18.1: the forms of a variant of the prelude written after a type that get the E0302 of
+// the names stage with no fix candidate. A candidate is offered only when, taken alone, it leaves no
+// diagnostic of the same stage or an earlier one where it applies (§18.1) and the intent of the writer is
+// one. In the length of an array the variant is no constant, so `[0; None]` is an E0302 of the names stage
+// again; a variant of the other type (`Option.Ok`, `Result.Some`) is no variant of the type written, and
+// taking the type off would change which value it is. One error in each unit (§18.1). (W4-04 U5/b.)
+
+pub fn a_variant_in_the_length_of_an_array() -> I32 {
+  let a = [0; Option.None]                          //~ E0302
+  0
+}
+
+pub fn a_variant_of_the_other_type() -> Option[I32] {
+  Option.Ok(1)                                      //~ E0302
+}
+
+pub fn a_variant_of_the_other_type_again() -> Result[I32, Bool] {
+  Result.Some(1)                                    //~ E0302
+}

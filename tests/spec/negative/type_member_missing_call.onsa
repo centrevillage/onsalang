@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.6", "§18.1"]
+// fixes = 0
+
+// R-249, S-258, §15.1: a function that a built-in type does not have (`F32.y(1.0)`) is a name that is not
+// found: E0302 in the names stage, as the read of a constant it does not have (`F32.PIE`,
+// `type_member_missing_read.onsa`) is. It is not E0413 ("does not exist": the code of the name after a
+// value, the field or the method that a value does not have). The type is a float type, `Bool` or an integer
+// type, and the call stands in every place a body has. A near spelling is not a candidate (`fixes = 0`,
+// S-258). One error in each unit (§18.1).
+
+pub fn a_call_of_a_float_type() -> F32 {
+  F32.y(1.0)                                        //~ E0302
+}
+
+pub fn a_call_of_bool() -> Bool {
+  Bool.nosuch(true)                                 //~ E0302
+}
+
+pub fn a_call_of_an_integer_type() -> U32 {
+  U32.nosuch(1)                                     //~ E0302
+}
+
+pub fn a_call_with_no_arguments() -> F32 {
+  F32.nosuch()                                      //~ E0302
+}
+
+pub fn a_call_in_a_branch(c: Bool) -> F32 {
+  if c {
+    F32.y(1.0)                                      //~ E0302
+  } else {
+    2.0
+  }
+}
+
+pub fn a_call_in_a_closure() -> F32 {
+  let f = fn(x: F32) -> F32 { F32.y(x) }            //~ E0302
+  f.(1.0)
+}
+
+pub fn a_call_in_a_generic_function[T](x: T) -> F32 {
+  F32.y(1.0)                                        //~ E0302
+}
+
+pub fn a_call_in_an_argument() -> F32 {
+  twice(F32.y(1.0))                                 //~ E0302
+}
+
+pub fn twice(x: F32) -> F32 {
+  x + x
+}

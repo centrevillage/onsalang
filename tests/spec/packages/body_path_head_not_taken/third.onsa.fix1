@@ -1,0 +1,6 @@
+use kp.inner
+use kp
+
+pub fn a_variant() -> inner.Mode {
+  kp.inner.Mode.A                                   //~ E0302
+}

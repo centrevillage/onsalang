@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-607, S-305, §4.1, §15.1: the variants of the prelude enums are names of the prelude in every module, with
+// no `use`, and the qualified form is E0302 in every module: in the root module, in a module that takes
+// another (`use util`), in a child module (`util/leaf.onsa`) and in a module that has a type of its own with
+// variants (`Maybe`, whose variants are written with the type, as every enum's other than the prelude's are
+// (§4.1)). The one candidate takes the qualifier off. The module `util.onsa` has the bare forms, taken by
+// another module through the function that returns them.
+use util
+
+pub enum Maybe {
+  Nothing,
+  Just(I32),
+}
+
+pub fn a_user_enum_is_written_with_its_type() -> Maybe {
+  Maybe.Just(1)
+}
+
+pub fn a_prelude_variant_qualified() -> Option[I32] {
+  Option.Some(2)                                    //~ E0302
+}
+
+pub fn a_prelude_variant_through_the_module() -> Option[I32] {
+  util.some()
+}
+
+pub fn a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Option.None => 0,                               //~ E0302
+    Some(v) => v,
+  }
+}

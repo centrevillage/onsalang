@@ -1,0 +1,7 @@
+// S-709: the item first, then the `use` of `process_inplace` of the flow that does not have it. The E0304 is on
+// the `use` (§15.1), and it has no E0302 of the types stage.
+pub fn process_inplace() -> I32 {
+  1
+}
+
+use dsp.synth.one.{process_inplace}                 //~ E0304

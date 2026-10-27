@@ -1,0 +1,8 @@
+pub fn g() -> I32 {
+  2
+}
+
+pub enum Mode {
+  A,
+  B(I32),
+}

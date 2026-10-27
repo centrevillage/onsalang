@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§11.6"]
+// fixes = 0
+
+// S-709, S-694, §18.1: a `use` of `process_inplace` of a flow that does not have it (the types decide that,
+// §11.6) is a resolved binding in the names stage, so it counts in the E0304 of two `use` of one name. Here
+// the flow that does not have it (`one`) comes first: its `use` is E0302 in the types stage, as
+// `use_flow_items_not_taken` has it, and the `use` of the function of another module after it is E0304, on the
+// later `use` (§15.1) with a note on the first. Neither of the names is used. The other orders are in the other
+// modules of this package: `later_absent.onsa`, `has_then_absent.onsa`, `absent_then_has.onsa`,
+// `absent_twice.onsa`. The E0304 is a diagnostic of the names stage, so the `use` that has it has no E0302 of
+// the types stage (a unit with an error of an earlier stage is not checked by the later one, §18.1).
+use dsp.synth.one.{process_inplace}                 //~ E0302
+use dsp.other.{process_inplace}                     //~ E0304

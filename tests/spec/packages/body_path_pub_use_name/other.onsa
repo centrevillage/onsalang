@@ -1,0 +1,23 @@
+use main
+
+pub fn the_last_element_is_a_pub_use_name() -> I32 {
+  main.g()                                          //~ E0302
+}
+
+pub fn a_variant_through_the_pub_use_type() -> I32 {
+  let _ = main.Mode.B(1)                            //~ E0302
+  1
+}
+
+pub fn the_middle_is_the_child_and_the_last_a_pub_use_name() -> I32 {
+  main.inner.g()                                    //~ E0302
+}
+
+pub fn the_type_of_a_pub_use_of_the_child() -> I32 {
+  let _ = main.inner.Mode.B(1)                      //~ E0302
+  1
+}
+
+pub fn the_item_and_the_child_are_found() -> I32 {
+  main.own() + main.inner.h()
+}

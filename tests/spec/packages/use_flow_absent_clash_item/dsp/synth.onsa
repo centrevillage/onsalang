@@ -1,0 +1,9 @@
+// `gain` has the item `process_inplace` (one sample input and one output of the same type); `one` has no sample
+// input, so its namespace has none (§11.6, S-694).
+pub flow gain(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow one() -> F32 at sample {
+  1.0
+}

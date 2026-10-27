@@ -33,9 +33,6 @@ pub(super) enum Place {
     /// The callee of an instance (`f~(x)`): the flow stage reads it and
     /// reports its errors (W4-12); the walk records what it finds alone.
     Instance,
-    /// A name of a constant expression (§4.5, `Walker::const_expr`): a
-    /// value, whose error has the words of the constants (`cannot find `n``).
-    Const,
 }
 
 /// Whether the entity is a value at the place of a value: a function, a
@@ -102,7 +99,7 @@ impl<'a> Walker<'a> {
         match self.heading(&head.name) {
             Some(r @ PathRes::ConstParam(_)) => return (vec![r], None),
             // A type parameter is no value (`T.ZERO` from W4-04 U6).
-            Some(r) => return (vec![r], Some(self.not_found(segs, place))),
+            Some(r) => return (vec![r], Some(self.not_found(head))),
             None => {}
         }
         let a = self.a;
@@ -112,7 +109,7 @@ impl<'a> Walker<'a> {
         let Some(first) = a.modules.lookup(self.m, &head.name, &a.prelude) else {
             return match a.modules.head_error(self.m, &path_of(segs), (&a.prelude, &a.defs, &a.builtin_key)) {
                 ResolveError::Failed => (Vec::new(), Some(Fail::Held)),
-                ResolveError::NotFound { .. } => (Vec::new(), Some(self.not_found(segs, place))),
+                ResolveError::NotFound { .. } => (Vec::new(), Some(self.not_found(head))),
                 err => (Vec::new(), Some(Fail::Report(err.into_diagnostic()))),
             };
         };
@@ -128,6 +125,14 @@ impl<'a> Walker<'a> {
         // name of the method of a call.
         let at = out.len() + 1;
         let method = matches!(place, Place::Callee | Place::Instance) && at + 1 == segs.len();
+        // `Option.None`, `Result.Ok(1)` (S-607); the callee of an instance
+        // is the flow stage's (W4-12).
+        let variant = match &err {
+            Some(ResolveError::NotFound { .. }) if place != Place::Instance => {
+                self.qualified_variant(&path_of(segs), at, cur)
+            }
+            _ => None,
+        };
         let fail = match err {
             None => {
                 out.push(PathRes::Item { entity: cur, owner: None });
@@ -150,6 +155,7 @@ impl<'a> Walker<'a> {
                 out.push(PathRes::Item { entity: cur, owner: None });
                 None
             }
+            Some(ResolveError::NotFound { .. }) if variant.is_some() => variant.map(Fail::Report),
             Some(ResolveError::NotFound { .. }) if self.builtin_assoc(cur, segs[at], method).is_some() => {
                 let assoc = self.builtin_assoc(cur, segs[at], method).expect("an associated item");
                 out.extend([PathRes::Namespace(cur), assoc]);
@@ -174,29 +180,40 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// E0302 for the head of `segs` not found at `place`, in the words the
-    /// types stage had: it typed a chain of one name as a value apart, and a
-    /// constant as a name of a type position. The
-    /// split by `place` and by the length goes with W4-04 U5 (the errors of
-    /// a path), with [`Place::Const`].
-    fn not_found(&self, segs: &[&Ident], place: Place) -> Fail {
-        let head = segs[0];
-        let alone = match place {
-            Place::Value => segs.len() == 1,
-            Place::Callee | Place::Instance => segs.len() <= 2,
-            Place::Const => false,
-        };
-        let d = match alone {
-            true => Diagnostic::new(
-                Stage::Names,
-                Code::E0302,
-                head.span,
-                format!("cannot find `{}` in this scope", head.name),
-            )
-            .with_found(head.name.clone()),
-            false => ResolveError::NotFound { name: head.name.clone(), span: head.span }.into_diagnostic(),
-        };
-        Fail::Report(d)
+    /// E0302 for the head `head` of a chain not found: one form wherever
+    /// the chain is (a value, a callee, a hole, a constant expression).
+    fn not_found(&self, head: &Ident) -> Fail {
+        Fail::Report(ResolveError::NotFound { name: head.name.clone(), span: head.span }.into_diagnostic())
+    }
+
+    /// E0302 for the variant of the prelude `path[at]` named through its
+    /// type `of` (`Option.None`, `Result.Ok(1)`, `Option.None =>`; §4.1,
+    /// S-607): the variants are names of the prelude, not members of the
+    /// type. The candidate takes off the qualifier, and then reads the name
+    /// of the prelude (none when an item clashes with it, an E0304, and in a
+    /// constant expression, where a variant is no constant); the type
+    /// arguments of the qualifier go to the name from W5-10.
+    fn qualified_variant(&self, path: &Path, at: usize, of: Entity) -> Option<Diagnostic> {
+        let a = self.a;
+        let name = &path.segments[at];
+        let variant = a.prelude.get(&name.name).copied()?;
+        let (Entity::Builtin(Builtin::Generic(ty)), Entity::Builtin(b)) = (of, variant) else { return None };
+        if super::super::prelude::variant_of(b) != Some(ty) {
+            return None;
+        }
+        let msg = format!("`{}` is a variant of the prelude, not a member of the type `{}`", name.name, ty.name());
+        let d = Diagnostic::new(Stage::Names, Code::E0302, name.span, msg)
+            .with_found(name.name.clone())
+            .with_rule(format!("a variant of the prelude is written by its name alone (`{}`, §4.1)", name.name));
+        if self.in_const {
+            return Some(d);
+        }
+        let names = (&a.prelude, &a.defs[..], &a.builtin_key);
+        Some(match a.modules.body_fix(self.m, path, at, Some(variant), names) {
+            Ok(fix) => d.with_fix(fix),
+            // An item that clashes with the name of the prelude (E0304).
+            Err(_) => d,
+        })
     }
 
     /// The builtin name of a flow `name` is, in a flow body, where no item
@@ -215,7 +232,7 @@ impl<'a> Walker<'a> {
         let called = match place {
             Place::Instance => true,
             Place::Callee => segs.len() == 1,
-            Place::Value | Place::Const => false,
+            Place::Value => false,
         };
         let fail = (!called).then(|| Fail::Report(b.misplaced(segs.iter().map(|s| s.span), self.text)));
         (vec![PathRes::FlowBuiltin(b)], fail)
@@ -247,17 +264,18 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// An associated item `name` of the builtin type `of`: at the place of a
-    /// value, a constant of the compiler's table (`F32.PI`); as the name of
-    /// the method of a call, any (the types stage reads the associated
-    /// function, `Buf.zeroed`, and reports one that is none).
+    /// An associated item `name` of the builtin type `of` in the compiler's
+    /// table: a constant (`F32.PI`), or, as the name of the method of a call,
+    /// a function (`Buf.zeroed`, whose call the types stage reads). A name
+    /// the table has not is not found (E0302, R-249: `F32.y`, `F32.y(1.0)`).
     fn builtin_assoc(&self, of: Entity, name: &Ident, method: bool) -> Option<PathRes> {
         let a = self.a;
+        let has_fn = |scalar, generic| method && builtin::has_assoc_fn(&a.types, scalar, generic, &name.name);
         let ty = match of {
             Entity::Builtin(Builtin::Scalar(t)) => {
-                (method || builtin::has_assoc_const(&a.types, t, &name.name)).then_some(t)
+                (builtin::has_assoc_const(&a.types, t, &name.name) || has_fn(Some(t), None)).then_some(t)
             }
-            Entity::Builtin(Builtin::Generic(g)) if method => a.builtin_key.get(&g).copied(),
+            Entity::Builtin(Builtin::Generic(g)) if has_fn(None, Some(g)) => a.builtin_key.get(&g).copied(),
             _ => None,
         }?;
         Some(PathRes::BuiltinAssoc { ty, name: name.name.clone() })
@@ -301,6 +319,13 @@ impl<'a> Walker<'a> {
             return Err(error(a.modules.head_error(self.m, path, names)));
         };
         match a.modules.members(first, &path.segments[1..], self.m, names) {
+            (reached, Some(err @ ResolveError::NotFound { .. })) => {
+                let of = reached.last().copied().unwrap_or(first);
+                match self.qualified_variant(path, reached.len() + 1, of) {
+                    Some(d) => Err(Fail::Report(d)),
+                    None => Err(error(err)),
+                }
+            }
             (_, Some(err)) => Err(error(err)),
             (reached, None) => Ok(reached.last().copied().unwrap_or(first)),
         }

@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-607, S-305, §4.1: the variants of `Option` and `Result` are names of the prelude, and the type
+// namespaces of `Option` and `Result` give no variant, so a variant qualified by the type (`Option.None`,
+// `Option.Some(1)`, `Result.Ok(1)`, `Result.Err(e)`, or the function value `Option.Some`) is a name that is
+// not found: E0302 in the names stage (§15.1), not a type error (E0413) and not silent. The one candidate
+// takes the qualifier off (`None`, `Some(1)`), and the name is then the name of the prelude: applying it
+// leaves no diagnostic in the unit. (The note and the spelling of the message are not promised.) The right
+// forms are in `tests/spec/module/prelude_variants_bare.onsa`. One error in each unit (§18.1), so each form
+// stands in a function of its own, and the contexts are in `prelude_variant_qualified_contexts.onsa`.
+
+pub fn unit_variant() -> Option[I32] {
+  None                                       //~ E0302
+}
+
+pub fn tuple_variant() -> Option[I32] {
+  Some(1)                                    //~ E0302
+}
+
+pub fn ok_variant() -> Result[I32, I32] {
+  Ok(1)                                      //~ E0302
+}
+
+pub fn err_variant(e: I32) -> Result[I32, I32] {
+  Err(e)                                     //~ E0302
+}
+
+pub fn as_a_function_value() -> Option[I32] {
+  let f = Some                               //~ E0302
+  f(2)
+}
+
+pub fn in_a_let() -> I32 {
+  let o: Option[I32] = None                  //~ E0302
+  or_zero(o)
+}
+
+pub fn as_an_argument() -> I32 {
+  or_zero(Some(3))                           //~ E0302
+}
+
+pub fn or_zero(o: Option[I32]) -> I32 {
+  match o {
+    None => 0,
+    Some(v) => v,
+  }
+}
+
+pub fn in_a_comparison(o: Option[I32]) -> Bool {
+  o == None                                  //~ E0302
+}

@@ -1,0 +1,5 @@
+pub const TICKS: U32 = 4
+
+pub fn c() -> I32 {
+  3
+}

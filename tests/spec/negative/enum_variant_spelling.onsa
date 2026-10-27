@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// R-249, S-258, §15.1: a name after the name of a type that the type does not have (the variant of a user
+// enum, or an associated constant of a built-in type) is a name that is not found: E0302 in the names stage,
+// in an expression, as a function value and in a pattern. It is not E0401 ("`Shape` is not a value"). The
+// spelling of a near name is not a candidate (a spelling error has more than one possible intent), so
+// `fixes = 0` says that no diagnostic of this file has a candidate. The names that are there are the
+// controls (`Shape.Circle`, `F32.PI`), which give no diagnostic. One error in each unit (§18.1).
+
+pub enum Shape {
+  Dot,
+  Circle(F32),
+  Rect(F32, F32),
+}
+
+pub enum Tree[T] {
+  Leaf,
+  Node(T),
+}
+
+pub fn misspelt_tuple_variant() -> Shape {
+  Shape.Circel(1.0)                                 //~ E0302
+}
+
+pub fn misspelt_unit_variant() -> Shape {
+  Shape.Dott                                        //~ E0302
+}
+
+pub fn misspelt_variant_as_a_value() -> Shape {
+  let f = Shape.Circel                              //~ E0302
+  f(1.0)
+}
+
+pub fn misspelt_variant_of_a_generic_enum() -> Tree[I32] {
+  Tree.Nod(1)                                       //~ E0302
+}
+
+pub fn misspelt_variant_in_a_pattern(s: Shape) -> F32 {
+  match s {
+    Shape.Circel(r) => r,                           //~ E0302
+    _ => 0.0,
+  }
+}
+
+pub fn misspelt_unit_variant_in_a_pattern(s: Shape) -> F32 {
+  match s {
+    Shape.Dott => 1.0,                              //~ E0302
+    _ => 0.0,
+  }
+}
+
+pub fn misspelt_variant_in_an_inner_pattern(t: Tree[Shape]) -> F32 {
+  match t {
+    Tree.Node(Shape.Rectt(w, h)) => w * h,          //~ E0302
+    _ => 0.0,
+  }
+}
+
+pub fn a_constant_the_type_does_not_have() -> F32 {
+  F32.PIE                                           //~ E0302
+}
+
+pub fn a_constant_of_an_integer_type() -> U32 {
+  U32.MAXX                                          //~ E0302
+}
+
+pub fn the_right_names(s: Shape, t: Tree[I32]) -> F32 {
+  let a = match s {
+    Shape.Dot => 0.0,
+    Shape.Circle(r) => r,
+    Shape.Rect(w, h) => w * h,
+  }
+  let b = match t {
+    Tree.Leaf => 0.0,
+    Tree.Node(_) => 1.0,
+  }
+  a + b + F32.PI
+}

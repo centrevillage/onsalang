@@ -1,0 +1,5 @@
+pub use util.{g, Mode}                              //~ E0200 @1
+
+pub fn h() -> I32 {
+  3
+}

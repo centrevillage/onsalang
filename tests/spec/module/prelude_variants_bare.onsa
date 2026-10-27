@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§15.1"]
+
+// S-607, S-305, §4.1: the variants of the prelude enums `Option` and `Result` are written by their names
+// alone, with no `use` and no qualifier: `None`, `Some(1)`, `Ok(1)`, `Err(e)` as values, `Some` as a function
+// value (a tuple-shaped variant, §4.4), and in patterns. These are the right forms of the qualified ones that
+// are E0302 (`tests/spec/negative/prelude_variant_qualified_*.onsa`). No diagnostic. (The same forms are run
+// in `prelude_variants_bare_run.onsa`.)
+
+pub fn none() -> Option[I32] {
+  None
+}
+
+pub fn some() -> Option[I32] {
+  Some(1)
+}
+
+pub fn ok() -> Result[I32, Str] {
+  Ok(1)
+}
+
+pub fn err(e: Str) -> Result[I32, Str] {
+  Err(e)
+}
+
+pub fn some_as_a_value() -> Option[I32] {
+  let f = Some
+  f(2)
+}
+
+pub fn or_zero(o: Option[I32]) -> I32 {
+  match o {
+    None => 0,
+    Some(v) => v,
+  }
+}
+
+pub fn ok_or_zero(r: Result[I32, Str]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Err(_) => 0,
+  }
+}
+
+pub fn in_a_generic_function[T](x: T) -> Option[T] {
+  Some(x)
+}
+
+pub fn in_a_branch(c: Bool) -> Option[I32] {
+  if c {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(x: I32) -> Option[I32] { Some(x) }
+  or_zero(f.(3))
+}

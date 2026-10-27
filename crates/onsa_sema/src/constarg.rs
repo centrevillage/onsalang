@@ -138,7 +138,8 @@ pub(crate) fn literal(ast: &Ast, text: &str, e: ExprId) -> Option<Result<u32, Di
 
 /// A name of a constant (`SIZE`, `cfg.N`, `I32.BITS`) at `span`: its value, when
 /// its type is `U32`. `Ok(None)`: the name is not a constant (the caller reports
-/// what it is). `ast` is the module `m` the name is written in.
+/// what it is). `ast` is the module `m` the name is written in. A body reads the
+/// entity its record has ([`of_entity`], [`of_builtin`]).
 pub(crate) fn named(
     a: &mut Analysis,
     m: ModId,
@@ -147,58 +148,8 @@ pub(crate) fn named(
     path: &Path,
     span: Span,
 ) -> Result<Option<u32>, ConstErr> {
-    let found = text[span.start as usize..span.end as usize].to_string();
-    let u32_ = a.types.int(IntKind::U32);
     match a.resolve_path(m, path) {
-        Ok(Entity::Def(d)) | Ok(Entity::Member(d)) => {
-            let def = a.def(d).clone();
-            let DefKind::Const(c) = &def.kind else { return Ok(None) };
-            if c.int_value.is_none() && a.partly_read(d) {
-                return Err(ConstErr::Unknown);
-            }
-            if c.ty != u32_ && !matches!(a.types.get(c.ty), Ty::Error) {
-                let shown = a.types.display(c.ty, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
-                let mut d = Diagnostic::new(
-                    Stage::Types,
-                    Code::E0401,
-                    span,
-                    format!("a constant expression has the type `U32`; `{}` is `{shown}` (§4.5)", def.name),
-                )
-                .with_found(found);
-                // The candidate makes the type of the constant `U32` when it is
-                // declared in this module (§4.5) and its value is a `U32` (an integer
-                // literal that fits), so that the candidate leaves no error (S-236).
-                if def.module == m
-                    && c.int_value.is_some_and(|v| u32::try_from(v).is_ok())
-                    && let Some(item) = def.item
-                    && let ItemKind::Const(cd) = &ast.item(item).kind
-                {
-                    let tspan = ast.ty(cd.ty).span;
-                    let want = a.types.display(u32_, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
-                    d = d.with_fix(Fix::replace(format!("make `{}` a `{want}`", def.name), tspan, want));
-                }
-                return Err(d.into());
-            }
-            match c.int_value {
-                Some(v) => match u32::try_from(v) {
-                    Ok(v) => Ok(Some(v)),
-                    Err(_) => Err(Diagnostic::new(
-                        Stage::Types,
-                        Code::E0408,
-                        span,
-                        format!("the value of `{}` does not fit in `U32` (§4.5)", def.name),
-                    )
-                    .with_found(found)
-                    .into()),
-                },
-                None => Err(ConstErr::Uncomputed(
-                    onsa_diag::unsupported::Feature::ComputedArrayLengths
-                        .diagnostic(Stage::Types, span, &[])
-                        .with_found(found),
-                )),
-            }
-        }
-        Ok(_) => Ok(None),
+        Ok(entity) => of_entity(a, m, ast, text, entity, span),
         // A name held as an error (§18.1, S-462, S-675): no diagnostic, and
         // the check goes on (S-689).
         Err(ResolveError::Failed) => Err(ConstErr::Unknown),
@@ -206,31 +157,101 @@ pub(crate) fn named(
             // `I32.BITS`, `U32.MAX`: an associated constant of a scalar type.
             if path.segments.len() == 2 {
                 let prefix = Path { segments: path.segments[..1].to_vec(), span: path.segments[0].span };
-                if let Ok(Entity::Builtin(Builtin::Scalar(t))) = a.resolve_path(m, &prefix) {
-                    let name = &path.segments[1].name;
-                    if let Some(ct) = builtin::assoc_const(&mut a.types, t, name) {
-                        if ct != u32_ {
-                            let shown = a.types.display(ct, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
-                            return Err(Diagnostic::new(
-                                Stage::Types,
-                                Code::E0401,
-                                span,
-                                format!("a constant expression has the type `U32`; `{found}` is `{shown}` (§4.5)"),
-                            )
-                            .with_found(found)
-                            .into());
-                        }
-                        // A `U32` associated constant (`I32.BITS`): its value is the
-                        // constant evaluator's (W5-08 types the whole grammar).
-                        return Err(ConstErr::Uncomputed(
-                            onsa_diag::unsupported::Feature::ComputedArrayLengths
-                                .diagnostic(Stage::Types, span, &[])
-                                .with_found(found),
-                        ));
-                    }
+                if let Ok(Entity::Builtin(Builtin::Scalar(t))) = a.resolve_path(m, &prefix)
+                    && let Some(r) = of_builtin(a, t, &path.segments[1].name, text, span)
+                {
+                    return r;
                 }
             }
             Err(err.into_diagnostic().into())
         }
     }
+}
+
+/// The value of the constant `entity` a name at `span` names (as [`named`]).
+pub(crate) fn of_entity(
+    a: &mut Analysis,
+    m: ModId,
+    ast: &Ast,
+    text: &str,
+    entity: Entity,
+    span: Span,
+) -> Result<Option<u32>, ConstErr> {
+    let (Entity::Def(d) | Entity::Member(d)) = entity else { return Ok(None) };
+    let found = text[span.start as usize..span.end as usize].to_string();
+    let u32_ = a.types.int(IntKind::U32);
+    let def = a.def(d).clone();
+    let DefKind::Const(c) = &def.kind else { return Ok(None) };
+    if c.int_value.is_none() && a.partly_read(d) {
+        return Err(ConstErr::Unknown);
+    }
+    if c.ty != u32_ && !matches!(a.types.get(c.ty), Ty::Error) {
+        let shown = a.types.display(c.ty, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
+        let mut d = Diagnostic::new(
+            Stage::Types,
+            Code::E0401,
+            span,
+            format!("a constant expression has the type `U32`; `{}` is `{shown}` (§4.5)", def.name),
+        )
+        .with_found(found);
+        // The candidate makes the type of the constant `U32` when it is
+        // declared in this module (§4.5) and its value is a `U32` (an integer
+        // literal that fits), so that the candidate leaves no error (S-236).
+        if def.module == m
+            && c.int_value.is_some_and(|v| u32::try_from(v).is_ok())
+            && let Some(item) = def.item
+            && let ItemKind::Const(cd) = &ast.item(item).kind
+        {
+            let tspan = ast.ty(cd.ty).span;
+            let want = a.types.display(u32_, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
+            d = d.with_fix(Fix::replace(format!("make `{}` a `{want}`", def.name), tspan, want));
+        }
+        return Err(d.into());
+    }
+    match c.int_value {
+        Some(v) => match u32::try_from(v) {
+            Ok(v) => Ok(Some(v)),
+            Err(_) => Err(Diagnostic::new(
+                Stage::Types,
+                Code::E0408,
+                span,
+                format!("the value of `{}` does not fit in `U32` (§4.5)", def.name),
+            )
+            .with_found(found)
+            .into()),
+        },
+        None => Err(ConstErr::Uncomputed(
+            onsa_diag::unsupported::Feature::ComputedArrayLengths.diagnostic(Stage::Types, span, &[]).with_found(found),
+        )),
+    }
+}
+
+/// The associated constant `name` of the scalar type `t` at `span` (`I32.BITS`,
+/// `U32.MAX`), as [`named`] reads it; none when the compiler's table has none.
+pub(crate) fn of_builtin(
+    a: &mut Analysis,
+    t: crate::ty::TyId,
+    name: &str,
+    text: &str,
+    span: Span,
+) -> Option<Result<Option<u32>, ConstErr>> {
+    let found = text[span.start as usize..span.end as usize].to_string();
+    let u32_ = a.types.int(IntKind::U32);
+    let ct = builtin::assoc_const(&mut a.types, t, name)?;
+    if ct != u32_ {
+        let shown = a.types.display(ct, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
+        return Some(Err(Diagnostic::new(
+            Stage::Types,
+            Code::E0401,
+            span,
+            format!("a constant expression has the type `U32`; `{found}` is `{shown}` (§4.5)"),
+        )
+        .with_found(found)
+        .into()));
+    }
+    // A `U32` associated constant (`I32.BITS`): its value is the constant
+    // evaluator's (W5-08 types the whole grammar).
+    Some(Err(ConstErr::Uncomputed(
+        onsa_diag::unsupported::Feature::ComputedArrayLengths.diagnostic(Stage::Types, span, &[]).with_found(found),
+    )))
 }

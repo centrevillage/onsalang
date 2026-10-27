@@ -110,9 +110,9 @@ impl<'p> Sema<'p> {
         }
         for (name, entity) in &w.names {
             match *entity {
-                // SPEC-GAP(S-695): only the module itself is taken here; a name
-                // of a flow of `m` through its path (`use main.f.{process_inplace}`
-                // in `main.onsa`) is taken.
+                // Only the module itself is taken here; a name of a flow of `m`
+                // through its path (`use main.f.{process_inplace}` in
+                // `main.onsa`) is taken (S-695).
                 Ok(Entity::Module(c)) if c == m => {
                     self.report_mod(takes_itself(name));
                     self.fail(m, name);

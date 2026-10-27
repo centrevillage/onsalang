@@ -1,0 +1,10 @@
+use util.leaf
+
+pub fn qualified_in_a_module_that_takes_a_child() -> Option[I32] {
+  let o: Option[I32] = None                  //~ E0302
+  o
+}
+
+pub fn through_the_child_module() -> Result[I32, I32] {
+  leaf.bare_in_a_child_module()
+}

@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.6", "§18.1"]
+// fixes = 0
+
+// R-249, R-254, S-258, §15.1: a name that the type after whose name it stands does not have is E0302, whether
+// it is read (`F32.y`, `P.y`) or called (`P.y()`, `P.neww(1.0)`): not E0413 (the code of a name after a
+// value) and not E0401 ("`P` is not a value"). The type is a built-in type, a user struct or a user enum. A
+// near spelling is not a candidate (`fixes = 0`, S-258). The associated function and the constant that the
+// types have are the controls (`P.new`, `F32.PI`). One error in each unit (§18.1).
+
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub fn new(x: F32) -> P {
+    P { x: x }
+  }
+}
+
+pub enum Shape {
+  Dot,
+  Circle(F32),
+}
+
+pub fn a_read_of_a_float_type() -> F32 {
+  F32.y                                             //~ E0302
+}
+
+pub fn a_function_value_of_a_float_type() -> F32 {
+  let f = F32.y                                     //~ E0302
+  f.(1.0)
+}
+
+pub fn a_call_of_a_struct() -> F32 {
+  P.y()                                             //~ E0302
+}
+
+pub fn a_misspelt_associated_function() -> P {
+  P.neww(1.0)                                       //~ E0302
+}
+
+pub fn a_read_of_a_struct() -> F32 {
+  P.y                                               //~ E0302
+}
+
+pub fn a_call_of_a_variant_that_is_not_there() -> Shape {
+  Shape.Dott()                                      //~ E0302
+}
+
+pub fn a_function_value_of_a_struct() -> F32 {
+  let f = P.neww                                    //~ E0302
+  f.(1.0).x
+}
+
+pub fn the_names_that_are_there() -> F32 {
+  let p = P.new(1.0)
+  p.x + F32.PI
+}

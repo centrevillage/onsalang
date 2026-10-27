@@ -1,0 +1,7 @@
+pub fn qualified_in_a_child_module() -> Result[I32, I32] {
+  Result.Err(2)                                     //~ E0302
+}
+
+pub fn bare_in_a_child_module() -> Result[I32, I32] {
+  Err(2)
+}

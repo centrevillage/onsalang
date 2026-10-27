@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-607, S-305, §4.1, §15.1: a variant of the prelude written after the type through the module that holds
+// it (`core.Option.None`, with `use std.core`) is the E0302 of the names stage as `Option.None` is, and the
+// candidate takes off the whole qualification (`core.Option.`), so the name alone is left. One error in each
+// unit (§18.1). (W4-04 U5/b.)
+use std.core
+
+pub fn a_value() -> Option[I32] {
+  core.Option.None                                  //~ E0302
+}
+
+pub fn a_call() -> Option[I32] {
+  core.Option.Some(1)                               //~ E0302
+}

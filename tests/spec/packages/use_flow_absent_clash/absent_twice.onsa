@@ -1,0 +1,4 @@
+// S-709: the same name taken twice from flows that do not have it: the first `use` is E0302 (types stage), the
+// second is E0304 (names stage, a binding that the first one made).
+use dsp.synth.one.{process_inplace}                 //~ E0302
+use dsp.synth.one.{process_inplace}                 //~ E0304

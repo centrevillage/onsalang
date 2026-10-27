@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-258, §15.1: a name of another module that is written alone, with no `use` (`sqrt(x)`, the name of a
+// function of `std.math`), is E0302 with no candidate: the candidate that adds a `use` is for the path form
+// (`std.math.sqrt(x)`, whose head is a package or a module that has not been taken), and a name alone has no
+// head to take (`fixes = 0`). A name that is only written wrong (`sqr(x)`) is not a candidate either. One
+// error in each unit (§18.1).
+
+pub fn a_function_of_std() -> F32 {
+  sqrt(4.0)                                         //~ E0302
+}
+
+pub fn a_function_value_of_std() -> F32 {
+  let f = sqrt                                      //~ E0302
+  f.(4.0)
+}
+
+pub fn a_constant_of_std() -> F32 {
+  PI                                                //~ E0302
+}
+
+pub fn a_name_that_is_nowhere(x: F32) -> F32 {
+  sqr(x)                                            //~ E0302
+}
+
+pub fn a_type_name_of_another_module(x: Foo) -> I32 {   //~ E0302
+  1
+}

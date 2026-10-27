@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// R-254, S-611, §15.1: the variant of an enum of another module is reached through the module, the type
+// and the variant: `inner.Mode.A`, `inner.Mode.B(1)` after `use kp.inner`, `Mode.B(1)` after
+// `use kp.inner.{Mode}`, `kp.inner.Mode.A` after `use kp`, as an expression and in a pattern. The names that
+// are not there are in the package `module_enum_variant_missing`. Every test passes.
+use kp.inner
+
+pub fn value_of(m: inner.Mode) -> I32 {
+  match m {
+    inner.Mode.A => 0,
+    inner.Mode.B(v) => v,
+  }
+}
+
+test "a unit variant through the module" {
+  assert value_of(inner.Mode.A) == 0
+}
+
+test "a tuple variant through the module" {
+  assert value_of(inner.Mode.B(5)) == 5
+}
+
+test "a function of the module beside the type" {
+  assert inner.g() == 2
+}

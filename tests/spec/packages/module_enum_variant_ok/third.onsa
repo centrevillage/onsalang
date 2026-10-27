@@ -1,0 +1,10 @@
+use kp
+
+test "a variant through the package module" {
+  let m = kp.inner.Mode.A
+  let v = match m {
+    kp.inner.Mode.A => 1,
+    kp.inner.Mode.B(_) => 2,
+  }
+  assert v == 1
+}

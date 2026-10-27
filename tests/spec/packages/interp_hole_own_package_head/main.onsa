@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-90, S-258, §15.1, §18.1: a path in a body does not start with the name of its own package; the hole of a
+// string resolves as the same path in an expression does, so `{interp_hole_own_package_head.inner.K}` is
+// E0302 with the candidate that takes the head off. The string is one token, and an edit changes whole
+// tokens (§18.1), so the candidate replaces the whole literal, keeping the other hole and the text as they
+// are. W4-04 U4 made this candidate an edit inside the literal, an internal error (W4-04 U5).
+use inner
+
+pub fn a_hole() -> Str uses {Alloc} {
+  "{interp_hole_own_package_head.inner.K} and {inner.K}"   //~ E0302
+}

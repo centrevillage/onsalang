@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-693, S-611, S-596, §15.1, §18.1: the `pub use` of this version is E0200 (a failed name, the name stays
+// silent where a `use` takes it: `use main.{g}`), but a path in a body of another module goes into the module
+// through its items and its child modules alone, and `g` and `Mode` that `pub use` takes are neither: the last
+// element and the middle of the path are E0302 (`main.g()`, `main.Mode.A`, `inner.g()`, `inner.Mode.A`).
+// The items and the child modules that are there (`own`, `inner`, `h`) are the controls (`other.onsa`,
+// `third.onsa`). `main/inner.onsa` has its own E0200. One error in each unit (§18.1).
+pub use util.{g, Mode}                              //~ E0200 @1
+
+pub fn own() -> I32 {
+  1
+}
