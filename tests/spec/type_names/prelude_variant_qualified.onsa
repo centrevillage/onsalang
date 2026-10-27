@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.4", "§7", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-607, S-305, S-91, §4.4: "ただし prelude の列挙子は別名でも修飾しない（§4.1）". A variant of `Option` or
+// `Result` written after an alias of the type (`type O = Option[I32]`, `O.None`, `O.Some(1)`, a pattern
+// `O.None =>`) names a variant that the type namespace does not give: E0302 in the names stage, the same as with
+// the type (`Option.None`, prelude_variant_qualified_*.onsa). The one candidate takes the qualifier off (`None`,
+// `Some(1)`), and applying it leaves no diagnostic in the unit. One error in each unit (§18.1), so each place
+// is a function of its own; the bare names, which are right, are in the last functions.
+
+type O = Option[I32]
+
+type R = Result[I32, Bool]
+
+type OO = O
+
+fn unit_variant() -> O {
+  O.None                                            //~ E0302
+}
+
+fn tuple_variant() -> O {
+  O.Some(1)                                         //~ E0302
+}
+
+fn ok_variant() -> R {
+  R.Ok(1)                                           //~ E0302
+}
+
+fn err_variant() -> R {
+  R.Err(true)                                       //~ E0302
+}
+
+fn through_two_names() -> OO {
+  OO.None                                           //~ E0302
+}
+
+fn in_a_branch(c: Bool) -> O {
+  if c {
+    O.Some(1)                                       //~ E0302
+  } else {
+    None
+  }
+}
+
+fn in_an_arm(x: I32) -> O {
+  match x {
+    0 => O.None,                                    //~ E0302
+    n => Some(n),
+  }
+}
+
+fn in_a_closure() -> O {
+  let f = fn(x: I32) -> O { O.Some(x) }             //~ E0302
+  f.(3)
+}
+
+fn in_a_generic_function[T](x: T) -> Option[T] {
+  let o = Option.Some(x)                            //~ E0302
+  o
+}
+
+fn as_an_argument() -> I32 {
+  or_zero(O.Some(2))                                //~ E0302
+}
+
+fn or_zero(o: Option[I32]) -> I32 {
+  match o {
+    None => 0,
+    Some(v) => v,
+  }
+}
+
+fn unit_pattern(o: O) -> I32 {
+  match o {
+    O.None => 0,                                    //~ E0302
+    Some(v) => v,
+  }
+}
+
+fn tuple_pattern(o: O) -> I32 {
+  match o {
+    O.Some(v) => v,                                 //~ E0302
+    None => 0,
+  }
+}
+
+fn ok_pattern(r: R) -> I32 {
+  match r {
+    R.Ok(v) => v,                                   //~ E0302
+    Err(_) => 0,
+  }
+}
+
+fn err_pattern(r: R) -> I32 {
+  match r {
+    Ok(v) => v,
+    R.Err(_) => 1,                                  //~ E0302
+  }
+}
+
+fn nested_pattern(o: Option[O]) -> I32 {
+  match o {
+    Some(O.Some(v)) => v,                           //~ E0302
+    _ => 0,
+  }
+}
+
+fn in_a_guarded_arm(o: O) -> I32 {
+  match o {
+    O.Some(v) if v > 1 => v,                        //~ E0302
+    _ => 0,
+  }
+}
+
+const NOTHING: O = O.None                           //~ E0302
+
+fn bare_names_are_fine(o: O, r: R) -> I32 {
+  let a = match o {
+    None => 0,
+    Some(v) => v,
+  }
+  let b = match r {
+    Ok(v) => v,
+    Err(_) => 1,
+  }
+  a + b
+}
+
+fn bare_names_build_the_type() -> O {
+  Some(1)
+}

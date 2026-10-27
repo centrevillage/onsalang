@@ -318,6 +318,13 @@ impl<'p> Sema<'p> {
                 // S-689): the members are checked, and read it too (an unknown
                 // bound of their generics, an error type of `self`).
                 let held = self.a.read_held.contains(&id);
+                // The members are named before their headings are lowered
+                // (`[F32; Self.N]`, §2.2, S-595): the first of a name, as below.
+                for &sub in fns.iter().chain(&consts) {
+                    let name = self.a.defs[sub.0 as usize].name.clone();
+                    let Some(table) = self.assoc_table(key_def, key_builtin) else { break };
+                    table.entry(name).or_insert(sub);
+                }
                 for &sub in fns.iter().chain(&consts) {
                     if held {
                         self.a.read_held.insert(sub);
@@ -339,12 +346,8 @@ impl<'p> Sema<'p> {
                     }
                     let name = self.a.defs[sub.0 as usize].name.clone();
                     let name_span = self.a.defs[sub.0 as usize].name_span;
-                    let table = match (key_def, key_builtin) {
-                        (Some(d), _) => self.a.modules.assoc.entry(d).or_default(),
-                        (None, Some(t)) => self.a.modules.assoc_builtin.entry(t).or_default(),
-                        _ => continue,
-                    };
-                    if let Some(prev) = table.get(&name) {
+                    let Some(table) = self.assoc_table(key_def, key_builtin) else { continue };
+                    if let Some(&prev) = table.get(&name).filter(|&&p| p != sub) {
                         let prev_span = self.a.defs[prev.0 as usize].name_span;
                         self.report(
                             sub,
@@ -356,8 +359,6 @@ impl<'p> Sema<'p> {
                             )
                             .with_note(prev_span, "first defined here"),
                         );
-                    } else {
-                        table.insert(name, sub);
                     }
                 }
             }
@@ -365,6 +366,16 @@ impl<'p> Sema<'p> {
             _ => {}
         }
         None
+    }
+
+    /// The associated items of the type of an `impl`: of a user type by its
+    /// def, of a builtin type by its key; none for another type.
+    fn assoc_table(&mut self, def: Option<DefId>, builtin: Option<TyId>) -> Option<&mut HashMap<String, DefId>> {
+        match (def, builtin) {
+            (Some(d), _) => Some(self.a.modules.assoc.entry(d).or_default()),
+            (None, Some(t)) => Some(self.a.modules.assoc_builtin.entry(t).or_default()),
+            _ => None,
+        }
     }
 
     /// How far the member `sub` of an inherent `impl` of a type of `ty_vis`

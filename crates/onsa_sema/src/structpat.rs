@@ -55,7 +55,7 @@ impl<'a> Checker<'a> {
         sub: SubPattern<'_, 'a>,
     ) -> R<Option<usize>> {
         let Written { pat, path, fields, rest } = written;
-        let entity = self.ctor_of(pat)?;
+        let (entity, owner) = self.ctor_of(pat)?;
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
             Entity::Def(d) if self.a.error_alias(d) => {
@@ -75,6 +75,7 @@ impl<'a> Checker<'a> {
         };
         let name = self.a.def(d).name.clone();
         let args = self.fresh_args(d);
+        self.of_owner(d, &args, owner, span)?;
         let named = self.a.types.intern(Ty::Named(d, args.clone()));
         self.unify_at(span, named, ty)?;
         // SPEC-GAP(S-260): as for the fields of a struct literal.

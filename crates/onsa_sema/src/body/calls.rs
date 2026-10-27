@@ -43,7 +43,7 @@ impl<'a> Checker<'a> {
             // resolved the callee.
             let cspan = self.expr(callee).span;
             match self.names.paths.get(&callee).cloned() {
-                Some(PathRes::Item { entity, .. }) => {
+                Some(PathRes::Item { entity, owner }) => {
                     let name = self.last_name(callee);
                     return match entity {
                         Entity::Builtin(Builtin::Panic) => Err(self.unsupported(name.span, Feature::Panic, &[])),
@@ -55,12 +55,12 @@ impl<'a> Checker<'a> {
                             let shown = self.src(cspan);
                             Err(self.err(Code::E0401, cspan, format!("`{shown}` is not a function")))
                         }
-                        _ => self.check_fn_call(e, callee, entity, &name, args, expected, kind),
+                        _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
                     };
                 }
-                Some(PathRes::BuiltinAssoc { ty, .. }) => {
+                Some(PathRes::BuiltinAssoc { ty, owner, .. }) => {
                     let name = self.last_name(callee);
-                    return self.check_builtin_assoc_call(e, callee, ty, &name, args, expected);
+                    return self.check_builtin_assoc_call(e, callee, (ty, owner), &name, args, expected);
                 }
                 _ => {}
             }
@@ -114,7 +114,7 @@ impl<'a> Checker<'a> {
         &mut self,
         e: ExprId,
         callee: ExprId,
-        entity: Entity,
+        (entity, owner): (Entity, Option<TyId>),
         name: &Ident,
         args: &[Arg],
         expected: Option<TyId>,
@@ -154,6 +154,7 @@ impl<'a> Checker<'a> {
                     ));
                 }
                 let targs = self.fresh_args(d);
+                self.of_owner(d, &targs, owner, span)?;
                 let params: Vec<(Mode, TyId)> = f.params.iter().map(|p| (p.mode, self.subst(p.ty, &targs))).collect();
                 let ret = self.subst(f.ret, &targs);
                 if let Some(exp) = expected {
@@ -168,6 +169,7 @@ impl<'a> Checker<'a> {
             }
             Entity::Variant(d, i) => {
                 let targs = self.fresh_args(d);
+                self.of_owner(d, &targs, owner, span)?;
                 let variant = self.a.def(d).as_enum().unwrap().variants[i as usize].clone();
                 if variant.fields.is_empty() {
                     return Err(self.err(
@@ -290,12 +292,14 @@ impl<'a> Checker<'a> {
     }
 
     /// `Buf.zeroed(4)`, `F32.from_bits(b)`: an associated function of the
-    /// builtin type `ty` (a generic one by its key, `Analysis::builtin_key`).
+    /// builtin type `ty` (a generic one by its key, `Analysis::builtin_key`),
+    /// whose type argument the type an alias names it by decides (`owner`,
+    /// `Samples.zeroed(n)` of `type Samples = Buf[F32]`, §4.4).
     fn check_builtin_assoc_call(
         &mut self,
         e: ExprId,
         callee: ExprId,
-        ty: TyId,
+        (ty, owner): (TyId, Option<TyId>),
         name: &Ident,
         args: &[Arg],
         expected: Option<TyId>,
@@ -310,6 +314,12 @@ impl<'a> Checker<'a> {
             let shown = self.src(self.expr(callee).span);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` does not exist")));
         };
+        if let Some(o) = owner
+            && let Ty::Builtin(_, of) = self.ty(o)
+            && let Some(&arg) = of.first()
+        {
+            self.unify_at(span, targ, arg)?;
+        }
         if let Some(g) = generic {
             // `Buf.zeroed(4)`: the element type may be decided later (§4.7, S-226), and
             // it must be Copy (§4.5), a kind constraint checked when it is (S-235).

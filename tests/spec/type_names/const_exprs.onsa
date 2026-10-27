@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.6"]
+
+// S-91, R-105 (§4.4, §4.5): an alias is a name that may be written where a constant is ("定数を指す名前（`cfg.N`
+// のような修飾した名前と、`I32.BITS` のような具体的な型の関連定数を含む）"), so `Al.N` is a constant
+// expression: the initializer of a `const` (with arithmetic), the length of an array in a signature, in a
+// body and in a field, and a const argument. An alias of a built-in type does the same (`Word.BITS`). The
+// lengths with arithmetic and with a computed constant are in const_exprs_arith.onsa (they wait for the
+// grammar of constant expressions, W5-08). The mismatch of a length is in alias_arguments.onsa. Everything
+// here is right.
+
+pub struct Fx {
+  gain: F32,
+}
+
+impl Fx {
+  pub const N: U32 = 4
+
+  pub const HALF: U32 = 2
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  priv head: U32,
+}
+
+type Al = Fx
+
+type Word = U32
+
+const K: U32 = Al.N
+
+const K2: U32 = Al.N * 2 + Al.HALF
+
+const BITS: U32 = Word.BITS
+
+const FROM_A_CONSTANT: U32 = K + Al.N
+
+pub struct Frame {
+  data: [F32; Al.N],
+}
+
+type Row = [F32; Al.N]
+
+fn first(a: [F32; Al.N]) -> F32 {
+  a[0]
+}
+
+fn zeros() -> [F32; Al.N] {
+  [0.0; Al.N]
+}
+
+fn filled(v: F32) -> F32 {
+  let a = [v; Al.N]
+  a[1]
+}
+
+fn the_same_length_by_the_name(a: [F32; Al.N]) -> [F32; Fx.N] {
+  a
+}
+
+fn a_field(f: Frame) -> F32 {
+  f.data[3]
+}
+
+fn a_row(r: Row) -> [F32; 4] {
+  r
+}
+
+fn a_ring() -> Ring[F32, Al.N] {
+  Ring { data: [0.0; Al.N], head: 0 }
+}
+
+fn in_a_closure() -> F32 {
+  let f = fn(a: [F32; Al.N]) -> F32 { a[0] }
+  f.([1.0; Al.N])
+}
+
+fn in_a_generic_function[T](x: T) -> [F32; Al.N] {
+  [0.0; Al.N]
+}

@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+
+// S-595 (§2.2, §15.1): `Self` is bound by the body of an `impl`; "見出し（対象、型パラメータの境界）と `impl` の
+// 外の `Self` は E0302 である". So `Self.N`, `Self.new(x)`, `Self.Dot`, `Self { … }` and a pattern `Self { … }` in
+// a function outside an `impl`, `Self.N` in the body of a flow, `Self` in a type of a signature and of a
+// field, and `Self` as the target of an `impl` are E0302: the name is not found where it is written. The
+// error is the first of its unit (§18.1), so each form is in a function of its own. (These hold today as well;
+// they are here so that the places where `Self` is found do not spread beyond the body of an `impl`.)
+
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub const N: U32 = 4
+
+  pub const SCALE: F32 = 2.0
+
+  pub fn new(x: F32) -> P {
+    P { x: x }
+  }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Dot,
+}
+
+pub fn a_constant() -> U32 {
+  Self.N                                            //~ E0302
+}
+
+pub fn a_function() -> P {
+  Self.new(1.0)                                     //~ E0302
+}
+
+pub fn a_variant() -> Shape {
+  Self.Dot                                          //~ E0302
+}
+
+pub fn a_variant_with_a_field() -> Shape {
+  Self.Circle(1.0)                                  //~ E0302
+}
+
+pub fn a_struct_literal() -> P {
+  Self { x: 1.0 }                                   //~ E0302
+}
+
+pub fn a_struct_pattern(p: P) -> F32 {
+  let Self { x: a } = p                             //~ E0302
+  a
+}
+
+pub fn a_variant_pattern(s: Shape) -> F32 {
+  match s {
+    Self.Circle(r) => r,                            //~ E0302
+    _ => 0.0,
+  }
+}
+
+pub fn in_an_interpolation() -> Str uses {Alloc} {
+  "{Self.N}"                                        //~ E0302
+}
+
+pub fn in_a_closure() -> U32 {
+  let f = fn(k: U32) -> U32 { k + Self.N }          //~ E0302
+  f.(1)
+}
+
+pub fn in_a_signature(p: Self) -> F32 {             //~ E0302
+  0.0
+}
+
+pub fn in_a_return_type() -> Self {                 //~ E0302
+  P { x: 0.0 }
+}
+
+pub struct Node {
+  next: Option[Self],                               //~ E0302
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * Self.SCALE                                    //~ E0302
+}
+
+pub flow in_a_flow_with_a_constant_of_u32(x: F32 at sample) -> F32 at sample {
+  let n = Self.N                                    //~ E0302
+  x
+}
+
+impl Self {                                         //~ E0302
+  pub fn nothing() {}
+}

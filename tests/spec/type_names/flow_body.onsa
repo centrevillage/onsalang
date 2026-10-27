@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§11.2", "§7"]
+
+// S-91, R-105 (§4.4, §11.2): "主な用途は、標本の精度を一か所で切り替えること（`type Sample = F32`。flow は型パラメー
+// タを持たないので、精度を変える手段は別名だけである）". So an alias of a built-in type is read in the body of a
+// flow as the type is: its associated constants (`Sample.PI`), and in the types of the inputs, the output and the
+// `let`. The other places of the body that §11.2 lists hold for an alias as for the type: a struct literal and a
+// pattern, a constant of a user type, a call of an associated `rt fn`, a variant that is built and one that is
+// matched, in a branch and in the copies of a `par`. Everything here is right.
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub const ORIGIN: Point = Point { x: 0.5, y: 0.0 }
+
+  pub rt fn new(x: F32, y: F32) -> Point {
+    Point { x: x, y: y }
+  }
+}
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+type Sample = F32
+
+type P = Point
+
+type M = Mode
+
+pub rt fn amount(m: M, x: Sample) -> Sample {
+  match m {
+    M.Off => 0.0,
+    M.Gain(k) => x * k,
+  }
+}
+
+pub flow scale(x: Sample at sample) -> Sample at sample {
+  x * Sample.PI
+}
+
+pub flow twice_pi(x: Sample at sample) -> Sample at sample {
+  let two: Sample = Sample.PI + Sample.PI
+  x * Sample.PI * two
+}
+
+pub flow with_the_largest(x: Sample at sample) -> Sample at sample {
+  x + Sample.MAX
+}
+
+pub flow struct_literal_and_pattern(x: Sample at sample) -> Sample at sample {
+  let p                = P { x: x, y: Sample.PI }
+  let P { x: a, y: b } = p
+  a * b
+}
+
+pub flow constant_of_a_user_type(x: Sample at sample) -> Sample at sample {
+  x + P.ORIGIN.x
+}
+
+pub flow associated_function(x: Sample at sample) -> Sample at sample {
+  let p = P.new(x, x)
+  p.x
+}
+
+pub flow variants(x: Sample at sample) -> Sample at sample {
+  let m = if x > 0.0 { M.Gain(Sample.PI) } else { M.Off }
+  match m {
+    M.Off => 0.0,
+    M.Gain(k) => x * k,
+  }
+}
+
+pub flow in_a_par(x: Sample at sample) -> Sample at sample {
+  let ms = par i in 0 ..< 3 {
+    if i == 1 { M.Off } else { M.Gain((i + 1).round_f32()) }
+  }
+  amount(ms[0], x) + amount(ms[1], x) + amount(ms[2], x)
+}
+
+pub flow in_a_parameter(x: Sample at sample, g: Sample at block) -> Sample at sample {
+  x * g * Sample.PI
+}

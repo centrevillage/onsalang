@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§4.5"]
+
+// S-595, S-446 (§2.2, §4.5): `Self.N` as the length of an array and as a const argument in the signature of a
+// member of the `impl`: `a: [F32; Self.N]`, `-> [F32; Self.N]`, `Ring[F32, Self.N]`. Today the name of the type
+// written there (`Voice.N`) is not found either (E0302 "cannot find `Voice.N`": the constants of the `impl` are
+// not seen by the signatures of its own members), so the unit that makes the signatures see the constants is
+// not only `Self`. Everything here is right.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  priv head: U32,
+}
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  pub const N: U32 = 4
+
+  pub fn first(a: [F32; Self.N]) -> F32 {
+    a[0]
+  }
+
+  pub fn last(a: [F32; Self.N]) -> F32 {
+    a[3]
+  }
+
+  pub fn zeros() -> [F32; Self.N] {
+    [0.0; Self.N]
+  }
+
+  pub fn a_ring() -> Ring[F32, Self.N] {
+    Ring { data: [0.0; Self.N], head: 0 }
+  }
+
+  pub fn read(r: Ring[F32, Self.N]) -> F32 {
+    r.data[0]
+  }
+
+  pub fn by_the_name(a: [F32; Voice.N]) -> F32 {
+    a[1]
+  }
+}

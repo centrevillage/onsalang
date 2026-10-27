@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§6.3", "§4.4"]
+
+// S-595 (§2.2): `Self` is bound in the body of `impl Tr for Ty` as in a plain `impl`: "`impl`（固有の `impl` と
+// `impl Tr for Ty`）の本体の中で対象の型を指す". The trait that a program can implement in this version is
+// `Drop` of the prelude (§6.3; a user trait is E0200, and the other traits of the prelude can be implemented
+// by std only, E0307). Its `drop(move self)` may take `self` apart ("本体の中では `self` を分解でき"), and the
+// body reads `Self` in a pattern and in a path as the body of a plain `impl` does. Everything here is right.
+
+pub struct Handle {
+  id: U32,
+}
+
+impl Handle {
+  pub const CLOSED: U32 = 0
+
+  pub fn open(id: U32) -> Self {
+    Self { id: id }
+  }
+
+  pub fn is_closed(self) -> Bool {
+    self.id == Self.CLOSED
+  }
+}
+
+impl Drop for Handle {
+  rt fn drop(move self) {
+    let Self { id: id } = self
+    if id == Self.CLOSED {
+      return
+    }
+  }
+}

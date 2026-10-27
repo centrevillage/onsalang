@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§6.2"]
+
+// S-595 (§2.2): in a generic `impl`, `Self` is the type with its arguments fixed to the type parameters of
+// the `impl` ("`impl[T] Pr[T]` の `Self` は `Pr[T]`"), the same as an alias that fixes its arguments (§4.4). So
+// `Self.wrap(v)` and `Self { v: v }` are `G[T]`, and `Self.DEPTH` is a constant of `G[T]`. The same holds for
+// the const parameter of a `Ring[T, M]`. The errors of the arguments are in negative/self_generic_args.onsa.
+// Everything here is right.
+
+pub struct G[T] {
+  v: T,
+}
+
+impl[T] G[T] {
+  pub const DEPTH: U32 = 2
+
+  pub fn wrap(v: T) -> Self {
+    Self { v: v }
+  }
+
+  pub fn twice(v: T) -> Self {
+    Self.wrap(v)
+  }
+
+  pub fn get(self) -> T {
+    let Self { v: v } = self
+    v
+  }
+
+  pub fn depth() -> U32 {
+    Self.DEPTH
+  }
+
+  pub fn map_to(self, f: fn(T) -> T) -> Self {
+    let Self { v: v } = self
+    Self.wrap(f.(v))
+  }
+
+  pub fn in_an_option(v: T) -> Option[Self] {
+    Some(Self { v: v })
+  }
+}
+
+pub struct Ring[T, const M: U32] {
+  data: [T; M],
+  priv head: U32,
+}
+
+impl[T, const M: U32] Ring[T, M] {
+  pub const DEPTH: U32 = 2
+
+  pub fn from(data: [T; M]) -> Self {
+    Self { data: data, head: 0 }
+  }
+
+  pub fn rewound(self) -> Self {
+    let Self { data: d, head: _ } = self
+    Self.from(d)
+  }
+
+  pub fn depth(self) -> U32 {
+    Self.DEPTH
+  }
+}
+
+// Outside the `impl` the type is written by its name and its arguments are inferred.
+pub fn outside() -> G[I32] {
+  G { v: 1 }
+}
+
+pub fn outside_wrap() -> G[F32] {
+  G.wrap(2.0)
+}

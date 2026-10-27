@@ -183,8 +183,9 @@ pub(crate) enum PathRes {
     ConstParam(u32),
     /// A type parameter of the item (`T.…`), by its index.
     TypeParam(u32),
-    /// A namespace the chain passes: a module, a flow, a type (an alias and
-    /// `Self` from W4-04 U6), at a node before the one it stops at.
+    /// A namespace the chain passes: a module, a flow, a type (an alias by
+    /// its def, `Self` by the type it stands for), at a node before the one
+    /// it stops at.
     Namespace(Entity),
     /// The item at the node where the chain stops, whatever its kind: at
     /// its last name, or at the name after which a name is no member (a
@@ -193,18 +194,21 @@ pub(crate) enum PathRes {
     /// module or a type at the place of a value is the types stage's error
     /// (E0308 from W4-04 U8); a member of a def whose heading a syntax error
     /// cut is an error with no diagnostic there (S-59, R-71). `owner` is the
-    /// type it is a member of as the chain names it (an alias or `Self` as
-    /// the type they stand for, from W4-04 U6).
+    /// type an alias or `Self` before it stands for (§4.4, S-91, S-595;
+    /// `crate::names::typed`), which decides its type arguments; `Self`
+    /// alone is the type, with its own `owner`.
     Item {
         entity: Entity,
         owner: Option<TyId>,
     },
     /// An associated item of a builtin type in the compiler's table
     /// (`F32.PI`, `Buf.zeroed`, `crate::builtin`); `ty` is the type it is a
-    /// member of (a generic one by its key, [`Analysis::builtin_key`]).
+    /// member of (a generic one by its key, [`Analysis::builtin_key`]), and
+    /// `owner` as of [`PathRes::Item`] (`Buf[F32]` of `Samples.zeroed`).
     BuiltinAssoc {
         ty: TyId,
         name: String,
+        owner: Option<TyId>,
     },
     /// A builtin name of a flow body (§2.2, §11.4), recorded where the flow
     /// stage reads it (the callee of a delay or of `sample_rate()`); anywhere
@@ -300,7 +304,7 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         };
         // A panic names this declaration (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
-        let mut w = Walker::new(a, def.module, ast, &module.text, generics);
+        let mut w = Walker::new(a, def.module, ast, &module.text, (generics, self_ty));
         let done = match &def.kind {
             DefKind::Flow(f) => w.walk_flow(&f.inputs, body),
             _ => {
@@ -376,6 +380,9 @@ struct Walker<'a> {
     text: &'a str,
     /// The type and const parameters of the heading (§4.5).
     generics: &'a [GenericDef],
+    /// The type of the `impl` whose member's body it is, which `Self` names
+    /// (§2.2, S-595).
+    self_ty: Option<TyId>,
     /// A flow body, whose builtin names are its own (§2.2, §11.4).
     flow: bool,
     out: BodyNames,
@@ -395,13 +402,20 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
-    fn new(a: &'a Analysis, m: ModId, ast: &'a Ast, text: &'a str, generics: &'a [GenericDef]) -> Walker<'a> {
+    fn new(
+        a: &'a Analysis,
+        m: ModId,
+        ast: &'a Ast,
+        text: &'a str,
+        (generics, self_ty): (&'a [GenericDef], Option<TyId>),
+    ) -> Walker<'a> {
         Walker {
             a,
             m,
             ast,
             text,
             generics,
+            self_ty,
             flow: false,
             out: BodyNames::default(),
             scopes: scope::Scopes::default(),

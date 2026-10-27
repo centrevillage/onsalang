@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5"]
+
+// S-91, R-105 (§4.4): "型引数を決めた別名は、その型引数を決める（`type Samples = Buf[F32]` の
+// `Samples.zeroed(n)` は `T = F32` の `Buf.zeroed`）". It holds for a generic type of the program
+// (`type GI = G[I32]`, `GI.wrap(1)`), for the struct literal and the pattern, and for an associated
+// constant. An alias of an alias is the same type (`type B = A`, `type A = P`), in every position. The
+// errors of the arguments are in alias_arguments.onsa. Everything here is right.
+
+pub struct G[T] {
+  v: T,
+}
+
+impl[T] G[T] {
+  pub const DEPTH: U32 = 2
+
+  pub fn wrap(v: T) -> Self {
+    Self { v: v }
+  }
+}
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 }
+
+  pub fn new(x: F32, y: F32) -> Point {
+    Point { x: x, y: y }
+  }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Dot,
+}
+
+type GI = G[I32]
+
+type GF = G[F32]
+
+type GG = GI
+
+type Samples = Buf[F32]
+
+type P = Point
+
+type A = P
+
+type B = A
+
+type S = Shape
+
+type Z = S
+
+fn wrap_int() -> G[I32] {
+  GI.wrap(1)
+}
+
+fn wrap_float() -> G[F32] {
+  GF.wrap(1.0)
+}
+
+fn wrap_through_two_names() -> G[I32] {
+  GG.wrap(3)
+}
+
+fn literal() -> G[I32] {
+  GI { v: 1 }
+}
+
+fn literal_of_a_float() -> G[F32] {
+  GF { v: 0.5 }
+}
+
+fn pattern(g: G[I32]) -> I32 {
+  let GI { v: a } = g
+  a
+}
+
+fn pattern_in_a_match(g: GF) -> F32 {
+  match g {
+    GF { v: a } => a,
+  }
+}
+
+fn an_argument_of_the_alias(g: GI) -> I32 {
+  g.v
+}
+
+fn associated_constant() -> U32 {
+  GI.DEPTH + GG.DEPTH
+}
+
+fn zeros(n: U32) -> Buf[F32] uses {Alloc} {
+  Samples.zeroed(n)
+}
+
+fn zeros_into_a_let(n: U32) -> U32 uses {Alloc} {
+  let b: Samples = Samples.zeroed(n)
+  b.len()
+}
+
+fn an_alias_of_an_alias_function() -> Point {
+  B.new(1.0, 2.0)
+}
+
+fn an_alias_of_an_alias_constant() -> Point {
+  B.ORIGIN
+}
+
+fn an_alias_of_an_alias_literal() -> Point {
+  B { x: 1.0, y: 2.0 }
+}
+
+fn an_alias_of_an_alias_pattern(p: B) -> F32 {
+  let B { x: a, y: _ } = p
+  a
+}
+
+fn the_names_of_the_chain_are_one_type(p: P, a: A, b: B) -> F32 {
+  let q: Point = p
+  let r: B     = a
+  let s: A     = b
+  q.x + r.x + s.x
+}
+
+fn an_alias_of_an_alias_of_an_enum() -> Shape {
+  Z.Circle(1.0)
+}
+
+fn an_alias_of_an_alias_of_an_enum_match(s: Z) -> F32 {
+  match s {
+    Z.Circle(r) => r,
+    Z.Dot => 0.0,
+  }
+}

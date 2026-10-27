@@ -192,6 +192,11 @@ pub enum ResolveError {
         name: String,
         span: Span,
     },
+    /// `Self` out of the body of an `impl` and its members' headings (§2.2,
+    /// S-595): the one wording of a heading and a body.
+    SelfOutsideImpl {
+        span: Span,
+    },
     /// `a.b` where `a` has no members.
     NotANamespace {
         name: String,
@@ -238,6 +243,10 @@ impl ResolveError {
             )
             .with_found(name.clone())
             .with_rule(format!("take `{ty}`, and write `{ty}.{name}` where it is used")),
+            ResolveError::SelfOutsideImpl { span } => {
+                Diagnostic::new(Stage::Names, Code::E0302, span, "`Self` is only valid inside `impl`")
+                    .with_found("Self")
+            }
             ResolveError::NotANamespace { name, span } => {
                 Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` has no members")).with_found(name)
             }

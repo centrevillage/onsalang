@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§4.5", "§18.1"]
+
+// S-595 (§2.2, §4.4): in `impl[T] G[T]`, `Self` is `G[T]` with the argument fixed to the type parameter `T`
+// of the `impl` ("型引数を `impl` の型パラメータに決めた型を指す"), the same as `type GI = G[I32]` fixes it to
+// `I32` (§4.4). So `Self { v: 1 }` is a value of `G[T]` whose field `v` is `T` and an integer is not: E0401.
+// `G { v: 1 }` written with the name infers its argument, `G[I32]`, which is not the `Self` that the function
+// returns: E0401 as well. Each error is the first of its unit (§18.1), so each form is a member of its own.
+// The right forms (`Self { v: v }`, `Self.wrap(v)`) are in generic_impl.onsa.
+
+pub struct G[T] {
+  v: T,
+}
+
+impl[T] G[T] {
+  pub fn wrap(v: T) -> Self {
+    Self { v: v }
+  }
+
+  pub fn literal() -> Self {
+    Self { v: 1 }                                   //~ E0401
+  }
+
+  pub fn another_type(x: I32) -> Self {
+    Self { v: x }                                   //~ E0401
+  }
+
+  pub fn through_wrap() -> Self {
+    Self.wrap(1)                                    //~ E0401
+  }
+
+  pub fn through_wrap_of_another_type(x: F32) -> Self {
+    Self.wrap(x)                                    //~ E0401
+  }
+
+  pub fn by_the_name() -> Self {
+    G { v: 1 }                                      //~ E0401
+  }
+
+  pub fn pattern_of_another_argument(g: G[I32]) -> I32 {
+    let Self { v: a } = g                           //~ E0401
+    a
+  }
+}
+
+pub struct Ring[T, const M: U32] {
+  data: [T; M],
+  priv head: U32,
+}
+
+impl[T, const M: U32] Ring[T, M] {
+  pub fn wrong_length() -> Self {
+    Self { data: [0.0; 4], head: 0 }                //~ E0401
+  }
+
+  pub fn wrong_element(x: I32) -> Self {
+    Self { data: [x; M], head: 0 }                  //~ E0401
+  }
+}

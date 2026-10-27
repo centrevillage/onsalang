@@ -20,6 +20,7 @@ use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
 use crate::def::{DefKind, GenericKind};
 use crate::flow_names::FlowBuiltin;
 use crate::resolve::{Builtin, Entity, ResolveError};
+use crate::ty::TyId;
 use crate::{Analysis, builtin};
 
 /// What the types stage does with the end of a chain of names.
@@ -106,36 +107,36 @@ impl<'a> Walker<'a> {
         if let Some(b) = self.flow_name(&head.name) {
             return self.flow_builtin(b, segs, place);
         }
-        let Some(first) = a.modules.lookup(self.m, &head.name, &a.prelude) else {
-            return match a.modules.head_error(self.m, &path_of(segs), (&a.prelude, &a.defs, &a.builtin_key)) {
-                ResolveError::Failed => (Vec::new(), Some(Fail::Held)),
-                ResolveError::NotFound { .. } => (Vec::new(), Some(self.not_found(head))),
-                err => (Vec::new(), Some(Fail::Report(err.into_diagnostic()))),
-            };
+        let (first, owner) = match a.path_head(self.m, &path_of(segs), self.self_ty) {
+            Ok(found) => found,
+            Err(ResolveError::Failed) => return (Vec::new(), Some(Fail::Held)),
+            Err(ResolveError::NotFound { .. }) => return (Vec::new(), Some(self.not_found(head))),
+            Err(err) => return (Vec::new(), Some(Fail::Report(err.into_diagnostic()))),
         };
-        let (reached, err) =
-            a.modules.members(first, segs[1..].iter().copied(), self.m, (&a.prelude, &a.defs, &a.builtin_key));
+        let typed = a.typed_members(first, owner, segs[1..].iter().copied(), self.m);
+        let (err, owner, of) = (typed.err, typed.owner, typed.at);
         let mut out = Vec::new();
         let mut cur = first;
-        for e in reached {
+        for e in typed.reached {
             out.push(PathRes::Namespace(cur));
             cur = e;
         }
-        // The element that is no member of `cur`, and whether it is the
-        // name of the method of a call.
+        // The element that is no member of `of` (the last reached, or the
+        // type an alias there stands for), and whether it is the name of the
+        // method of a call.
         let at = out.len() + 1;
         let method = matches!(place, Place::Callee | Place::Instance) && at + 1 == segs.len();
-        // `Option.None`, `Result.Ok(1)` (S-607); the callee of an instance
-        // is the flow stage's (W4-12).
+        // `Option.None`, `Result.Ok(1)`, `O.None` (S-607); the callee of an
+        // instance is the flow stage's (W4-12).
         let variant = match &err {
             Some(ResolveError::NotFound { .. }) if place != Place::Instance => {
-                self.qualified_variant(&path_of(segs), at, cur)
+                self.qualified_variant(&path_of(segs), at, of)
             }
             _ => None,
         };
         let fail = match err {
             None => {
-                out.push(PathRes::Item { entity: cur, owner: None });
+                out.push(PathRes::Item { entity: cur, owner });
                 None
             }
             Some(ResolveError::NotANamespace { .. })
@@ -146,18 +147,18 @@ impl<'a> Walker<'a> {
             // A value, or the receiver of a method (what is no value there
             // is the types stage's error, unless the check does not read it).
             Some(ResolveError::NotANamespace { .. }) if is_value(a, cur) => {
-                out.push(PathRes::Item { entity: cur, owner: None });
+                out.push(PathRes::Item { entity: cur, owner });
                 None
             }
             Some(err @ ResolveError::NotANamespace { .. })
                 if method && !a.unread(self.m, &path_of(&segs[..=at]), &err) =>
             {
-                out.push(PathRes::Item { entity: cur, owner: None });
+                out.push(PathRes::Item { entity: cur, owner });
                 None
             }
             Some(ResolveError::NotFound { .. }) if variant.is_some() => variant.map(Fail::Report),
-            Some(ResolveError::NotFound { .. }) if self.builtin_assoc(cur, segs[at], method).is_some() => {
-                let assoc = self.builtin_assoc(cur, segs[at], method).expect("an associated item");
+            Some(ResolveError::NotFound { .. }) if self.builtin_assoc(of, segs[at], method, owner).is_some() => {
+                let assoc = self.builtin_assoc(of, segs[at], method, owner).expect("an associated item");
                 out.extend([PathRes::Namespace(cur), assoc]);
                 None
             }
@@ -268,7 +269,7 @@ impl<'a> Walker<'a> {
     /// table: a constant (`F32.PI`), or, as the name of the method of a call,
     /// a function (`Buf.zeroed`, whose call the types stage reads). A name
     /// the table has not is not found (E0302, R-249: `F32.y`, `F32.y(1.0)`).
-    fn builtin_assoc(&self, of: Entity, name: &Ident, method: bool) -> Option<PathRes> {
+    fn builtin_assoc(&self, of: Entity, name: &Ident, method: bool, owner: Option<TyId>) -> Option<PathRes> {
         let a = self.a;
         let has_fn = |scalar, generic| method && builtin::has_assoc_fn(&a.types, scalar, generic, &name.name);
         let ty = match of {
@@ -278,7 +279,7 @@ impl<'a> Walker<'a> {
             Entity::Builtin(Builtin::Generic(g)) if has_fn(None, Some(g)) => a.builtin_key.get(&g).copied(),
             _ => None,
         }?;
-        Some(PathRes::BuiltinAssoc { ty, name: name.name.clone() })
+        Some(PathRes::BuiltinAssoc { ty, name: name.name.clone(), owner })
     }
 
     /// The chain of names `e` ends (`a.b.c` is `Field(Field(Path(a), b), c)`),
@@ -305,37 +306,43 @@ impl<'a> Walker<'a> {
     }
 
     /// The item a path of a pattern or a struct literal names, of the names
-    /// of the module (as a type is named).
-    fn item(&self, path: &Path) -> Result<Entity, Fail> {
+    /// of the module (as a type is named), and the type an alias or `Self`
+    /// before it stands for; a path that ends at an alias or at `Self` names
+    /// the type (`P { x }`, `Self { x }`).
+    fn item(&self, path: &Path) -> Result<(Entity, Option<TyId>), Fail> {
         let a = self.a;
-        let names = (&a.prelude, &a.defs[..], &a.builtin_key);
         let head = &path.segments[0];
         let error = |err| self.member_error(path, err);
         // A builtin name of a flow in a pattern (`prev(z) =>`, S-720).
         if let Some(b) = self.flow_name(&head.name) {
             return Err(Fail::Report(b.misplaced(path.segments.iter().map(|s| s.span), self.text)));
         }
-        let Some(first) = a.modules.lookup(self.m, &head.name, &a.prelude) else {
-            return Err(error(a.modules.head_error(self.m, path, names)));
-        };
-        match a.modules.members(first, &path.segments[1..], self.m, names) {
-            (reached, Some(err @ ResolveError::NotFound { .. })) => {
-                let of = reached.last().copied().unwrap_or(first);
-                match self.qualified_variant(path, reached.len() + 1, of) {
+        let (first, typed) = a.typed_path(self.m, path, self.self_ty).map_err(error)?;
+        match typed.err {
+            Some(err @ ResolveError::NotFound { .. }) => {
+                match self.qualified_variant(path, typed.reached.len() + 1, typed.at) {
                     Some(d) => Err(Fail::Report(d)),
                     None => Err(error(err)),
                 }
             }
-            (_, Some(err)) => Err(error(err)),
-            (reached, None) => Ok(reached.last().copied().unwrap_or(first)),
+            Some(err) => Err(error(err)),
+            None => {
+                let end = typed.reached.last().copied().unwrap_or(first);
+                match a.alias_type(end) {
+                    Ok(Some((ns, t))) => Ok((ns, Some(t))),
+                    // An alias of the error type or of no struct: the types
+                    // stage reads the alias (R-271).
+                    Ok(None) | Err(_) => Ok((end, typed.owner)),
+                }
+            }
         }
     }
 
     /// The item the path of the pattern `p` names (§7).
     pub(super) fn ctor(&mut self, p: PatId, path: &Path) -> W {
         match self.item(path) {
-            Ok(entity) => {
-                self.out.pats.insert(p, PatRes::Ctor { entity, owner: None });
+            Ok((entity, owner)) => {
+                self.out.pats.insert(p, PatRes::Ctor { entity, owner });
                 Ok(())
             }
             Err(f) => self.fail_at_let(f, false),
@@ -344,8 +351,8 @@ impl<'a> Walker<'a> {
 
     /// The item the path of the struct literal `e` names.
     pub(super) fn struct_lit(&mut self, e: ExprId, path: &Path) -> W {
-        let entity = self.item(path).map_err(|f| self.fail(f))?;
-        self.out.structs.insert(e, StructRes { entity, owner: None });
+        let (entity, owner) = self.item(path).map_err(|f| self.fail(f))?;
+        self.out.structs.insert(e, StructRes { entity, owner });
         Ok(())
     }
 }

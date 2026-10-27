@@ -1,0 +1,179 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§4.4", "§2.4", "§11.8"]
+
+// S-595, S-446, S-377, S-91, R-105 (§2.2, §4.4): `Self` in the body of an `impl` and a type alias in the
+// positions of a type name read the type, and what they compute is what the name of the type computes. The
+// main forms of self/ and type_names/ are run here with their values, so that the stages after the check (the
+// interpreter reads what the names stage recorded) do the same: an associated function (`Self.new`,
+// `A.new`), an associated constant (`Self.N`, `B.ORIGIN`, `Sample.PI`), a variant built and matched (`Self.Circle`,
+// `S.Circle(r)`), a struct literal and a pattern (`Self { … }`, `B { … }`), the arguments fixed by an alias
+// (`Samples.zeroed(n)`, `GI.wrap(1)`). The holes of a string are checked in self/interp_heads.onsa and
+// type_names/positions.onsa, not run here: this version runs no `Str` (E0200 of the lowering). For the same reason the
+// closures and the struct patterns of a `match` are only in the checked cases.
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+impl P {
+  pub const N: U32 = 4
+
+  pub const SCALE: F32 = 2.0
+
+  pub const ORIGIN: P = Self { x: 0.0, y: 0.0 }
+
+  pub const COPY_OF_N: U32 = Self.N
+
+  pub fn new(x: F32, y: F32) -> Self {
+    Self { x: x, y: y }
+  }
+
+  pub fn twin(v: F32) -> Self {
+    Self.new(v, v)
+  }
+
+  pub fn swapped(self) -> Self {
+    let Self { x: a, y: b } = self
+    Self { x: b, y: a }
+  }
+
+  pub fn count() -> U32 {
+    Self.N
+  }
+
+  pub fn sums() -> F32 {
+    let b = [2.0; Self.N]
+    b[3] + b[0]
+  }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Dot,
+}
+
+impl Shape {
+  pub fn round(r: F32) -> Self {
+    Self.Circle(r)
+  }
+
+  pub fn point() -> Self {
+    Self.Dot
+  }
+
+  pub fn area(self) -> F32 {
+    match self {
+      Self.Circle(r) => r * r,
+      Self.Rect(w, h) => w * h,
+      Self.Dot => 0.0,
+    }
+  }
+}
+
+pub struct G[T] {
+  v: T,
+}
+
+impl[T] G[T] {
+  pub fn wrap(v: T) -> Self {
+    Self { v: v }
+  }
+
+  pub fn twice(v: T) -> Self {
+    Self.wrap(v)
+  }
+}
+
+type A = P
+
+type B = A
+
+type S = Shape
+
+type Sample = F32
+
+type Samples = Buf[F32]
+
+type GI = G[I32]
+
+test "Self.new and Self.N in an impl" {
+  assert P.count() == 4
+  assert P.COPY_OF_N == 4
+  assert P.twin(2.0).y == 2.0
+}
+
+test "Self as a struct literal and a struct pattern" {
+  let p = P.new(1.0, 2.0).swapped()
+  assert p.x == 2.0
+  assert p.y == 1.0
+  assert P.ORIGIN.x == 0.0
+}
+
+test "Self.Circle and Self.Dot are built and matched" {
+  assert Shape.round(2.0).area() == 4.0
+  assert Shape.point().area() == 0.0
+  assert Shape.Rect(2.0, 3.0).area() == 6.0
+}
+
+test "Self in a generic impl is the type with its parameter" {
+  let g: G[I32] = G.twice(5)
+  assert g.v == 5
+  let h: G[F32] = G.wrap(0.5)
+  assert h.v == 0.5
+}
+
+test "the length of an array with Self.N" {
+  assert P.sums() == 4.0
+}
+
+test "an alias reads the associated function and the constants" {
+  let p = A.new(1.0, 2.0)
+  assert p.x == 1.0
+  assert p.y == 2.0
+  assert B.new(5.0, 6.0).y == 6.0
+  assert B.ORIGIN.x == 0.0
+  assert B.N == 4
+}
+
+test "an alias writes a struct literal and a pattern" {
+  let q                = B { x: 5.0, y: 6.0 }
+  let B { x: a, y: b } = q
+  assert a == 5.0
+  assert b == 6.0
+}
+
+test "an alias builds and matches a variant" {
+  let s = S.Circle(3.0)
+  let got = match s {
+    S.Circle(c) => c,
+    S.Rect(w, _) => w,
+    S.Dot => 0.0,
+  }
+  assert got == 3.0
+  let d = match S.Dot {
+    S.Dot => 1,
+    _ => 0,
+  }
+  assert d == 1
+}
+
+test "the alias of a built-in type has its constants" {
+  assert Sample.PI > 3.14
+  assert Sample.PI < 3.15
+  assert Sample.PI == F32.PI
+}
+
+test "an alias that fixes the arguments fixes them" {
+  let b = Samples.zeroed(4)
+  assert b.len() == 4
+  assert b[2] == 0.0
+  let g = GI.wrap(1)
+  assert g.v == 1
+  let l           = GI { v: 7 }
+  let GI { v: w } = l
+  assert w == 7
+}

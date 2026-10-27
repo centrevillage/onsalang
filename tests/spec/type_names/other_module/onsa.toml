@@ -1,0 +1,3 @@
+[package]
+name = "other_module"
+edition = "2026"

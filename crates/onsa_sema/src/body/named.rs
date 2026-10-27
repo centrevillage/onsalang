@@ -51,14 +51,14 @@ impl<'a> Checker<'a> {
                 self.info.targets.insert(e, Target::ConstParam(i));
                 Ok(self.u32())
             }
-            PathRes::Item { entity, .. } => match self.value_of_entity(entity, e, name, span, expected)? {
+            PathRes::Item { entity, owner } => match self.value_of_entity((entity, owner), e, name, span, expected)? {
                 Some(t) => Ok(t),
                 None => {
                     let shown = self.src(span);
                     Err(self.err(Code::E0401, span, format!("`{shown}` is not a value")))
                 }
             },
-            PathRes::BuiltinAssoc { ty, name: assoc } => {
+            PathRes::BuiltinAssoc { ty, name: assoc, .. } => {
                 let Some(t) = builtin::assoc_const(&mut self.a.types, ty, &assoc) else {
                     onsa_diag::internal::bug(Some(span), "an associated constant the names stage did not find")
                 };
@@ -123,7 +123,7 @@ impl<'a> Checker<'a> {
             let PathRes::Namespace(entity) = r else { continue };
             if !matches!(entity, Entity::Def(d) if self.a.heading_failed(d)) {
                 let span = self.expr(node).span;
-                self.value_of_entity(entity, node, &name, span, None)?;
+                self.value_of_entity((entity, None), node, &name, span, None)?;
             }
         }
         Ok(())
@@ -157,12 +157,29 @@ impl<'a> Checker<'a> {
         Stop
     }
 
-    /// The record of a constructor of a pattern.
-    pub(crate) fn ctor_of(&mut self, pat: PatId) -> R<Entity> {
+    /// The record of a constructor of a pattern, and the type an alias or
+    /// `Self` names it by.
+    pub(crate) fn ctor_of(&mut self, pat: PatId) -> R<(Entity, Option<TyId>)> {
         match self.names.pats.get(&pat) {
-            Some(crate::names::body::PatRes::Ctor { entity, .. }) => Ok(*entity),
+            Some(crate::names::body::PatRes::Ctor { entity, owner }) => Ok((*entity, *owner)),
             _ => Err(self.held_stop()),
         }
+    }
+
+    /// The type arguments `args` of the def `d` that a path names through
+    /// an alias or `Self` (`owner`, §4.4, S-91, S-595): the type `d` is of
+    /// (the struct or the enum of a literal, a pattern or a variant; the
+    /// type of the `impl` of an associated function) with `args` is the
+    /// owner (`type Samples = Buf[F32]`, `Self` of `impl[T] G[T]` is `G[T]`).
+    pub(crate) fn of_owner(&mut self, d: DefId, args: &[TyId], owner: Option<TyId>, span: Span) -> R<()> {
+        let Some(owner) = owner else { return Ok(()) };
+        let def = self.a.def(d);
+        let ty = match (&def.kind, def.owner.map(|o| &self.a.def(o).kind)) {
+            (DefKind::Struct(_) | DefKind::Enum(_), _) => self.a.types.intern(Ty::Named(d, args.to_vec())),
+            (DefKind::Fn(_), Some(&DefKind::Impl(crate::def::ImplDef { self_ty, .. }))) => self.subst(self_ty, args),
+            _ => return Ok(()),
+        };
+        self.unify_at(span, ty, owner)
     }
 
     /// A type written in the body, as the names stage lowered it; its
@@ -178,12 +195,13 @@ impl<'a> Checker<'a> {
     }
 
     /// Type of an entity used as a value (`None` when it is none,
-    /// [`crate::names::body::is_value`]). Records the target on `e`; `span`
+    /// [`crate::names::body::is_value`]), with the type an alias or `Self`
+    /// names it by ([`Self::of_owner`]). Records the target on `e`; `span`
     /// is that of the path up to the name, where an instance is made (the
     /// hole, not the whole literal, for a hole of a string).
     pub(super) fn value_of_entity(
         &mut self,
-        entity: Entity,
+        (entity, owner): (Entity, Option<TyId>),
         e: ExprId,
         name: &Ident,
         span: Span,
@@ -207,6 +225,7 @@ impl<'a> Checker<'a> {
                             ));
                         }
                         let args = self.fresh_args(d);
+                        self.of_owner(d, &args, owner, span)?;
                         let fty = self.fn_type(f, &args);
                         if let Some(exp) = expected {
                             self.unify_at(name.span, fty, exp)?;
@@ -233,6 +252,7 @@ impl<'a> Checker<'a> {
             }
             Entity::Variant(d, i) => {
                 let args = self.fresh_args(d);
+                self.of_owner(d, &args, owner, span)?;
                 let variant = self.a.def(d).as_enum().unwrap().variants[i as usize].clone();
                 let enum_ty = self.a.types.intern(Ty::Named(d, args.clone()));
                 let t = if variant.fields.is_empty() {

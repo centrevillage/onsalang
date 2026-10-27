@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5"]
+
+// S-91, R-105 (§4.4, §4.5): `Al.N` with an alias in a constant expression with arithmetic (`[F32; Al.N * 2]`)
+// and a length that names a constant computed by an expression (`const K: U32 = Al.N`, then `[F32; K]`:
+// "初期化式で計算した定数は名前で使える"). A type is compared by the value of the length (`[F32; Al.N * 2]` is
+// `[F32; 8]` when `N` is 4). The alias in the names stage is U6 of W4-04; the grammar of constant expressions
+// in a length is W5-08 (today E0200, "expressions as array lengths"). The lengths that name a constant that a
+// literal initializes are in const_exprs.onsa. Everything here is right.
+
+pub struct Fx {
+  gain: F32,
+}
+
+impl Fx {
+  pub const N: U32 = 4
+
+  pub const HALF: U32 = 2
+}
+
+type Al = Fx
+
+type Word = U32
+
+const K: U32 = Al.N
+
+fn twice(a: [F32; Al.N * 2]) -> [F32; 8] {
+  a
+}
+
+fn the_length_of_a_constant(a: [F32; K]) -> [F32; 4] {
+  a
+}
+
+fn a_sum_of_two(a: [F32; Al.N + Al.HALF]) -> [F32; 6] {
+  a
+}
+
+fn the_bits_as_a_length(a: [F32; Word.BITS]) -> [F32; 32] {
+  a
+}
+
+fn the_bits_twice(a: [F32; Word.BITS * 2]) -> [F32; 64] {
+  a
+}
+
+fn in_the_body() -> F32 {
+  let a = [1.0; Al.N * 2]
+  a[7]
+}

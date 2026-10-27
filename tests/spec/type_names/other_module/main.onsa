@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§7", "§18.1"]
+
+// S-91, R-105 (§4.4, §15.1): an alias that a module declares `pub` is taken by `use` and read in another module
+// as the type is: `Pt.new(…)`, `Pt.ORIGIN`, `Pt { … }`, a pattern, `Sh.Circle(…)`, and `Sample.PI` for the alias
+// of a built-in type. The rule of the fields that another module does not see is the same as with the name
+// of the type ("見えないフィールドを持つ struct は…struct リテラルで作れず、struct のパターンで分解できない
+// (E0303)"): a literal and a pattern of `Ctr` that name or leave out the `priv` field `last` are E0303, through
+// the alias and through the name `Counter`. Each error is the first of its unit (§18.1).
+use geo.{Counter, Ctr, Point, Pt, Sample, Sh}
+
+fn associated_function() -> Pt {
+  Pt.new(1.0, 2.0)
+}
+
+fn associated_constant() -> Pt {
+  Pt.ORIGIN
+}
+
+fn constant_then_field() -> F32 {
+  Pt.ORIGIN.x
+}
+
+fn a_constant_of_the_alias_of_a_built_in_type() -> Sample {
+  Sample.PI
+}
+
+fn struct_literal() -> Pt {
+  Pt { x: 1.0, y: 2.0 }
+}
+
+fn pattern(p: Pt) -> F32 {
+  let Pt { x: a, y: _ } = p
+  a
+}
+
+fn variant() -> Sh {
+  Sh.Circle(1.0)
+}
+
+fn match_variant(s: Sh) -> F32 {
+  match s {
+    Sh.Circle(r) => r,
+    Sh.Dot => 0.0,
+  }
+}
+
+fn the_type_and_the_alias_are_one_type(p: Pt) -> Point {
+  p
+}
+
+fn through_a_function_of_the_module() -> U32 {
+  let c = Ctr.start()
+  c.count()
+}
+
+fn literal_with_the_hidden_field() -> Ctr {
+  Ctr { n: 0, last: 0 }                             //~ E0303
+}
+
+fn literal_without_the_hidden_field() -> Ctr {
+  Ctr { n: 0 }                                      //~ E0303
+}
+
+fn pattern_with_the_hidden_field(c: Ctr) -> U32 {
+  let Ctr { n: a, last: _ } = c                     //~ E0303
+  a
+}
+
+fn pattern_without_the_hidden_field(c: Ctr) -> U32 {
+  let Ctr { n: a } = c                              //~ E0303
+  a
+}
+
+fn pattern_in_a_match(c: Ctr) -> U32 {
+  match c {
+    Ctr { n: a, last: _ } => a,                     //~ E0303
+  }
+}
+
+fn literal_by_the_name_of_the_type() -> Counter {
+  Counter { n: 0, last: 0 }                         //~ E0303
+}
+
+fn pattern_by_the_name_of_the_type(c: Counter) -> U32 {
+  let Counter { n: a, last: _ } = c                 //~ E0303
+  a
+}

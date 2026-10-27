@@ -86,7 +86,7 @@ impl<'a> Checker<'a> {
                 crate::constarg::of_entity(self.a, self.m, self.ast, self.text, entity, lspan)
                     .map(|v| v.map(|v| (v, d)))
             }
-            Some(PathRes::BuiltinAssoc { ty, name }) => {
+            Some(PathRes::BuiltinAssoc { ty, name, .. }) => {
                 match crate::constarg::of_builtin(self.a, ty, &name, self.text, lspan) {
                     Some(r) => r.map(|v| v.map(|v| (v, None))),
                     None => {
@@ -99,7 +99,8 @@ impl<'a> Checker<'a> {
             // grammar).
             _ => match crate::constarg::path_of(self.ast, l) {
                 Some(p) => {
-                    crate::constarg::named(self.a, self.m, self.ast, self.text, &p, lspan).map(|v| v.map(|v| (v, None)))
+                    let named = crate::constarg::named(self.a, self.m, (self.ast, self.text), &p, None, lspan);
+                    named.map(|v| v.map(|v| (v, None)))
                 }
                 None => return Ok(Leaf::Other),
             },

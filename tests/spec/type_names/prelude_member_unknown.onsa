@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-607, R-249, §4.4, §15.1: the forms of prelude_type_member_unknown.onsa and
+// prelude_type_member_unknown_call.onsa, written after an alias of the type. A name that is not a variant of the
+// prelude and not a name of the type either, after `type O = Option[I32]`, `type R = Result[I32, I32]` or the
+// alias of a built-in type (`type F = F32`: `F.y(1.0)`, `F.PIE`), is a name not found in the type: E0302 in the
+// names stage, when it is read, called or in a pattern. It is not E0413 ("does not exist") and not E0401. No fix
+// candidate: taking off the type would leave a name that nothing gives, an error of the same stage (the contract
+// of the candidates, §18.1). One error in each unit (§18.1).
+
+type O = Option[I32]
+
+type R = Result[I32, I32]
+
+type F = F32
+
+type I = I32
+
+fn a_read() -> O {
+  O.nosuch                                          //~ E0302
+}
+
+fn a_read_of_result() -> R {
+  R.nosuch                                          //~ E0302
+}
+
+fn a_call() -> O {
+  O.Foo(1)                                          //~ E0302
+}
+
+fn a_call_with_no_arguments() -> O {
+  O.foo()                                           //~ E0302
+}
+
+fn a_call_of_result() -> R {
+  R.Foo(1)                                          //~ E0302
+}
+
+fn a_call_of_result_with_two_arguments() -> R {
+  R.foo(1, 2)                                       //~ E0302
+}
+
+fn a_pattern(o: O) -> I32 {
+  match o {
+    O.Foo => 0,                                     //~ E0302
+    _ => 1,
+  }
+}
+
+fn a_pattern_with_a_field(o: O) -> I32 {
+  match o {
+    O.Foo(v) => v,                                  //~ E0302
+    _ => 1,
+  }
+}
+
+fn a_call_of_a_float_type() -> F {
+  F.y(1.0)                                          //~ E0302
+}
+
+fn a_read_of_a_float_type() -> F {
+  F.PIE                                             //~ E0302
+}
+
+fn a_read_of_a_float_type_after_a_value() -> F {
+  F.PIE + 1.0                                       //~ E0302
+}
+
+fn a_read_of_an_integer_type() -> I {
+  I.LARGEST                                         //~ E0302
+}
+
+fn a_call_of_an_integer_type() -> I {
+  I.nosuch(1)                                       //~ E0302
+}
+
+fn a_pattern_of_an_integer_type(n: I32) -> I32 {
+  match n {
+    I.LARGEST => 0,                                 //~ E0302
+    _ => 1,
+  }
+}
+
+fn a_read_in_a_closure() -> F {
+  let f = fn(a: F) -> F { a + F.PIE }               //~ E0302
+  f.(1.0)
+}

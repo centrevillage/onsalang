@@ -42,15 +42,7 @@ impl<'p> Sema<'p> {
                         return match cx.self_ty {
                             Some(t) => t,
                             None => {
-                                self.report(
-                                    cx.def,
-                                    Diagnostic::new(
-                                        Stage::Names,
-                                        Code::E0302,
-                                        seg.span,
-                                        "`Self` is only valid inside `impl`",
-                                    ),
-                                );
+                                self.report(cx.def, ResolveError::SelfOutsideImpl { span: seg.span }.into_diagnostic());
                                 self.a.types.error()
                             }
                         };
@@ -168,7 +160,8 @@ impl<'p> Sema<'p> {
                 self.a.types.error()
             }
             (TypeKind::ConstArg(e), Some(true)) => {
-                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, &cx.generics, *e) {
+                self.lower_alias_of(cx, *e);
+                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), *e) {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
                     Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
@@ -190,7 +183,8 @@ impl<'p> Sema<'p> {
                         return self.a.types.intern(Ty::Param(i as u32));
                     }
                 } else {
-                    match crate::constarg::named(self.a, cx.m, cx.ast, cx.text, path, te.span) {
+                    self.lower_alias_before(cx, path);
+                    match crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, te.span) {
                         Ok(Some(v)) => return self.a.types.intern(Ty::ConstVal(v)),
                         Ok(None) => {}
                         Err(crate::constarg::ConstErr::Unknown) => return self.a.types.error(),
@@ -378,10 +372,32 @@ impl<'p> Sema<'p> {
         self.report(cx.def, d);
     }
 
+    /// The constant expression `e` as [`Self::lower_alias_before`] reads it.
+    fn lower_alias_of(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) {
+        if let Some(path) = crate::constarg::path_of(cx.ast, e) {
+            self.lower_alias_before(cx, &path);
+        }
+    }
+
+    /// Lower the alias before the last name of the path of a constant
+    /// (`Al.N`, `inner.Al.N`) when the path names one there, which a
+    /// signature may name before its declaration is lowered: the constant
+    /// reads the type it stands for (§4.4, `crate::names::typed`).
+    fn lower_alias_before(&mut self, cx: &Cx<'p>, path: &onsa_syntax::ast::Path) {
+        let Some((_, before)) = path.segments.split_last().filter(|(_, b)| !b.is_empty()) else { return };
+        let before = onsa_syntax::ast::Path { segments: before.to_vec(), span: path.span };
+        if let Ok(Entity::Def(d)) = self.a.resolve_path(cx.m, &before)
+            && matches!(self.a.def(d).kind, DefKind::Alias(_))
+        {
+            self.alias_ty(d);
+        }
+    }
+
     /// Array length (§4.1): an integer literal, a `const` with a literal
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
-        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, &cx.generics, e) {
+        self.lower_alias_of(cx, e);
+        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), e) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
             Err(crate::constarg::ConstErr::Unknown) => None,

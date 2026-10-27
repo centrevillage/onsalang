@@ -27,7 +27,7 @@ use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
 use crate::deferred::{Deferred, DeferredKind, Required};
 use crate::exhaust::P;
 use crate::infer::{Cause, Infer, LitKind, Mismatch};
-use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes};
+use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes, StructRes};
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::structpat::Written;
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId};
@@ -157,6 +157,10 @@ pub struct BodyInfo {
     pub targets: HashMap<ExprId, Target>,
     /// `PatKind::Bind` patterns → the local they introduce.
     pub pat_locals: HashMap<PatId, LocalId>,
+    /// The constructor patterns of an enum (`S.Circle(r)`, `Self.Dot`,
+    /// `None`) → the index of the constructor they name, as the names stage
+    /// resolved their path: the lowering reads it (D-15).
+    pub pat_ctors: HashMap<PatId, u32>,
     pub instances: Vec<Instance>,
     /// Closure expression → outer locals it captures (by copy, §5.3).
     pub captures: HashMap<ExprId, Vec<LocalId>>,

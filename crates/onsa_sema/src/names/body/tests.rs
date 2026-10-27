@@ -280,15 +280,17 @@ fn chains_record_the_namespaces_they_pass_and_the_item_they_end_at() {
     assert_eq!(at("Shape"), Some(PathRes::Namespace(entity_of(&a, "Shape"))));
     assert_eq!(at("Shape.Circle"), item(Entity::Variant(def(&a, "Shape"), 0)));
     assert_eq!(at("F32"), Some(PathRes::Namespace(Entity::Builtin(crate::resolve::Builtin::Scalar(f32)))));
-    assert_eq!(at("F32.PI"), Some(PathRes::BuiltinAssoc { ty: f32, name: "PI".into() }));
-    assert_eq!(at("F32.from_bits"), Some(PathRes::BuiltinAssoc { ty: f32, name: "from_bits".into() }));
+    assert_eq!(at("F32.PI"), Some(PathRes::BuiltinAssoc { ty: f32, name: "PI".into(), owner: None }));
+    assert_eq!(at("F32.from_bits"), Some(PathRes::BuiltinAssoc { ty: f32, name: "from_bits".into(), owner: None }));
     assert_eq!(at("P.new"), item(Entity::Member(def(&a, "new"))));
     assert_eq!(at("Some"), item(Entity::Builtin(crate::resolve::Builtin::Some)));
     assert_eq!(at("K"), item(entity_of(&a, "K")));
-    // A field of a value is the types stage's; through an alias, from U6
-    // (now the receiver of a method, an error of the types stage).
+    // A field of a value is the types stage's; an alias stands for its type,
+    // the owner of its members (§4.4).
     assert!(matches!(at("p"), Some(PathRes::Local(_))) && at("p.x").is_none());
-    assert_eq!((at("Q"), at("Q.new")), (item(entity_of(&a, "Q")), None));
+    let p_ty = a.types.find(&crate::ty::Ty::Named(def(&a, "P"), Vec::new()));
+    let new = Some(PathRes::Item { entity: Entity::Member(def(&a, "new")), owner: p_ty });
+    assert_eq!((at("Q"), at("Q.new")), (Some(PathRes::Namespace(entity_of(&a, "Q"))), new));
     // The holes of a string: the namespaces they pass and their ends.
     let mut holes: Vec<_> = n.interp.iter().map(|((_, k), r)| (*k, r.clone())).collect();
     holes.sort_by_key(|(k, _)| *k);
@@ -354,6 +356,31 @@ fn the_paths_of_patterns_name_their_items() {
         ("Some(v)", Entity::Builtin(Builtin::Some)),
     ];
     assert_eq!(ctors, want.map(|(t, e)| (t.to_string(), e)));
+}
+
+/// `Self` in the body of an `impl` and an alias stand for their type, the
+/// owner of what the path names (§2.2, §4.4, S-595, S-91): `Self` of
+/// `impl[T] G[T]` is `G[T]`.
+#[test]
+fn self_and_an_alias_name_their_type_as_the_owner_of_what_follows() {
+    let src = "pub struct G[T] { v: T }\nimpl[T] G[T] {\n  pub fn wrap(v: T) -> Self { Self { v: v } }\n  pub fn get(self) -> T {\n    let Self { v: x } = self\n    let f = fn(w: T) -> G[T] { Self.wrap(w) }\n    x\n  }\n}\ntype GI = G[I32]\npub fn k() -> GI { GI { v: 1 } }\n";
+    let (a, module) = analysis(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let g_t = a.types.find(&crate::ty::Ty::Named(def(&a, "G"), vec![a.types.find(&crate::ty::Ty::Param(0)).unwrap()]));
+    let g_i32 = a.types.find(&crate::ty::Ty::Named(
+        def(&a, "G"),
+        vec![a.types.find(&crate::ty::Ty::Int(crate::ty::IntKind::I32)).unwrap()],
+    ));
+    let g = Entity::Def(def(&a, "G"));
+    let one = |n: &BodyNames| n.structs.values().cloned().collect::<Vec<_>>();
+    assert_eq!(one(names(&a, "wrap")), [StructRes { entity: g, owner: g_t }]);
+    assert_eq!(one(names(&a, "k")), [StructRes { entity: g, owner: g_i32 }]);
+    let get = names(&a, "get");
+    let ctors: Vec<_> = get.pats.values().filter(|r| matches!(r, PatRes::Ctor { .. })).cloned().collect();
+    assert_eq!(ctors, [PatRes::Ctor { entity: g, owner: g_t }]);
+    let at = |text: &str| get.paths.get(&node(&module, text)).cloned();
+    let wrap = PathRes::Item { entity: Entity::Member(def(&a, "wrap")), owner: g_t };
+    assert_eq!((at("Self"), at("Self.wrap")), (Some(PathRes::Namespace(g)), Some(wrap)));
 }
 
 #[test]

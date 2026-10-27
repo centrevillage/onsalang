@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§4.5"]
+
+// S-595, S-446 (§2.2, §4.5): `Self.N` in a constant expression with arithmetic (`[F32; Self.N * 2]`), and a
+// length that names a constant that is computed by an expression (`const M: U32 = Self.N`, then `[F32; Self.M]`:
+// "初期化式で計算した定数は名前で使える"). A type is compared by the value of the length (`[F32; Self.N * 2]` is
+// `[F32; 8]` when `N` is 4). The unit of the names stage is `Self`, which U6 of W4-04 reads; the grammar of
+// constant expressions in a length is W5-08 (today E0200, "expressions as array lengths"). The lengths that
+// name a constant that a literal initializes are in const_exprs.onsa. Everything here is right.
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  pub const N: U32 = 4
+
+  pub const HALF: U32 = 2
+
+  pub const M: U32 = Self.N
+
+  pub fn twice(a: [F32; Self.N * 2]) -> [F32; 8] {
+    a
+  }
+
+  pub fn halves(a: [F32; Self.N]) -> [F32; Self.HALF + Self.HALF] {
+    a
+  }
+
+  pub fn zeros_and_four() -> [F32; Self.N + 4] {
+    [0.0; Self.N + 4]
+  }
+
+  pub fn through_a_computed_constant(a: [F32; Self.M]) -> [F32; 4] {
+    a
+  }
+
+  pub fn a_computed_constant_in_the_body() -> F32 {
+    let a = [1.0; Self.M]
+    a[0]
+  }
+}

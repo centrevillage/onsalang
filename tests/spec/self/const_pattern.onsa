@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§7", "§4.4"]
+
+// S-446, S-595 (table row 9) (§2.2, §7): `Self.N =>` is a pattern that names an associated constant, and it
+// follows the rule of a constant in a pattern (§7): it is compared with `==`, and the type of the constant is
+// an integer, `Char`, `Bool` or `Str`. A float constant is E0020 (the candidate is the form with a guard). It
+// reads the type of the constant, so the unit waits for the typing of constant patterns (W4-12). The
+// errors are one in each unit (§18.1).
+
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub const LIMIT: U32 = 4
+
+  pub const MARK: Char = 'm'
+
+  pub const ON: Bool = true
+
+  pub const SCALE: F32 = 2.0
+
+  pub fn is_limit(n: U32) -> Bool {
+    match n {
+      Self.LIMIT => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_mark(c: Char) -> Bool {
+    match c {
+      Self.MARK => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_on(b: Bool) -> I32 {
+    match b {
+      Self.ON => 1,
+      false => 0,
+      true => 2,
+    }
+  }
+
+  pub fn in_a_tuple(a: U32, b: U32) -> U32 {
+    match (a, b) {
+      (Self.LIMIT, k) => k,
+      (_, _) => 0,
+    }
+  }
+
+  pub fn a_float_constant(x: F32) -> Bool {
+    match x {
+      Self.SCALE => true,                           //~ E0020
+      _ => false,
+    }
+  }
+
+  pub fn a_float_constant_in_a_tuple(x: F32, n: U32) -> Bool {
+    match (x, n) {
+      (Self.SCALE, _) => true,                      //~ E0020
+      _ => false,
+    }
+  }
+
+  pub fn a_float_constant_in_an_option(o: Option[F32]) -> Bool {
+    match o {
+      Some(Self.SCALE) => true,                     //~ E0020
+      _ => false,
+    }
+  }
+}

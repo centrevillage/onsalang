@@ -1,0 +1,129 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4"]
+
+// S-595, S-446 (§2.2, §4.4): in the body of an `impl`, `Self` is the type of the `impl`, the same as a type
+// alias for it ("`impl` の本体の中の `Self` も、対象の型を右辺にした別名と同じである"). The head of a path in an
+// expression reads the associated constant (`Self.N`), the associated function (`Self.new(x)`) and the
+// variant (`Self.Circle(x)`, `Self.Dot`) of the type of the `impl`, as the name of the type does. It is seen
+// from a branch, a loop and an anonymous function in the body ("中の無名関数からも見える"). Everything here
+// is right.
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+impl P {
+  pub const N: U32 = 4
+
+  pub const SCALE: F32 = 2.0
+
+  pub const ORIGIN: P = P { x: 0.0, y: 0.0 }
+
+  pub fn new(x: F32, y: F32) -> Self {
+    P { x: x, y: y }
+  }
+
+  pub fn unit() -> Self {
+    Self.new(1.0, 1.0)
+  }
+
+  pub fn corner() -> Self {
+    Self.new(Self.SCALE, Self.SCALE)
+  }
+
+  pub fn count() -> U32 {
+    Self.N
+  }
+
+  pub fn origin_x() -> F32 {
+    Self.ORIGIN.x
+  }
+
+  pub fn scaled(self) -> F32 {
+    self.x * Self.SCALE
+  }
+
+  pub fn pick(c: Bool) -> Self {
+    if c {
+      Self.ORIGIN
+    } else {
+      Self.unit()
+    }
+  }
+
+  pub fn total(n: U32) -> U32 {
+    var t = 0
+    for i in 0 ..< n {
+      t = t + i * Self.N
+    }
+    t
+  }
+
+  pub fn in_a_closure(k: U32) -> U32 {
+    let f = fn(i: U32) -> U32 { i + Self.N }
+    f.(k)
+  }
+
+  pub fn a_closure_that_builds(r: F32) -> F32 {
+    let g = fn(a: F32) -> Self { Self.new(a, Self.SCALE) }
+    g.(r).x
+  }
+
+  pub fn a_closure_in_a_closure(r: F32) -> F32 {
+    let outer = fn(a: F32) -> F32 {
+      let inner = fn(b: F32) -> F32 { b * Self.SCALE }
+      inner.(a) + Self.ORIGIN.y
+    }
+    outer.(r)
+  }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Dot,
+}
+
+impl Shape {
+  pub const SIDES: U32 = 4
+
+  pub fn round(r: F32) -> Self {
+    Self.Circle(r)
+  }
+
+  pub fn square(w: F32) -> Self {
+    Self.Rect(w, w)
+  }
+
+  pub fn point() -> Self {
+    Self.Dot
+  }
+
+  pub fn pick(c: Bool, r: F32) -> Self {
+    if c {
+      Self.Circle(r)
+    } else {
+      Self.Dot
+    }
+  }
+
+  pub fn sides() -> U32 {
+    Self.SIDES
+  }
+
+  pub fn in_an_option(r: F32) -> Option[Self] {
+    Some(Self.Circle(r))
+  }
+
+  pub fn a_variant_in_a_closure(rs: F32) -> Self {
+    let make = fn(r: F32) -> Self { Self.Circle(r) }
+    make.(rs)
+  }
+}
+
+// The paths of the types, written by their names, still work beside `Self`.
+pub fn by_the_name() -> U32 {
+  P.N + Shape.SIDES
+}

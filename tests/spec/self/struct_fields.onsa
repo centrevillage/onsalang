@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§7", "§15.1", "§18.1"]
+
+// S-377, S-595 (§2.2, §4.4, §7): the rules of a struct literal and of a struct pattern are the same when the
+// type is written `Self`: every field once and only the fields of the type (E0410, "過不足と重複"), the type of
+// a field (E0401), and a name that the type does not have (E0302, as `P.nosuch` is). Each error is the first
+// of its unit (§18.1), so each form is in a member of its own. The right forms are at the end.
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Dot,
+}
+
+impl P {
+  pub fn missing() -> Self {
+    Self { x: 1.0 }                                 //~ E0410
+  }
+
+  pub fn extra() -> Self {
+    Self { x: 1.0, y: 2.0, w: 3.0 }                 //~ E0410
+  }
+
+  pub fn twice() -> Self {
+    Self { x: 1.0, x: 2.0, y: 3.0 }                 //~ E0410
+  }
+
+  pub fn none_of_them() -> Self {
+    Self {}                                         //~ E0410
+  }
+
+  pub fn pattern_missing(self) -> F32 {
+    let Self { x: a } = self                        //~ E0410
+    a
+  }
+
+  pub fn pattern_extra(self) -> F32 {
+    let Self { x: a, y: _, w: _ } = self            //~ E0410
+    a
+  }
+
+  pub fn arm_missing(self) -> F32 {
+    match self {
+      Self { y: b } => b,                           //~ E0410
+    }
+  }
+
+  pub fn field_type() -> Self {
+    Self { x: true, y: 0.0 }                        //~ E0401
+  }
+
+  pub fn pattern_against_another_type(s: Shape) -> F32 {
+    match s {
+      Self { x: a, y: _ } => a,                     //~ E0401
+    }
+  }
+
+  pub fn unknown_function() -> Self {
+    Self.nosuch(1.0)                                //~ E0302
+  }
+
+  pub fn unknown_constant() -> U32 {
+    Self.NOSUCH                                     //~ E0302
+  }
+
+  pub fn unknown_variant(s: Shape) -> F32 {
+    match s {
+      Self.Circle(r) => r,                          //~ E0302
+      _ => 0.0,
+    }
+  }
+
+  // The same three, written with the name of the type: the same errors.
+  pub fn missing_by_the_name() -> Self {
+    P { x: 1.0 }                                    //~ E0410
+  }
+
+  pub fn pattern_missing_by_the_name(self) -> F32 {
+    let P { x: a } = self                           //~ E0410
+    a
+  }
+
+  pub fn unknown_function_by_the_name() -> Self {
+    P.nosuch(1.0)                                   //~ E0302
+  }
+
+  pub fn right(self) -> Self {
+    let Self { x: a, y: b } = self
+    Self { x: b, y: a }
+  }
+}
+
+impl Shape {
+  pub fn unknown_variant_of_the_enum() -> Self {
+    Self.Squar(1.0)                                 //~ E0302
+  }
+
+  pub fn unknown_variant_by_the_name() -> Self {
+    Shape.Squar(1.0)                                //~ E0302
+  }
+
+  pub fn right() -> Self {
+    Self.Circle(1.0)
+  }
+}

@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.2", "§4.4"]
+
+// S-595, S-446, S-90 (§2.4, §2.2): `Self` as the head of a hole. The forms that lex/interp_paths_self.onsa
+// does not have: a constant of a user type with a field after it (`{Self.ORIGIN.x}`), the `impl` of an enum,
+// a generic `impl`, and holes with `Self` beside the name of the type or a field of `self`. A hole is resolved
+// as an expression is, so `Self.N` is `P.N`. A string with an interpolation makes a new `Str`, so each function
+// that holds one uses `Alloc`. Everything here is right.
+
+pub struct P {
+  x: F32,
+  n: U32,
+}
+
+impl P {
+  pub const N: U32 = 4
+
+  pub const ORIGIN: P = P { x: 0.5, n: 1 }
+
+  pub fn after_a_constant() -> Str uses {Alloc} {
+    "{Self.ORIGIN.x}/{Self.ORIGIN.n}"
+  }
+
+  pub fn beside_the_name() -> Str uses {Alloc} {
+    "{Self.N}={P.N}"
+  }
+
+  pub fn with_a_field(self) -> Str uses {Alloc} {
+    "{Self.N}/{self.x}"
+  }
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+impl Mode {
+  pub const LEVELS: U32 = 2
+
+  pub fn levels() -> Str uses {Alloc} {
+    "{Self.LEVELS}"
+  }
+}
+
+pub struct G[T] {
+  v: T,
+}
+
+impl[T] G[T] {
+  pub const WIDTH: U32 = 3
+
+  pub fn width() -> Str uses {Alloc} {
+    "{Self.WIDTH}"
+  }
+}

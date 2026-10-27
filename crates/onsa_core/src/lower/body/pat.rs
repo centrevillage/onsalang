@@ -34,8 +34,8 @@ pub(crate) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
             }
             Ok(())
         }
-        PatKind::TupleStruct { path, elems } => {
-            let (tag, _) = ctor_of(lw, cx, path, &value.ty)?;
+        PatKind::TupleStruct { elems, .. } => {
+            let (tag, _) = ctor_of(lw, cx, pat, &value.ty)?;
             let base = materialize(cx, value, out, "__variant");
             for (i, &el) in elems.iter().enumerate() {
                 let f = payload(lw, base.clone(), tag, i as u32)?;
@@ -53,20 +53,12 @@ pub(crate) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
     }
 }
 
-/// Constructor tag (and arity) of a ctor pattern path against an enum type.
-fn ctor_of(lw: &mut Lowerer, cx: &FnCx, path: &ast::Path, ty: &Ty) -> R<(u32, usize)> {
-    // Sema resolved the path already: a failure here is lowering's own.
-    let entity = lw.a.resolve_path(cx.module, path).map_err(|e| {
-        let d = e.into_diagnostic();
-        internal(d.span, format!("pattern path does not resolve ({}: {})", d.code.as_str(), d.message))
-    })?;
-    let tag = match entity {
-        Entity::Builtin(Builtin::None) | Entity::Builtin(Builtin::Ok) => 0,
-        Entity::Builtin(Builtin::Some) | Entity::Builtin(Builtin::Err) => 1,
-        Entity::Variant(_, i) => i,
-        _ => return Err(internal(path.span, "pattern path is not a constructor")),
-    };
-    let Ty::Enum(id) = ty else { return Err(internal(path.span, "constructor pattern on a non-enum")) };
+/// Constructor tag (and arity) of the ctor pattern `pat` against an enum
+/// type: the tag the check recorded (`BodyInfo::pat_ctors`).
+fn ctor_of(lw: &mut Lowerer, cx: &FnCx, pat: PatId, ty: &Ty) -> R<(u32, usize)> {
+    let span = cx.ast.pat(pat).span;
+    let Some(&tag) = cx.info.pat_ctors.get(&pat) else { return Err(internal(span, "pattern without a constructor")) };
+    let Ty::Enum(id) = ty else { return Err(internal(span, "constructor pattern on a non-enum")) };
     let arity = lw.enum_variants(*id).get(tag as usize).map(|(_, f)| f.len()).unwrap_or(0);
     Ok((tag, arity))
 }
@@ -119,12 +111,12 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
                 ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(place.clone()), rhs: Box::new(rhs) },
             )))
         }
-        PatKind::Path(path) => {
-            let (tag, _) = ctor_of(lw, cx, path, &place.ty)?;
+        PatKind::Path(_) => {
+            let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
             Ok(Some(tag_test(lw, place, tag)?))
         }
-        PatKind::TupleStruct { path, elems } => {
-            let (tag, _) = ctor_of(lw, cx, path, &place.ty)?;
+        PatKind::TupleStruct { elems, .. } => {
+            let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
             let mut t = Some(tag_test(lw, place, tag)?);
             for (i, &el) in elems.iter().enumerate() {
                 let sub = payload(lw, place.clone(), tag, i as u32)?;
@@ -190,8 +182,8 @@ fn pat_bind(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr, out: &mut
             Ok(())
         }
         PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) | PatKind::Or(_) => Ok(()),
-        PatKind::TupleStruct { path, elems } => {
-            let (tag, _) = ctor_of(lw, cx, path, &place.ty)?;
+        PatKind::TupleStruct { elems, .. } => {
+            let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
             for (i, &el) in elems.iter().enumerate() {
                 let sub = payload(lw, place.clone(), tag, i as u32)?;
                 pat_bind(lw, cx, el, &sub, out)?;
@@ -257,11 +249,7 @@ pub(super) fn lower_match(
                     default = Some(Block { stmts: b, value: if want { body.value } else { None } });
                 }
                 _ => {
-                    let path = match &cx.ast.pat(arm.pat).kind {
-                        PatKind::Path(p) | PatKind::TupleStruct { path: p, .. } => p.clone(),
-                        _ => unreachable!(),
-                    };
-                    let (tag, _) = ctor_of(lw, cx, &path, &place.ty)?;
+                    let (tag, _) = ctor_of(lw, cx, arm.pat, &place.ty)?;
                     pat_bind(lw, cx, arm.pat, &place, &mut b)?;
                     let body = lower_block_expr(lw, cx, arm.body)?;
                     b.extend(body.stmts);

@@ -355,7 +355,7 @@ impl<'a> Checker<'a> {
     /// `None`: a length the check does not read (§18.1, S-690).
     pub(crate) fn const_len(&mut self, len: ExprId) -> R<Option<Len>> {
         let generics = self.generics.clone();
-        match crate::constarg::expr(self.a, self.m, self.ast, self.text, &generics, len) {
+        match crate::constarg::expr(self.a, self.m, self.ast, self.text, (&generics, self.self_ty), len) {
             Ok((value, constant)) => {
                 let u32 = self.u32();
                 self.record(len, u32);
@@ -400,7 +400,7 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
         span: Span,
     ) -> R<TyId> {
-        let Some(entity) = self.names.structs.get(&e).map(|s| s.entity) else { return Err(self.held_stop()) };
+        let Some(&StructRes { entity, owner }) = self.names.structs.get(&e) else { return Err(self.held_stop()) };
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
             // An alias of the error type (§18.1, R-271).
@@ -422,6 +422,7 @@ impl<'a> Checker<'a> {
             ));
         };
         let args = self.fresh_args(d);
+        self.of_owner(d, &args, owner, span)?;
         // The expected type decides the generic arguments first (§4.7: expected
         // types flow downward; `Ring[F32, 4]` fixes `T` and `N` before the fields).
         // The expected type may be a variable a field of an outer literal bound (R-148).

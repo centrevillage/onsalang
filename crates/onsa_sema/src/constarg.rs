@@ -11,7 +11,7 @@ use onsa_syntax::ast::{Ast, ExprId, ExprKind, ItemKind, Lit, Path};
 
 use crate::def::{DefKind, GenericDef, GenericKind};
 use crate::resolve::{Builtin, Entity, ResolveError};
-use crate::ty::{IntKind, Ty};
+use crate::ty::{IntKind, Ty, TyId};
 use crate::{Analysis, ModId, builtin};
 
 /// The value of a constant expression in a type position.
@@ -43,14 +43,16 @@ impl From<Diagnostic> for ConstErr {
 }
 
 /// An array length or a const argument written as an expression (`4`, `-1`, `N`,
-/// `SIZE`, `cfg.N`, `I32.BITS`): the one reader of the forms, for the signatures and
-/// the bodies. `Ok((value, constant))`: `constant` is the `const` item a name denotes.
+/// `SIZE`, `cfg.N`, `I32.BITS`, `Self.N`): the one reader of the forms, for the
+/// signatures and the bodies, with the type and const parameters in scope and the
+/// type `Self` names (§2.2). `Ok((value, constant))`: `constant` is the `const`
+/// item a name denotes.
 pub(crate) fn expr(
     a: &mut Analysis,
     m: ModId,
     ast: &Ast,
     text: &str,
-    generics: &[GenericDef],
+    (generics, self_ty): (&[GenericDef], Option<TyId>),
     e: ExprId,
 ) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
     if let Some(r) = literal(ast, text, e) {
@@ -80,14 +82,8 @@ pub(crate) fn expr(
         .with_found(found)
         .into());
     }
-    match named(a, m, ast, text, &path, span)? {
-        Some(v) => {
-            let constant = match a.resolve_path(m, &path) {
-                Ok(Entity::Def(d) | Entity::Member(d)) => Some(d),
-                _ => None,
-            };
-            Ok((ConstU32::Value(v), constant))
-        }
+    match named_def(a, m, (ast, text), &path, self_ty, span)? {
+        Some((v, constant)) => Ok((ConstU32::Value(v), constant)),
         None => Err(Diagnostic::new(Stage::Names, Code::E0302, span, "array length must be a constant")
             .with_found(found)
             .into()),
@@ -136,35 +132,61 @@ pub(crate) fn literal(ast: &Ast, text: &str, e: ExprId) -> Option<Result<u32, Di
     }
 }
 
-/// A name of a constant (`SIZE`, `cfg.N`, `I32.BITS`) at `span`: its value, when
-/// its type is `U32`. `Ok(None)`: the name is not a constant (the caller reports
-/// what it is). `ast` is the module `m` the name is written in. A body reads the
-/// entity its record has ([`of_entity`], [`of_builtin`]).
+/// A name of a constant (`SIZE`, `cfg.N`, `I32.BITS`, `Self.N`, `Al.N` of an
+/// alias, §4.4) at `span`: its value, when its type is `U32`. `Ok(None)`: the
+/// name is not a constant (the caller reports what it is). `ast` is the module
+/// `m` the name is written in, and `self_ty` the type `Self` names. A body reads
+/// the entity its record has ([`of_entity`], [`of_builtin`]).
 pub(crate) fn named(
     a: &mut Analysis,
     m: ModId,
-    ast: &Ast,
-    text: &str,
+    (ast, text): (&Ast, &str),
     path: &Path,
+    self_ty: Option<TyId>,
     span: Span,
 ) -> Result<Option<u32>, ConstErr> {
-    match a.resolve_path(m, path) {
-        Ok(entity) => of_entity(a, m, ast, text, entity, span),
+    Ok(named_def(a, m, (ast, text), path, self_ty, span)?.map(|(v, _)| v))
+}
+
+/// [`named`], with the `const` item the name denotes.
+fn named_def(
+    a: &mut Analysis,
+    m: ModId,
+    (ast, text): (&Ast, &str),
+    path: &Path,
+    self_ty: Option<TyId>,
+    span: Span,
+) -> Result<Option<(u32, Option<crate::DefId>)>, ConstErr> {
+    let err = match a.typed_path(m, path, self_ty) {
+        Ok((head, typed)) => match typed.err {
+            None => {
+                let entity = typed.reached.last().copied().unwrap_or(head);
+                let constant = match entity {
+                    Entity::Def(d) | Entity::Member(d) => Some(d),
+                    _ => None,
+                };
+                return Ok(of_entity(a, m, ast, text, entity, span)?.map(|v| (v, constant)));
+            }
+            // `I32.BITS`, `U32.MAX`, `Sample.PI`: an associated constant of a
+            // scalar type, the last name.
+            Some(err @ ResolveError::NotFound { .. }) => match typed.at {
+                Entity::Builtin(Builtin::Scalar(t)) if typed.reached.len() + 2 == path.segments.len() => {
+                    match of_builtin(a, t, &path.segments[typed.reached.len() + 1].name, text, span) {
+                        Some(r) => return Ok(r?.map(|v| (v, None))),
+                        None => err,
+                    }
+                }
+                _ => err,
+            },
+            Some(err) => err,
+        },
+        Err(err) => err,
+    };
+    match err {
         // A name held as an error (§18.1, S-462, S-675): no diagnostic, and
         // the check goes on (S-689).
-        Err(ResolveError::Failed) => Err(ConstErr::Unknown),
-        Err(err) => {
-            // `I32.BITS`, `U32.MAX`: an associated constant of a scalar type.
-            if path.segments.len() == 2 {
-                let prefix = Path { segments: path.segments[..1].to_vec(), span: path.segments[0].span };
-                if let Ok(Entity::Builtin(Builtin::Scalar(t))) = a.resolve_path(m, &prefix)
-                    && let Some(r) = of_builtin(a, t, &path.segments[1].name, text, span)
-                {
-                    return r;
-                }
-            }
-            Err(err.into_diagnostic().into())
-        }
+        ResolveError::Failed => Err(ConstErr::Unknown),
+        err => Err(err.into_diagnostic().into()),
     }
 }
 

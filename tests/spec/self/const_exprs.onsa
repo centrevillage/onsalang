@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§4.5"]
+
+// S-595, S-446 (§2.2, §4.4, §4.5): `Self.N` is a name for a constant, so it is read where a constant
+// expression is ("配列の長さと const 引数は定数式で書く。定数を指す名前…と算術の演算子…からなる"): the length of
+// an array in the body (`[0.0; Self.N]`, `let a: [F32; Self.N]`), in the type of an anonymous function and
+// in a function outside the `impl` (`Voice.N`). The constant is one that a literal initializes. The lengths
+// in the signature of a member of the `impl` are in const_exprs_signature.onsa; the arithmetic and a constant
+// that is computed (`const M: U32 = Self.N`) are in const_exprs_arith.onsa, which waits for the grammar of
+// constant expressions (W5-08). Everything here is right.
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  pub const N: U32 = 4
+
+  pub fn filled(v: F32) -> F32 {
+    let a = [v; Self.N]
+    a[1]
+  }
+
+  pub fn through_a_let() -> F32 {
+    let a: [F32; Self.N] = [1.0; Self.N]
+    a[2]
+  }
+
+  pub fn in_a_closure() -> F32 {
+    let f = fn(a: [F32; Self.N]) -> F32 { a[0] }
+    f.([1.0; Self.N])
+  }
+}
+
+pub fn by_the_name(a: [F32; Voice.N]) -> F32 {
+  a[0]
+}

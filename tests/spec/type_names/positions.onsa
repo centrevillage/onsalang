@@ -1,0 +1,182 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§2.4", "§6.6", "§7"]
+
+// S-91, R-105 (§4.4): a type alias is "型の名前を書ける全ての位置（型、関連関数と関連定数、struct リテラル、
+// パターン、列挙子）で、元の型と同じに使える". Here are the positions of the example of R-105 and the
+// places of a body in which they stand: a branch, a loop, an anonymous function, a generic function, a
+// constant, an interpolation. The alias of a built-in type has its associated constants (`Sample.PI`, the
+// use that §4.4 gives it: "標本の精度を一か所で切り替える"). An alias to a prelude enum is not here: its
+// variants are not qualified (prelude_variant_qualified.onsa). Everything here is right.
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 }
+
+  pub const N: U32 = 2
+
+  pub fn new(x: F32, y: F32) -> Point {
+    Point { x: x, y: y }
+  }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Dot,
+}
+
+type P = Point
+
+type S = Shape
+
+type Sample = F32
+
+type Word = U32
+
+fn type_position(p: P) -> F32 {
+  p.x
+}
+
+fn type_position_in_a_return(x: F32) -> P {
+  Point { x: x, y: x }
+}
+
+fn associated_function() -> Point {
+  P.new(1.0, 2.0)
+}
+
+fn associated_constant() -> Point {
+  P.ORIGIN
+}
+
+fn constant_then_field() -> F32 {
+  P.ORIGIN.x
+}
+
+fn constant_of_a_built_in_type() -> Sample {
+  Sample.PI
+}
+
+fn constants_of_an_integer_alias() -> Word {
+  Word.MAX / 2
+}
+
+fn the_bits_of_an_alias() -> U32 {
+  Word.BITS
+}
+
+fn struct_literal() -> Point {
+  P { x: 1.0, y: 2.0 }
+}
+
+fn pattern(p: Point) -> F32 {
+  let P { x: a, y: _ } = p
+  a
+}
+
+fn pattern_in_a_match(p: Point) -> F32 {
+  match p {
+    P { x: a, y: b } => a + b,
+  }
+}
+
+fn variant() -> Shape {
+  S.Circle(1.0)
+}
+
+fn variant_with_two_fields() -> Shape {
+  S.Rect(1.0, 2.0)
+}
+
+fn unit_variant() -> Shape {
+  S.Dot
+}
+
+fn match_variant(s: Shape) -> F32 {
+  match s {
+    S.Circle(r) => r,
+    S.Rect(w, h) => w * h,
+    S.Dot => 0.0,
+  }
+}
+
+fn or_pattern(s: Shape) -> F32 {
+  match s {
+    S.Circle(r) | S.Rect(r, _) => r,
+    S.Dot => 0.0,
+  }
+}
+
+fn nested_pattern(o: Option[Shape]) -> F32 {
+  match o {
+    Some(S.Circle(r)) => r,
+    Some(S.Rect(w, _)) => w,
+    Some(S.Dot) => 0.0,
+    None => -1.0,
+  }
+}
+
+fn in_a_branch(c: Bool) -> Point {
+  if c {
+    P.ORIGIN
+  } else {
+    P.new(1.0, 1.0)
+  }
+}
+
+fn in_a_loop(n: U32) -> F32 {
+  var acc = P.ORIGIN
+  for i in 0 ..< n {
+    let P { x: a, y: b } = acc
+    acc = P { x: a + Sample.PI, y: b + i.round_f32() }
+  }
+  acc.x
+}
+
+fn in_a_closure(k: F32) -> F32 {
+  let f = fn(a: Sample) -> Sample { a * Sample.PI + P.ORIGIN.y }
+  f.(k)
+}
+
+fn in_a_closure_that_makes(k: F32) -> Shape {
+  let make = fn(r: F32) -> S { S.Circle(r) }
+  make.(k)
+}
+
+fn in_a_generic_function[T](x: T) -> F32 {
+  P.ORIGIN.x + Sample.PI
+}
+
+fn in_a_generic_return[T](x: T, a: Sample) -> Sample {
+  a * Sample.PI
+}
+
+const HALF_PI: Sample = Sample.PI / 2.0
+
+const START: Point = P { x: 1.0, y: 1.0 }
+
+const SPOT: Point = P.ORIGIN
+
+const SIDES: U32 = P.N * 2
+
+fn in_an_interpolation() -> Str uses {Alloc} {
+  "{P.ORIGIN.x}/{Sample.PI}/{P.N}/{Word.BITS}"
+}
+
+fn in_an_array(a: [Sample; 2]) -> Sample {
+  a[0] + a[1] * Sample.MAX
+}
+
+fn in_a_tuple(t: (P, S)) -> F32 {
+  let (P { x: a, y: _ }, s) = t
+  match s {
+    S.Circle(r) => a + r,
+    S.Rect(w, _) => a + w,
+    S.Dot => a,
+  }
+}

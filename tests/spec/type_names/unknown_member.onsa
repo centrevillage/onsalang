@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-91, R-249, R-105 (§4.4, §15.1): an alias is read as the type is, so a name that the type does not have is
+// "名前が見つからなければ E0302" through the alias as through the name of the type, in every place the name
+// stands (a read, a call, a path with a field after it, a pattern, an interpolation, the length of an array).
+// It is not E0401 ("`P` is not a value") and not E0413. No fix candidate: a near spelling is not a candidate
+// (§15.1). One error in each unit (§18.1). The same names written with the type are at the end.
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub const N: U32 = 2
+
+  pub fn new(x: F32, y: F32) -> Point {
+    Point { x: x, y: y }
+  }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Dot,
+}
+
+type P = Point
+
+type S = Shape
+
+type Sample = F32
+
+type Word = U32
+
+fn unknown_function() -> Point {
+  P.nosuch(1.0, 2.0)                                //~ E0302
+}
+
+fn unknown_function_with_no_arguments() -> Point {
+  P.nosuch()                                        //~ E0302
+}
+
+fn unknown_constant() -> U32 {
+  P.NOSUCH                                          //~ E0302
+}
+
+fn unknown_constant_with_a_field() -> F32 {
+  P.NOSUCH.x                                        //~ E0302
+}
+
+fn unknown_variant() -> Shape {
+  S.Circel(1.0)                                     //~ E0302
+}
+
+fn unknown_unit_variant() -> Shape {
+  S.Dott                                            //~ E0302
+}
+
+fn unknown_variant_in_a_pattern(s: Shape) -> F32 {
+  match s {
+    S.Circel(r) => r,                               //~ E0302
+    _ => 0.0,
+  }
+}
+
+fn unknown_unit_variant_in_a_pattern(s: Shape) -> F32 {
+  match s {
+    S.Dott => 0.0,                                  //~ E0302
+    _ => 1.0,
+  }
+}
+
+fn unknown_constant_of_a_built_in_type() -> Sample {
+  Sample.PIE                                        //~ E0302
+}
+
+fn unknown_constant_of_an_integer_type() -> Word {
+  Word.LARGEST                                      //~ E0302
+}
+
+fn unknown_function_of_a_built_in_type() -> Sample {
+  Sample.nosuch(1.0)                                //~ E0302
+}
+
+fn unknown_in_an_interpolation() -> Str uses {Alloc} {
+  "{P.NOSUCH}"                                      //~ E0302
+}
+
+fn unknown_in_the_length_of_an_array() -> [F32; P.NOSUCH] {   //~ E0302
+  [0.0; 2]
+}
+
+fn unknown_in_a_closure() -> F32 {
+  let f = fn(a: F32) -> F32 { a + Sample.PIE }      //~ E0302
+  f.(1.0)
+}
+
+fn by_the_name_of_the_type() -> Point {
+  Point.nosuch(1.0, 2.0)                            //~ E0302
+}
+
+fn by_the_name_of_the_enum() -> Shape {
+  Shape.Circel(1.0)                                 //~ E0302
+}
+
+fn by_the_name_of_the_built_in_type() -> F32 {
+  F32.PIE                                           //~ E0302
+}

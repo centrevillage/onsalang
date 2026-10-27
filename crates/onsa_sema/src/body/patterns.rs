@@ -153,7 +153,7 @@ impl<'a> Checker<'a> {
         with_parens: bool,
     ) -> R<P> {
         let span = self.ast.pat(pat).span;
-        let entity = self.ctor_of(pat)?;
+        let (entity, owner) = self.ctor_of(pat)?;
         // (constructor index, field types, number of constructors of the type)
         let (ctor, fields, nctors): (u32, Vec<TyId>, usize) = match entity {
             Entity::Builtin(Builtin::None) => {
@@ -176,6 +176,7 @@ impl<'a> Checker<'a> {
             }
             Entity::Variant(d, i) => {
                 let args = self.fresh_args(d);
+                self.of_owner(d, &args, owner, span)?;
                 let en = self.a.def(d).as_enum().unwrap().clone();
                 let named = self.a.types.intern(Ty::Named(d, args.clone()));
                 self.unify_at(span, named, ty)?;
@@ -193,6 +194,7 @@ impl<'a> Checker<'a> {
                 ));
             }
         };
+        self.info.pat_ctors.insert(pat, ctor);
         if irrefutable && nctors > 1 {
             return Err(self.err(
                 Code::E0502,

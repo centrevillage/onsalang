@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-91, R-105 (§4.4): "型引数を決めた別名は、その型引数を決める". So `GI.wrap(1.0)` with `type GI = G[I32]` is a
+// call of `wrap` with `T = I32`: a float for an `I32` is E0401, and a `G[I32]` where `G[F32]` is expected is
+// E0401, in a call, a struct literal, a pattern, and for `Samples.zeroed(n)` (`Buf[F32]`) and the length of
+// an array (`[F32; Al.N]`, which is 4). Each error is the first of its unit (§18.1), so each form is a function
+// of its own. The right forms are in arguments_and_chains.onsa and const_exprs.onsa.
+
+pub struct G[T] {
+  v: T,
+}
+
+impl[T] G[T] {
+  pub fn wrap(v: T) -> Self {
+    Self { v: v }
+  }
+}
+
+pub struct Fx {
+  gain: F32,
+}
+
+impl Fx {
+  pub const N: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  priv head: U32,
+}
+
+type GI = G[I32]
+
+type Samples = Buf[F32]
+
+type Al = Fx
+
+fn a_float_for_the_argument() -> G[I32] {
+  GI.wrap(1.0)                                      //~ E0401
+}
+
+fn a_value_of_another_type_for_the_argument(x: F32) -> G[I32] {
+  GI.wrap(x)                                        //~ E0401
+}
+
+fn the_result_where_another_is_expected() -> G[F32] {
+  GI.wrap(1)                                        //~ E0401
+}
+
+fn a_float_in_a_literal() -> G[I32] {
+  GI { v: 1.0 }                                     //~ E0401
+}
+
+fn the_literal_where_another_is_expected() -> G[F32] {
+  GI { v: 1 }                                       //~ E0401
+}
+
+fn a_pattern_of_another_argument(g: G[F32]) -> I32 {
+  let GI { v: a } = g                               //~ E0401
+  a
+}
+
+fn a_pattern_in_a_match_of_another_argument(g: G[F32]) -> I32 {
+  match g {
+    GI { v: a } => a,                               //~ E0401
+  }
+}
+
+fn a_buffer_of_another_element() -> Buf[I32] uses {Alloc} {
+  Samples.zeroed(4)                                 //~ E0401
+}
+
+fn a_buffer_into_a_let_of_another_element() -> U32 uses {Alloc} {
+  let b: Buf[I32] = Samples.zeroed(4)               //~ E0401
+  b.len()
+}
+
+fn another_length_in_a_copy(a: [F32; Al.N]) -> F32 {
+  let b: [F32; 5] = a                               //~ E0401
+  b[0]
+}
+
+fn another_length_in_a_let() -> F32 {
+  let a: [F32; Al.N] = [0.0; 3]                     //~ E0401
+  a[0]
+}
+
+fn another_length_in_an_argument() -> F32 {
+  take(Al.N, [0.0; 5])                              //~ E0401
+}
+
+fn take(n: U32, a: [F32; 4]) -> F32 {
+  a[0]
+}
+
+fn another_const_argument() -> Ring[F32, 3] {
+  make_ring()                                       //~ E0401
+}
+
+fn make_ring() -> Ring[F32, Al.N] {
+  Ring { data: [0.0; Al.N], head: 0 }
+}

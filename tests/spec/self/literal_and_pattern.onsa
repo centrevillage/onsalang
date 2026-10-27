@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§7"]
+
+// S-595, S-377 (§2.2, §4.4, §7): `Self { x: a, y: b }` is a struct literal and a struct pattern of the type of
+// the `impl`, the same as `P { … }`. It is read in the initializer of an associated constant (`const ORIGIN: P
+// = Self { … }`, `const SAME: U32 = Self.COUNT`), in `let`, in a `match` arm, in a nested pattern, in a loop and
+// in an anonymous function. A variant is `Self.Circle(r)` and `Self.Dot` in a pattern. A `priv` field is the
+// module's own, and the `impl` is in the module of its type, so `Self { … }` names it. Everything here is right.
+
+pub struct P {
+  x: F32,
+  y: F32,
+  priv n: U32,
+}
+
+impl P {
+  pub const COUNT: U32 = 3
+
+  pub const SAME: U32 = Self.COUNT
+
+  pub const TWICE: U32 = Self.COUNT + Self.SAME
+
+  pub const ORIGIN: P = Self { x: 0.0, y: 0.0, n: 0 }
+
+  pub const UNIT: Self = Self { x: 1.0, y: 1.0, n: Self.COUNT }
+
+  pub fn new(x: F32, y: F32) -> Self {
+    Self { x: x, y: y, n: 0 }
+  }
+
+  pub fn swap(self) -> Self {
+    let Self { x: a, y: b, n: k } = self
+    Self { x: b, y: a, n: k }
+  }
+
+  pub fn first(self) -> F32 {
+    let Self { x: a, y: _, n: _ } = self
+    a
+  }
+
+  pub fn sum(self) -> F32 {
+    match self {
+      Self { x: a, y: b, n: _ } => a + b,
+    }
+  }
+
+  pub fn in_a_tuple(p: (Self, F32)) -> F32 {
+    let (Self { x: a, y: _, n: _ }, k) = p
+    a + k
+  }
+
+  pub fn in_an_option(o: Option[Self]) -> F32 {
+    match o {
+      Some(Self { x: a, y: _, n: _ }) => a,
+      None => 0.0,
+    }
+  }
+
+  pub fn in_a_closure(self) -> F32 {
+    let f = fn(p: Self) -> F32 {
+      let Self { x: a, y: b, n: _ } = p
+      a - b
+    }
+    f.(self)
+  }
+
+  pub fn in_a_loop(n: U32) -> F32 {
+    var acc = Self.ORIGIN
+    for i in 0 ..< n {
+      let Self { x: a, y: b, n: k } = acc
+      acc = Self { x: a + 1.0, y: b, n: k + i }
+    }
+    acc.x
+  }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Dot,
+}
+
+impl Shape {
+  pub fn area(self) -> F32 {
+    match self {
+      Self.Circle(r) => r * r,
+      Self.Rect(w, h) => w * h,
+      Self.Dot => 0.0,
+    }
+  }
+
+  pub fn is_dot(self) -> Bool {
+    match self {
+      Self.Dot => true,
+      _ => false,
+    }
+  }
+
+  pub fn in_an_option(o: Option[Self]) -> F32 {
+    match o {
+      Some(Self.Circle(r)) => r,
+      Some(Self.Rect(w, _)) => w,
+      Some(Self.Dot) => 0.0,
+      None => -1.0,
+    }
+  }
+
+  pub fn either(self) -> F32 {
+    match self {
+      Self.Circle(r) | Self.Rect(r, _) => r,
+      Self.Dot => 0.0,
+    }
+  }
+
+  pub fn with_a_guard(self) -> F32 {
+    match self {
+      Self.Circle(r) if r > 1.0 => r,
+      Self.Circle(_) => 1.0,
+      Self.Rect(w, h) => w + h,
+      Self.Dot => 0.0,
+    }
+  }
+
+  pub fn in_a_closure(self) -> F32 {
+    let f = fn(s: Self) -> F32 {
+      match s {
+        Self.Circle(r) => r,
+        Self.Rect(w, _) => w,
+        Self.Dot => 0.0,
+      }
+    }
+    f.(self)
+  }
+}
