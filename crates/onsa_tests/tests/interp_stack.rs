@@ -138,7 +138,7 @@ pub fn sqrt_chain(n: U32) -> U32 {
   if n == 0 {
     0
   } else {
-    let x: F64 = (sqrt_chain(n - 1) as F64).sqrt()
+    let _: F64 = (sqrt_chain(n - 1) as F64).sqrt()
     1
   }
 }

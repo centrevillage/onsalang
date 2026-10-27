@@ -264,13 +264,13 @@ pub fn fine(x: F64) -> F64 {
   let c: F64 = 3.402823567797336617e38
   let d: F64 = 7e-46
   // The least and the greatest, in F32 and in F64.
-  let e: F32 = 3.402823567797336616e38
-  let f: F32 = 8e-46
-  let g: F32 = 7.00649232162408535461864792e-46
+  let _: F32 = 3.402823567797336616e38
+  let _: F32 = 8e-46
+  let _: F32 = 7.00649232162408535461864792e-46
   let h: F64 = 1.7976931348623157e308
   let i: F64 = 2.5e-324
   // Zero is zero.
-  let z: F32 = 0.0e-100
+  let _: F32 = 0.0e-100
   let n: F64 = 0e0
   // Decided later as F64.
   let l = id(1e39)

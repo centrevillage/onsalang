@@ -150,6 +150,6 @@ const IN_A_CONST: Str = f"\q"                      //~ E0002
 pub fn fine(x: I32) -> U32 uses {Alloc} {
   let a = "{x}"
   let b = "\n"
-  let c = 'a'
+  let _ = 'a'
   show(a) + show(b)
 }

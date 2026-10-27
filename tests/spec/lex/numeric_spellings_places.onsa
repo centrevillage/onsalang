@@ -31,7 +31,7 @@ fn id[T](x: T) -> T {
 
 pub fn in_a_repeated_element_and_a_length() -> [F32; 0x4] {
   let a: [F32; 0X4] = [0.0; 0b100]
-  let b: [U32; 4_] = [0X1F; 4__]
+  let _: [U32; 4_] = [0X1F; 4__]
   a
 }
 
@@ -48,7 +48,7 @@ pub fn in_an_array_and_a_tuple() -> ([F32; 3], (U32, F32)) {
 }
 
 pub fn as_an_operand(x: F32, n: U32) -> F32 {
-  let m: U32 = n + 0x_1F - 1_
+  let _: U32 = n + 0x_1F - 1_
   x * 5e-1 + 02.5
 }
 
@@ -62,13 +62,13 @@ pub fn in_a_branch_and_an_arm(flag: Bool, o: Option[U32]) -> U32 {
 
 pub fn in_a_closure_body() -> U32 {
   let f = fn(y: U32) -> U32 { y + 0XFF }
-  let g = fn(y: F32) -> F32 { y * 1E+3 }
+  let _ = fn(y: F32) -> F32 { y * 1E+3 }
   f.(1_0)
 }
 
 pub fn in_a_generic_function[T](x: T) -> T {
-  let n: U32 = 0x1__F
-  let a: F32 = 48e3
+  let _: U32 = 0x1__F
+  let _: F32 = 48e3
   x
 }
 

@@ -47,7 +47,7 @@ pub fn nested_loops(n: U32) -> U32 {
 
 pub fn comment_between(n: U32) -> U32 {
   var t: U32 = 0
-  for i in 0..<
+  for _ in 0..<
     // the end of the range
 
     n {
@@ -59,7 +59,7 @@ pub fn comment_between(n: U32) -> U32 {
 pub fn in_a_branch(n: U32, c: Bool) -> U32 {
   var t: U32 = 0
   if c {
-    for i in 0..<
+    for _ in 0..<
       n {
       t = t + 1
     }

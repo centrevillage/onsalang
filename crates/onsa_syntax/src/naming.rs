@@ -288,6 +288,17 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
             check(id, Shape::Snake, "variable");
         }
     }
+    // A binding with a leading `_` may mean a value that is not used: that is
+    // `_` alone, the candidate of its E0309 after this one (§2.3, §5.1, S-726).
+    let marked: std::collections::HashSet<Span> = (ast.pats.iter())
+        .filter_map(|p| match &p.kind {
+            PatKind::Bind(id) if has_leading_underscore(&id.name) => Some(id.span),
+            _ => None,
+        })
+        .collect();
+    for d in out.iter_mut().filter(|d| marked.contains(&d.span)) {
+        d.notes.push(onsa_diag::Note::rule("a value that is not used is bound to `_` alone, with no name"));
+    }
     diagnostics.extend(out);
 }
 
@@ -401,8 +412,9 @@ mod tests {
             ("_p", "p", 0),
             ("_P", "P", 0),
             ("_MAX", "MAX", 0),
-            ("_x", "x", 0),
-            ("_type", "type_", 1),
+            // A binding's note says that a value not used is `_` alone (S-726).
+            ("_x", "x", 1),
+            ("_type", "type_", 2),
         ]
         .iter()
         .map(|&(f, c, n)| (f.to_string(), c.to_string(), n))

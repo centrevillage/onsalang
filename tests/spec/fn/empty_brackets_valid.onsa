@@ -124,8 +124,8 @@ pub fn patterns(s: Shape, m: Maybe[I32], o: Option[I32]) -> I32 {
 
 pub fn constructors() -> I32 {
   let h              = Holder { value: Maybe.Just(1) }
-  let s              = Shape.Rect(1, 2)
-  let n: Option[I32] = None
+  let _              = Shape.Rect(1, 2)
+  let _: Option[I32] = None
   match h.value {
     Maybe.Just(x) => x,
     Maybe.Nothing => 0,

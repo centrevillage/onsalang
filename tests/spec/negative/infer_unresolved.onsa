@@ -272,7 +272,7 @@ pub fn match_on_a_decided_call() -> U32 {
 pub fn method_on_a_decided_empty_array() -> U32 {
   let e = []
   let n = e.len()
-  let f: [F32; 0] = e
+  let _: [F32; 0] = e
   n
 }
 

@@ -1,0 +1,174 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§7", "§18.1"]
+// fixes = 1
+
+// E0309 (spec 5.1; S-129, S-726): a binding that is never read. The binding forms are `let`, a
+// destructuring (one element of it), `for`, a `match` arm, a name inside a nested pattern and a name
+// of a choice pattern. The mark is on the name; in a choice pattern (`E.A(x) | E.B(x)`) it is on the
+// first one. Each unit below holds one unused binding, because the E0309 of a unit is one (the first
+// in the order of 18.1, tests in unused_binding_order). The candidate renames the name to `_`; for a
+// choice pattern it is one candidate that renames the name in every branch. A name that is read is
+// not reported (unused_binding_reads), and neither is `_`.
+
+pub struct Point {
+  x: I32,
+  y: I32,
+}
+
+pub enum Shape {
+  Dot(I32),
+  Line(I32),
+  Plane(I32, I32),
+}
+
+pub fn let_with_type() -> I32 {
+  let _: I32 = 1 //~ E0309 @7
+  2
+}
+
+pub fn let_in_a_branch(c: Bool) -> I32 {
+  if c {
+    let _ = 1 //~ E0309 @9
+    2
+  } else {
+    3
+  }
+}
+
+pub fn let_in_a_loop_body(n: U32) -> U32 {
+  var total = 0
+  for i in 0 ..< n {
+    let _ = i + 1 //~ E0309 @9
+    total = total + i
+  }
+  total
+}
+
+pub fn let_in_a_while(n: U32) -> U32 {
+  var i = 0
+  while i < n {
+    let _ = i + 1 //~ E0309 @9
+    i = i + 1
+  }
+  i
+}
+
+pub fn sibling_scopes(c: Bool) -> I32 {
+  if c {
+    let _ = 1 //~ E0309 @9
+    2
+  } else {
+    let v = 3
+    v
+  }
+}
+
+pub fn struct_destructuring(p: Point) -> I32 {
+  let Point { x: px, y: _ } = p //~ E0309 @25
+  px
+}
+
+pub fn tuple_second(pair: (I32, I32)) -> I32 {
+  let (a, _) = pair //~ E0309 @11
+  a
+}
+
+pub fn nested_tuple(t: ((I32, I32), I32)) -> I32 {
+  let ((a, _), c) = t //~ E0309 @12
+  a + c
+}
+
+pub fn for_over_an_array(xs: [I32; 3]) -> I32 {
+  var n = 0
+  for _ in xs { //~ E0309 @7
+    n = n + 1
+  }
+  n
+}
+
+pub fn for_over_constant_bounds() -> U32 {
+  var count = 0
+  for _ in 0 ..< 4 { //~ E0309 @7
+    count = count + 1
+  }
+  count
+}
+
+pub fn arm_of_a_variant(s: Shape) -> I32 {
+  match s {
+    Shape.Dot(_) => 0, //~ E0309 @15
+    Shape.Line(l) => l,
+    Shape.Plane(a, b) => a + b,
+  }
+}
+
+pub fn arm_with_a_guard(o: Option[I32], limit: I32) -> I32 {
+  match o {
+    Some(_) if limit > 0 => 1, //~ E0309 @10
+    Some(_) => 2,
+    None => 0,
+  }
+}
+
+pub fn name_in_a_nested_pattern(o: Option[(I32, I32)]) -> I32 {
+  match o {
+    Some((a, _)) => a, //~ E0309 @14
+    None => 0,
+  }
+}
+
+pub fn name_in_a_variant_pattern(s: Shape) -> I32 {
+  match s {
+    Shape.Plane(a, _) => a, //~ E0309 @20
+    Shape.Dot(_) => 1,
+    Shape.Line(_) => 2,
+  }
+}
+
+pub fn arm_in_a_tuple_of_options(a: Option[I32], b: Option[I32]) -> I32 {
+  match (a, b) {
+    (Some(x), Some(_)) => x, //~ E0309 @20
+    (_, _) => 0,
+  }
+}
+
+pub fn choice_of_two(s: Shape) -> I32 {
+  match s {
+    Shape.Dot(_) | Shape.Line(_) => 1, //~ E0309 @15
+    Shape.Plane(_, _) => 2,
+  }
+}
+
+pub fn choice_in_a_tuple(o: Option[I32], p: Option[I32]) -> I32 {
+  match (o, p) {
+    (Some(_), _) | (_, Some(_)) => 1, //~ E0309 @11
+    (None, None) => 0,
+  }
+}
+
+pub fn choice_of_three(s: Shape) -> I32 {
+  match s {
+    Shape.Dot(_) | Shape.Line(_) | Shape.Plane(_, _) => 1, //~ E0309 @15
+  }
+}
+
+pub fn choice_inside_a_variant(o: Option[Shape]) -> I32 {
+  match o {
+    Some(Shape.Dot(_) | Shape.Line(_)) => 1, //~ E0309 @20
+    Some(Shape.Plane(_, _)) => 2,
+    None => 0,
+  }
+}
+
+pub fn read_choice(s: Shape) -> I32 {
+  match s {
+    Shape.Dot(x) | Shape.Line(x) => x,
+    Shape.Plane(_, _) => 2,
+  }
+}
+
+pub fn read_destructuring(p: Point) -> I32 {
+  let Point { x: px, y: py } = p
+  px + py
+}

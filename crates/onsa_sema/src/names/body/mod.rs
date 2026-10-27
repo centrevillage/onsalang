@@ -106,7 +106,7 @@ pub(crate) struct BodyNames {
 
 /// One binding of a body (§5.1).
 #[derive(Debug, Clone)]
-#[allow(dead_code, reason = "the E0309 and the overlaps of a rename read the scope and the reads from W4-04 U7b, U9")]
+#[allow(dead_code, reason = "the overlaps of a rename read the scope from W4-04 U9")]
 pub(crate) struct Binding {
     pub name: String,
     /// The name where it is first bound.
@@ -302,6 +302,7 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         // A panic names this declaration (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
         let mut w = Walker::new(a, def.module, ast, &module.text, (generics, self_ty));
+        let flow = matches!(def.kind, DefKind::Flow(_));
         let done = match &def.kind {
             DefKind::Flow(f) => w.walk_flow(&f.inputs, body),
             _ => {
@@ -322,6 +323,10 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
             }
             Some(Fail::Held | Fail::Later) => out.complete = false,
             None => {}
+        }
+        // The unused bindings of a flow body are the flow stage's (W7-04).
+        if out.complete && !flow {
+            a.diagnostics.extend(scope::unused(&out, ast));
         }
         names.insert(id, out);
     }

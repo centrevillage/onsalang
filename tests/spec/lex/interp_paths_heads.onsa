@@ -91,7 +91,7 @@ pub fn in_a_match_arm(n: U32) -> Str uses {Alloc} {
 pub fn in_a_for_loop(n: U32) -> U32 uses {Alloc} {
   var total = 0
   for i in 0 ..< n {
-    let s = "{i}/{MAXV}/{P.N}"
+    let _ = "{i}/{MAXV}/{P.N}"
     total = total + 1
   }
   total

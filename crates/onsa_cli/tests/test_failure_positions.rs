@@ -45,7 +45,9 @@ test \"value\" {
 
 /// R-188: in a chain of indices the panic is at the element that is out of
 /// range: the inner `xs[i]` of `xs[i][0]`, read or written, and the whole
-/// `xs[0][i]` when the outer index is the one out of range.
+/// `xs[0][i]` when the outer index is the one out of range. A written `xs` is
+/// read after the write (an unread binding is an E0309, §5.1), with no blank
+/// line before the last test, so that the lines below stay.
 #[test]
 fn an_index_out_of_range_in_a_chain_is_at_its_own_element() {
     let src = "test \"read\" {
@@ -59,12 +61,13 @@ test \"write\" {
   var xs: [[I32; 2]; 2] = [[0, 0], [0, 0]]
   let i: U32 = 3
   xs[i][0] = 1
+  assert xs[0][0] == 1
 }
-
 test \"write outer\" {
   var xs: [[I32; 2]; 2] = [[0, 0], [0, 0]]
   let i: U32 = 3
   xs[0][i] = 1
+  assert xs[0][0] == 1
 }
 ";
     let d = Dir::pkg("index_chain");

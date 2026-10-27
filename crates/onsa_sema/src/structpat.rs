@@ -217,8 +217,11 @@ mod tests {
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
         let a = analyze(&Package::new("t", modules, Vec::new()));
-        assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
-        let d = &a.diagnostics[0];
+        // The bindings of the arm are not read: their E0309 is of the last stage, which the unit
+        // with an error does not report (§18.1, S-726).
+        let ds: Vec<_> = a.diagnostics.iter().filter(|d| d.stage != onsa_diag::Stage::Unused).collect();
+        assert_eq!(ds.len(), 1, "{:?}", a.diagnostics);
+        let d = ds[0];
         let (from, to) = (d.span.start as usize, d.span.end as usize);
         (d.code, src[from..to].to_string(), from)
     }
@@ -264,8 +267,10 @@ mod tests {
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
         let a = analyze(&Package::new("t", modules, Vec::new()));
-        assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
-        let fix = &a.diagnostics[0].fixes[0];
+        // As in `first`: the E0309 of the arm's bindings is not the unit's (§18.1, S-726).
+        let ds: Vec<_> = a.diagnostics.iter().filter(|d| d.stage != onsa_diag::Stage::Unused).collect();
+        assert_eq!(ds.len(), 1, "{:?}", a.diagnostics);
+        let fix = &ds[0].fixes[0];
         let s = fix.edits()[0].span;
         (fix.title().to_string(), src[s.start as usize..s.end as usize].to_string())
     }

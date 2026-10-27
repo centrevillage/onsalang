@@ -58,8 +58,8 @@ pub fn next_to_the_lists() -> Str {
 
 pub fn scalar_characters() -> Char {
   let a: Char = '😀'
-  let b: Char = '日'
-  let c: Char = 'é'
+  let _: Char = '日'
+  let _: Char = 'é'
   a
 }
 

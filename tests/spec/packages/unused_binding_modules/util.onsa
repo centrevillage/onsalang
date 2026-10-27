@@ -1,0 +1,16 @@
+pub fn scale(x: I32) -> I32 {
+  let factor = 2 //~ E0309
+  x
+}
+
+pub fn fine(x: I32) -> I32 {
+  let factor = 2
+  x * factor
+}
+
+pub fn match_unused(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => 1, //~ E0309
+    None => 0,
+  }
+}

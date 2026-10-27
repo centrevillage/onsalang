@@ -20,22 +20,22 @@ pub struct Wrap[T: ?Dup] {
 
 pub fn to_a_dup_parameter[U: ?Dup](move u: U) {
   let w = Wrap { x: move u }
-  let z = need_dup(w)   //~ E0416
+  let _ = need_dup(w)   //~ E0416
 }
 
 pub fn repeated[U: ?Dup](move u: U) {
   let w = Wrap { x: move u }
-  let q = [w; 2]   //~ E0416
+  let _ = [w; 2]   //~ E0416
 }
 
 pub fn in_a_tuple[U: ?Dup](move u: U) {
   let w = (1, Wrap { x: move u })
-  let z = need_dup(w)   //~ E0416
+  let _ = need_dup(w)   //~ E0416
 }
 
 // A parameter with the implicit `Dup` is fine.
 pub fn dup_parameter[U](u: U) {
   let w = Wrap { x: u }
-  let z = need_dup(w)
-  let q = [w; 2]
+  let _ = need_dup(w)
+  let _ = [w; 2]
 }

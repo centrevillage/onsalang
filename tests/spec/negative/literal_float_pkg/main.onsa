@@ -39,9 +39,9 @@ pub fn qualified_argument() -> F32 {
 
 // The right forms.
 pub fn fine() -> F64 {
-  let a: F32 = FINE
+  let _: F32 = FINE
   let b: F64 = FINE_64
   let c = takes_f64(1e39)
-  let d: F32 = takes_f32(3.402823567797336616e38)
+  let _: F32 = takes_f32(3.402823567797336616e38)
   b + c
 }

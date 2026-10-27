@@ -47,7 +47,7 @@ test "a constant, a struct and an enum through the path" {
   assert p.a + p.b == 3
   let s = util.Shape.Square
   let n = match s {
-    util.Shape.Circle(r) => 1,
+    util.Shape.Circle(_) => 1,
     util.Shape.Square => 2,
   }
   assert n == 2

@@ -42,7 +42,7 @@ pub fn alias_match_one_arm(x: A) -> I32 {
 
 pub fn alias_match_pair(x: A) -> I32 {
   match x {
-    (p, q) => p,
+    (p, _) => p,
   }
 }
 
@@ -94,7 +94,7 @@ pub fn chain_match_one_arm(x: B) -> I32 {
 
 pub fn chain_match_pair(x: B) -> I32 {
   match x {
-    (p, q) => p,
+    (p, _) => p,
   }
 }
 
@@ -146,7 +146,7 @@ pub fn direct_match_one_arm(x: E.Zed) -> I32 {
 
 pub fn direct_match_pair(x: E.Zed) -> I32 {
   match x {
-    (p, q) => p,
+    (p, _) => p,
   }
 }
 

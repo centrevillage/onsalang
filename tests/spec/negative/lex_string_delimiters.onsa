@@ -230,7 +230,7 @@ pub fn fine(x: I32) -> U32 uses {Alloc} {
   let a = "{x}"
   let b = "a`b"
   let c = "$ @ r# #"
-  let d = '\''
+  let _ = '\''
   let e = "'''"
   let f = "\"\""
   show(a) + show(b) + show(c) + show(e) + show(f)

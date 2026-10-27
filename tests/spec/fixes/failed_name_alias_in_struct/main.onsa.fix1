@@ -18,6 +18,6 @@ pub fn p() -> I32 {
 }
 
 pub fn m() -> I32 {
-  let s = S { f: p }
+  let _ = S { f: p }
   1
 }

@@ -175,7 +175,7 @@ const PLACES: &[Place] = &[
     },
     Place {
         name: "let annotation in option",
-        lines: &["pub fn p23() -> I32 {", "  let a: Option[{H}] = None", "  1", "}"],
+        lines: &["pub fn p23() -> I32 {", "  let _: Option[{H}] = None", "  1", "}"],
         data: true,
         control: "I32",
     },

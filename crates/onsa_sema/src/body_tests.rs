@@ -58,22 +58,22 @@ fn literal_resolved_by_later_statement() {
 #[test]
 fn unresolved_float_literal_is_e0405() {
     // S-22: floats have no default (§2.4); integers default to I32 (below).
-    assert_eq!(codes("pub fn f() {\n  var acc = 0.0\n}\n"), vec![Code::E0405]);
-    assert_eq!(codes("pub fn f() {\n  let a = 1.0\n}\n"), vec![Code::E0405]);
+    assert_eq!(codes("pub fn f() {\n  var acc = 0.0\n  let _ = acc\n}\n"), vec![Code::E0405]);
+    assert_eq!(codes("pub fn f() {\n  let _ = 1.0\n}\n"), vec![Code::E0405]);
 }
 
 #[test]
 fn unresolved_integer_literal_defaults_to_i32() {
     // S-22 (§2.4, §4.7): applied at the end of the body only.
-    assert_eq!(codes("pub fn f() {\n  let a = 1\n}\n"), vec![]);
+    assert_eq!(codes("pub fn f() {\n  let _ = 1\n}\n"), vec![]);
     assert_eq!(codes("test \"t\" { assert 1 == 1 }\n"), vec![]);
-    assert_eq!(codes("pub fn f() {\n  for i in 0..<4 {\n  }\n}\n"), vec![]);
+    assert_eq!(codes("pub fn f() {\n  for _ in 0..<4 {\n  }\n}\n"), vec![]);
     let a = check("pub fn f() {\n  let a = 1\n}\n");
     let body = a.bodies.values().next().unwrap();
     let int = body.locals.iter().find(|l| l.name == "a").unwrap().ty;
     assert!(matches!(a.types.get(int), Ty::Int(IntKind::I32)));
     // Out of the I32 range: E0408 with the annotation hint.
-    let a = check("pub fn f() {\n  let x = 3_000_000_000\n}\n");
+    let a = check("pub fn f() {\n  let _ = 3_000_000_000\n}\n");
     assert_eq!(a.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0408]);
     assert!(a.diagnostics[0].message.contains("annotation"), "{}", a.diagnostics[0].message);
     // Mid-body operations still need the type (E0420): the default is not eager.
@@ -130,7 +130,7 @@ fn operations_need_known_types() {
         vec![Code::E0420]
     );
     // The element type of `[]` may be decided later; left open, it is E0406 at `[]` (S-226).
-    assert_eq!(codes("pub fn f() -> U32 {\n  let xs = []\n  1\n}\n"), vec![Code::E0406]);
+    assert_eq!(codes("pub fn f() -> U32 {\n  let _ = []\n  1\n}\n"), vec![Code::E0406]);
     assert_eq!(codes("pub fn f() -> I64 {\n  1 as I64\n}\n"), vec![Code::E0420]);
     ok("pub fn f() -> [F32; 0] {\n  let xs: [F32; 0] = []\n  xs\n}\n");
 }
@@ -173,7 +173,7 @@ fn const_generics_and_arrays() {
     ok("const N: U32 = 8\npub fn g() -> [U32; 8] { [0; N] }\n");
     // The element of `[e; N]` must be Dup (§2.4), checked in sema once it is decided (S-235).
     assert_eq!(
-        codes("pub struct O { b: Buf[F32] }\npub fn g(move o: O) -> U32 uses {Alloc} {\n  let xs = [o; 2]\n  0\n}\n"),
+        codes("pub struct O { b: Buf[F32] }\npub fn g(move o: O) -> U32 uses {Alloc} {\n  let _ = [o; 2]\n  0\n}\n"),
         vec![Code::E0416]
     );
 }
@@ -187,7 +187,7 @@ fn closures_take_types_from_the_expected_function_type() {
     assert_eq!(captures.len(), 1);
     assert_eq!(body.locals[captures[0].0 as usize].name, "k");
     assert!(matches!(a.types.get(body.expr_types[closure]), Ty::Fn(_)));
-    assert_eq!(codes("pub fn g() -> U32 {\n  let f = fn(i) { i }\n  1\n}\n"), vec![Code::E0420]);
+    assert_eq!(codes("pub fn g() -> U32 {\n  let _ = fn(i) { i }\n  1\n}\n"), vec![Code::E0420]);
     ok("pub fn g() -> U32 {\n  let f = fn(i: U32) -> U32 { i }\n  f(1)\n}\n");
     assert_eq!(
         codes("pub fn apply(f: fn(U32) -> U32) -> U32 { f(1) }\npub fn g() -> U32 { apply(fn(i, j) { i }) }\n"),
@@ -237,7 +237,7 @@ fn match_exhaustiveness() {
 #[test]
 fn conversions() {
     ok(
-        "pub fn f(i: I32, x: F64, y: F32, n: U8) -> F64 {\n  let a = i as I64\n  let b = x.round_f32()\n  let c = y.trunc_i32_sat()\n  let d = y.to_bits()\n  let e = F32.from_bits(d)\n  let g = n as F32\n  (i as F64) + x\n}\n",
+        "pub fn f(i: I32, x: F64, y: F32, n: U8) -> F64 {\n  let _ = i as I64\n  let _ = x.round_f32()\n  let _ = y.trunc_i32_sat()\n  let d = y.to_bits()\n  let _ = F32.from_bits(d)\n  let _ = n as F32\n  (i as F64) + x\n}\n",
     );
     assert_eq!(codes("pub fn f(x: I64) -> I32 { x as I32 }\n"), vec![Code::E0411]);
     assert_eq!(codes("pub fn f(x: I64) -> F64 { x as F64 }\n"), vec![Code::E0411]);
@@ -330,14 +330,16 @@ fn statements() {
 
 #[test]
 fn places_and_assignment() {
-    ok("pub struct P { x: F32 }\npub fn f(inout p: P, q: P) {\n  p.x = q.x\n  var r = q\n  r.x = 1.0\n}\n");
+    ok(
+        "pub struct P { x: F32 }\npub fn f(inout p: P, q: P) {\n  p.x = q.x\n  var r = q\n  r.x = 1.0\n  let _ = r\n}\n",
+    );
     assert_eq!(codes("pub fn f(p: U32) { 1 = 2 }\n"), vec![Code::E0415]);
 }
 
 #[test]
 fn borrow_bindings_are_flagged() {
     let a = ok(
-        "pub struct P { x: F32, xs: [F32; 2] }\npub fn f(p: P) -> F32 {\n  let y = p.x\n  let z = p.xs[0]\n  let w = y + z\n  for v in p.xs { }\n  w\n}\n",
+        "pub struct P { x: F32, xs: [F32; 2] }\npub fn f(p: P) -> F32 {\n  let y = p.x\n  let z = p.xs[0]\n  let w = y + z\n  for v in p.xs { let _ = v }\n  w\n}\n",
     );
     let body = &a.bodies[&def(&a, "f")];
     let flag = |n: &str| body.locals.iter().find(|l| l.name == n).unwrap().borrow;
@@ -440,7 +442,7 @@ fn the_uses_of_failed_items_get_no_diagnostic() {
     // The namespace of a flow whose heading was cut (F-4).
     assert_eq!(
         codes(
-            "pub flow g(x: ) -> F32 at sample {\n  x\n}\ntest \"t\" {\n  let z = g.init\n  let c = g.Config {}\n}\nfn h(s: g.State) -> I32 { 1 }\n"
+            "pub flow g(x: ) -> F32 at sample {\n  x\n}\ntest \"t\" {\n  let _ = g.init\n  let _ = g.Config {}\n}\nfn h(s: g.State) -> I32 { 1 }\n"
         ),
         []
     );
@@ -463,8 +465,8 @@ fn an_item_read_whole_is_checked_where_it_is_used() {
 /// still checked (W3-03/b N-1): a length, a tuple against `Bool`, an array against `I32`.
 #[test]
 fn the_type_around_the_error_type_is_checked() {
-    let src = "struct P { x: F32, y: , z: F32 }\nfn u(p: P) -> I32 {\n  let a: [I32; 3] = [p.y, p.y]\n  1\n}\n\
-               fn v(p: P) -> I32 {\n  let a: Bool = (p.y, 1)\n  1\n}\nfn w(p: P) -> I32 {\n  let a: I32 = [p.y]\n  1\n}\n";
+    let src = "struct P { x: F32, y: , z: F32 }\nfn u(p: P) -> I32 {\n  let _: [I32; 3] = [p.y, p.y]\n  1\n}\n\
+               fn v(p: P) -> I32 {\n  let _: Bool = (p.y, 1)\n  1\n}\nfn w(p: P) -> I32 {\n  let _: I32 = [p.y]\n  1\n}\n";
     let a = check(src);
     let got: Vec<(Code, &str)> = a.diagnostics.iter().map(|d| (d.code, d.message.as_str())).collect();
     assert_eq!(got.len(), 3, "{got:?}");
@@ -474,13 +476,13 @@ fn the_type_around_the_error_type_is_checked() {
 
 #[test]
 fn for_ranges() {
-    let f = |head: &str| codes(&format!("pub fn f(n: U32) {{\n  for i in {head} {{ }}\n}}\n"));
+    let f = |head: &str| codes(&format!("pub fn f(n: U32) {{\n  for _ in {head} {{ }}\n}}\n"));
     assert_eq!(f("0..<n"), vec![]);
     // The bounds are integers (§7).
     assert_eq!(f("0.0..<1.0"), vec![Code::E0401]);
     // `..=` is E0200 until the loop that ends at the type's maximum (W8-03,
     // S-224), after the checks of the bounds; never read as `..<` (R-81).
-    let d = check("pub fn f(n: U32) {\n  for i in 0..=n { }\n}\n").diagnostics;
+    let d = check("pub fn f(n: U32) {\n  for _ in 0..=n { }\n}\n").diagnostics;
     assert_eq!(d.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0200]);
     assert!(d[0].message.contains("`a..=b`") && d[0].message.contains("`for`"), "{}", d[0].message);
     assert_eq!(f("0.0..=1.0"), vec![Code::E0401]);
@@ -496,7 +498,7 @@ fn for_ranges() {
         "0..<1.5 + 2.5",
         "1.5 + 2.5..<n",
     ] {
-        let d = check(&format!("pub fn f(n: U32) {{\n  for i in {head} {{ }}\n}}\n")).diagnostics;
+        let d = check(&format!("pub fn f(n: U32) {{\n  for _ in {head} {{ }}\n}}\n")).diagnostics;
         assert_eq!(d.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0401], "{head}");
         assert!(!d[0].message.contains('?') && d[0].message.contains("integers"), "{head}: {}", d[0].message);
     }

@@ -574,7 +574,8 @@ property = ["clean"]
         for src in [
             f("F32", "0.5 | 1.5"),
             f("Option[F32]", "Some(0.5) | Some(1.5)"),
-            f("(F32, I32)", "(0.5, n) | (1.5, n)"),
+            // The shared binding is read by the arm (an unread binding is an E0309, §5.1).
+            f("(F32, I32)", "(0.5, n) | (1.5, n)").replace("=> 1,", "=> n,"),
             f("Option[F32]", "Some(0.5 | 1.5)"),
             f("(F32, F32)", "(0.5, 1.5) | (1.5, 0.5)"),
             f("(F32, I32)", "(0.5 | 1.5, 1) | (2.5, 1)"),

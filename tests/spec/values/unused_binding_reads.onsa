@@ -1,0 +1,214 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§2.3", "§5.3", "§7", "§18.1"]
+
+// What is not an E0309 (spec 5.1; S-129, S-716, S-726): every binding here is read at least once, or is
+// a parameter of a function or of an anonymous function (the signature is a promise to the caller, so a
+// parameter that is not read is fine), or is `_`. A binding is read where its name appears in an
+// expression that is not the left side of an assignment: an operand, a condition, an argument, an
+// index (`xs[i]`), a hole of an interpolated string (`"{m}"`), a guard, a field of a struct literal,
+// the range of a `for`, the receiver of a method, and the body of an anonymous function that captures
+// it. No error is reported in this file, so the check passes in every stage. The cases that are
+// reported are in negative/unused_binding_places, negative/unused_binding_bodies,
+// negative/unused_binding_assigned and negative/unused_binding_order.
+
+pub struct Point {
+  x: I32,
+  y: I32,
+}
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn read_in_an_operand() -> I32 {
+  let a = 1
+  a + 1
+}
+
+pub fn read_in_a_condition(c: Bool) -> I32 {
+  let limit = 3
+  if c && limit > 2 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn read_as_the_source_of_an_assignment() -> I32 {
+  let a = 1
+  var b = 0
+  b = a
+  b
+}
+
+pub fn read_by_a_later_binding() -> I32 {
+  let a = 1
+  let b = a + 1
+  b
+}
+
+pub fn read_in_an_index(xs: [I32; 3]) -> I32 {
+  let i = 1
+  xs[i]
+}
+
+pub fn read_in_a_hole(n: I32) -> Str uses {Alloc} {
+  let m = n + 1
+  "m={m}"
+}
+
+pub fn read_in_a_field_of_a_hole(p: Point) -> Str uses {Alloc} {
+  let q = p
+  "x={q.x}"
+}
+
+pub fn read_in_an_argument() -> I32 {
+  let k = 4
+  apply(fn(x: I32) -> I32 { x }, k)
+}
+
+pub fn read_in_a_captured_closure() -> I32 {
+  let a = 1
+  apply(fn(x: I32) -> I32 { x + a }, 3)
+}
+
+pub fn read_in_a_struct_literal() -> Point {
+  let a = 1
+  Point { x: a, y: 2 }
+}
+
+pub fn read_as_a_receiver(xs: [I32; 3]) -> U32 {
+  let ys = xs
+  ys.len()
+}
+
+pub fn read_in_the_range_of_a_for(n: U32) -> U32 {
+  let m     = n + 1
+  var total = 0
+  for i in 0 ..< m {
+    total = total + i
+  }
+  total
+}
+
+pub fn read_in_a_while(n: U32) -> U32 {
+  let limit = n
+  var i     = 0
+  while i < limit {
+    i = i + 1
+  }
+  i
+}
+
+pub fn read_for_variable(n: U32) -> U32 {
+  var total = 0
+  for i in 0 ..< n {
+    total = total + i
+  }
+  total
+}
+
+pub fn read_in_a_guard(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) if v > 0 => 1,
+    Some(_) => 2,
+    None => 0,
+  }
+}
+
+pub fn read_arm_binding(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn read_in_a_nested_pattern(o: Option[(I32, I32)]) -> I32 {
+  match o {
+    Some((a, b)) => a + b,
+    None => 0,
+  }
+}
+
+pub fn read_in_every_branch_of_a_choice(o: Option[I32], p: Option[I32]) -> I32 {
+  match (o, p) {
+    (Some(x), _) | (_, Some(x)) => x,
+    (None, None) => 0,
+  }
+}
+
+pub fn read_in_a_destructuring(pair: (I32, I32), p: Point) -> I32 {
+  let (a, b)                 = pair
+  let Point { x: px, y: py } = p
+  a + b + px + py
+}
+
+pub fn read_as_the_result_of_a_block(c: Bool) -> I32 {
+  let v = if c {
+    let t = 1
+    t
+  } else {
+    2
+  }
+  v
+}
+
+pub fn read_var_that_is_assigned(n: I32) -> I32 {
+  var acc = n
+  acc = acc + 1
+  acc
+}
+
+pub fn read_in_a_nested_closure() -> I32 {
+  let a = 1
+  apply(fn(x: I32) -> I32 {
+    apply(fn(y: I32) -> I32 { y + a }, x)
+  }, 3)
+}
+
+pub fn unused_parameter(x: I32) -> I32 {
+  1
+}
+
+pub fn unused_closure_parameter() -> I32 {
+  apply(fn(x: I32) -> I32 { 1 }, 3)
+}
+
+pub fn underscore_everywhere(o: Option[I32], pair: (I32, I32), n: U32) -> I32 {
+  let _      = 1
+  let (_, b) = pair
+  var count  = 0
+  for _ in 0 ..< n {
+    count = count + 1
+  }
+  match o {
+    Some(_) => b + count,
+    None => 0,
+  }
+}
+
+pub fn underscore_in_a_field(p: Point) -> I32 {
+  let Point { x: _, y: py } = p
+  py
+}
+
+pub fn same_name_in_siblings(c: Bool) -> I32 {
+  if c {
+    let v = 1
+    v
+  } else {
+    let v = 3
+    v
+  }
+}
+
+test "a read in a test" {
+  let a = 1
+  assert a == 1
+}
+
+const READ: I32 = {
+  let k = 1
+  k + 1
+}

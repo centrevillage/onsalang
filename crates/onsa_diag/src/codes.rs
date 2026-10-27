@@ -37,6 +37,10 @@ pub enum Stage {
     Modes,
     /// `rt` and effects.
     Effects,
+    /// The unused bindings (E0309, §5.1): the last check, reported only in a
+    /// unit with no error of the others (§18.1, S-726). What a body reads
+    /// is counted by the names stage (a flow body by the flow stage).
+    Unused,
     /// Lowering to Core and the build (code generation, layout, export).
     Build,
     /// The manifest (`onsa.toml`).
@@ -51,12 +55,14 @@ impl Stage {
         Stage::Flow,
         Stage::Modes,
         Stage::Effects,
+        Stage::Unused,
         Stage::Build,
         Stage::Manifest,
     ];
 
     /// The dependency order of the check stages (spec §18.1: syntax, names,
-    /// types, argument modes and moves, rt and effects): in a unit, the
+    /// types, the flow checks, argument modes and moves, rt and effects,
+    /// unused bindings): in a unit, the
     /// diagnostic of the earliest stage is the one reported, wherever it is
     /// (S-214). The one list of that order (`onsa_driver::reduce`). Lowering,
     /// the build and the manifest are not check stages: their diagnostics are
@@ -64,7 +70,7 @@ impl Stage {
     // SPEC-GAP(S-267): §18.1 does not place the flow checks in the order; they
     // sit after the types and before the modes, as in this enum, until S-267.
     pub const CHECK_ORDER: &'static [Stage] =
-        &[Stage::Syntax, Stage::Names, Stage::Types, Stage::Flow, Stage::Modes, Stage::Effects];
+        &[Stage::Syntax, Stage::Names, Stage::Types, Stage::Flow, Stage::Modes, Stage::Effects, Stage::Unused];
 
     /// The place of a check stage in [`Stage::CHECK_ORDER`]; `None` for the
     /// stages that are not checks.
@@ -81,6 +87,7 @@ impl Stage {
             Stage::Flow => "flow",
             Stage::Modes => "modes",
             Stage::Effects => "effects",
+            Stage::Unused => "unused",
             Stage::Build => "build",
             Stage::Manifest => "manifest",
         }
@@ -265,7 +272,7 @@ codes! {
         "`impl` in a place, or for a target, the rules do not allow";
     E0308 = 308, Names, [Names], Optional, Optional,
         "the name is of a kind that does not fit this position";
-    E0309 = 309, Names, [Names], Optional, Optional,
+    E0309 = 309, Names, [Unused], Optional, Optional,
         "unused binding";
     E0310 = 310, Names, [Names], Optional, Optional,
         "cyclic module import";

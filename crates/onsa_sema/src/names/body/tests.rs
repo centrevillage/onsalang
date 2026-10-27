@@ -365,7 +365,7 @@ fn the_parameters_of_a_heading_are_by_their_index_and_a_builtin_type_has_its_own
 
 #[test]
 fn the_paths_of_patterns_name_their_items() {
-    let src = "pub enum Shape { Circle(F32), Dot }\npub struct P { x: I32 }\npub fn pm(s: Shape, o: Option[I32], p: P) -> I32 {\n  let P { x: x } = p\n  let a = match s {\n    Shape.Circle(r) => 1,\n    Shape.Dot => 2,\n  }\n  match o {\n    Some(v) => v + x + a,\n    None => 0,\n  }\n}\n";
+    let src = "pub enum Shape { Circle(F32), Dot }\npub struct P { x: I32 }\npub fn pm(s: Shape, o: Option[I32], p: P) -> I32 {\n  let P { x: x } = p\n  let a = match s {\n    Shape.Circle(r) => r.trunc_i32_sat(),\n    Shape.Dot => 2,\n  }\n  match o {\n    Some(v) => v + x + a,\n    None => 0,\n  }\n}\n";
     let (a, module) = analysis(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let n = names(&a, "pm");
@@ -397,7 +397,7 @@ fn the_paths_of_patterns_name_their_items() {
 /// `impl[T] G[T]` is `G[T]`.
 #[test]
 fn self_and_an_alias_name_their_type_as_the_owner_of_what_follows() {
-    let src = "pub struct G[T] { v: T }\nimpl[T] G[T] {\n  pub fn wrap(v: T) -> Self { Self { v: v } }\n  pub fn get(self) -> T {\n    let Self { v: x } = self\n    let f = fn(w: T) -> G[T] { Self.wrap(w) }\n    x\n  }\n}\ntype GI = G[I32]\npub fn k() -> GI { GI { v: 1 } }\n";
+    let src = "pub struct G[T] { v: T }\nimpl[T] G[T] {\n  pub fn wrap(v: T) -> Self { Self { v: v } }\n  pub fn get(self) -> T {\n    let Self { v: x } = self\n    let _ = fn(w: T) -> G[T] { Self.wrap(w) }\n    x\n  }\n}\ntype GI = G[I32]\npub fn k() -> GI { GI { v: 1 } }\n";
     let (a, module) = analysis(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let g_t = a.types.find(&crate::ty::Ty::Named(def(&a, "G"), vec![a.types.find(&crate::ty::Ty::Param(0)).unwrap()]));

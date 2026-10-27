@@ -36,7 +36,7 @@ pub fn literal_default() -> Bool {
 
 pub fn dup_bound_is_met_by_every_scalar() -> Bool {
   let o = None
-  let a = hold(o)
+  let _ = hold(o)
   take_oi(o)
 }
 
@@ -52,9 +52,9 @@ pub fn float_literal_open() -> Bool {
 pub fn met() -> Bool {
   let o = None
   let a = need_f(o)
-  let p: Option[F32] = o
+  let _: Option[F32] = o
   let b = Bx { o: None }
-  let c = b.has()
-  let d: Bx[F64] = b
+  let _ = b.has()
+  let _: Bx[F64] = b
   a
 }

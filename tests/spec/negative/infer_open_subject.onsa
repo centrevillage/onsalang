@@ -99,7 +99,7 @@ pub fn decided_by_the_annotation() -> F32 {
 
 pub fn decided_by_an_argument(x: F32) -> F32 {
   let v = make()
-  let w = pass_f64(v)
+  let _ = pass_f64(v)
   let r = v.round_f32()
   r + x
 }

@@ -89,10 +89,10 @@ pub fn one_arm(m: Mode) -> I32 {
 }
 
 pub fn as_a_value(s: Shape) -> F32 {
-  let a = match s { Shape.Circle(r) => r, Shape.Rect(w, h) => w, Shape.Empty => 0.0 }
+  let a = match s { Shape.Circle(r) => r, Shape.Rect(w, _) => w, Shape.Empty => 0.0 }
   let b = match s {
     Shape.Circle(r) => r,
-    Shape.Rect(w, h) => h,
+    Shape.Rect(_, h) => h,
     Shape.Empty => 0.0,
   }
   let c = match s { Shape.Circle(r) => r,
@@ -104,10 +104,10 @@ pub fn as_a_value(s: Shape) -> F32 {
 // The same lists one level deeper.
 pub fn deeper(s: Shape, t: Bool) -> F32 {
   if t {
-    match s { Shape.Circle(r) => r, Shape.Rect(w, h) => w, Shape.Empty => 0.0 }
+    match s { Shape.Circle(r) => r, Shape.Rect(w, _) => w, Shape.Empty => 0.0 }
   } else {
     match s { Shape.Circle(r) => r,
-              Shape.Rect(w, h) => h,
+              Shape.Rect(_, h) => h,
               Shape.Empty => 0.0 }
   }
 }

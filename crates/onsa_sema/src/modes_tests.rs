@@ -106,9 +106,9 @@ fn argument_modes_must_match() {
 
 #[test]
 fn second_class_values_stay_in_argument_position() {
-    assert_eq!(codes("pub fn g(xs: Span[F32]) { let s = xs }\n"), vec![Code::E0710]);
+    assert_eq!(codes("pub fn g(xs: Span[F32]) { let _ = xs }\n"), vec![Code::E0710]);
     assert_eq!(codes("pub fn g(xs: Span[F32]) -> Span[F32] { xs }\n").first().copied(), Some(Code::E0710));
-    assert_eq!(codes("pub fn g(xs: Span[F32]) { let s = xs.slice(0, 2) }\n"), vec![Code::E0710]);
+    assert_eq!(codes("pub fn g(xs: Span[F32]) { let _ = xs.slice(0, 2) }\n"), vec![Code::E0710]);
     ok(
         "pub fn total(xs: Span[F32]) -> U32 { xs.len() }\npub fn g(xs: Span[F32]) -> U32 { total(xs.slice(0, 2)) + xs[0].trunc_u32() }\n",
     );
@@ -116,8 +116,8 @@ fn second_class_values_stay_in_argument_position() {
         "pub fn mix(ch: [Span[F32]; 2]) -> U32 { ch[0].len() + ch[1].len() }\npub fn g(a: [F32; 4], b: [F32; 4]) -> U32 { mix([a, b]) }\n",
     );
     // A capturing closure is second-class too.
-    assert_eq!(codes("pub fn g(k: F32) { let f: fn(F32) -> F32 = fn(x: F32) -> F32 { x * k } }\n"), vec![Code::E0710]);
-    ok("pub fn g(k: F32) { let f: fn(F32) -> F32 = fn(x: F32) -> F32 { x * 2.0 } }\n");
+    assert_eq!(codes("pub fn g(k: F32) { let _: fn(F32) -> F32 = fn(x: F32) -> F32 { x * k } }\n"), vec![Code::E0710]);
+    ok("pub fn g(k: F32) { let _: fn(F32) -> F32 = fn(x: F32) -> F32 { x * 2.0 } }\n");
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn borrowed_affine_cannot_move() {
     // Dup values are copied when passed as `move`, even when borrowed.
     ok("pub fn take(move n: U32) {}\npub fn g(n: U32) { take(move n) }\n");
     // `[e; N]` needs a Dup element: a kind constraint of sema (E0416, §2.4, S-235), not a move.
-    assert_eq!(codes("pub fn g(move b: Buf[F32]) uses {Alloc} { let xs = [b; 2] }\n"), vec![Code::E0416]);
+    assert_eq!(codes("pub fn g(move b: Buf[F32]) uses {Alloc} { let _ = [b; 2] }\n"), vec![Code::E0416]);
 }
 
 #[test]
@@ -197,15 +197,15 @@ fn use_after_move() {
     // Moved inside a loop.
     assert_eq!(
         codes(&format!(
-            "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for i in 0..<n {{ take(move b) }} }}\n"
+            "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for _ in 0..<n {{ take(move b) }} }}\n"
         )),
         vec![Code::E0704]
     );
     ok(&format!(
-        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for i in 0..<n {{ take(move b)\n break }} }}\n"
+        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for _ in 0..<n {{ take(move b)\n break }} }}\n"
     ));
     ok(&format!(
-        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ var v = move b\n for i in 0..<n {{ take(move v)\n v = Buf.zeroed(4) }} }}\n"
+        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ var v = move b\n for _ in 0..<n {{ take(move v)\n v = Buf.zeroed(4) }} }}\n"
     ));
     // `match` arms are branches.
     assert_eq!(
@@ -218,9 +218,9 @@ fn use_after_move() {
 
 #[test]
 fn assignment_needs_a_mutable_place() {
-    assert_eq!(codes("pub fn g() { let a: U32 = 1\n a = 2 }\n"), vec![Code::E0701]);
+    assert_eq!(codes("pub fn g() { let a: U32 = 1\n a = 2\n let _ = a }\n"), vec![Code::E0701]);
     assert_eq!(codes("pub struct P { x: U32 }\npub fn g(p: P) { p.x = 2 }\n"), vec![Code::E0701]);
-    assert_eq!(codes("pub fn g(xs: [U32; 2]) { for x in xs { x = 1 } }\n"), vec![Code::E0701]);
+    assert_eq!(codes("pub fn g(xs: [U32; 2]) { for x in xs { x = 1\n let _ = x } }\n"), vec![Code::E0701]);
     ok("pub struct P { x: U32 }\npub fn g(inout p: P) { p.x = 2 }\n");
 }
 
@@ -268,7 +268,7 @@ const TAKE: &str = "pub fn take(move b: Buf[F32]) uses {Alloc} {}\npub struct Bo
 #[test]
 fn consuming_an_affine_value_needs_move() {
     // `let y = x` on an owned Affine value: E0711 with the `move ` insertion (§5.2).
-    let src = format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let y = b\n}}\n");
+    let src = format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let y = b\n  take(move y)\n}}\n");
     let a = check(&src);
     assert_eq!(a.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0711]);
     assert_eq!(crate::fixed_region(&src, &a.diagnostics[0], 0), "move b");
@@ -276,28 +276,28 @@ fn consuming_an_affine_value_needs_move() {
     // The same in every consuming position: assignment, literal element, struct field, constructor.
     assert_eq!(
         codes(&format!(
-            "{TAKE}pub fn f(move b: Buf[F32], move c: Buf[F32]) uses {{Alloc}} {{\n  var v = move b\n  v = c\n}}\n"
+            "{TAKE}pub fn f(move b: Buf[F32], move c: Buf[F32]) uses {{Alloc}} {{\n  var v = move b\n  v = c\n  take(move v)\n}}\n"
         )),
         vec![Code::E0711]
     );
     assert_eq!(
-        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let t = (b, 1)\n}}\n")),
+        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let _ = (b, 1)\n}}\n")),
         vec![Code::E0711]
     );
     assert_eq!(
-        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let x = Box {{ b: b }}\n}}\n")),
+        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let _ = Box {{ b: b }}\n}}\n")),
         vec![Code::E0711]
     );
     assert_eq!(
-        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let o = Some(b)\n}}\n")),
+        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let _ = Some(b)\n}}\n")),
         vec![Code::E0711]
     );
     // With `move`: fine, and the value is then moved (use after → E0704).
-    ok(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let y = move b\n}}\n"));
-    ok(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let x = Box {{ b: move b }}\n}}\n"));
-    ok(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let o = Some(move b)\n}}\n"));
+    ok(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let _ = move b\n}}\n"));
+    ok(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let _ = Box {{ b: move b }}\n}}\n"));
+    ok(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let _ = Some(move b)\n}}\n"));
     assert_eq!(
-        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let y = move b\n  take(move b)\n}}\n")),
+        codes(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let _ = move b\n  take(move b)\n}}\n")),
         vec![Code::E0704]
     );
     // Dup values may be written with `move` (a copy).
@@ -390,18 +390,18 @@ fn range_ends_are_read() {
     assert_eq!(f("  take(move b)\n  for i in b.len()..<n { s = s + i }"), vec![Code::E0704]);
     // A move in the ends of two loops: the second is a use after the move.
     assert_eq!(
-        f("  for i in 0..<take(move b) { s = s + 1 }\n  for j in 0..<take(move b) { s = s + 1 }"),
+        f("  for _ in 0..<take(move b) { s = s + 1 }\n  for _ in 0..<take(move b) { s = s + 1 }"),
         vec![Code::E0704]
     );
     // The ends of an inner `for` are read once per iteration of the outer one.
-    assert_eq!(f("  for k in 0..<n {\n    for i in 0..<take(move b) { s = s + 1 }\n  }"), vec![Code::E0704]);
+    assert_eq!(f("  for _ in 0..<n {\n    for _ in 0..<take(move b) { s = s + 1 }\n  }"), vec![Code::E0704]);
     // A move in the body, then a use in the ends of a nested `for`.
     assert_eq!(
-        f("  for k in 0..<n {\n    take(move b)\n    for i in 0..<b.len() { s = s + 1 }\n  }"),
+        f("  for _ in 0..<n {\n    take(move b)\n    for _ in 0..<b.len() { s = s + 1 }\n  }"),
         vec![Code::E0704]
     );
     // Read once: a move in the ends is not a move in each iteration.
-    assert_eq!(f("  for i in 0..<take(move b) { s = s + 1 }"), vec![]);
+    assert_eq!(f("  for _ in 0..<take(move b) { s = s + 1 }"), vec![]);
     // A borrow in the ends, then the move after the loop.
-    assert_eq!(f("  for i in 0..<b.len() { s = s + 1 }\n  s = s + take(move b)"), vec![]);
+    assert_eq!(f("  for _ in 0..<b.len() { s = s + 1 }\n  s = s + take(move b)"), vec![]);
 }

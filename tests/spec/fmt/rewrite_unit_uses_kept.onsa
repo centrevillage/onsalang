@@ -27,7 +27,7 @@ fn alloc_value() -> I32 uses {Alloc} {
 }
 
 fn unit_value() {
-  let u: () = ()
+  let _: () = ()
 }
 
 pub struct Sinks {

@@ -108,7 +108,7 @@ pub fn fine(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
   } else {
     2
   }) + 10
-  let n = (if c { xs } else { ys })
+  let _ = (if c { xs } else { ys })
     .len()
   a
 }

@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+// fixes = 0
+
+// E0309 of a `var` (spec 5.1; S-129, S-714, S-726): a `var` that is only assigned and never read is
+// an unused binding, because an assignment is not a reference. The name cannot be changed to `_` (`var _`
+// is not written), so there is no candidate (`fixes = 0` says no diagnostic here has one); a note shows
+// `let _ = e`. A `var` that is read anywhere, even only in the right side of its own assignment
+// (`acc = acc + 1`), is read (values/unused_binding_reads). What is on the right side of an
+// assignment is read: the `x` in `y = x` below is not reported, only `y`.
+
+pub fn never_assigned() -> I32 {
+  var y = 1 //~ E0309 @7
+  2
+}
+
+pub fn only_assigned() -> I32 {
+  var y = 0 //~ E0309 @7
+  y = 1
+  2
+}
+
+pub fn assigned_in_a_loop(n: U32) -> U32 {
+  var last = 0 //~ E0309 @7
+  for i in 0 ..< n {
+    last = i
+  }
+  n
+}
+
+pub fn assigned_from_a_binding(x: I32) -> I32 {
+  var y = 0 //~ E0309 @7
+  y = x
+  x
+}
+
+pub fn assigned_in_a_branch(c: Bool) -> I32 {
+  var y = 0 //~ E0309 @7
+  if c {
+    y = 1
+  } else {
+    y = 2
+  }
+  3
+}
+
+pub fn assigned_in_a_while(n: U32) -> U32 {
+  var i = 0
+  var flag = false //~ E0309 @7
+  while i < n {
+    i = i + 1
+    flag = true
+  }
+  i
+}
+
+pub fn var_in_a_branch(c: Bool) -> I32 {
+  if c {
+    var t = 1 //~ E0309 @9
+    2
+  } else {
+    3
+  }
+}
+
+pub fn var_in_a_closure() -> I32 {
+  apply(fn(x: I32) -> I32 {
+    var t = x //~ E0309 @9
+    x
+  }, 3)
+}
+
+test "a var in a test" {
+  var count = 0 //~ E0309 @7
+  assert true
+}
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}

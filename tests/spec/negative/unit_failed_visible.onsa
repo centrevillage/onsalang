@@ -108,6 +108,6 @@ pub fn calls_generic_broken() -> I32 {
 
 // A failed function used from inside a closure and a branch.
 pub fn nested_use(c: Bool) -> I32 {
-  let f = fn(x: I32) -> I32 { body_broken() + x }
+  let _ = fn(x: I32) -> I32 { body_broken() + x }
   if c { body_broken() } else { sig_broken(2) }
 }

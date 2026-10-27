@@ -18,11 +18,11 @@ fn unit_range() -> Gen[F32] {
 }
 
 test "a generator built by a function" {
-  let g = unit_range()
+  let _ = unit_range()
 }
 
 test "a pair of generators" {
-  let p = gen.pair(gen.u32(1, 2), gen.u32(3, 4))   //~ E0200 //~ E0200 //~ E0200
+  let _ = gen.pair(gen.u32(1, 2), gen.u32(3, 4))   //~ E0200 //~ E0200 //~ E0200
 }
 
 test "a test without a generator" {

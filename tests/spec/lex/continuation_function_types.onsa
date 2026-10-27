@@ -43,7 +43,7 @@ pub fn take_alias(h: Op, x: Alias) ->
 }
 
 pub fn return_type_of_a_closure() -> I32 {
-  let h = fn(x: I32) ->
+  let _ = fn(x: I32) ->
     I32 { x }
   1
 }

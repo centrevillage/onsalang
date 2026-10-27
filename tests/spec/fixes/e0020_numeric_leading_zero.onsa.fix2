@@ -217,15 +217,15 @@ pub fn in_a_repeated_element() -> [I32; 4] {
 // The right forms: `0` itself, a float with zeros in front of its integer part, a number with a separator
 // after a nonzero digit, and the numbers that look like these but start with a nonzero digit.
 pub fn fine() -> F32 {
-  let a: I32 = 0
-  let b: I32 = 10
-  let c: I32 = 17
+  let _: I32 = 0
+  let _: I32 = 10
+  let _: I32 = 17
   let d: F32 = 00.5
   let e: F32 = 01.5
   let f: F32 = 007.25
   let g: F32 = 0.0
-  let h: I32 = 0x0F
-  let i: I32 = 0b0101
-  let j: I32 = 1_017
+  let _: I32 = 0x0F
+  let _: I32 = 0b0101
+  let _: I32 = 1_017
   d + e + f + g
 }

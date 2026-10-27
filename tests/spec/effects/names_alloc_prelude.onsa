@@ -15,7 +15,7 @@ pub fn takes(f: fn() -> U32 uses {Alloc}) -> U32 {
 }
 
 pub fn closure() -> U32 {
-  let g = fn(x: U32) -> U32 uses {Alloc} { x }
+  let _ = fn(x: U32) -> U32 uses {Alloc} { x }
   1
 }
 

@@ -67,7 +67,7 @@ fn text(src: &str) -> String {
 #[test]
 fn operators_carry_overflow_modes() {
     let d = text(
-        "pub fn f(a: I32, b: I32) -> I32 {\n  let c = a + b\n  let w = a +% b\n  let s = a *| b\n  let q = a / b\n  let r = a % b\n  let sh = a << 3\n  (c - w) & s\n}\n",
+        "pub fn f(a: I32, b: I32) -> I32 {\n  let c = a + b\n  let w = a +% b\n  let s = a *| b\n  let _ = a / b\n  let _ = a % b\n  let _ = a << 3\n  (c - w) & s\n}\n",
     );
     assert!(d.contains("(a + b)"), "{d}");
     assert!(d.contains("(a +% b)"), "{d}");
@@ -78,7 +78,7 @@ fn operators_carry_overflow_modes() {
 
 #[test]
 fn float_rem_is_fmod_and_literals_keep_their_kind() {
-    let d = text("pub fn f(x: F32, y: F64) -> F32 {\n  let z = y % 2.0\n  x % 1.5\n}\n");
+    let d = text("pub fn f(x: F32, y: F64) -> F32 {\n  let _ = y % 2.0\n  x % 1.5\n}\n");
     assert!(d.contains("math.fmod.F64(y, 2.0:F64)"), "{d}");
     assert!(d.contains("math.fmod.F32(x, 1.5:F32)"), "{d}");
 }
@@ -176,7 +176,7 @@ fn from_fn_closure_is_inlined() {
 #[test]
 fn generics_are_monomorphized_and_deduplicated() {
     let d = text(
-        "pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {\n  if x < lo { lo } else if x > hi { hi } else { x }\n}\n\npub fn f(a: F32, b: I32) -> F32 {\n  let p = clamp(a, 0.0, 1.0)\n  let q = clamp(a, 0.5, 1.0)\n  let r = clamp(b, 0, 10)\n  p + q\n}\n",
+        "pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {\n  if x < lo { lo } else if x > hi { hi } else { x }\n}\n\npub fn f(a: F32, b: I32) -> F32 {\n  let p = clamp(a, 0.0, 1.0)\n  let q = clamp(a, 0.5, 1.0)\n  let _ = clamp(b, 0, 10)\n  p + q\n}\n",
     );
     assert_eq!(d.matches("fn t.clamp__F32(").count(), 1, "{d}");
     assert_eq!(d.matches("fn t.clamp__I32(").count(), 1, "{d}");
@@ -194,7 +194,7 @@ fn const_generics_name_instances() {
 #[test]
 fn consts_and_assoc_consts() {
     let d =
-        text("const N: U32 = 8\nconst TWO_PI: F32 = 6.283\n\npub fn f() -> F32 {\n  let k = N\n  F32.PI * TWO_PI\n}\n");
+        text("const N: U32 = 8\nconst TWO_PI: F32 = 6.283\n\npub fn f() -> F32 {\n  let _ = N\n  F32.PI * TWO_PI\n}\n");
     assert!(d.contains("const t.N: U32 = 8:U32"), "{d}");
     assert!(d.contains("3.1415927:F32"), "{d}");
     assert!(d.contains("const t.TWO_PI"), "{d}");
@@ -203,7 +203,7 @@ fn consts_and_assoc_consts() {
 #[test]
 fn methods_and_builtin_prims() {
     let d = text(
-        "pub fn f(x: F64, n: I64) -> I32 {\n  let a = x.trunc_i32_sat()\n  let b = n.narrow_i32().unwrap_or(0)\n  let c = x.to_bits()\n  a + b\n}\n",
+        "pub fn f(x: F64, n: I64) -> I32 {\n  let a = x.trunc_i32_sat()\n  let b = n.narrow_i32().unwrap_or(0)\n  let _ = x.to_bits()\n  a + b\n}\n",
     );
     assert!(d.contains("trunc_sat.F64.I32(x)"), "{d}");
     assert!(d.contains("narrow.I64.I32(n)"), "{d}");
@@ -214,7 +214,7 @@ fn methods_and_builtin_prims() {
 #[test]
 fn span_coercions_and_bang_methods() {
     let d = text(
-        "pub rt fn fill(inout out: Span[F32]) {\n  out.fill!(0.0)\n}\n\npub rt fn g(inout buf: [F32; 8]) {\n  fill(inout buf)\n  buf.fill!(1.0)\n  let n = buf.len()\n}\n",
+        "pub rt fn fill(inout out: Span[F32]) {\n  out.fill!(0.0)\n}\n\npub rt fn g(inout buf: [F32; 8]) -> U32 {\n  fill(inout buf)\n  buf.fill!(1.0)\n  let n = buf.len()\n  n\n}\n",
     );
     assert!(d.contains("fill(inout span(buf))"), "{d}");
     assert!(d.contains("fill(inout span(buf), 1.0:F32)"), "{d}");
@@ -262,8 +262,8 @@ fn unsupported_types_and_patterns_do_not_stop_the_item() {
         l.sort();
         l
     };
-    let locals = "pub fn f() -> I32 uses {Alloc} {\n  let a = \"abc\"\n  let b = \"def\"\n  \
-                  let c = fn(v: I32) -> I32 { v }\n  1\n}\n";
+    let locals = "pub fn f() -> I32 uses {Alloc} {\n  let _ = \"abc\"\n  let _ = \"def\"\n  \
+                  let _ = fn(v: I32) -> I32 { v }\n  1\n}\n";
     let got = lines(locals);
     assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [2, 3, 4], "{got:?}");
     assert!(got[2].1.contains("anonymous functions"), "{got:?}");

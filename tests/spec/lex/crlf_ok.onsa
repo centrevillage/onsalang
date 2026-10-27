@@ -32,7 +32,7 @@ pub fn statements(a: I32, b: I32) -> I32 {
   let d = c
     .max(a)
   // a comment
-  let e = [
+  let _ = [
     1,
     2,
   ]

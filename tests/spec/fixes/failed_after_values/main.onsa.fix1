@@ -21,7 +21,7 @@ pub fn value_call() -> I32 {
 
 pub fn takes_value_call() -> I32 {
   let o = value_call_of_color()
-  let b = o + 1
+  let _ = o + 1
   1
 }
 

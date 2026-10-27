@@ -1,0 +1,155 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "76:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["77:7 E0309"]
+// [[test.fix]]
+// at = "82:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["83:7 E0309"]
+// [[test.fix]]
+// at = "89:8"
+// code = "E0309"
+// candidate = 1
+// leaves = ["89:11 E0309"]
+// [[test.fix]]
+// at = "94:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["96:10 E0309"]
+// [[test.fix]]
+// at = "104:10"
+// code = "E0309"
+// candidate = 1
+// leaves = ["107:7 E0309"]
+// [[test.fix]]
+// at = "113:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["116:7 E0309"]
+// [[test.fix]]
+// at = "121:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["122:9 E0309"]
+// [[test.fix]]
+// at = "130:9"
+// code = "E0309"
+// candidate = 1
+// leaves = ["133:7 E0309"]
+// [[test.fix]]
+// at = "138:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["140:9 E0309"]
+// [[test.fix]]
+// at = "146:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["147:7 E0309"]
+// [[test.fix]]
+// at = "152:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["153:7 E0309"]
+
+// One unit reports one E0309 (spec 18.1; S-726): when a unit has several unused bindings, the first in
+// the order of the diagnostics is reported, that is the one that starts first in the file (the name of
+// the binding, so `let (l, r) = pair` gives `l`; a binding in an anonymous function counts by where it
+// is written, and an outer `let a = { ... }` starts before the `let b` inside it). The others are not
+// reported, and they come out one by one in the repair loop: the candidate of the first renames it to
+// `_` and the next check reports the next one, so each candidate leaves the next E0309 of its unit
+// (`leaves`, the position after the edit, which is the same as before because `_` is as wide as the
+// one-letter names here). The order is by place, not by name (`the_name_that_comes_first_wins`). The
+// E0309 of the other units is not affected: they are independent.
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn two_lets() -> I32 {
+  let a = 1 //~ E0309 @7
+  let b = 2
+  3
+}
+
+pub fn three_lets() -> I32 {
+  let a = 1 //~ E0309 @7
+  let b = 2
+  let c = 3
+  4
+}
+
+pub fn destructuring_both(pair: (I32, I32)) -> I32 {
+  let (l, r) = pair //~ E0309 @8
+  3
+}
+
+pub fn let_then_arm(o: Option[I32]) -> I32 {
+  let a = 1 //~ E0309 @7
+  let r = match o {
+    Some(v) => 1,
+    None => 2,
+  }
+  r
+}
+
+pub fn arm_then_let(o: Option[I32]) -> I32 {
+  let r = match o {
+    Some(v) => 1, //~ E0309 @10
+    None => 2,
+  }
+  let late = 1
+  r
+}
+
+pub fn for_then_let(n: U32) -> U32 {
+  var count = 0
+  for i in 0 ..< n { //~ E0309 @7
+    count = count + 1
+  }
+  let late = 1
+  count
+}
+
+pub fn outer_let_with_an_inner_one() -> I32 {
+  let a = { //~ E0309 @7
+    let b = 1
+    2
+  }
+  3
+}
+
+pub fn closure_then_let() -> I32 {
+  let r = apply(fn(x: I32) -> I32 {
+    let t = x + 1 //~ E0309 @9
+    x
+  }, 3)
+  let late = 1
+  r
+}
+
+pub fn let_then_closure() -> I32 {
+  let early = 1 //~ E0309 @7
+  apply(fn(x: I32) -> I32 {
+    let t = x + 1
+    x
+  }, 3)
+}
+
+test "two unused in a test" {
+  let a = 1 //~ E0309 @7
+  var b = 2
+  assert true
+}
+
+pub fn the_name_that_comes_first_wins(x: I32) -> I32 {
+  let b = x + 1 //~ E0309 @7
+  let a = 1
+  3
+}

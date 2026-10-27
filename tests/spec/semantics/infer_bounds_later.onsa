@@ -60,7 +60,7 @@ fn take_bf(b: Bx[F32]) -> Bool {
 fn bound_in_a_generic[U: Float](x: U) -> Bool {
   let o            = None
   let a            = need_f(o)
-  let p: Option[U] = o
+  let _: Option[U] = o
   a
 }
 
@@ -96,7 +96,7 @@ test "a bound met by the return type" {
 
 fn decided_by_the_return() -> Option[F32] {
   let o = None
-  let a = need_f(o)
+  let _ = need_f(o)
   o
 }
 
@@ -139,7 +139,7 @@ test "a bound of a generic parameter is met by the bound of the function" {
 test "the implicit Dup is met by a Copy type that comes later" {
   let o             = None
   let a             = hold(o)
-  let p: Option[U8] = o
+  let _: Option[U8] = o
   assert !a
 }
 
@@ -160,7 +160,7 @@ test "a waiting bound in a branch and a loop" {
       n = n + 1
     }
   }
-  for i in 0 ..< 2 {
+  for _ in 0 ..< 2 {
     if !need_f(o) {
       n = n + 10
     }
@@ -174,7 +174,7 @@ test "a waiting bound inside a closure" {
   let xs: [U32; 2] = array.from_fn(fn(i) {
     let o              = None
     let a              = need_f(o)
-    let p: Option[F64] = o
+    let _: Option[F64] = o
     if a { 100 } else { i + 1 }
   })
   assert xs[0] == 1

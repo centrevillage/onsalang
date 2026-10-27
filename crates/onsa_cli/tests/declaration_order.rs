@@ -136,7 +136,7 @@ const PROGRAMS: [Program; 8] = [
             "pub flow h(x: [F32; 4] at sample) -> Buf4 at sample { x }",
             "pub flow j(x: [F32; 3] at sample) -> Quad at sample { Quad { q: [x[0], x[1], x[2], 0.0] } }",
         ],
-        tests: "test \"t\" {\n  var st = g.init(g.Config {}, 8.0)\n  var b: [[F32; 4]; 1] = [[0.0; 4]]\n}",
+        tests: "test \"t\" {\n  let _ = g.init(g.Config {}, 8.0)\n  let _: [[F32; 4]; 1] = [[0.0; 4]]\n}",
         codes: &[],
     },
 ];

@@ -167,7 +167,7 @@ pub fn integer_pattern_then_each_integer_type() -> U32 {
     Some(3) => 1,
     _ => 0,
   }
-  let p: Option[U8] = o
+  let _: Option[U8] = o
   r
 }
 
@@ -186,7 +186,7 @@ pub fn the_minimum_is_in_range_for_the_later_type() -> U32 {
     Some(-(127)) => 2,
     _ => 0,
   }
-  let p: Option[I8] = o
+  let _: Option[I8] = o
   r
 }
 
@@ -205,6 +205,6 @@ pub fn char_pattern() -> U32 {
     Some('a') => 1,
     _ => 0,
   }
-  let p: Option[Char] = o
+  let _: Option[Char] = o
   r
 }

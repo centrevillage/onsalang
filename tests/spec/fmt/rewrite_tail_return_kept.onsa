@@ -99,7 +99,7 @@ fn without_a_value_at_the_end_of_branches(c: Bool, inout x: I32) {
 }
 
 fn without_a_value_in_a_closure() {
-  let f = fn(inout x: I32) {
+  let _ = fn(inout x: I32) {
     x = 2
     return
   }

@@ -18,6 +18,6 @@ pub fn through_a_closure(k: I32) -> I32 {
 }
 
 pub fn through_a_generic(first: Bool, a: F32, b: F32) -> F32 {
-  let n = pick(first, 1, 2)
+  let _ = pick(first, 1, 2)
   pick(first, a * 2.0, b)
 }

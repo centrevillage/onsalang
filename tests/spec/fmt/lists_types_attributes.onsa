@@ -83,11 +83,11 @@ pub enum Shape {
 
 pub fn corners(s: Shape) -> U32 {
   match s {
-    Shape.Circle(r) => 0,
-    Shape.Rect(w, h) => 4,
-    Shape.Quad(a, b, c, d) => 4,
-    Shape.Tri(a, b, c) => 3,
-    Shape.Solo(r) => 1,
+    Shape.Circle(_) => 0,
+    Shape.Rect(_, _) => 4,
+    Shape.Quad(_, _, _, _) => 4,
+    Shape.Tri(_, _, _) => 3,
+    Shape.Solo(_) => 1,
   }
 }
 

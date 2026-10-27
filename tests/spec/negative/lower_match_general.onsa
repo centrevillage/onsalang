@@ -123,7 +123,7 @@ pub fn n_generic[T: Copy](o: Option[Option[T]], d: T) -> T {
 
 pub fn uses_generic(o: Option[Option[U32]], p: Option[Option[Bool]]) -> U32 {
   let a = n_generic(o, 1)
-  let b = n_generic(p, true)
+  let _ = n_generic(p, true)
   a
 }
 

@@ -15,6 +15,6 @@ pub fn f() -> I32 {
 }
 
 pub fn h() -> I32 {
-  let g = fn(x: I32) -> I32 uses {util} { x }
+  let _ = fn(x: I32) -> I32 uses {util} { x }
   1
 }

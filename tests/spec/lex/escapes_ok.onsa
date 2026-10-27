@@ -31,26 +31,26 @@ pub fn the_last_scalar_value() -> Char {
 
 pub fn character_escapes() -> Char {
   let a: Char = '\n'
-  let b: Char = '\t'
-  let c: Char = '\r'
-  let d: Char = '\0'
-  let e: Char = '\\'
-  let f: Char = '\''
-  let g: Char = '"'
-  let h: Char = '\u{41}'
-  let i: Char = '\u{e9}'
-  let j: Char = '\u{1F600}'
+  let _: Char = '\t'
+  let _: Char = '\r'
+  let _: Char = '\0'
+  let _: Char = '\\'
+  let _: Char = '\''
+  let _: Char = '"'
+  let _: Char = '\u{41}'
+  let _: Char = '\u{e9}'
+  let _: Char = '\u{1F600}'
   a
 }
 
 pub fn character_literals_of_one_scalar() -> Char {
   let a: Char = 'a'
-  let b: Char = 'é'
-  let c: Char = '日'
-  let d: Char = '😀'
-  let e: Char = '𠮷'
-  let f: Char = ' '
-  let g: Char = '"'
+  let _: Char = 'é'
+  let _: Char = '日'
+  let _: Char = '😀'
+  let _: Char = '𠮷'
+  let _: Char = ' '
+  let _: Char = '"'
   a
 }
 
@@ -65,7 +65,7 @@ pub fn a_comment_has_no_escapes() -> I32 {
 }
 
 pub fn nested_places() -> Str {
-  let f = fn(n: I32) -> Str { "\u{41}\n" }
+  let _ = fn(n: I32) -> Str { "\u{41}\n" }
   if true {
     "日本\u{3042}"
   } else {

@@ -177,13 +177,6 @@ note = "impl を書ける場所と対象の規則。別名は W4-04、型引数�
 
 [[pending]]
 kind = "diag-code"
-target = "E0309"
-reasons = ["S-129"]
-until = "W7-04"
-note = "使われない束縛。fn の世界は W4-04、flow の世界は W7-04"
-
-[[pending]]
-kind = "diag-code"
 target = "E0311"
 reasons = ["R-02", "S-91"]
 until = "W4-05"
@@ -1153,13 +1146,6 @@ target = "tests/spec/fixes/e0020_call_forms_type.onsa"
 reasons = ["S-191"]
 until = "W5-02"
 note = "s.f(x) の E0020（型の段）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0309_unused.onsa"
-reasons = ["S-129"]
-until = "W4-04"
-note = "使われない束縛の E0309 の候補"
 
 [[pending]]
 kind = "fix-contract"

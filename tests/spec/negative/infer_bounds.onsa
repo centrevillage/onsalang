@@ -222,21 +222,21 @@ pub fn open_dup() -> Bool {
 pub fn met_by_an_annotation() -> Bool {
   let o = None
   let a = need_f(o)
-  let p: Option[F32] = o
+  let _: Option[F32] = o
   a
 }
 
 pub fn met_by_the_method_receiver() -> Bool {
   let b = Bx { o: None }
   let a = b.has()
-  let c: Bx[F32] = b
+  let _: Bx[F32] = b
   a
 }
 
 pub fn met_by_a_float_variable() -> Bool {
   let v = 3.0
   let a = need_fl(v)
-  let w: F64 = v
+  let _: F64 = v
   a
 }
 
@@ -248,19 +248,19 @@ pub fn met_by_the_expected_type() -> Bool {
 pub fn met_by_a_generic_parameter[U: Float](x: U) -> Bool {
   let o = None
   let a = need_f(o)
-  let p: Option[U] = o
+  let _: Option[U] = o
   a
 }
 
 pub fn met_dup() -> Bool {
   let o = None
   let a = hold(o)
-  let p: Option[U8] = o
+  let _: Option[U8] = o
   a
 }
 
 pub fn met_repeat() -> U32 {
   let xs = [None; 2]
-  let ys: [Option[U8]; 2] = xs
+  let _: [Option[U8]; 2] = xs
   0
 }

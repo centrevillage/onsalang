@@ -163,8 +163,8 @@ pub fn fine() -> I8 {
   let d: I8 = -0b1000_0000
   let e: I8 = 0x7F
   let f: I8 = -1_28
-  let g: U8 = 0xFF
-  let h: U8 = 2__55
-  let i: I64 = -0x8000_0000_0000_0000
+  let _: U8 = 0xFF
+  let _: U8 = 2__55
+  let _: I64 = -0x8000_0000_0000_0000
   takes_i8(-0x80) + a + b + c + d + e + f
 }

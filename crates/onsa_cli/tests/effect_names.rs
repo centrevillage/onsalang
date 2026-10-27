@@ -75,7 +75,7 @@ fn places(prefix: &str, row: &str) -> (String, Vec<u64>) {
         format!("pub fn p_param(f: fn() -> U32 uses {{{row}}}) -> U32 {{\n  1\n}}\n"),
         format!("pub type PAlias = fn(U32) -> U32 uses {{{row}}}\n"),
         format!("pub struct PField {{\n  f: fn() -> U32 uses {{{row}}},\n}}\n"),
-        format!("pub fn p_closure() -> U32 {{\n  let g = fn(x: U32) -> U32 uses {{{row}}} {{ x }}\n  1\n}}\n"),
+        format!("pub fn p_closure() -> U32 {{\n  let _ = fn(x: U32) -> U32 uses {{{row}}} {{ x }}\n  1\n}}\n"),
         format!(
             "pub struct PImpl {{\n  id: U32,\n}}\n\nimpl PImpl {{\n  pub fn read(self) -> U32 uses {{{row}}} {{\n    self.id\n  }}\n}}\n"
         ),

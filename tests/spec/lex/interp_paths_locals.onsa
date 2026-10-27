@@ -82,7 +82,7 @@ pub fn in_a_match_arm(m: Option[U32]) -> Str uses {Alloc} {
 pub fn in_a_loop(n: U32) -> U32 uses {Alloc} {
   var total = 0
   for i in 0 ..< n {
-    let s = "{i}/{total}"
+    let _ = "{i}/{total}"
     total = total + 1
   }
   total

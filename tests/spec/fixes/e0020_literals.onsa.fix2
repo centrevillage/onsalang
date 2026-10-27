@@ -86,7 +86,7 @@ pub fn prefix_without_digits() -> I32 {
 pub fn fine() -> F32 {
   let a: F32 = 1.0
   let b: F32 = 0.5
-  let c: F32 = 1.0e3
-  let n: I32 = 17
+  let _: F32 = 1.0e3
+  let _: I32 = 17
   a + b
 }

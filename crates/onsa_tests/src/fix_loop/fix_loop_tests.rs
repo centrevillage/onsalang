@@ -311,8 +311,10 @@ fn the_compiler_is_walked_through_the_check_of_the_contract() {
     let r = walk("m.onsa", src, &Options::default(), &check);
     assert_eq!((r.errors, r.walks[0].stop), (1, Stop::NoCandidate), "{r:?}");
     // One unit shows its first error only: 20 `let mut` are one error at the start and 20 steps.
+    // The result reads them all (an unread binding is an E0309, §5.1).
     let lets: String = (0..20).map(|i| format!("  let mut a{i} = {i}\n")).collect();
-    let src = format!("pub fn f() -> I32 {{\n{lets}  0\n}}\n");
+    let sum: Vec<String> = (0..20).map(|i| format!("a{i}")).collect();
+    let src = format!("pub fn f() -> I32 {{\n{lets}  {}\n}}\n", sum.join(" + "));
     let r = walk("m.onsa", &src, &Options::default(), &check);
     assert_eq!((r.errors, r.walks[0].stop, r.walks[0].steps.len()), (1, Stop::Clean, 20), "{r:?}");
 }

@@ -144,7 +144,7 @@ const FIELD_OPS: [(&str, &str); 5] = [
     ("read", "fn op(s: S) -> I32 {\n  s.f\n}\n"),
     ("write", "fn op(inout s: S) {\n  s.f = 1\n}\n"),
     ("literal", "fn op() -> S {\n  S { a: 1, f: 2 }\n}\n"),
-    ("pattern", "fn op(s: S) -> I32 {\n  match s {\n    S { a: x, f: y } => y,\n  }\n}\n"),
+    ("pattern", "fn op(s: S) -> I32 {\n  match s {\n    S { a: _, f: y } => y,\n  }\n}\n"),
     ("rest", "fn op(s: S) -> I32 {\n  match s {\n    S { a: x, .. } => x,\n  }\n}\n"),
 ];
 

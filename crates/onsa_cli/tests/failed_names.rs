@@ -129,7 +129,7 @@ fn a_failed_name_is_silent_where_it_is_read_by_its_spelling() {
     let forms = [
         ("effects", "pub fn f() -> I32 uses {Fs, Alloc} {\n  1\n}\n", "E0302"),
         ("fn_type", "pub fn f(g: fn() -> I32 uses {Fs}) -> I32 {\n  1\n}\n", "E0302"),
-        ("closure", "pub fn f() -> I32 {\n  let g = fn(x: I32) -> I32 uses {Fs} { x }\n  1\n}\n", "E0302"),
+        ("closure", "pub fn f() -> I32 {\n  let _ = fn(x: I32) -> I32 uses {Fs} { x }\n  1\n}\n", "E0302"),
         ("bound", "pub fn f[T: Fs](x: T) -> I32 {\n  1\n}\n", "E0302"),
         ("derive", "pub struct S: Fs + PartialEq {\n  a: I32,\n}\n\npub enum E: Fs {\n  A,\n}\n", "E0416"),
     ];
@@ -394,13 +394,13 @@ fn the_error_type_of_a_failed_name_has_no_use_that_is_checked_against_it() {
         ("call_args", "pub fn u(o: {X}) -> I32 {\n  o(1, 2)\n}\n", false),
         ("match", "pub fn u(x: {X}) -> I32 {\n  match x {\n    Some(v) => v,\n    None => 0,\n  }\n}\n", false),
         ("match_one_arm", "pub fn u(x: {X}) -> I32 {\n  match x {\n    Some(v) => v,\n  }\n}\n", false),
-        ("match_tuple", "pub fn u(x: {X}) -> I32 {\n  match x {\n    (p, q) => p,\n  }\n}\n", false),
+        ("match_tuple", "pub fn u(x: {X}) -> I32 {\n  match x {\n    (p, _) => p,\n  }\n}\n", false),
         (
             "in_option",
             "pub fn u(x: Option[{X}]) -> I32 {\n  match x {\n    Some(f) => f(),\n    None => 0,\n  }\n}\n",
             false,
         ),
-        ("literal", "pub fn u() -> I32 {\n  let s = {X} { a: 1 }\n  1\n}\n", true),
+        ("literal", "pub fn u() -> I32 {\n  let _ = {X} { a: 1 }\n  1\n}\n", true),
         ("path", "pub fn u() -> I32 {\n  let p = {X}.V\n  1\n}\n", true),
         ("assoc", "pub fn u() -> I32 {\n  let p = {X}.make()\n  1\n}\n", true),
     ];

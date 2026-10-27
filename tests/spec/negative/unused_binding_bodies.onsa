@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§6.1", "§6.6", "§11.8", "§18.1"]
+// fixes = 1
+
+// E0309 (spec 5.1; S-129, S-726) in every body that is not a plain `fn` of the module: the body of a
+// `test` (11.8), the initializer of a `const` (6.6) and of an associated constant, a method of an
+// `impl` (6.2), and the body of an anonymous function (6.1), also one that is nested or sits in the
+// argument of a call. The binding forms are the same in all of them (`let`, an arm). A `test`, a
+// `const`, an associated constant and a method are units of their own (18.1), and the body of an
+// anonymous function is part of the unit around it (each of its fns below has one unused binding, so
+// each reports one E0309). The body of a flow is W7-04, not here. The candidate renames the name to `_`.
+
+pub struct Point {
+  x: I32,
+  y: I32,
+}
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+test "an unused let in a test" {
+  let a = 1 //~ E0309 @7
+  assert true
+}
+
+test "an unused arm in a test" {
+  let o = Some(1)
+  match o {
+    Some(v) => { assert true }, //~ E0309 @10
+    None => { assert true },
+  }
+}
+
+const BASE: I32 = {
+  let k = 1 //~ E0309 @7
+  2
+}
+
+const PICK: I32 = if true {
+  let spare = 3 //~ E0309 @7
+  4
+} else {
+  5
+}
+
+impl Point {
+  const ORIGIN_X: I32 = {
+    let skip = 0 //~ E0309 @9
+    1
+  }
+
+  pub fn sum(self) -> I32 {
+    let doubled = self.x * 2 //~ E0309 @9
+    self.x + self.y
+  }
+
+  pub fn first(self) -> I32 {
+    match self.x {
+      0 => 0,
+      n => 1, //~ E0309 @7
+    }
+  }
+}
+
+pub fn closure_argument() -> I32 {
+  apply(fn(x: I32) -> I32 {
+    let t = x + 1 //~ E0309 @9
+    x
+  }, 3)
+}
+
+pub fn closure_in_a_let() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let unused = 5 //~ E0309 @9
+    x + 1
+  }
+  f.(1)
+}
+
+pub fn nested_closure() -> I32 {
+  apply(fn(x: I32) -> I32 {
+    apply(fn(y: I32) -> I32 {
+      let deep = y //~ E0309 @11
+      y
+    }, x)
+  }, 3)
+}
+
+pub fn generic_unit[T](x: T) -> T {
+  let unused = 1 //~ E0309 @7
+  x
+}
+
+pub fn generic_with_a_closure[T](x: T) -> T {
+  let _ = apply(fn(n: I32) -> I32 {
+    let spare = n //~ E0309 @9
+    n
+  }, 1)
+  x
+}
+
+pub fn read_in_each() -> I32 {
+  let a = 1
+  let b = apply(fn(x: I32) -> I32 {
+    let t = x + a
+    t
+  }, 3)
+  b
+}
+
+test "reads in a test" {
+  let a = 1
+  assert a == 1
+}
+
+const READ: I32 = {
+  let k = 1
+  k + 1
+}

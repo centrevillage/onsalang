@@ -4,9 +4,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_syntax::ast::{ExprId, Ident, PatId};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Stage};
+use onsa_syntax::ast::{Ast, ExprId, Ident, PatId, PatKind};
 
-use super::{Binding, BindingId, BindingKind, Fail, Origin, ScopeId, ScopeInfo, Stop, W, Walker};
+use super::{Binding, BindingId, BindingKind, BodyNames, Fail, Origin, ScopeId, ScopeInfo, Stop, W, Walker};
 use crate::names::clash::hides;
 
 /// A name a declaration hid, and the binding it named before (none if none).
@@ -146,4 +147,29 @@ impl Walker<'_> {
     pub(super) fn close_closure(&mut self) {
         self.scopes.closures.pop();
     }
+}
+
+/// The E0309 of every binding of the complete record `out` of a body of the
+/// fn world that is never read (§5.1, S-129): a `let`, a `var`, a `for` and
+/// a pattern of an arm, no parameter. It is of the last stage (§18.1,
+/// S-726): the unit reports the first, and none when it has another error.
+/// At the name where it is first bound; the candidate renames every site
+/// to `_` (each branch of a choice), and a `var` has none (`var _` is no
+/// form, S-714).
+pub(super) fn unused<'a>(out: &'a BodyNames, ast: &'a Ast) -> impl Iterator<Item = Diagnostic> + 'a {
+    let counted = |k: BindingKind| {
+        matches!(k, BindingKind::Let | BindingKind::Var | BindingKind::For { .. } | BindingKind::MatchBind)
+    };
+    out.bindings.iter().filter(move |b| b.reads == 0 && counted(b.kind)).map(move |b| {
+        let message = format!("`{}` is bound and never read; a value that is not used is bound to `_` (§5.1)", b.name);
+        let d = Diagnostic::new(Stage::Unused, Code::E0309, b.span, message).with_found(b.name.clone());
+        if b.kind == BindingKind::Var {
+            return d.with_rule("a `var` cannot be named `_`: write `let _ = e` for a value that is not used");
+        }
+        let names = b.sites.iter().filter_map(|&p| match &ast.pat(p).kind {
+            PatKind::Bind(name) => Some(Edit::replace(name.span, "_")),
+            _ => None,
+        });
+        d.with_fix(Fix::new("rename to `_`", names.collect()))
+    })
 }

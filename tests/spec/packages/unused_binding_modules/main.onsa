@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1", "§18.1"]
+
+// E0309 in a package of two modules (spec 5.1, 15.1, 18.1; S-129, S-726). The unit of a diagnostic is a
+// declaration and the units are independent (P1), also across files: `util.scale` has an unused binding
+// (the E0309 is in util.onsa), `main.broken` has a type error and an unused binding (only the E0401),
+// `main.lazy` has an unused binding (the E0309), and `main.run` uses `util` and reads everything (no
+// error). The candidate of an E0309 edits only the file of the binding.
+use util.{fine, scale}
+
+pub fn run() -> I32 {
+  let r = scale(1) + fine(2)
+  r
+}
+
+pub fn broken() -> I32 {
+  let b: Bool = 1 //~ E0401
+  let unused = 2
+  3
+}
+
+pub fn lazy() -> I32 {
+  let unused = 1 //~ E0309
+  2
+}

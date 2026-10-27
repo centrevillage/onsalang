@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+
+// An unused binding whose name starts with `_` (spec 2.3, 5.1, 18.1; S-716, S-726): the name breaks
+// 2.3 (`let _x = 1` is a binding and the candidate is `x`), and E0309 is reported only for a unit with
+// no other error, so the first check reports the E0320 and no E0309. After the candidate is applied the
+// name is `x`, which is not read, and the second check reports the E0309 (candidate `_`). The repair
+// loop stops after two rounds: `_x` → `x` → `_`. The second round is the file
+// fixes/e0309_after_e0320, which holds the same units with the names after the first round. A `_` that
+// starts a name is not "no use": only a lone `_` says the value is not used. Each unit here holds one
+// binding. In a unit with another unused binding that is written first, the E0320 is still the only
+// error (`first_is_plain`).
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn let_binding() -> I32 {
+  let _x = 1 //~ E0320 @7
+  1
+}
+
+pub fn var_binding() -> I32 {
+  var _y = 0 //~ E0320 @7
+  1
+}
+
+pub fn typed_binding() -> I32 {
+  let _x: I32 = 1 //~ E0320 @7
+  1
+}
+
+pub fn arm_binding(o: Option[I32]) -> I32 {
+  match o {
+    Some(_k) => 1, //~ E0320 @10
+    None => 0,
+  }
+}
+
+pub fn for_binding(n: U32) -> U32 {
+  var count = 0
+  for _i in 0 ..< n { //~ E0320 @7
+    count = count + 1
+  }
+  count
+}
+
+pub fn destructuring(pair: (I32, I32)) -> I32 {
+  let (_a, b) = pair //~ E0320 @8
+  b
+}
+
+pub fn nested_pattern(o: Option[(I32, I32)]) -> I32 {
+  match o {
+    Some((_a, b)) => b, //~ E0320 @11
+    None => 0,
+  }
+}
+
+pub fn first_is_plain() -> I32 {
+  let a = 1
+  let _x = 2 //~ E0320 @7
+  3
+}
+
+pub fn closure_body() -> I32 {
+  apply(fn(x: I32) -> I32 {
+    let _t = x //~ E0320 @9
+    x
+  }, 3)
+}
+
+test "a leading underscore in a test" {
+  let _x = 1 //~ E0320 @7
+  assert true
+}

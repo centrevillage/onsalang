@@ -22,7 +22,7 @@ pub fn sig_ret() -> Color {
 
 pub fn takes_sig_ret() -> I32 {
   let o = sig_ret()
-  let b = o + 1
+  let _ = o + 1
   1
 }
 

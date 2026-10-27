@@ -879,13 +879,12 @@ fn string_cases() -> Vec<Case> {
             "Some(\"a{x}b\")",
             "Some($1) if $1 == \"a{x}b\"",
         ),
-        string_case(
-            "string_choice_that_shares_a_binding",
-            "t: (Str, U32), x: U32",
-            "t",
-            "(\"a{x}\", n) | (\"b{x}\", n)",
-            "($1, n) if $1 == \"a{x}\" || $1 == \"b{x}\"",
-        ),
+        // The shared binding is read by the arm (an unread binding is an E0309, §5.1).
+        Case {
+            name: "string_choice_that_shares_a_binding",
+            program: prog("", "t: (Str, I32), x: U32", "t", "(\"a{x}\", n) | (\"b{x}\", n)", "n", " uses {Alloc}"),
+            cands: vec![cand("($1, n) if $1 == \"a{x}\" || $1 == \"b{x}\"", "")],
+        },
         string_case(
             "string_beside_a_float",
             "t: (Str, F32), x: U32",

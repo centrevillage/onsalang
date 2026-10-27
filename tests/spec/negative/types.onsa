@@ -11,8 +11,8 @@ pub fn float_literal_undecided() -> U32 {
 }
 
 pub fn integer_literal_defaults_to_i32() -> U32 {
-  let a = 1
-  for i in 0..<4 {
+  let _ = 1
+  for _ in 0..<4 {
   }
   assert 1 == 1
   2

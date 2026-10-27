@@ -75,7 +75,7 @@ test "a literal pattern on a None decides the parameter of the imported enum (R-
     Slot.Empty => 2,
     _ => 0,
   }
-  let t: Slot[U8] = s
+  let _: Slot[U8] = s
   assert r == 0
   assert k == 2
 }
