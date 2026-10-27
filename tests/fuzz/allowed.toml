@@ -421,3 +421,10 @@ left = "a callee that is no path of names is a function value; it is called with
 input = "tests/fuzz/2988ecc4.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a prefix `^` at the end of a line before its operand, and the `(` of the call and the body's `{` never closed at the end of the file (closed, the candidate joins the operand and the loop is clean)"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "`…` (U+#C#) cannot be written outside comments and strings: a name is written wi"
+input = "tests/fuzz/43e0e81e.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: an `else` on the line after the `}`, and a character that cannot be written outside comments after it on the same line, which the candidate moves with the `else`"

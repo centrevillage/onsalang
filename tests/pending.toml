@@ -1832,6 +1832,13 @@ reasons = ["R-296", "S-236"]
 until = "W5-11"
 note = "fix-same-place: fix|E0002|write the `…` between the elements|E0002。match の腕の値の後の演算子の無い式（_ => s 0.0）に `,` を挿す候補を出し、当てると 0.0 が次の腕のパターンの E0002 になる"
 
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/6c441628.onsa"
+reasons = ["R-297", "S-236"]
+until = "W5-11"
+note = "fix-same-place: fix|E0020|move it to the end of the line before|E0002。属性の行の次の行の頭の二項演算子を前の行の末尾へ移す候補で、前の行が属性と演算子になり E0002 が残る（2575c47 の網羅の検査）"
+
 # --- W4-04 U4/t: 補間の穴の事例のうち、後の単位で通るもの（2026-10-27）
 
 [[pending]]
