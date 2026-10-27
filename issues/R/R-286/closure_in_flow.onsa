@@ -1,0 +1,4 @@
+pub flow a3(x: F32 at sample) -> F32 at sample {
+  let c = fn(q: I32) { nope }
+  x
+}
