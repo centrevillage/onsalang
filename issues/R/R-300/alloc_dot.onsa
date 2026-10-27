@@ -1,0 +1,8 @@
+pub fn a() -> I32 {
+  Alloc.x()
+}
+
+pub fn b() -> I32 {
+  let _ = Alloc.y
+  1
+}

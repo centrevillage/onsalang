@@ -1,0 +1,32 @@
+pub fn a[const M: U32](t: I32) -> I32 {
+  let _: M = 1
+  0
+}
+pub fn b[const M: U32](t: I32) -> I32 {
+  let f = fn(x: M) -> I32 { 1 }
+  f.(t)
+}
+pub fn c[const M: U32](t: I32) -> I32 {
+  let x = t as M
+  0
+}
+pub fn d[const M: U32](t: I32) -> I32 {
+  let _ = M { x: 1 }
+  0
+}
+pub fn e() -> I32 {
+  let _: F32.PI = 1
+  0
+}
+pub fn f() -> I32 {
+  let _: Str.len = 1
+  0
+}
+pub fn g() -> I32 {
+  let _ = F32.PI { x: 1 }
+  0
+}
+pub fn h() -> I32 {
+  let _: F32.from_bits = 1
+  0
+}
