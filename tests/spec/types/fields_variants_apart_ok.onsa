@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.1"]
+
+// §4.4: the names of the fields of a struct and of the variants of an enum are the names of that
+// declaration only. The same field name in two structs, the same variant name in two enums, a field
+// with the name of a function of the module (a field is not a binding of the body, §15.1), and a variant
+// with the name of a type are not repeats of one another (no E0304).
+
+pub struct Left {
+  x: F32,
+  y: F32,
+}
+
+pub struct Right {
+  x: F32,
+  gain: F32,
+}
+
+pub enum Idle {
+  Off,
+  On(I32),
+}
+
+pub enum Busy {
+  Off,
+  On(I32, I32),
+  Left,
+}
+
+pub fn gain(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub fn read(l: Left, r: Right) -> F32 {
+  l.x + r.x + r.gain + gain(l.y)
+}
+
+pub fn count(i: Idle, b: Busy) -> I32 {
+  let a = match i {
+    Idle.Off => 0,
+    Idle.On(n) => n,
+  }
+  let c = match b {
+    Busy.Off => 0,
+    Busy.On(n, m) => n + m,
+    Busy.Left => 1,
+  }
+  a + c
+}

@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1"]
+
+// §5.1: a name is E0304 only while a binding of it is visible. These are bindings that never see one
+// another, so there is no diagnostic: the same name in sibling scopes (two `for i` loops, two arms
+// with `Some(x)`, the two branches of an `if`, two closures), after the scope of the first has ended
+// (a `for` variable and a `let` after the loop, a block's `let` and a `let` after the block, a closure's
+// argument and a `let` after the closure), the same argument names in different functions, methods and
+// flows, and names that are not of the body (a field name, a type parameter of another case).
+use std.math.{sin}
+
+pub fn gain(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub struct Pt {
+  x: F32,
+  norm: F32,
+}
+
+pub fn two_loops(n: U32) -> U32 {
+  var acc = 0
+  for i in 0 ..< n {
+    acc = acc + i
+  }
+  for i in 0 ..< n {
+    acc = acc + i
+  }
+  acc
+}
+
+pub fn two_arms(o: Option[U32], q: Option[U32]) -> U32 {
+  let a = match o {
+    Some(v) => v,
+    None => 0,
+  }
+  let b = match q {
+    Some(v) => v,
+    None => 0,
+  }
+  a + b
+}
+
+pub fn two_branches(flag: Bool, k: U32) -> U32 {
+  if flag {
+    let t = k + 1
+    t
+  } else {
+    let t = k + 2
+    t
+  }
+}
+
+pub fn let_after_the_loop(n: U32) -> U32 {
+  var acc = 0
+  for i in 0 ..< n {
+    acc = acc + i
+  }
+  let i = acc + 1
+  i
+}
+
+pub fn let_after_the_block(flag: Bool, k: U32) -> U32 {
+  var acc = k
+  if flag {
+    let t = k + 1
+    acc = acc + t
+  }
+  let t = acc + 2
+  t
+}
+
+pub fn let_after_the_closure(k: U32) -> U32 {
+  let f = fn(j: U32) -> U32 { j + 1 }
+  let j = f.(k)
+  j
+}
+
+pub fn two_closures(k: U32) -> U32 {
+  let f = fn(j: U32) -> U32 { j + 1 }
+  let g = fn(j: U32) -> U32 { j + 2 }
+  f.(k) + g.(k)
+}
+
+pub fn same_argument_name_a(k: U32, m: U32) -> U32 {
+  k + m
+}
+
+pub fn same_argument_name_b(k: U32, m: U32) -> U32 {
+  k * m
+}
+
+pub flow same_input_name_a(a: F32 at sample, b: F32 at block) -> F32 at sample {
+  a * b
+}
+
+pub flow same_input_name_b(a: F32 at sample, b: F32 at block) -> F32 at sample {
+  a + b
+}
+
+impl Pt {
+  pub fn method_with_the_argument_names(self, k: F32, m: F32) -> F32 {
+    self.x + k + m
+  }
+
+  pub fn norm_of(self, other: F32) -> F32 {
+    self.norm + other
+  }
+}
+
+// The locals `x` and `norm` are not the fields `x` and `norm` (a field is not a binding of the body).
+pub fn locals_with_the_field_names(p: Pt) -> F32 {
+  let x    = p.x
+  let norm = p.norm
+  let q    = Pt { x: x, norm: norm }
+  q.norm_of(x)
+}
+
+// A name that differs only in case (`t` and `T`) is another name (§2.3).
+pub fn lower_case_local_and_type_parameter[T: Copy](t: T) -> T {
+  t
+}
+
+pub fn uses_the_names(x: F32) -> F32 {
+  gain(sin(x))
+}

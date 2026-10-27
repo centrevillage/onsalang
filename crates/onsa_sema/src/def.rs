@@ -265,6 +265,8 @@ pub struct FlowInput {
     pub ty: TyId,
     pub param: Option<ParamMeta>,
     pub span: Span,
+    /// The name, which a binding of the body is declared at (§5.1).
+    pub name_span: Span,
 }
 
 #[derive(Debug, Clone)]

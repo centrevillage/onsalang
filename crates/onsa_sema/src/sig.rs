@@ -228,6 +228,7 @@ impl<'p> Sema<'p> {
             ItemKind::Struct(s) => {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &s.generics);
+                self.member_clashes(id, "field", s.fields.iter().map(|f| &f.name));
                 let derives = self.lower_derives(&cx, &s.derives);
                 // A field has the visibility of its struct, narrowed by
                 // `priv` alone (§15.1, S-35, S-672).
@@ -250,6 +251,7 @@ impl<'p> Sema<'p> {
             ItemKind::Enum(e) => {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &e.generics);
+                self.member_clashes(id, "variant", e.variants.iter().map(|v| &v.name));
                 let derives = self.lower_derives(&cx, &e.derives);
                 let variants = e
                     .variants
@@ -423,15 +425,12 @@ impl<'p> Sema<'p> {
     }
 
     fn lower_generics(&mut self, cx: &Cx<'p>, gs: &[GenericParam]) -> Vec<GenericDef> {
+        self.heading_clashes(cx.def, cx.m, gs, &cx.generics);
         let mut out = cx.generics.clone();
         // The names of the list, each seen in every bound of it.
         let listed: Vec<&str> = gs
             .iter()
-            .map(|g| match g {
-                GenericParam::Type { name, .. } | GenericParam::Const { name, .. } | GenericParam::Effect { name } => {
-                    name.name.as_str()
-                }
-            })
+            .map(|g| crate::names::param_name(g).name.as_str())
             .chain(cx.generics.iter().map(|g| g.name.as_str()))
             .collect();
         for g in gs {

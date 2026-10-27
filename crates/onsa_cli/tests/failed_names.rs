@@ -340,7 +340,7 @@ fn a_unit_goes_on_after_a_failed_name_in_a_type_place() {
         (
             "const_arg",
             format!(
-                "pub struct Ring[T, const N: U32] {{\n  data: [T; N],\n  head: U32,\n}}\n\n\
+                "pub struct Ring[T, const CAP: U32] {{\n  data: [T; CAP],\n  head: U32,\n}}\n\n\
                  pub fn u(r: Ring[F32, {{L}}]) -> I32 {{\n{real}"
             ),
         ),

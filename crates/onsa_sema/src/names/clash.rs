@@ -11,11 +11,18 @@
 //! The side reported (§15.1) is the declaration of the module against a name
 //! from outside the source, the `use` against an item, and the later of two
 //! of a kind; the side not reported is checked.
+//!
+//! A binding (a local, a parameter, a parameter of a heading) hides no name
+//! it sees (§5.1, [`hides`]): its E0304 is in its unit, and the name it
+//! clashes with is no error elsewhere (§18.1).
 
 use std::collections::{HashMap, HashSet};
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
+use onsa_syntax::ast::Ident;
+
+use crate::Analysis;
 use crate::def::{DefId, ModId};
 use crate::resolve::UseBinding;
 use crate::sig::Sema;
@@ -38,6 +45,40 @@ pub(crate) fn unbindable(name: &str) -> Option<Unbindable> {
     } else {
         crate::flow_names::is_builtin(name).then_some(Unbindable::FlowBuiltin)
     }
+}
+
+/// The E0304 of a binding `name` declared in the module `m` (§5.1: no
+/// shadowing): a local, a parameter, an input of a flow, or a type, const
+/// or effect parameter of a heading (S-717, S-649). The one test of every
+/// declaration, of what it would hide: the binding visible where it is
+/// declared (`visible`, its name: a local, or a binding of the heading),
+/// a name of the body of the module (an item, a `use`, the prelude and the
+/// builtin types; S-79, R-103), and, for an input, a `let` or the index
+/// of a `par` of a flow (`flow`), a builtin name of a flow (S-542). The order decides the
+/// wording alone: a program with no error sees no name twice.
+pub(crate) fn hides(a: &Analysis, m: ModId, name: &Ident, visible: Option<Span>, flow: bool) -> Option<Diagnostic> {
+    let n = &name.name;
+    let (msg, note) = if n == "_" {
+        return None;
+    } else if let Some(at) = visible {
+        (
+            format!("`{n}` is already bound and visible here; Onsa has no shadowing (§5.1)"),
+            Some((at, "first bound here")),
+        )
+    } else if let Some(at) = a.modules.declared_in_body(m, n, (&a.prelude, &a.defs)) {
+        let msg =
+            format!("`{n}` is a name of this module (an item, a `use`, the prelude), which no binding hides (§5.1)");
+        (msg, at.map(|at| (at, "declared here")))
+    } else if flow && matches!(unbindable(n), Some(Unbindable::FlowBuiltin)) {
+        (format!("`{n}` is a builtin name of a flow, which no binding of a flow hides (§2.2, §11.4)"), None)
+    } else {
+        return None;
+    };
+    let d = clash(name.span, n, msg);
+    Some(match note {
+        Some((at, note)) => d.with_note(at, note),
+        None => d,
+    })
 }
 
 impl<'p> Sema<'p> {

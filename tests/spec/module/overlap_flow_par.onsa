@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.4"]
+// fixes = 0
+
+// §5.1: the index of a `par` (`par i in 0 ..< N { e }`, §11.4) is a binding of its body, so a name that
+// is visible there (an item of the module, a name taken by a `use`, a module taken by a `use`, a value of
+// the prelude) cannot be its name: E0304, on the index. The unit stops there (§18.1). The overlaps with
+// the inputs and the `let`s of the flow already hold (overlap_flow_par_locals_ok.onsa). The E0304 is in
+// W4-04 U7a (tests/pending.toml).
+use std.math.{sin}
+use std.math
+
+pub fn gain(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub flow index_over_item(x: F32 at sample) -> F32 at sample {
+  let ys = par gain in 0 ..< 4 {   //~ E0304
+    prev~(x)
+  }
+  ys[0]
+}
+
+pub flow index_over_use(x: F32 at sample) -> F32 at sample {
+  let ys = par sin in 0 ..< 4 {   //~ E0304
+    prev~(x)
+  }
+  ys[0]
+}
+
+pub flow index_over_module(x: F32 at sample) -> F32 at sample {
+  let ys = par math in 0 ..< 4 {   //~ E0304
+    prev~(x)
+  }
+  ys[0]
+}
+
+pub flow index_over_prelude(x: F32 at sample) -> F32 at sample {
+  let ys = par panic in 0 ..< 4 {   //~ E0304
+    prev~(x)
+  }
+  ys[0]
+}

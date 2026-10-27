@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§5.1", "§11.4"]
+// fixes = 0
+
+// §2.2, §5.1, §11.4 (S-542): `prev`, `delay`, `vdelay`, `sample_rate` and `sample_tick` are the built-in
+// names of a flow, and they are visible in the whole body of a flow, so the input of a flow, a `let`
+// of the body and the index of a `par` cannot have one of them as its name: E0304, with no candidate. Each flow is a unit with
+// one error (§18.1) and is otherwise correct. A name of a built-in flow that is a field or a method
+// (`prev` as a method) is free; the generated names (`prev_0`) and the patterns of the body are W7-03.
+// The E0304 is in W4-04 U7a (tests/pending.toml).
+
+pub flow input_prev(prev: F32 at sample) -> F32 at sample {           //~ E0304
+  prev
+}
+
+pub flow input_delay(delay: F32 at sample) -> F32 at sample {         //~ E0304
+  delay
+}
+
+pub flow input_vdelay(vdelay: F32 at sample) -> F32 at sample {       //~ E0304
+  vdelay
+}
+
+pub flow input_sample_rate(sample_rate: F32 at sample) -> F32 at sample {   //~ E0304
+  sample_rate
+}
+
+pub flow input_sample_tick(sample_tick: F32 at sample) -> F32 at sample {   //~ E0304
+  sample_tick
+}
+
+pub flow second_input_prev(x: F32 at sample, prev: F32 at block) -> F32 at sample {   //~ E0304
+  x * prev
+}
+
+pub flow let_prev(x: F32 at sample) -> F32 at sample {
+  let prev = x * 2.0                                                  //~ E0304
+  prev
+}
+
+pub flow let_delay(x: F32 at sample) -> F32 at sample {
+  let delay = x * 2.0                                                 //~ E0304
+  delay
+}
+
+pub flow let_vdelay(x: F32 at sample) -> F32 at sample {
+  let vdelay = x * 2.0                                                //~ E0304
+  vdelay
+}
+
+pub flow let_sample_rate(x: F32 at sample) -> F32 at sample {
+  let sample_rate = x * 2.0                                           //~ E0304
+  sample_rate
+}
+
+pub flow let_sample_tick(x: F32 at sample) -> F32 at sample {
+  let sample_tick = x * 2.0                                           //~ E0304
+  sample_tick
+}
+
+pub flow let_after_other_lets(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = a + 1.0
+  let prev = b * 0.5                                                  //~ E0304
+  prev
+}
+
+pub flow let_typed(x: F32 at sample) -> F32 at sample {
+  let delay: F32 = x * 2.0                                            //~ E0304
+  delay
+}
+
+pub flow par_index_prev(x: F32 at sample) -> F32 at sample {
+  let ys = par prev in 0 ..< 2 {                                      //~ E0304
+    x * 2.0
+  }
+  ys[0]
+}
+
+pub flow par_index_sample_rate(x: F32 at sample) -> F32 at sample {
+  let ys = par sample_rate in 0 ..< 2 {                               //~ E0304
+    x * 2.0
+  }
+  ys[0]
+}

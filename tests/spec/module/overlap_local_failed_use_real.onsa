@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§5.1"]
+
+// §18.1: a failed `use` is no partner of an E0304, but a real binding of the same name is. Here
+// `use std.math.{sin}` binds `sin` and `use std.nothing.{sin}` fails (E0302) after it, and `use
+// std.nothing.{gain}` fails before the item `gain`. A local or an argument with the name is E0304
+// against the real binding (the `use` of `sin`, the item `gain`), and the other diagnostic of the file
+// is the E0302 of the failed `use` alone. The E0304 is in W4-04 U7a (tests/pending.toml).
+use std.math.{sin}
+use std.nothing.{sin}                               //~ E0302
+use std.nothing.{gain}                              //~ E0302
+
+pub fn gain(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub fn let_over_the_real_use(x: F32) -> F32 {
+  let sin = x                                       //~ E0304
+  sin
+}
+
+pub fn argument_over_the_real_use(sin: F32) -> F32 {   //~ E0304
+  sin
+}
+
+pub fn let_over_the_item(x: F32) -> F32 {
+  let gain = x                                      //~ E0304
+  gain
+}
+
+pub fn argument_over_the_item(gain: F32) -> F32 {   //~ E0304
+  gain
+}
+
+pub flow input_over_the_item(gain: F32 at sample) -> F32 at sample {   //~ E0304
+  gain
+}

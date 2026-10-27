@@ -4,10 +4,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Stage};
 use onsa_syntax::ast::{ExprId, Ident, PatId};
 
-use super::{Binding, BindingId, BindingKind, Fail, Origin, ScopeId, ScopeInfo, Stop, Walker};
+use super::{Binding, BindingId, BindingKind, Fail, Origin, ScopeId, ScopeInfo, Stop, W, Walker};
+use crate::names::clash::hides;
 
 /// A name a declaration hid, and the binding it named before (none if none).
 type Hidden = (String, Option<BindingId>);
@@ -46,8 +46,11 @@ impl Walker<'_> {
     }
 
     /// Declare a binding in the innermost scope, `site` the pattern that
-    /// binds it: E0304 when its name is visible (§5.1, no shadowing), which
-    /// stops the walk ([`Walker::fail_at_let`]).
+    /// binds it: E0304 when it hides a name it sees (§5.1, no shadowing: a
+    /// local or a parameter of the heading visible here, a name of the
+    /// module, a builtin name of a flow for an input, a `let` and the index
+    /// of a `par` of a flow;
+    /// [`hides`]), which stops the walk ([`Walker::fail_at_let`]).
     pub(super) fn declare(
         &mut self,
         name: &Ident,
@@ -55,14 +58,15 @@ impl Walker<'_> {
         origin: Origin,
         site: Option<PatId>,
     ) -> Result<BindingId, Stop> {
-        if name.name != "_"
-            && let Some(prev) = self.scopes.visible.get(&name.name)
-        {
-            let msg = format!("`{}` is already bound and visible here; Onsa has no shadowing (§5.1)", name.name);
-            let d = Diagnostic::new(Stage::Names, Code::E0304, name.span, msg)
-                .with_found(name.name.clone())
-                .with_note(self.out.bindings[prev.0 as usize].span, "first bound here");
-            self.fail_at_let(Fail::Report(d), true)?;
+        let local = self.scopes.visible.get(&name.name).map(|b| self.out.bindings[b.0 as usize].span);
+        let visible = local.or_else(|| self.generics.iter().find(|g| g.name == name.name).map(|g| g.span));
+        let flow = match kind {
+            BindingKind::FlowInput | BindingKind::FlowLet => true,
+            BindingKind::ParVar => self.flow,
+            _ => false,
+        };
+        if let Some(d) = hides(self.a, self.m, name, visible, flow) {
+            self.fail_at_let(Fail::Report(d))?;
         }
         let (scope, hidden) = self.scopes.open.last_mut().expect("an open scope");
         let id = BindingId(self.out.bindings.len() as u32);
@@ -79,6 +83,26 @@ impl Walker<'_> {
         let prev = self.scopes.visible.insert(name.name.clone(), id);
         hidden.push((name.name.clone(), prev));
         Ok(id)
+    }
+
+    /// Check the names `declare` declares before the walk reads what is
+    /// after them in the text and before them in the walk (the value of a
+    /// `let` or a `var`, the iterated value of a `for`, the range of a
+    /// `par`): the first error of a unit is the first in the text (§18.1,
+    /// R-289). They are declared in a scope of their own and taken back with
+    /// their records; the walk declares them again after the value.
+    pub(super) fn ahead(&mut self, declare: impl FnOnce(&mut Self) -> W) -> W {
+        let (bindings, scopes) = (self.out.bindings.len(), self.out.scopes.len());
+        self.open_scope();
+        declare(self)?;
+        self.close_scope();
+        for b in self.out.bindings.drain(bindings..) {
+            for p in b.sites {
+                self.out.pats.remove(&p);
+            }
+        }
+        self.out.scopes.truncate(scopes);
+        Ok(())
     }
 
     /// The bindings visible here, from the outermost scope (a typed hole).

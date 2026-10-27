@@ -57,6 +57,29 @@ impl Modules {
         info.uses.get(name).and_then(|u| u.entity())
     }
 
+    /// The declaration of `name` in the body of `from` that a binding of
+    /// that name would hide (§5.1, S-79): what [`Self::lookup`] finds, or a
+    /// name of an E0304 or an E0305, which is declared. The span is of the
+    /// item or the first `use` of it, none for the prelude and the builtin
+    /// types. The name of a `use` that failed binds nothing (§18.1, S-462).
+    pub(crate) fn declared_in_body(
+        &self,
+        from: ModId,
+        name: &str,
+        (prelude, defs): (&HashMap<String, Entity>, &[Def]),
+    ) -> Option<Option<Span>> {
+        let info = self.get(from);
+        if self.lookup(from, name, prelude).is_none() && !info.clashed.body.contains(name) {
+            return None;
+        }
+        let item = info.items.get(name).map(|d| defs[d.0 as usize].name_span);
+        let used = || match info.uses.get(name) {
+            Some(&UseBinding::Bound { span, .. }) => Some(span),
+            _ => None,
+        };
+        Some(item.or_else(used))
+    }
+
     /// The head `name` of a path in the body of `from` that [`Self::lookup`]
     /// does not find is an error (§18.1): an E0304 or E0305, the name of a
     /// `use` that failed (S-462), a head that is an E0304 (S-675), or any

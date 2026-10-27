@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§5.1", "§11.4"]
+
+// §5.1 (S-542): the built-in names of a flow (`prev`, `delay`, `vdelay`, `sample_rate`, `sample_tick`,
+// §11.4) are visible in the body of a flow only. The argument of a function and a `let` or a
+// pattern in the body of a function, a method and a closure can have these names, and a flow still
+// calls the built-in flows. Two flows can have the same input names, since a flow's inputs are not
+// visible to another flow.
+
+pub fn arguments_with_the_names(prev: F32, delay: F32, vdelay: F32, sample_rate: F32, sample_tick: F32) -> F32 {
+  prev + delay + vdelay + sample_rate + sample_tick
+}
+
+pub fn lets_with_the_names(x: F32) -> F32 {
+  let prev        = x
+  let delay       = prev + 1.0
+  let vdelay      = delay + 1.0
+  let sample_rate = vdelay + 1.0
+  let sample_tick = sample_rate + 1.0
+  sample_tick
+}
+
+pub fn pattern_with_the_names(p: (F32, F32)) -> F32 {
+  let (prev, delay) = p
+  prev + delay
+}
+
+pub fn arm_with_the_name(o: Option[F32]) -> F32 {
+  match o {
+    Some(sample_rate) => sample_rate,
+    None => 0.0,
+  }
+}
+
+pub fn closure_with_the_names(x: F32) -> F32 {
+  let f = fn(delay: F32) -> F32 {
+    let prev = delay * 2.0
+    prev
+  }
+  f.(x)
+}
+
+pub struct Voice {
+  delay: F32,
+}
+
+impl Voice {
+  pub fn prev(self, vdelay: F32) -> F32 {
+    let sample_tick = self.delay + vdelay
+    sample_tick
+  }
+}
+
+pub flow uses_the_built_ins(x: F32 at sample) -> F32 at sample {
+  let p = prev~(x)
+  let d = delay~(x, 4)
+  p + d
+}
+
+pub flow same_input_names_a(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+pub flow same_input_names_b(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x + g
+}

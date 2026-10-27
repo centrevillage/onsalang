@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§15.1"]
+
+// §5.1 (S-717): the arguments of a function, of an anonymous function, and the inputs of a flow are
+// bindings too, so a name that is visible (a name taken by a `use`, a module taken by a `use`, an item
+// of the module, a value of the prelude) cannot be the name of one: E0304, on the argument. The unit
+// stops there (§18.1); each unit is otherwise correct. The E0304 is in W4-04 U7a (tests/pending.toml).
+use std.math.{sin}
+use std.math
+
+pub fn gain(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub flow voice(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct Pt {
+  a: F32,
+}
+
+pub fn param_over_item(gain: F32) -> F32 {          //~ E0304
+  gain
+}
+
+pub fn param_over_use(sin: F32) -> F32 {            //~ E0304
+  sin
+}
+
+pub fn param_over_module(math: F32) -> F32 {        //~ E0304
+  math
+}
+
+pub fn param_over_prelude(panic: I32) -> I32 {      //~ E0304
+  panic
+}
+
+pub fn param_over_flow_item(voice: F32) -> F32 {    //~ E0304
+  voice
+}
+
+pub fn second_param_over_item(k: F32, gain: F32) -> F32 {   //~ E0304
+  k + gain
+}
+
+pub fn inout_param_over_use(inout sin: F32) {       //~ E0304
+  sin = sin + 1.0
+}
+
+pub fn generic_param_over_item[T: Copy](gain: T) -> T {   //~ E0304
+  gain
+}
+
+impl Pt {
+  pub fn method_param_over_item(self, gain: F32) -> F32 {   //~ E0304
+    self.a + gain
+  }
+}
+
+pub fn closure_param_over_item(x: F32) -> F32 {
+  let f = fn(gain: F32) -> F32 { gain }             //~ E0304
+  f.(x)
+}
+
+pub fn closure_param_over_use(x: F32) -> F32 {
+  let f = fn(sin: F32) -> F32 { sin }               //~ E0304
+  f.(x)
+}
+
+pub fn closure_param_over_prelude(x: I32) -> I32 {
+  let f = fn(panic: I32) -> I32 { panic }           //~ E0304
+  f.(x)
+}
+
+pub fn closure_second_param_over_module(x: F32) -> F32 {
+  let f = fn(k: F32, math: F32) -> F32 { k + math } //~ E0304
+  f.(x, x)
+}
+
+pub flow input_over_item(gain: F32 at sample) -> F32 at sample {   //~ E0304
+  gain
+}
+
+pub flow input_over_use(sin: F32 at sample) -> F32 at sample {     //~ E0304
+  sin
+}
+
+pub flow input_over_module(math: F32 at sample) -> F32 at sample { //~ E0304
+  math
+}
+
+pub flow input_over_prelude(panic: F32 at sample) -> F32 at sample {   //~ E0304
+  panic
+}
+
+pub flow input_over_flow_item(voice: F32 at sample) -> F32 at sample { //~ E0304
+  voice
+}
+
+pub flow second_input_over_item(x: F32 at sample, gain: F32 at block) -> F32 at sample {   //~ E0304
+  x * gain
+}

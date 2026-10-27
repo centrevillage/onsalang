@@ -21,7 +21,7 @@ mod scope;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use onsa_diag::Diagnostic;
 use onsa_syntax::ast::{Ast, ExprId, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind, TypeId};
@@ -49,9 +49,9 @@ pub(crate) struct ScopeId(pub u32);
 /// where it stops, an item ([`PathRes::Item`]) whatever its kind; what
 /// follows is a field or a method, which the types stage resolves. A chain
 /// with a name the names stage holds as an error (§18.1, S-692) has no
-/// record at any node, the namespaces before that name included. A local
-/// bound twice is the walk's E0304 (§5.1), which stops it there: no use of
-/// the name after it has a record (§18.1). An
+/// record at any node, the namespaces before that name included. A binding
+/// that hides a name it sees is the walk's E0304 (§5.1), which stops it
+/// there: no use of the name after it has a record (§18.1). An
 /// expression with no record is one the names stage does not decide (a
 /// literal, an operator, a field of a value), one of a chain held as an
 /// error, or one after the name that stopped the walk.
@@ -106,10 +106,7 @@ pub(crate) struct BodyNames {
 
 /// One binding of a body (§5.1).
 #[derive(Debug, Clone)]
-#[allow(
-    dead_code,
-    reason = "the E0304, the E0309 and the overlaps of a rename read the sites, the scope and the reads from W4-04 U7a, U7b, U9"
-)]
+#[allow(dead_code, reason = "the E0309 and the overlaps of a rename read the scope and the reads from W4-04 U7b, U9")]
 pub(crate) struct Binding {
     pub name: String,
     /// The name where it is first bound.
@@ -313,10 +310,10 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
                 w.walk_fn(params, has_self, body)
             }
         };
-        let (mut out, fail, sites) = (w.out, w.failure, w.type_sites);
+        let (mut out, fail, sites) = (w.out, w.failure, (w.type_sites, w.flow_types));
         out.complete = done.is_ok();
         let generics = generics.to_vec();
-        let fail = lower_types(a, id, (ast, &module.text), (&generics, self_ty), &sites, &mut out).or(fail);
+        let fail = lower_types(a, id, (ast, &module.text), (&generics, self_ty), sites, &mut out).or(fail);
         match fail {
             Some(Fail::Report(d)) => {
                 out.complete = false;
@@ -334,26 +331,33 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
 /// Lower the types written in the body of `def`, in the order of the walk
 /// (`sites`, those before the name that stopped it), into the record: the
 /// first error of the names stage among them comes before that name's, and
-/// stops the body (§18.1).
+/// stops the body (§18.1). The types of the `let`s of a flow the walk did
+/// not reach (`late`), which the types stage reads ahead of the statements,
+/// are after the stop: an error of the names stage there is none.
 fn lower_types(
     a: &mut Analysis,
     def: DefId,
     (ast, text): (&Ast, &str),
     (generics, self_ty): (&[GenericDef], Option<TyId>),
-    sites: &[TypeId],
+    (sites, late): (Vec<TypeId>, VecDeque<(StmtId, TypeId)>),
     out: &mut BodyNames,
 ) -> Option<Fail> {
     let held = a.read_held.contains(&def);
     let m = a.def(def).module;
     let mut fail = None;
-    for &t in sites {
+    let late = late.into_iter().map(|(_, t)| (t, true));
+    for (t, late) in sites.into_iter().map(|t| (t, false)).chain(late) {
         let (ty, diags) = crate::sig::lower_type_in_body(a, m, ast, text, generics, self_ty, def, t);
         let d = diags.into_iter().next();
-        if let Some(d) = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names) {
-            fail = Some(Fail::Report(d.clone()));
-            break;
+        let names = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names);
+        match names {
+            Some(_) if late => drop(out.types.insert(t, (ty, None))),
+            Some(d) => {
+                fail = Some(Fail::Report(d.clone()));
+                break;
+            }
+            None => drop(out.types.insert(t, (ty, d))),
         }
-        out.types.insert(t, (ty, d));
     }
     // What a type reads and the check does not is the body's (S-690).
     out.read_unread = !held && a.read_held.remove(&def);
@@ -397,6 +401,9 @@ struct Walker<'a> {
     /// it reaches its `let` (§18.1: in the order of the text).
     prescan: Option<StmtId>,
     flow_stop: Option<(StmtId, Fail)>,
+    /// The types of the `let`s of a flow body, in order, until the walk
+    /// reaches each (`lower_types`).
+    flow_types: VecDeque<(StmtId, TypeId)>,
     /// In a constant expression of §4.5 (`Walker::const_expr`).
     in_const: bool,
 }
@@ -424,6 +431,7 @@ impl<'a> Walker<'a> {
             type_sites: Vec::new(),
             prescan: None,
             flow_stop: None,
+            flow_types: VecDeque::new(),
             in_const: false,
         }
     }
@@ -435,20 +443,17 @@ impl<'a> Walker<'a> {
     }
 
     /// Stop the walk at a name of a pattern, for `why`. In a `let` of a flow
-    /// body declared ahead of it, an E0304 (`overlap`), a name held as an
-    /// error, and any stop after one that waits, wait for that `let`
-    /// instead, and the walk goes on declaring the names of the `let`s (the
-    /// types stage declares them all before the statements, S-692); another
-    /// error of the names stage stops it there, before the statements in
-    /// front of it (R-289).
-    fn fail_at_let(&mut self, why: Fail, overlap: bool) -> W {
-        let waits = overlap || matches!(why, Fail::Held) || self.flow_stop.is_some();
+    /// body declared ahead of it, the stop waits for that `let` instead,
+    /// after the statements in front of it (§18.1: in the order of the text,
+    /// R-289), and the walk goes on declaring the names of the `let`s (the
+    /// types stage declares them all before the statements, S-692).
+    fn fail_at_let(&mut self, why: Fail) -> W {
         match self.prescan {
-            Some(s) if waits => {
+            Some(s) => {
                 self.flow_stop.get_or_insert((s, why));
                 Ok(())
             }
-            _ => Err(self.fail(why)),
+            None => Err(self.fail(why)),
         }
     }
 
@@ -480,16 +485,16 @@ impl<'a> Walker<'a> {
     }
 
     /// A flow body (§11.2), in the order the types stage declares: the
-    /// inputs, the names of every `let` of the body, then the body. An E0304
-    /// of a `let`, and a name held as an error in its pattern, stop the walk
-    /// at it, after the errors of the statements before it
-    /// ([`Self::fail_at_let`]). The walk stops at its first assignment: its error is the
+    /// inputs, the names of every `let` of the body, then the body. An error
+    /// of the pattern of a `let` stops the walk at it, after the errors of
+    /// the statements before it ([`Self::fail_at_let`]), and its type is read
+    /// there. The walk stops at its first assignment: its error is the
     /// flow stage's (E0806) until W7-04 reports it in the names stage.
     fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
         self.flow = true;
         self.open_scope();
         for (k, input) in inputs.iter().enumerate() {
-            let name = Ident { name: input.name.clone(), span: input.span };
+            let name = Ident { name: input.name.clone(), span: input.name_span };
             self.declare(&name, BindingKind::FlowInput, Origin::FlowInput(k as u32), None)?;
         }
         let ast = self.ast;
@@ -498,7 +503,7 @@ impl<'a> Walker<'a> {
             if let StmtKind::Let { pat, ty, .. } = ast.stmt(s).kind {
                 self.prescan = Some(s);
                 self.pattern(pat, BindingKind::FlowLet, Origin::Let(s))?;
-                self.type_sites.extend(ty);
+                self.flow_types.extend(ty.map(|t| (s, t)));
             }
         }
         self.prescan = None;
@@ -508,7 +513,12 @@ impl<'a> Walker<'a> {
                 return Err(self.fail(why));
             }
             match &ast.stmt(s).kind {
-                StmtKind::Let { init, .. } => self.expr(*init)?,
+                StmtKind::Let { init, .. } => {
+                    if self.flow_types.front().is_some_and(|&(at, _)| at == s) {
+                        self.type_sites.extend(self.flow_types.pop_front().map(|(_, t)| t));
+                    }
+                    self.expr(*init)?
+                }
                 _ => self.stmt(s)?,
             }
         }

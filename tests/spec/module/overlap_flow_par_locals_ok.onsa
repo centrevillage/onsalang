@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.4"]
+// fixes = 0
+
+// §5.1: the index of a `par` is a binding of its body, so it overlaps an input of the flow, an earlier
+// `let` of the body and the index of an enclosing `par` (E0304, on the index), and two `par`s that are
+// siblings can have the same index. These hold today; overlap_flow_par.onsa has the names of the module.
+
+pub flow index_over_input(x: F32 at sample) -> F32 at sample {
+  let ys = par x in 0 ..< 4 {   //~ E0304
+    prev~(x)
+  }
+  ys[0]
+}
+
+pub flow index_over_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let ys = par a in 0 ..< 4 {   //~ E0304
+    prev~(x)
+  }
+  ys[0]
+}
+
+pub flow index_over_index(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 4 {
+    par i in 0 ..< 2 {   //~ E0304
+      prev~(x)
+    }
+  }
+  ys[0][0]
+}
+
+pub flow sibling_indices(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0 ..< 2 {
+    prev~(x)
+  }
+  let b = par i in 0 ..< 2 {
+    prev~(x)
+  }
+  a[0] + b[0]
+}

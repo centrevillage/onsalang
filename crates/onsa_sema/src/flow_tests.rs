@@ -338,7 +338,7 @@ fn e0806_forms() {
         "while true { }\n  x",
         "return x",
         "assert true\n  x",
-        "let f = fn(v: F32) -> F32 { v }\n  x",
+        "let g = fn(v: F32) -> F32 { v }\n  x",
         "let a = move x\n  a",
         "let a = if true { let b = x\n b } else { x }\n  a",
         "x\n  x",

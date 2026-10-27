@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+
+// §18.1 (R-289): the forms of overlap_local_order.onsa that already report the first error in the order
+// of the positions, so they keep doing so when the order is made to hold for the others. The body of a
+// flow is a unit; an E0304 of the `let` in front of a later pattern with an unknown name, an unknown
+// name in front of a later one, and a clash with an input in the initializer.
+
+pub struct Rec {
+  x: I32,
+}
+
+pub flow flow_let_init(x: F32 at sample) -> F32 at sample {
+  let x = nope   //~ E0304
+  x
+}
+
+pub flow flow_let_over_a_let(x: F32 at sample) -> F32 at sample {
+  let y = x
+  let y = nope   //~ E0304
+  y
+}
+
+pub flow flow_clash_then_unknown_pattern(x: F32 at sample) -> F32 at sample {
+  let x = x * 2.0   //~ E0304
+  let Nope { a: q } = x
+  x
+}
+
+pub flow flow_clash_then_unknown_variant(x: F32 at sample) -> F32 at sample {
+  let x = x * 2.0   //~ E0304
+  let Rec.Nope(q) = x
+  x
+}
+
+pub flow flow_unknown_type_then_unknown_pattern(x: F32 at sample) -> F32 at sample {
+  let a: Nope2 = x   //~ E0302
+  let Nope { a: q } = x
+  x
+}
+
+pub flow flow_unknown_in_the_middle(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let b: Nope2 = x   //~ E0302
+  let Nope { a: q } = x
+  x
+}
+
+// An unknown name before an overlapping `let` of the same unit: the unknown name is first.
+pub fn unknown_then_clash(x: I32) -> I32 {
+  let y = nope   //~ E0302
+  let x = 1
+  y
+}
+
+pub fn unknown_scrutinee_then_clash_in_an_arm(x: I32, o: Option[I32]) -> I32 {
+  match nope {   //~ E0302
+    Some(x) => x,
+    None => 0,
+  }
+}
+
+pub flow flow_unknown_then_clash(x: F32 at sample) -> F32 at sample {
+  let a = nope1   //~ E0302
+  let x = a
+  x
+}

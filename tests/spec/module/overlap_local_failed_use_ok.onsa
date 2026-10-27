@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§5.1"]
+
+// §15.1, §18.1: a `use` that fails (here `std.nothing` is not a module, E0302) binds nothing, so it is no
+// partner of an E0304: a `let`, a `var`, a `for`, a `match` arm, an argument of a function and of an
+// anonymous function, and an input of a flow, each with the name the failed `use` would have bound, are
+// not an error of their own. Each local is a real binding: the `Bool` annotation in each unit is E0401
+// (the local `x` is an `I32`), which says that the name reads the local and is not silenced like a
+// name of a failed `use`. The only E0304 would be against a real binding (overlap_local_failed_use_real.onsa).
+use std.nothing.{x}                                 //~ E0302
+use std.nothing.{y, z}                              //~ E0302
+
+pub fn let_with_the_name() -> I32 {
+  let x: I32 = 1
+  let _: Bool = x                                   //~ E0401
+  x
+}
+
+pub fn var_with_the_name() -> I32 {
+  var y: I32 = 1
+  let _: Bool = y                                   //~ E0401
+  y = 2
+  y
+}
+
+pub fn argument_with_the_name(x: I32) -> I32 {
+  let _: Bool = x                                   //~ E0401
+  x
+}
+
+pub fn second_argument_with_the_name(k: I32, z: I32) -> I32 {
+  let _: Bool = z                                   //~ E0401
+  k + z
+}
+
+pub fn closure_argument_with_the_name(k: I32) -> I32 {
+  let f = fn(y: I32) -> I32 {
+    let _: Bool = y                                 //~ E0401
+    y
+  }
+  f.(k)
+}
+
+pub fn for_with_the_name(n: U32) -> U32 {
+  var acc = 0
+  for x in 0 ..< n {
+    let _: Bool = x                                 //~ E0401
+    acc = acc + x
+  }
+  acc
+}
+
+pub fn arm_with_the_name(o: Option[I32]) -> I32 {
+  match o {
+    Some(z) => {
+      let _: Bool = z                               //~ E0401
+      z
+    },
+    None => 0,
+  }
+}
+
+pub fn pattern_with_the_name(p: (I32, I32)) -> I32 {
+  let (x, y) = p
+  let _: Bool = y                                   //~ E0401
+  x + y
+}
+
+pub flow input_with_the_name(x: F32 at sample) -> F32 at sample {
+  let _: Bool = x                                   //~ E0401
+  x
+}
+
+pub flow let_in_a_flow_with_the_name(k: F32 at sample) -> F32 at sample {
+  let y: F32 = k * 2.0
+  let _: Bool = y                                   //~ E0401
+  y
+}

@@ -34,9 +34,9 @@ impl<'p> Sema<'p> {
         let mut inputs = Vec::new();
         let mut heading = FlowHeading { flow: id, inputs: Vec::new(), out: None };
         for (k, p) in f.params.iter().enumerate() {
-            let name = match &p.name {
-                ParamName::Ident(i) => i.name.clone(),
-                ParamName::Wild(_) => "_".into(),
+            let (name, name_span) = match &p.name {
+                ParamName::Ident(i) => (i.name.clone(), i.span),
+                ParamName::Wild(s) => ("_".into(), *s),
                 ParamName::SelfParam(s) => {
                     self.report(id, Diagnostic::new(Stage::Names, Code::E0002, *s, "a flow has no `self`"));
                     continue;
@@ -84,15 +84,15 @@ impl<'p> Sema<'p> {
             // An input of the error type keeps its clock (§18.1, S-692).
             let Some(rate) = rate else {
                 let error = self.a.types.error();
-                inputs.push(FlowInput { name, rate: Rate::Sig, ty: error, param: None, span: p.span });
+                inputs.push(FlowInput { name, rate: Rate::Sig, ty: error, param: None, span: p.span, name_span });
                 continue;
             };
             if matches!(self.a.types.get(lowered), Ty::Error) {
-                inputs.push(FlowInput { name, rate, ty: lowered, param: None, span: p.span });
+                inputs.push(FlowInput { name, rate, ty: lowered, param: None, span: p.span, name_span });
                 continue;
             }
             heading.inputs.push((inputs.len(), k, tspan));
-            inputs.push(FlowInput { name, rate, ty: lowered, param: None, span: p.span });
+            inputs.push(FlowInput { name, rate, ty: lowered, param: None, span: p.span, name_span });
         }
         let out_lowered = self.lower_type(&cx, f.ret);
         let rspan = cx.ast.ty(f.ret).span;

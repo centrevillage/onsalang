@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+
+// §18.1 (R-289): a unit reports the first error of its stage in the order of the start positions, and
+// stops there. A binding that overlaps a visible name (E0304, on the name it binds) starts before the
+// expression to its right, the type after it, and the parts to its right in the pattern, so when both
+// are errors of the names stage the E0304 is the one reported and the E0302 of the expression or the
+// type is not. Every unit has `x` visible (an argument, an input, an earlier `let`) and an unknown name
+// (`nope`, `Nope`) in the same statement, or the unknown name in a later statement of a flow. The
+// forms that already hold are in overlap_local_order_ok.onsa. The E0304 and the order are in
+// W4-04 U7a (tests/pending.toml).
+
+pub struct Rec {
+  x: I32,
+}
+
+pub fn let_init(x: I32) -> I32 {
+  let x = nope   //~ E0304
+  0
+}
+
+pub fn let_annotation(x: I32) -> I32 {
+  let x: Nope = 1   //~ E0304
+  0
+}
+
+pub fn var_init(x: I32) -> I32 {
+  var x = nope   //~ E0304
+  0
+}
+
+pub fn for_iterable(x: I32) -> I32 {
+  for x in nope {   //~ E0304
+    0
+  }
+  0
+}
+
+pub fn tuple_pattern(x: I32) -> I32 {
+  let (y, x) = (nope, 1)   //~ E0304
+  y
+}
+
+pub fn struct_pattern(x: I32) -> I32 {
+  let Rec { x: x } = nope   //~ E0304
+  x
+}
+
+pub fn closure_argument(x: I32) -> I32 {
+  let f = fn(x: Nope) -> I32 { 0 }   //~ E0304
+  f.(x)
+}
+
+pub fn closure_argument_over_a_let(k: I32) -> I32 {
+  let x = k
+  let f = fn(x: Nope) -> I32 { 0 }   //~ E0304
+  f.(x)
+}
+
+pub fn let_over_a_let(k: I32) -> I32 {
+  let x = k
+  let x = nope   //~ E0304
+  x
+}
+
+pub flow flow_let_annotation(x: F32 at sample) -> F32 at sample {
+  let x: Nope = 1.0   //~ E0304
+  x
+}
+
+// The E0304 of a statement of a flow comes before the unknown name of the type of a later statement
+// (the types of the `let`s of a flow are read before the statements in order, which is not the order
+// of the positions).
+pub flow flow_clash_then_unknown_type(x: F32 at sample) -> F32 at sample {
+  let x = x * 2.0   //~ E0304
+  let b: Nope = x
+  x
+}
+
+pub flow flow_clash_in_the_middle(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let x = a * 2.0   //~ E0304
+  let b: Nope2 = x
+  let Nope { a: q } = x
+  x
+}
+
+// An unknown name in an earlier statement is the first error (E0302), whatever a later pattern says.
+pub flow flow_unknown_init_then_unknown_pattern(x: F32 at sample) -> F32 at sample {
+  let a = nope1   //~ E0302
+  let Nope { a: q } = x
+  x
+}
+
+pub flow flow_unknown_init_then_unknown_variant(x: F32 at sample) -> F32 at sample {
+  let a = nope1   //~ E0302
+  let Rec.Nope(q) = x
+  x
+}

@@ -1,0 +1,129 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.1", "§6.2", "§18.1"]
+// fixes = 0
+
+// §5.1 (S-649): the type parameters, const parameters and effect-row variables of an item are bindings
+// that are visible in the item (the members of an `impl` see the parameters of its heading). Two with one
+// name in a list, a name of the outer `impl` list, a name of the module (an item, a built-in type, a
+// type of the prelude, the user's own type) and a local with the name are E0304, with no candidate. The
+// diagnostic is on the later (inner) declaration, so the column says which; it stays in the unit of the
+// item (§18.1), and the other items can still use the name. The E0304 is in W4-04 U7a (tests/pending.toml).
+
+pub struct Item {
+  v: I32,
+}
+
+pub fn tone() -> I32 {
+  1
+}
+
+pub fn same_list[T, T](x: T) -> T {   //~ E0304 @21
+  x
+}
+
+pub fn same_list_apart[A, B, A](x: A, y: B) -> A {   //~ E0304 @30
+  x
+}
+
+pub fn over_user_type[Item](x: Item) -> Item {   //~ E0304 @23
+  x
+}
+
+pub fn over_builtin_type[I32](x: I32) -> I32 {   //~ E0304 @26
+  x
+}
+
+pub fn over_prelude_type[Option](x: Option) -> Option {   //~ E0304 @26
+  x
+}
+
+pub fn const_over_type[T, const T: U32](x: T) -> T {   //~ E0304 @33
+  x
+}
+
+pub fn const_twice[const N: U32, const N: U32](x: [F32; N]) -> F32 {   //~ E0304 @40
+  x[0]
+}
+
+pub fn effect_twice[e, e](f: fn() -> I32 uses {e}) -> I32 uses {e} {   //~ E0304 @24
+  f.()
+}
+
+pub fn effect_over_item[tone](f: fn() -> I32 uses {tone}) -> I32 uses {tone} {   //~ E0304 @25
+  f.()
+}
+
+pub struct Twice[A, A] {   //~ E0304 @21
+  a: A,
+}
+
+pub enum Over[Item] {   //~ E0304 @15
+  One(Item),
+  Nothing,
+}
+
+// The names stay in the module for the other units: a use of the user's `Item` is as always.
+pub fn uses_the_item(i: Item) -> I32 {
+  i.v + tone()
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T] Holder[T] {
+  pub fn member_over_the_impl[T](self, x: T) -> T {   //~ E0304 @31
+    x
+  }
+
+  pub fn member_fine[U](self, x: U) -> U {
+    x
+  }
+
+  pub fn member_twice[U, U](self, x: U) -> U {   //~ E0304 @26
+    x
+  }
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn member_const_over_the_impl[const N: U32](self) -> U32 {   //~ E0304 @43
+    0
+  }
+}
+
+pub struct Wrap[T] {
+  a: T,
+}
+
+// A name of the heading list that is a name of the module: the heading is the unit (§18.1).
+impl[Item] Wrap[Item] {   //~ E0304 @6
+  pub fn get(self) -> Item {
+    self.a
+  }
+}
+
+pub fn effect_row_variable_and_a_local[e](r: Result[I32, I32], g: fn() -> I32 uses {e}) -> I32 uses {e} {
+  match r {
+    Ok(v) => v + g.(),
+    Err(e) => e,   //~ E0304
+  }
+}
+
+pub fn effect_row_variable_and_a_let[e](g: fn() -> I32 uses {e}) -> I32 uses {e} {
+  let e = g.()   //~ E0304
+  e
+}
+
+pub fn effect_row_variable_and_an_argument[e](e: I32, g: fn() -> I32 uses {e}) -> I32 uses {e} {   //~ E0304
+  e + g.()
+}
+
+pub fn effect_row_variable_and_a_closure[e](g: fn() -> I32 uses {e}) -> I32 uses {e} {
+  let f = fn(e: I32) -> I32 { e }   //~ E0304
+  f.(g.())
+}

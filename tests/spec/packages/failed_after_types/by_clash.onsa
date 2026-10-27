@@ -12,8 +12,8 @@ pub enum D {                                        //~ E0304
 pub const N: U32 = 4
 pub const N: U32 = 8                                //~ E0304
 
-pub struct Ring[T, const N: U32] {
-  data: [T; N],
+pub struct Ring[T, const LEN: U32] {
+  data: [T; LEN],
   head: U32,
 }
 

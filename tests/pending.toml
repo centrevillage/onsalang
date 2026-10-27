@@ -2185,13 +2185,6 @@ note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/module/overlap_local_stops_unit.onsa"
-reasons = ["S-681", "S-79"]
-until = "W4-04"
-note = "ローカルと見えている束縛の E0304（§5.1）は W4-04 の本体の歩き手で入る。今は通り、使う所の型の誤り E0401 が出る"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/packages/failed_use_empty_list"
 reasons = ["S-515"]
 until = "W5-11"

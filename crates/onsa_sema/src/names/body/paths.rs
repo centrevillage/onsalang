@@ -345,7 +345,7 @@ impl<'a> Walker<'a> {
                 self.out.pats.insert(p, PatRes::Ctor { entity, owner });
                 Ok(())
             }
-            Err(f) => self.fail_at_let(f, false),
+            Err(f) => self.fail_at_let(f),
         }
     }
 

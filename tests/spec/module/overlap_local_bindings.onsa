@@ -1,0 +1,154 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1", "§18.1"]
+
+// §5.1 (S-79, R-103, S-681): there is no shadowing. A binding of a `var`, a destructuring pattern, a
+// `match` arm, a `for` and the body of an anonymous function is E0304 when a binding of the name is
+// visible: a name taken by a `use`, a module taken by a `use` (`math`), an item of the module (a function
+// or a flow), and a value of the prelude (`panic`). The diagnostic is on the new binding and the unit
+// stops there (§18.1); each unit here is otherwise correct, so the E0304 is the only diagnostic.
+// overlap_local_stops_unit.onsa has the plain `let` forms; this file has the other forms of binding, in
+// the places that nest (a loop, a branch, a closure, a generic function, a method, a `test`). The
+// E0304 is in W4-04 U7a (tests/pending.toml).
+use std.math.{sin}
+use std.math
+
+pub fn gain(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub flow voice(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct Pt {
+  a: F32,
+  b: F32,
+}
+
+pub fn tuple_let_over_use(p: (F32, F32)) -> F32 {
+  let (sin, k) = p                                  //~ E0304
+  sin + k
+}
+
+pub fn tuple_let_second_over_item(p: (F32, F32)) -> F32 {
+  let (k, gain) = p                                 //~ E0304
+  gain + k
+}
+
+pub fn struct_let_over_item(p: Pt) -> F32 {
+  let Pt { a: gain, b: k } = p                      //~ E0304
+  gain + k
+}
+
+pub fn var_over_module(x: F32) -> F32 {
+  var math = x                                      //~ E0304
+  math = math + 1.0
+  math
+}
+
+pub fn let_over_prelude(x: I32) -> I32 {
+  let panic = x                                     //~ E0304
+  panic
+}
+
+pub fn let_over_flow_item(x: F32) -> F32 {
+  let voice = x                                     //~ E0304
+  voice
+}
+
+pub fn arm_over_item(o: Option[F32]) -> F32 {
+  match o {
+    Some(gain) => gain,                             //~ E0304
+    None => 0.0,
+  }
+}
+
+pub fn arm_second_over_use(o: Option[F32]) -> F32 {
+  match o {
+    None => 0.0,
+    Some(sin) => sin,                               //~ E0304
+  }
+}
+
+pub fn for_over_module(n: U32) -> U32 {
+  var acc = 0
+  for math in 0 ..< n {                             //~ E0304
+    acc = acc + math
+  }
+  acc
+}
+
+pub fn for_over_prelude(n: U32) -> U32 {
+  var acc = 0
+  for panic in 0 ..< n {                            //~ E0304
+    acc = acc + panic
+  }
+  acc
+}
+
+pub fn nested_branch_in_loop(n: U32, flag: Bool) -> U32 {
+  var acc = 0
+  for i in 0 ..< n {
+    if flag {
+      let math = i                                  //~ E0304
+      acc = acc + math
+    }
+  }
+  acc
+}
+
+pub fn nested_arm_in_loop(n: U32, o: Option[U32]) -> U32 {
+  var acc = 0
+  for i in 0 ..< n {
+    match o {
+      Some(sin) => {                                //~ E0304
+        acc = acc + sin + i
+      },
+      None => {
+        acc = acc + i
+      }
+    }
+  }
+  acc
+}
+
+pub fn closure_body_let_over_item(x: F32) -> F32 {
+  let f = fn(k: F32) -> F32 {
+    let gain = k                                    //~ E0304
+    gain
+  }
+  f.(x)
+}
+
+pub fn closure_body_arm_over_use(x: Option[F32]) -> F32 {
+  let f = fn(o: Option[F32]) -> F32 {
+    match o {
+      Some(sin) => sin,                             //~ E0304
+      None => 0.0,
+    }
+  }
+  f.(x)
+}
+
+pub fn generic_let_over_use[T: Copy](x: T) -> T {
+  let sin = x                                       //~ E0304
+  sin
+}
+
+impl Pt {
+  pub fn method_let_over_item(self) -> F32 {
+    let gain = self.a                               //~ E0304
+    gain
+  }
+
+  pub fn method_let_over_module(self) -> F32 {
+    let math = self.b                               //~ E0304
+    math
+  }
+}
+
+test "a let in a test body" {
+  let gain: F32 = 1.0                               //~ E0304
+  assert gain == 1.0
+}

@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.1", "§18.1"]
+
+// §4.4 (R-40): the field names of one struct and the variant names of one enum cannot repeat: E0304,
+// on the later name. The declaration is the unit (§18.1), so only the first repeat
+// of a declaration is reported. The type of the repeated field does not matter, a variant can be a
+// unit variant or carry values, and a generic or `priv` field is the same. The E0304 is in W4-04 U7a
+// (tests/pending.toml).
+
+pub struct Twice {
+  x: F32,
+  x: F32,   //~ E0304
+}
+
+pub struct TwiceType {
+  x: F32,
+  x: I32,   //~ E0304
+}
+
+pub struct Apart {
+  a: I32,
+  b: I32,
+  a: I32,   //~ E0304
+}
+
+pub struct PrivField {
+  priv value: F32,
+  value: F32,   //~ E0304
+}
+
+pub struct GenericFields[T] {
+  v: T,
+  v: T,   //~ E0304
+}
+
+pub enum UnitAndTuple {
+  A,
+  A(I32),   //~ E0304
+}
+
+pub enum TwoTuples {
+  Circle(F32),
+  Circle(F32, F32),   //~ E0304
+}
+
+pub enum Three {
+  A(I32),
+  B,
+  A,   //~ E0304
+}
+
+pub enum GenericVariants[T] {
+  SomeOne(T),
+  SomeOne,   //~ E0304
+}

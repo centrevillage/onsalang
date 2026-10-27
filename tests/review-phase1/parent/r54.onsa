@@ -7,8 +7,8 @@ pub fn f(b: Buf[F32]) -> U32 {
 pub struct H5 {
   buf: Buf[F32],
 }
-pub fn m(h: H5) -> U32 {
-  let b = h.buf
+pub fn m(hv: H5) -> U32 {
+  let b = hv.buf
   b.len()
 }
 

@@ -91,10 +91,12 @@ impl Walker<'_> {
             // whose names it does not read.
             ExprKind::Handle { .. } | ExprKind::Unsafe(_) => Err(self.fail(Fail::Later)),
             ExprKind::Par { var, range, body } => {
+                let declare = |w: &mut Self| w.declare(var, BindingKind::ParVar, Origin::Par(e), None).map(drop);
+                self.ahead(declare)?;
                 self.const_expr(range.lo)?;
                 self.const_expr(range.hi)?;
                 self.open_scope();
-                self.declare(var, BindingKind::ParVar, Origin::Par(e), None)?;
+                declare(self)?;
                 self.expr(*body)?;
                 self.close_scope();
                 Ok(())
@@ -182,16 +184,19 @@ impl Walker<'_> {
     pub(super) fn stmt(&mut self, s: StmtId) -> W {
         let ast = self.ast;
         match &ast.stmt(s).kind {
+            // The names before the value, as in the text (§18.1, R-289).
             StmtKind::Let { pat, init, ty, .. } => {
+                self.ahead(|w| w.pattern(*pat, BindingKind::Let, Origin::Let(s)))?;
                 self.type_sites.extend(ty);
                 self.expr(*init)?;
                 self.pattern(*pat, BindingKind::Let, Origin::Let(s))
             }
             StmtKind::Var { name, init, ty } => {
+                let var = |w: &mut Self| w.declare(name, BindingKind::Var, Origin::Var(s), None).map(drop);
+                self.ahead(var)?;
                 self.type_sites.extend(ty);
                 self.expr(*init)?;
-                self.declare(name, BindingKind::Var, Origin::Var(s), None)?;
-                Ok(())
+                var(self)
             }
             // An assignment of a flow body is an error of the flow stage
             // (E0806) until W7-04 reports it here.
@@ -201,9 +206,11 @@ impl Walker<'_> {
                 self.expr(*value)
             }
             StmtKind::For { pat, moved, iter, body } => {
+                let kind = BindingKind::For { moved: *moved };
+                self.ahead(|w| w.pattern(*pat, kind, Origin::For(s)))?;
                 self.expr(*iter)?;
                 self.open_scope();
-                self.pattern(*pat, BindingKind::For { moved: *moved }, Origin::For(s))?;
+                self.pattern(*pat, kind, Origin::For(s))?;
                 self.expr(*body)?;
                 self.close_scope();
                 Ok(())
@@ -239,8 +246,9 @@ impl Walker<'_> {
         Ok(())
     }
 
+    /// An anonymous function: each parameter, then its type, as in the text
+    /// (§18.1, R-289).
     fn closure(&mut self, e: ExprId, params: &[Param], ret: Option<TypeId>, body: ExprId) -> W {
-        self.type_sites.extend(params.iter().filter_map(|p| p.ty).chain(ret));
         self.open_closure(e);
         self.open_scope();
         for (k, p) in params.iter().enumerate() {
@@ -249,7 +257,9 @@ impl Walker<'_> {
                 let origin = Origin::Closure { closure: e, param: k as u32 };
                 self.declare(name, BindingKind::ClosureParam(p.mode), origin, None)?;
             }
+            self.type_sites.extend(p.ty);
         }
+        self.type_sites.extend(ret);
         self.expr(body)?;
         self.close_scope();
         self.close_closure();
