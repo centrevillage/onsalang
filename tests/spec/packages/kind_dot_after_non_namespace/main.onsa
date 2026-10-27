@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-713 (e), S-719, S-721 (W4-04 U8a): a name that has no namespace (§15.1: the namespaces are the
+// package, a module, a type, a flow and an effect; a function, a constant, a trait, a kind
+// constraint and a handler have none) followed by a `.` is E0308, in a `use` path and in a body.
+//  - The path of a `use` through a function (`use util.g.{x}`, `use util.g.x`), a constant
+//    (`use util.K.{x}`), a trait of a module that is E0200 in this version (`use util.Tr.{m}`) or a
+//    handler (`use util.hh.{y}`): the middle element is not a namespace, so the `use` is E0308 and
+//    it takes no name (the names of a failed `use` are errors that are not reported again, §18.1).
+//    The `use` of the name itself (`use util.{g, K, Tr, hh, Ef}`) is quiet.
+//  - In a body, the trait and the handler taken from another module: the name alone is a value place
+//    of the wrong kind (E0308), and a `.` after it, or after its path through the module
+//    (`util.Tr.y()`), is the E0308 of a name that has no namespace. `Show.show(1)`, the trait of the
+//    prelude, is in dot_after_trait_name.onsa.
+//  - The operation of an effect taken from another module (`Ef.op(1)`) is a part not read, so the
+//    unit is not checked after it (S-719): the `let z: Bool = 2` that follows it has no E0401.
+// The declarations are E0200 in `util.onsa`. One error per unit (§18.1), so each form is in its own
+// unit (a `use` is a unit of its own).
+use util.g.{x}                                      //~ E0308
+use util.g.x                                        //~ E0308
+use util.K.{x}                                      //~ E0308
+use util.Tr.{m}                                     //~ E0308
+use util.hh.{y}                                     //~ E0308
+use util
+use util.{g, K, Tr, hh, Ef, Pt}
+
+pub fn trait_from_a_module() -> I32 {
+  let _ = Tr                                        //~ E0308
+  0
+}
+
+pub fn handler_from_a_module() -> I32 {
+  let _ = hh                                        //~ E0308
+  0
+}
+
+pub fn effect_from_a_module() -> I32 {
+  let _ = Ef                                        //~ E0308
+  0
+}
+
+pub fn dot_after_a_trait_taken() -> I32 {
+  Tr.y()                                            //~ E0308
+}
+
+pub fn dot_after_a_handler_taken() -> I32 {
+  hh.y()                                            //~ E0308
+}
+
+pub fn dot_after_a_trait_by_the_module_path() -> I32 {
+  util.Tr.y()                                       //~ E0308
+}
+
+pub fn dot_after_a_handler_by_the_module_path() -> I32 {
+  util.hh.y()                                       //~ E0308
+}
+
+pub fn dot_after_a_trait_in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    Tr.y()                                          //~ E0308
+  } else {
+    0
+  }
+}
+
+pub fn dot_after_a_handler_in_a_closure() -> I32 {
+  let f = fn(a: I32) -> I32 { hh.y() + a }          //~ E0308
+  f.(1)
+}
+
+pub fn effect_operation_from_a_module_stops_the_unit() -> Bool {
+  let _ = Ef.op(1)
+  let z: Bool = 2
+  z
+}
+
+pub fn function_taken_is_called() -> I32 {
+  g() + util.g() + util.x() + K + util.K
+}
+
+pub fn type_of_the_module_is_a_namespace() -> I32 {
+  let p = util.Pt { a: 1 }
+  let q = Pt { a: 2 }
+  p.a + q.a
+}

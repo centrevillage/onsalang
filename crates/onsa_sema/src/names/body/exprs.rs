@@ -11,6 +11,7 @@ use onsa_syntax::ast::{
     StrLit, StrSeg, TypeId,
 };
 
+use super::kinds::Want;
 use super::paths::Place;
 use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, W, Walker};
 use crate::flow_names::FlowBuiltin;
@@ -37,9 +38,19 @@ impl Walker<'_> {
                 let place = match kind {
                     CallKind::Value { .. } => Place::Value,
                     CallKind::Flow => Place::Instance,
-                    _ => Place::Callee,
+                    _ => Place::Callee(e),
                 };
-                self.name_at(*callee, place)?;
+                match &ast.expr(*callee).kind {
+                    // `p.m[I32](1)`: a method's type arguments or an index
+                    // of a field, which the types stage tells apart (§4.5).
+                    ExprKind::Index { base, index }
+                        if place != Place::Value && matches!(ast.expr(*base).kind, ExprKind::Field { .. }) =>
+                    {
+                        self.expr(*base)?;
+                        self.name_at(*index, Place::TypeOrValue)?
+                    }
+                    _ => self.name_at(*callee, place)?,
+                }
                 // The constant of a delay (`delay~(x, N)`, §11.4).
                 let constant = match self.out.paths.get(callee) {
                     Some(PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => d.const_index(),
@@ -287,14 +298,14 @@ impl Walker<'_> {
             }
             PatKind::Tuple(ps) => return ps.iter().try_for_each(|&q| self.pattern(q, kind, origin)),
             PatKind::TupleStruct { path, elems } => {
-                self.ctor(p, path)?;
+                self.ctor(p, path, Want::VariantOrConstant)?;
                 return elems.iter().try_for_each(|&q| self.pattern(q, kind, origin));
             }
             PatKind::Struct { path, fields, .. } => {
-                self.ctor(p, path)?;
+                self.ctor(p, path, Want::Type)?;
                 return fields.iter().try_for_each(|(_, q)| self.pattern(*q, kind, origin));
             }
-            PatKind::Path(path) => return self.ctor(p, path),
+            PatKind::Path(path) => return self.ctor(p, path, Want::VariantOrConstant),
             PatKind::Or(alts) => {
                 let first = binds(ast, alts[0]);
                 self.choices.push(Choice::default());

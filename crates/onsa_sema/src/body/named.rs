@@ -218,11 +218,7 @@ impl<'a> Checker<'a> {
                     DefKind::Fn(_) if self.a.heading_failed(d) => Ok(Some(self.a.types.error())),
                     DefKind::Fn(f) => {
                         if f.self_mode.is_some() {
-                            return Err(self.err(
-                                Code::E0401,
-                                name.span,
-                                format!("`{}` is a method; call it as `value.{}(...)` (§6.2)", def.name, def.name),
-                            ));
+                            onsa_diag::internal::bug(Some(name.span), "a method as a value the names stage took");
                         }
                         let args = self.fresh_args(d);
                         self.of_owner(d, &args, owner, span)?;
@@ -238,15 +234,7 @@ impl<'a> Checker<'a> {
                         self.info.targets.insert(e, Target::Const(d));
                         Ok(Some(c.ty))
                     }
-                    DefKind::Flow(_) => Err(self.err(
-                        Code::E0401,
-                        name.span,
-                        format!(
-                            "`{}` is a flow; outside a flow body use its namespace (`{}.init`, `{}.process`, §11.6)",
-                            def.name, def.name, def.name
-                        ),
-                    )),
-                    DefKind::Unsupported => Ok(Some(self.a.types.error())),
+                    DefKind::Unsupported(_) => Ok(Some(self.a.types.error())),
                     _ => no_value(),
                 }
             }

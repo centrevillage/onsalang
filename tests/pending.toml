@@ -1163,20 +1163,6 @@ note = "別名への impl の E0307 の候補"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0308_method_function_form.onsa"
-reasons = ["S-103"]
-until = "W4-04"
-note = "E0308 の候補（メソッドの形）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0308_flow_as_a_type.onsa"
-reasons = ["S-103"]
-until = "W4-04"
-note = "E0308 の候補（flow を型に）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0413_forms.onsa"
 reasons = ["S-98", "R-126"]
 until = "W5-02"
@@ -1889,6 +1875,27 @@ until = "W5-09"
 note = "定数のパターン `OK =>` が E0302「is not a variant」（定数のパターンは W5-09）"
 
 [[pending]]
+kind = "test-case"
+target = "tests/spec/control/kind_pattern_names_constants.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "定数のパターンの正例が E0302「is not a variant」（W4-04 U8a/t。定数のパターンは W5-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/kind_constant_called_type_param.onsa"
+reasons = ["R-56"]
+until = "W5-05"
+note = "型パラメータの関連定数 `T.ZERO` が E0302（R-56）。呼ぶ形の E0020 は W4-04 U8a で入った（`kind_constant_called.onsa` から分けた）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/kind_alias_cycle.onsa"
+reasons = ["S-728", "R-182"]
+until = "W4-05"
+note = "自分を指す別名 `type Lp = Lp` が今 E0310（§4.4 は E0311、W4-05 の R-182）。値の位置で単位を止めるのは W4-04 U8a"
+
+[[pending]]
 kind = "fix-contract"
 target = "tests/spec/fixes/e0320_leading_underscore.onsa:13:8 E0320 fix1"
 reasons = ["S-82"]
@@ -2210,7 +2217,7 @@ kind = "test-case"
 target = "tests/spec/negative/flow_namespace_params_default.onsa"
 reasons = ["S-625", "R-147"]
 until = "W7-03"
-note = "本体の経路の amp.params_default() と let f = amp.params_default は E0302（S-625）。今は呼び出しが通り、関数値は E0401（W4-04 U5/t）"
+note = "本体の経路の amp.params_default() と let f = amp.params_default は E0302（S-625）。今は呼び出しが通り、関数値も W4-04 U8a から通る（flow の名前空間の関数を値にする形。E0309 だけが出る）"
 
 [[pending]]
 kind = "test-case"
@@ -2218,21 +2225,6 @@ target = "tests/spec/flow/heading_names_event.onsa"
 reasons = ["S-664", "S-665"]
 until = "W7-11"
 note = "イベントの入出力の見出し。`at event` のクロックが読めるのは W7-11（今は E0302）"
-
-# --- W4-03 U3d: E0304 の名前の辺と並びの要素の読み続けの事例のうち、後の単位・作業で通るもの（2026-10-25）。
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/use_flow_absent_type_position_kinds"
-reasons = ["S-103"]
-until = "W4-04"
-note = "値（関数を含む）を型の位置に書く誤りの E0308 は W4-04 U8 のコードの割り当て。今は E0302"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/use_flow_own_item_signature_kind"
-reasons = ["S-103"]
-until = "W4-04"
-note = "自分の生成項目の関数の名前を署名の型に書く誤りの E0308 は W4-04 U8。今は E0302"
 
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
 [[pending]]

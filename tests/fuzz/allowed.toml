@@ -409,7 +409,7 @@ reasons = ["S-659"]
 note = "an effect row with a standard effect and no `use`: the candidate `use std.fs.{Fs}` resolves the name, and the effect is then an E0200 on the same name, as D-08 says of a name that resolves (S-659 (3))"
 
 [[allowed]]
-class = "fix|E0302|write `…`|E0810"
+class = "fix|E0308|write `…`|E0810"
 left = "a flow input needs a clock after its type: `…`, `…` or `…` (§#.#)"
 input = "tests/fuzz/8f0a4d28.onsa"
 reasons = ["S-236", "S-710"]

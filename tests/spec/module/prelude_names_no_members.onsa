@@ -5,13 +5,12 @@
 
 // A name of the prelude that is not a module or a type has no members to take or to read after it: a trait
 // (`Show`, `Num`) and a kind constraint (`Copy`). §15.1 assigns E0308 to a `.` after a name that has no
-// namespace (S-713 (e)), with no candidate: a path in the body that starts with one is E0308 from W4-04 U3a.
-// A `use` path through one stays E0302 until W4-04 U8 (the `use` paths of the names stage), and then is
-// E0308 too. A constant of a type is read after the name of the type (`F32.PI`), or after a type parameter
+// namespace (S-713 (e)), with no candidate: a path in the body that starts with one is E0308 from W4-04 U3a,
+// and a `use` path through one from W4-04 U8. A constant of a type is read after the name of the type (`F32.PI`), or after a type parameter
 // of a bound (`T.ZERO`, §6.6), and a trait name does not stand there. An enumerator is not taken by a `use`
 // (§15.1, E0302).
 
-use std.core.Show.show   //~ E0302
+use std.core.Show.show   //~ E0308
 
 use std.core.Option.Some   //~ E0302
 

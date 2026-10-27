@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::ResolveError;
+use crate::resolve::NameKind;
 
 impl<'p> Sema<'p> {
     // ------------------------------------------------------------ types
@@ -277,55 +278,36 @@ impl<'p> Sema<'p> {
                         }
                         self.alias_ty(d)
                     }
-                    DefKind::Flow(_) => {
-                        let mut d = Diagnostic::new(
-                            Stage::Names,
-                            Code::E0302,
-                            span,
-                            format!("`{name}` is a flow, not a type; its state type is `{name}.State` (§11.6)"),
-                        );
-                        // The type arguments after the path, if any, are what
-                        // changes: `Sig[F32]` is `Sig.State` (§18.1, S-251). Not
-                        // when `State`, of the flow's visibility, would be an
-                        // E0303 there (§15.1).
-                        if cx.reach.is_none_or(|r| crate::resolve::reaches(def.vis, r)) {
-                            let at = Span { start: path.span.end, ..span };
-                            d = d.with_fix(Fix::replace(format!("write `{name}.State`"), at, ".State"));
-                        }
-                        self.report(cx.def, d);
-                        self.a.types.error()
-                    }
-                    DefKind::Unsupported => self.a.types.error(),
-                    _ => {
-                        self.report(
-                            cx.def,
-                            Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is not a type"))
-                                .with_found(name.clone()),
-                        );
-                        self.a.types.error()
-                    }
+                    // An opaque type of an `extern` block, whose kind is a type.
+                    DefKind::Unsupported(Declared::Type | Declared::Block) => self.a.types.error(),
+                    _ => self.not_a_type(cx, entity, span, path),
                 }
             }
-            Entity::Module(_) => {
-                self.report(
-                    cx.def,
-                    Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is a module, not a type")),
-                );
-                self.a.types.error()
-            }
-            Entity::Builtin(_) | Entity::Variant(..) => {
-                let what = match entity {
-                    Entity::Builtin(Builtin::Trait(_)) => "a trait",
-                    Entity::Builtin(Builtin::Kind(_)) => "a kind constraint",
-                    _ => "a value",
-                };
-                self.report(
-                    cx.def,
-                    Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is {what}, not a type")),
-                );
-                self.a.types.error()
-            }
+            Entity::Module(_) | Entity::Builtin(_) | Entity::Variant(..) => self.not_a_type(cx, entity, span, path),
         }
+    }
+
+    /// E0308 for the name `path` at `span` of a type, which is of another
+    /// kind (§15.1, §18.1, S-713, S-719, S-721): a value, a module, a trait,
+    /// a flow (with the candidate of its state type, §11.6), what an E0200
+    /// declares. The type is the error type.
+    fn not_a_type(&mut self, cx: &Cx<'p>, entity: Entity, span: Span, path: &onsa_syntax::ast::Path) -> TyId {
+        let shown = path.segments.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(".");
+        let Some(kind) = NameKind::of(entity, &self.a.defs) else {
+            onsa_diag::internal::bug(Some(span), "a type named by what has no name")
+        };
+        let mut d = ResolveError::Kind { shown: shown.clone(), span, kind, want: "a type" }.into_diagnostic();
+        // The type arguments after the path, if any, are what changes:
+        // `Sig[F32]` is `Sig.State` (§18.1, S-251). Not when `State`, of the
+        // flow's visibility, would be an E0303 there (§15.1).
+        if let (Entity::Def(f), NameKind::Flow) = (entity, kind)
+            && cx.reach.is_none_or(|r| crate::resolve::reaches(self.a.def(f).vis, r))
+        {
+            let at = Span { start: path.span.end, ..span };
+            d = d.with_fix(Fix::replace(format!("write `{shown}.State`"), at, ".State"));
+        }
+        self.report(cx.def, d);
+        self.a.types.error()
     }
 
     /// A type named in a heading that reaches less far than the heading
@@ -341,7 +323,7 @@ impl<'p> Sema<'p> {
         let Some(reach) = cx.reach.filter(|&r| r != Vis::Priv) else { return };
         // Every kind is named, so that a new one is judged or not by choice.
         let named = match self.a.def(d).kind {
-            DefKind::Struct(_) | DefKind::Enum(_) | DefKind::Unsupported => vec![d],
+            DefKind::Struct(_) | DefKind::Enum(_) | DefKind::Unsupported(_) => vec![d],
             DefKind::Alias(_) => {
                 let t = self.alias_ty(d);
                 self.a.types.named(t)

@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§2.2", "§4.4"]
+
+// S-103, S-713, S-595 (W4-04 U8a): the name of a type written in a value place is E0308 (§15.1:
+// "名前は見つかったが、その位置に要る種類（値、…）でなければ、位置によらず E0308"; the example of the
+// spec is `let a = P`). The kinds that are types: a struct, an enum, a built-in type, an alias of a
+// type, `Self` (§2.2: a `Self` written as a value, `let s = Self`, is E0308). The name is found, so
+// it is not E0302, and it is a kind and not a value, so it is not the E0401 of the type stage (the
+// unit does not reach it, §18.1). One error per unit (§18.1), so each form is in its own unit; the
+// places (a let, an operand, an argument, a branch, a closure, a match arm, the tail, a tuple, a
+// field of a literal, the initializer of a `const`, a `test`, a generic fn, a method) give the same
+// code. The forms that are values (`P { .. }`, `P.new(..)`, `E.A`, `F32.PI`) are in
+// kind_value_position_fine.onsa. The hole of an interpolation is in kind_interp_hole_types.onsa.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn new(x: I32) -> P { P { x: x } }
+
+  pub fn self_as_a_value(self) -> I32 {
+    let _ = Self                                    //~ E0308
+    0
+  }
+
+  pub fn self_as_an_operand(self) -> I32 {
+    1 + Self                                        //~ E0308
+  }
+
+  pub fn a_struct_in_a_method(self) -> I32 {
+    let _ = P                                       //~ E0308
+    0
+  }
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+type Al = P
+
+type AlOfAl = Al
+
+type Prim = F32
+
+pub fn struct_name() -> I32 {
+  let _ = P                                         //~ E0308
+  0
+}
+
+pub fn enum_name() -> I32 {
+  let _ = E                                         //~ E0308
+  0
+}
+
+pub fn builtin_integer() -> I32 {
+  let _ = I32                                       //~ E0308
+  0
+}
+
+pub fn builtin_float() -> I32 {
+  let _ = F32                                       //~ E0308
+  0
+}
+
+pub fn builtin_string() -> I32 {
+  let _ = Str                                       //~ E0308
+  0
+}
+
+pub fn prelude_generic_type() -> I32 {
+  let _ = Option                                    //~ E0308
+  0
+}
+
+pub fn alias_name() -> I32 {
+  let _ = Al                                        //~ E0308
+  0
+}
+
+pub fn alias_of_alias_name() -> I32 {
+  let _ = AlOfAl                                    //~ E0308
+  0
+}
+
+pub fn alias_of_builtin_name() -> I32 {
+  let _ = Prim                                      //~ E0308
+  0
+}
+
+pub fn as_an_operand(n: I32) -> I32 {
+  n + P                                             //~ E0308
+}
+
+pub fn as_an_argument() -> I32 {
+  id(P)                                             //~ E0308
+}
+
+pub fn as_the_tail() -> P {
+  P                                                 //~ E0308
+}
+
+pub fn as_a_tuple_element() -> I32 {
+  let _ = (1, E)                                    //~ E0308
+  0
+}
+
+pub fn as_an_array_element() -> I32 {
+  let _ = [P, P]                                    //~ E0308
+  0
+}
+
+pub fn as_a_field_value() -> I32 {
+  let _ = Holder { v: P }                           //~ E0308
+  0
+}
+
+pub fn in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    let _ = P                                       //~ E0308
+    1
+  } else {
+    0
+  }
+}
+
+pub fn in_a_match_arm(n: U32) -> I32 {
+  match n {
+    0 => 0,
+    _ => {
+      let _ = E                                     //~ E0308
+      1
+    }
+  }
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let _ = P                                       //~ E0308
+    x
+  }
+  f.(1)
+}
+
+pub fn in_a_nested_closure() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let g = fn(y: I32) -> I32 { y + P }             //~ E0308
+    g.(x)
+  }
+  f.(1)
+}
+
+pub fn in_a_loop() -> I32 {
+  var n = 0
+  for i in 0 ..< 3 {
+    n = n + i
+    let _ = Al                                      //~ E0308
+  }
+  n
+}
+
+pub fn in_a_generic_fn[T](x: T) -> T {
+  let _ = P                                         //~ E0308
+  x
+}
+
+pub fn a_type_parameter_as_a_value[T](x: T) -> T {
+  let _ = T                                         //~ E0308
+  x
+}
+
+pub const IN_A_CONST: I32 = P                       //~ E0308
+
+pub const IN_A_CONST_EXPRESSION: I32 = 1 + I32      //~ E0308
+
+test "a type name as a value in a test" {
+  let n = P                                         //~ E0308
+  assert n.x == 0
+}
+
+pub struct Holder {
+  v: I32,
+}
+
+pub fn id(x: I32) -> I32 {
+  x
+}

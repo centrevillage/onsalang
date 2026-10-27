@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{Ident, ItemId, Path, Vis};
 
-use crate::def::{DefId, ModId};
+use crate::def::{Declared, DefId, DefKind, ModId};
 use crate::ty::{BuiltinTy, TyId};
 
 /// Names in scope everywhere (prelude, §15.1) and builtin types (§4.1).
@@ -44,6 +44,92 @@ pub enum Entity {
     /// A member of a flow namespace (`voice.State`, `voice.init`), or an
     /// associated item of a type (`Point.new`, `F32.PI`); the def itself.
     Member(DefId),
+}
+
+/// The kind of a name (§15.1), which a place takes or not: the one table of
+/// the E0308 of a name of the wrong kind (S-103, S-713, S-719, S-721).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameKind {
+    Function,
+    Constant,
+    Variant,
+    Type,
+    Module,
+    Flow,
+    Trait,
+    KindConstraint,
+    Effect,
+    Handler,
+    /// A const parameter, a value and a constant (§15.1) that a pattern does
+    /// not take (§7, S-185).
+    ConstParam,
+}
+
+impl NameKind {
+    /// The kind of the name of a def; none of what has no name (an `impl`,
+    /// a `test`, an `extern` block).
+    pub fn of_def(kind: &DefKind) -> Option<NameKind> {
+        Some(match kind {
+            DefKind::Fn(_) | DefKind::Unsupported(Declared::Fn) => NameKind::Function,
+            DefKind::Const(_) => NameKind::Constant,
+            DefKind::Struct(_) | DefKind::Enum(_) | DefKind::Alias(_) | DefKind::Unsupported(Declared::Type) => {
+                NameKind::Type
+            }
+            DefKind::Flow(_) => NameKind::Flow,
+            DefKind::Effect { .. } | DefKind::Unsupported(Declared::Effect) => NameKind::Effect,
+            DefKind::Unsupported(Declared::Trait) => NameKind::Trait,
+            DefKind::Unsupported(Declared::Handler) => NameKind::Handler,
+            DefKind::Impl(_) | DefKind::Test { .. } | DefKind::Unsupported(Declared::Block) => return None,
+        })
+    }
+
+    /// The kind of what a name resolves to, of the defs `defs`.
+    pub fn of(e: Entity, defs: &[crate::def::Def]) -> Option<NameKind> {
+        match e {
+            Entity::Module(_) => Some(NameKind::Module),
+            Entity::Def(d) | Entity::Member(d) => NameKind::of_def(&defs[d.0 as usize].kind),
+            Entity::Variant(..) => Some(NameKind::Variant),
+            Entity::Builtin(b) => Some(NameKind::of_builtin(b)),
+        }
+    }
+
+    /// The kind of a name of the prelude or a builtin type.
+    pub fn of_builtin(b: Builtin) -> NameKind {
+        match b {
+            Builtin::Scalar(_) | Builtin::Generic(_) => NameKind::Type,
+            Builtin::Some | Builtin::None | Builtin::Ok | Builtin::Err => NameKind::Variant,
+            Builtin::Panic => NameKind::Function,
+            Builtin::Trait(_) => NameKind::Trait,
+            Builtin::Kind(_) => NameKind::KindConstraint,
+        }
+    }
+
+    /// A function, a constant or a variant.
+    pub fn is_value(self) -> bool {
+        matches!(self, NameKind::Function | NameKind::Constant | NameKind::Variant | NameKind::ConstParam)
+    }
+
+    /// A package, a module, a type, a flow or an effect, after which a name
+    /// is a member (§15.1).
+    pub fn is_namespace(self) -> bool {
+        matches!(self, NameKind::Type | NameKind::Module | NameKind::Flow | NameKind::Effect)
+    }
+
+    pub fn noun(self) -> &'static str {
+        match self {
+            NameKind::Function => "a function",
+            NameKind::Constant => "a constant",
+            NameKind::Variant => "a variant",
+            NameKind::Type => "a type",
+            NameKind::Module => "a module",
+            NameKind::Flow => "a flow",
+            NameKind::Trait => "a trait",
+            NameKind::KindConstraint => "a kind constraint",
+            NameKind::Effect => "an effect",
+            NameKind::Handler => "a handler",
+            NameKind::ConstParam => "a const parameter",
+        }
+    }
 }
 
 /// A name a `use` bound in its module (§15.1): of the module's body only,
@@ -197,10 +283,20 @@ pub enum ResolveError {
     SelfOutsideImpl {
         span: Span,
     },
-    /// `a.b` where `a` has no members.
+    /// `a.b` where `a` has no members (`span` is `b`), of the kind `kind`:
+    /// after a name that is no namespace, E0308 (§15.1).
     NotANamespace {
         name: String,
         span: Span,
+        kind: Option<NameKind>,
+    },
+    /// The name written `shown` at `span` is of the kind `kind`, which the
+    /// place does not take (`want`, "a value"): E0308 (§15.1).
+    Kind {
+        shown: String,
+        span: Span,
+        kind: NameKind,
+        want: &'static str,
     },
     /// The head of a path outside a `use` names a module or a package with
     /// no `use` of it (§15.1, R-39), or names the own package or module
@@ -247,8 +343,15 @@ impl ResolveError {
                 Diagnostic::new(Stage::Names, Code::E0302, span, "`Self` is only valid inside `impl`")
                     .with_found("Self")
             }
-            ResolveError::NotANamespace { name, span } => {
+            ResolveError::NotANamespace { name, span, kind: Some(kind) } if !kind.is_namespace() => {
+                no_members(&name, kind, span).with_found(name)
+            }
+            ResolveError::NotANamespace { name, span, .. } => {
                 Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` has no members")).with_found(name)
+            }
+            ResolveError::Kind { shown, span, kind, want } => {
+                let msg = format!("`{shown}` is {}, not {want} (§15.1)", kind.noun());
+                Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(shown)
             }
             ResolveError::NeedsUse { name, span, own, fix, rule } => {
                 let msg = if own {
@@ -267,6 +370,13 @@ impl ResolveError {
             }
         }
     }
+}
+
+/// E0308 for a `.` after the name `name` of the kind `kind`, which is no
+/// namespace (§15.1), at `span`.
+pub(crate) fn no_members(name: &str, kind: NameKind, span: Span) -> Diagnostic {
+    let msg = format!("`{name}` is {}, which has no members (§15.1)", kind.noun());
+    Diagnostic::new(Stage::Names, Code::E0308, span, msg)
 }
 
 /// The order of the visibilities (§15.1): `priv` < no word < `pub`.

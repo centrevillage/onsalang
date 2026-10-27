@@ -7,7 +7,7 @@ pub fn helper(x: F32) -> F32 { x }
 
 // 名前が、その位置に要る種類でない。
 // 期待: E0308（名前の種類の誤り）。
-// 今: E0401「`P` is not a value」（型の不一致のコード）。
+// 今: E0308「`P` is a type, not a value (§15.1)」（W4-04 U8a から）。
 fn type_as_value() -> F32 { let a = P
   1.0 }
 

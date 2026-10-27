@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-103, S-713 (W4-04 U8a): a flow in a type place of a body is E0308 and the candidate is
+// `lp.State` (§15.1: "flow を型の位置に書く（修正候補は `lp.State`、§11.6）"), as in a signature
+// (e0308_flow_as_a_type.onsa): the annotation of a `let`, the target of an `as`, the type of the
+// parameter and of the result of an anonymous function, a tuple type. The candidate is the only one
+// (`fixes = 1`); the text after it is the copy `.fix1` that the implementation writes. One error per
+// unit (§18.1), so each form is in its own unit. The state type in the same places is the fine form.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub fn flow_in_an_annotation() -> F32 {
+  let _: lp.State = 1                                     //~ E0308
+  0.0
+}
+
+pub fn flow_in_a_tuple_type() -> F32 {
+  let _: (F32, lp.State) = (1.0, 2.0)                     //~ E0308
+  0.0
+}
+
+pub fn flow_as_a_cast_target(n: U32) -> F32 {
+  let _ = n as lp.State                                   //~ E0308
+  0.0
+}
+
+pub fn flow_as_a_closure_parameter_type() -> F32 {
+  let f = fn(s: lp.State) -> F32 { 0.0 }                  //~ E0308
+  0.0
+}
+
+pub fn flow_as_a_closure_result_type() -> F32 {
+  let f = fn(x: F32) -> lp.State { x }                    //~ E0308
+  0.0
+}
+
+pub fn flow_in_a_branch(flag: Bool) -> F32 {
+  if flag {
+    let _: lp.State = 1                                   //~ E0308
+    1.0
+  } else {
+    0.0
+  }
+}
+
+test "a flow as a type in a test" {
+  let s: lp.State = 1                                     //~ E0308
+  assert 1.0 == 1.0
+}
+
+pub fn state_in_a_signature_is_a_type(s: lp.State) -> F32 {
+  0.0
+}
+
+pub fn state_in_a_closure_parameter() -> F32 {
+  let _ = fn(s: lp.State) -> F32 { 0.0 }
+  0.0
+}

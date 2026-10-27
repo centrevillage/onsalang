@@ -1,0 +1,23 @@
+pub fn g() -> I32 {
+  1
+}
+
+pub fn x() -> I32 {
+  2
+}
+
+pub const K: I32 = 3
+
+pub struct Pt {
+  a: I32,
+}
+
+pub trait Tr {                                      //~ E0200
+  fn m(self) -> I32
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(a: I32) -> I32
+}
+
+pub handler hh: Alloc { }                           //~ E0200

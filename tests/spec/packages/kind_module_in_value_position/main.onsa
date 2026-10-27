@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§2.4", "§18.1"]
+
+// S-103, S-713 (W4-04 U8a): the name of a module that a `use` took (the module of the package or of
+// std) is a namespace, not a value, so it written in a value place is E0308 (§15.1: a name that is
+// found and is not of the kind the place needs), and so is a type of a module written by its path
+// (`util.Q`, `util.Kind`) or taken by
+// itself (`use util.{Q}`). The hole of an interpolation is the same path (§2.4): `"{inner}"`,
+// `"{inner.Q}"`. A module in a type place of a body (`let _: util = 1`, `n as inner`, the type of
+// the parameter of an anonymous function) is the E0308 of a value or a module written where a type
+// is read (§15.1). The members that are values are fine units of the file: a function called, a
+// constant, a struct literal and a variant by the path of the module, a function of `std.math`. One
+// error per unit (§18.1), so each form is in its own unit; the places (a branch, a closure, a
+// match arm, a `test`, a `const`) give the same code.
+use util
+use util.{Q}
+use inner
+use std.math
+
+pub fn module_in_a_let() -> I32 {
+  let _ = util                                      //~ E0308
+  0
+}
+
+pub fn second_module_in_a_let() -> I32 {
+  let _ = inner                                     //~ E0308
+  0
+}
+
+pub fn std_module_in_a_let() -> I32 {
+  let _ = math                                      //~ E0308
+  0
+}
+
+pub fn module_as_an_operand(n: I32) -> I32 {
+  n + util                                          //~ E0308
+}
+
+pub fn module_as_an_argument() -> I32 {
+  id(inner)                                         //~ E0308
+}
+
+pub fn module_as_the_tail() -> I32 {
+  util                                              //~ E0308
+}
+
+pub fn module_in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    let _ = util                                    //~ E0308
+    1
+  } else {
+    0
+  }
+}
+
+pub fn module_in_a_match_arm(n: U32) -> I32 {
+  match n {
+    0 => 0,
+    _ => {
+      let _ = inner                                 //~ E0308
+      1
+    }
+  }
+}
+
+pub fn module_in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let _ = util                                    //~ E0308
+    x
+  }
+  f.(1)
+}
+
+pub const MODULE_IN_A_CONST: I32 = util             //~ E0308
+
+test "a module name as a value in a test" {
+  let n = inner                                     //~ E0308
+  assert n == 0
+}
+
+pub fn type_of_a_module_by_its_path() -> I32 {
+  let _ = util.Q                                    //~ E0308
+  0
+}
+
+pub fn type_of_another_module_by_its_path() -> I32 {
+  let _ = inner.Q                                   //~ E0308
+  0
+}
+
+pub fn enum_of_a_module_by_its_path() -> I32 {
+  let _ = util.Kind                                 //~ E0308
+  0
+}
+
+pub fn type_of_a_module_as_an_operand(n: I32) -> I32 {
+  n + util.Q                                        //~ E0308
+}
+
+pub fn type_taken_by_itself() -> I32 {
+  let _ = Q                                         //~ E0308
+  0
+}
+
+pub fn module_in_a_hole() -> Str uses {Alloc} {
+  "{inner}"                                         //~ E0308
+}
+
+pub fn std_module_in_a_hole() -> Str uses {Alloc} {
+  "{math}"                                          //~ E0308
+}
+
+pub fn type_of_a_module_in_a_hole() -> Str uses {Alloc} {
+  "{inner.Q}"                                       //~ E0308
+}
+
+pub fn module_in_a_hole_after_a_good_hole(n: I32) -> Str uses {Alloc} {
+  "{n}/{util}"                                      //~ E0308
+}
+
+pub fn module_in_an_annotation() -> I32 {
+  let _: util = 1                                   //~ E0308
+  0
+}
+
+pub fn std_module_in_an_annotation() -> I32 {
+  let _: math = 1                                   //~ E0308
+  0
+}
+
+pub fn module_as_a_cast_target(n: I32) -> I32 {
+  let _ = n as inner                                //~ E0308
+  0
+}
+
+pub fn module_as_a_closure_parameter_type() -> I32 {
+  let f = fn(x: util) -> I32 { 0 }                  //~ E0308
+  f.(1)
+}
+
+pub fn function_of_a_module_called() -> I32 {
+  util.g()
+}
+
+pub fn constant_of_a_module() -> I32 {
+  util.K + inner.LIMIT
+}
+
+pub fn struct_literal_by_the_path_of_a_module() -> I32 {
+  let q = util.Q { x: 1 }
+  q.x
+}
+
+pub fn struct_literal_of_a_type_taken_by_itself() -> I32 {
+  let q = Q { x: 2 }
+  q.x
+}
+
+pub fn variant_by_the_path_of_a_module() -> I32 {
+  let k = util.Kind.A
+  match k {
+    util.Kind.A => 1,
+    util.Kind.B => 2,
+  }
+}
+
+pub fn function_of_std() -> F32 {
+  math.sqrt(4.0)
+}
+
+pub fn module_member_in_a_hole() -> Str uses {Alloc} {
+  "{util.K}/{inner.LIMIT}"
+}
+
+pub fn id(x: I32) -> I32 {
+  x
+}

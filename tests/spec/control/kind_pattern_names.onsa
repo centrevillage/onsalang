@@ -1,0 +1,251 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+
+// S-185, S-103, S-713 (W4-04 U8a): a name written in a pattern that is not a binding (`snake_case`
+// is a binding, so the name starts with a capital) is resolved, and unless it is a constant (a
+// `const` or an associated constant) or a variant it is E0308 (§7, §15.1): a type (a struct, an
+// enum, a built-in type, an alias), a trait, a kind constraint, an effect, a type parameter and a
+// const parameter of a generic (to compare with it, write a guard, §7). Nested in a tuple, a
+// struct pattern, a variant pattern and a `let` it is the same. In a choice (`p | q`) the name is E0308 before the E0314 of
+// the names that the branches bind differently (§18.1: the diagnostics that stay are ordered by
+// their start, and both start at the branch; `Some(x) | U32`). One error per unit (§18.1), so each
+// form is in its own unit. The names that are patterns (a variant, a struct pattern, an alias in a
+// struct pattern) are fine units of the file; a constant as a pattern is in
+// kind_pattern_names_constants.onsa (the typing of a constant pattern is W5-09).
+
+pub struct P {
+  x: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+type Al = P
+
+pub fn builtin_type(n: U32) -> I32 {
+  match n {
+    U32 => 1,                                       //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn float_type(x: F32) -> I32 {
+  match x {
+    F32 => 1,                                       //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn struct_type(p: P) -> I32 {
+  match p {
+    P => 1,                                         //~ E0308
+  }
+}
+
+pub fn enum_type(e: E) -> I32 {
+  match e {
+    E => 1,                                         //~ E0308
+  }
+}
+
+pub fn alias_type(p: P) -> I32 {
+  match p {
+    Al => 1,                                        //~ E0308
+  }
+}
+
+pub fn trait_name(n: U32) -> I32 {
+  match n {
+    Show => 1,                                      //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn number_trait_name(n: U32) -> I32 {
+  match n {
+    Num => 1,                                       //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn kind_constraint_name(n: U32) -> I32 {
+  match n {
+    Copy => 1,                                      //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn effect_name(n: U32) -> I32 {
+  match n {
+    Alloc => 1,                                     //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn const_parameter_of_a_generic[const N: U32](x: U32) -> I32 {
+  match x {
+    N => 1,                                         //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn type_parameter_of_a_generic[T](x: T) -> I32 {
+  match x {
+    T => 1,                                         //~ E0308
+  }
+}
+
+pub fn type_in_a_tuple(a: U32, b: U32) -> I32 {
+  match (a, b) {
+    (0, U32) => 1,                                  //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn type_in_a_struct_pattern(p: P) -> I32 {
+  match p {
+    P { x: I32 } => 1,                              //~ E0308
+  }
+}
+
+pub fn type_in_a_variant_pattern(e: E) -> I32 {
+  match e {
+    E.A => 0,
+    E.B(P) => 1,                                    //~ E0308
+  }
+}
+
+pub fn type_in_an_option(o: Option[U32]) -> I32 {
+  match o {
+    Some(U32) => 1,                                 //~ E0308
+    None => 0,
+  }
+}
+
+pub fn type_in_a_let(a: U32) -> I32 {
+  let U32 = a                                       //~ E0308
+  0
+}
+
+pub fn type_in_a_let_tuple(t: (U32, U32)) -> I32 {
+  let (v, U32) = t                                  //~ E0308
+  0
+}
+
+pub fn type_after_a_good_arm(n: U32) -> I32 {
+  match n {
+    0 => 0,
+    1 | 2 => 1,
+    U32 => 2,                                       //~ E0308
+    _ => 3,
+  }
+}
+
+pub fn type_in_an_arm_with_a_guard(n: U32) -> I32 {
+  match n {
+    U32 if n > 1 => 1,                              //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn type_in_a_choice_after_a_literal(n: U32) -> I32 {
+  match n {
+    0 | U32 => 1,                                   //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn type_in_a_choice_binds_a_name_in_one_branch(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | U32 => x,                             //~ E0308
+    None => 0,
+  }
+}
+
+pub fn type_in_a_choice_first_branch(o: Option[U32]) -> U32 {
+  match o {
+    U32 | Some(x) => x,                             //~ E0308
+    None => 0,
+  }
+}
+
+pub fn trait_in_a_choice_binds_a_name_in_one_branch(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | Show => x,                            //~ E0308
+    None => 0,
+  }
+}
+
+pub fn type_in_a_nested_choice(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 | U32) => 1,                             //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn type_in_a_closure(o: Option[U32]) -> U32 {
+  let f = fn(n: U32) -> U32 {
+    match n {
+      U32 => 1,                                     //~ E0308
+      _ => 0,
+    }
+  }
+  f.(1)
+}
+
+pub fn type_in_a_branch(flag: Bool, n: U32) -> U32 {
+  if flag {
+    match n {
+      U32 => 1,                                     //~ E0308
+      _ => 0,
+    }
+  } else {
+    0
+  }
+}
+
+test "a type name as a pattern in a test" {
+  let n: I32 = 1
+  let r = match n {
+    I32 => 1,                                       //~ E0308
+    _ => 0,
+  }
+  assert r == 1
+}
+
+pub fn a_variant_is_a_pattern(e: E) -> I32 {
+  match e {
+    E.A => 0,
+    E.B(v) => v,
+  }
+}
+
+pub fn a_prelude_variant_is_a_pattern(o: Option[U32]) -> U32 {
+  match o {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn a_struct_pattern_is_a_pattern(p: P) -> I32 {
+  match p {
+    P { x: px } => px,
+  }
+}
+
+pub fn an_alias_in_a_struct_pattern_is_a_pattern(p: P) -> I32 {
+  match p {
+    Al { x: px } => px,
+  }
+}
+
+pub fn a_choice_with_the_same_names(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 | 1) | Some(2) => 1,
+    Some(x) => x,
+    None => 0,
+  }
+}

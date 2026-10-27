@@ -1,0 +1,3 @@
+[package]
+name = "kind_dot_after_non_namespace"
+edition = "2026"

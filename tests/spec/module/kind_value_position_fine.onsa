@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§2.2", "§4.4", "§6.6"]
+
+// The right forms next to kind_type_in_value_position.onsa (S-103, S-713, S-595, W4-04 U8a): the name
+// of a type is not a value, but it is the head of a path that is one (§15.1: a type is a namespace,
+// §4.4: an alias is used as the type it names). A struct literal (`P { x: 1 }`), an associated
+// function (`P.new(1)`), an associated constant (`P.N`, `F32.PI`, `I32.MAX`), a variant (`E.A`,
+// `E.B(2)`), the same through an alias (`Al { .. }`, `Al.new(..)`, `Al.N`), `Self` as the head of a
+// path in an `impl` (§2.2), a function and a constant by their names. No diagnostic, and the
+// values are what the `test` blocks read.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  const N: I32 = 4
+
+  pub fn new(x: I32) -> P { P { x: x } }
+
+  pub fn get(self) -> I32 { self.x }
+
+  pub fn make() -> P { Self { x: 1 } }
+
+  pub fn bump(self) -> P { Self.new(self.x + Self.N) }
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+type Al = P
+
+type AlOfAl = Al
+
+const K: I32 = 7
+
+fn inc(x: I32) -> I32 { x + 1 }
+
+test "a struct literal, an associated function and an associated constant" {
+  let a = P { x: 2 }
+  let b = P.new(3)
+  assert a.get() + b.get() == 5
+  assert P.N == 4
+  assert F32.PI > 3.0
+  assert I32.MAX > 0
+}
+
+test "a variant of an enum" {
+  let a = E.A
+  let b = E.B(2)
+  let n = match b {
+    E.A => 0,
+    E.B(v) => v,
+  }
+  let m = match a {
+    E.A => 1,
+    E.B(_) => 0,
+  }
+  assert n + m == 3
+}
+
+test "the same through an alias" {
+  let a = Al { x: 2 }
+  let b = Al.new(3)
+  let c = AlOfAl { x: 4 }
+  assert a.get() + b.get() + c.get() == 9
+  assert Al.N == 4
+}
+
+test "Self as the head of a path" {
+  assert P.make().get() == 1
+  assert P.make().bump().get() == 5
+}
+
+test "a function and a constant by their names" {
+  assert inc(K) == 8
+  assert K == 7
+}

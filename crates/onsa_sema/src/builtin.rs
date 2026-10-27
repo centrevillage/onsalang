@@ -166,21 +166,34 @@ fn methods() -> &'static [Method] {
     })
 }
 
-/// Method `name` on a receiver of (resolved, non-variable) type `recv`.
-pub fn method(types: &mut Types, recv: TyId, name: &str) -> Option<MethodSig> {
-    let recv_ty = types.get(recv).clone();
-    let (families, inner): (&[Recv], Option<TyId>) = match &recv_ty {
+/// The row of the method `name` of the receiver type `recv_ty`, and its
+/// element type (none of the key of a generic type, `Analysis::builtin_key`).
+fn method_row(recv_ty: &Ty, name: &str) -> Option<(&'static Method, Option<TyId>)> {
+    let (families, inner): (&[Recv], Option<TyId>) = match recv_ty {
         Ty::Int(k) if k.signed() => (&[Recv::Int, Recv::SignedInt], None),
         Ty::Int(_) => (&[Recv::Int], None),
         Ty::Float(_) => (&[Recv::Float], None),
         Ty::Array(elem, _) => (&[Recv::Seq], Some(*elem)),
-        Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, args) => (&[Recv::Seq], Some(args[0])),
+        Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, args) => (&[Recv::Seq], args.first().copied()),
         Ty::Builtin(BuiltinTy::Str, _) => (&[Recv::Str], None),
-        Ty::Builtin(BuiltinTy::Option, args) => (&[Recv::Option], Some(args[0])),
-        Ty::Builtin(BuiltinTy::Result, args) => (&[Recv::Result], Some(args[0])),
+        Ty::Builtin(BuiltinTy::Option, args) => (&[Recv::Option], args.first().copied()),
+        Ty::Builtin(BuiltinTy::Result, args) => (&[Recv::Result], args.first().copied()),
         _ => return None,
     };
-    let m = methods().iter().find(|m| families.contains(&m.recv) && m.name == name)?;
+    Some((methods().iter().find(|m| families.contains(&m.recv) && m.name == name)?, inner))
+}
+
+/// Whether the builtin type `recv` (a scalar, or a generic one by its key)
+/// has the method `name`, and whether it is called with `!`: the question
+/// of the names stage, which makes no type (`Str.len(s)`, §15.1).
+pub(crate) fn method_bang(types: &Types, recv: TyId, name: &str) -> Option<bool> {
+    method_row(types.get(recv), name).map(|(m, _)| m.bang)
+}
+
+/// Method `name` on a receiver of (resolved, non-variable) type `recv`.
+pub fn method(types: &mut Types, recv: TyId, name: &str) -> Option<MethodSig> {
+    let recv_ty = types.get(recv).clone();
+    let (m, inner) = method_row(&recv_ty, name)?;
     let mut ty = |t: T| sig_ty(types, t, recv, &recv_ty, inner);
     let params = m.params.iter().map(|t| ty(*t)).collect::<Option<Vec<_>>>()?;
     let ret = ty(m.ret)?;

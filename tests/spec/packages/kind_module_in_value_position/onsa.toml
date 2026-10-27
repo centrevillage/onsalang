@@ -1,0 +1,3 @@
+[package]
+name = "kind_module_in_value_position"
+edition = "2026"

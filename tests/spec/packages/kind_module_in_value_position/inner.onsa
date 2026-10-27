@@ -1,0 +1,9 @@
+pub struct Q {
+  x: I32,
+}
+
+pub const LIMIT: I32 = 8
+
+pub fn make() -> Q {
+  Q { x: LIMIT }
+}

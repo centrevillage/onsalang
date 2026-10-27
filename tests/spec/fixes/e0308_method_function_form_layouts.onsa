@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§15.1", "§2.6", "§18.1"]
+// fixes = 1
+
+// S-103, S-713 (W4-04 U8a): the candidate of the method called in the function form
+// (e0308_method_function_form_builtin.onsa) when the call is written over lines or with marks. Its
+// title is one line (§18.1) when the first argument spans lines; the `,` after the first argument
+// goes with it when no argument follows (`P.get(\n p,\n )`, `P.get(p,)`), and stays before the next
+// one; a call already written with `!` (§2.6) keeps its one `!`, and a call of an `inout self` method
+// without it gets it. The first candidate is the only one (`fixes = 1`); the text after it is the
+// copy `.fix1` that the implementation writes. The runner applies every candidate and checks the
+// program again, so a candidate that left an error of the same stage or an earlier one in its unit
+// (a syntax error) fails the case (S-236). One error per unit (§18.1).
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn new(x: U32) -> P { P { x: x } }
+
+  pub fn get(self) -> U32 { self.x }
+
+  pub fn mul(self, k: U32) -> U32 { self.x * k }
+
+  pub fn bump(inout self, k: U32) { self.x = self.x + k }
+}
+
+pub fn a_receiver_over_lines() -> U32 {
+  P.get(P.new(                                      //~ E0308
+    1
+  ))
+}
+
+pub fn a_receiver_with_an_operator_over_lines(a: P, b: U32) -> U32 {
+  P.mul(                                            //~ E0308
+    P.new(b +
+      1),
+    b,
+  )
+}
+
+pub fn a_trailing_comma_over_lines(p: P) -> U32 {
+  P.get(                                            //~ E0308
+    p,
+  )
+}
+
+pub fn a_trailing_comma_on_one_line(p: P) -> U32 {
+  P.get(p,)                                         //~ E0308
+}
+
+pub fn a_trailing_comma_after_two_arguments(p: P) -> U32 {
+  P.mul(                                            //~ E0308
+    p,
+    2,
+  )
+}
+
+pub fn a_builtin_with_a_trailing_comma(s: Str) -> U32 {
+  Str.len(                                          //~ E0308
+    s,
+  )
+}
+
+pub fn the_bang_written(inout q: P) -> U32 {
+  P.bump!(q, 2)                                     //~ E0308
+  q.x
+}
+
+pub fn the_bang_not_written(inout q: P) -> U32 {
+  P.bump(q, 2)                                      //~ E0308
+  q.x
+}

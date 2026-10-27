@@ -1,0 +1,19 @@
+pub struct Q {
+  x: I32,
+}
+
+pub enum Kind {
+  A,
+  B,
+}
+
+pub const K: I32 = 3
+
+pub fn g() -> I32 {
+  1
+}
+
+pub fn q_in_a_module_is_a_type() -> I32 {
+  let q = Q { x: 1 }
+  q.x
+}

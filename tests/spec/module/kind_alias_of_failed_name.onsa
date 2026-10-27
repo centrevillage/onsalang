@@ -1,0 +1,265 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4", "§15.1"]
+
+// S-728, R-271, S-91 (W4-04 U8a): a type alias whose type is the error type, and the `Self` of an
+// `impl` whose target is the error type, written at the head of a path in a value place, stop the
+// unit as the failed name itself does (§18.1: "値の位置（失敗した名前を経路として書いた式とパターン。
+// 型が誤りの型になった型別名（§4.4）と、対象が誤りの型の `impl` の `Self` を経路の頭に書いたときも
+// 同じ）では、その単位の以後を検査しない"). The alias is the error type when its right side is a
+// failed name (`use std.math.{Gone}` is E0302, so `Gone` is a failed name), a name that is not found
+// (`type B = Nope`), or an alias of such an alias. The test is the line after the use: `let b: Bool = 2`
+// has an E0401 in a unit that goes on, and none when the unit stops, and the binding is read so there
+// is no E0309 either. A type place (`x: A`, `Self` in an annotation) reads the error type and the unit
+// goes on, so the E0401 is reported there. The cycle of aliases is in kind_alias_cycle.onsa (the code
+// of the cycle waits for W4-05). One error per unit (§18.1) for the real errors, so each form is in
+// its own unit.
+use std.math.{Gone}                                 //~ E0302
+
+type A = Gone
+
+type AA = A
+
+type B = Nope                                       //~ E0302
+
+pub struct P {
+  x: I32,
+}
+
+type Good = P
+
+pub fn failed_name_literal() -> Bool {
+  let _ = Gone { a: 1 }
+  let b: Bool = 2
+  b
+}
+
+pub fn failed_name_path() -> Bool {
+  let _ = Gone.V
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_literal() -> Bool {
+  let _ = A { a: 1 }
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_path() -> Bool {
+  let _ = A.V
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_associated_call() -> Bool {
+  let _ = A.make()
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_pattern(x: A) -> Bool {
+  let _ = match x {
+    A.V => 1,
+    _ => 0,
+  }
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_pattern_with_a_binding(x: A) -> Bool {
+  match x {
+    A.V(_) => {
+      let b: Bool = 2
+      b
+    },
+    _ => true,
+  }
+}
+
+pub fn alias_pattern_after_a_good_arm(n: U32, x: (U32, A)) -> Bool {
+  match x {
+    (0, _) => true,
+    (_, A.V) => {
+      let b: Bool = n
+      b
+    },
+    _ => true,
+  }
+}
+
+pub fn alias_of_alias_literal() -> Bool {
+  let _ = AA { a: 1 }
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_of_alias_path() -> Bool {
+  let _ = AA.V
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_of_alias_pattern(x: AA) -> Bool {
+  match x {
+    AA.V => {
+      let b: Bool = 2
+      b
+    },
+    _ => true,
+  }
+}
+
+pub fn alias_of_a_name_not_found_literal() -> Bool {
+  let _ = B { a: 1 }
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_of_a_name_not_found_path() -> Bool {
+  let _ = B.V
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_of_a_name_not_found_pattern(x: B) -> Bool {
+  match x {
+    B.V => {
+      let b: Bool = 2
+      b
+    },
+    _ => true,
+  }
+}
+
+pub fn alias_in_a_branch(flag: Bool) -> Bool {
+  if flag {
+    let _ = A { a: 1 }
+  }
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_in_a_closure() -> Bool {
+  let f = fn(x: I32) -> I32 {
+    let _ = A { a: x }
+    x
+  }
+  let b: Bool = 2
+  b && f.(1) == 1
+}
+
+pub fn alias_in_a_loop() -> Bool {
+  for i in 0 ..< 3 {
+    let _ = A { a: i }
+  }
+  let b: Bool = 2
+  b
+}
+
+pub fn alias_in_a_generic_fn[T](x: T) -> Bool {
+  let _ = A { a: 1 }
+  let b: Bool = 2
+  b
+}
+
+test "an alias of a failed name stops the unit of a test" {
+  let _ = A { a: 1 }
+  let b: Bool = 2
+  assert b
+}
+
+pub fn alias_in_a_type_place_goes_on(x: A) -> Bool {
+  let b: Bool = 2                                   //~ E0401
+  b
+}
+
+pub fn alias_in_an_annotation_goes_on(x: A) -> Bool {
+  let y: A = x
+  let b: Bool = 2                                   //~ E0401
+  b
+}
+
+pub fn alias_of_alias_in_a_type_place_goes_on(x: AA) -> Bool {
+  let b: Bool = 2                                   //~ E0401
+  b
+}
+
+pub fn alias_of_a_name_not_found_in_a_type_place_goes_on(x: B) -> Bool {
+  let b: Bool = 2                                   //~ E0401
+  b
+}
+
+pub fn alias_of_a_good_type_goes_on() -> Bool {
+  let _ = Good { x: 1 }
+  let b: Bool = 2                                   //~ E0401
+  b
+}
+
+pub fn alias_of_a_good_type_path_goes_on() -> Bool {
+  let _ = Good.make()
+  let b: Bool = 2                                   //~ E0401
+  b
+}
+
+impl Gone {
+  pub fn make(self) -> Bool {
+    let _ = Self { a: 1 }
+    let b: Bool = 2
+    b
+  }
+
+  pub fn path(self) -> Bool {
+    let _ = Self.V
+    let b: Bool = 2
+    b
+  }
+
+  pub fn associated_call(self) -> Bool {
+    let _ = Self.make2()
+    let b: Bool = 2
+    b
+  }
+
+  pub fn pattern(self, x: I32) -> Bool {
+    match x {
+      Self.V => {
+        let b: Bool = 2
+        b
+      },
+      _ => true,
+    }
+  }
+
+  pub fn in_a_closure(self) -> Bool {
+    let f = fn(x: I32) -> I32 {
+      let _ = Self { a: x }
+      x
+    }
+    let b: Bool = 2
+    b && f.(1) == 1
+  }
+
+  pub fn in_a_type_place_goes_on(self, other: Self) -> Bool {
+    let b: Bool = 2                                 //~ E0401
+    b
+  }
+
+  pub fn in_an_annotation_goes_on(self) -> Bool {
+    let me: Self = self
+    let b: Bool = 2                                 //~ E0401
+    b
+  }
+}
+
+impl P {
+  pub fn make() -> P {
+    P { x: 1 }
+  }
+
+  pub fn good_self_literal(self) -> Bool {
+    let _ = Self { x: 1 }
+    let b: Bool = 2                                 //~ E0401
+    b
+  }
+}

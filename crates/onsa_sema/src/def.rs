@@ -301,8 +301,26 @@ pub enum DefKind {
         blocking: bool,
     },
     /// A declaration phase 1 does not support (E0200 reported); kept so that
-    /// names resolve without cascading errors.
-    Unsupported,
+    /// names resolve without cascading errors, with the kind of its name its
+    /// keyword tells (§18.1, S-719, S-721).
+    Unsupported(Declared),
+}
+
+/// The kind of the name of a declaration this version does not support, as
+/// its keyword tells (§18.1): what is not read of it (the members of a
+/// trait or an effect, the signature of an `extern` function) is an error
+/// with no diagnostic where it is used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Declared {
+    Trait,
+    Effect,
+    Handler,
+    /// A function of an `extern` block, a value of the error type.
+    Fn,
+    /// A type of an `extern` block (opaque).
+    Type,
+    /// The `extern` block itself, which has no name.
+    Block,
 }
 
 #[derive(Debug, Clone)]

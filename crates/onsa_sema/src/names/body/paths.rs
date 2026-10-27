@@ -16,9 +16,11 @@
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path};
 
+use super::kinds::Want;
 use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
-use crate::def::{DefKind, GenericKind};
+use crate::def::GenericKind;
 use crate::flow_names::FlowBuiltin;
+use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::ty::TyId;
 use crate::{Analysis, builtin};
@@ -28,32 +30,30 @@ use crate::{Analysis, builtin};
 pub(super) enum Place {
     /// A value, whose fields may follow.
     Value,
-    /// The callee of a call (`f(x)`, `a.m(x)`, `x.m!(y)`): its last name may
-    /// be a method of the value before it, or an associated function.
-    Callee,
+    /// The callee of the call `.0` (`f(x)`, `a.m(x)`, `x.m!(y)`): its last
+    /// name may be a method of the value before it, or an associated function.
+    Callee(ExprId),
     /// The callee of an instance (`f~(x)`): the flow stage reads it and
     /// reports its errors (W4-12); the walk records what it finds alone.
     Instance,
+    /// The `[…]` of a callee after a field (`p.m[I32](1)`): the type
+    /// arguments of a method or an index, which the types stage tells apart
+    /// (§4.5); the walk records what it finds, but a method named through
+    /// its type, neither of them (E0308).
+    TypeOrValue,
 }
 
-/// Whether the entity is a value at the place of a value: a function, a
-/// constant, a variant, a constructor of the prelude, `panic`, a flow (an
-/// error there, reported by the types stage) or what this version does
-/// not support. The fields and methods of a value follow it; a name after
-/// what is neither a value nor a namespace has no members.
+/// Whether the entity is a value at the place of a value: a function (of
+/// an `extern` block too, a value of the error type), a constant, a variant,
+/// a constructor of the prelude or `panic` ([`NameKind::is_value`]). The
+/// fields and methods of a value follow it; a name after what is neither a
+/// value nor a namespace has no members.
 pub(crate) fn is_value(a: &Analysis, e: Entity) -> bool {
-    match e {
-        Entity::Def(d) | Entity::Member(d) => {
-            matches!(a.def(d).kind, DefKind::Fn(_) | DefKind::Const(_) | DefKind::Flow(_) | DefKind::Unsupported)
-        }
-        Entity::Variant(..) => true,
-        Entity::Builtin(b) => matches!(b, Builtin::None | Builtin::Some | Builtin::Ok | Builtin::Err | Builtin::Panic),
-        Entity::Module(_) => false,
-    }
+    NameKind::of(e, &a.defs).is_some_and(NameKind::is_value)
 }
 
 /// The span from the first name of `segs` to its last.
-fn span_of(segs: &[&Ident]) -> Span {
+pub(super) fn span_of(segs: &[&Ident]) -> Span {
     let (first, last) = (segs[0].span, segs[segs.len() - 1].span);
     Span::new(first.file, first.start, last.end)
 }
@@ -99,8 +99,12 @@ impl<'a> Walker<'a> {
         }
         match self.heading(&head.name) {
             Some(r @ PathRes::ConstParam(_)) => return (vec![r], None),
-            // A type parameter is no value (`T.ZERO` from W4-04 U6).
-            Some(r) => return (vec![r], Some(self.not_found(head))),
+            // A type parameter is a type (§15.1), and no namespace of members
+            // (`T.ZERO` from W4-04 U6).
+            Some(r) => {
+                let kind = (segs.len() == 1).then(|| self.kind_fail(NameKind::Type, segs, place)).flatten();
+                return (vec![r], Some(kind.unwrap_or_else(|| self.not_found(head))));
+            }
             None => {}
         }
         let a = self.a;
@@ -125,30 +129,40 @@ impl<'a> Walker<'a> {
         // type an alias there stands for), and whether it is the name of the
         // method of a call.
         let at = out.len() + 1;
-        let method = matches!(place, Place::Callee | Place::Instance) && at + 1 == segs.len();
+        let method = matches!(place, Place::Callee(_) | Place::Instance) && at + 1 == segs.len();
         // `Option.None`, `Result.Ok(1)`, `O.None` (S-607); the callee of an
         // instance is the flow stage's (W4-12).
-        let variant = match &err {
+        let (variant, called) = match &err {
             Some(ResolveError::NotFound { .. }) if place != Place::Instance => {
-                self.qualified_variant(&path_of(segs), at, of)
+                let called = (at + 1 == segs.len()).then(|| self.builtin_called(of, &segs[..=at], place)).flatten();
+                (self.qualified_variant(&path_of(segs), at, of), called)
             }
+            _ => (None, None),
+        };
+        let assoc = match &err {
+            Some(ResolveError::NotFound { .. }) => self.builtin_assoc(of, segs[at], method, owner),
             _ => None,
         };
         let fail = match err {
+            // An alias of the error type stands for a failed name (§18.1, S-728).
+            None if a.alias_type(cur).is_err() => Some(Fail::Held),
             None => {
                 out.push(PathRes::Item { entity: cur, owner });
-                None
-            }
-            Some(ResolveError::NotANamespace { .. })
-                if matches!(cur, Entity::Builtin(Builtin::Trait(_) | Builtin::Kind(_))) =>
-            {
-                Some(Fail::Report(self.no_namespace(&segs[..=at])))
+                let kind = NameKind::of(cur, &a.defs);
+                kind.and_then(|k| self.kind_fail(k, segs, place)).or_else(|| self.method_form(cur, segs, place))
             }
             // A value, or the receiver of a method (what is no value there
-            // is the types stage's error, unless the check does not read it).
+            // is the types stage's error, unless the check does not read it);
+            // a method named through its type is no value whatever follows it.
             Some(ResolveError::NotANamespace { .. }) if is_value(a, cur) => {
-                out.push(PathRes::Item { entity: cur, owner });
-                None
+                let method = self.method_form(cur, &segs[..at], Place::Value);
+                if method.is_none() {
+                    out.push(PathRes::Item { entity: cur, owner });
+                }
+                method
+            }
+            Some(ResolveError::NotANamespace { kind: Some(k), .. }) if !k.is_namespace() => {
+                Some(Fail::Report(self.no_namespace(&segs[..=at], k)))
             }
             Some(err @ ResolveError::NotANamespace { .. })
                 if method && !a.unread(self.m, &path_of(&segs[..=at]), &err) =>
@@ -157,12 +171,12 @@ impl<'a> Walker<'a> {
                 None
             }
             Some(ResolveError::NotFound { .. }) if variant.is_some() => variant.map(Fail::Report),
-            Some(ResolveError::NotFound { .. }) if self.builtin_assoc(of, segs[at], method, owner).is_some() => {
-                let assoc = self.builtin_assoc(of, segs[at], method, owner).expect("an associated item");
-                out.extend([PathRes::Namespace(cur), assoc]);
+            Some(ResolveError::NotFound { .. }) if called.is_some() => called,
+            Some(ResolveError::NotFound { .. }) if assoc.is_some() => {
+                out.extend([PathRes::Namespace(cur)].into_iter().chain(assoc));
                 None
             }
-            Some(err) => Some(self.member_error(&path_of(&segs[..=at]), err)),
+            Some(err) => Some(self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner))),
         };
         // A chain held as an error has no record, as one held at its head
         // (`BodyNames`): the types stage stops at its head.
@@ -232,27 +246,23 @@ impl<'a> Walker<'a> {
     fn flow_builtin(&self, b: FlowBuiltin, segs: &[&Ident], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let called = match place {
             Place::Instance => true,
-            Place::Callee => segs.len() == 1,
-            Place::Value => false,
+            Place::Callee(_) => segs.len() == 1,
+            Place::Value | Place::TypeOrValue => false,
         };
         let fail = (!called).then(|| Fail::Report(b.misplaced(segs.iter().map(|s| s.span), self.text)));
         (vec![PathRes::FlowBuiltin(b)], fail)
     }
 
-    /// E0308 for a `.` after a name that is neither a value nor a namespace
-    /// (a trait, a kind constraint; §15.1, S-713 (e)), with no candidate.
-    fn no_namespace(&self, segs: &[&Ident]) -> Diagnostic {
-        let (name, member) = (segs[segs.len() - 2], segs[segs.len() - 1]);
-        let span = span_of(segs);
-        let msg = format!("`{}` is a trait or a kind constraint, which has no members (§15.1)", name.name);
-        Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(self.src(span)).with_note(
-            name.span,
-            format!(
-                "a method is called on a value (`x.{}()`), and an associated function or constant is named after \
-                 a type (`F32.from_bits(b)`, §6.6)",
-                member.name
-            ),
-        )
+    /// The error `err` of the element after `segs[..len - 1]` as written,
+    /// when an alias or `Self` passed (`owner`): `Q.nope`, not the name of the
+    /// type it stands for (W4-04 U6).
+    fn written(&self, err: ResolveError, segs: &[&Ident], owner: Option<TyId>) -> ResolveError {
+        match err {
+            ResolveError::NotFound { span, .. } if owner.is_some() => {
+                ResolveError::NotFound { name: self.src(span_of(segs)), span }
+            }
+            err => err,
+        }
     }
 
     /// The type or const parameter `name` of the heading.
@@ -308,39 +318,50 @@ impl<'a> Walker<'a> {
     /// The item a path of a pattern or a struct literal names, of the names
     /// of the module (as a type is named), and the type an alias or `Self`
     /// before it stands for; a path that ends at an alias or at `Self` names
-    /// the type (`P { x }`, `Self { x }`).
-    fn item(&self, path: &Path) -> Result<(Entity, Option<TyId>), Fail> {
+    /// the type (`P { x }`, `Self { x }`). A name of a kind the place does
+    /// not take (`want`) is E0308 (§15.1, §7): a struct literal and a struct
+    /// pattern name a type, the path of any other pattern a variant or a
+    /// constant (the form of each is the types stage's).
+    fn item(&self, path: &Path, want: Want) -> Result<(Entity, Option<TyId>), Fail> {
         let a = self.a;
-        let head = &path.segments[0];
+        let segs: Vec<&Ident> = path.segments.iter().collect();
+        let head = segs[0];
         let error = |err| self.member_error(path, err);
         // A builtin name of a flow in a pattern (`prev(z) =>`, S-720).
         if let Some(b) = self.flow_name(&head.name) {
             return Err(Fail::Report(b.misplaced(path.segments.iter().map(|s| s.span), self.text)));
         }
+        // A type or const parameter in a pattern (S-185).
+        if let (Want::VariantOrConstant, [_], Some(r)) = (want, &segs[..], self.heading(&head.name)) {
+            let kind = if matches!(r, PathRes::ConstParam(_)) { NameKind::ConstParam } else { NameKind::Type };
+            return Err(self.want(kind, &segs, want).unwrap_or_else(|| self.not_found(head)));
+        }
         let (first, typed) = a.typed_path(self.m, path, self.self_ty).map_err(error)?;
+        let at = typed.reached.len() + 1;
         match typed.err {
-            Some(err @ ResolveError::NotFound { .. }) => {
-                match self.qualified_variant(path, typed.reached.len() + 1, typed.at) {
-                    Some(d) => Err(Fail::Report(d)),
-                    None => Err(error(err)),
-                }
-            }
+            Some(err @ ResolveError::NotFound { .. }) => match self.qualified_variant(path, at, typed.at) {
+                Some(d) => Err(Fail::Report(d)),
+                None => Err(error(self.written(err, &segs[..=at], typed.owner))),
+            },
             Some(err) => Err(error(err)),
             None => {
                 let end = typed.reached.last().copied().unwrap_or(first);
-                match a.alias_type(end) {
-                    Ok(Some((ns, t))) => Ok((ns, Some(t))),
-                    // An alias of the error type or of no struct: the types
-                    // stage reads the alias (R-271).
-                    Ok(None) | Err(_) => Ok((end, typed.owner)),
+                let (entity, owner) = match a.alias_type(end).map_err(error)? {
+                    Some((ns, t)) => (ns, Some(t)),
+                    // An alias of no struct: the types stage reads the alias.
+                    None => (end, typed.owner),
+                };
+                match NameKind::of(entity, &a.defs).and_then(|k| self.want(k, &segs, want)) {
+                    Some(f) => Err(f),
+                    None => Ok((entity, owner)),
                 }
             }
         }
     }
 
     /// The item the path of the pattern `p` names (§7).
-    pub(super) fn ctor(&mut self, p: PatId, path: &Path) -> W {
-        match self.item(path) {
+    pub(super) fn ctor(&mut self, p: PatId, path: &Path, want: Want) -> W {
+        match self.item(path, want) {
             Ok((entity, owner)) => {
                 self.out.pats.insert(p, PatRes::Ctor { entity, owner });
                 Ok(())
@@ -351,7 +372,7 @@ impl<'a> Walker<'a> {
 
     /// The item the path of the struct literal `e` names.
     pub(super) fn struct_lit(&mut self, e: ExprId, path: &Path) -> W {
-        let (entity, owner) = self.item(path).map_err(|f| self.fail(f))?;
+        let (entity, owner) = self.item(path, Want::Type).map_err(|f| self.fail(f))?;
         self.out.structs.insert(e, StructRes { entity, owner });
         Ok(())
     }

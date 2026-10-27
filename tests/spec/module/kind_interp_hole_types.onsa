@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§2.4", "§2.2", "§18.1"]
+
+// S-103, S-713, S-90 (W4-04 U8a): a hole of an interpolation is a name path that "resolves by the
+// same rule as when it is written in an expression" (§2.4), so the name of a type alone in a hole is
+// the E0308 of a type in a value place, as `let a = P` is (kind_type_in_value_position.onsa): a
+// struct, an enum, a built-in type, an alias, `Self` (a hole may start with `Self`, §2.4), and a
+// trait or a kind constraint (not a namespace and not a value, §15.1), an effect, a type parameter.
+// The paths that are values (`{P.N}`, `{F32.PI}`, `{p.x}`) are fine units of the same file. A string
+// with an interpolation makes a new `Str`, so the functions use `Alloc` (§2.4). One error per
+// unit; the places (a branch, a closure, a match arm, a `test`, a `const`, after and before a good
+// hole) give the same code.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: I32 = 4
+
+  pub fn self_hole(self) -> Str uses {Alloc} {
+    "{Self}"                                        //~ E0308
+  }
+
+  pub fn self_constant_hole(self) -> Str uses {Alloc} {
+    "{Self.N}/{self.x}"
+  }
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+type Al = P
+
+pub fn struct_hole() -> Str uses {Alloc} {
+  "{P}"                                             //~ E0308
+}
+
+pub fn enum_hole() -> Str uses {Alloc} {
+  "{E}"                                             //~ E0308
+}
+
+pub fn builtin_hole() -> Str uses {Alloc} {
+  "{I32}"                                           //~ E0308
+}
+
+pub fn builtin_float_hole() -> Str uses {Alloc} {
+  "{F32}"                                           //~ E0308
+}
+
+pub fn alias_hole() -> Str uses {Alloc} {
+  "{Al}"                                            //~ E0308
+}
+
+pub fn trait_hole() -> Str uses {Alloc} {
+  "{Show}"                                          //~ E0308
+}
+
+pub fn kind_constraint_hole() -> Str uses {Alloc} {
+  "{Copy}"                                          //~ E0308
+}
+
+pub fn effect_hole() -> Str uses {Alloc} {
+  "{Alloc}"                                         //~ E0308
+}
+
+pub fn after_a_good_hole(n: I32) -> Str uses {Alloc} {
+  "{n}/{P}"                                         //~ E0308
+}
+
+pub fn before_a_good_hole(n: I32) -> Str uses {Alloc} {
+  "{P}/{n}"                                         //~ E0308
+}
+
+pub fn among_text(n: I32) -> Str uses {Alloc} {
+  "n = {n}, type = {E}, done"                       //~ E0308
+}
+
+pub fn in_a_branch(flag: Bool) -> Str uses {Alloc} {
+  if flag {
+    "{P}"                                           //~ E0308
+  } else {
+    "no"
+  }
+}
+
+pub fn in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "zero",
+    _ => "{E}",                                     //~ E0308
+  }
+}
+
+pub fn in_a_closure() -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}/{I32}" }   //~ E0308
+  f.(1)
+}
+
+pub fn in_a_generic_fn[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}/{P}"                                         //~ E0308
+}
+
+pub fn a_type_parameter_hole[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}/{T}"                                         //~ E0308
+}
+
+pub const IN_A_CONST: Str = "{P}"                   //~ E0308
+
+test "a type in a hole in a test" {
+  let s = "{P}"                                     //~ E0308
+  assert s.len() == 1
+}
+
+pub fn constants_are_values() -> Str uses {Alloc} {
+  "{P.N}/{F32.PI}/{I32.MAX}"
+}
+
+pub fn locals_are_values(p: P, n: I32) -> Str uses {Alloc} {
+  "{p.x}/{n}"
+}
+
+pub fn type_names_in_text_are_text(n: I32) -> Str uses {Alloc} {
+  "P and {{E}} and {n}"
+}

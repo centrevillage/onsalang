@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use onsa_diag::{Edit, Fix, Span};
 use onsa_syntax::ast::{Ident, Path, Vis};
 
-use crate::def::{Def, DefKind, ModId};
-use crate::resolve::{Builtin, DepTarget, Entity, Modules, ResolveError, UseAt, UseBinding};
+use crate::def::{Declared, Def, DefKind, ModId};
+use crate::resolve::{Builtin, DepTarget, Entity, Modules, NameKind, ResolveError, UseAt, UseBinding};
 
 /// The tables a path outside a `use` reads after its head.
 pub(crate) type Names<'a> = (&'a HashMap<String, Entity>, &'a [Def], &'a HashMap<BuiltinTy, TyId>);
@@ -371,7 +371,14 @@ impl Modules {
                         }
                     }
                     DefKind::Struct(_) => {}
-                    _ => return Err(ResolveError::NotANamespace { name: def.name.clone(), span: name.span }),
+                    // What is not read of an E0200 (an opaque type of an
+                    // `extern` block, an effect): an error with no diagnostic
+                    // (§18.1, S-719, S-721).
+                    DefKind::Unsupported(Declared::Type | Declared::Effect) => return Err(ResolveError::Failed),
+                    kind => {
+                        let kind = NameKind::of_def(kind);
+                        return Err(ResolveError::NotANamespace { name: def.name.clone(), span: name.span, kind });
+                    }
                 }
                 if let Some(&a) = self.assoc.get(&d).and_then(|m| m.get(&name.name)) {
                     return self.member_reach(def, &defs[a.0 as usize], name, from).map(|()| Entity::Member(a));
@@ -394,13 +401,14 @@ impl Modules {
                     _ => None,
                 };
                 let owner = owner.unwrap_or_else(|| onsa_diag::internal::bug(Some(name.span), "a variant of no enum"));
-                Err(ResolveError::NotANamespace { name: owner, span: name.span })
+                Err(ResolveError::NotANamespace { name: owner, span: name.span, kind: Some(NameKind::Variant) })
             }
-            Entity::Builtin(_) => {
+            Entity::Builtin(b) => {
                 let owner = prelude.iter().filter(|&(_, &e)| e == entity).map(|(n, _)| n).min();
                 let owner =
                     owner.unwrap_or_else(|| onsa_diag::internal::bug(Some(name.span), "a builtin of no prelude name"));
-                Err(ResolveError::NotANamespace { name: owner.clone(), span: name.span })
+                let kind = Some(NameKind::of_builtin(b));
+                Err(ResolveError::NotANamespace { name: owner.clone(), span: name.span, kind })
             }
         }
     }

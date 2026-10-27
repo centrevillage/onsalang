@@ -2,7 +2,7 @@
 //! their arguments.
 
 use super::*;
-use crate::names::body::{PathRes, is_value};
+use crate::names::body::PathRes;
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ calls
@@ -47,11 +47,9 @@ impl<'a> Checker<'a> {
                     let name = self.last_name(callee);
                     return match entity {
                         Entity::Builtin(Builtin::Panic) => Err(self.unsupported(name.span, Feature::Panic, &[])),
-                        // What is no value but a def (`check_fn_call` reports
-                        // it), and `None`, which takes no value.
-                        Entity::Module(_) | Entity::Builtin(_)
-                            if !is_value(self.a, entity) || entity == Entity::Builtin(Builtin::None) =>
-                        {
+                        // `None`, which takes no value (what is neither a value
+                        // nor a flow is the names stage's E0308).
+                        Entity::Builtin(Builtin::None) => {
                             let shown = self.src(cspan);
                             Err(self.err(Code::E0401, cspan, format!("`{shown}` is not a function")))
                         }
@@ -128,17 +126,13 @@ impl<'a> Checker<'a> {
                     return self.args_of_unknown_callee(args);
                 }
                 let DefKind::Fn(f) = &def.kind else {
-                    if matches!(def.kind, DefKind::Unsupported) {
+                    if matches!(def.kind, DefKind::Unsupported(_)) {
                         return Ok(self.a.types.error());
                     }
                     return Err(self.err(Code::E0401, name.span, format!("`{}` is not a function", def.name)));
                 };
                 if f.self_mode.is_some() {
-                    return Err(self.err(
-                        Code::E0401,
-                        name.span,
-                        format!("`{}` is a method; call it as `value.{}(...)` (§6.2)", def.name, def.name),
-                    ));
+                    onsa_diag::internal::bug(Some(name.span), "a method in the function form the names stage took");
                 }
                 if kind == CallKind::Bang {
                     let at = self.expr(callee).span.end;

@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.1", "§6.6", "§18.1"]
+
+// S-713 (W4-04 U8a): the associated constant of a type parameter called with the call form of a
+// function is the E0020 of a value called as `x(...)` (§15.1), as `F32.PI()` in
+// kind_constant_called.onsa. Apart from that file because `T.ZERO` itself is not found yet (R-56,
+// W5-05: `x * T.ZERO` is an E0302 today), so the unit cannot reach the call.
+
+pub fn constant_called_in_a_generic_fn[T: Num](x: T) -> T {
+  x * T.ZERO()                                      //~ E0020
+}
+
+pub fn constant_read_in_a_generic_fn[T: Num](x: T) -> T {
+  x + T.ZERO
+}

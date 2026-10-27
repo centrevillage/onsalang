@@ -15,6 +15,7 @@
 //! of the record.
 
 mod exprs;
+mod kinds;
 mod paths;
 pub(crate) use paths::is_value;
 mod scope;

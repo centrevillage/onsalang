@@ -143,7 +143,7 @@ fn the_candidate_of_a_wide_member_shows_the_heading_error_that_was_behind_it() {
     assert!(after.diags[0].fixes.is_empty(), "an E0303 of a head has no candidate");
 }
 
-/// §15.1, §11.6, §18.1: the alias of a flow name is E0302 with the candidate `voice.State`; the `pub` function
+/// §15.1, §11.6, §18.1: the alias of a flow name is E0308 with the candidate `voice.State`; the `pub` function
 /// whose head names the alias has no diagnostic while the alias has failed, and has the E0303 once it is a type,
 /// since the state of a flow with no word reaches the package alone.
 #[test]
@@ -152,7 +152,7 @@ fn the_candidate_of_a_failed_alias_shows_the_heading_error_of_the_unit_that_name
     let texts = Texts::from([("m.onsa".to_string(), text.to_string())]);
     let d = package("candidate_failed_alias", "demo", &texts);
     let c = check_package(d.root());
-    assert_eq!(codes_of(&c), [("E0302".to_string(), 2)], "{:?}", c.diags);
+    assert_eq!(codes_of(&c), [("E0308".to_string(), 2)], "{:?}", c.diags);
     assert!(!c.diags[0].fixes.is_empty(), "a candidate that writes the state type");
     let mut t = texts.clone();
     apply_fix_texts(&mut t, &c.diags[0].fixes[0]);

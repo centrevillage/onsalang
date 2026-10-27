@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§15.1"]
+
+// S-185, S-713 (W4-04 U8a): the right forms next to kind_pattern_names.onsa. A name in a pattern that
+// is not a binding is resolved (§7), and a constant (a `const` or an associated constant, `LIMIT`,
+// `I64.MAX`) is compared with `==`; it is the kind that the place needs, so no diagnostic. A type
+// name in the same arm list is E0308 in the other file. The typing of a constant pattern waits for
+// W5-09 (tests/pending.toml has the same wait for semantics/naming_pattern_constants.onsa), so this
+// file is on the list until then, apart from kind_pattern_names.onsa whose forms hold now.
+
+const LIMIT: U32 = 3
+
+pub fn a_constant_is_a_pattern(n: U32) -> I32 {
+  match n {
+    LIMIT => 1,
+    _ => 0,
+  }
+}
+
+pub fn an_associated_constant_is_a_pattern(n: I64) -> I32 {
+  match n {
+    I64.MAX => 1,
+    _ => 0,
+  }
+}
+
+pub fn a_choice_of_constants(n: U32) -> I32 {
+  match n {
+    0 | LIMIT => 1,
+    _ => 0,
+  }
+}
+
+test "a constant is compared" {
+  assert a_constant_is_a_pattern(3) == 1
+  assert a_constant_is_a_pattern(2) == 0
+  assert an_associated_constant_is_a_pattern(9223372036854775807) == 1
+  assert an_associated_constant_is_a_pattern(1) == 0
+  assert a_choice_of_constants(0) == 1
+  assert a_choice_of_constants(3) == 1
+  assert a_choice_of_constants(4) == 0
+}

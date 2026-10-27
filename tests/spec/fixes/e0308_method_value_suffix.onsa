@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§15.1", "§2.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-103, S-205, S-713 (W4-04 U8a): a method named through its type (`P.get`) is no value (§6.1,
+// S-205) and no namespace (§15.1), so whatever follows it (a field, a call of the field, a further
+// name, a tuple index), the path is the E0308 of the method named as a value, as `let _ = P.get`
+// (e0308_method_function_form_no_receiver.onsa), and has no candidate (`fixes = 0`): the call is not
+// that of the method. The same through an alias, through `Self`, of an `inout self` method, in a hole
+// of a string (§2.4), and in the `[…]` of a callee after a field (`s.p[P.get](1)`: type arguments or an
+// index, §4.5, a method is neither a type nor a value). One error per unit (§18.1), so each form is in
+// its own unit. The associated function and the field of a value are fine units of the file.
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn new(x: U32) -> P { P { x: x } }
+
+  pub fn get(self) -> U32 { self.x }
+
+  pub fn bump(inout self) { self.x = self.x + 1 }
+
+  pub fn through_self(self) -> U32 {
+    let _ = Self.get.zz                             //~ E0308
+    0
+  }
+}
+
+type Q = P
+
+pub struct S {
+  p: P,
+}
+
+pub fn a_field_after() -> U32 {
+  let _ = P.get.zz                                  //~ E0308
+  0
+}
+
+pub fn a_call_of_a_field_after() -> U32 {
+  P.get.zz(1)                                       //~ E0308
+}
+
+pub fn two_names_after() -> U32 {
+  1 + P.get.zz.yy                                   //~ E0308
+}
+
+pub fn a_tuple_index_after() -> U32 {
+  let _ = P.get.0                                   //~ E0308
+  0
+}
+
+pub fn through_an_alias() -> U32 {
+  let _ = Q.get.zz                                  //~ E0308
+  0
+}
+
+pub fn an_inout_method() -> U32 {
+  let _ = P.bump.zz                                 //~ E0308
+  0
+}
+
+pub fn in_a_hole() -> Str {
+  "{P.get.zz}"                                      //~ E0308
+}
+
+pub fn in_a_hole_with_a_tuple_index() -> Str {
+  "{P.get.0}"                                       //~ E0308
+}
+
+pub fn in_the_brackets_of_a_callee(s: S) -> U32 {
+  s.p[P.get](1)                                     //~ E0308
+}
+
+pub fn in_the_brackets_with_a_name_after(s: S) -> U32 {
+  s.p[P.get.zz](1)                                  //~ E0308
+}
+
+pub fn a_builtin_method_in_the_brackets(s: S) -> U32 {
+  s.p[Str.len](1)                                   //~ E0308
+}
+
+pub fn in_a_closure() -> U32 {
+  let f = fn(k: U32) -> U32 { P.get.zz(k) }         //~ E0308
+  f.(2)
+}
+
+test "a method with a name after it in a test" {
+  let _ = P.get.zz                                  //~ E0308
+  assert P.new(1).get() == 1
+}
+
+pub fn the_associated_function_and_a_field(s: S) -> U32 {
+  P.new(1).x + s.p.x
+}

@@ -282,7 +282,7 @@ fn methods_and_associated_items() {
         codes(
             "pub struct P { x: F32 }\nimpl P { pub fn norm(self) -> F32 { self.x } }\npub fn g(p: P) -> F32 { P.norm(p) }\n"
         ),
-        vec![Code::E0401]
+        vec![Code::E0308]
     );
     ok(
         "pub fn g(xs: [F32; 4], inout out: Span[F32]) -> U32 {\n  out.fill!(0.0)\n  out.add_from!(xs)\n  xs.len() + xs.slice(0, 2).len()\n}\n",

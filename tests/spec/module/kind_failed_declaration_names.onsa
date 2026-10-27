@@ -1,0 +1,218 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§8.1", "§14.1"]
+
+// S-719, S-721, S-713 (W4-04 U8a): the names of a declaration that is E0200 in this version (a
+// `trait`, an `effect`, a `handler`, the members of an `extern` block) are read with the kind of
+// their keyword (§18.1: trait, effect, handler; a `fn` of an `extern` block is a function and its
+// `type` a type), so a use of them is read by the rule of the kind (§15.1). In the body:
+//  - `let _ = Tr`, `let _ = hh`, `let _ = Ef` and `let _ = CHandle` are E0308 (a value place needs a
+//    value), and so are the annotations `let _: Tr = 1`, `let _: hh = 1`, `let _: c_sin = 1` (a type
+//    place needs a type; a function is a value) and the literal `Tr { b: 1 }`;
+//  - the `.` after a trait or a handler (`Tr.y()`, `hh.y()`) is the E0308 of a name that has no
+//    namespace (a type, a module, a flow and an effect have one);
+//  - the right uses are quiet: `c_sin(1.0)` is a value of the error type (the signature of an `extern`
+//    function is a part that was not read), so the unit goes on and the E0401 of the line after it is
+//    reported; a type place that names `CHandle` is a type;
+//  - the operation of an effect `Ef.op(1)` is a name that is not resolved (the members of an effect
+//    are parts not read), so the unit is not checked after it (§18.1: a value place of a failed name);
+//  - the opaque type `CHandle { b: 1 }` is the E0401 of a type that is not a struct (a form inside
+//    one kind, §15.1, not a kind).
+// The E0308 of a name is a rule of the version and comes before the E0200 of what the version does not
+// support (§15.1), so it is reported where the name is used; the E0200 is reported at each
+// declaration. One error per unit (§18.1), so each form is in its own unit; the places (a branch, a
+// closure, a match arm, a `test`, a `const`, a generic fn) give the same code.
+
+pub trait Tr {                                      //~ E0200
+  fn m(self) -> I32
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(x: I32) -> I32
+}
+
+handler hh: Alloc { }                               //~ E0200
+
+extern "C" lib "m" {                                //~ E0200
+  fn c_sin(x: F64) -> F64
+  type CHandle
+}
+
+pub fn trait_as_a_value() -> I32 {
+  let _ = Tr                                        //~ E0308
+  0
+}
+
+pub fn handler_as_a_value() -> I32 {
+  let _ = hh                                        //~ E0308
+  0
+}
+
+pub fn effect_as_a_value() -> I32 {
+  let _ = Ef                                        //~ E0308
+  0
+}
+
+pub fn extern_type_as_a_value() -> I32 {
+  let _ = CHandle                                   //~ E0308
+  0
+}
+
+pub fn trait_as_an_operand(n: I32) -> I32 {
+  n + Tr                                            //~ E0308
+}
+
+pub fn handler_as_an_argument() -> I32 {
+  id(hh)                                            //~ E0308
+}
+
+pub fn extern_type_as_the_tail() -> I32 {
+  CHandle                                           //~ E0308
+}
+
+pub fn trait_in_an_annotation() -> I32 {
+  let _: Tr = 1                                     //~ E0308
+  0
+}
+
+pub fn handler_in_an_annotation() -> I32 {
+  let _: hh = 1                                     //~ E0308
+  0
+}
+
+pub fn effect_in_an_annotation() -> I32 {
+  let _: Ef = 1                                     //~ E0308
+  0
+}
+
+pub fn extern_function_in_an_annotation() -> I32 {
+  let _: c_sin = 1                                  //~ E0308
+  0
+}
+
+pub fn trait_in_a_cast(n: I32) -> I32 {
+  let _ = n as Tr                                   //~ E0308
+  0
+}
+
+pub fn handler_in_a_cast(n: I32) -> I32 {
+  let _ = n as hh                                   //~ E0308
+  0
+}
+
+pub fn trait_in_a_closure_parameter() -> I32 {
+  let _ = fn(x: Tr) -> I32 { 0 }                    //~ E0308
+  0
+}
+
+pub fn trait_in_a_struct_literal() -> I32 {
+  let _ = Tr { b: 1 }                               //~ E0308
+  0
+}
+
+pub fn dot_after_a_trait() -> I32 {
+  Tr.y()                                            //~ E0308
+}
+
+pub fn dot_after_a_handler() -> I32 {
+  hh.y()                                            //~ E0308
+}
+
+pub fn dot_after_a_trait_without_a_call() -> I32 {
+  Tr.y                                              //~ E0308
+}
+
+pub fn dot_after_a_handler_with_arguments() -> I32 {
+  hh.y(1, 2)                                        //~ E0308
+}
+
+pub fn trait_in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    let _ = Tr                                      //~ E0308
+    1
+  } else {
+    0
+  }
+}
+
+pub fn handler_in_a_match_arm(n: U32) -> I32 {
+  match n {
+    0 => 0,
+    _ => {
+      let _ = hh                                    //~ E0308
+      1
+    }
+  }
+}
+
+pub fn trait_in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let _ = Tr                                      //~ E0308
+    x
+  }
+  f.(1)
+}
+
+pub fn handler_in_a_generic_fn[T](x: T) -> T {
+  let _ = hh                                        //~ E0308
+  x
+}
+
+pub const TRAIT_IN_A_CONST: I32 = Tr                //~ E0308
+
+test "a trait name as a value in a test" {
+  let n = Tr                                        //~ E0308
+  assert id(1) == 1
+}
+
+pub fn extern_function_goes_on() -> Bool {
+  let _ = c_sin(1.0)
+  let z: Bool = 2                                   //~ E0401
+  z
+}
+
+pub fn extern_function_as_a_value_goes_on() -> Bool {
+  let _ = c_sin
+  let z: Bool = 2                                   //~ E0401
+  z
+}
+
+pub fn extern_function_in_an_expression_goes_on() -> Bool {
+  let x = c_sin(1.0) + 2.0
+  let z: Bool = x
+  z
+}
+
+fn extern_type_in_type_places_is_quiet(h: CHandle) -> CHandle {
+  let g: CHandle = h
+  g
+}
+
+fn extern_type_in_a_type_place_then_a_real_error(h: CHandle) -> Bool {
+  let g: CHandle = h
+  let z: Bool = 2                                   //~ E0401
+  z
+}
+
+pub fn opaque_type_is_not_a_struct() -> I32 {
+  let _ = CHandle { b: 1 }                          //~ E0401
+  0
+}
+
+pub fn effect_operation_stops_the_unit() -> Bool {
+  let _ = Ef.op(1)
+  let z: Bool = 2
+  z
+}
+
+pub fn effect_operation_in_a_branch_stops_the_unit(flag: Bool) -> Bool {
+  if flag {
+    let _ = Ef.op(1)
+  }
+  let z: Bool = 2
+  z
+}
+
+pub fn id(x: I32) -> I32 {
+  x
+}

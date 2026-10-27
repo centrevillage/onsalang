@@ -1,0 +1,153 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.4", "§18.1"]
+
+// S-103, S-713 (W4-04 U8a): a name that is found and is not a type, written in a type place of a body
+// (the annotation of a `let`, the target of an `as`, the type of the parameter or of the result of
+// an anonymous function), is E0308 (§15.1: "値やモジュールを型の位置に書く"). The names: a function,
+// a constant, a trait, a kind constraint, an effect (a local binding in a type place is not here: the
+// spec does not say whether a type place sees the locals, a gap that is reported). A flow in the same
+// place is E0308 with the candidate `lp.State` (fixes/e0308_flow_as_a_type_in_a_body.onsa); a module
+// is in packages/kind_module_in_value_position. The positions of a signature are not here
+// (W4-04 U8b). The name is found, so it is not E0302. One error per unit (§18.1), so each form is in
+// its own unit; the places (a branch, a closure, a match arm, a `test`, a generic fn, a tuple type)
+// give the same code. The types in the same places (`P`, an alias, a built-in type, `Self`, a type
+// parameter) are fine units of the file.
+
+pub struct P {
+  x: I32,
+}
+
+type Al = P
+
+const K: I32 = 7
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn function_in_an_annotation() -> I32 {
+  let _: inc = 1                                    //~ E0308
+  0
+}
+
+pub fn constant_in_an_annotation() -> I32 {
+  let _: K = 1                                      //~ E0308
+  0
+}
+
+pub fn trait_in_an_annotation() -> I32 {
+  let _: Show = 1                                   //~ E0308
+  0
+}
+
+pub fn number_trait_in_an_annotation() -> I32 {
+  let _: Num = 1                                    //~ E0308
+  0
+}
+
+pub fn kind_constraint_in_an_annotation() -> I32 {
+  let _: Copy = 1                                   //~ E0308
+  0
+}
+
+pub fn effect_in_an_annotation() -> I32 {
+  let _: Alloc = 1                                  //~ E0308
+  0
+}
+
+pub fn function_in_a_tuple_type() -> I32 {
+  let _: (I32, inc) = (1, 2)                        //~ E0308
+  0
+}
+
+pub fn function_as_a_cast_target(n: I32) -> I32 {
+  let _ = n as inc                                  //~ E0308
+  0
+}
+
+pub fn constant_as_a_cast_target(n: I32) -> I32 {
+  let _ = n as K                                    //~ E0308
+  0
+}
+
+pub fn trait_as_a_cast_target(n: I32) -> I32 {
+  let _ = n as Show                                 //~ E0308
+  0
+}
+
+pub fn function_as_a_closure_parameter_type() -> I32 {
+  let f = fn(x: inc) -> I32 { 0 }                   //~ E0308
+  f.(1)
+}
+
+pub fn constant_as_a_closure_result_type() -> I32 {
+  let f = fn(x: I32) -> K { x }                     //~ E0308
+  f.(1)
+}
+
+pub fn trait_as_a_closure_parameter_type() -> I32 {
+  let f = fn(x: Show) -> I32 { 0 }                  //~ E0308
+  f.(1)
+}
+
+pub fn function_in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    let _: inc = 1                                  //~ E0308
+    1
+  } else {
+    0
+  }
+}
+
+pub fn function_in_a_match_arm(n: U32) -> I32 {
+  match n {
+    0 => 0,
+    _ => {
+      let _: K = 1                                  //~ E0308
+      1
+    },
+  }
+}
+
+pub fn function_in_a_nested_closure() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let g = fn(y: I32) -> I32 {
+      let _: inc = y                                //~ E0308
+      y
+    }
+    g.(x)
+  }
+  f.(1)
+}
+
+pub fn function_in_a_generic_fn[T](x: T) -> T {
+  let _: inc = 1                                    //~ E0308
+  x
+}
+
+test "a function name as a type in a test" {
+  let n: inc = 1                                    //~ E0308
+  assert n == 1
+}
+
+pub fn types_in_annotations(p: P, n: I32) -> I32 {
+  let a: P = p
+  let b: Al = p
+  let c: I32 = n
+  let d: (I32, Al) = (1, p)
+  let f = fn(x: P) -> I32 { x.x }
+  a.x + b.x + c + d.0 + f.(p)
+}
+
+impl P {
+  pub fn self_in_annotations(self) -> I32 {
+    let a: Self = self
+    a.x
+  }
+}
+
+pub fn type_parameter_in_an_annotation[T](x: T) -> T {
+  let y: T = x
+  y
+}

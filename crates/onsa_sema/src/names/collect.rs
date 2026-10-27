@@ -102,19 +102,20 @@ impl<'p> Sema<'p> {
                     ItemKind::Use(u) => self.collect_use(m, item, id, u),
                     ItemKind::Impl(decl) => self.collect_impl(&at, decl),
                     ItemKind::Extern(e) => {
-                        let d = self.add_def(at.def("<extern>".into(), item.span, DefKind::Unsupported));
+                        let d =
+                            self.add_def(at.def("<extern>".into(), item.span, DefKind::Unsupported(Declared::Block)));
                         self.unsupported(d, item.span, Feature::Extern, &[]);
                         // Its functions and types are names of the module, each
                         // of its own visibility (§18.1, R-246, S-491), and E0200
                         // defs, whose uses get no diagnostic.
                         for &sub in &e.items {
                             let member = Place { id: sub, item: ast.item(sub), ..at };
-                            let (ItemKind::Fn(onsa_syntax::ast::FnDecl { name, .. }) | ItemKind::OpaqueType { name }) =
-                                &member.item.kind
-                            else {
-                                continue;
+                            let (name, kind) = match &member.item.kind {
+                                ItemKind::Fn(onsa_syntax::ast::FnDecl { name, .. }) => (name, Declared::Fn),
+                                ItemKind::OpaqueType { name } => (name, Declared::Type),
+                                _ => continue,
                             };
-                            let md = self.add_def(member.def(name.name.clone(), name.span, DefKind::Unsupported));
+                            let md = self.add_def(member.def(name.name.clone(), name.span, DefKind::Unsupported(kind)));
                             self.declare(m, name, md);
                         }
                     }
@@ -233,14 +234,16 @@ impl<'p> Sema<'p> {
             ),
             ItemKind::TypeAlias { name, .. } => (name, DefKind::Alias(at.error), None),
             ItemKind::Const(c) => (&c.name, DefKind::Const(at.const_def(c.value)), None),
-            ItemKind::Trait(t) => (&t.name, DefKind::Unsupported, Some(Feature::TraitDefinitions)),
+            ItemKind::Trait(t) => (&t.name, DefKind::Unsupported(Declared::Trait), Some(Feature::TraitDefinitions)),
             // An effect of std, with no operations in this version (D-08,
             // S-659); a user's is an E0200.
             ItemKind::Effect(e) if self.a.modules.is_std(at.m) => {
                 (&e.name, DefKind::Effect { blocking: e.blocking }, None)
             }
-            ItemKind::Effect(e) => (&e.name, DefKind::Unsupported, Some(Feature::EffectDefinitions)),
-            ItemKind::Handler(h) => (&h.name, DefKind::Unsupported, Some(Feature::HandlerDefinitions)),
+            ItemKind::Effect(e) => (&e.name, DefKind::Unsupported(Declared::Effect), Some(Feature::EffectDefinitions)),
+            ItemKind::Handler(h) => {
+                (&h.name, DefKind::Unsupported(Declared::Handler), Some(Feature::HandlerDefinitions))
+            }
             _ => return None,
         };
         let d = self.add_def(at.def(name.name.clone(), name.span, kind));

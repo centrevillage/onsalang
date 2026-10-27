@@ -158,7 +158,7 @@ impl<'p> Sema<'p> {
         for i in 0..n {
             let id = DefId(i as u32);
             // Lowered with their owner (impl / flow), or an E0200 (S-224).
-            if self.a.defs[i].owner.is_some() || matches!(self.a.defs[i].kind, DefKind::Unsupported) {
+            if self.a.defs[i].owner.is_some() || matches!(self.a.defs[i].kind, DefKind::Unsupported(_)) {
                 continue;
             }
             let _scope = onsa_diag::internal::item_scope(self.a.defs[i].span);

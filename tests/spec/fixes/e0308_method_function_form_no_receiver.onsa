@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-103, S-713 (W4-04 U8a): the method called in the function form without an argument is still
+// E0308 (§15.1: a method of a type is not an associated function), but the candidate `value.m(...)`
+// takes the first argument as its receiver, so with no argument there is no candidate (`fixes = 0`:
+// the check of the candidates sees no diagnostic that has one). The note is not compared. One error
+// per unit (§18.1), so each form is in its own unit. A method named as a value (`P.get`, §6.1: a method
+// and an operation of an effect are not values, S-205) is E0308 too and has no candidate: the
+// writer's intent is not one form (the note shows that a method is only called).
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn get(self) -> U32 { self.x }
+
+  pub fn mul(self, k: U32) -> U32 { self.x * k }
+}
+
+pub fn user_method_no_argument() -> U32 {
+  P.get()                                           //~ E0308
+}
+
+pub fn user_method_with_one_missing_receiver() -> U32 {
+  P.mul()                                           //~ E0308
+}
+
+pub fn str_len_no_argument() -> U32 {
+  Str.len()                                         //~ E0308
+}
+
+pub fn option_unwrap_no_argument() -> U32 {
+  Option.unwrap()                                   //~ E0308
+}
+
+pub fn float_to_bits_no_argument() -> U32 {
+  F32.to_bits()                                     //~ E0308
+}
+
+pub fn user_method_as_a_value() -> U32 {
+  let _ = P.get                                     //~ E0308
+  0
+}
+
+pub fn builtin_method_as_a_value() -> U32 {
+  let _ = Str.len                                   //~ E0308
+  0
+}
+
+pub fn user_method_as_an_argument() -> U32 {
+  call(P.get)                                       //~ E0308
+}
+
+pub fn user_method_in_a_closure() -> U32 {
+  let f = fn() -> U32 {
+    let _ = P.mul                                   //~ E0308
+    0
+  }
+  f.()
+}
+
+test "a method as a value in a test" {
+  let _ = P.get                                     //~ E0308
+  assert call_zero() == 0
+}
+
+pub fn call(_: U32) -> U32 {
+  0
+}
+
+pub fn call_zero() -> U32 {
+  0
+}

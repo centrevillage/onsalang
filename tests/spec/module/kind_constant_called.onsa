@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.1", "§6.6", "§18.1"]
+
+// S-713 (W4-04 U8a): a constant called with the call form of a function is the E0020 of a value
+// called as `x(...)` (§15.1: "値を `x(...)` の形で呼ぶと、型によらず E0020"; a function value is
+// called `x.(...)`, §6.1). A constant (a `const`, an associated constant, `F32.PI`) is a value
+// (§15.1: a const parameter is a value and a constant), so `F32.PI()` is not the E0308 of a method
+// in the function form (the member is found and is a value, not a method, so the kind of the place
+// is met) and not the E0413 of a name that does not exist. This form is derived from the line of
+// the spec that is cited (the line does not name a constant), so the file has no `fixes` key (the
+// candidate is not promised). One error per unit (§18.1), so each form is in its own unit. The
+// right forms (the constant read, the associated function called) are fine units of the file.
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub const N: U32 = 4
+
+  pub fn get(self) -> U32 { self.x }
+
+  pub fn n_called(self) -> U32 {
+    Self.N()                                        //~ E0020
+  }
+}
+
+const K: U32 = 7
+
+pub fn builtin_constant_called() -> F32 {
+  F32.PI()                                          //~ E0020
+}
+
+pub fn builtin_constant_called_with_an_argument() -> F32 {
+  F32.PI(2.0)                                       //~ E0020
+}
+
+pub fn integer_constant_called() -> U32 {
+  U32.MAX()                                         //~ E0020
+}
+
+pub fn associated_constant_called() -> U32 {
+  P.N()                                             //~ E0020
+}
+
+pub fn module_constant_called() -> U32 {
+  K()                                               //~ E0020
+}
+
+pub fn constant_called_in_a_branch(flag: Bool) -> F32 {
+  if flag {
+    F32.PI()                                        //~ E0020
+  } else {
+    0.0
+  }
+}
+
+pub fn constant_called_in_a_closure() -> F32 {
+  let f = fn(x: F32) -> F32 { x * F32.PI() }        //~ E0020
+  f.(1.0)
+}
+
+test "a constant called in a test" {
+  let n = K()                                       //~ E0020
+  assert n == 7
+}
+
+pub fn constant_read_is_the_right_form() -> F32 {
+  F32.PI + 1.0
+}
+
+pub fn associated_constant_read(p: P) -> U32 {
+  P.N + p.get() + K
+}
+
+pub fn associated_function_called() -> F32 {
+  F32.from_bits(1)
+}

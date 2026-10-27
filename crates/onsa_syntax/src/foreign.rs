@@ -501,6 +501,7 @@ pub enum RowId {
     TypeArgsAngle,
     TypeArgsSquareComma,
     TypeArgsOnExpression,
+    ValueCall,
     TypePositionPath,
     SpaceInTypeArgsMark,
     RangeDots,

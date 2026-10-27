@@ -1,0 +1,136 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§15.1", "§4.2", "§9.1", "§3.3", "§18.1"]
+// fixes = 1
+
+// S-103, S-713 (W4-04 U8a): the method called in the function form, for the methods of the built-in
+// types and a user type (§15.1: "メソッドを関数の形で呼ぶ（修正候補は `value.m(...)`）", §6.2: the
+// functions of an `impl` are called with the dot only). The name of the type is found, the member
+// is a method and not an associated function, so it is E0308 and not E0302 (`cannot find`) or
+// E0413 (`does not exist`). The candidate is the method form with the first argument as the
+// receiver (`s.len()`, `o.unwrap()`, `x.to_bits()`, `p.get()`, `p.mul(2)`), and with arguments
+// after the receiver the rest follow. The first candidate is the only one (`fixes = 1`); the text
+// after it is the copy `.fix1` that the implementation writes (the test side does not write it).
+// One error per unit (§18.1), so each form is in its own unit; the places (an operand, an argument, a branch, a closure, a match arm, a method, a generic fn, a
+// `test`, a chain) give the same code. The associated functions and constants that are called with
+// the name of the type (`P.new(1)`, `F32.from_bits(b)`, `F32.PI`) are fine units of the file. The
+// call without an argument has no candidate (e0308_method_function_form_no_receiver.onsa). The
+// runner applies every candidate and checks the program again, so a candidate that left an error of
+// the same stage or an earlier one in its unit fails the case (S-236).
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn new(x: U32) -> P { P { x: x } }
+
+  pub fn get(self) -> U32 { self.x }
+
+  pub fn mul(self, k: U32) -> U32 { self.x * k }
+
+  pub fn in_a_method(self) -> U32 {
+    self.get()                                     //~ E0308
+  }
+}
+
+pub fn str_len(s: Str) -> U32 {
+  s.len()                                        //~ E0308
+}
+
+pub fn option_unwrap(o: Option[U32]) -> U32 {
+  o.unwrap()                                  //~ E0308
+}
+
+pub fn result_unwrap(r: Result[U32, Str]) -> U32 {
+  r.unwrap()                                  //~ E0308
+}
+
+pub fn float_to_bits(x: F32) -> U32 {
+  x.to_bits()                                    //~ E0308
+}
+
+pub fn double_to_bits(x: F64) -> U64 {
+  x.to_bits()                                    //~ E0308
+}
+
+pub fn user_method(p: P) -> U32 {
+  p.get()                                          //~ E0308
+}
+
+pub fn user_method_with_an_argument(p: P) -> U32 {
+  p.mul(2)                                       //~ E0308
+}
+
+pub fn receiver_is_a_call(x: U32) -> U32 {
+  P.new(x).get()                                   //~ E0308
+}
+
+pub fn as_an_operand(s: Str) -> U32 {
+  1 + s.len()                                    //~ E0308
+}
+
+pub fn as_an_argument(p: P) -> U32 {
+  add(p.get(), 1)                                  //~ E0308
+}
+
+pub fn in_a_chain(s: Str) -> F32 {
+  s.len().round_f32()                            //~ E0308
+}
+
+pub fn in_a_branch(flag: Bool, p: P) -> U32 {
+  if flag {
+    p.get()                                        //~ E0308
+  } else {
+    0
+  }
+}
+
+pub fn in_a_match_arm(n: U32, p: P) -> U32 {
+  match n {
+    0 => 0,
+    _ => p.get(),                                  //~ E0308
+  }
+}
+
+pub fn in_a_closure(p: P) -> U32 {
+  let f = fn(k: U32) -> U32 { p.mul(k) }         //~ E0308
+  f.(2)
+}
+
+pub fn in_a_generic_fn[T: Show](x: T, s: Str) -> U32 {
+  s.len()                                        //~ E0308
+}
+
+pub fn in_a_loop(p: P) -> U32 {
+  var n = 0
+  for i in 0 ..< 3 {
+    n = n + p.get() + i                            //~ E0308
+  }
+  n
+}
+
+test "a method in the function form in a test" {
+  let n = "abc".len()                            //~ E0308
+  assert n == 3
+}
+
+pub fn associated_function_is_called_with_the_type(x: U32) -> U32 {
+  P.new(x).get()
+}
+
+pub fn associated_function_of_a_builtin(b: U32) -> F32 {
+  F32.from_bits(b)
+}
+
+pub fn associated_constant_is_read_with_the_type() -> F32 {
+  F32.PI
+}
+
+pub fn method_form_is_the_value_dot(s: Str, o: Option[U32], x: F32, p: P) -> U32 {
+  s.len() + o.unwrap() + x.to_bits() + p.mul(2) + p.get()
+}
+
+pub fn add(a: U32, b: U32) -> U32 {
+  a + b
+}

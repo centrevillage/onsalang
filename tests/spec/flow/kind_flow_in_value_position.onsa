@@ -1,0 +1,177 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§11.6", "§11.1", "§18.1"]
+
+// S-103, S-713 (W4-04 U8a): the name of a flow is a namespace (its `State`, `Params` and the
+// functions of §11.6), not a value, so it written in a value place is the E0308 of a name that is
+// found and is not of the kind the place needs (§15.1), in a fn, a `test` and a `const`, and in a
+// flow: `let f = lp`, `lp * x`, an argument, a hole of an interpolation. The call forms are not
+// here: `lp(x)` in a fn is E0821 and `lp~(x)` is the instance call (§11.1, W4-12). A type of the
+// namespace (`lp.State`) is a type, so it is E0308 in a value place too. The right forms (the
+// instance call in a flow, `lp.State` in the place of a type) are fine units of the file. The name of
+// a type or of a trait in a flow body is the same E0308 (the last units). One error
+// per unit (§18.1), so each form is in its own unit; the places (a branch, a closure, a `par`, a
+// match arm, a `test`, a `const`) give the same code.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub fn id(x: F32) -> F32 {
+  x
+}
+
+pub fn flow_in_a_fn_let() -> F32 {
+  let _ = lp                                        //~ E0308
+  0.0
+}
+
+pub fn flow_as_an_operand_in_a_fn(x: F32) -> F32 {
+  lp * x                                            //~ E0308
+}
+
+pub fn flow_as_an_argument_in_a_fn() -> F32 {
+  id(lp)                                            //~ E0308
+}
+
+pub fn flow_as_the_tail_in_a_fn() -> F32 {
+  lp                                                //~ E0308
+}
+
+pub fn flow_in_a_branch_in_a_fn(flag: Bool) -> F32 {
+  if flag {
+    let _ = lp                                      //~ E0308
+    1.0
+  } else {
+    0.0
+  }
+}
+
+pub fn flow_in_a_closure_in_a_fn() -> F32 {
+  let f = fn(x: F32) -> F32 {
+    let _ = lp                                      //~ E0308
+    x
+  }
+  f.(1.0)
+}
+
+pub fn flow_in_a_match_arm_in_a_fn(n: U32) -> F32 {
+  match n {
+    0 => 0.0,
+    _ => lp * 2.0,                                  //~ E0308
+  }
+}
+
+pub fn state_of_a_flow_as_a_value() -> F32 {
+  let _ = lp.State                                  //~ E0308
+  0.0
+}
+
+pub fn flow_in_a_hole_in_a_fn() -> Str uses {Alloc} {
+  "{lp}"                                            //~ E0308
+}
+
+pub fn state_of_a_flow_in_a_hole() -> Str uses {Alloc} {
+  "{lp.State}"                                      //~ E0308
+}
+
+pub const FLOW_IN_A_CONST: F32 = lp                 //~ E0308
+
+test "a flow name as a value in a test" {
+  let n = lp                                        //~ E0308
+  assert id(1.0) == 1.0
+}
+
+pub flow flow_in_a_flow_let(x: F32 at sample) -> F32 at sample {
+  let f = lp                                        //~ E0308
+  x
+}
+
+pub flow flow_as_an_operand_in_a_flow(x: F32 at sample) -> F32 at sample {
+  lp * x                                            //~ E0308
+}
+
+pub flow flow_as_an_argument_in_a_flow(x: F32 at sample) -> F32 at sample {
+  id(lp) * x                                        //~ E0308
+}
+
+pub flow flow_in_a_branch_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 { lp * x } else { x }          //~ E0308
+  y
+}
+
+pub flow flow_in_a_par_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    lp * x                                          //~ E0308
+  }
+  ys[0] + ys[1]
+}
+
+pub flow flow_in_a_hole_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = id_len("{lp}")                            //~ E0308
+  x
+}
+
+pub flow state_of_a_flow_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = lp.State                                  //~ E0308
+  x
+}
+
+pub flow flow_after_a_good_line_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  let f = lp                                        //~ E0308
+  y
+}
+
+pub struct Fp {
+  g: F32,
+}
+
+pub flow type_in_a_flow_let(x: F32 at sample) -> F32 at sample {
+  let a = Fp                                        //~ E0308
+  x
+}
+
+pub flow type_as_an_operand_in_a_flow(x: F32 at sample) -> F32 at sample {
+  Fp * x                                            //~ E0308
+}
+
+pub flow trait_in_a_flow_let(x: F32 at sample) -> F32 at sample {
+  let a = Show                                      //~ E0308
+  x
+}
+
+pub flow type_in_a_par_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    Fp                                              //~ E0308
+  }
+  x
+}
+
+pub flow type_in_a_branch_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 { Fp } else { x }              //~ E0308
+  y
+}
+
+pub flow type_in_a_hole_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = id_len("{Fp}")                            //~ E0308
+  x
+}
+
+pub flow struct_literal_is_the_right_form(x: F32 at sample) -> F32 at sample {
+  let a = Fp { g: x }
+  a.g
+}
+
+pub fn id_len(s: Str) -> F32 {
+  0.0
+}
+
+pub flow instance_call_is_the_right_form(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}
+
+pub fn state_of_a_flow_is_a_type(s: lp.State) -> F32 {
+  0.0
+}

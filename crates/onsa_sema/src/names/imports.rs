@@ -374,9 +374,8 @@ fn head_of(a: &Analysis, m: ModId, name: &Ident) -> Result<Entity, ResolveError>
 
 /// The element `name` after `cur` in the path of a `use` written in `from`
 /// (R-250, S-611): the same as after the head of any other path, but that the
-/// variants and the associated items of a type are not taken (§15.1, R-50),
-/// and a path through an E0200 (a trait, an effect, a member of an `extern`
-/// block) is an error with no diagnostic (§18.1).
+/// variants and the associated items of a type are not taken (§15.1, R-50).
+/// After an E0200, its kind decides (§18.1, S-719, S-721: `Modules::member`).
 fn step(a: &Analysis, cur: Entity, name: &Ident, from: ModId) -> Result<Entity, ResolveError> {
     if let Entity::Def(d) | Entity::Member(d) = cur {
         let def = a.def(d);
@@ -384,7 +383,6 @@ fn step(a: &Analysis, cur: Entity, name: &Ident, from: ModId) -> Result<Entity, 
             DefKind::Struct(_) | DefKind::Enum(_) => {
                 return Err(ResolveError::OfAType { ty: def.name.clone(), name: name.name.clone(), span: name.span });
             }
-            DefKind::Unsupported => return Err(ResolveError::Failed),
             _ => {}
         }
     }
