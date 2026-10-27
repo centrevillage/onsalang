@@ -108,6 +108,13 @@ reasons = ["S-384"]
 note = "the same two errors as d035fd58 with a letter whose code point is digits only (`味`, U+5473): an `else` on the next line and the letter right after it, which the input has before the candidate (W3-23's cases moved the mutants)"
 
 [[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "`…` (U+#F#C) cannot be written outside comments and strings: a name is written w"
+input = "tests/fuzz/23260c42.onsa"
+reasons = ["S-384"]
+note = "the same two errors as d035fd58 with `後` (U+5F8C) after the `else` of an `if~` in a flow body, whose code point gives another form of the number"
+
+[[allowed]]
 class = "fix|E0002|remove the line break|E0002"
 left = "expected newline or `…`, found integer literal"
 input = "tests/fuzz/01824c64.onsa"
