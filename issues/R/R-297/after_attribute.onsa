@@ -1,0 +1,6 @@
+pub fn f(x: I32) -> I32 {
+  x
+}
+
+@inline
+/ f(1)
