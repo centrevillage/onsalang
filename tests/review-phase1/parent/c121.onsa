@@ -2,7 +2,7 @@
 // 今の実装が読む古い書き方（`x: Sig[F32]`、`prev(x, 0.0)`）で書いた。
 // 期待（S-129）: flow の `let y` は E0309（出力から辿れない。修正候補は `_` に変える形）。
 // `- prev` の行は前置の `-` の後の空白で E0020（S-123）。fn の `let unused` も E0309。
-// 今の出力: `onsa check` は通る。flow の出力は `-prev(x, 0.0)` になる。
+// 今の出力（78 回目、W4-04 U7b2 の後）: 8 行の行頭の `-` は E0020、fn の `let unused` は E0309。flow の `let y` は通る（flow の E0309 は W7-04）。
 pub flow d(x: Sig[F32]) -> Sig[F32] {
   let y = x
     - prev(x, 0.0)
