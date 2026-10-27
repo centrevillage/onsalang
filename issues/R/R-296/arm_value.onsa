@@ -1,0 +1,5 @@
+pub fn n(s: F32) -> F32 {
+  match s {
+    _ => s 0.0
+  }
+}
