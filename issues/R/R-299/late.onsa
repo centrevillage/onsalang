@@ -1,0 +1,7 @@
+pub type A = [F32; K]
+
+pub fn f(a: [F32; K]) -> F32 {
+  a[0]
+}
+
+pub const K: I32 = 2
