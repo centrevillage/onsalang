@@ -1823,6 +1823,15 @@ reasons = ["S-267", "S-236"]
 until = "W4-12"
 note = "fix-same-place: fix|E0812|remove `…`|E0805。flow の中の非 rt の fn への hp~(x) の E0812 の候補（~ を除く）の後に、非 rt の fn を sample のクロックで呼ぶ E0805（仕様は E0815、S-147、W7-02）。仕様では E0812 は名前の段、残る誤りは flow の検査の段で、後の段の診断は出てよい（§18.1）。実装は E0812 をまだ flow の段で出すので、近似が同じ段と見る。W4-12 で E0812 を名前の段へ移すと落ちなくなる"
 
+# --- W4-04 U5 の gate のファズが見つけた修正候補の型（事例を足してコーパスが変わった。e741747 でも出る）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/7e25b3d2.onsa"
+reasons = ["R-296", "S-236"]
+until = "W5-11"
+note = "fix-same-place: fix|E0002|write the `…` between the elements|E0002。match の腕の値の後の演算子の無い式（_ => s 0.0）に `,` を挿す候補を出し、当てると 0.0 が次の腕のパターンの E0002 になる"
+
 # --- W4-04 U4/t: 補間の穴の事例のうち、後の単位で通るもの（2026-10-27）
 
 [[pending]]
