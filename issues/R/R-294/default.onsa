@@ -1,0 +1,5 @@
+fn main() { let a: I32 = I32.default()
+ let b: F32 = F32.default()
+ let c: Bool = Bool.default()
+ let d: Str = Str.default()
+ let e = (U8.default(), F64.default()) }

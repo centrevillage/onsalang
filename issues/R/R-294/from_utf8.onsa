@@ -1,0 +1,1 @@
+fn f(b: Bytes) { let r = Str.from_utf8(b) }

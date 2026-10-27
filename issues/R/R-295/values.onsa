@@ -1,0 +1,5 @@
+pub fn a() -> F32 {
+  let f = Buf.zeroed
+  let g = F32.from_bits
+  0.0
+}
