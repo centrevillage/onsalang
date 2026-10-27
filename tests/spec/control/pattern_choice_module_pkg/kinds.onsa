@@ -1,0 +1,16 @@
+// A module that main imports: an enum, and a function whose choice has the same set in every
+// branch (S-318, §7, §15.1).
+
+pub enum Kind {
+  A(U32),
+  B(U32),
+  C(U32, U32),
+  D,
+}
+
+pub fn amount(k: Kind) -> U32 {
+  match k {
+    Kind.A(x) | Kind.B(x) | Kind.C(x, 0) | Kind.C(0, x) => x,
+    Kind.C(_, _) | Kind.D => 0,
+  }
+}

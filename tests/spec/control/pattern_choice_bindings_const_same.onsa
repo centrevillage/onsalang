@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-318 with the constants of §7: a name of a constant in a pattern is no binding (it is compared with
+// `==`), so it is in no set of names, and the branches of a choice that hold constants bind the same
+// names when the other names agree. The same file with the sets that differ is
+// negative/pattern_choice_bindings_const_differ.onsa. This version reports a constant in a pattern
+// as an E0302 (tests/pending.toml: W5-09 makes constants patterns), so the cases are listed there.
+
+const LIMIT: U32 = 3
+
+pub fn constant_in_each_branch(t: (U32, U32)) -> U32 {
+  match t {
+    (x, LIMIT) | (LIMIT, x) => x,
+    _ => 0,
+  }
+}
+
+pub fn only_constants(v: U32) -> U32 {
+  match v {
+    0 | LIMIT => 1,
+    _ => 0,
+  }
+}
+
+pub fn constant_and_literal(t: (U32, U32)) -> U32 {
+  match t {
+    (x, LIMIT) | (x, 0) => x,
+    _ => 0,
+  }
+}

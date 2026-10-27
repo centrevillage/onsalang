@@ -1,0 +1,145 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// S-318: a choice pattern whose branches all bind the same set of names is fine (§7:
+// `(x, 0) | (0, x) => x`), and this version checks it clean. The sets are compared as sets: the
+// order of the names and of the branches does not matter, a `_` and a literal bind no name, so
+// `Some(_) | None` and `0 | 1 | 2` have an empty set in every branch, and a name nested in a choice
+// is in the set of the branch it is written in. The cases that differ are in
+// pattern_choice_bindings_differ.onsa and the others next to it (negative/). The lowering of a
+// choice that binds names is E0200 in this version (W8-06), so these are checked, not run.
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+pub enum Slot {
+  A(U32),
+  B(U32),
+  C(U32),
+  D,
+}
+
+pub fn swapped_tuple(p: (U32, U32)) -> U32 {
+  match p {
+    (x, 0) | (0, x) => x,
+    _ => 0,
+  }
+}
+
+pub fn order_of_names_differs(p: (U32, U32)) -> U32 {
+  match p {
+    (x, y) | (y, x) => x + y,
+  }
+}
+
+pub fn variants(s: Slot) -> U32 {
+  match s {
+    Slot.A(x) | Slot.B(x) | Slot.C(x) => x,
+    Slot.D => 0,
+  }
+}
+
+pub fn struct_fields(p: Pair) -> U32 {
+  match p {
+    Pair { a: x, b: 0 } | Pair { a: 0, b: x } => x,
+    Pair { a: _, b: _ } => 0,
+  }
+}
+
+pub fn no_names(o: Option[U32]) -> U32 {
+  match o {
+    Some(_) | None => 0,
+  }
+}
+
+pub fn literals(v: U32) -> U32 {
+  match v {
+    0 | 1 | 2 => 1,
+    _ => 0,
+  }
+}
+
+pub fn nested_in_a_variant(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    Some((x, 0) | (0, x)) => x,
+    _ => 0,
+  }
+}
+
+pub fn nested_in_a_tuple(p: ((U32, U32), U32)) -> U32 {
+  match p {
+    ((x, 0) | (0, x), y) => x + y,
+    _ => 0,
+  }
+}
+
+pub fn nested_and_outer(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    Some((x, 0) | (0, x)) | Some((x, 1)) => x,
+    _ => 0,
+  }
+}
+
+pub fn two_choices_in_one_pattern(p: ((U32, U32), (U32, U32))) -> U32 {
+  match p {
+    ((x, 0) | (0, x), (y, 1) | (1, y)) => x + y,
+    _ => 0,
+  }
+}
+
+pub fn with_a_guard(p: (U32, U32)) -> U32 {
+  match p {
+    (x, 0) | (0, x) if x > 1 => x,
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure(n: U32) -> U32 {
+  let f = fn(p: (U32, U32)) -> U32 {
+    match p {
+      (x, 0) | (0, x) => x,
+      _ => 0,
+    }
+  }
+  f.((n, 0))
+}
+
+pub fn generic[T](p: (T, T)) -> T {
+  match p {
+    (x, _) | (_, x) => x,
+  }
+}
+
+pub fn generic_option[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(x) | Some(x) => x,
+    None => d,
+  }
+}
+
+pub flow pick(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match (k, k % 2) {
+    (n, 0) | (0, n) => x * n.round_f32(),
+    _ => x,
+  }
+}
+
+pub flow in_par(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
+  par i in 0 ..< 2 {
+    match (i, k) {
+      (j, 0) | (0, j) => x * j.round_f32(),
+      _ => x,
+    }
+  }
+}
+
+pub flow in_a_let(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  let w = match (k, 1) {
+    (n, 0) | (0, n) => n.round_f32(),
+    _ => 0.0,
+  }
+  x * w
+}

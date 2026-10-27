@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1"]
+
+// S-318 across the modules of a package: a choice whose branches bind the same names, on the enum
+// of another module, imported by name and written with the module's name (§15.1), is fine.
+
+use kinds
+use kinds.{Kind}
+
+pub fn imported_by_name(k: Kind) -> U32 {
+  match k {
+    Kind.A(x) | Kind.B(x) => x,
+    _ => 0,
+  }
+}
+
+pub fn through_the_module(k: kinds.Kind) -> U32 {
+  match k {
+    kinds.Kind.A(x) | kinds.Kind.B(x) => x,
+    _ => 0,
+  }
+}
+
+pub fn nested_in_a_tuple(p: (Kind, U32)) -> U32 {
+  match p {
+    (Kind.A(x) | Kind.B(x), y) => x + y,
+    _ => 0,
+  }
+}

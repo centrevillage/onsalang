@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-318: a choice nested in another pattern is checked on its own, choice by choice (§7: "入れ子の
+// 選択は選択ごとに当てる"): the E0314 is at the branch whose set differs from the set of the first
+// branch of that choice, wherever the choice sits (a variant, a tuple, a struct, another choice).
+// When one unit holds several, the unit stops at the first by position (§18.1). Every name is read
+// in the body, so no binding is unused. The same sets nested are in pattern_choice_bindings_same.onsa.
+
+pub struct Pair {
+  a: Option[U32],
+  b: U32,
+}
+
+// A choice in the payload of a variant, and no choice outside it.
+pub fn in_a_variant(o: Option[Option[U32]]) -> U32 {
+  match o {
+    Some(Some(x) | None) => x,                      //~ E0314 @20
+    None => 0,
+  }
+}
+
+// Three levels.
+pub fn three_levels(o: Option[Option[Option[U32]]]) -> U32 {
+  match o {
+    Some(Some(Some(x) | None)) => x,                //~ E0314 @25
+    _ => 0,
+  }
+}
+
+// A choice in an element of a tuple, with a name outside the choice.
+pub fn in_a_tuple(p: ((U32, U32), U32)) -> U32 {
+  match p {
+    ((x, 0) | (0, y), z) => x + y + z,              //~ E0314 @15
+    _ => 0,
+  }
+}
+
+// A choice in the field of a struct pattern.
+pub fn in_a_field(p: Pair) -> U32 {
+  match p {
+    Pair { a: Some(x) | None, b: y } => x + y,      //~ E0314 @25
+    _ => 0,
+  }
+}
+
+// Two choices in one pattern, the first one differs: the unit has the error of the first.
+pub fn first_of_two_choices(p: (Option[U32], Option[U32])) -> U32 {
+  match p {
+    (Some(x) | None, Some(y) | None) => x + y,      //~ E0314 @16
+  }
+}
+
+// Two choices in one pattern, the second one differs and the first one is fine.
+pub fn second_of_two_choices(p: ((U32, U32), Option[U32])) -> U32 {
+  match p {
+    ((x, 0) | (0, x), Some(y) | None) => x + y,     //~ E0314 @33
+    _ => 0,
+  }
+}
+
+// The choice inside differs, and it sits in a branch of a choice outside it: the error is at the
+// inner branch, which comes first in the text.
+pub fn inner_in_an_outer_branch(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    Some((x, 0) | (0, y)) | None => x + y,          //~ E0314 @19
+    _ => 0,
+  }
+}
+
+// The choice outside differs and the choice inside is fine: the error is at the outer branch.
+pub fn outer_differs_inner_is_fine(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    None | Some((x, 0) | (0, x)) => x,              //~ E0314 @12
+    _ => 0,
+  }
+}
+
+// The outer choice differs in the second of its branches, and the first holds a choice that is fine.
+pub fn outer_second_branch(t: (Option[U32], U32)) -> U32 {
+  match t {
+    (Some(x) | Some(x), 0) | (None, y) => x + y,    //~ E0314 @30
+    _ => 0,
+  }
+}
+
+// The choice that differs is in the second arm, in the payload of a variant of an enum.
+pub enum Wrap {
+  W(Option[U32]),
+  N,
+}
+
+pub fn in_a_second_arm(w: Wrap) -> U32 {
+  match w {
+    Wrap.N => 0,
+    Wrap.W(Some(x) | None) => x,                    //~ E0314 @22
+  }
+}

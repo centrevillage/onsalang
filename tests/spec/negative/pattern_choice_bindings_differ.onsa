@@ -1,0 +1,159 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-318: the branches of a choice pattern bind the same set of names (§7: `(x, 0) | (0, x) => x`).
+// A set that differs is the E0314 of the names stage; it is reported at the first branch whose set
+// differs from the set of the first branch, one error per choice, and has no fix (`fixes = 0`: a
+// note names the two ways out, the same names in every branch or one arm per branch). The column
+// (`@N`) is the start of that branch. Each function is one unit, and a unit stops at its first error
+// (§18.1), so each function holds one choice that differs, or the first by position. Every name is
+// read in the body, so no binding is unused (the E0309 of §5.1 is not what is under test). The
+// binding of the same name twice in one branch is the E0304 of R-284 (pattern_choice_dup_binding.onsa),
+// and a name of another type in the branches is the E0401 of the types stage
+// (pattern_choice_branch_types.onsa).
+// The nested choices are in pattern_choice_bindings_nested.onsa, the unit orders in
+// pattern_choice_bindings_order.onsa, and the other places (a closure, a generic function, a flow,
+// `par`, a module) in pattern_choice_bindings_places.onsa.
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+pub enum Slot {
+  A(U32),
+  B(U32),
+  C,
+}
+
+// The second branch lacks the name of the first.
+pub fn missing_in_the_second(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | None => x,                            //~ E0314 @15
+  }
+}
+
+// The second branch has a name the first lacks (the other direction).
+pub fn extra_in_the_second(o: Option[U32]) -> U32 {
+  match o {
+    None | Some(x) => x,                            //~ E0314 @12
+  }
+}
+
+// One name in each branch, and not the same one.
+pub fn different_names(t: (U32, U32)) -> U32 {
+  match t {
+    (x, 0) | (0, y) => x + y,                       //~ E0314 @14
+    _ => 0,
+  }
+}
+
+// A binding in each branch, with no other pattern around it.
+pub fn plain_names(v: U32) -> U32 {
+  match v {
+    x | y => x + y,                                 //~ E0314 @9
+  }
+}
+
+// The second branch has a name of the first and another one.
+pub fn superset(t: (U32, U32)) -> U32 {
+  match t {
+    (x, 0) | (x, y) => x + y,                       //~ E0314 @14
+  }
+}
+
+// Two names that overlap only in part.
+pub fn partly_the_same(t: (U32, U32)) -> U32 {
+  match t {
+    (x, y) | (y, z) => x + y + z,                   //~ E0314 @14
+  }
+}
+
+// A `_` binds no name, so `Some(_)` does not make up for the `x` of the first branch.
+pub fn wildcard_binds_nothing(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | Some(_) => x,                         //~ E0314 @15
+    None => 0,
+  }
+}
+
+// The second branch of three differs, and the third has the same set as the second.
+pub fn second_of_three(s: Slot) -> U32 {
+  match s {
+    Slot.A(x) | Slot.C | Slot.B(x) => x,            //~ E0314 @17
+  }
+}
+
+// The third branch of three differs; the first two have the same set.
+pub fn third_of_three(s: Slot) -> U32 {
+  match s {
+    Slot.A(x) | Slot.B(x) | Slot.C => x,            //~ E0314 @29
+  }
+}
+
+// Two branches differ from the first: the first of them is the one reported, and the unit has one
+// error.
+pub fn two_branches_differ(s: Slot) -> U32 {
+  match s {
+    Slot.A(x) | Slot.C | Slot.B(y) => x + y,        //~ E0314 @17
+  }
+}
+
+// The branches of a struct pattern.
+pub fn struct_fields(p: Pair) -> U32 {
+  match p {
+    Pair { a: x, b: _ } | Pair { a: _, b: y } => x + y,   //~ E0314 @27
+  }
+}
+
+// The names are inside a tuple inside a variant.
+pub fn inside_a_variant(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    Some((x, 0)) | Some((0, y)) => x + y,           //~ E0314 @20
+    _ => 0,
+  }
+}
+
+// The branches are on two lines (a `|` at the end of the line, §2.5), so the line of the error is
+// the line of the branch that differs.
+pub fn branches_on_two_lines(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) |
+    None => x,                                      //~ E0314
+  }
+}
+
+// The same, with the first branch on its own line and the error in the third.
+pub fn branches_on_three_lines(s: Slot) -> U32 {
+  match s {
+    Slot.A(x) |
+    Slot.B(x) |
+    Slot.C => x,                                    //~ E0314
+  }
+}
+
+// A guard does not change the rule: the branches are checked before it.
+pub fn with_a_guard(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | None if true => x,                    //~ E0314 @15
+    _ => 0,
+  }
+}
+
+// An arm after the first that is fine: the unit has the one error of its second arm.
+pub fn the_second_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) => x,
+    None | Some(x) => x,                            //~ E0314 @12
+  }
+}
+
+// The first arm is the one with an error, and the second has one too: the unit stops at the first.
+pub fn two_arms_differ(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | None => x,                            //~ E0314 @15
+    None | Some(y) => y,
+  }
+}

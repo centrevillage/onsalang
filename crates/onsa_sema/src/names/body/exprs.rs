@@ -5,10 +5,10 @@
 use std::collections::HashMap;
 
 use onsa_diag::unsupported::Feature;
-use onsa_diag::{Diagnostic, Edit, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
-    Block, CallKind, ExprId, ExprKind, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind, StrLit,
-    StrSeg, TypeId,
+    Ast, Block, CallKind, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind,
+    StrLit, StrSeg, TypeId,
 };
 
 use super::paths::Place;
@@ -267,7 +267,8 @@ impl Walker<'_> {
     }
 
     /// The names a pattern binds, in the innermost scope, and the items its
-    /// paths name.
+    /// paths name. A branch of a choice binds the names of its first branch
+    /// (E0314 at the first that does not, [`other_names`]).
     pub(super) fn pattern(&mut self, p: PatId, kind: BindingKind, origin: Origin) -> W {
         let ast = self.ast;
         match &ast.pat(p).kind {
@@ -295,9 +296,16 @@ impl Walker<'_> {
             }
             PatKind::Path(path) => return self.ctor(p, path),
             PatKind::Or(alts) => {
+                let first = binds(ast, alts[0]);
                 self.choices.push(Choice::default());
-                for &alt in alts {
-                    self.pattern(alt, kind, origin)?;
+                for (k, &alt) in alts.iter().enumerate() {
+                    let other = if k > 0 { other_names(ast, &first, alt) } else { None };
+                    let waited = self.flow_stop.is_some();
+                    let walked = self.pattern(alt, kind, origin);
+                    if let Some(d) = other {
+                        self.first_in_branch(d, walked.is_err(), waited)?;
+                    }
+                    walked?;
                     let c = self.choices.last_mut().expect("a choice");
                     let cur = std::mem::take(&mut c.cur);
                     c.prev.extend(cur);
@@ -313,6 +321,28 @@ impl Walker<'_> {
         Ok(())
     }
 
+    /// Report the E0314 `d` of a branch, or the error the walk of the branch
+    /// stopped at (`stopped`) or, in a `let` of a flow declared ahead, waits
+    /// for (none waited before the branch, `waited`): the first in the order
+    /// of §18.1 (start, end, code). An error from the start of the branch
+    /// that ends in it (`Some(x) | Nope(_)`) or ends with it (`Some(x) |
+    /// Non`) comes first; one after its start (`Some(x) | Some(Non)`) after.
+    fn first_in_branch(&mut self, d: Diagnostic, stopped: bool, waited: bool) -> W {
+        let at = match stopped {
+            true => self.failure.as_mut(),
+            false if self.prescan.is_some() && !waited => self.flow_stop.as_mut().map(|(_, why)| why),
+            false => None,
+        };
+        match at {
+            Some(Fail::Report(e)) if e.order_in_file() < d.order_in_file() => Ok(()),
+            Some(why) => {
+                *why = Fail::Report(d);
+                Ok(())
+            }
+            None => self.fail_at_let(Fail::Report(d)),
+        }
+    }
+
     /// The binding of `name` in an earlier branch of the open choices, unless
     /// this branch binds it already (two bindings of one name, E0304, R-284).
     fn earlier_branch(&self, name: &str) -> Option<BindingId> {
@@ -326,4 +356,36 @@ impl Walker<'_> {
         }
         None
     }
+}
+
+/// The names the pattern `p` binds, in the order of the text; a choice in
+/// it binds the names of its first branch (its other branches bind the
+/// same, or are its E0314).
+fn binds(ast: &Ast, p: PatId) -> Vec<&Ident> {
+    match &ast.pat(p).kind {
+        PatKind::Bind(name) => vec![name],
+        PatKind::Tuple(ps) | PatKind::TupleStruct { elems: ps, .. } => ps.iter().flat_map(|&q| binds(ast, q)).collect(),
+        PatKind::Struct { fields, .. } => fields.iter().flat_map(|(_, q)| binds(ast, *q)).collect(),
+        PatKind::Or(alts) => binds(ast, alts[0]),
+        PatKind::Path(_) | PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) => Vec::new(),
+    }
+}
+
+/// The E0314 of the branch `alt` of a choice whose first branch binds
+/// `first` (§7, S-318): every branch binds the same set of names. It names
+/// one: the first of `first` that `alt` does not bind, else the first that
+/// `alt` binds and the first branch does not. No candidate.
+fn other_names(ast: &Ast, first: &[&Ident], alt: PatId) -> Option<Diagnostic> {
+    let names = binds(ast, alt);
+    let has = |ns: &[&Ident], n: &Ident| ns.iter().any(|m| m.name == n.name);
+    let message = match first.iter().find(|n| !has(&names, n)) {
+        Some(n) => format!("`{}` is bound by the first alternative of this choice and not by this one", n.name),
+        None => {
+            let n = names.iter().find(|n| !has(first, n))?;
+            format!("`{}` is bound by this alternative and not by the first one of this choice", n.name)
+        }
+    };
+    let message = format!("{message}; every alternative binds the same names (§7)");
+    let d = Diagnostic::new(Stage::Names, Code::E0314, ast.pat(alt).span, message);
+    Some(d.with_rule("bind the same names in every alternative, or write one arm for each alternative"))
 }

@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1", "§11.5"]
+// fixes = 0
+
+// S-318: the E0314 of a choice whose branches bind other sets of names is the same wherever the
+// `match` stands: in the body of a closure, of a generic function, of an `impl` member, of a
+// `test`, of a flow, in the body of a `par`, and in the initializer of a `let`. Each function,
+// member, test and flow is one unit. Every name bound is read, so no binding is unused. The
+// `let` pattern and `match~` are not here: a choice in a `let` is the E0502 of §7 (the stage of
+// that is not in the spec), and `match~` is E0200 in this version.
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+pub fn in_a_closure(n: U32) -> U32 {
+  let f = fn(o: Option[U32]) -> U32 {
+    match o {
+      Some(x) | None => x,                          //~ E0314 @17
+    }
+  }
+  f.(Some(n))
+}
+
+pub fn in_a_closure_called_in_a_loop(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    let g = fn(p: (U32, U32)) -> U32 {
+      match p {
+        (x, 0) | (0, y) => x + y,                   //~ E0314 @18
+        _ => 0,
+      }
+    }
+    t = t + g.((i, 0))
+  }
+  t
+}
+
+pub fn generic[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(x) | None => x,                            //~ E0314 @15
+  }
+}
+
+pub fn generic_pair[T](p: (T, T)) -> T {
+  match p {
+    (x, _) | (_, y) => x,                           //~ E0314 @14
+  }
+}
+
+impl Pair {
+  pub fn first(o: Option[U32]) -> U32 {
+    match o {
+      Some(x) | None => x,                          //~ E0314 @17
+    }
+  }
+
+  pub fn second(self) -> U32 {
+    match (self.a, self.b) {
+      (x, 0) | (0, y) => x + y,                     //~ E0314 @16
+      _ => 0,
+    }
+  }
+}
+
+test "a choice that differs in a test" {
+  let o: Option[U32] = Some(1)
+  let r = match o {
+    Some(x) | None => x,                            //~ E0314 @15
+  }
+  assert r == 1
+}
+
+pub flow in_a_flow(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match (k, k % 2) {
+    (n, 0) | (0, m) => x * n.round_f32() * m.round_f32(),   //~ E0314 @14
+    _ => x,
+  }
+}
+
+pub flow in_par(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
+  par i in 0 ..< 2 {
+    match (i, k) {
+      (j, 0) | (0, h) => x * j.round_f32() * h.round_f32(),   //~ E0314 @16
+      _ => x,
+    }
+  }
+}
+
+pub flow in_a_let_of_a_flow(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  let w = match (k, k + 1) {
+    (n, 0) | (0, m) => n.round_f32() * m.round_f32(),     //~ E0314 @14
+    _ => 0.0,
+  }
+  x * w
+}
+
+// A flow with a choice that differs and a mistake of the types stage in the same unit.
+pub flow with_a_type_error(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  let _: Bool = 1
+  match (k, k % 2) {
+    (n, 0) | (0, m) => x * n.round_f32() * m.round_f32(),   //~ E0314 @14
+    _ => x,
+  }
+}

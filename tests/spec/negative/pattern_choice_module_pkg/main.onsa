@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-318 across the modules of a package: a choice on the enum of another module, imported by name
+// and written with the module's name (§15.1), whose branches bind other names is the E0314 of the
+// unit it stands in. The unit of the other module (kinds.onsa) has its own error, and the units here
+// are checked as well (§18.1: units are independent). Every name bound is read.
+
+use kinds
+use kinds.{Kind}
+
+pub fn imported_by_name(k: Kind) -> U32 {
+  match k {
+    Kind.A(x) | Kind.D => x,                        //~ E0314 @17
+    _ => 0,
+  }
+}
+
+pub fn through_the_module(k: kinds.Kind) -> U32 {
+  match k {
+    kinds.Kind.A(x) | kinds.Kind.C(x, y) => x + y,  //~ E0314 @23
+    _ => 0,
+  }
+}
+
+pub fn nested_in_a_tuple(p: (Kind, U32)) -> U32 {
+  match p {
+    (Kind.A(x) | Kind.C(x, y), z) => x + y + z,     //~ E0314 @18
+    _ => 0,
+  }
+}

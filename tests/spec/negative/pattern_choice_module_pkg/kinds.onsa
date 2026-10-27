@@ -1,0 +1,17 @@
+// A module that main imports: an enum, and a function whose choice binds other names in its
+// branches (S-318, §7, §15.1). The error of this module is a unit of this module; the units of
+// main are independent of it.
+
+pub enum Kind {
+  A(U32),
+  B(U32),
+  C(U32, U32),
+  D,
+}
+
+pub fn amount(k: Kind) -> U32 {
+  match k {
+    Kind.A(x) | Kind.D => x,                        //~ E0314 @17
+    _ => 0,
+  }
+}

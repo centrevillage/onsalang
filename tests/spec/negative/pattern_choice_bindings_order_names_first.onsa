@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1", "§5.1"]
+// fixes = 0
+
+// S-318 with the order of §18.1, the other way: a unit that holds an E0314 and another error of the
+// names stage (the E0302 of a name that is not visible, the E0304 of a binding over a visible name)
+// reports the one that is first by position, and here that is not the choice. The E0314 is no
+// reason to report the choice first, and the later error of the names stage is not hidden by it
+// before it is reached. These pass in this version (there is no E0314 yet); the cases where the
+// choice is first are in pattern_choice_bindings_order.onsa. Each function is one unit. Every name
+// bound is read, so no binding is unused.
+
+// A name that is not visible in front of the choice: the unit reports the name.
+pub fn unknown_name_before(o: Option[U32]) -> U32 {
+  let a = missing_name                              //~ E0302
+  match o {
+    Some(x) | None => x + a,
+  }
+}
+
+// A binding over a visible name in front of the choice.
+pub fn overlap_before(o: Option[U32]) -> U32 {
+  let r = 1
+  let r = match o {                                 //~ E0304
+    Some(x) | None => x,
+  }
+  r
+}
+
+// The name of the first branch is the name of an argument (E0304), and the second branch lacks it:
+// the E0304 is first by position.
+pub fn overlap_in_the_first_branch(x: U32, o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | None => x,                            //~ E0304
+  }
+}
+
+// A name bound twice in the first branch (E0304, R-284) in front of the second branch that differs.
+pub fn dup_in_the_first_branch(t: (U32, U32)) -> U32 {
+  match t {
+    (x, x) | (y, 0) => x + y,                       //~ E0304
+    _ => 0,
+  }
+}
+
+// The first arm has the E0304 of its binding and the second has an E0314: the first by position.
+pub fn overlap_in_the_first_arm(a: U32, o: Option[U32]) -> U32 {
+  match o {
+    Some(a) => a,                                   //~ E0304
+    None | Some(b) => b,
+  }
+}
+
+// The errors from the start of the branch that differs (§18.1: start, end, code). A name that is
+// not visible, the whole branch: the same start and end, and E0302 is before E0314.
+pub fn unknown_name_is_the_branch(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | Non => x,                             //~ E0302
+    _ => 0,
+  }
+}
+
+// A constructor that is not visible at the start of the branch: it ends before the branch.
+pub fn unknown_constructor_at_the_start(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | Nope(_) => x,                         //~ E0302
+    _ => 0,
+  }
+}
+
+// A binding over the name of an item, the whole branch: E0304 is before E0314.
+pub fn gain(a: U32) -> U32 {
+  a
+}
+
+pub fn overlap_is_the_branch(t: U32) -> U32 {
+  match t {
+    x | gain => x,                                  //~ E0304
+  }
+}

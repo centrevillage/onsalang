@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-318 with the constants of §7: a name of a constant in a pattern is no binding, so it makes up for
+// no name of another branch, and a branch of constants only binds the empty set. The sets that
+// differ are the E0314 of the names stage. The same file with the sets that agree is
+// control/pattern_choice_bindings_const_same.onsa. This version reports a constant in a pattern as an
+// E0302 (tests/pending.toml: W5-09 makes constants patterns), so the cases are listed there.
+// Every name bound is read.
+
+const LIMIT: U32 = 3
+
+pub fn constant_is_not_the_name(t: (U32, U32)) -> U32 {
+  match t {
+    (x, LIMIT) | (LIMIT, y) => x + y,               //~ E0314 @18
+    _ => 0,
+  }
+}
+
+pub fn constants_only_in_the_first(t: (U32, U32)) -> U32 {
+  match t {
+    (LIMIT, 0) | (x, y) => x + y,                   //~ E0314 @18
+  }
+}
+
+pub fn constant_instead_of_the_name(t: (U32, U32)) -> U32 {
+  match t {
+    (x, 0) | (LIMIT, 0) => x,                       //~ E0314 @14
+    _ => 0,
+  }
+}

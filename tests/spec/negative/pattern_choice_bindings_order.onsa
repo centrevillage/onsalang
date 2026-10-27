@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1", "§5.1"]
+// fixes = 0
+
+// S-318 with the order of §18.1: the E0314 is an error of the names stage, so a unit that holds an
+// E0314 and an error of the types stage (E0401, E0501) reports the E0314, wherever the type error
+// sits in the text; and when the same unit holds another error of the names stage (the E0302 of a
+// name that is not visible, the E0304 of a binding over a visible name) after the choice, the
+// choice is first by position and is the one reported. Each function is one unit. Every name bound
+// is read, so no binding is unused. The cases where the other error of the names stage is first by
+// position are in pattern_choice_bindings_order_names_first.onsa (they pass in this version).
+
+// S-318 with the order of §18.1: the E0314 is an error of the names stage, so a unit that holds an
+// E0314 and an error of the types stage (E0401, E0501) reports the E0314, wherever the type error
+// sits in the text; and when the same unit holds another error of the names stage (the E0302 of a
+// name that is not visible, the E0304 of a binding over a visible name), the first of them by
+// position is the one reported. Each function is one unit. Every name bound is read, so no
+// binding is unused.
+
+// A type error in front of the choice.
+pub fn type_error_before(o: Option[U32]) -> U32 {
+  let _: Bool = 1
+  match o {
+    Some(x) | None => x,                            //~ E0314 @15
+  }
+}
+
+// A type error after the choice.
+pub fn type_error_after(o: Option[U32]) -> U32 {
+  let r = match o {
+    Some(x) | None => x,                            //~ E0314 @15
+  }
+  let _: Bool = 1
+  r
+}
+
+// A type error in the body of the arm that holds the choice.
+pub fn type_error_in_the_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | None => x + true,                     //~ E0314 @15
+  }
+}
+
+// The match is not exhaustive (E0501 of the types stage) as well.
+pub fn not_exhaustive(t: (U32, U32)) -> U32 {
+  match t {
+    (x, 0) | (0, y) => x + y,                       //~ E0314 @14
+  }
+}
+
+// A second choice, with the same names but not the same types (E0401, the types stage), after the
+// choice that differs.
+pub fn later_choice_has_a_type_error(t: (Option[U32], (U32, I32))) -> U32 {
+  match t {
+    (Some(x) | None, (a, 0) | (0, a)) => x + a,     //~ E0314 @16
+    _ => 0,
+  }
+}
+
+// A name that is not visible (E0302) after the choice: the unit reports the choice.
+pub fn unknown_name_after(o: Option[U32]) -> U32 {
+  let r = match o {
+    Some(x) | None => x,                            //~ E0314 @15
+  }
+  r + missing_name
+}
+
+// A binding over a visible name after the choice (E0304).
+pub fn overlap_after(o: Option[U32]) -> U32 {
+  let r = match o {
+    Some(x) | None => x,                            //~ E0314 @15
+  }
+  let r = 1
+  r
+}
+
+// The first arm has the E0314 and the second has the E0304 of its binding: the first by position.
+pub fn overlap_in_the_second_arm(a: U32, o: Option[U32]) -> U32 {
+  match o {
+    Some(x) | None => x,                            //~ E0314 @15
+    Some(a) => a,
+  }
+}

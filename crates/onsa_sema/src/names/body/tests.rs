@@ -138,6 +138,40 @@ fn reported(a: &Analysis, module: &Module) -> Vec<(onsa_diag::Code, u32)> {
 }
 
 #[test]
+fn a_branch_of_a_choice_that_binds_other_names_is_one_e0314_in_the_order_of_the_text() {
+    // At the start of the branch, before an error in it and after one in an
+    // earlier branch; once for a `let` and a `for`, whose names are checked
+    // ahead of the value (R-289); the outer choice before the inner one; a
+    // `let` of a flow at its `let` (§18.1, S-318).
+    let src = "pub fn ua(t: (I32, I32)) -> I32 {\n  match t {\n    (x, 0) | (0, Nope) => 0,\n    _ => 1,\n  }\n}\n\
+               pub fn ub(t: (I32, I32)) -> I32 {\n  match t {\n    (x, Nope) | (0, y) => 0,\n    _ => 1,\n  }\n}\n\
+               pub fn uc(o: Option[I32]) -> I32 {\n  let Some(a) | None = nope\n  0\n}\n\
+               pub fn ud(xs: [Option[I32]; 2]) -> I32 {\n  for Some(a) | None in nope {\n  }\n  0\n}\n\
+               pub fn ue(o: Option[Option[I32]]) -> I32 {\n  match o {\n    Some(Some(x)) |\n      Some(Some(y) | None) => 0,\n    _ => 1,\n  }\n}\n\
+               pub flow uf(a: F32 at sample) -> F32 at sample {\n  let b = nope\n  let (c, _) | (_, d) = (a, a)\n  b\n}\n\
+               pub flow ug(a: F32 at sample) -> F32 at sample {\n  let (c, _) | (_, d) = (a, a)\n  let e = nope\n  a\n}\n\
+               pub fn uio() -> I32 {\n  0\n}\n\
+               pub flow uh(a: F32 at sample) -> F32 at sample {\n  let (c, _) | uio = (a, a)\n  a\n}\n\
+               pub fn ui(o: Option[I32]) -> I32 {\n  match o {\n    Some(x) | Non => x,\n    _ => 0,\n  }\n}\n";
+    let (a, module) = analysis(src);
+    use onsa_diag::Code::{E0302, E0304, E0314};
+    // From the start of the branch, an error that ends with it is first by
+    // its code (E0304, E0302 before E0314), in a `let` of a flow too.
+    let want = [
+        (E0314, 3),
+        (E0302, 9),
+        (E0314, 14),
+        (E0314, 18),
+        (E0314, 25),
+        (E0302, 30),
+        (E0314, 35),
+        (E0304, 43),
+        (E0302, 48),
+    ];
+    assert_eq!(reported(&a, &module), want);
+}
+
+#[test]
 fn a_local_bound_twice_is_the_e0304_of_the_names_stage_where_its_second_binding_is() {
     // Before a type error of the unit (§18.1); in one branch of a choice
     // (R-284); a `let` of a flow at its `let`, after the errors before it.

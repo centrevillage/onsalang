@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-318 in the pattern of a `let`: a choice is not a pattern a `let` takes (§7: "反駁可能な `let` は
+// 無い（E0502）", a choice can fail to match), and that is the E0502 of the types stage
+// (tasks/diag-codes.md; the spec text does not name the stage). The E0314 is an error of the names
+// stage, so a `let` whose choice binds other names in its branches reports the E0314, as the unit
+// stops before the types stage (§18.1). The `let` whose choice binds the same names is E0502 and
+// is not here (it has no E0314). Each function is one unit. Every name bound is read.
+
+pub fn let_of_a_choice(p: (U32, U32)) -> U32 {
+  let (x, _) | (_, y) = p                           //~ E0314 @16
+  x + y
+}
+
+pub fn let_of_a_choice_in_parens(p: (U32, U32)) -> U32 {
+  let ((x, _) | (_, y)) = p                         //~ E0314 @17
+  x + y
+}
+
+pub fn let_of_a_choice_in_a_tuple(p: ((U32, U32), U32)) -> U32 {
+  let ((x, 0) | (0, y), z) = p                      //~ E0314 @17
+  x + y + z
+}
+
+pub fn let_with_a_type_error(p: (U32, U32)) -> U32 {
+  let _: Bool = 1
+  let (x, _) | (_, y) = p                           //~ E0314 @16
+  x + y
+}

@@ -9,7 +9,7 @@ pub enum Sh { Two(U32, U32), Ci(F32), Pair(U32, I32) }
 // Two variants whose payloads have different types.
 pub fn variants(s: Sh) -> U32 {
   match s {
-    Sh.Two(a, b) | Sh.Ci(a) => b,                   //~ E0401
+    Sh.Two(a, _) | Sh.Ci(a) => 1,                   //~ E0401
     _ => 0,
   }
 }
