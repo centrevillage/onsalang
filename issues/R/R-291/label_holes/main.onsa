@@ -1,0 +1,35 @@
+// R-291: the holes of a string key of `@param` (§11.7, §2.4). `onsa check` passes all three flows,
+// and `onsa interface` prints the labels "Gain ", "Gain //" and "Gain " (the holes are dropped).
+// `nope` names nothing (E0302 expected, or the E0200 of a form the version does not handle).
+
+const CH: U32 = 2
+
+pub struct Q {}
+
+impl Q {
+    pub const TAG: U32 = 7
+}
+
+pub flow a_constant(
+    x: F32 at sample,
+    @param(min: 0.0, max: 1.0, default: 0.5, label: "Gain {CH}")
+    g: F32 at block,
+) -> F32 at sample {
+    x * g
+}
+
+pub flow constants_and_associated_constants(
+    x: F32 at sample,
+    @param(min: 0.0, max: 1.0, default: 0.5, label: "Gain {CH}/{Q.TAG}/{U8.MAX}")
+    g: F32 at block,
+) -> F32 at sample {
+    x * g
+}
+
+pub flow a_name_of_nothing(
+    x: F32 at sample,
+    @param(min: 0.0, max: 1.0, default: 0.5, label: "Gain {nope}")
+    g: F32 at block,
+) -> F32 at sample {
+    x * g
+}

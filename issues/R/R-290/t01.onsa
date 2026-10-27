@@ -1,0 +1,7 @@
+pub fn a(t: (I32, I32)) -> Str uses {Alloc} {
+    "{t.01}"
+}
+
+pub fn b(t: (I32, I32)) -> I32 {
+    t.01
+}
