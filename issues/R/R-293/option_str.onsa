@@ -1,0 +1,10 @@
+pub fn ok_or_zero(r: Option[Str]) -> I32 {
+  match r {
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+test "ok" {
+  assert ok_or_zero(None) == 0
+}

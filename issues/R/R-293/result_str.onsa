@@ -1,0 +1,10 @@
+pub fn ok_or_zero(r: Result[I32, Str]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Err(_) => 0,
+  }
+}
+
+test "ok" {
+  assert ok_or_zero(Ok(3)) == 3
+}
