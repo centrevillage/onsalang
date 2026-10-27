@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§15.1"]
+
+// The head of a hole that is not a local (§2.4, S-90, R-270, W4-04 U4). A hole is a name path that
+// "resolves by the same rule as when it is written in an expression", so its head is found where
+// an expression finds it: a constant of the module, a built-in type (`F32.PI`, `I32.BITS`,
+// `U8.MAX`), a type of the module (`P.N`, an associated constant). The holes of a local, a
+// parameter and `self` are in interp_paths_locals.onsa (they hold today). The
+// constant paths that interp_paths_resolved.onsa already has (`{MAX_VOICES}`, `{F32.PI}`, `{t.0}`,
+// `{p.pair.0.1}`, `{p.pos.1}`) are not here again. Imported heads (`use`) are in
+// packages/interp_path_heads. A string with an interpolation makes a new `Str`, so every function
+// that holds one uses `Alloc`. This file is all positive; the unresolved names are in
+// negative/interp_hole_unresolved.onsa.
+
+const MAXV: U32 = 8
+
+const RATE: F32 = 0.5
+
+pub struct P {
+  x: F32,
+  n: U32,
+  pos: (F32, F32),
+  pair: ((I32, I32), I32),
+}
+
+impl P {
+  const N: U32 = 4
+
+  pub const SCALE: F32 = 2.0
+
+  pub fn show_n(self) -> Str uses {Alloc} {
+    "{self.n}/{self.pos.1}/{self.pair.0.1}"
+  }
+
+  pub fn show_constants() -> Str uses {Alloc} {
+    "{P.N}/{P.SCALE}"
+  }
+}
+
+pub fn a_module_constant() -> Str uses {Alloc} {
+  "{MAXV}"
+}
+
+pub fn a_module_constant_of_a_float() -> Str uses {Alloc} {
+  "{RATE}"
+}
+
+pub fn a_constant_of_a_user_type() -> Str uses {Alloc} {
+  "{P.N}"
+}
+
+pub fn a_public_constant_of_a_user_type() -> Str uses {Alloc} {
+  "{P.SCALE}"
+}
+
+pub fn constants_of_the_built_in_types() -> Str uses {Alloc} {
+  "{I32.BITS}/{U8.MAX}/{F32.PI}"
+}
+
+pub fn everything_in_one_string(n: U32, t: (I32, I32), p: P) -> Str uses {Alloc} {
+  "{n}/{t.0}/{p.pos.1}/{MAXV}/{RATE}/{P.N}/{I32.BITS}"
+}
+
+pub fn a_hole_twice(n: U32) -> Str uses {Alloc} {
+  "{n}{n}{MAXV}{MAXV}{P.N}{P.N}"
+}
+
+pub fn text_around_the_holes() -> Str uses {Alloc} {
+  "a {MAXV} b {P.N} c {{MAXV}} d"
+}
+
+// The same heads in the places a body nests.
+
+pub fn in_a_branch(c: Bool, p: P) -> Str uses {Alloc} {
+  if c {
+    "{P.N}"
+  } else {
+    "{p.x}/{MAXV}"
+  }
+}
+
+pub fn in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "{P.N}",
+    1 => "{MAXV}",
+    _ => "{n}",
+  }
+}
+
+pub fn in_a_for_loop(n: U32) -> U32 uses {Alloc} {
+  var total = 0
+  for i in 0 ..< n {
+    let s = "{i}/{MAXV}/{P.N}"
+    total = total + 1
+  }
+  total
+}
+
+pub fn in_a_let_chain(p: P) -> Str uses {Alloc} {
+  let a = "{MAXV}"
+  let b = "{a}/{p.n}"
+  "{b}/{P.N}"
+}
+
+fn join(a: Str, b: Str, c: Str) -> Str uses {Alloc} {
+  "{a}-{b}-{c}"
+}
+
+pub fn in_an_argument(p: P) -> Str uses {Alloc} {
+  join("{MAXV}", "{p.n}", "{P.N}")
+}
+
+pub fn in_a_generic_function[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}/{MAXV}/{P.N}"
+}
+
+pub fn in_a_closure() -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}/{MAXV}/{P.N}" }
+  f.(1)
+}

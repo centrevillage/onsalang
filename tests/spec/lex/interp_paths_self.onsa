@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.2", "§4.4"]
+
+// `Self` as the head of a hole (§2.4: "頭は名前か `self`・`Self`"). Inside an `impl`, `Self` is the
+// type of the impl, the same as writing its name (§4.4: "`impl` の本体の中の `Self`（§2.2）も、対象の型
+// を右辺にした別名と同じである（`Self { x: 0.0 }`、`Self.N`）"), so `{Self.N}` is `{P.N}`. A hole is
+// resolved as an expression is, so `Self.N` in a string is the associated constant `N` of `P`. This
+// file is apart from interp_paths_heads.onsa: `Self` is read by the types stage of a later unit
+// (W4-04 U6), so a path with `Self` stays an error until then (tests/pending.toml).
+
+pub struct P {
+  n: U32,
+  pos: (F32, F32),
+}
+
+impl P {
+  const N: U32 = 4
+
+  pub const SCALE: F32 = 2.0
+
+  pub fn constant() -> Str uses {Alloc} {
+    "{Self.N}"
+  }
+
+  pub fn constants() -> Str uses {Alloc} {
+    "{Self.N}/{Self.SCALE}/{P.N}"
+  }
+
+  pub fn with_self(self) -> Str uses {Alloc} {
+    "{Self.N}/{self.n}/{self.pos.1}"
+  }
+
+  pub fn in_a_branch(self, c: Bool) -> Str uses {Alloc} {
+    if c {
+      "{Self.N}"
+    } else {
+      "{self.n}"
+    }
+  }
+}
+
+pub struct Ring[T, const M: U32] {
+  data: [T; M],
+}
+
+impl[T, const M: U32] Ring[T, M] {
+  const DEPTH: U32 = 2
+
+  pub fn describe(self) -> Str uses {Alloc} {
+    "{Self.DEPTH}"
+  }
+}

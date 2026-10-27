@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§11.2"]
+
+// A failed name (here a struct declared twice, E0304 on the second, so the name is no binding;
+// S-462, §18.1) is no error in the unit that uses it: the unit is checked up to the use, and an
+// error before the use is the first error of the unit. A `let` pattern whose constructor is the
+// failed name (`let Dd { a: q } = x`) is such a use, and so is the name in the annotation of a
+// `let` (`let w: Dd = x`, a type position read as a part that could not be read). So the E0401
+// of `let zz: Bool = 1` before it is reported, in a flow body and in a fn body. After the use of
+// the failed name in a value position, the rest of the unit is not checked (§18.1: "その単位の以後を
+// 検査しない"), so a type error after it is not reported. The annotated pattern in a flow body is
+// failed_name_annotated_pattern.onsa. One error per unit, so each form is a unit of its own.
+
+pub struct Dd { a: F32 }
+pub struct Dd { a: F32 }                            //~ E0304
+
+// A flow body.
+
+pub flow pattern_without_an_annotation(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd { a: q } = x
+  x
+}
+
+pub flow annotation_without_a_pattern(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let w: Dd = x
+  x
+}
+
+// A fn body.
+
+pub fn fn_annotated_pattern(x: F32) -> F32 {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd { a: q }: Dd = Dd { a: x }
+  x
+}
+
+pub fn fn_pattern_without_an_annotation(x: F32) -> F32 {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd { a: q } = Dd { a: x }
+  x
+}
+
+pub fn fn_annotation_without_a_pattern(x: F32) -> F32 {
+  let zz: Bool = 1                                  //~ E0401
+  let w: Dd = Dd { a: x }
+  x
+}
+
+// After the use of the failed name in a value position nothing more is checked.
+
+pub flow error_after_an_annotated_pattern(x: F32 at sample) -> F32 at sample {
+  let Dd { a: q }: Dd = x
+  let zz: Bool = 1
+  x
+}
+
+pub fn fn_error_after_an_annotated_pattern(x: F32) -> F32 {
+  let Dd { a: q }: Dd = Dd { a: x }
+  let zz: Bool = 1
+  x
+}

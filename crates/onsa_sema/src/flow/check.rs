@@ -62,7 +62,12 @@ impl<'a> Checker<'a> {
                 let annotation = match ty {
                     Some(t) => {
                         let lowered = self.lower_type_expr(t)?;
-                        self.flow_unify_pat(pat, lowered)?;
+                        // A constructor with no record (a name held as an
+                        // error) stops the check at its `let`, after the
+                        // statements before it (§18.1, S-692).
+                        if self.ctors_recorded(pat) {
+                            self.flow_unify_pat(pat, lowered)?;
+                        }
                         Some(lowered)
                     }
                     // SPEC-GAP(S-395): with no annotation the locals stay unknown
@@ -90,6 +95,22 @@ impl<'a> Checker<'a> {
                 let end = Span::new(span.file, span.end.saturating_sub(1), span.end);
                 Err(self.flow_err(Code::E0806, end, "a flow body ends with its output expression (§11.2)"))
             }
+        }
+    }
+
+    /// Whether every constructor the pattern `pat` names has its record.
+    fn ctors_recorded(&self, pat: PatId) -> bool {
+        let names = &self.names;
+        match &self.ast.pat(pat).kind {
+            PatKind::Path(_) => names.pats.contains_key(&pat),
+            PatKind::TupleStruct { elems, .. } => {
+                names.pats.contains_key(&pat) && elems.iter().all(|&q| self.ctors_recorded(q))
+            }
+            PatKind::Struct { fields, .. } => {
+                names.pats.contains_key(&pat) && fields.iter().all(|(_, q)| self.ctors_recorded(*q))
+            }
+            PatKind::Tuple(ps) | PatKind::Or(ps) => ps.iter().all(|&q| self.ctors_recorded(q)),
+            PatKind::Bind(_) | PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) => true,
         }
     }
 

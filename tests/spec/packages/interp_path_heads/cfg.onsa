@@ -1,0 +1,12 @@
+pub const N: U32 = 4
+
+pub const RATE: F32 = 0.5
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub const ORIGIN: Pt = Pt { x: 1, y: 2 }
+
+pub const PAIR: (I32, I32) = (7, 8)

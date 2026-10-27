@@ -1791,20 +1791,6 @@ note = "`if~` は W3-10 の写しで E0200（K-08、W7-06）。W3-06 で `e0020_
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/lex/interp_paths_resolved.onsa"
-reasons = ["S-90", "R-102"]
-until = "W4-04"
-note = "定数・関連定数・タプルの添字の穴を名前の段で解決する（字句と構文は W3-04）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/interp_path_modules"
-reasons = ["S-90", "R-102"]
-until = "W4-04"
-note = "修飾した名前の穴 {cfg.N}、{kp.clock.TICKS} の解決（字句と構文は W3-04）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/float_literal_rounding_fn_values.onsa"
 reasons = ["R-08", "R-20", "S-211"]
 until = "W8-09"
@@ -1836,6 +1822,15 @@ target = "tests/fuzz/22c9f449.onsa"
 reasons = ["S-267", "S-236"]
 until = "W4-12"
 note = "fix-same-place: fix|E0812|remove `…`|E0805。flow の中の非 rt の fn への hp~(x) の E0812 の候補（~ を除く）の後に、非 rt の fn を sample のクロックで呼ぶ E0805（仕様は E0815、S-147、W7-02）。仕様では E0812 は名前の段、残る誤りは flow の検査の段で、後の段の診断は出てよい（§18.1）。実装は E0812 をまだ flow の段で出すので、近似が同じ段と見る。W4-12 で E0812 を名前の段へ移すと落ちなくなる"
+
+# --- W4-04 U4/t: 補間の穴の事例のうち、後の単位で通るもの（2026-10-27）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/lex/interp_paths_self.onsa"
+reasons = ["S-90", "S-595"]
+until = "W4-04"
+note = "impl の中の {Self.N} の穴。Self の解決は U6（今は E0302「cannot find `Self`」）"
 
 
 [[pending]]

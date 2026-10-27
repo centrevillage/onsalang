@@ -1,0 +1,3 @@
+[package]
+name = "interp_path_heads_not_imported"
+edition = "2026"

@@ -87,3 +87,16 @@ fn the_callers_of_an_rt_function_whose_body_read_a_held_name_are_users() {
     let users = users(&a);
     assert_eq!(users, ["f", "r1"], "{:?}", a.diagnostics);
 }
+
+#[test]
+fn a_body_that_reads_a_constant_in_a_hole_is_a_user() {
+    // `Missng` is no type (E0302), so the type of `K` failed to resolve: `in_hole` reads `K` in a hole of a
+    // string only (§2.4), whose target the hole keeps (W4-04 U4/b, F4); `in_expr` reads it in an expression;
+    // `other` reads neither.
+    let src = "const K: Missng = 1\n\n\
+               fn in_hole() -> Str uses {Alloc} {\n  \"{K}\"\n}\n\n\
+               fn in_expr() -> I32 {\n  let k = K\n  1\n}\n\n\
+               fn other() -> I32 {\n  2\n}\n";
+    let a = check(src);
+    assert_eq!(users(&a), ["K", "in_hole", "in_expr"], "{:?}", a.diagnostics);
+}

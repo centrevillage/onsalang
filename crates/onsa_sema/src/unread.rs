@@ -139,7 +139,7 @@ impl Analysis {
     /// refers to a def of it.
     fn body_reaches(&self, b: &BodyInfo, set: &HashSet<DefId>, memo: &mut HashMap<TyId, bool>) -> bool {
         b.expr_types.values().chain(b.locals.iter().map(|l| &l.ty)).any(|&t| self.ty_reaches(t, set, memo))
-            || b.targets.values().any(|t| match t {
+            || b.targets.values().chain(b.hole_targets.values()).any(|t| match t {
                 Target::Fn { def, .. }
                 | Target::Method { def, .. }
                 | Target::Variant { def, .. }

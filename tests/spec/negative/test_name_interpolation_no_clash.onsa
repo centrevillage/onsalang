@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8", "§2.4", "§18.1"]
+
+// R-267: a test whose name holds an interpolation is E0002 of the syntax stage (spec §11.8, S-244),
+// and it is no test of the module: it has no name, so no other test can be "the same test" as it
+// (§18.1: nothing is reported from an error already reported). So the E0306 of two tests with one
+// name is not added to a test after (or before) one with an interpolation, whatever the text around
+// the hole is. Two tests with the same plain name are E0306 as always (the later is the error).
+
+// The text of the name without the hole is the name of a plain test after it.
+test "x{1}y" {                  //~ E0002
+  assert true
+}
+
+test "xy" {
+  assert true
+}
+
+// The plain test comes first.
+test "ab" {
+  assert true
+}
+
+test "a{p}b" {                  //~ E0002
+  assert true
+}
+
+// Two tests with an interpolation and the same text.
+test "c{p}d" {                  //~ E0002
+  assert true
+}
+
+test "c{q}d" {                  //~ E0002
+  assert true
+}
+
+test "c{p}d" {                  //~ E0002
+  assert true
+}
+
+// The hole is the whole name, and the text around it.
+test "{p}" {                    //~ E0002
+  assert true
+}
+
+test "a name with {p.x} in the middle" {   //~ E0002
+  assert true
+}
+
+test "a name with  in the middle" {
+  assert true
+}
+
+// `{{` and `}}` are text, so a name with them is a plain name and a test of the module.
+test "braces {{1}} are text" {
+  assert true
+}
+
+test "braces {1} are not text" {   //~ E0002
+  assert true
+}
+
+test "braces  are not text" {
+  assert true
+}
+
+// Two tests with the same plain name stay E0306 (the later is the error), also with a test that
+// has an interpolation between them.
+test "dup" {
+  assert true
+}
+
+test "dup{p}" {                 //~ E0002
+  assert true
+}
+
+test "dup" {                    //~ E0306
+  assert true
+}
+
+test "dup2" {
+  assert true
+}
+
+test "dup2" {                   //~ E0306
+  assert true
+}

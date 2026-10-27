@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§15.1", "§18.1"]
+
+// A hole that names nothing (S-90, §15.1): a name that is not found anywhere is E0302, where a body
+// finds names (a local, a parameter, an item of the module, a built-in type, an imported name).
+// The same name written in an expression is the same E0302, and a hole is no looser or stricter than
+// that (the guard of W4-04 U4 when the heads of holes move to the same lookup: an unresolved head
+// stays E0302). The path after the head is not read once the head is not found. One error per unit,
+// so each form is a unit of its own. A candidate for a spelling is no part of the contract, so the
+// number of candidates is not written.
+
+pub fn plain_name() -> Str uses {Alloc} {
+  "{nope}"   //~ E0302
+}
+
+pub fn name_then_a_field() -> Str uses {Alloc} {
+  "{nope.a}"   //~ E0302
+}
+
+pub fn name_then_a_tuple_index() -> Str uses {Alloc} {
+  "{nope.0}"   //~ E0302
+}
+
+pub fn name_then_a_long_path() -> Str uses {Alloc} {
+  "{nope.a.0.b}"   //~ E0302
+}
+
+pub fn upper_case_name() -> Str uses {Alloc} {
+  "{NOPE}"   //~ E0302
+}
+
+pub fn upper_case_path() -> Str uses {Alloc} {
+  "{Nope.N}"   //~ E0302
+}
+
+pub fn after_a_good_hole(n: U32) -> Str uses {Alloc} {
+  "{n}/{nope}"   //~ E0302
+}
+
+pub fn before_a_good_hole(n: U32) -> Str uses {Alloc} {
+  "{nope}/{n}"   //~ E0302
+}
+
+pub fn a_local_of_another_function() -> Str uses {Alloc} {
+  "{n}"   //~ E0302
+}
+
+pub fn in_a_branch(c: Bool) -> Str uses {Alloc} {
+  if c {
+    "{nope}"   //~ E0302
+  } else {
+    "no"
+  }
+}
+
+pub fn in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "{nope}",   //~ E0302
+    _ => "no",
+  }
+}
+
+pub fn in_a_loop(n: U32) -> U32 uses {Alloc} {
+  for i in 0 ..< n {
+    let s = "{i}/{nope}"   //~ E0302
+  }
+  n
+}
+
+pub fn in_a_closure() -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}/{nope}" }   //~ E0302
+  f.(1)
+}
+
+pub fn in_a_generic_function[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}/{nope}"   //~ E0302
+}
+
+pub struct P {
+  n: U32,
+}
+
+impl P {
+  const N: U32 = 4
+
+  pub fn in_a_method(self) -> Str uses {Alloc} {
+    "{self.n}/{nope}"   //~ E0302
+  }
+}
+
+pub fn len_of(s: Str) -> F32 {
+  0.0
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{nope}")   //~ E0302
+  x
+}
+
+pub flow in_a_flow_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { len_of("{nope}") } else { x }   //~ E0302
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    len_of("{nope}")   //~ E0302
+  }
+  ys[0]
+}
+
+pub const NOPE_IN_A_CONST: Str = "{nope}"   //~ E0302
+
+test "a hole that names nothing in a test" {
+  let s = "{nope}"   //~ E0302
+  assert true
+}
+
+// The units around are checked on their own.
+
+pub fn good(n: U32) -> Str uses {Alloc} {
+  "{n}"
+}

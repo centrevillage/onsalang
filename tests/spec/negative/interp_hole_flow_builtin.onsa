@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§15.1", "§2.4"]
+// fixes = 0
+
+// The flow builtins (`prev` `delay` `vdelay` `sample_rate` `sample_tick`) in a hole of an
+// interpolation inside a flow (S-720, §11.4, W4-04 U4). Inside a flow they are found names, and the
+// kind a hole needs (a value) is not the kind of a builtin, which is only the callee of its own
+// call form (`prev~(e)`, `sample_rate()`), so a hole that names one is E0308 with no fix candidate
+// (the note and its words are not compared). One error per unit, so each form is a flow of its
+// own. The same hole outside a flow is E0302 (interp_hole_flow_builtin_fn_side.onsa). The call
+// form in a hole (`{sample_rate()}`) is E0001 of the lexical stage (negative/lex_interp_holes.onsa).
+
+pub fn len_of(s: Str) -> F32 {
+  0.0
+}
+
+pub flow hole_sample_rate(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{sample_rate}")   //~ E0308
+  x
+}
+
+pub flow hole_sample_tick(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{sample_tick}")   //~ E0308
+  x
+}
+
+pub flow hole_prev(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{prev}")   //~ E0308
+  x
+}
+
+pub flow hole_delay(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{delay}")   //~ E0308
+  x
+}
+
+pub flow hole_vdelay(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{vdelay}")   //~ E0308
+  x
+}
+
+// The head of a longer path: a builtin is not a namespace either.
+pub flow hole_prev_then_a_field(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{prev.x}")   //~ E0308
+  x
+}
+
+pub flow hole_sample_rate_then_an_index(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{sample_rate.0}")   //~ E0308
+  x
+}
+
+// Among other holes and text, the one hole decides.
+pub flow hole_after_a_good_hole(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}/{sample_rate}")   //~ E0308
+  x
+}
+
+pub flow hole_before_a_good_hole(x: F32 at sample) -> F32 at sample {
+  let n = len_of("at {prev} of {x}")   //~ E0308
+  x
+}
+
+// The places a flow body nests.
+pub flow hole_in_a_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { len_of("{sample_rate}") } else { x }   //~ E0308
+}
+
+pub flow hole_in_the_else_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { x } else { len_of("{delay}") }   //~ E0308
+}
+
+pub flow hole_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    len_of("{sample_tick}")   //~ E0308
+  }
+  ys[0]
+}
+
+pub flow hole_in_a_match_arm(x: F32 at sample) -> F32 at sample {
+  match x {
+    _ => len_of("{vdelay}"),   //~ E0308
+  }
+}
+
+pub flow hole_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x * len_of("{sample_rate}")   //~ E0308
+}
+
+pub flow hole_after_a_call_form(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  let n = len_of("{prev}")   //~ E0308
+  a
+}
+
+pub flow hole_in_the_last_expression(x: F32 at sample) -> F32 at sample {
+  len_of("{prev}")   //~ E0308
+}

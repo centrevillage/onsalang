@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§15.1", "§2.4"]
+// fixes = 0
+
+// The flow builtins (`prev` `delay` `vdelay` `sample_rate` `sample_tick`) in a hole outside a flow
+// (S-720, §11.4): the body of a fn, a `test` and the initializer of a `const` do not see the
+// names, so the hole is E0302 (also no fix candidate), as the same name written in an expression
+// is (negative/flow_builtin_outside_flow.onsa). The hole inside a flow is E0308
+// (interp_hole_flow_builtin.onsa). In a fn the names are ordinary: a parameter or a field named
+// `prev` or `sample_rate` is found by a hole. One error per unit.
+
+pub fn fn_hole_sample_rate() -> Str uses {Alloc} {
+  "{sample_rate}"   //~ E0302
+}
+
+pub fn fn_hole_sample_tick() -> Str uses {Alloc} {
+  "{sample_tick}"   //~ E0302
+}
+
+pub fn fn_hole_prev() -> Str uses {Alloc} {
+  "{prev}"   //~ E0302
+}
+
+pub fn fn_hole_delay() -> Str uses {Alloc} {
+  "{delay}"   //~ E0302
+}
+
+pub fn fn_hole_vdelay() -> Str uses {Alloc} {
+  "{vdelay}"   //~ E0302
+}
+
+pub fn fn_hole_prev_then_a_field() -> Str uses {Alloc} {
+  "{prev.x}"   //~ E0302
+}
+
+pub fn fn_hole_in_a_branch(c: Bool) -> Str uses {Alloc} {
+  if c {
+    "{sample_rate}"   //~ E0302
+  } else {
+    "no"
+  }
+}
+
+pub fn fn_hole_in_a_closure() -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}/{sample_rate}" }   //~ E0302
+  f.(1)
+}
+
+pub const HOLE_IN_A_CONST: Str = "{sample_rate}"   //~ E0302
+
+test "a hole of a builtin name in a test" {
+  let s = "{sample_rate}"   //~ E0302
+  assert true
+}
+
+pub fn fn_binds_builtin_names(prev: F32, sample_rate: U32) -> Str uses {Alloc} {
+  "{prev}/{sample_rate}"
+}
+
+pub struct Voice {
+  prev: F32,
+  delay: F32,
+}
+
+pub fn fn_reads_builtin_names_as_fields(v: Voice) -> Str uses {Alloc} {
+  "{v.prev}/{v.delay}"
+}

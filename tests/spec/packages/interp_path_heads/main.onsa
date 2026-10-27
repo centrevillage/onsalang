@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§15.1"]
+
+// (S-90, R-270, W4-04 U4.) A hole whose head is a name that a `use` took. A hole resolves a name path
+// by the same rule as an expression (§2.4), and in a body another module is named only by what a
+// `use` took (§15.1: "`use std.math` の後の `math.sqrt(x)`"), so the head of a hole is a taken name: a
+// module (`use kp.inner`, then `{inner.K}`), a module under a directory that has no file of its own
+// (`use kp.deep`, then `{deep.leaf.D}`), a constant taken by itself (`use cfg.{N}`, then `{N}`), a type
+// taken by itself, whose associated constant follows (`use kp.inner.{Q}`, then `{Q.LIMIT}`). A path
+// goes on down from the head: a type of a module and its constant (`{inner.Q.LIMIT}`), and the fields
+// and tuple indexes of a constant (`{ORIGIN.x}`, `{PAIR.0}`). The hole of a taken module's constant
+// through the package (`{cfg.N}`, `{kp.clock.TICKS}`) is in interp_path_modules. Every function here
+// is the same path written in an expression (the last function) and has no diagnostic.
+use cfg
+use cfg.{N, ORIGIN, PAIR}
+use kp.inner
+use kp.inner.{Q}
+use kp.deep
+
+pub fn a_module_taken() -> Str uses {Alloc} {
+  "{inner.K}"
+}
+
+pub fn a_constant_taken_by_itself() -> Str uses {Alloc} {
+  "{N}"
+}
+
+pub fn a_type_taken_by_itself() -> Str uses {Alloc} {
+  "{Q.LIMIT}"
+}
+
+pub fn a_type_through_its_module() -> Str uses {Alloc} {
+  "{inner.Q.LIMIT}"
+}
+
+pub fn a_module_under_a_directory_with_no_file() -> Str uses {Alloc} {
+  "{deep.leaf.D}"
+}
+
+pub fn a_field_of_a_constant_taken() -> Str uses {Alloc} {
+  "{ORIGIN.x}/{ORIGIN.y}"
+}
+
+pub fn a_tuple_index_of_a_constant_taken() -> Str uses {Alloc} {
+  "{PAIR.0}/{PAIR.1}"
+}
+
+pub fn a_field_of_a_constant_through_a_module() -> Str uses {Alloc} {
+  "{cfg.ORIGIN.x}"
+}
+
+pub fn a_tuple_index_of_a_constant_through_a_module() -> Str uses {Alloc} {
+  "{cfg.PAIR.0}"
+}
+
+pub fn the_taken_name_twice_in_a_module_path(k: U32) -> Str uses {Alloc} {
+  "{cfg.N}/{N}/{k}"
+}
+
+pub fn many_holes(n: U32, p: Q) -> Str uses {Alloc} {
+  "{n}/{p.n}/{inner.K}/{N}/{Q.LIMIT}/{deep.leaf.D}/{cfg.RATE}/{F32.PI}"
+}
+
+pub fn in_a_branch(c: Bool) -> Str uses {Alloc} {
+  if c {
+    "{inner.K}"
+  } else {
+    "{N}"
+  }
+}
+
+pub fn in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "{inner.Q.LIMIT}",
+    1 => "{ORIGIN.x}",
+    _ => "{n}",
+  }
+}
+
+pub fn in_a_generic_function[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}/{inner.K}/{Q.LIMIT}"
+}
+
+pub fn in_a_closure() -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}/{inner.K}/{N}" }
+  f.(1)
+}
+
+pub flow in_a_flow_body(x: F32 at sample) -> F32 at sample {
+  let s = len_of("{inner.K}/{N}/{Q.LIMIT}/{deep.leaf.D}")
+  x + s
+}
+
+pub fn len_of(s: Str) -> F32 {
+  0.0
+}
+
+pub fn the_same_paths_in_an_expression() -> U32 {
+  inner.K + N + Q.LIMIT + inner.Q.LIMIT + deep.leaf.D + cfg.N
+}

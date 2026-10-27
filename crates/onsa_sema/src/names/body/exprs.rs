@@ -130,15 +130,17 @@ impl Walker<'_> {
         self.fail(Fail::Report(d))
     }
 
-    /// The holes of a string literal (§2.4).
+    /// The holes of a string literal (§2.4): the path of each is a chain of
+    /// names at the place of a value, resolved and reported as one of an
+    /// expression; what follows its records is fields and tuple elements.
     fn interp(&mut self, e: ExprId, s: &StrLit) -> W {
-        for (k, seg) in s.segments.iter().enumerate() {
-            // Their errors are the types stage's until W4-04 U4.
-            if let StrSeg::Interp(p) = seg
-                && let (records, None) = self.resolve(&p.segments.iter().collect::<Vec<_>>(), Place::Value)
-            {
-                let records = (0..).zip(records).collect();
-                self.out.interp.insert((e, k as u32), records);
+        for (k, seg) in (0..).zip(&s.segments) {
+            if let StrSeg::Interp(p) = seg {
+                let (records, fail) = self.resolve(&p.segments.iter().collect::<Vec<_>>(), Place::Value);
+                if let Some(f) = fail {
+                    return Err(self.fail(f));
+                }
+                self.out.interp.insert((e, k), (0..).zip(records).collect());
             }
         }
         Ok(())

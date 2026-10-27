@@ -1,0 +1,9 @@
+pub const K: U32 = 3
+
+pub struct Q {
+  n: U32,
+}
+
+impl Q {
+  pub const LIMIT: U32 = 5
+}

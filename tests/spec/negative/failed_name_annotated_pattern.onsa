@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§11.2"]
+
+// A failed name (here a struct declared twice, E0304 on the second, so the name is no binding;
+// S-462, §18.1) is no error in the unit that uses it: the unit is checked up to the use, and an
+// error before the use is the first error of the unit. A `let` pattern whose constructor is the
+// failed name and that has an annotation after it (`let Dd { a: q }: Dd = x`) is such a use in the
+// flow body (where a `let` is a held name of the statement, W4-04 U3b/U4): the annotation is a type
+// position of the same failed name, read as a part that could not be read, and the check goes on
+// (§18.1). So the E0401 of `let zz: Bool = 1` before the pattern is reported, also when the
+// constructor is a variant path through the failed name (`Dd.A(q)`, `Dd.B`). The same units
+// without the annotation, and in a fn body, are in failed_name_pattern_guards.onsa (they hold
+// today). One error per unit, so each form is a flow of its own.
+
+pub struct Dd { a: F32 }
+pub struct Dd { a: F32 }                            //~ E0304
+
+pub flow annotated_pattern(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd { a: q }: Dd = x
+  x
+}
+
+pub flow annotated_tuple_pattern(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let (q, Dd { a: r }): (F32, Dd) = (x, x)
+  x
+}
+
+pub flow annotated_tuple_variant_pattern(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd.A(q): Option[F32] = x
+  x
+}
+
+pub flow annotated_unit_variant_pattern(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd.B: Option[F32] = x
+  x
+}

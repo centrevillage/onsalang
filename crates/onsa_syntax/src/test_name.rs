@@ -21,6 +21,9 @@ pub(crate) fn forbidden(c: char) -> bool {
 /// interpolation: then it is no name (the parser's E0002). The one place a
 /// name's value is made (the parser's check, the names of `onsa_sema`).
 pub fn value(lit: &crate::ast::StrLit) -> Option<String> {
+    if lit.pathless_hole {
+        return None;
+    }
     let mut out = String::new();
     for s in &lit.segments {
         match s {

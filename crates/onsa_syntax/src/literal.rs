@@ -779,6 +779,15 @@ pub(crate) fn tuple_index_unpadded(text: &str) -> Option<&str> {
     Some(if digits.is_empty() { &text[text.len() - 1..] } else { digits })
 }
 
+/// The tuple index a name of the path of a hole is (`0` of `{t.0}`, §2.4),
+/// by the rules of a tuple index of an expression: `None` when it is no
+/// decimal digits, or starts with `0` and is not `0` (S-508), or does not
+/// fit `U32`.
+pub fn hole_tuple_index(name: &str) -> Option<u32> {
+    let digits = name.bytes().all(|b| b.is_ascii_digit()) && tuple_index_unpadded(name).is_none();
+    digits.then(|| tuple_index_value(name)).flatten()
+}
+
 /// The character of a char literal (`'a'`, `'\n'`).
 pub(crate) fn char_value(text: &str) -> char {
     let inner = &text[1..];
@@ -792,7 +801,8 @@ pub(crate) fn char_value(text: &str) -> char {
 /// A string literal with its interpolations split out (§2.4): the text
 /// between the holes with its escapes read ([`escape`]), and the path of
 /// each of its holes `holes` (the lexer's, [`Literals::holes_in`]; `text` is
-/// the file). A hole that holds no name path (the lexer's E0001) is left out.
+/// the file). A hole that holds no name path (the lexer's E0001) is left out
+/// ([`StrLit::pathless_hole`]).
 pub(crate) fn str_lit(text: &str, span: Span, holes: &[Hole]) -> StrLit {
     let raw = &text[span.start as usize..span.end as usize];
     let close = usize::from(raw.len() > 1 && raw.ends_with('"'));
@@ -801,6 +811,7 @@ pub(crate) fn str_lit(text: &str, span: Span, holes: &[Hole]) -> StrLit {
     let mut buf = String::new();
     let mut i = from;
     let mut holes = holes.iter().peekable();
+    let mut pathless_hole = false;
     while i < to {
         if let Some(h) = holes.next_if(|h| h.span.start as usize == i) {
             if !buf.is_empty() {
@@ -811,6 +822,7 @@ pub(crate) fn str_lit(text: &str, span: Span, holes: &[Hole]) -> StrLit {
                 let pspan = Span::new(span.file, path[0].start, path[path.len() - 1].end);
                 segments.push(StrSeg::Interp(Path { segments: path.iter().map(name).collect(), span: pspan }));
             }
+            pathless_hole |= h.path.is_none();
             i = h.span.end as usize;
             continue;
         }
@@ -831,7 +843,7 @@ pub(crate) fn str_lit(text: &str, span: Span, holes: &[Hole]) -> StrLit {
     if !buf.is_empty() || segments.is_empty() {
         segments.push(StrSeg::Text(buf));
     }
-    StrLit { segments, span }
+    StrLit { segments, span, pathless_hole }
 }
 
 /// The escape after a backslash (§2.4, S-19), `after` being the text after

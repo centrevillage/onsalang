@@ -1,0 +1,9 @@
+pub const N: U32 = 4
+
+pub struct Pt {
+  x: I32,
+}
+
+impl Pt {
+  pub const LIMIT: U32 = 5
+}

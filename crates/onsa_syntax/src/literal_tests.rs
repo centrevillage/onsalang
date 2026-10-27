@@ -354,3 +354,11 @@ fn a_negative_pattern_names_the_form_of_its_number() {
         assert_eq!((d.code, got), (onsa_diag::Code::E0020, want.iter().map(|s| s.to_string()).collect()), "{src}");
     }
 }
+
+#[test]
+fn a_tuple_index_of_a_hole_follows_the_rules_of_one_of_an_expression() {
+    // §2.4, S-508: decimal digits, no leading `0` but `0`, in `U32`.
+    let read = |s: &str| crate::literal::hole_tuple_index(s);
+    assert_eq!((read("0"), read("1"), read("10"), read("4294967295")), (Some(0), Some(1), Some(10), Some(u32::MAX)));
+    assert_eq!((read("01"), read("00"), read("4294967296"), read("x"), read("1a")), (None, None, None, None, None));
+}

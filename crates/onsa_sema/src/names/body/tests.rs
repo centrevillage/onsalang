@@ -194,6 +194,33 @@ fn self_and_the_holes_of_a_string_are_bindings_of_the_scopes_of_the_body() {
 }
 
 #[test]
+fn a_hole_of_a_string_is_resolved_and_reported_as_a_chain_of_an_expression() {
+    // §2.4: the E0302 of `nope` and the E0308 of a builtin name of a flow are
+    // of the names stage; a name held as an error stops the body with no
+    // diagnostic (S-692, R-270), and a resolved hole has its records.
+    let src = "fn dup() -> I32 { 1 }\nfn dup() -> I32 { 2 }\npub fn f() -> Str {\n  \"{nope}\"\n}\n\
+               pub flow g(x: F32 at sample) -> F32 at sample {\n  let s = \"{sample_rate}\"\n  x\n}\n\
+               pub fn h() -> Str {\n  \"{dup}\"\n}\nconst K: I32 = 1\n\
+               pub fn k(t: (I32, I32)) -> Str {\n  \"{K} {t.1}\"\n}\n";
+    let (a, module) = analysis(src);
+    use onsa_diag::Code::{E0302, E0304, E0308, E0601};
+    // `k`, checked to its end, makes a `Str` with no `uses {Alloc}` (§12).
+    assert_eq!(reported(&a, &module), [(E0304, 2), (E0302, 4), (E0308, 7), (E0601, 14)]);
+    let h = names(&a, "h");
+    assert!(!h.complete && !h.reported && h.interp.is_empty());
+    let k = names(&a, "k");
+    let mut holes: Vec<_> = k.interp.iter().map(|((_, i), r)| (*i, r.clone())).collect();
+    holes.sort_by_key(|(i, _)| *i);
+    let t = PathRes::Local(binding(k, "t"));
+    assert_eq!(holes, [(0, vec![(0, PathRes::Item { entity: entity_of(&a, "K"), owner: None })]), (2, vec![(0, t)])]);
+    let body = &a.bodies[&def(&a, "k")];
+    assert!(k.complete && body.complete);
+    // The targets of the holes are the holes' (`unread_users` reads them).
+    let targets: Vec<_> = body.hole_targets.values().filter(|t| matches!(t, crate::Target::Const(_))).collect();
+    assert_eq!((targets.len(), body.targets.len()), (1, 0));
+}
+
+#[test]
 fn a_type_argument_in_an_expression_stops_the_walk_of_its_body() {
     let src = "pub struct Q[T] { v: T }\npub fn id(x: I32) -> I32 { x }\npub fn t() -> I32 {\n  let a = 1\n  let b = id::[I32](a)\n  let c = 2\n  c\n}\npub fn s() -> I32 {\n  let k = 1\n  let q = Q::[I32] { v: k }\n  0\n}\npub fn r() -> I32 {\n  let k = 1\n  let q = Q { v: k }\n  0\n}\nconst K: I32 = 1\ntest \"w\" {\n  let w = K\n  assert w == 1\n}\n";
     let (a, _) = analysis(src);

@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§15.1"]
+
+// (S-90, W4-04 U4.) A hole resolves a name path by the rule of an expression (§2.4), and in a body
+// another module is named only by what a `use` took (§15.1: "`use` の無い経路（`std.math.sqrt(x)`）は
+// E0302"). So a hole whose head no `use` of this module took is E0302, as the same name written in an
+// expression is: a module (`cfg`) that is not taken, a package-level directory (`kp`) when only a
+// module under it is taken (`use kp.inner` takes `inner`), a type (`Pt`) of a module that is not
+// taken, and the name taken by `main` read in another module (side.onsa). The guard of the
+// heads of holes that U4 moves to the same lookup: they must not become visible by the package alone.
+// One error per unit.
+use kp.inner
+
+pub fn module_not_taken() -> Str uses {Alloc} {
+  "{cfg.N}"   //~ E0302
+}
+
+pub fn directory_not_taken() -> Str uses {Alloc} {
+  "{kp.inner.K}"   //~ E0302
+}
+
+pub fn type_of_a_module_not_taken() -> Str uses {Alloc} {
+  "{Pt.LIMIT}"   //~ E0302
+}
+
+pub fn constant_of_a_module_not_taken() -> Str uses {Alloc} {
+  "{N}"   //~ E0302
+}
+
+pub fn same_in_an_expression() -> U32 {
+  cfg.N   //~ E0302
+}

@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§2.4"]
+
+// R-270, S-462: a `use` that fails in the names stage (the module has no such item, a step of the path
+// is not there, the head is not a module) makes the names it would have bound failed names, and a
+// failed name written in a hole of an interpolation is silent, as a failed name is where an expression
+// uses it (§18.1: "失敗した名前を使う所に診断は出ない"). The path after the failed head (`{KK.a}`,
+// `{gone.a.0}`) is not read either. The only diagnostics here are the E0302 of the `use` lines; the
+// hole is no E0302 "cannot find ... for the interpolation". A hole of an unknown name that no `use`
+// lost stays E0302 (negative/interp_hole_unresolved.onsa), and a hole of the name a good `use` took
+// is as always (`{REAL}`), also next to a failed one.
+use util.{REAL}
+use util.{KK}                                       //~ E0302
+use util.{gone}                                     //~ E0302
+use util.nomod                                      //~ E0302
+use missing.{FF}                                    //~ E0302
+use util.{one, two, three}                          //~ E0302
+
+pub fn a_failed_name() -> Str uses {Alloc} {
+  "{KK}"
+}
+
+pub fn a_failed_name_in_lower_case() -> Str uses {Alloc} {
+  "{gone}"
+}
+
+pub fn a_failed_name_then_a_field() -> Str uses {Alloc} {
+  "{KK.a}"
+}
+
+pub fn a_failed_name_then_a_long_path() -> Str uses {Alloc} {
+  "{gone.a.0.b}"
+}
+
+pub fn a_failed_module() -> Str uses {Alloc} {
+  "{nomod.X}"
+}
+
+pub fn a_failed_name_of_a_missing_head() -> Str uses {Alloc} {
+  "{FF}"
+}
+
+pub fn names_of_one_use_that_lost_three() -> Str uses {Alloc} {
+  "{one}/{two}/{three}"
+}
+
+pub fn two_failed_names_in_one_string() -> Str uses {Alloc} {
+  "{KK}{gone}"
+}
+
+pub fn text_around() -> Str uses {Alloc} {
+  "a {KK} b {{KK}} c"
+}
+
+pub fn next_to_a_local(n: U32) -> Str uses {Alloc} {
+  "{n}/{KK}/{n}"
+}
+
+pub fn next_to_a_name_that_a_good_use_took() -> Str uses {Alloc} {
+  "{REAL}/{KK}"
+}
+
+pub fn next_to_a_built_in_constant() -> Str uses {Alloc} {
+  "{F32.PI}/{KK}"
+}
+
+// The places a body nests.
+
+pub fn in_a_branch(c: Bool) -> Str uses {Alloc} {
+  if c {
+    "{KK}"
+  } else {
+    "{gone}"
+  }
+}
+
+pub fn in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "{KK}",
+    _ => "{gone.a}",
+  }
+}
+
+pub fn in_a_loop(n: U32) -> U32 uses {Alloc} {
+  for i in 0 ..< n {
+    let s = "{i}/{KK}"
+  }
+  n
+}
+
+pub fn in_a_closure() -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}/{KK}" }
+  f.(1)
+}
+
+pub fn in_a_generic_function[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}/{KK}"
+}
+
+pub struct P {
+  n: U32,
+}
+
+impl P {
+  pub fn in_a_method(self) -> Str uses {Alloc} {
+    "{self.n}/{KK}"
+  }
+}
+
+pub const IN_A_CONST: Str = "{KK}"
+
+test "a failed name in a hole of a test" {
+  let s = "{KK}"
+  assert true
+}
+
+pub fn len_of(s: Str) -> F32 {
+  0.0
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{KK}")
+  x + n
+}
+
+pub flow in_a_flow_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { len_of("{gone.a}") } else { x }
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    len_of("{KK}")
+  }
+  ys[0] + x
+}
+
+// A failed name is silent in a hole, and the unit is checked up to it: an error before the hole is
+// reported as in any unit (the first error of the unit).
+
+pub fn an_error_before_the_hole() -> Str uses {Alloc} {
+  let z: Bool = 1                                   //~ E0401
+  "{KK}"
+}
+
+pub flow an_error_before_the_hole_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let z: Bool = 1                                   //~ E0401
+  let n = len_of("{KK}")
+  x
+}

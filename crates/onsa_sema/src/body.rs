@@ -160,6 +160,9 @@ pub struct BodyInfo {
     pub instances: Vec<Instance>,
     /// Closure expression → outer locals it captures (by copy, §5.3).
     pub captures: HashMap<ExprId, Vec<LocalId>>,
+    /// A hole of a string literal (§2.4), by the literal and the index of the
+    /// hole in its segments → what the name its path ends at refers to.
+    pub hole_targets: HashMap<(ExprId, u32), Target>,
     /// `-e` expressions whose operand, without parentheses, is a numeric literal:
     /// the `-` is a part of the literal's value (§4.7, S-184, S-227). The lowering
     /// folds exactly these (R-03); every other `-` negates a value.

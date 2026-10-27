@@ -226,6 +226,9 @@ pub struct Clock {
 pub struct StrLit {
     pub segments: Vec<StrSeg>,
     pub span: Span,
+    /// A hole of it holds no name path (the lexer's E0001): it is left out
+    /// of the segments, and the literal holds an interpolation all the same.
+    pub pathless_hole: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -162,7 +162,7 @@
 | `parent/r99.onsa` | R-99（`@param` の値型と値。期待値と今の出力は各 flow の上のコメント。S-87） |
 | `parent/r100/` | R-100（`delay.onsa` は `vdelay` の `MAX` と `F32`、`check` と `test` で確かめる。`size.onsa` は大きさの上限、`interface` で確かめる。期待値と今の出力は各項目の上のコメント。S-88） |
 | `parent/r101/` | R-101（字句と fmt の細則。形ごとのファイルで、`align.onsa` は `onsa fmt`、他は `onsa check` で確かめる。期待値と今の出力は各ファイルの先頭のコメント。S-89）。W3-04 で字句の部分を期待値付きのテストへ移した: `ident.onsa` は `tests/spec/negative/lex_ident_ascii.onsa`（`let_japanese`）、`slashes.onsa` は `tests/spec/lex/doc_comment_positions.onsa`（`after_a_rule_and_no_doc`）。後置の括弧の前の空白（`space_*.onsa`）と腕の `return`（`arm_return.onsa`）は `tests/spec/fixes/e0020_space_*.onsa`・`e0020_spacing.onsa`・`e0020_arm_return_forms.onsa` にある |
-| `parent/r102.onsa` | R-102（補間の範囲。期待値と今の出力は各関数の上のコメント。S-90）。W3-04 で期待値付きのテストへ移した: 定数・タプル・関連定数の穴は `tests/spec/lex/interp_paths_resolved.onsa`（W4-04 まで実装待ち）、ローカルと `self` は `tests/spec/lex/interp_paths_ok.onsa`、式・呼び出し・添字・書式は `tests/spec/negative/lex_interp_holes.onsa` |
+| `parent/r102.onsa` | R-102（補間の範囲。期待値と今の出力は各関数の上のコメント。S-90）。W3-04 で期待値付きのテストへ移した: 定数・タプル・関連定数の穴は `tests/spec/lex/interp_paths_resolved.onsa`（W4-04 U4 で通った。修飾した名前の穴は `tests/spec/packages/interp_path_modules`）、ローカルと `self` は `tests/spec/lex/interp_paths_ok.onsa`、式・呼び出し・添字・書式は `tests/spec/negative/lex_interp_holes.onsa` |
 | `parent/r105/` | R-105（型別名。`alias.onsa`・`generic.onsa`・`cycle.onsa` は `onsa check`、`impl/` は別名を通した孤児規則のパッケージ。期待値と今の出力は各項目の上か `onsa.toml` の先頭のコメント。S-91） |
 | `parent/r107/` | R-107（C の生成 API と設定。パッケージで、`onsa build --target host` と `--target bare` の生成物で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-92） |
 | `parent/r108/` | R-108（`const` の評価の超越関数。パッケージで、二台の機械で `onsa build --target src` の生成した C の表を比べる。手順と期待値は `m.onsa` の先頭のコメント。S-93） |

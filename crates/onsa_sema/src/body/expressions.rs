@@ -239,18 +239,7 @@ impl<'a> Checker<'a> {
             ExprKind::TupleIndex { base, index, index_span } => {
                 let bt = self.check_expr(*base, None)?;
                 let bt = self.known(bt, self.expr(*base).span, "value")?;
-                match self.ty(bt) {
-                    Ty::Tuple(ts) if (*index as usize) < ts.len() => Ok(ts[*index as usize]),
-                    Ty::Error => Ok(bt),
-                    // SPEC-GAP(S-260): an element of a struct whose unit failed in
-                    // the syntax stage gets no diagnostic, as a field does
-                    // (`field_type`; a tuple struct `struct Hz(F32)` is one, S-39).
-                    Ty::Named(d, _) if self.a.partly_read(d) => Ok(self.a.types.error()),
-                    _ => {
-                        let shown = self.display(bt);
-                        Err(self.err(Code::E0413, *index_span, format!("`{shown}` has no element `{index}`")))
-                    }
-                }
+                self.tuple_element(bt, *index, *index_span)
             }
             ExprKind::Index { base, index } => {
                 let bt = self.check_expr(*base, None)?;
@@ -337,27 +326,27 @@ impl<'a> Checker<'a> {
             Lit::Str(s) => {
                 for (k, seg) in (0..).zip(&s.segments) {
                     if let StrSeg::Interp(path) = seg {
-                        let head = &path.segments[0];
-                        // The locals alone until W4-04 U4.
-                        let local = match self.names.interp.get(&(e, k)).and_then(|r| r.first()) {
-                            Some((0, PathRes::Local(b))) => Some(LocalId(b.0)),
-                            _ => None,
-                        };
-                        let Some(id) = local else {
-                            return Err(self.name_err(
-                                Code::E0302,
-                                head.span,
-                                format!("cannot find `{}` for the interpolation", head.name),
-                            ));
-                        };
-                        let mut t = self.local_ty(id);
-                        for seg in &path.segments[1..] {
-                            let base = self.known(t, seg.span, "value")?;
-                            t = self.field_type(base, seg)?;
-                        }
+                        self.check_hole(e, k, path)?;
                     }
                 }
                 Ok(self.a.types.builtin(BuiltinTy::Str, vec![]))
+            }
+        }
+    }
+
+    /// The type of the element `index` (written at `at`) of a value of the
+    /// known type `bt` (`t.0`, and in a hole `{t.0}`, §2.4).
+    pub(super) fn tuple_element(&mut self, bt: TyId, index: u32, at: Span) -> R<TyId> {
+        match self.ty(bt) {
+            Ty::Tuple(ts) if (index as usize) < ts.len() => Ok(ts[index as usize]),
+            Ty::Error => Ok(bt),
+            // SPEC-GAP(S-260): an element of a struct whose unit failed in
+            // the syntax stage gets no diagnostic, as a field does
+            // (`field_type`; a tuple struct `struct Hz(F32)` is one, S-39).
+            Ty::Named(d, _) if self.a.partly_read(d) => Ok(self.a.types.error()),
+            _ => {
+                let shown = self.display(bt);
+                Err(self.err(Code::E0413, at, format!("`{shown}` has no element `{index}`")))
             }
         }
     }

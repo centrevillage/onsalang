@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§5.1"]
+
+// The holes whose head is a local, a parameter or `self` (§2.4: `{n}`, `{p.x}`, `{self.gain}`), the
+// forms that resolve today and have to keep resolving when W4-04 U4 moves the heads of holes to the
+// lookup of an expression. A hole sees the names of its place: the parameters, the `let`s before it,
+// the loop variable, the arm's bindings, the names of the flow so far. The holes with a constant,
+// a type or an imported name for a head are in interp_paths_heads.onsa. A string with an
+// interpolation makes a new `Str`, so the functions use `Alloc`. No diagnostics.
+
+pub struct P {
+  x: F32,
+  n: U32,
+}
+
+impl P {
+  pub fn show_x(self) -> Str uses {Alloc} {
+    "{self.x}"
+  }
+
+  pub fn show_both(self) -> Str uses {Alloc} {
+    "{self.x}/{self.n}"
+  }
+}
+
+pub fn a_parameter(n: U32) -> Str uses {Alloc} {
+  "{n}"
+}
+
+pub fn a_let() -> Str uses {Alloc} {
+  let n = 3
+  "{n}"
+}
+
+pub fn a_field_of_a_parameter(p: P) -> Str uses {Alloc} {
+  "{p.x}/{p.n}"
+}
+
+pub fn a_hole_twice(n: U32) -> Str uses {Alloc} {
+  "{n}{n}"
+}
+
+pub fn text_around(n: U32) -> Str uses {Alloc} {
+  "a {n} b {{n}} c"
+}
+
+pub fn a_let_of_a_string(p: P) -> Str uses {Alloc} {
+  let a = "{p.n}"
+  "{a}/{p.x}"
+}
+
+pub fn a_let_of_a_computed_value(n: U32) -> Str uses {Alloc} {
+  let m = n + 1
+  "{m}/{n}"
+}
+
+pub fn in_a_branch(c: Bool, p: P) -> Str uses {Alloc} {
+  if c {
+    "{p.x}"
+  } else {
+    "{p.n}"
+  }
+}
+
+pub fn a_let_of_a_branch_seen_inside(c: Bool, p: P) -> Str uses {Alloc} {
+  if c {
+    let k = 1
+    "{k}/{p.n}"
+  } else {
+    "{p.n}"
+  }
+}
+
+pub fn in_a_match_arm(m: Option[U32]) -> Str uses {Alloc} {
+  match m {
+    Some(v) => "{v}",
+    None => "none",
+  }
+}
+
+pub fn in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var total = 0
+  for i in 0 ..< n {
+    let s = "{i}/{total}"
+    total = total + 1
+  }
+  total
+}
+
+pub fn in_a_generic_function[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn in_a_closure() -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}" }
+  f.(1)
+}
+
+pub fn len_of(s: Str) -> F32 {
+  0.0
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")
+  x + n
+}
+
+pub flow a_flow_let_seen_by_a_hole(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let n = len_of("{a}/{x}")
+  a + n
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    len_of("{i}/{x}")
+  }
+  ys[0] + x
+}
