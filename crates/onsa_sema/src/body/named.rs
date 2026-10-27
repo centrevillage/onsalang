@@ -1,12 +1,143 @@
-//! The names in bodies: the chains of names, the paths, the constants, the
-//! entities a name is, and the types of functions and fields.
+//! The names of a body as the names stage resolved them
+//! ([`crate::names::body::BodyNames`]): the values they name, the type of a
+//! field, and the types written in the body. The types stage reads the
+//! record and resolves no name of its own (D-15), except the locals of the
+//! holes of a string (W4-04 U4) and the names the flow stage reads
+//! (`flow/check.rs`, W4-04 U3b).
 
 use super::*;
+use crate::names::body::PathRes;
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ names
 
-    /// `a.b.c` as a chain of identifiers with the expression of each prefix.
+    /// The value a name or a chain of names (`a.b.c`) ends at, as the
+    /// record has it; a node with no record is a field of the value before
+    /// it (`p.x`), or a node of a chain with a name held as an error (§18.1,
+    /// S-692), which has no record down to its head, where the check stops.
+    pub(super) fn check_name(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
+        let Some(r) = self.names.paths.get(&e).cloned() else {
+            let ExprKind::Field { base, name } = &self.expr(e).kind else { return Err(self.held_stop()) };
+            // The span of the operand: of the chain so far when it is one of
+            // names (`p.x.y`), else of the value (`f().x`).
+            let at = if self.of_names(*base) { e } else { *base };
+            let bt = self.check_expr(*base, None)?;
+            let bt = self.known(bt, self.expr(at).span, "value")?;
+            return self.field_type(bt, name);
+        };
+        let span = self.expr(e).span;
+        let t = match r {
+            PathRes::Local(b) => {
+                let id = self.read_local(LocalId(b.0));
+                if self.flow.is_some() {
+                    self.flow_use_local(id, span)?;
+                }
+                self.info.targets.insert(e, Target::Local(id));
+                self.local_ty(id)
+            }
+            PathRes::ConstParam(i) => {
+                self.info.targets.insert(e, Target::ConstParam(i));
+                self.u32()
+            }
+            PathRes::Item { entity, .. } => {
+                self.namespaces_before(e)?;
+                let name = self.last_name(e);
+                match self.value_of_entity(entity, e, &name, expected)? {
+                    Some(t) => t,
+                    None => {
+                        let shown = self.src(span);
+                        return Err(self.err(Code::E0401, span, format!("`{shown}` is not a value")));
+                    }
+                }
+            }
+            PathRes::BuiltinAssoc { ty, name } => {
+                let Some(t) = builtin::assoc_const(&mut self.a.types, ty, &name) else {
+                    onsa_diag::internal::bug(Some(span), "an associated constant the names stage did not find")
+                };
+                self.info.targets.insert(e, Target::BuiltinConst { ty: t, name });
+                t
+            }
+            PathRes::Namespace(_) | PathRes::TypeParam(_) | PathRes::FlowBuiltin(_) => {
+                onsa_diag::internal::bug(Some(span), "a value of a name the names stage reports")
+            }
+        };
+        Ok(self.record(e, t))
+    }
+
+    /// The namespaces a chain passes before `e`, from its head: none is a
+    /// value but a flow, an error there (§11.6).
+    fn namespaces_before(&mut self, e: ExprId) -> R<()> {
+        let mut passed = Vec::new();
+        let mut cur = e;
+        while let ExprKind::Field { base, .. } = &self.expr(cur).kind {
+            cur = *base;
+            // The namespace of a def whose heading a syntax error cut is not
+            // known (S-59, R-71).
+            if let Some(&PathRes::Namespace(entity)) = self.names.paths.get(&cur)
+                && !matches!(entity, Entity::Def(d) if self.a.heading_failed(d))
+            {
+                passed.push((cur, entity));
+            }
+        }
+        for (node, entity) in passed.into_iter().rev() {
+            let name = self.last_name(node);
+            self.value_of_entity(entity, node, &name, None)?;
+        }
+        Ok(())
+    }
+
+    /// The last name of the node `e` of a chain.
+    pub(super) fn last_name(&self, e: ExprId) -> Ident {
+        match &self.expr(e).kind {
+            ExprKind::Field { name, .. } => name.clone(),
+            ExprKind::Path(p) => p.segments[0].clone(),
+            _ => onsa_diag::internal::bug(Some(self.expr(e).span), "a chain of names with no name"),
+        }
+    }
+
+    /// Whether `e` is a chain of names (`a`, `a.b`), by its form.
+    fn of_names(&self, e: ExprId) -> bool {
+        match &self.expr(e).kind {
+            ExprKind::Field { base, .. } => self.of_names(*base),
+            ExprKind::Path(p) => p.segments.len() == 1,
+            _ => false,
+        }
+    }
+
+    /// The end of the check of the body at a name the names stage holds as
+    /// an error or that it did not read (§18.1, S-692): no diagnostic, and
+    /// what the body reads and the check does not is recorded
+    /// ([`BodyInfo::read_unread`]).
+    pub(crate) fn held_stop(&mut self) -> Stop {
+        self.a.read_held.insert(self.def);
+        self.failed = true;
+        Stop
+    }
+
+    /// The record of a constructor of a pattern.
+    pub(crate) fn ctor_of(&mut self, pat: PatId) -> R<Entity> {
+        match self.names.pats.get(&pat) {
+            Some(crate::names::body::PatRes::Ctor { entity, .. }) => Ok(*entity),
+            _ => Err(self.held_stop()),
+        }
+    }
+
+    /// A type written in the body, as the names stage lowered it; its
+    /// diagnostic of the types stage, if any, is reported here.
+    pub(crate) fn lower_type_expr(&mut self, t: onsa_syntax::ast::TypeId) -> R<TyId> {
+        match self.names.types.get(&t).cloned() {
+            Some((_, Some(d))) => Err(self.diag(d)),
+            // An error with no diagnostic (a name held as an error, a member
+            // of a def a syntax error cut): the check goes on (§18.1, S-690).
+            Some((ty, None)) => Ok(ty),
+            None => Err(self.held_stop()),
+        }
+    }
+
+    // ------------------------------------------- read by the flow stage
+
+    /// `a.b.c` as a chain of identifiers with the expression of each prefix
+    /// (the flow stage's until W4-04 U3b).
     pub(crate) fn name_chain(&self, e: ExprId) -> Option<Vec<(ExprId, Ident)>> {
         let mut out = Vec::new();
         let mut cur = e;
@@ -27,153 +158,27 @@ impl<'a> Checker<'a> {
         Some(out)
     }
 
+    /// Whether `name` is a local, `self` or a const parameter here (the flow
+    /// stage's until W4-04 U3b).
     pub(crate) fn is_local_head(&mut self, name: &str) -> bool {
-        name == "self" || self.lookup_local(name).is_some() || self.const_param(name).is_some()
+        name == "self"
+            || self.lookup_local(name).is_some()
+            || self.generics.iter().any(|g| g.name == name && matches!(g.kind, GenericKind::Const(_)))
     }
 
-    fn const_param(&self, name: &str) -> Option<u32> {
-        self.generics.iter().position(|g| g.name == name && matches!(g.kind, GenericKind::Const(_))).map(|i| i as u32)
-    }
-
-    /// Resolve the longest prefix of a dotted name that denotes a value, then
-    /// apply the remaining segments as field accesses. Records types and
-    /// targets of every prefix expression. Returns the type of the whole chain.
-    pub(super) fn check_chain(&mut self, chain: &[(ExprId, Ident)], expected: Option<TyId>) -> R<TyId> {
-        let n = chain.len();
-        let head = &chain[0].1;
-        // Local, `self`, const parameter: ordinary field accesses from there.
-        if self.is_local_head(&head.name) {
-            let mut t = self.check_single_path(chain[0].0, head, if n == 1 { expected } else { None })?;
-            for (e, name) in &chain[1..] {
-                let base = self.known(t, self.expr(*e).span, "value")?;
-                t = self.field_type(base, name)?;
-                self.record(*e, t);
-            }
-            return Ok(t);
+    /// Type of an entity used as a value (`None` when it is none,
+    /// [`crate::names::body::is_value`]). Records the target on `e`.
+    pub(super) fn value_of_entity(
+        &mut self,
+        entity: Entity,
+        e: ExprId,
+        name: &Ident,
+        expected: Option<TyId>,
+    ) -> R<Option<TyId>> {
+        if !crate::names::body::is_value(self.a, entity) {
+            return Ok(None);
         }
-        // Module-level resolution of the longest value prefix.
-        let mut k = 1;
-        let mut value_ty: Option<TyId> = None;
-        while k <= n {
-            let path = Path {
-                segments: chain[..k].iter().map(|(_, i)| i.clone()).collect(),
-                span: self.expr(chain[k - 1].0).span,
-            };
-            let entity = match self.a.resolve_path(self.m, &path) {
-                Ok(e) => e,
-                Err(err) => {
-                    // A scalar / builtin type followed by an associated builtin item.
-                    if k >= 2 {
-                        let prefix =
-                            Path { segments: chain[..k - 1].iter().map(|(_, i)| i.clone()).collect(), span: path.span };
-                        if let Ok(Entity::Builtin(b)) = self.a.resolve_path(self.m, &prefix)
-                            && let Some(t) = self.builtin_const(b, &chain[k - 1].1)
-                        {
-                            self.info.targets.insert(
-                                chain[k - 1].0,
-                                Target::BuiltinConst { ty: t, name: chain[k - 1].1.name.clone() },
-                            );
-                            value_ty = Some(t);
-                            break;
-                        }
-                    }
-                    // A head with no `use`: the error of the whole chain, whose
-                    // candidate needs the member after the head (R-39).
-                    let err = match err {
-                        e @ ResolveError::NeedsUse { .. } if n > 1 => {
-                            let whole =
-                                Path { segments: chain.iter().map(|(_, i)| i.clone()).collect(), span: path.span };
-                            self.a.resolve_path(self.m, &whole).err().unwrap_or(e)
-                        }
-                        e => e,
-                    };
-                    return Err(self.resolve_error(&path, err));
-                }
-            };
-            let last = k == n;
-            // A def whose heading a syntax error cut (a flow's namespace, S-59):
-            // its members are not known; the next segment does not resolve,
-            // and `resolve_error` gives no diagnostic (R-71).
-            if !last
-                && let Entity::Def(d) = entity
-                && self.a.heading_failed(d)
-            {
-                k += 1;
-                continue;
-            }
-            match self.value_of_entity(entity, chain[k - 1].0, &chain[k - 1].1, if last { expected } else { None })? {
-                Some(t) => {
-                    value_ty = Some(t);
-                    break;
-                }
-                None => {
-                    if last {
-                        let name = self.src(path.span);
-                        return Err(self.err(Code::E0401, path.span, format!("`{name}` is not a value")));
-                    }
-                }
-            }
-            k += 1;
-        }
-        let Some(mut t) = value_ty else {
-            let span = self.expr(chain[n - 1].0).span;
-            return Err(self.err(Code::E0401, span, "not a value"));
-        };
-        self.record(chain[k - 1].0, t);
-        for (e, name) in &chain[k..] {
-            let base = self.known(t, self.expr(*e).span, "value")?;
-            t = self.field_type(base, name)?;
-            self.record(*e, t);
-        }
-        Ok(t)
-    }
-
-    fn builtin_const(&mut self, b: Builtin, name: &Ident) -> Option<TyId> {
-        match b {
-            Builtin::Scalar(t) => builtin::assoc_const(&mut self.a.types, t, &name.name),
-            _ => None,
-        }
-    }
-
-    /// A single identifier in expression position.
-    pub(super) fn check_single_path(&mut self, e: ExprId, name: &Ident, expected: Option<TyId>) -> R<TyId> {
-        if let Some(id) = self.lookup_local(&name.name) {
-            if self.flow.is_some() {
-                self.flow_use_local(id, name.span)?;
-            }
-            self.info.targets.insert(e, Target::Local(id));
-            let t = self.local_ty(id);
-            return Ok(self.record(e, t));
-        }
-        if let Some(i) = self.const_param(&name.name) {
-            self.info.targets.insert(e, Target::ConstParam(i));
-            let t = self.u32();
-            return Ok(self.record(e, t));
-        }
-        if name.name == "self" {
-            return Err(self.name_err(Code::E0302, name.span, "`self` is only available inside a method"));
-        }
-        let path = Path { segments: vec![name.clone()], span: name.span };
-        let entity = match self.a.resolve_path(self.m, &path) {
-            Ok(en) => en,
-            Err(ResolveError::NotFound { .. }) => {
-                return Err(self.name_err(
-                    Code::E0302,
-                    name.span,
-                    format!("cannot find `{}` in this scope", name.name),
-                ));
-            }
-            Err(err) => return Err(self.resolve_error(&path, err)),
-        };
-        match self.value_of_entity(entity, e, name, expected)? {
-            Some(t) => Ok(self.record(e, t)),
-            None => Err(self.err(Code::E0401, name.span, format!("`{}` is not a value", name.name))),
-        }
-    }
-
-    /// Type of an entity used as a value (`None` when it is a type / module /
-    /// namespace). Records the target on `e`.
-    fn value_of_entity(&mut self, entity: Entity, e: ExprId, name: &Ident, expected: Option<TyId>) -> R<Option<TyId>> {
+        let no_value = || onsa_diag::internal::bug(Some(name.span), "a value that `is_value` does not take");
         match entity {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = self.a.def(d).clone();
@@ -210,7 +215,7 @@ impl<'a> Checker<'a> {
                         ),
                     )),
                     DefKind::Unsupported => Ok(Some(self.a.types.error())),
-                    _ => Ok(None),
+                    _ => no_value(),
                 }
             }
             Entity::Variant(d, i) => {
@@ -264,9 +269,9 @@ impl<'a> Checker<'a> {
                     Ok(Some(fty))
                 }
                 Builtin::Panic => Err(self.unsupported(name.span, Feature::Panic, &[])),
-                _ => Ok(None),
+                _ => no_value(),
             },
-            Entity::Module(_) => Ok(None),
+            Entity::Module(_) => no_value(),
         }
     }
 

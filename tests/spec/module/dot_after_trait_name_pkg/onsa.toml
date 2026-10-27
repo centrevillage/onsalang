@@ -1,0 +1,3 @@
+[package]
+name = "dot_after_trait_name_pkg"
+edition = "2026"

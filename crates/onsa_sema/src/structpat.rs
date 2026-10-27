@@ -33,6 +33,7 @@ pub(crate) type SubPattern<'s, 'a> = &'s mut dyn FnMut(&mut Checker<'a>, PatId, 
 
 /// A struct pattern as written: `path { fields, rest }`.
 pub(crate) struct Written<'p> {
+    pub pat: PatId,
     pub path: &'p Path,
     pub fields: &'p [(Ident, PatId)],
     pub rest: Option<StructRest>,
@@ -53,11 +54,8 @@ impl<'a> Checker<'a> {
         written: Written<'_>,
         sub: SubPattern<'_, 'a>,
     ) -> R<Option<usize>> {
-        let Written { path, fields, rest } = written;
-        let entity = match self.a.resolve_path(self.m, path) {
-            Ok(en) => en,
-            Err(err) => return Err(self.resolve_error(path, err)),
-        };
+        let Written { pat, path, fields, rest } = written;
+        let entity = self.ctor_of(pat)?;
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
             Entity::Def(d) if self.a.error_alias(d) => {
@@ -243,8 +241,10 @@ mod tests {
         assert_eq!(code_text("P { x: \"s\" }").0, Code::E0401);
         // The fields as written: a sub-pattern before a later unknown field.
         assert_eq!(code_text("P { x: Some(a), w: b }").0, Code::E0401);
-        // An unknown field before a later sub-pattern.
-        assert_eq!(code_text("P { w: b, x: Nope }"), (Code::E0410, "w".into()));
+        // An unknown field before a later sub-pattern (of the types stage: a
+        // name not found is the names stage's, before them all, §18.1).
+        assert_eq!(code_text("P { w: b, x: \"s\" }"), (Code::E0410, "w".into()));
+        assert_eq!(code_text("P { w: b, x: Nope }"), (Code::E0302, "Nope".into()));
         // The missing fields last.
         assert_eq!(code_text("P { x: a }").0, Code::E0410);
         // An inner `..` before the outer one.

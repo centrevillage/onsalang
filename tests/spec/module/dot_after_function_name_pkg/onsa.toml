@@ -1,0 +1,3 @@
+[package]
+name = "dot_after_function_name_pkg"
+edition = "2026"

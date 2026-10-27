@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-713 (f) across modules: the name of a function taken by `use` is a value like the name of a
+// function of this module, so a `.` after it is E0413 (a field or a method of a function value).
+
+use util.{g}
+
+pub fn field_of_an_imported_function() -> I32 {
+  g.y                                               //~ E0413
+}
+
+pub fn method_of_an_imported_function() -> I32 {
+  g.y()                                             //~ E0413
+}
+
+pub fn right_form() -> I32 {
+  g(1)
+}

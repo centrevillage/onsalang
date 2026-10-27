@@ -1,0 +1,3 @@
+[package]
+name = "held_name_cut_enum_path"
+edition = "2026"

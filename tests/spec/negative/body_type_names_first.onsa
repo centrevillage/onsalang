@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§4.4", "§6.1"]
+
+// The same three places as body_type_names_stage.onsa (the annotation of a `let`, the type after
+// `as`, the type of a parameter of an anonymous function), with the type error after the name
+// error in the text: the name error (E0302) is the one reported, and the type error is not
+// (§18.1: a unit with a name error is not type-checked). This holds in the order of the text
+// without a change of the stages, so it is a guard that the stage switch of S-713 (U3a) keeps.
+
+pub fn annotation_then_type_error(a: I32) -> I32 {
+  let b: Nope = 1                                   //~ E0302
+  let c: Bool = a
+  0
+}
+
+pub fn cast_then_type_error(a: I32) -> I32 {
+  let d = a as Nope                                 //~ E0302
+  let c: Bool = a
+  0
+}
+
+pub fn closure_parameter_then_type_error(a: I32) -> I32 {
+  let f = fn(y: Nope) -> I32 { 0 }                  //~ E0302
+  let c: Bool = a
+  0
+}

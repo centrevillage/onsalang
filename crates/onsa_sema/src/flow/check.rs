@@ -228,7 +228,7 @@ impl<'a> Checker<'a> {
                     Stage::Flow,
                     span,
                     ty,
-                    crate::structpat::Written { path: &path, fields: &fields, rest },
+                    crate::structpat::Written { pat, path: &path, fields: &fields, rest },
                     &mut |ck, fp, ft, _| ck.flow_unify_pat(fp, ft),
                 )?;
                 Ok(())
@@ -565,10 +565,11 @@ impl<'a> Checker<'a> {
         self.fcx().delay_arg -= 1;
         let t = r?;
         let init_expr = args.get(d.init_index()).map(|a| a.expr);
+        let constant = d.const_index().map(|k| args[k].expr);
         let len = match d {
             Delay::Prev => 0,
             Delay::Fixed => {
-                let n_expr = args[1].expr;
+                let n_expr = constant.expect("the length of `delay~`");
                 let n = self.flow_const_u32(n_expr, "the length of `delay~`")?;
                 if n == 1 {
                     // The name and the length change, the rest of the call stays (S-251):
@@ -600,7 +601,7 @@ impl<'a> Checker<'a> {
             }
             Delay::Variable => {
                 self.check_expr(args[1].expr, Some(t))?;
-                let max_expr = args[2].expr;
+                let max_expr = constant.expect("the maximum of `vdelay~`");
                 let max = self.flow_const_u32(max_expr, "the maximum of `vdelay~`")?;
                 if max < 1 {
                     return Err(self.flow_err(

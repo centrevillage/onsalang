@@ -28,25 +28,7 @@ impl<'a> Checker<'a> {
             // diagnostic. The body of a failed item is not checked at all.
             ExprKind::Error => Ok(self.a.types.error()),
             ExprKind::Lit(lit) => self.check_lit(e, lit, expected),
-            ExprKind::Path(p) => {
-                if p.segments.len() == 1 {
-                    let name = p.segments[0].clone();
-                    self.check_single_path(e, &name, expected)
-                } else {
-                    let chain: Vec<(ExprId, Ident)> = p.segments.iter().map(|s| (e, s.clone())).collect();
-                    self.check_chain(&chain, expected)
-                }
-            }
-            ExprKind::Field { .. } => {
-                if let Some(chain) = self.name_chain(e) {
-                    self.check_chain(&chain, expected)
-                } else {
-                    let ExprKind::Field { base, name } = &expr.kind else { unreachable!() };
-                    let bt = self.check_expr(*base, None)?;
-                    let bt = self.known(bt, self.expr(*base).span, "value")?;
-                    self.field_type(bt, name)
-                }
-            }
+            ExprKind::Path(_) | ExprKind::Field { .. } => self.check_name(e, expected),
             ExprKind::Hole => {
                 // Reported at the end of the body (§18.1), once later statements
                 // have had the chance to decide the type.
@@ -123,11 +105,14 @@ impl<'a> Checker<'a> {
                     None => self.a.types.error(),
                 })
             }
+            // The names stage stops the body at a type argument (E0200 until W5-10).
             ExprKind::Struct { type_args, .. } if !type_args.is_empty() => {
-                Err(self.type_args_unsupported(type_args[0].1.span))
+                onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
             }
-            ExprKind::Struct { path, fields, .. } => self.check_struct_lit(path, fields, expected, self.expr(e).span),
-            ExprKind::TypeArgs { args, .. } => Err(self.type_args_unsupported(args.span)),
+            ExprKind::Struct { path, fields, .. } => self.check_struct_lit(e, path, fields, expected, span),
+            ExprKind::TypeArgs { .. } => {
+                onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
+            }
             ExprKind::Block(b) => self.check_block(b, expected),
             // The flow syntax outside a flow body does not reach here
             // (`crate::flow_syntax`). In a flow body, `if~` and `match~` are
@@ -415,15 +400,13 @@ impl<'a> Checker<'a> {
 
     fn check_struct_lit(
         &mut self,
+        e: ExprId,
         path: &Path,
         fields: &[(Ident, ExprId)],
         expected: Option<TyId>,
         span: Span,
     ) -> R<TyId> {
-        let entity = match self.a.resolve_path(self.m, path) {
-            Ok(en) => en,
-            Err(err) => return Err(self.resolve_error(path, err)),
-        };
+        let Some(entity) = self.names.structs.get(&e).map(|s| s.entity) else { return Err(self.held_stop()) };
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
             // An alias of the error type (§18.1, R-271).

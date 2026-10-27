@@ -184,13 +184,6 @@ note = "impl を書ける場所と対象の規則。別名は W4-04、型引数�
 
 [[pending]]
 kind = "diag-code"
-target = "E0308"
-reasons = ["S-103", "S-165"]
-until = "W10-01"
-note = "名前の種類の誤りは W4-04（S-103）、flows / fns の種類の誤りは W10-01（S-165）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0309"
 reasons = ["S-129"]
 until = "W7-04"
@@ -1531,13 +1524,6 @@ note = "整数のリテラルの腕が 300 個の match の実行。リテラル
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/unit_stage_order.onsa"
-reasons = ["S-214", "S-59"]
-until = "W4-06"
-note = "本体の名前の誤り E0302 が、前の行の型の誤り E0401 を隠す（names_before_types）。単位の中の選び方は段の順になった（W3-03）が、本体の検査は名前と型を一度に行い、最初の誤り（E0401）で止まるので E0302 が出ない。名前の段を型の前に置くのは W4-06"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/c_runtime/c_match_panic_arm.onsa"
 reasons = ["S-40"]
 until = "W5-08"
@@ -1832,13 +1818,6 @@ until = "W5-06"
 note = "derive が作るメソッド（default・ordinal・from_ordinal）の未知を見る 2 か所は W5-06"
 
 # --- W3-12/i U1b: 事例を足して変異が変わり、ファズが見つけた修正候補の型（2026-10-15。e6a8fa0 でも出る）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/8be605b6.onsa"
-reasons = ["R-225", "S-236"]
-until = "W4-12"
-note = "fix-same-place: fix|E0812|remove `…`|E0413。メソッドの無い a.pv~(n0) の E0812 の候補（~ を除く）が、a.pv(n0) の E0413（fn() has no method）を作る。~ を除いた形が呼べるときだけ候補を出す"
 
 # --- 71 回目: gate の自動の掃引（9357676）が見つけた修正候補の型（74c0608 でも出る）
 
@@ -2203,13 +2182,6 @@ note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/body_path_member_missing"
-reasons = ["S-611", "R-254"]
-until = "W4-04"
-note = "取り込んだモジュールに無い名前の E0302 が今は E0401（R-254）。他のモジュールの経路が use の束縛を引く誤りは W4-03"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/module/overlap_local_stops_unit.onsa"
 reasons = ["S-681", "S-79"]
 until = "W4-04"
@@ -2260,24 +2232,10 @@ note = "params_default は Onsa の名前空間から外れる（S-625）。今�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/pub_use_child_module_missing_name"
-reasons = ["R-254", "S-611"]
-until = "W4-04"
-note = "取り込んだ子モジュールに無い名前の inner.g() が E0302 でなく E0401（R-254）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow/heading_names_event.onsa"
 reasons = ["S-664", "S-665"]
 until = "W7-11"
 note = "イベントの入出力の見出し。`at event` のクロックが読めるのは W7-11（今は E0302）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/visibility_use_binding_path"
-reasons = ["R-254"]
-until = "W4-04"
-note = "use で取り込んだ名前を他のモジュールから経路で引く main.double(1) が E0302 でなく E0401「`main` is not a value」（R-254）"
 
 # --- W4-03 U3d: E0304 の名前の辺と並びの要素の読み続けの事例のうち、後の単位・作業で通るもの（2026-10-25）。
 [[pending]]
@@ -2315,3 +2273,17 @@ target = "tests/spec/module/prelude_bounds_ordinal.onsa"
 reasons = ["S-107"]
 until = "W5-06"
 note = "Ordinal は prelude の名前（S-107）だが、境界としての意味は W5-06。今は E0200"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_let_underscore.onsa:23:7 E0320 fix1"
+reasons = ["S-82", "R-87"]
+until = "W4-04"
+note = "E0320 の候補が var の宣言だけを改名し、同じ関数の代入 `_total = _total + 1` に名前の段の E0302 が残る（S-82、R-87 (5)。W4-04 U3a で代入の左辺の名前が名前の段の誤りになり、前の E0415 から変わった）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_rename.onsa:56:7 E0320 fix1"
+reasons = ["S-82", "R-87"]
+until = "W4-04"
+note = "E0320 の候補が var の宣言だけを改名し、同じ関数の代入 `Count = Count + 1` に名前の段の E0302 が残る（S-82、R-87 (5)。W4-04 U3a で前の E0415 から変わった）"

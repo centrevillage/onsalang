@@ -1,0 +1,7 @@
+pub fn broken() -> F32 {
+  Float.from_bits(1)                                //~ E0308
+}
+
+pub fn fine() -> F32 {
+  F32.PI
+}

@@ -117,7 +117,7 @@ impl<'a> Checker<'a> {
                     Stage::Types,
                     span,
                     ty,
-                    Written { path, fields, rest: *rest },
+                    Written { pat, path, fields, rest: *rest },
                     &mut |ck, fp, ft, i| {
                         let sub = ck.bind_pat(fp, ft, irrefutable, borrow, kind)?;
                         bound.extend(i.map(|i| (i, sub)));
@@ -171,10 +171,7 @@ impl<'a> Checker<'a> {
         with_parens: bool,
     ) -> R<P> {
         let span = self.ast.pat(pat).span;
-        let entity = match self.a.resolve_path(self.m, path) {
-            Ok(en) => en,
-            Err(err) => return Err(self.resolve_error(path, err)),
-        };
+        let entity = self.ctor_of(pat)?;
         // (constructor index, field types, number of constructors of the type)
         let (ctor, fields, nctors): (u32, Vec<TyId>, usize) = match entity {
             Entity::Builtin(Builtin::None) => {

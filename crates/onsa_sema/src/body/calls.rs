@@ -2,6 +2,7 @@
 //! their arguments.
 
 use super::*;
+use crate::names::body::{PathRes, is_value};
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ calls
@@ -15,9 +16,6 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        if let ExprKind::TypeArgs { args, .. } = &self.expr(callee).kind {
-            return Err(self.type_args_unsupported(args.span));
-        }
         if self.flow.is_some()
             && let Some(t) = self.check_flow_call(e, callee, kind, args, expected)?
         {
@@ -39,100 +37,47 @@ impl<'a> Checker<'a> {
         }
         // `v.(x)` (§6.1, S-191): the callee is a value, whatever its form;
         // the names stage tells `inc.(1)` of an item from it (W4-12).
-        let value = matches!(kind, CallKind::Value { .. });
-        // 1. Method call `recv.name(...)` when the base is a value.
-        if !value && let ExprKind::Field { base, name } = &self.expr(callee).kind {
-            let base = *base;
-            let name = name.clone();
-            let chain = self.name_chain(callee);
-            let head_is_local = chain.as_ref().is_some_and(|c| self.is_local_head(&c[0].1.name));
-            let resolved_fn = if head_is_local {
-                None
-            } else if let Some(c) = &chain {
-                let path = Path { segments: c.iter().map(|(_, i)| i.clone()).collect(), span: self.expr(callee).span };
-                match self.a.resolve_path(self.m, &path) {
-                    Ok(en) => Some(en),
-                    // `util.f()` with no `use util` (R-39): the error of the
-                    // whole path, with its candidate. What the check does not
-                    // read (a name held as an error, a variant or an associated
-                    // function of a def a syntax error cut, S-260, or of an
-                    // alias of the error type, R-271): no diagnostic.
-                    // A member not visible here (`Point.m()`, R-38): its E0303.
-                    Err(err)
-                        if matches!(err, ResolveError::NeedsUse { .. } | ResolveError::NotVisible { .. })
-                            || self.a.unread_path(self.def, self.m, &path, &err) =>
-                    {
-                        return Err(self.resolve_error(&path, err));
-                    }
-                    Err(_) => {
-                        // `Buf.zeroed`, `F32.from_bits`: builtin associated functions.
-                        let prefix = Path {
-                            segments: c[..c.len() - 1].iter().map(|(_, i)| i.clone()).collect(),
-                            span: path.span,
-                        };
-                        if let Ok(Entity::Builtin(b)) = self.a.resolve_path(self.m, &prefix) {
-                            return self.check_builtin_assoc_call(e, callee, b, &name, args, expected);
+        if !matches!(kind, CallKind::Value { .. }) {
+            // 1. A function, a variant or a constructor of the prelude, or
+            // an associated function of a builtin type, as the names stage
+            // resolved the callee.
+            let cspan = self.expr(callee).span;
+            match self.names.paths.get(&callee).cloned() {
+                Some(PathRes::Item { entity, .. }) => {
+                    let name = self.last_name(callee);
+                    return match entity {
+                        Entity::Builtin(Builtin::Panic) => Err(self.unsupported(name.span, Feature::Panic, &[])),
+                        // What is no value but a def (`check_fn_call` reports
+                        // it), and `None`, which takes no value.
+                        Entity::Module(_) | Entity::Builtin(_)
+                            if !is_value(self.a, entity) || entity == Entity::Builtin(Builtin::None) =>
+                        {
+                            let shown = self.src(cspan);
+                            Err(self.err(Code::E0401, cspan, format!("`{shown}` is not a function")))
                         }
-                        None
-                    }
+                        _ => self.check_fn_call(e, callee, entity, &name, args, expected, kind),
+                    };
                 }
-            } else {
-                None
-            };
-            match resolved_fn {
-                Some(entity)
-                    if matches!(
-                        entity,
-                        Entity::Def(_)
-                            | Entity::Member(_)
-                            | Entity::Variant(..)
-                            | Entity::Builtin(Builtin::Some | Builtin::Ok | Builtin::Err)
-                    ) =>
-                {
-                    return self.check_fn_call(e, callee, entity, &name, args, expected, kind);
-                }
-                Some(Entity::Module(_)) | Some(Entity::Builtin(_)) => {
-                    let shown = self.src(self.expr(callee).span);
-                    return Err(self.err(Code::E0401, self.expr(callee).span, format!("`{shown}` is not a function")));
+                Some(PathRes::BuiltinAssoc { ty, .. }) => {
+                    let name = self.last_name(callee);
+                    return self.check_builtin_assoc_call(e, callee, ty, &name, args, expected);
                 }
                 _ => {}
             }
-            let recv = self.check_expr(base, None)?;
-            let recv = self.known(recv, self.expr(base).span, "receiver")?;
-            return self.check_method_call(e, callee, recv, &name, args, expected, kind);
-        }
-        // 2. Named function, variant constructor, or prelude constructor.
-        if !value
-            && let ExprKind::Path(p) = &self.expr(callee).kind
-            && p.segments.len() == 1
-        {
-            let name = p.segments[0].clone();
-            if self.lookup_local(&name.name).is_none() && name.name != "self" {
-                let path = Path { segments: vec![name.clone()], span: name.span };
-                match self.a.resolve_path(self.m, &path) {
-                    Ok(
-                        entity @ (Entity::Def(_)
-                        | Entity::Member(_)
-                        | Entity::Variant(..)
-                        | Entity::Builtin(Builtin::Some | Builtin::Ok | Builtin::Err)),
-                    ) => {
-                        return self.check_fn_call(e, callee, entity, &name, args, expected, kind);
-                    }
-                    Ok(Entity::Builtin(Builtin::Panic)) => {
-                        return Err(self.unsupported(name.span, Feature::Panic, &[]));
-                    }
-                    Ok(_) => {
-                        return Err(self.err(Code::E0401, name.span, format!("`{}` is not a function", name.name)));
-                    }
-                    Err(ResolveError::NotFound { .. }) => {
-                        return Err(self.name_err(
-                            Code::E0302,
-                            name.span,
-                            format!("cannot find `{}` in this scope", name.name),
-                        ));
-                    }
-                    Err(err) => return Err(self.resolve_error(&path, err)),
+            // 2. A method `recv.name(...)` of the value before it.
+            if let ExprKind::Field { base, name } = &self.expr(callee).kind {
+                let (base, name) = (*base, name.clone());
+                // After a constructor of the prelude (`Some.x()`): an
+                // associated function that is none, in the words of
+                // `check_builtin_assoc_call` (`panic.x()` is E0200, S-713).
+                if let Some(PathRes::Item { entity: Entity::Builtin(b), .. }) = self.names.paths.get(&base)
+                    && *b != Builtin::Panic
+                {
+                    return Err(self.err(Code::E0413, name.span, format!("`{}` does not exist", self.src(cspan))));
                 }
+                let recv = self.check_expr(base, None)?;
+                let recv = self.known(recv, self.expr(base).span, "receiver")?;
+                return self.check_method_call(e, callee, recv, &name, args, expected, kind);
             }
         }
         // 3. A function value.
@@ -344,21 +289,21 @@ impl<'a> Checker<'a> {
         Ok(sig.ret)
     }
 
+    /// `Buf.zeroed(4)`, `F32.from_bits(b)`: an associated function of the
+    /// builtin type `ty` (a generic one by its key, `Analysis::builtin_key`).
     fn check_builtin_assoc_call(
         &mut self,
         e: ExprId,
         callee: ExprId,
-        b: Builtin,
+        ty: TyId,
         name: &Ident,
         args: &[Arg],
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        let _ = callee;
-        let (scalar, generic) = match b {
-            Builtin::Scalar(t) => (Some(t), None),
-            Builtin::Generic(g) => (None, Some(g)),
-            _ => (None, None),
+        let (scalar, generic) = match self.ty(ty) {
+            Ty::Builtin(g, _) => (None, Some(g)),
+            _ => (Some(ty), None),
         };
         let targ = self.fresh();
         let Some((params, ret)) = builtin::assoc_fn(&mut self.a.types, scalar, generic, &name.name, targ) else {
@@ -379,10 +324,9 @@ impl<'a> Checker<'a> {
         }
         let params: Vec<(Mode, TyId)> = params.into_iter().map(|t| (Mode::Borrow, t)).collect();
         self.check_args(args, &params, span)?;
-        let recv = scalar.unwrap_or_else(|| self.a.builtin_key[&generic.unwrap()]);
         self.info
             .targets
-            .insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), bang: false, lazy_args: false });
+            .insert(e, Target::BuiltinMethod { recv: ty, name: name.name.clone(), bang: false, lazy_args: false });
         Ok(ret)
     }
 

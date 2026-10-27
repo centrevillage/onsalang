@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.6", "§3.4"]
+
+// The right forms that dot_after_trait_name.onsa is the negative of: an associated function and a
+// constant are read after the name of a type (`F32.from_bits(b)`, `F32.PI`, §6.6), not after a
+// trait. Today and after the stage switch of S-713 (U3a) alike.
+
+pub fn right_constant(b: U32) -> F32 {
+  F32.from_bits(b) + F32.PI
+}
+
+pub fn right_integer_constant() -> U32 {
+  U32.MAX - 1
+}

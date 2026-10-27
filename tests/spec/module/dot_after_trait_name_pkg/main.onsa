@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-713 (e) in a second module: a `.` after the name of a trait is E0308 in every module of the
+// package, and a function of another module that is called from here is not affected (the unit
+// that holds the error is the one that reports it, §18.1).
+
+use util.{broken, fine}
+
+pub fn calls_both() -> F32 {
+  broken() + fine()
+}
+
+pub fn here() -> F32 {
+  Float.PI                                          //~ E0308
+}

@@ -184,15 +184,11 @@ impl Modules {
             }
             _ => return Err(None),
         };
-        let mut cur = entity;
-        for s in &segs[k + 1..] {
-            match self.member(cur, s, from, names) {
-                Ok(e) => cur = e,
-                // A value: the rest is its fields and methods (the types).
-                Err(ResolveError::NotANamespace { .. }) => break,
-                Err(_) => return Err(None),
-            }
-        }
+        // A value: the rest is its fields and methods (the types).
+        let cur = match self.members(entity, &segs[k + 1..], from, names) {
+            (reached, None | Some(ResolveError::NotANamespace { .. })) => reached.last().copied().unwrap_or(entity),
+            (_, Some(_)) => return Err(None),
+        };
         if matches!(cur, Entity::Module(_)) {
             return Err(None);
         }
@@ -389,15 +385,48 @@ impl Modules {
     /// Resolve a full path written outside a `use` in `from`.
     pub fn resolve_path(&self, from: ModId, path: &Path, names: Names<'_>) -> Result<Entity, ResolveError> {
         let first = &path.segments[0];
-        let prelude = names.0;
-        let mut cur = match self.lookup(from, &first.name, prelude) {
-            Some(e) => e,
-            None if self.held_as_error(from, &first.name) => return Err(ResolveError::Failed),
-            None => return Err(self.not_in_body(from, path, names)),
+        let Some(head) = self.lookup(from, &first.name, names.0) else {
+            return Err(self.head_error(from, path, names));
         };
-        for seg in &path.segments[1..] {
-            cur = self.member(cur, seg, from, names)?;
+        match self.members(head, &path.segments[1..], from, names) {
+            (_, Some(err)) => Err(err),
+            (reached, None) => Ok(reached.last().copied().unwrap_or(head)),
         }
-        Ok(cur)
+    }
+
+    /// The error of the head of `path` in the body of `from` that
+    /// [`Self::lookup`] does not find: a name held as an error (§18.1), or
+    /// one not in the body, with the candidate of the whole path.
+    pub(crate) fn head_error(&self, from: ModId, path: &Path, names: Names<'_>) -> ResolveError {
+        match self.held_as_error(from, &path.segments[0].name) {
+            true => ResolveError::Failed,
+            false => self.not_in_body(from, path, names),
+        }
+    }
+
+    /// The members of a path after `head`: what each element of `segs`
+    /// names in what the one before names ([`Self::member`]), up to the
+    /// first that is no member, with its error (`NotANamespace` after a
+    /// value, whose fields and methods follow). The one walk of the
+    /// elements of a path outside a `use`.
+    pub(crate) fn members<'i>(
+        &self,
+        head: Entity,
+        segs: impl IntoIterator<Item = &'i Ident>,
+        from: ModId,
+        names: Names<'_>,
+    ) -> (Vec<Entity>, Option<ResolveError>) {
+        let mut reached = Vec::new();
+        let mut cur = head;
+        for seg in segs {
+            match self.member(cur, seg, from, names) {
+                Ok(next) => {
+                    reached.push(next);
+                    cur = next;
+                }
+                Err(err) => return (reached, Some(err)),
+            }
+        }
+        (reached, None)
     }
 }

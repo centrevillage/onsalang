@@ -271,11 +271,17 @@ impl Analysis {
         path: &onsa_syntax::ast::Path,
         err: &ResolveError,
     ) -> bool {
-        let unread = *err == ResolveError::Failed || self.through_partly_read(from, path);
+        let unread = self.unread(from, path, err);
         if unread {
             self.read_held.insert(def);
         }
         unread
+    }
+
+    /// Whether the path that did not resolve (`err`) names what the check
+    /// does not read, as of [`Self::unread_path`], which records it.
+    pub(crate) fn unread(&self, from: ModId, path: &onsa_syntax::ast::Path, err: &ResolveError) -> bool {
+        *err == ResolveError::Failed || self.through_partly_read(from, path)
     }
 
     /// Fully qualified name of a def (`dsp.voice.State`), for diagnostics.

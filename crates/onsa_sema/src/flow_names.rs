@@ -87,6 +87,16 @@ impl Delay {
         Delay::ALL.into_iter().find(|d| d.name() == name)
     }
 
+    /// The position of the constant expression that fixes the state size
+    /// (`delay~(e, N)`, `vdelay~(e, d, MAX)`, §11.4), if any.
+    pub fn const_index(self) -> Option<usize> {
+        match self {
+            Delay::Prev => None,
+            Delay::Fixed => Some(1),
+            Delay::Variable => Some(2),
+        }
+    }
+
     /// The position of the optional `init`, which is the last argument
     /// (`prev~(e, init)`, `delay~(e, N, init)`, `vdelay~(e, d, MAX, init)`).
     pub fn init_index(self) -> usize {

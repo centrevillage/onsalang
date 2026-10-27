@@ -8,20 +8,23 @@
 //! `exprs` (the walk of the statements, expressions and patterns, and of
 //! a flow body) and `paths` (the names whose head is no local).
 //!
-//! The walk makes the record only, and no diagnostic: the types stage
-//! resolves the names of a body as before and reports their errors, until it
-//! reads the record (W4-04 U3a, U3b).
-#![allow(dead_code, reason = "the record is read from W4-04 U3a")]
+//! The walk reports the first error of the names of a body (§18.1), and
+//! the types stage does not check a body it reported in. The types stage
+//! reads the record for the names of the expressions, patterns, struct
+//! literals and types of the body; it declares its bindings itself until
+//! W4-04 U3b.
 
 mod exprs;
 mod paths;
+pub(crate) use paths::is_value;
 mod scope;
 #[cfg(test)]
 mod tests;
 
 use std::collections::HashMap;
 
-use onsa_syntax::ast::{Ast, ExprId, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind};
+use onsa_diag::Diagnostic;
+use onsa_syntax::ast::{Ast, ExprId, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind, TypeId};
 
 use crate::def::{DefKind, FlowInput, GenericDef, ModId};
 use crate::flow_names::FlowBuiltin;
@@ -43,9 +46,13 @@ pub(crate) struct ScopeId(pub u32);
 /// The names of one body, made once by the names stage. A name chain
 /// (`a.b.c`, `Field(Field(Path(a), b), c)`) has a record at each node the
 /// names stage resolves: the nodes of the namespaces it passes and the node
-/// of the value it ends at; what follows is a field or a method, which the
-/// types stage resolves. An expression with no record is one the names stage
-/// does not decide (a literal, an operator, a field of a value).
+/// where it stops, an item ([`PathRes::Item`]) whatever its kind; what
+/// follows is a field or a method, which the types stage resolves. A chain
+/// with a name the names stage holds as an error (§18.1, S-692) has no
+/// record at any node, the namespaces before that name included. An
+/// expression with no record is one the names stage does not decide (a
+/// literal, an operator, a field of a value), one of a chain held as an
+/// error, or one after the name that stopped the walk.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct BodyNames {
     /// The bindings, by [`BindingId`].
@@ -71,16 +78,30 @@ pub(crate) struct BodyNames {
     /// captures them by copy, §5.3), in the order of their first read: those
     /// that the anonymous functions inside it read too.
     pub captures: HashMap<ExprId, Vec<BindingId>>,
-    /// `false` when the walk stopped before the end of the body (a type
-    /// argument in an expression, `Feature::TypeArgsInExpressions`): the
-    /// record is partial, and what comes after the stop is missing from it,
-    /// the bindings, the [`Binding::reads`] and the captures included (a
-    /// stage that reports E0309 from the record reads only a complete one).
+    /// The types written in the body (an annotation, the type after `as`, a
+    /// parameter and the result of an anonymous function, §4.4), lowered once
+    /// by the names stage: the type, and the diagnostic of the types stage at
+    /// it (E0412, …), which the types stage reports when it reaches it.
+    pub types: HashMap<TypeId, (TyId, Option<Diagnostic>)>,
+    /// `false` when the walk stopped before the end of the body: at an error
+    /// of the names stage ([`Self::reported`]), or at a name the names stage
+    /// holds as an error (§18.1, S-692), where the types stage stops too with
+    /// no diagnostic. The record is partial, and what comes after the stop is
+    /// missing from it, the bindings, the [`Binding::reads`] and the captures
+    /// included (a stage that reports E0309 from the record reads only a
+    /// complete one). A name held as an error in a type does not stop it.
     pub complete: bool,
+    /// The walk reported an error of the names stage (the first of the
+    /// body): the types stage does not check the body (§18.1).
+    pub reported: bool,
+    /// A type of the body reads what the check does not read (a name held as
+    /// an error, S-690): [`crate::body::BodyInfo::read_unread`].
+    pub read_unread: bool,
 }
 
 /// One binding of a body (§5.1).
 #[derive(Debug, Clone)]
+#[allow(dead_code, reason = "the types stage reads the bindings from W4-04 U3b, the E0304 and E0309 from U7a, U7b")]
 pub(crate) struct Binding {
     pub name: String,
     /// The name where it is first bound.
@@ -153,15 +174,18 @@ pub(crate) enum PathRes {
     ConstParam(u32),
     /// A type parameter of the item (`T.…`), by its index.
     TypeParam(u32),
-    /// A namespace the chain passes: a module, a flow, a type, an alias or
-    /// `Self` (the nodes before the end).
+    /// A namespace the chain passes: a module, a flow, a type (an alias and
+    /// `Self` from W4-04 U6), at a node before the one it stops at.
     Namespace(Entity),
-    /// The end of the chain, an item: a value (a function, a constant, a
-    /// variant, an associated item), whose fields and methods follow, or
-    /// what the place of a value does not take (a module, a type), which
-    /// the types stage reports. Through a module, a flow, a type, an alias or
-    /// `Self`; `owner` is the type it is a member of as the chain names it
-    /// (an alias or `Self` as the type they stand for, from W4-04 U6).
+    /// The item at the node where the chain stops, whatever its kind: at
+    /// its last name, or at the name after which a name is no member (a
+    /// value, whose fields and methods follow: `g` of `g.y`; the receiver
+    /// of a method, which the types stage reports when it is no value). A
+    /// module or a type at the place of a value is the types stage's error
+    /// (E0308 from W4-04 U8); a member of a def whose heading a syntax error
+    /// cut is an error with no diagnostic there (S-59, R-71). `owner` is the
+    /// type it is a member of as the chain names it (an alias or `Self` as
+    /// the type they stand for, from W4-04 U6).
     Item {
         entity: Entity,
         owner: Option<TyId>,
@@ -173,7 +197,9 @@ pub(crate) enum PathRes {
         ty: TyId,
         name: String,
     },
-    /// A builtin name of a flow body (§2.2, §11.4).
+    /// A builtin name of a flow body (§2.2, §11.4), recorded where the flow
+    /// stage reads it (the callee of a delay or of `sample_rate()`); anywhere
+    /// else it is not found (S-720, `paths.rs`).
     FlowBuiltin(FlowBuiltin),
 }
 
@@ -190,16 +216,17 @@ pub(crate) enum PatRes {
     },
 }
 
-/// The def the path of a struct literal names (a struct, or what the types
+/// The item the path of a struct literal names (a struct, or what the types
 /// stage reports as none), and the type the literal names it by.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct StructRes {
-    pub def: DefId,
+    pub entity: Entity,
     pub owner: Option<TyId>,
 }
 
 /// A scope of a body: its parent, and the bindings declared in it in order.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code, reason = "the E0304 and the overlaps of a rename read the tree from W4-04 U7a, U9")]
 pub(crate) struct ScopeInfo {
     pub parent: Option<ScopeId>,
     pub bindings: Vec<BindingId>,
@@ -210,6 +237,19 @@ pub(crate) struct ScopeInfo {
 struct Stop;
 type W = Result<(), Stop>;
 
+/// Why the walk of a body stops at a name.
+enum Fail {
+    /// The error of the names stage at it.
+    Report(Diagnostic),
+    /// A name the names stage holds as an error, or what the check does not
+    /// read ([`Analysis::unread`]): no diagnostic.
+    Held,
+    /// A form whose error is of a later stage, and which the walk does not
+    /// read into: an assignment of a flow body (E0806 until W7-04), `unsafe`
+    /// and `handle` (E0200, whose names this version does not read, S-713).
+    Later,
+}
+
 /// Walk the body of every function, test, `const` initializer and flow of
 /// the package and its dependencies (the defs `crate::body::check_all`
 /// checks), after the names of the modules and the signatures are known,
@@ -217,8 +257,8 @@ type W = Result<(), Stop>;
 pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
     let mut names = HashMap::new();
-    for (i, def) in a.defs.iter().enumerate() {
-        let id = DefId(i as u32);
+    for i in 0..a.defs.len() {
+        let (id, def) = (DefId(i as u32), &a.defs[i]);
         // A body whose unit has a syntax error is not checked (§18.1, S-59).
         let Some(item) = def.item else { continue };
         if a.failed.contains_key(&id) {
@@ -230,8 +270,12 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         };
         let ast = &module.parsed.ast;
         // The type and const parameters a body sees: of the function, or of
-        // the `impl` of an associated `const`.
+        // the `impl` of an associated `const`; `Self` of an `impl`.
         let owner_generics = || def.owner.map_or(&[][..], |o| a.def(o).generics());
+        let self_ty = def.owner.and_then(|o| match &a.def(o).kind {
+            DefKind::Impl(i) => Some(i.self_ty),
+            _ => None,
+        });
         let (body, params, generics): (ExprId, &[Param], &[GenericDef]) = match &def.kind {
             DefKind::Fn(f) => match f.body {
                 Some(b) => (b, fn_params(ast, item), &f.generics),
@@ -247,7 +291,7 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         };
         // A panic names this declaration (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
-        let mut w = Walker::new(a, def.module, ast, generics);
+        let mut w = Walker::new(a, def.module, ast, &module.text, generics);
         let done = match &def.kind {
             DefKind::Flow(f) => w.walk_flow(&f.inputs, body),
             _ => {
@@ -256,10 +300,51 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
                 w.walk_fn(params, has_self, body)
             }
         };
-        w.out.complete = done.is_ok();
-        names.insert(id, w.out);
+        let (mut out, fail, sites) = (w.out, w.failure, w.type_sites);
+        out.complete = done.is_ok();
+        let generics = generics.to_vec();
+        let fail = lower_types(a, id, (ast, &module.text), (&generics, self_ty), &sites, &mut out).or(fail);
+        match fail {
+            Some(Fail::Report(d)) => {
+                out.complete = false;
+                out.reported = true;
+                a.diagnostics.push(d);
+            }
+            Some(Fail::Held | Fail::Later) => out.complete = false,
+            None => {}
+        }
+        names.insert(id, out);
     }
     a.names = names;
+}
+
+/// Lower the types written in the body of `def`, in the order of the walk
+/// (`sites`, those before the name that stopped it), into the record: the
+/// first error of the names stage among them comes before that name's, and
+/// stops the body (§18.1).
+fn lower_types(
+    a: &mut Analysis,
+    def: DefId,
+    (ast, text): (&Ast, &str),
+    (generics, self_ty): (&[GenericDef], Option<TyId>),
+    sites: &[TypeId],
+    out: &mut BodyNames,
+) -> Option<Fail> {
+    let held = a.read_held.contains(&def);
+    let m = a.def(def).module;
+    let mut fail = None;
+    for &t in sites {
+        let (ty, diags) = crate::sig::lower_type_in_body(a, m, ast, text, generics, self_ty, def, t);
+        let d = diags.into_iter().next();
+        if let Some(d) = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names) {
+            fail = Some(Fail::Report(d.clone()));
+            break;
+        }
+        out.types.insert(t, (ty, d));
+    }
+    // What a type reads and the check does not is the body's (S-690).
+    out.read_unread = !held && a.read_held.remove(&def);
+    fail
 }
 
 /// The parameters written in the heading of the function `item`.
@@ -279,6 +364,7 @@ struct Walker<'a> {
     a: &'a Analysis,
     m: ModId,
     ast: &'a Ast,
+    text: &'a str,
     /// The type and const parameters of the heading (§4.5).
     generics: &'a [GenericDef],
     /// A flow body, whose builtin names are its own (§2.2, §11.4).
@@ -286,20 +372,37 @@ struct Walker<'a> {
     out: BodyNames,
     scopes: scope::Scopes,
     choices: Vec<exprs::Choice>,
+    /// What stopped the walk at a name.
+    failure: Option<Fail>,
+    /// The types written in the body, in the order of the walk.
+    type_sites: Vec<TypeId>,
 }
 
 impl<'a> Walker<'a> {
-    fn new(a: &'a Analysis, m: ModId, ast: &'a Ast, generics: &'a [GenericDef]) -> Walker<'a> {
+    fn new(a: &'a Analysis, m: ModId, ast: &'a Ast, text: &'a str, generics: &'a [GenericDef]) -> Walker<'a> {
         Walker {
             a,
             m,
             ast,
+            text,
             generics,
             flow: false,
             out: BodyNames::default(),
             scopes: scope::Scopes::default(),
             choices: Vec::new(),
+            failure: None,
+            type_sites: Vec::new(),
         }
+    }
+
+    /// Stop the walk at a name, for `why`.
+    fn fail(&mut self, why: Fail) -> Stop {
+        self.failure = Some(why);
+        Stop
+    }
+
+    fn src(&self, span: onsa_diag::Span) -> String {
+        self.text[span.start as usize..span.end as usize].to_string()
     }
 
     /// A body with the parameters of its heading.
@@ -326,9 +429,9 @@ impl<'a> Walker<'a> {
     }
 
     /// A flow body (§11.2), in the order the types stage declares: the
-    /// inputs, the names of every `let` of the body, then the body. Its
-    /// assignments are not walked: their errors are the flow stage's (E0806)
-    /// until W7-04 reports them in the names stage.
+    /// inputs, the names of every `let` of the body, then the body. The walk
+    /// stops at its first assignment: its error is the flow stage's (E0806)
+    /// until W7-04 reports it in the names stage.
     fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
         self.flow = true;
         self.open_scope();
@@ -339,15 +442,15 @@ impl<'a> Walker<'a> {
         let ast = self.ast;
         let onsa_syntax::ast::ExprKind::Block(b) = &ast.expr(body).kind else { return self.expr(body) };
         for &s in &b.stmts {
-            if let StmtKind::Let { pat, .. } = ast.stmt(s).kind {
-                self.pattern(pat, BindingKind::FlowLet, Origin::Let(s));
+            if let StmtKind::Let { pat, ty, .. } = ast.stmt(s).kind {
+                self.pattern(pat, BindingKind::FlowLet, Origin::Let(s))?;
+                self.type_sites.extend(ty);
             }
         }
         self.open_scope();
         for &s in &b.stmts {
             match &ast.stmt(s).kind {
                 StmtKind::Let { init, .. } => self.expr(*init)?,
-                StmtKind::Assign { .. } => {}
                 _ => self.stmt(s)?,
             }
         }

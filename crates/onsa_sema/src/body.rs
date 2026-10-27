@@ -9,7 +9,7 @@
 //! scopes, and the accessors that the later passes read. The
 //! rest of the checking is in a module per part, each an `impl` of
 //! `Checker`: `entry` (a function body, a `const`), `bounds`, `generics`,
-//! `names`, `expressions`, `calls`, `statements` and `patterns`. The tests
+//! `named` (the names the names stage resolved), `expressions`, `calls`, `statements` and `patterns`. The tests
 //! are `body_tests.rs`.
 
 use std::collections::{HashMap, HashSet};
@@ -36,7 +36,7 @@ mod calls;
 mod entry;
 mod expressions;
 mod generics;
-mod names;
+mod named;
 mod patterns;
 mod statements;
 
@@ -205,6 +205,8 @@ pub(crate) struct Checker<'a> {
     why: Option<(String, TyId)>,
     /// Or-pattern alternative being checked: names bound by the first alternative.
     or_bindings: Option<HashMap<String, LocalId>>,
+    /// The names of the body, which the names stage resolved (W4-04).
+    pub(crate) names: crate::names::body::BodyNames,
 }
 
 /// Check every body of the package and its dependencies.
@@ -254,6 +256,18 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         if a.failed.contains_key(&id) {
             continue;
         }
+        // Nor is a body whose names have an error (§18.1): the names stage
+        // reported it.
+        let names = a.names.remove(&id).unwrap_or_default();
+        if names.reported {
+            let body = BodyInfo::default();
+            match a.defs[i].kind {
+                DefKind::Flow(_) => drop(a.flows.insert(id, crate::flow::FlowInfo { body, ..Default::default() })),
+                _ => drop(a.bodies.insert(id, body)),
+            }
+            a.names.insert(id, names);
+            continue;
+        }
         // What the body reads and the check does not goes to `read_held` as
         // for a signature (`Analysis::unread_path`, `record_if_held`); it is
         // moved to the body below.
@@ -279,6 +293,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             why: None,
             or_bindings: None,
             flow: None,
+            names,
         };
         let is_const = matches!(ck.a.defs[i].kind, DefKind::Const(_));
         let is_flow = matches!(ck.a.defs[i].kind, DefKind::Flow(_));
@@ -290,10 +305,12 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             ck.check_fn_body(body, ret);
         }
         let fcx = ck.flow.take();
+        let names = std::mem::take(&mut ck.names);
         let mut info = ck.finish();
-        if !held && a.read_held.remove(&id) {
+        if (!held && a.read_held.remove(&id)) || names.read_unread {
             info.read_unread = true;
         }
+        a.names.insert(id, names);
         match fcx {
             Some(fcx) => crate::flow::finish_flow(a, module, id, info, fcx),
             None => {
@@ -345,13 +362,6 @@ impl<'a> Checker<'a> {
     /// stage (spec §18.1), so that it hides a type error of its unit (S-214).
     pub(crate) fn name_err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
         self.diag(Diagnostic::new(Stage::Names, code, span, msg).with_found(self.src(span)))
-    }
-
-    /// E0200 for a type argument written in an expression (`name::[…]`, §4.5)
-    /// at the list `span`: the names stage gives the list to its item from
-    /// W5-10; until then the list is neither dropped nor read (R-81).
-    pub(crate) fn type_args_unsupported(&mut self, span: Span) -> Stop {
-        self.unsupported_in(Stage::Names, span, Feature::TypeArgsInExpressions, &[])
     }
 
     /// E0200 for `feature` (S-224), with the details its phrase takes.
@@ -553,18 +563,22 @@ impl<'a> Checker<'a> {
     pub(crate) fn lookup_local(&mut self, name: &str) -> Option<LocalId> {
         for s in self.scopes.iter().rev() {
             if let Some((_, id)) = s.names.iter().rev().find(|(n, _)| n == name) {
-                let id = *id;
-                // Captured from an enclosing function (§5.3): record it.
-                if let Some(f) = self.frames.last_mut()
-                    && id.0 < f.local_base
-                    && !f.captures.contains(&id)
-                {
-                    f.captures.push(id);
-                }
-                return Some(id);
+                return Some(self.read_local(*id));
             }
         }
         None
+    }
+
+    /// A read of the local `id`: one captured from an enclosing function
+    /// (§5.3) is recorded as its capture.
+    pub(crate) fn read_local(&mut self, id: LocalId) -> LocalId {
+        if let Some(f) = self.frames.last_mut()
+            && id.0 < f.local_base
+            && !f.captures.contains(&id)
+        {
+            f.captures.push(id);
+        }
+        id
     }
 
     /// Declare a binding (E0304 when the name is already visible, §5.1).
@@ -615,18 +629,5 @@ impl<'a> Checker<'a> {
 
     pub(crate) fn target_of(&self, e: ExprId) -> Option<Target> {
         self.info.targets.get(&e).cloned()
-    }
-
-    /// Lower a type written inside a body (annotations, casts, closure params).
-    pub(crate) fn lower_type_expr(&mut self, t: onsa_syntax::ast::TypeId) -> R<TyId> {
-        let generics = self.generics.clone();
-        let (ty, diags) =
-            crate::sig::lower_type_in_body(self.a, self.m, self.ast, self.text, &generics, self.self_ty, self.def, t);
-        if let Some(d) = diags.into_iter().next() {
-            return Err(self.diag(d));
-        }
-        // An error with no diagnostic (a name held as an error, a member of a
-        // def a syntax error cut): the check goes on (§18.1, S-690).
-        Ok(ty)
     }
 }

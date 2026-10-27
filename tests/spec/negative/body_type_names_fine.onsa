@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§4.4", "§6.1"]
+
+// The positive side of body_type_names_stage.onsa: the same three places with a type that is
+// found (a builtin type, a type of the module, a type parameter) give no diagnostic, in the same
+// places (a branch, a loop, a match arm, a closure, a generic function, a method, a `test`).
+
+pub struct P {
+  x: I32,
+}
+
+pub fn annotation(a: I32) -> I32 {
+  let b: I32 = a
+  let p: P   = P { x: b }
+  p.x
+}
+
+pub fn annotation_in_a_branch(a: I32, flag: Bool) -> I32 {
+  if flag {
+    let b: I32 = a
+    b
+  } else {
+    0
+  }
+}
+
+pub fn annotation_in_a_loop(a: I32) -> I32 {
+  var s: I32 = a
+  for i in 0 ..< 3 {
+    let b: I32 = i
+    s = s + b
+  }
+  s
+}
+
+pub fn annotation_in_a_match_arm(a: I32) -> I32 {
+  match a {
+    0 => {
+      let b: I32 = 1
+      b
+    },
+    _ => 1,
+  }
+}
+
+pub fn annotation_in_a_generic_function[T: Num](x: T) -> T {
+  let y: T = x
+  y
+}
+
+pub fn cast(a: I32) -> I64 {
+  let d = a as I64
+  d + (a as I64)
+}
+
+pub fn cast_in_a_branch(a: I32, flag: Bool) -> I64 {
+  if flag {
+    a as I64
+  } else {
+    0
+  }
+}
+
+pub fn closure_parameter(a: I32) -> I32 {
+  let f = fn(y: I32) -> I32 { y }
+  f.(a)
+}
+
+pub fn closure_parameter_of_a_module_type(a: I32) -> I32 {
+  let f = fn(p: P, y: I32) -> I32 { p.x + y }
+  f.(P { x: a }, 1)
+}
+
+pub fn closure_in_a_closure(a: I32) -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let g = fn(y: I32) -> I32 { y }
+    g.(x)
+  }
+  f.(a)
+}
+
+impl P {
+  pub fn all_three_in_a_method(self) -> I64 {
+    let b: I32 = self.x
+    let f      = fn(y: I32) -> I32 { y }
+    f.(b) as I64
+  }
+}
+
+test "the three places with found types" {
+  let b: I32 = 1
+  let f      = fn(y: I32) -> I32 { y }
+  assert (f.(b) as I64) == 1
+}

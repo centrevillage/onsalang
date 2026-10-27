@@ -303,12 +303,11 @@ fn assoc_fn_row(types: &Types, scalar: Option<TyId>, builtin: Option<BuiltinTy>,
     owns.then_some(*f)
 }
 
-/// Whether a builtin type (a `scalar`, or a generic `builtin`) has the
-/// associated constant or function `name`: the question of the names stage,
-/// which makes no type (`Type.name` is resolved before it is typed).
-pub(crate) fn has_assoc(types: &Types, scalar: Option<TyId>, builtin: Option<BuiltinTy>, name: &str) -> bool {
-    scalar.is_some_and(|t| assoc_const_row(types, t, name).is_some())
-        || assoc_fn_row(types, scalar, builtin, name).is_some()
+/// Whether the scalar type `scalar` has the associated constant `name`: the
+/// question of the names stage, which makes no type (`Type.NAME` is
+/// resolved before it is typed).
+pub(crate) fn has_assoc_const(types: &Types, scalar: TyId, name: &str) -> bool {
+    assoc_const_row(types, scalar, name).is_some()
 }
 
 /// The names of every builtin method, associated constant and associated

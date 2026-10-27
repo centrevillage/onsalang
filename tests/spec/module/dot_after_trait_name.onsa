@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.3", "§6.6", "§18.1"]
+// fixes = 0
+
+// S-713 (e): a `.` after a name that has no namespace is E0308 (§15.1). The namespaces are the
+// package, a module, a type (a type parameter and `Self` too), a flow and an effect. A trait of
+// the prelude (`Show`, `Float`, `Num`) and a kind constraint (`Copy`, `Dup`) are none of them, and
+// not a value either, so what is written after the `.` cannot be a member of it: `Show.show(1)` is
+// the method written as a function (the method form is `x.show()`), and a constant or an
+// associated function is read after the name of a type (`F32.PI`, `F32.from_bits(b)`, §6.6) or of
+// a type parameter (`T.ONE`). The code is the same for a call, a constant and a bare name. There
+// is no candidate (`fixes = 0`: the writer's intent is not one form; the note shows the method
+// form and says that an associated function is called by the name of a type). The text of the
+// note is not promised. One error per unit (§18.1), so each form is in its own function; the
+// places (a branch, an argument, a closure, a method, a generic function, a match arm, a `test`)
+// give the same code. The right forms (the name of a type before the `.`) are in
+// dot_after_type_name_fine.onsa.
+
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub fn kind_constraint_in_a_method(self) -> F32 {
+    Dup.dup(self.x)                                 //~ E0308
+  }
+}
+
+pub fn method_as_function() -> Str {
+  Show.show(1)                                      //~ E0308
+}
+
+pub fn associated_function_of_a_trait() -> F32 {
+  Float.from_bits(1)                                //~ E0308
+}
+
+pub fn constant_of_a_trait() -> F32 {
+  Float.PI                                          //~ E0308
+}
+
+pub fn constant_of_a_number_trait[T: Num](x: T) -> T {
+  x + Num.ZERO                                      //~ E0308
+}
+
+pub fn kind_constraint(x: F32) -> F32 {
+  Copy.copy(x)                                      //~ E0308
+}
+
+pub fn in_a_branch(flag: Bool) -> Str {
+  if flag {
+    Show.show(1)                                    //~ E0308
+  } else {
+    "x"
+  }
+}
+
+pub fn in_an_argument() -> I32 {
+  id(Show.show(1))                                  //~ E0308
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(x: I32) -> Str { Show.show(x) }        //~ E0308
+  f.(1)
+}
+
+pub fn in_a_match_arm(n: U32) -> Str {
+  match n {
+    0 => "zero",
+    _ => Default.default(),                         //~ E0308
+  }
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+test "a trait name before a dot" {
+  let s = Show.show(1)                              //~ E0308
+  assert s == "1"
+}
