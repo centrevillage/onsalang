@@ -1,0 +1,32 @@
+pub struct Dd { a: F32 }
+pub flow g1(x: F32 at sample) -> F32 at sample {
+  let a = nope1
+  let Nope { a: q } = x
+  x
+}
+pub flow g2(x: F32 at sample) -> F32 at sample {
+  let a = nope1
+  let (q, Nope { a: r }) = (x, x)
+  x
+}
+pub flow g3(x: F32 at sample) -> F32 at sample {
+  let a: Bool = 1
+  let Nope { a: q } = x
+  x
+}
+pub flow g4(x: F32 at sample) -> F32 at sample {
+  let a = nope1
+  let Dd.Nope(q) = x
+  x
+}
+pub flow g5(x: F32 at sample) -> F32 at sample {
+  let a: Nope2 = x
+  let Nope { a: q } = x
+  x
+}
+pub flow g6(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let b: Nope2 = x
+  let Nope { a: q } = x
+  x
+}

@@ -1,0 +1,4 @@
+pub fn a(x: I32) -> I32 {
+  let x = nope
+  0
+}
