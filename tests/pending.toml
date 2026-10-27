@@ -1828,6 +1828,15 @@ reasons = ["R-281"]
 until = "W5-11"
 note = "fix-same-place: fix|E0020|write the attribute with `…`|E0005。閉じない { の回復が、属性で始まる行を次の項目と読まず本体の文として読むので、@ の候補を当てると E0005 が残る"
 
+# --- W4-04 U3b の gate のファズが見つけた修正候補の型（事例を足してコーパスが変わった。7cd8d17 でも出る）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/22c9f449.onsa"
+reasons = ["S-267", "S-236"]
+until = "W4-12"
+note = "fix-same-place: fix|E0812|remove `…`|E0805。flow の中の非 rt の fn への hp~(x) の E0812 の候補（~ を除く）の後に、非 rt の fn を sample のクロックで呼ぶ E0805（仕様は E0815、S-147、W7-02）。仕様では E0812 は名前の段、残る誤りは flow の検査の段で、後の段の診断は出てよい（§18.1）。実装は E0812 をまだ flow の段で出すので、近似が同じ段と見る。W4-12 で E0812 を名前の段へ移すと落ちなくなる"
+
 
 [[pending]]
 kind = "fix-contract"

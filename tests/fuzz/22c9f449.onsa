@@ -1,0 +1,4 @@
+fn hp(x:F)->F{
+pub flow u(x:F32 at sample)-> F32 at sample {
+hp~(x)
+}
