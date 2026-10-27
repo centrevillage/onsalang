@@ -636,11 +636,7 @@ impl<'a> Checker<'a> {
     /// Whether the chain of names `e` ends at (`a.b.c`) starts at a local, by
     /// the record of its head.
     pub(crate) fn of_a_local(&self, e: ExprId) -> bool {
-        let mut cur = e;
-        while let ExprKind::Field { base, .. } = &self.expr(cur).kind {
-            cur = *base;
-        }
-        matches!(self.names.paths.get(&cur), Some(PathRes::Local(_)))
+        starts_at_local(self.ast, &self.names, e)
     }
 
     pub(crate) fn local_ty(&self, id: LocalId) -> TyId {
@@ -660,4 +656,22 @@ impl<'a> Checker<'a> {
     pub(crate) fn target_of(&self, e: ExprId) -> Option<Target> {
         self.info.targets.get(&e).cloned()
     }
+}
+
+/// Whether the chain of names `e` ends at (`a.b.c`) of the body of `ast`
+/// starts at a local, by the record of its head in `names`.
+pub(crate) fn starts_at_local(ast: &Ast, names: &crate::names::body::BodyNames, e: ExprId) -> bool {
+    let mut cur = e;
+    while let ExprKind::Field { base, .. } = &ast.expr(cur).kind {
+        cur = *base;
+    }
+    matches!(names.paths.get(&cur), Some(PathRes::Local(_)))
+}
+
+/// E0401 for the struct literal whose path `shown` at `span` names a type
+/// that is no struct (`I32 { x: 1 }`, a type parameter `T { x: 1 }`; the form
+/// in a kind, not E0308, §15.1, S-713).
+pub(crate) fn not_a_struct(shown: String, span: Span) -> Diagnostic {
+    let msg = format!("`{shown}` is not a struct");
+    Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(shown)
 }

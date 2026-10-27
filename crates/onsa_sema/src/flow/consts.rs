@@ -100,7 +100,7 @@ impl<'a> Checker<'a> {
             _ => match crate::constarg::path_of(self.ast, l) {
                 Some(p) => {
                     let named = crate::constarg::named(self.a, self.m, (self.ast, self.text), &p, None, lspan);
-                    named.map(|v| v.map(|v| (v, None)))
+                    named.map(|v| Some((v, None)))
                 }
                 None => return Ok(Leaf::Other),
             },

@@ -4,19 +4,19 @@
 
 // The name of a parameter of the same `[ ]` written in a bound: the type parameter of a bound on another
 // parameter (`[T, U: T]`), of its own bound (`[T: T]`), and a const parameter (`[const N: U32, U: N]`).
-// They are found names that are not traits, so E0200 in this version (the assignment of E0308 to them is
-// W4-04, S-103), and not E0302, as for a struct in a bound (`[U: S]`, names_not_effects.onsa).
+// They are found names that are neither traits nor kind constraints, so E0308 (§15.1, S-713), and not
+// E0302, as for a struct in a bound (`[U: S]`, names_not_effects.onsa).
 // The spec does not say whether a parameter is in scope in the bounds of its own list (§4.5); the cases
 // follow the answer of the work ticket (W4-03 U5b/t3) and are to be checked when the gap is decided.
 
-pub fn bound_on_other_parameter[T, U: T](x: U) -> U32 {   //~ E0200
+pub fn bound_on_other_parameter[T, U: T](x: U) -> U32 {   //~ E0308
   1
 }
 
-pub fn bound_on_itself[T: T](x: T) -> U32 {   //~ E0200
+pub fn bound_on_itself[T: T](x: T) -> U32 {   //~ E0308
   1
 }
 
-pub fn bound_const_parameter[const N: U32, U: N](x: U) -> U32 {   //~ E0200
+pub fn bound_const_parameter[const N: U32, U: N](x: U) -> U32 {   //~ E0308
   1
 }

@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§18.1"]
+
+// W4-04 U8b/i3: a function declared with `self` outside an `impl` is an E0002 where it is declared (§6.2: `self`
+// is the first parameter of a method of an `impl`), and it is a declaration with an error: "誤りのある宣言も、
+// 名前まで読めれば名前解決に見せる。... それを使う側には診断を出さない" (§18.1). So its calls (`f(1)`,
+// `f()`, `f!(1)`, an argument `f(f(1))`, in a `test` and in a flow) and its uses as a value (`let h = f`)
+// are no error of their units, in this module and through a path; no internal error either (it was one, a
+// method that the names stage was taken to have reported). A method of an `impl` named through its type
+// stays the E0308 of the names stage (§15.1, S-205), also with `self` not first.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn late(x: I32, self) -> I32 {   //~ E0002
+    x
+  }
+}
+
+fn f(self) -> I32 {   //~ E0002
+  1
+}
+
+fn f2(x: I32, self) -> I32 {   //~ E0002
+  x
+}
+
+pub fn called() -> I32 {
+  f(1)
+}
+
+pub fn called_with_nothing() -> I32 {
+  f()
+}
+
+pub fn called_with_bang() -> I32 {
+  f!(1)
+}
+
+pub fn called_in_arguments() -> I32 {
+  f(f(1)) + f2(1, 2) + f2(f, 1)
+}
+
+pub fn as_value() -> I32 {
+  let h = f
+  h(2)
+}
+
+test "a call in a test" {
+  assert(f(1) == 1)
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = f(1)
+  x
+}
+
+pub fn method_through_its_type(p: P) -> I32 {
+  P.late(p, 1)   //~ E0308
+}
+
+pub fn method_through_its_type_as_value() -> I32 {
+  let h = P.late   //~ E0308
+  1
+}
+
+pub fn main() -> I32 {
+  1
+}

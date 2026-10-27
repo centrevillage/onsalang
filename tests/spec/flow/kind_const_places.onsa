@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§11.4", "§18.1"]
+
+// S-713 (a), S-103 (W4-04 U8b): the places of a flow where a constant expression is written (§4.5: "定数式でない
+// ものを書くと、位置によらず（配列の長さ、const 引数、遅延線の長さ、`par` の端）E0417"): the length of an array in
+// the body of a flow, the ends of a `par`, the length of a delay line. The name in them is read by the kind
+// the place needs, as in a function (types/kind_array_lengths.onsa): a value that is not a constant (a function,
+// a variant) is E0417 and a name that is not a value (a type, a trait, an effect) is E0308 (§4.5: "値でない名前
+// （型、モジュール、flow、trait、効果など）は E0308"). One error per unit (§18.1), so each form is in its own
+// unit; a constant is fine in the same places.
+
+pub struct P {
+  x: F32,
+}
+
+pub enum E {
+  A,
+  B,
+}
+
+const K: U32 = 4
+
+fn g() -> U32 {
+  1
+}
+
+pub flow function_in_a_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; g]                                    //~ E0417
+  a[0]
+}
+
+pub flow type_in_a_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; P]                                    //~ E0308
+  a[0]
+}
+
+pub flow trait_in_a_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; Show]                                 //~ E0308
+  a[0]
+}
+
+pub flow function_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<g { x * i.round_f32() }         //~ E0417
+  ys[0]
+}
+
+pub flow variant_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<E.A { x * i.round_f32() }       //~ E0417
+  ys[0]
+}
+
+pub flow type_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<P { x * i.round_f32() }         //~ E0308
+  ys[0]
+}
+
+pub flow effect_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in Alloc..<4 { x * i.round_f32() }     //~ E0308
+  ys[0]
+}
+
+pub flow function_as_the_length_of_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, g)                                      //~ E0417
+}
+
+pub flow type_as_the_length_of_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, P)                                      //~ E0308
+}
+
+pub flow constant_in_a_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; K]
+  a[0]
+}
+
+pub flow constant_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<K { x * i.round_f32() }
+  ys[0]
+}
+
+pub flow constant_as_the_length_of_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K)
+}

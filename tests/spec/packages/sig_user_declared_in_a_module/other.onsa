@@ -1,0 +1,20 @@
+pub fn not_taken_in_a_parameter(x: Sig[F32]) -> F32 {   //~ E0020
+  1.0
+}
+
+pub fn not_taken_in_a_result(x: F32) -> Sig[F32] {   //~ E0020
+  x
+}
+
+pub struct NotTakenInAField {
+  s: Sig[F32],                                      //~ E0020
+}
+
+pub fn not_taken_in_an_annotation(x: F32) -> F32 {
+  let s: Sig[F32] = x                               //~ E0020
+  x
+}
+
+pub fn a_name_that_is_not_a_rate(x: Nope[F32]) -> F32 {   //~ E0302
+  1.0
+}

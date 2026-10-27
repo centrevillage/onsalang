@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§18.1"]
+// fixes = 1
+
+// S-91, R-105 (W4-04 U8b): the target of an `impl` is written by the name of the declaration, and an alias is
+// not written there (§4.4: "`impl` と `impl Tr for` の対象は型の宣言の名前で書き、別名は書けない（E0307。元の型が
+// そのモジュールで宣言されていれば、修正候補は元の名前）"). The original type of each alias here is declared in
+// this module, so each error has one candidate (`fixes = 1`): the original name. The text after it is the copy
+// `.fix1` that the implementation writes. The forms: an alias of an alias and a chain of three (the candidate is
+// the declaration at the end of the chain, not the alias in the middle, which is itself an alias and would be
+// E0307 again), a `pub` alias, an alias written after the `impl`, and an alias of an enum.
+// The `impl` of an alias is an error in the heading, so the whole `impl` is one unit (§18.1).
+// One error per unit (§18.1), so each form is in its own unit. The declared names are fine at the end of the
+// file. The aliases that give no candidate are in module/impl_on_alias_without_candidate.onsa and
+// packages/impl_on_alias_of_imported_type.
+
+pub struct P {
+  x: F32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Point,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+type Q = P
+
+type R = Q
+
+type S = R
+
+pub type Pub = P
+
+type Sh = Shape
+
+impl P {                                            //~ E0307
+  pub fn from_alias(self) -> F32 { self.x }
+}
+
+impl P {                                            //~ E0307
+  pub fn from_alias_of_alias(self) -> F32 { self.x }
+}
+
+impl P {                                            //~ E0307
+  pub fn from_a_long_chain(self) -> F32 { self.x }
+}
+
+impl P {                                          //~ E0307
+  pub fn from_a_pub_alias(self) -> F32 { self.x }
+}
+
+impl P {                                        //~ E0307
+  pub fn from_a_later_alias(self) -> F32 { self.x }
+}
+
+type Later = P
+
+impl Shape {                                           //~ E0307
+  pub fn from_an_alias_of_an_enum(self) -> F32 { 1.0 }
+}
+
+impl[T] Wrap[T] {
+  pub fn wrap_from_the_name(self) -> T { self.v }
+}
+
+impl P {
+  pub fn p_from_the_name(self) -> F32 { self.x }
+}
+
+impl Shape {
+  pub fn from_the_enum_name(self) -> F32 { 1.0 }
+}

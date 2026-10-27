@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§6.1"]
+
+// W4-04 U8b (the faults 1 to 4 of its breaker): the names of a constant expression are read by the kind
+// the place needs (§15.1) before the E0417 of the types stage (§18.1: the names stage first), the same
+// in a signature, a body and a flow:
+//  - a call in a length is E0417 (§4.5: "関数の呼び出しは書けない"), but its callee and its arguments are
+//    read first: a name not found is E0302, a name that is no value at the callee is E0308, and a constant
+//    called as `K()` is the E0020 of a value called with `(` (§15.1: "値を `x(...)` の形で呼ぶと、型に
+//    よらず E0020"), as `let _ = K()` of a body is;
+//  - a method named through its type (`P.get`, `Str.len`) is the E0308 of a method that is no value
+//    (§15.1, S-205), and an associated function of a builtin type (`F32.from_bits`) is a value that is no
+//    constant, E0417 (§4.5: "値だが定数でない名前（関数、列挙子）も ... E0417");
+//  - a type whose head is a name, at a const argument (`Ring[F32, Wrap[F32]]`), is E0308 by the kind of
+//    its head (§15.1: "型を const 引数の位置に書く"), and a head that is not found is E0302 (S-732: the
+//    types that are no name are not here).
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn get(self) -> U32 {
+    self.x
+  }
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Ring[T, const M: U32] {
+  v: [T; M],
+}
+
+const K: U32 = 4
+
+fn g(x: U32) -> U32 {
+  x
+}
+
+// ---- A call in the length of a signature ----
+
+pub fn unknown_callee(x: [F32; zz()]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_argument(x: [F32; g(zz)]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn type_called(x: [F32; P()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn effect_called(x: [F32; Alloc()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn constant_called(x: [F32; K()]) -> F32 {   //~ E0020
+  1.0
+}
+
+pub fn type_as_an_argument(x: [F32; g(P)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_called(x: [F32; g(1)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn associated_function_called(x: [F32; F32.from_bits(1)]) -> F32 {   //~ E0417
+  1.0
+}
+
+// ---- The same calls in the repeat of a body ----
+
+pub fn unknown_argument_in_a_repeat() -> F32 {
+  let a = [1.0; g(zz)]   //~ E0302
+  a[0]
+}
+
+pub fn constant_called_in_a_repeat() -> F32 {
+  let a = [1.0; K()]   //~ E0020
+  a[0]
+}
+
+// ---- A method named through its type, and an associated function of a builtin type ----
+
+pub fn method_in_a_parameter(x: [F32; P.get]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_method_in_a_parameter(x: [F32; Str.len]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_method_called_in_a_parameter(x: [F32; Str.len("a")]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn associated_function_in_a_parameter(x: [F32; F32.from_bits]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn method_in_an_annotation() -> F32 {
+  let a: [F32; P.get] = [1.0; 4]   //~ E0308
+  a[0]
+}
+
+pub fn associated_function_in_a_repeat() -> F32 {
+  let a = [1.0; F32.from_bits]   //~ E0417
+  a[0]
+}
+
+pub fn method_at_a_const_argument(x: Ring[F32, P.get]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub flow associated_function_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, F32.from_bits)   //~ E0417
+}
+
+pub flow method_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; Str.len]   //~ E0308
+  a[0]
+}
+
+// ---- A type whose head is a name, at a const argument ----
+
+pub fn generic_type_at_a_const_argument(x: Ring[F32, Wrap[F32]]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_generic_type_at_a_const_argument(x: Ring[F32, Option[F32]]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn unknown_head_at_a_const_argument(x: Ring[F32, zz[F32]]) -> F32 {   //~ E0302
+  1.0
+}
+
+// ---- Fine ----
+
+pub fn constant_length(x: [F32; K]) -> F32 {
+  x[0]
+}

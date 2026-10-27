@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// W4-04 U8b/i3, S-728 (1): a type alias whose type is the error type (`type B = zz`, with `zz` not found) has
+// its error where it is declared, and stands for a failed name (§18.1: "誤りのある宣言も、名前まで読めれば
+// 名前解決に見せる。... それを使う側には診断を出さない"). So in a constant expression, a length of a
+// signature, of a body, of an annotation and of a flow, and a const argument, `B` and `B()` are no error of
+// their units, as `let _ = B()` of a body is not (no E0308 "`B` is a type").
+
+type B = zz   //~ E0302
+
+pub struct W[const N: U32] {
+  x: I32,
+}
+
+pub fn called_in_a_body() -> I32 {
+  let _ = B()
+  1
+}
+
+pub fn called_in_a_length(x: [F32; B()]) -> F32 {
+  1.0
+}
+
+pub fn called_in_a_body_length(x: F32) -> F32 {
+  let a = [x; B()]
+  a[0]
+}
+
+pub fn named_in_a_length(x: [F32; B]) -> F32 {
+  1.0
+}
+
+pub fn named_in_a_body_length(x: F32) -> F32 {
+  let a = [x; B]
+  a[0]
+}
+
+pub fn named_in_an_annotation(y: [F32; 1]) -> I32 {
+  let _: [F32; B] = y
+  1
+}
+
+pub fn named_in_a_const_argument(x: W[B]) -> I32 {
+  1
+}
+
+pub fn called_in_a_const_argument(x: W[B()]) -> I32 {
+  1
+}
+
+pub flow named_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, B)
+}
+
+pub fn main() -> I32 {
+  1
+}

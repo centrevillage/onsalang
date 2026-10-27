@@ -83,6 +83,11 @@ impl NameKind {
         })
     }
 
+    /// [`Self::of`] of what is named at `span`, which has a kind.
+    pub fn of_named(e: Entity, defs: &[crate::def::Def], span: Span) -> NameKind {
+        NameKind::of(e, defs).unwrap_or_else(|| onsa_diag::internal::bug(Some(span), "a name of what has no name"))
+    }
+
     /// The kind of what a name resolves to, of the defs `defs`.
     pub fn of(e: Entity, defs: &[crate::def::Def]) -> Option<NameKind> {
         match e {
@@ -101,6 +106,29 @@ impl NameKind {
             Builtin::Panic => NameKind::Function,
             Builtin::Trait(_) => NameKind::Trait,
             Builtin::Kind(_) => NameKind::KindConstraint,
+        }
+    }
+
+    /// The kind of a parameter of a heading (§15.1): a type parameter is a
+    /// type, a const parameter a value and a constant, an effect-row
+    /// variable an effect.
+    pub fn of_generic(kind: &crate::def::GenericKind) -> NameKind {
+        match kind {
+            crate::def::GenericKind::Type { .. } => NameKind::Type,
+            crate::def::GenericKind::Const(_) => NameKind::ConstParam,
+            crate::def::GenericKind::Effect => NameKind::Effect,
+        }
+    }
+
+    /// What a name of the kind is at the callee of `x(...)` (§15.1, §6.1):
+    /// the one table of a body and a constant expression.
+    pub fn at_callee(self) -> Callee {
+        match self {
+            // The call of a flow is W4-12's (E0821).
+            NameKind::Flow => Callee::Called,
+            NameKind::Constant => Callee::Value,
+            kind if kind.is_value() => Callee::Called,
+            _ => Callee::NoValue,
         }
     }
 
@@ -130,6 +158,17 @@ impl NameKind {
             NameKind::ConstParam => "a const parameter",
         }
     }
+}
+
+/// What a name is at the callee of `x(...)` ([`NameKind::at_callee`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Callee {
+    /// What is called so, or what a later stage reads there.
+    Called,
+    /// A value that is no function: the E0020 of the row `value_call`.
+    Value,
+    /// What is no value: E0308.
+    NoValue,
 }
 
 /// A name a `use` bound in its module (§15.1): of the module's body only,

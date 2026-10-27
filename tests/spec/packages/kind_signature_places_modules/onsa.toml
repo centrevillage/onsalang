@@ -1,0 +1,3 @@
+[package]
+name = "kind_signature_places_modules"
+edition = "2026"

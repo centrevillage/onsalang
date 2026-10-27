@@ -115,6 +115,12 @@ pub const DUP: &str = "Dup";
 /// candidate of a derive leaves them out (S-463). The one list.
 pub const KIND_CONSTRAINTS: [&str; 2] = [COPY, DUP];
 
+/// The rates written as a type (`Sig[F32]`, the form of the 0.3 draft, the
+/// row `rate_as_type`, S-120), in the order of the clocks, slowest first
+/// (`init`, `block`, `sample`, §11.3): ordinary names, an E0020 only where
+/// they are not found. The one list.
+pub const RATE_TYPES: [&str; 3] = ["Init", "Ctl", "Sig"];
+
 /// The rule of a derive (§6.4): the note of the old `@derive` (the row
 /// `derive_attribute`) and of a trait that cannot be derived (E0416, whose
 /// other note lists the traits, `onsa_sema`). The one text.
@@ -532,6 +538,7 @@ pub enum RowId {
     ElseIfTilde,
     ClockOnBinding,
     ClockInType,
+    RateAsType,
 }
 
 pub struct Row {

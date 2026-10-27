@@ -18,12 +18,13 @@ use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path};
 
 use super::kinds::Want;
 use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
+use crate::Analysis;
 use crate::def::GenericKind;
 use crate::flow_names::FlowBuiltin;
+use crate::names::BuiltinMember;
 use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::ty::TyId;
-use crate::{Analysis, builtin};
 
 /// What the types stage does with the end of a chain of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,7 +135,10 @@ impl<'a> Walker<'a> {
         // instance is the flow stage's (W4-12).
         let (variant, called) = match &err {
             Some(ResolveError::NotFound { .. }) if place != Place::Instance => {
-                let called = (at + 1 == segs.len()).then(|| self.builtin_called(of, &segs[..=at], place)).flatten();
+                // A method of a builtin type with a name after it is no value
+                // either (`Str.len.zz`, as `P.get.zz`).
+                let place = if at + 1 == segs.len() { place } else { Place::Value };
+                let called = self.builtin_called(of, &segs[..=at], place);
                 (self.qualified_variant(&path_of(segs), at, of), called)
             }
             _ => (None, None),
@@ -164,8 +168,12 @@ impl<'a> Walker<'a> {
             Some(ResolveError::NotANamespace { kind: Some(k), .. }) if !k.is_namespace() => {
                 Some(Fail::Report(self.no_namespace(&segs[..=at], k)))
             }
-            Some(err @ ResolveError::NotANamespace { .. })
-                if method && !a.unread(self.m, &path_of(&segs[..=at]), &err) =>
+            // What is no namespace before the method of a call (a namespace
+            // with no such member is the E0302 below: `Alloc.x()`, R-300).
+            Some(err @ ResolveError::NotANamespace { kind, .. })
+                if method
+                    && !kind.is_some_and(NameKind::is_namespace)
+                    && !a.unread(self.m, &path_of(&segs[..=at]), &err) =>
             {
                 out.push(PathRes::Item { entity: cur, owner });
                 None
@@ -174,6 +182,18 @@ impl<'a> Walker<'a> {
             Some(ResolveError::NotFound { .. }) if called.is_some() => called,
             Some(ResolveError::NotFound { .. }) if assoc.is_some() => {
                 out.extend([PathRes::Namespace(cur)].into_iter().chain(assoc));
+                None
+            }
+            // An associated function of a builtin type in a constant
+            // expression (`[0.0; F32.from_bits]`): a value that is no
+            // constant, the E0417 of the types stage, which reads the name
+            // again (§4.5, W5-08).
+            Some(ResolveError::NotFound { .. })
+                if self.in_const
+                    && at + 1 == segs.len()
+                    && crate::names::builtin_member(a, of, &segs[at].name) == Some(BuiltinMember::Function) =>
+            {
+                out.push(PathRes::Namespace(cur));
                 None
             }
             Some(err) => Some(self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner))),
@@ -280,15 +300,12 @@ impl<'a> Walker<'a> {
     /// a function (`Buf.zeroed`, whose call the types stage reads). A name
     /// the table has not is not found (E0302, R-249: `F32.y`, `F32.y(1.0)`).
     fn builtin_assoc(&self, of: Entity, name: &Ident, method: bool, owner: Option<TyId>) -> Option<PathRes> {
-        let a = self.a;
-        let has_fn = |scalar, generic| method && builtin::has_assoc_fn(&a.types, scalar, generic, &name.name);
-        let ty = match of {
-            Entity::Builtin(Builtin::Scalar(t)) => {
-                (builtin::has_assoc_const(&a.types, t, &name.name) || has_fn(Some(t), None)).then_some(t)
-            }
-            Entity::Builtin(Builtin::Generic(g)) if has_fn(None, Some(g)) => a.builtin_key.get(&g).copied(),
-            _ => None,
-        }?;
+        match crate::names::builtin_member(self.a, of, &name.name)? {
+            BuiltinMember::Constant => {}
+            BuiltinMember::Function if method => {}
+            BuiltinMember::Function | BuiltinMember::Method { .. } => return None,
+        }
+        let ty = crate::names::builtin_ty(self.a, of)?;
         Some(PathRes::BuiltinAssoc { ty, name: name.name.clone(), owner })
     }
 
@@ -331,17 +348,28 @@ impl<'a> Walker<'a> {
         if let Some(b) = self.flow_name(&head.name) {
             return Err(Fail::Report(b.misplaced(path.segments.iter().map(|s| s.span), self.text)));
         }
-        // A type or const parameter in a pattern (S-185).
-        if let (Want::VariantOrConstant, [_], Some(r)) = (want, &segs[..], self.heading(&head.name)) {
+        // A type or const parameter in a pattern (S-185) or at the head of
+        // a struct literal (`M { x: 1 }`, R-302).
+        if let ([_], Some(r)) = (&segs[..], self.heading(&head.name)) {
             let kind = if matches!(r, PathRes::ConstParam(_)) { NameKind::ConstParam } else { NameKind::Type };
-            return Err(self.want(kind, &segs, want).unwrap_or_else(|| self.not_found(head)));
+            // A type parameter is a type, and no struct (`T { x: 1 }`).
+            let no_struct = || Fail::Report(crate::body::not_a_struct(head.name.clone(), head.span));
+            return Err(self.want(kind, &segs, want).unwrap_or_else(no_struct));
         }
         let (first, typed) = a.typed_path(self.m, path, self.self_ty).map_err(error)?;
         let at = typed.reached.len() + 1;
         match typed.err {
             Some(err @ ResolveError::NotFound { .. }) => match self.qualified_variant(path, at, typed.at) {
                 Some(d) => Err(Fail::Report(d)),
-                None => Err(error(self.written(err, &segs[..=at], typed.owner))),
+                // An associated name of a builtin type (`F32.PI { x: 1 }`, R-302).
+                None => match (at + 1 == segs.len())
+                    .then(|| crate::names::builtin_member(a, typed.at, &segs[at].name))
+                    .flatten()
+                    .and_then(|k| self.want(k.kind(), &segs, want))
+                {
+                    Some(f) => Err(f),
+                    None => Err(error(self.written(err, &segs[..=at], typed.owner))),
+                },
             },
             Some(err) => Err(error(err)),
             None => {

@@ -122,7 +122,7 @@ impl<'a> Checker<'a> {
         match entity {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = self.a.def(d).clone();
-                if self.a.heading_failed(d) {
+                if self.a.heading_failed(d) || crate::names::self_outside_impl(self.a, entity) {
                     return self.args_of_unknown_callee(args);
                 }
                 let DefKind::Fn(f) = &def.kind else {

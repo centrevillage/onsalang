@@ -1,0 +1,216 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5", "§15.1", "§18.1"]
+
+// S-713 (c), S-719, S-721 (W4-04 U8b): a name that is found and is neither a trait nor a kind
+// constraint, written in a bound (`[T: ..]`), is E0308 (§15.1: "境界に trait でも種の制約でもない名前を書く
+// （`T: I32`）のも E0308 である"). The name is found, so it is not E0302, and the bound of a type that is
+// not a trait is not the E0200 of "user-defined traits as bounds". The names here are a built-in type, a
+// struct, an enum, an alias, a constant, a function, an effect of the prelude, the names of the
+// declarations that are E0200 in this version and are read by the kind of their keyword (an `effect`, a
+// `handler`, a `type` and a `fn` of an `extern` block, S-719, S-721), and the names after a `+` (§4.5:
+// "境界を複数付けるときは `+` で並べる"). In a function, a method and the heading of an `impl` (an error in
+// the heading makes the whole `impl` one unit, §18.1, so the members are not checked).
+// What the version does not support stays E0200: the bound of a user `trait` (`T: Tr`), which is the kind
+// the place needs (§15.1: "E0200 は、要る種類の名前でこの版が扱えないもの（…利用者の trait の境界）").
+// The E0308 of a wrong name comes before it, in front of it and after it (a rule of the version
+// before what the version does not support).
+// One error per unit (§18.1), so each form is in its own unit; the fine bounds (the traits and the kind
+// constraints of the prelude, joined by `+`) are the fine units at the end of the file.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+type Al = P
+
+const K: U32 = 4
+
+fn g() -> I32 {
+  1
+}
+
+pub trait Tr {                                      //~ E0200
+  fn m(self) -> I32
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(x: I32) -> I32
+}
+
+handler hh: Alloc { }                               //~ E0200
+
+extern "C" lib "m" {                                //~ E0200
+  fn c_sin(x: F64) -> F64
+  type CHandle
+}
+
+pub fn builtin_type_as_a_bound[T: I32](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn bool_as_a_bound[T: Bool](x: T) -> T {        //~ E0308
+  x
+}
+
+pub fn struct_as_a_bound[T: P](x: T) -> T {         //~ E0308
+  x
+}
+
+pub fn generic_struct_as_a_bound[T: Wrap](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn enum_as_a_bound[T: E](x: T) -> T {           //~ E0308
+  x
+}
+
+pub fn prelude_enum_as_a_bound[T: Option](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn alias_as_a_bound[T: Al](x: T) -> T {         //~ E0308
+  x
+}
+
+pub fn constant_as_a_bound[T: K](x: T) -> T {       //~ E0308
+  x
+}
+
+pub fn function_as_a_bound[T: g](x: T) -> T {       //~ E0308
+  x
+}
+
+pub fn prelude_effect_as_a_bound[T: Alloc](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn user_effect_as_a_bound[T: Ef](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn handler_as_a_bound[T: hh](x: T) -> T {       //~ E0308
+  x
+}
+
+pub fn extern_type_as_a_bound[T: CHandle](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn extern_function_as_a_bound[T: c_sin](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn wrong_name_after_a_trait[T: Num + I32](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn wrong_name_before_a_trait[T: I32 + Num](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn wrong_name_after_a_kind_constraint[T: Copy + P](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn wrong_name_after_two_traits[T: Show + PartialEq + K](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn wrong_name_in_the_second_parameter[T: Num, U: I32](x: T, y: U) -> T {   //~ E0308
+  x
+}
+
+pub fn two_wrong_names[T: I32, U: P](x: T, y: U) -> T {   //~ E0308
+  x
+}
+
+pub fn wrong_name_before_a_user_trait[T: I32 + Tr](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn user_trait_before_a_wrong_name[T: Tr + I32](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn user_trait_is_not_supported[T: Tr](x: T) -> T {   //~ E0200
+  x
+}
+
+pub fn user_trait_after_a_trait[T: Num + Tr](x: T) -> T {   //~ E0200
+  x
+}
+
+pub fn const_parameter_after_a_wrong_name[T: I32, const N: U32](x: T) -> T {   //~ E0308
+  x
+}
+
+impl P {
+  pub fn method_with_a_wrong_bound[U: I32](self, u: U) -> U {   //~ E0308
+    u
+  }
+
+  pub fn method_with_a_wrong_bound_in_the_second_parameter[U: Num, V: Alloc](self, u: U, v: V) -> U {   //~ E0308
+    u
+  }
+
+  pub fn method_with_a_user_trait[U: Tr](self, u: U) -> U {   //~ E0200
+    u
+  }
+
+  pub fn method_with_a_fine_bound[U: Num](self, u: U) -> U {
+    u
+  }
+}
+
+impl[T: I32] Wrap[T] {                              //~ E0308
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn members_are_not_checked(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl[T: Ef] Wrap[T] {                               //~ E0308
+  pub fn get_again(self) -> T {
+    self.v
+  }
+}
+
+impl[T: Num] Wrap[T] {
+  pub fn double(self) -> T {
+    self.v + self.v
+  }
+}
+
+pub fn prelude_traits_are_fine[T: Num + Show + PartialOrd](x: T, y: T) -> T {
+  if x < y { x } else { y }
+}
+
+pub fn kind_constraints_are_fine[T: Copy](x: T) -> T {
+  x
+}
+
+pub fn a_number_trait_and_a_kind_constraint_are_fine[T: Num + Copy](x: T) -> T {
+  x + x
+}
+
+pub fn a_relaxed_dup_bound_is_fine[T: ?Dup](x: T) -> T {
+  x
+}
+
+pub fn a_bound_with_a_const_parameter_is_fine[T: Num, const N: U32](xs: [T; N]) -> U32 {
+  N
+}

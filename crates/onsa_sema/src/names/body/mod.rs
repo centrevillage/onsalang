@@ -17,6 +17,7 @@
 mod exprs;
 mod kinds;
 mod paths;
+pub(crate) use kinds::{method_named, value_called};
 pub(crate) use paths::is_value;
 mod scope;
 #[cfg(test)]

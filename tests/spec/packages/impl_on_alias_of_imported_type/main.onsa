@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-91, R-105 (W4-04 U8b): an `impl` on an alias is E0307 (§4.4), and the candidate is the original name only
+// when the original type is declared in the module of the `impl` (§4.4: "元の型がそのモジュールで宣言されて
+// いれば、修正候補は元の名前"). Here the original type is declared in another module of the package
+// (`util.P`, taken by a `use` or written by its path), so the error has no candidate (`fixes = 0`): an alias of
+// the type that `use` took, an alias written with the path of the module, and an alias of an alias of it.
+// The alias that is declared in `util` and used here is E0307 in the same way: the alias is not the name of
+// the declaration wherever it is declared. The error is in the heading, so the whole `impl` is one unit and its
+// members are not checked (§18.1). One error per unit (§18.1), so each form is in its own unit.
+use util
+use util.{P, Shorthand}
+
+type Taken = P
+
+type ByPath = util.P
+
+type OfAnAlias = Taken
+
+impl Taken {                                        //~ E0307
+  pub fn from_a_taken_alias(self) -> F32 { 1.0 }
+}
+
+impl ByPath {                                       //~ E0307
+  pub fn from_an_alias_by_path(self) -> F32 { 1.0 }
+}
+
+impl OfAnAlias {                                    //~ E0307
+  pub fn from_an_alias_of_an_alias(self) -> F32 { 1.0 }
+}
+
+impl Shorthand {                                    //~ E0307
+  pub fn from_an_alias_of_the_module(self) -> F32 { 1.0 }
+}
+
+pub fn the_alias_is_a_type(t: Taken, b: ByPath) -> F32 {
+  t.x + b.x
+}

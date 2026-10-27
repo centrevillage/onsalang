@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1"]
+
+// S-713 (a) (W4-04 U8b): the lengths of arrays that are constant expressions (§4.5: integer literals,
+// names of constants including the qualified ones and the associated constants of a concrete type,
+// `+ - * / %`, parentheses) are accepted wherever a length is written: the fine side of
+// kind_array_length_operations.onsa and kind_array_lengths.onsa. This version does not evaluate
+// the operations yet (E0200 "expressions as array lengths", W9-03), so the file is listed as
+// pending for that reason, and not for the kinds of the names. The constants are of type `U32`
+// (§4.5).
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+}
+
+const K: U32 = 4
+
+pub fn operation_in_a_parameter(x: [F32; K * 2 + P.N]) -> F32 {
+  x[0]
+}
+
+pub fn parenthesized_in_a_parameter(x: [F32; (K + 1) * 2]) -> F32 {
+  x[0]
+}
+
+pub fn builtin_constant_in_a_parameter(x: [F32; I32.BITS]) -> F32 {
+  x[0]
+}
+
+pub fn operation_in_a_result() -> [F32; K + 1] {
+  [0.0; 5]
+}
+
+type FrameOfAnOperation = [F32; K * 2]
+
+pub struct FieldOfAnOperation {
+  data: [F32; K - 1],
+  more: [F32; P.N + K],
+}
+
+const OPERATION_IN_A_CONST_TYPE: [F32; K / 2] = [0.0; 2]
+
+pub fn operation_in_a_repeat() -> F32 {
+  let a = [1.0; K + P.N]
+  a[0]
+}
+
+pub fn operation_in_an_annotation() -> F32 {
+  let a: [F32; K % 3] = [0.0; 1]
+  a[0]
+}

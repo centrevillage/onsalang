@@ -1,0 +1,3 @@
+[package]
+name = "impl_on_alias_of_imported_type"
+edition = "2026"

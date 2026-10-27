@@ -340,3 +340,16 @@ fn the_candidate_of_a_use_needs_a_member_after_the_head() {
         assert_eq!(e0302[0].fixes.len(), fixes, "{main}: {:?}", e0302[0]);
     }
 }
+
+/// `Rate::of_type_name` pairs `Rate::ALL` with `RATE_TYPES` by position
+/// (S-120): the two lists have one length and one order.
+#[test]
+fn the_rate_types_are_the_rates_in_their_order() {
+    use crate::ty::Rate;
+    use onsa_syntax::foreign::RATE_TYPES;
+    assert_eq!(Rate::ALL.len(), RATE_TYPES.len());
+    for (rate, name) in Rate::ALL.into_iter().zip(RATE_TYPES) {
+        assert_eq!(format!("{rate:?}"), name);
+        assert_eq!(Rate::of_type_name(name), Some(rate));
+    }
+}

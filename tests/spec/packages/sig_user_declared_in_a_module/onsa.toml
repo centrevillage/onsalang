@@ -1,0 +1,3 @@
+[package]
+name = "sig_user_declared_in_a_module"
+edition = "2026"

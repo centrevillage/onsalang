@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§4.5", "§18.1"]
+
+// S-120 (W4-04 U8b): `Sig`, `Ctl` and `Init` are ordinary names, not reserved (§11.3: "予約していない普通の名前なので
+// （利用者が `struct Sig[T]` を宣言してよい）、この E0020 は名前が解決できないときだけ、名前の段で出す"). When the
+// program declares them, `Sig[F32]` is the type of the program and is not E0020, wherever the rate would be
+// written as a type: a parameter, a result, a field, the right side of an alias, the type of a `const`, the
+// annotation of a `let`, a type argument, an `impl`. The declaration may be written after the
+// use (§15.1: the names are found whatever order they are written in). The type that is declared without the
+// parameter is in sig_user_declared_without_parameter.onsa. All the units are fine.
+
+pub struct Sig[T] {
+  v: T,
+}
+
+pub struct Ctl[T] {
+  v: T,
+}
+
+pub enum Init[T] {
+  Zero,
+  Value(T),
+}
+
+pub fn sig_in_a_parameter(x: Sig[F32]) -> F32 {
+  x.v
+}
+
+pub fn sig_in_a_result(x: F32) -> Sig[F32] {
+  Sig { v: x }
+}
+
+pub fn ctl_and_init_in_parameters(c: Ctl[U32], i: Init[F32]) -> U32 {
+  c.v
+}
+
+pub struct HasRates {
+  s: Sig[F32],
+  c: Ctl[F32],
+  i: Init[U32],
+}
+
+type SigAlias = Sig[F32]
+
+const NO_SIG: Option[Sig[F32]] = None
+
+pub fn sig_in_an_annotation(x: F32) -> F32 {
+  let s: Sig[F32] = Sig { v: x }
+  s.v
+}
+
+pub fn sig_in_nested_types(o: Option[Sig[F32]], a: [Ctl[F32]; 2]) -> F32 {
+  1.0
+}
+
+impl[T] Sig[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub fn declared_later(x: Later[F32]) -> Later[F32] {
+  x
+}
+
+pub struct Later[T] {
+  v: T,
+}

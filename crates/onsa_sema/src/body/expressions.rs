@@ -355,7 +355,11 @@ impl<'a> Checker<'a> {
     /// `None`: a length the check does not read (§18.1, S-690).
     pub(crate) fn const_len(&mut self, len: ExprId) -> R<Option<Len>> {
         let generics = self.generics.clone();
-        match crate::constarg::expr(self.a, self.m, self.ast, self.text, (&generics, self.self_ty), len) {
+        // A local or a parameter, by the record (§4.5: E0417, as a value that
+        // is no constant).
+        let (ast, names) = (self.ast, &self.names);
+        let local = |e| crate::body::starts_at_local(ast, names, e);
+        match crate::constarg::expr(self.a, self.m, self.ast, self.text, (&generics, self.self_ty), len, &local) {
             Ok((value, constant)) => {
                 let u32 = self.u32();
                 self.record(len, u32);
@@ -407,10 +411,7 @@ impl<'a> Checker<'a> {
             Entity::Def(d) if self.a.error_alias(d) => {
                 return self.fields_of_unknown(fields);
             }
-            _ => {
-                let name = self.src(path.span);
-                return Err(self.err(Code::E0401, path.span, format!("`{name}` is not a struct")));
-            }
+            _ => return Err(self.diag(crate::body::not_a_struct(self.src(path.span), path.span))),
         };
         let s = self.a.def(d).as_struct().unwrap().clone();
         let Fields::Named(defs) = &s.fields else {
@@ -611,18 +612,14 @@ impl<'a> Checker<'a> {
         let effects = match effects {
             // Read as the row of a signature; but its first error is the
             // first error of the body, whose check stops there (§18.1).
-            Some(row) => match crate::sig::read_effects(
-                self.a,
-                self.def,
-                self.m,
-                (&self.generics, self.self_ty.is_some()),
-                Some(row),
-            ) {
-                (_, errors) if !errors.is_empty() => {
-                    return Err(self.diag(errors.into_iter().next().unwrap()));
+            Some(row) => {
+                match crate::sig::read_effects(self.a, self.def, self.m, (&self.generics, self.self_ty), Some(row)) {
+                    (_, errors) if !errors.is_empty() => {
+                        return Err(self.diag(errors.into_iter().next().unwrap()));
+                    }
+                    (set, _) => set,
                 }
-                (set, _) => set,
-            },
+            }
             None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
         };
         let rt = exp_fn.as_ref().map(|f| f.rt).unwrap_or(false);

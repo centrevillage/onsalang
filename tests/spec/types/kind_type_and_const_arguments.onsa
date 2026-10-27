@@ -1,0 +1,415 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§18.1"]
+
+// S-103, S-713, S-719, S-721 (W4-04 U8b): a constant written in the position of a type argument, and a type
+// written in the position of a const argument, are E0308 (§15.1: "定数を型引数の位置に書く、型を const 引数の
+// 位置に書く"; §4.5: "const 引数は定数式"). A function written in the position of a type argument is E0308
+// (a value is not a type) and in the position of a const argument it is E0417 (a value that is not a
+// constant, §4.5). The same holds wherever the arguments are written: a parameter, a result, the right side
+// of a type alias, a field, the type of a `const` and the annotation of a `let` in a body. The `::[…]` of an
+// expression is not here: the form is not supported by this version (E0200), and a form that the version
+// does not have is E0200 without reading the names in it (§15.1, §18.1).
+// A const parameter is a value and a constant (§15.1), so it written in the position of a type is E0308
+// too (R-282: a parameter of a function,
+// an argument of `Option`, a field, a variant, a method of an `impl`, and in the body the annotation of a
+// `let`, the target of an `as`, the types of an anonymous function). The constant of an `impl` written in the
+// position of a type (`Self.N`, `P.N`) is E0308 (§4.4: `Self` is the alias of the target).
+// The number of arguments is the E0412 of §4.5 and is not here. One error per unit (§18.1), so each form is
+// in its own unit; the fine forms (a type in the position of a type argument, a constant in the position of
+// a const argument, a const parameter as an argument or a length) are the fine units at the end of the file.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct Cells[const N: U32] {
+  data: [F32; N],
+}
+
+type Al = P
+
+const K: U32 = 4
+
+fn g() -> U32 {
+  1
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- A constant in the position of a type argument ----
+
+pub fn constant_as_a_type_argument(o: Option[K]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn associated_constant_as_a_type_argument(o: Option[P.N]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn constant_as_the_argument_of_a_user_type(w: Wrap[K]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn constant_as_the_type_of_a_ring(r: Ring[K, 4]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_as_a_type_argument(o: Option[g]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn variant_as_a_type_argument(o: Option[E.A]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn constant_as_a_type_argument_in_a_result() -> Option[K] {   //~ E0308
+  None
+}
+
+pub fn constant_as_a_type_argument_in_a_tuple(t: (U32, Option[K])) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn constant_as_a_nested_type_argument(o: Option[Option[K]]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn constant_as_a_type_argument_of_an_array(x: [Option[K]; 2]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn constant_as_a_type_argument_of_a_function_type(f: fn(Option[K]) -> F32) -> F32 {   //~ E0308
+  1.0
+}
+
+type ConstantAsAnArgumentInAnAlias = Option[K]      //~ E0308
+
+pub struct ConstantAsAnArgumentInAField {
+  o: Option[K],                                     //~ E0308
+}
+
+pub enum ConstantAsAnArgumentInAVariant {
+  A(Option[K]),                                     //~ E0308
+}
+
+const CONSTANT_AS_AN_ARGUMENT_IN_A_CONST_TYPE: Option[K] = None   //~ E0308
+
+pub fn constant_as_a_type_argument_in_an_annotation() -> F32 {
+  let _: Option[K] = None                           //~ E0308
+  1.0
+}
+
+pub fn constant_as_a_type_argument_in_a_cast(n: U32) -> F32 {
+  let _ = n as Option[K]                            //~ E0308
+  1.0
+}
+
+pub fn constant_as_a_type_argument_in_a_closure() -> F32 {
+  let f = fn(o: Option[K]) -> F32 { 1.0 }           //~ E0308
+  1.0
+}
+
+impl P {
+  pub fn constant_as_a_type_argument_in_a_method(self, o: Option[K]) -> F32 {   //~ E0308
+    1.0
+  }
+}
+
+// ---- A type in the position of a const argument ----
+
+pub fn struct_as_a_const_argument(r: Ring[F32, P]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn alias_as_a_const_argument(r: Ring[F32, Al]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_type_as_a_const_argument(r: Ring[F32, I32]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn prelude_type_as_a_const_argument(r: Ring[F32, Option]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn enum_as_a_const_argument(r: Ring[F32, E]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn trait_as_a_const_argument(r: Ring[F32, Show]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn effect_as_a_const_argument(r: Ring[F32, Alloc]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn flow_as_a_const_argument(r: Ring[F32, lp]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_parameter_as_a_const_argument[T](r: Ring[F32, T]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_in_the_first_of_a_nested_ring(r: Ring[Ring[F32, P], 4]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_as_a_const_argument(r: Ring[F32, g]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn variant_as_a_const_argument(r: Ring[F32, E.A]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn struct_as_a_const_argument_of_cells(c: Cells[P]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_as_a_const_argument_of_cells(c: Cells[g]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn struct_as_a_const_argument_in_a_result() -> Ring[F32, P] {   //~ E0308
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn struct_as_a_const_argument_in_a_tuple(t: (U32, Ring[F32, P])) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn struct_as_a_const_argument_in_a_function_type(f: fn(Ring[F32, P]) -> F32) -> F32 {   //~ E0308
+  1.0
+}
+
+type StructAsAConstArgumentInAnAlias = Ring[F32, P]   //~ E0308
+
+type FunctionAsAConstArgumentInAnAlias = Ring[F32, g]   //~ E0417
+
+pub struct StructAsAConstArgumentInAField {
+  r: Ring[F32, P],                                  //~ E0308
+}
+
+pub enum StructAsAConstArgumentInAVariant {
+  A(Ring[F32, P]),                                  //~ E0308
+}
+
+const STRUCT_AS_A_CONST_ARGUMENT_IN_A_CONST_TYPE: Ring[F32, P] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+
+pub fn struct_as_a_const_argument_in_an_annotation() -> F32 {
+  let _: Ring[F32, P] = Ring { data: [0.0; 4], head: 0 }               //~ E0308
+  1.0
+}
+
+pub fn function_as_a_const_argument_in_an_annotation() -> F32 {
+  let _: Ring[F32, g] = Ring { data: [0.0; 4], head: 0 }               //~ E0417
+  1.0
+}
+
+impl P {
+  pub fn struct_as_a_const_argument_in_a_method(self, r: Ring[F32, Self]) -> F32 {   //~ E0308
+    1.0
+  }
+}
+
+// ---- A const parameter in the position of a type (R-282) ----
+
+pub fn const_parameter_as_a_parameter_type[const N: U32](x: N) -> I32 {   //~ E0308
+  0
+}
+
+pub fn const_parameter_as_a_result_type[const N: U32]() -> N {   //~ E0308
+  0
+}
+
+pub fn const_parameter_as_a_type_argument[const N: U32](x: Option[N]) -> I32 {   //~ E0308
+  0
+}
+
+pub fn const_parameter_in_a_tuple_type[const N: U32](x: (N, U32)) -> I32 {   //~ E0308
+  0
+}
+
+pub fn const_parameter_as_an_element_type[const N: U32](x: [N; 2]) -> I32 {   //~ E0308
+  0
+}
+
+pub fn const_parameter_in_a_function_type[const N: U32](f: fn(N) -> I32) -> I32 {   //~ E0308
+  0
+}
+
+pub fn const_parameter_as_the_type_of_a_ring[const N: U32](r: Ring[N, 4]) -> I32 {   //~ E0308
+  0
+}
+
+pub fn const_parameter_after_a_type_parameter[T, const N: U32](x: T, y: N) -> I32 {   //~ E0308
+  0
+}
+
+pub struct ConstParameterAsAFieldType[const N: U32] {
+  a: N,                                             //~ E0308
+}
+
+pub struct ConstParameterAsAnArgumentInAField[const N: U32] {
+  a: Option[N],                                     //~ E0308
+}
+
+pub enum ConstParameterAsAVariantType[const N: U32] {
+  A(N),                                             //~ E0308
+}
+
+impl[const N: U32] Cells[N] {
+  pub fn const_parameter_as_a_method_parameter_type(self, x: N) -> I32 {   //~ E0308
+    0
+  }
+
+  pub fn const_parameter_as_a_method_result_type(self) -> N {   //~ E0308
+    0
+  }
+}
+
+pub fn const_parameter_in_an_annotation[const M: U32]() -> I32 {
+  let _: M = 1                                      //~ E0308
+  0
+}
+
+pub fn const_parameter_in_a_tuple_annotation[const M: U32]() -> I32 {
+  let _: (M, I32) = (1, 2)                          //~ E0308
+  0
+}
+
+pub fn const_parameter_as_a_cast_target[const M: U32](t: U32) -> I32 {
+  let _ = t as M                                    //~ E0308
+  0
+}
+
+pub fn const_parameter_as_a_closure_parameter_type[const M: U32]() -> I32 {
+  let f = fn(x: M) -> I32 { 0 }                     //~ E0308
+  f.(1)
+}
+
+pub fn const_parameter_as_a_closure_result_type[const M: U32]() -> I32 {
+  let f = fn(x: I32) -> M { 0 }                     //~ E0308
+  0
+}
+
+pub fn const_parameter_in_a_branch[const M: U32](flag: Bool) -> I32 {
+  if flag {
+    let _: M = 1                                    //~ E0308
+    1
+  } else {
+    0
+  }
+}
+
+// ---- The constant of an `impl` in the position of a type ----
+
+pub fn associated_constant_as_a_parameter_type(x: P.N) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn associated_constant_as_the_argument_of_an_option(x: Option[P.N]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub struct AssociatedConstantAsAFieldType {
+  a: P.N,                                           //~ E0308
+}
+
+impl P {
+  pub const M: U32 = 2
+
+  pub fn own_constant_as_a_parameter_type(self, x: Self.N) -> F32 {   //~ E0308
+    1.0
+  }
+
+  pub fn own_constant_as_a_result_type(self) -> Self.N {   //~ E0308
+    0
+  }
+
+  pub fn own_constant_as_a_type_argument(self, x: Option[Self.N]) -> F32 {   //~ E0308
+    1.0
+  }
+
+  pub fn own_constant_by_the_type_name(self, x: P.M) -> F32 {   //~ E0308
+    1.0
+  }
+
+  pub fn own_constant_in_an_annotation(self) -> F32 {
+    let _: Self.N = 1                               //~ E0308
+    1.0
+  }
+
+  pub fn own_constant_as_a_length(self, x: [F32; Self.N]) -> F32 {
+    x[0]
+  }
+
+  pub fn constant_by_the_type_name_as_a_length(self, x: [F32; P.M]) -> F32 {
+    x[0]
+  }
+}
+
+// ---- Fine forms ----
+
+pub fn type_as_a_type_argument(o: Option[P], w: Wrap[Al], p: Option[Option[I32]]) -> F32 {
+  1.0
+}
+
+pub fn constant_as_a_const_argument(r: Ring[F32, K], s: Ring[F32, 4], t: Ring[F32, P.N]) -> F32 {
+  1.0
+}
+
+pub fn type_and_constant_as_arguments(r: Ring[Ring[F32, 2], 3], c: Cells[K]) -> F32 {
+  1.0
+}
+
+pub fn const_parameter_as_a_const_argument[const N: U32](r: Ring[F32, N], c: Cells[N]) -> F32 {
+  1.0
+}
+
+pub fn type_parameter_as_a_type_argument[T](r: Ring[T, 4], o: Option[T]) -> F32 {
+  1.0
+}
+
+pub fn const_parameter_as_a_length[const N: U32](x: [F32; N]) -> F32 {
+  x[0]
+}
+
+pub fn const_parameter_as_a_value[const N: U32]() -> U32 {
+  N
+}
+
+pub fn const_parameter_in_an_annotation_as_a_length[const M: U32]() -> F32 {
+  let a: [F32; M] = [0.0; M]
+  a[0]
+}
+
+pub fn type_arguments_in_annotations() -> F32 {
+  let _: Option[P] = None
+  let _: Ring[F32, K] = Ring { data: [0.0; K], head: 0 }
+  1.0
+}

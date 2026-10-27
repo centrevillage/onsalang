@@ -1,0 +1,158 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§6.3", "§18.1"]
+
+// S-103, S-713, S-719, S-721 (W4-04 U8b): a name that is found and is not a type, written as the target
+// of an `impl`, is E0308 (§15.1: "型でないものを `impl` の対象にする"; §4.4: "`impl` の対象は型の宣言の
+// 名前で書き"). The names here are a constant, a function, a variant, a function of the prelude, an effect of
+// the prelude, a trait and a kind constraint of the prelude (without `for`: a trait is not a type), a handler,
+// a user `trait` and a user `effect` and the function of an `extern` block (the declarations that are E0200 in
+// this version are read by the kind of their keyword, S-719, S-721), and a const parameter of the `impl`. The name
+// is found, so it is not E0302, and it is not the E0307 of a type that is not written by its declared name
+// (that is for an alias, in fixes/e0307_alias_forms.onsa). The error is in the heading, so the whole `impl`
+// is one unit and its members are not checked (§18.1): the members here have an error of the type stage,
+// and it is not reported. The `impl Tr for P` is a form that the version does not have (E0200 without reading
+// the names, §18.1), and is not here. One error per unit (§18.1), so each form is in its own unit; the fine
+// `impl` blocks (a struct, an enum, a generic struct with its parameters) are the fine units at the end of the file.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+const K: U32 = 4
+
+fn g() -> U32 {
+  1
+}
+
+pub trait Tr {                                      //~ E0200
+  fn m(self) -> I32
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(x: I32) -> I32
+}
+
+handler hh: Alloc { }                               //~ E0200
+
+extern "C" lib "m" {                                //~ E0200
+  fn c_sin(x: F64) -> F64
+}
+
+impl K {                                            //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl g {                                            //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl E.A {                                          //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl E.B {                                          //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl panic {                                        //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl Alloc {                                        //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl Show {                                         //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl Copy {                                         //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl Tr {                                           //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl Ef {                                           //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl hh {                                           //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl c_sin {                                        //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl[T] K {                                         //~ E0308
+  pub fn get_again(self) -> T {
+    1
+  }
+}
+
+impl[const N: U32] N {                              //~ E0308
+  pub fn get(self) -> U32 {
+    1
+  }
+}
+
+impl K {                                            //~ E0308
+  pub fn members_are_not_checked(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl P {
+  pub fn get(self) -> I32 {
+    self.x
+  }
+}
+
+impl E {
+  pub fn get(self) -> I32 {
+    1
+  }
+}
+
+impl[T] Wrap[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+}

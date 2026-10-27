@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+
+// S-713 (b), S-719, S-721 (W4-04 U8b): a name that is found and is not an effect, written in an effect row
+// (`uses {..}`), is E0308 (§8.1: "効果でも効果行変数でもない名前（`uses {I32}`、`uses {Show}`）は E0308
+// である"; §15.1: the kinds, and "要る種類でない名前は E0200 より先に E0308"). It is not E0302 (the name is
+// found) and not the E0200 of "effects other than `Alloc`". The names here are a function, a constant,
+// an enum, a variant, an alias, a trait of the prelude, an operator trait, a kind constraint, a
+// built-in type, the names of the declarations that are E0200 in this version and are read by the kind of
+// their keyword (a `trait`, a `handler`, a `fn` and a `type` of an `extern` block, S-719, S-721), and the
+// place of the row in the type of a function value (a parameter, a result, an alias of a type, a closure).
+// The effect row is read element by element, so a wrong name after a right one is also E0308.
+// What the version does not support stays E0200: the name of a user `effect` (`uses {Ef}`), which is the
+// kind the place needs (§15.1: "E0200 は、要る種類の名前でこの版が扱えないもの"). The E0308 of a wrong
+// name before it comes first (a rule of the version before what the version does not support).
+// One error per unit (§18.1), so each form is in its own unit; the fine rows (`Alloc`, an empty row,
+// an effect row variable, a row of a function type) are the fine units at the end of the file.
+
+pub struct P {
+  x: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+type Al = P
+
+const K: U32 = 4
+
+fn g() -> I32 {
+  1
+}
+
+pub trait Tr {                                      //~ E0200
+  fn m(self) -> I32
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(x: I32) -> I32
+}
+
+handler hh: Alloc { }                               //~ E0200
+
+extern "C" lib "m" {                                //~ E0200
+  fn c_sin(x: F64) -> F64
+  type CHandle
+}
+
+pub fn function_in_a_row() uses {g} {}              //~ E0308
+
+pub fn constant_in_a_row() uses {K} {}              //~ E0308
+
+pub fn enum_in_a_row() uses {E} {}                  //~ E0308
+
+pub fn variant_in_a_row() uses {E.A} {}             //~ E0308
+
+pub fn prelude_variant_in_a_row() uses {None} {}    //~ E0308
+
+pub fn alias_in_a_row() uses {Al} {}                //~ E0308
+
+pub fn generic_prelude_type_in_a_row() uses {Option} {}   //~ E0308
+
+pub fn operator_trait_in_a_row() uses {Add} {}      //~ E0308
+
+pub fn number_trait_in_a_row() uses {Num} {}        //~ E0308
+
+pub fn kind_constraint_in_a_row() uses {Copy} {}    //~ E0308
+
+pub fn bool_in_a_row() uses {Bool} {}               //~ E0308
+
+pub fn user_trait_in_a_row() uses {Tr} {}           //~ E0308
+
+pub fn handler_in_a_row() uses {hh} {}              //~ E0308
+
+pub fn extern_function_in_a_row() uses {c_sin} {}   //~ E0308
+
+pub fn extern_type_in_a_row() uses {CHandle} {}     //~ E0308
+
+pub fn wrong_name_after_a_right_one() uses {Alloc, I32} {}   //~ E0308
+
+pub fn wrong_name_before_a_right_one() uses {I32, Alloc} {}   //~ E0308
+
+pub fn two_wrong_names() uses {I32, Show} {}        //~ E0308
+
+pub fn wrong_name_before_a_user_effect() uses {I32, Ef} {}   //~ E0308
+
+pub fn user_effect_before_a_wrong_name() uses {Ef, I32} {}   //~ E0308
+
+pub fn user_effect_is_not_supported() uses {Ef} {}  //~ E0200
+
+pub fn user_effect_after_alloc() uses {Alloc, Ef} {}   //~ E0200
+
+pub fn in_the_row_of_a_parameter_type(f: fn(I32) -> I32 uses {I32}) -> I32 {   //~ E0308
+  1
+}
+
+pub fn in_the_row_of_a_result_type() -> fn(I32) -> I32 uses {Show} {   //~ E0308
+  fn(x: I32) -> I32 { x }
+}
+
+pub type Maker = fn(U32) -> U32 uses {P}            //~ E0308
+
+pub fn in_the_row_of_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 uses {K} { x }          //~ E0308
+  f.(1)
+}
+
+pub fn in_the_row_of_a_nested_function_type(h: fn(fn() -> I32 uses {g}) -> I32) -> I32 {   //~ E0308
+  1
+}
+
+pub fn in_a_generic_function[T](x: T) -> T uses {I32} {   //~ E0308
+  x
+}
+
+impl P {
+  pub fn in_a_method(self) -> I32 uses {Show} {     //~ E0308
+    self.x
+  }
+
+  pub fn in_a_method_parameter(self, f: fn() -> I32 uses {K}) -> I32 {   //~ E0308
+    self.x
+  }
+}
+
+pub fn alloc_is_an_effect() -> I32 uses {Alloc} {
+  1
+}
+
+pub fn an_empty_row_is_fine() -> I32 uses {} {
+  1
+}
+
+pub fn an_effect_row_variable_is_fine[e](f: fn() -> I32 uses {e}) -> I32 uses {e} {
+  f.()
+}
+
+pub fn row_of_a_function_type_is_fine(f: fn() -> I32 uses {Alloc}) -> I32 uses {Alloc} {
+  f.()
+}
+
+pub fn closure_row_is_fine() -> I32 uses {Alloc} {
+  let f = fn(x: I32) -> I32 uses {Alloc} { x }
+  f.(1)
+}

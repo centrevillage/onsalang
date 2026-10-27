@@ -12,7 +12,7 @@ fn type_as_value() -> F32 { let a = P
   1.0 }
 
 // 期待: E0308。
-// 今: E0302「`helper` is not a type」（未解決の名前のコード）。
+// 今: E0308「`helper` is a function, not a type (§15.1)」（W4-04 U8a から）。
 fn value_as_type(x: helper) -> F32 { 1.0 }
 
 // 期待: 今のまま E0401。
@@ -24,13 +24,13 @@ fn call_non_function(x: F32) -> F32 { x(1.0) }
 fn type_arity(x: F32[I32]) -> F32 { 1.0 }
 
 // 期待: E0308。
-// 今: E0302「`N` is not a type」（実装には同じ場面に E0401 の文面もある）。
+// 今: E0308「`N` is a constant, not a type (§15.1)」（W4-04 U8a から）。
 const N: U32 = 4
 fn const_as_type(x: Option[N]) -> F32 { 1.0 }
 
 // 定数式の規則（§4.5）。仕様は「関数の呼び出しは書けない」とだけ書き、コードを定めていない。
 // 期待: E0417（定数式の規則の違反）。
-// 今: E0200「this version does not support expressions as array lengths」（S-50 の定数式は未実装。実装には E0302「array length must be a constant」もある）。
+// 今: E0200「this version does not support expressions as array lengths」（S-50 の定数式は未実装。名前の `len` だけなら W4-04 U8b から E0417）。
 fn len_from_call(x: [F32; len()]) -> F32 { 1.0 }
 fn len() -> U32 { 4 }
 
@@ -42,7 +42,7 @@ fn attr() -> F32 { 1.0 }
 
 // `impl` の対象が型でない。
 // 期待: E0308。
-// 今: E0302「`helper` is not a type」（実装には E0302「`impl` needs a struct, enum, or builtin type」の文面もある）。
+// 今: E0308「`helper` is a function, not a type (§15.1)」（W4-04 U8a から。型の名前で型でない対象は E0302「`impl` needs a struct, enum, or builtin type」）。
 impl helper {
   fn m(self) -> F32 { 1.0 }
 }

@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-91, R-105 (W4-04 U8b): an `impl` on an alias is E0307 (§4.4: "`impl` と `impl Tr for` の対象は型の宣言の名前
+// で書き、別名は書けない（E0307。元の型がそのモジュールで宣言されていれば、修正候補は元の名前）"). When the
+// original type is not declared in this module there is no candidate (`fixes = 0`: the error is one that has no
+// candidate): the alias of a built-in type, of a type of the prelude (declared in std, §15.1) and of a type that
+// has no name of a declaration (a tuple, an array). The error is in the heading, so the whole `impl` is one
+// unit and its members are not checked (§18.1): the members here have an error of the type stage, and it is
+// not reported. An alias of a type declared in another module of the package is in
+// packages/impl_on_alias_of_imported_type. One error per unit (§18.1), so each form is in its own unit.
+
+type Sample = F32
+
+type Opt = Option[F32]
+
+type Frame = [F32; 2]
+
+type Pair = (F32, F32)
+
+type Count = U32
+
+impl Sample {                                       //~ E0307
+  pub fn from_a_builtin_alias(self) -> F32 { self }
+}
+
+impl Opt {                                          //~ E0307
+  pub fn from_a_prelude_alias(self) -> F32 { 1.0 }
+}
+
+impl Frame {                                        //~ E0307
+  pub fn from_an_array_alias(self) -> F32 { 1.0 }
+}
+
+impl Pair {                                         //~ E0307
+  pub fn from_a_tuple_alias(self) -> F32 { 1.0 }
+}
+
+impl Count {                                        //~ E0307
+  pub fn members_are_not_checked(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}

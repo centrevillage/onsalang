@@ -1,0 +1,19 @@
+pub struct Q {
+  x: I32,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub const K: U32 = 3
+
+pub fn g() -> U32 {
+  1
+}
+
+pub fn q_in_a_module_is_a_type() -> I32 {
+  let q = Q { x: 1 }
+  q.x
+}

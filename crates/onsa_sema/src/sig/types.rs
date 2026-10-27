@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::ResolveError;
+use crate::names::PathEnd;
 use crate::resolve::NameKind;
 
 impl<'p> Sema<'p> {
@@ -49,6 +50,12 @@ impl<'p> Sema<'p> {
                         };
                     }
                     if let Some(i) = cx.generics.iter().position(|g| g.name == seg.name) {
+                        // A const parameter (R-282) and an effect-row variable
+                        // are no type (§15.1).
+                        let kind = NameKind::of_generic(&cx.generics[i].kind);
+                        if kind != NameKind::Type {
+                            return self.not_a_type(cx, None, kind, te.span, path);
+                        }
                         if !args_ast.is_empty() {
                             self.report(
                                 cx.def,
@@ -60,32 +67,25 @@ impl<'p> Sema<'p> {
                                 ),
                             );
                         }
-                        return match cx.generics[i].kind {
-                            GenericKind::Type { .. } | GenericKind::Const(_) => {
-                                self.a.types.intern(Ty::Param(i as u32))
-                            }
-                            GenericKind::Effect => {
-                                self.report(
-                                    cx.def,
-                                    Diagnostic::new(
-                                        Stage::Names,
-                                        Code::E0302,
-                                        seg.span,
-                                        "an effect-row variable is not a type",
-                                    ),
-                                );
-                                self.a.types.error()
-                            }
-                        };
+                        return self.a.types.intern(Ty::Param(i as u32));
                     }
                 }
-                let entity = match self.a.resolve_path(cx.m, path) {
-                    Ok(e) => e,
+                // Through `Self` and the aliases (`Self.N`, `Al.N`, §2.2, §4.4).
+                let entity = match self.a.path_end(cx.m, path, cx.self_ty) {
+                    Ok(PathEnd::Entity(e)) => e,
+                    // `F32.PI`, `Str.len` (R-302).
+                    Ok(end @ PathEnd::Builtin { .. }) => {
+                        return self.not_a_type(cx, None, end.kind(self.a, te.span), te.span, path);
+                    }
                     // What the check does not read (§18.1, S-689, S-690): the
                     // error type, with no diagnostic.
                     Err(e) if self.a.unread_path(cx.def, cx.m, path, &e) => return self.a.types.error(),
                     Err(e) => {
-                        let d = self.flow_name_as_type(cx, path, &e).unwrap_or_else(|| e.into_diagnostic());
+                        let d = match self.rate_as_type(cx, t, &e) {
+                            Some(Some(d)) => d,
+                            Some(None) => return self.a.types.error(),
+                            None => self.flow_name_as_type(cx, path, &e).unwrap_or_else(|| e.into_diagnostic()),
+                        };
                         self.report(cx.def, d);
                         return self.a.types.error();
                     }
@@ -140,6 +140,48 @@ impl<'p> Sema<'p> {
         Some(b.misplaced(path.segments.iter().map(|s| s.span), cx.text))
     }
 
+    /// E0020 for a rate written as a type `t` (`Sig[F32]`, the row
+    /// `rate_as_type`, §11.3, S-120): a name of the list of
+    /// [`foreign::RATE_TYPES`] with one type argument, not found (`err`;
+    /// a user's `struct Sig[T]` is found). The candidate keeps the argument,
+    /// with a clock after it at the type of an input or the output of the flow
+    /// `cx.def` with no clock: the rate's of an input, `sample` of the output
+    /// (its one clock in this version, §11.6). The argument is lowered first:
+    /// an error in it, which the candidate would leave, is the error
+    /// (`Some(None)`, §18.1).
+    fn rate_as_type(&mut self, cx: &Cx<'p>, t: TypeId, err: &ResolveError) -> Option<Option<Diagnostic>> {
+        let te = cx.ast.ty(t);
+        let TypeKind::Path { path, args } = &te.kind else { return None };
+        let ([seg], [arg]) = (path.segments.as_slice(), args.as_slice()) else { return None };
+        let rate = Rate::of_type_name(&seg.name)?;
+        if !matches!(err, ResolveError::NotFound { name, .. } if *name == seg.name) {
+            return None;
+        }
+        let inner = self.lower_type(cx, *arg);
+        if matches!(self.a.types.get(inner), Ty::Error) {
+            return Some(None);
+        }
+        let (whole, arg) = (te.span, cx.ast.ty(*arg).span);
+        let mut kind = self.a.def(cx.def).item.map(|i| &cx.ast.item(i).kind);
+        if let Some(ItemKind::Target(inner)) = kind {
+            kind = Some(inner);
+        }
+        let clock = match kind {
+            Some(ItemKind::Flow(f)) if f.ret == t && f.ret_clock.is_none() => Some(Rate::Sig),
+            Some(ItemKind::Flow(f)) if f.params.iter().any(|p| p.ty == Some(t) && p.clock.is_none()) => Some(rate),
+            _ => None,
+        };
+        let (clock, title) = match clock {
+            Some(r) => (format!(" at {}", r.clock()), format!("write the rate as the clock `at {}`", r.clock())),
+            None => (String::new(), format!("write `{}` with no rate", src(cx, arg))),
+        };
+        let edits = vec![
+            onsa_diag::Edit::replace(Span { end: arg.start, ..whole }, ""),
+            onsa_diag::Edit::replace(Span { start: arg.end, ..whole }, clock),
+        ];
+        Some(Some(foreign::report(RowId::RateAsType, cx.text, whole, vec![Fix::new(title, edits)])))
+    }
+
     /// One type argument (S-24). `expect_const`: `Some(true)` for a `const`
     /// parameter, `Some(false)` for a type parameter, `None` when the entity
     /// has no declared kinds (builtins, aliases: only types are accepted).
@@ -162,7 +204,7 @@ impl<'p> Sema<'p> {
             }
             (TypeKind::ConstArg(e), Some(true)) => {
                 self.lower_alias_of(cx, *e);
-                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), *e) {
+                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), *e, &|_| false) {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
                     Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
@@ -175,53 +217,43 @@ impl<'p> Sema<'p> {
                     }
                 }
             }
-            (TypeKind::Path { path, args }, Some(true)) if args.is_empty() => {
-                // `N` of the enclosing item, or a `const` item with a literal value.
-                if path.segments.len() == 1
-                    && let Some(i) = cx.generics.iter().position(|g| g.name == path.segments[0].name)
-                {
-                    if matches!(cx.generics[i].kind, GenericKind::Const(_)) {
-                        return self.a.types.intern(Ty::Param(i as u32));
+            (TypeKind::Path { path, args }, Some(true)) => {
+                // `N` of the enclosing item, or a constant; a name of another
+                // kind is E0417 or E0308 (§4.5, S-713 (a)), with type
+                // arguments or not (`Wrap[F32]`, S-732).
+                let named = match crate::constarg::generic(&cx.generics, path) {
+                    Some((i, NameKind::ConstParam)) => Ok(Ty::Param(i)),
+                    Some((_, kind)) => Err(crate::constarg::not_constant(kind, src(cx, path.span), path.span)),
+                    None => {
+                        self.lower_alias_before(cx, path);
+                        crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, path.span)
+                            .map(Ty::ConstVal)
                     }
-                } else {
-                    self.lower_alias_before(cx, path);
-                    match crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, te.span) {
-                        Ok(Some(v)) => return self.a.types.intern(Ty::ConstVal(v)),
-                        Ok(None) => {}
-                        Err(crate::constarg::ConstErr::Unknown) => return self.a.types.error(),
-                        Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => {
-                            self.report(cx.def, d);
-                            return self.a.types.error();
-                        }
+                };
+                match named {
+                    // A constant with type arguments (`K[F32]`).
+                    Ok(_) | Err(crate::constarg::ConstErr::Uncomputed(_)) if !args.is_empty() => {
+                        self.not_a_const_arg(cx, te.span)
+                    }
+                    Ok(ty) => self.a.types.intern(ty),
+                    Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
+                    Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => {
+                        self.report(cx.def, d);
+                        self.a.types.error()
                     }
                 }
-                self.report(
-                    cx.def,
-                    Diagnostic::new(
-                        Stage::Types,
-                        Code::E0401,
-                        te.span,
-                        "a `const` parameter expects an integer literal or a constant, not a type",
-                    )
-                    .with_found(src(cx, te.span)),
-                );
-                self.a.types.error()
             }
-            (_, Some(true)) => {
-                self.report(
-                    cx.def,
-                    Diagnostic::new(
-                        Stage::Types,
-                        Code::E0401,
-                        te.span,
-                        "a `const` parameter expects an integer literal or a constant, not a type",
-                    )
-                    .with_found(src(cx, te.span)),
-                );
-                self.a.types.error()
-            }
+            // A type that is no name (`(F32, F32)`, S-732).
+            (_, Some(true)) => self.not_a_const_arg(cx, te.span),
             _ => self.lower_type(cx, t),
         }
+    }
+
+    /// E0401 for the const argument at `span`, which is no constant.
+    fn not_a_const_arg(&mut self, cx: &Cx<'p>, span: Span) -> TyId {
+        let msg = "a `const` parameter expects an integer literal or a constant, not a type";
+        self.report(cx.def, Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(src(cx, span)));
+        self.a.types.error()
     }
 
     fn type_of_entity(
@@ -280,27 +312,27 @@ impl<'p> Sema<'p> {
                     }
                     // An opaque type of an `extern` block, whose kind is a type.
                     DefKind::Unsupported(Declared::Type | Declared::Block) => self.a.types.error(),
-                    _ => self.not_a_type(cx, entity, span, path),
+                    _ => self.not_a_type(cx, Some(entity), NameKind::of_named(entity, &self.a.defs, span), span, path),
                 }
             }
-            Entity::Module(_) | Entity::Builtin(_) | Entity::Variant(..) => self.not_a_type(cx, entity, span, path),
+            Entity::Module(_) | Entity::Builtin(_) | Entity::Variant(..) => {
+                self.not_a_type(cx, Some(entity), NameKind::of_named(entity, &self.a.defs, span), span, path)
+            }
         }
     }
 
     /// E0308 for the name `path` at `span` of a type, which is of another
-    /// kind (§15.1, §18.1, S-713, S-719, S-721): a value, a module, a trait,
-    /// a flow (with the candidate of its state type, §11.6), what an E0200
-    /// declares. The type is the error type.
-    fn not_a_type(&mut self, cx: &Cx<'p>, entity: Entity, span: Span, path: &onsa_syntax::ast::Path) -> TyId {
-        let shown = path.segments.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(".");
-        let Some(kind) = NameKind::of(entity, &self.a.defs) else {
-            onsa_diag::internal::bug(Some(span), "a type named by what has no name")
-        };
-        let mut d = ResolveError::Kind { shown: shown.clone(), span, kind, want: "a type" }.into_diagnostic();
+    /// kind `kind` (§15.1, §18.1, S-713, S-719, S-721): a value, a module, a
+    /// trait, a flow (with the candidate of its state type, §11.6), what an
+    /// E0200 declares, a parameter of the heading that is no type; `entity`
+    /// is what the path names, if any. The type is the error type.
+    fn not_a_type(&mut self, cx: &Cx<'p>, entity: Option<Entity>, kind: NameKind, span: Span, path: &Path) -> TyId {
+        let mut d = kind_error(path, kind, "a type", span);
+        let shown = d.found.clone().unwrap_or_default();
         // The type arguments after the path, if any, are what changes:
         // `Sig[F32]` is `Sig.State` (§18.1, S-251). Not when `State`, of the
         // flow's visibility, would be an E0303 there (§15.1).
-        if let (Entity::Def(f), NameKind::Flow) = (entity, kind)
+        if let (Some(Entity::Def(f)), NameKind::Flow) = (entity, kind)
             && cx.reach.is_none_or(|r| crate::resolve::reaches(self.a.def(f).vis, r))
         {
             let at = Span { start: path.span.end, ..span };
@@ -379,7 +411,7 @@ impl<'p> Sema<'p> {
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
         self.lower_alias_of(cx, e);
-        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), e) {
+        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), e, &|_| false) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
             Err(crate::constarg::ConstErr::Unknown) => None,

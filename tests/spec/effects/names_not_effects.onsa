@@ -3,8 +3,8 @@
 // spec = ["§8.1", "§15.1", "§2.2", "§18.1"]
 
 // A name that is found and is not an effect, written in an effect row (a built-in type, a trait of the
-// prelude, a type of the program), and a name that is not a trait, written in a bound, are E0200 in this
-// version: the assignment of E0308 to them is W4-04 (S-103). They are not E0302, as the name is found.
+// prelude, a type of the program), and a name that is neither a trait nor a kind constraint, written in a
+// bound, are E0308 (§15.1, S-713). They are not E0302, as the name is found.
 // `Self` is found only in the body of an `impl` (§2.2), so outside it, in a function or in the heading of an
 // `impl`, it is a name that is not found and E0302 (the last forms below).
 
@@ -12,17 +12,17 @@ pub struct Point {
   x: F32,
 }
 
-pub fn builtin_type() uses {I32} {}   //~ E0200 @29
+pub fn builtin_type() uses {I32} {}   //~ E0308 @29
 
-pub fn prelude_trait() uses {Show} {}   //~ E0200 @30
+pub fn prelude_trait() uses {Show} {}   //~ E0308 @30
 
-pub fn user_type() uses {Point} {}   //~ E0200 @26
+pub fn user_type() uses {Point} {}   //~ E0308 @26
 
-pub fn bound_builtin_type[T: I32](x: T) -> T {   //~ E0200
+pub fn bound_builtin_type[T: I32](x: T) -> T {   //~ E0308
   x
 }
 
-pub fn bound_user_type[T: Point](x: T) -> T {   //~ E0200
+pub fn bound_user_type[T: Point](x: T) -> T {   //~ E0308
   x
 }
 

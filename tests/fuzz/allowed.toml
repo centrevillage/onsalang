@@ -435,3 +435,10 @@ left = "`…` (U+#C#) cannot be written outside comments and strings: a name is 
 input = "tests/fuzz/43e0e81e.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: an `else` on the line after the `}`, and a character that cannot be written outside comments after it on the same line, which the candidate moves with the `else`"
+
+[[allowed]]
+class = "fix|E0308|call `…` on the first argument|E0302"
+left = "cannot find `…`"
+input = "tests/fuzz/a589aa43.onsa"
+reasons = ["S-103"]
+note = "an input with two errors of the names stage in one unit: the method `len` called through its type, and the argument `s` that is not found, hidden by the one error of a unit. The E0308 is not the only error of its stage, so the promise of the candidates (§18.1: only when the diagnostic is the only error of its stage and before in the units it touches) does not hold, and the candidate `s.len()` leaves the E0302 of `s`"

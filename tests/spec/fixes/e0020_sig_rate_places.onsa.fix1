@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+
+// S-120 (W4-04 U8b): the rate written as a type, `Sig[F32]`, is E0020 when `Sig` does not resolve, and the
+// error comes from the names stage in every place where a type is written (§11.3: "レートを型の形で書く
+// （`x: Sig[F32]`、0.3 の草案の形）と E0020 で、修正候補は … flow の外ではレートを外した `x: F32`"; §18.1:
+// "`Sig[F32]` は名前の段"). Outside a flow there is no clock to write, so the one candidate removes the rate
+// (`fixes = 1`); the text after it is the copy `.fix1` that the implementation writes. The places here are
+// those that e0020_sig_rate.onsa does not have: a field, the payload of a variant, the right side of an alias,
+// the type of a `const`, the parameter and the result of a method, the types of an anonymous function and of
+// a function value, a type inside another type (a tuple, an `Option`, an array), and the annotation of a
+// `let`. The candidate of the form inside a flow (a nested type in a flow input) is not fixed by the spec,
+// so it is not here. One error per unit (§18.1), so each form is in its own unit; the types of the program
+// are fine at the end of the file.
+
+pub struct InAField {
+  s: F32,                                      //~ E0020
+}
+
+pub enum InAVariant {
+  A(F32),                                      //~ E0020
+  B,
+}
+
+type InAnAlias = F32                           //~ E0020
+
+const IN_A_CONST_TYPE: Option[F32] = None      //~ E0020
+
+pub struct Holder {
+  x: F32,
+}
+
+impl Holder {
+  pub fn in_a_method_parameter(self, s: F32) -> F32 {   //~ E0020
+    s
+  }
+
+  pub fn in_a_method_result(self) -> F32 {     //~ E0020
+    self.x
+  }
+}
+
+pub fn in_a_tuple(t: (U32, F32)) -> F32 {      //~ E0020
+  t.1
+}
+
+pub fn in_an_option(o: Option[F32]) -> F32 {   //~ E0020
+  1.0
+}
+
+pub fn in_an_array(a: [F32; 2]) -> F32 {       //~ E0020
+  a[0]
+}
+
+pub fn in_a_function_type(f: fn(F32) -> F32) -> F32 {   //~ E0020
+  1.0
+}
+
+pub fn in_the_result_of_a_function_type(f: fn(F32) -> F32) -> F32 {   //~ E0020
+  1.0
+}
+
+pub fn in_an_anonymous_function_parameter() -> F32 {
+  let f = fn(x: F32) -> F32 { x }              //~ E0020
+  f.(1.0)
+}
+
+pub fn in_an_anonymous_function_result() -> F32 {
+  let f = fn(x: F32) -> F32 { x }              //~ E0020
+  f.(1.0)
+}
+
+pub fn in_an_annotation(x: F32) -> F32 {
+  let s: F32 = x                               //~ E0020
+  s
+}
+
+pub fn in_a_branch(flag: Bool, x: F32) -> F32 {
+  if flag {
+    let s: F32 = x                             //~ E0020
+    s
+  } else {
+    x
+  }
+}
+
+pub fn in_a_generic_function[T](x: T, s: F32) -> T {   //~ E0020
+  x
+}
+
+test "the rate as a type in a test" {
+  let s: F32 = 1.0                             //~ E0020
+  assert s == 1.0
+}
+
+pub fn the_types_of_the_program_are_fine(x: F32, o: Option[F32], a: [F32; 2]) -> F32 {
+  x
+}

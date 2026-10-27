@@ -7,10 +7,12 @@
 //! whole constant-expression grammar.
 
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, ItemKind, Lit, Path};
+use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, ItemKind, Lit, Path};
 
-use crate::def::{DefKind, GenericDef, GenericKind};
-use crate::resolve::{Builtin, Entity, ResolveError};
+use crate::def::{DefKind, GenericDef};
+use crate::names::body::{method_named, value_called};
+use crate::names::{BuiltinMember, PathEnd};
+use crate::resolve::{Builtin, Callee, Entity, NameKind, ResolveError};
 use crate::ty::{IntKind, Ty, TyId};
 use crate::{Analysis, ModId, builtin};
 
@@ -45,8 +47,11 @@ impl From<Diagnostic> for ConstErr {
 /// An array length or a const argument written as an expression (`4`, `-1`, `N`,
 /// `SIZE`, `cfg.N`, `I32.BITS`, `Self.N`): the one reader of the forms, for the
 /// signatures and the bodies, with the type and const parameters in scope and the
-/// type `Self` names (§2.2). `Ok((value, constant))`: `constant` is the `const`
-/// item a name denotes.
+/// type `Self` names (§2.2); `local` tells a chain of a body that starts at a
+/// local. `Ok((value, constant))`: `constant` is the `const` item a name denotes.
+/// Of an operation (E0200 until W9-03), a call, a local or a name of no constant
+/// in it is the error first (§4.5, §18.1, S-713 (a)); of a call (E0417), the
+/// error of the names stage of its callee and its arguments, as a body has it.
 pub(crate) fn expr(
     a: &mut Analysis,
     m: ModId,
@@ -54,40 +59,168 @@ pub(crate) fn expr(
     text: &str,
     (generics, self_ty): (&[GenericDef], Option<TyId>),
     e: ExprId,
+    local: &dyn Fn(ExprId) -> bool,
 ) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
-    if let Some(r) = literal(ast, text, e) {
-        return r.map(|v| (ConstU32::Value(v), None)).map_err(ConstErr::Report);
-    }
-    let expr = ast.expr(e);
-    let span = expr.span;
-    let found = text[span.start as usize..span.end as usize].to_string();
-    let Some(path) = path_of(ast, e) else {
-        return Err(onsa_diag::unsupported::Feature::ArrayLengthExprs
-            .diagnostic(Stage::Types, span, &[])
-            .with_found(found)
-            .into());
-    };
-    if path.segments.len() == 1
-        && let Some(i) = generics.iter().position(|g| g.name == path.segments[0].name)
-    {
-        if matches!(generics[i].kind, GenericKind::Const(_)) {
-            return Ok((ConstU32::Param(i as u32), None));
+    Reader { m, ast, text, generics, self_ty, local }.expr(a, e)
+}
+
+/// What [`expr`] reads with: the module `m` of `ast`, the parameters in
+/// scope, the type `Self` names and the locals.
+struct Reader<'r> {
+    m: ModId,
+    ast: &'r Ast,
+    text: &'r str,
+    generics: &'r [GenericDef],
+    self_ty: Option<TyId>,
+    local: &'r dyn Fn(ExprId) -> bool,
+}
+
+impl Reader<'_> {
+    fn expr(&self, a: &mut Analysis, e: ExprId) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
+        let ast = self.ast;
+        if let Some(r) = literal(ast, self.text, e) {
+            return r.map(|v| (ConstU32::Value(v), None)).map_err(ConstErr::Report);
         }
-        return Err(Diagnostic::new(
-            Stage::Names,
-            Code::E0302,
-            span,
-            "a constant expression names a `const` parameter or a constant, not a type parameter (§4.5)",
-        )
-        .with_found(found)
-        .into());
+        let span = ast.expr(e).span;
+        let found = self.text[span.start as usize..span.end as usize].to_string();
+        if (self.local)(e) {
+            return Err(value_not_constant(found, "a local", span).into());
+        }
+        if let Some(path) = path_of(ast, e) {
+            return self.name(a, &path, span);
+        }
+        if let ExprKind::Call { callee, kind, args } = &ast.expr(e).kind {
+            let callee = match kind {
+                CallKind::Plain | CallKind::Bang => self.callee(a, *callee),
+                CallKind::Value { .. } => self.before(a, *callee, false),
+                // The callee of an instance is the flow stage's (W4-12).
+                CallKind::Flow => None,
+            };
+            let mut args = args.iter().map(|x| x.expr);
+            return Err(callee
+                .or_else(|| args.find_map(|x| self.before(a, x, false)))
+                .unwrap_or_else(|| value_not_constant(found, "a call", span).into()));
+        }
+        let mut leaves = Vec::new();
+        operands(ast, e, &mut leaves);
+        let wrong = leaves.into_iter().filter(|&l| l != e).filter_map(|l| match self.before(a, l, true) {
+            Some(ConstErr::Report(d)) => Some(d),
+            _ => None,
+        });
+        if let Some(d) = wrong.min_by(|x, y| x.unit_order().cmp(&y.unit_order())) {
+            return Err(d.into());
+        }
+        let unsupported = onsa_diag::unsupported::Feature::ArrayLengthExprs.diagnostic(Stage::Types, span, &[]);
+        Err(unsupported.with_found(found).into())
     }
-    match named_def(a, m, (ast, text), &path, self_ty, span)? {
-        Some((v, constant)) => Ok((ConstU32::Value(v), constant)),
-        None => Err(Diagnostic::new(Stage::Names, Code::E0302, span, "array length must be a constant")
-            .with_found(found)
-            .into()),
+
+    /// The error of the part `l` that comes before the error of what holds
+    /// it: one of the names stage (§18.1), or an E0417 when `e0417`.
+    fn before(&self, a: &mut Analysis, l: ExprId, e0417: bool) -> Option<ConstErr> {
+        match self.expr(a, l) {
+            Err(ConstErr::Report(d)) if d.stage == Stage::Names || (e0417 && d.code == Code::E0417) => Some(d.into()),
+            _ => None,
+        }
     }
+
+    /// The error of the names stage of the callee `c` of `c(...)`, as a body
+    /// has it (§15.1, §6.1): what is not found, a method named through its
+    /// type, a constant called (E0020) and what is no value; a local and the
+    /// members of a value (`K.x()`) are the types stage's.
+    fn callee(&self, a: &mut Analysis, c: ExprId) -> Option<ConstErr> {
+        let Some(path) = path_of(self.ast, c).filter(|_| !(self.local)(c)) else { return self.before(a, c, false) };
+        let span = self.ast.expr(c).span;
+        let shown = self.text[span.start as usize..span.end as usize].to_string();
+        let kind = match generic(self.generics, &path) {
+            Some((_, kind)) => kind,
+            None => match path_end(a, self.m, &path, self.self_ty) {
+                Ok(end) if end.method(a).is_some() => {
+                    return Some(method_named(shown, &path.segments[path.segments.len() - 1].name, span).into());
+                }
+                Ok(end) => end.kind(a, span),
+                Err(ResolveError::Failed) => return Some(ConstErr::Unknown),
+                // A member of a value (`K.x()`) is the types stage's; a method
+                // named through its type is no value whatever follows it.
+                Err(ResolveError::NotANamespace { kind: Some(k), span: at, .. }) if k.is_value() => {
+                    return self.method_before(a, &path, at);
+                }
+                Err(err) => return Some(err.into_diagnostic().into()),
+            },
+        };
+        let want = "a function";
+        match kind.at_callee() {
+            Callee::Called => None,
+            Callee::Value => Some(value_called(self.text, span).into()),
+            Callee::NoValue => Some(ResolveError::Kind { shown, span, kind, want }.into_diagnostic().into()),
+        }
+    }
+
+    /// E0308 for the method named through its type (`P.get` of
+    /// `P.get.zz()`) before the name at `at` of `path`, as a body has it
+    /// (§15.1, S-205); none for another name.
+    fn method_before(&self, a: &Analysis, path: &Path, at: Span) -> Option<ConstErr> {
+        let i = path.segments.iter().position(|s| s.span == at)?;
+        let last = &path.segments[i.checked_sub(1)?];
+        let span = Span::new(path.span.file, path.span.start, last.span.end);
+        let before = Path { segments: path.segments[..i].to_vec(), span };
+        // `before` resolved on the way to `at`.
+        let Ok(end) = path_end(a, self.m, &before, self.self_ty) else { return None };
+        end.method(a)?;
+        let shown = self.text[span.start as usize..span.end as usize].to_string();
+        Some(method_named(shown, &last.name, span).into())
+    }
+
+    /// The name `path` at `span`: a const parameter, or a constant
+    /// ([`named_def`]); a parameter of another kind is an error
+    /// ([`not_constant`]).
+    fn name(&self, a: &mut Analysis, path: &Path, span: Span) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
+        match generic(self.generics, path) {
+            Some((i, NameKind::ConstParam)) => Ok((ConstU32::Param(i), None)),
+            Some((_, kind)) => Err(not_constant(kind, path.segments[0].name.clone(), span)),
+            None => {
+                let (v, constant) = named_def(a, self.m, (self.ast, self.text), path, self.self_ty, span)?;
+                Ok((ConstU32::Value(v), constant))
+            }
+        }
+    }
+}
+
+/// The parameter of `generics` a path of one name names, with its kind
+/// (§15.1): the one question of the constants of a body and a signature.
+pub(crate) fn generic(generics: &[GenericDef], path: &Path) -> Option<(u32, NameKind)> {
+    let [seg] = &path.segments[..] else { return None };
+    let i = generics.iter().position(|g| g.name == seg.name)?;
+    Some((i as u32, NameKind::of_generic(&generics[i].kind)))
+}
+
+/// The operands of the arithmetic of `e`, under parentheses, prefix `-` and
+/// binary operators; `e` itself when it is none of them.
+fn operands(ast: &Ast, e: ExprId, out: &mut Vec<ExprId>) {
+    match &ast.expr(e).kind {
+        ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => operands(ast, *x, out),
+        ExprKind::Binary { lhs, rhs, .. } => {
+            operands(ast, *lhs, out);
+            operands(ast, *rhs, out);
+        }
+        _ => out.push(e),
+    }
+}
+
+/// The error of the name `shown` at `span` of a constant expression, of the
+/// kind `kind`, which is no constant (§4.5, §15.1, S-713 (a)): a value (a
+/// function, a variant) is E0417, as a local is, and what is no value E0308.
+pub(crate) fn not_constant(kind: NameKind, shown: String, span: Span) -> ConstErr {
+    if !kind.is_value() {
+        return ResolveError::Kind { shown, span, kind, want: "a constant" }.into_diagnostic().into();
+    }
+    value_not_constant(shown, kind.noun(), span).into()
+}
+
+/// E0417 for the value `shown` at `span`, which is `noun` (a function, a
+/// variant, a local), no constant (§4.5).
+pub(crate) fn value_not_constant(shown: String, noun: &str, span: Span) -> Diagnostic {
+    let msg = format!("`{shown}` is {noun}, not a constant: a constant expression names constants (§4.5)");
+    Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown)
 }
 
 /// `N`, `cfg.N`, `I32.BITS` as a path (a field chain of names is a qualified name here).
@@ -133,10 +266,10 @@ pub(crate) fn literal(ast: &Ast, text: &str, e: ExprId) -> Option<Result<u32, Di
 }
 
 /// A name of a constant (`SIZE`, `cfg.N`, `I32.BITS`, `Self.N`, `Al.N` of an
-/// alias, §4.4) at `span`: its value, when its type is `U32`. `Ok(None)`: the
-/// name is not a constant (the caller reports what it is). `ast` is the module
-/// `m` the name is written in, and `self_ty` the type `Self` names. A body reads
-/// the entity its record has ([`of_entity`], [`of_builtin`]).
+/// alias, §4.4) at `span`: its value, when its type is `U32`; a name of
+/// another kind is an error ([`not_constant`]). `ast` is the module `m` the
+/// name is written in, and `self_ty` the type `Self` names. A body reads the
+/// entity its record has ([`of_entity`], [`of_builtin`]).
 pub(crate) fn named(
     a: &mut Analysis,
     m: ModId,
@@ -144,8 +277,8 @@ pub(crate) fn named(
     path: &Path,
     self_ty: Option<TyId>,
     span: Span,
-) -> Result<Option<u32>, ConstErr> {
-    Ok(named_def(a, m, (ast, text), path, self_ty, span)?.map(|(v, _)| v))
+) -> Result<u32, ConstErr> {
+    Ok(named_def(a, m, (ast, text), path, self_ty, span)?.0)
 }
 
 /// [`named`], with the `const` item the name denotes.
@@ -156,37 +289,47 @@ fn named_def(
     path: &Path,
     self_ty: Option<TyId>,
     span: Span,
-) -> Result<Option<(u32, Option<crate::DefId>)>, ConstErr> {
-    let err = match a.typed_path(m, path, self_ty) {
-        Ok((head, typed)) => match typed.err {
-            None => {
-                let entity = typed.reached.last().copied().unwrap_or(head);
-                let constant = match entity {
-                    Entity::Def(d) | Entity::Member(d) => Some(d),
-                    _ => None,
-                };
-                return Ok(of_entity(a, m, ast, text, entity, span)?.map(|v| (v, constant)));
+) -> Result<(u32, Option<crate::DefId>), ConstErr> {
+    let shown = text[span.start as usize..span.end as usize].to_string();
+    match path_end(a, m, path, self_ty) {
+        // A method named through its type, no value (§15.1, S-205).
+        Ok(end) if end.method(a).is_some() => {
+            Err(method_named(shown, &path.segments[path.segments.len() - 1].name, span).into())
+        }
+        Ok(PathEnd::Entity(entity)) => {
+            let constant = match entity {
+                Entity::Def(d) | Entity::Member(d) => Some(d),
+                _ => None,
+            };
+            match of_entity(a, m, ast, text, entity, span)? {
+                Some(v) => Ok((v, constant)),
+                None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
             }
-            // `I32.BITS`, `U32.MAX`, `Sample.PI`: an associated constant of a
-            // scalar type, the last name.
-            Some(err @ ResolveError::NotFound { .. }) => match typed.at {
-                Entity::Builtin(Builtin::Scalar(t)) if typed.reached.len() + 2 == path.segments.len() => {
-                    match of_builtin(a, t, &path.segments[typed.reached.len() + 1].name, text, span) {
-                        Some(r) => return Ok(r?.map(|v| (v, None))),
-                        None => err,
-                    }
-                }
-                _ => err,
-            },
-            Some(err) => err,
-        },
-        Err(err) => err,
-    };
-    match err {
+        }
+        // `I32.BITS`, `U32.MAX`, `Sample.PI`: an associated constant of a
+        // scalar type, the last name.
+        Ok(PathEnd::Builtin { of: Entity::Builtin(Builtin::Scalar(t)), member: BuiltinMember::Constant }) => {
+            let name = &path.segments[path.segments.len() - 1].name;
+            match of_builtin(a, t, name, text, span) {
+                Some(Ok(Some(v))) => Ok((v, None)),
+                Some(Err(e)) => Err(e),
+                _ => onsa_diag::internal::bug(Some(span), "an associated constant of no scalar's table"),
+            }
+        }
+        Ok(PathEnd::Builtin { member, .. }) => Err(not_constant(member.kind(), shown, span)),
         // A name held as an error (§18.1, S-462, S-675): no diagnostic, and
         // the check goes on (S-689).
-        ResolveError::Failed => Err(ConstErr::Unknown),
-        err => Err(err.into_diagnostic().into()),
+        Err(ResolveError::Failed) => Err(ConstErr::Unknown),
+        Err(err) => Err(err.into_diagnostic().into()),
+    }
+}
+
+/// What `path` names ([`Analysis::path_end`]); an alias of the error type
+/// stands for a failed name, as at the head of a value path (§18.1, S-728).
+fn path_end(a: &Analysis, m: ModId, path: &Path, self_ty: Option<TyId>) -> Result<PathEnd, ResolveError> {
+    match a.path_end(m, path, self_ty)? {
+        PathEnd::Entity(e) if a.alias_type(e).is_err() => Err(ResolveError::Failed),
+        end => Ok(end),
     }
 }
 

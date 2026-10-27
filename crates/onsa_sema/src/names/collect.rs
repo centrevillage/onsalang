@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{
-    Ast, ExprId, ExprKind, Failed, GenericParam, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit, UseDecl, Vis,
+    Ast, ExprId, ExprKind, Failed, FnDecl, GenericParam, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, ParamName,
+    StrLit, UseDecl, Vis,
 };
 
 use crate::def::*;
@@ -212,7 +213,7 @@ impl<'p> Sema<'p> {
     fn collect_named(&mut self, at: &Place<'_>, kind: &ItemKind) -> Option<DefId> {
         let item = at.item;
         let (name, kind, feature) = match kind {
-            ItemKind::Fn(f) => (&f.name, DefKind::Fn(at.fn_def(f.rt, f.body)), None),
+            ItemKind::Fn(f) => (&f.name, DefKind::Fn(at.fn_def(f)), None),
             ItemKind::Flow(f) => (
                 &f.name,
                 DefKind::Flow(FlowDef { inputs: Vec::new(), out: at.error, body: f.body, members: Vec::new() }),
@@ -298,7 +299,7 @@ impl<'p> Sema<'p> {
             let sub = at.ast.item(id);
             let member = Place { id, item: sub, ..*at };
             let (name, kind) = match &sub.kind {
-                ItemKind::Fn(f) => (&f.name, DefKind::Fn(member.fn_def(f.rt, f.body))),
+                ItemKind::Fn(f) => (&f.name, DefKind::Fn(member.fn_def(f))),
                 ItemKind::Const(c) => (&c.name, DefKind::Const(member.const_def(c.value))),
                 _ => continue,
             };
@@ -366,10 +367,16 @@ impl Place<'_> {
         ConstDef { ty: self.error, value, int_value }
     }
 
-    fn fn_def(&self, rt: bool, body: Option<ExprId>) -> FnDef {
+    /// A function, with the mode of its `self` (a method, §6.2), known
+    /// before the signatures are lowered (a signature names a method,
+    /// `[F32; P.get]`, §15.1); none of a heading a syntax error cut (S-59).
+    fn fn_def(&self, f: &FnDecl) -> FnDef {
+        let (rt, body) = (f.rt, f.body);
+        let params = if self.item.failed == Some(Failed::Heading) { &[][..] } else { &f.params[..] };
+        let self_param = params.iter().rev().find(|p| matches!(p.name, ParamName::SelfParam(_)));
         FnDef {
             generics: Vec::new(),
-            self_mode: None,
+            self_mode: self_param.map(|p| p.mode),
             params: Vec::new(),
             ret: self.unit,
             rt,

@@ -2,11 +2,11 @@
 // [test]
 // spec = ["§8.1", "§15.1", "§2.2", "§4.5", "§18.1"]
 
-// A name that is found and is not an effect, written in an effect row, is E0200 in this version (the
-// assignment of E0308 to it is W4-04, S-103), as in names_not_effects.onsa. The names here are the type
-// parameter and the const parameter of a function, the type parameter of an `impl`, and `Self` in the body
-// of an `impl` (§2.2: it is bound in the whole body, so in the heading of a member too). They are in scope,
-// so they are found names and not E0302.
+// A name that is found and is not an effect, written in an effect row, is E0308 (§15.1, S-713), as in
+// names_not_effects.onsa: a type parameter and `Self` are types, a const parameter a value. The names
+// here are the type parameter and the const parameter of a function, the type parameter of an `impl`, and
+// `Self` in the body of an `impl` (§2.2: it is bound in the whole body, so in the heading of a member too).
+// They are in scope, so they are found names and not E0302.
 
 pub struct S {
   a: U32,
@@ -16,18 +16,18 @@ pub struct Wrap[T] {
   v: T,
 }
 
-pub fn type_parameter_in_row[T](x: T) uses {T} {}   //~ E0200
+pub fn type_parameter_in_row[T](x: T) uses {T} {}   //~ E0308
 
-pub fn const_parameter_in_row[const N: U32](x: [U32; N]) uses {N} {}   //~ E0200
+pub fn const_parameter_in_row[const N: U32](x: [U32; N]) uses {N} {}   //~ E0308
 
 impl S {
-  pub fn self_in_bound[U: Self](self, x: U) -> U32 {   //~ E0200
+  pub fn self_in_bound[U: Self](self, x: U) -> U32 {   //~ E0308
     1
   }
 
-  pub fn self_in_row(self) uses {Self} {}   //~ E0200
+  pub fn self_in_row(self) uses {Self} {}   //~ E0308
 }
 
 impl[T] Wrap[T] {
-  pub fn impl_parameter_in_row(self) uses {T} {}   //~ E0200
+  pub fn impl_parameter_in_row(self) uses {T} {}   //~ E0308
 }

@@ -23,7 +23,7 @@ use onsa_syntax::ast::{
 use onsa_syntax::foreign::{self, RowId};
 
 use crate::def::*;
-use crate::resolve::{Builtin, Entity};
+use crate::resolve::{Builtin, Entity, NameKind};
 use crate::ty::*;
 use crate::{Analysis, Module, Package, flatten};
 mod flow_sig;
@@ -285,6 +285,7 @@ impl<'p> Sema<'p> {
                 // The heading of an `impl` has no visibility (§15.1).
                 let mut cx = Cx { reach: None, ..cx };
                 cx.generics = self.lower_generics(&cx, &i.generics);
+                let aliased = self.alias_impl(&cx, i.self_ty);
                 let self_ty = self.lower_type(&cx, i.self_ty);
                 let (fns, consts) = match &self.a.defs[id.0 as usize].kind {
                     DefKind::Impl(imp) => (imp.fns.clone(), imp.consts.clone()),
@@ -304,7 +305,12 @@ impl<'p> Sema<'p> {
                     Ty::Builtin(b, _) => self.a.builtin_key.get(b).copied(),
                     _ => None,
                 };
-                if key_def.is_none() && key_builtin.is_none() && !matches!(self.a.types.get(self_ty), Ty::Error) {
+                // The E0307 of an alias is the error of the heading.
+                if key_def.is_none()
+                    && key_builtin.is_none()
+                    && !matches!(self.a.types.get(self_ty), Ty::Error)
+                    && !aliased
+                {
                     let span = cx.ast.ty(i.self_ty).span;
                     self.report(
                         id,
@@ -370,6 +376,42 @@ impl<'p> Sema<'p> {
         None
     }
 
+    /// E0307 for an `impl` whose type `t` names a type alias (§4.4, S-91,
+    /// R-105): the methods of a type are found by the name of its
+    /// declaration. The candidate is the name of the type it stands for when
+    /// that one is declared in the module, with no type arguments; the `impl`
+    /// is lowered for that type all the same. An alias of the error type has
+    /// its error where it is declared (§18.1). Whether `t` names an alias.
+    fn alias_impl(&mut self, cx: &Cx<'p>, t: TypeId) -> bool {
+        let TypeKind::Path { path, .. } = &cx.ast.ty(t).kind else { return false };
+        let Ok(Entity::Def(d)) = self.a.resolve_path(cx.m, path) else { return false };
+        if !matches!(self.a.def(d).kind, DefKind::Alias(_)) {
+            return false;
+        }
+        let ty = self.alias_ty(d);
+        let shown = src(cx, path.span);
+        let mut diag = match self.a.types.get(ty) {
+            Ty::Error => return true,
+            _ => Diagnostic::new(
+                Stage::Names,
+                Code::E0307,
+                path.span,
+                format!("`{shown}` is a type alias; an `impl` names the type it stands for by its declaration (§4.4)"),
+            )
+            .with_found(shown),
+        };
+        if let Ty::Named(orig, args) = self.a.types.get(ty)
+            && args.is_empty()
+            && let def = self.a.def(*orig)
+            && def.module == cx.m
+            && def.owner.is_none()
+        {
+            diag = diag.with_fix(Fix::replace(format!("write `{}`", def.name), path.span, def.name.clone()));
+        }
+        self.report(cx.def, diag);
+        true
+    }
+
     /// The associated items of the type of an `impl`: of a user type by its
     /// def, of a builtin type by its key; none for another type.
     fn assoc_table(&mut self, def: Option<DefId>, builtin: Option<TyId>) -> Option<&mut HashMap<String, DefId>> {
@@ -428,11 +470,14 @@ impl<'p> Sema<'p> {
         self.heading_clashes(cx.def, cx.m, gs, &cx.generics);
         let mut out = cx.generics.clone();
         // The names of the list, each seen in every bound of it.
-        let listed: Vec<&str> = gs
+        let listed: Vec<(&str, NameKind)> = gs
             .iter()
-            .map(|g| crate::names::param_name(g).name.as_str())
-            .chain(cx.generics.iter().map(|g| g.name.as_str()))
+            .map(|g| (crate::names::param_name(g).name.as_str(), param_kind(g)))
+            .chain(cx.generics.iter().map(|g| (g.name.as_str(), NameKind::of_generic(&g.kind))))
             .collect();
+        // The traits this version does not take as bounds (E0200), after the
+        // E0308 of a name of another kind in the list (§15.1, S-713 A7).
+        let (mut traits, mut wrong) = (Vec::new(), false);
         for g in gs {
             let def = match g {
                 GenericParam::Type { name, bounds } => {
@@ -440,24 +485,26 @@ impl<'p> Sema<'p> {
                     let mut dup = true;
                     let mut unknown = false;
                     // The path of a bound is resolved as any other (§15.1,
-                    // R-278): a trait of the prelude, or a kind constraint.
+                    // R-278): a trait of the prelude, or a kind constraint; a
+                    // user trait is an E0200 (S-719), a name of another kind
+                    // an E0308 (S-713 (c)).
                     for b in bounds {
                         let n = b.path.segments.last().unwrap();
-                        if heading_binds(&b.path, &listed, cx.self_ty.is_some()) {
-                            self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]);
-                            continue;
-                        }
-                        match self.a.resolve_path(cx.m, &b.path) {
-                            Ok(Entity::Builtin(Builtin::Kind(Bound::Dup))) if b.relaxed => dup = false,
-                            Ok(Entity::Builtin(Builtin::Kind(bound))) => bs.push(bound),
-                            Ok(Entity::Builtin(Builtin::Trait(i))) => match TRAITS[i as usize].1 {
+                        match heading_name(self.a, cx.m, &b.path, &listed, cx.self_ty) {
+                            Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => dup = false,
+                            Ok((_, Some(Entity::Builtin(Builtin::Kind(bound))))) => bs.push(bound),
+                            Ok((_, Some(Entity::Builtin(Builtin::Trait(i))))) => match TRAITS[i as usize].1 {
                                 Some(bound) => bs.push(bound),
-                                None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
+                                None => traits.push(n.span),
                             },
-                            // A name that is no trait (`T: I32`), or a user
-                            // trait: the E0308 of the kinds of names is W4-04's
-                            // (also for a parameter, above).
-                            Ok(_) => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
+                            Ok((NameKind::Trait, _)) => traits.push(n.span),
+                            Ok((kind, _)) => {
+                                wrong = true;
+                                self.report(
+                                    cx.def,
+                                    kind_error(&b.path, kind, "a trait or a kind constraint", b.path.span),
+                                );
+                            }
                             // An unknown bound (§18.1, S-689).
                             Err(e) if self.a.unread_path(cx.def, cx.m, &b.path, &e) => unknown = true,
                             Err(e) => self.report(cx.def, e.into_diagnostic()),
@@ -483,6 +530,9 @@ impl<'p> Sema<'p> {
                 }
             };
             out.push(def);
+        }
+        for span in traits.into_iter().filter(|_| !wrong) {
+            self.unsupported(cx.def, span, Feature::TraitBounds, &[]);
         }
         out
     }
@@ -536,15 +586,16 @@ impl<'p> Sema<'p> {
     /// The effects of a row of a signature or a function type
     /// ([`read_effects`]): its errors are reported, and the lowering goes on.
     fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
-        let (set, errors) = read_effects(self.a, cx.def, cx.m, (&cx.generics, cx.self_ty.is_some()), row);
+        let (set, errors) = read_effects(self.a, cx.def, cx.m, (&cx.generics, cx.self_ty), row);
         for d in errors {
             self.report(cx.def, d);
         }
         set
     }
 
-    fn lower_params(&mut self, cx: &Cx<'p>, params: &[Param], in_impl: bool) -> (Option<Mode>, Vec<ParamSig>) {
-        let mut self_mode = None;
+    /// The parameters but `self`, whose mode the names stage has
+    /// (`FnDef::self_mode`).
+    fn lower_params(&mut self, cx: &Cx<'p>, params: &[Param], in_impl: bool) -> Vec<ParamSig> {
         let mut out = Vec::new();
         for (i, p) in params.iter().enumerate() {
             match &p.name {
@@ -560,7 +611,6 @@ impl<'p> Sema<'p> {
                             ),
                         );
                     }
-                    self_mode = Some(p.mode);
                 }
                 name => {
                     let n = match name {
@@ -586,7 +636,7 @@ impl<'p> Sema<'p> {
                 }
             }
         }
-        (self_mode, out)
+        out
     }
 
     fn lower_fn(&mut self, cx: Cx<'p>, id: DefId, f: &onsa_syntax::ast::FnDecl) {
@@ -602,7 +652,7 @@ impl<'p> Sema<'p> {
         let mut cx = cx;
         cx.generics = self.lower_generics(&cx, &f.generics);
         let in_impl = cx.self_ty.is_some();
-        let (self_mode, params) = self.lower_params(&cx, &f.params, in_impl);
+        let params = self.lower_params(&cx, &f.params, in_impl);
         let ret = match f.ret {
             Some(t) => self.lower_type(&cx, t),
             None => self.a.types.unit(),
@@ -627,7 +677,6 @@ impl<'p> Sema<'p> {
         }
         if let DefKind::Fn(fd) = &mut self.a.defs[id.0 as usize].kind {
             fd.generics = cx.generics;
-            fd.self_mode = self_mode;
             fd.params = params;
             fd.ret = ret;
             fd.effects = effects;
@@ -685,27 +734,27 @@ fn src(cx: &Cx<'_>, span: Span) -> String {
 
 /// The one reading of an effect row (§8.1, S-74, D-08), of a signature, of a
 /// function type and of a closure: a single name of an effect variable of
-/// `generics`, else a path resolved as any other (§15.1). `Alloc` (the lang
-/// item) is read; another effect is an E0200 at its name, but in std, which
-/// declares them (S-659); so is a name of another kind, also a parameter of
-/// `generics` or a `Self` that is seen (the bool, [`heading_binds`]). A name
-/// not found is its E0302, with the `use` of the effect std declares of that
-/// name as the candidate (S-659 (3)); a name
-/// the check does not read is left out with no diagnostic (§18.1; read by
-/// `def`, [`Analysis::unread_path`]). The errors go back to the caller,
-/// which reports them.
+/// `generics`, else a path as [`heading_name`] reads it (§15.1). `Alloc` (the
+/// lang item) is read; another effect is an E0200 at its name, but in std,
+/// which declares them (S-659); a name of another kind is an E0308 (S-713
+/// (b)). A name not found is its E0302, with the `use` of the effect std
+/// declares of that name as the candidate (S-659 (3)); a name the check does
+/// not read is left out with no diagnostic (§18.1; read by `def`,
+/// [`Analysis::unread_path`]). The errors go back to the caller, which
+/// reports them.
 // The effects read stay when a name held as an error is left out, as an
 // unknown effect of an open row, and the check goes on (§18.1, S-691).
 pub(crate) fn read_effects(
     a: &mut Analysis,
     def: DefId,
     from: crate::ModId,
-    (generics, self_seen): (&[GenericDef], bool),
+    (generics, self_ty): (&[GenericDef], Option<TyId>),
     row: Option<&EffectRow>,
 ) -> (EffectSet, Vec<Diagnostic>) {
     let mut set = EffectSet::default();
-    let mut errors = Vec::new();
-    let names: Vec<&str> = generics.iter().map(|g| g.name.as_str()).collect();
+    let (mut errors, mut unsupported, mut wrong) = (Vec::new(), Vec::new(), false);
+    let listed: Vec<(&str, NameKind)> =
+        generics.iter().map(|g| (g.name.as_str(), NameKind::of_generic(&g.kind))).collect();
     for p in row.map_or(&[][..], |r| &r.effects[..]) {
         let n = p.segments.last().unwrap();
         let var = generics.iter().position(|g| g.name == n.name && matches!(g.kind, GenericKind::Effect));
@@ -713,20 +762,27 @@ pub(crate) fn read_effects(
             set.vars.push(i as u32);
             continue;
         }
-        let found = if heading_binds(p, &names, self_seen) { None } else { Some(a.resolve_path(from, p)) };
-        match found {
-            Some(Ok(Entity::Def(d))) if Some(d) == a.alloc => set.alloc = true,
-            Some(Ok(Entity::Def(d))) if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) => {
+        match heading_name(a, from, p, &listed, self_ty) {
+            Ok((_, Some(Entity::Def(d)))) if Some(d) == a.alloc => set.alloc = true,
+            Ok((_, Some(Entity::Def(d))))
+                if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
+            {
                 set.other.push(n.name.clone());
             }
-            // Another effect; or a name that is no effect (`uses {I32}`,
-            // `uses {T}`), whose E0308 of the kinds of names is W4-04's.
-            None | Some(Ok(_)) => {
-                errors.push(Feature::Effects.diagnostic(Stage::Names, n.span, &[&n.name]));
+            // Another effect (of a user's `effect`, S-719); or a name that is
+            // no effect (`uses {I32}`, `uses {T}`).
+            Ok((kind, _)) => {
+                match kind {
+                    NameKind::Effect => unsupported.push(Feature::Effects.diagnostic(Stage::Names, n.span, &[&n.name])),
+                    kind => {
+                        wrong = true;
+                        errors.push(kind_error(p, kind, "an effect", p.span));
+                    }
+                }
                 set.other.push(n.name.clone());
             }
-            Some(Err(e)) if a.unread_path(def, from, p, &e) => {}
-            Some(Err(e)) => {
+            Err(e) if a.unread_path(def, from, p, &e) => {}
+            Err(e) => {
                 let fix = match (&e, p.segments.as_slice()) {
                     (crate::ResolveError::NotFound { .. }, [_]) => {
                         a.modules.std_effect_use(from, &n.name, (&a.prelude, &a.defs, &a.builtin_key))
@@ -741,15 +797,52 @@ pub(crate) fn read_effects(
             }
         }
     }
+    // An effect this version does not take after the E0308 of a name of
+    // another kind in the row (§15.1, S-713 A7).
+    errors.extend(unsupported.into_iter().filter(|_| !wrong));
     (set, errors)
 }
 
-/// Whether the head of `p` is a name a heading binds that is no item of a
-/// module: one of `names` (the generic parameters seen), or `Self` where it
-/// is seen (`self_seen`: in an `impl`, §2.2). It is found, so no E0302; in a
-/// bound or an effect row it is a name of another kind (E0200 until the
-/// E0308 of the kinds of names, W4-04).
-fn heading_binds(p: &Path, names: &[&str], self_seen: bool) -> bool {
-    let head = p.segments[0].name.as_str();
-    names.contains(&head) || (self_seen && head == "Self")
+/// The kind of what the path `p` of a bound or an effect row names (§15.1),
+/// and what it names but a parameter of the heading of `listed` (the names a
+/// heading binds that are no item of a module, with their kinds) and an
+/// associated name of a builtin type: through `Self` (`self_ty`) and the
+/// aliases ([`Analysis::path_end`]). A parameter has no members (the E0302
+/// of its head, as in a body).
+fn heading_name(
+    a: &Analysis,
+    from: ModId,
+    p: &Path,
+    listed: &[(&str, NameKind)],
+    self_ty: Option<TyId>,
+) -> Result<(NameKind, Option<Entity>), crate::ResolveError> {
+    let head = &p.segments[0];
+    if let Some(&(_, kind)) = listed.iter().find(|(n, _)| *n == head.name) {
+        return match p.segments.len() {
+            1 => Ok((kind, None)),
+            _ => Err(crate::ResolveError::NotFound { name: head.name.clone(), span: head.span }),
+        };
+    }
+    let end = a.path_end(from, p, self_ty)?;
+    let entity = match end {
+        crate::names::PathEnd::Entity(e) => Some(e),
+        crate::names::PathEnd::Builtin { .. } => None,
+    };
+    Ok((end.kind(a, p.span), entity))
+}
+
+/// E0308 for the path `p` at `span`, of the kind `kind`, where `want` is
+/// (§15.1): the one form of a signature.
+fn kind_error(p: &Path, kind: NameKind, want: &'static str, span: Span) -> Diagnostic {
+    let shown = p.segments.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(".");
+    crate::ResolveError::Kind { shown, span, kind, want }.into_diagnostic()
+}
+
+/// The kind of a parameter of a list of a heading (§15.1).
+fn param_kind(g: &GenericParam) -> NameKind {
+    match g {
+        GenericParam::Type { .. } => NameKind::Type,
+        GenericParam::Const { .. } => NameKind::ConstParam,
+        GenericParam::Effect { .. } => NameKind::Effect,
+    }
 }

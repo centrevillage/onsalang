@@ -215,7 +215,9 @@ impl<'a> Checker<'a> {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = self.a.def(d).clone();
                 match &def.kind {
-                    DefKind::Fn(_) if self.a.heading_failed(d) => Ok(Some(self.a.types.error())),
+                    DefKind::Fn(_) if self.a.heading_failed(d) || crate::names::self_outside_impl(self.a, entity) => {
+                        Ok(Some(self.a.types.error()))
+                    }
                     DefKind::Fn(f) => {
                         if f.self_mode.is_some() {
                             onsa_diag::internal::bug(Some(name.span), "a method as a value the names stage took");

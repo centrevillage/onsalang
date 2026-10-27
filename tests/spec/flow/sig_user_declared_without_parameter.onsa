@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§4.5", "§15.1", "§18.1"]
+
+// S-120 (W4-04 U8b): `Sig`, `Ctl` and `Init` are ordinary names (§11.3). When the program declares one of them
+// as a type that has no type parameter, `Sig[F32]` is not the rate written as a type (E0020 is only for a name
+// that does not resolve, §11.3): the name is found, and the argument that it does not take is the E0412 of
+// the number of arguments (§4.5: "数が宣言と合わなければ E0412"; §15.1: "総称でない型への型引数 … 型引数の数は
+// E0412"). So the unit is not E0020 and the unit is reported once, in the type stage. The uses without the
+// argument are fine. One error per unit (§18.1), so each form is in its own unit.
+
+pub struct Sig {
+  v: F32,
+}
+
+pub struct Ctl {
+  v: F32,
+}
+
+pub enum Init {
+  Zero,
+  Value(F32),
+}
+
+pub fn sig_with_an_argument(x: Sig[F32]) -> F32 {   //~ E0412
+  1.0
+}
+
+pub fn ctl_with_an_argument(x: Ctl[F32]) -> F32 {   //~ E0412
+  1.0
+}
+
+pub fn init_with_an_argument(x: Init[F32]) -> F32 {   //~ E0412
+  1.0
+}
+
+pub fn sig_with_an_argument_in_a_result(x: F32) -> Sig[F32] {   //~ E0412
+  Sig { v: x }
+}
+
+pub struct SigWithAnArgumentInAField {
+  s: Sig[F32],                                      //~ E0412
+}
+
+pub fn sig_without_an_argument(x: Sig, c: Ctl, i: Init) -> F32 {
+  x.v
+}
+
+pub fn sig_without_an_argument_in_a_result(x: F32) -> Sig {
+  Sig { v: x }
+}

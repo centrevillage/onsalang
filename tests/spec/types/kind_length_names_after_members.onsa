@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// W4-04 U8b/i3: the names of a constant expression after a member, the same in a signature and a body.
+//  - A method named through its type (`P.get`, `Str.len`) is no value whatever follows it (§15.1, S-205), so
+//    `P.get.zz()` and `Str.len.zz()` at the callee of a call in a length are its E0308 before the E0417 of
+//    the call (§18.1: the names stage first), as in a body; `P.mk.zz()` (an associated function, a value)
+//    is the E0417 of the call.
+//  - A builtin associated constant or function with a name after it (`F32.PI.x`, `F32.from_bits.x`) is a name
+//    that is no namespace, E0308, as the user's `P.N.x` (§15.1), not "cannot find `PI`".
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub const N: U32 = 3
+
+  pub fn get(self) -> U32 {
+    self.x
+  }
+
+  pub fn mk() -> U32 {
+    1
+  }
+}
+
+// ---- A method before a name, at the callee of a call ----
+
+pub fn method_member_called(x: [F32; P.get.zz()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn method_member_called_with_unknown(x: [F32; P.get.zz(zz)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn method_members_called(x: [F32; P.get.zz.yy()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_method_member_called(x: [F32; Str.len.zz()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn method_member_called_in_a_body(x: F32) -> F32 {
+  let a = [x; P.get.zz()]   //~ E0308
+  a[0]
+}
+
+pub fn function_member_called(x: [F32; P.mk.zz()]) -> F32 {   //~ E0417
+  1.0
+}
+
+// ---- A builtin associated name before a name ----
+
+pub fn builtin_constant_member(x: [F32; F32.PI.x]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_function_member(x: [F32; F32.from_bits.x]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn user_constant_member(x: [F32; P.N.x]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_constant_member_as_type(x: F32.PI.x) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn builtin_constant_member_in_a_body(x: F32) -> F32 {
+  let a = [x; F32.PI.x]   //~ E0308
+  a[0]
+}
+
+pub fn builtin_constant_member_in_an_annotation(y: [F32; 1]) -> F32 {
+  let a: [F32; F32.PI.x] = y   //~ E0308
+  1.0
+}
+
+pub fn main() -> I32 {
+  1
+}

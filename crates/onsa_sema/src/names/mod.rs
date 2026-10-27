@@ -25,6 +25,7 @@ use crate::sig::Sema;
 
 pub(crate) use cycles::ImportGraph;
 pub(crate) use heading::param_name;
+pub(crate) use typed::{BuiltinMember, PathEnd, builtin_member, builtin_ty, self_outside_impl};
 
 /// The names stage, in its order: the tree, the prelude, the items (those
 /// of `std.core` then in the prelude, S-659) and their clashes, each `use` and the clashes of their names, the cycles of

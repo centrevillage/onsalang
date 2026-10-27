@@ -348,7 +348,10 @@
 
 [allow."crates/onsa_syntax/src/foreign.rs"]
 "Copy" = 1
+"Ctl" = 1
 "Dup" = 1
+"Init" = 1
+"Sig" = 1
 
 [allow."crates/onsa_syntax/src/foreign/paths.rs"]
 "Bool" = 1

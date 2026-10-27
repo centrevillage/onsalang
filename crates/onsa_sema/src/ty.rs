@@ -196,6 +196,12 @@ impl Rate {
     pub fn of_clock(name: &str) -> Option<Rate> {
         Rate::ALL.into_iter().find(|r| r.clock() == name)
     }
+
+    /// The rate the name `name` of a rate written as a type names (`Sig`,
+    /// [`onsa_syntax::foreign::RATE_TYPES`], S-120), if it is one.
+    pub fn of_type_name(name: &str) -> Option<Rate> {
+        Rate::ALL.into_iter().zip(onsa_syntax::foreign::RATE_TYPES).find(|&(_, n)| n == name).map(|(r, _)| r)
+    }
 }
 
 /// Function type (§4.1). Captures are not part of the type.

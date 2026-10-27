@@ -1,0 +1,132 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§8.1", "§6.3", "§18.1"]
+
+// S-713, S-103 (W4-04 U8b): the name of a module (the module of the package that a `use` took) is a
+// namespace and not a value, a type, an effect or a trait, so it written in the places of a signature
+// is E0308 (§15.1: "名前は見つかったが、その位置に要る種類でなければ、位置によらず E0308"): the length of
+// an array (§4.5: "値でない名前（型、モジュール、flow、trait、効果など）は E0308"), the effect row (§8.1),
+// a bound (§6.3), a type argument, a const argument, the target of an `impl` ("型でないものを `impl` の対象に
+// する"). A type, a constant and a function of the module written by its path are read by their own kinds:
+// `util.Q` is a type, so it is E0308 where a constant, an effect or a trait is needed and fine where a
+// type is needed; `util.K` is a constant, so it is fine as a length and E0308 as a type; `util.g` is a
+// function, so it is E0417 as a length and E0308 as an effect, a bound or a type. A name that the
+// module does not have is E0302 in the same places (the name is not found).
+// One error per unit (§18.1), so each form is in its own unit; the fine uses of the module's members are
+// the fine units at the end of the file.
+use util
+use util.{Q, Ring}
+
+pub fn module_as_a_length(x: [F32; util]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn module_in_a_row() uses {util} {}             //~ E0308
+
+pub fn module_as_a_bound[T: util](x: T) -> T {      //~ E0308
+  x
+}
+
+pub fn module_as_a_type_argument(o: Option[util]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn module_as_a_const_argument(r: Ring[F32, util]) -> F32 {   //~ E0308
+  1.0
+}
+
+impl util {                                         //~ E0308
+  pub fn nothing(self) -> I32 {
+    1
+  }
+}
+
+pub fn type_of_a_module_as_a_length(x: [F32; util.Q]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_of_a_module_as_a_length(x: [F32; util.g]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn taken_type_as_a_length(x: [F32; Q]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_of_a_module_in_a_row() uses {util.Q} {}   //~ E0308
+
+pub fn function_of_a_module_in_a_row() uses {util.g} {}   //~ E0308
+
+pub fn constant_of_a_module_in_a_row() uses {util.K} {}   //~ E0308
+
+pub fn type_of_a_module_as_a_bound[T: util.Q](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn constant_of_a_module_as_a_bound[T: util.K](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn function_of_a_module_as_a_bound[T: util.g](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn constant_of_a_module_as_a_type_argument(o: Option[util.K]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_of_a_module_as_a_type_argument(o: Option[util.g]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_of_a_module_as_a_const_argument(r: Ring[F32, util.Q]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_of_a_module_as_a_const_argument(r: Ring[F32, util.g]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn constant_of_a_module_as_a_type_argument_of_the_module_type(r: util.Ring[util.K, 4]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn missing_name_as_a_length(x: [F32; util.Nope]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn missing_name_in_a_row() uses {util.Nope} {}  //~ E0302
+
+pub fn missing_name_as_a_bound[T: util.Nope](x: T) -> T {   //~ E0302
+  x
+}
+
+impl util.Nope {                                    //~ E0302
+  pub fn nothing(self) -> I32 {
+    1
+  }
+}
+
+pub fn constant_of_a_module_as_a_length(x: [F32; util.K]) -> F32 {
+  x[0]
+}
+
+pub fn type_of_a_module_as_a_type(q: util.Q) -> I32 {
+  q.x
+}
+
+pub fn taken_type_as_a_type(q: Q) -> I32 {
+  q.x
+}
+
+pub fn type_of_a_module_as_a_type_argument(o: Option[util.Q]) -> F32 {
+  1.0
+}
+
+pub fn type_and_constant_of_a_module_as_arguments(r: Ring[util.Q, util.K]) -> F32 {
+  1.0
+}
+
+pub fn taken_generic_type_with_a_literal(r: Ring[F32, 4]) -> F32 {
+  1.0
+}

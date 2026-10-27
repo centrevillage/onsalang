@@ -1,0 +1,1 @@
+fn d(i:Str)->U32{1+Str.len(s)}

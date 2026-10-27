@@ -1,0 +1,9 @@
+pub struct P {
+  x: F32,
+}
+
+pub type Shorthand = P
+
+impl P {
+  pub fn double(self) -> F32 { self.x * 2.0 }
+}

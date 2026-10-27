@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-713 (a) (W4-04 U8b): the name in an operation of a constant expression (§4.5: "算術の演算子 `+ - * / %`
+// と前置の `-`、括弧") is read by the kind the place needs, as the name alone is (kind_array_lengths.onsa):
+//  - a name that is a value and is not a constant (a function, a parameter, a local binding) is E0417, and
+//    so is a call `g()` (§4.5: "関数の呼び出しは書けない（`const` の初期化式に分ける）", "定数式でないもの
+//    （関数の呼び出し、ローカル変数など）を書くと、位置によらず E0417");
+//  - a name that is not a value (a type, a trait, an effect, a flow) is E0308 (§15.1), and it is the
+//    rule of the version, so it is reported where the name is written whether or not the version
+//    evaluates the operation (§15.1: "要る種類でない名前は E0200 より先に E0308").
+// The operations of constants that are right (`K * 2`) are in array_length_operations_fine.onsa: this
+// version does not evaluate them yet (E0200 in the version, W9-03), so they are not here. The call and the
+// local binding are wrong whatever the version evaluates, so the E0417 of them is not the E0200 of
+// the unsupported expression ("仕様が拒否する規則には、全て本文にコードを書く").
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+}
+
+const K: U32 = 4
+
+fn g() -> U32 {
+  1
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn call_in_a_parameter(x: [F32; g()]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn call_in_an_operation_in_a_parameter(x: [F32; K + g()]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn call_with_an_argument_in_a_parameter(x: [F32; K * g()]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn function_in_an_operation_in_a_parameter(x: [F32; (K + 1) * g]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn type_in_an_operation_in_a_parameter(x: [F32; K * P]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn trait_in_an_operation_in_a_parameter(x: [F32; K + Show]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn effect_in_a_negation_in_a_parameter(x: [F32; K - Alloc]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn flow_in_an_operation_in_a_parameter(x: [F32; K / lp]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_in_parentheses_in_a_parameter(x: [F32; (P)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_in_a_result() -> [F32; K + g] {      //~ E0417
+  [0.0; 4]
+}
+
+pub fn type_in_an_operation_in_a_result() -> [F32; K % P] {   //~ E0308
+  [0.0; 4]
+}
+
+type CallInAnAlias = [F32; g()]                     //~ E0417
+
+type TypeInAnOperationInAnAlias = [F32; K + P]      //~ E0308
+
+pub struct CallInAField {
+  data: [F32; K + g()],                             //~ E0417
+}
+
+pub struct TypeInAnOperationInAField {
+  data: [F32; P * 2],                               //~ E0308
+}
+
+const CALL_IN_A_CONST_TYPE: [F32; g()] = [0.0; 4]   //~ E0417
+
+const TYPE_IN_AN_OPERATION_IN_A_CONST_TYPE: [F32; K * P] = [0.0; 4]   //~ E0308
+
+pub fn call_in_a_repeat() -> F32 {
+  let a = [0.0; g()]                                //~ E0417
+  a[0]
+}
+
+pub fn local_in_an_operation_in_a_repeat(n: U32) -> F32 {
+  let a = [0.0; K + n]                              //~ E0417
+  a[0]
+}
+
+pub fn function_in_an_operation_in_a_repeat() -> F32 {
+  let a = [0.0; K * g]                              //~ E0417
+  a[0]
+}
+
+pub fn type_in_an_operation_in_a_repeat() -> F32 {
+  let a = [0.0; K + P]                              //~ E0308
+  a[0]
+}
+
+pub fn effect_in_an_operation_in_a_repeat() -> F32 {
+  let a = [0.0; Alloc + 1]                          //~ E0308
+  a[0]
+}
+
+pub fn call_in_an_annotation() -> F32 {
+  let _: [F32; g()] = [0.0; 4]                      //~ E0417
+  1.0
+}
+
+pub fn type_in_an_operation_in_an_annotation() -> F32 {
+  let _: [F32; K + P] = [0.0; 4]                    //~ E0308
+  1.0
+}

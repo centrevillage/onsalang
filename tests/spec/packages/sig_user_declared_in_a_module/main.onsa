@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§15.1", "§18.1"]
+
+// S-120 (W4-04 U8b): the E0020 of the rate written as a type (`x: Sig[F32]`) is only for a name that does not
+// resolve (§11.3). `Sig` declared in another module resolves where the program takes it (`use util.{Sig}`,
+// or writes it with the path `util.Sig[F32]`), so it is the type of the program and is not E0020; in a
+// module that does not take it (other.onsa), `Sig` is the name that does not resolve, so it is the rate written
+// as a type and it is E0020 (name stage, §11.3), and not the E0302 of an unknown name (§18.1).
+use util
+use util.{Sig}
+use other
+
+pub fn taken_by_a_use(x: Sig[F32]) -> F32 {
+  x.v
+}
+
+pub fn written_by_a_path(x: util.Sig[F32]) -> F32 {
+  x.v
+}
+
+pub fn taken_in_a_result(x: F32) -> Sig[F32] {
+  Sig { v: x }
+}
+
+pub fn by_path_in_a_result(x: F32) -> util.Sig[F32] {
+  util.Sig { v: x }
+}
+
+pub fn taken_in_an_annotation(x: F32) -> F32 {
+  let s: Sig[F32] = Sig { v: x }
+  s.v
+}

@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// R-302 (W4-04 U8b): the type parameter of a function written as the head of a struct literal (`T { x: 1 }`) is a
+// name that is found, so it is not E0302 ("cannot find", a false word). A type parameter is a type (§15.1: "型パラ
+// メータと `Self` は型"), and a type that is not a struct at the head of a struct literal is a form inside one kind,
+// which is not E0308 (§15.1: "同じ種類の中の形の違い（struct でない型の struct リテラル …）は … E0308 にしない"), so it is
+// the E0401 "is not a struct" of `I32 { x: 1 }` (S-713 B4). A const parameter is a value, not a type, so
+// `M { x: 1 }` is an E0308 (kind_found_names.onsa). One error per unit (§18.1), so each form is in its own unit.
+
+pub fn type_parameter_as_a_head[T](x: T) -> I32 {
+  let _ = T { x: 1 }                                //~ E0401
+  0
+}
+
+pub fn type_parameter_as_a_head_in_a_branch[T](x: T, flag: Bool) -> I32 {
+  if flag {
+    let _ = T { x: 1 }                              //~ E0401
+    1
+  } else {
+    0
+  }
+}
+
+pub fn type_parameter_as_a_head_in_a_closure[T](x: T) -> I32 {
+  let f = fn(n: I32) -> I32 {
+    let _ = T { x: n }                              //~ E0401
+    n
+  }
+  f.(1)
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn impl_parameter_as_a_head(self) -> I32 {
+    let _ = T { x: 1 }                              //~ E0401
+    0
+  }
+}

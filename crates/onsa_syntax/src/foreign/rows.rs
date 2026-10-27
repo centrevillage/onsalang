@@ -986,6 +986,16 @@ pub static ROWS: &[Row] = &[
         rule: "a value is called with `.(`, whatever its type (`f.(x)`); `f(x)` is the call of an item declared with `fn`, and a constant is read without `(…)` (§6.1, §15.1)",
         detect: Detect::Reported,
     },
+    // Found by the names stage at a name of `RATE_TYPES` not found (S-120).
+    Row {
+        id: RowId::RateAsType,
+        name: "rate_as_type",
+        phase: Phase::Names,
+        code: Code::E0020,
+        message: "a rate is no type; it is written as the clock after the type",
+        rule: "the rate of an input or the output of a flow is the clock written after its type (`x: F32 at sample`), not a type; out of a flow no clock is written (§11.3)",
+        detect: Detect::Reported,
+    },
 ];
 
 /// The rows of the data file that no work has made yet (the later works
@@ -997,7 +1007,6 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "float_constant_pattern", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "type_args_method_square", phase: Phase::Types, code: Code::E0020 },
-    Waiting { name: "rate_as_type", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "copy_impl", phase: Phase::Names, code: Code::E0020 },
 ];

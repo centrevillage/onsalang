@@ -170,13 +170,6 @@ note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 �
 
 [[pending]]
 kind = "diag-code"
-target = "E0307"
-reasons = ["S-70", "S-139", "R-104", "S-145", "S-91", "S-137"]
-until = "W5-04"
-note = "impl を書ける場所と対象の規則。別名は W4-04、型引数は W4-05、孤児規則・Float・Ordinal は W5-04"
-
-[[pending]]
-kind = "diag-code"
 target = "E0311"
 reasons = ["R-02", "S-91"]
 until = "W4-05"
@@ -202,13 +195,6 @@ target = "E0411"
 reasons = ["S-98", "R-126"]
 until = "W5-02"
 note = "as で書けない組。修正候補を読みごとに"
-
-[[pending]]
-kind = "diag-code"
-target = "E0417"
-reasons = ["S-103", "S-50", "S-132", "S-109"]
-until = "W7-02"
-note = "定数式でないもの。型の段は W5-08、flow の遅延の長さと par の回数は W7-02（S-132）"
 
 [[pending]]
 kind = "diag-code"
@@ -1128,13 +1114,6 @@ note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。fo
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_sig_rate.onsa"
-reasons = ["S-120"]
-until = "W4-04"
-note = "Sig[F32] の E0020（名前の段）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_call_forms_names.onsa"
 reasons = ["S-191"]
 until = "W4-12"
@@ -1153,13 +1132,6 @@ target = "tests/spec/fixes/pkg_rename/util.onsa:1:8 E0320 fix1"
 reasons = ["S-82", "R-87"]
 until = "W4-04"
 note = "E0320 の候補が他のモジュールの使用を改名せず、main.onsa に E0302 が残る（clean）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0307_alias_impl.onsa"
-reasons = ["S-91"]
-until = "W4-04"
-note = "別名への impl の E0307 の候補"
 
 [[pending]]
 kind = "test-case"
@@ -1611,13 +1583,6 @@ note = "メソッドに付けた [...] の型引数（型の段）"
 
 [[pending]]
 kind = "foreign-form"
-target = "rate_as_type"
-reasons = ["S-120"]
-until = "W4-04"
-note = "Sig[F32] の名前の段"
-
-[[pending]]
-kind = "foreign-form"
 target = "caret_visible"
 reasons = ["S-116"]
 until = "W7-04"
@@ -1665,13 +1630,6 @@ until = "W4-12"
 note = "fn の入出力の型の後ろの at は名前の段の E0821。構文の段が at を読む（W3-09）のが前提"
 
 # --- W3-10: 新しい flow の構文を今の sema へ写した後も通らない事例（W3-10/t の新しい事例と、手順の組）。
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_rate_types.onsa"
-reasons = ["S-120", "S-102"]
-until = "W4-04"
-note = "Sig[F32] / Ctl[F32] / Init[F32] の E0020（名前の段）。W4-04 の前は解けない名前の E0302（W3-10 で prelude から外した）"
 
 [[pending]]
 kind = "fix-contract"
@@ -2303,3 +2261,17 @@ target = "tests/spec/control/pattern_choice_bindings_const_same.onsa"
 reasons = ["S-318", "S-185"]
 until = "W5-09"
 note = "定数を含む選択の枝で名前の集合が揃う正例。定数のパターンが今は E0302「is not a variant」（W5-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/array_length_operations_fine.onsa"
+reasons = ["S-713"]
+until = "W9-03"
+note = "演算を含む定数式の長さの正例が E0200「expressions as array lengths」（W4-04 U8b/t。`type_names/const_exprs_arith.onsa` と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow/sig_user_declared_without_parameter.onsa"
+reasons = ["S-103", "R-258"]
+until = "W4-05"
+note = "型パラメータの無い利用者の `Sig` に型引数を書く形の E0412 が今は E0302（W4-04 U8b/t。型の位置の型引数の数は W4-05 の R-258）"
