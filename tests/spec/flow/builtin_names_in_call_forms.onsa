@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§15.1", "§5.1"]
+
+// The flow builtins are accepted as the callee of their own call form anywhere in a flow's body
+// (§11.4): nested in an expression, in a branch, in a `par`, as an argument, on the right of a
+// `let`, behind `^`. They are not names of a fn, so a fn may bind `prev` or `delay` as a local or a
+// field, and a flow may use names that only start like a builtin (§5.1: the reserved names are the
+// five builtins, not their prefixes).
+
+pub struct Voice {
+  prev: F32,
+  delay: F32,
+}
+
+pub fn fn_binds_builtin_names(v: Voice) -> F32 {
+  let sample_rate = v.prev + v.delay
+  let prev        = sample_rate * 2.0
+  prev
+}
+
+pub rt fn twice(x: F32) -> F32 { x * 2.0 }
+
+pub flow call_forms(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  let b = delay~(x, 2)
+  let c = vdelay~(x, 1.5, 8)
+  let r = sample_rate()
+  twice(a) + b + c + r
+}
+
+pub flow call_forms_in_branches(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 { sample_rate() } else { x }
+  y * 2.0
+}
+
+pub flow call_forms_in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    prev~(x) * sample_rate()
+  }
+  ys[0] + ys[1]
+}
+
+pub flow call_forms_behind_a_caret(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow similar_names(x: F32 at sample) -> F32 at sample {
+  let previous     = prev~(x)
+  let delay_time   = 2.0
+  let sample_rates = sample_rate()
+  previous * delay_time + sample_rates
+}

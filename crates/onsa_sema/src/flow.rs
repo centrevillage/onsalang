@@ -57,11 +57,11 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::unsupported::{Feature, FlowForm};
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
-    Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, Path, RangeEnd, RangeHead, StmtId,
-    StmtKind, UnOp,
+    Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind,
+    UnOp,
 };
 
-use crate::body::{BodyInfo, Checker, Frame, LocalId, LocalKind, R, Target};
+use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
 use crate::consteval::{self, ConstValue};
 use crate::def::{DefKind, FlowInput};
 use crate::resolve::Entity;

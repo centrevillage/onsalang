@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§2.2"]
+
+// `sample_tick()` is a flow builtin (§11.4, §2.2): in the body of a flow it is found as the callee
+// of its own call form, and its value is a `U32`.
+
+pub flow tick_value(x: F32 at sample) -> F32 at sample {
+  let t = sample_tick()
+  x * (t as F32)
+}
+
+pub flow tick_in_an_expression(x: F32 at sample) -> U32 at sample {
+  sample_tick()
+}
+
+pub flow tick_in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    x * (sample_tick() as F32)
+  }
+  ys[0] + ys[1]
+}

@@ -11,8 +11,8 @@
 //! The walk reports the first error of the names of a body (§18.1), and
 //! the types stage does not check a body it reported in. The types stage
 //! reads the record for the names of the expressions, patterns, struct
-//! literals and types of the body; it declares its bindings itself until
-//! W4-04 U3b.
+//! literals and types of the body, and makes its locals from the bindings
+//! of the record.
 
 mod exprs;
 mod paths;
@@ -35,7 +35,7 @@ use crate::{Analysis, DefId, Package, flatten};
 /// A binding of a body: an index of [`BodyNames::bindings`], in the order the
 /// walk declares them: the source order, except that a `let` and a `var`
 /// are declared after their value (`let x = { let y = 1; y }` declares `y`,
-/// then `x`), as the types stage declares.
+/// then `x`). The types stage gives the binding `b` the local `LocalId(b.0)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct BindingId(pub u32);
 
@@ -49,7 +49,9 @@ pub(crate) struct ScopeId(pub u32);
 /// where it stops, an item ([`PathRes::Item`]) whatever its kind; what
 /// follows is a field or a method, which the types stage resolves. A chain
 /// with a name the names stage holds as an error (§18.1, S-692) has no
-/// record at any node, the namespaces before that name included. An
+/// record at any node, the namespaces before that name included. A local
+/// bound twice is the walk's E0304 (§5.1), which stops it there: no use of
+/// the name after it has a record (§18.1). An
 /// expression with no record is one the names stage does not decide (a
 /// literal, an operator, a field of a value), one of a chain held as an
 /// error, or one after the name that stopped the walk.
@@ -78,6 +80,9 @@ pub(crate) struct BodyNames {
     /// captures them by copy, §5.3), in the order of their first read: those
     /// that the anonymous functions inside it read too.
     pub captures: HashMap<ExprId, Vec<BindingId>>,
+    /// A typed hole `_` (E0421, §18.1) to the bindings visible at it, from
+    /// the outermost scope, each in the order of the walk.
+    pub holes: HashMap<ExprId, Vec<BindingId>>,
     /// The types written in the body (an annotation, the type after `as`, a
     /// parameter and the result of an anonymous function, §4.4), lowered once
     /// by the names stage: the type, and the diagnostic of the types stage at
@@ -101,7 +106,10 @@ pub(crate) struct BodyNames {
 
 /// One binding of a body (§5.1).
 #[derive(Debug, Clone)]
-#[allow(dead_code, reason = "the types stage reads the bindings from W4-04 U3b, the E0304 and E0309 from U7a, U7b")]
+#[allow(
+    dead_code,
+    reason = "the E0304, the E0309 and the overlaps of a rename read the sites, the scope and the reads from W4-04 U7a, U7b, U9"
+)]
 pub(crate) struct Binding {
     pub name: String,
     /// The name where it is first bound.
@@ -141,8 +149,9 @@ pub(crate) enum BindingKind {
     ParVar,
 }
 
-/// The root of the value of a binding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The root of the value of a binding; of a binding no pattern makes, the
+/// one key the types stage finds it by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Origin {
     /// A parameter of the function, by its index in the parameters of the
     /// signature (`FnDef::params`, which `self` is not one of).
@@ -226,7 +235,7 @@ pub(crate) struct StructRes {
 
 /// A scope of a body: its parent, and the bindings declared in it in order.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code, reason = "the E0304 and the overlaps of a rename read the tree from W4-04 U7a, U9")]
+#[allow(dead_code, reason = "the overlaps of a rename read the parents from W4-04 U9")]
 pub(crate) struct ScopeInfo {
     pub parent: Option<ScopeId>,
     pub bindings: Vec<BindingId>,
@@ -376,6 +385,11 @@ struct Walker<'a> {
     failure: Option<Fail>,
     /// The types written in the body, in the order of the walk.
     type_sites: Vec<TypeId>,
+    /// While the `let`s of a flow body are declared ahead of it, the one
+    /// declared; and the first stop among them, where the walk stops when
+    /// it reaches its `let` (§18.1: in the order of the text).
+    prescan: Option<StmtId>,
+    flow_stop: Option<(StmtId, Fail)>,
 }
 
 impl<'a> Walker<'a> {
@@ -392,6 +406,8 @@ impl<'a> Walker<'a> {
             choices: Vec::new(),
             failure: None,
             type_sites: Vec::new(),
+            prescan: None,
+            flow_stop: None,
         }
     }
 
@@ -399,6 +415,24 @@ impl<'a> Walker<'a> {
     fn fail(&mut self, why: Fail) -> Stop {
         self.failure = Some(why);
         Stop
+    }
+
+    /// Stop the walk at a name of a pattern, for `why`. In a `let` of a flow
+    /// body declared ahead of it, an E0304 (`overlap`), a name held as an
+    /// error, and any stop after one that waits, wait for that `let`
+    /// instead, and the walk goes on declaring the names of the `let`s (the
+    /// types stage declares them all before the statements, S-692); another
+    /// error of the names stage stops it there, before the statements in
+    /// front of it (R-289).
+    fn fail_at_let(&mut self, why: Fail, overlap: bool) -> W {
+        let waits = overlap || matches!(why, Fail::Held) || self.flow_stop.is_some();
+        match self.prescan {
+            Some(s) if waits => {
+                self.flow_stop.get_or_insert((s, why));
+                Ok(())
+            }
+            _ => Err(self.fail(why)),
+        }
     }
 
     fn src(&self, span: onsa_diag::Span) -> String {
@@ -413,11 +447,11 @@ impl<'a> Walker<'a> {
             match &p.name {
                 ParamName::SelfParam(span) if has_self => {
                     let name = Ident { name: "self".into(), span: *span };
-                    self.declare(&name, BindingKind::SelfParam(p.mode), Origin::SelfParam, None);
+                    self.declare(&name, BindingKind::SelfParam(p.mode), Origin::SelfParam, None)?;
                 }
                 ParamName::SelfParam(_) => {}
                 ParamName::Ident(name) => {
-                    self.declare(name, BindingKind::Param(p.mode), Origin::Param(index), None);
+                    self.declare(name, BindingKind::Param(p.mode), Origin::Param(index), None)?;
                     index += 1;
                 }
                 ParamName::Wild(_) => index += 1,
@@ -429,26 +463,33 @@ impl<'a> Walker<'a> {
     }
 
     /// A flow body (§11.2), in the order the types stage declares: the
-    /// inputs, the names of every `let` of the body, then the body. The walk
-    /// stops at its first assignment: its error is the flow stage's (E0806)
-    /// until W7-04 reports it in the names stage.
+    /// inputs, the names of every `let` of the body, then the body. An E0304
+    /// of a `let`, and a name held as an error in its pattern, stop the walk
+    /// at it, after the errors of the statements before it
+    /// ([`Self::fail_at_let`]). The walk stops at its first assignment: its error is the
+    /// flow stage's (E0806) until W7-04 reports it in the names stage.
     fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
         self.flow = true;
         self.open_scope();
         for (k, input) in inputs.iter().enumerate() {
             let name = Ident { name: input.name.clone(), span: input.span };
-            self.declare(&name, BindingKind::FlowInput, Origin::FlowInput(k as u32), None);
+            self.declare(&name, BindingKind::FlowInput, Origin::FlowInput(k as u32), None)?;
         }
         let ast = self.ast;
         let onsa_syntax::ast::ExprKind::Block(b) = &ast.expr(body).kind else { return self.expr(body) };
         for &s in &b.stmts {
             if let StmtKind::Let { pat, ty, .. } = ast.stmt(s).kind {
+                self.prescan = Some(s);
                 self.pattern(pat, BindingKind::FlowLet, Origin::Let(s))?;
                 self.type_sites.extend(ty);
             }
         }
+        self.prescan = None;
         self.open_scope();
         for &s in &b.stmts {
+            if let Some((_, why)) = self.flow_stop.take_if(|(at, _)| *at == s) {
+                return Err(self.fail(why));
+            }
             match &ast.stmt(s).kind {
                 StmtKind::Let { init, .. } => self.expr(*init)?,
                 _ => self.stmt(s)?,

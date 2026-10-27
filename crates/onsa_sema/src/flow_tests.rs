@@ -285,6 +285,24 @@ fn read_at_match_bindings() {
     assert_eq!(let_rate(f, "m"), (FlowRate::Ctl, true));
 }
 
+/// The kinds of the locals of a flow body, as the table of `flow.rs` gives
+/// them: the inputs first, in their order, as borrowed parameters.
+#[test]
+fn locals_have_the_kinds_of_the_table() {
+    use crate::body::LocalKind;
+    let a = ok(
+        "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par i in 0..<2 { x }\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  p[0] + m\n}\n",
+    );
+    let f = flow(&a, "f");
+    let kinds: Vec<(&str, LocalKind)> = f.body.locals.iter().map(|l| (l.name.as_str(), l.kind)).collect();
+    let borrow = LocalKind::Param(onsa_syntax::ast::Mode::Borrow);
+    assert_eq!(&kinds[..2], &[("x", borrow), ("c", borrow)]);
+    let of = |name: &str| kinds.iter().find(|(n, _)| *n == name).map(|&(_, k)| k);
+    assert_eq!(of("p"), Some(LocalKind::Let));
+    assert_eq!(of("i"), Some(LocalKind::Let));
+    assert_eq!(of("v"), Some(LocalKind::MatchBind));
+}
+
 // ---------------------------------------------------------------- diagnostics
 
 #[test]

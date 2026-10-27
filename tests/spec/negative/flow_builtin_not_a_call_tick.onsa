@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§15.1"]
+// fixes = 0
+
+// `sample_tick` is one of the flow builtins (§11.4), so a use that is not its call form
+// `sample_tick()` is E0308 (§15.1, S-720) in a flow, with no fix candidate, as for `sample_rate`
+// (flow_builtin_not_a_call.onsa). These forms are apart from that file because the current
+// implementation does not find `sample_tick` in a flow at all (its call `sample_tick()` is E0302
+// too, builtin_sample_tick_call.onsa), so they wait for the work that implements the name
+// (tests/pending.toml). One error per unit.
+
+pub flow let_of_sample_tick(x: F32 at sample) -> F32 at sample {
+  let t = sample_tick   //~ E0308
+  x
+}
+
+pub flow callee_of_a_function_value(x: F32 at sample) -> F32 at sample {
+  let t = sample_tick.()   //~ E0308
+  x
+}
+
+pub flow before_a_dot(x: F32 at sample) -> F32 at sample {
+  sample_tick.y   //~ E0308
+}
+
+pub flow in_a_let_type(x: F32 at sample) -> F32 at sample {
+  let t: sample_tick = 1   //~ E0308
+  x
+}
+
+pub flow operand_of_a_sum(x: F32 at sample) -> U32 at sample {
+  sample_tick + 1   //~ E0308
+}
+
+pub flow in_an_input_type(x: sample_tick at sample) -> F32 at sample {   //~ E0308
+  1.0
+}

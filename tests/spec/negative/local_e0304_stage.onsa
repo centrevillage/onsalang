@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+
+// A local binding that overlaps a visible one is the E0304 of the names stage (§5.1, §18.1), so it
+// is reported before an error of the types stage in the same unit, wherever the type error sits in
+// the text: a unit stops at the first error of the earliest stage that finds one (§18.1). Each
+// function is one unit, and each has a type error (E0401) in front of the overlapping binding.
+// W4-04 U3b moves the local E0304 from the types stage to the names stage (tests/pending.toml).
+
+// A second `let` of a name that is still visible.
+pub fn let_after_let() -> U32 {
+  let c: Bool = 1
+  let x = 1
+  let x = 2   //~ E0304
+  x
+}
+
+// A `let` inside a `for` body with the loop variable's name.
+pub fn let_in_for_body(n: U32) -> U32 {
+  let c: Bool = 1
+  var acc = 0
+  for i in 0 ..< n {
+    let i = 1   //~ E0304
+    acc = acc + i
+  }
+  acc
+}
+
+// A `let` with the name of a parameter.
+pub fn let_as_parameter(x: U32) -> U32 {
+  let c: Bool = 1
+  let x = 2   //~ E0304
+  x
+}
+
+// A binding of a `match` arm that overlaps an earlier `let`.
+pub fn arm_binding_over_let(o: Option[U32]) -> U32 {
+  let c: Bool = 1
+  let v = 1
+  match o {
+    Some(v) => v,   //~ E0304
+    None => 0,
+  }
+}
+
+// A `for` variable that overlaps an earlier `let`.
+pub fn for_variable_over_let(n: U32) -> U32 {
+  let c: Bool = 1
+  let i = 0
+  var acc = 0
+  for i in 0 ..< n {   //~ E0304
+    acc = acc + i
+  }
+  acc
+}
+
+// A destructuring `let` whose name overlaps an earlier binding.
+pub fn destructure_over_let(p: (U32, U32)) -> U32 {
+  let c: Bool = 1
+  let a = 1
+  let (a, b) = p   //~ E0304
+  a + b
+}
+
+// A parameter of an anonymous function that overlaps a local of the function around it.
+pub fn closure_parameter_over_let() -> U32 {
+  let c: Bool = 1
+  let k = 1
+  let f = fn(k: U32) -> U32 { k }   //~ E0304
+  f.(2)
+}
+
+// The type error is in the initializer of the overlapping binding itself.
+pub fn type_error_in_the_initializer() -> U32 {
+  let x = 1
+  let x: Bool = 2   //~ E0304
+  x
+}
+
+// Other errors of the types stage in front: a wrong number of arguments (E0412), a field that
+// does not exist (E0413).
+pub fn two(a: U32, b: U32) -> U32 { a + b }
+
+pub fn arity_error_first() -> U32 {
+  let c = two(1)
+  let x = 1
+  let x = 2   //~ E0304
+  x
+}
+
+pub struct Point { a: U32 }
+
+pub fn field_error_first(p: Point) -> U32 {
+  let c = p.zzz
+  let x = 1
+  let x = 2   //~ E0304
+  x
+}
+
+// The overlap is between two bindings of a choice pattern's branch (R-284), with the type error
+// in front.
+pub fn choice_pattern_after_a_type_error(p: (U32, U32)) -> U32 {
+  let c: Bool = 1
+  match p {
+    (x, x) | (x, x) => x,   //~ E0304
+  }
+}

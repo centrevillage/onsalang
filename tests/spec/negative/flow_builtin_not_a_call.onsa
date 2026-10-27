@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§15.1"]
+// fixes = 0
+
+// A name of the flow builtins (`prev` `delay` `vdelay` `sample_rate` `sample_tick`) is found in the
+// heading types and the body of a flow, and is the kind a position needs only as the callee of its
+// own call form (`prev~(e)`, `sample_rate()`). Anywhere else the name is found but is not the needed
+// kind, so it is E0308 (§15.1, §11.4, S-720), and there is no fix candidate. One error per unit, so
+// each form is a flow of its own. W4-04 U3b makes the types stage read these (tests/pending.toml);
+// until then the name is E0302 "cannot find". Outside a flow the names stay E0302
+// (flow_builtin_outside_flow.onsa).
+
+pub fn twice(x: F32) -> F32 { x * 2.0 }
+
+// A value position: the right side of a `let`, an operand, an argument.
+pub flow let_of_sample_rate(x: F32 at sample) -> F32 at sample {
+  let f = sample_rate   //~ E0308
+  x
+}
+
+pub flow let_of_delay(x: F32 at sample) -> F32 at sample {
+  let d = delay   //~ E0308
+  x
+}
+
+pub flow let_of_vdelay(x: F32 at sample) -> F32 at sample {
+  let d = vdelay   //~ E0308
+  x
+}
+
+pub flow operand_of_a_product(x: F32 at sample) -> F32 at sample {
+  prev * x   //~ E0308
+}
+
+pub flow argument_of_a_call(x: F32 at sample) -> F32 at sample {
+  twice(prev)   //~ E0308
+}
+
+// A function value's callee: `.(` calls a value.
+pub flow callee_of_a_function_value(x: F32 at sample) -> F32 at sample {
+  prev.(x)   //~ E0308
+}
+
+pub flow callee_of_a_function_value_without_arguments(x: F32 at sample) -> F32 at sample {
+  let r = sample_rate.()   //~ E0308
+  x * r
+}
+
+// A type position of the body.
+pub flow in_a_let_type(x: F32 at sample) -> F32 at sample {
+  let y: prev = 1.0   //~ E0308
+  x
+}
+
+pub flow in_an_as_type(x: F32 at sample) -> F32 at sample {
+  let y = x as delay   //~ E0308
+  x
+}
+
+// Before a `.`: the name is not a namespace.
+pub flow before_a_dot(x: F32 at sample) -> F32 at sample {
+  prev.y   //~ E0308
+}
+
+pub flow before_a_method_call(x: F32 at sample) -> F32 at sample {
+  sample_rate.sqrt()   //~ E0308
+}
+
+// A pattern.
+pub flow in_a_pattern(x: F32 at sample) -> F32 at sample {
+  match x {
+    prev(z) => z,   //~ E0308
+    _ => 0.0,
+  }
+}
+
+// After `^`.
+pub flow after_a_caret(x: F32 at sample) -> F32 at sample {
+  prev~(^prev)   //~ E0308
+}
+
+// The type position of a flow's heading.
+pub flow in_an_input_type(x: prev at sample) -> F32 at sample {   //~ E0308
+  1.0
+}
+
+pub flow in_the_output_type(x: F32 at sample) -> sample_rate at sample {   //~ E0308
+  x
+}
+
+pub flow in_an_input_type_of_a_vdelay(x: vdelay at sample) -> F32 at sample {   //~ E0308
+  1.0
+}
+
+// Combined with the other forms of the flow around.
+pub flow inside_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    x * delay   //~ E0308
+  }
+  ys[0]
+}
+
+pub flow inside_a_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { x * sample_rate } else { x }   //~ E0308
+}
+
+pub flow in_the_else_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { x } else { vdelay }   //~ E0308
+}

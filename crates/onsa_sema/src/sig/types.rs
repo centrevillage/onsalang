@@ -3,6 +3,7 @@
 //! a body.
 
 use super::*;
+use crate::ResolveError;
 
 impl<'p> Sema<'p> {
     // ------------------------------------------------------------ types
@@ -91,7 +92,8 @@ impl<'p> Sema<'p> {
                     // error type, with no diagnostic.
                     Err(e) if self.a.unread_path(cx.def, cx.m, path, &e) => return self.a.types.error(),
                     Err(e) => {
-                        self.report(cx.def, e.into_diagnostic());
+                        let d = self.flow_name_as_type(cx, path, &e).unwrap_or_else(|| e.into_diagnostic());
+                        self.report(cx.def, d);
                         return self.a.types.error();
                     }
                 };
@@ -130,6 +132,19 @@ impl<'p> Sema<'p> {
                 self.a.types.error()
             }
         }
+    }
+
+    /// E0308 for a builtin name of a flow (§11.4, S-720) the head of `path`
+    /// names in a type of a flow, its heading or its body, where no item or
+    /// `use` takes it (`x: prev at sample`; what `err` did not find).
+    fn flow_name_as_type(&self, cx: &Cx<'p>, path: &Path, err: &ResolveError) -> Option<Diagnostic> {
+        let head = &path.segments[0];
+        let b = crate::flow_names::FlowBuiltin::named(&head.name)?;
+        let in_flow = matches!(self.a.def(cx.def).kind, DefKind::Flow(_));
+        if !in_flow || !matches!(err, ResolveError::NotFound { name, .. } if *name == head.name) {
+            return None;
+        }
+        Some(b.misplaced(path.segments.iter().map(|s| s.span), cx.text))
     }
 
     /// One type argument (S-24). `expect_const`: `Some(true)` for a `const`

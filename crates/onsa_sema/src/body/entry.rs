@@ -7,18 +7,18 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ entry points
 
     pub(super) fn check_fn_body(&mut self, body: ExprId, ret: TyId) {
-        self.frames.push(Frame { local_base: 0, ret, loop_depth: 0, captures: Vec::new() });
-        self.push_scope();
+        self.frames.push(Frame { ret, loop_depth: 0 });
         let r = (|| -> R<()> {
             self.bind_params()?;
             self.with_why("the result of the function".into(), ret, |ck| ck.check_expr(body, Some(ret)))?;
             Ok(())
         })();
         let _ = r;
-        self.pop_scope();
         self.frames.pop();
     }
 
+    /// The types of the parameters, from the signature (the bindings are
+    /// the record's).
     fn bind_params(&mut self) -> R<()> {
         let def = self.a.defs[self.def.0 as usize].clone();
         let DefKind::Fn(f) = &def.kind else { return Ok(()) };
@@ -31,18 +31,18 @@ impl<'a> Checker<'a> {
             },
             _ => Vec::new(),
         };
-        let mut sig_params = f.params.iter();
+        let mut sig_params = (0..).zip(f.params.iter());
         for p in &params {
             match &p.name {
                 ParamName::SelfParam(span) => {
                     let Some(st) = self.self_ty else { continue };
-                    let ident = Ident { name: "self".into(), span: *span };
-                    self.declare(&ident, st, LocalKind::SelfParam(p.mode), false)?;
+                    let id = self.local_of(Origin::SelfParam)?;
+                    self.bind_local(id, st, false, *span)?;
                 }
-                ParamName::Ident(id) => {
-                    let Some(sig) = sig_params.next() else { continue };
-                    let ty = sig.ty;
-                    self.declare(id, ty, LocalKind::Param(p.mode), p.mode == Mode::Borrow)?;
+                ParamName::Ident(name) => {
+                    let Some((k, sig)) = sig_params.next() else { continue };
+                    let id = self.local_of(Origin::Param(k))?;
+                    self.bind_local(id, sig.ty, p.mode == Mode::Borrow, name.span)?;
                 }
                 ParamName::Wild(_) => {
                     sig_params.next();
@@ -53,8 +53,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn check_const(&mut self, value: ExprId, ty: TyId) {
-        self.frames.push(Frame { local_base: 0, ret: ty, loop_depth: 0, captures: Vec::new() });
-        self.push_scope();
+        self.frames.push(Frame { ret: ty, loop_depth: 0 });
         let r = (|| -> R<()> {
             self.check_expr(value, Some(ty))?;
             // E0407: the result must be Copy (static Shared placement is phase 2).
@@ -72,7 +71,6 @@ impl<'a> Checker<'a> {
             Ok(())
         })();
         let _ = r;
-        self.pop_scope();
         self.frames.pop();
         // The literals first (E0408, E0401 of `-` on an unsigned type): the evaluation
         // below reads the values they denote.

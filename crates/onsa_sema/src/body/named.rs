@@ -1,9 +1,9 @@
 //! The names of a body as the names stage resolved them
 //! ([`crate::names::body::BodyNames`]): the values they name, the type of a
 //! field, and the types written in the body. The types stage reads the
-//! record and resolves no name of its own (D-15), except the locals of the
-//! holes of a string (W4-04 U4) and the names the flow stage reads
-//! (`flow/check.rs`, W4-04 U3b).
+//! record and resolves no name of its own (D-15), except the errors the
+//! flow stage reports at the callee of an instance and after `^` (W4-12,
+//! W7-04: `flow/check.rs`, `flow_map.rs`).
 
 use super::*;
 use crate::names::body::PathRes;
@@ -28,7 +28,7 @@ impl<'a> Checker<'a> {
         let span = self.expr(e).span;
         let t = match r {
             PathRes::Local(b) => {
-                let id = self.read_local(LocalId(b.0));
+                let id = LocalId(b.0);
                 if self.flow.is_some() {
                     self.flow_use_local(id, span)?;
                 }
@@ -132,38 +132,6 @@ impl<'a> Checker<'a> {
             Some((ty, None)) => Ok(ty),
             None => Err(self.held_stop()),
         }
-    }
-
-    // ------------------------------------------- read by the flow stage
-
-    /// `a.b.c` as a chain of identifiers with the expression of each prefix
-    /// (the flow stage's until W4-04 U3b).
-    pub(crate) fn name_chain(&self, e: ExprId) -> Option<Vec<(ExprId, Ident)>> {
-        let mut out = Vec::new();
-        let mut cur = e;
-        loop {
-            match &self.expr(cur).kind {
-                ExprKind::Field { base, name } => {
-                    out.push((cur, name.clone()));
-                    cur = *base;
-                }
-                ExprKind::Path(p) if p.segments.len() == 1 => {
-                    out.push((cur, p.segments[0].clone()));
-                    break;
-                }
-                _ => return None,
-            }
-        }
-        out.reverse();
-        Some(out)
-    }
-
-    /// Whether `name` is a local, `self` or a const parameter here (the flow
-    /// stage's until W4-04 U3b).
-    pub(crate) fn is_local_head(&mut self, name: &str) -> bool {
-        name == "self"
-            || self.lookup_local(name).is_some()
-            || self.generics.iter().any(|g| g.name == name && matches!(g.kind, GenericKind::Const(_)))
     }
 
     /// Type of an entity used as a value (`None` when it is none,

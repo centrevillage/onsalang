@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§7"]
+
+// R-284: binding the same name twice in one branch of a choice pattern is E0304 (§5.1: no
+// shadowing, and a pattern's names are bindings, §7). The branches of a choice bind the same set of
+// names (`(x, 0) | (0, x)`), but inside one branch a name is still bound once. Without a choice
+// `let (x, x) = p` is E0304 already (pattern_choice_dup_plain.onsa). The error is at the second
+// binding of the name. One error per function. The binding is checked in the names stage (W4-04
+// U3b, tests/pending.toml); the implementation of dev 07f71e4 ends these forms with an internal
+// error (index out of bounds), not the exit 0 that R-284 describes.
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+pub enum Slot {
+  A(U32, U32),
+  B(U32, U32),
+}
+
+pub fn same_name_in_both_branches(p: (U32, U32)) -> U32 {
+  match p {
+    (x, x) | (x, x) => x,   //~ E0304
+  }
+}
+
+// The duplicate is only in the later branch; both branches bind the set {x}.
+pub fn duplicate_in_the_later_branch(p: (U32, U32)) -> U32 {
+  match p {
+    (x, 0) | (x, x) => x,   //~ E0304
+    _ => 0,
+  }
+}
+
+// The duplicate is only in the first branch.
+pub fn duplicate_in_the_first_branch(p: (U32, U32)) -> U32 {
+  match p {
+    (x, x) | (0, x) => x,   //~ E0304
+    _ => 0,
+  }
+}
+
+pub fn three_branches(p: (U32, U32)) -> U32 {
+  match p {
+    (x, 0) | (0, x) | (x, x) => x,   //~ E0304
+    _ => 0,
+  }
+}
+
+pub fn struct_pattern(p: Pair) -> U32 {
+  match p {
+    Pair { a: x, b: x } | Pair { a: x, b: x } => x,   //~ E0304
+  }
+}
+
+pub fn nested_in_a_variant(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    Some((x, x)) | Some((x, x)) => x,   //~ E0304
+    None => 0,
+  }
+}
+
+pub fn variants_of_an_enum(s: Slot) -> U32 {
+  match s {
+    Slot.A(x, x) | Slot.B(x, x) => x,   //~ E0304
+  }
+}
+
+// A choice nested in a pattern, with the duplicate inside one of its branches.
+pub fn choice_inside_a_tuple(p: (U32, (U32, U32))) -> U32 {
+  match p {
+    (y, (x, x) | (x, 0)) => y + x,   //~ E0304
+    _ => 0,
+  }
+}

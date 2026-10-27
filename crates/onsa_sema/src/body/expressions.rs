@@ -33,8 +33,8 @@ impl<'a> Checker<'a> {
                 // Reported at the end of the body (§18.1), once later statements
                 // have had the chance to decide the type.
                 let t = expected.unwrap_or_else(|| self.fresh());
-                let visible: Vec<LocalId> =
-                    self.scopes.iter().flat_map(|s| s.names.iter().map(|(_, id)| *id)).collect();
+                let Some(visible) = self.names.holes.get(&e) else { return Err(self.held_stop()) };
+                let visible = visible.iter().map(|b| LocalId(b.0)).collect();
                 self.defer(span, t, DeferredKind::Hole { visible });
                 Ok(self.record(e, t))
             }
@@ -335,10 +335,15 @@ impl<'a> Checker<'a> {
             Lit::Char(_) => Ok(self.a.types.intern(Ty::Char)),
             Lit::Bool(_) => Ok(self.bool_()),
             Lit::Str(s) => {
-                for seg in &s.segments {
+                for (k, seg) in (0..).zip(&s.segments) {
                     if let StrSeg::Interp(path) = seg {
                         let head = &path.segments[0];
-                        let Some(id) = self.lookup_local(&head.name) else {
+                        // The locals alone until W4-04 U4.
+                        let local = match self.names.interp.get(&(e, k)).and_then(|r| r.first()) {
+                            Some((0, PathRes::Local(b))) => Some(LocalId(b.0)),
+                            _ => None,
+                        };
+                        let Some(id) = local else {
                             return Err(self.name_err(
                                 Code::E0302,
                                 head.span,
@@ -482,7 +487,6 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn check_block(&mut self, b: &Block, expected: Option<TyId>) -> R<TyId> {
-        self.push_scope();
         if let Some(f) = &mut self.flow {
             f.depth += 1;
         }
@@ -505,7 +509,6 @@ impl<'a> Checker<'a> {
         if let Some(f) = &mut self.flow {
             f.depth -= 1;
         }
-        self.pop_scope();
         r
     }
 
@@ -517,9 +520,8 @@ impl<'a> Checker<'a> {
         let mut result: Option<TyId> = expected;
         let mut rows: Vec<Vec<P>> = Vec::new();
         for arm in arms {
-            self.push_scope();
             let r = (|| -> R<()> {
-                let p = self.bind_pat(arm.pat, st, false, borrow, LocalKind::MatchBind)?;
+                let p = self.bind_pat(arm.pat, st, false, borrow)?;
                 if let Some(g) = arm.guard {
                     let bool_ = self.bool_();
                     self.check_expr(g, Some(bool_))?;
@@ -537,7 +539,6 @@ impl<'a> Checker<'a> {
                 }
                 Ok(())
             })();
-            self.pop_scope();
             r?;
         }
         // SPEC-GAP(S-260): the variants of an enum whose unit failed in the
@@ -635,16 +636,15 @@ impl<'a> Checker<'a> {
             None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
         };
         let rt = exp_fn.as_ref().map(|f| f.rt).unwrap_or(false);
-        // The body runs in its own frame: `return` targets the closure, captures are recorded.
-        let frame =
-            Frame { local_base: self.info.locals.len() as u32, ret: ret_ty, loop_depth: 0, captures: Vec::new() };
-        self.frames.push(frame);
-        self.push_scope();
+        // The body runs in its own frame: `return` targets the closure (its
+        // captures are the record's, §5.3).
+        self.frames.push(Frame { ret: ret_ty, loop_depth: 0 });
         let r = (|| -> R<()> {
-            for (p, (_, t)) in params.iter().zip(&ptys) {
+            for (k, (p, (_, t))) in (0..).zip(params.iter().zip(&ptys)) {
                 match &p.name {
                     ParamName::Ident(id) => {
-                        self.declare(id, *t, LocalKind::ClosureParam(p.mode), p.mode == Mode::Borrow)?;
+                        let local = self.local_of(Origin::Closure { closure: e, param: k })?;
+                        self.bind_local(local, *t, p.mode == Mode::Borrow, id.span)?;
                     }
                     ParamName::SelfParam(s) => {
                         return Err(self.err(Code::E0002, *s, "an anonymous function has no `self`"));
@@ -655,10 +655,8 @@ impl<'a> Checker<'a> {
             self.check_expr(body, Some(ret_ty))?;
             Ok(())
         })();
-        self.pop_scope();
-        let frame = self.frames.pop().unwrap();
+        self.frames.pop();
         r?;
-        self.info.captures.insert(e, frame.captures);
         Ok(self.a.types.intern(Ty::Fn(FnTy { rt, params: ptys, ret: ret_ty, effects })))
     }
 

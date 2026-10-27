@@ -2,9 +2,8 @@
 //! their numbers, the anonymous functions and their captures, the sites of
 //! the bindings of `match`, `for` and a choice, the origins, the scopes, the
 //! holes of a string, a body the walk stops in, the chains of names, the
-//! paths of patterns and struct literals, and a flow body. The last test
-//! holds the record against the tables of the types stage until the types
-//! stage reads it (W4-04 U3b removes it).
+//! paths of patterns and struct literals, a flow body, the local E0304 and
+//! the builtin names of a flow written where they are not called (S-720).
 
 use onsa_diag::FileId;
 use onsa_syntax::ast::{ExprKind, Mode, PatKind};
@@ -102,7 +101,7 @@ fn anonymous_functions_capture_what_they_and_those_inside_them_read() {
 
 #[test]
 fn the_branches_of_a_choice_bind_one_binding_with_a_site_each() {
-    let src = "pub fn n(q: ((I32, I32), I32)) -> I32 {\n  match q {\n    ((x, 0) | (0, x), 1) | ((x, 1) | (1, x), 2) => x,\n    (y, _) => 0,\n  }\n}\npub fn s() -> I32 {\n  var t = 0\n  for i in 0..<4 {\n    t = t + i\n  }\n  let (u, u) = (1, 2)\n  t\n}\n";
+    let src = "pub fn n(q: ((I32, I32), I32)) -> I32 {\n  match q {\n    ((x, 0) | (0, x), 1) | ((x, 1) | (1, x), 2) => x,\n    (y, _) => 0,\n  }\n}\npub fn s() -> I32 {\n  var t = 0\n  for i in 0..<4 {\n    t = t + i\n  }\n  t\n}\n";
     let (a, module) = analysis(src);
     let ast = &module.parsed.ast;
     let n = names(&a, "n");
@@ -123,15 +122,53 @@ fn the_branches_of_a_choice_bind_one_binding_with_a_site_each() {
     assert_eq!(n.scopes[sx.0 as usize].parent, n.scopes[sy.0 as usize].parent);
 
     let s = names(&a, "s");
-    assert_eq!(binding_names(s), ["t", "i", "u", "u"]);
+    assert_eq!(binding_names(s), ["t", "i"]);
     let i = &s.bindings[1];
     assert_eq!(i.kind, BindingKind::For { moved: false });
     assert!(matches!(i.origin, Origin::For(_)));
     assert_eq!(i.sites.len(), 1);
     // `t` is read twice (`t + i` and the result), assigned once.
     assert_eq!((s.bindings[0].reads, i.reads), (2, 1));
-    // Two bindings of one name in one pattern are two bindings (E0304).
-    assert_ne!(s.bindings[2].sites, s.bindings[3].sites);
+}
+
+/// The codes and lines of the diagnostics of `src`.
+fn reported(a: &Analysis, module: &Module) -> Vec<(onsa_diag::Code, u32)> {
+    let line = |at: u32| module.text[..at as usize].matches('\n').count() as u32 + 1;
+    a.diagnostics.iter().map(|d| (d.code, line(d.span.start))).collect()
+}
+
+#[test]
+fn a_local_bound_twice_is_the_e0304_of_the_names_stage_where_its_second_binding_is() {
+    // Before a type error of the unit (§18.1); in one branch of a choice
+    // (R-284); a `let` of a flow at its `let`, after the errors before it.
+    let src = "pub fn f() -> I32 {\n  let c: Bool = 1\n  let x = 1\n  let x = 2\n  x\n}\n\
+               pub fn g(p: (I32, I32)) -> I32 {\n  match p {\n    (x, x) | (x, x) => x,\n  }\n}\n\
+               pub fn h(p: (I32, I32)) -> I32 {\n  match p {\n    (x, 0) | (0, x) => x,\n    (y, _) => y,\n  }\n}\n\
+               pub flow k(a: F32 at sample) -> F32 at sample {\n  let b = nope\n  let b = a\n  b\n}\n\
+               pub flow l(a: F32 at sample) -> F32 at sample {\n  let b = a\n  let a = b\n  a\n}\n";
+    let (a, module) = analysis(src);
+    use onsa_diag::Code::{E0302, E0304};
+    assert_eq!(reported(&a, &module), [(E0304, 4), (E0304, 9), (E0302, 19), (E0304, 25)]);
+    let g = names(&a, "g");
+    assert_eq!(binding_names(g), ["p", "x"]);
+    assert!(g.reported && !g.complete);
+    assert!(names(&a, "h").complete);
+}
+
+#[test]
+fn a_builtin_name_of_a_flow_is_e0308_but_as_the_callee_of_its_call() {
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  let y = prev~(x)\n  let r = sample_rate()\n  y * r\n}\n\
+               pub flow g(x: F32 at sample) -> F32 at sample {\n  let y = prev * x\n  y\n}\n\
+               pub flow h(x: F32 at sample) -> F32 at sample {\n  let y = sample_rate.sqrt()\n  y\n}\n\
+               pub flow k(x: F32 at sample) -> F32 at sample {\n  let y = prev~(^prev)\n  y\n}\n\
+               pub fn m() -> F32 {\n  sample_rate()\n}\n";
+    let (a, module) = analysis(src);
+    use onsa_diag::Code::{E0302, E0308};
+    assert_eq!(reported(&a, &module), [(E0308, 7), (E0308, 11), (E0308, 15), (E0302, 19)]);
+    let f = names(&a, "f");
+    assert!(f.complete);
+    let callees = f.paths.values().filter(|r| matches!(r, PathRes::FlowBuiltin(_))).count();
+    assert_eq!(callees, 2);
 }
 
 #[test]
@@ -343,294 +380,4 @@ fn an_error_of_the_names_stage_in_a_type_of_the_body_comes_before_one_of_the_typ
     assert_eq!(codes, [onsa_diag::Code::E0302], "{:?}", a.diagnostics);
     let n = names(&a, "f");
     assert!(n.reported && !n.complete);
-}
-
-// ------------------------------------------------ against the types stage
-
-/// The record of a name and the target the types stage gives it are the
-/// same item (of an associated constant of a builtin type, the types stage
-/// keeps the type of the constant).
-fn same(types: &mut crate::ty::Types, t: &Target, r: &PathRes) -> bool {
-    use crate::resolve::Entity::{Builtin, Def, Member, Variant};
-    match (t, r) {
-        (Target::Local(l), PathRes::Local(b)) => l.0 == b.0,
-        (Target::ConstParam(i), PathRes::ConstParam(j)) => i == j,
-        (Target::Fn { def, .. } | Target::Const(def), PathRes::Item { entity: Def(d) | Member(d), .. }) => def == d,
-        (Target::Variant { def, index }, PathRes::Item { entity: Variant(d, i), .. }) => (def, index) == (d, i),
-        (Target::Prelude(b), PathRes::Item { entity: Builtin(c), .. }) => b == c,
-        (Target::BuiltinConst { ty, name }, PathRes::BuiltinAssoc { ty: t, name: n }) => {
-            name == n && crate::builtin::assoc_const(types, *t, n) == Some(*ty)
-        }
-        (Target::BuiltinMethod { recv, name, .. }, PathRes::BuiltinAssoc { ty, name: n }) => (recv, name) == (ty, n),
-        _ => false,
-    }
-}
-
-/// The differences of the record of each body of `pkg` and its
-/// dependencies from the tables of the types stage: the bindings (names,
-/// kinds), the patterns that bind, the targets of every form, the captures,
-/// the constructors of the patterns and the structs of the literals. A
-/// capture the types stage misses is no difference when an anonymous
-/// function inside reads it (R-283).
-fn differences(pkg: &Package, counts: &mut [u32; 5], out: &mut Vec<String>) {
-    use onsa_syntax::ast::{ExprId, ExprKind};
-    let mut a = analyze(pkg);
-    // The types, apart, to ask for the type of a constant.
-    let mut types = std::mem::take(&mut a.types);
-    let a = a;
-    let modules_of = crate::flatten(pkg);
-    let modules: Vec<&Module> = modules_of.iter().flat_map(|p| &p.modules).collect();
-    let module_of = |m: crate::ModId| {
-        let file = a.modules.get(m).file.expect("a module of a file");
-        *modules.iter().find(|x| x.file == file).expect("the module of the file")
-    };
-    let mut diff = |what: String| out.push(what);
-    let body_of = |id: &DefId| a.bodies.get(id).or_else(|| a.flows.get(id).map(|f| &f.body));
-    let typed = a.bodies.keys().chain(a.flows.keys());
-    for id in typed.filter(|id| !a.names.contains_key(id)) {
-        diff(format!("{}: no record", a.def(*id).name));
-    }
-    let mut all_complete = a.failed.is_empty();
-    for (id, n) in &a.names {
-        let name = &a.def(*id).name;
-        let ast = &module_of(a.def(*id).module).parsed.ast;
-        let Some(b) = body_of(id) else {
-            diff(format!("{name}: a record of no body"));
-            continue;
-        };
-        counts[0] += 1;
-        // The bodies of the package of the case, not of std (the last one).
-        counts[4] += (a.modules.get(a.def(*id).module).pkg + 1 == modules_of.len()) as u32;
-        let full = b.complete && n.complete;
-        all_complete &= full;
-        // The bindings: those of the types stage, in its order (in a
-        // complete body, all of them).
-        let k = b.locals.len().min(n.bindings.len());
-        let kinds = (b.locals.iter().zip(&n.bindings)).all(|(l, x)| {
-            use crate::body::LocalKind as L;
-            l.name == x.name
-                && match (l.kind, x.kind) {
-                    (L::Param(p), BindingKind::Param(q))
-                    | (L::SelfParam(p), BindingKind::SelfParam(q))
-                    | (L::ClosureParam(p), BindingKind::ClosureParam(q)) => p == q,
-                    (L::Param(p), BindingKind::FlowInput) => p == Mode::Borrow,
-                    (L::Let, BindingKind::Let | BindingKind::FlowLet | BindingKind::ParVar) => true,
-                    (L::For { moved: p }, BindingKind::For { moved: q }) => p == q,
-                    (l, x) => matches!((l, x), (L::Var, BindingKind::Var) | (L::MatchBind, BindingKind::MatchBind)),
-                }
-        });
-        if !kinds || (full && b.locals.len() != n.bindings.len()) {
-            diff(format!("{name}: bindings {:?} {:?}", &b.locals[..k], &n.bindings[..k]));
-            continue;
-        }
-        for (p, l) in &b.pat_locals {
-            match n.pats.get(p) {
-                Some(PatRes::Bind(x)) if x.0 == l.0 && n.bindings[x.0 as usize].sites.contains(p) => {}
-                None if !n.complete => {}
-                other => diff(format!("{name}: pattern {p:?} {l:?} {other:?}")),
-            }
-        }
-        // The targets: of a call at its callee, of a name at its node.
-        let callee_of = |e: &ExprId| match &ast.expr(*e).kind {
-            ExprKind::Call { callee, .. } => Some(*callee),
-            _ => None,
-        };
-        let mut calls = std::collections::HashMap::new();
-        for (e, t) in &b.targets {
-            counts[1] += 1;
-            let (at, t) = match (callee_of(e), t) {
-                // A function value (`f(x)`, `v.(x)`): its callee is a name of its own.
-                (Some(_), Target::Value) => continue,
-                (Some(c), t) => {
-                    calls.insert(c, t);
-                    (c, t)
-                }
-                (None, t) => (*e, t),
-            };
-            match (n.paths.get(&at), t) {
-                (Some(r), t) if same(&mut types, t, r) => {}
-                // A method of a value (not of a namespace, `F32.from_bits`).
-                (None, Target::Method { .. } | Target::BuiltinMethod { .. })
-                    if !matches!(&ast.expr(at).kind, ExprKind::Field { base, .. }
-                        if matches!(n.paths.get(base), Some(PathRes::Namespace(_)))) => {}
-                (None, _) if !n.complete => {}
-                (r, t) => diff(format!("{name}: target {e:?} {t:?} {r:?}")),
-            }
-        }
-        for (e, r) in n.paths.iter().filter(|_| full) {
-            let t = b.targets.get(e).or_else(|| calls.get(e).copied());
-            match (r, t) {
-                (PathRes::Namespace(_) | PathRes::FlowBuiltin(_), None) => {}
-                (_, Some(t)) if same(&mut types, t, r) => {}
-                // An instance of a flow (`f~(x)`) has no target, nor has a
-                // def this version does not support or a syntax error cut
-                // (its uses are errors with no diagnostic, S-260).
-                (PathRes::Item { entity: Entity::Def(d), .. }, None)
-                    if matches!(a.def(*d).kind, crate::DefKind::Flow(_) | crate::DefKind::Unsupported)
-                        || a.failed.contains_key(d) => {}
-                (r, t) => diff(format!("{name}: record {e:?} {r:?} {t:?}")),
-            }
-        }
-        if full {
-            let inside = |outer: onsa_diag::Span, s: onsa_diag::Span| outer.start <= s.start && s.end <= outer.end;
-            let keys = |c: &mut dyn Iterator<Item = &ExprId>| {
-                let mut k: Vec<u32> = c.map(|e| e.0).collect();
-                k.sort();
-                k
-            };
-            let (theirs, mine) = (keys(&mut b.captures.keys()), keys(&mut n.captures.keys()));
-            if theirs != mine {
-                diff(format!("{name}: anonymous functions {theirs:?} {mine:?}"));
-            }
-            for (c, mine) in &n.captures {
-                let span = ast.expr(*c).span;
-                let mut want: Vec<u32> = (b.captures.iter())
-                    .filter(|(d, _)| inside(span, ast.expr(**d).span))
-                    .flat_map(|(_, ls)| ls.iter().map(|l| l.0))
-                    .filter(|&l| !inside(span, n.bindings[l as usize].span))
-                    .collect();
-                let mut got: Vec<u32> = mine.iter().map(|x| x.0).collect();
-                let theirs: Vec<u32> = b.captures[c].iter().map(|l| l.0).collect();
-                want.sort();
-                want.dedup();
-                got.sort();
-                if want != got || !theirs.iter().all(|l| got.contains(l)) {
-                    diff(format!("{name}: captures {c:?} {theirs:?} {mine:?}"));
-                }
-            }
-        }
-    }
-    // The paths of patterns and struct literals, as the types stage resolves
-    // them; in a module whose bodies are all complete, every one it resolves.
-    let record = |m: crate::ModId, literal: bool, k: u32| {
-        let of_module = a.names.iter().filter(|(d, _)| a.def(**d).module == m);
-        of_module.into_iter().find_map(|(_, n)| match literal {
-            true => n.structs.get(&ExprId(k)).map(|s| match s.entity {
-                Entity::Member(d) => Entity::Def(d),
-                e => e,
-            }),
-            false => match n.pats.get(&onsa_syntax::ast::PatId(k)) {
-                Some(PatRes::Ctor { entity, .. }) => Some(*entity),
-                _ => None,
-            },
-        })
-    };
-    let paths = modules.iter().flat_map(|module| {
-        let m = a.module_of_file(module.file).expect("the module");
-        let ast = &module.parsed.ast;
-        let pattern_paths = (ast.pats.iter().enumerate()).filter_map(move |(k, p)| match &p.kind {
-            PatKind::Path(path) | PatKind::TupleStruct { path, .. } | PatKind::Struct { path, .. } => {
-                Some((m, k, path, false))
-            }
-            _ => None,
-        });
-        let struct_paths = (ast.exprs.iter().enumerate()).filter_map(move |(k, e)| match &e.kind {
-            ExprKind::Struct { path, type_args, .. } if type_args.is_empty() => Some((m, k, path, true)),
-            _ => None,
-        });
-        pattern_paths.chain(struct_paths)
-    });
-    for (m, k, path, literal) in paths {
-        let mine = record(m, literal, k as u32);
-        let mine = mine.as_ref();
-        counts[2 + literal as usize] += mine.is_some() as u32;
-        let theirs = a.resolve_path(m, path).ok().map(|e| match e {
-            Entity::Member(d) if literal => Entity::Def(d),
-            e => e,
-        });
-        match (mine, theirs) {
-            (Some(x), Some(y)) if *x == y => {}
-            (None, _) if !all_complete => {}
-            // A module or a value at the end of the path of a struct
-            // literal (the types stage reports it).
-            (None, Some(Entity::Module(_) | Entity::Variant(..) | Entity::Builtin(_))) if literal => {}
-            (mine, theirs) => out.push(format!("path {k} {literal} {mine:?} {theirs:?}")),
-        }
-    }
-}
-
-/// A module of the file `file`, of the path `segments` in its package.
-fn module_of(segments: Vec<String>, file: u32, text: String) -> Module {
-    let parsed = onsa_syntax::parse(FileId(file), &text);
-    Module { segments, file: FileId(file), text, parsed }
-}
-
-/// The case `path` of `tests/spec` as a package, with std as its
-/// dependency: a file (the module `main`), or the directory of a package
-/// (`onsa.toml`), whose files are its modules by their paths in it. Its
-/// own manifest is not read (a case that names another package does not
-/// resolve it, and is compared as it is checked).
-fn spec_package(path: &std::path::Path) -> Package {
-    let mut files = Vec::new();
-    if path.is_dir() {
-        let mut dirs = vec![path.to_path_buf()];
-        while let Some(d) = dirs.pop() {
-            for e in std::fs::read_dir(&d).expect("a package") {
-                let p = e.expect("an entry").path();
-                if p.is_dir() {
-                    dirs.push(p);
-                } else if p.extension().is_some_and(|x| x == "onsa") {
-                    let rel = p.strip_prefix(path).expect("in the package").with_extension("");
-                    files.push((rel.iter().map(|c| c.to_string_lossy().into_owned()).collect(), p));
-                }
-            }
-        }
-        files.sort();
-    } else {
-        files.push((vec!["main".to_string()], path.to_path_buf()));
-    }
-    let n = files.len() as u32;
-    let modules =
-        (0..).zip(files).map(|(k, (segs, p))| module_of(segs, k, std::fs::read_to_string(p).expect("a case")));
-    let std = (crate::std_modules().iter().zip(n..))
-        .map(|(m, k)| module_of(m.segments.iter().map(|s| s.to_string()).collect(), k, m.text.to_string()));
-    Package::new("t", modules.collect(), vec![std::sync::Arc::new(Package::std(std.collect()))])
-}
-
-/// The cases of `tests/spec` in the order of their paths: every `step`-th
-/// file outside a package, and every `pkg_step`-th package.
-fn spec_cases(step: usize, pkg_step: usize) -> (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>) {
-    let (mut files, mut packages) = (Vec::new(), Vec::new());
-    let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec")];
-    while let Some(d) = dirs.pop() {
-        for e in std::fs::read_dir(&d).expect("tests/spec") {
-            let p = e.expect("an entry").path();
-            if p.join("onsa.toml").is_file() {
-                packages.push(p);
-            } else if p.is_dir() {
-                dirs.push(p);
-            } else if p.extension().is_some_and(|x| x == "onsa") {
-                files.push(p);
-            }
-        }
-    }
-    files.sort();
-    packages.sort();
-    (files.into_iter().step_by(step).collect(), packages.into_iter().step_by(pkg_step).collect())
-}
-
-/// The record says what the tables of the types stage say, on every sixth
-/// file and every fourth package of `tests/spec` (about 150 and 50, with std
-/// and its bodies), until the types stage reads the record (W4-04 U3b).
-#[test]
-fn the_record_agrees_with_the_types_stage_on_the_spec_cases() {
-    onsa_diag::stack::run(|| {
-        let (files, packages) = spec_cases(6, 4);
-        let mut counts = [0; 5];
-        let mut out = Vec::new();
-        for f in files.iter().chain(&packages) {
-            let start = out.len();
-            differences(&spec_package(f), &mut counts, &mut out);
-            for d in &mut out[start..] {
-                *d = format!("{}: {d}", f.display());
-            }
-        }
-        assert!(out.is_empty(), "{} differences:\n{}", out.len(), out[..out.len().min(20)].join("\n"));
-        // Each kind of the record was compared (none is passed by nothing run).
-        let [bodies, targets, ctors, structs, own] = counts;
-        assert!(files.len() >= 140 && packages.len() >= 45, "{} {}", files.len(), packages.len());
-        assert!(bodies >= 500 && targets >= 2000 && ctors >= 20 && structs >= 20, "{counts:?}");
-        // Those of the cases, apart from the bodies of std each case repeats.
-        assert!(own >= 1200, "{counts:?}");
-    });
 }

@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+
+// Local E0304 forms that already hold: a binding that overlaps a visible one is E0304 (§5.1), and
+// the unit stops there. The forms whose E0304 must also come before an earlier type error of the
+// same unit are in local_e0304_stage.onsa (W4-04 U3b). Here the type error comes after the
+// overlapping binding, or the unit is a flow (a flow's locals are checked in the names stage).
+
+pub fn let_after_let() -> U32 {
+  let x = 1
+  let x = 2   //~ E0304
+  x
+}
+
+pub fn let_in_for_body(n: U32) -> U32 {
+  var acc = 0
+  for i in 0 ..< n {
+    let i = 1   //~ E0304
+    acc = acc + i
+  }
+  acc
+}
+
+pub fn let_as_parameter(x: U32) -> U32 {
+  let x = 2   //~ E0304
+  x
+}
+
+// The type error is in the tail of the function, after the overlapping binding.
+pub fn type_error_in_the_tail() -> Bool {
+  let x = 1
+  let x = 2   //~ E0304
+  1
+}
+
+// A flow: the input and a `let` of the body with the same name, with a type error in front.
+pub flow flow_let_over_input(x: F32 at sample) -> F32 at sample {
+  let c: Bool = 1
+  let x = x * 2.0   //~ E0304
+  x
+}
+
+// A flow: a `let` that overlaps an earlier `let`, with a type error in front.
+pub flow flow_let_after_let(x: F32 at sample) -> F32 at sample {
+  let c: Bool = 1
+  let y = x
+  let y = x * 2.0   //~ E0304
+  y
+}
+
+// Bindings in sibling scopes do not overlap: two `for i` loops, two arms with `Some(x)`.
+pub fn sibling_scopes(n: U32, o: Option[U32], q: Option[U32]) -> U32 {
+  var acc = 0
+  for i in 0 ..< n {
+    acc = acc + i
+  }
+  for i in 0 ..< n {
+    acc = acc + i
+  }
+  let a = match o {
+    Some(x) => x,
+    None => 0,
+  }
+  let b = match q {
+    Some(x) => x,
+    None => 0,
+  }
+  acc + a + b
+}
+
+// A closure's own parameter and a local of the block it sits in, with different names.
+pub fn distinct_names(k: U32) -> U32 {
+  let f = fn(j: U32) -> U32 { j }
+  f.(k)
+}

@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// A name bound in every branch of a choice has the same type in all of them; a branch where it has
+// another type is the E0401 of the types stage (§7). Each function is one unit.
+pub enum Sh { Two(U32, U32), Ci(F32), Pair(U32, I32) }
+
+// Two variants whose payloads have different types.
+pub fn variants(s: Sh) -> U32 {
+  match s {
+    Sh.Two(a, b) | Sh.Ci(a) => b,                   //~ E0401
+    _ => 0,
+  }
+}
+
+// The elements of a tuple, swapped between the branches.
+pub fn swapped(t: (U32, I32)) -> U32 {
+  match t {
+    (a, 0) | (0, a) => 1,                           //~ E0401
+    _ => 0,
+  }
+}
+
+// The third branch differs from the first two.
+pub fn third_branch(s: Sh) -> U32 {
+  match s {
+    Sh.Two(a, _) | Sh.Two(_, a) | Sh.Pair(_, a) => 1, //~ E0401
+    _ => 0,
+  }
+}
+
+// A choice nested in a constructor.
+pub fn nested(o: Option[(U32, I32)]) -> U32 {
+  match o {
+    Some((a, 1) | (1, a)) => 1,                     //~ E0401
+    _ => 0,
+  }
+}

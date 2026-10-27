@@ -106,12 +106,10 @@ impl<'a> Walker<'a> {
             None => {}
         }
         let a = self.a;
+        if let Some(b) = self.flow_name(&head.name) {
+            return self.flow_builtin(b, segs, place);
+        }
         let Some(first) = a.modules.lookup(self.m, &head.name, &a.prelude) else {
-            if !a.modules.held_as_error(self.m, &head.name)
-                && let Some(b) = FlowBuiltin::named(&head.name).filter(|_| self.flow)
-            {
-                return self.flow_builtin(b, segs, place);
-            }
             return match a.modules.head_error(self.m, &path_of(segs), (&a.prelude, &a.defs, &a.builtin_key)) {
                 ResolveError::Failed => (Vec::new(), Some(Fail::Held)),
                 ResolveError::NotFound { .. } => (Vec::new(), Some(self.not_found(segs, place))),
@@ -177,8 +175,8 @@ impl<'a> Walker<'a> {
     }
 
     /// E0302 for the head of `segs` not found at `place`, in the words the
-    /// types stage had: it typed a chain of one name as a value apart (S-720
-    /// keeps its words), and a constant as a name of a type position. The
+    /// types stage had: it typed a chain of one name as a value apart, and a
+    /// constant as a name of a type position. The
     /// split by `place` and by the length goes with W4-04 U5 (the errors of
     /// a path), with [`Place::Const`].
     fn not_found(&self, segs: &[&Ident], place: Place) -> Fail {
@@ -201,16 +199,25 @@ impl<'a> Walker<'a> {
         Fail::Report(d)
     }
 
+    /// The builtin name of a flow `name` is, in a flow body, where no item
+    /// or `use` takes it (that one is an E0304, and held as an error).
+    pub(super) fn flow_name(&self, name: &str) -> Option<FlowBuiltin> {
+        let a = self.a;
+        let found = a.modules.lookup(self.m, name, &a.prelude).is_some() || a.modules.held_as_error(self.m, name);
+        FlowBuiltin::named(name).filter(|_| self.flow && !found)
+    }
+
     /// A builtin name of a flow body at the head of `segs` (§2.2, §11.4):
-    /// the callee of a delay or of `sample_rate()`, which the flow stage
-    /// reads; anywhere else, not found (S-720, the one place of its error).
+    /// the callee of a call (`prev~(x)`, `sample_rate()`; the flow stage
+    /// reads it, and its marks, E0811, E0812); anywhere else E0308 (S-720,
+    /// the one place of its error in a body).
     fn flow_builtin(&self, b: FlowBuiltin, segs: &[&Ident], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let called = match place {
             Place::Instance => true,
-            Place::Callee => segs.len() == 1 && b != FlowBuiltin::SampleTick,
+            Place::Callee => segs.len() == 1,
             Place::Value | Place::Const => false,
         };
-        let fail = (!called).then(|| self.not_found(segs, place));
+        let fail = (!called).then(|| Fail::Report(b.misplaced(segs.iter().map(|s| s.span), self.text)));
         (vec![PathRes::FlowBuiltin(b)], fail)
     }
 
@@ -286,6 +293,10 @@ impl<'a> Walker<'a> {
         let names = (&a.prelude, &a.defs[..], &a.builtin_key);
         let head = &path.segments[0];
         let error = |err| self.member_error(path, err);
+        // A builtin name of a flow in a pattern (`prev(z) =>`, S-720).
+        if let Some(b) = self.flow_name(&head.name) {
+            return Err(Fail::Report(b.misplaced(path.segments.iter().map(|s| s.span), self.text)));
+        }
         let Some(first) = a.modules.lookup(self.m, &head.name, &a.prelude) else {
             return Err(error(a.modules.head_error(self.m, path, names)));
         };
@@ -297,9 +308,13 @@ impl<'a> Walker<'a> {
 
     /// The item the path of the pattern `p` names (§7).
     pub(super) fn ctor(&mut self, p: PatId, path: &Path) -> W {
-        let entity = self.item(path).map_err(|f| self.fail(f))?;
-        self.out.pats.insert(p, PatRes::Ctor { entity, owner: None });
-        Ok(())
+        match self.item(path) {
+            Ok(entity) => {
+                self.out.pats.insert(p, PatRes::Ctor { entity, owner: None });
+                Ok(())
+            }
+            Err(f) => self.fail_at_let(f, false),
+        }
     }
 
     /// The item the path of the struct literal `e` names.

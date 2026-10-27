@@ -4,9 +4,10 @@
 
 use std::collections::{HashMap, HashSet};
 
+use onsa_diag::{Code, Diagnostic, Stage};
 use onsa_syntax::ast::{ExprId, Ident, PatId};
 
-use super::{Binding, BindingId, BindingKind, Origin, ScopeId, ScopeInfo, Walker};
+use super::{Binding, BindingId, BindingKind, Fail, Origin, ScopeId, ScopeInfo, Stop, Walker};
 
 /// A name a declaration hid, and the binding it named before (none if none).
 type Hidden = (String, Option<BindingId>);
@@ -17,8 +18,8 @@ pub(super) struct Scopes {
     /// The bindings visible here, by name.
     visible: HashMap<String, BindingId>,
     /// The open scopes, innermost last, each with what its declarations hid
-    /// (a name declared again while visible, an error the types stage
-    /// reports, E0304), to give back when it closes.
+    /// (a name declared again while visible, the E0304 of a `let` of a flow
+    /// body declared ahead of it), to give back when it closes.
     open: Vec<(ScopeId, Vec<Hidden>)>,
     /// The open anonymous functions, innermost last, with the number of the
     /// bindings declared before each (those are outside it) and the bindings
@@ -45,14 +46,24 @@ impl Walker<'_> {
     }
 
     /// Declare a binding in the innermost scope, `site` the pattern that
-    /// binds it.
+    /// binds it: E0304 when its name is visible (§5.1, no shadowing), which
+    /// stops the walk ([`Walker::fail_at_let`]).
     pub(super) fn declare(
         &mut self,
         name: &Ident,
         kind: BindingKind,
         origin: Origin,
         site: Option<PatId>,
-    ) -> BindingId {
+    ) -> Result<BindingId, Stop> {
+        if name.name != "_"
+            && let Some(prev) = self.scopes.visible.get(&name.name)
+        {
+            let msg = format!("`{}` is already bound and visible here; Onsa has no shadowing (§5.1)", name.name);
+            let d = Diagnostic::new(Stage::Names, Code::E0304, name.span, msg)
+                .with_found(name.name.clone())
+                .with_note(self.out.bindings[prev.0 as usize].span, "first bound here");
+            self.fail_at_let(Fail::Report(d), true)?;
+        }
         let (scope, hidden) = self.scopes.open.last_mut().expect("an open scope");
         let id = BindingId(self.out.bindings.len() as u32);
         self.out.bindings.push(Binding {
@@ -67,7 +78,13 @@ impl Walker<'_> {
         self.out.scopes[scope.0 as usize].bindings.push(id);
         let prev = self.scopes.visible.insert(name.name.clone(), id);
         hidden.push((name.name.clone(), prev));
-        id
+        Ok(id)
+    }
+
+    /// The bindings visible here, from the outermost scope (a typed hole).
+    pub(super) fn visible(&self) -> Vec<BindingId> {
+        let scopes = self.scopes.open.iter().map(|(s, _)| &self.out.scopes[s.0 as usize].bindings);
+        scopes.flat_map(|bs| bs.iter().copied()).collect()
     }
 
     /// The local binding `name` names here, read: the read counts for

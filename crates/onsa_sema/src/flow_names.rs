@@ -6,7 +6,7 @@
 //! outside a flow (`crate::flow_syntax`), `onsa graph` and `onsa interface`
 //! read them from here.
 
-use onsa_diag::{Code, Diagnostic, Stage};
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::Clock;
 
 use crate::ty::Rate;
@@ -31,8 +31,9 @@ pub(crate) fn clock_rate(c: &Clock) -> Result<Rate, Diagnostic> {
 /// The builtin of a flow that is no delay and is checked (§11.4).
 pub(crate) const SAMPLE_RATE: &str = "sample_rate";
 
-/// The builtin of a flow that is no delay and is not checked yet; its name
-/// is reserved as the others (§11.4).
+/// The builtin of a flow that is no delay and that this version does not
+/// have yet (E0200 `Feature::SampleTick`, W7-09); its name is reserved as
+/// the others (§11.4).
 const SAMPLE_TICK: &str = "sample_tick";
 
 /// A builtin name of a flow (§2.2, §11.4), as the names stage records a
@@ -51,6 +52,35 @@ impl FlowBuiltin {
             SAMPLE_TICK => Some(FlowBuiltin::SampleTick),
             _ => Delay::named(name).map(FlowBuiltin::Delay),
         }
+    }
+
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            FlowBuiltin::Delay(d) => d.name(),
+            FlowBuiltin::SampleRate => SAMPLE_RATE,
+            FlowBuiltin::SampleTick => SAMPLE_TICK,
+        }
+    }
+
+    /// E0308 for the builtin name written where it is not the callee of its
+    /// call (§11.4, §15.1, S-720), with no candidate: the note shows the
+    /// call. `names` are the spans of the names of the path from the builtin
+    /// one; the error is at it and the name after its `.` (`prev.y`), in
+    /// the source `text`.
+    pub(crate) fn misplaced(self, mut names: impl Iterator<Item = Span>, text: &str) -> Diagnostic {
+        let name = names.next().expect("the builtin name");
+        let end = names.next().unwrap_or(name);
+        let span = Span::new(name.file, name.start, end.end);
+        let found = &text[span.start as usize..span.end as usize];
+        let call = match self {
+            FlowBuiltin::Delay(d) => format!("{}~(…)", d.name()),
+            _ => format!("{}()", self.name()),
+        };
+        let msg =
+            format!("`{}` is a builtin name of a flow, written only as the callee of its call (§11.4)", self.name());
+        Diagnostic::new(Stage::Names, Code::E0308, span, msg)
+            .with_found(found)
+            .with_note(name, format!("its call is `{call}`"))
     }
 }
 

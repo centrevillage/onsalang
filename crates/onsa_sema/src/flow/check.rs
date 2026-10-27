@@ -4,6 +4,8 @@
 
 use super::*;
 use crate::ResolveError;
+use crate::flow_names::FlowBuiltin;
+use crate::names::body::{Origin, PathRes};
 
 impl<'a> Checker<'a> {
     pub(super) fn fcx(&mut self) -> &mut FlowCx {
@@ -13,8 +15,7 @@ impl<'a> Checker<'a> {
     /// Entry point: declare the inputs, pre-declare the `let`s, check the body.
     pub(crate) fn check_flow_body(&mut self, body: ExprId, out: TyId) {
         self.flow = Some(FlowCx::default());
-        self.frames.push(Frame { local_base: 0, ret: out, loop_depth: 0, captures: Vec::new() });
-        self.push_scope();
+        self.frames.push(Frame { ret: out, loop_depth: 0 });
         let r = (|| -> R<()> {
             self.declare_flow_inputs()?;
             self.prescan_lets(body)?;
@@ -22,15 +23,14 @@ impl<'a> Checker<'a> {
             Ok(())
         })();
         let _ = r;
-        self.pop_scope();
         self.frames.pop();
     }
 
     fn declare_flow_inputs(&mut self) -> R<()> {
         let inputs: Vec<FlowInput> = self.a.def(self.def).as_flow().map(|f| f.inputs.clone()).unwrap_or_default();
-        for input in inputs {
-            let ident = Ident { name: input.name.clone(), span: input.span };
-            let id = self.declare(&ident, input.ty, LocalKind::Param(Mode::Borrow), true)?;
+        for (k, input) in (0..).zip(inputs) {
+            let id = self.local_of(Origin::FlowInput(k))?;
+            self.bind_local(id, input.ty, true, input.span)?;
             let rate = FlowRate::from_rate(input.rate);
             self.fcx().inputs.push((id, rate));
         }
@@ -97,9 +97,9 @@ impl<'a> Checker<'a> {
         let ast = self.ast;
         match &ast.pat(pat).kind {
             PatKind::Bind(id) => {
-                let id = id.clone();
                 let t = self.fresh();
-                let lid = self.declare(&id, t, LocalKind::Let, false)?;
+                let lid = self.local_of_pat(pat)?;
+                self.bind_local(lid, t, false, id.span)?;
                 self.info.pat_locals.insert(pat, lid);
                 locals.push(lid);
                 Ok(())
@@ -305,17 +305,16 @@ impl<'a> Checker<'a> {
             Ty::Array(el, _) => Some(el),
             _ => None,
         });
-        self.push_scope();
         let r = (|| -> R<TyId> {
             let u32 = self.u32();
-            let lid = self.declare(var, u32, LocalKind::Let, false)?;
+            let lid = self.local_of(Origin::Par(e))?;
+            self.bind_local(lid, u32, false, var.span)?;
             self.fcx().pars.insert(e, (lid, lo, hi));
             self.fcx().par_depth += 1;
             let r = self.check_expr(body, exp_elem);
             self.fcx().par_depth -= 1;
             r
         })();
-        self.pop_scope();
         let t = r?;
         Ok(self.a.types.intern(Ty::Array(t, Len::Const(hi - lo))))
     }
@@ -336,21 +335,21 @@ impl<'a> Checker<'a> {
             return Ok(None);
         }
         let span = self.expr(e).span;
-        // 1. Reserved builtin names (§2.2): the delays are stateful flows
-        // (`prev~(…)`), `sample_rate()` is not.
-        if let ExprKind::Path(p) = &self.expr(callee).kind
-            && p.segments.len() == 1
-            && (Delay::named(&p.segments[0].name).is_some() || p.segments[0].name == SAMPLE_RATE)
-            && self.lookup_local(&p.segments[0].name).is_none()
-        {
-            let name = p.segments[0].name.clone();
-            // A builtin name that an item or a `use` of the module takes is an
-            // E0304 there, and an error in the whole body (§18.1, S-675).
-            if self.a.modules.get(self.m).clashed.body.contains(&name) {
-                let path = Path { segments: p.segments.clone(), span: p.span };
-                return Err(self.resolve_error(&path, ResolveError::Failed));
-            }
-            return match (Delay::named(&name), kind) {
+        // 1. The builtin names (§2.2), as the names stage found them (one an
+        // item or a `use` of the module takes is an E0304 there, held as an
+        // error in the body, §18.1, S-675): the delays are stateful flows
+        // (`prev~(…)`), `sample_rate()` is not, `sample_tick~()` is no flow.
+        let builtin = match self.names.paths.get(&callee) {
+            Some(&PathRes::FlowBuiltin(b)) => Some(b),
+            _ => None,
+        };
+        if let Some(b) = builtin.filter(|&b| !(b == FlowBuiltin::SampleTick && kind == CallKind::Flow)) {
+            let name = b.name();
+            let delay = match b {
+                FlowBuiltin::Delay(d) => Some(d),
+                _ => None,
+            };
+            return match (delay, kind) {
                 (Some(d), CallKind::Flow) => self.check_delay(e, d, args, expected).map(Some),
                 (Some(_), CallKind::Plain) => {
                     // `~` goes right after the callee (`prev~(`, §2.6).
@@ -368,33 +367,34 @@ impl<'a> Checker<'a> {
                         .with_fix(Fix::insert("add `~`", span.file, at, "~")),
                     ))
                 }
-                (None, CallKind::Plain) => self.check_sample_rate(e, args).map(Some),
-                _ => Err(self.flow_bad_mark(span, kind, &name)),
+                (None, CallKind::Plain) if b == FlowBuiltin::SampleRate => self.check_sample_rate(e, args).map(Some),
+                (None, CallKind::Plain) => Err(self.unsupported_in(Stage::Flow, span, Feature::SampleTick, &[])),
+                _ => Err(self.flow_bad_mark(span, kind, name)),
             };
         }
-        // 2. A path that names a flow.
-        let chain = match &self.expr(callee).kind {
-            ExprKind::Path(p) => Some(p.segments.clone()),
-            ExprKind::Field { .. } => self.name_chain(callee).map(|c| c.into_iter().map(|(_, i)| i).collect()),
-            _ => None,
-        };
-        let flow_def = match &chain {
-            Some(segs) if !self.is_local_head(&segs[0].name) => {
-                let path = Path { segments: segs.clone(), span: self.expr(callee).span };
-                match self.a.resolve_path(self.m, &path) {
-                    Ok(Entity::Def(d)) | Ok(Entity::Member(d)) if matches!(self.a.def(d).kind, DefKind::Flow(_)) => {
-                        Some(d)
-                    }
-                    // A name held as an error (§18.1, S-675, S-680): neither a
-                    // flow nor not one. A name not visible here (`lib.pf~(x)`
-                    // of a `priv` flow): its E0303 (§15.1).
+        // 2. A path that names a flow, as the names stage found it.
+        let flow_def = match self.names.paths.get(&callee) {
+            Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. })
+                if matches!(self.a.def(d).kind, DefKind::Flow(_)) =>
+            {
+                Some(d)
+            }
+            Some(_) => None,
+            None if self.of_a_local(callee) => None,
+            // An error the names stage found at the callee of an instance and
+            // left to this stage (W4-12, R-286), the one name it resolves
+            // again: a name held as an error (§18.1, S-675, S-680), neither a
+            // flow nor not one; a name not visible here (`lib.pf~(x)` of a
+            // `priv` flow), its E0303 (§15.1); else no flow.
+            None => match crate::constarg::path_of(self.ast, callee) {
+                Some(path) => match self.a.resolve_path(self.m, &path) {
                     Err(err @ (ResolveError::Failed | ResolveError::NotVisible { .. })) => {
                         return Err(self.resolve_error(&path, err));
                     }
                     _ => None,
-                }
-            }
-            _ => None,
+                },
+                None => None,
+            },
         };
         match (flow_def, kind) {
             (Some(d), CallKind::Flow) => self.check_instance(e, d, args, expected).map(Some),

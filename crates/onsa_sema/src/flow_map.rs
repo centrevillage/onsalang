@@ -46,9 +46,10 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{BinOp, Clock, ExprId, ExprKind, Ident, Path};
 
 use super::{FlowRate, InitArg, Rater};
-use crate::body::{Checker, R, Target};
+use crate::body::{Checker, LocalId, R, Target};
 use crate::consteval::ConstValue;
 use crate::flow_names::clock_rate;
+use crate::names::body::PathRes;
 use crate::ty::{Ty, TyId};
 
 impl Checker<'_> {
@@ -65,7 +66,10 @@ impl Checker<'_> {
     /// first argument of a delay (outside it E0801, inside a `par` E0200).
     pub(super) fn check_feedback(&mut self, e: ExprId, name: &Ident) -> R<TyId> {
         let span = self.expr(e).span;
-        let local = self.lookup_local(&name.name);
+        let local = match self.names.paths.get(&e) {
+            Some(PathRes::Local(b)) => Some(LocalId(b.0)),
+            _ => None,
+        };
         let later = local.and_then(|id| {
             let f = self.fcx();
             let k = *f.let_of_local.get(&id)?;
@@ -97,6 +101,9 @@ impl Checker<'_> {
                 Ok(self.local_ty(id))
             }
             (Some(_), None) => Err(self.unsupported_in(Stage::Flow, span, Feature::CaretOnVisible, &[])),
+            // Not a local (nor a builtin name, the names stage's E0308, S-720):
+            // the one name this stage resolves again, until W7-04 reports the
+            // `^` of a visible name in the names stage (E0020, §11.2).
             (None, None) => {
                 let path = Path { segments: vec![name.clone()], span: name.span };
                 match self.a.resolve_path(self.m, &path) {

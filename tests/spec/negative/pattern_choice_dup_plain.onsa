@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§7"]
+
+// A name bound twice in one pattern is E0304 (§5.1), as a `let` pattern or an arm without a
+// choice (the guards of R-284's cases, pattern_choice_dup_binding.onsa), and a choice whose branches
+// bind each name once is fine (§7: all the branches bind the same set of names).
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+pub enum Slot {
+  A(U32),
+  B(U32),
+}
+
+pub fn let_of_a_tuple(p: (U32, U32)) -> U32 {
+  let (x, x) = p   //~ E0304
+  x
+}
+
+pub fn arm_of_a_tuple(p: (U32, U32)) -> U32 {
+  match p {
+    (x, x) => x,   //~ E0304
+  }
+}
+
+pub fn let_of_a_struct(p: Pair) -> U32 {
+  let Pair { a: x, b: x } = p   //~ E0304
+  x
+}
+
+pub fn nested(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    Some((x, x)) => x,   //~ E0304
+    None => 0,
+  }
+}
+
+// The same name in the branches of a choice is one binding, not a repeat.
+pub fn choice_binds_each_name_once(p: (U32, U32)) -> U32 {
+  match p {
+    (x, 0) | (0, x) => x,
+    _ => 0,
+  }
+}
+
+pub fn choice_of_variants(s: Slot) -> U32 {
+  match s {
+    Slot.A(x) | Slot.B(x) => x,
+  }
+}
+
+pub fn choice_with_two_names(p: (U32, U32)) -> U32 {
+  match p {
+    (x, y) | (y, x) => x + y,
+  }
+}
+
+pub fn choice_inside_a_variant(o: Option[(U32, U32)]) -> U32 {
+  match o {
+    Some((x, 0) | (0, x)) => x,
+    _ => 0,
+  }
+}
+
+// Sibling arms may bind the same name.
+pub fn sibling_arms(p: (U32, U32)) -> U32 {
+  match p {
+    (x, 0) => x,
+    (0, x) => x,
+    (x, y) => x + y,
+  }
+}

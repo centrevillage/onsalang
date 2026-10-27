@@ -116,12 +116,20 @@ impl Ast {
     /// E0711 of `move` and the target of an assignment): whether the name is a
     /// local the names stage decides.
     pub fn place_root(&self, e: ExprId) -> Option<&str> {
+        match &self.expr(self.place_root_node(e)?).kind {
+            ExprKind::Path(p) => Some(p.segments[0].name.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The node of the name [`Ast::place_root`] gives.
+    pub fn place_root_node(&self, e: ExprId) -> Option<ExprId> {
         match &self.expr(e).kind {
-            ExprKind::Path(p) if p.segments.len() == 1 => Some(p.segments[0].name.as_str()),
+            ExprKind::Path(p) if p.segments.len() == 1 => Some(e),
             ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
-                self.place_root(*base)
+                self.place_root_node(*base)
             }
-            ExprKind::Paren(inner) => self.place_root(*inner),
+            ExprKind::Paren(inner) => self.place_root_node(*inner),
             _ => None,
         }
     }

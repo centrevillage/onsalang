@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.2", "§5.1"]
+
+// A name the names stage holds as an error (S-692: the second `Dd` and `Ee` are E0304 of the module)
+// in the pattern of a `let` of a flow body stops the unit at that name, with no diagnostic there; the
+// statements in front of it are checked, so their type error (E0401) is reported (§18.1). The `let`s
+// of a flow body are declared ahead of the statements (§11.2), and the held name in a later `let`
+// does not stop that before the statements in front of it are checked (W4-04 U3b/b F1).
+pub struct Dd { a: F32 }
+pub struct Dd { a: F32 }                            //~ E0304
+pub enum Ee { E1(F32), E2 }
+pub enum Ee { E1(F32), E2 }                         //~ E0304
+
+// A struct pattern.
+pub flow struct_pattern(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd { a: q } = x
+  x
+}
+
+// A variant in a pattern, after a `let` that reads an input.
+pub flow variant_after_a_read(x: F32 at sample) -> F32 at sample {
+  let y = x
+  let zz: Bool = 1                                  //~ E0401
+  let Ee.E1(q) = y
+  x
+}
+
+// A held name after a name the pattern binds, which a statement in front reads as `^r`.
+pub flow binding_read_ahead(x: F32 at sample) -> F32 at sample {
+  let p = prev~(^r, 0.0)
+  let zz: Bool = 1                                  //~ E0401
+  let (q, Dd { a: r }) = (x, x)
+  x
+}
+
+// A held name inside a choice.
+pub flow inside_a_choice(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let (Ee.E1(q) | Ee.E1(q)) = x
+  x
+}
+
+// Two `let`s with held names: the unit stops at the first.
+pub flow two_held_lets(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd { a: b } = x
+  let Dd { a: c } = x
+  x
+}
+
+// A name bound twice after the held name in the same pattern is not reported: the unit stopped
+// before it (§18.1).
+pub flow overlap_after_the_held_name(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let (Dd { a: r }, x) = (x, x)
+  x
+}
+
+// A name not found in a later `let`, after the held name, is not reported either.
+pub flow not_found_after_the_held_name(x: F32 at sample) -> F32 at sample {
+  let zz: Bool = 1                                  //~ E0401
+  let Dd { a: q } = x
+  let Nope { a: r } = x
+  x
+}

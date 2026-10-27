@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§15.1"]
+// fixes = 0
+
+// The flow builtins (`prev` `delay` `vdelay` `sample_rate` `sample_tick`) are names only of a flow's
+// heading types and body (§11.4). Outside a flow (the body of a fn, a `test`, the initializer of a
+// `const`) they are not found, so every use is E0302, whether it is in the form of a call or not
+// (S-720: only inside a flow is a use that is not a call E0308, see flow_builtin_not_a_call.onsa).
+// There is no fix candidate. One error per unit.
+
+pub fn call_of_sample_rate() -> F32 {
+  sample_rate()   //~ E0302
+}
+
+pub fn call_of_sample_tick() -> U32 {
+  sample_tick()   //~ E0302
+}
+
+pub fn call_of_prev(x: F32) -> F32 {
+  prev(x)   //~ E0302
+}
+
+pub fn call_of_delay(x: F32) -> F32 {
+  delay(x, 2)   //~ E0302
+}
+
+pub fn call_of_vdelay(x: F32) -> F32 {
+  vdelay(x, 1.5, 8)   //~ E0302
+}
+
+pub fn let_of_sample_rate(x: F32) -> F32 {
+  let f = sample_rate   //~ E0302
+  x
+}
+
+pub fn operand_of_a_product(x: F32) -> F32 {
+  prev * x   //~ E0302
+}
+
+pub fn before_a_dot(x: F32) -> F32 {
+  prev.y   //~ E0302
+}
+
+pub fn in_a_closure(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 { y * sample_rate() }   //~ E0302
+  f.(x)
+}
+
+pub const RATE: F32 = sample_rate()   //~ E0302
+
+pub const TICK: U32 = sample_tick()   //~ E0302
+
+test "a call of sample_rate in a test" {
+  let r = sample_rate()   //~ E0302
+  assert r > 0.0
+}
+
+test "a use of prev that is not a call in a test" {
+  let f = prev   //~ E0302
+  assert true
+}

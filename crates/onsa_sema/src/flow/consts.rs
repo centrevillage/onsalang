@@ -2,6 +2,7 @@
 //! bounds that fix the state size (R-195, W7-02).
 
 use super::*;
+use crate::names::body::PathRes;
 
 impl<'a> Checker<'a> {
     /// A compile-time `U32` (§11.4, §4.5): the value of a constant
@@ -21,12 +22,14 @@ impl<'a> Checker<'a> {
                 ExprKind::Lit(Lit::Int { value, .. }) => Leaf::Int(*value),
                 ExprKind::Path(_) | ExprKind::Field { .. } => match crate::constarg::path_of(self.ast, l) {
                     // A local, or a field of one.
-                    Some(p) if self.is_local_head(&p.segments[0].name) => Leaf::Other,
+                    Some(_) if self.of_a_local(l) => Leaf::Other,
                     Some(p) => {
                         let lspan = self.expr(l).span;
                         match crate::constarg::named(self.a, self.m, self.ast, self.text, &p, lspan) {
-                            Ok(Some(v)) => match self.a.resolve_path(self.m, &p) {
-                                Ok(Entity::Def(d) | Entity::Member(d)) => Leaf::Value(v, Some(d)),
+                            Ok(Some(v)) => match self.names.paths.get(&l) {
+                                Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. }) => {
+                                    Leaf::Value(v, Some(d))
+                                }
                                 _ => Leaf::Value(v, None),
                             },
                             Ok(None) => Leaf::Other,

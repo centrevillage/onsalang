@@ -1,12 +1,13 @@
 //! Function-body checking (T2-5 .. T2-7, T2-10, T2-11): the inference of spec
 //! §4.7 — statement order, unification variables, downward expected types —
-//! plus generics instantiation, closures as arguments, builtin methods,
-//! scopes (E0304) and `const` evaluation. Argument modes / exclusivity (T2-8)
+//! plus generics instantiation, closures as arguments, builtin methods
+//! and `const` evaluation; the names and the bindings are the names stage's
+//! record (`crate::names::body`). Argument modes / exclusivity (T2-8)
 //! and `rt` (T2-9) run after this pass over the tables in [`BodyInfo`].
 //!
 //! Where the code is: this module holds the tables ([`BodyInfo`], the locals,
 //! the targets), the checker (`Checker`, `check_all`), its helpers and
-//! scopes, and the accessors that the later passes read. The
+//! locals, and the accessors that the later passes read. The
 //! rest of the checking is in a module per part, each an `impl` of
 //! `Checker`: `entry` (a function body, a `const`), `bounds`, `generics`,
 //! `named` (the names the names stage resolved), `expressions`, `calls`, `statements` and `patterns`. The tests
@@ -26,6 +27,7 @@ use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
 use crate::deferred::{Deferred, DeferredKind, Required};
 use crate::exhaust::P;
 use crate::infer::{Cause, Infer, LitKind, Mismatch};
+use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes};
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::structpat::Written;
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId};
@@ -59,6 +61,23 @@ pub enum LocalKind {
     },
     MatchBind,
     ClosureParam(Mode),
+}
+
+impl LocalKind {
+    /// The kind of the binding of the record: a flow's input is a borrowed
+    /// parameter, its `let` and the variable of a `par` are `let`s.
+    fn of(kind: BindingKind) -> LocalKind {
+        match kind {
+            BindingKind::Param(m) => LocalKind::Param(m),
+            BindingKind::SelfParam(m) => LocalKind::SelfParam(m),
+            BindingKind::Let | BindingKind::FlowLet | BindingKind::ParVar => LocalKind::Let,
+            BindingKind::Var => LocalKind::Var,
+            BindingKind::For { moved } => LocalKind::For { moved },
+            BindingKind::MatchBind => LocalKind::MatchBind,
+            BindingKind::ClosureParam(m) => LocalKind::ClosureParam(m),
+            BindingKind::FlowInput => LocalKind::Param(Mode::Borrow),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -161,16 +180,10 @@ pub struct BodyInfo {
 pub(crate) struct Stop;
 pub(crate) type R<T> = Result<T, Stop>;
 
-struct Scope {
-    names: Vec<(String, LocalId)>,
-}
-
 /// A function or closure body being checked.
 pub(crate) struct Frame {
-    pub(crate) local_base: u32,
     pub(crate) ret: TyId,
     pub(crate) loop_depth: u32,
-    pub(crate) captures: Vec<LocalId>,
 }
 
 pub(crate) struct Checker<'a> {
@@ -182,7 +195,6 @@ pub(crate) struct Checker<'a> {
     generics: Vec<GenericDef>,
     self_ty: Option<TyId>,
     pub(crate) infer: Infer,
-    scopes: Vec<Scope>,
     pub(crate) frames: Vec<Frame>,
     pub(crate) info: BodyInfo,
     pub(crate) failed: bool,
@@ -203,10 +215,13 @@ pub(crate) struct Checker<'a> {
     /// one unified (an argument, an annotation, the result, a field); every other
     /// binding gets a note with its position alone.
     why: Option<(String, TyId)>,
-    /// Or-pattern alternative being checked: names bound by the first alternative.
-    or_bindings: Option<HashMap<String, LocalId>>,
     /// The names of the body, which the names stage resolved (W4-04).
     pub(crate) names: crate::names::body::BodyNames,
+    /// The local of each binding no pattern makes, by its [`Origin`].
+    origins: HashMap<Origin, LocalId>,
+    /// The locals given their type so far (a branch of a choice after the
+    /// first unifies with it, §7).
+    typed: Vec<bool>,
 }
 
 /// Check every body of the package and its dependencies.
@@ -272,6 +287,10 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         // for a signature (`Analysis::unread_path`, `record_if_held`); it is
         // moved to the body below.
         let held = a.read_held.contains(&id);
+        let (locals, origins) = locals_of(a, &names);
+        let mut info = BodyInfo { locals, ..Default::default() };
+        info.captures = names.captures.iter().map(|(e, bs)| (*e, bs.iter().map(|b| LocalId(b.0)).collect())).collect();
+        let typed = vec![false; info.locals.len()];
         let mut ck = Checker {
             a,
             ast: &module.parsed.ast,
@@ -281,9 +300,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             generics,
             self_ty,
             infer: Infer::default(),
-            scopes: Vec::new(),
             frames: Vec::new(),
-            info: BodyInfo::default(),
+            info,
             failed: false,
             deferred: Vec::new(),
             deferred_seen: 0,
@@ -291,9 +309,10 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             deferred_end: Vec::new(),
             deferred_count: 0,
             why: None,
-            or_bindings: None,
             flow: None,
             names,
+            origins,
+            typed,
         };
         let is_const = matches!(ck.a.defs[i].kind, DefKind::Const(_));
         let is_flow = matches!(ck.a.defs[i].kind, DefKind::Flow(_));
@@ -318,6 +337,30 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             }
         }
     }
+}
+
+/// The locals of a body, one for each binding of its record (`LocalId(b.0)`
+/// for the binding `b`), with the error type until the check gives them
+/// theirs; and the local of each binding no pattern makes, by its origin.
+fn locals_of(a: &mut Analysis, names: &BodyNames) -> (Vec<LocalInfo>, HashMap<Origin, LocalId>) {
+    let error = a.types.error();
+    let mut origins = HashMap::new();
+    let mut locals = Vec::new();
+    for (i, b) in names.bindings.iter().enumerate() {
+        if b.sites.is_empty() {
+            origins.insert(b.origin, LocalId(i as u32));
+        }
+        let kind = LocalKind::of(b.kind);
+        let mutable = matches!(
+            kind,
+            LocalKind::Var
+                | LocalKind::Param(Mode::Inout)
+                | LocalKind::SelfParam(Mode::Inout)
+                | LocalKind::ClosureParam(Mode::Inout)
+        );
+        locals.push(LocalInfo { name: b.name.clone(), span: b.span, ty: error, kind, borrow: false, mutable });
+    }
+    (locals, origins)
 }
 
 impl<'a> Checker<'a> {
@@ -550,67 +593,47 @@ impl<'a> Checker<'a> {
         Ok(s)
     }
 
-    // ------------------------------------------------------------ scopes
+    // ------------------------------------------------------------ locals
 
-    pub(crate) fn push_scope(&mut self) {
-        self.scopes.push(Scope { names: Vec::new() });
-    }
-
-    pub(crate) fn pop_scope(&mut self) {
-        self.scopes.pop();
-    }
-
-    pub(crate) fn lookup_local(&mut self, name: &str) -> Option<LocalId> {
-        for s in self.scopes.iter().rev() {
-            if let Some((_, id)) = s.names.iter().rev().find(|(n, _)| n == name) {
-                return Some(self.read_local(*id));
-            }
+    /// The local of the binding `origin` names (one no pattern makes).
+    pub(crate) fn local_of(&mut self, origin: Origin) -> R<LocalId> {
+        match self.origins.get(&origin) {
+            Some(&id) => Ok(id),
+            // After the name that stopped the walk (§18.1, S-692).
+            None => Err(self.held_stop()),
         }
-        None
     }
 
-    /// A read of the local `id`: one captured from an enclosing function
-    /// (§5.3) is recorded as its capture.
-    pub(crate) fn read_local(&mut self, id: LocalId) -> LocalId {
-        if let Some(f) = self.frames.last_mut()
-            && id.0 < f.local_base
-            && !f.captures.contains(&id)
-        {
-            f.captures.push(id);
+    /// The local the pattern `pat` binds.
+    pub(crate) fn local_of_pat(&mut self, pat: PatId) -> R<LocalId> {
+        match self.names.pats.get(&pat) {
+            Some(PatRes::Bind(b)) => Ok(LocalId(b.0)),
+            _ => Err(self.held_stop()),
         }
-        id
     }
 
-    /// Declare a binding (E0304 when the name is already visible, §5.1).
-    pub(crate) fn declare(&mut self, name: &Ident, ty: TyId, kind: LocalKind, borrow: bool) -> R<LocalId> {
-        if name.name != "_" {
-            let visible =
-                self.scopes.iter().flat_map(|s| s.names.iter()).find(|(n, _)| *n == name.name).map(|(_, id)| *id);
-            if let Some(prev) = visible {
-                let prev_span = self.info.locals[prev.0 as usize].span;
-                return Err(self.diag(
-                    Diagnostic::new(
-                        Stage::Types,
-                        Code::E0304,
-                        name.span,
-                        format!("`{}` is already bound and visible here; Onsa has no shadowing (§5.1)", name.name),
-                    )
-                    .with_found(name.name.clone())
-                    .with_note(prev_span, "first bound here"),
-                ));
-            }
+    /// Give the local `id` its type at `span`, or, when a branch of a choice
+    /// before this one gave it one, unify with it (§7).
+    pub(crate) fn bind_local(&mut self, id: LocalId, ty: TyId, borrow: bool, span: Span) -> R<()> {
+        let i = id.0 as usize;
+        if std::mem::replace(&mut self.typed[i], true) {
+            let lt = self.info.locals[i].ty;
+            return self.unify_at(span, ty, lt);
         }
-        let mutable = matches!(
-            kind,
-            LocalKind::Var
-                | LocalKind::Param(Mode::Inout)
-                | LocalKind::SelfParam(Mode::Inout)
-                | LocalKind::ClosureParam(Mode::Inout)
-        );
-        let id = LocalId(self.info.locals.len() as u32);
-        self.info.locals.push(LocalInfo { name: name.name.clone(), span: name.span, ty, kind, borrow, mutable });
-        self.scopes.last_mut().expect("scope").names.push((name.name.clone(), id));
-        Ok(id)
+        let l = &mut self.info.locals[i];
+        l.ty = ty;
+        l.borrow = borrow;
+        Ok(())
+    }
+
+    /// Whether the chain of names `e` ends at (`a.b.c`) starts at a local, by
+    /// the record of its head.
+    pub(crate) fn of_a_local(&self, e: ExprId) -> bool {
+        let mut cur = e;
+        while let ExprKind::Field { base, .. } = &self.expr(cur).kind {
+            cur = *base;
+        }
+        matches!(self.names.paths.get(&cur), Some(PathRes::Local(_)))
     }
 
     pub(crate) fn local_ty(&self, id: LocalId) -> TyId {

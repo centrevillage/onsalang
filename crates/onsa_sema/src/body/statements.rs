@@ -29,7 +29,7 @@ impl<'a> Checker<'a> {
                     None => self.check_expr(*init, ann)?,
                 };
                 let borrow = self.is_borrow_source(*init);
-                self.bind_pat(*pat, it, true, borrow, LocalKind::Let)?;
+                self.bind_pat(*pat, it, true, borrow)?;
                 Ok(())
             }
             StmtKind::Var { name, ty, init } => {
@@ -43,7 +43,8 @@ impl<'a> Checker<'a> {
                     }
                     None => self.check_expr(*init, ann)?,
                 };
-                self.declare(name, it, LocalKind::Var, false)?;
+                let id = self.local_of(Origin::Var(s))?;
+                self.bind_local(id, it, false, name.span)?;
                 Ok(())
             }
             StmtKind::Assign { target, value } => {
@@ -62,17 +63,12 @@ impl<'a> Checker<'a> {
             }
             StmtKind::For { pat, moved, iter, body } => {
                 let (elem, borrow) = self.check_iter(*iter, *moved)?;
-                self.push_scope();
-                let r = (|| -> R<()> {
-                    self.bind_pat(*pat, elem, true, borrow, LocalKind::For { moved: *moved })?;
-                    self.frames.last_mut().unwrap().loop_depth += 1;
-                    let unit = self.unit();
-                    let r = self.check_expr(*body, Some(unit));
-                    self.frames.last_mut().unwrap().loop_depth -= 1;
-                    r.map(|_| ())
-                })();
-                self.pop_scope();
-                r
+                self.bind_pat(*pat, elem, true, borrow)?;
+                self.frames.last_mut().unwrap().loop_depth += 1;
+                let unit = self.unit();
+                let r = self.check_expr(*body, Some(unit));
+                self.frames.last_mut().unwrap().loop_depth -= 1;
+                r.map(|_| ())
             }
             StmtKind::While { cond, body } => {
                 let bool_ = self.bool_();
@@ -169,22 +165,23 @@ impl<'a> Checker<'a> {
     }
 
     /// A place expression (§5.1): a local, or a field / element / tuple element of a place
-    /// ([`onsa_syntax::ast::Ast::place_root`], the one definition of the form).
-    pub(super) fn is_place(&mut self, e: ExprId) -> bool {
-        let ast = self.ast;
-        ast.place_root(e).is_some_and(|name| name == "self" || self.lookup_local(name).is_some())
+    /// ([`onsa_syntax::ast::Ast::place_root_node`], the one definition of the form),
+    /// whose root the record has as a local (`self` included).
+    pub(super) fn is_place(&self, e: ExprId) -> bool {
+        let root = self.ast.place_root_node(e);
+        root.is_some_and(|r| matches!(self.names.paths.get(&r), Some(PathRes::Local(_))))
     }
 
     /// §5.4: `let y = x`, `x.f`, `x[i]` where `x` is a borrowed parameter or a
     /// borrow binding derived from one.
-    fn is_borrow_source(&mut self, e: ExprId) -> bool {
+    fn is_borrow_source(&self, e: ExprId) -> bool {
         match &self.expr(e).kind {
-            ExprKind::Path(p) if p.segments.len() == 1 => match self.lookup_local(&p.segments[0].name) {
-                Some(id) => {
-                    let l = &self.info.locals[id.0 as usize];
+            ExprKind::Path(p) if p.segments.len() == 1 => match self.names.paths.get(&e) {
+                Some(PathRes::Local(b)) => {
+                    let l = &self.info.locals[b.0 as usize];
                     l.borrow || matches!(l.kind, LocalKind::Param(Mode::Borrow) | LocalKind::SelfParam(Mode::Borrow))
                 }
-                None => false,
+                _ => false,
             },
             ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
                 self.is_borrow_source(*base)

@@ -2287,3 +2287,10 @@ target = "tests/spec/fixes/e0320_rename.onsa:56:7 E0320 fix1"
 reasons = ["S-82", "R-87"]
 until = "W4-04"
 note = "E0320 の候補が var の宣言だけを改名し、同じ関数の代入 `Count = Count + 1` に名前の段の E0302 が残る（S-82、R-87 (5)。W4-04 U3a で前の E0415 から変わった）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow/builtin_sample_tick_call.onsa"
+reasons = ["S-565"]
+until = "W7-09"
+note = "`sample_tick()` は W7-09 で実装する（位相のカウンタ）。今は E0200 `Feature::SampleTick`（R-288、W4-04 U3b で E0302 から変えた）"

@@ -130,6 +130,8 @@ features! {
         Some("bind the call with a `let` of its own, which is computed at `init`");
     /// R-03: the look-back of a replica (W7-04).
     FeedbackInPar: Language, "a feedback reference `^name` inside a `par`", None;
+    /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
+    SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
     /// S-44, S-116: its E0020 is the names stage's (W7-04).
     CaretOnVisible: Language, "`^` on a name that is defined above it (a redundant mark)", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

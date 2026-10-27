@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3"]
+
+// R-283: an anonymous function that holds an anonymous function capturing an outer value is a
+// capturing closure itself (§5.3: "外側の値をコピーで捕捉する無名関数"; the outer one needs the
+// value to build the inner one), so it is second class: it cannot be bound by `let`, returned or
+// stored (E0710). The innermost closure alone was counted before. The position is the
+// closure that is bound, returned or stored. One error per function. W4-04 U3b gives the capture
+// of an inner closure to the closures around it (tests/pending.toml).
+
+pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }
+
+pub struct Callback {
+  f: fn(U32) -> U32,
+}
+
+// The outer closure is bound by `let`: it captures `k` through the closure it builds.
+pub fn bound_by_let(k: U32) -> U32 {
+  let h = fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + k }) }   //~ E0710
+  h.(1)
+}
+
+// The inner closure has an untyped parameter.
+pub fn bound_with_untyped_inner(k: U32) -> U32 {
+  let h = fn(i: U32) -> U32 { apply(fn(j) { j + k }) }   //~ E0710
+  h.(1)
+}
+
+// The outer closure is the value a function returns.
+pub fn returned(k: U32) -> fn(U32) -> U32 {
+  fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + k }) }   //~ E0710
+}
+
+// The outer closure is stored in a field.
+pub fn stored_in_a_field(k: U32) -> Callback {
+  Callback { f: fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + k }) } }   //~ E0710
+}
+
+// Three levels: only the innermost closure names `k`, the other two build it.
+pub fn three_levels(k: U32) -> U32 {
+  let h = fn(a: U32) -> U32 { apply(fn(b: U32) -> U32 { apply(fn(c: U32) -> U32 { c + k }) }) }   //~ E0710
+  h.(1)
+}
+
+// The inner closure names both a value of the function and a value of the outer closure; the outer
+// closure still captures `k`.
+pub fn inner_names_both(k: U32) -> U32 {
+  let h = fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + i + k }) }   //~ E0710
+  h.(1)
+}
+
+// The captured value is a local of the function, not a parameter.
+pub fn captured_local(n: U32) -> U32 {
+  let k = n + 1
+  let h = fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + k }) }   //~ E0710
+  h.(1)
+}
+
+// The inner closure is built in a `let` inside the outer closure's block.
+pub fn inner_in_a_block(k: U32) -> U32 {
+  let h = fn(i: U32) -> U32 {   //~ E0710
+    let r = apply(fn(j: U32) -> U32 { j + k })
+    r + i
+  }
+  h.(1)
+}

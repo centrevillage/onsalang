@@ -59,10 +59,20 @@ impl Walker<'_> {
                 self.type_sites.push(*ty);
                 Ok(())
             }
+            // `^y`: a local, or a builtin name of the flow (S-720); any other
+            // name is the flow stage's until W7-04.
             ExprKind::Feedback(name) => {
                 if let Some(b) = self.lookup(&name.name) {
                     self.out.paths.insert(e, PathRes::Local(b));
+                } else if let Some(b) = self.flow_name(&name.name) {
+                    let d = b.misplaced([name.span].into_iter(), self.text).with_found(self.src(ast.expr(e).span));
+                    return Err(self.fail(Fail::Report(d)));
                 }
+                Ok(())
+            }
+            ExprKind::Hole => {
+                let visible = self.visible();
+                self.out.holes.insert(e, visible);
                 Ok(())
             }
             // A type argument in an expression: the names stage gives it to
@@ -84,7 +94,7 @@ impl Walker<'_> {
                 self.const_expr(range.lo)?;
                 self.const_expr(range.hi)?;
                 self.open_scope();
-                self.declare(var, BindingKind::ParVar, Origin::Par(e), None);
+                self.declare(var, BindingKind::ParVar, Origin::Par(e), None)?;
                 self.expr(*body)?;
                 self.close_scope();
                 Ok(())
@@ -157,7 +167,7 @@ impl Walker<'_> {
             StmtKind::Var { name, init, ty } => {
                 self.type_sites.extend(ty);
                 self.expr(*init)?;
-                self.declare(name, BindingKind::Var, Origin::Var(s), None);
+                self.declare(name, BindingKind::Var, Origin::Var(s), None)?;
                 Ok(())
             }
             // An assignment of a flow body is an error of the flow stage
@@ -213,12 +223,8 @@ impl Walker<'_> {
         for (k, p) in params.iter().enumerate() {
             // `self` is no parameter of an anonymous function (E0002, the types stage).
             if let ParamName::Ident(name) = &p.name {
-                self.declare(
-                    name,
-                    BindingKind::ClosureParam(p.mode),
-                    Origin::Closure { closure: e, param: k as u32 },
-                    None,
-                );
+                let origin = Origin::Closure { closure: e, param: k as u32 };
+                self.declare(name, BindingKind::ClosureParam(p.mode), origin, None)?;
             }
         }
         self.expr(body)?;
@@ -238,7 +244,7 @@ impl Walker<'_> {
                         self.out.bindings[b.0 as usize].sites.push(p);
                         b
                     }
-                    None => self.declare(name, kind, origin, Some(p)),
+                    None => self.declare(name, kind, origin, Some(p))?,
                 };
                 self.out.pats.insert(p, PatRes::Bind(b));
                 if let Some(c) = self.choices.last_mut() {
@@ -275,7 +281,7 @@ impl Walker<'_> {
     }
 
     /// The binding of `name` in an earlier branch of the open choices, unless
-    /// this branch binds it already (two bindings of one name, E0304).
+    /// this branch binds it already (two bindings of one name, E0304, R-284).
     fn earlier_branch(&self, name: &str) -> Option<BindingId> {
         for c in self.choices.iter().rev() {
             if c.cur.contains_key(name) {

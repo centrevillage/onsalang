@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3"]
+
+// The closure forms around R-283 that already hold (modes_second_class_nested.onsa has the forms
+// that do not): a closure that captures directly is E0710 when bound, returned or stored, and
+// E0712 when it captures an `inout` or Affine value; a nested closure is fine when no closure
+// of the nest needs a value from outside the closure that holds it (§5.3, "捕捉の無い関数値は
+// Copy の第一級の値"), and when the outer closure is only passed as an argument.
+
+pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }
+
+pub struct Callback {
+  f: fn(U32) -> U32,
+}
+
+pub fn direct_bound_by_let(k: U32) -> U32 {
+  let h = fn(i: U32) -> U32 { i + k }   //~ E0710
+  h.(1)
+}
+
+pub fn direct_stored_in_a_field(k: U32) -> Callback {
+  Callback { f: fn(i: U32) -> U32 { i + k } }   //~ E0710
+}
+
+// The closure bound by `let` inside the outer closure captures a value of the outer closure.
+pub fn inner_bound_by_let(k: U32) -> U32 {
+  apply(fn(i: U32) -> U32 {
+    let g = fn(j: U32) -> U32 { j + i }   //~ E0710
+    g.(1)
+  })
+}
+
+// A nested use of an `inout` argument or of an Affine value is E0712 (a closure cannot capture
+// them).
+pub fn nested_captures_inout(inout k: U32) -> U32 {
+  apply(fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { i + j + k }) })   //~ E0712
+}
+
+pub fn nested_captures_a_borrowed_buf(b: Buf[F32]) -> U32 {
+  apply(fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + b.len() }) })   //~ E0712
+}
+
+// The outer closure is passed as an argument: second class is allowed there, even when the inner
+// closure captures `k`.
+pub fn outer_passed_as_an_argument(k: U32) -> U32 {
+  apply(fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + k }) })
+}
+
+// The inner closure uses only the outer closure's own parameter, and the outer one only its own:
+// neither captures anything from outside, so both are first-class values.
+pub fn nothing_captured_from_outside() -> U32 {
+  let h = fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + i }) }
+  h.(1)
+}
+
+// A capture-free nest may be returned and stored.
+pub fn capture_free_nest_returned() -> fn(U32) -> U32 {
+  fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + i }) }
+}
+
+pub fn capture_free_nest_stored() -> Callback {
+  Callback { f: fn(i: U32) -> U32 { apply(fn(j: U32) -> U32 { j + i }) } }
+}
+
+// The inner closure is let-bound inside the outer one and uses a value of the function around the
+// outer closure only through the outer closure's own parameter.
+pub fn let_inside_capture_free(k: U32) -> U32 {
+  let h = fn(i: U32) -> U32 {
+    let g = fn(j: U32) -> U32 { j + 1 }
+    g.(i)
+  }
+  h.(k)
+}
