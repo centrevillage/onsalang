@@ -151,9 +151,9 @@
 | `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71） |
 | `parent/r80/` | R-80（NRVO の判定の食い違い。`onsa build --target host .` の生成コードで確かめる。期待値は `m.onsa` の先頭のコメント） |
 | `parent/r83.onsa` | R-83（効果の使用の診断。期待値と今の出力は各関数の上のコメント。S-77） |
-| `parent/r84.onsa`、`parent/r84_type.onsa` | R-84、R-103（名前の段と名前の隠蔽。期待値と今の出力は各項目の上のコメント。S-78、S-79）。`parent/r84_type.onsa`（利用者の型が組込み型・prelude と同じ名前）は W4-03 U3a1/t で期待値付きのテストへ写した: `tests/spec/packages/overlap_prelude_names/types.onsa`、`crates/onsa_cli/tests/name_overlaps.rs`。`parent/r84.onsa` のローカルの隠蔽は W4-04。`parent/r84_type.onsa` の元の入力は W4-03 を終えた後に消した（73 回目） |
+| `parent/r84.onsa`、`parent/r84_type.onsa` | R-84、R-103（名前の段と名前の隠蔽。期待値と今の出力は各項目の上のコメント。S-78、S-79）。`parent/r84_type.onsa`（利用者の型が組込み型・prelude と同じ名前）は W4-03 U3a1/t で期待値付きのテストへ写した: `tests/spec/packages/overlap_prelude_names/types.onsa`、`crates/onsa_cli/tests/name_overlaps.rs`。`parent/r84.onsa` のローカルの隠蔽は W4-04 U7a で E0304 になった（今の `onsa check` の出力は 17・23・29 行が E0304）。`parent/r84_type.onsa` の元の入力は W4-03 を終えた後に消した（73 回目） |
 | `parent/r85.onsa` | R-85（束縛の状態。期待値と今の出力は各関数の上のコメント。S-80） |
-| `parent/r87.onsa` | R-87（修正候補の形と診断を置く位置。`onsa check --json` で確かめる。期待値と今の出力は各関数の上のコメント。S-81、S-82）。候補の形（S-81、R-87 (1)(2)）は W3-02 で直した。残りの E0320 の全ての使用箇所は W4-04、E0601 の位置は W6-03 で、期待値は `tests/spec/fixes/e0320_rename.onsa`・`pkg_rename/`・`e0601_alloc_row.onsa`（実装待ち） |
+| `parent/r87.onsa` | R-87（修正候補の形と診断を置く位置。`onsa check --json` で確かめる。期待値と今の出力は各関数の上のコメント。S-81、S-82）。候補の形（S-81、R-87 (1)(2)）は W3-02 で直した。E0320 の全ての使用箇所の改名は W4-04 U9 で直した（今の `onsa check --json` は複数の編集を持つ候補を出す。期待値は `tests/spec/fixes/e0320_rename.onsa`・`pkg_rename/`）。E0601 の位置は W6-03 で、期待値は `tests/spec/fixes/e0601_alloc_row.onsa`（実装待ち） |
 | `parent/r88/` | R-88（std の版の固定。期待値は `onsa.toml` の先頭のコメント。S-83） |
 | `parent/r93.onsa` | R-93、R-81（評価順。S-75 の期待値で書いたテストで、今の結果は各テストの上のコメント） |
 | `parent/r94/` | R-94、R-131（数の trait の形。`check.onsa` は `onsa check`、`run.onsa` は `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-84） |

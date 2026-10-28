@@ -9,7 +9,7 @@
 //    （関数の呼び出し、ローカル変数など）を書くと、位置によらず E0417");
 //  - a name that is not a value (a type, a trait, an effect, a flow) is E0308 (§15.1), and it is the
 //    rule of the version, so it is reported where the name is written whether or not the version
-//    evaluates the operation (§15.1: "要る種類でない名前は E0200 より先に E0308").
+//    evaluates the operation (§15.1: "要る種類でない名前には E0200 でなく E0308 を付ける"; §18.1: the stage goes first).
 // The operations of constants that are right (`K * 2`) are in array_length_operations_fine.onsa: this
 // version does not evaluate them yet (E0200 in the version, W9-03), so they are not here. The call and the
 // local binding are wrong whatever the version evaluates, so the E0417 of them is not the E0200 of

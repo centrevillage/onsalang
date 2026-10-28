@@ -1793,7 +1793,7 @@ note = "型パラメータの関連定数 `T.ZERO` が E0302（R-56）。呼ぶ�
 [[pending]]
 kind = "test-case"
 target = "tests/spec/module/kind_alias_cycle.onsa"
-reasons = ["S-728", "R-182"]
+reasons = ["R-182"]
 until = "W4-05"
 note = "自分を指す別名 `type Lp = Lp` が今 E0310（§4.4 は E0311、W4-05 の R-182）。値の位置で単位を止めるのは W4-04 U8a"
 
