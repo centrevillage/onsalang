@@ -1,0 +1,128 @@
+struct A0 {
+  v: F32,
+}
+
+struct A1 {
+  x: A0,
+  y: A0,
+}
+
+struct A2 {
+  x: A1,
+  y: A1,
+}
+
+struct A3 {
+  x: A2,
+  y: A2,
+}
+
+struct A4 {
+  x: A3,
+  y: A3,
+}
+
+struct A5 {
+  x: A4,
+  y: A4,
+}
+
+struct A6 {
+  x: A5,
+  y: A5,
+}
+
+struct A7 {
+  x: A6,
+  y: A6,
+}
+
+struct A8 {
+  x: A7,
+  y: A7,
+}
+
+struct A9 {
+  x: A8,
+  y: A8,
+}
+
+struct A10 {
+  x: A9,
+  y: A9,
+}
+
+struct A11 {
+  x: A10,
+  y: A10,
+}
+
+struct A12 {
+  x: A11,
+  y: A11,
+}
+
+struct A13 {
+  x: A12,
+  y: A12,
+}
+
+struct A14 {
+  x: A13,
+  y: A13,
+}
+
+struct A15 {
+  x: A14,
+  y: A14,
+}
+
+struct A16 {
+  x: A15,
+  y: A15,
+}
+
+struct A17 {
+  x: A16,
+  y: A16,
+}
+
+struct A18 {
+  x: A17,
+  y: A17,
+}
+
+struct A19 {
+  x: A18,
+  y: A18,
+}
+
+struct A20 {
+  x: A19,
+  y: A19,
+}
+
+struct A21 {
+  x: A20,
+  y: A20,
+}
+
+struct A22 {
+  x: A21,
+  y: A21,
+}
+
+struct A23 {
+  x: A22,
+  y: A22,
+}
+
+struct A24 {
+  x: A23,
+  y: A23,
+}
+
+fn f(a: A24) -> A24 {
+  let b = a
+  b
+}
