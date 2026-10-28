@@ -1,0 +1,12 @@
+impl (I32, I32) {
+  pub fn f() {}
+}
+impl [F32; 2] {
+  pub fn f() {}
+}
+impl () {
+  pub fn f() {}
+}
+impl fn(I32) -> I32 {
+  pub fn f() {}
+}

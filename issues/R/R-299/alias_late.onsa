@@ -1,0 +1,9 @@
+pub struct S { x: I32 }
+
+type Al = S
+
+pub type Row = [F32; Al.N]
+
+impl S {
+  pub const N: I32 = 2
+}
