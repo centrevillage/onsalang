@@ -1,0 +1,32 @@
+=== flow_closure_row_bad
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let g = fn(y: F32) -> F32 uses {Nope} { y }
+  x
+}
+=== flow_closure_param_bad
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let g = fn(y: Nope) -> F32 { y }
+  x
+}
+=== flow_closure_row_local
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let g = fn(y: F32) -> F32 uses {x} { y }
+  x
+}
+=== flow_closure_ok
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let g = fn(y: F32) -> F32 { y }
+  x
+}
+=== flow_closure_row_ok
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let g = fn(y: F32) -> F32 uses {Alloc} { y }
+  x
+}
+=== flow_closure_in_let_type_after
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let g = fn(y: F32) -> F32 uses {Alloc} { y }
+  let h: z = x
+  let z = x
+  x
+}
