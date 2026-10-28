@@ -1,0 +1,16 @@
+pub fn pair_of_buffers(move t: (Buf[F32], U32)) uses {Alloc} {}
+
+pub fn take_buf(move buf: Buf[F32]) uses {Alloc} {}
+
+pub fn fa() uses {Alloc} {
+  take_buf(Buf.zeroed(4))
+}
+
+pub fn fb() uses {Alloc} {
+  pair_of_buffers((Buf.zeroed(4), 2))
+}
+
+pub fn fc() uses {Alloc} {
+  let t = (Buf.zeroed(4), 2)
+  pair_of_buffers(move t)
+}
