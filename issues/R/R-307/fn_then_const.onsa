@@ -1,0 +1,5 @@
+pub struct P { x: I32 }
+impl P {
+  pub fn a() -> I32 { 1 }
+  pub const a: I32 = 2
+}
