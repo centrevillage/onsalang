@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§18.1"]
+
+// S-134, S-737, R-307 (W4-05 U3a): the methods, the associated functions and the associated constants of one
+// type are names of one space after the name of the type, and a name that repeats is E0304 (§6.2: "メンバどうしは
+// ソースの順で後の宣言に付けて前を note で示す"), in the `impl` blocks of a type that has several (§6.2: the
+// blocks of a type may differ in bounds, and the space is one). The E0304 is at the later one in the order of the
+// source: inside one `impl`, in a second `impl` of the type, in a third that repeats a name of the first, and
+// in an `impl` with a bound (`T: Float`) that repeats a name of an `impl` without. Two functions, two constants;
+// a function and a constant cannot repeat a name (§2.3: the form of the name tells them apart; they are in
+// impl_member_clash_const_fn.onsa with the E0320 that comes with it). The names that differ are fine, and a name
+// that two types have is no clash. The notes show the earlier member (not a part of the marks of a case).
+
+pub struct P1 {
+  x: I32,
+}
+
+impl P1 {
+  pub fn get(self) -> I32 { 1 }
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}
+
+pub struct P2 {
+  x: I32,
+}
+
+impl P2 {
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl P2 {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}
+
+pub struct P3 {
+  x: I32,
+}
+
+impl P3 {
+  pub const N: U32 = 1
+  pub const N: U32 = 2                              //~ E0304
+}
+
+pub struct P4 {
+  x: I32,
+}
+
+impl P4 {
+  pub const N: U32 = 1
+}
+
+impl P4 {
+  pub const N: U32 = 2                              //~ E0304
+}
+
+pub struct P5 {
+  x: I32,
+}
+
+impl P5 {
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl P5 {
+  pub fn other(self) -> I32 { 2 }
+}
+
+impl P5 {
+  pub fn get(self) -> I32 { 3 }                     //~ E0304
+  pub fn other(self) -> I32 { 4 }                   //~ E0304
+}
+
+pub struct P6[T] {
+  v: T,
+}
+
+impl[T] P6[T] {
+  pub fn first(self) -> T { self.v }
+}
+
+impl[T: Float] P6[T] {
+  pub fn first(self) -> T { self.v }                //~ E0304
+}
+
+pub struct P7 {
+  x: I32,
+}
+
+impl P7 {
+  pub fn a_fn() -> I32 { 1 }
+  pub fn b_fn() -> I32 { 2 }
+  pub const A_CONST: U32 = 1
+  pub const B_CONST: U32 = 2
+}
+
+pub struct P8 {
+  x: I32,
+}
+
+impl P8 {
+  pub fn get(self) -> I32 { 1 }
+  pub const N: U32 = 1
+}
+
+pub struct P9 {
+  x: I32,
+}
+
+impl P9 {
+  pub fn get(self) -> I32 { 1 }
+  pub const N: U32 = 1
+}

@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// R-299 (the form of an alias), S-744, S-748 (W4-05 U3a): the contrast of cycle_type_const_assoc.onsa with the
+// path written by an alias of the type: `type A = S` and `impl S { pub const N: [F32; A.N] = … }` is the same
+// E0311 as `Self.N` (the constant whose declared type reads itself in a length, §4.4: "固定長配列の長さと
+// const 引数が読む定数は、その定数の宣言の型を辿る"; an alias is replaced by its right side and `A.N` is the
+// path `S.N`, §4.4). The collection is the one constant, so the E0311 is at its name. The alias is written
+// before or after the `impl`, is an alias of an alias, is `pub` or not, and the type of the constant is a cycle
+// of two constants that read each other through the alias (one E0311 for the collection, at the first name,
+// §18.1). The type of a constant that reads another constant of the type, which has the type `U32`, is no cycle
+// (the last unit): no diagnostic.
+
+pub struct P1 {
+  x: F32,
+}
+
+type A1 = P1
+
+impl P1 {
+  pub const N: [F32; A1.N] = 3                      //~ E0311
+}
+
+pub struct P2 {
+  x: F32,
+}
+
+impl P2 {
+  pub const N: [F32; A2.N] = 3                      //~ E0311
+}
+
+type A2 = P2
+
+pub struct P3 {
+  x: F32,
+}
+
+type A3b = A3a
+
+type A3a = P3
+
+impl P3 {
+  pub const N: [F32; A3b.N] = 3                     //~ E0311
+}
+
+pub struct P4 {
+  x: F32,
+}
+
+pub type A4 = P4
+
+impl P4 {
+  const N: [F32; A4.N] = 3                          //~ E0311
+}
+
+pub struct P5 {
+  x: F32,
+}
+
+type A5 = P5
+
+impl P5 {
+  pub const N: [F32; A5.M] = 3                      //~ E0311
+  pub const M: [F32; A5.N] = 3
+}
+
+pub struct P6 {
+  x: F32,
+}
+
+type A6 = P6
+
+impl P6 {
+  pub const N: U32 = 3
+  pub const M: [F32; A6.N] = [1.0, 2.0, 3.0]
+  pub const L: [F32; Self.N] = [1.0, 2.0, 3.0]
+}

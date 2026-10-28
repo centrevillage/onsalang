@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§15.1"]
+
+// R-299 (the form of an alias), S-725 (W4-05 U3a): the type of the constant that a length reads is checked
+// whatever the order of the source (S-725: "定数の型も書いた順によらずに確かめる"; §4.5: a constant that is
+// not `U32` is E0401 in a length). The path of the constant is written by an alias of the type
+// (`type Al = S`, `Al.N`), and the `impl` that has the constant `N: I32` is written after the alias
+// (`issues/R/R-299/alias_late.onsa`, which gave no diagnostic) or before it (`alias_early.onsa`, which is E0401
+// already): in an alias of a type, in a signature, in the type of a constant, in a field, in the type of a
+// constant of the `impl` itself, and through a chain of aliases. The constants of the type `U32` are fine (the
+// positive file is length_const_type_alias_fine.onsa).
+
+pub struct S1 {
+  x: I32,
+}
+
+type Al1 = S1
+
+pub type Row1 = [F32; Al1.N]                        //~ E0401
+
+impl S1 {
+  pub const N: I32 = 2
+}
+
+pub struct S2 {
+  x: I32,
+}
+
+type Al2 = S2
+
+pub fn sig2(a: [F32; Al2.N]) -> F32 {               //~ E0401
+  a[0]
+}
+
+impl S2 {
+  pub const N: I32 = 2
+}
+
+pub struct S3 {
+  x: I32,
+}
+
+type Al3 = S3
+
+pub const K3: [F32; Al3.N] = [1.0, 2.0]             //~ E0401
+
+impl S3 {
+  pub const N: I32 = 2
+}
+
+pub struct S4 {
+  x: I32,
+}
+
+type Al4 = S4
+
+pub struct Holder4 {
+  r: [F32; Al4.N],                                  //~ E0401
+}
+
+impl S4 {
+  pub const N: I32 = 2
+}
+
+pub struct S5 {
+  x: I32,
+}
+
+impl S5 {
+  pub const N: I32 = 2
+}
+
+type Al5 = S5
+
+pub type Row5 = [F32; Al5.N]                        //~ E0401
+
+pub fn sig5(a: [F32; Al5.N]) -> F32 {               //~ E0401
+  a[0]
+}
+
+pub const K5: [F32; Al5.N] = [1.0, 2.0]             //~ E0401
+
+pub struct S6 {
+  x: I32,
+}
+
+type Al6 = S6
+
+impl S6 {
+  pub const N: I32 = 2
+  pub const M: [F32; Al6.N] = [1.0, 2.0]            //~ E0401
+}
+
+pub struct S7 {
+  x: I32,
+}
+
+type Al7b = Al7a
+
+type Al7a = S7
+
+pub type Row7 = [F32; Al7b.N]                       //~ E0401
+
+impl S7 {
+  pub const N: I32 = 2
+}

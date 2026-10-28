@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.2", "§18.1"]
+
+// S-748 (a) and A1, A2 (W4-05 U3a): the forms of the alias that is the target of an `impl` (the E0307 of the heading,
+// §4.4). A chain of aliases ends in the declaration of the type, and the members are names after the name of that
+// type (the alias is replaced by its right side, §4.4): the alias of an alias is read by `S1.N` and
+// `S1.f()` without a diagnostic of a missing name. The alias of a built-in type (`type AF = F32`) is an alias
+// whose type is decided, so its members are names after `F32` in the same way (the names are not in std, so they
+// meet nothing; the orphan rule of the direct form is W5-04). The alias of a type that has no name (a tuple,
+// an array) has a type that no path starts from, so the members are in no space (S-748 A2: "メンバはどこにも入らない"):
+// the same name of a direct `impl` of a struct is no clash (the last unit). Each `impl` has the E0307 of its heading and
+// nothing after it.
+
+pub struct S1 {
+  x: I32,
+}
+
+type A1 = S1
+
+type A1b = A1
+
+type A1c = A1b
+
+impl A1c {                                          //~ E0307
+  pub const N: U32 = 2
+  pub fn f() -> U32 { 1 }
+}
+
+pub fn chain_const() -> U32 {
+  S1.N
+}
+
+pub fn chain_fn() -> U32 {
+  S1.f()
+}
+
+pub fn chain_len(a: [F32; S1.N]) -> F32 {
+  a[0]
+}
+
+pub fn chain_by_alias() -> U32 {
+  A1b.N
+}
+
+type AF = F32
+
+impl AF {                                           //~ E0307
+  pub const MY_COUNT: U32 = 2
+  pub const MY_GAIN: F32 = 0.5
+}
+
+pub fn builtin_const() -> F32 {
+  F32.MY_GAIN
+}
+
+pub fn builtin_len(a: [F32; F32.MY_COUNT]) -> F32 {
+  a[0]
+}
+
+pub fn builtin_missing() -> F32 {
+  F32.MY_MISSING                                    //~ E0302
+}
+
+type T2 = (I32, I32)
+
+impl T2 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+  pub const LIMIT: U32 = 2
+}
+
+type Arr = [F32; 3]
+
+impl Arr {                                          //~ E0307
+  pub fn get(self) -> I32 { 1 }
+  pub const LIMIT: U32 = 2
+}
+
+pub struct S4 {
+  x: I32,
+}
+
+impl S4 {
+  pub fn get(self) -> I32 { 3 }
+  pub const LIMIT: U32 = 4
+}

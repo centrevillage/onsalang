@@ -280,10 +280,10 @@ impl Modules {
     }
 
     fn builtin_member(&self, key: TyId, name: &Ident, from: ModId, defs: &[Def]) -> Result<Entity, ResolveError> {
-        if let Some(a) = self.assoc_builtin.get(&key).and_then(|m| m.get(&name.name)) {
+        if let Some(a) = self.assoc_member(self.assoc_builtin.get(&key), &name.name)? {
             let adef = &defs[a.0 as usize];
             if self.visible(adef.vis, adef.module, from) {
-                return Ok(Entity::Member(*a));
+                return Ok(Entity::Member(a));
             }
             let why = self.hidden_why(adef.vis, None, from);
             return Err(ResolveError::NotVisible {
@@ -356,6 +356,8 @@ impl Modules {
             }
             Entity::Def(d) => {
                 let def = &defs[d.0 as usize];
+                // Of an E0304, neither the members nor the variant (§18.1, S-737).
+                let assoc = self.assoc_member(self.assoc.get(&d), &name.name)?;
                 match &def.kind {
                     DefKind::Flow(f) => {
                         // The sizes of the state (`SIZE`, `BULK_SIZE`, the
@@ -383,7 +385,7 @@ impl Modules {
                         return Err(ResolveError::NotANamespace { name: def.name.clone(), span: name.span, kind });
                     }
                 }
-                if let Some(&a) = self.assoc.get(&d).and_then(|m| m.get(&name.name)) {
+                if let Some(a) = assoc {
                     return self.member_reach(def, &defs[a.0 as usize], name, from).map(|()| Entity::Member(a));
                 }
                 Err(ResolveError::NotFound { name: format!("{}.{}", def.name, name.name), span: name.span })

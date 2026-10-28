@@ -3,10 +3,9 @@
 // spec = ["§2.2", "§4.4", "§4.5"]
 
 // S-595, S-446 (§2.2, §4.5): `Self.N` as the length of an array and as a const argument in the signature of a
-// member of the `impl`: `a: [F32; Self.N]`, `-> [F32; Self.N]`, `Ring[F32, Self.N]`. Today the name of the type
-// written there (`Voice.N`) is not found either (E0302 "cannot find `Voice.N`": the constants of the `impl` are
-// not seen by the signatures of its own members), so the unit that makes the signatures see the constants is
-// not only `Self`. Everything here is right.
+// member of the `impl`: `a: [F32; Self.N]`, `-> [F32; Self.N]`, `Ring[F32, Self.N]`. The name of the type
+// written there (`Voice.N`) is found the same way (S-725: the members of an `impl` are named before any
+// signature). Everything here is right.
 
 pub struct Ring[T, const N: U32] {
   data: [T; N],

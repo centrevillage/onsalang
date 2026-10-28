@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.2", "§18.1"]
+
+// R-307, S-737 (W4-05 U3a): a function `a` and a constant `a` of one type (the constant is not UPPER_SNAKE, so
+// it is E0320 as well, §2.3: a function and a constant of one name must break one of the naming rules). The
+// constant is written BEFORE the function, so the later one is the function and the E0304 is at the function
+// (§6.2: "メンバどうしはソースの順で後の宣言に付け"; before R-307 it was put on the constant, whatever the
+// order, and its note showed the function after it). The constant is its own unit with the E0320 only (nothing is
+// before it). The same in two `impl` blocks of the type. The other order (the function first) puts the E0304 on
+// the constant, which has the E0320 of its own too, in one unit at the same name: the E0320 the parser alone
+// reports cannot be written as a marker there, so that form is a Rust test of `onsa_sema`
+// (`a_constant_after_a_function_of_its_name_is_the_e0304_alone`).
+
+pub struct P1 {
+  x: I32,
+}
+
+impl P1 {
+  pub const a: I32 = 2                              //~ E0320
+  pub fn a() -> I32 { 1 }                           //~ E0304
+}
+
+pub struct P2 {
+  x: I32,
+}
+
+impl P2 {
+  pub const b: I32 = 2                              //~ E0320
+}
+
+impl P2 {
+  pub fn b() -> I32 { 1 }                           //~ E0304
+}
+
+pub struct P3 {
+  x: I32,
+}
+
+impl P3 {
+  pub const c: I32 = 2                              //~ E0320
+  pub fn other() -> I32 { 1 }
+  pub fn c(self) -> I32 { 3 }                       //~ E0304
+}

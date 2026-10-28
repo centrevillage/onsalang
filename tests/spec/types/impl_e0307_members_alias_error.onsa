@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+
+// S-752 (1), S-748 (a) (W4-05 U3a): the alias that is written as the target of an `impl` is itself an error
+// type (the arguments of a type that takes none, `type A1 = S1[I32]`, which is E0302; a cycle of values, `struct S2
+// { a: A2 }` and `type A2 = S2`, which is E0311), but the head of its right side names a type. The members of the
+// `impl` are then names after the name of that type (S-752 (1): "右辺の頭が型を名指せば、メンバはその型の `.` の
+// 空間に数える"; §18.1: the members of an `impl` whose heading is E0307 are counted when the type is decided), so
+// the member of the direct `impl` that is written after it and repeats a name is E0304, and a name that no one
+// repeats is read from the type (`S4.N` below, no diagnostic). The `impl` of the alias has no diagnostic of its own
+// besides the error of the alias: a failed name in a heading is no error of the heading (§18.1). The uses of the
+// name that is E0304 are silent. The orphan form (the target is a built-in type) is W5-04, and the `impl` written
+// after the direct one is the last form (S5): a failed name in a heading is no error of the heading
+// (§18.1), so the `impl` is not one unit, its members are units of their own, and the member that repeats the
+// name of the direct `impl` written before it is E0304.
+
+pub struct S1 {
+  x: I32,
+}
+
+type A1 = S1[I32]                                   //~ E0302
+
+impl A1 {
+  pub const N: U32 = 2
+}
+
+impl S1 {
+  pub const N: U32 = 3                              //~ E0304
+}
+
+pub fn use1() -> Bool {
+  S1.N
+}
+
+pub struct S2 { a: A2 }                             //~ E0311
+
+type A2 = S2
+
+impl A2 {
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl S2 {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}
+
+pub struct S4 {
+  x: I32,
+}
+
+type A4 = S4[I32]                                   //~ E0302
+
+impl A4 {
+  pub const N: U32 = 2
+}
+
+pub fn read4() -> U32 {
+  S4.N
+}
+
+pub fn read4_len(a: [F32; S4.N]) -> F32 {
+  a[0]
+}
+
+pub fn read4_missing() -> U32 {
+  S4.other                                          //~ E0302
+}
+
+pub struct S5 {
+  x: I32,
+}
+
+type A5 = S5[I32]                                   //~ E0302
+
+impl S5 {
+  pub const N: U32 = 3
+}
+
+impl A5 {
+  pub const N: U32 = 2                              //~ E0304
+  pub const M: U32 = 4
+}

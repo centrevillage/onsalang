@@ -327,8 +327,9 @@ impl<'p> Sema<'p> {
                 // S-689): the members are checked, and read it too (an unknown
                 // bound of their generics, an error type of `self`).
                 let held = self.a.read_held.contains(&id);
-                // The members are named before (`Sema::name_members`), and a
-                // constant lowered in the order of the declarations.
+                // The members are named before, with their E0304
+                // (`Sema::name_members`), and a constant lowered in the order
+                // of the declarations.
                 for &sub in fns.iter().chain(&consts) {
                     if held {
                         self.a.read_held.insert(sub);
@@ -337,22 +338,6 @@ impl<'p> Sema<'p> {
                     let reach = self.type_vis((key_def, key_builtin)).map(|t| self.member_reach(&cx, sub, t));
                     if let ItemKind::Fn(f) = &cx.ast.item(sub_item).kind {
                         self.lower_fn(Cx { def: sub, reach, ..cx_clone(&cx) }, sub, f);
-                    }
-                    let name = self.a.defs[sub.0 as usize].name.clone();
-                    let name_span = self.a.defs[sub.0 as usize].name_span;
-                    let Some(table) = self.assoc_table(key_def, key_builtin) else { continue };
-                    if let Some(&prev) = table.get(&name).filter(|&&p| p != sub) {
-                        let prev_span = self.a.defs[prev.0 as usize].name_span;
-                        self.report(
-                            sub,
-                            Diagnostic::new(
-                                Stage::Names,
-                                Code::E0304,
-                                name_span,
-                                format!("`{name}` is defined twice for this type"),
-                            )
-                            .with_note(prev_span, "first defined here"),
-                        );
                     }
                 }
             }

@@ -216,7 +216,10 @@ impl<'a> Checker<'a> {
         let span = self.expr(e).span;
         let _ = callee;
         if let Ty::Named(d, targs_recv) = self.ty(recv) {
-            let assoc = self.a.modules.assoc.get(&d).and_then(|m| m.get(&name.name)).copied();
+            // Of an E0304, an unknown callee too (§18.1, S-737).
+            let Ok(assoc) = self.a.modules.assoc_member(self.a.modules.assoc.get(&d), &name.name) else {
+                return self.args_of_unknown_callee(args);
+            };
             if let Some(md) = assoc {
                 if self.a.heading_failed(md) {
                     return self.args_of_unknown_callee(args);

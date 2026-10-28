@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+
+// S-748 (a), S-737 (W4-05 U3a): the members of an inherent `impl` whose heading is E0307 (here the target
+// is written by an alias, §4.4) are names in the space after the name of their type (§6.2: "見出しが E0307 の
+// `impl` のメンバもこの空間に入る"; §18.1: "対象の型が決まればメンバをその型の名前の後の `.` の空間の名前に数え、
+// E0304 の相手にし"). The `impl` of the alias is written BEFORE the direct `impl` of the type, so the member of the
+// direct `impl` is the later one (the order of the source, §6.2) and is E0304; the `impl` of the alias is one
+// unit with the error of its heading and has its E0307 only. The forms: a function and a function, a constant
+// and a constant (a function and a constant cannot meet: a constant is UPPER_SNAKE and a function is
+// snake_case, §2.3), a name that repeats in two direct `impl` blocks after the alias one, an alias `impl` on an
+// enum, two aliases of one type, an alias of a generic type with direct `impl` blocks of different bounds
+// (§6.2: the blocks may differ in bounds, the names are one space), and a repeat inside the `impl` of the
+// alias (S-748 A4: the names of the E0307 `impl` are counted in the order of the source too; the repeat is in
+// the unit of the E0307 and hidden, the direct member after them is E0304). One error per unit (§18.1), so the
+// members that are not the repeat have no diagnostic. The note of the E0304 shows the member of the E0307
+// `impl` (not a part of the marks of a case).
+
+pub struct P1 {
+  x: I32,
+}
+
+type A1 = P1
+
+impl A1 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl P1 {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+  pub fn other(self) -> I32 { 3 }
+}
+
+pub struct P2 {
+  x: I32,
+}
+
+type A2 = P2
+
+impl A2 {                                           //~ E0307
+  pub const LIMIT: U32 = 1
+}
+
+impl P2 {
+  pub const LIMIT: U32 = 2                          //~ E0304
+  pub const OTHER: U32 = 3
+}
+
+pub struct P3 {
+  x: I32,
+}
+
+type A3 = P3
+
+impl A3 {                                           //~ E0307
+  pub fn f(self) -> I32 { 1 }
+  pub const LIMIT: U32 = 1
+  pub fn g(self) -> I32 { 1 }
+}
+
+impl P3 {
+  pub fn g(self) -> I32 { 2 }                       //~ E0304
+}
+
+impl P3 {
+  pub const LIMIT: U32 = 3                          //~ E0304
+}
+
+pub enum E4 {
+  Left,
+  Right,
+}
+
+type A4 = E4
+
+impl A4 {                                           //~ E0307
+  pub fn flip(self) -> E4 { E4.Left }
+}
+
+impl E4 {
+  pub fn flip(self) -> E4 { E4.Right }              //~ E0304
+}
+
+pub struct P5 {
+  x: I32,
+}
+
+type A5 = P5
+
+type A5b = P5
+
+impl A5 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl A5b {                                          //~ E0307
+  pub fn get(self) -> I32 { 2 }
+}
+
+impl P5 {
+  pub fn get(self) -> I32 { 3 }                     //~ E0304
+}
+
+pub struct P6[T] {
+  v: T,
+}
+
+type A6 = P6[F32]
+
+impl A6 {                                           //~ E0307
+  pub fn first(self) -> F32 { self.v }
+}
+
+impl[T] P6[T] {
+  pub fn first(self) -> T { self.v }                //~ E0304
+}
+
+impl[T: Float] P6[T] {
+  pub fn first(self) -> T { self.v }                //~ E0304
+}
+
+pub struct P7 {
+  x: I32,
+}
+
+type A7 = P7
+
+impl A7 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+  pub fn get(self) -> I32 { 2 }
+  pub const LIMIT: U32 = 1
+  pub const LIMIT: U32 = 2
+}
+
+impl P7 {
+  pub fn get(self) -> I32 { 3 }                     //~ E0304
+  pub const LIMIT: U32 = 3                          //~ E0304
+}

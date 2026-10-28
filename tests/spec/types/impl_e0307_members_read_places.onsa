@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.2", "§18.1"]
+
+// S-748 (a) and A3 (W4-05 U3a): the places that read a member of an `impl` with an E0307 heading read it as the
+// member of a direct `impl` (§18.1), in the combinations that the body of a function has: a branch (`if`, `match`), a
+// loop, a closure, a generic function, a method of another type, a test, and the nested array of the type
+// of a local. The E0307 of the heading is the only diagnostic (no E0302 for `S.N`, `S.f()` or `S.get`), and the
+// last unit shows that a name no `impl` has is still E0302 in the same combination.
+
+pub struct S {
+  x: I32,
+}
+
+type A = S
+
+impl A {                                            //~ E0307
+  pub const N: U32 = 2
+  pub fn f(i: U32) -> U32 { i }
+  pub fn get(self) -> U32 { 3 }
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    S.N
+  } else {
+    S.f(1)
+  }
+}
+
+pub fn in_a_match(c: Bool) -> U32 {
+  match c {
+    true => S.N,
+    false => S.f(1),
+  }
+}
+
+pub fn in_a_loop() -> U32 {
+  var sum = 0
+  for i in 0..<S.N {
+    sum = sum + S.f(i)
+  }
+  sum
+}
+
+pub fn in_a_closure() -> U32 {
+  let g = fn(i: U32) -> U32 { i + S.N }
+  g.(1)
+}
+
+pub fn in_a_generic[T](v: T) -> U32 {
+  S.N
+}
+
+pub fn in_a_local_type() -> F32 {
+  let a: [F32; S.N] = [1.0, 2.0]
+  a[0]
+}
+
+pub struct Other {
+  y: I32,
+}
+
+impl Other {
+  pub fn read(self, s: S) -> U32 {
+    s.get() + S.N
+  }
+}
+
+test "the members are read" {
+  assert S.N == 2
+  assert S.f(5) == 5
+}
+
+pub fn missing_in_a_branch(c: Bool) -> U32 {
+  if c {
+    S.N
+  } else {
+    S.nothing                                       //~ E0302
+  }
+}

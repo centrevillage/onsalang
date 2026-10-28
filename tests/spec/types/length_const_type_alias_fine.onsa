@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§15.1"]
+
+// R-299 (the form of an alias), S-725 (W4-05 U3a): the contrast of length_const_type_alias.onsa. A length that
+// reads the constant of an `impl` through an alias of the type (`Al.N`) is fine when the type of the constant
+// is `U32` (§4.5), whatever the order: the `impl` is written after the alias and before it, and the alias is
+// an alias of an alias. The positions are the alias of a type, a signature, the type of a constant, a field
+// and the type of a constant of another `impl`. No diagnostic.
+
+pub struct S1 {
+  x: I32,
+}
+
+type Al1 = S1
+
+pub type Row1 = [F32; Al1.N]
+
+pub fn sig1(r: Row1) -> F32 {
+  r[0]
+}
+
+pub fn sig1_len(a: [F32; Al1.N]) -> F32 {
+  a[0]
+}
+
+pub const K1: [F32; Al1.N] = [1.0, 2.0]
+
+pub struct Holder1 {
+  r: [F32; Al1.N],
+}
+
+impl S1 {
+  pub const N: U32 = 2
+  pub const M: [F32; Al1.N] = [1.0, 2.0]
+}
+
+pub struct S2 {
+  x: I32,
+}
+
+impl S2 {
+  pub const N: U32 = 3
+}
+
+type Al2b = Al2a
+
+type Al2a = S2
+
+pub type Row2 = [F32; Al2b.N]
+
+pub fn sig2(r: Row2) -> F32 {
+  r[0]
+}
+
+pub fn make2() -> Row2 {
+  [1.0, 2.0, 3.0]
+}
+
+pub fn sig2_len(a: [F32; Al2a.N]) -> F32 {
+  a[2]
+}
+
+pub struct S3 {
+  x: I32,
+}
+
+type Al3 = S3
+
+pub fn sig3(a: [F32; Al3.N]) -> F32 {
+  a[0]
+}
+
+pub fn call3() -> F32 {
+  sig3([1.0, 2.0, 3.0, 4.0])
+}
+
+impl S3 {
+  pub const N: U32 = 4
+}

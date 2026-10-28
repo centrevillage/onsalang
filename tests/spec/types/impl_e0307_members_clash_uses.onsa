@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§15.1", "§18.1"]
+
+// S-748 (a), S-737 (W4-05 U3a): a name after the name of a type that is E0304 is an error name where it is used
+// (§18.1: "E0304・E0305 になった名前も、その空間では、使う所…どちらの宣言も引かず、その名前を誤りとして扱う。
+// …報告が同じ単位の先の誤りに隠れても、扱いは同じである"), also when one of the two members is the member of an `impl` with an E0307
+// heading. Each use below would be an E0401 if it were read as one of the declarations (`I32` is not `Bool`, the
+// variant is not `Bool`), so the silence of the unit shows the error name. The forms: a name that the `impl` of the alias
+// and a direct `impl` give (the E0304 of the direct member is reported), a name that repeats inside the one
+// `impl` of the alias (the E0304 is in the unit of the E0307 and hidden), and a constant of the `impl` of the
+// alias with the name of a variant of the enum (the same, hidden). The use of a name that is no clash (`unique`,
+// the variant `B`) is read as before and is E0401 here.
+
+pub struct S1 {
+  x: I32,
+}
+
+type A1 = S1
+
+impl A1 {                                           //~ E0307
+  pub fn a(x: I32) -> I32 { x }
+  pub fn unique(x: I32) -> I32 { x }
+}
+
+impl S1 {
+  pub fn a(x: I32) -> I32 { x }                     //~ E0304
+}
+
+pub fn use_clash_1() -> Bool {
+  S1.a(1)
+}
+
+pub fn use_unique_1() -> Bool {
+  S1.unique(1)                                      //~ E0401
+}
+
+pub struct S2 {
+  x: I32,
+}
+
+type A2 = S2
+
+impl A2 {                                           //~ E0307
+  pub fn f() -> I32 { 1 }
+  pub fn f() -> I32 { 2 }
+  pub const N: U32 = 1
+  pub const N: U32 = 2
+}
+
+pub fn use_dup_fn() -> Bool {
+  S2.f()
+}
+
+pub fn use_dup_const() -> Bool {
+  S2.N
+}
+
+pub enum E3 {
+  A(I32),
+  B,
+}
+
+type A3 = E3
+
+impl A3 {                                           //~ E0307
+  pub const A: I32 = 1
+}
+
+pub fn use_variant_clash() -> Bool {
+  E3.A
+}
+
+pub fn use_variant_clash_by_alias() -> Bool {
+  A3.A
+}
+
+pub fn use_variant_other() -> Bool {
+  E3.B                                              //~ E0401
+}

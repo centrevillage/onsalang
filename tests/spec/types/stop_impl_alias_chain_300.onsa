@@ -1,0 +1,1240 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+
+// S-748 (a) (W4-05 U3a): a chain of 300 aliases and the E0307 `impl` at its head: the check ends in a short time.
+// The type of the `impl` is found by following the right sides of the aliases to the declaration (an alias is
+// replaced by its right side, §4.4), and the members of the `impl` are names after the name of that type
+// (§18.1), so the member of the direct `impl` of the type that repeats a name is E0304, and the `impl` of the
+// alias has its E0307 only. The first chain is written in the order of the aliases (`Fwdk = Fwd(k-1)`, the head is
+// the last, the `impl` is after the chain) and the second in the opposite order (`Backk = Back(k+1)`, the head is the
+// first, the `impl` is before the chain). The chain of 20000 aliases is a Rust test of the check, not a case
+// (R-298, W4-05).
+
+pub struct S {
+  x: I32,
+}
+
+type Fwd0 = S
+
+type Fwd1 = Fwd0
+
+type Fwd2 = Fwd1
+
+type Fwd3 = Fwd2
+
+type Fwd4 = Fwd3
+
+type Fwd5 = Fwd4
+
+type Fwd6 = Fwd5
+
+type Fwd7 = Fwd6
+
+type Fwd8 = Fwd7
+
+type Fwd9 = Fwd8
+
+type Fwd10 = Fwd9
+
+type Fwd11 = Fwd10
+
+type Fwd12 = Fwd11
+
+type Fwd13 = Fwd12
+
+type Fwd14 = Fwd13
+
+type Fwd15 = Fwd14
+
+type Fwd16 = Fwd15
+
+type Fwd17 = Fwd16
+
+type Fwd18 = Fwd17
+
+type Fwd19 = Fwd18
+
+type Fwd20 = Fwd19
+
+type Fwd21 = Fwd20
+
+type Fwd22 = Fwd21
+
+type Fwd23 = Fwd22
+
+type Fwd24 = Fwd23
+
+type Fwd25 = Fwd24
+
+type Fwd26 = Fwd25
+
+type Fwd27 = Fwd26
+
+type Fwd28 = Fwd27
+
+type Fwd29 = Fwd28
+
+type Fwd30 = Fwd29
+
+type Fwd31 = Fwd30
+
+type Fwd32 = Fwd31
+
+type Fwd33 = Fwd32
+
+type Fwd34 = Fwd33
+
+type Fwd35 = Fwd34
+
+type Fwd36 = Fwd35
+
+type Fwd37 = Fwd36
+
+type Fwd38 = Fwd37
+
+type Fwd39 = Fwd38
+
+type Fwd40 = Fwd39
+
+type Fwd41 = Fwd40
+
+type Fwd42 = Fwd41
+
+type Fwd43 = Fwd42
+
+type Fwd44 = Fwd43
+
+type Fwd45 = Fwd44
+
+type Fwd46 = Fwd45
+
+type Fwd47 = Fwd46
+
+type Fwd48 = Fwd47
+
+type Fwd49 = Fwd48
+
+type Fwd50 = Fwd49
+
+type Fwd51 = Fwd50
+
+type Fwd52 = Fwd51
+
+type Fwd53 = Fwd52
+
+type Fwd54 = Fwd53
+
+type Fwd55 = Fwd54
+
+type Fwd56 = Fwd55
+
+type Fwd57 = Fwd56
+
+type Fwd58 = Fwd57
+
+type Fwd59 = Fwd58
+
+type Fwd60 = Fwd59
+
+type Fwd61 = Fwd60
+
+type Fwd62 = Fwd61
+
+type Fwd63 = Fwd62
+
+type Fwd64 = Fwd63
+
+type Fwd65 = Fwd64
+
+type Fwd66 = Fwd65
+
+type Fwd67 = Fwd66
+
+type Fwd68 = Fwd67
+
+type Fwd69 = Fwd68
+
+type Fwd70 = Fwd69
+
+type Fwd71 = Fwd70
+
+type Fwd72 = Fwd71
+
+type Fwd73 = Fwd72
+
+type Fwd74 = Fwd73
+
+type Fwd75 = Fwd74
+
+type Fwd76 = Fwd75
+
+type Fwd77 = Fwd76
+
+type Fwd78 = Fwd77
+
+type Fwd79 = Fwd78
+
+type Fwd80 = Fwd79
+
+type Fwd81 = Fwd80
+
+type Fwd82 = Fwd81
+
+type Fwd83 = Fwd82
+
+type Fwd84 = Fwd83
+
+type Fwd85 = Fwd84
+
+type Fwd86 = Fwd85
+
+type Fwd87 = Fwd86
+
+type Fwd88 = Fwd87
+
+type Fwd89 = Fwd88
+
+type Fwd90 = Fwd89
+
+type Fwd91 = Fwd90
+
+type Fwd92 = Fwd91
+
+type Fwd93 = Fwd92
+
+type Fwd94 = Fwd93
+
+type Fwd95 = Fwd94
+
+type Fwd96 = Fwd95
+
+type Fwd97 = Fwd96
+
+type Fwd98 = Fwd97
+
+type Fwd99 = Fwd98
+
+type Fwd100 = Fwd99
+
+type Fwd101 = Fwd100
+
+type Fwd102 = Fwd101
+
+type Fwd103 = Fwd102
+
+type Fwd104 = Fwd103
+
+type Fwd105 = Fwd104
+
+type Fwd106 = Fwd105
+
+type Fwd107 = Fwd106
+
+type Fwd108 = Fwd107
+
+type Fwd109 = Fwd108
+
+type Fwd110 = Fwd109
+
+type Fwd111 = Fwd110
+
+type Fwd112 = Fwd111
+
+type Fwd113 = Fwd112
+
+type Fwd114 = Fwd113
+
+type Fwd115 = Fwd114
+
+type Fwd116 = Fwd115
+
+type Fwd117 = Fwd116
+
+type Fwd118 = Fwd117
+
+type Fwd119 = Fwd118
+
+type Fwd120 = Fwd119
+
+type Fwd121 = Fwd120
+
+type Fwd122 = Fwd121
+
+type Fwd123 = Fwd122
+
+type Fwd124 = Fwd123
+
+type Fwd125 = Fwd124
+
+type Fwd126 = Fwd125
+
+type Fwd127 = Fwd126
+
+type Fwd128 = Fwd127
+
+type Fwd129 = Fwd128
+
+type Fwd130 = Fwd129
+
+type Fwd131 = Fwd130
+
+type Fwd132 = Fwd131
+
+type Fwd133 = Fwd132
+
+type Fwd134 = Fwd133
+
+type Fwd135 = Fwd134
+
+type Fwd136 = Fwd135
+
+type Fwd137 = Fwd136
+
+type Fwd138 = Fwd137
+
+type Fwd139 = Fwd138
+
+type Fwd140 = Fwd139
+
+type Fwd141 = Fwd140
+
+type Fwd142 = Fwd141
+
+type Fwd143 = Fwd142
+
+type Fwd144 = Fwd143
+
+type Fwd145 = Fwd144
+
+type Fwd146 = Fwd145
+
+type Fwd147 = Fwd146
+
+type Fwd148 = Fwd147
+
+type Fwd149 = Fwd148
+
+type Fwd150 = Fwd149
+
+type Fwd151 = Fwd150
+
+type Fwd152 = Fwd151
+
+type Fwd153 = Fwd152
+
+type Fwd154 = Fwd153
+
+type Fwd155 = Fwd154
+
+type Fwd156 = Fwd155
+
+type Fwd157 = Fwd156
+
+type Fwd158 = Fwd157
+
+type Fwd159 = Fwd158
+
+type Fwd160 = Fwd159
+
+type Fwd161 = Fwd160
+
+type Fwd162 = Fwd161
+
+type Fwd163 = Fwd162
+
+type Fwd164 = Fwd163
+
+type Fwd165 = Fwd164
+
+type Fwd166 = Fwd165
+
+type Fwd167 = Fwd166
+
+type Fwd168 = Fwd167
+
+type Fwd169 = Fwd168
+
+type Fwd170 = Fwd169
+
+type Fwd171 = Fwd170
+
+type Fwd172 = Fwd171
+
+type Fwd173 = Fwd172
+
+type Fwd174 = Fwd173
+
+type Fwd175 = Fwd174
+
+type Fwd176 = Fwd175
+
+type Fwd177 = Fwd176
+
+type Fwd178 = Fwd177
+
+type Fwd179 = Fwd178
+
+type Fwd180 = Fwd179
+
+type Fwd181 = Fwd180
+
+type Fwd182 = Fwd181
+
+type Fwd183 = Fwd182
+
+type Fwd184 = Fwd183
+
+type Fwd185 = Fwd184
+
+type Fwd186 = Fwd185
+
+type Fwd187 = Fwd186
+
+type Fwd188 = Fwd187
+
+type Fwd189 = Fwd188
+
+type Fwd190 = Fwd189
+
+type Fwd191 = Fwd190
+
+type Fwd192 = Fwd191
+
+type Fwd193 = Fwd192
+
+type Fwd194 = Fwd193
+
+type Fwd195 = Fwd194
+
+type Fwd196 = Fwd195
+
+type Fwd197 = Fwd196
+
+type Fwd198 = Fwd197
+
+type Fwd199 = Fwd198
+
+type Fwd200 = Fwd199
+
+type Fwd201 = Fwd200
+
+type Fwd202 = Fwd201
+
+type Fwd203 = Fwd202
+
+type Fwd204 = Fwd203
+
+type Fwd205 = Fwd204
+
+type Fwd206 = Fwd205
+
+type Fwd207 = Fwd206
+
+type Fwd208 = Fwd207
+
+type Fwd209 = Fwd208
+
+type Fwd210 = Fwd209
+
+type Fwd211 = Fwd210
+
+type Fwd212 = Fwd211
+
+type Fwd213 = Fwd212
+
+type Fwd214 = Fwd213
+
+type Fwd215 = Fwd214
+
+type Fwd216 = Fwd215
+
+type Fwd217 = Fwd216
+
+type Fwd218 = Fwd217
+
+type Fwd219 = Fwd218
+
+type Fwd220 = Fwd219
+
+type Fwd221 = Fwd220
+
+type Fwd222 = Fwd221
+
+type Fwd223 = Fwd222
+
+type Fwd224 = Fwd223
+
+type Fwd225 = Fwd224
+
+type Fwd226 = Fwd225
+
+type Fwd227 = Fwd226
+
+type Fwd228 = Fwd227
+
+type Fwd229 = Fwd228
+
+type Fwd230 = Fwd229
+
+type Fwd231 = Fwd230
+
+type Fwd232 = Fwd231
+
+type Fwd233 = Fwd232
+
+type Fwd234 = Fwd233
+
+type Fwd235 = Fwd234
+
+type Fwd236 = Fwd235
+
+type Fwd237 = Fwd236
+
+type Fwd238 = Fwd237
+
+type Fwd239 = Fwd238
+
+type Fwd240 = Fwd239
+
+type Fwd241 = Fwd240
+
+type Fwd242 = Fwd241
+
+type Fwd243 = Fwd242
+
+type Fwd244 = Fwd243
+
+type Fwd245 = Fwd244
+
+type Fwd246 = Fwd245
+
+type Fwd247 = Fwd246
+
+type Fwd248 = Fwd247
+
+type Fwd249 = Fwd248
+
+type Fwd250 = Fwd249
+
+type Fwd251 = Fwd250
+
+type Fwd252 = Fwd251
+
+type Fwd253 = Fwd252
+
+type Fwd254 = Fwd253
+
+type Fwd255 = Fwd254
+
+type Fwd256 = Fwd255
+
+type Fwd257 = Fwd256
+
+type Fwd258 = Fwd257
+
+type Fwd259 = Fwd258
+
+type Fwd260 = Fwd259
+
+type Fwd261 = Fwd260
+
+type Fwd262 = Fwd261
+
+type Fwd263 = Fwd262
+
+type Fwd264 = Fwd263
+
+type Fwd265 = Fwd264
+
+type Fwd266 = Fwd265
+
+type Fwd267 = Fwd266
+
+type Fwd268 = Fwd267
+
+type Fwd269 = Fwd268
+
+type Fwd270 = Fwd269
+
+type Fwd271 = Fwd270
+
+type Fwd272 = Fwd271
+
+type Fwd273 = Fwd272
+
+type Fwd274 = Fwd273
+
+type Fwd275 = Fwd274
+
+type Fwd276 = Fwd275
+
+type Fwd277 = Fwd276
+
+type Fwd278 = Fwd277
+
+type Fwd279 = Fwd278
+
+type Fwd280 = Fwd279
+
+type Fwd281 = Fwd280
+
+type Fwd282 = Fwd281
+
+type Fwd283 = Fwd282
+
+type Fwd284 = Fwd283
+
+type Fwd285 = Fwd284
+
+type Fwd286 = Fwd285
+
+type Fwd287 = Fwd286
+
+type Fwd288 = Fwd287
+
+type Fwd289 = Fwd288
+
+type Fwd290 = Fwd289
+
+type Fwd291 = Fwd290
+
+type Fwd292 = Fwd291
+
+type Fwd293 = Fwd292
+
+type Fwd294 = Fwd293
+
+type Fwd295 = Fwd294
+
+type Fwd296 = Fwd295
+
+type Fwd297 = Fwd296
+
+type Fwd298 = Fwd297
+
+type Fwd299 = Fwd298
+
+type Fwd300 = Fwd299
+
+impl Fwd300 {                                      //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl S {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}
+
+pub struct T {
+  x: I32,
+}
+
+impl Back0 {                                      //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl T {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}
+
+type Back0 = Back1
+
+type Back1 = Back2
+
+type Back2 = Back3
+
+type Back3 = Back4
+
+type Back4 = Back5
+
+type Back5 = Back6
+
+type Back6 = Back7
+
+type Back7 = Back8
+
+type Back8 = Back9
+
+type Back9 = Back10
+
+type Back10 = Back11
+
+type Back11 = Back12
+
+type Back12 = Back13
+
+type Back13 = Back14
+
+type Back14 = Back15
+
+type Back15 = Back16
+
+type Back16 = Back17
+
+type Back17 = Back18
+
+type Back18 = Back19
+
+type Back19 = Back20
+
+type Back20 = Back21
+
+type Back21 = Back22
+
+type Back22 = Back23
+
+type Back23 = Back24
+
+type Back24 = Back25
+
+type Back25 = Back26
+
+type Back26 = Back27
+
+type Back27 = Back28
+
+type Back28 = Back29
+
+type Back29 = Back30
+
+type Back30 = Back31
+
+type Back31 = Back32
+
+type Back32 = Back33
+
+type Back33 = Back34
+
+type Back34 = Back35
+
+type Back35 = Back36
+
+type Back36 = Back37
+
+type Back37 = Back38
+
+type Back38 = Back39
+
+type Back39 = Back40
+
+type Back40 = Back41
+
+type Back41 = Back42
+
+type Back42 = Back43
+
+type Back43 = Back44
+
+type Back44 = Back45
+
+type Back45 = Back46
+
+type Back46 = Back47
+
+type Back47 = Back48
+
+type Back48 = Back49
+
+type Back49 = Back50
+
+type Back50 = Back51
+
+type Back51 = Back52
+
+type Back52 = Back53
+
+type Back53 = Back54
+
+type Back54 = Back55
+
+type Back55 = Back56
+
+type Back56 = Back57
+
+type Back57 = Back58
+
+type Back58 = Back59
+
+type Back59 = Back60
+
+type Back60 = Back61
+
+type Back61 = Back62
+
+type Back62 = Back63
+
+type Back63 = Back64
+
+type Back64 = Back65
+
+type Back65 = Back66
+
+type Back66 = Back67
+
+type Back67 = Back68
+
+type Back68 = Back69
+
+type Back69 = Back70
+
+type Back70 = Back71
+
+type Back71 = Back72
+
+type Back72 = Back73
+
+type Back73 = Back74
+
+type Back74 = Back75
+
+type Back75 = Back76
+
+type Back76 = Back77
+
+type Back77 = Back78
+
+type Back78 = Back79
+
+type Back79 = Back80
+
+type Back80 = Back81
+
+type Back81 = Back82
+
+type Back82 = Back83
+
+type Back83 = Back84
+
+type Back84 = Back85
+
+type Back85 = Back86
+
+type Back86 = Back87
+
+type Back87 = Back88
+
+type Back88 = Back89
+
+type Back89 = Back90
+
+type Back90 = Back91
+
+type Back91 = Back92
+
+type Back92 = Back93
+
+type Back93 = Back94
+
+type Back94 = Back95
+
+type Back95 = Back96
+
+type Back96 = Back97
+
+type Back97 = Back98
+
+type Back98 = Back99
+
+type Back99 = Back100
+
+type Back100 = Back101
+
+type Back101 = Back102
+
+type Back102 = Back103
+
+type Back103 = Back104
+
+type Back104 = Back105
+
+type Back105 = Back106
+
+type Back106 = Back107
+
+type Back107 = Back108
+
+type Back108 = Back109
+
+type Back109 = Back110
+
+type Back110 = Back111
+
+type Back111 = Back112
+
+type Back112 = Back113
+
+type Back113 = Back114
+
+type Back114 = Back115
+
+type Back115 = Back116
+
+type Back116 = Back117
+
+type Back117 = Back118
+
+type Back118 = Back119
+
+type Back119 = Back120
+
+type Back120 = Back121
+
+type Back121 = Back122
+
+type Back122 = Back123
+
+type Back123 = Back124
+
+type Back124 = Back125
+
+type Back125 = Back126
+
+type Back126 = Back127
+
+type Back127 = Back128
+
+type Back128 = Back129
+
+type Back129 = Back130
+
+type Back130 = Back131
+
+type Back131 = Back132
+
+type Back132 = Back133
+
+type Back133 = Back134
+
+type Back134 = Back135
+
+type Back135 = Back136
+
+type Back136 = Back137
+
+type Back137 = Back138
+
+type Back138 = Back139
+
+type Back139 = Back140
+
+type Back140 = Back141
+
+type Back141 = Back142
+
+type Back142 = Back143
+
+type Back143 = Back144
+
+type Back144 = Back145
+
+type Back145 = Back146
+
+type Back146 = Back147
+
+type Back147 = Back148
+
+type Back148 = Back149
+
+type Back149 = Back150
+
+type Back150 = Back151
+
+type Back151 = Back152
+
+type Back152 = Back153
+
+type Back153 = Back154
+
+type Back154 = Back155
+
+type Back155 = Back156
+
+type Back156 = Back157
+
+type Back157 = Back158
+
+type Back158 = Back159
+
+type Back159 = Back160
+
+type Back160 = Back161
+
+type Back161 = Back162
+
+type Back162 = Back163
+
+type Back163 = Back164
+
+type Back164 = Back165
+
+type Back165 = Back166
+
+type Back166 = Back167
+
+type Back167 = Back168
+
+type Back168 = Back169
+
+type Back169 = Back170
+
+type Back170 = Back171
+
+type Back171 = Back172
+
+type Back172 = Back173
+
+type Back173 = Back174
+
+type Back174 = Back175
+
+type Back175 = Back176
+
+type Back176 = Back177
+
+type Back177 = Back178
+
+type Back178 = Back179
+
+type Back179 = Back180
+
+type Back180 = Back181
+
+type Back181 = Back182
+
+type Back182 = Back183
+
+type Back183 = Back184
+
+type Back184 = Back185
+
+type Back185 = Back186
+
+type Back186 = Back187
+
+type Back187 = Back188
+
+type Back188 = Back189
+
+type Back189 = Back190
+
+type Back190 = Back191
+
+type Back191 = Back192
+
+type Back192 = Back193
+
+type Back193 = Back194
+
+type Back194 = Back195
+
+type Back195 = Back196
+
+type Back196 = Back197
+
+type Back197 = Back198
+
+type Back198 = Back199
+
+type Back199 = Back200
+
+type Back200 = Back201
+
+type Back201 = Back202
+
+type Back202 = Back203
+
+type Back203 = Back204
+
+type Back204 = Back205
+
+type Back205 = Back206
+
+type Back206 = Back207
+
+type Back207 = Back208
+
+type Back208 = Back209
+
+type Back209 = Back210
+
+type Back210 = Back211
+
+type Back211 = Back212
+
+type Back212 = Back213
+
+type Back213 = Back214
+
+type Back214 = Back215
+
+type Back215 = Back216
+
+type Back216 = Back217
+
+type Back217 = Back218
+
+type Back218 = Back219
+
+type Back219 = Back220
+
+type Back220 = Back221
+
+type Back221 = Back222
+
+type Back222 = Back223
+
+type Back223 = Back224
+
+type Back224 = Back225
+
+type Back225 = Back226
+
+type Back226 = Back227
+
+type Back227 = Back228
+
+type Back228 = Back229
+
+type Back229 = Back230
+
+type Back230 = Back231
+
+type Back231 = Back232
+
+type Back232 = Back233
+
+type Back233 = Back234
+
+type Back234 = Back235
+
+type Back235 = Back236
+
+type Back236 = Back237
+
+type Back237 = Back238
+
+type Back238 = Back239
+
+type Back239 = Back240
+
+type Back240 = Back241
+
+type Back241 = Back242
+
+type Back242 = Back243
+
+type Back243 = Back244
+
+type Back244 = Back245
+
+type Back245 = Back246
+
+type Back246 = Back247
+
+type Back247 = Back248
+
+type Back248 = Back249
+
+type Back249 = Back250
+
+type Back250 = Back251
+
+type Back251 = Back252
+
+type Back252 = Back253
+
+type Back253 = Back254
+
+type Back254 = Back255
+
+type Back255 = Back256
+
+type Back256 = Back257
+
+type Back257 = Back258
+
+type Back258 = Back259
+
+type Back259 = Back260
+
+type Back260 = Back261
+
+type Back261 = Back262
+
+type Back262 = Back263
+
+type Back263 = Back264
+
+type Back264 = Back265
+
+type Back265 = Back266
+
+type Back266 = Back267
+
+type Back267 = Back268
+
+type Back268 = Back269
+
+type Back269 = Back270
+
+type Back270 = Back271
+
+type Back271 = Back272
+
+type Back272 = Back273
+
+type Back273 = Back274
+
+type Back274 = Back275
+
+type Back275 = Back276
+
+type Back276 = Back277
+
+type Back277 = Back278
+
+type Back278 = Back279
+
+type Back279 = Back280
+
+type Back280 = Back281
+
+type Back281 = Back282
+
+type Back282 = Back283
+
+type Back283 = Back284
+
+type Back284 = Back285
+
+type Back285 = Back286
+
+type Back286 = Back287
+
+type Back287 = Back288
+
+type Back288 = Back289
+
+type Back289 = Back290
+
+type Back290 = Back291
+
+type Back291 = Back292
+
+type Back292 = Back293
+
+type Back293 = Back294
+
+type Back294 = Back295
+
+type Back295 = Back296
+
+type Back296 = Back297
+
+type Back297 = Back298
+
+type Back298 = Back299
+
+type Back299 = Back300
+
+type Back300 = T

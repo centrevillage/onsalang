@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.2", "§18.1"]
+// fixes = 0
+
+// S-652, S-737 (W4-05 U3a/i2): the space after the name of a builtin type holds the members of its `impl` as the
+// space of a user type does (§6.2), so the constant `a` of an `impl F32`, whose name by the naming rule (§2.3) is
+// the name of the constant `A` after it, has an E0320 with no candidate (the candidate would make `F32.a` read
+// `A` silently; the same as e0320_member_variant_no_candidate.onsa). The written `fixes = 0` checks that no
+// diagnostic of the file has a candidate.
+
+impl F32 {
+  pub const a: F32 = 1.0                            //~ E0320
+  pub const A: F32 = 2.0
+}
+
+pub fn u() -> F32 {
+  F32.a
+}
+
+pub fn v() -> F32 {
+  F32.A
+}

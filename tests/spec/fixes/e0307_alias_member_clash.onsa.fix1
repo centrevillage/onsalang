@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+// fixes = 1
+
+// S-748 (a) (W4-05 U3a): the E0307 of an `impl` on an alias has its one candidate (the original name, §4.4) also
+// when the member of the `impl` repeats a name of a direct `impl` of the type. The E0304 that is left after the
+// candidate has no candidate of its own (the spec gives none: a name that repeats has no one intended rename),
+// so a repair that applies the candidates one after another stops there with the E0304 (S-748: "E0307 の候補を
+// 当てた後の E0304 は、当てる前から単位の持つ誤り"; §18.1: the unit of the original diagnostic is not a unit
+// that the candidate touched, S-266). `fixes = 1`: each of the four E0307 has the one candidate, and no other
+// diagnostic has one. Four forms: the alias `impl` before the direct one (the E0304 of the direct member is
+// there before and after the candidate), a constant in the same position, the alias `impl` after the direct one
+// (the E0304 appears in the unit of the E0307 after the candidate, where it was hidden), and an enum.
+
+pub struct P1 {
+  x: I32,
+}
+
+type A1 = P1
+
+impl P1 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl P1 {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}
+
+pub struct P2 {
+  x: I32,
+}
+
+type A2 = P2
+
+impl P2 {                                           //~ E0307
+  pub const LIMIT: U32 = 1
+}
+
+impl P2 {
+  pub const LIMIT: U32 = 2                          //~ E0304
+}
+
+pub struct P3 {
+  x: I32,
+}
+
+type A3 = P3
+
+impl P3 {
+  pub fn get(self) -> I32 { 2 }
+}
+
+impl P3 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+pub enum E4 {
+  Left,
+  Right,
+}
+
+type A4 = E4
+
+impl E4 {                                           //~ E0307
+  pub fn flip(self) -> E4 { E4.Left }
+}
+
+impl E4 {
+  pub fn flip(self) -> E4 { E4.Right }              //~ E0304
+}

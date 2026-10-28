@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.2", "§18.1"]
+// fixes = 0
+
+// S-737, S-652 (W4-05 U3a): the name that the naming rule makes of a name (§2.3) is already a name of the
+// same space when the space is the names after the name of a type (the methods, the associated constants and the
+// variants of an enum, §6.2), so the E0320 has no candidate (S-737: "改名の候補が値を黙って変える形（関連定数 `a`
+// の候補 `A` が列挙子と重なる）は、S-652 の判定にそのまま乗って候補なしになる"; the same as the clashes in
+// fixes/e0320_overlap_items.onsa). The written `fixes = 0` checks that no diagnostic of the file has a candidate.
+// The constant `a` of an `impl` of an enum that has the variant `A` (the `impl` before or after the enum, and an `impl`
+// of a generic enum or a second `impl`), and the variant `a` of an enum that has an associated constant `A` (the
+// `impl` before or after the enum). The uses of the names read the declaration that the name is of, and no
+// diagnostic is there but the E0320. The candidates of the names that have a free name are in
+// e0320_member_variant_candidate.onsa.
+
+pub enum E1 {
+  A,
+  B,
+}
+
+impl E1 {
+  pub const a: E1 = E1.B                            //~ E0320
+}
+
+pub fn use1() -> E1 {
+  E1.a
+}
+
+impl E2 {
+  pub const a: E2 = E2.B                            //~ E0320
+}
+
+pub enum E2 {
+  A,
+  B,
+}
+
+pub enum E3[T] {
+  A(T),
+  B,
+}
+
+impl[T] E3[T] {
+  pub const a: U32 = 1                              //~ E0320
+}
+
+pub enum E4 {
+  A,
+  B,
+}
+
+impl E4 {
+  pub const LIMIT: U32 = 1
+}
+
+impl E4 {
+  pub const a: U32 = 2                              //~ E0320
+}
+
+pub enum E5 {
+  a,                                                //~ E0320
+  B,
+}
+
+impl E5 {
+  pub const A: E5 = E5.B
+}
+
+impl E6 {
+  pub const A: E6 = E6.B
+}
+
+pub enum E6 {
+  a,                                                //~ E0320
+  B,
+}
+
+pub fn use6() -> E6 {
+  E6.a
+}

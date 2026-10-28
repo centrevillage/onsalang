@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1"]
+
+// R-299, S-725 (W4-05 U3a): the type of the constant that a length reads is checked whatever the order of the
+// source (S-725: "定数の型も書いた順によらずに確かめる"; §4.5: "`U32` でない定数は E0401"). The top-level constant
+// `I32` is written before the length (`issues/R/R-299/early.onsa`) or after it (`late.onsa`, which was
+// fine before W4-05 U2), in an alias of a type and in a signature, and a constant that is `U32` is fine in
+// either order (the last units). The E0401 is at the length.
+
+pub const EARLY: I32 = 2
+
+pub type EarlyRow = [F32; EARLY]                    //~ E0401
+
+pub fn early_sig(a: [F32; EARLY]) -> F32 {          //~ E0401
+  a[0]
+}
+
+pub type LateRow = [F32; LATE]                      //~ E0401
+
+pub fn late_sig(a: [F32; LATE]) -> F32 {            //~ E0401
+  a[0]
+}
+
+pub const LATE: I32 = 2
+
+pub struct Holder {
+  r: [F32; LATE_FIELD],                             //~ E0401
+}
+
+pub const LATE_FIELD: I32 = 2
+
+pub const LATE_TYPE: [F32; LATE_LEN] = [1.0, 2.0]   //~ E0401
+
+pub const LATE_LEN: I32 = 2
+
+pub const FINE_EARLY: U32 = 2
+
+pub type FineEarlyRow = [F32; FINE_EARLY]
+
+pub type FineLateRow = [F32; FINE_LATE]
+
+pub fn fine_late_sig(a: [F32; FINE_LATE]) -> F32 {
+  a[0]
+}
+
+pub const FINE_LATE: U32 = 2

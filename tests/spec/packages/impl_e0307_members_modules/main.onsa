@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§15.1", "§18.1"]
+
+// S-748 (a) and A3, S-725 (W4-05 U3a): the members of an `impl` with an E0307 heading (in `util`, the alias
+// `A` is the target of the `impl`, so the E0307 is in `util.onsa`) are names after the name of the type `S`
+// (§18.1), and the paths of another module read them as the members of a direct `impl` (S-748: "他のモジュール
+// の経路"): `util.S.N`, `util.S.f()` and the name that a `use` took (`use util.{S}`, `S.N`), in a body, in the length
+// of an array in a signature, in an alias and in the type of a constant. The result does not depend on the
+// order in which the modules are read (S-725: "モジュールを読む順（ファイルの名前）によらない"): `aa.onsa` reads
+// the same names and is read before `util.onsa`. The path of a name that no `impl` of `S` has is E0302.
+use util
+use util.{S}
+use aa
+
+pub fn by_path() -> U32 {
+  util.S.N
+}
+
+pub fn by_path_fn() -> U32 {
+  util.S.f()
+}
+
+pub fn by_use() -> U32 {
+  S.N
+}
+
+pub fn sig_len(a: [F32; util.S.N]) -> F32 {
+  a[0]
+}
+
+pub fn sig_len_by_use(a: [F32; S.N]) -> F32 {
+  a[0]
+}
+
+pub fn sig_len_wrong() -> F32 {
+  sig_len([1.0, 2.0, 3.0])                          //~ E0401
+}
+
+type Row = [F32; util.S.N]
+
+pub const K: [F32; util.S.N] = [1.0, 2.0]
+
+pub fn missing_by_path() -> U32 {
+  util.S.missing                                    //~ E0302
+}

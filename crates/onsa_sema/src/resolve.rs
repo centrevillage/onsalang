@@ -484,6 +484,9 @@ pub struct Modules {
     /// keyed by the scalar's `TyId`, or by `Builtin(b, [])` for generic
     /// builtins (`Buf.zeroed`).
     pub assoc_builtin: HashMap<TyId, HashMap<String, DefId>>,
+    /// The members first of a name that is an E0304 in their table (§6.2,
+    /// S-737): no name where it is used, of either (§18.1).
+    pub clashed_assoc: HashSet<DefId>,
     /// The module `std.core`, where the names of the prelude std declares are
     /// (§15.1, S-659); set by `crate::names::prelude::declared`.
     pub core: Option<ModId>,
@@ -493,6 +496,20 @@ pub struct Modules {
 }
 
 impl Modules {
+    /// The member `name` of the table `t` of an `impl` (`assoc`,
+    /// `assoc_builtin`): `Failed` of an E0304 (§18.1, S-737). The one test of
+    /// the readers of a table (D-15).
+    pub(crate) fn assoc_member(
+        &self,
+        t: Option<&HashMap<String, DefId>>,
+        name: &str,
+    ) -> Result<Option<DefId>, ResolveError> {
+        match t.and_then(|t| t.get(name)) {
+            Some(a) if self.clashed_assoc.contains(a) => Err(ResolveError::Failed),
+            a => Ok(a.copied()),
+        }
+    }
+
     pub fn get(&self, m: ModId) -> &ModInfo {
         &self.mods[m.0 as usize]
     }

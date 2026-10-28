@@ -1,0 +1,13 @@
+use util
+
+pub fn from_aa() -> U32 {
+  util.S.N
+}
+
+pub fn from_aa_len(a: [F32; util.S.N]) -> F32 {
+  a[0]
+}
+
+pub type AaRow = [F32; util.S.N]
+
+pub const AA_K: [F32; util.S.N] = [1.0, 2.0]

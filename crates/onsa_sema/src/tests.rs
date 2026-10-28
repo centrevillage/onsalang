@@ -324,6 +324,31 @@ fn a_chain_of_twenty_thousand_aliases_ends() {
     assert_eq!(onsa_diag::stack::spawn("t", run).unwrap().join().unwrap(), Vec::<Code>::new());
 }
 
+/// The same chain under an `impl` of its head (E0307, whose members are of
+/// `S`, S-748) written before it: its constant is lowered after the chain
+/// (the edge to its heading), and `A0.M` reads the member through the heads
+/// of the aliases (R-299), with no recursion.
+#[test]
+fn an_impl_of_the_head_of_a_chain_of_twenty_thousand_aliases_ends() {
+    let mut src = String::from("pub struct S { x: I32 }\nimpl A0 {\n  pub const N: [F32; S.M] = [0.0; 2]\n}\n");
+    src.extend((0..20_000).map(|i| format!("type A{i} = A{}\n", i + 1)));
+    src.push_str("type A20000 = S\nimpl S {\n  pub const M: U32 = 2\n}\npub type Row = [F32; A0.M]\n");
+    let run = move || codes(&check(&src));
+    assert_eq!(onsa_diag::stack::spawn("t", run).unwrap().join().unwrap(), vec![Code::E0307]);
+}
+
+/// A constant after a function of its name (§6.2, R-307): the E0304 is at
+/// the constant, the later, and its E0320 (§2.3) at the same name is not the
+/// one of the unit (§18.1: E0304, the smaller code). The parser reports the
+/// E0320 too, so a case cannot mark it (`impl_member_clash_const_fn.onsa`).
+#[test]
+fn a_constant_after_a_function_of_its_name_is_the_e0304_alone() {
+    let src = "pub struct P { x: I32 }\nimpl P {\n  pub fn a(self) -> I32 { 1 }\n  pub const a: I32 = 2\n}\n";
+    let a = check(src);
+    assert_eq!(codes(&a), vec![Code::E0304]);
+    assert_eq!(a.diagnostics[0].span.start as usize, src.find("a: I32").unwrap());
+}
+
 /// The depth and the size of §4.4 (S-264), held once per type: a chain of
 /// pairs doubles its size each step without being expanded.
 #[test]

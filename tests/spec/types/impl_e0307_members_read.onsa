@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.2", "§15.1", "§18.1"]
+
+// S-748 (a) and A3, S-725 (W4-05 U3a): the members of an `impl` whose heading is E0307 (the alias `A` is the target)
+// are names after the name of their type, and the places that read them read them as the members of a direct
+// `impl` (§18.1: "使う所は他の `impl` のメンバと同じに引く"; S-748: "読む所は全ての位置（本体、署名、別名と定数の型、
+// 直接の `impl` のメンバの型、他のモジュールの経路）で"). There is no direct `impl` of `S` with these names, so
+// the E0307 is the only error that the file has about `A` and nothing after it (no E0302 for `S.N`): a read in a
+// body (a constant, an associated function, a method), in the signature of a function (the length of an array,
+// which is the value `2` of the constant: the call with the array of the length 2 is fine and the one with
+// the length 3 is E0401, §4.5), in an alias, in the type of a constant, in a field, in a method and a
+// constant of a direct `impl` of the type, and in the signature of a method of it. The members of an `impl` with a
+// heading error are not checked (§18.1), and a name that no `impl` has is still E0302 (the last unit).
+
+pub struct S {
+  x: I32,
+}
+
+type A = S
+
+impl A {                                            //~ E0307
+  pub const N: U32 = 2
+  pub fn f() -> U32 { 1 }
+  pub fn get(self) -> U32 { 3 }
+  pub fn not_checked(self) -> Bool { 1 }
+}
+
+pub fn body_const() -> U32 {
+  S.N
+}
+
+pub fn body_fn() -> U32 {
+  S.f()
+}
+
+pub fn body_method(s: S) -> U32 {
+  s.get()
+}
+
+pub fn sig_len(a: [F32; S.N]) -> F32 {
+  a[0]
+}
+
+pub fn sig_len_right() -> F32 {
+  sig_len([1.0, 2.0])
+}
+
+pub fn sig_len_wrong() -> F32 {
+  sig_len([1.0, 2.0, 3.0])                          //~ E0401
+}
+
+pub fn sig_len_result() -> [F32; S.N] {
+  [1.0, 2.0]
+}
+
+type Row = [F32; S.N]
+
+pub fn takes_row(r: Row) -> F32 {
+  r[0]
+}
+
+pub const K: [F32; S.N] = [1.0, 2.0]
+
+pub struct Holder {
+  r: [F32; S.N],
+}
+
+impl S {
+  pub const M: [F32; S.N] = [1.0, 2.0]
+  pub fn g(self, a: [F32; S.N]) -> F32 {
+    a[0]
+  }
+}
+
+pub fn missing() -> U32 {
+  S.missing                                         //~ E0302
+}

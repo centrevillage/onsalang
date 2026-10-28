@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+
+// S-748 (a) (W4-05 U3a): the contrast of impl_e0307_members_first.onsa. The `impl` of the alias is written
+// AFTER the direct `impl`, so its member is the later one and would be E0304; the `impl` is one unit with the
+// error of its heading (§18.1), and one error per unit leaves the E0307 only: the E0304 is in the unit of
+// the E0307 and is hidden (S-748: "E0307 の単位の中に付いた E0304 は単位の規則で隠れる"). The direct `impl` has
+// no diagnostic. The forms are those of the first file: a function, a constant, an enum, two aliases of one
+// type, a generic type, and an alias of an alias.
+
+pub struct P1 {
+  x: I32,
+}
+
+type A1 = P1
+
+impl P1 {
+  pub fn get(self) -> I32 { 2 }
+}
+
+impl A1 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+pub struct P2 {
+  x: I32,
+}
+
+type A2 = P2
+
+impl P2 {
+  pub const LIMIT: U32 = 2
+}
+
+impl A2 {                                           //~ E0307
+  pub const LIMIT: U32 = 1
+}
+
+pub enum E3 {
+  Left,
+  Right,
+}
+
+type A3 = E3
+
+impl E3 {
+  pub fn flip(self) -> E3 { E3.Right }
+}
+
+impl A3 {                                           //~ E0307
+  pub fn flip(self) -> E3 { E3.Left }
+}
+
+pub struct P4 {
+  x: I32,
+}
+
+type A4 = P4
+
+type A4b = P4
+
+impl P4 {
+  pub fn get(self) -> I32 { 3 }
+}
+
+impl A4 {                                           //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl A4b {                                          //~ E0307
+  pub fn get(self) -> I32 { 2 }
+}
+
+pub struct P5[T] {
+  v: T,
+}
+
+type A5 = P5[F32]
+
+impl[T] P5[T] {
+  pub fn first(self) -> T { self.v }
+}
+
+impl A5 {                                           //~ E0307
+  pub fn first(self) -> F32 { self.v }
+}
+
+pub struct P6 {
+  x: I32,
+}
+
+type A6 = P6
+
+type A6b = A6
+
+impl P6 {
+  pub fn get(self) -> I32 { 3 }
+}
+
+impl A6b {                                          //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}

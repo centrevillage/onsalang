@@ -1,0 +1,24 @@
+pub struct S {
+  x: I32,
+}
+
+type A = S
+
+impl A {                                            //~ E0307
+  pub const N: U32 = 2
+  pub fn f() -> U32 { 1 }
+}
+
+pub struct T {
+  x: I32,
+}
+
+type B = T
+
+impl B {                                            //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl T {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}

@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§15.1", "§18.1"]
+
+// S-737 (W4-05 U3a): the names that are written after the name of a type (the methods, the associated constants
+// and the variants of an enum) are one space, and an associated constant with the name of a variant of its
+// enum is E0304 (§6.2: "列挙子との重なりは書いた順によらず `impl` のメンバに付けて列挙子を note で示し"; §4.4:
+// "列挙子と同じ名前の、その型の関連定数も E0304"). The E0304 is at the constant, whether the `impl` is written
+// before or after the enum, for a variant with a value or without, for a generic enum, for the constant in a second
+// `impl` of the enum, and for each of two constants with the names of two variants (one error per unit
+// (§18.1): each constant is a unit). A constant with a name that no variant has is fine (the last unit). A function
+// cannot meet a variant (a function is snake_case and a variant is UpperCamel, §2.3). The note of the E0304 shows
+// the variant (not a part of the marks of a case).
+
+pub enum E1 {
+  A(I32),
+  B,
+}
+
+impl E1 {
+  pub const A: I32 = 1                              //~ E0304
+}
+
+impl E2 {
+  pub const A: I32 = 1                              //~ E0304
+}
+
+pub enum E2 {
+  A,
+  B,
+}
+
+pub enum E3 {
+  A,
+  B,
+}
+
+impl E3 {
+  pub const A: E3 = E3.B                            //~ E0304
+  pub const B: E3 = E3.A                            //~ E0304
+}
+
+pub enum E4[T] {
+  A(T),
+  B,
+}
+
+impl[T] E4[T] {
+  pub const A: U32 = 1                              //~ E0304
+}
+
+pub enum E5 {
+  ON,
+  OFF,
+}
+
+impl E5 {
+  pub const LIMIT: U32 = 1
+}
+
+impl E5 {
+  pub const ON: U32 = 2                             //~ E0304
+}
+
+pub enum E6 {
+  A,
+  B,
+}
+
+impl E6 {
+  pub const C: U32 = 1
+  pub const D: U32 = 2
+  pub fn get(self) -> U32 { 3 }
+}

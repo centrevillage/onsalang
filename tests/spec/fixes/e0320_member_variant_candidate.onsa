@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.2", "§18.1"]
+// fixes = 1
+
+// S-737, S-652 (W4-05 U3a): the contrast of e0320_member_variant_no_candidate.onsa. When the name that the naming
+// rule makes (§2.3) is not a name of the space after the name of the type, the E0320 has its one candidate, which
+// renames the declaration and every use: the constant `a` of an `impl` of an enum that has no variant `A`, the
+// variant `a` of an enum that has no associated constant `A` (the constants `B` and `LIMIT` are other names). The text
+// after each candidate is the copy `.fixK` that the implementation writes.
+
+pub enum E1 {
+  X,
+  Y,
+}
+
+impl E1 {
+  pub const a: E1 = E1.Y                            //~ E0320
+}
+
+pub fn use1() -> E1 {
+  E1.a
+}
+
+pub enum E2 {
+  a,                                                //~ E0320
+  Y,
+}
+
+impl E2 {
+  pub const B: E2 = E2.Y
+  pub const LIMIT: U32 = 1
+}
+
+pub fn use2() -> E2 {
+  E2.a
+}

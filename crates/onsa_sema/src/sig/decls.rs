@@ -37,6 +37,9 @@ pub struct Decls {
     pub(crate) cyclic: HashSet<DefId>,
     /// The aliases lowered (`true`) or being lowered (`false`).
     pub(crate) lowered: HashMap<DefId, bool>,
+    /// What the head of the right side of each alias names, through the
+    /// aliases there ([`Sema::alias_heads`]).
+    pub(crate) heads: HashMap<DefId, Option<Entity>>,
 }
 
 /// The generic arguments `(e, k)` a place is under, a chain of
@@ -170,14 +173,20 @@ impl Graph<'_> {
             return;
         }
         let before = Path { segments: p.segments[..p.segments.len() - 1].to_vec(), span: p.span };
-        if w.anywhere
-            && !before.segments.is_empty()
+        let mut read = self.resolve(w, p);
+        if !before.segments.is_empty()
             && let Some(Entity::Def(al)) = self.resolve(w, &before)
             && matches!(self.a.def(al).kind, DefKind::Alias(_))
         {
-            self.edge(w, (al, true), under);
+            if w.anywhere {
+                self.edge(w, (al, true), under);
+            }
+            // `Al.N`: of the type the alias stands for (R-299).
+            let names = (&self.a.prelude, &self.a.defs[..], &self.a.builtin_key);
+            let ty = self.a.decls.heads.get(&al).copied().flatten();
+            read = ty.and_then(|t| self.a.modules.member(t, p.segments.last()?, w.m, names).ok());
         }
-        if let Some(Entity::Def(c) | Entity::Member(c)) = self.resolve(w, p)
+        if let Some(Entity::Def(c) | Entity::Member(c)) = read
             && matches!(self.a.def(c).kind, DefKind::Const(_))
         {
             self.edge(w, (c, true), under);
@@ -234,7 +243,8 @@ impl<'p> Sema<'p> {
     /// The graph of the declarations (the module's doc): its cycles reported,
     /// and the aliases and the constants of the modules lowered in its order.
     pub(super) fn order_declarations(&mut self) {
-        self.name_members(false);
+        self.alias_heads();
+        self.name_members();
         let mut g = Graph {
             a: &*self.a,
             points: HashMap::new(),
@@ -311,7 +321,6 @@ impl<'p> Sema<'p> {
                 _ => {}
             }
         }
-        self.name_members(true);
     }
 
     /// The edges from the declaration `d`.
@@ -348,14 +357,20 @@ impl<'p> Sema<'p> {
                 walk(g, (true, &[], None), &mut std::iter::once(*ty));
             }
             (DefKind::Const(_), Some(ItemKind::Const(c))) => {
-                let (gs, this) = match def.owner.map(|o| (o, self.a.def(o).item.map(|i| item_kind(&ast.item(i).kind))))
-                {
-                    Some((o, Some(ItemKind::Impl(i)))) => (&i.generics[..], self.impl_target(o)),
-                    _ => (&[][..], None),
+                let owner = def.owner.map(|o| (o, self.a.def(o).item.map(|i| item_kind(&ast.item(i).kind))));
+                let (gs, this, heading) = match owner {
+                    Some((o, Some(ItemKind::Impl(i)))) => (&i.generics[..], self.impl_type(o), Some(i)),
+                    _ => (&[][..], None, None),
                 };
                 walk(g, (true, gs, this), &mut std::iter::once(c.ty));
                 // And what that type holds as a value (§4.4, S-744): `const K: S`.
                 walk(g, (false, gs, this), &mut std::iter::once(c.ty));
+                // The heading of its `impl`, lowered with it (`member_cx`).
+                let consts = heading.into_iter().flat_map(|i| &i.generics).filter_map(|p| match p {
+                    GenericParam::Const { ty, .. } => Some(*ty),
+                    _ => None,
+                });
+                walk(g, (true, gs, this), &mut heading.map(|i| i.self_ty).into_iter().chain(consts));
             }
             (DefKind::Struct(sd), None) => {
                 let (Some(rate), Some(flow)) = (sd.flow_ty.and_then(FlowTy::input_rate), def.owner) else { return };
@@ -380,51 +395,107 @@ impl<'p> Sema<'p> {
         i.trait_.is_none().then(|| self.a.resolve_path(def.module, path).ok()).flatten()
     }
 
-    /// The names of the members of every inherent `impl` (the one place,
-    /// D-15), each in the table of its type ([`Sema::member_key`]): of the
-    /// `impl` of a type it names by its declaration before any signature is
-    /// lowered (`aliased` false), as a type and a constant read them in the
-    /// order of the declarations (`Self.N`, `S.N`; §4.4); of an `impl` of an
-    /// alias (E0307) once the aliases are. The first of a name in the order of
-    /// the defs; the `impl` reports the others (E0304).
-    fn name_members(&mut self, aliased: bool) {
+    /// What the head of the right side of each alias names ([`Decls::heads`]),
+    /// from the AST and the names alone (S-748): through an alias there, to
+    /// what is no alias, also when the alias is the error type (`type A =
+    /// S[I32]`, S-752); none for a type with no name (a tuple, an array), a
+    /// cycle of aliases and a heading that failed. Each alias once, with no
+    /// recursion (a chain of 20 000, R-298).
+    fn alias_heads(&mut self) {
         for i in 0..self.a.defs.len() {
-            let DefKind::Impl(imp) = &self.a.defs[i].kind else { continue };
-            let subs: Vec<DefId> = imp.fns.iter().chain(&imp.consts).copied().collect();
-            let of_alias = matches!(self.impl_target(DefId(i as u32)), Some(Entity::Def(d)) if matches!(self.a.def(d).kind, DefKind::Alias(_)));
-            // SPEC-GAP(S-748): the members of an `impl` of an alias (E0307)
-            // are named after those of every other, so that none of them is
-            // the first of a name, which another `impl` of the type clashes with.
-            if of_alias != aliased {
-                continue;
-            }
-            let Some((def, builtin)) = self.member_key(DefId(i as u32)) else { continue };
-            for sub in subs {
-                let name = self.a.def(sub).name.clone();
-                let Some(table) = self.assoc_table(def, builtin) else { break };
-                table.entry(name).or_insert(sub);
-            }
+            let (mut cur, mut chain) = (DefId(i as u32), Vec::new());
+            let head = loop {
+                if let Some(&h) = self.a.decls.heads.get(&cur) {
+                    break h;
+                }
+                if !matches!(self.a.def(cur).kind, DefKind::Alias(_)) {
+                    break Some(Entity::Def(cur));
+                }
+                self.a.decls.heads.insert(cur, None);
+                chain.push(cur);
+                match self.alias_rhs(cur) {
+                    Some(Entity::Def(d)) => cur = d,
+                    e => break e,
+                }
+            };
+            chain.into_iter().for_each(|d| _ = self.a.decls.heads.insert(d, head));
         }
     }
 
+    /// What the head of the right side of the alias `d` names: none for a
+    /// type with no name, and when its heading failed.
+    fn alias_rhs(&self, d: DefId) -> Option<Entity> {
+        let def = self.a.def(d);
+        let ast = &self.module(def.module)?.parsed.ast;
+        let Some(ItemKind::TypeAlias { ty, .. }) = def.item.map(|i| item_kind(&ast.item(i).kind)) else { return None };
+        let TypeKind::Path { path, .. } = &ast.ty(*ty).kind else { return None };
+        (!self.a.heading_failed(d)).then(|| self.a.resolve_path(def.module, path).ok()).flatten()
+    }
+
+    /// The names of the members of every inherent `impl` (the one place,
+    /// D-15), each in the table of its type ([`Sema::member_key`]), before
+    /// any signature is lowered: a type and a constant read them in the
+    /// order of the declarations (`Self.N`, `S.N`; §4.4). Those of an `impl`
+    /// whose heading is an E0307 too (§18.1, S-748). In the order of the
+    /// source (§6.2, R-307): a member of the name of one before, or of a
+    /// variant of its enum, is an E0304 (S-134, S-737), and the first of the
+    /// name is no name where it is used (§18.1).
+    fn name_members(&mut self) {
+        let mut subs = Vec::new();
+        for i in 0..self.a.defs.len() {
+            let DefKind::Impl(imp) = &self.a.defs[i].kind else { continue };
+            let Some(key) = self.member_key(DefId(i as u32)) else { continue };
+            subs.extend(imp.fns.iter().chain(&imp.consts).map(|&sub| (key, sub)));
+        }
+        subs.sort_by_cached_key(|&(_, d)| (self.file_key(self.a.def(d).module), self.a.def(d).name_span.start));
+        let mut variants: HashMap<DefId, HashMap<String, Span>> = HashMap::new();
+        for ((def, builtin), sub) in subs {
+            let (name, at) = (self.a.def(sub).name.clone(), self.a.def(sub).name_span);
+            let variant = def.and_then(|d| variants.entry(d).or_insert_with(|| self.variants(d)).get(&name).copied());
+            let Some(table) = self.assoc_table(def, builtin) else { continue };
+            let first = *table.entry(name.clone()).or_insert(sub);
+            let note = match variant {
+                Some(v) => (v, format!("the variant `{name}`")),
+                None if first != sub => (self.a.def(first).name_span, "first defined here".to_string()),
+                None => continue,
+            };
+            self.a.modules.clashed_assoc.insert(first);
+            let msg = format!("`{name}` is defined twice for this type");
+            self.report(sub, Diagnostic::new(Stage::Names, Code::E0304, at, msg).with_note(note.0, note.1));
+        }
+    }
+
+    /// The names of the variants of `d` when it is an enum, as written (the
+    /// variants are lowered later).
+    fn variants(&self, d: DefId) -> HashMap<String, Span> {
+        let def = self.a.def(d);
+        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return HashMap::new() };
+        let Some(ItemKind::Enum(e)) = def.item.map(|i| item_kind(&ast.item(i).kind)) else { return HashMap::new() };
+        e.variants.iter().map(|v| (v.name.name.clone(), v.name.span)).collect()
+    }
+
     /// The table of the members of the inherent `impl` `id` (D-15): of the
-    /// struct or enum it names, of the builtin type by its key; of an alias
-    /// (E0307), of the type it stands for, lowered. None for another type.
-    pub(super) fn member_key(&mut self, id: DefId) -> Option<(Option<DefId>, Option<TyId>)> {
-        let ty = match self.impl_target(id)? {
+    /// struct or enum it names, of the builtin type by its key. None for
+    /// another type.
+    pub(super) fn member_key(&self, id: DefId) -> Option<(Option<DefId>, Option<TyId>)> {
+        match self.impl_type(id)? {
             Entity::Def(d) | Entity::Member(d)
                 if matches!(self.a.def(d).kind, DefKind::Struct(_) | DefKind::Enum(_)) =>
             {
-                return Some((Some(d), None));
+                Some((Some(d), None))
             }
-            Entity::Def(al) if matches!(self.a.def(al).kind, DefKind::Alias(_)) => self.alias_ty(al),
-            e => return builtin_ty(self.a, e).map(|t| (None, Some(t))),
-        };
-        match self.a.types.get(ty) {
-            Ty::Named(d, _) => Some((Some(*d), None)),
-            Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char => Some((None, Some(ty))),
-            Ty::Builtin(b, _) => self.a.builtin_key.get(b).map(|&t| (None, Some(t))),
-            _ => None,
+            e => builtin_ty(self.a, e).map(|t| (None, Some(t))),
+        }
+    }
+
+    /// The type the inherent `impl` `id` is of: what it names, and of an
+    /// alias (E0307), what the alias stands for ([`Decls::heads`]).
+    fn impl_type(&self, id: DefId) -> Option<Entity> {
+        match self.impl_target(id)? {
+            Entity::Def(al) if matches!(self.a.def(al).kind, DefKind::Alias(_)) => {
+                self.a.decls.heads.get(&al).copied().flatten()
+            }
+            e => Some(e),
         }
     }
 
