@@ -759,6 +759,7 @@ pub(crate) fn read_effects(
         let n = p.segments.last().unwrap();
         let var = generics.iter().position(|g| g.name == n.name && matches!(g.kind, GenericKind::Effect));
         if let (1, Some(i)) = (p.segments.len(), var) {
+            a.note_use(generics[i].span, n.span);
             set.vars.push(i as u32);
             continue;
         }

@@ -1,0 +1,112 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+// fixes = 0
+
+// W4-04 U9, S-652, S-82: when the name that the naming rule makes would be hidden by, or would hide, a
+// binding that is visible at the same place, the declaration would be E0304 (§5.1: there is no
+// shadowing), so the E0320 has no candidate, and a note shows the name that the rule makes (§2.3).
+// The written `fixes = 0` checks that no diagnostic of the file has a candidate. The clash is with: the
+// other name of the same list (`fn f(_x: I32, x: I32)`, `fn g[_T, T]`), an item of the module (a
+// function, a struct, a name taken with `use`, a name of the prelude and a built-in type), a binding
+// that is in scope in an outer block, a parameter, a binding of an `impl` (`impl[T]` and `fn m[_T]`),
+// and a built-in name of a flow (`delay`, §11.4), which a fn may use but a flow's body may not. The
+// binding that is declared later or in a sibling scope has no clash, and its candidate is in
+// e0320_no_overlap. Every binding is read, so no E0309 comes after a candidate (§5.1).
+
+use std.math
+
+pub fn gain(x: F32) -> F32 {
+  x
+}
+
+pub struct Item {
+  n: I32,
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+pub fn two_parameters(_x: I32, x: I32) -> I32 { //~ E0320
+  _x + x
+}
+
+pub fn two_type_parameters[_T, T](a: _T, b: T) -> T { //~ E0320
+  b
+}
+
+pub fn parameter_and_item(_gain: F32) -> F32 { //~ E0320
+  _gain
+}
+
+pub fn type_parameter_and_item[_Item](x: _Item) -> _Item { //~ E0320
+  x
+}
+
+pub fn type_parameter_and_built_in_type[_I32](x: _I32) -> _I32 { //~ E0320
+  x
+}
+
+pub fn local_and_use() -> I32 {
+  let _math = 1 //~ E0320
+  _math
+}
+
+pub fn local_and_prelude() -> I32 {
+  let _panic = 1 //~ E0320
+  _panic
+}
+
+pub fn parameter_and_a_later_let(_x: I32) -> I32 { //~ E0320
+  let x = _x + 1
+  x
+}
+
+pub fn inner_and_outer_let(c: Bool) -> I32 {
+  let x = 1
+  if c {
+    let _x = 2 //~ E0320
+    x + _x
+  } else {
+    x
+  }
+}
+
+pub fn inner_and_outer_for(n: U32) -> U32 {
+  var total = 0
+  for i in 0 ..< n {
+    for _i in 0 ..< 2 { //~ E0320
+      total = total + _i + i
+    }
+  }
+  total
+}
+
+pub fn arm_and_parameter(v: I32, o: Option[I32]) -> I32 {
+  match o {
+    Some(_v) => _v + v, //~ E0320
+    None => 0,
+  }
+}
+
+pub fn closure_parameter_and_outer(n: I32) -> I32 {
+  apply(fn(_n: I32) -> I32 { _n + n }, n) //~ E0320
+}
+
+fn apply(f: fn(I32) -> I32, v: I32) -> I32 {
+  f.(v)
+}
+
+impl[T] Holder[T] {
+  pub fn member_type_parameter[_T](self, y: _T) -> _T { //~ E0320
+    y
+  }
+}
+
+pub flow builtin_name(
+  x: F32 at sample,
+) -> F32 at sample {
+  let _delay = x * 0.5 //~ E0320
+  _delay + x
+}

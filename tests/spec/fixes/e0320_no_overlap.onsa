@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+// fixes = 1
+
+// W4-04 U9, S-652, S-82: the name that the naming rule makes of a name is not a name of the same space
+// that is visible at the same place, so a declaration with it is not E0304 (§5.1), and the E0320 has
+// its one candidate, which renames the declaration and every use (§2.3). Every form here is the form of
+// e0320_overlap_locals and e0320_overlap_items with the clash taken away: a binding in a sibling scope
+// (the two branches of an `if`, two arms of a `match`, two `for` loops), a binding that is declared
+// after the end of the block of the other, a name of another function (names of locals are not
+// shared), a field and a method of the name of a function (the spaces of the members are not the
+// space of the module, §6.2), the name of a variant of another enum, a `delay` in a fn (a flow's
+// body cannot take it, §11.4). Each function is a unit of its own with one error, so the default of §18.1
+// checks that the unit has no error of the stage after the candidate (`E0302` for a read of the old
+// name, `E0304` for the clash that a candidate would make), and that the units that had none have no
+// error at all.
+
+pub fn two_branches(c: Bool) -> I32 {
+  if c {
+    let _x = 1 //~ E0320
+    _x
+  } else {
+    let x = 2
+    x
+  }
+}
+
+pub fn declared_after_the_block(c: Bool) -> I32 {
+  let r = if c {
+    let _x = 1 //~ E0320
+    _x
+  } else {
+    0
+  }
+  let x = r + 1
+  x
+}
+
+pub fn two_arms(o: Option[I32]) -> I32 {
+  match o {
+    Some(_v) => _v, //~ E0320
+    None => 0,
+  }
+}
+
+pub fn two_arms_other(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v + 1,
+    None => 0,
+  }
+}
+
+pub fn two_for_loops(n: U32) -> U32 {
+  var total = 0
+  for _i in 0 ..< n { //~ E0320
+    total = total + _i
+  }
+  for i in 0 ..< n {
+    total = total + i
+  }
+  total
+}
+
+pub fn the_name_in_another_function(_k: I32) -> I32 { //~ E0320
+  _k
+}
+
+pub fn the_name_in_another_function_too(k: I32) -> I32 {
+  k
+}
+
+pub fn parameter_named_like_the_other(_c: Bool, other: I32) -> I32 { //~ E0320
+  if _c {
+    other
+  } else {
+    0
+  }
+}
+
+pub fn the_other(c: Bool) -> I32 {
+  let other = 3
+  if c {
+    other
+  } else {
+    0
+  }
+}
+
+pub fn item() -> I32 {
+  1
+}
+
+pub fn same() -> I32 {
+  2
+}
+
+pub struct Fields {
+  _item: I32, //~ E0320
+  n: I32,
+}
+
+pub fn read_the_field(f: Fields) -> I32 {
+  f._item + f.n
+}
+
+pub struct Holder {
+  n: I32,
+}
+
+impl Holder {
+  pub fn _same(self) -> I32 { //~ E0320
+    self.n
+  }
+}
+
+pub fn call_the_method(h: Holder) -> I32 {
+  h._same()
+}
+
+pub enum First {
+  _A, //~ E0320
+  B,
+}
+
+pub enum Second {
+  A,
+  C,
+}
+
+pub fn first_a() -> First {
+  First._A
+}
+
+pub fn second_a() -> Second {
+  Second.A
+}
+
+pub fn delay_in_a_fn() -> I32 {
+  let _delay = 1 //~ E0320
+  _delay + 1
+}

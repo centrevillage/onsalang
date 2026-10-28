@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§11.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:7"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the value of a term of `@latency` is a compile-time constant written by
+// the rule of a `const` initializer (§11.6), and it may be the name of a constant. So the name of a
+// constant in `@latency` is a use, and the one candidate of an E0320 on the constant renames the
+// declaration and the uses in the two terms and in the body, and the file is clean after it
+// (`clean`). Today `@latency` is the E0005 "there is no attribute" (W10-08), so this case waits
+// for the attribute.
+
+const lookahead_samples: U32 = 64 //~ E0320
+
+const LOOKAHEAD_SECONDS: F32 = 0.001
+
+@latency(samples: lookahead_samples, seconds: LOOKAHEAD_SECONDS)
+pub flow limiter(
+  x: F32 at sample,
+) -> F32 at sample {
+  x * 0.5
+}
+
+@latency(samples: lookahead_samples)
+pub flow limiter_again(
+  x: F32 at sample,
+) -> F32 at sample {
+  x * 0.25
+}
+
+pub fn lookahead() -> U32 {
+  lookahead_samples
+}

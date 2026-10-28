@@ -23,6 +23,8 @@ use crate::sig::Sema;
 /// of them `ResolveError::Failed` after a failure before them).
 struct Walk<'i> {
     prefix: Result<(), ResolveError>,
+    /// What each name of the path before the names taken names, up to the failure.
+    reached: Vec<(Span, Entity)>,
     last: Option<ModId>,
     names: Vec<(&'i Ident, Result<Entity, ResolveError>)>,
 }
@@ -37,8 +39,7 @@ fn walk<'i>(a: &Analysis, m: ModId, segs: &'i [Ident], names: Option<&'i [Ident]
             None => (segs, Vec::new()),
         },
     };
-    let mut last = None;
-    let mut from = None;
+    let (mut last, mut from, mut reached) = (None, None, Vec::new());
     for seg in prefix {
         let next = match from {
             None => head_of(a, m, seg),
@@ -49,11 +50,12 @@ fn walk<'i>(a: &Analysis, m: ModId, segs: &'i [Ident], names: Option<&'i [Ident]
                 if let Entity::Module(c) = e {
                     last = Some(c);
                 }
+                reached.push((seg.span, e));
                 from = Some(e);
             }
             Err(e) => {
                 let names = names.into_iter().map(|name| (name, Err(ResolveError::Failed))).collect();
-                return Walk { prefix: Err(e), last, names };
+                return Walk { prefix: Err(e), reached, last, names };
             }
         }
     }
@@ -78,7 +80,7 @@ fn walk<'i>(a: &Analysis, m: ModId, segs: &'i [Ident], names: Option<&'i [Ident]
             (name, entity)
         })
         .collect();
-    Walk { prefix: Ok(()), last, names }
+    Walk { prefix: Ok(()), reached, last, names }
 }
 
 impl<'p> Sema<'p> {
@@ -104,6 +106,9 @@ impl<'p> Sema<'p> {
                 s.report_mod(d);
             }
         };
+        for &(at, e) in &w.reached {
+            self.a.note_entity(e, at);
+        }
         if let Err(e) = &w.prefix {
             let taken: Vec<&Ident> = w.names.iter().map(|&(n, _)| n).collect();
             report(self, e, &taken);
@@ -120,6 +125,7 @@ impl<'p> Sema<'p> {
                 // A module of a directory with no file of its own (`a` of
                 // `a/b/c.onsa` alone) is a module with no items (S-666).
                 Ok(e) => {
+                    self.a.note_entity(e, name.span);
                     if let Some(target) = self.a.modules.dep_of(m, Some(e), w.last) {
                         self.a.modules.get_mut(m).deps.push(Dep { target, name: name.span, span: imp.span });
                     }

@@ -464,6 +464,9 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             return run;
         }
     };
+    // The runner's self-tests may change the candidates (`tests::Repo::changing_candidates`).
+    #[cfg(test)]
+    let analyzed = tests::changed_candidates(root, analyzed);
     let check = &analyzed.diagnostics;
     // Every candidate, applied alone and checked again (§18.1, S-236, W3-17).
     let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);

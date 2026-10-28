@@ -332,6 +332,7 @@ impl<'a> Checker<'a> {
                     && let Fields::Named(fs) = &s.fields
                     && let Some(f) = fs.iter().find(|f| f.name == name.name)
                 {
+                    self.a.note_use(f.span, name.span);
                     self.field_reach(d, f, name.span)?;
                     return Ok(self.subst(f.ty, &args));
                 }

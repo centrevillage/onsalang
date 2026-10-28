@@ -1,0 +1,39 @@
+pub fn bad_fn(x: I32) -> I32 { //~ E0320
+  x + 1
+}
+
+pub struct BadPt { //~ E0320
+  x: F32,
+}
+
+pub enum BadShape { //~ E0320
+  Circle(F32),
+  Square(F32),
+}
+
+pub const MAX_VOICES: U32 = 8 //~ E0320
+
+pub type BadAlias = F32 //~ E0320
+
+pub enum Wave {
+  Sine,
+  SawTooth, //~ E0320
+}
+
+pub struct Cfg {
+  bad_field: F32, //~ E0320
+}
+
+impl Cfg {
+  pub fn bad_m(self) -> F32 { //~ E0320
+    1.0
+  }
+
+  pub fn bad_new(c: Cfg) -> Cfg { //~ E0320
+    c
+  }
+}
+
+pub fn ok_name() -> I32 {
+  2
+}

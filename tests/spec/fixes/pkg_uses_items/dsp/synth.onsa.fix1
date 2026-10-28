@@ -1,0 +1,6 @@
+pub flow bad_flow( //~ E0320
+  x: F32 at sample,
+  gain: F32 at block,
+) -> F32 at sample {
+  x * gain
+}

@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§7", "§2.4", "§18.1"]
+// fixes = 1
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a local name renames the binding and every
+// read of it in the scope of the binding (§5.1), so that the unit that holds it has no error of the
+// stage after the candidate (`E0302` for a read of the old name), as §18.1 asks. Each function is a unit
+// of its own with one error. The binding is a parameter, a `let`, a `var`, a `for`, a binding of an arm
+// of a `match` (also in a nested pattern), a part of a tuple pattern and a parameter of a closure;
+// the reads are in an expression, in an operand of an assignment, in a hole of an interpolated
+// string (`"{x}"`, and the head of a path `"{p.x}"`, §2.4), in a branch, in a nested block, in the
+// guard of an arm, and in the body of a closure that is passed as an argument (a capture, §5.3). Every
+// binding is read, so no E0309 comes after the candidate (§5.1).
+
+pub struct Pt {
+  x: I32,
+}
+
+fn apply(f: fn(I32) -> I32, v: I32) -> I32 {
+  f.(v)
+}
+
+pub fn parameter(someValue: I32) -> I32 { //~ E0320
+  someValue + someValue * 2
+}
+
+pub fn parameter_in_a_hole(someValue: I32) -> Str uses {Alloc} { //~ E0320
+  "value {someValue}"
+}
+
+pub fn parameter_head_of_a_path(somePoint: Pt) -> Str uses {Alloc} { //~ E0320
+  "x is {somePoint.x}"
+}
+
+pub fn parameter_captured(someValue: I32) -> I32 { //~ E0320
+  apply(fn(v: I32) -> I32 { v + someValue }, 1)
+}
+
+pub fn parameter_in_a_branch(someValue: I32, c: Bool) -> I32 { //~ E0320
+  if c {
+    someValue
+  } else {
+    let y = someValue + 1
+    y
+  }
+}
+
+pub fn inout_parameter(inout someValue: I32) { //~ E0320
+  someValue = someValue + 1
+}
+
+pub fn let_binding(n: I32) -> I32 {
+  let someLet = n + 1 //~ E0320
+  someLet * someLet
+}
+
+pub fn let_with_a_type(n: I32) -> I32 {
+  let someLet: I32 = n + 1 //~ E0320
+  someLet
+}
+
+pub fn let_captured(n: I32) -> I32 {
+  let someLet = n + 1 //~ E0320
+  apply(fn(v: I32) -> I32 { v + someLet }, someLet)
+}
+
+pub fn let_in_a_hole(n: I32) -> Str uses {Alloc} {
+  let someLet = n + 1 //~ E0320
+  "let is {someLet}"
+}
+
+pub fn var_binding(n: I32) -> I32 {
+  var someTotal = 0 //~ E0320
+  someTotal = someTotal + n
+  someTotal = someTotal * 2
+  someTotal
+}
+
+pub fn for_binding(n: U32) -> U32 {
+  var total = 0
+  for someIndex in 0 ..< n { //~ E0320
+    total = total + someIndex
+  }
+  total
+}
+
+pub fn arm_binding(o: Option[I32]) -> I32 {
+  match o {
+    Some(someArm) => someArm + 1, //~ E0320
+    None => 0,
+  }
+}
+
+pub fn arm_binding_in_a_guard(o: Option[I32]) -> I32 {
+  match o {
+    Some(someArm) if someArm > 3 => someArm, //~ E0320
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn nested_pattern_binding(o: Option[(I32, I32)]) -> I32 {
+  match o {
+    Some((someArm, b)) => someArm + b, //~ E0320
+    None => 0,
+  }
+}
+
+pub fn tuple_pattern_binding(p: (I32, I32)) -> I32 {
+  let (somePart, b) = p //~ E0320
+  somePart + b
+}
+
+pub fn closure_parameter(n: I32) -> I32 {
+  apply(fn(someArg: I32) -> I32 { someArg + 1 }, n) //~ E0320
+}

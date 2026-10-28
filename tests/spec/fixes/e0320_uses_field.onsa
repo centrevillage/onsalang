@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.4", "§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:3"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a field of a struct renames the
+// declaration and every use of the field in the module, and the file is clean after it (`clean`). The
+// uses are the name of the field in a struct literal, in a struct pattern (in a `let` and in a
+// `match`), in a read `p.name` (also through another field and in a closure), in a write `p.name = e`
+// (of a `var` and of an `inout` parameter) and as `self.name` in a method. The name of the struct and
+// the other field are not changed. Each use is in a unit of its own that has no other error.
+
+pub struct Pt {
+  badField: F32, //~ E0320
+  other: F32,
+}
+
+pub struct Wrapper {
+  inner: Pt,
+}
+
+impl Pt {
+  pub fn read(self) -> F32 {
+    self.badField
+  }
+
+  pub fn scale(inout self, k: F32) {
+    self.badField = self.badField * k
+  }
+}
+
+pub fn literal(x: F32) -> Pt {
+  Pt { badField: x, other: 0.0 }
+}
+
+pub fn pattern_in_a_let(p: Pt) -> F32 {
+  let Pt { badField: a, other: b } = p
+  a + b
+}
+
+pub fn pattern_in_a_match(p: Pt) -> F32 {
+  match p {
+    Pt { badField: a, other: _ } => a,
+  }
+}
+
+pub fn read_it(p: Pt) -> F32 {
+  p.badField + p.other
+}
+
+pub fn read_through_another_field(w: Wrapper) -> F32 {
+  w.inner.badField
+}
+
+pub fn read_in_a_closure(p: Pt) -> F32 {
+  apply(fn(q: Pt) -> F32 { q.badField }, p)
+}
+
+fn apply(f: fn(Pt) -> F32, p: Pt) -> F32 {
+  f.(p)
+}
+
+pub fn write_a_var(x: F32) -> F32 {
+  var p = Pt { badField: 0.0, other: 1.0 }
+  p.badField = x
+  p.badField
+}
+
+pub fn write_an_inout(inout p: Pt, x: F32) {
+  p.badField = p.badField + x
+}
+
+pub fn write_through_another_field(inout w: Wrapper, x: F32) {
+  w.inner.badField = x
+}

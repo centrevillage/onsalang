@@ -1,0 +1,57 @@
+use util
+use dsp.synth
+
+pub fn call_through_the_module(x: I32) -> I32 {
+  util.bad_fn(x)
+}
+
+pub fn struct_through_the_module(x: F32) -> util.BadPt {
+  util.BadPt { x: x }
+}
+
+pub fn enum_through_the_module(x: F32) -> util.BadShape {
+  util.BadShape.Square(x)
+}
+
+pub fn pattern_through_the_module(s: util.BadShape) -> F32 {
+  match s {
+    util.BadShape.Circle(r) => r,
+    util.BadShape.Square(a) => a,
+  }
+}
+
+pub fn constant_through_the_module() -> U32 {
+  util.MAX_VOICES + 1
+}
+
+pub fn alias_through_the_module(x: util.BadAlias) -> util.BadAlias {
+  x
+}
+
+pub fn flow_through_the_module(move s: synth.bad_flow.State) -> synth.bad_flow.State {
+  s
+}
+
+pub fn flow_params_through_the_module(g: F32) -> synth.bad_flow.Params {
+  synth.bad_flow.Params { gain: g }
+}
+
+pub fn variant_through_the_module() -> util.Wave {
+  util.Wave.SawTooth
+}
+
+pub fn field_through_the_module(c: util.Cfg) -> F32 {
+  c.bad_field
+}
+
+pub fn literal_through_the_module(x: F32) -> util.Cfg {
+  util.Cfg { bad_field: x }
+}
+
+pub fn method_through_the_module(c: util.Cfg) -> F32 {
+  c.bad_m()
+}
+
+pub fn associated_function_through_the_module(c: util.Cfg) -> util.Cfg {
+  util.Cfg.bad_new(c)
+}

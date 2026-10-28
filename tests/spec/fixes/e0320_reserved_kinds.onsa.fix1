@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§2.2", "§18.1"]
+// fixes = 1
+
+// W4-04 U9, S-243, S-82: a name that is E0320 only for its leading `_` and that is a reserved word
+// without the `_` (§2.2) gets the word with a `_` at the end as its one candidate, in every kind of
+// name (§2.3: `_type` is `type_`, `_Self` is `Self_`), and the candidate renames the declaration and
+// every use to that name. Each declaration is a unit of its own with one error, so the default of
+// §18.1 checks that the unit has no error of the stage after the candidate (`E0302` for a use of the
+// old name, a reserved word where a name is read as a syntax error), and that the units that had none
+// have no error at all. The kinds are a field, a method, a variant, a type parameter, an effect-row
+// variable, a `for` and an arm binding, a parameter of a closure and a parameter of a function, and
+// a flow. The spelling is not asserted here (the copy `.fix1` of the implementation holds
+// it). The kinds that e0320_leading_underscore_keyword has (a function, a `let`, a struct, a
+// parameter) are not repeated.
+
+pub struct Pt {
+  type_: F32, //~ E0320
+  other: F32,
+}
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn field_literal(x: F32) -> Pt {
+  Pt { type_: x, other: 0.0 }
+}
+
+pub fn field_read(p: Pt) -> F32 {
+  p.type_ + p.other
+}
+
+pub fn field_write(inout p: Pt, x: F32) {
+  p.type_ = x
+}
+
+pub fn field_pattern(p: Pt) -> F32 {
+  let Pt { type_: a, other: b } = p
+  a + b
+}
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn for_(self) -> I32 { //~ E0320
+    self.n
+  }
+
+  pub fn twice(self) -> I32 {
+    self.for_() * 2
+  }
+}
+
+pub fn method_call(c: Counter) -> I32 {
+  c.for_()
+}
+
+pub enum Choice {
+  Self_(I32), //~ E0320
+  Other,
+}
+
+pub fn variant_expression(x: I32) -> Choice {
+  Choice.Self_(x)
+}
+
+pub fn variant_pattern(c: Choice) -> I32 {
+  match c {
+    Choice.Self_(v) => v,
+    Choice.Other => 0,
+  }
+}
+
+pub fn type_parameter[Self_](x: Self_) -> Self_ { //~ E0320
+  let y: Self_ = x
+  y
+}
+
+pub fn effect_variable[T, when_](f: fn(T) -> T uses {when_}, x: T) -> T uses {when_} { //~ E0320
+  f.(x)
+}
+
+pub fn for_binding(n: U32) -> U32 {
+  var total = 0
+  for while_ in 0 ..< n { //~ E0320
+    total = total + while_
+  }
+  total
+}
+
+pub fn arm_binding(o: Option[I32]) -> I32 {
+  match o {
+    Some(return_) => return_ + 1, //~ E0320
+    None => 0,
+  }
+}
+
+pub fn closure_parameter(n: I32) -> I32 {
+  apply(fn(move_: I32) -> I32 { move_ + 1 }, n) //~ E0320
+}
+
+pub fn parameter_in_a_hole(in_: I32) -> Str uses {Alloc} { //~ E0320
+  "value {in_}"
+}
+
+pub flow ser_( //~ E0320
+  x: F32 at sample,
+) -> F32 at sample {
+  x * 0.5
+}
+
+pub fn flow_type(s: ser_.State) -> U32 {
+  1
+}
+
+pub flow user(
+  x: F32 at sample,
+) -> F32 at sample {
+  ser_~(x)
+}

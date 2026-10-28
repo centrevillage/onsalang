@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.5", "§2.4", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "24:7"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a constant renames the declaration and
+// every use of the name in the module, and the file is clean after it (`clean`). The uses are in a
+// number in a body, the initializer of another constant, the length of an array in a type and in an
+// expression (`[e; N]`), the constant argument of a generic type, the bound of a `for`, the end of the
+// head of an `if`, a `while` and a `match`, a hole of an interpolated string (`"{N}"`, §2.4) and a
+// `test`. In the heads the new name is written with capital letters before a `{`, which is not a
+// struct literal there (a head of a statement takes none outside parentheses, §4.4), so the
+// candidate leaves no syntax error. Each use is in a unit of its own that has no other error.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+const max_voices: U32 = 8 //~ E0320
+
+const DOUBLE: U32 = max_voices * 2
+
+pub fn in_a_body(x: U32) -> U32 {
+  x + max_voices
+}
+
+pub fn array_length_in_a_type(xs: [F32; max_voices]) -> [F32; max_voices] {
+  xs
+}
+
+pub fn array_length_in_an_expression() -> [F32; 8] {
+  [0.0; max_voices]
+}
+
+pub fn constant_argument(r: Ring[F32, max_voices]) -> Ring[F32, max_voices] {
+  r
+}
+
+pub fn for_bound() -> U32 {
+  var total = 0
+  for i in 0 ..< max_voices {
+    total = total + i
+  }
+  total
+}
+
+pub fn heads_of_statements(n: U32) -> U32 {
+  var total = 0
+  if n > max_voices {
+    total = total + 1
+  }
+  while total < max_voices {
+    total = total + 2
+  }
+  match max_voices {
+    8 => total,
+    _ => n,
+  }
+}
+
+pub fn interpolated() -> Str uses {Alloc} {
+  "voices: {max_voices}"
+}
+
+pub fn twice() -> U32 {
+  DOUBLE
+}
+
+test "a use in a test" {
+  assert max_voices == 8
+}

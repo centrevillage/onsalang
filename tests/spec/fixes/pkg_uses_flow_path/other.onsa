@@ -1,0 +1,23 @@
+use main
+use main.{BadFlow}
+use main.BadFlow.{State, Params}
+
+pub fn state_taken(s: State) -> U32 {
+  s.helper()
+}
+
+pub fn params_taken() -> Params {
+  Params.loud()
+}
+
+pub fn namespace_taken(g: F32) -> BadFlow.Params {
+  BadFlow.Params { gain: g }
+}
+
+pub fn through_main(s: main.BadFlow.State) -> U32 {
+  s.helper()
+}
+
+pub fn params_through_main(g: F32) -> main.BadFlow.Params {
+  main.BadFlow.Params { gain: g }
+}

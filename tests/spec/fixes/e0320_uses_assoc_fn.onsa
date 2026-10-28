@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.4", "§6.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "22:10"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on an associated function (a function of an
+// `impl` that has no `self`) renames the declaration and every use of it in the module, and the file
+// is clean after it (`clean`). The uses are `Pt.Name(…)` through the type, `Self.Name(…)` in an
+// `impl`, `Alias.Name(…)` through a type alias, the function as a value (`Pt.Name`), and a call in
+// a closure. Each use is in a unit of its own that has no other error.
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  pub fn BadNew(x: F32) -> Pt { //~ E0320
+    Pt { x: x }
+  }
+
+  pub fn unit() -> Pt {
+    Self.BadNew(1.0)
+  }
+
+  pub fn get(self) -> F32 {
+    self.x
+  }
+}
+
+type Alias = Pt
+
+fn apply(f: fn(F32) -> Pt, x: F32) -> Pt {
+  f.(x)
+}
+
+pub fn through_the_type(x: F32) -> Pt {
+  Pt.BadNew(x)
+}
+
+pub fn through_an_alias(x: F32) -> Alias {
+  Alias.BadNew(x)
+}
+
+pub fn as_a_value(x: F32) -> Pt {
+  apply(Pt.BadNew, x)
+}
+
+pub fn in_a_closure(x: F32) -> Pt {
+  apply(fn(v: F32) -> Pt { Pt.BadNew(v) }, x)
+}
+
+pub fn in_an_expression(x: F32) -> F32 {
+  Pt.BadNew(x).get() + Pt.BadNew(x + 1.0).get()
+}

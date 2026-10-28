@@ -37,8 +37,8 @@ pub fn in_pattern(o: Option[I64]) -> I64 {
 }
 
 pub fn tuple(p: (I64, I64)) -> I64 {
-  let (_a, b) = p //~ E0320
-  _a + b
+  let (_a, c) = p //~ E0320
+  _a + c
 }
 
 pub fn trailing(x: I64) -> I64 {

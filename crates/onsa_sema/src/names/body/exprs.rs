@@ -73,7 +73,7 @@ impl Walker<'_> {
             // `^y`: a local, or a builtin name of the flow (S-720); any other
             // name is the flow stage's until W7-04.
             ExprKind::Feedback(name) => {
-                if let Some(b) = self.lookup(&name.name) {
+                if let Some(b) = self.lookup(name) {
                     self.out.paths.insert(e, PathRes::Local(b));
                 } else if let Some(b) = self.flow_name(&name.name) {
                     let d = b.misplaced([name.span].into_iter(), self.text).with_found(self.src(ast.expr(e).span));
@@ -286,6 +286,7 @@ impl Walker<'_> {
             PatKind::Bind(name) => {
                 let b = match self.earlier_branch(&name.name) {
                     Some(b) => {
+                        self.a.note_use(self.out.bindings[b.0 as usize].span, name.span);
                         self.out.bindings[b.0 as usize].sites.push(p);
                         b
                     }

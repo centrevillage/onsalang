@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.1", "§18.1"]
+// fixes = 1
+
+// W4-04 U9, S-82, R-87 (5): in a package the one candidate of an E0320 on an item renames the
+// declaration in its module and every use in the other modules of the package: the name in a
+// `use util.{BadFn}` (each in a unit of its own), the name after the module in a path (`util.BadFn`,
+// in other.onsa), a flow in the middle of a `use` path (`use dsp.synth.BadFlow.{State, Params}`) and
+// in a `use` list (`use dsp.synth.{BadFlow}`). The declarations are in util.onsa (a function, a struct,
+// an enum, a constant and a type alias) and in dsp/synth.onsa (a flow), and each unit holds one error,
+// so the default of §18.1 checks that the units that the candidate touches have no error of the
+// stage, and that the units that had none have no error at all after it.
+
+use util.{BadFn}
+use util.{Bad_Pt}
+use util.{Bad_Shape}
+use util.{max_voices}
+use util.{Bad_Alias}
+use util.{ok_name}
+use util.{Wave}
+use util.{Cfg}
+use dsp.synth.{BadFlow}
+use dsp.synth.BadFlow.{State, Params}
+
+pub fn call(x: I32) -> I32 {
+  BadFn(x) + ok_name()
+}
+
+pub fn struct_literal(x: F32) -> Bad_Pt {
+  Bad_Pt { x: x }
+}
+
+pub fn enum_path(x: F32) -> Bad_Shape {
+  Bad_Shape.Circle(x)
+}
+
+pub fn enum_pattern(s: Bad_Shape) -> F32 {
+  match s {
+    Bad_Shape.Circle(r) => r,
+    Bad_Shape.Square(a) => a,
+  }
+}
+
+pub fn constant() -> U32 {
+  max_voices * 2
+}
+
+pub fn alias(x: Bad_Alias) -> Bad_Alias {
+  x + 1.0
+}
+
+pub fn flow_params(g: F32) -> Params {
+  Params { gain: g }
+}
+
+pub fn flow_params_through_the_namespace(g: F32) -> BadFlow.Params {
+  BadFlow.Params { gain: g }
+}
+
+pub fn flow_state(move s: State) -> State {
+  s
+}
+
+pub fn flow_reset(inout s: BadFlow.State) {
+  BadFlow.reset(inout s)
+}
+
+pub fn variant() -> Wave {
+  Wave.saw_tooth
+}
+
+pub fn variant_pattern(w: Wave) -> I32 {
+  match w {
+    Wave.Sine => 0,
+    Wave.saw_tooth => 1,
+  }
+}
+
+pub fn field_read(c: Cfg) -> F32 {
+  c.badField
+}
+
+pub fn field_pattern(c: Cfg) -> F32 {
+  let Cfg { badField: f } = c
+  f
+}
+
+pub fn method(c: Cfg) -> F32 {
+  c.BadM()
+}
+
+pub fn associated_function(c: Cfg) -> Cfg {
+  Cfg.BadNew(c)
+}

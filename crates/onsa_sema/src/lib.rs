@@ -67,6 +67,7 @@ pub use def::{Def, DefId, DefKind, ModId};
 pub use flow::{FlowInfo, FlowLet, FlowRate, InitArg, Node};
 pub use kind::Kind;
 pub use layout::Layout;
+pub use names::rename::rename_fixes;
 pub use resolve::{Builtin, Entity, ModInfo, Modules, ResolveError};
 pub use ty::{Ty, TyId, Types};
 
@@ -217,6 +218,11 @@ pub struct Analysis {
     /// meet these at one place, `onsa_driver::analyze`: two paths, as they
     /// are made at two stages (the files read, the table of the heads).
     pub path_diagnostics: Vec<Diagnostic>,
+    /// The names the stages resolved, each as the name of its declaration
+    /// and the name that names it (§2.3, S-82): what the candidate of an
+    /// E0320 renames ([`rename_fixes`]). A cell, as the one resolution of a
+    /// path ([`Analysis::typed_members`]) reads the analysis.
+    pub(crate) uses: std::cell::RefCell<Vec<(onsa_diag::Span, onsa_diag::Span)>>,
 }
 
 impl Analysis {

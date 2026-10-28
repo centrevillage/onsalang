@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§2.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:8"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-243, S-82: `Clock` is not in the shape of a function name, and the name that the rule
+// makes of it, `clock`, is a reserved word (§2.2), so the candidate adds a `_` at the end (`clock_`,
+// §2.3) and not the word itself. The candidate renames the declaration and every use to that one name:
+// the file is clean after it (`clean`), so a use that kept the old name (`E0302`), or took the
+// reserved word (`E0200` for `clock`, which is a keyword), would be a diagnostic left. The spelling
+// itself is not asserted here (the copy `.fix1` of the implementation holds it).
+
+pub fn clock_(x: I32) -> I32 { //~ E0320
+  x + 1
+}
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn call(x: I32) -> I32 {
+  clock_(x) + clock_(1)
+}
+
+pub fn as_a_value(x: I32) -> I32 {
+  apply(clock_, x)
+}
+
+pub fn in_a_closure(x: I32) -> I32 {
+  apply(fn(v: I32) -> I32 { clock_(v) }, x)
+}

@@ -256,6 +256,7 @@ impl<'a> Checker<'a> {
                 }
                 self.check_args(args, &params, span)?;
                 let inst = self.finish_instance(md, targs, span)?;
+                self.a.note_use(self.a.def(md).name_span, name.span);
                 self.info.targets.insert(e, Target::Method { def: md, inst });
                 let _ = kind;
                 return Ok(ret);

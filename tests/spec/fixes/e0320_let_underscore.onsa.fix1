@@ -11,34 +11,34 @@
 
 pub fn b(x: I64) -> I64 {
   let z = 5 //~ E0320
-  x + _z
+  x + z
 }
 
 pub fn typed(x: I64) -> I64 {
   let z: I64 = 5 //~ E0320
-  x + _z
+  x + z
 }
 
 pub fn mutable(x: I64) -> I64 {
   var total = x //~ E0320
-  _total = _total + 1
-  _total
+  total = total + 1
+  total
 }
 
 pub fn param(x: I64) -> I64 { //~ E0320
-  _x
+  x
 }
 
 pub fn in_pattern(o: Option[I64]) -> I64 {
   match o {
-    Some(v) => _v, //~ E0320
+    Some(v) => v, //~ E0320
     None => 0,
   }
 }
 
 pub fn tuple(p: (I64, I64)) -> I64 {
-  let (a, b) = p //~ E0320
-  _a + b
+  let (a, c) = p //~ E0320
+  a + c
 }
 
 pub fn trailing(x: I64) -> I64 {

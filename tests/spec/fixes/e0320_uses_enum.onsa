@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:10"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on an enum renames the declaration and every
+// use of the name in the module, and the file is clean after it (`clean`). The name is also a part in
+// the middle of a path: the `Bad_Shape` of `Bad_Shape.Circle` is a use of the enum in an expression,
+// and in a pattern of a `match` (alone, in a choice `|`, nested in a tuple and in `Some`).
+// Each use is in a unit of its own that has no other error.
+
+pub enum Bad_Shape { //~ E0320
+  Circle(F32),
+  Square(F32),
+}
+
+impl Bad_Shape {
+  pub fn side(self) -> F32 {
+    match self {
+      Self.Circle(r) => r,
+      Self.Square(a) => a,
+    }
+  }
+}
+
+pub fn make(x: F32) -> Bad_Shape {
+  Bad_Shape.Circle(x)
+}
+
+pub fn path_in_an_expression(c: Bool, x: F32) -> Bad_Shape {
+  if c {
+    Bad_Shape.Square(x)
+  } else {
+    Bad_Shape.Circle(x)
+  }
+}
+
+pub fn path_in_a_pattern(s: Bad_Shape) -> F32 {
+  match s {
+    Bad_Shape.Circle(r) => r * r,
+    Bad_Shape.Square(a) => a * a,
+  }
+}
+
+pub fn path_in_a_choice(s: Bad_Shape) -> Bool {
+  match s {
+    Bad_Shape.Circle(_) | Bad_Shape.Square(_) => true,
+  }
+}
+
+pub fn path_in_a_tuple(s: Bad_Shape, t: Bad_Shape) -> F32 {
+  match (s, t) {
+    (Bad_Shape.Circle(a), Bad_Shape.Circle(b)) => a + b,
+    (Bad_Shape.Square(a), _) => a,
+    (_, Bad_Shape.Square(b)) => b,
+  }
+}
+
+pub fn path_in_an_option(o: Option[Bad_Shape]) -> F32 {
+  match o {
+    Some(Bad_Shape.Circle(r)) => r,
+    Some(Bad_Shape.Square(a)) => a,
+    None => 0.0,
+  }
+}

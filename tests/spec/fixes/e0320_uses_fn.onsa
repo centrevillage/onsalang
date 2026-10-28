@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "24:8"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a function renames the declaration and
+// every use of the name in the module (§2.3), so that nothing is left of the name: after the candidate
+// the whole file is clean (`clean`), which is stricter than the default of §18.1 (the units it
+// touches hold no error of the stage). The new spelling is not fixed here, only that it is one name
+// at every place. The uses are in a call in a body, a call as an argument of another call, the
+// function as a value (an argument of a function type), a call in the body of a closure, a call in a
+// branch of `if` and `match`, a `test`, and a call of a call. Each use is in a unit of its own
+// that has no other error.
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn BadName(x: I32) -> I32 { //~ E0320
+  x + 1
+}
+
+pub fn call_in_body(x: I32) -> I32 {
+  BadName(x) + BadName(2)
+}
+
+pub fn call_as_argument(x: I32) -> I32 {
+  apply(fn(v: I32) -> I32 { BadName(v) }, BadName(x))
+}
+
+pub fn function_as_value(x: I32) -> I32 {
+  apply(BadName, x)
+}
+
+pub fn call_in_branches(c: Bool, o: Option[I32]) -> I32 {
+  let m = match o {
+    Some(v) => BadName(v),
+    None => 0,
+  }
+  if c {
+    BadName(m)
+  } else {
+    m
+  }
+}
+
+pub fn call_of_a_call(x: I32) -> I32 {
+  BadName(BadName(BadName(x)))
+}
+
+test "a use in a test" {
+  assert BadName(1) == 2
+}

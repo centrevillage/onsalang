@@ -268,11 +268,16 @@ fn first_candidate(src: &str) -> (TextCheck, CandidateCheck) {
 }
 
 /// X-3 (α): a candidate that leaves a diagnostic in a unit it does not
-/// touch, which held none before it, breaks the contract.
+/// touch, which held none before it, breaks the contract: here a rename of
+/// the declaration alone, made by hand (the candidate of the E0320 renames
+/// the use too, S-82).
 #[test]
 fn a_candidate_that_breaks_a_unit_it_does_not_touch_breaks_the_contract() {
     let src = "pub fn BadFn() -> I32 {\n  1\n}\n\npub fn user() -> I32 {\n  BadFn()\n}\n";
-    let (_, now) = first_candidate(src);
+    let run = check_text(src).unwrap();
+    let d = &run.analyzed.diagnostics[0];
+    let alone = onsa_diag::Fix::replace("rename the declaration alone", d.span, "bad_fn");
+    let now = check_candidate(&run, d, &alone).unwrap();
     assert!(
         matches!(&now.problems[..], [p] if p.contains("the units its edits touch hold none")
                 && p.contains("the units that held no diagnostic before it hold 6:3 E0302 besides")),

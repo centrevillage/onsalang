@@ -11,18 +11,18 @@ pub fn bad_fn() -> I32 {                             //~ E0320
 }
 
 pub fn calls_bad_fn() -> I32 {
-  BadFn() + BadFn()
+  bad_fn() + bad_fn()
 }
 
 pub struct BadType {                               //~ E0320
   x: F32,
 }
 
-pub fn pass_bad_type(b: bad_type) -> bad_type {
+pub fn pass_bad_type(b: BadType) -> BadType {
   b
 }
 
-pub fn read_bad_type(b: bad_type) -> F32 {
+pub fn read_bad_type(b: BadType) -> F32 {
   b.x
 }
 
@@ -32,12 +32,12 @@ pub enum Shape {
 }
 
 pub fn unit_circle() -> Shape {
-  Shape.circle(1.0)
+  Shape.Circle(1.0)
 }
 
 pub fn area(s: Shape) -> F32 {
   match s {
-    Shape.circle(r) => r * r,
+    Shape.Circle(r) => r * r,
     Shape.Square(a) => a * a,
   }
 }
@@ -45,17 +45,17 @@ pub fn area(s: Shape) -> F32 {
 const MAX_VOICES: U32 = 8                           //~ E0320
 
 pub fn voices() -> U32 {
-  max_voices * 2
+  MAX_VOICES * 2
 }
 
 pub fn camel_parameter(some_value: I32) -> I32 {     //~ E0320
-  someValue * 2
+  some_value * 2
 }
 
 pub fn capitalized_var() -> I32 {
   var count = 0                                     //~ E0320
-  Count = Count + 1
-  Count
+  count = count + 1
+  count
 }
 
 pub fn double_underscore() -> I32 {                //~ E0320
@@ -63,5 +63,5 @@ pub fn double_underscore() -> I32 {                //~ E0320
 }
 
 pub fn calls_double_underscore() -> I32 {
-  double__underscore()
+  double_underscore()
 }

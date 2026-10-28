@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.4", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "28:6"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a type alias renames the declaration and
+// every use of the name in the module, and the file is clean after it (`clean`). A type alias is
+// used wherever a type is, and wherever a struct is when its target is one (§4.4): in a signature,
+// in the right side of another alias, in a field, in a type argument, in a function type, as the head
+// of a struct literal and of a pattern, and in the middle of a path to an associated function. Each
+// use is in a unit of its own that has no other error.
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  pub fn origin() -> Pt {
+    Pt { x: 0.0 }
+  }
+}
+
+type Bad_Alias = Pt //~ E0320
+
+type Next = Bad_Alias
+
+pub struct Holder {
+  p: Bad_Alias,
+}
+
+pub fn signature(p: Bad_Alias) -> Bad_Alias {
+  p
+}
+
+pub fn through_next(n: Next) -> F32 {
+  n.x
+}
+
+pub fn through_holder(h: Holder) -> F32 {
+  h.p.x
+}
+
+pub fn type_argument(o: Option[Bad_Alias]) -> F32 {
+  match o {
+    Some(p) => p.x,
+    None => 0.0,
+  }
+}
+
+pub fn function_type(f: fn(Bad_Alias) -> Bad_Alias, p: Bad_Alias) -> Bad_Alias {
+  f.(p)
+}
+
+pub fn literal(x: F32) -> Bad_Alias {
+  Bad_Alias { x: x }
+}
+
+pub fn pattern(p: Pt) -> F32 {
+  let Bad_Alias { x: a } = p
+  a
+}
+
+pub fn associated_function() -> Bad_Alias {
+  Bad_Alias.origin()
+}

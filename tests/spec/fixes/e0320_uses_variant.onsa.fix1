@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:3"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a variant of an enum renames the
+// declaration and every use of the variant in the module, and the file is clean after it (`clean`).
+// The uses are `Shape.name` in an expression, in a pattern of a `match` (alone, in a choice `|`,
+// nested in a tuple and in `Some`), the variant as a function value, and `Self.name` in an `impl`. The
+// name of the enum and the other variants are not changed. Each use is in a unit of its own that has
+// no other error.
+
+pub enum Shape {
+  Circle(F32),
+  RoundSquare(F32), //~ E0320
+  Point,
+}
+
+impl Shape {
+  pub fn side(self) -> F32 {
+    match self {
+      Self.Circle(r) => r,
+      Self.RoundSquare(a) => a,
+      Self.Point => 0.0,
+    }
+  }
+
+  pub fn rounded(x: F32) -> Shape {
+    Self.RoundSquare(x)
+  }
+}
+
+fn apply(f: fn(F32) -> Shape, x: F32) -> Shape {
+  f.(x)
+}
+
+pub fn in_an_expression(c: Bool, x: F32) -> Shape {
+  if c {
+    Shape.RoundSquare(x)
+  } else {
+    Shape.Circle(x)
+  }
+}
+
+pub fn as_a_function_value(x: F32) -> Shape {
+  apply(Shape.RoundSquare, x)
+}
+
+pub fn in_a_pattern(s: Shape) -> F32 {
+  match s {
+    Shape.RoundSquare(a) => a * a,
+    Shape.Circle(r) => r,
+    Shape.Point => 0.0,
+  }
+}
+
+pub fn in_a_choice(s: Shape) -> Bool {
+  match s {
+    Shape.RoundSquare(_) | Shape.Circle(_) => true,
+    Shape.Point => false,
+  }
+}
+
+pub fn in_a_tuple(s: Shape, t: Shape) -> F32 {
+  match (s, t) {
+    (Shape.RoundSquare(a), Shape.RoundSquare(b)) => a + b,
+    (Shape.RoundSquare(a), _) => a,
+    (_, _) => 0.0,
+  }
+}
+
+pub fn in_an_option(o: Option[Shape]) -> F32 {
+  match o {
+    Some(Shape.RoundSquare(a)) => a,
+    Some(_) => 1.0,
+    None => 0.0,
+  }
+}

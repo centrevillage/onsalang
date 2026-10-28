@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.4", "§6.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "25:12"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a struct renames the declaration and
+// every use of the name in the module, and the file is clean after it (`clean`). The uses are in
+// every place a type name is written: a parameter and a return type, a field of another struct, a type
+// argument, the right side of a type alias, a `let` annotation, the head of an `impl`, the head of a
+// struct literal and of a struct pattern (in a `let` and in a `match`), and a type in a closure. The
+// name has a capital letter at its start, as a head of a literal or of a pattern needs one (§2.3).
+// Each use is in a unit of its own that has no other error.
+
+pub struct Other {
+  inner: BadType,
+}
+
+type Alias = BadType
+
+pub struct BadType { //~ E0320
+  x: F32,
+}
+
+impl BadType {
+  pub fn get(self) -> F32 {
+    self.x
+  }
+}
+
+pub fn parameter(p: BadType) -> F32 {
+  p.x
+}
+
+pub fn returned(x: F32) -> BadType {
+  BadType { x: x }
+}
+
+pub fn through_alias(a: Alias) -> F32 {
+  a.x
+}
+
+pub fn through_other(o: Other) -> F32 {
+  o.inner.x
+}
+
+pub fn type_argument(o: Option[BadType]) -> F32 {
+  match o {
+    Some(p) => p.x,
+    None => 0.0,
+  }
+}
+
+pub fn annotation(x: F32) -> F32 {
+  let p: BadType = BadType { x: x }
+  p.x
+}
+
+pub fn struct_pattern(p: BadType) -> F32 {
+  let BadType { x: a } = p
+  a
+}
+
+pub fn struct_pattern_in_match(p: BadType) -> F32 {
+  match p {
+    BadType { x: a } => a,
+  }
+}
+
+pub fn array_of(xs: [BadType; 2]) -> F32 {
+  xs[0].x + xs[1].x
+}
+
+pub fn in_a_closure(p: BadType) -> F32 {
+  apply(fn(q: BadType) -> F32 { q.x }, p)
+}
+
+fn apply(f: fn(BadType) -> F32, p: BadType) -> F32 {
+  f.(p)
+}

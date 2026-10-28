@@ -108,7 +108,6 @@ pub(crate) struct BodyNames {
 
 /// One binding of a body (§5.1).
 #[derive(Debug, Clone)]
-#[allow(dead_code, reason = "the overlaps of a rename read the scope from W4-04 U9")]
 pub(crate) struct Binding {
     pub name: String,
     /// The name where it is first bound.
@@ -238,7 +237,6 @@ pub(crate) struct StructRes {
 
 /// A scope of a body: its parent, and the bindings declared in it in order.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code, reason = "the overlaps of a rename read the parents from W4-04 U9")]
 pub(crate) struct ScopeInfo {
     pub parent: Option<ScopeId>,
     pub bindings: Vec<BindingId>,

@@ -112,14 +112,17 @@ impl Walker<'_> {
         scopes.flat_map(|bs| bs.iter().copied()).collect()
     }
 
-    /// The local binding `name` names here, read: the read counts for
+    /// The local binding `name` names here, read (a use of it, which an E0320
+    /// renames): the read counts for
     /// E0309 and, for a binding outside the open anonymous functions, is a
     /// capture of each of them. A binding an open function captures already
     /// is captured by those around it that it is outside of, so the marking
     /// stops at the first that has it.
-    pub(super) fn lookup(&mut self, name: &str) -> Option<BindingId> {
-        let id = *self.scopes.visible.get(name)?;
-        self.out.bindings[id.0 as usize].reads += 1;
+    pub(super) fn lookup(&mut self, name: &Ident) -> Option<BindingId> {
+        let id = *self.scopes.visible.get(&name.name)?;
+        let b = &mut self.out.bindings[id.0 as usize];
+        b.reads += 1;
+        self.a.note_use(b.span, name.span);
         for (closure, base, seen) in self.scopes.closures.iter_mut().rev() {
             if id.0 >= *base || !seen.insert(id) {
                 break;

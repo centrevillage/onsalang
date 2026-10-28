@@ -442,3 +442,17 @@ left = "cannot find `…`"
 input = "tests/fuzz/a589aa43.onsa"
 reasons = ["S-103"]
 note = "an input with two errors of the names stage in one unit: the method `len` called through its type, and the argument `s` that is not found, hidden by the one error of a unit. The E0308 is not the only error of its stage, so the promise of the candidates (§18.1: only when the diagnostic is the only error of its stage and before in the units it touches) does not hold, and the candidate `s.len()` leaves the E0302 of `s`"
+
+[[allowed]]
+class = "fix|E0002|write the `…` between the elements|E0020"
+left = "a callee that is no path of names is a function value; it is called with `…`"
+input = "tests/fuzz/0ea80e63.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: two elements of a parenthesized list without the `,` (`()2`), and the literal `2` called as `2(`, which the `,` leaves as the call of a value"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "`…` (U+#F#) cannot be written outside comments and strings: a name is written wi"
+input = "tests/fuzz/cc240d16.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: an `else` on the line after the `}`, and a character that cannot be written outside comments after it on the same line, which the candidate moves with the `else` (as 43e0e81e, another code point)"

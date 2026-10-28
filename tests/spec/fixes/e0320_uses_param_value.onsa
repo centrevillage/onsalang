@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§11.7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:7"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the value of a key of `@param` is an expression of the rule of a `const`
+// initializer, and it may be the name of a constant (§11.7, so that the range is written once for the
+// attribute and for the body). So the name of a constant in `@param` is
+// a use, and the one candidate of an E0320 on the constant renames the declaration and the uses in
+// the keys `min`, `max` and `default` of two inputs, and in the body, and the file is clean after it
+// (`clean`). Today a constant in `@param` is the E0809 "must be a numeric literal" (R-216, S-632),
+// so this case waits for the check of the values of `@param`.
+
+const lowest_gain: F32 = 0.0 //~ E0320
+
+const HIGHEST_GAIN: F32 = 1.0
+
+pub flow voice(
+  x: F32 at sample,
+  @param(min: lowest_gain, max: HIGHEST_GAIN, default: lowest_gain)
+  gain: F32 at block,
+  @param(min: lowest_gain, max: 2.0, default: 1.0)
+  boost: F32 at block,
+) -> F32 at sample {
+  let floor = gain + lowest_gain
+  x * floor * boost
+}

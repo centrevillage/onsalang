@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.3", "§11.6", "§15.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "main.onsa:18:10"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the name of a flow is the middle of a `use` path and the heading of an
+// `impl` (§11.6). The one candidate of the E0320 on the flow renames the declaration, the middle
+// element of `use main.BadFlow.{State, Params}` and of `use main.{BadFlow}` in other.onsa, the name
+// in the heading of an `impl BadFlow.State` and `impl BadFlow.Params` (§6.3), and the path
+// `main.BadFlow.State` after a `use main`, and the package is clean after it (`clean`). The module
+// other.onsa is not imported by this one.
+
+pub flow BadFlow( //~ E0320
+  x: F32 at sample,
+  gain: F32 at block,
+) -> F32 at sample {
+  x * gain
+}
+
+impl BadFlow.State {
+  pub fn helper(self) -> U32 {
+    1
+  }
+}
+
+impl BadFlow.Params {
+  pub fn loud() -> BadFlow.Params {
+    BadFlow.Params { gain: 2.0 }
+  }
+}

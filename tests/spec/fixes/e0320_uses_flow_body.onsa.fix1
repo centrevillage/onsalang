@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§11.2", "§11.3", "§18.1"]
+// fixes = 1
+
+// W4-04 U9, S-82, R-87 (5), S-542: the one candidate of an E0320 on a name in a flow renames the
+// binding and every read of it in the flow, so the unit of the flow has no error of the stage after
+// the candidate (`E0302` for a read of the old name, §18.1). The names are an input of the flow, a
+// `let` of the body, and the name of a `let` that is read by the feedback `^name` (§11.2) and by an
+// instance that is given it (`f~(name)`, §11.4). Each flow is a unit of its own with one error, and
+// every binding is read (§5.1).
+
+pub flow input_read(
+  in_signal: F32 at sample, //~ E0320
+  gain: F32 at block,
+) -> F32 at sample {
+  in_signal * gain + in_signal * 0.5
+}
+
+pub flow let_read(
+  x: F32 at sample,
+) -> F32 at sample {
+  let some_level = x * 0.5 //~ E0320
+  some_level + some_level
+}
+
+pub flow feedback(
+  x: F32 at sample,
+) -> F32 at sample {
+  let some_out = x + 0.5 * prev~(^some_out) //~ E0320
+  some_out
+}
+
+pub flow given_to_an_instance(
+  x: F32 at sample,
+) -> F32 at sample {
+  let some_level = x * 0.5 //~ E0320
+  let y         = smoothing~(some_level)
+  y + some_level
+}
+
+flow smoothing(
+  x: F32 at sample,
+) -> F32 at sample {
+  let y = x * 0.5 + 0.5 * prev~(^y)
+  y
+}
+
+pub flow pattern_in_a_match(
+  k: U32 at sample,
+) -> F32 at sample {
+  match k {
+    0 => 0.0,
+    some_n => some_n.round_f32(), //~ E0320
+  }
+}

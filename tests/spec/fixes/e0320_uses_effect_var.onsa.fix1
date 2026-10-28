@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.5", "§8.1", "§18.1"]
+// fixes = 1
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on an effect-row variable (a lowercase name in
+// the list `[…]`, §2.3) renames the name in the list and every use of it in the declaration that owns
+// the list (§4.5): the rows `uses {…}` of the parameters, of the result and of the function types
+// inside them, of a closure and of an annotation in the body. Each declaration is a unit of its own
+// with one error, so the default of §18.1 checks that the unit has no error of the stage after the
+// candidate (`E0302` for the use of the old name), and the units that had none have no error either.
+
+pub fn in_the_result[T, row_var](f: fn(T) -> T uses {row_var}, x: T) -> T uses {row_var} { //~ E0320
+  f.(x)
+}
+
+pub fn in_a_nested_function_type[T, row_var]( //~ E0320
+  g: fn(fn(T) -> T uses {row_var}) -> T uses {row_var},
+  f: fn(T) -> T uses {row_var},
+) -> T uses {row_var} {
+  g.(f)
+}
+
+pub fn with_an_effect_beside[T, row_var](f: fn(T) -> T uses {Alloc, row_var}, x: T) -> T uses {Alloc, row_var} { //~ E0320
+  f.(x)
+}
+
+pub fn in_a_closure[row_var](x: I32) -> I32 uses {row_var} { //~ E0320
+  let h: fn(I32) -> I32 uses {row_var} = fn(v: I32) -> I32 uses {row_var} { v + 1 }
+  h.(x)
+}
+
+pub fn in_an_annotation[row_var](f: fn(I32) -> I32 uses {row_var}, x: I32) -> I32 uses {row_var} { //~ E0320
+  let g: fn(I32) -> I32 uses {row_var} = f
+  g.(x)
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T] Holder[T] {
+  pub fn map[row_var](self, f: fn(T) -> T uses {row_var}) -> Holder[T] uses {row_var} { //~ E0320
+    Holder { a: f.(self.a) }
+  }
+}

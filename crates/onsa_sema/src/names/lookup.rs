@@ -27,15 +27,18 @@ impl Modules {
     }
 
     /// Whether a `use` added to `from` would bind `name` free in its body: a
-    /// name a `use` binds, of nothing of the prelude, the items or the `use`
-    /// of `from`. The name of a `use` that failed binds nothing, and is no
-    /// partner of an E0304 (§18.1, S-462): it is free.
+    /// name a `use` binds that is not declared there ([`Self::declared`]).
     pub(crate) fn free_in_body(&self, from: ModId, name: &str, prelude: &HashMap<String, Entity>) -> bool {
-        let info = self.get(from);
-        super::clash::unbindable(name).is_none()
-            && !prelude.contains_key(name)
-            && !info.items.contains_key(name)
-            && !matches!(info.uses.get(name), Some(UseBinding::Bound { .. }))
+        super::clash::unbindable(name).is_none() && !self.declared(from, name, prelude)
+    }
+
+    /// Whether `name` is declared in the body of `from` (§15.1, §5.1): what
+    /// [`Self::lookup`] finds, or a name of an E0304 or an E0305. The name of
+    /// a `use` that failed binds nothing, and is no partner of an E0304
+    /// (§18.1, S-462). The one test of the space of the body, of a `use`
+    /// added there and of a binding declared in it (S-79, S-652).
+    pub(crate) fn declared(&self, from: ModId, name: &str, prelude: &HashMap<String, Entity>) -> bool {
+        self.lookup(from, name, prelude).is_some() || self.get(from).clashed.body.contains(name)
     }
 
     /// The head `name` of a path in the body of `from` (§15.1): the prelude
@@ -68,10 +71,10 @@ impl Modules {
         name: &str,
         (prelude, defs): (&HashMap<String, Entity>, &[Def]),
     ) -> Option<Option<Span>> {
-        let info = self.get(from);
-        if self.lookup(from, name, prelude).is_none() && !info.clashed.body.contains(name) {
+        if !self.declared(from, name, prelude) {
             return None;
         }
+        let info = self.get(from);
         let item = info.items.get(name).map(|d| defs[d.0 as usize].name_span);
         let used = || match info.uses.get(name) {
             Some(&UseBinding::Bound { span, .. }) => Some(span),

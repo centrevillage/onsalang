@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§11.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "21:3"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5), S-542: the one candidate of an E0320 on a `block` input of a flow
+// renames the input, every read of it in the body of the flow, and the field of the generated
+// `Params` that has the name of the input (§11.6): the literal `voice.Params { … }`, the pattern
+// and the read `p.name` in other units. The file is clean after it (`clean`), so a unit that
+// writes the old name of the field is not left with an error (§18.1). The flow and the name of its
+// other input are not changed.
+
+pub flow voice(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  gain_amount: F32 at block, //~ E0320
+) -> F32 at sample {
+  let y = x * gain_amount
+  y + gain_amount * 0.0
+}
+
+pub fn literal(g: F32) -> voice.Params {
+  voice.Params { gain_amount: g }
+}
+
+pub fn pattern(p: voice.Params) -> F32 {
+  let voice.Params { gain_amount: g } = p
+  g
+}
+
+pub fn read(p: voice.Params) -> F32 {
+  p.gain_amount
+}
+
+pub fn read_in_a_branch(p: voice.Params, c: Bool) -> F32 {
+  if c {
+    p.gain_amount
+  } else {
+    0.0
+  }
+}

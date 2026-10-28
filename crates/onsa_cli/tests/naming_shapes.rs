@@ -131,7 +131,6 @@ fn after_the_candidate(tag: &str, source: &str) -> String {
 /// comes from the position, or from the first letter after the `_`. One candidate, after which the program
 /// is clean (the uses are renamed too, so there is no E0302).
 #[test]
-#[ignore = "W4-04: the E0320 candidate renames the uses too (S-82); W4-14 U3 gives the E0320 and the candidate of the declaration (S-648, S-650, R-168, R-240)"]
 fn a_leading_underscore_is_e0320_with_one_candidate_that_leaves_the_program_clean() {
     let sources: [(&str, &str); 14] = [
         ("fn_name", "pub fn _g() -> I32 {\n  1\n}\n\npub fn h() -> I32 {\n  _g()\n}\n"),
@@ -157,7 +156,6 @@ fn a_leading_underscore_is_e0320_with_one_candidate_that_leaves_the_program_clea
 /// §2.3 names two spellings outright: `[_e]` is an effect-row variable and the candidate is `e`; `let _x = 1`
 /// is a binding and the candidate is `x`. The result is the same text without the `_`.
 #[test]
-#[ignore = "W4-04: the E0320 candidate renames the uses too (S-82); W4-14 U3 gives `e` and `x` at the declaration (S-648)"]
 fn the_candidates_the_spec_names_drop_the_underscore() {
     let fixed =
         after_the_candidate("spec_e", "pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} {\n  f(x)\n}\n");
@@ -204,7 +202,6 @@ fn a_name_with_an_underscore_at_the_end_is_fine_in_every_shape() {
 /// §2.3: when the name in its shape is a keyword (`_type` is `type`), the candidate is the name with a `_`
 /// at the end, and a note shows that a `_` at the end avoids a keyword.
 #[test]
-#[ignore = "W4-04: the E0320 candidate renames the uses too (S-82); W4-14 U3 gives `type_` and the note at the declaration (S-651)"]
 fn the_candidate_of_a_keyword_ends_with_an_underscore_and_has_a_note() {
     let cases: [(&str, &str, &str); 4] = [
         ("type", "pub fn l() -> I32 {\n  let _type = 1\n  _type\n}\n", "type_"),
@@ -288,4 +285,30 @@ fn an_exported_function_whose_name_starts_with_an_underscore_is_e0320_in_check()
     let doc = doc_of(&out);
     let d0 = the_e0320("r263", &out, &doc);
     assert_eq!(span_of(&d0["span"]).line, 2, "{d0}");
+}
+
+// ---- the name by the rule is a name there already (S-652) -----------------------------------------
+
+/// §2.3, §18.1, S-652: when the name by the rule would clash where the declaration is seen (an E0304),
+/// the E0320 has no candidate, and a note shows the name by the rule (the spelling of S-243 included).
+/// A name in a scope apart (a block closed before the other binding) is no clash.
+#[test]
+fn a_name_by_the_rule_that_clashes_has_no_candidate_and_a_note() {
+    let cases: [(&str, &str, &str); 6] = [
+        ("items", "pub fn a__b() -> I32 {\n  1\n}\n\npub fn a_b() -> I32 {\n  2\n}\n", "a_b"),
+        ("type_params", "pub fn f[_T, T](x: T) -> T {\n  x\n}\n", "T"),
+        ("locals", "pub fn g(_x: I32, x: I32) -> I32 {\n  x + _x\n}\n", "x"),
+        ("binding_and_item", "pub fn gain() -> I32 {\n  1\n}\n\npub fn h(Gain: I32) -> I32 {\n  Gain\n}\n", "gain"),
+        ("reserved", "pub fn clock_() -> I32 {\n  1\n}\n\npub fn Clock() -> I32 {\n  2\n}\n", "clock_"),
+        ("fields", "pub struct S {\n  aB: I32,\n  a_b: I32,\n}\n", "a_b"),
+    ];
+    for (tag, source, name) in cases {
+        let (out, doc) = check_file(tag, source);
+        let d = the_e0320(tag, &out, &doc);
+        assert!(fixes_of(d).is_empty(), "{tag}: no candidate expected: {d}");
+        let notes = d["notes"].as_array().expect("`notes` is an array");
+        assert!(notes.iter().any(|n| str_of(n, "message").contains(&format!("`{name}`"))), "{tag}: {d}");
+    }
+    let apart = "pub fn f() -> I32 {\n  let a = {\n    let _w = 1\n    _w\n  }\n  let w = 3\n  a + w\n}\n";
+    assert_eq!(after_the_candidate("apart", apart), apart.replace("_w", "w"));
 }

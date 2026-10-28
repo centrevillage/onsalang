@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.5", "§5.1", "§18.1"]
+// fixes = 1
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a type parameter renames the name in the
+// list `[…]` and every use of it in the declaration that owns the list (§4.5): the parameters, the
+// result, the fields, the variants, a bound, the annotations in the body, and, for an `impl`, the
+// target and the members. Each declaration is a unit of its own with one error, so the default of
+// §18.1 checks that the unit has no error of the stage after the candidate (`E0302` for the use of
+// the old name), and the units that had none have no error either. A type parameter that is
+// written in a body is only in a body annotation (`let y: Bad_T = x`, `Option[Bad_T]`).
+
+pub fn in_a_signature[BadT](x: BadT, y: BadT) -> BadT { //~ E0320
+  x
+}
+
+pub fn in_an_annotation[BadT](x: BadT) -> BadT { //~ E0320
+  let y: BadT = x
+  y
+}
+
+pub fn in_a_type_argument[BadT](o: Option[BadT], d: BadT) -> BadT { //~ E0320
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+pub fn in_a_function_type[BadT](f: fn(BadT) -> BadT, x: BadT) -> BadT { //~ E0320
+  f.(x)
+}
+
+pub fn in_a_closure[BadT](x: BadT) -> BadT { //~ E0320
+  apply(fn(v: BadT) -> BadT { v }, x)
+}
+
+fn apply[T](f: fn(T) -> T, x: T) -> T {
+  f.(x)
+}
+
+pub fn in_a_bound[BadT: Num](x: BadT, y: BadT) -> BadT { //~ E0320
+  x + y
+}
+
+pub struct Pair[BadT] { //~ E0320
+  a: BadT,
+  b: BadT,
+}
+
+pub enum Choice[BadT] { //~ E0320
+  One(BadT),
+  Nothing,
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[BadT] Holder[BadT] { //~ E0320
+  pub fn get(self) -> BadT {
+    self.a
+  }
+
+  pub fn put(inout self, v: BadT) {
+    self.a = v
+  }
+
+  pub fn pick[U](self, y: U) -> (BadT, U) {
+    (self.a, y)
+  }
+}
+
+pub fn use_holder(h: Holder[F32]) -> F32 {
+  h.get()
+}

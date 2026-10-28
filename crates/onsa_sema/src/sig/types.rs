@@ -50,6 +50,7 @@ impl<'p> Sema<'p> {
                         };
                     }
                     if let Some(i) = cx.generics.iter().position(|g| g.name == seg.name) {
+                        self.a.note_use(cx.generics[i].span, seg.span);
                         // A const parameter (R-282) and an effect-row variable
                         // are no type (§15.1).
                         let kind = NameKind::of_generic(&cx.generics[i].kind);
@@ -221,7 +222,7 @@ impl<'p> Sema<'p> {
                 // `N` of the enclosing item, or a constant; a name of another
                 // kind is E0417 or E0308 (§4.5, S-713 (a)), with type
                 // arguments or not (`Wrap[F32]`, S-732).
-                let named = match crate::constarg::generic(&cx.generics, path) {
+                let named = match crate::constarg::generic(self.a, &cx.generics, path) {
                     Some((i, NameKind::ConstParam)) => Ok(Ty::Param(i)),
                     Some((_, kind)) => Err(crate::constarg::not_constant(kind, src(cx, path.span), path.span)),
                     None => {

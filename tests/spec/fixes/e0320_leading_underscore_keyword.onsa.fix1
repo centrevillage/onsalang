@@ -13,22 +13,22 @@ pub fn match_() -> I32 { //~ E0320
 }
 
 pub fn calls_match() -> I32 {
-  _match()
+  match_()
 }
 
 pub fn local() -> I32 {
   let type_ = 1 //~ E0320
-  _type + 1
+  type_ + 1
 }
 
 pub struct Self_ { //~ E0320
   x: I32,
 }
 
-pub fn read_self(s: _Self) -> I32 {
+pub fn read_self(s: Self_) -> I32 {
   s.x
 }
 
 pub fn param(inout_: I32) -> I32 { //~ E0320
-  _inout
+  inout_
 }

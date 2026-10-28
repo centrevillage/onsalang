@@ -190,7 +190,10 @@ fn split_words(s: &str) -> Vec<String> {
 
 pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     let mut out = Vec::new();
-    let mut check = |ident: &Ident, shape: Shape, what: &str| {
+    // `binding`: a name a pattern binds, whose leading `_` may mean a value
+    // that is not used: that is `_` alone, the candidate of its E0309 after
+    // this one (§2.3, §5.1, S-726).
+    let mut check = |ident: &Ident, shape: Shape, what: &str, binding: bool| {
         if ident.name == "_" || shape.matches(&ident.name) {
             return;
         }
@@ -209,21 +212,24 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
             }
             d = d.with_fix(Fix::replace("rename by the naming rule", ident.span, to));
         }
+        if binding && has_leading_underscore(&ident.name) {
+            d = d.with_rule("a value that is not used is bound to `_` alone, with no name");
+        }
         out.push(d);
     };
-    let params = |params: &[Param], check: &mut dyn FnMut(&Ident, Shape, &str)| {
+    let params = |params: &[Param], check: &mut dyn FnMut(&Ident, Shape, &str, bool)| {
         for p in params {
             if let ParamName::Ident(id) = &p.name {
-                check(id, Shape::Snake, "parameter");
+                check(id, Shape::Snake, "parameter", false);
             }
         }
     };
-    let generics = |gs: &[GenericParam], check: &mut dyn FnMut(&Ident, Shape, &str)| {
+    let generics = |gs: &[GenericParam], check: &mut dyn FnMut(&Ident, Shape, &str, bool)| {
         for g in gs {
             match g {
-                GenericParam::Type { name, .. } => check(name, Shape::UpperCamel, "type parameter"),
-                GenericParam::Const { name, .. } => check(name, Shape::UpperSnake, "const parameter"),
-                GenericParam::Effect { name } => check(name, Shape::Snake, "effect-row variable"),
+                GenericParam::Type { name, .. } => check(name, Shape::UpperCamel, "type parameter", false),
+                GenericParam::Const { name, .. } => check(name, Shape::UpperSnake, "const parameter", false),
+                GenericParam::Effect { name } => check(name, Shape::Snake, "effect-row variable", false),
             }
         }
     };
@@ -234,70 +240,61 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         }
         match kind {
             ItemKind::Fn(f) => {
-                check(&f.name, Shape::Snake, "function");
+                check(&f.name, Shape::Snake, "function", false);
                 generics(&f.generics, &mut check);
                 params(&f.params, &mut check);
             }
             ItemKind::Flow(f) => {
-                check(&f.name, Shape::Snake, "flow");
+                check(&f.name, Shape::Snake, "flow", false);
                 params(&f.params, &mut check);
             }
             ItemKind::Struct(s) => {
-                check(&s.name, Shape::UpperCamel, "type");
+                check(&s.name, Shape::UpperCamel, "type", false);
                 generics(&s.generics, &mut check);
                 for f in &s.fields {
-                    check(&f.name, Shape::Snake, "field");
+                    check(&f.name, Shape::Snake, "field", false);
                 }
             }
             ItemKind::Enum(e) => {
-                check(&e.name, Shape::UpperCamel, "type");
+                check(&e.name, Shape::UpperCamel, "type", false);
                 generics(&e.generics, &mut check);
                 for v in &e.variants {
-                    check(&v.name, Shape::UpperCamel, "variant");
+                    check(&v.name, Shape::UpperCamel, "variant", false);
                 }
             }
-            ItemKind::TypeAlias { name, .. } | ItemKind::OpaqueType { name } => check(name, Shape::UpperCamel, "type"),
+            ItemKind::TypeAlias { name, .. } | ItemKind::OpaqueType { name } => {
+                check(name, Shape::UpperCamel, "type", false)
+            }
             ItemKind::Trait(t) => {
-                check(&t.name, Shape::UpperCamel, "trait");
+                check(&t.name, Shape::UpperCamel, "trait", false);
                 generics(&t.generics, &mut check);
             }
             ItemKind::Impl(i) => generics(&i.generics, &mut check),
-            ItemKind::Effect(e) => check(&e.name, Shape::UpperCamel, "effect"),
+            ItemKind::Effect(e) => check(&e.name, Shape::UpperCamel, "effect", false),
             ItemKind::Handler(h) => {
-                check(&h.name, Shape::Snake, "handler");
+                check(&h.name, Shape::Snake, "handler", false);
                 params(&h.params, &mut check);
             }
-            ItemKind::Const(c) => check(&c.name, Shape::UpperSnake, "constant"),
+            ItemKind::Const(c) => check(&c.name, Shape::UpperSnake, "constant", false),
             ItemKind::Use(_) | ItemKind::Extern(_) | ItemKind::Target(_) | ItemKind::Test { .. } => {}
         }
     }
     for stmt in &ast.stmts {
         if let StmtKind::Var { name, .. } = &stmt.kind {
-            check(name, Shape::Snake, "variable");
+            check(name, Shape::Snake, "variable", false);
         }
     }
     for expr in &ast.exprs {
         match &expr.kind {
             ExprKind::Closure { params: ps, .. } => params(ps, &mut check),
-            ExprKind::Par { var, .. } => check(var, Shape::Snake, "variable"),
+            ExprKind::Par { var, .. } => check(var, Shape::Snake, "variable", false),
             _ => {}
         }
     }
     for pat in &ast.pats {
         if let PatKind::Bind(id) = &pat.kind {
-            check(id, Shape::Snake, "variable");
+            check(id, Shape::Snake, "variable", true);
         }
-    }
-    // A binding with a leading `_` may mean a value that is not used: that is
-    // `_` alone, the candidate of its E0309 after this one (§2.3, §5.1, S-726).
-    let marked: std::collections::HashSet<Span> = (ast.pats.iter())
-        .filter_map(|p| match &p.kind {
-            PatKind::Bind(id) if has_leading_underscore(&id.name) => Some(id.span),
-            _ => None,
-        })
-        .collect();
-    for d in out.iter_mut().filter(|d| marked.contains(&d.span)) {
-        d.notes.push(onsa_diag::Note::rule("a value that is not used is bound to `_` alone, with no name"));
     }
     diagnostics.extend(out);
 }

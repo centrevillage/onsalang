@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+// fixes = 0
+
+// W4-04 U9, S-652, S-82: when the name that the naming rule makes is already a name of the same space
+// (the name with which a declaration would be E0304, §5.1), the E0320 has no candidate, and a note
+// shows the name that the rule makes (§2.3). The written `fixes = 0` checks that no diagnostic of the
+// file has a candidate. The name is the one that §2.3 gives for the leading `_` (`_gain` is `gain`) and
+// for `__` (`a__b` is `a_b`), so the clash is certain. Each pair is in the space of the module (a
+// function, a flow, a struct, an enum, a type alias, a constant and the names of the prelude and of the
+// built-in types, which a user's item may not take, §5.1), in the space of the fields of a struct, of the
+// variants of an enum, and of the members of an `impl`. The other candidates, of a name that has
+// a free name, are in e0320_no_overlap.
+
+pub fn a__b() -> I32 { //~ E0320
+  1
+}
+
+pub fn a_b() -> I32 {
+  2
+}
+
+pub fn _gain() -> F32 { //~ E0320
+  1.0
+}
+
+pub fn gain() -> F32 {
+  2.0
+}
+
+pub struct _Item { //~ E0320
+  x: I32,
+}
+
+pub struct Item {
+  y: I32,
+}
+
+pub enum _Mode { //~ E0320
+  On,
+  Off,
+}
+
+pub enum Mode {
+  Fast,
+  Slow,
+}
+
+type _Alias = F32 //~ E0320
+
+type Alias = I32
+
+pub const _MAX: U32 = 1 //~ E0320
+
+pub const MAX: U32 = 2
+
+pub flow _lp( //~ E0320
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+pub fn lp(x: F32) -> F32 {
+  x
+}
+
+pub fn _panic() -> I32 { //~ E0320
+  1
+}
+
+pub struct _Option { //~ E0320
+  x: I32,
+}
+
+pub struct _F32 { //~ E0320
+  x: I32,
+}
+
+pub struct Fields {
+  _x: I32, //~ E0320
+  x: I32,
+}
+
+pub enum Variants {
+  _A, //~ E0320
+  A,
+}
+
+pub struct Holder {
+  n: I32,
+}
+
+impl Holder {
+  pub fn _get(self) -> I32 { //~ E0320
+    self.n
+  }
+
+  pub fn get(self) -> I32 {
+    self.n + 1
+  }
+}

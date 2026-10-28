@@ -131,7 +131,7 @@ impl Reader<'_> {
         let Some(path) = path_of(self.ast, c).filter(|_| !(self.local)(c)) else { return self.before(a, c, false) };
         let span = self.ast.expr(c).span;
         let shown = self.text[span.start as usize..span.end as usize].to_string();
-        let kind = match generic(self.generics, &path) {
+        let kind = match generic(a, self.generics, &path) {
             Some((_, kind)) => kind,
             None => match path_end(a, self.m, &path, self.self_ty) {
                 Ok(end) if end.method(a).is_some() => {
@@ -174,7 +174,7 @@ impl Reader<'_> {
     /// ([`named_def`]); a parameter of another kind is an error
     /// ([`not_constant`]).
     fn name(&self, a: &mut Analysis, path: &Path, span: Span) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
-        match generic(self.generics, path) {
+        match generic(a, self.generics, path) {
             Some((i, NameKind::ConstParam)) => Ok((ConstU32::Param(i), None)),
             Some((_, kind)) => Err(not_constant(kind, path.segments[0].name.clone(), span)),
             None => {
@@ -187,9 +187,10 @@ impl Reader<'_> {
 
 /// The parameter of `generics` a path of one name names, with its kind
 /// (§15.1): the one question of the constants of a body and a signature.
-pub(crate) fn generic(generics: &[GenericDef], path: &Path) -> Option<(u32, NameKind)> {
+pub(crate) fn generic(a: &Analysis, generics: &[GenericDef], path: &Path) -> Option<(u32, NameKind)> {
     let [seg] = &path.segments[..] else { return None };
     let i = generics.iter().position(|g| g.name == seg.name)?;
+    a.note_use(generics[i].span, seg.span);
     Some((i as u32, NameKind::of_generic(&generics[i].kind)))
 }
 

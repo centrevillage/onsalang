@@ -98,6 +98,7 @@ impl<'a> Checker<'a> {
                 return Err(self.pattern_err(stage, Code::E0410, field.span, msg));
             }
             seen.push(&field.name);
+            self.a.note_use(defs[i].span, field.span);
             let ft = self.subst(defs[i].ty, &args);
             sub(self, *fp, ft, Some(i))?;
         }
@@ -217,15 +218,14 @@ mod tests {
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
         let a = analyze(&Package::new("t", modules, Vec::new()));
-        // The bindings of the arm are not read: their E0309 is of the last stage, which the unit
-        // with an error does not report (§18.1, S-726).
-        let ds: Vec<_> = a.diagnostics.iter().filter(|d| d.stage != onsa_diag::Stage::Unused).collect();
-        assert_eq!(ds.len(), 1, "{:?}", a.diagnostics);
-        let d = ds[0];
+        assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
+        let d = &a.diagnostics[0];
         let (from, to) = (d.span.start as usize, d.span.end as usize);
         (d.code, src[from..to].to_string(), from)
     }
 
+    /// A `match` on `p` (or on `w`) with one arm, whose pattern binds no
+    /// name: a binding not read is an E0309 (§5.1, S-129).
     fn arm(pattern: &str) -> String {
         format!(
             "pub struct P {{\n  x: I32,\n  y: I32,\n}}\n\npub struct W {{\n  p: P,\n  k: I32,\n}}\n\n\
@@ -244,15 +244,15 @@ mod tests {
         assert_eq!(code_text("P { x: Nope }"), (Code::E0302, "Nope".into()));
         assert_eq!(code_text("P { x: \"s\" }").0, Code::E0401);
         // The fields as written: a sub-pattern before a later unknown field.
-        assert_eq!(code_text("P { x: Some(a), w: b }").0, Code::E0401);
+        assert_eq!(code_text("P { x: Some(_), w: _ }").0, Code::E0401);
         // An unknown field before a later sub-pattern (of the types stage: a
         // name not found is the names stage's, before them all, §18.1).
-        assert_eq!(code_text("P { w: b, x: \"s\" }"), (Code::E0410, "w".into()));
-        assert_eq!(code_text("P { w: b, x: Nope }"), (Code::E0302, "Nope".into()));
+        assert_eq!(code_text("P { w: _, x: \"s\" }"), (Code::E0410, "w".into()));
+        assert_eq!(code_text("P { w: _, x: Nope }"), (Code::E0302, "Nope".into()));
         // The missing fields last.
-        assert_eq!(code_text("P { x: a }").0, Code::E0410);
+        assert_eq!(code_text("P { x: _ }").0, Code::E0410);
         // An inner `..` before the outer one.
-        let src = arm("W { p: P { x: a, .. }, .. }");
+        let src = arm("W { p: P { x: _, .. }, .. }");
         let (code, text, at) = first(&src);
         assert_eq!((code, text.as_str()), (Code::E0020, ".."));
         assert!(src[at..].starts_with(".. }, .."), "the inner `..` is reported first");
@@ -267,10 +267,8 @@ mod tests {
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
         let a = analyze(&Package::new("t", modules, Vec::new()));
-        // As in `first`: the E0309 of the arm's bindings is not the unit's (§18.1, S-726).
-        let ds: Vec<_> = a.diagnostics.iter().filter(|d| d.stage != onsa_diag::Stage::Unused).collect();
-        assert_eq!(ds.len(), 1, "{:?}", a.diagnostics);
-        let fix = &ds[0].fixes[0];
+        assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
+        let fix = &a.diagnostics[0].fixes[0];
         let s = fix.edits()[0].span;
         (fix.title().to_string(), src[s.start as usize..s.end as usize].to_string())
     }
@@ -279,11 +277,11 @@ mod tests {
     fn the_title_of_a_removal_is_one_line_whatever_is_removed() {
         // W3-21/b2: the title is fixed; the removal holds the blanks and newlines before the `..`.
         let cases = [
-            ("P { x: a, y: b, .. }", "remove `, ..`", ", .."),
-            ("P {\n      x: a,\n      y: b,\n      ..\n    }", "remove `, ..`", ",\n      .."),
-            ("P {\n\t\tx: a,\n\t\ty: b,\n\t\t..\n    }", "remove `, ..`", ",\n\t\t.."),
-            ("P { x: a, y: b,                                                  .. }", "remove `, ..`", ""),
-            ("P {\n      x: a,\n      y: b, // the last,\n      ..\n    }", "remove `..`", ".."),
+            ("P { x: _, y: _, .. }", "remove `, ..`", ", .."),
+            ("P {\n      x: _,\n      y: _,\n      ..\n    }", "remove `, ..`", ",\n      .."),
+            ("P {\n\t\tx: _,\n\t\ty: _,\n\t\t..\n    }", "remove `, ..`", ",\n\t\t.."),
+            ("P { x: _, y: _,                                                  .. }", "remove `, ..`", ""),
+            ("P {\n      x: _,\n      y: _, // the last,\n      ..\n    }", "remove `..`", ".."),
         ];
         for (pattern, title, removed) in cases {
             let (t, r) = removal(&arm(pattern));
@@ -299,10 +297,10 @@ mod tests {
 
     #[test]
     fn the_rest_is_e0020_last_and_its_candidate_reads_the_ast() {
-        let (code, text, _) = first(&arm("P { x: a, .. }"));
+        let (code, text, _) = first(&arm("P { x: _, .. }"));
         assert_eq!((code, text.as_str()), (Code::E0020, ".."));
         // A comment that ends with `,` before the `..` (W3-21/b): the `..` alone goes.
-        let src = arm("P {\n      x: a,\n      y: b, // the last field,\n      ..\n    }");
+        let src = arm("P {\n      x: _,\n      y: _, // the last field,\n      ..\n    }");
         let (code, text, _) = first(&src);
         assert_eq!((code, text.as_str()), (Code::E0020, ".."));
     }

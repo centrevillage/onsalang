@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.3", "§11.2", "§11.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:10"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a flow renames the declaration and every
+// use of the name in the module, and the file is clean after it (`clean`). The name of a flow is a
+// namespace of the generated API (§11.6): it is the middle of a path to a type (`State`, `Params`), to
+// a function (`reset`, `process`), to a struct literal and to a pattern, the name in the
+// heading of an `impl` on a generated type (§6.3), and the callee of an instance in the body of
+// another flow (`name~(…)`, §11.2). Each use is in a unit of its own that has no other error.
+
+pub flow BadFlow( //~ E0320
+  x: F32 at sample,
+  gain: F32 at block,
+) -> F32 at sample {
+  x * gain
+}
+
+impl BadFlow.State {
+  pub fn helper(self) -> U32 {
+    1
+  }
+}
+
+impl BadFlow.Params {
+  pub fn loud() -> BadFlow.Params {
+    BadFlow.Params { gain: 2.0 }
+  }
+}
+
+pub fn state_type(s: BadFlow.State) -> U32 {
+  s.helper()
+}
+
+pub fn params_type(p: BadFlow.Params) -> BadFlow.Params {
+  p
+}
+
+pub fn params_literal(g: F32) -> BadFlow.Params {
+  BadFlow.Params { gain: g }
+}
+
+pub fn params_pattern(p: BadFlow.Params) -> F32 {
+  let BadFlow.Params { gain: g } = p
+  g
+}
+
+pub fn reset_the_state(inout s: BadFlow.State) {
+  BadFlow.reset(inout s)
+}
+
+pub fn process_a_block(inout s: BadFlow.State, p: BadFlow.Params, xs: Span[F32], inout ys: Span[F32]) {
+  BadFlow.process(inout s, p, xs, inout ys)
+}
+
+pub flow uses_the_instance(
+  x: F32 at sample,
+  gain: F32 at block,
+) -> F32 at sample {
+  BadFlow~(x, gain) * 0.5
+}

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// W4-04 U9, S-652, S-82, §18.1: the E0320 has no candidate when the name that the rule makes clashes
+// with a name that is visible in a module, and a note shows the name that the rule makes (§2.3). Two
+// forms with modules. (1) `use util.{gain}` takes `gain`, so the function `_gain` of this module cannot be
+// `gain` (the name of a `use` is a name of the module's space, §5.1). (2) The function `_level` of
+// util.onsa is taken by `use util.{_level}` in this module, which has a function `level` of its own,
+// so the candidate `level` would make the module take the name twice; the units of this module are
+// touched by the candidate (the `use`), and §18.1 gives no candidate that leaves an error in a touched
+// unit. The written `fixes = 0` checks that no diagnostic of the package has a candidate. The form that
+// has no clash, a name of another module that is not taken, is in pkg_no_overlap_modules.
+
+use util.{gain}
+use util.{_level}
+
+pub fn _gain() -> F32 { //~ E0320
+  gain()
+}
+
+pub fn level() -> F32 {
+  _level() + 1.0
+}

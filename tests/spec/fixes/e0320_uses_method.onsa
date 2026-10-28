@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "22:10"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-82, R-87 (5): the one candidate of an E0320 on a method renames the declaration and
+// every call of the method in the module, and the file is clean after it (`clean`). The calls are
+// `p.Name()` on a value of the type, on the result of a call, in a chain, as `self.Name()` in another
+// method, in a closure, on an `inout` parameter, in a branch and in a `test`. The other methods are not
+// changed. Each use is in a unit of its own that has no other error.
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  pub fn BadMethod(self) -> F32 { //~ E0320
+    self.x
+  }
+
+  pub fn good_method(self) -> F32 {
+    self.BadMethod() + 1.0
+  }
+
+  pub fn bump(inout self) {
+    self.x = self.BadMethod() + 1.0
+  }
+
+  pub fn doubled(self) -> Pt {
+    Pt { x: self.BadMethod() * 2.0 }
+  }
+}
+
+pub fn call(p: Pt) -> F32 {
+  p.BadMethod()
+}
+
+pub fn call_on_a_result(x: F32) -> F32 {
+  Pt { x: x }.BadMethod()
+}
+
+pub fn call_in_a_chain(p: Pt) -> F32 {
+  p.doubled().doubled().BadMethod()
+}
+
+pub fn call_in_a_closure(p: Pt) -> F32 {
+  apply(fn(q: Pt) -> F32 { q.BadMethod() }, p)
+}
+
+fn apply(f: fn(Pt) -> F32, p: Pt) -> F32 {
+  f.(p)
+}
+
+pub fn call_on_an_inout(inout p: Pt) -> F32 {
+  p.bump!()
+  p.BadMethod()
+}
+
+pub fn call_in_a_branch(c: Bool, p: Pt) -> F32 {
+  if c {
+    p.BadMethod()
+  } else {
+    p.good_method()
+  }
+}
+
+test "a call in a test" {
+  let p = Pt { x: 1.0 }
+  assert p.BadMethod() == 1.0
+}

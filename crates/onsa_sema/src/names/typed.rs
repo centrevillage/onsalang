@@ -138,7 +138,10 @@ impl Analysis {
             return self.type_namespace(t).map(|ns| (ns, Some(t))).ok_or(ResolveError::Failed);
         }
         match self.modules.lookup(from, &head.name, &self.prelude) {
-            Some(e) => Ok((e, None)),
+            Some(e) => {
+                self.note_entity(e, head.span);
+                Ok((e, None))
+            }
             None => Err(self.modules.head_error(from, path, (&self.prelude, &self.defs[..], &self.builtin_key))),
         }
     }
@@ -167,6 +170,7 @@ impl Analysis {
             }
             match self.modules.member(t.at, seg, from, names) {
                 Ok(next) => {
+                    self.note_entity(next, seg.span);
                     t.reached.push(next);
                     t.at = next;
                 }

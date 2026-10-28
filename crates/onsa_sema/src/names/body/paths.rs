@@ -91,14 +91,14 @@ impl<'a> Walker<'a> {
     /// stopped it.
     pub(super) fn resolve(&mut self, segs: &[&Ident], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let head = segs[0];
-        if let Some(b) = self.lookup(&head.name) {
+        if let Some(b) = self.lookup(head) {
             return (vec![PathRes::Local(b)], None);
         }
         if head.name == "self" {
             let d = Diagnostic::new(Stage::Names, Code::E0302, head.span, "`self` is only available inside a method");
             return (Vec::new(), Some(Fail::Report(d.with_found("self"))));
         }
-        match self.heading(&head.name) {
+        match self.heading(head) {
             Some(r @ PathRes::ConstParam(_)) => return (vec![r], None),
             // A type parameter is a type (§15.1), and no namespace of members
             // (`T.ZERO` from W4-04 U6).
@@ -286,8 +286,9 @@ impl<'a> Walker<'a> {
     }
 
     /// The type or const parameter `name` of the heading.
-    fn heading(&self, name: &str) -> Option<PathRes> {
-        let (i, g) = (0..).zip(self.generics).find(|(_, g)| g.name == name)?;
+    fn heading(&self, name: &Ident) -> Option<PathRes> {
+        let (i, g) = (0..).zip(self.generics).find(|(_, g)| g.name == name.name)?;
+        self.a.note_use(g.span, name.span);
         match g.kind {
             GenericKind::Type { .. } => Some(PathRes::TypeParam(i)),
             GenericKind::Const(_) => Some(PathRes::ConstParam(i)),
@@ -350,7 +351,7 @@ impl<'a> Walker<'a> {
         }
         // A type or const parameter in a pattern (S-185) or at the head of
         // a struct literal (`M { x: 1 }`, R-302).
-        if let ([_], Some(r)) = (&segs[..], self.heading(&head.name)) {
+        if let ([_], Some(r)) = (&segs[..], self.heading(head)) {
             let kind = if matches!(r, PathRes::ConstParam(_)) { NameKind::ConstParam } else { NameKind::Type };
             // A type parameter is a type, and no struct (`T { x: 1 }`).
             let no_struct = || Fail::Report(crate::body::not_a_struct(head.name.clone(), head.span));

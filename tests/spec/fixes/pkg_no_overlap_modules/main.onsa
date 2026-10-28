@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§15.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "util.onsa:1:8"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W4-04 U9, S-652, S-82: the name that the rule makes of `_gain` (util.onsa) is `gain`, and this module
+// has a function `gain` of its own. The spaces of two modules are separate (§5.1, §15.1), and this module
+// reaches the function of util only through the module name (`util._gain()`), so the candidate has no
+// clash and it is given. It renames the declaration, the path in this module (`util._gain`), and the
+// name in a `use util.{_gain}` of the module third.onsa, which has no function `gain`, and the
+// package is clean after it (`clean`). The module other.onsa has a function `gain` too and does not
+// take util. The clash of a module that takes both names is in pkg_overlap_modules.
+
+use util
+
+pub fn gain() -> F32 {
+  util._gain() + 1.0
+}

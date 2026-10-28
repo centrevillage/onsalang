@@ -320,6 +320,7 @@ fn analyze(
         let pkg = package_graph(name, user_modules, &std);
         let analysis = onsa_sema::analyze(&pkg);
         let mut all: Vec<Diagnostic> = pkg.modules.iter().flat_map(|m| m.parsed.diagnostics.iter().cloned()).collect();
+        onsa_sema::rename_fixes(&pkg, &analysis, &mut all);
         all.extend(analysis.diagnostics.iter().cloned());
         let files = pkg.modules.iter().map(|m| (m.file, &m.parsed.units));
         let reduce::Reduced { mut diagnostics, mut diagnostic_units, units } = reduce::per_unit(files, all);

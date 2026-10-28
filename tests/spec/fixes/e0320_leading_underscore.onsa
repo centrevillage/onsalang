@@ -73,7 +73,7 @@ pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} { //~ E0320
 
 impl Q {
   pub fn _get(self) -> I32 { //~ E0320
-    self._x
+    1
   }
 }
 

@@ -1,0 +1,7 @@
+pub fn gain() -> F32 {
+  1.0
+}
+
+pub fn _level() -> F32 { //~ E0320
+  2.0
+}

@@ -3,6 +3,7 @@ use super::*;
 use crate::pending::{self, Pending};
 use onsa_diag::Diagnostic;
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 
 #[test]
 fn a_negative_example_needs_found_but_with_an_empty_range() {
@@ -44,11 +45,46 @@ impl Repo {
     fn run_with(&self, update: Update) -> Report {
         run_all_with(&self.0, update)
     }
+
+    /// The runs of this repository change the candidates of the check with
+    /// `change` before the runner applies them (the tests' only way in).
+    fn changing_candidates(self, change: Change) -> Repo {
+        CHANGES.lock().unwrap_or_else(PoisonError::into_inner).push((self.0.clone(), change));
+        self
+    }
 }
 
 impl Drop for Repo {
     fn drop(&mut self) {
+        CHANGES.lock().unwrap_or_else(PoisonError::into_inner).retain(|(root, _)| *root != self.0);
         let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A change of the candidates of the check.
+type Change = fn(&mut [Diagnostic]);
+
+/// The changes of the candidates, by the root of their repository.
+static CHANGES: Mutex<Vec<(PathBuf, Change)>> = Mutex::new(Vec::new());
+
+/// `analyzed` with the change of `root`'s repository, if any ([`Repo::changing_candidates`]).
+pub(super) fn changed_candidates(root: &Path, mut analyzed: Analyzed) -> Analyzed {
+    let change = CHANGES.lock().unwrap_or_else(PoisonError::into_inner).iter().find(|(r, _)| r == root).map(|c| c.1);
+    if let Some(change) = change {
+        change(&mut analyzed.diagnostics);
+    }
+    analyzed
+}
+
+/// A candidate that breaks the contract (X-3) the compiler does not give:
+/// the rename of the E0320 with its edits of the uses taken out (S-82).
+fn declaration_alone(diagnostics: &mut [Diagnostic]) {
+    for d in diagnostics.iter_mut().filter(|d| d.code == Code::E0320) {
+        for fix in &mut d.fixes {
+            let edits: Vec<_> = fix.edits().iter().filter(|e| e.span == d.span).cloned().collect();
+            assert!(edits.len() == 1 && edits.len() < fix.edits().len(), "no use to take out: {fix:?}");
+            *fix = onsa_diag::Fix::new(fix.title(), edits);
+        }
     }
 }
 
@@ -291,7 +327,8 @@ fn copies_are_not_silenced_and_do_not_keep_a_case_pending() {
 
 /// The guard on rewriting the copies (X-3), through the cases: the copies
 /// of `tests/spec/fixes/pkg_rename` that held S-82 (every use renamed)
-/// are not rewritten by an output that renames the declaration only; with
+/// are not rewritten by an output that renames the declaration only
+/// ([`declaration_alone`]); with
 /// `worse` they are, and the summary lists them.
 #[test]
 fn the_guard_refuses_a_rewriting_that_loses_a_rule() {
@@ -305,7 +342,7 @@ fn the_guard_refuses_a_rewriting_that_loses_a_rule() {
         ("tests/p/util.onsa.fix1", &util.replace("BadName", "bad_name")),
         ("tests/p/main.onsa.fix1", &main.replace("BadName", "bad_name")),
     ];
-    let repo = Repo::new("guard", &files);
+    let repo = Repo::new("guard", &files).changing_candidates(declaration_alone);
     let copy = repo.0.join("tests/p/main.onsa.fix1");
     let r = repo.run_with(Update::Rewrite);
     let p = case(&r, "tests/p");
@@ -368,8 +405,8 @@ fn fix_entry(target: &str) -> String {
 /// (§18.1, S-236); `[[test.fix]]` and the entries of kind `fix-contract`.
 #[test]
 fn fix_contract_of_the_units_clean_before() {
-    // X-3 (α): renaming the declaration alone leaves an E0302 in `user`, which it does not touch
-    // and which held no diagnostic before it; `leaves` writes it.
+    // X-3 (α): renaming the declaration alone ([`declaration_alone`]) leaves an E0302 in `user`,
+    // which it does not touch and which held no diagnostic before it; `leaves` writes it.
     let rename = |leaves: &str| {
         let entry = if leaves.is_empty() {
             String::new()
@@ -388,7 +425,8 @@ fn fix_contract_of_the_units_clean_before() {
             ("tests/right.onsa", &rename("\"14:3 E0302\"")),
             ("tests/wrong.onsa", &rename("\"14:4 E0302\"")),
         ],
-    );
+    )
+    .changing_candidates(declaration_alone);
     let r = repo.run();
     let none = &case(&r, "tests/none.onsa").failures;
     let message = "the units its edits touch hold none of its stage or an earlier one, and the units that held no \
