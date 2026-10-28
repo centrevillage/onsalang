@@ -1,0 +1,9 @@
+pub struct S { x: I32 }
+impl S { pub const N: U32 = 1 }
+impl S { pub const N: U32 = 2 }
+pub const K3: [F32; S.N] = [0.0; S.N]
+pub fn f() -> [F32; S.N] { [0.0; S.N] }
+pub fn g(a: [F32; S.N]) -> F32 { let b: [F32; S.N] = [0.0; S.N]
+  a[0] }
+pub fn h() -> [F32; 2] { let b = [0.0; S.N]
+  b }

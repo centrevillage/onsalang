@@ -1,0 +1,9 @@
+const N: U32 = 1
+const N: U32 = 2
+pub const K3: [F32; N] = [0.0; N]
+pub fn f() -> [F32; N] { [0.0; N] }
+pub fn g() -> [F32; 2] { let b = [0.0; N]
+  b }
+pub fn h() -> [F32; 2] { [0.0; Nope] }
+pub fn k() -> [F32; 2] { let b = [0.0; Nope]
+  b }
