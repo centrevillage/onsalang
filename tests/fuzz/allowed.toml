@@ -484,3 +484,10 @@ left = "cannot find `…`"
 input = "tests/fuzz/18026c0b.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a rate written as a type (`g: Ctl[[S[2]; 2]]`) and an unknown type `S` inside it, which the input has before the candidate; the candidate writes the clock and leaves the E0302 of `S`"
+
+[[allowed]]
+class = "fix|E0020|write the rate as the clock `…`|E0020"
+left = "a rate is no type; it is written as the clock after the type"
+input = "tests/fuzz/a927e108.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a rate written as a type (`g: Ctl[[Sig[F32]; 2]]`) and another rate written as a type (`Sig[F32]`) inside it, which the input has before the candidate; the candidate writes the clock of the outer one and leaves the E0020 of the inner one at the same place"
