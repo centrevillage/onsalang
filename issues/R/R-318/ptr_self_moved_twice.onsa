@@ -1,0 +1,6 @@
+pub struct K { p: Ptr[K] }
+fn take(move k: K) {}
+pub fn two(move k: K) {
+  take(move k)
+  take(move k)
+}

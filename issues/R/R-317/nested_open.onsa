@@ -1,0 +1,97 @@
+pub struct G0[T] {
+  v: T,
+}
+
+pub struct G1[T] {
+  x: G0[Option[T]],
+  y: G0[Option[T]],
+}
+
+pub struct G2[T] {
+  x: G1[Option[T]],
+  y: G1[Option[T]],
+}
+
+pub struct G3[T] {
+  x: G2[Option[T]],
+  y: G2[Option[T]],
+}
+
+pub struct G4[T] {
+  x: G3[Option[T]],
+  y: G3[Option[T]],
+}
+
+pub struct G5[T] {
+  x: G4[Option[T]],
+  y: G4[Option[T]],
+}
+
+pub struct G6[T] {
+  x: G5[Option[T]],
+  y: G5[Option[T]],
+}
+
+pub struct G7[T] {
+  x: G6[Option[T]],
+  y: G6[Option[T]],
+}
+
+pub struct G8[T] {
+  x: G7[Option[T]],
+  y: G7[Option[T]],
+}
+
+pub struct G9[T] {
+  x: G8[Option[T]],
+  y: G8[Option[T]],
+}
+
+pub struct G10[T] {
+  x: G9[Option[T]],
+  y: G9[Option[T]],
+}
+
+pub struct G11[T] {
+  x: G10[Option[T]],
+  y: G10[Option[T]],
+}
+
+pub struct G12[T] {
+  x: G11[Option[T]],
+  y: G11[Option[T]],
+}
+
+pub struct G13[T] {
+  x: G12[Option[T]],
+  y: G12[Option[T]],
+}
+
+pub struct G14[T] {
+  x: G13[Option[T]],
+  y: G13[Option[T]],
+}
+
+pub struct G15[T] {
+  x: G14[Option[T]],
+  y: G14[Option[T]],
+}
+
+pub struct G16[T] {
+  x: G15[Option[T]],
+  y: G15[Option[T]],
+}
+
+pub struct G17[T] {
+  x: G16[Option[T]],
+  y: G16[Option[T]],
+}
+
+pub struct G18[T] {
+  x: G17[Option[T]],
+  y: G17[Option[T]],
+}
+
+pub struct H {
+  g: G18[F32],
+}
