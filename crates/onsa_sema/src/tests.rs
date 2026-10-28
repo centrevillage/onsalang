@@ -235,6 +235,82 @@ fn a_type_that_holds_itself_has_no_kind_and_no_layout() {
     }
 }
 
+/// A chain whose every step holds the step before twice (R-313), of
+/// declarations with no parameter (`A_k`) and with one (`G_k[T]`): each walk
+/// finds what a declaration used with closed arguments holds once
+/// (`walk::Known`), so the kind, the layout and the drops of the 64th have an
+/// answer, where a walk that expands the chain stops past its steps at about
+/// 20. A size past `U32` (from the 30th) is no layout (S-88), so the layout
+/// is of the 29th.
+#[test]
+fn a_chain_that_doubles_each_step_has_its_answers() {
+    let mut src = String::from("pub struct A0 { v: F32 }\npub struct G0[T] { v: T }\n");
+    for k in 1..=64 {
+        src.push_str(&format!("pub struct A{k} {{ x: A{0}, y: A{0} }}\n", k - 1));
+        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[T], y: G{0}[T] }}\n", k - 1));
+    }
+    let run = move || {
+        let mut a = check(&src);
+        assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+        let f32 = a.types.float(FloatKind::F32);
+        for (k, name, args) in [(29, "A", vec![]), (29, "G", vec![f32]), (64, "A", vec![]), (64, "G", vec![f32])] {
+            let d = def(&a, &format!("{name}{k}"));
+            let t = a.types.intern(Ty::Named(d, args.clone()));
+            assert_eq!(a.kind_of(t), Some(Kind::Copy), "{name}{k}");
+            assert!(!crate::rt::needs_alloc_drop(&a, t));
+            assert_eq!(a.known.drops.borrow().get(&(d, args)), Some(&Some(false)), "{name}{k}: the drops are found");
+            assert_eq!(a.layout_of(t).map(|l| l.size), (k == 29).then_some(4 << 29), "{name}{k}");
+        }
+    };
+    onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+}
+
+/// A kind found near the steps of a walk is the same whichever declaration
+/// is asked first (§18.1; W4-05 U2b/b): `Z` holds three expansions of about
+/// a third of the steps each, `Q` holds `Z` and two more, so `Q` has its
+/// answer only if `Z`'s is found with steps of its own.
+#[test]
+fn a_kind_near_the_steps_does_not_hang_on_the_order() {
+    let mut src = String::from("pub struct G0[T] { v: T }\n");
+    for k in 1..=13 {
+        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[Option[T]] }}\n", k - 1));
+    }
+    src.push_str("pub struct Z { f0: G13[F32], f1: G13[I32], f2: G13[U8] }\n");
+    src.push_str("pub struct Q { z: Z, g0: G13[Bool], g1: G13[I8] }\n");
+    let kind_of_q = |z_first: bool| {
+        let mut a = check(&src);
+        let ty = |a: &mut Analysis, name| a.types.intern(Ty::Named(def(a, name), vec![]));
+        let (z, q) = (ty(&mut a, "Z"), ty(&mut a, "Q"));
+        if z_first {
+            a.kind_of(z);
+        }
+        a.kind_of(q)
+    };
+    assert_eq!(kind_of_q(true), kind_of_q(false));
+}
+
+/// The answer of a declaration is found from the depth 0, whatever depth
+/// the walk that asks it is at (W4-05 U2b/i3): a chain of 300 asked from its
+/// top finds the kind of each (each step is `W` and a `P`, so the chain is
+/// past the depth of a walk). A type that holds itself through a `Ptr` has
+/// no answer as it is entered again, so its drops end at once.
+#[test]
+fn an_answer_does_not_hang_on_the_depth_it_is_asked_at() {
+    let mut src = String::from("pub struct W[T] { t: T }\npub struct P0 { v: F32 }\n");
+    for k in (1..=300).rev() {
+        src.push_str(&format!("pub struct P{k} {{ w: W[P{}] }}\n", k - 1));
+    }
+    src.push_str("pub struct N { p: Ptr[N] }\n");
+    let run = move || {
+        let mut a = check(&src);
+        let ty = |a: &mut Analysis, name| a.types.intern(Ty::Named(def(a, name), vec![]));
+        let (p300, p20, n) = (ty(&mut a, "P300"), ty(&mut a, "P20"), ty(&mut a, "N"));
+        assert_eq!((a.kind_of(p300), a.kind_of(p20)), (Some(Kind::Copy), Some(Kind::Copy)));
+        assert!(!crate::rt::needs_alloc_drop(&a, n));
+    };
+    onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+}
+
 /// A chain of 20 000 aliases (R-298) is lowered in the order of the
 /// declarations, sinks first, each once: no lowering recurses through the
 /// chain, so the check ends with no diagnostic (an alias adds nothing to the

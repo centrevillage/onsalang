@@ -195,6 +195,9 @@ pub struct Analysis {
     /// The order of the declarations of types and their cycles (E0311,
     /// `sig::decls`).
     pub(crate) decls: sig::Decls,
+    /// What the walks of the kinds, the layouts and the drops found of each
+    /// declaration used with arguments none of which is open (R-313).
+    pub(crate) known: walk::Known,
     /// Typed bodies of functions, tests and `const` initializers (T2-5).
     pub bodies: HashMap<DefId, BodyInfo>,
     /// Values of `const` items evaluated at check time (T2-11).

@@ -69,11 +69,13 @@ fn all(w: &Walk, ts: &[TyId], env: Option<&Env>, depth: u32) -> Option<Kind> {
 }
 
 fn named(w: &Walk, d: DefId, args: &[TyId], env: Option<&Env>, depth: u32) -> Option<Kind> {
-    let (holds, env, depth) = w.enter(d, args, env, depth)?;
-    match holds {
-        _ if holds.is_state() => Some(Kind::Affine), // §4.6: flow state is Affine
-        Holds::Opaque(_) => Some(Kind::Copy),
-        Holds::Nothing => None,
-        _ => all(w, &holds.parts(), env.as_ref(), depth),
-    }
+    w.remember(&w.a.known.kinds, (d, args, env, depth), |depth| {
+        let (holds, env, depth) = w.enter(d, args, env, depth)?;
+        match holds {
+            _ if holds.is_state() => Some(Kind::Affine), // §4.6: flow state is Affine
+            Holds::Opaque(_) => Some(Kind::Copy),
+            Holds::Nothing => None,
+            _ => all(w, &holds.parts(), env.as_ref(), depth),
+        }
+    })
 }

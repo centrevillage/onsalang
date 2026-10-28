@@ -6,10 +6,10 @@
 // Lp`: the cycle of aliases is E0311, §4.4, R-105) is an alias of the error type like the alias of
 // a failed name (kind_alias_of_failed_name.onsa), so written at the head of a path in a value place
 // it stops the unit, and the `let b: Bool = 2` after it has no E0401. In a type place it is the error
-// type and the unit goes on. The code of the cycle is E0311 (spec §4.4: "型別名の循環"); the
-// implementation gives E0310 today (tests/pending.toml lists E0311 until W4-05), so this file waits
-// for W4-05. The cycle of two aliases (`type C = D`, `type D = C`) is not written here: the spec does
-// not say whether the diagnostic is one or on both declarations, a gap that is reported.
+// type and the unit goes on. The code of the cycle is E0311 (spec §4.4: "型別名の循環"), which the
+// implementation gives since W4-05 U2. The cycles of two and more aliases (`type C = D`,
+// `type D = C`) are in tests/spec/types/cycle_alias.onsa: one E0311 for each collection, at its
+// first declaration, with the others in notes (§18.1).
 
 type Lp = Lp                                        //~ E0311
 

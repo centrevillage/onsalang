@@ -3,16 +3,20 @@
 //! declaration holds, the arguments it is read under (R-30), and where the
 //! walk stops (D-15).
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 
 use crate::def::{DefKind, FieldDef, Fields, FlowTy, VariantDef};
+use crate::kind::Kind;
+use crate::layout::Layout;
 use crate::ty::{Env, TYPE_DEPTH_LIMIT, Ty, TyId};
 use crate::{Analysis, DefId};
 
 /// The steps one walk takes at most: a step reads a type or follows a
 /// parameter to its argument, so a walk does work in proportion to them. A
-/// walk reads what a declaration holds once for each place it is held in;
-/// past the steps it stops with no answer, as at a type that holds itself. A
+/// walk reads what a declaration holds once for each place it is held in,
+/// but once in all of one used with closed arguments ([`Known`]); past the
+/// steps it stops with no answer, as at a type that holds itself. A
 /// generic type that holds itself with ever larger arguments
 /// (`R[T] { t: T, a: R[(T, T)] }`) needs steps exponential in its depth; a
 /// chain of declarations deeper than the stack holds (about 100 000) is
@@ -21,6 +25,26 @@ const STEPS: u32 = 1 << 20;
 
 /// The bytes of stack a walk keeps ([`Walk::enter`]).
 const STACK_RESERVE: usize = 1 << 20;
+
+/// A declaration and the arguments it is used with, none open.
+pub(crate) type Key = (DefId, Vec<TyId>);
+
+/// What the walks found of a declaration used with arguments none of which
+/// is open ([`crate::ty::Types::open`]), each once (R-313): so a walk through
+/// a type that holds the same one in many places (`A_k { x: A_{k-1}, y:
+/// A_{k-1} }`, or `G_k[T]` of two `G_{k-1}[T]`) is not exponential. Each is
+/// found with steps and a depth of its own ([`Walk::remember`]), so it is
+/// the same whichever walk asks first (§18.1), no answer past [`STEPS`] too:
+/// a walk that holds one takes one step for it. Kept from the end of the
+/// lowering of the declarations (`ready`), whose fields are not all lowered
+/// before.
+#[derive(Debug, Default)]
+pub(crate) struct Known {
+    pub(crate) ready: bool,
+    pub(crate) kinds: RefCell<HashMap<Key, Option<Kind>>>,
+    pub(crate) layouts: RefCell<HashMap<Key, Option<Layout>>>,
+    pub(crate) drops: RefCell<HashMap<Key, Option<bool>>>,
+}
 
 /// What a declaration a walk enters holds.
 /// `state`: a struct a flow made for its state (§11.6).
@@ -65,6 +89,33 @@ impl<'a> Walk<'a> {
     fn step(&self) -> Option<()> {
         self.steps.set(self.steps.get().checked_sub(1)?);
         Some(())
+    }
+
+    /// The answer in `table` of `d` used with `args` under `env` ([`Known`]):
+    /// one step, and the one kept or the one `find` finds from the depth 0
+    /// with [`STEPS`] of its own, which the walk around does not spend. One
+    /// being found and entered again holds itself (through `Ptr`, `Span`):
+    /// no answer. Else `find` from `depth`.
+    pub(crate) fn remember<T: Clone>(
+        &self,
+        table: &RefCell<HashMap<Key, Option<T>>>,
+        (d, args, env, depth): (DefId, &[TyId], Option<&Env>, u32),
+        find: impl FnOnce(u32) -> Option<T>,
+    ) -> Option<T> {
+        let types = &self.a.types;
+        let closed = |&t: &TyId| Some(types.resolve(t, env).0).filter(|&t| !types.open(t));
+        let key = self.a.known.ready.then(|| args.iter().map(closed).collect::<Option<Vec<TyId>>>()).flatten();
+        let Some(key) = key.map(|args| (d, args)) else { return find(depth) };
+        self.step()?;
+        if let Some(t) = table.borrow().get(&key) {
+            return t.clone();
+        }
+        table.borrow_mut().insert(key.clone(), None);
+        let around = self.steps.replace(STEPS);
+        let found = find(0);
+        self.steps.set(around);
+        table.borrow_mut().insert(key, found.clone());
+        found
     }
 
     /// `ty` read under `env`: a parameter is followed to its argument, read

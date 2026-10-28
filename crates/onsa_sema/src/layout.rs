@@ -111,17 +111,19 @@ pub fn layout_of_def(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Layout> {
 }
 
 fn named(w: &Walk, d: DefId, args: &[TyId], (env, depth): At) -> Option<Layout> {
-    let (holds, env, depth) = w.enter(d, args, env, depth)?;
-    let at = (env.as_ref(), depth);
-    match holds {
-        Holds::Fields(fs, _) => {
-            let tys: Vec<TyId> = fs.iter().map(|f| f.ty).collect();
-            record(w, fs.iter().map(|f| f.name.clone()), &tys, at)
+    w.remember(&w.a.known.layouts, (d, args, env, depth), |depth| {
+        let (holds, env, depth) = w.enter(d, args, env, depth)?;
+        let at = (env.as_ref(), depth);
+        match holds {
+            Holds::Fields(fs, _) => {
+                let tys: Vec<TyId> = fs.iter().map(|f| f.ty).collect();
+                record(w, fs.iter().map(|f| f.name.clone()), &tys, at)
+            }
+            Holds::Variants(vs) => enum_layout(w, &vs.iter().map(|v| &v.fields[..]).collect::<Vec<_>>(), at),
+            Holds::Alias(t) => walk(w, t, at),
+            Holds::Opaque(_) | Holds::Nothing => None,
         }
-        Holds::Variants(vs) => enum_layout(w, &vs.iter().map(|v| &v.fields[..]).collect::<Vec<_>>(), at),
-        Holds::Alias(t) => walk(w, t, at),
-        Holds::Opaque(_) | Holds::Nothing => None,
-    }
+    })
 }
 
 /// `IntKind` of the enum tag for `n` variants.

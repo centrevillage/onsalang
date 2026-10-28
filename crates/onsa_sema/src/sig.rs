@@ -88,6 +88,7 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
     let flows = s.lower_signatures();
     s.lower_generated(flows);
     s.fail_ungenerated();
+    s.a.known.ready = true;
     s.name_non_copy_fields();
     a
 }
