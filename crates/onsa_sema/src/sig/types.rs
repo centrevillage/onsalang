@@ -16,12 +16,16 @@ impl<'p> Sema<'p> {
     /// side of or at its form written, and is the error type. A type with an
     /// error in it is not judged: a part not read is the error type, and its
     /// users get no diagnostic (§18.1; an alias over the limits is the error
-    /// type for the aliases that use it).
+    /// type for the aliases that use it). Over them, it is the error type,
+    /// so that no type made of it grows on (a chain of aliases, R-303).
     pub(super) fn lower_type(&mut self, cx: &Cx<'p>, t: TypeId) -> TyId {
         let ty = self.lower_written(cx, t);
         let types = &self.a.types;
-        if !types.over_limit(ty) || types.has_error(ty) {
+        if !types.over_limit(ty) {
             return ty;
+        }
+        if types.has_error(ty) {
+            return self.a.types.error();
         }
         let msg = if types.depth(ty) > TYPE_DEPTH_LIMIT {
             format!("the type is deeper than {TYPE_DEPTH_LIMIT} levels (§4.4)")
@@ -227,7 +231,6 @@ impl<'p> Sema<'p> {
                 local.unwrap_or_else(|| self.wrong_kind_arg(cx, te.span, "a constant expression", "a type"))
             }
             (TypeKind::ConstArg(e), Some(true)) => {
-                self.lower_alias_of(cx, *e);
                 match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), *e, &cx.local())
                 {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
@@ -251,11 +254,8 @@ impl<'p> Sema<'p> {
                     _ if cx.is_local(&path.segments[0].name) => Err(local().into()),
                     Some((i, NameKind::ConstParam)) => Ok(Ty::Param(i)),
                     Some((_, kind)) => Err(crate::constarg::not_constant(kind, src(cx, path.span), path.span)),
-                    None => {
-                        self.lower_alias_before(cx, path);
-                        crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, path.span)
-                            .map(Ty::ConstVal)
-                    }
+                    None => crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, path.span)
+                        .map(Ty::ConstVal),
                 };
                 match named {
                     // A constant with type arguments (`K[F32]`).
@@ -347,7 +347,12 @@ impl<'p> Sema<'p> {
                 match &def.kind {
                     // A heading a syntax error cut (S-59): its generic parameters
                     // are not known, and its uses are the error type (R-71).
-                    DefKind::Struct(_) | DefKind::Enum(_) if self.a.heading_failed(d) => self.a.types.error(),
+                    // A type of a cycle (E0311, at its declaration, §18.1) too.
+                    DefKind::Struct(_) | DefKind::Enum(_)
+                        if self.a.heading_failed(d) || self.a.decls.cyclic.contains(&d) =>
+                    {
+                        self.a.types.error()
+                    }
                     DefKind::Struct(_) | DefKind::Enum(_) => {
                         let want = def.generics().len();
                         if args.len() != want {
@@ -437,31 +442,9 @@ impl<'p> Sema<'p> {
         self.report(cx.def, d);
     }
 
-    /// The constant expression `e` as [`Self::lower_alias_before`] reads it.
-    fn lower_alias_of(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) {
-        if let Some(path) = crate::constarg::path_of(cx.ast, e) {
-            self.lower_alias_before(cx, &path);
-        }
-    }
-
-    /// Lower the alias before the last name of the path of a constant
-    /// (`Al.N`, `inner.Al.N`) when the path names one there, which a
-    /// signature may name before its declaration is lowered: the constant
-    /// reads the type it stands for (§4.4, `crate::names::typed`).
-    fn lower_alias_before(&mut self, cx: &Cx<'p>, path: &onsa_syntax::ast::Path) {
-        let Some((_, before)) = path.segments.split_last().filter(|(_, b)| !b.is_empty()) else { return };
-        let before = onsa_syntax::ast::Path { segments: before.to_vec(), span: path.span };
-        if let Ok(Entity::Def(d)) = self.a.resolve_path(cx.m, &before)
-            && matches!(self.a.def(d).kind, DefKind::Alias(_))
-        {
-            self.alias_ty(d);
-        }
-    }
-
     /// Array length (§4.1): an integer literal, a `const` with a literal
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
-        self.lower_alias_of(cx, e);
         match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), e, &cx.local()) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
@@ -479,7 +462,7 @@ impl<'p> Sema<'p> {
 /// (`locals`, [`Cx::locals`]). Diagnostics are returned, not
 /// pushed, so the body checker keeps its first-error rule. The signatures
 /// are lowered: it reads them, and writes only the types it interns and
-/// [`Analysis::read_held`] (with no package, no alias is lowered again).
+/// [`Analysis::read_held`] (the aliases are lowered, `decls`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_type_in_body<'p>(
     a: &'p mut Analysis,

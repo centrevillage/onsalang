@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// R-02, S-730 (W4-05 U2): the type argument of a generic type is followed where the definition holds
+// it as a value (spec §4.4: "総称の型の引数は、その定義で値として含む位置に現れるときに辿る
+// （`struct W[T] { a: T }` の `W[Node]`、prelude の `Option[Node]`・`Result[Node, E]` は `Node` を値として
+// 含み、`Array[Node]` は含まない）"). So a struct that holds `W[Self]`, however deep the arguments or the
+// generic types in between, holds itself; and a generic type that holds itself through its own
+// parameters is a cycle at its declaration. One E0311 per collection, at its first declaration
+// (§18.1). The generic type `W` itself is not in the collection of `S1` (it does not reach `S1`), so
+// it has no diagnostic and the uses of `W[S1]` outside have none.
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct Q[T] {
+  a: T,
+}
+
+pub struct R[T] {
+  q: Q[T],
+  b: T,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub enum E[T] {
+  Has(T),
+  Not,
+}
+
+pub struct S1 {                                     //~ E0311
+  w: W[S1],
+}
+
+pub struct S2 {                                     //~ E0311
+  w: W[W[S2]],
+}
+
+// Two levels of generic types in between: `R[T]` holds `Q[T]`, which holds `T`.
+pub struct S3 {                                     //~ E0311
+  r: R[S3],
+}
+
+// The argument is a tuple, an array or an `Option` that holds the type.
+pub struct S4 {                                     //~ E0311
+  w: W[(I32, S4)],
+}
+
+pub struct S5 {                                     //~ E0311
+  w: W[[S5; 2]],
+}
+
+pub struct S6 {                                     //~ E0311
+  w: W[Option[S6]],
+}
+
+// A generic enum, and a generic type with two parameters (either one).
+pub struct S7 {                                     //~ E0311
+  e: E[S7],
+}
+
+pub struct S8 {                                     //~ E0311
+  p: Pair[I32, S8],
+}
+
+pub struct S9 {                                     //~ E0311
+  p: Pair[S9, I32],
+}
+
+// A generic type that holds itself through its own parameter: a cycle at its declaration.
+pub struct Lst[T] {                                 //~ E0311
+  v: T,
+  next: Option[Lst[T]],
+}
+
+// Two generic types that hold each other.
+pub struct Gp[T] {                                  //~ E0311
+  q: Gq[T],
+}
+
+pub struct Gq[T] {
+  p: Gp[T],
+}
+
+// A generic type and a plain struct that reach each other through the argument.
+pub struct Ws {                                     //~ E0311
+  w: W[Wt],
+}
+
+pub struct Wt {
+  s: Ws,
+}
+
+// Outside the collections: no diagnostic.
+pub struct Users {
+  a: W[S1],
+  b: R[S3],
+  c: Lst[I32],
+  d: Gp[I32],
+}
+
+pub fn takes(a: W[S1], b: Pair[I32, S8], c: E[S7]) -> I32 {
+  1
+}

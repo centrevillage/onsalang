@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.6", "§18.1"]
+
+// S-744, S-725, S-734 (W4-05 U2): the associated constant whose type reads itself in the length of an
+// array (spec §4.4: "固定長配列の長さと const 引数が読む定数は、その定数の宣言の型を辿る"; S-744:
+// "関連定数の `impl S { const N: [F32; Self.N] = … }`", with `Self.N` an ordinary path through the
+// target of the `impl`). The collection is the one constant (a member of the `impl` is a unit of its
+// own, §18.1), so the E0311 is at the name of the constant and the unit stops there. The type is
+// written by `Self` or by the name of the target, the member is `pub` or not, and the `impl` of a
+// generic struct is the same.
+
+pub struct P1 {
+  x: F32,
+}
+
+impl P1 {
+  pub const N: [F32; Self.N] = 3                    //~ E0311
+}
+
+pub struct P2 {
+  x: F32,
+}
+
+impl P2 {
+  pub const N: [F32; P2.N] = 3                      //~ E0311
+}
+
+pub struct P3 {
+  x: F32,
+}
+
+impl P3 {
+  const N: [F32; Self.N] = 3                        //~ E0311
+}
+
+pub struct P4[T] {
+  x: T,
+}
+
+impl[T] P4[T] {
+  pub const N: [F32; Self.N] = 3                    //~ E0311
+}
+
+// Another member of the same `impl` reads the constant and has no diagnostic of its own: the constant
+// is the error value (S-734: the lengths that read it have no diagnostic).
+pub struct P5 {
+  x: F32,
+}
+
+impl P5 {
+  pub const N: [F32; Self.N] = 3                    //~ E0311
+  pub const M: U32 = 2
+  pub const L: U32 = Self.M
+}

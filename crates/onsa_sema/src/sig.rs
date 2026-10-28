@@ -17,8 +17,8 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
-    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ItemKind, Lit, Mode, Param, ParamName, Path,
-    TypeId, TypeKind, UnOp, Vis,
+    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ImplDecl, ItemKind, Lit, Mode, Param,
+    ParamName, Path, TypeId, TypeKind, UnOp, Vis,
 };
 use onsa_syntax::foreign::{self, RowId};
 
@@ -26,12 +26,14 @@ use crate::def::*;
 use crate::resolve::{Builtin, Entity, NameKind};
 use crate::ty::*;
 use crate::{Analysis, Module, Package, flatten};
+mod decls;
 mod flow_sig;
 mod generated;
 mod types;
 
 use flow_sig::FlowHeading;
 
+pub(crate) use decls::Decls;
 pub(crate) use types::lower_type_in_body;
 
 pub(crate) struct Sema<'p> {
@@ -40,8 +42,6 @@ pub(crate) struct Sema<'p> {
     /// Defs that already have a diagnostic, and its index in the
     /// diagnostics (P-01: one error per item, [`Sema::report`]).
     reported: HashMap<DefId, usize>,
-    /// Aliases being expanded (cycle guard).
-    expanding: HashSet<DefId>,
     /// The `copy_bound` diagnostics reported (their index in the
     /// diagnostics), their type and whether the constraint is `Dup`: once
     /// every signature is lowered, the note names a field that does not meet
@@ -94,7 +94,7 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
 
 impl<'p> Sema<'p> {
     fn new(a: &'p mut Analysis, flat: Vec<&'p Package>) -> Self {
-        Sema { a, flat, reported: HashMap::new(), expanding: HashSet::new(), kind_heads: Vec::new() }
+        Sema { a, flat, reported: HashMap::new(), kind_heads: Vec::new() }
     }
 
     pub(crate) fn module(&self, m: ModId) -> Option<&'p Module> {
@@ -167,9 +167,12 @@ impl<'p> Sema<'p> {
 
     // ------------------------------------------------------------ lowering
 
-    /// The stage of the types of the signatures: every def, in the order of
-    /// the defs. The headings of the flows it lowered, for the next stage.
+    /// The stage of the types of the signatures: the aliases and the
+    /// constants in the order of the declarations (`decls`), then every def,
+    /// in the order of the defs. The headings of the flows it lowered, for
+    /// the next stage.
     fn lower_signatures(&mut self) -> Vec<FlowHeading> {
+        self.order_declarations();
         let n = self.a.defs.len();
         let mut flows = Vec::new();
         for i in 0..n {
@@ -235,12 +238,7 @@ impl<'p> Sema<'p> {
         let def = &self.a.defs[id.0 as usize];
         let item_id = def.item?;
         let cx = self.cx_for(id, Vec::new(), None)?;
-        let item = cx.ast.item(item_id);
-        let mut kind = &item.kind;
-        if let ItemKind::Target(inner) = kind {
-            kind = inner;
-        }
-        match kind {
+        match decls::item_kind(&cx.ast.item(item_id).kind) {
             ItemKind::Fn(f) => self.lower_fn(cx, id, f),
             ItemKind::Flow(f) => return self.lower_flow(cx, id, f),
             ItemKind::Struct(s) => {
@@ -289,22 +287,15 @@ impl<'p> Sema<'p> {
             ItemKind::TypeAlias { .. } => {
                 self.alias_ty(id);
             }
-            ItemKind::OpaqueType { .. } => {}
-            ItemKind::Const(c) => {
-                let ty = self.lower_type(&cx, c.ty);
-                if let DefKind::Const(cd) = &mut self.a.defs[id.0 as usize].kind {
-                    cd.ty = ty;
-                }
-            }
+            // A constant is lowered in the order of the declarations.
+            ItemKind::OpaqueType { .. } | ItemKind::Const(_) => {}
             ItemKind::Impl(i) => {
                 if i.trait_.is_some() {
                     return None;
                 }
-                // The heading of an `impl` has no visibility (§15.1).
-                let mut cx = Cx { reach: None, ..cx };
-                cx.generics = self.lower_generics(&cx, &i.generics);
+                let cx = self.impl_cx(cx, i);
                 let aliased = self.alias_impl(&cx, i.self_ty);
-                let self_ty = self.lower_type(&cx, i.self_ty);
+                let self_ty = cx.self_ty.unwrap_or_else(|| self.a.types.error());
                 let (fns, consts) = match &self.a.defs[id.0 as usize].kind {
                     DefKind::Impl(imp) => (imp.fns.clone(), imp.consts.clone()),
                     _ => unreachable!(),
@@ -313,16 +304,7 @@ impl<'p> Sema<'p> {
                     imp.generics = cx.generics.clone();
                     imp.self_ty = self_ty;
                 }
-                // Associated items are keyed by the type's def (or the builtin TyId).
-                let key_def = match self.a.types.get(self_ty) {
-                    Ty::Named(d, _) => Some(*d),
-                    _ => None,
-                };
-                let key_builtin = match self.a.types.get(self_ty) {
-                    Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char => Some(self_ty),
-                    Ty::Builtin(b, _) => self.a.builtin_key.get(b).copied(),
-                    _ => None,
-                };
+                let (key_def, key_builtin) = self.member_key(id).unwrap_or((None, None));
                 // The E0307 of an alias is the error of the heading.
                 if key_def.is_none()
                     && key_builtin.is_none()
@@ -344,31 +326,16 @@ impl<'p> Sema<'p> {
                 // S-689): the members are checked, and read it too (an unknown
                 // bound of their generics, an error type of `self`).
                 let held = self.a.read_held.contains(&id);
-                // The members are named before their headings are lowered
-                // (`[F32; Self.N]`, §2.2, S-595): the first of a name, as below.
-                for &sub in fns.iter().chain(&consts) {
-                    let name = self.a.defs[sub.0 as usize].name.clone();
-                    let Some(table) = self.assoc_table(key_def, key_builtin) else { break };
-                    table.entry(name).or_insert(sub);
-                }
+                // The members are named before (`Sema::name_members`), and a
+                // constant lowered in the order of the declarations.
                 for &sub in fns.iter().chain(&consts) {
                     if held {
                         self.a.read_held.insert(sub);
                     }
                     let sub_item = self.a.defs[sub.0 as usize].item.unwrap();
-                    let ty_vis = key_def.map(|d| self.a.def(d).vis).or(key_builtin.map(|_| Vis::Pub));
-                    let reach = ty_vis.map(|t| self.member_reach(&cx, sub, t));
-                    let sub_cx =
-                        Cx { generics: cx.generics.clone(), self_ty: Some(self_ty), def: sub, reach, ..cx_clone(&cx) };
-                    match &cx.ast.item(sub_item).kind {
-                        ItemKind::Fn(f) => self.lower_fn(sub_cx, sub, f),
-                        ItemKind::Const(c) => {
-                            let ty = self.lower_type(&sub_cx, c.ty);
-                            if let DefKind::Const(cd) = &mut self.a.defs[sub.0 as usize].kind {
-                                cd.ty = ty;
-                            }
-                        }
-                        _ => {}
+                    let reach = self.type_vis((key_def, key_builtin)).map(|t| self.member_reach(&cx, sub, t));
+                    if let ItemKind::Fn(f) = &cx.ast.item(sub_item).kind {
+                        self.lower_fn(Cx { def: sub, reach, ..cx_clone(&cx) }, sub, f);
                     }
                     let name = self.a.defs[sub.0 as usize].name.clone();
                     let name_span = self.a.defs[sub.0 as usize].name_span;
@@ -392,6 +359,16 @@ impl<'p> Sema<'p> {
             _ => {}
         }
         None
+    }
+
+    /// The context of the members of the inherent `impl` `i` (its `cx`): its
+    /// generics, and its type as `Self` (§2.2). Its heading has no
+    /// visibility (§15.1).
+    fn impl_cx(&mut self, cx: Cx<'p>, i: &ImplDecl) -> Cx<'p> {
+        let mut cx = Cx { reach: None, ..cx };
+        cx.generics = self.lower_generics(&cx, &i.generics);
+        cx.self_ty = Some(self.lower_type(&cx, i.self_ty));
+        cx
     }
 
     /// E0307 for an `impl` whose type `t` names a type alias (§4.4, S-91,
@@ -457,18 +434,21 @@ impl<'p> Sema<'p> {
         crate::resolve::narrower(own, ty_vis)
     }
 
+    /// The type of the alias `id`, lowered once in the order of the
+    /// declarations (`decls`), which lowers what it reads before it: an
+    /// alias of a cycle is the error type (E0311), and a body reads the
+    /// aliases lowered.
     fn alias_ty(&mut self, id: DefId) -> TyId {
-        let current = match &self.a.defs[id.0 as usize].kind {
-            DefKind::Alias(t) => *t,
-            _ => return self.a.types.error(),
-        };
-        if !matches!(self.a.types.get(current), Ty::Error) {
-            return current;
-        }
-        if !self.expanding.insert(id) {
-            let span = self.a.defs[id.0 as usize].name_span;
-            self.report(id, Diagnostic::new(Stage::Names, Code::E0310, span, "type alias refers to itself"));
-            return self.a.types.error();
+        let DefKind::Alias(current) = self.a.defs[id.0 as usize].kind else { return self.a.types.error() };
+        let at = Some(self.a.defs[id.0 as usize].name_span);
+        match self.a.decls.lowered.insert(id, false) {
+            Some(true) => {
+                self.a.decls.lowered.insert(id, true);
+                return current;
+            }
+            Some(false) => onsa_diag::internal::bug(at, "an alias read as it is lowered: a cycle not in the order"),
+            None if self.flat.is_empty() => onsa_diag::internal::bug(at, "an alias the signatures did not lower"),
+            None => {}
         }
         let ty = match (self.cx_for(id, Vec::new(), None), self.a.defs[id.0 as usize].item) {
             (Some(cx), Some(item)) => match &cx.ast.item(item).kind {
@@ -477,7 +457,7 @@ impl<'p> Sema<'p> {
             },
             _ => self.a.types.error(),
         };
-        self.expanding.remove(&id);
+        self.a.decls.lowered.insert(id, true);
         if let DefKind::Alias(t) = &mut self.a.defs[id.0 as usize].kind {
             *t = ty;
         }

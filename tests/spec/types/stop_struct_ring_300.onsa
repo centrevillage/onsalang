@@ -1,0 +1,1211 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// R-02, S-730 (W4-05 U2): 300 structs that hold the next one round (`struct S0 { n: S1 }`, ...,
+// `struct S299 { n: S0 }`) are one collection: one E0311, at the first declaration S0, and the check ends
+// in a short time. The struct outside that holds one of them has no diagnostic.
+
+pub struct S0 {                                     //~ E0311
+  n: S1,
+}
+
+pub struct S1 {
+  n: S2,
+}
+
+pub struct S2 {
+  n: S3,
+}
+
+pub struct S3 {
+  n: S4,
+}
+
+pub struct S4 {
+  n: S5,
+}
+
+pub struct S5 {
+  n: S6,
+}
+
+pub struct S6 {
+  n: S7,
+}
+
+pub struct S7 {
+  n: S8,
+}
+
+pub struct S8 {
+  n: S9,
+}
+
+pub struct S9 {
+  n: S10,
+}
+
+pub struct S10 {
+  n: S11,
+}
+
+pub struct S11 {
+  n: S12,
+}
+
+pub struct S12 {
+  n: S13,
+}
+
+pub struct S13 {
+  n: S14,
+}
+
+pub struct S14 {
+  n: S15,
+}
+
+pub struct S15 {
+  n: S16,
+}
+
+pub struct S16 {
+  n: S17,
+}
+
+pub struct S17 {
+  n: S18,
+}
+
+pub struct S18 {
+  n: S19,
+}
+
+pub struct S19 {
+  n: S20,
+}
+
+pub struct S20 {
+  n: S21,
+}
+
+pub struct S21 {
+  n: S22,
+}
+
+pub struct S22 {
+  n: S23,
+}
+
+pub struct S23 {
+  n: S24,
+}
+
+pub struct S24 {
+  n: S25,
+}
+
+pub struct S25 {
+  n: S26,
+}
+
+pub struct S26 {
+  n: S27,
+}
+
+pub struct S27 {
+  n: S28,
+}
+
+pub struct S28 {
+  n: S29,
+}
+
+pub struct S29 {
+  n: S30,
+}
+
+pub struct S30 {
+  n: S31,
+}
+
+pub struct S31 {
+  n: S32,
+}
+
+pub struct S32 {
+  n: S33,
+}
+
+pub struct S33 {
+  n: S34,
+}
+
+pub struct S34 {
+  n: S35,
+}
+
+pub struct S35 {
+  n: S36,
+}
+
+pub struct S36 {
+  n: S37,
+}
+
+pub struct S37 {
+  n: S38,
+}
+
+pub struct S38 {
+  n: S39,
+}
+
+pub struct S39 {
+  n: S40,
+}
+
+pub struct S40 {
+  n: S41,
+}
+
+pub struct S41 {
+  n: S42,
+}
+
+pub struct S42 {
+  n: S43,
+}
+
+pub struct S43 {
+  n: S44,
+}
+
+pub struct S44 {
+  n: S45,
+}
+
+pub struct S45 {
+  n: S46,
+}
+
+pub struct S46 {
+  n: S47,
+}
+
+pub struct S47 {
+  n: S48,
+}
+
+pub struct S48 {
+  n: S49,
+}
+
+pub struct S49 {
+  n: S50,
+}
+
+pub struct S50 {
+  n: S51,
+}
+
+pub struct S51 {
+  n: S52,
+}
+
+pub struct S52 {
+  n: S53,
+}
+
+pub struct S53 {
+  n: S54,
+}
+
+pub struct S54 {
+  n: S55,
+}
+
+pub struct S55 {
+  n: S56,
+}
+
+pub struct S56 {
+  n: S57,
+}
+
+pub struct S57 {
+  n: S58,
+}
+
+pub struct S58 {
+  n: S59,
+}
+
+pub struct S59 {
+  n: S60,
+}
+
+pub struct S60 {
+  n: S61,
+}
+
+pub struct S61 {
+  n: S62,
+}
+
+pub struct S62 {
+  n: S63,
+}
+
+pub struct S63 {
+  n: S64,
+}
+
+pub struct S64 {
+  n: S65,
+}
+
+pub struct S65 {
+  n: S66,
+}
+
+pub struct S66 {
+  n: S67,
+}
+
+pub struct S67 {
+  n: S68,
+}
+
+pub struct S68 {
+  n: S69,
+}
+
+pub struct S69 {
+  n: S70,
+}
+
+pub struct S70 {
+  n: S71,
+}
+
+pub struct S71 {
+  n: S72,
+}
+
+pub struct S72 {
+  n: S73,
+}
+
+pub struct S73 {
+  n: S74,
+}
+
+pub struct S74 {
+  n: S75,
+}
+
+pub struct S75 {
+  n: S76,
+}
+
+pub struct S76 {
+  n: S77,
+}
+
+pub struct S77 {
+  n: S78,
+}
+
+pub struct S78 {
+  n: S79,
+}
+
+pub struct S79 {
+  n: S80,
+}
+
+pub struct S80 {
+  n: S81,
+}
+
+pub struct S81 {
+  n: S82,
+}
+
+pub struct S82 {
+  n: S83,
+}
+
+pub struct S83 {
+  n: S84,
+}
+
+pub struct S84 {
+  n: S85,
+}
+
+pub struct S85 {
+  n: S86,
+}
+
+pub struct S86 {
+  n: S87,
+}
+
+pub struct S87 {
+  n: S88,
+}
+
+pub struct S88 {
+  n: S89,
+}
+
+pub struct S89 {
+  n: S90,
+}
+
+pub struct S90 {
+  n: S91,
+}
+
+pub struct S91 {
+  n: S92,
+}
+
+pub struct S92 {
+  n: S93,
+}
+
+pub struct S93 {
+  n: S94,
+}
+
+pub struct S94 {
+  n: S95,
+}
+
+pub struct S95 {
+  n: S96,
+}
+
+pub struct S96 {
+  n: S97,
+}
+
+pub struct S97 {
+  n: S98,
+}
+
+pub struct S98 {
+  n: S99,
+}
+
+pub struct S99 {
+  n: S100,
+}
+
+pub struct S100 {
+  n: S101,
+}
+
+pub struct S101 {
+  n: S102,
+}
+
+pub struct S102 {
+  n: S103,
+}
+
+pub struct S103 {
+  n: S104,
+}
+
+pub struct S104 {
+  n: S105,
+}
+
+pub struct S105 {
+  n: S106,
+}
+
+pub struct S106 {
+  n: S107,
+}
+
+pub struct S107 {
+  n: S108,
+}
+
+pub struct S108 {
+  n: S109,
+}
+
+pub struct S109 {
+  n: S110,
+}
+
+pub struct S110 {
+  n: S111,
+}
+
+pub struct S111 {
+  n: S112,
+}
+
+pub struct S112 {
+  n: S113,
+}
+
+pub struct S113 {
+  n: S114,
+}
+
+pub struct S114 {
+  n: S115,
+}
+
+pub struct S115 {
+  n: S116,
+}
+
+pub struct S116 {
+  n: S117,
+}
+
+pub struct S117 {
+  n: S118,
+}
+
+pub struct S118 {
+  n: S119,
+}
+
+pub struct S119 {
+  n: S120,
+}
+
+pub struct S120 {
+  n: S121,
+}
+
+pub struct S121 {
+  n: S122,
+}
+
+pub struct S122 {
+  n: S123,
+}
+
+pub struct S123 {
+  n: S124,
+}
+
+pub struct S124 {
+  n: S125,
+}
+
+pub struct S125 {
+  n: S126,
+}
+
+pub struct S126 {
+  n: S127,
+}
+
+pub struct S127 {
+  n: S128,
+}
+
+pub struct S128 {
+  n: S129,
+}
+
+pub struct S129 {
+  n: S130,
+}
+
+pub struct S130 {
+  n: S131,
+}
+
+pub struct S131 {
+  n: S132,
+}
+
+pub struct S132 {
+  n: S133,
+}
+
+pub struct S133 {
+  n: S134,
+}
+
+pub struct S134 {
+  n: S135,
+}
+
+pub struct S135 {
+  n: S136,
+}
+
+pub struct S136 {
+  n: S137,
+}
+
+pub struct S137 {
+  n: S138,
+}
+
+pub struct S138 {
+  n: S139,
+}
+
+pub struct S139 {
+  n: S140,
+}
+
+pub struct S140 {
+  n: S141,
+}
+
+pub struct S141 {
+  n: S142,
+}
+
+pub struct S142 {
+  n: S143,
+}
+
+pub struct S143 {
+  n: S144,
+}
+
+pub struct S144 {
+  n: S145,
+}
+
+pub struct S145 {
+  n: S146,
+}
+
+pub struct S146 {
+  n: S147,
+}
+
+pub struct S147 {
+  n: S148,
+}
+
+pub struct S148 {
+  n: S149,
+}
+
+pub struct S149 {
+  n: S150,
+}
+
+pub struct S150 {
+  n: S151,
+}
+
+pub struct S151 {
+  n: S152,
+}
+
+pub struct S152 {
+  n: S153,
+}
+
+pub struct S153 {
+  n: S154,
+}
+
+pub struct S154 {
+  n: S155,
+}
+
+pub struct S155 {
+  n: S156,
+}
+
+pub struct S156 {
+  n: S157,
+}
+
+pub struct S157 {
+  n: S158,
+}
+
+pub struct S158 {
+  n: S159,
+}
+
+pub struct S159 {
+  n: S160,
+}
+
+pub struct S160 {
+  n: S161,
+}
+
+pub struct S161 {
+  n: S162,
+}
+
+pub struct S162 {
+  n: S163,
+}
+
+pub struct S163 {
+  n: S164,
+}
+
+pub struct S164 {
+  n: S165,
+}
+
+pub struct S165 {
+  n: S166,
+}
+
+pub struct S166 {
+  n: S167,
+}
+
+pub struct S167 {
+  n: S168,
+}
+
+pub struct S168 {
+  n: S169,
+}
+
+pub struct S169 {
+  n: S170,
+}
+
+pub struct S170 {
+  n: S171,
+}
+
+pub struct S171 {
+  n: S172,
+}
+
+pub struct S172 {
+  n: S173,
+}
+
+pub struct S173 {
+  n: S174,
+}
+
+pub struct S174 {
+  n: S175,
+}
+
+pub struct S175 {
+  n: S176,
+}
+
+pub struct S176 {
+  n: S177,
+}
+
+pub struct S177 {
+  n: S178,
+}
+
+pub struct S178 {
+  n: S179,
+}
+
+pub struct S179 {
+  n: S180,
+}
+
+pub struct S180 {
+  n: S181,
+}
+
+pub struct S181 {
+  n: S182,
+}
+
+pub struct S182 {
+  n: S183,
+}
+
+pub struct S183 {
+  n: S184,
+}
+
+pub struct S184 {
+  n: S185,
+}
+
+pub struct S185 {
+  n: S186,
+}
+
+pub struct S186 {
+  n: S187,
+}
+
+pub struct S187 {
+  n: S188,
+}
+
+pub struct S188 {
+  n: S189,
+}
+
+pub struct S189 {
+  n: S190,
+}
+
+pub struct S190 {
+  n: S191,
+}
+
+pub struct S191 {
+  n: S192,
+}
+
+pub struct S192 {
+  n: S193,
+}
+
+pub struct S193 {
+  n: S194,
+}
+
+pub struct S194 {
+  n: S195,
+}
+
+pub struct S195 {
+  n: S196,
+}
+
+pub struct S196 {
+  n: S197,
+}
+
+pub struct S197 {
+  n: S198,
+}
+
+pub struct S198 {
+  n: S199,
+}
+
+pub struct S199 {
+  n: S200,
+}
+
+pub struct S200 {
+  n: S201,
+}
+
+pub struct S201 {
+  n: S202,
+}
+
+pub struct S202 {
+  n: S203,
+}
+
+pub struct S203 {
+  n: S204,
+}
+
+pub struct S204 {
+  n: S205,
+}
+
+pub struct S205 {
+  n: S206,
+}
+
+pub struct S206 {
+  n: S207,
+}
+
+pub struct S207 {
+  n: S208,
+}
+
+pub struct S208 {
+  n: S209,
+}
+
+pub struct S209 {
+  n: S210,
+}
+
+pub struct S210 {
+  n: S211,
+}
+
+pub struct S211 {
+  n: S212,
+}
+
+pub struct S212 {
+  n: S213,
+}
+
+pub struct S213 {
+  n: S214,
+}
+
+pub struct S214 {
+  n: S215,
+}
+
+pub struct S215 {
+  n: S216,
+}
+
+pub struct S216 {
+  n: S217,
+}
+
+pub struct S217 {
+  n: S218,
+}
+
+pub struct S218 {
+  n: S219,
+}
+
+pub struct S219 {
+  n: S220,
+}
+
+pub struct S220 {
+  n: S221,
+}
+
+pub struct S221 {
+  n: S222,
+}
+
+pub struct S222 {
+  n: S223,
+}
+
+pub struct S223 {
+  n: S224,
+}
+
+pub struct S224 {
+  n: S225,
+}
+
+pub struct S225 {
+  n: S226,
+}
+
+pub struct S226 {
+  n: S227,
+}
+
+pub struct S227 {
+  n: S228,
+}
+
+pub struct S228 {
+  n: S229,
+}
+
+pub struct S229 {
+  n: S230,
+}
+
+pub struct S230 {
+  n: S231,
+}
+
+pub struct S231 {
+  n: S232,
+}
+
+pub struct S232 {
+  n: S233,
+}
+
+pub struct S233 {
+  n: S234,
+}
+
+pub struct S234 {
+  n: S235,
+}
+
+pub struct S235 {
+  n: S236,
+}
+
+pub struct S236 {
+  n: S237,
+}
+
+pub struct S237 {
+  n: S238,
+}
+
+pub struct S238 {
+  n: S239,
+}
+
+pub struct S239 {
+  n: S240,
+}
+
+pub struct S240 {
+  n: S241,
+}
+
+pub struct S241 {
+  n: S242,
+}
+
+pub struct S242 {
+  n: S243,
+}
+
+pub struct S243 {
+  n: S244,
+}
+
+pub struct S244 {
+  n: S245,
+}
+
+pub struct S245 {
+  n: S246,
+}
+
+pub struct S246 {
+  n: S247,
+}
+
+pub struct S247 {
+  n: S248,
+}
+
+pub struct S248 {
+  n: S249,
+}
+
+pub struct S249 {
+  n: S250,
+}
+
+pub struct S250 {
+  n: S251,
+}
+
+pub struct S251 {
+  n: S252,
+}
+
+pub struct S252 {
+  n: S253,
+}
+
+pub struct S253 {
+  n: S254,
+}
+
+pub struct S254 {
+  n: S255,
+}
+
+pub struct S255 {
+  n: S256,
+}
+
+pub struct S256 {
+  n: S257,
+}
+
+pub struct S257 {
+  n: S258,
+}
+
+pub struct S258 {
+  n: S259,
+}
+
+pub struct S259 {
+  n: S260,
+}
+
+pub struct S260 {
+  n: S261,
+}
+
+pub struct S261 {
+  n: S262,
+}
+
+pub struct S262 {
+  n: S263,
+}
+
+pub struct S263 {
+  n: S264,
+}
+
+pub struct S264 {
+  n: S265,
+}
+
+pub struct S265 {
+  n: S266,
+}
+
+pub struct S266 {
+  n: S267,
+}
+
+pub struct S267 {
+  n: S268,
+}
+
+pub struct S268 {
+  n: S269,
+}
+
+pub struct S269 {
+  n: S270,
+}
+
+pub struct S270 {
+  n: S271,
+}
+
+pub struct S271 {
+  n: S272,
+}
+
+pub struct S272 {
+  n: S273,
+}
+
+pub struct S273 {
+  n: S274,
+}
+
+pub struct S274 {
+  n: S275,
+}
+
+pub struct S275 {
+  n: S276,
+}
+
+pub struct S276 {
+  n: S277,
+}
+
+pub struct S277 {
+  n: S278,
+}
+
+pub struct S278 {
+  n: S279,
+}
+
+pub struct S279 {
+  n: S280,
+}
+
+pub struct S280 {
+  n: S281,
+}
+
+pub struct S281 {
+  n: S282,
+}
+
+pub struct S282 {
+  n: S283,
+}
+
+pub struct S283 {
+  n: S284,
+}
+
+pub struct S284 {
+  n: S285,
+}
+
+pub struct S285 {
+  n: S286,
+}
+
+pub struct S286 {
+  n: S287,
+}
+
+pub struct S287 {
+  n: S288,
+}
+
+pub struct S288 {
+  n: S289,
+}
+
+pub struct S289 {
+  n: S290,
+}
+
+pub struct S290 {
+  n: S291,
+}
+
+pub struct S291 {
+  n: S292,
+}
+
+pub struct S292 {
+  n: S293,
+}
+
+pub struct S293 {
+  n: S294,
+}
+
+pub struct S294 {
+  n: S295,
+}
+
+pub struct S295 {
+  n: S296,
+}
+
+pub struct S296 {
+  n: S297,
+}
+
+pub struct S297 {
+  n: S298,
+}
+
+pub struct S298 {
+  n: S299,
+}
+
+pub struct S299 {
+  n: S0,
+}
+
+pub struct Top {
+  s: S150,
+}

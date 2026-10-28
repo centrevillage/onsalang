@@ -1,0 +1,1011 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4"]
+
+// R-298, R-303 (W4-05 U2): a chain of 500 aliases that end in a type, no cycle: the check ends in a short
+// time and has no diagnostic (an alias does not add to the depth of a type, spec §4.4: names are not
+// counted). The chain of 20000 aliases (R-298) is a Rust test of the check, not a case.
+
+type D0 = D1
+
+type D1 = D2
+
+type D2 = D3
+
+type D3 = D4
+
+type D4 = D5
+
+type D5 = D6
+
+type D6 = D7
+
+type D7 = D8
+
+type D8 = D9
+
+type D9 = D10
+
+type D10 = D11
+
+type D11 = D12
+
+type D12 = D13
+
+type D13 = D14
+
+type D14 = D15
+
+type D15 = D16
+
+type D16 = D17
+
+type D17 = D18
+
+type D18 = D19
+
+type D19 = D20
+
+type D20 = D21
+
+type D21 = D22
+
+type D22 = D23
+
+type D23 = D24
+
+type D24 = D25
+
+type D25 = D26
+
+type D26 = D27
+
+type D27 = D28
+
+type D28 = D29
+
+type D29 = D30
+
+type D30 = D31
+
+type D31 = D32
+
+type D32 = D33
+
+type D33 = D34
+
+type D34 = D35
+
+type D35 = D36
+
+type D36 = D37
+
+type D37 = D38
+
+type D38 = D39
+
+type D39 = D40
+
+type D40 = D41
+
+type D41 = D42
+
+type D42 = D43
+
+type D43 = D44
+
+type D44 = D45
+
+type D45 = D46
+
+type D46 = D47
+
+type D47 = D48
+
+type D48 = D49
+
+type D49 = D50
+
+type D50 = D51
+
+type D51 = D52
+
+type D52 = D53
+
+type D53 = D54
+
+type D54 = D55
+
+type D55 = D56
+
+type D56 = D57
+
+type D57 = D58
+
+type D58 = D59
+
+type D59 = D60
+
+type D60 = D61
+
+type D61 = D62
+
+type D62 = D63
+
+type D63 = D64
+
+type D64 = D65
+
+type D65 = D66
+
+type D66 = D67
+
+type D67 = D68
+
+type D68 = D69
+
+type D69 = D70
+
+type D70 = D71
+
+type D71 = D72
+
+type D72 = D73
+
+type D73 = D74
+
+type D74 = D75
+
+type D75 = D76
+
+type D76 = D77
+
+type D77 = D78
+
+type D78 = D79
+
+type D79 = D80
+
+type D80 = D81
+
+type D81 = D82
+
+type D82 = D83
+
+type D83 = D84
+
+type D84 = D85
+
+type D85 = D86
+
+type D86 = D87
+
+type D87 = D88
+
+type D88 = D89
+
+type D89 = D90
+
+type D90 = D91
+
+type D91 = D92
+
+type D92 = D93
+
+type D93 = D94
+
+type D94 = D95
+
+type D95 = D96
+
+type D96 = D97
+
+type D97 = D98
+
+type D98 = D99
+
+type D99 = D100
+
+type D100 = D101
+
+type D101 = D102
+
+type D102 = D103
+
+type D103 = D104
+
+type D104 = D105
+
+type D105 = D106
+
+type D106 = D107
+
+type D107 = D108
+
+type D108 = D109
+
+type D109 = D110
+
+type D110 = D111
+
+type D111 = D112
+
+type D112 = D113
+
+type D113 = D114
+
+type D114 = D115
+
+type D115 = D116
+
+type D116 = D117
+
+type D117 = D118
+
+type D118 = D119
+
+type D119 = D120
+
+type D120 = D121
+
+type D121 = D122
+
+type D122 = D123
+
+type D123 = D124
+
+type D124 = D125
+
+type D125 = D126
+
+type D126 = D127
+
+type D127 = D128
+
+type D128 = D129
+
+type D129 = D130
+
+type D130 = D131
+
+type D131 = D132
+
+type D132 = D133
+
+type D133 = D134
+
+type D134 = D135
+
+type D135 = D136
+
+type D136 = D137
+
+type D137 = D138
+
+type D138 = D139
+
+type D139 = D140
+
+type D140 = D141
+
+type D141 = D142
+
+type D142 = D143
+
+type D143 = D144
+
+type D144 = D145
+
+type D145 = D146
+
+type D146 = D147
+
+type D147 = D148
+
+type D148 = D149
+
+type D149 = D150
+
+type D150 = D151
+
+type D151 = D152
+
+type D152 = D153
+
+type D153 = D154
+
+type D154 = D155
+
+type D155 = D156
+
+type D156 = D157
+
+type D157 = D158
+
+type D158 = D159
+
+type D159 = D160
+
+type D160 = D161
+
+type D161 = D162
+
+type D162 = D163
+
+type D163 = D164
+
+type D164 = D165
+
+type D165 = D166
+
+type D166 = D167
+
+type D167 = D168
+
+type D168 = D169
+
+type D169 = D170
+
+type D170 = D171
+
+type D171 = D172
+
+type D172 = D173
+
+type D173 = D174
+
+type D174 = D175
+
+type D175 = D176
+
+type D176 = D177
+
+type D177 = D178
+
+type D178 = D179
+
+type D179 = D180
+
+type D180 = D181
+
+type D181 = D182
+
+type D182 = D183
+
+type D183 = D184
+
+type D184 = D185
+
+type D185 = D186
+
+type D186 = D187
+
+type D187 = D188
+
+type D188 = D189
+
+type D189 = D190
+
+type D190 = D191
+
+type D191 = D192
+
+type D192 = D193
+
+type D193 = D194
+
+type D194 = D195
+
+type D195 = D196
+
+type D196 = D197
+
+type D197 = D198
+
+type D198 = D199
+
+type D199 = D200
+
+type D200 = D201
+
+type D201 = D202
+
+type D202 = D203
+
+type D203 = D204
+
+type D204 = D205
+
+type D205 = D206
+
+type D206 = D207
+
+type D207 = D208
+
+type D208 = D209
+
+type D209 = D210
+
+type D210 = D211
+
+type D211 = D212
+
+type D212 = D213
+
+type D213 = D214
+
+type D214 = D215
+
+type D215 = D216
+
+type D216 = D217
+
+type D217 = D218
+
+type D218 = D219
+
+type D219 = D220
+
+type D220 = D221
+
+type D221 = D222
+
+type D222 = D223
+
+type D223 = D224
+
+type D224 = D225
+
+type D225 = D226
+
+type D226 = D227
+
+type D227 = D228
+
+type D228 = D229
+
+type D229 = D230
+
+type D230 = D231
+
+type D231 = D232
+
+type D232 = D233
+
+type D233 = D234
+
+type D234 = D235
+
+type D235 = D236
+
+type D236 = D237
+
+type D237 = D238
+
+type D238 = D239
+
+type D239 = D240
+
+type D240 = D241
+
+type D241 = D242
+
+type D242 = D243
+
+type D243 = D244
+
+type D244 = D245
+
+type D245 = D246
+
+type D246 = D247
+
+type D247 = D248
+
+type D248 = D249
+
+type D249 = D250
+
+type D250 = D251
+
+type D251 = D252
+
+type D252 = D253
+
+type D253 = D254
+
+type D254 = D255
+
+type D255 = D256
+
+type D256 = D257
+
+type D257 = D258
+
+type D258 = D259
+
+type D259 = D260
+
+type D260 = D261
+
+type D261 = D262
+
+type D262 = D263
+
+type D263 = D264
+
+type D264 = D265
+
+type D265 = D266
+
+type D266 = D267
+
+type D267 = D268
+
+type D268 = D269
+
+type D269 = D270
+
+type D270 = D271
+
+type D271 = D272
+
+type D272 = D273
+
+type D273 = D274
+
+type D274 = D275
+
+type D275 = D276
+
+type D276 = D277
+
+type D277 = D278
+
+type D278 = D279
+
+type D279 = D280
+
+type D280 = D281
+
+type D281 = D282
+
+type D282 = D283
+
+type D283 = D284
+
+type D284 = D285
+
+type D285 = D286
+
+type D286 = D287
+
+type D287 = D288
+
+type D288 = D289
+
+type D289 = D290
+
+type D290 = D291
+
+type D291 = D292
+
+type D292 = D293
+
+type D293 = D294
+
+type D294 = D295
+
+type D295 = D296
+
+type D296 = D297
+
+type D297 = D298
+
+type D298 = D299
+
+type D299 = D300
+
+type D300 = D301
+
+type D301 = D302
+
+type D302 = D303
+
+type D303 = D304
+
+type D304 = D305
+
+type D305 = D306
+
+type D306 = D307
+
+type D307 = D308
+
+type D308 = D309
+
+type D309 = D310
+
+type D310 = D311
+
+type D311 = D312
+
+type D312 = D313
+
+type D313 = D314
+
+type D314 = D315
+
+type D315 = D316
+
+type D316 = D317
+
+type D317 = D318
+
+type D318 = D319
+
+type D319 = D320
+
+type D320 = D321
+
+type D321 = D322
+
+type D322 = D323
+
+type D323 = D324
+
+type D324 = D325
+
+type D325 = D326
+
+type D326 = D327
+
+type D327 = D328
+
+type D328 = D329
+
+type D329 = D330
+
+type D330 = D331
+
+type D331 = D332
+
+type D332 = D333
+
+type D333 = D334
+
+type D334 = D335
+
+type D335 = D336
+
+type D336 = D337
+
+type D337 = D338
+
+type D338 = D339
+
+type D339 = D340
+
+type D340 = D341
+
+type D341 = D342
+
+type D342 = D343
+
+type D343 = D344
+
+type D344 = D345
+
+type D345 = D346
+
+type D346 = D347
+
+type D347 = D348
+
+type D348 = D349
+
+type D349 = D350
+
+type D350 = D351
+
+type D351 = D352
+
+type D352 = D353
+
+type D353 = D354
+
+type D354 = D355
+
+type D355 = D356
+
+type D356 = D357
+
+type D357 = D358
+
+type D358 = D359
+
+type D359 = D360
+
+type D360 = D361
+
+type D361 = D362
+
+type D362 = D363
+
+type D363 = D364
+
+type D364 = D365
+
+type D365 = D366
+
+type D366 = D367
+
+type D367 = D368
+
+type D368 = D369
+
+type D369 = D370
+
+type D370 = D371
+
+type D371 = D372
+
+type D372 = D373
+
+type D373 = D374
+
+type D374 = D375
+
+type D375 = D376
+
+type D376 = D377
+
+type D377 = D378
+
+type D378 = D379
+
+type D379 = D380
+
+type D380 = D381
+
+type D381 = D382
+
+type D382 = D383
+
+type D383 = D384
+
+type D384 = D385
+
+type D385 = D386
+
+type D386 = D387
+
+type D387 = D388
+
+type D388 = D389
+
+type D389 = D390
+
+type D390 = D391
+
+type D391 = D392
+
+type D392 = D393
+
+type D393 = D394
+
+type D394 = D395
+
+type D395 = D396
+
+type D396 = D397
+
+type D397 = D398
+
+type D398 = D399
+
+type D399 = D400
+
+type D400 = D401
+
+type D401 = D402
+
+type D402 = D403
+
+type D403 = D404
+
+type D404 = D405
+
+type D405 = D406
+
+type D406 = D407
+
+type D407 = D408
+
+type D408 = D409
+
+type D409 = D410
+
+type D410 = D411
+
+type D411 = D412
+
+type D412 = D413
+
+type D413 = D414
+
+type D414 = D415
+
+type D415 = D416
+
+type D416 = D417
+
+type D417 = D418
+
+type D418 = D419
+
+type D419 = D420
+
+type D420 = D421
+
+type D421 = D422
+
+type D422 = D423
+
+type D423 = D424
+
+type D424 = D425
+
+type D425 = D426
+
+type D426 = D427
+
+type D427 = D428
+
+type D428 = D429
+
+type D429 = D430
+
+type D430 = D431
+
+type D431 = D432
+
+type D432 = D433
+
+type D433 = D434
+
+type D434 = D435
+
+type D435 = D436
+
+type D436 = D437
+
+type D437 = D438
+
+type D438 = D439
+
+type D439 = D440
+
+type D440 = D441
+
+type D441 = D442
+
+type D442 = D443
+
+type D443 = D444
+
+type D444 = D445
+
+type D445 = D446
+
+type D446 = D447
+
+type D447 = D448
+
+type D448 = D449
+
+type D449 = D450
+
+type D450 = D451
+
+type D451 = D452
+
+type D452 = D453
+
+type D453 = D454
+
+type D454 = D455
+
+type D455 = D456
+
+type D456 = D457
+
+type D457 = D458
+
+type D458 = D459
+
+type D459 = D460
+
+type D460 = D461
+
+type D461 = D462
+
+type D462 = D463
+
+type D463 = D464
+
+type D464 = D465
+
+type D465 = D466
+
+type D466 = D467
+
+type D467 = D468
+
+type D468 = D469
+
+type D469 = D470
+
+type D470 = D471
+
+type D471 = D472
+
+type D472 = D473
+
+type D473 = D474
+
+type D474 = D475
+
+type D475 = D476
+
+type D476 = D477
+
+type D477 = D478
+
+type D478 = D479
+
+type D479 = D480
+
+type D480 = D481
+
+type D481 = D482
+
+type D482 = D483
+
+type D483 = D484
+
+type D484 = D485
+
+type D485 = D486
+
+type D486 = D487
+
+type D487 = D488
+
+type D488 = D489
+
+type D489 = D490
+
+type D490 = D491
+
+type D491 = D492
+
+type D492 = D493
+
+type D493 = D494
+
+type D494 = D495
+
+type D495 = D496
+
+type D496 = D497
+
+type D497 = D498
+
+type D498 = D499
+
+type D499 = (I32, I32)
+
+pub fn takes(a: D0, b: D250) -> I32 {
+  1
+}

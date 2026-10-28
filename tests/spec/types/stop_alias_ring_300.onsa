@@ -1,0 +1,612 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// R-303, S-730 (W4-05 U2): 300 aliases that name the next one round (`type C0 = C1`, ..., `type C299 =
+// C0`) are one cycle: one E0311, at the first declaration C0 (spec §4.4, §18.1), and the check ends in a
+// short time (in 2296e83 the time doubled with each alias and N = 300 did not end, R-303). The
+// signature that writes an alias of the cycle has no diagnostic.
+
+type C0 = C1                                        //~ E0311
+
+type C1 = C2
+
+type C2 = C3
+
+type C3 = C4
+
+type C4 = C5
+
+type C5 = C6
+
+type C6 = C7
+
+type C7 = C8
+
+type C8 = C9
+
+type C9 = C10
+
+type C10 = C11
+
+type C11 = C12
+
+type C12 = C13
+
+type C13 = C14
+
+type C14 = C15
+
+type C15 = C16
+
+type C16 = C17
+
+type C17 = C18
+
+type C18 = C19
+
+type C19 = C20
+
+type C20 = C21
+
+type C21 = C22
+
+type C22 = C23
+
+type C23 = C24
+
+type C24 = C25
+
+type C25 = C26
+
+type C26 = C27
+
+type C27 = C28
+
+type C28 = C29
+
+type C29 = C30
+
+type C30 = C31
+
+type C31 = C32
+
+type C32 = C33
+
+type C33 = C34
+
+type C34 = C35
+
+type C35 = C36
+
+type C36 = C37
+
+type C37 = C38
+
+type C38 = C39
+
+type C39 = C40
+
+type C40 = C41
+
+type C41 = C42
+
+type C42 = C43
+
+type C43 = C44
+
+type C44 = C45
+
+type C45 = C46
+
+type C46 = C47
+
+type C47 = C48
+
+type C48 = C49
+
+type C49 = C50
+
+type C50 = C51
+
+type C51 = C52
+
+type C52 = C53
+
+type C53 = C54
+
+type C54 = C55
+
+type C55 = C56
+
+type C56 = C57
+
+type C57 = C58
+
+type C58 = C59
+
+type C59 = C60
+
+type C60 = C61
+
+type C61 = C62
+
+type C62 = C63
+
+type C63 = C64
+
+type C64 = C65
+
+type C65 = C66
+
+type C66 = C67
+
+type C67 = C68
+
+type C68 = C69
+
+type C69 = C70
+
+type C70 = C71
+
+type C71 = C72
+
+type C72 = C73
+
+type C73 = C74
+
+type C74 = C75
+
+type C75 = C76
+
+type C76 = C77
+
+type C77 = C78
+
+type C78 = C79
+
+type C79 = C80
+
+type C80 = C81
+
+type C81 = C82
+
+type C82 = C83
+
+type C83 = C84
+
+type C84 = C85
+
+type C85 = C86
+
+type C86 = C87
+
+type C87 = C88
+
+type C88 = C89
+
+type C89 = C90
+
+type C90 = C91
+
+type C91 = C92
+
+type C92 = C93
+
+type C93 = C94
+
+type C94 = C95
+
+type C95 = C96
+
+type C96 = C97
+
+type C97 = C98
+
+type C98 = C99
+
+type C99 = C100
+
+type C100 = C101
+
+type C101 = C102
+
+type C102 = C103
+
+type C103 = C104
+
+type C104 = C105
+
+type C105 = C106
+
+type C106 = C107
+
+type C107 = C108
+
+type C108 = C109
+
+type C109 = C110
+
+type C110 = C111
+
+type C111 = C112
+
+type C112 = C113
+
+type C113 = C114
+
+type C114 = C115
+
+type C115 = C116
+
+type C116 = C117
+
+type C117 = C118
+
+type C118 = C119
+
+type C119 = C120
+
+type C120 = C121
+
+type C121 = C122
+
+type C122 = C123
+
+type C123 = C124
+
+type C124 = C125
+
+type C125 = C126
+
+type C126 = C127
+
+type C127 = C128
+
+type C128 = C129
+
+type C129 = C130
+
+type C130 = C131
+
+type C131 = C132
+
+type C132 = C133
+
+type C133 = C134
+
+type C134 = C135
+
+type C135 = C136
+
+type C136 = C137
+
+type C137 = C138
+
+type C138 = C139
+
+type C139 = C140
+
+type C140 = C141
+
+type C141 = C142
+
+type C142 = C143
+
+type C143 = C144
+
+type C144 = C145
+
+type C145 = C146
+
+type C146 = C147
+
+type C147 = C148
+
+type C148 = C149
+
+type C149 = C150
+
+type C150 = C151
+
+type C151 = C152
+
+type C152 = C153
+
+type C153 = C154
+
+type C154 = C155
+
+type C155 = C156
+
+type C156 = C157
+
+type C157 = C158
+
+type C158 = C159
+
+type C159 = C160
+
+type C160 = C161
+
+type C161 = C162
+
+type C162 = C163
+
+type C163 = C164
+
+type C164 = C165
+
+type C165 = C166
+
+type C166 = C167
+
+type C167 = C168
+
+type C168 = C169
+
+type C169 = C170
+
+type C170 = C171
+
+type C171 = C172
+
+type C172 = C173
+
+type C173 = C174
+
+type C174 = C175
+
+type C175 = C176
+
+type C176 = C177
+
+type C177 = C178
+
+type C178 = C179
+
+type C179 = C180
+
+type C180 = C181
+
+type C181 = C182
+
+type C182 = C183
+
+type C183 = C184
+
+type C184 = C185
+
+type C185 = C186
+
+type C186 = C187
+
+type C187 = C188
+
+type C188 = C189
+
+type C189 = C190
+
+type C190 = C191
+
+type C191 = C192
+
+type C192 = C193
+
+type C193 = C194
+
+type C194 = C195
+
+type C195 = C196
+
+type C196 = C197
+
+type C197 = C198
+
+type C198 = C199
+
+type C199 = C200
+
+type C200 = C201
+
+type C201 = C202
+
+type C202 = C203
+
+type C203 = C204
+
+type C204 = C205
+
+type C205 = C206
+
+type C206 = C207
+
+type C207 = C208
+
+type C208 = C209
+
+type C209 = C210
+
+type C210 = C211
+
+type C211 = C212
+
+type C212 = C213
+
+type C213 = C214
+
+type C214 = C215
+
+type C215 = C216
+
+type C216 = C217
+
+type C217 = C218
+
+type C218 = C219
+
+type C219 = C220
+
+type C220 = C221
+
+type C221 = C222
+
+type C222 = C223
+
+type C223 = C224
+
+type C224 = C225
+
+type C225 = C226
+
+type C226 = C227
+
+type C227 = C228
+
+type C228 = C229
+
+type C229 = C230
+
+type C230 = C231
+
+type C231 = C232
+
+type C232 = C233
+
+type C233 = C234
+
+type C234 = C235
+
+type C235 = C236
+
+type C236 = C237
+
+type C237 = C238
+
+type C238 = C239
+
+type C239 = C240
+
+type C240 = C241
+
+type C241 = C242
+
+type C242 = C243
+
+type C243 = C244
+
+type C244 = C245
+
+type C245 = C246
+
+type C246 = C247
+
+type C247 = C248
+
+type C248 = C249
+
+type C249 = C250
+
+type C250 = C251
+
+type C251 = C252
+
+type C252 = C253
+
+type C253 = C254
+
+type C254 = C255
+
+type C255 = C256
+
+type C256 = C257
+
+type C257 = C258
+
+type C258 = C259
+
+type C259 = C260
+
+type C260 = C261
+
+type C261 = C262
+
+type C262 = C263
+
+type C263 = C264
+
+type C264 = C265
+
+type C265 = C266
+
+type C266 = C267
+
+type C267 = C268
+
+type C268 = C269
+
+type C269 = C270
+
+type C270 = C271
+
+type C271 = C272
+
+type C272 = C273
+
+type C273 = C274
+
+type C274 = C275
+
+type C275 = C276
+
+type C276 = C277
+
+type C277 = C278
+
+type C278 = C279
+
+type C279 = C280
+
+type C280 = C281
+
+type C281 = C282
+
+type C282 = C283
+
+type C283 = C284
+
+type C284 = C285
+
+type C285 = C286
+
+type C286 = C287
+
+type C287 = C288
+
+type C288 = C289
+
+type C289 = C290
+
+type C290 = C291
+
+type C291 = C292
+
+type C292 = C293
+
+type C293 = C294
+
+type C294 = C295
+
+type C295 = C296
+
+type C296 = C297
+
+type C297 = C298
+
+type C298 = C299
+
+type C299 = C0
+
+pub fn takes(a: C0, b: C150, c: C299) -> I32 {
+  1
+}

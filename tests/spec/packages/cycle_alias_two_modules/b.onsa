@@ -1,0 +1,3 @@
+use a.{X}
+
+pub type Y = X

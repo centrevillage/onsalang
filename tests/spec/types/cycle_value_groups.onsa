@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// R-02, S-730, S-734 (W4-05 U2): a collection of types that reach each other as values (a struct, an
+// enum, in any mix) is one error, whatever the number of the declarations or of the cycles in it
+// (§18.1: "互いに辿り合う宣言の集まり（自分を指す一つの宣言を含む）ごとに一つ報告する。循環は一か所を
+// 直せば消える一つの誤りだから"). The place is the name of the first declaration of the collection in the
+// source (the order of the diagnostics: the line, then the column). A declaration that only uses the
+// collection (it is not reached from it) is outside and has no diagnostic, even when it is written
+// first.
+
+// A declaration outside, first in the file: it holds `Pa` but `Pa` does not reach it.
+pub struct Before {
+  a: Pa,
+}
+
+// Two structs.
+pub struct Pa {                                     //~ E0311
+  b: Pb,
+}
+
+pub struct Pb {
+  a: Pa,
+}
+
+// A struct and an enum; the enum is first.
+pub enum Ea {                                       //~ E0311
+  Has(Sb),
+  Not,
+}
+
+pub struct Sb {
+  e: Ea,
+}
+
+// Three types; the first in the source is `U3`, the third on the way round.
+pub struct U3 {                                     //~ E0311
+  n: U1,
+}
+
+pub struct U1 {
+  n: U2,
+}
+
+pub struct U2 {
+  n: U3,
+}
+
+// Two cycles that share `Hub`: one collection, one diagnostic.
+pub struct Hub {                                    //~ E0311
+  a: Ra,
+  b: Rb,
+}
+
+pub struct Ra {
+  h: Hub,
+}
+
+pub struct Rb {
+  h: Hub,
+}
+
+// A chain whose middle type points back to the first and also on: one collection.
+pub struct Ch1 {                                    //~ E0311
+  n: Ch2,
+}
+
+pub struct Ch2 {
+  p: Ch1,
+  n: Ch3,
+}
+
+pub struct Ch3 {
+  p: Ch2,
+}
+
+// Two collections, the second reached from the first but not back: two diagnostics, at `X1` and `Y1`.
+pub struct X1 {                                     //~ E0311
+  x2: X2,
+}
+
+pub struct X2 {
+  x1: X1,
+  y1: Y1,
+}
+
+pub struct Y1 {                                     //~ E0311
+  y2: Y2,
+}
+
+pub struct Y2 {
+  y1: Y1,
+}
+
+// Users of the collections, outside: no diagnostic.
+pub struct Users {
+  a: Pa,
+  b: Pb,
+  e: Ea,
+  s: Sb,
+  h: Hub,
+  c: Ch2,
+  x: X2,
+  y: Y2,
+}
+
+pub fn takes(h: Hub, x: X1, y: Y2) -> I32 {
+  1
+}

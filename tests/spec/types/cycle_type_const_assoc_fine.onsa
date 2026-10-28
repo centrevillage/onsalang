@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§15.1"]
+
+// S-744, S-725 (W4-05 U2/t): the contrast of cycle_type_const_assoc.onsa. A struct whose field reads the
+// associated constant of its own `impl` is no cycle when the type of the constant does not reach back
+// (S-725: "自分の型のフィールドが自分の `impl` の関連定数を読む形も、閉路でなければ通る"), and an
+// alias written before the `impl` reads the associated constant of it (S-725 (a): the names in a
+// signature are found whatever the order). No diagnostic. The implementation gave E0302 for these
+// before W4-05 U2 (the signature read the `impl` members only after the `impl`); U2 names the members
+// of every inherent `impl` before the signatures (the first part of S-725).
+
+pub struct S {
+  a: [F32; S.N],
+}
+
+impl S {
+  pub const N: U32 = 3
+}
+
+type A = [F32; P.N]
+
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub const N: U32 = 2
+}
+
+pub fn takes(s: S, a: A) -> I32 {
+  1
+}

@@ -1,0 +1,3 @@
+use a.{A}
+
+pub const K: A = 3

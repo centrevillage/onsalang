@@ -192,6 +192,9 @@ pub struct Analysis {
     /// The names of each body, resolved by the names stage
     /// ([`names::body::walk_bodies`]).
     pub(crate) names: HashMap<DefId, names::body::BodyNames>,
+    /// The order of the declarations of types and their cycles (E0311,
+    /// `sig::decls`).
+    pub(crate) decls: sig::Decls,
     /// Typed bodies of functions, tests and `const` initializers (T2-5).
     pub bodies: HashMap<DefId, BodyInfo>,
     /// Values of `const` items evaluated at check time (T2-11).

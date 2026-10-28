@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.6", "§18.1"]
+
+// S-744, S-734 (W4-05 U2): the length of a fixed-length array and a const argument read a constant, and
+// the type of that constant is followed (spec §4.4: "固定長配列の長さと const 引数が読む定数は、その
+// 定数の宣言の型を辿る（`type A = [F32; K]` と `const K: A = 3`、別名を通さない `const K: [F32; K] = 3`
+// も E0311）"; §4.5, §6.6). A collection that goes through the declared type of a constant is E0311 (not
+// the E0312 of an initializer that reads itself), one per collection, at the name of the first
+// declaration of the collection in the source (§18.1).
+//
+// Here the first declaration of every collection is a constant, so the E0311 is at the name of the
+// constant and the unit of the constant stops at the diagnostic (§18.1), with no check of its
+// initializer. The forms where a type is first and the constant is checked after are in
+// cycle_type_const_later.onsa. The forms inside `impl` are in cycle_type_const_assoc.onsa.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// An alias of an array whose length is the constant, the constant first (S-744: "`K` が先なら `K` の
+// 名前に E0311").
+const K2: A2 = 3                                    //~ E0311
+
+type A2 = [F32; K2]
+
+// Through a chain of aliases.
+const K4: A5 = 3                                    //~ E0311
+
+type A5 = A6
+
+type A6 = [F32; K4]
+
+// Without an alias: the type of the constant is the array whose length is the constant.
+const K5: [F32; K5] = 3                             //~ E0311
+
+// Through a struct.
+const K6: S6 = 3                                    //~ E0311
+
+pub struct S6 {
+  a: [F32; K6],
+}
+
+// Through a const argument, of an alias and of a struct.
+const K7: R7 = 3                                    //~ E0311
+
+type R7 = Ring[F32, K7]
+
+const K8: S8 = 3                                    //~ E0311
+
+pub struct S8 {
+  r: Ring[F32, K8],
+}
+
+// Through a tuple and an `Option` of the array, and an enum.
+const K9: T9 = 3                                    //~ E0311
+
+type T9 = (I32, [F32; K9])
+
+const K10: O10 = 3                                  //~ E0311
+
+type O10 = Option[[F32; K10]]
+
+const K11: S11 = 3                                  //~ E0311
+
+pub enum S11 {
+  Has([F32; K11]),
+  Not,
+}
+
+// Outside the collections: no diagnostic (the type is the error type there).
+pub struct Users {
+  a: A2,
+  b: A5,
+  c: S6,
+  d: R7,
+  e: S8,
+  f: T9,
+}
+
+pub fn takes(a: A2, s: S8, t: S11) -> I32 {
+  1
+}

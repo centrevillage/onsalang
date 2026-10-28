@@ -491,9 +491,10 @@ fn named(p: &Prog, c: &BTreeSet<usize>) -> BTreeSet<String> {
     c.iter().map(|&i| p.tree.dotted(i)).collect()
 }
 
-/// Whether narrowing cuts the component (§15.1, S-683): the E0310 of a component has a note that shows how
-/// to narrow the path (it points at a place) when narrowing every `use` that takes a module with a file to
-/// that module alone cuts the component; otherwise the note is the rule alone. A module with no file has
+/// Whether narrowing cuts the component (§15.1, S-683): the E0310 of a component has notes that show how
+/// to narrow the path (at places) when narrowing every `use` that takes a module with a file to that module
+/// alone cuts the component; otherwise it has the rule (a note with no place), and its notes at the other
+/// `use` of the cycle only say they are in it (§18.1, S-734). A module with no file has
 /// no items, so a `use` of it is not narrowed: it stays the module and every module below it.
 fn narrowing_cuts(p: &Prog, comp: &BTreeSet<usize>) -> bool {
     let t = &p.tree;
@@ -1382,14 +1383,20 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
         if e.notes == 0 {
             problems.push(format!("{what}: an E0310 with no note: {comp:?}"));
         }
+        // The other `use` of the cycle are in notes with places (§18.1, S-734): a cycle has two modules
+        // or more, so a `use` other than the one of the E0310.
+        if e.spanned_notes == 0 {
+            problems.push(format!("{what}: an E0310 with no note at another `use`: {comp:?}"));
+        }
         if let Some(ids) = ex.comps.iter().find(|c| named(&p, c) == comp) {
-            // The note that points at a `use` is there when narrowing cuts the cycle (S-683).
+            // The rule, the note with no place, is there when narrowing does not cut the cycle (S-683);
+            // when it cuts, the notes at the `use` show how.
             st.notes_checked += 1;
-            st.notes_narrow += (e.spanned_notes > 0) as usize;
-            if (e.spanned_notes > 0) != narrowing_cuts(&p, ids) {
+            let rule = e.notes > e.spanned_notes;
+            st.notes_narrow += !rule as usize;
+            if rule == narrowing_cuts(&p, ids) {
                 problems.push(format!(
-                    "{what}: the note of the E0310 {comp:?} has {} places, the cycle is cut by narrowing: {}",
-                    e.spanned_notes,
+                    "{what}: the E0310 {comp:?} has the rule: {rule}, the cycle is cut by narrowing: {}",
                     narrowing_cuts(&p, ids)
                 ));
             }

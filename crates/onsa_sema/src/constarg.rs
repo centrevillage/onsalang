@@ -196,7 +196,7 @@ pub(crate) fn generic(a: &Analysis, generics: &[GenericDef], path: &Path) -> Opt
 
 /// The operands of the arithmetic of `e`, under parentheses, prefix `-` and
 /// binary operators; `e` itself when it is none of them.
-fn operands(ast: &Ast, e: ExprId, out: &mut Vec<ExprId>) {
+pub(crate) fn operands(ast: &Ast, e: ExprId, out: &mut Vec<ExprId>) {
     match &ast.expr(e).kind {
         ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => operands(ast, *x, out),
         ExprKind::Binary { lhs, rhs, .. } => {
@@ -348,7 +348,8 @@ pub(crate) fn of_entity(
     let u32_ = a.types.int(IntKind::U32);
     let def = a.def(d).clone();
     let DefKind::Const(c) = &def.kind else { return Ok(None) };
-    if c.int_value.is_none() && a.partly_read(d) {
+    // A constant of a cycle (E0311, §18.1, S-734).
+    if c.int_value.is_none() && a.partly_read(d) || a.decls.cyclic.contains(&d) {
         return Err(ConstErr::Unknown);
     }
     if c.ty != u32_ && !matches!(a.types.get(c.ty), Ty::Error) {

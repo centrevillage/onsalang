@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// R-182, R-303, S-730, S-734 (W4-05 U2): a type alias that reaches itself is E0311 (spec §4.4:
+// "型別名の循環 `type A = B`、`type B = A` も同じ"; the code is E0311, not the E0310 of the modules,
+// R-182). One per collection of types that reach each other, at the name of the first declaration of
+// the collection (§18.1), however many aliases and structs are in it. A declaration outside that uses
+// an alias of the collection has no diagnostic (the alias is the error type there). The cycle of the
+// alias alone `type Lp = Lp` is in module/kind_alias_cycle.onsa.
+
+type Aa = Option[Aa]                                //~ E0311
+
+type Ab = (I32, Ab)                                 //~ E0311
+
+// Two aliases: one diagnostic, at the first.
+type Ac = Ad                                        //~ E0311
+
+type Ad = Ac
+
+// Three aliases, the first in the source starts the cycle.
+type Ae = Af                                        //~ E0311
+
+type Af = Ag
+
+type Ag = Ae
+
+// An alias and a struct that reach each other: the alias is first, then the struct is.
+type Ak = Sa                                        //~ E0311
+
+pub struct Sa {
+  a: Ak,
+}
+
+pub struct Sb {                                     //~ E0311
+  a: Al,
+}
+
+type Al = Sb
+
+// An alias of an `Option` of a struct that holds the alias.
+type Am = Option[Sc]                                //~ E0311
+
+pub enum Sc {
+  Has(Am),
+  Not,
+}
+
+// An alias that is no part of the cycle but uses an alias of it: no diagnostic. The same for a struct,
+// a parameter and a result that use them.
+type An = (Aa, I32)
+
+type Ao = Option[Ab]
+
+type Ap = Ac
+
+pub struct User {
+  a: An,
+  b: Ao,
+  c: Ap,
+  d: Ak,
+}
+
+pub fn takes(a: An, b: Ao, c: Ap, d: Ae) -> I32 {
+  1
+}

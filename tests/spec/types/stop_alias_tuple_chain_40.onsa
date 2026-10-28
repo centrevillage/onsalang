@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// S-264, R-303, F3 of W4-05 U1/b (W4-05 U2): a chain of 40 aliases `type Ak = (A(k-1), A(k-1))` is
+// finished by the check in a short time. The size of Ak is 2^(k+1) - 1 (spec §4.4), so A12 is the
+// first to pass 4096 and is the one E0422, at its declaration; the aliases after it use an alias
+// that is the error type, so they have no diagnostic, and the signature that writes A12 or the last
+// alias has none either (§4.4, §18.1). The error type of an alias is lowered once: the time does
+// not double with each alias (it did in 2296e83: 40 aliases took longer than 20 seconds, F3 of
+// W4-05 U1/b, and the chain of 1000 did not end).
+
+type A0 = I32
+
+type A1 = (A0, A0)
+
+type A2 = (A1, A1)
+
+type A3 = (A2, A2)
+
+type A4 = (A3, A3)
+
+type A5 = (A4, A4)
+
+type A6 = (A5, A5)
+
+type A7 = (A6, A6)
+
+type A8 = (A7, A7)
+
+type A9 = (A8, A8)
+
+type A10 = (A9, A9)
+
+type A11 = (A10, A10)
+
+type A12 = (A11, A11)                               //~ E0422
+
+type A13 = (A12, A12)
+
+type A14 = (A13, A13)
+
+type A15 = (A14, A14)
+
+type A16 = (A15, A15)
+
+type A17 = (A16, A16)
+
+type A18 = (A17, A17)
+
+type A19 = (A18, A18)
+
+type A20 = (A19, A19)
+
+type A21 = (A20, A20)
+
+type A22 = (A21, A21)
+
+type A23 = (A22, A22)
+
+type A24 = (A23, A23)
+
+type A25 = (A24, A24)
+
+type A26 = (A25, A25)
+
+type A27 = (A26, A26)
+
+type A28 = (A27, A27)
+
+type A29 = (A28, A28)
+
+type A30 = (A29, A29)
+
+type A31 = (A30, A30)
+
+type A32 = (A31, A31)
+
+type A33 = (A32, A32)
+
+type A34 = (A33, A33)
+
+type A35 = (A34, A34)
+
+type A36 = (A35, A35)
+
+type A37 = (A36, A36)
+
+type A38 = (A37, A37)
+
+type A39 = (A38, A38)
+
+type A40 = (A39, A39)
+
+pub fn takes(a: A12, b: A40) -> I32 {
+  1
+}

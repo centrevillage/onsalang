@@ -170,13 +170,6 @@ note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 �
 
 [[pending]]
 kind = "diag-code"
-target = "E0311"
-reasons = ["R-02", "S-91"]
-until = "W4-05"
-note = "型定義の閉路と型別名の循環"
-
-[[pending]]
-kind = "diag-code"
 target = "E0312"
 reasons = ["R-02"]
 until = "W4-05"
@@ -1782,13 +1775,6 @@ target = "tests/spec/module/kind_constant_called_type_param.onsa"
 reasons = ["R-56"]
 until = "W5-05"
 note = "型パラメータの関連定数 `T.ZERO` が E0302（R-56）。呼ぶ形の E0020 は W4-04 U8a で入った（`kind_constant_called.onsa` から分けた）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/module/kind_alias_cycle.onsa"
-reasons = ["R-182"]
-until = "W4-05"
-note = "自分を指す別名 `type Lp = Lp` が今 E0310（§4.4 は E0311、W4-05 の R-182）。値の位置で単位を止めるのは W4-04 U8a"
 
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
 [[pending]]

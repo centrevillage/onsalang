@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+
+// S-744, S-734 (W4-05 U2): the cycle of a type and a constant (`type A = [F32; K]` and `const K: A`,
+// S-744) with the alias in one module and the constant in another. The cycle of the declarations goes
+// through the modules, so the report is the E0310 only and there is no E0311 (S-744: "モジュールを
+// またぐ宣言の循環（型と定数）は E0310 だけ"; §18.1). The E0310 is at the first `use` of the cycle.
+// (The constant `K` of `b` is the error value, and its initializer `3` has no diagnostic of its own,
+// as in types/cycle_type_const_later.onsa.)
+use b.{K}                        //~ E0310
+
+pub type A = [F32; K]

@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+
+// S-734, S-730 (W4-05 U2): two type aliases in two modules that name each other. The cycle of the
+// aliases goes through the modules, so it lies in a cycle of `use` and the report is the E0310 only,
+// with no E0311 (§18.1). The E0310 is at the first `use` of the cycle.
+use b.{Y}                        //~ E0310
+
+pub type X = Y

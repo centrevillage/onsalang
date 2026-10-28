@@ -1,0 +1,9 @@
+use c.{C}
+
+pub const LEN: U32 = 4
+
+pub type Frame = [F32; LEN]
+
+pub struct B {
+  c: C,
+}

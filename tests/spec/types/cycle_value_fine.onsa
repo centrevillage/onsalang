@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4"]
+
+// R-02, S-730 (W4-05 U2): types that reach themselves only through a place that does not hold the
+// value are no cycle (spec §4.4: `Array[Node]` does not hold `Node`), and types that nest each other
+// in one direction, or reach the same type by two ways, are no cycle. No diagnostic. (Today the check
+// passes them; this file keeps the cycle check from taking them in.)
+
+pub struct Tree {
+  kids: Array[Tree],
+}
+
+pub enum Json {
+  Num(F32),
+  List(Array[Json]),
+  Nil,
+}
+
+pub struct Rose[T] {
+  v: T,
+  kids: Array[Rose[T]],
+}
+
+pub struct MaybeKids {
+  kids: Option[Array[MaybeKids]],
+}
+
+pub struct Inner {
+  x: I32,
+}
+
+pub struct Outer {
+  i: Inner,
+  j: [Inner; 2],
+  t: (Inner, I32),
+  o: Option[Inner],
+}
+
+pub struct Top {
+  o: Outer,
+  r: Result[Outer, Inner],
+}
+
+// A type used by two others, and by the one that uses both (a diamond): no cycle.
+pub struct Left {
+  i: Inner,
+}
+
+pub struct Right {
+  i: Inner,
+}
+
+pub struct Both {
+  l: Left,
+  r: Right,
+  i: Inner,
+}
+
+pub fn takes(t: Tree, j: Json, b: Both, o: Top) -> I32 {
+  1
+}

@@ -119,6 +119,11 @@ pub enum BuiltinTy {
 }
 
 impl BuiltinTy {
+    /// Whether its arguments are held as values, as of an enum (§4.4).
+    pub fn holds_values(self) -> bool {
+        matches!(self, BuiltinTy::Option | BuiltinTy::Result)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             BuiltinTy::Str => "Str",

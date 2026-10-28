@@ -368,10 +368,10 @@ impl<'p> Sema<'p> {
             inputs.iter().filter(|i| i.rate == rate).map(|i| s.generated_field(flow, &i.name, i.ty)).collect()
         };
         self.fill_struct(flow, FlowTy::State, Vec::new());
-        let config_fields = fields(self, Rate::Init);
-        self.fill_struct(flow, FlowTy::Config, config_fields);
-        let params_fields = fields(self, Rate::Ctl);
-        self.fill_struct(flow, FlowTy::Params, params_fields);
+        for t in [FlowTy::Config, FlowTy::Params] {
+            let fs = t.input_rate().map(|r| fields(self, r)).unwrap_or_default();
+            self.fill_struct(flow, t, fs);
+        }
         let u32 = self.a.types.int(IntKind::U32);
         for g in [Generated::Size, Generated::BulkSize] {
             self.fill_generated(flow, g, DefKind::Const(ConstDef { ty: u32, value: None, int_value: None }));

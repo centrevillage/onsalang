@@ -310,7 +310,8 @@ fn a_child_and_its_parent_are_a_cycle_when_each_takes_the_other() {
 
 /// §15.1: the note shows how to narrow the `use` of a module only when narrowing every such `use` of the
 /// cycle to items cuts it. When the cycle stays (`main` takes `main.inner`, which takes an item of `main`;
-/// `dsp.x` and `dsp.y` take each other), the rule says that no path narrows to cut it, at no `use`. The
+/// `dsp.x` and `dsp.y` take each other), the rule says that no path narrows to cut it, and no note at a
+/// `use` narrows; the notes at the other `use` of the cycle only say they are in it (§18.1, S-734). The
 /// control: narrowing `use b` cuts the cycle through `b.inner`, and the note is at the `use`.
 #[test]
 fn the_note_narrows_only_a_cycle_that_narrowing_cuts() {
@@ -331,8 +332,10 @@ fn the_note_narrows_only_a_cycle_that_narrowing_cuts() {
     for (d, what) in [(&child, "main and main.inner"), (&pair, "dsp.x and dsp.y")] {
         let doc = assert_cycle(d, what);
         for e in of_code(&doc, "E0310") {
-            assert!(!notes_of(e).is_empty(), "{what}: the rule: {e}");
-            assert!(notes_of(e).iter().all(|n| n.get("span").is_none()), "{what}: no `use` to narrow: {e}");
+            assert!(has_rule_note(e), "{what}: the rule: {e}");
+            assert!(!has_narrowing_note(e), "{what}: no `use` to narrow: {e}");
+            // The other `use` of the cycle are in notes with positions (§18.1, S-734).
+            assert!(notes_of(e).iter().any(|n| n.get("span").is_some()), "{what}: the other `use`: {e}");
         }
     }
     let below = pkg(
@@ -345,7 +348,7 @@ fn the_note_narrows_only_a_cycle_that_narrowing_cuts() {
     );
     let doc = assert_cycle(&below, "use b");
     for e in of_code(&doc, "E0310") {
-        assert!(notes_of(e).iter().any(|n| n.get("span").is_some()), "the note at `use b`: {e}");
+        assert!(has_narrowing_note(e) && !has_rule_note(e), "the note at `use b`: {e}");
     }
 }
 
@@ -997,27 +1000,33 @@ fn a_body_candidate_left_out_for_a_cycle_has_a_note_with_the_form() {
 
 // ---- the note that narrows a `use` (S-683) ------------------------------------------------------------
 
-/// Whether the package is a cycle (E0310 alone, exit 1) whose every diagnostic has notes and none of
-/// them has a position (the rule note: narrowing does not cut), or, with `positioned`, whose every
-/// diagnostic has a note with a position (the note at the `use` to narrow). `None` when it is so, the
-/// reason when it is not.
+/// Whether the package is a cycle (E0310 alone, exit 1) whose every diagnostic has the rule note (no
+/// position: narrowing does not cut) and no note that narrows, or, with `positioned`, no rule note and a
+/// note that narrows at the `use` to narrow. Either way the other `use` of the cycle are in notes with
+/// positions (§18.1, S-734). `None` when it is so, the reason when it is not.
 fn narrowing_problem(d: &Dir, positioned: bool) -> Option<String> {
     let (out, doc) = check_json(d.root(), &["."]);
     if out.code != 1 || codes(&doc) != set(&["E0310"]) {
         return Some(format!("want the cycle alone: {doc}"));
     }
     for e in of_code(&doc, "E0310") {
-        let notes = notes_of(e);
-        let ok = if positioned {
-            notes.iter().any(|n| n.get("span").is_some())
-        } else {
-            !notes.is_empty() && notes.iter().all(|n| n.get("span").is_none())
-        };
+        let ok = has_rule_note(e) != positioned && has_narrowing_note(e) == positioned;
         if !ok {
-            return Some(format!("want {} note: {e}", if positioned { "a positioned" } else { "only the rule" }));
+            return Some(format!("want {} note: {e}", if positioned { "a narrowing" } else { "only the rule" }));
         }
     }
     None
+}
+
+/// Whether the E0310 `e` has the rule note, the one with no position (narrowing does not cut).
+fn has_rule_note(e: &Value) -> bool {
+    notes_of(e).iter().any(|n| n.get("span").is_none())
+}
+
+/// Whether the E0310 `e` has a note at a `use` that shows how to narrow it (S-683); the other notes with
+/// a position are the other `use` of the cycle (S-734).
+fn has_narrowing_note(e: &Value) -> bool {
+    notes_of(e).iter().any(|n| n.get("span").is_some() && n["message"].as_str().is_some_and(|m| m.contains("narrow")))
 }
 
 /// §15.1 (S-683): the note that narrows a `use` is given only when the `use` can be written narrower and

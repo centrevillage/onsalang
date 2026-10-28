@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// R-182, S-730 (W4-05 U2): an alias that reaches itself through an `Array` or a fixed-length array is
+// a cycle of aliases, E0311 (spec §4.4: "型別名の循環 `type A = B`、`type B = A` も同じ"). The alias
+// is replaced by its right side wherever it is written (spec §4.4: "新しい型を作らない"), so the right
+// side that names the alias again never ends, whatever holds it; the `Array` that breaks the hold of
+// a struct (cycle_value_fine.onsa) is no exit for an alias. This file is apart from cycle_alias.onsa
+// because the spec does not write the case apart: if the alias through `Array` were allowed, only this
+// file would change. One diagnostic per collection, at the first declaration (§18.1).
+
+type Ar1 = Array[Ar2]                               //~ E0311
+
+type Ar2 = Ar1
+
+type Ar3 = Array[Ar3]                               //~ E0311
+
+type Ar4 = [Ar4; 2]                                 //~ E0311
+
+type Ar5 = Array[Ar6]                               //~ E0311
+
+type Ar6 = Array[Ar5]
+
+// An alias that uses an alias of the cycle: no diagnostic.
+type Ar7 = Option[Ar3]
+
+pub fn takes(a: Ar7, b: Ar2, c: Ar4) -> I32 {
+  1
+}

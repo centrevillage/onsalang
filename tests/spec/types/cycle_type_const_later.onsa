@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.6", "§18.1"]
+
+// S-744, S-734 (W4-05 U2): the forms of cycle_type_const.onsa where a type is written first and the
+// constant after it. The E0311 is at the name of the first declaration of the collection, the type
+// (§18.1; S-744: "宣言の順を逆にした形は §18.1 の位置の規則のまま"). The constant is also in the
+// collection and has its own unit with an initializer (`3`): the type of the cycle is the error type
+// (§18.1: a part that is not read is the error type, and its users get no diagnostic), so the `3` has
+// no E0401 against the array, and the use of the constant as a length has none for not being a `U32`.
+// The other errors of such a unit, not made by the cycle, are reported as in any unit.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// S-744's first example: the alias first.
+type A1 = [F32; K1]                                 //~ E0311
+
+const K1: A1 = 3
+
+// Through a chain of aliases.
+type A3 = A4                                        //~ E0311
+
+type A4 = [F32; K3]
+
+const K3: A3 = 3
+
+// Through a struct and a const argument.
+pub struct S7 {                                     //~ E0311
+  a: [F32; K12],
+}
+
+const K12: S7 = 3
+
+type R13 = Ring[F32, K13]                           //~ E0311
+
+const K13: R13 = 3
+
+// Two constants whose types read each other: the first constant is the place.
+const K14: [F32; K15] = 3                           //~ E0311
+
+const K15: [F32; K14] = 3
+
+// A struct that reads the constant of its own `impl`, whose type is the struct (S-725 (c) with the
+// type of the constant being the struct).
+pub struct S16 {                                    //~ E0311
+  a: [F32; S16.N],
+}
+
+impl S16 {
+  pub const N: S16 = 3
+}
+
+// Associated constants whose types read each other.
+pub struct S17 {
+  x: F32,
+}
+
+impl S17 {
+  pub const A: [F32; Self.B] = 3                    //~ E0311
+  pub const B: [F32; Self.A] = 3
+}

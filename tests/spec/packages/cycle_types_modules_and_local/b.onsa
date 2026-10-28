@@ -1,0 +1,9 @@
+use a.{A}
+
+pub struct B {
+  a: A,
+}
+
+pub struct Local {                                  //~ E0311
+  next: Option[Local],
+}

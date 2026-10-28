@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5"]
+
+// R-02, S-730 (W4-05 U2): the argument of a generic type that the definition does not hold as a value
+// is no cycle (spec §4.4: "総称の型の引数は、その定義で値として含む位置に現れるときに辿る"). `Array`
+// breaks the hold (`Array[Node]` does not hold `Node`), a parameter that the definition does not use
+// holds nothing, and a hold through `Array` in the middle stops the walk. No diagnostic. (Today the
+// check passes them; this file keeps the cycle check from taking them in.)
+
+pub struct H[T] {
+  a: Array[T],
+}
+
+pub struct G[T] {
+  x: T,
+}
+
+pub struct W[T] {
+  g: G[Array[T]],
+}
+
+pub struct Ph[T] {
+  n: I32,
+}
+
+pub struct Q[T] {
+  a: Array[T],
+}
+
+pub struct R[T] {
+  q: Q[T],
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+// `S1`: through `Array` inside the generic type.
+pub struct S1 {
+  h: H[S1],
+}
+
+// `S2`: `W[T]` holds `G[Array[T]]`, and the array does not hold.
+pub struct S2 {
+  w: W[S2],
+}
+
+// `S3`: a parameter that nothing in the definition holds.
+pub struct S3 {
+  p: Ph[S3],
+}
+
+// `S4`, `S5`: the argument is an array, or an option of an array.
+pub struct S4 {
+  g: G[Array[S4]],
+}
+
+pub struct S5 {
+  o: Option[Array[S5]],
+}
+
+// `S6`: two levels, the second does not hold.
+pub struct S6 {
+  r: R[S6],
+}
+
+// `S7`: the parameter that holds the type is the one that gets `I32`.
+pub struct S7 {
+  p: Pair[I32, Array[S7]],
+}
+
+pub fn takes(a: H[S1], b: W[S2], c: R[S6]) -> I32 {
+  1
+}

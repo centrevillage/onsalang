@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+
+// S-734 (W4-05 U2): a cycle of types through three modules (`A` holds `B`, `B` holds `C`, `C` holds
+// `A`): the E0310 of the modules only, one for the cycle, at the first `use` of it, and no E0311 (§18.1).
+use b.{B}                        //~ E0310
+
+pub struct A {
+  b: B,
+}

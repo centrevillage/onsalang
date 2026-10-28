@@ -45,14 +45,15 @@ fn walk(w: &Walk, ty: TyId, env: Option<&Env>, depth: u32) -> Option<Kind> {
         Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit | Ty::Fn(_) | Ty::ConstVal(_) => Some(Kind::Copy),
         Ty::Array(t, _) => walk(w, *t, env, depth),
         Ty::Tuple(ts) => all(w, ts, env, depth),
-        Ty::Builtin(b, args) => match b {
+        // Of the arguments it holds as values, as of an enum (§4.4).
+        Ty::Builtin(b, args) if b.holds_values() => all(w, args, env, depth),
+        Ty::Builtin(b, _) => match b {
             BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set => {
                 Some(Kind::Shared)
             }
             BuiltinTy::Buf => Some(Kind::Affine),
             BuiltinTy::Ptr => Some(Kind::Copy),
-            BuiltinTy::Span => None,
-            BuiltinTy::Option | BuiltinTy::Result => all(w, args, env, depth),
+            BuiltinTy::Span | BuiltinTy::Option | BuiltinTy::Result => None,
         },
         Ty::Named(d, args) => named(w, *d, args, env, depth),
         Ty::Param(_) | Ty::Var(_) | Ty::Error => None,

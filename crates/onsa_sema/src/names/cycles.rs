@@ -126,6 +126,13 @@ impl Modules {
         (0..n).filter(|&m| comp[m] == comp[at]).map(|m| ModId(m as u32)).collect()
     }
 
+    /// Whether the modules `mods` are all in one cycle of the imports, which
+    /// its E0310 reports (§18.1, S-734).
+    pub(crate) fn one_cycle(&self, mods: &[ModId]) -> bool {
+        let comp = &self.import_graph().comp;
+        mods.iter().all(|m| comp[m.0 as usize] == comp[mods[0].0 as usize])
+    }
+
     fn import_graph(&self) -> &ImportGraph {
         match &self.graph {
             Some(graph) => graph,
@@ -155,10 +162,10 @@ impl Modules {
 impl<'p> Sema<'p> {
     /// Makes the graph once every `use` is resolved, and reports one E0310
     /// per cycle, on the first `use` in the order of the diagnostics that
-    /// has a dependency in it (the spec fixes neither the number nor the
-    /// place). When narrowing every `use` of a module with a file to items
-    /// (`At`, S-683) cuts the cycle, those `use` are the notes; when not, the
-    /// rule says so. Whether it cuts reads the graph with those dependencies
+    /// has a dependency in it, the others in notes (§18.1, S-734). When
+    /// narrowing every `use` of a module with a file to items (`At`, S-683)
+    /// cuts the cycle, the notes of those `use` say how; when not, the rule
+    /// says so. Whether it cuts reads the graph with those dependencies
     /// narrowed, once: a cycle is cut when no two of its modules are then in
     /// one component (a component of it is inside one of the graph).
     pub(crate) fn check_cycles(&mut self) {
@@ -199,24 +206,26 @@ impl<'p> Sema<'p> {
         let msg = format!("the modules {} import each other (cyclic module import, §15.1)", names.join(", "));
         let mut d = Diagnostic::new(Stage::Names, Code::E0310, at.span, msg);
         if !cut {
-            return d.with_rule(
+            d = d.with_rule(
                 "the cycle stays after each `use` of it that takes a module is narrowed to items of it: \
                  its modules take items of each other",
             );
         }
+        // The other `use` of the cycle in notes (§18.1, S-734), with how to
+        // narrow those that cut it.
         for &(m, dep) in deps {
-            if let DepTarget::Below(t) = dep.target
-                && narrows(&self.a.modules, dep.target)
-            {
-                let path = self.a.modules.abs_path(m, t).join(".");
-                d = d.with_note(
-                    dep.name,
+            let note = match dep.target {
+                DepTarget::Below(t) if cut && narrows(&self.a.modules, dep.target) => {
+                    let path = self.a.modules.abs_path(m, t).join(".");
                     format!(
-                        "this takes `{path}` and every module below it; narrow it to what is used \
-                         (`use {path}.{{…}}`)"
-                    ),
-                );
-            }
+                        "this takes `{path}` and every module below it; narrow it to what is used (`use {path}.{{…}}`)"
+                    )
+                }
+                // Of the `use` the E0310 is on, none (R-315).
+                _ if dep.span == at.span => continue,
+                _ => "this `use` is in the cycle too".to_string(),
+            };
+            d = d.with_note(dep.name, note);
         }
         d
     }
@@ -231,8 +240,9 @@ impl<'p> Sema<'p> {
     }
 }
 
-/// The strongly connected component of each point (Tarjan, iterative).
-fn components(edges: &[Vec<usize>]) -> Vec<usize> {
+/// The strongly connected component of each point (Tarjan, iterative),
+/// numbered sinks first.
+pub(crate) fn components(edges: &[Vec<usize>]) -> Vec<usize> {
     const NONE: usize = usize::MAX;
     let n = edges.len();
     let (mut index, mut low, mut comp) = (vec![NONE; n], vec![0; n], vec![NONE; n]);

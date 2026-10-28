@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// R-02, S-730, S-734 (W4-05 U2): a type does not hold itself as a value (spec §4.4: "値として含む位置
+// （フィールド、列挙子の中身、タプル、固定長配列）を辿って同じ型に戻る定義は E0311"; the prelude
+// `Option[T]` and `Result[T, E]` are enums that hold `T` and `E` as the payload of a variant). Each
+// type below holds itself in one of these places, so each is a collection of one declaration and the
+// E0311 is at the name of that declaration (§18.1: one per collection of declarations that reach each
+// other, at the first declaration's name). The declarations outside the collection that use these types
+// (a field, a parameter, an alias, a variant) have no diagnostic: they are not in the cycle and the
+// type they use is the error type (§18.1).
+
+pub struct Node {                                   //~ E0311
+  v: I32,
+  next: Node,
+}
+
+pub enum List {                                     //~ E0311
+  Cons(I32, List),
+  Nil,
+}
+
+pub struct InTuple {                                //~ E0311
+  t: (I32, InTuple),
+}
+
+pub struct InArray {                                //~ E0311
+  a: [InArray; 2],
+}
+
+pub struct InOption {                               //~ E0311
+  o: Option[InOption],
+}
+
+pub struct InResultOk {                             //~ E0311
+  r: Result[InResultOk, I32],
+}
+
+pub struct InResultErr {                            //~ E0311
+  r: Result[I32, InResultErr],
+}
+
+pub enum InPayloadTuple {                           //~ E0311
+  A((I32, InPayloadTuple)),
+  B,
+}
+
+pub enum InPayloadArray {                           //~ E0311
+  A([InPayloadArray; 3]),
+  B,
+}
+
+// Outside the collections: no diagnostic.
+pub struct Holder {
+  n: Node,
+  l: List,
+  o: InOption,
+}
+
+pub enum Wrapper {
+  Of(Node),
+  Empty,
+}
+
+pub type Alias = Node
+
+pub fn takes(n: Node, l: List) -> I32 {
+  1
+}
+
+pub fn returns(w: Wrapper, h: Holder, a: Alias) -> I32 {
+  2
+}

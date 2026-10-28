@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1"]
+
+// S-734, S-744 (W4-05 U2): types, aliases and constants that depend on each other across modules in
+// one direction, and a type used by two modules, are no cycle. No diagnostic. (Today the check passes
+// this; the file keeps the cycle check across modules from taking in a use that is no cycle.)
+use b.{B, LEN, Frame}
+use c.{C}
+
+pub struct A {
+  b: B,
+  c: C,
+  f: Frame,
+  g: [F32; LEN],
+}

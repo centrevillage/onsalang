@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§15.1"]
+
+// S-744, S-725 (W4-05 U2): the contrast of cycle_type_const.onsa. The length reads a constant whose
+// declared type does not reach back (`U32`, an alias of `U32` written after the use, a constant of
+// another type), in any order of the declarations (S-725: the names in a signature are found whatever
+// the order). No diagnostic. (Today the check passes them; this file keeps the cycle check from
+// taking them in. The associated constant of S-725 is in cycle_type_const_assoc_fine.onsa.)
+
+// S-744's contrast: the constant has the type `Len`, written after.
+type A = [F32; K]
+
+const K: Len = 3
+
+type Len = U32
+
+// The constant first, the alias after.
+const K2: U32 = 4
+
+type A2 = [F32; K2]
+
+// A constant of another type that the array reads in a struct, one way.
+const K3: U32 = 2
+
+pub struct Holder {
+  a: [F32; K3],
+}
+
+// A const argument that reads a constant of a struct type that does not read back.
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const K5: U32 = 2
+
+type R = Ring[F32, K5]
+
+pub fn takes(a: A, b: A2, c: R, d: [F32; 2]) -> I32 {
+  1
+}

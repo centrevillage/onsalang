@@ -188,6 +188,17 @@ pub enum FlowTy {
     Out,
 }
 
+impl FlowTy {
+    /// The rate of the inputs whose fields it holds (§11.6).
+    pub fn input_rate(self) -> Option<Rate> {
+        match self {
+            FlowTy::Config => Some(Rate::Init),
+            FlowTy::Params => Some(Rate::Ctl),
+            FlowTy::State | FlowTy::Out => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct VariantDef {
     pub name: String,

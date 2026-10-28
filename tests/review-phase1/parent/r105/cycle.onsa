@@ -1,4 +1,4 @@
-// R-105（S-91）: 別名の循環は E0311（型定義の閉路、R-02）。
-// 今: cycle.onsa:3:6 と 4:6: error[E0310]: type alias refers to itself（モジュールの循環 import のコードを流用）。
+// R-105（S-91）: 別名の循環は E0311（型定義の閉路、R-02）。集まりごとに一つで、最初の宣言の名前に付け、他は note（§18.1、S-730・S-734）。
+// 今（W4-05 U2、R-182）: cycle.onsa:3:6: error[E0311]: `A`, `B` refer to each other（4:6 の `B` は note）。
 type A = B
 type B = A

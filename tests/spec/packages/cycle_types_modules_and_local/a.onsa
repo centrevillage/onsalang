@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+
+// S-734, S-730 (W4-05 U2): a cycle of types through two modules is the E0310 of the modules only (the
+// `use` here, §18.1), and a type in `b` that holds itself inside the one module is a cycle of its own,
+// not across modules, so it is the E0311 as in a single file (the mark in `b.onsa`).
+use b.{B}                        //~ E0310
+
+pub struct A {
+  b: B,
+}

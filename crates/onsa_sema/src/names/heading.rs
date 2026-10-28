@@ -9,6 +9,7 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{GenericParam, Ident};
 
 use super::clash::hides;
+use crate::Analysis;
 use crate::def::{DefId, GenericDef, ModId};
 use crate::sig::Sema;
 
@@ -19,6 +20,16 @@ pub(crate) fn param_name(g: &GenericParam) -> &Ident {
     }
 }
 
+/// The E0304 of the parameters `list` ([`Sema::heading_clashes`]).
+pub(crate) fn param_clashes(a: &Analysis, m: ModId, list: &[GenericParam], outer: &[GenericDef]) -> Vec<Diagnostic> {
+    let names: Vec<&Ident> = list.iter().map(param_name).collect();
+    let visible = |k: usize, name: &Ident| {
+        let before = names[..k].iter().find(|n| n.name == name.name).map(|n| n.span);
+        before.or_else(|| outer.iter().find(|g| g.name == name.name).map(|g| g.span))
+    };
+    names.iter().enumerate().filter_map(|(k, name)| hides(a, m, name, visible(k, name), false)).collect()
+}
+
 impl Sema<'_> {
     /// The E0304 of the parameters `list` of the heading of `def` in `m`
     /// (§5.1, S-649), each through the one test of a declaration
@@ -27,14 +38,7 @@ impl Sema<'_> {
     /// is on the later (inner) name; the name it clashes with is no error
     /// elsewhere (§18.1).
     pub(crate) fn heading_clashes(&mut self, def: DefId, m: ModId, list: &[GenericParam], outer: &[GenericDef]) {
-        let names: Vec<&Ident> = list.iter().map(param_name).collect();
-        for (k, name) in names.iter().enumerate() {
-            let before = names[..k].iter().find(|n| n.name == name.name).map(|n| n.span);
-            let visible = before.or_else(|| outer.iter().find(|g| g.name == name.name).map(|g| g.span));
-            if let Some(d) = hides(self.a, m, name, visible, false) {
-                self.report(def, d);
-            }
-        }
+        param_clashes(self.a, m, list, outer).into_iter().for_each(|d| self.report(def, d));
     }
 
     /// The E0304 of a name of a field of a struct or of a variant of an enum

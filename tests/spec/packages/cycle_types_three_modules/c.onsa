@@ -1,0 +1,5 @@
+use a.{A}
+
+pub struct C {
+  a: [A; 2],
+}

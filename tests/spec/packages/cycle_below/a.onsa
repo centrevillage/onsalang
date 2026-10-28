@@ -4,9 +4,9 @@
 
 // E0310: `use b` takes the module `b` and every module below it, so it is a dependency on `b.inner`
 // too, and `b.inner` takes an item of `a` (§15.1, S-594). The body of `a` names only `b.g`; the path is
-// not looked at. The note shows how to narrow the `use` (`use b.{g}` is no cycle). The spec fixes
-// neither the number nor the place of the E0310 of one cycle; the mark is where the compiler puts it
-// (one per cycle, on the first `use` of the cycle in the order of the diagnostics).
+// not looked at. The note shows how to narrow the `use` (`use b.{g}` is no cycle). One E0310 per
+// cycle, on the first `use` of the cycle in the order of the diagnostics, the other `use` in notes
+// (§18.1, S-734).
 use b                            //~ E0310
 
 pub fn f() -> I32 {

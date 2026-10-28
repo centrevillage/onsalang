@@ -1,0 +1,2017 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// S-264, R-303, F3 of W4-05 U1/b (W4-05 U2): a chain of 1000 aliases `type Ak = (A(k-1), A(k-1))` is
+// finished by the check in a short time. The size of Ak is 2^(k+1) - 1 (spec §4.4), so A12 is the
+// first to pass 4096 and is the one E0422, at its declaration; the aliases after it use an alias
+// that is the error type, so they have no diagnostic, and the signature that writes A12 or the last
+// alias has none either (§4.4, §18.1). The error type of an alias is lowered once: the time does
+// not double with each alias (it did in 2296e83: 40 aliases took longer than 20 seconds, F3 of
+// W4-05 U1/b, and the chain of 1000 did not end).
+
+type A0 = I32
+
+type A1 = (A0, A0)
+
+type A2 = (A1, A1)
+
+type A3 = (A2, A2)
+
+type A4 = (A3, A3)
+
+type A5 = (A4, A4)
+
+type A6 = (A5, A5)
+
+type A7 = (A6, A6)
+
+type A8 = (A7, A7)
+
+type A9 = (A8, A8)
+
+type A10 = (A9, A9)
+
+type A11 = (A10, A10)
+
+type A12 = (A11, A11)                               //~ E0422
+
+type A13 = (A12, A12)
+
+type A14 = (A13, A13)
+
+type A15 = (A14, A14)
+
+type A16 = (A15, A15)
+
+type A17 = (A16, A16)
+
+type A18 = (A17, A17)
+
+type A19 = (A18, A18)
+
+type A20 = (A19, A19)
+
+type A21 = (A20, A20)
+
+type A22 = (A21, A21)
+
+type A23 = (A22, A22)
+
+type A24 = (A23, A23)
+
+type A25 = (A24, A24)
+
+type A26 = (A25, A25)
+
+type A27 = (A26, A26)
+
+type A28 = (A27, A27)
+
+type A29 = (A28, A28)
+
+type A30 = (A29, A29)
+
+type A31 = (A30, A30)
+
+type A32 = (A31, A31)
+
+type A33 = (A32, A32)
+
+type A34 = (A33, A33)
+
+type A35 = (A34, A34)
+
+type A36 = (A35, A35)
+
+type A37 = (A36, A36)
+
+type A38 = (A37, A37)
+
+type A39 = (A38, A38)
+
+type A40 = (A39, A39)
+
+type A41 = (A40, A40)
+
+type A42 = (A41, A41)
+
+type A43 = (A42, A42)
+
+type A44 = (A43, A43)
+
+type A45 = (A44, A44)
+
+type A46 = (A45, A45)
+
+type A47 = (A46, A46)
+
+type A48 = (A47, A47)
+
+type A49 = (A48, A48)
+
+type A50 = (A49, A49)
+
+type A51 = (A50, A50)
+
+type A52 = (A51, A51)
+
+type A53 = (A52, A52)
+
+type A54 = (A53, A53)
+
+type A55 = (A54, A54)
+
+type A56 = (A55, A55)
+
+type A57 = (A56, A56)
+
+type A58 = (A57, A57)
+
+type A59 = (A58, A58)
+
+type A60 = (A59, A59)
+
+type A61 = (A60, A60)
+
+type A62 = (A61, A61)
+
+type A63 = (A62, A62)
+
+type A64 = (A63, A63)
+
+type A65 = (A64, A64)
+
+type A66 = (A65, A65)
+
+type A67 = (A66, A66)
+
+type A68 = (A67, A67)
+
+type A69 = (A68, A68)
+
+type A70 = (A69, A69)
+
+type A71 = (A70, A70)
+
+type A72 = (A71, A71)
+
+type A73 = (A72, A72)
+
+type A74 = (A73, A73)
+
+type A75 = (A74, A74)
+
+type A76 = (A75, A75)
+
+type A77 = (A76, A76)
+
+type A78 = (A77, A77)
+
+type A79 = (A78, A78)
+
+type A80 = (A79, A79)
+
+type A81 = (A80, A80)
+
+type A82 = (A81, A81)
+
+type A83 = (A82, A82)
+
+type A84 = (A83, A83)
+
+type A85 = (A84, A84)
+
+type A86 = (A85, A85)
+
+type A87 = (A86, A86)
+
+type A88 = (A87, A87)
+
+type A89 = (A88, A88)
+
+type A90 = (A89, A89)
+
+type A91 = (A90, A90)
+
+type A92 = (A91, A91)
+
+type A93 = (A92, A92)
+
+type A94 = (A93, A93)
+
+type A95 = (A94, A94)
+
+type A96 = (A95, A95)
+
+type A97 = (A96, A96)
+
+type A98 = (A97, A97)
+
+type A99 = (A98, A98)
+
+type A100 = (A99, A99)
+
+type A101 = (A100, A100)
+
+type A102 = (A101, A101)
+
+type A103 = (A102, A102)
+
+type A104 = (A103, A103)
+
+type A105 = (A104, A104)
+
+type A106 = (A105, A105)
+
+type A107 = (A106, A106)
+
+type A108 = (A107, A107)
+
+type A109 = (A108, A108)
+
+type A110 = (A109, A109)
+
+type A111 = (A110, A110)
+
+type A112 = (A111, A111)
+
+type A113 = (A112, A112)
+
+type A114 = (A113, A113)
+
+type A115 = (A114, A114)
+
+type A116 = (A115, A115)
+
+type A117 = (A116, A116)
+
+type A118 = (A117, A117)
+
+type A119 = (A118, A118)
+
+type A120 = (A119, A119)
+
+type A121 = (A120, A120)
+
+type A122 = (A121, A121)
+
+type A123 = (A122, A122)
+
+type A124 = (A123, A123)
+
+type A125 = (A124, A124)
+
+type A126 = (A125, A125)
+
+type A127 = (A126, A126)
+
+type A128 = (A127, A127)
+
+type A129 = (A128, A128)
+
+type A130 = (A129, A129)
+
+type A131 = (A130, A130)
+
+type A132 = (A131, A131)
+
+type A133 = (A132, A132)
+
+type A134 = (A133, A133)
+
+type A135 = (A134, A134)
+
+type A136 = (A135, A135)
+
+type A137 = (A136, A136)
+
+type A138 = (A137, A137)
+
+type A139 = (A138, A138)
+
+type A140 = (A139, A139)
+
+type A141 = (A140, A140)
+
+type A142 = (A141, A141)
+
+type A143 = (A142, A142)
+
+type A144 = (A143, A143)
+
+type A145 = (A144, A144)
+
+type A146 = (A145, A145)
+
+type A147 = (A146, A146)
+
+type A148 = (A147, A147)
+
+type A149 = (A148, A148)
+
+type A150 = (A149, A149)
+
+type A151 = (A150, A150)
+
+type A152 = (A151, A151)
+
+type A153 = (A152, A152)
+
+type A154 = (A153, A153)
+
+type A155 = (A154, A154)
+
+type A156 = (A155, A155)
+
+type A157 = (A156, A156)
+
+type A158 = (A157, A157)
+
+type A159 = (A158, A158)
+
+type A160 = (A159, A159)
+
+type A161 = (A160, A160)
+
+type A162 = (A161, A161)
+
+type A163 = (A162, A162)
+
+type A164 = (A163, A163)
+
+type A165 = (A164, A164)
+
+type A166 = (A165, A165)
+
+type A167 = (A166, A166)
+
+type A168 = (A167, A167)
+
+type A169 = (A168, A168)
+
+type A170 = (A169, A169)
+
+type A171 = (A170, A170)
+
+type A172 = (A171, A171)
+
+type A173 = (A172, A172)
+
+type A174 = (A173, A173)
+
+type A175 = (A174, A174)
+
+type A176 = (A175, A175)
+
+type A177 = (A176, A176)
+
+type A178 = (A177, A177)
+
+type A179 = (A178, A178)
+
+type A180 = (A179, A179)
+
+type A181 = (A180, A180)
+
+type A182 = (A181, A181)
+
+type A183 = (A182, A182)
+
+type A184 = (A183, A183)
+
+type A185 = (A184, A184)
+
+type A186 = (A185, A185)
+
+type A187 = (A186, A186)
+
+type A188 = (A187, A187)
+
+type A189 = (A188, A188)
+
+type A190 = (A189, A189)
+
+type A191 = (A190, A190)
+
+type A192 = (A191, A191)
+
+type A193 = (A192, A192)
+
+type A194 = (A193, A193)
+
+type A195 = (A194, A194)
+
+type A196 = (A195, A195)
+
+type A197 = (A196, A196)
+
+type A198 = (A197, A197)
+
+type A199 = (A198, A198)
+
+type A200 = (A199, A199)
+
+type A201 = (A200, A200)
+
+type A202 = (A201, A201)
+
+type A203 = (A202, A202)
+
+type A204 = (A203, A203)
+
+type A205 = (A204, A204)
+
+type A206 = (A205, A205)
+
+type A207 = (A206, A206)
+
+type A208 = (A207, A207)
+
+type A209 = (A208, A208)
+
+type A210 = (A209, A209)
+
+type A211 = (A210, A210)
+
+type A212 = (A211, A211)
+
+type A213 = (A212, A212)
+
+type A214 = (A213, A213)
+
+type A215 = (A214, A214)
+
+type A216 = (A215, A215)
+
+type A217 = (A216, A216)
+
+type A218 = (A217, A217)
+
+type A219 = (A218, A218)
+
+type A220 = (A219, A219)
+
+type A221 = (A220, A220)
+
+type A222 = (A221, A221)
+
+type A223 = (A222, A222)
+
+type A224 = (A223, A223)
+
+type A225 = (A224, A224)
+
+type A226 = (A225, A225)
+
+type A227 = (A226, A226)
+
+type A228 = (A227, A227)
+
+type A229 = (A228, A228)
+
+type A230 = (A229, A229)
+
+type A231 = (A230, A230)
+
+type A232 = (A231, A231)
+
+type A233 = (A232, A232)
+
+type A234 = (A233, A233)
+
+type A235 = (A234, A234)
+
+type A236 = (A235, A235)
+
+type A237 = (A236, A236)
+
+type A238 = (A237, A237)
+
+type A239 = (A238, A238)
+
+type A240 = (A239, A239)
+
+type A241 = (A240, A240)
+
+type A242 = (A241, A241)
+
+type A243 = (A242, A242)
+
+type A244 = (A243, A243)
+
+type A245 = (A244, A244)
+
+type A246 = (A245, A245)
+
+type A247 = (A246, A246)
+
+type A248 = (A247, A247)
+
+type A249 = (A248, A248)
+
+type A250 = (A249, A249)
+
+type A251 = (A250, A250)
+
+type A252 = (A251, A251)
+
+type A253 = (A252, A252)
+
+type A254 = (A253, A253)
+
+type A255 = (A254, A254)
+
+type A256 = (A255, A255)
+
+type A257 = (A256, A256)
+
+type A258 = (A257, A257)
+
+type A259 = (A258, A258)
+
+type A260 = (A259, A259)
+
+type A261 = (A260, A260)
+
+type A262 = (A261, A261)
+
+type A263 = (A262, A262)
+
+type A264 = (A263, A263)
+
+type A265 = (A264, A264)
+
+type A266 = (A265, A265)
+
+type A267 = (A266, A266)
+
+type A268 = (A267, A267)
+
+type A269 = (A268, A268)
+
+type A270 = (A269, A269)
+
+type A271 = (A270, A270)
+
+type A272 = (A271, A271)
+
+type A273 = (A272, A272)
+
+type A274 = (A273, A273)
+
+type A275 = (A274, A274)
+
+type A276 = (A275, A275)
+
+type A277 = (A276, A276)
+
+type A278 = (A277, A277)
+
+type A279 = (A278, A278)
+
+type A280 = (A279, A279)
+
+type A281 = (A280, A280)
+
+type A282 = (A281, A281)
+
+type A283 = (A282, A282)
+
+type A284 = (A283, A283)
+
+type A285 = (A284, A284)
+
+type A286 = (A285, A285)
+
+type A287 = (A286, A286)
+
+type A288 = (A287, A287)
+
+type A289 = (A288, A288)
+
+type A290 = (A289, A289)
+
+type A291 = (A290, A290)
+
+type A292 = (A291, A291)
+
+type A293 = (A292, A292)
+
+type A294 = (A293, A293)
+
+type A295 = (A294, A294)
+
+type A296 = (A295, A295)
+
+type A297 = (A296, A296)
+
+type A298 = (A297, A297)
+
+type A299 = (A298, A298)
+
+type A300 = (A299, A299)
+
+type A301 = (A300, A300)
+
+type A302 = (A301, A301)
+
+type A303 = (A302, A302)
+
+type A304 = (A303, A303)
+
+type A305 = (A304, A304)
+
+type A306 = (A305, A305)
+
+type A307 = (A306, A306)
+
+type A308 = (A307, A307)
+
+type A309 = (A308, A308)
+
+type A310 = (A309, A309)
+
+type A311 = (A310, A310)
+
+type A312 = (A311, A311)
+
+type A313 = (A312, A312)
+
+type A314 = (A313, A313)
+
+type A315 = (A314, A314)
+
+type A316 = (A315, A315)
+
+type A317 = (A316, A316)
+
+type A318 = (A317, A317)
+
+type A319 = (A318, A318)
+
+type A320 = (A319, A319)
+
+type A321 = (A320, A320)
+
+type A322 = (A321, A321)
+
+type A323 = (A322, A322)
+
+type A324 = (A323, A323)
+
+type A325 = (A324, A324)
+
+type A326 = (A325, A325)
+
+type A327 = (A326, A326)
+
+type A328 = (A327, A327)
+
+type A329 = (A328, A328)
+
+type A330 = (A329, A329)
+
+type A331 = (A330, A330)
+
+type A332 = (A331, A331)
+
+type A333 = (A332, A332)
+
+type A334 = (A333, A333)
+
+type A335 = (A334, A334)
+
+type A336 = (A335, A335)
+
+type A337 = (A336, A336)
+
+type A338 = (A337, A337)
+
+type A339 = (A338, A338)
+
+type A340 = (A339, A339)
+
+type A341 = (A340, A340)
+
+type A342 = (A341, A341)
+
+type A343 = (A342, A342)
+
+type A344 = (A343, A343)
+
+type A345 = (A344, A344)
+
+type A346 = (A345, A345)
+
+type A347 = (A346, A346)
+
+type A348 = (A347, A347)
+
+type A349 = (A348, A348)
+
+type A350 = (A349, A349)
+
+type A351 = (A350, A350)
+
+type A352 = (A351, A351)
+
+type A353 = (A352, A352)
+
+type A354 = (A353, A353)
+
+type A355 = (A354, A354)
+
+type A356 = (A355, A355)
+
+type A357 = (A356, A356)
+
+type A358 = (A357, A357)
+
+type A359 = (A358, A358)
+
+type A360 = (A359, A359)
+
+type A361 = (A360, A360)
+
+type A362 = (A361, A361)
+
+type A363 = (A362, A362)
+
+type A364 = (A363, A363)
+
+type A365 = (A364, A364)
+
+type A366 = (A365, A365)
+
+type A367 = (A366, A366)
+
+type A368 = (A367, A367)
+
+type A369 = (A368, A368)
+
+type A370 = (A369, A369)
+
+type A371 = (A370, A370)
+
+type A372 = (A371, A371)
+
+type A373 = (A372, A372)
+
+type A374 = (A373, A373)
+
+type A375 = (A374, A374)
+
+type A376 = (A375, A375)
+
+type A377 = (A376, A376)
+
+type A378 = (A377, A377)
+
+type A379 = (A378, A378)
+
+type A380 = (A379, A379)
+
+type A381 = (A380, A380)
+
+type A382 = (A381, A381)
+
+type A383 = (A382, A382)
+
+type A384 = (A383, A383)
+
+type A385 = (A384, A384)
+
+type A386 = (A385, A385)
+
+type A387 = (A386, A386)
+
+type A388 = (A387, A387)
+
+type A389 = (A388, A388)
+
+type A390 = (A389, A389)
+
+type A391 = (A390, A390)
+
+type A392 = (A391, A391)
+
+type A393 = (A392, A392)
+
+type A394 = (A393, A393)
+
+type A395 = (A394, A394)
+
+type A396 = (A395, A395)
+
+type A397 = (A396, A396)
+
+type A398 = (A397, A397)
+
+type A399 = (A398, A398)
+
+type A400 = (A399, A399)
+
+type A401 = (A400, A400)
+
+type A402 = (A401, A401)
+
+type A403 = (A402, A402)
+
+type A404 = (A403, A403)
+
+type A405 = (A404, A404)
+
+type A406 = (A405, A405)
+
+type A407 = (A406, A406)
+
+type A408 = (A407, A407)
+
+type A409 = (A408, A408)
+
+type A410 = (A409, A409)
+
+type A411 = (A410, A410)
+
+type A412 = (A411, A411)
+
+type A413 = (A412, A412)
+
+type A414 = (A413, A413)
+
+type A415 = (A414, A414)
+
+type A416 = (A415, A415)
+
+type A417 = (A416, A416)
+
+type A418 = (A417, A417)
+
+type A419 = (A418, A418)
+
+type A420 = (A419, A419)
+
+type A421 = (A420, A420)
+
+type A422 = (A421, A421)
+
+type A423 = (A422, A422)
+
+type A424 = (A423, A423)
+
+type A425 = (A424, A424)
+
+type A426 = (A425, A425)
+
+type A427 = (A426, A426)
+
+type A428 = (A427, A427)
+
+type A429 = (A428, A428)
+
+type A430 = (A429, A429)
+
+type A431 = (A430, A430)
+
+type A432 = (A431, A431)
+
+type A433 = (A432, A432)
+
+type A434 = (A433, A433)
+
+type A435 = (A434, A434)
+
+type A436 = (A435, A435)
+
+type A437 = (A436, A436)
+
+type A438 = (A437, A437)
+
+type A439 = (A438, A438)
+
+type A440 = (A439, A439)
+
+type A441 = (A440, A440)
+
+type A442 = (A441, A441)
+
+type A443 = (A442, A442)
+
+type A444 = (A443, A443)
+
+type A445 = (A444, A444)
+
+type A446 = (A445, A445)
+
+type A447 = (A446, A446)
+
+type A448 = (A447, A447)
+
+type A449 = (A448, A448)
+
+type A450 = (A449, A449)
+
+type A451 = (A450, A450)
+
+type A452 = (A451, A451)
+
+type A453 = (A452, A452)
+
+type A454 = (A453, A453)
+
+type A455 = (A454, A454)
+
+type A456 = (A455, A455)
+
+type A457 = (A456, A456)
+
+type A458 = (A457, A457)
+
+type A459 = (A458, A458)
+
+type A460 = (A459, A459)
+
+type A461 = (A460, A460)
+
+type A462 = (A461, A461)
+
+type A463 = (A462, A462)
+
+type A464 = (A463, A463)
+
+type A465 = (A464, A464)
+
+type A466 = (A465, A465)
+
+type A467 = (A466, A466)
+
+type A468 = (A467, A467)
+
+type A469 = (A468, A468)
+
+type A470 = (A469, A469)
+
+type A471 = (A470, A470)
+
+type A472 = (A471, A471)
+
+type A473 = (A472, A472)
+
+type A474 = (A473, A473)
+
+type A475 = (A474, A474)
+
+type A476 = (A475, A475)
+
+type A477 = (A476, A476)
+
+type A478 = (A477, A477)
+
+type A479 = (A478, A478)
+
+type A480 = (A479, A479)
+
+type A481 = (A480, A480)
+
+type A482 = (A481, A481)
+
+type A483 = (A482, A482)
+
+type A484 = (A483, A483)
+
+type A485 = (A484, A484)
+
+type A486 = (A485, A485)
+
+type A487 = (A486, A486)
+
+type A488 = (A487, A487)
+
+type A489 = (A488, A488)
+
+type A490 = (A489, A489)
+
+type A491 = (A490, A490)
+
+type A492 = (A491, A491)
+
+type A493 = (A492, A492)
+
+type A494 = (A493, A493)
+
+type A495 = (A494, A494)
+
+type A496 = (A495, A495)
+
+type A497 = (A496, A496)
+
+type A498 = (A497, A497)
+
+type A499 = (A498, A498)
+
+type A500 = (A499, A499)
+
+type A501 = (A500, A500)
+
+type A502 = (A501, A501)
+
+type A503 = (A502, A502)
+
+type A504 = (A503, A503)
+
+type A505 = (A504, A504)
+
+type A506 = (A505, A505)
+
+type A507 = (A506, A506)
+
+type A508 = (A507, A507)
+
+type A509 = (A508, A508)
+
+type A510 = (A509, A509)
+
+type A511 = (A510, A510)
+
+type A512 = (A511, A511)
+
+type A513 = (A512, A512)
+
+type A514 = (A513, A513)
+
+type A515 = (A514, A514)
+
+type A516 = (A515, A515)
+
+type A517 = (A516, A516)
+
+type A518 = (A517, A517)
+
+type A519 = (A518, A518)
+
+type A520 = (A519, A519)
+
+type A521 = (A520, A520)
+
+type A522 = (A521, A521)
+
+type A523 = (A522, A522)
+
+type A524 = (A523, A523)
+
+type A525 = (A524, A524)
+
+type A526 = (A525, A525)
+
+type A527 = (A526, A526)
+
+type A528 = (A527, A527)
+
+type A529 = (A528, A528)
+
+type A530 = (A529, A529)
+
+type A531 = (A530, A530)
+
+type A532 = (A531, A531)
+
+type A533 = (A532, A532)
+
+type A534 = (A533, A533)
+
+type A535 = (A534, A534)
+
+type A536 = (A535, A535)
+
+type A537 = (A536, A536)
+
+type A538 = (A537, A537)
+
+type A539 = (A538, A538)
+
+type A540 = (A539, A539)
+
+type A541 = (A540, A540)
+
+type A542 = (A541, A541)
+
+type A543 = (A542, A542)
+
+type A544 = (A543, A543)
+
+type A545 = (A544, A544)
+
+type A546 = (A545, A545)
+
+type A547 = (A546, A546)
+
+type A548 = (A547, A547)
+
+type A549 = (A548, A548)
+
+type A550 = (A549, A549)
+
+type A551 = (A550, A550)
+
+type A552 = (A551, A551)
+
+type A553 = (A552, A552)
+
+type A554 = (A553, A553)
+
+type A555 = (A554, A554)
+
+type A556 = (A555, A555)
+
+type A557 = (A556, A556)
+
+type A558 = (A557, A557)
+
+type A559 = (A558, A558)
+
+type A560 = (A559, A559)
+
+type A561 = (A560, A560)
+
+type A562 = (A561, A561)
+
+type A563 = (A562, A562)
+
+type A564 = (A563, A563)
+
+type A565 = (A564, A564)
+
+type A566 = (A565, A565)
+
+type A567 = (A566, A566)
+
+type A568 = (A567, A567)
+
+type A569 = (A568, A568)
+
+type A570 = (A569, A569)
+
+type A571 = (A570, A570)
+
+type A572 = (A571, A571)
+
+type A573 = (A572, A572)
+
+type A574 = (A573, A573)
+
+type A575 = (A574, A574)
+
+type A576 = (A575, A575)
+
+type A577 = (A576, A576)
+
+type A578 = (A577, A577)
+
+type A579 = (A578, A578)
+
+type A580 = (A579, A579)
+
+type A581 = (A580, A580)
+
+type A582 = (A581, A581)
+
+type A583 = (A582, A582)
+
+type A584 = (A583, A583)
+
+type A585 = (A584, A584)
+
+type A586 = (A585, A585)
+
+type A587 = (A586, A586)
+
+type A588 = (A587, A587)
+
+type A589 = (A588, A588)
+
+type A590 = (A589, A589)
+
+type A591 = (A590, A590)
+
+type A592 = (A591, A591)
+
+type A593 = (A592, A592)
+
+type A594 = (A593, A593)
+
+type A595 = (A594, A594)
+
+type A596 = (A595, A595)
+
+type A597 = (A596, A596)
+
+type A598 = (A597, A597)
+
+type A599 = (A598, A598)
+
+type A600 = (A599, A599)
+
+type A601 = (A600, A600)
+
+type A602 = (A601, A601)
+
+type A603 = (A602, A602)
+
+type A604 = (A603, A603)
+
+type A605 = (A604, A604)
+
+type A606 = (A605, A605)
+
+type A607 = (A606, A606)
+
+type A608 = (A607, A607)
+
+type A609 = (A608, A608)
+
+type A610 = (A609, A609)
+
+type A611 = (A610, A610)
+
+type A612 = (A611, A611)
+
+type A613 = (A612, A612)
+
+type A614 = (A613, A613)
+
+type A615 = (A614, A614)
+
+type A616 = (A615, A615)
+
+type A617 = (A616, A616)
+
+type A618 = (A617, A617)
+
+type A619 = (A618, A618)
+
+type A620 = (A619, A619)
+
+type A621 = (A620, A620)
+
+type A622 = (A621, A621)
+
+type A623 = (A622, A622)
+
+type A624 = (A623, A623)
+
+type A625 = (A624, A624)
+
+type A626 = (A625, A625)
+
+type A627 = (A626, A626)
+
+type A628 = (A627, A627)
+
+type A629 = (A628, A628)
+
+type A630 = (A629, A629)
+
+type A631 = (A630, A630)
+
+type A632 = (A631, A631)
+
+type A633 = (A632, A632)
+
+type A634 = (A633, A633)
+
+type A635 = (A634, A634)
+
+type A636 = (A635, A635)
+
+type A637 = (A636, A636)
+
+type A638 = (A637, A637)
+
+type A639 = (A638, A638)
+
+type A640 = (A639, A639)
+
+type A641 = (A640, A640)
+
+type A642 = (A641, A641)
+
+type A643 = (A642, A642)
+
+type A644 = (A643, A643)
+
+type A645 = (A644, A644)
+
+type A646 = (A645, A645)
+
+type A647 = (A646, A646)
+
+type A648 = (A647, A647)
+
+type A649 = (A648, A648)
+
+type A650 = (A649, A649)
+
+type A651 = (A650, A650)
+
+type A652 = (A651, A651)
+
+type A653 = (A652, A652)
+
+type A654 = (A653, A653)
+
+type A655 = (A654, A654)
+
+type A656 = (A655, A655)
+
+type A657 = (A656, A656)
+
+type A658 = (A657, A657)
+
+type A659 = (A658, A658)
+
+type A660 = (A659, A659)
+
+type A661 = (A660, A660)
+
+type A662 = (A661, A661)
+
+type A663 = (A662, A662)
+
+type A664 = (A663, A663)
+
+type A665 = (A664, A664)
+
+type A666 = (A665, A665)
+
+type A667 = (A666, A666)
+
+type A668 = (A667, A667)
+
+type A669 = (A668, A668)
+
+type A670 = (A669, A669)
+
+type A671 = (A670, A670)
+
+type A672 = (A671, A671)
+
+type A673 = (A672, A672)
+
+type A674 = (A673, A673)
+
+type A675 = (A674, A674)
+
+type A676 = (A675, A675)
+
+type A677 = (A676, A676)
+
+type A678 = (A677, A677)
+
+type A679 = (A678, A678)
+
+type A680 = (A679, A679)
+
+type A681 = (A680, A680)
+
+type A682 = (A681, A681)
+
+type A683 = (A682, A682)
+
+type A684 = (A683, A683)
+
+type A685 = (A684, A684)
+
+type A686 = (A685, A685)
+
+type A687 = (A686, A686)
+
+type A688 = (A687, A687)
+
+type A689 = (A688, A688)
+
+type A690 = (A689, A689)
+
+type A691 = (A690, A690)
+
+type A692 = (A691, A691)
+
+type A693 = (A692, A692)
+
+type A694 = (A693, A693)
+
+type A695 = (A694, A694)
+
+type A696 = (A695, A695)
+
+type A697 = (A696, A696)
+
+type A698 = (A697, A697)
+
+type A699 = (A698, A698)
+
+type A700 = (A699, A699)
+
+type A701 = (A700, A700)
+
+type A702 = (A701, A701)
+
+type A703 = (A702, A702)
+
+type A704 = (A703, A703)
+
+type A705 = (A704, A704)
+
+type A706 = (A705, A705)
+
+type A707 = (A706, A706)
+
+type A708 = (A707, A707)
+
+type A709 = (A708, A708)
+
+type A710 = (A709, A709)
+
+type A711 = (A710, A710)
+
+type A712 = (A711, A711)
+
+type A713 = (A712, A712)
+
+type A714 = (A713, A713)
+
+type A715 = (A714, A714)
+
+type A716 = (A715, A715)
+
+type A717 = (A716, A716)
+
+type A718 = (A717, A717)
+
+type A719 = (A718, A718)
+
+type A720 = (A719, A719)
+
+type A721 = (A720, A720)
+
+type A722 = (A721, A721)
+
+type A723 = (A722, A722)
+
+type A724 = (A723, A723)
+
+type A725 = (A724, A724)
+
+type A726 = (A725, A725)
+
+type A727 = (A726, A726)
+
+type A728 = (A727, A727)
+
+type A729 = (A728, A728)
+
+type A730 = (A729, A729)
+
+type A731 = (A730, A730)
+
+type A732 = (A731, A731)
+
+type A733 = (A732, A732)
+
+type A734 = (A733, A733)
+
+type A735 = (A734, A734)
+
+type A736 = (A735, A735)
+
+type A737 = (A736, A736)
+
+type A738 = (A737, A737)
+
+type A739 = (A738, A738)
+
+type A740 = (A739, A739)
+
+type A741 = (A740, A740)
+
+type A742 = (A741, A741)
+
+type A743 = (A742, A742)
+
+type A744 = (A743, A743)
+
+type A745 = (A744, A744)
+
+type A746 = (A745, A745)
+
+type A747 = (A746, A746)
+
+type A748 = (A747, A747)
+
+type A749 = (A748, A748)
+
+type A750 = (A749, A749)
+
+type A751 = (A750, A750)
+
+type A752 = (A751, A751)
+
+type A753 = (A752, A752)
+
+type A754 = (A753, A753)
+
+type A755 = (A754, A754)
+
+type A756 = (A755, A755)
+
+type A757 = (A756, A756)
+
+type A758 = (A757, A757)
+
+type A759 = (A758, A758)
+
+type A760 = (A759, A759)
+
+type A761 = (A760, A760)
+
+type A762 = (A761, A761)
+
+type A763 = (A762, A762)
+
+type A764 = (A763, A763)
+
+type A765 = (A764, A764)
+
+type A766 = (A765, A765)
+
+type A767 = (A766, A766)
+
+type A768 = (A767, A767)
+
+type A769 = (A768, A768)
+
+type A770 = (A769, A769)
+
+type A771 = (A770, A770)
+
+type A772 = (A771, A771)
+
+type A773 = (A772, A772)
+
+type A774 = (A773, A773)
+
+type A775 = (A774, A774)
+
+type A776 = (A775, A775)
+
+type A777 = (A776, A776)
+
+type A778 = (A777, A777)
+
+type A779 = (A778, A778)
+
+type A780 = (A779, A779)
+
+type A781 = (A780, A780)
+
+type A782 = (A781, A781)
+
+type A783 = (A782, A782)
+
+type A784 = (A783, A783)
+
+type A785 = (A784, A784)
+
+type A786 = (A785, A785)
+
+type A787 = (A786, A786)
+
+type A788 = (A787, A787)
+
+type A789 = (A788, A788)
+
+type A790 = (A789, A789)
+
+type A791 = (A790, A790)
+
+type A792 = (A791, A791)
+
+type A793 = (A792, A792)
+
+type A794 = (A793, A793)
+
+type A795 = (A794, A794)
+
+type A796 = (A795, A795)
+
+type A797 = (A796, A796)
+
+type A798 = (A797, A797)
+
+type A799 = (A798, A798)
+
+type A800 = (A799, A799)
+
+type A801 = (A800, A800)
+
+type A802 = (A801, A801)
+
+type A803 = (A802, A802)
+
+type A804 = (A803, A803)
+
+type A805 = (A804, A804)
+
+type A806 = (A805, A805)
+
+type A807 = (A806, A806)
+
+type A808 = (A807, A807)
+
+type A809 = (A808, A808)
+
+type A810 = (A809, A809)
+
+type A811 = (A810, A810)
+
+type A812 = (A811, A811)
+
+type A813 = (A812, A812)
+
+type A814 = (A813, A813)
+
+type A815 = (A814, A814)
+
+type A816 = (A815, A815)
+
+type A817 = (A816, A816)
+
+type A818 = (A817, A817)
+
+type A819 = (A818, A818)
+
+type A820 = (A819, A819)
+
+type A821 = (A820, A820)
+
+type A822 = (A821, A821)
+
+type A823 = (A822, A822)
+
+type A824 = (A823, A823)
+
+type A825 = (A824, A824)
+
+type A826 = (A825, A825)
+
+type A827 = (A826, A826)
+
+type A828 = (A827, A827)
+
+type A829 = (A828, A828)
+
+type A830 = (A829, A829)
+
+type A831 = (A830, A830)
+
+type A832 = (A831, A831)
+
+type A833 = (A832, A832)
+
+type A834 = (A833, A833)
+
+type A835 = (A834, A834)
+
+type A836 = (A835, A835)
+
+type A837 = (A836, A836)
+
+type A838 = (A837, A837)
+
+type A839 = (A838, A838)
+
+type A840 = (A839, A839)
+
+type A841 = (A840, A840)
+
+type A842 = (A841, A841)
+
+type A843 = (A842, A842)
+
+type A844 = (A843, A843)
+
+type A845 = (A844, A844)
+
+type A846 = (A845, A845)
+
+type A847 = (A846, A846)
+
+type A848 = (A847, A847)
+
+type A849 = (A848, A848)
+
+type A850 = (A849, A849)
+
+type A851 = (A850, A850)
+
+type A852 = (A851, A851)
+
+type A853 = (A852, A852)
+
+type A854 = (A853, A853)
+
+type A855 = (A854, A854)
+
+type A856 = (A855, A855)
+
+type A857 = (A856, A856)
+
+type A858 = (A857, A857)
+
+type A859 = (A858, A858)
+
+type A860 = (A859, A859)
+
+type A861 = (A860, A860)
+
+type A862 = (A861, A861)
+
+type A863 = (A862, A862)
+
+type A864 = (A863, A863)
+
+type A865 = (A864, A864)
+
+type A866 = (A865, A865)
+
+type A867 = (A866, A866)
+
+type A868 = (A867, A867)
+
+type A869 = (A868, A868)
+
+type A870 = (A869, A869)
+
+type A871 = (A870, A870)
+
+type A872 = (A871, A871)
+
+type A873 = (A872, A872)
+
+type A874 = (A873, A873)
+
+type A875 = (A874, A874)
+
+type A876 = (A875, A875)
+
+type A877 = (A876, A876)
+
+type A878 = (A877, A877)
+
+type A879 = (A878, A878)
+
+type A880 = (A879, A879)
+
+type A881 = (A880, A880)
+
+type A882 = (A881, A881)
+
+type A883 = (A882, A882)
+
+type A884 = (A883, A883)
+
+type A885 = (A884, A884)
+
+type A886 = (A885, A885)
+
+type A887 = (A886, A886)
+
+type A888 = (A887, A887)
+
+type A889 = (A888, A888)
+
+type A890 = (A889, A889)
+
+type A891 = (A890, A890)
+
+type A892 = (A891, A891)
+
+type A893 = (A892, A892)
+
+type A894 = (A893, A893)
+
+type A895 = (A894, A894)
+
+type A896 = (A895, A895)
+
+type A897 = (A896, A896)
+
+type A898 = (A897, A897)
+
+type A899 = (A898, A898)
+
+type A900 = (A899, A899)
+
+type A901 = (A900, A900)
+
+type A902 = (A901, A901)
+
+type A903 = (A902, A902)
+
+type A904 = (A903, A903)
+
+type A905 = (A904, A904)
+
+type A906 = (A905, A905)
+
+type A907 = (A906, A906)
+
+type A908 = (A907, A907)
+
+type A909 = (A908, A908)
+
+type A910 = (A909, A909)
+
+type A911 = (A910, A910)
+
+type A912 = (A911, A911)
+
+type A913 = (A912, A912)
+
+type A914 = (A913, A913)
+
+type A915 = (A914, A914)
+
+type A916 = (A915, A915)
+
+type A917 = (A916, A916)
+
+type A918 = (A917, A917)
+
+type A919 = (A918, A918)
+
+type A920 = (A919, A919)
+
+type A921 = (A920, A920)
+
+type A922 = (A921, A921)
+
+type A923 = (A922, A922)
+
+type A924 = (A923, A923)
+
+type A925 = (A924, A924)
+
+type A926 = (A925, A925)
+
+type A927 = (A926, A926)
+
+type A928 = (A927, A927)
+
+type A929 = (A928, A928)
+
+type A930 = (A929, A929)
+
+type A931 = (A930, A930)
+
+type A932 = (A931, A931)
+
+type A933 = (A932, A932)
+
+type A934 = (A933, A933)
+
+type A935 = (A934, A934)
+
+type A936 = (A935, A935)
+
+type A937 = (A936, A936)
+
+type A938 = (A937, A937)
+
+type A939 = (A938, A938)
+
+type A940 = (A939, A939)
+
+type A941 = (A940, A940)
+
+type A942 = (A941, A941)
+
+type A943 = (A942, A942)
+
+type A944 = (A943, A943)
+
+type A945 = (A944, A944)
+
+type A946 = (A945, A945)
+
+type A947 = (A946, A946)
+
+type A948 = (A947, A947)
+
+type A949 = (A948, A948)
+
+type A950 = (A949, A949)
+
+type A951 = (A950, A950)
+
+type A952 = (A951, A951)
+
+type A953 = (A952, A952)
+
+type A954 = (A953, A953)
+
+type A955 = (A954, A954)
+
+type A956 = (A955, A955)
+
+type A957 = (A956, A956)
+
+type A958 = (A957, A957)
+
+type A959 = (A958, A958)
+
+type A960 = (A959, A959)
+
+type A961 = (A960, A960)
+
+type A962 = (A961, A961)
+
+type A963 = (A962, A962)
+
+type A964 = (A963, A963)
+
+type A965 = (A964, A964)
+
+type A966 = (A965, A965)
+
+type A967 = (A966, A966)
+
+type A968 = (A967, A967)
+
+type A969 = (A968, A968)
+
+type A970 = (A969, A969)
+
+type A971 = (A970, A970)
+
+type A972 = (A971, A971)
+
+type A973 = (A972, A972)
+
+type A974 = (A973, A973)
+
+type A975 = (A974, A974)
+
+type A976 = (A975, A975)
+
+type A977 = (A976, A976)
+
+type A978 = (A977, A977)
+
+type A979 = (A978, A978)
+
+type A980 = (A979, A979)
+
+type A981 = (A980, A980)
+
+type A982 = (A981, A981)
+
+type A983 = (A982, A982)
+
+type A984 = (A983, A983)
+
+type A985 = (A984, A984)
+
+type A986 = (A985, A985)
+
+type A987 = (A986, A986)
+
+type A988 = (A987, A987)
+
+type A989 = (A988, A988)
+
+type A990 = (A989, A989)
+
+type A991 = (A990, A990)
+
+type A992 = (A991, A991)
+
+type A993 = (A992, A992)
+
+type A994 = (A993, A993)
+
+type A995 = (A994, A994)
+
+type A996 = (A995, A995)
+
+type A997 = (A996, A996)
+
+type A998 = (A997, A997)
+
+type A999 = (A998, A998)
+
+type A1000 = (A999, A999)
+
+pub fn takes(a: A12, b: A1000) -> I32 {
+  1
+}

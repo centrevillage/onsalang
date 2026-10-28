@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4"]
+
+// R-182, R-303, S-730 (W4-05 U2): aliases and structs that name each other in one direction, reach the
+// same alias by two ways, or reach a struct through an `Array` are no cycle. No diagnostic. (Today the
+// check passes them; this file keeps the cycle check from taking them in.)
+
+type C1 = C2
+
+type C2 = C3
+
+type C3 = I32
+
+// A diamond: `D4` is reached by two ways.
+type D1 = (D2, D3)
+
+type D2 = D4
+
+type D3 = D4
+
+type D4 = I32
+
+// An alias and a struct that name each other through an `Array`: the array does not hold the struct.
+type Ax = Array[Sx]
+
+pub struct Sx {
+  a: Ax,
+}
+
+// An alias of a struct that does not name the alias back.
+type Opt = Option[Leaf]
+
+pub struct Leaf {
+  x: I32,
+}
+
+type Frame = (Opt, Samples)
+
+type Samples = Buf[F32]
+
+pub fn takes(a: C1, b: D1, c: Ax, d: Frame) -> I32 {
+  1
+}
