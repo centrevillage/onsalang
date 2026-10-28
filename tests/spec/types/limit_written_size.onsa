@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// S-264 (W4-05 U1): a written type that is within the limit by its parts and passes the size limit
+// 4096 once the aliases in it are expanded is E0422 at the written type (§4.4: "書いた型はその形").
+// A11 is 4095 (see limit_alias_size.onsa), so `(A11, A0)` is 1 + 4095 + 1 = 4097, `[A11; 2]` is the
+// array shape, the element and the const argument, 1 + 4095 + 1 = 4097, and `(A11, A11)` is 8191. The
+// aliases themselves are within the limit and have no diagnostic, and a written type that stays within
+// it (`(A10, A10)` is 4095) is fine. One written type is in each unit: a parameter, a field of a
+// struct, a field of an enum variant and a parameter of a function type.
+// The implementation gave no E0422 before W4-05 U1, which brought the code in.
+
+type A0 = I32
+
+type A1 = (A0, A0)
+
+type A2 = (A1, A1)
+
+type A3 = (A2, A2)
+
+type A4 = (A3, A3)
+
+type A5 = (A4, A4)
+
+type A6 = (A5, A5)
+
+type A7 = (A6, A6)
+
+type A8 = (A7, A7)
+
+type A9 = (A8, A8)
+
+type A10 = (A9, A9)
+
+type A11 = (A10, A10)
+pub fn tuple_parameter(x: (A11, A0)) {}                   //~ E0422
+
+pub fn array_parameter(x: [A11; 2]) {}                    //~ E0422
+
+pub fn both_halves_big(x: (A11, A11)) {}                  //~ E0422
+
+pub struct Field {
+  big: (A11, A0),                                         //~ E0422
+}
+
+pub enum Variant {
+  Big((A11, A0)),                                         //~ E0422
+  Small(A11),
+}
+
+pub fn function_type_parameter(f: fn((A11, A0)) -> I32) {}   //~ E0422
+
+pub fn within_the_limit(x: (A10, A10), y: A11) {}

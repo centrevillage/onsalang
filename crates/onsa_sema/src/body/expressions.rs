@@ -458,7 +458,7 @@ impl<'a> Checker<'a> {
                 return Err(self.err(Code::E0410, name.span, format!("`{shown}` has no field `{}`", name.name)));
             };
             self.a.note_use(f.span, name.span);
-            let ft = self.subst(f.ty, &args);
+            let ft = self.a.types.subst(f.ty, &args);
             self.with_why(format!("the field `{}`", name.name), ft, |ck| ck.check_expr(*value, Some(ft)))?;
         }
         let missing: Vec<&str> = defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.contains(n)).collect();

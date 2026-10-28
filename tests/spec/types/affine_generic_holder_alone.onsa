@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2"]
+
+// R-30 (W4-05 U1, the second half of its first item, `subst`): `Holder[Buf[F32]]` holds a `Buf`, so
+// its kind is Affine (§4.6: "それらを含む型"; §4.5: a `?Dup` parameter lets an Affine type in), and the
+// second `move` of the same value is a use after the move, E0704 (§5.2, §5.4). The first `move` is
+// fine. A type argument is substituted into the field `(T, U32)`, the field becomes the tuple
+// `(Buf[F32], U32)`, and the kind is computed from the substituted type; whether the program also
+// writes `(Buf[F32], U32)` somewhere must not change the answer, so the same function is in
+// affine_generic_holder_used_before.onsa and affine_generic_holder_used_after.onsa, which write that
+// tuple before and after it. This file never writes it. Before W4-05 U1 the implementation
+// answered by whether the tuple was interned (R-30): in this file the kind was not found, the value
+// was taken for one that is not Affine, and the check reported nothing.
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub fn take(move h: Holder[Buf[F32]]) uses {Alloc} {}
+
+pub fn twice(move h: Holder[Buf[F32]]) uses {Alloc} {
+  take(move h)
+  take(move h)                                      //~ E0704
+}
+
+pub fn once(move h: Holder[Buf[F32]]) uses {Alloc} {
+  take(move h)
+}

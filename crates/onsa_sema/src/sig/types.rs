@@ -6,11 +6,38 @@ use super::*;
 use crate::ResolveError;
 use crate::names::PathEnd;
 use crate::resolve::NameKind;
+use crate::ty::{TYPE_DEPTH_LIMIT, TYPE_SIZE_LIMIT};
 
 impl<'p> Sema<'p> {
     // ------------------------------------------------------------ types
 
+    /// The type `t` as written, within the limits of §4.4 (S-264): the first
+    /// type over them is an E0422, at the name of the alias it is the right
+    /// side of or at its form written, and is the error type. A type with an
+    /// error in it is not judged: a part not read is the error type, and its
+    /// users get no diagnostic (§18.1; an alias over the limits is the error
+    /// type for the aliases that use it).
     pub(super) fn lower_type(&mut self, cx: &Cx<'p>, t: TypeId) -> TyId {
+        let ty = self.lower_written(cx, t);
+        let types = &self.a.types;
+        if !types.over_limit(ty) || types.has_error(ty) {
+            return ty;
+        }
+        let msg = if types.depth(ty) > TYPE_DEPTH_LIMIT {
+            format!("the type is deeper than {TYPE_DEPTH_LIMIT} levels (§4.4)")
+        } else {
+            format!("the type is larger than {TYPE_SIZE_LIMIT} names and forms (§4.4)")
+        };
+        let def = self.a.def(cx.def);
+        let span = if matches!(def.kind, DefKind::Alias(_)) { def.name_span } else { cx.ast.ty(t).span };
+        let rule = "name an inner part of the type with a `struct`: a declared type counts as one name, and an \
+                    alias stands for the whole type it names";
+        let d = Diagnostic::new(Stage::Names, Code::E0422, span, msg).with_found(src(cx, span)).with_rule(rule);
+        self.report(cx.def, d);
+        self.a.types.error()
+    }
+
+    fn lower_written(&mut self, cx: &Cx<'p>, t: TypeId) -> TyId {
         let te = cx.ast.ty(t);
         match &te.kind {
             // What a syntax error left unread (S-59): no diagnostic.

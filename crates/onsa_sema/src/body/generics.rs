@@ -33,46 +33,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Substitute `Ty::Param(i)` / `Len::Param(i)` with `args[i]` (variables or concrete).
-    pub(crate) fn subst(&mut self, ty: TyId, args: &[TyId]) -> TyId {
-        if args.is_empty() {
-            return ty;
-        }
-        match self.ty(ty) {
-            Ty::Param(i) => args.get(i as usize).copied().unwrap_or(ty),
-            Ty::Array(e, len) => {
-                let e2 = self.subst(e, args);
-                let len2 = match len {
-                    Len::Param(i) => match args.get(i as usize).map(|&t| self.ty(t)) {
-                        Some(Ty::Var(v)) => Len::Var(v),
-                        Some(Ty::ConstVal(n)) => Len::Const(n),
-                        _ => len,
-                    },
-                    other => other,
-                };
-                self.a.types.intern(Ty::Array(e2, len2))
-            }
-            Ty::Tuple(ts) => {
-                let ns: Vec<TyId> = ts.iter().map(|&t| self.subst(t, args)).collect();
-                self.a.types.intern(Ty::Tuple(ns))
-            }
-            Ty::Named(d, ts) => {
-                let ns: Vec<TyId> = ts.iter().map(|&t| self.subst(t, args)).collect();
-                self.a.types.intern(Ty::Named(d, ns))
-            }
-            Ty::Builtin(b, ts) => {
-                let ns: Vec<TyId> = ts.iter().map(|&t| self.subst(t, args)).collect();
-                self.a.types.intern(Ty::Builtin(b, ns))
-            }
-            Ty::Fn(f) => {
-                let params: Vec<(Mode, TyId)> = f.params.iter().map(|(m, t)| (*m, self.subst(*t, args))).collect();
-                let ret = self.subst(f.ret, args);
-                self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }))
-            }
-            _ => ty,
-        }
-    }
-
     /// Record an instantiation made by the expression at `span`. Its arguments
     /// may be decided by a later statement (§4.5, §4.7; S-174): each one is an
     /// origin (E0406 when still open at the end) and carries the requirements of

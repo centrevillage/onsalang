@@ -1,9 +1,7 @@
 //! Kinds (spec §4.6): Copy / Shared / Affine, from the structure of a type.
 
-use std::collections::HashSet;
-
-use crate::def::{DefKind, Fields, FlowTy};
-use crate::ty::{BuiltinTy, Ty, TyId};
+use crate::ty::{BuiltinTy, Env, Ty, TyId};
+use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -24,17 +22,29 @@ impl Kind {
 }
 
 /// Kind of a type; `None` when it depends on a generic parameter, or for
-/// second-class types (`Span`). Recursive types stop with `None`.
+/// second-class types (`Span`). A type that holds itself stops with `None`
+/// ([`Walk`]).
 pub fn kind_of(a: &Analysis, ty: TyId) -> Option<Kind> {
-    let mut visiting = HashSet::new();
-    kind_rec(a, ty, &mut visiting)
+    kind_in(a, ty, None)
 }
 
-fn kind_rec(a: &Analysis, ty: TyId, visiting: &mut HashSet<DefId>) -> Option<Kind> {
-    match a.types.get(ty) {
+/// Kind of `ty` read under the arguments `env` (R-30).
+pub fn kind_in(a: &Analysis, ty: TyId, env: Option<&Env>) -> Option<Kind> {
+    walk(&Walk::new(a), ty, env, 0)
+}
+
+/// Kind of a user type by its def (`onsa interface`), without interning its `TyId`.
+pub fn kind_of_named(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Kind> {
+    named(&Walk::new(a), d, args, None, 0)
+}
+
+/// `depth`: the named types entered on the way ([`Walk::enter`]).
+fn walk(w: &Walk, ty: TyId, env: Option<&Env>, depth: u32) -> Option<Kind> {
+    let (ty, env) = w.at(ty, env)?;
+    match ty {
         Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit | Ty::Fn(_) | Ty::ConstVal(_) => Some(Kind::Copy),
-        Ty::Array(t, _) => kind_rec(a, *t, visiting),
-        Ty::Tuple(ts) => ts.iter().try_fold(Kind::Copy, |k, &t| Some(k.max(kind_rec(a, t, visiting)?))),
+        Ty::Array(t, _) => walk(w, *t, env, depth),
+        Ty::Tuple(ts) => all(w, ts, env, depth),
         Ty::Builtin(b, args) => match b {
             BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set => {
                 Some(Kind::Shared)
@@ -42,51 +52,27 @@ fn kind_rec(a: &Analysis, ty: TyId, visiting: &mut HashSet<DefId>) -> Option<Kin
             BuiltinTy::Buf => Some(Kind::Affine),
             BuiltinTy::Ptr => Some(Kind::Copy),
             BuiltinTy::Span => None,
-            BuiltinTy::Option | BuiltinTy::Result => {
-                args.iter().try_fold(Kind::Copy, |k, &t| Some(k.max(kind_rec(a, t, visiting)?)))
-            }
+            BuiltinTy::Option | BuiltinTy::Result => all(w, args, env, depth),
         },
-        Ty::Named(d, args) => {
-            if !visiting.insert(*d) {
-                return None;
-            }
-            let r = kind_of_def(a, *d, args, visiting);
-            visiting.remove(d);
-            r
-        }
+        Ty::Named(d, args) => named(w, *d, args, env, depth),
         Ty::Param(_) | Ty::Var(_) | Ty::Error => None,
     }
 }
 
-/// Kind of a user type by its def (`onsa interface`), without interning its `TyId`.
-pub fn kind_of_named(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Kind> {
-    let mut visiting = HashSet::new();
-    visiting.insert(d);
-    kind_of_def(a, d, args, &mut visiting)
+fn all(w: &Walk, ts: &[TyId], env: Option<&Env>, depth: u32) -> Option<Kind> {
+    let mut kind = Kind::Copy;
+    for &t in ts {
+        kind = kind.max(walk(w, t, env, depth)?);
+    }
+    Some(kind)
 }
 
-fn kind_of_def(a: &Analysis, d: DefId, args: &[TyId], visiting: &mut HashSet<DefId>) -> Option<Kind> {
-    let def = a.def(d);
-    let field_kind = |t: TyId, visiting: &mut HashSet<DefId>| {
-        let t = crate::layout::subst(a, t, args);
-        kind_rec(a, t, visiting)
-    };
-    match &def.kind {
-        DefKind::Struct(s) => {
-            if s.flow_ty == Some(FlowTy::State) {
-                return Some(Kind::Affine); // §4.6: flow state is Affine
-            }
-            match &s.fields {
-                Fields::Named(fs) => fs.iter().try_fold(Kind::Copy, |k, f| Some(k.max(field_kind(f.ty, visiting)?))),
-                Fields::Opaque => Some(Kind::Copy),
-            }
-        }
-        DefKind::Enum(e) => e
-            .variants
-            .iter()
-            .flat_map(|v| v.fields.iter())
-            .try_fold(Kind::Copy, |k, &t| Some(k.max(field_kind(t, visiting)?))),
-        DefKind::Alias(t) => kind_rec(a, *t, visiting),
-        _ => None,
+fn named(w: &Walk, d: DefId, args: &[TyId], env: Option<&Env>, depth: u32) -> Option<Kind> {
+    let (holds, env, depth) = w.enter(d, args, env, depth)?;
+    match holds {
+        _ if holds.is_state() => Some(Kind::Affine), // §4.6: flow state is Affine
+        Holds::Opaque(_) => Some(Kind::Copy),
+        Holds::Nothing => None,
+        _ => all(w, &holds.parts(), env.as_ref(), depth),
     }
 }

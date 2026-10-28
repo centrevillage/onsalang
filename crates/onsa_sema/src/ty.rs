@@ -254,11 +254,29 @@ pub enum Ty {
     Error,
 }
 
+/// The limits of the types the check makes (§4.4, S-264): the one place.
+pub const TYPE_DEPTH_LIMIT: u32 = 256;
+pub const TYPE_SIZE_LIMIT: u32 = 4096;
+
+/// The arguments a type is read under (R-30): `Param(i)` stands for
+/// `args[i]`, read under `outer`. The walks behind `&Analysis` (kinds,
+/// layouts, the drops of `rt`) read a field of a generic type under the
+/// arguments of its use, without making the substituted type.
+#[derive(Debug, Clone, Copy)]
+pub struct Env<'e> {
+    pub args: &'e [TyId],
+    pub outer: Option<&'e Env<'e>>,
+}
+
 /// The interner.
 #[derive(Debug, Default)]
 pub struct Types {
     tys: Vec<Ty>,
     map: HashMap<Ty, TyId>,
+    /// The depth and the size (§4.4) of each type, from its parts once when
+    /// it is interned, each held at its limit + 1: so a shared type is
+    /// judged without being expanded.
+    measures: Vec<(u16, u32)>,
 }
 
 impl Types {
@@ -267,9 +285,119 @@ impl Types {
             return id;
         }
         let id = TyId(self.tys.len() as u32);
+        self.measures.push(self.measure(&ty));
         self.tys.push(ty.clone());
         self.map.insert(ty, id);
         id
+    }
+
+    /// The depth and the size of `ty` (§4.4): a form (a type with
+    /// arguments, a tuple, an array, a function type) is a level and one, a
+    /// name and a const argument (a length) one each; `()` is a form with no
+    /// parts. A declared type is a leaf.
+    fn measure(&self, ty: &Ty) -> (u16, u32) {
+        let (own, parts): (u32, Vec<TyId>) = match ty {
+            Ty::Unit => (1, Vec::new()),
+            Ty::Tuple(ts) => (1, ts.clone()),
+            Ty::Array(t, _) => (2, vec![*t]),
+            Ty::Named(_, ts) | Ty::Builtin(_, ts) if !ts.is_empty() => (2, ts.clone()),
+            Ty::Fn(f) => (1, f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect()),
+            _ => return (0, 1),
+        };
+        let (depth, size) = parts.iter().fold((0, own), |(d, s), p| {
+            let (pd, ps) = self.measures[p.0 as usize];
+            (d.max(pd), s.saturating_add(ps))
+        });
+        ((depth + 1).min(TYPE_DEPTH_LIMIT as u16 + 1), size.min(TYPE_SIZE_LIMIT + 1))
+    }
+
+    /// The depth of `id` (§4.4), at most [`TYPE_DEPTH_LIMIT`] + 1.
+    pub fn depth(&self, id: TyId) -> u32 {
+        u32::from(self.measures[id.0 as usize].0)
+    }
+
+    /// The size of `id` (§4.4), at most [`TYPE_SIZE_LIMIT`] + 1.
+    pub fn size(&self, id: TyId) -> u32 {
+        self.measures[id.0 as usize].1
+    }
+
+    /// Whether `id` is deeper or larger than the limits (§4.4, E0422).
+    pub fn over_limit(&self, id: TyId) -> bool {
+        self.depth(id) > TYPE_DEPTH_LIMIT || self.size(id) > TYPE_SIZE_LIMIT
+    }
+
+    /// Whether the error type is in `id`. Each type is visited once.
+    pub fn has_error(&self, id: TyId) -> bool {
+        let (mut seen, mut todo) = (HashSet::new(), vec![id]);
+        while let Some(t) = todo.pop() {
+            if !seen.insert(t) {
+                continue;
+            }
+            match self.get(t) {
+                Ty::Error => return true,
+                Ty::Array(e, _) => todo.push(*e),
+                Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => todo.extend(ts),
+                Ty::Fn(f) => todo.extend(f.params.iter().map(|&(_, p)| p).chain([f.ret])),
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// `ty` read under `env`: a parameter is followed to its argument, read
+    /// under the environment around; one with no argument stays.
+    pub fn resolve<'e>(&self, mut ty: TyId, mut env: Option<&'e Env<'e>>) -> (TyId, Option<&'e Env<'e>>) {
+        while let (Ty::Param(i), Some(e)) = (self.get(ty), env) {
+            let Some(&arg) = e.args.get(*i as usize) else { break };
+            (ty, env) = (arg, e.outer);
+        }
+        (ty, env)
+    }
+
+    /// The length `len` read under `env`: a const parameter is its argument.
+    pub fn len_in(&self, len: Len, env: Option<&Env>) -> Len {
+        let (Len::Param(i), Some(e)) = (len, env) else { return len };
+        let Some(&arg) = e.args.get(i as usize) else { return len };
+        match self.get(self.resolve(arg, e.outer).0) {
+            Ty::ConstVal(n) => Len::Const(*n),
+            Ty::Param(j) => Len::Param(*j),
+            Ty::Var(v) => Len::Var(*v),
+            _ => len,
+        }
+    }
+
+    /// Substitute `Ty::Param(i)` / `Len::Param(i)` with `args[i]` (variables
+    /// or concrete), interning the types it makes (R-30: the one substitution).
+    pub fn subst(&mut self, ty: TyId, args: &[TyId]) -> TyId {
+        if args.is_empty() {
+            return ty;
+        }
+        match self.get(ty).clone() {
+            Ty::Param(i) => args.get(i as usize).copied().unwrap_or(ty),
+            Ty::Array(e, len) => {
+                let e2 = self.subst(e, args);
+                let len2 = self.len_in(len, Some(&Env { args, outer: None }));
+                self.intern(Ty::Array(e2, len2))
+            }
+            Ty::Tuple(ts) => {
+                let ns: Vec<TyId> = ts.iter().map(|&t| self.subst(t, args)).collect();
+                self.intern(Ty::Tuple(ns))
+            }
+            Ty::Named(d, ts) => {
+                let ns: Vec<TyId> = ts.iter().map(|&t| self.subst(t, args)).collect();
+                self.intern(Ty::Named(d, ns))
+            }
+            Ty::Builtin(b, ts) => {
+                let ns: Vec<TyId> = ts.iter().map(|&t| self.subst(t, args)).collect();
+                self.intern(Ty::Builtin(b, ns))
+            }
+            Ty::Fn(f) => {
+                let params: Vec<(Mode, TyId)> = f.params.iter().map(|(m, t)| (*m, self.subst(*t, args))).collect();
+                let ret = self.subst(f.ret, args);
+                self.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects }))
+            }
+            _ => ty,
+        }
     }
 
     pub fn get(&self, id: TyId) -> &Ty {

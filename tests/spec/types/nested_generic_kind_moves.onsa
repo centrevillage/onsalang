@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2"]
+
+// R-310 (W4-05 U1; issues/R/R-310/nested_generic.onsa): a generic type nested in itself with a `Buf`
+// inside is Affine (§4.6: "それらを含む型"). `Q[T: ?Dup]` lets the Affine type in (§4.5),
+// `Q[Q[Buf[F32]]]` holds the `Buf` two levels down, and the second `move` of the same value is a use
+// after the move, E0704 (§5.2). The kind of the outer `Q` comes from its content, through the inner
+// `Q` of the same definition (the same generic type with another type argument, not a cycle). The
+// three forms are the nest of two, the nest of three and the nest through a tuple; the last function
+// moves once and is fine.
+// Before W4-05 U1 the kind of the nest was not found (R-310) and the value was taken for "not Affine",
+// so the implementation reported nothing in the three functions with the second `move`.
+
+pub struct Q[T: ?Dup] {
+  a: T,
+}
+
+pub fn take_two(move q: Q[Q[Buf[F32]]]) uses {Alloc} {}
+
+pub fn take_three(move q: Q[Q[Q[Buf[F32]]]]) uses {Alloc} {}
+
+pub fn take_tuple(move q: Q[(Q[Buf[F32]], U32)]) uses {Alloc} {}
+
+pub fn nest_of_two(move q: Q[Q[Buf[F32]]]) uses {Alloc} {
+  take_two(move q)
+  take_two(move q)                                  //~ E0704
+}
+
+pub fn nest_of_three(move q: Q[Q[Q[Buf[F32]]]]) uses {Alloc} {
+  take_three(move q)
+  take_three(move q)                                //~ E0704
+}
+
+pub fn nest_through_a_tuple(move q: Q[(Q[Buf[F32]], U32)]) uses {Alloc} {
+  take_tuple(move q)
+  take_tuple(move q)                                //~ E0704
+}
+
+pub fn moved_once(move q: Q[Q[Buf[F32]]]) uses {Alloc} {
+  take_two(move q)
+}

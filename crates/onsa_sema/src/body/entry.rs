@@ -136,7 +136,7 @@ impl<'a> Checker<'a> {
             (V::Struct(xs), Ty::Named(d, args)) => {
                 let s = self.a.def(d).as_struct().cloned()?;
                 let Fields::Named(fs) = &s.fields else { return None };
-                let tys: Vec<TyId> = fs.iter().map(|f| self.subst(f.ty, &args)).collect();
+                let tys: Vec<TyId> = fs.iter().map(|f| self.a.types.subst(f.ty, &args)).collect();
                 xs.iter().zip(tys).find_map(|(x, t)| self.const_overflow(x, t))
             }
             _ => None,

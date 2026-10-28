@@ -35,7 +35,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use onsa_sema::def::{DefKind, Fields, FlowTy, GenericKind, ParamMeta};
-use onsa_sema::ty::Rate;
+use onsa_sema::ty::{Env, Rate};
 use onsa_sema::{Analysis, ConstValue, DefId, ModId, Ty, TyId};
 use onsa_syntax::ast::{Mode, Vis};
 use serde::Serialize;
@@ -440,7 +440,7 @@ impl Builder<'_> {
             .a
             .const_values
             .get(&d)
-            .map(|v| self.value_text(v, Some(c.ty)))
+            .map(|v| self.value_text(v, Some(c.ty), None))
             .or_else(|| c.int_value.map(|v| v.to_string()));
         Item::Const { name: display.to_string(), vis: vis_str(def.vis).into(), ty: self.ty(c.ty, &[]), value }
     }
@@ -449,12 +449,17 @@ impl Builder<'_> {
     /// §4.1): each float in its type ([`onsa_syntax::float_shown`]), a char
     /// with its escapes (§2.4), and the arrays, tuples and structs of them
     /// (`P { x: 1, y: 2.5 }`).
-    /// Of no type known (`None`), the floats are as they are held.
-    fn value_text(&self, v: &ConstValue, ty: Option<TyId>) -> String {
-        let ty = ty.map(|t| self.a.types.get(t));
-        let list = |vs: &[ConstValue], tys: &[TyId]| -> Vec<String> {
-            vs.iter().enumerate().map(|(i, v)| self.value_text(v, tys.get(i).copied())).collect()
+    /// Of no type known (`None`), the floats are as they are held. The type
+    /// is read under the arguments `env` (a field of a generic struct, R-30).
+    fn value_text(&self, v: &ConstValue, ty: Option<TyId>, env: Option<&Env>) -> String {
+        let (ty, env) = match ty.map(|t| self.a.types.resolve(t, env)) {
+            Some((t, env)) => (Some(self.a.types.get(t)), env),
+            None => (None, None),
         };
+        let list_in = |vs: &[ConstValue], tys: &[TyId], env: Option<&Env>| -> Vec<String> {
+            vs.iter().enumerate().map(|(i, v)| self.value_text(v, tys.get(i).copied(), env)).collect()
+        };
+        let list = |vs: &[ConstValue], tys: &[TyId]| list_in(vs, tys, env);
         match (v, ty) {
             (ConstValue::Int(x), _) => x.to_string(),
             (ConstValue::Float(x), Some(Ty::Float(k))) => format!("{:?}", onsa_syntax::float_shown(*x, k.width())),
@@ -472,15 +477,13 @@ impl Builder<'_> {
             (ConstValue::Struct(vs), Some(Ty::Named(s, args))) => {
                 let fields: Vec<(String, TyId)> = match &self.a.def(*s).kind {
                     DefKind::Struct(sd) => match &sd.fields {
-                        Fields::Named(fs) => {
-                            fs.iter().map(|f| (f.name.clone(), onsa_sema::layout::subst(self.a, f.ty, args))).collect()
-                        }
+                        Fields::Named(fs) => fs.iter().map(|f| (f.name.clone(), f.ty)).collect(),
                         Fields::Opaque => Vec::new(),
                     },
                     _ => Vec::new(),
                 };
                 let tys: Vec<TyId> = fields.iter().map(|(_, t)| *t).collect();
-                let each: Vec<String> = list(vs, &tys)
+                let each: Vec<String> = list_in(vs, &tys, Some(&Env { args, outer: env }))
                     .into_iter()
                     .enumerate()
                     .map(|(i, v)| match fields.get(i) {

@@ -149,8 +149,9 @@ impl<'a> Checker<'a> {
                 }
                 let targs = self.fresh_args(d);
                 self.of_owner(d, &targs, owner, span)?;
-                let params: Vec<(Mode, TyId)> = f.params.iter().map(|p| (p.mode, self.subst(p.ty, &targs))).collect();
-                let ret = self.subst(f.ret, &targs);
+                let params: Vec<(Mode, TyId)> =
+                    f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, &targs))).collect();
+                let ret = self.a.types.subst(f.ret, &targs);
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
                 }
@@ -173,7 +174,7 @@ impl<'a> Checker<'a> {
                     ));
                 }
                 let params: Vec<(Mode, TyId)> =
-                    variant.fields.iter().map(|&f| (Mode::Borrow, self.subst(f, &targs))).collect();
+                    variant.fields.iter().map(|&f| (Mode::Borrow, self.a.types.subst(f, &targs))).collect();
                 let ret = self.a.types.intern(Ty::Named(d, targs.clone()));
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
@@ -245,12 +246,13 @@ impl<'a> Checker<'a> {
                     _ => None,
                 });
                 if let Some(st) = impl_self {
-                    let st2 = self.subst(st, &targs);
+                    let st2 = self.a.types.subst(st, &targs);
                     self.unify_at(name.span, recv, st2)?;
                 }
                 let _ = targs_recv;
-                let params: Vec<(Mode, TyId)> = f.params.iter().map(|p| (p.mode, self.subst(p.ty, &targs))).collect();
-                let ret = self.subst(f.ret, &targs);
+                let params: Vec<(Mode, TyId)> =
+                    f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, &targs))).collect();
+                let ret = self.a.types.subst(f.ret, &targs);
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
                 }

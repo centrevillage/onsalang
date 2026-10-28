@@ -144,7 +144,8 @@ impl<'a> Parser<'a> {
 
     /// E0006 at `at`, the token of a form of `kind` over the limit (spec §2.5).
     /// The note says how to split the form: an expression into a `let`, a
-    /// type into a `type` alias, a block into a function. The unit is not
+    /// type into a named `struct` (an alias expands to the same depth,
+    /// §4.4), a block into a function. The unit is not
     /// read further: the error goes up to the recovery.
     pub(super) fn too_deep(&mut self, at: Span, kind: NodeKind) -> ParseError {
         use NodeKind::*;
@@ -152,7 +153,9 @@ impl<'a> Parser<'a> {
             (Block | ForStmt | WhileStmt, _) => {
                 "move the inner blocks into a function and call it; a function starts again from level 0"
             }
-            (TypeArgs | FnTypeParams, _) | (_, Class::Type) => "name an inner part of the type with a `type` alias",
+            (TypeArgs | FnTypeParams, _) | (_, Class::Type) => {
+                "name an inner part of the type with a `struct`; a `type` alias expands to the same depth"
+            }
             (StructPatField, _) | (_, Class::Pat) => "bind an inner part to a name and match that name on its own",
             _ => "bind an inner part to a name with `let`, or move it into a function",
         };

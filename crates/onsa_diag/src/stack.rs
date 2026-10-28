@@ -22,10 +22,12 @@ use std::thread::{Builder, JoinHandle, Scope, ScopedJoinHandle};
 /// The syntax is at most 256 levels deep (spec §2.5, S-183: the parser stops
 /// at the limit with E0006, `onsa_syntax::parser::NESTING_LIMIT`), so the
 /// stages that recurse on the written tree are bounded. What is made from it
-/// is not yet: a chain of type aliases (`type A2 = Option[A1]`, ...) expands
-/// to a type as deep as the chain is long, each alias one level deep in the
-/// source, and a chain of pairs (`type A2 = (A1, A1)`) takes exponential
-/// time; their bound is S-264 (to decide before W4-05). Measured on
+/// is bounded too: a type the check makes is at most 256 levels deep and
+/// 4096 names and forms large (§4.4, S-264, E0422; `onsa_sema::ty`), however
+/// a chain of aliases (`type A2 = (A1, A1)`) expands (the written types and
+/// the aliases; the types a body infers are W5-08's). The walks through the
+/// declarations a type holds stop at a stack of their own, with an internal
+/// error (`onsa_sema::walk`). Measured on
 /// aarch64-apple-darwin in a debug build (2026-10-08, W3-14, the stack
 /// painted under the call): `check` of one function 256 levels deep uses at
 /// most 3.9 MiB (256 nested calls `id(id(...))`; parentheses 2.2 MiB, of

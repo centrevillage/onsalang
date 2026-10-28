@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2"]
+
+// R-30 (W4-05 U1): the same function as affine_generic_holder_alone.onsa, in a file that writes the
+// tuple `(Buf[F32], U32)` (the substituted field of `Holder[Buf[F32]]`) before the use of the
+// `Holder`. The answer is the same as without it: the second `move` of an Affine value is E0704
+// (§5.2). The kind of a type does not depend on what else the program writes.
+
+pub fn pair_of_buffers(move t: (Buf[F32], U32)) uses {Alloc} {}
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub fn take(move h: Holder[Buf[F32]]) uses {Alloc} {}
+
+pub fn twice(move h: Holder[Buf[F32]]) uses {Alloc} {
+  take(move h)
+  take(move h)                                      //~ E0704
+}
+
+pub fn once(move h: Holder[Buf[F32]]) uses {Alloc} {
+  take(move h)
+}

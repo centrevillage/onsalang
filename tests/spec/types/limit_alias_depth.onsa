@@ -1,0 +1,536 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// S-264 (W4-05 U1): the depth limit of a type the check makes is 256 (spec §4.4). A type argument list
+// (`Option[..]`), a tuple, an array and a function type are one level each and a name is none, so in
+// `type Bk = Option[B(k-1)]` the depth of Bk is k (B0 = I32 has depth 0): B256 is within the limit
+// and B257 is the first to pass it. The syntactic depth of each line is 1 (§2.5), so it is E0422, not
+// E0006. The diagnostic is at the declaration of the alias that first passes (B257); B258 and B259 use
+// it, are the error type and have no diagnostic, and so is a signature that writes B257.
+// The implementation gave no E0422 before W4-05 U1, which brought the code in.
+
+type B0 = I32
+
+type B1 = Option[B0]
+
+type B2 = Option[B1]
+
+type B3 = Option[B2]
+
+type B4 = Option[B3]
+
+type B5 = Option[B4]
+
+type B6 = Option[B5]
+
+type B7 = Option[B6]
+
+type B8 = Option[B7]
+
+type B9 = Option[B8]
+
+type B10 = Option[B9]
+
+type B11 = Option[B10]
+
+type B12 = Option[B11]
+
+type B13 = Option[B12]
+
+type B14 = Option[B13]
+
+type B15 = Option[B14]
+
+type B16 = Option[B15]
+
+type B17 = Option[B16]
+
+type B18 = Option[B17]
+
+type B19 = Option[B18]
+
+type B20 = Option[B19]
+
+type B21 = Option[B20]
+
+type B22 = Option[B21]
+
+type B23 = Option[B22]
+
+type B24 = Option[B23]
+
+type B25 = Option[B24]
+
+type B26 = Option[B25]
+
+type B27 = Option[B26]
+
+type B28 = Option[B27]
+
+type B29 = Option[B28]
+
+type B30 = Option[B29]
+
+type B31 = Option[B30]
+
+type B32 = Option[B31]
+
+type B33 = Option[B32]
+
+type B34 = Option[B33]
+
+type B35 = Option[B34]
+
+type B36 = Option[B35]
+
+type B37 = Option[B36]
+
+type B38 = Option[B37]
+
+type B39 = Option[B38]
+
+type B40 = Option[B39]
+
+type B41 = Option[B40]
+
+type B42 = Option[B41]
+
+type B43 = Option[B42]
+
+type B44 = Option[B43]
+
+type B45 = Option[B44]
+
+type B46 = Option[B45]
+
+type B47 = Option[B46]
+
+type B48 = Option[B47]
+
+type B49 = Option[B48]
+
+type B50 = Option[B49]
+
+type B51 = Option[B50]
+
+type B52 = Option[B51]
+
+type B53 = Option[B52]
+
+type B54 = Option[B53]
+
+type B55 = Option[B54]
+
+type B56 = Option[B55]
+
+type B57 = Option[B56]
+
+type B58 = Option[B57]
+
+type B59 = Option[B58]
+
+type B60 = Option[B59]
+
+type B61 = Option[B60]
+
+type B62 = Option[B61]
+
+type B63 = Option[B62]
+
+type B64 = Option[B63]
+
+type B65 = Option[B64]
+
+type B66 = Option[B65]
+
+type B67 = Option[B66]
+
+type B68 = Option[B67]
+
+type B69 = Option[B68]
+
+type B70 = Option[B69]
+
+type B71 = Option[B70]
+
+type B72 = Option[B71]
+
+type B73 = Option[B72]
+
+type B74 = Option[B73]
+
+type B75 = Option[B74]
+
+type B76 = Option[B75]
+
+type B77 = Option[B76]
+
+type B78 = Option[B77]
+
+type B79 = Option[B78]
+
+type B80 = Option[B79]
+
+type B81 = Option[B80]
+
+type B82 = Option[B81]
+
+type B83 = Option[B82]
+
+type B84 = Option[B83]
+
+type B85 = Option[B84]
+
+type B86 = Option[B85]
+
+type B87 = Option[B86]
+
+type B88 = Option[B87]
+
+type B89 = Option[B88]
+
+type B90 = Option[B89]
+
+type B91 = Option[B90]
+
+type B92 = Option[B91]
+
+type B93 = Option[B92]
+
+type B94 = Option[B93]
+
+type B95 = Option[B94]
+
+type B96 = Option[B95]
+
+type B97 = Option[B96]
+
+type B98 = Option[B97]
+
+type B99 = Option[B98]
+
+type B100 = Option[B99]
+
+type B101 = Option[B100]
+
+type B102 = Option[B101]
+
+type B103 = Option[B102]
+
+type B104 = Option[B103]
+
+type B105 = Option[B104]
+
+type B106 = Option[B105]
+
+type B107 = Option[B106]
+
+type B108 = Option[B107]
+
+type B109 = Option[B108]
+
+type B110 = Option[B109]
+
+type B111 = Option[B110]
+
+type B112 = Option[B111]
+
+type B113 = Option[B112]
+
+type B114 = Option[B113]
+
+type B115 = Option[B114]
+
+type B116 = Option[B115]
+
+type B117 = Option[B116]
+
+type B118 = Option[B117]
+
+type B119 = Option[B118]
+
+type B120 = Option[B119]
+
+type B121 = Option[B120]
+
+type B122 = Option[B121]
+
+type B123 = Option[B122]
+
+type B124 = Option[B123]
+
+type B125 = Option[B124]
+
+type B126 = Option[B125]
+
+type B127 = Option[B126]
+
+type B128 = Option[B127]
+
+type B129 = Option[B128]
+
+type B130 = Option[B129]
+
+type B131 = Option[B130]
+
+type B132 = Option[B131]
+
+type B133 = Option[B132]
+
+type B134 = Option[B133]
+
+type B135 = Option[B134]
+
+type B136 = Option[B135]
+
+type B137 = Option[B136]
+
+type B138 = Option[B137]
+
+type B139 = Option[B138]
+
+type B140 = Option[B139]
+
+type B141 = Option[B140]
+
+type B142 = Option[B141]
+
+type B143 = Option[B142]
+
+type B144 = Option[B143]
+
+type B145 = Option[B144]
+
+type B146 = Option[B145]
+
+type B147 = Option[B146]
+
+type B148 = Option[B147]
+
+type B149 = Option[B148]
+
+type B150 = Option[B149]
+
+type B151 = Option[B150]
+
+type B152 = Option[B151]
+
+type B153 = Option[B152]
+
+type B154 = Option[B153]
+
+type B155 = Option[B154]
+
+type B156 = Option[B155]
+
+type B157 = Option[B156]
+
+type B158 = Option[B157]
+
+type B159 = Option[B158]
+
+type B160 = Option[B159]
+
+type B161 = Option[B160]
+
+type B162 = Option[B161]
+
+type B163 = Option[B162]
+
+type B164 = Option[B163]
+
+type B165 = Option[B164]
+
+type B166 = Option[B165]
+
+type B167 = Option[B166]
+
+type B168 = Option[B167]
+
+type B169 = Option[B168]
+
+type B170 = Option[B169]
+
+type B171 = Option[B170]
+
+type B172 = Option[B171]
+
+type B173 = Option[B172]
+
+type B174 = Option[B173]
+
+type B175 = Option[B174]
+
+type B176 = Option[B175]
+
+type B177 = Option[B176]
+
+type B178 = Option[B177]
+
+type B179 = Option[B178]
+
+type B180 = Option[B179]
+
+type B181 = Option[B180]
+
+type B182 = Option[B181]
+
+type B183 = Option[B182]
+
+type B184 = Option[B183]
+
+type B185 = Option[B184]
+
+type B186 = Option[B185]
+
+type B187 = Option[B186]
+
+type B188 = Option[B187]
+
+type B189 = Option[B188]
+
+type B190 = Option[B189]
+
+type B191 = Option[B190]
+
+type B192 = Option[B191]
+
+type B193 = Option[B192]
+
+type B194 = Option[B193]
+
+type B195 = Option[B194]
+
+type B196 = Option[B195]
+
+type B197 = Option[B196]
+
+type B198 = Option[B197]
+
+type B199 = Option[B198]
+
+type B200 = Option[B199]
+
+type B201 = Option[B200]
+
+type B202 = Option[B201]
+
+type B203 = Option[B202]
+
+type B204 = Option[B203]
+
+type B205 = Option[B204]
+
+type B206 = Option[B205]
+
+type B207 = Option[B206]
+
+type B208 = Option[B207]
+
+type B209 = Option[B208]
+
+type B210 = Option[B209]
+
+type B211 = Option[B210]
+
+type B212 = Option[B211]
+
+type B213 = Option[B212]
+
+type B214 = Option[B213]
+
+type B215 = Option[B214]
+
+type B216 = Option[B215]
+
+type B217 = Option[B216]
+
+type B218 = Option[B217]
+
+type B219 = Option[B218]
+
+type B220 = Option[B219]
+
+type B221 = Option[B220]
+
+type B222 = Option[B221]
+
+type B223 = Option[B222]
+
+type B224 = Option[B223]
+
+type B225 = Option[B224]
+
+type B226 = Option[B225]
+
+type B227 = Option[B226]
+
+type B228 = Option[B227]
+
+type B229 = Option[B228]
+
+type B230 = Option[B229]
+
+type B231 = Option[B230]
+
+type B232 = Option[B231]
+
+type B233 = Option[B232]
+
+type B234 = Option[B233]
+
+type B235 = Option[B234]
+
+type B236 = Option[B235]
+
+type B237 = Option[B236]
+
+type B238 = Option[B237]
+
+type B239 = Option[B238]
+
+type B240 = Option[B239]
+
+type B241 = Option[B240]
+
+type B242 = Option[B241]
+
+type B243 = Option[B242]
+
+type B244 = Option[B243]
+
+type B245 = Option[B244]
+
+type B246 = Option[B245]
+
+type B247 = Option[B246]
+
+type B248 = Option[B247]
+
+type B249 = Option[B248]
+
+type B250 = Option[B249]
+
+type B251 = Option[B250]
+
+type B252 = Option[B251]
+
+type B253 = Option[B252]
+
+type B254 = Option[B253]
+
+type B255 = Option[B254]
+
+type B256 = Option[B255]
+
+type B257 = Option[B256]                            //~ E0422
+
+type B258 = Option[B257]
+
+type B259 = Option[B258]
+pub fn uses_the_error_alias(x: B257, y: B259) {}
+
+pub fn within_the_limit(x: B256) -> B256 {
+  x
+}

@@ -100,7 +100,7 @@ fn first_use(
         if !owned || moved.is_some_and(|m| m.contains(&crate::body::LocalId(i as u32))) {
             continue;
         }
-        if needs_alloc_drop(a, l.ty, &mut HashSet::new()) {
+        if needs_alloc_drop(a, l.ty) {
             uses.push((
                 l.span,
                 format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)),
@@ -113,7 +113,7 @@ fn first_use(
         }
         if let StmtKind::Expr(e) = &stmt.kind
             && let Some(t) = body.expr_types.get(e)
-            && needs_alloc_drop(a, *t, &mut HashSet::new())
+            && needs_alloc_drop(a, *t)
         {
             uses.push((stmt.span, format!("a `{}` is dropped here, which needs `Alloc`", a.display_type(*t))));
         }

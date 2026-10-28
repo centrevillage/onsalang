@@ -176,7 +176,9 @@ impl<'a> Checker<'a> {
         let def = self.a.def(d);
         let ty = match (&def.kind, def.owner.map(|o| &self.a.def(o).kind)) {
             (DefKind::Struct(_) | DefKind::Enum(_), _) => self.a.types.intern(Ty::Named(d, args.to_vec())),
-            (DefKind::Fn(_), Some(&DefKind::Impl(crate::def::ImplDef { self_ty, .. }))) => self.subst(self_ty, args),
+            (DefKind::Fn(_), Some(&DefKind::Impl(crate::def::ImplDef { self_ty, .. }))) => {
+                self.a.types.subst(self_ty, args)
+            }
             _ => return Ok(()),
         };
         self.unify_at(span, ty, owner)
@@ -249,7 +251,7 @@ impl<'a> Checker<'a> {
                     enum_ty
                 } else {
                     let params: Vec<(Mode, TyId)> =
-                        variant.fields.iter().map(|&f| (Mode::Borrow, self.subst(f, &args))).collect();
+                        variant.fields.iter().map(|&f| (Mode::Borrow, self.a.types.subst(f, &args))).collect();
                     self.a.types.intern(Ty::Fn(FnTy { rt: true, params, ret: enum_ty, effects: Default::default() }))
                 };
                 if let Some(exp) = expected {
@@ -318,8 +320,8 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn fn_type(&mut self, f: &FnDef, args: &[TyId]) -> TyId {
-        let params: Vec<(Mode, TyId)> = f.params.iter().map(|p| (p.mode, self.subst(p.ty, args))).collect();
-        let ret = self.subst(f.ret, args);
+        let params: Vec<(Mode, TyId)> = f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, args))).collect();
+        let ret = self.a.types.subst(f.ret, args);
         self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }))
     }
 
@@ -334,7 +336,7 @@ impl<'a> Checker<'a> {
                 {
                     self.a.note_use(f.span, name.span);
                     self.field_reach(d, f, name.span)?;
-                    return Ok(self.subst(f.ty, &args));
+                    return Ok(self.a.types.subst(f.ty, &args));
                 }
                 // SPEC-GAP(S-260): a field of a struct whose unit failed in the
                 // syntax stage gets no diagnostic, whatever its name (the

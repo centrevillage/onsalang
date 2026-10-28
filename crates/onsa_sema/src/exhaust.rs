@@ -45,7 +45,7 @@ impl Checker<'_> {
                         .variants
                         .iter()
                         .map(|v| {
-                            let fs: Vec<TyId> = v.fields.iter().map(|&f| self.subst(f, &args)).collect();
+                            let fs: Vec<TyId> = v.fields.iter().map(|&f| self.a.types.subst(f, &args)).collect();
                             (format!("{name}.{}", v.name), fs)
                         })
                         .collect();
@@ -53,7 +53,7 @@ impl Checker<'_> {
                 }
                 DefKind::Struct(s) => match s.fields {
                     Fields::Named(fs) => {
-                        let tys: Vec<TyId> = fs.iter().map(|f| self.subst(f.ty, &args)).collect();
+                        let tys: Vec<TyId> = fs.iter().map(|f| self.a.types.subst(f.ty, &args)).collect();
                         Some(Ctors { items: vec![(self.a.def(d).name.clone(), tys)] })
                     }
                     Fields::Opaque => None,

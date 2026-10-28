@@ -99,7 +99,7 @@ impl<'a> Checker<'a> {
             }
             seen.push(&field.name);
             self.a.note_use(defs[i].span, field.span);
-            let ft = self.subst(defs[i].ty, &args);
+            let ft = self.a.types.subst(defs[i].ty, &args);
             sub(self, *fp, ft, Some(i))?;
         }
         if failed {

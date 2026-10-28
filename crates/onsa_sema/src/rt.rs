@@ -9,9 +9,10 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprKind, Lit, Mode, StmtKind, StrSeg};
 
 use crate::body::{LocalKind, Target};
-use crate::def::{DefKind, Fields};
+use crate::def::DefKind;
 use crate::modes::MovedLocals;
-use crate::ty::{BuiltinTy, Ty, TyId};
+use crate::ty::{BuiltinTy, Env, Ty, TyId};
+use crate::walk::Walk;
 use crate::{Analysis, DefId, Package, module_of_def};
 
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
@@ -230,7 +231,7 @@ fn body_rules(
         if !owned || moved.is_some_and(|m| m.contains(&crate::body::LocalId(i as u32))) {
             continue;
         }
-        if needs_alloc_drop(a, l.ty, &mut HashSet::new()) {
+        if needs_alloc_drop(a, l.ty) {
             let shown = a.display_type(l.ty);
             found.push(
                 Diagnostic::new(
@@ -252,7 +253,7 @@ fn body_rules(
         }
         if let StmtKind::Expr(e) = &stmt.kind
             && let Some(t) = body.expr_types.get(e)
-            && needs_alloc_drop(a, *t, &mut HashSet::new())
+            && needs_alloc_drop(a, *t)
         {
             let shown = a.display_type(*t);
             found.push(
@@ -271,37 +272,33 @@ fn body_rules(
 
 /// Whether dropping a value of this type needs `Alloc` (§12.2): Shared values
 /// and `Buf`, or anything containing them. Flow state is Affine but drops freely.
-pub(crate) fn needs_alloc_drop(a: &Analysis, t: TyId, visiting: &mut HashSet<DefId>) -> bool {
-    match a.types.get(t) {
+pub(crate) fn needs_alloc_drop(a: &Analysis, t: TyId) -> bool {
+    drops_alloc(&Walk::new(a), t, None, 0).unwrap_or(false)
+}
+
+/// [`needs_alloc_drop`] of `t` read under `env` (R-30), `depth` named types
+/// in; `None` when the walk stops ([`Walk`]; a type that holds itself: no).
+fn drops_alloc(w: &Walk, t: TyId, env: Option<&Env>, depth: u32) -> Option<bool> {
+    fn any(w: &Walk, ts: &[TyId], env: Option<&Env>, depth: u32) -> Option<bool> {
+        for &t in ts {
+            if drops_alloc(w, t, env, depth)? {
+                return Some(true);
+            }
+        }
+        Some(false)
+    }
+    let (ty, env) = w.at(t, env)?;
+    match ty {
         Ty::Builtin(
             BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set | BuiltinTy::Buf,
             _,
-        ) => true,
-        Ty::Builtin(_, args) => args.iter().any(|&x| needs_alloc_drop(a, x, visiting)),
-        Ty::Array(el, _) => needs_alloc_drop(a, *el, visiting),
-        Ty::Tuple(ts) => ts.iter().any(|&x| needs_alloc_drop(a, x, visiting)),
+        ) => Some(true),
+        Ty::Builtin(_, ts) | Ty::Tuple(ts) => any(w, ts, env, depth),
+        Ty::Array(el, _) => drops_alloc(w, *el, env, depth),
         Ty::Named(d, args) => {
-            if !visiting.insert(*d) {
-                return false;
-            }
-            let r = match &a.def(*d).kind {
-                DefKind::Struct(s) => match &s.fields {
-                    Fields::Named(fs) => {
-                        fs.iter().any(|f| needs_alloc_drop(a, crate::layout::subst(a, f.ty, args), visiting))
-                    }
-                    Fields::Opaque => false,
-                },
-                DefKind::Enum(e) => e
-                    .variants
-                    .iter()
-                    .flat_map(|v| v.fields.iter())
-                    .any(|&x| needs_alloc_drop(a, crate::layout::subst(a, x, args), visiting)),
-                DefKind::Alias(x) => needs_alloc_drop(a, *x, visiting),
-                _ => false,
-            };
-            visiting.remove(d);
-            r
+            let (holds, env, depth) = w.enter(*d, args, env, depth)?;
+            any(w, &holds.parts(), env.as_ref(), depth)
         }
-        _ => false,
+        _ => Some(false),
     }
 }

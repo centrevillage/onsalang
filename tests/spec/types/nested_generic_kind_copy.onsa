@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2"]
+
+// R-310 (W4-05 U1; issues/R/R-310/nested_generic.onsa): a generic type nested in itself has a kind
+// like any other (§4.6: "全ての型は構造から次のどれかに分類される"). `Pair[T]` has the implicit `Dup`
+// bound on `T` (§4.5), and the kind of `Pair[Pair[I32]]` is that of its content: Copy, so a value of
+// it is copied at each use (§5.2: a Dup value is copied into a borrowed or `move` parameter and into a
+// tuple); the same with a Shared `Str` inside, where the kind is Shared and also Dup. A `Span` or `Buf`
+// of it is well-formed, because the element of a `Span[T]` is `T: Copy` (§4.5), which the nested type
+// satisfies. Nothing is reported. Before W4-05 U1 the kind of the inner `Pair` was not found (R-310:
+// the inner `Pair` was taken as being visited), taken for "not Affine", and passed by chance; the file
+// stays fine when a kind that is not found is Affine (W4-16) and the kind of the nested type is
+// found. The negative, where the nested type has a `Buf` inside, is nested_generic_kind_moves.onsa.
+
+pub struct Pair[T] {
+  a: T,
+}
+
+pub fn take(p: Pair[Pair[I32]]) {}
+
+pub fn use_twice(p: Pair[Pair[I32]]) {
+  take(p)
+  take(p)
+}
+
+pub fn pair_of_copies(p: Pair[Pair[I32]]) -> (Pair[Pair[I32]], Pair[Pair[I32]]) {
+  (p, p)
+}
+
+pub fn three_deep(p: Pair[Pair[Pair[I32]]]) -> (Pair[Pair[Pair[I32]]], Pair[Pair[Pair[I32]]]) {
+  (p, p)
+}
+
+pub fn through_a_tuple(p: Pair[(Pair[I32], Pair[I32])]) -> (Pair[(Pair[I32], Pair[I32])], I32) {
+  (p, 1)
+}
+
+pub fn shared_inside(s: Pair[Pair[Str]]) -> (Pair[Pair[Str]], Pair[Pair[Str]]) {
+  (s, s)
+}
+
+pub fn element_of_a_span(xs: Span[Pair[Pair[I32]]]) {}
+
+pub fn element_of_a_buf(xs: Buf[Pair[Pair[I32]]]) {}
+
+pub struct Outer {
+  p: Pair[Pair[I32]],
+}
+
+pub fn outer_twice(o: Outer) -> (Outer, Outer) {
+  (o, o)
+}

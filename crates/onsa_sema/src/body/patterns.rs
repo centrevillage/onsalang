@@ -180,7 +180,8 @@ impl<'a> Checker<'a> {
                 let en = self.a.def(d).as_enum().unwrap().clone();
                 let named = self.a.types.intern(Ty::Named(d, args.clone()));
                 self.unify_at(span, named, ty)?;
-                let fields: Vec<TyId> = en.variants[i as usize].fields.iter().map(|&f| self.subst(f, &args)).collect();
+                let fields: Vec<TyId> =
+                    en.variants[i as usize].fields.iter().map(|&f| self.a.types.subst(f, &args)).collect();
                 (i, fields, en.variants.len())
             }
             _ => {
