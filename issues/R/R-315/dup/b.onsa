@@ -1,0 +1,5 @@
+use a.{f}
+use a
+
+pub fn g() -> I32 { f() }
+pub fn h() -> I32 { a.f() }

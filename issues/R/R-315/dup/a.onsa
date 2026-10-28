@@ -1,0 +1,3 @@
+use b.{g, h}
+
+pub fn f() -> I32 { g() + h() }
