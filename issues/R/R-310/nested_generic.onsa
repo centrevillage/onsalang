@@ -1,0 +1,11 @@
+pub struct Pair[T] {
+  a: T,
+}
+
+pub struct Outer {
+  p: Pair[Pair[I32]],
+}
+
+pub struct Inner {
+  p: Pair[I32],
+}

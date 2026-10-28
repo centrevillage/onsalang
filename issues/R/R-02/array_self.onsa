@@ -1,0 +1,3 @@
+pub struct S {
+  a: [S; 2],
+}

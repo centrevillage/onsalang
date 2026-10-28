@@ -1,0 +1,12 @@
+pub struct Q[T] {
+  a: Array[T],
+}
+
+pub struct R[T] {
+  q: Q[T],
+  b: T,
+}
+
+pub struct S {
+  r: R[S],
+}

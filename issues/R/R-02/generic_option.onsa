@@ -1,0 +1,7 @@
+pub struct P[T] {
+  a: Option[T],
+}
+
+pub struct S {
+  p: P[S],
+}
