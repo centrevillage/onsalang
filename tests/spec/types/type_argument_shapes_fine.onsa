@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1"]
+
+// S-732 (W4-04 U10): the forms that are fine next to the E0308 of types/kind_type_argument_shapes.onsa. A
+// type in the position of a type argument is a type whatever its shape (a tuple type, a function type, an
+// array type, the unit type, a type that has arguments), and a constant (a literal, a name of a constant, an
+// associated constant, a const parameter) is fine in the position of a const argument (§4.5: "並びの要素は
+// 型の位置の並びと同じに読み、const 引数は定数式である"). The same forms are written in a signature and in
+// the annotation of a body. (An operation of constants in the position of a const argument, `Ring[F32, K + 1]`,
+// is E0200 in this version, array_length_operations_fine.onsa, so it is not here.) The last two units are
+// the errors that are the same before and after the decision (the first in the place is reported).
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct Cells[const N: U32] {
+  data: [F32; N],
+}
+
+const K: U32 = 4
+
+pub fn tuple_as_a_type_argument(w: Wrap[(F32, F32)]) -> F32 {
+  w.v.0
+}
+
+pub fn function_type_as_a_type_argument(w: Wrap[fn() -> F32]) -> F32 {
+  w.v.()
+}
+
+pub fn array_type_as_a_type_argument(w: Wrap[[F32; 3]]) -> F32 {
+  w.v[0]
+}
+
+pub fn unit_as_a_type_argument(w: Wrap[()]) -> I32 {
+  1
+}
+
+pub fn option_as_a_type_argument(w: Wrap[Option[F32]]) -> I32 {
+  1
+}
+
+pub fn tuple_as_the_type_of_a_ring(r: Ring[(F32, F32), 4]) -> F32 {
+  r.data[0].0
+}
+
+pub fn constants_as_const_arguments(a: Ring[F32, K], b: Ring[F32, 3], c: Ring[F32, P.N], d: Cells[K]) -> F32 {
+  a.data[0] + b.data[0] + c.data[0] + d.data[0]
+}
+
+pub fn const_parameter_as_a_const_argument[const N: U32](r: Ring[F32, N], c: Cells[N]) -> F32 {
+  r.data[0] + c.data[0]
+}
+
+pub fn shapes_in_a_result() -> Wrap[(F32, F32)] {
+  Wrap { v: (1.0, 2.0) }
+}
+
+type ShapeInAnAlias = Wrap[fn() -> F32]
+
+pub struct ShapesInAField {
+  a: Wrap[(F32, F32)],
+  b: Ring[Wrap[F32], 3],
+}
+
+pub fn shapes_in_annotations(n: U32) -> F32 {
+  let a: Wrap[(F32, F32)] = Wrap { v: (1.0, 2.0) }
+  let b: Wrap[()] = Wrap { v: () }
+  let c: Wrap[[F32; 3]] = Wrap { v: [1.0, 2.0, 3.0] }
+  let d: Ring[F32, K] = Ring { data: [0.0; K], head: n }
+  let e: Ring[(F32, F32), 2] = Ring { data: [(1.0, 2.0); 2], head: n }
+  let f = fn(w: Wrap[(F32, F32)]) -> F32 { w.v.0 }
+  let _ = b
+  a.v.0 + c.v[0] + d.data[0] + e.data[0].0 + f.(a)
+}
+
+test "shapes of the type arguments in a test" {
+  let a: Wrap[(F32, F32)] = Wrap { v: (1.0, 2.0) }
+  let d: Ring[F32, 2] = Ring { data: [3.0; 2], head: 0 }
+  assert a.v.0 + d.data[0] == 4.0
+}
+
+pub flow shapes_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let a: Wrap[(F32, F32)] = Wrap { v: (x, x) }
+  a.v.0
+}
+
+fn g() -> U32 {
+  1
+}
+
+// ---- The errors that are the same before and after the decision ----
+// The first in the place is reported: the E0302 of a name that is written before the literal, and the E0308 of
+// the tuple written before the function used as a type (the stage of the names, then the place); and a type
+// that has a head and arguments in the position of a const argument.
+
+pub fn unknown_name_before_a_literal(a: Nope, b: Wrap[3]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn tuple_before_a_function_as_a_type(a: Ring[F32, (F32, F32)], b: g) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_with_an_argument_as_a_const_argument(r: Ring[F32, Option[F32]]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn user_type_with_an_argument_as_a_const_argument(r: Ring[F32, Wrap[F32]]) -> F32 {   //~ E0308
+  1.0
+}

@@ -63,6 +63,8 @@ pub enum NameKind {
     /// A const parameter, a value and a constant (§15.1) that a pattern does
     /// not take (§7, S-185).
     ConstParam,
+    /// A local binding or a parameter of a body (§5.1, S-729).
+    Local,
 }
 
 impl NameKind {
@@ -156,6 +158,7 @@ impl NameKind {
             NameKind::Effect => "an effect",
             NameKind::Handler => "a handler",
             NameKind::ConstParam => "a const parameter",
+            NameKind::Local => "a local",
         }
     }
 }

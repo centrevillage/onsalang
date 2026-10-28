@@ -13,8 +13,8 @@
 // the heading makes the whole `impl` one unit, §18.1, so the members are not checked).
 // What the version does not support stays E0200: the bound of a user `trait` (`T: Tr`), which is the kind
 // the place needs (§15.1: "E0200 は、要る種類の名前でこの版が扱えないもの（…利用者の trait の境界）").
-// The E0308 of a wrong name comes before it, in front of it and after it (a rule of the version
-// before what the version does not support).
+// With a wrong name in the same list, the first in the place is reported (§15.1, §18.1, S-731: the
+// order is the place's).
 // One error per unit (§18.1), so each form is in its own unit; the fine bounds (the traits and the kind
 // constraints of the prelude, joined by `+`) are the fine units at the end of the file.
 
@@ -138,7 +138,7 @@ pub fn wrong_name_before_a_user_trait[T: I32 + Tr](x: T) -> T {   //~ E0308
   x
 }
 
-pub fn user_trait_before_a_wrong_name[T: Tr + I32](x: T) -> T {   //~ E0308
+pub fn user_trait_before_a_wrong_name[T: Tr + I32](x: T) -> T {   //~ E0200
   x
 }
 

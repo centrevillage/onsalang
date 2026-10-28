@@ -4,7 +4,7 @@
 
 // S-713 (b), S-719, S-721 (W4-04 U8b): a name that is found and is not an effect, written in an effect row
 // (`uses {..}`), is E0308 (§8.1: "効果でも効果行変数でもない名前（`uses {I32}`、`uses {Show}`）は E0308
-// である"; §15.1: the kinds, and "要る種類でない名前は E0200 より先に E0308"). It is not E0302 (the name is
+// である"; §15.1: the kinds, and "要る種類でない名前には E0200 でなく E0308 を付ける"). It is not E0302 (the name is
 // found) and not the E0200 of "effects other than `Alloc`". The names here are a function, a constant,
 // an enum, a variant, an alias, a trait of the prelude, an operator trait, a kind constraint, a
 // built-in type, the names of the declarations that are E0200 in this version and are read by the kind of
@@ -12,8 +12,8 @@
 // place of the row in the type of a function value (a parameter, a result, an alias of a type, a closure).
 // The effect row is read element by element, so a wrong name after a right one is also E0308.
 // What the version does not support stays E0200: the name of a user `effect` (`uses {Ef}`), which is the
-// kind the place needs (§15.1: "E0200 は、要る種類の名前でこの版が扱えないもの"). The E0308 of a wrong
-// name before it comes first (a rule of the version before what the version does not support).
+// kind the place needs (§15.1: "E0200 は、要る種類の名前でこの版が扱えないもの"). With a wrong name in
+// the same row, the first in the place is reported (§15.1, §18.1, S-731: the order is the place's).
 // One error per unit (§18.1), so each form is in its own unit; the fine rows (`Alloc`, an empty row,
 // an effect row variable, a row of a function type) are the fine units at the end of the file.
 
@@ -87,7 +87,7 @@ pub fn two_wrong_names() uses {I32, Show} {}        //~ E0308
 
 pub fn wrong_name_before_a_user_effect() uses {I32, Ef} {}   //~ E0308
 
-pub fn user_effect_before_a_wrong_name() uses {Ef, I32} {}   //~ E0308
+pub fn user_effect_before_a_wrong_name() uses {Ef, I32} {}   //~ E0200
 
 pub fn user_effect_is_not_supported() uses {Ef} {}  //~ E0200
 

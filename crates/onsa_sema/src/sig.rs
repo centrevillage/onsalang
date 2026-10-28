@@ -62,6 +62,23 @@ struct Cx<'p> {
     /// named in it that reaches less far is an E0303. `None` out of a
     /// heading (a body, the type of an `impl`).
     reach: Option<Vis>,
+    /// The local bindings and parameters the type sees, by name: values a
+    /// path of it names first (§15.1, §4.5, S-729). Of a type of a body, the
+    /// visible ones it names; none in a heading (S-733).
+    locals: Vec<String>,
+}
+
+impl Cx<'_> {
+    /// Whether `name` is one of [`Self::locals`], a value (S-729).
+    fn is_local(&self, name: &str) -> bool {
+        self.locals.iter().any(|l| l == name)
+    }
+
+    /// Whether a constant expression starts at one of [`Self::locals`]: a
+    /// value, no constant (E0417, §4.5).
+    fn local(&self) -> impl Fn(onsa_syntax::ast::ExprId) -> bool + '_ {
+        |e| crate::constarg::path_of(self.ast, e).is_some_and(|p| self.is_local(&p.segments[0].name))
+    }
 }
 
 pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
@@ -209,6 +226,7 @@ impl<'p> Sema<'p> {
             self_ty,
             def: id,
             reach: Some(def.vis),
+            locals: Vec::new(),
         })
     }
 
@@ -475,9 +493,6 @@ impl<'p> Sema<'p> {
             .map(|g| (crate::names::param_name(g).name.as_str(), param_kind(g)))
             .chain(cx.generics.iter().map(|g| (g.name.as_str(), NameKind::of_generic(&g.kind))))
             .collect();
-        // The traits this version does not take as bounds (E0200), after the
-        // E0308 of a name of another kind in the list (§15.1, S-713 A7).
-        let (mut traits, mut wrong) = (Vec::new(), false);
         for g in gs {
             let def = match g {
                 GenericParam::Type { name, bounds } => {
@@ -493,13 +508,15 @@ impl<'p> Sema<'p> {
                         match heading_name(self.a, cx.m, &b.path, &listed, cx.self_ty) {
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => dup = false,
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(bound))))) => bs.push(bound),
+                            // A trait this version does not take as a bound
+                            // (E0200; with an E0308 in the unit, the first by
+                            // its place, §18.1, S-731).
                             Ok((_, Some(Entity::Builtin(Builtin::Trait(i))))) => match TRAITS[i as usize].1 {
                                 Some(bound) => bs.push(bound),
-                                None => traits.push(n.span),
+                                None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             },
-                            Ok((NameKind::Trait, _)) => traits.push(n.span),
+                            Ok((NameKind::Trait, _)) => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             Ok((kind, _)) => {
-                                wrong = true;
                                 self.report(
                                     cx.def,
                                     kind_error(&b.path, kind, "a trait or a kind constraint", b.path.span),
@@ -530,9 +547,6 @@ impl<'p> Sema<'p> {
                 }
             };
             out.push(def);
-        }
-        for span in traits.into_iter().filter(|_| !wrong) {
-            self.unsupported(cx.def, span, Feature::TraitBounds, &[]);
         }
         out
     }
@@ -693,6 +707,7 @@ fn cx_clone<'p>(cx: &Cx<'p>) -> Cx<'p> {
         self_ty: cx.self_ty,
         def: cx.def,
         reach: cx.reach,
+        locals: cx.locals.clone(),
     }
 }
 
@@ -752,7 +767,7 @@ pub(crate) fn read_effects(
     row: Option<&EffectRow>,
 ) -> (EffectSet, Vec<Diagnostic>) {
     let mut set = EffectSet::default();
-    let (mut errors, mut unsupported, mut wrong) = (Vec::new(), Vec::new(), false);
+    let mut errors = Vec::new();
     let listed: Vec<(&str, NameKind)> =
         generics.iter().map(|g| (g.name.as_str(), NameKind::of_generic(&g.kind))).collect();
     for p in row.map_or(&[][..], |r| &r.effects[..]) {
@@ -770,16 +785,14 @@ pub(crate) fn read_effects(
             {
                 set.other.push(n.name.clone());
             }
-            // Another effect (of a user's `effect`, S-719); or a name that is
-            // no effect (`uses {I32}`, `uses {T}`).
+            // Another effect (of a user's `effect`, S-719, E0200); or a name
+            // that is no effect (`uses {I32}`, `uses {T}`). With both in a
+            // unit, the first by its place is reported (§18.1, S-731).
             Ok((kind, _)) => {
-                match kind {
-                    NameKind::Effect => unsupported.push(Feature::Effects.diagnostic(Stage::Names, n.span, &[&n.name])),
-                    kind => {
-                        wrong = true;
-                        errors.push(kind_error(p, kind, "an effect", p.span));
-                    }
-                }
+                errors.push(match kind {
+                    NameKind::Effect => Feature::Effects.diagnostic(Stage::Names, n.span, &[&n.name]),
+                    kind => kind_error(p, kind, "an effect", p.span),
+                });
                 set.other.push(n.name.clone());
             }
             Err(e) if a.unread_path(def, from, p, &e) => {}
@@ -798,9 +811,6 @@ pub(crate) fn read_effects(
             }
         }
     }
-    // An effect this version does not take after the E0308 of a name of
-    // another kind in the row (§15.1, S-713 A7).
-    errors.extend(unsupported.into_iter().filter(|_| !wrong));
     (set, errors)
 }
 

@@ -13,8 +13,8 @@
 //    (§15.1, S-205), and an associated function of a builtin type (`F32.from_bits`) is a value that is no
 //    constant, E0417 (§4.5: "値だが定数でない名前（関数、列挙子）も ... E0417");
 //  - a type whose head is a name, at a const argument (`Ring[F32, Wrap[F32]]`), is E0308 by the kind of
-//    its head (§15.1: "型を const 引数の位置に書く"), and a head that is not found is E0302 (S-732: the
-//    types that are no name are not here).
+//    its head (§15.1: "型を const 引数の位置に書く"), and a head that is not found is E0302 (the types
+//    that are no name are E0308 too, S-732, in kind_type_argument_shapes.onsa).
 // One error per unit (§18.1), so each form is in its own unit.
 
 pub struct P {

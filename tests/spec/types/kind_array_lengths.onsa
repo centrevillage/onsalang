@@ -17,8 +17,8 @@
 // `[x; N]` of a body. The names of the declarations that are E0200 in this version (an `effect`, a
 // `handler`, a `trait`, an `extern` block) are read by the kind of their keyword (S-719, S-721), so
 // `[F32; Ef]` is E0308 and `[F32; c_sin]` is E0417 ("`[F32; c_sin]` は E0417（S-713）", S-721).
-// The local binding in an annotation of a body (`let n = 4` and `let a: [F32; n]`) is not here: the
-// spec does not say whether a type place sees the locals (a gap that is reported, S-729).
+// The local binding in an annotation of a body (`let n = 4` and `let a: [F32; n]`, E0417, S-729, R-304)
+// is in kind_body_local_lengths.onsa.
 // One error per unit (§18.1), so each form is in its own unit; the fine lengths (a constant, an
 // associated constant, an operation on constants, a constant parameter, `I32.BITS`, a literal) are the
 // fine units at the end of the file.

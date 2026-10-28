@@ -38,6 +38,18 @@ impl<'p> Sema<'p> {
             }
             TypeKind::Path { path, args } => {
                 let args_ast = args.clone();
+                // A local of a body is a value (§15.1, S-729), as `K.x` of a
+                // constant `K` has no members.
+                if let [head, rest @ ..] = &path.segments[..]
+                    && cx.is_local(&head.name)
+                {
+                    let Some(next) = rest.first() else {
+                        return self.not_a_type(cx, None, NameKind::Local, te.span, path);
+                    };
+                    let d = crate::resolve::no_members(&head.name, NameKind::Local, next.span);
+                    self.report(cx.def, d.with_found(head.name.clone()));
+                    return self.a.types.error();
+                }
                 if path.segments.len() == 1 {
                     let seg = &path.segments[0];
                     if seg.name == "Self" {
@@ -189,23 +201,15 @@ impl<'p> Sema<'p> {
     fn lower_type_arg(&mut self, cx: &Cx<'p>, t: TypeId, expect_const: Option<bool>) -> TyId {
         let te = cx.ast.ty(t);
         match (&te.kind, expect_const) {
-            (TypeKind::ConstArg(e), Some(false) | None) => {
-                let _ = e;
-                self.report(
-                    cx.def,
-                    Diagnostic::new(
-                        Stage::Types,
-                        Code::E0401,
-                        te.span,
-                        "a type parameter expects a type, not a constant",
-                    )
-                    .with_found(src(cx, te.span)),
-                );
-                self.a.types.error()
+            // The kind of an argument is the name stage's, whatever its form
+            // (`Wrap[3]`, `Ring[F32, (F32, F32)]`; §4.5, §15.1, S-732).
+            (TypeKind::ConstArg(_), Some(false) | None) => {
+                self.wrong_kind_arg(cx, te.span, "a constant expression", "a type")
             }
             (TypeKind::ConstArg(e), Some(true)) => {
                 self.lower_alias_of(cx, *e);
-                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), *e, &|_| false) {
+                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), *e, &cx.local())
+                {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
                     Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
@@ -222,7 +226,9 @@ impl<'p> Sema<'p> {
                 // `N` of the enclosing item, or a constant; a name of another
                 // kind is E0417 or E0308 (§4.5, S-713 (a)), with type
                 // arguments or not (`Wrap[F32]`, S-732).
+                let local = || crate::constarg::value_not_constant(src(cx, path.span), "a local", path.span);
                 let named = match crate::constarg::generic(self.a, &cx.generics, path) {
+                    _ if cx.is_local(&path.segments[0].name) => Err(local().into()),
                     Some((i, NameKind::ConstParam)) => Ok(Ty::Param(i)),
                     Some((_, kind)) => Err(crate::constarg::not_constant(kind, src(cx, path.span), path.span)),
                     None => {
@@ -244,13 +250,21 @@ impl<'p> Sema<'p> {
                     }
                 }
             }
-            // A type that is no name (`(F32, F32)`, S-732).
-            (_, Some(true)) => self.not_a_const_arg(cx, te.span),
+            (_, Some(true)) => self.wrong_kind_arg(cx, te.span, "a type", "a constant"),
             _ => self.lower_type(cx, t),
         }
     }
 
-    /// E0401 for the const argument at `span`, which is no constant.
+    /// E0308 for the type argument at `span`, which is `is` where the
+    /// parameter wants `want`.
+    fn wrong_kind_arg(&mut self, cx: &Cx<'p>, span: Span, is: &str, want: &str) -> TyId {
+        let msg = format!("`{}` is {is}, not {want} (§4.5)", src(cx, span));
+        self.report(cx.def, Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(src(cx, span)));
+        self.a.types.error()
+    }
+
+    /// E0401 for the const argument at `span`, a constant with type
+    /// arguments (`K[F32]`, a form of its kind, S-713 B4).
     fn not_a_const_arg(&mut self, cx: &Cx<'p>, span: Span) -> TyId {
         let msg = "a `const` parameter expects an integer literal or a constant, not a type";
         self.report(cx.def, Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(src(cx, span)));
@@ -412,7 +426,7 @@ impl<'p> Sema<'p> {
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
         self.lower_alias_of(cx, e);
-        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), e, &|_| false) {
+        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), e, &cx.local()) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
             Err(crate::constarg::ConstErr::Unknown) => None,
@@ -425,7 +439,8 @@ impl<'p> Sema<'p> {
 }
 
 /// Lower a type written inside a body (T2-5): same rules as signatures, with
-/// the item's generics and `Self` in scope. Diagnostics are returned, not
+/// the item's generics and `Self` in scope, and the visible locals it names
+/// (`locals`, [`Cx::locals`]). Diagnostics are returned, not
 /// pushed, so the body checker keeps its first-error rule. The signatures
 /// are lowered: it reads them, and writes only the types it interns and
 /// [`Analysis::read_held`] (with no package, no alias is lowered again).
@@ -438,11 +453,11 @@ pub(crate) fn lower_type_in_body<'p>(
     generics: &[GenericDef],
     self_ty: Option<TyId>,
     def: DefId,
-    t: TypeId,
+    (t, locals): (TypeId, Vec<String>),
 ) -> (TyId, Vec<Diagnostic>) {
     let before = a.diagnostics.len();
     let mut s = Sema::new(a, Vec::new());
-    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None };
+    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None, locals };
     let ty = s.lower_type(&cx, t);
     let diags = s.a.diagnostics.drain(before..).collect();
     (ty, diags)

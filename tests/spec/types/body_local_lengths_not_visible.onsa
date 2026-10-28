@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§5.1", "§18.1"]
+
+// R-304, S-729 (W4-04 U10): the name in the length of an array or in a const argument of a type that is
+// written in a body, when it is not visible there (a name of a sibling scope, a name declared later, a name
+// of a closed block, the parameter of another function), is not found, so it is E0302 (§15.1: "名前が見つか
+// らなければ E0302"; §5.1: the visible range). The local that is visible there is E0417
+// (kind_body_local_lengths.onsa). The constants and the const parameters in the same places, next to the
+// locals, are fine (§4.5: "定数を指す名前"; a const parameter is a value and a constant, §15.1).
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const K: U32 = 4
+
+fn other(zz: U32) -> U32 {
+  zz
+}
+
+pub fn name_of_a_sibling_branch(flag: Bool) -> F32 {
+  if flag {
+    let n: U32 = 4
+    let _ = n
+    1.0
+  } else {
+    let _: [F32; n] = [0.0; 4]                      //~ E0302
+    0.0
+  }
+}
+
+pub fn name_declared_later() -> F32 {
+  let _: [F32; n] = [0.0; 4]                        //~ E0302
+  let n: U32 = 4
+  let _ = n
+  1.0
+}
+
+pub fn name_of_a_closed_block(flag: Bool) -> F32 {
+  let m = if flag {
+    let n: U32 = 4
+    n
+  } else {
+    0
+  }
+  let _: [F32; n] = [0.0; 4]                        //~ E0302
+  let _ = m
+  1.0
+}
+
+pub fn name_of_a_loop_after_the_loop() -> F32 {
+  for i in 0 ..< 3 {
+    let _ = i
+  }
+  let _: [F32; i] = [0.0; 4]                        //~ E0302
+  1.0
+}
+
+pub fn parameter_of_another_function() -> F32 {
+  let _: [F32; zz] = [0.0; 4]                       //~ E0302
+  1.0
+}
+
+pub fn name_in_a_const_argument_declared_later() -> F32 {
+  let _: Ring[F32, n] = Ring { data: [0.0; 4], head: 0 }   //~ E0302
+  let n: U32 = 4
+  let _ = n
+  1.0
+}
+
+pub fn name_of_a_sibling_branch_in_an_expression(flag: Bool) -> F32 {
+  if flag {
+    let n: U32 = 4
+    let _ = n
+    1.0
+  } else {
+    let _: [F32; n + 1] = [0.0; 4]                  //~ E0302
+    0.0
+  }
+}
+
+pub fn name_that_nothing_declares() -> F32 {
+  let _: [F32; Nope] = [0.0; 4]                     //~ E0302
+  1.0
+}
+
+// ---- The constants and the const parameters, next to the locals, are fine ----
+
+pub fn constants_next_to_a_local(n: U32) -> F32 {
+  let a: [F32; K] = [0.0; K]
+  let b: [F32; P.N] = [0.0; P.N]
+  let d: Ring[F32, K] = Ring { data: [0.0; K], head: n }
+  let e: Ring[F32, P.N] = Ring { data: [0.0; P.N], head: n }
+  let f: Ring[F32, 8] = Ring { data: [0.0; 8], head: n }
+  a[0] + b[0] + d.data[0] + e.data[0] + f.data[0]
+}
+
+pub fn const_parameter_next_to_a_local[const N: U32](n: U32) -> F32 {
+  let a: [F32; N] = [0.0; N]
+  let d: Ring[F32, N] = Ring { data: [0.0; N], head: n }
+  a[0] + d.data[0]
+}
+
+pub fn constants_in_other_places(n: U32) -> F32 {
+  let f = fn(x: [F32; K]) -> [F32; P.N] { [x[0]; P.N] }
+  let g = fn(x: Ring[F32, K]) -> U32 { x.head + K }
+  let t: (U32, [F32; K]) = (n, [0.0; K])
+  let o: Option[[F32; K]] = None
+  let _ = g
+  let _ = o
+  f.([0.0; K])[0] + t.1[0]
+}
+
+impl P {
+  pub fn constants_in_a_method(self, n: U32) -> F32 {
+    let a: [F32; Self.N] = [0.0; Self.N]
+    let d: Ring[F32, K] = Ring { data: [0.0; K], head: n }
+    a[0] + d.data[0]
+  }
+}
+
+test "constants next to a local in a test" {
+  let n: U32 = 4
+  let a: [F32; K] = [0.0; K]
+  let d: Ring[F32, K] = Ring { data: [0.0; K], head: n }
+  assert a[0] == d.data[0]
+}

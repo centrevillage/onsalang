@@ -1,0 +1,245 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§8.1", "§4.5"]
+
+// S-731 (3) (W4-04 U10): the order of an E0308 and an E0200 in one unit is the order of a unit, the stage
+// and then the place (§15.1, §18.1), as it is in kind_e0308_e0200_order.onsa; the forms here give the same
+// code with the rule of a unit as with "E0308 first" of the earlier reading, so they pass before the
+// work of the decision and must not change: the E0308 that is written first in a list or in the unit is
+// reported (`uses {I32, Ef}`, `[T: I32 + Tr]`), the E0200 that is written first among places that are
+// far apart is reported, an E0200 of the names stage comes before an error of the types stage of the
+// same unit, and two units are independent (each reports its own).
+// A name of the wrong kind is E0308 and a name that the version does not support is E0200 (`Ef` is an
+// `effect` and `Tr` is a `trait` of the user). The place of the error that is reported is the line of
+// its marker; the places that are far apart are written on their own lines.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+const K: U32 = 4
+
+fn g() -> I32 {
+  1
+}
+
+pub trait Tr {                                      //~ E0200
+  fn m(self) -> I32
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(x: I32) -> I32
+}
+
+// ---- Within one effect row and one list of bounds: the wrong name first ----
+
+pub fn wrong_name_then_user_effect() -> I32 uses {I32, Ef} {   //~ E0308
+  1
+}
+
+pub fn function_then_user_effect() -> I32 uses {g, Ef} {   //~ E0308
+  1
+}
+
+pub fn alloc_wrong_name_then_user_effect() -> I32 uses {Alloc, I32, Ef} {   //~ E0308
+  1
+}
+
+pub fn wrong_name_then_user_effect_in_a_parameter_type(f: fn() -> I32 uses {I32, Ef}) -> I32 {   //~ E0308
+  1
+}
+
+pub fn wrong_name_then_user_trait[T: I32 + Tr](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn function_then_user_trait[T: g + Tr](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn trait_wrong_name_then_user_trait[T: Num + P + Tr](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn wrong_name_then_user_trait_of_the_next_parameter[T: I32, U: Tr](x: T, y: U) -> T {   //~ E0308
+  x
+}
+
+impl P {
+  pub fn wrong_bound_then_user_trait_of_a_method[T: I32 + Tr](self, x: T) -> T {   //~ E0308
+    x
+  }
+}
+
+impl[T: I32 + Tr] Wrap[T] {                         //~ E0308
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+// ---- A wrong name in one place and a user effect or trait in the next place ----
+
+pub fn wrong_bound_then_user_effect_in_the_row[T: I32](x: T) -> T uses {Ef} {   //~ E0308
+  x
+}
+
+pub fn wrong_parameter_type_then_user_effect_in_the_row(x: g) -> I32 uses {Ef} {   //~ E0308
+  1
+}
+
+pub fn wrong_result_type_then_user_effect_in_the_row() -> g uses {Ef} {   //~ E0308
+  1
+}
+
+pub fn wrong_name_in_the_row_of_a_parameter_then_user_effect_in_the_row(
+  f: fn() -> I32 uses {I32},                        //~ E0308
+) -> I32 uses {Ef} {
+  1
+}
+
+pub fn wrong_parameter_type_then_user_effect_in_a_parameter_type(
+  x: g,                                             //~ E0308
+  f: fn() -> I32 uses {Ef},
+) -> I32 {
+  1
+}
+
+pub fn wrong_name_in_the_signature_then_user_effect_in_a_closure(x: g) -> I32 {   //~ E0308
+  let f = fn() -> I32 uses {Ef} { 1 }
+  f.()
+}
+
+// ---- An E0200 of the names stage is before an error of the types stage ----
+
+pub fn user_effect_in_the_row_then_a_type_error_in_the_body() -> I32 uses {Ef} {   //~ E0200
+  let _: Bool = 1
+  0
+}
+
+pub fn user_trait_in_a_bound_then_a_type_error_in_the_body[T: Tr](x: T) -> T {   //~ E0200
+  let _: Bool = 1
+  x
+}
+
+// ---- Two units are independent ----
+
+pub fn one_unit_with_a_user_effect() -> I32 uses {Ef} {   //~ E0200
+  1
+}
+
+pub fn the_next_unit_with_a_wrong_name() -> I32 uses {I32} {   //~ E0308
+  1
+}
+
+pub fn one_unit_with_a_user_trait[T: Tr](x: T) -> T {   //~ E0200
+  x
+}
+
+pub fn the_next_unit_with_a_wrong_bound[T: I32](x: T) -> T {   //~ E0308
+  x
+}
+
+// ---- The fine rows and bounds ----
+
+pub fn alloc_is_fine() -> I32 uses {Alloc} {
+  1
+}
+
+pub fn traits_of_the_prelude_are_fine[T: Num + Show](x: T) -> T {
+  x
+}
+
+// ---- The places that are far apart: the first written is reported ----
+
+pub fn user_trait_in_a_bound_then_a_function_as_a_parameter_type[T: Tr](   //~ E0200
+  x: g,
+) -> I32 {
+  1
+}
+
+pub fn user_trait_in_a_bound_then_a_wrong_name_in_a_row[T: Tr](   //~ E0200
+  x: T,
+) -> I32 uses {I32} {
+  1
+}
+
+pub fn user_effect_in_a_parameter_type_then_a_function_as_a_parameter_type(
+  f: fn() -> I32 uses {Ef},                         //~ E0200
+  x: g,
+) -> I32 {
+  1
+}
+
+pub fn user_effect_in_a_parameter_type_then_a_wrong_name_in_the_result(
+  f: fn() -> I32 uses {Ef},                         //~ E0200
+) -> g {
+  1
+}
+
+pub fn user_effect_in_a_parameter_type_then_a_wrong_name_in_the_row(
+  f: fn() -> I32 uses {Ef},                         //~ E0200
+) -> I32 uses {I32} {
+  1
+}
+
+pub fn user_effect_in_the_row_then_a_wrong_name_in_the_body() -> I32 uses {Ef} {   //~ E0200
+  let _: g = 1
+  0
+}
+
+pub fn user_effect_in_the_row_then_a_wrong_name_in_an_expression() -> I32 uses {Ef} {   //~ E0200
+  let _ = 1 as g
+  0
+}
+
+pub fn user_effect_in_the_row_then_a_trait_as_a_value() -> I32 uses {Ef} {   //~ E0200
+  let _ = Show
+  0
+}
+
+pub fn user_trait_in_a_bound_then_a_wrong_name_in_the_body[T: Tr](x: T) -> T {   //~ E0200
+  let _: g = 1
+  x
+}
+
+impl P {
+  pub fn user_trait_in_a_bound_then_a_function_as_a_parameter_type[T: Tr](self,   //~ E0200
+    x: g,
+  ) -> I32 {
+    1
+  }
+
+  pub fn user_effect_in_the_row_then_a_wrong_name_in_the_body(self) -> I32 uses {Ef} {   //~ E0200
+    let _: g = 1
+    0
+  }
+}
+
+pub struct UserTraitInABoundThenAFunctionAsAField[T: Tr] {   //~ E0200
+  a: g,
+}
+
+pub struct UserEffectInAFieldThenAFunctionAsAField {
+  f: fn() -> I32 uses {Ef},                         //~ E0200
+  a: g,
+}
+
+pub enum UserEffectInAVariantThenAFunctionAsAVariant {
+  A(fn() -> I32 uses {Ef}),                         //~ E0200
+  B(g),
+}
+
+pub type UserEffectInATupleThenAFunction = (
+  fn() -> I32 uses {Ef},                            //~ E0200
+  g,
+)
+
+pub fn user_effect_of_a_function_type_then_a_wrong_name_after_it() -> I32 {
+  let f: fn() -> I32 uses {Ef} = fn() -> I32 { 1 }  //~ E0200
+  let _: g = 1
+  f.()
+}

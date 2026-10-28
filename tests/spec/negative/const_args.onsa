@@ -2,9 +2,9 @@
 // [test]
 // spec = ["§4.5", "§4.7", "§3.4"]
 
-// S-24: const generic arguments in type position (§4.5). A type written at a const argument is
-// E0308 (§15.1, S-713), of the names stage, so it comes before the E0401 of the literal `4` written
-// at the type argument of the same unit (§18.1).
+// S-24: const generic arguments in type position (§4.5). A type written at a const argument and a
+// constant expression written at a type argument (the literal `4`) are E0308 (§4.5, §15.1, S-713,
+// S-732), of the names stage; in one unit the first in the place is reported (§18.1).
 pub struct Ring[T, const N: U32] {
   data: [T; N],
   head: U32,

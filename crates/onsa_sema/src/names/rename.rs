@@ -2,9 +2,9 @@
 //! the declaration and every name of the package that names it, which the
 //! stages note as they resolve it ([`Analysis::note_use`]).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Edit, Fix, Note, Span};
+use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Note, Span};
 use onsa_syntax::ast::Ident;
 
 use super::body::{BindingId, BindingKind, BodyNames, ScopeId};
@@ -56,11 +56,13 @@ pub fn rename_fixes(pkg: &Package, a: &Analysis, diagnostics: &mut [Diagnostic])
     for &(decl, at) in a.uses.borrow().iter() {
         uses.entry(decl).or_default().push(at);
     }
-    for d in diagnostics.iter_mut().filter(|d| d.code == Code::E0320) {
+    // Built once for all the E0320 (R-305).
+    let (mut targets, spaces) = (targets(a, diagnostics), Spaces::new(a));
+    for (i, d) in diagnostics.iter_mut().enumerate().filter(|(_, d)| d.code == Code::E0320) {
         let (Some(fix), Some(from)) = (d.fixes.first(), d.found.clone()) else { continue };
-        let Some((target, key)) = target(a, d.span, &from) else { continue };
+        let Some((target, key)) = targets.remove(&i) else { continue };
         let to = fix.edits()[0].replace.clone();
-        if clashes(a, &target, d.span, &to) {
+        if clashes(a, &spaces, &target, d.span, &to) {
             d.fixes.clear();
             let rule = format!("the name by the rule, `{to}`, is a name here already (§2.3): rename by hand");
             d.notes.push(Note::rule(rule));
@@ -98,15 +100,26 @@ pub fn rename_fixes(pkg: &Package, a: &Analysis, diagnostics: &mut [Diagnostic])
     }
 }
 
-/// The declaration whose name `name` is at `at`, and the span its uses are
-/// noted with (of the field or variant, of the name of the others).
-fn target(a: &Analysis, at: Span, name: &str) -> Option<(Target, Span)> {
-    let is = |s: Span, n: &str| n == name && s.file == at.file && s.start <= at.start && at.end <= s.end;
-    let mut params = Vec::new();
-    for (i, def) in a.defs.iter().enumerate() {
-        let d = DefId(i as u32);
-        if is(def.name_span, &def.name) {
-            return Some((Target::Item(d), def.name_span));
+/// For the E0320 at index `i` of `ds` with a candidate, the declaration
+/// whose name it is, and the span its uses are noted with (of the field or
+/// variant, of the name of the others), in one walk of the declarations:
+/// the first item or member in the order of the defs, else the parameters,
+/// else a binding.
+fn targets(a: &Analysis, ds: &[Diagnostic]) -> HashMap<usize, (Target, Span)> {
+    let mut at: BTreeMap<(FileId, u32), Vec<usize>> = BTreeMap::new();
+    for (i, d) in ds.iter().enumerate().filter(|(_, d)| d.code == Code::E0320 && !d.fixes.is_empty()) {
+        at.entry((d.span.file, d.span.start)).or_default().push(i);
+    }
+    // The E0320 within the name `n` declared at `s`.
+    let hits = |s: Span, n: &str| {
+        let within = at.range((s.file, s.start)..=(s.file, s.end)).flat_map(|(_, is)| is.iter().copied());
+        within.filter(|&i| ds[i].span.end <= s.end && ds[i].found.as_deref() == Some(n)).collect::<Vec<_>>()
+    };
+    let (mut found, mut params, mut locals) = (HashMap::new(), HashMap::<_, Vec<_>>::new(), HashMap::new());
+    for (k, def) in a.defs.iter().enumerate() {
+        let d = DefId(k as u32);
+        for i in hits(def.name_span, &def.name) {
+            found.entry(i).or_insert((Target::Item(d), def.name_span));
         }
         let list: Vec<(Span, &str)> = match &def.kind {
             DefKind::Struct(s) => match &s.fields {
@@ -116,30 +129,39 @@ fn target(a: &Analysis, at: Span, name: &str) -> Option<(Target, Span)> {
             DefKind::Enum(e) => e.variants.iter().map(|v| (v.span, v.name.as_str())).collect(),
             _ => Vec::new(),
         };
-        if let Some(&(key, _)) = list.iter().find(|&&(s, n)| is(s, n)) {
-            return Some((Target::Member(list.iter().map(|(_, n)| n.to_string()).collect()), key));
+        for (i, key) in list.iter().flat_map(|&(s, n)| hits(s, n).into_iter().map(move |i| (i, s))) {
+            let names = || list.iter().map(|(_, n)| n.to_string()).collect();
+            found.entry(i).or_insert_with(|| (Target::Member(names()), key));
         }
-        if def.generics().iter().any(|g| is(g.span, &g.name)) {
-            params.push(d);
+        for i in def.generics().iter().flat_map(|g| hits(g.span, &g.name)) {
+            params.entry(i).or_default().push(d);
         }
     }
-    if !params.is_empty() {
-        return Some((Target::Param(params), at));
+    for (&d, names) in &a.names {
+        for (b, x) in names.bindings.iter().enumerate() {
+            for i in hits(x.span, &x.name) {
+                locals.entry(i).or_insert(Target::Local(d, BindingId(b as u32)));
+            }
+        }
     }
-    a.names.iter().find_map(|(&d, names)| {
-        let b = names.bindings.iter().position(|b| is(b.span, &b.name))?;
-        Some((Target::Local(d, BindingId(b as u32)), at))
-    })
+    for i in at.into_values().flatten() {
+        if !found.contains_key(&i)
+            && let Some(t) = params.remove(&i).map(Target::Param).or_else(|| locals.remove(&i))
+        {
+            found.insert(i, (t, ds[i].span));
+        }
+    }
+    found
 }
 
 /// Whether the name `to` declared at `at` in place of `target` would be an
 /// E0304 (§5.1, §15.1, S-652), by the one test of a declaration ([`hides`]):
 /// what it would see, and what would see it.
-fn clashes(a: &Analysis, target: &Target, at: Span, to: &str) -> bool {
+fn clashes(a: &Analysis, spaces: &Spaces, target: &Target, at: Span, to: &str) -> bool {
     let name = Ident { name: to.to_string(), span: at };
     match *target {
         Target::Member(ref list) => list.iter().any(|n| n == to),
-        Target::Item(d) => item_clashes(a, d, to),
+        Target::Item(d) => item_clashes(a, spaces, d, to),
         Target::Param(ref defs) => {
             let visible = defs.iter().flat_map(|&d| a.def(d).generics()).find(|g| g.name == to).map(|g| g.span);
             hides(a, a.def(defs[0]).module, &name, visible, false).is_some() || defs.iter().any(|&d| binds(a, d, to))
@@ -166,10 +188,10 @@ fn clashes(a: &Analysis, target: &Target, at: Span, to: &str) -> bool {
 /// An item renamed to `to`: a member of an `impl`, of the associated items
 /// of its type (§6.2); else of the spaces of the module and of the modules
 /// whose `use` binds it, and of the bindings and parameters there.
-fn item_clashes(a: &Analysis, d: DefId, to: &str) -> bool {
+fn item_clashes(a: &Analysis, spaces: &Spaces, d: DefId, to: &str) -> bool {
     let def = a.def(d);
     if def.owner.is_some() {
-        return a.modules.assoc.values().any(|t| t.get(&def.name) == Some(&d) && t.contains_key(to));
+        return spaces.assoc.get(&d).is_some_and(|ts| ts.iter().any(|t| t.contains_key(to)));
     }
     let used = |m: ModId| a.modules.get(m).uses.get(&def.name).and_then(|u| u.entity()) == Some(Entity::Def(d));
     let mut seen = (0..a.modules.mods.len() as u32).map(ModId).filter(|&m| m == def.module || used(m));
@@ -177,9 +199,33 @@ fn item_clashes(a: &Analysis, d: DefId, to: &str) -> bool {
     a.modules.get(def.module).children.contains_key(to)
         || unbindable(to).is_some()
         || seen.any(|m| {
-            a.modules.declared_in_body(m, to, names).is_some()
-                || a.defs_of_module(m).any(|(x, xd)| xd.generics().iter().any(|g| g.name == to) || binds(a, x, to))
+            a.modules.declared_in_body(m, to, names).is_some() || spaces.bound.get(&m).is_some_and(|b| b.contains(to))
         })
+}
+
+/// The spaces [`item_clashes`] reads, built once (R-305): the tables of
+/// associated items that hold each member under its name, and the names of
+/// the parameters and bindings of the defs of each module.
+struct Spaces<'a> {
+    assoc: HashMap<DefId, Vec<&'a HashMap<String, DefId>>>,
+    bound: HashMap<ModId, HashSet<&'a str>>,
+}
+
+impl<'a> Spaces<'a> {
+    fn new(a: &'a Analysis) -> Self {
+        let mut s = Spaces { assoc: HashMap::new(), bound: HashMap::new() };
+        for t in a.modules.assoc.values() {
+            for (_, &x) in t.iter().filter(|&(n, &x)| *n == a.def(x).name) {
+                s.assoc.entry(x).or_default().push(t);
+            }
+        }
+        for (i, def) in a.defs.iter().enumerate() {
+            let body = a.names.get(&DefId(i as u32)).map_or(&[][..], |n| &n.bindings[..]);
+            let names = def.generics().iter().map(|g| g.name.as_str());
+            s.bound.entry(def.module).or_default().extend(names.chain(body.iter().map(|b| b.name.as_str())));
+        }
+        s
+    }
 }
 
 /// Whether the body of `d` binds `to`.

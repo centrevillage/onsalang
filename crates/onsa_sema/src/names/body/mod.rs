@@ -242,6 +242,10 @@ pub(crate) struct ScopeInfo {
     pub bindings: Vec<BindingId>,
 }
 
+/// A type written in a body, with the visible locals it names
+/// ([`Walker::site`]).
+type Site = (TypeId, Vec<String>);
+
 /// The walk of a body stopped: the record is partial
 /// ([`BodyNames::complete`]).
 struct Stop;
@@ -338,21 +342,22 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
 /// first error of the names stage among them comes before that name's, and
 /// stops the body (§18.1). The types of the `let`s of a flow the walk did
 /// not reach (`late`), which the types stage reads ahead of the statements,
-/// are after the stop: an error of the names stage there is none.
+/// are after the stop: an error of the names stage there is none, and the
+/// locals they name are not looked up.
 fn lower_types(
     a: &mut Analysis,
     def: DefId,
     (ast, text): (&Ast, &str),
     (generics, self_ty): (&[GenericDef], Option<TyId>),
-    (sites, late): (Vec<TypeId>, VecDeque<(StmtId, TypeId)>),
+    (sites, late): (Vec<Site>, VecDeque<(StmtId, Site)>),
     out: &mut BodyNames,
 ) -> Option<Fail> {
     let held = a.read_held.contains(&def);
     let m = a.def(def).module;
     let mut fail = None;
-    let late = late.into_iter().map(|(_, t)| (t, true));
-    for (t, late) in sites.into_iter().map(|t| (t, false)).chain(late) {
-        let (ty, diags) = crate::sig::lower_type_in_body(a, m, ast, text, generics, self_ty, def, t);
+    let late = late.into_iter().map(|(_, (t, _))| ((t, Vec::new()), true));
+    for ((t, locals), late) in sites.into_iter().map(|t| (t, false)).chain(late) {
+        let (ty, diags) = crate::sig::lower_type_in_body(a, m, ast, text, generics, self_ty, def, (t, locals));
         let d = diags.into_iter().next();
         let names = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names);
         match names {
@@ -399,8 +404,9 @@ struct Walker<'a> {
     choices: Vec<exprs::Choice>,
     /// What stopped the walk at a name.
     failure: Option<Fail>,
-    /// The types written in the body, in the order of the walk.
-    type_sites: Vec<TypeId>,
+    /// The types written in the body, in the order of the walk, with the
+    /// locals they name ([`Walker::typed`]).
+    type_sites: Vec<Site>,
     /// While the `let`s of a flow body are declared ahead of it, the one
     /// declared; and the first stop among them, where the walk stops when
     /// it reaches its `let` (§18.1: in the order of the text).
@@ -408,7 +414,7 @@ struct Walker<'a> {
     flow_stop: Option<(StmtId, Fail)>,
     /// The types of the `let`s of a flow body, in order, until the walk
     /// reaches each (`lower_types`).
-    flow_types: VecDeque<(StmtId, TypeId)>,
+    flow_types: VecDeque<(StmtId, Site)>,
     /// In a constant expression of §4.5 (`Walker::const_expr`).
     in_const: bool,
 }
@@ -507,8 +513,10 @@ impl<'a> Walker<'a> {
         for &s in &b.stmts {
             if let StmtKind::Let { pat, ty, .. } = ast.stmt(s).kind {
                 self.prescan = Some(s);
+                // The type sees the `let`s above it (§11.2), not its own names.
+                let site = ty.map(|t| (s, self.site(t)));
                 self.pattern(pat, BindingKind::FlowLet, Origin::Let(s))?;
-                self.flow_types.extend(ty.map(|t| (s, t)));
+                self.flow_types.extend(site);
             }
         }
         self.prescan = None;

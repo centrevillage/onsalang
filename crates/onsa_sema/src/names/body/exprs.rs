@@ -8,7 +8,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Ast, Block, CallKind, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind,
-    StrLit, StrSeg, TypeId,
+    StrLit, StrSeg, TypeId, TypeKind,
 };
 
 use super::kinds::Want;
@@ -67,7 +67,7 @@ impl Walker<'_> {
             }
             ExprKind::Cast { expr, ty } => {
                 self.expr(*expr)?;
-                self.type_sites.push(*ty);
+                self.typed([*ty]);
                 Ok(())
             }
             // `^y`: a local, or a builtin name of the flow (S-720); any other
@@ -128,6 +128,23 @@ impl Walker<'_> {
         let r = self.expr(e);
         self.in_const = outer;
         r
+    }
+
+    /// Keep the types `ts` written here for `lower_types` ([`Self::site`]).
+    fn typed(&mut self, ts: impl IntoIterator<Item = TypeId>) {
+        for t in ts {
+            let site = self.site(t);
+            self.type_sites.push(site);
+        }
+    }
+
+    /// The type `t` with the visible locals it names at the head of a path,
+    /// of a type or of a constant expression in it: values, no types or
+    /// constants (§15.1, §4.5, S-729).
+    pub(super) fn site(&self, t: TypeId) -> super::Site {
+        let mut names = Vec::new();
+        heads(self.ast, t, &mut names);
+        (t, names.into_iter().filter(|n| self.sees_local(n)).map(|n| n.name.clone()).collect())
     }
 
     /// E0200 for the type arguments at `span` of an expression.
@@ -198,14 +215,14 @@ impl Walker<'_> {
             // The names before the value, as in the text (§18.1, R-289).
             StmtKind::Let { pat, init, ty, .. } => {
                 self.ahead(|w| w.pattern(*pat, BindingKind::Let, Origin::Let(s)))?;
-                self.type_sites.extend(ty);
+                self.typed(*ty);
                 self.expr(*init)?;
                 self.pattern(*pat, BindingKind::Let, Origin::Let(s))
             }
             StmtKind::Var { name, init, ty } => {
                 let var = |w: &mut Self| w.declare(name, BindingKind::Var, Origin::Var(s), None).map(drop);
                 self.ahead(var)?;
-                self.type_sites.extend(ty);
+                self.typed(*ty);
                 self.expr(*init)?;
                 var(self)
             }
@@ -268,9 +285,9 @@ impl Walker<'_> {
                 let origin = Origin::Closure { closure: e, param: k as u32 };
                 self.declare(name, BindingKind::ClosureParam(p.mode), origin, None)?;
             }
-            self.type_sites.extend(p.ty);
+            self.typed(p.ty);
         }
-        self.type_sites.extend(ret);
+        self.typed(ret);
         self.expr(body)?;
         self.close_scope();
         self.close_closure();
@@ -367,6 +384,32 @@ impl Walker<'_> {
             }
         }
         None
+    }
+}
+
+/// The names at the head of the paths of the type `t` and of the constant
+/// expressions in it (§4.5).
+fn heads<'a>(ast: &'a Ast, t: TypeId, out: &mut Vec<&'a Ident>) {
+    match &ast.ty(t).kind {
+        TypeKind::Path { path, args } => {
+            out.extend(path.segments.first());
+            args.iter().for_each(|&x| heads(ast, x, out));
+        }
+        TypeKind::Array { elem, len } => {
+            heads(ast, *elem, out);
+            expr_heads(ast, *len, out);
+        }
+        TypeKind::Tuple(ts) => ts.iter().for_each(|&x| heads(ast, x, out)),
+        TypeKind::Fn { params, ret, .. } => params.iter().map(|p| p.1).chain(*ret).for_each(|x| heads(ast, x, out)),
+        TypeKind::ConstArg(e) => expr_heads(ast, *e, out),
+        TypeKind::Unit | TypeKind::Error => {}
+    }
+}
+
+fn expr_heads<'a>(ast: &'a Ast, e: ExprId, out: &mut Vec<&'a Ident>) {
+    match &ast.expr(e).kind {
+        ExprKind::Path(p) => out.extend(p.segments.first()),
+        _ => ast.sub_exprs(e).into_iter().for_each(|x| expr_heads(ast, x, out)),
     }
 }
 

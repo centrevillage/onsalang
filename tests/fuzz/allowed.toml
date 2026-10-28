@@ -456,3 +456,10 @@ left = "`…` (U+#F#) cannot be written outside comments and strings: a name is 
 input = "tests/fuzz/cc240d16.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: an `else` on the line after the `}`, and a character that cannot be written outside comments after it on the same line, which the candidate moves with the `else` (as 43e0e81e, another code point)"
+
+[[allowed]]
+class = "fix|E0002|remove the line break|E0002"
+left = "expected `…` or `…`, found `…`"
+input = "tests/fuzz/6e42d95e.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a line break before the `(` of the value of a field in a struct literal, and the `((` with no element before the `3` on the next line, which the input has before the candidate"

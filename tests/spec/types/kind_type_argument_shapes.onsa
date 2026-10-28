@@ -1,0 +1,401 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-732 (1) (W4-04 U10): the elements of a list of type arguments are a type or a constant expression by the
+// position the declaration has for them (§4.5: "並びの要素は型の位置の並びと同じに読み、const 引数は定数式
+// （下記）である。要素の種類（型か定数式か）が宣言の位置と合わなければ、名前でない型の形と定数式
+// （`Ring[F32, (F32, F32)]`、`Wrap[3]`）も E0308 である"; §15.1: "定数を型引数の位置に書く、型を const 引数の
+// 位置に書く（どちらも名前でない型の形と定数式を含む、§4.5）"). Both ways, and a form that is not a name
+// is E0308 as a name is (types/kind_type_and_const_arguments.onsa):
+//  - in the position of a const argument: a tuple type, a function type, an array type and the unit type (a
+//    type that has a head and arguments, `Option[F32]`, is E0308 already, type_argument_shapes_fine.onsa);
+//  - in the position of a type argument: a literal, an operation of constants, a negative literal
+//    (`Wrap[3]`, `Wrap[K + 1]`, `Wrap[-1]`; the `-1` is not the E0401 of "U32 に前置の `-` は無い").
+// The code is E0308 of the names stage, so it comes before the errors of the types stage of the same unit
+// (the E0401 of the old reading, the E0417 of a length) wherever it is written. The places are the ones of
+// the names, in a signature and in a body: a parameter, a result, a type inside another type, the right
+// side of a type alias, a field, a variant, the type of a `const`, a method, the annotation of a `let`, the
+// target of an `as`, the type of the parameter and of the result of an anonymous function, and a flow.
+// The forms of one kind with a different shape (a constant with type arguments, `Ring[F32, K[F32]]`) are not
+// here. The number of arguments is the E0412 of §4.5 and is not here either.
+// One error per unit (§18.1), so each form is in its own unit; the fine forms (a type in the position of a
+// type argument whatever its shape, a constant expression in the position of a const argument) are in
+// type_argument_shapes_fine.onsa.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct Cells[const N: U32] {
+  data: [F32; N],
+}
+
+const K: U32 = 4
+
+fn g() -> U32 {
+  1
+}
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+// ---- A type that is not a name in the position of a const argument ----
+
+pub fn tuple_as_a_const_argument(r: Ring[F32, (F32, F32)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_type_as_a_const_argument(r: Ring[F32, fn() -> I32]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn function_type_with_an_argument_as_a_const_argument(r: Ring[F32, fn(F32) -> F32]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn array_type_as_a_const_argument(r: Ring[F32, [F32; 3]]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn unit_as_a_const_argument(r: Ring[F32, ()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn tuple_as_the_only_const_argument(c: Cells[(F32, F32)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn unit_as_the_only_const_argument(c: Cells[()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn array_type_as_the_only_const_argument(c: Cells[[F32; 3]]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn tuple_with_a_const_in_it_as_a_const_argument(r: Ring[F32, (F32, K)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn tuple_as_the_const_argument_of_an_inner_ring(r: Ring[Ring[F32, (F32, F32)], 4]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn tuple_as_the_const_argument_in_an_option(o: Option[Ring[F32, (F32, F32)]]) -> F32 {   //~ E0308
+  1.0
+}
+
+// ---- A constant expression in the position of a type argument ----
+
+pub fn literal_as_a_type_argument(w: Wrap[3]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn zero_as_a_type_argument(w: Wrap[0]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn operation_as_a_type_argument(w: Wrap[K + 1]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn product_as_a_type_argument(w: Wrap[2 * K]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn negative_literal_as_a_type_argument(w: Wrap[-1]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_as_the_argument_of_an_option(o: Option[3]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn operation_as_the_argument_of_an_option(o: Option[K * 2]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_as_the_first_argument_of_a_ring(r: Ring[3, 4]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn operation_as_the_first_argument_of_a_ring(r: Ring[K + 1, 4]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_in_a_nested_type_argument(o: Option[Wrap[3]]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_as_the_type_of_an_inner_ring(r: Ring[Wrap[3], 4]) -> F32 {   //~ E0308
+  1.0
+}
+
+// ---- The other places of a signature and of a declaration ----
+
+pub fn tuple_as_a_const_argument_in_a_result() -> Ring[F32, (F32, F32)] {   //~ E0308
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn literal_as_a_type_argument_in_a_result() -> Wrap[3] {   //~ E0308
+  Wrap { v: 1 }
+}
+
+pub fn tuple_as_a_const_argument_in_a_tuple(t: (U32, Ring[F32, (F32, F32)])) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_a_tuple(t: (U32, Wrap[3])) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn tuple_as_a_const_argument_in_an_array(x: [Ring[F32, (F32, F32)]; 2]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_a_function_type(f: fn(Wrap[3]) -> F32) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn tuple_as_a_const_argument_in_the_result_of_a_function_type(f: fn(F32) -> Ring[F32, (F32, F32)]) -> F32 {   //~ E0308
+  1.0
+}
+
+type TupleAsAConstArgumentInAnAlias = Ring[F32, (F32, F32)]   //~ E0308
+
+type LiteralAsATypeArgumentInAnAlias = Wrap[3]      //~ E0308
+
+type OperationAsATypeArgumentInAnAlias = Option[K + 1]   //~ E0308
+
+pub struct TupleAsAConstArgumentInAField {
+  r: Ring[F32, (F32, F32)],                         //~ E0308
+}
+
+pub struct LiteralAsATypeArgumentInAField {
+  w: Wrap[3],                                       //~ E0308
+}
+
+pub enum TupleAsAConstArgumentInAVariant {
+  A(Ring[F32, (F32, F32)]),                         //~ E0308
+}
+
+pub enum LiteralAsATypeArgumentInAVariant {
+  A(Wrap[3]),                                       //~ E0308
+}
+
+const TUPLE_AS_A_CONST_ARGUMENT_IN_A_CONST_TYPE: Ring[F32, (F32, F32)] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+
+const LITERAL_AS_A_TYPE_ARGUMENT_IN_A_CONST_TYPE: Wrap[3] = Wrap { v: 1 }   //~ E0308
+
+impl P {
+  pub fn tuple_as_a_const_argument_in_a_method(self, r: Ring[F32, (F32, F32)]) -> F32 {   //~ E0308
+    1.0
+  }
+
+  pub fn literal_as_a_type_argument_in_a_method(self, w: Wrap[3]) -> F32 {   //~ E0308
+    1.0
+  }
+}
+
+pub fn tuple_as_a_const_argument_in_a_generic_function[T](r: Ring[T, (F32, F32)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_a_generic_function[T](w: Wrap[3], x: T) -> T {   //~ E0308
+  x
+}
+
+// ---- The body: an annotation, a cast, an anonymous function ----
+
+pub fn tuple_as_a_const_argument_in_an_annotation() -> F32 {
+  let _: Ring[F32, (F32, F32)] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+  1.0
+}
+
+pub fn function_type_as_a_const_argument_in_an_annotation() -> F32 {
+  let _: Ring[F32, fn() -> I32] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+  1.0
+}
+
+pub fn array_type_as_a_const_argument_in_an_annotation() -> F32 {
+  let _: Ring[F32, [F32; 3]] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+  1.0
+}
+
+pub fn unit_as_a_const_argument_in_an_annotation() -> F32 {
+  let _: Ring[F32, ()] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_an_annotation() -> F32 {
+  let _: Wrap[3] = Wrap { v: 1 }                    //~ E0308
+  1.0
+}
+
+pub fn operation_as_a_type_argument_in_an_annotation() -> F32 {
+  let _: Wrap[K + 1] = Wrap { v: 1 }                //~ E0308
+  1.0
+}
+
+pub fn negative_literal_as_a_type_argument_in_an_annotation() -> F32 {
+  let _: Wrap[-1] = Wrap { v: 1 }                   //~ E0308
+  1.0
+}
+
+pub fn literal_as_the_argument_of_an_option_in_an_annotation() -> F32 {
+  let _: Option[3] = None                           //~ E0308
+  1.0
+}
+
+pub fn tuple_as_a_const_argument_in_a_cast(n: U32) -> F32 {
+  let _ = n as Ring[F32, (F32, F32)]                //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_a_cast(n: U32) -> F32 {
+  let _ = n as Wrap[3]                              //~ E0308
+  1.0
+}
+
+pub fn tuple_as_a_const_argument_in_a_closure_parameter() -> F32 {
+  let f = fn(r: Ring[F32, (F32, F32)]) -> F32 { 1.0 }   //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_a_closure_parameter() -> F32 {
+  let f = fn(w: Wrap[3]) -> F32 { 1.0 }             //~ E0308
+  1.0
+}
+
+pub fn tuple_as_a_const_argument_in_a_closure_result() -> F32 {
+  let f = fn(x: F32) -> Ring[F32, (F32, F32)] { Ring { data: [x; 4], head: 0 } }   //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_a_closure_result() -> F32 {
+  let f = fn(x: F32) -> Wrap[3] { Wrap { v: 1 } }   //~ E0308
+  1.0
+}
+
+pub fn tuple_as_a_const_argument_in_a_tuple_annotation() -> F32 {
+  let _: (U32, Ring[F32, (F32, F32)]) = (1, Ring { data: [0.0; 4], head: 0 })   //~ E0308
+  1.0
+}
+
+pub fn literal_as_a_type_argument_in_a_function_type_annotation() -> F32 {
+  let _: fn(Wrap[3]) -> F32 = inc                   //~ E0308
+  1.0
+}
+
+pub fn literal_in_a_branch(flag: Bool) -> F32 {
+  if flag {
+    let _: Wrap[3] = Wrap { v: 1 }                  //~ E0308
+    1.0
+  } else {
+    0.0
+  }
+}
+
+pub fn tuple_in_a_match_arm(n: U32) -> F32 {
+  match n {
+    0 => 0.0,
+    _ => {
+      let _: Ring[F32, (F32, F32)] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+      1.0
+    },
+  }
+}
+
+pub fn literal_in_a_closure_body() -> F32 {
+  let f = fn(x: F32) -> F32 {
+    let _: Wrap[3] = Wrap { v: 1 }                  //~ E0308
+    x
+  }
+  f.(1.0)
+}
+
+pub fn tuple_in_a_generic_function_body[T](x: T) -> T {
+  let _: Ring[T, (F32, F32)] = Ring { data: [x; 4], head: 0 }   //~ E0308
+  x
+}
+
+impl P {
+  pub fn literal_in_a_method_body(self) -> F32 {
+    let _: Wrap[3] = Wrap { v: 1 }                  //~ E0308
+    1.0
+  }
+}
+
+test "a literal as a type argument in a test" {
+  let _: Wrap[3] = Wrap { v: 1 }                    //~ E0308
+  assert true
+}
+
+test "a tuple as a const argument in a test" {
+  let _: Ring[F32, (F32, F32)] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+  assert true
+}
+
+const LITERAL_IN_A_CONST_BODY: F32 = {
+  let _: Wrap[3] = Wrap { v: 1 }                    //~ E0308
+  1.0
+}
+
+pub flow literal_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let _: Wrap[3] = Wrap { v: 1 }                    //~ E0308
+  x
+}
+
+pub flow tuple_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let _: Ring[F32, (F32, F32)] = Ring { data: [x; 4], head: 0 }   //~ E0308
+  x
+}
+
+// ---- The stage goes before the place: the E0308 of the names stage is before the types stage ----
+
+pub fn literal_before_a_length_that_is_a_function(a: Wrap[3], b: [F32; g]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn length_that_is_a_function_before_a_literal(a: [F32; g], b: Wrap[3]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn tuple_after_a_length_that_is_a_function(a: [F32; g], b: Ring[F32, (F32, F32)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn literal_after_a_type_error_in_the_body() -> F32 {
+  let b: Bool = 1
+  let _: Wrap[3] = Wrap { v: 1 }                    //~ E0308
+  1.0
+}
+
+pub fn tuple_after_a_type_error_in_the_body() -> F32 {
+  let b: Bool = 1
+  let _: Ring[F32, (F32, F32)] = Ring { data: [0.0; 4], head: 0 }   //~ E0308
+  1.0
+}
+
+pub fn literal_after_a_local_as_a_length(n: U32) -> F32 {
+  let _: [F32; n] = [0.0; 4]
+  let _: Wrap[3] = Wrap { v: 1 }                    //~ E0308
+  1.0
+}
+
+// ---- The first in the place is reported ----
+
+pub fn literal_before_an_unknown_name(a: Wrap[3], b: Nope) -> F32 {   //~ E0308
+  1.0
+}

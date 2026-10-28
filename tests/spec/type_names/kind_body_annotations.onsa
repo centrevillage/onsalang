@@ -5,8 +5,8 @@
 // S-103, S-713 (W4-04 U8a): a name that is found and is not a type, written in a type place of a body
 // (the annotation of a `let`, the target of an `as`, the type of the parameter or of the result of
 // an anonymous function), is E0308 (§15.1: "値やモジュールを型の位置に書く"). The names: a function,
-// a constant, a trait, a kind constraint, an effect (a local binding in a type place is not here: the
-// spec does not say whether a type place sees the locals, a gap that is reported). A flow in the same
+// a constant, a trait, a kind constraint, an effect (a local binding and a parameter, S-729, are in
+// kind_body_locals.onsa). A flow in the same
 // place is E0308 with the candidate `lp.State` (fixes/e0308_flow_as_a_type_in_a_body.onsa); a module
 // is in packages/kind_module_in_value_position. The positions of a signature are not here
 // (W4-04 U8b). The name is found, so it is not E0302. One error per unit (§18.1), so each form is in

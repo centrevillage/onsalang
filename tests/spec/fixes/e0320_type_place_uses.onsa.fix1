@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§15.1", "§4.5", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "55:35"
+// code = "E0320"
+// candidate = 1
+// leaves = ["56:10 E0308"]
+//
+// [[test.fix]]
+// at = "61:7"
+// code = "E0320"
+// candidate = 1
+// leaves = ["62:16 E0308"]
+//
+// [[test.fix]]
+// at = "82:7"
+// code = "E0320"
+// candidate = 1
+// leaves = ["83:13 E0308"]
+//
+// [[test.fix]]
+// at = "88:14"
+// code = "E0320"
+// candidate = 1
+// leaves = ["89:19 E0308"]
+
+// W4-04 U10c (S-729, R-304, S-82, R-87 (5)): a local binding or a parameter written at a type place of a
+// body is a name found there (§5.1), a value: E0308 at a type (§15.1), E0417 in a constant expression
+// (§4.5). It is a use of the binding, so the candidate of the E0320 of its name renames it with the
+// declaration and the uses as a value. Applied alone, it leaves no E0302 "cannot find" of the old name:
+// what is left in the unit is the E0308 or the E0417 of the place, under the new name (`leaves`; an E0417
+// is of the types stage, after the E0320, and is not compared). The bindings are a parameter, a `let`, a
+// `for` (with a leading `_`: a capital name in a pattern is a path, §7) and the parameter of an anonymous
+// function; the places are an annotation, the target of an `as`,
+// an array length, a const argument, the type of a function value and the type of a parameter of an
+// anonymous function. One error per unit (§18.1), so each is in its own unit. The text after the candidates
+// is the copy `.fix1` of the implementation.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn parameter_in_a_length(n: U32) -> U32 { //~ E0320
+  let _: [F32; n] = [0.0; 3]
+  n
+}
+
+pub fn parameter_in_an_annotation(q: I32) -> I32 { //~ E0320
+  let _: q = 3
+  q
+}
+
+pub fn let_as_a_cast_target(x: I32) -> I32 {
+  let k = 2 //~ E0320
+  let _ = x as k
+  k
+}
+
+pub fn let_in_a_const_argument() -> U32 {
+  let n: U32 = 4 //~ E0320
+  let _: Ring[F32, n] = Ring { data: [0.0; 4], head: 0 }
+  n
+}
+
+pub fn for_in_a_length(n: U32) -> U32 {
+  var s: U32 = 0
+  for i in 0 ..< n { //~ E0320
+    let _: [F32; i] = [0.0; 4]
+    s = s + i
+  }
+  s
+}
+
+pub fn let_in_a_function_type() -> I32 {
+  let t = 1 //~ E0320
+  let _: fn(t) -> I32 = inc
+  t
+}
+
+pub fn closure_parameter_in_a_closure_parameter_type() -> I32 {
+  let f = fn(v: I32) -> I32 { //~ E0320
+    let g = fn(y: v) -> I32 { y }
+    g.(v)
+  }
+  f.(1)
+}

@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§8.1", "§4.5"]
+
+// S-731 (3) (W4-04 U10): a name of the wrong kind is E0308 and a name of the right kind that this version
+// does not support is E0200 (an `effect` of the user in an effect row, a `trait` of the user in a bound:
+// `Ef` and `Tr` here, §15.1: "E0200 は、要る種類の名前でこの版が扱えないもの"). "E0308 は版によらない誤り" is
+// the rule that gives one name E0308 and not E0200; when both are in one unit, the one that is reported is
+// the one of the rule of a unit, the stage, then the place (§15.1: "一つの単位に両方があるときの順は、§18.1
+// の単位の規則（段、次に位置）のとおりである"; §18.1). Both are of the names stage, so it is the place, and
+// within one effect row and one list of bounds it is the place too: `uses {Ef, I32}` is the E0200 of `Ef`,
+// `[T: Tr + I32]` is the E0200 of `Tr`, wherever the row or the list is written (a function, a method, the
+// type of a function value in a parameter or a result, a closure, the heading of an `impl`, a list that
+// goes on in the next parameter `[T: Tr, U: I32]`). The wrong name that is written first in the same
+// forms (`uses {I32, Ef}`) and the far apart places are in e0308_e0200_order_unchanged.onsa.
+// The version before the decision put the E0308 first within a list (the E0308 is reported on each line
+// here), so every unit but the two declarations fails before U10.
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+const K: U32 = 4
+
+fn g() -> I32 {
+  1
+}
+
+pub trait Tr {                                      //~ E0200
+  fn m(self) -> I32
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(x: I32) -> I32
+}
+
+// ---- Within one effect row ----
+
+pub fn user_effect_then_wrong_name() -> I32 uses {Ef, I32} {   //~ E0200
+  1
+}
+
+pub fn user_effect_then_function() -> I32 uses {Ef, g} {   //~ E0200
+  1
+}
+
+pub fn user_effect_then_trait() -> I32 uses {Ef, Show} {   //~ E0200
+  1
+}
+
+pub fn alloc_user_effect_then_wrong_name() -> I32 uses {Alloc, Ef, I32} {   //~ E0200
+  1
+}
+
+pub fn user_effect_then_two_wrong_names() -> I32 uses {Ef, I32, P} {   //~ E0200
+  1
+}
+
+pub fn row_of_a_parameter_type(f: fn() -> I32 uses {Ef, I32}) -> I32 {   //~ E0200
+  1
+}
+
+pub fn row_of_a_result_type() -> fn() -> I32 uses {Ef, K} {   //~ E0200
+  fn() -> I32 { 1 }
+}
+
+pub fn row_of_a_closure() -> I32 {
+  let f = fn() -> I32 uses {Ef, I32} { 1 }          //~ E0200
+  f.()
+}
+
+impl P {
+  pub fn row_of_a_method(self) -> I32 uses {Ef, I32} {   //~ E0200
+    self.x
+  }
+}
+
+// ---- Within one list of bounds ----
+
+pub fn user_trait_then_wrong_name[T: Tr + I32](x: T) -> T {   //~ E0200
+  x
+}
+
+pub fn user_trait_then_function[T: Tr + g](x: T) -> T {   //~ E0200
+  x
+}
+
+pub fn trait_then_user_trait_then_wrong_name[T: Num + Tr + P](x: T) -> T {   //~ E0200
+  x
+}
+
+pub fn user_trait_then_wrong_name_of_the_next_parameter[T: Tr, U: I32](x: T, y: U) -> T {   //~ E0200
+  x
+}
+
+pub fn user_trait_then_a_wrong_name_after_a_fine_parameter[T: Tr, U: Num, V: P](x: T, y: U, z: V) -> T {   //~ E0200
+  x
+}
+
+impl P {
+  pub fn bounds_of_a_method[T: Tr + I32](self, x: T) -> T {   //~ E0200
+    x
+  }
+}
+
+impl[T: Tr + I32] Wrap[T] {                         //~ E0200
+  pub fn get(self) -> T {
+    self.v
+  }
+}

@@ -106,6 +106,14 @@ impl Walker<'_> {
         Ok(())
     }
 
+    /// Whether `name`, at the head of a path of a type, is a binding visible
+    /// here: a use of it (an E0320 renames it, S-729), no read.
+    pub(super) fn sees_local(&self, name: &Ident) -> bool {
+        let Some(id) = self.scopes.visible.get(&name.name) else { return false };
+        self.a.note_use(self.out.bindings[id.0 as usize].span, name.span);
+        true
+    }
+
     /// The bindings visible here, from the outermost scope (a typed hole).
     pub(super) fn visible(&self) -> Vec<BindingId> {
         let scopes = self.scopes.open.iter().map(|(s, _)| &self.out.scopes[s.0 as usize].bindings);

@@ -1,0 +1,292 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// R-304, S-713 (a1), S-729 (W4-04 U10): a local binding or a parameter written in the length of an array or
+// in a const argument of a type that is written in a body is a value that is not a constant, so it is E0417
+// (§4.5: "定数式でないもの（関数の呼び出し、ローカル変数など）を書くと、位置によらず…E0417"; §15.1: "ローカルの
+// 束縛を書いた配列の長さの E0417"), not the E0302 of a name that is not found and not the E0308 of a value
+// written at a type place (S-729: the rule of the position that fixes the code goes first). The places are
+// the annotation of a `let`, the target of an `as`, the type of the parameter and of the result of an
+// anonymous function, a type inside another type (a tuple, an `Option`, an array of arrays, the type of a
+// function value) and the const argument of a user type (`Ring[F32, n]`); the bindings are a `let`, a
+// `var`, a parameter, the binding of a `for` and of a `match` arm, the parameter of an anonymous function and
+// a local of the function outside it; the bodies are a function, a method, a generic function, a `test`, the
+// initializer of a `const` and a flow. A constant expression that holds a local (`n + 1`) is E0417 too.
+// The same names in the repeat `[x; n]` of an expression are in types/kind_array_lengths.onsa, and a
+// function or a variant in a length is there too.
+// One error per unit (§18.1), so each form is in its own unit. E0417 is of the types stage
+// (tasks/diag-codes.md), so the E0302 and the E0308 of the names stage come before it wherever they are
+// written in the unit (the last units).
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const K: U32 = 4
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+fn first(a: [F32; 4]) -> F32 {
+  a[0]
+}
+
+fn filled(x: F32) -> [F32; 4] {
+  [x; 4]
+}
+
+// ---- The annotation of a `let` ----
+
+pub fn parameter_in_an_annotation(n: U32) -> F32 {
+  let _: [F32; n] = [0.0; 4]                        //~ E0417
+  1.0
+}
+
+pub fn local_in_an_annotation() -> F32 {
+  let n: U32 = 4
+  let _: [F32; n] = [0.0; 4]                        //~ E0417
+  1.0
+}
+
+pub fn variable_in_an_annotation() -> F32 {
+  var n: U32 = 4
+  let _: [F32; n] = [0.0; 4]                        //~ E0417
+  1.0
+}
+
+pub fn parameter_in_a_const_argument(n: U32) -> F32 {
+  let _: Ring[F32, n] = Ring { data: [0.0; 4], head: 0 }   //~ E0417
+  1.0
+}
+
+pub fn local_in_a_const_argument() -> F32 {
+  let n: U32 = 4
+  let _: Ring[F32, n] = Ring { data: [0.0; 4], head: 0 }   //~ E0417
+  1.0
+}
+
+pub fn local_in_the_second_of_two_arguments(n: U32) -> F32 {
+  let _: Ring[Ring[F32, 2], n] = Ring { data: [Ring { data: [0.0; 2], head: 0 }; 4], head: 0 }   //~ E0417
+  1.0
+}
+
+pub fn local_in_the_inner_ring(n: U32) -> F32 {
+  let _: Ring[Ring[F32, n], 4] = Ring { data: [Ring { data: [0.0; 2], head: 0 }; 4], head: 0 }   //~ E0417
+  1.0
+}
+
+// ---- A constant expression that holds a local ----
+
+pub fn sum_with_a_local(n: U32) -> F32 {
+  let _: [F32; n + 1] = [0.0; 4]                    //~ E0417
+  1.0
+}
+
+pub fn product_with_a_local(n: U32) -> F32 {
+  let _: [F32; 2 * n] = [0.0; 4]                    //~ E0417
+  1.0
+}
+
+pub fn constant_and_a_local(n: U32) -> F32 {
+  let _: [F32; K + n] = [0.0; 4]                    //~ E0417
+  1.0
+}
+
+pub fn parenthesized_local(n: U32) -> F32 {
+  let _: [F32; (n)] = [0.0; 4]                      //~ E0417
+  1.0
+}
+
+pub fn expression_in_a_const_argument(n: U32) -> F32 {
+  let _: Ring[F32, n * 2] = Ring { data: [0.0; 4], head: 0 }   //~ E0417
+  1.0
+}
+
+// ---- The other type places ----
+
+pub fn local_in_a_cast(n: U32) -> F32 {
+  let _ = n as [F32; n]                             //~ E0417
+  1.0
+}
+
+pub fn local_in_a_closure_parameter(n: U32) -> F32 {
+  let f = fn(x: [F32; n]) -> F32 { 1.0 }            //~ E0417
+  1.0
+}
+
+pub fn local_in_a_closure_result(n: U32) -> F32 {
+  let f = fn(x: F32) -> [F32; n] { [x; 4] }         //~ E0417
+  1.0
+}
+
+pub fn local_in_a_tuple_type(n: U32) -> F32 {
+  let _: (U32, [F32; n]) = (1, [0.0; 4])            //~ E0417
+  1.0
+}
+
+pub fn local_in_an_option(n: U32) -> F32 {
+  let _: Option[[F32; n]] = None                    //~ E0417
+  1.0
+}
+
+pub fn local_in_the_inner_array(n: U32) -> F32 {
+  let _: [[F32; n]; 2] = [[0.0; 4]; 2]              //~ E0417
+  1.0
+}
+
+pub fn local_in_the_outer_array(n: U32) -> F32 {
+  let _: [[F32; 2]; n] = [[0.0; 2]; 4]              //~ E0417
+  1.0
+}
+
+pub fn local_in_a_function_type(n: U32) -> F32 {
+  let _: fn([F32; n]) -> F32 = first                //~ E0417
+  1.0
+}
+
+pub fn local_in_the_result_of_a_function_type(n: U32) -> F32 {
+  let _: fn(F32) -> [F32; n] = filled               //~ E0417
+  1.0
+}
+
+// ---- The bindings of `for` and `match`, the branches, and the closure outside ----
+
+pub fn binding_of_a_for(n: U32) -> F32 {
+  for i in 0 ..< n {
+    let _: [F32; i] = [0.0; 4]                      //~ E0417
+  }
+  1.0
+}
+
+pub fn binding_of_a_match_arm(o: Option[U32]) -> F32 {
+  match o {
+    Some(v) => {
+      let _: [F32; v] = [0.0; 4]                    //~ E0417
+      1.0
+    },
+    None => 0.0,
+  }
+}
+
+pub fn local_in_a_branch(flag: Bool) -> F32 {
+  if flag {
+    let n: U32 = 4
+    let _: [F32; n] = [0.0; 4]                      //~ E0417
+    1.0
+  } else {
+    0.0
+  }
+}
+
+pub fn outer_local_in_a_branch(flag: Bool, n: U32) -> F32 {
+  if flag {
+    let _: [F32; n] = [0.0; 4]                      //~ E0417
+    1.0
+  } else {
+    0.0
+  }
+}
+
+pub fn outer_local_in_a_closure(n: U32) -> F32 {
+  let f = fn(x: F32) -> F32 {
+    let _: [F32; n] = [x; 4]                        //~ E0417
+    x
+  }
+  f.(1.0)
+}
+
+pub fn outer_local_in_a_nested_closure(n: U32) -> F32 {
+  let f = fn(x: F32) -> F32 {
+    let g = fn(y: F32) -> [F32; n] { [y; 4] }       //~ E0417
+    x
+  }
+  f.(1.0)
+}
+
+// ---- A generic function, a method, a `test`, the initializer of a `const`, a flow ----
+
+pub fn local_in_a_generic_function[T](x: T, n: U32) -> T {
+  let _: [T; n] = [x; 4]                            //~ E0417
+  x
+}
+
+pub fn const_argument_in_a_generic_function[T](x: T, n: U32) -> T {
+  let _: Ring[T, n] = Ring { data: [x; 4], head: 0 }   //~ E0417
+  x
+}
+
+impl P {
+  pub fn local_in_a_method(self, n: U32) -> F32 {
+    let _: [F32; n] = [0.0; 4]                      //~ E0417
+    1.0
+  }
+
+  pub fn local_of_a_method_in_a_const_argument(self) -> F32 {
+    let n: U32 = 4
+    let _: Ring[F32, n] = Ring { data: [0.0; 4], head: 0 }   //~ E0417
+    1.0
+  }
+}
+
+test "a local as a length in a test" {
+  let n: U32 = 4
+  let _: [F32; n] = [0.0; 4]                        //~ E0417
+  assert n == 4
+}
+
+test "a local as a const argument in a test" {
+  let n: U32 = 4
+  let _: Ring[F32, n] = Ring { data: [0.0; 4], head: 0 }   //~ E0417
+  assert n == 4
+}
+
+const LOCAL_IN_A_CONST: F32 = {
+  let n: U32 = 4
+  let _: [F32; n] = [0.0; 4]                        //~ E0417
+  1.0
+}
+
+pub flow local_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n: U32 = 4
+  let _: [F32; n] = [x; 4]                          //~ E0417
+  x
+}
+
+pub flow input_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let _: [F32; x] = [x; 4]                          //~ E0417
+  x
+}
+
+pub flow local_in_a_const_argument_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n: U32 = 4
+  let _: Ring[F32, n] = Ring { data: [x; 4], head: 0 }   //~ E0417
+  x
+}
+
+// ---- The stage goes before the place: the names stage is before the E0417 ----
+
+pub fn local_length_then_unknown_name(n: U32) -> F32 {
+  let _: [F32; n] = [0.0; 4]
+  let _: Nope = 3                                   //~ E0302
+  1.0
+}
+
+pub fn local_length_then_function_as_a_type(n: U32) -> F32 {
+  let _: [F32; n] = [0.0; 4]
+  let _: inc = 3                                    //~ E0308
+  1.0
+}
+
+pub fn local_length_then_local_as_a_type(n: U32) -> F32 {
+  let m: U32 = 4
+  let _: [F32; n] = [0.0; 4]
+  let _: m = 3                                      //~ E0308
+  1.0
+}

@@ -1,0 +1,191 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§5.1", "§18.1"]
+
+// S-729 (W4-04 U10): a name that is not visible at a type place of a body is not found, so it stays E0302
+// (§15.1: "名前が見つからなければ E0302"; §5.1: the binding is visible in its scope: "兄弟のスコープ（二つの
+// `for i in ...`、二つの `match` の腕の `Some(x)`）では同じ名前を使える"). A name of a sibling scope, a name
+// of a block that is closed, a name that is declared later, the parameter of another function and the
+// parameter of an anonymous function outside it are not visible (the forms in which a visible name is E0308
+// are in kind_body_locals.onsa). The types in the same places, next to the locals, are fine.
+// One error per unit (§18.1), so each form is in its own unit. The names that are found and not visible in
+// the same unit are of the same stage, so the first in the place is reported (`unknown_then_local`,
+// `function_then_local`, the E0308 of a function that is found before a local that is found).
+
+pub struct P {
+  x: I32,
+}
+
+type Al = P
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+fn other(zz: I32) -> I32 {
+  zz
+}
+
+pub fn name_of_a_sibling_branch(flag: Bool) -> I32 {
+  if flag {
+    let a = 1
+    a
+  } else {
+    let _: a = 2                                    //~ E0302
+    0
+  }
+}
+
+pub fn name_of_a_closed_block(flag: Bool) -> I32 {
+  let b = if flag {
+    let a = 1
+    a
+  } else {
+    0
+  }
+  let _: a = b                                      //~ E0302
+  0
+}
+
+pub fn name_declared_later() -> I32 {
+  let _: a = 1                                      //~ E0302
+  let a = 2
+  a
+}
+
+pub fn name_declared_later_as_a_cast_target(n: I32) -> I32 {
+  let _ = n as a                                    //~ E0302
+  let a = 2
+  a
+}
+
+pub fn name_of_a_loop_after_the_loop() -> I32 {
+  for i in 0 ..< 3 {
+    let _ = i
+  }
+  let _: i = 1                                      //~ E0302
+  0
+}
+
+pub fn name_of_a_sibling_loop() -> I32 {
+  for i in 0 ..< 3 {
+    let _ = i
+  }
+  for j in 0 ..< 3 {
+    let _: i = j                                    //~ E0302
+  }
+  0
+}
+
+pub fn name_of_a_sibling_match_arm(o: Option[I32], r: Option[I32]) -> I32 {
+  let _ = match o {
+    Some(v) => v,
+    None => 0,
+  }
+  match r {
+    Some(w) => {
+      let _: v = w                                  //~ E0302
+      w
+    },
+    None => 0,
+  }
+}
+
+pub fn parameter_of_another_function() -> I32 {
+  let _: zz = 1                                     //~ E0302
+  0
+}
+
+pub fn parameter_of_a_closure_outside_it() -> I32 {
+  let f = fn(x: I32) -> I32 { x }
+  let _: x = f.(1)                                  //~ E0302
+  0
+}
+
+pub fn name_of_an_inner_closure_outside_it() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let y = x
+    y
+  }
+  let _: y = f.(1)                                  //~ E0302
+  0
+}
+
+pub fn name_that_nothing_declares(n: I32) -> I32 {
+  let _: Nope = n                                   //~ E0302
+  0
+}
+
+test "a name declared later in a test" {
+  let _: a = 1                                      //~ E0302
+  let a = 2
+  assert a == 2
+}
+
+pub flow name_declared_later_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let _: a = 1.0                                    //~ E0302
+  let a = x * 2.0
+  a
+}
+
+pub fn unknown_then_local() -> I32 {
+  let a = 1
+  let _: Nope = 3                                   //~ E0302
+  let _: a = 2
+  0
+}
+
+pub fn function_then_local() -> I32 {
+  let a = 1
+  let _: inc = 1                                    //~ E0308
+  let _: a = 2
+  0
+}
+
+pub fn invisible_then_visible_local(flag: Bool) -> I32 {
+  let b = 1
+  if flag {
+    let a = 1
+    a
+  } else {
+    let _: a = b                                    //~ E0302
+    0
+  }
+}
+
+// ---- The types in the same places, next to the locals, are fine ----
+
+pub fn types_next_to_the_locals(p: P, n: I32) -> I32 {
+  let a: P = p
+  let b: Al = p
+  let c: I32 = n
+  let d: (I32, Al) = (1, p)
+  let f = fn(x: P) -> I32 { x.x }
+  a.x + b.x + c + d.0 + f.(p)
+}
+
+impl P {
+  pub fn self_next_to_the_locals(self, n: I32) -> I32 {
+    let a: Self = self
+    let b: I32 = n
+    a.x + b
+  }
+}
+
+pub fn type_parameter_next_to_the_locals[T](x: T, n: I32) -> T {
+  let y: T = x
+  let z: I32 = n
+  let _ = z
+  y
+}
+
+test "types next to the locals in a test" {
+  let a: P = P { x: 1 }
+  let n: I32 = 2
+  assert a.x + n == 3
+}
+
+pub flow types_next_to_the_locals_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let a: F32 = x * 2.0
+  a
+}
