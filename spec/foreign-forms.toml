@@ -8331,7 +8331,7 @@ origin = "Rust"
 stage = "names"
 code = "E0020"
 spec = ["4.6", "18.1"]
-rule = "種は構造で決まる。`impl Copy for X` は書かない（Copy でないフィールドがあるときは note で名指しする）"
+rule = "種は構造で決まる。`impl Copy for X` と `impl Dup for X` は書かない（Copy でないフィールドがあるときは note で名指しする）"
 
 [[form.example]]
 source = '''
