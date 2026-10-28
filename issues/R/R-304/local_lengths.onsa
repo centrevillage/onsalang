@@ -1,0 +1,21 @@
+pub fn p1() -> I32 {
+  let (_, _) = 5
+  1
+}
+
+pub fn p2() -> I32 {
+  let _ = 5
+  1
+}
+
+pub fn p3(n: U32) -> I32 {
+  let v: [F32; n] = [0.0; 2]
+  v.len() as I32
+}
+
+pub fn p4(n: U32, a: [F32; n]) -> I32 {
+  1
+}
+
+type A = (I32, B)
+type B = (A, I32)

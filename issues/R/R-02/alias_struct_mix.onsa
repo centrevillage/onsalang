@@ -1,0 +1,9 @@
+type A = S1
+
+pub struct S1 {
+  a: A,
+}
+
+pub fn f(s: S1) -> I32 {
+  1
+}
