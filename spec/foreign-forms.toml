@@ -8345,6 +8345,18 @@ impl Copy for P {
 property = ["clean"]
 candidates = 1
 
+[[form.example]]
+source = '''
+pub struct P {
+  x: I32,
+}
+
+impl Dup for P {
+}
+'''
+property = ["clean"]
+candidates = 1
+
 # 候補は外す形。struct と enum の宣言の頭の `: Copy` と `: Dup`（§4.6、S-34）。`+` で並べた中の種の制約は、隣の
 # `+` と一緒に外す。境界の `[T: Copy]`・`[T: ?Dup]` は §4.6 が書ける形と定める正しい書き方で、この行の対象ではない
 # （tests/spec/flow_semantics/infer_generic.onsa などが正例）。
