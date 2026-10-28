@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§15.1", "§18.1"]
+
+// S-137 (W4-05 U3b): the type arguments of the target of an `impl` are checked in the module that declares the
+// type (`shapes.onsa`; an `impl` of the type in another module is E0307 by the orphan rule of §6.3, which is W5-04's
+// and not here). The `impl` with the E0307 heading does not make the right `impl` of the same type wrong: a value
+// of `shapes.Pair2[I32, F32]` that this module takes by a `use` has `first` and `second` in the places of the target
+// (`impl[U, T] Pair2[T, U]`), and the length of a `Ring` is the argument of its `impl`. The names of the members of
+// the E0307 `impl` are not used here (a member of such an `impl` is a name after the name of the type, and the
+// paths that read it are in packages/impl_e0307_members_modules).
+use shapes.{Pair2, Ring}
+
+pub fn first_of(p: Pair2[I32, F32]) -> I32 {
+  p.first()
+}
+
+pub fn second_of(p: Pair2[I32, F32]) -> F32 {
+  p.second()
+}
+
+pub fn second_wrong(p: Pair2[I32, F32]) -> I32 {
+  p.second()                                        //~ E0401
+}
+
+pub fn data_of(r: Ring[I32, 3]) -> [I32; 3] {
+  r.into_data()
+}
+
+pub fn data_wrong(r: Ring[I32, 3]) -> [I32; 4] {
+  r.into_data()                                     //~ E0401
+}

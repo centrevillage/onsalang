@@ -1,0 +1,112 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+// fixes = 0
+
+// S-91, S-137 (W4-05 U3b): an `impl` on an alias is E0307 (§4.4), and its candidate is the original name when
+// the original type is declared in this module. The original type of an alias that fixes the type arguments of a
+// generic type is declared in this module (`type AR = R[F32]`), but the name that it would give (`R[F32]`) is the
+// target of an `impl` that is E0307 itself (a concrete type argument, §6.2), and "この約束を満たす候補を作れな
+// ければ、候補を出さない" (§18.1: a candidate that leaves an error of the same stage in the unit that it touched is
+// not made). So there is no candidate (`fixes = 0`): the alias of a generic struct with one type argument, with two,
+// with a type argument and a length, of an enum, of a type argument that is a type of its own, an alias of
+// such an alias, a `pub` alias, and an alias written after the `impl`. The alias of a type that is not generic
+// has its candidate (fixes/e0307_alias_forms.onsa, fixes/e0307_alias_generic_mixed.onsa). The error is in the
+// heading, so each `impl` is one unit and its members are not checked (§18.1): the `let z: Bool = 2` in the
+// members of `by_the_alias_of_a_struct` has no E0401. One error per unit, so each form is in its own unit.
+
+pub struct R[T] {
+  v: T,
+}
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+pub enum Maybe[T] {
+  Just(T),
+  Nothing,
+}
+
+type AR = R[F32]
+
+type AP = Pair2[I32, F32]
+
+type AG = Ring[F32, 4]
+
+type AM = Maybe[I32]
+
+type AN = R[Option[I32]]
+
+type AA = AR
+
+type AAA = AA
+
+pub type APub = R[I32]
+
+impl AR {                                           //~ E0307
+  pub fn by_the_alias_of_a_struct(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl AP {                                           //~ E0307
+  pub fn by_the_alias_of_two_arguments(self) -> I32 { 1 }
+}
+
+impl AG {                                           //~ E0307
+  pub fn by_the_alias_with_a_length(self) -> U32 { 4 }
+}
+
+impl AM {                                           //~ E0307
+  pub fn by_the_alias_of_an_enum(self) -> I32 { 1 }
+}
+
+impl AN {                                           //~ E0307
+  pub fn by_the_alias_of_a_nested_argument(self) -> I32 { 1 }
+}
+
+impl AA {                                           //~ E0307
+  pub fn by_an_alias_of_an_alias(self) -> I32 { 1 }
+}
+
+impl AAA {                                          //~ E0307
+  pub fn by_a_chain_of_aliases(self) -> I32 { 1 }
+}
+
+impl APub {                                         //~ E0307
+  pub fn by_a_pub_alias(self) -> I32 { 1 }
+}
+
+impl Later {                                        //~ E0307
+  pub fn by_a_later_alias(self) -> I32 { 1 }
+}
+
+type Later = R[U32]
+
+impl[T] R[T] {
+  pub fn get(self) -> T { self.v }
+}
+
+impl[A, B] Pair2[A, B] {
+  pub fn left(self) -> A { self.a }
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn into_data(self) -> [T; N] { self.data }
+}
+
+impl[T] Maybe[T] {
+  pub fn present(self) -> Bool {
+    match self {
+      Maybe.Just(_) => true,
+      Maybe.Nothing => false,
+    }
+  }
+}

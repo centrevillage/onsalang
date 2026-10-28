@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+// fixes = 1
+
+// S-91, S-137 (W4-05 U3b): the E0307 of an `impl` on an alias has one candidate, the original name (§4.4), when the
+// original type is declared in this module, and none when that name would be an E0307 itself: the alias of a
+// generic type with its arguments fixed (`type AR = R[F32]`, `impl R[F32]` is the concrete type argument of §6.2),
+// so "この約束を満たす候補を作れなければ、候補を出さない" (§18.1). `fixes = 1` is the number of candidates of
+// a diagnostic: the alias of a struct that is not generic and the alias of an enum that is not generic have one
+// each (the same as in fixes/e0307_alias_forms.onsa), and the three aliases of generic types have none
+// (module/impl_on_alias_of_generic_without_candidate.onsa counts them: `fixes = 0`). The two kinds are in one
+// file because the candidates are applied one by one and the unit of each is checked again: a candidate that
+// names `R[F32]` would leave the E0307 of §6.2 in the unit that it touched, which is a violation. The copy
+// `.fix1` is the one that the implementation writes: the text after the candidate of the two aliases that have one.
+// The error is in the heading, so each `impl` is one unit (§18.1). One error per unit.
+
+pub struct S {
+  x: I32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Point,
+}
+
+pub struct R[T] {
+  v: T,
+}
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub enum Maybe[T] {
+  Just(T),
+  Nothing,
+}
+
+type Sa = S
+
+type AR = R[F32]
+
+type AP = Pair2[I32, F32]
+
+type Sh = Shape
+
+type AM = Maybe[I32]
+
+impl Sa {                                           //~ E0307
+  pub fn from_a_plain_alias(self) -> I32 { self.x }
+}
+
+impl AR {                                           //~ E0307
+  pub fn from_a_generic_alias(self) -> F32 { self.v }
+}
+
+impl AP {                                           //~ E0307
+  pub fn from_a_generic_alias_of_two(self) -> I32 { self.a }
+}
+
+impl Sh {                                           //~ E0307
+  pub fn from_an_alias_of_an_enum(self) -> F32 { 1.0 }
+}
+
+impl AM {                                           //~ E0307
+  pub fn from_an_alias_of_a_generic_enum(self) -> I32 { 1 }
+}
+
+impl[T] R[T] {
+  pub fn get(self) -> T { self.v }
+}
+
+impl[X, Y] Pair2[X, Y] {
+  pub fn left(self) -> X { self.a }
+}
+
+impl[T] Maybe[T] {
+  pub fn present(self) -> Bool {
+    match self {
+      Maybe.Just(_) => true,
+      Maybe.Nothing => false,
+    }
+  }
+}

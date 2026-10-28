@@ -1,0 +1,25 @@
+pub struct P {
+  x: I32,
+}
+
+pub enum Mode {
+  Fast,
+  Slow,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl Copy for P {                                   //~ E0020
+}
+
+impl Dup for Mode {                                 //~ E0020
+}
+
+impl[T] Copy for Wrap[T] {                          //~ E0020
+}
+
+pub fn px(p: P) -> I32 {
+  p.x
+}

@@ -42,7 +42,7 @@ fn attr() -> F32 { 1.0 }
 
 // `impl` の対象が型でない。
 // 期待: E0308。
-// 今: E0308「`helper` is a function, not a type (§15.1)」（W4-04 U8a から。型の名前で型でない対象は E0302「`impl` needs a struct, enum, or builtin type」）。
+// 今: E0308「`helper` is a function, not a type (§15.1)」（W4-04 U8a から。名前でない型の形の対象（タプルなど）は W4-05 U3b から E0307、R-320）。
 impl helper {
   fn m(self) -> F32 { 1.0 }
 }

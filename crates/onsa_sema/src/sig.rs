@@ -292,6 +292,9 @@ impl<'p> Sema<'p> {
             ItemKind::OpaqueType { .. } | ItemKind::Const(_) => {}
             ItemKind::Impl(i) => {
                 if i.trait_.is_some() {
+                    if let Some(dup) = i.trait_.as_ref().and_then(kind_constraint) {
+                        self.copy_impl(&cx, item_id, i, dup);
+                    }
                     return None;
                 }
                 let cx = self.impl_cx(cx, i);
@@ -307,21 +310,8 @@ impl<'p> Sema<'p> {
                 }
                 let (key_def, key_builtin) = self.member_key(id).unwrap_or((None, None));
                 // The E0307 of an alias is the error of the heading.
-                if key_def.is_none()
-                    && key_builtin.is_none()
-                    && !matches!(self.a.types.get(self_ty), Ty::Error)
-                    && !aliased
-                {
-                    let span = cx.ast.ty(i.self_ty).span;
-                    self.report(
-                        id,
-                        Diagnostic::new(
-                            Stage::Names,
-                            Code::E0302,
-                            span,
-                            "`impl` needs a struct, enum, or builtin type",
-                        ),
-                    );
+                if !aliased && !matches!(self.a.types.get(self_ty), Ty::Error) {
+                    self.impl_heading(&cx, i, self_ty, key_def.is_some() || key_builtin.is_some());
                 }
                 // A name the heading reads and the check does not (§18.1,
                 // S-689): the members are checked, and read it too (an unknown
@@ -355,6 +345,78 @@ impl<'p> Sema<'p> {
         cx.generics = self.lower_generics(&cx, &i.generics);
         cx.self_ty = Some(self.lower_type(&cx, i.self_ty));
         cx
+    }
+
+    /// E0307 for the type `self_ty` of the inherent `impl` `i` written as it
+    /// may not be (§6.3): with no name of a declaration (`keyed` false: a
+    /// tuple, an array, `()`, a function type, a parameter; §4.4, R-320), or
+    /// with type arguments other than the parameters of the `impl`, each
+    /// once in any order (a concrete or compound type, one twice, one left
+    /// out; §6.2, S-137). Arguments with an error of a name (its E0302, a
+    /// name held, §18.1) are not judged; one of the types stage (an E0417, a
+    /// length this version does not compute) is no parameter, and the E0307
+    /// of the names stage comes first.
+    fn impl_heading(&mut self, cx: &Cx<'p>, i: &ImplDecl, self_ty: TyId, keyed: bool) {
+        let target = cx.ast.ty(i.self_ty);
+        let shown = one_line(&src(cx, target.span));
+        let named = self.reported.get(&cx.def).is_some_and(|&at| self.a.diagnostics[at].stage != Stage::Types);
+        let named = named || self.a.read_held.contains(&cx.def);
+        let types = &self.a.types;
+        // A scalar (`impl F32`) has no arguments.
+        let args: &[TyId] = match types.get(self_ty) {
+            Ty::Named(_, args) | Ty::Builtin(_, args) => args,
+            _ => &[],
+        };
+        if named && args.iter().any(|&t| types.has_error(t)) {
+            return;
+        }
+        let mut seen = vec![false; cx.generics.len()];
+        let wrong = args.iter().position(|&t| match types.get(t) {
+            Ty::Param(p) => seen.get_mut(*p as usize).is_none_or(|s| std::mem::replace(s, true)),
+            _ => true,
+        });
+        let written: &[TypeId] = match &target.kind {
+            TypeKind::Path { args, .. } => args,
+            _ => &[],
+        };
+        let (span, what) = match (keyed, wrong, seen.iter().position(|s| !s)) {
+            (false, ..) => (target.span, format!("`{shown}` is not the name of a type declaration")),
+            (true, Some(k), _) => {
+                let at = written.get(k).map_or(target.span, |&a| cx.ast.ty(a).span);
+                let twice = matches!(types.get(args[k]), Ty::Param(_));
+                let how = if twice { "is written twice" } else { "is not a parameter of the `impl`" };
+                (at, format!("`{}` {how}", one_line(&src(cx, at))))
+            }
+            (true, None, Some(g)) => {
+                let name = &cx.generics[g].name;
+                (target.span, format!("the parameter `{name}` of the `impl` is not an argument of `{shown}`"))
+            }
+            (true, None, None) => return,
+        };
+        let rule = "the type of an `impl` is the name of its declaration, with the parameters of the `impl` as its arguments, each once (§4.4, §6.2)";
+        let d = Diagnostic::new(Stage::Names, Code::E0307, span, what).with_found(src(cx, span)).with_rule(rule);
+        self.report(cx.def, d);
+    }
+
+    /// `impl Copy for X` and `impl Dup for X` (E0020, `copy_impl`, §4.6,
+    /// S-140), at the form (§18.1: from `impl` to its type). The candidate
+    /// takes the whole `impl` out with its doc comments and attributes (the
+    /// start of its unit, §18.1), and the note names a field of `X` that does
+    /// not meet the constraint ([`Sema::name_non_copy_fields`]). No note when
+    /// `X` names no struct or enum (its own error goes with the `impl`).
+    fn copy_impl(&mut self, cx: &Cx<'p>, item: onsa_syntax::ast::ItemId, i: &ImplDecl, dup: bool) {
+        let span = cx.ast.item(item).span;
+        let units = self.module(cx.m).map(|m| &m.parsed.units);
+        let unit = units.and_then(|us| us.of(span).map(|u| us.list[u].span.start));
+        let fix = Fix::delete("remove the `impl`", Span { start: unit.unwrap_or(span.start), ..span });
+        let form = Span { end: cx.ast.ty(i.self_ty).span.end, ..span };
+        let Some(at) = self.keep(cx.def, foreign::report(RowId::CopyImpl, cx.text, form, vec![fix])) else { return };
+        let TypeKind::Path { path, .. } = &cx.ast.ty(i.self_ty).kind else { return };
+        if let Ok(Entity::Def(t)) = self.a.resolve_path(cx.m, path)
+            && matches!(self.a.def(t).kind, DefKind::Struct(_) | DefKind::Enum(_))
+        {
+            self.kind_heads.push((at, t, dup));
+        }
     }
 
     /// E0307 for an `impl` whose type `t` names a type alias (§4.4, S-91,
@@ -534,16 +596,16 @@ impl<'p> Sema<'p> {
                 underivable.push(p);
                 continue;
             };
-            match DERIVABLE.iter().find(|(name, _)| *name == n.name) {
-                Some((_, Some(d))) => out.push(*d),
-                Some((_, None)) => self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]),
-                None if foreign::KIND_CONSTRAINTS.contains(&n.name.as_str()) => {
+            match (DERIVABLE.iter().find(|(name, _)| *name == n.name), kind_constraint(p)) {
+                (Some((_, Some(d))), _) => out.push(*d),
+                (Some((_, None)), _) => self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]),
+                (None, Some(dup)) => {
                     let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_derive(cx, paths, k)]);
                     if let Some(at) = self.keep(cx.def, d) {
-                        self.kind_heads.push((at, cx.def, n.name == foreign::DUP));
+                        self.kind_heads.push((at, cx.def, dup));
                     }
                 }
-                None => underivable.push(p),
+                (None, None) => underivable.push(p),
             }
         }
         // A name held as an error: the list is not known (§18.1).
@@ -759,6 +821,21 @@ fn drop_derive(cx: &Cx<'_>, paths: &[onsa_syntax::ast::Path], k: usize) -> Fix {
         Span::new(p.file, colon, p.end)
     };
     Fix::delete(format!("remove `{}`", &cx.text[p.start as usize..p.end as usize]), span)
+}
+
+/// The kind constraint `p` names (§4.6), by its spelling: whether it is
+/// `Dup` (else `Copy`); none for another name or a path of more names. The
+/// one judgment of `copy_bound` and `copy_impl` (`impl Copy for X` is no
+/// trait implementation, S-140).
+pub(crate) fn kind_constraint(p: &Path) -> Option<bool> {
+    let [n] = p.segments.as_slice() else { return None };
+    foreign::KIND_CONSTRAINTS.contains(&n.name.as_str()).then(|| n.name == foreign::DUP)
+}
+
+/// `s` on one line, for a message: line breaks and runs of blanks are one
+/// space.
+fn one_line(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn src(cx: &Cx<'_>, span: Span) -> String {

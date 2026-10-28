@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "24:1"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-140 (W4-05 U3b): the candidate of `impl Copy for X` and `impl Dup for X` (§4.6: "修正候補は外す形") is to take the
+// `impl` away, and nothing is left behind (`clean`, S-253): the type is Copy (or Shared, so that it is Dup) by its
+// structure, so the uses that need the constraint are right without the `impl` (a value of `P` is used twice,
+// and a value of `Q` is, which `Dup` allows: Copy or Shared). The position of the error is the start of the form,
+// the `impl` (§18.1: "E0020 の主の範囲は外来の形の範囲（形を作る最初のトークンから…）").
+// The `impl Copy for` form is in fixes/e0020_impl_copy_clean.onsa and the `impl Dup for` form in
+// fixes/e0020_impl_dup_clean.onsa: `clean` looks at the whole file after the one candidate.
+
+pub struct P {
+  x: I32,
+}
+
+
+
+pub fn twice(p: P) -> I32 {
+  let a = p
+  let b = p
+  a.x + b.x
+}
+
+pub fn use_bounds[T: Copy, U: Dup](x: T, y: U) -> T {
+  x
+}

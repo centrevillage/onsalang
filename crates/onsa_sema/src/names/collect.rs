@@ -291,7 +291,11 @@ impl<'p> Sema<'p> {
         let empty = ImplDef { generics: Vec::new(), self_ty: at.error, fns: Vec::new(), consts: Vec::new() };
         let d = self.add_def(at.def("<impl>".into(), item.span, DefKind::Impl(empty)));
         if decl.trait_.is_some() {
-            self.unsupported(d, item.span, Feature::TraitImpls, &[]);
+            // `impl Copy for X` is no trait implementation: the signatures
+            // report it (`copy_impl`, §4.6, S-140).
+            if decl.trait_.as_ref().and_then(crate::sig::kind_constraint).is_none() {
+                self.unsupported(d, item.span, Feature::TraitImpls, &[]);
+            }
             return;
         }
         let (mut fns, mut consts) = (Vec::new(), Vec::new());

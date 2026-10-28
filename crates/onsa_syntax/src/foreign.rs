@@ -503,6 +503,7 @@ pub enum RowId {
     ExternFn,
     ExportC,
     CopyBound,
+    CopyImpl,
     TypeArgsTurbofish,
     TypeArgsAngle,
     TypeArgsSquareComma,

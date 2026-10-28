@@ -1547,13 +1547,6 @@ until = "W7-04"
 note = "見えている名前への ^"
 
 [[pending]]
-kind = "foreign-form"
-target = "copy_impl"
-reasons = ["S-250"]
-until = "W4-05"
-note = "impl Copy と : Copy（名前の段）"
-
-[[pending]]
 kind = "test-case"
 target = "tests/spec/values/move_assign.onsa"
 reasons = ["R-191"]

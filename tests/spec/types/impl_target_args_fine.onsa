@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.2", "§6.3"]
+
+// S-137 (W4-05 U3b, §6.2): the type arguments of the target of an `impl` are the type parameters of the `impl`,
+// each once, so the forms that are right are the ones that list them in any order: `impl[U, T] Pair2[T, U]`
+// (the first type argument of the target is `T` and the second is `U`, whatever order the parameters are
+// declared in), a const parameter (`impl[T, const N: U32] Ring[T, N]`), a bound (`impl[U: Float, T] …`, an
+// `impl` of the same type with another bound is fine, §6.2), and a type that nests the type itself
+// (`impl[T] W[T]` next to a value of `W[W[I32]]`). No diagnostic, and the members are read with the
+// type arguments in their places: a method of the reordered `impl` returns the first or the second argument of
+// the value (in a branch also; this version has no closure to write one in).
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[U, T] Pair2[T, U] {
+  pub fn first(self) -> T { self.a }
+  pub fn second(self) -> U { self.b }
+}
+
+impl[U: Float, T] Pair2[T, U] {
+  pub fn second_doubled(self) -> U { self.b + self.b }
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn into_data(self) -> [T; N] { self.data }
+}
+
+impl[T] W[T] {
+  pub fn unwrap(self) -> T { self.v }
+}
+
+fn first_of(p: Pair2[I32, F32]) -> I32 {
+  p.first()
+}
+
+fn second_of(p: Pair2[I32, F32]) -> F32 {
+  p.second()
+}
+
+fn pick(flag: Bool, p: Pair2[I32, F32]) -> I32 {
+  if flag { p.first() } else { 0 }
+}
+
+fn doubled_of(p: Pair2[I32, F32]) -> F32 {
+  p.second_doubled()
+}
+
+fn data_of(r: Ring[I32, 3]) -> [I32; 3] {
+  r.into_data()
+}
+
+fn flat(w: W[W[I32]]) -> I32 {
+  w.unwrap().unwrap()
+}
+
+test "the type arguments are in the order of the target" {
+  assert first_of(Pair2 { a: 3, b: 1.5 }) == 3
+  assert second_of(Pair2 { a: 3, b: 1.5 }) == 1.5
+  assert pick(true, Pair2 { a: 3, b: 1.5 }) == 3
+  assert pick(false, Pair2 { a: 3, b: 1.5 }) == 0
+  assert doubled_of(Pair2 { a: 3, b: 1.5 }) == 3.0
+}
+
+test "a const parameter and a nested type" {
+  assert data_of(Ring { data: [1, 2, 3] })[2] == 3
+  assert flat(W { v: W { v: 7 } }) == 7
+}

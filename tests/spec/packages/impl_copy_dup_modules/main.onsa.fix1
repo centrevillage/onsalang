@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-140 (W4-05 U3b): `impl Copy for X` and `impl Dup for X` are E0020 in every module that writes them, each with the
+// one candidate that takes the `impl` away (§4.6; `fixes = 1`: a candidate edits the file of its own diagnostic, and
+// the candidates of `shapes.onsa` are applied there). Here `impl Dup for R` is in `main.onsa`, and the `impl Copy for`
+// of the types of `shapes.onsa` are in that file: the unit of each is its own, so a candidate of one leaves the
+// others as they were. The type of another module is Copy by its structure, and the uses here are right whether
+// or not the `impl` of `shapes.onsa` is there (`shapes.P` is copied twice, a `shapes.Wrap[I32]` is a value that is
+// used). An `impl Copy for` that names the type of another module is not written here (the orphan rule, §6.3,
+// is not this unit's).
+use shapes
+use shapes.{P, Wrap}
+
+pub struct R {
+  p: P,
+}
+
+
+
+pub fn twice(p: P) -> I32 {
+  let a = p
+  let b = p
+  a.x + b.x
+}
+
+pub fn use_wrap(w: Wrap[I32]) -> I32 {
+  w.v
+}
+
+pub fn from_the_other_module(r: R) -> I32 {
+  shapes.px(r.p)
+}

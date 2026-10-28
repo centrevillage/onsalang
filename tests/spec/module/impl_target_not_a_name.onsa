@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§15.1", "§18.1"]
+
+// R-320, S-139 (W4-05 U3b): the target of an `impl` is written by the name of a type's declaration (§4.4), and
+// "`impl` を書ける場所と対象の書き方の規則は、全て E0307 である: この孤児規則、宣言の名前で書くこと（§4.4）…"
+// (§6.3). A type that is not written by a name (a tuple, an array, `()`, a function type, in each case with a type
+// parameter inside also, and nested) is E0307: it is a type, so it is not the E0308 of a name that is not a type
+// (§15.1; module/kind_impl_target.onsa has the list of those, and one is here to set the two apart), and it is
+// found, so it is not E0302. The error is in the heading, so each `impl` is one unit and the members are not
+// checked (§18.1): the `let z: Bool = 2` in the members of `tuple_members` and `unit_members` has no E0401.
+// One error per unit, so each form is in its own unit. The fine `impl` blocks at the end are the names of the
+// declarations (a struct, an enum).
+
+pub struct P {
+  x: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+const K: U32 = 4
+
+impl (I32, I32) {                                   //~ E0307
+  pub fn tuple_members(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl (I32, F32) {                                   //~ E0307
+  pub fn tuple_other(self) -> I32 { 1 }
+}
+
+impl [F32; 2] {                                     //~ E0307
+  pub fn array_members(self) -> I32 { 1 }
+}
+
+impl () {                                           //~ E0307
+  pub fn unit_members(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl fn(I32) -> I32 {                               //~ E0307
+  pub fn function_type_members(self) -> I32 { 1 }
+}
+
+impl[T] (T, T) {                                    //~ E0307
+  pub fn tuple_of_parameters(self) -> I32 { 1 }
+}
+
+impl[T] [T; 2] {                                    //~ E0307
+  pub fn array_of_parameters(self) -> I32 { 1 }
+}
+
+impl[const N: U32] [F32; N] {                       //~ E0307
+  pub fn array_of_length_parameter(self) -> I32 { 1 }
+}
+
+impl[T] fn(T) -> T {                                //~ E0307
+  pub fn function_type_of_parameters(self) -> I32 { 1 }
+}
+
+impl ((I32, I32), [F32; 2]) {                       //~ E0307
+  pub fn nested_members(self) -> I32 { 1 }
+}
+
+impl [(I32, I32); 2] {                              //~ E0307
+  pub fn array_of_tuples(self) -> I32 { 1 }
+}
+
+impl K {                                            //~ E0308
+  pub fn a_name_that_is_not_a_type(self) -> I32 { 1 }
+}
+
+impl P {
+  pub fn get(self) -> I32 { self.x }
+}
+
+impl E {
+  pub fn get(self) -> I32 { 1 }
+}

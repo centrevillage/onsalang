@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§18.1"]
+// fixes = 1
+
+// S-140 (W4-05 U3b): the kind of a type is decided by its structure, so "`impl Copy for X` と宣言の `: Copy`
+// (`Dup` も同じ）は書かない（E0020。修正候補は外す形で、note で種の規則を示し、Copy でないフィールドがあれば名指し
+// する）" (§4.6): `Copy` and `Dup` are constraints on kinds and not traits (§6.3 has the traits, and `impl Show for`
+// is not the form here), so the `impl` of either is the form of a language where a type is marked with it
+// (foreign-forms.toml `copy_impl`), and the candidate is to take the `impl` away: one candidate, the unit is
+// gone, and the units that were fine are fine (the contract of §18.1, which the case runner applies). `impl Dup for`
+// is the same as `impl Copy for`; the struct, the enum, the generic ones (the `impl` has parameters) and a type
+// that has a field that is not Copy (a `Str`, a `Buf`: the note names it, which the markers do not check) are
+// all E0020. One error per unit, so each is in its own unit with its own type; the types that are named in
+// them are fine: the constraint is written in a bound (`[T: Copy]`, §4.5), which is not this form.
+
+pub struct P1 {
+  x: I32,
+}
+
+pub struct P2 {
+  x: I32,
+}
+
+pub enum E1 {
+  A,
+  B(I32),
+}
+
+pub enum E2 {
+  A,
+  B(I32),
+}
+
+pub struct G1[T] {
+  v: T,
+}
+
+pub struct G2[T] {
+  v: T,
+}
+
+pub struct Shared1 {
+  name: Str,
+}
+
+pub struct Shared2 {
+  name: Str,
+}
+
+pub struct Affine1 {
+  data: Buf[I32],
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pub fn use_them(p: P1, q: P2, e: E1, f: E2) -> I32 {
+  1
+}
+
+pub fn use_generic(g: G1[I32], h: G2[F32]) -> I32 {
+  1
+}
+
+pub fn use_bound[T: Copy](x: T) -> T {
+  x
+}
+
+pub fn use_dup[T: Dup](x: T) -> T {
+  x
+}

@@ -1,0 +1,29 @@
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+impl[U, T] Pair2[T, U] {
+  pub fn first(self) -> T { self.a }
+  pub fn second(self) -> U { self.b }
+}
+
+impl Pair2[I32, F32] {                              //~ E0307
+  pub fn concrete_both(self) -> I32 { 1 }
+}
+
+impl[T] Pair2[T, T] {                               //~ E0307
+  pub fn twice_the_same(self) -> T { self.a }
+}
+
+impl[T, U] Ring[T, 3] {                             //~ E0307
+  pub fn unused_and_concrete(self) -> U32 { 3 }
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn into_data(self) -> [T; N] { self.data }
+}

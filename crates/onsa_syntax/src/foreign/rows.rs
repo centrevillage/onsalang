@@ -787,6 +787,15 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Reported,
     },
     Row {
+        id: RowId::CopyImpl,
+        name: "copy_impl",
+        phase: Phase::Names,
+        code: Code::E0020,
+        message: "the kind of a type follows from its structure; `Copy` and `Dup` are not implemented",
+        rule: "the kind (Copy, Shared, Affine) of a type follows from its structure: `Copy` and `Dup` are written in bounds only, and no `impl` gives them (§4.6)",
+        detect: Detect::Reported,
+    },
+    Row {
         id: RowId::TypeArgsTurbofish,
         name: "type_args_turbofish",
         phase: Phase::Syntax,
@@ -1008,7 +1017,6 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "type_args_method_square", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "copy_impl", phase: Phase::Names, code: Code::E0020 },
 ];
 
 /// The matchers of the syntax stage and the rows each may name: every one

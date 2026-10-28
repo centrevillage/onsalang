@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1"]
+
+// S-137 (W4-05 U3b, §6.2): "対象の型引数は、`impl` の型パラメータを一度ずつ並べたものに限る（具体的な型の
+// `impl Ring[F32, 4]`、同じパラメータの重複 `impl[T] Pair2[T, T]`、対象に現れないパラメータは E0307）"; §6.3: the
+// rules for where an `impl` may be written and how its target is written are all E0307. Each `impl` below has one
+// heading that breaks the rule, so each is one unit with one E0307 (§18.1: one error per unit), and the
+// members are not checked: the `let z: Bool = 2` in the members of `concrete_f32` and `inner_option` has no E0401.
+// Forms: a concrete type for the type argument (a primitive, a prelude type, a concrete length, in each slot, and
+// next to a parameter that is not used), the same parameter twice, a parameter that does not appear in the target
+// (a type parameter and a const parameter), and a type argument that is not a parameter but has one inside (an enum
+// of the prelude, the type itself, a tuple, an array). The members have names of their own: the members of an
+// `impl` with an E0307 heading are names after the name of the type (§6.2, §18.1), and E0304 is for a name that
+// repeats. The fine `impl` blocks at the end are the right forms (the lists of parameters that are right are in
+// types/impl_target_args_fine.onsa).
+
+pub struct R[T] {
+  v: T,
+}
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl R[F32] {                                       //~ E0307
+  pub fn concrete_f32(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl Option[I32] {                                  //~ E0307
+  pub fn concrete_option(self) -> I32 { 1 }
+}
+
+impl Ring[F32, 4] {                                 //~ E0307
+  pub fn concrete_ring(self) -> U32 { 4 }
+}
+
+impl[T] Ring[T, 4] {                                //~ E0307
+  pub fn concrete_length(self) -> U32 { 4 }
+}
+
+impl[const N: U32] Ring[F32, N] {                   //~ E0307
+  pub fn concrete_element(self) -> [F32; N] { self.data }
+}
+
+impl[T] R[F32] {                                    //~ E0307
+  pub fn concrete_next_to_unused(self) -> F32 { self.v }
+}
+
+impl Pair2[I32, F32] {                              //~ E0307
+  pub fn concrete_both(self) -> I32 { self.a }
+}
+
+impl[T] Pair2[T, T] {                               //~ E0307
+  pub fn twice_the_same(self) -> T { self.a }
+}
+
+impl[A] Pair2[A, A] {                               //~ E0307
+  pub fn twice_the_same_renamed(self) -> A { self.b }
+}
+
+impl[T, U] R[T] {                                   //~ E0307
+  pub fn unused_type_parameter(self) -> T { self.v }
+}
+
+impl[T, const N: U32] R[T] {                        //~ E0307
+  pub fn unused_const_parameter(self) -> T { self.v }
+}
+
+impl[T] W[Option[T]] {                              //~ E0307
+  pub fn inner_option(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl[T] W[W[T]] {                                   //~ E0307
+  pub fn inner_itself(self) -> I32 { 1 }
+}
+
+impl[T] W[(T, T)] {                                 //~ E0307
+  pub fn inner_tuple(self) -> I32 { 1 }
+}
+
+impl[T] W[[T; 2]] {                                 //~ E0307
+  pub fn inner_array(self) -> I32 { 1 }
+}
+
+impl[T, const N: U32] Ring[T, N + 1] {              //~ E0307
+  pub fn plus_one(self) -> I32 { 1 }
+}
+
+impl[T, const N: U32] Ring[T, N * 2] {              //~ E0307
+  pub fn doubled(self) -> I32 { 1 }
+}
+
+impl[T] R[T] {
+  pub fn get(self) -> T { self.v }
+}
+
+impl[A, B] Pair2[A, B] {
+  pub fn left(self) -> A { self.a }
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn into_data(self) -> [T; N] { self.data }
+}
+
+impl[T] W[T] {
+  pub fn unwrap(self) -> T { self.v }
+}

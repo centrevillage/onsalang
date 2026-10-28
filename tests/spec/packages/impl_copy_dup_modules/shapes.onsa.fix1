@@ -1,0 +1,22 @@
+pub struct P {
+  x: I32,
+}
+
+pub enum Mode {
+  Fast,
+  Slow,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+
+
+
+
+
+
+pub fn px(p: P) -> I32 {
+  p.x
+}

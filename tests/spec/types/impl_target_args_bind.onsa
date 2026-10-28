@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§4.5"]
+
+// S-137 (W4-05 U3b, §6.2): the parameters of an `impl` are bound by the place that each has in the target, not by
+// the order in which they are declared. `impl[U, T] Pair2[T, U]` has `T` for the first type argument and `U` for
+// the second, so on a `Pair2[I32, F32]` `first` is an `I32` and `second` is an `F32`, and the other way is E0401.
+// The same names serve a `Pair2[F32, I32]` the other way round. The bound `U: Float` of the second `impl` is on the
+// second type argument, so `second_doubled` is a method of the `Pair2[I32, F32]` and not of the `Pair2[F32, I32]`
+// (§4.5: a bound that the type argument does not satisfy is E0416 at the method call).
+// The right forms are fine, and are run in types/impl_target_args_fine.onsa.
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+impl[U, T] Pair2[T, U] {
+  pub fn first(self) -> T { self.a }
+  pub fn second(self) -> U { self.b }
+}
+
+fn first_as_float(p: Pair2[I32, F32]) -> F32 {
+  p.first()                                         //~ E0401
+}
+
+fn second_as_int(p: Pair2[I32, F32]) -> I32 {
+  p.second()                                        //~ E0401
+}
+
+fn swapped_first_as_int(p: Pair2[F32, I32]) -> I32 {
+  p.first()                                         //~ E0401
+}
+
+impl[U: Float, T] Pair2[T, U] {
+  pub fn second_doubled(self) -> U { self.b + self.b }
+}
+
+fn bound_on_the_second(p: Pair2[F32, I32]) -> I32 {
+  p.second_doubled()                                //~ E0416
+}
+
+fn bound_met(p: Pair2[I32, F32]) -> F32 {
+  p.second_doubled()
+}
+
+fn right_way(p: Pair2[I32, F32]) -> F32 {
+  p.second()
+}
+
+fn right_way_swapped(p: Pair2[F32, I32]) -> F32 {
+  p.first()
+}
