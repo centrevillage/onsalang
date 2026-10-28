@@ -1,0 +1,4 @@
+pub fn f() -> I32 {
+  let _: fn() -> I32 uses {Nope} = Nope3
+  1
+}

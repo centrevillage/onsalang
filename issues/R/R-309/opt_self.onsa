@@ -1,0 +1,7 @@
+pub struct S { v: I32 }
+impl S {
+  pub fn m(self) -> I32 {
+    let a: Option[self] = None
+    1
+  }
+}
