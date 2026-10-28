@@ -59,14 +59,7 @@ impl Walker<'_> {
         origin: Origin,
         site: Option<PatId>,
     ) -> Result<BindingId, Stop> {
-        let local = self.scopes.visible.get(&name.name).map(|b| self.out.bindings[b.0 as usize].span);
-        let visible = local.or_else(|| self.generics.iter().find(|g| g.name == name.name).map(|g| g.span));
-        let flow = match kind {
-            BindingKind::FlowInput | BindingKind::FlowLet => true,
-            BindingKind::ParVar => self.flow,
-            _ => false,
-        };
-        if let Some(d) = hides(self.a, self.m, name, visible, flow) {
+        if let Some(d) = self.hidden(name, kind) {
             self.fail_at_let(Fail::Report(d))?;
         }
         let (scope, hidden) = self.scopes.open.last_mut().expect("an open scope");
@@ -84,6 +77,18 @@ impl Walker<'_> {
         let prev = self.scopes.visible.insert(name.name.clone(), id);
         hidden.push((name.name.clone(), prev));
         Ok(id)
+    }
+
+    /// The E0304 of the binding `name` of `kind` declared here ([`hides`]).
+    pub(super) fn hidden(&self, name: &Ident, kind: BindingKind) -> Option<Diagnostic> {
+        let local = self.scopes.visible.get(&name.name).map(|b| self.out.bindings[b.0 as usize].span);
+        let visible = local.or_else(|| self.generics.iter().find(|g| g.name == name.name).map(|g| g.span));
+        let flow = match kind {
+            BindingKind::FlowInput | BindingKind::FlowLet => true,
+            BindingKind::ParVar => self.flow,
+            _ => false,
+        };
+        hides(self.a, self.m, name, visible, flow)
     }
 
     /// Check the names `declare` declares before the walk reads what is
@@ -107,10 +112,13 @@ impl Walker<'_> {
     }
 
     /// Whether `name`, at the head of a path of a type, is a binding visible
-    /// here: a use of it (an E0320 renames it, S-729), no read.
+    /// here or a parameter of the heading walked: a use of it (an E0320
+    /// renames it, S-729), no read.
     pub(super) fn sees_local(&self, name: &Ident) -> bool {
-        let Some(id) = self.scopes.visible.get(&name.name) else { return false };
-        self.a.note_use(self.out.bindings[id.0 as usize].span, name.span);
+        let heading = self.heading.get(&name.name).copied();
+        let visible = self.scopes.visible.get(&name.name).map(|id| self.out.bindings[id.0 as usize].span);
+        let Some(decl) = heading.or(visible) else { return false };
+        self.a.note_use(decl, name.span);
         true
     }
 

@@ -611,16 +611,8 @@ impl<'a> Checker<'a> {
             },
         };
         let effects = match effects {
-            // Read as the row of a signature; but its first error is the
-            // first error of the body, whose check stops there (§18.1).
-            Some(row) => {
-                match crate::sig::read_effects(self.a, self.def, self.m, (&self.generics, self.self_ty), Some(row)) {
-                    (_, errors) if !errors.is_empty() => {
-                        return Err(self.diag(errors.into_iter().next().unwrap()));
-                    }
-                    (set, _) => set,
-                }
-            }
+            // As the names stage read it (S-738).
+            Some(_) => self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?,
             None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
         };
         let rt = exp_fn.as_ref().map(|f| f.rt).unwrap_or(false);

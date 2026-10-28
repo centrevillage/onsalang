@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1", "§4.5"]
+
+// S-741 (b), S-733 (W4-19): the signatures that stay right when a parameter is visible in the whole heading.
+// The names that a signature may write in a type place are the types, the type parameters, the const
+// parameters, the constants and the associated constants (§4.5, §15.1); a parameter is a value, so it is
+// not among them, and it does not hide them: a parameter cannot have the name of such a binding (E0304,
+// §5.1), so no program changes (S-741: "どの案でも通るプログラムは変わらない"). Everything here is right.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const K: U32 = 4
+
+type Al = P
+
+pub fn const_parameter[const N: U32](a: [F32; N]) -> U32 {
+  N
+}
+
+pub fn const_parameter_and_a_parameter[const N: U32](n: U32, a: [F32; N]) -> U32 {
+  n + N
+}
+
+pub fn constant_in_a_length(n: U32, a: [F32; K]) -> U32 {
+  n + K
+}
+
+pub fn types_next_to_the_parameters(p: P, n: U32, r: Ring[F32, 4], o: Option[P], q: Al) -> U32 {
+  n + r.head
+}
+
+pub fn const_parameter_in_the_result[const N: U32](n: U32) -> [F32; N] {
+  [0.0; N]
+}
+
+pub fn type_parameter_next_to_the_parameters[T](x: T, n: U32) -> T {
+  x
+}
+
+pub fn function_type_next_to_the_parameters(f: fn(P) -> P, p: P) -> P {
+  f.(p)
+}
+
+impl P {
+  pub const N: U32 = 2
+
+  pub fn self_type_next_to_the_parameters(self, o: Self, n: U32) -> I32 {
+    self.x + o.x
+  }
+
+  pub fn associated_constant_in_a_length(self, a: [F32; P.N]) -> I32 {
+    self.x
+  }
+}
+
+pub flow types_next_to_the_inputs(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}

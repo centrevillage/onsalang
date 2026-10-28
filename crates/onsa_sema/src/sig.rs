@@ -17,7 +17,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
-    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, ItemKind, Lit, Mode, Param, ParamName, Path,
+    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ItemKind, Lit, Mode, Param, ParamName, Path,
     TypeId, TypeKind, UnOp, Vis,
 };
 use onsa_syntax::foreign::{self, RowId};
@@ -64,14 +64,14 @@ struct Cx<'p> {
     reach: Option<Vis>,
     /// The local bindings and parameters the type sees, by name: values a
     /// path of it names first (§15.1, §4.5, S-729). Of a type of a body, the
-    /// visible ones it names; none in a heading (S-733).
-    locals: Vec<String>,
+    /// visible ones it names; in a heading, its parameters (S-741, S-733).
+    locals: HashSet<String>,
 }
 
 impl Cx<'_> {
     /// Whether `name` is one of [`Self::locals`], a value (S-729).
     fn is_local(&self, name: &str) -> bool {
-        self.locals.iter().any(|l| l == name)
+        self.locals.contains(name)
     }
 
     /// Whether a constant expression starts at one of [`Self::locals`]: a
@@ -226,7 +226,7 @@ impl<'p> Sema<'p> {
             self_ty,
             def: id,
             reach: Some(def.vis),
-            locals: Vec::new(),
+            locals: HashSet::new(),
         })
     }
 
@@ -505,7 +505,7 @@ impl<'p> Sema<'p> {
                     // an E0308 (S-713 (c)).
                     for b in bounds {
                         let n = b.path.segments.last().unwrap();
-                        match heading_name(self.a, cx.m, &b.path, &listed, cx.self_ty) {
+                        match heading_name(self.a, cx.m, &b.path, (&listed, &cx.locals), cx.self_ty) {
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => dup = false,
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(bound))))) => bs.push(bound),
                             // A trait this version does not take as a bound
@@ -600,7 +600,7 @@ impl<'p> Sema<'p> {
     /// The effects of a row of a signature or a function type
     /// ([`read_effects`]): its errors are reported, and the lowering goes on.
     fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
-        let (set, errors) = read_effects(self.a, cx.def, cx.m, (&cx.generics, cx.self_ty), row);
+        let (set, errors) = read_effects(self.a, cx.def, cx.m, (&cx.generics, cx.self_ty, &cx.locals), row);
         for d in errors {
             self.report(cx.def, d);
         }
@@ -664,8 +664,19 @@ impl<'p> Sema<'p> {
             return;
         }
         let mut cx = cx;
-        cx.generics = self.lower_generics(&cx, &f.generics);
         let in_impl = cx.self_ty.is_some();
+        let consts = f.generics.iter().filter_map(|g| match g {
+            GenericParam::Const { ty, .. } => Some(*ty),
+            _ => None,
+        });
+        let types = f.params.iter().filter_map(|p| p.ty).chain(f.ret).chain(consts).collect();
+        let bounds = f.generics.iter().flat_map(|g| match g {
+            GenericParam::Type { bounds, .. } => &bounds[..],
+            _ => &[],
+        });
+        let paths = f.effects.iter().flat_map(|r| &r.effects).chain(bounds.map(|b| &b.path)).collect();
+        cx.locals = heading_locals(self.a, &cx, (&f.params, &f.generics, false), (types, paths));
+        cx.generics = self.lower_generics(&cx, &f.generics);
         let params = self.lower_params(&cx, &f.params, in_impl);
         let ret = match f.ret {
             Some(t) => self.lower_type(&cx, t),
@@ -709,6 +720,47 @@ fn cx_clone<'p>(cx: &Cx<'p>) -> Cx<'p> {
         reach: cx.reach,
         locals: cx.locals.clone(),
     }
+}
+
+/// The parameters `params` of a heading of the type, const and effect
+/// parameters `generics` (and those of `cx`, of its `impl`), `self` of a
+/// method too, of a flow (`flow`) or not: values its whole heading sees
+/// (§5.1, S-741, S-733). One that is an E0304 ([`hides`], as the body
+/// declares it) is none: its name names what it clashes with (§18.1, S-675).
+/// A name of one at the head of a path of `types` (and of the constant
+/// expressions in them) or of `paths` (bounds, the effect row) is a use of
+/// it, which an E0320 renames (§2.3).
+fn heading_locals(
+    a: &Analysis,
+    cx: &Cx<'_>,
+    (params, generics, flow): (&[Param], &[GenericParam], bool),
+    (types, paths): (Vec<TypeId>, Vec<&Path>),
+) -> HashSet<String> {
+    let mut seen: HashMap<&str, Span> = cx.generics.iter().map(|g| (g.name.as_str(), g.span)).collect();
+    seen.extend(generics.iter().map(crate::names::param_name).map(|n| (n.name.as_str(), n.span)));
+    let mut declared = HashMap::new();
+    for p in params {
+        let (name, span) = match &p.name {
+            ParamName::Ident(i) => (i.name.as_str(), i.span),
+            ParamName::SelfParam(s) if cx.self_ty.is_some() => ("self", *s),
+            _ => continue,
+        };
+        let visible = seen.get(name).copied();
+        seen.entry(name).or_insert(span);
+        let ident = Ident { name: name.to_string(), span };
+        if crate::names::hides(a, cx.m, &ident, visible, flow).is_none() {
+            declared.insert(name, span);
+        }
+    }
+    let mut names = Vec::new();
+    types.into_iter().for_each(|t| crate::names::body::heads(cx.ast, t, &mut names));
+    names.extend(paths.into_iter().filter_map(|p| p.segments.first()));
+    for n in names {
+        if let Some(&decl) = declared.get(n.name.as_str()) {
+            a.note_use(decl, n.span);
+        }
+    }
+    declared.into_keys().map(str::to_string).collect()
 }
 
 /// The derivable traits (§6.4, S-34), in the order of the spec: the closed
@@ -759,11 +811,12 @@ fn src(cx: &Cx<'_>, span: Span) -> String {
 /// reports them.
 // The effects read stay when a name held as an error is left out, as an
 // unknown effect of an open row, and the check goes on (§18.1, S-691).
+// A local it sees (`locals`, S-738) is a value, no effect.
 pub(crate) fn read_effects(
     a: &mut Analysis,
     def: DefId,
     from: crate::ModId,
-    (generics, self_ty): (&[GenericDef], Option<TyId>),
+    (generics, self_ty, locals): (&[GenericDef], Option<TyId>, &HashSet<String>),
     row: Option<&EffectRow>,
 ) -> (EffectSet, Vec<Diagnostic>) {
     let mut set = EffectSet::default();
@@ -778,7 +831,7 @@ pub(crate) fn read_effects(
             set.vars.push(i as u32);
             continue;
         }
-        match heading_name(a, from, p, &listed, self_ty) {
+        match heading_name(a, from, p, (&listed, locals), self_ty) {
             Ok((_, Some(Entity::Def(d)))) if Some(d) == a.alloc => set.alloc = true,
             Ok((_, Some(Entity::Def(d))))
                 if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
@@ -816,21 +869,26 @@ pub(crate) fn read_effects(
 
 /// The kind of what the path `p` of a bound or an effect row names (§15.1),
 /// and what it names but a parameter of the heading of `listed` (the names a
-/// heading binds that are no item of a module, with their kinds) and an
+/// heading binds that are no item of a module, with their kinds, and the
+/// values `locals` the place sees, [`Cx::locals`]) and an
 /// associated name of a builtin type: through `Self` (`self_ty`) and the
-/// aliases ([`Analysis::path_end`]). A parameter has no members (the E0302
-/// of its head, as in a body).
+/// aliases ([`Analysis::path_end`]). A parameter of a list has no members
+/// (the E0302 of its head, as in a body), a local neither (its E0308).
 fn heading_name(
     a: &Analysis,
     from: ModId,
     p: &Path,
-    listed: &[(&str, NameKind)],
+    (listed, locals): (&[(&str, NameKind)], &HashSet<String>),
     self_ty: Option<TyId>,
 ) -> Result<(NameKind, Option<Entity>), crate::ResolveError> {
     let head = &p.segments[0];
-    if let Some(&(_, kind)) = listed.iter().find(|(n, _)| *n == head.name) {
-        return match p.segments.len() {
-            1 => Ok((kind, None)),
+    let local = locals.contains(&head.name).then_some(NameKind::Local);
+    if let Some(kind) = local.or_else(|| listed.iter().find(|(n, _)| *n == head.name).map(|&(_, k)| k)) {
+        return match &p.segments[1..] {
+            [] => Ok((kind, None)),
+            [next, ..] if kind == NameKind::Local => {
+                Err(crate::ResolveError::NotANamespace { name: head.name.clone(), span: next.span, kind: Some(kind) })
+            }
             _ => Err(crate::ResolveError::NotFound { name: head.name.clone(), span: head.span }),
         };
     }

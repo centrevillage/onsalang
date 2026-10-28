@@ -38,17 +38,8 @@ impl<'p> Sema<'p> {
             }
             TypeKind::Path { path, args } => {
                 let args_ast = args.clone();
-                // A local of a body is a value (§15.1, S-729), as `K.x` of a
-                // constant `K` has no members.
-                if let [head, rest @ ..] = &path.segments[..]
-                    && cx.is_local(&head.name)
-                {
-                    let Some(next) = rest.first() else {
-                        return self.not_a_type(cx, None, NameKind::Local, te.span, path);
-                    };
-                    let d = crate::resolve::no_members(&head.name, NameKind::Local, next.span);
-                    self.report(cx.def, d.with_found(head.name.clone()));
-                    return self.a.types.error();
+                if let Some(t) = self.local_as_type(cx, path, te.span) {
+                    return t;
                 }
                 if path.segments.len() == 1 {
                     let seg = &path.segments[0];
@@ -203,8 +194,10 @@ impl<'p> Sema<'p> {
         match (&te.kind, expect_const) {
             // The kind of an argument is the name stage's, whatever its form
             // (`Wrap[3]`, `Ring[F32, (F32, F32)]`; §4.5, §15.1, S-732).
-            (TypeKind::ConstArg(_), Some(false) | None) => {
-                self.wrong_kind_arg(cx, te.span, "a constant expression", "a type")
+            (TypeKind::ConstArg(e), Some(false) | None) => {
+                // `Option[self]`: a local, as of a path (R-309).
+                let local = crate::constarg::path_of(cx.ast, *e).and_then(|p| self.local_as_type(cx, &p, te.span));
+                local.unwrap_or_else(|| self.wrong_kind_arg(cx, te.span, "a constant expression", "a type"))
             }
             (TypeKind::ConstArg(e), Some(true)) => {
                 self.lower_alias_of(cx, *e);
@@ -253,6 +246,22 @@ impl<'p> Sema<'p> {
             (_, Some(true)) => self.wrong_kind_arg(cx, te.span, "a type", "a constant"),
             _ => self.lower_type(cx, t),
         }
+    }
+
+    /// The E0308 of the path `path` of the type at `span` whose head is a
+    /// local, a value (§15.1, S-729, S-741), as `K.x` of a constant `K` has
+    /// no members; `None` when its head is no local.
+    fn local_as_type(&mut self, cx: &Cx<'p>, path: &Path, span: Span) -> Option<TyId> {
+        let [head, rest @ ..] = &path.segments[..] else { return None };
+        if !cx.is_local(&head.name) {
+            return None;
+        }
+        let Some(next) = rest.first() else {
+            return Some(self.not_a_type(cx, None, NameKind::Local, span, path));
+        };
+        let d = crate::resolve::no_members(&head.name, NameKind::Local, next.span);
+        self.report(cx.def, d.with_found(head.name.clone()));
+        Some(self.a.types.error())
     }
 
     /// E0308 for the type argument at `span`, which is `is` where the
@@ -453,7 +462,7 @@ pub(crate) fn lower_type_in_body<'p>(
     generics: &[GenericDef],
     self_ty: Option<TyId>,
     def: DefId,
-    (t, locals): (TypeId, Vec<String>),
+    (t, locals): (TypeId, HashSet<String>),
 ) -> (TyId, Vec<Diagnostic>) {
     let before = a.diagnostics.len();
     let mut s = Sema::new(a, Vec::new());

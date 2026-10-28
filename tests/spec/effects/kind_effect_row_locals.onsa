@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§5.1", "§15.1", "§18.1"]
+
+// S-738, S-741 (W4-19): a local or a parameter that is visible is a name that is found in an effect row, and
+// not an effect, so it is E0308 (§8.1: "効果でも効果行変数でもない名前（`uses {I32}`、`uses {Show}`、見えている引数や
+// ローカルの `uses {n}`、§5.1）は E0308 である"; §15.1: "効果行に効果でない名前を書く…のも E0308"), not the E0302 of a
+// name that is not found. The binding is visible by the same range as at a value place (§5.1): a `let` and a
+// `var` after their statement, the parameters of a function in its heading and its body, the bindings of a `for`
+// and of a `match` arm in their block, the parameters of an anonymous function in its heading (its own
+// parameters too: `fn(x: I32) -> I32 uses {x}`) and in its body. The places are the effect row of a function
+// type written in the body (the annotation of a `let`, a type argument), the row of an anonymous function, and the
+// row of a signature (the result, the type of a parameter, the type of a result), in a function, a generic
+// function and a method.
+// One error per unit (§18.1), so each form is in its own unit. The right rows (`Alloc`, an effect row
+// variable) next to the locals are in the last units.
+
+pub struct P {
+  x: I32,
+}
+
+fn g() -> I32 {
+  1
+}
+
+// ---- The effect row of a function type in the body ----
+
+pub fn local_in_an_annotation() -> I32 {
+  let n = 1
+  let _: fn() -> I32 uses {n} = g   //~ E0308
+  0
+}
+
+pub fn variable_in_an_annotation() -> I32 {
+  var n = 1
+  let _: fn() -> I32 uses {n} = g   //~ E0308
+  0
+}
+
+pub fn parameter_in_an_annotation(n: I32) -> I32 {
+  let _: fn() -> I32 uses {n} = g   //~ E0308
+  n
+}
+
+pub fn part_of_a_destructuring_in_an_annotation() -> I32 {
+  let (p, q) = (1, 2)
+  let _: fn() -> I32 uses {q} = g   //~ E0308
+  p
+}
+
+pub fn binding_of_a_for_in_an_annotation() -> I32 {
+  for i in 0 ..< 3 {
+    let _: fn() -> I32 uses {i} = g   //~ E0308
+  }
+  0
+}
+
+pub fn binding_of_a_match_arm_in_an_annotation(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => {
+      let _: fn() -> I32 uses {v} = g   //~ E0308
+      v
+    },
+    None => 0,
+  }
+}
+
+pub fn parameter_of_a_function_value_in_an_annotation(n: I32) -> I32 {
+  let _: fn(fn() -> I32 uses {n}) -> I32 = fn(h: fn() -> I32 uses {n}) -> I32 { 1 }   //~ E0308
+  0
+}
+
+pub fn row_after_a_right_name(n: I32) -> I32 {
+  let _: fn() -> I32 uses {Alloc, n} = g   //~ E0308
+  n
+}
+
+pub fn local_in_the_row_of_a_type_argument(n: I32) -> I32 {
+  let _: Option[fn() -> I32 uses {n}] = None   //~ E0308
+  n
+}
+
+// ---- The effect row of an anonymous function ----
+
+pub fn closure_row_with_an_outer_local() -> I32 {
+  let n = 1
+  let f = fn(x: I32) -> I32 uses {n} { x }   //~ E0308
+  f.(n)
+}
+
+pub fn closure_row_with_an_outer_parameter(n: I32) -> I32 {
+  let f = fn(x: I32) -> I32 uses {n} { x }   //~ E0308
+  f.(n)
+}
+
+pub fn closure_row_with_its_own_parameter() -> I32 {
+  let f = fn(x: I32) -> I32 uses {x} { x }   //~ E0308
+  f.(1)
+}
+
+pub fn closure_row_with_a_later_parameter() -> I32 {
+  let f = fn(x: I32, y: I32) -> I32 uses {y} { x + y }   //~ E0308
+  f.(1, 2)
+}
+
+pub fn closure_row_with_the_parameter_of_the_outer_closure() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let h = fn(y: I32) -> I32 uses {x} { y }   //~ E0308
+    h.(x)
+  }
+  f.(1)
+}
+
+// ---- The effect row of a signature ----
+
+pub fn parameter_in_the_row(n: I32) -> I32 uses {n} {   //~ E0308
+  n
+}
+
+pub fn second_parameter_in_the_row(m: I32, n: I32) -> I32 uses {n} {   //~ E0308
+  m + n
+}
+
+pub fn parameter_that_comes_later_in_the_row_of_a_type(f: fn() -> I32 uses {n}, n: I32) -> I32 {   //~ E0308
+  n
+}
+
+pub fn parameter_in_the_row_of_a_parameter_type(n: I32, f: fn() -> I32 uses {n}) -> I32 {   //~ E0308
+  n
+}
+
+pub fn parameter_in_the_row_of_a_result_type(n: I32) -> fn() -> I32 uses {n} {   //~ E0308
+  g
+}
+
+pub fn parameter_in_the_row_of_a_generic_function[T](n: I32, x: T) -> T uses {n} {   //~ E0308
+  x
+}
+
+pub fn row_after_a_right_name_in_a_signature(n: I32) -> I32 uses {Alloc, n} {   //~ E0308
+  n
+}
+
+impl P {
+  pub fn parameter_in_the_row_of_a_method(self, n: I32) -> I32 uses {n} {   //~ E0308
+    self.x
+  }
+
+  pub fn parameter_in_the_row_of_a_closure_in_a_method(self, n: I32) -> I32 {
+    let f = fn(x: I32) -> I32 uses {n} { x }   //~ E0308
+    f.(self.x)
+  }
+
+  pub fn local_in_the_row_of_an_annotation_in_a_method(self) -> I32 {
+    let n = 1
+    let _: fn() -> I32 uses {n} = g   //~ E0308
+    self.x
+  }
+}
+
+// ---- The right rows next to the locals ----
+
+pub fn alloc_next_to_a_parameter(n: I32) -> I32 uses {Alloc} {
+  n
+}
+
+pub fn effect_row_variable_next_to_a_parameter[e](n: I32, f: fn() -> I32 uses {e}) -> I32 uses {e} {
+  f.() + n
+}
+
+pub fn closure_row_next_to_a_local() -> I32 uses {Alloc} {
+  let n = 1
+  let f = fn(x: I32) -> I32 uses {Alloc} { x }
+  f.(n)
+}

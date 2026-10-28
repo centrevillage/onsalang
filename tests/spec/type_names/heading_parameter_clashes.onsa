@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1", "§18.1"]
+
+// S-741, S-675 (d1) (W4-19): a parameter whose name is a name it sees (an item, a `use`, an effect-row
+// variable: §5.1, no shadowing) is an E0304, and it is no binding that the rest of the heading sees (§18.1:
+// a name of an E0304 reads neither side, as the name of a `use` that failed). The same name in a type place
+// of the heading names what it clashes with, so the one error of the unit is the E0304 of the parameter,
+// before or after the place in the text. The heading is of a function, a method, a flow (its inputs) and an
+// anonymous function. One error per unit (§18.1), so each form is in its own unit.
+// The names are lowercase, so that a parameter has no E0320 (§2.3) of its own: the struct and the constant
+// they clash with are the E0320 of their declarations, which are units of their own.
+
+use std.math
+
+pub struct item { //~ E0320
+  x: I32,
+}
+
+pub struct P {
+  y: I32,
+}
+
+const k: U32 = 4 //~ E0320
+
+pub fn later_parameter_is_an_item(a: item, item: U32) -> U32 { //~ E0304
+  1
+}
+
+pub fn earlier_parameter_is_an_item(item: U32, a: item) -> U32 { //~ E0304
+  1
+}
+
+pub fn parameter_is_an_item_in_the_result(a: I32, item: U32) -> item { //~ E0304
+  a
+}
+
+pub fn parameter_is_a_constant_in_a_length(a: [F32; k], k: U32) -> U32 { //~ E0304
+  1
+}
+
+pub fn parameter_is_an_effect_row_variable[e](g: fn() -> I32 uses {e}, e: I32) -> I32 { //~ E0304
+  1
+}
+
+pub fn parameter_is_a_name_of_a_use(math: I32) -> I32 uses {math} { //~ E0304
+  1
+}
+
+impl P {
+  pub fn method_parameter_is_an_item(self, a: item, item: U32) -> I32 { //~ E0304
+    1
+  }
+}
+
+pub flow flow_input_is_an_item(a: item at sample, item: F32 at sample) -> F32 at sample { //~ E0304
+  1.0
+}
+
+pub fn closure_parameter_is_an_item() -> I32 {
+  let g = fn(a: item, item: I32) -> I32 { 1 }    //~ E0304
+  1
+}
+
+pub fn closure_parameter_is_an_item_in_the_result() -> I32 {
+  let g = fn(item: I32) -> item { 1 }    //~ E0304
+  1
+}

@@ -31,6 +31,10 @@ impl<'p> Sema<'p> {
             }
             return None;
         }
+        // The inputs are values the whole heading sees (§5.1, S-741).
+        let types = f.params.iter().filter_map(|p| p.ty).chain([f.ret]).collect();
+        let locals = heading_locals(self.a, &cx, (&f.params, &[], true), (types, Vec::new()));
+        let cx = Cx { locals, ..cx };
         let mut inputs = Vec::new();
         let mut heading = FlowHeading { flow: id, inputs: Vec::new(), out: None };
         for (k, p) in f.params.iter().enumerate() {

@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1", "§4.5", "§18.1"]
+
+// S-739 (3), S-741 (W4-19): the parameters of an anonymous function are visible in its whole heading (§5.1:
+// "引数…は、その項目の見出しの全体と本体で見える（無名関数の引数はその式の中）"), so a parameter that comes later
+// is a name that is found when it is written in the type of a parameter before it (`fn(x: y, y: I32)`): a
+// value in a type place, E0308 (§15.1), not the E0302 of a name that is not found. In a constant expression
+// inside a type (the length of an array, a const argument) a parameter that comes later is E0417 (§4.5).
+// One error per unit (§18.1), so each form is in its own unit. The forms that read an earlier parameter or
+// the parameter itself (E0308, E0417) are right as today and are in kind_closure_parameters_kept.onsa.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// ---- A parameter that comes later: E0308 ----
+
+pub fn later_parameter_as_a_type() -> I32 {
+  let f = fn(x: y, y: I32) -> I32 { 1 }   //~ E0308
+  f.(1, 2)
+}
+
+pub fn later_parameter_as_a_type_argument() -> I32 {
+  let f = fn(x: Option[y], y: I32) -> I32 { 1 }   //~ E0308
+  f.(None, 2)
+}
+
+pub fn later_parameter_in_a_tuple_type() -> I32 {
+  let f = fn(x: (I32, y), y: I32) -> I32 { 1 }   //~ E0308
+  f.((1, 2), 3)
+}
+
+pub fn later_parameter_in_a_function_type() -> I32 {
+  let f = fn(g: fn(y) -> I32, y: I32) -> I32 { y }   //~ E0308
+  f.(f, 3)
+}
+
+pub fn later_parameter_as_the_type_of_the_first() -> I32 {
+  let f = fn(x: z, y: I32, z: I32) -> I32 { 1 }   //~ E0308
+  f.(1, 2, 3)
+}
+
+// ---- A constant expression: E0417 ----
+
+pub fn later_parameter_in_a_length() -> I32 {
+  let f = fn(a: [F32; n], n: U32) -> I32 { 1 }   //~ E0417
+  f.([0.0; 2], 2)
+}
+
+pub fn later_parameter_in_a_const_argument() -> I32 {
+  let f = fn(r: Ring[F32, n], n: U32) -> I32 { 1 }   //~ E0417
+  f.(Ring { data: [0.0; 2], head: 0 }, 2)
+}
+
+pub fn later_parameter_in_a_length_inside_a_type_argument() -> I32 {
+  let f = fn(o: Option[[F32; n]], n: U32) -> I32 { 1 }   //~ E0417
+  f.(None, 2)
+}
+
+pub fn later_parameter_in_the_length_of_a_second_parameter() -> I32 {
+  let f = fn(a: U32, b: [F32; n], n: U32) -> I32 { 1 }   //~ E0417
+  f.(1, [0.0; 2], 2)
+}

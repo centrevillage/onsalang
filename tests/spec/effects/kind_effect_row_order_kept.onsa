@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+
+// R-308 (W4-19): the order that does not change when the row of an anonymous function is read in the
+// names stage. The first error of the unit is the first one of the places (§18.1), and the effect row of a
+// function type written in the body (the annotation of a `let`) is already a name of the names stage, so a
+// name that is not found there is before a name on a later line; a name of an earlier line is before the row
+// of an anonymous function that follows it.
+// One error per unit (§18.1), so each form is in its own unit, and the lines after the first error have
+// no mark.
+
+fn base() -> I32 {
+  1
+}
+
+pub fn row_of_a_function_type_then_a_name() -> I32 {
+  let _: fn() -> I32 uses {Nope} = base   //~ E0302
+  let _: Nope2 = 1
+  1
+}
+
+pub fn name_then_the_row_of_a_closure() -> I32 {
+  let _: Nope = 1   //~ E0302
+  let h = fn(y: I32) -> I32 uses {Nope2} { y }
+  1
+}
+
+pub fn row_of_a_function_type_then_the_row_of_a_closure() -> I32 {
+  let _: fn() -> I32 uses {Nope} = base   //~ E0302
+  let h = fn(y: I32) -> I32 uses {Nope2} { y }
+  1
+}
+
+pub fn closure_row_then_a_closure_row() -> I32 {
+  let g = fn(x: I32) -> I32 uses {Nope} { x }   //~ E0302
+  let h = fn(y: I32) -> I32 uses {Nope2} { y }
+  1
+}
+
+pub fn local_then_the_row_of_a_closure() -> I32 {
+  let a = 1
+  let _: a = 2   //~ E0308
+  let h = fn(y: I32) -> I32 uses {Nope} { y }
+  1
+}

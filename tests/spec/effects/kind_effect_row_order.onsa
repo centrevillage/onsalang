@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+
+// R-308, S-738 (W4-19): the names in the effect row of an anonymous function are read in the names stage,
+// like the names of an effect row anywhere else (§8.1: "効果行の名前は、他の名前と同じく解決する（§15.1）"), so
+// the first error in the unit is the first one of the places (§18.1: within the names stage, the position
+// decides). A name that is not found in the row of an anonymous function (E0302) is before a name that is not
+// found on a later line, a local that is written as a type on a later line, and the other way round: a
+// name in a later row does not hide the error of an earlier line. The E0308 of a name that is found and is
+// not an effect (a local, a type) and the E0200 of an effect that this version does not support
+// (§15.1) are of the same stage and are ordered by the place in the same way.
+// One error per unit (§18.1), so each form is in its own unit, and the lines after the first error have
+// no mark. The forms in which the first error is not in the row of an anonymous function are in
+// kind_effect_row_order_kept.onsa.
+
+pub effect Ef {   //~ E0200
+  fn op(x: I32) -> I32
+}
+
+pub fn closure_row_then_a_name() -> I32 {
+  let g = fn(x: I32) -> I32 uses {Nope} { x }   //~ E0302
+  let _: Nope2 = 1
+  1
+}
+
+pub fn closure_row_then_a_local() -> I32 {
+  let a = 1
+  let g = fn(x: I32) -> I32 uses {Nope} { x }   //~ E0302
+  let _: a = 2
+  1
+}
+
+pub fn closure_row_then_the_row_of_a_type() -> I32 {
+  let g = fn(x: I32) -> I32 uses {Nope} { x }   //~ E0302
+  let _: fn() -> I32 uses {Nope2} = g
+  1
+}
+
+pub fn closure_row_then_a_name_in_a_signature_type(f: fn() -> I32) -> I32 {
+  let g = fn(x: I32) -> I32 uses {Nope} { x }   //~ E0302
+  let _: Nope2 = f.()
+  1
+}
+
+pub fn closure_row_of_a_local_then_a_name() -> I32 {
+  let n = 1
+  let g = fn(x: I32) -> I32 uses {n} { x }   //~ E0308
+  let _: Nope = 1
+  g.(n)
+}
+
+pub fn closure_row_of_a_type_then_a_name() -> I32 {
+  let g = fn(x: I32) -> I32 uses {I32} { x }   //~ E0308
+  let _: Nope = 1
+  1
+}
+
+pub fn closure_row_of_a_user_effect_then_a_name() -> I32 {
+  let g = fn(x: I32) -> I32 uses {Ef} { x }   //~ E0200
+  let _: Nope = 1
+  1
+}
+
+pub fn closure_row_in_a_nested_closure_then_a_name() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let g = fn(y: I32) -> I32 uses {Nope} { y }   //~ E0302
+    g.(x)
+  }
+  let _: Nope2 = 1
+  f.(1)
+}

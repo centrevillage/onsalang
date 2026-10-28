@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1", "§4.5", "§11.2", "§18.1"]
+
+// S-741 (b), S-733 (1a) (W4-19): a parameter is a binding that is visible in the whole heading of its item
+// and in its body (§5.1: "引数と flow の入力も、その項目の中（見出しの全体と本体…）で見える束縛"), so a
+// parameter that is written in a type place of the signature is a name that is found, a value (§15.1: "値
+// （見えているローカルの束縛と引数を含む、§5.1）…を型の位置に書く" is E0308), and in a constant expression
+// inside a type it is E0417 (§4.5: a local variable is not a constant expression; §15.1: "ローカルの束縛を書いた
+// 配列の長さの E0417"). It is not the E0302 of a name that is not found, which the signature gave before.
+// The places are the type of a parameter, the result, a type argument, a const argument, the length of an
+// array, a tuple, the type of a function value, a bound. The parameter is visible in the whole heading, so a
+// parameter that comes later (`fn f(a: [F32; n], n: U32)`) and the parameter itself (`fn f(n: n)`) are found
+// too. The method `self` and the flow inputs are parameters in the same way (S-741: "メソッドの `self` を含む"),
+// and `self.N` is the E0417 of the body (S-733: no note is added).
+// One error per unit (§18.1), so each form is in its own unit. The bodies are right: nothing is read from
+// them. The fine signatures (a const parameter, the types next to the parameters) are in
+// signature_locals_fine.onsa.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// ---- A constant expression: E0417 ----
+
+pub fn length_of_a_later_parameter(n: U32, a: [F32; n]) -> U32 {   //~ E0417
+  n
+}
+
+pub fn length_in_the_result(n: U32) -> [F32; n] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn const_argument_of_a_parameter(n: U32, r: Ring[F32, n]) -> U32 {   //~ E0417
+  n
+}
+
+pub fn const_argument_in_the_result(n: U32) -> Ring[F32, n] {   //~ E0417
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn parameter_that_comes_later(a: [F32; n], n: U32) -> U32 {   //~ E0417
+  n
+}
+
+pub fn length_inside_a_type_argument(n: U32, o: Option[[F32; n]]) -> U32 {   //~ E0417
+  n
+}
+
+pub fn length_inside_a_tuple(n: U32, t: (I32, [F32; n])) -> U32 {   //~ E0417
+  n
+}
+
+pub fn length_inside_a_function_type(n: U32, f: fn([F32; n]) -> I32) -> U32 {   //~ E0417
+  n
+}
+
+pub fn length_in_a_generic_function[T](n: U32, a: [T; n], x: T) -> T {   //~ E0417
+  x
+}
+
+pub fn one_of_two_parameters(m: U32, n: U32, a: [F32; n]) -> U32 {   //~ E0417
+  m + n
+}
+
+impl P {
+  pub const N: U32 = 2
+
+  pub fn length_of_a_method_parameter(self, n: U32, a: [F32; n]) -> I32 {   //~ E0417
+    self.x
+  }
+
+  pub fn length_of_self_member(self, a: [F32; self.N]) -> I32 {   //~ E0417
+    self.x
+  }
+}
+
+pub flow length_of_a_flow_input(n: U32 at block, a: [F32; n] at sample) -> F32 at sample {   //~ E0417
+  0.0
+}
+
+pub flow length_in_the_result_of_a_flow(n: U32 at block, x: F32 at sample) -> [F32; n] at sample {   //~ E0417
+  [x; 2]
+}
+
+// ---- A type place: E0308 ----
+
+pub fn type_of_a_later_parameter(n: U32, a: n) -> U32 {   //~ E0308
+  n
+}
+
+pub fn result_type(n: U32) -> n {   //~ E0308
+  n
+}
+
+pub fn type_argument(n: U32, o: Option[n]) -> U32 {   //~ E0308
+  n
+}
+
+pub fn path_after_a_value(n: U32, a: n.T) -> U32 {   //~ E0308
+  n
+}
+
+pub fn type_of_a_parameter_that_comes_later(a: n, n: U32) -> U32 {   //~ E0308
+  n
+}
+
+pub fn parameter_as_its_own_type(n: n) -> U32 {   //~ E0308
+  1
+}
+
+pub fn element_of_a_tuple(n: U32, t: (I32, n)) -> U32 {   //~ E0308
+  n
+}
+
+pub fn element_of_an_array(n: U32, a: [n; 2]) -> U32 {   //~ E0308
+  n
+}
+
+pub fn parameter_of_a_function_type(n: U32, f: fn(n) -> I32) -> U32 {   //~ E0308
+  n
+}
+
+pub fn result_of_a_function_type(n: U32, f: fn() -> n) -> U32 {   //~ E0308
+  n
+}
+
+pub fn type_in_a_generic_function[T](n: I32, x: n) -> I32 {   //~ E0308
+  n
+}
+
+pub fn bound_of_a_type_parameter[T: n](n: I32, x: T) -> I32 {   //~ E0308
+  n
+}
+
+impl P {
+  pub fn type_of_a_method_parameter(self, n: I32, a: n) -> I32 {   //~ E0308
+    self.x
+  }
+
+  pub fn type_of_a_later_method_parameter(self, a: n, n: I32) -> I32 {   //~ E0308
+    self.x
+  }
+}
+
+pub flow type_of_a_flow_input(n: F32 at sample, x: n at sample) -> F32 at sample {   //~ E0308
+  x
+}
+
+pub flow result_type_of_a_flow(n: F32 at sample) -> n at sample {   //~ E0308
+  n
+}

@@ -122,12 +122,6 @@ test "a name declared later in a test" {
   assert a == 2
 }
 
-pub flow name_declared_later_in_a_flow(x: F32 at sample) -> F32 at sample {
-  let _: a = 1.0                                    //~ E0302
-  let a = x * 2.0
-  a
-}
-
 pub fn unknown_then_local() -> I32 {
   let a = 1
   let _: Nope = 3                                   //~ E0302

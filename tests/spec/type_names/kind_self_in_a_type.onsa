@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§5.1"]
+
+// R-309, S-741 (W4-19): `self` is the first parameter of a method, a local (§5.1), so it written as a type
+// argument is a value in a type place: E0308 (§15.1), not a constant expression (§4.5: E0417 is for a local
+// written inside a constant expression, like `self.N` in an array length). The text of the message calls
+// `self` a local ("is a local", R-309); the case runner compares the code only, so the text is read by hand:
+//   onsa check tests/spec/type_names/kind_self_in_a_type.onsa   (each line says "`self` is a local, not a type")
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn type_argument_in_a_let(self) -> I32 {
+    let a: Option[self] = None   //~ E0308
+    1
+  }
+
+  pub fn type_argument_in_a_nested_argument(self) -> I32 {
+    let a: Option[Option[self]] = None   //~ E0308
+    1
+  }
+
+  pub fn type_argument_in_a_closure(self) -> I32 {
+    let f = fn(o: Option[self]) -> I32 { 1 }   //~ E0308
+    f.(None)
+  }
+
+  pub fn type_argument_in_the_signature(self, o: Option[self]) -> I32 {   //~ E0308
+    self.x
+  }
+}

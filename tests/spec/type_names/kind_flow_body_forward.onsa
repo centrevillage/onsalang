@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§5.1", "§15.1", "§4.5", "§18.1"]
+
+// S-740 (3), S-741 (W4-19): the order of §11.2 ("名前は上から順に定義する") is the order of the references that
+// read a value, and it is not for the type places of a flow (§11.2: "順の規則は値を読む参照の規則で、型の位置
+// （注釈、`as`、型の中の定数式）には当たらない。型の位置に書いた本体の `let` の名前は、順によらず値を型の位置に
+// 書いた E0308（定数式は E0417）"). The `let` of a flow is visible in the whole body (§5.1: "flow の本体の
+// `let` は本体の全体で見え"), so the name of a `let` that comes later, the name of the `let` itself and a
+// part of the same pattern, written in an annotation, are names that are found, values: E0308 (E0417 in a
+// constant expression inside the type). They are not the E0302 of a name that is not found, which the
+// annotation gave before, and not the E0801 of a reference that reads a value before its definition.
+// One error per unit (§18.1), so each form is in its own unit. The forms that keep their codes
+// (the cast, a value that is read before its definition) are in kind_flow_body_forward_kept.onsa.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// ---- A type place: E0308 ----
+
+pub flow later_let_in_an_annotation(x: F32 at sample) -> F32 at sample {
+  let b: a = x   //~ E0308
+  let a = x * 2.0
+  b + a
+}
+
+pub flow own_name_in_an_annotation(x: F32 at sample) -> F32 at sample {
+  let a: a = x   //~ E0308
+  a
+}
+
+pub flow later_let_in_a_type_argument(x: F32 at sample) -> F32 at sample {
+  let b: Option[a] = None   //~ E0308
+  let a = x * 2.0
+  a
+}
+
+pub flow later_let_in_a_tuple_type(x: F32 at sample) -> F32 at sample {
+  let b: (F32, a) = (x, x)   //~ E0308
+  let a = x * 2.0
+  a
+}
+
+pub flow own_part_of_a_destructuring(x: F32 at sample) -> F32 at sample {
+  let (a, b): (F32, a) = (x, x)   //~ E0308
+  a + b
+}
+
+pub flow later_part_of_a_destructuring(x: F32 at sample) -> F32 at sample {
+  let (a, b): (b, F32) = (x, x)   //~ E0308
+  a + b
+}
+
+pub flow later_let_in_a_function_type(x: F32 at sample) -> F32 at sample {
+  let f: fn(a) -> F32 = x   //~ E0308
+  let a = x * 2.0
+  a
+}
+
+pub flow later_let_after_a_few_lets(x: F32 at sample) -> F32 at sample {
+  let p = x + 1.0
+  let q: c = p   //~ E0308
+  let c = p * 2.0
+  c + q
+}
+
+// ---- A constant expression in a type: E0417 ----
+
+pub flow later_let_in_an_array_length(x: F32 at sample) -> F32 at sample {
+  let b: [F32; a] = [x, x]   //~ E0417
+  let a = x * 2.0
+  a
+}
+
+pub flow own_name_in_an_array_length(x: F32 at sample) -> F32 at sample {
+  let a: [F32; a] = [x, x]   //~ E0417
+  a[0]
+}
+
+pub flow later_let_in_a_const_argument(x: F32 at sample) -> F32 at sample {
+  let b: Ring[F32, a] = Ring { data: [x, x], head: 0 }   //~ E0417
+  let a = x * 2.0
+  a
+}
+
+pub flow later_let_in_a_length_inside_a_type_argument(x: F32 at sample) -> F32 at sample {
+  let b: Option[[F32; a]] = None   //~ E0417
+  let a = x * 2.0
+  a
+}
+
+pub flow part_of_a_destructuring_in_an_array_length(x: F32 at sample) -> F32 at sample {
+  let (a, b): (F32, [F32; a]) = (x, [x, x])   //~ E0417
+  a
+}

@@ -17,16 +17,19 @@
 mod exprs;
 mod kinds;
 mod paths;
+pub(crate) use exprs::heads;
 pub(crate) use kinds::{method_named, value_called};
 pub(crate) use paths::is_value;
 mod scope;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use onsa_diag::Diagnostic;
-use onsa_syntax::ast::{Ast, ExprId, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind, TypeId};
+use onsa_syntax::ast::{
+    Ast, ExprId, ExprKind, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind, TypeId,
+};
 
 use crate::def::{DefKind, FlowInput, GenericDef, ModId};
 use crate::flow_names::FlowBuiltin;
@@ -90,6 +93,9 @@ pub(crate) struct BodyNames {
     /// by the names stage: the type, and the diagnostic of the types stage at
     /// it (E0412, …), which the types stage reports when it reaches it.
     pub types: HashMap<TypeId, (TyId, Option<Diagnostic>)>,
+    /// The effect row of an anonymous function, read once by the names stage
+    /// as the row of a signature (§8.1, S-738).
+    pub effects: HashMap<ExprId, crate::ty::EffectSet>,
     /// `false` when the walk stopped before the end of the body: at an error
     /// of the names stage ([`Self::reported`]), or at a name the names stage
     /// holds as an error (§18.1, S-692), where the types stage stops too with
@@ -242,9 +248,15 @@ pub(crate) struct ScopeInfo {
     pub bindings: Vec<BindingId>,
 }
 
-/// A type written in a body, with the visible locals it names
-/// ([`Walker::site`]).
-type Site = (TypeId, Vec<String>);
+/// A type written in a body, or the effect row of the anonymous function,
+/// with the visible locals it names ([`Walker::site`]).
+type Site = (Typed, HashSet<String>);
+
+#[derive(Debug, Clone, Copy)]
+enum Typed {
+    Type(TypeId),
+    Row(ExprId),
+}
 
 /// The walk of a body stopped: the record is partial
 /// ([`BodyNames::complete`]).
@@ -355,8 +367,21 @@ fn lower_types(
     let held = a.read_held.contains(&def);
     let m = a.def(def).module;
     let mut fail = None;
-    let late = late.into_iter().map(|(_, (t, _))| ((t, Vec::new()), true));
-    for ((t, locals), late) in sites.into_iter().map(|t| (t, false)).chain(late) {
+    let late = late.into_iter().map(|(_, (t, _))| ((t, HashSet::new()), true));
+    for ((site, locals), late) in sites.into_iter().map(|t| (t, false)).chain(late) {
+        let t = match site {
+            Typed::Type(t) => t,
+            Typed::Row(e) => {
+                let ExprKind::Closure { effects, .. } = &ast.expr(e).kind else { continue };
+                let (set, errors) = crate::sig::read_effects(a, def, m, (generics, self_ty, &locals), effects.as_ref());
+                out.effects.insert(e, set);
+                if let Some(d) = errors.into_iter().next() {
+                    fail = Some(Fail::Report(d));
+                    break;
+                }
+                continue;
+            }
+        };
         let (ty, diags) = crate::sig::lower_type_in_body(a, m, ast, text, generics, self_ty, def, (t, locals));
         let d = diags.into_iter().next();
         let names = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names);
@@ -417,6 +442,9 @@ struct Walker<'a> {
     flow_types: VecDeque<(StmtId, Site)>,
     /// In a constant expression of §4.5 (`Walker::const_expr`).
     in_const: bool,
+    /// The parameters of the anonymous function whose heading is walked,
+    /// which the whole heading sees (§5.1, S-739).
+    heading: HashMap<String, onsa_diag::Span>,
 }
 
 impl<'a> Walker<'a> {
@@ -444,6 +472,7 @@ impl<'a> Walker<'a> {
             flow_stop: None,
             flow_types: VecDeque::new(),
             in_const: false,
+            heading: HashMap::new(),
         }
     }
 
@@ -499,8 +528,9 @@ impl<'a> Walker<'a> {
     /// inputs, the names of every `let` of the body, then the body. An error
     /// of the pattern of a `let` stops the walk at it, after the errors of
     /// the statements before it ([`Self::fail_at_let`]), and its type is read
-    /// there. The walk stops at its first assignment: its error is the
-    /// flow stage's (E0806) until W7-04 reports it in the names stage.
+    /// there; a type sees every `let` of the body (S-740). The walk stops at
+    /// its first assignment: its error is the flow stage's (E0806) until
+    /// W7-04 reports it in the names stage.
     fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
         self.flow = true;
         self.open_scope();
@@ -509,16 +539,24 @@ impl<'a> Walker<'a> {
             self.declare(&name, BindingKind::FlowInput, Origin::FlowInput(k as u32), None)?;
         }
         let ast = self.ast;
-        let onsa_syntax::ast::ExprKind::Block(b) = &ast.expr(body).kind else { return self.expr(body) };
+        let ExprKind::Block(b) = &ast.expr(body).kind else { return self.expr(body) };
+        let (mut typed, mut declared) = (Vec::new(), Ok(()));
         for &s in &b.stmts {
             if let StmtKind::Let { pat, ty, .. } = ast.stmt(s).kind {
                 self.prescan = Some(s);
-                // The type sees the `let`s above it (§11.2), not its own names.
-                let site = ty.map(|t| (s, self.site(t)));
-                self.pattern(pat, BindingKind::FlowLet, Origin::Let(s))?;
-                self.flow_types.extend(site);
+                typed.extend(ty.map(|t| (s, t)));
+                declared = self.pattern(pat, BindingKind::FlowLet, Origin::Let(s));
+                if declared.is_err() {
+                    break;
+                }
             }
         }
+        // The types see every `let`: the order of §11.2 is of the values.
+        for (s, t) in typed {
+            let site = self.site(Typed::Type(t));
+            self.flow_types.push_back((s, site));
+        }
+        declared?;
         self.prescan = None;
         self.open_scope();
         for &s in &b.stmts {

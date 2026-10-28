@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§5.1", "§15.1", "§18.1"]
+
+// S-740 (W4-19): the forms of a flow body whose codes do not change when the type places see the whole body.
+// The target of an `as` is a type place that already gives E0308 for a `let` that comes later (§11.2: the
+// order is for the references that read a value, not for the type places; S-740: "`as` は今のまま E0308").
+// A value that is read before its definition is E0801 (§11.2: "印の無い前方参照は E0801"), in a value place:
+// the annotation does not change it. The `let` that comes before the annotation is seen (it is E0308 as a
+// type, S-729). The flow input is seen in the whole body.
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub flow later_let_as_a_cast_target(x: F32 at sample) -> F32 at sample {
+  let b = x as a   //~ E0308
+  let a = x * 2.0
+  a
+}
+
+pub flow earlier_let_as_a_cast_target(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = x as a   //~ E0308
+  b
+}
+
+pub flow earlier_let_in_an_annotation(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b: a = x   //~ E0308
+  b
+}
+
+pub flow input_in_an_annotation(x: F32 at sample) -> F32 at sample {
+  let b: x = 1.0   //~ E0308
+  b
+}
+
+pub flow value_read_before_its_definition(x: F32 at sample) -> F32 at sample {
+  let b = a + x   //~ E0801
+  let a = x * 2.0
+  b
+}
+
+pub flow value_read_in_its_own_definition(x: F32 at sample) -> F32 at sample {
+  let a = a + x   //~ E0801
+  a
+}
+
+pub flow value_read_before_its_definition_next_to_an_annotation(x: F32 at sample) -> F32 at sample {
+  let b: F32 = a   //~ E0801
+  let a = x * 2.0
+  b
+}
+
+// ---- The right order ----
+
+pub flow types_next_to_the_lets(x: F32 at sample) -> F32 at sample {
+  let a: F32 = x * 2.0
+  let b: (F32, F32) = (a, x)
+  b.0
+}

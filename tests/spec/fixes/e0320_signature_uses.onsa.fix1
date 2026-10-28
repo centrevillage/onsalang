@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§15.1", "§4.5", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "65:28"
+// code = "E0320"
+// candidate = 1
+// leaves = ["65:39 E0308"]
+//
+// [[test.fix]]
+// at = "69:36"
+// code = "E0320"
+// candidate = 1
+// leaves = ["69:57 E0308"]
+//
+// [[test.fix]]
+// at = "73:56"
+// code = "E0320"
+// candidate = 1
+// leaves = ["73:85 E0308"]
+
+// S-741 (W4-19), S-733, S-738 (§2.3, §5.1): a parameter is visible in the whole heading of its item, so
+// the parameter that is written in a type place of the signature is a use of the binding, as the use in
+// the body is (e0320_type_place_uses.onsa). The candidate of the E0320 of its name renames the declaration
+// and the uses (§2.3: the rename is of the binding with its uses), so the signature that is left after
+// it reads the new name, which is a binding that is found: what is left in the unit is the E0417 of the place
+// (a constant expression, §4.5; it is of the types stage, after the E0320, and is not compared) or the
+// E0308 (a type place, §15.1) under the new name (`leaves`). A candidate that renames the declaration only
+// leaves the E0302 "cannot find" of the old name in the signature, which is of the same stage and
+// is a violation of the promise of the candidates (§18.1). The places are the length of an array, a
+// const argument, the result, a parameter that comes later, the type of a parameter, the effect
+// row of a signature, and the input of a flow. One error per unit
+// (§18.1), so each is in its own unit.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub fn length_of_an_array(n: U32, a: [F32; n]) -> U32 { //~ E0320
+  1
+}
+
+pub fn length_in_the_result(n: U32) -> [F32; n] { //~ E0320
+  [0.0; 4]
+}
+
+pub fn const_argument(n: U32, r: Ring[F32, n]) -> U32 { //~ E0320
+  1
+}
+
+pub fn parameter_that_comes_later(a: [F32; n], n: U32) -> U32 { //~ E0320
+  1
+}
+
+pub fn length_in_a_generic_function[T](n: U32, a: [T; n], x: T) -> T { //~ E0320
+  x
+}
+
+pub flow length_of_a_flow_input(n: U32 at block, a: [F32; n] at sample) -> F32 at sample { //~ E0320
+  0.0
+}
+
+pub fn type_of_a_parameter(n: U32, a: n) -> U32 { //~ E0320
+  1
+}
+
+pub fn parameter_in_the_effect_row(n: I32) -> I32 uses {n} { //~ E0320
+  1
+}
+
+pub fn parameter_in_the_effect_row_of_a_parameter_type(n: I32, f: fn() -> I32 uses {n}) -> I32 { //~ E0320
+  1
+}

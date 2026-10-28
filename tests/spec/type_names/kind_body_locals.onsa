@@ -300,6 +300,14 @@ pub flow local_as_a_type_argument_in_a_flow(x: F32 at sample) -> F32 at sample {
   a
 }
 
+// A `let` of a flow body is seen in the whole body by a type place (§11.2: the order is of the values,
+// S-740), so a name declared later is a local there too.
+pub flow name_declared_later_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let _: a = 1.0                                    //~ E0308
+  let a = x * 2.0
+  a
+}
+
 pub flow index_of_a_par_in_a_flow(x: F32 at sample) -> F32 at sample {
   let ys = par i in 0 ..< 3 {
     let _: i = 1                                    //~ E0308

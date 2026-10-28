@@ -13,7 +13,7 @@ use onsa_syntax::ast::{
 
 use super::kinds::Want;
 use super::paths::Place;
-use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, W, Walker};
+use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Walker};
 use crate::flow_names::FlowBuiltin;
 
 /// The choices open while a pattern is walked (§7): the names bound by the
@@ -97,7 +97,9 @@ impl Walker<'_> {
             }
             ExprKind::Block(b) => self.block(b),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
-            ExprKind::Closure { params, ret, body, .. } => self.closure(e, params, *ret, *body),
+            ExprKind::Closure { params, ret, body, effects, .. } => {
+                self.closure(e, params, *ret, effects.is_some(), *body)
+            }
             // Forms this version does not have (E0200 of the types stage),
             // whose names it does not read.
             ExprKind::Handle { .. } | ExprKind::Unsafe(_) => Err(self.fail(Fail::Later)),
@@ -133,17 +135,24 @@ impl Walker<'_> {
     /// Keep the types `ts` written here for `lower_types` ([`Self::site`]).
     fn typed(&mut self, ts: impl IntoIterator<Item = TypeId>) {
         for t in ts {
-            let site = self.site(t);
+            let site = self.site(Typed::Type(t));
             self.type_sites.push(site);
         }
     }
 
-    /// The type `t` with the visible locals it names at the head of a path,
-    /// of a type or of a constant expression in it: values, no types or
-    /// constants (§15.1, §4.5, S-729).
-    pub(super) fn site(&self, t: TypeId) -> super::Site {
+    /// The type or the effect row `t` with the visible locals it names at
+    /// the head of a path, of a type or of a constant expression in it:
+    /// values, no types, constants or effects (§15.1, §4.5, S-729, S-738).
+    pub(super) fn site(&self, t: Typed) -> super::Site {
         let mut names = Vec::new();
-        heads(self.ast, t, &mut names);
+        match t {
+            Typed::Type(t) => heads(self.ast, t, &mut names),
+            Typed::Row(e) => {
+                if let ExprKind::Closure { effects: Some(row), .. } = &self.ast.expr(e).kind {
+                    row_heads(row, &mut names);
+                }
+            }
+        }
         (t, names.into_iter().filter(|n| self.sees_local(n)).map(|n| n.name.clone()).collect())
     }
 
@@ -275,10 +284,21 @@ impl Walker<'_> {
     }
 
     /// An anonymous function: each parameter, then its type, as in the text
-    /// (§18.1, R-289).
-    fn closure(&mut self, e: ExprId, params: &[Param], ret: Option<TypeId>, body: ExprId) -> W {
+    /// (§18.1, R-289), then the result type and the effect row (`row`). Its
+    /// whole heading sees every parameter (§5.1, S-739).
+    fn closure(&mut self, e: ExprId, params: &[Param], ret: Option<TypeId>, row: bool, body: ExprId) -> W {
         self.open_closure(e);
         self.open_scope();
+        // A parameter that is an E0304 is none (§18.1, S-675; `heading_locals`).
+        self.heading = params
+            .iter()
+            .filter_map(|p| match &p.name {
+                ParamName::Ident(n) if self.hidden(n, BindingKind::ClosureParam(p.mode)).is_none() => {
+                    Some((n.name.clone(), n.span))
+                }
+                _ => None,
+            })
+            .collect();
         for (k, p) in params.iter().enumerate() {
             // `self` is no parameter of an anonymous function (E0002, the types stage).
             if let ParamName::Ident(name) = &p.name {
@@ -288,6 +308,11 @@ impl Walker<'_> {
             self.typed(p.ty);
         }
         self.typed(ret);
+        if row {
+            let site = self.site(Typed::Row(e));
+            self.type_sites.push(site);
+        }
+        self.heading.clear();
         self.expr(body)?;
         self.close_scope();
         self.close_closure();
@@ -387,9 +412,9 @@ impl Walker<'_> {
     }
 }
 
-/// The names at the head of the paths of the type `t` and of the constant
-/// expressions in it (§4.5).
-fn heads<'a>(ast: &'a Ast, t: TypeId, out: &mut Vec<&'a Ident>) {
+/// The names at the head of the paths of the type `t`, of the constant
+/// expressions (§4.5) and of the effect rows (§8.1) in it.
+pub(crate) fn heads<'a>(ast: &'a Ast, t: TypeId, out: &mut Vec<&'a Ident>) {
     match &ast.ty(t).kind {
         TypeKind::Path { path, args } => {
             out.extend(path.segments.first());
@@ -400,10 +425,17 @@ fn heads<'a>(ast: &'a Ast, t: TypeId, out: &mut Vec<&'a Ident>) {
             expr_heads(ast, *len, out);
         }
         TypeKind::Tuple(ts) => ts.iter().for_each(|&x| heads(ast, x, out)),
-        TypeKind::Fn { params, ret, .. } => params.iter().map(|p| p.1).chain(*ret).for_each(|x| heads(ast, x, out)),
+        TypeKind::Fn { params, ret, effects, .. } => {
+            params.iter().map(|p| p.1).chain(*ret).for_each(|x| heads(ast, x, out));
+            effects.iter().for_each(|r| row_heads(r, out));
+        }
         TypeKind::ConstArg(e) => expr_heads(ast, *e, out),
         TypeKind::Unit | TypeKind::Error => {}
     }
+}
+
+fn row_heads<'a>(row: &'a onsa_syntax::ast::EffectRow, out: &mut Vec<&'a Ident>) {
+    out.extend(row.effects.iter().filter_map(|p| p.segments.first()));
 }
 
 fn expr_heads<'a>(ast: &'a Ast, e: ExprId, out: &mut Vec<&'a Ident>) {

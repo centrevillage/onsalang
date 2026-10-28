@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1", "§4.5", "§18.1"]
+
+// S-739 (3), S-741 (W4-19): the parameters of an anonymous function are visible in its whole heading (§5.1:
+// "無名関数の引数はその式の中" and, for the heading, "引数…は、その項目の見出しの全体と本体で見える"), so a parameter written in
+// the type of itself, of a parameter before it, or of the result is a name that is found: E0308 (§15.1),
+// as today; and in a constant expression inside a type (the length of an array, a const argument) a
+// parameter is E0417 (§4.5), as today. These forms are kept; the forms that read a parameter that comes
+// later (`fn(x: y, y: I32)`, `fn(a: [F32; n], n: U32)`) are in kind_closure_parameters.onsa.
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub fn own_parameter_as_its_type() -> I32 {
+  let f = fn(x: x) -> I32 { 1 }   //~ E0308
+  f.(1)
+}
+
+pub fn earlier_parameter_as_a_type() -> I32 {
+  let f = fn(x: I32, y: x) -> I32 { 1 }   //~ E0308
+  f.(1, 2)
+}
+
+pub fn parameter_as_the_result_type() -> I32 {
+  let f = fn(x: I32) -> x { 1 }   //~ E0308
+  f.(1)
+}
+
+pub fn earlier_parameter_as_a_type_argument() -> I32 {
+  let f = fn(x: I32, y: Option[x]) -> I32 { 1 }   //~ E0308
+  f.(1, None)
+}
+
+pub fn parameter_as_the_result_type_argument() -> I32 {
+  let f = fn(x: I32) -> Option[x] { None }   //~ E0308
+  f.(1)
+}
+
+test "parameter as a type in a closure of a test" {
+  let f = fn(x: x) -> I32 { 1 }   //~ E0308
+  assert f.(1) == 1
+}
+
+// ---- A constant expression: E0417 ----
+
+pub fn earlier_parameter_in_a_length() -> I32 {
+  let f = fn(n: U32, a: [F32; n]) -> I32 { 1 }   //~ E0417
+  f.(2, [0.0; 2])
+}
+
+pub fn parameter_in_the_length_of_the_result() -> I32 {
+  let f = fn(n: U32) -> [F32; n] { [0.0; 2] }   //~ E0417
+  f.(2).len()
+}
+
+pub fn own_parameter_in_a_length() -> I32 {
+  let f = fn(n: [F32; n]) -> I32 { 1 }   //~ E0417
+  f.([0.0; 2])
+}
+
+pub fn parameter_in_a_const_argument() -> I32 {
+  let f = fn(n: U32, r: Ring[F32, n]) -> I32 { 1 }   //~ E0417
+  f.(2, Ring { data: [0.0; 2], head: 0 })
+}
+
+pub fn parameter_of_the_outer_closure_in_a_length(m: U32) -> I32 {
+  let f = fn(n: U32) -> I32 {
+    let g = fn(a: [F32; n]) -> I32 { 1 }   //~ E0417
+    g.([0.0; 2])
+  }
+  f.(m)
+}
+
+pub fn parameter_of_the_function_in_a_length(n: U32) -> I32 {
+  let f = fn(a: [F32; n]) -> I32 { 1 }   //~ E0417
+  f.([0.0; 2])
+}
+
+// ---- The fine forms ----
+
+pub fn types_next_to_the_parameters(a: I32) -> I32 {
+  let f = fn(x: I32, y: Option[I32]) -> I32 { x }
+  f.(a, None)
+}
