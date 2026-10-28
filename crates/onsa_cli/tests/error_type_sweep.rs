@@ -723,7 +723,6 @@ fn flow_with_error_types() {
 /// interpolated string is an error where it is used, so the string has no diagnostic of its own, as the
 /// local of an error type has none. The only diagnostics are the ones of the failed names.
 #[test]
-#[ignore = "W4-04: the interpolation of a failed name (R-270)"]
 fn the_interpolation_of_a_failed_name_is_silent() {
     let heads = [
         ("use_upper", "use util.{KK} @@E0302\n\n", ["KK", "KK.a"]),

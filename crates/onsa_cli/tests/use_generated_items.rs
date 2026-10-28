@@ -406,7 +406,6 @@ fn a_name_of_a_type_or_a_failed_name_in_each_place() {
 }
 
 #[test]
-#[ignore = "W4-04 U7: a value (a function, a flow) written where a type is read is E0308 (S-103); now E0302"]
 fn a_name_of_a_value_in_each_place() {
     each_place_once(&KINDS_OF_VALUES, "gen_pos_val");
 }
@@ -489,7 +488,6 @@ fn the_use_lines_decide_alone_in_any_order() {
 }
 
 #[test]
-#[ignore = "W4-04 U7: a value (a function, a flow) written where a type is read is E0308 (S-103); now E0302"]
 fn the_use_lines_decide_alone_in_any_order_with_values_in_places() {
     use_lines_in_any_order(true, "gen_ord_val");
 }

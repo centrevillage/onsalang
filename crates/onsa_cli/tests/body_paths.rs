@@ -395,7 +395,6 @@ fn through_main_a_name_that_only_a_use_of_main_took_is_rejected() {
 /// §15.1, §18.1 (R-254): the same rejections are E0302, the name stage, not a type error. R-254 is fixed
 /// by W4-04.
 #[test]
-#[ignore = "W4-04"]
 fn through_main_a_name_that_only_a_use_of_main_took_is_e0302() {
     let d = s611("s611_bad_code", S611_MAIN, S611_OTHER_BAD);
     let (_, doc) = check_json(d.root(), &["."]);
@@ -410,7 +409,6 @@ fn through_main_a_name_that_only_a_use_of_main_took_is_e0302() {
 /// (the child module's item) is not found there: E0302. The child module's items are taken by
 /// `use main.inner.{h}`.
 #[test]
-#[ignore = "W4-04"]
 fn in_the_body_of_main_the_child_module_is_not_a_name() {
     let d = s611("s611_body", "use kp.inner\n\npub fn k() -> I32 {\n  inner.h()\n}\n", "use main\n");
     let (out, doc) = check_json(d.root(), &["."]);

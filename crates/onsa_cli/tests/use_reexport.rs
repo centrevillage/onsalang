@@ -156,7 +156,6 @@ fn a_child_module_of_the_same_name_is_what_the_use_points_to() {
 /// §15.1, §18.1, S-596, S-611, R-254: the child module is what `use main.{inner}` takes, so the name it does not
 /// have (`inner.g()`, `g` is in `util.inner` only) is an E0302 of the names stage, one, besides the E0200.
 #[test]
-#[ignore = "W4-04: R-254"]
 fn a_name_the_child_module_of_the_same_name_does_not_have_is_e0302() {
     let d = util_package("reexport_child_missing", "pub use util.inner\n");
     d.write("main/inner.onsa", &f("h"));
