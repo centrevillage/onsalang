@@ -1606,9 +1606,9 @@ note = "遅延の第 1 引数の中の遅延（関数の呼び出し・添字・
 [[pending]]
 kind = "fuzz-input"
 target = "tests/fuzz/f2fafaf0.onsa"
-reasons = ["S-267", "S-236"]
-until = "W4-06"
-note = "fix-same-place: fix|E0812|remove `…`|E0302。flow の中の解けない名前への v~(x) の E0812 の候補（~ を除く）の後に E0302。名前の段は flow の段より前なので、段の順（S-267）と単位の中の選び方で決まる。W3-10 で tests/fuzz/4ea5a011.onsa（旧い Sig[F32] の flow）がこの型で落ちなくなったので、代わりに載せる（4ea5a011 は回帰の入力として残る）"
+reasons = ["S-267", "S-236", "S-723"]
+until = "W4-12"
+note = "fix-same-place: fix|E0812|remove `…`|E0302。flow の中の解けない名前への v~(x) の E0812 の候補（~ を除く）の後に E0302。名前の段は flow の段より前なので、段の順（S-267）と単位の中の選び方で決まる。W3-10 で tests/fuzz/4ea5a011.onsa（旧い Sig[F32] の flow）がこの型で落ちなくなったので、代わりに載せる（4ea5a011 は回帰の入力として残る）。W4-06 の設計メモ（83 回目）: 元の入力の `v~(x)` が E0302 でなく E0812 なので段の止め方では直らず、W4-12 U3 の「見つからない名前は E0302」（S-723）へ送る"
 
 [[pending]]
 kind = "fuzz-input"
