@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.4", "§12.2", "§10"]
+
+// S-80, R-85 (§5.4, §12.2), run in the interpreter: a `let` of a `const` (a static value, a Copy
+// value) reads as the `const` says, in an `rt fn` and in a function without `Alloc`, and a binding
+// derived from it reads the same value. The string literals of values/binding_static_leaf.onsa are
+// only checked there: this version does not run the Shared type `Str` (E0200 in `onsa test`, and an
+// internal lowering error for the `match` over an `Option[Str]` argument of
+// tests/review-phase1/parent/r85.onsa), so the run of the literal waits for `Str` in the interpreter.
+
+const K: F32 = 0.5
+const N: U32 = 3
+
+rt fn const_float() -> F32 {
+  let y = K
+  y * 2.0
+}
+
+rt fn const_int() -> U32 {
+  let n = N
+  n + 1
+}
+
+rt fn derived_from_a_const() -> U32 {
+  let n = N
+  let m = n
+  m + n
+}
+
+fn plain_const() -> F32 {
+  let y = K
+  y + 1.0
+}
+
+test "a let of a const in an rt fn is the value of the const" {
+  assert const_float() == 1.0
+  assert const_int() == 4
+}
+
+test "a let derived from a let of a const reads the same value" {
+  assert derived_from_a_const() == 6
+}
+
+test "a let of a const in a function without Alloc in its row" {
+  assert plain_const() == 1.5
+}

@@ -9,6 +9,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, Ast, Block, CallKind, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
+use crate::binding::{Bind, Head, HeadRow};
 use crate::body::{BodyInfo, LocalId, LocalKind, Target};
 use crate::def::DefKind;
 use crate::ty::{BuiltinTy, Ty, TyId};
@@ -26,20 +27,13 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         k
     };
     for id in keys {
-        let body = &a.bodies[&id];
-        // Nor is a body whose unit failed in an earlier stage (§18.1).
-        if !body.complete || a.failures.skips(id, Stage::Modes) {
+        if !a.body_checked(id, Stage::Modes) {
             continue;
         }
+        let body = &a.bodies[&id];
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let Some(module) = module_of_def(pkg, a, id) else { continue };
-        let root = match &a.def(id).kind {
-            DefKind::Fn(f) => f.body,
-            DefKind::Test { body, .. } => Some(*body),
-            DefKind::Const(c) => c.value,
-            _ => None,
-        };
-        let Some(root) = root else { continue };
+        let Some(root) = crate::body::root_of(a, id) else { continue };
         let mut w = Walker {
             a,
             ast: &module.parsed.ast,
@@ -49,7 +43,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
             state: State::default(),
             diverged: false,
             loops: Vec::new(),
-            closure_depth: 0,
+            closures_in: Vec::new(),
             moved_any: HashSet::new(),
         };
         w.closures();
@@ -138,7 +132,8 @@ struct Walker<'a> {
     diverged: bool,
     /// Start of the body of each enclosing loop (locals declared before it are "outer").
     loops: Vec<u32>,
-    closure_depth: u32,
+    /// The anonymous functions the walk is in, outermost first.
+    closures_in: Vec<ExprId>,
     moved_any: HashSet<LocalId>,
 }
 
@@ -314,7 +309,11 @@ impl<'a> Walker<'a> {
     fn stmt(&mut self, s: StmtId) {
         let stmt = self.ast.stmt(s);
         match &stmt.kind {
-            StmtKind::Let { init, .. } => self.expr(*init, Pos::Consume),
+            // A borrow binding consumes nothing (§5.2, R-54).
+            StmtKind::Let { init, .. } => match self.body.heads.get(&Head::Let(s)) {
+                Some(HeadRow::Borrow { .. }) => self.expr(*init, Pos::Base),
+                _ => self.expr(*init, Pos::Consume),
+            },
             StmtKind::Var { init, .. } => self.expr(*init, Pos::Consume),
             StmtKind::Assign { target, value } => {
                 self.expr(*value, Pos::Consume);
@@ -548,9 +547,9 @@ impl<'a> Walker<'a> {
                 }
                 let saved = self.state.clone();
                 let saved_div = self.diverged;
-                self.closure_depth += 1;
+                self.closures_in.push(e);
                 self.expr(*body, Pos::Return);
-                self.closure_depth -= 1;
+                self.closures_in.pop();
                 self.state = saved;
                 self.diverged = saved_div;
             }
@@ -676,7 +675,7 @@ impl<'a> Walker<'a> {
             self.report(d);
             return;
         }
-        if self.closure_depth > 0 {
+        if !self.closures_in.is_empty() {
             return; // captures are copies; Affine captures were rejected (E0712)
         }
         self.state.moved.insert(place.local, span);
@@ -693,12 +692,25 @@ impl<'a> Walker<'a> {
     /// must be a `var`, an `inout` parameter, or `inout self` (E0701).
     fn mutable_place(&mut self, place: &Place, what: &str) {
         let l = self.local(place.local);
+        // A captured value is read-only, whatever its binding (§5.3).
+        let captured =
+            self.closures_in.iter().any(|c| self.body.captures.get(c).is_some_and(|cs| cs.contains(&place.local)));
+        if captured {
+            let (name, span) = (l.name.clone(), place.span);
+            let msg = format!("cannot {what} this place: `{name}` is captured by a closure, read-only (§5.3)");
+            let d = Diagnostic::new(Stage::Modes, Code::E0701, span, msg).with_found(self.src(span));
+            self.report(d.with_note(l.span, "captured value declared here"));
+            return;
+        }
         if l.mutable {
             return;
         }
         let name = l.name.clone();
         let (reason, fix_var) = match l.kind {
-            LocalKind::Let if !l.borrow => (format!("`{name}` is immutable (`let`); declare it with `var`"), true),
+            // A static value is a borrow (§5.4), of a `let` that can be a `var` (§5.1).
+            LocalKind::Let if !l.borrow || l.state == (Bind::Borrow { no_drop: true }) => {
+                (format!("`{name}` is immutable (`let`); declare it with `var`"), true)
+            }
             LocalKind::Let | LocalKind::MatchBind => (format!("`{name}` is a borrow binding (§5.4), read-only"), false),
             LocalKind::Param(_) | LocalKind::ClosureParam(_) => {
                 (format!("`{name}` is a borrowed parameter; declare it `inout {name}`"), false)
@@ -795,7 +807,10 @@ impl<'a> Walker<'a> {
         // 2. Arguments: mode must match (E0703), places collected for exclusivity.
         for (i, arg) in args.iter().enumerate() {
             let want = param_modes.get(i).copied().unwrap_or(Mode::Borrow);
-            if arg.mode != want {
+            // A borrowed Affine place is E0711 with no fix whatever its mark (§5.2), from `consume`.
+            let borrowed = want == Mode::Move && self.kind_of_expr(arg.expr) == Some(Kind::Affine);
+            let borrowed = borrowed && self.place_of(arg.expr).is_some_and(|p| self.is_borrowed(p.local));
+            if arg.mode != want && !borrowed {
                 let (found, fix) = self.mode_fix(arg, want);
                 let msg = match want {
                     Mode::Inout => "this parameter is `inout`; write `inout` before the argument (§5.2)",

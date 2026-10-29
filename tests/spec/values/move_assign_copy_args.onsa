@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.1", "§5.2"]
+
+// R-191, S-609 (§5.1, §5.2): the `move` parameters of a Copy type can be assigned to like the other
+// `move` parameters (values/move_assign.onsa), and the caller's value does not change: a Dup value
+// is copied into the parameter, and §5.2 has no mark for it ("`move` 引数に渡す Dup 値（Copy、Shared、
+// 関数値の変数）には `move` を書かず（`tk(n)`、`ts(s)`、`ap(f)`）、その場で複製して渡す"). The calls
+// are written without a mark. Today a call of a `move` parameter of Copy type is an E0703 that asks
+// for the mark (the old rule that S-609 reversed), so this file waits for the work W4-09.
+
+pub fn incremented(move x: I32) -> I32 {
+  x = x + 1
+  x
+}
+
+pub fn set_first(move v: [I32; 2]) -> I32 {
+  v[0] = 3
+  v[0] + v[1]
+}
+
+test "a move parameter of a Copy type can be assigned to, and the caller keeps its value" {
+  let a = 4
+  assert incremented(a) == 5
+  assert a == 4
+}
+
+test "an element of a move parameter of an array can be assigned to, and the caller keeps its value" {
+  let v = [1, 20]
+  assert set_first(v) == 23
+  assert v[0] == 1
+}

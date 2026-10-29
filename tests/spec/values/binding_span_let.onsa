@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// S-217 (§5.3, §5.4): a `Span` (the element `xs[k]` of an array of `Span`s, a `Span` argument, the
+// array of `Span`s itself) whose source is a borrowed origin or a borrowed binding derived from one is
+// a borrowed binding of a `let`: "元が借用の起点か派生した借用束縛なら、借用の行で `let` と `for` と
+// `match` の腕に束縛できる（`let ch = input[0]`、`for ch in input`）". The bound name stays second-class
+// (it can be read, passed on in the default mode, and used as a receiver; the uses that stay an E0710
+// are in negative/binding_span_let.onsa). Every binding is read. No diagnostic is expected anywhere in
+// this file. The part of a view (`xs.slice(a, b)`) is a form of the work W4-16 U1b (it is in
+// types/wellformed_body_annotation_second_class_let.onsa, with the annotated forms), the run is in
+// values/binding_span_run.onsa.
+
+pub fn sum(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0 ..< s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+// ------------------------------------------------------------------------- the let forms
+
+pub fn element(input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]
+  ch[0]
+}
+
+pub fn element_at_run_time(input: [Span[F32]; 2], k: U32) -> F32 {
+  let ch = input[k]
+  ch[0]
+}
+
+pub fn whole_planar_argument(input: [Span[F32]; 2]) -> F32 {
+  let all = input
+  all[1][0]
+}
+
+pub fn span_argument(xs: Span[F32]) -> U32 {
+  let s = xs
+  s.len()
+}
+
+pub fn two_channels(input: [Span[F32]; 2]) -> F32 {
+  let l = input[0]
+  let r = input[1]
+  l[0] + r[0]
+}
+
+// ---------------------------------------------------------------------------- derived
+
+pub fn derived(input: [Span[F32]; 2]) -> F32 {
+  let ch    = input[0]
+  let again = ch
+  again[0]
+}
+
+pub fn derived_from_the_whole(input: [Span[F32]; 2]) -> F32 {
+  let all = input
+  let ch  = all[1]
+  ch[0]
+}
+
+pub fn derived_from_the_argument(xs: Span[F32]) -> F32 {
+  let a = xs
+  let b = a
+  b[0]
+}
+
+// -------------------------------------------------------------------- uses of the binding
+
+pub fn passed_on(input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]
+  sum(ch)
+}
+
+pub fn as_a_receiver(input: [Span[F32]; 2]) -> U32 {
+  let ch = input[0]
+  ch.len()
+}
+
+pub fn get_through_the_binding(input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]
+  match ch.get(1) {
+    Some(v) => v,
+    None => -1.0,
+  }
+}
+
+// -------------------------------------------------------------------------- for and nesting
+
+pub fn for_binding(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for ch in input {
+    total = total + ch[0]
+  }
+  total
+}
+
+pub fn let_from_the_for_binding(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for ch in input {
+    let c = ch
+    total = total + c[0]
+  }
+  total
+}
+
+pub fn in_a_branch(input: [Span[F32]; 2], flag: Bool) -> F32 {
+  if flag {
+    let ch = input[0]
+    ch[0]
+  } else {
+    let ch = input[1]
+    ch[0]
+  }
+}
+
+pub fn in_a_loop(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for k in 0 ..< 2 {
+    let ch = input[k]
+    total = total + ch[0]
+  }
+  total
+}
+
+pub fn in_an_arm(input: [Span[F32]; 2], o: Option[U32]) -> F32 {
+  match o {
+    Some(k) => {
+      let ch = input[k]
+      ch[0]
+    },
+    None => 0.0,
+  }
+}
+
+// ------------------------------------------------------------------------ a closure argument
+
+pub fn apply_span(f: fn(Span[F32]) -> F32, s: Span[F32]) -> F32 {
+  f.(s)
+}
+
+pub fn closure_argument(xs: Span[F32]) -> F32 {
+  apply_span(fn(s) {
+    let c = s
+    c[0]
+  }, xs)
+}

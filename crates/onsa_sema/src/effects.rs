@@ -21,8 +21,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
     for (i, def) in a.defs.iter().enumerate() {
         let id = DefId(i as u32);
         let DefKind::Fn(f) = &def.kind else { continue };
-        let unchecked = !a.bodies.get(&id).is_some_and(|b| b.complete) || a.failures.skips(id, Stage::Effects);
-        if f.rt || f.effects.alloc || f.body.is_none() || unchecked {
+        if f.rt || f.effects.alloc || f.body.is_none() || !a.body_checked(id, Stage::Effects) {
             continue;
         }
         let _scope = onsa_diag::internal::item_scope(def.span);

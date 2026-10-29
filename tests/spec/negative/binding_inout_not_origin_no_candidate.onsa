@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2"]
+// fixes = 0
+
+// S-41, R-117 (§5.2, §5.4): the E0711 of an Affine value taken out of an `inout` argument has no
+// repair candidate: "借用の Affine の値と `inout` 引数の値は E0711 で修正候補なし" (§5.4), "`inout`
+// 引数から `move` で取り出すと、呼び出し側の値が破棄済みになる" (§5.2). `move` cannot be inserted
+// (it would move out what the caller still holds), and the direction of the repair is the mode of the
+// parameter, far from the error. This is the `fixes = 0` of the same forms as
+// negative/binding_inout_not_origin.onsa; today the `let c = b` form offers the insertion of `move`
+// and `let c = move b` is accepted (R-117, the work W4-07), so this file waits for W4-07. One error
+// per item (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn let_without_move(inout b: Buf[F32]) -> U32 {
+  let c = b                     //~ E0711
+  c.len()
+}
+
+pub fn let_with_move(inout b: Buf[F32]) -> U32 uses {Alloc} {
+  let c = move b                //~ E0711
+  c.len()
+}
+
+pub fn let_field(inout h: Holder) -> U32 {
+  let x = h.buf                 //~ E0711
+  x.len()
+}
+
+pub fn let_destructured(inout p: (Buf[F32], U32)) -> U32 {
+  let (a, n) = p                //~ E0711
+  a.len() + n
+}
+
+pub fn move_argument(inout b: Buf[F32]) uses {Alloc} {
+  take(move b)                  //~ E0711
+}
+
+pub fn pass_without_move(inout b: Buf[F32]) uses {Alloc} {
+  take(b)                       //~ E0711
+}

@@ -106,7 +106,9 @@ fn argument_modes_must_match() {
 
 #[test]
 fn second_class_values_stay_in_argument_position() {
-    assert_eq!(codes("pub fn g(xs: Span[F32]) { let _ = xs }\n"), vec![Code::E0710]);
+    // A `Span` of a borrowed parameter is a borrow binding of a `let` (S-217, §5.4); of an `inout` one it is not.
+    ok("pub fn g(xs: Span[F32]) { let _ = xs }\n");
+    assert_eq!(codes("pub fn g(inout xs: Span[F32]) { let _ = xs }\n"), vec![Code::E0710]);
     assert_eq!(codes("pub fn g(xs: Span[F32]) -> Span[F32] { xs }\n").first().copied(), Some(Code::E0710));
     assert_eq!(codes("pub fn g(xs: Span[F32]) { let _ = xs.slice(0, 2) }\n"), vec![Code::E0710]);
     ok(
@@ -404,4 +406,106 @@ fn range_ends_are_read() {
     assert_eq!(f("  for _ in 0..<take(move b) { s = s + 1 }"), vec![]);
     // A borrow in the ends, then the move after the loop.
     assert_eq!(f("  for _ in 0..<b.len() { s = s + 1 }\n  s = s + take(move b)"), vec![]);
+}
+
+/// The states of the bindings over their heads (§5.4) and their uses
+/// (§5.2), a table of the sweep of W4-16 U1a/b (`rules/leader.md` 4.9; the
+/// whole sweep stays with the breaking side). A binding `b` of the Affine
+/// `Buf[F32]` from each head is used as it is or through `let c = b`. The
+/// codes are from the spec: a borrow (an origin, or a `let` from one) is
+/// moved nowhere, with its mark or not (E0711, §5.2), and is read-only
+/// (E0701, §5.4); an `inout` parameter, a `move` parameter and a `var` are
+/// written (§5.2); a `let` from a binding that is no origin is owned, so its
+/// value is an Affine place consumed with no `move` (E0711, §5.2); an owned
+/// Affine value passed to a `move` parameter with no mark is E0703 (§5.2).
+#[test]
+fn binding_states_over_heads_and_uses() {
+    let pre = "pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} { b.len() }\n\
+        pub fn fill(inout b: Buf[F32]) uses {Alloc} { b.fill!(1.0) }\n\
+        pub fn mk() -> Buf[F32] uses {Alloc} { Buf.zeroed(2) }\n\
+        pub fn len(b: Buf[F32]) -> U32 { b.len() }\n";
+    let uses = [
+        "let _ = take(move X)",
+        "let _ = take(X)",
+        "var z = X\n let _ = z.len()",
+        "X.fill!(1.0)",
+        "fill(inout X)",
+        "let _ = len(X)",
+    ];
+    // (head, parameters, body around `BODY`).
+    let heads = [
+        ("param", "b: Buf[F32]", "BODY"),
+        ("inout", "inout b: Buf[F32]", "BODY"),
+        ("move", "move b: Buf[F32]", "BODY"),
+        ("var", "", "var b = mk()\n BODY"),
+        ("let", "", "let b = mk()\n BODY"),
+        ("for", "xs: [Buf[F32]; 2]", "for b in xs {\n BODY\n }"),
+        ("match", "o: Option[Buf[F32]]", "match o { Some(b) => {\n BODY\n }, None => {} }"),
+        ("closure", "", "let g = fn(b: Buf[F32]) -> U32 uses {Alloc} {\n BODY\n 1 }\n let _ = g.(mk())"),
+    ];
+    // (head, through `let c = b`, the code of each use: `.` none, `1` E0701,
+    // `3` E0703, `m` E0711, `-` not in this table).
+    // The two `-` of `inout`: §5.2 makes them E0711 with no fix, which waits for R-117 (W4-07).
+    let rows = [
+        ("param", false, "mmm11."),
+        ("param", true, "mmm11."),
+        ("inout", false, "--m..."),
+        ("inout", true, "-----m"),
+        ("move", false, "-3m..."),
+        ("move", true, "-----m"),
+        ("var", false, "-3-..."),
+        ("var", true, "---m--"),
+        ("let", false, "-3-11."),
+        ("let", true, "-----m"),
+        ("for", true, "m--11."),
+        ("match", true, "m--11."),
+        ("closure", true, "m--11."),
+    ];
+    let mut n = 0;
+    for (head, derived, codes_of_uses) in rows {
+        let &(_, params, around) = heads.iter().find(|h| h.0 == head).unwrap();
+        for (u, c) in uses.iter().zip(codes_of_uses.chars()) {
+            let want = match c {
+                '.' => vec![],
+                '1' => vec![Code::E0701],
+                '3' => vec![Code::E0703],
+                'm' => vec![Code::E0711],
+                _ => continue,
+            };
+            let body = if derived { format!("let c = b\n {}", u.replace('X', "c")) } else { u.replace('X', "b") };
+            let src = format!("{pre}pub fn f({params}) uses {{Alloc}} {{\n {}\n}}\n", around.replace("BODY", &body));
+            assert_eq!(codes(&src), want, "{head}, derived {derived}, `{u}`:\n{src}");
+            n += 1;
+        }
+    }
+    assert_eq!(n, 45);
+}
+
+/// A value an anonymous function captures is read-only (§5.3): assigning
+/// to it, passing it as `inout` and calling a `!` method on it are E0701,
+/// whatever its binding (a `move` parameter, `move self` and a `var` are
+/// written outside the function). Its own parameters and bindings are not
+/// captured, nor the bindings of an outer anonymous function in its own body.
+#[test]
+fn captured_values_are_read_only() {
+    let pre = "pub fn apply(f: fn(I32) -> I32) -> I32 { f.(1) }\n\
+        pub fn bump(inout z: I32) { z = z + 1 }\n\
+        pub struct C { n: I32 }\n\
+        impl C {\n  pub fn inc(inout self) { self.n = self.n + 1 }\n}\n";
+    let f = |params: &str, body: &str| codes(&format!("{pre}pub fn h({params}) -> I32 {{\n {body}\n}}\n"));
+    let read_only = vec![Code::E0701];
+    assert_eq!(f("move x: I32", "apply(fn(n) { x = 3\n n + x })"), read_only);
+    assert_eq!(f("move x: I32", "apply(fn(n) { bump(inout x)\n n })"), read_only);
+    assert_eq!(f("x: I32", "var y = x\n apply(fn(n) { y = 3\n n + y })"), read_only);
+    assert_eq!(f("", "let y = 2\n apply(fn(n) { y = 3\n n + y })"), read_only);
+    assert_eq!(f("", "var c = C { n: 1 }\n apply(fn(n) { c.inc!()\n n + c.n })"), read_only);
+    let move_self = "impl C {\n  pub fn a(move self) -> I32 { apply(fn(k) { self.n = 3\n k }) }\n}\n";
+    assert_eq!(codes(&format!("{pre}{move_self}")), read_only);
+    // A binding of an outer anonymous function, captured by an inner one.
+    assert_eq!(f("", "apply(fn(n) { var k = n\n apply(fn(m) { k = m\n m }) + k })"), read_only);
+    // Read only; written outside; the function's own bindings.
+    let ok = |params: &str, body: &str| assert_eq!(f(params, body), vec![], "{body}");
+    ok("x: I32", "var y = x\n y = 2\n apply(fn(n) { n + y })");
+    ok("", "apply(fn(n) { var k = n\n k = k + 1\n apply(fn(m) { m + k }) + k })");
+    ok("", "apply(fn(n) { var k = n\n bump(inout k)\n k })");
 }

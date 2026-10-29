@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§8.1", "§12.2"]
+
+// S-80, R-85 (§5.4, §12.2): a string literal with interpolation is not a static value ("補間の無い
+// 文字列リテラル"): it makes a new `Str` (§12.2: "補間文字列" needs `Alloc`), so a `let` of it is an
+// owned binding ("静的な値でも破棄の要らないリテラルでもない… 演算の結果"), and the creation needs
+// `Alloc` in the row of the function (E0601 at the first use, §8.1: "診断は最初の使用の位置に置く").
+// The literal without interpolation beside it needs none (values/binding_static_leaf.onsa).
+// Today the E0601 is placed at the name of the function and not at the first use, so this file waits
+// for the work W6-03 (R-87 (6), the same reason as fixes/e0601_alloc_row.onsa). One error per item
+// (P-01).
+
+pub fn interpolated(v: U32) -> U32 {
+  let s = "gain {v}"           //~ E0601
+  s.len()
+}
+
+pub fn interpolated_derived(v: U32) -> U32 {
+  let s = "gain {v}"           //~ E0601
+  let t = s
+  t.len()
+}
+
+pub fn interpolated_var(v: U32) -> U32 {
+  var s = "gain {v}"           //~ E0601
+  s.len()
+}
+
+// Contrasts: with `Alloc` in the row the interpolation is fine, and the literal without
+// interpolation needs none.
+pub fn interpolated_with_alloc(v: U32) -> U32 uses {Alloc} {
+  let s = "gain {v}"
+  s.len()
+}
+
+pub fn literal_without_alloc() -> U32 {
+  let s = "gain"
+  s.len()
+}

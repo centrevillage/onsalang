@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-80, R-85 (§5.4, §12.2, §10): the owned forms next to the static values of
+// values/binding_static_leaf.onsa. `var` is an owned binding whatever the initializer is (§5.4:
+// "`var y = ...`: 所有（書き換えられる）"), so a `var` of a string literal owns a `Str` that is
+// destroyed, and the destruction of a Shared value needs `Alloc` (§12.2), which an `rt fn` cannot
+// do: an E0901 at the binding (the same E0901 as `owns_a_buf` of negative/rt.onsa). A `let` from a
+// call is owned too ("`let y = f(...)`: 所有"). One error per item (P-01).
+
+const K: F32 = 0.5
+
+pub rt fn name_len(s: Str) -> U32 {
+  s.len()
+}
+
+pub rt fn make() -> Str {
+  "gain"
+}
+
+pub rt fn var_literal() -> U32 {
+  var s = "gain"                //~ E0901
+  name_len(s)
+}
+
+pub rt fn var_reassigned() -> U32 {
+  var s = "gain"                //~ E0901
+  s = "other"
+  name_len(s)
+}
+
+// A `var` copies the value of a borrowed binding into an owned one.
+pub rt fn var_from_a_static() -> U32 {
+  let s = "gain"
+  var t = s                     //~ E0901
+  name_len(t)
+}
+
+pub rt fn var_from_an_argument(s: Str) -> U32 {
+  var t = s                     //~ E0901
+  name_len(t)
+}
+
+pub rt fn let_from_a_call() -> U32 {
+  let s = make()                //~ E0901
+  name_len(s)
+}
+
+// Contrasts: a Copy value needs no destruction, so a `var` of a `const` is fine in an `rt fn`, and a
+// `let` of the literal is the borrowed binding.
+pub rt fn var_of_a_copy_const() -> F32 {
+  var y = K
+  y = y + 1.0
+  y
+}
+
+pub rt fn let_of_a_literal() -> U32 {
+  let s = "gain"
+  name_len(s)
+}

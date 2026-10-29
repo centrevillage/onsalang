@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2"]
+
+// S-41, R-85 (§5.4): "ローカルの `var` / `let` と `inout` 引数は起点にならない". An `inout` argument is
+// not owned and is written in the function, so a `let` from it is not a borrowed binding: it is the
+// initialization of an owned binding, and an Affine value cannot be taken out of an `inout`
+// argument (E0711, "借用の Affine の値と `inout` 引数の値は E0711"). The error is at the `let`. One
+// error per item (P-01). That the error has no candidate is in
+// negative/binding_inout_not_origin_no_candidate.onsa; the contrasts that stay legal (the elements of a
+// borrowing `for` and the binding of a `match` arm over an `inout` argument) are in
+// values/binding_borrow_let.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn whole(inout b: Buf[F32]) -> U32 {
+  let c = b                     //~ E0711
+  c.len()
+}
+
+pub fn field(inout h: Holder) -> U32 {
+  let x = h.buf                 //~ E0711
+  x.len()
+}
+
+pub fn destructured(inout p: (Buf[F32], U32)) -> U32 {
+  let (a, n) = p                //~ E0711
+  a.len() + n
+}

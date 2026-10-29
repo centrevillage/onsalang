@@ -22,6 +22,7 @@ use onsa_syntax::ast::{
     PatId, PatKind, Path, RangeEnd, RangeHead, StmtId, StmtKind, StrSeg, UnOp,
 };
 
+use crate::binding::{Bind, Head, HeadRow, LitClass};
 use crate::builtin;
 use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
 use crate::deferred::{Deferred, DeferredKind, Required};
@@ -87,11 +88,21 @@ pub struct LocalInfo {
     /// Resolved at the end of the body (may still contain `Ty::Param` in generic bodies).
     pub ty: TyId,
     pub kind: LocalKind,
-    /// Borrow binding (§5.4): derived from a borrowed parameter, or a `for`
-    /// over a place without `move`. Not enforced here.
+    /// Its state (§5.4), settled after the types stage ([`crate::binding`]);
+    /// the types stage does not read it.
+    pub state: Bind,
+    /// Of the old modes stage until W4-07, made from `state` alone
+    /// ([`LocalInfo::set_state`]): a borrow, and owned and written to or `inout`.
     pub borrow: bool,
-    /// `var`, `inout` parameter, `inout self`.
     pub mutable: bool,
+}
+
+impl LocalInfo {
+    pub(crate) fn set_state(&mut self, state: Bind) {
+        self.state = state;
+        self.borrow = matches!(state, Bind::Borrow { .. });
+        self.mutable = matches!(state, Bind::OwnedMut | Bind::Inout);
+    }
 }
 
 /// Instantiation of a generic def at a call site (for monomorphization).
@@ -171,6 +182,10 @@ pub struct BodyInfo {
     /// the `-` is a part of the literal's value (§4.7, S-184, S-227). The lowering
     /// folds exactly these (R-03); every other `-` negates a value.
     pub neg_literals: HashSet<ExprId>,
+    /// The rows of the heads of the bindings (§5.4), and the marks of the
+    /// static values, settled with the states of the locals ([`crate::binding`]).
+    pub heads: HashMap<Head, HeadRow>,
+    pub lits: HashMap<ExprId, LitClass>,
     /// `false` when checking stopped at the first error (tables are partial).
     pub complete: bool,
     /// The body reads what the check does not read (§18.1, S-692: a name the
@@ -247,32 +262,32 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             continue;
         };
         let _ = item;
-        let (generics, self_ty, body, ret) = match &def.kind {
+        let (self_ty, body, ret) = match &def.kind {
             DefKind::Fn(f) => {
                 let Some(b) = f.body else { continue };
                 let self_ty = def.owner.and_then(|o| match &a.defs[o.0 as usize].kind {
                     DefKind::Impl(i) => Some(i.self_ty),
                     _ => None,
                 });
-                (f.generics.clone(), self_ty, b, f.ret)
+                (self_ty, b, f.ret)
             }
             DefKind::Test { body, .. } => {
                 let unit = a.types.unit();
-                (Vec::new(), None, *body, unit)
+                (None, *body, unit)
             }
             DefKind::Const(c) => {
                 let Some(v) = c.value else { continue };
-                let generics = def.owner.map(|o| a.defs[o.0 as usize].generics().to_vec()).unwrap_or_default();
                 let self_ty = def.owner.and_then(|o| match &a.defs[o.0 as usize].kind {
                     DefKind::Impl(i) => Some(i.self_ty),
                     _ => None,
                 });
-                (generics, self_ty, v, c.ty)
+                (self_ty, v, c.ty)
             }
             // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`).
-            DefKind::Flow(f) => (Vec::new(), None, f.body, f.out),
+            DefKind::Flow(f) => (None, f.body, f.out),
             _ => continue,
         };
+        let generics = generics_of(a, id);
         // The body of an item whose unit has a syntax error is not checked
         // (spec §18.1, S-59).
         if a.failed.contains_key(&id) {
@@ -347,9 +362,33 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     }
 }
 
+/// The generic parameters a body sees: a function's own, those of the owner
+/// of an associated `const`; a test and a flow have none.
+pub(crate) fn generics_of(a: &Analysis, def: DefId) -> Vec<GenericDef> {
+    let d = a.def(def);
+    match &d.kind {
+        DefKind::Fn(f) => f.generics.clone(),
+        DefKind::Const(_) => d.owner.map(|o| a.def(o).generics().to_vec()).unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+/// The expression of the body of a function, a test or a `const` (the bodies
+/// the modes stage reads; not a flow's).
+pub(crate) fn root_of(a: &Analysis, def: DefId) -> Option<ExprId> {
+    match &a.def(def).kind {
+        DefKind::Fn(f) => f.body,
+        DefKind::Test { body, .. } => Some(*body),
+        DefKind::Const(c) => c.value,
+        _ => None,
+    }
+}
+
 /// The locals of a body, one for each binding of its record (`LocalId(b.0)`
 /// for the binding `b`), with the error type until the check gives them
-/// theirs; and the local of each binding no pattern makes, by its origin.
+/// theirs and the state of the table of §5.4 with no head (owned, for a
+/// binding of a head: settled after the check, [`crate::binding`]); and the
+/// local of each binding no pattern makes, by its origin.
 fn locals_of(a: &mut Analysis, names: &BodyNames) -> (Vec<LocalInfo>, HashMap<Origin, LocalId>) {
     let error = a.types.error();
     let mut origins = HashMap::new();
@@ -359,14 +398,10 @@ fn locals_of(a: &mut Analysis, names: &BodyNames) -> (Vec<LocalInfo>, HashMap<Or
             origins.insert(b.origin, LocalId(i as u32));
         }
         let kind = LocalKind::of(b.kind);
-        let mutable = matches!(
-            kind,
-            LocalKind::Var
-                | LocalKind::Param(Mode::Inout)
-                | LocalKind::SelfParam(Mode::Inout)
-                | LocalKind::ClosureParam(Mode::Inout)
-        );
-        locals.push(LocalInfo { name: b.name.clone(), span: b.span, ty: error, kind, borrow: false, mutable });
+        let (name, span, state) = (b.name.clone(), b.span, Bind::Owned);
+        let mut l = LocalInfo { name, span, ty: error, kind, state, borrow: false, mutable: false };
+        l.set_state(crate::binding::row(b.kind, None));
+        locals.push(l);
     }
     (locals, origins)
 }
@@ -622,15 +657,13 @@ impl<'a> Checker<'a> {
 
     /// Give the local `id` its type at `span`, or, when a branch of a choice
     /// before this one gave it one, unify with it (§7).
-    pub(crate) fn bind_local(&mut self, id: LocalId, ty: TyId, borrow: bool, span: Span) -> R<()> {
+    pub(crate) fn bind_local(&mut self, id: LocalId, ty: TyId, span: Span) -> R<()> {
         let i = id.0 as usize;
         if std::mem::replace(&mut self.typed[i], true) {
             let lt = self.info.locals[i].ty;
             return self.unify_at(span, ty, lt);
         }
-        let l = &mut self.info.locals[i];
-        l.ty = ty;
-        l.borrow = borrow;
+        self.info.locals[i].ty = ty;
         Ok(())
     }
 

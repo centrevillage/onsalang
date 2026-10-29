@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§5.2"]
+
+// S-217 (§5.3, §5.4): the `Span` bindings that stay an E0710 and the uses of a legal one that are
+// not allowed. "`inout` 引数からの `Span` と、所有の行の `Span`（`let (l, r) = (xs[0], xs[1])`）は
+// 束縛できず、束縛の場所に置いた値の位置で E0710"; the bound name of a legal binding "第二級のまま
+// （返す・保存する・捕捉する・`move` の引数へ渡すと E0710）". The legal forms are in
+// values/binding_span_let.onsa. A borrowed binding is read-only, so it cannot be an `inout` argument
+// (E0701, §5.4). One error per item (P-01).
+//
+// Not written: returning the bound name. The only function that can return a `Span` has a `Span` in its
+// result type, which is an E0710 of the signature already (the case `span_returned` of
+// negative/modes.onsa), so the body is not a separate item.
+
+pub fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+pub fn sink[T](move x: T) {}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+// ------------------------------------------------------- origins that are not borrowed origins
+
+pub fn inout_planar_argument(inout input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]             //~ E0710
+  ch[0]
+}
+
+pub fn inout_span_argument(inout xs: Span[F32]) -> U32 {
+  let s = xs                    //~ E0710
+  s.len()
+}
+
+pub fn inout_whole_planar_argument(inout input: [Span[F32]; 2]) -> U32 {
+  let all = input               //~ E0710
+  all[0].len()
+}
+
+// ------------------------------------------------------------------------- owned rows
+
+pub fn tuple_of_elements(xs: [Span[F32]; 2]) -> U32 {
+  let (l, r) = (xs[0], xs[1])   //~ E0710
+  l.len() + r.len()
+}
+
+pub fn var_of_an_element(input: [Span[F32]; 2]) -> F32 {
+  var v = input[0]              //~ E0710
+  v[0]
+}
+
+pub fn var_of_a_binding(input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]
+  var v = ch                    //~ E0710
+  v[0]
+}
+
+// ------------------------------------------------ the bound name stays second-class
+
+pub fn captured(input: [Span[F32]; 2]) -> U32 {
+  let ch = input[0]
+  apply(fn(n) { ch.len() + n }) //~ E0710
+}
+
+pub fn moved_on(input: [Span[F32]; 2]) {
+  let ch = input[0]
+  sink(move ch)                 //~ E0710
+}
+
+pub fn passed_as_inout(input: [Span[F32]; 2]) {
+  let ch = input[0]
+  clear(inout ch)               //~ E0701
+}

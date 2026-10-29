@@ -507,13 +507,11 @@ impl<'a> Checker<'a> {
     fn check_match(&mut self, scrutinee: ExprId, arms: &[MatchArm], expected: Option<TyId>, span: Span) -> R<TyId> {
         let st = self.check_expr(scrutinee, None)?;
         let st = self.known(st, self.expr(scrutinee).span, "`match` operand")?;
-        // §7 (S-21): `match x` binds borrows; only `match move x` gives the arms ownership.
-        let borrow = !matches!(self.expr(scrutinee).kind, ExprKind::Move(_));
         let mut result: Option<TyId> = expected;
         let mut rows: Vec<Vec<P>> = Vec::new();
         for arm in arms {
             let r = (|| -> R<()> {
-                let p = self.bind_pat(arm.pat, st, false, borrow)?;
+                let p = self.bind_pat(arm.pat, st, false)?;
                 if let Some(g) = arm.guard {
                     let bool_ = self.bool_();
                     self.check_expr(g, Some(bool_))?;
@@ -624,7 +622,7 @@ impl<'a> Checker<'a> {
                 match &p.name {
                     ParamName::Ident(id) => {
                         let local = self.local_of(Origin::Closure { closure: e, param: k })?;
-                        self.bind_local(local, *t, p.mode == Mode::Borrow, id.span)?;
+                        self.bind_local(local, *t, id.span)?;
                     }
                     ParamName::SelfParam(s) => {
                         return Err(self.err(Code::E0002, *s, "an anonymous function has no `self`"));

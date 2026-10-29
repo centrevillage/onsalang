@@ -1,0 +1,200 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+
+// R-54, S-41, R-85 (§5.4): a `let` whose initializer is a borrowed origin (an argument in the default
+// mode, `self`, the binding of a borrowing `for`, the binding of a `match` arm, an argument of an
+// anonymous function) or a borrowed binding derived from one is a borrowed binding, even when the
+// type is Affine (`Buf[F32]`): "借用束縛は消費しない" (§5.2), it ends without a drop, and it is read
+// only. Every binding below is read (a binding never read is an E0309). No diagnostic is expected
+// anywhere in this file. The uses that stay an error (moving the binding on, returning it) are in
+// negative/binding_borrow_move.onsa, the origins that are not (an `inout` argument, a local) in
+// negative/binding_inout_not_origin.onsa and negative/binding_local_not_origin.onsa, the run in
+// values/binding_borrow_run.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn length(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+// ---------------------------------------------------------------- the argument and its parts
+
+pub fn whole(b: Buf[F32]) -> U32 {
+  let c = b
+  c.len()
+}
+
+pub fn field(h: Holder) -> U32 {
+  let b = h.buf
+  b.len()
+}
+
+pub fn destructured_tuple(p: (Buf[F32], U32)) -> U32 {
+  let (a, n) = p
+  a.len() + n
+}
+
+pub fn destructured_struct(h: Holder) -> U32 {
+  let Holder { buf: b, gain: _ } = h
+  b.len()
+}
+
+pub fn read_twice(b: Buf[F32]) -> U32 {
+  let c = b
+  c.len() + c.len()
+}
+
+// A borrowed binding goes on as an argument in the default mode.
+pub fn passed_on(b: Buf[F32]) -> U32 {
+  let c = b
+  length(c)
+}
+
+// ------------------------------------------------------------------------- derived bindings
+
+pub fn derived(b: Buf[F32]) -> U32 {
+  let c = b
+  let d = c
+  d.len()
+}
+
+pub fn derived_field(h: Holder) -> U32 {
+  let g = h
+  let b = g.buf
+  b.len()
+}
+
+pub fn derived_destructure(p: (Buf[F32], U32)) -> U32 {
+  let q      = p
+  let (a, n) = q
+  a.len() + n
+}
+
+// ------------------------------------------------------------------ self, for, match, closures
+
+impl Holder {
+  pub fn size(self) -> U32 {
+    let b = self.buf
+    b.len()
+  }
+}
+
+pub fn for_element(xs: [Holder; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    let t = s.buf
+    n = n + t.len()
+  }
+  n
+}
+
+pub fn for_element_derived(xs: [Holder; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    let t = s
+    let u = t.buf
+    n = n + u.len()
+  }
+  n
+}
+
+// The origin of a borrowing `for` may be any place (§5.4), a local included.
+pub fn for_over_a_local() -> U32 uses {Alloc} {
+  let hs: [Holder; 2] = [Holder { buf: Buf.zeroed(2), gain: 1.0 }, Holder { buf: Buf.zeroed(3), gain: 2.0 }]
+  var n: U32          = 0
+  for h in hs {
+    let b = h.buf
+    n = n + b.len()
+  }
+  n
+}
+
+// Whatever the place of the iterated value or of the subject is (§5.4: "`xs` はどの場所でもよい"),
+// an `inout` argument included, the elements of a borrowing `for` and the binding of a `match` arm
+// are origins. It is the `inout` argument itself that is not (negative/binding_inout_not_origin.onsa).
+pub fn for_over_inout(inout xs: [Holder; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    let t = s.buf
+    n = n + t.len()
+  }
+  n
+}
+
+pub fn match_on_inout(inout o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(b) => {
+      let c = b
+      c.len()
+    },
+    None => 0,
+  }
+}
+
+pub fn arm_binding(o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(b) => {
+      let c = b
+      c.len()
+    },
+    None => 0,
+  }
+}
+
+pub fn arm_binding_field(o: Option[Holder]) -> U32 {
+  match o {
+    Some(h) => {
+      let b = h.buf
+      b.len()
+    },
+    None => 0,
+  }
+}
+
+pub fn apply_buf(f: fn(Buf[F32]) -> U32, b: Buf[F32]) -> U32 {
+  f.(b)
+}
+
+pub fn closure_argument(b: Buf[F32]) -> U32 {
+  apply_buf(fn(x) {
+    let c = x
+    c.len()
+  }, b)
+}
+
+pub fn closure_argument_annotated(b: Buf[F32]) -> U32 {
+  apply_buf(fn(x: Buf[F32]) -> U32 {
+    let c = x
+    c.len()
+  }, b)
+}
+
+// ------------------------------------------------------------------------ nested positions
+
+pub fn in_a_branch(b: Buf[F32], flag: Bool) -> U32 {
+  if flag {
+    let c = b
+    c.len()
+  } else {
+    0
+  }
+}
+
+pub fn in_a_loop(b: Buf[F32], n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let c = b
+    total = total + c.len() + i
+  }
+  total
+}
+
+// A Copy field out of a borrowed binding is a copy and stays usable after the binding.
+pub fn copy_field(h: Holder) -> F32 {
+  let g = h
+  g.gain
+}

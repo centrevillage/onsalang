@@ -38,12 +38,12 @@ impl<'a> Checker<'a> {
                 ParamName::SelfParam(span) => {
                     let Some(st) = self.self_ty else { continue };
                     let id = self.local_of(Origin::SelfParam)?;
-                    self.bind_local(id, st, false, *span)?;
+                    self.bind_local(id, st, *span)?;
                 }
                 ParamName::Ident(name) => {
                     let Some((k, sig)) = sig_params.next() else { continue };
                     let id = self.local_of(Origin::Param(k))?;
-                    self.bind_local(id, sig.ty, p.mode == Mode::Borrow, name.span)?;
+                    self.bind_local(id, sig.ty, name.span)?;
                 }
                 ParamName::Wild(_) => {
                     sig_params.next();

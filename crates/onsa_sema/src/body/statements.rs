@@ -28,8 +28,7 @@ impl<'a> Checker<'a> {
                     }
                     None => self.check_expr(*init, ann)?,
                 };
-                let borrow = self.is_borrow_source(*init);
-                self.bind_pat(*pat, it, true, borrow)?;
+                self.bind_pat(*pat, it, true)?;
                 Ok(())
             }
             StmtKind::Var { name, ty, init } => {
@@ -44,7 +43,7 @@ impl<'a> Checker<'a> {
                     None => self.check_expr(*init, ann)?,
                 };
                 let id = self.local_of(Origin::Var(s))?;
-                self.bind_local(id, it, false, name.span)?;
+                self.bind_local(id, it, name.span)?;
                 Ok(())
             }
             StmtKind::Assign { target, value } => {
@@ -62,8 +61,8 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
             StmtKind::For { pat, moved, iter, body } => {
-                let (elem, borrow) = self.check_iter(*iter, *moved)?;
-                self.bind_pat(*pat, elem, true, borrow)?;
+                let elem = self.check_iter(*iter, *moved)?;
+                self.bind_pat(*pat, elem, true)?;
                 self.frames.last_mut().unwrap().loop_depth += 1;
                 let unit = self.unit();
                 let r = self.check_expr(*body, Some(unit));
@@ -119,8 +118,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Element type of a `for` iteration and whether the binding is a borrow.
-    fn check_iter(&mut self, iter: ExprId, moved: bool) -> R<(TyId, bool)> {
+    /// Element type of a `for` iteration.
+    fn check_iter(&mut self, iter: ExprId, moved: bool) -> R<TyId> {
         let span = self.expr(iter).span;
         if let ExprKind::Range(r) = &self.expr(iter).kind {
             let r = *r;
@@ -146,17 +145,17 @@ impl<'a> Checker<'a> {
                 // Until the loop that ends at the type's maximum (W8-03).
                 return Err(self.closed_range_unsupported(&r, Stage::Types, Feature::InclusiveRangeFor));
             }
-            return Ok((lt, false));
+            return Ok(lt);
         }
         let it = self.check_expr(iter, None)?;
         let it = self.known(it, span, "iterated value")?;
         match self.ty(it) {
-            Ty::Array(el, _) => Ok((el, !moved)),
-            Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, a) => Ok((a[0], !moved)),
+            Ty::Array(el, _) => Ok(el),
+            Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, a) => Ok(a[0]),
             Ty::Builtin(BuiltinTy::Map | BuiltinTy::Set | BuiltinTy::Str, _) => {
                 Err(self.unsupported(span, Feature::Iteration, &[]))
             }
-            Ty::Error => Ok((it, true)),
+            Ty::Error => Ok(it),
             _ => {
                 let shown = self.display(it);
                 Err(self.err(Code::E0401, span, format!("`{shown}` cannot be iterated (§7)")))
@@ -170,24 +169,5 @@ impl<'a> Checker<'a> {
     pub(super) fn is_place(&self, e: ExprId) -> bool {
         let root = self.ast.place_root_node(e);
         root.is_some_and(|r| matches!(self.names.paths.get(&r), Some(PathRes::Local(_))))
-    }
-
-    /// §5.4: `let y = x`, `x.f`, `x[i]` where `x` is a borrowed parameter or a
-    /// borrow binding derived from one.
-    fn is_borrow_source(&self, e: ExprId) -> bool {
-        match &self.expr(e).kind {
-            ExprKind::Path(p) if p.segments.len() == 1 => match self.names.paths.get(&e) {
-                Some(PathRes::Local(b)) => {
-                    let l = &self.info.locals[b.0 as usize];
-                    l.borrow || matches!(l.kind, LocalKind::Param(Mode::Borrow) | LocalKind::SelfParam(Mode::Borrow))
-                }
-                _ => false,
-            },
-            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
-                self.is_borrow_source(*base)
-            }
-            ExprKind::Paren(inner) => self.is_borrow_source(*inner),
-            _ => false,
-        }
     }
 }

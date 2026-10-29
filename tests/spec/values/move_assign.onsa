@@ -5,8 +5,15 @@
 
 // A `move` parameter, and `move self`, can be assigned to in the body (R-191): §5.1 makes only a
 // `let` binding and a borrowed parameter read-only (E0701), and the value is the callee's own.
-// The caller's value does not change (a Copy value is copied). This is the reading behind the
+// The caller's value does not change (a Copy value is copied). The `move` parameters of Copy type
+// (`move x: I32`, `move v: [I32; 2]`) are in values/move_assign_copy_args.onsa: the call of such a
+// parameter waits for the repair of the mark on a Dup value (S-609, the work W4-09), which this file
+// does not depend on. This is the reading behind the
 // `mut self` -> `move self` candidate of spec/foreign-forms.toml (row `mut_self`).
+// The places of `move self` and of a `move` parameter are written the same way: the fields (the state of
+// the binding is owned and mutable, §5.4: "`move` の引数と `move self`: 所有"), also when it is Affine
+// (`Holder` below owns a `Buf`). The borrowed parameter and the `let` stay read-only (E0701):
+// negative/binding_assign.onsa.
 
 pub struct Counter {
   n: I32,
@@ -19,18 +26,41 @@ impl Counter {
   }
 }
 
-pub fn incremented(move x: I32) -> I32 {
-  x = x + 1
-  x
+pub struct Pt {
+  x: I32,
+  y: I32,
 }
 
-test "a move parameter can be assigned to, and the caller keeps its value" {
-  let a = 4
-  assert incremented(move a) == 5
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+impl Pt {
+  pub fn shifted(move self) -> I32 {
+    self.x = self.x + 1
+    self.x + self.y
+  }
+}
+
+pub fn regained(move h: Holder) -> F32 uses {Alloc} {
+  h.gain = 2.0
+  h.gain
 }
 
 test "move self can be assigned to, and the caller keeps its value" {
   let c = Counter { n: 1 }
   assert c.bumped() == 2
   assert c.n == 1
+}
+
+test "a field of move self of a struct with two fields, and the caller keeps its value" {
+  let a = Pt { x: 1, y: 10 }
+  assert a.shifted() == 12
+  assert a.x == 1
+}
+
+test "a field of an Affine move parameter can be assigned to, and the value is passed with move" {
+  let h = Holder { buf: Buf.zeroed(1), gain: 1.0 }
+  assert regained(move h) == 2.0
 }

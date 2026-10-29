@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.2", "§5.1"]
+// fixes = 0
+
+// §5.3 (the row of a capturing closure): "外側の値をコピーで捕捉する無名関数。捕捉した値は読み取り専用で、
+// 代入すると E0701". A value an anonymous function captures is read-only in it whatever its binding:
+// a `move` parameter, `move self` and a `var`, which are written outside the function (§5.2, R-191),
+// are read-only when captured, for an assignment, a pass as `inout` and a call of a `!` method alike.
+// From the review of W4-16 U1a (the breaking side, finding 1). There is no fix: the way to write it
+// (pass the value as an argument, write it outside) is not one. The function's own parameters and
+// bindings are not captured. One error per item (P-01).
+
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+pub fn bump(inout z: I32) {
+  z = z + 1
+}
+
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn inc(inout self) {
+    self.n = self.n + 1
+  }
+
+  pub fn assign_move_self(move self) -> I32 {
+    apply(fn(k) {
+      self.n = 3                //~ E0701
+      k
+    })
+  }
+}
+
+pub fn assign_move_param(move x: I32) -> I32 {
+  apply(fn(n) {
+    x = 3                       //~ E0701
+    n + x
+  })
+}
+
+pub fn assign_var(x: I32) -> I32 {
+  var y = x
+  y = y + 1
+  apply(fn(n) {
+    y = 3                       //~ E0701
+    n + y
+  })
+}
+
+pub fn inout_of_move_param(move x: I32) -> I32 {
+  apply(fn(n) {
+    bump(inout x)               //~ E0701
+    n
+  })
+}
+
+pub fn bang_on_var() -> I32 {
+  var c = C { n: 1 }
+  apply(fn(n) {
+    c.inc!()                    //~ E0701
+    n + c.n
+  })
+}
+
+pub fn captured_by_inner(x: I32) -> I32 {
+  apply(fn(n) {
+    var k = n + x
+    k = k + 1
+    apply(fn(m) {
+      k = m                     //~ E0701
+      m
+    }) + k
+  })
+}
+
+// The controls: reading what is captured, and writing the function's own bindings.
+
+pub fn read_move_param(move x: I32) -> I32 {
+  apply(fn(n) { n + x })
+}
+
+pub fn read_var(x: I32) -> I32 {
+  var y = x
+  y = y + 1
+  apply(fn(n) { n + y })
+}
+
+pub fn own_bindings() -> I32 {
+  apply(fn(n) {
+    var k = n
+    k = k + 1
+    bump(inout k)
+    var c = C { n: k }
+    c.inc!()
+    c.n
+  })
+}

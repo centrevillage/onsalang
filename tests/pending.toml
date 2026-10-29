@@ -1518,13 +1518,6 @@ reasons = ["S-116"]
 until = "W7-04"
 note = "見えている名前への ^"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/move_assign.onsa"
-reasons = ["R-191"]
-until = "W4-16"
-note = "move の引数と move self への代入が E0701（§5.1 の E0701 は let と借用の引数だけ）"
-
 # --- W3-19: 式の中の型引数 `::[…]`。W3-19 で通らない事例（W3-19/t の事例。W3-19/i の報告）。
 
 # --- W3-18: 範囲の書き方 `..<` / `..=`。W3-18 で通らない事例（W3-18/t の事例。W3-18/i の報告）。
@@ -1908,3 +1901,40 @@ target = "tests/spec/negative/const_type_affine_drop.onsa"
 reasons = ["S-755", "S-70", "S-138"]
 until = "W5-04"
 note = "手書きの `impl Drop` の型の `const` の E0407 は `impl Drop` が入る W5-04（`const_kind_drop.onsa` と同じ）"
+
+# --- W4-16 U1a/t: 束縛の状態の土台と `let`（2026-10-29、84 回目）。
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_span_let.onsa"
+reasons = ["S-217"]
+until = "W4-07"
+note = "束縛した `Span` の名前を無名関数が捕捉する形（`captured`）の E0710。名前の第二級は W4-07（S-217。束縛していない引数の捕捉は R-331）。他の E0710 は W4-16 U1a で通る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_inout_not_origin_no_candidate.onsa"
+reasons = ["R-117", "S-41"]
+until = "W4-07"
+note = "`inout` 引数の値の E0711 は修正候補なし（今は `move` の挿入の候補を出し、`let c = move b` と `take(move b)` は通る）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_static_interp.onsa"
+reasons = ["R-87", "S-82"]
+until = "W6-03"
+note = "E0601 を最初の使用の行に出す（`fixes/e0601_alloc_row.onsa` と同じ理由）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_borrow_move.onsa"
+reasons = ["S-609"]
+until = "W4-09"
+note = "対照の `take_n(n)`（Copy の型の `move` の引数に `move` を書かない）が E0703（`values/move_assign_copy_args.onsa` と同じ。借用束縛の E0711 は W4-16 U1a で全て通る）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/values/move_assign_copy_args.onsa"
+reasons = ["S-609"]
+until = "W4-09"
+note = "Copy の型の `move` の引数に `move` を書かない（今は E0703）"

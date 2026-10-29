@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.4", "§12.2"]
+
+// R-54, S-41 (§5.4), run in the interpreter: the borrowed bindings of values/binding_borrow_let.onsa
+// that become legal have never reached the lowering and the run (the work W4-16 U1a, the check of a
+// borrowed `let` of an Affine value passes only now). A borrowed binding does not consume (§5.2:
+// "借用束縛は消費しない"): the caller still holds the value after the call, reads it, and a later call
+// reads the same value; the binding reads the value as it is when the binding is made. The argument of an
+// anonymous function is only checked (values/binding_borrow_let.onsa): this version runs an anonymous
+// function only as the argument of `array.from_fn` (E0200 otherwise).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+fn read_at(b: Buf[F32], i: U32) -> F32 {
+  let c = b
+  c[i]
+}
+
+fn len_of_field(h: Holder) -> U32 {
+  let b = h.buf
+  b.len()
+}
+
+fn sum_destructured(p: (Buf[F32], U32)) -> F32 {
+  let (a, n) = p
+  a[n]
+}
+
+fn derived_at(b: Buf[F32], i: U32) -> F32 {
+  let c = b
+  let d = c
+  d[i]
+}
+
+fn for_total(xs: [Holder; 2]) -> F32 {
+  var total: F32 = 0.0
+  for s in xs {
+    let t = s.buf
+    total = total + t[0]
+  }
+  total
+}
+
+fn arm_first(o: Option[Buf[F32]]) -> F32 {
+  match o {
+    Some(b) => {
+      let c = b
+      c[0]
+    },
+    None => -1.0,
+  }
+}
+
+fn gain_of_borrowed(h: Holder) -> F32 {
+  let g = h
+  g.gain
+}
+
+test "a borrowed binding of a Buf argument reads the buffer, and the caller keeps it" {
+  var b: Buf[F32] = Buf.zeroed(4)
+  b[2] = 3.0
+  assert read_at(b, 2) == 3.0
+  assert b[2] == 3.0
+  assert b.len() == 4
+}
+
+test "the binding reads the value at the time of the call" {
+  var b: Buf[F32] = Buf.zeroed(2)
+  assert read_at(b, 0) == 0.0
+  b[0] = 5.0
+  assert read_at(b, 0) == 5.0
+}
+
+test "a field of a borrowed struct is a borrowed binding, and the struct is still whole" {
+  let h = Holder { buf: Buf.zeroed(3), gain: 2.0 }
+  assert len_of_field(h) == 3
+  assert len_of_field(h) == 3
+  assert h.gain == 2.0
+}
+
+test "a destructuring let of a borrowed tuple" {
+  var b: Buf[F32] = Buf.zeroed(3)
+  b[1] = 7.0
+  let p = (move b, 1)
+  assert sum_destructured(p) == 7.0
+  assert sum_destructured(p) == 7.0
+}
+
+test "a binding derived from a borrowed binding" {
+  var b: Buf[F32] = Buf.zeroed(3)
+  b[2] = 4.5
+  assert derived_at(b, 2) == 4.5
+  assert b[2] == 4.5
+}
+
+test "the binding of a borrowing for, and a let from it, leave the array whole" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  var c: Buf[F32] = Buf.zeroed(2)
+  a[0] = 1.5
+  c[0] = 2.5
+  let xs: [Holder; 2] = [Holder { buf: move a, gain: 1.0 }, Holder { buf: move c, gain: 1.0 }]
+  assert for_total(xs) == 4.0
+  assert for_total(xs) == 4.0
+}
+
+test "the binding of a match arm, and a let from it" {
+  var b: Buf[F32] = Buf.zeroed(2)
+  b[0] = 9.0
+  let o: Option[Buf[F32]] = Some(move b)
+  assert arm_first(o) == 9.0
+  assert arm_first(o) == 9.0
+  assert arm_first(None) == -1.0
+}
+
+test "a Copy field out of a borrowed struct is a copy" {
+  let h = Holder { buf: Buf.zeroed(1), gain: 0.25 }
+  assert gain_of_borrowed(h) == 0.25
+  assert h.gain == 0.25
+}

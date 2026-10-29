@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// R-54, S-41 (§5.2, §5.4): a borrowed binding is not owned, so an Affine value in it cannot be moved
+// out: "Affine 値は所有していなければ `move` で渡せない。借用引数、借用束縛、`inout` 引数は所有して
+// いない。その場所を `move` 引数に置くと、印の有無によらず修正候補の無い E0711" (`fixes = 0`: the
+// direction of the repair is the mode of the parameter or the caller, far from the error). The
+// binding itself is legal (values/binding_borrow_let.onsa), so the error is at the use that moves it
+// on or returns it, not at the `let`. One error per item (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn take_n(move n: U32) {}
+
+pub fn move_whole(b: Buf[F32]) uses {Alloc} {
+  let c = b
+  take(move c)                  //~ E0711
+}
+
+pub fn pass_without_move(b: Buf[F32]) uses {Alloc} {
+  let c = b
+  take(c)                       //~ E0711
+}
+
+pub fn move_derived(b: Buf[F32]) uses {Alloc} {
+  let c = b
+  let d = c
+  take(move d)                  //~ E0711
+}
+
+pub fn move_field(h: Holder) uses {Alloc} {
+  let x = h.buf
+  take(move x)                  //~ E0711
+}
+
+pub fn move_destructured(p: (Buf[F32], U32)) uses {Alloc} {
+  let (a, _) = p
+  take(move a)                  //~ E0711
+}
+
+pub fn move_for_element(xs: [Holder; 2]) uses {Alloc} {
+  for s in xs {
+    let t = s.buf
+    take(move t)                //~ E0711
+  }
+}
+
+pub fn move_arm_binding(o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      take(move c)              //~ E0711
+    },
+    None => {},
+  }
+}
+
+pub fn apply_buf(f: fn(Buf[F32]) -> U32 uses {Alloc}, b: Buf[F32]) -> U32 uses {Alloc} {
+  f.(b)
+}
+
+pub fn move_closure_argument(b: Buf[F32]) -> U32 uses {Alloc} {
+  apply_buf(fn(x) {
+    let c = x
+    take(move c)                //~ E0711
+    0
+  }, b)
+}
+
+pub fn move_into_a_let(b: Buf[F32]) uses {Alloc} {
+  let c = b
+  let d = move c                //~ E0711
+  take(move d)
+}
+
+pub fn return_the_binding(b: Buf[F32]) -> Buf[F32] {
+  let c = b
+  c                             //~ E0711
+}
+
+pub fn return_the_argument(b: Buf[F32]) -> Buf[F32] {
+  b                             //~ E0711
+}
+
+// Contrasts: an owned binding moves on, and a Copy value in a borrowed binding is copied.
+pub fn owned_moves_on(move b: Buf[F32]) uses {Alloc} {
+  let c = move b
+  take(move c)
+}
+
+pub fn copy_is_copied(p: (Buf[F32], U32)) {
+  let (_, n) = p
+  take_n(n)
+}

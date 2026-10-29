@@ -11,10 +11,10 @@ use std::collections::HashMap;
 use onsa_diag::{Diagnostic, FileId, Stage};
 use onsa_syntax::ast::ItemId;
 
-use crate::{Analysis, DefId, Package, body, effects, flatten, modes, names, rt};
+use crate::{Analysis, DefId, Package, binding, body, effects, flatten, modes, names, rt};
 
 /// Check the bodies: names, types (a flow body's types and flow checks in
-/// one walk), argument modes and moves, `rt` and effects (§18.1). Each stage
+/// one walk), the states of the bindings (no diagnostic), argument modes and moves, `rt` and effects (§18.1). Each stage
 /// after the names reads the record made after the stage before it. The
 /// unused bindings (E0309), the last stage, are reported by the names walk
 /// with their stage, and dropped by the choice in a unit with another error
@@ -24,6 +24,7 @@ pub(crate) fn check_bodies(pkg: &Package, a: &mut Analysis) {
     a.failures = Failures::of(pkg, a);
     body::check_all(pkg, a);
     a.failures = Failures::of(pkg, a);
+    binding::settle_all(pkg, a);
     let moved = modes::check_all(pkg, a);
     a.failures = Failures::of(pkg, a);
     rt::check_all(pkg, a, &moved);
@@ -100,6 +101,17 @@ impl Failures {
     #[cfg(test)]
     pub(crate) fn of_def(&self, def: DefId) -> Option<Stage> {
         self.by_def.get(&def).copied()
+    }
+}
+
+impl Analysis {
+    /// The body of `def` is read by the check stage `stage`: typed to its end
+    /// and in a unit that no stage before it failed (§18.1). The one test of
+    /// the bodies a stage reads (D-15): those of a later stage are of an
+    /// earlier one too, so the states the modes stage reads are settled for
+    /// `rt` and effects.
+    pub(crate) fn body_checked(&self, def: DefId, stage: Stage) -> bool {
+        self.bodies.get(&def).is_some_and(|b| b.complete) && !self.failures.skips(def, stage)
     }
 }
 

@@ -1,0 +1,129 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§12.2", "§10"]
+
+// S-80, R-85 (§5.4, §12.2): a string literal without interpolation and a `const` are static values:
+// "`let y = CONST`、`let s = "abc"`" is a borrowed binding (the row of the table of §5.4), so it is not
+// destroyed, and "rt の関数でも、定数の表や文字列…を `let` で受けられる". No `Alloc` is needed to bind
+// it: not in an `rt fn` (an owned `Str` there is an E0901, §10 and §12.2) and not in a function
+// without `Alloc` in its row (an E0601 there, §8.1). A binding derived from it is a borrowed binding
+// too. No diagnostic is expected anywhere in this file. The `var` and the interpolated forms (owned)
+// are in negative/binding_static_leaf.onsa.
+//
+// The `match` arm below is the other form of tests/review-phase1/parent/r85.onsa: the binding of an
+// arm over an argument in the default mode is a borrowed origin (§5.4), so `s` is not destroyed.
+
+const K: F32 = 0.5
+const N: U32 = 3
+
+pub rt fn name_len(s: Str) -> U32 {
+  s.len()
+}
+
+// ------------------------------------------------------------------------------ in an rt fn
+
+pub rt fn literal_let() -> U32 {
+  let s = "gain"
+  name_len(s)
+}
+
+pub rt fn literal_method() -> U32 {
+  let s = "gain"
+  s.len()
+}
+
+pub rt fn literal_read_twice() -> U32 {
+  let s = "gain"
+  s.len() + name_len(s)
+}
+
+pub rt fn derived_from_a_literal() -> U32 {
+  let s = "gain"
+  let t = s
+  name_len(t)
+}
+
+pub rt fn literal_as_an_argument() -> U32 {
+  name_len("gain")
+}
+
+pub rt fn const_float() -> F32 {
+  let y = K
+  y * 2.0
+}
+
+pub rt fn const_int() -> U32 {
+  let n = N
+  n + 1
+}
+
+pub rt fn match_arm_over_an_argument(xs: Option[Str]) -> U32 {
+  match xs {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn for_over_an_argument(xs: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    n = n + s.len()
+  }
+  n
+}
+
+// ---------------------------------------------------------------- without Alloc in the row
+
+pub fn plain_literal() -> U32 {
+  let s = "gain"
+  s.len()
+}
+
+pub fn plain_const() -> F32 {
+  let y = K
+  y + 1.0
+}
+
+pub fn plain_derived() -> U32 {
+  let s = "gain"
+  let t = s
+  t.len()
+}
+
+pub fn plain_literal_as_an_argument() -> U32 {
+  name_len("gain")
+}
+
+// ----------------------------------------------------------------------- nested positions
+
+pub rt fn in_a_branch(flag: Bool) -> U32 {
+  if flag {
+    let s = "on"
+    s.len()
+  } else {
+    let s = "off"
+    s.len()
+  }
+}
+
+pub rt fn in_a_loop(n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let s = "gain"
+    total = total + s.len() + i
+  }
+  total
+}
+
+pub rt fn in_an_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(v) => {
+      let s = "some"
+      s.len() + v
+    },
+    None => {
+      let s = "none"
+      s.len()
+    },
+  }
+}

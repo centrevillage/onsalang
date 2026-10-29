@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-217 (§5.3, §5.4), run in the interpreter: the `let` of a `Span` of values/binding_span_let.onsa
+// has never reached the lowering and the run (the work W4-16 U1a makes the check pass). A borrowed
+// `Span` binding is a view of the storage of its origin: it reads the elements as they are, and
+// nothing is copied. The planar argument is given as a nested array (`[[F32; 4]; 2]` for
+// `[Span[F32]; 2]`, §5.3), the way of tests/spec/semantics/span_element_receiver.onsa.
+
+fn element(input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]
+  ch[0]
+}
+
+fn element_at_run_time(input: [Span[F32]; 2], k: U32) -> F32 {
+  let ch = input[k]
+  ch[2]
+}
+
+fn whole_planar_argument(input: [Span[F32]; 2]) -> F32 {
+  let all = input
+  all[1][3]
+}
+
+fn span_argument(xs: Span[F32]) -> U32 {
+  let s = xs
+  s.len()
+}
+
+fn two_channels(input: [Span[F32]; 2]) -> F32 {
+  let l = input[0]
+  let r = input[1]
+  l[1] + r[1]
+}
+
+fn derived(input: [Span[F32]; 2]) -> F32 {
+  let ch    = input[1]
+  let again = ch
+  again[2]
+}
+
+fn sum(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0 ..< s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+fn passed_on(input: [Span[F32]; 2], k: U32) -> F32 {
+  let ch = input[k]
+  sum(ch)
+}
+
+fn get_through_the_binding(input: [Span[F32]; 2], i: U32) -> F32 {
+  let ch = input[0]
+  match ch.get(i) {
+    Some(v) => v,
+    None => -1.0,
+  }
+}
+
+fn for_firsts(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for ch in input {
+    let c = ch
+    total = total + c[0]
+  }
+  total
+}
+
+fn in_a_loop(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for k in 0 ..< 2 {
+    let ch = input[k]
+    total = total + ch[3]
+  }
+  total
+}
+
+test "let ch = input[0] reads the first channel" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert element(ins) == 1.0
+}
+
+test "let ch = input[k] with k from the run" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert element_at_run_time(ins, 0) == 3.0
+  assert element_at_run_time(ins, 1) == 30.0
+}
+
+test "let all = input binds the whole planar argument" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert whole_planar_argument(ins) == 40.0
+}
+
+test "let s = xs binds a Span argument, and the length is the length of the view" {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  assert span_argument(a) == 3
+}
+
+test "two channels in two bindings" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert two_channels(ins) == 22.0
+}
+
+test "a binding derived from a binding of a Span" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert derived(ins) == 30.0
+}
+
+test "the binding goes on as an argument of a function over a Span" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert passed_on(ins, 0) == 10.0
+  assert passed_on(ins, 1) == 100.0
+}
+
+test "get through the binding returns the element or None" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert get_through_the_binding(ins, 1) == 2.0
+  assert get_through_the_binding(ins, 9) == -1.0
+}
+
+test "a let from the binding of a borrowing for over the channels" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert for_firsts(ins) == 11.0
+}
+
+test "a let in a loop over the channels" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert in_a_loop(ins) == 44.0
+}

@@ -130,9 +130,7 @@ impl Analysis {
     /// Only the calls of such a function are edges of the rt recursion (§10
     /// rule 5, S-776). The one test of it ([`check_all`], `crate::unread`).
     pub(crate) fn rt_checked(&self, id: DefId) -> bool {
-        self.rt_with_body(id)
-            && self.bodies.get(&id).is_some_and(|b| b.complete)
-            && !self.failures.skips(id, Stage::Effects)
+        self.rt_with_body(id) && self.body_checked(id, Stage::Effects)
     }
 
     /// `id` is an `rt` function with a written body: a node of the rt calls.

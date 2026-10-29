@@ -74,9 +74,9 @@ pub fn moved_in_loop(move b: Buf[F32], n: U32) uses {Alloc} {
   }
 }
 
-pub fn span_stored(xs: Span[F32]) {
-  let s = xs                    //~ E0710
-}
+// `let s = xs` for a `Span` argument is a borrowed binding (S-217, §5.3): it is in
+// values/binding_span_let.onsa (`span_argument`) and the Span bindings that stay an E0710 are in
+// negative/binding_span_let.onsa.
 
 pub fn span_returned(xs: Span[F32]) -> Span[F32] {   //~ E0710
   xs

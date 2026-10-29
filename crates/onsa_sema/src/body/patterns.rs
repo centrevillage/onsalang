@@ -9,14 +9,14 @@ impl<'a> Checker<'a> {
     /// exhaustiveness check. `irrefutable` is the `let` / `for` context (E0502).
     /// The names it binds are the bindings of the record (a name of a choice
     /// is one, which each branch unifies with, §7).
-    pub(super) fn bind_pat(&mut self, pat: PatId, ty: TyId, irrefutable: bool, borrow: bool) -> R<P> {
+    pub(super) fn bind_pat(&mut self, pat: PatId, ty: TyId, irrefutable: bool) -> R<P> {
         let p = self.ast.pat(pat);
         let span = p.span;
         match &p.kind {
             PatKind::Wild => Ok(P::Wild),
             PatKind::Bind(id) => {
                 let lid = self.local_of_pat(pat)?;
-                self.bind_local(lid, ty, borrow, id.span)?;
+                self.bind_local(lid, ty, id.span)?;
                 self.info.pat_locals.insert(pat, lid);
                 Ok(P::Wild)
             }
@@ -68,8 +68,8 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            PatKind::Path(path) => self.bind_ctor_pat(pat, path, &[], ty, irrefutable, borrow, false),
-            PatKind::TupleStruct { path, elems } => self.bind_ctor_pat(pat, path, elems, ty, irrefutable, borrow, true),
+            PatKind::Path(path) => self.bind_ctor_pat(pat, path, &[], ty, irrefutable, false),
+            PatKind::TupleStruct { path, elems } => self.bind_ctor_pat(pat, path, elems, ty, irrefutable, true),
             PatKind::Tuple(elems) => {
                 let s = self.known(ty, span, "matched value")?;
                 let Ty::Tuple(ts) = self.ty(s) else {
@@ -77,7 +77,7 @@ impl<'a> Checker<'a> {
                     // and their names are bound (§18.1, R-271).
                     if matches!(self.ty(s), Ty::Error) {
                         for &el in elems {
-                            self.bind_pat(el, s, irrefutable, borrow)?;
+                            self.bind_pat(el, s, irrefutable)?;
                         }
                         return Ok(P::Wild);
                     }
@@ -97,7 +97,7 @@ impl<'a> Checker<'a> {
                 }
                 let mut subs = Vec::new();
                 for (&el, &t) in elems.iter().zip(&ts) {
-                    subs.push(self.bind_pat(el, t, irrefutable, borrow)?);
+                    subs.push(self.bind_pat(el, t, irrefutable)?);
                 }
                 Ok(P::Ctor(0, subs))
             }
@@ -109,7 +109,7 @@ impl<'a> Checker<'a> {
                     ty,
                     Written { pat, path, fields, rest: *rest },
                     &mut |ck, fp, ft, i| {
-                        let sub = ck.bind_pat(fp, ft, irrefutable, borrow)?;
+                        let sub = ck.bind_pat(fp, ft, irrefutable)?;
                         bound.extend(i.map(|i| (i, sub)));
                         Ok(())
                     },
@@ -134,14 +134,13 @@ impl<'a> Checker<'a> {
                 }
                 let mut lowered = Vec::new();
                 for &alt in alts {
-                    lowered.push(self.bind_pat(alt, ty, false, borrow)?);
+                    lowered.push(self.bind_pat(alt, ty, false)?);
                 }
                 Ok(P::Or(lowered))
             }
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn bind_ctor_pat(
         &mut self,
         pat: PatId,
@@ -149,7 +148,6 @@ impl<'a> Checker<'a> {
         elems: &[PatId],
         ty: TyId,
         irrefutable: bool,
-        borrow: bool,
         with_parens: bool,
     ) -> R<P> {
         let span = self.ast.pat(pat).span;
@@ -223,7 +221,7 @@ impl<'a> Checker<'a> {
         }
         let mut subs = Vec::new();
         for (&el, &t) in elems.iter().zip(&fields) {
-            subs.push(self.bind_pat(el, t, irrefutable, borrow)?);
+            subs.push(self.bind_pat(el, t, irrefutable)?);
         }
         Ok(P::Ctor(ctor, subs))
     }

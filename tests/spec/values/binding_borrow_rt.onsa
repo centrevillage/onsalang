@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// R-85, R-54 (§5.4, §12.2, §10): a borrowed binding of an Affine value ends without a drop
+// ("借用束縛の終了: `Alloc` は要らない"), so an `rt fn` can bind it: an `rt fn` cannot destroy an owned
+// `Buf` (E0901, negative/rt.onsa `owns_a_buf`), but a binding that does not own does not destroy
+// anything. The state of the binding is read by the rt checks, not computed again from the kind of
+// the binding (R-85: the three places that decided "borrowed or owned" each on their own). No
+// diagnostic is expected anywhere in this file. The same forms outside an `rt fn` are in
+// values/binding_borrow_let.onsa; if the rt checks read the state only in the next unit (the work
+// W4-16 U1b: "modes・rt・効果が状態を読む"), this file is the one that waits for it.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn whole(b: Buf[F32]) -> U32 {
+  let c = b
+  c.len()
+}
+
+pub rt fn field(h: Holder) -> U32 {
+  let b = h.buf
+  b.len()
+}
+
+pub rt fn destructured(p: (Buf[F32], U32)) -> U32 {
+  let (a, n) = p
+  a.len() + n
+}
+
+pub rt fn derived(b: Buf[F32]) -> U32 {
+  let c = b
+  let d = c
+  d.len()
+}
+
+pub rt fn for_element(xs: [Holder; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    let t = s.buf
+    n = n + t.len()
+  }
+  n
+}
+
+pub rt fn arm_binding(o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(b) => {
+      let c = b
+      c.len()
+    },
+    None => 0,
+  }
+}
+
+pub rt fn self_field(h: Holder) -> U32 {
+  h.size()
+}
+
+impl Holder {
+  pub rt fn size(self) -> U32 {
+    let b = self.buf
+    b.len()
+  }
+}

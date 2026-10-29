@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2"]
+
+// S-41, R-85 (§5.4): "ローカルの `var` / `let` と `inout` 引数は起点にならない" (a Perceus in-place
+// update could free the storage of the local that the borrowed binding points to). A `let` from a
+// local is the initialization of an owned binding: an Affine value in it is consumed, so without
+// `move` it is an E0711 whose candidate inserts `move` (§5.4: "ローカルの Affine の値は `move` の
+// 挿入を候補にする E0711"; the candidate is checked by fixes/e0711_move.onsa). Where a local is the
+// owner, `move` is what makes the binding legal. One error per item (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn from_a_local_let() -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  let c = b                     //~ E0711
+  c.len()
+}
+
+pub fn from_a_local_var() -> U32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  let c = b                     //~ E0711
+  c.len()
+}
+
+pub fn from_a_field_of_a_local() -> U32 uses {Alloc} {
+  let h = Holder { buf: Buf.zeroed(2), gain: 1.0 }
+  let x = h.buf                 //~ E0711
+  x.len()
+}
+
+pub fn from_a_destructured_local() -> U32 uses {Alloc} {
+  let p: (Buf[F32], U32) = (Buf.zeroed(2), 1)
+  let (a, n) = p                //~ E0711
+  a.len() + n
+}
+
+pub fn from_a_local_of_an_owned_argument(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let c = b                     //~ E0711
+  c.len()
+}
+
+// A `var` is an owned binding (§5.4), so an Affine value of a borrowed argument cannot be put in it:
+// the initialization consumes it, and the argument is not owned (no candidate).
+pub fn var_from_a_borrowed_argument(b: Buf[F32]) -> U32 {
+  var v = b                     //~ E0711
+  v.len()
+}
+
+// Contrast: with `move` the local gives up its value and the new binding is the owner.
+pub fn moved_from_a_local() -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  let c = move b
+  c.len()
+}

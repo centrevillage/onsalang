@@ -30,7 +30,7 @@ impl<'a> Checker<'a> {
         let inputs: Vec<FlowInput> = self.a.def(self.def).as_flow().map(|f| f.inputs.clone()).unwrap_or_default();
         for (k, input) in (0..).zip(inputs) {
             let id = self.local_of(Origin::FlowInput(k))?;
-            self.bind_local(id, input.ty, true, input.span)?;
+            self.bind_local(id, input.ty, input.span)?;
             let rate = FlowRate::from_rate(input.rate);
             self.fcx().inputs.push((id, rate));
         }
@@ -120,7 +120,7 @@ impl<'a> Checker<'a> {
             PatKind::Bind(id) => {
                 let t = self.fresh();
                 let lid = self.local_of_pat(pat)?;
-                self.bind_local(lid, t, false, id.span)?;
+                self.bind_local(lid, t, id.span)?;
                 self.info.pat_locals.insert(pat, lid);
                 locals.push(lid);
                 Ok(())
@@ -329,7 +329,7 @@ impl<'a> Checker<'a> {
         let r = (|| -> R<TyId> {
             let u32 = self.u32();
             let lid = self.local_of(Origin::Par(e))?;
-            self.bind_local(lid, u32, false, var.span)?;
+            self.bind_local(lid, u32, var.span)?;
             self.fcx().pars.insert(e, (lid, lo, hi));
             self.fcx().par_depth += 1;
             let r = self.check_expr(body, exp_elem);

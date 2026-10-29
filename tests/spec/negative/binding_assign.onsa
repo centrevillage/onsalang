@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.2", "§5.4"]
+
+// R-85, R-191 (§5.1): "`let` の束縛と借用の引数は変更できない（代入すると、また `inout` で渡すと
+// E0701）". Every binding that §5.4 makes a borrowed binding or a `let` stays read-only whatever the
+// initializer is (a static value, a `const`, a part of a borrowed argument): the state of a binding is
+// one of owned and immutable, owned and mutable, borrowed, and `inout` (R-85), and only `var` and the
+// parameters in the `move` and `inout` modes are writable (the `move` side is in
+// values/move_assign.onsa). E0701 declares the fix `var` (§5.1: "E0701 は宣言を `var` にする"; the
+// note is not checked by a marker). One error per item (P-01).
+
+const K: F32 = 0.5
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn bump(inout k: U32, d: U32) {}
+
+pub fn let_of_a_literal() {
+  let k = 1
+  k = 2                         //~ E0701
+}
+
+pub fn let_of_a_string_literal() {
+  let s = "gain"
+  s = "other"                   //~ E0701
+}
+
+pub fn let_of_a_const() {
+  let y = K
+  y = 1.0                       //~ E0701
+}
+
+pub fn let_passed_as_inout() {
+  let k: U32 = 1
+  bump(inout k, 1)              //~ E0701
+}
+
+pub fn let_from_a_borrowed_argument(x: F32) -> F32 {
+  let c = x
+  c = 2.0                       //~ E0701
+  c
+}
+
+pub fn let_destructured_from_a_borrowed_argument(p: (F32, U32)) -> F32 {
+  let (a, n) = p
+  a = 1.0                       //~ E0701
+  a + n.round_f32()
+}
+
+pub fn let_field_of_a_let() -> I32 {
+  let p = Pt { x: 1, y: 2 }
+  p.x = 5                       //~ E0701
+  p.x
+}
+
+pub fn borrowed_argument(a: U32) -> U32 {
+  a = 1                         //~ E0701
+  a
+}
+
+pub fn field_of_a_borrowed_argument(p: Pt) -> I32 {
+  p.x = 5                       //~ E0701
+  p.x
+}
+
+pub fn element_of_a_borrowed_argument(v: [I32; 2]) -> I32 {
+  v[0] = 5                      //~ E0701
+  v[0]
+}
+
+pub fn for_binding(xs: [Pt; 2]) -> I32 {
+  var n: I32 = 0
+  for s in xs {
+    s.x = 1                     //~ E0701
+    n = n + s.x
+  }
+  n
+}
+
+// Contrast: the `var` is writable.
+pub fn var_is_writable() -> U32 {
+  var k = 1
+  k = 2
+  k
+}

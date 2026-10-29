@@ -5,6 +5,7 @@
 //! diagnostics. Bodies are checked by `stages::check_bodies` (T2-5 ..
 //! T2-12), in the order of the stages (§18.1).
 
+pub mod binding;
 pub mod body;
 #[cfg(test)]
 mod body_tests;

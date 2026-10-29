@@ -1,0 +1,245 @@
+//! The states of the bindings (spec §5.4, R-85, S-80): one stage after the
+//! types and before the modes settles, once for each body, whether each
+//! binding is owned, owned and mutable, a borrow or `inout`, from the closed
+//! table of §5.4 ([`row`]) and the rows of the heads whose bindings take the
+//! row of their value (`let`, `for`, the arms of a `match`). The later stages
+//! read the record ([`crate::body::LocalInfo::state`], [`BodyInfo::heads`],
+//! [`BodyInfo::lits`]) and decide none of it again (D-15). It reports no
+//! diagnostic, so it is not a stage of §18.1.
+//!
+//! The walk goes in source order: a head is settled after its value is
+//! walked, so the state of the binding at the root of a place it reads is
+//! settled before (§5.1: a `let` sees only the bindings before it). It goes
+//! into anonymous functions and `par` bodies, whose bindings are of the same
+//! body. A flow body is not settled (the modes, `rt` and effects stages do
+//! not read it), nor is a body they skip (one that is not complete or whose
+//! unit failed before the modes, §18.1): its heads' bindings stay owned.
+
+use std::collections::HashMap;
+
+use onsa_diag::Stage;
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
+
+use crate::body::{BodyInfo, LocalId};
+use crate::names::body::{BindingKind, BodyNames, Origin, PathRes};
+use crate::{Analysis, DefId, Package, module_of_def};
+
+mod literal;
+#[cfg(test)]
+mod tests;
+
+/// The state of a binding (§5.4, R-85 (1)): one of four, so that a borrow
+/// that can be written cannot be made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bind {
+    Owned,
+    /// Owned and written to: a `var`, a `move` parameter and `move self`
+    /// (§5.1: only a `let` and a borrowed parameter are read-only, R-191).
+    OwnedMut,
+    /// A borrow, a root or derived (a derived borrow is a root too, §5.4).
+    /// `no_drop`: a binding that needs no drop (from a static value or a
+    /// literal that needs no drop, or derived from one, S-613 L4).
+    Borrow {
+        no_drop: bool,
+    },
+    Inout,
+}
+
+/// A head whose bindings take the row of its value (§5.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Head {
+    Let(StmtId),
+    For(StmtId),
+    Match { scrutinee: ExprId },
+}
+
+/// The row of a head (§5.4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeadRow {
+    Owned,
+    /// `sources`: the places of the value the bindings derive from (S-604:
+    /// the invalidation of §7 and E0715 apply to each); a static value adds
+    /// none. `no_drop` as of [`Bind::Borrow`].
+    Borrow {
+        sources: Vec<ExprId>,
+        no_drop: bool,
+    },
+}
+
+/// What a literal is (§5.4): a static value (S-610), one that needs no drop
+/// (S-613), or owned with its first element that made it so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LitClass {
+    Static,
+    NoDrop,
+    Owned { first: ExprId },
+}
+
+/// The state of a binding of kind `kind`, from the table of §5.4, with the
+/// row of its head for the kinds that have one (`None`: its head is not
+/// settled, and it is owned). No `_`: a new kind of binding needs a row here.
+pub(crate) fn row(kind: BindingKind, head: Option<&HeadRow>) -> Bind {
+    let of_head = match head {
+        Some(HeadRow::Borrow { no_drop, .. }) => Bind::Borrow { no_drop: *no_drop },
+        Some(HeadRow::Owned) | None => Bind::Owned,
+    };
+    match kind {
+        BindingKind::Param(m) | BindingKind::SelfParam(m) | BindingKind::ClosureParam(m) => match m {
+            Mode::Borrow => Bind::Borrow { no_drop: false },
+            Mode::Inout => Bind::Inout,
+            Mode::Move => Bind::OwnedMut,
+        },
+        BindingKind::FlowInput => Bind::Borrow { no_drop: false },
+        BindingKind::Let | BindingKind::FlowLet | BindingKind::MatchBind | BindingKind::For { moved: false } => of_head,
+        BindingKind::For { moved: true } | BindingKind::ParVar => Bind::Owned,
+        BindingKind::Var => Bind::OwnedMut,
+    }
+}
+
+/// Settle the bindings of every body the modes stage reads.
+pub(crate) fn settle_all(pkg: &Package, a: &mut Analysis) {
+    let ids: Vec<DefId> = a.bodies.keys().copied().collect();
+    for id in ids {
+        if !a.body_checked(id, Stage::Modes) {
+            continue;
+        }
+        let (Some(module), Some(root)) = (module_of_def(pkg, a, id), crate::body::root_of(a, id)) else {
+            continue;
+        };
+        let _scope = onsa_diag::internal::item_scope(a.def(id).span);
+        let Some(mut info) = a.bodies.remove(&id) else { continue };
+        if let Some(names) = a.names.get(&id) {
+            Settle::new(a, &module.parsed.ast, names, &mut info).expr(root);
+        }
+        a.bodies.insert(id, info);
+    }
+}
+
+struct Settle<'a> {
+    a: &'a Analysis,
+    ast: &'a Ast,
+    names: &'a BodyNames,
+    info: &'a mut BodyInfo,
+    /// The bindings of each head, from their origins.
+    bound: HashMap<Head, Vec<LocalId>>,
+}
+
+impl<'a> Settle<'a> {
+    fn new(a: &'a Analysis, ast: &'a Ast, names: &'a BodyNames, info: &'a mut BodyInfo) -> Self {
+        let mut bound: HashMap<Head, Vec<LocalId>> = HashMap::new();
+        for (i, b) in names.bindings.iter().enumerate() {
+            let head = match b.origin {
+                Origin::Let(s) if b.kind == BindingKind::Let => Head::Let(s),
+                Origin::For(s) => Head::For(s),
+                Origin::Arm { scrutinee, .. } => Head::Match { scrutinee },
+                _ => continue,
+            };
+            bound.entry(head).or_default().push(LocalId(i as u32));
+        }
+        Settle { a, ast, names, info, bound }
+    }
+
+    fn expr(&mut self, e: ExprId) {
+        let ast = self.ast;
+        match &ast.expr(e).kind {
+            ExprKind::Block(b) => {
+                for &s in &b.stmts {
+                    self.stmt(s);
+                }
+                if let Some(t) = b.tail {
+                    self.expr(t);
+                }
+            }
+            ExprKind::Match { scrutinee, arms, .. } => {
+                self.expr(*scrutinee);
+                let moved = matches!(ast.expr(ast.without_parens(*scrutinee)).kind, ExprKind::Move(_));
+                let row = self.iterated(*scrutinee, moved);
+                self.settle(Head::Match { scrutinee: *scrutinee }, row);
+                for arm in arms {
+                    if let Some(g) = arm.guard {
+                        self.expr(g);
+                    }
+                    self.expr(arm.body);
+                }
+            }
+            _ => {
+                if let Some(class) = literal::leaf(self.a, ast, self.info, e) {
+                    self.info.lits.insert(e, class);
+                }
+                for x in ast.sub_exprs(e) {
+                    self.expr(x);
+                }
+            }
+        }
+    }
+
+    fn stmt(&mut self, s: StmtId) {
+        let ast = self.ast;
+        match &ast.stmt(s).kind {
+            StmtKind::Let { init, .. } => {
+                self.expr(*init);
+                let e = ast.without_parens(*init);
+                let row = self.borrowed(e, false).unwrap_or(HeadRow::Owned);
+                self.settle(Head::Let(s), row);
+            }
+            StmtKind::For { moved, iter, body, .. } => {
+                self.expr(*iter);
+                let row = self.iterated(*iter, *moved);
+                self.settle(Head::For(s), row);
+                self.expr(*body);
+            }
+            StmtKind::Var { init: x, .. } | StmtKind::Return(Some(x)) | StmtKind::Assert(x) | StmtKind::Expr(x) => {
+                self.expr(*x)
+            }
+            StmtKind::Assign { target, value } => {
+                self.expr(*target);
+                self.expr(*value);
+            }
+            StmtKind::While { cond, body } => {
+                self.expr(*cond);
+                self.expr(*body);
+            }
+            StmtKind::Return(None) | StmtKind::Break | StmtKind::Continue => {}
+        }
+    }
+
+    /// The row of the head of a `for` or a `match` on `e`: owned with `move`
+    /// and for a range (its integers, §5.4); else borrowed (any place, §5.4).
+    // The rule before S-604 and R-251 (W4-16 U1b): a value that is no place
+    // and no static value is borrowed too.
+    fn iterated(&self, e: ExprId, moved: bool) -> HeadRow {
+        let e = self.ast.without_parens(e);
+        if moved || matches!(self.ast.expr(e).kind, ExprKind::Range(_)) {
+            return HeadRow::Owned;
+        }
+        self.borrowed(e, true).unwrap_or(HeadRow::Borrow { sources: Vec::new(), no_drop: false })
+    }
+
+    /// The borrow row of a head on `e` (without parentheses), if it is one
+    /// (§5.4): a place whose root is a borrow (for a `let`, S-41), or any
+    /// place (`any_place`, for a `for` and a `match`); a static value.
+    fn borrowed(&self, e: ExprId, any_place: bool) -> Option<HeadRow> {
+        if let Some(root) = self.ast.place_root_node(e)
+            && let Some(PathRes::Local(b)) = self.names.paths.get(&root)
+        {
+            return match self.info.locals[b.0 as usize].state {
+                Bind::Borrow { no_drop } => Some(HeadRow::Borrow { sources: vec![e], no_drop }),
+                _ if any_place => Some(HeadRow::Borrow { sources: vec![e], no_drop: false }),
+                _ => None,
+            };
+        }
+        match self.info.lits.get(&e) {
+            Some(LitClass::Static | LitClass::NoDrop) => Some(HeadRow::Borrow { sources: Vec::new(), no_drop: true }),
+            _ => None,
+        }
+    }
+
+    /// Give the bindings of `head` the state of `row` and record it.
+    fn settle(&mut self, head: Head, head_row: HeadRow) {
+        for &id in self.bound.get(&head).into_iter().flatten() {
+            let kind = self.names.bindings[id.0 as usize].kind;
+            self.info.locals[id.0 as usize].set_state(row(kind, Some(&head_row)));
+        }
+        self.info.heads.insert(head, head_row);
+    }
+}

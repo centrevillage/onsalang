@@ -3,7 +3,8 @@
 
 // 期待: 通る。`match xs` の腕の束縛 `s` は借用（`xs` は借用の引数、§5.4）で、破棄が無いので
 //   `Alloc` は要らない。
-// 今: 通る（腕の束縛には借用の印が付く。ただし rt と効果の検査は、腕の束縛を種類の一覧で所有とみなす
+// 今: 通る（W4-16 U1a、2026-10-29。腕の束縛は束縛の状態の段が借用にし、rt と効果は互換の欄を読む。
+//   rt と効果が状態を直に読むのは U1b。以下は U1a の前の記述: 腕の束縛には借用の印が付く。ただし rt と効果の検査は、腕の束縛を種類の一覧で所有とみなす
 //   別の定義を持っていて、印が付かない経路では誤る。R-85 の範囲）。
 rt fn match_borrow(xs: Option[Str]) -> U32 {
   match xs {
@@ -13,7 +14,7 @@ rt fn match_borrow(xs: Option[Str]) -> U32 {
 }
 
 // 期待（S-80）: 通る。補間の無い文字列リテラルは静的な値で、借用の起点（`let` は借用束縛）。
-// 今: r85.onsa:19:7: error[E0901]: `s` owns a `Str`, whose destruction needs `Alloc`; an `rt` function can
+// 今: 通る（W4-16 U1a、2026-10-29）。U1a の前: r85.onsa:19:7: error[E0901]: `s` owns a `Str`, whose destruction needs `Alloc`; an `rt` function can
 //   only borrow it or move it on (§10, §12.2)
 rt fn literal_borrow() -> U32 {
   let s = "gain"
