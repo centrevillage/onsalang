@@ -1,0 +1,174 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.4", "§10", "§12.2", "§8.1"]
+
+// S-610, S-613 (§5.4, §10, §12.2, §8.1), run in the interpreter: the static aggregates and the literals
+// that need no destruction (values/binding_static_aggregate.onsa, values/binding_literal_noalloc.onsa,
+// values/binding_literal_names.onsa, values/binding_static_index.onsa) bound by `let`, iterated by `for` and
+// destructured, in an `rt fn` and in a function without `Alloc` in the row, read as they are written: a
+// borrowed row does not consume and does not change the value, "複製も破棄も何もしない", and the value is
+// "使う所で組む" (§5.4), so the arguments that the literal reads are still the same after it. This version does
+// not run the Shared type `Str` (values/binding_static_leaf_run.onsa) and the `match` on a tuple (E0200),
+// so the elements are the numbers and the `Copy` struct that run, and the Shared forms of the cases above
+// are only checked there: the run keeps the part of the lowering that does not depend on `Str`, and it
+// passes in this version too. The arguments `v` and `w` are `F32`.
+
+pub struct Param {
+  id: U32,
+  value: F32,
+}
+
+pub struct W {
+  p: Param,
+  k: U32,
+}
+
+// ------------------------------------------------------------------------- static aggregates
+
+rt fn sum_of_a_static_array_of_tuples() -> U32 {
+  var n: U32 = 0
+  for x in [(1, 2), (3, 4)] {
+    n = n + x.0 + x.1
+  }
+  n
+}
+
+rt fn an_element_of_a_static_table(i: U32) -> U32 {
+  let r = [(1, 2), (3, 4)][i]
+  r.0 + r.1
+}
+
+rt fn a_static_struct() -> F32 {
+  let p = Param { id: 3, value: 2.5 }
+  p.id.round_f32() + p.value
+}
+
+rt fn a_static_variant(v: U32) -> U32 {
+  let o = Some(7)
+  match o {
+    Some(k) => k + v,
+    None => 0,
+  }
+}
+
+fn plain_static_array() -> U32 {
+  var n: U32 = 0
+  for x in [(5, 6), (7, 8)] {
+    n = n + x.0 * x.1
+  }
+  n
+}
+
+// ------------------------------------------------------------------ literals with an argument
+
+rt fn a_struct_with_an_argument(v: F32) -> F32 {
+  let p = Param { id: 3, value: v }
+  p.value + p.id.round_f32()
+}
+
+rt fn a_tuple_with_an_operation(v: U32) -> U32 {
+  let p = (1 + 2, v)
+  p.0 + p.1
+}
+
+rt fn destructured(v: U32) -> U32 {
+  let (a, b) = (7, v)
+  a + b
+}
+
+rt fn array_with_arguments(v: F32, w: F32) -> F32 {
+  var total: F32 = 0.0
+  for x in [(1.0, v), (2.0, w)] {
+    total = total + x.1 * x.0
+  }
+  total
+}
+
+rt fn if_with_literal_tails(c: Bool, v: F32, w: F32) -> F32 {
+  let p = if c { (1.0, v) } else { (2.0, w) }
+  let q = p
+  q.1 + q.0
+}
+
+fn plain_struct_with_an_argument(v: F32) -> F32 {
+  let p = Param { id: 4, value: v }
+  p.value * p.id.round_f32()
+}
+
+// ------------------------------------------------------------------------ names as elements
+
+rt fn names_in_a_tuple(v: F32) -> F32 {
+  let nm: U32 = 3
+  let t       = (nm, v)
+  t.1 + t.0.round_f32()
+}
+
+rt fn literal_binding_in_a_struct(v: F32) -> F32 {
+  let p = Param { id: 3, value: v }
+  let o = W { p: p, k: 2 }
+  o.p.value + o.k.round_f32() + o.p.id.round_f32()
+}
+
+rt fn derived_binding_in_a_tuple(v: F32) -> F32 {
+  let p = Param { id: 3, value: v }
+  let q = p
+  let t = (q, 1.0)
+  t.0.value + t.1
+}
+
+rt fn path_of_a_literal_binding(v: F32) -> F32 {
+  let p = Param { id: 3, value: v }
+  let t = (p.value, 1.0)
+  t.0 + t.1
+}
+
+rt fn element_of_a_for_binding(v: F32) -> F32 {
+  var total: F32 = 0.0
+  for x in [(2, v)] {
+    let t = (x, 1.0)
+    total = total + t.0.1 + t.1
+  }
+  total
+}
+
+// ---------------------------------------------------------------------- a generic function
+
+rt fn generic_with_a_copy_bound[T: Copy](x: T) -> T {
+  let p = (1, x)
+  p.1
+}
+
+test "static aggregates read as they are written" {
+  assert sum_of_a_static_array_of_tuples() == 10
+  assert an_element_of_a_static_table(0) == 3
+  assert an_element_of_a_static_table(1) == 7
+  assert a_static_struct() == 5.5
+  assert a_static_variant(1) == 8
+  assert plain_static_array() == 86
+}
+
+test "literals with an argument read the argument as it is" {
+  assert a_struct_with_an_argument(1.5) == 4.5
+  assert a_tuple_with_an_operation(4) == 7
+  assert destructured(1) == 8
+  assert array_with_arguments(1.0, 2.0) == 5.0
+  assert if_with_literal_tails(true, 1.5, 9.0) == 2.5
+  assert if_with_literal_tails(false, 1.5, 9.0) == 11.0
+  assert plain_struct_with_an_argument(1.5) == 6.0
+}
+
+test "names as elements read the value of the binding" {
+  assert names_in_a_tuple(1.0) == 4.0
+  assert literal_binding_in_a_struct(1.0) == 6.0
+  assert derived_binding_in_a_tuple(2.0) == 3.0
+  assert path_of_a_literal_binding(2.0) == 3.0
+  assert element_of_a_for_binding(2.0) == 3.0
+}
+
+test "a generic function with a Copy bound reads the argument" {
+  let f: F32 = 2.5
+  let n: U32 = 7
+  assert generic_with_a_copy_bound(f) == f
+  assert generic_with_a_copy_bound(n) == n
+}

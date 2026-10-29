@@ -183,7 +183,9 @@ pub struct BodyInfo {
     /// folds exactly these (R-03); every other `-` negates a value.
     pub neg_literals: HashSet<ExprId>,
     /// The rows of the heads of the bindings (§5.4), and the marks of the
-    /// static values, settled with the states of the locals ([`crate::binding`]).
+    /// static values, the literals that need no drop and the owned aggregate
+    /// literals with their first element, settled with the states of the
+    /// locals ([`crate::binding`]).
     pub heads: HashMap<Head, HeadRow>,
     pub lits: HashMap<ExprId, LitClass>,
     /// `false` when checking stopped at the first error (tables are partial).

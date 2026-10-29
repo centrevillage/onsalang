@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§8.1", "§12.2"]
+
+// S-613 (§5.4, §8.1, §12.2): the literals of values/binding_literal_noalloc.onsa in functions that have no
+// `Alloc` in the row. A literal whose elements are static values and `Copy` expressions is a borrowed row
+// ("`let p = ("gain", v)`（破棄の要らないリテラル。`v` は Copy の型）": 借用, 破棄は起きない), its
+// duplication and destruction need nothing (§12.2: "静的な値と破棄の要らないリテラルの複製と破棄（一時の値を
+// 含む）: 要らない"), so a function without `Alloc` in its row binds it with `let`, iterates it with `for` and
+// matches on it: no E0601 (§8.1). Nothing in this file has `uses {Alloc}`, and no diagnostic is expected
+// anywhere in it. The owned boundary is in negative/binding_literal_owned_plain.onsa.
+//
+// These are E0601 in this version (the work W4-16 U1b made the initializer that is not a place owned);
+// the work W4-16 U2 puts the literal of this kind in the borrowed rows.
+
+use std.array
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub fn use_p(p: Param) -> U32 {
+  p.name.len()
+}
+
+pub fn for_over_an_array(a: F32) -> U32 {
+  var k: U32 = 0
+  for x in [("a", a), ("b", a)] {
+    k = k + x.0.len()
+  }
+  k
+}
+
+pub fn let_a_struct(v: F32) -> U32 {
+  let p = Param { name: "gain", value: v }
+  use_p(p)
+}
+
+pub fn let_a_tuple(v: F32) -> U32 {
+  let p = ("gain", v)
+  p.0.len()
+}
+
+pub fn let_an_operation() -> U32 {
+  let p = ("a", 1 + 2)
+  p.0.len() + p.1
+}
+
+pub fn let_destructured(v: F32) -> U32 {
+  let (nm, x) = ("gain", v)
+  if x > 0.0 {
+    nm.len()
+  } else {
+    0
+  }
+}
+
+pub fn match_on_a_tuple(v: F32) -> U32 {
+  match ("gain", v) {
+    (s, _) => s.len(),
+  }
+}
+
+pub fn if_with_literal_tails(c: Bool, v: F32, w: F32) -> U32 {
+  let p = if c { ("a", v) } else { ("b", w) }
+  let q = p
+  q.0.len()
+}
+
+pub fn in_a_branch_and_a_loop(c: Bool, n: U32, v: F32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    if c {
+      let p = ("on", v)
+      total = total + p.0.len() + i
+    } else {
+      total = total + i
+    }
+  }
+  total
+}
+
+// The body of an anonymous function gets its own binding states (the body is a body like a function's).
+pub fn in_the_body_of_an_anonymous_function(v: F32) -> U32 {
+  let ys: [U32; 3] = array.from_fn(fn(i) {
+    let p = ("gain", v)
+    p.0.len() + i
+  })
+  ys[1]
+}

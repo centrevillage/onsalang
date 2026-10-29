@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§8.1", "§12.2"]
+
+// S-610, S-613, S-615 (§5.4, §10, §8.1, §12.2): the path of a static value is a borrowed origin. "`let y = x[i]`、
+// `let y = x.f`" are rows of the table ("借用", "破棄は起きない") whose `x` is a borrowed origin, and the
+// static value and the literal that needs no destruction are borrowed origins ("借用の起点は…静的な値と破棄の
+// 要らないリテラル（下）である"). "`for` と `match` の見出しも同じ規則で決め、見出しの借用の行は場所か、静的な
+// 値か、破棄の要らないリテラルか、それらの経路（`match ["a", "bc"][i]`、`for c in TABLE.cols`）で". So an `rt fn`
+// and a function without `Alloc` in the row bind, iterate and match on an element of a literal table
+// without a destruction (§12.2: "静的な値と破棄の要らないリテラルの複製と破棄（一時の値を含む）: 要らない"). The
+// table of `row` is a menu of `Item`s read through `row.label` (the overwrite of an owned field with `row` is
+// another form and not here). Every binding is read (an unread one is an E0309). No diagnostic is expected
+// anywhere in this file.
+//
+// These are E0901 (E0601 in a function without `Alloc`) at the binding in this version; the work W4-16
+// U2 closes them. The `const` table (`NAMES[i]`) is not here: a `const` of a type with a Shared part is an
+// E0200 in this version (§6.6).
+
+pub struct Item {
+  label: Str,
+  id: U32,
+}
+
+pub rt fn draw(label: Str) -> U32 {
+  label.len()
+}
+
+// ------------------------------------------------------------------ an element of a static table
+
+pub rt fn let_an_element(i: U32) -> U32 {
+  let y = ["a", "bc"][i]
+  y.len()
+}
+
+pub rt fn match_on_an_element(i: U32) -> U32 {
+  match ["a", "bc"][i] {
+    s => s.len(),
+  }
+}
+
+pub rt fn for_over_a_row(i: U32) -> U32 {
+  var n: U32 = 0
+  for s in [["a", "bc"], ["d", "ef"]][i] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn read_a_row_of_a_table(i: U32) -> U32 {
+  let row = [Item { label: "warm", id: 0 }, Item { label: "bright", id: 1 }][i]
+  draw(row.label)
+}
+
+pub rt fn read_a_row_and_its_id(i: U32) -> U32 {
+  let row = [Item { label: "warm", id: 0 }, Item { label: "bright", id: 1 }][i]
+  draw(row.label) + row.id
+}
+
+pub rt fn let_an_element_of_tuples(i: U32) -> U32 {
+  let r = [("a", 1), ("bc", 2)][i]
+  r.0.len() + r.1
+}
+
+pub rt fn let_a_field_of_a_literal() -> U32 {
+  let l = (Item { label: "warm", id: 0 }).label
+  l.len()
+}
+
+// ------------------------------------------------- an element of a literal that needs no destruction
+
+pub rt fn let_an_element_of_a_literal(i: U32, v: F32, w: F32) -> U32 {
+  let r = [("a", v), ("bc", w)][i]
+  r.0.len()
+}
+
+pub rt fn match_on_an_element_of_a_literal(i: U32, v: F32, w: F32) -> U32 {
+  match [("a", v), ("bc", w)][i] {
+    (s, _) => s.len(),
+  }
+}
+
+pub rt fn let_an_element_of_a_literal_binding(i: U32, v: F32, w: F32) -> U32 {
+  let t = [("a", v), ("bc", w)]
+  let r = t[i]
+  r.0.len()
+}
+
+pub rt fn let_an_element_of_a_static_binding(i: U32) -> U32 {
+  let t = ["a", "bc"]
+  let y = t[i]
+  draw(y)
+}
+
+// ---------------------------------------------------------- nested positions
+
+pub rt fn in_a_branch_and_a_loop(c: Bool, n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    if c {
+      let y = ["a", "bc"][i]
+      total = total + y.len()
+    }
+  }
+  total
+}
+
+pub rt fn in_an_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(i) => {
+      let row = [Item { label: "warm", id: 0 }, Item { label: "bright", id: 1 }][i]
+      draw(row.label)
+    },
+    None => 0,
+  }
+}
+
+// ---------------------------------------------------------- without Alloc in the row
+
+pub fn plain_draw(label: Str) -> U32 {
+  label.len()
+}
+
+pub fn plain_let_an_element(i: U32) -> U32 {
+  let y = ["a", "bc"][i]
+  y.len()
+}
+
+pub fn plain_read_a_row_of_a_table(i: U32) -> U32 {
+  let row = [Item { label: "warm", id: 0 }, Item { label: "bright", id: 1 }][i]
+  plain_draw(row.label)
+}
+
+pub fn plain_match_on_an_element(i: U32) -> U32 {
+  match ["a", "bc"][i] {
+    s => s.len(),
+  }
+}

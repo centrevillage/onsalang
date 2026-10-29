@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.6", "§8.1", "§12.2"]
+
+// S-780 (§5.4, §4.6, §8.1, §12.2): a literal or a variant whose own type is not `Dup` is an owned row
+// (`let o: Option[Buf[F32]] = None`, `let e = E.A` for an enum that has a variant with a `Buf`), so it
+// is destroyed at the end of its scope, and the destruction of an owned `Buf` needs `Alloc` (§12.2): in
+// a function without `Alloc` in its row it is an E0601 (§8.1; "`Alloc` の無い関数で…`let` に置いて破棄する形は
+// …E0601 のまま", S-780). The error is at the binding of the value, the first use of `Alloc` (§8.1: "診断は最初の
+// 使用の位置に置く"; §8.1 does not say where a destruction is, and the file waits for the work W6-03 with
+// negative/binding_literal_owned_plain.onsa: in this version the E0601 is at the name of the function). The
+// value is read with `match`, whose arm binding is a borrowed origin. One error per function (P-01).
+//
+// The contrast: the same forms with `Alloc` in the row are in negative/binding_static_affine_type_rt.onsa.
+
+pub enum E {
+  A,
+  B(Buf[F32]),
+}
+
+pub fn a_none_of_a_buffer() -> U32 {
+  let o: Option[Buf[F32]] = None //~ E0601
+  match o {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub fn a_unit_variant_of_an_enum_with_a_buffer() -> U32 {
+  let e = E.A //~ E0601
+  match e {
+    E.A => 0,
+    E.B(b) => b.len(),
+  }
+}
+
+pub fn a_tuple_with_a_none() -> U32 {
+  let t: (Option[Buf[F32]], U32) = (None, 1) //~ E0601
+  match t.0 {
+    Some(b) => b.len() + t.1,
+    None => t.1,
+  }
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let e = E.A //~ E0601
+    match e {
+      E.A => 0,
+      E.B(b) => b.len(),
+    }
+  } else {
+    0
+  }
+}

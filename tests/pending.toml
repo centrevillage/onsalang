@@ -1955,6 +1955,27 @@ note = "E0601 を最初の使用の行に出す（`fixes/e0601_alloc_row.onsa` �
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/negative/binding_literal_owned_plain.onsa"
+reasons = ["R-87", "S-82"]
+until = "W6-03"
+note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_literal_generic_owned_plain.onsa"
+reasons = ["R-87", "S-82"]
+until = "W6-03"
+note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_static_affine_type_plain.onsa"
+reasons = ["R-87", "S-82"]
+until = "W6-03"
+note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/negative/binding_borrow_move.onsa"
 reasons = ["S-609"]
 until = "W4-09"

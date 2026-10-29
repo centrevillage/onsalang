@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-610 (§5.4, §10, §12.2): the owned side of values/binding_static_aggregate.onsa. "演算子・呼び出し・ローカルの
+// 名前を含む式は静的な値でない", and "これらのどれでもない要素を持つリテラルは所有の行である（`["a", s]`・`("a",
+// s)`、`s` は借用の `Str` の引数）". A literal with one such element is owned ("`let q = ("gain", s)`…: 所有",
+// 破棄は起きる), an owned value of a Shared type is destroyed, and the destruction needs `Alloc` (§12.2), which
+// an `rt fn` cannot do: an E0901 at the binding (the code of a drop in an `rt fn` in this version, as in
+// negative/binding_tail_owned_rt.onsa). `s` is a borrowed `Str` argument: a `Str` is Shared and not `Copy`,
+// so it is not an element that needs no destruction either (§5.4). The `for` and the `match` are on one line
+// with their binding, so the line does not depend on where in the heading the error is put. One error per
+// item (P-01).
+
+pub struct Item {
+  label: Str,
+  id: U32,
+}
+
+pub rt fn array_with_an_argument(s: Str) -> U32 {
+  let t = ["a", s] //~ E0901
+  t[0].len()
+}
+
+pub rt fn repeated_argument(s: Str) -> U32 {
+  let t = [s; 2] //~ E0901
+  t[1].len()
+}
+
+pub rt fn tuple_with_an_argument(s: Str) -> U32 {
+  let t = ("a", s) //~ E0901
+  t.1.len()
+}
+
+pub rt fn struct_with_an_argument(s: Str) -> U32 {
+  let p = Item { label: s, id: 0 } //~ E0901
+  p.label.len()
+}
+
+pub rt fn variant_with_an_argument(s: Str) -> U32 {
+  let o = Some(s) //~ E0901
+  match o {
+    Some(x) => x.len(),
+    None => 0,
+  }
+}
+
+pub rt fn nested_element_with_an_argument(s: Str) -> U32 {
+  let t = [("a", 1), (s, 2)] //~ E0901
+  t[0].0.len()
+}
+
+pub rt fn an_if_with_one_owned_tail(c: Bool, s: Str) -> U32 {
+  let t = if c { ["a"] } else { [s] } //~ E0901
+  t[0].len()
+}
+
+pub rt fn for_over_an_array_with_an_argument(s: Str) -> U32 {
+  var n: U32 = 0
+  for x in ["a", s] { n = n + x.len() } //~ E0901
+  n
+}
+
+pub rt fn in_a_loop(s: Str, k: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< k {
+    let t = ("a", s) //~ E0901
+    total = total + t.1.len() + i
+  }
+  total
+}

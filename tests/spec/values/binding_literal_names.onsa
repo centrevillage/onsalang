@@ -1,0 +1,154 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§8.1", "§12.2"]
+
+// S-613 (L4), S-610 (§5.4, §10, §8.1, §12.2): the elements of a literal that "破棄の要らない束縛の名前とその
+// 経路" are those of a literal that needs no destruction. "破棄の要らない束縛は、静的な値か破棄の要らない
+// リテラルで初期化した借用束縛と、そこから派生した借用束縛（`let q = p`、分解、`for`、`match` の腕）である
+// （`let nm = "gain"` の `nm`、`let p = Param { name: "gain", value: v }` の `p`）。その経路はフィールドと添字の
+// 経路（`p.name`、`p.0`、`t[i]`）である". Its examples are `(nm, v)` and `W { p: p, k: 1 }`. The value is made
+// of immortal static objects and `Copy` values, so a name as an element is the same as the literal written
+// in its place, and nothing is destroyed: the `let` that binds such a literal is a borrowed row in an
+// `rt fn` and in a function without `Alloc` in its row. Every binding is read (an unread one is an E0309).
+// No diagnostic is expected anywhere in this file. The name that is not such a binding (a borrowed `Str`
+// argument, a `var`) makes the literal owned: negative/binding_literal_names_owned.onsa.
+//
+// These are E0901 (E0601 in a function without `Alloc`) at the binding in this version, as the literal
+// itself is (values/binding_literal_noalloc.onsa); the work W4-16 U2 closes them.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct W {
+  p: Param,
+  k: U32,
+}
+
+pub rt fn use_p(p: Param) -> U32 {
+  p.name.len()
+}
+
+// ------------------------------------------------------------------- the names as elements
+
+pub rt fn a_static_name_in_a_struct(v: F32) -> U32 {
+  let nm = "gain"
+  let p  = Param { name: nm, value: v }
+  use_p(p)
+}
+
+pub rt fn a_static_name_in_a_tuple() -> U32 {
+  let nm = "gain"
+  let t  = (nm, 1)
+  t.0.len() + t.1
+}
+
+pub rt fn a_literal_binding_in_a_struct(v: F32) -> U32 {
+  let p = Param { name: "gain", value: v }
+  let o = W { p: p, k: 1 }
+  o.p.name.len() + o.k
+}
+
+pub rt fn a_derived_binding_in_a_tuple(v: F32) -> U32 {
+  let p = Param { name: "gain", value: v }
+  let q = p
+  let t = (q, 1)
+  t.0.name.len() + t.1
+}
+
+pub rt fn a_path_in_a_tuple(v: F32) -> U32 {
+  let p = Param { name: "gain", value: v }
+  let t = (p.name, 1)
+  t.0.len() + t.1
+}
+
+pub rt fn a_path_of_a_tuple_binding(v: F32) -> U32 {
+  let p = ("gain", v)
+  let t = (p.0, p.1)
+  t.0.len()
+}
+
+pub rt fn an_index_path(i: U32) -> U32 {
+  let names = ["a", "bc"]
+  let t     = (names[i], 1)
+  t.0.len() + t.1
+}
+
+pub rt fn a_for_binding_in_a_tuple(v: F32) -> U32 {
+  var n: U32 = 0
+  for x in [("a", v)] {
+    let t = (x, 1)
+    n = n + t.0.0.len() + t.1
+  }
+  n
+}
+
+pub rt fn a_match_arm_binding_in_a_tuple(v: F32) -> U32 {
+  match ("gain", v) {
+    (s, k) => {
+      let t = (s, k)
+      t.0.len()
+    },
+  }
+}
+
+pub rt fn a_destructured_binding_in_a_tuple(v: F32) -> U32 {
+  let (nm, x) = ("gain", v)
+  let t       = (nm, x)
+  t.0.len()
+}
+
+pub rt fn an_if_of_two_literal_bindings(c: Bool, v: F32, w: F32) -> U32 {
+  let a = ("a", v)
+  let b = ("b", w)
+  let p = if c { a } else { b }
+  let t = (p, 1)
+  t.0.0.len() + t.1
+}
+
+pub rt fn the_name_in_a_heading(v: F32) -> U32 {
+  let nm     = "gain"
+  var n: U32 = 0
+  for x in [(nm, v), ("b", v)] {
+    n = n + x.0.len()
+  }
+  n
+}
+
+pub rt fn the_name_in_a_match(v: F32) -> U32 {
+  let nm = "gain"
+  match (nm, v) {
+    (s, _) => s.len(),
+  }
+}
+
+pub rt fn in_a_branch_and_a_loop(c: Bool, n: U32, v: F32) -> U32 {
+  let nm         = "gain"
+  var total: U32 = 0
+  for i in 0 ..< n {
+    if c {
+      let p = Param { name: nm, value: v }
+      total = total + use_p(p) + i
+    }
+  }
+  total
+}
+
+// ---------------------------------------------------------- without Alloc in the row
+
+pub fn use_p_plain(p: Param) -> U32 {
+  p.name.len()
+}
+
+pub fn plain_a_static_name_in_a_struct(v: F32) -> U32 {
+  let nm = "gain"
+  let p  = Param { name: nm, value: v }
+  use_p_plain(p)
+}
+
+pub fn plain_a_literal_binding_in_a_struct(v: F32) -> U32 {
+  let p = Param { name: "gain", value: v }
+  let o = W { p: p, k: 1 }
+  o.p.name.len() + o.k
+}

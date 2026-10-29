@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.5", "§4.6", "§10", "§8.1", "§12.2"]
+
+// S-613 (§5.4, §4.5, §4.6, §10, §12.2): the owned side of values/binding_literal_generic.onsa. "要素が Copy かは、
+// 本体の型の推論の後の型（既定を当てた後）で決める。`T: Copy` の値は Copy で、境界の無い `T` と `T: ?Dup` の値は
+// Copy でない". A name of the unbounded type `T` (it is `Dup`, §4.5, so it may be a `Shared` value) is not a
+// `Copy` expression, a static value or a name of a binding that needs no destruction, so the literal that has it
+// as an element is owned ("これらのどれでもない要素を持つリテラルは所有の行である"), destroyed, and the destruction
+// of a value that may be Shared needs `Alloc` (§12.2): an E0901 at the binding in an `rt fn` (the code of a
+// drop in an `rt fn` in this version, as in negative/binding_tail_owned_rt.onsa; the text of the message
+// names the type as `<0>` today, which the case does not depend on) and an E0601 in a function without `Alloc`
+// in the row (§8.1). The `for` and the `match` are on one line with their binding. One error per item (P-01).
+//
+// The E0601 of the plain functions is marked at the binding, the first use of `Alloc` (§8.1); it waits for the
+// work W6-03 with negative/binding_literal_owned_plain.onsa, so the rt functions are in this file and the plain
+// functions are in negative/binding_literal_generic_owned_plain.onsa.
+
+pub struct Pair[T] {
+  name: Str,
+  value: T,
+}
+
+pub rt fn tuple_of_an_unbounded_t[T](x: T) -> U32 {
+  let p = ("a", x) //~ E0901
+  p.0.len()
+}
+
+pub rt fn struct_of_an_unbounded_t[T](x: T) -> U32 {
+  let p = Pair { name: "a", value: x } //~ E0901
+  p.name.len()
+}
+
+pub rt fn for_over_an_unbounded_t[T](x: T, y: T) -> U32 {
+  var n: U32 = 0
+  for p in [("a", x), ("bc", y)] { n = n + p.0.len() } //~ E0901
+  n
+}
+
+pub rt fn match_on_an_unbounded_t[T](x: T) -> U32 {
+  match ("a", x) { (s, _) => s.len() } //~ E0901
+}

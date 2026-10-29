@@ -1,0 +1,244 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-613 (§5.4, §10, §12.2): "破棄の要らないリテラルは、静的な値でない集成体のリテラル（配列（`[e; N]` を含む）・
+// タプル・struct のリテラル・ペイロード付きの列挙子・括弧。入れ子を含む）で、各要素が静的な値か、第一級の Copy の
+// 型の式か、破棄の要らないリテラルか、破棄の要らない束縛の名前とその経路であるもの". Its examples are
+// `("a", 1 + 2)`, `("a", -1)`, `("a", v)` and `Param { name: "gain", value: sq(v) }` (`v` is an `F32`), and
+// "`let p = ("gain", v)`（破棄の要らないリテラル。`v` は Copy の型）" is a borrowed row of the table. Like a
+// static value it "複製も破棄も何もしない", so "rt の関数でも…静的な値と Copy の値だけでできたリテラル
+// （…`Param { name: "gain", value: v }`）を `let` で受けられる", iterate it with `for` and match on it
+// ("`for s in xs`（`xs` は…破棄の要らないリテラル…）", "`match x` の腕の束縛（`x` は…破棄の要らないリテラル…）"),
+// without `Alloc` (§12.2: "静的な値と破棄の要らないリテラルの複製と破棄（一時の値を含む）: 要らない"). A binding of
+// an `if`, a `match` or a block whose tails are all such literals is a borrowed binding, and so is what is
+// derived from it ("そこから派生した借用束縛（`let q = p`、分解、`for`、`match` の腕）"). The arguments `v`,
+// `w` and `k` are `F32`. Every binding is read (an unread one is an E0309). No diagnostic is expected
+// anywhere in this file. The owned boundary (`("gain", s)` with a borrowed `Str`, `var`) is in
+// negative/binding_literal_owned.onsa, the names as elements are in values/binding_literal_names.onsa.
+//
+// These are E0901 at the binding in this version (the work W4-16 U1b made the initializer that is not a
+// place owned; the work W4-16 U2 puts the literal of this kind in the borrowed rows).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub enum Cue {
+  Off,
+  Level(F32),
+  Named(Str, F32),
+}
+
+pub rt fn use_p(p: Param) -> U32 {
+  p.name.len()
+}
+
+pub rt fn sq(v: F32) -> F32 {
+  v * v
+}
+
+// ------------------------------------------------------------------------------------ let
+
+pub rt fn let_a_struct(v: F32) -> U32 {
+  let p = Param { name: "gain", value: v }
+  use_p(p)
+}
+
+pub rt fn let_a_negative_literal() -> U32 {
+  let p = ("gain", -1)
+  p.0.len()
+}
+
+pub rt fn let_an_operation() -> U32 {
+  let p = ("a", 1 + 2)
+  p.0.len() + p.1
+}
+
+pub rt fn let_a_call_of_a_copy_result(v: F32) -> U32 {
+  let p = Param { name: "gain", value: sq(v) }
+  use_p(p)
+}
+
+pub rt fn let_a_tuple(v: F32) -> U32 {
+  let p = ("gain", v)
+  p.0.len()
+}
+
+pub rt fn let_a_repeated_array(v: F32) -> U32 {
+  let t = [("a", v); 2]
+  t[1].0.len()
+}
+
+pub rt fn let_a_variant_with_a_payload(v: F32) -> U32 {
+  let o = Some(("a", v))
+  match o {
+    Some(p) => p.0.len(),
+    None => 0,
+  }
+}
+
+pub rt fn let_a_user_variant_with_a_payload(v: F32) -> U32 {
+  let c = Cue.Named("x", v)
+  match c {
+    Cue.Off => 0,
+    Cue.Level(_) => 1,
+    Cue.Named(s, _) => s.len(),
+  }
+}
+
+pub rt fn let_nested(v: F32, w: F32) -> U32 {
+  let t = (("a", v), [("bc", w)])
+  t.0.0.len() + t.1[0].0.len()
+}
+
+pub rt fn let_in_parentheses(v: F32) -> U32 {
+  let p = (("gain", v))
+  p.0.len()
+}
+
+pub rt fn let_destructured(v: F32) -> U32 {
+  let (nm, x) = ("gain", v)
+  if x > 0.0 {
+    nm.len()
+  } else {
+    0
+  }
+}
+
+// ---------------------------------------------------------------------- for and match
+
+pub rt fn for_over_an_array(v: F32, w: F32) -> U32 {
+  var n: U32 = 0
+  for x in [("a", v), ("b", w)] {
+    n = n + x.0.len()
+  }
+  n
+}
+
+pub rt fn for_over_an_array_of_structs(v: F32) -> U32 {
+  var n: U32 = 0
+  for p in [Param { name: "a", value: v }, Param { name: "bc", value: sq(v) }] {
+    n = n + use_p(p)
+  }
+  n
+}
+
+pub rt fn for_over_a_let_of_a_literal(v: F32, w: F32) -> U32 {
+  let t      = [("a", v), ("b", w)]
+  var n: U32 = 0
+  for x in t {
+    n = n + x.0.len()
+  }
+  n
+}
+
+pub rt fn match_on_a_tuple(v: F32) -> U32 {
+  match ("gain", v) {
+    (s, _) => s.len(),
+  }
+}
+
+pub rt fn match_on_a_variant_with_a_payload(v: F32) -> U32 {
+  match Some(("a", v)) {
+    Some(p) => p.0.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_a_user_variant(v: F32) -> U32 {
+  match Cue.Named("xy", v) {
+    Cue.Off => 0,
+    Cue.Level(_) => 1,
+    Cue.Named(s, _) => s.len(),
+  }
+}
+
+pub rt fn match_on_a_struct(v: F32) -> U32 {
+  match (Param { name: "gain", value: v }) {
+    Param { name: s, value: _ } => s.len(),
+  }
+}
+
+// -------------------------------------------------------------- tails and derived bindings
+
+pub rt fn if_with_literal_tails(c: Bool, v: F32, w: F32) -> U32 {
+  let p = if c { ("a", v) } else { ("b", w) }
+  let q = p
+  q.0.len()
+}
+
+pub rt fn match_with_literal_tails(o: Option[F32], w: F32) -> U32 {
+  let p = match o {
+    Some(k) => ("a", k),
+    None => ("bc", w),
+  }
+  p.0.len()
+}
+
+pub rt fn block_with_a_literal_tail(v: F32) -> U32 {
+  let p = { ("gain", v) }
+  p.0.len()
+}
+
+pub rt fn static_and_literal_tails(c: Bool, v: F32) -> U32 {
+  let p = if c { ("a", 1.0) } else { ("b", v) }
+  p.0.len()
+}
+
+pub rt fn a_tail_that_leaves(c: Bool, v: F32) -> U32 {
+  let p = if c { ("a", v) } else { return 0 }
+  p.0.len()
+}
+
+pub rt fn derived_twice(v: F32) -> U32 {
+  let p = ("gain", v)
+  let q = p
+  let r = q
+  r.0.len()
+}
+
+// ------------------------------------------------------------------ nested positions
+
+pub rt fn in_a_branch(c: Bool, v: F32, w: F32) -> U32 {
+  if c {
+    let p = ("on", v)
+    p.0.len()
+  } else {
+    let p = Param { name: "off", value: w }
+    use_p(p)
+  }
+}
+
+pub rt fn in_a_loop(n: U32, v: F32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let p = ("gain", v)
+    total = total + p.0.len() + i
+  }
+  total
+}
+
+pub rt fn in_an_arm(o: Option[F32]) -> U32 {
+  match o {
+    Some(v) => {
+      let p = ("some", v)
+      p.0.len()
+    },
+    None => {
+      let p = ("none", 0)
+      p.0.len()
+    },
+  }
+}
+
+pub rt fn a_loop_in_a_loop(v: F32, w: F32) -> U32 {
+  var n: U32 = 0
+  for a in [("a", v), ("bc", w)] {
+    for b in [("x", w), ("yz", v)] {
+      n = n + a.0.len() + b.0.len()
+    }
+  }
+  n
+}

@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.4", "§10"]
+
+// S-610, S-613 (§5.1, §5.4): "`let` の束縛と借用の引数は変更できない（代入すると、また `inout` で渡すと E0701）",
+// and a binding that §5.4 makes a borrowed binding stays read-only whatever the initializer is: the static
+// value ("`let t = ["a", "bc"]`（静的な値）") and the literal that needs no destruction ("`let p = ("gain", v)`
+// （破棄の要らないリテラル）") are borrowed rows, so the assignment to the binding, or to a field or an element of
+// it, is an E0701 (not an E0415: the place is a place that cannot be changed, §5.1). E0701 "は宣言を `var` に
+// する" (the note says to change `let` to `var`; a note is not checked by a marker). Only `var` is writable;
+// the `var` of such a literal is an owned binding (negative/binding_literal_owned.onsa). One error per item
+// (P-01). The functions are `rt fn`s for the literal forms (the borrowed row has no destruction, so there
+// is no other error) and plain functions for two of them.
+//
+// This version does not report an E0901 beside the E0701 of the same function, so the file passes in this
+// version as well; it keeps the code of the assignment to the bindings that the work W4-16 U2 makes
+// borrowed rows.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn field_of_a_literal(v: F32) -> F32 {
+  let p = Param { name: "gain", value: v }
+  p.value = 2.0 //~ E0701
+  p.value
+}
+
+pub rt fn element_of_a_tuple(v: F32) -> F32 {
+  let p = ("gain", v)
+  p.1 = 2.0 //~ E0701
+  p.1
+}
+
+pub rt fn element_of_a_static_array() -> U32 {
+  let t = ["a", "bc"]
+  t[0] = "x" //~ E0701
+  t[0].len()
+}
+
+pub rt fn whole_binding_of_a_literal(v: F32) -> U32 {
+  let p = ("gain", v)
+  p = ("other", v) //~ E0701
+  p.0.len()
+}
+
+pub rt fn destructured_from_a_literal(v: F32) -> F32 {
+  let (nm, x) = ("gain", v)
+  x = 1.0 //~ E0701
+  x + nm.len().round_f32()
+}
+
+pub rt fn derived_from_a_literal_binding(v: F32) -> F32 {
+  let p = ("gain", v)
+  let q = p
+  q.1 = 3.0 //~ E0701
+  q.1
+}
+
+pub rt fn tail_of_an_if(c: Bool, v: F32, w: F32) -> F32 {
+  let p = if c { ("a", v) } else { ("b", w) }
+  p.1 = 1.0 //~ E0701
+  p.1
+}
+
+pub fn plain_field_of_a_literal(v: F32) -> F32 {
+  let p = Param { name: "gain", value: v }
+  p.value = 2.0 //~ E0701
+  p.value
+}
+
+pub fn plain_element_of_a_static_array() -> U32 {
+  let t = ["a", "bc"]
+  t[1] = "x" //~ E0701
+  t[1].len()
+}

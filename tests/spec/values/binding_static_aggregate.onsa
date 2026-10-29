@@ -1,0 +1,222 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-610, R-85 (§5.4, §10, §12.2): "静的な値は、`const`…、補間の無い文字列リテラル、数・真偽・文字のリテラル、
+// ペイロードの無い列挙子と、全ての要素が静的な値の配列（`[e; N]` を含む）・タプル・struct のリテラル・
+// ペイロード付きの列挙子・括弧（入れ子を含む。`["a", "bc"]`、`("a", 1)`、`Some("a")`）である". A static value
+// is a borrowed row of the table ("`let t = ["a", "bc"]`（静的な値）": 借用, 破棄は起きない), so an `rt fn`
+// can bind it with `let`, iterate it with `for` and match on it ("`for s in xs`（`xs` は…静的な値…)" and
+// "`match x` の腕の束縛（`x` は…静的な値…）": 借用（起点）), and "rt の関数でも、…静的な値と Copy の値だけでできた
+// リテラル（`["a", "bc"]`、…）を `let` で受けられる". No destruction happens, so no `Alloc` is needed (§12.2:
+// "静的な値と破棄の要らないリテラルの複製と破棄（一時の値を含む）: 要らない"), while an owned `Str` cannot be
+// destroyed in an `rt fn` (an E0901, §10; negative/binding_static_aggregate_owned.onsa). A binding derived
+// from a static value is a borrowed origin too ("そこから `let`、`for`、`match` の腕で作った借用束縛も起点").
+// The forms with a `Str` in them are only checked: this version does not run the Shared type `Str`
+// (values/binding_static_leaf_run.onsa). Every binding is read (an unread one is an E0309). No
+// diagnostic is expected anywhere in this file.
+//
+// These forms are E0901 at the binding in this version, since the work W4-16 U1b made the heading and the
+// initializer that is not a place owned; the work W4-16 U2 closes them. The first three functions are the
+// forms that passed before U1b and stopped (`for s in ["a", "bc"]`, `match ["a", "bc"][i]`,
+// `match ("a", 1)`), the back-step that U2 closes.
+
+pub struct Item {
+  label: Str,
+  id: U32,
+}
+
+pub enum Tag {
+  Plain,
+  Named(Str),
+}
+
+pub rt fn name_len(s: Str) -> U32 {
+  s.len()
+}
+
+// ------------------------------------------------------------------ the forms that the work W4-16 U1b left
+
+pub rt fn for_over_an_array() -> U32 {
+  var n: U32 = 0
+  for s in ["a", "bc"] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn match_on_an_indexed_array(i: U32) -> U32 {
+  match ["a", "bc"][i] {
+    s => s.len(),
+  }
+}
+
+pub rt fn match_on_a_tuple() -> U32 {
+  match ("a", 1) {
+    (s, k) => s.len() + k,
+  }
+}
+
+// ------------------------------------------------------------------------------------ let
+
+pub rt fn let_an_array() -> U32 {
+  let t = ["a", "bc"]
+  t[0].len() + t[1].len()
+}
+
+pub rt fn let_a_repeated_array() -> U32 {
+  let t = ["ab"; 3]
+  t[2].len()
+}
+
+pub rt fn let_a_tuple() -> U32 {
+  let t = ("a", 1)
+  t.0.len() + t.1
+}
+
+pub rt fn let_a_struct() -> U32 {
+  let p = Item { label: "warm", id: 0 }
+  p.label.len() + p.id
+}
+
+pub rt fn let_a_variant_with_a_payload() -> U32 {
+  let o = Some("a")
+  match o {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn let_a_user_variant_with_a_payload() -> U32 {
+  let g = Tag.Named("x")
+  match g {
+    Tag.Plain => 0,
+    Tag.Named(s) => s.len(),
+  }
+}
+
+pub rt fn let_nested() -> U32 {
+  let t = [("a", 1), ("bc", 2)]
+  t[1].0.len() + t[0].1
+}
+
+pub rt fn let_nested_struct_in_a_tuple() -> U32 {
+  let t = (Item { label: "warm", id: 0 }, ["x", "yz"])
+  t.0.label.len() + t.1[1].len()
+}
+
+pub rt fn let_in_parentheses() -> U32 {
+  let t = (["a", "bc"])
+  t[1].len()
+}
+
+pub rt fn let_destructured() -> U32 {
+  let (s, k) = ("a", 1)
+  s.len() + k
+}
+
+pub rt fn let_derived() -> U32 {
+  let t = ["a", "bc"]
+  let u = t
+  let s = u[1]
+  name_len(s)
+}
+
+// ---------------------------------------------------------------------- for and match
+
+pub rt fn for_over_a_nested_array() -> U32 {
+  var n: U32 = 0
+  for x in [("a", 1), ("bc", 2)] {
+    n = n + x.0.len() + x.1
+  }
+  n
+}
+
+pub rt fn for_over_a_repeated_array() -> U32 {
+  var n: U32 = 0
+  for s in ["a"; 2] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_a_let_of_a_literal() -> U32 {
+  let t      = ["a", "bc"]
+  var n: U32 = 0
+  for s in t {
+    n = n + name_len(s)
+  }
+  n
+}
+
+pub rt fn match_on_a_variant_with_a_payload() -> U32 {
+  match Some("a") {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_a_user_variant() -> U32 {
+  match Tag.Named("xy") {
+    Tag.Plain => 0,
+    Tag.Named(s) => s.len(),
+  }
+}
+
+pub rt fn match_on_a_struct() -> U32 {
+  match (Item { label: "warm", id: 3 }) {
+    Item { label: s, id: k } => s.len() + k,
+  }
+}
+
+// ------------------------------------------------------------------ nested positions
+
+pub rt fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let t = ["a", "bc"]
+    t[1].len()
+  } else {
+    let t = ("x", 7)
+    t.0.len() + t.1
+  }
+}
+
+pub rt fn in_a_loop(n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let t = ("gain", i)
+    total = total + t.0.len() + t.1
+  }
+  total
+}
+
+pub rt fn in_an_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(v) => {
+      let t = ["on", "off"]
+      t[0].len() + v
+    },
+    None => {
+      var n: U32 = 0
+      for s in ["none", "n"] {
+        n = n + s.len()
+      }
+      n
+    },
+  }
+}
+
+pub rt fn a_loop_in_a_loop() -> U32 {
+  var n: U32 = 0
+  for a in ["a", "bc"] {
+    for b in ["x", "yz"] {
+      n = n + a.len() + b.len()
+    }
+  }
+  n
+}
+
+pub rt fn if_with_static_tails(c: Bool) -> U32 {
+  let t = if c { ["a", "bc"] } else { ["x", "yz"] }
+  t[1].len()
+}

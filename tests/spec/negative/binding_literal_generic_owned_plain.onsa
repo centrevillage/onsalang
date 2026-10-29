@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.5", "§4.6", "§8.1", "§12.2"]
+
+// S-613 (§5.4, §4.5, §4.6, §8.1, §12.2): the functions without `Alloc` in the row of
+// negative/binding_literal_generic_owned.onsa. "境界の無い `T` と `T: ?Dup` の値は Copy でない" (§5.4), so the
+// literal that has a name of the unbounded type `T` as an element is owned, destroyed, and the destruction
+// of a value that may be Shared is a use of `Alloc` (§12.2) that the function must have in its row: an
+// E0601 (§8.1), "診断は最初の使用の位置に置く", the binding of the value. One error per item (P-01).
+// The place of the first use of a destruction is not written in §8.1, so the file waits with
+// negative/binding_literal_owned_plain.onsa for the work W6-03 (R-87 (6)): in this version the E0601 is at
+// the name of the function.
+
+pub struct Pair[T] {
+  name: Str,
+  value: T,
+}
+
+pub fn tuple_of_an_unbounded_t[T](x: T) -> U32 {
+  let p = ("a", x) //~ E0601
+  p.0.len()
+}
+
+pub fn struct_of_an_unbounded_t[T](x: T) -> U32 {
+  let p = Pair { name: "a", value: x } //~ E0601
+  p.name.len()
+}
+
+pub fn for_over_an_unbounded_t[T](x: T, y: T) -> U32 {
+  var n: U32 = 0
+  for p in [("a", x), ("bc", y)] { n = n + p.0.len() } //~ E0601
+  n
+}
+
+pub fn match_on_an_unbounded_t[T](x: T) -> U32 {
+  match ("a", x) { (s, _) => s.len() } //~ E0601
+}

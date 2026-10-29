@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.4", "§4.6", "§5.2", "§12.2"]
+
+// S-780 (§5.4, §4.6, §5.2, §12.2), run in the interpreter: the values of values/binding_static_affine_type.onsa,
+// a literal or a variant whose own type is not `Dup` (`let o: Option[Buf[F32]] = None`, `let e = E.A` of an
+// enum that has a variant with a `Buf`), are owned and moved like any owned Affine value ("Affine の型の値は
+// 所有の Affine と同じく `move` の引数へ渡せる"): the callee receives the value as it was made (the empty
+// variant reads as the empty variant, the variant with a buffer reads the length of its buffer). The
+// functions that own them have `uses {Alloc}` (§12.2: the destruction of an owned `Buf`).
+
+pub enum E {
+  A,
+  B(Buf[F32]),
+}
+
+fn len_of_o(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => b.len(),
+    None => 7,
+  }
+}
+
+fn len_of_e(move e: E) -> U32 uses {Alloc} {
+  match e {
+    E.A => 3,
+    E.B(b) => b.len(),
+  }
+}
+
+fn a_none_moved() -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  len_of_o(move o)
+}
+
+fn a_unit_variant_moved() -> U32 uses {Alloc} {
+  let e = E.A
+  len_of_e(move e)
+}
+
+fn a_buffer_variant_moved(n: U32) -> U32 uses {Alloc} {
+  let e = E.B(Buf.zeroed(n))
+  len_of_e(move e)
+}
+
+fn a_moved_value_in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let e = E.A
+    total = total + len_of_e(move e) + i
+  }
+  total
+}
+
+test "an empty variant of an Affine type is moved as it was made" {
+  assert a_none_moved() == 7
+  assert a_unit_variant_moved() == 3
+}
+
+test "a variant with a buffer is moved with its buffer" {
+  assert a_buffer_variant_moved(5) == 5
+}
+
+test "an owned empty variant is made again in each iteration" {
+  assert a_moved_value_in_a_loop(3) == 12
+}

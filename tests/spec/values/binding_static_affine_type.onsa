@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.6", "§5.2", "§12.2"]
+
+// S-780 (§5.4, §4.6, §5.2): "自分の型が Dup でない（Affine か、`T: ?Dup` のように Affine でありうる、§4.5・§4.6）
+// リテラルと列挙子は、要素によらず静的な値にも破棄の要らないリテラルにもならず、所有の行である（`let o:
+// Option[Buf[F32]] = None`、`Buf` のペイロードを持つ列挙子のある列挙の `let e = E.A`、…）". The binding is
+// owned, so it is moved like any owned Affine value: "Affine の型の値は所有の Affine と同じく `move` の引数へ
+// 渡せる" (a borrowed binding of an Affine value cannot be passed to a `move` parameter, an E0711, §5.4).
+// `take_o` and `take_e` may destroy a `move` argument, so they have `uses {Alloc}` (§12.2), and so do the
+// functions that own the values. The contrast at the end: a unit variant of a `Copy` enum has an own type
+// that is `Dup`, so it is a static value ("ペイロードの無い列挙子"), a borrowed row that needs no `Alloc`,
+// and so is that variant in a tuple. The `None` of `Option[T]` with `T: ?Dup` is owned too (the type is not
+// `Dup`, decided after the inference of the body, S-780). No diagnostic is expected anywhere in this file. The use after
+// the move, and the destruction of these owned values in an `rt fn` or a function without `Alloc`, are in
+// negative/binding_static_affine_type*.onsa.
+
+pub enum E {
+  A,
+  B(Buf[F32]),
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+pub fn take_o(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn take_e(move e: E) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn take_t[T: ?Dup](move o: Option[T]) -> U32 uses {Alloc} {
+  0
+}
+
+// ----------------------------------------------------- the Affine type of an empty variant
+
+pub fn a_none_of_a_buffer() -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  take_o(move o)
+}
+
+pub fn a_unit_variant_of_an_enum_with_a_buffer() -> U32 uses {Alloc} {
+  let e = E.A
+  take_e(move e)
+}
+
+pub fn the_moved_value_made_in_a_branch(c: Bool) -> U32 uses {Alloc} {
+  if c {
+    let o: Option[Buf[F32]] = None
+    take_o(move o)
+  } else {
+    let e = E.A
+    take_e(move e)
+  }
+}
+
+pub fn the_value_read_before_the_move() -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  let n = match o {
+    Some(b) => b.len(),
+    None => 0,
+  }
+  n + take_o(move o)
+}
+
+pub fn a_none_of_a_maybe_dup_type[T: ?Dup](move x: T) -> U32 uses {Alloc} {
+  let o: Option[T] = None
+  take_t(move o)
+}
+
+pub fn in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let e = E.A
+    total = total + take_e(move e) + i
+  }
+  total
+}
+
+// ------------------------------------------------------------- the contrast: a Copy enum
+
+pub rt fn a_unit_variant_of_a_copy_enum() -> U32 {
+  let m = Mode.On
+  match m {
+    Mode.Off => 0,
+    Mode.On => 1,
+  }
+}
+
+pub rt fn a_copy_enum_in_a_tuple() -> U32 {
+  let t = (Mode.On, 1)
+  match t.0 {
+    Mode.Off => t.1,
+    Mode.On => 0,
+  }
+}
+
+pub fn a_copy_enum_without_alloc() -> U32 {
+  let m = Mode.Off
+  match m {
+    Mode.Off => 1,
+    Mode.On => 0,
+  }
+}

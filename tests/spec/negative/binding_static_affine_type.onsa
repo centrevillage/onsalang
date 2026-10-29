@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.6", "§5.2", "§7"]
+
+// S-780 (§5.4, §4.6, §5.2, §7): a literal or a variant whose own type is not `Dup` is an owned row
+// ("自分の型が Dup でない…リテラルと列挙子は、要素によらず静的な値にも破棄の要らないリテラルにもならず、所有の行
+// である", `let o: Option[Buf[F32]] = None`, `let e = E.A` for an enum that has a variant with a `Buf`). It
+// is moved when it is passed as `move o` (values/binding_static_affine_type.onsa), and a moved Affine
+// value is not usable afterwards ("Affine 値はこの後使えない", §5.2): an E0704 at the later use (§7). A
+// borrowed binding would be an E0711 at the first `move` instead and never reach this error. One error per
+// item (P-01).
+
+pub enum E {
+  A,
+  B(Buf[F32]),
+}
+
+pub fn take_o(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn take_e(move e: E) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn a_none_moved_twice() -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  let a                   = take_o(move o)
+  a + take_o(move o) //~ E0704
+}
+
+pub fn a_unit_variant_moved_twice() -> U32 uses {Alloc} {
+  let e = E.A
+  let a = take_e(move e)
+  a + take_e(move e) //~ E0704
+}
+
+pub fn a_none_read_after_the_move() -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  let a                   = take_o(move o)
+  let n = match o { //~ E0704
+    Some(b) => b.len(),
+    None => 0,
+  }
+  a + n
+}
+
+pub fn a_unit_variant_moved_in_a_branch(c: Bool) -> U32 uses {Alloc} {
+  let e = E.A
+  let a = if c { take_e(move e) } else { 0 }
+  a + take_e(move e) //~ E0704
+}
+
+pub fn a_none_moved_in_a_loop(n: U32) -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  var total: U32          = 0
+  for i in 0 ..< n {
+    total = total + take_o(move o) + i //~ E0704
+  }
+  total
+}

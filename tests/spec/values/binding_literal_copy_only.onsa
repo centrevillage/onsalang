@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.6", "§10", "§12.2", "§8.1"]
+
+// S-613 (§5.4, §4.6, §10, §12.2, §8.1): a literal whose elements are all `Copy` values (`let p = (a, b)`, `a`
+// and `b` are `F32`) is by the definition a literal that needs no destruction (each element is "第一級の Copy
+// の型の式"), a borrowed row; what the writer sees is the same as an owned `Copy` value: it is not a value of
+// a Shared type, so it is not destroyed and it needs no `Alloc`, and it reads as it is made, in an `rt fn`
+// and in a function without `Alloc` in the row ("`Copy` の値" has no destruction, §4.6). No diagnostic is
+// expected anywhere in this file; the file passes in this version too. The Shared forms next to it are in
+// values/binding_literal_noalloc.onsa.
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+pub rt fn let_a_tuple(a: F32, b: F32) -> F32 {
+  let p = (a, b)
+  p.0 + p.1
+}
+
+pub rt fn let_a_struct(a: F32, b: F32) -> F32 {
+  let p = Pair { a: a, b: b }
+  p.a + p.b
+}
+
+pub rt fn let_an_array(a: F32, b: F32) -> F32 {
+  let t = [a, b]
+  t[0] + t[1]
+}
+
+pub rt fn for_over_an_array(a: F32, b: F32) -> F32 {
+  var total: F32 = 0.0
+  for x in [(a, b), (b, a)] {
+    total = total + x.0
+  }
+  total
+}
+
+pub rt fn match_on_a_variant(a: F32) -> F32 {
+  match Some((a, a)) {
+    Some(p) => p.0 + p.1,
+    None => 0.0,
+  }
+}
+
+pub rt fn if_with_literal_tails(c: Bool, a: F32, b: F32) -> F32 {
+  let p = if c { (a, b) } else { (b, a) }
+  let q = p
+  q.0 - q.1
+}
+
+pub rt fn a_var_of_a_copy_literal(a: F32, b: F32) -> F32 {
+  var p = (a, b)
+  p.0 = p.0 + 1.0
+  p.0 + p.1
+}
+
+pub fn plain_let_a_tuple(a: F32, b: F32) -> F32 {
+  let p = (a, b)
+  p.0 + p.1
+}
+
+pub fn plain_var_of_a_copy_literal(a: F32, b: F32) -> F32 {
+  var p = Pair { a: a, b: b }
+  p.a = p.a + 1.0
+  p.a + p.b
+}

@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§8.1", "§12.2"]
+
+// S-610, S-613, L4 (§5.4, §8.1, §12.2): the owned side of values/binding_static_aggregate_plain.onsa and
+// values/binding_literal_noalloc_plain.onsa, in functions that have no `Alloc` in the row. A literal with
+// an element that is not a static value, a `Copy` expression, a literal that needs no destruction or a name of
+// a binding that needs no destruction is owned ("これらのどれでもない要素を持つリテラルは所有の行である
+// （`["a", s]`・`("a", s)`、`s` は借用の `Str` の引数）"), and so is every `var` ("`var y = ...`: 所有（書き換え
+// られる）"). An owned value of a Shared type is destroyed, and the destruction is a use of `Alloc` (§12.2) that
+// the function must have in its row: an E0601 (§8.1), "診断は最初の使用の位置に置く", the binding of the value
+// (the `for` and the `match` are on one line with their binding). `s` is a borrowed `Str` argument. One error
+// per item (P-01).
+//
+// The place of the first use of a destruction is not written in §8.1 (the use of a creation is the
+// expression that creates, as in negative/binding_static_interp.onsa); this file puts it at the binding of
+// the value, as the creation of an interpolated string, and waits with it for the work W6-03 (R-87 (6)),
+// where the E0601 is placed at the first use. In this version it is at the name of the function.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub fn array_with_an_argument(s: Str) -> U32 {
+  let t = ["a", s] //~ E0601
+  t[0].len()
+}
+
+pub fn tuple_with_an_argument(s: Str, v: F32) -> U32 {
+  let p = ("gain", s, v) //~ E0601
+  p.0.len()
+}
+
+pub fn struct_with_an_argument(s: Str, v: F32) -> U32 {
+  let p = Param { name: s, value: v } //~ E0601
+  p.name.len()
+}
+
+pub fn for_over_an_array_with_an_argument(s: Str) -> U32 {
+  var n: U32 = 0
+  for x in ["a", s] { n = n + x.len() } //~ E0601
+  n
+}
+
+pub fn match_on_a_pair_of_arguments(a: Str, b: Str) -> U32 {
+  match (a, b) { (x, y) => x.len() + y.len() } //~ E0601
+}
+
+pub fn var_of_a_literal(v: F32) -> U32 {
+  var p = Param { name: "gain", value: v } //~ E0601
+  p.value = 2.0
+  p.name.len()
+}
+
+pub fn a_name_that_comes_from_an_argument(s: Str, v: F32) -> U32 {
+  let q = s
+  let t = (q, v) //~ E0601
+  t.0.len()
+}
+
+pub fn the_name_of_an_if_with_an_argument(c: Bool, s: Str, v: F32) -> U32 {
+  let p = "gain"
+  let q = if c { p } else { s }
+  let t = (q, v) //~ E0601
+  t.0.len()
+}

@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.6", "§10", "§12.2"]
+
+// S-780 (§5.4, §4.6, §10, §12.2): a literal or a variant whose own type is not `Dup` is an owned row
+// ("自分の型が Dup でない…リテラルと列挙子は…所有の行である", `let o: Option[Buf[F32]] = None`, `let e = E.A` for
+// an enum that has a variant with a `Buf`). It is not a static value, so it is destroyed at the end of its
+// scope, and the destruction of an owned `Buf` needs `Alloc` (§12.2), which an `rt fn` cannot do: an E0901
+// at the binding (the code of a drop in an `rt fn` in this version, as in negative/rt.onsa; "rt の関数と
+// `Alloc` の無い関数で、Affine の型の `None`・`E.A` を `let` に置いて破棄する形は E0901・E0601 のまま", S-780). The
+// variant is read with `match`, whose arm binding is a borrowed origin, so the one error is the binding of
+// the value. One error per item (P-01).
+//
+// The same forms in a function with `Alloc` in the row, which destroys the value, are legal: the contrast
+// at the end.
+
+pub enum E {
+  A,
+  B(Buf[F32]),
+}
+
+pub rt fn a_none_of_a_buffer() -> U32 {
+  let o: Option[Buf[F32]] = None //~ E0901
+  match o {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub rt fn a_unit_variant_of_an_enum_with_a_buffer() -> U32 {
+  let e = E.A //~ E0901
+  match e {
+    E.A => 0,
+    E.B(b) => b.len(),
+  }
+}
+
+pub rt fn a_tuple_with_a_none() -> U32 {
+  let t: (Option[Buf[F32]], U32) = (None, 1) //~ E0901
+  match t.0 {
+    Some(b) => b.len() + t.1,
+    None => t.1,
+  }
+}
+
+pub rt fn a_branch(c: Bool) -> U32 {
+  if c {
+    let e = E.A //~ E0901
+    match e {
+      E.A => 0,
+      E.B(b) => b.len(),
+    }
+  } else {
+    0
+  }
+}
+
+// ------------------------------------------------------------------------ the contrasts
+
+pub fn with_alloc_a_none() -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  match o {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub fn with_alloc_a_unit_variant() -> U32 uses {Alloc} {
+  let e = E.A
+  match e {
+    E.A => 0,
+    E.B(b) => b.len(),
+  }
+}

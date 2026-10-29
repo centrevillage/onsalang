@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-613 (§5.4, §10, §12.2): the owned side of values/binding_literal_noalloc.onsa. "これらのどれでもない
+// 要素を持つリテラルは所有の行である（`["a", s]`・`("a", s)`、`s` は借用の `Str` の引数）" and "静的な値でも
+// 破棄の要らないリテラルでもないリテラル（`let q = ("gain", s)`、`s` は借用の `Str` の引数）や演算の結果: 所有",
+// destroyed ("起きる"); `var y = ...` is "所有（書き換えられる）" whatever the initializer is. `s` is a borrowed
+// `Str` argument: a `Str` is Shared and not `Copy`, so it is not an element of a literal that needs no
+// destruction (§5.4). A call that makes a `Str` is not a static value, a `Copy` expression or a name of a
+// binding that needs no destruction either. An owned value of a Shared type is destroyed, and the
+// destruction needs `Alloc` (§12.2), which an `rt fn` cannot do: an E0901 at the binding (the code of a
+// drop in an `rt fn` in this version, as in negative/binding_tail_owned_rt.onsa). In `tuple_with_a_name_of_an_if`
+// the `if` binding is borrowed (its tails are borrowed rows, S-589) and the one error is the literal that has
+// it as an element: "`if c { p } else { s }` は、`s` が借用の `Str` の引数なら当たらない" (the binding of an `if`
+// needs no destruction only when all the tails are such). The `for` and the `match` are on one line with
+// their binding. One error per item (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn make(x: Str) -> Str {
+  x
+}
+
+pub rt fn use_p(p: Param) -> U32 {
+  p.name.len()
+}
+
+// ---------------------------------------------------------------- a literal with an owned element
+
+pub rt fn tuple_with_an_argument(s: Str) -> U32 {
+  let p = ("gain", s) //~ E0901
+  p.0.len()
+}
+
+pub rt fn struct_with_an_argument(s: Str, v: F32) -> U32 {
+  let p = Param { name: s, value: v } //~ E0901
+  use_p(p)
+}
+
+pub rt fn array_with_an_argument(s: Str, v: F32, w: F32) -> U32 {
+  let t = [("a", v), (s, w)] //~ E0901
+  t[0].0.len()
+}
+
+pub rt fn tuple_with_a_call_that_makes_a_str(s: Str, v: F32) -> U32 {
+  let p = ("gain", make(s), v) //~ E0901
+  p.0.len()
+}
+
+pub rt fn variant_with_an_argument(s: Str, v: F32) -> U32 {
+  let o = Some((s, v)) //~ E0901
+  match o {
+    Some(p) => p.0.len(),
+    None => 0,
+  }
+}
+
+pub rt fn for_over_an_array_with_an_argument(s: Str, v: F32) -> U32 {
+  var n: U32 = 0
+  for x in [("a", v), (s, v)] { n = n + x.0.len() } //~ E0901
+  n
+}
+
+pub rt fn match_on_a_tuple_with_an_argument(s: Str, v: F32) -> U32 {
+  match (s, v) { (x, _) => x.len() } //~ E0901
+}
+
+pub rt fn tuple_with_a_name_of_an_if(c: Bool, s: Str, v: F32) -> U32 {
+  let p = "gain"
+  let q = if c { p } else { s }
+  let t = (q, v) //~ E0901
+  t.0.len()
+}
+
+// ------------------------------------------------------------------------------------- var
+
+pub rt fn var_of_a_literal(v: F32) -> U32 {
+  var p = Param { name: "gain", value: v } //~ E0901
+  p.value = 2.0
+  p.name.len()
+}
+
+pub rt fn var_of_a_tuple(v: F32) -> U32 {
+  var p = ("gain", v) //~ E0901
+  p.1 = 2.0
+  p.0.len()
+}
+
+pub rt fn var_of_a_static_value() -> U32 {
+  var t = ["a", "bc"] //~ E0901
+  t[0] = "x"
+  t[1].len()
+}
+
+pub rt fn var_reassigned_to_a_literal(v: F32) -> U32 {
+  var p = ("gain", v) //~ E0901
+  p = ("other", v)
+  p.0.len()
+}

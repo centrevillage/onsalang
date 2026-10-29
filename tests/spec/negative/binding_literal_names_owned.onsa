@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-613 (L4) (§5.4, §10, §12.2): the owned side of values/binding_literal_names.onsa. A name as an element
+// keeps the literal free of destruction only when it is "破棄の要らない束縛": a binding "静的な値か破棄の
+// 要らないリテラルで初期化した借用束縛と、そこから派生した借用束縛" and its paths. A borrowed binding that
+// comes from an argument (a plain `let q = s`, the field or the element of an argument, the element of a
+// `for` over an argument, the binding of an arm over an argument) is a borrowed origin (§5.4) and needs no
+// error by itself, but it is not such a binding: the value behind it is not an immortal static object, so
+// the literal that has it as an element is owned ("これらのどれでもない要素を持つリテラルは所有の行である
+// …`let p = (s, v)` の `p` を要素にする `W { p: p, k: 1 }`"), is destroyed, and the destruction of a Shared
+// value needs `Alloc` (§12.2), which an `rt fn` cannot do: an E0901 at the binding of the literal (the code
+// of a drop in an `rt fn` in this version, as in negative/binding_tail_owned_rt.onsa). `s` is a borrowed
+// `Str` argument. One error per item (P-01); the last function is the form of the work ticket (the owned
+// `p` is the one error: the `W` over it is owned too, and not reported as a second error of the function).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct W {
+  p: Param,
+  k: U32,
+}
+
+pub rt fn derived_from_an_argument(s: Str, v: F32) -> U32 {
+  let q = s
+  let t = (q, v) //~ E0901
+  t.0.len()
+}
+
+pub rt fn field_of_an_argument(h: Param, v: F32) -> U32 {
+  let n = h.name
+  let t = (n, v) //~ E0901
+  t.0.len()
+}
+
+pub rt fn path_of_an_argument(h: Param, v: F32) -> U32 {
+  let t = (h.name, v) //~ E0901
+  t.0.len()
+}
+
+pub rt fn element_of_an_argument(xs: Array[Str], v: F32) -> U32 {
+  let t = (xs[0], v) //~ E0901
+  t.0.len()
+}
+
+pub rt fn for_binding_over_an_argument(xs: Array[Str], v: F32) -> U32 {
+  var n: U32 = 0
+  for x in xs {
+    let t = (x, v) //~ E0901
+    n = n + t.0.len()
+  }
+  n
+}
+
+pub rt fn arm_binding_over_an_argument(o: Option[Str], v: F32) -> U32 {
+  match o {
+    Some(s) => {
+      let t = (s, v) //~ E0901
+      t.0.len()
+    },
+    None => 0,
+  }
+}
+
+pub rt fn literal_of_an_owned_literal_binding(s: Str, v: F32) -> U32 {
+  let p = Param { name: s, value: v } //~ E0901
+  let o = W { p: p, k: 1 }
+  o.k
+}

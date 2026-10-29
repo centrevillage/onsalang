@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§8.1", "§12.2"]
+
+// S-610 (§5.4, §8.1, §12.2): the static aggregates of values/binding_static_aggregate.onsa in functions
+// that have no `Alloc` in the row. A static value is a borrowed row ("借用", "破棄は起きない"), the
+// destruction of an owned value of a Shared type needs `Alloc` (§12.2) and the function without it is
+// an E0601 (§8.1), so the same form that an `rt fn` binds is legal here as well: "静的な値と破棄の要らない
+// リテラルの複製と破棄（一時の値を含む）: 要らない". Nothing in this file has `uses {Alloc}`, and no
+// diagnostic is expected anywhere in it. The owned counterparts (`["a", s]`) are E0601 in
+// negative/binding_static_aggregate_owned_plain.onsa.
+//
+// These are E0601 in this version (the work W4-16 U1b made the heading and the initializer that is not a
+// place owned; the forms passed before it and stopped): the work W4-16 U2 closes the back-step.
+
+use std.array
+
+pub fn name_len(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn for_over_an_array() -> U32 {
+  var n: U32 = 0
+  for x in ["a", "bc"] {
+    n = n + x.len()
+  }
+  n
+}
+
+pub fn let_an_array() -> U32 {
+  let t = ["a", "bc"]
+  t[1].len()
+}
+
+pub fn let_a_tuple() -> U32 {
+  let t = ("a", 1)
+  t.0.len() + t.1
+}
+
+pub fn let_a_variant_with_a_payload() -> U32 {
+  let o = Some("a")
+  match o {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub fn match_on_a_tuple() -> U32 {
+  match ("a", 1) {
+    (s, k) => s.len() + k,
+  }
+}
+
+pub fn match_on_an_indexed_array(i: U32) -> U32 {
+  match ["a", "bc"][i] {
+    s => name_len(s),
+  }
+}
+
+pub fn for_over_a_nested_array() -> U32 {
+  var n: U32 = 0
+  for x in [("a", 1), ("bc", 2)] {
+    n = n + x.0.len() + x.1
+  }
+  n
+}
+
+pub fn in_a_branch_and_a_loop(c: Bool, n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    if c {
+      let t = ["a", "bc"]
+      total = total + t[1].len() + i
+    } else {
+      total = total + i
+    }
+  }
+  total
+}
+
+// The body of an anonymous function gets its own binding states (the body is a body like a function's).
+pub fn in_the_body_of_an_anonymous_function(k: U32) -> U32 {
+  let ys: [U32; 3] = array.from_fn(fn(i) {
+    let t = ["a", "bc"]
+    t[0].len() + i + k
+  })
+  ys[1]
+}

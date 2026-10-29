@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-613 (§5.4, §10, §12.2): a tuple of borrowed `Str` arguments is not a literal that needs no
+// destruction. The elements of such a literal are static values, "第一級の Copy の型の式", literals that
+// need no destruction, or names of bindings that need no destruction (§5.4); an argument `a: Str` is
+// none of them (a `Str` is Shared and not `Copy`, §4.6, and the argument is not a binding of a static
+// value). So `(a, b)` is a literal with an element "これらのどれでもない", an owned row ("`let q = ("gain", s)`、
+// `s` は借用の `Str` の引数: 所有"), and "`match f(...)` … 場所でも静的な値でも破棄の要らないリテラルでもなく、
+// それらの経路でもない対象" has an owned arm binding. The owned value of a Shared type is destroyed, and the
+// destruction needs `Alloc` (§12.2), which an `rt fn` cannot do: an E0901 (the code of a drop in an `rt fn`
+// in this version, as in negative/binding_tail_owned_rt.onsa). The `match` and the `for` are on one line with
+// their binding. The error stays until the second period (tasks/phase2.md, L3); it is the error of the
+// first period and the form is not a legal one. One error per item (P-01).
+
+pub rt fn match_on_a_pair(a: Str, b: Str) -> U32 {
+  match (a, b) { (x, y) => x.len() + y.len() } //~ E0901
+}
+
+pub rt fn match_on_a_pair_with_a_static(a: Str) -> U32 {
+  match (a, "gain") { (x, y) => x.len() + y.len() } //~ E0901
+}
+
+pub rt fn let_a_pair(a: Str, b: Str) -> U32 {
+  let p = (a, b) //~ E0901
+  p.0.len() + p.1.len()
+}
+
+pub rt fn destructure_a_pair(a: Str, b: Str) -> U32 {
+  let (x, y) = (a, b) //~ E0901
+  x.len() + y.len()
+}
+
+pub rt fn for_over_a_pair_in_an_array(a: Str, b: Str) -> U32 {
+  var n: U32 = 0
+  for p in [(a, b)] { n = n + p.0.len() + p.1.len() } //~ E0901
+  n
+}
+
+pub rt fn match_on_an_array_of_arguments(a: Str, b: Str) -> U32 {
+  match [a, b] { t => t[0].len() + t[1].len() } //~ E0901
+}

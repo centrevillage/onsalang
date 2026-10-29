@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.5", "§4.6", "§10", "§8.1"]
+
+// S-613 (§5.4, §4.5, §4.6, §10, §8.1): "要素が Copy かは、本体の型の推論の後の型（既定を当てた後）で決める。`T: Copy`
+// の値は Copy で、境界の無い `T` と `T: ?Dup` の値は Copy でない". So in a generic function with the bound
+// `T: Copy`, a literal with a name of type `T` as an element is a literal that needs no destruction ("第一級の
+// Copy の型の式"), a borrowed row, and an `rt fn` and a function without `Alloc` in the row bind, iterate
+// and match on it as they do the literal with an `F32` (values/binding_literal_noalloc.onsa). The generic
+// struct `Pair[T]` has the `Copy` field `T` the same way. Every binding is read (an unread one is an E0309).
+// No diagnostic is expected anywhere in this file. The unbounded `T` is owned: negative/binding_literal_generic_owned.onsa.
+//
+// These are E0901 (E0601 in a function without `Alloc`) at the binding in this version, as the literal
+// itself is (values/binding_literal_noalloc.onsa); the work W4-16 U2 closes them.
+
+pub struct Pair[T] {
+  name: Str,
+  value: T,
+}
+
+pub rt fn let_a_tuple[T: Copy](x: T) -> U32 {
+  let p = ("a", x)
+  p.0.len()
+}
+
+pub rt fn let_a_struct[T: Copy](x: T) -> U32 {
+  let p = Pair { name: "a", value: x }
+  p.name.len()
+}
+
+pub rt fn for_over_an_array[T: Copy](x: T, y: T) -> U32 {
+  var n: U32 = 0
+  for p in [("a", x), ("bc", y)] {
+    n = n + p.0.len()
+  }
+  n
+}
+
+pub rt fn match_on_a_tuple[T: Copy](x: T) -> U32 {
+  match ("a", x) {
+    (s, _) => s.len(),
+  }
+}
+
+pub rt fn if_with_literal_tails[T: Copy](c: Bool, x: T, y: T) -> U32 {
+  let p = if c { ("a", x) } else { ("bc", y) }
+  p.0.len()
+}
+
+pub rt fn nested_literal_with_an_f32(x: F32) -> U32 {
+  let p = ("a", x)
+  let q = (p, x)
+  q.0.0.len()
+}
+
+pub fn plain_let_a_tuple[T: Copy](x: T) -> U32 {
+  let p = ("a", x)
+  p.0.len()
+}
+
+pub fn plain_for_over_an_array[T: Copy](x: T, y: T) -> U32 {
+  var n: U32 = 0
+  for p in [("a", x), ("bc", y)] {
+    n = n + p.0.len()
+  }
+  n
+}

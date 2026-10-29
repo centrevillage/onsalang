@@ -22,7 +22,10 @@ use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
 use onsa_syntax::tails::Tail;
 
 use crate::body::{BodyInfo, LocalId, view_base};
+use crate::def::GenericDef;
+use crate::kind::Kind;
 use crate::names::body::{BindingKind, BodyNames, Origin, PathRes};
+use crate::ty::TyId;
 use crate::{Analysis, DefId, Package, module_of_def};
 
 mod literal;
@@ -110,7 +113,7 @@ pub(crate) fn settle_all(pkg: &Package, a: &mut Analysis) {
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let Some(mut info) = a.bodies.remove(&id) else { continue };
         if let Some(names) = a.names.get(&id) {
-            Settle::new(a, &module.parsed.ast, names, &mut info).expr(root);
+            Settle::new(a, &module.parsed.ast, names, &mut info, crate::body::generics_of(a, id)).expr(root);
         }
         a.bodies.insert(id, info);
     }
@@ -123,10 +126,20 @@ struct Settle<'a> {
     info: &'a mut BodyInfo,
     /// The bindings of each head, from their origins.
     bound: HashMap<Head, Vec<LocalId>>,
+    /// The type parameters of the body, and the kinds asked of its types
+    /// ([`Settle::class`]).
+    generics: Vec<GenericDef>,
+    kinds: HashMap<TyId, Option<Kind>>,
 }
 
 impl<'a> Settle<'a> {
-    fn new(a: &'a Analysis, ast: &'a Ast, names: &'a BodyNames, info: &'a mut BodyInfo) -> Self {
+    fn new(
+        a: &'a Analysis,
+        ast: &'a Ast,
+        names: &'a BodyNames,
+        info: &'a mut BodyInfo,
+        generics: Vec<GenericDef>,
+    ) -> Self {
         let mut bound: HashMap<Head, Vec<LocalId>> = HashMap::new();
         for (i, b) in names.bindings.iter().enumerate() {
             let head = match b.origin {
@@ -137,7 +150,7 @@ impl<'a> Settle<'a> {
             };
             bound.entry(head).or_default().push(LocalId(i as u32));
         }
-        Settle { a, ast, names, info, bound }
+        Settle { a, ast, names, info, bound, generics, kinds: HashMap::new() }
     }
 
     fn expr(&mut self, e: ExprId) {
@@ -163,11 +176,11 @@ impl<'a> Settle<'a> {
                 }
             }
             _ => {
-                if let Some(class) = literal::leaf(self.a, ast, self.info, e) {
-                    self.info.lits.insert(e, class);
-                }
                 for x in ast.sub_exprs(e) {
                     self.expr(x);
+                }
+                if let Some(class) = self.class(e) {
+                    self.info.lits.insert(e, class);
                 }
             }
         }
@@ -230,7 +243,10 @@ impl<'a> Settle<'a> {
     /// Whether a tail `e` (without parentheses) is borrowed (§5.4), with the
     /// place it derives from (none for a static value) and whether it needs
     /// no drop: a place whose root is a borrow, or any place (`any_place`);
-    /// a partial view of such a place ([`view_base`]); a static value.
+    /// a partial view of such a place ([`view_base`]); a static value or a
+    /// literal that needs no drop, or a path of one (`["a", "bc"][i]`,
+    /// `("gain", v).0`, S-615), stopping at the end of a chain
+    /// of names (`m.LIMIT`).
     fn borrowed(&self, e: ExprId, any_place: bool) -> Option<(Option<ExprId>, bool)> {
         if let Some(base) = view_base((self.ast, self.info, &self.a.types), e, |t| t) {
             return self.borrowed(self.ast.without_parens(base), any_place);
@@ -244,9 +260,17 @@ impl<'a> Settle<'a> {
                 _ => None,
             };
         }
-        match self.info.lits.get(&e) {
-            Some(LitClass::Static | LitClass::NoDrop) => Some((None, true)),
-            _ => None,
+        let mut x = e;
+        loop {
+            if let Some(LitClass::Static | LitClass::NoDrop) = self.info.lits.get(&x) {
+                return Some((None, true));
+            }
+            match &self.ast.expr(x).kind {
+                _ if self.info.targets.contains_key(&x) => return None,
+                ExprKind::Field { base: b, .. } | ExprKind::TupleIndex { base: b, .. } => x = *b,
+                ExprKind::Index { base: b, .. } | ExprKind::Paren(b) => x = *b,
+                _ => return None,
+            }
         }
     }
 
