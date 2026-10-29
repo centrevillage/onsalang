@@ -290,10 +290,12 @@ fn drops_alloc(w: &Walk, t: TyId, env: Option<&Env>, depth: u32) -> Option<bool>
             BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set | BuiltinTy::Buf,
             _,
         ) => Some(true),
+        // A `Ptr` (Copy, §4.1) and a `Span` (a view) own nothing to drop.
+        Ty::Builtin(BuiltinTy::Ptr | BuiltinTy::Span, _) => Some(false),
         Ty::Builtin(_, ts) | Ty::Tuple(ts) => any(w, ts, env, depth),
         Ty::Array(el, _) => drops_alloc(w, *el, env, depth),
-        Ty::Named(d, args) => w.remember(&w.a.known.drops, (*d, args, env, depth), |depth| {
-            let (holds, env, depth) = w.enter(*d, args, env, depth)?;
+        Ty::Named(d, args) => w.remember(&w.a.known.drops, (*d, args, env, depth), |depth, key| {
+            let (holds, env, depth) = w.enter(*d, args, env, (depth, key))?;
             any(w, &holds.parts(), env.as_ref(), depth)
         }),
         _ => Some(false),

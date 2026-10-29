@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2"]
+
+// R-317, R-30 (W4-16 U3; §4.6: "Affine … それらを含む型", §4.5): the Affine side of types/kind_nested_generic_deep.onsa.
+// `E18[T]` is the chain of 18 generic types with two fields of the type before it, declared with `T: ?Dup` at every
+// step, and its 2^18 leaves hold a `T` under 18 `Option`s. When `T` is `?Dup` or a `Buf`, the leaves are Affine, so
+// the whole chain is, and the second `move` of the same value is E0704 (§5.2); the answer must not depend on
+// how deep the declarations are (the steps that decide the kind ran out at about 18 steps, and a kind that is not
+// found is Affine in the checks of the modes). One error per function (P-01).
+
+pub struct E0[T: ?Dup] {
+  v: T,
+}
+
+pub struct E1[T: ?Dup] {
+  x: E0[Option[T]],
+  y: E0[Option[T]],
+}
+
+pub struct E2[T: ?Dup] {
+  x: E1[Option[T]],
+  y: E1[Option[T]],
+}
+
+pub struct E3[T: ?Dup] {
+  x: E2[Option[T]],
+  y: E2[Option[T]],
+}
+
+pub struct E4[T: ?Dup] {
+  x: E3[Option[T]],
+  y: E3[Option[T]],
+}
+
+pub struct E5[T: ?Dup] {
+  x: E4[Option[T]],
+  y: E4[Option[T]],
+}
+
+pub struct E6[T: ?Dup] {
+  x: E5[Option[T]],
+  y: E5[Option[T]],
+}
+
+pub struct E7[T: ?Dup] {
+  x: E6[Option[T]],
+  y: E6[Option[T]],
+}
+
+pub struct E8[T: ?Dup] {
+  x: E7[Option[T]],
+  y: E7[Option[T]],
+}
+
+pub struct E9[T: ?Dup] {
+  x: E8[Option[T]],
+  y: E8[Option[T]],
+}
+
+pub struct E10[T: ?Dup] {
+  x: E9[Option[T]],
+  y: E9[Option[T]],
+}
+
+pub struct E11[T: ?Dup] {
+  x: E10[Option[T]],
+  y: E10[Option[T]],
+}
+
+pub struct E12[T: ?Dup] {
+  x: E11[Option[T]],
+  y: E11[Option[T]],
+}
+
+pub struct E13[T: ?Dup] {
+  x: E12[Option[T]],
+  y: E12[Option[T]],
+}
+
+pub struct E14[T: ?Dup] {
+  x: E13[Option[T]],
+  y: E13[Option[T]],
+}
+
+pub struct E15[T: ?Dup] {
+  x: E14[Option[T]],
+  y: E14[Option[T]],
+}
+
+pub struct E16[T: ?Dup] {
+  x: E15[Option[T]],
+  y: E15[Option[T]],
+}
+
+pub struct E17[T: ?Dup] {
+  x: E16[Option[T]],
+  y: E16[Option[T]],
+}
+
+pub struct E18[T: ?Dup] {
+  x: E17[Option[T]],
+  y: E17[Option[T]],
+}
+
+pub struct HB {
+  e: E18[Buf[F32]],
+}
+
+pub fn sink_chain[T: ?Dup](move e: E18[T]) uses {Alloc} {}
+
+pub fn sink_h(move h: HB) uses {Alloc} {}
+
+pub fn chain_of_maybe_dup_twice[T: ?Dup](move e: E18[T]) uses {Alloc} {
+  sink_chain(move e)
+  sink_chain(move e)            //~ E0704
+}
+
+pub fn chain_of_buf_twice(move e: E18[Buf[F32]]) uses {Alloc} {
+  sink_chain(move e)
+  sink_chain(move e)            //~ E0704
+}
+
+pub fn holder_of_the_chain_twice(move h: HB) uses {Alloc} {
+  sink_h(move h)
+  sink_h(move h)                //~ E0704
+}
+
+pub fn chain_split_twice[T: ?Dup](move e: E18[T]) -> (E18[T], E18[T]) {
+  let a = keep(move e)
+  let b = keep(move e)          //~ E0704
+  (move a, move b)
+}
+
+pub fn keep[T: ?Dup](move x: T) -> T {
+  x
+}
+
+pub fn returns_a_borrowed_chain[T: ?Dup](e: E18[T]) -> E18[T] {
+  e                             //~ E0711
+}
+
+pub fn chain_of_buf_returns_a_borrowed(h: HB) -> HB {
+  h                             //~ E0711
+}
+
+// Contrast: the same chain with a Copy leaf is Copy (types/kind_nested_generic_deep.onsa).

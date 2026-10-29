@@ -21,9 +21,8 @@ use onsa_diag::Stage;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
 use onsa_syntax::tails::Tail;
 
-use crate::body::{BodyInfo, LocalId, Target};
+use crate::body::{BodyInfo, LocalId, view_base};
 use crate::names::body::{BindingKind, BodyNames, Origin, PathRes};
-use crate::ty::{BuiltinTy, Ty};
 use crate::{Analysis, DefId, Package, module_of_def};
 
 mod literal;
@@ -231,16 +230,10 @@ impl<'a> Settle<'a> {
     /// Whether a tail `e` (without parentheses) is borrowed (§5.4), with the
     /// place it derives from (none for a static value) and whether it needs
     /// no drop: a place whose root is a borrow, or any place (`any_place`);
-    /// a partial view of such a place (S-217: `xs.slice(a, b)`, known by the
-    /// `Span` its builtin method gives, not by its name, Q-14); a static value.
+    /// a partial view of such a place ([`view_base`]); a static value.
     fn borrowed(&self, e: ExprId, any_place: bool) -> Option<(Option<ExprId>, bool)> {
-        if let ExprKind::Call { callee, .. } = &self.ast.expr(e).kind
-            && let ExprKind::Field { base, .. } = &self.ast.expr(*callee).kind
-            && let Some(Target::BuiltinMethod { .. }) = self.info.targets.get(&e)
-            && let Some(&t) = self.info.expr_types.get(&e)
-            && let Ty::Builtin(BuiltinTy::Span, _) = self.a.types.get(t)
-        {
-            return self.borrowed(self.ast.without_parens(*base), any_place);
+        if let Some(base) = view_base((self.ast, self.info, &self.a.types), e, |t| t) {
+            return self.borrowed(self.ast.without_parens(base), any_place);
         }
         if let Some(root) = self.ast.place_root_node(e)
             && let Some(PathRes::Local(b)) = self.names.paths.get(&root)

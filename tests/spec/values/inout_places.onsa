@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.2"]
+
+// S-178 (W4-16 U3; §5.2: "`inout` … 呼び出し側は `var`、`inout` 引数、`move` の引数か `move self` であること", "レシーバは可変な場所（`var`、`inout`
+// 引数、`move` の引数と `move self`、それらのフィールドや要素）でなければならない"): the places that an `inout` argument and the receiver of an
+// `inout self` method take, next to negative/inout_place_required.onsa (E0415) and negative/inout_readonly_place.onsa (E0701):
+// a `var`, an `inout` parameter, a `move` parameter and `move self`, and their fields and elements. The change of the check of
+// a place that is not one must not reject these.
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+impl P {
+  pub fn scale(inout self, k: U32) {
+    self.x = self.x * k
+  }
+
+  pub fn scaled(move self, k: U32) -> P {
+    self.scale!(k)
+    self
+  }
+}
+
+pub struct Q {
+  p: P,
+  xs: [F32; 2],
+}
+
+pub fn set(inout x: U32) {
+  x = 1
+}
+
+pub fn set_f(inout x: F32) {}
+
+pub fn var_argument() -> U32 {
+  var v: U32 = 0
+  set(inout v)
+  v
+}
+
+pub fn inout_parameter(inout v: U32) {
+  set(inout v)
+}
+
+pub fn move_parameter(move v: U32) -> U32 {
+  set(inout v)
+  v
+}
+
+pub fn field_of_a_var() -> U32 {
+  var p = P { x: 0, y: 2 }
+  set(inout p.x)
+  p.x + p.y
+}
+
+pub fn element_of_an_inout_parameter(inout xs: [F32; 2]) {
+  set_f(inout xs[1])
+}
+
+pub fn nested_field_and_element(inout q: Q) {
+  set(inout q.p.y)
+  set_f(inout q.xs[0])
+}
+
+pub fn var_receiver() -> U32 {
+  var p = P { x: 1, y: 2 }
+  p.scale!(3)
+  p.x
+}
+
+pub fn inout_receiver(inout p: P) {
+  p.scale!(2)
+}
+
+pub fn move_receiver(move p: P) -> U32 {
+  p.scale!(2)
+  p.x
+}
+
+pub fn array_receiver() -> F32 {
+  var xs: [F32; 2] = [0.0, 0.0]
+  xs.fill!(1.0)
+  xs[0]
+}
+
+pub fn inout_array_receiver(inout xs: [F32; 2]) {
+  xs.fill!(1.0)
+}
+
+pub fn field_receiver(inout q: Q) {
+  q.p.scale!(2)
+  q.xs.fill!(0.5)
+}
+
+pub fn element_receiver(inout ps: [P; 2]) {
+  ps[0].scale!(2)
+}
+
+pub fn move_self_receiver(move p: P) -> P {
+  p.scaled(3)
+}

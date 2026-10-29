@@ -1,0 +1,390 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2"]
+
+// R-317 (W4-16 U3; §4.6: "全ての型は構造から次のどれかに分類される", "Copy: … Copy 要素の固定長配列・タプル・構造体・enum"): the kind
+// of a generic type is decided from its declaration down to the parameter at its bottom and does not depend on
+// how many generic types there are on the way. `G18[F32]` holds two `G17[Option[F32]]`, each of which holds two
+// `G16[Option[Option[F32]]]`, and so on to a `G0` with a `v` of 18 `Option`s of `F32`: every leaf is a `F32`, so `H`
+// is Copy and `(h, h)` is right (§5.2: a Copy value is copied where it is used twice). Before W4-16 U3 a kind that is
+// not found was taken for one that is not Affine, so the chain was accepted whatever its depth; when R-30 takes a kind
+// that is not found for Affine, `H` stays Copy only if the kind of the chain is found (the argument `Option[T]` is open
+// in the shape of the declaration and was not a key of the answer, so the steps ran out). The same chains with the
+// argument `[T; 1]` and `(T, T)`, and with the bound `T: Copy` of the function that names the type, follow.
+// The Affine side of the same chains is negative/kind_nested_generic_deep_affine.onsa.
+
+pub struct G0[T] {
+  v: T,
+}
+
+pub struct G1[T] {
+  x: G0[Option[T]],
+  y: G0[Option[T]],
+}
+
+pub struct G2[T] {
+  x: G1[Option[T]],
+  y: G1[Option[T]],
+}
+
+pub struct G3[T] {
+  x: G2[Option[T]],
+  y: G2[Option[T]],
+}
+
+pub struct G4[T] {
+  x: G3[Option[T]],
+  y: G3[Option[T]],
+}
+
+pub struct G5[T] {
+  x: G4[Option[T]],
+  y: G4[Option[T]],
+}
+
+pub struct G6[T] {
+  x: G5[Option[T]],
+  y: G5[Option[T]],
+}
+
+pub struct G7[T] {
+  x: G6[Option[T]],
+  y: G6[Option[T]],
+}
+
+pub struct G8[T] {
+  x: G7[Option[T]],
+  y: G7[Option[T]],
+}
+
+pub struct G9[T] {
+  x: G8[Option[T]],
+  y: G8[Option[T]],
+}
+
+pub struct G10[T] {
+  x: G9[Option[T]],
+  y: G9[Option[T]],
+}
+
+pub struct G11[T] {
+  x: G10[Option[T]],
+  y: G10[Option[T]],
+}
+
+pub struct G12[T] {
+  x: G11[Option[T]],
+  y: G11[Option[T]],
+}
+
+pub struct G13[T] {
+  x: G12[Option[T]],
+  y: G12[Option[T]],
+}
+
+pub struct G14[T] {
+  x: G13[Option[T]],
+  y: G13[Option[T]],
+}
+
+pub struct G15[T] {
+  x: G14[Option[T]],
+  y: G14[Option[T]],
+}
+
+pub struct G16[T] {
+  x: G15[Option[T]],
+  y: G15[Option[T]],
+}
+
+pub struct G17[T] {
+  x: G16[Option[T]],
+  y: G16[Option[T]],
+}
+
+pub struct G18[T] {
+  x: G17[Option[T]],
+  y: G17[Option[T]],
+}
+
+pub struct H {
+  g: G18[F32],
+}
+
+pub struct A0[T] {
+  v: T,
+}
+
+pub struct A1[T] {
+  x: A0[[T; 1]],
+}
+
+pub struct A2[T] {
+  x: A1[[T; 1]],
+}
+
+pub struct A3[T] {
+  x: A2[[T; 1]],
+}
+
+pub struct A4[T] {
+  x: A3[[T; 1]],
+}
+
+pub struct A5[T] {
+  x: A4[[T; 1]],
+}
+
+pub struct A6[T] {
+  x: A5[[T; 1]],
+}
+
+pub struct A7[T] {
+  x: A6[[T; 1]],
+}
+
+pub struct A8[T] {
+  x: A7[[T; 1]],
+}
+
+pub struct A9[T] {
+  x: A8[[T; 1]],
+}
+
+pub struct A10[T] {
+  x: A9[[T; 1]],
+}
+
+pub struct A11[T] {
+  x: A10[[T; 1]],
+}
+
+pub struct A12[T] {
+  x: A11[[T; 1]],
+}
+
+pub struct A13[T] {
+  x: A12[[T; 1]],
+}
+
+pub struct A14[T] {
+  x: A13[[T; 1]],
+}
+
+pub struct A15[T] {
+  x: A14[[T; 1]],
+}
+
+pub struct A16[T] {
+  x: A15[[T; 1]],
+}
+
+pub struct A17[T] {
+  x: A16[[T; 1]],
+}
+
+pub struct A18[T] {
+  x: A17[[T; 1]],
+}
+
+pub struct HA {
+  a: A18[F32],
+}
+
+pub struct P0[T] {
+  v: T,
+}
+
+pub struct P1[T] {
+  x: P0[(T, T)],
+}
+
+pub struct P2[T] {
+  x: P1[(T, T)],
+}
+
+pub struct P3[T] {
+  x: P2[(T, T)],
+}
+
+pub struct P4[T] {
+  x: P3[(T, T)],
+}
+
+pub struct P5[T] {
+  x: P4[(T, T)],
+}
+
+pub struct P6[T] {
+  x: P5[(T, T)],
+}
+
+pub struct P7[T] {
+  x: P6[(T, T)],
+}
+
+pub struct P8[T] {
+  x: P7[(T, T)],
+}
+
+pub struct P9[T] {
+  x: P8[(T, T)],
+}
+
+pub struct P10[T] {
+  x: P9[(T, T)],
+}
+
+pub struct HP {
+  p: P10[F32],
+}
+
+pub struct E0[T: ?Dup] {
+  v: T,
+}
+
+pub struct E1[T: ?Dup] {
+  x: E0[Option[T]],
+  y: E0[Option[T]],
+}
+
+pub struct E2[T: ?Dup] {
+  x: E1[Option[T]],
+  y: E1[Option[T]],
+}
+
+pub struct E3[T: ?Dup] {
+  x: E2[Option[T]],
+  y: E2[Option[T]],
+}
+
+pub struct E4[T: ?Dup] {
+  x: E3[Option[T]],
+  y: E3[Option[T]],
+}
+
+pub struct E5[T: ?Dup] {
+  x: E4[Option[T]],
+  y: E4[Option[T]],
+}
+
+pub struct E6[T: ?Dup] {
+  x: E5[Option[T]],
+  y: E5[Option[T]],
+}
+
+pub struct E7[T: ?Dup] {
+  x: E6[Option[T]],
+  y: E6[Option[T]],
+}
+
+pub struct E8[T: ?Dup] {
+  x: E7[Option[T]],
+  y: E7[Option[T]],
+}
+
+pub struct E9[T: ?Dup] {
+  x: E8[Option[T]],
+  y: E8[Option[T]],
+}
+
+pub struct E10[T: ?Dup] {
+  x: E9[Option[T]],
+  y: E9[Option[T]],
+}
+
+pub struct E11[T: ?Dup] {
+  x: E10[Option[T]],
+  y: E10[Option[T]],
+}
+
+pub struct E12[T: ?Dup] {
+  x: E11[Option[T]],
+  y: E11[Option[T]],
+}
+
+pub struct E13[T: ?Dup] {
+  x: E12[Option[T]],
+  y: E12[Option[T]],
+}
+
+pub struct E14[T: ?Dup] {
+  x: E13[Option[T]],
+  y: E13[Option[T]],
+}
+
+pub struct E15[T: ?Dup] {
+  x: E14[Option[T]],
+  y: E14[Option[T]],
+}
+
+pub struct E16[T: ?Dup] {
+  x: E15[Option[T]],
+  y: E15[Option[T]],
+}
+
+pub struct E17[T: ?Dup] {
+  x: E16[Option[T]],
+  y: E16[Option[T]],
+}
+
+pub struct E18[T: ?Dup] {
+  x: E17[Option[T]],
+  y: E17[Option[T]],
+}
+
+pub struct HE {
+  e: E18[F32],
+}
+
+pub fn copy_h(h: H) -> (H, H) {
+  (h, h)
+}
+
+pub fn copy_h_owned(move h: H) -> (H, H) {
+  (h, h)
+}
+
+pub fn copy_ha(move h: HA) -> (HA, HA) {
+  (h, h)
+}
+
+pub fn copy_hp(move h: HP) -> (HP, HP) {
+  (h, h)
+}
+
+pub fn copy_he(move h: HE) -> (HE, HE) {
+  (h, h)
+}
+
+pub fn copy_the_chain(move g: G18[F32]) -> (G18[F32], G18[F32]) {
+  (g, g)
+}
+
+pub fn copy_the_chain_of_copy_parameter[T: Copy](move g: G18[T]) -> (G18[T], G18[T]) {
+  (g, g)
+}
+
+pub fn copy_the_chain_of_dup_parameter[T](g: G18[T]) -> (G18[T], G18[T]) {
+  (g, g)
+}
+
+pub fn copy_the_array_chain[T: Copy](move a: A18[T]) -> (A18[T], A18[T]) {
+  (a, a)
+}
+
+pub fn copy_the_tuple_chain[T: Copy](move p: P10[T]) -> (P10[T], P10[T]) {
+  (p, p)
+}
+
+pub fn copy_the_maybe_dup_chain[T: Copy](move e: E18[T]) -> (E18[T], E18[T]) {
+  (e, e)
+}
+
+pub fn copy_the_maybe_dup_chain_of_f32(move e: E18[F32]) -> (E18[F32], E18[F32]) {
+  (e, e)
+}
+
+pub fn copy_a_shared_leaf(g: G18[Str]) -> (G18[Str], G18[Str]) {
+  (g, g)
+}

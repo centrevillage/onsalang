@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2", "§5.3"]
+
+// R-30 (W4-16 U3; §4.6: "Affine … それらを含む型", §4.5: a `?Dup` parameter lets an Affine type in and the value
+// of `T` cannot be copied). A generic type whose parameter is declared `?Dup` is Affine when it holds a value of
+// that parameter, in a field, in a tuple or an array in a field, in a payload of an enum, and through another
+// generic type; the kind is decided by the bound of the parameter of the function that names the type
+// (`Holder[T]` with `T: ?Dup` is Affine in the body, with `T: Copy` it is Copy, types/kind_dup_contrast.onsa).
+// The errors are those of an Affine value: a second use after the `move` (E0704), no `move` where it is consumed
+// (E0711), a borrowed value that is returned (E0711, no candidate), the capture by an anonymous function (E0712),
+// all of §5.2 and §5.3. The concrete `Holder[Buf[F32]]` (the `?Dup` parameter given a `Buf`) is in
+// negative/kind_generic_buf_holder.onsa and is an error already. One error per function (P-01).
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub struct Direct[T: ?Dup] {
+  item: T,
+}
+
+pub struct Both[T: ?Dup] {
+  a: T,
+  b: T,
+}
+
+pub struct Many[T: ?Dup] {
+  items: [T; 2],
+}
+
+pub enum Slot[T: ?Dup] {
+  Empty,
+  Full(T),
+}
+
+pub fn keep_holder[T: ?Dup](move h: Holder[T]) -> Holder[T] {
+  h
+}
+
+pub fn keep_direct[T: ?Dup](move d: Direct[T]) -> Direct[T] {
+  d
+}
+
+pub fn sink_holder[T: ?Dup](move h: Holder[T]) uses {Alloc} {}
+
+pub fn sink_direct[T: ?Dup](move d: Direct[T]) uses {Alloc} {}
+
+pub fn sink_both[T: ?Dup](move b: Both[T]) uses {Alloc} {}
+
+pub fn sink_many[T: ?Dup](move m: Many[T]) uses {Alloc} {}
+
+pub fn sink_slot[T: ?Dup](move s: Slot[T]) uses {Alloc} {}
+
+pub fn sink_nested[T: ?Dup](move d: Direct[Holder[T]]) uses {Alloc} {}
+
+pub fn measure_holder[T: ?Dup](h: Holder[T]) -> U32 {
+  0
+}
+
+pub fn measure_tuple[T: ?Dup](t: (Holder[T], U32)) -> U32 {
+  0
+}
+
+pub fn run(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+// ---- E0704: a second use after the `move` ----
+
+pub fn holder_twice[T: ?Dup](move h: Holder[T]) uses {Alloc} {
+  sink_holder(move h)
+  sink_holder(move h)           //~ E0704
+}
+
+pub fn direct_twice[T: ?Dup](move d: Direct[T]) uses {Alloc} {
+  sink_direct(move d)
+  sink_direct(move d)           //~ E0704
+}
+
+pub fn both_twice[T: ?Dup](move b: Both[T]) uses {Alloc} {
+  sink_both(move b)
+  sink_both(move b)             //~ E0704
+}
+
+pub fn many_twice[T: ?Dup](move m: Many[T]) uses {Alloc} {
+  sink_many(move m)
+  sink_many(move m)             //~ E0704
+}
+
+pub fn slot_twice[T: ?Dup](move s: Slot[T]) uses {Alloc} {
+  sink_slot(move s)
+  sink_slot(move s)             //~ E0704
+}
+
+pub fn nested_twice[T: ?Dup](move d: Direct[Holder[T]]) uses {Alloc} {
+  sink_nested(move d)
+  sink_nested(move d)           //~ E0704
+}
+
+pub fn holder_in_a_tuple_twice[T: ?Dup](move t: (Holder[T], U32)) uses {Alloc} {
+  let a = move t
+  let b = move t                //~ E0704
+  let _ = (move a, move b)
+}
+
+pub fn holder_split_and_moved_twice[T: ?Dup](move h: Holder[T]) -> (Holder[T], Holder[T]) {
+  let a = keep_holder(move h)
+  let b = keep_holder(move h)   //~ E0704
+  (move a, move b)
+}
+
+// ---- E0711: no `move` where the value is consumed, or the value is not owned ----
+
+pub fn holder_in_a_tuple_without_move[T: ?Dup](move h: Holder[T]) -> (Holder[T], U32) {
+  (h, 1)                        //~ E0711
+}
+
+pub fn slot_let_without_move[T: ?Dup](move s: Slot[T]) -> Slot[T] {
+  let t = s                     //~ E0711
+  t
+}
+
+pub fn returns_a_borrowed_holder[T: ?Dup](h: Holder[T]) -> Holder[T] {
+  h                             //~ E0711
+}
+
+pub fn returns_a_borrowed_direct[T: ?Dup](d: Direct[T]) -> Direct[T] {
+  d                             //~ E0711
+}
+
+pub fn moves_a_borrowed_slot[T: ?Dup](s: Slot[T]) uses {Alloc} {
+  sink_slot(move s)             //~ E0711
+}
+
+// ---- E0712: an anonymous function cannot capture it ----
+
+pub fn captures_a_holder[T: ?Dup](h: Holder[T]) -> U32 {
+  run(fn(i) { i + measure_holder(h) })   //~ E0712
+}
+
+pub fn captures_an_owned_holder[T: ?Dup](move h: Holder[T]) -> Holder[T] {
+  let n = run(fn(i) { i + measure_holder(h) })   //~ E0712
+  let _ = n
+  h
+}
+
+pub fn captures_a_tuple_of_holders[T: ?Dup](t: (Holder[T], U32)) -> U32 {
+  run(fn(i) { i + measure_tuple(t) })   //~ E0712
+}

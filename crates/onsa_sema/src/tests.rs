@@ -258,7 +258,11 @@ fn a_chain_that_doubles_each_step_has_its_answers() {
             let t = a.types.intern(Ty::Named(d, args.clone()));
             assert_eq!(a.kind_of(t), Some(Kind::Copy), "{name}{k}");
             assert!(!crate::rt::needs_alloc_drop(&a, t));
-            assert_eq!(a.known.drops.borrow().get(&(d, args)), Some(&Some(false)), "{name}{k}: the drops are found");
+            assert_eq!(
+                a.known.drops.borrow().get(&(d, args, crate::walk::Under::Closed)),
+                Some(&(Some(false), false)),
+                "{name}{k}: the drops are found"
+            );
             assert_eq!(a.layout_of(t).map(|l| l.size), (k == 29).then_some(4 << 29), "{name}{k}");
         }
     };
@@ -267,16 +271,17 @@ fn a_chain_that_doubles_each_step_has_its_answers() {
 
 /// A kind found near the steps of a walk is the same whichever declaration
 /// is asked first (§18.1; W4-05 U2b/b): `Z` holds three expansions of about
-/// a third of the steps each, `Q` holds `Z` and two more, so `Q` has its
-/// answer only if `Z`'s is found with steps of its own.
+/// a third of the steps each (each step holds the one before with arguments
+/// of two forms, so none is kept twice, R-317), `Q` holds `Z` and two more,
+/// so `Q` has its answer only if `Z`'s is found with steps of its own.
 #[test]
 fn a_kind_near_the_steps_does_not_hang_on_the_order() {
     let mut src = String::from("pub struct G0[T] { v: T }\n");
-    for k in 1..=13 {
-        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[Option[T]] }}\n", k - 1));
+    for k in 1..=10 {
+        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[(T, T)] }}\n", k - 1));
     }
-    src.push_str("pub struct Z { f0: G13[F32], f1: G13[I32], f2: G13[U8] }\n");
-    src.push_str("pub struct Q { z: Z, g0: G13[Bool], g1: G13[I8] }\n");
+    src.push_str("pub struct Z { f0: G10[F32], f1: G10[I32], f2: G10[U8] }\n");
+    src.push_str("pub struct Q { z: Z, g0: G10[Bool], g1: G10[I8] }\n");
     let kind_of_q = |z_first: bool| {
         let mut a = check(&src);
         let ty = |a: &mut Analysis, name| a.types.intern(Ty::Named(def(a, name), vec![]));
@@ -287,6 +292,59 @@ fn a_kind_near_the_steps_does_not_hang_on_the_order() {
         a.kind_of(q)
     };
     assert_eq!(kind_of_q(true), kind_of_q(false));
+    assert_eq!(kind_of_q(false), Some(Kind::Copy));
+}
+
+/// The kind in a body asked by the modes (R-30): a walk past its steps is
+/// Affine (`G11` holds the one before with arguments of two forms, each
+/// kept, about 3^11 steps), so `(move h, move h)` is an E0704; a walk with no answer
+/// of an error keeps quiet (§18.1): a field whose type is not found, a type
+/// that holds itself, a field of a declaration whose type parameters a
+/// syntax error cut.
+#[test]
+fn a_kind_in_a_body_is_affine_only_past_the_steps() {
+    let mut src = String::from("pub struct G0[T] { v: T }\n");
+    for k in 1..=11 {
+        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[(T, T)] }}\n", k - 1));
+    }
+    src.push_str("pub fn f(move h: G11[F32]) -> (G11[F32], G11[F32]) { (move h, move h) }\n");
+    let mut a = check(&src);
+    assert_eq!(codes(&a), [Code::E0704]);
+    let f32 = a.types.float(FloatKind::F32);
+    let g11 = a.types.intern(Ty::Named(def(&a, "G11"), vec![f32]));
+    assert_eq!((a.kind_of(g11), crate::kind::kind_in_body(&a, g11, &[])), (None, Some(Kind::Affine)));
+    let quiet = [
+        ("pub struct S { a: Nope }\npub fn f(s: S) -> S { s }\n", vec![Code::E0302]),
+        ("pub struct Node { v: I32, next: Node }\npub fn f(n: Node) -> Node { n }\n", vec![Code::E0311]),
+        ("struct S[T: ] { a: T }\nfn f(s: S[F32]) -> F32 { s.a }\n", vec![]),
+    ];
+    for (src, want) in quiet {
+        assert_eq!(codes(&check(src)), want, "{src}");
+    }
+}
+
+/// The items read under the environment of an item go when it is found
+/// (R-317, `walk::Known`): after 20 bodies ask `G6` of 20 arguments, each
+/// walk keeping about 2^7 such items, the tables keep the answers of the
+/// roots and of the closed types only, not more for each root.
+#[test]
+fn the_kinds_kept_do_not_grow_with_the_roots() {
+    let mut src = String::from("pub struct G0[T] { v: T }\n");
+    for k in 1..=6 {
+        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[[T; 2]] }}\n", k - 1));
+    }
+    let mut shape = String::from("T");
+    for n in 0..20 {
+        shape = if n % 2 == 0 { format!("Option[{shape}]") } else { format!("({shape}, U8)") };
+        src.push_str(&format!("pub fn f{n}[T: Copy](g: G6[{shape}]) -> (G6[{shape}], G6[{shape}]) {{ (g, g) }}\n"));
+    }
+    let a = check(&src);
+    assert_eq!(codes(&a), []);
+    let kinds = a.known.kinds.borrow();
+    let under = |u: fn(&crate::walk::Under) -> bool| kinds.keys().filter(|k| u(&k.2)).count();
+    assert_eq!(under(|u| matches!(u, crate::walk::Under::Body(_))), 20, "each root is kept");
+    assert_eq!(under(|u| matches!(u, crate::walk::Under::Item(_))), 0);
+    assert!(kinds.len() <= 20 + 7, "{} kept", kinds.len());
 }
 
 /// The answer of a declaration is found from the depth 0, whatever depth

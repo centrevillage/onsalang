@@ -111,8 +111,8 @@ pub fn layout_of_def(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Layout> {
 }
 
 fn named(w: &Walk, d: DefId, args: &[TyId], (env, depth): At) -> Option<Layout> {
-    w.remember(&w.a.known.layouts, (d, args, env, depth), |depth| {
-        let (holds, env, depth) = w.enter(d, args, env, depth)?;
+    w.remember(&w.a.known.layouts, (d, args, env, depth), |depth, key| {
+        let (holds, env, depth) = w.enter(d, args, env, (depth, key))?;
         let at = (env.as_ref(), depth);
         match holds {
             Holds::Fields(fs, _) => {

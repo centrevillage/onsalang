@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.6", "§10", "§12.2"]
+
+// R-30, W4-05 U2b carry-over (W4-16 U3; §4.1: `Ptr[T]` is Copy and a value; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄
+// …は `Alloc` が要る", "Copy 値…の生成と破棄: 要らない"; §10 4.: an `rt fn` cannot do what needs `Alloc`). Whether a value needs
+// `Alloc` to be dropped depends on the Shared values and `Buf`s it holds, and a `Ptr[T]` holds none of them: it is a Copy
+// value whatever `T` is, so the drop does not go to what it points to. A type that is reached through a `Ptr[T]` and loops
+// back (`struct N { p: Ptr[N] }`) is not a problem of the drop either; the `Str` next to it is what needs `Alloc`. The
+// `rt fn` that owns an `M` is an E0901 at the signature (the same E0901 as `owns_a_buf` of negative/rt.onsa; the code of a drop
+// in an `rt fn` is E0901 in this version, R-83), and the function without `rt` and without `uses {Alloc}` is an E0601
+// (§10 1.). Before the fix the answer for a value that holds a `Ptr` back into its own type was "no `Alloc` is needed", so
+// nothing was reported. One error per function (P-01).
+
+pub struct N {
+  p: Ptr[N],
+}
+
+pub struct M {
+  n: N,
+  s: Str,
+}
+
+pub struct Left {
+  next: Ptr[Right],
+}
+
+pub struct Right {
+  back: Ptr[Left],
+  names: Array[Str],
+}
+
+// ---- an `rt fn` that owns a value with a Shared value next to a `Ptr` ----
+
+pub rt fn own(move m: M) -> U32 { m.s.len() }   //~ E0901
+
+pub rt fn own_right(move r: Right) -> U32 { 1 }   //~ E0901
+
+pub rt fn own_in_a_tuple(move t: (N, Str)) -> U32 { 1 }   //~ E0901
+
+pub rt fn own_in_an_array(move xs: [M; 2]) -> U32 { 1 }   //~ E0901
+
+// The same with a `Ptr` that does not point back is negative/rt_drop_with_flat_ptr.onsa (it is an error already).
+
+// ---- a function without `rt` and without `Alloc` ----
+
+pub fn own_plain(move m: M) -> U32 { m.s.len() }   //~ E0601
+
+pub fn own_right_plain(move r: Right) -> U32 { 1 }   //~ E0601

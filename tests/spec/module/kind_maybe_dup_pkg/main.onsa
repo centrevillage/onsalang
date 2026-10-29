@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2", "§5.3", "§15.1"]
+
+// R-30 (W4-16 U3): the kind of a generic type of another module is decided from its declaration there, and the bound of the
+// function that names it here. `lib.Holder[T]` with `T: ?Dup` is Affine in the body that names it, so a second `move`
+// (E0704, §5.2), a borrowed value that is returned (E0711) and a capture (E0712, §5.3) are the same errors as for a type of this
+// module (negative/kind_maybe_dup_struct.onsa); the same error written in `lib.onsa` is reported there. With `T: Copy`
+// both `lib.Holder[T]` and `lib.Pair[T]` are Copy and are copied where they are used twice. One error per item (P-01).
+
+use lib.{Holder, Pair, keep, measure, sink}
+
+pub fn run(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn holder_twice[T: ?Dup](move h: Holder[T]) uses {Alloc} {
+  sink(move h)
+  sink(move h)                  //~ E0704
+}
+
+pub fn holder_split[T: ?Dup](move h: Holder[T]) -> (Holder[T], Holder[T]) {
+  let a = keep(move h)
+  let b = keep(move h)          //~ E0704
+  (move a, move b)
+}
+
+pub fn returns_a_borrowed_holder[T: ?Dup](h: Holder[T]) -> Holder[T] {
+  h                             //~ E0711
+}
+
+pub fn captures_a_holder[T: ?Dup](h: Holder[T]) -> U32 {
+  run(fn(i) { i + measure(h) })   //~ E0712
+}
+
+// Contrasts.
+pub fn holder_copy[T: Copy](move h: Holder[T]) -> (Holder[T], Holder[T]) {
+  (h, h)
+}
+
+pub fn pair_copy[T: Copy](move p: Pair[T]) -> (Pair[T], Pair[T]) {
+  (p, p)
+}
+
+pub fn pair_dup[T](p: Pair[T]) -> (Pair[T], Pair[T]) {
+  (p, p)
+}
+
+pub fn holder_moved_once[T: ?Dup](move h: Holder[T]) -> Holder[T] {
+  keep(move h)
+}

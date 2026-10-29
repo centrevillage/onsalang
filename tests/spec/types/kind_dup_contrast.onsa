@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2"]
+
+// R-30, R-317 (W4-16 U3; §4.5: "型パラメータには、暗黙に `Dup`（複製できる = Copy か Shared）の制約が付く",
+// §4.6: "種は構造で決まる"): the contrast of negative/kind_maybe_dup_param.onsa and kind_maybe_dup_struct.onsa. A
+// value whose type is Copy or Shared is copied where it is used twice, tuple and array literals included, and a
+// `move` is not written. A type parameter without a bound is `Dup`, and `T: Copy` is Copy. The kind of a
+// generic type is decided from the declaration down to the parameter at its bottom and by the bound of the
+// parameter of the function that names it: `Pair[T]` has only `T`, `Holder[T]`, `Slot[T]` and `Option[T]`
+// are declared with `T: ?Dup`, and with `T: Copy` all of them are Copy (the parameter of the declaration is
+// not what decides). When a kind is not found it is taken for Affine (R-30), so a kind that is found must be
+// found in every one of these.
+// The functions take their arguments as `move` of a Copy type or as a borrowed value of a `Dup` type: a `Dup`
+// value that is only `Dup` (it may be Shared) is not dropped here, because dropping a generic `T` needs `Alloc`
+// (§12.2).
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub struct Direct[T: ?Dup] {
+  item: T,
+}
+
+pub enum Slot[T: ?Dup] {
+  Empty,
+  Full(T),
+}
+
+pub struct Outer[T: ?Dup] {
+  inner: Direct[Holder[T]],
+  slot: Slot[T],
+}
+
+// ---- a parameter without a bound is Dup ----
+
+pub fn dup_plain[T](x: T) -> (T, T) {
+  (x, x)
+}
+
+pub fn dup_plain_array[T](x: T) -> [T; 3] {
+  [x, x, x]
+}
+
+pub fn dup_plain_repeat[T](x: T) -> [T; 2] {
+  [x; 2]
+}
+
+pub fn dup_plain_pair[T](p: Pair[T]) -> (Pair[T], Pair[T]) {
+  (p, p)
+}
+
+pub fn dup_plain_holder[T](h: Holder[T]) -> (Holder[T], Holder[T]) {
+  (h, h)
+}
+
+pub fn dup_plain_slot[T](s: Slot[T]) -> (Slot[T], Slot[T]) {
+  (s, s)
+}
+
+pub fn dup_plain_option[T](o: Option[T]) -> (Option[T], Option[T]) {
+  (o, o)
+}
+
+// ---- T: Copy is Copy, through every declaration ----
+
+pub fn dup_copy[T: Copy](move x: T) -> (T, T) {
+  (x, x)
+}
+
+pub fn dup_copy_array[T: Copy](move x: T) -> [T; 3] {
+  [x, x, x]
+}
+
+pub fn dup_pair[T: Copy](move p: Pair[T]) -> (Pair[T], Pair[T]) {
+  (p, p)
+}
+
+pub fn dup_holder[T: Copy](move h: Holder[T]) -> (Holder[T], Holder[T]) {
+  (h, h)
+}
+
+pub fn dup_direct[T: Copy](move d: Direct[T]) -> (Direct[T], Direct[T]) {
+  (d, d)
+}
+
+pub fn dup_slot[T: Copy](move s: Slot[T]) -> (Slot[T], Slot[T]) {
+  (s, s)
+}
+
+pub fn dup_option[T: Copy](move o: Option[T]) -> (Option[T], Option[T]) {
+  (o, o)
+}
+
+pub fn dup_result[T: Copy, E: Copy](move r: Result[T, E]) -> (Result[T, E], Result[T, E]) {
+  (r, r)
+}
+
+pub fn dup_nested_pair[T: Copy](move p: Pair[Pair[T]]) -> (Pair[Pair[T]], Pair[Pair[T]]) {
+  (p, p)
+}
+
+pub fn dup_nested_through_declarations[T: Copy](move o: Outer[T]) -> (Outer[T], Outer[T]) {
+  (o, o)
+}
+
+pub fn dup_in_a_tuple[T: Copy](move t: (Pair[T], U32)) -> ((Pair[T], U32), (Pair[T], U32)) {
+  (t, t)
+}
+
+pub fn dup_in_an_array[T: Copy](move xs: [Holder[T]; 2]) -> ([Holder[T]; 2], [Holder[T]; 2]) {
+  (xs, xs)
+}
+
+pub fn dup_option_of_pair[T: Copy](move o: Option[Pair[T]]) -> (Option[Pair[T]], Option[Pair[T]]) {
+  (o, o)
+}
+
+// ---- a bound that implies Copy ----
+
+pub fn dup_num[T: Num](move x: T) -> (T, T) {
+  (x, x)
+}
+
+pub fn dup_num_pair[T: Num](move p: Pair[T]) -> (Pair[T], Pair[T]) {
+  (p, p)
+}
+
+// ---- a concrete type with a Shared or a Copy value in it ----
+
+pub fn dup_shared(s: Str) -> (Str, Str) {
+  (s, s)
+}
+
+pub fn dup_holder_of_shared(h: Holder[Str]) -> (Holder[Str], Holder[Str]) {
+  (h, h)
+}
+
+pub fn dup_holder_of_copy(move h: Holder[F32]) -> (Holder[F32], Holder[F32]) {
+  (h, h)
+}

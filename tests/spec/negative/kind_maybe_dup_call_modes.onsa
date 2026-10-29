@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.2"]
+
+// R-30 (W4-16 U3; §5.2: "`inout` と `move` は呼び出し位置にも書く", "総称の `T: ?Dup` の値は Affine でありうるので
+// `move` を書く"): an argument of a `move` parameter that is a value of a `?Dup` type parameter and has no `move` is a
+// mode that is not written at the call, E0703. This is the same answer as for a `Buf` (negative/modes.onsa
+// `missing_inout` is the `inout` side). It does not depend on the kind of `T`, so it holds before and after R-30; the
+// file is a guard for the part of the kind of `?Dup` values that is already right. One error per function (P-01).
+
+pub fn keep[T: ?Dup](move x: T) -> T {
+  x
+}
+
+pub fn argument_without_move[T: ?Dup](move x: T) -> T {
+  keep(x)                       //~ E0703
+}
+
+pub fn second_argument_without_move[T: ?Dup](move x: T, move y: T) -> (T, T) {
+  let a = keep(move x)
+  let b = keep(y)               //~ E0703
+  (move a, move b)
+}
+
+pub fn in_a_tuple_of_calls[T: ?Dup](move x: T, move y: T) -> (T, T) {
+  (keep(x), keep(move y))       //~ E0703
+}

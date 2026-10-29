@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6"]
+
+// R-30 (W4-05 U1, W4-16 U3; §4.5: "型パラメータの要求（境界と暗黙の `Dup`）は、型パラメータが決まった文で検査し…満たさな
+// ければ、要求を生んだ式（呼び出し…）の位置に E0416"): a type parameter without a bound needs `Dup`, so a value of a
+// type that is not Copy or Shared cannot be given to it. The kind of the type is decided from the declaration with the
+// arguments put in: a generic type whose `?Dup` parameter is a `Buf`, and a `?Dup` parameter itself. One error per
+// function (P-01).
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub struct Direct[T: ?Dup] {
+  item: T,
+}
+
+pub fn need_dup[U](x: U) -> U32 {
+  0
+}
+
+pub fn need_copy[U: Copy](x: U) -> U32 {
+  0
+}
+
+pub fn holder_of_buf(h: Holder[Buf[F32]]) -> U32 {
+  need_dup(h)                   //~ E0416
+}
+
+pub fn direct_of_buf(d: Direct[Buf[F32]]) -> U32 {
+  need_dup(d)                   //~ E0416
+}
+
+pub fn tuple_of_buf(t: (Buf[F32], U32)) -> U32 {
+  need_dup(t)                   //~ E0416
+}
+
+pub fn maybe_dup_parameter[T: ?Dup](x: T) -> U32 {
+  need_dup(x)                   //~ E0416
+}
+
+pub fn maybe_dup_parameter_for_copy[T: ?Dup](x: T) -> U32 {
+  need_copy(x)                  //~ E0416
+}
+
+pub fn shared_for_copy(s: Str) -> U32 {
+  need_copy(s)                  //~ E0416
+}
+
+// Contrasts: a Copy or Shared value meets both, and a `Dup` parameter meets `Dup`.
+pub fn shared_for_dup(s: Str) -> U32 {
+  need_dup(s)
+}
+
+pub fn copy_for_both(x: F32) -> U32 {
+  need_dup(x) + need_copy(x)
+}
+
+pub fn dup_parameter_for_dup[T](x: T) -> U32 {
+  need_dup(x)
+}
+
+pub fn copy_parameter_for_both[T: Copy](x: T) -> U32 {
+  need_dup(x) + need_copy(x)
+}

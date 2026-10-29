@@ -39,6 +39,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
             ast: &module.parsed.ast,
             text: &module.text,
             body,
+            generics: crate::body::generics_of(a, id),
             diag: None,
             state: State::default(),
             diverged: false,
@@ -127,6 +128,8 @@ struct Walker<'a> {
     ast: &'a Ast,
     text: &'a str,
     body: &'a BodyInfo,
+    /// The type parameters of the body, for the kinds ([`crate::kind::kind_in_body`]).
+    generics: Vec<crate::def::GenericDef>,
     diag: Option<Diagnostic>,
     state: State,
     diverged: bool,
@@ -168,7 +171,12 @@ impl<'a> Walker<'a> {
     }
 
     fn kind_of_expr(&self, e: ExprId) -> Option<Kind> {
-        self.ty_of(e).and_then(|t| self.a.kind_of(t))
+        self.ty_of(e).and_then(|t| self.kind(t))
+    }
+
+    /// Whether a value of `t` can be copied: an unknown kind is Affine (R-30).
+    fn kind(&self, t: TyId) -> Option<Kind> {
+        crate::kind::kind_in_body(self.a, t, &self.generics)
     }
 
     fn local(&self, id: LocalId) -> &crate::body::LocalInfo {
@@ -258,7 +266,7 @@ impl<'a> Walker<'a> {
                         | LocalKind::ClosureParam(Mode::Inout)
                 ) {
                     Some(format!("`{}` is an `inout` parameter", l.name))
-                } else if self.a.kind_of(l.ty) == Some(Kind::Affine) {
+                } else if self.kind(l.ty) == Some(Kind::Affine) {
                     Some(format!("`{}` is Affine and cannot be copied", l.name))
                 } else {
                     None

@@ -266,11 +266,13 @@ pub const TYPE_SIZE_LIMIT: u32 = 4096;
 /// The arguments a type is read under (R-30): `Param(i)` stands for
 /// `args[i]`, read under `outer`. The walks behind `&Analysis` (kinds,
 /// layouts, the drops of `rt`) read a field of a generic type under the
-/// arguments of its use, without making the substituted type.
+/// arguments of its use, without making the substituted type. `key`: the
+/// number of the item a walk made it for (`walk::Known`, R-317).
 #[derive(Debug, Clone, Copy)]
 pub struct Env<'e> {
     pub args: &'e [TyId],
     pub outer: Option<&'e Env<'e>>,
+    pub key: Option<u32>,
 }
 
 /// The interner.
@@ -389,7 +391,7 @@ impl Types {
             Ty::Param(i) => args.get(i as usize).copied().unwrap_or(ty),
             Ty::Array(e, len) => {
                 let e2 = self.subst(e, args);
-                let len2 = self.len_in(len, Some(&Env { args, outer: None }));
+                let len2 = self.len_in(len, Some(&Env { args, outer: None, key: None }));
                 self.intern(Ty::Array(e2, len2))
             }
             Ty::Tuple(ts) => {

@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2", "§5.3"]
+
+// R-30 (W4-16 U3; §4.5: "Affine 型も受け付けるには `[T: ?Dup]` と書いて、この制約を外す…その場合、`T` の値は
+// 複製できない"; §4.6; §5.2: "総称の `T: ?Dup` の値は Affine でありうるので `move` を書く"). A value of a type
+// parameter declared `?Dup` is Affine in the body, whatever the program later gives it, so every form that
+// copies it is an error of the modes: a second use after the `move` (E0704, §5.2), a place that has no `move`
+// in a consuming position or an argument of the `move` mode (E0711, §5.2), a borrowed value that is moved or
+// returned (E0711, no candidate, §5.2 and §5.4), and the capture by an anonymous function (E0712, §5.3:
+// "`inout` 引数と Affine 値は捕捉できない"). Before the fix the kind of such a value was not found and it was
+// taken for one that is not Affine, so the program was accepted and `onsa test` ran it with a `Buf`.
+// The same shapes with a type parameter without `?Dup` or with `Copy` are in types/kind_dup_contrast.onsa, and the
+// ones that move once in types/kind_maybe_dup_moved_once.onsa. One error per function (P-01).
+
+pub fn keep[T: ?Dup](move x: T) -> T {
+  x
+}
+
+pub fn sink[T: ?Dup](move x: T) uses {Alloc} {}
+
+pub fn peek[T: ?Dup](x: T) {}
+
+pub fn measure[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn run(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+// ---- E0704: a second use of a `move` argument ----
+
+pub fn consumed_twice[T: ?Dup](move x: T) uses {Alloc} {
+  sink(move x)
+  sink(move x)                  //~ E0704
+}
+
+pub fn kept_twice[T: ?Dup](move x: T) -> (T, T) {
+  let a = keep(move x)
+  let b = keep(move x)          //~ E0704
+  (move a, move b)
+}
+
+pub fn tuple_twice[T: ?Dup](move x: T) -> (T, T) {
+  (move x, move x)              //~ E0704
+}
+
+pub fn array_twice[T: ?Dup](move x: T) -> [T; 2] {
+  [move x, move x]              //~ E0704
+}
+
+pub fn read_after_move[T: ?Dup](move x: T) -> T {
+  let a = keep(move x)
+  peek(x)                       //~ E0704
+  a
+}
+
+pub fn moved_in_loop[T: ?Dup](move x: T, n: U32) uses {Alloc} {
+  for _ in 0..<n {
+    sink(move x)                //~ E0704
+  }
+}
+
+pub fn moved_in_one_branch[T: ?Dup](c: Bool, move x: T) -> T uses {Alloc} {
+  if c {
+    sink(move x)
+  }
+  keep(move x)                  //~ E0704
+}
+
+pub fn moved_in_one_arm[T: ?Dup](o: Option[U32], move x: T) -> T uses {Alloc} {
+  match o {
+    Some(_) => sink(move x),
+    None => {},
+  }
+  keep(move x)                  //~ E0704
+}
+
+pub fn moved_by_let_then_passed[T: ?Dup](move x: T) uses {Alloc} {
+  let y = move x
+  sink(move y)
+  sink(move x)                  //~ E0704
+}
+
+// ---- E0711: a place of a `?Dup` type has no `move` where it is consumed ----
+// (The argument of the `move` mode that has no `move` is E0703, a mode written at the call, §5.2; it is in
+// negative/kind_maybe_dup_call_modes.onsa.)
+
+pub fn let_without_move[T: ?Dup](move x: T) -> T {
+  let a = x                     //~ E0711
+  a
+}
+
+pub fn tuple_without_move[T: ?Dup](move x: T) -> (T, U32) {
+  (x, 1)                        //~ E0711
+}
+
+pub fn array_without_move[T: ?Dup](move x: T, move y: T) -> [T; 2] {
+  [move x, y]                   //~ E0711
+}
+
+// ---- E0711 with no candidate: the value is not owned ----
+
+pub fn returns_a_borrowed_argument[T: ?Dup](x: T) -> T {
+  x                             //~ E0711
+}
+
+pub fn passes_a_borrowed_argument[T: ?Dup](x: T) -> T {
+  keep(x)                       //~ E0711
+}
+
+pub fn moves_a_borrowed_argument[T: ?Dup](x: T) -> T {
+  keep(move x)                  //~ E0711
+}
+
+pub fn returns_an_element_of_a_borrowed_argument[T: ?Dup](xs: [T; 2]) -> T {
+  xs[0]                         //~ E0711
+}
+
+// ---- E0712: an anonymous function cannot capture it ----
+
+pub fn captures_a_borrowed_argument[T: ?Dup](x: T) -> U32 {
+  run(fn(i) { i + measure(x) })   //~ E0712
+}
+
+pub fn captures_an_owned_argument[T: ?Dup](move x: T) -> T {
+  let n = run(fn(i) { i + measure(x) })   //~ E0712
+  let _ = n
+  x
+}
+
+pub fn captures_a_binding[T: ?Dup](move x: T) -> T {
+  let y = keep(move x)
+  let n = run(fn(i) { i + measure(y) })   //~ E0712
+  let _ = n
+  y
+}

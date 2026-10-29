@@ -307,7 +307,7 @@ codes! {
     E0414 = 414, Types, [Types], Optional, Optional,
         "`?` needs a matching Option/Result return type";
     E0415 = 415, Types, [Types], Optional, Optional,
-        "assignment target is not a place";
+        "assignment target, `inout` argument or `inout self` receiver is not a place";
     E0416 = 416, Types, [Types], Optional, Optional,
         "type does not satisfy the bound";
     E0417 = 417, Types, [Types], Optional, Optional,

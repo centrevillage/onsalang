@@ -1,0 +1,30 @@
+// The generic types and functions of another module whose `?Dup` parameter makes the value Affine (R-30, spec §4.5, §4.6).
+// The kind is decided from the declaration here and the bound of the function that names the type.
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+pub fn keep[T: ?Dup](move x: T) -> T {
+  x
+}
+
+pub fn sink[T: ?Dup](move x: T) uses {Alloc} {}
+
+pub fn measure[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn twice_in_the_declaring_module[T: ?Dup](move h: Holder[T]) uses {Alloc} {
+  sink(move h)
+  sink(move h)   //~ E0704
+}
+
+pub fn copy_pair_in_the_declaring_module[T: Copy](move p: Pair[T]) -> (Pair[T], Pair[T]) {
+  (p, p)
+}

@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1"]
+
+// S-180 (W4-16 U3; §5.1: "タプルを左辺にする代入（`(a, b) = (b, a)`）は書けない（E0415。`let` で分解してから一つずつ代入する形を note で示す）。
+// 一つずつの代入と同じことをする二つ目の書き方になるからである（P2）"): a tuple on the left side of an assignment is not a place,
+// whatever its parts are (variables, fields, elements, a nested tuple, a part that is not a place). The note that shows the
+// form with `let` is not checked by a case (a note's wording is not promised, §18.1, and a marker has no place for one); the
+// code and the line are. The right way, a `let` that takes the values apart and one assignment for each part, is the
+// contrast at the end. One error per function (P-01).
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+pub fn swap_two_variables() -> U32 {
+  var p: U32 = 1
+  var q: U32 = 2
+  (p, q) = (q, p)               //~ E0415
+  p + q
+}
+
+pub fn assign_two_values() -> U32 {
+  var a: U32 = 0
+  var b: U32 = 0
+  (a, b) = (3, 4)               //~ E0415
+  a + b
+}
+
+pub fn three_parts() -> U32 {
+  var a: U32 = 1
+  var b: U32 = 2
+  var c: U32 = 3
+  (a, b, c) = (c, a, b)         //~ E0415
+  a + b + c
+}
+
+pub fn nested_tuple() -> U32 {
+  var a: U32 = 1
+  var b: U32 = 2
+  var c: U32 = 3
+  ((a, b), c) = ((b, a), c)     //~ E0415
+  a + b + c
+}
+
+pub fn fields_of_a_struct(inout s: P) {
+  (s.x, s.y) = (s.y, s.x)       //~ E0415
+}
+
+pub fn elements_of_an_array(inout xs: [U32; 2]) {
+  (xs[0], xs[1]) = (xs[1], xs[0])   //~ E0415
+}
+
+pub fn a_part_that_is_not_a_place() -> U32 {
+  var a: U32 = 1
+  (a, 1) = (2, 3)               //~ E0415
+  a
+}
+
+pub fn inside_loop_and_branch(n: U32, flag: Bool) -> U32 {
+  var p: U32 = 1
+  var q: U32 = 2
+  for _ in 0..<n {
+    if flag {
+      (p, q) = (q, p)           //~ E0415
+    }
+  }
+  p + q
+}
+
+pub fn inside_a_closure() -> U32 {
+  let f = fn(x: U32) -> U32 {
+    var p: U32 = x
+    var q: U32 = 2
+    (p, q) = (q, p)             //~ E0415
+    p + q
+  }
+  f.(1)
+}
+
+// The right way: take the values apart with a `let`, then assign each part (the `let` of Copy values takes the
+// values at that point, §5.4).
+pub fn swap_with_a_let() -> U32 {
+  var p: U32 = 1
+  var q: U32 = 2
+  let (a, b) = (q, p)
+  p = a
+  q = b
+  p + q
+}
+
+// A tuple on the right side or in a `let` is not the left side of an assignment.
+pub fn tuple_values_are_fine() -> U32 {
+  var t: (U32, U32) = (1, 2)
+  t = (t.1, t.0)
+  t.0 + t.1
+}

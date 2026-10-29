@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§10", "§12.2"]
+
+// R-30, W4-05 U2b carry-over (W4-16 U3; §4.1: `Ptr[T]` is Copy, §12.2): the part of negative/rt_drop_through_ptr.onsa that is an
+// error already. A `Ptr[U8]` does not point back into its own type, and the `Str` next to it needs `Alloc` to be dropped:
+// an E0901 at the signature of an `rt fn` (the code of a drop in an `rt fn` is E0901 in this version, R-83), and an E0601 in
+// the function without `rt` and without `uses {Alloc}` (§10 1.). It must stay so when the drop stops going to what a `Ptr` or
+// a `Span` points to. One error per function (P-01).
+
+pub struct Bytes8 {
+  raw: Ptr[U8],
+  label: Str,
+}
+
+pub rt fn own_bytes(move b: Bytes8) -> U32 { 1 }   //~ E0901
+
+pub rt fn own_bytes_in_a_tuple(move t: (Bytes8, U32)) -> U32 { 1 }   //~ E0901
+
+pub rt fn own_bytes_in_an_array(move xs: [Bytes8; 2]) -> U32 { 1 }   //~ E0901
+
+pub fn own_bytes_plain(move b: Bytes8) -> U32 { 1 }   //~ E0601
+
+pub fn own_bytes_in_a_tuple_plain(move t: (Bytes8, U32)) -> U32 { 1 }   //~ E0601
+
+pub fn own_bytes_in_an_array_plain(move xs: [Bytes8; 2]) -> U32 { 1 }   //~ E0601

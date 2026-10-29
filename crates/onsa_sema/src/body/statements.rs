@@ -49,11 +49,26 @@ impl<'a> Checker<'a> {
             StmtKind::Assign { target, value } => {
                 if !self.is_place(*target) {
                     let span = self.expr(*target).span;
-                    return Err(self.err(
-                        Code::E0415,
-                        span,
-                        "assignment needs a place: a `var`, or a field / element of one (§5.1)",
-                    ));
+                    let msg = "assignment needs a place: a `var`, or a field / element of one (§5.1)";
+                    let mut d = Diagnostic::new(Stage::Types, Code::E0415, span, msg).with_found(self.src(span));
+                    // `(a, b) = (b, a)` (S-180): the form with `let` and one assignment each,
+                    // written out when each part is a place (no tuple) and it is one line.
+                    if let ExprKind::Tuple(parts) = &self.expr(self.ast.without_parens(*target)).kind
+                        && !parts.is_empty()
+                    {
+                        let names: Vec<String> = (0..parts.len()).map(|i| format!("v{i}")).collect();
+                        let each =
+                            parts.iter().zip(&names).map(|(&p, v)| format!("`{} = {v}`", self.src(self.expr(p).span)));
+                        let (names, value) = (names.join(", "), self.src(self.expr(*value).span));
+                        let each = each.collect::<Vec<_>>().join(", ");
+                        let rule = format!(
+                            "a tuple is not a place; take the value apart with `let ({names}) = {value}`, then assign each: {each} (§5.1)"
+                        );
+                        let words = "a tuple is not a place; take the value apart with `let`, then assign each part to its place (§5.1)";
+                        let written = parts.iter().all(|&p| self.is_place(p)) && !rule.contains('\n');
+                        d = d.with_rule(if written { rule } else { words.to_string() });
+                    }
+                    return Err(self.diag(d));
                 }
                 let tt = self.check_expr(*target, None)?;
                 let why = format!("the assignment to `{}`", self.src(self.expr(*target).span));

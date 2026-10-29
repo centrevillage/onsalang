@@ -483,7 +483,7 @@ impl Builder<'_> {
                     _ => Vec::new(),
                 };
                 let tys: Vec<TyId> = fields.iter().map(|(_, t)| *t).collect();
-                let each: Vec<String> = list_in(vs, &tys, Some(&Env { args, outer: env }))
+                let each: Vec<String> = list_in(vs, &tys, Some(&Env { args, outer: env, key: None }))
                     .into_iter()
                     .enumerate()
                     .map(|(i, v)| match fields.get(i) {

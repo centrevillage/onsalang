@@ -31,7 +31,7 @@
 | `body/r2_effect_fnvalue.onsa`、`body/ev1.onsa` | R-27 |
 | `body/m1_continue.onsa`〜`body/m4_while_cond.onsa` | R-28 |
 | `body/m5_for_move.onsa`、`body/m5b_for_move_once.onsa` | R-29 |
-| `body/q1_qdup.onsa`、`body/q2_qdup_copy.onsa`、`types/kindfb*.onsa` | R-30 |
+| `body/q1_qdup.onsa`、`body/q2_qdup_copy.onsa`、`types/kindfb*.onsa` | R-30。W4-16 U3/t で期待値付きのテストへ写した: `tests/spec/negative/kind_maybe_dup_param.onsa`（`?Dup` の値の複製）、`kind_maybe_dup_struct.onsa`・`kind_generic_buf_holder.onsa`・`kind_dup_requirement.onsa`（総称の型）、`tests/spec/types/kind_dup_contrast.onsa`（Dup の対照）。W4-16 U3 で直した（今の `onsa check` は `q1` が 1 行の E0704・3 行の E0711・5 行の E0416、`q2` が 1 行の E0711、`kindfb` が 9・10 行の E0601・14・20 行の E0704・26 行の E0416、`kindfb2` が 12・17 行の E0416） |
 | `body/x1_slice_alias.onsa`、`body/s1_planar.onsa`、`body/s2_slice_inout.onsa` | R-31 |
 | `body/g1_generic_drop.onsa`、`body/r3_rt_temp_drop.onsa`、`body/r4_branch_drop.onsa`、`body/e1_temp_drop_nonrt.onsa` | R-32 |
 | `body/m6_closure_local.onsa` | R-33 |
@@ -123,7 +123,7 @@
 | `parent/t2.onsa` | R-02。W4-05 U2 で期待値付きのテストへ移した: `tests/spec/types/cycle_value_self.onsa`（E0311）。今: `check` は `Node` に E0311 |
 | `parent/r2.onsa` | R-69 |
 | `parent/r4.onsa` | R-72 |
-| `parent/t1.onsa` | R-30 |
+| `parent/t1.onsa` | R-30。W4-05 U1 と W4-16 U3 で直した（今の `onsa check` は 7 行の E0704）。期待値付きのテストは `tests/spec/types/affine_generic_holder_used_after.onsa` |
 | `parent/p2/` | R-09 |
 | `parent/r13*.onsa` | R-13（`prev(prev(x))` を含む） |
 | `parent/r15*.onsa` | R-15 |

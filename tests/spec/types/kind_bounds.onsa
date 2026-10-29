@@ -207,7 +207,8 @@ pub fn a_number_trait_and_a_kind_constraint_are_fine[T: Num + Copy](x: T) -> T {
   x + x
 }
 
-pub fn a_relaxed_dup_bound_is_fine[T: ?Dup](x: T) -> T {
+// `move`: a `?Dup` value may be Affine, so a borrowed one is not returned (§5.2, R-30, W4-16 U3).
+pub fn a_relaxed_dup_bound_is_fine[T: ?Dup](move x: T) -> T {
   x
 }
 

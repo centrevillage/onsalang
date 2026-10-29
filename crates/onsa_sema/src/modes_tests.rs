@@ -96,7 +96,12 @@ fn argument_modes_must_match() {
     // `inout` needs a place rooted at a mutable binding.
     assert_eq!(codes("pub fn f(inout a: U32) {}\npub fn g() { let a = 1\n f(inout a) }\n"), vec![Code::E0701]);
     assert_eq!(codes("pub fn f(inout a: U32) {}\npub fn g(a: U32) { f(inout a) }\n"), vec![Code::E0701]);
-    assert_eq!(codes("pub fn f(inout a: U32) {}\npub fn g() { f(inout 1) }\n"), vec![Code::E0701]);
+    // A value that is no place is the E0415 of the types (§5.1, S-178).
+    assert_eq!(codes("pub fn f(inout a: U32) {}\npub fn g() { f(inout 1) }\n"), vec![Code::E0415]);
+    // By the mode of the declaration, with no mark too (the types stage is before the E0703 / E0713).
+    assert_eq!(codes("pub fn f(inout a: U32) {}\npub fn g() { f(1) }\n"), vec![Code::E0415]);
+    let p = "pub struct P { v: F32 }\nimpl P {\n  pub fn bump(inout self) { self.v = 1.0 }\n}\npub fn mk() -> P { P { v: 0.0 } }\n";
+    assert_eq!(codes(&format!("{p}pub fn g() {{ mk().bump() }}\n")), vec![Code::E0415]);
     assert_eq!(
         codes("pub fn f(inout a: U32) {}\npub fn g(xs: [U32; 2]) { for x in xs { f(inout x) } }\n"),
         vec![Code::E0701]

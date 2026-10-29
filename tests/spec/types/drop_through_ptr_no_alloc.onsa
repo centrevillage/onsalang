@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.6", "§10", "§12.2"]
+
+// R-30, W4-05 U2b carry-over (W4-16 U3; §4.1: `Ptr[T]` is Copy and a value, `Span[T]` is a view of the storage it borrows;
+// §12.2: "Copy 値…の生成と破棄: 要らない", "Shared 値・`Buf` の借用、読み取り: 要らない", "受け取った Shared 値を、そのまま返す・`move` の引数に渡す:
+// 要らない"): the contrast of negative/rt_drop_through_ptr.onsa. A value that holds no Shared value and no `Buf` needs no
+// `Alloc` to be dropped, however the `Ptr` in it points: back into its own type or into a type that points back (a `Ptr` at a Shared type is in
+// types/drop_through_ptr_to_shared.onsa). A `Span` argument is a view and is not dropped. Reading a value with a
+// `Str` in it needs no `Alloc` either (moving it on is in types/drop_through_ptr_move_on.onsa, R-255). So an `rt fn` takes all of
+// these, and so does a function without `Alloc`.
+
+pub struct N {
+  p: Ptr[N],
+}
+
+pub struct M {
+  n: N,
+  s: Str,
+}
+
+pub struct K {
+  n: N,
+  v: U32,
+}
+
+pub struct Left {
+  next: Ptr[Right],
+}
+
+pub struct Right {
+  back: Ptr[Left],
+  tag: U32,
+}
+
+pub rt fn own_n(move n: N) -> U32 { 1 }
+
+pub rt fn own_k(move k: K) -> U32 { k.v }
+
+pub rt fn own_left(move l: Left) -> U32 { 1 }
+
+pub rt fn own_right(move r: Right) -> U32 { r.tag }
+
+pub rt fn own_in_a_tuple(move t: (N, U32)) -> U32 { t.1 }
+
+pub rt fn own_in_an_array(move xs: [K; 2]) -> U32 { 1 }
+
+pub rt fn read_m(m: M) -> U32 { m.s.len() }
+
+pub rt fn view_of_n(xs: Span[N]) -> U32 { xs.len() }
+
+pub rt fn view_with_m(xs: Span[N], m: M) -> U32 { xs.len() + m.s.len() }
+
+pub fn own_n_plain(move n: N) -> U32 { 1 }
+
+pub fn own_right_plain(move r: Right) -> U32 { r.tag }

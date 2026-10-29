@@ -214,7 +214,6 @@ impl<'a> Checker<'a> {
         kind: CallKind,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        let _ = callee;
         if let Ty::Named(d, targs_recv) = self.ty(recv) {
             // Of an E0304, an unknown callee too (§18.1, S-737).
             let Ok(assoc) = self.a.modules.assoc_member(self.a.modules.assoc.get(&d), &name.name) else {
@@ -241,6 +240,9 @@ impl<'a> Checker<'a> {
                             name.name, name.name
                         ),
                     ));
+                }
+                if f.self_mode == Some(Mode::Inout) {
+                    self.inout_receiver(callee)?;
                 }
                 let targs = self.fresh_args(md);
                 // The impl's own generic arguments come from the receiver.
@@ -279,6 +281,9 @@ impl<'a> Checker<'a> {
             let shown = self.display(recv);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` has no method `{}`", name.name)));
         };
+        if sig.bang {
+            self.inout_receiver(callee)?;
+        }
         let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
         if let Some(exp) = expected {
             self.unify_at(span, sig.ret, exp)?;
@@ -361,8 +366,7 @@ impl<'a> Checker<'a> {
                 format!("this call takes {} argument(s) but {} were given", params.len(), args.len()),
             ));
         }
-        for (arg, (_, pt)) in args.iter().zip(params) {
-            let pt = *pt;
+        for (arg, &(mode, pt)) in args.iter().zip(params) {
             let ps = self.shallow(pt);
             let coerce = match self.ty(ps) {
                 Ty::Builtin(BuiltinTy::Span, a) => Some((a[0], None)),
@@ -372,6 +376,7 @@ impl<'a> Checker<'a> {
                 },
                 _ => None,
             };
+            let planar = matches!(coerce, Some((_, Some(_))));
             match coerce {
                 None => {
                     let callee = self.src(span);
@@ -415,7 +420,44 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+            if mode == Mode::Inout && !self.inout_place(arg.expr, planar) {
+                return Err(self.no_inout_place(arg.expr, "an `inout` argument", "§5.1"));
+            }
         }
         Ok(())
+    }
+
+    /// Whether `e` can be passed as `inout` (§5.1, §5.3, S-178): a place, a
+    /// partial view of one ([`view_base`]), and in a planar argument an array
+    /// literal of those (`inout [a, b]`). The modes take the views and the
+    /// literals from W4-08.
+    fn inout_place(&self, e: ExprId, planar: bool) -> bool {
+        let e = self.ast.without_parens(e);
+        if let Some(base) = view_base((self.ast, &self.info, &self.a.types), e, |t| self.shallow(t)) {
+            return self.inout_place(base, false);
+        }
+        match &self.expr(e).kind {
+            ExprKind::Array(parts) if planar => parts.iter().all(|&p| self.inout_place(p, false)),
+            _ => self.is_place(e),
+        }
+    }
+
+    /// The receiver of an `inout self` method, written with `!` or not, is
+    /// an `inout` argument (§5.2, S-178).
+    fn inout_receiver(&mut self, callee: ExprId) -> R<()> {
+        match &self.expr(callee).kind {
+            ExprKind::Field { base, .. } if !self.inout_place(*base, false) => {
+                Err(self.no_inout_place(*base, "the receiver of an `inout self` method", "§5.2"))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// E0415: `what` is no place (§5.1; a place that cannot change is the E0701 of the modes).
+    fn no_inout_place(&mut self, e: ExprId, what: &str, section: &str) -> Stop {
+        let msg = format!(
+            "{what} must be a place (a `var`, an `inout` parameter, or a field / element of one), not a constant, a temporary or the result of a call ({section})"
+        );
+        self.err(Code::E0415, self.expr(e).span, msg)
     }
 }

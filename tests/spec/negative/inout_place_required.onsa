@@ -1,0 +1,145 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.2"]
+
+// S-178 (W4-16 U3; §5.1: "`inout` に場所でないもの（定数、一時値、呼び出しの結果）を渡すのも E0415 で、E0701 は場所だが変更できないもの
+// （`let` の束縛、借用の引数）に使う"; §5.2: "場所でないレシーバ（呼び出しの結果、定数）は E0415 で、場所だが変更できないもの…は E0701 である
+// （`inout` に渡す値と同じ）"): the operand of `inout` and the receiver of an `inout self` method are places, and a `const`, a
+// literal, a call result and a field or an element of them are not places (the same as the left side of an assignment,
+// negative/assign_place.onsa). They are E0415, not the E0701 that the implementation reports (the fix of E0701 is to declare the
+// binding `var`, which no declaration can do for these). The receiver is an `inout` argument too, so the receivers are
+// here with the arguments. The places that cannot be changed stay E0701 (negative/inout_readonly_place.onsa).
+// Not here: a part view `inout xs.slice(a, b)` and a flat array literal `inout [a, b]` are lists of places (W4-08). One error per
+// function (P-01).
+
+const LIMIT: U32 = 3
+
+const TABLE: [F32; 2] = [0.0, 0.0]
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+const ORIGIN: P = P { x: 0, y: 0 }
+
+impl P {
+  pub fn scale(inout self, k: U32) {
+    self.x = self.x * k
+  }
+}
+
+pub struct Q {
+  p: P,
+}
+
+pub fn make_q() -> Q {
+  Q { p: P { x: 1, y: 2 } }
+}
+
+pub fn make_p() -> P {
+  P { x: 1, y: 2 }
+}
+
+pub fn table() -> [F32; 2] {
+  [0.0, 0.0]
+}
+
+pub fn number() -> U32 {
+  3
+}
+
+pub fn set(inout x: U32) {
+  x = 1
+}
+
+pub fn bump(inout a: U32, b: U32) {}
+
+pub fn swap(inout a: U32, inout b: U32) {}
+
+pub fn set_f(inout x: F32) {}
+
+// ---- an `inout` argument that is not a place ----
+
+pub fn const_name() {
+  set(inout LIMIT)              //~ E0415
+}
+
+pub fn integer_literal() {
+  set(inout 3)                  //~ E0415
+}
+
+pub fn first_argument_literal() {
+  bump(inout 1, 1)              //~ E0415
+}
+
+pub fn second_argument_literal() {
+  var a: U32 = 1
+  swap(inout a, inout 2)        //~ E0415
+}
+
+pub fn call_result() {
+  set(inout number())           //~ E0415
+}
+
+pub fn field_of_a_call_result() {
+  set(inout make_p().x)         //~ E0415
+}
+
+pub fn element_of_a_call_result() {
+  set_f(inout table()[0])       //~ E0415
+}
+
+pub fn element_of_a_const() {
+  set_f(inout TABLE[0])         //~ E0415
+}
+
+pub fn field_of_a_const() {
+  set(inout ORIGIN.x)           //~ E0415
+}
+
+pub fn inside_loop_and_branch(n: U32, flag: Bool) {
+  for _ in 0..<n {
+    if flag {
+      set(inout LIMIT)          //~ E0415
+    }
+  }
+}
+
+pub fn inside_a_closure() -> U32 {
+  let f = fn(x: U32) -> U32 {
+    set(inout 3)                //~ E0415
+    x
+  }
+  f.(1)
+}
+
+// ---- the receiver of an `inout self` method that is not a place ----
+
+pub fn call_result_receiver() {
+  table().fill!(1.0)            //~ E0415
+}
+
+pub fn const_receiver() {
+  TABLE.fill!(1.0)              //~ E0415
+}
+
+pub fn struct_call_result_receiver() {
+  make_p().scale!(2)            //~ E0415
+}
+
+pub fn const_struct_receiver() {
+  ORIGIN.scale!(2)              //~ E0415
+}
+
+pub fn field_of_a_call_result_receiver() {
+  make_q().p.scale!(2)          //~ E0415
+}
+
+pub fn receiver_inside_loop_and_branch(n: U32, flag: Bool) {
+  for _ in 0..<n {
+    if flag {
+      TABLE.fill!(0.0)          //~ E0415
+    }
+  }
+}

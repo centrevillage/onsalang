@@ -1,0 +1,129 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.2", "§5.4"]
+
+// R-30 (W4-16 U3; §4.5: "生成して返すこと、借用・`inout`・`move` で渡すことはできる"): the contrast of
+// negative/kind_maybe_dup_param.onsa and kind_maybe_dup_struct.onsa. A value of a `?Dup` type is used once as an
+// Affine value: moved out (returned, put in a tuple, an array, a struct or an enum with `move`), borrowed any
+// number of times, or bound to a name that borrows it. Taking such a value for Affine must not reject these.
+// No function drops a value of `T` (a generic `T` is dropped with `Alloc`, §12.2), so there is no effect row.
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub struct Direct[T: ?Dup] {
+  item: T,
+}
+
+pub enum Slot[T: ?Dup] {
+  Empty,
+  Full(T),
+}
+
+pub fn keep[T: ?Dup](move x: T) -> T {
+  x
+}
+
+pub fn peek[T: ?Dup](x: T) {}
+
+pub fn measure[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn run(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+// ---- moved out once ----
+
+pub fn pass_through[T: ?Dup](move x: T) -> T {
+  keep(move x)
+}
+
+pub fn moved_into_a_tuple[T: ?Dup](move x: T) -> (T, U32) {
+  (move x, 1)
+}
+
+pub fn moved_into_two_slots[T: ?Dup](move x: T, move y: T) -> (T, T) {
+  (move x, move y)
+}
+
+pub fn moved_into_an_array[T: ?Dup](move x: T, move y: T) -> [T; 2] {
+  [move x, move y]
+}
+
+pub fn moved_into_a_struct[T: ?Dup](move x: T) -> Direct[T] {
+  Direct { item: move x }
+}
+
+pub fn moved_into_a_holder[T: ?Dup](move x: T) -> Holder[T] {
+  Holder { items: (move x, 1) }
+}
+
+pub fn moved_into_an_option[T: ?Dup](move x: T) -> Option[T] {
+  Some(move x)
+}
+
+pub fn moved_into_a_slot[T: ?Dup](move x: T) -> Slot[T] {
+  Slot.Full(move x)
+}
+
+pub fn moved_by_let_then_returned[T: ?Dup](move x: T) -> T {
+  let y = move x
+  y
+}
+
+pub fn moved_in_each_branch[T: ?Dup](c: Bool, move x: T, move y: T) -> T {
+  if c { move x } else { move y }
+}
+
+pub fn holder_passed_on[T: ?Dup](move h: Holder[T]) -> Holder[T] {
+  keep_holder(move h)
+}
+
+pub fn keep_holder[T: ?Dup](move h: Holder[T]) -> Holder[T] {
+  h
+}
+
+// ---- borrowed any number of times ----
+
+pub fn read_twice[T: ?Dup](x: T) -> U32 {
+  peek(x)
+  peek(x)
+  measure(x) + measure(x)
+}
+
+pub fn read_then_move[T: ?Dup](move x: T) -> T {
+  peek(x)
+  keep(move x)
+}
+
+pub fn borrow_binding[T: ?Dup](x: T) -> U32 {
+  let y = x
+  peek(y)
+  peek(x)
+  measure(y)
+}
+
+pub fn read_holder_twice[T: ?Dup](h: Holder[T]) -> U32 {
+  let g = h
+  measure_holder(g) + measure_holder(h)
+}
+
+pub fn measure_holder[T: ?Dup](h: Holder[T]) -> U32 {
+  0
+}
+
+pub fn element_read_twice[T: ?Dup](xs: [T; 2]) -> U32 {
+  peek(xs[0])
+  peek(xs[0])
+  measure(xs[1])
+}
+
+// ---- an anonymous function that does not capture it ----
+
+pub fn closure_without_capture[T: ?Dup](x: T) -> U32 {
+  peek(x)
+  run(fn(i) { i + 1 })
+}

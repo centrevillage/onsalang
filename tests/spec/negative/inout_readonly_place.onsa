@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.2", "§5.4"]
+
+// S-178 (W4-16 U3; §5.1: "E0701 は場所だが変更できないもの（`let` の束縛、借用の引数）に使う（直し方が違う。E0701 は宣言を `var`
+// にする）"; §5.2: "場所だが変更できないもの（`let` の束縛、借用の引数）は E0701 である（`inout` に渡す値と同じ）"): the other side of
+// negative/inout_place_required.onsa. A binding that is a place and cannot be changed (a `let`, a borrowed argument, a field or an
+// element of them) is an E0701 as an `inout` argument and as the receiver of an `inout self` method; the fix is to declare it
+// `var` or `inout`, which is not true of a `const` or a call result. It stays E0701 when those become E0415. One error per
+// function (P-01).
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+impl P {
+  pub fn scale(inout self, k: U32) {
+    self.x = self.x * k
+  }
+}
+
+pub fn set(inout x: U32) {
+  x = 1
+}
+
+pub fn set_f(inout x: F32) {}
+
+// ---- an `inout` argument ----
+
+pub fn let_binding() {
+  let v: U32 = 1
+  set(inout v)                  //~ E0701
+}
+
+pub fn borrowed_argument(v: U32) {
+  set(inout v)                  //~ E0701
+}
+
+pub fn field_of_a_let() -> U32 {
+  let p = P { x: 1, y: 2 }
+  set(inout p.x)                //~ E0701
+  p.y
+}
+
+pub fn field_of_a_borrowed_argument(p: P) -> U32 {
+  set(inout p.x)                //~ E0701
+  p.y
+}
+
+pub fn element_of_a_borrowed_argument(xs: [F32; 2]) {
+  set_f(inout xs[0])            //~ E0701
+}
+
+pub fn element_of_a_let() {
+  let xs: [F32; 2] = [0.0, 0.0]
+  set_f(inout xs[1])            //~ E0701
+}
+
+// ---- the receiver of an `inout self` method ----
+
+pub fn let_receiver() {
+  let xs: [F32; 2] = [0.0, 0.0]
+  xs.fill!(1.0)                 //~ E0701
+}
+
+pub fn borrowed_argument_receiver(xs: [F32; 2]) {
+  xs.fill!(1.0)                 //~ E0701
+}
+
+pub fn struct_let_receiver() -> U32 {
+  let p = P { x: 1, y: 2 }
+  p.scale!(2)                   //~ E0701
+  p.x
+}
+
+pub fn struct_borrowed_receiver(p: P) -> U32 {
+  p.scale!(2)                   //~ E0701
+  p.x
+}
+
+pub fn field_of_a_borrowed_receiver(q: (P, U32)) -> U32 {
+  q.0.scale!(2)                 //~ E0701
+  q.1
+}

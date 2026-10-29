@@ -1,0 +1,3 @@
+[package]
+name = "kind_maybe_dup_pkg"
+edition = "2026"

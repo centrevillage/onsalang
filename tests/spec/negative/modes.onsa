@@ -27,9 +27,9 @@ pub fn inout_of_borrowed(a: U32) {
   bump(inout a, 1)              //~ E0701
 }
 
-pub fn inout_of_temporary() {
-  bump(inout 1, 1)              //~ E0701
-}
+// `bump(inout 1, 1)`, an `inout` argument that is not a place, is an E0415 (S-178, §5.1): it is in
+// negative/inout_place_required.onsa (`first_argument_literal`) and the places that cannot be changed stay E0701 in
+// negative/inout_readonly_place.onsa.
 
 pub fn same_place_twice() {
   var p = P { x: 1, y: 2 }

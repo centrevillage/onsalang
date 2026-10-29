@@ -334,6 +334,27 @@ fn places_and_assignment() {
         "pub struct P { x: F32 }\npub fn f(inout p: P, q: P) {\n  p.x = q.x\n  var r = q\n  r.x = 1.0\n  let _ = r\n}\n",
     );
     assert_eq!(codes("pub fn f(p: U32) { 1 = 2 }\n"), vec![Code::E0415]);
+    // A tuple on the left (S-180): E0415 with the form of `let` and one assignment each, a
+    // note with no position; none for another place that is not.
+    let notes = |src: &str| {
+        let a = check(src);
+        assert_eq!(a.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), [Code::E0415], "{src}");
+        a.diagnostics[0].notes.iter().map(|n| (n.span, n.message.clone())).collect::<Vec<_>>()
+    };
+    let swap = "pub fn f() -> U32 {\n  var p: U32 = 1\n  var q: U32 = 2\n  ((p, q)) = (q, p)\n  p + q\n}\n";
+    let want = "a tuple is not a place; take the value apart with `let (v0, v1) = (q, p)`, then assign each: `p = v0`, `q = v1` (§5.1)";
+    assert_eq!(notes(swap), [(None, want.to_string())]);
+    // In words only when a part is no place (a tuple too) or the value is of more lines.
+    let words = "a tuple is not a place; take the value apart with `let`, then assign each part to its place (§5.1)";
+    for body in
+        ["(p, (q, r)) = (1, (2, 3))", "(p, 1) = (1, 2)", "(p, q) = if true {\n    (1, 2)\n  } else {\n    (3, 4)\n  }"]
+    {
+        let src = format!(
+            "pub fn f() {{\n  var p: U32 = 1\n  var q: U32 = 2\n  var r: U32 = 3\n  {body}\n  let _ = p + q + r\n}}\n"
+        );
+        assert_eq!(notes(&src), [(None, words.to_string())], "{body}");
+    }
+    assert_eq!(notes("const K: U32 = 1\npub fn f() { K = 2 }\n"), []);
 }
 
 #[test]
