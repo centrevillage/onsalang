@@ -1,0 +1,67 @@
+pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }
+
+pub fn sink[T](move x: T) {}
+
+pub fn sum(s: Span[F32]) -> F32 { s[0] }
+
+pub fn captured(input: [Span[F32]; 2]) -> U32 {
+  let ch = input[0]
+  apply(fn(n) { ch.len() + n })
+}
+
+pub fn captured_xs(xs: Span[F32]) -> U32 {
+  apply(fn(n) { xs.len() + n })
+}
+
+pub fn to_generic_move(input: [Span[F32]; 2]) {
+  let ch = input[0]
+  sink(ch)
+}
+
+pub fn to_generic_move_direct(xs: Span[F32]) {
+  sink(xs)
+}
+
+pub fn var_owned(input: [Span[F32]; 2]) -> F32 {
+  var v = input[0]
+  v[0]
+}
+
+pub fn var_from_let(input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]
+  var v = ch
+  v[0]
+}
+
+pub fn pass_on(input: [Span[F32]; 2]) -> F32 {
+  let ch = input[0]
+  sum(ch)
+}
+
+pub fn index_var(input: [Span[F32]; 2], k: U32) -> F32 {
+  let ch = input[k]
+  ch[0]
+}
+
+pub fn in_arm(input: [Span[F32]; 2], c: Bool) -> F32 {
+  if c {
+    let ch = input[0]
+    ch[0]
+  } else {
+    0.0
+  }
+}
+
+pub fn view_in_for(xs: Span[F32]) -> F32 {
+  var t = 0.0
+  for v in xs {
+    let w = v
+    t = t + w
+  }
+  t
+}
+
+pub fn array_in(input: [Span[F32]; 2]) -> F32 {
+  let a = [input[0], input[1]]
+  a[0][0]
+}
