@@ -4454,13 +4454,17 @@ class Handback(unittest.TestCase):
             self.assertIn("{" + ",".join(names + ["help"]) + "}", buf.getvalue())
 
 
+# A made-up `onsa` of `Compare`: what its spec says for the whole command (`check tests/a.onsa`), else for the case,
+# else for "*"; it logs its name to `log` and its name and command to `calls`.
 FAKE_DIAGS = """#!{exe}
 import json, os, signal, sys
 here, name = os.path.split(sys.argv[0])
 with open(os.path.join(here, "log"), "a") as f:
     f.write(name + "\\n")
+with open(os.path.join(here, "calls"), "a") as f:
+    f.write(" ".join([name, *sys.argv[1:]]) + "\\n")
 spec = json.load(open(os.path.join(here, "spec.json"))).get(name, {{}})
-code, out, *more = spec.get(sys.argv[-1], spec.get("*", [0, {{"diagnostics": []}}]))
+code, out, *more = spec.get(" ".join(sys.argv[1:]), spec.get(sys.argv[-1], spec.get("*", [0, {{"diagnostics": []}}])))
 if code == "kill":
     os.kill(os.getpid(), signal.SIGKILL)
 out = out if isinstance(out, str) or out is None else json.dumps(out)
@@ -4631,9 +4635,10 @@ class Compare(unittest.TestCase):
         b1, b2 = self.fakes({}, "b1", "b2")
         log = self.bin / "log"
 
-        def runs(*turns, per, chosen=0):  # the names the binaries logged: `chosen` runs of the first choosing the
-            # inputs of `core`, then `per` runs of a binary in its turn of a round
-            want = ["b1"] * chosen + [n for t in turns for n in [t] * per]
+        def runs(*turns, per, chosen=0):  # the names the binaries logged: choosing the inputs of `core`, `check` of
+            # each binary on each of `chosen` inputs, then `dump --core` of the first, then `per` runs of a binary in
+            # its turn of a round
+            want = ["b1", "b2"] * chosen + ["b1"] * chosen + [n for t in turns for n in [t] * per]
             got = log.read_text().split()
             log.unlink()
             return got, want
@@ -4649,12 +4654,13 @@ class Compare(unittest.TestCase):
         self.assertEqual(lines[3], "the five grown most in cpu, 1:b1 -> 2:b2: input, command, cpu, wall")
         self.assertEqual(len(lines), 9)
         self.assertRegex(lines[4], r"^\w\.onsa (check|fmt) [\d.]+ -> [\d.]+ [\d.]+ -> [\d.]+$")
+        core = "5 for core: 5 of 5 checked to 0 by every binary"
         with mock.patch.object(compare, "ROOT", self.root):  # 7 files `check` and `fmt --check`, 5 inputs `dump --core`
             code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "2", b1, b2])
-            self.assertEqual((code, lines[0]), (0, f"7 files (5 for core), 0 long inputs, 2 rounds; {unit}"))
+            self.assertEqual((code, lines[0]), (0, f"7 files ({core}), 0 long inputs, 2 rounds; {unit}"))
             self.assertEqual(*runs("b1", "b2", "b2", "b1", per=19, chosen=5))
             code, lines = quiet_out(compare.main, argv[:1] + ["all", "--rounds", "2"] + argv[4:])
-        self.assertEqual((code, lines[0]), (0, f"7 files (5 for core), 4 long inputs, 2 rounds; {unit}"))
+        self.assertEqual((code, lines[0]), (0, f"7 files ({core}), 4 long inputs, 2 rounds; {unit}"))
         self.assertEqual(*runs("b1", "b2", "b2", "b1", per=19 + 8, chosen=5))
         times = ast.literal_eval(lines[1].split(" ", 1)[1])
         kinds = ("check", "fmt", "core", "long", "long fmt")
@@ -4676,15 +4682,27 @@ class Compare(unittest.TestCase):
         with mock.patch.object(compare, "ROOT", self.root):
             code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "1", after, after])
         self.assertEqual((code, [x.split()[0] for x in lines[1:]]), (0, ["1:onsa", "2:onsa"]))
-        self.assertEqual((self.bin / "debug/log").read_text().split(), ["onsa"] * (5 + 19 * 2))
+        self.assertEqual((self.bin / "debug/log").read_text().split(), ["onsa"] * (5 * 2 + 19 * 2))  # one `check`
 
     def test_speed_core_lowers(self):
-        # `core` times the inputs of `compare.py core` the first binary lowers (exit 0), chosen once before the rounds.
-        b1, b2 = self.fakes({"b1": {"tests/a.onsa": [1, "error"], "tests/p": [2, "no manifest"]}}, "b1", "b2")
+        # `core` times the inputs of `compare.py core` every binary checks to exit 0 and the first then lowers (exit
+        # 0), chosen once before the rounds, a file a process (X-21 P-4): an input that one binary does not check to 0
+        # gets no `dump --core` of any binary, so a binary before a fix does not lower an input the fixed one rejects.
+        b1, b2 = self.fakes({"b1": {"check tests/p": [2, "no manifest"], "dump --core tests/a.onsa": [1, "error"]},
+                             "b2": {"check tests/b.onsa": [1, {"diagnostics": []}]}}, "b1", "b2")  # fmt: skip
         with mock.patch.object(compare, "ROOT", self.root):
             code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "1", b1, b2])
-        self.assertEqual((code, lines[0].split(";")[0]), (0, "7 files (3 for core), 0 long inputs, 1 rounds"))
-        self.assertEqual((self.bin / "log").read_text().split(), ["b1"] * (5 + 17) + ["b2"] * 17)
+        self.assertEqual((code, lines[0].split(";")[0]),
+                         (0, "7 files (2 for core: 3 of 5 checked to 0 by every binary), 0 long inputs, 1 rounds"))
+        calls = (self.bin / "calls").read_text().splitlines()
+        self.assertEqual(calls[:12], [
+            "b1 check tests/a.onsa", "b2 check tests/a.onsa", "b1 check tests/b.onsa", "b2 check tests/b.onsa",
+            "b1 check tests/c.onsa", "b2 check tests/c.onsa", "b1 check tests/d.onsa", "b2 check tests/d.onsa",
+            "b1 check tests/p",
+            "b1 dump --core tests/a.onsa", "b1 dump --core tests/c.onsa", "b1 dump --core tests/d.onsa"])  # fmt: skip
+        timed = [c.replace(f"{self.root}/", "") for c in calls[12:] if " dump " in c]
+        self.assertEqual(timed, [f"{b} dump --core tests/{x}.onsa" for b in ("b1", "b2") for x in "cd"])
+        self.assertEqual(len(calls), 12 + 16 * 2)  # a round: 7 files `check` and `fmt --check`, 2 `dump --core`
 
     def test_probe(self):
         old, new = (self.bin / n for n in ("old", "new"))
@@ -7917,6 +7935,79 @@ class DocsCommands(DocsTree):
             self.assertEqual(self.run_("ticket", "W1-02", unit)[0], 2, unit)
         shutil.rmtree(self.root / "tests")  # not "なし" when there is nothing to read
         self.assertEqual(self.run_("ticket", "W1-02", "U2/i"), (2, ["docs.py ticket: tests/: no directory (the lines of the cases)"]))
+
+    def test_stale(self):
+        """X-21 P-2: the lines of the `持ち越し` of the works not DONE (`--all`: every work) that name a DECIDED S beside
+        決める, or a DONE R beside 決める or 直す, with no mark of a thing done on the line, on the next line of its
+        item, or at the head of its item or an item above it; past forms and compounds are not the verbs."""
+        self.layout()
+        self.write("issues/R/R-2.md", '+++\nstatus = "DONE"\n+++\n# R-2 済んだ\n')
+        carried = [
+            "- 内容: S-1 を決める（節の外）。",
+            "- 持ち越し:",
+            "  - **U2 の終わり（2026-10-28）:** S-1 を U3 の前に決める。",
+            "    S-2 を決める。R-1 を直す。",  # OPEN
+            "    R-2 は U2 の直しで直す。（済み: U2、`728ebb7`）",
+            "    U3b へ: S-1 を決める。",
+            "    （済み: U3b、`0eb4575`。事例は x）",  # the line before it, broken by `fmt`
+            "    R-2 を見直す。S-1 は決めた。R-2 を直した。S-1 の取り決め。",
+            "    S-1 を直す。",  # a decided S may wait to be put in
+            "  - （済み: U3a2、`4c9d682`）R-2 の判断が二か所にあり、直す。",
+            "    S-1 も決める。",
+            "    - S-1 の残りを決める。",
+            "  - U3a2（済み、`4c9d682`）: R-2 を直す。",
+            "  - **U4 から（`x` は済み: U5a）:** R-2 を直す。",
+            "  - R-2 を直さない。S-1 の前に決める（済みでない）。",  # not the shape of a mark: `済み` before `:、）`
+            "",
+            "    R-2 を決めれば。",
+            "- 結果: S-1 を決める（節の外）。",
+        ]  # fmt: skip
+        self.write("tasks/W/W1-02.md", self.read("tasks/W/W1-02.md") + "\n".join(carried) + "\n")
+        self.edit("tasks/W/W1-01.md", "# W1-01 gate\n", "# W1-01 gate\n- 持ち越し: S-1 を決める。\n")
+        at = {x.strip(): n for n, x in enumerate(self.read("tasks/W/W1-02.md").split("\n"), 1)}
+        rows = [f"{ids}\ttasks/W/W1-02.md:{at[x]}\t{x}" for ids, x in (
+            ("S-1 DECIDED", "- **U2 の終わり（2026-10-28）:** S-1 を U3 の前に決める。"),
+            ("R-2 DONE, S-1 DECIDED", "- R-2 を直さない。S-1 の前に決める（済みでない）。"),
+            ("R-2 DONE", "R-2 を決めれば。"))]  # fmt: skip
+        self.assertEqual(self.run_("stale"), (0, [*rows, "docs stale: 3 line(s) in the `持ち越し` of 1 work(s)"]))
+        self.assertEqual(self.run_("stale", "--all"), (0, [
+            "S-1 DECIDED\ttasks/W/W1-01.md:6\t- 持ち越し: S-1 を決める。", *rows,
+            "docs stale: 4 line(s) in the `持ち越し` of 2 work(s) (DONE too)"]))  # fmt: skip
+        # The four places the 81st check of the documents found by hand in the `持ち越し` of W4-05, with their marks
+        # (`target/notes/81/handback/onsa-docs-ad1740d45a6d9e4bf-001.md`, 5): taken out, the one that says 決める is
+        # found; the three others name no verb of STALE (`U3b へ:`, `事例で守る`, `U3 で扱う`).
+        for id_, status in (("S-137", "DECIDED"), ("S-140", "DECIDED"), ("S-748", "DECIDED"), ("R-320", "DONE")):
+            self.write(repo.path_of(id_).as_posix(), f'+++\nstatus = "{status}"\n+++\n# {id_} x\n')
+        marks = ["（済み: U3b、`0eb4575`。`rule` の文は `c84ec93`）", "（済み: U3a、`86d463a`）",
+                 "（済み: 第 72 組、`4474022`。`A.N` の辺は U3a、`86d463a`）"]  # fmt: skip
+        w405 = "\n".join([
+            '+++\nstatus = "PLAN"\n+++\n# W1-03 型\n',
+            "- 持ち越し:",
+            "  - **U3a の終わり（2026-10-29、80 回目、`86d463a`）:** S-748・S-752 を入れた。",
+            "    U3b へ: S-137（対象の型引数）、S-140（`impl Copy for`・`impl Dup for` は §4.6 で E0020）、"
+            f"R-320（タプルなどの対象の E0307）。{marks[0]}",
+            "    総称の別名の E0307 の候補（`type AR = R[F32]` の `impl AR`）は今は出ないが、元の名前 `R[F32]` を候補にすると"
+            " S-137 の E0307 になる。U3b で候補を出さないことを事例で守る。",
+            "    （済み: U3b、`0eb4575`。事例は `tests/spec/module/impl_on_alias_of_generic_without_candidate.onsa`）",
+            "  - **U2 から（2026-10-28、79 回目）:** U2/i は +486 −83（見積もり 200 の 2.43 倍）で止まった。",
+            "    E0307 の `impl` のメンバを型の位置から読む形に、U2 から E0302 が足された。S-748 と一緒に U3 で扱う。"
+            f"{marks[1]}",
+            "    U3 へ: 別名を頭にした `A.N` は計算した長さの E0200 のまま。"
+            f"S-748（E0307 の `impl` のメンバを E0304 の相手に数えるか）を U3 の前に決める。{marks[2]}",
+        ]) + "\n"  # fmt: skip
+        self.write("tasks/W/W1-03.md", w405)
+        self.assertEqual(self.run_("stale")[1][3:], ["docs stale: 3 line(s) in the `持ち越し` of 2 work(s)"])
+        bare = "\n".join(x for x in w405.split("\n") if not x.strip().startswith("（済み"))
+        for m in marks:
+            bare = bare.replace(m, "")
+        self.write("tasks/W/W1-03.md", bare)
+        found = "S-748（E0307 の `impl` のメンバを E0304 の相手に数えるか）を U3 の前に決める。"
+        n = next(n for n, x in enumerate(bare.split("\n"), 1) if x.endswith(found))
+        self.assertEqual(self.run_("stale")[1][3:], [
+            f"S-748 DECIDED\ttasks/W/W1-03.md:{n}\tU3 へ: 別名を頭にした `A.N` は計算した長さの E0200 のまま。{found}",
+            "docs stale: 4 line(s) in the `持ち越し` of 2 work(s)"])  # fmt: skip
+        shutil.rmtree(self.root / "tasks")
+        self.assertEqual(self.run_("stale")[0], 2)  # no W: not the new layout
 
     def test_depends_a_stage(self):
         """U5e: a stage in `depends` is every work of it: `ticket` shows its state, `show` the works that

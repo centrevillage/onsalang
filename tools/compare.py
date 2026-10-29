@@ -17,10 +17,12 @@ left in the directory differ. `core` runs `dump --core` of both on the cases of 
 lists those whose exit code or output differ. Both list the falls and exit 1 as `diags` does, and when no case ran to
 exit 0 in both binaries.
 `speed` measures as the removed `tools/speed.py` did (X9-19), the order of the binaries turned round every other round;
-the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inputs of `core` the first binary lowers
-(exit 0) get `dump --core`. Each binary is named by its place in the arguments and the path past the directories they
-share; each run shows the wall seconds and the cpu seconds (user + sys of the children). The cpu seconds swing under
-load too (about 55% in an A/A of one binary, 2026-10-20): judge on a quiet machine.
+the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inputs of `core` that every binary checks
+to exit 0 and the first then lowers (exit 0) get `dump --core`: a binary before a fix may fall lowering an input that
+it checks to 0 and the fixed one finds an error in (X-21 P-4); the choosing runs a file a process, out of the timed
+rounds. Each binary is named by its place in the arguments and the path past the directories they share; each run
+shows the wall seconds and the cpu seconds (user + sys of the children). The cpu seconds swing under load too (about
+55% in an A/A of one binary, 2026-10-20): judge on a quiet machine.
 `probe` writes the cases of a file (`probe_cases`) as packages below `--out` and runs every binary on each, `check
 --json` or `--cmd`, named as in `speed` (W4-03, 70th session: the scripts the agents copied per worktree).
 """
@@ -44,7 +46,7 @@ import repo  # noqa: E402
 
 ROOT = repo.ROOT
 TIMEOUT = 30  # seconds per run of `diags`, `fmt` and `core`
-REVIEW = "tests/review-phase1"  # left by `core`: some of its inputs fall on lowering (rules/common.md 3.2)
+REVIEW = "tests/review-phase1"  # left by `core`: unknown inputs, not lowered all at once (rules/common.md 3.2)
 PARTS = ((2, "message"), (3, "fix titles"), (4, "fix edits"), (5, "notes"))  # the parts of `diagnostic` a pair names
 CASE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")  # a case of `probe`: a directory below --out
 DIAG_LINE = re.compile(r"^(.+?):(\d+):(\d+): \w+\[(\w+)\]", re.M)  # the text form: `file:line:col: error[E…]`
@@ -66,8 +68,8 @@ def cases(root) -> list:
 
 
 def core_cases(root) -> list:
-    """The inputs `core` lowers, relative to `root`: the cases of `diags` but tests/review-phase1 (rules/common.md
-    3.2), then the files of examples, a package's ones as its directory. Whether an input lowers is its exit code."""
+    """The inputs `core` lowers, relative to `root`: the cases of `diags` (tests/fuzz is not among them) but REVIEW,
+    then the files of examples, a package's ones as its directory. Whether an input lowers is its exit code."""
     tests = [rel for rel, _ in fuzz.seeds(root) if not rel.startswith(f"{REVIEW}/")]
     examples = [p.relative_to(root).as_posix() for p in sorted((Path(root) / "examples").rglob("*.onsa"))]
     return packaged(root, tests + examples)
@@ -226,6 +228,21 @@ def core(args) -> int:
     return compared(args, units, run, texts, ok, f"tests (but {REVIEW}) and examples")
 
 
+def ok_run(argv) -> bool:
+    """`argv` run in ROOT exits 0."""
+    r = outcome(argv, ROOT)
+    return not isinstance(r, str) and r[0] == 0
+
+
+def core_inputs(binaries) -> tuple:
+    """(the inputs of `compare.py core`, those every binary checks to exit 0, the paths of those the first of them
+    then lowers to exit 0) in ROOT, a file a process: the column `core` of `speed all` times lowering, not inputs that
+    stop at `check`, and no binary lowers an input another finds an error in."""
+    units, bins = core_cases(ROOT), list(dict.fromkeys(map(os.path.realpath, binaries)))
+    checked = [c for c in units if all(ok_run([b, "check", c]) for b in bins)]
+    return units, checked, [ROOT / c for c in checked if ok_run([binaries[0], "dump", "--core", c])]
+
+
 def timed(binary: str, args: list, files: list) -> tuple:
     """(wall seconds, CPU seconds: user + sys of the children) of `binary <args> <file>` on each of `files`."""
     t, r = time.perf_counter(), resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -265,10 +282,7 @@ def speed(a) -> int:
     if a.mode == "all":
         rounds = a.rounds or 3
         files = sorted(p for d in ("tests", "std", "examples") for p in (ROOT / d).rglob("*.onsa"))
-        # The inputs of `compare.py core` the first binary lowers (exit 0), chosen once: the column times lowering,
-        # not inputs that stop at `check`.
-        first = a.binaries[0]
-        lowered = [ROOT / c for c in core_cases(ROOT) if outcome([first, "dump", "--core", c], ROOT)[0] == 0]
+        units, checked, lowered = core_inputs(a.binaries)
         runs = {"check": (["check"], files), "fmt": (["fmt", "--check"], files), "core": (["dump", "--core"], lowered)}
         if long:
             runs.update({"long": (["check"], long), "long fmt": (["fmt", "--check"], long)})
@@ -277,7 +291,8 @@ def speed(a) -> int:
             for i, b in turn(order, r):
                 for k, (argv, fs) in runs.items():
                     best[i][k] = least(best[i][k], timed(b, argv, fs))
-        print(f"{len(files)} files ({len(lowered)} for core), {len(long)} long inputs, {rounds} rounds; {unit}")
+        core_of = f"{len(lowered)} for core: {len(checked)} of {len(units)} checked to 0 by every binary"
+        print(f"{len(files)} files ({core_of}), {len(long)} long inputs, {rounds} rounds; {unit}")
         for name, times in zip(names, best):
             print(name, shown(times, 2))
         return 0
@@ -402,7 +417,8 @@ def diags_args(p):
 def speed_args(p):
     p.add_argument("mode", choices=["all", "long"],
                    help="all: check と fmt --check を tests・std・examples の全ての .onsa に、"
-                        "dump --core を core の入力のうち最初のバイナリで終了コード 0 になるものに（1 ファイル 1 プロセス）、"
+                        "dump --core を core の入力のうち、与えた全てのバイナリの check が終了コード 0 で、"
+                        "その後に最初のバイナリの dump --core が 0 になるものに（選ぶ回も 1 ファイル 1 プロセスで、測る回の外）、"
                         "--long があればその長い入力に check と fmt --check も（別の欄に）。"
                         "long: 長い入力ごとの check と fmt --check、それぞれの合計と、cpu の時間で最も遅くなった五つ（入力と命令）。"
                         "各欄は壁時計と cpu（子プロセスの user + sys）。cpu も負荷の下では揺れる"
@@ -435,7 +451,8 @@ COMMANDS = {
              "字句・行の配置・fmt のリファクタリングの前後で、整形の結果が変わっていないかを見るとき（マージの前の確かめ）。前のバイナリは diags と同じ",
              "compare.py fmt <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "core": C(diags_args, core, ("parent", "i", "b"),
-              "二つのバイナリの dump --core を、tests/ の事例（diags と同じ。tests/review-phase1 を除く）と examples（パッケージはディレクトリで）に回し、終了コードか出力が違う入力と落ちた入力を並べる。両方で終了コード 0 の入力が無ければ失敗",
+              "二つのバイナリの dump --core を、tests/ の事例（diags と同じ。未知の入力を持つ tests/review-phase1 は、"
+              "降下に進む命令に一括でかけないので除く。rules/common.md 3.2）と examples（パッケージはディレクトリで）に回し、終了コードか出力が違う入力と落ちた入力を並べる。両方で終了コード 0 の入力が無ければ失敗",
               "意味解析・降下のリファクタリングの前後で、Core IR が変わっていないかを見るとき（check を回す diags では降下を確かめられない）。前のバイナリは diags と同じ",
               "compare.py core <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "speed": C(speed_args, speed, ("parent", "i", "b"),

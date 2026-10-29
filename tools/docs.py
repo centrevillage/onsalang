@@ -10,6 +10,7 @@
     python3 -B tools/docs.py show ID [--relations] | list KIND [--status S] [--stage W4] [--group N]
                              [--before W4-02|W4] [--no-fix] [--waiting] [--count] | changes [--since DATE]
                              [--stage W3] [--section §6] | ticket W UNIT/ROLE[-handover] [--out FILE]
+                             | stale [--all]
     python3 -B tools/docs.py set ID KEY=VALUE... | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
                              [--stage W4] [KEY=VALUE...] | draft S... --group N
     python3 -B tools/docs.py blind FILE...|--group N --out FILE | answers FILE...|--group N
@@ -31,6 +32,8 @@ depth 0 with `-` for the type and from).
   break (a) or (b) of the file or (c) of it and its partners (`check_write`). `new S` shows the S of the
   same sections or family (X9-12, `akin`); `ticket` the lines of `tests/` that name its IDs (X9-67).
   `blind` and `answers` (X9-65, X9-66) read the drafts of the gaps (the files given, or of a group).
+  `stale` (X-21 P-2) shows the lines of the `持ち越し` of the works (`carried`; not DONE unless `--all`) with no
+  mark of a thing done that name a DECIDED S or a DONE R beside a verb of STALE: suspects, exit 0 whatever it finds.
 
 - `fmt` (DT-4): breaks each line longer than LONG after a `。` at the depth 0 of the brackets
   （）()「」『』【】 and outside the code spans and the bold, packing the line to WIDTH characters
@@ -2297,6 +2300,69 @@ def cmd_ticket(args):
     return 0
 
 
+# ---------------------------------------------------------------- stale (X-21 P-2)
+
+DONE_MARK = re.compile(r"（[^（）]*済み[:：、）]")  # `（済み: U3b、…）`, `U3a2（済み、…）`, `（`x` は済み: …）`
+ITEM = re.compile(r"( *)[-*+] +")
+HEAD_MARK = re.compile(r"(?:\*\*.*?\*\*\s*)?[^（:：]*" + DONE_MARK.pattern)  # a mark before the first `:` of an item
+NOT_COMPOUND = r"(?<![\u4e00-\u9fffきしちひみりいぎじびぴ])"  # not 見直す, 書き直す, 取り決め
+DECIDE, FIX = r"決め(?!た|まし)|決ま(?:ら|れ|ったら|るまで)", r"直(?:さ|す|せ|そ|して|します)"  # not past: 決めた, 直した
+# the kinds whose ID in a status is stale beside these verbs: a decided S needs no deciding, a done R no fixing
+STALE = {"S": ("DECIDED", re.compile(f"{NOT_COMPOUND}(?:{DECIDE})")),
+         "R": ("DONE", re.compile(f"{NOT_COMPOUND}(?:{DECIDE}|{FIX})"))}  # fmt: skip
+
+
+def carried(lines, start):
+    """[[line number, line, covered]] of the section `- 持ち越し:` (CARRIED) of a work from the line `start`: the
+    line and the lines indented below it. `covered` when the line has a DONE_MARK, when the next line of its item
+    starts with one (`fmt` breaks after a `。`), or when its item or an item above it has one at its head."""
+    rows, items, inside = [], [], False  # items: (indent, covered) of the items the line is in
+    for n, line in enumerate(lines[start:], start + 1):
+        if not line.strip():
+            continue
+        item = ITEM.match(line)
+        indent = len(item.group(1)) if item else len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            inside, items = bool(CARRIED.match(line)), []
+        if not inside:
+            continue
+        while items and items[-1][0] >= indent:
+            items.pop()
+        covered = any(c for _, c in items)
+        if item:
+            items.append((indent, covered or bool(HEAD_MARK.match(line, item.end()))))
+            covered = items[-1][1]
+        elif DONE_MARK.match(line.lstrip()) and rows:
+            rows[-1][2] = True
+        rows.append([n, line, covered or bool(DONE_MARK.search(line))])
+    return rows
+
+
+def stale_args(p):
+    p.add_argument("--all", action="store_true", help="the works that are DONE too (their `持ち越し` stays)")
+
+
+def cmd_stale(args):
+    ids = Ids(args.root)
+    ids.require("W")
+    works = found = 0
+    for id_, rel, v in sorted(ids.heads(["W"]), key=lambda r: id_key(r[0])):
+        if v.get("status") == "DONE" and not args.all:
+            continue
+        works += 1
+        lines, head = ids.tree.lines(rel), ids.tree.head(rel)
+        start = 0 if head.values is None else len(lines) - len(head.body.split("\n"))
+        for n, line, covered in carried(lines, start):
+            names = [] if covered else [
+                f"{i} {STALE[k][0]}" for i in dict.fromkeys(repo.ID_RE.findall(line))
+                if (k := repo.kind_of(i).name) in STALE and ids.where(i).status == STALE[k][0] and STALE[k][1].search(line)]  # fmt: skip
+            if names:
+                found += 1
+                print(f"{', '.join(names)}\t{rel.as_posix()}:{n}\t{line.strip()}")
+    print(f"docs stale: {found} line(s) in the `持ち越し` of {works} work(s){' (DONE too)' if args.all else ''}")
+    return 0
+
+
 # ---------------------------------------------------------------- the subcommands
 
 EDITORS = ("parent", "i", "docs")  # the roles that edit the documents (the help of `fmt`, `swaps`, `check`, the writes)
@@ -2358,6 +2424,11 @@ COMMANDS = {
                 "作業票を書くとき（親は残りの欄を埋める。「ぶつかりうる事例」の行を読み、ぶつかる事例を作業票に挙げる）。"
                 "引き継ぎの作業票は `<単位>/<役割>-handover` で、引き継ぎの欄が手引きとともに足される",
                 "docs.py ticket W3-05 U2/i-handover"),
+    "stale": C(stale_args, cmd_stale, ("parent", "docs"),
+               "作業の `持ち越し` の行のうち、DECIDED の S か DONE の R を名指すのに「決める」（DONE の R は「直す」も）と書いたまま、"
+               "「済み」の印（`（済み: …）`）の無い行を、ID と状態・経路:行・行で並べる（疑いで、誤りとは限らない。終了コードは 0）",
+               "文書の点検で、済んだ決定や直しを待つと書いたままの持ち越しを探すとき。既定は DONE でない作業だけ（`--all` で全て）",
+               "docs.py stale"),
 }  # fmt: skip
 
 
