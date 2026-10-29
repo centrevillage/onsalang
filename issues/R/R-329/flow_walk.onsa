@@ -1,0 +1,31 @@
+// E0807 (flow stage) before a types error
+flow a(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 1)
+  let kk: I32 = 1.0
+  d
+}
+
+// E0813 (flow stage) before a types error
+flow b(x: F32 at block) -> F32 at sample {
+  let d = prev~(x, 0.0)
+  let k: I32 = 1.0
+  d
+}
+
+fn eff() -> F32 uses {Alloc} {
+  1.0
+}
+
+// E0805 (flow stage) before a types error
+flow c(x: F32 at sample) -> F32 at sample {
+  let ee = eff()
+  let k: I32 = 1.0
+  x
+}
+
+// E0808 (flow stage) before a types error
+flow e(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 0)
+  let k: I32 = 1.0
+  d
+}

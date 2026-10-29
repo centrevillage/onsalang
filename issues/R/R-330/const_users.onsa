@@ -1,0 +1,33 @@
+const N: Nope = 3
+const M: U32 = zz
+const K: U32 = 3
+
+fn f() -> U32 {
+  let a = [0; N]
+  a.len()
+}
+
+fn g() -> U32 {
+  let a = [0; M]
+  a.len()
+}
+
+fn h() -> [I32; M] {
+  [0; 3]
+}
+
+fn k() -> [I32; N] {
+  [0; 3]
+}
+
+fn ok() -> [I32; K] {
+  [0; 3]
+}
+
+const P: U32 = 3
+
+// a modes-free const whose decl type is fine but whose unit has a names error elsewhere is impossible;
+// the const user of a const with a value
+fn q() -> [I32; P] {
+  [0; 3]
+}
