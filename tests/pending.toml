@@ -1966,3 +1966,10 @@ target = "tests/spec/values/move_assign_copy_args.onsa"
 reasons = ["S-609"]
 until = "W4-09"
 note = "Copy の型の `move` の引数に `move` を書かない（今は E0703）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/938b63f9.onsa"
+reasons = ["R-333", "S-302"]
+until = "W5-11"
+note = "fix-same-place: fix|E0020|write `…`|reading と fix|E0020|write `…`|E0002。式の始まりの ~= の ~ を ! にする候補で、!= が一語に読まれて編集の外の = の読みが変わり、同じ位置に E0002 が残る（3434a10 の後の親の fuzz）"

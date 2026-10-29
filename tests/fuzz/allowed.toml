@@ -498,3 +498,17 @@ left = "expected variant name, found `…`"
 input = "tests/fuzz/47d29a26.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a line break before the `[2]` in the payload of a variant, and the `|` after the `),` where a variant name goes, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|move it to the end of the line before|E0020"
+left = "a prefix operator is written right before its operand"
+input = "tests/fuzz/03db5ce3.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a line that starts with `=`, and a blank between the prefix `!` after it and its operand, which the input has before the candidate; moved, the `=` leaves the `!` at the head of the line at the same place, whose candidate removes the blank (two steps)"
+
+[[allowed]]
+class = "fix|E0002|write the `…` between the elements|E0408"
+left = "integer literal is larger than any integer type holds"
+input = "tests/fuzz/193e6c03.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: two elements of a parenthesized list without the `,` (`C{}99…9`), and an integer literal larger than any integer type, which the input has before the candidate; the `,` leaves the E0408 of the literal"
