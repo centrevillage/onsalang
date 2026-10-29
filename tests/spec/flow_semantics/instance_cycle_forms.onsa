@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+
+// R-03, S-742 (W4-05 U5): the places where the instance that makes the cycle can stand. An instance
+// is a call of a flow with `~` (spec §11.5: "呼び出し位置ごとに独立した状態を持つインスタンスを作る"),
+// wherever it stands in the body: inside a `par` (a copy for each `i`, §11.5: "`e` の中の flow 呼び出しは、
+// 複製ごとに別のインスタンスになる"), as the value of a `let`, as an operand, or as the argument of
+// another instance. The marker is on the declaration of the first flow of the
+// collection (§18.1). The instance in the branch of an `if~` is in instance_cycle_if_tilde.onsa.
+
+// In a `par`.
+pub flow in_par(x: F32 at sample) -> F32 at sample {          //~ E0817
+  let xs = par i in 0..<2 { in_par~(x) * i.round_f32() }
+  xs[0] + xs[1]
+}
+
+// In a `par`, through another flow.
+pub flow par_a(x: F32 at sample) -> F32 at sample {           //~ E0817
+  let xs = par i in 0..<2 { par_b~(x) * i.round_f32() }
+  xs[0] + xs[1]
+}
+
+pub flow par_b(x: F32 at sample) -> F32 at sample {
+  par_a~(x)
+}
+
+// As the value of a `let`.
+pub flow named(x: F32 at sample) -> F32 at sample {           //~ E0817
+  let a = named~(x)
+  a + 1.0
+}
+
+// As the values of a `let` in two flows.
+pub flow named_a(x: F32 at sample) -> F32 at sample {         //~ E0817
+  let a = named_b~(x)
+  a
+}
+
+pub flow named_b(x: F32 at sample) -> F32 at sample {
+  let b = named_a~(x)
+  b + 1.0
+}
+
+// As an operand.
+pub flow as_operand(x: F32 at sample) -> F32 at sample {      //~ E0817
+  (as_operand~(x) + 1.0) * 0.5
+}
+
+// As the argument of the instance of another flow, in a chain of three.
+pub flow arg_a(x: F32 at sample) -> F32 at sample {           //~ E0817
+  arg_b~(arg_c~(x))
+}
+
+pub flow arg_b(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow arg_c(x: F32 at sample) -> F32 at sample {
+  arg_a~(x)
+}

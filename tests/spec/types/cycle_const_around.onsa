@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+
+// R-02, S-734 (W4-05 U5): what is around a collection of constants that read each other. The
+// E0312 is one per collection, at the first constant (§18.1). The unit of that constant stops at the
+// diagnostic in the stage of the names, so a later error in the same unit does not appear (§18.1:
+// "ある段が誤りを見つけた単位では、その結果に依存する後の段を行わない"; §6.6: "E0312 を付けた定数の単位は
+// 名前の段で止まり"). The other constants of the collection are checked one by one (§6.6: "集まりの
+// 他の定数の単位はそれぞれ検査する（型は宣言に書くので、値に頼らない）"), and the cycle is not
+// evaluated: a constant that reads the collection is an error value and has no diagnostic of its own
+// (§6.6: "循環の定数は評価せず、誤りの値として扱う").
+
+// The second constant adds a `Str` to a `U32`: its own unit is checked, so the E0401 stays on its
+// line (S-734).
+const E1: U32 = E2                                  //~ E0312
+
+const E2: U32 = E1 + "s"                            //~ E0401
+
+// The first constant has an unknown name after the cycle in its initializer: the unit stops at the
+// E0312 at its name, and the E0302 does not appear.
+const N1: U32 = N2 + missing                        //~ E0312
+
+const N2: U32 = N1
+
+// The first constant has a type error of the stage after the names: it does not appear either.
+const T1: U32 = T2 + "s"                            //~ E0312
+
+const T2: U32 = T1
+
+// The second constant has an unknown name: its unit is checked, and the E0302 stays on its line.
+const M1: U32 = M2                                  //~ E0312
+
+const M2: U32 = M1 + nothing                        //~ E0302
+
+// The value of the collection is not evaluated: a reader that would overflow with any value above
+// zero has no E0419, and a reader that divides by a constant of the collection has no E0419 either.
+const CY1: U32 = CY2                                //~ E0312
+
+const CY2: U32 = CY1
+
+const OVERFLOW: U32 = CY1 + 4294967295
+
+const DIVIDED: U32 = 10 / CY2
+
+// A reader with the wrong type is still checked by the declared type of the constant, which is
+// written on the declaration.
+const WRONG: Bool = CY1                             //~ E0401

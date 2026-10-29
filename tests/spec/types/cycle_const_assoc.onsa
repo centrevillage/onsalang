@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+
+// R-02, S-734 (W4-05 U5): the associated constants (`impl` members) take part in the cycles of the
+// constants like the top-level ones (spec §6.6: "`impl` と `trait` の中にも同じ形で書ける（関連定数）";
+// "初期化式が、直接または他の定数を経由して自分自身を参照すると E0312"). The reference is `Self.N`, the
+// name of the type (`P.N`), or a top-level constant. The place is the name of the first constant of
+// the collection in the source (§18.1), that is the name of the member, and the unit of the member
+// stops at the diagnostic. The reader of the collection outside has no diagnostic.
+
+pub struct P {
+  x: F32,
+}
+
+pub struct Q {
+  x: F32,
+}
+
+pub struct R {
+  x: F32,
+}
+
+pub struct V {
+  x: F32,
+}
+
+pub struct W {
+  x: F32,
+}
+
+pub struct Mx {
+  x: F32,
+}
+
+// A member that reads itself through `Self`.
+impl P {
+  pub const M: U32 = Self.M                         //~ E0312
+}
+
+// Two members of a type that read each other through `Self`, the first reads the second.
+impl Q {
+  pub const M: U32 = Self.N                         //~ E0312
+  pub const N: U32 = Self.M
+}
+
+// A member that reads itself through the name of the type.
+impl R {
+  pub const T: U32 = R.T                            //~ E0312
+}
+
+// The members of two types, each reads the other through the name of the type.
+impl V {
+  pub const A: U32 = W.B                            //~ E0312
+}
+
+impl W {
+  pub const B: U32 = V.A
+}
+
+// A top-level constant first, a member after it: the place is the top-level constant.
+const TOP: U32 = Mx.M                               //~ E0312
+
+impl Mx {
+  pub const M: U32 = TOP + 1
+}
+
+// A member first, two top-level constants after it and a member of another type.
+pub struct Z {
+  x: F32,
+}
+
+impl Z {
+  pub const M: U32 = Z2                             //~ E0312
+}
+
+const Z2: U32 = Z3
+
+const Z3: U32 = Z.M
+
+// Mixed `Self` and the name of the type, in two blocks of the same type.
+pub struct T2 {
+  x: F32,
+}
+
+impl T2 {
+  pub const A: U32 = T2.B                           //~ E0312
+}
+
+impl T2 {
+  pub const B: U32 = Self.A
+}
+
+// Readers of the collections, outside: no diagnostic.
+const READ_TOP: U32 = Q.N + P.M + R.T + V.A + W.B + Mx.M + Z.M
+
+pub fn read_members() -> U32 {
+  Q.M + Q.N + P.M + R.T + T2.B
+}

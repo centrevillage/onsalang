@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+
+// R-03, S-742 (W4-05 U5): the instance that makes the cycle stands in a branch of an `if~` (spec
+// §11.5: "`if~ c { a } else { b }` は、全ての枝を評価してから一つを選ぶ"; the instances of the
+// branches are all made, so they are instances of the flow like any other). The marker is on the
+// declaration of the first flow of the collection (§18.1: "位置は、集まりの宣言のうち診断の並べ方で
+// 最初のものの名前"). This is apart from instance_cycle_forms.onsa because `if~` is E0200 in this
+// version (the construct of the branch, W7-06), which the E0817 of the unit must hide (§18.1: an
+// earlier stage that finds an error stops the unit, and the E0817 is also earlier in the position).
+
+pub flow in_branch(x: F32 at sample) -> F32 at sample {       //~ E0817
+  let big = x > 1.0
+  if~ big { in_branch~(x) } else { x }
+}
+
+pub flow in_else(x: F32 at sample) -> F32 at sample {         //~ E0817
+  let big = x > 1.0
+  if~ big { x } else { in_else~(x) }
+}
+
+pub flow branch_a(x: F32 at sample) -> F32 at sample {        //~ E0817
+  let big = x > 1.0
+  if~ big { branch_b~(x) } else { x }
+}
+
+pub flow branch_b(x: F32 at sample) -> F32 at sample {
+  let small = x < 0.0
+  if~ small { x } else { branch_a~(x) }
+}

@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+
+// R-02, S-734 (W4-05 U5): a collection of constants that read each other is one E0312, whatever the
+// number of the constants or of the cycles in it (spec §6.6: "初期化式が、直接または他の定数を経由して
+// 自分自身を参照すると E0312"; §18.1: "互いに辿り合う宣言の集まり（自分を指す一つの宣言を含む）ごとに
+// 一つ報告する"). The place is the name of the first constant of the collection in the source (the
+// order of the diagnostics: the line, then the column), and the other constants are notes. A
+// constant that only reads the collection (it is not reached from it) is outside and has no
+// diagnostic, whether it is written before the collection, after it, or inside a function (§18.1:
+// "集まりの外からそれらを使う宣言には出さず、誤りの値として扱う"). The forms inside `impl` are in
+// cycle_const_assoc.onsa, the units around a collection in cycle_const_around.onsa.
+
+// A constant outside, first in the file: it reads `A1`, but `A1` does not reach it.
+const READ_BEFORE: U32 = A1 + 1
+
+// Two constants.
+const A1: U32 = B1                                  //~ E0312
+
+const B1: U32 = A1
+
+// A constant that reads itself, directly and through an operator.
+const SELF1: U32 = SELF1                            //~ E0312
+
+const SELF2: U32 = SELF2 + 1                        //~ E0312
+
+// Three constants written in the opposite order to the way round: `C3` reads `C1`, `C2` reads `C3`,
+// `C1` reads `C2`. The constant that is first in the source, `C3`, is the place.
+const C3: U32 = C1 * 2                              //~ E0312
+
+const C2: U32 = C3 + 1
+
+const C1: U32 = C2
+
+// The cycle goes through the elements of an array literal, in the repeat form `[e; N]`.
+const AR: [U32; 2] = [BR; 2]                        //~ E0312
+
+const BR: U32 = AR[0]
+
+// The cycle goes through a hole of a string literal (`"{N}"` reads the constant `N`).
+const HA: U32 = "{HB}".len()                        //~ E0312
+
+const HB: U32 = HA
+
+// Two cycles that share `HUB`: one collection, one diagnostic.
+const HUB: U32 = LEFT + RIGHT                       //~ E0312
+
+const LEFT: U32 = HUB
+
+const RIGHT: U32 = HUB
+
+// A longer ring: the first in the source is the place, though the ring is entered from the last.
+const R1: U32 = R2                                  //~ E0312
+
+const R2: U32 = R3
+
+const R3: U32 = R4
+
+const R4: U32 = R5
+
+const R5: U32 = R1
+
+// Two collections, the second reached from the first but not back: two diagnostics, at `X1` and `Y1`.
+const X1: U32 = X2                                  //~ E0312
+
+const X2: U32 = X1 + Y1
+
+const Y1: U32 = Y2                                  //~ E0312
+
+const Y2: U32 = Y1
+
+// Users of the collections, outside: no diagnostic.
+const READ_AFTER: U32 = B1 + C1 + HB + HUB + X2 + Y2
+
+const READ_ARRAY: [U32; 2] = AR
+
+pub fn read_all() -> U32 {
+  A1 + SELF1 + SELF2 + C2 + BR + LEFT + R3 + X1
+}

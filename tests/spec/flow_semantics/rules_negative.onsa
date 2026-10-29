@@ -5,7 +5,9 @@
 // Rejections that belong to the semantic rules of the flow tests in this directory (spec §11.2,
 // §11.4, §11.5, §2.6): state in a branch, `~` without state, no Default for a delay's value type,
 // `^` outside a delay's first argument, and the limits of the delay lengths and of `par`.
-// One error per flow; the marker is on the line of the offending construct.
+// One error per flow; the marker is on the line of the offending construct (E0817 is the exception:
+// its marker is on the declaration of the flow, as the report is one per collection of flows, §18.1,
+// S-742; more of the E0817 is in instance_cycle_groups.onsa, instance_cycle_forms.onsa).
 
 use std.math.{sum}
 
@@ -234,15 +236,15 @@ pub flow let_in_an_if_tilde_arm(x: F32 at sample) -> F32 at sample {
 
 // ---- E0817: a flow that makes an instance of itself ----
 
-pub flow instance_of_itself(x: F32 at sample) -> F32 at sample {
-  instance_of_itself~(x)                                          //~ E0817
+pub flow instance_of_itself(x: F32 at sample) -> F32 at sample {   //~ E0817
+  instance_of_itself~(x)
 }
 
-pub flow instance_of_itself_in_a_par(x: F32 at sample) -> F32 at sample {
-  sum(par i in 0..<2 { instance_of_itself_in_a_par~(x) * i.round_f32() })   //~ E0817
+pub flow instance_of_itself_in_a_par(x: F32 at sample) -> F32 at sample {   //~ E0817
+  sum(par i in 0..<2 { instance_of_itself_in_a_par~(x) * i.round_f32() })
 }
 
-pub flow instance_of_itself_in_a_branch(x: F32 at sample) -> F32 at sample {
+pub flow instance_of_itself_in_a_branch(x: F32 at sample) -> F32 at sample {   //~ E0817
   let big = x > 1.0
-  if~ big { instance_of_itself_in_a_branch~(x) } else { acc~(x) }    //~ E0817
+  if~ big { instance_of_itself_in_a_branch~(x) } else { acc~(x) }
 }

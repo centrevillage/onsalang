@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§15.1", "§18.1"]
+
+// R-02, S-734 (W4-05 U5): the constants of one module that read each other, used from another
+// module with no way back. There is no cycle of `use` (`a` takes items of `b`, `b` takes none of
+// `a`), so the E0310 is not the report: the cycle is E0312, one for the collection, at the name of
+// its first constant in `b` (spec §6.6, §18.1). The module that reads the constants has no
+// diagnostic ("集まりの外からそれらを使う宣言には出さず").
+use b.{X, Z}
+
+pub const FROM_A: U32 = X + Z
+
+pub fn read_x() -> U32 {
+  X + Z
+}

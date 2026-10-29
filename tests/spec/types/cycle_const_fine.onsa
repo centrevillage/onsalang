@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+
+// R-02, S-734 (W4-05 U5): the constants that read each other in a line, a tree or a diamond, with no
+// way back, are no cycle and have no diagnostic (spec §6.6: E0312 is for an initializer that reads
+// itself "直接または他の定数を経由して"; the order in the source does not matter). This is the foil of
+// cycle_const_groups.onsa and cycle_const_assoc.onsa: the same shapes without the last edge.
+
+pub struct P {
+  x: F32,
+}
+
+pub struct Q {
+  x: F32,
+}
+
+// A line, the reader written before the constant it reads.
+const READER: U32 = MIDDLE + 1
+
+const MIDDLE: U32 = BASE * 2
+
+const BASE: U32 = 3
+
+// A diamond: `LEFT` and `RIGHT` read `TOP`, and `JOIN` reads both.
+const JOIN: U32 = LEFT + RIGHT
+
+const LEFT: U32 = TOP + 1
+
+const RIGHT: U32 = TOP + 2
+
+const TOP: U32 = 10
+
+// An array, a repeat and a string hole that read a constant that does not read back.
+const LIST: [U32; 2] = [BASE; 2]
+
+const WIDTH: U32 = "{BASE}".len()
+
+// The members: the same names in two types do not make a cycle, and a member reads another
+// through `Self` and through the name of the type, with no way back.
+impl P {
+  pub const M: U32 = Q.M + 1
+  pub const N: U32 = Self.M + P.M
+}
+
+impl Q {
+  pub const M: U32 = BASE
+}
+
+// A constant that is read in a function and in the initializer of another constant.
+pub fn read_all() -> U32 {
+  READER + JOIN + LIST[0] + WIDTH + P.N
+}

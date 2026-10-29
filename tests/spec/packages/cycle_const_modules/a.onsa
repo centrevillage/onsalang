@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§15.1", "§18.1"]
+
+// R-02, S-734 (W4-05 U5): the constants of two modules that read each other. The cycle of the
+// declarations goes through the modules, so the report is the E0310 only and there is no E0312
+// (spec §18.1: "モジュールをまたぐ宣言（型と定数）の循環は、必ず `use` の循環の中にあるので E0310 だけを
+// 報告する"). The E0310 is at the first `use` of the cycle (the other `use` is a note), and the
+// constants `A` and `B` have no diagnostic of their own.
+use b.{B}                        //~ E0310
+
+pub const A: U32 = B + 1
+
+pub fn read_a() -> U32 {
+  A
+}

@@ -1,0 +1,5 @@
+pub const X: U32 = Y                //~ E0312
+
+const Y: U32 = X + 1
+
+pub const Z: U32 = Z                //~ E0312

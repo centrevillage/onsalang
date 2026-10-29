@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+
+// R-03, S-742, S-734 (W4-05 U5): a flow that makes an instance of itself, directly or through other
+// flows, is E0817 (spec §11.5: "flow が自分自身を、直接または他の flow を経由してインスタンスにすると
+// E0817"). It is one per collection of flows that make instances of each other (a single flow that
+// instantiates itself is a collection too), at the name of the first flow of the collection in the
+// source, and the instances that make the cycle are notes (§11.5, §18.1: "互いに辿り合う宣言の集まり
+// ごとに一つ報告する"; "集まりの外からそれらを使う宣言には出さず"). The marker is on the line of the
+// declaration of the flow, not of the instance (the other flows of this directory put it on the
+// construct, see rules_negative.onsa). The flow that uses the collection from outside, written before
+// or after it, has no diagnostic.
+
+// A flow outside, first in the file: it makes an instance of `fa`, but `fa` does not reach it.
+pub flow user_before(x: F32 at sample) -> F32 at sample {
+  fa~(x)
+}
+
+// An instance of itself.
+pub flow once(x: F32 at sample) -> F32 at sample {            //~ E0817
+  once~(x)
+}
+
+// Two flows that make instances of each other: one diagnostic, at the first, `fa`; the second, `fb`,
+// has none.
+pub flow fa(x: F32 at sample) -> F32 at sample {              //~ E0817
+  fb~(x)
+}
+
+pub flow fb(x: F32 at sample) -> F32 at sample {
+  fa~(x)
+}
+
+pub flow user_after(x: F32 at sample) -> F32 at sample {
+  fb~(x) + fa~(x)
+}
+
+// Three flows: the first in the source, `h3`, is the place, though `h3` is the last on the way round
+// (`h1` makes an instance of `h2`, `h2` of `h3`, and `h3` of `h1`).
+pub flow h3(x: F32 at sample) -> F32 at sample {              //~ E0817
+  h1~(x)
+}
+
+pub flow h1(x: F32 at sample) -> F32 at sample {
+  h2~(x)
+}
+
+pub flow h2(x: F32 at sample) -> F32 at sample {
+  h3~(x)
+}
+
+// Two instances of the same flow in one body: one diagnostic for the collection.
+pub flow twice(x: F32 at sample) -> F32 at sample {           //~ E0817
+  twice~(x) + twice~(x * 0.5)
+}
+
+// Two cycles that share `hub`: one collection, one diagnostic.
+pub flow hub(x: F32 at sample) -> F32 at sample {             //~ E0817
+  left~(x) + right~(x)
+}
+
+pub flow left(x: F32 at sample) -> F32 at sample {
+  hub~(x)
+}
+
+pub flow right(x: F32 at sample) -> F32 at sample {
+  hub~(x)
+}
+
+// A flow of the collection that also makes an instance of a flow outside the cycle: the one outside
+// has no diagnostic.
+pub flow leaf(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub flow mixed_a(x: F32 at sample) -> F32 at sample {         //~ E0817
+  leaf~(x) + mixed_b~(x)
+}
+
+pub flow mixed_b(x: F32 at sample) -> F32 at sample {
+  mixed_a~(leaf~(x))
+}
+
+// Two collections, the second reached from the first but not back: two diagnostics, at `x1` and `y1`.
+pub flow x1(x: F32 at sample) -> F32 at sample {              //~ E0817
+  x2~(x)
+}
+
+pub flow x2(x: F32 at sample) -> F32 at sample {
+  x1~(x) + y1~(x)
+}
+
+pub flow y1(x: F32 at sample) -> F32 at sample {              //~ E0817
+  y2~(x)
+}
+
+pub flow y2(x: F32 at sample) -> F32 at sample {
+  y1~(x)
+}
+
+// A chain with no cycle (a flow makes instances of flows written after it, and of the same flow in
+// two places): no diagnostic.
+pub flow top(x: F32 at sample) -> F32 at sample {
+  mid_a~(x) + mid_b~(x)
+}
+
+pub flow mid_a(x: F32 at sample) -> F32 at sample {
+  base~(x)
+}
+
+pub flow mid_b(x: F32 at sample) -> F32 at sample {
+  base~(x) + base~(x * 0.5)
+}
+
+pub flow base(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// A user of the cycles written last, with a `par`: the instances of the flows of the collections are
+// not a cycle for this flow.
+pub flow users(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 { x1~(x) * i.round_f32() }
+  xs[0] + xs[1] + y2~(x) + h2~(x) + hub~(x)
+}
