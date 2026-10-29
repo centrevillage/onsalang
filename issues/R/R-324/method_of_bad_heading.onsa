@@ -1,0 +1,13 @@
+pub struct S {
+  x: I32,
+}
+
+impl[T] S[T] {
+  pub fn only_here(self) -> I32 {
+    self.x
+  }
+}
+
+pub fn reads_a_method_of_the_bad_heading(s: S) -> I32 {
+  s.only_here()
+}
