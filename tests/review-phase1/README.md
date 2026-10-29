@@ -86,7 +86,7 @@
 | `types/rec*.onsa`、`types/constcyc*.onsa` | R-02。W4-05 で期待値付きのテストへ移した: 型の循環（`rec*`）は U2 の `tests/spec/types/cycle_value_self.onsa`・`cycle_value_groups.onsa`（E0311）、定数の循環（`constcyc*`）は U5 の `tests/spec/types/cycle_const_groups.onsa`・`cycle_const_assoc.onsa`・`cycle_const_around.onsa`（E0312）。今: `check` は `rec*` が E0311、`constcyc*` が集まりごとに一つの E0312 で、`constcyc*` は降下に進む命令（`interface`・`dump --core`・`test`）も E0312 で止まる（U5 で確かめた） |
 | `types/derive2.onsa` | R-35 |
 | `types/attrs.onsa` | R-36。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/attributes_table.onsa`（E0005）、`attributes_no_candidate.onsa`（S-483）、`tests/spec/fixes/e0005_attribute_values.onsa`。derive の検査（`NoEq` 越し）は W5-06 |
-| `types/bounds.onsa`、`types/bufelem.onsa`、`types/span*.onsa`、`types/nestrate.onsa`、`types/ratefn.onsa`、`types/tyb*.onsa`（推定） | R-37 |
+| `types/bounds.onsa`、`types/bufelem.onsa`、`types/span*.onsa`、`types/nestrate.onsa`、`types/ratefn.onsa`、`types/tyb*.onsa`（推定） | R-37。W4-05 U4a で署名と本体に書いた型の整形性を入れ、期待値付きのテストへ移した: `tests/spec/types/wellformed_*.onsa`。今: `bufelem`・`tyb2`・`tybounds` は E0416、`spanfield`・`spanpos` は E0710 と E0416（`spanpos` の古い構文の E0020 も）。`bounds.onsa` の 5 行の境界の並びは U4b（S-747）。`nestrate`・`ratefn` の flow の値型は flow の署名の E0810 のまま |
 | `types/fieldvis/` | R-38。W4-03 U4a/t で期待値付きのテストへ移した: `tests/spec/packages/visibility_methods/`（`priv` の `p.m()`・`Point.m()`・`Point.C` は E0303）、`tests/spec/packages/visibility_fields/`（`priv` のフィールドの読み書き・リテラル・パターン）、`crates/onsa_cli/tests/visibility.rs`。元の入力は S-36 の後は語の無いメンバとフィールドなので通る |
 | `types/cyc2/`、`types/cyc3/`、`types/reexp/` | R-39。W4-03 で期待値付きのテストへ移して消した（W4-03 を終えた 72 回目）: `types/cyc2/` は `tests/spec/packages/body_path_mutual/`（`use` を書かない相互参照は、それぞれの経路が E0302 で、E0310 にならない）と `crates/onsa_cli/tests/body_paths.rs`（U2b/t）。`types/cyc3/`（自分のパッケージ名で相互に取り込む）は `tests/spec/fixes/pkg_own_name_mutual/`（二つの `use` が E0302 で、それぞれ候補はパッケージ名を外す形）と、`use b.{g}` の形に書き直した E0310 の事例 `tests/spec/packages/cycle/`・`crates/onsa_cli/tests/use_cycles.rs`（U3a2/t）。`types/reexp/`（`pub use` の連鎖）は `tests/spec/packages/pub_use_chain/`・`pub_use_no_cycle/` と `crates/onsa_cli/tests/use_reexport.rs`（S-596、U3b2/t） |
 | `types/dups.onsa` | R-40 |
@@ -135,7 +135,7 @@
 | `parent/r118.onsa` | R-118 |
 | `parent/r55.onsa` | R-55（範囲を広げた再現） |
 | `parent/r119.onsa` | R-119 |
-| `parent/r120.onsa` | R-120 |
+| `parent/r120.onsa` | R-120。W4-05 U4a で期待値付きのテストへ移した: `tests/spec/negative/option_result_order.onsa`（E0401） |
 | `parent/r61.onsa` | R-61（計算で決まる定数を長さに使う） |
 | `parent/r62.onsa` | R-62（括弧・腕の中の `else` と `{` の位置）。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0003_else_line.onsa`（`in_a_call`、`in_an_arm`）と `e0003_brace_line.onsa`（`if_in_a_call`、`closure_head`） |
 | `parent/r70/` | R-70（コメントの位置の 17 の形。どれも正規形で書いてあり、fmt で変わらないのが期待値。S-58）。W3-11/t（U4）で期待値付きのテストへ移した: `crates/onsa_cli/tests/fmt_comments.rs` の `the_seventeen_forms_of_r70_are_not_changed_by_fmt`（17 の形を一つずつ全文で写し、fmt で変わらないことを確かめる）と、コメントの置き場所の正規形の事例 `tests/spec/fmt/comments_places.onsa` |
