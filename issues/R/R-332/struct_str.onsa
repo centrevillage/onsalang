@@ -1,0 +1,5 @@
+pub struct Mm { name: Str, n: U32 }
+test "flat" {
+  let m = Mm { name: "b", n: 2 }
+  assert m.n == 2
+}
