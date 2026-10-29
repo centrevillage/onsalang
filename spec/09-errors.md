@@ -14,8 +14,10 @@ pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
 `?` は、それを含む最も内側の関数（無名関数を含む。`return` と同じ脱出先、§6.1）の返り値の `E` と **同じ型** のエラーにしか使えない（E0414）。注釈の無い無名関数では、`?` が返り値の型を `Result[_, E]` / `Option[_]` に決める。暗黙の変換（`From` 相当）は無い。変換は `map_err` で明示する。
 `Option` を返す関数の中では `Option` にも使える（`None` で早期に返る）。`Result` と `Option` の混在は不可。
 `?` の誤り（混在、エラーの型の違い、返り値が `Result` / `Option` でない関数の中の `?`、被演算子が `Result` / `Option` でない `x?`）は全て E0414 で、直し方（`?` の対象と関数の返り値を合わせる）は一つである。`match` か `map_err` かの違いは文面と note で示す。
+`?` の被演算子は消費する位置で、`move self` のメソッドの受け手と同じく印を書かない（§5.2）。場所の被演算子は §5.2 の消費の規則に従う: 所有の Affine の場所は移って以後使えず（E0704）、Affine のフィールドの経路は根の全体を消費し、配列の要素と、借用・`inout` の Affine の場所は E0711（修正候補なし）、Dup の場所は複製する。
+消費するかは被演算子の型の全体で決まり、`Result[U32, Buf[F32]]` の場所は `Ok` の道でも移る。場所でない被演算子（`f()?`）は一時の値を消費する。
 
-`Option` と `Result` のメソッドは、両方の `unwrap`（`None` / `Err` なら panic する、§9.2）と、`Result` の `map_err` だけである。
+`Option` と `Result` のメソッドは、両方の `pub fn unwrap(move self) -> T`（`None` / `Err` なら panic する、§9.2）と、`Result` の `map_err` だけである。どちらも受け手を消費し、受け手の扱いは `?` の被演算子と同じ（§5.2）。
 `map_err` は `pub fn map_err[F](move self, f: fn(move E) -> F) -> Result[T, F]` で（`f` の効果行は空）、`?` の前でエラーの型を関数の返り値の型へ変換するのに使う（`Fs.read(path).map_err(ConfigError.Io)?`）。
 値の取り出しや有無の判定は `match`、`?`、`==` で書く（P2）。組込みの API の候補は、仕様に入れる前に必要性を議論する（[`decisions/A/`](../decisions/A/README.md)）。
 
