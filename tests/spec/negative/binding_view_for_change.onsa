@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// S-217 (§5.3, §5.4): `for v in xs.slice(a, b)` is a borrowed `for` over the place `xs`, so a change of
+// `xs` in the body is an E0715: "部分ビューの `for s in xs.slice(a, b)` は、範囲によらず `xs` の場所を
+// 反復元とする" and "借用の `for` の本体では、反復元 `xs` とその一部を変更できない。代入、`inout` への
+// 受け渡し、`move` は E0715". The range is not compared (`a` and `b` are run-time values, and the
+// views below do not overlap the changed element, which is an error all the same): "本体で `xs` を変更
+// すると、範囲 `[a, b)` によらず E0715" (§5.3). The legal reads of the same views are in
+// values/binding_view_let.onsa. One error per item (P-01).
+
+pub fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+pub fn assign_to_an_element(inout xs: Span[F32]) {
+  for v in xs.slice(0, 1) {
+    xs[2] = v                       //~ E0715
+  }
+}
+
+pub fn assign_to_an_element_in_a_local_array() -> F32 {
+  var a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  for v in a.slice(0, 1) {
+    a[3] = v                        //~ E0715
+  }
+  a[3]
+}
+
+pub fn assign_to_an_element_of_a_buffer(inout b: Buf[F32]) {
+  for v in b.slice(0, 2) {
+    b[3] = v                        //~ E0715
+  }
+}
+
+pub fn pass_as_inout(inout xs: Span[F32]) {
+  for _ in xs.slice(0, 1) {
+    clear(inout xs)                 //~ E0715
+  }
+}
+
+pub fn change_by_a_method(inout xs: Span[F32]) {
+  for v in xs.slice(0, 1) {
+    xs.fill!(v)                     //~ E0715
+  }
+}
+
+pub fn change_in_an_inner_block(inout xs: Span[F32], c: Bool) {
+  for v in xs.slice(0, 1) {
+    if c {
+      xs[1] = v                     //~ E0715
+    }
+  }
+}
+
+// The planar element is the place that is iterated: a change of another element of the same argument
+// is a change of a part of the argument.
+pub fn change_the_planar_element(inout input: [Span[F32]; 2]) {
+  for v in input[0].slice(0, 1) {
+    input[0][2] = v                 //~ E0715
+  }
+}

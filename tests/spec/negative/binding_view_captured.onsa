@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// S-217 (§5.3, §5.4): the bound name of a view stays second-class, and capturing it in an anonymous
+// function is one of the uses that is an E0710: "束縛した名前も第二級のままで、返す・保存する・捕捉する・
+// `move` の引数へ渡すと E0710 である（§5.3）". The binding itself is legal (values/binding_view_let.onsa),
+// so the error is at the use inside the function. The same form for the element of a planar argument is
+// `captured` of negative/binding_span_let.onsa, and the other uses are in
+// negative/binding_view_span.onsa. The check of the name as second-class is the work W4-07 (S-217: "名前の
+// 第二級は W4-07"); this file is the one that waits for it. The capture of a `Span` argument that is not
+// bound (R-331) is not written here. One error per item (P-01).
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn captured_view(xs: Span[F32], n: U32) -> U32 {
+  let half = xs.slice(0, n)
+  apply(fn(k) { half.len() + k })   //~ E0710
+}
+
+pub fn captured_derived(xs: Span[F32], n: U32) -> U32 {
+  let half  = xs.slice(0, n)
+  let again = half
+  apply(fn(k) { again.len() + k })  //~ E0710
+}
+
+pub fn captured_view_of_a_planar_element(input: [Span[F32]; 2]) -> U32 {
+  let part = input[0].slice(0, 1)
+  apply(fn(k) { part.len() + k })   //~ E0710
+}
+
+pub fn captured_in_a_loop(xs: Span[F32], n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let part = xs.slice(0, i)
+    total = total + apply(fn(k) { part.len() + k })   //~ E0710
+  }
+  total
+}

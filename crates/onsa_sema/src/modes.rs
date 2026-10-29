@@ -175,17 +175,9 @@ impl<'a> Walker<'a> {
         &self.body.locals[id.0 as usize]
     }
 
-    /// Whether a local is a borrow (parameter, borrow binding, `for` without `move`).
+    /// Whether a local is a borrow (§5.4: its settled state, [`crate::binding`]).
     fn is_borrowed(&self, id: LocalId) -> bool {
-        let l = self.local(id);
-        l.borrow
-            || matches!(
-                l.kind,
-                LocalKind::Param(Mode::Borrow)
-                    | LocalKind::SelfParam(Mode::Borrow)
-                    | LocalKind::ClosureParam(Mode::Borrow)
-                    | LocalKind::For { moved: false }
-            )
+        self.local(id).borrow
     }
 
     fn strip(&self, mut e: ExprId) -> ExprId {

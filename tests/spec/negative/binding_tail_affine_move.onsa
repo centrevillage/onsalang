@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// S-604, S-589, R-54 (§5.2, §5.4): the other side of values/binding_tail_affine.onsa. A binding made
+// by the tails of an `if`, a `match`, a block or a parenthesis, where every tail that stays is a
+// borrowed origin, is a borrowed binding, so an Affine value in it cannot be moved out: "Affine 値は
+// 所有していなければ `move` で渡せない。借用引数、借用束縛、`inout` 引数は所有していない。その場所を
+// `move` 引数に置くと、印の有無によらず修正候補の無い E0711" (§5.2, `fixes = 0`). A binding derived
+// from it is borrowed too. The binding itself is legal, so the error is at the use that moves it on or
+// returns it, not at the `let`. One error per item (P-01).
+//
+// Not written: the check of each owned tail when one tail is owned and another is a borrowed Affine
+// value (`let t = if c { x } else { make(y) }`, an E0711 at the borrowed tail), and a local Affine
+// tail (a `move` is inserted): the work W4-09 ("S-604 の所有の末尾の検査").
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn make(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+// ------------------------------------------------------------------------ moved on
+
+pub fn move_if_tails(c: Bool, x: Buf[F32], y: Buf[F32]) uses {Alloc} {
+  let t = if c { x } else { y }
+  take(move t)                  //~ E0711
+}
+
+pub fn pass_without_move(c: Bool, x: Buf[F32], y: Buf[F32]) uses {Alloc} {
+  let t = if c { x } else { y }
+  take(t)                       //~ E0711
+}
+
+pub fn move_block_tail(x: Buf[F32]) uses {Alloc} {
+  let t = { x }
+  take(move t)                  //~ E0711
+}
+
+pub fn move_parenthesis(x: Buf[F32]) uses {Alloc} {
+  let t = (x)
+  take(move t)                  //~ E0711
+}
+
+pub fn move_match_tails(o: Option[Buf[F32]], d: Buf[F32]) uses {Alloc} {
+  let t = match o {
+    Some(b) => b,
+    None => d,
+  }
+  take(move t)                  //~ E0711
+}
+
+pub fn move_derived(c: Bool, x: Buf[F32], y: Buf[F32]) uses {Alloc} {
+  let t = if c { x } else { y }
+  let q = t
+  take(move q)                  //~ E0711
+}
+
+pub fn move_nested(c: Bool, o: Option[Buf[F32]], x: Buf[F32], y: Buf[F32]) uses {Alloc} {
+  let t = if c {
+    match o {
+      Some(b) => b,
+      None => x,
+    }
+  } else {
+    y
+  }
+  take(move t)                  //~ E0711
+}
+
+pub fn move_when_the_other_tail_leaves(c: Bool, x: Buf[F32]) uses {Alloc} {
+  let t = if c { x } else { return }
+  take(move t)                  //~ E0711
+}
+
+pub fn move_in_a_loop(c: Bool, x: Buf[F32], y: Buf[F32], n: U32) uses {Alloc} {
+  for i in 0 ..< n {
+    let t = if c { x } else { y }
+    take(move t)                //~ E0711
+  }
+}
+
+pub fn move_into_a_let(c: Bool, x: Buf[F32], y: Buf[F32]) uses {Alloc} {
+  let t = if c { x } else { y }
+  let d = move t                //~ E0711
+  take(move d)
+}
+
+// ---------------------------------------------------------------------------- returned
+
+pub fn return_the_binding(c: Bool, x: Buf[F32], y: Buf[F32]) -> Buf[F32] {
+  let t = if c { x } else { y }
+  t                             //~ E0711
+}
+
+pub fn return_the_derived_binding(c: Bool, x: Buf[F32], y: Buf[F32]) -> Buf[F32] {
+  let t = if c { x } else { y }
+  let q = t
+  q                             //~ E0711
+}
+
+// ------------------------------------------------------------------------ the contrasts
+
+// An owned binding moves on, and so does a binding whose tails are all new values (owned rows).
+pub fn owned_moves_on(move x: Buf[F32]) uses {Alloc} {
+  let t = move x
+  take(move t)
+}
+
+pub fn a_new_value_moves_on(c: Bool, n: U32) uses {Alloc} {
+  let t = if c { make(n) } else { make(n + 1) }
+  take(move t)
+}

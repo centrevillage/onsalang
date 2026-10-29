@@ -491,10 +491,7 @@ impl<'a> Checker<'a> {
                 None => {
                     // A block that ends in `return` / `break` / `continue` diverges: it
                     // takes any type (a trailing `return e` is allowed, §6.1).
-                    let diverges = b.stmts.last().is_some_and(|&s| {
-                        matches!(self.ast.stmt(s).kind, StmtKind::Return(_) | StmtKind::Break | StmtKind::Continue)
-                    });
-                    if diverges { Ok(self.fresh()) } else { Ok(self.unit()) }
+                    if self.ast.block_exits(b) { Ok(self.fresh()) } else { Ok(self.unit()) }
                 }
             }
         })();

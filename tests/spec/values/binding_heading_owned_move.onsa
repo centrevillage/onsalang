@@ -1,0 +1,112 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+
+// R-251 (§5.4, §5.2): the binding of an arm of a `match` whose subject is not a place (`match f(...)`),
+// and the binding of a `for` over such a value, are owned: "`match move x` と、場所でも静的な値でも
+// 破棄の要らないリテラルでもない対象（`match f(...)`）の腕の束縛: 所有", "`for s in f(...)`: 所有。
+// 一時の値を消費する". An owned Affine value can be moved on (`take(move z)`), where the binding of an
+// arm over a place (an argument) is borrowed and cannot (negative/binding_heading_borrow_move.onsa).
+// This is the form of the repro issues/R/R-251/match_call_affine.onsa. Every binding is read or moved
+// (a binding never read is an E0309). No diagnostic is expected anywhere in this file. The same
+// headings in an `rt fn` are an E0901 for the drop of the owned binding
+// (negative/binding_heading_owned_rt.onsa); here every arm moves the binding on, so nothing is dropped
+// and the form is legal in an `rt fn` too (the last cases). The element of a `for` over a call moved on in
+// the body is in values/binding_heading_owned_move_loop.onsa.
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub fn make() -> Option[Buf[F32]] {
+  None
+}
+
+pub fn make_array() -> [Buf[F32]; 2] uses {Alloc} {
+  [Buf.zeroed(1), Buf.zeroed(2)]
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+// ---------------------------------------------------------------- match on a call
+
+pub fn arm_moves_the_binding() uses {Alloc} {
+  match make() {
+    Some(z) => take(move z),
+    None => {},
+  }
+}
+
+pub fn arm_moves_a_derived_owned_binding() uses {Alloc} {
+  match make() {
+    Some(z) => {
+      let y = move z
+      take(move y)
+    },
+    None => {},
+  }
+}
+
+pub fn arm_reads_then_moves() -> U32 uses {Alloc} {
+  match make() {
+    Some(z) => {
+      let n = z.len()
+      take(move z)
+      n
+    },
+    None => 0,
+  }
+}
+
+pub fn match_on_a_call_with_arguments(move b: Buf[F32]) uses {Alloc} {
+  match wrap(move b) {
+    Some(z) => take(move z),
+    None => {},
+  }
+}
+
+pub fn wrap(move b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(move b)
+}
+
+pub fn match_on_a_call_in_a_branch(c: Bool) uses {Alloc} {
+  if c {
+    match make() {
+      Some(z) => take(move z),
+      None => {},
+    }
+  }
+}
+
+// ------------------------------------------------------------------ match on an if of calls
+
+pub fn match_on_an_if_with_an_owned_tail(c: Bool) uses {Alloc} {
+  match if c { make() } else { make() } {
+    Some(z) => take(move z),
+    None => {},
+  }
+}
+
+// ------------------------------------------------------------------------ for over a call
+
+pub fn for_reads_the_element() -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for z in make_array() {
+    n = n + z.len()
+  }
+  n
+}
+
+// -------------------------------------------------------- in an rt fn: moved on, never dropped
+
+pub rt fn rt_wrap(move b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(move b)
+}
+
+pub rt fn rt_match_moves_the_binding(move b: Buf[F32]) -> Option[Buf[F32]] {
+  match rt_wrap(move b) {
+    Some(z) => Some(move z),
+    None => None,
+  }
+}

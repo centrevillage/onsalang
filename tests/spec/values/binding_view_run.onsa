@@ -1,0 +1,267 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-217 (§5.3, §5.4), run in the interpreter: the part of a view (`xs.slice(a, b)`), bound by a `let`
+// or iterated by a `for`, of values/binding_view_let.onsa. A bound view is a view of the storage of its
+// origin: it reads the elements `[a, b)` of the origin as they are, `len()` is `b - a`, and nothing is
+// copied (§5.3: "半開区間 `[from, to)` の `Span`"). The `for` over a view visits the elements of the
+// range in order and only those. A planar argument is given as a nested array (`[[F32; 4]; 2]` for
+// `[Span[F32]; 2]`, §5.3), the way of values/binding_span_run.onsa.
+
+fn half_first(xs: Span[F32], n: U32) -> F32 {
+  let half = xs.slice(0, n)
+  half[0]
+}
+
+fn half_len(xs: Span[F32], a: U32, b: U32) -> U32 {
+  let part = xs.slice(a, b)
+  part.len()
+}
+
+fn middle(a: [F32; 5]) -> F32 {
+  let part = a.slice(1, 4)
+  part[0] + part[1] + part[2]
+}
+
+fn buffer_view(b: Buf[F32]) -> F32 {
+  let part = b.slice(2, 4)
+  part[0] + part[1]
+}
+
+fn planar_view(input: [Span[F32]; 2], k: U32) -> F32 {
+  let part = input[k].slice(1, 3)
+  part[0] + part[1]
+}
+
+fn view_of_a_view(xs: Span[F32]) -> F32 {
+  let a = xs.slice(1, 5)
+  let b = a.slice(1, 3)
+  b[0] + b[1]
+}
+
+fn view_of_a_binding(xs: Span[F32]) -> F32 {
+  let s    = xs
+  let part = s.slice(2, 4)
+  part[0]
+}
+
+fn derived(xs: Span[F32]) -> F32 {
+  let half  = xs.slice(0, 2)
+  let again = half
+  again[1]
+}
+
+fn sum(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0 ..< s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+fn sum_of_the_view(xs: Span[F32], a: U32, b: U32) -> F32 {
+  let part = xs.slice(a, b)
+  sum(part)
+}
+
+fn get_through_the_view(xs: Span[F32], i: U32) -> F32 {
+  let part = xs.slice(1, 3)
+  match part.get(i) {
+    Some(v) => v,
+    None => -1.0,
+  }
+}
+
+fn for_sum(xs: Span[F32], a: U32, b: U32) -> F32 {
+  var total: F32 = 0.0
+  for v in xs.slice(a, b) {
+    total = total + v
+  }
+  total
+}
+
+fn for_count(xs: Span[F32], a: U32, b: U32) -> U32 {
+  var n: U32 = 0
+  for _ in xs.slice(a, b) {
+    n = n + 1
+  }
+  n
+}
+
+fn for_weighted(xs: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  var w: F32     = 1.0
+  for v in xs.slice(1, 4) {
+    total = total + v * w
+    w = w * 10.0
+  }
+  total
+}
+
+fn for_over_the_view_of_a_planar_element(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for v in input[1].slice(0, 2) {
+    total = total + v
+  }
+  total
+}
+
+fn for_over_the_view_of_a_binding(xs: Span[F32]) -> F32 {
+  let half       = xs.slice(0, 4)
+  var total: F32 = 0.0
+  for v in half.slice(2, 4) {
+    total = total + v
+  }
+  total
+}
+
+fn for_over_the_view_of_the_binding_of_a_for(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for ch in input {
+    for v in ch.slice(1, 2) {
+      total = total + v
+    }
+  }
+  total
+}
+
+fn for_over_the_view_of_an_inout_argument(inout xs: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for v in xs.slice(0, 2) {
+    total = total + v
+  }
+  total
+}
+
+fn in_a_loop(xs: Span[F32], n: U32) -> F32 {
+  var total: F32 = 0.0
+  for k in 0 ..< n {
+    let part = xs.slice(k, k + 1)
+    total = total + part[0] * 2.0
+  }
+  total
+}
+
+rt fn rt_view(xs: Span[F32], n: U32) -> F32 {
+  let half = xs.slice(0, n)
+  half[n - 1]
+}
+
+rt fn rt_for(xs: Span[F32], n: U32) -> F32 {
+  var total: F32 = 0.0
+  for v in xs.slice(0, n) {
+    total = total + v
+  }
+  total
+}
+
+test "let half = xs.slice(0, n) reads the first elements of the origin" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert half_first(a, 2) == 1.0
+}
+
+test "the length of a view is b - a" {
+  let a: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  assert half_len(a, 0, 5) == 5
+  assert half_len(a, 1, 4) == 3
+  assert half_len(a, 2, 2) == 0
+}
+
+test "the view of an array reads the range" {
+  let a: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  assert middle(a) == 9.0
+}
+
+test "the view of a buffer reads the range" {
+  var b: Buf[F32] = Buf.zeroed(5)
+  b[1] = 100.0
+  b[2] = 7.0
+  b[3] = 8.0
+  b[4] = 100.0
+  assert buffer_view(b) == 15.0
+  assert b[1] == 100.0
+  assert b[4] == 100.0
+}
+
+test "the view of a planar element" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert planar_view(ins, 0) == 5.0
+  assert planar_view(ins, 1) == 50.0
+}
+
+test "the view of a view is relative to the first view" {
+  let a: [F32; 6] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+  assert view_of_a_view(a) == 5.0
+}
+
+test "the view of a binding of the argument" {
+  let a: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  assert view_of_a_binding(a) == 3.0
+}
+
+test "a binding derived from a view" {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  assert derived(a) == 2.0
+}
+
+test "the view goes on as an argument of a function over a Span" {
+  let a: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  assert sum_of_the_view(a, 0, 5) == 15.0
+  assert sum_of_the_view(a, 1, 3) == 5.0
+  assert sum_of_the_view(a, 4, 4) == 0.0
+}
+
+test "get through the view returns the element of the view or None" {
+  let a: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  assert get_through_the_view(a, 0) == 2.0
+  assert get_through_the_view(a, 1) == 3.0
+  assert get_through_the_view(a, 2) == -1.0
+}
+
+test "for v in xs.slice(a, b) visits the range and only the range" {
+  let a: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  assert for_sum(a, 0, 5) == 15.0
+  assert for_sum(a, 1, 3) == 5.0
+  assert for_sum(a, 3, 3) == 0.0
+  assert for_count(a, 1, 4) == 3
+  assert for_count(a, 2, 2) == 0
+}
+
+test "the for over a view visits in order" {
+  let a: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  assert for_weighted(a) == 432.0
+}
+
+test "the for over the view of a planar element" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert for_over_the_view_of_a_planar_element(ins) == 30.0
+}
+
+test "the for over the view of a binding" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert for_over_the_view_of_a_binding(a) == 7.0
+}
+
+test "the for over the view of the binding of a for" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert for_over_the_view_of_the_binding_of_a_for(ins) == 22.0
+}
+
+test "the for over the view of an inout argument" {
+  var a: [F32; 3] = [1.0, 2.0, 3.0]
+  assert for_over_the_view_of_an_inout_argument(inout a) == 3.0
+  assert a[2] == 3.0
+}
+
+test "a view bound in a loop" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert in_a_loop(a, 3) == 12.0
+}
+
+test "the same forms in an rt fn" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert rt_view(a, 2) == 2.0
+  assert rt_for(a, 3) == 6.0
+}

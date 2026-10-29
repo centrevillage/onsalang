@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// S-604, R-251 (§5.2, §5.4): the other side of values/binding_heading_owned_move.onsa. The binding of
+// an arm and of a `for` over a heading that is a place is a borrowed origin ("`for s in xs`（`xs` は
+// 任意の場所…）", "`match x` の腕の束縛（`x` は任意の場所…）: 借用（起点）"), and so is the binding over
+// a heading whose tails are all borrowed rows (the same rule as the initializer of a `let`, with a
+// parenthesis the same as its content). An Affine value in a borrowed binding cannot be moved out:
+// "その場所を `move` 引数に置くと、印の有無によらず修正候補の無い E0711" (§5.2, `fixes = 0`). The
+// error is at the use that moves it. One error per item (P-01).
+//
+// Not written: the E0715 of a change of the heading inside the `for` or the arm, for each tail place
+// of an `if` heading (the work W4-07: "modes が派生元を読む").
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+// ------------------------------------------------------------------- match on a place
+
+pub fn arm_of_an_argument(o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(z) => take(move z),    //~ E0711
+    None => {},
+  }
+}
+
+pub fn arm_of_an_if_of_places(c: Bool, x: Option[Buf[F32]], y: Option[Buf[F32]]) uses {Alloc} {
+  match if c { x } else { y } {
+    Some(z) => take(move z),    //~ E0711
+    None => {},
+  }
+}
+
+pub fn arm_of_a_parenthesized_if(c: Bool, x: Option[Buf[F32]], y: Option[Buf[F32]]) uses {Alloc} {
+  match (if c { x } else { y }) {
+    Some(z) => take(move z),    //~ E0711
+    None => {},
+  }
+}
+
+pub fn arm_of_a_match_of_places(o: Option[Option[Buf[F32]]], d: Option[Buf[F32]]) uses {Alloc} {
+  match (match o { Some(i) => i, None => d }) {
+    Some(z) => take(move z),    //~ E0711
+    None => {},
+  }
+}
+
+pub fn arm_of_an_if_that_leaves(c: Bool, x: Option[Buf[F32]]) uses {Alloc} {
+  match if c { x } else { return } {
+    Some(z) => take(move z),    //~ E0711
+    None => {},
+  }
+}
+
+pub fn arm_of_a_local_var() uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(Buf.zeroed(2))
+  match o {
+    Some(z) => take(move z),    //~ E0711
+    None => {},
+  }
+}
+
+// ---------------------------------------------------------------------------- for over a place
+
+pub fn for_over_an_argument(xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in xs {
+    take(move z)                //~ E0711
+  }
+}
+
+pub fn for_over_an_if_of_places(c: Bool, xs: [Buf[F32]; 2], ys: [Buf[F32]; 2]) uses {Alloc} {
+  for z in if c { xs } else { ys } {
+    take(move z)                //~ E0711
+  }
+}
+
+pub fn for_over_a_parenthesized_if(c: Bool, xs: [Buf[F32]; 2], ys: [Buf[F32]; 2]) uses {Alloc} {
+  for z in (if c { xs } else { ys }) {
+    take(move z)                //~ E0711
+  }
+}
+
+pub fn for_over_an_if_that_leaves(c: Bool, xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in if c { xs } else { return } {
+    take(move z)                //~ E0711
+  }
+}
+
+pub fn for_over_a_local_var() uses {Alloc} {
+  var bufs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(2)]
+  for z in bufs {
+    take(move z)                //~ E0711
+  }
+}
+
+// A let from the binding of the heading is borrowed too.
+pub fn let_from_the_element(xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in xs {
+    let y = z
+    take(move y)                //~ E0711
+  }
+}

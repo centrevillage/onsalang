@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-604, S-589, S-80 (§5.4, §10, §12.2): a tail that is a string literal with interpolation is an owned
+// row ("補間の無い文字列リテラル" is the static value, so the interpolated one is not: it makes a new
+// `Str`, §12.2), so one such tail makes the binding of an `if`, a `match` or a block owned
+// ("一つでも所有の行なら所有"), and an owned `Str` cannot be destroyed in an `rt fn`: an E0901 at the
+// binding, the code of a drop in an `rt fn` in this version, as in negative/binding_tail_owned_rt.onsa
+// (the cases there use a call, which makes no string of its own). The creation of the string needs
+// `Alloc` as well (§10 1.: "補間文字列" is an E0601 in an `rt fn`, §12.2), and today the creation is not
+// reported beside the drop. When the code of the drop and the creation are settled in the work W6-03
+// (R-83, S-77), the expectation of this file changes with them; it is kept apart from the cases that
+// do not depend on that. The `let` and its tails are on one line. One error per item (P-01).
+
+pub rt fn if_second_tail(c: Bool, x: Str, v: U32) -> U32 {
+  let t = if c { x } else { "gain {v}" }    //~ E0901
+  t.len()
+}
+
+pub rt fn if_first_tail(c: Bool, x: Str, v: U32) -> U32 {
+  let t = if c { "gain {v}" } else { x }    //~ E0901
+  t.len()
+}
+
+pub rt fn block_tail(v: U32) -> U32 {
+  let t = { "gain {v}" }                   //~ E0901
+  t.len()
+}
+
+pub rt fn match_arm(o: Option[Str], v: U32) -> U32 {
+  let t = match o { Some(s) => s, None => "gain {v}" }   //~ E0901
+  t.len()
+}

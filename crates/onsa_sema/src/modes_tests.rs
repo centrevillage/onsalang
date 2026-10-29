@@ -110,7 +110,9 @@ fn second_class_values_stay_in_argument_position() {
     ok("pub fn g(xs: Span[F32]) { let _ = xs }\n");
     assert_eq!(codes("pub fn g(inout xs: Span[F32]) { let _ = xs }\n"), vec![Code::E0710]);
     assert_eq!(codes("pub fn g(xs: Span[F32]) -> Span[F32] { xs }\n").first().copied(), Some(Code::E0710));
-    assert_eq!(codes("pub fn g(xs: Span[F32]) { let _ = xs.slice(0, 2) }\n"), vec![Code::E0710]);
+    // A part of the view is too (W4-16 U1b).
+    ok("pub fn g(xs: Span[F32]) { let _ = xs.slice(0, 2) }\n");
+    assert_eq!(codes("pub fn g(inout xs: Span[F32]) { let _ = xs.slice(0, 2) }\n"), vec![Code::E0710]);
     ok(
         "pub fn total(xs: Span[F32]) -> U32 { xs.len() }\npub fn g(xs: Span[F32]) -> U32 { total(xs.slice(0, 2)) + xs[0].trunc_u32() }\n",
     );

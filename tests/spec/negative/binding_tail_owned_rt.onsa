@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-604, S-589 (§5.4, §10, §12.2): the other side of values/binding_tail_rt.onsa. "全ての末尾が借用の行
+// なら借用、一つでも所有の行なら所有" (§5.4): one tail that is an owned row (the result of a call,
+// `let y = f(...)`) makes the binding owned, however many of the other tails are borrowed origins or
+// static values. An owned `Str` is destroyed, the destruction of a Shared value needs `Alloc` (§12.2),
+// and an `rt fn` cannot do that: an E0901 at the binding (the same E0901 as `let_from_a_call` of
+// negative/binding_static_leaf.onsa; the code of a drop in an `rt fn` is E0901 in this version and
+// the destruction in the row of S-77 is the work W6-03, R-83). The `let` and its tails are on one
+// line, so the line does not depend on where in the binding the error is put. One error per item
+// (P-01).
+//
+// The contrasts at the end are legal: the same forms with `Alloc` in the row (the destruction is
+// allowed), and a Dup value in an owned binding is a copy (§5.4: "借用の Dup は複製").
+//
+// The interpolated tail (`"gain {v}"`) is in negative/binding_tail_owned_rt_interp.onsa: the creation of
+// the string needs `Alloc` too (§10 1.: E0601), so its expectation changes with the work W6-03 (R-83).
+
+pub rt fn make(x: Str) -> Str {
+  x
+}
+
+pub rt fn name_len(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn make_plain(x: Str) -> Str {
+  x
+}
+
+// -------------------------------------------------------- one owned tail among borrowed ones
+
+pub rt fn if_second_tail_is_a_call(c: Bool, x: Str) -> U32 {
+  let t = if c { x } else { make(x) }       //~ E0901
+  t.len()
+}
+
+pub rt fn if_first_tail_is_a_call(c: Bool, x: Str) -> U32 {
+  let t = if c { make(x) } else { x }       //~ E0901
+  t.len()
+}
+
+pub rt fn block_tail_is_a_call(x: Str) -> U32 {
+  let t = { make(x) }                       //~ E0901
+  t.len()
+}
+
+pub rt fn parenthesis_around_a_call(x: Str) -> U32 {
+  let t = (make(x))                         //~ E0901
+  t.len()
+}
+
+pub rt fn match_arm_is_a_call(o: Option[Str], d: Str) -> U32 {
+  let t = match o { Some(s) => s, None => make(d) }   //~ E0901
+  t.len()
+}
+
+pub rt fn literal_and_a_call(c: Bool, x: Str) -> U32 {
+  let t = if c { "lit" } else { make(x) }   //~ E0901
+  t.len()
+}
+
+pub rt fn nested_one_deep(c: Bool, o: Option[Str], x: Str) -> U32 {
+  let t = if c { match o { Some(s) => s, None => make(x) } } else { x }   //~ E0901
+  t.len()
+}
+
+pub rt fn every_tail_is_a_call(c: Bool, x: Str) -> U32 {
+  let t = if c { make(x) } else { make(x) } //~ E0901
+  t.len()
+}
+
+// A tail that leaves does not make the binding borrowed: the tail that stays is the one that counts.
+pub rt fn the_staying_tail_is_a_call(c: Bool, x: Str) -> U32 {
+  let t = if c { make(x) } else { return 0 }   //~ E0901
+  t.len()
+}
+
+// The owned binding is not turned into a borrowed one by deriving from it.
+pub rt fn derived_from_the_owned_binding(c: Bool, x: Str) -> U32 {
+  let t = if c { x } else { make(x) }       //~ E0901
+  let q = t
+  name_len(q)
+}
+
+// ------------------------------------------------------------------------ the contrasts
+
+pub fn with_alloc_a_call_tail(c: Bool, x: Str) -> U32 uses {Alloc} {
+  let t = if c { x } else { make_plain(x) }
+  t.len()
+}
+
+pub fn with_alloc_an_interpolated_tail(c: Bool, x: Str, v: U32) -> U32 uses {Alloc} {
+  let t = if c { x } else { "gain {v}" }
+  t.len()
+}
+
+pub rt fn a_copy_value_in_an_owned_binding(c: Bool, x: U32, y: U32) -> U32 {
+  let t = if c { x } else { y + 1 }
+  t
+}

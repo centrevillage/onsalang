@@ -1,0 +1,206 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2"]
+
+// S-604, S-589 (§5.4, §10, §12.2): the heading of a `for` and of a `match` (the iterated value and the
+// subject) is decided by the same rule as the initializer of a `let`: "`for` と `match` の見出しも同じ
+// 規則で決め、見出しの借用の行は場所か、静的な値か、破棄の要らないリテラルか、それらの経路" and the tails
+// of an `if`, a `match` or a block decide it, with a parenthesis the same as its content. A borrowed
+// heading makes the binding of the element or of the arm a borrowed origin (`for s in xs` and `match x`
+// are rows of the table), which ends without a drop, so an `rt fn` can iterate and match on them. The
+// arguments `xs` and `ys` are in the default mode, so they are places. Every binding is read (a
+// binding never read is an E0309). No diagnostic is expected anywhere in this file. The headings that
+// are owned (a call, an `if` with an owned tail) are in negative/binding_heading_owned_rt.onsa.
+
+pub struct Table {
+  names: Array[Str],
+  gain: F32,
+}
+
+pub rt fn name_len(s: Str) -> U32 {
+  s.len()
+}
+
+// ---------------------------------------------------------------------------- for headings
+
+pub rt fn for_over_an_if(c: Bool, xs: Array[Str], ys: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in if c { xs } else { ys } {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_a_parenthesized_if(c: Bool, xs: Array[Str], ys: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in (if c { xs } else { ys }) {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_an_argument(xs: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    n = n + name_len(s)
+  }
+  n
+}
+
+pub rt fn for_over_a_match(o: Option[Array[Str]], d: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in (match o { Some(xs) => xs, None => d }) {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_a_block(xs: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in ({ xs }) {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_a_field(c: Bool, t: Table, u: Table) -> U32 {
+  var n: U32 = 0
+  for s in (if c { t.names } else { u.names }) {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_an_if_with_a_return(c: Bool, xs: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in (if c { xs } else { return 0 }) {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_nested(c: Bool, d: Bool, xs: Array[Str], ys: Array[Str], zs: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in (if c { if d { xs } else { ys } } else { zs }) {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_a_derived_binding(c: Bool, xs: Array[Str], ys: Array[Str]) -> U32 {
+  let zs     = xs
+  var n: U32 = 0
+  for s in (if c { zs } else { ys }) {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_with_a_let_inside(c: Bool, xs: Array[Str], ys: Array[Str]) -> U32 {
+  var n: U32 = 0
+  for s in (if c { xs } else { ys }) {
+    let t = s
+    n = n + t.len()
+  }
+  n
+}
+
+// A local `var` is a place, so it is a borrowed heading too (the element is a borrowed origin).
+pub rt fn for_over_a_local_var(n: U32) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[0] = n
+  var total: U32 = 0
+  for v in xs {
+    total = total + v
+  }
+  total
+}
+
+pub fn for_over_a_local_buffers(n: U32) -> U32 uses {Alloc} {
+  var bufs: [Buf[F32]; 2] = [Buf.zeroed(n), Buf.zeroed(n + 1)]
+  var total: U32          = 0
+  for b in bufs {
+    total = total + b.len()
+  }
+  total
+}
+
+// ---------------------------------------------------------------------------- match headings
+
+pub rt fn match_on_an_if(c: Bool, x: Option[Str], y: Option[Str]) -> U32 {
+  match if c { x } else { y } {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_a_parenthesized_if(c: Bool, x: Option[Str], y: Option[Str]) -> U32 {
+  match (if c { x } else { y }) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_an_if_of_strings(c: Bool, x: Str, y: Str) -> U32 {
+  match (if c { x } else { y }) {
+    s => s.len(),
+  }
+}
+
+pub rt fn match_on_a_block(x: Option[Str]) -> U32 {
+  match ({ x }) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_a_match(o: Option[Option[Str]], d: Option[Str]) -> U32 {
+  match (match o { Some(i) => i, None => d }) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_an_argument(x: Option[Str]) -> U32 {
+  match x {
+    Some(s) => name_len(s),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_a_field(c: Bool, h: (Option[Str], U32), g: (Option[Str], U32)) -> U32 {
+  match (if c { h.0 } else { g.0 }) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_an_if_with_a_return(c: Bool, x: Option[Str]) -> U32 {
+  match (if c { x } else { return 0 }) {
+    Some(s) => s.len(),
+    None => 1,
+  }
+}
+
+pub rt fn match_on_a_literal_tail(c: Bool, x: Str) -> U32 {
+  match (if c { x } else { "lit" }) {
+    s => s.len(),
+  }
+}
+
+pub rt fn match_on_a_static_value() -> U32 {
+  match "gain" {
+    s => s.len(),
+  }
+}
+
+pub rt fn match_on_a_derived_binding(c: Bool, x: Option[Str], y: Option[Str]) -> U32 {
+  let o = x
+  match (if c { o } else { y }) {
+    Some(s) => {
+      let t = s
+      t.len()
+    },
+    None => 0,
+  }
+}

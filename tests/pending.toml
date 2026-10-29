@@ -1886,13 +1886,6 @@ note = "@latency が無い属性の E0005（W10-08）"
 
 # --- W4-05 U4a/t: 整形性の段。S-217 の 1 件は W4-07（U4a の他の項目は U4a で外した）。
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/wellformed_body_annotation_second_class_let.onsa"
-reasons = ["S-217"]
-until = "W4-07"
-note = "`let`・`for` の借用束縛の根の Span（S-217）は W4-07（今は modes の E0710）"
-
 # --- W4-05 U4b/t: `impl Drop` の型の `const`（S-755）。W5-04 で外す（2026-10-29）。
 
 [[pending]]
@@ -1910,6 +1903,34 @@ target = "tests/spec/negative/binding_span_let.onsa"
 reasons = ["S-217"]
 until = "W4-07"
 note = "束縛した `Span` の名前を無名関数が捕捉する形（`captured`）の E0710。名前の第二級は W4-07（S-217。束縛していない引数の捕捉は R-331）。他の E0710 は W4-16 U1a で通る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_view_captured.onsa"
+reasons = ["S-217", "R-331"]
+until = "W4-07"
+note = "束縛した部分ビューの名前を無名関数が捕捉する形の E0710。名前の第二級は W4-07（S-217、R-331）。部分ビューの `let` は W4-16 U1b で通る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_view_for_change.onsa"
+reasons = ["R-24"]
+until = "W4-09"
+note = "`for v in xs.slice(a, b)` の本体で `xs` を変更する形の E0715。借用の `for` の反復元の変更は W4-09（R-24。部分ビューの `for` は `xs` の借用の `for`、S-217）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/values/binding_heading_owned_move_loop.onsa"
+reasons = ["R-29"]
+until = "W4-09"
+note = "R-251 で所有になった `for` の要素（`for z in make_array()`）を本体で `move` すると、modes が外の変数とみなして E0704（`modes.rs::consume` の `decl < loop_start`、R-29）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/values/binding_heading_loop_run.onsa"
+reasons = ["R-29"]
+until = "W4-09"
+note = "R-251 で所有になった `for` の要素（`for z in make_pair(v)`）を本体で `move` すると、modes が外の変数とみなして E0704（`modes.rs::consume` の `decl < loop_start`、R-29）"
 
 [[pending]]
 kind = "test-case"

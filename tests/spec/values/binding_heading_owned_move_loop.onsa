@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+
+// R-251 (§5.4, §5.2): the binding of a `for` over a value that is not a place is owned: "`for s in
+// f(...)`: 所有。一時の値を消費する". An owned Affine element can be moved on in the body (`take(move z)`):
+// each iteration binds a new element. Split from values/binding_heading_owned_move.onsa. No diagnostic
+// is expected anywhere in this file. Today the move is an E0704 ("moved in a previous iteration"):
+// the modes take the element for an outer variable (R-29, W4-09).
+
+pub fn make_array() -> [Buf[F32]; 2] uses {Alloc} {
+  [Buf.zeroed(1), Buf.zeroed(2)]
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn for_moves_the_element() uses {Alloc} {
+  for z in make_array() {
+    take(move z)
+  }
+}

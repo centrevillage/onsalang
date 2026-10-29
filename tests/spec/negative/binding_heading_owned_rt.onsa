@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§10", "§12.2", "§5.2"]
+
+// R-251, S-604 (§5.4, §10, §12.2): the heading of a `for` and of a `match` that is not a place is
+// owned: "`for s in f(...)`（場所でも静的な値でも破棄の要らないリテラルでもない反復元）: 所有。一時の値を
+// 消費する" with a drop for each element, and "`match f(...)` … の腕の束縛: 所有". An owned `Buf` is
+// destroyed, and the destruction of an owned `Buf` needs `Alloc` (§12.2), which an `rt fn` cannot do:
+// an E0901 (the code of a drop in an `rt fn` of this version, the same as `owns_a_buf` of
+// negative/rt.onsa). The heading is on one line with its binding and the end of the arm, so the line
+// does not depend on where in the arm the error is put. The argument of the call is a `move`
+// argument and an Affine `Buf`, so the form stays an error when the destruction of a temporary of a
+// borrowed Dup value stops being counted (tasks/phase2.md, L2 (b)); the forms over a `Str` are not
+// here for that reason. One error per item (P-01).
+//
+// The same headings in a function with `Alloc` in the row are legal (the drop is allowed): the
+// contrasts at the end. A heading that is a place stays borrowed (values/binding_heading_rt.onsa).
+
+pub rt fn wrap(move b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(move b)
+}
+
+pub rt fn pair(move a: Buf[F32], move b: Buf[F32]) -> [Buf[F32]; 2] {
+  [move a, move b]
+}
+
+pub fn wrap_plain(move b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(move b)
+}
+
+pub struct Box {
+  buf: Buf[F32],
+}
+
+impl Box {
+  pub rt fn into_option(move self) -> Option[Buf[F32]] {
+    let Box { buf: inner } = move self
+    Some(move inner)
+  }
+}
+
+// ------------------------------------------------------------------ match on a call
+
+pub rt fn match_on_a_call(move b: Buf[F32]) -> U32 {
+  match wrap(move b) { Some(c) => c.len(), None => 0 }   //~ E0901
+}
+
+pub rt fn match_on_a_method_call(move h: Box) -> U32 {
+  match h.into_option() { Some(c) => c.len(), None => 0 }   //~ E0901
+}
+
+pub rt fn match_on_an_if_of_calls(c: Bool, move b: Buf[F32]) -> U32 {
+  match if c { wrap(move b) } else { wrap(move b) } { Some(z) => z.len(), None => 0 }   //~ E0901
+}
+
+pub rt fn match_on_a_call_in_parentheses(move b: Buf[F32]) -> U32 {
+  match (wrap(move b)) { Some(c) => c.len(), None => 0 }   //~ E0901
+}
+
+pub rt fn match_on_a_block_with_a_call(move b: Buf[F32]) -> U32 {
+  match ({ wrap(move b) }) { Some(c) => c.len(), None => 0 }   //~ E0901
+}
+
+// ------------------------------------------------------------------------- for over a call
+
+pub rt fn for_over_a_call(move a: Buf[F32], move b: Buf[F32]) -> U32 {
+  var n: U32 = 0
+  for c in pair(move a, move b) { n = n + c.len() }   //~ E0901
+  n
+}
+
+pub rt fn for_over_a_call_in_parentheses(move a: Buf[F32], move b: Buf[F32]) -> U32 {
+  var n: U32 = 0
+  for c in (pair(move a, move b)) { n = n + c.len() }   //~ E0901
+  n
+}
+
+pub rt fn for_over_an_if_of_calls(f: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 {
+  var n: U32 = 0
+  for c in if f { pair(move a, move b) } else { pair(move b, move a) } { n = n + c.len() }   //~ E0901
+  n
+}
+
+// ------------------------------------------------------------------------ the contrasts
+
+pub fn match_on_a_call_with_alloc(move b: Buf[F32]) -> U32 uses {Alloc} {
+  match wrap_plain(move b) {
+    Some(c) => c.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_on_an_argument_is_borrowed(o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(c) => c.len(),
+    None => 0,
+  }
+}
+
+pub rt fn for_over_an_argument_is_borrowed(xs: [Buf[F32]; 2]) -> U32 {
+  var n: U32 = 0
+  for c in xs {
+    n = n + c.len()
+  }
+  n
+}

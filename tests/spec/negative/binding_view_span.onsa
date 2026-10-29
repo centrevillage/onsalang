@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§5.2"]
+
+// S-217 (§5.3, §5.4): the part of a view (`xs.slice(a, b)`) and the elements of a planar argument that
+// stay an error, next to the legal forms of values/binding_view_let.onsa. "`inout` 引数からの `Span`
+// と、所有の行の `Span`（`let (l, r) = (xs[0], xs[1])`、`move xs[0]`）は束縛できず、束縛の場所に置いた値
+// の位置で E0710"; the bound name of a legal view "第二級のまま（返す・保存する・捕捉する・`move` の引数
+// へ渡すと E0710）" (§5.3, §5.4). The part of a view of a local `var` or an `inout` argument is not a
+// borrowed row (the origin must be a borrowed origin or a binding derived from one, §5.4: "ローカルの
+// `var` / `let` と `inout` 引数は起点にならない"), so it is an owned row of a `Span`. A borrowed binding
+// is read-only, so it cannot be an `inout` argument (E0701, §5.4). One error per item (P-01).
+//
+// Not written: returning the bound name (the signature with a `Span` in the result type is an E0710
+// already, as in negative/binding_span_let.onsa), the capture of the bound name (negative/
+// binding_view_captured.onsa, it waits for the work W4-07), the capture of a `Span` argument that is
+// not bound (R-331), and the `Span` of a `match` arm and the wording of the E0710 (W4-07).
+
+pub fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+pub fn sink[T](move x: T) {}
+
+// ---------------------------------------------------------- origins that are not borrowed origins
+
+pub fn inout_span_argument(inout xs: Span[F32], n: U32) -> U32 {
+  let half = xs.slice(0, n)         //~ E0710
+  half.len()
+}
+
+pub fn inout_planar_element(inout input: [Span[F32]; 2]) -> U32 {
+  let part = input[0].slice(0, 1)   //~ E0710
+  part.len()
+}
+
+pub fn inout_buffer(inout b: Buf[F32]) -> U32 {
+  let part = b.slice(0, 1)          //~ E0710
+  part.len()
+}
+
+pub fn inout_array(inout a: [F32; 4]) -> U32 {
+  let part = a.slice(1, 3)          //~ E0710
+  part.len()
+}
+
+pub fn local_buffer() -> U32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  let part = b.slice(0, 2)          //~ E0710
+  part.len()
+}
+
+pub fn local_array() -> U32 {
+  var a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let part = a.slice(0, 2)          //~ E0710
+  part.len()
+}
+
+pub fn view_of_an_owned_view(xs: Span[F32]) -> U32 {
+  var v = xs.slice(0, 2)            //~ E0710
+  v.len()
+}
+
+// ------------------------------------------------------------------ the element of a Span: move
+
+pub fn move_the_element_into_a_let(input: [Span[F32]; 2]) -> U32 {
+  let m = move input[0]             //~ E0710
+  m.len()
+}
+
+pub fn move_the_element_as_an_argument(input: [Span[F32]; 2]) {
+  sink(move input[0])               //~ E0710
+}
+
+pub fn move_the_element_by_a_run_time_index(input: [Span[F32]; 2], k: U32) {
+  sink(move input[k])               //~ E0710
+}
+
+// ------------------------------------------------- the bound name of a view stays second-class
+
+pub fn moved_on(xs: Span[F32], n: U32) {
+  let half = xs.slice(0, n)
+  sink(move half)                   //~ E0710
+}
+
+pub fn stored_in_a_var(xs: Span[F32], n: U32) -> U32 {
+  let half = xs.slice(0, n)
+  var v = half                      //~ E0710
+  v.len()
+}
+
+pub fn derived_and_moved_on(xs: Span[F32], n: U32) {
+  let half = xs.slice(0, n)
+  let q = half
+  sink(move q)                      //~ E0710
+}
+
+pub fn part_of_the_element_moved_on(input: [Span[F32]; 2]) {
+  let part = input[0].slice(0, 1)
+  sink(move part)                   //~ E0710
+}
+
+pub fn passed_as_inout(xs: Span[F32], n: U32) {
+  let half = xs.slice(0, n)
+  clear(inout half)                 //~ E0701
+}

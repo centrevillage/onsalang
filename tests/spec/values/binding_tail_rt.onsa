@@ -1,0 +1,215 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§7", "§10", "§12.2"]
+
+// S-604, S-589, R-85 (§5.4, §10, §12.2): the initializer of a `let` that is a parenthesis, an `if`, a
+// `match` or a block expression is decided by its tails: "括弧は中身と同じ。`if`・`match`・ブロック式は、
+// 発散しない全ての末尾で決め、全ての末尾が借用の行なら借用（`let t = if c { x } else { y }` は、`x`・`y`
+// が借用の起点なら借用で、rt の関数でも破棄が起きない）". A borrowed binding ends without a drop
+// (§12.2: "借用束縛の終了: `Alloc` は要らない"), so an `rt fn` can bind a `Str` this way, where an
+// owned `Str` is an E0901 (negative/rt.onsa, negative/binding_tail_owned_rt.onsa). A tail that leaves
+// the function (`return`, §7: "発散する") does not count. The tails here are borrowed origins (an
+// argument in the default mode, a part of one, the binding of a `match` arm, a binding derived from
+// them) and static values (a string literal without interpolation, §5.4). Every binding is read
+// (a binding never read is an E0309). No diagnostic is expected anywhere in this file. The owned
+// tails are in negative/binding_tail_owned_rt.onsa, an Affine value in values/binding_tail_affine.onsa.
+// The heading of a `for` and of a `match` is in values/binding_heading_rt.onsa.
+
+pub struct Named {
+  name: Str,
+  gain: F32,
+}
+
+pub rt fn name_len(s: Str) -> U32 {
+  s.len()
+}
+
+// ------------------------------------------------------------------------------ the forms
+
+pub rt fn if_tails(c: Bool, x: Str, y: Str) -> U32 {
+  let t = if c { x } else { y }
+  t.len()
+}
+
+pub rt fn block_tail(x: Str) -> U32 {
+  let t = { x }
+  t.len()
+}
+
+pub rt fn block_with_a_statement(x: Str) -> U32 {
+  let t = {
+    let n = x.len()
+    if n == 0 { x } else { x }
+  }
+  t.len()
+}
+
+pub rt fn parenthesis(x: Str) -> U32 {
+  let t = (x)
+  t.len()
+}
+
+pub rt fn parenthesis_around_an_if(c: Bool, x: Str, y: Str) -> U32 {
+  let t = (if c { x } else { y })
+  t.len()
+}
+
+pub rt fn match_tails(o: Option[Str], d: Str) -> U32 {
+  let t = match o {
+    Some(s) => s,
+    None => d,
+  }
+  t.len()
+}
+
+pub rt fn else_if_chain(a: Bool, b: Bool, x: Str, y: Str, z: Str) -> U32 {
+  let t = if a { x } else if b { y } else { z }
+  t.len()
+}
+
+// ------------------------------------------------------------- parts of the origins as tails
+
+pub rt fn field_tails(c: Bool, h: Named, g: Named) -> U32 {
+  let t = if c { h.name } else { g.name }
+  t.len()
+}
+
+pub rt fn element_tails(c: Bool, xs: [Str; 2]) -> U32 {
+  let t = if c { xs[0] } else { xs[1] }
+  t.len()
+}
+
+pub rt fn element_at_run_time(c: Bool, xs: [Str; 3], i: U32) -> U32 {
+  let t = if c { xs[i] } else { xs[0] }
+  t.len()
+}
+
+pub rt fn derived_binding_as_a_tail(c: Bool, x: Str, y: Str) -> U32 {
+  let u = x
+  let t = if c { u } else { y }
+  t.len()
+}
+
+// --------------------------------------------------------------------------- static values
+
+pub rt fn one_tail_is_a_literal(c: Bool, x: Str) -> U32 {
+  let t = if c { x } else { "lit" }
+  t.len()
+}
+
+pub rt fn every_tail_is_a_literal(c: Bool) -> U32 {
+  let t = if c { "on" } else { "off" }
+  t.len()
+}
+
+pub rt fn match_with_a_literal(o: Option[Str]) -> U32 {
+  let t = match o {
+    Some(s) => s,
+    None => "none",
+  }
+  t.len()
+}
+
+pub rt fn literal_in_a_block() -> U32 {
+  let t = { "gain" }
+  t.len()
+}
+
+// ---------------------------------------------------------------------------- nesting
+
+pub rt fn match_inside_an_if(c: Bool, o: Option[Str], x: Str) -> U32 {
+  let t = if c {
+    match o {
+      Some(s) => s,
+      None => x,
+    }
+  } else {
+    x
+  }
+  t.len()
+}
+
+pub rt fn if_inside_a_match(o: Option[Str], c: Bool, x: Str, y: Str) -> U32 {
+  let t = match o {
+    Some(s) => if c { s } else { x },
+    None => y,
+  }
+  t.len()
+}
+
+pub rt fn block_inside_a_block(c: Bool, x: Str, y: Str) -> U32 {
+  let t = { { if c { x } else { y } } }
+  t.len()
+}
+
+// ------------------------------------------------------------------- a tail that leaves
+
+pub rt fn else_returns(c: Bool, x: Str) -> U32 {
+  let t = if c { x } else { return 0 }
+  t.len()
+}
+
+pub rt fn arm_returns(o: Option[Str]) -> U32 {
+  let t = match o {
+    Some(s) => s,
+    None => { return 0 },
+  }
+  t.len()
+}
+
+pub rt fn the_leaving_tail_is_skipped(c: Bool, x: Str, y: Str) -> U32 {
+  let t = if c { x } else if c { return 1 } else { y }
+  t.len()
+}
+
+pub rt fn continue_leaves_the_tail(xs: [Str; 3], n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let t = if i == 1 { continue } else { xs[0] }
+    total = total + t.len()
+  }
+  total
+}
+
+// ------------------------------------------------------------- derived from such a binding
+
+pub rt fn derived_from_the_tail_binding(c: Bool, x: Str, y: Str) -> U32 {
+  let t = if c { x } else { y }
+  let q = t
+  name_len(q)
+}
+
+pub rt fn the_binding_goes_on_as_an_argument(c: Bool, x: Str, y: Str) -> U32 {
+  let t = if c { x } else { y }
+  name_len(t) + t.len()
+}
+
+pub rt fn in_a_loop(xs: [Str; 2], n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    let t = if i == 0 { xs[0] } else { xs[1] }
+    total = total + t.len()
+  }
+  total
+}
+
+pub rt fn in_a_for_body(xs: Array[Str], y: Str) -> U32 {
+  var total: U32 = 0
+  for s in xs {
+    let t = if s.len() == 0 { y } else { s }
+    total = total + t.len()
+  }
+  total
+}
+
+// -------------------------------------------------------------- the same without `rt`
+
+pub fn plain_if(c: Bool, x: Str, y: Str) -> U32 {
+  let t = if c { x } else { y }
+  t.len()
+}
+
+pub fn plain_literal_tail(c: Bool, x: Str) -> U32 {
+  let t = if c { x } else { "lit" }
+  t.len()
+}

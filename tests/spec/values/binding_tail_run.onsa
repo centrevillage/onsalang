@@ -1,0 +1,227 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.4", "§7"]
+
+// S-604, S-589 (§5.4, §5.2), run in the interpreter: the binding made by the tails of an `if`, a
+// `match`, a block or a parenthesis, where every tail that stays is a borrowed origin, is a borrowed
+// binding (values/binding_tail_affine.onsa), and it has never reached the lowering and the run (the
+// work W4-16 U1b makes the check pass). A borrowed binding does not consume (§5.2: "借用束縛は消費しない"):
+// the binding reads the value of the tail that was taken, the caller still holds both values after the
+// call, and a later call reads them again. Which tail is taken is decided by the condition at run time
+// and, for a tail that leaves (`return`, §7), the other tail is the value of the binding.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+fn read_if(c: Bool, x: Buf[F32], y: Buf[F32]) -> F32 {
+  let t = if c { x } else { y }
+  t[0]
+}
+
+fn read_block(x: Buf[F32]) -> F32 {
+  let t = { x }
+  t[1]
+}
+
+fn read_parenthesis(c: Bool, x: Buf[F32], y: Buf[F32]) -> F32 {
+  let t = (if c { x } else { y })
+  t[1]
+}
+
+fn read_match(o: Option[Buf[F32]], d: Buf[F32]) -> F32 {
+  let t = match o {
+    Some(b) => b,
+    None => d,
+  }
+  t[0]
+}
+
+fn read_derived(c: Bool, x: Buf[F32], y: Buf[F32]) -> F32 {
+  let t = if c { x } else { y }
+  let q = t
+  q[1]
+}
+
+fn read_nested(c: Bool, o: Option[Buf[F32]], x: Buf[F32], y: Buf[F32]) -> F32 {
+  let t = if c {
+    match o {
+      Some(b) => b,
+      None => x,
+    }
+  } else {
+    y
+  }
+  t[0]
+}
+
+fn read_field(c: Bool, h: Holder, g: Holder) -> F32 {
+  let t = if c { h.buf } else { g.buf }
+  t[0]
+}
+
+fn read_else_returns(c: Bool, x: Buf[F32]) -> F32 {
+  let t = if c { x } else { return -1.0 }
+  t[0]
+}
+
+fn read_arm_returns(o: Option[Buf[F32]]) -> F32 {
+  let t = match o {
+    Some(b) => b,
+    None => { return -1.0 },
+  }
+  t[0]
+}
+
+fn length_if(c: Bool, x: Buf[F32], y: Buf[F32]) -> U32 {
+  let t = if c { x } else { y }
+  t.len()
+}
+
+fn sum_in_a_loop(c: Bool, x: Buf[F32], y: Buf[F32], n: U32) -> F32 {
+  var total: F32 = 0.0
+  for i in 0 ..< n {
+    let t = if c { x } else { y }
+    total = total + t[i]
+  }
+  total
+}
+
+fn gain_of_the_tail(c: Bool, h: Holder, g: Holder) -> F32 {
+  let t = if c { h } else { g }
+  t.gain
+}
+
+rt fn rt_read(c: Bool, x: Buf[F32], y: Buf[F32]) -> F32 {
+  let t = if c { x } else { y }
+  t[1]
+}
+
+test "the binding reads the tail that the condition takes" {
+  var a: Buf[F32] = Buf.zeroed(3)
+  var b: Buf[F32] = Buf.zeroed(3)
+  a[0] = 1.0
+  b[0] = 2.0
+  assert read_if(true, a, b) == 1.0
+  assert read_if(false, a, b) == 2.0
+}
+
+test "the caller keeps both values after the call" {
+  var a: Buf[F32] = Buf.zeroed(3)
+  var b: Buf[F32] = Buf.zeroed(3)
+  a[0] = 1.0
+  b[0] = 2.0
+  assert read_if(true, a, b) == 1.0
+  assert a[0] == 1.0
+  assert b[0] == 2.0
+  assert read_if(false, a, b) == 2.0
+  assert a.len() == 3
+  assert b.len() == 3
+}
+
+test "the binding reads the value at the time of the call" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  var b: Buf[F32] = Buf.zeroed(2)
+  assert read_if(true, a, b) == 0.0
+  a[0] = 5.0
+  assert read_if(true, a, b) == 5.0
+}
+
+test "a block and a parenthesis are the tail" {
+  var a: Buf[F32] = Buf.zeroed(3)
+  var b: Buf[F32] = Buf.zeroed(3)
+  a[1] = 3.0
+  b[1] = 4.0
+  assert read_block(a) == 3.0
+  assert read_parenthesis(true, a, b) == 3.0
+  assert read_parenthesis(false, a, b) == 4.0
+}
+
+test "the tails of a match" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  var d: Buf[F32] = Buf.zeroed(2)
+  a[0] = 7.0
+  d[0] = 8.0
+  let o: Option[Buf[F32]] = Some(move a)
+  assert read_match(o, d) == 7.0
+  assert read_match(o, d) == 7.0
+  assert read_match(None, d) == 8.0
+}
+
+test "a binding derived from the binding of the tails" {
+  var a: Buf[F32] = Buf.zeroed(3)
+  var b: Buf[F32] = Buf.zeroed(3)
+  a[1] = 1.5
+  b[1] = 2.5
+  assert read_derived(true, a, b) == 1.5
+  assert read_derived(false, a, b) == 2.5
+  assert a[1] == 1.5
+}
+
+test "an if inside a match inside an if" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  var x: Buf[F32] = Buf.zeroed(2)
+  var y: Buf[F32] = Buf.zeroed(2)
+  a[0] = 1.0
+  x[0] = 2.0
+  y[0] = 3.0
+  let o: Option[Buf[F32]] = Some(move a)
+  assert read_nested(true, o, x, y) == 1.0
+  assert read_nested(true, None, x, y) == 2.0
+  assert read_nested(false, o, x, y) == 3.0
+}
+
+test "the field of a borrowed struct as a tail" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  var b: Buf[F32] = Buf.zeroed(2)
+  a[0] = 6.0
+  b[0] = 9.0
+  let h = Holder { buf: move a, gain: 0.5 }
+  let g = Holder { buf: move b, gain: 0.25 }
+  assert read_field(true, h, g) == 6.0
+  assert read_field(false, h, g) == 9.0
+  assert gain_of_the_tail(true, h, g) == 0.5
+  assert gain_of_the_tail(false, h, g) == 0.25
+  assert h.gain == 0.5
+}
+
+test "a tail that leaves is not the value of the binding" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  a[0] = 4.0
+  assert read_else_returns(true, a) == 4.0
+  assert read_else_returns(false, a) == -1.0
+  let o: Option[Buf[F32]] = Some(move a)
+  assert read_arm_returns(o) == 4.0
+  assert read_arm_returns(None) == -1.0
+}
+
+test "the length of the buffer of the tail" {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(5)
+  assert length_if(true, a, b) == 2
+  assert length_if(false, a, b) == 5
+}
+
+test "a borrowed binding of the tails in a loop" {
+  var a: Buf[F32] = Buf.zeroed(3)
+  var b: Buf[F32] = Buf.zeroed(3)
+  a[0] = 1.0
+  a[1] = 2.0
+  a[2] = 3.0
+  b[0] = 10.0
+  b[1] = 20.0
+  b[2] = 30.0
+  assert sum_in_a_loop(true, a, b, 3) == 6.0
+  assert sum_in_a_loop(false, a, b, 2) == 30.0
+}
+
+test "the same form in an rt fn" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  var b: Buf[F32] = Buf.zeroed(2)
+  a[1] = 1.0
+  b[1] = 2.0
+  assert rt_read(true, a, b) == 1.0
+  assert rt_read(false, a, b) == 2.0
+}

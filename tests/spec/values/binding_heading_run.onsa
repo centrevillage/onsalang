@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.4"]
+
+// S-604, R-251 (§5.4, §5.2), run in the interpreter: the heading of a `for` and of a `match` that is an
+// `if` of places (the elements and the arm are borrowed origins: the iterated arrays and the subject
+// are still whole after the run), and the heading that is a call (the binding of the arm and of the
+// `for` is owned: it can be moved on, and the value is the one that the call made,
+// values/binding_heading_owned_move.onsa). `Str` is not run in this version
+// (values/binding_static_leaf_run.onsa), so the elements are `Buf[F32]`. The element of a `for` over a
+// call moved on in the body is in values/binding_heading_loop_run.onsa.
+
+fn total_if(c: Bool, xs: [Buf[F32]; 2], ys: [Buf[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for b in if c { xs } else { ys } {
+    total = total + b[0]
+  }
+  total
+}
+
+fn total_parenthesized(c: Bool, xs: [Buf[F32]; 2], ys: [Buf[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for b in (if c { xs } else { ys }) {
+    total = total + b[0]
+  }
+  total
+}
+
+fn match_if(c: Bool, x: Option[Buf[F32]], y: Option[Buf[F32]]) -> F32 {
+  match if c { x } else { y } {
+    Some(b) => b[0],
+    None => -1.0,
+  }
+}
+
+fn match_if_that_leaves(c: Bool, x: Option[Buf[F32]]) -> F32 {
+  match if c { x } else { return -2.0 } {
+    Some(b) => b[0],
+    None => -1.0,
+  }
+}
+
+fn first_of_a_local(n: U32) -> U32 uses {Alloc} {
+  var bufs: [Buf[F32]; 2] = [Buf.zeroed(n), Buf.zeroed(n + 1)]
+  var total: U32          = 0
+  for b in bufs {
+    total = total + b.len()
+  }
+  total
+}
+
+fn make(v: F32) -> Option[Buf[F32]] uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(1)
+  b[0] = v
+  Some(move b)
+}
+
+fn value_of(move b: Buf[F32]) -> F32 uses {Alloc} {
+  b[0]
+}
+
+fn arm_moves_the_binding(v: F32) -> F32 uses {Alloc} {
+  match make(v) {
+    Some(z) => value_of(move z),
+    None => -1.0,
+  }
+}
+
+fn arm_reads_then_moves(v: F32) -> F32 uses {Alloc} {
+  match make(v) {
+    Some(z) => {
+      let n = z.len().round_f32()
+      n + value_of(move z)
+    },
+    None => -1.0,
+  }
+}
+
+test "for over an if of arrays takes the array that the condition takes" {
+  var a: Buf[F32] = Buf.zeroed(1)
+  var b: Buf[F32] = Buf.zeroed(1)
+  var c: Buf[F32] = Buf.zeroed(1)
+  var d: Buf[F32] = Buf.zeroed(1)
+  a[0] = 1.0
+  b[0] = 2.0
+  c[0] = 10.0
+  d[0] = 20.0
+  let xs: [Buf[F32]; 2] = [move a, move b]
+  let ys: [Buf[F32]; 2] = [move c, move d]
+  assert total_if(true, xs, ys) == 3.0
+  assert total_if(false, xs, ys) == 30.0
+  assert total_parenthesized(true, xs, ys) == 3.0
+  assert total_parenthesized(false, xs, ys) == 30.0
+  assert total_if(true, xs, ys) == 3.0
+}
+
+test "match over an if of subjects takes the subject that the condition takes" {
+  var a: Buf[F32] = Buf.zeroed(1)
+  var b: Buf[F32] = Buf.zeroed(1)
+  a[0] = 5.0
+  b[0] = 6.0
+  let x: Option[Buf[F32]] = Some(move a)
+  let y: Option[Buf[F32]] = Some(move b)
+  assert match_if(true, x, y) == 5.0
+  assert match_if(false, x, y) == 6.0
+  assert match_if(false, x, None) == -1.0
+  assert match_if(true, x, y) == 5.0
+}
+
+test "an if whose else leaves is the subject of the condition that stays" {
+  var a: Buf[F32] = Buf.zeroed(1)
+  a[0] = 5.0
+  let x: Option[Buf[F32]] = Some(move a)
+  assert match_if_that_leaves(true, x) == 5.0
+  assert match_if_that_leaves(false, x) == -2.0
+  assert match_if_that_leaves(true, None) == -1.0
+}
+
+test "for over a local var of buffers is a borrowed for" {
+  assert first_of_a_local(2) == 5
+}
+
+test "the binding of an arm over a call is owned and moves on" {
+  assert arm_moves_the_binding(3.5) == 3.5
+  assert arm_reads_then_moves(3.5) == 4.5
+}

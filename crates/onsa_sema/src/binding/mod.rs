@@ -19,9 +19,11 @@ use std::collections::HashMap;
 
 use onsa_diag::Stage;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
+use onsa_syntax::tails::Tail;
 
-use crate::body::{BodyInfo, LocalId};
+use crate::body::{BodyInfo, LocalId, Target};
 use crate::names::body::{BindingKind, BodyNames, Origin, PathRes};
+use crate::ty::{BuiltinTy, Ty};
 use crate::{Analysis, DefId, Package, module_of_def};
 
 mod literal;
@@ -152,8 +154,7 @@ impl<'a> Settle<'a> {
             }
             ExprKind::Match { scrutinee, arms, .. } => {
                 self.expr(*scrutinee);
-                let moved = matches!(ast.expr(ast.without_parens(*scrutinee)).kind, ExprKind::Move(_));
-                let row = self.iterated(*scrutinee, moved);
+                let row = self.head(*scrutinee, true);
                 self.settle(Head::Match { scrutinee: *scrutinee }, row);
                 for arm in arms {
                     if let Some(g) = arm.guard {
@@ -178,13 +179,12 @@ impl<'a> Settle<'a> {
         match &ast.stmt(s).kind {
             StmtKind::Let { init, .. } => {
                 self.expr(*init);
-                let e = ast.without_parens(*init);
-                let row = self.borrowed(e, false).unwrap_or(HeadRow::Owned);
+                let row = self.head(*init, false);
                 self.settle(Head::Let(s), row);
             }
             StmtKind::For { moved, iter, body, .. } => {
                 self.expr(*iter);
-                let row = self.iterated(*iter, *moved);
+                let row = if *moved { HeadRow::Owned } else { self.head(*iter, true) };
                 self.settle(Head::For(s), row);
                 self.expr(*body);
             }
@@ -203,33 +203,56 @@ impl<'a> Settle<'a> {
         }
     }
 
-    /// The row of the head of a `for` or a `match` on `e`: owned with `move`
-    /// and for a range (its integers, §5.4); else borrowed (any place, §5.4).
-    // The rule before S-604 and R-251 (W4-16 U1b): a value that is no place
-    // and no static value is borrowed too.
-    fn iterated(&self, e: ExprId, moved: bool) -> HeadRow {
-        let e = self.ast.without_parens(e);
-        if moved || matches!(self.ast.expr(e).kind, ExprKind::Range(_)) {
-            return HeadRow::Owned;
+    /// The row of a head on the value `e` (§5.4, S-604, S-589): a borrow
+    /// when every tail that does not exit is one ([`Settle::borrowed`]),
+    /// derived from the places of all; else owned, and owned when every tail
+    /// exits (the E0503 of §7 does not ask the row). `any_place`: the head of
+    /// a `for` or a `match`, which borrows any place; a `let` borrows a place
+    /// only from a borrow (S-41).
+    fn head(&self, e: ExprId, any_place: bool) -> HeadRow {
+        let mut tails = Vec::new();
+        self.ast.tails(e, &mut tails);
+        let (mut sources, mut no_drop, mut borrows) = (Vec::new(), true, false);
+        for tail in tails {
+            match tail {
+                Tail::Exits => {}
+                Tail::Unit(_) => return HeadRow::Owned,
+                Tail::Value(v) => {
+                    let Some((place, nd)) = self.borrowed(v, any_place) else { return HeadRow::Owned };
+                    sources.extend(place);
+                    no_drop &= nd;
+                    borrows = true;
+                }
+            }
         }
-        self.borrowed(e, true).unwrap_or(HeadRow::Borrow { sources: Vec::new(), no_drop: false })
+        if borrows { HeadRow::Borrow { sources, no_drop } } else { HeadRow::Owned }
     }
 
-    /// The borrow row of a head on `e` (without parentheses), if it is one
-    /// (§5.4): a place whose root is a borrow (for a `let`, S-41), or any
-    /// place (`any_place`, for a `for` and a `match`); a static value.
-    fn borrowed(&self, e: ExprId, any_place: bool) -> Option<HeadRow> {
+    /// Whether a tail `e` (without parentheses) is borrowed (§5.4), with the
+    /// place it derives from (none for a static value) and whether it needs
+    /// no drop: a place whose root is a borrow, or any place (`any_place`);
+    /// a partial view of such a place (S-217: `xs.slice(a, b)`, known by the
+    /// `Span` its builtin method gives, not by its name, Q-14); a static value.
+    fn borrowed(&self, e: ExprId, any_place: bool) -> Option<(Option<ExprId>, bool)> {
+        if let ExprKind::Call { callee, .. } = &self.ast.expr(e).kind
+            && let ExprKind::Field { base, .. } = &self.ast.expr(*callee).kind
+            && let Some(Target::BuiltinMethod { .. }) = self.info.targets.get(&e)
+            && let Some(&t) = self.info.expr_types.get(&e)
+            && let Ty::Builtin(BuiltinTy::Span, _) = self.a.types.get(t)
+        {
+            return self.borrowed(self.ast.without_parens(*base), any_place);
+        }
         if let Some(root) = self.ast.place_root_node(e)
             && let Some(PathRes::Local(b)) = self.names.paths.get(&root)
         {
             return match self.info.locals[b.0 as usize].state {
-                Bind::Borrow { no_drop } => Some(HeadRow::Borrow { sources: vec![e], no_drop }),
-                _ if any_place => Some(HeadRow::Borrow { sources: vec![e], no_drop: false }),
+                Bind::Borrow { no_drop } => Some((Some(e), no_drop)),
+                _ if any_place => Some((Some(e), false)),
                 _ => None,
             };
         }
         match self.info.lits.get(&e) {
-            Some(LitClass::Static | LitClass::NoDrop) => Some(HeadRow::Borrow { sources: Vec::new(), no_drop: true }),
+            Some(LitClass::Static | LitClass::NoDrop) => Some((None, true)),
             _ => None,
         }
     }

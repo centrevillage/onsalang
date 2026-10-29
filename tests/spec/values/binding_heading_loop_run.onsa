@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.4"]
+
+// R-251 (§5.4, §5.2), run in the interpreter: the binding of a `for` over a call is owned, so each
+// element can be moved on in the body, and the values are the ones that the call made. Split from
+// values/binding_heading_run.onsa. `Str` is not run in this version, so the elements are `Buf[F32]`.
+// Today the move is an E0704 ("moved in a previous iteration"): the modes take the element for an
+// outer variable (R-29, W4-09).
+
+fn make_pair(v: F32) -> [Buf[F32]; 2] uses {Alloc} {
+  var a: Buf[F32] = Buf.zeroed(1)
+  var b: Buf[F32] = Buf.zeroed(1)
+  a[0] = v
+  b[0] = v * 2.0
+  [move a, move b]
+}
+
+fn value_of(move b: Buf[F32]) -> F32 uses {Alloc} {
+  b[0]
+}
+
+fn for_moves_the_elements(v: F32) -> F32 uses {Alloc} {
+  var total: F32 = 0.0
+  for z in make_pair(v) {
+    total = total + value_of(move z)
+  }
+  total
+}
+
+test "the binding of a for over a call is owned and moves on" {
+  assert for_moves_the_elements(2.0) == 6.0
+}

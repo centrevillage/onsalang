@@ -6,9 +6,10 @@
 // §5.4: `let ch = input[0]`, `let half = xs.slice(0, n)`): a `Span` and an array of `Span`s are borrowed bindings of a `let`,
 // with an annotation or without. The annotation names the type of the binding as it is, and its root is the place where a
 // second-class type is right (the rule of §5.4 depends on the form of the initializer, not on the annotation). No diagnostic
-// is expected anywhere in this file. Today every `let` below is an E0710 of the modes stage (the work W4-07 makes S-217
-// pass, as `negative/modes.onsa` `span_stored` says), so these wait for W4-07 and not for U4a: the checks of the annotations
-// of a body (U4a) must not reject the annotated forms when W4-07 lets them through. The `for` form is in
+// is expected anywhere in this file. Today the lets of the planar element, of the whole planar argument and of the `Span`
+// argument pass (the work W4-16 U1a), and the two lets of a part of a view (`xs.slice(0, 1)`, with the annotation and without)
+// are still an E0710 (the work W4-16 U1b makes them pass): the checks of the annotations of a body (U4a) must not reject the
+// annotated forms when they pass. The `for` form is in
 // types/wellformed_body_annotation_second_class_fine.onsa, the negative forms (below the root) in
 // types/wellformed_body_annotation_second_class.onsa.
 
