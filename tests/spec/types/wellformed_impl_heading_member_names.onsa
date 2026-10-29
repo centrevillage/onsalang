@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// S-763, S-775 (§18.1: "ここで検査しないのは型の段から後で、名前の段はメンバ（署名と本体）の名前も読む。そのため見出しの誤りが
+// 型の段（型引数の数の E0412、型引数の要求の E0416）のときは、段の順（下）でメンバの名前の段の誤り（E0302 など）が先に残り、
+// 見出しの誤りは報告しない"): a name not found in a member of an `impl` whose heading is an error of the types stage
+// is reported, in a signature, in a body and in the type of an associated const, and the heading is not. The heading
+// of E0412 is `impl[T] A[T]` for an `A` that takes no type argument, the heading of E0416 is `impl[T] D[T]` for a
+// `D[T: Num]`. These forms are reported today (and stay so). One error per item (P-01).
+
+pub struct A {
+  x: I32,
+}
+
+impl[T] A[T] {
+  pub fn sig(self, y: Gone) -> I32 {   //~ E0302
+    1
+  }
+}
+
+pub struct B {
+  x: I32,
+}
+
+impl[T] B[T] {
+  pub fn body(self) -> I32 {
+    zz   //~ E0302
+  }
+}
+
+pub struct C {
+  x: I32,
+}
+
+impl[T] C[T] {
+  pub const K: Gone = 1   //~ E0302
+}
+
+pub struct D[T: Num] {
+  x: T,
+}
+
+impl[T] D[T] {
+  pub fn body(self) -> I32 {
+    zz   //~ E0302
+  }
+}
