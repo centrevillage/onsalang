@@ -15,6 +15,14 @@ use crate::def::DefKind;
 use crate::ty::{BuiltinTy, Ty, TyId};
 use crate::{Analysis, DefId, Kind, Package, module_of_def};
 
+// The new modes stage (W4-07), beside this one until the switch (U4).
+mod check;
+mod flow;
+mod state;
+#[cfg(test)]
+mod tests;
+mod walk;
+
 /// Locals moved somewhere in each body (the `rt` pass uses it for drops).
 pub(crate) type MovedLocals = HashMap<DefId, HashSet<LocalId>>;
 
