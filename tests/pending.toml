@@ -1922,14 +1922,14 @@ note = "`for v in xs.slice(a, b)` の本体で `xs` を変更する形の E0715�
 kind = "test-case"
 target = "tests/spec/values/binding_heading_owned_move_loop.onsa"
 reasons = ["R-29"]
-until = "W4-09"
+until = "W4-07"
 note = "R-251 で所有になった `for` の要素（`for z in make_array()`）を本体で `move` すると、modes が外の変数とみなして E0704（`modes.rs::consume` の `decl < loop_start`、R-29）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/values/binding_heading_loop_run.onsa"
 reasons = ["R-29"]
-until = "W4-09"
+until = "W4-07"
 note = "R-251 で所有になった `for` の要素（`for z in make_pair(v)`）を本体で `move` すると、modes が外の変数とみなして E0704（`modes.rs::consume` の `decl < loop_start`、R-29）"
 
 [[pending]]
@@ -1978,14 +1978,14 @@ note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は�
 kind = "test-case"
 target = "tests/spec/negative/binding_borrow_move.onsa"
 reasons = ["S-609"]
-until = "W4-09"
+until = "W4-07"
 note = "対照の `take_n(n)`（Copy の型の `move` の引数に `move` を書かない）が E0703（`values/move_assign_copy_args.onsa` と同じ。借用束縛の E0711 は W4-16 U1a で全て通る）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/values/move_assign_copy_args.onsa"
 reasons = ["S-609"]
-until = "W4-09"
+until = "W4-07"
 note = "Copy の型の `move` の引数に `move` を書かない（今は E0703）"
 
 [[pending]]
