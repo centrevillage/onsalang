@@ -1522,7 +1522,7 @@ note = "見えている名前への ^"
 kind = "test-case"
 target = "tests/spec/values/move_assign.onsa"
 reasons = ["R-191"]
-until = "W4-07"
+until = "W4-16"
 note = "move の引数と move self への代入が E0701（§5.1 の E0701 は let と借用の引数だけ）"
 
 # --- W3-19: 式の中の型引数 `::[…]`。W3-19 で通らない事例（W3-19/t の事例。W3-19/i の報告）。
