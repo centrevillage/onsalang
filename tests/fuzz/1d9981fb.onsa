@@ -1,0 +1,4 @@
+fn take(move b: f[2]){}
+pub fn pe(b: Buf[F32]) uses {Alloc} {
+let c = b
+take(c) }
