@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§11.6", "§18.1"]
+// fixes = 0
+
+// S-758 (W4-05 U4a, §5.3: "flow の生成型 `voice.In` / `voice.Out`(§11.6)も `Span` を持つので第二級で、返り値と構造体の
+// フィールドと `move` の引数にはできない(E0710)"): the generated type `Out` of a flow with a struct output holds a
+// `Span` for each field, so it is second-class, and it is E0710 as a `move` argument (and below the root of an
+// argument, in a return type and in a field), at the type, with no candidate (`fixes = 0`). The alias of it is the
+// same. The generated type `In` (a flow with two or more `sample` inputs) is the same, but it is made in W7-03 and
+// is not written here. The right forms (`inout o: swap.Out`, the default mode) are in
+// types/wellformed_move_span_flow_fine.onsa. One error per item (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+type Slot = swap.Out
+
+pub fn move_out(move o: swap.Out) -> U32 {   //~ E0710
+  0
+}
+
+pub fn move_alias_of_out(move o: Slot) -> U32 {   //~ E0710
+  0
+}
+
+pub fn move_out_below_the_root(move o: Option[swap.Out]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn function_type_moves_out(f: fn(move swap.Out) -> F32) -> U32 {   //~ E0710
+  0
+}
+
+pub fn out_returned(inout o: swap.Out) -> swap.Out {   //~ E0710
+  o
+}
+
+pub struct HoldsOut {
+  o: swap.Out,   //~ E0710
+}

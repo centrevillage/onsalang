@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1"]
+
+// R-37 (§4.5): the element type of a `Buf` or a `Span` in a signature is right when it is Copy: a scalar, a
+// tuple or a fixed array of Copy types, a struct of Copy fields (even a generic one whose arguments are Copy), a
+// type parameter with the bound `Copy` (or one that implies it: `Num`, `Float`, §4.5), and an unnamed element of
+// a `Buf` of a generic type that is declared with the bound. An array of `Buf`s is not a `Buf` of `Buf`s and is
+// right (`[Buf[F32]; 2]`). The negative forms are in types/wellformed_element_copy.onsa.
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct Pair {
+  a: F32,
+  b: I32,
+}
+
+pub struct HoldsCopyBuf[T: Copy] {
+  b: Buf[T],
+}
+
+pub fn buf_of_scalar(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn span_of_tuple(b: Span[(F32, I32)]) -> U32 {
+  b.len()
+}
+
+pub fn span_of_fixed_array(b: Span[[F32; 2]]) -> U32 {
+  b.len()
+}
+
+pub fn span_of_struct(b: Span[Pair]) -> U32 {
+  b.len()
+}
+
+pub fn buf_of_copy_generic(b: Buf[W[F32]]) -> U32 {
+  b.len()
+}
+
+pub fn span_of_copy_parameter[T: Copy](b: Span[T]) -> U32 {
+  b.len()
+}
+
+pub fn buf_of_number[T: Num](b: Buf[T]) -> U32 {
+  b.len()
+}
+
+pub fn span_of_float[T: Float](b: Span[T]) -> U32 {
+  b.len()
+}
+
+pub fn planar_of_copy(b: [Span[I32]; 2]) -> U32 {
+  b.len()
+}
+
+pub fn array_of_bufs(b: [Buf[F32]; 2]) -> U32 {
+  b.len()
+}
+
+pub fn option_of_buf(o: Option[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn holds_in_a_generic(h: HoldsCopyBuf[F32]) -> U32 {
+  h.b.len()
+}

@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-757 (W4-05 U4a, §4.4: "…別名の宣言に報告し、別名を誤りの型として扱う(使う所には出さない、§18.1)"): a chain of
+// aliases that each wrap the one before in a generic type of the program. `A1 = W[A0]` has `A0 = Buf[F32]` (not
+// `Dup`, §4.6) as the argument of `W[T]`, an E0416 at `A1`, which is an error type. `A2 = W[A1]` and the aliases
+// after it hold an error type, which is nothing to report (§18.1), and `fn f(x: A7)` has nothing. The error is once,
+// at `A1`; a user of the chain at the end of it has nothing. The chain of tuples is in
+// types/wellformed_alias_error_tuple_chain.onsa. One error per item (P-01).
+
+pub struct W[T] {
+  a: T,
+}
+
+type A0 = Buf[F32]
+
+type A1 = W[A0]   //~ E0416
+
+type A2 = W[A1]
+
+type A3 = W[A2]
+
+type A4 = W[A3]
+
+type A5 = W[A4]
+
+type A6 = W[A5]
+
+type A7 = W[A6]
+
+pub fn end_of_chain(x: A7) -> U32 {
+  0
+}
+
+pub fn middle_of_chain(x: A3) -> U32 {
+  0
+}
+
+pub fn chain_annotation(x: A7) -> U32 {
+  let _: A7 = x
+  0
+}
+
+pub struct ChainHolder {
+  a: A7,
+  b: A2,
+}
+
+pub fn direct_buf_of_buf(x: W[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn direct_chain_head(x: W[A0]) -> U32 {   //~ E0416
+  0
+}

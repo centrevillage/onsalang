@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// R-326 (W4-05 U4a, §6.3, the table of the built-in types), the traits other than `Show`: the types the table gives
+// `PartialEq` (tuples, `[T; N]`, `Option`, `Result` and `Array[T]` whose elements implement it), `PartialOrd`
+// (tuples and `[T; N]`), `Hash` (tuples, `[T; N]`, `Option`, `Result`; a float has no `Hash`, so the elements are
+// integers and `Str`) and `Default` (tuples, `[T; N]`, `()`) meet the bound of that trait in a signature, a field,
+// and a call of a generic function whose parameter has the bound. The case guards them while the judgment of
+// the bounds is aligned to the table for `Show` (types/wellformed_builtin_traits_show.onsa). One error per item (P-01); none
+// is expected here.
+
+pub struct E2[T: PartialEq] {
+  a: T,
+}
+
+pub struct O2[T: PartialOrd] {
+  a: T,
+}
+
+pub struct H2[T: Hash] {
+  a: T,
+}
+
+pub struct D2[T: Default] {
+  a: T,
+}
+
+pub fn eq_tuple(x: E2[(F32, Str)]) -> U32 {
+  0
+}
+
+pub fn eq_array(x: E2[[F32; 2]]) -> U32 {
+  0
+}
+
+pub fn eq_option(x: E2[Option[F32]]) -> U32 {
+  0
+}
+
+pub fn eq_result(x: E2[Result[I32, Str]]) -> U32 {
+  0
+}
+
+pub fn eq_array_type(x: E2[Array[I32]]) -> U32 {
+  0
+}
+
+pub fn ord_tuple(x: O2[(I32, I32)]) -> U32 {
+  0
+}
+
+pub fn ord_tuple_with_str(x: O2[(F32, Str)]) -> U32 {
+  0
+}
+
+pub fn ord_array(x: O2[[F32; 2]]) -> U32 {
+  0
+}
+
+pub fn hash_tuple(x: H2[(I32, Str)]) -> U32 {
+  0
+}
+
+pub fn hash_array(x: H2[[I32; 2]]) -> U32 {
+  0
+}
+
+pub fn hash_option(x: H2[Option[I32]]) -> U32 {
+  0
+}
+
+pub fn hash_result(x: H2[Result[I32, Str]]) -> U32 {
+  0
+}
+
+pub fn default_tuple(x: D2[(I32, F32)]) -> U32 {
+  0
+}
+
+pub fn default_array(x: D2[[F32; 2]]) -> U32 {
+  0
+}
+
+pub fn default_unit(x: D2[()]) -> U32 {
+  0
+}
+
+pub struct Holder {
+  e: E2[Option[F32]],
+  o: O2[[F32; 2]],
+  h: H2[Result[I32, Str]],
+  d: D2[(I32, F32)],
+}
+
+pub fn need_eq[T: PartialEq](x: T) -> U32 {
+  0
+}
+
+pub fn need_ord[T: PartialOrd](x: T) -> U32 {
+  0
+}
+
+pub fn need_hash[T: Hash](x: T) -> U32 {
+  0
+}
+
+pub fn need_default[T: Default](x: T) -> U32 {
+  0
+}
+
+pub fn body_eq_array_type(a: Array[I32]) -> U32 {
+  need_eq(a)
+}
+
+pub fn body_eq_option(o: Option[F32]) -> U32 {
+  need_eq(o)
+}
+
+pub fn body_ord_tuple(t: (I32, F32)) -> U32 {
+  need_ord(t)
+}
+
+pub fn body_hash_tuple() -> U32 {
+  need_hash((1, "a"))
+}
+
+pub fn body_default_tuple(t: (I32, F32)) -> U32 {
+  need_default(t)
+}

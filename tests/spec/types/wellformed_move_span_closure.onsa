@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.2", "§18.1"]
+// fixes = 0
+
+// S-758, R-37 (W4-05 U4a, §5.3: "`Span[T]` と `[Span[T]; N]`(別名を通したものも)は `move` の引数の型に書けない(E0710)。...
+// 関数型の引数の並び(`fn(move Span[F32]) -> F32`、§5.2)と無名関数の引数も同じである"): the E0710 of an anonymous
+// function that takes a `Span` by `move` is at the declaration of its argument, in the types stage, so the unit stops
+// there and the call of the function with `move xs` has no diagnostic of the modes stage (today it is E0710 at the
+// `move xs` of the call, on the line of the call). A `Span` below the root of the argument of an anonymous function
+// (`Option[Span[F32]]`) is the E0710 of every position (R-37), also in the default mode. The error has no candidate
+// (`fixes = 0`). One error per item (P-01).
+
+pub fn move_span_then_call(xs: Span[F32]) -> F32 {
+  let g = fn(move v: Span[F32]) -> F32 { 0.0 }   //~ E0710
+  g.(move xs)
+}
+
+pub fn move_planar_then_call(xs: [Span[F32]; 2]) -> F32 {
+  let g = fn(move v: [Span[F32]; 2]) -> F32 { 0.0 }   //~ E0710
+  g.(move xs)
+}
+
+pub fn move_span_never_called() -> U32 {
+  let _ = fn(move v: Span[F32]) -> F32 { 0.0 }   //~ E0710
+  0
+}
+
+pub fn option_of_span_then_call(xs: Span[F32]) -> F32 {
+  let g = fn(o: Option[Span[F32]]) -> F32 { 0.0 }   //~ E0710
+  g.(Some(xs))
+}
+
+pub fn move_option_of_span_never_called() -> U32 {
+  let _ = fn(move o: Option[Span[F32]]) -> F32 { 0.0 }   //~ E0710
+  0
+}

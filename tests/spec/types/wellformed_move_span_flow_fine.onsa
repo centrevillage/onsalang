@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§11.6"]
+
+// S-758 (§5.3): the generated type `Out` of a flow with a struct output (§11.6) is right as the type of an argument
+// in the default mode and in `inout` (the table of §5.3: `Span` is "引数の型として `xs: Span[T]` / `inout xs: Span[T]`"),
+// also through an alias. The negative forms (`move`, a return type, a field) are in
+// types/wellformed_move_span_flow.onsa.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+type Slot = swap.Out
+
+pub fn inout_out(inout o: swap.Out) -> U32 {
+  0
+}
+
+pub fn default_out(o: swap.Out) -> U32 {
+  0
+}
+
+pub fn inout_alias_of_out(inout o: Slot) -> U32 {
+  0
+}

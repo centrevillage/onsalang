@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.4"]
+
+// R-37 (W4-05 U4a, §5.3: "次のものは引数の位置にだけ現れる"): a `Span` at the root of the argument of an anonymous
+// function is right (the argument is a position of a second-class value), as it is for a function, in the default mode
+// and in `inout`, and so is the planar `[Span[F32]; 2]`, written out or through an alias. The return types here are
+// first-class values. The anonymous function that gives a `Span` back is in types/wellformed_closure_return_span.onsa.
+
+type Pl = [Span[F32]; 2]
+
+pub fn span_argument() -> U32 {
+  let _ = fn(ys: Span[F32]) -> U32 { ys.len() }
+  0
+}
+
+pub fn inout_span_argument() -> U32 {
+  let _ = fn(inout ys: Span[F32]) -> U32 { ys.len() }
+  0
+}
+
+pub fn planar_argument() -> U32 {
+  let _ = fn(ys: [Span[F32]; 2]) -> U32 { ys[0].len() }
+  0
+}
+
+pub fn alias_argument() -> U32 {
+  let _ = fn(ys: Pl) -> U32 { ys[0].len() }
+  0
+}
+
+pub fn called(xs: Span[F32]) -> U32 {
+  let g = fn(ys: Span[F32]) -> U32 { ys.len() }
+  g.(xs)
+}

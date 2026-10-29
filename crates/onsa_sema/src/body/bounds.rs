@@ -1,10 +1,53 @@
 //! The bounds (§6.3): whether a type satisfies a bound, and which builtin
-//! bound implies which.
+//! bound implies which. The judgments are of the types and the generics in
+//! scope ([`Bounds`]), shared by the body and the well-formedness of the
+//! types written (`sig::wellformed`, R-37).
 
 use super::*;
 
+/// The judgments of the bounds under the generics in scope `generics`.
+pub(crate) struct Bounds<'b> {
+    pub(crate) a: &'b Analysis,
+    pub(crate) generics: &'b [GenericDef],
+}
+
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ bounds
+
+    /// The judgments of the bounds under the generics of the body.
+    pub(crate) fn bounds(&self) -> Bounds<'_> {
+        Bounds { a: self.a, generics: &self.generics }
+    }
+
+    pub(crate) fn traits_unknown(&self, t: TyId) -> bool {
+        self.bounds().traits_unknown(t)
+    }
+
+    pub(crate) fn satisfies(&self, t: TyId, b: Bound) -> bool {
+        self.bounds().satisfies(t, b)
+    }
+}
+
+impl Bounds<'_> {
+    fn ty(&self, t: TyId) -> Ty {
+        self.a.types.get(t).clone()
+    }
+
+    /// Whether a decided type meets a requirement (the bounds of §6.3 and the
+    /// kind constraints `Copy` / `Dup` of §4.6).
+    pub(crate) fn meets(&self, t: TyId, b: Bound) -> bool {
+        if self.satisfies(t, b) {
+            return true;
+        }
+        // The kind of a user type that holds a type parameter of the body is not
+        // computed (`kind_of` is `None`): such a constraint is not decided here and passes.
+        // R-176 (W5-08): a `?Dup` parameter inside makes the type not `Dup`
+        // (`tests/spec/negative/dup_maybe_dup_param.onsa`, in the pending list).
+        if matches!(b, Bound::Dup | Bound::Copy) && !matches!(self.ty(t), Ty::Param(_)) && self.a.kind_of(t).is_none() {
+            return true;
+        }
+        false
+    }
 
     /// Whether the traits a (resolved) type meets are not known: the error
     /// type, or a type parameter with an unknown bound (§18.1, S-692 A1).
@@ -85,6 +128,7 @@ impl<'a> Checker<'a> {
                 | Bound::Hash
                 | Bound::Copy
                 | Bound::Dup
+                | Bound::Show
                 | Bound::Default,
             ) => self.satisfies(*e, b),
             (
@@ -96,11 +140,12 @@ impl<'a> Checker<'a> {
                 | Bound::Hash
                 | Bound::Copy
                 | Bound::Dup
+                | Bound::Show
                 | Bound::Default,
             ) => ts.iter().all(|&x| self.satisfies(x, b)),
             (
                 Ty::Builtin(BuiltinTy::Option | BuiltinTy::Result, args),
-                Bound::PartialEq | Bound::Eq | Bound::PartialOrd | Bound::Ord | Bound::Hash | Bound::Copy | Bound::Dup,
+                Bound::PartialEq | Bound::Eq | Bound::Hash | Bound::Show | Bound::Copy | Bound::Dup,
             ) => args.iter().all(|&x| self.satisfies(x, b)),
             (
                 Ty::Builtin(BuiltinTy::Str | BuiltinTy::Bytes, _),
@@ -110,14 +155,15 @@ impl<'a> Checker<'a> {
                 | Bound::Ord
                 | Bound::Hash
                 | Bound::Dup
-                | Bound::Show
                 | Bound::Default,
             ) => true,
+            (Ty::Builtin(BuiltinTy::Str, _), Bound::Show) => true,
             (Ty::Builtin(BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set, _), Bound::Dup) => true,
             (Ty::Builtin(BuiltinTy::Array, args), Bound::PartialEq | Bound::Eq) => {
                 args.iter().all(|&x| self.satisfies(x, b))
             }
-            (Ty::Fn(_), Bound::Copy | Bound::Dup) => true,
+            // `Ptr[T]` is Copy (§4.1, R-322).
+            (Ty::Fn(_) | Ty::Builtin(BuiltinTy::Ptr, _), Bound::Copy | Bound::Dup) => true,
             (Ty::Named(d, args), _) => {
                 let def = self.a.def(*d);
                 let derives = match &def.kind {
@@ -151,7 +197,7 @@ impl<'a> Checker<'a> {
 
 /// `have` implies `want` among the builtin bounds (§6.3): `Ord` ⇒ `PartialOrd`, `Eq`;
 /// `Eq` ⇒ `PartialEq`; `Float` ⇒ `Num`; `Num` ⇒ `PartialEq`, `PartialOrd`, `Copy`.
-fn implies(have: Bound, want: Bound) -> bool {
+pub(crate) fn implies(have: Bound, want: Bound) -> bool {
     if have == want {
         return true;
     }

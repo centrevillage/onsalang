@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1", "§18.1"]
+
+// R-37, F4 of the U1 record (W4-05 U4a, §4.5: "`Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る(E0416)"): the
+// element type of a `Buf` or a `Span` written in a signature must be Copy. A `Buf` is Affine and `Str` is Shared
+// (§4.1), so `Buf[Buf[F32]]`, `Buf[Str]` and `Span[Str]` are E0416, and so is a `Buf` of a generic type that is
+// only Shared, `Buf[W[Str]]`, and a type parameter without the bound `Copy` (`fn f[T](b: Span[T])`, whose `T`
+// has only the implicit `Dup`, or none, `[T: ?Dup]`). The error is at the type, in an argument, a return type, a
+// field and a variant. It is an error of the types stage, so the body is not read.
+// One error per item (P-01). The right forms are in types/wellformed_element_copy_fine.onsa.
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+pub fn buf_of_buf(b: Buf[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_of_str(b: Buf[Str]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_of_shared_struct(b: Buf[W[Str]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn span_of_str(b: Span[Str]) -> U32 {   //~ E0416
+  b.len()
+}
+
+pub fn span_of_owner(b: Span[Owner]) -> U32 {   //~ E0416
+  b.len()
+}
+
+pub fn span_of_a_tuple_with_str(b: Span[(F32, Str)]) -> U32 {   //~ E0416
+  b.len()
+}
+
+pub fn span_of_type_parameter[T](b: Span[T]) -> U32 {   //~ E0416
+  b.len()
+}
+
+pub fn buf_of_maybe_dup_parameter[T: ?Dup](b: Buf[T]) -> U32 {   //~ E0416
+  b.len()
+}
+
+pub fn planar_of_str(b: [Span[Str]; 2]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_returned() -> Buf[Str] {   //~ E0416
+  Buf.zeroed(1)
+}
+
+pub fn nested_in_an_option(b: Option[Buf[Buf[F32]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub struct HoldsBufOfStr {
+  b: Buf[Str],   //~ E0416
+}
+
+pub struct HoldsGenericBuf[T] {
+  b: Buf[T],   //~ E0416
+}
+
+pub enum HoldsInVariant {
+  Wrap(Buf[Buf[F32]]),   //~ E0416
+}

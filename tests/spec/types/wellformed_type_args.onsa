@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§6.2", "§18.1"]
+// fixes = 0
+
+// R-37 (W4-05 U4a, §4.5: "型の位置(署名、…)に書いた型引数は、その型の宣言の型パラメータの要求(境界と暗黙の
+// `Dup`)を満たさなければならず、満たさなければ E0416である(`struct N[T: Num]` に対して `N[Bool]` と
+// `fn f[T](x: N[T])` は E0416、`fn f[T: Float](x: N[T])` は正しい)"; "型パラメータを型引数に書いたときは、それを
+// 宣言した項目の `[ ]` の境界だけで判定する(型の宣言の境界は受け継がない)"). The type arguments of a type
+// in a signature must meet the requirements of the type parameters of the declaration: the bound (`N[T: Num]`
+// does not take a `Bool`, `C[T: Copy]` does not take a `Str`) and the implicit `Dup` (`W[T]` does not take a `Buf`,
+// which is Affine, nor a type parameter declared `?Dup`). A type parameter that is written as the argument meets
+// them by the bounds of the item that declares it: `fn f[T](x: N[T])` is E0416 although `N` is bounded.
+// The error is at the type, in an argument (any depth), a return type, a field and a variant, and it has no
+// candidate (`fixes = 0`: the bound could be written in the function or the argument changed). It is an error of
+// the types stage, so the body is not read. One error per item (P-01).
+// The positions of the body annotations are in types/wellformed_body_annotation.onsa, of the heading of an `impl`
+// in types/wellformed_impl_heading.onsa, of the right side of an alias in types/wellformed_alias_args.onsa; the
+// right forms are in types/wellformed_type_args_fine.onsa.
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct C[T: Copy] {
+  a: T,
+}
+
+pub fn dup_buf_argument(x: W[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn num_bool_argument(x: N[Bool]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_str_argument(x: C[Str]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn bound_not_inherited[T](x: N[T]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_dup_parameter[T: ?Dup](x: W[T]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn weaker_bound[T: Copy](x: N[T]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn inout_argument(inout x: N[Bool]) {   //~ E0416
+}
+
+pub fn nested_in_an_option(x: Option[N[Bool]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn nested_in_a_tuple(x: (F32, W[Buf[F32]])) -> U32 {   //~ E0416
+  0
+}
+
+pub fn nested_in_an_array(x: [C[Str]; 2]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn nested_in_a_generic(x: W[N[Bool]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_a_function_type_argument(f: fn(N[Bool]) -> F32) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_a_function_type_return(f: fn(F32) -> W[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn returned(x: F32) -> N[Bool] {   //~ E0416
+  N { a: true }
+}
+
+pub fn returned_generic[T](x: T) -> N[T] {   //~ E0416
+  N { a: x }
+}
+
+pub struct FieldNum {
+  n: N[Bool],   //~ E0416
+}
+
+pub struct FieldDup {
+  w: W[Buf[F32]],   //~ E0416
+}
+
+pub struct FieldCopy[T] {
+  c: C[T],   //~ E0416
+}
+
+pub enum VariantNum {
+  Bad(N[Bool]),   //~ E0416
+  Fine(F32),
+}
+
+pub enum VariantDup {
+  Bad(F32, W[Buf[F32]]),   //~ E0416
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn take(self, x: N[Bool]) -> U32 {   //~ E0416
+    0
+  }
+}

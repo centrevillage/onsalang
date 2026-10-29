@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§5.3"]
+
+// S-772 (1) and (i) (W4-05 U4a): the types of the inputs and the outputs
+// of a flow are type positions of the well-formedness of §4.5. A type argument that does not meet the requirement
+// of the declaration (`N[Bool]` for `struct N[T: Num]`) and a `Buf` whose element is not `Copy` (`Buf[Str]`) are
+// E0416, and a second-class type (`Span[F32]`, `Option[Span[F32]]`) is E0710 (§5.3), at the input. A type
+// argument that meets the requirement (`N[F32]`) is right. One error per item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub flow num_bool(x: F32 at sample, k: N[Bool] at block) -> F32 at sample {   //~ E0416
+  x
+}
+
+pub flow buf_str(x: F32 at sample, k: Buf[Str] at block) -> F32 at sample {   //~ E0416
+  x
+}
+
+pub flow span_input(x: F32 at sample, k: Span[F32] at block) -> F32 at sample {   //~ E0710
+  x
+}
+
+pub flow option_span_input(x: F32 at sample, k: Option[Span[F32]] at block) -> F32 at sample {   //~ E0710
+  x
+}
+
+pub flow num_bool_output(x: F32 at sample) -> N[Bool] at sample {   //~ E0416
+  N { a: true }
+}
+
+pub flow num_float(x: F32 at sample, k: N[F32] at block) -> F32 at sample {
+  x
+}
+
+pub flow num_int(x: F32 at sample, k: N[I32] at init) -> F32 at sample {
+  x
+}

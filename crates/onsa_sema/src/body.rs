@@ -33,7 +33,7 @@ use crate::structpat::Written;
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 
-mod bounds;
+pub(crate) mod bounds;
 mod calls;
 mod entry;
 mod expressions;

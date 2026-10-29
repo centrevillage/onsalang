@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§15.1", "§18.1"]
+
+// R-37, R-135 (W4-05 U4a): the requirements of the type parameters of a type declared in another module (§4.5)
+// and the second-class positions (§5.3) are judged in the module that writes the type, as in the module of the
+// declaration (§15.1): the type argument `Bool` of `lib.N` (declared `N[T: Num]`), the `Buf` of `lib.W` (the
+// implicit `Dup`) and a `Span` below the root of a type of another module's generic are errors at the type that
+// is written here, and so is the same error written in `lib.onsa`. The `Buf` of `lib.D` (declared `?Dup`) and
+// the `Span` as the root of an argument are right. One error per item (P-01).
+
+use lib.{N, W, D, takes_span}
+
+pub fn number_of_bool(x: N[Bool]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn dup_of_buf(x: W[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn span_below_the_root(x: W[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn span_returned(xs: Span[F32]) -> Option[Span[F32]] {   //~ E0710
+  None
+}
+
+pub struct FieldOfThe {
+  n: N[Bool],   //~ E0416
+}
+
+pub fn maybe_dup_buf(x: D[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn number_of_float(x: N[F32]) -> U32 {
+  0
+}
+
+pub fn passes_the_span(xs: Span[F32]) -> U32 {
+  takes_span(xs)
+}

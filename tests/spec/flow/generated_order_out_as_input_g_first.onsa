@@ -5,7 +5,9 @@
 
 // R-273: the input of a flow is a `Copy` value type (E0810, §11.3), and `g.Out`, the generated type of the
 // output of `g` that holds `Span`s, is not (§5.3: it is a second-class value that is only in the place of an
-// argument). The same E0810 at the heading of `h` whichever of the two flows is declared first (§15.1). Here `g`, whose `Out` it is, is declared first.
+// argument). By S-772 (1) and (i), the types of the inputs of a flow are places of a type,
+// so the input `g.Out` is the E0710 of the types stage, before the E0810 of the flow stage (§18.1). The same
+// E0710 at the heading of `h` whichever of the two flows is declared first (§15.1). Here `g`, whose `Out` it is, is declared first.
 // The two files (`generated_order_out_as_input_h_first`, `generated_order_out_as_input_g_first`) differ only
 // in the order of the two flows.
 
@@ -17,6 +19,6 @@ pub flow g(x: F32 at sample) -> St at sample {
   St { a: x }
 }
 
-pub flow h(x: g.Out at sample) -> F32 at sample { //~ E0810
+pub flow h(x: g.Out at sample) -> F32 at sample { //~ E0710
   0.0
 }

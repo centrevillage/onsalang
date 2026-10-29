@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4"]
+
+// R-37 (§4.5): the type arguments that meet the requirements of the declaration are right in a signature: a
+// type parameter with a bound that implies the one of the declaration (`fn f[T: Float](x: N[T])` for
+// `N[T: Num]`, `Float` is a `Num`), the same bound, a concrete type that meets it, a `Buf` for a type parameter
+// declared `?Dup` (`D[Buf[F32]]`), and a type parameter declared `?Dup` for the one that is declared so. A
+// type parameter with the implicit `Dup` meets the implicit `Dup`. The negative forms are in
+// types/wellformed_type_args.onsa.
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct C[T: Copy] {
+  a: T,
+}
+
+pub struct D[T: ?Dup] {
+  a: T,
+}
+
+pub fn float_for_num[T: Float](x: N[T]) -> U32 {
+  0
+}
+
+pub fn same_bound[T: Num](x: N[T]) -> U32 {
+  0
+}
+
+pub fn concrete_number(x: N[F32], y: N[I32]) -> U32 {
+  0
+}
+
+pub fn concrete_copy(x: C[F32], y: C[(I32, F32)]) -> U32 {
+  0
+}
+
+pub fn dup_parameter[T](x: W[T]) -> U32 {
+  0
+}
+
+pub fn copy_for_dup[T: Copy](x: W[T]) -> U32 {
+  0
+}
+
+pub fn shared_for_dup(x: W[Str]) -> U32 {
+  0
+}
+
+pub fn copy_for_copy[T: Copy](x: C[T]) -> U32 {
+  0
+}
+
+pub fn maybe_dup_for_maybe_dup[T: ?Dup](x: D[T]) -> U32 {
+  0
+}
+
+pub fn buf_for_maybe_dup(x: D[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn nested_fine(x: Option[N[F32]], y: (W[F32], C[I32]), z: [N[F32]; 2]) -> U32 {
+  0
+}
+
+pub fn returned_fine[T: Float](x: T) -> N[T] {
+  N { a: x }
+}
+
+pub fn function_type_fine(f: fn(N[F32]) -> W[F32]) -> U32 {
+  0
+}
+
+pub fn annotations_fine[T: Float](x: Option[T]) -> U32 {
+  let _: Option[N[F32]]        = None
+  let _: Option[N[T]]          = None
+  let _: Option[D[Buf[F32]]]   = None
+  let _: Option[C[(I32, F32)]] = None
+  let _: (F32, Option[W[Str]]) = (1.0, None)
+  0
+}
+
+pub struct FieldsFine[T: Float] {
+  n: N[T],
+  w: W[F32],
+  d: D[Buf[F32]],
+}
+
+pub enum VariantFine[T: Copy] {
+  One(C[T]),
+  Two(W[T], F32),
+}

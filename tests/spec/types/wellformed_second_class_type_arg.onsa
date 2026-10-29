@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§18.1"]
+
+// S-766 (reading (1), before the user's confirmation; W4-05 U4a, §5.3: a `Span` is only at the root of the type of an
+// argument; §4.6: the table gives a `Span` no kind): a `Span` written as the type argument of a type of the program
+// is E0710, at the type, and only that. The requirement of the type parameter (the implicit `Dup` of `struct W[T]`,
+// the bound of `struct N[T: Num]`) is not judged for a `Span`, which has no kind to meet it with, so there is no
+// E0416 beside the E0710. The positions are an argument, a return type, a field, a variant and the annotation of a
+// `let` in a body. The marks are of the line only. One error per item (P-01).
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub fn dup_argument(w: W[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn num_argument(n: N[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn dup_returned(xs: Span[F32]) -> W[Span[F32]] {   //~ E0710
+  W { a: xs }
+}
+
+pub fn num_returned(xs: Span[F32]) -> N[Span[F32]] {   //~ E0710
+  N { a: xs }
+}
+
+pub struct DupField {
+  w: W[Span[F32]],   //~ E0710
+}
+
+pub struct NumField {
+  n: N[Span[F32]],   //~ E0710
+}
+
+pub enum DupVariant {
+  Bad(W[Span[F32]]),   //~ E0710
+}
+
+pub fn dup_annotation() -> U32 {
+  let _: Option[W[Span[F32]]] = None   //~ E0710
+  0
+}
+
+pub fn num_annotation() -> U32 {
+  let _: Option[N[Span[F32]]] = None   //~ E0710
+  0
+}
+
+pub fn planar_dup_argument(w: W[[Span[F32]; 2]]) -> U32 {   //~ E0710
+  0
+}

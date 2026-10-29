@@ -156,7 +156,8 @@ fn diagnostics_of(d: &Dir) -> Vec<(String, String)> {
     diagnostics(&doc).iter().map(|x| (str_of(x, "code").to_string(), str_of(x, "message").to_string())).collect()
 }
 
-/// `g.Out` in the input of `h` is E0810 whichever flow is declared first.
+/// `g.Out` in the input of `h` is E0710 whichever flow is declared first: the types of the inputs of a flow
+/// are places of a type, where a second-class type is not (§5.3, S-772).
 #[test]
 fn the_generated_out_of_another_flow_as_an_input_is_the_same_error_in_both_orders() {
     let st = "pub struct St {\n  a: F32,\n}\n";
@@ -165,7 +166,7 @@ fn the_generated_out_of_another_flow_as_an_input_is_the_same_error_in_both_order
     let g_first = package("order_out_a", &[("main.onsa", &format!("{st}\n{g}\n{h}"))]);
     let h_first = package("order_out_b", &[("main.onsa", &format!("{st}\n{h}\n{g}"))]);
     let (a, b) = (diagnostics_of(&g_first), diagnostics_of(&h_first));
-    assert_eq!(a.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), ["E0810"], "{a:?}");
+    assert_eq!(a.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), ["E0710"], "{a:?}");
     assert_eq!(a, b, "the diagnostics differ with the order");
 }
 

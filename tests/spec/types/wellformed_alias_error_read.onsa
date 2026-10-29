@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-757 (W4-05 U4a, §4.4: "…別名の宣言に報告し、別名を誤りの型として扱う(使う所には出さない、§18.1)"; §18.1: "読めなかった
+// 部分(引数の型、フィールドなど)は誤りの型として扱い、それを使う側には診断を出さない"): the alias `Bad = N[Bool]` is an
+// error type (E0416 once, at its declaration), so a body that reads the field `a` of a value of it, or of the
+// element of a tuple, an `Option` or a wrapper that holds it through another alias, has nothing: the value of the
+// error type is not the `Bool` of the written `N[Bool]`, so `t.0.a` is not an E0401 "expected `F32`, found `Bool`".
+// The reads that do not touch the error type (`t.1`) are in types/wellformed_alias_error_nested.onsa. One error per
+// item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct W[T] {
+  a: T,
+}
+
+type Bad = N[Bool]   //~ E0416
+
+type Tup = (Bad, F32)
+
+type Opt = Option[Bad]
+
+type Wr = W[Bad]
+
+pub fn reads_field_of_alias(b: Bad) -> F32 {
+  b.a
+}
+
+pub fn reads_field_of_tuple(t: Tup) -> F32 {
+  t.0.a
+}
+
+pub fn reads_field_of_wrapper(w: Wr) -> F32 {
+  w.a.a
+}
+
+pub fn reads_field_in_match(o: Opt) -> F32 {
+  match o {
+    Some(b) => b.a,
+    None => 0.0,
+  }
+}
+
+pub fn reads_field_into_annotation(t: Tup) -> U32 {
+  let _: F32 = t.0.a
+  0
+}

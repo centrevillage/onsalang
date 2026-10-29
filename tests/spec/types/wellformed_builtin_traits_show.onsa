@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// R-326 (W4-05 U4a, §6.3, the table of the built-in types: "タプル、`[T; N]`: 要素が全て実装するとき … `Show` …",
+// "`Option[T]`、`Result[T, E]`: 中身が全て実装するとき … `Show`"): a tuple, an array `[T; N]`, an `Option` and a
+// `Result` whose elements and contents implement `Show` implement it, so they meet the bound of `struct S2[T: Show]`
+// in a signature, a field and an annotation (§4.5), and the bound of `need_show[T: Show]` in a call. A type
+// parameter with the bound `Show` as an element (`(T, I32)`) implements it too. The elements that are compound
+// themselves (`((I32, F32), [Str; 2])`) and the call `need_show((1, 2))` are the same rule. The negative side is in
+// types/wellformed_builtin_traits_negative.onsa; the other traits of the table (all met today) are in
+// types/wellformed_builtin_traits_fine.onsa. One error per item (P-01); none is expected here.
+
+pub struct S2[T: Show] {
+  a: T,
+}
+
+pub fn show_tuple(x: S2[(I32, I32)]) -> U32 {
+  0
+}
+
+pub fn show_tuple_with_str(x: S2[(F32, Str)]) -> U32 {
+  0
+}
+
+pub fn show_array(x: S2[[F32; 2]]) -> U32 {
+  0
+}
+
+pub fn show_option(x: S2[Option[F32]]) -> U32 {
+  0
+}
+
+pub fn show_result(x: S2[Result[I32, Str]]) -> U32 {
+  0
+}
+
+pub fn show_nested(x: S2[((I32, F32), [Str; 2])], y: S2[Option[(I32, F32)]]) -> U32 {
+  0
+}
+
+pub fn show_with_parameter[T: Show](x: S2[(T, I32)]) -> U32 {
+  0
+}
+
+pub struct HolderOfShow {
+  a: S2[(I32, I32)],
+  b: S2[Option[F32]],
+  c: S2[[F32; 2]],
+  d: S2[Result[I32, Str]],
+}
+
+pub fn annotation(x: (I32, I32)) -> U32 {
+  let _: S2[(I32, I32)] = S2 { a: x }
+  0
+}
+
+pub fn need_show[T: Show](x: T) -> U32 {
+  0
+}
+
+pub fn body_show_tuple() -> U32 {
+  need_show((1, 2))
+}
+
+pub fn body_show_array(a: [F32; 2]) -> U32 {
+  need_show(a)
+}
+
+pub fn body_show_option(o: Option[F32]) -> U32 {
+  need_show(o)
+}
+
+pub fn body_show_result(r: Result[I32, Str]) -> U32 {
+  need_show(r)
+}

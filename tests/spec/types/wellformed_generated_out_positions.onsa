@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§6.2", "§11.6", "§4.5"]
+
+// S-769 (1) and S-770 (1) (W4-05 U4a): the generated type
+// `voice.Out` of a flow whose output is a struct holds a `Span` for each field, so it is second-class (§5.3, §11.6): it
+// is only in the place of an argument. (S-769) It is E0710 as the target of an `impl` (`impl voice.Out { … }`, the
+// method's `self` is not a reason to write it), while `impl voice.State { … }` is right (§11.6: the generated types are
+// defined by the module of the flow). (S-770) A planar array is only of `Span`s (§5.3, the table), so
+// `[voice.Out; 2]` as the type of an argument is E0710, in the default mode and `inout`, while `voice.Out` at the root
+// of an argument is right, in the default mode and `inout` (§11.6: `inout output: voice.Out`). The marks are of the
+// line only. One error per item (P-01).
+
+pub struct St {
+  a: F32,
+}
+
+pub flow voice(x: F32 at sample) -> St at sample {
+  St { a: x }
+}
+
+impl voice.Out {   //~ E0710
+  pub fn h(self) -> U32 {
+    1
+  }
+}
+
+impl voice.Out {   //~ E0710
+  pub fn other(self) -> U32 {
+    2
+  }
+}
+
+impl voice.State {
+  pub fn h(self) -> U32 {
+    1
+  }
+}
+
+impl voice.State {
+  pub fn other(self) -> U32 {
+    2
+  }
+}
+
+pub fn planar_default(y: [voice.Out; 2]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn planar_inout(inout y: [voice.Out; 3]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn planar_after_out(x: voice.Out, y: [voice.Out; 2]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn root_default(x: voice.Out) -> U32 {
+  0
+}
+
+pub fn root_inout(inout x: voice.Out) -> U32 {
+  0
+}

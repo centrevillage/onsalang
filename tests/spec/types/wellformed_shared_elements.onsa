@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1", "§4.4", "§18.1"]
+
+// S-767 (1), S-757 (W4-05 U4a, §4.5: the element of `Array[T]` and `Set[T]` and the key and the value of `Map[K, V]` are Dup, Copy or
+// Shared; an Affine type is E0416): a `Buf` (Affine) or a user's struct that holds a `Buf` cannot be the element of an
+// `Array` or a `Set` or a key or a value of a `Map`. The error is at the type, in an argument, a return type, a field, below the
+// root (`Option[Array[Buf[F32]]]`), a type parameter declared `?Dup`, and the annotation of a `let` in a body; it has no
+// candidate. An alias whose right side breaks the rule is E0416 at the alias declaration, and where the alias is used there is
+// no diagnostic (S-757). The marks are of the line only. One error per item (P-01). The right forms are in
+// types/wellformed_shared_elements_fine.onsa.
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+type A = Array[Buf[F32]]   //~ E0416
+
+pub fn array_argument(a: Array[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn set_argument(a: Set[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn map_value_argument(a: Map[U32, Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn map_key_argument(a: Map[Buf[F32], U32]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_owner_argument(a: Array[Owner]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn nested_argument(a: Option[Array[Buf[F32]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_dup_parameter[T: ?Dup](a: Array[T]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_returned(a: Array[Buf[F32]]) -> Array[Buf[F32]] {   //~ E0416
+  a
+}
+
+pub struct ArrayField {
+  a: Array[Buf[F32]],   //~ E0416
+}
+
+pub struct MapField {
+  m: Map[U32, Buf[F32]],   //~ E0416
+}
+
+pub fn array_annotation() -> U32 {
+  let _: Option[Array[Buf[F32]]] = None   //~ E0416
+  0
+}
+
+pub fn alias_argument(a: A) -> U32 {
+  0
+}
+
+pub struct AliasField {
+  a: A,
+}

@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§2.4"]
+
+// R-322 (W4-05 U4a, §4.1: the kind of `Ptr[T]` is Copy, the storage is a value): a `Ptr[F32]` meets the
+// requirements of a type parameter that wants a Copy type: the bound `Copy` and the implicit `Dup`, and the
+// element of `[e; N]` (§2.4). So it is right as the argument of a call of a generic function with `U: Copy` or
+// the implicit `Dup`, as the field of a struct made by such a call and as the element of a repeated array. Today
+// each of these is a false E0416 "`Ptr[F32]` is not Copy or Shared" in the body. The judgement of the body and the
+// one of the signatures (R-37) are shared in W4-05, so the signatures are in
+// types/wellformed_ptr_kind_signatures.onsa. No diagnostic is expected anywhere in this file.
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct C[T: Copy] {
+  a: T,
+}
+
+pub fn need_copy[U: Copy](x: U) -> U {
+  x
+}
+
+pub fn need_dup[U](x: U) -> U {
+  x
+}
+
+pub fn call_with_copy_bound(p: Ptr[F32]) -> Ptr[F32] {
+  need_copy(p)
+}
+
+pub fn call_with_implicit_dup(p: Ptr[F32]) -> Ptr[F32] {
+  need_dup(p)
+}
+
+pub fn call_with_a_struct_of_pointers(p: Ptr[F32]) -> W[Ptr[F32]] {
+  need_dup(W { a: p })
+}
+
+pub fn pointer_in_a_field_of_a_copy_type(c: C[Ptr[F32]]) -> Ptr[F32] {
+  need_copy(c.a)
+}
+
+pub fn pointer_repeated(p: Ptr[F32]) -> [Ptr[F32]; 2] {
+  [p; 2]
+}

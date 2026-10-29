@@ -87,7 +87,8 @@ const PROGRAMS: [Program; 8] = [
             "pub flow i(x: F32 at sample) -> g.Config at sample { g.Config {} }",
         ],
         tests: "",
-        codes: &["E0810", "E0810"],
+        // `g.Out` as an input of `h` is the E0710 of the types stage (S-772).
+        codes: &["E0710", "E0810"],
     },
     Program {
         name: "E: Params of a flow as the output of another and as an input",

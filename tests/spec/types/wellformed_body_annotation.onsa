@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// R-37 (W4-05 U4a, §4.5: "型の位置(署名、別名の右辺(§4.4)、`impl` の見出しの対象(§6.2)、本体の注釈)に書いた型引数は、
+// その型の宣言の型パラメータの要求(境界と暗黙の `Dup`)を満たさなければならず、満たさなければ E0416 である"): the type
+// written as the annotation of a `let` in a body is a type position of the same rule. `Option[N[Bool]]` is E0416
+// at the annotation although the value is `None` (today only the construction of a struct value with `N { a: x }`
+// is checked, at the value, never the annotation). The element of a `Buf` that is not Copy is the same (§4.5).
+// A body of a function, a method, a test and a branch is checked alike. The right annotations are in
+// types/wellformed_type_args_fine.onsa. One error per item (P-01).
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct C[T: Copy] {
+  a: T,
+}
+
+pub fn num_bool() -> U32 {
+  let _: Option[N[Bool]] = None   //~ E0416
+  0
+}
+
+pub fn dup_buf() -> U32 uses {Alloc} {
+  let _: Option[W[Buf[F32]]] = None   //~ E0416
+  0
+}
+
+pub fn copy_str() -> U32 {
+  let _: Option[C[Str]] = None   //~ E0416
+  0
+}
+
+pub fn tuple_annotation() -> U32 {
+  let _: (F32, Option[N[Bool]]) = (1.0, None)   //~ E0416
+  0
+}
+
+pub fn buf_element_annotation() -> U32 uses {Alloc} {
+  let _: Option[Buf[Buf[F32]]] = None   //~ E0416
+  0
+}
+
+pub fn bound_not_inherited[T](x: Option[T]) -> U32 {
+  let _: Option[N[T]] = None   //~ E0416
+  0
+}
+
+pub fn in_a_branch(flag: Bool) -> U32 {
+  if flag {
+    let _: Option[N[Bool]] = None   //~ E0416
+  }
+  0
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method(self) -> U32 {
+    let _: Option[N[Bool]] = None   //~ E0416
+    self.n
+  }
+}
+
+test "annotation in a test" {
+  let _: Option[N[Bool]] = None   //~ E0416
+  assert true
+}

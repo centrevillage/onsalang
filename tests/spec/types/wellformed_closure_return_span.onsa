@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.4", "§18.1"]
+
+// R-37 (W4-05 U4a, §5.3: "次のものは引数の位置にだけ現れる。返り値、構造体のフィールドにはできない(E0710)", "`Span[T]` と
+// `[Span[T]; N]`(別名を通したものも)"): the return type that an anonymous function writes is a type position of the
+// same rule as the return type of a function. A `Span[F32]` or a `[Span[F32]; 2]` at the root of it (and through an
+// alias) is E0710, at the written return type, although the body only gives the argument back. The anonymous function
+// is not called in the body, so the error is not of the call. The positive side (a `Span` as the root of the argument
+// of an anonymous function) is in types/wellformed_closure_return_span_fine.onsa. The marks are of the line only.
+// One error per item (P-01).
+
+type Pl = [Span[F32]; 2]
+
+pub fn returns_span() -> U32 {
+  let _ = fn(ys: Span[F32]) -> Span[F32] { ys }   //~ E0710
+  0
+}
+
+pub fn returns_planar() -> U32 {
+  let _ = fn(ys: [Span[F32]; 2]) -> [Span[F32]; 2] { ys }   //~ E0710
+  0
+}
+
+pub fn returns_alias() -> U32 {
+  let _ = fn(ys: Pl) -> Pl { ys }   //~ E0710
+  0
+}
+
+pub fn returns_span_of_var(xs: Span[F32]) -> U32 {
+  let g = fn(ys: Span[F32]) -> Span[F32] { ys }   //~ E0710
+  g.(xs).len()
+}
+
+pub fn returns_span_from_inout(xs: Span[F32]) -> U32 {
+  let _ = fn(inout ys: Span[F32]) -> Span[F32] { ys }   //~ E0710
+  0
+}

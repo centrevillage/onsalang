@@ -37,6 +37,9 @@ pub struct Decls {
     pub(crate) cyclic: HashSet<DefId>,
     /// The aliases lowered (`true`) or being lowered (`false`).
     pub(crate) lowered: HashMap<DefId, bool>,
+    /// The aliases in the order they were lowered: an alias after those its
+    /// right side names (`Sema::wellformed`, S-757).
+    pub(crate) aliases: Vec<DefId>,
     /// What the head of the right side of each alias names, through the
     /// aliases there ([`Sema::alias_heads`]).
     pub(crate) heads: HashMap<DefId, Option<Entity>>,

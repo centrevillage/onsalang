@@ -60,6 +60,31 @@ pub(crate) enum Required {
     RepeatElement,
     /// The element of `Buf` / `Span` (`Copy`, §4.5).
     BufElement,
+    /// The element of `Array` / `Set`, the key and the value of `Map`
+    /// (`Dup`, §4.5, S-767).
+    SharedElement,
+}
+
+impl Required {
+    /// The message of the E0416 of the type `shown` that does not meet `bound`
+    /// as this requirement: of a body, and of a type written (`sig::wellformed`).
+    pub(crate) fn unmet(&self, shown: &str, bound: Bound) -> String {
+        match self {
+            Required::RepeatElement => format!(
+                "`[e; N]` repeats the value of `e`, so its type must be Copy or Shared (`Dup`); `{shown}` is not; make an Affine array with `array.from_fn` (§2.4)"
+            ),
+            Required::BufElement => format!("the element type of `Buf` must be Copy; `{shown}` is not (§4.5)"),
+            Required::SharedElement => format!(
+                "the elements of `Array`, `Set` and `Map` are Copy or Shared (`Dup`); `{shown}` is Affine (§4.5)"
+            ),
+            Required::Param { param, owner } if bound == Bound::Dup => format!(
+                "`{shown}` is not Copy or Shared, so it does not satisfy `{param}: Dup` of {owner}; a type parameter takes only Copy or Shared types unless it is declared `{param}: ?Dup` (§4.5)"
+            ),
+            Required::Param { param, owner } => {
+                format!("`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)", bound.name())
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -245,22 +270,11 @@ impl<'a> Checker<'a> {
                 if self.infer.has_vars(&self.a.types, r) {
                     return Look::Wait;
                 }
-                if self.meets(r, *bound) {
+                if self.bounds().meets(r, *bound) {
                     return Look::Done;
                 }
                 let shown = self.display(r);
-                let msg = match what {
-                    Required::RepeatElement => format!(
-                        "`[e; N]` repeats the value of `e`, so its type must be Copy or Shared (`Dup`); `{shown}` is not; make an Affine array with `array.from_fn` (§2.4)"
-                    ),
-                    Required::BufElement => format!("the element type of `Buf` must be Copy; `{shown}` is not (§4.5)"),
-                    Required::Param { param, owner } if *bound == Bound::Dup => format!(
-                        "`{shown}` is not Copy or Shared, so it does not satisfy `{param}: Dup` of {owner}; a type parameter takes only Copy or Shared types unless it is declared `{param}: ?Dup` (§4.5)"
-                    ),
-                    Required::Param { param, owner } => {
-                        format!("`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)", bound.name())
-                    }
-                };
+                let msg = what.unmet(&shown, *bound);
                 let mut d = Diagnostic::new(Stage::Types, Code::E0416, item.span, msg).with_found(self.src(item.span));
                 d = self.decided_note(d, item.ty, &shown);
                 Look::Fail(d)
@@ -363,21 +377,5 @@ impl<'a> Checker<'a> {
             )),
             None => d,
         }
-    }
-
-    /// Whether a decided type meets a requirement (the bounds of §6.3 and the
-    /// kind constraints `Copy` / `Dup` of §4.6).
-    fn meets(&self, t: TyId, b: Bound) -> bool {
-        if self.satisfies(t, b) {
-            return true;
-        }
-        // The kind of a user type that holds a type parameter of the body is not
-        // computed (`kind_of` is `None`): such a constraint is not decided here and passes.
-        // R-176 (W5-08): a `?Dup` parameter inside makes the type not `Dup`
-        // (`tests/spec/negative/dup_maybe_dup_param.onsa`, in the pending list).
-        if matches!(b, Bound::Dup | Bound::Copy) && !matches!(self.ty(t), Ty::Param(_)) && self.a.kind_of(t).is_none() {
-            return true;
-        }
-        false
     }
 }

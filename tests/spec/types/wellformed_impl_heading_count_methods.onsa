@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§18.1", "§4.5"]
+
+// R-324, S-764 (§18.1: "見出しが誤りの固有の `impl`(E0307、E0412、E0416)も、対象の型が決まればメンバをその型の名前の後の `.`
+// の空間の名前に数え、…使う所は他の `impl` のメンバと同じに引く(メンバは検査しない)"): the members of an `impl` whose
+// heading has the wrong number of type arguments (E0412) are found where they are used, and the function that calls
+// them has no diagnostic: the E0412 of the heading is the only error. A method is called with `s.only_here()`, an
+// associated function with `S.make()`, also for a generic struct whose number of arguments is wrong in either
+// direction (`impl[T, U] P1[T, U]` for a `P1` with one parameter, `impl[T] P2[T]` for a `P2` with two). One error per
+// item (P-01). The constants are in types/wellformed_impl_heading_count_members.onsa.
+
+pub struct S {
+  x: I32,
+}
+
+impl[T] S[T] {   //~ E0412
+  pub fn only_here(self) -> I32 {
+    self.x
+  }
+  pub fn make() -> I32 {
+    1
+  }
+}
+
+pub fn reads_a_method(s: S) -> I32 {
+  s.only_here()
+}
+
+pub fn reads_an_associated_function() -> I32 {
+  S.make()
+}
+
+pub struct P1[A] {
+  a: A,
+}
+
+impl[T, U] P1[T, U] {   //~ E0412
+  pub fn tag(self) -> I32 {
+    1
+  }
+  pub fn make() -> I32 {
+    2
+  }
+}
+
+pub fn reads_a_method_of_too_many(p: P1[F32]) -> I32 {
+  p.tag()
+}
+
+pub fn reads_an_associated_function_of_too_many() -> I32 {
+  P1.make()
+}
+
+pub struct P2[A, B] {
+  a: A,
+  b: B,
+}
+
+impl[T] P2[T] {   //~ E0412
+  pub fn tag(self) -> I32 {
+    3
+  }
+  pub fn make() -> I32 {
+    4
+  }
+}
+
+pub fn reads_a_method_of_too_few(p: P2[F32, I32]) -> I32 {
+  p.tag()
+}
+
+pub fn reads_an_associated_function_of_too_few() -> I32 {
+  P2.make()
+}

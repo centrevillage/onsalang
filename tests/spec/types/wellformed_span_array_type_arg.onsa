@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§4.4", "§18.1"]
+
+// S-766 (W4-05 U4a, §4.5: "第二級の型(§5.3)を型引数に書いた所(`W[Span[F32]]`)は位置の E0710 だけで、その型引数の要求は判定
+// しない(第二級の型は種を持たない、§4.6)"; §5.3: "`Span[T]` と `[Span[T]; N]`(別名を通したものも)"): an array of `Span`s
+// (`[Span[F32]; 2]`, the planar form of §5.3) written as the type argument of `N[T: Num]` and of `F[T: Float]`, directly
+// or through the alias `Pl = [Span[F32]; 2]`, is the E0710 of the position and nothing else. It is not an E0416 for
+// the bound `Num` or `Float` (the array of `Span`s has no kind to be judged, and an array of floats is not a `Num`
+// either, so the E0416 would be a second error of the same type argument). The positions are an argument, a field, a
+// variant and the annotation of a `let` in a body. The alias itself, and the planar form at the root of an argument
+// (`xs: [Span[F32]; 2]`, `xs: Pl`), are right (§4.4: the position of the alias decides). The marks are of the line
+// only. One error per item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct F[T: Float] {
+  a: T,
+}
+
+type Pl = [Span[F32]; 2]
+
+pub fn num_argument(n: N[[Span[F32]; 2]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn float_argument(f: F[[Span[F32]; 2]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn num_alias_argument(n: N[Pl]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn float_alias_argument(f: F[Pl]) -> U32 {   //~ E0710
+  0
+}
+
+pub struct NumField {
+  n: N[[Span[F32]; 2]],   //~ E0710
+}
+
+pub struct FloatAliasField {
+  f: F[Pl],   //~ E0710
+}
+
+pub enum Variants {
+  Bad(N[Pl]),   //~ E0710
+}
+
+pub fn num_annotation() -> U32 {
+  let _: Option[N[[Span[F32]; 2]]] = None   //~ E0710
+  0
+}
+
+pub fn float_alias_annotation() -> U32 {
+  let _: Option[F[Pl]] = None   //~ E0710
+  0
+}
+
+pub fn fine_root(xs: [Span[F32]; 2], ys: Pl, n: N[F32]) -> U32 {
+  0
+}

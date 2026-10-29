@@ -1,0 +1,21 @@
+// The types of another module, whose requirements are judged where they are written (spec §4.5, §15.1).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct D[T: ?Dup] {
+  a: T,
+}
+
+pub fn takes_span(xs: Span[F32]) -> U32 {
+  xs.len()
+}
+
+pub fn bad_in_the_other_module(x: N[Bool]) -> U32 {   //~ E0416
+  0
+}

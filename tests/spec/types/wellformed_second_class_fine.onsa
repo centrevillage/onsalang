@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.4", "§4.5"]
+
+// R-37, R-135 (§5.3): the places where a `Span` and an array of `Span`s are right are the root of the type of an
+// argument (`xs: Span[T]`, `inout xs: Span[T]`, `xs: [Span[T]; N]`), the arguments of a function type (the
+// arguments of `fn(Span[F32]) -> F32` are in an argument position), and an alias of them that is used only as the
+// type of an argument (§4.4: the position is decided where the alias is used). The negative forms are in
+// types/wellformed_second_class_positions.onsa.
+
+type Frame = Span[F32]
+
+type Planar = [Span[F32]; 2]
+
+pub struct Counter {
+  n: U32,
+}
+
+impl Counter {
+  pub fn total(self, xs: Span[F32]) -> U32 {
+    xs.len() + self.n
+  }
+}
+
+pub fn read_span(xs: Span[F32]) -> F32 {
+  xs[0]
+}
+
+pub fn generic_span[T: Copy](xs: Span[T]) -> U32 {
+  xs.len()
+}
+
+pub fn inout_span(inout xs: Span[F32]) {
+  xs.fill!(0.0)
+}
+
+pub fn planar(xs: [Span[F32]; 2]) -> U32 {
+  xs.len()
+}
+
+pub fn inout_planar(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(0.0)
+}
+
+pub fn generic_planar[T: Copy](xs: [Span[T]; 2]) -> U32 {
+  xs.len()
+}
+
+pub fn function_type_with_span(f: fn(Span[F32]) -> F32) -> U32 {
+  0
+}
+
+pub fn function_type_with_planar(f: fn([Span[F32]; 2]) -> U32) -> U32 {
+  0
+}
+
+pub fn function_type_with_inout_span(f: fn(inout Span[F32])) -> U32 {
+  0
+}
+
+pub fn alias_argument(xs: Frame) -> U32 {
+  xs.len()
+}
+
+pub fn alias_inout_argument(inout xs: Frame) {
+  xs.fill!(1.0)
+}
+
+pub fn alias_planar_argument(xs: Planar) -> U32 {
+  xs.len()
+}
+
+pub fn alias_in_a_function_type(f: fn(Frame) -> F32) -> U32 {
+  0
+}
+
+pub fn alias_and_plain(a: Frame, b: Span[F32]) -> U32 {
+  a.len() + b.len()
+}

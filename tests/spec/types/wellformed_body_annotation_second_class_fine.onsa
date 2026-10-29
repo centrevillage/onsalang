@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// R-37 (§5.3, §5.4): the binding of a `for` over a planar argument (`for ch in input`) is a borrowed binding of a `Span` ("借用と
+// `Span` ... だけは、§5.4 の規則で `let` と `for` と `match` の腕に束縛できる"). It is right today and stays so with the checks
+// of the annotations of a body (W4-05 U4a). The `let` forms are in types/wellformed_body_annotation_second_class_let.onsa
+// (they wait for W4-07, S-217), the negative forms (below the root) in types/wellformed_body_annotation_second_class.onsa.
+
+pub fn for_over_planar(input: [Span[F32]; 2]) -> F32 {
+  var total = 0.0
+  for ch in input {
+    total = total + ch[0]
+  }
+  total
+}

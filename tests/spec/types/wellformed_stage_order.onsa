@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§5.3", "§4.5", "§6.2"]
+
+// R-37 (§18.1: "検査の段には依存の順がある(構文 → 名前 → 型 → …)。ある段が誤りを見つけた単位では、その結果に依存する
+// 後の段を行わない"): the E0710 and the E0416 of a signature are errors of the types stage, so a unit that has an error
+// of the names stage keeps that error and not these. A name that is not found in a signature (E0302) leaves
+// `Buf[Str]`, `Option[Span[F32]]`, `move y: Span[F32]` and `N[Bool]` of the same unit without a diagnostic, in
+// whatever order they are written. The `impl` whose target has a concrete type argument (`impl N[Bool]`) is the
+// E0307 of the names stage (§6.2), and not the E0416 of the types stage (S-756). The E0302 or E0307 is the only
+// error of each item. These forms give the same diagnostics today (and the well-formedness of the signatures of
+// W4-05 must keep them). One error per item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub fn unknown_then_element(x: Nope, y: Buf[Str]) -> U32 {   //~ E0302
+  0
+}
+
+pub fn element_then_unknown(y: Buf[Str], x: Nope) -> U32 {   //~ E0302
+  0
+}
+
+pub fn unknown_and_second_class(x: Nope) -> Option[Span[F32]] {   //~ E0302
+  None
+}
+
+pub fn unknown_and_move_span(x: Nope, move y: Span[F32]) -> U32 {   //~ E0302
+  0
+}
+
+pub fn unknown_and_type_argument(x: Nope, y: N[Bool]) -> U32 {   //~ E0302
+  0
+}
+
+pub fn unknown_return_and_type_argument(y: N[Bool]) -> Nope {   //~ E0302
+  y
+}
+
+impl N[Bool] {   //~ E0307
+  pub fn get(self) -> Bool {
+    self.a
+  }
+}

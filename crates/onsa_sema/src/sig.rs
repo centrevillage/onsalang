@@ -30,11 +30,13 @@ mod decls;
 mod flow_sig;
 mod generated;
 mod types;
+mod wellformed;
 
 use flow_sig::FlowHeading;
 
 pub(crate) use decls::Decls;
 pub(crate) use types::lower_type_in_body;
+pub(crate) use wellformed::Pos;
 
 pub(crate) struct Sema<'p> {
     pub(crate) a: &'p mut Analysis,
@@ -47,6 +49,12 @@ pub(crate) struct Sema<'p> {
     /// every signature is lowered, the note names a field that does not meet
     /// it ([`Sema::name_non_copy_fields`], §4.6).
     kind_heads: Vec<(usize, DefId, bool)>,
+    /// The places of the types written that name an alias, and the alias:
+    /// its right side is judged at the alias (S-757, [`Sema::wellformed`]).
+    alias_at: HashMap<(ModId, TypeId), DefId>,
+    /// Whether a part of a type at its place holds a second-class type out
+    /// of its place (E0710, [`Sema::wellformed`]).
+    misfit: HashMap<(TyId, Pos, u8), bool>,
 }
 
 /// Lowering context for one item.
@@ -86,16 +94,25 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
     let mut s = Sema::new(&mut a, flatten(pkg));
     crate::names::collect_names(&mut s);
     let flows = s.lower_signatures();
-    s.lower_generated(flows);
-    s.fail_ungenerated();
+    let pairs = s.lower_generated(&flows);
     s.a.known.ready = true;
+    s.wellformed();
+    s.check_generated(flows, pairs);
+    s.fail_ungenerated();
     s.name_non_copy_fields();
     a
 }
 
 impl<'p> Sema<'p> {
     fn new(a: &'p mut Analysis, flat: Vec<&'p Package>) -> Self {
-        Sema { a, flat, reported: HashMap::new(), kind_heads: Vec::new() }
+        Sema {
+            a,
+            flat,
+            reported: HashMap::new(),
+            kind_heads: Vec::new(),
+            alias_at: HashMap::new(),
+            misfit: HashMap::new(),
+        }
     }
 
     pub(crate) fn module(&self, m: ModId) -> Option<&'p Module> {
@@ -369,8 +386,8 @@ impl<'p> Sema<'p> {
         // An opaque type of `extern` is not judged.
         let opaque = matches!(head, Some(Entity::Def(d))
             if matches!(self.a.def(d).kind, DefKind::Unsupported(Declared::Type | Declared::Block)));
-        // SPEC-GAP(S-759): a target whose own count of arguments is not the
-        // declared one is only its E0412 (§4.5): its arguments are not judged.
+        // A target whose own count of arguments is not the declared one is
+        // only its E0412 (§4.5, S-759 (2')): its arguments are not judged.
         let miscounted = head.and_then(|e| self.declared_params(e)).is_some_and(|p| p.len() != written.len());
         let types = &self.a.types;
         let failed = match types.get(self_ty) {
@@ -514,6 +531,7 @@ impl<'p> Sema<'p> {
             _ => self.a.types.error(),
         };
         self.a.decls.lowered.insert(id, true);
+        self.a.decls.aliases.push(id);
         if let DefKind::Alias(t) = &mut self.a.defs[id.0 as usize].kind {
             *t = ty;
         }
@@ -552,15 +570,20 @@ impl<'p> Sema<'p> {
                                 None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             },
                             Ok((NameKind::Trait, _)) => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
+                            // A bound with an error of its name is a part of the
+                            // declaration not read (§18.1): unknown to its users, its
+                            // implicit `Dup` too (S-768 (1)).
                             Ok((kind, _)) => {
-                                self.report(
-                                    cx.def,
-                                    kind_error(&b.path, kind, "a trait or a kind constraint", b.path.span),
-                                );
+                                let d = kind_error(&b.path, kind, "a trait or a kind constraint", b.path.span);
+                                self.report(cx.def, d);
+                                unknown = true;
                             }
                             // An unknown bound (§18.1, S-689).
                             Err(e) if self.a.unread_path(cx.def, cx.m, &b.path, &e) => unknown = true,
-                            Err(e) => self.report(cx.def, e.into_diagnostic()),
+                            Err(e) => {
+                                self.report(cx.def, e.into_diagnostic());
+                                unknown = true;
+                            }
                         }
                     }
                     let kind = GenericKind::Type { bounds: bs, dup, unknown };

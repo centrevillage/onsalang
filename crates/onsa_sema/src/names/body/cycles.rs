@@ -23,8 +23,8 @@ pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
         a.names.keys().copied().filter(|&d| matches!(a.def(d).kind, DefKind::Const(_) | DefKind::Flow(_))).collect();
     points.sort();
     let at: HashMap<DefId, usize> = points.iter().enumerate().map(|(p, &d)| (d, p)).collect();
-    // SPEC-GAP(S-761): a name after the stop of a walk (at an error of the
-    // names stage) is no edge: the record ends there.
+    // A name after the stop of a walk (at an error of the names stage) is
+    // no edge: the record ends there (S-761 (1)).
     let adj: Vec<Vec<usize>> =
         points.iter().map(|d| edges(a, *d).into_iter().filter_map(|t| at.get(&t).copied()).collect()).collect();
     let (comp, cycled) = crate::names::cyclic(&adj);
@@ -39,9 +39,9 @@ pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
     for c in order {
         let decls = std::mem::take(&mut groups[c]);
         let mods: Vec<ModId> = decls.iter().map(|&d| a.def(d).module).collect();
-        // SPEC-GAP(S-760): a cycle of flow instances across modules is in a
-        // cycle of the imports, as one of types and constants: its E0310 is
-        // the one report.
+        // A cycle of flow instances across modules is in a cycle of the
+        // imports, as one of types and constants: its E0310 is the one report
+        // (S-760 (2)).
         if a.modules.across_one_cycle(&mods) {
             continue;
         }

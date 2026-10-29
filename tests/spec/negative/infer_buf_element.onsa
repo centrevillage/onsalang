@@ -10,6 +10,12 @@
 // 型パラメータの要求と同じく、型変数が無くなった文で検査し…"). A type variable left at the end
 // is E0406 only (negative/infer_unresolved.onsa). One error per function (P-01).
 //
+// R-37 (W4-05 U4a, §4.5: a type written as the annotation of a `let` is a type position of the same rule): where
+// the annotation itself names the element that is not Copy (`Buf[Owner]`, `Buf[Str]`, `Buf[T]`: the lines of
+// `affine_element_by_annotation`, `shared_element_by_annotation`, `type_parameter_without_copy` and
+// `in_a_branch`), the E0416 is at the annotation, on the same line and before `Buf.zeroed(n)` is read. The
+// requirement of `Buf.zeroed(n)` above is for the element that is decided by a later statement.
+//
 // Written by the implementer of W2-06 from §4.5 and §4.7 (no test ticket had these cases).
 
 pub struct Owner {

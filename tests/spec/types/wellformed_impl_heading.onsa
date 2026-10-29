@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-756, S-764 (W4-05 U4a, §6.2: "対象の型引数は型の宣言の型パラメータの要求を満たさなければならず(E0416、§4.5)、
+// `impl` の型パラメータが満たすかは `impl` の `[ ]` に書いた境界だけで決まる(`struct N[T: Num]` の後の `impl[T] N[T]`
+// は E0416 で、`impl[T: Num] N[T]` と書く)。見出しの誤りである(§18.1)"). The type arguments of the target of
+// an `impl` must meet the requirements of the type parameters of the declaration, by the bounds that the `impl`
+// writes in its own `[ ]`: the bound of the declaration is not inherited (`impl[T] N[T]`, `impl[T: Show] N[T]`
+// for `N[T: Num]`) and the implicit `Dup` of a type that has it is not given up (`impl[T: ?Dup] W[T]` for
+// `struct W[T]`). It is an error of the heading: the whole `impl` is one unit, at the line of the `impl`, and its
+// members are not checked (§18.1: the E0401 of `self.a + self.a` that `impl[T] N[T]` gives today is not
+// reported, as `let z: Bool = 1` is not). The error has no candidate (`fixes = 0`).
+// The names of the members of such an `impl` are in the space of `.` of the type (§6.2, §18.1, S-764): a name
+// that a later direct `impl` has again is E0304 on the later one, and a function that reads a member that only
+// the `impl` of the bad heading has has no error. The right forms are in types/wellformed_impl_heading_fine.onsa.
+// One error per item (P-01).
+
+pub struct N1[T: Num] {
+  a: T,
+}
+
+impl[T] N1[T] {   //~ E0416
+  pub fn get(self) -> T {
+    self.a
+  }
+  pub fn twice(self) -> T {
+    self.a + self.a
+  }
+}
+
+pub struct N2[T: Num] {
+  a: T,
+}
+
+impl[T] N2[T] {   //~ E0416
+  pub fn get(self) -> T {
+    self.a
+  }
+}
+
+pub struct N3[T: Num] {
+  a: T,
+}
+
+impl[T: Show] N3[T] {   //~ E0416
+  pub fn get(self) -> T {
+    let z: Bool = 1
+    self.a
+  }
+}
+
+pub struct W4[T] {
+  a: T,
+}
+
+impl[T: ?Dup] W4[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub enum E5[T: Num] {
+  One(T),
+  Nothing,
+}
+
+impl[T] E5[T] {   //~ E0416
+  pub fn is_one(self) -> Bool {
+    true
+  }
+}
+
+pub struct P6[A: Num, B] {
+  a: A,
+  b: B,
+}
+
+impl[A, B] P6[A, B] {   //~ E0416
+  pub fn first_value(self) -> A {
+    self.a
+  }
+}
+
+// ---- the members are in the space of `.` of the type (S-764) ----
+
+pub struct P7[T: Num] {
+  a: T,
+}
+
+impl[T] P7[T] {   //~ E0416
+  pub fn id(self) -> T {
+    self.a
+  }
+  pub fn only_here(self) -> T {
+    self.a
+  }
+}
+
+impl[T: Num] P7[T] {
+  pub fn id(self) -> T {   //~ E0304
+    self.a
+  }
+}
+
+pub fn reads_a_member_of_the_bad_heading(p: P7[F32]) -> F32 {
+  p.only_here()
+}
+
+pub struct P8[T: Num] {
+  a: T,
+}
+
+impl[T] P8[T] {   //~ E0416
+  pub const LIMIT: U32 = 1
+}
+
+impl[T: Num] P8[T] {
+  pub const LIMIT: U32 = 2   //~ E0304
+}

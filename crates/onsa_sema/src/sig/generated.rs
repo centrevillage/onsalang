@@ -288,12 +288,18 @@ impl<'p> Sema<'p> {
     /// read the fields of the output's type: a struct, lowered, or an item of
     /// the inputs of a flow; an `Out` has no scalar field, so that it gives no
     /// output, made or not), then the check of the value types and `@param`
-    /// in the order of the heading, then what `@param` gives.
-    pub(super) fn lower_generated(&mut self, flows: Vec<FlowHeading>) {
-        for h in &flows {
+    /// in the order of the heading, then what `@param` gives
+    /// ([`Self::check_generated`], after the well-formedness of the types
+    /// written, which reads an alias with an error in an input as the error
+    /// type, S-757). Whether each flow's inputs and output pair up.
+    pub(super) fn lower_generated(&mut self, flows: &[FlowHeading]) -> Vec<bool> {
+        for h in flows {
             self.fill_by_inputs(h.flow);
         }
-        let pairs: Vec<bool> = flows.iter().map(|h| self.fill_by_output(h.flow)).collect();
+        flows.iter().map(|h| self.fill_by_output(h.flow)).collect()
+    }
+
+    pub(super) fn check_generated(&mut self, flows: Vec<FlowHeading>, pairs: Vec<bool>) {
         for (h, pairs) in flows.iter().zip(pairs) {
             let cx = self.cx_for(h.flow, Vec::new(), None);
             let Some((cx, f)) = cx.as_ref().and_then(|cx| Some((cx, flow_decl(cx, self.a.def(h.flow).item?)?))) else {

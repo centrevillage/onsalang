@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// R-326 (W4-05 U4a, §6.3, the table of the built-in types), the negative side that is missed today: `Option[T]` and
+// `Result[T, E]` are given `PartialEq` `Eq` `Hash` `Show` and no `PartialOrd`, and `Bytes` is given `PartialEq` `Eq`
+// `PartialOrd` `Ord` `Hash` `Default` and no `Show`, so a type argument of them for the bound `PartialOrd` and for
+// `Show` is E0416 in a signature, a field, and a call of a generic function whose parameter has the bound. Today the
+// check passes these (the judgment of the bound has no arm that says they do not implement the trait), so it is a
+// false negative that sits beside R-326. One error per item (P-01).
+
+pub struct S2[T: Show] {
+  a: T,
+}
+
+pub struct O2[T: PartialOrd] {
+  a: T,
+}
+
+pub fn ord_option(x: O2[Option[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn ord_result(x: O2[Result[I32, Str]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn show_bytes(x: S2[Bytes]) -> U32 {   //~ E0416
+  0
+}
+
+pub struct FieldOrdOption {
+  o: O2[Option[F32]],   //~ E0416
+}
+
+pub struct FieldShowBytes {
+  s: S2[Bytes],   //~ E0416
+}
+
+pub fn need_show[T: Show](x: T) -> U32 {
+  0
+}
+
+pub fn need_ord[T: PartialOrd](x: T) -> U32 {
+  0
+}
+
+pub fn body_show_bytes(b: Bytes) -> U32 {
+  need_show(b)   //~ E0416
+}
+
+pub fn body_ord_option(o: Option[F32]) -> U32 {
+  need_ord(o)   //~ E0416
+}

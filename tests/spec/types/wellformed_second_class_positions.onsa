@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.4", "§4.5", "§18.1"]
+
+// R-37, R-135 (W4-05 U4a, §5.3: "次のものは引数の位置にだけ現れる。返り値、構造体のフィールドにはできない
+// (E0710)"; table: `Span[T]` is "引数の型として `xs: Span[T]` / `inout xs: Span[T]`", the array of `Span` is
+// "引数の型として `xs: [Span[T]; N]`"). A `Span` (or an array of `Span`s) is allowed only as the root of the type
+// of an argument. Anywhere else in a signature it is E0710, at the type: in a return type, in the fields of a
+// struct, in the contents of a variant, below the root of an argument (`Option[Span[F32]]`, a tuple, an argument
+// of a generic type of the program, an array of arrays of `Span`s), and in the return type of a function type
+// (`fn(F32) -> Span[F32]`). It is a signature error of the types stage (§18.1), so the unit stops there and the
+// body is not read (the bodies below use the `Span` in ways that would be errors of their own).
+// An alias of a `Span` is the same type (§4.4: "元の型と同じに使える"), and whether the position is second-class
+// is decided by the place where the alias is used (§4.4), so the alias declaration `type Frame = Span[F32]` is
+// no error and its uses in a field are (the uses in a return type are in
+// types/wellformed_second_class_alias_returned.onsa). One error per item (P-01).
+// The positions that are right are in types/wellformed_second_class_fine.onsa.
+
+pub struct W[T: ?Dup] {
+  v: T,
+}
+
+type Frame = Span[F32]
+
+type Planar = [Span[F32]; 2]
+
+// ---- return types ----
+
+pub fn option_returned(xs: Span[F32]) -> Option[Span[F32]] {   //~ E0710
+  Some(xs)
+}
+
+pub fn tuple_returned(xs: Span[F32]) -> (Span[F32], F32) {   //~ E0710
+  (xs, 1.0)
+}
+
+pub fn generic_option_returned[T: Copy](xs: Span[T]) -> Option[Span[T]] {   //~ E0710
+  Some(xs)
+}
+
+pub fn generic_type_returned(xs: Span[F32]) -> W[Span[F32]] {   //~ E0710
+  W { v: xs }
+}
+
+pub fn function_type_returns_span(f: fn(F32) -> Span[F32]) -> U32 {   //~ E0710
+  0
+}
+
+// ---- below the root of an argument ----
+
+pub fn option_argument(o: Option[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn inout_option_argument(inout o: Option[Span[F32]]) {   //~ E0710
+}
+
+pub fn move_option_argument(move o: Option[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn tuple_argument(t: (Span[F32], F32)) -> U32 {   //~ E0710
+  0
+}
+
+pub fn array_of_arrays_argument(xs: [[Span[F32]; 2]; 2]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn generic_argument(w: W[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn generic_option_argument[T: Copy](o: Option[Span[T]]) -> U32 {   //~ E0710
+  0
+}
+
+// ---- the fields of a struct ----
+
+pub struct OptionField {
+  a: Option[Span[F32]],   //~ E0710
+}
+
+pub struct TupleField {
+  a: (Span[F32], F32),   //~ E0710
+}
+
+pub struct GenericField {
+  a: W[Span[F32]],   //~ E0710
+}
+
+pub struct NestedField {
+  a: [[Span[F32]; 2]; 2],   //~ E0710
+}
+
+pub struct FunctionField {
+  f: fn(F32) -> Span[F32],   //~ E0710
+}
+
+pub struct AliasField {
+  a: Frame,   //~ E0710
+}
+
+pub struct PlanarAliasField {
+  a: Planar,   //~ E0710
+}
+
+// ---- the contents of a variant ----
+
+pub enum SpanVariant {
+  Wide(Span[F32]),   //~ E0710
+  Narrow(F32),
+}
+
+pub enum SecondOfTwo {
+  Both(F32, Span[F32]),   //~ E0710
+}
+
+pub enum NestedVariant {
+  Maybe(Option[Span[F32]]),   //~ E0710
+}
+
+pub enum PlanarVariant {
+  Channels([Span[F32]; 2]),   //~ E0710
+}
+
+// ---- in an `impl`, a method is a function ----
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn view(self, xs: Span[F32]) -> Option[Span[F32]] {   //~ E0710
+    Some(xs)
+  }
+}

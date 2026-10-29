@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.6", "§18.1"]
+
+// S-771 (1) (W4-05 U4a): a type that holds a second-class type
+// (§5.3) written as the type argument of a type of the program (`C[(Span[F32], F32)]`, `N[W[Span[F32]]]`,
+// `N[Option[Span[F32]]]`) is the E0710 of the position of the `Span` inside it, and only that. As for a second-class
+// type written directly (S-766), the type that holds one has no kind (§4.6), so the requirement of the parameter of the
+// outer type (`T: Copy` of `C`, `T: Num` of `N`) is not judged: there is no E0416 beside the E0710. The positions are an
+// argument, a return type and a field. The marks are of the line only. One error per item (P-01).
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct C[T: Copy] {
+  a: T,
+}
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub fn copy_tuple_argument(c: C[(Span[F32], F32)]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn num_tuple_argument(n: N[(Span[F32], F32)]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn num_wrapper_argument(n: N[W[Span[F32]]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn num_option_argument(n: N[Option[Span[F32]]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn copy_tuple_returned(xs: Span[F32]) -> C[(Span[F32], F32)] {   //~ E0710
+  C { a: (xs, 1.0) }
+}
+
+pub fn num_tuple_returned(xs: Span[F32]) -> N[(Span[F32], F32)] {   //~ E0710
+  N { a: (xs, 1.0) }
+}
+
+pub fn num_wrapper_returned(xs: Span[F32]) -> N[W[Span[F32]]] {   //~ E0710
+  N { a: W { a: xs } }
+}
+
+pub fn num_option_returned(xs: Span[F32]) -> N[Option[Span[F32]]] {   //~ E0710
+  N { a: Some(xs) }
+}
+
+pub struct CopyTupleField {
+  c: C[(Span[F32], F32)],   //~ E0710
+}
+
+pub struct NumTupleField {
+  n: N[(Span[F32], F32)],   //~ E0710
+}
+
+pub struct NumWrapperField {
+  n: N[W[Span[F32]]],   //~ E0710
+}
+
+pub struct NumOptionField {
+  n: N[Option[Span[F32]]],   //~ E0710
+}

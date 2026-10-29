@@ -9,9 +9,18 @@ impl<'a> Checker<'a> {
     /// Fresh variables for a def's generic parameters (owner's first for methods).
     pub(crate) fn fresh_args(&mut self, def: DefId) -> Vec<TyId> {
         let generics = self.all_generics(def);
+        // The parameters of an `impl` whose target is the error type (a
+        // heading with an error, §18.1) are not decided by a use: the error
+        // type (R-324).
+        let unread = match self.a.def(def).owner.map(|o| &self.a.def(o).kind) {
+            Some(DefKind::Impl(i)) if matches!(self.ty(i.self_ty), Ty::Error) => i.generics.len(),
+            _ => 0,
+        };
         generics
             .iter()
-            .map(|g| match g.kind {
+            .enumerate()
+            .map(|(k, g)| match g.kind {
+                _ if k < unread => self.a.types.error(),
                 GenericKind::Const(_) => {
                     let len = self.infer.fresh_len();
                     let Len::Var(v) = len else { unreachable!() };

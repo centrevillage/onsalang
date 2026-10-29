@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-757 (W4-05 U4a, §4.4: "別名の右辺の型に、使う位置によらない誤り(型引数が境界を満たさない、…、E0416、§4.5)があれば、
+// 別名の宣言に報告し、別名を誤りの型として扱う(使う所には出さない、§18.1)"): an alias whose right side is an error
+// type is an error type, so an alias that holds it inside a tuple, an `Option` or a generic type of the program has
+// nothing to report for the error part (§18.1: an error type is read as the part that could not be read, and
+// nothing is reported to its users). The users of the second alias (an argument, a field, a variant, a return type,
+// an annotation of the body, and the element that is not the error type) have nothing either. The error is once,
+// at `Bad`. In contrast, the same type written out in a place is E0416 there (the last items). The reads of the
+// error type itself (`t.0.a`) are in types/wellformed_alias_error_read.onsa. One error per item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct W[T] {
+  a: T,
+}
+
+type Bad = N[Bool]   //~ E0416
+
+type Tup = (Bad, F32)
+
+type Opt = Option[Bad]
+
+type Wr = W[Bad]
+
+pub fn tuple_argument(t: Tup) -> U32 {
+  0
+}
+
+pub fn option_argument(o: Opt) -> U32 {
+  0
+}
+
+pub fn wrapper_argument(w: Wr) -> U32 {
+  0
+}
+
+pub fn tuple_returned(move t: Tup) -> Tup {
+  t
+}
+
+pub fn option_returned(move o: Opt) -> Opt {
+  o
+}
+
+pub fn wrapper_returned(move w: Wr) -> Wr {
+  w
+}
+
+pub struct Holder {
+  t: Tup,
+  o: Opt,
+  w: Wr,
+}
+
+pub enum Variants {
+  T(Tup),
+  O(Opt),
+  W(Wr),
+}
+
+pub fn tuple_annotation(t: Tup) -> U32 {
+  let _: Tup = t
+  0
+}
+
+pub fn option_annotation(o: Opt) -> U32 {
+  let _: Opt = o
+  0
+}
+
+pub fn wrapper_annotation(w: Wr) -> U32 {
+  let _: Wr = w
+  0
+}
+
+pub fn reads_second_of_tuple(t: Tup) -> F32 {
+  t.1
+}
+
+pub fn direct_tuple(t: (N[Bool], F32)) -> U32 {   //~ E0416
+  0
+}
+
+pub fn direct_option(o: Option[N[Bool]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn direct_wrapper(w: W[N[Bool]]) -> U32 {   //~ E0416
+  0
+}

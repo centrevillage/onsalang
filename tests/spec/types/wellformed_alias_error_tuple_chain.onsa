@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-757 (W4-05 U4a, §4.4: "…別名の宣言に報告し、別名を誤りの型として扱う(使う所には出さない、§18.1)"): a chain of aliases
+// that hold the one before in a tuple and an `Option` (no type argument of the program, so no requirement to
+// judge). `B0 = Buf[Str]` is the E0416 (the element of a `Buf` is not `Copy`, §4.5) and an error type; `B1`, `B2` and
+// `B3` hold it and have nothing, nor has an argument of `B3`. Another chain starts at `C0 = Buf[Buf[F32]]`.
+// One error per item (P-01).
+
+type B0 = Buf[Str]   //~ E0416
+
+type B1 = (B0, U32)
+
+type B2 = Option[B1]
+
+type B3 = (B2, B2)
+
+pub fn tuple_chain(x: B3) -> U32 {
+  0
+}
+
+type C0 = Buf[Buf[F32]]   //~ E0416
+
+type C1 = [C0; 2]
+
+type C2 = Option[C1]
+
+pub fn array_chain(x: C2) -> U32 {
+  0
+}
+
+pub fn direct_buf_of_str(x: (Buf[Str], U32)) -> U32 {   //~ E0416
+  0
+}

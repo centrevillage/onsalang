@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§3.2"]
+
+// R-120 (§6.3, the table of the built-in types: `Option[T]` and `Result[T, E]` are given `PartialEq` `Eq` `Hash`
+// `Show` and no `PartialOrd`): `<` and `>` between two `Option` or two `Result` values are not defined, the E0401 of
+// the operator (§3.2). `==` is defined. One error per item (P-01).
+
+pub fn option_less(a: Option[I32], b: Option[I32]) -> Bool {
+  a < b   //~ E0401
+}
+
+pub fn option_greater(a: Option[F32], b: Option[F32]) -> Bool {
+  a > b   //~ E0401
+}
+
+pub fn result_less(a: Result[I32, Str], b: Result[I32, Str]) -> Bool {
+  a < b   //~ E0401
+}
+
+pub fn option_equal(a: Option[I32], b: Option[I32]) -> Bool {
+  a == b
+}

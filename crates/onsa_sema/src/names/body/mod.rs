@@ -37,6 +37,7 @@ use onsa_syntax::ast::{
 use crate::def::{DefKind, FlowInput, GenericDef, ModId};
 use crate::flow_names::FlowBuiltin;
 use crate::resolve::Entity;
+use crate::sig::Pos;
 use crate::ty::TyId;
 use crate::{Analysis, DefId, Package, flatten};
 
@@ -260,7 +261,8 @@ type Site = (Typed, HashSet<String>);
 
 #[derive(Debug, Clone, Copy)]
 enum Typed {
-    Type(TypeId),
+    /// A type written at its place (`sig::wellformed`).
+    Type(TypeId, Pos),
     Row(ExprId),
 }
 
@@ -373,8 +375,8 @@ fn lower_types(
     let mut fail = None;
     let late = late.into_iter().map(|(_, (t, _))| ((t, HashSet::new()), true));
     for ((site, locals), late) in sites.into_iter().map(|t| (t, false)).chain(late) {
-        let t = match site {
-            Typed::Type(t) => t,
+        let (t, pos) = match site {
+            Typed::Type(t, pos) => (t, pos),
             Typed::Row(e) => {
                 let ExprKind::Closure { effects, .. } = &ast.expr(e).kind else { continue };
                 let (set, errors) = crate::sig::read_effects(a, def, m, (generics, self_ty, &locals), effects.as_ref());
@@ -386,7 +388,7 @@ fn lower_types(
                 continue;
             }
         };
-        let (ty, diags) = crate::sig::lower_type_in_body(a, m, ast, text, generics, self_ty, def, (t, locals));
+        let (ty, diags) = crate::sig::lower_type_in_body(a, m, ast, text, generics, self_ty, def, (t, locals, pos));
         let d = diags.into_iter().next();
         let names = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names);
         match names {
@@ -557,7 +559,7 @@ impl<'a> Walker<'a> {
         }
         // The types see every `let`: the order of §11.2 is of the values.
         for (s, t) in typed {
-            let site = self.site(Typed::Type(t));
+            let site = self.site(Typed::Type(t, Pos::Bind));
             self.flow_types.push_back((s, site));
         }
         declared?;

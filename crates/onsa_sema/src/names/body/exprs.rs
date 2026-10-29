@@ -17,6 +17,7 @@ use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Wal
 use crate::def::DefKind;
 use crate::flow_names::FlowBuiltin;
 use crate::resolve::Entity;
+use crate::sig::Pos;
 
 /// The choices open while a pattern is walked (§7): the names bound by the
 /// branches before this one (`prev`) and by this branch so far (`cur`). A
@@ -75,7 +76,7 @@ impl Walker<'_> {
             }
             ExprKind::Cast { expr, ty } => {
                 self.expr(*expr)?;
-                self.typed([*ty]);
+                self.typed([*ty], Pos::Bind);
                 Ok(())
             }
             // `^y`: a local, or a builtin name of the flow (S-720); any other
@@ -140,10 +141,11 @@ impl Walker<'_> {
         r
     }
 
-    /// Keep the types `ts` written here for `lower_types` ([`Self::site`]).
-    fn typed(&mut self, ts: impl IntoIterator<Item = TypeId>) {
+    /// Keep the types `ts` written here at the place `pos` for `lower_types`
+    /// ([`Self::site`]).
+    fn typed(&mut self, ts: impl IntoIterator<Item = TypeId>, pos: Pos) {
         for t in ts {
-            let site = self.site(Typed::Type(t));
+            let site = self.site(Typed::Type(t, pos));
             self.type_sites.push(site);
         }
     }
@@ -154,7 +156,7 @@ impl Walker<'_> {
     pub(super) fn site(&self, t: Typed) -> super::Site {
         let mut names = Vec::new();
         match t {
-            Typed::Type(t) => heads(self.ast, t, &mut names),
+            Typed::Type(t, _) => heads(self.ast, t, &mut names),
             Typed::Row(e) => {
                 if let ExprKind::Closure { effects: Some(row), .. } = &self.ast.expr(e).kind {
                     row_heads(row, &mut names);
@@ -232,14 +234,14 @@ impl Walker<'_> {
             // The names before the value, as in the text (§18.1, R-289).
             StmtKind::Let { pat, init, ty, .. } => {
                 self.ahead(|w| w.pattern(*pat, BindingKind::Let, Origin::Let(s)))?;
-                self.typed(*ty);
+                self.typed(*ty, Pos::Bind);
                 self.expr(*init)?;
                 self.pattern(*pat, BindingKind::Let, Origin::Let(s))
             }
             StmtKind::Var { name, init, ty } => {
                 let var = |w: &mut Self| w.declare(name, BindingKind::Var, Origin::Var(s), None).map(drop);
                 self.ahead(var)?;
-                self.typed(*ty);
+                self.typed(*ty, Pos::Bind);
                 self.expr(*init)?;
                 var(self)
             }
@@ -313,9 +315,9 @@ impl Walker<'_> {
                 let origin = Origin::Closure { closure: e, param: k as u32 };
                 self.declare(name, BindingKind::ClosureParam(p.mode), origin, None)?;
             }
-            self.typed(p.ty);
+            self.typed(p.ty, Pos::Arg(p.mode));
         }
-        self.typed(ret);
+        self.typed(ret, Pos::Other);
         if row {
             let site = self.site(Typed::Row(e));
             self.type_sites.push(site);

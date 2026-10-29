@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.2", "§4.4", "§18.1"]
+// fixes = 0
+
+// S-758 (W4-05 U4a, §5.3: "`Span[T]` と `[Span[T]; N]`(別名を通したものも)は `move` の引数の型に書けない(E0710)。
+// 非所有のビューを所有で受け取る意味は無いから"; "関数型の引数の並び(`fn(move Span[F32]) -> F32`)と無名関数の
+// 引数も同じ"). A `move` argument whose type is a `Span`, an array of `Span`s, or an alias of them is E0710
+// at the argument type, in a function, a method, a function type and an anonymous function. The error has no
+// candidate (`fixes = 0`: the `move` could become a borrow, an `inout` or an owned `Buf`, §5.3 names the three
+// in the note). A `Span` below the root (`move o: Option[Span[F32]]`) is the E0710 of every position and is in
+// types/wellformed_second_class_positions.onsa. The generated type `Out` of a flow is in
+// types/wellformed_move_span_flow.onsa, and `In` is made in W7-03 and is not written. The right forms are in
+// types/wellformed_move_span_fine.onsa.
+// One error per item (P-01).
+
+type Frame = Span[F32]
+
+type Planar = [Span[F32]; 2]
+
+pub fn move_span(move xs: Span[F32]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn move_generic_span[T: Copy](move xs: Span[T]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn move_planar(move xs: [Span[F32]; 2]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn move_alias(move xs: Frame) -> U32 {   //~ E0710
+  0
+}
+
+pub fn move_planar_alias(move xs: Planar) -> U32 {   //~ E0710
+  0
+}
+
+pub fn function_type_moves_span(f: fn(move Span[F32]) -> F32) -> U32 {   //~ E0710
+  0
+}
+
+pub fn function_type_moves_planar(f: fn(move [Span[F32]; 2]) -> F32) -> U32 {   //~ E0710
+  0
+}
+
+pub fn function_type_moves_alias(f: fn(move Frame) -> F32) -> U32 {   //~ E0710
+  0
+}
+
+pub fn anonymous_function_moves_span() -> U32 {
+  let _ = fn(move xs: Span[F32]) -> F32 { 0.0 }   //~ E0710
+  0
+}
+
+pub struct Mixer {
+  gain: F32,
+}
+
+impl Mixer {
+  pub fn mix(self, move xs: Span[F32]) -> U32 {   //~ E0710
+    0
+  }
+}

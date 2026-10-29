@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// R-326 (W4-05 U4a, §6.3, the table of the built-in types), the negative side that the check judges rightly today: a
+// type the table does not give the trait (`Array` has no `Show`, `Map` has no `PartialEq`, `Default` is not given to
+// `Option` and `Result`, a float has no `Hash`), and a compound type with an element that does not implement it (a
+// `Buf` has no `Show`; a type parameter with no bound has no `Show`), do not meet the bound: E0416 in a signature, a
+// field and an annotation (§4.5), and in a call of a generic function whose parameter has the bound. The types the
+// table gives the trait are in types/wellformed_builtin_traits_show.onsa and
+// types/wellformed_builtin_traits_fine.onsa; the negative side that is missed today (`PartialOrd` of `Option`,
+// `Show` of `Bytes`) is in types/wellformed_builtin_traits_negative_table.onsa. One error per item (P-01).
+
+pub struct S2[T: Show] {
+  a: T,
+}
+
+pub struct E2[T: PartialEq] {
+  a: T,
+}
+
+pub struct H2[T: Hash] {
+  a: T,
+}
+
+pub struct D2[T: Default] {
+  a: T,
+}
+
+pub fn show_array_type(x: S2[Array[I32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn show_tuple_with_buf(x: S2[(F32, Buf[F32])]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn eq_buf(x: E2[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn eq_map(x: E2[Map[I32, I32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn hash_float_tuple(x: H2[(F32, Str)]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn hash_float_array(x: H2[[F32; 2]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn default_option(x: D2[Option[I32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn default_result(x: D2[Result[I32, Str]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn show_unbound_parameter[T](x: S2[(T, I32)]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn annotation_show_array_type() -> U32 {
+  let _: Option[S2[Array[I32]]] = None   //~ E0416
+  0
+}
+
+pub fn need_show[T: Show](x: T) -> U32 {
+  0
+}
+
+pub fn need_hash[T: Hash](x: T) -> U32 {
+  0
+}
+
+pub fn body_show_array_type(a: Array[I32]) -> U32 {
+  need_show(a)   //~ E0416
+}
+
+pub fn body_hash_float_tuple(t: (F32, I32)) -> U32 {
+  need_hash(t)   //~ E0416
+}

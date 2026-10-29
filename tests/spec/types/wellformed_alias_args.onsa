@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-757 (W4-05 U4a, §4.4: "別名の右辺の型に、使う位置によらない誤り(型引数が境界を満たさない、`Buf`・`Span` の要素が
+// Copy でない、E0416、§4.5)があれば、別名の宣言に報告し、別名を誤りの型として扱う(使う所には出さない、§18.1)"):
+// the right side of an alias is a type position of the well-formedness of §4.5. A type argument that does not
+// meet the requirements of the declaration (the implicit `Dup` of `W[T]`, the bound of `N[T: Num]`) or an element
+// of a `Buf` that is not Copy is E0416 at the alias declaration, and the alias is an error type: where the alias
+// is used (an argument, a field, a variant, an annotation of the body, a return type) there is no diagnostic,
+// as for any error type (§18.1), although `W[Buf[F32]]` written out in these places would be E0416.
+// The right side that is well formed has no error. One error per item (P-01).
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+type A = W[Buf[F32]]   //~ E0416
+
+type B = Buf[Str]   //~ E0416
+
+type C = N[Bool]   //~ E0416
+
+type D = Buf[Buf[F32]]   //~ E0416
+
+type E = (F32, W[Buf[F32]])   //~ E0416
+
+type Fine = W[F32]
+
+pub fn alias_argument(x: A) -> U32 {
+  0
+}
+
+pub fn alias_returned(move x: B) -> B {
+  x
+}
+
+pub fn alias_inout(inout x: C) {
+}
+
+pub struct HoldsAlias {
+  b: B,
+  d: D,
+}
+
+pub enum VariantOfAlias {
+  One(A),
+  Two(E, C),
+}
+
+pub fn alias_in_the_body() -> U32 uses {Alloc} {
+  let _: Option[A] = None
+  let _: (F32, Option[C]) = (1.0, None)
+  0
+}
+
+pub fn alias_below_the_root(x: Option[C], y: (D, F32)) -> U32 {
+  0
+}
+
+pub fn fine_alias(x: Fine) -> U32 {
+  0
+}

@@ -228,8 +228,9 @@ const PLACES: &[Place] = &[
     },
     Place { name: "impl target", lines: &["impl {H} {", "}"], data: false, control: "S36" },
     Place {
+        // A `Span` below another is an E0710 (§5.3, R-37): the planar form.
         name: "nested span",
-        lines: &["pub fn p37(x: Span[Span[{H}]]) -> I32 {", "  1", "}"],
+        lines: &["pub fn p37(x: [Span[{H}]; 2]) -> I32 {", "  1", "}"],
         data: true,
         control: "I32",
     },

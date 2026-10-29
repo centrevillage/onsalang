@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§4.5", "§18.1"]
+
+// R-37 (W4-05 U4a, §5.3: "次のものは引数の位置にだけ現れる", "借用と `Span` (平面の要素と部分ビューを含む)だけは、§5.4 の規則で
+// `let` と `for` と `match` の腕に束縛できる"): the annotation of a `let` or a `var` in a body is a type position of
+// the same rule. A second-class type that is not the root of the annotation (`Option[Span[F32]]`, a tuple with a
+// `Span`, an array of arrays of `Span`s, a function type that takes `move` a `Span`) is E0710 at the annotation,
+// although the value is `None`; the root of the annotation of a borrowed binding (`let ch: Span[F32] = input[0]`)
+// is right (§5.4) and is in types/wellformed_body_annotation_second_class_let.onsa (the `for` form is in
+// types/wellformed_body_annotation_second_class_fine.onsa). The marks are of the line only: the spec does not
+// fix which part of the type the error is at. One error per item (P-01). (`tuple_with_span` is reported today
+// at its value `(xs, 1.0)`, on the same line.)
+
+pub fn option_of_span() -> U32 {
+  let _: Option[Span[F32]] = None   //~ E0710
+  0
+}
+
+pub fn option_of_function_moving_span() -> U32 {
+  let _: Option[fn(move Span[F32]) -> F32] = None   //~ E0710
+  0
+}
+
+pub fn tuple_with_span(xs: Span[F32]) -> U32 {
+  var t: (Span[F32], F32) = (xs, 1.0)   //~ E0710
+  0
+}
+
+pub fn option_of_planar() -> U32 {
+  let _: Option[[Span[F32]; 2]] = None   //~ E0710
+  0
+}
+
+pub fn array_of_planar_arrays() -> U32 {
+  let _: Option[[[Span[F32]; 2]; 2]] = None   //~ E0710
+  0
+}
+
+pub fn function_returning_span() -> U32 {
+  let _: Option[fn(F32) -> Span[F32]] = None   //~ E0710
+  0
+}
+
+pub fn in_a_branch(flag: Bool) -> U32 {
+  if flag {
+    let _: Option[Span[F32]] = None   //~ E0710
+  }
+  0
+}
+
+pub fn in_a_closure_body() -> U32 {
+  let _ = fn(x: U32) -> U32 {
+    let _: Option[Span[F32]] = None   //~ E0710
+    x
+  }
+  0
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method(self) -> U32 {
+    let _: Option[Span[F32]] = None   //~ E0710
+    self.n
+  }
+}
+
+test "annotation in a test" {
+  let _: Option[Span[F32]] = None   //~ E0710
+  assert true
+}

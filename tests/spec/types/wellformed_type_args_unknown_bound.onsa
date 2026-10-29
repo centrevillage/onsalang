@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1", "§15.1"]
+
+// R-37, S-689 (§18.1: "総称の境界では未知の境界(その型引数が trait を満たすかに頼る判定には診断を出さない)として読む"):
+// a bound that is a name that was not found is an unknown bound, and a judgement that depends on it is not made. The
+// requirements of a type are not judged against an unknown bound of the declaration (`struct M[T: Gone]`, so
+// `M[Bool]` and `M[Buf[F32]]` have no E0416 in a signature, and `impl[T] M[T]` has none in its heading), and a
+// type parameter whose bound is unknown is not judged as an argument (`fn f[T: Gone](x: N[T])` has the E0302 of
+// the bound and no E0416 for `N[T]`, which would not be reported before the types stage in any case: the names
+// stage that found the error stops the unit, §18.1). The E0302 is the only error of each item.
+// One error per item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct M[T: Gone] {   //~ E0302
+  a: T,
+}
+
+pub fn bool_for_unknown_bound(x: M[Bool]) -> U32 {
+  0
+}
+
+pub fn buf_for_unknown_bound(x: M[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn parameter_for_unknown_bound[T](x: M[T]) -> U32 {
+  0
+}
+
+pub fn unknown_bound_on_the_argument[T: Gone](x: N[T]) -> U32 {   //~ E0302
+  0
+}
+
+pub struct FieldOfUnknown {
+  m: M[Buf[F32]],
+}
+
+impl[T] M[T] {
+  pub fn get(self) -> T {
+    self.a
+  }
+}
+
+impl[T: Gone] N[T] {   //~ E0302
+  pub fn get(self) -> T {
+    self.a
+  }
+}

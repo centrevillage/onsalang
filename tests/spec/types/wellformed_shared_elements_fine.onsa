@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1"]
+
+// S-767 (1) (§4.5): the element of an `Array` or a `Set` and the key and the value of a `Map` that are Copy or Shared are right
+// (`Str` is Shared, an `Array` is Shared, §4.1), and a type parameter with the implicit `Dup` meets it. The negative forms
+// are in types/wellformed_shared_elements.onsa.
+
+pub fn array_of_float(a: Array[F32]) -> U32 {
+  0
+}
+
+pub fn array_of_str(a: Array[Str]) -> U32 {
+  0
+}
+
+pub fn array_of_array(a: Array[Array[F32]]) -> U32 {
+  0
+}
+
+pub fn map_of_array(m: Map[Str, Array[F32]]) -> U32 {
+  0
+}
+
+pub fn set_of_str(s: Set[Str]) -> U32 {
+  0
+}
+
+pub fn dup_parameter[T](a: Array[T]) -> U32 {
+  0
+}
+
+pub struct Holds {
+  a: Array[Str],
+  m: Map[Str, Array[F32]],
+}

@@ -358,7 +358,7 @@ codes! {
         "argument mode does not match the parameter";
     E0704 = 704, Modes, [Modes], Optional, Optional,
         "value used after it was moved";
-    E0710 = 710, Modes, [Modes], Optional, Optional,
+    E0710 = 710, Modes, [Types, Modes], Optional, Optional,
         "second-class value used outside an argument position";
     E0711 = 711, Modes, [Types, Modes], Optional, Optional,
         "borrowed Affine value passed as `move`";

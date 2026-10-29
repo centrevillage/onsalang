@@ -1,0 +1,3 @@
+[package]
+name = "wellformed_pkg"
+edition = "2026"

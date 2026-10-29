@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.2"]
+
+// S-758 (§5.3): the same types in the other modes are right: the default mode and `inout` for a `Span`, an array
+// of `Span`s and their alias (the table of §5.3), and `move` for the owned types (`Buf`, a fixed array, a
+// function value, §5.2: "所有して持つなら `move xs: Buf[T]`"). A function type may take `inout` and the default
+// mode of a `Span`. The negative forms are in types/wellformed_move_span.onsa.
+
+type Frame = Span[F32]
+
+type Planar = [Span[F32]; 2]
+
+pub fn default_mode(xs: Span[F32]) -> U32 {
+  xs.len()
+}
+
+pub fn inout_mode(inout xs: Span[F32]) {
+  xs.fill!(0.0)
+}
+
+pub fn default_planar(xs: [Span[F32]; 2]) -> U32 {
+  xs.len()
+}
+
+pub fn inout_planar(inout xs: Planar) {
+  xs[1].fill!(0.0)
+}
+
+pub fn default_alias(xs: Frame) -> U32 {
+  xs.len()
+}
+
+pub fn move_owned_buf(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn move_fixed_array(move a: [F32; 4]) -> U32 {
+  a.len()
+}
+
+pub fn move_function_value(move f: fn(F32) -> F32) -> F32 {
+  f.(1.0)
+}
+
+pub fn function_type_with_modes(f: fn(inout Span[F32]), g: fn(Span[F32]) -> F32) -> U32 {
+  0
+}

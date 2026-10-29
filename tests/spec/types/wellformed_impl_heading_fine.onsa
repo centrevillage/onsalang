@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§4.5"]
+
+// S-756 (§6.2): the target of an `impl` is right when the bounds that the `impl` writes in its own `[ ]` meet the
+// requirements of the type parameters of the declaration: the same bound (`impl[T: Num] N[T]`), a stronger one
+// (`impl[T: Float] N[T]`, a `Float` is a `Num`), no bound for a type that has none, and a type declared `?Dup`
+// (`struct D[T: ?Dup]`) that an `impl` with the implicit `Dup` takes. An `impl` of such a target checks its
+// members as any `impl`, so the member `twice` that needs `Num` is right when the bound is written. The
+// negative forms are in types/wellformed_impl_heading.onsa.
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+impl[T: Num] N[T] {
+  pub fn get(self) -> T {
+    self.a
+  }
+  pub fn twice(self) -> T {
+    self.a + self.a
+  }
+}
+
+pub struct M[T: Num] {
+  a: T,
+}
+
+impl[T: Float] M[T] {
+  pub fn get(self) -> T {
+    self.a
+  }
+}
+
+pub struct W[T] {
+  a: T,
+}
+
+impl[T] W[T] {
+  pub fn get(self) -> T {
+    self.a
+  }
+}
+
+pub struct D[T: ?Dup] {
+  a: T,
+}
+
+impl[T] D[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T: ?Dup] D[T] {
+  pub fn other_tag() -> U32 {
+    8
+  }
+}
+
+pub struct P[A: Num, B] {
+  a: A,
+  b: B,
+}
+
+impl[A: Num, B] P[A, B] {
+  pub fn first_value(self) -> A {
+    self.a
+  }
+}
+
+impl[A: Float, B: Copy] P[A, B] {
+  pub fn float_value(self) -> A {
+    self.a
+  }
+}
+
+pub enum E[T: Num] {
+  One(T),
+  Nothing,
+}
+
+impl[T: Num] E[T] {
+  pub fn is_one(self) -> Bool {
+    true
+  }
+}
+
+pub fn uses_the_members(n: N[F32], m: M[F32]) -> F32 {
+  n.twice() + m.get()
+}

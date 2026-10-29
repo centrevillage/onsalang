@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.3", "§18.1"]
+
+// R-37 (§4.4: "第二級の型(§5.3)を書ける位置かは、別名を使う位置で決まる"; S-757): an alias of a `Span` is the
+// same type as the `Span`, so it is second-class where it is used, and the alias declaration itself has no error
+// (`type Frame = Span[F32]`, `type Planar = [Span[F32]; 2]`). A return type that names the alias is E0710 at the
+// return type, as the `Span` written out is (negative/modes_second_class.onsa). These forms are reported today
+// (and stay so); the uses in a field and in a variant are in types/wellformed_second_class_positions.onsa.
+// One error per item (P-01).
+
+type Frame = Span[F32]
+
+type Planar = [Span[F32]; 2]
+
+pub fn alias_returned(xs: Frame) -> Frame {   //~ E0710
+  xs
+}
+
+pub fn planar_alias_returned(xs: Planar) -> Planar {   //~ E0710
+  xs
+}
+
+pub fn plain_to_alias_returned(xs: Span[F32]) -> Frame {   //~ E0710
+  xs
+}
+
+pub fn inout_alias_returned(inout xs: Frame) -> Frame {   //~ E0710
+  xs
+}

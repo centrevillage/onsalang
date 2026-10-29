@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§14.1"]
+
+// R-322 (§4.1: the kind of `Ptr[T]` is Copy): a `Ptr[F32]` in a signature is right where a Copy type is wanted:
+// the element of a `Buf` and of a `Span` (§4.5), the argument of a type with the implicit `Dup` (`W[T]`) and of a
+// type with the bound `Copy` (`C[T: Copy]`), and a tuple of pointers. These forms are accepted today; the
+// well-formedness of the signatures (R-37, W4-05 U4a) judges them with the kinds of the body, where the kind of
+// `Ptr` is missing today (types/wellformed_ptr_kind.onsa), so they must stay right.
+// No diagnostic is expected anywhere in this file.
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct C[T: Copy] {
+  a: T,
+}
+
+pub fn buf_of_pointers(b: Buf[Ptr[F32]]) -> U32 {
+  b.len()
+}
+
+pub fn span_of_pointers(b: Span[Ptr[F32]]) -> U32 {
+  b.len()
+}
+
+pub fn planar_of_pointers(b: [Span[Ptr[F32]]; 2]) -> U32 {
+  b.len()
+}
+
+pub fn dup_type_of_pointer(w: W[Ptr[F32]]) -> U32 {
+  0
+}
+
+pub fn copy_type_of_pointer(c: C[Ptr[F32]]) -> U32 {
+  0
+}
+
+pub fn tuple_of_pointers(t: (Ptr[F32], Ptr[I32])) -> U32 {
+  0
+}
+
+pub fn pointer_is_copied(p: Ptr[F32]) -> (Ptr[F32], Ptr[F32]) {
+  (p, p)
+}
+
+pub struct HoldsPointers {
+  one: Ptr[F32],
+  many: Buf[Ptr[F32]],
+  copy: C[Ptr[F32]],
+}
+
+pub enum PointerVariant {
+  One(Ptr[F32]),
+  Wrapped(W[Ptr[F32]]),
+}

@@ -125,11 +125,18 @@ impl<'p> Sema<'p> {
                         return self.a.types.error();
                     }
                 };
+                // Where an alias is written: its right side is judged at the alias
+                // (`Sema::wellformed`, S-757).
+                if let Entity::Def(d) = entity
+                    && matches!(self.a.def(d).kind, DefKind::Alias(_))
+                {
+                    self.alias_at.insert((cx.m, t), d);
+                }
                 // S-24: a const generic parameter takes an integer literal or a
                 // constant's name; which arguments are const depends on the entity.
-                // SPEC-GAP(S-762): the declared parameters, when their count is known:
-                // an argument past them has no kind to judge and is not read, the
-                // E0412 of the count (`Ring[F32, 4, 5]`, `P[3]`, `P[Nope]`; §4.5).
+                // The declared parameters, when their count is known: an argument
+                // past them has no kind to judge and is not read, the E0412 of the
+                // count (`Ring[F32, 4, 5]`, `P[3]`, `P[Nope]`; §4.5, S-762 (1)).
                 let declared = self.declared_params(entity);
                 let lowered_args: Vec<TyId> = args_ast
                     .iter()
@@ -364,16 +371,16 @@ impl<'p> Sema<'p> {
                 match &def.kind {
                     // A heading a syntax error cut (S-59): its generic parameters
                     // are not known, and its uses are the error type (R-71).
-                    // A type of a cycle (E0311, at its declaration, §18.1) too.
-                    DefKind::Struct(_) | DefKind::Enum(_)
-                        if self.a.heading_failed(d) || self.a.decls.cyclic.contains(&d) =>
-                    {
-                        self.a.types.error()
-                    }
+                    DefKind::Struct(_) | DefKind::Enum(_) if self.a.heading_failed(d) => self.a.types.error(),
                     DefKind::Struct(_) | DefKind::Enum(_) => {
                         let want = def.generics().len();
                         if args.len() != want {
                             return arity_err(self, want);
+                        }
+                        // A type of a cycle (E0311, at its declaration, §18.1)
+                        // is the error type, its count compared (R-323).
+                        if self.a.decls.cyclic.contains(&d) {
+                            return self.a.types.error();
                         }
                         self.a.types.intern(Ty::Named(d, args))
                     }
@@ -493,12 +500,17 @@ pub(crate) fn lower_type_in_body<'p>(
     generics: &[GenericDef],
     self_ty: Option<TyId>,
     def: DefId,
-    (t, locals): (TypeId, HashSet<String>),
+    (t, locals, pos): (TypeId, HashSet<String>, Pos),
 ) -> (TyId, Vec<Diagnostic>) {
     let before = a.diagnostics.len();
     let mut s = Sema::new(a, Vec::new());
     let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None, locals };
     let ty = s.lower_type(&cx, t);
+    // Its well-formedness at its place `pos` (§4.5, §5.3, R-37), with no
+    // error of its lowering.
+    if s.a.diagnostics.len() == before {
+        s.judge(&cx, t, ty, pos);
+    }
     let diags = s.a.diagnostics.drain(before..).collect();
     (ty, diags)
 }

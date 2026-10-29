@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§18.1", "§4.5"]
+
+// S-764 (§18.1: "見出しが誤りの固有の `impl`(E0307 の…、E0412 の対象の型引数の数、E0416 の対象の型引数の要求)も、
+// 対象の型が決まればメンバをその型の名前の後の `.` の空間(§6.2)の名前に数え、E0304 の相手にし、使う所は他の `impl`
+// のメンバと同じに引く(メンバは検査しない)"): the heading with the wrong number of type arguments (E0412,
+// `impl[T] P[T]` for a `P` that takes none) is the same. Its members are in the space of `.` of `P`: a name that a
+// later `impl` has again is E0304 on the later one, and a function that reads a member that only the `impl` of the
+// bad heading has has no error. These forms are reported today (and stay so); the heading of E0416 is in
+// types/wellformed_impl_heading.onsa. One error per item (P-01).
+
+pub struct P {
+  x: I32,
+}
+
+impl[T] P[T] {   //~ E0412
+  pub const Q: F32 = 1.0
+  pub const R: F32 = 3.0
+}
+
+impl P {
+  pub const Q: F32 = 2.0   //~ E0304
+}
+
+pub fn reads_a_member_of_the_bad_heading() -> F32 {
+  P.R
+}
+
+pub struct S {
+  x: I32,
+}
+
+impl[T] S[T] {   //~ E0412
+  pub fn id(self) -> I32 {
+    self.x
+  }
+}
+
+impl S {
+  pub fn id(self) -> I32 {   //~ E0304
+    self.x
+  }
+}

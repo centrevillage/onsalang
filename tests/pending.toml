@@ -432,8 +432,8 @@ note = "E0710 の否定例 2 件。at は W3-10 で通るが、生成項目 swap
 kind = "test-case"
 target = "tests/spec/negative/modes_flow_span_fields.onsa"
 reasons = ["S-102", "R-135"]
-until = "W4-05"
-note = "E0710 の否定例 2 件。at（W3-10）と、構造体のフィールドの第二級の型の E0710（R-135、W4-05）の両方が要る"
+until = "W7-03"
+note = "E0710 の否定例 2 件。構造体のフィールドの pan.Out の E0710 は W4-05 U4a で通る。swap.In のフィールドは生成項目 In が無い（E0302。生成項目 In の Onsa の側は W7-03）"
 
 [[pending]]
 kind = "test-case"
@@ -448,13 +448,6 @@ target = "tests/spec/negative/build_provides_main.onsa"
 reasons = ["R-134"]
 until = "W6-03"
 note = "main の効果行を provides と照合しない（仕様 §15.3、E0610）。今は診断なし"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/modes_second_class_fields.onsa"
-reasons = ["R-135"]
-until = "W4-05"
-note = "構造体のフィールドの Span、[Span; N]、総称の Span[T] が E0710 にならない（仕様 §5.3）。今は診断なし"
 
 [[pending]]
 kind = "test-case"
@@ -1904,3 +1897,12 @@ target = "tests/spec/fixes/e0320_uses_latency_value.onsa"
 reasons = ["S-82"]
 until = "W10-08"
 note = "@latency が無い属性の E0005（W10-08）"
+
+# --- W4-05 U4a/t: 整形性の段。S-217 の 1 件は W4-07（U4a の他の項目は U4a で外した）。
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/wellformed_body_annotation_second_class_let.onsa"
+reasons = ["S-217"]
+until = "W4-07"
+note = "`let`・`for` の借用束縛の根の Span（S-217）は W4-07（今は modes の E0710）"
