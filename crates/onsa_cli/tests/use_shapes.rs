@@ -41,6 +41,7 @@ mod test_support;
 
 use std::collections::BTreeMap;
 
+use test_support::Dir;
 use test_support::sweep::*;
 
 const HEADS: [&str; 14] = [
@@ -108,10 +109,10 @@ fn count(diags: &[Diag], k: &Key) -> usize {
     diags.iter().filter(|d| &key(d) == k).count()
 }
 
-/// The problems of one package: it ends as a check does, and each candidate takes its diagnostic away and
-/// adds no code of `NEW_CODES` that the text did not have.
-fn probe(tag: &str, texts: &Texts, what: &str, problems: &mut Vec<String>) -> usize {
-    let d = package(tag, "fx", texts);
+/// The problems of one package, written over the scratch package `d`: it ends as a check does, and each
+/// candidate takes its diagnostic away and adds no code of `NEW_CODES` that the text did not have.
+fn probe(d: &Dir, texts: &Texts, what: &str, problems: &mut Vec<String>) -> usize {
+    write_texts(d, texts);
     let c = check_package(d.root());
     if !ended_well(&c) {
         problems.push(format!("{what}: ended with code {} {:?}", c.code, c.stderr.lines().next().unwrap_or("")));
@@ -124,7 +125,7 @@ fn probe(tag: &str, texts: &Texts, what: &str, problems: &mut Vec<String>) -> us
             applied_n += 1;
             let mut applied = texts.clone();
             apply_fix_texts(&mut applied, fix);
-            write_texts(&d, &applied);
+            write_texts(d, &applied);
             let after = check_package(d.root());
             if !ended_well(&after) {
                 problems.push(format!(
@@ -160,12 +161,15 @@ fn probe(tag: &str, texts: &Texts, what: &str, problems: &mut Vec<String>) -> us
                 ));
             }
         }
-        write_texts(&d, texts);
+        write_texts(d, texts);
     }
     applied_n
 }
 
 fn shapes(where_: &str, prefix: &str, tag: &str) {
+    // One scratch package for every shape: the shapes have the same files and differ in `where_` alone,
+    // which is all `write_texts` writes from one to the next (X-16).
+    let d = package(&format!("shape_{tag}"), "fx", &Texts::new());
     let mut problems = Vec::new();
     let mut n = 0;
     let mut applied = 0;
@@ -174,7 +178,7 @@ fn shapes(where_: &str, prefix: &str, tag: &str) {
             let line = format!("{prefix}{head}{tail}");
             n += 1;
             let texts = shapes_package(where_, &line, head);
-            applied += probe(&format!("shape_{tag}_{n}"), &texts, &format!("{where_}: {line:?}"), &mut problems);
+            applied += probe(&d, &texts, &format!("{where_}: {line:?}"), &mut problems);
         }
     }
     assert!(problems.is_empty(), "{} of {n} shapes:\n{}", problems.len(), problems.join("\n"));
@@ -290,15 +294,17 @@ fn odd_package(where_: &str, line: &str, after: bool) -> Texts {
 }
 
 fn odd(where_: &str, tag: &str) {
+    // One scratch package for every line, as in `shapes`.
+    let d = package(&format!("odd_{tag}"), "fx", &Texts::new());
     let mut problems = Vec::new();
     let mut seen: BTreeMap<String, usize> = BTreeMap::new();
     let mut applied = 0;
-    for (i, line) in ODD.iter().enumerate() {
+    for line in ODD {
         for after in [false, true] {
             let texts = odd_package(where_, line, after);
             let what = format!("{where_}: {line:?} {}", if after { "after the body" } else { "before the body" });
             *seen.entry(what.clone()).or_default() += 1;
-            applied += probe(&format!("odd_{tag}_{i}_{}", after as u8), &texts, &what, &mut problems);
+            applied += probe(&d, &texts, &what, &mut problems);
         }
     }
     assert!(problems.is_empty(), "{} of {} packages:\n{}", problems.len(), seen.len(), problems.join("\n"));
