@@ -1,0 +1,21 @@
+pub struct S2[T: Show] { a: T }
+pub struct E2[T: PartialEq] { a: T }
+pub struct O2[T: PartialOrd] { a: T }
+pub struct H2[T: Hash] { a: T }
+pub struct Df[T: Default] { a: T }
+pub fn k1(x: S2[(I32, I32)]) -> U32 { 0 }
+pub fn k2(x: S2[(F32, I32)]) -> U32 { 0 }
+pub fn k3(x: S2[[F32; 2]]) -> U32 { 0 }
+pub fn k4(x: S2[F32]) -> U32 { 0 }
+pub fn k5(x: E2[(F32, I32)]) -> U32 { 0 }
+pub fn k6(x: O2[(F32, I32)]) -> U32 { 0 }
+pub fn k7(x: H2[(I32, Str)]) -> U32 { 0 }
+pub fn k8(x: Df[(F32, I32)]) -> U32 { 0 }
+pub fn k9(x: S2[(I32, Str)]) -> U32 { 0 }
+pub fn k10(x: S2[Option[(I32, Str)]]) -> U32 { 0 }
+pub fn k11(x: S2[[Str; 2]]) -> U32 { 0 }
+pub fn k12(x: E2[[F32; 2]], y: Df[Str], z: Df[[F32; 2]]) -> U32 { 0 }
+pub fn main() {}
+fn need_show[T: Show](x: T) -> U32 { 0 }
+pub fn b1() -> U32 { need_show((1.0, 2)) }
+pub fn b2() -> U32 { need_show((1, 2)) }

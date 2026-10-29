@@ -1,0 +1,7 @@
+pub struct S2[T: Show] { a: T }
+pub struct P1: Show { a: F32 }
+pub enum E3: Show { A, B }
+pub fn k1(x: S2[P1]) -> U32 { 0 }
+pub fn k2(x: S2[E3]) -> U32 { 0 }
+pub fn k3(x: S2[F32], y: S2[Str], z: S2[I32], w: S2[Bool], v: S2[(F32, I32)], u: S2[Option[F32]]) -> U32 { 0 }
+pub fn main() {}

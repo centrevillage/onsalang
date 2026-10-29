@@ -1,0 +1,22 @@
+pub struct W[T] { a: T }
+pub struct N[T: Num] { a: T }
+pub struct Cy { a: Option[Cy] }
+pub struct Cy2[T] { a: Cy2[T] }
+pub enum E1 { A(E1) }
+pub struct M1 { b: M2 }
+pub struct M2 { a: M1 }
+type L1 = L2
+type L2 = L1
+type L3 = W[L3]
+pub fn y01(x: Cy) -> U32 { 0 }
+pub fn y02(x: Cy2[F32]) -> U32 { 0 }
+pub fn y03(x: Cy2) -> U32 { 0 }
+pub fn y04(x: Cy2[F32, F32]) -> U32 { 0 }
+pub fn y05(x: Cy2[Span[F32]]) -> U32 { 0 }
+pub fn y06(x: E1, y: N[Bool]) -> U32 { 0 }
+pub fn y07(x: M1) -> Span[F32] { x }
+pub fn y08(x: L1) -> Span[F32] { x }
+pub fn y09(x: L3) -> Span[F32] { x }
+pub fn y10(x: W[L1]) -> U32 { 0 }
+pub fn y11(x: Cy2[N[Bool]]) -> U32 { 0 }
+pub fn main() {}
