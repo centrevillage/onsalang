@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§10", "§18.1"]
+// fixes = 1
+
+// S-776 (W4-06 U1/i2): `b1` has a modes error (E0703, the `move` of the argument missing), so its
+// unit is not checked for rt, though its body is typed to its end, and its calls are no edges of
+// the rt recursion: the cycle `e1 -> a1 -> b1 -> e1` gets no E0903 until it is fixed. The
+// candidate writes the `move`; after it the E0903 of the cycle is reported at the first call of
+// the cycle, in `e1`, which does not call `b1` itself. That unit read what the check held back, so
+// the E0903 there is no new error of the candidate (§18.1). (Every unit hands the owned `Buf` on,
+// so no `rt fn` needs `Alloc`.)
+
+pub rt fn e1(n: I32, move q: Buf[F32]) -> I32 {
+  a1(n - 1, move q)
+}
+
+pub rt fn a1(n: I32, move q: Buf[F32]) -> I32 {
+  b1(n - 1, move q)
+}
+
+pub rt fn b1(n: I32, move q: Buf[F32]) -> I32 {
+  e1(n - 1, q)                  //~ E0703
+}

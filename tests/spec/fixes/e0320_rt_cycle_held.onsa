@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§10", "§18.1"]
+// fixes = 1
+
+// S-776 (W4-06 U1/i2): `BadB` has a naming error (E0320), so its unit is not checked for rt and its
+// calls are no edges of the rt recursion: the cycle `e1 -> a1 -> BadB -> e1` gets no E0903 until
+// it is fixed. The candidate renames `BadB`; after it the E0903 of the cycle is reported at the
+// first call of the cycle, in `e1`, which does not call `BadB` itself. That unit read what the
+// check held back, so the E0903 there is no new error of the candidate (§18.1).
+
+pub rt fn e1(n: I32) -> I32 {
+  a1(n - 1)
+}
+
+pub rt fn a1(n: I32) -> I32 {
+  BadB(n - 1)
+}
+
+pub rt fn BadB(n: I32) -> I32 { //~ E0320
+  e1(n - 1)
+}

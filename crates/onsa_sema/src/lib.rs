@@ -2,7 +2,8 @@
 //!
 //! This crate takes parsed packages and produces an [`Analysis`]: every
 //! definition with its lowered signature, interned types, module scopes, and
-//! diagnostics. Bodies are checked by `check_bodies` (T2-5 .. T2-12).
+//! diagnostics. Bodies are checked by `stages::check_bodies` (T2-5 ..
+//! T2-12), in the order of the stages (§18.1).
 
 pub mod body;
 #[cfg(test)]
@@ -34,6 +35,9 @@ pub mod package_tree;
 pub mod resolve;
 mod rt;
 mod sig;
+mod stages;
+#[cfg(test)]
+mod stages_tests;
 mod structpat;
 #[cfg(test)]
 mod tests;
@@ -230,6 +234,9 @@ pub struct Analysis {
     /// E0320 renames ([`rename_fixes`]). A cell, as the one resolution of a
     /// path ([`Analysis::typed_members`]) reads the analysis.
     pub(crate) uses: std::cell::RefCell<Vec<(onsa_diag::Span, onsa_diag::Span)>>,
+    /// The earliest stage that failed in the unit of each def, as of the
+    /// last stage of the bodies that read it (`stages::check_bodies`).
+    pub(crate) failures: stages::Failures,
 }
 
 impl Analysis {
@@ -382,26 +389,8 @@ impl Analysis {
 /// Analyze a package and its dependencies (T2-1 .. T2-4).
 pub fn analyze(pkg: &Package) -> Analysis {
     let mut analysis = sig::collect_and_lower(pkg);
-    check_bodies(pkg, &mut analysis);
+    stages::check_bodies(pkg, &mut analysis);
     analysis
-}
-
-/// Body checking (T2-5 .. T2-12): type inference per spec §4.7, generics
-/// instantiation, second-class values and closures, argument modes and
-/// exclusivity, `rt` rules, scopes / shadowing (E0304), `const` evaluation,
-/// typed holes. It gets: `Analysis.defs` (every fn with `FnDef.body`, every
-/// flow with `FlowDef.body`, tests), `Analysis.types`, the scopes in
-/// `Analysis.modules` (`resolve_path` for paths in expressions; `Field`
-/// chains whose head is a module / flow / type name must be read as paths),
-/// `Analysis.modules.assoc` for methods and associated items, `kind_of`
-/// and `layout_of`. Diagnostics are pushed to `Analysis.diagnostics`; the
-/// driver keeps the first per item (P-01).
-pub fn check_bodies(pkg: &Package, analysis: &mut Analysis) {
-    names::body::walk_bodies(pkg, analysis);
-    body::check_all(pkg, analysis);
-    let moved = modes::check_all(pkg, analysis);
-    rt::check_all(pkg, analysis, &moved);
-    effects::check_all(pkg, analysis, &moved);
 }
 
 /// The module (file) a def was declared in.

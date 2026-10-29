@@ -17,16 +17,7 @@ use crate::{Analysis, DefId, Package, module_of_def};
 
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
     let mut diags = Vec::new();
-    let mut rt_fns: Vec<DefId> = Vec::new();
-    for (i, def) in a.defs.iter().enumerate() {
-        if let DefKind::Fn(f) = &def.kind
-            && f.rt
-            && f.body.is_some()
-            && a.bodies.get(&DefId(i as u32)).is_some_and(|b| b.complete)
-        {
-            rt_fns.push(DefId(i as u32));
-        }
-    }
+    let rt_fns: Vec<DefId> = (0..a.defs.len() as u32).map(DefId).filter(|&id| a.rt_checked(id)).collect();
     // Calls of each rt body, in source order: (span, callee) for rt callees.
     let mut edges: HashMap<DefId, Vec<(Span, DefId)>> = HashMap::new();
     for &id in &rt_fns {
@@ -127,10 +118,27 @@ fn rt_calls(pkg: &Package, a: &Analysis, id: DefId) -> Vec<(Span, DefId)> {
             Target::Fn { def, .. } | Target::Method { def, .. } => Some((ast.expr(*e).span, *def)),
             _ => None,
         })
-        .filter(|(_, d)| matches!(&a.def(*d).kind, DefKind::Fn(f) if f.rt && f.body.is_some()))
+        .filter(|(_, d)| a.rt_with_body(*d))
         .collect();
     out.sort_by_key(|(s, _)| s.start);
     out
+}
+
+impl Analysis {
+    /// `id` is an `rt` function with a body that the rt stage checks: typed
+    /// to its end, in a unit that did not fail in an earlier stage (§18.1).
+    /// Only the calls of such a function are edges of the rt recursion (§10
+    /// rule 5, S-776). The one test of it ([`check_all`], `crate::unread`).
+    pub(crate) fn rt_checked(&self, id: DefId) -> bool {
+        self.rt_with_body(id)
+            && self.bodies.get(&id).is_some_and(|b| b.complete)
+            && !self.failures.skips(id, Stage::Effects)
+    }
+
+    /// `id` is an `rt` function with a written body: a node of the rt calls.
+    pub(crate) fn rt_with_body(&self, id: DefId) -> bool {
+        matches!(&self.def(id).kind, DefKind::Fn(f) if f.rt && f.body.is_some())
+    }
 }
 
 /// E0901 for one rt body: the earliest violation in source order.

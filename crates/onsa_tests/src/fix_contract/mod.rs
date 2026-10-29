@@ -369,8 +369,8 @@ fn judge(
     let mut fresh: Vec<(Place, Code)> = Vec::new();
     let mut shown = Vec::new();
     for (d, unit) in after.analyzed.diagnostics.iter().zip(&after.analyzed.diagnostic_units) {
-        // SPEC-GAP(S-267): where the flow checks sit in the order decides whether a candidate
-        // of a flow code may leave a modes or effects diagnostic (`Stage::CHECK_ORDER`).
+        // The flow checks are before the modes and the effects (§18.1, S-267): a candidate of
+        // a flow code may leave a diagnostic of those (`Stage::CHECK_ORDER`).
         let early = d.stage.check_rank().is_some_and(|r| r <= rank);
         let hit = early
             && match unit {

@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§5.2", "§8.1", "§10"]
+
+// R-74, S-64 (W4-06): a unit with a modes error (E0711 a partial move, E0704 a second `move`)
+// is not checked for rt and effects (§18.1: the stages are syntax, names, types, flow, modes,
+// then rt and effects; a unit that failed at a stage does not go on to the later ones). The
+// unit's only mark is the modes error, whether the function is `fn` or `rt fn` and whether it has
+// `uses {Alloc}` or not. Before the fix the E0601 ("add `uses {Alloc}`") or the E0901 hid the
+// E0711 and the repair loop was led to a wrong edit.
+// The contrast (the same shapes without the modes error get the E0601 or E0901) is in the last
+// part of the file.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+// The partial move of a field out of an owned struct (§5.2): E0711 only.
+pub fn take_field(move s: Holder) -> Buf[F32] { s.buf }   //~ E0711
+
+pub fn take_field_alloc(move s: Holder) -> Buf[F32] uses {Alloc} { s.buf }   //~ E0711
+
+pub rt fn take_field_rt(move s: Holder) -> Buf[F32] { s.buf }   //~ E0711
+
+// The right way (destructuring the whole value) has no error.
+pub fn via_let(move s: Holder) -> Buf[F32] {
+  let Holder { buf: b, gain: _ } = move s
+  b
+}
+
+// A second `move` of an argument (E0704): the calls to `consume` need `Alloc` and are not `rt`,
+// which the effects and rt stages would report if they ran (E0601, E0901).
+pub fn consume(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn twice(move b: Buf[F32]) {
+  consume(move b)
+  consume(move b)               //~ E0704
+}
+
+pub rt fn twice_rt(move b: Buf[F32]) {
+  consume(move b)
+  consume(move b)               //~ E0704
+}
+
+// Contrast: the same shapes without a modes error get the effects and rt errors of the later
+// stages (one-line functions, so that the line of the mark does not depend on where the use is).
+pub fn once(move b: Buf[F32]) { consume(move b) }   //~ E0601
+
+pub rt fn once_rt(move b: Buf[F32]) { consume(move b) }   //~ E0901
+
+pub fn whole_dropped(move s: Holder) -> F32 { 1.0 }   //~ E0601
+
+pub rt fn whole_dropped_rt(move s: Holder) -> F32 { 1.0 }   //~ E0901
+
+pub fn slow(x: F32) -> F32 { x }
+
+pub rt fn calls_slow(x: F32) -> F32 { slow(x) }   //~ E0901
+
+// With `uses {Alloc}` and no modes error the `fn` is clean.
+pub fn whole_dropped_alloc(move s: Holder) -> F32 uses {Alloc} { 1.0 }

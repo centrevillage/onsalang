@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10"]
+
+// R-74, S-64 (W4-06): the E0902 of an `rt fn` with `Alloc` in its effect row (§10 rule 1) is an
+// error of the rt and effects stage (§10: "the checks of an `rt fn`", §18.1), so a unit with a
+// modes error (E0711, E0704) does not report it. Kept apart from unit_stage_modes_stops_rt.onsa
+// because §18.1 does not name E0902 in its list of the stages (the rule 1 is decided by the
+// effect row alone, §10); the reading here is "rt stage".
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn take_field_rt_alloc(move s: Holder) -> Buf[F32] uses {Alloc} { s.buf }   //~ E0711
+
+pub fn consume(move b: Buf[F32]) uses {Alloc} {}
+
+pub rt fn twice_rt_alloc(move b: Buf[F32]) uses {Alloc} {
+  consume(move b)
+  consume(move b)               //~ E0704
+}
+
+// Contrast: without a modes error the E0902 is reported.
+pub rt fn has_alloc() uses {Alloc} {}   //~ E0902
+
+pub rt fn once_rt_alloc(move b: Buf[F32]) uses {Alloc} {   //~ E0902
+  consume(move b)
+}

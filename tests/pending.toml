@@ -198,13 +198,6 @@ note = "発散の後の到達しない文（W5-08）と、前の腕で覆われ�
 
 [[pending]]
 kind = "diag-code"
-target = "E0703"
-reasons = ["S-100", "S-103"]
-until = "W4-09"
-note = "呼び出し位置のモード。末尾の式の move（S-100）、for … in move の範囲（S-103）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0715"
 reasons = ["R-24", "R-110", "R-118", "S-42"]
 until = "W4-10"

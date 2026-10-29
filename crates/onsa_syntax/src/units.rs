@@ -109,6 +109,27 @@ impl Units {
     /// diagnostics (start, end, code, message), then of `diagnostics`. A
     /// diagnostic of no check stage or outside every unit has none.
     pub fn choose(&self, diagnostics: &[&Diagnostic]) -> Vec<(Option<usize>, bool)> {
+        let (assigned, _) = self.assign(diagnostics);
+        // Both the E0020 of a form and the E0002 of its place may be found at
+        // one token (`1.` among the items): the order chooses, here alone.
+        let key = |i: usize| (diagnostics[i].unit_order(), i);
+        let mut best: Vec<Option<usize>> = vec![None; self.list.len()];
+        for (i, a) in assigned.iter().enumerate() {
+            if let Some(u) = *a
+                && best[u].is_none_or(|b| key(i) < key(b))
+            {
+                best[u] = Some(i);
+            }
+        }
+        assigned.iter().enumerate().map(|(i, &a)| (a, a.is_some_and(|u| best[u] == Some(i)))).collect()
+    }
+
+    /// For each of `diagnostics` of a check stage, its unit, and for each
+    /// unit whether its heading has one (§18.1): the one assignment that
+    /// [`Self::choose`] and the record of the failed stages
+    /// (`onsa_sema::stages`) read. A diagnostic of a member goes to the unit
+    /// of its item when the heading of the item has one.
+    pub fn assign(&self, diagnostics: &[&Diagnostic]) -> (Vec<Option<usize>>, Vec<bool>) {
         let mut assigned: Vec<Option<usize>> = diagnostics
             .iter()
             .map(|d| {
@@ -132,18 +153,7 @@ impl Units {
                 *a = Some(p);
             }
         }
-        // Both the E0020 of a form and the E0002 of its place may be found at
-        // one token (`1.` among the items): the order chooses, here alone.
-        let key = |i: usize| (diagnostics[i].unit_order(), i);
-        let mut best: Vec<Option<usize>> = vec![None; self.list.len()];
-        for (i, a) in assigned.iter().enumerate() {
-            if let Some(u) = *a
-                && best[u].is_none_or(|b| key(i) < key(b))
-            {
-                best[u] = Some(i);
-            }
-        }
-        assigned.iter().enumerate().map(|(i, &a)| (a, a.is_some_and(|u| best[u] == Some(i)))).collect()
+        (assigned, heading_error)
     }
 
     /// What a check reads again for the edits at `spans` (§18.1, S-537): the

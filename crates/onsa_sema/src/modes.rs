@@ -27,7 +27,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
     };
     for id in keys {
         let body = &a.bodies[&id];
-        if !body.complete {
+        // Nor is a body whose unit failed in an earlier stage (§18.1).
+        if !body.complete || a.failures.skips(id, Stage::Modes) {
             continue;
         }
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);

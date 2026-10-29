@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1"]
+
+// S-776 (W4-06): an rt recursion through a unit that failed at an earlier stage.
+// A unit with a name error in its heading (E0302, the names stage) is not checked for rt, so its
+// calls are no edges of an rt recursion (§10 rule 5: "the calls of a unit that failed at an
+// earlier stage (§18.1) do not count in the cycle; it is reported after that unit is fixed").
+// The clean units of the cycle get no E0903; the only mark is the E0302 of the failed unit.
+// A cycle with no failed unit reports E0903 (negative/rt.onsa); at which call is S-778, open.
+
+// A mutual cycle d -> c -> d, where c has a name error in a parameter type.
+pub rt fn d(n: I32) -> I32 {
+  if n == 0 { 0 } else { c(n - 1, 0) }
+}
+
+pub rt fn c(n: I32, q: Nope) -> I32 {   //~ E0302
+  if n == 0 { 0 } else { d(n - 1) }
+}
+
+// The failed unit sits in the middle of a longer cycle (a1 -> b1 -> e1 -> a1) and its name
+// error is in the return type.
+pub rt fn a1(n: I32) -> I32 {
+  b1(n - 1)
+}
+
+pub rt fn b1(n: I32) -> Nope {   //~ E0302
+  e1(n - 1)
+}
+
+pub rt fn e1(n: I32) -> I32 {
+  a1(n - 1)
+}
+
+// A failed unit that calls itself: no E0903 (only the E0302).
+pub rt fn self_call(n: I32, q: Nope) -> I32 {   //~ E0302
+  self_call(n - 1, q)
+}
+
+// A clean rt fn that calls a failed unit without being on a cycle: nothing is reported for it.
+pub rt fn leaf(n: I32, q: Nope) -> I32 {   //~ E0302
+  n
+}
+
+pub rt fn caller(n: I32) -> I32 {
+  leaf(n, 0)
+}

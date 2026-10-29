@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1"]
+
+// S-776 (W4-06): an rt recursion through a unit that failed at an earlier stage.
+// A unit with a type error in its body (E0401, the types stage) is not checked for rt, so its
+// calls are no edges of an rt recursion (§10 rule 5: "the calls of a unit that failed at an
+// earlier stage (§18.1) do not count in the cycle; it is reported after that unit is fixed").
+// The clean units of the cycle get no E0903; the only mark is the E0401 of the failed unit.
+// A cycle with no failed unit reports E0903 (negative/rt.onsa); at which call is S-778, open.
+
+// A mutual cycle d -> c -> d, where c has a type error in its body.
+pub rt fn d(n: I32) -> I32 {
+  if n == 0 { 0 } else { c(n - 1) }
+}
+
+pub rt fn c(n: I32) -> I32 {
+  let b: Bool = 1               //~ E0401
+  if n == 0 { 0 } else { d(n - 1) }
+}
+
+// The failed unit sits in the middle of a longer cycle (a1 -> b1 -> e1 -> a1).
+pub rt fn a1(n: I32) -> I32 {
+  b1(n - 1)
+}
+
+pub rt fn b1(n: I32) -> I32 {
+  let flag: Bool = 2            //~ E0401
+  e1(n - 1)
+}
+
+pub rt fn e1(n: I32) -> I32 {
+  a1(n - 1)
+}
+
+// A failed unit that calls itself: no E0903 (only the E0401).
+pub rt fn self_call(n: I32) -> I32 {
+  let flag: Bool = 3            //~ E0401
+  self_call(n - 1)
+}
+
+// A clean rt fn that calls a failed unit without being on a cycle: nothing is reported for it.
+pub rt fn leaf(n: I32) -> I32 {
+  let flag: Bool = 4            //~ E0401
+  n
+}
+
+pub rt fn caller(n: I32) -> I32 {
+  leaf(n)
+}

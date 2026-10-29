@@ -214,9 +214,9 @@ pub fn run_tests(
         if unsupported.is_empty() {
             return TestRun::Ran(run_selected(module, &selected));
         }
-        // SPEC-GAP(S-309): a use that several tests, or several instances of
-        // a generic function, reach is one E0200: the same position, code and
-        // message are reported once.
+        // A use that several tests, or several instances of a generic
+        // function, reach is one E0200: the same position, code and message
+        // are reported once (§18.1, S-309).
         let mut diagnostics = reduce::exact(unsupported.iter().map(onsa_interp::Unsupported::diagnostic).collect());
         fill_found(sources, &mut diagnostics);
         debug_contract(sources, &diagnostics);

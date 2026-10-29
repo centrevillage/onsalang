@@ -278,10 +278,11 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         if a.failed.contains_key(&id) {
             continue;
         }
-        // Nor is a body whose names have an error (§18.1): the names stage
-        // reported it.
+        // Nor is a body whose unit failed in the names stage (§18.1, S-78: in
+        // its signature too), or whose names walk stopped at an error it
+        // reported (its record ends there).
         let names = a.names.remove(&id).unwrap_or_default();
-        if names.reported {
+        if names.reported || a.failures.skips(id, Stage::Types) {
             let body = BodyInfo::default();
             match a.defs[i].kind {
                 DefKind::Flow(_) => drop(a.flows.insert(id, crate::flow::FlowInfo { body, ..Default::default() })),

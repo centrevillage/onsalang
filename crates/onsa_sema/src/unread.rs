@@ -23,9 +23,11 @@ impl Analysis {
     /// types ([`Analysis::reached`]), and a def whose body has an expression
     /// or a local of such a type, refers to such a def, or was not checked to
     /// its end (`complete == false`) or read what the check does not read
-    /// ([`BodyInfo::read_unread`]).
+    /// ([`BodyInfo::read_unread`]), and an rt function an E0903 held back
+    /// may be reported in ([`Self::rt_held`]).
     pub fn unread_users(&self, files: &[FileId]) -> Vec<Span> {
         let reached = self.reached();
+        let rt_held = self.rt_held();
         let mut memo = self.held_alias_types();
         let mut out = Vec::new();
         for (i, def) in self.defs.iter().enumerate().filter(|(_, d)| files.contains(&d.span.file)) {
@@ -33,6 +35,7 @@ impl Analysis {
             let body = self.bodies.get(&id).map(|b| (b, b.complete));
             let body = body.or_else(|| self.flows.get(&id).map(|f| (&f.body, f.complete && f.body.complete)));
             let uses = reached.contains(&id)
+                || rt_held.contains(&id)
                 || body.is_some_and(|(b, complete)| {
                     !complete || b.read_unread || self.body_reaches(b, &reached, &mut memo)
                 });
@@ -46,8 +49,8 @@ impl Analysis {
     /// The defs the unread reaches: those read in part (S-260), whose
     /// derive list is not known (S-460), that read a name held as an error
     /// (whether their check was held or not, [`Analysis::read_held`]) or rt
-    /// functions whose body the check did not finish (its calls make no edges
-    /// of the rt recursion), and those whose declared types hold
+    /// functions whose calls are not all edges of the rt recursion
+    /// ([`Self::rt_unread`]), and those whose declared types hold
     /// [`Ty::Error`], the type of an alias that read a held name
     /// ([`Self::held_alias_types`]) or a def it reaches. A fixed point: each
     /// round adds a def or ends, so there are at most as many rounds as defs.
@@ -60,14 +63,7 @@ impl Analysis {
                     DefKind::Enum(e) => e.derives.is_none(),
                     _ => false,
                 };
-                // An rt function whose written body the check did not finish
-                // or read what it does not read (a call on a value of the error
-                // type, `v.f()`, has no callee, even in a body checked to its end):
-                // its calls are no edges of the rt recursion (`rt::check_all`),
-                // so an E0903 through it was held back (X-3/U1c/b, F1).
-                let rt_unread = matches!(&self.def(id).kind, DefKind::Fn(f) if f.rt && f.body.is_some())
-                    && !self.bodies.get(&id).is_some_and(|b| b.complete && !b.read_unread);
-                derives || rt_unread || self.partly_read(id) || self.read_held.contains(&id)
+                derives || self.rt_unread(id) || self.partly_read(id) || self.read_held.contains(&id)
             })
             .collect();
         loop {
@@ -82,6 +78,44 @@ impl Analysis {
             }
             set.extend(more);
         }
+    }
+
+    /// An rt function whose calls are not all edges of the rt recursion: the
+    /// rt stage did not check it ([`Analysis::rt_checked`]), or its body read
+    /// what the check does not read (a call on a value of the error type,
+    /// `v.f()`, has no callee, even in a body checked to its end). An E0903
+    /// through it was held back (X-3/U1c/b, F1; S-776).
+    fn rt_unread(&self, id: DefId) -> bool {
+        self.rt_with_body(id) && (!self.rt_checked(id) || self.bodies.get(&id).is_some_and(|b| b.read_unread))
+    }
+
+    /// The rt functions that reach one of [`Self::rt_unread`] by the calls of
+    /// the rt bodies (§10 rule 5): the E0903 held back is reported at the
+    /// first call of its cycle, which may be in any of them, not only in a
+    /// caller of it. A search back from those functions over the calls,
+    /// each function and call once: O(V + E) for V functions and E calls,
+    /// and it ends, as each function is pushed at most once.
+    fn rt_held(&self) -> HashSet<DefId> {
+        let mut callers: HashMap<DefId, Vec<DefId>> = HashMap::new();
+        for (&id, b) in self.bodies.iter().filter(|(id, _)| self.rt_with_body(**id)) {
+            for t in b.targets.values() {
+                if let Target::Fn { def, .. } | Target::Method { def, .. } = t
+                    && self.rt_with_body(*def)
+                {
+                    callers.entry(*def).or_default().push(id);
+                }
+            }
+        }
+        let mut todo: Vec<DefId> = (0..self.defs.len() as u32).map(DefId).filter(|&id| self.rt_unread(id)).collect();
+        let mut held: HashSet<DefId> = todo.iter().copied().collect();
+        while let Some(d) = todo.pop() {
+            for &c in callers.get(&d).into_iter().flatten() {
+                if held.insert(c) {
+                    todo.push(c);
+                }
+            }
+        }
+        held
     }
 
     /// The types a def declares: of the parameters and the result, the

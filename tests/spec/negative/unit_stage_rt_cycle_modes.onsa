@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1", "§5.2"]
+
+// S-776 (W4-06): an rt recursion through a unit that failed at an earlier stage.
+// A unit with a modes error (E0704, a second `move` of an argument, §5.2) is not checked for rt,
+// so its calls are no edges of an rt recursion (§10 rule 5: "the calls of a unit that failed at an
+// earlier stage (§18.1) do not count in the cycle; it is reported after that unit is fixed").
+// The clean units of the cycle get no E0903; the only mark is the E0704 of the failed unit.
+// A cycle with no failed unit reports E0903 (negative/rt.onsa); at which call is S-778, open.
+// (A cycle that passes an owned `Buf` through every unit is the way to make an `rt fn` with a
+// `move` argument that needs no `Alloc`: every unit hands the value on.)
+
+pub fn take(move q: Buf[F32]) uses {Alloc} {}
+
+// A mutual cycle d -> c -> d, where c moves its argument twice.
+pub rt fn d(n: I32, move q: Buf[F32]) -> I32 {
+  c(n - 1, move q)
+}
+
+pub rt fn c(n: I32, move q: Buf[F32]) -> I32 {
+  let a = d(n - 1, move q)
+  a + d(n - 1, move q)          //~ E0704
+}
+
+// The failed unit sits in the middle of a longer cycle (a1 -> b1 -> e1 -> a1).
+pub rt fn a1(n: I32, move q: Buf[F32]) -> I32 {
+  b1(n - 1, move q)
+}
+
+pub rt fn b1(n: I32, move q: Buf[F32]) -> I32 {
+  let a = e1(n - 1, move q)
+  a + e1(n - 1, move q)         //~ E0704
+}
+
+pub rt fn e1(n: I32, move q: Buf[F32]) -> I32 {
+  a1(n - 1, move q)
+}
+
+// A failed unit that calls itself: no E0903 (only the E0704).
+pub rt fn self_call(n: I32, move q: Buf[F32]) -> I32 {
+  let a = self_call(n - 1, move q)
+  a + self_call(n - 1, move q)  //~ E0704
+}
+
+// A clean rt fn that calls a failed unit without being on a cycle: nothing is reported for it.
+pub rt fn leaf(n: I32, move q: Buf[F32]) -> I32 {
+  take(move q)
+  take(move q)                  //~ E0704
+  n
+}
+
+pub rt fn caller(n: I32, move q: Buf[F32]) -> I32 {
+  leaf(n, move q)
+}
