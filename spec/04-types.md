@@ -163,6 +163,7 @@ pub struct Ring[T, const N: U32] {
 | Shared | `Str` `Bytes` `Array` `Map` `Set`、それらを含む型 | 参照カウントで共有、書き込み時コピー | 参照カウントを減らし、0 なら解放（`Alloc`） |
 | Affine | `Buf`、`Drop` 実装型、flow の状態（`f.State`）、それらを含む型 | 不可（ムーブのみ） | 中身の破棄、`Drop` |
 
+- Shared の部分と Affine の部分を両方含む型（`struct M { name: Str, buf: Buf[F32] }`）は Affine である（複製できない部分を含むので、全体も複製できない）。
 - `Copy`（種が Copy）と `Dup`（複製できる、つまり Copy か Shared）は **種の制約** で、trait ではない。書けるのは境界（`[T: Copy]`、`[T: ?Dup]`、§4.5）と trait の要求（`AnyNum: Copy + …`、§6.3）だけで、trait と同じく `+` で並べる。満たさなければ E0416。
 - 種は構造で決まるので、`impl Copy for X` と宣言の `: Copy`（`Dup` も同じ）は書かない（E0020。修正候補は外す形で、note で種の規則を示し、Copy でないフィールドがあれば名指しする）。明示して Copy を付ける言語の書き方で、書き手が種の仕組みを誤解していることを示すからである（P2）。Shared と Affine は境界に書く名前を持たない（Affine も受けるのは `?Dup`、§4.5）。
 
