@@ -1,0 +1,22 @@
+pub enum Tree {
+  Leaf,
+  Node(Array[Tree]),
+}
+
+pub struct Mp {
+  m: Option[Map[U32, U32]],
+}
+
+pub struct Two[T, U] {
+  a: T,
+  b: U,
+}
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+pub struct Bad {
+  a: Set[Span[F32]],   //~ E0710
+}

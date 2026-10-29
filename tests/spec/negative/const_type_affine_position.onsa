@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.6", "§6.3", "§18.1"]
+
+// S-610, S-755, R-85 (W4-05 U4b; §6.6: "`Map` / `Set` は表の配置が実装に依存するので対象外で、Affine の型を含む型も置けない
+// (E0407)…この判定は宣言の型だけで決まり、値の検査より先に行う。位置は宣言の型で、値に失敗した名前があっても報告する"):
+// a `const` of a type that holds a `Map`, a `Set` or an Affine value (a `Buf`, and a type that has one inside; a type
+// that implements `Drop` is in negative/const_type_affine_drop.onsa) is E0407 at the declared type, and not at the
+// value as it was before. The value is on the next line in these cases and the marker is on the line of the type.
+// The judgement is of the type alone and is before the check of the value, so a value of a wrong type
+// (`const C: Buf[F32] = 1`) is the E0407 of the type and not the E0401 of the value (both are of the types stage and
+// the declared type is the first by place, S-755). The types that hold a Shared value are the E0200 of
+// negative/const_type_shared.onsa; these are not placeable in any version.
+// One error per item (P-01).
+
+type Samples = Buf[F32]
+
+pub struct HoldsBuf {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+const BUF_WITH_A_WRONG_VALUE: Buf[F32] =   //~ E0407
+  1
+
+const BUF_WITH_A_RIGHT_VALUE: Buf[F32] =   //~ E0407
+  Buf.zeroed(4)
+
+const MAP: Map[U32, U32] =   //~ E0407
+  1
+
+const SET: Set[U32] =   //~ E0407
+  1
+
+const TUPLE_WITH_A_BUF: (U32, Buf[F32]) =   //~ E0407
+  (1, 2)
+
+const OPTION_OF_A_SET: Option[Set[U32]] =   //~ E0407
+  None
+
+const ARRAY_OF_MAPS: Array[Map[U32, U32]] =   //~ E0407
+  0
+
+const FIXED_ARRAY_OF_BUFS: [Buf[F32]; 2] =   //~ E0407
+  0
+
+const STRUCT_WITH_A_BUF: HoldsBuf =   //~ E0407
+  1
+
+const ALIASED: Samples =   //~ E0407
+  1
+
+pub const PUBLIC_BUF: Buf[F32] =   //~ E0407
+  1
+
+impl HoldsBuf {
+  const ASSOCIATED_BUF: Buf[F32] =   //~ E0407
+    1
+
+  pub const ASSOCIATED_MAP: Map[U32, U32] =   //~ E0407
+    1
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  const ASSOCIATED_SET: Set[U32] =   //~ E0407
+    1
+}

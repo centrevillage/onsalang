@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// S-747 (W4-05 U4b; §4.5: "同じ並びに同じ境界を二度書く形(`T: Copy + Copy`、`T: ?Dup + ?Dup`)…は E0416 で、並びを前から
+// 読んで前の要素と重なるか矛盾する最初の要素に付け、前の要素を note で示す"): a bound that is written twice in the same list
+// is an error of the bound, E0416, with no candidate (`fixes = 0`: which of the two to drop is the writer's). It is on
+// the first element that overlaps one before it, so the later one of two: the list is read from the front, and a
+// marker is on the line of that element in the cases that put the elements on two lines. It is one error per unit
+// (§18.1), so a third copy is not another. Traits and kind constraints alike (`Show`, `Copy`, `Num`), and `?Dup`
+// twice. The elements need not be next to each other. Every place that has a list of bounds: a function, a method, a
+// struct, an enum and the `[ ]` of an `impl`; and in a list of several type parameters, the one that has it.
+// Two type parameters that have the same bound are two lists (`[T: Copy, U: Copy]`) and are fine, and so is a bound
+// that another bound implies; both are in types/bounds_sequence_fine.onsa, and the bounds that are names-stage errors
+// are in types/bounds_maybe_names.onsa.
+// One error per item (P-01).
+
+pub fn copy_twice[T: Copy + Copy](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn show_twice[T: Show +
+  Show](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn num_twice[T: Num +
+  Num](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_dup_twice[T: ?Dup +
+  ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn not_next_to_each_other[T: Num + Show +
+  Num](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn three_copies[T: Show + Show +   //~ E0416
+  Show](x: T) -> U32 {
+  0
+}
+
+pub fn the_first_that_overlaps[T: Copy + Show + Show +   //~ E0416
+  Copy](x: T) -> U32 {
+  0
+}
+
+pub fn in_the_second_parameter[T: Show, U: Num +
+  Num](x: T, y: U) -> U32 {   //~ E0416
+  0
+}
+
+pub struct SeveralOfOne[T: Show + Show] {   //~ E0416
+  a: T,
+}
+
+pub enum SeveralOfOneEnum[T: Copy + Copy] {   //~ E0416
+  One(T),
+  Nothing,
+}
+
+pub struct MaybeDupTwice[T: ?Dup + ?Dup] {   //~ E0416
+  a: T,
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T: Show + Show] Holder[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn method_with_two[T: Num + Num](self, x: T) -> U32 {   //~ E0416
+    self.n
+  }
+}

@@ -146,6 +146,15 @@ impl<'p> Sema<'p> {
                         known => self.lower_type_arg(cx, x, known.flatten().copied().flatten()),
                     })
                     .collect();
+                // A type of a cycle with its count is the error type; its
+                // arguments are judged as written (R-327).
+                if let Entity::Def(d) = entity
+                    && self.a.decls.cyclic.contains(&d)
+                    && declared.as_ref().is_some_and(|p| !p.is_empty() && p.len() == lowered_args.len())
+                {
+                    let would_be = self.a.types.intern(Ty::Named(d, lowered_args.clone()));
+                    self.a.decls.cyclic_at.insert((cx.m, t), would_be);
+                }
                 self.type_of_entity(cx, entity, lowered_args, te.span, path)
             }
             TypeKind::ConstArg(_) => {

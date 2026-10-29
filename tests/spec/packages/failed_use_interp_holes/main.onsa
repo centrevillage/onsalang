@@ -1,13 +1,15 @@
 // onsa.toml
 // [test]
-// spec = ["§18.1", "§15.1", "§2.4"]
+// spec = ["§18.1", "§15.1", "§2.4", "§6.6"]
 
 // R-270, S-462: a `use` that fails in the names stage (the module has no such item, a step of the path
 // is not there, the head is not a module) makes the names it would have bound failed names, and a
 // failed name written in a hole of an interpolation is silent, as a failed name is where an expression
 // uses it (§18.1: "失敗した名前を使う所に診断は出ない"). The path after the failed head (`{KK.a}`,
-// `{gone.a.0}`) is not read either. The only diagnostics here are the E0302 of the `use` lines; the
-// hole is no E0302 "cannot find ... for the interpolation". A hole of an unknown name that no `use`
+// `{gone.a.0}`) is not read either. The diagnostics here are the E0302 of the `use` lines and the E0200 of the
+// type of `IN_A_CONST` (S-755, W4-05 U4b: a `const` of a type that holds a Shared value, `Str`, is this version's
+// E0200, judged from the declared type alone, §6.6, so a failed name in the value does not hide it; the other
+// holes are no E0302 "cannot find ... for the interpolation"). A hole of an unknown name that no `use`
 // lost stays E0302 (negative/interp_hole_unresolved.onsa), and a hole of the name a good `use` took
 // is as always (`{REAL}`), also next to a failed one.
 use util.{REAL}
@@ -108,7 +110,7 @@ impl P {
   }
 }
 
-pub const IN_A_CONST: Str = "{KK}"
+pub const IN_A_CONST: Str = "{KK}"                  //~ E0200
 
 test "a failed name in a hole of a test" {
   let s = "{KK}"

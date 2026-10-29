@@ -182,8 +182,10 @@ impl Bounds<'_> {
                     Bound::PartialOrd => derived(crate::def::Derive::PartialOrd) || derived(crate::def::Derive::Ord),
                     Bound::Ord => derived(crate::def::Derive::Ord),
                     Bound::Default => derived(crate::def::Derive::Default),
-                    // `Hash` and `Show` are not derived in this version (W5-06).
-                    Bound::Hash | Bound::Show => derives.is_none(),
+                    // `Hash` and `Show` are E0200 in this version (W5-06): written,
+                    // they are met (R-328).
+                    Bound::Hash => derived(crate::def::Derive::Hash),
+                    Bound::Show => derived(crate::def::Derive::Show),
                     _ => {
                         let _ = args;
                         false

@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§6.3"]
+
+// S-747 (W4-05 U4b), S-711; §4.5: "含意で重なる形(`Float + Num`)は誤りでない": the right forms next to the errors of
+// types/bounds_overlap.onsa, types/bounds_contradiction.onsa and types/bounds_maybe_other.onsa. A bound that another
+// bound implies is not a second copy of it (a numeric trait needs `Num`, `Float` needs `Num`, `Ord` needs
+// `PartialOrd`; a numeric trait and `Copy` also: §6.3), because the writer wrote two different names and the
+// meaning of the list is one. The same bound in two lists (two type parameters, a type and its `impl`) is two
+// lists. A `?Dup` next to a bound that does not need `Dup` (`Show`) says what it means. All of them are used,
+// with a value that meets the bounds.
+
+pub struct Pair[T: Copy, U: Copy] {
+  a: T,
+  b: U,
+}
+
+pub struct Both[T: Show, U: Show] {
+  a: T,
+  b: U,
+}
+
+pub struct Free[T: ?Dup, U: ?Dup] {
+  a: T,
+  b: U,
+}
+
+pub fn float_and_num[T: Float + Num](x: T) -> T {
+  x
+}
+
+pub fn ord_and_partial_ord[T: Ord + PartialOrd](x: T) -> T {
+  x
+}
+
+pub fn num_and_copy[T: Num + Copy](x: T) -> T {
+  x
+}
+
+pub fn copy_and_show[T: Copy + Show](x: T) -> T {
+  x
+}
+
+pub fn maybe_dup_and_show[T: ?Dup + Show](x: T) -> U32 {
+  0
+}
+
+pub fn show_and_maybe_dup[T: Show + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn two_lists_with_one_bound[T: Copy, U: Copy](x: T, y: U) -> T {
+  x
+}
+
+pub fn two_free_parameters[T: ?Dup, U: ?Dup](x: T, y: U) -> U32 {
+  0
+}
+
+impl[T: Copy, U: Copy] Pair[T, U] {
+  pub fn first(self) -> T {
+    self.a
+  }
+}
+
+impl[T: Show, U: Show] Both[T, U] {
+  pub fn tag() -> U32 {
+    1
+  }
+}
+
+pub fn uses_float(f: F32) -> F32 {
+  float_and_num(f)
+}
+
+pub fn uses_ord(n: I32) -> I32 {
+  ord_and_partial_ord(n)
+}
+
+pub fn uses_num(n: I32) -> I32 {
+  num_and_copy(n)
+}
+
+pub fn uses_show(n: I32) -> I32 {
+  copy_and_show(n)
+}
+
+pub fn uses_pair(p: Pair[I32, F32]) -> I32 {
+  p.first()
+}
+
+pub fn uses_free(n: I32) -> U32 {
+  maybe_dup_and_show(n)
+}

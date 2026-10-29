@@ -26,6 +26,7 @@ use crate::def::*;
 use crate::resolve::{Builtin, Entity, NameKind};
 use crate::ty::*;
 use crate::{Analysis, Module, Package, flatten};
+mod bound_list;
 mod decls;
 mod flow_sig;
 mod generated;
@@ -34,7 +35,7 @@ mod wellformed;
 
 use flow_sig::FlowHeading;
 
-pub(crate) use decls::Decls;
+pub(crate) use decls::{Decls, item_kind};
 pub(crate) use types::lower_type_in_body;
 pub(crate) use wellformed::Pos;
 
@@ -550,8 +551,8 @@ impl<'p> Sema<'p> {
         for g in gs {
             let def = match g {
                 GenericParam::Type { name, bounds } => {
-                    let mut bs = Vec::new();
-                    let mut dup = true;
+                    // The bounds read, each with its `?` and its name (S-747).
+                    let mut list = Vec::new();
                     let mut unknown = false;
                     // The path of a bound is resolved as any other (§15.1,
                     // R-278): a trait of the prelude, or a kind constraint; a
@@ -560,13 +561,20 @@ impl<'p> Sema<'p> {
                     for b in bounds {
                         let n = b.path.segments.last().unwrap();
                         match heading_name(self.a, cx.m, &b.path, (&listed, &cx.locals), cx.self_ty) {
-                            Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => dup = false,
-                            Ok((_, Some(Entity::Builtin(Builtin::Kind(bound))))) => bs.push(bound),
+                            Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => {
+                                list.push((Bound::Dup, true, n.span));
+                            }
+                            // `?` on another trait or kind constraint (S-711).
+                            Ok((NameKind::Trait | NameKind::KindConstraint, _)) if b.relaxed => {
+                                self.report(cx.def, bound_list::relaxed(n));
+                                unknown = true;
+                            }
+                            Ok((_, Some(Entity::Builtin(Builtin::Kind(bound))))) => list.push((bound, false, n.span)),
                             // A trait this version does not take as a bound
                             // (E0200; with an E0308 in the unit, the first by
                             // its place, §18.1, S-731).
                             Ok((_, Some(Entity::Builtin(Builtin::Trait(i))))) => match TRAITS[i as usize].1 {
-                                Some(bound) => bs.push(bound),
+                                Some(bound) => list.push((bound, false, n.span)),
                                 None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             },
                             Ok((NameKind::Trait, _)) => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
@@ -586,6 +594,10 @@ impl<'p> Sema<'p> {
                             }
                         }
                     }
+                    // A list with a contradiction is unknown to its users (S-747).
+                    unknown |= self.bound_list(cx.def, &list);
+                    let bs = list.iter().filter(|b| !b.1).map(|b| b.0).collect();
+                    let dup = !list.iter().any(|b| b.1);
                     let kind = GenericKind::Type { bounds: bs, dup, unknown };
                     GenericDef { name: name.name.clone(), span: name.span, kind }
                 }
@@ -627,9 +639,13 @@ impl<'p> Sema<'p> {
                 underivable.push(p);
                 continue;
             };
-            match (DERIVABLE.iter().find(|(name, _)| *name == n.name), kind_constraint(p)) {
-                (Some((_, Some(d))), _) => out.push(*d),
-                (Some((_, None)), _) => self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]),
+            match (DERIVABLE.iter().find(|(name, ..)| *name == n.name), kind_constraint(p)) {
+                (Some(&(_, d, now)), _) => {
+                    if !now {
+                        self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]);
+                    }
+                    out.push(d);
+                }
                 (None, Some(dup)) => {
                     let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_derive(cx, paths, k)]);
                     if let Some(at) = self.keep(cx.def, d) {
@@ -644,7 +660,7 @@ impl<'p> Sema<'p> {
             underivable.into_iter().partition(|p| self.a.record_if_held(cx.def, cx.m, p));
         for span in underivable.into_iter().map(|p| p.span) {
             let name = src(cx, span);
-            let list: Vec<String> = DERIVABLE.iter().map(|(name, _)| format!("`{name}`")).collect();
+            let list: Vec<String> = DERIVABLE.iter().map(|(name, ..)| format!("`{name}`")).collect();
             self.report(
                 cx.def,
                 Diagnostic::new(Stage::Types, Code::E0416, span, format!("`{name}` cannot be derived"))
@@ -823,17 +839,17 @@ fn heading_locals(
 }
 
 /// The derivable traits (§6.4, S-34), in the order of the spec: the closed
-/// list, and what each is in this version (`None`: E0200, S-13, S-145). The
-/// one list of their names.
-const DERIVABLE: [(&str, Option<Derive>); 8] = [
-    ("PartialEq", Some(Derive::PartialEq)),
-    ("Eq", Some(Derive::Eq)),
-    ("PartialOrd", Some(Derive::PartialOrd)),
-    ("Ord", Some(Derive::Ord)),
-    ("Hash", None),
-    ("Show", None),
-    ("Default", Some(Derive::Default)),
-    ("Ordinal", None),
+/// list, and whether this version derives each (`false`: E0200, S-13,
+/// S-145). The one list of their names.
+const DERIVABLE: [(&str, Derive, bool); 8] = [
+    ("PartialEq", Derive::PartialEq, true),
+    ("Eq", Derive::Eq, true),
+    ("PartialOrd", Derive::PartialOrd, true),
+    ("Ord", Derive::Ord, true),
+    ("Hash", Derive::Hash, false),
+    ("Show", Derive::Show, false),
+    ("Default", Derive::Default, true),
+    ("Ordinal", Derive::Ordinal, false),
 ];
 
 /// The candidate that takes the trait `k` of the head `paths` out (§4.6,

@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.5", "§4.6", "§12.8"]
+
+// S-610, R-85 (W4-05 U4b, table 5 of the work file: "宣言の型が型パラメータを含み、`T` が `Copy` の境界を持たない
+// ときは E0200(Shared でありうる。この版)"; §6.6: "この版では、Shared を含む型の `const` は E0200 である"): the declared
+// type of an associated constant of an `impl` that has a type parameter (`impl[T] Holder[T] { const NONE: Option[T] }`)
+// is judged by the kind that the type parameter is known to have. `T` with no `Copy` bound may be a Shared value
+// (`Str`, ...), which a `const` of this version does not place, so the declared type that holds it is E0200, at the
+// declared type (the value is on the next line, and the marker is on the line of the type); with `T: Copy`, `T: Num`
+// or `T: Float` it is Copy and the type is fine (types/const_type_fine.onsa). A type parameter that holds
+// a Shared value is the same in a tuple, an array and an `Option`, and for the bounds that do not give `Copy`
+// (`T: Show`, `T: Dup`). One error per unit: each constant is its own.
+// One error per item (P-01).
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T] Holder[T] {
+  pub const NONE: Option[T] =   //~ E0200
+    None
+}
+
+impl[T] Holder[T] {
+  pub const TWO_NONES: [Option[T]; 2] =   //~ E0200
+    [None, None]
+
+  pub const TAGGED: (Option[T], U32) =   //~ E0200
+    (None, 1)
+}
+
+impl[T: Show] Holder[T] {
+  pub const NONE_OF_A_SHOW: Option[T] =   //~ E0200
+    None
+}
+
+impl[T: Dup] Holder[T] {
+  pub const NONE_OF_A_DUP: Option[T] =   //~ E0200
+    None
+}
+
+// The constants of the same `impl` whose types do not hold `T` are fine, and the error of one is not the others'.
+impl[T] Holder[T] {
+  pub const COUNT: U32 = 4
+}

@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1", "§4.5", "§5.3"]
+
+// §18.1 and §6.6 (W4-05 U4b): a declaration with an error (the field `Buf[Str]` of `W1` is the E0416, the field
+// `Set[Span[F32]]` of `W4` is the E0710, a variant of an `enum` the same) still has its name, and a part it could
+// not read is an error type; what uses it gets no diagnostic. So the type of a `const` that is such a declaration,
+// or holds one (`Option[W1]`, `[W4; 2]`, a tuple, an alias, an associated constant), gets neither the E0407 (the
+// field is an Affine `Buf` or a never placed `Set` as it was written) nor an error in its value. The errors are
+// those of the declarations, one each. A `const` of the same shape with a sound declaration is the E0407 of its
+// own (`ok_holder`), to see that the judgement is not off for these types.
+
+pub struct W1 {
+  a: Buf[Str],   //~ E0416
+}
+
+pub struct W4 {
+  a: Set[Span[F32]],   //~ E0710
+}
+
+pub struct W3 {
+  a: Gone,   //~ E0302
+}
+
+pub enum E1 {
+  A(Buf[Str]),   //~ E0416
+  B,
+}
+
+pub enum E4 {
+  A(Set[Span[F32]]),   //~ E0710
+  B,
+}
+
+pub enum E3 {
+  A(Gone),   //~ E0302
+  B,
+}
+
+type W1Alias = W1
+
+pub const C1: W1 = W1 { a: 1 }
+
+pub const C3: W3 = W3 { a: 1 }
+
+pub const C4: W4 = W4 { a: 1 }
+
+pub const C5: E1 = E1.B
+
+pub const C6: E4 = E4.B
+
+pub const C7: E3 = E3.B
+
+pub const C8: Option[W1] = None
+
+pub const C9: (W4, U32) = (W4 { a: 1 }, 1)
+
+pub const C10: W1Alias = W1 { a: 1 }
+
+pub const C11: [W4; 2] = [W4 { a: 1 }, W4 { a: 2 }]
+
+pub const C12: Option[E1] = None
+
+impl W1 {
+  const D1: W1 = W1 { a: 1 }
+
+  const D2: Option[E4] = None
+}
+
+// A sound declaration of the same shape is the E0407 of its own.
+pub struct OkHolder {
+  b: Buf[F32],
+}
+
+pub const OK1: OkHolder = OkHolder { b: Buf.zeroed(1) }   //~ E0407
+
+pub const OK2: Option[OkHolder] = None   //~ E0407

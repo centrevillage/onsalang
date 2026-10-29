@@ -6,6 +6,12 @@
 // (§6.6). An Affine result (`Buf`, a type holding one) is neither, whatever
 // the shape around it. The kind is judged from the declared type, so an
 // empty `Option` is rejected too. (A `Drop` type is in const_kind_drop.onsa.)
+// S-610, S-755, R-85 (W4-05 U4b): the judgement is of the declared type alone
+// and is before the value, and its place is the declared type (the values
+// here are on the same line as the type, so only the line shows; the place
+// is in const_type_affine_position.onsa). A `Map` or a `Set` is the E0407
+// too. A type that holds a Shared value (`Str`, `Option[Str]`, ...) is not
+// the E0407 that it was before but this version's E0200 (const_type_shared.onsa).
 pub struct Holder {
   buf: Buf[F32],
   gain: F32,

@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.5", "§18.1"]
+
+// R-328 (W4-05 U4b; §18.1: "誤りのある宣言も、名前まで読めれば名前解決に見せる。読めなかった部分…は誤りの型として扱い、それを
+// 使う側には診断を出さない。正しい宣言に偽の連鎖エラーを出さないためである"; §6.4, §4.5): a struct or an enum whose derive
+// list has a trait that this version cannot derive (`Show`, `Hash`) is the E0200 of the list, at its declaration, and
+// the list is a part of the declaration that was not read, so the types that use it have no diagnostic that depends
+// on the trait: not in a type argument that has to meet a bound (`S2[P1]` for `S2[T: Show]`, in a signature, a field
+// and an alias), and not in a call of a function whose bound is the trait (`need_show(p)`). The E0416 that
+// the use would give is a symptom that mending the declaration removes (once the list is derivable the types do
+// satisfy it). The trait that the list did write and could derive (`Eq` of `Eq + Show`) is no hole: `S3[P6]` is right
+// as ever.
+// One error per item (P-01).
+
+pub struct S2[T: Show] {
+  a: T,
+}
+
+pub struct S4[T: Hash] {
+  a: T,
+}
+
+pub struct S3[T: Eq] {
+  a: T,
+}
+
+pub struct P1: Show {   //~ E0200
+  a: F32,
+}
+
+pub enum E3: Show {   //~ E0200
+  A,
+  B,
+}
+
+pub struct P4: Hash {   //~ E0200
+  a: F32,
+}
+
+pub struct G5[T]: Show {   //~ E0200
+  a: T,
+}
+
+pub struct P6: Eq + Show {   //~ E0200
+  a: F32,
+}
+
+pub fn need_show[T: Show](x: T) -> U32 {
+  0
+}
+
+pub fn need_hash[T: Hash](x: T) -> U32 {
+  0
+}
+
+pub fn struct_argument(x: S2[P1]) -> U32 {
+  0
+}
+
+pub fn enum_argument(x: S2[E3]) -> U32 {
+  0
+}
+
+pub fn hash_argument(x: S4[P4]) -> U32 {
+  0
+}
+
+pub fn generic_argument(x: S2[G5[F32]]) -> U32 {
+  0
+}
+
+pub fn list_with_another_trait(x: S2[P6]) -> U32 {
+  0
+}
+
+pub fn returns_it(x: U32) -> Option[S2[P1]] {
+  None
+}
+
+pub struct FieldOfIt {
+  s: S2[E3],
+}
+
+type AliasOfIt = S4[P4]
+
+pub fn calls_with_a_struct(p: P1) -> U32 {
+  need_show(p)
+}
+
+pub fn calls_with_an_enum(e: E3) -> U32 {
+  need_show(e)
+}
+
+pub fn calls_with_a_hash(p: P4) -> U32 {
+  need_hash(p)
+}
+
+pub fn calls_with_a_generic(g: G5[F32]) -> U32 {
+  need_show(g)
+}
+
+pub fn calls_with_the_other(p: P6) -> U32 {
+  need_show(p)
+}
+
+// The trait that was written and could be derived is as it always was.
+pub fn eq_of_the_list(x: S3[P6]) -> U32 {
+  0
+}

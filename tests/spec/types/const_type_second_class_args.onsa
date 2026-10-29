@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.6", "§6.6", "§18.1"]
+
+// S-766 and S-771 (W4-05 U4b): a second-class type (§5.3) written as an argument of a type (`Buf[Span[F32]]`),
+// or a type that holds one, is the E0710 of the position of the `Span` and only that. It has no kind (§4.6), so
+// the requirement of the outer type is not judged (no E0416: the element of a `Buf` is Copy, the element of a
+// `Set` and the key and value of a `Map` are Dup), and the judgement of the placement of a `const` (§6.6) is not
+// made either (no E0407: a `Buf`, a `Set` and a `Map` are never placed). The same holds through an alias, in an
+// array, a tuple or an `Option`, and for an associated constant (the signatures are in the cases
+// wellformed_second_class_*). One error per item (§18.1); the marks are of the line only and the values are never
+// judged.
+
+type AS = Buf[Span[F32]]
+
+type AM = Map[U32, Span[F32]]
+
+pub const A: Buf[Span[F32]] = 1   //~ E0710
+
+pub const B: Set[Span[F32]] = 1   //~ E0710
+
+pub const C: Map[U32, Span[F32]] = 1   //~ E0710
+
+pub const D: AS = 1   //~ E0710
+
+pub const E: AM = 1   //~ E0710
+
+pub const F: Option[Buf[Span[F32]]] = None   //~ E0710
+
+pub const G: (Buf[Span[F32]], Str) = 1   //~ E0710
+
+pub const H: Buf[(Span[F32], U32)] = 1   //~ E0710
+
+pub const I: Map[Span[F32], U32] = 1   //~ E0710
+
+pub const J: [Buf[Span[F32]]; 2] = 1   //~ E0710
+
+pub const K: Array[Span[F32]] = 1   //~ E0710
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  const L: Buf[Span[F32]] = 1   //~ E0710
+
+  const M: Set[Span[F32]] = 1   //~ E0710
+}

@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§15.1", "§18.1"]
+
+// S-773 and §6.6 (W4-05 U4b) across modules: the kind of the declared type of a `const` is judged through the
+// types a `use` took from another module (`shapes.onsa`), as in one module. A type that holds itself through an
+// `Array` is Shared (the E0200 of this version, alone or in `Two[Tree, U32]`), with a part never placed
+// (`Mp`) it is the E0407, and a type of another module with an error in its declaration (`Bad`, the E0710 is in
+// `shapes.onsa`) gives no diagnostic to its use here. The position is the declared type.
+use shapes.{Tree, Mp, Two, Pt, Bad}
+
+pub const T1: Tree = Tree.Leaf   //~ E0200 @15
+
+pub const T2: Two[Tree, U32] = Two { a: Tree.Leaf, b: 1 }   //~ E0200 @15
+
+pub const T3: Two[Tree, Mp] = Two { a: Tree.Leaf, b: Mp { m: None } }   //~ E0407 @15
+
+pub const T4: Option[Two[Mp, Tree]] = None   //~ E0407 @15
+
+pub const T5: (Tree, Buf[F32]) = (Tree.Leaf, Buf.zeroed(1))   //~ E0407 @15
+
+pub const T6: Bad = Bad { a: 1 }
+
+pub const T7: Option[Bad] = None
+
+pub const T8: Pt = Pt { x: 1.0, y: 2.0 }
+
+pub const T9: Two[Pt, U32] = Two { a: T8, b: 1 }

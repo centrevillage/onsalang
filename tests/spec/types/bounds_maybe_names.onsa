@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-711 (W4-05 U4b), S-747: the errors of the names stage stay where they were, before the E0416 of the bound that
+// has a `?` (§18.1: the stages go in the order of syntax, names, types; "名前の誤りがある単位では型検査をせず").
+// A name that is not found is E0302 (`?Nope`), a name that is found and is no bound is E0308 (`?I32`, `?Holder`,
+// §15.1), and a trait that cannot be a bound in this version is the E0200 of the name when it is not the one that
+// the `?` is on (`T: ?Show + Add`: the `?Show` is the E0416 of the types stage but the `Add` after it is the names
+// stage, and the names stage is first). The same holds for a list that overlaps or contradicts (S-747): the
+// compared bounds are the ones that are found and are bounds in this version, so `Add + Add` is the E0200 of the
+// name (twice), `Gone + Gone` the E0302, and `?Dup + Gone` the E0302 and no contradiction.
+// One error per unit, so each form is in its own unit; the right forms are the units at the end.
+
+pub struct Holder {
+  a: U32,
+}
+
+pub fn unknown_name[T: ?Nope](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub fn unknown_name_second[T: Show + ?Nope](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub fn not_a_bound[T: ?I32](x: T) -> U32 {   //~ E0308
+  0
+}
+
+pub fn a_struct_is_not_a_bound[T: ?Holder](x: T) -> U32 {   //~ E0308
+  0
+}
+
+pub fn maybe_then_a_trait_that_is_no_bound[T: ?Show + Add](x: T) -> U32 {   //~ E0200
+  0
+}
+
+pub fn a_trait_that_is_no_bound_twice[T: Add + Add](x: T) -> U32 {   //~ E0200
+  0
+}
+
+pub fn unknown_twice[T: Gone + Gone](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub fn unknown_with_a_maybe_dup[T: ?Dup + Gone](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub struct UnknownInAStruct[T: ?Show + Gone] {   //~ E0302
+  a: T,
+}
+
+pub enum NotABoundInAnEnum[T: ?I32] {   //~ E0308
+  One(T),
+  Nothing,
+}
+
+impl[T: ?Nope] Holder {   //~ E0302
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+// The numeric traits that need `Copy` but are no bound in this version (`AnyNum`, `Int`, `Unsigned`, §6.3; S-747
+// leaves them out of the comparison until they are bounds) are the E0200 of the name next to a `?Dup`.
+pub fn maybe_dup_then_int[T: ?Dup + Int](x: T) -> U32 {   //~ E0200
+  0
+}
+
+pub fn any_num_then_maybe_dup[T: AnyNum + ?Dup](x: T) -> U32 {   //~ E0200
+  0
+}
+
+pub fn unsigned_twice[T: Unsigned + Unsigned](x: T) -> U32 {   //~ E0200
+  0
+}
+
+// What the `?` is on and is right: `?Dup` alone, and `?Dup` next to a bound that does not need the kind.
+pub fn maybe_dup[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn maybe_dup_with_a_trait[T: ?Dup + Show](x: T) -> U32 {
+  0
+}
+
+pub fn a_trait_with_a_maybe_dup[T: Show + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub struct MaybeDup[T: ?Dup] {
+  a: T,
+}
+
+pub enum MaybeDupEnum[T: ?Dup + Show] {
+  One(T),
+  Nothing,
+}
+
+impl[T: ?Dup] MaybeDup[T] {
+  pub fn tag() -> U32 {
+    9
+  }
+}
+
+pub fn takes_affine(b: Buf[F32]) -> U32 {
+  maybe_dup(b)
+}

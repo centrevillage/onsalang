@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§18.1"]
+
+// S-747 A5 (W4-05 U4b): a list of bounds that contradicts itself, also after an overlap (`Copy + Copy + ?Dup`,
+// `?Dup + ?Dup + Copy`, `Num + Num + ?Dup`), is the E0416 at its declaration (one per item), and a type
+// parameter with such a list is read as an unknown bound where it is used (an overlap alone keeps its bound): `need(b)` with a `Buf[F32]` (Affine,
+// so not `Copy`), `M[Buf[F32]]` and a generic caller get no diagnostic from the bound (§4.5, §18.1). The unknown
+// bound is the one of that parameter only: the other parameters of the item are judged by their own bounds. The
+// marks are of the line only. The declarations alone are in bounds_overlap_declared.onsa.
+
+pub fn need[T: Copy + Copy + ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn need2[T: ?Dup + ?Dup + Copy](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn need3[T: Copy + ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn two[A: Copy + Copy + ?Dup, B: Num](a: A, b: B) -> U32 {   //~ E0416
+  0
+}
+
+pub struct M[T: Num + Num + ?Dup] {   //~ E0416
+  a: T,
+}
+
+pub enum En[T: ?Dup + Num] {   //~ E0416
+  A(T),
+  B,
+}
+
+pub fn call(b: Buf[F32]) -> U32 {
+  need(b) + need2(b) + need3(b)
+}
+
+pub fn branch(b: Buf[F32], c: Bool) -> U32 {
+  if c {
+    need(b)
+  } else {
+    need3(b)
+  }
+}
+
+pub fn matched(b: Buf[F32], o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => need2(b) + n,
+    None => 0,
+  }
+}
+
+pub fn generic_caller[T: ?Dup](x: T) -> U32 {
+  need(x)
+}
+
+pub fn two_users(b: Buf[F32]) -> U32 {
+  two(b, 1)
+}
+
+// The sound bound of the other parameter still holds: a `Bool` is not `Num`.
+pub fn two_other(b: Buf[F32]) -> U32 {
+  two(b, true)   //~ E0416
+}
+
+pub fn use_m(x: M[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn use_en(x: En[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn use_nested(x: Option[M[Buf[F32]]]) -> U32 {
+  0
+}
+
+pub fn use_annotation() -> U32 {
+  let _: Option[En[Buf[F32]]] = None
+  0
+}
+
+pub struct Field {
+  m: M[Buf[F32]],
+}

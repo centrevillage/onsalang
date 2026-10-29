@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.4", "§4.6", "§18.1"]
+
+// S-773 and §6.6 (W4-05 U4b): the type of a `const` is judged from its declaration alone, and a type that holds
+// itself through an `Array` (`Tree`, `Q[T]`) is Shared, so a `const` of it is the E0200 of this version (a
+// Shared type is placed in the second period). A type that holds such a Shared type and also a part that is
+// never placed (`Map`, `Set`, an Affine value: `Mp`) is the E0407, which every version gives, and not the E0200
+// (§18.1: an error of every version is no E0200). The position is the declared type. Every other item is
+// checked, and the values below are never judged (the kind of the declared type is judged before the value).
+
+pub enum Tree {
+  Leaf,
+  Node(Array[Tree]),
+}
+
+pub struct Mp {
+  m: Option[Map[U32, U32]],
+}
+
+pub struct Two[T, U] {
+  a: T,
+  b: U,
+}
+
+// The argument of the next type is wider than the type itself at each step.
+pub struct Q[T] {
+  t: T,
+  a: Array[Q[(T, T)]],
+}
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+type TreeAlias = Tree
+
+type TwoAlias = Two[Tree, U32]
+
+// Shared only: the E0200 of this version.
+pub const K1: Tree = Tree.Leaf   //~ E0200 @15
+
+pub const K2: Option[Tree] = None   //~ E0200 @15
+
+pub const K3: (Tree, U32) = (Tree.Leaf, 1)   //~ E0200 @15
+
+pub const K4: TreeAlias = Tree.Leaf   //~ E0200 @15
+
+pub const K5: Two[Tree, U32] = Two { a: Tree.Leaf, b: 1 }   //~ E0200 @15
+
+pub const K6: TwoAlias = Two { a: Tree.Leaf, b: 1 }   //~ E0200 @15
+
+pub const K7: [Tree; 2] = [Tree.Leaf, Tree.Leaf]   //~ E0200 @15
+
+// The widening recursion: the argument `Str` is Shared and `Array` is Shared, whatever the argument is.
+pub const N1: Q[Str] = Q { t: "a", a: [] }   //~ E0200 @15
+
+pub const N2: Q[U32] = Q { t: 1, a: [] }   //~ E0200 @15
+
+// Shared and never placed together: the E0407, in every order and shape.
+pub const M1: Two[Tree, Mp] = Two { a: Tree.Leaf, b: Mp { m: None } }   //~ E0407 @15
+
+pub const M2: Two[Mp, Tree] = Two { a: Mp { m: None }, b: Tree.Leaf }   //~ E0407 @15
+
+pub const M3: (Tree, Mp) = (Tree.Leaf, Mp { m: None })   //~ E0407 @15
+
+pub const M4: Option[Two[Tree, Mp]] = None   //~ E0407 @15
+
+pub const M5: (Tree, Buf[F32]) = (Tree.Leaf, Buf.zeroed(1))   //~ E0407 @15
+
+// An associated constant is a constant of the same kind.
+impl Pt {
+  const A1: Tree = Tree.Leaf   //~ E0200 @13
+
+  const A2: Two[Tree, Mp] = Two { a: Tree.Leaf, b: Mp { m: None } }   //~ E0407 @13
+
+  const A3: Pt = Pt { x: 0.0, y: 0.0 }
+}
+
+// Copy results are still fine, in a type that is built from the same generic declarations.
+pub const FINE1: Two[U32, F32] = Two { a: 1, b: 2.0 }
+
+pub const FINE2: Pt = Pt { x: 1.0, y: 2.0 }
+
+pub const FINE3: (Pt, [U32; 2]) = (FINE2, [1, 2])

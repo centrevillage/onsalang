@@ -35,6 +35,10 @@ pub struct Decls {
     /// The declarations of a cycle: a name of one is the error type, and a
     /// constant of one has no value, with no diagnostic (§18.1).
     pub(crate) cyclic: HashSet<DefId>,
+    /// The types written that name one of a cycle with the count of its
+    /// parameters, as they would be: their arguments are judged as written
+    /// (`Sema::wellformed`, R-327).
+    pub(crate) cyclic_at: HashMap<(ModId, TypeId), TyId>,
     /// The aliases lowered (`true`) or being lowered (`false`).
     pub(crate) lowered: HashMap<DefId, bool>,
     /// The aliases in the order they were lowered: an alias after those its
@@ -537,7 +541,7 @@ impl<'p> Sema<'p> {
 }
 
 /// The kind of an item, out of `target` (§14).
-pub(super) fn item_kind(kind: &ItemKind) -> &ItemKind {
+pub(crate) fn item_kind(kind: &ItemKind) -> &ItemKind {
     match kind {
         ItemKind::Target(inner) => inner,
         k => k,

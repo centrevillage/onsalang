@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§18.1"]
+
+// §4.5 and S-747 A4 (W4-05 U4b): the controls of bounds_contradiction_uses.onsa. A list without overlap or
+// contradiction is judged at the uses as before: `Copy` and `Num` accept a Copy type, `?Dup` accepts an Affine
+// type, `Float + Num` (only an overlap by implication) is no error and keeps both requirements. The marks are of
+// the line only.
+
+pub fn copy_only[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub fn off_only[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn float_num[T: Float + Num](x: T) -> U32 {
+  0
+}
+
+pub struct Wrap[T: ?Dup] {
+  a: T,
+}
+
+pub fn fine(b: Buf[F32], f: F32) -> U32 {
+  copy_only(f) + off_only(b) + float_num(f)
+}
+
+pub fn wrapped(x: Wrap[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn affine_to_copy(b: Buf[F32]) -> U32 {
+  copy_only(b)   //~ E0416
+}
+
+pub fn int_to_float(n: U32) -> U32 {
+  float_num(n)   //~ E0416
+}
+
+pub fn affine_to_float(b: Buf[F32]) -> U32 {
+  float_num(b)   //~ E0416
+}

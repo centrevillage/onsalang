@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§5.3", "§18.1"]
+
+// R-327 (W4-05 U4b; §4.5: "型の位置…に書いた型引数は、その型の宣言の型パラメータの要求(境界と暗黙の `Dup`)を満たさなければ
+// ならず、満たさなければ E0416"; §5.3: a second-class type in a type argument is E0710; §4.4: a cycle of values is E0311;
+// §18.1: a type of a cycle is an error type for the units that use it): a struct or an enum with a type parameter that
+// holds itself (`struct Cy2[T] { a: Cy2[T] }`) is the E0311 of the cycle at its declaration, and the type arguments that
+// another unit writes after its name are still types of a place of a type (a signature, an alias): they are judged
+// against the type parameters of the declaration, apart from the cycle, which can be mended and leaves the errors of
+// the use (R-323 does the same for the number of the arguments, types/wellformed_cycle_type_args_count.onsa). The
+// errors are the ones of the use's own unit: E0416 for a type argument that does not meet the requirement of its type
+// (the `Bool` of `N[Bool]` inside `Cy2[...]`, the `Bool` of `Cy3[Bool]` for `T: Num`, the implicit `Dup` of a `Buf`
+// given to the unbounded `Cy2`), E0710 for a second-class type in an argument of the cyclic type (and then that
+// argument's requirement is not judged: §4.5). The type arguments that are right have no diagnostic.
+// One error per item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct W[T] {
+  a: T,
+}
+
+pub struct Cy2[T] {   //~ E0311
+  a: Cy2[T],
+}
+
+pub enum CyE[T] {   //~ E0311
+  Next(CyE[T]),
+  End,
+}
+
+pub struct Cy3[T: Num] {   //~ E0311
+  a: Cy3[T],
+}
+
+pub fn requirement_inside(x: Cy2[N[Bool]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn requirement_inside_an_enum(x: CyE[N[Bool]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn requirement_inside_a_tuple(x: (Cy2[N[Bool]], U32)) -> U32 {   //~ E0416
+  0
+}
+
+pub fn requirement_inside_another_type(x: W[Cy2[N[Bool]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn requirement_of_the_cyclic_type(x: Cy3[Bool]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn implicit_dup_of_the_cyclic_type(x: Cy2[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+type Aliased = Cy2[N[Bool]]   //~ E0416
+
+pub fn second_class_argument(x: Cy2[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn second_class_argument_of_an_enum(x: CyE[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn second_class_inside_a_tuple_argument(x: Cy2[(Span[F32], F32)]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn second_class_argument_with_a_bound(x: Cy3[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+// The right arguments of the same types.
+pub fn right_arguments(a: Cy2[F32], b: Cy2[N[F32]], c: CyE[I32], d: Cy3[F32]) -> U32 {
+  0
+}

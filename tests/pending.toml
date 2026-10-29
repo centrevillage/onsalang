@@ -1906,3 +1906,12 @@ target = "tests/spec/types/wellformed_body_annotation_second_class_let.onsa"
 reasons = ["S-217"]
 until = "W4-07"
 note = "`let`・`for` の借用束縛の根の Span（S-217）は W4-07（今は modes の E0710）"
+
+# --- W4-05 U4b/t: `impl Drop` の型の `const`（S-755）。W5-04 で外す（2026-10-29）。
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_type_affine_drop.onsa"
+reasons = ["S-755", "S-70", "S-138"]
+until = "W5-04"
+note = "手書きの `impl Drop` の型の `const` の E0407 は `impl Drop` が入る W5-04（`const_kind_drop.onsa` と同じ）"

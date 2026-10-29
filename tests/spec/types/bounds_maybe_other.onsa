@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§18.1"]
+// fixes = 0
+
+// S-711 (W4-05 U4b; §4.5: "`?` を付けられるのは `Dup` だけで、他の境界(`?Copy`、`?Show`)に付けると E0416(暗黙に
+// 付く制約は `Dup` だけなので外すものが無い。note で規則を示す)"; §4.6: "Affine も受けるのは `?Dup`"): the `?` of a
+// bound takes off the implicit `Dup` and only that, so a `?` on any other bound is an error of the bound, E0416, with
+// no candidate (`fixes = 0`: `?Copy` can mean `?Dup` or no bound at all). The kind constraint (`?Copy`), a trait of
+// the prelude (`?Show`), a numeric trait that does take the kind (`?Num`) and a trait that cannot be a bound in this
+// version (`?Add`, which is the E0416 and not the E0200 of the name: the `?` is judged first, S-711) are all the same.
+// The place is the bound, so the whole unit of a function, a method, a struct, an enum or an `impl` is the one error.
+// In a list the first bound that has the `?` is reported (§18.1: one error per unit, in the order of the places).
+// The names stage is before the types stage (§18.1), so a name that is not found (`?Nope`), or a bound of a kind of
+// name that is not a bound (`?I32`), or a trait that cannot be a bound (`T: ?Show + Add`) is the error of the names
+// stage and not this one: those are in types/bounds_maybe_other_names.onsa.
+// The type parameter with the error is an unknown bound where it is used (§4.5, §18.1, S-768: the writer may have
+// meant `?Dup`), so the functions at the end, which call the functions above with a value that is Affine, and write
+// the types above with an Affine argument, have no error.
+// One error per item (P-01).
+
+pub fn maybe_copy[T: ?Copy](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_show[T: ?Show](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_add[T: ?Add](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_num[T: ?Num](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_float[T: ?Float](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn after_a_good_bound[T: Show + ?Copy](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn the_first_of_two[T: ?Show +   //~ E0416
+  ?Copy](x: T) -> U32 {
+  0
+}
+
+pub fn the_second_parameter[T, U: ?Show](x: T, y: U) -> U32 {   //~ E0416
+  0
+}
+
+pub struct MaybeCopy[T: ?Copy] {   //~ E0416
+  a: T,
+}
+
+pub struct MaybeAdd[T: ?Add] {   //~ E0416
+  a: T,
+}
+
+pub enum MaybeShow[T: ?Show] {   //~ E0416
+  One(T),
+  Nothing,
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T: ?Copy] Holder[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T: ?Add] MaybeCopy[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    8
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn maybe_show_method[T: ?Show](self, x: T) -> U32 {   //~ E0416
+    self.n
+  }
+}
+
+// The uses of the type parameters above: calls with a value that is Affine, and signatures with an Affine
+// argument. An unknown bound does not judge the implicit `Dup` either (S-768 reads it the same).
+pub fn calls_maybe_copy(b: Buf[F32]) -> U32 {
+  maybe_copy(b)
+}
+
+pub fn calls_maybe_show(b: Buf[F32]) -> U32 {
+  maybe_show(b)
+}
+
+pub fn calls_maybe_add(b: Buf[F32]) -> U32 {
+  maybe_add(b)
+}
+
+pub fn calls_the_method(p: Plain, b: Buf[F32]) -> U32 {
+  p.maybe_show_method(b)
+}
+
+pub fn writes_a_struct(x: MaybeCopy[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn writes_an_enum(x: MaybeShow[Buf[F32]]) -> U32 {
+  0
+}
+
+pub struct HoldsAnAffine {
+  m: MaybeAdd[Buf[F32]],
+}

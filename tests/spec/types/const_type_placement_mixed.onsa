@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+
+// S-773 and §6.6, the forms that already give the right code (W4-05 U4b): the judgement of the declared type of a
+// `const` is made before the value, so the values here are never judged. A Shared type alone is the E0200 of this
+// version (`Str`, `Option[Str]`, a struct holding a `Str`); a type with a part that is never placed (`Buf`,
+// `Map`, `Set`, a type holding one) is the E0407, and so is a Shared type together with such a part
+// (`(Str, Buf[F32])`, `Mp`): an error of every version is no E0200 (§18.1). The position is the declared type.
+// Copy results are fine.
+
+pub struct Mp {
+  m: Option[Map[U32, U32]],
+}
+
+pub struct Held {
+  s: Str,
+  b: Buf[F32],
+}
+
+pub struct Named {
+  name: Str,
+  id: U32,
+}
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+pub const S1: Str = "a"   //~ E0200 @15
+
+pub const S2: Option[Str] = None   //~ E0200 @15
+
+pub const S3: (Str, U32) = ("a", 1)   //~ E0200 @15
+
+pub const S4: Named = Named { name: "a", id: 1 }   //~ E0200 @15
+
+pub const S5: [Str; 2] = ["a", "b"]   //~ E0200 @15
+
+pub const B1: (Str, Buf[F32]) = ("a", Buf.zeroed(1))   //~ E0407 @15
+
+pub const B2: Held = Held { s: "a", b: Buf.zeroed(1) }   //~ E0407 @15
+
+pub const B3: Mp = Mp { m: None }   //~ E0407 @15
+
+pub const B4: Option[Mp] = None   //~ E0407 @15
+
+pub const B5: ([Str; 2], Buf[F32]) = (["a", "b"], Buf.zeroed(1))   //~ E0407 @15
+
+pub const B6: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(1)]   //~ E0407 @15
+
+impl Named {
+  const C1: (Str, Buf[F32]) = ("a", Buf.zeroed(1))   //~ E0407 @13
+
+  const C2: Str = "a"   //~ E0200 @13
+}
+
+pub const FINE1: Pt = Pt { x: 1.0, y: 2.0 }
+
+pub const FINE2: (U32, Pt) = (1, FINE1)
+
+pub const FINE3: [Pt; 2] = [FINE1, FINE1]

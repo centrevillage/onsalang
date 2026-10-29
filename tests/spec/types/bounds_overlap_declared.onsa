@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§18.1"]
+
+// S-747 (reading A1 to A4; W4-05 U4b): a bound written twice in one list (`Copy + Copy`, `?Dup + ?Dup`) and
+// `?Dup` beside a bound that needs Dup (`Copy`, `Num`, `Float`, in either order) are the E0416 of the list, at
+// the first element that overlaps or contradicts an element before it (`Copy + ?Dup` is at the `?Dup`), and one
+// per item (§18.1). The lists of the parameters of a `fn`, a `struct`, an `enum` and an `impl` are all judged.
+// The marks are of the line only. The bounds that overlap only by implication (`Float + Num`) are no error, so
+// the last items are fine.
+
+pub fn copy_twice[T: Copy + Copy](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn off_twice[T: ?Dup + ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_then_off[T: Copy + ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn off_then_copy[T: ?Dup + Copy](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn num_then_off[T: Num + ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn off_then_num[T: ?Dup + Num](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn float_then_off[T: Float + ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn three[T: Copy + Copy + ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn later_parameter[A: Copy, B: Num + Num](a: A, b: B) -> U32 {   //~ E0416
+  0
+}
+
+pub struct SCopy[T: Copy + Copy] {   //~ E0416
+  a: T,
+}
+
+pub struct SNum[T: Num + Num + ?Dup] {   //~ E0416
+  a: T,
+}
+
+pub enum EOff[T: ?Dup + ?Dup] {   //~ E0416
+  A(T),
+  B,
+}
+
+pub enum ECopy[T: Copy + ?Dup] {   //~ E0416
+  A(T),
+  B,
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T: Copy + Copy] Holder[T] {   //~ E0416
+  fn zero() -> U32 {
+    0
+  }
+}
+
+impl[T: ?Dup + Num] Holder[T] {   //~ E0416
+  fn one() -> U32 {
+    1
+  }
+}
+
+// Overlap by implication is fine, and so is each element alone.
+pub fn float_num[T: Float + Num](x: T) -> U32 {
+  0
+}
+
+pub fn num_copy[T: Num + Copy](x: T) -> U32 {
+  0
+}
+
+pub fn only_off[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn only_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub struct SFine[T: Num + Copy] {
+  a: T,
+}

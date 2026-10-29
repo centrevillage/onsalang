@@ -89,7 +89,9 @@ impl Bound {
 pub enum GenericKind {
     /// `T`, `T: Num`, `T: ?Dup` (`dup == false` lifts the implicit `Dup` bound, §4.5).
     /// `unknown`: a bound is a name the names stage holds as an error (§18.1,
-    /// S-689): `T` satisfies every bound, and its methods are not known.
+    /// S-689), or the list has an error of its name, its `?` or a
+    /// contradiction (S-768, S-711, S-747): `T` satisfies every bound, the
+    /// implicit `Dup` too, and its methods are not known.
     Type { bounds: Vec<Bound>, dup: bool, unknown: bool },
     /// `const N: U32`
     Const(TyId),
@@ -159,14 +161,18 @@ pub enum Fields {
     Opaque,
 }
 
-/// The traits derived at the head of a type (§6.4; S-13: `Hash`, `Show` and `Ordinal` are E0200 in phase 1).
+/// The traits derived at the head of a type (§6.4; S-13: `Hash`, `Show` and `Ordinal` are E0200 in phase 1,
+/// in the list still, so that its users read them as derived, §18.1, R-328).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Derive {
     PartialEq,
     Eq,
     PartialOrd,
     Ord,
+    Hash,
+    Show,
     Default,
+    Ordinal,
 }
 
 #[derive(Debug, Clone)]

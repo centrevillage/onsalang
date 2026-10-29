@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1", "§15.1"]
+
+// S-755, S-610, R-85 (W4-05 U4b; §6.6: "この判定(E0407 と、Shared を含む型の E0200)は宣言の型だけで決まり、値の検査より先に
+// 行う。位置は宣言の型で、値に失敗した名前があっても報告する(値の位置で単位の以後を止める §18.1 は、値に頼らないこの判定に
+// 当たらない)"): the value of a `const` that is a name that a failed `use` lost makes the rest of the unit unchecked
+// (§18.1), but the declared type is judged by itself and before the value, so the E0200 of a type that holds a Shared
+// value and the E0407 of a type that holds a `Map`, a `Set` or an Affine value are reported with the failed name in the
+// value, at the declared type (the value is on the next line, and the marker is on the line of the type). The failed
+// name in the value as a whole (`= KK`), in a hole (`"{KK}"`), in a part (`Some(KK)`), or in an associated constant
+// are the same. A `const` of a type that is fine is silent, as ever; so is a declared type that is itself a failed
+// name (an error type: no judgement, §18.1), and a name that the bad `use` could not have lost. The only other
+// diagnostics are the E0302 of the `use` lines. The same without a failed name is in negative/const_type_shared.onsa
+// and negative/const_type_affine_position.onsa.
+use util.{REAL}
+use util.{KK}                                       //~ E0302
+use util.{gone}                                     //~ E0302
+use util.{LostType}                                 //~ E0302
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+pub const STR_WITH_A_HOLE: Str =   //~ E0200
+  "{KK}"
+
+pub const STR_IS_A_FAILED_NAME: Str =   //~ E0200
+  KK
+
+pub const STR_IS_A_LOWER_CASE_NAME: Str =   //~ E0200
+  gone
+
+pub const OPTION_OF_A_FAILED_NAME: Option[Str] =   //~ E0200
+  Some(KK)
+
+pub const PAIR_WITH_A_FAILED_NAME: (Str, U32) =   //~ E0200
+  ("a", KK)
+
+pub const BUF_WITH_A_FAILED_NAME: Buf[F32] =   //~ E0407
+  KK
+
+pub const MAP_WITH_A_FAILED_NAME: Map[U32, U32] =   //~ E0407
+  gone
+
+impl Pt {
+  pub const ASSOCIATED_STR: Str =   //~ E0200
+    "{KK}"
+
+  pub const ASSOCIATED_BUF: Buf[F32] =   //~ E0407
+    KK
+}
+
+// Fine: a type that a `const` can have, with the failed name in the value; the declared type that is a failed name.
+pub const COUNT_IS_A_FAILED_NAME: U32 = KK
+
+pub const POINT_WITH_A_FAILED_NAME: Pt = Pt { x: KK, y: 0 }
+
+pub const ARRAY_WITH_A_FAILED_NAME: [U32; 2] = [KK, REAL]
+
+pub const OPTION_OF_A_COPY_TYPE: Option[U32] = Some(KK)
+
+pub const LOST_TYPE: LostType = KK
+
+pub const LOST_TYPE_IN_A_PAIR: (LostType, U32) = (KK, 1)
+
+pub fn reads(n: U32) -> U32 {
+  n + REAL
+}

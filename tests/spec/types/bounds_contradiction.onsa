@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-747 (W4-05 U4b; §4.5: "`?Dup` を Dup を要する境界(`Dup`、`Copy`、…`Num`、`Float`…数の trait は全て `Copy` を要する、§6.3)と
+// 並べる形(`T: Copy + ?Dup`。外すものが無い)は E0416 で、並びを前から読んで前の要素と重なるか矛盾する最初の要素に付け…
+// 矛盾のある並びの型パラメータを使う側には、その境界による診断を出さない(§18.1)"): the `?Dup` takes off the implicit
+// `Dup`, and a bound that needs `Dup` (`Dup`, `Copy`, `Num`, `Float`) puts it back, so the two in one list say the
+// opposite of each other: it is an error of the bound, E0416, with no candidate (`fixes = 0`: which one to drop is
+// the writer's). It is on the first element that contradicts one before it, in either order (`Copy + ?Dup` is on the
+// `?Dup`, `?Dup + Copy` on the `Copy`): the cases that put the two on two lines have the marker on the line of that
+// element. A bound that does not need `Dup` (`Show`) next to a `?Dup` is no contradiction (types/bounds_sequence_fine.onsa).
+// Every place that has a list of bounds: a function, a method, a struct, an enum and the `[ ]` of an `impl`.
+// A type parameter with such a list is an unknown bound where it is used (§18.1): a call with a value that is
+// Affine, and a type written with an Affine argument, have no error at the use, whatever the bound of the list
+// said. (The writer may have meant to take the `Dup` off or to put it on: a use cannot tell, S-747.)
+// One error per item (P-01).
+
+pub fn dup_then_maybe_dup[T: Dup +
+  ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_then_maybe_dup[T: Copy +
+  ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_dup_then_num[T: ?Dup +
+  Num](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_dup_then_copy[T: ?Dup +
+  Copy](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn float_then_maybe_dup[T: Float +
+  ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_dup_then_dup[T: ?Dup + Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn trait_between[T: Copy + Show +
+  ?Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn trait_before_the_pair[T: Show + ?Dup +
+  Num](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_the_second_parameter[T: Show, U: Copy + ?Dup](x: T, y: U) -> U32 {   //~ E0416
+  0
+}
+
+pub struct CopyMaybeDup[T: Copy + ?Dup] {   //~ E0416
+  a: T,
+}
+
+pub enum MaybeDupNum[T: ?Dup + Num] {   //~ E0416
+  One(T),
+  Nothing,
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T: Dup + ?Dup] Holder[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn method_with_two[T: Num + ?Dup](self, x: T) -> U32 {   //~ E0416
+    self.n
+  }
+}
+
+// The uses of the lists above.
+pub fn calls_dup(b: Buf[F32]) -> U32 {
+  dup_then_maybe_dup(b)
+}
+
+pub fn calls_copy(b: Buf[F32]) -> U32 {
+  copy_then_maybe_dup(b)
+}
+
+pub fn calls_num(b: Buf[F32]) -> U32 {
+  maybe_dup_then_num(b)
+}
+
+pub fn calls_with_a_scalar(n: I32) -> U32 {
+  maybe_dup_then_copy(n)
+}
+
+pub fn calls_the_method(p: Plain, b: Buf[F32]) -> U32 {
+  p.method_with_two(b)
+}
+
+pub fn writes_a_struct(x: CopyMaybeDup[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn writes_an_enum(x: MaybeDupNum[Buf[F32]]) -> U32 {
+  0
+}
+
+pub struct HoldsAnAffine {
+  m: CopyMaybeDup[Buf[F32]],
+}

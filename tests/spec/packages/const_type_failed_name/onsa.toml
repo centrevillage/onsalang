@@ -1,0 +1,3 @@
+[package]
+name = "const_type_failed_name"
+edition = "2026"

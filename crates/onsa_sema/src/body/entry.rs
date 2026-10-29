@@ -2,6 +2,7 @@
 //! and the end of a body.
 
 use super::*;
+use crate::kind::Placed;
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ entry points
@@ -53,24 +54,13 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn check_const(&mut self, value: ExprId, ty: TyId) {
+        // The declared type first, of itself: its error stops the unit (§6.6, S-755).
+        if let Some(d) = self.const_type(ty) {
+            self.diag(d);
+            return;
+        }
         self.frames.push(Frame { ret: ty, loop_depth: 0 });
-        let r = (|| -> R<()> {
-            self.check_expr(value, Some(ty))?;
-            // E0407: the result must be Copy (static Shared placement is phase 2).
-            if let Some(k) = self.a.kind_of(ty)
-                && k != Kind::Copy
-            {
-                let span = self.expr(value).span;
-                let shown = self.display(ty);
-                return Err(self.err(
-                    Code::E0407,
-                    span,
-                    format!("a `const` must be Copy in this version; `{shown}` is {} (§6.6)", k.name()),
-                ));
-            }
-            Ok(())
-        })();
-        let _ = r;
+        let _ = self.check_expr(value, Some(ty));
         self.frames.pop();
         // The literals first (E0408, E0401 of `-` on an unsigned type): the evaluation
         // below reads the values they denote.
@@ -95,6 +85,33 @@ impl<'a> Checker<'a> {
             }
             self.a.const_values.insert(self.def, v);
         }
+    }
+
+    /// The E0407 of a `const` whose declared type `ty` is never placed
+    /// statically, or the E0200 of one placed from the second phase (a Shared
+    /// value, a type parameter not `Copy`; §6.6, S-610, R-85, W4-05 table 5),
+    /// at the type written (S-755).
+    fn const_type(&mut self, ty: TyId) -> Option<Diagnostic> {
+        let params = 0..self.generics.len() as u32;
+        let params: Vec<TyId> = params.map(|i| self.a.types.intern(Ty::Param(i))).collect();
+        let copy: Vec<bool> = params.into_iter().map(|p| self.satisfies(p, Bound::Copy)).collect();
+        let placed = crate::kind::placed(self.a, ty, &copy)?;
+        let item = self.a.def(self.def).item?;
+        let onsa_syntax::ast::ItemKind::Const(c) = crate::sig::item_kind(&self.ast.item(item).kind) else {
+            return None;
+        };
+        let (span, shown) = (self.ast.ty(c.ty).span, self.display(ty));
+        let d = match placed {
+            Placed::Static => return None,
+            Placed::Later => Feature::SharedConsts.diagnostic(Stage::Types, span, &[&shown]),
+            Placed::Never => {
+                let msg = format!(
+                    "a `const` cannot be of the type `{shown}`: a `Map`, a `Set` or an Affine value in it is not placed in the static area (§6.6)"
+                );
+                Diagnostic::new(Stage::Types, Code::E0407, span, msg)
+            }
+        };
+        Some(d.with_found(self.src(span)))
     }
 
     /// E0406 at the first expression whose type still has a variable that is not a

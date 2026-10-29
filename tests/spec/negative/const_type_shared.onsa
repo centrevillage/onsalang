@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.6", "§12.8", "§18.1"]
+
+// S-610, R-85 (W4-05 U4b; §6.6: "この版では、Shared を含む型の `const` は E0200 である(第 2 期)。この判定(E0407 と、
+// Shared を含む型の E0200)は宣言の型だけで決まり、値の検査より先に行う。位置は宣言の型で…"): the result of a
+// `const` that is of a type that holds a Shared value (`Str`, `Bytes`, `Array`, and a tuple, an array, an `Option`, a
+// struct or an enum that has one) is this version's E0200, not the E0407 that it was before (S-610: a Shared value
+// can be placed in the static area, §12.8, and the version has not got to it). The place is the declared type and not
+// the value: the value is on the next line in these cases, and the marker is on the line of the type. The judgement
+// is of the type alone, so it is before the check of the value (a value of a wrong type, `1` for a `Bytes`, is not
+// the E0401 of the value) and an alias for the type is the same as the type. An associated constant is the same.
+// A type that holds a `Map`, a `Set` or an Affine value stays the E0407 (negative/const_type_affine_position.onsa).
+// One error per item (P-01).
+
+type Text = Str
+
+pub struct Named {
+  text: Str,
+}
+
+pub enum Label {
+  Named(Str),
+  Anonymous,
+}
+
+const STR: Str =   //~ E0200
+  "a"
+
+const BYTES: Bytes =   //~ E0200
+  0
+
+const ARRAY: Array[F32] =   //~ E0200
+  0
+
+const STRS: [Str; 2] =   //~ E0200
+  ["a", "b"]
+
+const PAIR: (Str, U32) =   //~ E0200
+  ("a", 1)
+
+const OPTION: Option[Str] =   //~ E0200
+  Some("a")
+
+const EMPTY_OPTION: Option[Str] =   //~ E0200
+  None
+
+const NESTED: Option[(Str, U32)] =   //~ E0200
+  None
+
+const ALIASED: Text =   //~ E0200
+  "a"
+
+const STRUCT: Named =   //~ E0200
+  Named { text: "a" }
+
+const ENUM: Label =   //~ E0200
+  Label.Anonymous
+
+pub const PUBLIC_STR: Str =   //~ E0200
+  "a"
+
+impl Named {
+  const ASSOCIATED_STR: Str =   //~ E0200
+    "a"
+
+  pub const ASSOCIATED_PAIR: (Str, U32) =   //~ E0200
+    ("a", 1)
+
+  const ASSOCIATED_ARRAY: Array[F32] =   //~ E0200
+    0
+}
+
+impl Label {
+  const ASSOCIATED_OPTION: Option[Str] =   //~ E0200
+    None
+}

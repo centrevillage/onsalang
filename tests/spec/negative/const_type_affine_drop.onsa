@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.6", "§6.3", "§18.1"]
+
+// S-610, S-755, R-85 (W4-05 U4b; §6.6, §4.6: "Affine = `Buf`、`Drop` 実装型…、それらを含む型"; "Affine の型を含む型も置けない
+// (E0407)"; the judgement is of the declared type and is before the value): a `const` of a type that implements
+// `Drop` (so it is Affine, §4.6; `drop(move self)` may be `rt` or `uses {Alloc}`, §6.3), or of a type that holds one,
+// is E0407 at the declared type, and a value of a wrong type is not the E0401 of the value. The value is on the
+// next line in these cases and the marker is on the line of the type. This is the position of
+// negative/const_type_affine_position.onsa for the types that need a hand-written `impl Drop`; the same-line cases are
+// in negative/const_kind_drop.onsa. (A hand-written `impl Drop` is the E0200 of the form until W5-04.)
+// One error per item (P-01).
+
+pub struct Handle {
+  id: U32,
+}
+
+impl Drop for Handle {
+  rt fn drop(move self) {}
+}
+
+pub struct Pair {
+  first: Handle,
+  second: U32,
+}
+
+const DROP_TYPE_WITH_A_WRONG_VALUE: Handle =   //~ E0407
+  1
+
+const DROP_TYPE_WITH_A_RIGHT_VALUE: Handle =   //~ E0407
+  Handle { id: 1 }
+
+const HOLDS_A_DROP_TYPE: Pair =   //~ E0407
+  1
+
+const OPTION_OF_A_DROP_TYPE: Option[Handle] =   //~ E0407
+  None
+
+impl Handle {
+  const ASSOCIATED: Handle =   //~ E0407
+    1
+}

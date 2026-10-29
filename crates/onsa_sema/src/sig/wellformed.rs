@@ -171,7 +171,15 @@ impl<'p> Sema<'p> {
             };
         for (t, ty, pos, slot) in roots {
             match self.judge(&cx, t, ty, pos) {
-                None => return,
+                None => {
+                    // A field or a payload with an error is not read: the error type
+                    // to its users (§18.1).
+                    if matches!(slot, Slot::Field(_) | Slot::Variant(..)) {
+                        let error = self.a.types.error();
+                        self.unread(id, slot, error);
+                    }
+                    return;
+                }
                 Some(read) if read != ty => self.unread(id, slot, read),
                 Some(_) => {}
             }
@@ -227,8 +235,13 @@ impl<'p> Sema<'p> {
     /// The part `ty`, written as `w`, at the place `at`; `span`, where its
     /// nearest part written is. The type as read ([`Self::judge`]).
     fn part(&mut self, cx: &Cx<'p>, w: Written, ty: TyId, at: (Pos, u8), span: Span) -> Result<TyId, Diagnostic> {
+        // A type of a cycle is read as the error type, its arguments judged (R-327).
+        let cyclic = match w {
+            Written::Here(t) => self.a.decls.cyclic_at.get(&(cx.m, t)).copied(),
+            _ => None,
+        };
         let (here, span, ty) = match w {
-            Written::Here(t) => (Some(t), cx.ast.ty(t).span, ty),
+            Written::Here(t) => (Some(t), cx.ast.ty(t).span, cyclic.unwrap_or(ty)),
             // As the alias is read, after its own judgment ([`Self::wellformed`]).
             Written::Alias(d) => match self.a.def(d).kind {
                 DefKind::Alias(read) if matches!(self.a.types.get(read), Ty::Error) => return Ok(read),
@@ -261,6 +274,9 @@ impl<'p> Sema<'p> {
             self.required(cx, &shape, &read, &kids, span)?;
         }
         first?;
+        if cyclic.is_some() {
+            return Ok(self.a.types.error());
+        }
         // The same parts intern as the same type.
         let mut read = read.into_iter();
         let shape = match shape {

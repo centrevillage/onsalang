@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.6"]
+
+// S-610, S-755, R-85 (W4-05 U4b), W4-05 table 5; §6.6: "結果の型は、静的に配置できる型でなければならない": the right forms
+// next to the E0200 of negative/const_type_shared.onsa and the E0407 of negative/const_type_affine_position.onsa. A
+// `const` of a Copy type is fine whatever the shape (scalars, fixed arrays, tuples, structs and enums of Copy, an
+// `Option` of Copy, an alias), as an associated constant, and as a constant whose type is a type parameter that is
+// Copy by its bound (`T: Copy`, and `T: Num` or `T: Float`, which need `Copy`, §6.3, S-747). The type parameter
+// without a `Copy` bound is in types/const_type_param.onsa: it may be a Shared value, which this version does not
+// place, so it is the E0200 there.
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+pub enum Mode {
+  Off,
+  On(U32),
+}
+
+type Count = U32
+
+const COUNT: U32 = 4
+
+const GAIN: F32 = 0.5
+
+const ENABLED: Bool = true
+
+const TABLE: [F32; 3] = [1.0, 2.0, 3.0]
+
+const GRID: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+
+const ORIGIN: Pt = Pt { x: 0.0, y: 0.0 }
+
+const MIXED: (U32, Pt) = (COUNT, ORIGIN)
+
+const NO_COUNT: Option[U32] = None
+
+const MODE: Mode = Mode.On(1)
+
+const ALIASED: Count = 3
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl Pt {
+  pub const UNIT: Pt = Pt { x: 1.0, y: 1.0 }
+
+  pub const ROW: [F32; 2] = [1.0, 2.0]
+}
+
+impl[T: Copy] Holder[T] {
+  pub const NONE: Option[T] = None
+
+  pub const TWO_NONES: [Option[T]; 2] = [None, None]
+
+  pub const TAGGED: (Option[T], U32) = (None, 1)
+}
+
+impl[T: Num] Holder[T] {
+  pub const NONE_OF_A_NUMBER: Option[T] = None
+}
+
+impl[T: Float] Holder[T] {
+  pub const NONE_OF_A_FLOAT: Option[T] = None
+}
+
+pub fn reads_a_constant() -> U32 {
+  COUNT
+}
