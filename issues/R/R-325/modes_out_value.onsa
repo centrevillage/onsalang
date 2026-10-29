@@ -1,0 +1,23 @@
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+pub fn keep_in_let(inout o: swap.Out) -> U32 {
+  let k = o
+  k.l.len()
+}
+
+pub fn keep_in_option(inout o: swap.Out) -> U32 {
+  let k = Some(o)
+  0
+}
+
+pub fn span_in_option(xs: Span[F32]) -> U32 {
+  let k = Some(xs)
+  0
+}
