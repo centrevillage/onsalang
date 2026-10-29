@@ -24,7 +24,9 @@
 //! (§15.1: the candidates are for the head of a path, not for the name of an item).
 //!
 //! The packages: the faultless ones of `tests/spec/packages` (a package whose `onsa check` has a
-//! diagnostic is left out, as is a package inside a package) and `examples`, in a scratch copy each. The
+//! diagnostic is left out, as is a package inside a package) and `examples`, each read from its directory
+//! (`read_input`) and checked in this process as the command checks it, with no file written
+//! (`check_input`, X-16; the reading and the exit code are the business of the tests of the command). The
 //! `use` lines are the lines that start with `use ` at the left edge, with the lines of a list that goes
 //! on to the closing `}`. Two tests: every `use` line out at once (the script's mode `all`), and one
 //! `use` line out at a time for each line of each package (the mode `one`, which the script named and
@@ -36,7 +38,6 @@ mod test_support;
 use std::path::{Path, PathBuf};
 
 use test_support::sweep::*;
-use test_support::*;
 
 /// The diagnostics of the names stage that a candidate must not make (E0302 is what the loop repairs).
 const NAMES_STAGE_OTHERS: [&str; 4] = ["E0303", "E0304", "E0305", "E0310"];
@@ -108,18 +109,18 @@ fn count_uses(src: &Path) -> usize {
     uses
 }
 
-/// Take the `use` lines (all, or the one of the number `only`) out of the package at `src`, written over the
-/// scratch package `d`, and repair it with the candidates. Problems found go to `problems`. `None` when
-/// the package is not one to use (it has a fault to begin with).
-fn repair(d: &Dir, src: &Path, only: Option<usize>, problems: &mut Vec<String>) -> Option<Outcome> {
+/// Take the `use` lines (all, or the one of the number `only`) out of the package at `src` and repair it
+/// with the candidates. Problems found go to `problems`. `None` when the package is not one to use (it
+/// has a fault to begin with).
+fn repair(src: &Path, only: Option<usize>, problems: &mut Vec<String>) -> Option<Outcome> {
     let name = format!(
         "{}{}",
         src.file_name().unwrap().to_string_lossy(),
         only.map(|k| format!(" (use #{k})")).unwrap_or_default()
     );
+    let input = onsa_driver::read_input(Some(src)).unwrap_or_else(|e| panic!("read {}: {e}", src.display()));
     let mut texts = read_tree(src);
-    write_texts(d, &texts);
-    let base = check_package(d.root());
+    let base = check_input(&input);
     if !ended_well(&base) || !base.diags.is_empty() {
         return None;
     }
@@ -134,13 +135,12 @@ fn repair(d: &Dir, src: &Path, only: Option<usize>, problems: &mut Vec<String>) 
     if uses == 0 {
         return None;
     }
-    write_texts(d, &texts);
     let taken = if only.is_some() { 1 } else { uses };
     let cap = 4 * taken + 10;
     let mut steps = 0;
     let mut first_codes: Option<std::collections::BTreeSet<String>> = None;
     loop {
-        let c = check_package(d.root());
+        let c = check_input(&with_texts(&input, &texts));
         if !ended_well(&c) {
             problems.push(format!("{name}: step {steps}: ended with code {} {:?}", c.code, c.stderr.lines().next()));
             return Some(Outcome { steps, clean_at_the_end: false });
@@ -177,7 +177,6 @@ fn repair(d: &Dir, src: &Path, only: Option<usize>, problems: &mut Vec<String>) 
             return Some(Outcome { steps, clean_at_the_end: false });
         }
         apply_fix_texts(&mut texts, &diag.fixes[0]);
-        write_texts(d, &texts);
         steps += 1;
     }
 }
@@ -191,16 +190,13 @@ struct Totals {
     ended_by_a_step: usize,
 }
 
-fn sweep(tag: &str, only_each: bool) -> (Totals, Vec<String>) {
+fn sweep(only_each: bool) -> (Totals, Vec<String>) {
     let mut problems = Vec::new();
     let mut t = Totals::default();
-    for (i, src) in packages().iter().enumerate() {
+    for src in packages().iter() {
         let modes: Vec<Option<usize>> = if only_each { (0..count_uses(src)).map(Some).collect() } else { vec![None] };
-        // One scratch package for the runs of a package: they have its files and differ in the texts of
-        // those they took a `use` line out of, which is all `write_texts` writes again (X-16).
-        let d = Dir::bare(&format!("{tag}_{i}"));
         for only in modes {
-            if let Some(o) = repair(&d, src, only, &mut problems) {
+            if let Some(o) = repair(src, only, &mut problems) {
                 t.used += 1;
                 t.steps += o.steps;
                 t.clean += o.clean_at_the_end as usize;
@@ -216,7 +212,7 @@ fn sweep(tag: &str, only_each: bool) -> (Totals, Vec<String>) {
 /// the names stage on the way.
 #[test]
 fn the_loop_of_candidates_stops_without_a_fault_of_the_names_stage() {
-    let (t, problems) = sweep("repair_all", false);
+    let (t, problems) = sweep(false);
     assert!(problems.is_empty(), "{} problems in {} packages:\n{}", problems.len(), t.used, problems.join("\n"));
     // The sweep must have a subject: many packages with `use` lines and candidates really applied.
     assert!(t.used >= 20, "only {} packages were used", t.used);
@@ -228,7 +224,7 @@ fn the_loop_of_candidates_stops_without_a_fault_of_the_names_stage() {
 /// package that was there), and the candidates add no fault of the names stage on the way.
 #[test]
 fn the_loop_of_candidates_stops_when_one_use_line_is_taken_out() {
-    let (t, problems) = sweep("repair_one", true);
+    let (t, problems) = sweep(true);
     assert!(problems.is_empty(), "{} problems in {} runs:\n{}", problems.len(), t.used, problems.join("\n"));
     assert!(t.used >= 60, "only {} runs were used", t.used);
     assert!(t.steps >= 5, "only {} candidates were applied", t.steps);

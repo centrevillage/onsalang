@@ -5,7 +5,9 @@
 //! E0302, which cycles are E0310 and which candidate is given, and `onsa check` that must say the same
 //! (spec §2.2, §15.1, §18.1; S-37, S-594, S-663, S-673, S-679, R-39, R-106, R-268; W4-03 U3a2/t2). The
 //! sweep moved here from the scripts of the break side (`model.py` of U2b with the rules of U3a2, and
-//! `cyc.py`), which found faults the gate had passed.
+//! `cyc.py`), which found faults the gate had passed. The check runs in this process as the command runs
+//! it, with no file written (`check_input`, X-16): the reading of a package from its directory, the exit
+//! code and the printing are the business of the tests that run the command.
 //!
 //! The model (written from the spec, not from the compiler):
 //! - the head of a `use` is a module at the root of the package or a dependency (`std`); the own package
@@ -67,7 +69,7 @@
 //! in two (every fourth seed, 40 each); the modules come from a pool of 14 paths (some with no file of
 //! their own), 0 to 3 `use` lines (4 when cycles are let in) and 1 to 4 paths in a body for a module, 45
 //! packages in 100 are kept free of cycles while they are written (so that a candidate is the only thing
-//! that can close one) and the others may have them. A test is about 4 seconds in a debug build.
+//! that can close one) and the others may have them. A test is about 2 seconds in a debug build.
 
 mod test_support;
 
@@ -1353,8 +1355,7 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
     st.body_faults += ex.e0302.iter().filter(|s| matches!(s, Site::Body(..))).count();
     let what = format!("seed {seed}");
     let mut problems = Vec::new();
-    let d = package(&format!("model_{seed}"), "fx", &texts);
-    let c = check_package(d.root());
+    let c = check_input(&input_of("fx", &texts));
     if !ended_well(&c) {
         return vec![format!("{what}: ended with code {} {:?}\n{}", c.code, c.stderr.lines().next(), dump(&texts))];
     }
@@ -1410,8 +1411,7 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
             m.uses.reverse();
         }
         let rtexts = render(&reversed);
-        write_texts(&d, &rtexts);
-        let rc = check_package(d.root());
+        let rc = check_input(&input_of("fx", &rtexts));
         let tag = format!("{what} with the `use` lines in the opposite order");
         if !ended_well(&rc) {
             problems.push(format!("{tag}: ended with code {}", rc.code));
@@ -1425,7 +1425,6 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
                 problems.push(format!("{tag}: the modules of the E0310 are {rcycles:?}, they were {cycles:?}"));
             }
         }
-        write_texts(&d, &texts);
     }
     // The candidates.
     for site in &ex.e0302 {
@@ -1458,9 +1457,8 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
         for fix in &diag.fixes {
             let mut applied = texts.clone();
             apply_fix_texts(&mut applied, fix);
-            write_texts(&d, &applied);
             st.applied += 1;
-            let after = check_package(d.root());
+            let after = check_input(&input_of("fx", &applied));
             let tag = format!("{what}: the candidate {:?} for {k}", fix["title"].as_str().unwrap_or(""));
             if !ended_well(&after) {
                 problems.push(format!("{tag}: ended with code {}", after.code));
@@ -1495,7 +1493,6 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
                 }
             }
         }
-        write_texts(&d, &texts);
     }
     if !problems.is_empty() {
         problems.push(format!("{what}: the package was\n{}", dump(&texts)));
@@ -1549,8 +1546,7 @@ fn sweep(chunk: u64) {
 fn repair_seed(seed: u64) -> Vec<String> {
     let p = gen_prog(seed);
     let mut texts = render(&p);
-    let d = package(&format!("model_loop_{seed}"), "fx", &texts);
-    let first = check_package(d.root());
+    let first = check_input(&input_of("fx", &texts));
     if !ended_well(&first) {
         return vec![format!("seed {seed}: ended with code {}", first.code)];
     }
@@ -1563,7 +1559,7 @@ fn repair_seed(seed: u64) -> Vec<String> {
     let cap = 4 * faults + 10;
     let mut problems = Vec::new();
     for step in 0..=cap {
-        let c = check_package(d.root());
+        let c = check_input(&input_of("fx", &texts));
         if !ended_well(&c) {
             problems.push(format!("seed {seed}: step {step}: ended with code {}", c.code));
             break;
@@ -1589,7 +1585,6 @@ fn repair_seed(seed: u64) -> Vec<String> {
             break;
         }
         apply_fix_texts(&mut texts, &diag.fixes[0]);
-        write_texts(&d, &texts);
     }
     if !problems.is_empty() {
         problems.push(format!("seed {seed}: the package was\n{}", dump(&render(&p))));

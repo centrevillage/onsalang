@@ -2,6 +2,9 @@
 //! every shape, and a candidate does what §18.1 promises of it (spec §15.1, §18.1, §2.2; S-37, S-594,
 //! S-663, S-673, S-679; W4-03 U3a2/t2). The sweep moved here from the scripts of the break side
 //! (`useshapes.py`, `odd.py`) that found an internal error in `use fx.{}` which the gate had passed.
+//! The check runs in this process as the command runs it, with no file written (`check_input`, X-16):
+//! the reading of a package from its directory, the exit code and the printing are the business of the
+//! tests that run the command.
 //!
 //! What is fixed, and so what is checked, for every shape:
 //! - the command ends with exit code 0 or 1 and no `internal error`, whatever the line is (a `use` that
@@ -34,14 +37,13 @@
 //!
 //! Size: 14 heads x 18 tails x 3 files for `use` and for `pub use` is 1512 packages, each run once and
 //! once per candidate of its diagnostics; the six tests below run the files and the `pub` apart so the
-//! tests of `cargo test` run side by side (a debug build, about 3 seconds each); `odd_*` is 55 lines x 2
+//! tests of `cargo test` run side by side (a debug build, about a second each); `odd_*` is 55 lines x 2
 //! files x 2 places = 220 packages.
 
 mod test_support;
 
 use std::collections::BTreeMap;
 
-use test_support::Dir;
 use test_support::sweep::*;
 
 const HEADS: [&str; 14] = [
@@ -109,11 +111,10 @@ fn count(diags: &[Diag], k: &Key) -> usize {
     diags.iter().filter(|d| &key(d) == k).count()
 }
 
-/// The problems of one package, written over the scratch package `d`: it ends as a check does, and each
-/// candidate takes its diagnostic away and adds no code of `NEW_CODES` that the text did not have.
-fn probe(d: &Dir, texts: &Texts, what: &str, problems: &mut Vec<String>) -> usize {
-    write_texts(d, texts);
-    let c = check_package(d.root());
+/// The problems of one package: it ends as a check does, and each candidate takes its diagnostic away and
+/// adds no code of `NEW_CODES` that the text did not have.
+fn probe(texts: &Texts, what: &str, problems: &mut Vec<String>) -> usize {
+    let c = check_input(&input_of("fx", texts));
     if !ended_well(&c) {
         problems.push(format!("{what}: ended with code {} {:?}", c.code, c.stderr.lines().next().unwrap_or("")));
         return 0;
@@ -125,8 +126,7 @@ fn probe(d: &Dir, texts: &Texts, what: &str, problems: &mut Vec<String>) -> usiz
             applied_n += 1;
             let mut applied = texts.clone();
             apply_fix_texts(&mut applied, fix);
-            write_texts(d, &applied);
-            let after = check_package(d.root());
+            let after = check_input(&input_of("fx", &applied));
             if !ended_well(&after) {
                 problems.push(format!(
                     "{what}: after candidate {n} of {} {:?}: ended with code {} {:?}",
@@ -161,15 +161,11 @@ fn probe(d: &Dir, texts: &Texts, what: &str, problems: &mut Vec<String>) -> usiz
                 ));
             }
         }
-        write_texts(d, texts);
     }
     applied_n
 }
 
-fn shapes(where_: &str, prefix: &str, tag: &str) {
-    // One scratch package for every shape: the shapes have the same files and differ in `where_` alone,
-    // which is all `write_texts` writes from one to the next (X-16).
-    let d = package(&format!("shape_{tag}"), "fx", &Texts::new());
+fn shapes(where_: &str, prefix: &str) {
     let mut problems = Vec::new();
     let mut n = 0;
     let mut applied = 0;
@@ -178,7 +174,7 @@ fn shapes(where_: &str, prefix: &str, tag: &str) {
             let line = format!("{prefix}{head}{tail}");
             n += 1;
             let texts = shapes_package(where_, &line, head);
-            applied += probe(&d, &texts, &format!("{where_}: {line:?}"), &mut problems);
+            applied += probe(&texts, &format!("{where_}: {line:?}"), &mut problems);
         }
     }
     assert!(problems.is_empty(), "{} of {n} shapes:\n{}", problems.len(), problems.join("\n"));
@@ -190,35 +186,35 @@ fn shapes(where_: &str, prefix: &str, tag: &str) {
 /// §15.1: the shapes of `use` in the file of the root, `main.onsa`.
 #[test]
 fn shapes_use_in_a_root_module() {
-    shapes("main.onsa", "use ", "m");
+    shapes("main.onsa", "use ");
 }
 
 /// §15.1: the shapes in a module below a module with a file (`dsp/synth.onsa`, its parent is `dsp.onsa`).
 #[test]
 fn shapes_use_in_a_module_below() {
-    shapes("dsp/synth.onsa", "use ", "s");
+    shapes("dsp/synth.onsa", "use ");
 }
 
 /// §15.1: the shapes in a module below a module in a directory (`util/inner.onsa`, parent `util.onsa`).
 #[test]
 fn shapes_use_in_a_module_of_a_directory() {
-    shapes("util/inner.onsa", "use ", "i");
+    shapes("util/inner.onsa", "use ");
 }
 
 /// §15.1: the same with `pub use`, which is E0200 in this version (the candidates, if any, are safe).
 #[test]
 fn shapes_pub_use_in_a_root_module() {
-    shapes("main.onsa", "pub use ", "pm");
+    shapes("main.onsa", "pub use ");
 }
 
 #[test]
 fn shapes_pub_use_in_a_module_below() {
-    shapes("dsp/synth.onsa", "pub use ", "ps");
+    shapes("dsp/synth.onsa", "pub use ");
 }
 
 #[test]
 fn shapes_pub_use_in_a_module_of_a_directory() {
-    shapes("util/inner.onsa", "pub use ", "pi");
+    shapes("util/inner.onsa", "pub use ");
 }
 
 const ODD: [&str; 55] = [
@@ -293,9 +289,7 @@ fn odd_package(where_: &str, line: &str, after: bool) -> Texts {
     t
 }
 
-fn odd(where_: &str, tag: &str) {
-    // One scratch package for every line, as in `shapes`.
-    let d = package(&format!("odd_{tag}"), "fx", &Texts::new());
+fn odd(where_: &str) {
     let mut problems = Vec::new();
     let mut seen: BTreeMap<String, usize> = BTreeMap::new();
     let mut applied = 0;
@@ -304,7 +298,7 @@ fn odd(where_: &str, tag: &str) {
             let texts = odd_package(where_, line, after);
             let what = format!("{where_}: {line:?} {}", if after { "after the body" } else { "before the body" });
             *seen.entry(what.clone()).or_default() += 1;
-            applied += probe(&d, &texts, &what, &mut problems);
+            applied += probe(&texts, &what, &mut problems);
         }
     }
     assert!(problems.is_empty(), "{} of {} packages:\n{}", problems.len(), seen.len(), problems.join("\n"));
@@ -314,11 +308,11 @@ fn odd(where_: &str, tag: &str) {
 /// §15.1, §18.1: the broken lines in `main.onsa`.
 #[test]
 fn odd_lines_in_a_root_module() {
-    odd("main.onsa", "m");
+    odd("main.onsa");
 }
 
 /// §15.1, §18.1: the broken lines in `dsp/synth.onsa`.
 #[test]
 fn odd_lines_in_a_module_below() {
-    odd("dsp/synth.onsa", "s");
+    odd("dsp/synth.onsa");
 }

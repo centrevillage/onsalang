@@ -4,13 +4,15 @@
 //!
 //! A sweep writes a package from its texts, runs the command, and compares the diagnostics with what the
 //! spec fixes. A candidate is applied to the texts and the files it changed are written again, so every
-//! trial is a fresh run of the command on a scratch directory (`Dir`, removed on drop).
+//! trial is a fresh run of the command on a scratch directory (`Dir`, removed on drop). Or the sweep
+//! checks the texts in this process as the command does (`check_input`), with no file written (X-16).
 
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use onsa_driver::{ManifestSource, PackageInput, SourceFile};
 use serde_json::Value;
 
 use super::{Dir, doc_of, run};
@@ -62,12 +64,48 @@ impl Rng {
 /// The files of a package: the path under the root (`a/b.onsa`) to the text.
 pub type Texts = BTreeMap<String, String>;
 
+/// The manifest of a scratch package named `name`.
+fn manifest(name: &str) -> String {
+    format!("[package]\nname = \"{name}\"\nedition = \"2026\"\n")
+}
+
 /// A scratch package named `name` with the files of `texts`.
 pub fn package(tag: &str, name: &str, texts: &Texts) -> Dir {
     let d = Dir::bare(tag);
-    d.write("onsa.toml", &format!("[package]\nname = \"{name}\"\nedition = \"2026\"\n"));
+    d.write("onsa.toml", &manifest(name));
     write_texts(&d, texts);
     d
+}
+
+/// The input of a package named `name` with the files of `texts`, all of them modules, sorted part by part
+/// as the files of a package root are read (`a/b.onsa` before `a.onsa`), so that they are numbered as
+/// they are from the disk.
+pub fn input_of(name: &str, texts: &Texts) -> PackageInput {
+    let mut files: Vec<SourceFile> =
+        texts.iter().map(|(path, text)| SourceFile { path: path.clone(), text: text.clone() }).collect();
+    files.sort_by(|a, b| a.path.split('/').cmp(b.path.split('/')));
+    PackageInput {
+        manifest: Some(ManifestSource { path: "onsa.toml".into(), text: manifest(name) }),
+        files,
+        ..PackageInput::default()
+    }
+}
+
+/// `input` with the texts of `texts` for its files of the same paths (the manifest, the modules and the
+/// root's `tests/`); a file `texts` does not name keeps its text.
+pub fn with_texts(input: &PackageInput, texts: &Texts) -> PackageInput {
+    let mut out = input.clone();
+    for f in out.files.iter_mut().chain(out.root_tests.iter_mut()) {
+        if let Some(text) = texts.get(&f.path) {
+            f.text = text.clone();
+        }
+    }
+    if let Some(m) = out.manifest.as_mut() {
+        if let Some(text) = texts.get(&m.path) {
+            m.text = text.clone();
+        }
+    }
+    out
 }
 
 /// Write the files of `texts` (the manifest stays, and so does a file that `texts` does not name). A file
@@ -135,9 +173,40 @@ pub fn check_package(root: &Path) -> Checked {
     if out.code != 0 && out.code != 1 || out.stderr.contains("internal error") {
         return Checked { code: out.code, stderr: out.stderr, diags: Vec::new() };
     }
-    let doc = doc_of(&out);
-    let diags = doc["diagnostics"].as_array().expect("diagnostics").iter().map(Diag::from).collect();
+    let diags = diags_of(&doc_of(&out));
     Checked { code: out.code, stderr: out.stderr, diags }
+}
+
+fn diags_of(doc: &Value) -> Vec<Diag> {
+    doc["diagnostics"].as_array().expect("diagnostics").iter().map(Diag::from).collect()
+}
+
+/// `onsa check --json .` on the package of `input`, run in this process as the command runs it (on a
+/// thread of the command's stack, under its guard) and read from the document it prints, with no file
+/// written or read (X-16). The reading of a package from its directory, the exit code and the printing
+/// are the business of the tests that run the command. The exit code is the command's: 2 for an input
+/// that does not load, 101 with `internal error` for an internal error, else 1 with diagnostics and 0.
+pub fn check_input(input: &PackageInput) -> Checked {
+    let input = input.clone();
+    let ran = onsa_diag::stack::spawn("check", move || {
+        onsa_driver::guard(|| -> Result<String, (i32, String)> {
+            let mut loaded = onsa_driver::Loaded::from_input(input).map_err(|e| (2, e))?;
+            let result = onsa_driver::check_loaded(&mut loaded).map_err(|e| (101, format!("internal error: {e:?}")))?;
+            Ok(onsa_diag::to_json(&loaded.sources, &result.diagnostics))
+        })
+    })
+    .expect("spawn the thread of the check")
+    .join()
+    .unwrap_or_else(|_| panic!("the check panicked outside its guard"));
+    match ran {
+        Ok(Ok(json)) => {
+            let doc: Value = serde_json::from_str(&json).expect("the document is one JSON value");
+            let diags = diags_of(&doc);
+            Checked { code: if diags.is_empty() { 0 } else { 1 }, stderr: String::new(), diags }
+        }
+        Ok(Err((code, stderr))) => Checked { code, stderr, diags: Vec::new() },
+        Err(e) => Checked { code: 101, stderr: format!("internal error: {e:?}"), diags: Vec::new() },
+    }
 }
 
 /// True when the command ended as a check does: exit code 0 or 1 and no internal error.
