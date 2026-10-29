@@ -6,7 +6,9 @@
 //! The parts: this module (the record and the entry [`walk_bodies`]),
 //! `scope` (the tree of the scopes, the bindings and the lookup of a local),
 //! `exprs` (the walk of the statements, expressions and patterns, and of
-//! a flow body) and `paths` (the names whose head is no local).
+//! a flow body), `paths` (the names whose head is no local) and `cycles`
+//! (the cycles of the constants and of the flow instances, from the
+//! records).
 //!
 //! The walk reports the first error of the names of a body (§18.1), and
 //! the types stage does not check a body it reported in. The types stage
@@ -14,6 +16,7 @@
 //! literals and types of the body, and makes its locals from the bindings
 //! of the record.
 
+mod cycles;
 mod exprs;
 mod kinds;
 mod paths;
@@ -96,6 +99,9 @@ pub(crate) struct BodyNames {
     /// The effect row of an anonymous function, read once by the names stage
     /// as the row of a signature (§8.1, S-738).
     pub effects: HashMap<ExprId, crate::ty::EffectSet>,
+    /// The instances of flows (`f~(x)`, §11.5) of a flow body, in the order
+    /// of the walk: the flow and its name, the edges of the cycles of E0817.
+    pub instances: Vec<(DefId, onsa_diag::Span)>,
     /// `false` when the walk stopped before the end of the body: at an error
     /// of the names stage ([`Self::reported`]), or at a name the names stage
     /// holds as an error (§18.1, S-692), where the types stage stops too with
@@ -290,10 +296,7 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         if a.failed.contains_key(&id) {
             continue;
         }
-        let info = a.modules.get(def.module);
-        let Some(module) = flat.get(info.pkg).and_then(|p| info.module.and_then(|mi| p.modules.get(mi))) else {
-            continue;
-        };
+        let Some(module) = crate::names::module_of(&flat, &a.modules, def.module) else { continue };
         let ast = &module.parsed.ast;
         // The type and const parameters a body sees: of the function, or of
         // the `impl` of an associated `const`; `Self` of an `impl`.
@@ -347,6 +350,7 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         names.insert(id, out);
     }
     a.names = names;
+    cycles::report(&flat, a);
 }
 
 /// Lower the types written in the body of `def`, in the order of the walk

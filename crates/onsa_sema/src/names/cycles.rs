@@ -16,11 +16,12 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use onsa_diag::{Code, Diagnostic, Stage};
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::def::ModId;
 use crate::resolve::{Dep, DepTarget, Entity, Modules};
 use crate::sig::Sema;
+use crate::{Analysis, DefId, Module, Package};
 
 /// The edges of the graph of the dependencies of the `use`, by point: the
 /// module `m` is the point `m`, and S(m) the point `N + m`.
@@ -126,11 +127,12 @@ impl Modules {
         (0..n).filter(|&m| comp[m] == comp[at]).map(|m| ModId(m as u32)).collect()
     }
 
-    /// Whether the modules `mods` are all in one cycle of the imports, which
-    /// its E0310 reports (§18.1, S-734).
-    pub(crate) fn one_cycle(&self, mods: &[ModId]) -> bool {
+    /// Whether the modules `mods` of a cycle of declarations are two or
+    /// more, all in one cycle of the imports, whose E0310 is the one report
+    /// (§18.1, S-734).
+    pub(crate) fn across_one_cycle(&self, mods: &[ModId]) -> bool {
         let comp = &self.import_graph().comp;
-        mods.iter().all(|m| comp[m.0 as usize] == comp[mods[0].0 as usize])
+        mods.iter().any(|&m| m != mods[0]) && mods.iter().all(|m| comp[m.0 as usize] == comp[mods[0].0 as usize])
     }
 
     fn import_graph(&self) -> &ImportGraph {
@@ -230,14 +232,62 @@ impl<'p> Sema<'p> {
         d
     }
 
-    /// The key of the file of `m` in the order of the diagnostics: the path
-    /// of the file in its package (S-313).
+    /// The [`file_key`] of `m`.
     pub(crate) fn file_key(&self, m: ModId) -> String {
-        match self.module(m) {
-            Some(module) => format!("{}.onsa", module.segments.join("/")),
-            None => String::new(),
-        }
+        file_key(&self.flat, &self.a.modules, m)
     }
+}
+
+/// The source of the module `m`: none of a directory alone and of a
+/// package root.
+pub(crate) fn module_of<'p>(flat: &[&'p Package], modules: &Modules, m: ModId) -> Option<&'p Module> {
+    let info = modules.get(m);
+    flat.get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
+}
+
+/// The key of the file of `m` in the order of the diagnostics: the path
+/// of the file in its package (S-313).
+pub(crate) fn file_key(flat: &[&Package], modules: &Modules, m: ModId) -> String {
+    match module_of(flat, modules, m) {
+        Some(module) => format!("{}.onsa", module.segments.join("/")),
+        None => String::new(),
+    }
+}
+
+/// One diagnostic `code` of a cycle of the declarations `decls` (§18.1,
+/// S-734): at the name of the first of them in the order of the
+/// diagnostics, the others in notes, or the `notes` given (of E0817, the
+/// instances, S-742). The first of them, and the diagnostic.
+pub(crate) fn cycle_diagnostic(
+    (a, flat): (&Analysis, &[&Package]),
+    (code, what): (Code, &str),
+    mut decls: Vec<DefId>,
+    notes: Option<Vec<(Span, String)>>,
+) -> (DefId, Diagnostic) {
+    decls.sort_by_cached_key(|&d| (file_key(flat, &a.modules, a.def(d).module), a.def(d).name_span.start));
+    let names: Vec<String> = decls.iter().map(|&d| format!("`{}`", a.shown_name(d))).collect();
+    let msg = match &names[..] {
+        [a, b, _, _, ..] => format!("{a}, {b} and {} more refer to each other ({what})", names.len() - 2),
+        [one] => format!("{one} refers to itself ({what})"),
+        _ => format!("{} refer to each other ({what})", names.join(", ")),
+    };
+    let notes = notes.unwrap_or_else(|| {
+        let others = decls.iter().zip(&names).skip(1);
+        others.map(|(&o, name)| (a.def(o).name_span, format!("{name} is in the cycle"))).collect()
+    });
+    let d = Diagnostic::new(Stage::Names, code, a.def(decls[0]).name_span, msg);
+    (decls[0], notes.into_iter().fold(d, |d, (at, note)| d.with_note(at, note)))
+}
+
+/// The strongly connected component of each point of `adj` ([`components`]),
+/// and whether the point is in a cycle: in a component of two points or
+/// more, or with an edge to itself (§18.1, S-734).
+pub(crate) fn cyclic(adj: &[Vec<usize>]) -> (Vec<usize>, Vec<bool>) {
+    let comp = components(adj);
+    let mut size = vec![0; adj.len()];
+    comp.iter().for_each(|&c| size[c] += 1);
+    let cycled = (0..adj.len()).map(|p| size[comp[p]] > 1 || adj[p].contains(&p)).collect();
+    (comp, cycled)
 }
 
 /// The strongly connected component of each point (Tarjan, iterative),
@@ -293,7 +343,7 @@ pub(crate) fn components(edges: &[Vec<usize>]) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::components;
+    use super::{components, cyclic};
 
     #[test]
     fn the_components_of_a_ring_a_chain_and_a_loop() {
@@ -302,6 +352,15 @@ mod tests {
         let c = components(&edges);
         assert!(c[0] == c[1] && c[1] == c[2]);
         assert!(c[3] != c[4] && c[3] != c[0] && c[5] != c[0]);
+    }
+
+    #[test]
+    fn a_point_is_cyclic_in_a_component_of_two_or_with_an_edge_to_itself() {
+        // 0 ↔ 1; 2 → 2; 3 → 4 and 4 alone.
+        let (comp, cycled) = cyclic(&[vec![1], vec![0], vec![2], vec![4], vec![]]);
+        assert_eq!(comp[0], comp[1]);
+        assert_eq!(cycled, [true, true, true, false, false]);
+        assert_eq!(cyclic(&[]).1, Vec::<bool>::new());
     }
 
     /// [`Modules::closes_cycle`] leaves out the points of a component of a

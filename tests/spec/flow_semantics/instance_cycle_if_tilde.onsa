@@ -9,6 +9,8 @@
 // 最初のものの名前"). This is apart from instance_cycle_forms.onsa because `if~` is E0200 in this
 // version (the construct of the branch, W7-06), which the E0817 of the unit must hide (§18.1: an
 // earlier stage that finds an error stops the unit, and the E0817 is also earlier in the position).
+// The other flows of a collection are units of their own (§18.1: "単位どうしは独立に検査し"), so the
+// `if~` of `branch_b`, which is no first flow of its collection, is its E0200.
 
 pub flow in_branch(x: F32 at sample) -> F32 at sample {       //~ E0817
   let big = x > 1.0
@@ -27,5 +29,5 @@ pub flow branch_a(x: F32 at sample) -> F32 at sample {        //~ E0817
 
 pub flow branch_b(x: F32 at sample) -> F32 at sample {
   let small = x < 0.0
-  if~ small { x } else { branch_a~(x) }
+  if~ small { x } else { branch_a~(x) }                   //~ E0200
 }

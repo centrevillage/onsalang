@@ -135,7 +135,6 @@ features! {
     /// S-44, S-116: its E0020 is the names stage's (W7-04).
     CaretOnVisible: Language, "`^` on a name that is defined above it (a redundant mark)", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;
-    FlowSelfInstance: Language, "a flow that instantiates itself", None;
     Equality: Language, "equality on this type", None;
     OrderingAggregates: Language, "ordering comparisons of aggregate values", None;
     /// R-06: the general path of a value `match` (W8-06).

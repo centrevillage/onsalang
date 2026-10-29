@@ -52,7 +52,7 @@
 | `flow/e4/` | R-17 |
 | `flow/e5/` | R-03（`par` の中の look-back） |
 | `flow/e8/`、`flow/e9/`、`flow/e18/` | R-15 |
-| `flow/e10/` | R-03（自分をインスタンスにする flow） |
+| `flow/e10/` | R-03（自分をインスタンスにする flow）。W4-05 U5 で期待値付きのテストへ移した: `tests/spec/flow_semantics/instance_cycle_groups.onsa`・`instance_cycle_forms.onsa`（E0817）。今: `check` は `rec` と、`a`・`b` の集まりの `a` に E0817（`b` は古い構文 `Sig[F32]` の E0020）で、降下に進む命令も E0817 で止まる（降下の E0200「a flow that instantiates itself」は内部エラーの守りになった） |
 | `flow/e11/` | R-22。W2-08 で期待値付きのテストへ移した: `tests/spec/flow_semantics/export_planar_lengths_in.onsa`、`planar_length_bufs.onsa`・`planar_length_bufs_late.onsa`（全てのチャンネルの長さの比較） |
 | `flow/e12/` | R-41 |
 | `flow/e13/` | R-100、R-03 |
@@ -83,7 +83,7 @@
 | `cback/p14/` | R-10。W2-05 で期待値付きのテストへ移した: テストベクトルの `u32.mul`・`u32.smul`・`u32.checked_mul`（`vectors-c` の `c-gcc` が、gcc の -O2 で消えていた検査を確かめる）、`tests/spec/c_runtime/c_mul.onsa` |
 | `cback/fma.c` | R-67。W2-09/t で期待値付きのテストへ移した: `tests/spec/c_runtime/c_fp_contract.onsa`（FMA で値が変わる行。全ての C の検査が -ffp-contract=off の下で）、`c_fp_relaxed.onsa`・`c_fp_flow.onsa`（緩和した関数や flow の前後の厳密な関数）、`crates/onsa_tests/tests/c_fp_flags.rs`（GNU モードの gcc・fast-math・FLT_EVAL_METHOD の `#error`、`ONSA_ALLOW_INEXACT_FP`、STDC のプラグマ、公開と内部のヘッダ、フラグなしの GCC / Clang での結果）。W2-09 で実装し、この再現（`cback/fma.c`）を消した |
 | `cback/voice_host/host.cpp` | R-65 |
-| `types/rec*.onsa`、`types/constcyc*.onsa` | R-02 |
+| `types/rec*.onsa`、`types/constcyc*.onsa` | R-02。W4-05 で期待値付きのテストへ移した: 型の循環（`rec*`）は U2 の `tests/spec/types/cycle_value_self.onsa`・`cycle_value_groups.onsa`（E0311）、定数の循環（`constcyc*`）は U5 の `tests/spec/types/cycle_const_groups.onsa`・`cycle_const_assoc.onsa`・`cycle_const_around.onsa`（E0312）。今: `check` は `rec*` が E0311、`constcyc*` が集まりごとに一つの E0312 で、`constcyc*` は降下に進む命令（`interface`・`dump --core`・`test`）も E0312 で止まる（U5 で確かめた） |
 | `types/derive2.onsa` | R-35 |
 | `types/attrs.onsa` | R-36。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/attributes_table.onsa`（E0005）、`attributes_no_candidate.onsa`（S-483）、`tests/spec/fixes/e0005_attribute_values.onsa`。derive の検査（`NoEq` 越し）は W5-06 |
 | `types/bounds.onsa`、`types/bufelem.onsa`、`types/span*.onsa`、`types/nestrate.onsa`、`types/ratefn.onsa`、`types/tyb*.onsa`（推定） | R-37 |
@@ -120,7 +120,7 @@
 | `syntax/interp.onsa` | R-102。W3-04 で期待値付きのテストへ移した: `tests/spec/lex/interp_paths_syntax.onsa`（字句と構文）、`tests/spec/lex/interp_paths_resolved.onsa`（名前の段の解決、W4-04 まで実装待ち） |
 | `syntax/fuzz.py`、`syntax/fuzz2.py` | 変異入力の簡易ファズ（R-01 の確認、Q-06 の参考）。`fuzz.py` は W1-04 の `tools/fuzz.py`（gate の項目 `fuzz`）に置き換えた。記録として残す。`fuzz2.py`（fmt の AST の保存）は W1-07 の `tools/fmt_props.py`（gate の項目 `fmt-props`）に置き換えた。どちらも記録として残す |
 | `parent/r1.onsa` | R-01。W3-04 で期待値付きのテストへ移した: `tests/spec/negative/lex_utf8_holes.onsa`（`single_kanji`） |
-| `parent/t2.onsa` | R-02 |
+| `parent/t2.onsa` | R-02。W4-05 U2 で期待値付きのテストへ移した: `tests/spec/types/cycle_value_self.onsa`（E0311）。今: `check` は `Node` に E0311 |
 | `parent/r2.onsa` | R-69 |
 | `parent/r4.onsa` | R-72 |
 | `parent/t1.onsa` | R-30 |

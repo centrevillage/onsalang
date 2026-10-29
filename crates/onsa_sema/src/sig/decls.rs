@@ -258,25 +258,18 @@ impl<'p> Sema<'p> {
         }
         let holds = solve(&g);
         let mut adj = vec![Vec::new(); g.of.len()];
-        let mut looped = vec![false; g.of.len()];
         for (u, v, _) in g.edges.iter().filter(|e| holds[e.2]) {
             adj[*u].push(*v);
-            looped[*u] |= u == v;
         }
-        let comp = crate::names::components(&adj);
+        let (comp, cycled) = crate::names::cyclic(&adj);
         let of = g.of;
-        let mut size = vec![0; of.len()];
-        comp.iter().for_each(|&c| size[c] += 1);
-        let cyclic: Vec<usize> = (0..of.len()).filter(|&p| size[comp[p]] > 1 || looped[p]).collect();
+        let cyclic: Vec<usize> = (0..of.len()).filter(|&p| cycled[p]).collect();
         let mut mods: HashMap<usize, Vec<ModId>> = HashMap::new();
         cyclic.iter().for_each(|&p| mods.entry(comp[p]).or_default().push(self.a.def(of[p].0).module));
         // A cycle in modules that are one cycle of the imports: its E0310 is
         // the one (§18.1, S-734).
-        let silent: HashSet<usize> = mods
-            .iter()
-            .filter(|(_, ms)| ms.iter().any(|&m| m != ms[0]) && self.a.modules.one_cycle(ms))
-            .map(|e| *e.0)
-            .collect();
+        let silent: HashSet<usize> =
+            mods.iter().filter(|(_, ms)| self.a.modules.across_one_cycle(ms)).map(|e| *e.0).collect();
         // The other cycles that share a declaration are one (a union of components).
         let mut root: Vec<usize> = (0..of.len()).collect();
         let find = |root: &mut Vec<usize>, mut c: usize| {
@@ -308,7 +301,9 @@ impl<'p> Sema<'p> {
         order.sort_by_key(|&p| comp[p]);
         let order: Vec<DefId> = order.into_iter().map(|p| of[p].0).collect();
         for decls in groups.into_iter().filter(|ds| !ds.is_empty()) {
-            self.report_cycle(Code::E0311, decls, "cyclic type, §4.4");
+            let what = (Code::E0311, "cyclic type, §4.4");
+            let (first, d) = crate::names::cycle_diagnostic((self.a, &self.flat), what, decls, None);
+            self.report(first, d);
         }
         for d in order {
             if self.a.decls.cyclic.contains(&d) {
@@ -535,24 +530,6 @@ impl<'p> Sema<'p> {
         let key = self.member_key(o).unwrap_or((None, None));
         let reach = self.type_vis(key).map(|t| crate::resolve::narrower(self.a.def(id).vis, t));
         Some(Cx { def: id, reach, ..cx })
-    }
-
-    /// One diagnostic `code` of a cycle of the declarations `decls` (§18.1,
-    /// S-734): at the name of the first of them in the order of the
-    /// diagnostics, the others in notes.
-    pub(crate) fn report_cycle(&mut self, code: Code, mut decls: Vec<DefId>, what: &str) {
-        decls.sort_by_key(|&d| (self.file_key(self.a.def(d).module), self.a.def(d).name_span.start));
-        let names: Vec<String> = decls.iter().map(|&d| format!("`{}`", self.a.shown_name(d))).collect();
-        let msg = match &names[..] {
-            [a, b, _, _, ..] => format!("{a}, {b} and {} more refer to each other ({what})", names.len() - 2),
-            [one] => format!("{one} refers to itself ({what})"),
-            _ => format!("{} refer to each other ({what})", names.join(", ")),
-        };
-        let mut d = Diagnostic::new(Stage::Names, code, self.a.def(decls[0]).name_span, msg);
-        for (&o, name) in decls.iter().zip(&names).skip(1) {
-            d = d.with_note(self.a.def(o).name_span, format!("{name} is in the cycle"));
-        }
-        self.report(decls[0], d);
     }
 }
 

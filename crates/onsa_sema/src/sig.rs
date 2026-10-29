@@ -99,8 +99,7 @@ impl<'p> Sema<'p> {
     }
 
     pub(crate) fn module(&self, m: ModId) -> Option<&'p Module> {
-        let info = self.a.modules.get(m);
-        self.flat.get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
+        crate::names::module_of(&self.flat, &self.a.modules, m)
     }
 
     // ------------------------------------------------------------ diagnostics

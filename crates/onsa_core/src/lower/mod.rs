@@ -19,9 +19,8 @@
 //! is a placeholder too, so its uses are reported where they are. The
 //! limits (W8-01 takes them over):
 //! - A feature outside an expression and an arm pattern (a parameter or
-//!   return type, a `let` pattern, a flow that instantiates itself, a
-//!   `const` initializer with bindings) stops its item: the rest of that
-//!   item is not reported.
+//!   return type, a `let` pattern, a `const` initializer with bindings)
+//!   stops its item: the rest of that item is not reported.
 //! - A generic function lowered for several types reports an expression
 //!   once: the later instances find it a placeholder already, so another
 //!   unsupported feature at the same expression of a later instance is not

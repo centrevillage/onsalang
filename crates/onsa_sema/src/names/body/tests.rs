@@ -469,3 +469,24 @@ fn an_error_of_the_names_stage_in_a_type_of_the_body_comes_before_one_of_the_typ
     let n = names(&a, "f");
     assert!(n.reported && !n.complete);
 }
+
+/// A ring of 2000 constants and one of 300 flows (W4-05 U5, S-734, S-742):
+/// one diagnostic each, at the first, whose unit stops; the walk and the
+/// components do not recurse, and the other units are checked with no
+/// diagnostic (the cycle is not evaluated).
+#[test]
+fn a_long_ring_of_constants_or_of_flows_is_one_diagnostic() {
+    use onsa_diag::Code::{E0312, E0817};
+    let n = 2000;
+    let consts: String = (0..n).map(|i| format!("const C{i}: U32 = C{}\n", (i + 1) % n)).collect();
+    let (a, _) = analysis(&consts);
+    let got: Vec<_> = a.diagnostics.iter().map(|d| (d.code, d.notes.len())).collect();
+    assert_eq!(got, [(E0312, n - 1)]);
+    assert!(names(&a, "C0").reported && !names(&a, "C1").reported);
+    let n = 300;
+    let flow = |i: usize| format!("pub flow f{i}(x: F32 at sample) -> F32 at sample {{\n  f{}~(x)\n}}\n", (i + 1) % n);
+    let (a, _) = analysis(&(0..n).map(flow).collect::<String>());
+    let got: Vec<_> = a.diagnostics.iter().map(|d| (d.code, d.notes.len())).collect();
+    assert_eq!(got, [(E0817, n)]);
+    assert_eq!(names(&a, "f1").instances.len(), 1);
+}

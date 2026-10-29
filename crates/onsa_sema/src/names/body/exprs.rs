@@ -14,7 +14,9 @@ use onsa_syntax::ast::{
 use super::kinds::Want;
 use super::paths::Place;
 use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Walker};
+use crate::def::DefKind;
 use crate::flow_names::FlowBuiltin;
+use crate::resolve::Entity;
 
 /// The choices open while a pattern is walked (§7): the names bound by the
 /// branches before this one (`prev`) and by this branch so far (`cur`). A
@@ -50,6 +52,12 @@ impl Walker<'_> {
                         self.name_at(*index, Place::TypeOrValue)?
                     }
                     _ => self.name_at(*callee, place)?,
+                }
+                if let (CallKind::Flow, Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. })) =
+                    (kind, self.out.paths.get(callee))
+                    && matches!(self.a.def(d).kind, DefKind::Flow(_))
+                {
+                    self.out.instances.push((d, ast.expr(*callee).span));
                 }
                 // The constant of a delay (`delay~(x, N)`, §11.4).
                 let constant = match self.out.paths.get(callee) {

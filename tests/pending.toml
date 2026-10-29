@@ -170,13 +170,6 @@ note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 �
 
 [[pending]]
 kind = "diag-code"
-target = "E0312"
-reasons = ["R-02"]
-until = "W4-05"
-note = "定数の初期化式の名前による閉路（R-02、K-10）。関数を経由する閉路が E0312 になるかは W9-03 で決める（S-173）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0409"
 reasons = ["S-142", "R-100"]
 until = "W9-04"
@@ -251,13 +244,6 @@ target = "E0816"
 reasons = ["S-29", "S-110"]
 until = "W7-07"
 note = "init の省略（W7-07）と match~ の取られない腕（W7-06）で T: Default でない"
-
-[[pending]]
-kind = "diag-code"
-target = "E0817"
-reasons = ["R-03"]
-until = "W4-05"
-note = "自分をインスタンスにする flow（宣言どうしの閉路）"
 
 [[pending]]
 kind = "diag-code"
@@ -1918,54 +1904,3 @@ target = "tests/spec/fixes/e0320_uses_latency_value.onsa"
 reasons = ["S-82"]
 until = "W10-08"
 note = "@latency が無い属性の E0005（W10-08）"
-
-# --- W4-05 U5/t: 本体の記録からの閉路（E0312、E0817）。W4-05 U5 で外す（2026-10-29）。
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/cycle_const_groups.onsa"
-reasons = ["R-02", "S-734"]
-until = "W4-05"
-note = "定数の循環の E0312（集まりごとに一つ）は W4-05 U5"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/cycle_const_assoc.onsa"
-reasons = ["R-02", "S-734"]
-until = "W4-05"
-note = "関連定数を通る定数の循環の E0312 は W4-05 U5"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/cycle_const_around.onsa"
-reasons = ["R-02", "S-734"]
-until = "W4-05"
-note = "E0312 の単位と集まりの他の定数の検査は W4-05 U5"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/cycle_const_in_module"
-reasons = ["R-02", "S-734"]
-until = "W4-05"
-note = "一つのモジュールの中の定数の循環の E0312 は W4-05 U5"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/instance_cycle_groups.onsa"
-reasons = ["R-03", "S-742"]
-until = "W4-05"
-note = "flow のインスタンスの循環の E0817（集まりごとに一つ、宣言の名前）は W4-05 U5"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/instance_cycle_forms.onsa"
-reasons = ["R-03", "S-742"]
-until = "W4-05"
-note = "`par`・`let`・式の中のインスタンスの循環の E0817 は W4-05 U5"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/instance_cycle_if_tilde.onsa"
-reasons = ["R-03", "S-742"]
-until = "W4-05"
-note = "`if~` の枝のインスタンスの循環の E0817（名前の段で、flow の段の `if~` の E0200 より先）は W4-05 U5"

@@ -53,7 +53,6 @@
 use std::collections::{HashMap, HashSet};
 
 use onsa_diag::Span;
-use onsa_diag::unsupported::Feature;
 use onsa_sema::DefId;
 use onsa_sema::def::{DefKind, Fields, FlowDef};
 use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
@@ -65,7 +64,7 @@ use super::build::{
     assign, borrow, call, checked_binary, cmp, expr_stmt, field_by_name, float_lit, index, inout, lit, local_expr,
     materialize, stmt, u32_lit,
 };
-use super::{Lowerer, R, core_mode, internal, unsupported};
+use super::{Lowerer, R, core_mode, internal};
 use crate::ir::*;
 use crate::layout::{FlowLayout, flow_layout_for};
 use crate::prim::Prim;
@@ -209,7 +208,8 @@ impl<'a> Lowerer<'a> {
         let def = self.a.def(flow).clone();
         let DefKind::Flow(fd) = &def.kind else { return Err(internal(def.span, "not a flow")) };
         if !self.flows_in_progress.insert(flow) {
-            return Err(unsupported(def.span, Feature::FlowSelfInstance, &[]));
+            // The names stage reports the cycle (E0817, §11.5), which stops lowering.
+            return Err(internal(def.span, "a flow that instantiates itself"));
         }
         let r = lower_flow(self, flow, fd.clone(), def.span);
         self.flows_in_progress.remove(&flow);

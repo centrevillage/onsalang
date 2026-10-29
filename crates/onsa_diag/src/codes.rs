@@ -394,7 +394,7 @@ codes! {
         "a value's clock is faster than its place (flow input, delay `init`, non-`rt` fn argument)";
     E0816 = 816, Flow, [Flow], Optional, Optional,
         "`init` is omitted, but the value type does not satisfy `Default`";
-    E0817 = 817, Flow, [Flow], Optional, Optional,
+    E0817 = 817, Flow, [Names], Optional, Optional,
         "a flow makes an instance of itself";
     E0818 = 818, Flow, [Flow], Optional, Optional,
         "`@mem` in a wrong place or with an unknown memory name";

@@ -26,7 +26,7 @@ use crate::def::ModId;
 use crate::sig::Sema;
 
 pub(crate) use clash::hides;
-pub(crate) use cycles::{ImportGraph, components};
+pub(crate) use cycles::{ImportGraph, cycle_diagnostic, cyclic, module_of};
 pub(crate) use heading::{param_clashes, param_name};
 pub(crate) use typed::{BuiltinMember, PathEnd, builtin_member, builtin_ty, self_outside_impl};
 
