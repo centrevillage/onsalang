@@ -1,0 +1,6 @@
+pub struct C { d: D }
+pub struct D { c: C }
+pub fn f(x: C[I32]) -> I32 { 1 }
+impl C[I32] {
+  pub fn g(self) -> I32 { 1 }
+}
