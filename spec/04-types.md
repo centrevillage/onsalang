@@ -18,7 +18,7 @@
 | 関数 | `fn(A, B) -> R uses {E}`, `rt fn(A) -> R`, `fn(inout A)`, `fn(move A) -> R` | Copy（捕捉の無い値。捕捉する無名関数と既定のモードの関数型の引数は第二級、§5.3） | 値 |
 | FFI | `Ptr[T]`（§14） | Copy | 値 |
 
-`Option` と `Result` は、std で `pub enum Option[T]: PartialEq + Eq + Hash + Show { None, Some(T) }` と `pub enum Result[T, E]: PartialEq + Eq + Hash + Show { Ok(T), Err(E) }` と宣言された enum で、prelude にある（§15.1）。
+`Option` と `Result` は、std で `pub enum Option[T: ?Dup]: PartialEq + Eq + Hash + Show { None, Some(T) }` と `pub enum Result[T: ?Dup, E: ?Dup]: PartialEq + Eq + Hash + Show { Ok(T), Err(E) }` と宣言された enum で（中身に Affine の値も持てる、§4.5）、prelude にある（§15.1）。
 他の enum と違うのは、`use` なしで見えること、列挙子を名前だけで（修飾なしで）書くこと、`?`（§9.1）に使えることだけである。他の enum の列挙子は常に `Type.Variant` と書く。
 `Option`・`Result` の型の名前空間から列挙子は引かない（列挙子は prelude の名前である）ので、型や別名で修飾した形（`Option.None`、`Option::[I32].None`、`type O = Option[I32]` の後の `O.None`）は名前の段の E0302 で、修正候補は修飾を除き、修飾が持っていた型引数を名前に付ける形（`None`、`None::[I32]`）、note は「prelude の列挙子は名前だけで書く」である。
 修飾なしで書く列挙子に式の中で型引数を書くときは、列挙子の名前に付ける（`None::[I32]`、`Some::[U8](250)`。他の総称の enum の列挙子は型に付ける、§4.5）。
@@ -143,8 +143,10 @@ pub struct Ring[T, const N: U32] {
 - 型パラメータには、暗黙に `Dup`（複製できる = Copy か Shared）の制約が付く。Affine 型も受け付けるには `[T: ?Dup]` と書いて、この制約を外す（Rust の `?Sized` と同じ形）。その場合、`T` の値は複製できない。
   生成して返すこと、借用・`inout`・`move` で渡すことはできる。`?` を付けられるのは `Dup` だけで、他の境界（`?Copy`、`?Show`）に付けると E0416（暗黙に付く制約は `Dup` だけなので外すものが無い。note で規則を示す）。
 - `Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る（E0416）。
+- `Array[T]`・`Set[T]` の要素と `Map[K, V]` の鍵と値は Dup（Copy か Shared）に限る（E0416。参照カウントで共有する値は中身ごと複製しうるので、複製できない Affine の値は置けない、§4.6）。
 - 型の位置（署名、別名の右辺（§4.4）、`impl` の見出しの対象（§6.2）、本体に書いた型（注釈、無名関数の引数と返り値、式の型引数 `::[…]`））に書いた型引数は、その型の宣言の型パラメータの要求（境界と暗黙の `Dup`）を満たさなければならず、満たさなければ E0416 である（`struct N[T: Num]` に対して `N[Bool]` と `fn f[T](x: N[T])` は E0416、`fn f[T: Float](x: N[T])` は正しい）。
   型パラメータを型引数に書いたときは、それを宣言した項目の `[ ]` の境界だけで判定する（型の宣言の境界は受け継がない）。本体の要求の検査（上記）と同じ規則で、位置が型を書いた所になる。
+  第二級の型（§5.3）を型引数に書いた所（`W[Span[F32]]`）は位置の E0710 だけで、その型引数の要求は判定しない（第二級の型は種を持たない、§4.6）。
 - 境界を複数付けるときは `+` で並べる（`[T: Num + Default]`）。
   同じ並びに同じ境界を二度書く形（`T: Copy + Copy`、`T: ?Dup + ?Dup`）と、`?Dup` を Dup を要する境界（`Dup`、`Copy`、`AnyNum`、`Num`、`Float`、`Int`、`Unsigned`。数の trait は全て `Copy` を要する、§6.3）と並べる形（`T: Copy + ?Dup`。外すものが無い）は E0416 で、並びを前から読んで前の要素と重なるか矛盾する最初の要素に付け、前の要素を note で示す（矛盾では規則も示す）。
   含意で重なる形（`Float + Num`）は誤りでない。矛盾のある並びの型パラメータを使う側には、その境界による診断を出さない（§18.1）。
