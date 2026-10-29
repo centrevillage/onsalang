@@ -108,18 +108,17 @@ fn count_uses(src: &Path) -> usize {
     uses
 }
 
-/// Take the `use` lines (all, or the one of the number `only`) out of the package at `src` and repair it
-/// with the candidates. Problems found go to `problems`. `None` when the package is not one to use (it
-/// has a fault to begin with).
-fn repair(tag: &str, src: &Path, only: Option<usize>, problems: &mut Vec<String>) -> Option<Outcome> {
+/// Take the `use` lines (all, or the one of the number `only`) out of the package at `src`, written over the
+/// scratch package `d`, and repair it with the candidates. Problems found go to `problems`. `None` when
+/// the package is not one to use (it has a fault to begin with).
+fn repair(d: &Dir, src: &Path, only: Option<usize>, problems: &mut Vec<String>) -> Option<Outcome> {
     let name = format!(
         "{}{}",
         src.file_name().unwrap().to_string_lossy(),
         only.map(|k| format!(" (use #{k})")).unwrap_or_default()
     );
-    let d = Dir::bare(tag);
     let mut texts = read_tree(src);
-    write_texts(&d, &texts);
+    write_texts(d, &texts);
     let base = check_package(d.root());
     if !ended_well(&base) || !base.diags.is_empty() {
         return None;
@@ -135,7 +134,7 @@ fn repair(tag: &str, src: &Path, only: Option<usize>, problems: &mut Vec<String>
     if uses == 0 {
         return None;
     }
-    write_texts(&d, &texts);
+    write_texts(d, &texts);
     let taken = if only.is_some() { 1 } else { uses };
     let cap = 4 * taken + 10;
     let mut steps = 0;
@@ -178,7 +177,7 @@ fn repair(tag: &str, src: &Path, only: Option<usize>, problems: &mut Vec<String>
             return Some(Outcome { steps, clean_at_the_end: false });
         }
         apply_fix_texts(&mut texts, &diag.fixes[0]);
-        write_texts(&d, &texts);
+        write_texts(d, &texts);
         steps += 1;
     }
 }
@@ -197,9 +196,11 @@ fn sweep(tag: &str, only_each: bool) -> (Totals, Vec<String>) {
     let mut t = Totals::default();
     for (i, src) in packages().iter().enumerate() {
         let modes: Vec<Option<usize>> = if only_each { (0..count_uses(src)).map(Some).collect() } else { vec![None] };
+        // One scratch package for the runs of a package: they have its files and differ in the texts of
+        // those they took a `use` line out of, which is all `write_texts` writes again (X-16).
+        let d = Dir::bare(&format!("{tag}_{i}"));
         for only in modes {
-            let tag = format!("{tag}_{i}_{}", only.map(|k| k as i64).unwrap_or(-1));
-            if let Some(o) = repair(&tag, src, only, &mut problems) {
+            if let Some(o) = repair(&d, src, only, &mut problems) {
                 t.used += 1;
                 t.steps += o.steps;
                 t.clean += o.clean_at_the_end as usize;
