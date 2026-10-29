@@ -1780,13 +1780,6 @@ note = "空の並び use util.{} の E0002（S-515）が出ない。何も取り
 # --- W4-03 U3b2: 名前の段の E0200 と生成項目の事例のうち、後の単位・作業の機能で通るもの（2026-10-25）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/generic_struct_import_counts"
-reasons = ["R-258", "R-197"]
-until = "W4-05"
-note = "取り込んだ総称の型の型引数の数の誤りは型の位置の E0412（S-103）。今は E0302 で、型引数の無い Pair は何も出ない"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/module/target_user_impl.onsa"
 reasons = ["S-661", "S-670"]
 until = "W5-02"
@@ -1897,13 +1890,6 @@ target = "tests/spec/types/array_length_operations_fine.onsa"
 reasons = ["S-713"]
 until = "W9-03"
 note = "演算を含む定数式の長さの正例が E0200「expressions as array lengths」（W4-04 U8b/t。`type_names/const_exprs_arith.onsa` と同じ待ち）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow/sig_user_declared_without_parameter.onsa"
-reasons = ["S-103", "R-258"]
-until = "W4-05"
-note = "型パラメータの無い利用者の `Sig` に型引数を書く形の E0412 が今は E0302（W4-04 U8b/t。型の位置の型引数の数は W4-05 の R-258）"
 
 [[pending]]
 kind = "fix-contract"

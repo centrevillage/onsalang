@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§18.1"]
+
+// S-759 (2') (W4-05 U4c): the type arguments of the target of an `impl` are the parameters of the `impl`, each
+// once (§6.2, E0307 of the names stage), and their number is that of the declaration (§4.5, E0412 of the types
+// stage). The rule of the list is judged on the arguments as written, and only when the count of the target's
+// own arguments is that of its declaration: a target with a wrong count is the E0412 alone (`impl P[I32]` of a
+// type that takes none, `impl W[I32, I32]`, `impl[T] P[T]`, `impl W`), and an argument past the count is not
+// read (S-762), so a name that is not found there is no E0307 (S-753). A target whose count is right and whose
+// arguments break the rule is the E0307 (`impl[T] W[T[I32]]`: the argument is no parameter alone). A type
+// parameter is no name of a type declaration, with arguments or not (§4.4, R-320). Either is an error of the
+// heading, so the `impl` is one unit and its members are not checked (`let z: Bool = 1` below has no
+// diagnostic).
+
+pub struct P {
+  x: I32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl P[I32] {                                       //~ E0412
+  pub fn a(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl W[I32, I32] {                                  //~ E0412
+  pub fn d(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl[T] W[T[I32]] {                                 //~ E0307
+  pub fn e(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl[T] P[T] {                                      //~ E0412
+  pub fn b(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl W {                                            //~ E0412
+  pub fn c(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl P[Nope] {                                      //~ E0412
+  pub fn f(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl[T] W[T, Nope] {                                //~ E0412
+  pub fn g(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl[T] T[I32] {                                    //~ E0307
+  pub fn h(self) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}

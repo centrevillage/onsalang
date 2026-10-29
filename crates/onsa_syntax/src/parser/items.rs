@@ -469,6 +469,9 @@ impl<'a> Parser<'a> {
         } else if ctx == ItemCtx::Extern {
             self.complete(m, NodeKind::OpaqueType);
             Ok(())
+        } else if self.at(TokenKind::LBracket) {
+            let rule = "a type alias has no type parameters (§4.4); a generic alias is not in this version (§19.1)";
+            Err(self.fail_noting(Want::Other, "`=` (a type alias needs a definition)", self.peek(), rule))
         } else {
             Err(self.unexpected("`=` (a type alias needs a definition)"))
         }

@@ -76,6 +76,12 @@ impl<'p> Sema<'p> {
                     let seg = &path.segments[0];
                     if seg.name == "Self" {
                         return match cx.self_ty {
+                            // `Self` is the type of the `impl`, its arguments decided (§4.4).
+                            Some(_) if !args_ast.is_empty() => {
+                                let msg = "`Self` takes no type arguments: it is the type of the `impl`";
+                                self.report(cx.def, Diagnostic::new(Stage::Types, Code::E0412, te.span, msg));
+                                self.a.types.error()
+                            }
                             Some(t) => t,
                             None => {
                                 self.report(cx.def, ResolveError::SelfOutsideImpl { span: seg.span }.into_diagnostic());
@@ -92,15 +98,9 @@ impl<'p> Sema<'p> {
                             return self.not_a_type(cx, None, kind, te.span, path);
                         }
                         if !args_ast.is_empty() {
-                            self.report(
-                                cx.def,
-                                Diagnostic::new(
-                                    Stage::Names,
-                                    Code::E0302,
-                                    te.span,
-                                    "a type parameter takes no arguments",
-                                ),
-                            );
+                            let msg = "a type parameter takes no arguments";
+                            self.report(cx.def, Diagnostic::new(Stage::Types, Code::E0412, te.span, msg));
+                            return self.a.types.error();
                         }
                         return self.a.types.intern(Ty::Param(i as u32));
                     }
@@ -127,22 +127,17 @@ impl<'p> Sema<'p> {
                 };
                 // S-24: a const generic parameter takes an integer literal or a
                 // constant's name; which arguments are const depends on the entity.
-                let expect_const: Vec<Option<bool>> = match entity {
-                    Entity::Def(d) | Entity::Member(d) => {
-                        let def = &self.a.defs[d.0 as usize];
-                        match &def.kind {
-                            DefKind::Struct(_) | DefKind::Enum(_) => {
-                                def.generics().iter().map(|g| Some(matches!(g.kind, GenericKind::Const(_)))).collect()
-                            }
-                            _ => Vec::new(),
-                        }
-                    }
-                    _ => Vec::new(),
-                };
+                // SPEC-GAP(S-762): the declared parameters, when their count is known:
+                // an argument past them has no kind to judge and is not read, the
+                // E0412 of the count (`Ring[F32, 4, 5]`, `P[3]`, `P[Nope]`; §4.5).
+                let declared = self.declared_params(entity);
                 let lowered_args: Vec<TyId> = args_ast
                     .iter()
                     .enumerate()
-                    .map(|(i, &x)| self.lower_type_arg(cx, x, expect_const.get(i).copied().flatten()))
+                    .map(|(i, &x)| match declared.as_ref().map(|p| p.get(i)) {
+                        Some(None) => self.a.types.error(),
+                        known => self.lower_type_arg(cx, x, known.flatten().copied().flatten()),
+                    })
                     .collect();
                 self.type_of_entity(cx, entity, lowered_args, te.span, path)
             }
@@ -307,6 +302,27 @@ impl<'p> Sema<'p> {
         self.a.types.error()
     }
 
+    /// The kinds of the declared parameters of the type `entity` names, when
+    /// their count is known (`Some(true)` a `const` one, `None` one of a
+    /// builtin, which takes a type).
+    pub(super) fn declared_params(&self, entity: Entity) -> Option<Vec<Option<bool>>> {
+        match entity {
+            Entity::Def(d) | Entity::Member(d) if !self.a.heading_failed(d) => {
+                let def = &self.a.defs[d.0 as usize];
+                match &def.kind {
+                    DefKind::Struct(_) | DefKind::Enum(_) => {
+                        Some(def.generics().iter().map(|g| Some(matches!(g.kind, GenericKind::Const(_)))).collect())
+                    }
+                    DefKind::Alias(_) => Some(Vec::new()),
+                    _ => None,
+                }
+            }
+            Entity::Builtin(Builtin::Scalar(_)) => Some(Vec::new()),
+            Entity::Builtin(Builtin::Generic(b)) => Some(vec![None; b.arity()]),
+            _ => None,
+        }
+    }
+
     fn type_of_entity(
         &mut self,
         cx: &Cx<'p>,
@@ -316,12 +332,13 @@ impl<'p> Sema<'p> {
         path: &onsa_syntax::ast::Path,
     ) -> TyId {
         let name = path.segments.last().unwrap().name.clone();
+        // The count of the arguments of a type is of the types stage (§4.5, S-103).
         let arity_err = |s: &mut Self, want: usize| {
             s.report(
                 cx.def,
                 Diagnostic::new(
-                    Stage::Names,
-                    Code::E0302,
+                    Stage::Types,
+                    Code::E0412,
                     span,
                     format!("`{name}` takes {want} type argument(s), {} given", args.len()),
                 ),
@@ -360,6 +377,10 @@ impl<'p> Sema<'p> {
                         }
                         self.a.types.intern(Ty::Named(d, args))
                     }
+                    // An alias is never generic, so arguments are an E0412 even
+                    // when it is the error type; not when the syntax error is
+                    // its parameters (`type Al[T] = …`, R-274).
+                    DefKind::Alias(_) if self.a.heading_failed(d) => self.a.types.error(),
                     DefKind::Alias(_) => {
                         if !args.is_empty() {
                             return arity_err(self, 0);

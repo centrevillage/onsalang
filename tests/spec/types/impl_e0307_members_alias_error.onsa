@@ -2,26 +2,30 @@
 // [test]
 // spec = ["§4.4", "§6.2", "§18.1"]
 
-// S-752 (1), S-748 (a) (W4-05 U3a): the alias that is written as the target of an `impl` is itself an error
-// type (the arguments of a type that takes none, `type A1 = S1[I32]`, which is E0302; a cycle of values, `struct S2
-// { a: A2 }` and `type A2 = S2`, which is E0311), but the head of its right side names a type. The members of the
-// `impl` are then names after the name of that type (S-752 (1): "右辺の頭が型を名指せば、メンバはその型の `.` の
-// 空間に数える"; §18.1: the members of an `impl` whose heading is E0307 are counted when the type is decided), so
-// the member of the direct `impl` that is written after it and repeats a name is E0304, and a name that no one
-// repeats is read from the type (`S4.N` below, no diagnostic). The `impl` of the alias has no diagnostic of its own
-// besides the error of the alias: a failed name in a heading is no error of the heading (§18.1). The uses of the
-// name that is E0304 are silent. The orphan form (the target is a built-in type) is W5-04, and the `impl` written
-// after the direct one is the last form (S5): a failed name in a heading is no error of the heading
-// (§18.1), so the `impl` is not one unit, its members are units of their own, and the member that repeats the
-// name of the direct `impl` written before it is E0304.
+// S-752 (1), S-754 (1), S-748 (a) (W4-05 U3a, U4c): the alias that is written as the target of an `impl` is itself
+// an error type (the arguments of a type that takes none, `type A1 = S1[I32]`, which is E0412 (§4.5, S-103); a
+// cycle of values, `struct S2 { a: A2 }` and `type A2 = S2`, which is E0311), but the head of its right side
+// names a type. S-754 (1), §4.4 ("別名そのものが誤りの型でも同じ") and §18.1 ("`impl` の見出しに書いた別名 … は、別名そのものが
+// 誤りの型 … でも E0307 で、見出しの誤りである"): the `impl` of such an alias has the E0307 of its heading, as the `impl`
+// of an alias that is right has (an alias is never written as the target of an `impl`, so the error stays when
+// the alias is fixed and is not a chain from its error). The heading is an error of the `impl`, so the `impl` is
+// one unit (§18.1) and its members are not checked. They are still names after the name of the type that the head
+// of the alias names (S-752 (1): "右辺の頭が型を名指せば、メンバはその型の `.` の空間に数える"; §18.1: the members
+// of an `impl` whose heading is E0307 are counted when the type is decided), so the member of the direct `impl`
+// that is written after it and repeats a name is E0304, and a name that no one repeats is read from the type
+// (`S4.N` below, no diagnostic). The `impl` written after the direct one is the last form (S5): its member that
+// repeats the name of the direct `impl` is in the unit of the E0307 and is hidden by it, as in the `impl` of an
+// alias that is right (impl_e0307_members_last.onsa). The uses of the name that is E0304 are silent. The orphan
+// form (the target is a built-in type) is W5-04. An alias whose right side is a name that is not found is in
+// impl_e0307_alias_error_target.onsa.
 
 pub struct S1 {
   x: I32,
 }
 
-type A1 = S1[I32]                                   //~ E0302
+type A1 = S1[I32]                                   //~ E0412
 
-impl A1 {
+impl A1 {                                           //~ E0307
   pub const N: U32 = 2
 }
 
@@ -37,7 +41,7 @@ pub struct S2 { a: A2 }                             //~ E0311
 
 type A2 = S2
 
-impl A2 {
+impl A2 {                                           //~ E0307
   pub fn get(self) -> I32 { 1 }
 }
 
@@ -49,9 +53,9 @@ pub struct S4 {
   x: I32,
 }
 
-type A4 = S4[I32]                                   //~ E0302
+type A4 = S4[I32]                                   //~ E0412
 
-impl A4 {
+impl A4 {                                           //~ E0307
   pub const N: U32 = 2
 }
 
@@ -71,13 +75,13 @@ pub struct S5 {
   x: I32,
 }
 
-type A5 = S5[I32]                                   //~ E0302
+type A5 = S5[I32]                                   //~ E0412
 
 impl S5 {
   pub const N: U32 = 3
 }
 
-impl A5 {
-  pub const N: U32 = 2                              //~ E0304
+impl A5 {                                           //~ E0307
+  pub const N: U32 = 2
   pub const M: U32 = 4
 }

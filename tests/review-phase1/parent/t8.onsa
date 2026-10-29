@@ -20,7 +20,7 @@ fn value_as_type(x: helper) -> F32 { 1.0 }
 fn call_non_function(x: F32) -> F32 { x(1.0) }
 
 // 期待: E0412（引数の数のコードを型引数にも使う）。
-// 今: E0302「`F32` takes 0 type argument(s), 1 given」（型引数の数。関数の引数の数は E0412）。
+// 今: E0412「`F32` takes 0 type argument(s), 1 given」（W4-05 U4c から）。
 fn type_arity(x: F32[I32]) -> F32 { 1.0 }
 
 // 期待: E0308。

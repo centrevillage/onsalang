@@ -1,0 +1,168 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§2.2", "§4.4", "§6.2"]
+
+// S-103, R-258, R-248, S-595 (W4-05 U4c): the forms that are right, with no diagnostic, next to the wrong ones of
+// type_args_count.onsa, type_args_count_stages.onsa and type_args_on_parameter_and_self.onsa. They pass before
+// the number of arguments is E0412, so they are in a file of their own: those files fail until then, and
+// this one tells that the work does not reject a number that is right (§4.5: "型引数と const 引数の数が宣言と
+// 合わなければ E0412"): the number given equal to the number declared, for a type of the program, a type of the
+// prelude (`Option`, `Result`, `Buf`, `Span`), a type with a const parameter, an alias (an alias takes none, and
+// an alias of a type with its arguments decided is written without them), a type nested in another, a type
+// parameter alone (`T`, `Option[T]`), `Self` alone (§2.2: `Self` is the alias of the target; `Option[Self]`,
+// `Self { … }`), and the name of the target with its arguments in a method of a generic `impl`.
+
+pub struct P {
+  x: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct G[T] {
+  v: T,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+type B = P
+
+type O = Option[I32]
+
+type Pa = Pair[I32]
+
+// ---- The number is right ----
+
+pub fn counts_that_match(
+  a: Pair[I32],
+  b: Ring[F32, 4],
+  c: Option[I32],
+  d: Result[I32, Bool],
+  e: Buf[F32],
+  f: Span[F32],
+  g: Pa,
+  h: B,
+  i: O,
+  j: P,
+  k: E,
+  l: Pair[Pair[I32]],
+  m: Option[Pair[Option[I32]]],
+  n: Ring[Pair[I32], 8],
+) -> I32 {
+  1
+}
+
+pub fn counts_that_match_in_a_result() -> Result[Pair[I32], E] {
+  Err(E.A)
+}
+
+pub struct CountsThatMatchInAField {
+  a: Pair[I32],
+  b: Ring[F32, 4],
+  c: Option[Pa],
+}
+
+pub enum CountsThatMatchInAVariant {
+  A(Pair[I32]),
+  B(Result[I32, Bool]),
+}
+
+pub fn counts_that_match_in_an_annotation() -> I32 {
+  let _: Pair[I32]         = Pair { a: 1, b: 2 }
+  let _: Ring[F32, 2]      = Ring { data: [0.0; 2], head: 0 }
+  let _: Option[Pair[I32]] = None
+  let _: B                 = P { x: 1 }
+  1
+}
+
+// ---- A type parameter and `Self` without an argument ----
+
+pub fn parameter_alone[T](x: T) -> T {
+  x
+}
+
+pub fn parameter_inside_types[T](o: Option[T], t: (T, T), a: [T; 2], f: fn(T) -> T) -> I32 {
+  1
+}
+
+pub fn parameter_as_the_argument[T](x: G[T]) -> I32 {
+  1
+}
+
+pub fn parameter_nested_in_options[T](x: Option[Option[T]]) -> I32 {
+  1
+}
+
+pub fn parameter_in_an_annotation_alone[T](x: T) -> I32 {
+  let _: T = x
+  1
+}
+
+impl P {
+  pub fn self_alone(self, o: Self) -> Self {
+    self
+  }
+
+  pub fn self_inside_types(self, o: Option[Self], t: (Self, I32)) -> I32 {
+    1
+  }
+
+  pub fn self_in_an_annotation_alone(self) -> I32 {
+    let _: Self = self
+    1
+  }
+
+  pub fn self_as_a_literal() -> Self {
+    Self { x: 1 }
+  }
+}
+
+impl[T] G[T] {
+  pub fn self_of_a_generic_alone(self, o: Self) -> Self {
+    o
+  }
+
+  pub fn self_of_a_generic_inside_types(self, o: Option[Self], t: (Self, T)) -> I32 {
+    1
+  }
+
+  pub fn self_of_a_generic_as_a_literal(v: T) -> Self {
+    Self { v: v }
+  }
+
+  pub fn the_name_with_its_argument(self, o: G[T]) -> I32 {
+    1
+  }
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn self_of_a_ring_alone(self, o: Self) -> Self {
+    o
+  }
+
+  pub fn the_name_with_its_arguments(self, o: Ring[T, N]) -> I32 {
+    1
+  }
+}
+
+// ---- The `impl` whose target has the parameters as arguments ----
+
+impl[T] W[T] {
+  pub fn right(self, a: Pair[T]) -> T {
+    self.v
+  }
+}

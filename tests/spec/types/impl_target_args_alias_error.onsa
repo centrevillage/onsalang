@@ -6,7 +6,8 @@
 // 名前の引数は判定しない（§18.1）". An alias is never a parameter of the `impl`, so the E0307 stays when the alias is
 // fixed and is not a chain from its error; the alias keeps its own error in its own unit. A name not found, written
 // right in the argument, may be a parameter misspelled, so it has its E0302 only. The members of an `impl` with an
-// E0307 are not checked (§18.1): the `let z: Bool = 2` below has no E0401.
+// E0307 are not checked (§18.1): the `let z: Bool = 2` below has no E0401. The alias `Bare = W` leaves out the
+// argument that `W` takes, which is the E0412 of the number of arguments (§4.5, S-103, W4-05 U4c), not E0302.
 
 pub struct W[T] {
   v: T,
@@ -27,7 +28,7 @@ impl W[Cyc] {                                       //~ E0307
   pub fn b(self) -> I32 { 1 }
 }
 
-type Bare = W                                       //~ E0302
+type Bare = W                                       //~ E0412
 
 impl W[Bare] {                                      //~ E0307
   pub fn c(self) -> I32 { 1 }

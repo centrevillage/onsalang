@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// R-274 (W4-05 U4c): the alias with parameters (`type Dl[T] = (T, T)`, E0002, §4.4) is a declaration of which the
+// name is read, so the places where it is used without the arguments (`Dl`) have no diagnostic, as the ones where it
+// is used with them (alias_params_then_use.onsa; §18.1: "読めなかった部分 … は誤りの型として扱い、それを使う側には
+// 診断を出さない"). They pass before the use with arguments is silent, so they are in a file of their own: that
+// file fails until then and this one tells that the work does not make the bare use report.
+
+type Dl[T] = (T, T)                                 //~ E0002
+
+pub fn in_a_parameter(x: Dl) -> I32 {
+  1
+}
+
+pub fn in_a_result() -> Dl {
+  (1, 2)
+}
+
+pub fn in_an_annotation() -> I32 {
+  let _: Dl = (1, 2)
+  1
+}
+
+pub struct InAField {
+  a: Dl,
+}
+
+pub enum InAVariant {
+  A(Dl),
+}

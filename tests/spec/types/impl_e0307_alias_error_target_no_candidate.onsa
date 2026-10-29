@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 0
+
+// S-754 (1) (W4-05 U4c): "候補は出さない（元の型が誤りの型）". §4.4: the E0307 of an alias written as the target of an
+// `impl` has a fix candidate, the name of the original type, when that type is declared in the module and is
+// a right type ("元の型がそのモジュールで宣言されていれば、修正候補は元の名前"). An alias that is itself an error type
+// (a cycle of values, a name that is not found on the right side, a cycle of aliases) has no original type to
+// write, so the E0307 of its `impl` has no candidate, and the errors of the aliases (E0311, E0302) have none
+// either. `fixes = 0` is the check that no diagnostic of the file has a candidate. The `impl` of an alias that is
+// right, which has the candidate, is in the other files (impl_e0307_members_last.onsa).
+
+pub struct S1 { a: Cycle1 }                         //~ E0311
+
+type Cycle1 = S1
+
+impl Cycle1 {                                       //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+type Missing1 = Absent                              //~ E0302
+
+impl Missing1 {                                     //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+type Loop1 = Loop1                                  //~ E0311
+
+impl Loop1 {                                        //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+pub struct S2 { a: Cycle2 }                         //~ E0311
+
+type Cycle2 = S2
+
+impl Cycle2 {                                       //~ E0307
+  pub const N: U32 = 2
+}
+
+type Missing2 = Gone                                //~ E0302
+
+impl Missing2 {                                     //~ E0307
+  pub const N: U32 = 2
+}

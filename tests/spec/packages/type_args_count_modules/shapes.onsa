@@ -1,0 +1,35 @@
+pub struct Pair[T] {
+  first: T,
+  second: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct Plain {
+  x: I32,
+}
+
+pub type Alias = Plain
+
+pub type PairOfInt = Pair[I32]
+
+fn own_plain_with_an_argument(x: Plain[I32]) -> I32 {   //~ E0412
+  1
+}
+
+fn own_pair_with_two_arguments(x: Pair[I32, I32]) -> I32 {   //~ E0412
+  1
+}
+
+fn own_alias_with_an_argument(x: Alias[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub type OwnAliasWithTwoArguments = Pair[I32, I32]  //~ E0412
+
+fn own_fine(a: Pair[I32], b: Ring[F32, 2], c: Alias, d: PairOfInt) -> I32 {
+  1
+}

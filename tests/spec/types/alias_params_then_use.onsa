@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// R-274 (W4-05 U4c): "型別名は型パラメータを持たない（`type V[T] = (T, T)` は E0002。総称の別名は §19.1）" (§4.4).
+// The alias with parameters is a declaration of which the name is read and the rest is not (§18.1: "誤りのある宣言も、
+// 名前まで読めれば名前解決に見せる。読めなかった部分 … は誤りの型として扱い、それを使う側には診断を出さない").
+// So the one error is the E0002 of the declaration, and the places where the alias is used with the arguments
+// that it was written with (`Al[I32]`), with other arguments and with the wrong number of them have no
+// diagnostic (the use without them is in alias_params_bare_use.onsa): the old reading was the E0302 "`Al` takes 0 type argument(s), 1 given", and the
+// E0412 of the number of arguments (§4.5) is not for an alias that was not read. The places are the ones of a
+// type: a parameter, a result, a field, the content of a variant, the right side of another alias, the type of
+// a `const`, the annotation of a `let`, a method, an anonymous function, a type inside another type. The
+// uses of an alias that is right with the numbers that are wrong are in type_args_count.onsa. The unit of each
+// use has no other error, so what is checked is that nothing is reported (the markers are only on the
+// declarations).
+
+type Al[T] = (T, T)                                 //~ E0002
+
+type Bl[A, B] = (A, B)                              //~ E0002
+
+type Cl[T] = Option[T]                              //~ E0002
+
+pub struct P {
+  x: I32,
+}
+
+// ---- The uses: no diagnostic ----
+
+pub fn in_a_parameter(x: Al[I32]) -> I32 {
+  1
+}
+
+pub fn in_a_result() -> Al[I32] {
+  (1, 2)
+}
+
+pub fn with_other_arguments(x: Al[I32, F32]) -> I32 {
+  1
+}
+
+pub fn with_two_parameters(x: Bl[I32, F32]) -> I32 {
+  1
+}
+
+pub fn with_one_argument_for_two(x: Bl[I32]) -> I32 {
+  1
+}
+
+pub fn an_alias_of_an_option(x: Cl[I32]) -> I32 {
+  1
+}
+
+pub fn inside_an_option(o: Option[Al[I32]]) -> I32 {
+  1
+}
+
+pub fn inside_a_tuple(t: (I32, Bl[I32, F32])) -> I32 {
+  1
+}
+
+pub fn inside_an_array(a: [Cl[I32]; 2]) -> I32 {
+  1
+}
+
+pub fn inside_a_function_type(f: fn(Al[I32]) -> Cl[I32]) -> I32 {
+  1
+}
+
+pub fn in_an_annotation() -> I32 {
+  let _: Al[I32] = (1, 2)
+  1
+}
+
+pub fn in_a_closure() -> I32 {
+  let _ = fn(a: Al[I32]) -> Bl[I32, I32] { (1, 2) }
+  1
+}
+
+pub struct InAField {
+  a: Al[I32],
+  b: Bl[I32, F32],
+  c: Cl[F32],
+}
+
+pub enum InAVariant {
+  A(Al[I32]),
+  B(Cl[F32]),
+}
+
+type InAnotherAlias = Al[I32]
+
+type InAnotherAliasInAnOption = Option[Bl[I32, I32]]
+
+const IN_A_CONST_TYPE: Al[I32] = (1, 2)
+
+impl P {
+  pub fn in_a_method_parameter(self, a: Al[I32]) -> I32 {
+    1
+  }
+
+  pub fn in_a_method_result(self) -> Bl[I32, I32] {
+    (1, 2)
+  }
+}
+
+pub fn in_a_generic_function[T](x: Al[T]) -> I32 {
+  1
+}
+
+pub fn in_a_generic_argument[T](x: Option[Al[T]]) -> I32 {
+  1
+}

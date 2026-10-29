@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§18.1"]
+
+// S-103, R-258 (W4-05 U4c, §18.1): the number of the type arguments written in the position of a type is the
+// E0412 of the types stage, and the stages have an order ("構文 → 名前 → 型 → …"; "依存する段の間では、位置によらず先の段の
+// 誤りを報告する"). So a name that is not found (E0302) and a kind that is wrong (E0308) in the same unit are the
+// error of the unit even when they are written after the wrong number of arguments, and the number of
+// arguments goes after them; the unit keeps its first error, so the body that is not checked after a wrong
+// signature and the second number are not reported. A type that is only the argument of an `impl` target and
+// is not a parameter is the E0307 of the target (§6.2: "対象の型引数は、`impl` の型パラメータを一度ずつ並べたものに
+// 限る"), and an `impl` whose heading has an error is one unit whose members are not checked (§18.1), so the
+// wrong number of arguments written in that type is not reported (it was the E0302 of the old reading). Each
+// form is in a unit of its own and the signatures are on several lines so that the position tells which
+// error is kept.
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+// ---- A name that is not found goes before the number of arguments ----
+
+pub fn name_after_the_number(
+  a: P[I32],
+  b: Nope,                                          //~ E0302
+) -> I32 {
+  1
+}
+
+pub fn name_before_the_number(
+  a: Nope,                                          //~ E0302
+  b: P[I32],
+) -> I32 {
+  1
+}
+
+pub fn name_in_the_result(
+  a: Pair[I32, I32],
+) -> Nope {                                         //~ E0302
+  1
+}
+
+pub fn name_in_a_closure() -> I32 {
+  let f = fn(
+    a: Option[I32, F32],
+    b: Nope,                                        //~ E0302
+  ) -> I32 { 1 }
+  1
+}
+
+pub fn name_in_the_body(a: P[I32]) -> I32 {
+  zz                                                //~ E0302
+}
+
+pub fn name_in_the_annotation(a: Pair) -> I32 {
+  let _: Nope = 1                                   //~ E0302
+  1
+}
+
+pub fn name_inside_the_arguments(
+  a: P[I32],
+  b: Option[Nope],                                  //~ E0302
+) -> I32 {
+  1
+}
+
+// ---- A kind that is wrong goes before the number of arguments ----
+
+pub fn kind_after_the_number(
+  a: P[I32],
+  b: W[3],                                          //~ E0308
+) -> I32 {
+  1
+}
+
+pub fn kind_before_the_number(
+  a: W[3],                                          //~ E0308
+  b: Option[I32, F32],
+) -> I32 {
+  1
+}
+
+// ---- The first error of the unit is kept ----
+
+pub fn number_in_the_signature_and_a_type_error_in_the_body(
+  a: P[I32],                                        //~ E0412
+) -> I32 {
+  let z: Bool = 1
+  1
+}
+
+pub fn number_twice_in_the_signature(
+  a: P[I32],                                        //~ E0412
+  b: Pair,
+) -> I32 {
+  1
+}
+
+pub fn number_in_the_signature_and_in_the_body(
+  a: Option[I32, F32],                              //~ E0412
+) -> I32 {
+  let _: Pair = Pair { a: 1, b: 2 }
+  1
+}
+
+pub fn number_and_an_unused_binding(a: P[I32]) -> I32 {   //~ E0412
+  let unused = 1
+  1
+}
+
+pub fn number_in_the_body_and_an_unused_binding() -> I32 {
+  let unused = 1
+  let _: P[I32] = P { x: 1 }                        //~ E0412
+  1
+}
+
+// ---- The arguments of the target of an `impl` ----
+
+impl[T] W[P[I32]] {                                 //~ E0307
+  pub fn member(self, a: P[I32]) -> I32 {
+    let z: Bool = 1
+    1
+  }
+}
+
+impl W[Pair[I32, I32]] {                            //~ E0307
+  pub fn member_of_a_concrete_target(self) -> I32 { 1 }
+}
+
+impl[T] W[Option[T, T]] {                           //~ E0307
+  pub fn member_with_the_parameter_twice(self) -> T { self.v }
+}
+
+impl[T] W[Pair] {                                   //~ E0307
+  pub fn member_of_a_bare_target(self) -> I32 { 1 }
+}
+
+impl[T] W[Option[Pair[T, T]]] {                     //~ E0307
+  pub fn member_of_a_nested_target(self) -> I32 { 1 }
+}

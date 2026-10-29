@@ -1,0 +1,240 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.2", "§18.1"]
+
+// S-754 (1) (W4-05 U4c): §4.4 "`impl` と `impl Tr for` の対象は型の宣言の名前で書き、別名は書けない（E0307。別名
+// そのものが誤りの型でも同じ、§18.1 …）"; §18.1 "`impl` の見出しに書いた別名（対象と、対象の型引数）は、別名そのものが
+// 誤りの型（右辺が見つからない名前を含む）でも E0307 で、見出しの誤りである。別名は正しい宣言でも見出しに書けず、別名を
+// 直しても残る誤りなので、誤りの型を使う側の連鎖に数えない". So an alias that is itself an error type, written as
+// the target of an `impl`, has the E0307 of the heading as an alias that is right has (S-753 gives the same for
+// the alias written as a type argument of the target, `impl[T] W[A]`, the contrast at the end of this file). The
+// alias keeps its own error in its own unit: the number of arguments of a type that takes none (`type A1 =
+// S1[I32]`, E0412, §4.5), a name that is not found on the right side (`type A2 = Nope`, E0302), a cycle of
+// values (`struct S3 { a: A3 }` and `type A3 = S3`, E0311), a cycle of aliases (E0311), the argument left out
+// of a generic type (`type A5 = W`, E0412) and the number of arguments of `Option`. The heading is an error of
+// the `impl`, so the `impl` is one unit and its members are not checked (§18.1): the `let z: Bool = 2` in the
+// members has no E0401.
+// The members are names after the name of the type that the head of the right side names (S-752 (1)); an alias
+// whose head is not a type (the name that is not found, a cycle of aliases) has no type to count them in. A member
+// of the `impl` of an alias that repeats a name of a direct `impl` written BEFORE it is in the unit of the E0307
+// and is hidden by it (the same as the alias that is right, impl_e0307_members_last.onsa); a member of a direct
+// `impl` written AFTER the `impl` of the alias that repeats its name is the later one, in a unit of its own, and
+// is E0304 (impl_e0307_members_first.onsa). A name that no one repeats is read from the type.
+
+pub struct S1 {
+  x: I32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+// ---- The number of arguments of a type that takes none ----
+
+type A1 = S1[I32]                                   //~ E0412
+
+impl A1 {                                           //~ E0307
+  pub fn a(self) -> I32 {
+    let z: Bool = 2
+    1
+  }
+}
+
+// ---- The right side is a name that is not found ----
+
+type A2 = Nope                                      //~ E0302
+
+impl A2 {                                           //~ E0307
+  pub fn b(self) -> I32 {
+    let z: Bool = 2
+    1
+  }
+}
+
+// ---- A cycle of values: the head of the right side is a type ----
+
+pub struct S3 { a: A3 }                             //~ E0311
+
+type A3 = S3
+
+impl A3 {                                           //~ E0307
+  pub fn c(self) -> I32 {
+    let z: Bool = 2
+    1
+  }
+}
+
+// ---- A cycle of aliases: the head is not a type ----
+
+type A4 = A4                                        //~ E0311
+
+impl A4 {                                           //~ E0307
+  pub fn d(self) -> I32 {
+    let z: Bool = 2
+    1
+  }
+}
+
+// ---- The argument left out of a generic type ----
+
+type A5 = W                                         //~ E0412
+
+impl A5 {                                           //~ E0307
+  pub fn e(self) -> I32 {
+    let z: Bool = 2
+    1
+  }
+}
+
+// ---- The number of arguments of a type of the prelude ----
+
+type A6 = Option[I32, F32]                          //~ E0412
+
+impl A6 {                                           //~ E0307
+  pub fn f(self) -> I32 {
+    let z: Bool = 2
+    1
+  }
+}
+
+// ---- The alias is fixed: the E0307 stays ----
+
+type Fixed = S1
+
+impl Fixed {                                        //~ E0307
+  pub fn g(self) -> I32 { 1 }
+}
+
+// ---- The `impl` of the alias is written before the direct `impl`: the member of the direct one is E0304 ----
+
+pub struct B1 {
+  x: I32,
+}
+
+type AliasB1 = B1[I32]                              //~ E0412
+
+impl AliasB1 {                                      //~ E0307
+  pub const N: U32 = 2
+  pub const ONLY_IN_THE_ALIAS: U32 = 5
+}
+
+impl B1 {
+  pub const N: U32 = 3                              //~ E0304
+  pub const ONLY_IN_THE_TYPE: U32 = 6
+}
+
+pub struct B2 { a: AliasB2 }                        //~ E0311
+
+type AliasB2 = B2
+
+impl AliasB2 {                                      //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+impl B2 {
+  pub fn get(self) -> I32 { 2 }                     //~ E0304
+}
+
+pub struct B3 {
+  x: I32,
+}
+
+type AliasB3 = B3[I32]                              //~ E0412
+
+impl AliasB3 {                                      //~ E0307
+  pub fn first(self) -> I32 { 1 }
+}
+
+impl B3 {
+  pub fn second(self) -> I32 { 2 }
+  pub fn first(self) -> I32 { 3 }                   //~ E0304
+}
+
+// ---- The `impl` of the alias is written after the direct `impl`: the E0304 is hidden by the E0307 ----
+
+pub struct C1 {
+  x: I32,
+}
+
+type AliasC1 = C1[I32]                              //~ E0412
+
+impl C1 {
+  pub const N: U32 = 3
+}
+
+impl AliasC1 {                                      //~ E0307
+  pub const N: U32 = 2
+}
+
+pub struct C2 { a: AliasC2 }                        //~ E0311
+
+type AliasC2 = C2
+
+impl C2 {
+  pub fn get(self) -> I32 { 2 }
+}
+
+impl AliasC2 {                                      //~ E0307
+  pub fn get(self) -> I32 { 1 }
+}
+
+pub struct C3 {
+  x: I32,
+}
+
+type AliasC3 = C3[I32]                              //~ E0412
+
+impl C3 {
+  pub fn norm(self) -> I32 { 1 }
+}
+
+impl AliasC3 {                                      //~ E0307
+  pub fn other(self) -> I32 { 2 }
+  pub fn norm(self) -> I32 { 3 }
+}
+
+// ---- A name that no one repeats is read from the type ----
+
+pub struct D1 {
+  x: I32,
+}
+
+type AliasD1 = D1[I32]                              //~ E0412
+
+impl AliasD1 {                                      //~ E0307
+  pub const LEN: U32 = 2
+}
+
+pub fn read_d1() -> U32 {
+  D1.LEN
+}
+
+pub fn read_d1_length(a: [F32; D1.LEN]) -> F32 {
+  a[0]
+}
+
+pub struct D2 { a: AliasD2 }                        //~ E0311
+
+type AliasD2 = D2
+
+impl AliasD2 {                                      //~ E0307
+  pub const LEN: U32 = 2
+}
+
+pub fn read_d2() -> U32 {
+  D2.LEN
+}
+
+// ---- The contrast: the alias written as an argument of the target (S-753) ----
+
+impl[T] W[A1] {                                     //~ E0307
+  pub fn h(self) -> I32 { 1 }
+}
+
+impl[T] W[A2] {                                     //~ E0307
+  pub fn i(self) -> I32 { 1 }
+}
+
+impl[T] W[A3] {                                     //~ E0307
+  pub fn j(self) -> I32 { 1 }
+}

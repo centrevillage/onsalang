@@ -310,7 +310,7 @@ impl<'p> Sema<'p> {
                 }
                 let (key_def, key_builtin) = self.member_key(id).unwrap_or((None, None));
                 // The E0307 of an alias is the error of the heading.
-                if !aliased && !matches!(self.a.types.get(self_ty), Ty::Error) {
+                if !aliased {
                     self.impl_heading(&cx, i, self_ty, key_def.is_some() || key_builtin.is_some());
                 }
                 // A name the heading reads and the check does not (§18.1,
@@ -352,38 +352,49 @@ impl<'p> Sema<'p> {
     /// tuple, an array, `()`, a function type, a parameter; §4.4, R-320), or
     /// with type arguments other than the parameters of the `impl`, each
     /// once in any order (a concrete or compound type, one twice, one left
-    /// out; §6.2, S-137). Arguments with an error of a name (its E0302, a
-    /// name held, §18.1) are not judged; one of the types stage (an E0417, a
-    /// length this version does not compute) is no parameter, and the E0307
-    /// of the names stage comes first.
+    /// out; §6.2, S-137), judged as written, of a target of the error type
+    /// too. Arguments with an error of a name (its E0302, a name held, §18.1)
+    /// are not judged; one of the types stage (an E0417, a length this version
+    /// does not compute) is no parameter, and the E0307 of the names stage
+    /// comes first.
     fn impl_heading(&mut self, cx: &Cx<'p>, i: &ImplDecl, self_ty: TyId, keyed: bool) {
         let target = cx.ast.ty(i.self_ty);
         let shown = one_line(&src(cx, target.span));
         let named = self.reported.get(&cx.def).is_some_and(|&at| self.a.diagnostics[at].stage != Stage::Types);
         let named = named || self.a.read_held.contains(&cx.def);
-        let types = &self.a.types;
         // A scalar (`impl F32`) has no arguments.
-        let args: &[TyId] = match types.get(self_ty) {
-            Ty::Named(_, args) | Ty::Builtin(_, args) => args,
-            _ => &[],
+        let (head, written): (_, &[TypeId]) = match &target.kind {
+            TypeKind::Path { path, args } => (self.a.resolve_path(cx.m, path).ok(), args),
+            _ => (None, &[]),
         };
-        if named && args.iter().any(|&t| types.has_error(t)) {
+        // An opaque type of `extern` is not judged.
+        let opaque = matches!(head, Some(Entity::Def(d))
+            if matches!(self.a.def(d).kind, DefKind::Unsupported(Declared::Type | Declared::Block)));
+        // SPEC-GAP(S-759): a target whose own count of arguments is not the
+        // declared one is only its E0412 (§4.5): its arguments are not judged.
+        let miscounted = head.and_then(|e| self.declared_params(e)).is_some_and(|p| p.len() != written.len());
+        let types = &self.a.types;
+        let failed = match types.get(self_ty) {
+            Ty::Named(_, args) | Ty::Builtin(_, args) => args.iter().any(|&t| types.has_error(t)),
+            t => matches!(t, Ty::Error),
+        };
+        if (named && failed) || opaque || miscounted {
             return;
         }
-        let mut seen = vec![false; cx.generics.len()];
-        let wrong = args.iter().position(|&t| match types.get(t) {
-            Ty::Param(p) => seen.get_mut(*p as usize).is_none_or(|s| std::mem::replace(s, true)),
-            _ => true,
-        });
-        let written: &[TypeId] = match &target.kind {
-            TypeKind::Path { args, .. } => args,
-            _ => &[],
+        // The parameter of the `impl` an argument is: its name alone (`T`, not `T[I32]`).
+        let param = |a: TypeId| match &cx.ast.ty(a).kind {
+            TypeKind::Path { path, args } if args.is_empty() && path.segments.len() == 1 => {
+                cx.generics.iter().position(|g| g.name == path.segments[0].name)
+            }
+            _ => None,
         };
+        let mut seen = vec![false; cx.generics.len()];
+        let wrong = written.iter().position(|&a| param(a).is_none_or(|p| std::mem::replace(&mut seen[p], true)));
         let (span, what) = match (keyed, wrong, seen.iter().position(|s| !s)) {
             (false, ..) => (target.span, format!("`{shown}` is not the name of a type declaration")),
             (true, Some(k), _) => {
-                let at = written.get(k).map_or(target.span, |&a| cx.ast.ty(a).span);
-                let twice = matches!(types.get(args[k]), Ty::Param(_));
+                let at = cx.ast.ty(written[k]).span;
+                let twice = param(written[k]).is_some();
                 let how = if twice { "is written twice" } else { "is not a parameter of the `impl`" };
                 (at, format!("`{}` {how}", one_line(&src(cx, at))))
             }
@@ -423,8 +434,9 @@ impl<'p> Sema<'p> {
     /// R-105): the methods of a type are found by the name of its
     /// declaration. The candidate is the name of the type it stands for when
     /// that one is declared in the module, with no type arguments; the `impl`
-    /// is lowered for that type all the same. An alias of the error type has
-    /// its error where it is declared (§18.1). Whether `t` names an alias.
+    /// is lowered for that type all the same. An alias of the error type is
+    /// an E0307 too, with no candidate: it stays when the alias is fixed, and
+    /// is no use of the error type (§18.1, S-754). Whether `t` names an alias.
     fn alias_impl(&mut self, cx: &Cx<'p>, t: TypeId) -> bool {
         let TypeKind::Path { path, .. } = &cx.ast.ty(t).kind else { return false };
         let Ok(Entity::Def(d)) = self.a.resolve_path(cx.m, path) else { return false };
@@ -433,16 +445,13 @@ impl<'p> Sema<'p> {
         }
         let ty = self.alias_ty(d);
         let shown = src(cx, path.span);
-        let mut diag = match self.a.types.get(ty) {
-            Ty::Error => return true,
-            _ => Diagnostic::new(
-                Stage::Names,
-                Code::E0307,
-                path.span,
-                format!("`{shown}` is a type alias; an `impl` names the type it stands for by its declaration (§4.4)"),
-            )
-            .with_found(shown),
-        };
+        let mut diag = Diagnostic::new(
+            Stage::Names,
+            Code::E0307,
+            path.span,
+            format!("`{shown}` is a type alias; an `impl` names the type it stands for by its declaration (§4.4)"),
+        )
+        .with_found(shown);
         if let Ty::Named(orig, args) = self.a.types.get(ty)
             && args.is_empty()
             && let def = self.a.def(*orig)

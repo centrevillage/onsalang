@@ -1,0 +1,300 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§15.1", "§18.1"]
+
+// S-103, R-258 (W4-05 U4c, §4.5): "型引数と const 引数の数が宣言と合わなければ E0412"; "型パラメータを持たない
+// 項目（総称でない関数、flow、型パラメータ、列挙子の名前）に書いても E0412"; §15.1: "総称でない型への型引数 … 型引数の数は
+// E0412". The number of the arguments written in the position of a type is counted from the declaration: an
+// argument for a type that takes none (a struct, an enum, a primitive type, an alias of a type, `type B = P`
+// and then `B[I32]`: §4.4 "型別名は型パラメータを持たない"), too many, too few and none for a type that has
+// parameters (a type of the program, `Option`, `Result`, `Buf`, `Ring` with its const parameter). The code is
+// E0412 and not the E0302 of the old reading ("`P` takes 0 type argument(s)"). One error per unit (§18.1), so
+// each form is in its own unit. The places are the ones of a type: a parameter, a result, a field, the
+// content of a variant, the right side of a type alias, the type of a `const`, the annotation of a `let` in
+// a body, a method, an anonymous function, a type inside another type. The fine forms (the number is right)
+// are in type_args_count_fine.onsa, so that this file, which fails until the number is E0412, does not hide them.
+// The stage (E0412 is the types stage, so a name that is not found or a kind that is wrong in the same unit
+// goes first) is in type_args_count_stages.onsa.
+
+pub struct P {
+  x: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+type B = P
+
+type O = Option[I32]
+
+type Pa = Pair[I32]
+
+// ---- The shapes: a type that takes none ----
+
+pub fn struct_with_an_argument(x: P[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn enum_with_an_argument(x: E[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn primitive_with_an_argument(x: F32[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn bool_with_an_argument(x: Bool[F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn alias_of_a_struct_with_an_argument(x: B[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn alias_of_an_option_with_an_argument(x: O[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn alias_of_a_pair_with_an_argument(x: Pa[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn struct_with_two_arguments(x: P[I32, F32]) -> I32 {   //~ E0412
+  1
+}
+
+// ---- The shapes: a type with parameters, the number is wrong ----
+
+pub fn option_with_two_arguments(x: Option[I32, F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn option_with_no_arguments(x: Option) -> I32 {   //~ E0412
+  1
+}
+
+pub fn result_with_one_argument(x: Result[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn result_with_three_arguments(x: Result[I32, Bool, F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn buf_with_two_arguments(x: Buf[F32, F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn buf_with_no_arguments(x: Buf) -> I32 {   //~ E0412
+  1
+}
+
+pub fn span_with_two_arguments(x: Span[F32, F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn pair_with_two_arguments(x: Pair[I32, I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn pair_with_no_arguments(x: Pair) -> I32 {   //~ E0412
+  1
+}
+
+pub fn ring_without_the_const_argument(x: Ring[F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn ring_without_arguments(x: Ring) -> I32 {   //~ E0412
+  1
+}
+
+pub fn ring_with_three_arguments(x: Ring[F32, 4, 5]) -> I32 {   //~ E0412
+  1
+}
+
+// ---- The places of a type ----
+
+pub fn in_a_result() -> P[I32] {   //~ E0412
+  P { x: 1 }
+}
+
+pub fn in_a_result_of_an_option() -> Option[I32, F32] {   //~ E0412
+  None
+}
+
+pub struct InAField {
+  p: P[I32],                                        //~ E0412
+}
+
+pub struct InAFieldAfterAGoodOne {
+  n: I32,
+  p: Pair[I32, I32],                                //~ E0412
+}
+
+pub enum InAVariant {
+  A(P[I32]),                                        //~ E0412
+}
+
+pub enum InAVariantAfterAGoodOne {
+  A(I32),
+  B(Option[I32, F32]),                              //~ E0412
+}
+
+type InAnAlias = P[I32]                             //~ E0412
+
+type InAnAliasOfAnOption = Option[I32, F32]         //~ E0412
+
+type InAnAliasOfABuf = Buf[F32, F32]                //~ E0412
+
+const IN_A_CONST_TYPE: Pair[I32, I32] = Pair { a: 1, b: 2 }   //~ E0412
+
+const IN_A_CONST_TYPE_OF_AN_OPTION: Option[I32, F32] = None   //~ E0412
+
+const IN_A_CONST_TYPE_OF_A_STRUCT: P[I32] = P { x: 1 }   //~ E0412
+
+pub fn in_an_annotation() -> I32 {
+  let _: P[I32] = P { x: 1 }                        //~ E0412
+  1
+}
+
+pub fn in_an_annotation_of_an_option() -> I32 {
+  let _: Option[I32, F32] = None                    //~ E0412
+  1
+}
+
+pub fn in_an_annotation_of_a_buf(b: Buf[F32]) -> I32 {
+  let _: Buf[F32, F32] = b                          //~ E0412
+  1
+}
+
+pub fn in_an_annotation_of_a_pair() -> I32 {
+  let _: Pair = Pair { a: 1, b: 2 }                 //~ E0412
+  1
+}
+
+pub fn in_an_annotation_of_an_alias() -> I32 {
+  let _: B[I32] = P { x: 1 }                        //~ E0412
+  1
+}
+
+pub fn in_an_annotation_in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    let _: P[I32] = P { x: 1 }                      //~ E0412
+    1
+  } else {
+    0
+  }
+}
+
+pub fn in_an_annotation_in_a_loop() -> I32 {
+  for i in 0..<2 {
+    let _: Option[I32, F32] = None                  //~ E0412
+  }
+  0
+}
+
+pub fn in_a_closure_parameter() -> I32 {
+  let f = fn(p: P[I32]) -> I32 { 1 }               //~ E0412
+  1
+}
+
+pub fn in_a_closure_result() -> I32 {
+  let f = fn(n: I32) -> P[I32] { P { x: n } }       //~ E0412
+  1
+}
+
+pub fn in_a_nested_closure() -> I32 {
+  let f = fn(n: I32) -> I32 {
+    let g = fn(p: Pair) -> I32 { 1 }               //~ E0412
+    n
+  }
+  f.(1)
+}
+
+impl P {
+  pub fn in_a_method_parameter(self, o: P[I32]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn in_a_method_result(self) -> Option[I32, F32] {   //~ E0412
+    None
+  }
+
+  pub fn in_a_method_annotation(self) -> I32 {
+    let _: Pair[I32, I32] = Pair { a: 1, b: 2 }     //~ E0412
+    1
+  }
+}
+
+impl[T] Pair[T] {
+  pub fn in_a_generic_method(self, o: Pair[T, T]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn in_a_generic_method_result(self) -> Pair {   //~ E0412
+    self
+  }
+}
+
+pub fn in_a_generic_function[T](x: Pair[T, T]) -> T {   //~ E0412
+  x.a
+}
+
+pub struct InAGenericField[T] {
+  o: Option[T, T],                                  //~ E0412
+}
+
+pub enum InAGenericVariant[T] {
+  A(Pair[T, T]),                                    //~ E0412
+}
+
+// ---- A type inside another type ----
+
+pub fn in_a_tuple(t: (I32, P[I32])) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_an_array(a: [P[I32]; 2]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_a_length_of_a_ring(a: [Ring[F32]; 2]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_an_argument_of_a_function_type(f: fn(P[I32]) -> I32) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_the_result_of_a_function_type(f: fn(I32) -> Option[I32, F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_an_argument_of_an_option(o: Option[P[I32]]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_an_argument_of_a_pair(o: Pair[Pair[I32, I32]]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_a_deep_argument(o: Option[Result[Pair, Bool]]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn in_an_argument_of_an_option_of_an_option(b: Option[Option]) -> I32 {   //~ E0412
+  1
+}

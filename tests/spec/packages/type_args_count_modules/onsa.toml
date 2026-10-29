@@ -1,0 +1,3 @@
+[package]
+name = "type_args_count_modules"
+edition = "2026"

@@ -1,0 +1,221 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§2.2", "§4.4", "§18.1"]
+
+// R-248, S-595, S-103 (W4-05 U4c): §4.5 "型パラメータを持たない項目（総称でない関数、flow、型パラメータ、列挙子の名前）
+// に書いても E0412"; §2.2 "型引数を付けた `Self`（`Self[I32]`）は E0412". A type parameter (`T[I32]`) and `Self`
+// (`Self[I32]`, whether the target of the `impl` has parameters or not) take no arguments, so an argument written
+// after them is the E0412 of the number of arguments, not the E0302 of the old reading ("a type parameter takes
+// no arguments"), and not dropped without a diagnostic (the old reading of `Self[I32]`: the argument was
+// ignored and the unit was fine). The places are the ones of a type: a parameter, a result, a type inside
+// another type, a field and the content of a variant of a generic type, a method of a generic `impl`, the
+// annotation of a `let`, an anonymous function. One error per unit (§18.1), so each form is in its own unit.
+// The right forms (`T`, `Self`, `Option[T]`, `Option[Self]`, `Self { … }`) are in type_args_count_fine.onsa.
+
+pub struct P {
+  x: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub struct G[T] {
+  v: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// ---- A type parameter with an argument ----
+
+pub fn parameter_in_a_parameter[T](x: T[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_in_a_result[T](x: T) -> T[I32] {   //~ E0412
+  x
+}
+
+pub fn parameter_with_two_arguments[T](x: T[I32, F32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn second_parameter_with_an_argument[A, B](a: A, b: B[A]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_inside_an_option[T](o: Option[T[I32]]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_inside_a_tuple[T](t: (I32, T[I32])) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_inside_an_array[T](a: [T[I32]; 2]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_inside_a_function_type[T](f: fn(T[I32]) -> I32) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_as_the_argument_of_the_parameter[T](x: G[T[T]]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_with_a_bound_and_an_argument[T: Copy](x: T[I32]) -> I32 {   //~ E0412
+  1
+}
+
+pub fn parameter_in_an_annotation[T](x: T) -> I32 {
+  let _: T[I32] = x                                 //~ E0412
+  1
+}
+
+pub fn parameter_in_a_closure[T](x: T) -> I32 {
+  let f = fn(y: T[I32]) -> I32 { 1 }                //~ E0412
+  1
+}
+
+pub fn parameter_in_a_closure_result[T](x: T) -> I32 {
+  let f = fn(y: I32) -> T[I32] { y }                //~ E0412
+  1
+}
+
+pub struct ParameterInAField[T] {
+  a: T[I32],                                        //~ E0412
+}
+
+pub struct ParameterInAFieldAfterAGoodOne[T] {
+  n: I32,
+  a: Option[T[I32]],                                //~ E0412
+}
+
+pub enum ParameterInAVariant[T] {
+  A(T[I32]),                                        //~ E0412
+}
+
+impl[T] G[T] {
+  pub fn parameter_in_a_method_parameter(self, x: T[I32]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn parameter_in_a_method_result(self) -> T[I32] {   //~ E0412
+    self.v
+  }
+
+  pub fn method_parameter_with_an_argument[U](self, x: U[T]) -> I32 {   //~ E0412
+    1
+  }
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn parameter_in_a_ring(self, x: T[I32]) -> I32 {   //~ E0412
+    1
+  }
+}
+
+// ---- `Self` with an argument ----
+
+impl P {
+  pub fn self_in_a_parameter(self, o: Self[I32]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_in_a_result(self) -> Self[I32] {   //~ E0412
+    self
+  }
+
+  pub fn self_with_two_arguments(self, o: Self[I32, F32]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_inside_an_option(self, o: Option[Self[I32]]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_inside_a_tuple(self, t: (I32, Self[I32])) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_inside_a_function_type(self, f: fn(Self[I32]) -> I32) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_in_an_annotation(self) -> I32 {
+    let x: Self[I32] = self                         //~ E0412
+    1
+  }
+
+  pub fn self_in_an_annotation_in_a_branch(self, flag: Bool) -> I32 {
+    if flag {
+      let _: Self[I32] = self                       //~ E0412
+      1
+    } else {
+      0
+    }
+  }
+
+  pub fn self_in_a_closure(self) -> I32 {
+    let f = fn(o: Self[I32]) -> I32 { 1 }           //~ E0412
+    1
+  }
+
+  pub fn self_in_a_closure_result(self) -> I32 {
+    let f = fn(n: I32) -> Option[Self[I32]] { None }   //~ E0412
+    1
+  }
+}
+
+impl E {
+  pub fn self_of_an_enum_in_a_parameter(self, o: Self[I32]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_of_an_enum_in_a_result() -> Self[I32] {   //~ E0412
+    Self.A
+  }
+}
+
+impl[T] G[T] {
+  pub fn self_of_a_generic_in_a_parameter(self, o: Self[I32]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_of_a_generic_with_its_parameter(self, o: Self[T]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_of_a_generic_in_a_result(self) -> Self[T] {   //~ E0412
+    self
+  }
+
+  pub fn self_of_a_generic_inside_an_option(self, o: Option[Self[T]]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_of_a_generic_in_an_annotation(self) -> I32 {
+    let x: Self[I32] = self                         //~ E0412
+    1
+  }
+
+  pub fn self_of_a_generic_in_a_closure(self) -> I32 {
+    let f = fn(o: Self[T]) -> I32 { 1 }             //~ E0412
+    1
+  }
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn self_of_a_ring_in_a_parameter(self, o: Self[T, N]) -> I32 {   //~ E0412
+    1
+  }
+
+  pub fn self_of_a_ring_with_a_length(self, o: Self[T, 4]) -> I32 {   //~ E0412
+    1
+  }
+}
