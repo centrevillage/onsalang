@@ -8,6 +8,7 @@ use onsa_syntax::ast::{Ast, StmtId};
 
 use super::MovedLocals;
 use super::flow::Run;
+use super::place::{Deps, Place};
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
 use crate::body::{BodyInfo, LocalId, generics_of, root_of};
@@ -36,6 +37,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let mut w = Walker::new(a, (&module.parsed.ast, &module.text), names, info, generics_of(a, id));
+        w.deps = Deps::of_body((w.ast, names, info), root, |t| w.kind_of(t) == Some(Kind::Copy));
         w.expr(&mut Run::new(), root, Pos::Return);
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
         if !w.m.moved.is_empty() {
@@ -62,6 +64,11 @@ pub(super) struct Walker<'a> {
     /// The walk reports: the one of the body, not one that makes a loop's
     /// summary, which does not know the state before the loop.
     pub(super) reports: bool,
+    /// The index of §7 (`place.rs`).
+    pub(super) deps: Deps,
+    /// The locals the anonymous functions the walk is in capture (R-161's
+    /// candidate; U4's frames of `capture.rs` take it over).
+    pub(super) captured: Vec<LocalId>,
     pub(super) m: Made,
 }
 
@@ -93,7 +100,8 @@ impl<'a> Walker<'a> {
                 _ => None,
             })
             .collect();
-        Walker { a, ast, text, names, info, generics, vars, reports: true, m: Made::default() }
+        let (deps, captured) = (Deps::default(), Vec::new());
+        Walker { a, ast, text, names, info, generics, vars, reports: true, deps, captured, m: Made::default() }
     }
 
     /// The kind of the values of the type `ty` (R-30: an unknown one is
@@ -145,9 +153,10 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The owned Affine local `l` is moved at `at` (§5.2).
+    /// The owned Affine local `l` is moved at `at` (§5.2): a change (§7).
     pub(super) fn move_local(&mut self, r: &mut Run, l: LocalId, at: Span) {
         r.cur.set(l, Status::Moved { at, via_loop: false });
+        self.changed(r, Place { root: l, proj: Vec::new() }, at);
         if self.reports {
             self.m.moved.insert(l);
         }

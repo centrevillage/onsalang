@@ -25,6 +25,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 mod walk;
+mod write;
 
 /// Locals moved somewhere in each body (the `rt` pass uses it for drops).
 pub(crate) type MovedLocals = HashMap<DefId, HashSet<LocalId>>;

@@ -1,5 +1,6 @@
 //! The unit tests of the new modes stage (W4-07): the flow of the moves
-//! (U1) and the table of consumption (U2a) (§5.2, §5.4, §7), from sources
+//! (U1), the table of consumption (U2), the calls (U3a) and the writes
+//! (U3b) (§5.1, §5.2, §5.4, §7), from sources
 //! parsed in memory. Each runs the whole
 //! analysis (the old modes stage included), then the new `check_all`, and
 //! reads only the diagnostics it adds (review 10).
@@ -1327,4 +1328,414 @@ fn a_callee_not_known_checks_nothing() {
     let moved = check_all(&pkg, &mut a);
     assert!(a.diagnostics[before..].iter().all(|d| d.span.file != FileId(0)));
     assert!(!moved.contains_key(&id));
+}
+
+/// Each diagnostic the new stage reports for [`CALLEES`] and `body` (after
+/// [`PRELUDE`]), by its code, its line in `body` and its message, and each
+/// of its candidates by the line its first edit is on, after its edits
+/// (trimmed; R-161's edits the `let`, not the line of the write).
+fn writes(body: &str) -> Vec<(Code, usize, String, Vec<String>)> {
+    let src = format!("{PRELUDE}{CALLEES}{body}");
+    let (pkg, mut a) = analyzed(&src);
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    let start = PRELUDE.len() + CALLEES.len();
+    let line = |at: u32| src[start..at as usize].matches('\n').count() + 1;
+    (a.diagnostics[before..].iter())
+        .filter(|d| d.span.file == FileId(0))
+        .map(|d| {
+            let fixed = (d.fixes.iter()).map(|f| {
+                let mut text = src.clone();
+                for e in f.edits().iter().rev() {
+                    text.replace_range(e.span.start as usize..e.span.end as usize, &e.replace);
+                }
+                let skip = src[..start].matches('\n').count();
+                text.lines().nth(skip + line(f.edits()[0].span.start) - 1).unwrap_or_default().trim().to_string()
+            });
+            (d.code, line(d.span.start), d.message.clone(), fixed.collect())
+        })
+        .collect()
+}
+
+/// Memo 2.4's table (§5.1, §5.2, §5.4): the E0701 of a write to a place
+/// that cannot be changed says what its root is, and of a value that is no
+/// place, that it is not; the words of the write, by what writes.
+#[test]
+fn the_places_that_cannot_be_changed() {
+    let src = "pub struct V { n: U32 }
+impl V {
+  pub fn s(self) {
+    self.n = 1
+  }
+}
+pub fn param(b: U32) {
+  b = 2
+}
+pub fn closure_param() -> U32 {
+  apply(fn(x: U32) -> U32 {
+    x = 1
+    x
+  })
+}
+pub fn let_owned() uses {Alloc} {
+  let b = mk()
+  b = mk()
+}
+pub fn let_static() {
+  let k = 1
+  bump(inout k)
+}
+pub fn borrow_let(h: Holder) uses {Alloc} {
+  let c = h.buf
+  c.fill!(0.0)
+}
+pub fn borrow_for(xs: [Buf[F32]; 2]) uses {Alloc} {
+  for c in xs { c = mk() }
+}
+pub fn borrow_arm(o: Option[U32]) {
+  match o { Some(v) => { v = 1 }, None => {} }
+}
+pub fn owned_for() uses {Alloc} {
+  for c in make_array() { c = mk() }
+}
+pub fn owned_arm() uses {Alloc} {
+  match mko() { Some(c) => { c = mk() }, None => {} }
+}
+pub fn ios(inout xs: Span[F32]) {}
+pub fn no_place(inout xs: Span[F32]) {
+  ios(inout xs.slice(0, 1))
+}
+pub fn no_receiver(inout xs: Span[F32]) {
+  xs.slice(0, 1).fill!(0.0)
+}
+pub fn bump(inout n: U32) {}
+";
+    let (assign, inout, bang) = ("cannot assign", "cannot pass as `inout`", "cannot call an `inout self` method");
+    let expected = [
+        (4, assign, "`self` is borrowed; declare the method with `inout self`"),
+        (8, assign, "`b` is a borrowed parameter; declare it `inout b`"),
+        (12, assign, "`x` is a borrowed parameter; declare it `inout x`"),
+        (18, assign, "`b` is immutable (`let`); declare it with `var`"),
+        (22, inout, "`k` is immutable (`let`); declare it with `var`"),
+        (26, bang, "`c` is a borrow binding (§5.4), read-only"),
+        (29, assign, "`c` is a borrow binding (§5.4), read-only"),
+        (32, assign, "`v` is a borrow binding (§5.4), read-only"),
+        (35, assign, "`c` is a `for` variable, read-only"),
+        (38, assign, "`c` is a `match` binding, read-only"),
+        (42, "an `inout` argument must be a place", ""),
+        (45, "the receiver of an `inout self` method must be a place", ""),
+    ];
+    let found = writes(src);
+    assert_eq!(found.len(), expected.len(), "{found:?}");
+    for ((code, line, message, fixes), (l, how, why)) in found.iter().zip(expected) {
+        assert_eq!((*code, *line), (Code::E0701, l), "{message}");
+        assert!(message.starts_with(how) && message.contains(why), "{message}");
+        // R-161's candidate: of the two `let`s that can be `var` only.
+        assert_eq!(fixes.len(), usize::from(l == 18 || l == 22), "{message}");
+    }
+}
+
+/// R-161 (memo 2.4): `var` for the `let` of the place written, the one fix
+/// when the `let` binds the name alone and `var` takes its value with no
+/// error: of a Copy borrow, an owned value, a static value, at an
+/// assignment, an `inout` argument and a `!` receiver. Applied, every write
+/// to the binding passes (§18.1).
+#[test]
+fn the_candidate_that_writes_var() {
+    let src = "pub fn copy_borrow(h: Holder) -> U32 {
+  let n = h.n
+  n = 2
+  n = 3
+  n
+}
+pub fn owned() uses {Alloc} {
+  let b = mk()
+  io(inout b)
+  b = mk()
+  b.fill!(0.0)
+}
+pub fn static_value() -> U32 {
+  let k = 1
+  k = 2
+  k
+}
+pub fn shared(s: Str) -> U32 uses {Alloc} {
+  let t = s
+  t = \"x\"
+  t.len()
+}
+";
+    let to_var = |l: usize, line: &str| (Code::E0701, l, vec![line.to_string()]);
+    let found: Vec<_> = writes(src).into_iter().map(|(c, l, _, f)| (c, l, f)).collect();
+    let expected =
+        [to_var(3, "var n = h.n"), to_var(9, "var b = mk()"), to_var(15, "var k = 1"), to_var(20, "var t = s")];
+    assert_eq!(found, expected);
+    each_fix_clears(src);
+}
+
+/// R-161's conditions (memo 2.4): no candidate for a split `let`, a binding
+/// of a `for` or `match` head, a write in an anonymous function that
+/// captures the `let`, a borrowed Affine value (`var` would consume it,
+/// E0711), a second-class one, and a `let` another binding derives from
+/// (after `var`, the write would leave it unusable, §7). (A `let` with an
+/// attribute is an error of the signatures stage in a function, before.)
+#[test]
+fn no_candidate_where_var_is_not_the_fix() {
+    let src = "pub fn split() uses {Alloc} {
+  let (a, c) = (mk(), 1)
+  a = mk()
+}
+pub fn captured() -> U32 {
+  let k = 1
+  apply(fn(x: U32) -> U32 {
+    k = x
+    k + x
+  })
+}
+pub fn borrowed_affine(h: Holder) uses {Alloc} {
+  let b = h.buf
+  b = mk()
+}
+pub fn second_class(xs: Span[F32]) {
+  let s = xs
+  ios(inout s)
+}
+pub fn derived() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    Some(b) => {
+      o = None
+      len_of(b)
+    },
+    None => 0,
+  }
+}
+pub fn ios(inout xs: Span[F32]) {}
+";
+    let found: Vec<_> = writes(src).into_iter().map(|(c, l, _, f)| (c, l, f.len())).collect();
+    assert_eq!(found, [3, 8, 14, 18, 24].map(|l| (Code::E0701, l, 0)));
+}
+
+/// All the walk of the function `t` in `body` (after [`PRELUDE`] and
+/// [`CALLEES`]) found, before the one of the body is chosen: each by its
+/// code, its line in `body` and the text it is at.
+fn all_found(body: &str) -> Vec<(Code, usize, String)> {
+    let src = format!("{PRELUDE}{CALLEES}{body}");
+    let (pkg, a) = analyzed(&src);
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
+    let root = crate::body::root_of(&a, id).expect("a body");
+    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
+    let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
+    w.expr(&mut Run::new(), root, Pos::Return);
+    let start = PRELUDE.len() + CALLEES.len();
+    let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
+    (w.m.found.iter())
+        .map(|d| (d.code, src[start..d.span.start as usize].matches('\n').count() + 1, text(d.span)))
+        .collect()
+}
+
+/// §5.1, §5.2: a `let` is E0701 at an `inout` argument and at the receiver
+/// of an `inout self` method. The E0701 stands at the argument whatever its
+/// mark (the position is the parameter's, U3a): it is there before the
+/// candidate of E0703 that adds `inout`, so that candidate makes no error.
+#[test]
+fn a_let_at_an_inout_argument_and_a_receiver() {
+    let src = "pub fn argument() uses {Alloc} {
+  let x = mk()
+  io(inout x)
+}
+pub fn receiver() uses {Alloc} {
+  let x = mk()
+  x.fill!(0.0)
+}
+pub fn method() uses {Alloc} {
+  let w = W { b: mk() }
+  w.poke!()
+}
+";
+    let found: Vec<_> = writes(src).into_iter().map(|(c, l, _, f)| (c, l, f)).collect();
+    let to_var = |l: usize, line: &str| (Code::E0701, l, vec![line.to_string()]);
+    assert_eq!(found, [to_var(3, "var x = mk()"), to_var(7, "var x = mk()"), to_var(11, "var w = W { b: mk() }")]);
+    let unmarked = "pub fn t() uses {Alloc} {\n  let x = mk()\n  io(x)\n}\n";
+    let x = |code| (code, 3, "x".to_string());
+    assert_eq!(all_found(unmarked), [x(Code::E0703), x(Code::E0701)]);
+    let marked = unmarked.replace("io(x)", "io(inout x)");
+    assert_eq!(all_found(&marked), [x(Code::E0701)]);
+}
+
+/// §5.2, S-789: a `var` moved and assigned as a whole is live again, on a
+/// branch and in a loop; a write to a part of it is a use (E0704), and so
+/// are an `inout` argument and a `!` receiver, which assign nothing whole.
+#[test]
+fn a_write_revives_a_whole_var_only() {
+    let src = "pub fn whole(c: Bool) uses {Alloc} {
+  var b = mk()
+  if c {
+    take(move b)
+    b = mk()
+  }
+  while c {
+    take(move b)
+    b = mk()
+  }
+  take(move b)
+}
+pub fn th(move h: Holder) uses {Alloc} {}
+pub fn field() uses {Alloc} {
+  var h = Holder { buf: mk(), n: 1 }
+  th(move h)
+  h.buf = mk()
+}
+pub fn element() uses {Alloc} {
+  var xs = make_array()
+  take_all(move xs)
+  xs[0] = mk()
+}
+pub fn inout_arg() uses {Alloc} {
+  var b = mk()
+  take(move b)
+  io(inout b)
+  take(move b)
+}
+pub fn bang() uses {Alloc} {
+  var b = mk()
+  take(move b)
+  b.fill!(0.0)
+  take(move b)
+}
+pub fn io(inout x: Buf[F32]) {}
+";
+    assert_eq!(diags(src), [at(17, MOVED), at(22, MOVED), at(27, MOVED), at(33, MOVED)]);
+}
+
+/// §7, S-42, R-118: changing the scrutinee of a borrowed `match` in an arm
+/// leaves the bindings of the place it changed, and those derived from them
+/// (§5.4), unusable (E0704): by an assignment, an `inout` argument and a
+/// move, on one path of an `if` too. W4-16 U1b's F4: a `let` of the tails of
+/// a `match` derives from each (S-604). Another field does not overlap.
+#[test]
+fn a_change_of_the_place_a_binding_derives_from() {
+    let src = "pub fn tko(move o: Option[Buf[F32]]) uses {Alloc} {}
+pub fn ioo(inout o: Option[Buf[F32]]) {}
+pub fn in_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => {
+      o = None
+      len_of(b)
+    },
+    None => 0,
+  }
+}
+pub fn after_match(d: Buf[F32]) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(Buf.zeroed(2))
+  let t = match o { Some(b) => b, None => d }
+  o = None
+  t.len()
+}
+pub fn disjoint_field() -> U32 uses {Alloc} {
+  var p: (Buf[F32], Buf[F32]) = (Buf.zeroed(1), Buf.zeroed(2))
+  match p {
+    (a, c) => {
+      p.1 = Buf.zeroed(3)
+      a.len()
+    },
+  }
+}
+pub fn same_field() -> U32 uses {Alloc} {
+  var p: (Buf[F32], Buf[F32]) = (Buf.zeroed(1), Buf.zeroed(2))
+  match p {
+    (a, c) => {
+      p.0 = Buf.zeroed(3)
+      a.len()
+    },
+  }
+}
+pub fn derived_twice(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => {
+      let t = b
+      let u = t
+      if c { ioo(inout o) }
+      len_of(u)
+    },
+    None => 0,
+  }
+}
+pub fn moved(h: Holder) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => {
+      tko(move o)
+      len_of(b)
+    },
+    None => 0,
+  }
+}
+";
+    let stale = (Code::E0704, false);
+    assert_eq!(diags(src), [at(8, stale), at(17, stale), at(33, stale), at(44, stale), at(54, stale)]);
+}
+
+/// §7: a Copy binding holds the value it was bound to, and the bindings of
+/// a `for` are not in the index (review 5: a change of the iterated place is
+/// E0715, W4-09). An E0701 write changes nothing, so it leaves no E0704 at
+/// the head of a loop before it (review 2).
+#[test]
+fn what_a_change_leaves_usable() {
+    let src = "pub fn copy() -> U32 uses {Alloc} {
+  var p: (U32, Buf[F32]) = (1, mk())
+  match p {
+    (n, _) => {
+      p.0 = 2
+      n
+    },
+  }
+}
+pub fn erroneous(o: Option[Buf[F32]], d: Buf[F32], c: Bool) -> U32 uses {Alloc} {
+  let t = match o { Some(b) => b, None => d }
+  var n: U32 = 0
+  while c {
+    n = len_of(t)
+    o = None
+  }
+  n
+}
+";
+    assert_eq!(diags(src), [at(15, (Code::E0701, false))]);
+    let a_for = "pub fn t() -> U32 uses {Alloc} {
+  var xs = make_array()
+  var n: U32 = 0
+  for b in xs {
+    xs[0] = mk()
+    n = len_of(b)
+  }
+  n
+}
+";
+    assert!(diags(a_for).iter().all(|d| d.0 != Code::E0704), "{:?}", diags(a_for));
+}
+
+/// S-604: a `let` of the tails of an `if` derives from the place of each,
+/// so a change of either leaves it unusable.
+#[test]
+fn a_binding_of_tails_derives_from_each() {
+    let src = "pub fn t(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  var q = mko()
+  match o {
+    Some(a) => match q {
+      Some(b) => {
+        let r = if c { a } else { b }
+        q = None
+        len_of(r)
+      },
+      None => 0,
+    },
+    None => 0,
+  }
+}
+";
+    assert_eq!(diags(src), [at(9, (Code::E0704, false))]);
 }

@@ -12,6 +12,7 @@ use super::check::Walker;
 use super::flow::Run;
 use super::place::place_of;
 use super::walk::Pos;
+use super::write::How;
 use crate::Kind;
 use crate::body::Target;
 use crate::builtin::method_self;
@@ -48,6 +49,7 @@ impl Walker<'_> {
         self.bang(e, callee, kind, recv);
         match (recv, &self.ast.expr(callee).kind) {
             (Some(Mode::Move), &ExprKind::Field { base, .. }) => self.expr(r, base, Pos::Extract),
+            (Some(Mode::Inout), &ExprKind::Field { base, .. }) => self.write_place(r, base, How::Bang),
             (Some(m), &ExprKind::Field { base, .. }) => self.expr(r, base, Pos::Arg(m)),
             (Some(_), _) => bug(Some(self.ast.expr(callee).span), "a method call with no receiver"),
             (None, _) => self.expr(r, callee, Pos::Read),
@@ -113,13 +115,18 @@ impl Walker<'_> {
             }
             (Takes::Param(Mode::Move, _), _) => self.consume(r, e, Pos::MoveArg, mark),
             (Takes::Element, Mode::Borrow) => self.expr(r, e, Pos::Consume),
-            // SPEC-GAP(S-793): a Dup value marked `move` on an element is copied, as on a literal's element.
+            // A Dup value marked `move` on an element is copied, as on a literal's element (§5.2, S-793).
             (Takes::Element, _) => self.consume(r, e, Pos::Consume, mark),
             (Takes::Param(m, ty), _) => {
                 if a.mode != m {
                     self.mismatch(a, m);
                 }
-                self.argument(r, e, m, ty)
+                match m {
+                    // SPEC-GAP(S-796): a binding derived from the place of an `inout` argument, passed in the same
+                    // call, is E0704 after it only (§7, from the left), not before it (§5.2: E0702 or not).
+                    Mode::Inout => self.write_place(r, e, How::Inout),
+                    _ => self.argument(r, e, ty),
+                }
             }
         }
     }

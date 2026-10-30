@@ -14,14 +14,8 @@ use crate::body::LocalId;
 /// changed (§7, §5.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Status {
-    Moved {
-        at: Span,
-        via_loop: bool,
-    },
-    #[allow(dead_code)] // The writes of U3 make it.
-    Stale {
-        changed: Span,
-    },
+    Moved { at: Span, via_loop: bool },
+    Stale { changed: Span },
 }
 
 impl Status {

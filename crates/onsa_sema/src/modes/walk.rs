@@ -88,27 +88,17 @@ impl Walker<'_> {
         }
     }
 
-    /// The argument `e` of the mode `m` (not `move`) of a parameter of the
-    /// type `param`, if read: a literal of a second-class type at a borrowed
-    /// one passes its elements on as arguments (memo 2.1, §5.3:
-    /// `planes([a, b])`, `swap.Out { l: a, r: b }`; the type of an array
-    /// literal is that of its elements). `inout [a, b]` is W4-08's.
-    pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, m: Mode, param: Option<TyId>) {
+    /// The borrowed argument `e` of a parameter of the type `param`, if
+    /// read: a literal of a second-class type passes its elements on as
+    /// arguments (memo 2.1, §5.3: `planes([a, b])`, `swap.Out { l: a, r: b }`;
+    /// the type of an array literal is that of its elements). An `inout` one
+    /// is a write (`write.rs`; `inout [a, b]` is W4-08's).
+    pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: Option<TyId>) {
         let x = self.ast.without_parens(e);
         let literal =
             matches!(self.ast.expr(x).kind, ExprKind::Array(_) | ExprKind::Tuple(_) | ExprKind::Struct { .. });
-        if m == Mode::Borrow && literal && param.and_then(|t| self.class_of(t)).is_some() {
-            return self.ast.sub_exprs(x).into_iter().for_each(|y| self.expr(r, y, Pos::Arg(m)));
-        }
-        self.expr(r, e, Pos::Arg(m))
-    }
-
-    /// The local `e` names as a whole (through parentheses).
-    pub(super) fn whole_local(&self, e: ExprId) -> Option<LocalId> {
-        let x = self.ast.without_parens(e);
-        match (&self.ast.expr(x).kind, self.names.paths.get(&x)) {
-            (ExprKind::Path(_), Some(PathRes::Local(b))) => Some(LocalId(b.0)),
-            _ => None,
-        }
+        let at =
+            if literal && param.and_then(|t| self.class_of(t)).is_some() { self.ast.sub_exprs(x) } else { vec![e] };
+        at.into_iter().for_each(|y| self.expr(r, y, Pos::Arg(Mode::Borrow)));
     }
 }

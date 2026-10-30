@@ -10,6 +10,7 @@ use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, St
 use super::check::Walker;
 use super::state::{Delta, LoopSum};
 use super::walk::Pos;
+use super::write::How;
 use crate::binding::{Head, HeadRow};
 use crate::body::{LocalId, Target};
 
@@ -95,8 +96,10 @@ impl Walker<'_> {
                     return true;
                 }
                 if self.reports {
-                    let outer = replace(r, Run::new());
+                    let (outer, n, info) = (replace(r, Run::new()), self.captured.len(), self.info);
+                    self.captured.extend(info.captures.get(&e).into_iter().flatten());
                     self.expr(r, *body, Pos::Return);
+                    self.captured.truncate(n);
                     *r = outer;
                 }
             }
@@ -135,15 +138,10 @@ impl Walker<'_> {
                 let Some(&l) = self.vars.get(&s) else { bug(Some(ast.stmt(s).span), "a `var` with no local") };
                 r.declare(l);
             }
-            // The value, then the target (§3.5). A whole local that can be
-            // written is live again (an E0701 write changes nothing, U3).
+            // The value, then the target (§3.5).
             StmtKind::Assign { target, value } => {
                 self.expr(r, *value, Pos::Consume);
-                match self.whole_local(*target) {
-                    Some(l) if self.writable(l) => r.cur.revive(l),
-                    Some(_) => {}
-                    None => self.expr(r, *target, Pos::Read),
-                }
+                self.write_place(r, *target, How::Assign);
             }
             StmtKind::For { pat, moved, iter, body } => {
                 match moved {
