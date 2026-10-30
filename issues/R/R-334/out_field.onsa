@@ -1,0 +1,17 @@
+pub struct Stereo { l: F32, r: F32 }
+pub flow pair(x: F32 at sample) -> Stereo at sample { Stereo { l: x, r: x } }
+pub fn borrowed(o: pair.Out) -> U32 {
+  let l = o.l
+  l.len()
+}
+pub fn written(inout o: pair.Out) -> U32 {
+  let l = o.l
+  l.len()
+}
+pub fn grow(inout o: pair.Out) uses {Alloc} {
+  o.l.push(1.0)
+}
+pub fn tb(b: Buf[F32]) -> U32 { b.len() }
+pub fn to_buf(o: pair.Out) -> U32 { tb(o.l) }
+pub fn tsp(xs: Span[F32]) -> U32 { xs.len() }
+pub fn to_buf2(xs: Span[F32]) -> U32 { tb(xs) }
