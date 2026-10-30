@@ -1965,7 +1965,7 @@ kind = "test-case"
 target = "tests/spec/negative/try_operand_field_path.onsa"
 reasons = ["S-784", "S-85"]
 until = "W4-09"
-note = "dev は何も出さず、新しい modes は部分移動の E0711（S-85、W4-09）。W4-07 の後も W4-09 まで落ちる（W4-07 U4 の t1）"
+note = "W4-07 の切り替えから、所有の値のフィールドの経路の `?` に部分移動の E0711（19・24・30・36 行。S-85、W4-09）が出て、期待の根の使用の E0704 に届かない。W4-09 まで落ちる（W4-07 U4 の t1）"
 
 [[pending]]
 kind = "test-case"
@@ -1979,4 +1979,4 @@ kind = "test-case"
 target = "tests/spec/negative/overlap_args_move_field.onsa"
 reasons = ["S-787", "S-85"]
 until = "W4-09"
-note = "`move x.b` の部分移動の E0711 が W4-09 まで残る（W4-07 で E0702 が出ても落ちる。W4-07 U4 の t3）"
+note = "39・43・55 行の E0702 は W4-07 で通る。`move x.a` を二つ目の引数と並べる 47・51 行は、部分移動の E0711 が W4-09 まで残る（S-85。W4-07 U4 の t3）"
