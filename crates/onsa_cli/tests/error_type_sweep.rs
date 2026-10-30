@@ -578,6 +578,53 @@ fn unknown_bound_silences_what_depends_on_the_trait() {
     finish(problems);
 }
 
+/// The callees of [`NO_KIND`] (`{G}` the type parameters of a function, `{X}` the type with no kind).
+const NO_KIND_CALLEES: &str = "fn two{G}(move a: {X}, b: {X}) {}
+fn two_mv{G}(move a: {X}, move b: {X}) {}
+rt fn keep{G}(move p: (Buf[F32], {X})) -> (Buf[F32], {X}) { p }
+fn keep_n{G}(move p: (Buf[F32], {X})) -> (Buf[F32], {X}) { p }
+
+";
+
+/// The forms whose diagnostics depend on the kind of a value of no known kind (§18.1, §4.6): whether it
+/// moves (E0702 of a `move` argument and another, the E0703 of `move`, S-609), and of an aggregate with an
+/// Affine part, which is Affine whatever the other part is (its drop, E0901 and E0601; E0704).
+const NO_KIND: &[(&str, &str)] = &[
+    ("move_and_read", "pub fn NAME{G}(move x: {X}) {\n  two(move x, x)\n}\n\n"),
+    ("move_twice", "pub fn NAME{G}(move x: {X}) {\n  two_mv(move x, move x)\n}\n\n"),
+    ("no_marks", "pub fn NAME{G}(move x: {X}) {\n  two_mv(x, x)\n}\n\n"),
+    ("rt_return", "pub rt fn NAME{G}(move p: (Buf[F32], {X})) -> (Buf[F32], {X}) {\n  p\n}\n\n"),
+    ("rt_pass", "pub rt fn NAME{G}(move p: (Buf[F32], {X})) -> (Buf[F32], {X}) {\n  keep(move p)\n}\n\n"),
+    (
+        "rt_let",
+        "pub rt fn NAME{G}(move p: (Buf[F32], {X})) -> (Buf[F32], {X}) {\n  let q = move p\n  keep(move q)\n}\n\n",
+    ),
+    ("plain_return", "pub fn NAME{G}(move p: (Buf[F32], {X})) -> (Buf[F32], {X}) {\n  p\n}\n\n"),
+    ("plain_pass", "pub fn NAME{G}(move p: (Buf[F32], {X})) -> (Buf[F32], {X}) {\n  keep_n(move p)\n}\n\n"),
+    (
+        "moved_twice",
+        "pub fn NAME{G}(move p: (Buf[F32], {X})) -> U32 {\n  let q = move p\n  let r = move p @@E0704\n  1\n}\n\n",
+    ),
+];
+
+/// §18.1, §4.6: a value of an unknown bound or of the error type has no kind, so what depends on whether it
+/// moves has no diagnostic; an aggregate with an Affine part is Affine (W4-07 U4b-2).
+#[test]
+fn a_value_of_no_kind() {
+    let mut problems = Vec::new();
+    for (tag, generics, ty) in [("bound", "[T: Gone]", "T"), ("error", "", "Gone")] {
+        let fill = |t: &str| t.replace("{G}", generics).replace("{X}", ty);
+        let mut src = Src::new();
+        src.raw(USE);
+        src.raw(&fill(NO_KIND_CALLEES));
+        for (name, form) in NO_KIND {
+            src.unit(name, &fill(form).replace("NAME", name));
+        }
+        problems.extend(verify(&format!("no_kind_{tag}"), &src));
+    }
+    finish(problems);
+}
+
 // ---- 3. the exhaustiveness ---------------------------------------------------------------------------------
 
 /// §18.1, S-692 A2: the part of a pattern whose type is an error type matches anything, and a part that is

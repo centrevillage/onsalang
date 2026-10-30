@@ -1884,7 +1884,7 @@ reasons = ["S-82"]
 until = "W10-08"
 note = "@latency が無い属性の E0005（W10-08）"
 
-# --- W4-05 U4a/t: 整形性の段。S-217 の 1 件は W4-07（U4a の他の項目は U4a で外した）。
+# --- W4-05 U4a/t: 整形性の段。項目は U4a で外し、S-217 の 1 件は W4-07 で外した。
 
 # --- W4-05 U4b/t: `impl Drop` の型の `const`（S-755）。W5-04 で外す（2026-10-29）。
 
@@ -1899,20 +1899,6 @@ note = "手書きの `impl Drop` の型の `const` の E0407 は `impl Drop` が
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/binding_span_let.onsa"
-reasons = ["S-217"]
-until = "W4-07"
-note = "束縛した `Span` の名前を無名関数が捕捉する形（`captured`）の E0710。名前の第二級は W4-07（S-217。束縛していない引数の捕捉は R-331）。他の E0710 は W4-16 U1a で通る"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_view_captured.onsa"
-reasons = ["S-217", "R-331"]
-until = "W4-07"
-note = "束縛した部分ビューの名前を無名関数が捕捉する形の E0710。名前の第二級は W4-07（S-217、R-331）。部分ビューの `let` は W4-16 U1b で通る"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/binding_view_for_change.onsa"
 reasons = ["R-24"]
 until = "W4-09"
@@ -1920,31 +1906,10 @@ note = "`for v in xs.slice(a, b)` の本体で `xs` を変更する形の E0715�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/values/binding_heading_owned_move_loop.onsa"
-reasons = ["R-29"]
-until = "W4-07"
-note = "R-251 で所有になった `for` の要素（`for z in make_array()`）を本体で `move` すると、modes が外の変数とみなして E0704（`modes.rs::consume` の `decl < loop_start`、R-29）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/binding_heading_loop_run.onsa"
-reasons = ["R-29"]
-until = "W4-07"
-note = "R-251 で所有になった `for` の要素（`for z in make_pair(v)`）を本体で `move` すると、modes が外の変数とみなして E0704（`modes.rs::consume` の `decl < loop_start`、R-29）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/types/drop_through_ptr_move_on.onsa"
 reasons = ["R-255"]
 until = "W6-02"
 note = "rt の関数で `move` の引数に受けた `Str` を持つ値をそのまま返すか `move` で渡す形の E0901（R-255。§12.2 では `Alloc` は要らない）。W4-16 U3 の `Ptr` の直しの前は、種の歩きが `Ptr` の輪で答えを出さず、たまたま通っていた"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_inout_not_origin_no_candidate.onsa"
-reasons = ["R-117", "S-41"]
-until = "W4-07"
-note = "`inout` 引数の値の E0711 は修正候補なし（今は `move` の挿入の候補を出し、`let c = move b` と `take(move b)` は通る）"
 
 [[pending]]
 kind = "test-case"
@@ -1975,116 +1940,11 @@ until = "W6-03"
 note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
 
 [[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_borrow_move.onsa"
-reasons = ["S-609"]
-until = "W4-07"
-note = "対照の `take_n(n)`（Copy の型の `move` の引数に `move` を書かない）が E0703（`values/move_assign_copy_args.onsa` と同じ。借用束縛の E0711 は W4-16 U1a で全て通る）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/move_assign_copy_args.onsa"
-reasons = ["S-609"]
-until = "W4-07"
-note = "Copy の型の `move` の引数に `move` を書かない（今は E0703）"
-
-[[pending]]
 kind = "fuzz-input"
 target = "tests/fuzz/938b63f9.onsa"
 reasons = ["R-333", "S-302"]
 until = "W5-11"
 note = "fix-same-place: fix|E0020|write `…`|reading と fix|E0020|write `…`|E0002。式の始まりの ~= の ~ を ! にする候補で、!= が一語に読まれて編集の外の = の読みが変わり、同じ位置に E0002 が残る（3434a10 の後の親の fuzz）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_for_move_xs.onsa"
-reasons = ["R-29", "R-198"]
-until = "W4-07"
-note = "`for … in move xs` が `xs` を消費せず、ループ変数を外の変数とみなす。借用・`inout`・場所でない反復元の E0711 が出ない（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/binding_for_move_xs.onsa"
-reasons = ["R-29", "S-609"]
-until = "W4-07"
-note = "要素の `move` が E0704、`move` の引数に渡す新しい値の配列が E0703（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/binding_heading_owned_combos_loop.onsa"
-reasons = ["R-251", "R-29"]
-until = "W4-07"
-note = "呼び出しを反復元にした `for` の要素を `move` すると E0704（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_inout_origin_forms.onsa"
-reasons = ["R-117", "S-41"]
-until = "W4-07"
-note = "`inout` 引数の値を返す・分解する・リテラルの要素に置く形が通る（E0711 が出ない。W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/modes_moved_next_iteration.onsa"
-reasons = ["S-789"]
-until = "W4-07"
-note = "`continue` の道と `while` の条件の再評価を数えず、復活した後の `move` に誤って E0704（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/move_borrowed_place_no_candidate.onsa"
-reasons = ["S-609", "R-117"]
-until = "W4-07"
-note = "借用の Affine の末尾を `move` の引数に置く形が、候補付きの E0703（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/move_not_a_place.onsa"
-reasons = ["R-198"]
-until = "W4-07"
-note = "引数の `move` の被演算子が場所でない形が通る（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/move_dup_mark.onsa"
-reasons = ["S-609"]
-until = "W4-07"
-note = "Copy・Shared・関数値に付けた `move` が通る。`.fix1` は U4b で作る（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/move_dup_args.onsa"
-reasons = ["S-609"]
-until = "W4-07"
-note = "Dup の値に `move` を書かない形が E0703（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/binding_span_match_arm.onsa"
-reasons = ["S-217"]
-until = "W4-07"
-note = "`Span` の `match` の腕が E0710（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_span_for_heading.onsa"
-reasons = ["S-217"]
-until = "W4-07"
-note = "`inout` の平面の引数の `for s in xs` が報告されない（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/try_operand_consume.onsa"
-reasons = ["S-784", "S-786"]
-until = "W4-07"
-note = "`?` が消費に数えられず、E0704・E0711 が出ない（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/try_operand_consume_marks.onsa"
-reasons = ["S-790", "S-609"]
-until = "W4-07"
-note = "`({ move r })?` と `(if … { move r } …)?` が E0200、`len_of(r?)` が E0703（W4-07 U4 の t1）"
 
 [[pending]]
 kind = "test-case"
@@ -2109,108 +1969,10 @@ note = "dev は何も出さず、新しい modes は部分移動の E0711（S-85
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/modes_call_marks_arms.onsa"
-reasons = ["S-100", "S-800"]
-until = "W4-07"
-note = "印を書いた引数の E0703 が印の頭を指す（S-800 で被演算子）。`.fix1` は U4b で作る（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/bang_calls.onsa"
-reasons = ["S-791"]
-until = "W4-07"
-note = "`!` の呼び出しの E0713 が出ない。`.fix1` は U4b で作る（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/unwrap_receiver.onsa"
-reasons = ["S-785", "S-786"]
-until = "W4-07"
-note = "消費する受け手の後の使用の E0704 が出ない（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/match_change_after_use.onsa"
-reasons = ["S-42", "R-118"]
-until = "W4-07"
-note = "腕の中で対象を変更した後の束縛の使用の E0704（§7）が出ない（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0701_let_to_var.onsa"
-reasons = ["R-161"]
-until = "W4-07"
-note = "`let` への書き込みの E0701 に `var` にする候補が無い（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/unwrap_receiver_run.onsa"
-reasons = ["S-785", "S-609"]
-until = "W4-07"
-note = "新しい値を `move` の引数に渡す形が E0703（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/ctor_elements_run.onsa"
-reasons = ["S-793", "S-609"]
-until = "W4-07"
-note = "新しい値を `move` の引数に渡す形が E0703（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/move_arg_new_values.onsa"
-reasons = ["S-609", "S-100"]
-until = "W4-07"
-note = "新しい値を `move` の引数に渡す形が E0703（W4-07 U4 の t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/overlap_args_move.onsa"
-reasons = ["S-787"]
-until = "W4-07"
-note = "`move` の場所と他の引数の重なりの E0702 が出ず、E0704 になる（W4-07 U4 の t3）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/overlap_args_derived.onsa"
-reasons = ["S-796"]
-until = "W4-07"
-note = "派生した借用束縛と `inout` の引数の重なりの E0702 が出ない（W4-07 U4 の t3）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_call_change.onsa"
-reasons = ["S-796", "R-118"]
-until = "W4-07"
-note = "呼び出しの引数で変更した後の束縛の使用の E0704（§7）が出ない（W4-07 U4 の t3）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_chain_projection.onsa"
-reasons = ["S-797", "R-118"]
-until = "W4-07"
-note = "派生の鎖の重なる変更の後の使用の E0704（§7）が出ない（W4-07 U4 の t3）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/closure_capture_span.onsa"
-reasons = ["R-331", "S-217"]
-until = "W4-07"
-note = "`Span` の捕捉の E0710 が出ない（W4-07 U4 の t3）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/closure_capture_shared.onsa"
-reasons = ["R-85", "S-80"]
-until = "W4-07"
-note = "Shared の値の捕捉の E0200 が出ない（W4-07 U4 の t3）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/module/closure_capture_shared_pkg"
-reasons = ["R-85", "S-80"]
-until = "W4-07"
-note = "Shared の値の捕捉の E0200 が出ない（W4-07 U4 の t3）"
+target = "tests/spec/values/try_operand_field_path.onsa"
+reasons = ["S-784", "S-85"]
+until = "W4-09"
+note = "所有の値の Affine のフィールドの経路の `?`（`h.r?`）に、新しい modes は部分移動の E0711 を出す（S-85、W4-09）。古い modes は何も出さず、W4-07 U4b-2 の切り替えから W4-09 まで落ちる"
 
 [[pending]]
 kind = "test-case"
@@ -2218,108 +1980,3 @@ target = "tests/spec/negative/overlap_args_move_field.onsa"
 reasons = ["S-787", "S-85"]
 until = "W4-09"
 note = "`move x.b` の部分移動の E0711 が W4-09 まで残る（W4-07 で E0702 が出ても落ちる。W4-07 U4 の t3）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/move_borrowed_place_no_candidate.onsa:22:8 E0703 fix1"
-reasons = ["S-609", "R-117"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/move_borrowed_place_no_candidate.onsa:26:8 E0703 fix1"
-reasons = ["S-609", "R-117"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/move_borrowed_place_no_candidate.onsa:30:8 E0703 fix1"
-reasons = ["S-609", "R-117"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/move_borrowed_place_no_candidate.onsa:34:8 E0703 fix1"
-reasons = ["S-609", "R-117"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/move_borrowed_place_no_candidate.onsa:41:8 E0703 fix1"
-reasons = ["S-609", "R-117"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/binding_for_move_xs.onsa:114:34 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/ctor_elements_run.onsa:77:25 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/move_dup_args.onsa:57:14 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/move_dup_args.onsa:71:6 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/move_dup_args.onsa:114:6 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/move_dup_args.onsa:148:6 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/move_dup_args.onsa:153:6 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/values/unwrap_receiver_run.onsa:80:21 E0703 fix1"
-reasons = ["S-609"]
-until = "W4-07"
-note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_path_use.onsa"
-reasons = ["S-803", "S-804"]
-until = "W4-07"
-note = "使えなくなった束縛の経路と全体の使用、分解する `let` と `match` の見出しの読み、添字の順の E0704（§7）が出ない（古い modes は §7 を持たない。W4-07 U4b の t4）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/a6df552b.onsa"
-reasons = ["S-609", "R-117"]
-until = "W4-07"
-note = "fix-same-place: fix|E0703|write the mode of the parameter|E0711。借用の Affine の値を `move` の引数に置く形で、古い modes の E0703 の `move` を書く候補を当てると E0711 が残る（新しい modes は候補の無い E0711。W4-07 U4 の t1 の事例を種にした変異、`fix-contract` の 13 件と同じ）"

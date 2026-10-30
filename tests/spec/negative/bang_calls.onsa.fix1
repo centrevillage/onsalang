@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§6.1", "§18.1"]
+// fixes = 1
+
+// S-791 (W4-07 U3; §5.2: "`inout self` のメソッドの呼び出しは、名前の直後に `!` を付ける（`out.fill!(0.0)`）。無ければ E0713、
+// `inout self` のメソッドでない呼び出し（関数、関数値、構築子を含む）に付ければ E0714。どちらも修正候補は一意"): the `!` is
+// the mark of a receiver that is changed, so a call without such a receiver has none: a function, a function value, a
+// constructor of `Option`, `Result` and of a user's enum (`Some!(1)`, `Shape.Circle!(1)`) and the methods whose
+// receiver is `self` or `move self` are E0714, and the one candidate removes the `!`. An `inout self` method called
+// without the `!` is E0713, and the candidate inserts it. The constructor is a call in the syntax and a literal in the
+// modes (S-793), but the answer for the `!` is the one of a function. The files negative/modes.onsa and
+// fixes/e0713_e0714_bang.onsa hold the cases of the methods. One error per function (P-01).
+
+pub enum Shape {
+  Circle(U32),
+  Empty,
+}
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+impl Pt {
+  pub fn norm(self) -> U32 { self.x + self.y }
+  pub fn scale(inout self, k: U32) { self.x = self.x * k }
+  pub fn take(move self) -> U32 { self.x }
+}
+
+pub fn inc(n: U32) -> U32 {
+  n + 1
+}
+
+// ---- E0714: the call has no `inout self` ----
+
+pub fn bang_on_a_function() -> U32 {
+  inc(1)                                   //~ E0714
+}
+
+pub fn bang_on_a_function_in_an_argument() -> U32 {
+  inc(inc(1))                              //~ E0714
+}
+
+pub fn bang_on_a_function_value(f: fn(U32) -> U32) -> U32 {
+  f(1)                                     //~ E0714
+}
+
+pub fn bang_on_some() -> Option[U32] {
+  Some(1)                                  //~ E0714
+}
+
+pub fn bang_on_ok() -> Result[U32, U32] {
+  Ok(1)                                    //~ E0714
+}
+
+pub fn bang_on_a_user_variant() -> Shape {
+  Shape.Circle(1)                          //~ E0714
+}
+
+pub fn bang_on_a_constructor_in_an_if(n: U32) -> Option[U32] {
+  let r = if n > 1 { Some(n) } else { None }   //~ E0714
+  r
+}
+
+pub fn bang_on_a_borrowed_receiver(p: Pt) -> U32 {
+  p.norm()                                 //~ E0714
+}
+
+pub fn bang_on_a_move_self_receiver(move p: Pt) -> U32 {
+  p.take()                                 //~ E0714
+}
+
+// ---- E0713: an `inout self` method without the `!` ----
+
+pub fn no_bang_on_a_move_parameter(move p: Pt) -> U32 {
+  p.scale!(2)                                //~ E0713
+  p.x
+}
+
+pub fn no_bang_on_a_field_of_a_var() -> U32 {
+  var q = (Pt { x: 1, y: 2 }, 3)
+  q.0.scale!(2)                              //~ E0713
+  q.1
+}
+
+pub fn no_bang_in_a_branch(c: Bool) -> U32 {
+  var p = Pt { x: 1, y: 2 }
+  if c {
+    p.scale!(2)                              //~ E0713
+  }
+  p.x
+}
+
+// ---- right ----
+
+pub fn right_calls(move m: Pt) -> U32 {
+  var p = Pt { x: 1, y: 2 }
+  p.scale!(2)
+  m.scale!(3)
+  let r = match Some(inc(p.norm())) {
+    Some(k) => k,
+    None => 0,
+  }
+  r + m.norm() + p.take()
+}

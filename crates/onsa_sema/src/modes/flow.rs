@@ -13,6 +13,7 @@ use super::walk::Pos;
 use super::write::How;
 use crate::binding::{Head, HeadRow};
 use crate::body::{LocalId, Target};
+use crate::names::body::Origin;
 
 /// A walk's state, the `break` and `continue` states of the innermost loop
 /// it is in, and the bindings declared in the blocks it is in (innermost
@@ -135,7 +136,9 @@ impl Walker<'_> {
             }
             StmtKind::Var { init, .. } => {
                 self.expr(r, *init, Pos::Consume);
-                let Some(&l) = self.vars.get(&s) else { bug(Some(ast.stmt(s).span), "a `var` with no local") };
+                let Some(&l) = self.origins.get(&Origin::Var(s)) else {
+                    bug(Some(ast.stmt(s).span), "a `var` with no local")
+                };
                 r.declare(l);
             }
             // The value, then the target (§3.5).

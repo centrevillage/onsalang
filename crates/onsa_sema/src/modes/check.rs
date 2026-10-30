@@ -1,4 +1,4 @@
-//! The entry of the new modes stage (W4-07 memo 1.1, 1.4, 2.10): one walk
+//! The entry of the modes stage (W4-07 memo 1.1, 1.4, 2.10): one walk
 //! of each body the stage reads, in source order, and its one diagnostic.
 
 use std::collections::{HashMap, HashSet};
@@ -22,7 +22,6 @@ use crate::{Analysis, DefId, Kind, Package, module_of_def};
 /// Check the argument modes and the moves of every body the stage reads
 /// (§5.2, §5.4, §7; §18.1: a body whose unit failed before is skipped), and
 /// the locals each moved.
-#[allow(dead_code)] // Wired at the switch (W4-07 U4); the unit tests call it.
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
     let mut ids: Vec<DefId> = a.bodies.keys().copied().collect();
     ids.sort();
@@ -60,8 +59,8 @@ pub(super) struct Walker<'a> {
     pub(super) names: &'a BodyNames,
     pub(super) info: &'a BodyInfo,
     generics: Vec<GenericDef>,
-    /// The local of each `var`.
-    pub(super) vars: HashMap<StmtId, LocalId>,
+    /// The local of each binding no pattern makes (a `var`).
+    pub(super) origins: HashMap<Origin, LocalId>,
     /// The walk reports: the one of the body, not one that makes a loop's
     /// summary, which does not know the state before the loop.
     pub(super) reports: bool,
@@ -118,15 +117,9 @@ impl<'a> Walker<'a> {
         (names, info, root): (&'a BodyNames, &'a BodyInfo, ExprId),
         generics: Vec<GenericDef>,
     ) -> Self {
-        let vars = (names.bindings.iter().enumerate())
-            .filter_map(|(i, b)| match b.origin {
-                Origin::Var(s) => Some((s, LocalId(i as u32))),
-                _ => None,
-            })
-            .collect();
-        let (deps, inside) = (Deps::default(), Inside::default());
+        let (origins, deps, inside) = (crate::body::origins(names), Deps::default(), Inside::default());
         let mut w =
-            Walker { a, ast, text, names, info, generics, vars, reports: true, deps, inside, m: Made::default() };
+            Walker { a, ast, text, names, info, generics, origins, reports: true, deps, inside, m: Made::default() };
         w.deps = Deps::of_body((ast, names, info), root, |t| w.kind_of(t) == Some(Kind::Copy));
         w
     }

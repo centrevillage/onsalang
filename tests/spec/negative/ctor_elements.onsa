@@ -1,0 +1,151 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§9.1"]
+// fixes = 1
+
+// S-792, S-793 (W4-07 U3; §5.2: "構築子（列挙子のペイロード。`Some(x)`、`E.A(x)`）の要素は、struct / 配列 / タプルのリテラルの要素と同じ
+// 消費する位置で、値で受ける。`inout` の印は E0703 である"; "`let` / `var` の初期化 … struct / 配列 / タプルのリテラルと構築子の要素 … に書く式の
+// 形"; "Affine 値を `move` 無しでこれらの位置に置くと E0711（修正候補は `move` の挿入）"; §5.2: "Dup 値の `move` は … 複製になる"):
+// a constructor is a call in the syntax and a literal in the modes. Its element is a consuming position like the element of a
+// tuple. An `inout` mark is E0703; its candidate (remove the `inout`) is given where the value is Dup or no place, and none where
+// it is an Affine place (the `move` left would be an E0711 in the same stage, so the fix is not one). A Dup `move` is a copy
+// (`Some(move n)` is right). An Affine place without a mark is E0711 with the candidate `add move`; a borrowed Affine one is E0711
+// with no candidate (§5.4). One error per function (P-01).
+
+pub enum Slot {
+  Num(U32),
+  Data(Buf[F32]),
+  Empty,
+}
+
+pub fn mk_n() -> U32 {
+  7
+}
+
+// ---- `inout` on an element ----
+
+pub fn inout_of_a_dup_var() -> Option[U32] {
+  var x: U32 = 1
+  x = 2
+  Some(inout x)                  //~ E0703
+}
+
+pub fn inout_of_a_dup_param(inout x: U32) -> Option[U32] {
+  Some(inout x)                  //~ E0703
+}
+
+pub fn inout_in_a_user_variant() -> Slot {
+  var x: U32 = 1
+  x = 2
+  Slot.Num(inout x)              //~ E0703
+}
+
+pub fn inout_in_ok() -> Result[U32, U32] {
+  var x: U32 = 1
+  x = 2
+  Ok(inout x)                    //~ E0703
+}
+
+pub fn inout_of_a_value_that_is_no_place() -> Option[U32] {
+  Some(inout mk_n())             //~ E0703
+}
+
+pub fn inout_of_an_affine_place_has_no_candidate() -> Option[Buf[F32]] uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(2)
+  b[0] = 1.0
+  Some(inout b)                  //~ E0703
+}
+
+// ---- an Affine value without a mark ----
+
+pub fn affine_local_without_mark() -> Option[Buf[F32]] uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(2)
+  Some(b)                        //~ E0711
+}
+
+pub fn affine_param_without_mark(move b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(b)                        //~ E0711
+}
+
+pub fn affine_in_a_user_variant(move b: Buf[F32]) -> Slot {
+  Slot.Data(b)                   //~ E0711
+}
+
+pub fn affine_in_ok(move b: Buf[F32]) -> Result[Buf[F32], U32] {
+  Ok(b)                          //~ E0711
+}
+
+pub fn affine_var_without_mark() -> Option[Buf[F32]] uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(2)
+  b[0] = 1.0
+  Some(b)                        //~ E0711
+}
+
+pub fn borrowed_affine_has_no_candidate(b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(b)                        //~ E0711
+}
+
+pub fn borrowed_affine_with_move_has_no_candidate(b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(move b)                   //~ E0711
+}
+
+pub fn inout_affine_param_has_no_candidate(inout b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(b)                        //~ E0711
+}
+
+// ---- the element is consumed: a later use is E0704 ----
+
+pub fn use_after_the_constructor(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let o = Some(move b)
+  let n = b.len()                //~ E0704
+  n + o.unwrap().len()
+}
+
+pub fn use_after_a_nested_constructor(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let o = Some(Some(move b))
+  let n = b.len()                //~ E0704
+  n + o.unwrap().unwrap().len()
+}
+
+// ---- right ----
+
+pub fn dup_without_mark(n: U32) -> Option[U32] {
+  Some(n)
+}
+
+pub fn dup_with_move_is_a_copy(n: U32) -> Option[U32] {
+  Some(move n)
+}
+
+pub fn dup_with_move_and_use_after(n: U32) -> U32 {
+  let o = Some(move n)
+  n + o.unwrap()
+}
+
+pub fn dup_in_a_user_variant_with_move(n: U32) -> Slot {
+  Slot.Num(move n)
+}
+
+pub fn dup_var_with_move_stays_usable() -> U32 {
+  var n: U32 = 1
+  n = 2
+  let o = Ok(move n)
+  let m: Result[U32, U32] = o
+  m.unwrap() + n
+}
+
+pub fn affine_with_move(move b: Buf[F32]) -> Option[Buf[F32]] {
+  Some(move b)
+}
+
+pub fn affine_new_value() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn affine_in_a_user_variant_with_move(move b: Buf[F32]) -> Slot {
+  Slot.Data(move b)
+}
+
+pub fn unit_variant() -> Slot {
+  Slot.Empty
+}

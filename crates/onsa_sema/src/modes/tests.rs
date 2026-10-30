@@ -1,9 +1,8 @@
-//! The unit tests of the new modes stage (W4-07): the flow of the moves
-//! (U1), the table of consumption (U2), the calls (U3a) and the writes
-//! (U3b) (§5.1, §5.2, §5.4, §7), from sources
-//! parsed in memory. Each runs the whole
-//! analysis (the old modes stage included), then the new `check_all`, and
-//! reads only the diagnostics it adds (review 10).
+//! The unit tests of the modes stage (W4-07): the flow of the moves (U1),
+//! the table of consumption (U2), the calls (U3a), the writes (U3b) and the
+//! captures (U4) (§5.1, §5.2, §5.4, §7), from sources parsed in memory. Each
+//! runs the whole analysis, then `check_all` once more or the walk of one
+//! body, and reads only what that adds.
 
 use std::collections::BTreeSet;
 
@@ -38,7 +37,7 @@ pub fn useout(o: pair.Out) {}
 ";
 
 /// The analysis of the one module `src`. A diagnostic of a stage before
-/// the modes in it fails the test: the new stage would not read the body.
+/// the modes in it fails the test: the stage would not read the body.
 fn analyzed(src: &str) -> (crate::Package, crate::Analysis) {
     let parsed = onsa_syntax::parse(FileId(0), src);
     assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
@@ -66,7 +65,7 @@ fn walked<R>(src: &str, name: &str, f: impl FnOnce(&Walker<'_>, &onsa_syntax::as
     f(&w, ast, root)
 }
 
-/// What the new stage reports for the functions `body` after [`PRELUDE`]:
+/// What the stage reports for the functions `body` after [`PRELUDE`]:
 /// each diagnostic by its code, its line in `body` (from 1) and whether it
 /// says "previous iteration" (`via_loop`); and the names of the moved locals.
 fn seen(body: &str) -> (Vec<(Code, usize, bool)>, BTreeSet<String>) {
@@ -285,7 +284,7 @@ pub fn body() uses {Alloc} {
 /// R-29: `for … in move xs` consumes `xs` (not by the loop: the head is
 /// walked once), and its binding is new at each iteration. The two cases
 /// are those of `tests/spec/values/binding_heading_owned_move_loop.onsa`
-/// and `binding_heading_loop_run.onsa` (pending until the switch, U4).
+/// and `binding_heading_loop_run.onsa`.
 #[test]
 fn a_for_over_a_moved_value() {
     let src = "pub fn t() uses {Alloc} {
@@ -423,7 +422,7 @@ fn nested_loops_visit_each_expression_at_most_twice() {
 /// title and that line after its edits.
 type Found = (Code, usize, Vec<(String, String)>);
 
-/// What the new stage reports for `body` after [`PRELUDE`]: each diagnostic
+/// What the stage reports for `body` after [`PRELUDE`]: each diagnostic
 /// by its code and its line in `body`, and each of its candidates by its
 /// title and that line after its edits (trimmed).
 fn fixes(body: &str) -> Vec<Found> {
@@ -907,7 +906,7 @@ pub fn looped(n: U32) -> Result[U32, U32] uses {Alloc} {
     assert_eq!(moved, BTreeSet::from(["r".to_string()]));
 }
 
-/// The message of each diagnostic the new stage reports for `body`.
+/// The message of each diagnostic the stage reports for `body`.
 fn messages(body: &str) -> Vec<String> {
     let src = format!("{PRELUDE}{body}");
     let (pkg, mut a) = analyzed(&src);
@@ -1343,7 +1342,7 @@ fn a_callee_not_known_checks_nothing() {
     assert!(!moved.contains_key(&id));
 }
 
-/// Each diagnostic the new stage reports for [`CALLEES`] and `body` (after
+/// Each diagnostic the stage reports for [`CALLEES`] and `body` (after
 /// [`PRELUDE`]), by its code, its line in `body` and its message, and each
 /// of its candidates by the line its first edit is on, after its edits
 /// (trimmed; R-161's edits the `let`, not the line of the write).
@@ -1533,14 +1532,8 @@ pub fn ios(inout xs: Span[F32]) {}
 /// [`CALLEES`]) found, before the one of the body is chosen: each by its
 /// code, its line in `body` and the text it is at.
 fn all_found(body: &str) -> Vec<(Code, usize, String)> {
-    let src = format!("{PRELUDE}{CALLEES}{body}");
-    let start = PRELUDE.len() + CALLEES.len();
-    let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
-    walked(&src, "t", |w, _, _| {
-        (w.m.found.iter())
-            .map(|d| (d.code, src[start..d.span.start as usize].matches('\n').count() + 1, text(d.span)))
-            .collect()
-    })
+    let found = walk_found(&format!("{PRELUDE}{CALLEES}"), body);
+    found.into_iter().map(|(c, l, t, _, _)| (c, l, t)).collect()
 }
 
 /// §5.1, §5.2: a `let` is E0701 at an `inout` argument and at the receiver
@@ -1936,7 +1929,7 @@ pub struct Two { a: Option[Buf[F32]], c: Option[Buf[F32]] }
 pub fn mk2() -> Two uses {Alloc} { Two { a: mko(), c: mko() } }
 ";
 
-/// Each diagnostic the new stage reports for [`OVERLAPS`] and `body`, by
+/// Each diagnostic the stage reports for [`OVERLAPS`] and `body`, by
 /// its code and its line in `body`, and the lines of its notes.
 fn overlapping(body: &str) -> Vec<(Code, usize, Vec<usize>)> {
     let src = format!("{PRELUDE}{CALLEES}{OVERLAPS}{body}");
@@ -2333,7 +2326,7 @@ pub fn fn3(h: H2, inout n: U32) {}
 pub fn bm2(x: Buf[F32], move y: Buf[F32]) uses {Alloc} {}
 ";
 
-/// What the new stage reports for [`S803`] and `body`: each diagnostic by
+/// What the stage reports for [`S803`] and `body`: each diagnostic by
 /// its code, its line in `body`, the text it is at, its message and its
 /// notes (the text each is at, and its message).
 type Said = (Code, usize, String, String, Notes);
@@ -2346,16 +2339,24 @@ fn said(body: &str) -> Vec<Said> {
     let (pkg, mut a) = analyzed(&src);
     let before = a.diagnostics.len();
     check_all(&pkg, &mut a);
-    let start = PRELUDE.len() + S803.len();
+    let found = a.diagnostics[before..].iter().filter(|d| d.span.file == FileId(0));
+    found.map(|d| said_of(&src, PRELUDE.len() + S803.len(), d)).collect()
+}
+
+/// The diagnostic `d` of `src` as [`Said`], its line from `start`.
+fn said_of(src: &str, start: usize, d: &onsa_diag::Diagnostic) -> Said {
     let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
-    (a.diagnostics[before..].iter())
-        .filter(|d| d.span.file == FileId(0))
-        .map(|d| {
-            let line = src[start..d.span.start as usize].matches('\n').count() + 1;
-            let notes = d.notes.iter().map(|n| (n.span.map(text), n.message.clone())).collect();
-            (d.code, line, text(d.span), d.message.clone(), notes)
-        })
-        .collect()
+    let line = src[start..d.span.start as usize].matches('\n').count() + 1;
+    let notes = d.notes.iter().map(|n| (n.span.map(text), n.message.clone())).collect();
+    (d.code, line, text(d.span), d.message.clone(), notes)
+}
+
+/// All the walk of the function `t` in `body` (after `prefix`) found,
+/// before the one of the body is chosen, as [`Said`]: the walk of
+/// [`walked`], which makes the index of §7.
+fn walk_found(prefix: &str, body: &str) -> Vec<Said> {
+    let src = format!("{prefix}{body}");
+    walked(&src, "t", |w, _, _| w.m.found.iter().map(|d| said_of(&src, prefix.len(), d)).collect())
 }
 
 /// Each diagnostic of `body` by its code, its line and the text it is at.
@@ -2686,16 +2687,7 @@ fn a_walk_makes_its_index() {
 /// text it is at, its message and its notes (the text each is at, and its
 /// message).
 fn all_said(body: &str) -> Vec<(Code, String, String, Notes)> {
-    let src = format!("{PRELUDE}{body}");
-    let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
-    walked(&src, "t", |w, _, _| {
-        (w.m.found.iter())
-            .map(|d| {
-                let notes = d.notes.iter().map(|n| (n.span.map(text), n.message.clone())).collect();
-                (d.code, text(d.span), d.message.clone(), notes)
-            })
-            .collect()
-    })
+    walk_found(PRELUDE, body).into_iter().map(|(c, _, t, m, n)| (c, t, m, n)).collect()
 }
 
 /// E0702 of two bindings of the index (§5.2, S-796, memo 3): each stands

@@ -41,15 +41,16 @@ pub fn kind_in(a: &Analysis, ty: TyId, env: Option<&Env>) -> Option<Kind> {
 /// The kind a value of `ty` in a body with the type parameters `generics` is
 /// taken for by the questions of the modes (R-30): a type parameter by its
 /// bounds wherever the walk meets it (`Pair[T]` too): Copy if it meets
-/// `Copy` (one with an unknown bound meets every bound, §4.5), Shared if
-/// `Dup`, else Affine (`?Dup`). A walk past its steps is Affine; the other
-/// walks with no answer are none and keep quiet (§18.1: the error type, a
-/// declaration a syntax error cut, a type that holds itself; a second-class
-/// type has no kind, §4.6).
+/// `Copy`, Shared if `Dup`, else Affine (`?Dup`). A walk past its steps is
+/// Affine; the other walks with no answer are none and keep quiet (§18.1:
+/// the error type, a type parameter with an unknown bound, whose kind each
+/// answer would claim, a declaration a syntax error cut, a type that holds
+/// itself; a second-class type has no kind, §4.6).
 pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Option<Kind> {
     let bounds = Bounds { a, generics };
     let param = |(i, g): (usize, &GenericDef)| {
-        let p = a.types.find(&Ty::Param(i as u32)).filter(|_| matches!(g.kind, GenericKind::Type { .. }))?;
+        let known = matches!(g.kind, GenericKind::Type { unknown: false, .. });
+        let p = a.types.find(&Ty::Param(i as u32)).filter(|_| known)?;
         let meets = |b| bounds.satisfies(p, b);
         let kinds = [(Bound::Copy, Kind::Copy), (Bound::Dup, Kind::Shared)];
         Some(kinds.into_iter().find(|&(b, _)| meets(b)).map_or(Kind::Affine, |(_, k)| k))
@@ -67,13 +68,13 @@ pub fn kind_of_named(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Kind> {
 /// `depth`: the named types entered on the way ([`Walk::enter`]); `params[i]`:
 /// in a body ([`kind_in_body`]), the kind of its type parameter `i`, met with
 /// no argument around. One it does not have is of a declaration a syntax
-/// error cut (§18.1): Copy, as one with an unknown bound.
+/// error cut (§18.1): none, as one with an unknown bound.
 type At<'p> = (u32, Option<&'p [Option<Kind>]>);
 
 fn walk(w: &Walk, ty: TyId, env: Option<&Env>, at: At) -> Option<Kind> {
     let (ty, env) = w.at(ty, env)?;
     match ty {
-        Ty::Param(i) if env.is_none() => at.1?.get(*i as usize).copied().unwrap_or(Some(Kind::Copy)),
+        Ty::Param(i) if env.is_none() => at.1?.get(*i as usize).copied().flatten(),
         Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit | Ty::Fn(_) | Ty::ConstVal(_) => Some(Kind::Copy),
         Ty::Array(t, _) => walk(w, *t, env, at),
         Ty::Tuple(ts) => all(w, ts, env, at),
@@ -92,12 +93,18 @@ fn walk(w: &Walk, ty: TyId, env: Option<&Env>, at: At) -> Option<Kind> {
     }
 }
 
+/// The kind of an aggregate of the parts `ts` (§4.6: the greatest): Affine
+/// if a part is, whatever the kind of a part with none would be; else none
+/// if a part has none.
 fn all(w: &Walk, ts: &[TyId], env: Option<&Env>, at: At) -> Option<Kind> {
-    let mut kind = Kind::Copy;
+    let mut kind = Some(Kind::Copy);
     for &t in ts {
-        kind = kind.max(walk(w, t, env, at)?);
+        match walk(w, t, env, at) {
+            Some(Kind::Affine) => return Some(Kind::Affine),
+            k => kind = kind.zip(k).map(|(a, b)| a.max(b)),
+        }
     }
-    Some(kind)
+    kind
 }
 
 /// The answer kept of an item hangs on `params` only as its key does: its

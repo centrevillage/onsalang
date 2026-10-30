@@ -31,9 +31,9 @@
 //!   flow, E0200 outside).
 //! - `onsa_diag/src/unsupported.rs`: the features of the E0200 here and of
 //!   `NestedDelays` (the works named on each).
-//! - `modes.rs` and `onsa_core` (`lower/body/expr.rs` `At`): the arms of `At` /
-//!   `Feedback`. `mark` and `onsa_driver/graph.rs` have no arm of `At`: they
-//!   reach its operand through `onsa_syntax`'s `Ast::sub_exprs`, the one
+//! - `onsa_core` (`lower/body/expr.rs` `At`): the arms of `At` / `Feedback`.
+//!   The modes stage (`modes/walk.rs`), `mark` and `onsa_driver/graph.rs` have
+//!   no arm of `At`: they reach its operand through `onsa_syntax`'s `Ast::sub_exprs`, the one
 //!   plain enumeration of the children, which keeps its arms while the AST has
 //!   the forms.
 //!

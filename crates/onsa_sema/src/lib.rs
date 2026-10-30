@@ -27,8 +27,6 @@ pub mod infer;
 pub mod kind;
 pub mod layout;
 mod modes;
-#[cfg(test)]
-mod modes_tests;
 mod names;
 /// The files of a package tree (§15.1): the driver reads packages with it, and
 /// `build.rs` includes the same file to generate the std table.

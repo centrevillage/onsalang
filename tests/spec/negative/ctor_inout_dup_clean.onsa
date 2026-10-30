@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2"]
+//
+// [[test.fix]]
+// at = "19:14"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-792 (§5.2: "構築子 … の要素 … に `inout` の印は E0703"; the candidate that removes the `inout` is given where the value is
+// Dup, because the element is then a copy and nothing else is left to fix): after the candidate the whole file has no error
+// (`clean` is about the whole file, so this file has this one error). The cases of the other values are in
+// negative/ctor_elements.onsa.
+
+pub fn inout_of_a_dup_var() -> Option[U32] {
+  var x: U32 = 1
+  x = 2
+  Some(inout x)                  //~ E0703
+}

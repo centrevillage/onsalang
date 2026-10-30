@@ -7,8 +7,9 @@
 // rest of the root is dropped on the spot ("取り出したフィールド以外はその場で破棄され、以後 `s` は使えない",
 // §5.2), as for `let b = move s.buf`. The path of a Copy or Shared field copies and leaves the root usable.
 // Every binding is read. No diagnostic is expected anywhere in this file. The uses of the root after the `?`
-// are E0704 (negative/try_operand_field_path.onsa). The taking out of the field is the work W4-09 (S-85: the
-// old and the new modes stage both give "partial moves are not allowed", an E0711).
+// are E0704 (negative/try_operand_field_path.onsa). The taking out of the field is the work W4-09 (S-85: until
+// then the modes stage gives "partial moves are not allowed", an E0711, at each `?` of an Affine field; the old
+// modes stage, before W4-07, gave nothing).
 
 pub struct Inner {
   r: Result[Buf[F32], U32],

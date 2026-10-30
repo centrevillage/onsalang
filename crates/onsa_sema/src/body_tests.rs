@@ -49,7 +49,7 @@ fn literal_resolved_by_later_statement() {
     let acc = body.locals.iter().find(|l| l.name == "acc").unwrap();
     assert!(matches!(a.types.get(acc.ty), Ty::Float(FloatKind::F32)));
     assert_eq!(acc.kind, LocalKind::Var);
-    assert!(acc.mutable);
+    assert_eq!(acc.state, crate::binding::Bind::OwnedMut);
     let i = body.locals.iter().find(|l| l.name == "i").unwrap();
     assert!(matches!(a.types.get(i.ty), Ty::Int(IntKind::U32)));
     assert!(body.complete);
@@ -363,7 +363,9 @@ fn borrow_bindings_are_flagged() {
         "pub struct P { x: F32, xs: [F32; 2] }\npub fn f(p: P) -> F32 {\n  let y = p.x\n  let z = p.xs[0]\n  let w = y + z\n  for v in p.xs { let _ = v }\n  w\n}\n",
     );
     let body = &a.bodies[&def(&a, "f")];
-    let flag = |n: &str| body.locals.iter().find(|l| l.name == n).unwrap().borrow;
+    let flag = |n: &str| {
+        matches!(body.locals.iter().find(|l| l.name == n).unwrap().state, crate::binding::Bind::Borrow { .. })
+    };
     assert!(flag("y") && flag("z") && flag("v"));
     assert!(!flag("w"));
 }

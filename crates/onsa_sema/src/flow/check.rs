@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::ResolveError;
+use crate::body::BANG_ON_NO_INOUT_SELF;
 use crate::flow_names::FlowBuiltin;
 use crate::names::body::{Origin, PathRes};
 
@@ -478,7 +479,7 @@ impl<'a> Checker<'a> {
             _ => {
                 let fix = self.src(span).replacen("!(", "(", 1);
                 self.diag(
-                    Diagnostic::new(Stage::Flow, Code::E0714, span, "`!` marks `inout self` method calls only (§5.2)")
+                    Diagnostic::new(Stage::Flow, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
                         .with_found(self.src(span))
                         .with_fix(Fix::replace("remove `!`", span, fix)),
                 )

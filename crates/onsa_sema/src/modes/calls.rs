@@ -16,8 +16,7 @@ use super::place::{Place, place_of};
 use super::walk::Pos;
 use super::write::How;
 use crate::Kind;
-use crate::body::{LocalId, Target};
-use crate::builtin::method_self;
+use crate::body::{BANG_ON_NO_INOUT_SELF, LocalId, Target};
 use crate::def::DefKind;
 use crate::ty::{Ty, TyId};
 
@@ -121,15 +120,17 @@ impl Walker<'_> {
     /// The argument `x` passed as `mode`, if it is a place (S-787: the
     /// `move` of an Affine field's path consumes its root whole; S-801: a
     /// Dup value at a `move` parameter or receiver is copied, and counts as
-    /// a read of its place, as at a borrowed one).
+    /// a read of its place, as at a borrowed one; a value with no kind too).
     fn passed(&mut self, x: ExprId, mut mode: Mode) -> Option<Passed> {
         let mut place = place_of(self.ast, self.names, x)?;
         let ty = self.info.expr_types.get(&self.ast.without_parens(x)).copied();
         let kind = ty.and_then(|t| self.kind_of(t));
-        let copied = mode == Mode::Move && matches!(kind, Some(Kind::Copy | Kind::Shared));
-        if copied {
+        // A value with no kind (§18.1: an unknown bound, the error type) may move or not: a read too.
+        let read = mode == Mode::Move && kind != Some(Kind::Affine);
+        let copied = read && kind.is_some();
+        if read {
             mode = Mode::Borrow;
-        } else if mode == Mode::Move && kind == Some(Kind::Affine) {
+        } else if mode == Mode::Move {
             place.proj.clear();
         }
         let via = self.deps.indexed(place.root).then_some(place.root);
@@ -197,7 +198,7 @@ impl Walker<'_> {
 
     /// What the call `e` of `callee` takes (memo 2.5): of a function or a
     /// method, its declaration; of a function value, its type; of a builtin
-    /// method, the mode of `self` in the table, and borrows; of a
+    /// method, the mode of `self` the types stage chose, and borrows; of a
     /// constructor, elements (`n` the number of the arguments). `None` of
     /// any other callee.
     fn takes(&self, e: ExprId, callee: ExprId, n: usize) -> Option<Takings> {
@@ -212,9 +213,7 @@ impl Walker<'_> {
                 Ty::Fn(f) => (None, f.params.iter().map(|&(m, t)| Takes::Param(m, Some(t))).collect()),
                 _ => return None,
             },
-            Target::BuiltinMethod { recv, name, .. } => {
-                (method_self(&self.a.types, *recv, name), vec![Takes::Param(Mode::Borrow, None); n])
-            }
+            Target::BuiltinMethod { self_mode, .. } => (*self_mode, vec![Takes::Param(Mode::Borrow, None); n]),
             Target::Variant { .. } | Target::Prelude(_) => (None, vec![Takes::Element; n]),
             _ => return None,
         })
@@ -232,9 +231,8 @@ impl Walker<'_> {
             }
             // `!` on a constructor (`Some!(1)`) is E0714 too: no `inout self` receiver (§5.2, S-791).
             (true, false) => {
-                let message = "`!` marks `inout self` method calls only (§5.2)";
                 let fix = Fix::delete("remove `!`", Span::new(span.file, at, at + 1));
-                Diagnostic::new(Stage::Modes, Code::E0714, span, message).with_fix(fix)
+                Diagnostic::new(Stage::Modes, Code::E0714, span, BANG_ON_NO_INOUT_SELF).with_fix(fix)
             }
             _ => return,
         };

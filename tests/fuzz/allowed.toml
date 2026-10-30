@@ -512,3 +512,10 @@ left = "integer literal is larger than any integer type holds"
 input = "tests/fuzz/193e6c03.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: two elements of a parenthesized list without the `,` (`C{}99…9`), and an integer literal larger than any integer type, which the input has before the candidate; the `,` leaves the E0408 of the literal"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "`…` (U+#CF) cannot be written outside comments and strings: a name is written wi"
+input = "tests/fuzz/7b09b846.onsa"
+reasons = ["S-384"]
+note = "the same two errors as d035fd58 with `描` (U+63CF) right after the `else` of an `if~` in a flow body, whose code point gives another form of the number (W4-07 U4b-2's cases moved the mutants)"

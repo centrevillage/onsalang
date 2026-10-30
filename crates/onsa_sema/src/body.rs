@@ -91,17 +91,11 @@ pub struct LocalInfo {
     /// Its state (§5.4), settled after the types stage ([`crate::binding`]);
     /// the types stage does not read it.
     pub state: Bind,
-    /// Of the old modes stage until W4-07, made from `state` alone
-    /// ([`LocalInfo::set_state`]): a borrow, and owned and written to or `inout`.
-    pub borrow: bool,
-    pub mutable: bool,
 }
 
 impl LocalInfo {
     pub(crate) fn set_state(&mut self, state: Bind) {
         self.state = state;
-        self.borrow = matches!(state, Bind::Borrow { .. });
-        self.mutable = state.writable();
     }
 }
 
@@ -150,7 +144,10 @@ pub enum Target {
     BuiltinMethod {
         recv: TyId,
         name: String,
-        bang: bool,
+        /// The mode of `self` of a method, as the types stage chose it (§5.2;
+        /// the modes stage reads it, not the name); none of an associated
+        /// function.
+        self_mode: Option<Mode>,
         /// [`crate::builtin::MethodSig::lazy_args`].
         lazy_args: bool,
     },
@@ -386,26 +383,31 @@ pub(crate) fn root_of(a: &Analysis, def: DefId) -> Option<ExprId> {
     }
 }
 
+/// The local of each binding no pattern makes (a parameter, a `var`), by
+/// its origin: the local of the binding `b` is `LocalId(b.0)`.
+pub(crate) fn origins(names: &BodyNames) -> HashMap<Origin, LocalId> {
+    (names.bindings.iter().enumerate())
+        .filter(|(_, b)| b.sites.is_empty())
+        .map(|(i, b)| (b.origin, LocalId(i as u32)))
+        .collect()
+}
+
 /// The locals of a body, one for each binding of its record (`LocalId(b.0)`
 /// for the binding `b`), with the error type until the check gives them
 /// theirs and the state of the table of §5.4 with no head (owned, for a
-/// binding of a head: settled after the check, [`crate::binding`]); and the
-/// local of each binding no pattern makes, by its origin.
+/// binding of a head: settled after the check, [`crate::binding`]); and
+/// their [`origins`].
 fn locals_of(a: &mut Analysis, names: &BodyNames) -> (Vec<LocalInfo>, HashMap<Origin, LocalId>) {
     let error = a.types.error();
-    let mut origins = HashMap::new();
     let mut locals = Vec::new();
-    for (i, b) in names.bindings.iter().enumerate() {
-        if b.sites.is_empty() {
-            origins.insert(b.origin, LocalId(i as u32));
-        }
+    for b in &names.bindings {
         let kind = LocalKind::of(b.kind);
         let (name, span, state) = (b.name.clone(), b.span, Bind::Owned);
-        let mut l = LocalInfo { name, span, ty: error, kind, state, borrow: false, mutable: false };
+        let mut l = LocalInfo { name, span, ty: error, kind, state };
         l.set_state(crate::binding::row(b.kind, None));
         locals.push(l);
     }
-    (locals, origins)
+    (locals, origins(names))
 }
 
 impl<'a> Checker<'a> {
@@ -708,6 +710,10 @@ pub(crate) fn starts_at_local(ast: &Ast, names: &crate::names::body::BodyNames, 
 /// it stands: the types stage's and the modes stage's.
 pub(crate) const MOVE_NEEDS_A_PLACE: &str =
     "`move` needs a place (a variable or its field); other values are already owned by the expression";
+
+/// The E0714 of `!` on a call of no `inout self` method (§5.2), wherever it
+/// stands: the types stage's, the flow stage's and the modes stage's.
+pub(crate) const BANG_ON_NO_INOUT_SELF: &str = "`!` marks `inout self` method calls only (§5.2)";
 
 /// The base of `e` when `e` is a partial view of it (S-217: `xs.slice(a, b)`):
 /// a call of a builtin method whose type, as `ty` reads it, is a `Span`,

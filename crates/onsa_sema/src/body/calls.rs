@@ -97,7 +97,7 @@ impl<'a> Checker<'a> {
             // The `!` comes right after the callee (`f!(`, §2.6).
             let at = self.expr(callee).span.end;
             return Err(self.diag(
-                Diagnostic::new(Stage::Types, Code::E0714, span, "`!` marks `inout self` method calls only (§5.2)")
+                Diagnostic::new(Stage::Types, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
                     .with_found(self.src(span))
                     .with_fix(Fix::delete("remove `!`", Span::new(span.file, at, at + 1))),
             ));
@@ -137,14 +137,9 @@ impl<'a> Checker<'a> {
                 if kind == CallKind::Bang {
                     let at = self.expr(callee).span.end;
                     return Err(self.diag(
-                        Diagnostic::new(
-                            Stage::Types,
-                            Code::E0714,
-                            span,
-                            "`!` marks `inout self` method calls only (§5.2)",
-                        )
-                        .with_found(self.src(span))
-                        .with_fix(Fix::delete("remove `!`", Span::new(span.file, at, at + 1))),
+                        Diagnostic::new(Stage::Types, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
+                            .with_found(self.src(span))
+                            .with_fix(Fix::delete("remove `!`", Span::new(span.file, at, at + 1))),
                     ));
                 }
                 let targs = self.fresh_args(d);
@@ -281,8 +276,7 @@ impl<'a> Checker<'a> {
             let shown = self.display(recv);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` has no method `{}`", name.name)));
         };
-        let bang = sig.self_mode == Mode::Inout;
-        if bang {
+        if sig.self_mode == Mode::Inout {
             self.inout_receiver(callee)?;
         }
         let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
@@ -290,9 +284,8 @@ impl<'a> Checker<'a> {
             self.unify_at(span, sig.ret, exp)?;
         }
         self.check_args(args, &params, span)?;
-        self.info
-            .targets
-            .insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), bang, lazy_args: sig.lazy_args });
+        let (self_mode, lazy_args) = (Some(sig.self_mode), sig.lazy_args);
+        self.info.targets.insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), self_mode, lazy_args });
         Ok(sig.ret)
     }
 
@@ -339,9 +332,8 @@ impl<'a> Checker<'a> {
         }
         let params: Vec<(Mode, TyId)> = params.into_iter().map(|t| (Mode::Borrow, t)).collect();
         self.check_args(args, &params, span)?;
-        self.info
-            .targets
-            .insert(e, Target::BuiltinMethod { recv: ty, name: name.name.clone(), bang: false, lazy_args: false });
+        let name = name.name.clone();
+        self.info.targets.insert(e, Target::BuiltinMethod { recv: ty, name, self_mode: None, lazy_args: false });
         Ok(ret)
     }
 
