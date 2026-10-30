@@ -376,39 +376,26 @@ impl<'a> Checker<'a> {
                     self.with_why(format!("an argument of `{callee}`"), pt, |ck| ck.check_expr(arg.expr, Some(pt)))?;
                 }
                 Some((elem, planar)) => {
-                    let at = self.check_expr(arg.expr, None)?;
-                    let at_s = self.known(at, self.expr(arg.expr).span, "argument")?;
                     let aspan = self.expr(arg.expr).span;
-                    let cause = self.cause(aspan, None);
+                    let at = match (planar, &self.expr(self.ast.without_parens(arg.expr)).kind) {
+                        (Some(_), ExprKind::Array(parts)) if !parts.is_empty() => {
+                            self.planar_literal(arg.expr, parts, elem)?
+                        }
+                        _ => self.check_expr(arg.expr, None)?,
+                    };
+                    let at_s = self.known(at, aspan, "argument")?;
                     let ok = match (planar, self.ty(at_s)) {
-                        (None, Ty::Array(el, _)) => self.infer.unify(&mut self.a.types, el, elem, &cause).is_ok(),
-                        (None, Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf, a)) => {
-                            self.infer.unify(&mut self.a.types, a[0], elem, &cause).is_ok()
-                        }
+                        // A length unified, as of any array (a const parameter `N`).
                         (Some(n), Ty::Array(ch, m)) => {
-                            let lens_ok =
-                                self.infer.shallow_len(&self.a.types, n) == self.infer.shallow_len(&self.a.types, m);
-                            lens_ok
-                                && match self.ty(self.shallow(ch)) {
-                                    Ty::Array(el, _) => self.infer.unify(&mut self.a.types, el, elem, &cause).is_ok(),
-                                    Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf, a) => {
-                                        self.infer.unify(&mut self.a.types, a[0], elem, &cause).is_ok()
-                                    }
-                                    _ => false,
-                                }
+                            let cause = self.cause(aspan, None);
+                            self.infer.unify_len(&mut self.a.types, n, m, &cause).is_ok() && self.views(ch, elem, aspan)
                         }
-                        (_, Ty::Error) => true,
-                        _ => false,
+                        (Some(_), Ty::Error) => true,
+                        (Some(_), _) => false,
+                        (None, _) => self.views(at_s, elem, aspan),
                     };
                     if !ok {
-                        let (ps_s, as_s) = (self.display(pt), self.display(at));
-                        return Err(self.err(
-                            Code::E0401,
-                            aspan,
-                            format!(
-                                "expected `{ps_s}` (or an array / `Buf` of the same element), found `{as_s}` (§5.3)"
-                            ),
-                        ));
+                        return Err(self.not_a_view(aspan, pt, at));
                     }
                 }
             }
@@ -417,6 +404,54 @@ impl<'a> Checker<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Whether a value of the type `t` is passed as a `Span[elem]` (§5.3):
+    /// an array, a `Buf` or a `Span` of the element (the error type too).
+    fn views(&mut self, t: TyId, elem: TyId, at: Span) -> bool {
+        let cause = self.cause(at, None);
+        match self.ty(self.shallow(t)) {
+            Ty::Array(el, _) => self.infer.unify(&mut self.a.types, el, elem, &cause).is_ok(),
+            Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf, a) => {
+                self.infer.unify(&mut self.a.types, a[0], elem, &cause).is_ok()
+            }
+            Ty::Error => true,
+            _ => false,
+        }
+    }
+
+    /// The type of the planar literal `e` (`[a, b]` at `[Span[elem]; N]`,
+    /// S-196, §5.3): each element is passed as a `Span` of its own, of any
+    /// kind and length, so `[Span[elem]; k]` (`k` checked against `N` by the
+    /// caller), recorded through the parentheses. The lowering converts each
+    /// element (`coerce`).
+    fn planar_literal(&mut self, e: ExprId, parts: &[ExprId], elem: TyId) -> R<TyId> {
+        let view = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
+        for &x in parts {
+            let (t, at) = (self.check_expr(x, None)?, self.expr(x).span);
+            if !self.views(t, elem, at) {
+                return Err(self.not_a_view(at, view, t));
+            }
+        }
+        let t = self.a.types.intern(Ty::Array(view, Len::Const(parts.len() as u32)));
+        let mut x = e;
+        loop {
+            self.record(x, t);
+            match self.expr(x).kind {
+                ExprKind::Paren(inner) => x = inner,
+                _ => return Ok(t),
+            }
+        }
+    }
+
+    /// E0401: `found` at `at` is passed where `want`, a `Span` or a planar
+    /// array of them, is (§5.3); a type not known yet (`1.0`, `[]`) as
+    /// written (§18.1: no variable of the inference in a message).
+    fn not_a_view(&mut self, at: Span, want: TyId, found: TyId) -> Stop {
+        let open = self.infer.has_vars(&self.a.types, found);
+        let (want, found) = (self.display(want), if open { self.src(at) } else { self.display(found) });
+        let msg = format!("expected `{want}` (or an array / `Buf` of the same element), found `{found}` (§5.3)");
+        self.err(Code::E0401, at, msg)
     }
 
     /// Whether `e` can be passed as `inout` (§5.1, §5.3, S-178): a place, a

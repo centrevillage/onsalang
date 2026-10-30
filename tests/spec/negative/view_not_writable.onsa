@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// R-31, S-217 (§5.2, §5.3, §5.4): a part view `xs.slice(from, to)` is a part of its source place, so it can be written
+// (an `inout` argument, the receiver of an `inout self` method, an element of an `inout` planar literal) only where the
+// source can: "`inout` に渡す値と同じ" (§5.2: the receiver "場所だが変更できないもの（`let` の束縛、借用の引数）は E0701"),
+// "借用束縛は読み取り専用で、`inout` に渡せない" (§5.4), "捕捉した値は読み取り専用で、代入すると E0701" (§5.3). The source
+// that cannot be written here is a borrowed argument (an array, a `Buf`, a `Span`, a field or an element of one, the
+// view of a view), a captured value, a borrowed binding and the element of a literal whose source is one of them. The
+// repair of E0701 is to declare a `let` `var` (§5.1), which none of these have: no repair candidate (`fixes = 0`).
+// The `let` of a value that can be a `var` is in negative/view_not_writable_let.onsa, the sources that are no place at
+// all (E0415) in negative/view_not_a_place.onsa, and the legal views in values/overlap_views_ok.onsa. One error per
+// function (P-01).
+
+pub struct Voice {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+fn fill(inout s: Span[F32]) {
+  s.fill!(1.0)
+}
+
+fn fill2(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)
+}
+
+fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+// ------------------------------------------------------------------------ a borrowed argument
+
+pub fn array_argument(p: [F32; 8]) {
+  fill(inout p.slice(0, 4)) //~ E0701
+}
+
+pub fn array_argument_receiver(p: [F32; 8]) {
+  p.slice(0, 4).fill!(1.0) //~ E0701
+}
+
+pub fn span_argument(p: Span[F32]) {
+  fill(inout p.slice(0, 2)) //~ E0701
+}
+
+pub fn span_argument_receiver(p: Span[F32]) {
+  p.slice(0, 2).copy_from!(p.slice(2, 4)) //~ E0701
+}
+
+pub fn buffer_argument(p: Buf[F32]) {
+  fill(inout p.slice(0, 1)) //~ E0701
+}
+
+pub fn view_of_a_view(p: Span[F32]) {
+  fill(inout p.slice(0, 4).slice(1, 2)) //~ E0701
+}
+
+pub fn field_of_an_argument(v: Voice) {
+  v.buf.slice(0, 2).fill!(1.0) //~ E0701
+}
+
+pub fn element_of_a_planar_argument(xs: [Span[F32]; 2]) {
+  fill(inout xs[0].slice(0, 2)) //~ E0701
+}
+
+pub fn element_receiver_of_a_planar_argument(xs: [Span[F32]; 2]) {
+  xs[1].slice(0, 2).fill!(1.0) //~ E0701
+}
+
+// ------------------------------------------------------ an element of a literal that cannot be written
+
+pub fn literal_of_two_arguments(p: [F32; 4], q: [F32; 4]) {
+  fill2(inout [p, q]) //~ E0701
+}
+
+pub fn literal_with_a_view_of_an_argument(p: [F32; 8]) {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [a, p.slice(0, 4)]) //~ E0701
+}
+
+pub fn literal_with_a_variable_first(p: [F32; 4]) {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [p, a]) //~ E0701
+}
+
+// ----------------------------------------------------------------------------- a captured value
+
+pub fn captured_array() -> U32 {
+  var c: [F32; 4] = [0.0; 4]
+  apply(fn(n) {
+    fill(inout c.slice(0, 2)) //~ E0701
+    n
+  })
+}
+
+pub fn captured_array_receiver() -> U32 {
+  var c: [F32; 4] = [0.0; 4]
+  apply(fn(n) {
+    c.slice(0, 2).fill!(1.0) //~ E0701
+    n
+  })
+}
+
+// ------------------------------------------------------------------------ a borrowed binding
+
+pub fn let_binding_of_a_view(xs: Span[F32], n: U32) {
+  let half = xs.slice(0, n)
+  fill(inout half.slice(0, 1)) //~ E0701
+}
+
+pub fn let_binding_receiver(xs: Span[F32], n: U32) {
+  let half = xs.slice(0, n)
+  half.slice(0, 1).fill!(1.0) //~ E0701
+}
+
+pub fn for_binding(xss: [Span[F32]; 2]) {
+  for ch in xss {
+    fill(inout ch.slice(0, 1)) //~ E0701
+  }
+}
+
+pub fn match_arm_binding(xs: Span[F32]) {
+  match xs {
+    s => fill(inout s.slice(0, 1)), //~ E0701
+  }
+}
+
+// ------------------------------------------------------------------- no error: the controls
+
+pub fn inout_argument(inout p: [F32; 8]) {
+  fill(inout p.slice(0, 4))
+  p.slice(4, 8).fill!(2.0)
+}
+
+pub fn borrowed_argument_read(p: [F32; 8]) -> F32 {
+  p.slice(0, 4)[0]
+}

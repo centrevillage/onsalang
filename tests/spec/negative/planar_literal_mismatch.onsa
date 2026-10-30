@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§11.6", "§14.2"]
+// fixes = 0
+
+// S-196 (§5.3, §11.6, §14.2): "`[[T; M]; N]`、`[Buf[T]; N]`、`[Span[T]; N]` の値をそのまま渡せる（要素ごとに `Span` へ変換）。
+// 別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け（要素の種類と長さは揃っていなくて
+// よい…）". The kinds and the lengths of the elements are free (values/planar_literal_kinds.onsa), but the number of the
+// elements is the `N` of the parameter type `[Span[T]; N]` and the element type is `T`: another number of elements, or an
+// element of another type, is a type mismatch (E0401), for a borrowed and an `inout` literal and for an array value as well.
+// The elements are not tested for overlap when the types do not fit. No repair candidate (`fixes = 0`: which element to add or
+// remove is the writer's design). One error per function (P-01).
+
+fn rd2(xs: [Span[F32]; 2]) -> U32 {
+  xs[0].len()
+}
+
+fn rd3(xs: [Span[F32]; 3]) -> U32 {
+  xs[0].len()
+}
+
+fn fill2(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)
+}
+
+fn fill_u2(inout xs: [Span[U32]; 2]) {
+  xs[0].fill!(1)
+}
+
+// ------------------------------------------------------------------- the number of elements
+
+pub fn one_element_for_two() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  rd2([a]) //~ E0401
+}
+
+pub fn three_elements_for_two() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  let b: [F32; 4] = [0.0; 4]
+  let c: [F32; 4] = [0.0; 4]
+  rd2([a, b, c]) //~ E0401
+}
+
+pub fn two_elements_for_three() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  let b: [F32; 2] = [0.0; 2]
+  rd3([a, b]) //~ E0401
+}
+
+pub fn inout_literal_of_three_for_two() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  var c: [F32; 4] = [0.0; 4]
+  fill2(inout [a, b, c]) //~ E0401
+}
+
+pub fn inout_literal_of_one_for_two() {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [a]) //~ E0401
+}
+
+pub fn array_value_of_three_for_two() -> U32 {
+  let chans: [[F32; 4]; 3] = [[0.0; 4]; 3]
+  rd2(chans) //~ E0401
+}
+
+// -------------------------------------------------------------------- the type of an element
+
+pub fn element_of_another_type() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  let n: [U32; 4] = [0; 4]
+  rd2([a, n]) //~ E0401
+}
+
+pub fn scalar_element() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  rd2([a, 1.0]) //~ E0401
+}
+
+pub fn inout_literal_of_another_type() {
+  var a: [F32; 4] = [0.0; 4]
+  var n: [U32; 4] = [0; 4]
+  fill2(inout [a, n]) //~ E0401
+}
+
+pub fn inout_literal_for_another_element_type() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  fill_u2(inout [a, b]) //~ E0401
+}
+
+pub fn buffers_of_another_type(m: U32) -> U32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(m)
+  let n: Buf[U32] = Buf.zeroed(m)
+  rd2([a, n]) //~ E0401
+}

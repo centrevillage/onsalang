@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2"]
+
+// S-806 (§3.5: "構築子、struct・配列・タプルのリテラル、二項演算子の要素は値として書いた順に評価して取るので、兄弟の要素の中の変更は
+// 重なりに数えない（`x` が Copy の `var` なら `Some((x, g(inout x)))`、`x + g(inout x)` は書ける）"): the elements of a
+// constructor, of a struct, array or tuple literal and the operands of a binary operator are values taken in the order written,
+// not arguments that are borrowed during a call, so a change in one element does not overlap a sibling element. The planar
+// literal passed as an argument is the exception (negative/overlap_views_planar.onsa). No diagnostic is expected anywhere in
+// this file; every binding is read.
+
+pub struct W {
+  a: U32,
+  b: U32,
+}
+
+fn nx(inout x: U32) -> U32 {
+  x = x + 1
+  x
+}
+
+pub fn constructor_and_tuple() -> Option[(U32, U32)] {
+  var x: U32 = 1
+  Some((x, nx(inout x)))
+}
+
+pub fn binary_operator() -> U32 {
+  var x: U32 = 1
+  x + nx(inout x)
+}
+
+pub fn array_literal() -> [U32; 2] {
+  var x: U32 = 1
+  [x, nx(inout x)]
+}
+
+pub fn struct_literal() -> W {
+  var x: U32 = 1
+  W { a: x, b: nx(inout x) }
+}

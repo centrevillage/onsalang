@@ -229,11 +229,12 @@ impl<'a> V<'a> {
         }
     }
 
-    /// A place, a span over a place, or (planar channels, §5.3) an array
-    /// literal of those.
+    /// A place, a span over a place, a slice of one (a partial view, R-31),
+    /// or (planar channels, §5.3) an array literal of those.
     fn is_place_expr(e: &Expr) -> bool {
         match &e.kind {
             ExprKind::SpanOf(inner) => inner.as_place().is_some(),
+            ExprKind::Prim { prim: Prim::Slice, args } => args.first().is_some_and(|a| Self::is_place_expr(&a.expr)),
             ExprKind::Array(items) => items.iter().all(Self::is_place_expr),
             _ => e.as_place().is_some(),
         }

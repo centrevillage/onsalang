@@ -1,0 +1,244 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// R-31, S-805, S-181, S-196 (§5.2, §5.3): "別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置に
+// だけ書け（…）、排他性は要素の場所ごとに検査する。`xs[k]` は `Span[T]` で、引数の位置に現れる（メソッドの受け手
+// `xs[k].len()`、添字の左辺 `xs[k][i]`…）" and "部分ビュー…も範囲によらず、元の場所、その添字、同じ元のほかの部分ビューと
+// 重なる". The elements of a planar literal are places, each of them checked against the other elements and the other
+// arguments of the call: the same variable twice, a variable and a view or an element of it, and two views of one
+// variable overlap when one of the places is `inout` (an `inout` literal makes all its elements `inout`); a borrowed
+// literal beside a borrowed argument is only reads. The elements of one planar parameter overlap each other (the indices
+// of one array do, §5.2), also through the views and the receivers taken from them. The error is at the later written
+// place, one per function (P-01), no repair candidate (`fixes = 0`). The forms that do not overlap are in
+// values/overlap_views_ok.onsa, the literal that does not fit the type (E0401) in negative/planar_literal_mismatch.onsa.
+
+fn fill2(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)
+}
+
+fn fill3(inout xs: [Span[F32]; 3]) {
+  xs[0].fill!(1.0)
+}
+
+fn rd2a(inout d: Span[F32], xs: [Span[F32]; 2]) {
+  d.fill!(xs[0][0])
+}
+
+fn rd2b(xs: [Span[F32]; 2], inout d: Span[F32]) {
+  d.fill!(xs[0][0])
+}
+
+fn mix(inout xs: [Span[F32]; 2], other: [Span[F32]; 2]) {
+  xs[0].copy_from!(other[0])
+}
+
+fn mix1(inout xs: [Span[F32]; 2], s: Span[F32]) {
+  xs[0].copy_from!(s)
+}
+
+fn take(inout a: Span[F32], b: Span[F32]) {
+  a.copy_from!(b)
+}
+
+fn rd2n(xs: [Span[F32]; 2]) -> U32 {
+  xs[0].len()
+}
+
+fn touch(inout a: [F32; 4]) -> [F32; 4] {
+  a[0] = 1.0
+  [0.0; 4]
+}
+
+fn touch_view(inout a: Span[F32]) -> [F32; 4] {
+  a.fill!(1.0)
+  [0.0; 4]
+}
+
+// ------------------------------------------------------------- the elements of one inout literal
+
+pub fn the_same_variable_twice() {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [a, a]) //~ E0702
+}
+
+pub fn the_same_variable_in_three() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  fill3(inout [a, b, a]) //~ E0702
+}
+
+pub fn two_views_of_one_variable() {
+  var a: [F32; 8] = [0.0; 8]
+  fill2(inout [a.slice(0, 4), a.slice(4, 8)]) //~ E0702
+}
+
+pub fn a_variable_and_a_view_of_it() {
+  var a: [F32; 8] = [0.0; 8]
+  fill2(inout [a, a.slice(0, 2)]) //~ E0702
+}
+
+pub fn a_view_and_the_variable() {
+  var a: [F32; 8] = [0.0; 8]
+  fill2(inout [a.slice(0, 2), a]) //~ E0702
+}
+
+pub fn two_views_of_a_buffer(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(n)
+  fill2(inout [b.slice(0, 1), b.slice(1, 2)]) //~ E0702
+}
+
+pub fn two_elements_of_one_array() {
+  var a: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  fill2(inout [a[0], a[1]]) //~ E0702
+}
+
+pub fn a_buffer_twice(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(n)
+  fill2(inout [b, b]) //~ E0702
+}
+
+// ---------------------------------------------- an inout literal or its elements and an argument
+
+pub fn inout_variable_and_a_borrowed_literal() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  rd2a(inout a, [a, b]) //~ E0702
+}
+
+pub fn inout_variable_and_a_borrowed_literal_second() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  rd2a(inout a, [b, a]) //~ E0702
+}
+
+pub fn borrowed_literal_and_an_inout_variable() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  rd2b([a, b], inout b) //~ E0702
+}
+
+pub fn inout_view_and_a_borrowed_literal_with_another_view() {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 4] = [0.0; 4]
+  rd2a(inout a.slice(0, 2), [a.slice(4, 6), b]) //~ E0702
+}
+
+pub fn inout_literal_and_a_borrowed_element() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  mix1(inout [a, b], b) //~ E0702
+}
+
+pub fn inout_literal_and_a_borrowed_view_of_an_element() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  mix1(inout [a, b], b.slice(0, 2)) //~ E0702
+}
+
+pub fn inout_literal_and_a_borrowed_literal() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  var c: [F32; 4] = [0.0; 4]
+  mix(inout [a, b], [b, c]) //~ E0702
+}
+
+pub fn inout_literal_and_a_borrowed_literal_with_a_view() {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 4] = [0.0; 4]
+  var c: [F32; 4] = [0.0; 4]
+  mix(inout [a.slice(0, 4), b], [c, a.slice(4, 8)]) //~ E0702
+}
+
+// ------------------------------- a change inside an element of a borrowed literal (S-806, S-799)
+
+// The elements of a planar literal are places of the call (§3.5: "平面の引数に置いた配列リテラル（§5.3）の要素は引数の場所なので、
+// 他の要素の中の変更と重なれば E0702"), so a change made while another element is evaluated overlaps it, in either order, at the
+// later written of the change and the element.
+
+pub fn element_then_a_call_that_changes_it() -> U32 {
+  var a: [F32; 4] = [0.0; 4]
+  rd2n([a, touch(inout a)]) //~ E0702
+}
+
+pub fn call_that_changes_an_element_then_the_element() -> U32 {
+  var a: [F32; 4] = [0.0; 4]
+  rd2n([touch(inout a), a]) //~ E0702
+}
+
+pub fn element_then_a_call_that_changes_a_view_of_it() -> U32 {
+  var a: [F32; 8] = [0.0; 8]
+  rd2n([a.slice(0, 4), touch_view(inout a.slice(4, 8))]) //~ E0702
+}
+
+pub fn element_then_a_block_that_assigns_it() -> U32 {
+  var a: [F32; 4] = [0.0; 4]
+  let c: [F32; 4] = [1.0; 4]
+  rd2n([a, {
+    a[0] = 1.0 //~ E0702
+    c
+  }])
+}
+
+pub fn a_block_that_assigns_then_the_element() -> U32 {
+  var a: [F32; 4] = [0.0; 4]
+  let c: [F32; 4] = [1.0; 4]
+  rd2n([{
+    a[0] = 1.0
+    c
+  }, a]) //~ E0702
+}
+
+pub fn three_elements_the_change_in_the_last() -> U32 {
+  var a: [F32; 4] = [0.0; 4]
+  let c: [F32; 4] = [1.0; 4]
+  rd3n([c, a, touch(inout a)]) //~ E0702
+}
+
+fn rd3n(xs: [Span[F32]; 3]) -> U32 {
+  xs[0].len()
+}
+
+pub fn the_change_of_another_variable_is_no_overlap() -> U32 {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  rd2n([a, touch(inout b)])
+}
+
+// ---------------------------------------------------------- the elements of a planar parameter
+
+pub fn whole_planar_and_one_element(inout xs: [Span[F32]; 2]) {
+  mix1(inout xs, xs[0]) //~ E0702
+}
+
+pub fn views_of_two_elements_receiver(inout xs: [Span[F32]; 2]) {
+  xs[0].slice(0, 2).copy_from!(xs[1].slice(0, 2)) //~ E0702
+}
+
+pub fn element_and_its_own_view(inout xs: [Span[F32]; 2]) {
+  xs[0].copy_from!(xs[0].slice(1, 3)) //~ E0702
+}
+
+pub fn inout_view_of_an_element_and_another_element(inout xs: [Span[F32]; 2]) {
+  take(inout xs[0].slice(0, 2), xs[1]) //~ E0702
+}
+
+pub fn two_inout_views_of_one_element(inout xs: [Span[F32]; 2]) {
+  two_views(inout xs[0].slice(0, 2), inout xs[0].slice(2, 4)) //~ E0702
+}
+
+pub fn run_time_elements(inout xs: [Span[F32]; 2], k: U32, j: U32) {
+  take(inout xs[k], xs[j]) //~ E0702
+}
+
+pub fn in_a_loop(inout xs: [Span[F32]; 2]) {
+  for k in 0 ..< 2 {
+    xs[k].copy_from!(xs[0]) //~ E0702
+  }
+}
+
+fn two_views(inout a: Span[F32], inout b: Span[F32]) {
+  a.fill!(1.0)
+  b.fill!(2.0)
+}

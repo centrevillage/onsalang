@@ -1,0 +1,11 @@
+// Functions over views, used from another module of the package (spec §15.1). The overlap rules of the callers
+// (§5.2, §5.3) do not depend on the module the called function is in.
+
+pub fn add(inout dst: Span[F32], src: Span[F32]) {
+  dst.add_from!(src)
+}
+
+pub fn fill2(inout xs: [Span[F32]; 2], v: F32) {
+  xs[0].fill!(v)
+  xs[1].fill!(v)
+}

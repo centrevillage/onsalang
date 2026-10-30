@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.2", "§5.3"]
+// fixes = 1
+
+// R-31 (§5.1: "`let` の束縛と借用の引数は変更できない（代入すると、また `inout` で渡すと E0701）… E0701 は宣言を `var` にする";
+// §5.2: the receiver of an `inout self` method "場所だが変更できないもの（`let` の束縛、借用の引数）は E0701"; §5.3: a part
+// view is written "`f(inout xs.slice(from, to))`"): a view of a `let` binding is a part of a binding that cannot be
+// changed, so passing it as an `inout` argument, using it as the receiver of an `inout self` method or putting it in an
+// `inout` planar literal is an E0701, with the same repair as the write to the binding itself: one candidate, which declares
+// the `let` `var` (a binding of an array of a Copy type or of a `Buf` is the same value as a `var`). Each function holds one
+// `let` that is written through a view, and `var` makes it right. The sources whose E0701 has no such candidate are in
+// negative/view_not_writable.onsa. One error per function (P-01).
+
+fn fill(inout s: Span[F32]) {
+  s.fill!(1.0)
+}
+
+fn fill2(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)
+}
+
+pub fn array_argument() -> F32 {
+  let a: [F32; 8] = [0.0; 8]
+  fill(inout a.slice(0, 4)) //~ E0701
+  a[0]
+}
+
+pub fn array_receiver() -> F32 {
+  let a: [F32; 8] = [0.0; 8]
+  a.slice(0, 4).fill!(2.0) //~ E0701
+  a[0]
+}
+
+pub fn view_of_a_view() -> F32 {
+  let a: [F32; 8] = [0.0; 8]
+  fill(inout a.slice(0, 8).slice(1, 2)) //~ E0701
+  a[0]
+}
+
+pub fn buffer(n: U32) -> F32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(n)
+  fill(inout b.slice(0, 1)) //~ E0701
+  b[0]
+}
+
+pub fn planar_literal() -> F32 {
+  let a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  fill2(inout [a, b]) //~ E0701
+  a[0] + b[0]
+}
+
+pub fn planar_literal_with_a_view() -> F32 {
+  let a: [F32; 8] = [0.0; 8]
+  var b: [F32; 4] = [0.0; 4]
+  fill2(inout [b, a.slice(0, 4)]) //~ E0701
+  a[0] + b[0]
+}
+
+pub fn in_a_loop(n: U32) -> F32 {
+  let a: [F32; 8] = [0.0; 8]
+  for i in 0 ..< n {
+    a.slice(0, i).fill!(1.0) //~ E0701
+  }
+  a[0]
+}
+
+pub fn the_var_is_right() -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  fill(inout a.slice(0, 4))
+  a.slice(4, 8).fill!(2.0)
+  a[0]
+}

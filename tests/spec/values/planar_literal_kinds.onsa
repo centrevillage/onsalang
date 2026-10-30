@@ -1,0 +1,152 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§11.6", "§14.2"]
+
+// S-196, S-181 (§5.3: "`[[T; M]; N]`、`[Buf[T]; N]`、`[Span[T]; N]` の値をそのまま渡せる（要素ごとに `Span` へ変換）。別々の変数にある
+// ときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け（要素の種類と長さは揃っていなくてよい…）"): the elements of
+// a literal passed as `[Span[T]; N]` (borrowed or `inout`) may be arrays of different lengths, `Buf`s, `Span`s (a `Span` parameter,
+// a part view) in any mix, as long as their number is `N` and their element type is `T`; an array value of arrays, of `Buf`s or of
+// `Span`s is passed as it is. The elements of the parameter are read by `xs[k].len()` and written through `xs[k]` (S-181). The
+// literal is a place of the call, so a variable can appear in it as in another argument (negative/overlap_views_planar.onsa has
+// the overlaps). The numbers of the run are in semantics/span_element_literal.onsa. No diagnostic is expected anywhere in this
+// file; every binding is read.
+
+fn lens(xs: [Span[F32]; 2]) -> U32 {
+  xs[0].len() + xs[1].len()
+}
+
+fn lens3(xs: [Span[F32]; 3]) -> U32 {
+  xs[0].len() + xs[1].len() + xs[2].len()
+}
+
+fn fill_all(inout xs: [Span[F32]; 2], v: F32) {
+  xs[0].fill!(v)
+  xs[1].fill!(v)
+}
+
+fn fill_all3(inout xs: [Span[F32]; 3], v: F32) {
+  xs[2].fill!(v)
+}
+
+// ------------------------------------------------------------------------------ borrowed literals
+
+pub fn arrays_of_different_lengths() -> U32 {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  let b: [F32; 5] = [0.0; 5]
+  lens([a, b])
+}
+
+pub fn buffers_of_different_lengths(m: U32, n: U32) -> U32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(m)
+  let b: Buf[F32] = Buf.zeroed(n)
+  lens([a, b])
+}
+
+pub fn array_and_buffer(m: U32) -> U32 uses {Alloc} {
+  let a: [F32; 3] = [0.0; 3]
+  let b: Buf[F32] = Buf.zeroed(m)
+  lens([a, b]) + lens([b, a])
+}
+
+pub fn span_parameter_and_array(s: Span[F32]) -> U32 {
+  let a: [F32; 2] = [0.0; 2]
+  lens([s, a]) + lens([a, s])
+}
+
+pub fn part_views_and_whole_values(s: Span[F32], n: U32) -> U32 {
+  let a: [F32; 8] = [0.0; 8]
+  lens([a.slice(0, n), s.slice(1, 3)]) + lens([a, s.slice(0, 1)])
+}
+
+pub fn three_kinds_at_once(s: Span[F32], m: U32) -> U32 uses {Alloc} {
+  let a: [F32; 4] = [0.0; 4]
+  let b: Buf[F32] = Buf.zeroed(m)
+  lens3([a, b, s]) + lens3([s.slice(0, 1), a, b])
+}
+
+pub fn array_value_of_arrays() -> U32 {
+  let chans: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  lens(chans)
+}
+
+pub fn array_value_of_buffers(m: U32) -> U32 uses {Alloc} {
+  let chans: [Buf[F32]; 2] = [Buf.zeroed(m), Buf.zeroed(m)]
+  lens(chans)
+}
+
+pub fn array_value_of_spans(chans: [Span[F32]; 2]) -> U32 {
+  lens(chans)
+}
+
+pub fn the_same_array_twice() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  lens([a, a])
+}
+
+// ------------------------------------------------------------------------------- inout literals
+
+pub fn inout_arrays_of_different_lengths() -> F32 {
+  var a: [F32; 3] = [0.0; 3]
+  var b: [F32; 5] = [0.0; 5]
+  fill_all(inout [a, b], 1.0)
+  a[0] + b[4]
+}
+
+pub fn inout_array_and_buffer(m: U32) -> F32 uses {Alloc} {
+  var a: [F32; 3] = [0.0; 3]
+  var b: Buf[F32] = Buf.zeroed(m)
+  fill_all(inout [a, b], 1.0)
+  fill_all(inout [b, a], 2.0)
+  a[0] + b[0]
+}
+
+pub fn inout_span_parameter_and_array(inout s: Span[F32]) -> F32 {
+  var a: [F32; 2] = [0.0; 2]
+  fill_all(inout [s, a], 1.0)
+  a[0]
+}
+
+pub fn inout_three_elements(m: U32) -> F32 uses {Alloc} {
+  var a: [F32; 3] = [0.0; 3]
+  var b: Buf[F32] = Buf.zeroed(m)
+  var c: [F32; 7] = [0.0; 7]
+  fill_all3(inout [a, b, c], 1.0)
+  a[0] + c[6]
+}
+
+pub fn inout_parts_of_one_variable_and_another(n: U32) -> F32 {
+  var long: [F32; 8] = [0.0; 8]
+  var a: [F32; 3]    = [0.0; 3]
+  fill_all(inout [a, long.slice(2, 4)], 1.0)
+  fill_all(inout [long.slice(0, n), a], 2.0)
+  long[0] + a[0]
+}
+
+pub fn inout_array_value(inout chans: [Span[F32]; 2]) {
+  fill_all(inout chans, 1.0)
+}
+
+pub fn borrowed_and_inout_literals_of_other_variables() -> F32 {
+  var a: [F32; 3] = [0.0; 3]
+  var b: [F32; 5] = [0.0; 5]
+  let c: [F32; 2] = [1.0; 2]
+  let d: [F32; 6] = [1.0; 6]
+  fill_all(inout [a, b], 1.0)
+  a[0] + b[0] + lens([c, d]).round_f32()
+}
+
+// A length given by a const parameter is found from the literal or the value, as for any array (§4.5).
+fn total[const N: U32](xs: [Span[F32]; N]) -> F32 {
+  xs[0][0]
+}
+
+fn set_all[const N: U32](inout xs: [Span[F32]; N], v: F32) {
+  xs[0].fill!(v)
+}
+
+pub fn a_length_of_a_const_parameter(v: [Span[F32]; 2]) -> F32 {
+  var a: [F32; 3] = [0.0; 3]
+  var b: [F32; 5] = [0.0; 5]
+  set_all(inout [a, b.slice(1, 3)], 5.0)
+  total([a, b, a]) + total(v)
+}

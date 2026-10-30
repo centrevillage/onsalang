@@ -24,7 +24,7 @@
 // # companion of export_planar_lengths_in.onsa, which has the input channels). The output
 // # channels here are views of local arrays made with `inout xs.slice(from, to)` in an
 // # `inout [..]` literal (§5.3), so the lengths can differ in Onsa code (the C API itself has one
-// # `frames`). The case waits for W4-08: an `inout` array literal of views is E0701 until then.
+// # `frames`). An `inout` array literal of views is accepted since W4-08 (R-31).
 // # The sum of the last frames of the channels is returned; a panic of `process` is the status 1.
 //
 // # `dup` writes `x` and `x * 2` to the two channels: the last frames are 4 and 8, the sum 12.

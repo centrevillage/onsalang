@@ -12,7 +12,7 @@ use onsa_syntax::ast::{ExprId, PatKind, StmtKind};
 
 use super::check::Walker;
 use super::flow::Run;
-use super::place::{Place, place_of};
+use super::place::Place;
 use super::state::Status;
 use super::walk::Pos;
 use crate::Kind;
@@ -47,10 +47,11 @@ impl Walker<'_> {
     /// S-789). A value captured is not written (R-25). An `inout` argument
     /// and a receiver change their place after the call (§7, S-796). W4-09
     /// and W4-10 put the E0715 of a place a borrowed `for` or a guard holds
-    /// here, first.
+    /// here, first. A partial view writes its base (memo 1.2: whether it
+    /// can, by its root), walked as the call of `slice` it is.
     pub(super) fn write_place(&mut self, r: &mut Run, target: ExprId, how: How) {
         let at = self.ast.expr(target).span;
-        let Some(place) = place_of(self.ast, self.names, target) else {
+        let Some(place) = self.view_place(target) else {
             let message = match how {
                 How::Assign => bug(Some(at), "an assignment to no place (the types stage's E0415)"),
                 How::Inout => {

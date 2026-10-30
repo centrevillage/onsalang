@@ -1,0 +1,314 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+
+// R-31, S-805, S-181, S-196 (§5.2, §5.3): the forms of part views and planar literals that are legal, next to the
+// overlaps of negative/overlap_views_args.onsa and negative/overlap_views_planar.onsa. "`fill(inout a.slice(0, 4))`" and the
+// other `inout` views are legal where the source can be written (§5.3: `f(inout xs.slice(from, to))`, "排他性は要素の場所
+// ごとに検査する"); the view of a view is a view; places that are not the same place (another variable, another field of a
+// struct) do not overlap (§5.2: "同じ値の異なるフィールド…は重ならないものとして扱う"); two borrowed views are two reads
+// (§5.2: "引数の中で同じ変数を読んで値を作るだけなら重ならない"), also beside a borrowed whole, and the value made by
+// reading in an argument is no overlap (`xs.fill!(xs.len())`). Views and literals stay legal in a branch, a loop, an arm,
+// a generic function and a method. No diagnostic is expected anywhere in this file; every binding is read.
+
+pub struct Voice {
+  buf: Buf[F32],
+  tmp: Buf[F32],
+  gain: F32,
+}
+
+impl Voice {
+  pub fn clear_head(inout self) {
+    self.buf.slice(0, 2).fill!(self.gain)
+  }
+
+  pub fn copy_between_fields(inout self) {
+    self.buf.slice(0, 2).copy_from!(self.tmp.slice(0, 2))
+  }
+
+  pub fn add_other_field(inout self) {
+    add(inout self.buf.slice(0, 2), self.tmp)
+  }
+
+  pub fn scale_gain_by_a_view_sum(inout self) {
+    scale(inout self.gain, sum(self.buf.slice(0, 2)))
+  }
+}
+
+fn fill(inout s: Span[F32]) {
+  s.fill!(1.0)
+}
+
+fn add(inout dst: Span[F32], src: Span[F32]) {
+  dst.add_from!(src)
+}
+
+fn add_one(inout dst: Span[F32], x: F32) {
+  dst.fill!(x)
+}
+
+fn scale(inout g: F32, k: F32) {
+  g = g * k
+}
+
+fn sum(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0 ..< s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+fn dot(a: Span[F32], b: Span[F32]) -> F32 {
+  sum(a) + sum(b)
+}
+
+fn fill2(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)
+}
+
+fn rd2(xs: [Span[F32]; 2]) -> U32 {
+  xs[0].len() + xs[1].len()
+}
+
+fn rd2a(inout d: Span[F32], xs: [Span[F32]; 2]) {
+  d.fill!(xs[0][0])
+}
+
+fn mix(inout xs: [Span[F32]; 2], other: [Span[F32]; 2]) {
+  xs[0].copy_from!(other[0])
+}
+
+fn head_fill[T: Copy](inout s: Span[T], v: T) {
+  s.slice(0, 1).fill!(v)
+}
+
+// ------------------------------------------------------------------------- the views that are legal
+
+pub fn inout_view() -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  fill(inout a.slice(0, 4))
+  a[0]
+}
+
+pub fn receiver_view() -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  a.slice(0, 4).fill!(2.0)
+  a[0]
+}
+
+pub fn view_of_a_view() -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  fill(inout a.slice(0, 8).slice(1, 2))
+  a.slice(0, 8).slice(4, 6).fill!(3.0)
+  a[0]
+}
+
+pub fn view_of_a_buffer(n: U32) -> F32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(n)
+  fill(inout b.slice(0, 1))
+  b[0]
+}
+
+pub fn view_of_an_inout_argument(inout a: [F32; 8]) {
+  fill(inout a.slice(0, 4))
+  a.slice(4, 8).fill!(2.0)
+}
+
+pub fn view_of_a_span_argument(inout s: Span[F32]) {
+  fill(inout s.slice(0, 2))
+  s.slice(2, 4).fill!(2.0)
+}
+
+pub fn view_of_a_field(inout v: Voice) {
+  fill(inout v.buf.slice(0, 2))
+  v.tmp.slice(0, 2).fill!(2.0)
+}
+
+pub fn separate_calls_on_the_same_place() -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  fill(inout a.slice(0, 4))
+  fill(inout a.slice(4, 8))
+  a[0]
+}
+
+// ---------------------------------------------------------------------- places that are not the same
+
+pub fn two_variables() -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [1.0; 8]
+  add(inout a.slice(0, 4), b.slice(0, 4))
+  a.slice(0, 4).copy_from!(b.slice(4, 8))
+  a.copy_from!(b)
+  add(inout a, b.slice(0, 8))
+  a[0]
+}
+
+pub fn two_arguments(inout x: [F32; 4], y: [F32; 4]) {
+  add(inout x.slice(0, 2), y.slice(0, 2))
+  x.slice(2, 4).copy_from!(y)
+}
+
+pub fn two_fields_of_a_struct(inout v: Voice) {
+  add(inout v.buf.slice(0, 2), v.tmp.slice(0, 2))
+  v.buf.slice(0, 2).copy_from!(v.tmp)
+}
+
+pub fn a_view_and_another_field(inout v: Voice) {
+  add_one(inout v.buf.slice(0, 2), v.gain)
+  v.buf.slice(0, 2).fill!(v.gain)
+}
+
+pub fn a_view_and_the_element_of_another_array() -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  let b: [F32; 8] = [1.0; 8]
+  add_one(inout a.slice(0, 4), b[5])
+  a.slice(0, 4).fill!(b[6])
+  a[0]
+}
+
+// ------------------------------------------------------------- reads: borrowed views and values
+
+pub fn two_borrowed_views() -> F32 {
+  let a: [F32; 8] = [1.0; 8]
+  dot(a.slice(0, 4), a.slice(4, 8)) + dot(a, a.slice(0, 2)) + dot(a.slice(0, 8), a)
+}
+
+pub fn borrowed_view_and_borrowed_whole(a: Span[F32]) -> F32 {
+  dot(a, a.slice(1, 3)) + dot(a.slice(0, 1), a.slice(0, 1))
+}
+
+pub fn the_value_made_by_reading_is_no_overlap() -> F32 {
+  var a: [F32; 8] = [1.0; 8]
+  a.slice(0, 4).fill!(a.len().round_f32())
+  a.slice(0, 4).fill!(sum(a.slice(4, 8)))
+  add_one(inout a.slice(0, 4), a[6] + 1.0)
+  add_one(inout a.slice(4, 8), sum(a.slice(0, 4)) * 2.0)
+  a.fill!(sum(a.slice(2, 4)))
+  a[0]
+}
+
+pub fn view_of_a_borrowed_binding(a: Span[F32], n: U32) -> F32 {
+  let head = a.slice(0, n)
+  dot(head, a)
+}
+
+// ------------------------------------------------------------------------ planar literals (S-196)
+
+pub fn inout_literal_of_two_variables() -> F32 {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  fill2(inout [a, b])
+  a[0] + b[0]
+}
+
+pub fn inout_literal_of_views_of_two_variables(n: U32) -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  fill2(inout [a.slice(0, 4), b.slice(0, n)])
+  a[0] + b[0]
+}
+
+pub fn inout_literal_of_views_of_two_parameters(inout a: Span[F32], inout b: [F32; 8]) {
+  fill2(inout [a.slice(0, 2), b.slice(0, 2)])
+}
+
+pub fn borrowed_literal_with_a_place_twice() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  rd2([a, a]) + rd2([a, a.slice(0, 2)]) + rd2([a.slice(0, 1), a.slice(1, 2)])
+}
+
+pub fn inout_variable_and_a_borrowed_literal_of_others() -> F32 {
+  var c: [F32; 8] = [0.0; 8]
+  let a: [F32; 4] = [1.0; 4]
+  let b: [F32; 4] = [2.0; 4]
+  rd2a(inout c.slice(0, 2), [a, b])
+  rd2a(inout c, [a, b])
+  c[0]
+}
+
+pub fn inout_literal_and_a_borrowed_literal_of_others() -> F32 {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  let c: [F32; 4] = [1.0; 4]
+  let d: [F32; 4] = [2.0; 4]
+  mix(inout [a, b], [c, d])
+  a[0] + b[0]
+}
+
+pub fn literal_beside_the_same_borrowed_variable() -> U32 {
+  let a: [F32; 4] = [0.0; 4]
+  rd2([a, a.slice(1, 3)]) + rd2([a, a])
+}
+
+// -------------------------------------------------------------- the elements of a planar parameter
+
+pub fn element_receivers(inout xs: [Span[F32]; 2], other: Span[F32]) {
+  xs[0].copy_from!(other)
+  xs[1].slice(0, 2).copy_from!(other.slice(0, 2))
+  xs[1].slice(2, 4).fill!(1.0)
+}
+
+pub fn element_views_in_a_loop(inout xs: [Span[F32]; 2], other: Span[F32]) {
+  for k in 0 ..< 2 {
+    xs[k].slice(0, 1).copy_from!(other.slice(0, 1))
+    xs[k].fill!(xs[k].len().round_f32())
+  }
+}
+
+pub fn element_with_its_own_length(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(xs[0].len().round_f32())
+  xs[1].slice(0, 2).fill!(sum(xs[0]))
+}
+
+pub fn element_as_an_inout_argument(inout xs: [Span[F32]; 2], other: Span[F32]) {
+  add(inout xs[0], other)
+  add(inout xs[1].slice(0, 2), other.slice(0, 2))
+}
+
+// ------------------------------------------------------ branch, loop, arm, generic function, closure
+
+pub fn in_a_branch(c: Bool) -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  if c {
+    fill(inout a.slice(0, 4))
+  } else {
+    a.slice(4, 8).fill!(2.0)
+  }
+  a[0]
+}
+
+pub fn in_a_loop(n: U32) -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  for i in 0 ..< n {
+    a.slice(0, i).fill!(1.0)
+  }
+  a[0]
+}
+
+pub fn in_an_arm(o: Option[U32]) -> F32 {
+  var a: [F32; 8] = [0.0; 8]
+  match o {
+    Some(n) => fill(inout a.slice(0, n)),
+    None => {},
+  }
+  a[0]
+}
+
+pub fn in_a_generic_function() -> F32 {
+  var a: [F32; 4] = [0.0; 4]
+  head_fill(inout a.slice(1, 4), 3.0)
+  a[1]
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn a_view_of_a_local_inside_a_closure() -> U32 {
+  apply(fn(n) {
+    var local: [F32; 4] = [0.0; 4]
+    fill(inout local.slice(0, 2))
+    n + local.len()
+  })
+}

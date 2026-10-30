@@ -87,8 +87,9 @@ pub fn fill_with_the_own_length(inout xs: [Span[F32]; 2]) {
   xs[0].fill!(xs[0].len().round_f32())
 }
 
-pub fn separate_calls_for_each_element(inout xs: [Span[F32]; 2]) {
-  xs[0].copy_from!(xs[1].slice(0, 1))
+// A view of another element is a part of that element and overlaps it whatever its range (§5.2).
+pub fn a_view_of_another_element(inout xs: [Span[F32]; 2]) {
+  xs[0].copy_from!(xs[1].slice(0, 1))      //~ E0702
 }
 
 pub fn clear_each_in_a_loop(inout xs: [Span[F32]; 2]) {

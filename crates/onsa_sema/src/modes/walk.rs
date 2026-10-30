@@ -8,7 +8,7 @@ use onsa_syntax::ast::{ExprId, ExprKind, Lit, Mode, PatId, StrSeg};
 use super::check::Walker;
 use super::flow::Run;
 use super::place::{Place, hole_place, pattern_places, place_of};
-use crate::ty::TyId;
+use crate::ty::{Ty, TyId};
 
 /// Where a value stands (§5.2, §5.3): what the walk checks at it. Passed down
 /// to the tails of a block, an `if` and a `match` (§5.2) and through
@@ -41,7 +41,7 @@ impl Pos {
     }
 }
 
-impl Walker<'_> {
+impl<'a> Walker<'a> {
     /// Walk `e` at `pos` (in source order).
     pub(super) fn expr(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
         #[cfg(test)]
@@ -132,16 +132,24 @@ impl Walker<'_> {
     }
 
     /// The borrowed argument `e` of a parameter of the type `param`, if
-    /// read: a literal of a second-class type passes its elements on as
-    /// arguments (memo 2.1, §5.3: `planes([a, b])`, `swap.Out { l: a, r: b }`;
-    /// the type of an array literal is that of its elements). An `inout` one
-    /// is a write (`write.rs`; `inout [a, b]` is W4-08's).
+    /// read: a planar literal passes its elements on as arguments (memo 2.1,
+    /// §5.3: `planes([a, b])`). An `inout` one is a write (`write.rs`).
     pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: Option<TyId>) {
-        let x = self.ast.without_parens(e);
-        let literal =
-            matches!(self.ast.expr(x).kind, ExprKind::Array(_) | ExprKind::Tuple(_) | ExprKind::Struct { .. });
-        let at =
-            if literal && param.and_then(|t| self.class_of(t)).is_some() { self.ast.sub_exprs(x) } else { vec![e] };
-        at.into_iter().for_each(|y| self.expr(r, y, Pos::Arg(Mode::Borrow)));
+        match self.planar_literal(e, param) {
+            Some(parts) => parts.iter().for_each(|&y| self.expr(r, y, Pos::Arg(Mode::Borrow))),
+            None => self.expr(r, e, Pos::Arg(Mode::Borrow)),
+        }
+    }
+
+    /// The elements of `e`, an array literal at a planar parameter of the
+    /// type `param` (`[a, b]` at `[Span[T]; N]`, §5.3, S-196): each is an
+    /// argument of its own, whose place is checked for exclusivity. The one
+    /// test of the walk, the writes and the places passed (memo 1.2).
+    /// W7-03 adds a struct literal of a generated `Out` here.
+    pub(super) fn planar_literal(&self, e: ExprId, param: Option<TyId>) -> Option<&'a [ExprId]> {
+        let ast = self.ast;
+        let ExprKind::Array(parts) = &ast.expr(ast.without_parens(e)).kind else { return None };
+        let ty = param?;
+        (matches!(self.a.types.get(ty), Ty::Array(..)) && self.class_of(ty).is_some()).then_some(parts.as_slice())
     }
 }

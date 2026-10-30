@@ -18,7 +18,9 @@ fn lower_args(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], params: &[(Mod
 }
 
 pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: Mode) -> R<Expr> {
-    if e.ty == *want {
+    // A planar literal has the type of the parameter, its elements their own (S-196): each converted below.
+    let planar = matches!((want, &e.kind), (Ty::Array(el, _), ExprKind::Array(_)) if matches!(**el, Ty::Span(_)));
+    if e.ty == *want && !planar {
         return Ok(e);
     }
     let span = e.span;

@@ -166,7 +166,7 @@ impl Infer {
         Ok(())
     }
 
-    fn unify_len(&mut self, types: &mut Types, a: Len, b: Len, cause: &Cause) -> Result<(), Mismatch> {
+    pub fn unify_len(&mut self, types: &mut Types, a: Len, b: Len, cause: &Cause) -> Result<(), Mismatch> {
         let a = self.shallow_len(types, a);
         let b = self.shallow_len(types, b);
         if a == b {

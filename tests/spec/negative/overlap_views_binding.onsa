@@ -1,0 +1,189 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4", "§7"]
+// fixes = 0
+
+// S-217, S-805 (§5.2, §5.3, §5.4, §7): the name bound to a part view is the view, and the view is a part of the place it
+// is taken from. "Copy でない借用束縛（`match` の腕の束縛と、そこから派生した束縛、§5.4）とその経路は、派生元の場所として
+// 重なりを見る" (§5.2), and a part view "範囲によらず、元の場所、その添字、同じ元のほかの部分ビューと重なる". So in one call the
+// name of a view bound by a `match` arm (`match b.slice(0, 2) { s => … }`) or derived from a binding (`let h = s.slice(0, 1)`)
+// is the whole variable it comes from, whatever the range was: it overlaps an `inout` of that variable, of a part view or an
+// element of it, in either order, at the later argument (E0702); and a change of that variable in the arm makes the name unusable
+// after it (E0704, §7). The bindings are `Span`s (the array itself would be a Copy binding that keeps the value of the moment of
+// binding, §5.4). Another variable and another field do not overlap (the controls at the end, and values/overlap_views_ok.onsa).
+// No repair candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Voice {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+fn use2(s: Span[F32], inout b: Span[F32]) {
+  b.copy_from!(s)
+}
+
+fn use2r(inout b: Span[F32], s: Span[F32]) {
+  b.copy_from!(s)
+}
+
+fn use_elem(s: Span[F32], inout x: F32) {
+  x = s[0]
+}
+
+fn use_voice(s: Span[F32], inout v: Voice) {
+  v.gain = s[0]
+}
+
+fn use_gain(s: Span[F32], inout g: F32) {
+  g = s[0]
+}
+
+fn sum(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+// ------------------------------------------------------------- the name of a view in a call
+
+pub fn view_and_the_whole_inout() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => use2(s, inout b), //~ E0702
+  }
+}
+
+pub fn the_whole_inout_and_view() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => use2r(inout b, s), //~ E0702
+  }
+}
+
+pub fn view_and_a_disjoint_part() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => use2(s, inout b.slice(4, 6)), //~ E0702
+  }
+}
+
+pub fn view_and_an_element() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => use_elem(s, inout b[5]), //~ E0702
+  }
+}
+
+pub fn view_and_the_receiver() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => b.slice(4, 6).copy_from!(s), //~ E0702
+  }
+}
+
+pub fn view_of_a_buffer(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(n)
+  match b.slice(0, 1) {
+    s => use2(s, inout b), //~ E0702
+  }
+}
+
+pub fn view_of_a_field() uses {Alloc} {
+  var v = Voice { buf: Buf.zeroed(4), gain: 0.0 }
+  match v.buf.slice(0, 2) {
+    s => use2(s, inout v.buf), //~ E0702
+  }
+}
+
+pub fn view_of_a_field_and_the_whole_struct() uses {Alloc} {
+  var v = Voice { buf: Buf.zeroed(4), gain: 0.0 }
+  match v.buf.slice(0, 2) {
+    s => use_voice(s, inout v), //~ E0702
+  }
+}
+
+pub fn view_of_a_view() {
+  var a: [F32; 8] = [0.0; 8]
+  match a.slice(0, 8).slice(1, 3) {
+    s => use2(s, inout a), //~ E0702
+  }
+}
+
+// ------------------------------------------------------------------- derived from the binding
+
+pub fn derived_view_of_the_binding() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 4) {
+    s => {
+      let h = s.slice(0, 1)
+      use2(h, inout b) //~ E0702
+    },
+  }
+}
+
+pub fn derived_binding_of_the_binding() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 4) {
+    s => {
+      let h = s
+      use2(h, inout b.slice(6, 8)) //~ E0702
+    },
+  }
+}
+
+// ---------------------------------------------------- a change of the variable in the arm (§7)
+
+pub fn assigned_element_then_the_binding() -> F32 {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => {
+      b[5] = 1.0
+      sum(s) //~ E0704
+    },
+  }
+}
+
+pub fn inout_part_then_the_binding() -> F32 {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => {
+      b.slice(4, 6).fill!(1.0)
+      sum(s) //~ E0704
+    },
+  }
+}
+
+pub fn derived_binding_after_a_change() -> F32 {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 4) {
+    s => {
+      let h = s.slice(0, 1)
+      b[7] = 1.0
+      sum(h) //~ E0704
+    },
+  }
+}
+
+// ----------------------------------------------------------------------- no error: the controls
+
+pub fn another_variable() {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  match a.slice(0, 2) {
+    s => use2(s, inout b),
+  }
+}
+
+pub fn another_field() uses {Alloc} {
+  var v = Voice { buf: Buf.zeroed(4), gain: 0.0 }
+  match v.buf.slice(0, 2) {
+    s => use_gain(s, inout v.gain),
+  }
+}
+
+pub fn the_change_after_the_last_use() {
+  var b: [F32; 8] = [0.0; 8]
+  match b.slice(0, 2) {
+    s => {
+      b[5] = sum(s)
+    },
+  }
+}

@@ -7,7 +7,7 @@
 // state moves; a difference in ANY channel is a panic (in a `test` it fails the test). The
 // channels here are `Buf`s of lengths chosen at run time in `[Buf[F32]; N]` (§5.3: "`[Buf[T]; N]` の
 // 値をそのまま渡せる"), so the lengths of the channels can differ, and the forms of the call do not
-// need an `inout` array literal (planar_length_panics.onsa has the literal forms, W4-08). The good
+// need an `inout` array literal (planar_length_panics.onsa has the literal forms). The good
 // calls keep the tests honest: the same calls with equal lengths run.
 
 /// Swaps the channels.

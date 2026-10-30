@@ -32,7 +32,7 @@
 | `body/m1_continue.onsa`〜`body/m4_while_cond.onsa` | R-28 |
 | `body/m5_for_move.onsa`、`body/m5b_for_move_once.onsa` | R-29 |
 | `body/q1_qdup.onsa`、`body/q2_qdup_copy.onsa`、`types/kindfb*.onsa` | R-30。W4-16 U3/t で期待値付きのテストへ写した: `tests/spec/negative/kind_maybe_dup_param.onsa`（`?Dup` の値の複製）、`kind_maybe_dup_struct.onsa`・`kind_generic_buf_holder.onsa`・`kind_dup_requirement.onsa`（総称の型）、`tests/spec/types/kind_dup_contrast.onsa`（Dup の対照）。W4-16 U3 で直した（今の `onsa check` は `q1` が 1 行の E0704・3 行の E0711・5 行の E0416、`q2` が 1 行の E0711、`kindfb` が 9・10 行の E0601・14・20 行の E0704・26 行の E0416、`kindfb2` が 12・17 行の E0416） |
-| `body/x1_slice_alias.onsa`、`body/s1_planar.onsa`、`body/s2_slice_inout.onsa` | R-31 |
+| `body/x1_slice_alias.onsa`、`body/s1_planar.onsa`、`body/s2_slice_inout.onsa` | R-31。W4-08 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/overlap_views_args.onsa`（`x1` の `add(inout a, a.slice(0, 8))`、`a.copy_from!(a.slice(0, 8))`、`s2` の `sub_alias` の形）、`overlap_views_planar.onsa`（`s1` の `fill2(inout [a, a])`）、`view_not_writable*.onsa`、`tests/spec/values/overlap_views_ok.onsa`（`s1`・`s2` の通る形 `fill(inout a.slice(0, 4))`、`fill2(inout [a, b])`、`a.slice(0, 4).fill!(2.0)`）、実行は `tests/spec/semantics/view_inout_run.onsa`。直すのは W4-08 U2 |
 | `body/g1_generic_drop.onsa`、`body/r3_rt_temp_drop.onsa`、`body/r4_branch_drop.onsa`、`body/e1_temp_drop_nonrt.onsa` | R-32 |
 | `body/m6_closure_local.onsa` | R-33 |
 | `body/a1_tuple_arg.onsa` | R-34 |

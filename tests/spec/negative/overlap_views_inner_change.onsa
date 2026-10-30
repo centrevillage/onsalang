@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.3", "§7"]
+// fixes = 0
+
+// S-193, S-799, S-805 (§3.5, §5.2): "他の引数の中で変更すると E0702（`f(inout x, g(inout x))`、`xs.fill!(g(inout xs))`）… 変更は
+// §7 と同じく、代入、`inout` への受け渡し、`!` の呼び出し、`move` で、引数に置いたブロック式や `if`・`match` の腕の中の文と、入れ子の
+// 呼び出しの引数を含む" together with "部分ビュー…も範囲によらず、元の場所、その添字、同じ元のほかの部分ビューと重なる". A part
+// view passed in a call (borrowed, `inout` or as the receiver) is a place of the call that overlaps a change made while another
+// argument is evaluated whenever the change is made to the variable it is taken from, to the whole variable, to an element or to
+// another view of it, in either order of the arguments. The error is at the later written of the change and the view
+// (the place expression of the change, or the view), one per function (P-01), no repair candidate (`fixes = 0`). The reads
+// in the arguments and the changes of other variables are the controls at the end.
+
+fn use_n(s: Span[F32], k: F32) {}
+
+fn use_n_rev(k: F32, s: Span[F32]) {}
+
+fn use_io(inout s: Span[F32], k: F32) {}
+
+fn change_all(inout a: [F32; 8]) -> F32 {
+  a[0] = 1.0
+  1.0
+}
+
+fn change_view(inout s: Span[F32]) -> F32 {
+  s.fill!(1.0)
+  1.0
+}
+
+fn take(move b: Buf[F32]) -> F32 uses {Alloc} {
+  b[0]
+}
+
+fn pass(k: F32) -> F32 {
+  k
+}
+
+fn sum(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+// --------------------------------------------------------- a borrowed view and a change in another argument
+
+pub fn view_then_an_inout_call() {
+  var a: [F32; 8] = [0.0; 8]
+  use_n(a.slice(0, 4), change_all(inout a)) //~ E0702
+}
+
+pub fn an_inout_call_then_the_view() {
+  var a: [F32; 8] = [0.0; 8]
+  use_n_rev(change_all(inout a), a.slice(0, 4)) //~ E0702
+}
+
+pub fn view_then_an_inout_view_of_a_disjoint_part() {
+  var a: [F32; 8] = [0.0; 8]
+  use_n(a.slice(0, 4), change_view(inout a.slice(4, 8))) //~ E0702
+}
+
+pub fn view_then_a_block_that_assigns() {
+  var a: [F32; 8] = [0.0; 8]
+  use_n(a.slice(0, 4), {
+    a[0] = 1.0 //~ E0702
+    2.0
+  })
+}
+
+pub fn a_block_that_assigns_then_the_view() {
+  var a: [F32; 8] = [0.0; 8]
+  use_n_rev({
+    a[7] = 1.0
+    2.0
+  }, a.slice(0, 4)) //~ E0702
+}
+
+pub fn view_then_a_change_in_a_nested_call() {
+  var a: [F32; 8] = [0.0; 8]
+  use_n(a.slice(0, 4), pass(change_all(inout a))) //~ E0702
+}
+
+pub fn view_then_a_change_in_an_arm(c: Bool) {
+  var a: [F32; 8] = [0.0; 8]
+  use_n(a.slice(0, 4), if c { change_all(inout a) } else { 0.0 }) //~ E0702
+}
+
+pub fn view_then_a_move(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(n)
+  use_n(b.slice(0, 1), take(move b)) //~ E0702
+}
+
+// ---------------------------------------------------------------- an inout view and a change
+
+pub fn inout_view_then_an_inout_call() {
+  var a: [F32; 8] = [0.0; 8]
+  use_io(inout a.slice(0, 4), change_all(inout a)) //~ E0702
+}
+
+pub fn inout_view_then_a_block_that_assigns() {
+  var a: [F32; 8] = [0.0; 8]
+  use_io(inout a.slice(0, 4), {
+    a[7] = 1.0 //~ E0702
+    2.0
+  })
+}
+
+pub fn inout_view_then_an_inout_view() {
+  var a: [F32; 8] = [0.0; 8]
+  use_io(inout a.slice(0, 4), change_view(inout a.slice(4, 8))) //~ E0702
+}
+
+// ------------------------------------------------------------------- the receiver is a view
+
+pub fn receiver_view_and_an_inout_call() {
+  var a: [F32; 8] = [0.0; 8]
+  a.slice(0, 4).fill!(change_all(inout a)) //~ E0702
+}
+
+pub fn receiver_view_and_a_block_that_assigns() {
+  var a: [F32; 8] = [0.0; 8]
+  a.slice(0, 4).fill!({
+    a[7] = 1.0 //~ E0702
+    2.0
+  })
+}
+
+pub fn receiver_view_and_a_bang_call() {
+  var a: [F32; 8] = [0.0; 8]
+  a.slice(0, 4).fill!(change_view(inout a.slice(6, 8))) //~ E0702
+}
+
+pub fn receiver_view_of_an_element(inout xs: [Span[F32]; 2]) {
+  xs[0].slice(0, 2).fill!(change_view(inout xs[1])) //~ E0702
+}
+
+// ---------------------------------------------------------------------------- the controls
+
+pub fn a_read_in_an_argument_is_no_overlap() {
+  var a: [F32; 8] = [0.0; 8]
+  use_io(inout a.slice(0, 4), a.len().round_f32())
+  a.slice(0, 4).fill!(sum(a.slice(4, 8)))
+}
+
+pub fn a_change_of_another_variable_is_no_overlap() {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  use_n(a.slice(0, 4), change_all(inout b))
+  use_io(inout a.slice(0, 4), {
+    b[0] = 1.0
+    2.0
+  })
+}
+
+pub fn a_change_before_the_call_is_no_overlap() {
+  var a: [F32; 8] = [0.0; 8]
+  let v           = change_all(inout a)
+  use_n(a.slice(0, 4), v)
+}

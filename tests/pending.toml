@@ -632,38 +632,10 @@ note = "par の中の if~。W3-10 の写しでは E0200（K-08）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/process_blocks.onsa"
-reasons = ["R-31"]
-until = "W4-08"
-note = "process を slice で二回に分けても一回と同じ。inout xs.slice(a, b) は今 E0701（W4-08）。構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/planar_views.onsa"
-reasons = ["R-31", "S-102"]
-until = "W4-08"
-note = "別々の変数の [a, b] / inout [a, b]、inout の slice、process_inplace の全入力を読んでから出力を書く。今は E0701（W4-08）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/planar_structs.onsa"
 reasons = ["S-30"]
 until = "W7-03"
 note = "名前付きの入力 In と struct 出力 Out（render の o.l / o.r、process の inout Out）。生成項目の Onsa の側は W7-03（S-30）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/planar_length_panics.onsa"
-reasons = ["R-22", "R-31"]
-until = "W4-08"
-note = "入力のチャンネル間・出力のチャンネル間・入出力間で Span の長さが違うと process は panic（全チャンネルを比べる。R-22、W2-08）。[a, b] / inout [a, b] は W4-08"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/export_planar_lengths_out.onsa"
-reasons = ["R-22", "S-196", "R-31"]
-until = "W4-08"
-note = "平面の出力のチャンネル間の長さの比較（C の側）。inout [a.slice(..), b.slice(..)] は W4-08 まで E0701。W2-08 の直しは W4-08 の後に確かめる"
 
 [[pending]]
 kind = "test-case"
@@ -1036,13 +1008,6 @@ target = "tests/spec/semantics/enum_variant_values.onsa"
 reasons = ["S-191", "S-71"]
 until = "W5-03"
 note = ".( の呼び出し（W3-20）の後も map_err が無い"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/span_element_literal.onsa"
-reasons = ["S-196", "S-181"]
-until = "W4-08"
-note = "[a, b]（長さの違う Span）が [Span[F32]; 2] の引数で E0401、inout [a, b] が E0701"
 
 # --- W3-02/t: 修正候補の期待値（tests/spec/fixes/、断片の fixes = N と事例の隣の .fixK。2026-10-08）。
 # 候補を当てた結果と .fixK は、空白の幅を無視し、空白以外の各トークン（改行とコメントを含む）の種類と字面と、

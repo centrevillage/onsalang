@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§15.1"]
+// fixes = 0
+
+// R-31, S-805 (§5.2, §5.3, §15.1): the overlap of part views and of the elements of a planar literal is decided at the call, from
+// the places of the arguments, so it is the same when the called function is imported from another module. The views of one
+// variable overlap whatever the ranges are (E0702), the views of two variables and a legal `inout` literal do not. One error per
+// function (P-01), no repair candidate (`fixes = 0`). The same forms in one file are in negative/overlap_views_args.onsa.
+
+use dsp.{add, fill2}
+
+pub fn two_views_of_one_variable() {
+  var a: [F32; 8] = [0.0; 8]
+  add(inout a.slice(0, 4), a.slice(4, 8)) //~ E0702
+}
+
+pub fn the_whole_and_a_view() {
+  var a: [F32; 8] = [0.0; 8]
+  add(inout a, a.slice(0, 8)) //~ E0702
+}
+
+pub fn the_same_variable_in_a_literal() {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [a, a], 1.0) //~ E0702
+}
+
+pub fn two_views_of_two_variables() {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  add(inout a.slice(0, 4), b.slice(4, 8))
+  fill2(inout [a.slice(0, 4), b.slice(0, 4)], 1.0)
+}

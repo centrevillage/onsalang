@@ -1370,8 +1370,8 @@ fn writes(body: &str) -> Vec<(Code, usize, String, Vec<String>)> {
 }
 
 /// Memo 2.4's table (§5.1, §5.2, §5.4): the E0701 of a write to a place
-/// that cannot be changed says what its root is, and of a value that is no
-/// place, that it is not; the words of the write, by what writes.
+/// that cannot be changed says what its root is (of a partial view, its
+/// base's, R-31); the words of the write, by what writes.
 #[test]
 fn the_places_that_cannot_be_changed() {
     let src = "pub struct V { n: U32 }
@@ -1414,10 +1414,10 @@ pub fn owned_arm() uses {Alloc} {
   match mko() { Some(c) => { c = mk() }, None => {} }
 }
 pub fn ios(inout xs: Span[F32]) {}
-pub fn no_place(inout xs: Span[F32]) {
+pub fn view_of_borrowed(xs: Span[F32]) {
   ios(inout xs.slice(0, 1))
 }
-pub fn no_receiver(inout xs: Span[F32]) {
+pub fn view_receiver(xs: Span[F32]) {
   xs.slice(0, 1).fill!(0.0)
 }
 pub fn bump(inout n: U32) {}
@@ -1434,8 +1434,9 @@ pub fn bump(inout n: U32) {}
         (32, assign, "`v` is a borrow binding (§5.4), read-only"),
         (35, assign, "`c` is a `for` variable, read-only"),
         (38, assign, "`c` is a `match` binding, read-only"),
-        (42, "an `inout` argument must be a place", ""),
-        (45, "the receiver of an `inout self` method must be a place", ""),
+        // A partial view writes its base (W4-08 U2, R-31): by what its root is.
+        (42, inout, "`xs` is a borrowed parameter; declare it `inout xs`"),
+        (45, bang, "`xs` is a borrowed parameter; declare it `inout xs`"),
     ];
     let found = writes(src);
     assert_eq!(found.len(), expected.len(), "{found:?}");

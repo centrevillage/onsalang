@@ -51,8 +51,15 @@ pub(super) const EXTRA: &[(&str, &str)] = &[(
 /// `shape::Base::Body`), met in the files of the repository. A kind met anew goes here when the
 /// block is an operand there, and in `shape::BLOCK_HOLDERS` when it is the body of the form. A
 /// block in parentheses is the operand of an operator that E0013 asks for (`({ n }) - 10`, §3.1).
-const EXPRESSION_BLOCK_HOLDERS: &[NodeKind] =
-    &[NodeKind::Arg, NodeKind::Const, NodeKind::ExprStmt, NodeKind::LetStmt, NodeKind::MatchArm, NodeKind::ParenExpr];
+const EXPRESSION_BLOCK_HOLDERS: &[NodeKind] = &[
+    NodeKind::Arg,
+    NodeKind::ArrayExpr,
+    NodeKind::Const,
+    NodeKind::ExprStmt,
+    NodeKind::LetStmt,
+    NodeKind::MatchArm,
+    NodeKind::ParenExpr,
+];
 
 /// The time the test may take in a debug build (it took about 4 s on 2026-10-13).
 const BUDGET: Duration = Duration::from_secs(30);

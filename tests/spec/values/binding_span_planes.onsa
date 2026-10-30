@@ -6,9 +6,9 @@
 // `[a, b]` … と配列リテラルを引数の位置にだけ書け（要素の種類と長さは揃っていなくてよい…）", takes its elements
 // as arguments: a `Span` argument, a part of a view, an element of a planar argument, and a local `Buf` (the elements
 // are at the same place as the argument, not in a row of a binding), for a function and for a method of an
-// instance. The elements of one literal are of one kind here (a literal of different kinds is the work W4-08,
-// S-196, with `inout [a, b]`). Iterating a planar argument binds a borrowed `Span` (`for ch in input`), and
-// iterating the elements of an `inout` `Span` binds numbers, not a `Span`. Every binding is read. No
+// instance. The elements of one literal are of one kind here (literals of different kinds and lengths, S-196, and
+// `inout [a, b]` are in values/planar_literal_kinds.onsa). Iterating a planar argument binds a borrowed `Span`
+// (`for ch in input`), and iterating the elements of an `inout` `Span` binds numbers, not a `Span`. Every binding is read. No
 // diagnostic is expected anywhere in this file. The literals that are stored or bound are E0710
 // (negative/binding_span_owned_rows.onsa), the `Span` of a `match` arm is in
 // values/binding_span_match_arm.onsa, and the bindings from an `inout` argument are in

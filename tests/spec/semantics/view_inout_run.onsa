@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.2", "§11.6"]
+
+// R-31 (§5.3: "部分ビュー `f(xs.slice(from, to))`, `f(inout xs.slice(from, to))` | 半開区間 `[from, to)` の `Span`"; "`[a, b]` /
+// `inout [a, b]` と配列リテラルを引数の位置にだけ書け"): the view is a window onto the storage of its source, so a write through an
+// `inout` view or a view receiver changes exactly the elements `[from, to)` of the source and nothing else, a view of a view
+// is a window of the window, and the elements of an `inout` literal write into their own variables. The overlaps and the places
+// that cannot be written are in negative/overlap_views_*.onsa and negative/view_not_writable*.onsa.
+
+fn fill(inout s: Span[F32], v: F32) {
+  s.fill!(v)
+}
+
+fn add(inout dst: Span[F32], src: Span[F32]) {
+  dst.add_from!(src)
+}
+
+fn fill_first(inout xs: [Span[F32]; 2], v: F32) {
+  xs[0].fill!(v)
+  xs[1][0] = v + 1.0
+}
+
+pub struct Voice {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+test "an inout view writes only the elements from the start to the end" {
+  var a: [F32; 6] = [0.0; 6]
+  fill(inout a.slice(1, 4), 7.0)
+  assert a[0] == 0.0
+  assert a[1] == 7.0
+  assert a[3] == 7.0
+  assert a[4] == 0.0
+  assert a[5] == 0.0
+}
+
+test "a view receiver writes only its window" {
+  var a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  a.slice(2, 4).fill!(9.0)
+  assert a[1] == 2.0
+  assert a[2] == 9.0
+  assert a[3] == 9.0
+}
+
+test "a view of a view is a window of the window" {
+  var a: [F32; 8] = [0.0; 8]
+  a.slice(2, 7).slice(1, 3).fill!(5.0)
+  assert a[2] == 0.0
+  assert a[3] == 5.0
+  assert a[4] == 5.0
+  assert a[5] == 0.0
+}
+
+test "two views of two variables in one call" {
+  var a: [F32; 4] = [1.0, 1.0, 1.0, 1.0]
+  let b: [F32; 4] = [10.0, 20.0, 30.0, 40.0]
+  add(inout a.slice(0, 2), b.slice(2, 4))
+  assert a[0] == 31.0
+  assert a[1] == 41.0
+  assert a[2] == 1.0
+}
+
+test "the part of a buffer that is a field" {
+  var v = Voice { buf: Buf.zeroed(4), gain: 2.0 }
+  v.buf.slice(1, 3).fill!(v.gain)
+  assert v.buf[0] == 0.0
+  assert v.buf[1] == 2.0
+  assert v.buf[2] == 2.0
+  assert v.buf[3] == 0.0
+}
+
+test "an inout literal of views writes into its own variables" {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 6] = [0.0; 6]
+  fill_first(inout [a.slice(0, 2), b.slice(3, 6)], 4.0)
+  assert a[0] == 4.0
+  assert a[1] == 4.0
+  assert a[2] == 0.0
+  assert b[2] == 0.0
+  assert b[3] == 5.0
+  assert b[4] == 0.0
+}
+
+test "an empty window writes nothing and the length of a window" {
+  var a: [F32; 6] = [0.0; 6]
+  fill(inout a.slice(2, 2), 1.0)
+  assert a.slice(1, 5).len() == 4
+  assert a[2] == 0.0
+}

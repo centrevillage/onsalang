@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.2", "§5.3"]
+
+// S-178, R-31 (§5.1: "`inout` に場所でないもの（定数、一時値、呼び出しの結果）を渡すのも E0415 で、E0701 は場所だが変更できない
+// ものに使う"; §5.2: "場所でないレシーバ（呼び出しの結果、定数）は E0415"; §5.3: `inout xs.slice(from, to)`): a part view is a
+// part of its source place, so a view of something that is no place (a call result, a `const`, a literal) is no place. It is
+// an E0415 as an `inout` argument, as the receiver of an `inout self` method and as an element of an `inout` planar literal,
+// and it is not the E0701 of a place that cannot be changed (negative/view_not_writable.onsa). The view of a place is a
+// place (values/overlap_views_ok.onsa). One error per function (P-01).
+
+const TABLE: [F32; 4] = [0.0, 0.0, 0.0, 0.0]
+
+fn make() -> [F32; 4] {
+  [0.0; 4]
+}
+
+fn fill(inout s: Span[F32]) {
+  s.fill!(1.0)
+}
+
+fn fill2(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)
+}
+
+pub fn call_result_receiver() {
+  make().slice(0, 4).fill!(1.0) //~ E0415
+}
+
+pub fn call_result_argument() {
+  fill(inout make().slice(0, 4)) //~ E0415
+}
+
+pub fn call_result_view_of_a_view() {
+  fill(inout make().slice(0, 4).slice(1, 2)) //~ E0415
+}
+
+pub fn constant_receiver() {
+  TABLE.slice(0, 4).fill!(1.0) //~ E0415
+}
+
+pub fn constant_argument() {
+  fill(inout TABLE.slice(0, 2)) //~ E0415
+}
+
+pub fn literal_receiver() {
+  [0.0; 4].slice(0, 2).fill!(1.0) //~ E0415
+}
+
+pub fn literal_argument() {
+  fill(inout [0.0; 4].slice(0, 2)) //~ E0415
+}
+
+pub fn element_of_a_planar_literal() {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [a, make().slice(0, 4)]) //~ E0415
+}
+
+pub fn constant_in_a_planar_literal() {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [TABLE, a]) //~ E0415
+}
+
+pub fn call_result_in_a_planar_literal() {
+  var a: [F32; 4] = [0.0; 4]
+  fill2(inout [a, make()]) //~ E0415
+}

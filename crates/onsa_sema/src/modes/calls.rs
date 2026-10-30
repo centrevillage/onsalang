@@ -73,8 +73,10 @@ impl Walker<'_> {
         let span = self.ast.expr(e).span;
         self.lazily(r, e, |w, r| {
             for (a, t) in args.iter().zip(takes) {
-                let excuse = (later.contains(&a.expr)).then(|| place_of(w.ast, w.names, a.expr)).flatten();
-                let outer = replace(&mut w.inside.excuse, excuse.map(|p| (p.root, span)));
+                // The root of a place in it that is E0702's (a view, an element of a planar literal too).
+                let at = w.ast.expr(a.expr).span;
+                let excuse = later.iter().find(|(s, _)| at.start <= s.start && s.end <= at.end);
+                let outer = replace(&mut w.inside.excuse, excuse.map(|&(_, l)| (l, span)));
                 w.arg(r, a, t);
                 w.inside.excuse = outer;
             }
@@ -149,7 +151,10 @@ impl Walker<'_> {
                 }
                 match m {
                     // A binding derived from its place, passed in the call, is `exclusive`'s E0702 (S-796).
-                    Mode::Inout => self.write_place(r, e, How::Inout),
+                    Mode::Inout => match self.planar_literal(e, ty) {
+                        Some(parts) => parts.iter().for_each(|&x| self.write_place(r, x, How::Inout)),
+                        None => self.write_place(r, e, How::Inout),
+                    },
                     _ => self.argument(r, e, ty),
                 }
             }
