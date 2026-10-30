@@ -44,11 +44,7 @@ impl<'a> Checker<'a> {
                 let t = self.check_expr(*inner, expected)?;
                 if !self.is_place(*inner) {
                     let ispan = self.expr(*inner).span;
-                    return Err(self.err(
-                        Code::E0711,
-                        ispan,
-                        "`move` needs a place (a variable or its field); other values are already owned by the expression",
-                    ));
+                    return Err(self.err(Code::E0711, ispan, super::MOVE_NEEDS_A_PLACE));
                 }
                 Ok(t)
             }

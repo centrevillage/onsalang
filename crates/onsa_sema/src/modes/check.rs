@@ -10,7 +10,6 @@ use super::MovedLocals;
 use super::flow::Run;
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
-use crate::binding::Bind;
 use crate::body::{BodyInfo, LocalId, generics_of, root_of};
 use crate::def::GenericDef;
 use crate::names::body::{BodyNames, Origin};
@@ -29,8 +28,12 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         if !a.body_checked(id, Stage::Modes) {
             continue;
         }
-        let (Some(module), Some(root)) = (module_of_def(pkg, a, id), root_of(a, id)) else { continue };
-        let (Some(info), Some(names)) = (a.bodies.get(&id), a.names.get(&id)) else { continue };
+        // A body is made with its names, for an item of a module that has
+        // one (`body::check_all`): never without them.
+        let found_all = (module_of_def(pkg, a, id), root_of(a, id), a.bodies.get(&id), a.names.get(&id));
+        let (Some(module), Some(root), Some(info), Some(names)) = found_all else {
+            onsa_diag::internal::bug(Some(a.def(id).span), "a body the modes stage reads with no module, root or names")
+        };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let mut w = Walker::new(a, (&module.parsed.ast, &module.text), names, info, generics_of(a, id));
         w.expr(&mut Run::new(), root, Pos::Return);
@@ -102,7 +105,7 @@ impl<'a> Walker<'a> {
 
     /// Whether the binding `l` can be written as a whole (§5.1).
     pub(super) fn writable(&self, l: LocalId) -> bool {
-        matches!(self.info.locals[l.0 as usize].state, Bind::OwnedMut | Bind::Inout)
+        self.info.locals[l.0 as usize].state.writable()
     }
 
     /// Whether `l` is live in `r` (in a walk that makes a loop's summary,
@@ -118,9 +121,9 @@ impl<'a> Walker<'a> {
         let d = match status {
             Status::Moved { at: m, via_loop } => {
                 let message = if via_loop {
-                    format!(
-                        "`{name}` is moved here in a previous iteration of the loop; assign it before the loop ends (§5.2)"
-                    )
+                    // Only a binding that can be written is live again (S-789).
+                    let assign = if self.writable(l) { "; assign it before the loop ends" } else { "" };
+                    format!("`{name}` is moved here in a previous iteration of the loop{assign} (§5.2)")
                 } else {
                     format!("`{name}` was moved and cannot be used again (§5.2)")
                 };

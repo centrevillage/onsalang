@@ -10,6 +10,7 @@ use super::flow::Run;
 use super::place::place_of;
 use crate::body::LocalId;
 use crate::names::body::PathRes;
+use crate::ty::{Ty, TyId};
 
 /// Where a value stands (§5.2, §5.3): what the walk checks at it. Passed down
 /// to the tails of a block, an `if` and a `match` (§5.2) and through
@@ -29,8 +30,18 @@ pub(super) enum Pos {
     Consume,
     /// `return e` and the tail of a function or anonymous function.
     Return,
+    /// A consuming position with no mark written: the operand of `?`, a
+    /// `move self` receiver (U3a) (S-786, §5.2, §9.1).
+    Extract,
     /// An argument of a call on a value of the error type (§18.1): no check.
     Unknown,
+}
+
+impl Pos {
+    /// A value at it is consumed (§5.2): moved, copied or an error.
+    pub(super) fn consumes(self) -> bool {
+        matches!(self, Pos::Consume | Pos::MoveArg | Pos::Return | Pos::Extract)
+    }
 }
 
 impl Walker<'_> {
@@ -40,12 +51,13 @@ impl Walker<'_> {
         {
             self.m.visits += 1;
         }
-        if self.control(r, e, pos) {
-            return;
-        }
         let ast = self.ast;
-        if matches!(pos, Pos::Consume | Pos::MoveArg | Pos::Return) && place_of(ast, self.names, e).is_some() {
+        // A place goes whole to `consume` (a candidate outside parentheses).
+        if pos.consumes() && place_of(ast, self.names, e).is_some() {
             return self.consume(r, e, pos, None);
+        }
+        if self.control(r, e, pos) || self.out_of_place(r, e, pos) {
+            return;
         }
         match &ast.expr(e).kind {
             ExprKind::Path(_) => {
@@ -61,10 +73,9 @@ impl Walker<'_> {
                     }
                 }
             }
-            ExprKind::Paren(x) | ExprKind::TypeArgs { base: x, .. } => self.expr(r, *x, pos),
-            ExprKind::Move(x) => self.marked(r, e, *x, pos),
             ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.iter().for_each(|&x| self.expr(r, x, Pos::Consume)),
             ExprKind::Struct { fields, .. } => fields.iter().for_each(|&(_, x)| self.expr(r, x, Pos::Consume)),
+            ExprKind::Try(x) => self.expr(r, *x, Pos::Extract),
             ExprKind::Repeat { elem, len } => {
                 self.expr(r, *elem, Pos::Consume);
                 self.expr(r, *len, Pos::Read);
@@ -75,17 +86,36 @@ impl Walker<'_> {
             }
             ExprKind::Call { callee, args, .. } => {
                 self.expr(r, *callee, Pos::Read);
+                let params = match self.info.expr_types.get(callee).map(|&t| self.a.types.get(t)) {
+                    Some(Ty::Fn(f)) if f.params.len() == args.len() => f.params.iter().map(|p| Some(p.1)).collect(),
+                    _ => vec![None; args.len()],
+                };
                 self.lazily(r, e, |w, r| {
-                    for arg in args {
+                    for (arg, param) in args.iter().zip(params) {
                         match arg.mode {
                             Mode::Move => w.consume(r, arg.expr, Pos::MoveArg, Some(arg.span.start)),
-                            m => w.expr(r, arg.expr, Pos::Arg(m)),
+                            m => w.argument(r, arg.expr, m, param),
                         }
                     }
                 });
             }
             _ => ast.sub_exprs(e).into_iter().for_each(|x| self.expr(r, x, Pos::Read)),
         }
+    }
+
+    /// The argument `e` of the mode `m` (not `move`) of a parameter of the
+    /// type `param`, if known: a literal of a second-class type at a borrowed
+    /// one passes its elements on as arguments (memo 2.1, §5.3:
+    /// `planes([a, b])`, `swap.Out { l: a, r: b }`; the type of an array
+    /// literal is that of its elements). `inout [a, b]` is W4-08's.
+    fn argument(&mut self, r: &mut Run, e: ExprId, m: Mode, param: Option<TyId>) {
+        let x = self.ast.without_parens(e);
+        let literal =
+            matches!(self.ast.expr(x).kind, ExprKind::Array(_) | ExprKind::Tuple(_) | ExprKind::Struct { .. });
+        if m == Mode::Borrow && literal && param.and_then(|t| self.class_of(t)).is_some() {
+            return self.ast.sub_exprs(x).into_iter().for_each(|y| self.expr(r, y, Pos::Arg(m)));
+        }
+        self.expr(r, e, Pos::Arg(m))
     }
 
     /// The local `e` names as a whole (through parentheses).

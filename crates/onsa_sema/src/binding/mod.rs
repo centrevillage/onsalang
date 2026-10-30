@@ -49,6 +49,18 @@ pub enum Bind {
     Inout,
 }
 
+impl Bind {
+    /// Owned (§5.4): the binding drops its value unless it moves it on.
+    pub fn owned(self) -> bool {
+        matches!(self, Bind::Owned | Bind::OwnedMut)
+    }
+
+    /// The binding can be written as a whole (§5.1).
+    pub fn writable(self) -> bool {
+        matches!(self, Bind::OwnedMut | Bind::Inout)
+    }
+}
+
 /// A head whose bindings take the row of its value (§5.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Head {

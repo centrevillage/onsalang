@@ -37,7 +37,7 @@ use flow_sig::FlowHeading;
 
 pub(crate) use decls::{Decls, item_kind};
 pub(crate) use types::lower_type_in_body;
-pub(crate) use wellformed::Pos;
+pub(crate) use wellformed::{Pos, second_class};
 
 pub(crate) struct Sema<'p> {
     pub(crate) a: &'p mut Analysis,

@@ -3,6 +3,7 @@
 //! the walk (W8-05 makes it public). U3b adds the projections of a pattern
 //! and the index of §7; W4-08 the views.
 
+use onsa_diag::internal::bug;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
 use crate::body::LocalId;
@@ -28,22 +29,24 @@ pub(super) enum Proj {
 
 /// The place `e` is, through parentheses: a local, and its fields, tuple
 /// elements and elements (§5.2); `None` for any other value (a call, a
-/// literal, a constant, a function item, a block, an `if` or a `match`).
+/// literal, a constant, a function item, a block, an `if` or a `match`). The
+/// form is [`Ast::place_root_node`]'s, the one definition of it.
 pub(super) fn place_of(ast: &Ast, names: &BodyNames, e: ExprId) -> Option<Place> {
-    let x = ast.without_parens(e);
-    let (base, step) = match &ast.expr(x).kind {
-        ExprKind::Path(_) => {
-            let Some(PathRes::Local(b)) = names.paths.get(&x) else { return None };
-            return Some(Place { root: LocalId(b.0), proj: Vec::new() });
-        }
-        ExprKind::Field { base, name } => (*base, Proj::Field(name.name.clone())),
-        ExprKind::TupleIndex { base, index, .. } => (*base, Proj::Elem(*index)),
-        ExprKind::Index { base, .. } => (*base, Proj::Index),
-        _ => return None,
-    };
-    let mut place = place_of(ast, names, base)?;
-    place.proj.push(step);
-    Some(place)
+    let root = ast.place_root_node(e)?;
+    let Some(PathRes::Local(b)) = names.paths.get(&root) else { return None };
+    let (mut proj, mut x) = (Vec::new(), ast.without_parens(e));
+    while x != root {
+        let (base, step) = match &ast.expr(x).kind {
+            ExprKind::Field { base, name } => (*base, Proj::Field(name.name.clone())),
+            ExprKind::TupleIndex { base, index, .. } => (*base, Proj::Elem(*index)),
+            ExprKind::Index { base, .. } => (*base, Proj::Index),
+            _ => bug(Some(ast.expr(x).span), "a step of a place `place_root_node` does not take"),
+        };
+        proj.push(step);
+        x = ast.without_parens(base);
+    }
+    proj.reverse();
+    Some(Place { root: LocalId(b.0), proj })
 }
 
 /// Whether the places `a` and `b` may share a part (§5.2): the same local,

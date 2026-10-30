@@ -101,7 +101,7 @@ impl LocalInfo {
     pub(crate) fn set_state(&mut self, state: Bind) {
         self.state = state;
         self.borrow = matches!(state, Bind::Borrow { .. });
-        self.mutable = matches!(state, Bind::OwnedMut | Bind::Inout);
+        self.mutable = state.writable();
     }
 }
 
@@ -703,6 +703,11 @@ pub(crate) fn starts_at_local(ast: &Ast, names: &crate::names::body::BodyNames, 
     }
     matches!(names.paths.get(&cur), Some(PathRes::Local(_)))
 }
+
+/// The E0711 of `move` on a value that is no place (§5.2, R-198), wherever
+/// it stands: the types stage's and the modes stage's.
+pub(crate) const MOVE_NEEDS_A_PLACE: &str =
+    "`move` needs a place (a variable or its field); other values are already owned by the expression";
 
 /// The base of `e` when `e` is a partial view of it (S-217: `xs.slice(a, b)`):
 /// a call of a builtin method whose type, as `ty` reads it, is a `Span`,

@@ -34,10 +34,15 @@ impl Run {
 }
 
 impl Walker<'_> {
-    /// Walk `e` if it is a form of the control; `false` for any other.
+    /// Walk `e` if it is a form of the control or one that passes `pos` on
+    /// to its tails or operand (§5.2: a block, an `if`, a `match`,
+    /// parentheses, `TypeArgs`, `move`; the one list of those); `false` for
+    /// any other.
     pub(super) fn control(&mut self, r: &mut Run, e: ExprId, pos: Pos) -> bool {
         let ast = self.ast;
         match &ast.expr(e).kind {
+            ExprKind::Paren(x) | ExprKind::TypeArgs { base: x, .. } => self.expr(r, *x, pos),
+            ExprKind::Move(x) => self.marked(r, e, *x, pos),
             ExprKind::Block(b) => {
                 let outer = r.declared.len();
                 b.stmts.iter().for_each(|&s| self.stmt(r, s));
@@ -60,6 +65,9 @@ impl Walker<'_> {
             }
             ExprKind::Match { scrutinee, arms, .. } => {
                 let head = self.head_pos(Head::Match { scrutinee: *scrutinee }, Pos::Arg(Mode::Borrow));
+                if head != Pos::Consume {
+                    self.view_of_inout(*scrutinee, arms.iter().map(|a| a.pat));
+                }
                 self.expr(r, *scrutinee, head);
                 // The state an arm is tried at: no arm before matched, or
                 // one matched and its guard was false.
@@ -83,6 +91,9 @@ impl Walker<'_> {
             // A new frame, walked once by the walk that reports (the
             // captures are U4's); it changes no state outside.
             ExprKind::Closure { body, .. } => {
+                if self.out_of_place(r, e, pos) {
+                    return true;
+                }
                 if self.reports {
                     let outer = replace(r, Run::new());
                     self.expr(r, *body, Pos::Return);
@@ -137,7 +148,13 @@ impl Walker<'_> {
             StmtKind::For { pat, moved, iter, body } => {
                 match moved {
                     true => self.consume(r, *iter, Pos::Consume, Some(ast.expr(*iter).span.start)),
-                    false => self.expr(r, *iter, self.head_pos(Head::For(s), Pos::Arg(Mode::Borrow))),
+                    false => {
+                        let head = self.head_pos(Head::For(s), Pos::Arg(Mode::Borrow));
+                        if head != Pos::Consume {
+                            self.view_of_inout(*iter, [*pat]);
+                        }
+                        self.expr(r, *iter, head)
+                    }
                 }
                 self.run_loop(r, s, (None, Some(*pat), *body));
             }
@@ -210,18 +227,23 @@ impl Walker<'_> {
 
     /// Declare the bindings of the pattern `p`: live (memo 1.3).
     fn declare(&mut self, r: &mut Run, p: PatId) {
+        self.each_local(p, &mut |l| r.declare(l));
+    }
+
+    /// Each local the pattern `p` binds.
+    pub(super) fn each_local(&self, p: PatId, f: &mut dyn FnMut(LocalId)) {
         let ast = self.ast;
         match &ast.pat(p).kind {
             PatKind::Bind(_) => {
                 let Some(&l) = self.info.pat_locals.get(&p) else {
                     bug(Some(ast.pat(p).span), "a binding with no local")
                 };
-                r.declare(l);
+                f(l);
             }
             PatKind::TupleStruct { elems: ps, .. } | PatKind::Tuple(ps) | PatKind::Or(ps) => {
-                ps.iter().for_each(|&q| self.declare(r, q))
+                ps.iter().for_each(|&q| self.each_local(q, f))
             }
-            PatKind::Struct { fields, .. } => fields.iter().for_each(|&(_, q)| self.declare(r, q)),
+            PatKind::Struct { fields, .. } => fields.iter().for_each(|&(_, q)| self.each_local(q, f)),
             PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) => {}
         }
     }

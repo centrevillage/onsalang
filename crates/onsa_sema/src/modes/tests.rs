@@ -25,6 +25,14 @@ pub fn tk(move n: U32) {}
 pub fn ts(move s: Str) uses {Alloc} {}
 pub fn len_of(b: Buf[F32]) -> U32 { b.len() }
 pub const K: U32 = 1
+pub fn rd(xs: Span[F32]) -> U32 { xs.len() }
+pub fn planes(xs: [Span[F32]; 2]) {}
+pub fn apply(g: fn(U32) -> U32) -> U32 { g.(1) }
+pub struct Stereo { l: F32, r: F32 }
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample { Stereo { l: l, r: r } }
+pub fn mkr() -> Result[Buf[F32], U32] uses {Alloc} { Ok(Buf.zeroed(1)) }
+pub fn keep[T: ?Dup](move x: T) {}
+pub fn useout(o: pair.Out) {}
 ";
 
 /// The analysis of the one module `src`. A diagnostic of a stage before
@@ -695,4 +703,331 @@ fn places_overlap() {
     assert!(!overlaps(&p(0, vec![f("a")]), &p(0, vec![f("b")])));
     assert!(!overlaps(&p(0, vec![Proj::Elem(0)]), &p(0, vec![Proj::Elem(1)])));
     assert!(!overlaps(&p(0, vec![]), &p(1, vec![])));
+}
+
+/// The second-class values (memo 2.6, §5.3, §5.4; S-217): a `Span` from a
+/// borrow binds at a borrow row (`let`, `for`), and the name stays
+/// second-class: stored, a `var`, a `Span` of an `inout` parameter or of an
+/// owned row, a `move` of one, are E0710 at the value placed there.
+#[test]
+fn a_span_binds_at_a_borrow_row_only() {
+    let src = "pub fn bound(input: [Span[F32]; 2], xs: Span[F32], n: U32) -> U32 {
+  let ch = input[0]
+  let half = xs.slice(0, n)
+  for c in input { let m = rd(c) }
+  rd(ch) + rd(half) + ch.len() + input[1].len()
+}
+pub fn stored(input: [Span[F32]; 2]) {
+  let ch = input[0]
+  let p = (ch, 1)
+}
+pub fn var_(xs: Span[F32]) {
+  var s = xs
+}
+pub fn of_inout(inout xs: Span[F32], n: U32) {
+  let half = xs.slice(0, n)
+}
+pub fn owned_row(input: [Span[F32]; 2]) {
+  let (l, r) = (input[0], input[1])
+}
+pub fn moved(input: [Span[F32]; 2]) {
+  let ch = move input[0]
+}
+pub fn whole(input: [Span[F32]; 2]) {
+  for c in move input {}
+}
+pub fn returned() {
+  let g = fn(x: Span[F32]) { x }
+}
+pub fn move_arg(xs: Span[F32]) {
+  keep(move xs)
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0710, &[9, 12, 15, 18, 21, 24, 27, 30]));
+}
+
+/// R-334: a generated `Out` is not counted second-class until W7-03 makes
+/// `Rendered` apart from it (`render` returns the type `Out`, and its result
+/// binds, §11.6): it is an Affine value of the table of §5.2 (R-325's
+/// `let k = o` of an `inout` one is E0711 with no candidate, R-117). A
+/// borrow binds the `Span` field of a borrowed one (S-788).
+#[test]
+fn a_generated_value_is_affine_until_w7_03() {
+    let src = "pub fn bound(o: pair.Out) {
+  let k = o
+}
+pub fn of_inout(inout o: pair.Out) {
+  let k = o
+}
+pub fn field(o: pair.Out) -> U32 {
+  let l = o.l
+  rd(l) + l.len() + o.r.len() + rd(o.r)
+}
+pub fn stored(o: pair.Out) {
+  var p = (o, 1)
+}
+pub fn move_arg(o: pair.Out) {
+  keep(move o)
+}
+pub fn returned() {
+  let g = fn(o: pair.Out) { o }
+}
+pub flow gain(x: F32 at sample) -> F32 at sample { x }
+pub fn rendered() -> F32 uses {Alloc} {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = gain.render(gain.Config {}, gain.Params {}, xs, 48000.0)
+  let p = move o
+  p.out[0]
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0711, &[5, 12, 15, 18]));
+}
+
+/// §5.3: an anonymous function that captures stands at an argument only;
+/// one with no capture is a first-class value.
+#[test]
+fn a_closure_that_captures_stands_at_an_argument() {
+    let src = "pub fn bound(k: U32) {
+  let g = fn(i: U32) -> U32 { k * i }
+}
+pub fn argument(k: U32) -> U32 {
+  apply(fn(i: U32) -> U32 { k * i })
+}
+pub fn plain() -> U32 {
+  let g = fn(i: U32) -> U32 { i }
+  apply(g)
+}
+pub fn var_(k: U32) {
+  var g = fn(i: U32) -> U32 { k * i }
+}
+pub fn returned(k: U32) -> fn(U32) -> U32 {
+  fn(i: U32) -> U32 { k * i }
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0710, &[2, 12, 15]));
+}
+
+/// Review of U2a, finding 1 (§5.3): the elements of a planar literal at a
+/// borrowed argument stand at the argument: not moved, used after.
+#[test]
+fn a_planar_literal_at_an_argument_borrows_its_elements() {
+    let src = "pub fn owned() uses {Alloc} {
+  let a = mk()
+  let b = mk()
+  planes([a, b])
+  take(move a)
+  let n = b.len()
+}
+pub fn borrowed(a: Buf[F32], b: Buf[F32]) {
+  planes([a, b])
+}
+pub fn not_planar() uses {Alloc} {
+  let a = mk()
+  take_all([a, mk()])
+}
+";
+    let (_, moved) = seen(src);
+    assert_eq!(
+        fixes(src),
+        [(Code::E0711, 13, vec![("add `move`".to_string(), "take_all([move a, mk()])".to_string())])]
+    );
+    assert_eq!(moved, BTreeSet::from(["a".to_string()]));
+}
+
+/// S-784, S-786 (§9.1, §5.2): the operand of `?` is consumed with no mark:
+/// an owned Affine local moves (E0704 after, and in the next iteration of a
+/// loop), a borrowed or `inout` one is E0711 with no candidate (by the kind
+/// of the whole type), a Dup one and a value that is no place are fine.
+#[test]
+fn the_operand_of_try_is_consumed() {
+    let src = "pub fn twice() -> Result[U32, U32] uses {Alloc} {
+  let r = mkr()
+  let b = r?
+  let c = r?
+  Ok(b.len())
+}
+pub fn after() -> Result[U32, U32] uses {Alloc} {
+  let r = mkr()
+  let b = r?
+  let p = (r, 1)
+  Ok(b.len())
+}
+pub fn borrowed(r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let b = r?
+  Ok(b.len())
+}
+pub fn inout_(inout r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let b = r?
+  Ok(b.len())
+}
+pub fn err_affine(r: Result[U32, Buf[F32]]) -> Result[U32, Buf[F32]] uses {Alloc} {
+  let n = r?
+  Ok(n)
+}
+pub fn dup(r: Result[U32, U32]) -> Result[U32, U32] {
+  let a = r?
+  let b = r?
+  Ok(a + b)
+}
+pub fn call() -> Result[U32, U32] uses {Alloc} {
+  let b = mkr()?
+  Ok(b.len())
+}
+pub fn looped(n: U32) -> Result[U32, U32] uses {Alloc} {
+  let r = mkr()
+  for i in 0 ..< n {
+    let b = r?
+  }
+  Ok(0)
+}
+";
+    let (diags, moved) = seen(src);
+    let e0711 = (Code::E0711, false);
+    assert_eq!(diags, [at(4, MOVED), at(10, MOVED), at(14, e0711), at(18, e0711), at(22, e0711), at(37, BY_LOOP)]);
+    assert_eq!(fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 0);
+    let (pkg, mut a) = analyzed(&format!("{PRELUDE}{src}"));
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    let rules = a.diagnostics[before..].iter().filter(|d| d.code == Code::E0711 && d.span.file == FileId(0));
+    assert!(rules.map(|d| d.notes.len()).eq([1, 1, 1]), "a note to read it with `match`");
+    assert_eq!(moved, BTreeSet::from(["r".to_string()]));
+}
+
+/// The message of each diagnostic the new stage reports for `body`.
+fn messages(body: &str) -> Vec<String> {
+    let src = format!("{PRELUDE}{body}");
+    let (pkg, mut a) = analyzed(&src);
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    a.diagnostics[before..].iter().filter(|d| d.span.file == FileId(0)).map(|d| d.message.clone()).collect()
+}
+
+/// S-789: "assign it before the loop ends" is said of a binding that can be
+/// written only.
+#[test]
+fn the_note_of_a_move_in_a_previous_iteration() {
+    let lets = messages(
+        "pub fn t(n: U32) uses {Alloc} {
+  let b = mk()
+  for i in 0 ..< n { take(move b) }
+}
+",
+    );
+    let vars = messages(
+        "pub fn t(n: U32) uses {Alloc} {
+  var b = mk()
+  for i in 0 ..< n { take(move b) }
+}
+",
+    );
+    assert_eq!(lets, ["`b` is moved here in a previous iteration of the loop (§5.2)"]);
+    assert_eq!(vars, ["`b` is moved here in a previous iteration of the loop; assign it before the loop ends (§5.2)"]);
+}
+
+/// R-198: one message for `move` on a value that is no place, in the types
+/// stage (`let y = move mk()`) and in the modes stage (`take(move mk())`).
+#[test]
+fn one_message_for_a_move_on_no_place() {
+    let modes = messages("pub fn t() uses {Alloc} {\n  take(move mk())\n}\n");
+    let src = format!("{PRELUDE}pub fn t() uses {{Alloc}} {{\n  let y = move mk()\n}}\n");
+    let parsed = onsa_syntax::parse(FileId(0), &src);
+    let modules = vec![crate::Module { segments: vec!["main".into()], file: FileId(0), text: src.clone(), parsed }];
+    let a = crate::analyze(&crate::Package::new("t", modules, vec![crate::flow_tests::std_package()]));
+    let types: Vec<_> = (a.diagnostics.iter()).filter(|d| d.code == Code::E0711).map(|d| d.message.clone()).collect();
+    assert_eq!(modes, [crate::body::MOVE_NEEDS_A_PLACE]);
+    assert_eq!(types, [crate::body::MOVE_NEEDS_A_PLACE]);
+}
+
+/// A `var` declared in a block of a loop and left by `break` (memo 1.3:
+/// `forget` at the end of its block, `revive` at its declaration, `join` at
+/// the exit): live at each iteration, gone after the loop; a move of an
+/// outer binding on the path of the `break` is seen after the loop.
+#[test]
+fn a_var_of_a_block_left_by_break() {
+    let src = "pub fn t(n: U32) uses {Alloc} {
+  var i: U32 = 0
+  while i < n {
+    var v = mk()
+    if i == 1 {
+      take(move v)
+      break
+    }
+    take(move v)
+    i = i + 1
+  }
+}
+pub fn u(n: U32) uses {Alloc} {
+  let b = mk()
+  var i: U32 = 0
+  while i < n {
+    var v = mk()
+    if i == 1 {
+      take(move b)
+      break
+    }
+    take(move v)
+    i = i + 1
+  }
+  let k = b.len()
+}
+";
+    assert_eq!(diags(src), [at(25, MOVED)]);
+}
+
+/// S-217: a `for` or `match` head (a borrow row) on a place of an `inout`
+/// parameter binds no `Span` (E0710 at the value); one that binds none (`_`,
+/// the elements of a `Span`) is fine, and so is one on a borrow (§5.3, §5.4).
+#[test]
+fn a_head_on_an_inout_parameter_binds_no_span() {
+    let src = "pub fn for_arr(inout xs: [Span[F32]; 2]) {
+  for s in xs { let n = rd(s) }
+}
+pub fn match_span(inout xs: Span[F32]) -> U32 {
+  match xs { s => rd(s) }
+}
+pub fn match_idx(inout xs: [Span[F32]; 2]) -> U32 {
+  match xs[0] { s => rd(s) }
+}
+pub fn match_view(inout xs: Span[F32], n: U32) -> U32 {
+  match xs.slice(0, n) { s => rd(s) }
+}
+pub fn wild(inout xs: Span[F32]) -> U32 {
+  match xs { _ => 1 }
+}
+pub fn elements(inout xs: Span[F32], n: U32) -> F32 {
+  var t: F32 = 0.0
+  for v in xs { t = t + v }
+  for v in xs.slice(0, n) { t = t + v }
+  t
+}
+pub fn borrowed(xs: [Span[F32]; 2], n: U32) -> U32 {
+  for s in xs { let m = rd(s) }
+  match xs[0].slice(0, n) { s => rd(s) }
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0710, &[2, 5, 8, 11]));
+}
+
+/// S-784: the note of `?` is of an element of an array and of a borrowed or
+/// `inout` Affine place, not of a field of an owned value (S-85, W4-09).
+#[test]
+fn the_note_of_try_on_a_field() {
+    let src = "pub struct W { r: Result[Buf[F32], U32] }
+pub fn field(move w: W) -> Result[U32, U32] uses {Alloc} {
+  let a = w.r?
+  Ok(a.len())
+}
+pub fn element(move w: [Result[Buf[F32], U32]; 2]) -> Result[U32, U32] uses {Alloc} {
+  let a = w[0]?
+  Ok(a.len())
+}
+";
+    let (pkg, mut a) = analyzed(&format!("{PRELUDE}{src}"));
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    let notes: Vec<_> = (a.diagnostics[before..].iter())
+        .filter(|d| d.span.file == FileId(0))
+        .map(|d| (d.code, d.notes.len()))
+        .collect();
+    assert_eq!(notes, [(Code::E0711, 0), (Code::E0711, 1)]);
 }

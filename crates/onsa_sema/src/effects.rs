@@ -9,7 +9,6 @@ use std::collections::HashSet;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprKind, ItemKind, Lit, StmtKind, StrSeg};
 
-use crate::binding::Bind;
 use crate::body::Target;
 use crate::def::DefKind;
 use crate::modes::MovedLocals;
@@ -87,7 +86,7 @@ fn first_use(
     }
     // Drops (§12.2): owned values whose destruction needs `Alloc`, unless moved on.
     for (i, l) in body.locals.iter().enumerate() {
-        let owned = matches!(l.state, Bind::Owned | Bind::OwnedMut);
+        let owned = l.state.owned();
         if !owned || moved.is_some_and(|m| m.contains(&crate::body::LocalId(i as u32))) {
             continue;
         }
