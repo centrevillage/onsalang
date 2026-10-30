@@ -75,7 +75,8 @@ impl Walker<'_> {
         if whole {
             r.cur.revive(l);
         } else if !live {
-            return;
+            // Its E0704 above; overlapping another argument, the E0702 at it, first (S-799).
+            return self.record(&place, at);
         }
         self.change(r, place, at, how != How::Assign);
     }
@@ -83,9 +84,18 @@ impl Walker<'_> {
     /// The place `w` changes at `at`, now or (of a `direct` argument) after
     /// the call (§7, S-796: `g(inout o, len_of(b))` reads `b` before it).
     pub(super) fn change(&mut self, r: &mut Run, w: Place, at: Span, direct: bool) {
+        self.record(&w, at);
         match direct {
             true => self.inside.after_call.push((w, at)),
             false => self.changed(r, &w, at),
+        }
+    }
+
+    /// The change of `w` at `at`, in the arguments of a call, to compare
+    /// with the places of the calls it is in (S-799).
+    pub(super) fn record(&mut self, w: &Place, at: Span) {
+        if self.reports && self.inside.calls > 0 {
+            self.inside.changes.push((w.clone(), at));
         }
     }
 

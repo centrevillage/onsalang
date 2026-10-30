@@ -1,0 +1,35 @@
+// The declarations of another module for main.onsa: the modes of the parameters and the receiver (`inout`,
+// borrowed, `move`, `inout self`) are theirs, and decide the changes inside the arguments of a call (§5.2, §15.1).
+
+pub struct Pos {
+  x: U32,
+  y: U32,
+}
+
+impl Pos {
+  pub fn bump(inout self) -> U32 {
+    self.x = self.x + 1
+    self.x
+  }
+
+  pub fn add(inout self, k: U32) {
+    self.x = self.x + k
+  }
+}
+
+pub fn bump_n(inout n: U32) -> U32 {
+  n = n + 1
+  n
+}
+
+pub fn copy_after(m: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  1
+}
+
+pub fn len_after(b: Buf[F32], k: U32) -> U32 {
+  k
+}

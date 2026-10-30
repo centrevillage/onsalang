@@ -1032,13 +1032,6 @@ note = "process_inplace の生成の条件と、flow の名前空間に無い項
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/modes_span_element_nested.onsa"
-reasons = ["S-193"]
-until = "W4-08"
-note = "他の引数の中の inout が E0702 にならない"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/enum_variant_values.onsa"
 reasons = ["S-191", "S-71"]
 until = "W5-03"

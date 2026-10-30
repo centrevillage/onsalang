@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§3.5"]
+// fixes = 0
+
+// S-796 widened to the changes inside other arguments (§5.2, §3.5): "Copy でない借用束縛（`match` の腕の束縛と、
+// そこから派生した束縛、§5.4）とその経路は、派生元の場所として重なりを見る" and "他の引数の中で `inout` に渡すか
+// `!` を呼ぶと重なる". A borrowed binding that is not Copy counts as the place it is derived from, so passing it
+// as an argument of a call in which another argument changes that place by an `inout` or a `!` call (also in a
+// nested call) is an E0702 in either order, at the later written of the change and the other argument. The binding derived from it (`let c = b`)
+// and its path (`hh.buf`) count the same. There is no repair candidate (`fixes = 0`). The direct `inout` of the
+// place is in negative/overlap_args_derived.onsa, the forms that do not overlap are in
+// values/overlap_args_inner_ok.onsa. One error per function (P-01).
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl W {
+  pub fn bump(inout self) -> U32 {
+    self.n = self.n + 1
+    self.n
+  }
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Wrap {
+  a: Option[Buf[F32]],
+  h: Holder,
+}
+
+pub fn f(b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn fr(k: U32, b: Buf[F32]) -> U32 {
+  k
+}
+
+pub fn drop_opt(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  o = None
+  1
+}
+
+pub fn drop_buf(inout b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn reset_holder(inout h: Holder) -> U32 {
+  h.n = 0
+  h.n
+}
+
+pub fn pass(k: U32) -> U32 {
+  k
+}
+
+// ------------------------------------------------------------ `inout` inside another argument
+
+pub fn borrowed_then_inout_in_an_argument(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => f(b, drop_opt(inout o)), //~ E0702
+    None => 0,
+  }
+}
+
+pub fn inout_in_an_argument_then_borrowed(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fr(drop_opt(inout o), b), //~ E0702
+    None => 0,
+  }
+}
+
+pub fn a_local_variable() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(Buf.zeroed(2))
+  match o {
+    Some(b) => f(b, drop_opt(inout o)), //~ E0702
+    None => 0,
+  }
+}
+
+pub fn a_derived_binding(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      f(c, drop_opt(inout o)) //~ E0702
+    },
+    None => 0,
+  }
+}
+
+pub fn inout_in_a_nested_call(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => f(b, pass(pass(drop_opt(inout o)))), //~ E0702
+    None => 0,
+  }
+}
+
+pub fn the_payload_of_a_field(inout w: Wrap) -> U32 uses {Alloc} {
+  match w.a {
+    Some(b) => f(b, drop_opt(inout w.a)), //~ E0702
+    None => 0,
+  }
+}
+
+pub fn the_element_of_a_tuple_pattern(inout p: (Buf[F32], Buf[F32])) -> U32 {
+  match p {
+    (a, _) => f(a, drop_buf(inout p.0)), //~ E0702
+  }
+}
+
+pub fn the_path_of_a_binding(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { a: _, h: hh } => f(hh.buf, reset_holder(inout w.h)), //~ E0702
+  }
+}
+
+pub fn the_binding_in_an_arm_of_the_argument(inout o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => f(b, if c { drop_opt(inout o) } else { 0 }), //~ E0702
+    None => 0,
+  }
+}
+
+// ------------------------------------------------------------ the `!` call inside another argument
+
+pub fn borrowed_then_bang_in_an_argument(inout w: W) -> U32 {
+  match w {
+    W { buf: bb, n: _ } => f(bb, w.bump!()), //~ E0702
+  }
+}
+
+pub fn bang_in_an_argument_then_borrowed(inout w: W) -> U32 {
+  match w {
+    W { buf: bb, n: _ } => fr(w.bump!(), bb), //~ E0702
+  }
+}
+
+pub fn bang_in_a_nested_call(inout w: W) -> U32 {
+  match w {
+    W { buf: bb, n: _ } => f(bb, pass(w.bump!())), //~ E0702
+  }
+}
+
+pub fn a_derived_binding_and_a_bang_call(inout w: W) -> U32 {
+  match w {
+    W { buf: bb, n: _ } => {
+      let c = bb
+      f(c, w.bump!()) //~ E0702
+    },
+  }
+}

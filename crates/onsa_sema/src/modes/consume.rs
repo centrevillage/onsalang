@@ -55,8 +55,8 @@ impl Walker<'_> {
         let Some(&ty) = self.info.expr_types.get(&x) else {
             onsa_diag::internal::bug(Some(at), "a consumed place with no type")
         };
-        // Not live (E0704 above), or the error type.
-        let Some(kind) = self.kind_of(ty).filter(|_| live) else { return };
+        // The error type. Not live, its E0704 above (and a move recorded only, S-799).
+        let Some(kind) = self.kind_of(ty) else { return };
         let (text, local) = (self.text, &self.info.locals[l.0 as usize]);
         let (name, root) = (&text[at.start as usize..at.end as usize], &local.name);
         let plain = |message: String| Diagnostic::new(Stage::Modes, Code::E0711, at, message);
@@ -107,10 +107,13 @@ impl Walker<'_> {
                 .with_fix(self.add_move(e)),
                 // An erroneous move (E0712 at the anonymous function) moves nothing.
                 _ if self.captured(l) => return,
+                _ if !live => return self.record(&place, at),
                 _ => return self.move_local(r, l, at, direct),
             },
         };
-        self.report(d);
+        if live {
+            self.report(d);
+        }
     }
 
     /// `move e` at `pos` (`e` its operand): consumed where a value is, else

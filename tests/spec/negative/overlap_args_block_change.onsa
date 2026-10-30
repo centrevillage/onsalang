@@ -1,0 +1,307 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§7"]
+// fixes = 0
+
+// S-799 (§3.5, §5.2): "変更は §7 と同じく、代入、`inout` への受け渡し、`!` の呼び出し、`move` で、引数に置いた
+// ブロック式や `if`・`match` の腕の中の文と、入れ子の呼び出しの引数を含む（`f(b, { o = None … })`、
+// `f(x, take(move x))`）" and "引数に置いたブロック式や腕の中の代入と `move`、入れ子の呼び出しの `move` の引数も
+// 同じ変更で、引数の順によらず E0702 である（`fn2(b, { o = None … })`。Copy の `var` を借用の引数に渡す
+// `h(m, { m = 5 … })` も）。変更が実行されない道（`if` の片方の腕、ループの本体、`&&` の右辺）にあっても数える".
+// An assignment in a block (also in the arm of an `if` or a `match`, a loop body, the right side of `&&`, and a
+// nested call) placed as an argument overlaps the other arguments and the receiver of the call that touch the
+// same place (a borrowed binding derived from it, the variable itself, a field, an element), in either order of
+// the arguments. A path that is not taken counts too. The error is at the later written of the change and the other argument
+// (S-799: the assigned place of the change, `o` of `o = None`, or the other argument `b`), E0702 (and not
+// the E0704 of §7 at the same place); there is no repair candidate (`fixes = 0`). The moves in arguments
+// are in negative/overlap_args_inner_move.onsa, the forms that do not overlap in
+// values/overlap_args_block_change_ok.onsa. One error per function (P-01).
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+  m: U32,
+}
+
+impl W {
+  pub fn step(inout self, k: U32) {
+    self.n = self.n + k
+  }
+}
+
+pub fn fn2(b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn fn2r(k: U32, b: Buf[F32]) -> U32 {
+  k
+}
+
+pub fn fcond(b: Buf[F32], c: Bool) -> U32 {
+  1
+}
+
+pub fn hc(m: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn hcr(k: U32, m: U32) -> U32 {
+  k
+}
+
+pub fn w_after(w: W, k: U32) -> U32 {
+  k
+}
+
+pub fn pass(k: U32) -> U32 {
+  k
+}
+
+// ------------------------------------------ a borrowed binding derived from the changed variable
+
+pub fn block_after_a_derived_borrow(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, {
+      o = None //~ E0702
+      1
+    }),
+    None => 0,
+  }
+}
+
+pub fn block_before_a_derived_borrow(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2r({
+      o = None
+      1
+    }, b), //~ E0702
+    None => 0,
+  }
+}
+
+pub fn a_binding_derived_from_a_binding(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      fn2(c, {
+        o = None //~ E0702
+        1
+      })
+    },
+    None => 0,
+  }
+}
+
+pub fn the_block_in_a_nested_call(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, pass({
+      o = None //~ E0702
+      1
+    })),
+    None => 0,
+  }
+}
+
+// ------------------------------------------------------- the variable, a field and an element
+
+pub fn the_variable_itself(inout x: Buf[F32]) -> U32 uses {Alloc} {
+  fn2(x, {
+    x = Buf.zeroed(2) //~ E0702
+    1
+  })
+}
+
+pub fn the_variable_itself_in_the_other_order(inout x: Buf[F32]) -> U32 uses {Alloc} {
+  fn2r({
+    x = Buf.zeroed(2)
+    1
+  }, x) //~ E0702
+}
+
+pub fn the_whole_and_an_assigned_field(inout w: W) -> U32 {
+  w_after(w, {
+    w.n = 5 //~ E0702
+    1
+  })
+}
+
+pub fn receiver_and_an_assigned_field(inout w: W) {
+  w.step!({
+    w.n = 5 //~ E0702
+    1
+  })
+}
+
+pub fn receiver_and_an_assigned_element(inout xs: [F32; 4]) {
+  xs.fill!({
+    xs[0] = 1.0 //~ E0702
+    2.0
+  })
+}
+
+// --------------------------------------------------- the arm of an `if` and a `match` as an argument
+
+pub fn change_in_an_if_arm(inout o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, if c {
+      o = None //~ E0702
+      1
+    } else {
+      2
+    }),
+    None => 0,
+  }
+}
+
+pub fn change_in_the_else_arm(inout o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, if c {
+      2
+    } else {
+      o = None //~ E0702
+      1
+    }),
+    None => 0,
+  }
+}
+
+pub fn change_in_a_match_arm(inout o: Option[Buf[F32]], p: Option[U32]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, match p {
+      Some(k) => k,
+      None => {
+        o = None //~ E0702
+        1
+      },
+    }),
+    None => 0,
+  }
+}
+
+pub fn change_in_an_if_arm_before_the_binding(inout o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2r(if c {
+      o = None
+      1
+    } else {
+      2
+    }, b), //~ E0702
+    None => 0,
+  }
+}
+
+// ---------------------------------------- a path that is not taken: a loop body and `&&`
+
+pub fn change_in_a_loop_body(inout o: Option[Buf[F32]], n: U32) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, {
+      for _ in 0 ..< n {
+        o = None //~ E0702
+      }
+      1
+    }),
+    None => 0,
+  }
+}
+
+pub fn change_in_a_while_body(inout o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, {
+      while c {
+        o = None //~ E0702
+      }
+      1
+    }),
+    None => 0,
+  }
+}
+
+pub fn change_on_the_right_of_an_and(inout o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fcond(b, c && ({
+      o = None //~ E0702
+      true
+    })),
+    None => 0,
+  }
+}
+
+pub fn change_in_an_arm_that_is_never_taken(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, if false {
+      o = None //~ E0702
+      1
+    } else {
+      2
+    }),
+    None => 0,
+  }
+}
+
+// -------------------------------------------------------- a Copy `var` passed as a borrowed argument
+
+pub fn a_copy_variable_then_an_assignment() -> U32 {
+  var m: U32 = 1
+  hc(m, {
+    m = 5 //~ E0702
+    1
+  })
+}
+
+pub fn an_assignment_then_a_copy_variable() -> U32 {
+  var m: U32 = 1
+  hcr({
+    m = 5
+    1
+  }, m) //~ E0702
+}
+
+pub fn a_copy_parameter_then_an_assignment(inout m: U32) -> U32 {
+  hc(m, {
+    m = 5 //~ E0702
+    1
+  })
+}
+
+// ----------------------------------------------------------------------------------- combinations
+
+pub fn in_a_for_loop(inout o: Option[Buf[F32]], n: U32) -> U32 uses {Alloc} {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    match o {
+      Some(b) => {
+        t = t + fn2(b, {
+          o = None //~ E0702
+          i
+        })
+      },
+      None => {},
+    }
+  }
+  t
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn in_an_anonymous_function() -> U32 {
+  apply(fn(n) {
+    var v = n
+    hc(v, {
+      v = 5 //~ E0702
+      1
+    })
+  })
+}
+
+pub fn generic_pass[T](a: T, k: U32) -> U32 {
+  k
+}
+
+pub fn a_generic_callee(inout m: U32) -> U32 {
+  generic_pass(m, {
+    m = 5 //~ E0702
+    1
+  })
+}

@@ -1,0 +1,3 @@
+[package]
+name = "overlap_inner_pkg"
+edition = "2026"

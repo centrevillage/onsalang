@@ -2,11 +2,12 @@
 // [test]
 // spec = ["§3.5", "§5.2", "§5.3"]
 
-// E0702 for a change in an argument of a call whose receiver is an element `xs[k]` (S-181, §3.5):
-// "他の引数の中で変更すると E0702（`f(inout x, g(inout x))`、`xs.fill!(g(inout xs))`）. 変更は、`inout` への
-// 受け渡しと `!` の呼び出しである". The receiver `xs[0]` of `fill!` is `inout`, and the argument changes
-// the same array through `xs[1]` (the indices of one array are taken to overlap, §5.2). One error
-// per function (P-01).
+// E0702 for a change in an argument of a call whose receiver is an element `xs[k]` (S-193, S-181, §3.5):
+// "その間に `inout` の場所を読むだけなら重ならない（`xs.fill!(xs.len())` は書ける）が、他の引数の中で変更すると E0702
+// （`f(inout x, g(inout x))`、`xs.fill!(g(inout xs))`）。変更は §7 と同じく、代入、`inout` への受け渡し、`!` の
+// 呼び出し、`move` で、…入れ子の呼び出しの引数を含む". The receiver `xs[0]` of `fill!` is `inout`, and the
+// argument changes the same array through `xs[1]` (the indices of one array are taken to overlap, §5.2). The
+// flat variables are in negative/overlap_args_inner_inout.onsa. One error per function (P-01).
 
 fn bump(inout s: Span[F32]) -> F32 {
   s.fill!(1.0)

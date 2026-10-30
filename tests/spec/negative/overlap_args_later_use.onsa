@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§3.5"]
+// fixes = 0
+
+// S-799 (§7, §3.5): "引数の評価の中の文の変更（ブロック式や腕の中の代入と `move`）は書いた位置で効き（後の引数で
+// 値を作るだけの `b.len()` は E0704）、同じ呼び出しの他の引数との重なりは E0702 である（`f({ o = None … }, b)`）".
+// A change made inside an argument (an assignment in a block, a `move`) takes effect where it is written, so an
+// argument written after it that only makes a value from a binding derived from the changed place (`b.len()`) is
+// not a place of the call to overlap; it is a use of the binding after the change, E0704, at the use (and not an
+// E0702). The same holds for a `move` of a variable and a later read of it (`take2(move b, b.len())` in §5.2),
+// and for a binding used after a nested call that changed its place (the nested call has ended, S-796). The
+// forms in which the later argument is the place itself (`f({ o = None … }, b)`) are E0702, in
+// negative/overlap_args_block_change.onsa. There is no repair candidate (`fixes = 0`). One error per function
+// (P-01).
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl W {
+  pub fn bump(inout self) -> U32 {
+    self.n = self.n + 1
+    self.n
+  }
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  1
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn fk(k: U32, n: U32) -> U32 {
+  k + n
+}
+
+pub fn drop_opt(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  o = None
+  1
+}
+
+pub fn a_block_then_the_length_of_the_binding(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fk({
+      o = None
+      1
+    }, b.len()), //~ E0704
+    None => 0,
+  }
+}
+
+pub fn a_block_then_the_length_of_a_derived_binding(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      fk({
+        o = None
+        1
+      }, c.len()) //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn an_arm_then_the_length_of_the_binding(inout o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fk(if c {
+      o = None
+      1
+    } else {
+      2
+    }, b.len()), //~ E0704
+    None => 0,
+  }
+}
+
+pub fn a_nested_move_then_the_length_of_the_variable(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fk(take(move x), x.len()) //~ E0704
+}
+
+pub fn a_move_in_a_block_then_the_length_of_the_variable(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fk({
+    eat(move x)
+    1
+  }, x.len()) //~ E0704
+}
+
+pub fn a_nested_inout_then_the_length_of_the_binding(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fk(drop_opt(inout o), b.len()), //~ E0704
+    None => 0,
+  }
+}
+
+pub fn a_nested_bang_then_the_length_of_the_binding(inout w: W) -> U32 {
+  match w {
+    W { buf: bb, n: _ } => fk(w.bump!(), bb.len()), //~ E0704
+  }
+}

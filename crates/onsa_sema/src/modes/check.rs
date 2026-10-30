@@ -83,6 +83,10 @@ pub(super) struct Inside {
     /// An argument that overlaps an earlier one of its call (E0702), and
     /// the call: its root is not reported as used after a move in the call.
     pub(super) excuse: Option<(LocalId, Span)>,
+    /// The changes made in the arguments of the calls the walk is in, and
+    /// how many those calls are (S-193, S-799: `exclusive.rs`).
+    pub(super) changes: Vec<(Place, Span)>,
+    pub(super) calls: u32,
 }
 
 /// Why a place cannot be used: its root moved (at, by the loop), or it

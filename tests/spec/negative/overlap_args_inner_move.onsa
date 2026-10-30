@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2"]
+// fixes = 0
+
+// S-799 (§3.5, §5.2): "変更は §7 と同じく、代入、`inout` への受け渡し、`!` の呼び出し、`move` で、…入れ子の呼び出しの
+// 引数を含む（`f(x, take(move x))`）" and "入れ子の呼び出しの `move` の引数も同じ変更で、引数の順によらず E0702
+// である（`fn2(x, take(move x))`）". "ブロックの末尾の式（`if` と `match` の腕）は、そのブロックが置かれた位置を継ぐ。
+// …`take(if c { move a } else { move b })`" and "`move` の引数に渡す場所が、同じ呼び出しの他の引数の場所と重なる
+// ときも E0702". A `move` that stands in another argument of the call (in a nested call, in the arm of an `if` or
+// a `match`, in a block) overlaps the places of the other arguments in either order, also on a path that is not
+// taken. The error is at the later written of the change and the other argument (the `x` of `move x`, or the other
+// argument); there is no repair candidate (`fixes = 0`). The direct
+// `move` of an argument (`h(x, move x)`) is in negative/overlap_args_move.onsa, and the `move` of a field path
+// (an E0711 today) in negative/overlap_args_move_field.onsa. A direct `move` argument and a change of the same
+// place in a later argument is E0702 too, not the E0704 of a use after the move (the order of the arguments does
+// not matter). The forms that do not overlap are in
+// values/overlap_args_inner_move_ok.onsa.
+// One error per function (P-01).
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  1
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn take_opt(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  1
+}
+
+pub fn pass(k: U32) -> U32 {
+  k
+}
+
+pub fn fn2(b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn fn2r(k: U32, b: Buf[F32]) -> U32 {
+  k
+}
+
+pub fn io_after(inout b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn hbm(a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  1
+}
+
+// ---------------------------------------------------------------- a `move` in a nested call
+
+pub fn borrowed_then_a_nested_move(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fn2(x, take(move x)) //~ E0702
+}
+
+pub fn a_nested_move_then_borrowed(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fn2r(take(move x), x) //~ E0702
+}
+
+pub fn inout_then_a_nested_move() -> U32 uses {Alloc} {
+  var x = Buf.zeroed(2)
+  io_after(inout x, take(move x)) //~ E0702
+}
+
+pub fn a_move_in_a_call_in_a_call(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fn2(x, pass(take(move x))) //~ E0702
+}
+
+pub fn a_derived_binding_and_a_nested_move(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fn2(b, take_opt(move o)), //~ E0702
+    None => 0,
+  }
+}
+
+// -------------------------------------------- a `move` at the end of an arm, and on a path not taken
+
+pub fn a_move_in_the_if_arm(move x: Buf[F32], move y: Buf[F32], c: Bool) -> U32 uses {Alloc} {
+  hbm(x, if c { move x } else { move y }) //~ E0702
+}
+
+pub fn a_move_in_the_else_arm(move x: Buf[F32], move y: Buf[F32], c: Bool) -> U32 uses {Alloc} {
+  hbm(x, if c { move y } else { move x }) //~ E0702
+}
+
+pub fn a_move_in_a_match_arm(move x: Buf[F32], move y: Buf[F32], p: Option[U32]) -> U32 uses {Alloc} {
+  hbm(x, match p { Some(_) => move y, None => move x }) //~ E0702
+}
+
+pub fn a_nested_move_in_an_arm_not_taken(move x: Buf[F32], c: Bool) -> U32 uses {Alloc} {
+  fn2(x, if c { take(move x) } else { 0 }) //~ E0702
+}
+
+pub fn a_move_in_a_block(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fn2(x, {
+    eat(move x) //~ E0702
+    1
+  })
+}
+
+pub fn a_move_in_a_block_before_the_borrow(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fn2r({
+    eat(move x)
+    1
+  }, x) //~ E0702
+}
+
+// ------------------------------------------- a direct `move` argument and a change in a later argument
+
+pub fn tk2(move b: Buf[F32], k: U32) -> U32 uses {Alloc} {
+  k
+}
+
+pub fn bump(inout b: Buf[F32]) -> U32 {
+  1
+}
+
+pub fn a_direct_move_then_inout_in_an_argument() -> U32 uses {Alloc} {
+  var x = Buf.zeroed(2)
+  tk2(move x, bump(inout x)) //~ E0702
+}
+
+pub fn a_direct_move_then_a_nested_move() -> U32 uses {Alloc} {
+  var x = Buf.zeroed(2)
+  tk2(move x, take(move x)) //~ E0702
+}
+
+pub fn a_direct_move_then_an_assignment_in_a_block() -> U32 uses {Alloc} {
+  var x = Buf.zeroed(2)
+  tk2(move x, {
+    x = Buf.zeroed(3) //~ E0702
+    1
+  })
+}

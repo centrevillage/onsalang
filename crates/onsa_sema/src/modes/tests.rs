@@ -2893,3 +2893,132 @@ fn a_chain_of_two_sources_does_not_grow() {
     let all: Vec<_> = all_said(&src[PRELUDE.len()..]).into_iter().map(|(c, t, _, _)| (c, t)).collect();
     assert_eq!(all, [(Code::E0702, "s".to_string()), (Code::E0704, format!("t{last}.a"))]);
 }
+
+/// S-799 (§3.5): the body of an anonymous function in an argument is not
+/// evaluated with the arguments: its changes leave the record of the calls
+/// the walk is in (here one, set before the walk), those around it stay.
+#[test]
+fn the_body_of_an_anonymous_function_is_not_in_the_window() {
+    let src = format!(
+        "{PRELUDE}pub fn cl() -> U32 {{
+  var k: U32 = 1
+  k = 2
+  apply(fn(v: U32) -> U32 {{
+    var j = v
+    j = 3
+    j
+  }})
+}}
+"
+    );
+    let (pkg, a) = analyzed(&src);
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "cl").expect("the function");
+    let root = crate::body::root_of(&a, id).expect("a body");
+    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
+    let mut w = Walker::new(&a, (ast, &src), (&a.names[&id], &a.bodies[&id], root), Vec::new());
+    w.inside.calls = 1;
+    w.expr(&mut Run::new(), root, Pos::Return);
+    let changed: Vec<_> = w.inside.changes.iter().map(|(_, at)| &src[at.start as usize..at.end as usize]).collect();
+    assert_eq!(changed, ["k"]);
+    assert!(w.m.found.is_empty(), "{:?}", w.m.found);
+}
+
+/// S-193, S-799 (§3.5): two changes in the arguments of one call are not
+/// compared with one another (`ys[next(inout k)] = next(inout k)` is the
+/// same), and a change made out of the arguments is in no window.
+#[test]
+fn changes_are_not_compared_with_one_another() {
+    let src = "pub fn nx(inout k: U32) -> U32 { k }
+pub fn hk(a: U32, b: U32) -> U32 { a + b }
+pub fn two() -> U32 {
+  var k: U32 = 1
+  hk(nx(inout k), nx(inout k))
+}
+pub fn out_of_the_call() -> U32 {
+  var k: U32 = 1
+  let v = nx(inout k)
+  hk(k, v)
+}
+";
+    assert_eq!(overlapping(src), []);
+}
+
+/// S-193, S-799 (§3.5): a change deep in nested calls is in the window of
+/// each call around it, at the innermost argument; the walk does not grow
+/// with the depth. Deeper than 20 levels: on a large stack (rules 3.4).
+#[test]
+fn a_change_deep_in_nested_calls() {
+    const DEPTH: usize = 40;
+    let run = || {
+        let mut body = String::from(
+            "pub fn nx(inout k: U32) -> U32 { k }\npub fn id(v: U32) -> U32 { v }\npub fn hk(a: U32, b: U32) -> U32 { a + b }\n",
+        );
+        body.push_str("pub fn deep() -> U32 {\n  var k: U32 = 1\n  hk(k, ");
+        body.push_str(&"id(".repeat(DEPTH));
+        body.push_str("nx(inout k)");
+        body.push_str(&")".repeat(DEPTH));
+        body.push_str(")\n}\n");
+        overlapping(&body)
+    };
+    let found = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+    assert_eq!(found, [(Code::E0702, 6, vec![6])]);
+}
+
+/// S-799 (§3.5, §5.2): the E0702 of a change in another argument stands at
+/// the later of the change and the argument it overlaps, noted at the
+/// earlier one, at the binding the argument derives from (S-796) and at a
+/// Dup value copied to a `move` parameter (S-801); a change after a direct
+/// `move` of its place is that E0702 too, not the E0704 of the move.
+#[test]
+fn the_notes_of_a_change_in_another_argument() {
+    let src = "pub fn nx(inout k: U32) -> U32 { k }
+pub fn hk(a: U32, b: U32) -> U32 { a + b }
+pub fn mm(move a: U32, b: U32) -> U32 { a + b }
+pub fn bn(b: Buf[F32], n: U32) -> U32 { n }
+pub fn iol(inout b: Buf[F32]) -> U32 { 1 }
+pub fn tk2(move b: Buf[F32], n: U32) -> U32 uses {Alloc} { n }
+pub fn change_later() -> U32 {
+  var k: U32 = 1
+  hk(k,
+    nx(inout k))
+}
+pub fn change_first() -> U32 {
+  var k: U32 = 1
+  hk(nx(inout k),
+    k)
+}
+pub fn derived() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => bn(b,
+      gn(inout o, 1)),
+    None => 0,
+  }
+}
+pub fn copied() -> U32 {
+  var n: U32 = 1
+  mm(n,
+    nx(inout n))
+}
+pub fn moved_first() -> U32 uses {Alloc} {
+  var x = mk()
+  tk2(move x,
+    iol(inout x))
+}
+";
+    let found = overlapping(src);
+    let expected = [
+        (Code::E0702, 10, vec![9]),
+        (Code::E0702, 15, vec![14]),
+        (Code::E0702, 21, vec![20, 20]),
+        (Code::E0702, 28, vec![27, 27]),
+        (Code::E0702, 33, vec![32]),
+    ];
+    assert_eq!(found, expected);
+    let messages = writes(&format!("{OVERLAPS}{src}"));
+    let says = |i: usize, s: &str| assert!(messages[i].2.contains(s), "{}", messages[i].2);
+    says(0, "`k` is changed in another argument while `k` is passed borrowed in the same call");
+    says(2, "`o` is changed in another argument while `b` is passed borrowed in the same call");
+    says(4, "`x` is changed in another argument while `x` is passed as `move` in the same call");
+    assert!(messages.iter().all(|m| m.3.is_empty()), "no candidate: {messages:?}");
+}

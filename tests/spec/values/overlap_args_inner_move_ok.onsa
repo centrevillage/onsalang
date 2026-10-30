@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2"]
+
+// S-799 (§3.5, §5.2): the calls with a `move` inside an argument that are not an overlap, next to the errors of
+// negative/overlap_args_inner_move.onsa. A `move` that stands in another argument (in a nested call, in the arm of
+// an `if` or a `match`, in a block) overlaps only the other arguments that are places of the variable moved: a
+// `move` of another variable, in either order and on every path, does not; a value read from the variable before
+// the move (`x.len()`, evaluated first) does not either.
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  1
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn pass(k: U32) -> U32 {
+  k
+}
+
+pub fn fn2(b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn fn2r(k: U32, b: Buf[F32]) -> U32 {
+  k
+}
+
+pub fn fk(k: U32, n: U32) -> U32 {
+  k + n
+}
+
+pub fn io_after(inout b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn hbm(a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  1
+}
+
+pub fn the_move_of_another_variable(x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  fn2(x, take(move y))
+}
+
+pub fn the_move_of_another_variable_first(x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  fn2r(take(move y), x)
+}
+
+pub fn an_inout_and_the_move_of_another_variable(inout x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  io_after(inout x, take(move y))
+}
+
+pub fn the_moves_in_both_arms_of_another_variable(x: Buf[F32], move y: Buf[F32], move z: Buf[F32], c: Bool) -> U32 uses {Alloc} {
+  hbm(x, if c { move y } else { move z })
+}
+
+pub fn the_moves_in_the_arms_of_a_match(x: Buf[F32], move y: Buf[F32], move z: Buf[F32], p: Option[U32]) -> U32 uses {Alloc} {
+  hbm(x, match p { Some(_) => move y, None => move z })
+}
+
+pub fn a_move_in_a_block_of_another_variable(x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  fn2(x, {
+    eat(move y)
+    1
+  })
+}
+
+pub fn the_length_before_the_move(move x: Buf[F32]) -> U32 uses {Alloc} {
+  fk(x.len(), take(move x))
+}
+
+pub fn a_move_in_a_nested_call_of_another_variable(x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  fn2(x, pass(take(move y)))
+}

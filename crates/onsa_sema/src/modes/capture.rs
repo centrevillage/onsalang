@@ -33,10 +33,12 @@ impl Walker<'_> {
             return;
         }
         self.uncapturable(e);
-        let outer = replace(r, Run::new());
+        let (outer, changes) = (replace(r, Run::new()), self.inside.changes.len());
         self.inside.frames.push(Frame { closure: e, read: Vec::new() });
         self.expr(r, body, Pos::Return);
         self.inside.frames.pop();
+        // Its body is not evaluated with the arguments it may be in (S-799).
+        self.inside.changes.truncate(changes);
         *r = outer;
     }
 

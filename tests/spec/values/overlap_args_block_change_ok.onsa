@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§7"]
+
+// S-799 (§3.5, §5.2): the calls with a change inside an argument that are not an overlap, next to the errors of
+// negative/overlap_args_block_change.onsa. "引数の中のブロックで宣言した変数への代入は、どの引数とも重ならない。
+// 違うフィールドへの代入と、値を作るだけの引数（`fcopy(b.len(), { o = None … })`）も重ならない" and "変更どうし
+// （`h(next(inout k), next(inout k))`。どの引数も場所でない）". The assignment of a block placed as an argument
+// overlaps only the other arguments that are places of the assigned variable: a variable declared in the block, a
+// field that is not assigned, another variable and a value made by reading the binding (`b.len()`, evaluated
+// before the block) are not. A Copy binding holds its value. A closure assigns only its own variables.
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+  m: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn add(inout self, k: U32) {
+    self.x = self.x + k
+  }
+}
+
+pub struct Outer {
+  p: P,
+  q: P,
+}
+
+pub fn fcopy(n: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn hc(m: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn two_values(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+pub fn f(b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn bump_n(inout n: U32) -> U32 {
+  n = n + 1
+  n
+}
+
+pub fn apply(op: fn(U32) -> U32) -> U32 {
+  op.(1)
+}
+
+pub fn the_length_before_the_block(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => fcopy(b.len(), {
+      o = None
+      1
+    }),
+    None => 0,
+  }
+}
+
+pub fn a_variable_declared_in_the_block() -> U32 {
+  let m: U32 = 1
+  hc(m, {
+    var t: U32 = 1
+    t = 5
+    t
+  })
+}
+
+pub fn a_variable_of_the_block_changed_by_a_call(inout x: U32) -> U32 {
+  hc(x, {
+    var t: U32 = 1
+    bump_n(inout t)
+  })
+}
+
+pub fn another_field_assigned(inout w: W) -> U32 {
+  hc(w.n, {
+    w.m = 5
+    1
+  })
+}
+
+pub fn the_receiver_field_and_another_field_assigned(inout o: Outer) {
+  o.p.add!({
+    o.q.x = 5
+    1
+  })
+}
+
+pub fn another_variable_assigned(inout q: U32) -> U32 {
+  let m: U32 = 1
+  hc(m, {
+    q = 5
+    1
+  })
+}
+
+pub fn a_block_that_loops_on_its_own_variable(b: Buf[F32], n: U32) -> U32 {
+  f(b, {
+    var t: U32 = 0
+    for i in 0 ..< n {
+      t = t + i
+    }
+    t
+  })
+}
+
+pub fn a_copy_binding(inout o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => hc(n, {
+      o = None
+      1
+    }),
+    None => 0,
+  }
+}
+
+pub fn a_field_that_is_not_the_target(inout w: W) -> U32 uses {Alloc} {
+  hc(w.m, {
+    w.buf = Buf.zeroed(2)
+    1
+  })
+}
+
+pub fn changes_with_no_place_argument() -> U32 {
+  var k: U32 = 0
+  two_values({
+    k = 1
+    2
+  }, bump_n(inout k))
+}
+
+pub fn an_anonymous_function_that_assigns_its_own_variable() -> U32 {
+  let m: U32 = 1
+  hc(m, apply(fn(n) {
+    var v = n
+    v = 5
+    v
+  }))
+}
+
+pub fn the_assignment_before_the_call(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  o = None
+  match o {
+    Some(b) => f(b, 1),
+    None => 0,
+  }
+}

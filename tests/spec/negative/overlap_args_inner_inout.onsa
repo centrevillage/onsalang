@@ -1,0 +1,211 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2"]
+// fixes = 0
+
+// S-193 (§3.5, §5.2): "その呼び出しの引数の評価の始まりから呼び出しの終わりまでについて判定する。その間に `inout`
+// の場所を読むだけなら重ならない（`xs.fill!(xs.len())` は書ける）が、他の引数の中で変更すると E0702
+// （`f(inout x, g(inout x))`、`xs.fill!(g(inout xs))`）。変更は §7 と同じく、代入、`inout` への受け渡し、`!` の
+// 呼び出し、`move` で、入れ子の呼び出しの引数を含む" and "他の引数の中で `inout` に渡すか `!` を呼ぶと重なる". The
+// change made by an `inout` argument or a `!` call that stands inside another argument (also in a nested call, an
+// operand, an `if` or `match` arm) overlaps the places of the other arguments of the same call and its receiver,
+// in either order of the arguments. The error is at the later written of the change and the other argument
+// (S-799: the place expression of the change, e.g. the `x` of `inout x`, or the other argument); there is no repair candidate (`fixes = 0`). The calls that do not overlap
+// (another field, a read, a value made by reading) are in values/overlap_args_inner_ok.onsa. One error per
+// function (P-01).
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl W {
+  pub fn bump(inout self) -> U32 {
+    self.n = self.n + 1
+    self.n
+  }
+
+  pub fn step(inout self, k: U32) {
+    self.n = self.n + k
+  }
+}
+
+pub fn bump_n(inout n: U32) -> U32 {
+  n = n + 1
+  n
+}
+
+pub fn touch(inout b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn touch_arr(inout a: [F32; 4]) -> F32 {
+  a[0]
+}
+
+pub fn pass(k: U32) -> U32 {
+  k
+}
+
+pub fn io_after(inout b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn io_before(k: U32, inout b: Buf[F32]) -> U32 {
+  k
+}
+
+pub fn br_after(b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn br_before(k: U32, b: Buf[F32]) -> U32 {
+  k
+}
+
+pub fn copy_after(m: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn copy_before(k: U32, m: U32) -> U32 {
+  k
+}
+
+pub fn w_after(w: W, k: U32) -> U32 {
+  k
+}
+
+pub fn elem_after(inout a: U32, k: U32) -> U32 {
+  k
+}
+
+// ------------------------------------------------------------ `inout` inside another argument
+
+pub fn inout_then_inout_in_an_argument(inout x: Buf[F32]) -> U32 {
+  io_after(inout x, touch(inout x)) //~ E0702
+}
+
+pub fn inout_in_an_argument_then_inout(inout x: Buf[F32]) -> U32 {
+  io_before(touch(inout x), inout x) //~ E0702
+}
+
+pub fn a_local_variable() -> U32 uses {Alloc} {
+  var x = Buf.zeroed(2)
+  io_after(inout x, touch(inout x)) //~ E0702
+}
+
+pub fn receiver_and_inout_in_an_argument(inout xs: [F32; 4]) {
+  xs.fill!(touch_arr(inout xs)) //~ E0702
+}
+
+pub fn receiver_element_and_inout_of_another_element(inout xs: [U32; 4]) -> U32 {
+  elem_after(inout xs[0], bump_n(inout xs[1])) //~ E0702
+}
+
+pub fn receiver_method_and_inout_in_an_argument(inout w: W) {
+  w.step!(bump_n(inout w.n)) //~ E0702
+}
+
+// ------------------------------------------- a borrowed argument and `inout` in another argument
+
+pub fn borrowed_then_inout_in_an_argument(inout x: Buf[F32]) -> U32 {
+  br_after(x, touch(inout x)) //~ E0702
+}
+
+pub fn inout_in_an_argument_then_borrowed(inout x: Buf[F32]) -> U32 {
+  br_before(touch(inout x), x) //~ E0702
+}
+
+pub fn a_copy_variable_then_inout_in_an_argument() -> U32 {
+  var m: U32 = 1
+  copy_after(m, bump_n(inout m)) //~ E0702
+}
+
+pub fn inout_in_an_argument_then_a_copy_variable() -> U32 {
+  var m: U32 = 1
+  copy_before(bump_n(inout m), m) //~ E0702
+}
+
+pub fn the_whole_borrowed_and_a_field_changed(inout w: W) -> U32 {
+  w_after(w, bump_n(inout w.n)) //~ E0702
+}
+
+// ------------------------------------------------------ the `!` call inside another argument
+
+pub fn borrowed_then_bang_in_an_argument(inout w: W) -> U32 {
+  w_after(w, w.bump!()) //~ E0702
+}
+
+pub fn borrowed_then_bang_in_a_nested_call(inout w: W) -> U32 {
+  w_after(w, pass(w.bump!())) //~ E0702
+}
+
+pub fn bang_receiver_and_bang_in_an_argument(inout w: W) {
+  w.step!(w.bump!()) //~ E0702
+}
+
+// ------------------------------------------------------- where the change stands in the argument
+
+pub fn change_in_a_nested_call_of_a_nested_call(inout x: Buf[F32]) -> U32 {
+  io_after(inout x, pass(pass(touch(inout x)))) //~ E0702
+}
+
+pub fn change_in_an_operand(inout x: Buf[F32]) -> U32 {
+  io_after(inout x, 1 + touch(inout x)) //~ E0702
+}
+
+pub fn change_in_an_if_arm(inout x: Buf[F32], c: Bool) -> U32 {
+  io_after(inout x, if c { touch(inout x) } else { 0 }) //~ E0702
+}
+
+pub fn change_in_the_else_arm(inout x: Buf[F32], c: Bool) -> U32 {
+  io_after(inout x, if c { 0 } else { touch(inout x) }) //~ E0702
+}
+
+pub fn change_in_a_match_arm(inout x: Buf[F32], o: Option[U32]) -> U32 {
+  io_after(inout x, match o { Some(k) => k, None => touch(inout x) }) //~ E0702
+}
+
+pub fn change_in_a_loop(inout x: Buf[F32], n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    t = t + io_after(inout x, touch(inout x)) + i //~ E0702
+  }
+  t
+}
+
+pub fn change_in_a_while_loop(inout x: Buf[F32], n: U32) -> U32 {
+  var i: U32 = 0
+  while i < n {
+    br_after(x, touch(inout x)) //~ E0702
+    i = i + 1
+  }
+  i
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn the_variable_of_an_anonymous_function() -> U32 {
+  apply(fn(n) {
+    var v = n
+    copy_after(v, bump_n(inout v)) //~ E0702
+  })
+}
+
+pub fn gio[T: ?Dup](inout a: T, k: U32) -> U32 {
+  k
+}
+
+pub fn gtouch[T: ?Dup](inout a: T) -> U32 {
+  1
+}
+
+pub fn generic_inout_in_an_argument(inout a: Buf[F32]) -> U32 {
+  gio(inout a, gtouch(inout a)) //~ E0702
+}
+
+pub fn generic_function_with_its_own_parameter[T: ?Dup](inout a: T) -> U32 {
+  gio(inout a, gtouch(inout a)) //~ E0702
+}

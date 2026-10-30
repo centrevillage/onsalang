@@ -1,0 +1,198 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4"]
+
+// S-193 and S-796 (§3.5, §5.2, §5.4): the calls with a change inside an argument that are not an overlap, next to
+// the errors of negative/overlap_args_inner_inout.onsa and negative/overlap_args_derived_inner.onsa. "その間に
+// `inout` の場所を読むだけなら重ならない（`xs.fill!(xs.len())` は書ける）", "同じ値の異なるフィールドは重ならない
+// ものとして扱う", "`match w.a { Some(b) => f(b, inout w.c) }` は重ならない。Copy の束縛は束縛した時点の値で、
+// 重ならない". A change inside an argument overlaps only the other arguments that are places of the same variable:
+// another field, another variable and another array are not, a value made by reading the place (a call, an
+// operation, `x.len()`) is not a place of it, and two changes of one variable are not either when no argument is
+// the place itself (the changes are ordered by §3.5, `h(next(inout k), next(inout k))`). A Copy binding holds its
+// value. Changes in two calls in a row are two calls.
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+  m: U32,
+}
+
+impl W {
+  pub fn bump(inout self) -> U32 {
+    self.n = self.n + 1
+    self.n
+  }
+
+  pub fn step(inout self, k: U32) {
+    self.n = self.n + k
+  }
+}
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn bump(inout self) -> U32 {
+    self.x = self.x + 1
+    self.x
+  }
+
+  pub fn add(inout self, k: U32) {
+    self.x = self.x + k
+  }
+}
+
+pub struct Outer {
+  p: P,
+  q: P,
+}
+
+pub struct Two {
+  a: Option[Buf[F32]],
+  c: Option[Buf[F32]],
+}
+
+pub fn bump_n(inout n: U32) -> U32 {
+  n = n + 1
+  n
+}
+
+pub fn pass(k: U32) -> U32 {
+  k
+}
+
+pub fn io_n(inout n: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn io_after(inout b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn touch(inout b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn copy_after(m: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn two_values(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+pub fn out_p(p: P, k: U32) -> U32 {
+  k
+}
+
+pub fn f(b: Buf[F32], k: U32) -> U32 {
+  k
+}
+
+pub fn f_count(n: U32, k: U32) -> U32 {
+  k
+}
+
+pub fn drop_opt(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  o = None
+  1
+}
+
+pub fn drop_count(inout o: Option[U32]) -> U32 {
+  o = None
+  1
+}
+
+pub fn another_field_in_an_argument(inout w: W) -> U32 {
+  io_n(inout w.n, bump_n(inout w.m))
+}
+
+pub fn another_variable_in_an_argument(inout x: Buf[F32], inout y: Buf[F32]) -> U32 {
+  io_after(inout x, touch(inout y))
+}
+
+pub fn another_array_in_an_argument(inout xs: [U32; 4], inout ys: [U32; 4]) -> U32 {
+  io_n(inout xs[0], bump_n(inout ys[0]))
+}
+
+pub fn a_borrowed_field_and_a_bang_on_another(inout o: Outer) -> U32 {
+  out_p(o.p, o.q.bump!())
+}
+
+pub fn a_bang_receiver_field_and_a_change_of_another_field(inout o: Outer) {
+  o.p.add!(bump_n(inout o.q.x))
+}
+
+// ------------------------------------------------------------------------------ reading is no change
+
+pub fn the_length_in_an_argument(inout x: Buf[F32]) -> U32 {
+  io_after(inout x, x.len())
+}
+
+pub fn a_read_in_a_nested_call(inout x: Buf[F32]) -> U32 {
+  io_after(inout x, pass(pass(x.len())))
+}
+
+pub fn a_field_read_in_an_argument(inout w: W) -> U32 {
+  io_n(inout w.n, w.n + 1)
+}
+
+pub fn a_value_made_before_the_change() -> U32 {
+  var m: U32 = 1
+  copy_after(m + 1, bump_n(inout m))
+}
+
+// ------------------------------------------------------------------ changes with no place argument
+
+pub fn two_changes_of_one_variable() -> U32 {
+  var k: U32 = 0
+  two_values(bump_n(inout k), bump_n(inout k))
+}
+
+pub fn a_change_in_a_nested_call_and_a_change() -> U32 {
+  var k: U32 = 0
+  two_values(bump_n(inout k), pass(bump_n(inout k)))
+}
+
+pub fn the_changes_of_two_calls_in_a_row(inout x: Buf[F32]) -> U32 {
+  let v = touch(inout x)
+  io_after(inout x, v)
+}
+
+// ------------------------------------------------------------ a borrowed binding of another place
+
+pub fn another_field_than_the_target(inout w: Two) -> U32 uses {Alloc} {
+  match w.a {
+    Some(b) => f(b, drop_opt(inout w.c)),
+    None => 0,
+  }
+}
+
+pub fn another_variable_than_the_target(inout o: Option[Buf[F32]], inout q: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => f(b, drop_opt(inout q)),
+    None => 0,
+  }
+}
+
+pub fn a_copy_binding_of_a_field_and_a_bang_call(inout w: W) -> U32 {
+  match w {
+    W { buf: _, n: nn, m: _ } => f_count(nn, w.bump!()),
+  }
+}
+
+pub fn a_copy_binding(inout o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => f_count(n, drop_count(inout o)),
+    None => 0,
+  }
+}
+
+pub fn the_length_of_the_binding_before_the_change(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => two_values(b.len(), drop_opt(inout o)),
+    None => 0,
+  }
+}

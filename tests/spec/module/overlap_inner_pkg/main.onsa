@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§15.1"]
+// fixes = 0
+
+// S-193 and S-799 (§3.5, §5.2) for the functions and the methods of another module: a change inside an argument
+// (an `inout`, a `!` call, an assignment in a block, a `move`) overlaps the other arguments and the receiver in
+// the same way whether the callee is of this module or of `lib` (a `lib.` path call, an imported name, the
+// method of an imported type), because the modes are those of the declaration in `lib`. One error per function
+// (P-01).
+
+use lib
+use lib.{Pos, bump_n, copy_after, take, len_after}
+
+pub fn imported_inout_in_an_argument() -> U32 {
+  var m: U32 = 1
+  copy_after(m, bump_n(inout m)) //~ E0702
+}
+
+pub fn path_inout_in_an_argument() -> U32 {
+  var m: U32 = 1
+  lib.copy_after(m, lib.bump_n(inout m)) //~ E0702
+}
+
+pub fn a_block_assignment() -> U32 {
+  var m: U32 = 1
+  lib.copy_after(m, {
+    m = 5 //~ E0702
+    1
+  })
+}
+
+pub fn a_bang_call_of_an_imported_type(inout p: Pos) -> U32 {
+  copy_after(p.x, p.bump!()) //~ E0702
+}
+
+pub fn the_receiver_and_an_inout_of_an_imported_function(inout p: Pos) {
+  p.add!(bump_n(inout p.x)) //~ E0702
+}
+
+pub fn a_nested_move_of_an_imported_function(move x: Buf[F32]) -> U32 uses {Alloc} {
+  len_after(x, take(move x)) //~ E0702
+}
