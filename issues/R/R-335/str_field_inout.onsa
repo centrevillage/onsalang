@@ -1,0 +1,5 @@
+pub struct P { a: Buf[F32], n: U32, s: Str }
+pub fn n5(inout p: P) -> U32 {
+  p.n = 3
+  p.n
+}
