@@ -2316,3 +2316,10 @@ target = "tests/spec/negative/binding_path_use.onsa"
 reasons = ["S-803", "S-804"]
 until = "W4-07"
 note = "使えなくなった束縛の経路と全体の使用、分解する `let` と `match` の見出しの読み、添字の順の E0704（§7）が出ない（古い modes は §7 を持たない。W4-07 U4b の t4）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/a6df552b.onsa"
+reasons = ["S-609", "R-117"]
+until = "W4-07"
+note = "fix-same-place: fix|E0703|write the mode of the parameter|E0711。借用の Affine の値を `move` の引数に置く形で、古い modes の E0703 の `move` を書く候補を当てると E0711 が残る（新しい modes は候補の無い E0711。W4-07 U4 の t1 の事例を種にした変異、`fix-contract` の 13 件と同じ）"

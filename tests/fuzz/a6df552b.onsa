@@ -1,0 +1,4 @@
+fn take(move b: f[2]) {Ao
+pub fn t(c: Bool, a: Buf[F32]) uses {Alloc} {
+take(if c { a } else { Buf.zeroed(1) }) 
+}
