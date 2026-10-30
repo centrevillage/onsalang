@@ -16,7 +16,7 @@ use crate::names::body::{BodyNames, PathRes};
 use crate::ty::TyId;
 
 /// A place (§5.1): a local and its projections, outermost last.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct Place {
     pub(super) root: LocalId,
     pub(super) proj: Vec<Proj>,
@@ -25,7 +25,7 @@ pub(super) struct Place {
 /// One step into a value: a field, a tuple element, an element of an
 /// array at an index, and (a pattern's) into the payload of a variant, which
 /// stands for the whole of the enum value (§5.2, S-796): no step follows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum Proj {
     Field(String),
     Elem(u32),
@@ -152,6 +152,13 @@ pub(super) struct Deps {
     of: BTreeMap<LocalId, Vec<Source>>,
     /// The locals of the places the heads read (R-161's condition 5).
     read: HashSet<LocalId>,
+    /// Of each root (no binding of the index), the bindings that derive
+    /// from it, in the order of the ids (memo 3).
+    by_root: HashMap<LocalId, Vec<LocalId>>,
+    /// The text where each binding is in scope: its block from its `let`,
+    /// its arm (a change elsewhere leaves it as it is where it is used:
+    /// declared again before, or never).
+    scope: HashMap<LocalId, (u32, u32)>,
 }
 
 /// How far a place read from its root has gone along the ways of another
@@ -177,7 +184,8 @@ struct Way {
 }
 
 /// A change of a place (§7): of each binding of the index a place of
-/// which overlaps it, how far it went along it. Made once at each change.
+/// which overlaps it, how far it went along it. Made once for each place
+/// changed (whatever binding is in scope where).
 #[derive(Debug)]
 pub(super) struct Change {
     ways: Vec<Way>,
@@ -202,7 +210,7 @@ impl Deps {
     ) -> Deps {
         let (mut heads, mut deps) = (Vec::new(), Deps::default());
         heads_in(ast, root, &mut heads);
-        for (head, pat) in heads {
+        for (head, pat, scope) in heads {
             let Some(HeadRow::Borrow { sources, .. }) = info.heads.get(&head) else { continue };
             let places: Vec<(Place, Span)> = (sources.iter())
                 .map(|&s| match place_of(ast, names, s) {
@@ -212,19 +220,28 @@ impl Deps {
                 .collect();
             pattern_places(ast, info, pat, &mut Vec::new(), &mut |l, proj, _| {
                 let Some(l) = l.filter(|l| !copy(info.locals[l.0 as usize].ty)) else { return };
+                deps.scope.insert(l, scope);
                 for (p, at) in &places {
                     let source = Source { place: p.then(proj), at: *at, pat: proj.to_vec() };
                     deps.of.entry(l).or_default().push(source);
                 }
             });
         }
-        for (l, sources) in &deps.of {
+        let mut roots: HashMap<LocalId, BTreeSet<LocalId>> = HashMap::new();
+        for (&l, sources) in &deps.of {
+            let mut mine = BTreeSet::new();
             for s in sources {
-                if deps.of.contains_key(&s.place.root) && s.place.root >= *l {
+                if deps.of.contains_key(&s.place.root) && s.place.root >= l {
                     bug(Some(s.at), "a binding derived from a later one");
                 }
                 deps.read.insert(s.place.root);
+                match roots.get(&s.place.root) {
+                    Some(r) => mine.extend(r),
+                    None => drop(mine.insert(s.place.root)),
+                }
             }
+            mine.iter().for_each(|&r| deps.by_root.entry(r).or_default().push(l));
+            roots.insert(l, mine);
         }
         deps
     }
@@ -240,12 +257,17 @@ impl Deps {
     }
 
     /// The change of the place `w` (§7): the bindings it leaves unusable
-    /// are those of `along` (§5.4: the ones derived from them too, by the
-    /// places they derive from, S-797).
+    /// are those of `along` in scope (§5.4: the ones derived from them too,
+    /// by the places they derive from, S-797), of those of its root.
     pub(super) fn change(&self, w: &Place) -> Change {
         let ways = vec![Way { from: w.root, to: None, steps: w.proj.clone() }];
-        let along = self.along(&ways, None);
+        let along = self.along(&ways, self.by_root.get(&w.root).map_or(&[], Vec::as_slice));
         Change { ways, along }
+    }
+
+    /// Whether the binding `l` is in scope at `at`.
+    pub(super) fn in_scope(&self, l: LocalId, at: Span) -> bool {
+        self.scope.get(&l).is_some_and(|&(start, end)| start <= at.start && at.end <= end)
     }
 
     /// Whether the places `a` and `b` may share a part (§5.2, S-796): of a
@@ -255,33 +277,40 @@ impl Deps {
     /// overlap, E0702's and §7's.
     pub(super) fn meets(&self, a: &Place, b: &Place) -> bool {
         // The ways of `b`: those of the sources of its ancestors, then its own steps.
-        let (mut ways, mut todo, mut seen) = (Vec::new(), vec![b.root], HashSet::new());
-        while let Some(u) = todo.pop() {
-            if !seen.insert(u) {
-                continue;
-            }
-            for s in self.sources(u) {
-                ways.push(Way { from: s.place.root, to: Some(u), steps: s.place.proj.clone() });
-                todo.push(s.place.root);
-            }
-        }
+        let mut ways: Vec<Way> = (self.ancestors(b.root).into_iter())
+            .flat_map(|u| self.sources(u).iter().map(move |s| (u, s)))
+            .map(|(u, s)| Way { from: s.place.root, to: Some(u), steps: s.place.proj.clone() })
+            .collect();
         ways.push(Way { from: b.root, to: None, steps: b.proj.clone() });
         let start = match self.indexed(a.root) {
-            true => self.along(&ways, Some(a.root)).remove(&a.root).unwrap_or_default(),
+            true => self.along(&ways, &self.ancestors(a.root)).remove(&a.root).unwrap_or_default(),
             false => close(&ways, starts(&ways, a.root)),
         };
         !advance(&ways, start, &a.proj).is_empty()
     }
 
-    /// Of each binding of the index (up to `upto`), how far the places it
-    /// stands for go along `ways`, in the order of the ids: from those of
-    /// the bindings it derives from, else from the start of the ways from
+    /// The binding `l` of the index and those it derives from, in the
+    /// order of the ids.
+    fn ancestors(&self, l: LocalId) -> Vec<LocalId> {
+        let (mut todo, mut seen) = (vec![l], BTreeSet::new());
+        while let Some(u) = todo.pop() {
+            if self.indexed(u) && seen.insert(u) {
+                todo.extend(self.sources(u).iter().map(|s| s.place.root));
+            }
+        }
+        seen.into_iter().collect()
+    }
+
+    /// Of each of the bindings `bound` of the index (in the order of the
+    /// ids, each after those it derives from that derive from the roots of
+    /// `ways`), how far the places it stands for go along `ways`: from those
+    /// of the bindings it derives from, else from the start of the ways from
     /// the root. A binding none of which overlaps is left out.
-    fn along(&self, ways: &[Way], upto: Option<LocalId>) -> HashMap<LocalId, Along> {
+    fn along(&self, ways: &[Way], bound: &[LocalId]) -> HashMap<LocalId, Along> {
         let mut out: HashMap<LocalId, Along> = HashMap::new();
-        for (&l, sources) in self.of.range(..=upto.unwrap_or(LocalId(u32::MAX))) {
+        for &l in bound {
             let mut at = Along::new();
-            for s in sources {
+            for s in self.sources(l) {
                 let start = match self.indexed(s.place.root) {
                     true => out.get(&s.place.root).cloned().unwrap_or_default(),
                     false => close(ways, starts(ways, s.place.root)),
@@ -337,16 +366,17 @@ fn advance(ways: &[Way], mut at: Along, proj: &[Proj]) -> Along {
     at
 }
 
-/// The heads of `let` and of the arms of `match` in `e`, with their patterns.
-fn heads_in(ast: &Ast, e: ExprId, out: &mut Vec<(Head, PatId)>) {
+/// The heads of `let` and of the arms of `match` in `e`, with their
+/// patterns and the text where their bindings are in scope.
+fn heads_in(ast: &Ast, e: ExprId, out: &mut Vec<(Head, PatId, (u32, u32))>) {
+    let end = ast.expr(e).span.end;
     match &ast.expr(e).kind {
         ExprKind::Block(b) => out.extend(b.stmts.iter().filter_map(|&s| match &ast.stmt(s).kind {
-            StmtKind::Let { pat, .. } => Some((Head::Let(s), *pat)),
+            StmtKind::Let { pat, .. } => Some((Head::Let(s), *pat, (ast.stmt(s).span.start, end))),
             _ => None,
         })),
-        ExprKind::Match { scrutinee, arms, .. } => {
-            out.extend(arms.iter().map(|a| (Head::Match { scrutinee: *scrutinee }, a.pat)))
-        }
+        ExprKind::Match { scrutinee, arms, .. } => out
+            .extend((arms.iter()).map(|a| (Head::Match { scrutinee: *scrutinee }, a.pat, (a.span.start, a.span.end)))),
         _ => {}
     }
     ast.sub_exprs(e).into_iter().for_each(|x| heads_in(ast, x, out));

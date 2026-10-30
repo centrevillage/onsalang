@@ -8,6 +8,7 @@
 use std::collections::BTreeSet;
 
 use onsa_diag::{Code, FileId, Span, Stage};
+use onsa_syntax::ast::ExprId;
 
 use super::check::{Walker, check_all};
 use super::flow::Run;
@@ -50,6 +51,19 @@ fn analyzed(src: &str) -> (crate::Package, crate::Analysis) {
         .collect();
     assert!(early.is_empty(), "{early:?}");
     (pkg, a)
+}
+
+/// The walk of the function `name` in `src`, before the one diagnostic of
+/// the body is chosen (its index of §7 made by `Walker::new`), and what `f`
+/// reads of it, its syntax tree and its root.
+fn walked<R>(src: &str, name: &str, f: impl FnOnce(&Walker<'_>, &onsa_syntax::ast::Ast, ExprId) -> R) -> R {
+    let (pkg, a) = analyzed(src);
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == name).expect("the function");
+    let root = crate::body::root_of(&a, id).expect("a body");
+    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
+    let mut w = Walker::new(&a, (ast, src), (&a.names[&id], &a.bodies[&id], root), Vec::new());
+    w.expr(&mut Run::new(), root, Pos::Return);
+    f(&w, ast, root)
 }
 
 /// What the new stage reports for the functions `body` after [`PRELUDE`]:
@@ -338,7 +352,7 @@ fn the_head_of_a_loop_is_its_least_fixpoint() {
     let (l, at) = (LocalId, |n| Span::new(FileId(0), n, n + 1));
     let mut entry = Delta::start();
     entry.set(l(0), Status::Moved { at: at(1), via_loop: false });
-    let stale = |n| Status::Stale { changes: BTreeSet::from([at(n)]) };
+    let stale = |n| Status::Stale { changes: std::collections::BTreeMap::from([(n, at(n))]) };
     entry.set(l(2), stale(2));
     entry.set(l(4), stale(4));
     let mut back = Delta::start();
@@ -370,7 +384,10 @@ fn the_head_of_a_loop_is_its_least_fixpoint() {
     }
     assert_eq!(plain(&head), plain(&x), "the least");
     // Of two stale, the changes of both (S-803).
-    assert_eq!(head.status(l(4)), Some(&Status::Stale { changes: BTreeSet::from([at(4), at(6)]) }));
+    assert_eq!(
+        head.status(l(4)),
+        Some(&Status::Stale { changes: std::collections::BTreeMap::from([(4, at(4)), (6, at(6))]) })
+    );
 }
 
 /// Memo 3: a body of 120 nested loops visits each expression at most twice
@@ -388,18 +405,14 @@ fn nested_loops_visit_each_expression_at_most_twice() {
         src.push_str("take(move b)\nb = mk()\n");
         src.push_str(&"}\n".repeat(depth));
         src.push_str("}\n");
-        let (pkg, a) = analyzed(&src);
-        let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "deep").expect("deep");
-        let root = crate::body::root_of(&a, id).expect("a body");
-        let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
-        let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
-        w.expr(&mut Run::new(), root, Pos::Return);
-        let (mut nodes, mut todo) = (0, vec![root]);
-        while let Some(e) = todo.pop() {
-            nodes += 1;
-            todo.extend(ast.sub_exprs(e));
-        }
-        (w.m.visits, nodes, w.m.loops.len())
+        walked(&src, "deep", |w, ast, root| {
+            let (mut nodes, mut todo) = (0, vec![root]);
+            while let Some(e) = todo.pop() {
+                nodes += 1;
+                todo.extend(ast.sub_exprs(e));
+            }
+            (w.m.visits, nodes, w.m.loops.len())
+        })
     };
     let (visits, nodes, loops) = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
     assert_eq!(loops, DEPTH);
@@ -666,17 +679,11 @@ fn an_erroneous_consumption_moves_nothing() {
 }
 ",
     );
-    let (pkg, a) = analyzed(&src);
-    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
-    let root = crate::body::root_of(&a, id).expect("a body");
-    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
-    let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
-    w.expr(&mut Run::new(), root, Pos::Return);
-    let lines: Vec<_> =
-        w.m.found
-            .iter()
+    let lines: Vec<_> = walked(&src, "t", |w, _, _| {
+        (w.m.found.iter())
             .map(|d| (d.code, src[PRELUDE.len()..d.span.start as usize].matches('\n').count() + 1))
-            .collect();
+            .collect()
+    });
     assert_eq!(lines, [(Code::E0711, 3), (Code::E0711, 5)]);
 }
 
@@ -1527,17 +1534,13 @@ pub fn ios(inout xs: Span[F32]) {}
 /// code, its line in `body` and the text it is at.
 fn all_found(body: &str) -> Vec<(Code, usize, String)> {
     let src = format!("{PRELUDE}{CALLEES}{body}");
-    let (pkg, a) = analyzed(&src);
-    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
-    let root = crate::body::root_of(&a, id).expect("a body");
-    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
-    let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
-    w.expr(&mut Run::new(), root, Pos::Return);
     let start = PRELUDE.len() + CALLEES.len();
     let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
-    (w.m.found.iter())
-        .map(|d| (d.code, src[start..d.span.start as usize].matches('\n').count() + 1, text(d.span)))
-        .collect()
+    walked(&src, "t", |w, _, _| {
+        (w.m.found.iter())
+            .map(|d| (d.code, src[start..d.span.start as usize].matches('\n').count() + 1, text(d.span)))
+            .collect()
+    })
 }
 
 /// §5.1, §5.2: a `let` is E0701 at an `inout` argument and at the receiver
@@ -2569,28 +2572,130 @@ fn the_text_of_an_e0702_of_a_binding() {
     assert_eq!(notes, [note("hh", "borrowed here"), note("hh", "`hh` is bound here as a borrow of `w.h` (§5.4)")]);
 }
 
+/// A place in the texts of E0704 and E0702 (§7, §5.2) is as written on
+/// one line, else its name and path, an index `[_]`: the one rule of the
+/// path used, the place changed, the source of a binding and an argument.
+#[test]
+fn a_place_on_more_than_one_line_is_named() {
+    let index = "[if c {\n      0\n    } else {\n      1\n    }]";
+    let changed = format!(
+        "pub fn t(c: Bool) -> U32 uses {{Alloc}} {{\n  var w = mkw()\n  match w {{ W3 {{ h: hh, i: _, k: _ }} => {{\n    w.h.xs{index} = 1\n    use_h(hh)\n  }} }}\n}}\n"
+    );
+    let (_, _, _, message, notes) = said(&changed).remove(0);
+    let stale = "cannot be used after `w.h.xs[_]` changed: the place it borrows overlaps the changed place (§7)";
+    assert_eq!(message, format!("`hh` {stale}"));
+    assert_eq!(notes[2].1, "a path of `hh` that does not overlap `w.h.xs[_]` can still be used (§7)");
+    let source = format!(
+        "pub fn t(c: Bool) -> U32 uses {{Alloc}} {{\n  var xs = make_array()\n  match xs{index} {{ b => {{\n    xs[0] = mk()\n    len_of(b)\n  }} }}\n}}\n"
+    );
+    let (_, _, _, message, notes) = said(&source).remove(0);
+    assert_eq!(
+        message,
+        "`b` cannot be used after `xs[0]` changed: the place it borrows overlaps the changed place (§7)"
+    );
+    assert_eq!(notes[1].1, "`b` is bound here as a borrow of `xs[_]` (§5.4)");
+    let argument = format!(
+        "pub fn t(c: Bool) uses {{Alloc}} {{\n  var w = mkw()\n  match w {{ W3 {{ h: hh, i: _, k: _ }} => fn3(hh, inout w.h.xs{index}) }}\n}}\n"
+    );
+    let (code, _, _, message, _) = said(&argument).remove(0);
+    let both = "`hh` is passed borrowed and `w.h.xs[_]` as `inout` in the same call; the places may overlap (§5.2)";
+    assert_eq!((code, message.as_str()), (Code::E0702, both));
+}
+
+/// §7, S-803: a change leaves unusable only the bindings in scope where it
+/// is (one out of scope is declared again before any use), and the change
+/// of a place is made once for all its positions: the judgment is that of
+/// every binding. Each of many `match`es reads its own binding after its
+/// change; a binding of a block that ended, or declared after the change,
+/// or in the next iteration of a loop, is usable; one derived from a
+/// binding out of scope there (`let b = { let a = w.h; a }`) is not. The
+/// stage takes well under a second for 300 `match`es (W4-07 U4b-1's
+/// review, finding 1: 0.5 s at 200).
+#[test]
+fn a_change_leaves_the_bindings_out_of_scope_as_they_are() {
+    let arm = |k: usize| {
+        format!("  match w {{ W3 {{ h: h{k}, i: _, k: _ }} => {{ w.h.n = {k}\n    acc = acc + h{k}.m }} }}\n")
+    };
+    let usable = format!(
+        "pub fn t(c: Bool) -> U32 uses {{Alloc}} {{\n  var w = mkw()\n  var acc: U32 = 0\n{}{}  match w {{ W3 {{ h: hh, i: _, k: _ }} => {{\n    {{ let g = hh\n      acc = acc + g.m }}\n    w.h.n = 3\n    match hh {{ H2 {{ buf: g2, n: _, m: _, xs: _, o: _ }} => {{ acc = acc + len_of(g2) }} }}\n  }} }}\n  w.h.n = 3\n  match w {{ W3 {{ h: h3, i: _, k: _ }} => {{ acc = acc + use_h(h3) }} }}\n  while c {{\n    match w {{ W3 {{ h: h4, i: _, k: _ }} => {{ acc = acc + use_h(h4)\n      w.h.n = 4 }} }}\n  }}\n  acc\n}}\n",
+        arm(1),
+        arm(2)
+    );
+    assert_eq!(said_at(&usable), []);
+    let derived = |head: &str| {
+        format!(
+            "pub fn t() -> U32 uses {{Alloc}} {{\n  var w = mkw()\n  match w {{ W3 {{ h: hh, i: _, k: _ }} => {{\n    let b = {head}\n    w.h.n = 1\n    use_h(b)\n  }} }}\n}}\n"
+        )
+    };
+    for head in ["{ let a = hh\n      a }", "match hh { a => a }"] {
+        let lines = 6 + head.matches('\n').count();
+        assert_eq!(said_at(&derived(head)), [(Code::E0704, lines, "b".to_string())], "{head}");
+    }
+    let mut many = String::from("pub fn t() -> U32 uses {Alloc} {\n  var w = mkw()\n  var acc: U32 = 0\n");
+    (0..300).for_each(|k| many.push_str(&arm(k)));
+    many.push_str("  acc\n}\n");
+    let src = format!("{PRELUDE}{S803}{many}");
+    let (pkg, mut a) = analyzed(&src);
+    let (before, start) = (a.diagnostics.len(), std::time::Instant::now());
+    check_all(&pkg, &mut a);
+    let took = start.elapsed();
+    assert_eq!(a.diagnostics.len(), before);
+    assert!(took < std::time::Duration::from_secs(1), "{took:?}");
+    let made = walked(&src, "t", |w, _, _| w.m.places.len());
+    assert_eq!(made, 2, "a change of each of `w.h.n` and `acc`");
+}
+
+/// Memo 3 (W4-07 U4b-1's review, finding 3): a change reads the bindings
+/// derived from its root only, so a write of another root changes nothing
+/// for them, and a binding of two roots (`g`, from `hh` of `w` or from
+/// `vi` of `v`) is unusable by a change of either where the paths overlap.
+#[test]
+fn a_change_of_another_root_leaves_a_binding_as_it_is() {
+    let f = |b: &str| {
+        format!(
+            "pub fn t(c: Bool) -> U32 uses {{Alloc}} {{\n  var w = mkw()\n  var v = mkw()\n  var acc: U32 = 0\n  match w {{ W3 {{ h: hh, i: _, k: _ }} => match v {{ W3 {{ h: _, i: vi, k: _ }} => {{\n    let g = if c {{ hh }} else {{ vi }}\n{b}\n    acc\n  }} }} }}\n}}\n"
+        )
+    };
+    let usable = "    acc = acc + 1\n    v.k = 2\n    acc = acc + g.n + hh.n\n    v.i.n = 3\n    acc = acc + len_of(g.buf) + hh.n";
+    assert_eq!(said_at(&f(usable)), []);
+    for (b, text) in [("    v.i.n = 3\n    acc = acc + g.n", "g.n"), ("    w.h.m = 3\n    acc = acc + g.m", "g.m")] {
+        assert_eq!(said_at(&f(b)), [(Code::E0704, 8, text.to_string())], "{b}");
+    }
+}
+
+/// Every walk of a unit test makes the index of §7 (`Walker::new`): the
+/// helper that reads all the walk found sees an E0704 of §7 and an E0702
+/// of a binding.
+#[test]
+fn a_walk_makes_its_index() {
+    let body = "pub fn t() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    fn3(hh, inout w.h.n)
+    w.h.n = 5
+    use_h(hh)
+  } }
+}
+";
+    let codes: Vec<_> = all_said(&format!("{S803}{body}")).into_iter().map(|(c, t, _, _)| (c, t)).collect();
+    assert_eq!(codes, [(Code::E0702, "w.h.n".to_string()), (Code::E0704, "hh".to_string())]);
+}
+
 /// Every diagnostic the walk of the function `t` of `body` (after
 /// [`PRELUDE`]) found, before the one of the body is chosen: its code, the
 /// text it is at, its message and its notes (the text each is at, and its
 /// message).
 fn all_said(body: &str) -> Vec<(Code, String, String, Notes)> {
     let src = format!("{PRELUDE}{body}");
-    let (pkg, a) = analyzed(&src);
-    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
-    let root = crate::body::root_of(&a, id).expect("a body");
-    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
-    let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
-    w.deps = super::place::Deps::of_body((ast, &a.names[&id], &a.bodies[&id]), root, |t| {
-        crate::kind::kind_in_body(&a, t, &[]) == Some(crate::Kind::Copy)
-    });
-    w.expr(&mut Run::new(), root, Pos::Return);
     let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
-    (w.m.found.iter())
-        .map(|d| {
-            let notes = d.notes.iter().map(|n| (n.span.map(text), n.message.clone())).collect();
-            (d.code, text(d.span), d.message.clone(), notes)
-        })
-        .collect()
+    walked(&src, "t", |w, _, _| {
+        (w.m.found.iter())
+            .map(|d| {
+                let notes = d.notes.iter().map(|n| (n.span.map(text), n.message.clone())).collect();
+                (d.code, text(d.span), d.message.clone(), notes)
+            })
+            .collect()
+    })
 }
 
 /// E0702 of two bindings of the index (§5.2, S-796, memo 3): each stands

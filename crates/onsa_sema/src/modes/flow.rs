@@ -32,6 +32,14 @@ impl Run {
         self.cur.revive(l);
         self.declared.push(l);
     }
+
+    /// The bindings declared after the first `outer` leave the table: their
+    /// block or arm ended.
+    fn forget(&mut self, outer: usize) {
+        for l in self.declared.split_off(outer) {
+            self.cur.forget(l);
+        }
+    }
 }
 
 impl Walker<'_> {
@@ -50,9 +58,7 @@ impl Walker<'_> {
                 if let Some(t) = b.tail {
                     self.expr(r, t, pos);
                 }
-                for l in r.declared.split_off(outer) {
-                    r.cur.forget(l);
-                }
+                r.forget(outer);
             }
             ExprKind::If { cond, then, else_, .. } => {
                 self.expr(r, *cond, Pos::Read);
@@ -75,12 +81,14 @@ impl Walker<'_> {
                 let (mut tried, mut out) = (r.cur.clone(), Delta::bottom());
                 for arm in arms {
                     r.cur = tried.clone();
+                    let outer = r.declared.len();
                     self.declare(r, arm.pat);
                     if let Some(g) = arm.guard {
                         self.expr(r, g, Pos::Read);
                         tried.join(&r.cur);
                     }
                     self.expr(r, arm.body, pos);
+                    r.forget(outer);
                     out.join(&r.cur);
                 }
                 r.cur = out;

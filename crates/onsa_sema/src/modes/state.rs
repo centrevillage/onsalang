@@ -15,7 +15,7 @@ use crate::body::LocalId;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Status {
     Moved { at: Span, via_loop: bool },
-    Stale { changes: BTreeSet<Span> },
+    Stale { changes: BTreeMap<u32, Span> },
 }
 
 impl Status {
@@ -24,7 +24,9 @@ impl Status {
     fn join(self, other: Status) -> Status {
         match (self, other) {
             (Status::Stale { mut changes }, Status::Stale { changes: more }) => {
-                changes.extend(more);
+                for (k, at) in more {
+                    changes.entry(k).and_modify(|c| *c = (*c).min(at)).or_insert(at);
+                }
                 Status::Stale { changes }
             }
             (s @ Status::Moved { .. }, Status::Stale { .. }) | (Status::Stale { .. }, s @ Status::Moved { .. }) => s,
@@ -96,7 +98,11 @@ impl Delta {
     /// `l` is `s` here; it joins (a binding moved twice keeps the first).
     pub(super) fn set(&mut self, l: LocalId, s: Status) {
         if self.reach {
-            join_into(&mut self.gens, &Out::from([(l, s)]));
+            let s = match self.gens.remove(&l) {
+                Some(t) => t.join(s),
+                None => s,
+            };
+            self.gens.insert(l, s);
         }
     }
 

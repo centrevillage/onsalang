@@ -148,8 +148,9 @@ impl Walker<'_> {
         };
         let n = &self.info.locals[a.place.root.0 as usize].name;
         let text = |p: &Passed| {
-            let s = self.ast.expr(p.at).span;
-            &self.text[s.start as usize..s.end as usize]
+            let at = self.ast.expr(p.at).span;
+            let Some(place) = place_of(self.ast, self.names, p.at) else { bug(Some(at), "a place passed is no place") };
+            self.place_text(at, &[], &place)
         };
         let derived = a.via.is_some() || b.via.is_some();
         let (message, note) = if a.mode == b.mode {

@@ -5,12 +5,12 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{Ast, StmtId};
+use onsa_syntax::ast::{Ast, ExprId, StmtId};
 
 use super::MovedLocals;
 use super::capture::Frame;
 use super::flow::Run;
-use super::place::{Change, Deps, Place, path_text};
+use super::place::{Change, Deps, Place, Proj, path_text};
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
 use crate::body::{BodyInfo, LocalId, generics_of, root_of};
@@ -38,8 +38,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
             bug(Some(a.def(id).span), "a body the modes stage reads with no module, root or names")
         };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
-        let mut w = Walker::new(a, (&module.parsed.ast, &module.text), names, info, generics_of(a, id));
-        w.deps = Deps::of_body((w.ast, names, info), root, |t| w.kind_of(t) == Some(Kind::Copy));
+        let mut w = Walker::new(a, (&module.parsed.ast, &module.text), (names, info, root), generics_of(a, id));
         w.expr(&mut Run::new(), root, Pos::Return);
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
         if !w.m.moved.is_empty() {
@@ -91,15 +90,16 @@ pub(super) struct Inside {
 /// overlaps the change at a place (and ends before it).
 enum Why {
     Moved(Span, bool),
-    Stale(Span, bool),
+    Stale(Span, bool, usize),
 }
 
 /// What the walk of a body makes as it goes.
 #[derive(Default)]
 pub(super) struct Made {
     kinds: HashMap<TyId, Option<Kind>>,
-    /// The change at each place a place changes (§7): one place each.
-    pub(super) changes: HashMap<Span, Change>,
+    /// Each place changed (§7) and its change, made once, by its number.
+    pub(super) places: Vec<(Place, Change)>,
+    pub(super) ids: HashMap<Place, u32>,
     /// The summary of each loop, made once (memo 3).
     pub(super) loops: HashMap<StmtId, LoopSum>,
     pub(super) found: Vec<Diagnostic>,
@@ -111,11 +111,11 @@ pub(super) struct Made {
 }
 
 impl<'a> Walker<'a> {
+    /// The walk of the body `root`, with its index of §7.
     pub(super) fn new(
         a: &'a Analysis,
         (ast, text): (&'a Ast, &'a str),
-        names: &'a BodyNames,
-        info: &'a BodyInfo,
+        (names, info, root): (&'a BodyNames, &'a BodyInfo, ExprId),
         generics: Vec<GenericDef>,
     ) -> Self {
         let vars = (names.bindings.iter().enumerate())
@@ -125,7 +125,10 @@ impl<'a> Walker<'a> {
             })
             .collect();
         let (deps, inside) = (Deps::default(), Inside::default());
-        Walker { a, ast, text, names, info, generics, vars, reports: true, deps, inside, m: Made::default() }
+        let mut w =
+            Walker { a, ast, text, names, info, generics, vars, reports: true, deps, inside, m: Made::default() };
+        w.deps = Deps::of_body((ast, names, info), root, |t| w.kind_of(t) == Some(Kind::Copy));
+        w
     }
 
     /// The kind of the values of the type `ty` (R-30: an unknown one is
@@ -152,10 +155,11 @@ impl<'a> Walker<'a> {
     fn unusable(&self, r: &Run, p: &Place) -> Option<Why> {
         match r.cur.status(p.root)? {
             &Status::Moved { at, via_loop } => Some(Why::Moved(at, via_loop)),
-            Status::Stale { changes } => changes.iter().find_map(|&c| {
-                let change = self.m.changes.get(&c).unwrap_or_else(|| bug(Some(c), "a change not kept"));
-                Some(Why::Stale(c, change.reaches(p)?))
-            }),
+            Status::Stale { changes } => (changes.iter())
+                .filter_map(|(&k, &c)| Some(Why::Stale(c, self.m.places[k as usize].1.reaches(p)?, k as usize)))
+                .min_by_key(|why| match why {
+                    Why::Stale(c, ..) | Why::Moved(c, _) => *c,
+                }),
         }
     }
 
@@ -181,14 +185,13 @@ impl<'a> Walker<'a> {
                 };
                 Diagnostic::new(Stage::Modes, Code::E0704, at, message).with_note(m, "moved here")
             }
-            Why::Stale(c, prefix) => {
-                let text = |s: Span| &self.text[s.start as usize..s.end as usize];
-                // As written, unless read by a pattern or on more than one line.
-                let what = match by.is_none() && !text(at).contains('\n') {
-                    true => text(at).to_string(),
-                    false => path_text(name, &p.proj),
+            Why::Stale(c, prefix, k) => {
+                // As written, unless read by a pattern.
+                let what = match by {
+                    None => self.place_text(at, &[], p),
+                    Some(_) => path_text(name, &p.proj),
                 };
-                let changed = text(c);
+                let changed = self.place_text(c, &[], &self.m.places[k].0);
                 let message = format!(
                     "`{what}` cannot be used after `{changed}` changed: the place it borrows overlaps the changed place (§7)"
                 );
@@ -215,13 +218,24 @@ impl<'a> Walker<'a> {
     pub(super) fn bound_note(&self, l: LocalId) -> (Span, String) {
         let mut from: Vec<String> = Vec::new();
         for s in self.deps.sources(l) {
-            let t = path_text(&self.text[s.at.start as usize..s.at.end as usize], &s.pat);
+            let t = self.place_text(s.at, &s.pat, &s.place);
             if !from.contains(&t) {
                 from.push(t);
             }
         }
         let local = &self.info.locals[l.0 as usize];
         (local.span, format!("`{}` is bound here as a borrow of `{}` (§5.4)", local.name, from.join("` or `")))
+    }
+
+    /// The text of the place `p` in a message: as written at `at`, then
+    /// the steps `more`; on more than one line, its name and path (an index
+    /// `[_]`).
+    pub(super) fn place_text(&self, at: Span, more: &[Proj], p: &Place) -> String {
+        let text = &self.text[at.start as usize..at.end as usize];
+        match text.contains('\n') {
+            false => path_text(text, more),
+            true => path_text(&self.info.locals[p.root.0 as usize].name, &p.proj),
+        }
     }
 
     /// Found by the walk that reports.

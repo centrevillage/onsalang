@@ -4,7 +4,7 @@
 //! when `var` is the one fix); a write to a place that can changes the state
 //! (§7, S-789). An erroneous write changes nothing (review 2).
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
@@ -89,13 +89,17 @@ impl Walker<'_> {
         }
     }
 
-    /// The place `w` changed at `at`: the bindings a place of which
-    /// overlaps it are unusable there (§7, S-803: kept once at each place).
+    /// The place `w` changed at `at`: the bindings in scope a place of
+    /// which overlaps it are unusable there (§7, S-803: kept once for each
+    /// place).
     pub(super) fn changed(&mut self, r: &mut Run, w: &Place, at: Span) {
-        let deps = &self.deps;
-        let change = self.m.changes.entry(at).or_insert_with(|| deps.change(w));
-        for &l in change.along.keys() {
-            r.cur.set(l, Status::Stale { changes: BTreeSet::from([at]) });
+        let (deps, places) = (&self.deps, &mut self.m.places);
+        let k = *self.m.ids.entry(w.clone()).or_insert_with(|| {
+            places.push((w.clone(), deps.change(w)));
+            places.len() as u32 - 1
+        });
+        for &l in places[k as usize].1.along.keys().filter(|&&l| deps.in_scope(l, at)) {
+            r.cur.set(l, Status::Stale { changes: BTreeMap::from([(k, at)]) });
         }
     }
 
