@@ -1,0 +1,155 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§5.2", "§5.4"]
+
+// S-803 (§7), run in the interpreter: the programs of values/binding_path_use.onsa that become legal are run.
+// A path of a binding of a `match` arm that a change made unusable reads the place it derives from composed with
+// the path (`hh` is `w.h`, so `hh.buf` is `w.h.buf`), which the change of `w.h.n` leaves as it was: the buffer is
+// the one made, the Copy sibling `hh.m` is its value. The changes themselves are done (`w.h.n` is read back through `w`).
+
+pub struct Counter {
+  c: U32,
+}
+
+impl Counter {
+  pub fn inc(inout self) {
+    self.c = self.c + 1
+  }
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  m: U32,
+  n: U32,
+  xs: [U32; 2],
+  cnt: Counter,
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+fn io_n(inout n: U32) {
+  n = n + 1
+}
+
+fn mk_wrap() -> Wrap uses {Alloc} {
+  Wrap { h: Holder { buf: Buf.zeroed(3), m: 7, n: 1, xs: [0, 0], cnt: Counter { c: 0 } }, k: 2 }
+}
+
+fn path_after_an_assignment(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      r = len_of(hh.buf) + hh.m
+    },
+  }
+  r
+}
+
+fn path_after_an_inout_argument(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, k: _ } => {
+      io_n(inout w.h.n)
+      r = hh.buf.len() + hh.m
+    },
+  }
+  r
+}
+
+fn path_after_a_bang_of_another_field(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.cnt.inc!()
+      w.h.cnt.inc!()
+      r = len_of(hh.buf) + hh.m
+    },
+  }
+  r
+}
+
+fn path_after_an_index(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.xs[1] = 4
+      r = len_of(hh.buf) + hh.m
+    },
+  }
+  r
+}
+
+fn path_used_in_a_loop(inout w: Wrap, n: U32) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, k: _ } => {
+      var t: U32 = 0
+      for _ in 0 ..< n {
+        t = t + len_of(hh.buf) + hh.m
+        w.h.n = w.h.n + 1
+      }
+      r = t
+    },
+  }
+  r
+}
+
+fn path_of_a_chain(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let g  = hh
+      let g2 = g
+      w.h.n = 5
+      r = len_of(g2.buf) + g2.m
+    },
+  }
+  r
+}
+
+test "a path of an unusable binding reads the place it derives from" {
+  var w = mk_wrap()
+  assert path_after_an_assignment(inout w) == 10
+  assert w.h.n == 5
+  assert w.h.m == 7
+}
+
+test "an inout argument changes the field, the other field is read" {
+  var w = mk_wrap()
+  assert path_after_an_inout_argument(inout w) == 10
+  assert w.h.n == 2
+}
+
+test "the receiver of a bang of another field" {
+  var w = mk_wrap()
+  assert path_after_a_bang_of_another_field(inout w) == 10
+  assert w.h.cnt.c == 2
+}
+
+test "an index of another field" {
+  var w = mk_wrap()
+  assert path_after_an_index(inout w) == 10
+  assert w.h.xs[1] == 4
+  assert w.h.xs[0] == 0
+}
+
+test "the use is repeated while the field is changed in a loop" {
+  var w = mk_wrap()
+  assert path_used_in_a_loop(inout w, 3) == 30
+  assert w.h.n == 4
+}
+
+test "a chain of derived bindings keeps the path" {
+  var w = mk_wrap()
+  assert path_of_a_chain(inout w) == 10
+  assert w.h.n == 5
+}

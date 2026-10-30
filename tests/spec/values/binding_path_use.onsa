@@ -1,0 +1,459 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§5.4"]
+
+// S-803 (§7, §5.4): the path of a binding is judged at the place it derives from composed with the path, and the whole
+// binding (`use_h(hh)`, `let g = hh`) at the place of the binding (`w.h.n = 5` leaves `hh.buf` usable, and `hh.n` and
+// `use_h(hh)` are E0704). A binding of
+// a `match` arm that a change made unusable can still be used by a path that does not overlap the changed place:
+// `hh` is the place `w.h`, so after `w.h.n = 5` the path `hh.buf` is the place `w.h.buf` and `hh.m` is `w.h.m`, which
+// the change leaves alone. The path is used directly, as the receiver of a method, as a Copy sibling field and in
+// the hole of an interpolated string, after an assignment, an `inout` argument, the receiver of a `!` call of
+// another field, a change in a branch and a change after the use in a loop. The paths of an index, of a tuple
+// element and of an element of an array (the indexes overlap, §5.2, and the fields after them decide) and the
+// chains of derived bindings (`let g = hh`, a chain of two, a binding derived from two bindings) are judged the same
+// way. The same meaning written another way gives the same answer (S-797: `let c = hh.buf` before the change, the
+// nested pattern `Holder { buf: bb, … }`). A destructuring `let` and a `match` on the binding or on its path read
+// the elements the pattern reads (a binding, a comparison with a literal; `_` reads nothing; the
+// pattern of a variant reads the whole of that position), so they are usable when those elements do not overlap the
+// changed place. The expression of an index inside a path is evaluated before the element is read. The whole
+// binding (`hh`), the overlapping path and the change of the place itself are E0704 in
+// negative/binding_path_use.onsa.
+
+pub struct Counter {
+  c: U32,
+}
+
+impl Counter {
+  pub fn inc(inout self) {
+    self.c = self.c + 1
+  }
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  m: U32,
+  n: U32,
+  xs: [U32; 2],
+  cnt: Counter,
+  o: Option[U32],
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+pub struct Pair {
+  a: Holder,
+  b: Holder,
+}
+
+impl Wrap {
+  pub fn len_after_a_change(inout self) -> U32 {
+    match self.h {
+      hh => {
+        self.h.n = 5
+        len_of(hh.buf)
+      },
+    }
+  }
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn set_n(inout n: U32) -> U32 {
+  n = 5
+  0
+}
+
+pub fn io_n(inout n: U32) {
+  n = n + 1
+}
+
+pub fn mk_holder() -> Holder uses {Alloc} {
+  Holder { buf: Buf.zeroed(2), m: 7, n: 1, xs: [0, 0], cnt: Counter { c: 0 }, o: Some(3) }
+}
+
+// ---- the use of a path: directly, as a receiver, a Copy sibling field, a hole of an interpolation ----
+
+pub fn path_as_an_argument(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      len_of(hh.buf)
+    },
+  }
+}
+
+pub fn path_as_a_receiver(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      hh.buf.len()
+    },
+  }
+}
+
+pub fn copy_sibling_field(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      hh.m
+    },
+  }
+}
+
+pub fn hole_of_an_interpolation(inout w: Wrap) -> U32 uses {Alloc} {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      let s = "{hh.m}"
+      s.len()
+    },
+  }
+}
+
+pub fn the_subject_is_a_path_itself(inout w: Wrap) -> U32 {
+  match w.h {
+    hh => {
+      w.h.n = 5
+      len_of(hh.buf) + hh.m
+    },
+  }
+}
+
+pub fn a_path_used_twice_after_the_change(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      len_of(hh.buf) + hh.buf.len() + hh.m
+    },
+  }
+}
+
+// ---- the form of the change ----
+
+pub fn change_by_an_inout_argument(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      io_n(inout w.h.n)
+      len_of(hh.buf)
+    },
+  }
+}
+
+pub fn change_by_the_receiver_of_a_bang_of_another_field(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.cnt.inc!()
+      len_of(hh.buf) + hh.m
+    },
+  }
+}
+
+pub fn change_in_a_branch(inout w: Wrap, c: Bool) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      if c {
+        w.h.n = 5
+      }
+      len_of(hh.buf)
+    },
+  }
+}
+
+pub fn change_in_both_branches(inout w: Wrap, c: Bool) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      if c {
+        w.h.n = 5
+      } else {
+        io_n(inout w.h.n)
+      }
+      len_of(hh.buf) + hh.m
+    },
+  }
+}
+
+pub fn use_then_change_in_a_loop(inout w: Wrap, n: U32) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      var t: U32 = 0
+      for _ in 0 ..< n {
+        t = t + len_of(hh.buf) + hh.m
+        w.h.n = w.h.n + 1
+      }
+      t
+    },
+  }
+}
+
+pub fn change_in_a_while_loop(inout w: Wrap, n: U32) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      var i: U32 = 0
+      var t: U32 = 0
+      while i < n {
+        t = t + hh.buf.len()
+        io_n(inout w.h.n)
+        i = i + 1
+      }
+      t
+    },
+  }
+}
+
+pub fn two_fields_changed(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      w.k = 6
+      len_of(hh.buf) + hh.m
+    },
+  }
+}
+
+pub fn two_changes_of_the_same_binding(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      w.h.cnt.inc!()
+      io_n(inout w.h.n)
+      len_of(hh.buf)
+    },
+  }
+}
+
+// ---- the kind of the path ----
+
+pub fn index_of_another_field(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.xs[0] = 1
+      len_of(hh.buf) + hh.m
+    },
+  }
+}
+
+pub fn element_of_a_tuple(inout p: (Holder, U32)) -> U32 {
+  match p {
+    (hh, _) => {
+      p.0.n = 5
+      len_of(hh.buf)
+    },
+  }
+}
+
+pub fn the_other_element_of_a_tuple(inout p: (Holder, Holder)) -> U32 {
+  match p {
+    (hh, _) => {
+      p.1.n = 5
+      len_of(hh.buf) + hh.m
+    },
+  }
+}
+
+pub fn element_of_an_array_then_the_fields(inout vs: [Holder; 2]) -> U32 {
+  match vs[0] {
+    hh => {
+      vs[1].n = 5
+      len_of(hh.buf) + hh.m
+    },
+  }
+}
+
+// ---- the chain of derived bindings ----
+
+pub fn derived_before_the_change(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let g = hh
+      w.h.n = 5
+      len_of(g.buf)
+    },
+  }
+}
+
+pub fn derived_twice_before_the_change(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let g  = hh
+      let g2 = g
+      io_n(inout w.h.n)
+      len_of(g2.buf) + g2.m
+    },
+  }
+}
+
+pub fn derived_from_two_bindings(inout w: Pair, c: Bool) -> U32 {
+  match w {
+    Pair { a: hh, b: hh2 } => {
+      let tt = if c { hh } else { hh2 }
+      w.a.n = 5
+      len_of(tt.buf) + tt.m
+    },
+  }
+}
+
+// ---- the same meaning written another way gives the same answer ----
+
+pub fn a_let_of_the_path_before_the_change(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      w.h.n = 5
+      len_of(c) + len_of(hh.buf)
+    },
+  }
+}
+
+pub fn the_nested_pattern(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: Holder { buf: bb, m: mm, n: _, xs: _, cnt: _, o: _ }, k: _ } => {
+      w.h.n = 5
+      len_of(bb) + mm
+    },
+  }
+}
+
+pub fn direct_path_and_interpolation_agree(inout w: Wrap) -> U32 uses {Alloc} {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.cnt.inc!()
+      let a = hh.m
+      let s = "{hh.m}"
+      a + s.len()
+    },
+  }
+}
+
+// ---- the use of a path in a nested arm and in a generic callee ----
+
+pub fn first_len[T: Copy](b: Buf[T]) -> U32 {
+  b.len()
+}
+
+pub fn nested_arms(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: kk } => {
+      match hh.xs {
+        ys => {
+          w.h.n = 5
+          len_of(hh.buf) + ys.len() + kk
+        },
+      }
+    },
+  }
+}
+
+pub fn generic_callee(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      first_len(hh.buf)
+    },
+  }
+}
+
+// ---- a destructuring `let` and a `match` read the elements the pattern reads (S-803, D1 and D2) ----
+
+pub fn destructuring_with_the_changed_element_skipped(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      let Holder { buf: bb, m: mm, n: _, xs: _, cnt: _, o: _ } = hh
+      len_of(bb) + mm
+    },
+  }
+}
+
+pub fn destructuring_the_same_as_the_lets_of_the_paths(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      let bb = hh.buf
+      let mm = hh.m
+      len_of(bb) + mm
+    },
+  }
+}
+
+pub fn destructuring_a_derived_binding(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let g = hh
+      w.h.n = 5
+      let Holder { buf: bb, m: _, n: _, xs: _, cnt: _, o: _ } = g
+      len_of(bb)
+    },
+  }
+}
+
+pub fn destructuring_the_path_of_the_binding(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.cnt.inc!()
+      let Counter { c: _ } = hh.cnt
+      len_of(hh.buf)
+    },
+  }
+}
+
+pub fn match_on_the_binding_with_wildcards(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      match hh {
+        Holder { buf: bb, m: _, n: _, xs: _, cnt: _, o: _ } => len_of(bb),
+      }
+    },
+  }
+}
+
+pub fn match_on_the_path_of_the_binding(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      match hh.buf {
+        b2 => len_of(b2),
+      }
+    },
+  }
+}
+
+pub fn match_on_a_variant_at_another_position(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      match hh.o {
+        Some(b) => b,
+        None => 0,
+      }
+    },
+  }
+}
+
+pub fn match_with_a_literal_at_another_position(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      match hh {
+        Holder { buf: _, m: 7, n: _, xs: _, cnt: _, o: _ } => 1,
+        _ => 0,
+      }
+    },
+  }
+}
+
+// ---- the expression of an index is evaluated before the element is read (S-803, E1) ----
+
+pub fn index_expression_changes_another_field(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      hh.xs[set_n(inout w.h.n)]
+    },
+  }
+}

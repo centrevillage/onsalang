@@ -2309,3 +2309,10 @@ target = "tests/spec/values/unwrap_receiver_run.onsa:80:21 E0703 fix1"
 reasons = ["S-609"]
 until = "W4-07"
 note = "古い modes の E0703 の `move` を書く候補が、同じ単位に別の E0703 か E0711 を残す（新しい modes では E0703 が出ない。W4-07 U4 の t1・t2）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/binding_path_use.onsa"
+reasons = ["S-803", "S-804"]
+until = "W4-07"
+note = "使えなくなった束縛の経路と全体の使用、分解する `let` と `match` の見出しの読み、添字の順の E0704（§7）が出ない（古い modes は §7 を持たない。W4-07 U4b の t4）"
