@@ -4,17 +4,19 @@
 //! arguments are walked from the left, each at the position its parameter
 //! gives, whatever its mark.
 
+use std::mem::replace;
+
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Mode};
 
 use super::check::Walker;
 use super::flow::Run;
-use super::place::place_of;
+use super::place::{Place, overlaps, place_of};
 use super::walk::Pos;
 use super::write::How;
 use crate::Kind;
-use crate::body::Target;
+use crate::body::{LocalId, Target};
 use crate::builtin::method_self;
 use crate::def::DefKind;
 use crate::ty::{Ty, TyId};
@@ -34,6 +36,18 @@ pub(super) enum Takes {
 /// arguments takes.
 type Takings = (Option<Mode>, Vec<Takes>);
 
+/// An argument of a call that is a place (E0702): its expression, how it
+/// is passed, the places it stands for and the binding that stands for
+/// them, if one does (S-796); `copied`, a Dup value at a `move` parameter
+/// or receiver, which counts as a read (S-801).
+struct Passed {
+    at: ExprId,
+    mode: Mode,
+    places: Vec<Place>,
+    via: Option<LocalId>,
+    copied: bool,
+}
+
 impl Walker<'_> {
     /// The call `e` of `callee` with `args`, of the form `kind`. Of a callee
     /// the walk does not know (§18.1: a value of the error type), the marks
@@ -47,14 +61,116 @@ impl Walker<'_> {
             bug(Some(self.ast.expr(e).span), "a call whose arguments are not those of its callee")
         }
         self.bang(e, callee, kind, recv);
-        match (recv, &self.ast.expr(callee).kind) {
-            (Some(Mode::Move), &ExprKind::Field { base, .. }) => self.expr(r, base, Pos::Extract),
-            (Some(Mode::Inout), &ExprKind::Field { base, .. }) => self.write_place(r, base, How::Bang),
-            (Some(m), &ExprKind::Field { base, .. }) => self.expr(r, base, Pos::Arg(m)),
+        let receiver = match (recv, &self.ast.expr(callee).kind) {
+            (Some(m), &ExprKind::Field { base, .. }) => Some((base, m)),
             (Some(_), _) => bug(Some(self.ast.expr(callee).span), "a method call with no receiver"),
-            (None, _) => self.expr(r, callee, Pos::Read),
+            (None, _) => None,
+        };
+        let later = self.exclusive(receiver, args, &takes);
+        let outer = std::mem::take(&mut self.inside.after_call);
+        match receiver {
+            Some((base, Mode::Move)) => {
+                self.inside.direct = place_of(self.ast, self.names, base).is_some();
+                self.expr(r, base, Pos::Extract)
+            }
+            Some((base, Mode::Inout)) => self.write_place(r, base, How::Bang),
+            Some((base, m)) => self.expr(r, base, Pos::Arg(m)),
+            None => self.expr(r, callee, Pos::Read),
         }
-        self.lazily(r, e, |w, r| args.iter().zip(takes).for_each(|(a, t)| w.arg(r, a, t)));
+        let span = self.ast.expr(e).span;
+        self.lazily(r, e, |w, r| {
+            for (a, t) in args.iter().zip(takes) {
+                let excuse = (later.contains(&a.expr)).then(|| place_of(w.ast, w.names, a.expr)).flatten();
+                let outer = replace(&mut w.inside.excuse, excuse.map(|p| (p.root, span)));
+                w.arg(r, a, t);
+                w.inside.excuse = outer;
+            }
+        });
+        for (place, at) in replace(&mut self.inside.after_call, outer) {
+            self.changed(r, &place, at);
+        }
+    }
+
+    /// E0702 (memo 2.5; §5.2, S-787, S-796): an argument (the receiver
+    /// first) that is a place overlapping the place of an earlier one, one
+    /// of them `inout` or `move`, at the later one; the arguments found so.
+    /// Each argument is evaluated before the call, so the order is not what
+    /// counts, and a value made of a place (`xs.fill!(xs.len())`) is no
+    /// place. A borrow binding that is not Copy stands for the places it
+    /// derives from (S-796). The `inout` inside another argument is W4-08's
+    /// (S-193).
+    fn exclusive(&mut self, receiver: Option<(ExprId, Mode)>, args: &[Arg], takes: &[Takes]) -> Vec<ExprId> {
+        let params = args.iter().zip(takes).filter_map(|(a, t)| match t {
+            Takes::Param(m, _) => Some((a.expr, *m)),
+            Takes::Element => None,
+        });
+        let passed: Vec<Passed> = receiver.into_iter().chain(params).filter_map(|(x, m)| self.passed(x, m)).collect();
+        let mut later = Vec::new();
+        for (j, b) in passed.iter().enumerate() {
+            let excl = b.mode != Mode::Borrow;
+            let overlap =
+                |a: &Passed| a.places.iter().find(|p| b.places.iter().any(|q| overlaps(p, q))).map(|p| p.root);
+            let first =
+                passed[..j].iter().filter(|a| excl || a.mode != Mode::Borrow).find_map(|a| Some((a, overlap(a)?)));
+            if let Some((a, root)) = first {
+                later.push(b.at);
+                let d = self.overlapping(a, b, root);
+                self.report(d);
+            }
+        }
+        later
+    }
+
+    /// The argument `x` passed as `mode`, if it is a place (S-787: the
+    /// `move` of an Affine field's path consumes its root whole; S-801: a
+    /// Dup value at a `move` parameter or receiver is copied, and counts as
+    /// a read of its place, as at a borrowed one).
+    fn passed(&mut self, x: ExprId, mut mode: Mode) -> Option<Passed> {
+        let mut place = place_of(self.ast, self.names, x)?;
+        let ty = self.info.expr_types.get(&self.ast.without_parens(x)).copied();
+        let kind = ty.and_then(|t| self.kind_of(t));
+        let copied = mode == Mode::Move && matches!(kind, Some(Kind::Copy | Kind::Shared));
+        if copied {
+            mode = Mode::Borrow;
+        } else if mode == Mode::Move && kind == Some(Kind::Affine) {
+            place.proj.clear();
+        }
+        let derived = self.deps.sources(&place);
+        let via = derived.is_some().then_some(place.root);
+        Some(Passed { at: x, mode, places: derived.unwrap_or_else(|| vec![place]), via, copied })
+    }
+
+    /// The E0702 of `b`, which overlaps the earlier `a` at a place of `root`:
+    /// "twice" of two of one mode, else "and" (§5.2's two forms); noted at
+    /// `a`, and at a binding either stands for (S-796).
+    fn overlapping(&self, a: &Passed, b: &Passed, root: LocalId) -> Diagnostic {
+        let how = |m: Mode| match m {
+            Mode::Inout => "as `inout`",
+            Mode::Move => "as `move`",
+            Mode::Borrow => "borrowed",
+        };
+        let n = &self.info.locals[root.0 as usize].name;
+        let (message, note) = if a.mode == b.mode {
+            let message =
+                format!("`{n}` is passed {} twice in one call; the two places may overlap (§5.2)", how(a.mode));
+            (message, format!("first {} here", how(a.mode).trim_start_matches("as ")))
+        } else {
+            let rank = |m: Mode| [Mode::Inout, Mode::Move, Mode::Borrow].iter().position(|&x| x == m);
+            let (x, y) = if rank(a.mode) < rank(b.mode) { (a.mode, b.mode) } else { (b.mode, a.mode) };
+            let message =
+                format!("`{n}` is passed {} and {} in the same call; the places may overlap (§5.2)", how(x), how(y));
+            (message, format!("{} here", how(a.mode).trim_start_matches("as ")))
+        };
+        let mut d = Diagnostic::new(Stage::Modes, Code::E0702, self.ast.expr(b.at).span, message)
+            .with_note(self.ast.expr(a.at).span, note);
+        for p in [a, b].into_iter().filter(|p| p.copied) {
+            let copy = "a Dup value passed to a `move` parameter is copied, and read here (§5.2)";
+            d = d.with_note(self.ast.expr(p.at).span, copy);
+        }
+        [a, b].into_iter().filter_map(|p| p.via).fold(d, |d, l| {
+            let local = &self.info.locals[l.0 as usize];
+            d.with_note(local.span, format!("`{}` is bound here as a borrow of `{n}` (§5.4)", local.name))
+        })
     }
 
     /// What the call `e` of `callee` takes (memo 2.5): of a function or a
@@ -122,8 +238,7 @@ impl Walker<'_> {
                     self.mismatch(a, m);
                 }
                 match m {
-                    // SPEC-GAP(S-796): a binding derived from the place of an `inout` argument, passed in the same
-                    // call, is E0704 after it only (§7, from the left), not before it (§5.2: E0702 or not).
+                    // A binding derived from its place, passed in the call, is `exclusive`'s E0702 (S-796).
                     Mode::Inout => self.write_place(r, e, How::Inout),
                     _ => self.argument(r, e, ty),
                 }

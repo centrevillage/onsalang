@@ -154,6 +154,8 @@ features! {
     /// S-610, R-85, W4-05 table 5: `{}`: the type of the `const`, holding a Shared
     /// value or a type parameter not `Copy` (placed statically from phase 2).
     SharedConsts: Language, "a `const` of the type `{}`, which holds or may hold a Shared value", None;
+    /// R-85 (5), S-80: whether the capture copies or borrows is phase 2's (§5.4).
+    CapturedShared: Language, "the capture of a Shared value by an anonymous function (phase 2)", None;
     OrPatternBindings: Language, "or-patterns with bindings", Some("write one arm for each alternative");
     Closures: Language, "anonymous functions anywhere but as the argument of `array.from_fn`", None;
     FnValues: Language, "function values", None;

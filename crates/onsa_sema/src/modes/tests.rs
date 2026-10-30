@@ -1268,8 +1268,8 @@ pub fn user_borrowed(v: W) -> U32 uses {Alloc} {
 /// E0703); `take(b)` of an `inout` Affine `b` is E0711 with no candidate
 /// (R-117); a planar literal at a borrowed parameter of a method and of a
 /// generic function; the tails of
-/// an `if` at a `move` parameter (§5.2); the arguments walked from the left
-/// (§3.5).
+/// an `if` at a `move` parameter (§5.2); a place moved and borrowed in one
+/// call, E0702 whatever the order (§5.2, S-787; U4a, was E0704 from the left).
 #[test]
 fn the_carried_forms_of_calls() {
     let src = "pub fn span(xs: Span[F32]) -> U32 {
@@ -1302,7 +1302,7 @@ pub fn generic(a: Buf[F32], b: Buf[F32]) {
     let skip = CALLEES.matches('\n').count();
     let (diags, moved) = seen(&format!("{CALLEES}{src}"));
     let lines: Vec<_> = diags.into_iter().map(|(c, l, _)| (c, l - skip)).collect();
-    assert_eq!(lines, [(Code::E0710, 2), (Code::E0711, 9), (Code::E0704, 20)]);
+    assert_eq!(lines, [(Code::E0710, 2), (Code::E0711, 9), (Code::E0702, 20)]);
     assert_eq!(call_fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 0);
     assert_eq!(moved, BTreeSet::from(["a", "b", "x"].map(String::from)));
 }
@@ -1738,4 +1738,563 @@ fn a_binding_of_tails_derives_from_each() {
 }
 ";
     assert_eq!(diags(src), [at(9, (Code::E0704, false))]);
+}
+
+/// §5.3, memo 2.7 (U4a): at the first read of a value an anonymous function
+/// captures, in this order: an `inout` parameter (of any kind) or an Affine
+/// value is one E0712 of the function, naming the first such read (S-722);
+/// a second-class value E0710 (R-331, S-217: an unbound `Span` parameter, a
+/// bound element and a view); a Shared one E0200 (R-85 (5), S-80: by its
+/// type, a static value and a `T` with no bound too). A Copy one is copied.
+/// The first read in a loop is the walk's that reports, not the summary's.
+#[test]
+fn what_an_anonymous_function_captures() {
+    let src = "pub fn inout_first(inout k: U32, b: Buf[F32]) -> U32 {
+  apply(fn(x: U32) -> U32 { k + b.len() + x })
+}
+pub fn affine_first(inout k: U32, b: Buf[F32]) -> U32 {
+  apply(fn(x: U32) -> U32 { b.len() + k + x })
+}
+pub fn inout_copy(inout n: U32) -> U32 {
+  apply(fn(x: U32) -> U32 { n + x })
+}
+pub fn span_param(xs: Span[F32]) -> U32 {
+  apply(fn(n: U32) -> U32 { xs.len() + n })
+}
+pub fn bound_element(xs: [Span[F32]; 2]) -> U32 {
+  let ch = xs[0]
+  apply(fn(n: U32) -> U32 { ch.len() + n })
+}
+pub fn bound_view(xs: Span[F32]) -> U32 {
+  let half = xs.slice(0, 1)
+  apply(fn(n: U32) -> U32 { n + half.len() })
+}
+pub fn shared(s: Str) -> U32 {
+  apply(fn(n: U32) -> U32 { s.len() + n })
+}
+pub fn static_value() -> U32 {
+  let s = \"abc\"
+  apply(fn(n: U32) -> U32 { s.len() + n })
+}
+pub fn see[T](t: T) -> U32 { 1 }
+pub fn unbounded[T](t: T) -> U32 {
+  apply(fn(n: U32) -> U32 { see(t) + n })
+}
+pub fn copied(k: U32, h: Holder) -> U32 {
+  let m = h.n
+  apply(fn(n: U32) -> U32 { k + m + n })
+}
+pub fn moved_capture() -> U32 uses {Alloc} {
+  let b = mk()
+  apply(fn(n: U32) -> U32 {
+    take(move b)
+    n
+  })
+}
+pub fn in_a_loop(xs: Span[F32], c: Bool) -> U32 {
+  apply(fn(n: U32) -> U32 {
+    var k = n
+    while c { k = k + xs.len() }
+    k
+  })
+}
+";
+    let found: Vec<_> = writes(src).into_iter().map(|(c, l, m, f)| (c, l, m, f.len())).collect();
+    let lines: Vec<_> = found.iter().map(|(c, l, _, n)| (*c, *l, *n)).collect();
+    let (e0712, e0710, e0200) = ((Code::E0712, 0), (Code::E0710, 0), (Code::E0200, 0));
+    let expected = [(e0712, 2), (e0712, 5), (e0712, 8), (e0710, 11), (e0710, 15), (e0710, 19), (e0200, 22)];
+    let expected = [&expected[..], &[(e0200, 26), (e0200, 30), (e0712, 38), (e0710, 46)]].concat();
+    assert_eq!(lines, expected.iter().map(|&((c, n), l)| (c, l, n)).collect::<Vec<_>>());
+    let says = |i: usize, s: &str| assert!(found[i].2.contains(s), "{}", found[i].2);
+    says(0, "`k` is an `inout` parameter");
+    says(1, "`b` is Affine");
+    says(2, "`n` is an `inout` parameter");
+    says(3, "cannot be captured");
+    says(6, "the capture of a Shared value");
+    says(9, "`b` is Affine");
+}
+
+/// R-25 (§5.3): a value an anonymous function captures is read-only in it,
+/// whatever its binding: an assignment, an `inout` argument and a `!`
+/// receiver, of a `let` and a `var`, of a field and an element, from a
+/// nested function, are E0701 with R-25's words and no candidate (`var`
+/// leaves it). The function's own bindings are written.
+#[test]
+fn a_captured_value_is_not_written() {
+    let src = "pub struct P { x: U32, y: U32 }
+impl P {
+  pub fn inc(inout self) {}
+}
+pub fn bump(inout z: U32) {}
+pub fn assign_var() -> U32 {
+  var y: U32 = 1
+  apply(fn(n: U32) -> U32 {
+    y = 3
+    n + y
+  })
+}
+pub fn assign_let() -> U32 {
+  let y: U32 = 1
+  apply(fn(n: U32) -> U32 {
+    y = n
+    n
+  })
+}
+pub fn field() -> U32 {
+  var p = P { x: 1, y: 2 }
+  apply(fn(n: U32) -> U32 {
+    p.x = n
+    p.y
+  })
+}
+pub fn element() -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  apply(fn(n: U32) -> U32 {
+    xs[0] = n
+    n
+  })
+}
+pub fn inout_arg(move k: U32) -> U32 {
+  apply(fn(n: U32) -> U32 {
+    bump(inout k)
+    n
+  })
+}
+pub fn bang() -> U32 {
+  let p = P { x: 1, y: 2 }
+  apply(fn(n: U32) -> U32 {
+    p.inc!()
+    n
+  })
+}
+pub fn nested() -> U32 {
+  apply(fn(n: U32) -> U32 {
+    var k = n
+    k = k + 1
+    bump(inout k)
+    apply(fn(m: U32) -> U32 {
+      k = m
+      m
+    }) + k
+  })
+}
+";
+    let found = writes(src);
+    let lines: Vec<_> = found.iter().map(|(c, l, _, f)| (*c, *l, f.len())).collect();
+    assert_eq!(lines, [9, 16, 23, 30, 36, 43, 53].map(|l| (Code::E0701, l, 0)));
+    let verbs = ["cannot assign", "cannot assign", "cannot assign", "cannot assign", "cannot pass as `inout`"];
+    for ((_, _, message, _), verb) in found.iter().zip(verbs.into_iter().chain(["cannot call", "cannot assign"])) {
+        assert!(
+            message.starts_with(verb) && message.ends_with("is captured by a closure, read-only (§5.3)"),
+            "{message}"
+        );
+    }
+    // An `inout` argument with no mark: R-25's E0701 stands at the argument
+    // before the candidate of E0703 adds the mark (U3a), so it leaves it.
+    let unmarked = "pub fn bump(inout z: U32) {}
+pub fn t() -> U32 {
+  var k: U32 = 1
+  apply(fn(n: U32) -> U32 {
+    bump(k)
+    n
+  })
+}
+";
+    let k = |code| (code, 5, "k".to_string());
+    assert_eq!(all_found(unmarked), [k(Code::E0703), k(Code::E0701)]);
+}
+
+/// The callees of [`overlapping`]'s cases.
+const OVERLAPS: &str = "pub fn ii(inout x: Buf[F32], inout y: Buf[F32]) {}
+pub fn ib(inout x: Buf[F32], y: Buf[F32]) {}
+pub fn bi(x: Buf[F32], inout y: Buf[F32]) {}
+pub fn im(inout x: Buf[F32], move y: Buf[F32]) uses {Alloc} {}
+pub fn bm(x: Buf[F32], move y: Buf[F32]) uses {Alloc} {}
+pub fn mb(move x: Buf[F32], y: Buf[F32]) uses {Alloc} {}
+pub fn mbh(move h: Holder, y: Buf[F32]) uses {Alloc} {}
+pub fn inm(inout n: U32, move b: Buf[F32]) uses {Alloc} {}
+pub fn ibn(inout b: Buf[F32], n: U32) {}
+pub fn ip(inout p: (Buf[F32], Buf[F32]), a: Buf[F32]) {}
+pub fn fo(b: Buf[F32], inout o: Option[Buf[F32]]) -> U32 { b.len() }
+pub fn go(inout o: Option[Buf[F32]], b: Buf[F32]) -> U32 { b.len() }
+pub fn gn(inout o: Option[Buf[F32]], n: U32) -> U32 { n }
+pub fn fk(k: U32, inout o: Option[U32]) -> U32 { k }
+pub fn gk(inout o: Option[U32], k: U32) -> U32 { k }
+pub fn fs(s: Str, inout o: Option[Str]) -> U32 { 1 }
+pub fn gs(inout o: Option[Str], s: Str) -> U32 { 1 }
+pub fn mks() -> Option[Str] { Some(\"abc\") }
+pub struct Two { a: Option[Buf[F32]], c: Option[Buf[F32]] }
+pub fn mk2() -> Two uses {Alloc} { Two { a: mko(), c: mko() } }
+";
+
+/// Each diagnostic the new stage reports for [`OVERLAPS`] and `body`, by
+/// its code and its line in `body`, and the lines of its notes.
+fn overlapping(body: &str) -> Vec<(Code, usize, Vec<usize>)> {
+    let src = format!("{PRELUDE}{CALLEES}{OVERLAPS}{body}");
+    let (pkg, mut a) = analyzed(&src);
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    let start = PRELUDE.len() + CALLEES.len() + OVERLAPS.len();
+    let line = |s: Span| src[start..s.start as usize].matches('\n').count() + 1;
+    (a.diagnostics[before..].iter())
+        .filter(|d| d.span.file == FileId(0))
+        .map(|d| (d.code, line(d.span), d.notes.iter().filter_map(|n| n.span.map(line)).collect()))
+        .collect()
+}
+
+/// E0702 (§5.2, S-787): of one call, two places that overlap, one passed as
+/// `inout` or `move`, whatever the order: twice `inout`, `inout` and
+/// borrowed, `move` and anything; an Affine field's path moved stands for
+/// its root (`inm(inout h.n, move h.buf)`); a receiver. At the later one,
+/// noted at the earlier one. `mb(move x, x)` and `mbh(move h, h.buf)` are
+/// the E0702 only, not the E0704 of the use after the move it holds.
+#[test]
+fn the_places_of_one_call_overlap() {
+    let src = "pub fn twice() uses {Alloc} {
+  var x = mk()
+  ii(inout x, inout x)
+}
+pub fn inout_borrow() uses {Alloc} {
+  var x = mk()
+  ib(inout x, x)
+}
+pub fn borrow_inout() uses {Alloc} {
+  var x = mk()
+  bi(x, inout x)
+}
+pub fn inout_move() uses {Alloc} {
+  var x = mk()
+  im(inout x, move x)
+}
+pub fn borrow_move() uses {Alloc} {
+  var x = mk()
+  bm(x, move x)
+}
+pub fn move_borrow() uses {Alloc} {
+  var x = mk()
+  mb(move x, x)
+}
+pub fn move_path(move h: Holder) uses {Alloc} {
+  mbh(move h, h.buf)
+}
+pub fn field_moved() uses {Alloc} {
+  var h = Holder { buf: mk(), n: 1 }
+  inm(inout h.n, move h.buf)
+}
+pub fn elements() uses {Alloc} {
+  var xs = make_array()
+  ii(inout xs[0], inout xs[1])
+}
+pub fn receiver(move w: W) uses {Alloc} {
+  w.put(move w.b)
+}
+pub fn builtin(inout xs: [Span[F32]; 2]) {
+  xs[0].copy_from!(xs[1])
+}
+";
+    let found = overlapping(src);
+    let lines = [3, 7, 11, 15, 19, 23, 26, 30, 34, 37, 40];
+    assert_eq!(found, lines.map(|l| (Code::E0702, l, vec![l])));
+    let messages = writes(&format!("{OVERLAPS}{src}"));
+    let says = |i: usize, s: &str| assert!(messages[i].2.contains(s), "{}", messages[i].2);
+    says(0, "`x` is passed as `inout` twice in one call");
+    says(1, "`x` is passed as `inout` and borrowed in the same call");
+    says(2, "`x` is passed as `inout` and borrowed in the same call");
+    says(3, "`x` is passed as `inout` and as `move` in the same call");
+    says(4, "`x` is passed as `move` and borrowed in the same call");
+    says(9, "`w` is passed as `move` and borrowed in the same call");
+}
+
+/// §5.2: places that do not overlap: other fields, a value made of the
+/// place (`ibn(inout b, b.len())`), other locals, a Copy field at a `move`
+/// parameter (not its root, S-787); and a value moved then read to make another
+/// (`mb(move x, x.len())`) stays the E0704 of the walk from the left (§3.5).
+#[test]
+fn the_places_of_one_call_that_do_not_overlap() {
+    let src = "pub fn fields() uses {Alloc} {
+  var h = Holder { buf: mk(), n: 1 }
+  ibn(inout h.buf, h.n)
+}
+pub fn value_of_it() uses {Alloc} {
+  var b = mk()
+  ibn(inout b, b.len())
+  b.fill!(b[0] * 2.0)
+}
+pub fn other_locals() uses {Alloc} {
+  var x = mk()
+  var y = mk()
+  im(inout x, move y)
+}
+pub fn fl(move b: Buf[F32], n: U32) uses {Alloc} {}
+pub fn moved_then_read() uses {Alloc} {
+  var x = mk()
+  fl(move x, x.len())
+}
+pub fn mn(inout b: Buf[F32], move n: U32) {}
+pub fn copy_field_moved() uses {Alloc} {
+  var h = Holder { buf: mk(), n: 1 }
+  mn(inout h.buf, h.n)
+}
+";
+    assert_eq!(overlapping(src), [(Code::E0704, 18, vec![18])]);
+}
+
+/// S-801 (§5.2): a Dup value at a `move` parameter, and a Dup `move self`
+/// receiver, is copied and counts as a read of its place, as at a borrowed
+/// one: two reads do not overlap (`mmn(n, n)`, `bmn(n, n)`, a `Str` arm
+/// binding twice, `p.plus(p.x)`); with an `inout` one it is E0702, noted
+/// as copied (`imn(inout n, n)`).
+#[test]
+fn a_dup_value_at_a_move_parameter_is_a_read() {
+    let src = "pub fn mmn(move a: U32, move b: U32) -> U32 { a + b }
+pub fn bmn(a: U32, move b: U32) -> U32 { a + b }
+pub fn imn(inout a: U32, move b: U32) { a = a + b }
+pub fn sbm(s: Str, move t: Str) -> U32 { s.len() + t.len() }
+pub struct Pt { x: U32, y: U32 }
+impl Pt {
+  pub fn plus(move self, k: U32) -> Pt {
+    self.x = self.x + k
+    self
+  }
+}
+pub fn reads() -> U32 {
+  var n: U32 = 1
+  n = 2
+  mmn(n, n) + bmn(n, n)
+}
+pub fn payload() -> U32 {
+  var o = mks()
+  o = mks()
+  match o { Some(s) => sbm(s, s), None => 0 }
+}
+pub fn receiver() -> U32 {
+  var p = Pt { x: 1, y: 2 }
+  p.y = 3
+  p.plus(p.x).x
+}
+pub fn inout_and_copy() -> U32 {
+  var n: U32 = 1
+  imn(inout n, n)
+  n
+}
+";
+    assert_eq!(overlapping(src), [(Code::E0702, 29, vec![29, 29])]);
+    let messages = writes(&format!("{OVERLAPS}{src}"));
+    assert!(messages[0].2.contains("`n` is passed as `inout` and borrowed"), "{}", messages[0].2);
+}
+
+/// S-796 (§5.2, §5.4): a borrow binding that is not Copy (of an arm, and
+/// derived from one: a `let`, a nested `match`, an or-pattern, the tails of
+/// an `if`) stands for the places it derives from, so with an `inout` of
+/// that place it is E0702 whatever the order, noted at the earlier argument
+/// and at the binding; of an `inout` parameter too, and of a Shared value.
+/// An arm's place is the scrutinee's with the paths of tuples and structs,
+/// a payload the whole value.
+#[test]
+fn a_borrow_binding_stands_for_its_place() {
+    let src = "pub fn after() -> U32 uses {Alloc} {
+  var o = mko()
+  match o { Some(b) => fo(b, inout o), None => 0 }
+}
+pub fn before() -> U32 uses {Alloc} {
+  var o = mko()
+  match o { Some(b) => go(inout o, b), None => 0 }
+}
+pub fn derived() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => {
+      let c = b
+      go(inout o, c)
+    },
+    None => 0,
+  }
+}
+pub fn inout_param(inout o: Option[Buf[F32]]) -> U32 {
+  match o { Some(b) => fo(b, inout o), None => 0 }
+}
+pub fn shared() -> U32 {
+  var o = mks()
+  match o { Some(s) => gs(inout o, s), None => 0 }
+}
+pub fn tails(c: Bool, d: Buf[F32]) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => {
+      let t = if c { b } else { d }
+      fo(t, inout o)
+    },
+    None => 0,
+  }
+}
+pub fn same_field() -> U32 uses {Alloc} {
+  var w = mk2()
+  match w.a { Some(b) => go(inout w.a, b), None => 0 }
+}
+pub fn whole() -> U32 uses {Alloc} {
+  var p: (Buf[F32], Buf[F32]) = (mk(), mk())
+  match p { (a, _) => { ip(inout p, a)
+    0 } }
+}
+pub fn element(inout p: (Buf[F32], Buf[F32])) {
+  match p { (a, _) => p.0.copy_from!(a) }
+}
+";
+    let found = overlapping(src);
+    let lines: Vec<_> = found.iter().map(|(c, l, _)| (*c, *l)).collect();
+    assert_eq!(lines, [3, 7, 14, 20, 24, 31, 38, 42, 46].map(|l| (Code::E0702, l)));
+    // Noted at the earlier argument and at the binding (`c` of `before`'s
+    // second arm: the `let`).
+    assert_eq!(found[1].2, [7, 7]);
+    assert_eq!(found[2].2, [14, 13]);
+}
+
+/// S-796: what a borrow binding does not overlap: a Copy binding (it holds
+/// its value, §5.4), another field, another element of a tuple; and a
+/// value made of it (`gn(inout o, len_of(b))`), as the place it derives
+/// from changes after the call (§7): a use after the call is E0704.
+#[test]
+fn what_a_borrow_binding_does_not_overlap() {
+    let src = "pub fn copy() -> U32 {
+  var n: Option[U32] = Some(1)
+  match n { Some(k) => fk(k, inout n), None => 0 }
+}
+pub fn copy_before() -> U32 {
+  var n: Option[U32] = Some(1)
+  match n { Some(k) => gk(inout n, k), None => 0 }
+}
+pub fn other_field() -> U32 uses {Alloc} {
+  var w = mk2()
+  match w.a { Some(b) => fo(b, inout w.c), None => 0 }
+}
+pub fn other_element() uses {Alloc} {
+  var p: (Buf[F32], Buf[F32]) = (mk(), mk())
+  match p { (a, _) => ib(inout p.1, a) }
+}
+pub fn value_made() -> U32 uses {Alloc} {
+  var o = mko()
+  match o { Some(b) => gn(inout o, len_of(b)), None => 0 }
+}
+pub fn used_after() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => {
+      let n = gn(inout o, len_of(b))
+      n + len_of(b)
+    },
+    None => 0,
+  }
+}
+";
+    let lines: Vec<_> = overlapping(src).into_iter().map(|(c, l, _)| (c, l)).collect();
+    assert_eq!(lines, [(Code::E0704, 26)]);
+}
+
+/// §7 (S-796): a direct argument changes its place after the call: the
+/// receiver of a `!` and a `move` argument too (`w.sw!(Buf.zeroed(bb.len()))`
+/// reads `bb` before).
+#[test]
+fn a_direct_argument_changes_its_place_after_the_call() {
+    let src = "pub struct WB { b: Buf[F32] }
+impl WB {
+  pub fn sw(inout self, move b: Buf[F32]) uses {Alloc} {}
+}
+pub fn receiver() uses {Alloc} {
+  var w = WB { b: mk() }
+  match w { WB { b: bb } => w.sw!(Buf.zeroed(bb.len())) }
+}
+pub fn tko(move o: Option[Buf[F32]], n: U32) -> U32 uses {Alloc} { n }
+pub fn moved() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => {
+      let n = tko(move o, len_of(b))
+      n + len_of(b)
+    },
+    None => 0,
+  }
+}
+";
+    let lines: Vec<_> = overlapping(src).into_iter().map(|(c, l, _)| (c, l)).collect();
+    assert_eq!(lines, [(Code::E0704, 15)]);
+}
+
+/// S-797 (§5.4, §7): a binding derived from another derives from its place
+/// with the paths composed: after a change of `w.h.n`, `c = hh.buf` is
+/// usable and `hh` is not; after a change of `w.h.buf`, neither is.
+#[test]
+fn a_derived_binding_composes_the_paths() {
+    let src = "pub struct Wrap { h: Holder, k: U32 }
+pub fn io_n(inout n: U32) {}
+pub fn other_field() -> U32 uses {Alloc} {
+  var w = Wrap { h: Holder { buf: mk(), n: 1 }, k: 2 }
+  match w {
+    Wrap { h: hh, k: kk } => {
+      let c = hh.buf
+      io_n(inout w.h.n)
+      len_of(c)
+    },
+  }
+}
+pub fn the_parent() -> U32 uses {Alloc} {
+  var w = Wrap { h: Holder { buf: mk(), n: 1 }, k: 2 }
+  match w {
+    Wrap { h: hh, k: kk } => {
+      let c = hh.buf
+      io_n(inout w.h.n)
+      len_of(hh.buf)
+    },
+  }
+}
+pub fn the_same_field() -> U32 uses {Alloc} {
+  var w = Wrap { h: Holder { buf: mk(), n: 1 }, k: 2 }
+  match w {
+    Wrap { h: hh, k: kk } => {
+      let c = hh.buf
+      w.h.buf = mk()
+      len_of(c)
+    },
+  }
+}
+";
+    let lines: Vec<_> = overlapping(src).into_iter().map(|(c, l, _)| (c, l)).collect();
+    assert_eq!(lines, [(Code::E0704, 19), (Code::E0704, 29)]);
+}
+
+/// The forms of S-796's table (`target/notes/87/s796/`) in U4a: a nested
+/// `match`, an or-pattern, an `inout self` receiver in an `impl` (a Copy
+/// field of a binding too: `self.upd!(v.n)`), a function value (the order
+/// counts for nothing, `a_borrow_binding_stands_for_its_place`).
+#[test]
+fn the_forms_of_the_table_of_s796() {
+    let src = "pub fn mkoo() -> Option[Option[Buf[F32]]] uses {Alloc} { Some(mko()) }
+pub fn fo2(b: Buf[F32], inout o: Option[Option[Buf[F32]]]) -> U32 { b.len() }
+pub fn nested() -> U32 uses {Alloc} {
+  var o = mkoo()
+  match o { Some(i) => match i { Some(b) => fo2(b, inout o), None => 0 }, None => 0 }
+}
+pub enum E { A(Buf[F32]), B(Buf[F32]), C }
+pub fn ge(inout e: E, b: Buf[F32]) -> U32 { b.len() }
+pub fn either() -> U32 uses {Alloc} {
+  var e = E.A(mk())
+  match e { E.A(b) | E.B(b) => ge(inout e, b), E.C => 0 }
+}
+pub struct S { v: Option[Holder] }
+impl S {
+  pub fn upd(inout self, n: U32) {}
+  pub fn poke(inout self, b: Buf[F32]) {}
+  pub fn copy_field(inout self) {
+    match self.v { Some(v) => self.upd!(v.n), None => {} }
+  }
+  pub fn binding(inout self) {
+    match self.v { Some(v) => self.poke!(v.buf), None => {} }
+  }
+}
+pub fn value(fv: fn(Buf[F32], inout Option[Buf[F32]]) -> U32) -> U32 uses {Alloc} {
+  var o = mko()
+  match o { Some(b) => fv.(b, inout o), None => 0 }
+}
+";
+    let lines: Vec<_> = overlapping(src).into_iter().map(|(c, l, _)| (c, l)).collect();
+    assert_eq!(lines, [5, 11, 18, 21, 26].map(|l| (Code::E0702, l)));
 }

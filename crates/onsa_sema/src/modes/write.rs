@@ -27,12 +27,25 @@ pub(super) enum How {
     Bang,
 }
 
+impl How {
+    /// The words of an E0701 of the write.
+    pub(super) fn verb(self) -> &'static str {
+        match self {
+            How::Assign => "cannot assign to this place",
+            How::Inout => "cannot pass as `inout` this place",
+            How::Bang => "cannot call an `inout self` method on this place",
+        }
+    }
+}
+
 impl Walker<'_> {
     /// The write `how` of `target`, walked after what is evaluated before
     /// it (§3.5). A whole local assigned is live again, and not read; any
     /// other write reads its place first (an E0704 of a moved or stale root,
-    /// S-789). W4-09 and W4-10 put the E0715 of a place a borrowed `for` or a
-    /// guard holds here, first.
+    /// S-789). A value captured is not written (R-25). An `inout` argument
+    /// and a receiver change their place after the call (§7, S-796). W4-09
+    /// and W4-10 put the E0715 of a place a borrowed `for` or a guard holds
+    /// here, first.
     pub(super) fn write_place(&mut self, r: &mut Run, target: ExprId, how: How) {
         let at = self.ast.expr(target).span;
         let Some(place) = place_of(self.ast, self.names, target) else {
@@ -51,6 +64,9 @@ impl Walker<'_> {
         if !whole {
             self.expr(r, target, Pos::Read);
         }
+        if self.captured(l) {
+            return self.captured_write(l, at, how);
+        }
         if !self.writable(l) {
             return self.read_only(l, at, how);
         }
@@ -59,12 +75,21 @@ impl Walker<'_> {
         } else if !live {
             return;
         }
-        self.changed(r, place, at);
+        self.change(r, place, at, how != How::Assign);
+    }
+
+    /// The place `w` changes at `at`, now or (of a `direct` argument) after
+    /// the call (§7, S-796: `g(inout o, len_of(b))` reads `b` before it).
+    pub(super) fn change(&mut self, r: &mut Run, w: Place, at: Span, direct: bool) {
+        match direct {
+            true => self.inside.after_call.push((w, at)),
+            false => self.changed(r, &w, at),
+        }
     }
 
     /// The place `w` changed at `at`: the bindings that derive from it are
     /// unusable (§7).
-    pub(super) fn changed(&mut self, r: &mut Run, w: Place, at: Span) {
+    pub(super) fn changed(&mut self, r: &mut Run, w: &Place, at: Span) {
         for l in self.deps.stale(w) {
             r.cur.set(l, Status::Stale { changed: at });
         }
@@ -90,12 +115,7 @@ impl Walker<'_> {
                 bug(Some(at), "a `let` or `var` that is neither owned nor borrowed")
             }
         };
-        let verb = match how {
-            How::Assign => "cannot assign to this place",
-            How::Inout => "cannot pass as `inout` this place",
-            How::Bang => "cannot call an `inout self` method on this place",
-        };
-        let d = Diagnostic::new(Stage::Modes, Code::E0701, at, format!("{verb}: {why} (§5.2)"))
+        let d = Diagnostic::new(Stage::Modes, Code::E0701, at, format!("{}: {why} (§5.2)", how.verb()))
             .with_note(local.span, "declared here");
         let fix = self.var_fix(l);
         self.report(fix.into_iter().fold(d, Diagnostic::with_fix));
@@ -104,7 +124,8 @@ impl Walker<'_> {
     /// R-161: the candidate that writes `var` for the `let` of `l`, only
     /// when it is the one fix and leaves no error of this stage (§18.1,
     /// memo 2.4): (1) the `let` binds the name alone; (2) the write is not
-    /// in an anonymous function that captures `l`; (3) `var`'s value is
+    /// in an anonymous function that captures `l` (R-25's E0701 there, before
+    /// this one); (3) `var`'s value is
     /// consumed, so not a second-class one and not a borrowed Affine one;
     /// (4) the `let` has no attribute; (5) no binding derives from `l`,
     /// which a write after `var` would leave unusable (§7).
@@ -115,7 +136,7 @@ impl Walker<'_> {
             bug(Some(self.ast.stmt(s).span), "the head of a `let` binding is no `let`")
         };
         let alone = b.sites == [*pat] && matches!(self.ast.pat(*pat).kind, PatKind::Bind(_));
-        if !alone || self.captured.contains(&l) || !attrs.is_empty() || self.deps.derives_from(l) {
+        if !alone || !attrs.is_empty() || self.deps.derives_from(l) {
             return None;
         }
         let owned = matches!(self.info.heads.get(&Head::Let(s)), Some(HeadRow::Owned));

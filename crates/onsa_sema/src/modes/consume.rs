@@ -35,6 +35,8 @@ impl Walker<'_> {
     /// `Return` or `Extract`), with the offset of the `move` written on it,
     /// if any (of a `for` head, its value's: no candidate removes that one).
     pub(super) fn consume(&mut self, r: &mut Run, e: ExprId, pos: Pos, mark: Option<u32>) {
+        // A direct argument changes its place after the call (§7, S-796).
+        let direct = std::mem::take(&mut self.inside.direct) || pos == Pos::MoveArg;
         let x = self.ast.without_parens(e);
         let at = self.ast.expr(x).span;
         // The second-class values come first, before the table (memo 2.6, R-325).
@@ -103,7 +105,9 @@ impl Walker<'_> {
                     "this parameter is `move`; write `move` before the argument (§5.2)",
                 )
                 .with_fix(self.add_move(e)),
-                _ => return self.move_local(r, l, at),
+                // An erroneous move (E0712 at the anonymous function) moves nothing.
+                _ if self.captured(l) => return,
+                _ => return self.move_local(r, l, at, direct),
             },
         };
         self.report(d);
@@ -155,17 +159,26 @@ impl Walker<'_> {
             Pos::Return => "returned",
             Pos::MoveArg | Pos::Extract => "moved",
         };
-        let what = match self.second_class(e) {
+        let class = match self.second_class(e) {
             None => return false,
             Some(SecondClass::View) if pos == Pos::Bind => return false,
-            Some(SecondClass::View) => "a `Span` (or an array of them)",
-            Some(SecondClass::Closure) => "an anonymous function that captures",
+            Some(class) => class,
+        };
+        self.report(self.second_class_error(class, how, self.ast.expr(e).span));
+        self.expr(r, e, Pos::Read);
+        true
+    }
+
+    /// The E0710 of the second-class value at `at` of `class`, which cannot
+    /// be `how` (stored, returned, moved, captured: §5.3).
+    pub(super) fn second_class_error(&self, class: SecondClass, how: &str, at: Span) -> Diagnostic {
+        let what = match class {
+            SecondClass::View => "a `Span` (or an array of them)",
+            SecondClass::Closure => "an anonymous function that captures",
         };
         let message =
             format!("this value is second-class, {what}: it stands at an argument only and cannot be {how} (§5.3)");
-        self.report(Diagnostic::new(Stage::Modes, Code::E0710, self.ast.expr(e).span, message));
-        self.expr(r, e, Pos::Read);
-        true
+        Diagnostic::new(Stage::Modes, Code::E0710, at, message)
     }
 
     /// S-217: a `for` or `match` head of a borrow row on a place of an

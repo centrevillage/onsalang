@@ -7,6 +7,7 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Ast, StmtId};
 
 use super::MovedLocals;
+use super::capture::Frame;
 use super::flow::Run;
 use super::place::{Deps, Place};
 use super::state::{LoopSum, Status};
@@ -66,10 +67,23 @@ pub(super) struct Walker<'a> {
     pub(super) reports: bool,
     /// The index of §7 (`place.rs`).
     pub(super) deps: Deps,
-    /// The locals the anonymous functions the walk is in capture (R-161's
-    /// candidate; U4's frames of `capture.rs` take it over).
-    pub(super) captured: Vec<LocalId>,
+    pub(super) inside: Inside,
     pub(super) m: Made,
+}
+
+/// What the walk is in: the anonymous functions (`capture.rs`), and the
+/// call whose arguments it walks (`calls.rs`).
+#[derive(Default)]
+pub(super) struct Inside {
+    pub(super) frames: Vec<Frame>,
+    /// The changes of the places of the call's direct arguments, made after
+    /// it (§7, S-796).
+    pub(super) after_call: Vec<(Place, Span)>,
+    /// The next consumption is of a direct argument (a `move self` receiver).
+    pub(super) direct: bool,
+    /// An argument that overlaps an earlier one of its call (E0702), and
+    /// the call: its root is not reported as used after a move in the call.
+    pub(super) excuse: Option<(LocalId, Span)>,
 }
 
 /// What the walk of a body makes as it goes.
@@ -100,8 +114,8 @@ impl<'a> Walker<'a> {
                 _ => None,
             })
             .collect();
-        let (deps, captured) = (Deps::default(), Vec::new());
-        Walker { a, ast, text, names, info, generics, vars, reports: true, deps, captured, m: Made::default() }
+        let (deps, inside) = (Deps::default(), Inside::default());
+        Walker { a, ast, text, names, info, generics, vars, reports: true, deps, inside, m: Made::default() }
     }
 
     /// The kind of the values of the type `ty` (R-30: an unknown one is
@@ -124,9 +138,14 @@ impl<'a> Walker<'a> {
 
     /// `l` is used at `at`: an E0704 if it is not live.
     pub(super) fn used(&mut self, r: &Run, l: LocalId, at: Span) -> bool {
+        self.read_captured(l, at);
         let Some(status) = r.cur.status(l).filter(|_| self.reports) else { return true };
         let name = &self.info.locals[l.0 as usize].name;
         let d = match status {
+            // The E0702 of the argument, not this symptom (memo 2.10).
+            Status::Moved { at: m, .. } if self.inside.excuse.is_some_and(|(x, c)| x == l && c.contains(m.start)) => {
+                return false;
+            }
             Status::Moved { at: m, via_loop } => {
                 let message = if via_loop {
                     // Only a binding that can be written is live again (S-789).
@@ -153,10 +172,11 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The owned Affine local `l` is moved at `at` (§5.2): a change (§7).
-    pub(super) fn move_local(&mut self, r: &mut Run, l: LocalId, at: Span) {
+    /// The owned Affine local `l` is moved at `at` (§5.2): a change (§7),
+    /// after the call of a `direct` argument.
+    pub(super) fn move_local(&mut self, r: &mut Run, l: LocalId, at: Span, direct: bool) {
         r.cur.set(l, Status::Moved { at, via_loop: false });
-        self.changed(r, Place { root: l, proj: Vec::new() }, at);
+        self.change(r, Place { root: l, proj: Vec::new() }, at, direct);
         if self.reports {
             self.m.moved.insert(l);
         }

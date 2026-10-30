@@ -89,18 +89,10 @@ impl Walker<'_> {
                 self.expr(r, *lhs, Pos::Read);
                 self.lazily(r, e, |w, r| w.expr(r, *rhs, Pos::Read));
             }
-            // A new frame, walked once by the walk that reports (the
-            // captures are U4's); it changes no state outside.
+            // A new frame (`capture.rs`); it changes no state outside.
             ExprKind::Closure { body, .. } => {
-                if self.out_of_place(r, e, pos) {
-                    return true;
-                }
-                if self.reports {
-                    let (outer, n, info) = (replace(r, Run::new()), self.captured.len(), self.info);
-                    self.captured.extend(info.captures.get(&e).into_iter().flatten());
-                    self.expr(r, *body, Pos::Return);
-                    self.captured.truncate(n);
-                    *r = outer;
+                if !self.out_of_place(r, e, pos) {
+                    self.closure(r, e, *body);
                 }
             }
             _ => return false,
