@@ -29,12 +29,12 @@
 |---|---|
 | `body/r1_rt_fnvalue.onsa` | R-26 |
 | `body/r2_effect_fnvalue.onsa`、`body/ev1.onsa` | R-27 |
-| `body/m1_continue.onsa`〜`body/m4_while_cond.onsa` | R-28 |
+| `body/m1_continue.onsa`〜`body/m4_while_cond.onsa` | R-28。W4-09 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/modes_moved_loop_exits.onsa`（`m1` の `continue` の道、`m2` の分岐の中の `continue`、`m3` の `break` の後の使用、`m4` の `while` の条件の `move`）。`continue` の道は `modes_moved_loop.onsa`・`modes_moved_next_iteration.onsa` にもある。W4-07 で直した |
 | `body/m5_for_move.onsa`、`body/m5b_for_move_once.onsa` | R-29 |
 | `body/q1_qdup.onsa`、`body/q2_qdup_copy.onsa`、`types/kindfb*.onsa` | R-30。W4-16 U3/t で期待値付きのテストへ写した: `tests/spec/negative/kind_maybe_dup_param.onsa`（`?Dup` の値の複製）、`kind_maybe_dup_struct.onsa`・`kind_generic_buf_holder.onsa`・`kind_dup_requirement.onsa`（総称の型）、`tests/spec/types/kind_dup_contrast.onsa`（Dup の対照）。W4-16 U3 で直した（今の `onsa check` は `q1` が 1 行の E0704・3 行の E0711・5 行の E0416、`q2` が 1 行の E0711、`kindfb` が 9・10 行の E0601・14・20 行の E0704・26 行の E0416、`kindfb2` が 12・17 行の E0416） |
 | `body/x1_slice_alias.onsa`、`body/s1_planar.onsa`、`body/s2_slice_inout.onsa` | R-31。W4-08 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/overlap_views_args.onsa`（`x1` の `add(inout a, a.slice(0, 8))`、`a.copy_from!(a.slice(0, 8))`、`s2` の `sub_alias` の形）、`overlap_views_planar.onsa`（`s1` の `fill2(inout [a, a])`）、`view_not_writable*.onsa`、`tests/spec/values/overlap_views_ok.onsa`（`s1`・`s2` の通る形 `fill(inout a.slice(0, 4))`、`fill2(inout [a, b])`、`a.slice(0, 4).fill!(2.0)`）、実行は `tests/spec/semantics/view_inout_run.onsa`。W4-08 U2 で直した |
 | `body/g1_generic_drop.onsa`、`body/r3_rt_temp_drop.onsa`、`body/r4_branch_drop.onsa`、`body/e1_temp_drop_nonrt.onsa` | R-32 |
-| `body/m6_closure_local.onsa` | R-33 |
+| `body/m6_closure_local.onsa` | R-33。W4-09 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/modes_moved_closure_local.onsa`（`m6` の `from_fn` の無名関数の中の二重移動、ほかの無名関数・使用・ループ）。W4-07 で直した |
 | `body/a1_tuple_arg.onsa` | R-34 |
 | `body/c1_capture_assign.onsa` | R-25。W4-16 U1a で直した（今の `onsa check` は 6 行の E0701「captured by a closure, read-only」）。期待値付きのテストは `tests/spec/negative/closure_capture_write.onsa` |
 | `body/t2_neg_generic.onsa` | R-03、R-94 |

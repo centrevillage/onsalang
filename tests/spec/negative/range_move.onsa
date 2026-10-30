@@ -1,11 +1,16 @@
 // onsa.toml
 // [test]
 // spec = ["§7", "§5.2", "§18.1"]
+// fixes = 1
 
-// `move` on a range (spec §7, S-257): a range has no value to consume, so `move` is not written
-// in front of it, and `for i in move 0..<n` is E0703 (a mode at the place of use that does not
-// match: the range is not passed as an owned value). The loop over a collection is where `move`
-// belongs: `for s in move xs` (§7). One diagnostic per function.
+// S-257, S-362 (§7): "範囲には消費する値が無いので、`move` は付けない（`for i in move 0..<n` は E0703）。見出しの
+// `move` は反復元の全体に付く印で、範囲の始まりの端の形によらず E0703 で（`for i in move lo + 1..<hi` も同じ）、
+// 修正候補は `move` を消す形である". A range has no value to consume, so `move` is not written in front of it,
+// and `for i in move 0..<n` is E0703 whatever the form of the start of the range (a literal, a name, a sum:
+// the `move` is read as the mark of the whole heading, and the range after it is not the operand of a
+// `move`). There is one candidate, which removes the `move`, for each error (`fixes = 1`). The loop over a
+// collection is where `move` belongs: `for s in move xs` (§7). The binary operand that is not a range
+// (`for i in move a + b`) is the E0002 of §5.2, in negative/for_move_binary_operand.onsa. One error per function (P-01).
 
 pub fn move_before_literals(n: U32) -> U32 {
   var t: U32 = 0

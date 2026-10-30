@@ -1683,8 +1683,8 @@ pub fn moved(h: Holder) -> U32 uses {Alloc} {
 
 /// §7: a Copy binding holds the value it was bound to, and the bindings of
 /// a `for` are not in the index (review 5: a change of the iterated place is
-/// E0715, W4-09). An E0701 write changes nothing, so it leaves no E0704 at
-/// the head of a loop before it (review 2).
+/// E0715, which changes nothing). An E0701 write changes nothing, so it
+/// leaves no E0704 at the head of a loop before it (review 2).
 #[test]
 fn what_a_change_leaves_usable() {
     let src = "pub fn copy() -> U32 uses {Alloc} {
@@ -1717,7 +1717,7 @@ pub fn erroneous(o: Option[Buf[F32]], d: Buf[F32], c: Bool) -> U32 uses {Alloc} 
   n
 }
 ";
-    assert!(diags(a_for).iter().all(|d| d.0 != Code::E0704), "{:?}", diags(a_for));
+    assert_eq!(diags(a_for), [at(5, (Code::E0715, false))]);
 }
 
 /// S-604: a `let` of the tails of an `if` derives from the place of each,
@@ -3022,4 +3022,76 @@ pub fn moved_first() -> U32 uses {Alloc} {
     says(2, "`o` is changed in another argument while `b` is passed borrowed in the same call");
     says(4, "`x` is changed in another argument while `x` is passed as `move` in the same call");
     assert!(messages.iter().all(|m| m.3.is_empty()), "no candidate: {messages:?}");
+}
+
+/// R-24, S-798 (§5.4, W4-09 memo 2.1): a change of a place a borrowed
+/// `for` holds is one E0715, noted at the head of each `for` it overlaps
+/// (not at another), and it changes no state: a `move` of it is no move,
+/// so a later one is no E0704 and the local is not among the moved.
+#[test]
+fn a_change_of_what_a_for_holds() {
+    let src = "pub fn nested() uses {Alloc} {
+  var xs = make_array()
+  var ys = make_array()
+  for _ in xs {
+    for _ in ys {
+      for _ in xs {
+        xs[0] = mk()
+      }
+    }
+  }
+}
+pub fn moved() -> U32 uses {Alloc} {
+  var xs = make_array()
+  var n: U32 = 0
+  for b in xs {
+    take_all(move xs)
+    n = len_of(b)
+  }
+  n + xs[0].len()
+}
+";
+    let found = said(src);
+    let codes: Vec<_> = found.iter().map(|d| (d.0, d.1, d.2.as_str())).collect();
+    assert_eq!(codes, [(Code::E0715, 7, "xs[0]"), (Code::E0715, 16, "xs")]);
+    let notes = |i: usize| found[i].4.iter().filter_map(|n| n.0.clone()).collect::<Vec<_>>();
+    assert_eq!(notes(0), ["xs", "xs"]);
+    assert_eq!(notes(1), ["xs"]);
+    assert!(seen(src).1.is_empty(), "{:?}", seen(src).1);
+}
+
+/// R-161's condition 5 (W4-09 memo 7.4): the head of a borrowed `match`
+/// with a guard holds its places (W4-10's E0715), so a `let` it reads has
+/// no candidate `var`, whatever its patterns bind.
+#[test]
+fn no_candidate_for_a_let_a_guard_holds() {
+    let src = "pub fn guarded() -> U32 {
+  let p: (U32, U32) = (1 + 1, 2)
+  match p {
+    (a, _) if bump(inout p) > a => a,
+    _ => 0,
+  }
+}
+pub fn bump(inout p: (U32, U32)) -> U32 { p.0 }
+";
+    let found: Vec<_> = writes(src).into_iter().map(|(c, l, _, f)| (c, l, f.len())).collect();
+    assert_eq!(found, [(Code::E0701, 4, 0)]);
+}
+
+/// Memo 3 (rules 3.4): a write in 120 nested borrowed `for` loops over the
+/// place is one E0715 with a note at each head, on a large stack (a `for`
+/// is two levels of §2.5's 256).
+#[test]
+fn a_write_in_deeply_nested_for_loops() {
+    const DEPTH: usize = 120;
+    let run = || {
+        let mut src = String::from("pub fn deep() uses {Alloc} {\n  var xs = make_array()\n");
+        src.push_str(&"for _ in xs {\n".repeat(DEPTH));
+        src.push_str("xs[0] = mk()\n");
+        src.push_str(&"}\n".repeat(DEPTH));
+        src.push_str("}\n");
+        said(&src).into_iter().map(|d| (d.0, d.4.len())).collect::<Vec<_>>()
+    };
+    let found = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+    assert_eq!(found, [(Code::E0715, DEPTH + 1)]);
 }

@@ -559,7 +559,7 @@ impl<'a> Dumper<'a> {
             StmtKind::For { pat, moved, iter, body } => {
                 self.out.push_str("(for ");
                 self.pat(*pat);
-                self.out.push_str(if *moved { " in move " } else { " in " });
+                self.out.push_str(if moved.is_some() { " in move " } else { " in " });
                 self.expr(*iter);
                 self.out.push(' ');
                 self.expr(*body);

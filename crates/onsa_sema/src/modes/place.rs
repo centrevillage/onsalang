@@ -137,8 +137,19 @@ pub(super) struct Source {
     pub(super) pat: Vec<Proj>,
 }
 
+/// The places of the sources of `head` at a borrow row (S-604: of each
+/// tail; a view's base, S-217), with their text; `None` at an owned row.
+pub(super) fn head_places((ast, names, info): (&Ast, &BodyNames, &BodyInfo), head: Head) -> Option<Vec<(Place, Span)>> {
+    let Some(HeadRow::Borrow { sources, .. }) = info.heads.get(&head) else { return None };
+    let place = |&s: &ExprId| match place_of(ast, names, s) {
+        Some(p) => (p, ast.expr(s).span),
+        None => bug(Some(ast.expr(s).span), "a source no place"),
+    };
+    Some(sources.iter().map(place).collect())
+}
+
 /// The index of §7 (memo 2.3): the bindings of the heads of `let` and
-/// `match` whose row is a borrow (a `for` is E0715's, W4-09, review 5), but
+/// `match` whose row is a borrow (a `for` holds its places, E0715), but
 /// the Copy ones (one of them holds the value it was bound to, §5.4), each
 /// with the places it derives from directly. A static value is no source,
 /// so derives nothing. The places a binding stands for (S-797: those of the
@@ -150,11 +161,14 @@ pub(super) struct Deps {
     /// Each binding of the index, in the order of their ids: a binding
     /// derives from earlier ones only.
     of: BTreeMap<LocalId, Vec<Source>>,
-    /// The locals of the places the heads read (R-161's condition 5).
+    /// The locals of the places the heads read, and those a borrowed `for`
+    /// or a guard holds (R-161's condition 5).
     read: HashSet<LocalId>,
     /// Of each root (no binding of the index), the bindings that derive
     /// from it, in the order of the ids (memo 3).
     by_root: HashMap<LocalId, Vec<LocalId>>,
+    /// Of each binding, the roots it derives from ([`Deps::origins`]).
+    roots: HashMap<LocalId, BTreeSet<LocalId>>,
     /// The text where each binding is in scope: its block from its `let`,
     /// its arm (a change elsewhere leaves it as it is where it is used:
     /// declared again before, or never).
@@ -210,14 +224,15 @@ impl Deps {
     ) -> Deps {
         let (mut heads, mut deps) = (Vec::new(), Deps::default());
         heads_in(ast, root, &mut heads);
-        for (head, pat, scope) in heads {
-            let Some(HeadRow::Borrow { sources, .. }) = info.heads.get(&head) else { continue };
-            let places: Vec<(Place, Span)> = (sources.iter())
-                .map(|&s| match place_of(ast, names, s) {
-                    Some(p) => (p, ast.expr(s).span),
-                    None => bug(Some(ast.expr(s).span), "a source no place"),
-                })
-                .collect();
+        for (head, pat, scope, holds) in heads {
+            let Some(places) = head_places((ast, names, info), head) else { continue };
+            // R-161's condition 5: what a `for` or a guard holds (E0715) is read.
+            if holds {
+                deps.read.extend(places.iter().map(|(p, _)| p.root));
+            }
+            if let Head::For(_) = head {
+                continue;
+            }
             pattern_places(ast, info, pat, &mut Vec::new(), &mut |l, proj, _| {
                 let Some(l) = l.filter(|l| !copy(info.locals[l.0 as usize].ty)) else { return };
                 deps.scope.insert(l, scope);
@@ -227,7 +242,6 @@ impl Deps {
                 }
             });
         }
-        let mut roots: HashMap<LocalId, BTreeSet<LocalId>> = HashMap::new();
         for (&l, sources) in &deps.of {
             let mut mine = BTreeSet::new();
             for s in sources {
@@ -235,15 +249,23 @@ impl Deps {
                     bug(Some(s.at), "a binding derived from a later one");
                 }
                 deps.read.insert(s.place.root);
-                match roots.get(&s.place.root) {
+                match deps.roots.get(&s.place.root) {
                     Some(r) => mine.extend(r),
                     None => drop(mine.insert(s.place.root)),
                 }
             }
             mine.iter().for_each(|&r| deps.by_root.entry(r).or_default().push(l));
-            roots.insert(l, mine);
+            deps.roots.insert(l, mine);
         }
         deps
+    }
+
+    /// The roots the places of `l` start from: of a binding of the index,
+    /// those it derives from; else `l`. Two places of no common root share
+    /// no part, so it is a condition [`Deps::meets`] needs (`frozen.rs`
+    /// asks it first), not another judgment of the overlap.
+    pub(super) fn origins(&self, l: LocalId) -> BTreeSet<LocalId> {
+        self.roots.get(&l).cloned().unwrap_or_else(|| BTreeSet::from([l]))
     }
 
     /// Whether `l` is a binding of the index.
@@ -366,17 +388,21 @@ fn advance(ways: &[Way], mut at: Along, proj: &[Proj]) -> Along {
     at
 }
 
-/// The heads of `let` and of the arms of `match` in `e`, with their
-/// patterns and the text where their bindings are in scope.
-fn heads_in(ast: &Ast, e: ExprId, out: &mut Vec<(Head, PatId, (u32, u32))>) {
+/// The heads of `let`, `for` and of the arms of `match` in `e`, with their
+/// patterns, the text where their bindings are in scope, and whether they
+/// hold the places of their value (a `for`, an arm with a guard: E0715).
+fn heads_in(ast: &Ast, e: ExprId, out: &mut Vec<(Head, PatId, (u32, u32), bool)>) {
     let end = ast.expr(e).span.end;
     match &ast.expr(e).kind {
         ExprKind::Block(b) => out.extend(b.stmts.iter().filter_map(|&s| match &ast.stmt(s).kind {
-            StmtKind::Let { pat, .. } => Some((Head::Let(s), *pat, (ast.stmt(s).span.start, end))),
+            StmtKind::Let { pat, .. } => Some((Head::Let(s), *pat, (ast.stmt(s).span.start, end), false)),
+            StmtKind::For { pat, .. } => Some((Head::For(s), *pat, (ast.stmt(s).span.start, end), true)),
             _ => None,
         })),
         ExprKind::Match { scrutinee, arms, .. } => out
-            .extend((arms.iter()).map(|a| (Head::Match { scrutinee: *scrutinee }, a.pat, (a.span.start, a.span.end)))),
+            .extend((arms.iter()).map(|a| {
+                (Head::Match { scrutinee: *scrutinee }, a.pat, (a.span.start, a.span.end), a.guard.is_some())
+            })),
         _ => {}
     }
     ast.sub_exprs(e).into_iter().for_each(|x| heads_in(ast, x, out));

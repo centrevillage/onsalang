@@ -75,8 +75,8 @@ impl<'a> Checker<'a> {
                 self.with_why(why, tt, |ck| ck.check_expr(*value, Some(tt)))?;
                 Ok(())
             }
-            StmtKind::For { pat, moved, iter, body } => {
-                let elem = self.check_iter(*iter, *moved)?;
+            StmtKind::For { pat, iter, body, .. } => {
+                let elem = self.check_iter(*iter)?;
                 self.bind_pat(*pat, elem, true)?;
                 self.frames.last_mut().unwrap().loop_depth += 1;
                 let unit = self.unit();
@@ -134,7 +134,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Element type of a `for` iteration.
-    fn check_iter(&mut self, iter: ExprId, moved: bool) -> R<TyId> {
+    fn check_iter(&mut self, iter: ExprId) -> R<TyId> {
         let span = self.expr(iter).span;
         if let ExprKind::Range(r) = &self.expr(iter).kind {
             let r = *r;
@@ -153,9 +153,6 @@ impl<'a> Checker<'a> {
                 }
             }
             self.record(iter, lt);
-            if moved {
-                return Err(self.err(Code::E0401, span, "`move` applies to collections, not ranges (§7)"));
-            }
             if r.end == RangeEnd::Included {
                 // Until the loop that ends at the type's maximum (W8-03).
                 return Err(self.closed_range_unsupported(&r, Stage::Types, Feature::InclusiveRangeFor));

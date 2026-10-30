@@ -638,10 +638,10 @@ pub enum StmtKind {
         target: ExprId,
         value: ExprId,
     },
-    /// `for pat in [move] iter { }`
+    /// `for pat in [move] iter { }`; `moved`: the `move` (S-362).
     For {
         pat: PatId,
-        moved: bool,
+        moved: Option<Span>,
         iter: ExprId,
         body: ExprId,
     },

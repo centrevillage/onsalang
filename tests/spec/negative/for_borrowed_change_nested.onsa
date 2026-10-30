@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§18.1"]
+// fixes = 0
+
+// S-798, R-24 (§5.4): a loop inside the body of a borrowed `for` is part of the body, so a change of the
+// place of the outer loop is E0715 wherever the inner loops are, whether the inner loop is over a
+// different place, over the same place, or over a range. A change that overlaps the places of both
+// loops is one error (at the change; the notes are one for each heading, which a case cannot count, S-798),
+// and a change of the place of the inner loop only is an error of the inner loop, with the outer
+// loop unaffected. The error is at the change and has no candidate (`fixes = 0`). The nested loops
+// whose changes are not in a place of any loop are in values/borrow_for_change_ok.onsa. One error per
+// function (P-01).
+
+pub fn reset(inout xs: [U32; 3]) {
+  xs[0] = 0
+}
+
+pub fn change_overlaps_both_loops() {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    for _ in xs {
+      xs[0] = 1 //~ E0715
+    }
+  }
+}
+
+pub fn change_overlaps_both_loops_by_an_inout_argument() {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    for _ in xs {
+      reset(inout xs) //~ E0715
+    }
+  }
+}
+
+pub fn change_of_the_outer_place_only() {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  for _ in xs {
+    for _ in ys {
+      xs[0] = 1 //~ E0715
+    }
+  }
+}
+
+pub fn change_of_the_inner_place_only() {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  for _ in xs {
+    for _ in ys {
+      ys[0] = 1 //~ E0715
+    }
+  }
+}
+
+pub fn change_of_the_outer_place_in_an_inner_range(n: U32) {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    for _ in 0 ..< n {
+      xs[1] = 2 //~ E0715
+    }
+  }
+}
+
+pub fn change_between_the_inner_loops() {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  for _ in xs {
+    for _ in ys {}
+    xs[2] = 1 //~ E0715
+  }
+}
+
+pub fn change_of_the_outer_place_after_an_inner_loop() {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  for _ in xs {
+    for _ in ys {
+      for _ in ys {
+        xs = [0, 0, 0] //~ E0715
+      }
+    }
+  }
+}
+
+pub fn change_of_a_middle_place_of_three_loops() {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  var zs: [U32; 3] = [7, 8, 9]
+  for _ in xs {
+    for _ in ys {
+      for _ in zs {
+        ys[0] = 1 //~ E0715
+      }
+    }
+  }
+}

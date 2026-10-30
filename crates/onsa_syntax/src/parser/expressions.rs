@@ -33,6 +33,11 @@ impl<'a> Parser<'a> {
     /// Its height is the one of the tree of §3.1 ([`ChainHeight`]).
     pub(super) fn parse_expr_inner(&mut self, allow_range: bool) -> PResult<Completed> {
         let first = self.parse_cast()?;
+        self.parse_chain_rest(first, allow_range)
+    }
+
+    /// [`Parser::parse_expr_inner`] after its first operand `first`.
+    pub(super) fn parse_chain_rest(&mut self, first: Completed, allow_range: bool) -> PResult<Completed> {
         let mut expr = first;
         if self.binary_here() {
             let m = self.precede(first, NodeKind::BinaryExpr)?;
@@ -113,7 +118,12 @@ impl<'a> Parser<'a> {
     /// `prefix [as Type | at Clock]*`: a prefix binds tighter than `as` and
     /// `at` (§3.1). A chain of them is read whole and is E0011 (`groups.rs`).
     fn parse_cast(&mut self) -> PResult<Completed> {
-        let mut expr = self.parse_prefix()?;
+        let expr = self.parse_prefix()?;
+        self.parse_cast_rest(expr)
+    }
+
+    /// [`Parser::parse_cast`] after its prefix expression `expr`.
+    pub(super) fn parse_cast_rest(&mut self, mut expr: Completed) -> PResult<Completed> {
         loop {
             match self.peek_kind() {
                 TokenKind::KwAs => {
@@ -135,7 +145,7 @@ impl<'a> Parser<'a> {
     // The tokens `parse_prefix` reads as the start of an operand are those of
     // `starts_operand` (a `debug_assert` in `parse_primary` and the test
     // `operand_starts` hold the two together).
-    fn parse_prefix(&mut self) -> PResult<Completed> {
+    pub(super) fn parse_prefix(&mut self) -> PResult<Completed> {
         self.parse_prefix_in(false)
     }
 

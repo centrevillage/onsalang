@@ -1,0 +1,198 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§18.1"]
+// fixes = 0
+
+// R-24, S-798 (§5.4): "借用の `for`（`for s in xs`）の本体では、反復元 `xs` とその一部を変更できない。代入、
+// `inout` への受け渡し、`!` のメソッドの呼び出し、`move` は E0715". The loop over a place is a borrowed
+// `for`, so a change of the iterated place or of a part of it in the body is E0715, whatever the form of
+// the change (an assignment to an element or to the whole, a call with the place as an `inout` argument,
+// a `!` method, a `move` of the place), wherever in the body it is (a `while`, an `if`, a block, an arm of
+// a `match`) and whether or not the loop leaves after it (`break`): the rule is about the structure of
+// the body, not the path that runs ("書いた後に `break` する形も構造の規則で E0715"). The error is at
+// the change (the left side of the assignment, the `inout` argument, the receiver of the `!` call, the
+// operand of the `move`) and has no candidate (`fixes = 0`: the remedy is another program, a loop over
+// an index, "添字で回す"). A `move` that is the E0715 is the only error of the function: the E0704 of
+// the same `move` in the next iteration (§5.2) is not reported as well (S-798). The loops over the
+// derived bindings, the tails of a heading and the nested loops are in the files named
+// for_borrowed_change_derived.onsa, for_borrowed_change_tails.onsa and for_borrowed_change_nested.onsa; the
+// forms that are not hit are in values/borrow_for_change_ok.onsa. One error per function (P-01).
+
+pub struct W {
+  a: [U32; 3],
+  c: U32,
+}
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn take_pair(move xs: [Buf[F32]; 2]) uses {Alloc} {}
+
+pub fn reset(inout xs: [U32; 3]) {
+  xs[0] = 0
+}
+
+pub fn set_whole(inout w: W) {
+  w.c = 0
+}
+
+// ---------------------------------------------------------------------------------- the forms
+
+pub fn assign_to_an_element() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32       = 0
+  for x in xs {
+    xs[2] = 100 //~ E0715
+    s = s + x
+  }
+  s
+}
+
+pub fn assign_to_the_whole() {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    xs = [4, 5, 6] //~ E0715
+  }
+}
+
+pub fn pass_as_inout() {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    reset(inout xs) //~ E0715
+  }
+}
+
+pub fn change_by_a_bang_method() {
+  var b: [F32; 2] = [1.0, 2.0]
+  for _ in b {
+    b.fill!(0.0) //~ E0715
+  }
+}
+
+pub fn move_the_place() uses {Alloc} {
+  var bs = [mk(), mk()]
+  for _ in bs {
+    take_pair(move bs) //~ E0715
+  }
+}
+
+pub fn assign_to_an_element_of_a_buffer(inout b: Buf[F32]) {
+  for v in b {
+    b[1] = v //~ E0715
+  }
+}
+
+pub fn assign_to_an_inout_argument(inout xs: [U32; 3]) {
+  for _ in xs {
+    xs[1] = 9 //~ E0715
+  }
+}
+
+// ---------------------------------------------------------------------- where the change is in the body
+
+pub fn change_in_a_while(c: Bool) {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    while c {
+      xs[1] = 2 //~ E0715
+    }
+  }
+}
+
+pub fn change_in_an_if(c: Bool) {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    if c {
+      xs[1] = 2 //~ E0715
+    }
+  }
+}
+
+pub fn change_in_an_arm(c: Bool) {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    match c {
+      true => reset(inout xs), //~ E0715
+      false => {},
+    }
+  }
+}
+
+pub fn change_in_a_block_value() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32       = 0
+  for _ in xs {
+    s = s + ({
+      xs[0] = 5 //~ E0715
+      1
+    })
+  }
+  s
+}
+
+pub fn change_after_a_read() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32       = 0
+  for x in xs {
+    s = s + x + xs[0]
+    xs[1] = s //~ E0715
+  }
+  s
+}
+
+// The loop that leaves after the change is an error as well: the rule is about the structure.
+pub fn change_then_break() {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    xs[0] = 1 //~ E0715
+    break
+  }
+}
+
+pub fn change_then_return() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  for _ in xs {
+    reset(inout xs) //~ E0715
+    return 1
+  }
+  0
+}
+
+pub fn move_then_break() uses {Alloc} {
+  var bs = [mk(), mk()]
+  for _ in bs {
+    take_pair(move bs) //~ E0715
+    break
+  }
+}
+
+// ------------------------------------------------------------------------------- the parts of a place
+
+pub fn change_the_whole_of_a_field_iterated() {
+  var w = W { a: [1, 2, 3], c: 0 }
+  for _ in w.a {
+    w = W { a: [0, 0, 0], c: 1 } //~ E0715
+  }
+}
+
+pub fn change_an_element_of_a_field_iterated() {
+  var w = W { a: [1, 2, 3], c: 0 }
+  for _ in w.a {
+    w.a[0] = 1 //~ E0715
+  }
+}
+
+pub fn pass_the_field_iterated_as_inout() {
+  var w = W { a: [1, 2, 3], c: 0 }
+  for _ in w.a {
+    reset(inout w.a) //~ E0715
+  }
+}
+
+pub fn pass_the_whole_of_a_field_iterated() {
+  var w = W { a: [1, 2, 3], c: 0 }
+  for _ in w.a {
+    set_whole(inout w) //~ E0715
+  }
+}

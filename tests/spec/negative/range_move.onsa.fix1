@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§18.1"]
+// fixes = 1
+
+// S-257, S-362 (§7): "範囲には消費する値が無いので、`move` は付けない（`for i in move 0..<n` は E0703）。見出しの
+// `move` は反復元の全体に付く印で、範囲の始まりの端の形によらず E0703 で（`for i in move lo + 1..<hi` も同じ）、
+// 修正候補は `move` を消す形である". A range has no value to consume, so `move` is not written in front of it,
+// and `for i in move 0..<n` is E0703 whatever the form of the start of the range (a literal, a name, a sum:
+// the `move` is read as the mark of the whole heading, and the range after it is not the operand of a
+// `move`). There is one candidate, which removes the `move`, for each error (`fixes = 1`). The loop over a
+// collection is where `move` belongs: `for s in move xs` (§7). The binary operand that is not a range
+// (`for i in move a + b`) is the E0002 of §5.2, in negative/for_move_binary_operand.onsa. One error per function (P-01).
+
+pub fn move_before_literals(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {                             //~ E0703
+    t = t + i
+  }
+  t
+}
+
+pub fn move_before_names(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..<hi {                           //~ E0703
+    t = t + i
+  }
+  t
+}
+
+pub fn move_before_sums(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..<hi - 1 {                   //~ E0703
+    t = t + i
+  }
+  t
+}
+
+pub fn move_in_an_inner_loop(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    for j in 0..<i + 1 {                       //~ E0703
+      t = t + j
+    }
+  }
+  t
+}
+
+pub fn move_in_a_branch(go: Bool, n: U32) -> U32 {
+  var t: U32 = 0
+  if go {
+    for _ in 0..<n {                           //~ E0703
+      t = t + 1
+    }
+  }
+  t
+}
+
+// The loops over a value are the ones that move, and the plain range is fine.
+
+pub fn fine(xs: [U32; 3], n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  for s in xs {
+    t = t + s
+  }
+  t
+}

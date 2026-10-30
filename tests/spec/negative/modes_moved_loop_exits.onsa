@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§7", "§18.1"]
+
+// R-28 (§5.2): "移動は制御の流れに沿って数える。ループの本体で移した変数を次の反復（条件の再評価と `continue` の道を
+// 含む）で使うと、反復の回数によらず E0704 である" and "片方の腕でだけ消費した変数は、その後で使えない（E0704）". The
+// loops of the review's `m1`..`m4`, which negative/modes_moved_loop.onsa and negative/modes_moved_next_iteration.onsa
+// do not hold in this form: a move on a path that ends in `continue` with no use of the variable between
+// (the move itself is the use of the next iteration: the cases `while_body_moves` and `move_on_the_continue_path`
+// of those files are the move at the end of the body and the move that revives the variable first), a move
+// in a branch that ends in `continue`, a move on a path that ends in `break` (the loop is left with the
+// variable moved on that path, so a use after the loop is the E0704, and the path where the loop ends without
+// it does not hide the error), and the move in the condition of a `while`, which is evaluated again by
+// every iteration. The error is at the use that comes after the move. One error per function (P-01).
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} {
+  false
+}
+
+pub fn read(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+// ----------------------------------------------------------------------------------- `continue`
+
+pub fn move_then_continue(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  var i: U32 = 0
+  while i < n {
+    i = i + 1
+    take(move b)        //~ E0704
+    continue
+  }
+}
+
+pub fn move_in_a_branch_then_continue(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  var i: U32 = 0
+  while i < n {
+    i = i + 1
+    if i > 1 {
+      take(move b)      //~ E0704
+      continue
+    }
+  }
+}
+
+pub fn move_in_a_branch_then_continue_in_a_for(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  for i in 0 ..< n {
+    if i > 1 {
+      take(move b)      //~ E0704
+      continue
+    }
+  }
+}
+
+// -------------------------------------------------------------------------------------- `break`
+
+pub fn move_then_break_and_use_after_the_loop(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  var i: U32 = 0
+  while i < n {
+    if i == 1 {
+      take(move b)
+      break
+    }
+    i = i + 1
+  }
+  take(move b)          //~ E0704
+}
+
+pub fn move_then_break_and_read_after_a_for(n: U32) -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  for i in 0 ..< n {
+    if i == 1 {
+      take(move b)
+      break
+    }
+  }
+  read(b)               //~ E0704
+}
+
+// ------------------------------------------------------------------------ the condition of a `while`
+
+pub fn move_in_the_condition() uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  while eat(move b) {   //~ E0704
+  }
+}
+
+pub fn move_in_the_condition_with_a_body(n: U32) -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  var i: U32 = 0
+  while i < n && eat(move b) { //~ E0704
+    i = i + 1
+  }
+  i
+}

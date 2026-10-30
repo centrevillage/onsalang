@@ -135,19 +135,7 @@ impl<'a> Parser<'a> {
                 self.parse_pattern()?;
                 self.expect(TokenKind::KwIn)?;
                 if self.at(TokenKind::KwMove) {
-                    // `for s in move xs`: `move xs` is the form `move` (§5.2).
-                    // A range after its start (`for i in move 0..<n`) is read
-                    // on, the `move` over the whole range (§7: E0703, of
-                    // the modes stage, W4-09); the start is a postfix
-                    // expression as any operand of `move` (§5.2).
-                    // SPEC-GAP(S-362): `move lo + 1..<hi` is the E0002 of
-                    // §5.2, which §7's E0703 for a range does not settle.
-                    self.parse_move(MoveAs::Level, |p, mv| {
-                        let saved = std::mem::replace(&mut p.no_struct_lit, true);
-                        let r = p.parse_marked(mv).and_then(|start| p.parse_range_rest(start));
-                        p.no_struct_lit = saved;
-                        r
-                    })?;
+                    self.parse_move(MoveAs::Level, |p, mv| p.parse_moved_head(mv))?;
                 } else {
                     self.parse_head_expr(true)?;
                 }
@@ -262,17 +250,44 @@ impl<'a> Parser<'a> {
         let operand = if prefix { None } else { Some(self.parse_postfix()?) };
         let t = self.peek();
         match operand {
-            Some(e) if t.kind.binop().is_none() && !matches!(t.kind, TokenKind::KwAs | TokenKind::KwAt) => Ok(e),
-            _ => {
-                let (mark, op) = (self.token_text(mark), self.token_text(t));
-                let what = if prefix { "a prefix" } else { "the operand of" };
-                Err(self.error(
-                    Code::E0002,
-                    t.span,
-                    format!("the operand of `{mark}` is a postfix expression (a name and its fields, indexes and calls), not {what} `{op}` (§5.2)"),
-                ))
-            }
+            Some(e) if !Self::operator_after(t) => Ok(e),
+            _ => Err(self.marked_error(mark, t, prefix)),
         }
+    }
+
+    /// The head of `for … in move` (S-362): the `move` marks the whole head,
+    /// read first as any head is. A range is the modes stage's E0703 (§7);
+    /// any other operator's expression the E0002 of the mark (§5.2), at its
+    /// first operator.
+    fn parse_moved_head(&mut self, mark: Token) -> PResult<Completed> {
+        let saved = std::mem::replace(&mut self.no_struct_lit, true);
+        let prefix = matches!(self.peek_kind(), TokenKind::Minus | TokenKind::Bang).then(|| self.peek());
+        let read = self.parse_prefix().and_then(|start| {
+            let op = prefix.or(Some(self.peek()).filter(|&t| Self::operator_after(t)));
+            Ok((self.parse_cast_rest(start).and_then(|e| self.parse_chain_rest(e, true))?, op))
+        });
+        self.no_struct_lit = saved;
+        match read? {
+            (e, Some(op)) if e.kind != NodeKind::RangeExpr => Err(self.marked_error(mark, op, prefix.is_some())),
+            (e, _) => Ok(e),
+        }
+    }
+
+    /// Whether `t` after an operand is a binary operator, `as` or `at`.
+    fn operator_after(t: Token) -> bool {
+        t.kind.binop().is_some() || matches!(t.kind, TokenKind::KwAs | TokenKind::KwAt)
+    }
+
+    /// The E0002 of a mark `move` or `inout` whose operand is not a postfix
+    /// expression: at its operator `t`, a `prefix` one or after it (R-42).
+    fn marked_error(&mut self, mark: Token, t: Token, prefix: bool) -> ParseError {
+        let (mark, op) = (self.token_text(mark), self.token_text(t));
+        let what = if prefix { "a prefix" } else { "the operand of" };
+        self.error(
+            Code::E0002,
+            t.span,
+            format!("the operand of `{mark}` is a postfix expression (a name and its fields, indexes and calls), not {what} `{op}` (§5.2)"),
+        )
     }
 
     /// Head expression of `if` / `while` / `match` / `for` / `par`: no struct

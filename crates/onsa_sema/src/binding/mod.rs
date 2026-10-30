@@ -208,7 +208,7 @@ impl<'a> Settle<'a> {
             }
             StmtKind::For { moved, iter, body, .. } => {
                 self.expr(*iter);
-                let row = if *moved { HeadRow::Owned } else { self.head(*iter, true) };
+                let row = if moved.is_some() { HeadRow::Owned } else { self.head(*iter, true) };
                 self.settle(Head::For(s), row);
                 self.expr(*body);
             }

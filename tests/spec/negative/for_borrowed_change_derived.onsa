@@ -1,0 +1,231 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§7", "§18.1"]
+// fixes = 0
+
+// S-798, S-796 (§5.4): "反復元が派生した借用束縛かその経路（`match o { Some(bs) => for x in bs { … } }` の
+// `bs`、`let cs = bs` の `cs`、`bs.0`、部分ビュー）なら、派生元の場所に経路を合成した場所（§5.2 の E0702 と同じ）で
+// 重なりを見るので、派生元とその重なる一部の変更も E0715 である（本体の `o = None`、`reset(inout o)`）". The
+// origin of the loop over a binding of an arm, a `let` chain from it, a path of it or a view of it is the place
+// the binding comes from, so a change of that place (or of a part of it that overlaps, by the rules of
+// the E0702 of §5.2: the same element or field, the planar elements of one argument) in the body is
+// E0715. The binding is not Copy in every form here (a `Buf` or an array of them), so it is a view of the
+// storage of the origin. The error is at the change and has no candidate (`fixes = 0`). The forms that are
+// not hit (the other field, a Copy binding, an owned iteration of a Dup value) are in
+// values/borrow_for_change_ok.onsa. One error per function (P-01).
+
+pub struct W {
+  a: Option[[Buf[F32]; 2]],
+  c: U32,
+}
+
+pub fn take_opt(move o: Option[[Buf[F32]; 2]]) uses {Alloc} {}
+
+pub fn reset_opt(inout o: Option[[Buf[F32]; 2]]) {
+  o = None
+}
+
+pub fn reset_buf(inout o: Option[Buf[F32]]) {
+  o = None
+}
+
+// ------------------------------------------------------------------- the binding of an arm
+
+pub fn assign_to_the_subject() uses {Alloc} {
+  var o: Option[[Buf[F32]; 2]] = None
+  match o {
+    Some(bs) => {
+      for _ in bs {
+        o = None //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn pass_the_subject_as_inout() uses {Alloc} {
+  var o: Option[[Buf[F32]; 2]] = None
+  match o {
+    Some(bs) => {
+      for _ in bs {
+        reset_opt(inout o) //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn move_the_subject() uses {Alloc} {
+  var o: Option[[Buf[F32]; 2]] = None
+  match o {
+    Some(bs) => {
+      for _ in bs {
+        take_opt(move o) //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn change_the_subject_and_read_the_element() -> U32 uses {Alloc} {
+  var o: Option[[Buf[F32]; 2]] = None
+  var n: U32                   = 0
+  match o {
+    Some(bs) => {
+      for x in bs {
+        o = None //~ E0715
+        n = n + x.len()
+      }
+    },
+    None => {},
+  }
+  n
+}
+
+pub fn change_the_field_that_is_the_subject() uses {Alloc} {
+  var w = W { a: None, c: 0 }
+  match w.a {
+    Some(bs) => {
+      for _ in bs {
+        w.a = None //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn change_the_whole_of_the_struct_that_holds_the_subject() uses {Alloc} {
+  var w = W { a: None, c: 0 }
+  match w.a {
+    Some(bs) => {
+      for _ in bs {
+        w = W { a: None, c: 1 } //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+// -------------------------------------------------------------------------------- a `let` chain
+
+pub fn let_chain_and_an_assignment() uses {Alloc} {
+  var o: Option[[Buf[F32]; 2]] = None
+  match o {
+    Some(bs) => {
+      let cs = bs
+      for _ in cs {
+        o = None //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn let_chain_of_two_and_an_inout_argument() uses {Alloc} {
+  var o: Option[[Buf[F32]; 2]] = None
+  match o {
+    Some(bs) => {
+      let cs = bs
+      let ds = cs
+      for _ in ds {
+        reset_opt(inout o) //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+// ------------------------------------------------------------------ a path of the binding
+
+pub fn path_of_the_binding() uses {Alloc} {
+  var o: Option[([Buf[F32]; 2], U32)] = None
+  match o {
+    Some(p) => {
+      for _ in p.0 {
+        o = None //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn path_of_a_binding_from_a_let() uses {Alloc} {
+  var o: Option[([Buf[F32]; 2], U32)] = None
+  match o {
+    Some(p) => {
+      let q = p
+      for _ in q.0 {
+        o = None //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+// -------------------------------------------------------------------------- a view of the binding
+
+pub fn view_of_the_binding() uses {Alloc} {
+  var o: Option[Buf[F32]] = None
+  match o {
+    Some(b) => {
+      for _ in b.slice(0, 1) {
+        o = None //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn view_of_the_binding_and_an_inout_argument() uses {Alloc} {
+  var o: Option[Buf[F32]] = None
+  match o {
+    Some(b) => {
+      for _ in b.slice(0, 1) {
+        reset_buf(inout o) //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn view_of_a_let_from_the_binding() uses {Alloc} {
+  var o: Option[Buf[F32]] = None
+  match o {
+    Some(b) => {
+      let c = b
+      for _ in c.slice(0, 1) {
+        o = None //~ E0715
+      }
+    },
+    None => {},
+  }
+}
+
+// ------------------------------------------------------------------------ a planar element
+
+// "同じ配列の添字どうしは、添字が等しいかを静的に判定しないので、重なるものとして扱う" (§5.2): an element of
+// the planar argument that is iterated and another element of it overlap, and the whole argument
+// overlaps both.
+pub fn planar_element_and_the_same_element(inout input: [Span[F32]; 2]) {
+  for v in input[0] {
+    input[0][1] = v //~ E0715
+  }
+}
+
+pub fn planar_element_and_another_element(inout input: [Span[F32]; 2]) {
+  for v in input[0] {
+    input[1][0] = v //~ E0715
+  }
+}
+
+pub fn planar_element_and_an_unknown_element(inout input: [Span[F32]; 2], k: U32) {
+  for v in input[0] {
+    input[k][0] = v //~ E0715
+  }
+}
+
+pub fn planar_element_and_a_bang_method(inout input: [Span[F32]; 2]) {
+  for _ in input[1] {
+    input[0].fill!(0.0) //~ E0715
+  }
+}

@@ -10,7 +10,7 @@
 // whether the change is an assignment, a `move` of the place, or a call whose argument is `inout` or whose receiver is a `!`
 // call. A write to another field does not (the bindings of the arm point to the field of the subject). No candidate: the
 // remedy is a different program (read before the change, or `match move`). Not here: the change in a guard, the change of
-// the subject of a `for` (E0715, W4-09) and a change by the direct argument of the call that uses the binding (W4-07 U4a). One error
+// the subject of a `for` (E0715, in negative/for_borrowed_change_derived.onsa) and a change by the direct argument of the call that uses the binding (W4-07 U4a). One error
 // per function (P-01).
 
 pub struct W {

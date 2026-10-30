@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.1", "§5.3", "§18.1"]
+// fixes = 0
+
+// S-798 (§5.4, §5.3): the other places of a borrowed `for` that cannot be written: a borrowed argument is
+// read-only (§5.1), and the value a closure captures is read-only ("捕捉した値は読み取り専用で、代入すると
+// E0701", §5.3), so a write to the iterated place in the body is the E0701 of the write and not an E0715
+// ("書けない場所の E0701 を先にし"), and there is no candidate (`fixes = 0`). The closure is written in the
+// body of the loop over the place it writes, the form that negative/closure_capture_write.onsa does
+// not have. One error per function (P-01).
+
+pub fn reset(inout xs: [U32; 2]) {
+  xs[0] = 0
+}
+
+pub fn ap(f: fn() -> U32) -> U32 {
+  f.()
+}
+
+pub fn assign_to_a_borrowed_argument(xs: [U32; 2]) {
+  for _ in xs {
+    xs[0] = 1 //~ E0701
+  }
+}
+
+pub fn closure_in_the_body_writes_the_source() -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  var t: U32       = 0
+  for _ in xs {
+    t = ap(fn() {
+      xs[0] = 1 //~ E0701
+      1
+    })
+  }
+  t
+}

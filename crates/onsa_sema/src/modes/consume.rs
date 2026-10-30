@@ -33,7 +33,7 @@ pub(super) enum SecondClass {
 impl Walker<'_> {
     /// The value `e` at the consuming position `pos` (`Consume`, `MoveArg`,
     /// `Return` or `Extract`), with the offset of the `move` written on it,
-    /// if any (of a `for` head, its value's: no candidate removes that one).
+    /// if any.
     pub(super) fn consume(&mut self, r: &mut Run, e: ExprId, pos: Pos, mark: Option<u32>) {
         // A direct argument changes its place after the call (§7, S-796).
         let direct = std::mem::take(&mut self.inside.direct) || pos == Pos::MoveArg;

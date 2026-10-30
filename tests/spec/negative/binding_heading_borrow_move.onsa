@@ -11,8 +11,9 @@
 // "その場所を `move` 引数に置くと、印の有無によらず修正候補の無い E0711" (§5.2, `fixes = 0`). The
 // error is at the use that moves it. One error per item (P-01).
 //
-// Not written: the E0715 of a change of the heading inside the `for` or the arm, for each tail place
-// of an `if` heading (the work W4-07: "modes が派生元を読む").
+// Not written here: the E0715 of a change of the heading inside the `for`, for each tail place of an `if`,
+// a `match` or a block heading, is in negative/for_borrowed_change_tails.onsa (the derived bindings, in
+// negative/for_borrowed_change_derived.onsa).
 
 pub fn take(move b: Buf[F32]) uses {Alloc} {}
 

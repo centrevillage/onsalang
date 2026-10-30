@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§18.1"]
+
+// R-33 (§5.2, §5.3): the body of an anonymous function is counted like the body of a function: a value of an
+// Affine type declared inside the closure is moved like any other, and a second `move` of it (or a use
+// after the move, or a move in a loop of the closure) is the E0704 of §5.2 ("移した変数はその後で使えない").
+// The review's `m6` is the double move in a closure passed to `array.from_fn`. The value that is declared in
+// the closure is not a captured value (an Affine value of the outside cannot be captured, E0712 in
+// negative/closure_capture_inout_affine.onsa). The error is at the second use. One error per function (P-01).
+
+use std.array.{from_fn}
+
+pub fn take(move b: Buf[F32]) -> I32 uses {Alloc} {
+  0
+}
+
+pub fn peek(b: Buf[F32]) -> I32 {
+  1
+}
+
+pub fn apply(f: fn(U32) -> I32) -> I32 {
+  f.(1)
+}
+
+pub fn double_move_in_a_closure_of_from_fn() -> [I32; 2] uses {Alloc} {
+  from_fn(fn(i: U32) -> I32 {
+    let b: Buf[F32] = Buf.zeroed(4)
+    let x = take(move b)
+    x + take(move b)        //~ E0704
+  })
+}
+
+pub fn double_move_in_a_closure_of_a_function() -> I32 uses {Alloc} {
+  apply(fn(i: U32) -> I32 {
+    let b: Buf[F32] = Buf.zeroed(4)
+    let x = take(move b)
+    x + take(move b)        //~ E0704
+  })
+}
+
+pub fn use_after_the_move_in_a_closure() -> I32 uses {Alloc} {
+  apply(fn(i: U32) -> I32 {
+    let b: Buf[F32] = Buf.zeroed(4)
+    let x = take(move b)
+    x + peek(b)             //~ E0704
+  })
+}
+
+pub fn move_in_a_loop_of_a_closure() -> I32 uses {Alloc} {
+  apply(fn(i: U32) -> I32 {
+    let b: Buf[F32] = Buf.zeroed(4)
+    var s: I32 = 0
+    for _ in 0 ..< i {
+      s = s + take(move b)  //~ E0704
+    }
+    s
+  })
+}
+
+// The controls: a value declared in the closure and moved once, and the same shape in a function.
+
+pub fn move_once_in_a_closure() -> I32 uses {Alloc} {
+  apply(fn(i: U32) -> I32 {
+    let b: Buf[F32] = Buf.zeroed(4)
+    take(move b)
+  })
+}
+
+pub fn double_move_in_a_function() -> I32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  let x = take(move b)
+  x + take(move b)          //~ E0704
+}

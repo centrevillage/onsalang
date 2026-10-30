@@ -1,0 +1,256 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.4", "§5.2", "§7"]
+
+// S-798, R-24 (§5.4), run in the interpreter: the forms that the E0715 of negative/for_borrowed_change.onsa,
+// for_borrowed_change_tails.onsa, for_borrowed_change_derived.onsa and for_borrowed_change_nested.onsa does not
+// hit. "異なるフィールドは重ならず、Copy の束縛は束縛した時点の値なので当たらない。Dup の値の所有の反復
+// （`for s in move bs`。複製を反復する）も当たらない" and "範囲の端（`for i in 0 ..< k { k = 0 }`）は場所でないので
+// 当たらない"; the loop over a static value or a literal that needs no drop has no origin ("派生元は無いので、§7 の重なる束縛の
+// 無効化と E0715 は当たらない"); a change after the loop is not in its body; the body of the loop over a moved
+// value (`for s in move xs`, the elements are owned) can change `xs` because the loop does not borrow it. The values
+// are the ones the rules give: a Copy binding keeps its value at the binding, a loop over a copy sees the
+// copy, the end of a range is read once.
+
+pub struct Row {
+  a: [U32; 3],
+  c: U32,
+}
+
+pub struct Slot {
+  a: Option[Buf[F32]],
+  c: U32,
+}
+
+const TABLE: [U32; 3] = [4, 5, 6]
+
+fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+fn take(move b: Buf[F32]) uses {Alloc} {}
+
+// ------------------------------------------------------------------------- another field
+
+fn change_the_other_field() -> U32 {
+  var w = Row { a: [1, 2, 3], c: 0 }
+  for x in w.a {
+    w.c = w.c + x
+  }
+  w.c
+}
+
+fn change_the_other_field_of_an_arm_binding() -> U32 uses {Alloc} {
+  var w = Slot { a: Some(Buf.zeroed(3)), c: 0 }
+  match w.a {
+    Some(bs) => {
+      for _ in bs {
+        w.c = w.c + 1
+      }
+    },
+    None => {},
+  }
+  w.c
+}
+
+// ---------------------------------------------------------------------------- a Copy binding
+
+fn change_the_subject_of_a_copy_binding() -> U32 {
+  var o: Option[[U32; 3]] = Some([1, 2, 3])
+  var t: U32              = 0
+  match o {
+    Some(arr) => {
+      for x in arr {
+        o = None
+        t = t + x
+      }
+    },
+    None => {},
+  }
+  t
+}
+
+// ----------------------------------------------------------------------- an owned iteration
+
+fn change_the_array_of_an_owned_iteration_of_a_dup_value() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var t: U32       = 0
+  for x in move xs {
+    xs[0] = 100
+    t = t + x
+  }
+  t + xs[0]
+}
+
+fn change_the_subject_of_an_owned_iteration_of_a_binding() -> U32 {
+  var o: Option[[U32; 3]] = Some([1, 2, 3])
+  var t: U32              = 0
+  match o {
+    Some(bs) => {
+      for x in move bs {
+        o = None
+        t = t + x
+      }
+    },
+    None => {},
+  }
+  t
+}
+
+fn assign_to_the_moved_array_of_an_affine_iteration() -> U32 uses {Alloc} {
+  var xs     = [mk(), mk()]
+  var n: U32 = 0
+  for z in move xs {
+    take(move z)
+    xs = [mk(), mk()]
+    n = n + 1
+  }
+  n
+}
+
+// ------------------------------------------------------------------------------ a range
+
+fn change_the_end_of_a_range() -> U32 {
+  var k: U32 = 3
+  var t: U32 = 0
+  for i in 0 ..< k {
+    k = 0
+    t = t + i + 1
+  }
+  t + k
+}
+
+fn change_the_start_of_a_range() -> U32 {
+  var k: U32 = 0
+  var t: U32 = 0
+  for i in k ..< 3 {
+    k = 10
+    t = t + i
+  }
+  t + k
+}
+
+// ---------------------------------------------------------------- static values and literals
+
+fn iterate_a_constant() -> U32 {
+  var t: U32 = 0
+  for x in TABLE {
+    t = t + x
+  }
+  t
+}
+
+fn iterate_a_literal_and_change_the_name_in_it() -> U32 {
+  var a: U32 = 1
+  var t: U32 = 0
+  for x in [a, 2] {
+    a = a + x
+    t = t + x
+  }
+  a * 10 + t
+}
+
+// ------------------------------------------------------------------- after and beside the loop
+
+fn change_after_the_loop() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32       = 0
+  for x in xs {
+    s = s + x
+  }
+  xs[0] = 100
+  s + xs[0]
+}
+
+fn change_in_the_next_pass_of_an_outer_loop() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32       = 0
+  var i: U32       = 0
+  while i < 2 {
+    for x in xs {
+      s = s + x
+    }
+    xs[0] = 10
+    i = i + 1
+  }
+  s
+}
+
+fn change_another_array() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [0, 0, 0]
+  for x in xs {
+    ys[0] = ys[0] + x
+  }
+  ys[0] + xs[0]
+}
+
+fn read_the_place_in_the_body() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32       = 0
+  for x in xs {
+    s = s + x + xs[2]
+  }
+  s
+}
+
+fn change_the_other_array_of_nested_loops() -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  var ys: [U32; 2] = [10, 20]
+  var zs: [U32; 2] = [0, 0]
+  for x in xs {
+    for y in ys {
+      zs[0] = zs[0] + x * y
+    }
+  }
+  zs[0]
+}
+
+fn change_the_other_tail_array_of_an_if_heading(c: Bool) -> U32 {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  var d: [U32; 3] = [0, 0, 0]
+  for x in if c { a } else { b } {
+    d[0] = d[0] + x
+  }
+  d[0]
+}
+
+test "the other field of the struct is not a part of the loop's place" {
+  assert change_the_other_field() == 6
+  assert change_the_other_field_of_an_arm_binding() == 3
+}
+
+test "a Copy binding keeps its value at the binding when the subject changes" {
+  assert change_the_subject_of_a_copy_binding() == 6
+}
+
+test "an owned iteration of a Dup value iterates the copy" {
+  assert change_the_array_of_an_owned_iteration_of_a_dup_value() == 106
+  assert change_the_subject_of_an_owned_iteration_of_a_binding() == 6
+}
+
+test "the array of an owned iteration can be assigned in the body" {
+  assert assign_to_the_moved_array_of_an_affine_iteration() == 2
+}
+
+test "the ends of a range are read once" {
+  assert change_the_end_of_a_range() == 6
+  assert change_the_start_of_a_range() == 13
+}
+
+test "a constant and a literal that needs no drop have no origin" {
+  assert iterate_a_constant() == 15
+  assert iterate_a_literal_and_change_the_name_in_it() == 43
+}
+
+test "a change after the loop and beside it is not in the body" {
+  assert change_after_the_loop() == 106
+  assert change_in_the_next_pass_of_an_outer_loop() == 21
+  assert change_another_array() == 7
+  assert read_the_place_in_the_body() == 15
+  assert change_the_other_array_of_nested_loops() == 90
+  assert change_the_other_tail_array_of_an_if_heading(true) == 6
+  assert change_the_other_tail_array_of_an_if_heading(false) == 15
+}

@@ -198,13 +198,6 @@ note = "発散の後の到達しない文（W5-08）と、前の腕で覆われ�
 
 [[pending]]
 kind = "diag-code"
-target = "E0715"
-reasons = ["R-24", "R-110", "R-118", "S-42"]
-until = "W4-10"
-note = "借用の for の反復元の変更は W4-09（R-24）、match の対象の変更は W4-10（R-110、R-118、S-42）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0805"
 reasons = ["R-17", "S-33"]
 until = "W7-05"
@@ -1487,13 +1480,6 @@ reasons = ["S-257", "S-84"]
 until = "W5-05"
 note = "型の最大値の端の範囲を総称の関数（T: Int）で書く。数の trait の境界が E0200（user-defined traits as bounds）"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/range_move.onsa"
-reasons = ["S-257", "S-103"]
-until = "W4-09"
-note = "for i in move 0..<n は E0703（§7）。今は型の段の E0401。28 行目の move lo + 1..<hi - 1 は今 + の E0002（§5.2、S-362 で未決）。E0703 は modes の段（diag-code の E0703 の項目と同じ時期）"
-
 # --- W3-18 の gate のファズが見つけた入力（種を足してコーパスが変わり、既存の不具合が表に出た）
 
 [[pending]]
@@ -1854,13 +1840,6 @@ until = "W5-04"
 note = "手書きの `impl Drop` の型の `const` の E0407 は `impl Drop` が入る W5-04（`const_kind_drop.onsa` と同じ）"
 
 # --- W4-16 U1a/t: 束縛の状態の土台と `let`（2026-10-29、84 回目）。
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_view_for_change.onsa"
-reasons = ["R-24"]
-until = "W4-09"
-note = "`for v in xs.slice(a, b)` の本体で `xs` を変更する形の E0715。借用の `for` の反復元の変更は W4-09（R-24。部分ビューの `for` は `xs` の借用の `for`、S-217）"
 
 [[pending]]
 kind = "test-case"

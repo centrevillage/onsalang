@@ -253,7 +253,7 @@ impl Walker<'_> {
                 self.expr(*value)
             }
             StmtKind::For { pat, moved, iter, body } => {
-                let kind = BindingKind::For { moved: *moved };
+                let kind = BindingKind::For { moved: moved.is_some() };
                 self.ahead(|w| w.pattern(*pat, kind, Origin::For(s)))?;
                 self.expr(*iter)?;
                 self.open_scope();

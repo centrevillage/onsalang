@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§18.1"]
+
+// S-722 (§5.3): "`inout` 引数と Affine 値は捕捉できない（E0712）". The anonymous function that captures a value that
+// cannot be captured is the E0712, and the closures that are nested in each other are the same: the inner
+// function that reads the `inout` parameter or the Affine value of the function is the error, and so is the
+// outer one that holds it. Which of the captured values is named is not a promise (S-722: not written
+// in the spec), so only the line is checked: each closure here is on one line, with the inner closure in the
+// argument of the call in it, the two uncapturable values (`k`, an `inout` parameter, and `b`, a `Buf`) are
+// read in the outer closure, in the inner one, or one in each, and the error is on that line whichever is
+// named. One error per function (P-01).
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn apply2(f: fn(U32) -> U32, n: U32) -> U32 {
+  f.(n)
+}
+
+pub fn the_inout_in_the_inner_and_the_buffer_in_the_outer(inout k: U32, b: Buf[F32]) -> U32 {
+  apply(fn(x: U32) -> U32 { apply2(fn(y: U32) -> U32 { k }, b.len()) }) //~ E0712
+}
+
+pub fn both_in_the_outer(inout k: U32, b: Buf[F32]) -> U32 {
+  apply(fn(x: U32) -> U32 { apply2(fn(y: U32) -> U32 { y }, b.len() + k) }) //~ E0712
+}
+
+pub fn the_buffer_in_the_inner_and_the_inout_in_the_outer(inout k: U32, b: Buf[F32]) -> U32 {
+  apply(fn(x: U32) -> U32 { apply2(fn(y: U32) -> U32 { b.len() }, k) }) //~ E0712
+}
+
+pub fn the_inout_in_the_inner_only(inout k: U32) -> U32 {
+  apply(fn(x: U32) -> U32 { apply2(fn(y: U32) -> U32 { k }, x) }) //~ E0712
+}
+
+pub fn the_buffer_in_the_inner_only(b: Buf[F32]) -> U32 {
+  apply(fn(x: U32) -> U32 { apply2(fn(y: U32) -> U32 { b.len() }, x) }) //~ E0712
+}
+
+// The controls: the same shapes with the values that can be captured (a Copy parameter and the length of
+// the buffer read before the closures).
+
+pub fn copy_values_in_the_nested_closures(k: U32, b: Buf[F32]) -> U32 {
+  let n = b.len()
+  apply(fn(x: U32) -> U32 { apply2(fn(y: U32) -> U32 { y + k }, n) })
+}

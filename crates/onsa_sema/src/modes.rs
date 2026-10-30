@@ -15,6 +15,7 @@ mod check;
 mod consume;
 mod exclusive;
 mod flow;
+mod frozen;
 mod place;
 mod state;
 #[cfg(test)]

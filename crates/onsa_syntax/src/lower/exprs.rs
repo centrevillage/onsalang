@@ -56,7 +56,7 @@ impl<'a> Lower<'a> {
             NodeKind::ForStmt => {
                 let pat = self.of_class(n, Class::Pat).into_iter().next().unwrap_or_else(|| self.bug(n, "a pattern"));
                 let pat = self.pat(pat);
-                let moved = self.has(n, TokenKind::KwMove);
+                let moved = self.tok(n, TokenKind::KwMove).map(|t| self.cst.token(t).span);
                 let exprs = self.of_class(n, Class::Expr);
                 let iter = self.expr(exprs[0]);
                 let body = self.expr(exprs[1]);

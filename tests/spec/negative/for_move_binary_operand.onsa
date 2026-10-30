@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§7"]
+
+// S-362 (§5.2, §7): "`move` と `inout`（呼び出し位置の印）の被演算子は後置式（名前と、それに続くフィールド・添字・
+// 呼び出し）で、二項演算子の被演算子にはならない（`move y + 1` と `take(move y + 1)` は E0002）". The heading of a
+// `for` is the same: `for i in move a + b` is a `move` of `a` that is the left operand of a `+`, which is not
+// a postfix expression, so it is an E0002, whatever the binary operator. It is not the E0703 of the `move` in
+// front of a range (negative/range_move.onsa: "範囲の始まりの端の形によらず E0703"): a heading that is not a
+// range has no range for the rule of the range to name. One error per function (P-01).
+
+pub fn move_before_a_sum(a: U32, b: U32) -> U32 {
+  var t: U32 = 0
+  for i in move a + b { //~ E0002
+    t = t + i
+  }
+  t
+}
+
+pub fn move_before_a_difference(a: U32, b: U32) -> U32 {
+  var t: U32 = 0
+  for i in move a - b { //~ E0002
+    t = t + i
+  }
+  t
+}
+
+pub fn move_before_a_product(a: U32, b: U32) -> U32 {
+  var t: U32 = 0
+  for i in move a * b { //~ E0002
+    t = t + i
+  }
+  t
+}
+
+// The postfix operand is fine for the syntax: the collections that are moved by the heading.
+
+pub fn move_a_name(move xs: [U32; 3]) -> U32 {
+  var t: U32 = 0
+  for x in move xs {
+    t = t + x
+  }
+  t
+}

@@ -10,6 +10,7 @@ use onsa_syntax::ast::{Ast, ExprId, StmtId};
 use super::MovedLocals;
 use super::capture::Frame;
 use super::flow::Run;
+use super::frozen::Frozen;
 use super::place::{Change, Deps, Place, Proj, path_text};
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
@@ -70,11 +71,13 @@ pub(super) struct Walker<'a> {
     pub(super) m: Made,
 }
 
-/// What the walk is in: the anonymous functions (`capture.rs`), and the
-/// call whose arguments it walks (`calls.rs`).
+/// What the walk is in: the anonymous functions (`capture.rs`), the
+/// borrowed `for` loops (`frozen.rs`), and the call whose arguments it walks
+/// (`calls.rs`).
 #[derive(Default)]
 pub(super) struct Inside {
     pub(super) frames: Vec<Frame>,
+    pub(super) frozen: Vec<Frozen>,
     /// The changes of the places of the call's direct arguments, made after
     /// it (§7, S-796).
     pub(super) after_call: Vec<(Place, Span)>,
@@ -243,10 +246,15 @@ impl<'a> Walker<'a> {
     }
 
     /// The owned Affine local `l` is moved at `at` (§5.2): a change (§7),
-    /// after the call of a `direct` argument.
+    /// after the call of a `direct` argument. Of a place a `for` holds, the
+    /// E0715 only (S-798).
     pub(super) fn move_local(&mut self, r: &mut Run, l: LocalId, at: Span, direct: bool) {
+        let whole = Place { root: l, proj: Vec::new() };
+        if self.held(&whole, at) {
+            return self.record(&whole, at);
+        }
         r.cur.set(l, Status::Moved { at, via_loop: false });
-        self.change(r, Place { root: l, proj: Vec::new() }, at, direct);
+        self.change(r, whole, at, direct);
         if self.reports {
             self.m.moved.insert(l);
         }

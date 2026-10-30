@@ -5,6 +5,7 @@
 use std::mem::replace;
 
 use onsa_diag::internal::bug;
+use onsa_diag::{Code, Diagnostic, Stage};
 use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, StmtKind};
 
 use super::check::Walker;
@@ -148,8 +149,15 @@ impl Walker<'_> {
             }
             StmtKind::For { pat, moved, iter, body } => {
                 match moved {
-                    true => self.consume(r, *iter, Pos::Consume, Some(ast.expr(*iter).span.start)),
-                    false => {
+                    // S-362: a range has no value to consume (§7).
+                    Some(m) if matches!(ast.expr(*iter).kind, ExprKind::Range(_)) => {
+                        let message = "a range has no value to consume: `move` is not written on it (§7)";
+                        let d = Diagnostic::new(Stage::Modes, Code::E0703, ast.expr(*iter).span, message);
+                        self.report(d.with_fix(self.unmark(m.file, m.start, "move")));
+                        self.expr(r, *iter, Pos::Read);
+                    }
+                    Some(m) => self.consume(r, *iter, Pos::Consume, Some(m.start)),
+                    None => {
                         let head = self.head_pos(Head::For(s), Pos::Arg(Mode::Borrow));
                         if head != Pos::Consume {
                             self.view_of_inout(*iter, [*pat]);
@@ -157,7 +165,9 @@ impl Walker<'_> {
                         self.expr(r, *iter, head)
                     }
                 }
+                self.freeze(s);
                 self.run_loop(r, s, (None, Some(*pat), *body));
+                self.inside.frozen.pop();
             }
             StmtKind::While { cond, body } => self.run_loop(r, s, (Some(*cond), None, *body)),
             StmtKind::Break => r.exits.0.join(&replace(&mut r.cur, Delta::bottom())),

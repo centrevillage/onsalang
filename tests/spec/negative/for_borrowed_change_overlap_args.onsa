@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§18.1"]
+// fixes = 0
+
+// S-798, S-799 (§5.4, §5.2, §18.1): a change of the place of a borrowed `for` that is also a change that
+// overlaps another argument of the same call is both an E0715 (the frozen place) and an E0702 (the call).
+// "一つの単位の中では、最初のエラーで検査を止める…残った診断のうち、`diagnostics` の並べ方（開始の位置、終わりの位置、
+// コード、文面の順）で最初のものを報告する" (§18.1): the unit reports the first one, and the two are at the same
+// place (the later of the two places of the call is the `inout` argument, or the assigned place of the change in
+// the block, S-799), so the code decides and the E0702 is the one reported. There is one error per function.
+// Two forms are added for the order. (A) The loop over a binding derived from `o`, with the call in the
+// body that passes `o` as `inout` and the binding borrowed (`fb(b, inout o)`): the E0715 of the write does not
+// change the state (S-798), so `b` is not made unusable and there is no E0704 of §7, and the E0715 (S-798)
+// and the E0702 (S-796) are at the `inout o` over the same range, so the code decides (§18.1) and the
+// E0702 is reported. (B) The call whose `inout` argument comes first (`h(inout xs, xs)`): the E0715 is at the
+// earlier `inout xs` and the E0702 at the later `xs`, and the order of §18.1 is by the positions first, so the
+// E0715 is reported. The call that has no other overlapping argument is the E0715 of
+// negative/for_borrowed_change.onsa. No candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn f(xs: [U32; 2], inout ys: [U32; 2]) {
+  ys[0] = xs[0]
+}
+
+pub fn g(xs: [U32; 2], n: U32) -> U32 {
+  xs[0] + n
+}
+
+pub fn fb(b: Buf[F32], inout o: Option[Buf[F32]]) uses {Alloc} {}
+
+pub fn h(inout xs: [U32; 2], ys: [U32; 2]) {
+  xs[0] = ys[0]
+}
+
+pub fn borrow_and_inout_of_the_iterated_place() {
+  var xs: [U32; 2] = [1, 2]
+  for _ in xs {
+    f(xs, inout xs) //~ E0702
+  }
+}
+
+pub fn borrow_and_a_block_that_writes_the_iterated_place() -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  var t: U32       = 0
+  for _ in xs {
+    t = g(xs, {
+      xs[0] = 5 //~ E0702
+      1
+    })
+  }
+  t
+}
+
+pub fn borrow_and_inout_of_the_origin_of_a_derived_binding() uses {Alloc} {
+  var o: Option[Buf[F32]] = None
+  match o {
+    Some(b) => {
+      for _ in b {
+        fb(b, inout o) //~ E0702
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn inout_first_and_borrow_of_the_iterated_place() {
+  var xs: [U32; 2] = [1, 2]
+  for _ in xs {
+    h(inout xs, xs) //~ E0715
+  }
+}

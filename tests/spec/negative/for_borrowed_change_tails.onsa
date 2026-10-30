@@ -1,0 +1,152 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§18.1"]
+// fixes = 0
+
+// S-604, R-24 (§5.4): "`for` と `match` の見出しも同じ規則で決め、見出しの借用の行は場所か、静的な値か、破棄の
+// 要らないリテラルか、それらの経路で、E0715 も末尾の場所の各々に当たる". A `for` whose heading is an `if`, a
+// `match` or a block borrows when every tail that does not leave is a place, and the origin of the
+// borrow is each of the tail places: a change of any one of them in the body is E0715, the first, the
+// second, or the one that both tails are. The heading of a `for` that is an `if` or a block is written
+// the way of negative/binding_heading_borrow_move.onsa (the `if` unparenthesized or in parentheses, the
+// block in parentheses). A tail that leaves (`return`) is not a tail. The error is at the change and has no
+// candidate (`fixes = 0`). The tails that are all of the same place are the form of the review's `h5`. One
+// error per function (P-01).
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn take_pair(move xs: [Buf[F32]; 2]) uses {Alloc} {}
+
+pub fn reset(inout xs: [U32; 3]) {
+  xs[0] = 0
+}
+
+pub struct W {
+  a: [U32; 3],
+  c: U32,
+}
+
+// ---------------------------------------------------------------------------------------- an `if`
+
+pub fn first_tail_of_an_if(c: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  for _ in if c { a } else { b } {
+    a = [7, 8, 9] //~ E0715
+  }
+}
+
+pub fn second_tail_of_an_if(c: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  for _ in if c { a } else { b } {
+    b[0] = 7 //~ E0715
+  }
+}
+
+pub fn both_tails_are_the_same_place(n: U32) -> U32 {
+  var a: [U32; 3] = [1, 2, 3]
+  for _ in (if n == 0 { a } else { a }) {
+    a = [7, 8, 9] //~ E0715
+  }
+  n
+}
+
+pub fn parenthesized_if_and_an_inout_argument(c: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  for _ in (if c { a } else { b }) {
+    reset(inout b) //~ E0715
+  }
+}
+
+pub fn bang_method_on_a_tail(c: Bool) {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [3.0, 4.0]
+  for _ in if c { a } else { b } {
+    a.fill!(0.0) //~ E0715
+  }
+}
+
+pub fn move_of_a_tail(c: Bool) uses {Alloc} {
+  var a = [mk(), mk()]
+  var b = [mk(), mk()]
+  for _ in if c { a } else { b } {
+    take_pair(move b) //~ E0715
+  }
+}
+
+pub fn tails_that_are_fields(c: Bool) {
+  var v = W { a: [1, 2, 3], c: 0 }
+  var w = W { a: [4, 5, 6], c: 0 }
+  for _ in if c { v.a } else { w.a } {
+    w.a[1] = 9 //~ E0715
+  }
+}
+
+pub fn nested_ifs_in_the_heading(c: Bool, d: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  var e: [U32; 3] = [7, 8, 9]
+  for _ in if c { a } else { if d { b } else { e } } {
+    e[0] = 1 //~ E0715
+  }
+}
+
+pub fn the_other_tail_leaves(c: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  for _ in if c { a } else { return } {
+    a[0] = 1 //~ E0715
+  }
+}
+
+pub fn if_in_a_nested_body(c: Bool, d: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  for _ in if c { a } else { b } {
+    if d {
+      b[2] = 0 //~ E0715
+    }
+  }
+}
+
+// -------------------------------------------------------------------------------- a `match` or a block
+
+pub fn first_arm_of_a_match(c: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  for _ in match c { true => a, false => b } {
+    reset(inout a) //~ E0715
+  }
+}
+
+pub fn second_arm_of_a_match(c: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  for _ in match c { true => a, false => b } {
+    b = [0, 0, 0] //~ E0715
+  }
+}
+
+pub fn tails_of_a_block(c: Bool) {
+  var a: [U32; 3] = [1, 2, 3]
+  var b: [U32; 3] = [4, 5, 6]
+  for _ in ({
+    if c { a } else { b }
+  }) {
+    b[0] = 7 //~ E0715
+  }
+}
+
+pub fn tail_of_a_block_with_a_statement() {
+  var a: [U32; 3] = [1, 2, 3]
+  for _ in ({
+    let k = 1
+    a[k] = 2
+    a
+  }) {
+    a[0] = 7 //~ E0715
+  }
+}
