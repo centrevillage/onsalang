@@ -198,7 +198,7 @@
 "trunc" = 1
 "trunc_{}" = 1
 "trunc_{}_sat" = 1
-"unwrap" = 2
+"unwrap" = 1
 "unwrap_or" = 1
 "zeroed" = 1
 

@@ -10,6 +10,8 @@
 
 use std::sync::OnceLock;
 
+use onsa_syntax::ast::Mode;
+
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
 
 /// A builtin method: parameter types (receiver excluded) and result.
@@ -17,8 +19,8 @@ use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
 pub struct MethodSig {
     pub params: Vec<TyId>,
     pub ret: TyId,
-    /// `inout self` (needs the `!` mark, §5.2).
-    pub bang: bool,
+    /// The mode of `self` (§5.2: `inout self` needs the `!` mark).
+    pub self_mode: Mode,
     /// The arguments are evaluated on some paths only (`o.unwrap_or(d)`
     /// evaluates `d` when `o` is `None`; the lowering of the method): a
     /// flow takes no stateful call there (K-08, W3-10). W5-03 removes it
@@ -86,8 +88,8 @@ struct Method {
     name: String,
     params: &'static [T],
     ret: T,
-    /// `inout self`.
-    bang: bool,
+    /// The mode of `self`.
+    self_mode: Mode,
     /// [`MethodSig::lazy_args`].
     lazy_args: bool,
 }
@@ -97,8 +99,9 @@ fn methods() -> &'static [Method] {
     static TABLE: OnceLock<Vec<Method>> = OnceLock::new();
     TABLE.get_or_init(|| {
         let mut v = Vec::new();
-        let mut add = |recv, name: &str, params: &'static [T], ret, bang| {
-            v.push(Method { recv, name: name.to_string(), params, ret, bang, lazy_args: false })
+        let mut add = |recv, name: &str, params: &'static [T], ret, bang: bool| {
+            let self_mode = if bang { Mode::Inout } else { Mode::Borrow };
+            v.push(Method { recv, name: name.to_string(), params, ret, self_mode, lazy_args: false })
         };
         // Integers (§3.3, §3.4).
         for t in INTS {
@@ -146,12 +149,15 @@ fn methods() -> &'static [Method] {
         add(Recv::Str, "find", &[T::Str], T::OptU32, false);
         add(Recv::Str, "is_char_boundary", &[T::U32], T::Bool, false);
         // Option and Result (§4.1).
-        add(Recv::Option, "unwrap", &[], T::Inner, false);
         add(Recv::Option, "is_some", &[], T::Bool, false);
         add(Recv::Option, "is_none", &[], T::Bool, false);
-        add(Recv::Result, "unwrap", &[], T::Inner, false);
         add(Recv::Result, "is_ok", &[], T::Bool, false);
         add(Recv::Result, "is_err", &[], T::Bool, false);
+        // `move self`: it takes the content out (§9.1, S-785).
+        for recv in [Recv::Option, Recv::Result] {
+            let name = "unwrap".to_string();
+            v.push(Method { recv, name, params: &[], ret: T::Inner, self_mode: Mode::Move, lazy_args: false });
+        }
         // The default is evaluated only for `None` (the lowering's `Switch`).
         let unwrap_or = "unwrap_or".to_string();
         v.push(Method {
@@ -159,7 +165,7 @@ fn methods() -> &'static [Method] {
             name: unwrap_or,
             params: &[T::Inner],
             ret: T::Inner,
-            bang: false,
+            self_mode: Mode::Borrow,
             lazy_args: true,
         });
         v
@@ -187,7 +193,13 @@ fn method_row(recv_ty: &Ty, name: &str) -> Option<(&'static Method, Option<TyId>
 /// has the method `name`, and whether it is called with `!`: the question
 /// of the names stage, which makes no type (`Str.len(s)`, §15.1).
 pub(crate) fn method_bang(types: &Types, recv: TyId, name: &str) -> Option<bool> {
-    method_row(types.get(recv), name).map(|(m, _)| m.bang)
+    method_self(types, recv, name).map(|m| m == Mode::Inout)
+}
+
+/// The mode of `self` of the method `name` of a receiver of the type
+/// `recv` (§5.2, §9.1); none of an associated function (`Buf.zeroed`).
+pub(crate) fn method_self(types: &Types, recv: TyId, name: &str) -> Option<Mode> {
+    method_row(types.get(recv), name).map(|(m, _)| m.self_mode)
 }
 
 /// Method `name` on a receiver of (resolved, non-variable) type `recv`.
@@ -197,7 +209,7 @@ pub fn method(types: &mut Types, recv: TyId, name: &str) -> Option<MethodSig> {
     let mut ty = |t: T| sig_ty(types, t, recv, &recv_ty, inner);
     let params = m.params.iter().map(|t| ty(*t)).collect::<Option<Vec<_>>>()?;
     let ret = ty(m.ret)?;
-    Some(MethodSig { params, ret, bang: m.bang, lazy_args: m.lazy_args })
+    Some(MethodSig { params, ret, self_mode: m.self_mode, lazy_args: m.lazy_args })
 }
 
 fn sig_ty(types: &mut Types, t: T, recv: TyId, recv_ty: &Ty, inner: Option<TyId>) -> Option<TyId> {

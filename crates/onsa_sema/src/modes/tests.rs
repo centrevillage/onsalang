@@ -436,7 +436,7 @@ fn bare(code: Code, lines: &[usize]) -> Vec<Found> {
 
 /// R-117, S-41: an Affine value in an `inout` parameter is not moved out
 /// (E0711, no candidate), marked or not, a path, a split, a return, a tail;
-/// a Dup one is copied. `take(b)` is U3a's (the mode of the callee).
+/// a Dup one is copied. `take(b)` is in `the_carried_forms_of_calls`.
 #[test]
 fn an_inout_parameter_is_not_moved_out() {
     let src = "pub fn whole(inout b: Buf[F32]) uses {Alloc} {
@@ -1030,4 +1030,301 @@ pub fn element(move w: [Result[Buf[F32], U32]; 2]) -> Result[U32, U32] uses {All
         .map(|d| (d.code, d.notes.len()))
         .collect();
     assert_eq!(notes, [(Code::E0711, 0), (Code::E0711, 1)]);
+}
+
+/// The types of the calls of U3a: a struct whose methods take `self` in
+/// each mode, and a function of an `inout` parameter.
+const CALLEES: &str = "pub struct W { b: Buf[F32] }
+impl W {
+  pub fn peek(self) -> U32 { 1 }
+  pub fn poke(inout self) {}
+  pub fn eat(move self) -> U32 uses {Alloc} { 1 }
+  pub fn put(self, move b: Buf[F32]) uses {Alloc} {}
+  pub fn m(self, xs: [Span[F32]; 2]) {}
+}
+pub fn io(inout x: Buf[F32]) {}
+";
+
+/// [`fixes`] of [`CALLEES`] and `body`, by the lines of `body`.
+fn call_fixes(body: &str) -> Vec<Found> {
+    let skip = CALLEES.matches('\n').count();
+    let found = fixes(&format!("{CALLEES}{body}"));
+    found.into_iter().map(|(c, l, f)| (c, l - skip, f)).collect()
+}
+
+/// §18.1: each candidate of [`CALLEES`] and `body`, applied alone, leaves
+/// no error before the modes stage and one diagnostic fewer of the new one.
+fn each_fix_clears(body: &str) {
+    let body = format!("{CALLEES}{body}");
+    let src = format!("{PRELUDE}{body}");
+    let (pkg, mut a) = analyzed(&src);
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    let found: Vec<_> = a.diagnostics[before..].iter().filter(|d| d.span.file == FileId(0)).cloned().collect();
+    for f in found.iter().flat_map(|d| d.fixes.iter()) {
+        let mut text = src.clone();
+        for e in f.edits().iter().rev() {
+            text.replace_range(e.span.start as usize..e.span.end as usize, &e.replace);
+        }
+        assert_eq!(diags(&text[PRELUDE.len()..]).len(), found.len() - 1, "{}", f.title());
+    }
+}
+
+/// A candidate by its title and its line after its edits.
+fn fix(title: &str, line: &str) -> Vec<(String, String)> {
+    vec![(title.to_string(), line.to_string())]
+}
+
+/// Memo 2.5, §5.2: the mark of an argument against the mode of its
+/// parameter, the nine cells; the position is the parameter's, so each
+/// candidate leaves no error the call had not. `inout` on a `move`
+/// parameter is removed for a Dup value only (an Affine place: no one fix).
+#[test]
+fn the_marks_against_the_modes() {
+    let src = "pub fn fine() uses {Alloc} {
+  var c = mk()
+  let n: U32 = 1
+  let k = len_of(c)
+  io(inout c)
+  tk(n)
+  take(move c)
+}
+pub fn borrow_inout(inout c: Buf[F32]) -> U32 {
+  len_of(inout c)
+}
+pub fn borrow_move(c: Buf[F32]) -> U32 {
+  len_of(move c)
+}
+pub fn inout_none(inout c: Buf[F32]) {
+  io(c)
+}
+pub fn inout_move(inout c: Buf[F32]) {
+  io(move c)
+}
+pub fn move_inout_dup(n: U32) {
+  tk(inout n)
+}
+pub fn move_inout_affine() uses {Alloc} {
+  var c = mk()
+  take(inout c)
+}
+pub fn move_none() uses {Alloc} {
+  let c = mk()
+  take(c)
+}
+pub fn move_move_dup(n: U32) {
+  tk(move n)
+}
+";
+    let e0703 = |l: usize, f: Vec<(String, String)>| (Code::E0703, l, f);
+    let expected = [
+        e0703(10, fix("remove `inout`", "len_of(c)")),
+        e0703(13, fix("remove `move`", "len_of(c)")),
+        e0703(16, fix("add `inout`", "io(inout c)")),
+        e0703(19, fix("replace `move` with `inout`", "io(inout c)")),
+        e0703(22, fix("remove `inout`", "tk(n)")),
+        e0703(26, Vec::new()),
+        e0703(30, fix("add `move`", "take(move c)")),
+        e0703(33, fix("remove `move`", "tk(n)")),
+    ];
+    assert_eq!(call_fixes(src), expected);
+    each_fix_clears(src);
+}
+
+/// Memo 2.5: what each callee takes, by a missing `move` (E0703) on each: a
+/// function, a method (and its `move self` receiver, consumed with no
+/// mark), a function value, a generic function; a builtin method borrows;
+/// a constructor takes elements (E0711, consumed). `move` on a borrowed
+/// parameter of each is E0703 too.
+#[test]
+fn what_each_callee_takes() {
+    let src = "pub fn method() uses {Alloc} {
+  let w = W { b: mk() }
+  let b = mk()
+  w.put(b)
+}
+pub fn value(g: fn(move Buf[F32]) -> U32) -> U32 uses {Alloc} {
+  let b = mk()
+  g.(b)
+}
+pub fn generic() uses {Alloc} {
+  let b = mk()
+  keep(b)
+}
+pub fn builtin(xs: Buf[F32], i: U32) -> U32 {
+  let o = xs.get(move i)
+  0
+}
+pub fn variant() -> Option[Buf[F32]] uses {Alloc} {
+  let b = mk()
+  Some(b)
+}
+pub fn by_mark(g: fn(Buf[F32]) -> U32, b: Buf[F32]) -> U32 {
+  g.(move b)
+}
+";
+    let add = |l: usize, code: Code, line: &str| (code, l, fix("add `move`", line));
+    let expected = [
+        add(4, Code::E0703, "w.put(move b)"),
+        add(8, Code::E0703, "g.(move b)"),
+        add(12, Code::E0703, "keep(move b)"),
+        (Code::E0703, 15, fix("remove `move`", "let o = xs.get(i)")),
+        add(20, Code::E0711, "Some(move b)"),
+        (Code::E0703, 23, fix("remove `move`", "g.(b)")),
+    ];
+    assert_eq!(call_fixes(src), expected);
+    each_fix_clears(src);
+}
+
+/// §5.2: the `!` of a call. An `inout self` method needs it (E0713), a user
+/// one and a builtin one; a method of `self` does not (E0714). Each
+/// candidate is the one fix. (A constructor is NEW's.)
+#[test]
+fn the_bang_of_a_call() {
+    let src = "pub fn user() uses {Alloc} {
+  var w = W { b: mk() }
+  w.poke()
+}
+pub fn builtin(inout xs: Buf[F32]) {
+  xs.fill(0.0)
+}
+pub fn marked(inout xs: Buf[F32]) uses {Alloc} {
+  var w = W { b: mk() }
+  w.poke!()
+  xs.fill!(0.0)
+}
+pub fn not_inout(w: W) -> U32 {
+  w.peek!()
+}
+";
+    let expected = [
+        (Code::E0713, 3, fix("add `!`", "w.poke!()")),
+        (Code::E0713, 6, fix("add `!`", "xs.fill!(0.0)")),
+        (Code::E0714, 14, fix("remove `!`", "w.peek()")),
+    ];
+    assert_eq!(call_fixes(src), expected);
+    each_fix_clears(src);
+}
+
+/// S-785, S-786 (§5.2, §9.1): a `move self` receiver, the builtin `unwrap`
+/// of `Option` and `Result` and a user's method, is consumed with no mark:
+/// an owned Affine one moves (E0704 after, and in the next iteration), a
+/// borrowed or `inout` one is E0711 with no candidate, a Dup one is copied.
+#[test]
+fn a_move_self_receiver_is_consumed() {
+    let src = "pub fn twice() -> U32 uses {Alloc} {
+  let w = mko()
+  let x = w.unwrap()
+  let y = w.unwrap()
+  x.len()
+}
+pub fn result() -> U32 uses {Alloc} {
+  let r = mkr()
+  let x = r.unwrap()
+  let p = (r, 1)
+  x.len()
+}
+pub fn borrowed(w: Option[Buf[F32]]) -> U32 {
+  let x = w.unwrap()
+  x.len()
+}
+pub fn inout_(inout w: Option[Buf[F32]]) -> U32 {
+  let x = w.unwrap()
+  x.len()
+}
+pub fn dup(w: Option[U32], r: Result[U32, U32]) -> U32 {
+  w.unwrap() + w.unwrap() + r.unwrap()
+}
+pub fn looped(n: U32) uses {Alloc} {
+  let w = mko()
+  for i in 0 ..< n {
+    let x = w.unwrap()
+  }
+}
+pub fn user() -> U32 uses {Alloc} {
+  let v = W { b: mk() }
+  let a = v.eat()
+  v.peek()
+}
+pub fn user_borrowed(v: W) -> U32 uses {Alloc} {
+  v.eat()
+}
+";
+    let skip = CALLEES.matches('\n').count();
+    let (diags, moved) = seen(&format!("{CALLEES}{src}"));
+    let diags: Vec<_> = diags.into_iter().map(|(c, l, v)| (c, l - skip, v)).collect();
+    let e0711 = (Code::E0711, false);
+    let expected =
+        [at(4, MOVED), at(10, MOVED), at(14, e0711), at(18, e0711), at(27, BY_LOOP), at(33, MOVED), at(36, e0711)];
+    assert_eq!(diags, expected.map(|(c, l, v)| (c, l, v)));
+    assert_eq!(call_fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 0);
+    let names = ["r", "v", "w"].map(String::from);
+    assert_eq!(moved, BTreeSet::from(names));
+}
+
+/// The forms carried to U3a: an element of a constructor is consumed (a
+/// `Span` is E0710, R-325; a Dup one marked `move` is fine, not S-609's
+/// E0703); `take(b)` of an `inout` Affine `b` is E0711 with no candidate
+/// (R-117); a planar literal at a borrowed parameter of a method and of a
+/// generic function; the tails of
+/// an `if` at a `move` parameter (§5.2); the arguments walked from the left
+/// (§3.5).
+#[test]
+fn the_carried_forms_of_calls() {
+    let src = "pub fn span(xs: Span[F32]) -> U32 {
+  let k = Some(xs)
+  0
+}
+pub fn dup_marked(n: U32) -> Option[U32] {
+  Some(move n)
+}
+pub fn inout_arg(inout b: Buf[F32]) uses {Alloc} {
+  take(b)
+}
+pub fn planar(w: W, a: Buf[F32], b: Buf[F32]) {
+  w.m([a, b])
+}
+pub fn tails(c: Bool) uses {Alloc} {
+  let a = mk()
+  let b = mk()
+  take(if c { move a } else { move b })
+}
+pub fn two(move x: Buf[F32]) uses {Alloc} {
+  w2(move x, x)
+}
+pub fn w2(move x: Buf[F32], y: Buf[F32]) uses {Alloc} {}
+pub fn gp[T: Copy](xs: [Span[T]; 2]) {}
+pub fn generic(a: Buf[F32], b: Buf[F32]) {
+  gp([a, b])
+}
+";
+    let skip = CALLEES.matches('\n').count();
+    let (diags, moved) = seen(&format!("{CALLEES}{src}"));
+    let lines: Vec<_> = diags.into_iter().map(|(c, l, _)| (c, l - skip)).collect();
+    assert_eq!(lines, [(Code::E0710, 2), (Code::E0711, 9), (Code::E0704, 20)]);
+    assert_eq!(call_fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 0);
+    assert_eq!(moved, BTreeSet::from(["a", "b", "x"].map(String::from)));
+}
+
+/// §18.1: of a callee the walk does not know (here its record removed, as
+/// of a value of the error type), the marks and the moves are not checked.
+#[test]
+fn a_callee_not_known_checks_nothing() {
+    let mut src = String::from(PRELUDE);
+    src.push_str(
+        "pub fn t() uses {Alloc} {
+  let b = mk()
+  take(b)
+  take(move b)
+  take(b)
+}
+",
+    );
+    let (pkg, mut a) = analyzed(&src);
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
+    a.bodies.get_mut(&id).expect("a body").targets.retain(|_, t| !matches!(t, crate::body::Target::Fn { .. }));
+    let before = a.diagnostics.len();
+    let moved = check_all(&pkg, &mut a);
+    assert!(a.diagnostics[before..].iter().all(|d| d.span.file != FileId(0)));
+    assert!(!moved.contains_key(&id));
 }

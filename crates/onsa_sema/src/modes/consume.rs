@@ -3,7 +3,7 @@
 //! `move` mark. An erroneous consumption moves nothing (review 2).
 
 use onsa_diag::unsupported::Feature;
-use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, PatId};
 
 use super::check::Walker;
@@ -15,6 +15,10 @@ use crate::binding::Bind;
 use crate::body::{MOVE_NEEDS_A_PLACE, view_base};
 use crate::sig::second_class;
 use crate::ty::{BuiltinTy, Ty, TyId};
+
+/// S-784, S-785: at `?` and a `move self` receiver, how to read the value
+/// instead.
+const EXTRACT: &str = "`?` and a `move self` receiver consume their operand (§5.2, §9.1): read it with `match` instead, or own it (a `move` parameter)";
 
 /// A second-class value (memo 1.2, §5.3), by why it is: a borrow row binds
 /// a view only (§5.4).
@@ -41,8 +45,7 @@ impl Walker<'_> {
             if mark.is_none() {
                 return self.expr(r, x, pos);
             }
-            // R-198: at any position, with no candidate (W4-09 adds them).
-            self.report(Diagnostic::new(Stage::Modes, Code::E0711, at, MOVE_NEEDS_A_PLACE));
+            self.needs_a_place(at);
             return self.expr(r, x, Pos::Read);
         };
         let (l, live) = (place.root, self.live(r, place.root));
@@ -55,11 +58,8 @@ impl Walker<'_> {
         let (text, local) = (self.text, &self.info.locals[l.0 as usize]);
         let (name, root) = (&text[at.start as usize..at.end as usize], &local.name);
         let plain = |message: String| Diagnostic::new(Stage::Modes, Code::E0711, at, message);
-        // S-784: at `?`, how to read the value instead.
         let error = |message: String| match pos {
-            Pos::Extract => plain(message).with_rule(
-                "`?` consumes its operand (§9.1): read it with `match` instead, or own it (a `move` parameter)",
-            ),
+            Pos::Extract => plain(message).with_rule(EXTRACT),
             _ => plain(message),
         };
         let d = match (kind, local.state) {
@@ -74,7 +74,7 @@ impl Walker<'_> {
                         kind.name()
                     ),
                 )
-                .with_fix(self.unmark(at, m)),
+                .with_fix(self.unmark(at.file, m, "move")),
                 _ => return,
             },
             // R-117, S-41: with no candidate (the fix is the mode, away from here).
@@ -188,6 +188,12 @@ impl Walker<'_> {
         }
     }
 
+    /// R-198: `move` on the value at `at`, which is no place: E0711 at any
+    /// position, with no candidate (W4-09 adds them).
+    pub(super) fn needs_a_place(&mut self, at: Span) {
+        self.report(Diagnostic::new(Stage::Modes, Code::E0711, at, MOVE_NEEDS_A_PLACE));
+    }
+
     /// The candidate that writes `move` before `e` (outside its parentheses:
     /// a mark is not written in them, §5.2).
     fn add_move(&self, e: ExprId) -> Fix {
@@ -195,11 +201,11 @@ impl Walker<'_> {
         Fix::insert("add `move`", span.file, span.start, "move ")
     }
 
-    /// The candidate that removes the `move` at `m` and the blanks after it
-    /// (not a comment, which is no part of the mark).
-    fn unmark(&self, at: Span, m: u32) -> Fix {
-        let after = &self.text[m as usize + "move".len()..];
+    /// The candidate that removes the mark `word` at `m` and the blanks
+    /// after it (not a comment, which is no part of the mark).
+    pub(super) fn unmark(&self, file: FileId, m: u32, word: &str) -> Fix {
+        let after = &self.text[m as usize + word.len()..];
         let end = self.text.len() - after.trim_start_matches([' ', '\t']).len();
-        Fix::delete("remove `move`", Span::new(at.file, m, end as u32))
+        Fix::delete(format!("remove `{word}`"), Span::new(file, m, end as u32))
     }
 }

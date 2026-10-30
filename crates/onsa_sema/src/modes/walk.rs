@@ -1,7 +1,7 @@
 //! The walk of the expressions (W4-07 memo 2.1): each gives its
 //! sub-expressions their positions, and a place at a consuming position goes
-//! to [`Walker::consume`]. The position of an argument is its mark's until
-//! U3a reads the modes of the callee.
+//! to [`Walker::consume`]. A call gives its receiver and arguments the
+//! positions of the parameters of its callee (`calls.rs`).
 
 use onsa_syntax::ast::{ExprId, ExprKind, Lit, Mode, StrSeg};
 
@@ -10,19 +10,18 @@ use super::flow::Run;
 use super::place::place_of;
 use crate::body::LocalId;
 use crate::names::body::PathRes;
-use crate::ty::{Ty, TyId};
+use crate::ty::TyId;
 
 /// Where a value stands (§5.2, §5.3): what the walk checks at it. Passed down
 /// to the tails of a block, an `if` and a `match` (§5.2) and through
 /// parentheses.
-#[allow(dead_code)] // U3a places `Unknown`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Pos {
     /// An operand, a condition, a guard, an index, a statement's value.
     Read,
     /// A borrowed or `inout` argument, a receiver, an index base, a borrowed head.
     Arg(Mode),
-    /// The argument of a `move` parameter, a `move self` receiver (S-609).
+    /// The argument of a `move` parameter (S-609).
     MoveArg,
     /// The value of a `let`, `for` or `match` head whose row is a borrow (§5.4).
     Bind,
@@ -31,7 +30,7 @@ pub(super) enum Pos {
     /// `return e` and the tail of a function or anonymous function.
     Return,
     /// A consuming position with no mark written: the operand of `?`, a
-    /// `move self` receiver (U3a) (S-786, §5.2, §9.1).
+    /// `move self` receiver (S-786, §5.2, §9.1).
     Extract,
     /// An argument of a call on a value of the error type (§18.1): no check.
     Unknown,
@@ -84,31 +83,17 @@ impl Walker<'_> {
                 self.expr(r, *base, Pos::Arg(Mode::Borrow));
                 self.expr(r, *index, Pos::Read);
             }
-            ExprKind::Call { callee, args, .. } => {
-                self.expr(r, *callee, Pos::Read);
-                let params = match self.info.expr_types.get(callee).map(|&t| self.a.types.get(t)) {
-                    Some(Ty::Fn(f)) if f.params.len() == args.len() => f.params.iter().map(|p| Some(p.1)).collect(),
-                    _ => vec![None; args.len()],
-                };
-                self.lazily(r, e, |w, r| {
-                    for (arg, param) in args.iter().zip(params) {
-                        match arg.mode {
-                            Mode::Move => w.consume(r, arg.expr, Pos::MoveArg, Some(arg.span.start)),
-                            m => w.argument(r, arg.expr, m, param),
-                        }
-                    }
-                });
-            }
+            ExprKind::Call { callee, args, kind } => self.call(r, e, *callee, args, *kind),
             _ => ast.sub_exprs(e).into_iter().for_each(|x| self.expr(r, x, Pos::Read)),
         }
     }
 
     /// The argument `e` of the mode `m` (not `move`) of a parameter of the
-    /// type `param`, if known: a literal of a second-class type at a borrowed
+    /// type `param`, if read: a literal of a second-class type at a borrowed
     /// one passes its elements on as arguments (memo 2.1, §5.3:
     /// `planes([a, b])`, `swap.Out { l: a, r: b }`; the type of an array
     /// literal is that of its elements). `inout [a, b]` is W4-08's.
-    fn argument(&mut self, r: &mut Run, e: ExprId, m: Mode, param: Option<TyId>) {
+    pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, m: Mode, param: Option<TyId>) {
         let x = self.ast.without_parens(e);
         let literal =
             matches!(self.ast.expr(x).kind, ExprKind::Array(_) | ExprKind::Tuple(_) | ExprKind::Struct { .. });

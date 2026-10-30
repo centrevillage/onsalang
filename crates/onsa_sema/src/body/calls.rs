@@ -281,7 +281,8 @@ impl<'a> Checker<'a> {
             let shown = self.display(recv);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` has no method `{}`", name.name)));
         };
-        if sig.bang {
+        let bang = sig.self_mode == Mode::Inout;
+        if bang {
             self.inout_receiver(callee)?;
         }
         let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
@@ -289,10 +290,9 @@ impl<'a> Checker<'a> {
             self.unify_at(span, sig.ret, exp)?;
         }
         self.check_args(args, &params, span)?;
-        self.info.targets.insert(
-            e,
-            Target::BuiltinMethod { recv, name: name.name.clone(), bang: sig.bang, lazy_args: sig.lazy_args },
-        );
+        self.info
+            .targets
+            .insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), bang, lazy_args: sig.lazy_args });
         Ok(sig.ret)
     }
 
