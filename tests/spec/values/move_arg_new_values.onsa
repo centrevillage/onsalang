@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2"]
+
+// S-609, S-100 (§5.2: "場所でない値（新しく作った値、Copy のリテラル）を `move` の引数に渡すときは、`move` を書かない（`take(Buf.zeroed(4))`）";
+// "`move` の印は、所有が移って前の値が以後使えなくなる所（Affine 値）にだけ付ける"): the argument of a `move` parameter that is
+// a new value (the result of a call, a constructor, a literal of a struct) has no mark, and it is not an E0703; the place of an
+// owned Affine value has the mark (negative/modes_call_marks.onsa). Run in the interpreter.
+
+pub struct Wrap {
+  b: Buf[F32],
+}
+
+fn make() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+fn take_opt(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  o.unwrap().len()
+}
+
+fn take_wrap(move w: Wrap) -> U32 uses {Alloc} {
+  w.b.len()
+}
+
+fn take_n(move n: U32) -> U32 {
+  n + 1
+}
+
+fn pass_a_call_result() -> U32 uses {Alloc} {
+  take(make())
+}
+
+fn pass_a_constructor() -> U32 uses {Alloc} {
+  take_opt(Some(make()))
+}
+
+fn pass_a_literal() -> U32 uses {Alloc} {
+  take_wrap(Wrap { b: Buf.zeroed(5) })
+}
+
+fn pass_a_branch(c: Bool) -> U32 uses {Alloc} {
+  take(if c { Buf.zeroed(1) } else { make() })
+}
+
+fn pass_a_copy_literal() -> U32 {
+  take_n(4)
+}
+
+test "a new value is passed to a move parameter without a mark" {
+  assert take(Buf.zeroed(4)) == 4
+  assert pass_a_call_result() == 2
+  assert pass_a_constructor() == 2
+  assert pass_a_literal() == 5
+  assert pass_a_branch(true) == 1
+  assert pass_a_branch(false) == 2
+}
+
+test "a Copy literal is passed to a move parameter without a mark" {
+  assert pass_a_copy_literal() == 5
+}

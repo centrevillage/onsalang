@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2"]
+
+// S-789 (§5.2): "移動は制御の流れに沿って数える。ループの本体で移した変数を次の反復で使うと、反復の回数に
+// よらず E0704 である。移した `var` は全体に代入すると再び使え、フィールドや要素への代入は使用に数える
+// (E0704)". A variable moved in the body of a `while` or a `for` is moved again by the next iteration,
+// whatever the number of iterations (a range of one iteration is an error too, the condition is not
+// looked at). The assignment to a part of a variable that was moved (a field, an element) is a use of
+// the moved variable. A variable moved in one of the branches of an `if`, an arm of a `match` or the
+// right side of `&&` and `||` (which is evaluated only sometimes) is not usable after them: "片方の腕で
+// だけ消費した変数は、その後で使えない (E0704)". The error is at the use that comes after the move. The
+// next iteration through `continue` and the re-evaluation of the condition of a `while` are in
+// negative/modes_moved_next_iteration.onsa, and the assignment to the whole variable is in
+// values/modes_moved_assign.onsa. One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn take_h(move h: Holder) uses {Alloc} {}
+
+pub fn take_xs(move xs: [Buf[F32]; 2]) uses {Alloc} {}
+
+pub fn read(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn cond() -> Bool {
+  true
+}
+
+pub fn eaten(move b: Buf[F32]) -> Bool uses {Alloc} {
+  true
+}
+
+// ------------------------------------------------------------------------------ loops
+
+pub fn while_body_moves() uses {Alloc} {
+  let b = mk()
+  while cond() {
+    take(move b) //~ E0704
+  }
+}
+
+pub fn while_body_moves_a_var(n: U32) uses {Alloc} {
+  var b      = mk()
+  var i: U32 = 0
+  while i < n {
+    take(move b) //~ E0704
+    i = i + 1
+  }
+}
+
+pub fn for_range_of_one_iteration() uses {Alloc} {
+  let b = mk()
+  for _ in 0 ..< 1 {
+    take(move b) //~ E0704
+  }
+}
+
+pub fn for_range_that_is_empty() uses {Alloc} {
+  let b = mk()
+  for _ in 0 ..< 0 {
+    take(move b) //~ E0704
+  }
+}
+
+pub fn for_over_an_array(xs: [U32; 2]) uses {Alloc} {
+  let b = mk()
+  for _ in xs {
+    take(move b) //~ E0704
+  }
+}
+
+// -------------------------------------------------------- the parts of a moved variable
+
+pub fn field_assigned_after_the_move(move h: Holder) uses {Alloc} {
+  take_h(move h)
+  h.buf = mk() //~ E0704
+}
+
+pub fn element_assigned_after_the_move(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  take_xs(move xs)
+  xs[0] = mk() //~ E0704
+}
+
+pub fn copy_field_assigned_after_the_move(move h: Holder) uses {Alloc} {
+  take_h(move h)
+  h.gain = 1.0 //~ E0704
+}
+
+// ---------------------------------------------------------------------- joins of branches
+
+pub fn moved_in_one_branch(c: Bool) -> U32 uses {Alloc} {
+  let b = mk()
+  if c {
+    take(move b)
+  }
+  read(b) //~ E0704
+}
+
+pub fn moved_in_one_arm(c: Bool) -> U32 uses {Alloc} {
+  let b = mk()
+  match c {
+    true => take(move b),
+    false => {},
+  }
+  read(b) //~ E0704
+}
+
+pub fn moved_on_the_right_of_and(c: Bool) -> U32 uses {Alloc} {
+  let b = mk()
+  if c && eaten(move b) {
+    return 1
+  }
+  read(b) //~ E0704
+}
+
+pub fn moved_on_the_right_of_or(c: Bool) -> U32 uses {Alloc} {
+  let b = mk()
+  if c || eaten(move b) {
+    return 1
+  }
+  read(b) //~ E0704
+}

@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2"]
+
+// S-790, S-784, S-609 (§9.1, §5.2): "中身を取り出す形の被演算子に置いたブロックの腕の `move` も同じである" (it is an
+// "意味を変えない余分な情報で、検査は受け付けるが、書かない", like the `move` at the place of a return value): a
+// block or an `if` that is the operand of a postfix `?` may end in a `move` of the Affine place, and the check
+// accepts it (`({ move r })?`, `(if c { move r } else { move s })?`; the operand of a `?` is in parentheses
+// there, because `{ … }?` as a statement is not an operand, E0013). The place is moved all the same. The
+// value of a `?` that is the argument of a `move` parameter is a value that is not a place, so it takes no
+// mark (`len_of(r?)`). Split from values/try_operand_consume.onsa: today the marks of the blocks are an
+// E0200 and the argument is an E0703 (the old modes stage asks for the mark that S-609 took away). Every
+// binding is read. No diagnostic is expected anywhere in this file.
+
+pub fn len_of(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn passed_on(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  Ok(len_of(r?))
+}
+
+pub fn block_with_a_mark(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let b = ({ move r })?
+  Ok(b.len())
+}
+
+pub fn if_with_marks(c: Bool, move r: Result[Buf[F32], U32], move s: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let b = (if c { move r } else { move s })?
+  Ok(b.len())
+}

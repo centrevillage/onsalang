@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// S-217 (§5.3, §5.4): "`inout` 引数からの `Span` … は束縛できず、束縛の場所に置いた値の位置で E0710". The
+// heading of a `match` is a place where a value is bound, so a `Span` bound from an `inout`
+// argument is an E0710 there (`match xs { s => … }`, with `xs: inout [Span[F32]; 2]` and `xs: inout
+// Span[F32]`), as the `let` of negative/binding_span_let.onsa is. The error is at the heading. The `for`
+// is in negative/binding_span_for_heading.onsa. The same headings over a borrowed argument are legal
+// (values/binding_span_match_arm.onsa). Iterating the numbers of an `inout` `Span` binds no `Span` (the
+// contrasts at the end). One error per function (P-01).
+
+pub fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+pub fn match_over_an_inout_planar_argument(inout xs: [Span[F32]; 2]) -> U32 {
+  match xs { //~ E0710
+    s => s.len(),
+  }
+}
+
+pub fn match_over_an_inout_span_argument(inout xs: Span[F32]) -> U32 {
+  match xs { //~ E0710
+    s => s.len(),
+  }
+}
+
+pub fn match_over_an_element_of_an_inout_argument(inout xs: [Span[F32]; 2]) -> U32 {
+  match xs[0] { //~ E0710
+    s => s.len(),
+  }
+}
+
+// -------------------------------------------------------------------------- the contrasts
+
+pub fn index_instead_of_a_binding(inout xs: [Span[F32]; 2]) -> U32 {
+  var n: U32 = 0
+  for k in 0 ..< 2 {
+    n = n + xs[k].len()
+  }
+  n
+}
+
+pub fn numbers_of_an_inout_span(inout xs: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for v in xs {
+    total = total + v
+  }
+  total
+}
+
+pub fn element_receivers_of_an_inout_planar_argument(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)
+  clear(inout xs[1])
+}

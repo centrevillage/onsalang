@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2"]
+
+// S-784, S-85 (§9.1, §5.2): the other side of values/try_operand_field_path.onsa. "Affine のフィールドの経路は根の全体
+// を消費し": after `h.r?` the root `h` is consumed as a whole, so any use of the root or of another part of it is an E0704
+// ("取り出した後に `s` を使った E0704"), and the same field again is too. The error is at the use after the `?`.
+// The field of a borrowed or `inout` root is an E0711 (negative/try_operand_consume.onsa). The taking out of
+// the field is the work W4-09 (S-85). One error per function (P-01).
+
+pub struct Holder {
+  r: Result[Buf[F32], U32],
+  n: U32,
+}
+
+pub fn sink[T: ?Dup](move x: T) {}
+
+pub fn read_another_field_after(move h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let b = h.r?
+  Ok(b.len() + h.n) //~ E0704
+}
+
+pub fn the_same_field_twice(move h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let a = h.r?
+  let b = h.r? //~ E0704
+  Ok(a.len() + b.len())
+}
+
+pub fn the_root_moved_on_after(move h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let a = h.r?
+  sink(move h) //~ E0704
+  Ok(a.len())
+}
+
+pub fn tuple_root_read_after(move p: (Result[Buf[F32], U32], U32)) -> Result[U32, U32] uses {Alloc} {
+  let a = p.0?
+  Ok(a.len() + p.1) //~ E0704
+}

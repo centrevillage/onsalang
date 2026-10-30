@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5"]
+// fixes = 0
+
+// S-787 (§5.2): "Affine のフィールドの経路の `move` は根の全体を消費する（上）ので、根のどの場所とも重なる
+// （`h(inout x.a, move x.b)`）". The `move` of a field path of an Affine value consumes the whole root
+// ("`s` 全体を消費する", §5.2), so it overlaps with every other argument that is a place of the root, a
+// sibling field included, in either order; the error is at the later argument. There is no repair candidate
+// (`fixes = 0`). Today the move of a field is an E0711 "partial moves are not allowed" (S-85, the work W4-09
+// makes the extraction consume the root), so this file is about the overlap of the arguments once that
+// consumption is accepted; the errors that do not need the extraction are in negative/overlap_args_move.onsa.
+// One error per item (P-01).
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Slot {
+  buf: Buf[F32],
+}
+
+impl Slot {
+  pub fn join(move self, move other: Buf[F32]) -> U32 uses {Alloc} {
+    self.buf.len() + other.len()
+  }
+}
+
+pub fn h(inout a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_borrow(a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_moves(move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_pair_moves(move a: Buf[F32], move p: Pair) uses {Alloc} {}
+
+pub fn move_of_a_field_with_inout_of_another(move x: Pair) uses {Alloc} {
+  h(inout x.a, move x.b) //~ E0702
+}
+
+pub fn move_of_a_field_with_a_borrow_of_another(move x: Pair) uses {Alloc} {
+  h_borrow(x.a, move x.b) //~ E0702
+}
+
+pub fn move_of_a_field_after_a_move_of_another(move x: Pair) uses {Alloc} {
+  h_moves(move x.a, move x.b) //~ E0702
+}
+
+pub fn the_root_moved_after_a_field_move(move x: Pair) uses {Alloc} {
+  h_pair_moves(move x.a, move x) //~ E0702
+}
+
+pub fn move_self_with_a_move_of_its_field(move s: Slot) -> U32 uses {Alloc} {
+  s.join(move s.buf) //~ E0702
+}

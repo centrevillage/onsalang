@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+
+// R-117, S-41 (§5.2, §5.4): what an `inout` argument can do. It is not an origin of a borrowed binding
+// and is not owned ("`inout` 引数は含まない", "`inout` の引数と `inout self`: `inout`（所有しない）"), so an
+// Affine value cannot be taken out of it (negative/binding_inout_origin_forms.onsa), but it is read,
+// passed on as `inout`, assigned to (it is writable), borrowed for a call, and a Copy part of it is
+// a binding ("Copy の借用束縛は、束縛した時点の値を持つ"). The arm of a `match` and the element of a
+// `for` over it are read. The borrowed argument that does the same `let c = b` is a borrowed binding
+// (S-41: "借用引数からの `let c = b`（Affine）は借用束縛"). No diagnostic is expected anywhere in this
+// file; every binding is read.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn grow(inout b: Buf[F32]) {
+  b[0] = b[0] + 1.0
+}
+
+pub fn read_and_pass_on(inout b: Buf[F32]) -> U32 {
+  grow(inout b)
+  len_of(b) + b.len()
+}
+
+pub fn assigned_to(inout h: Holder, move fresh: Buf[F32]) -> U32 uses {Alloc} {
+  h.buf = move fresh
+  h.gain = 1.0
+  h.buf.len()
+}
+
+pub fn copy_part_as_a_binding(inout p: (Buf[F32], U32)) -> U32 {
+  let n = p.1
+  n + len_of(p.0)
+}
+
+pub fn read_the_arm(inout o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub fn read_the_elements(inout xs: [Buf[F32]; 2]) -> U32 {
+  var n: U32 = 0
+  for z in xs {
+    n = n + z.len()
+  }
+  n
+}
+
+pub fn inout_field_passed_on(inout h: Holder) {
+  grow(inout h.buf)
+}
+
+pub fn borrowed_binding_of_a_borrowed_argument(b: Buf[F32]) -> U32 {
+  let c = b
+  c.len()
+}
+
+pub fn borrowed_binding_of_a_field(h: Holder) -> U32 {
+  let x = h.buf
+  x.len() + len_of(x)
+}

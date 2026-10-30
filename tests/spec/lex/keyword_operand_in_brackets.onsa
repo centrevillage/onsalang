@@ -20,8 +20,8 @@ pub fn two(a: I32, b: I32) -> I32 {
   a + b
 }
 
-pub fn take(move p: Pt) -> I32 {
-  p.x
+pub fn eat(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
 }
 
 pub fn bump(inout a: I32, b: I32) -> I32 {
@@ -57,9 +57,9 @@ pub fn else_if_condition_in_a_chain(c: Bool, d: Bool, e: Bool) -> I32 {
     e { 3 } else { 4 }, 1)
 }
 
-pub fn move_operand(p: Pt) -> I32 {
-  take(move
-    p)
+pub fn move_operand(move b: Buf[F32]) -> U32 uses {Alloc} {
+  eat(move
+    b)
 }
 
 pub fn inout_operand(inout n: I32) -> I32 {

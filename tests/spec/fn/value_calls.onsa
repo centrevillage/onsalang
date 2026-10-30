@@ -288,8 +288,8 @@ fn call_with_inout_field(f: fn(inout F32), inout s: Shaper) {
   f.(inout s.gain)
 }
 
-fn call_with_move(f: fn(move I32) -> I32, move a: I32) -> I32 {
-  f.(move a)
+fn call_with_move(f: fn(move Buf[F32]) -> U32, move b: Buf[F32]) -> U32 {
+  f.(move b)
 }
 
 fn call_with_borrow_and_inout(f: fn(I32, inout I32), a: I32, inout b: I32) {

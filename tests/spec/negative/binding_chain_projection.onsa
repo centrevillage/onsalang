@@ -1,0 +1,112 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.4"]
+
+// S-797 (§7, §5.4): the other side of values/binding_chain_projection.onsa. A chain of derived borrowed
+// bindings composes the projections, so a change of a place that overlaps the place of the binding makes it
+// (and the bindings derived from it) unusable: "変更した場所と重なる Copy でない束縛（腕の束縛と、そこから `let`
+// などで派生した束縛）は、move した値と同じく以後使えない（E0704）". `let c = hh.buf` is the place `w.h.buf`,
+// so a change of `w.h.buf`, of `w.h` or of `w` makes `c` unusable; the arm binding `hh` is `w.h`, so a change of
+// `w.h.n` makes `hh` unusable although it leaves `c` usable. The error is at the first use after the change
+// (P-01, one per item).
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn len_h(h: Holder) -> U32 {
+  h.buf.len()
+}
+
+pub fn io_n(inout n: U32) {
+  n = n + 1
+}
+
+pub fn touch(inout b: Buf[F32]) {}
+
+pub fn reset(inout h: Holder) {
+  h.n = 0
+}
+
+pub fn mkwrap() -> Wrap uses {Alloc} {
+  Wrap { h: Holder { buf: Buf.zeroed(2), n: 1 }, k: 2 }
+}
+
+pub fn same_place(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      touch(inout w.h.buf)
+      len_of(c) //~ E0704
+    },
+  }
+}
+
+pub fn the_place_that_holds_it(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      reset(inout w.h)
+      len_of(c) //~ E0704
+    },
+  }
+}
+
+pub fn the_whole_target(inout w: Wrap) -> U32 uses {Alloc} {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      w = mkwrap()
+      len_of(c) //~ E0704
+    },
+  }
+}
+
+pub fn the_chain_of_two(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      let d = c
+      touch(inout w.h.buf)
+      len_of(d) //~ E0704
+    },
+  }
+}
+
+pub fn the_arm_binding_itself(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      io_n(inout w.h.n)
+      len_h(hh) //~ E0704
+    },
+  }
+}
+
+pub fn the_arm_binding_while_the_chain_stays(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      io_n(inout w.h.n)
+      len_of(c) + len_h(hh) //~ E0704
+    },
+  }
+}
+
+pub fn nested_pattern(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: Holder { buf: bb, n: _ }, k: _ } => {
+      touch(inout w.h.buf)
+      len_of(bb) //~ E0704
+    },
+  }
+}

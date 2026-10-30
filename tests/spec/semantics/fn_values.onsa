@@ -125,7 +125,7 @@ test "a move parameter of a Copy type copies" {
     x + 1
   }
   var a: I32 = 4
-  let b      = succ.(move a)
+  let b      = succ.(a)
   assert b == 5
   assert a == 4
 }

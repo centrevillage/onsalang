@@ -1,0 +1,28 @@
+// A type of another module whose kind is decided from its declaration here: `Label` holds a `Str`, so it is
+// Shared (§4.6), and `Plain` holds only a number, so it is Copy.
+
+pub struct Label {
+  name: Str,
+  n: U32,
+}
+
+pub struct Boxed {
+  label: Label,
+  k: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn label_n(l: Label) -> U32 {
+  l.n
+}
+
+pub fn boxed_k(b: Boxed) -> U32 {
+  b.k
+}
+
+pub fn plain_n(p: Plain) -> U32 {
+  p.n
+}

@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// R-117, S-41 (§5.2, §5.4): the forms around negative/binding_inout_not_origin_no_candidate.onsa in
+// which an Affine value is taken out of an `inout` argument: the arm of a `match` and the element of
+// a `for` over it (a borrowed binding, which a `move` cannot take), the value returned, a
+// destructuring that moves it, and the elements of a literal. "`inout` 引数から `move` で取り出すと、呼び出し
+// 側の値が破棄済みになる" (§5.2): the error is E0711 and has no repair candidate (`fixes = 0`; the
+// repair is the mode of the parameter, far from the error). The `inout` argument is read and passed on
+// as `inout` in values/binding_inout_use.onsa. One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+// ----------------------------------------------------------------- arm and for binding
+
+pub fn arm_of_an_inout_argument(inout o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => take(move b), //~ E0711
+    None => {},
+  }
+}
+
+pub fn element_of_an_inout_array(inout xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in xs {
+    take(move z) //~ E0711
+  }
+}
+
+pub fn let_from_the_arm(inout o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      take(move c) //~ E0711
+    },
+    None => {},
+  }
+}
+
+// ----------------------------------------------------------------- a value taken out
+
+pub fn returned(inout b: Buf[F32]) -> Buf[F32] {
+  b //~ E0711
+}
+
+pub fn returned_field(inout h: Holder) -> Buf[F32] {
+  h.buf //~ E0711
+}
+
+pub fn destructured_with_move(inout p: (Buf[F32], U32)) -> U32 uses {Alloc} {
+  let (a, n) = move p //~ E0711
+  a.len() + n
+}
+
+pub fn element_of_a_tuple_literal(inout b: Buf[F32]) -> (Buf[F32], U32) uses {Alloc} {
+  let t = (move b, 1) //~ E0711
+  t
+}
+
+pub fn element_of_an_array_literal(inout b: Buf[F32]) -> [Buf[F32]; 2] uses {Alloc} {
+  let t = [move b, Buf.zeroed(1)] //~ E0711
+  t
+}
+
+pub fn field_of_a_struct_literal(inout b: Buf[F32]) -> Holder uses {Alloc} {
+  Holder { buf: move b, gain: 1.0 } //~ E0711
+}

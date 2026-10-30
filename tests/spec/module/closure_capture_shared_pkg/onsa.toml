@@ -1,0 +1,3 @@
+[package]
+name = "closure_capture_shared_pkg"
+edition = "2026"

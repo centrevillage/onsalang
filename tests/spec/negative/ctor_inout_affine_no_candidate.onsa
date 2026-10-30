@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// S-792 (§5.2: "構築子 … の要素 … に `inout` の印は E0703"; the decision: "`inout` を消す候補は値が Dup か場所でないときだけ（Affine の
+// 場所では直し方が一つに決まらない）"): the `inout` of an element that is an Affine place is an E0703 with no candidate, because
+// the `inout` removed leaves an unmarked Affine place, which is an E0711 in the same stage (the `move` is what the writer
+// has to choose). `fixes = 0` says there is none. One error per function (P-01).
+
+pub enum Slot {
+  Num(U32),
+  Data(Buf[F32]),
+  Empty,
+}
+
+pub fn inout_of_an_affine_var() -> Option[Buf[F32]] uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(2)
+  b[0] = 1.0
+  Some(inout b)                  //~ E0703
+}
+
+pub fn inout_of_an_affine_param_in_a_user_variant(inout b: Buf[F32]) -> Slot {
+  Slot.Data(inout b)             //~ E0703
+}
+
+pub fn inout_of_an_owned_affine_in_ok(move b: Buf[F32]) -> Result[Buf[F32], U32] {
+  Ok(inout b)                    //~ E0703
+}

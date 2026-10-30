@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§5.4"]
+
+// S-796 (§7): "変更が呼び出しの引数（`inout`、`!` の受け手、`move`）によるときは、同じ呼び出しの他の引数との
+// 重なりは E0702（§5.2）で、束縛が使えなくなるのは呼び出しの後である" and §5.2: "引数は全て評価してから呼び出す
+// ので、引数の中で同じ変数を読んで値を作るだけなら重ならない". The binding of a `match` arm is read inside the
+// arguments of the call that changes its place, in either order (a value made by reading it is evaluated before
+// the call), and it can still be used after a change of another field. The uses after the change itself are
+// E0704 in negative/binding_call_change.onsa.
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl W {
+  pub fn sw(inout self, nb: Buf[F32]) {
+    self.n = nb.len()
+  }
+
+  pub fn fin(move self, k: U32) uses {Alloc} {}
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn g1(inout o: Option[Buf[F32]], k: U32) {}
+
+pub fn g1_first(k: U32, inout o: Option[Buf[F32]]) {}
+
+pub fn consume(move w: W, k: U32) uses {Alloc} {}
+
+pub fn set_n(k: U32, inout n: U32) {}
+
+pub fn inout_argument_with_a_value_made_from_the_binding(inout o: Option[Buf[F32]]) {
+  match o {
+    Some(b) => {
+      g1(inout o, len_of(b))
+    },
+    None => {},
+  }
+}
+
+pub fn the_value_first(inout o: Option[Buf[F32]]) {
+  match o {
+    Some(b) => {
+      g1_first(len_of(b), inout o)
+    },
+    None => {},
+  }
+}
+
+pub fn bang_receiver_with_a_value_made_from_the_binding(inout w: W) uses {Alloc} {
+  match w {
+    W { buf: bb, n: _ } => {
+      w.sw!(Buf.zeroed(bb.len()))
+    },
+  }
+}
+
+pub fn move_argument_with_a_value_made_from_the_binding(move w: W) uses {Alloc} {
+  match w {
+    W { buf: bb, n: _ } => {
+      consume(move w, bb.len())
+    },
+  }
+}
+
+pub fn move_self_receiver_with_a_value_made_from_the_binding(move w: W) uses {Alloc} {
+  match w {
+    W { buf: bb, n: _ } => {
+      w.fin(bb.len())
+    },
+  }
+}
+
+pub fn a_derived_binding_read_in_the_arguments(inout o: Option[Buf[F32]]) {
+  match o {
+    Some(b) => {
+      let c = b
+      g1(inout o, len_of(c))
+    },
+    None => {},
+  }
+}
+
+pub fn another_field_changed_by_the_call(inout w: W) -> U32 {
+  match w {
+    W { buf: bb, n: nn } => {
+      set_n(nn, inout w.n)
+      bb.len()
+    },
+  }
+}
+
+pub fn a_copy_binding_after_the_change(inout w: W) -> U32 {
+  match w {
+    W { buf: _, n: nn } => {
+      set_n(1, inout w.n)
+      nn
+    },
+  }
+}

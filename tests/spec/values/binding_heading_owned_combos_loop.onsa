@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2"]
+
+// R-251, R-29 (§5.4, §5.2): the binding of a `for` over a value that is not a place is owned ("`for s
+// in f(...)`: 所有。一時の値を消費する"), and each iteration binds a new element, so an Affine element
+// can be moved on in the body wherever the loop is: with an arm of a `match` in the body, with another
+// `for` over a call in the body (the inner loop moves its own element, not the outer one), in an arm,
+// in a branch and in a generic function. Split from values/binding_heading_owned_combos.onsa. No
+// diagnostic is expected anywhere in this file. Today each element moved in the body is an E0704
+// ("moved in a previous iteration": the modes take the element for an outer variable, R-29).
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn make_array() -> [Buf[F32]; 2] uses {Alloc} {
+  [Buf.zeroed(1), Buf.zeroed(2)]
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn arm_in_the_body_of_a_for() uses {Alloc} {
+  for z in make_array() {
+    match mko() {
+      Some(y) => {
+        take(move y)
+        take(move z)
+      },
+      None => take(move z),
+    }
+  }
+}
+
+pub fn for_in_an_arm() uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      for y in make_array() {
+        take(move y)
+      }
+      take(move z)
+    },
+    None => {},
+  }
+}
+
+pub fn for_in_the_body_of_a_for() uses {Alloc} {
+  for z in make_array() {
+    for y in make_array() {
+      take(move y)
+    }
+    take(move z)
+  }
+}
+
+pub fn for_in_a_branch(c: Bool) uses {Alloc} {
+  if c {
+    for z in make_array() {
+      take(move z)
+    }
+  } else {
+    match mko() {
+      Some(z) => take(move z),
+      None => {},
+    }
+  }
+}
+
+pub fn pass_on[T: ?Dup](move x: T) -> Option[T] {
+  Some(move x)
+}
+
+pub fn sink[T: ?Dup](move x: T) {}
+
+pub fn for_in_a_generic_function[T: ?Dup](move x: T) {
+  for z in [pass_on(move x)] {
+    match move z {
+      Some(w) => sink(move w),
+      None => {},
+    }
+  }
+}

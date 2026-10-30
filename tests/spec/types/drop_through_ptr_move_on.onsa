@@ -4,8 +4,8 @@
 
 // R-255 (W6-02), split from types/drop_through_ptr_no_alloc.onsa in W4-16 U3: §12.2 says "受け取った Shared 値を、
 // そのまま返す・`move` の引数に渡す: 要らない", so an `rt fn` that takes a value with a `Str` in it by `move` and returns
-// it or moves it on needs no `Alloc`. Now each is an E0901 (R-255: the drops of an `rt fn` count a value that is
-// moved on). Before W4-16 U3 they passed only because the kind walk through the `Ptr` in `N` answered nothing.
+// it or passes it on to a `move` parameter needs no `Alloc` (a Shared value takes no `move` mark at the call, S-609,
+// §5.2). Now each is an E0901 (R-255: the drops of an `rt fn` count a value that is passed on). Before W4-16 U3 they passed only because the kind walk through the `Ptr` in `N` answered nothing.
 
 pub struct N {
   p: Ptr[N],
@@ -18,4 +18,4 @@ pub struct M {
 
 pub rt fn pass_m(move m: M) -> M { m }
 
-pub rt fn forward_m(move m: M) -> M { pass_m(move m) }
+pub rt fn forward_m(move m: M) -> M { pass_m(m) }

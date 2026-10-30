@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5"]
+
+// §5.2 (the sentences on E0702) and §3.5: the calls that are not an overlap, next to the errors of
+// negative/overlap_args_places.onsa. "同じ値の異なるフィールド（`self.voices[i]` と `self.params[i]` など）は
+// 重ならないものとして扱う", and "引数は全て評価してから呼び出すので、引数の中で同じ変数を読んで値を作るだけなら
+// 重ならない（`xs.fill!(xs.len())`）". Two different variables never overlap; two fields of one variable do not
+// (also through a tuple and a nested struct); an argument that is a value made by reading the variable (a call,
+// an operation) is not a place of the variable, so it does not overlap with an `inout` of it. A place that
+// is read as a plain argument and a receiver of another variable do not overlap either.
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+impl P {
+  pub fn scale(inout self, k: U32) {
+    self.x = self.x * k
+  }
+}
+
+pub struct Tracks {
+  voices: [U32; 4],
+  params: [U32; 4],
+}
+
+impl Tracks {
+  pub fn mix(inout self, i: U32) {
+    swap(inout self.voices[i], inout self.params[i])
+  }
+}
+
+pub struct Pair {
+  p: P,
+  q: P,
+}
+
+pub fn swap(inout a: U32, inout b: U32) {}
+
+pub fn two(inout a: U32, b: U32) {}
+
+pub fn whole(inout p: P, k: U32) {}
+
+pub fn double(x: U32) -> U32 {
+  x * 2
+}
+
+pub fn different_variables() {
+  var a: U32 = 1
+  var b: U32 = 2
+  swap(inout a, inout b)
+  two(inout a, b)
+}
+
+pub fn different_fields() {
+  var p = P { x: 1, y: 2 }
+  swap(inout p.x, inout p.y)
+  two(inout p.x, p.y)
+  two(inout p.y, p.x)
+}
+
+pub fn tuple_fields() {
+  var q = (1, 2)
+  swap(inout q.0, inout q.1)
+}
+
+pub fn nested_fields() {
+  var w = Pair { p: P { x: 1, y: 2 }, q: P { x: 3, y: 4 } }
+  swap(inout w.p.x, inout w.q.y)
+  whole(inout w.p, w.q.x)
+}
+
+pub fn arrays_of_the_fields(inout t: Tracks, i: U32) {
+  t.mix!(i)
+}
+
+pub fn elements_of_two_arrays(inout a: [U32; 4], inout b: [U32; 4]) {
+  swap(inout a[0], inout b[0])
+  two(inout a[1], b[1])
+}
+
+pub fn a_value_made_by_reading_a_call(inout xs: [U32; 4]) {
+  xs.fill!(xs.len())
+}
+
+pub fn a_value_made_by_reading_an_operation() {
+  var x: U32 = 1
+  two(inout x, x + 1)
+  two(inout x, double(x))
+}
+
+pub fn a_value_made_by_reading_a_field() {
+  var p = P { x: 1, y: 2 }
+  two(inout p.y, p.y + p.x)
+  p.scale!(p.x + 1)
+}
+
+pub fn receiver_and_a_sibling_field() {
+  var w = Pair { p: P { x: 1, y: 2 }, q: P { x: 3, y: 4 } }
+  w.p.scale!(w.q.x)
+}
+
+pub fn receiver_and_another_variable() {
+  var p      = P { x: 1, y: 2 }
+  let k: U32 = 3
+  p.scale!(k)
+}

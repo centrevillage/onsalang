@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.4"]
+
+// S-792, S-793 (§5.2: the element of a constructor (`Some(x)`, `E.A(x)`) is a consuming position like the element of a literal):
+// run in the interpreter. A Dup value is copied into the constructor whether or not it is written with `move`
+// (`Some(move n)` is a copy, like `(move n, 1)`), so `n` stays usable; an Affine value is moved with the `move`
+// and the constructor owns it. The errors of the other forms (an `inout` element, an Affine value without a mark) are in
+// negative/ctor_elements.onsa.
+
+pub enum Slot {
+  Num(U32),
+  Data(Buf[F32]),
+  Empty,
+}
+
+fn num_of(s: Slot) -> U32 uses {Alloc} {
+  match s {
+    Slot.Num(n) => n,
+    Slot.Data(b) => b.len(),
+    Slot.Empty => 0,
+  }
+}
+
+fn copy_into_some(n: U32) -> U32 {
+  let o = Some(move n)
+  o.unwrap() + n
+}
+
+fn copy_into_some_plain(n: U32) -> U32 {
+  let o = Some(n)
+  o.unwrap() + n
+}
+
+fn copy_into_a_variant(n: U32) -> U32 uses {Alloc} {
+  let s = Slot.Num(move n)
+  num_of(s) + n
+}
+
+fn copy_of_a_var() -> U32 {
+  var n: U32 = 1
+  n = 4
+  let r: Result[U32, U32] = Ok(move n)
+  n = n + 1
+  r.unwrap() + n
+}
+
+fn copy_into_a_literal(n: U32) -> U32 {
+  let t = (move n, 1)
+  t.0 + t.1 + n
+}
+
+fn move_into_some(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let o = Some(move b)
+  o.unwrap().len()
+}
+
+fn move_into_a_variant(move b: Buf[F32]) -> U32 uses {Alloc} {
+  num_of(Slot.Data(move b))
+}
+
+fn nested(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let o = Some(Some(move b))
+  o.unwrap().unwrap().len()
+}
+
+test "a Dup value written with move in a constructor is copied and stays usable" {
+  assert copy_into_some(3) == 6
+  assert copy_into_some_plain(3) == 6
+  assert copy_into_a_variant(5) == 10
+  assert copy_of_a_var() == 9
+  assert copy_into_a_literal(2) == 5
+}
+
+test "an Affine value moved into a constructor is owned by it" {
+  assert move_into_some(Buf.zeroed(3)) == 3
+  assert move_into_a_variant(Buf.zeroed(4)) == 4
+  assert nested(Buf.zeroed(5)) == 5
+}

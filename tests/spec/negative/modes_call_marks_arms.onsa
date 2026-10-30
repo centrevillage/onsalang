@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// S-100, W4-07 (§5.2: "ブロックの末尾の式（`if` と `match` の腕、ブロック式の末尾）は、そのブロックが置かれた位置を継ぐ。消費する位置に
+// 置いたブロックでは、各腕を `let y = <腕の値>` と書いたときと同じに扱う。Affine の変数（フィールドの経路を含む）には `move` を書き、
+// 新しく作った値と Copy の値には書かない"): the argument of a `move` parameter that is an `if` or a `match` takes the position of
+// the argument, so an owned Affine place at the end of an arm needs the `move` there and the error is at that arm (the place of
+// the unmarked variable), not at the `if`; the one candidate inserts the `move` in the arm, and the arm of a value that is new
+// has none. The unit stops at its first error (§18.1), so a unit holds one arm that lacks the mark (with two such arms the
+// candidate of the first would leave the second behind in the unit). One error per function (P-01).
+
+pub fn eat(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn first_arm_without_mark(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  eat(if c { a } else { Buf.zeroed(2) })              //~ E0703 @14
+}
+
+pub fn second_arm_without_mark(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  eat(if c { Buf.zeroed(2) } else { a })              //~ E0703 @37
+}
+
+pub fn match_arm_without_mark(k: U32, move a: Buf[F32]) -> U32 uses {Alloc} {
+  eat(match k {
+    0 => a,                                           //~ E0703 @10
+    _ => Buf.zeroed(2),
+  })
+}
+
+pub fn local_in_an_arm_without_mark(c: Bool) -> U32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(3)
+  eat(if c { a } else { Buf.zeroed(2) })              //~ E0703 @14
+}
+
+// ---- right ----
+
+pub fn arm_with_mark(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  eat(if c { move a } else { Buf.zeroed(2) })
+}
+
+pub fn both_arms_with_mark(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  eat(if c { move a } else { move b })
+}
+
+pub fn match_arm_with_mark(k: U32, move a: Buf[F32]) -> U32 uses {Alloc} {
+  eat(match k {
+    0 => move a,
+    _ => Buf.zeroed(2),
+  })
+}
+
+pub fn new_values_only(c: Bool) -> U32 uses {Alloc} {
+  eat(if c { Buf.zeroed(1) } else { Buf.zeroed(2) })
+}

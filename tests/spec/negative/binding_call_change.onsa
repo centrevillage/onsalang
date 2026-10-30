@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§5.4"]
+
+// S-796 (§7): "変更が呼び出しの引数（`inout`、`!` の受け手、`move`）によるときは、同じ呼び出しの他の引数との
+// 重なりは E0702（§5.2）で、束縛が使えなくなるのは呼び出しの後である". A Copy-less borrowed binding of a `match`
+// arm (and the binding derived from it) cannot be used after the call that changes the place it derives from by an
+// `inout` argument, the receiver of a `!`, a `move` argument or a `move self` receiver, and the error is at the
+// first use after the call. The uses inside the arguments of that call are not (the arguments are all evaluated
+// before the call; `g1(inout o, len_of(b))` and `w.sw!(Buf.zeroed(bb.len()))` are in
+// values/binding_call_change_ok.onsa). Today the binding stays usable after such a call (R-118, the work W4-07),
+// so this file waits for W4-07. One error per item (P-01).
+
+pub struct W {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl W {
+  pub fn sw(inout self, nb: Buf[F32]) {
+    self.n = nb.len()
+  }
+
+  pub fn fin(move self, k: U32) uses {Alloc} {}
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn g1(inout o: Option[Buf[F32]], k: U32) {}
+
+pub fn consume(move w: W, k: U32) uses {Alloc} {}
+
+pub fn after_an_inout_argument(inout o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(b) => {
+      g1(inout o, len_of(b))
+      len_of(b) //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn after_a_bang_receiver(inout w: W) -> U32 uses {Alloc} {
+  match w {
+    W { buf: bb, n: _ } => {
+      w.sw!(Buf.zeroed(bb.len()))
+      bb.len() //~ E0704
+    },
+  }
+}
+
+pub fn after_a_move_argument(move w: W) -> U32 uses {Alloc} {
+  match w {
+    W { buf: bb, n: _ } => {
+      consume(move w, bb.len())
+      bb.len() //~ E0704
+    },
+  }
+}
+
+pub fn after_a_move_self_receiver(move w: W) -> U32 uses {Alloc} {
+  match w {
+    W { buf: bb, n: _ } => {
+      w.fin(bb.len())
+      bb.len() //~ E0704
+    },
+  }
+}
+
+pub fn a_derived_binding_after_an_inout_argument(inout o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(b) => {
+      let c = b
+      g1(inout o, len_of(c))
+      len_of(c) //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn the_binding_passed_to_the_next_call(inout o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(b) => {
+      g1(inout o, 0)
+      g1(inout o, len_of(b)) //~ E0704
+      0
+    },
+    None => 0,
+  }
+}

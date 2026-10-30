@@ -1,0 +1,186 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7"]
+// fixes = 0
+
+// S-796 (§5.2, §7): "Copy でない借用束縛（`match` の腕の束縛と、そこから派生した束縛、§5.4）とその経路は、派生元の
+// 場所として重なりを見る。腕の束縛の場所は対象の場所にパターンのタプル・struct の経路を加えたもので、列挙子の
+// ペイロードは対象の全体である（`match o { Some(b) => f(b, inout o) }` と `g(inout o, b)` はどちらも E0702。
+// `match w.a { Some(b) => f(b, inout w.c) }` と `match p { (a, _) => g(inout p.1, a) }` は重ならない）".
+// A borrowed binding that is not Copy counts as the place it is derived from, so passing it in one call with an
+// `inout`, a `!` receiver or a `move` of that place (or of a place that holds it) is an E0702 in either order, at
+// the later argument. The binding derived from it (`let c = b`) and its path (`hh.buf`) count the same. There is
+// no repair candidate (`fixes = 0`). The forms that do not overlap (another field of the target, a Copy binding)
+// are in values/overlap_args_derived_ok.onsa. Today both orders pass (the binding is not a place of its own), so
+// this file waits for W4-07. One error per item (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Wrap {
+  a: Option[Buf[F32]],
+  c: Option[Buf[F32]],
+  h: Holder,
+}
+
+pub fn f(b: Buf[F32], inout o: Option[Buf[F32]]) uses {Alloc} {}
+
+pub fn g(inout o: Option[Buf[F32]], b: Buf[F32]) uses {Alloc} {}
+
+pub fn f_move(b: Buf[F32], move o: Option[Buf[F32]]) uses {Alloc} {}
+
+pub fn f_opt(a: Option[Buf[F32]], inout o: Option[Buf[F32]]) uses {Alloc} {}
+
+pub fn f_whole(b: Buf[F32], inout w: Wrap) uses {Alloc} {}
+
+pub fn f_holder(b: Buf[F32], inout h: Holder) uses {Alloc} {}
+
+pub fn f_buf(b: Buf[F32], inout c: Buf[F32]) uses {Alloc} {}
+
+pub fn g_buf(inout c: Buf[F32], b: Buf[F32]) uses {Alloc} {}
+
+// ---------------------------------------------------------- the payload is the whole target
+
+pub fn borrowed_then_inout(inout o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      f(b, inout o) //~ E0702
+    },
+    None => {},
+  }
+}
+
+pub fn inout_then_borrowed(inout o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      g(inout o, b) //~ E0702
+    },
+    None => {},
+  }
+}
+
+pub fn borrowed_then_move(move o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      f_move(b, move o) //~ E0702
+    },
+    None => {},
+  }
+}
+
+pub fn a_local_variable() uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(Buf.zeroed(2))
+  match o {
+    Some(b) => {
+      f(b, inout o) //~ E0702
+    },
+    None => {},
+  }
+}
+
+pub fn the_payload_of_a_field(inout w: Wrap) uses {Alloc} {
+  match w.a {
+    Some(b) => {
+      f(b, inout w.a) //~ E0702
+    },
+    None => {},
+  }
+}
+
+pub fn a_field_that_holds_the_target(inout w: Wrap) uses {Alloc} {
+  match w.a {
+    Some(b) => {
+      f_whole(b, inout w) //~ E0702
+    },
+    None => {},
+  }
+}
+
+// -------------------------------------------------------------- derived from the binding
+
+pub fn derived_borrowed_then_inout(inout o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      f(c, inout o) //~ E0702
+    },
+    None => {},
+  }
+}
+
+pub fn derived_inout_then_borrowed(inout o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      g(inout o, c) //~ E0702
+    },
+    None => {},
+  }
+}
+
+pub fn derived_twice(inout o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      let c = b
+      let d = c
+      f(d, inout o) //~ E0702
+    },
+    None => {},
+  }
+}
+
+// ------------------------------------------------- the tuple and struct paths of the pattern
+
+pub fn tuple_pattern(inout p: (Buf[F32], Buf[F32])) uses {Alloc} {
+  match p {
+    (a, _) => {
+      g_buf(inout p.0, a) //~ E0702
+    },
+  }
+}
+
+pub fn tuple_pattern_second_element(inout p: (Buf[F32], Buf[F32])) uses {Alloc} {
+  match p {
+    (_, b) => {
+      f_buf(b, inout p.1) //~ E0702
+    },
+  }
+}
+
+pub fn tuple_pattern_the_whole_tuple(inout p: (Buf[F32], Buf[F32])) uses {Alloc} {
+  match p {
+    (a, _) => {
+      f_pair(a, inout p) //~ E0702
+    },
+  }
+}
+
+pub fn f_pair(b: Buf[F32], inout p: (Buf[F32], Buf[F32])) uses {Alloc} {}
+
+pub fn struct_pattern(inout w: Wrap) uses {Alloc} {
+  match w {
+    Wrap { a: aa, c: _, h: _ } => {
+      f_opt(aa, inout w.a) //~ E0702
+    },
+  }
+}
+
+pub fn path_of_a_binding(inout w: Wrap) uses {Alloc} {
+  match w {
+    Wrap { a: _, c: _, h: hh } => {
+      f_holder_buf(hh.buf, inout w.h) //~ E0702
+    },
+  }
+}
+
+pub fn f_holder_buf(b: Buf[F32], inout h: Holder) uses {Alloc} {}
+
+pub fn nested_pattern_path(inout w: Wrap) uses {Alloc} {
+  match w {
+    Wrap { a: _, c: _, h: Holder { buf: bb, n: _ } } => {
+      f_holder(bb, inout w.h) //~ E0702
+    },
+  }
+}

@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// S-217 (§5.3, §5.4): the binding of an arm of a `match` whose subject is a `Span` that is a borrowed
+// origin (a `Span` argument, a planar argument, an element of one) or a binding derived from one is a
+// borrowed binding: "元が借用の起点か派生した借用束縛なら、借用の行で `let` と `for` と `match` の腕に束縛でき
+// る" (`match input { ch => … }`), like the `let` of values/binding_span_let.onsa and the `for` of
+// values/binding_span_planes.onsa. The bound name stays second-class (it is read, passed on in the
+// default mode, and used as a receiver). Every binding is read. No diagnostic is expected anywhere in this
+// file. The arm over an `inout` argument is an E0710 (negative/binding_span_heading.onsa). Today the arm
+// is an E0710 (the old modes stage keeps the arm out of the borrowed rows).
+
+pub fn sum(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0 ..< s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+pub fn over_a_planar_argument(input: [Span[F32]; 2]) -> F32 {
+  match input {
+    ch => ch[0][0] + ch[1][0],
+  }
+}
+
+pub fn over_a_span_argument(xs: Span[F32]) -> U32 {
+  match xs {
+    s => s.len(),
+  }
+}
+
+pub fn over_an_element(input: [Span[F32]; 2]) -> U32 {
+  match input[1] {
+    s => s.len(),
+  }
+}
+
+pub fn passed_on(xs: Span[F32]) -> F32 {
+  match xs {
+    s => sum(s),
+  }
+}
+
+pub fn derived_from_the_arm(input: [Span[F32]; 2]) -> F32 {
+  match input {
+    ch => {
+      let again = ch
+      again[1][0]
+    },
+  }
+}
+
+pub fn derived_from_a_let(input: [Span[F32]; 2]) -> F32 {
+  let all = input
+  match all {
+    ch => ch[1][0],
+  }
+}
+
+pub fn in_a_branch_and_a_loop(input: [Span[F32]; 2], c: Bool) -> F32 {
+  var total: F32 = 0.0
+  for k in 0 ..< 2 {
+    if c {
+      match input[k] {
+        s => {
+          total = total + sum(s)
+        },
+      }
+    }
+  }
+  total
+}

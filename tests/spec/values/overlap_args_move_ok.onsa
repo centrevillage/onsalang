@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2"]
+
+// S-787 (§5.2): the calls with a `move` argument that are not an overlap, next to the errors of
+// negative/overlap_args_move.onsa. The places of the other arguments overlap with a `move` argument only if they
+// are places of the same variable; another variable, a `move self` receiver and the arguments of other
+// variables, and an `inout` or borrowed place of a variable that is not the one moved are all fine, in either
+// order.
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Slot {
+  buf: Buf[F32],
+}
+
+impl Slot {
+  pub fn absorb(move self, other: Buf[F32]) -> U32 uses {Alloc} {
+    self.buf.len() + other.len()
+  }
+
+  pub fn absorb_into(move self, inout other: Buf[F32]) uses {Alloc} {}
+}
+
+pub fn h(inout a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_borrow(a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_borrow_last(move a: Buf[F32], b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_inout_last(move a: Buf[F32], inout b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_moves(move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_pairs(inout a: Buf[F32], move p: Pair) uses {Alloc} {}
+
+pub fn h_pair_borrow(a: Buf[F32], move p: Pair) uses {Alloc} {}
+
+pub fn different_variables(move x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  h(inout x, move y)
+}
+
+pub fn borrow_and_move_of_different_variables(x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  h_borrow(x, move y)
+}
+
+pub fn move_first_of_different_variables(move x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  h_borrow_last(move x, y)
+}
+
+pub fn move_then_inout_of_different_variables(move x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  h_inout_last(move x, inout y)
+}
+
+pub fn two_moves_of_different_variables(move x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  h_moves(move x, move y)
+}
+
+pub fn a_field_of_one_and_the_root_of_another(move x: Pair, move y: Pair) uses {Alloc} {
+  h_pairs(inout x.a, move y)
+}
+
+pub fn a_borrowed_field_of_one_and_the_root_of_another(x: Pair, move y: Pair) uses {Alloc} {
+  h_pair_borrow(x.a, move y)
+}
+
+pub fn move_self_and_another_variable(move s: Slot, t: Slot) -> U32 uses {Alloc} {
+  s.absorb(t.buf)
+}
+
+pub fn move_self_and_an_inout_of_another(move s: Slot, inout t: Slot) uses {Alloc} {
+  s.absorb_into(inout t.buf)
+}

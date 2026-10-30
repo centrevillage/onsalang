@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5"]
+// fixes = 0
+
+// S-787 (§5.2): "`move` の引数に渡す場所が、同じ呼び出しの他の引数（`inout`、借用、`move`）の場所と重なるときも
+// E0702 である（`h(inout x, move x)`、`h(x, move x)`）。引数は全て評価してから呼ぶので、引数の順によらない".
+// A `move self` receiver is a `move` argument, and a place that holds the other one (the root and one of its
+// fields) overlaps with it. The error is at the later argument, whichever mode it has, so swapping the
+// arguments does not change the count; the use of `x` that comes after `move x` in the same call is not an
+// E0704 (the arguments are all evaluated before the call). There is no repair candidate (`fixes = 0`).
+// The moves of a field of an Affine value (`h(inout x.a, move x.b)`) are in negative/overlap_args_move_field.onsa
+// and the calls that do not overlap in values/overlap_args_move_ok.onsa. Today none of these is an E0702
+// (`h(inout x, move x)` passes), so this file waits for W4-07. One error per item (P-01).
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Slot {
+  buf: Buf[F32],
+}
+
+impl Slot {
+  pub fn absorb(move self, other: Buf[F32]) -> U32 uses {Alloc} {
+    self.buf.len() + other.len()
+  }
+
+  pub fn absorb_into(move self, inout other: Buf[F32]) uses {Alloc} {}
+}
+
+pub fn h(inout a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_borrow(a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_borrow_last(move a: Buf[F32], b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_inout_last(move a: Buf[F32], inout b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_moves(move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn h_pairs(inout a: Buf[F32], move p: Pair) uses {Alloc} {}
+
+pub fn h_pair_borrow(a: Buf[F32], move p: Pair) uses {Alloc} {}
+
+// ----------------------------------------------------------------- a whole variable
+
+pub fn inout_then_move(move x: Buf[F32]) uses {Alloc} {
+  h(inout x, move x) //~ E0702
+}
+
+pub fn borrow_then_move(move x: Buf[F32]) uses {Alloc} {
+  h_borrow(x, move x) //~ E0702
+}
+
+pub fn move_then_borrow(move x: Buf[F32]) uses {Alloc} {
+  h_borrow_last(move x, x) //~ E0702
+}
+
+pub fn move_then_inout(move x: Buf[F32]) uses {Alloc} {
+  h_inout_last(move x, inout x) //~ E0702
+}
+
+pub fn move_twice(move x: Buf[F32]) uses {Alloc} {
+  h_moves(move x, move x) //~ E0702
+}
+
+pub fn local_variable() uses {Alloc} {
+  var y: Buf[F32] = Buf.zeroed(2)
+  h(inout y, move y) //~ E0702
+}
+
+// ------------------------------------------- a field of an Affine value and the root moved
+
+pub fn a_field_inout_and_the_root_moved(move x: Pair) uses {Alloc} {
+  h_pairs(inout x.a, move x) //~ E0702
+}
+
+pub fn a_field_borrowed_and_the_root_moved(move x: Pair) uses {Alloc} {
+  h_pair_borrow(x.a, move x) //~ E0702
+}
+
+// ---------------------------------------------------------------------- `move self`
+
+pub fn move_self_with_a_borrow_of_itself(move s: Slot) -> U32 uses {Alloc} {
+  s.absorb(s.buf) //~ E0702
+}
+
+pub fn move_self_with_an_inout_of_itself(move s: Slot) uses {Alloc} {
+  s.absorb_into(inout s.buf) //~ E0702
+}

@@ -1,0 +1,136 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2"]
+
+// R-251 (§5.4, §5.2), the forms around values/binding_heading_owned_move.onsa: the binding of an arm of
+// a `match` whose subject is not a place is owned ("`match f(...)` … の腕の束縛: 所有"), so an Affine
+// value in it can be moved on wherever the arm is: nested in another arm, in a loop, in a branch, in
+// an anonymous function, in a generic function, in the arms of a tuple of calls. A binding derived
+// from an owned binding (`let y = move z`) is owned too. Every binding is read or moved (a binding
+// never read is an E0309). No diagnostic is expected anywhere in this file. The same forms with a
+// `for` over a call are in values/binding_heading_owned_combos_loop.onsa (R-29), the other side (a
+// heading that is a place stays borrowed) is negative/binding_heading_borrow_move.onsa, and the use
+// of the binding after the move is negative/binding_heading_owned_reuse.onsa.
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+// ------------------------------------------------------------------------------ nested
+
+pub fn arm_in_an_arm() uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      match mko() {
+        Some(y) => {
+          take(move y)
+          take(move z)
+        },
+        None => take(move z),
+      }
+    },
+    None => {},
+  }
+}
+
+// ----------------------------------------------------------------- branches and loops
+
+pub fn arm_in_a_loop(n: U32) uses {Alloc} {
+  for _ in 0 ..< n {
+    match mko() {
+      Some(z) => take(move z),
+      None => {},
+    }
+  }
+}
+
+pub fn arm_in_a_while() uses {Alloc} {
+  var done = false
+  while done == false {
+    match mko() {
+      Some(z) => take(move z),
+      None => {},
+    }
+    done = true
+  }
+}
+
+pub fn arm_in_a_branch(c: Bool) uses {Alloc} {
+  if c {
+    match mko() {
+      Some(z) => take(move z),
+      None => {},
+    }
+  }
+}
+
+pub fn moved_in_one_branch_of_the_arm(c: Bool) -> U32 uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      if c {
+        take(move z)
+        0
+      } else {
+        z.len()
+      }
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_owned_binding() uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      let y = move z
+      take(move y)
+    },
+    None => {},
+  }
+}
+
+// ------------------------------------------------------------------ a tuple of calls
+
+pub fn arms_of_a_tuple_of_calls() uses {Alloc} {
+  match (mko(), mko()) {
+    (Some(x), Some(y)) => {
+      take(move x)
+      take(move y)
+    },
+    (Some(x), None) => take(move x),
+    (None, Some(y)) => take(move y),
+    (None, None) => {},
+  }
+}
+
+// ---------------------------------------------------------- closure and generic function
+
+pub fn apply(f: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(1)
+}
+
+pub fn in_an_anonymous_function() -> U32 uses {Alloc} {
+  apply(fn(n) {
+    match mko() {
+      Some(z) => {
+        take(move z)
+        n
+      },
+      None => n,
+    }
+  })
+}
+
+pub fn pass_on[T: ?Dup](move x: T) -> Option[T] {
+  Some(move x)
+}
+
+pub fn sink[T: ?Dup](move x: T) {}
+
+pub fn in_a_generic_function[T: ?Dup](move x: T) {
+  match pass_on(move x) {
+    Some(z) => sink(move z),
+    None => {},
+  }
+}

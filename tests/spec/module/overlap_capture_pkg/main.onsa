@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§4.6", "§15.1"]
+
+// §5.2 (E0702) and §5.3 (the capture of a closure) for the functions and types of another module: the overlap
+// of the places of one call is the same whether the callee is of this module or of `lib` (a `lib.swap` call or an
+// imported name, the method of an imported type), and the kind of a type that decides the capture (Copy, Affine of E0712) is the one of its declaration in `lib`. One error per item (P-01).
+
+use lib
+use lib.{Pos, Tape, swap, two, pos_x, tape_len}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn imported_name_twice() {
+  var x: U32 = 1
+  swap(inout x, inout x) //~ E0702
+}
+
+pub fn path_name_twice() {
+  var x: U32 = 1
+  lib.swap(inout x, inout x) //~ E0702
+}
+
+pub fn path_name_inout_and_borrow() {
+  var x: U32 = 1
+  lib.two(inout x, x) //~ E0702
+}
+
+pub fn method_of_an_imported_type() {
+  var p = Pos { x: 1, y: 2 }
+  p.scale!(p.x) //~ E0702
+}
+
+pub fn disjoint_fields_of_an_imported_type() {
+  var p = Pos { x: 1, y: 2 }
+  swap(inout p.x, inout p.y)
+  two(inout p.x, p.y)
+  lib.swap(inout p.y, inout p.x)
+  p.scale!(pos_x(p))
+}
+
+pub fn capture_of_an_affine_type_of_lib(t: Tape) -> U32 {
+  apply(fn(n) { n + tape_len(t) }) //~ E0712
+}
+
+pub fn capture_of_a_copy_type_of_lib(p: Pos) -> U32 {
+  apply(fn(n) { n + pos_x(p) })
+}

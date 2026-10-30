@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-788 (§5.3, §5.4, §11.6): the other side of values/binding_flow_span_field.onsa. The name bound to a
+// `Span` field of a generated `In` / `Out` "第二級のまま" (§5.3), so moving it on, storing it in a `var`
+// and passing it as `inout` are the errors that the bound `Span` of a `Span` argument has (negative/
+// binding_span_let.onsa): E0710 for the move and the store, E0701 for the `inout` of a borrowed
+// binding (§5.4). The field of the generated type cannot be taken as a value of an owned row either
+// (`var v = inp.l`, the tuple `(inp.l, 1)`). The error is at the use. One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn sink[T](move x: T) {}
+
+pub fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+pub fn moved_on(inp: pair.In) {
+  let l = inp.l
+  sink(move l) //~ E0710
+}
+
+pub fn stored_in_a_var(inp: pair.In) -> U32 {
+  let l = inp.l
+  var v = l //~ E0710
+  v.len()
+}
+
+pub fn derived_and_moved_on(inp: pair.In) {
+  let l = inp.l
+  let q = l
+  sink(move q) //~ E0710
+}
+
+pub fn passed_as_inout(inp: pair.In) {
+  let l = inp.l
+  clear(inout l) //~ E0701
+}
+
+pub fn var_of_the_field(inp: pair.In) -> U32 {
+  var v = inp.l //~ E0710
+  v.len()
+}
+
+pub fn tuple_of_the_field(inp: pair.In) -> U32 {
+  let t = (inp.l, 1) //~ E0710
+  t.1
+}

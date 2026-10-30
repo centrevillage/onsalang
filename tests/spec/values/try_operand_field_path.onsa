@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2"]
+
+// S-784, S-85 (§9.1, §5.2): "Affine のフィールドの経路は根の全体を消費し": the operand of a postfix `?` that is a
+// field path of an owned value (`h.r?`, `h.inner.r?`, `p.0?`) takes the field out of the owned root, and the
+// rest of the root is dropped on the spot ("取り出したフィールド以外はその場で破棄され、以後 `s` は使えない",
+// §5.2), as for `let b = move s.buf`. The path of a Copy or Shared field copies and leaves the root usable.
+// Every binding is read. No diagnostic is expected anywhere in this file. The uses of the root after the `?`
+// are E0704 (negative/try_operand_field_path.onsa). The taking out of the field is the work W4-09 (S-85: the
+// old and the new modes stage both give "partial moves are not allowed", an E0711).
+
+pub struct Inner {
+  r: Result[Buf[F32], U32],
+}
+
+pub struct Holder {
+  r: Result[Buf[F32], U32],
+  n: U32,
+  inner: Inner,
+}
+
+pub fn field_of_an_owned_parameter(move h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let b = h.r?
+  Ok(b.len())
+}
+
+pub fn field_of_an_owned_local(move h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let g = move h
+  let b = g.r?
+  Ok(b.len())
+}
+
+pub fn nested_field(move h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let b = h.inner.r?
+  Ok(b.len())
+}
+
+pub fn tuple_field(move p: (Result[Buf[F32], U32], U32)) -> Result[U32, U32] uses {Alloc} {
+  let b = p.0?
+  Ok(b.len())
+}
+
+pub fn copy_field_leaves_the_root(move h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let n = h.n
+  let b = h.r?
+  Ok(b.len() + n)
+}

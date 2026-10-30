@@ -1,0 +1,372 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§5.4"]
+// fixes = 0
+
+// S-42, R-118 (§7: "腕の本体では `x` を変更できる。変更すると、変更した場所と重なる Copy でない束縛（腕の束縛と、そこから `let` などで
+// 派生した借用束縛）は、move した値と同じく以後使えない（E0704）。重なりは `inout` の重複（E0702、§5.2）と同じく判定し、異なる
+// フィールドは重ならない。Copy の束縛は束縛した時点の値なので、そのまま使える"): a write to the subject of a `match` in the body
+// of an arm makes the arm's bindings that are not Copy, and the borrowed bindings derived from them, unusable after it (E0704),
+// whether the change is an assignment, a `move` of the place, or a call whose argument is `inout` or whose receiver is a `!`
+// call. A write to another field does not (the bindings of the arm point to the field of the subject). No candidate: the
+// remedy is a different program (read before the change, or `match move`). Not here: the change in a guard, the change of
+// the subject of a `for` (E0715, W4-09) and a change by the direct argument of the call that uses the binding (W4-07 U4a). One error
+// per function (P-01).
+
+pub struct W {
+  a: Option[Buf[F32]],
+  c: U32,
+}
+
+impl W {
+  pub fn clear(inout self) {
+    self.a = None
+  }
+
+  pub fn eat_inner(inout self) -> U32 uses {Alloc} {
+    match self.a {
+      Some(b) => {
+        self.a = None
+        b.len()              //~ E0704
+      },
+      None => 0,
+    }
+  }
+
+  pub fn touch_other_field(inout self) -> U32 uses {Alloc} {
+    match self.a {
+      Some(b) => {
+        self.c = self.c + 1
+        b.len()
+      },
+      None => 0,
+    }
+  }
+}
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn take_opt(move o: Option[Buf[F32]]) uses {Alloc} {}
+
+pub fn reset(inout o: Option[Buf[F32]]) {
+  o = None
+}
+
+// ---- the subject is changed in the arm ----
+
+pub fn assigned_then_read(d: Buf[F32]) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      o = None
+      b.len()                //~ E0704
+    },
+    None => d.len(),
+  }
+}
+
+pub fn moved_then_read() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      take_opt(move o)
+      len_of(b)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn inout_then_read() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      reset(inout o)
+      len_of(b)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn bang_then_read() -> U32 uses {Alloc} {
+  var w = W { a: Some(mk()), c: 0 }
+  match w.a {
+    Some(b) => {
+      w.clear!()
+      len_of(b)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn same_field(d: Buf[F32]) -> U32 uses {Alloc} {
+  var w = W { a: Some(mk()), c: 0 }
+  match w.a {
+    Some(b) => {
+      w.a = None
+      len_of(b)              //~ E0704
+    },
+    None => d.len(),
+  }
+}
+
+pub fn whole_of_the_field_subject() -> U32 uses {Alloc} {
+  var w = W { a: Some(mk()), c: 0 }
+  match w.a {
+    Some(b) => {
+      w = W { a: None, c: 1 }
+      len_of(b)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn tuple_pattern_same_field() -> U32 uses {Alloc} {
+  var p = (mk(), 1)
+  match p {
+    (a, n) => {
+      p.0 = mk()
+      len_of(a) + n          //~ E0704
+    },
+  }
+}
+
+pub fn assigned_in_a_branch(c: Bool) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      if c {
+        o = None
+      }
+      len_of(b)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn assigned_in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      var t: U32 = 0
+      for _ in 0..<n {
+        t = t + len_of(b)    //~ E0704
+        o = None
+      }
+      t
+    },
+    None => 0,
+  }
+}
+
+// ---- the bindings derived from the binding of the arm ----
+
+pub fn derived_by_let() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      let q = b
+      o = None
+      len_of(q)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_twice() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      let q = b
+      let r = q
+      o = None
+      len_of(r)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_by_an_if(c: Bool) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      let q = if c { b } else { b }
+      o = None
+      len_of(q)              //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_the_original_is_used() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      let q = b
+      let n = len_of(q)
+      o = None
+      n + len_of(b)          //~ E0704
+    },
+    None => 0,
+  }
+}
+
+// ---- F4: a `let` bound from a heading `match` or `if` is derived from every place at the tails ----
+
+pub fn heading_match_tail(d: Buf[F32]) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  let t = match o { Some(b) => b, None => d }
+  o = None
+  t.len()                    //~ E0704
+}
+
+pub fn heading_match_tail_derived(d: Buf[F32]) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  let t = match o { Some(b) => b, None => d }
+  let u = t
+  o = None
+  u.len()                    //~ E0704
+}
+
+pub fn one_of_two_ways_changed(c: Bool, d: Buf[F32]) -> U32 uses {Alloc} {
+  var o1: Option[Buf[F32]] = Some(mk())
+  var o2: Option[Buf[F32]] = Some(mk())
+  let t = if c { match o1 { Some(b1) => b1, None => d } } else { match o2 { Some(b2) => b2, None => d } }
+  o2 = None
+  t.len()                    //~ E0704
+}
+
+pub fn other_of_two_ways_changed(c: Bool, d: Buf[F32]) -> U32 uses {Alloc} {
+  var o1: Option[Buf[F32]] = Some(mk())
+  var o2: Option[Buf[F32]] = Some(mk())
+  let t = if c { match o1 { Some(b1) => b1, None => d } } else { match o2 { Some(b2) => b2, None => d } }
+  o1 = None
+  t.len()                    //~ E0704
+}
+
+// ---- a write that is an error changes nothing: the binding is still usable ----
+
+pub fn failed_assignment_in_a_loop(o: Option[Buf[F32]], c: Bool) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  match o {
+    Some(t) => {
+      while c {
+        total = total + t.len()
+        o = None             //~ E0701
+      }
+    },
+    None => {},
+  }
+  total
+}
+
+pub fn failed_move_of_a_borrowed_subject(o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(t) => {
+      take_opt(move o)       //~ E0711
+      t.len()
+    },
+    None => 0,
+  }
+}
+
+pub fn failed_assignment_to_a_let(d: Buf[F32]) -> U32 uses {Alloc} {
+  let o: Option[Buf[F32]] = None
+  match o {
+    Some(t) => {
+      o = None               //~ E0701
+      t.len()
+    },
+    None => d.len(),
+  }
+}
+
+// ---- right: no change of an overlapping place, or a Copy binding ----
+
+pub fn read_before_the_change() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match o {
+    Some(b) => {
+      let n = len_of(b)
+      o = None
+      n
+    },
+    None => 0,
+  }
+}
+
+pub fn other_variable_is_changed() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  var k: U32 = 1
+  match o {
+    Some(b) => {
+      k = k + 1
+      len_of(b) + k
+    },
+    None => 0,
+  }
+}
+
+pub fn disjoint_field() -> U32 uses {Alloc} {
+  var w = W { a: Some(mk()), c: 0 }
+  match w.a {
+    Some(b) => {
+      w.c = 5
+      len_of(b) + w.c
+    },
+    None => 0,
+  }
+}
+
+pub fn disjoint_tuple_field() -> U32 uses {Alloc} {
+  var p = (mk(), 1)
+  match p {
+    (a, n) => {
+      p.1 = 9
+      len_of(a) + n
+    },
+  }
+}
+
+pub fn copy_binding_keeps_the_value() -> U32 {
+  var o: Option[U32] = Some(4)
+  match o {
+    Some(n) => {
+      o = None
+      n
+    },
+    None => 0,
+  }
+}
+
+pub fn match_move_owns_the_binding() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  match move o {
+    Some(b) => {
+      o = None
+      len_of(b)
+    },
+    None => 0,
+  }
+}
+
+pub fn the_change_is_before_the_match() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = None
+  o = Some(mk())
+  match o {
+    Some(b) => len_of(b),
+    None => 0,
+  }
+}
+
+pub fn the_change_is_after_the_last_use() -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mk())
+  let t = match o { Some(b) => len_of(b), None => 0 }
+  o = None
+  t
+}

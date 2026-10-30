@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// W4-07 (R-85, S-609; §5.2 the table of the modes and the marks at the call: "`inout` と `move` は呼び出し位置にも
+// 書く"; "`move` の印は、所有が移って前の値が以後使えなくなる所（Affine 値）にだけ付ける"): the mark at the call must
+// be the mark of the declaration of the parameter, else E0703, and each of the four mismatches has the one
+// candidate that makes the call right: a mark on a borrowed argument is removed (`remove move`, `remove inout`), the
+// mark of an `inout` parameter is inserted (`add inout`) or replaces a `move` (the argument takes the place of the
+// parameter, so the place stays the same), and the `move` of a `move` parameter that gets an owned Affine place is
+// inserted (`add move`). The place of the argument does not change when the candidate is applied, so no other
+// error of the unit appears after it. The position is the argument. For a missing mark it is the whole argument
+// (the column is written); for a written mark it is the operand (S-800), but the spec does not promise the position,
+// so those lines carry no column. One error per function (P-01).
+
+pub struct Vox {
+  gain: U32,
+}
+
+pub fn read_n(n: U32) -> U32 {
+  n
+}
+
+pub fn read_buf(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn bump(inout n: U32) {
+  n = n + 1
+}
+
+pub fn fill_buf(inout b: Buf[F32]) uses {Alloc} {
+  b[0] = 1.0
+}
+
+pub fn eat(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn set_gain(inout v: Vox) {
+  v.gain = 1
+}
+
+// ---- the argument of a borrowed parameter has no mark ----
+
+pub fn borrowed_with_inout() -> U32 {
+  var n: U32 = 1
+  read_n(inout n)                         //~ E0703
+}
+
+pub fn borrowed_with_move(move b: Buf[F32]) -> U32 uses {Alloc} {
+  read_buf(move b)                        //~ E0703
+}
+
+pub fn borrowed_field_with_inout() -> U32 {
+  var v = Vox { gain: 5 }
+  v.gain = 2
+  read_n(inout v.gain)                    //~ E0703
+}
+
+// ---- the argument of an `inout` parameter has `inout` ----
+
+pub fn inout_without_mark() -> U32 {
+  var n: U32 = 1
+  bump(n)                                 //~ E0703 @8
+  n
+}
+
+pub fn inout_with_move(move b: Buf[F32]) uses {Alloc} {
+  fill_buf(move b)                        //~ E0703
+}
+
+pub fn inout_field_without_mark() -> U32 {
+  var v = Vox { gain: 5 }
+  set_gain(v)                             //~ E0703 @12
+  v.gain
+}
+
+// ---- the argument of a `move` parameter that is an owned Affine place has `move` ----
+
+pub fn move_without_mark(move b: Buf[F32]) -> U32 uses {Alloc} {
+  eat(b)                                  //~ E0703 @7
+}
+
+pub fn move_of_a_local_without_mark() -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  eat(b)                                  //~ E0703 @7
+}
+
+// ---- right: the marks of the declarations (the contrast of each case above) ----
+
+pub fn right_marks(move b: Buf[F32]) -> U32 uses {Alloc} {
+  var n: U32 = 1
+  bump(inout n)
+  var v = Vox { gain: 5 }
+  set_gain(inout v)
+  let k = read_n(n) + read_buf(b)
+  k + eat(move b) + v.gain
+}

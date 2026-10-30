@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7"]
+
+// S-796 (§5.2, §5.4): the calls with a borrowed binding of a `match` arm that are not an overlap, next to the
+// errors of negative/overlap_args_derived.onsa. "`match w.a { Some(b) => f(b, inout w.c) }` と `match p { (a, _) =>
+// g(inout p.1, a) }` は重ならない。Copy の束縛は束縛した時点の値で、重ならない（§5.4）". The place of a binding is
+// the place of the target with the tuple and struct paths of the pattern, so an `inout` of another field or
+// another element is not an overlap, and neither is another variable; a Copy binding holds its value and is
+// no place.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Wrap {
+  a: Option[Buf[F32]],
+  c: Option[Buf[F32]],
+  h: Holder,
+}
+
+pub fn f(b: Buf[F32], inout o: Option[Buf[F32]]) uses {Alloc} {}
+
+pub fn f_opt(a: Option[Buf[F32]], inout o: Option[Buf[F32]]) uses {Alloc} {}
+
+pub fn f_count(n: U32, inout o: Option[U32]) {}
+
+pub fn g_buf(inout c: Buf[F32], b: Buf[F32]) uses {Alloc} {}
+
+pub fn set_n(k: U32, inout n: U32) {}
+
+pub fn another_field_of_the_target(inout w: Wrap) uses {Alloc} {
+  match w.a {
+    Some(b) => {
+      f(b, inout w.c)
+    },
+    None => {},
+  }
+}
+
+pub fn another_variable(inout o: Option[Buf[F32]], inout q: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => {
+      f(b, inout q)
+    },
+    None => {},
+  }
+}
+
+pub fn another_element_of_a_tuple(inout p: (Buf[F32], Buf[F32])) uses {Alloc} {
+  match p {
+    (a, _) => {
+      g_buf(inout p.1, a)
+    },
+  }
+}
+
+pub fn the_other_element_in_the_other_order(inout p: (Buf[F32], Buf[F32])) uses {Alloc} {
+  match p {
+    (_, b) => {
+      g_buf(inout p.0, b)
+    },
+  }
+}
+
+pub fn another_field_of_a_struct_pattern(inout w: Wrap) uses {Alloc} {
+  match w {
+    Wrap { a: aa, c: _, h: _ } => {
+      f_opt(aa, inout w.c)
+    },
+  }
+}
+
+pub fn another_field_than_a_nested_pattern(inout w: Wrap) uses {Alloc} {
+  match w {
+    Wrap { a: _, c: _, h: Holder { buf: bb, n: _ } } => {
+      f(bb, inout w.a)
+    },
+  }
+}
+
+pub fn a_copy_binding(inout o: Option[U32]) {
+  match o {
+    Some(n) => {
+      f_count(n, inout o)
+    },
+    None => {},
+  }
+}
+
+pub fn a_copy_field_of_a_struct_pattern(inout w: Wrap) {
+  match w.h {
+    Holder { buf: _, n: nn } => {
+      set_n(nn, inout w.h.n)
+    },
+  }
+}

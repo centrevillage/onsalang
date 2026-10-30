@@ -1,0 +1,202 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.2", "§5.4"]
+
+// W4-07 U3 (the writes of the new modes stage; §5.1: "`let` の束縛と借用の引数は変更できない（代入すると、また `inout` で渡すと
+// E0701）"; §5.2: "`inout` 引数 … 呼び出し側は `var`、`inout` 引数、`move` の引数か `move self` であること"; "場所だが変更できないもの
+// （`let` の束縛、借用の引数）は E0701"; §5.4 the table: a borrowed `self`, the binding of a closure's argument, a borrowed
+// `let`, and the bindings of a `for` and a `match` are not writable): E0701 for every way of writing to a place that cannot
+// be changed: the assignment, the `inout` argument and the receiver of a `!` call. The roots are the borrowed `self` of a
+// method, the borrowed argument of an anonymous function, a `let` that is a borrowed binding (`let c = p`), and the
+// binding of a `for` and of a `match` arm over a place. The cases that the file negative/binding_assign.onsa and
+// negative/inout_readonly_place.onsa already hold (a `let`, a borrowed argument, a field or an element of them) are not
+// repeated. One error per function (P-01).
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+impl P {
+  pub fn scale(inout self, k: U32) { self.x = self.x * k }
+  pub fn assign_to_a_borrowed_self(self) -> U32 {
+    self.x = 5                   //~ E0701
+    self.x
+  }
+  pub fn inout_of_a_borrowed_self(self) -> U32 {
+    set(inout self.y)            //~ E0701
+    self.y
+  }
+  pub fn bang_on_a_borrowed_self(self) -> U32 {
+    self.scale!(2)               //~ E0701
+    self.x
+  }
+}
+
+pub fn set(inout n: U32) {
+  n = 1
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn apply_p(f: fn(P) -> U32) -> U32 {
+  f.(P { x: 1, y: 2 })
+}
+
+// ---- a borrowed argument of an anonymous function ----
+
+pub fn closure_argument_assigned() -> U32 {
+  apply(fn(k) {
+    k = 3                        //~ E0701
+    k
+  })
+}
+
+pub fn closure_argument_as_inout() -> U32 {
+  apply(fn(k) {
+    set(inout k)                 //~ E0701
+    k
+  })
+}
+
+pub fn closure_argument_field_assigned() -> U32 {
+  apply_p(fn(p) {
+    p.x = 3                      //~ E0701
+    p.x
+  })
+}
+
+pub fn closure_argument_bang() -> U32 {
+  apply_p(fn(p) {
+    p.scale!(2)                  //~ E0701
+    p.x
+  })
+}
+
+// ---- a borrowed `let` binding ----
+
+pub fn borrowed_let_field_assigned(p: P) -> U32 {
+  let c = p
+  c.x = 3                        //~ E0701
+  c.x
+}
+
+pub fn borrowed_let_as_inout(p: P) -> U32 {
+  let c = p.x
+  set(inout c)                   //~ E0701
+  c
+}
+
+pub fn borrowed_let_bang(p: P) -> U32 {
+  let c = p
+  c.scale!(2)                    //~ E0701
+  c.x
+}
+
+pub fn owned_let_assigned() -> U32 {
+  let c = P { x: 1, y: 2 }
+  c.y = 3                        //~ E0701
+  c.y
+}
+
+// ---- the binding of a `for` and of a `match` arm ----
+
+pub fn for_binding_as_inout(xs: [P; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    set(inout s.x)               //~ E0701
+    n = n + s.x
+  }
+  n
+}
+
+pub fn for_binding_bang(xs: [P; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    s.scale!(2)                  //~ E0701
+    n = n + s.x
+  }
+  n
+}
+
+pub fn for_binding_of_a_local_var() -> U32 {
+  var xs: [P; 2] = [P { x: 1, y: 2 }, P { x: 3, y: 4 }]
+  xs[0].x = 9
+  var n: U32 = 0
+  for s in xs {
+    s.y = 0                      //~ E0701
+    n = n + s.x
+  }
+  n
+}
+
+pub fn match_arm_assigned(p: Option[P]) -> U32 {
+  match p {
+    Some(q) => {
+      q.x = 5                    //~ E0701
+      q.x
+    },
+    None => 0,
+  }
+}
+
+pub fn match_arm_as_inout(p: Option[P]) -> U32 {
+  match p {
+    Some(q) => {
+      set(inout q.y)             //~ E0701
+      q.y
+    },
+    None => 0,
+  }
+}
+
+pub fn match_arm_bang(p: Option[P]) -> U32 {
+  match p {
+    Some(q) => {
+      q.scale!(2)                //~ E0701
+      q.x
+    },
+    None => 0,
+  }
+}
+
+pub fn match_arm_of_a_local_var() -> U32 {
+  var p: Option[P] = Some(P { x: 1, y: 2 })
+  p = Some(P { x: 2, y: 3 })
+  match p {
+    Some(q) => {
+      q.x = 5                    //~ E0701
+      q.x
+    },
+    None => 0,
+  }
+}
+
+pub fn match_arm_tuple_pattern(t: (P, U32)) -> U32 {
+  match t {
+    (q, n) => {
+      q.x = 5                    //~ E0701
+      q.x + n
+    },
+  }
+}
+
+// ---- right: the places that can be changed ----
+
+pub fn right_places(inout p: P, xs: [P; 2]) -> U32 {
+  var q = P { x: 1, y: 2 }
+  q.x = 3
+  set(inout q.y)
+  q.scale!(2)
+  p.x = 4
+  set(inout p.y)
+  p.scale!(3)
+  let apply_result = apply(fn(k) { k + q.x })
+  var n: U32 = 0
+  for s in xs {
+    n = n + s.x
+  }
+  n + apply_result + q.y + p.x
+}

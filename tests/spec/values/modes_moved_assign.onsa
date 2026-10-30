@@ -1,0 +1,163 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2"]
+
+// S-789 (§5.2): "移した `var` は全体に代入すると再び使え". An assignment to the whole of a `var` that was
+// moved gives it a new value, so the next use is of the new value: after the move in a straight line,
+// at the end of the body of a loop (the next iteration finds the variable assigned), before a
+// `continue`, in the branches of an `if` or the arms of a `match` (every path assigns), and in the
+// condition of a `while` that is evaluated after a body that assigns. A variable that is moved and not
+// used again is no error: the path ends in `break` or `return`, or the variable is declared in the
+// body (a new one in each iteration). The uses of a moved variable that are errors are in
+// negative/modes_moved_loop.onsa and negative/modes_moved_next_iteration.onsa.
+
+fn mk(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+fn take(move b: Buf[F32]) uses {Alloc} {}
+
+fn read(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+fn cond() -> Bool {
+  true
+}
+
+fn assign_after_the_move() -> U32 uses {Alloc} {
+  var b = mk(2)
+  take(move b)
+  b = mk(3)
+  read(b)
+}
+
+fn assign_at_the_end_of_the_body(n: U32) -> U32 uses {Alloc} {
+  var b      = mk(1)
+  var i: U32 = 0
+  while i < n {
+    take(move b)
+    b = mk(i + 5)
+    i = i + 1
+  }
+  read(b)
+}
+
+fn assign_in_a_for(n: U32) -> U32 uses {Alloc} {
+  var b = mk(1)
+  for k in 0 ..< n {
+    take(move b)
+    b = mk(k + 10)
+  }
+  read(b)
+}
+
+fn assign_before_the_continue(n: U32) -> U32 uses {Alloc} {
+  var b      = mk(1)
+  var i: U32 = 0
+  while i < n {
+    i = i + 1
+    if i == 2 {
+      take(move b)
+      b = mk(20)
+      continue
+    }
+    take(move b)
+    b = mk(30)
+  }
+  read(b)
+}
+
+fn assign_in_one_branch(c: Bool) -> U32 uses {Alloc} {
+  var b = mk(1)
+  if c {
+    take(move b)
+    b = mk(40)
+  }
+  read(b)
+}
+
+fn assign_in_every_arm(c: Bool) -> U32 uses {Alloc} {
+  var b = mk(1)
+  take(move b)
+  match c {
+    true => {
+      b = mk(50)
+    },
+    false => {
+      b = mk(60)
+    },
+  }
+  read(b)
+}
+
+fn condition_reads_what_the_body_assigned() -> U32 uses {Alloc} {
+  var b      = mk(1)
+  var i: U32 = 0
+  while i < read(b) {
+    take(move b)
+    b = mk(2)
+    i = i + 1
+  }
+  read(b)
+}
+
+fn moved_before_the_break() -> U32 uses {Alloc} {
+  let b      = mk(1)
+  var n: U32 = 0
+  while cond() {
+    take(move b)
+    n = n + 1
+    break
+  }
+  n
+}
+
+fn moved_before_the_return(c: Bool) -> U32 uses {Alloc} {
+  let b = mk(1)
+  while cond() {
+    if c {
+      take(move b)
+      return 1
+    }
+    break
+  }
+  take(move b)
+  0
+}
+
+fn declared_in_the_body() -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for k in 0 ..< 3 {
+    let b = mk(k)
+    n = n + read(b)
+    take(move b)
+  }
+  n
+}
+
+test "a moved var that is assigned as a whole is usable again" {
+  assert assign_after_the_move() == 3
+  assert assign_at_the_end_of_the_body(3) == 7
+  assert assign_in_a_for(3) == 12
+  assert assign_before_the_continue(3) == 30
+}
+
+test "the assignment in the branches" {
+  assert assign_in_one_branch(true) == 40
+  assert assign_in_one_branch(false) == 1
+  assert assign_in_every_arm(true) == 50
+  assert assign_in_every_arm(false) == 60
+}
+
+test "the condition after a body that assigns" {
+  assert condition_reads_what_the_body_assigned() == 2
+}
+
+test "a variable that is moved and not used again" {
+  assert moved_before_the_break() == 1
+  assert moved_before_the_return(true) == 1
+  assert moved_before_the_return(false) == 0
+  assert declared_in_the_body() == 3
+}

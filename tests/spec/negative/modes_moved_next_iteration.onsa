@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2"]
+
+// S-789 (§5.2): "ループの本体で移した変数を次の反復（条件の再評価と `continue` の道を含む）で使うと、反復の
+// 回数によらず E0704 である". Split from negative/modes_moved_loop.onsa: the two ways to the next
+// iteration that are not the end of the body. A move on a path that ends in `continue` goes to the
+// head of the loop, so the next iteration finds the variable moved; the condition of a `while` is
+// evaluated again after the body, so a read in the condition finds the variable moved. The body
+// revives the variable (`b = mk()`) before it moves it, so the use that is an error is the only
+// one: the read after the `if` that has the `continue`, the read in the condition. The
+// assignment to the whole variable that revives it is in values/modes_moved_assign.onsa. Today the
+// old modes stage counts neither way (no E0704 at the three reads, and an E0704 at the move after the
+// revival in `read_in_the_condition`). One error per function (P-01).
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn read(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn move_on_the_continue_path(n: U32) -> U32 uses {Alloc} {
+  var b          = mk()
+  var i: U32     = 0
+  var total: U32 = 0
+  while i < n {
+    i = i + 1
+    if i == 2 {
+      b = mk()
+      take(move b)
+      continue
+    }
+    total = total + read(b) //~ E0704
+  }
+  total
+}
+
+pub fn read_in_the_condition(n: U32) uses {Alloc} {
+  var b      = mk()
+  var i: U32 = 0
+  while i < n + read(b) { //~ E0704
+    b = mk()
+    take(move b)
+    i = i + 1
+  }
+}
+
+pub fn move_on_the_continue_path_of_a_for(n: U32) -> U32 uses {Alloc} {
+  var b          = mk()
+  var total: U32 = 0
+  for i in 0 ..< n {
+    if i == 2 {
+      b = mk()
+      take(move b)
+      continue
+    }
+    total = total + read(b) //~ E0704
+  }
+  total
+}

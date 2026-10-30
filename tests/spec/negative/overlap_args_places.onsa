@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5"]
+// fixes = 0
+
+// §5.2 (the sentences on E0702): "同じ変数を一つの呼び出しで二度 `inout` に渡すと、また `inout` と借用の両方に
+// 渡すと（`h(x, inout x)`）エラー（E0702）。借用の引数は、呼び出し中は変更されないと約束しているからである。
+// 同じ値の異なるフィールド（`self.voices[i]` と `self.params[i]` など）は重ならないものとして扱う。同じ配列の
+// 添字どうしは、添字が等しいかを静的に判定しないので、重なるものとして扱う。引数は全て評価してから呼び出す
+// ので、引数の中で同じ変数を読んで値を作るだけなら重ならない（`xs.fill!(xs.len())`）".
+// The arguments are the receiver and the arguments of one call, and the error is at the later argument (the
+// position is the line of the call here, one error per item, P-01). A place that holds the other one (the
+// whole variable and one of its fields) overlaps with it, two fields of one variable do not, and the
+// elements of one array always do (also two literal indices). There is no repair candidate (`fixes = 0`):
+// which of the two arguments to change is the writer's design. The controls are in values/overlap_args_ok.onsa.
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+impl P {
+  pub fn scale(inout self, k: U32) {
+    self.x = self.x * k
+  }
+}
+
+pub struct Tracks {
+  voices: [U32; 4],
+  params: [U32; 4],
+}
+
+impl Tracks {
+  pub fn mix_same(inout self, i: U32, j: U32) {
+    swap(inout self.voices[i], inout self.voices[j]) //~ E0702
+  }
+}
+
+pub fn swap(inout a: U32, inout b: U32) {}
+
+pub fn two(inout a: U32, b: U32) {}
+
+pub fn two_rev(a: U32, inout b: U32) {}
+
+pub fn whole(inout p: P, k: U32) {}
+
+pub fn the_same_variable_twice() {
+  var x: U32 = 1
+  swap(inout x, inout x) //~ E0702
+}
+
+pub fn inout_then_borrow() {
+  var x: U32 = 1
+  two(inout x, x) //~ E0702
+}
+
+pub fn borrow_then_inout() {
+  var x: U32 = 1
+  two_rev(x, inout x) //~ E0702
+}
+
+pub fn inout_parameter(inout x: U32) {
+  two(inout x, x) //~ E0702
+}
+
+pub fn the_whole_and_a_field() {
+  var p = P { x: 1, y: 2 }
+  whole(inout p, p.x) //~ E0702
+}
+
+pub fn a_field_and_itself() {
+  var p = P { x: 1, y: 2 }
+  two(inout p.y, p.y) //~ E0702
+}
+
+pub fn the_same_field_twice() {
+  var p = P { x: 1, y: 2 }
+  swap(inout p.x, inout p.x) //~ E0702
+}
+
+pub fn a_nested_field_in_its_parent() {
+  var q = (P { x: 1, y: 2 }, 3)
+  whole(inout q.0, q.0.x) //~ E0702
+}
+
+pub fn literal_indices(inout xs: [U32; 4]) {
+  swap(inout xs[0], inout xs[1]) //~ E0702
+}
+
+pub fn an_element_and_another(inout xs: [U32; 4]) {
+  two(inout xs[0], xs[3]) //~ E0702
+}
+
+pub fn receiver_and_its_field() {
+  var p = P { x: 1, y: 2 }
+  p.scale!(p.y) //~ E0702
+}
+
+pub fn receiver_and_a_borrowed_argument(inout p: P) {
+  p.scale!(p.x) //~ E0702
+}
+
+pub fn receiver_field_and_the_same_field() {
+  var q = (P { x: 1, y: 2 }, 3)
+  q.0.scale!(q.0.x) //~ E0702
+}

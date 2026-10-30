@@ -1,0 +1,194 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§9.1", "§5.4"]
+// fixes = 0
+
+// S-785, S-786 (W4-07 U3; §5.2: "中身を取り出す形（`move self` のメソッドの受け手（下）と後置 `?` の被演算子、§9.1）で、値が関数の外へ出ること
+// と取り出されることは書かなくても見える。Affine 値を `move` 無しでこれらの位置に置くと E0711（修正候補は `move` の挿入）"; §9.1:
+// `unwrap` of `Option` and `Result` is a `move self` method): the receiver of `unwrap` is a consuming position where no mark is
+// written, like the receiver of a `move self` method of a user's type (`w.eat()`). An owned Affine receiver is moved (a later
+// use is E0704, a second `unwrap` too); a borrowed or an `inout` Affine receiver cannot be moved (E0711 with no candidate,
+// §5.2: "借用の Affine の場所は候補の無い E0711"; `fixes = 0` says it); a Dup receiver is copied. The receiver is no place
+// of a mark, so a `move` before it is not written. One error per function (P-01).
+
+pub struct Wrap {
+  b: Buf[F32],
+}
+
+impl Wrap {
+  pub fn eat(move self) -> U32 uses {Alloc} { self.b.len() }
+  pub fn peek(self) -> U32 uses {Alloc} { self.b.len() }
+}
+
+pub fn mk() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(4))
+}
+
+pub fn mk_result() -> Result[Buf[F32], U32] uses {Alloc} {
+  Ok(Buf.zeroed(4))
+}
+
+pub fn mk_wrap() -> Wrap uses {Alloc} {
+  Wrap { b: Buf.zeroed(4) }
+}
+
+// ---- an owned receiver is moved: a later use is E0704 ----
+
+pub fn option_then_read(move o: Option[Buf[F32]]) -> Bool uses {Alloc} {
+  let n = o.unwrap().len()
+  o.is_some() && n > 0           //~ E0704
+}
+
+pub fn option_twice(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  let n = o.unwrap().len()
+  n + o.unwrap().len()           //~ E0704
+}
+
+pub fn option_local_then_read() -> Bool uses {Alloc} {
+  let o = mk()
+  let n = o.unwrap().len()
+  o.is_some() && n > 0           //~ E0704
+}
+
+pub fn result_then_read(move r: Result[Buf[F32], U32]) -> Bool uses {Alloc} {
+  let n = r.unwrap().len()
+  r.is_ok() && n > 0             //~ E0704
+}
+
+pub fn result_local_twice() -> U32 uses {Alloc} {
+  let r = mk_result()
+  let n = r.unwrap().len()
+  n + r.unwrap().len()           //~ E0704
+}
+
+pub fn user_move_self_then_read(move w: Wrap) -> U32 uses {Alloc} {
+  let n = w.eat()
+  n + w.peek()                   //~ E0704
+}
+
+pub fn user_move_self_twice() -> U32 uses {Alloc} {
+  let w = mk_wrap()
+  let n = w.eat()
+  n + w.eat()                    //~ E0704
+}
+
+pub fn moved_in_one_branch(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  if c {
+    total = o.unwrap().len()
+  }
+  if o.is_some() { total + 1 } else { total }   //~ E0704
+}
+
+pub fn moved_in_a_loop(move o: Option[Buf[F32]], n: U32) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  for _ in 0..<n {
+    total = total + o.unwrap().len()   //~ E0704
+  }
+  total
+}
+
+// ---- a borrowed or an `inout` receiver cannot be moved: E0711, no candidate ----
+
+pub fn option_borrowed(o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  let x = o.unwrap()             //~ E0711
+  x.len()
+}
+
+pub fn result_borrowed(r: Result[Buf[F32], U32]) -> U32 uses {Alloc} {
+  let x = r.unwrap()             //~ E0711
+  x.len()
+}
+
+pub fn option_inout(inout o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  let x = o.unwrap()             //~ E0711
+  x.len()
+}
+
+pub fn user_move_self_borrowed(w: Wrap) -> U32 uses {Alloc} {
+  w.eat()                        //~ E0711
+}
+
+pub fn user_move_self_inout(inout w: Wrap) -> U32 uses {Alloc} {
+  w.eat()                        //~ E0711
+}
+
+pub fn borrowed_binding_of_an_arm(o: Option[Option[Buf[F32]]]) -> U32 uses {Alloc} {
+  match o {
+    Some(inner) => {
+      let x = inner.unwrap()     //~ E0711
+      x.len()
+    },
+    None => 0,
+  }
+}
+
+// ---- a type parameter: `?Dup` may be Affine, a plain `T` is Dup ----
+
+pub fn generic_once[T: ?Dup](move o: Option[T]) -> T {
+  o.unwrap()
+}
+
+pub fn generic_twice[T: ?Dup](move o: Option[T]) -> (T, T) {
+  let a = o.unwrap()
+  let b = o.unwrap()             //~ E0704
+  (move a, move b)
+}
+
+pub fn generic_borrowed[T: ?Dup](o: Option[T]) -> T {
+  o.unwrap()                     //~ E0711
+}
+
+pub fn generic_dup_twice[T](o: Option[T]) -> (T, T) {
+  (o.unwrap(), o.unwrap())
+}
+
+// ---- a Dup receiver is copied ----
+
+pub fn dup_option_borrowed(o: Option[U32]) -> U32 {
+  o.unwrap() + o.unwrap()
+}
+
+pub fn dup_result_borrowed(r: Result[U32, U32]) -> U32 {
+  r.unwrap() + r.unwrap()
+}
+
+pub fn dup_option_inout(inout o: Option[U32]) -> U32 {
+  let a = o.unwrap()
+  o = None
+  a
+}
+
+pub fn dup_user_move_self(w: Dup3) -> U32 {
+  w.take() + w.take()
+}
+
+pub struct Dup3 {
+  n: U32,
+}
+
+impl Dup3 {
+  pub fn take(move self) -> U32 { self.n }
+}
+
+// ---- right: an owned receiver is moved once ----
+
+pub fn owned_once(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  let x = o.unwrap()
+  x.len()
+}
+
+pub fn owned_result_once() -> U32 uses {Alloc} {
+  let r = mk_result()
+  let x = r.unwrap()
+  x.len()
+}
+
+pub fn owned_new_value() -> U32 uses {Alloc} {
+  let x = mk().unwrap()
+  x.len()
+}
+
+pub fn owned_user_once(move w: Wrap) -> U32 uses {Alloc} {
+  w.eat()
+}

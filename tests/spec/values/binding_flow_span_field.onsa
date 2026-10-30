@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-788 (§5.3, §5.4, §11.6): a `Span` field of the generated type `In` / `Out` of a flow (`inp.l`,
+// `o.l`, an element of an array field `inp.x[0]`) in a borrowed argument is a borrowed origin, and the
+// `Span` taken from it is bound like a `Span` argument: "借用の起点の生成型 `In` / `Out` の `Span` のフィールド（`o.l`）
+// は、`Span` の引数と同じく借用の行で `let`・`for`・`match` の腕に束縛でき、束縛した名前は第二級のまま". The bound
+// name is read, passed on in the default mode and used as a receiver (the uses that stay an E0710 are in
+// negative/binding_flow_span_field.onsa). Every binding is read. No diagnostic is expected anywhere in
+// this file. The binding from an `inout` argument is not here (the work W7-03), nor is the generated
+// type itself as a binding (`let k = o`, R-325, W7-03).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub fn sum(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0 ..< s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+// ------------------------------------------------------------------------------ let
+
+pub fn field_of_an_in(inp: pair.In) -> U32 {
+  let l = inp.l
+  l.len()
+}
+
+pub fn field_of_an_out(o: pair.Out) -> U32 {
+  let l = o.l
+  l.len()
+}
+
+pub fn two_fields(inp: pair.In) -> F32 {
+  let l = inp.l
+  let r = inp.r
+  l[0] + r[0]
+}
+
+pub fn passed_on(inp: pair.In) -> F32 {
+  let l = inp.l
+  sum(l)
+}
+
+pub fn derived(inp: pair.In) -> F32 {
+  let l     = inp.l
+  let again = l
+  again[0]
+}
+
+pub fn element_of_an_array_field(inp: spread.In) -> F32 {
+  let ch = inp.x[1]
+  ch[0]
+}
+
+pub fn array_field(inp: spread.In) -> F32 {
+  let all = inp.x
+  all[0][0] + all[1][0]
+}
+
+pub fn part_of_a_field(inp: pair.In) -> U32 {
+  let half = inp.l.slice(0, 1)
+  half.len()
+}
+
+// ------------------------------------------------------------------------- for and match
+
+pub fn for_over_a_field(inp: pair.In) -> F32 {
+  var total: F32 = 0.0
+  for v in inp.l {
+    total = total + v
+  }
+  total
+}
+
+pub fn for_over_an_array_field(inp: spread.In) -> F32 {
+  var total: F32 = 0.0
+  for ch in inp.x {
+    total = total + ch[0]
+  }
+  total
+}
+
+pub fn match_over_a_field(inp: pair.In) -> U32 {
+  match inp.l {
+    s => s.len(),
+  }
+}
+
+pub fn in_a_branch_and_a_loop(inp: pair.In, c: Bool) -> F32 {
+  var total: F32 = 0.0
+  for k in 0 ..< 2 {
+    if c {
+      let l = inp.l
+      total = total + l[k]
+    }
+  }
+  total
+}

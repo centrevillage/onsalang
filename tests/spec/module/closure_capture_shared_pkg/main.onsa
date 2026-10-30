@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§4.6", "§15.1"]
+
+// R-85 (5), S-80 (§5.3, §5.4): a closure that reads a value of a Shared type is E0200 in this version, and the
+// kind of a type of another module is the one of its declaration there: `lib.Label` holds a `Str`, so it is
+// Shared and its capture is E0200, while `lib.Plain` is Copy and is captured. One error per item (P-01).
+
+use lib.{Label, Boxed, Plain, label_n, boxed_k, plain_n}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn capture_of_a_shared_type_of_lib(l: Label) -> U32 {
+  apply(fn(n) { n + label_n(l) }) //~ E0200
+}
+
+pub fn capture_of_a_struct_that_holds_one(b: Boxed) -> U32 {
+  apply(fn(n) { n + boxed_k(b) }) //~ E0200
+}
+
+pub fn capture_of_a_copy_type_of_lib(p: Plain) -> U32 {
+  apply(fn(n) { n + plain_n(p) })
+}

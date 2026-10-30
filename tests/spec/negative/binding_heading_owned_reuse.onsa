@@ -1,0 +1,132 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2"]
+
+// R-251, R-29 (§5.4, §5.2): the other side of values/binding_heading_owned_combos.onsa. The binding of an
+// arm over a call and the binding of a `for` over a call are owned, so a `move` consumes them and they are
+// not usable after it: "Affine 値はこの後使えない" (§5.2). The error is at the use after the move (E0704, no
+// candidate): a second `move`, a read, a use after a branch that moved it. The binding is declared by the arm
+// or by the iteration, so a loop around the arm does not repeat the move of the same binding (the contrast
+// in values/binding_heading_owned_combos.onsa), but a loop inside the arm or the body that moves the binding
+// does repeat it. One error per function (P-01).
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn make_array() -> [Buf[F32]; 2] uses {Alloc} {
+  [Buf.zeroed(1), Buf.zeroed(2)]
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+// ------------------------------------------------------------------ arm over a call
+
+pub fn arm_moved_twice() uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      take(move z)
+      take(move z)              //~ E0704
+    },
+    None => {},
+  }
+}
+
+pub fn arm_read_after_the_move() -> U32 uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      take(move z)
+      z.len()                   //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn arm_derived_binding_moved_twice() uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      let y = move z
+      take(move z)              //~ E0704
+      take(move y)
+    },
+    None => {},
+  }
+}
+
+pub fn arm_moved_in_a_branch(c: Bool) -> U32 uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      if c {
+        take(move z)
+      }
+      len_of(z)                 //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn arm_moved_in_an_inner_loop() uses {Alloc} {
+  match mko() {
+    Some(z) => {
+      for _ in 0 ..< 2 {
+        take(move z)            //~ E0704
+      }
+    },
+    None => {},
+  }
+}
+
+pub fn tuple_arm_moved_twice() uses {Alloc} {
+  match (mko(), mko()) {
+    (Some(x), Some(y)) => {
+      take(move x)
+      take(move x)              //~ E0704
+      take(move y)
+    },
+    (Some(x), None) => take(move x),
+    (None, Some(y)) => take(move y),
+    (None, None) => {},
+  }
+}
+
+// ------------------------------------------------------------------ for over a call
+
+pub fn element_moved_twice() uses {Alloc} {
+  for z in make_array() {
+    take(move z)
+    take(move z)                //~ E0704
+  }
+}
+
+pub fn element_read_after_the_move() -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for z in make_array() {
+    take(move z)
+    n = n + len_of(z)           //~ E0704
+  }
+  n
+}
+
+pub fn element_moved_in_an_inner_loop() uses {Alloc} {
+  for z in make_array() {
+    for _ in 0 ..< 2 {
+      take(move z)              //~ E0704
+    }
+  }
+}
+
+pub fn element_moved_in_an_arm_of_the_body(c: Bool) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for z in make_array() {
+    match c {
+      true => take(move z),
+      false => {},
+    }
+    n = n + len_of(z)           //~ E0704
+  }
+  n
+}

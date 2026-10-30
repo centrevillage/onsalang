@@ -1,0 +1,29 @@
+// The declarations of another module for main.onsa: the kind of a type (Copy, Affine) is decided
+// from its declaration here, and the places and modes of the functions are theirs (§4.6, §5.2, §15.1).
+
+pub struct Pos {
+  x: U32,
+  y: U32,
+}
+
+pub struct Tape {
+  buf: Buf[F32],
+}
+
+impl Pos {
+  pub fn scale(inout self, k: U32) {
+    self.x = self.x * k
+  }
+}
+
+pub fn swap(inout a: U32, inout b: U32) {}
+
+pub fn two(inout a: U32, b: U32) {}
+
+pub fn pos_x(p: Pos) -> U32 {
+  p.x
+}
+
+pub fn tape_len(t: Tape) -> U32 {
+  t.buf.len()
+}

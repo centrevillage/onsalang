@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2"]
+
+// S-784 (§9.1, §5.2): "`move r?` は S-605 の E0711 のまま". The operand of a `?` takes no mark, and a `move`
+// before it is a `move` of the value of the `?`, which is not a place (§5.2: "`move` の被演算子は場所…で、場所でな
+// い値（呼び出しの結果、…）に付けると、位置によらず E0711"): `move r?` is `move (r?)`. The same holds when the
+// operand is a call or an `Option`, and for a place of a Dup type. The candidates of the repair are not
+// counted here (the work W4-09). One error per function (P-01).
+
+pub fn mk() -> Result[Buf[F32], U32] uses {Alloc} {
+  Ok(Buf.zeroed(2))
+}
+
+pub fn move_of_the_try_of_a_parameter(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let b = move r? //~ E0711
+  Ok(b.len())
+}
+
+pub fn move_of_the_try_of_a_call() -> Result[U32, U32] uses {Alloc} {
+  let b = move mk()? //~ E0711
+  Ok(b.len())
+}
+
+pub fn move_of_the_try_of_an_option(move o: Option[Buf[F32]]) -> Option[U32] uses {Alloc} {
+  let b = move o? //~ E0711
+  Some(b.len())
+}
+
+pub fn move_of_the_try_of_a_copy_value(r: Result[U32, U32]) -> Result[U32, U32] {
+  let b = move r? //~ E0711
+  Ok(b)
+}

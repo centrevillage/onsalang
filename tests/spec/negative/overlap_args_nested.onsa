@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§7", "§4.5"]
+// fixes = 0
+
+// §5.2 (E0702): the overlap of the places of one call is judged wherever the call is written. The same errors as
+// in negative/overlap_args_places.onsa inside the body of an anonymous function (its own bindings, not the
+// captured ones, which are read-only), the arm of an `if`, a `match` or a loop, a generic function, and a call
+// that is an argument of another call (the error is at the inner call). A call is judged on its own arguments, so
+// two calls in a row that use the same variable are not an overlap (values/overlap_args_ok.onsa). No repair
+// candidate (`fixes = 0`). One error per item (P-01).
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+impl P {
+  pub fn scale(inout self, k: U32) {
+    self.x = self.x * k
+  }
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn keep(k: U32) -> U32 {
+  k
+}
+
+pub fn swap(inout a: U32, inout b: U32) {}
+
+pub fn two(inout a: U32, b: U32) {}
+
+pub fn bump_by(inout a: U32, b: U32) -> U32 {
+  a = a + b
+  a
+}
+
+pub fn gswap[T](inout a: T, inout b: T) {}
+
+pub fn gtwo[T](inout a: T, b: T) {}
+
+pub fn inside_an_anonymous_function() -> U32 {
+  apply(fn(n) {
+    var v = n
+    swap(inout v, inout v) //~ E0702
+    v
+  })
+}
+
+pub fn inside_a_nested_anonymous_function() -> U32 {
+  apply(fn(n) {
+    apply(fn(m) {
+      var v = m + n
+      two(inout v, v) //~ E0702
+      v
+    })
+  })
+}
+
+pub fn in_an_if_arm(c: Bool) {
+  var x: U32 = 1
+  if c {
+    swap(inout x, inout x) //~ E0702
+  } else {
+    two(inout x, 2)
+  }
+}
+
+pub fn in_the_else_arm(c: Bool) {
+  var x: U32 = 1
+  if c {
+    two(inout x, 2)
+  } else {
+    two(inout x, x) //~ E0702
+  }
+}
+
+pub fn in_a_match_arm(o: Option[U32]) {
+  var x: U32 = 1
+  match o {
+    Some(k) => two(inout x, k),
+    None => {
+      swap(inout x, inout x) //~ E0702
+    },
+  }
+}
+
+pub fn in_a_loop(n: U32) {
+  var x: U32 = 1
+  for i in 0 ..< n {
+    two(inout x, i)
+    swap(inout x, inout x) //~ E0702
+  }
+}
+
+pub fn in_a_while_loop(n: U32) {
+  var x: U32 = 1
+  var i: U32 = 0
+  while i < n {
+    two(inout x, x) //~ E0702
+    i = i + 1
+  }
+}
+
+pub fn generic_twice[T](inout a: T) {
+  gswap(inout a, inout a) //~ E0702
+}
+
+pub fn generic_inout_and_borrow[T](inout a: T) {
+  gtwo(inout a, a) //~ E0702
+}
+
+pub fn generic_instance() {
+  var x: U32 = 1
+  gswap(inout x, inout x) //~ E0702
+}
+
+pub fn the_inner_call_of_another_call() -> U32 {
+  var x: U32 = 1
+  keep(bump_by(inout x, x)) //~ E0702
+}
+
+pub fn the_second_call_of_one_expression() -> U32 {
+  var x: U32 = 1
+  bump_by(inout x, 1) + bump_by(inout x, x) //~ E0702
+}
+
+pub fn a_value_read_in_an_argument_then_a_receiver_overlap() -> U32 {
+  var p      = P { x: 1, y: 2 }
+  var x: U32 = 3
+  two(inout x, if x > 2 { 1 } else { 2 })
+  p.scale!(p.x) //~ E0702
+  x
+}

@@ -1,0 +1,153 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2"]
+// fixes = 0
+
+// S-784, S-786 (§9.1, §5.2): the other side of values/try_operand_consume.onsa. The operand of a postfix
+// `?` is a consuming position without a mark: an owned Affine place is moved, so a use after the `?`
+// (a second `?`, a `move`, a read, the next iteration of a loop) is an E0704; a place that cannot be
+// moved is an E0711 with no candidate (`fixes = 0`; "配列の要素と、借用・`inout` の Affine の場所は E0711（修正候補
+// なし）"): a borrowed argument, an `inout` argument, a binding derived from a borrowed one, an element of
+// an array, and a place of a type that is Affine as a whole (`Result[U32, Buf[F32]]`, "`Ok` の道でも移る"). The
+// error is at the `?` (the use after it for E0704). One error per function (P-01).
+
+pub fn mk() -> Result[Buf[F32], U32] uses {Alloc} {
+  Ok(Buf.zeroed(2))
+}
+
+pub struct Holder {
+  r: Result[Buf[F32], U32],
+  n: U32,
+}
+
+pub fn sink[T: ?Dup](move x: T) {}
+
+// ------------------------------------------------------------------------ E0704
+
+pub fn second_try_of_a_parameter(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let a = r?
+  let b = r? //~ E0704
+  Ok(a.len() + b.len())
+}
+
+pub fn second_try_of_a_local() -> Result[U32, U32] uses {Alloc} {
+  let r = mk()
+  let a = r?
+  let b = r? //~ E0704
+  Ok(a.len() + b.len())
+}
+
+pub fn option_twice(move o: Option[Buf[F32]]) -> Option[U32] uses {Alloc} {
+  let a = o?
+  let b = o? //~ E0704
+  Some(a.len() + b.len())
+}
+
+pub fn moved_on_after_the_try(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let a = r?
+  sink(move r) //~ E0704
+  Ok(a.len())
+}
+
+pub fn read_after_the_try(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let a = r?
+  match r { //~ E0704
+    Ok(b) => Ok(a.len() + b.len()),
+    Err(e) => Err(e),
+  }
+}
+
+pub fn try_in_a_loop(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  var n: U32 = 0
+  for _ in 0 ..< 2 {
+    let a = r? //~ E0704
+    n = n + a.len()
+  }
+  Ok(n)
+}
+
+pub fn try_in_a_branch(c: Bool, move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  var n: U32 = 0
+  if c {
+    let a = r?
+    n = a.len()
+  }
+  let b = r? //~ E0704
+  Ok(n + b.len())
+}
+
+// ------------------------------------------------------------------------ E0711
+
+pub fn borrowed_argument(r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let a = r? //~ E0711
+  Ok(a.len())
+}
+
+pub fn borrowed_option(o: Option[Buf[F32]]) -> Option[U32] uses {Alloc} {
+  let a = o? //~ E0711
+  Some(a.len())
+}
+
+pub fn inout_argument(inout r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let a = r? //~ E0711
+  Ok(a.len())
+}
+
+pub fn derived_borrowed_binding(r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let q = r
+  let a = q? //~ E0711
+  Ok(a.len())
+}
+
+pub fn element_of_an_owned_array(move xs: [Result[Buf[F32], U32]; 2]) -> Result[U32, U32] uses {Alloc} {
+  let a = xs[0]? //~ E0711
+  Ok(a.len())
+}
+
+pub fn element_of_a_borrowed_array(xs: [Result[Buf[F32], U32]; 2]) -> Result[U32, U32] uses {Alloc} {
+  let a = xs[1]? //~ E0711
+  Ok(a.len())
+}
+
+pub fn field_of_a_borrowed_root(h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let a = h.r? //~ E0711
+  Ok(a.len())
+}
+
+pub fn field_of_an_inout_root(inout h: Holder) -> Result[U32, U32] uses {Alloc} {
+  let a = h.r? //~ E0711
+  Ok(a.len())
+}
+
+pub fn affine_error_of_a_borrowed_place(r: Result[U32, Buf[F32]]) -> Result[U32, Buf[F32]] {
+  let a = r? //~ E0711
+  Ok(a + 1)
+}
+
+pub fn arm_binding_of_a_borrowed_subject(o: Option[Result[Buf[F32], U32]]) -> Result[U32, U32] uses {Alloc} {
+  match o {
+    Some(r) => {
+      let a = r? //~ E0711
+      Ok(a.len())
+    },
+    None => Ok(0),
+  }
+}
+
+// -------------------------------------------------------------------------- the contrasts
+
+pub fn owned_arm_binding(move o: Option[Result[Buf[F32], U32]]) -> Result[U32, U32] uses {Alloc} {
+  match move o {
+    Some(r) => {
+      let a = r?
+      Ok(a.len())
+    },
+    None => Ok(0),
+  }
+}
+
+pub fn copy_value_borrowed(r: Result[U32, U32]) -> Result[U32, U32] {
+  let a = r?
+  let b = r?
+  Ok(a + b)
+}

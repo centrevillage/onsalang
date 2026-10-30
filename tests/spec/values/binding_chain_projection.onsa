@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.4"]
+
+// S-797 (§7, §5.4): a chain of derived borrowed bindings composes the projections, so a change of a place
+// that does not overlap the place of a binding leaves it usable, whatever the chain. "§5.4 の「重なるもの」と §7 の
+// 「異なるフィールドは重ならない」の判定を派生の鎖にも当てる": `let c = hh.buf` (`hh` is the binding of the
+// arm `Wrap { h: hh, k: kk }` of `match w`) is the place `w.h.buf`, so a change of `w.h.n` or `w.k` does not make
+// it unusable; the same meaning written as a nested pattern (`Holder { buf: bb, n: _ }`) is the same answer.
+// The binding `hh` itself is the place `w.h`, which holds `w.h.n`, so it is not usable after the change: that is
+// an E0704 in negative/binding_chain_projection.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn io_n(inout n: U32) {
+  n = n + 1
+}
+
+pub fn mkwrap() -> Wrap uses {Alloc} {
+  Wrap { h: Holder { buf: Buf.zeroed(2), n: 1 }, k: 2 }
+}
+
+pub fn chain_and_a_sibling_field() -> U32 uses {Alloc} {
+  var w = mkwrap()
+  match w {
+    Wrap { h: hh, k: kk } => {
+      let c = hh.buf
+      io_n(inout w.h.n)
+      len_of(c) + kk
+    },
+  }
+}
+
+pub fn the_same_meaning_as_a_nested_pattern() -> U32 uses {Alloc} {
+  var w = mkwrap()
+  match w {
+    Wrap { h: Holder { buf: bb, n: _ }, k: kk } => {
+      io_n(inout w.h.n)
+      len_of(bb) + kk
+    },
+  }
+}
+
+pub fn a_chain_of_two() -> U32 uses {Alloc} {
+  var w = mkwrap()
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      let d = c
+      io_n(inout w.h.n)
+      len_of(d)
+    },
+  }
+}
+
+pub fn change_of_the_other_top_field() -> U32 uses {Alloc} {
+  var w = mkwrap()
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      io_n(inout w.k)
+      len_of(c) + len_of(hh.buf)
+    },
+  }
+}
+
+pub fn an_inout_parameter(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let c = hh.buf
+      io_n(inout w.h.n)
+      len_of(c)
+    },
+  }
+}
+
+pub fn the_chain_before_the_change_is_read_after_it() -> U32 uses {Alloc} {
+  var w = mkwrap()
+  match w {
+    Wrap { h: hh, k: _ } => {
+      let before = len_of(hh.buf)
+      io_n(inout w.h.n)
+      before + 1
+    },
+  }
+}

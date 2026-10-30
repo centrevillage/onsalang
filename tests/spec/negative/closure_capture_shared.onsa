@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§4.6", "§19.1"]
+
+// R-85 (5), S-80 (§5.3, §5.4): "Shared 型の値を捕捉したときの意味（複製か借用か）は第 2 期に決める" (§5.4 the row
+// of a captured variable, §19.1), so in this version a closure that reads a value of a Shared type is E0200
+// (the feature is not handled). Which values are Shared is by the kind of the value's type (§4.6): a `Str`, an
+// `Array`, a `Map`, a `Set`, a struct that holds one, and, by the kind alone, the value of a static binding
+// (`let s = "abc"`, a borrowed binding of a static value) and a value whose type is a parameter with no bound
+// (`T` is Dup, not Copy: it can be a Shared type). A `T: Copy` value is Copy and captured. The error is at the
+// first read of the value in the closure; the closures are on one line (P-01, one error per item).
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub struct Named {
+  name: Str,
+  gain: F32,
+}
+
+pub fn map_size(m: Map[Str, U32]) -> U32 {
+  1
+}
+
+pub fn set_size(s: Set[U32]) -> U32 {
+  1
+}
+
+pub fn apply_f(f: fn(U32) -> F32) -> F32 {
+  f.(1)
+}
+
+pub fn count_of[T](x: T) -> U32 {
+  1
+}
+
+pub fn copy_count_of[T: Copy](x: T) -> U32 {
+  1
+}
+
+// ------------------------------------------------------------------------ Shared types
+
+pub fn str_parameter(s: Str) -> U32 {
+  apply(fn(n) { n + s.len() }) //~ E0200
+}
+
+pub fn array_parameter(xs: Array[U32]) -> U32 {
+  apply(fn(n) { n + xs.len() }) //~ E0200
+}
+
+pub fn map_parameter(m: Map[Str, U32]) -> U32 {
+  apply(fn(n) { n + map_size(m) }) //~ E0200
+}
+
+pub fn set_parameter(s: Set[U32]) -> U32 {
+  apply(fn(n) { n + set_size(s) }) //~ E0200
+}
+
+pub fn move_str_parameter(move s: Str) -> U32 uses {Alloc} {
+  apply(fn(n) { n + s.len() }) //~ E0200
+}
+
+pub fn struct_with_a_str(v: Named) -> U32 {
+  apply(fn(n) { n + v.name.len() }) //~ E0200
+}
+
+pub fn str_local(s: Str) -> U32 {
+  let t = s
+  apply(fn(n) { n + t.len() }) //~ E0200
+}
+
+pub fn str_var(s: Str) -> U32 uses {Alloc} {
+  var t = s
+  t = s
+  apply(fn(n) { n + t.len() }) //~ E0200
+}
+
+// --------------------------------------------------- by the kind of the type, not the origin
+
+pub fn static_string_binding() -> U32 {
+  let s = "abc"
+  apply(fn(n) { n + s.len() }) //~ E0200
+}
+
+pub fn static_array_binding() -> U32 {
+  let t = ["a", "bc"]
+  apply(fn(n) { n + t.len() }) //~ E0200
+}
+
+pub fn unbounded_parameter_type[T](x: T) -> U32 {
+  apply(fn(n) { n + count_of(x) }) //~ E0200
+}
+
+// The controls: values that are Copy are captured, and a Shared value is read outside the closure.
+
+pub fn length_read_outside(s: Str) -> U32 {
+  let len = s.len()
+  apply(fn(n) { n + len })
+}
+
+pub fn copy_bounded_parameter_type[T: Copy](x: T) -> U32 {
+  apply(fn(n) { n + copy_count_of(x) })
+}
+
+pub fn copy_field_read_outside(v: Named) -> F32 {
+  let g = v.gain
+  apply_f(fn(n) { g })
+}

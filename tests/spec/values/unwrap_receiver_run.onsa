@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§9.1"]
+
+// S-785, S-786 (§5.2: "中身を取り出す形（`move self` のメソッドの受け手（下）と後置 `?` の被演算子、§9.1）は、書かなくても見える";
+// §9.1: `unwrap` of `Option` and `Result` is a `move self` method), run in the interpreter: the receiver of `unwrap` and of
+// a user's `move self` method has no mark. A Dup receiver is copied, so it is read as often as the program wants; an owned
+// Affine receiver is moved once and the value is the one that was inside. The errors of the other cases (a second `unwrap` of
+// an owned Affine, a borrowed Affine receiver) are in negative/unwrap_receiver.onsa.
+
+pub struct Gain {
+  k: U32,
+}
+
+impl Gain {
+  pub fn take(move self) -> U32 { self.k }
+}
+
+pub struct Wrap {
+  b: Buf[F32],
+}
+
+impl Wrap {
+  pub fn eat(move self) -> U32 uses {Alloc} { self.b.len() }
+}
+
+fn twice(o: Option[U32]) -> U32 {
+  o.unwrap() + o.unwrap()
+}
+
+fn twice_result(r: Result[U32, U32]) -> U32 {
+  r.unwrap() + r.unwrap()
+}
+
+fn twice_inout(inout o: Option[U32]) -> U32 {
+  let a = o.unwrap()
+  o = None
+  a + 1
+}
+
+fn twice_user(g: Gain) -> U32 {
+  g.take() + g.take()
+}
+
+fn once_owned(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  o.unwrap().len()
+}
+
+fn once_result(move r: Result[Buf[F32], U32]) -> U32 uses {Alloc} {
+  r.unwrap().len()
+}
+
+fn once_user(move w: Wrap) -> U32 uses {Alloc} {
+  w.eat()
+}
+
+fn once_in_a_branch(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  if c {
+    o.unwrap().len()
+  } else {
+    7
+  }
+}
+
+test "a Dup receiver of unwrap is copied" {
+  assert twice(Some(3)) == 6
+  assert twice_result(Ok(4)) == 8
+  var o: Option[U32] = Some(5)
+  assert twice_inout(inout o) == 6
+}
+
+test "a Dup receiver of a move self method of a user is copied" {
+  let g = Gain { k: 4 }
+  assert twice_user(g) == 8
+  assert g.take() == 4
+}
+
+test "an owned Affine receiver is moved once and the value is the one inside" {
+  assert once_owned(Some(Buf.zeroed(3))) == 3
+  assert once_result(Ok(Buf.zeroed(5))) == 5
+  assert once_user(Wrap { b: Buf.zeroed(2) }) == 2
+  assert once_in_a_branch(true, Some(Buf.zeroed(6))) == 6
+  assert once_in_a_branch(false, Some(Buf.zeroed(6))) == 7
+}

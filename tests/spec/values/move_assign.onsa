@@ -7,7 +7,7 @@
 // `let` binding and a borrowed parameter read-only (E0701), and the value is the callee's own.
 // The caller's value does not change (a Copy value is copied). The `move` parameters of Copy type
 // (`move x: I32`, `move v: [I32; 2]`) are in values/move_assign_copy_args.onsa: the call of such a
-// parameter waits for the repair of the mark on a Dup value (S-609, the work W4-09), which this file
+// parameter waits for the repair of the mark on a Dup value (S-609, the work W4-07), which this file
 // does not depend on. This is the reading behind the
 // `mut self` -> `move self` candidate of spec/foreign-forms.toml (row `mut_self`).
 // The places of `move self` and of a `move` parameter are written the same way: the fields (the state of

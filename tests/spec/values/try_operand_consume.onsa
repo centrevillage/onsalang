@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2"]
+
+// S-784, S-786, S-790 (§9.1, §5.2): "`?` の被演算子は消費する位置で、`move self` のメソッドの受け手と同じく印を書か
+// ない（§5.2）。場所の被演算子は §5.2 の消費の規則に従う: 所有の Affine の場所は移って以後使えず（E0704）、Affine
+// のフィールドの経路は根の全体を消費し、… Dup の場所は複製する。… 場所でない被演算子（`f()?`）は一時の値を消費する". The
+// operand of a postfix `?` takes no `move`: an owned Affine place (a `move` parameter, a local, a binding of an
+// owned heading) is moved by the `?`, a Dup place is copied (so it can be used again), a value that is not a
+// place (a call) is consumed. A block or an `if` that is the operand takes no mark on the tails either, as at the
+// place of a return value. The marks that may be written there (S-790) and the argument of a call that is a
+// `?` are in values/try_operand_consume_marks.onsa; the uses after the `?` that are errors, and the places
+// that cannot be moved, are in negative/try_operand_consume.onsa. Every binding is read. No diagnostic is
+// expected anywhere in this file.
+
+pub fn mk() -> Result[Buf[F32], U32] uses {Alloc} {
+  Ok(Buf.zeroed(2))
+}
+
+pub fn mk_some() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+// ------------------------------------------------------------------- an owned Affine place
+
+pub fn owned_parameter(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let b = r?
+  Ok(b.len())
+}
+
+pub fn owned_local() -> Result[U32, U32] uses {Alloc} {
+  let r = mk()
+  let b = r?
+  Ok(b.len())
+}
+
+pub fn owned_var() -> Result[U32, U32] uses {Alloc} {
+  var r = mk()
+  r = mk()
+  let b = r?
+  Ok(b.len())
+}
+
+pub fn option_of_an_owned_place(move o: Option[Buf[F32]]) -> Option[U32] uses {Alloc} {
+  let b = o?
+  Some(b.len())
+}
+
+pub fn as_a_tail(move r: Result[Buf[F32], U32]) -> Result[Buf[F32], U32] uses {Alloc} {
+  Ok(r?)
+}
+
+pub fn element_of_an_owned_heading() -> Result[U32, U32] uses {Alloc} {
+  var n: U32 = 0
+  for r in [mk(), mk()] {
+    let b = r?
+    n = n + b.len()
+  }
+  Ok(n)
+}
+
+// ------------------------------------------------------------- a value that is not a place
+
+pub fn call_result() -> Result[U32, U32] uses {Alloc} {
+  let b = mk()?
+  Ok(b.len())
+}
+
+// ------------------------------------------------------------------------ a Dup place
+
+pub fn copy_value_is_copied(r: Result[U32, U32]) -> Result[U32, U32] {
+  let a = r?
+  let b = r?
+  Ok(a + b)
+}
+
+pub fn option_copy_value(o: Option[U32]) -> Option[U32] {
+  let a = o?
+  Some(a + o?)
+}
+
+// ------------------------------------------------- blocks and ifs without a mark
+
+pub fn if_without_marks(c: Bool, move r: Result[Buf[F32], U32], move s: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  let b = (if c { r } else { s })?
+  Ok(b.len())
+}

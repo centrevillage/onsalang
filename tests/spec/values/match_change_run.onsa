@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§5.4"]
+
+// S-42, R-118 (§7: "腕の本体では `x` を変更できる … Copy の束縛は束縛した時点の値なので、そのまま使える。… 異なるフィールドは重ならない"),
+// run in the interpreter: the change of the subject in the body of an arm is allowed, the Copy binding of the arm keeps the value
+// of the time it was bound, the binding of an arm that is not Copy is usable as long as the change is of another field or comes
+// after its last use, and the transition of a state (`self.stage = ...` in the arm of `match self.stage`) is written in the arm.
+// The errors of the uses after an overlapping change are in negative/match_change_after_use.onsa.
+
+pub enum Stage {
+  Attack,
+  Decay,
+  Done,
+}
+
+pub struct Env {
+  stage: Stage,
+  level: U32,
+  buf: Option[Buf[F32]],
+}
+
+impl Env {
+  pub fn step(inout self) -> U32 {
+    match self.stage {
+      Stage.Attack => {
+        self.stage = Stage.Decay
+        self.level = self.level + 10
+      },
+      Stage.Decay => {
+        self.stage = Stage.Done
+        self.level = self.level + 1
+      },
+      Stage.Done => {},
+    }
+    self.level
+  }
+
+  pub fn len_then_clear(inout self) -> U32 {
+    match self.buf {
+      Some(b) => {
+        let n = b.len()
+        self.buf = None
+        n
+      },
+      None => 0,
+    }
+  }
+
+  pub fn len_with_another_field_changed(inout self) -> U32 {
+    match self.buf {
+      Some(b) => {
+        self.level = self.level + 100
+        b.len() + self.level
+      },
+      None => 0,
+    }
+  }
+}
+
+fn copy_binding_keeps_the_value(inout o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => {
+      o = None
+      n
+    },
+    None => 0,
+  }
+}
+
+fn copy_derived_keeps_the_value(inout o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => {
+      let m = n
+      o = Some(m + 1)
+      m + n
+    },
+    None => 0,
+  }
+}
+
+test "the copy binding of an arm keeps the value after the subject is changed" {
+  var o: Option[U32] = Some(4)
+  assert copy_binding_keeps_the_value(inout o) == 4
+  assert o.is_none()
+  var p: Option[U32] = Some(5)
+  assert copy_derived_keeps_the_value(inout p) == 10
+  assert p.unwrap() == 6
+}
+
+test "the transition of a stage is written in the arm of the match on it" {
+  var e = Env { stage: Stage.Attack, level: 0, buf: None }
+  assert e.step!() == 10
+  assert e.step!() == 11
+  assert e.step!() == 11
+}
+
+test "a binding that is not Copy is usable when another field is changed or the change comes after the last use" {
+  var e = Env { stage: Stage.Done, level: 1, buf: Some(Buf.zeroed(3)) }
+  assert e.len_with_another_field_changed!() == 104
+  assert e.len_then_clear!() == 3
+  assert e.len_then_clear!() == 0
+}

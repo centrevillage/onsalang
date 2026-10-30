@@ -8,7 +8,7 @@
 // is copied into the parameter, and §5.2 has no mark for it ("`move` 引数に渡す Dup 値（Copy、Shared、
 // 関数値の変数）には `move` を書かず（`tk(n)`、`ts(s)`、`ap(f)`）、その場で複製して渡す"). The calls
 // are written without a mark. Today a call of a `move` parameter of Copy type is an E0703 that asks
-// for the mark (the old rule that S-609 reversed), so this file waits for the work W4-09.
+// for the mark (the old rule that S-609 reversed), so this file waits for the work W4-07 (S-609).
 
 pub fn incremented(move x: I32) -> I32 {
   x = x + 1

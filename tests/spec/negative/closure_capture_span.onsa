@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// R-331, S-217 (§5.3, §5.4): a second-class value is not captured. §5.3 puts a `Span` "引数の位置にだけ" (the
+// planar array of `Span` too), and §5.4 says the bound name of a `Span` "第二級のまま（返す・保存する・捕捉する・
+// `move` の引数へ渡すと E0710）". So a `Span` parameter that is not bound is captured as an E0710 as well (an
+// anonymous function is not an argument position), and so is the name of a `let`, a `for` or a `match` arm that
+// binds a `Span`. The error is at the first read in the closure. The capture of the name of a view
+// (`let half = xs.slice(0, n)`) is in negative/binding_view_captured.onsa and that of the element of a planar
+// argument in negative/binding_span_let.onsa (both wait for W4-07 with these). What a closure reads out of a
+// `Span` before it is made (`let n = xs.len()` outside, then `n` captured) is a Copy value and passes. The
+// closures are on one line (P-01, one error per item).
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn apply_f(f: fn(U32) -> F32) -> F32 {
+  f.(1)
+}
+
+// ------------------------------------------------------------ a `Span` that is not bound
+
+pub fn span_parameter(xs: Span[F32]) -> U32 {
+  apply(fn(n) { xs.len() + n }) //~ E0710
+}
+
+pub fn span_parameter_element(xs: Span[F32]) -> F32 {
+  apply_f(fn(n) { xs[0] }) //~ E0710
+}
+
+pub fn span_parameter_of_bytes(xs: Span[U8]) -> U32 {
+  apply(fn(n) { xs.len() + n }) //~ E0710
+}
+
+pub fn planar_parameter(input: [Span[F32]; 2]) -> U32 {
+  apply(fn(n) { input[0].len() + n }) //~ E0710
+}
+
+pub fn captured_in_a_loop(xs: Span[F32], count: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< count {
+    total = total + apply(fn(n) { xs.len() + n + i }) //~ E0710
+  }
+  total
+}
+
+// ------------------------------------------------------------- the bound name of a `Span`
+
+pub fn let_of_a_span(xs: Span[F32]) -> U32 {
+  let s = xs
+  apply(fn(n) { s.len() + n }) //~ E0710
+}
+
+pub fn for_over_a_planar_argument(input: [Span[F32]; 2]) -> U32 {
+  var total: U32 = 0
+  for ch in input {
+    total = total + apply(fn(n) { ch.len() + n }) //~ E0710
+  }
+  total
+}
+
+// The controls: the length read before the closure is a `U32`, and the closure may read what it is given.
+
+pub fn length_read_outside(xs: Span[F32]) -> U32 {
+  let len = xs.len()
+  apply(fn(n) { len + n })
+}
+
+pub fn length_of_a_planar_element_read_outside(input: [Span[F32]; 2]) -> U32 {
+  let len = input[0].len()
+  apply(fn(n) { len + n })
+}
+
+pub fn span_not_named_in_the_closure(xs: Span[F32]) -> U32 {
+  apply(fn(n) { n + 1 }) + xs.len()
+}

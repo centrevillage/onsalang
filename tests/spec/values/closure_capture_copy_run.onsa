@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.6"]
+
+// §5.3 (the row of a capturing closure): "外側の値をコピーで捕捉する無名関数" (`array.from_fn(fn(i) { k * i })`),
+// run in the interpreter: the closure reads the value that it captured, the copy at the time of the call (the
+// `var` changed after the call does not change what was built), and a closure inside a closure reads the
+// parameter of the outer one. The check of the same shapes with more kinds of Copy values is
+// values/closure_capture_copy.onsa (this version runs an anonymous function only as the argument of
+// `array.from_fn`).
+
+use std.array
+
+pub struct Gain {
+  a: U32,
+  b: U32,
+}
+
+pub enum Mode {
+  Low,
+  High,
+}
+
+test "a scalar and a var are captured by copy" {
+  let k: U32 = 3
+  var m: U32 = 4
+  m = m + 1
+  let ys: [U32; 2] = array.from_fn(fn(i) { i + k + m })
+  m = 100
+  assert ys[0] == 8
+  assert ys[1] == 9
+  assert m == 100
+}
+
+test "a Copy struct, a tuple and an array" {
+  let g                   = Gain { a: 2, b: 5 }
+  let t: (U32, U32)       = (7, 8)
+  let xs: [U32; 3]        = [10, 20, 30]
+  let by_struct: [U32; 2] = array.from_fn(fn(i) { i + g.a + g.b })
+  let by_tuple: [U32; 2]  = array.from_fn(fn(i) { i + t.0 + t.1 })
+  let by_array: [U32; 2]  = array.from_fn(fn(i) { xs[i] + xs[2] })
+  assert by_struct[1] == 8
+  assert by_tuple[0] == 15
+  assert by_array[1] == 50
+}
+
+test "a Copy enum is matched in the closure" {
+  let md = Mode.High
+  let ys: [U32; 2] = array.from_fn(fn(i) {
+    let add = match md {
+      Mode.Low => 0,
+      Mode.High => 100,
+    }
+    i + add
+  })
+  assert ys[0] == 100
+  assert ys[1] == 101
+}
+
+test "a closure in a closure reads the parameter of the outer one" {
+  let k: U32 = 3
+  let ys: [U32; 2] = array.from_fn(fn(i) {
+    let zs: [U32; 2] = array.from_fn(fn(j) { i * 10 + j + k })
+    zs[1]
+  })
+  assert ys[0] == 4
+  assert ys[1] == 14
+}

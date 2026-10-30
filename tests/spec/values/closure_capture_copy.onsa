@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§4.6", "§5.2"]
+
+// §5.3 (the row of a capturing closure): "外側の値をコピーで捕捉する無名関数。捕捉した値は読み取り専用で、...
+// 既定のモードの関数型の引数（§5.2）に渡せる". A value of a Copy type is captured by copy and read in the
+// anonymous function, whatever its binding: a scalar, a Copy struct, tuple, array and enum, a function value
+// without a capture (Copy, §4.6), a `T: Copy` value, a `var`, a borrowed parameter, a `move` parameter of a Copy
+// type, `self` of a Copy type, the value read out of an Affine or Shared one before the closure, the parameter
+// of an anonymous function that holds it (a closure in a closure) and the index of a loop. Checked only; the
+// run of the same closures is values/closure_capture_copy_run.onsa (this version runs an anonymous function
+// only as the argument of `array.from_fn`). The errors of the values that are not captured (`inout`, Affine,
+// Shared, `Span`) are in negative/closure_capture_inout_affine.onsa, closure_capture_shared.onsa and
+// closure_capture_span.onsa, and the writes in negative/closure_capture_write.onsa.
+
+pub struct Gain {
+  a: I32,
+  b: I32,
+}
+
+pub enum Mode {
+  Low,
+  High,
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  k: I32,
+}
+
+impl Gain {
+  pub fn plus(self, x: I32) -> I32 {
+    apply(fn(n) { n + self.a + x })
+  }
+}
+
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+pub fn apply_u(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn twice(x: I32) -> I32 {
+  x * 2
+}
+
+pub fn tag[T: Copy](x: T) -> I32 {
+  1
+}
+
+pub fn scalar(k: I32) -> I32 {
+  apply(fn(n) { n + k })
+}
+
+pub fn move_parameter(move k: I32) -> I32 {
+  apply(fn(n) { n + k })
+}
+
+pub fn a_var(k: I32) -> I32 {
+  var m = k
+  m = m + 1
+  apply(fn(n) { n + m })
+}
+
+pub fn copy_aggregates(g: Gain, t: (I32, I32), xs: [I32; 3]) -> I32 {
+  apply(fn(n) { n + g.a + g.b + t.0 + t.1 + xs[0] + xs[2] })
+}
+
+pub fn a_copy_enum(md: Mode) -> I32 {
+  apply(fn(n) {
+    let add = match md {
+      Mode.Low => 0,
+      Mode.High => 100,
+    }
+    n + add
+  })
+}
+
+pub fn a_function_value() -> I32 {
+  let f = twice
+  apply(fn(n) { f.(n) + 1 })
+}
+
+pub fn a_copy_bound[T: Copy](x: T, k: I32) -> I32 {
+  apply(fn(n) { n + k + tag(x) })
+}
+
+pub fn read_out_of_an_affine_value(h: Holder) -> I32 {
+  let k = h.k
+  apply(fn(n) { n + k })
+}
+
+pub fn the_length_of_a_buffer(h: Holder) -> U32 {
+  let len = h.buf.len()
+  apply_u(fn(n) { n + len })
+}
+
+pub fn nested(k: I32) -> I32 {
+  apply(fn(n) { apply(fn(m) { m + n + k }) })
+}
+
+pub fn a_loop_index(count: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< count {
+    total = total + apply_u(fn(n) { n + i })
+  }
+  total
+}

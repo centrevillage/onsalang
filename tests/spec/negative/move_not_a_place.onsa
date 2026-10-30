@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2"]
+
+// R-198, S-609 (§5.2): "`move` の被演算子は場所（局所の変数と、そのフィールド・添字の経路。括弧で囲んだ場所は中身と
+// 同じ）で、場所でない値（呼び出しの結果、リテラル、定数、関数の項目の名前、ブロック、`if`・`match`）に付けると、位置
+// によらず E0711 である". The operand of a `move` that is not a place is an E0711 in an argument as it is in
+// a `let` (`eat(move if c { … } else { … })` is the same error as `let z = move if …`), whatever the
+// value is: a call, a literal, a constant, the name of a function, a block, an `if`, a `match`. A value
+// that is not a place is passed without the mark (values/move_dup_args.onsa: `take(Buf.zeroed(4))`). The
+// arms of the `if`, `match` and the block are new values in most of the functions, and variables in the two
+// that are the form of the issue R-198 (`eat(move if c { x } else { y })`); the error is the `move`
+// of the operand. The candidates of the repair (the `move` moved to the tails, or removed) are not
+// counted here: they are
+// the work W4-09. One error per function (P-01).
+
+pub const LIMIT: U32 = 4
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn tk(move n: U32) -> U32 {
+  n
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn ap(move f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+// ------------------------------------------------------------------- the argument
+
+pub fn call_result() uses {Alloc} {
+  eat(move mk()) //~ E0711
+}
+
+pub fn if_of_new_values(c: Bool) uses {Alloc} {
+  eat(move if c { mk() } else { Buf.zeroed(1) }) //~ E0711
+}
+
+pub fn match_of_new_values(c: Bool) uses {Alloc} {
+  eat(move match c { //~ E0711
+    true => mk(),
+    false => Buf.zeroed(1),
+  })
+}
+
+pub fn block_of_a_new_value() uses {Alloc} {
+  eat(move { mk() }) //~ E0711
+}
+
+pub fn if_of_variables(c: Bool, move x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  eat(move if c { x } else { y }) //~ E0711
+}
+
+pub fn block_of_a_variable(move x: Buf[F32]) uses {Alloc} {
+  eat(move { x }) //~ E0711
+}
+
+pub fn try_result(move r: Result[Buf[F32], U32]) -> Result[U32, U32] uses {Alloc} {
+  Ok(len_of(move r?)) //~ E0711
+}
+
+pub fn len_of(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn literal() -> U32 {
+  tk(move 1) //~ E0711
+}
+
+pub fn constant() -> U32 {
+  tk(move LIMIT) //~ E0711
+}
+
+pub fn function_name() -> I32 {
+  ap(move inc) //~ E0711
+}
+
+// ---------------------------------------------------------------------- a let
+
+pub fn call_result_in_a_let() -> U32 uses {Alloc} {
+  let y = move mk() //~ E0711
+  y.len()
+}
+
+pub fn if_in_a_let(c: Bool) -> U32 uses {Alloc} {
+  let y = move if c { mk() } else { Buf.zeroed(1) } //~ E0711
+  y.len()
+}
+
+pub fn constant_in_a_let() -> U32 {
+  let y = move LIMIT //~ E0711
+  y
+}

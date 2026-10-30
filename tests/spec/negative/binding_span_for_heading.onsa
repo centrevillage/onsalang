@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// S-217 (§5.3, §5.4): "`inout` 引数からの `Span` … は束縛できず、束縛の場所に置いた値の位置で E0710". The
+// heading of a `for` binds a `Span` of the planar argument, so a `for s in xs` over an `inout`
+// planar argument (`xs: inout [Span[F32]; 2]`) is an E0710 at the heading, as the `match` of
+// negative/binding_span_heading.onsa is. The same `for` over a borrowed argument is legal
+// (values/binding_span_planes.onsa). Split from negative/binding_span_heading.onsa: today the `for` is
+// not reported (the old modes stage sees the heading as an argument position), where the `match` is. One
+// error per function (P-01).
+
+pub fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+pub fn sum(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn read_the_element(inout xs: [Span[F32]; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs { //~ E0710
+    n = n + s.len()
+  }
+  n
+}
+
+pub fn pass_the_element_on(inout xs: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for s in xs { //~ E0710
+    total = total + sum(s)
+  }
+  total
+}
+
+pub fn in_a_branch(inout xs: [Span[F32]; 2], c: Bool) -> U32 {
+  var n: U32 = 0
+  if c {
+    for s in xs { //~ E0710
+      n = n + s.len()
+    }
+  }
+  n
+}
+
+pub fn the_planar_argument_is_still_usable(inout xs: [Span[F32]; 2]) {
+  clear(inout xs[0])
+  xs[1].fill!(1.0)
+}

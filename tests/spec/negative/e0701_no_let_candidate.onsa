@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.3", "§5.4", "§18.1"]
+// fixes = 0
+
+// R-161, R-25 (§5.1: "E0701 は宣言を `var` にする"; §5.3: "捕捉した値は読み取り専用で、代入すると E0701"; §18.1: a candidate is
+// given only where the writer's intent is one and the file is right after it): the writes to a place that cannot be changed
+// whose fix is not "turn the `let` into `var`" have no candidate. A destructuring `let` (the `var` would not be a
+// destructuring of the same names), the binding of a `for` or of a `match` arm (it is not a `let`), a value that a closure
+// captured (the write is wrong whatever the binding is, §5.3), a `let` of a borrowed Affine value (the `var` would consume
+// a value that is not owned: an E0711 in the same stage), a second-class binding (a `Span` cannot be a `var`, §5.4), and a
+// `let` from which another binding is derived and used after the write (the `var` would make that use an E0704, §7). The
+// `fixes = 0` says there is none. Each function holds the one write; one error per function (P-01).
+
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+// ---- not a `let` that is a binding of a value ----
+
+pub fn tuple_destructure(t: (U32, U32)) -> U32 {
+  let (a, n) = t
+  a = 3                          //~ E0701
+  a + n
+}
+
+pub fn struct_destructure(p: P) -> U32 {
+  let P { x: a, y: b } = p
+  b = 3                          //~ E0701
+  a + b
+}
+
+pub fn for_binding(xs: [U32; 2]) -> U32 {
+  var t: U32 = 0
+  for x in xs {
+    x = 1                        //~ E0701
+    t = t + x
+  }
+  t
+}
+
+pub fn match_binding(o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => {
+      n = 1                      //~ E0701
+      n
+    },
+    None => 0,
+  }
+}
+
+// ---- the write is wrong whatever the binding is ----
+
+pub fn captured_let(k: U32) -> U32 {
+  let y = k
+  apply(fn(n) {
+    y = 1                        //~ E0701
+    n + y
+  })
+}
+
+pub fn captured_var(k: U32) -> U32 {
+  var y = k
+  y = y + 1
+  apply(fn(n) {
+    y = 2                        //~ E0701
+    n + y
+  })
+}
+
+pub fn captured_move_parameter(move y: U32) -> U32 {
+  apply(fn(n) {
+    y = 3                        //~ E0701
+    n + y
+  })
+}
+
+// ---- the `var` would be an error of the same stage ----
+
+pub fn borrowed_affine(b: Buf[F32]) -> F32 uses {Alloc} {
+  let c = b
+  c[0] = 1.0                     //~ E0701
+  c[0]
+}
+
+pub fn borrowed_affine_field(p: (Buf[F32], U32)) -> F32 uses {Alloc} {
+  let c = p.0
+  c[0] = 1.0                     //~ E0701
+  c[0]
+}
+
+pub fn span_binding(xs: [Span[F32]; 2]) {
+  let ch = xs[0]
+  ch[0] = 1.0                    //~ E0701
+}
+
+pub fn derived_binding_used_after() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    Some(b) => {
+      o = None                   //~ E0701
+      len_of(b)
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_binding_chain() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    Some(b) => {
+      let c = b
+      o = None                   //~ E0701
+      len_of(c)
+    },
+    None => 0,
+  }
+}

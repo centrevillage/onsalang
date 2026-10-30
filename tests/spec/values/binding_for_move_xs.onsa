@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.4", "§5.2", "§7"]
+
+// R-29 (§5.4): `for s in move xs` consumes `xs`, and the binding of the loop is an owned value of each
+// iteration: "`for s in move xs`: 所有。`xs` を消費する。要素ごとに破棄が起きる". The element can be
+// moved on in the body (a new element is bound by each iteration), the moves are counted from the
+// consumption of `xs`, and the loop can be nested in a branch, a loop or an arm. A `Dup` array is
+// copied by the mark (`let y = move s` is a copy, §5.2), so it stays usable. Every binding is read or
+// moved (a binding never read is an E0309). The uses after the loop that are errors are in
+// negative/binding_for_move_xs.onsa.
+
+fn make(v: F32) -> Buf[F32] uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(1)
+  b[0] = v
+  b
+}
+
+fn value_of(move b: Buf[F32]) -> F32 uses {Alloc} {
+  b[0]
+}
+
+fn sum_of_a_parameter(move xs: [Buf[F32]; 2]) -> F32 uses {Alloc} {
+  var total: F32 = 0.0
+  for z in move xs {
+    total = total + value_of(move z)
+  }
+  total
+}
+
+fn sum_of_a_local(a: F32, b: F32) -> F32 uses {Alloc} {
+  let xs         = [make(a), make(b)]
+  var total: F32 = 0.0
+  for z in move xs {
+    total = total + value_of(move z)
+  }
+  total
+}
+
+fn sum_of_a_var(a: F32, b: F32) -> F32 uses {Alloc} {
+  var xs = [make(a), make(b)]
+  xs[0][0] = xs[0][0] + 1.0
+  var total: F32 = 0.0
+  for z in move xs {
+    total = total + value_of(move z)
+  }
+  total
+}
+
+fn read_the_element(move xs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for z in move xs {
+    n = n + z.len()
+  }
+  n
+}
+
+fn move_in_one_branch_only(move xs: [Buf[F32]; 2], c: Bool) -> F32 uses {Alloc} {
+  var total: F32 = 0.0
+  for z in move xs {
+    if c {
+      total = total + value_of(move z)
+    } else {
+      total = total + z[0] * 10.0
+    }
+  }
+  total
+}
+
+fn element_of_an_inner_value(a: F32, b: F32) -> F32 uses {Alloc} {
+  var total: F32 = 0.0
+  for z in [make(a), make(b)] {
+    let inner = [make(1.0), make(2.0)]
+    for w in move inner {
+      total = total + value_of(move w)
+    }
+    total = total + value_of(move z)
+  }
+  total
+}
+
+fn nested_in_a_loop(a: F32) -> F32 uses {Alloc} {
+  var total: F32 = 0.0
+  for _ in 0 ..< 3 {
+    let xs = [make(a), make(a)]
+    for z in move xs {
+      total = total + value_of(move z)
+    }
+  }
+  total
+}
+
+fn copy_array_stays_usable() -> U32 {
+  let xs: [U32; 3] = [1, 2, 3]
+  var n: U32       = 0
+  for x in move xs {
+    n = n + x
+  }
+  n + xs.len()
+}
+
+test "the element of a for over a moved array is moved on in the body" {
+  assert sum_of_a_parameter([make(1.0), make(2.0)]) == 3.0
+  assert sum_of_a_local(2.0, 3.0) == 5.0
+  assert sum_of_a_var(2.0, 3.0) == 6.0
+}
+
+test "the element can be read in the body" {
+  assert read_the_element([make(1.0), make(2.0)]) == 2
+}
+
+test "the element is moved in one branch and read in the other" {
+  assert move_in_one_branch_only([make(1.0), make(2.0)], true) == 3.0
+  assert move_in_one_branch_only([make(1.0), make(2.0)], false) == 30.0
+}
+
+test "the loops can be nested, and the consumed value is the one of each iteration" {
+  assert element_of_an_inner_value(1.0, 2.0) == 9.0
+  assert nested_in_a_loop(1.0) == 6.0
+}
+
+test "a Dup array stays usable after the loop that moves it" {
+  assert copy_array_stays_usable() == 9
+}

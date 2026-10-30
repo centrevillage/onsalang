@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§7"]
+
+// R-29 (§5.4, §5.2): the other side of values/binding_for_move_xs.onsa. `for s in move xs` consumes
+// `xs`, so the uses of `xs` after the head are E0704 ("`xs` を消費する"), the loop variable is a
+// value of each iteration that the body moves once (a second move, a read after the move, and a move
+// in a loop nested in the body are E0704), and `xs` has to be owned to be consumed: a borrowed
+// binding (a borrowed argument, an `inout` argument, a binding derived from them) and a value that is
+// not a place cannot be moved ("Affine 値は所有していなければ `move` で渡せない", E0711, no
+// candidate for a borrowed place). The error is at the use or at the `move`. One error per function
+// (P-01).
+
+pub fn make_array() -> [Buf[F32]; 2] uses {Alloc} {
+  [Buf.zeroed(1), Buf.zeroed(2)]
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+// ------------------------------------------------------------------- uses of the array
+
+pub fn read_after_the_loop(move xs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  for z in move xs {
+    take(move z)
+  }
+  xs[0].len() //~ E0704
+}
+
+pub fn read_in_the_body(move xs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for z in move xs {
+    n = n + xs.len() //~ E0704
+    take(move z)
+  }
+  n
+}
+
+pub fn consumed_by_the_head_of_a_local() -> U32 uses {Alloc} {
+  let xs = make_array()
+  for z in move xs {
+    take(move z)
+  }
+  len_of(xs[1]) //~ E0704
+}
+
+pub fn consumed_in_a_branch(move xs: [Buf[F32]; 2], c: Bool) -> U32 uses {Alloc} {
+  if c {
+    for z in move xs {
+      take(move z)
+    }
+  }
+  xs.len() //~ E0704
+}
+
+pub fn consumed_twice(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in move xs {
+    take(move z)
+  }
+  for y in move xs { //~ E0704
+    take(move y)
+  }
+}
+
+// ---------------------------------------------------------------- uses of the element
+
+pub fn element_moved_twice(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in move xs {
+    take(move z)
+    take(move z) //~ E0704
+  }
+}
+
+pub fn element_read_after_the_move(move xs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for z in move xs {
+    take(move z)
+    n = n + len_of(z) //~ E0704
+  }
+  n
+}
+
+pub fn element_moved_in_an_inner_loop(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in move xs {
+    for _ in 0 ..< 2 {
+      take(move z) //~ E0704
+    }
+  }
+}
+
+// ----------------------------------------------------------------- not an owned place
+
+pub fn borrowed_argument(xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in move xs { //~ E0711
+    take(move z)
+  }
+}
+
+pub fn inout_argument(inout xs: [Buf[F32]; 2]) uses {Alloc} {
+  for z in move xs { //~ E0711
+    take(move z)
+  }
+}
+
+pub fn borrowed_binding(xs: [Buf[F32]; 2]) uses {Alloc} {
+  let ys = xs
+  for z in move ys { //~ E0711
+    take(move z)
+  }
+}
+
+pub fn not_a_place() uses {Alloc} {
+  for z in move make_array() { //~ E0711
+    take(move z)
+  }
+}

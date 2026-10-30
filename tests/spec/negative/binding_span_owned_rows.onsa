@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4"]
+
+// S-217, R-325 (§5.3, §5.4): the `Span`s that are put in a literal that a binding takes are an owned
+// row, and "所有の行の `Span` … は束縛できず、束縛の場所に置いた値の位置で E0710" (the form `let (l, r) =
+// (xs[0], xs[1])` is in negative/binding_span_let.onsa, `move xs[0]` in negative/binding_view_span.onsa):
+// the value of a constructor (`Some(s)`), of a tuple and of an array, with a `Span` argument or an element
+// of a planar argument in it, when it is the initializer of a `let` or a `var`, and the value `s` of
+// an `inout` `Span` (`let k = s`). "第二級の値（§5.3）を要素に持つ形は E0710" (§5.4). The error is at the
+// value that is put at the place of the binding. A literal at the place of an argument is not a
+// binding (values/binding_span_planes.onsa). One error per function (P-01).
+
+pub fn sum(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn constructor_of_an_inout_span(inout s: Span[F32]) -> U32 {
+  let k = Some(s) //~ E0710
+  match k {
+    Some(v) => v.len(),
+    None => 0,
+  }
+}
+
+pub fn constructor_of_a_borrowed_span(s: Span[F32]) -> U32 {
+  let k = Some(s) //~ E0710
+  match k {
+    Some(v) => v.len(),
+    None => 0,
+  }
+}
+
+pub fn bound_inout_span(inout s: Span[F32]) -> U32 {
+  let k = s //~ E0710
+  k.len()
+}
+
+pub fn tuple_of_a_span(s: Span[F32]) -> F32 {
+  let t = (s, 1) //~ E0710
+  sum(t.0)
+}
+
+pub fn array_of_the_elements(xs: [Span[F32]; 2]) -> F32 {
+  let t = [xs[0], xs[1]] //~ E0710
+  sum(t[0])
+}
+
+pub fn var_of_a_tuple(xs: [Span[F32]; 2]) -> F32 {
+  var t = (xs[0], xs[1]) //~ E0710
+  sum(t.0)
+}
+
+pub fn constructor_of_an_element(xs: [Span[F32]; 2]) -> U32 {
+  let k = Some(xs[0]) //~ E0710
+  match k {
+    Some(v) => v.len(),
+    None => 0,
+  }
+}
+
+// -------------------------------------------------------------------------- the contrasts
+
+pub fn borrowed_span_as_a_binding(s: Span[F32]) -> U32 {
+  let k = s
+  k.len()
+}
+
+pub fn borrowed_element_as_a_binding(xs: [Span[F32]; 2]) -> F32 {
+  let k = xs[1]
+  sum(k)
+}

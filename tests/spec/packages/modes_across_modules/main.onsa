@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§15.1"]
+
+// S-791, S-785, W4-07 U3 (§5.2, §15.1): the modes of the callee are the ones of its declaration, whichever module the declaration
+// is in. A method or a function of another module (`make()`, `r.clear()`) needs the mark of its mode, an `inout self`
+// method has the `!`, a `move self` method moves its receiver (a later use is E0704, a borrowed receiver E0711), and a borrowed
+// Affine value is not passed to a `move` parameter (E0711). One error per function (P-01).
+use rack.{Rack, bump, make, read, take}
+
+pub fn method_without_bang(inout r: Rack) {
+  r.clear()                      //~ E0713
+}
+
+pub fn bang_on_a_borrowed_method(r: Rack) -> U32 {
+  r.peek!()                      //~ E0714
+}
+
+pub fn bang_on_a_function() -> U32 {
+  read!(1)                       //~ E0714
+}
+
+pub fn function_without_inout() -> U32 {
+  var n: U32 = 1
+  bump(n)                        //~ E0703
+  n
+}
+
+pub fn borrowed_with_inout() -> U32 {
+  var n: U32 = 1
+  read(inout n)                  //~ E0703
+}
+
+pub fn move_self_then_read(move r: Rack) -> U32 uses {Alloc} {
+  let k = r.eat()
+  k + r.peek()                   //~ E0704
+}
+
+pub fn move_self_of_a_borrowed(r: Rack) -> U32 uses {Alloc} {
+  r.eat()                        //~ E0711
+}
+
+pub fn borrowed_affine_to_a_move_param(b: Buf[F32]) -> U32 uses {Alloc} {
+  take(b)                        //~ E0711
+}
+
+pub fn right(move r: Rack) -> U32 uses {Alloc} {
+  var n: U32 = 1
+  bump(inout n)
+  r.clear!()
+  let k = read(n) + r.peek()
+  k + r.eat() + make().eat()
+}

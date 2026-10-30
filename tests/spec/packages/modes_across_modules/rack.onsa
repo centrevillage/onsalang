@@ -1,0 +1,34 @@
+pub struct Rack {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl Rack {
+  pub fn clear(inout self) {
+    self.n = 0
+  }
+
+  pub fn peek(self) -> U32 {
+    self.n
+  }
+
+  pub fn eat(move self) -> U32 uses {Alloc} {
+    self.buf.len()
+  }
+}
+
+pub fn make() -> Rack uses {Alloc} {
+  Rack { buf: Buf.zeroed(2), n: 1 }
+}
+
+pub fn bump(inout n: U32) {
+  n = n + 1
+}
+
+pub fn read(n: U32) -> U32 {
+  n
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}

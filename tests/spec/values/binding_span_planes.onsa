@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§5.2"]
+
+// S-217, R-325 (§5.3, §5.4): a literal of an array of `Span`s at the place of an argument, "別々の変数にあるときは
+// `[a, b]` … と配列リテラルを引数の位置にだけ書け（要素の種類と長さは揃っていなくてよい…）", takes its elements
+// as arguments: a `Span` argument, a part of a view, an element of a planar argument, and a local `Buf` (the elements
+// are at the same place as the argument, not in a row of a binding), for a function and for a method of an
+// instance. The elements of one literal are of one kind here (a literal of different kinds is the work W4-08,
+// S-196, with `inout [a, b]`). Iterating a planar argument binds a borrowed `Span` (`for ch in input`), and
+// iterating the elements of an `inout` `Span` binds numbers, not a `Span`. Every binding is read. No
+// diagnostic is expected anywhere in this file. The literals that are stored or bound are E0710
+// (negative/binding_span_owned_rows.onsa), the `Span` of a `match` arm is in
+// values/binding_span_match_arm.onsa, and the bindings from an `inout` argument are in
+// negative/binding_span_heading.onsa.
+
+pub struct Mixer {
+  gain: F32,
+}
+
+impl Mixer {
+  pub fn total(self, xs: [Span[F32]; 2]) -> F32 {
+    self.gain * (xs[0][0] + xs[1][0])
+  }
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+// ------------------------------------------------------------------ the literal as an argument
+
+pub fn from_span_arguments(a: Span[F32], b: Span[F32]) -> F32 {
+  planes([a, b])
+}
+
+pub fn from_views(a: Span[F32], b: Span[F32]) -> F32 {
+  planes([a.slice(0, 1), b.slice(1, 2)])
+}
+
+pub fn from_local_buffers() -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  planes([a, b])
+}
+
+pub fn from_the_element_of_a_planar_argument(xs: [Span[F32]; 3]) -> F32 {
+  planes([xs[0], xs[2]])
+}
+
+pub fn passed_on_from_a_planar_argument(xs: [Span[F32]; 2]) -> F32 {
+  planes(xs)
+}
+
+// ----------------------------------------------------------------- the same for a method
+
+pub fn method_from_span_arguments(m: Mixer, a: Span[F32], b: Span[F32]) -> F32 {
+  m.total([a, b])
+}
+
+pub fn method_from_local_buffers(m: Mixer) -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  m.total([a, b])
+}
+
+pub fn method_of_a_field(m: Mixer, a: Span[F32], b: Span[F32]) -> F32 {
+  m.total([a.slice(0, 1), b])
+}
+
+// ------------------------------------------------------------------ for over the argument
+
+pub fn for_over_a_planar_argument(input: [Span[F32]; 2]) -> F32 {
+  var total: F32 = 0.0
+  for ch in input {
+    total = total + ch[0]
+  }
+  total
+}
+
+pub fn for_over_the_numbers_of_an_inout_span(inout xs: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for v in xs {
+    total = total + v
+  }
+  total
+}

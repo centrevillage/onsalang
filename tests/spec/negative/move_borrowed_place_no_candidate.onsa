@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// S-609, R-117 (§5.2, §5.4): "Affine 値は所有していなければ `move` で渡せない。借用引数、借用束縛、`inout` 引数は所有
+// していない。その場所を `move` 引数に置くと、印の有無によらず修正候補の無い E0711 である（`take(a)`、`take(if c { a }
+// else { b })`。直すのは引数のモードか呼ぶ側で、誤りの位置から離れる）". The place that is borrowed or an `inout`
+// argument is put at a `move` argument as the tail of an `if`, a `match` or a block, with the mark and
+// without it, and an `inout` argument without the mark: the error is E0711 and has no candidate
+// (`fixes = 0`). A tail that is a new value is not an error, and the other tail is the one with the
+// error. The direct forms (`take(a)`, `take(move a)`, a field, a derived binding, the element of a `for`)
+// are in negative/binding_borrow_move.onsa and negative/binding_inout_not_origin_no_candidate.onsa; they
+// are reported today, the tails are not (the old modes stage asks for the mark: E0703 with a candidate).
+// One error per function (P-01).
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+// ---------------------------------------------------------------------- tails
+
+pub fn tail_of_an_if_without_the_mark(c: Bool, a: Buf[F32]) uses {Alloc} {
+  take(if c { a } else { Buf.zeroed(1) }) //~ E0711
+}
+
+pub fn tail_of_an_if_with_the_mark(c: Bool, a: Buf[F32]) uses {Alloc} {
+  take(if c { move a } else { Buf.zeroed(1) }) //~ E0711
+}
+
+pub fn tail_of_the_else(c: Bool, a: Buf[F32]) uses {Alloc} {
+  take(if c { Buf.zeroed(1) } else { a }) //~ E0711
+}
+
+pub fn tail_of_a_match(c: Bool, a: Buf[F32]) uses {Alloc} {
+  take(match c {
+    true => a, //~ E0711
+    false => Buf.zeroed(1),
+  })
+}
+
+pub fn tail_of_a_block(a: Buf[F32]) uses {Alloc} {
+  take({ a }) //~ E0711
+}
+
+// ---------------------------------------------------------------------- inout
+
+pub fn inout_argument_without_the_mark(inout a: Buf[F32]) uses {Alloc} {
+  take(a) //~ E0711
+}
+
+pub fn tail_of_an_if_of_an_inout(c: Bool, inout a: Buf[F32]) uses {Alloc} {
+  take(if c { a } else { Buf.zeroed(1) }) //~ E0711
+}
+
+// ----------------------------------------------------------------- the contrasts
+
+pub fn owned_argument(move a: Buf[F32]) uses {Alloc} {
+  take(move a)
+}
+
+pub fn owned_tails(c: Bool, move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {
+  take(if c { move a } else { move b })
+}

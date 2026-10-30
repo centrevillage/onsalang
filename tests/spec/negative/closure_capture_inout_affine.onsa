@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.6", "§18.1"]
+
+// §5.3 (the row of a capturing closure): "`inout` 引数と Affine 値は捕捉できない（E0712）". An `inout` parameter,
+// and a value of an Affine type (a `Buf`, a struct that holds one, a `T: ?Dup` value) whatever its binding
+// (a local, a `move` parameter, a borrowed parameter, a field path), is E0712 where the closure reads it. The
+// order of the checks (S-722, §5.3): the `inout` parameter and the Affine value come first, so an `inout`
+// parameter of a second-class type (`Span`) is an E0712 and not an E0710. Whichever captured value is
+// named is not a promise, so one anonymous function that captures two such values has one E0712 (the two
+// reads are on one line so the mark does not depend on which is named). The error is at the line of the first
+// read of an uncapturable value. The closures are on one line (P-01, one error per item).
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn apply_f(f: fn(U32) -> F32) -> F32 {
+  f.(1)
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn peek[T: ?Dup](x: T) -> U32 {
+  1
+}
+
+// ------------------------------------------------------------------- an `inout` parameter
+
+pub fn inout_scalar(inout k: U32) -> U32 {
+  apply(fn(x) { x + k }) //~ E0712
+}
+
+pub fn inout_buffer(inout b: Buf[F32]) -> U32 {
+  apply(fn(x) { x + b.len() }) //~ E0712
+}
+
+pub fn inout_struct(inout h: Holder) -> F32 {
+  apply_f(fn(x) { h.gain }) //~ E0712
+}
+
+pub fn inout_span(inout xs: Span[F32]) -> U32 {
+  apply(fn(x) { x + xs.len() }) //~ E0712
+}
+
+// ------------------------------------------------------------------------ an Affine value
+
+pub fn local_buffer() -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  apply(fn(x) { x + b.len() }) //~ E0712
+}
+
+pub fn local_var_buffer() -> U32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  b.fill!(1.0)
+  apply(fn(x) { x + b.len() }) //~ E0712
+}
+
+pub fn move_parameter(move b: Buf[F32]) -> U32 uses {Alloc} {
+  apply(fn(x) { x + b.len() }) //~ E0712
+}
+
+pub fn borrowed_parameter(b: Buf[F32]) -> U32 {
+  apply(fn(x) { x + b.len() }) //~ E0712
+}
+
+pub fn field_path_of_an_affine_field(h: Holder) -> U32 {
+  apply(fn(x) { x + h.buf.len() }) //~ E0712
+}
+
+pub fn affine_struct_parameter(h: Holder) -> F32 {
+  apply_f(fn(x) { peek_holder(h) }) //~ E0712
+}
+
+pub fn peek_holder(h: Holder) -> F32 {
+  h.gain
+}
+
+pub fn maybe_dup_parameter[T: ?Dup](x: T) -> U32 {
+  apply(fn(n) { n + peek(x) }) //~ E0712
+}
+
+// ------------------------------------------------------------------- one per anonymous function
+
+pub fn an_inout_and_an_affine_value(inout k: U32, b: Buf[F32]) -> U32 {
+  apply(fn(x) { x + k + b.len() }) //~ E0712
+}
+
+pub fn two_affine_values(b: Buf[F32], h: Holder) -> U32 {
+  apply(fn(x) { x + b.len() + h.buf.len() }) //~ E0712
+}
+
+pub fn the_same_value_twice(inout k: U32) -> U32 {
+  apply(fn(x) { x + k + k }) //~ E0712
+}
+
+// The controls: the same shapes with a value that can be captured (a Copy parameter, a Copy value read out of
+// an Affine one before the closure).
+
+pub fn copy_parameter(k: U32) -> U32 {
+  apply(fn(x) { x + k })
+}
+
+pub fn copy_value_read_out_of_an_affine_one(h: Holder) -> F32 {
+  let gain = h.gain
+  apply_f(fn(x) { gain })
+}
