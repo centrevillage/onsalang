@@ -1,5 +1,6 @@
-//! The unit tests of the new modes stage (W4-07 U1): the flow of the moves
-//! (§5.2, §5.4, §7), from sources parsed in memory. Each runs the whole
+//! The unit tests of the new modes stage (W4-07): the flow of the moves
+//! (U1) and the table of consumption (U2a) (§5.2, §5.4, §7), from sources
+//! parsed in memory. Each runs the whole
 //! analysis (the old modes stage included), then the new `check_all`, and
 //! reads only the diagnostics it adds (review 10).
 
@@ -19,6 +20,11 @@ pub fn take_all(move xs: [Buf[F32]; 2]) uses {Alloc} {}
 pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }
 pub fn make_array() -> [Buf[F32]; 2] uses {Alloc} { [Buf.zeroed(1), Buf.zeroed(2)] }
 pub fn mko() -> Option[Buf[F32]] uses {Alloc} { Some(Buf.zeroed(1)) }
+pub struct Holder { buf: Buf[F32], n: U32 }
+pub fn tk(move n: U32) {}
+pub fn ts(move s: Str) uses {Alloc} {}
+pub fn len_of(b: Buf[F32]) -> U32 { b.len() }
+pub const K: U32 = 1
 ";
 
 /// The analysis of the one module `src`. A diagnostic of a stage before
@@ -372,7 +378,7 @@ fn nested_loops_visit_each_expression_at_most_twice() {
         let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "deep").expect("deep");
         let root = crate::body::root_of(&a, id).expect("a body");
         let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
-        let mut w = Walker::new(&a, ast, &a.names[&id], &a.bodies[&id], Vec::new());
+        let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
         w.expr(&mut Run::new(), root, Pos::Return);
         let (mut nodes, mut todo) = (0, vec![root]);
         while let Some(e) = todo.pop() {
@@ -384,4 +390,309 @@ fn nested_loops_visit_each_expression_at_most_twice() {
     let (visits, nodes, loops) = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
     assert_eq!(loops, DEPTH);
     assert!(visits <= 2 * nodes, "{visits} visits of {nodes} expressions");
+}
+
+/// A diagnostic by its code and its line, and each of its candidates by its
+/// title and that line after its edits.
+type Found = (Code, usize, Vec<(String, String)>);
+
+/// What the new stage reports for `body` after [`PRELUDE`]: each diagnostic
+/// by its code and its line in `body`, and each of its candidates by its
+/// title and that line after its edits (trimmed).
+fn fixes(body: &str) -> Vec<Found> {
+    let src = format!("{PRELUDE}{body}");
+    let (pkg, mut a) = analyzed(&src);
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    let skip = PRELUDE.matches('\n').count();
+    (a.diagnostics[before..].iter())
+        .filter(|d| d.span.file == FileId(0))
+        .map(|d| {
+            let line = src[PRELUDE.len()..d.span.start as usize].matches('\n').count() + 1;
+            let fixed = (d.fixes.iter()).map(|f| {
+                let mut text = src.clone();
+                for e in f.edits().iter().rev() {
+                    text.replace_range(e.span.start as usize..e.span.end as usize, &e.replace);
+                }
+                (f.title().to_string(), text.lines().nth(skip + line - 1).unwrap_or_default().trim().to_string())
+            });
+            (d.code, line, fixed.collect())
+        })
+        .collect()
+}
+
+/// The diagnostics of `body` with no candidate, by code and line.
+fn bare(code: Code, lines: &[usize]) -> Vec<Found> {
+    lines.iter().map(|&l| (code, l, Vec::new())).collect()
+}
+
+/// R-117, S-41: an Affine value in an `inout` parameter is not moved out
+/// (E0711, no candidate), marked or not, a path, a split, a return, a tail;
+/// a Dup one is copied. `take(b)` is U3a's (the mode of the callee).
+#[test]
+fn an_inout_parameter_is_not_moved_out() {
+    let src = "pub fn whole(inout b: Buf[F32]) uses {Alloc} {
+  let c = b
+}
+pub fn marked(inout b: Buf[F32]) uses {Alloc} {
+  let c = move b
+}
+pub fn field(inout h: Holder) uses {Alloc} {
+  let x = h.buf
+}
+pub fn split(inout p: (Buf[F32], U32)) uses {Alloc} {
+  let (a, n) = p
+}
+pub fn argument(inout b: Buf[F32]) uses {Alloc} {
+  take(move b)
+}
+pub fn returned(inout b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  b
+}
+pub fn tail(inout b: Buf[F32], k: Bool) uses {Alloc} {
+  let c = if k { b } else { mk() }
+}
+pub fn copied(inout n: U32, inout h: Holder) -> U32 {
+  let a = n
+  let m = move n
+  let k = move h.n
+  n
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0711, &[2, 5, 8, 11, 14, 17, 20]));
+}
+
+/// §5.2, §5.4: nor out of a borrow (a parameter, a borrow binding, a `for`
+/// over it, a `match move`); a Dup one is copied.
+#[test]
+fn a_borrow_is_not_moved_out() {
+    let src = "pub fn marked(b: Buf[F32]) uses {Alloc} {
+  let c = move b
+}
+pub fn derived(b: Buf[F32]) uses {Alloc} {
+  let c = b
+  take(move c)
+}
+pub fn returned(b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  b
+}
+pub fn iterated(xs: [Buf[F32]; 2]) uses {Alloc} {
+  for x in move xs {}
+}
+pub fn matched(o: Option[Buf[F32]]) uses {Alloc} {
+  match move o { Some(b) => take(move b), None => {} }
+}
+pub fn copied(n: U32, s: Str) -> U32 uses {Alloc} {
+  let m = move n
+  let t = move s
+  n
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0711, &[2, 6, 9, 12, 15]));
+}
+
+/// §5.2: an owned value is not moved out of an element (E0711), nor out of
+/// a field until W4-09 (S-85; the partial move of now), marked or not; a
+/// Dup one is copied and leaves its root.
+#[test]
+fn a_path_of_an_owned_value() {
+    let src = "pub fn element(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  let y = move xs[0]
+}
+pub fn element_unmarked(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  let y = xs[1]
+}
+pub fn field(move h: Holder) uses {Alloc} {
+  let y = move h.buf
+}
+pub fn field_returned(move h: Holder) -> Buf[F32] uses {Alloc} {
+  h.buf
+}
+pub fn copied(move h: Holder, move t: (U32, U32)) uses {Alloc} {
+  let n = h.n
+  let m = move t.0
+  take(move h.buf)
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0711, &[2, 5, 8, 11, 16]));
+}
+
+/// §5.2: a whole owned Affine local is moved where it is marked and where
+/// it is returned; unmarked at a consuming position, E0711 with the
+/// candidate that writes `move` (before the parentheses, in a tail).
+#[test]
+fn a_whole_owned_local() {
+    let src = "pub fn unmarked() uses {Alloc} {
+  let b = mk()
+  let c = b
+}
+pub fn element() -> (Buf[F32], U32) uses {Alloc} {
+  let b = mk()
+  (b, 1)
+}
+pub fn parenthesized() uses {Alloc} {
+  let b = mk()
+  var c = (b)
+}
+pub fn tail(k: Bool) uses {Alloc} {
+  let b = mk()
+  let c = if k { b } else { mk() }
+}
+pub fn moves(k: Bool) -> Buf[F32] uses {Alloc} {
+  let a = mk()
+  let b = mk()
+  let c = move a
+  if k { return move b }
+  b
+}
+";
+    let add = |l: usize, line: &str| (Code::E0711, l, vec![("add `move`".to_string(), line.to_string())]);
+    let expected = [
+        add(3, "let c = move b"),
+        add(7, "(move b, 1)"),
+        add(11, "var c = move (b)"),
+        add(15, "let c = if k { move b } else { mk() }"),
+    ];
+    let (d, moved) = seen(src);
+    assert_eq!(fixes(src), expected);
+    assert_eq!(d.len(), 4);
+    assert_eq!(moved, BTreeSet::from(["a".to_string(), "b".to_string()]));
+}
+
+/// S-609: a Dup value marked `move` on a `move` argument is E0703 with the
+/// candidate that removes the mark and its blanks (a local, a parameter, a
+/// field, a Shared value); at a consuming position the mark is kept.
+#[test]
+fn a_dup_value_marked_on_a_move_argument() {
+    let src = "pub fn local() {
+  let n: U32 = 1
+  tk(move   n)
+}
+pub fn parameter(n: U32) {
+  tk(move n)
+}
+pub fn field(t: (U32, U32)) {
+  tk(move t.0)
+}
+pub fn shared(s: Str) uses {Alloc} {
+  ts(move s)
+}
+pub fn kept(n: U32) -> U32 {
+  let m = move n
+  let t = (move n, 1)
+  return move n
+}
+";
+    let remove = |l: usize, line: &str| (Code::E0703, l, vec![("remove `move`".to_string(), line.to_string())]);
+    assert_eq!(fixes(src), [remove(3, "tk(n)"), remove(6, "tk(n)"), remove(9, "tk(t.0)"), remove(12, "ts(s)")]);
+}
+
+/// R-198: `move` on a value that is no place is E0711 at any position, with
+/// no candidate (W4-09 adds those of a block and an `if`): a call, a
+/// literal, a constant, a function item, a block, an `if`, on a `move`
+/// argument and a `for` head. It moves nothing. (The types stage reports
+/// the `move e` of the other positions, E0711 too.)
+#[test]
+fn a_move_on_a_value_that_is_no_place() {
+    let src = "pub fn call() uses {Alloc} {
+  take(move mk())
+}
+pub fn literal() {
+  tk(move 1)
+}
+pub fn constant() {
+  tk(move K)
+}
+pub fn block() uses {Alloc} {
+  let b = mk()
+  take(move { b })
+  take(move b)
+}
+pub fn branches(k: Bool) uses {Alloc} {
+  let b = mk()
+  take(move if k { b } else { mk() })
+}
+pub fn head() uses {Alloc} {
+  for x in move make_array() {}
+}
+";
+    let (_, moved) = seen(src);
+    assert_eq!(fixes(src), bare(Code::E0711, &[2, 5, 8, 12, 17, 20]));
+    assert_eq!(moved, BTreeSet::from(["b".to_string()]));
+}
+
+/// The E0200 of a `move` on a tail where no value is consumed (W4-09 makes
+/// it S-605's E0703): an operand, a borrowed argument.
+#[test]
+fn a_move_where_no_value_is_consumed() {
+    let src = "pub fn operand(n: U32) -> U32 {
+  let x = ({ move n }) + 1
+  x
+}
+pub fn argument(k: Bool) -> U32 uses {Alloc} {
+  let b = mk()
+  len_of(if k { move b } else { mk() })
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0200, &[2, 7]));
+}
+
+/// Review 2: an erroneous consumption moves nothing, so the same local is
+/// live after it (all the walk found, before the one of the body).
+#[test]
+fn an_erroneous_consumption_moves_nothing() {
+    let mut src = String::from(PRELUDE);
+    src.push_str(
+        "pub fn t(inout h: Buf[F32]) uses {Alloc} {
+  let b = mk()
+  let c = b
+  take(move b)
+  let d = move h
+  let n = h.len()
+}
+",
+    );
+    let (pkg, a) = analyzed(&src);
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
+    let root = crate::body::root_of(&a, id).expect("a body");
+    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
+    let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
+    w.expr(&mut Run::new(), root, Pos::Return);
+    let lines: Vec<_> =
+        w.m.found
+            .iter()
+            .map(|d| (d.code, src[PRELUDE.len()..d.span.start as usize].matches('\n').count() + 1))
+            .collect();
+    assert_eq!(lines, [(Code::E0711, 3), (Code::E0711, 5)]);
+}
+
+/// R-30, §4.6: a `T: ?Dup` value is Affine (an unbounded `T` is Shared).
+#[test]
+fn a_maybe_dup_value_is_affine() {
+    let src = "pub fn inout_[T: ?Dup](inout v: T) {
+  let c = move v
+}
+pub fn owned[T: ?Dup](move v: T) {
+  let c = v
+}
+pub fn unbounded[T](move v: T) {
+  let c = v
+}
+";
+    let add = (Code::E0711, 5, vec![("add `move`".to_string(), "let c = move v".to_string())]);
+    assert_eq!(fixes(src), [(Code::E0711, 2, Vec::new()), add]);
+}
+
+/// The places of the walk and their overlap (memo 1.2, §5.2).
+#[test]
+fn places_overlap() {
+    use super::place::{Place, Proj, overlaps};
+    let p = |root, proj: Vec<Proj>| Place { root: LocalId(root), proj };
+    let f = |n: &str| Proj::Field(n.to_string());
+    assert!(overlaps(&p(0, vec![f("a")]), &p(0, vec![f("a"), Proj::Index])));
+    assert!(overlaps(&p(0, vec![Proj::Index, f("a")]), &p(0, vec![Proj::Index, f("a")])));
+    assert!(overlaps(&p(0, vec![]), &p(0, vec![Proj::Elem(1)])));
+    assert!(!overlaps(&p(0, vec![f("a")]), &p(0, vec![f("b")])));
+    assert!(!overlaps(&p(0, vec![Proj::Elem(0)]), &p(0, vec![Proj::Elem(1)])));
+    assert!(!overlaps(&p(0, vec![]), &p(1, vec![])));
 }

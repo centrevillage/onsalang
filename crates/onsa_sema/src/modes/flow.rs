@@ -136,7 +136,7 @@ impl Walker<'_> {
             }
             StmtKind::For { pat, moved, iter, body } => {
                 match moved {
-                    true => self.consume(r, *iter, true),
+                    true => self.consume(r, *iter, Pos::Consume, Some(ast.expr(*iter).span.start)),
                     false => self.expr(r, *iter, self.head_pos(Head::For(s), Pos::Arg(Mode::Borrow))),
                 }
                 self.run_loop(r, s, (None, Some(*pat), *body));

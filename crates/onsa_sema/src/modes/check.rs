@@ -32,7 +32,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         let (Some(module), Some(root)) = (module_of_def(pkg, a, id), root_of(a, id)) else { continue };
         let (Some(info), Some(names)) = (a.bodies.get(&id), a.names.get(&id)) else { continue };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
-        let mut w = Walker::new(a, &module.parsed.ast, names, info, generics_of(a, id));
+        let mut w = Walker::new(a, (&module.parsed.ast, &module.text), names, info, generics_of(a, id));
         w.expr(&mut Run::new(), root, Pos::Return);
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
         if !w.m.moved.is_empty() {
@@ -49,6 +49,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
 pub(super) struct Walker<'a> {
     pub(super) a: &'a Analysis,
     pub(super) ast: &'a Ast,
+    /// The text of the module (the blanks a candidate removes with a mark).
+    pub(super) text: &'a str,
     pub(super) names: &'a BodyNames,
     pub(super) info: &'a BodyInfo,
     generics: Vec<GenericDef>,
@@ -66,7 +68,7 @@ pub(super) struct Made {
     kinds: HashMap<TyId, Option<Kind>>,
     /// The summary of each loop, made once (memo 3).
     pub(super) loops: HashMap<StmtId, LoopSum>,
-    found: Vec<Diagnostic>,
+    pub(super) found: Vec<Diagnostic>,
     /// The owned Affine locals a move made `Moved` ([`MovedLocals`]).
     moved: HashSet<LocalId>,
     /// The expressions visited (memo 3: at most twice each).
@@ -77,7 +79,7 @@ pub(super) struct Made {
 impl<'a> Walker<'a> {
     pub(super) fn new(
         a: &'a Analysis,
-        ast: &'a Ast,
+        (ast, text): (&'a Ast, &'a str),
         names: &'a BodyNames,
         info: &'a BodyInfo,
         generics: Vec<GenericDef>,
@@ -88,25 +90,25 @@ impl<'a> Walker<'a> {
                 _ => None,
             })
             .collect();
-        Walker { a, ast, names, info, generics, vars, reports: true, m: Made::default() }
+        Walker { a, ast, text, names, info, generics, vars, reports: true, m: Made::default() }
     }
 
-    /// The kind of the values of `l` (R-30: an unknown one is Affine;
-    /// `None` for a second-class value and the error type).
-    pub(super) fn kind(&mut self, l: LocalId) -> Option<Kind> {
-        let ty = self.info.locals[l.0 as usize].ty;
+    /// The kind of the values of the type `ty` (R-30: an unknown one is
+    /// Affine; `None` for a second-class value and the error type).
+    pub(super) fn kind_of(&mut self, ty: TyId) -> Option<Kind> {
         let (a, generics) = (self.a, &self.generics);
         *self.m.kinds.entry(ty).or_insert_with(|| crate::kind::kind_in_body(a, ty, generics))
-    }
-
-    /// Whether the binding `l` owns its value (§5.4).
-    pub(super) fn owns(&self, l: LocalId) -> bool {
-        matches!(self.info.locals[l.0 as usize].state, Bind::Owned | Bind::OwnedMut)
     }
 
     /// Whether the binding `l` can be written as a whole (§5.1).
     pub(super) fn writable(&self, l: LocalId) -> bool {
         matches!(self.info.locals[l.0 as usize].state, Bind::OwnedMut | Bind::Inout)
+    }
+
+    /// Whether `l` is live in `r` (in a walk that makes a loop's summary,
+    /// always: the state before the loop is not known there).
+    pub(super) fn live(&self, r: &Run, l: LocalId) -> bool {
+        !self.reports || r.cur.status(l).is_none()
     }
 
     /// `l` is used at `at`: an E0704 if it is not live.
@@ -129,8 +131,15 @@ impl<'a> Walker<'a> {
                 Diagnostic::new(Stage::Modes, Code::E0704, at, message).with_note(changed, "changed here")
             }
         };
-        self.m.found.push(d);
+        self.report(d);
         false
+    }
+
+    /// Found by the walk that reports.
+    pub(super) fn report(&mut self, d: Diagnostic) {
+        if self.reports {
+            self.m.found.push(d);
+        }
     }
 
     /// The owned Affine local `l` is moved at `at` (§5.2).

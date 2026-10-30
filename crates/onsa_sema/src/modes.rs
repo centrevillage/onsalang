@@ -17,7 +17,9 @@ use crate::{Analysis, DefId, Kind, Package, module_of_def};
 
 // The new modes stage (W4-07), beside this one until the switch (U4).
 mod check;
+mod consume;
 mod flow;
+mod place;
 mod state;
 #[cfg(test)]
 mod tests;

@@ -1,19 +1,20 @@
-//! The walk of the expressions (W4-07 memo 2.1, 2.2): each gives its
-//! sub-expressions their positions. U1 has the reads of the locals and the
-//! move of a whole local marked `move`; U2 decides every position.
+//! The walk of the expressions (W4-07 memo 2.1): each gives its
+//! sub-expressions their positions, and a place at a consuming position goes
+//! to [`Walker::consume`]. The position of an argument is its mark's until
+//! U3a reads the modes of the callee.
 
 use onsa_syntax::ast::{ExprId, ExprKind, Lit, Mode, StrSeg};
 
 use super::check::Walker;
 use super::flow::Run;
-use crate::Kind;
+use super::place::place_of;
 use crate::body::LocalId;
 use crate::names::body::PathRes;
 
 /// Where a value stands (§5.2, §5.3): what the walk checks at it. Passed down
 /// to the tails of a block, an `if` and a `match` (§5.2) and through
 /// parentheses.
-#[allow(dead_code)] // U2 reads every position.
+#[allow(dead_code)] // U3a places `Unknown`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Pos {
     /// An operand, a condition, a guard, an index, a statement's value.
@@ -43,6 +44,9 @@ impl Walker<'_> {
             return;
         }
         let ast = self.ast;
+        if matches!(pos, Pos::Consume | Pos::MoveArg | Pos::Return) && place_of(ast, self.names, e).is_some() {
+            return self.consume(r, e, pos, None);
+        }
         match &ast.expr(e).kind {
             ExprKind::Path(_) => {
                 if let Some(PathRes::Local(b)) = self.names.paths.get(&e) {
@@ -58,37 +62,29 @@ impl Walker<'_> {
                 }
             }
             ExprKind::Paren(x) | ExprKind::TypeArgs { base: x, .. } => self.expr(r, *x, pos),
-            ExprKind::Move(x) if matches!(pos, Pos::Consume | Pos::Return) => self.consume(r, *x, true),
+            ExprKind::Move(x) => self.marked(r, e, *x, pos),
             ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.iter().for_each(|&x| self.expr(r, x, Pos::Consume)),
             ExprKind::Struct { fields, .. } => fields.iter().for_each(|&(_, x)| self.expr(r, x, Pos::Consume)),
             ExprKind::Repeat { elem, len } => {
                 self.expr(r, *elem, Pos::Consume);
                 self.expr(r, *len, Pos::Read);
             }
+            ExprKind::Index { base, index } => {
+                self.expr(r, *base, Pos::Arg(Mode::Borrow));
+                self.expr(r, *index, Pos::Read);
+            }
             ExprKind::Call { callee, args, .. } => {
                 self.expr(r, *callee, Pos::Read);
                 self.lazily(r, e, |w, r| {
                     for arg in args {
                         match arg.mode {
-                            Mode::Move => w.consume(r, arg.expr, true),
+                            Mode::Move => w.consume(r, arg.expr, Pos::MoveArg, Some(arg.span.start)),
                             m => w.expr(r, arg.expr, Pos::Arg(m)),
                         }
                     }
                 });
             }
             _ => ast.sub_exprs(e).into_iter().for_each(|x| self.expr(r, x, Pos::Read)),
-        }
-    }
-
-    /// The value `e` at a consuming position, marked `move` or not. U1: a
-    /// whole owned Affine local marked `move` is moved (§5.2); U2 decides
-    /// the rest (E0711, E0703, E0710, the paths, R-117).
-    pub(super) fn consume(&mut self, r: &mut Run, e: ExprId, marked: bool) {
-        let x = self.ast.without_parens(e);
-        let Some(l) = self.whole_local(x).filter(|_| marked) else { return self.expr(r, x, Pos::Read) };
-        let at = self.ast.expr(x).span;
-        if self.used(r, l, at) && self.owns(l) && self.kind(l) == Some(Kind::Affine) {
-            self.move_local(r, l, at);
         }
     }
 
