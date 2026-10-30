@@ -69,7 +69,7 @@ impl Walker<'_> {
                 if head != Pos::Consume {
                     self.view_of_inout(*scrutinee, arms.iter().map(|a| a.pat));
                 }
-                self.expr(r, *scrutinee, head);
+                self.head(r, *scrutinee, head, &arms.iter().map(|a| a.pat).collect::<Vec<_>>());
                 // The state an arm is tried at: no arm before matched, or
                 // one matched and its guard was false.
                 let (mut tried, mut out) = (r.cur.clone(), Delta::bottom());
@@ -122,7 +122,7 @@ impl Walker<'_> {
         match &ast.stmt(s).kind {
             StmtKind::Let { pat, init, .. } => {
                 let pos = self.head_pos(Head::Let(s), Pos::Bind);
-                self.expr(r, *init, pos);
+                self.head(r, *init, pos, &[*pat]);
                 self.declare(r, *pat);
             }
             StmtKind::Var { init, .. } => {

@@ -3,13 +3,14 @@
 
 use std::collections::{HashMap, HashSet};
 
+use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Ast, StmtId};
 
 use super::MovedLocals;
 use super::capture::Frame;
 use super::flow::Run;
-use super::place::{Deps, Place};
+use super::place::{Change, Deps, Place, path_text};
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
 use crate::body::{BodyInfo, LocalId, generics_of, root_of};
@@ -34,7 +35,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         // one (`body::check_all`): never without them.
         let found_all = (module_of_def(pkg, a, id), root_of(a, id), a.bodies.get(&id), a.names.get(&id));
         let (Some(module), Some(root), Some(info), Some(names)) = found_all else {
-            onsa_diag::internal::bug(Some(a.def(id).span), "a body the modes stage reads with no module, root or names")
+            bug(Some(a.def(id).span), "a body the modes stage reads with no module, root or names")
         };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let mut w = Walker::new(a, (&module.parsed.ast, &module.text), names, info, generics_of(a, id));
@@ -86,10 +87,19 @@ pub(super) struct Inside {
     pub(super) excuse: Option<(LocalId, Span)>,
 }
 
+/// Why a place cannot be used: its root moved (at, by the loop), or it
+/// overlaps the change at a place (and ends before it).
+enum Why {
+    Moved(Span, bool),
+    Stale(Span, bool),
+}
+
 /// What the walk of a body makes as it goes.
 #[derive(Default)]
 pub(super) struct Made {
     kinds: HashMap<TyId, Option<Kind>>,
+    /// The change at each place a place changes (§7): one place each.
+    pub(super) changes: HashMap<Span, Change>,
     /// The summary of each loop, made once (memo 3).
     pub(super) loops: HashMap<StmtId, LoopSum>,
     pub(super) found: Vec<Diagnostic>,
@@ -130,23 +140,38 @@ impl<'a> Walker<'a> {
         self.info.locals[l.0 as usize].state.writable()
     }
 
-    /// Whether `l` is live in `r` (in a walk that makes a loop's summary,
-    /// always: the state before the loop is not known there).
-    pub(super) fn live(&self, r: &Run, l: LocalId) -> bool {
-        !self.reports || r.cur.status(l).is_none()
+    /// Whether the place `p` is live in `r` (in a walk that makes a loop's
+    /// summary, always: the state before the loop is not known there).
+    pub(super) fn live(&self, r: &Run, p: &Place) -> bool {
+        !self.reports || self.unusable(r, p).is_none()
     }
 
-    /// `l` is used at `at`: an E0704 if it is not live.
-    pub(super) fn used(&mut self, r: &Run, l: LocalId, at: Span) -> bool {
+    /// Why the place `p` cannot be used in `r`: its root moved, or a change
+    /// it overlaps, the first, and whether `p` ends before it (§7, S-803: a
+    /// path of a binding is the place it derives from, the steps composed).
+    fn unusable(&self, r: &Run, p: &Place) -> Option<Why> {
+        match r.cur.status(p.root)? {
+            &Status::Moved { at, via_loop } => Some(Why::Moved(at, via_loop)),
+            Status::Stale { changes } => changes.iter().find_map(|&c| {
+                let change = self.m.changes.get(&c).unwrap_or_else(|| bug(Some(c), "a change not kept"));
+                Some(Why::Stale(c, change.reaches(p)?))
+            }),
+        }
+    }
+
+    /// The place `p` is used at `at` (read by the pattern element `by` of a
+    /// head, S-803): an E0704 if it is not live.
+    pub(super) fn used(&mut self, r: &Run, p: &Place, at: Span, by: Option<Span>) -> bool {
+        let l = p.root;
         self.read_captured(l, at);
-        let Some(status) = r.cur.status(l).filter(|_| self.reports) else { return true };
+        let Some(why) = self.unusable(r, p).filter(|_| self.reports) else { return true };
         let name = &self.info.locals[l.0 as usize].name;
-        let d = match status {
+        let d = match why {
             // The E0702 of the argument, not this symptom (memo 2.10).
-            Status::Moved { at: m, .. } if self.inside.excuse.is_some_and(|(x, c)| x == l && c.contains(m.start)) => {
+            Why::Moved(m, _) if self.inside.excuse.is_some_and(|(x, c)| x == l && c.contains(m.start)) => {
                 return false;
             }
-            Status::Moved { at: m, via_loop } => {
+            Why::Moved(m, via_loop) => {
                 let message = if via_loop {
                     // Only a binding that can be written is live again (S-789).
                     let assign = if self.writable(l) { "; assign it before the loop ends" } else { "" };
@@ -156,13 +181,47 @@ impl<'a> Walker<'a> {
                 };
                 Diagnostic::new(Stage::Modes, Code::E0704, at, message).with_note(m, "moved here")
             }
-            Status::Stale { changed } => {
-                let message = format!("`{name}` cannot be used after the place it derives from changed (§7)");
-                Diagnostic::new(Stage::Modes, Code::E0704, at, message).with_note(changed, "changed here")
+            Why::Stale(c, prefix) => {
+                let text = |s: Span| &self.text[s.start as usize..s.end as usize];
+                // As written, unless read by a pattern or on more than one line.
+                let what = match by.is_none() && !text(at).contains('\n') {
+                    true => text(at).to_string(),
+                    false => path_text(name, &p.proj),
+                };
+                let changed = text(c);
+                let message = format!(
+                    "`{what}` cannot be used after `{changed}` changed: the place it borrows overlaps the changed place (§7)"
+                );
+                let (bound, note) = self.bound_note(l);
+                let d = Diagnostic::new(Stage::Modes, Code::E0704, at, message)
+                    .with_note(c, "changed here")
+                    .with_note(bound, note);
+                let d = by.into_iter().fold(d, |d, b| d.with_note(b, "read by this pattern"));
+                match prefix {
+                    true => d.with_rule(format!(
+                        "a path of `{name}` that does not overlap `{changed}` can still be used (§7)"
+                    )),
+                    false => d,
+                }
             }
         };
         self.report(d);
         false
+    }
+
+    /// The note at the binding `l` of the index (§5.4): the places it
+    /// derives from directly, as written (a source and the steps of the
+    /// pattern; E0704's and E0702's).
+    pub(super) fn bound_note(&self, l: LocalId) -> (Span, String) {
+        let mut from: Vec<String> = Vec::new();
+        for s in self.deps.sources(l) {
+            let t = path_text(&self.text[s.at.start as usize..s.at.end as usize], &s.pat);
+            if !from.contains(&t) {
+                from.push(t);
+            }
+        }
+        let local = &self.info.locals[l.0 as usize];
+        (local.span, format!("`{}` is bound here as a borrow of `{}` (§5.4)", local.name, from.join("` or `")))
     }
 
     /// Found by the walk that reports.

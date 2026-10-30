@@ -10,31 +10,44 @@ use onsa_diag::Span;
 use crate::body::LocalId;
 
 /// What a binding is at a point, if not live: moved (`via_loop`: by the back
-/// edge of a loop, §5.2's E0704), or unusable since a place it derives from
-/// changed (§7, §5.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// edge of a loop, §5.2's E0704), or unusable where it overlaps a place
+/// changed at one of `changes` (§7, §5.4, S-803: kept in `Walker`'s `Made`).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Status {
     Moved { at: Span, via_loop: bool },
-    Stale { changed: Span },
+    Stale { changes: BTreeSet<Span> },
 }
 
 impl Status {
-    /// The greatest of a total order (so the join is a semilattice): moved
-    /// over stale, then the earlier place, then not by the loop.
+    /// A semilattice: moved over stale, of two moved the earlier place, then
+    /// not by the loop; of two stale the changes of both.
     fn join(self, other: Status) -> Status {
-        let key = |s: Status| match s {
-            Status::Moved { at, via_loop } => (true, Reverse((at.start, at.end, via_loop))),
-            Status::Stale { changed: c } => (false, Reverse((c.start, c.end, false))),
-        };
-        if key(other) > key(self) { other } else { self }
+        match (self, other) {
+            (Status::Stale { mut changes }, Status::Stale { changes: more }) => {
+                changes.extend(more);
+                Status::Stale { changes }
+            }
+            (s @ Status::Moved { .. }, Status::Stale { .. }) | (Status::Stale { .. }, s @ Status::Moved { .. }) => s,
+            (Status::Moved { at, via_loop }, Status::Moved { at: b, via_loop: v }) => {
+                let key = |at: Span, v: bool| Reverse((at.start, at.end, v));
+                if key(b, v) > key(at, via_loop) {
+                    Status::Moved { at: b, via_loop: v }
+                } else {
+                    Status::Moved { at, via_loop }
+                }
+            }
+        }
     }
 }
 
 type Out = BTreeMap<LocalId, Status>;
 
 fn join_into(into: &mut Out, from: &Out) {
-    for (&l, &s) in from {
-        into.entry(l).and_modify(|t| *t = t.join(s)).or_insert(s);
+    for (&l, s) in from {
+        match into.remove(&l) {
+            Some(t) => into.insert(l, t.join(s.clone())),
+            None => into.insert(l, s.clone()),
+        };
     }
 }
 
@@ -70,13 +83,14 @@ impl Delta {
         if !self.reach || !next.reach {
             return Delta::default();
         }
-        let mut gens: Out = self.gens.iter().filter(|(l, _)| !next.kill.contains(l)).map(|(&l, &s)| (l, s)).collect();
+        let mut gens: Out =
+            self.gens.iter().filter(|(l, _)| !next.kill.contains(l)).map(|(&l, s)| (l, s.clone())).collect();
         join_into(&mut gens, &next.gens);
         Delta { reach: true, kill: self.kill.union(&next.kill).copied().collect(), gens }
     }
 
-    pub(super) fn status(&self, l: LocalId) -> Option<Status> {
-        self.gens.get(&l).copied()
+    pub(super) fn status(&self, l: LocalId) -> Option<&Status> {
+        self.gens.get(&l)
     }
 
     /// `l` is `s` here; it joins (a binding moved twice keeps the first).
@@ -130,6 +144,10 @@ impl LoopSum {
             Status::Moved { at, .. } => Status::Moved { at, via_loop: true },
             s => s,
         };
-        Delta { reach: true, kill: BTreeSet::new(), gens: back.gens.iter().map(|(&l, &s)| (l, by_loop(s))).collect() }
+        Delta {
+            reach: true,
+            kill: BTreeSet::new(),
+            gens: back.gens.iter().map(|(&l, s)| (l, by_loop(s.clone()))).collect(),
+        }
     }
 }

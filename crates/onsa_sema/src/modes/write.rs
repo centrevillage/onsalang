@@ -4,6 +4,8 @@
 //! when `var` is the one fix); a write to a place that can changes the state
 //! (§7, S-789). An erroneous write changes nothing (review 2).
 
+use std::collections::BTreeSet;
+
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, PatKind, StmtKind};
@@ -60,7 +62,7 @@ impl Walker<'_> {
             return self.expr(r, target, Pos::Read);
         };
         let (l, whole) = (place.root, how == How::Assign && place.proj.is_empty());
-        let live = self.live(r, l);
+        let live = self.live(r, &place);
         if !whole {
             self.expr(r, target, Pos::Read);
         }
@@ -87,11 +89,13 @@ impl Walker<'_> {
         }
     }
 
-    /// The place `w` changed at `at`: the bindings that derive from it are
-    /// unusable (§7).
+    /// The place `w` changed at `at`: the bindings a place of which
+    /// overlaps it are unusable there (§7, S-803: kept once at each place).
     pub(super) fn changed(&mut self, r: &mut Run, w: &Place, at: Span) {
-        for l in self.deps.stale(w) {
-            r.cur.set(l, Status::Stale { changed: at });
+        let deps = &self.deps;
+        let change = self.m.changes.entry(at).or_insert_with(|| deps.change(w));
+        for &l in change.along.keys() {
+            r.cur.set(l, Status::Stale { changes: BTreeSet::from([at]) });
         }
     }
 

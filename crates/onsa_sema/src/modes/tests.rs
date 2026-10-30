@@ -338,19 +338,22 @@ fn the_head_of_a_loop_is_its_least_fixpoint() {
     let (l, at) = (LocalId, |n| Span::new(FileId(0), n, n + 1));
     let mut entry = Delta::start();
     entry.set(l(0), Status::Moved { at: at(1), via_loop: false });
-    entry.set(l(2), Status::Stale { changed: at(2) });
+    let stale = |n| Status::Stale { changes: BTreeSet::from([at(n)]) };
+    entry.set(l(2), stale(2));
+    entry.set(l(4), stale(4));
     let mut back = Delta::start();
     back.revive(l(1));
     back.set(l(1), Status::Moved { at: at(5), via_loop: false });
     back.revive(l(2));
-    back.set(l(3), Status::Stale { changed: at(3) });
+    back.set(l(3), stale(3));
+    back.set(l(4), stale(6));
     back.set(l(0), Status::Moved { at: at(7), via_loop: false });
     let plain = |d: &Delta| {
         (0..5)
             .map(|i| {
                 d.status(l(i)).map(|s| match s {
-                    Status::Moved { at, .. } => Status::Moved { at, via_loop: false },
-                    s => s,
+                    Status::Moved { at, .. } => Status::Moved { at: *at, via_loop: false },
+                    s => s.clone(),
                 })
             })
             .collect::<Vec<_>>()
@@ -366,6 +369,8 @@ fn the_head_of_a_loop_is_its_least_fixpoint() {
         x = next;
     }
     assert_eq!(plain(&head), plain(&x), "the least");
+    // Of two stale, the changes of both (S-803).
+    assert_eq!(head.status(l(4)), Some(&Status::Stale { changes: BTreeSet::from([at(4), at(6)]) }));
 }
 
 /// Memo 3: a body of 120 nested loops visits each expression at most twice
@@ -695,7 +700,8 @@ pub fn unbounded[T](move v: T) {
 /// The places of the walk and their overlap (memo 1.2, §5.2).
 #[test]
 fn places_overlap() {
-    use super::place::{Place, Proj, overlaps};
+    use super::place::{Deps, Place, Proj};
+    let overlaps = |a: &Place, b: &Place| Deps::default().meets(a, b);
     let p = |root, proj: Vec<Proj>| Place { root: LocalId(root), proj };
     let f = |n: &str| Proj::Field(n.to_string());
     assert!(overlaps(&p(0, vec![f("a")]), &p(0, vec![f("a"), Proj::Index])));
@@ -2221,7 +2227,9 @@ pub fn moved() -> U32 uses {Alloc} {
 
 /// S-797 (§5.4, §7): a binding derived from another derives from its place
 /// with the paths composed: after a change of `w.h.n`, `c = hh.buf` is
-/// usable and `hh` is not; after a change of `w.h.buf`, neither is.
+/// usable, and `hh.buf` too (S-803: a path of a binding is the place it
+/// derives from, the steps composed), and `hh` whole is not; after a change
+/// of `w.h.buf`, neither is.
 #[test]
 fn a_derived_binding_composes_the_paths() {
     let src = "pub struct Wrap { h: Holder, k: U32 }
@@ -2256,9 +2264,20 @@ pub fn the_same_field() -> U32 uses {Alloc} {
     },
   }
 }
+pub fn use_h(h: Holder) -> U32 { 1 }
+pub fn the_whole() -> U32 uses {Alloc} {
+  var w = Wrap { h: Holder { buf: mk(), n: 1 }, k: 2 }
+  match w {
+    Wrap { h: hh, k: kk } => {
+      let c = hh.buf
+      io_n(inout w.h.n)
+      use_h(hh)
+    },
+  }
+}
 ";
     let lines: Vec<_> = overlapping(src).into_iter().map(|(c, l, _)| (c, l)).collect();
-    assert_eq!(lines, [(Code::E0704, 19), (Code::E0704, 29)]);
+    assert_eq!(lines, [(Code::E0704, 29), (Code::E0704, 40)]);
 }
 
 /// The forms of S-796's table (`target/notes/87/s796/`) in U4a: a nested
@@ -2297,4 +2316,483 @@ pub fn value(fv: fn(Buf[F32], inout Option[Buf[F32]]) -> U32) -> U32 uses {Alloc
 ";
     let lines: Vec<_> = overlapping(src).into_iter().map(|(c, l, _)| (c, l)).collect();
     assert_eq!(lines, [5, 11, 18, 21, 26].map(|l| (Code::E0702, l)));
+}
+
+/// The types and callees of the tests of S-803 (§7, U4b-1).
+const S803: &str = "pub struct H2 { buf: Buf[F32], n: U32, m: U32, xs: [U32; 2], o: Option[Buf[F32]] }
+pub struct W3 { h: H2, i: H2, k: U32 }
+pub fn mkh() -> H2 uses {Alloc} { H2 { buf: mk(), n: 1, m: 2, xs: [1, 2], o: mko() } }
+pub fn mkw() -> W3 uses {Alloc} { W3 { h: mkh(), i: mkh(), k: 3 } }
+pub fn use_h(h: H2) -> U32 { 1 }
+pub fn io_n(inout n: U32) {}
+pub fn take3(move b: Buf[F32]) -> U32 uses {Alloc} { 1 }
+pub fn fn3(h: H2, inout n: U32) {}
+pub fn bm2(x: Buf[F32], move y: Buf[F32]) uses {Alloc} {}
+";
+
+/// What the new stage reports for [`S803`] and `body`: each diagnostic by
+/// its code, its line in `body`, the text it is at, its message and its
+/// notes (the text each is at, and its message).
+type Said = (Code, usize, String, String, Notes);
+
+/// The notes of a diagnostic: the text each is at, and its message.
+type Notes = Vec<(Option<String>, String)>;
+
+fn said(body: &str) -> Vec<Said> {
+    let src = format!("{PRELUDE}{S803}{body}");
+    let (pkg, mut a) = analyzed(&src);
+    let before = a.diagnostics.len();
+    check_all(&pkg, &mut a);
+    let start = PRELUDE.len() + S803.len();
+    let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
+    (a.diagnostics[before..].iter())
+        .filter(|d| d.span.file == FileId(0))
+        .map(|d| {
+            let line = src[start..d.span.start as usize].matches('\n').count() + 1;
+            let notes = d.notes.iter().map(|n| (n.span.map(text), n.message.clone())).collect();
+            (d.code, line, text(d.span), d.message.clone(), notes)
+        })
+        .collect()
+}
+
+/// Each diagnostic of `body` by its code, its line and the text it is at.
+fn said_at(body: &str) -> Vec<(Code, usize, String)> {
+    said(body).into_iter().map(|(c, l, t, _, _)| (c, l, t)).collect()
+}
+
+/// S-803 (§7): after a change, a path of a binding is the place it derives
+/// from with the steps composed, so a path that does not overlap the change
+/// is usable: a field and a method's receiver, a Copy sibling, a hole; after
+/// a change of an element; after a change in either branch; in a loop
+/// before the change; through bindings derived from it (`let g`, tails of
+/// an `if`); an element of an array of structs; after two changes. A head
+/// reads the paths its patterns read (D1, D2, S-804): `_` none, the arms of
+/// a `match` together; a variant at another place.
+#[test]
+fn a_path_that_does_not_overlap_the_change_is_usable() {
+    let src = "pub fn fields() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => { w.h.n = 5
+    len_of(hh.buf) + hh.m + hh.buf.len() } }
+}
+pub fn hole() -> Str uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => { w.h.n = 5
+    \"{hh.m}\" } }
+}
+pub fn element() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => { w.h.xs[0] = 1
+    len_of(hh.buf) } }
+}
+pub fn branches(c: Bool) -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    if c { w.h.n = 5 } else { w.h.m = 6 }
+    len_of(hh.buf) } }
+}
+pub fn a_loop(c: Bool) -> U32 uses {Alloc} {
+  var w = mkw()
+  var n: U32 = 0
+  match w { W3 { h: hh, i: _, k: _ } => {
+    while c {
+      n = n + len_of(hh.buf)
+      w.h.n = 5
+    }
+    n } }
+}
+pub fn derived() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    let g = hh
+    let g2 = g
+    w.h.n = 5
+    len_of(g2.buf) } }
+}
+pub fn tails(c: Bool) -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: ii, k: _ } => {
+    let tt = if c { hh } else { ii }
+    w.h.n = 5
+    w.i.n = 6
+    len_of(tt.buf) } }
+}
+pub fn array() -> U32 uses {Alloc} {
+  var vs = [mkh(), mkh()]
+  match vs[0] { hh => {
+    vs[1].n = 5
+    len_of(hh.buf) } }
+}
+pub fn two_changes() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    w.h.n = 5
+    w.h.m = 6
+    len_of(hh.buf) + hh.xs[0] } }
+}
+pub fn let_wild() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    w.h.n = 5
+    let H2 { buf: bb, n: _, m: _, xs: _, o: _ } = hh
+    len_of(bb) } }
+}
+pub fn match_wild() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    w.h.n = 5
+    match hh { H2 { buf: bb, n: _, m: 1, xs: _, o: _ } => len_of(bb), H2 { buf: _, n: _, m: _, xs: _, o: None } => 1, _ => 0 } } }
+}
+pub fn match_path() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    w.h.n = 5
+    match hh.buf { b2 => len_of(b2) } } }
+}
+pub fn variant_elsewhere() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => {
+    w.h.n = 5
+    match hh.o { Some(b) => len_of(b), None => 0 } } }
+}
+";
+    assert_eq!(said_at(src), []);
+}
+
+/// S-803 (§7): what overlaps the change is E0704 at the whole of the path
+/// used: the field changed, an element of the array changed (two indexes
+/// overlap, §5.2), the binding whole (an argument, `let g = hh`), a pattern
+/// that binds or compares the field changed (D1, D2), the head's binding
+/// whole, a variant at the place changed, the arms of a `match` together
+/// (S-804), a hole; after a change of the parent and of a `!` receiver; in
+/// the next iteration of a loop. An index in the path is walked before the
+/// element is read (E1, §3.5). `take3(hh.buf)` is the E0711 of a borrow.
+#[test]
+fn a_path_that_overlaps_the_change_is_e0704() {
+    let line = |b: &str| {
+        format!(
+            "pub fn t(c: Bool) -> U32 uses {{Alloc}} {{\n  var w = mkw()\n  match w {{ W3 {{ h: hh, i: _, k: _ }} => {{\n{b}\n  }} }}\n}}\n"
+        )
+    };
+    // The body, the line of the E0704 in it (from 1) and the text it is at.
+    let cases: &[(&str, usize, &str)] = &[
+        ("    w.h.n = 5\n    hh.n", 2, "hh.n"),
+        ("    w.h.xs[0] = 1\n    hh.xs[1]", 2, "hh.xs[1]"),
+        ("    w.h.n = 5\n    use_h(hh)", 2, "hh"),
+        ("    io_n(inout w.h.n)\n    let g = hh\n    use_h(g)", 2, "hh"),
+        ("    w.h.n = 5\n    let H2 { buf: bb, n: nn, m: _, xs: _, o: _ } = hh\n    nn", 2, "hh"),
+        ("    w.h.n = 5\n    match hh { H2 { buf: bb, n: 0, m: _, xs: _, o: _ } => 1, _ => 0 }", 2, "hh"),
+        ("    w.h.n = 5\n    match hh { g => use_h(g) }", 2, "hh"),
+        ("    w.h.o = None\n    match hh.o { Some(b) => len_of(b), None => 0 }", 2, "hh.o"),
+        (
+            "    w.h.n = 5\n    match hh { H2 { buf: bb, n: _, m: 0, xs: _, o: _ } => len_of(bb), H2 { buf: _, n: 0, m: _, xs: _, o: _ } => 1, _ => 0 }",
+            2,
+            "hh",
+        ),
+        ("    w.h = mkh()\n    len_of(hh.buf)", 2, "hh.buf"),
+        ("    w.h.buf.fill!(0.0)\n    len_of(hh.buf)", 2, "hh.buf"),
+        ("    var n: U32 = 0\n    while c {\n      n = n + hh.n\n      w.h.n = 5\n    }\n    n", 3, "hh.n"),
+        ("    hh.xs[{ w.h.xs[0] = 1\n    0 }]", 1, "hh.xs[{ w.h.xs[0] = 1\n    0 }]"),
+    ];
+    for (b, n, text) in cases {
+        assert_eq!(said_at(&line(b)), [(Code::E0704, 3 + n, text.to_string())], "{b}");
+    }
+    let s = "pub fn t() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => { w.h.n = 5
+    take3(hh.buf) } }
+}
+";
+    assert_eq!(said_at(s), [(Code::E0711, 4, "hh.buf".to_string())]);
+    let hole = "pub fn t() -> Str uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => { w.h.n = 5
+    \"{hh.n}\" } }
+}
+";
+    assert_eq!(said_at(hole), [(Code::E0704, 4, "hh.n".to_string())]);
+}
+
+/// The texts of E0704 (§7, S-803): the path used as written (named by its
+/// steps when a pattern reads it or it is on more than one line), the place
+/// changed, noted where it changed and where the binding is bound; the note
+/// with no place only when the path used ends before the place changed; a
+/// head noted at the first element that reads the path (S-804).
+#[test]
+fn the_text_of_an_e0704_of_a_change() {
+    let t = |b: &str| {
+        let src = format!(
+            "pub fn t() -> U32 uses {{Alloc}} {{\n  var w = mkw()\n  match w {{ W3 {{ h: hh, i: _, k: _ }} => {{\n    w.h.n = 5\n{b}\n  }} }}\n}}\n"
+        );
+        let found = said(&src);
+        assert_eq!(found.len(), 1, "{found:?}");
+        let (_, _, _, message, notes) = found.into_iter().next().unwrap_or_else(|| unreachable!());
+        (message, notes)
+    };
+    let msg = |p: &str| {
+        format!("`{p}` cannot be used after `w.h.n` changed: the place it borrows overlaps the changed place (§7)")
+    };
+    let note = |at: &str, m: &str| (Some(at.to_string()), m.to_string());
+    let changed = note("w.h.n", "changed here");
+    let bound = note("hh", "`hh` is bound here as a borrow of `w.h` (§5.4)");
+    let rest = (None, "a path of `hh` that does not overlap `w.h.n` can still be used (§7)".to_string());
+    assert_eq!(t("    hh.n"), (msg("hh.n"), vec![changed.clone(), bound.clone()]));
+    assert_eq!(t("    use_h(hh)"), (msg("hh"), vec![changed.clone(), bound.clone(), rest]));
+    let arms = "    match hh { H2 { buf: _, n: _, m: 0, xs: _, o: _ } => 1, H2 { buf: _, n: 0, m: _, xs: _, o: _ } => 2, _ => 0 }";
+    let by = note("0", "read by this pattern");
+    assert_eq!(t(arms), (msg("hh.n"), vec![changed.clone(), bound.clone(), by]));
+    let multi = "pub fn t() -> U32 uses {Alloc} {\n  var w = mkw()\n  match w { W3 { h: hh, i: _, k: _ } => hh.xs[{ w.h.xs[0] = 1\n    0 }] }\n}\n";
+    let (_, _, _, message, _) = said(multi).remove(0);
+    let named =
+        "`hh.xs[_]` cannot be used after `w.h.xs[0]` changed: the place it borrows overlaps the changed place (§7)";
+    assert_eq!(message, named);
+}
+
+/// The texts of E0702 of a binding of the index (§5.2, S-796): the
+/// arguments as written, noted where each binding is bound and at the
+/// places it derives from directly (`or` between two; with no binding,
+/// as before: `the_places_of_one_call_overlap`).
+#[test]
+fn the_text_of_an_e0702_of_a_binding() {
+    let src = "pub fn t() uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => fn3(hh, inout w.h.n) }
+}
+";
+    let (code, _, _, message, notes) = said(src).remove(0);
+    assert_eq!(code, Code::E0702);
+    assert_eq!(
+        message,
+        "`hh` is passed borrowed and `w.h.n` as `inout` in the same call; the places may overlap (§5.2)"
+    );
+    let note = |at: &str, m: &str| (Some(at.to_string()), m.to_string());
+    assert_eq!(notes, [note("hh", "borrowed here"), note("hh", "`hh` is bound here as a borrow of `w.h` (§5.4)")]);
+}
+
+/// Every diagnostic the walk of the function `t` of `body` (after
+/// [`PRELUDE`]) found, before the one of the body is chosen: its code, the
+/// text it is at, its message and its notes (the text each is at, and its
+/// message).
+fn all_said(body: &str) -> Vec<(Code, String, String, Notes)> {
+    let src = format!("{PRELUDE}{body}");
+    let (pkg, a) = analyzed(&src);
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
+    let root = crate::body::root_of(&a, id).expect("a body");
+    let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
+    let mut w = Walker::new(&a, (ast, &src), &a.names[&id], &a.bodies[&id], Vec::new());
+    w.deps = super::place::Deps::of_body((ast, &a.names[&id], &a.bodies[&id]), root, |t| {
+        crate::kind::kind_in_body(&a, t, &[]) == Some(crate::Kind::Copy)
+    });
+    w.expr(&mut Run::new(), root, Pos::Return);
+    let text = |s: Span| src[s.start as usize..s.end as usize].to_string();
+    (w.m.found.iter())
+        .map(|d| {
+            let notes = d.notes.iter().map(|n| (n.span.map(text), n.message.clone())).collect();
+            (d.code, text(d.span), d.message.clone(), notes)
+        })
+        .collect()
+}
+
+/// E0702 of two bindings of the index (§5.2, S-796, memo 3): each stands
+/// for the places it derives from, the steps composed, along a chain of
+/// sources of two; `t2` moved is a borrow (E0711) too.
+#[test]
+fn two_derived_bindings_overlap_by_their_places() {
+    let types = "pub struct Q { buf: Buf[F32] }
+pub struct P2 { a: Q, b: Q }
+pub struct S3 { a: P2, b: P2, c: P2 }
+pub fn bmq(x: Q, move y: Q) uses {Alloc} {}
+";
+    let body = |second: &str| {
+        format!(
+            "{types}pub fn t(c: Bool, s: S3) uses {{Alloc}} {{
+  let t1 = if c {{ s.a }} else {{ s.b }}
+  let t2 = if c {{ {second}.a }} else {{ {second}.b }}
+  bmq(t1.a, move t2)
+}}
+"
+        )
+    };
+    let found = all_said(&body("t1"));
+    let codes: Vec<_> = found.iter().map(|(c, t, _, _)| (*c, t.as_str())).collect();
+    assert_eq!(codes, [(Code::E0702, "t2"), (Code::E0711, "t2")]);
+    let (_, _, message, notes) = &found[0];
+    let expected = "`t1.a` is passed borrowed and `t2` as `move` in the same call; the places may overlap (§5.2)";
+    assert_eq!(message, expected);
+    let note = |at: &str, m: &str| (Some(at.to_string()), m.to_string());
+    let t1 = note("t1", "`t1` is bound here as a borrow of `s.a` or `s.b` (§5.4)");
+    let t2 = note("t2", "`t2` is bound here as a borrow of `t1.a` or `t1.b` (§5.4)");
+    assert_eq!(notes, &[note("t1.a", "borrowed here"), t1, t2]);
+    let apart = all_said(&body("s.c"));
+    assert_eq!(apart.iter().map(|(c, _, _, _)| *c).collect::<Vec<_>>(), [Code::E0711]);
+}
+
+/// A chain of `depth` bindings from the borrowed parameter `s`, each from
+/// the one before by the kind `kinds % 4` (then `kinds / 4` for the next):
+/// the tails of an `if` (two sources), an or-pattern of a `match` (two),
+/// a field, the payload of an `Option` (a `match`); the function `t`.
+fn chain(depth: usize, mut kinds: u64) -> String {
+    let mut src = String::new();
+    for i in 0..depth {
+        let n = if i + 1 == depth { "Buf[F32]".to_string() } else { format!("N{}", i + 1) };
+        src.push_str(&format!("pub struct N{i} {{ a: {n}, b: {n}, o: Option[{n}] }}\n"));
+    }
+    src.push_str("pub fn t(c: Bool, t0: N0) -> U32 {\n");
+    let mut close = String::new();
+    for i in 1..depth {
+        let (p, k) = (i - 1, kinds % 4);
+        kinds /= 4;
+        match k {
+            0 => src.push_str(&format!("let t{i} = if c {{ t{p}.a }} else {{ t{p}.b }}\n")),
+            1 => {
+                src.push_str(&format!(
+                    "match t{p} {{ N{p} {{ a: t{i}, b: _, o: _ }} | N{p} {{ a: _, b: t{i}, o: _ }} => {{\n"
+                ));
+                close.insert_str(0, "} }\n");
+            }
+            2 => src.push_str(&format!("let t{i} = t{p}.b\n")),
+            _ => {
+                src.push_str(&format!("match t{p}.o {{ Some(t{i}) => {{\n"));
+                close.insert_str(0, "}, None => 0 }\n");
+            }
+        }
+    }
+    src.push_str("0\n");
+    src.push_str(&close);
+    src.push_str("}\n");
+    src
+}
+
+/// The places the binding `l` stands for, made by the expansion U4a made
+/// (the copy of its `resolve`, which grows as the product of the sources).
+fn expanded(deps: &super::place::Deps, l: LocalId) -> Vec<super::place::Place> {
+    let mut out = Vec::new();
+    for s in deps.sources(l) {
+        let from = match deps.indexed(s.place.root) {
+            true => expanded(deps, s.place.root).iter().map(|q| q.then(&s.place.proj)).collect(),
+            false => vec![s.place.clone()],
+        };
+        for q in from {
+            if !out.contains(&q) {
+                out.push(q);
+            }
+        }
+    }
+    out
+}
+
+/// Memo 3: the index answers as the expansion does, with U4a's `overlaps`
+/// (the same root, the steps the same up to the shorter one): whether two
+/// places meet (E0702), which bindings a change leaves unusable, whether a
+/// path of one overlaps the change and ends before it (E0704 and its
+/// note), on chains of depth 1 to 10 of each kind of step. On a large stack
+/// (rules 3.4: a `match` in a `match`).
+#[test]
+fn the_index_answers_as_the_expansion() {
+    use super::place::{Deps, Place, Proj};
+    let overlaps = |a: &Place, b: &Place| a.root == b.root && a.proj.iter().zip(&b.proj).all(|(p, q)| p == q);
+    let run = move || {
+        let mut checked = 0;
+        for depth in 1..=10 {
+            for seed in [0x1B1B_1B1B_u64, 0xE4E4_E4E4, 0x3C3C_3C3C] {
+                let src = format!("{PRELUDE}{}", chain(depth, seed >> (2 * (depth % 4))));
+                let (pkg, a) = analyzed(&src);
+                let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
+                let root = crate::body::root_of(&a, id).expect("a body");
+                let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
+                let (names, info) = (&a.names[&id], &a.bodies[&id]);
+                let deps = Deps::of_body((ast, names, info), root, |_| false);
+                let locals = (0..info.locals.len() as u32).map(LocalId);
+                let bound: Vec<LocalId> = locals.filter(|&l| deps.indexed(l)).collect();
+                assert_eq!(bound.len(), depth - 1, "{src}");
+                let s = LocalId(1); // `t0` (after `c`)
+                assert!(!deps.indexed(s) && info.locals[1].name == "t0");
+                let f = |n: &str| Proj::Field(n.to_string());
+                // The places of `t0`: all of up to three steps of `a`, `b`, `o`, and longer ones.
+                let mut paths: Vec<Vec<Proj>> = vec![vec![]];
+                for _ in 0..3 {
+                    let next: Vec<_> = (paths.iter())
+                        .filter(|p| p.len() == paths.last().map_or(0, |l| l.len()))
+                        .flat_map(|p| ["a", "b", "o"].map(|n| [p.clone(), vec![f(n)]].concat()))
+                        .collect();
+                    paths.extend(next);
+                }
+                for k in 4..=depth + 1 {
+                    paths.push((0..k).map(|i| f(["b", "a"][i % 2])).collect());
+                    paths.push(vec![f("b"); k]);
+                }
+                let roots: Vec<Place> = paths.iter().map(|p| Place { root: s, proj: p.clone() }).collect();
+                let qs = [vec![], vec![f("a")], vec![f("b")], vec![f("o")], vec![f("b"), f("a")]];
+                let uses: Vec<Place> =
+                    bound.iter().flat_map(|&l| qs.iter().map(move |q| Place { root: l, proj: q.clone() })).collect();
+                let made: std::collections::HashMap<LocalId, Vec<Place>> =
+                    bound.iter().map(|&l| (l, expanded(&deps, l))).collect();
+                let stands = |p: &Place| match made.get(&p.root) {
+                    Some(e) => e.iter().map(|q| q.then(&p.proj)).collect(),
+                    None => vec![p.clone()],
+                };
+                for w in &roots {
+                    let change = deps.change(w);
+                    for u in &uses {
+                        let all = stands(u);
+                        let hit: Vec<_> = all.iter().filter(|e| overlaps(e, w)).collect();
+                        let want = (!hit.is_empty()).then(|| hit.iter().any(|e| e.proj.len() < w.proj.len()));
+                        assert_eq!(change.reaches(u), want, "{u:?} after {w:?}\n{src}");
+                        checked += 1;
+                    }
+                    for &l in &bound {
+                        let want = stands(&Place { root: l, proj: vec![] }).iter().any(|e| overlaps(e, w));
+                        assert_eq!(change.along.contains_key(&l), want, "{l:?} after {w:?}");
+                    }
+                }
+                let short: Vec<&Place> = roots.iter().filter(|p| p.proj.len() <= 2).collect();
+                for a in uses.iter().filter(|u| u.proj.len() <= 1) {
+                    let xs = stands(a);
+                    for b in uses.iter().chain(short.iter().copied()) {
+                        let want = stands(b).iter().any(|y| xs.iter().any(|x| overlaps(x, y)));
+                        assert_eq!(deps.meets(a, b), want, "{a:?} {b:?}\n{src}");
+                        assert_eq!(deps.meets(b, a), want, "{b:?} {a:?}");
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        checked
+    };
+    let checked = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+    assert!(checked > 10_000, "{checked}");
+}
+
+/// Memo 3 (U4a's review, finding 1): a chain of 22 bindings of two sources
+/// each (`gen_blow.py`'s form, 2^22 places expanded) from a `match` on an
+/// `inout` parameter, a change, a use and an E0702 of its end: the stage
+/// takes well under a second (U4a's took 15 s at 16).
+#[test]
+fn a_chain_of_two_sources_does_not_grow() {
+    const D: usize = 24;
+    let mut src = String::from(PRELUDE);
+    for i in 0..D {
+        let next = if i + 1 == D { "Buf[F32]".to_string() } else { format!("L{}", i + 1) };
+        src.push_str(&format!("pub struct L{i} {{ a: {next}, b: {next} }}\n"));
+    }
+    src.push_str("pub fn io1(inout x: L1) {}\npub fn bi2(x: Buf[F32], inout y: L0) -> U32 { 1 }\n");
+    src.push_str("pub fn t(c: Bool, inout s: L0) -> U32 uses {Alloc} {\n  match s { L0 { a: x0, b: y0 } => {\n");
+    src.push_str("    let t1 = if c { x0.a } else { y0.b }\n");
+    for i in 2..D - 1 {
+        src.push_str(&format!("    let t{i} = if c {{ t{}.a }} else {{ t{}.b }}\n", i - 1, i - 1));
+    }
+    let last = D - 2;
+    src.push_str(&format!(
+        "    let n = bi2(t{last}.b, inout s)\n    io1(inout s.a)\n    n + len_of(t{last}.a)\n  }} }}\n}}\n"
+    ));
+    let (pkg, mut a) = analyzed(&src);
+    let before = a.diagnostics.len();
+    let start = std::time::Instant::now();
+    check_all(&pkg, &mut a);
+    let took = start.elapsed();
+    let codes: Vec<_> = a.diagnostics[before..].iter().map(|d| d.code).collect();
+    assert_eq!(codes, [Code::E0702], "the first of the E0702 and the E0704");
+    assert!(took < std::time::Duration::from_secs(1), "{took:?}");
+    let all: Vec<_> = all_said(&src[PRELUDE.len()..]).into_iter().map(|(c, t, _, _)| (c, t)).collect();
+    assert_eq!(all, [(Code::E0702, "s".to_string()), (Code::E0704, format!("t{last}.a"))]);
 }

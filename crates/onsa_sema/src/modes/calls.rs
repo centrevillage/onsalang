@@ -12,7 +12,7 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Mode};
 
 use super::check::Walker;
 use super::flow::Run;
-use super::place::{Place, overlaps, place_of};
+use super::place::{Place, place_of};
 use super::walk::Pos;
 use super::write::How;
 use crate::Kind;
@@ -37,13 +37,13 @@ pub(super) enum Takes {
 type Takings = (Option<Mode>, Vec<Takes>);
 
 /// An argument of a call that is a place (E0702): its expression, how it
-/// is passed, the places it stands for and the binding that stands for
-/// them, if one does (S-796); `copied`, a Dup value at a `move` parameter
-/// or receiver, which counts as a read (S-801).
+/// is passed, its place, and its root if a binding of the index (S-796);
+/// `copied`, a Dup value at a `move` parameter or receiver, which counts as
+/// a read (S-801).
 struct Passed {
     at: ExprId,
     mode: Mode,
-    places: Vec<Place>,
+    place: Place,
     via: Option<LocalId>,
     copied: bool,
 }
@@ -108,13 +108,10 @@ impl Walker<'_> {
         let mut later = Vec::new();
         for (j, b) in passed.iter().enumerate() {
             let excl = b.mode != Mode::Borrow;
-            let overlap =
-                |a: &Passed| a.places.iter().find(|p| b.places.iter().any(|q| overlaps(p, q))).map(|p| p.root);
-            let first =
-                passed[..j].iter().filter(|a| excl || a.mode != Mode::Borrow).find_map(|a| Some((a, overlap(a)?)));
-            if let Some((a, root)) = first {
+            let mut earlier = passed[..j].iter().filter(|a| excl || a.mode != Mode::Borrow);
+            if let Some(a) = earlier.find(|a| self.deps.meets(&a.place, &b.place)) {
                 later.push(b.at);
-                let d = self.overlapping(a, b, root);
+                let d = self.overlapping(a, b);
                 self.report(d);
             }
         }
@@ -135,30 +132,54 @@ impl Walker<'_> {
         } else if mode == Mode::Move && kind == Some(Kind::Affine) {
             place.proj.clear();
         }
-        let derived = self.deps.sources(&place);
-        let via = derived.is_some().then_some(place.root);
-        Some(Passed { at: x, mode, places: derived.unwrap_or_else(|| vec![place]), via, copied })
+        let via = self.deps.indexed(place.root).then_some(place.root);
+        Some(Passed { at: x, mode, place, via, copied })
     }
 
-    /// The E0702 of `b`, which overlaps the earlier `a` at a place of `root`:
-    /// "twice" of two of one mode, else "and" (§5.2's two forms); noted at
-    /// `a`, and at a binding either stands for (S-796).
-    fn overlapping(&self, a: &Passed, b: &Passed, root: LocalId) -> Diagnostic {
+    /// The E0702 of `b`, which overlaps the earlier `a`: "twice" of two of
+    /// one mode, else "and" (§5.2's two forms), of their root, or of the
+    /// arguments as written when one is a binding of the index (S-796), noted
+    /// at it; noted at `a`.
+    fn overlapping(&self, a: &Passed, b: &Passed) -> Diagnostic {
         let how = |m: Mode| match m {
             Mode::Inout => "as `inout`",
             Mode::Move => "as `move`",
             Mode::Borrow => "borrowed",
         };
-        let n = &self.info.locals[root.0 as usize].name;
+        let n = &self.info.locals[a.place.root.0 as usize].name;
+        let text = |p: &Passed| {
+            let s = self.ast.expr(p.at).span;
+            &self.text[s.start as usize..s.end as usize]
+        };
+        let derived = a.via.is_some() || b.via.is_some();
         let (message, note) = if a.mode == b.mode {
-            let message =
-                format!("`{n}` is passed {} twice in one call; the two places may overlap (§5.2)", how(a.mode));
+            let message = match derived {
+                true => format!(
+                    "`{}` and `{}` are both passed {} in one call; the places may overlap (§5.2)",
+                    text(a),
+                    text(b),
+                    how(a.mode)
+                ),
+                false => {
+                    format!("`{n}` is passed {} twice in one call; the two places may overlap (§5.2)", how(a.mode))
+                }
+            };
             (message, format!("first {} here", how(a.mode).trim_start_matches("as ")))
         } else {
             let rank = |m: Mode| [Mode::Inout, Mode::Move, Mode::Borrow].iter().position(|&x| x == m);
             let (x, y) = if rank(a.mode) < rank(b.mode) { (a.mode, b.mode) } else { (b.mode, a.mode) };
-            let message =
-                format!("`{n}` is passed {} and {} in the same call; the places may overlap (§5.2)", how(x), how(y));
+            let message = match derived {
+                true => format!(
+                    "`{}` is passed {} and `{}` {} in the same call; the places may overlap (§5.2)",
+                    text(a),
+                    how(a.mode),
+                    text(b),
+                    how(b.mode)
+                ),
+                false => {
+                    format!("`{n}` is passed {} and {} in the same call; the places may overlap (§5.2)", how(x), how(y))
+                }
+            };
             (message, format!("{} here", how(a.mode).trim_start_matches("as ")))
         };
         let mut d = Diagnostic::new(Stage::Modes, Code::E0702, self.ast.expr(b.at).span, message)
@@ -168,8 +189,8 @@ impl Walker<'_> {
             d = d.with_note(self.ast.expr(p.at).span, copy);
         }
         [a, b].into_iter().filter_map(|p| p.via).fold(d, |d, l| {
-            let local = &self.info.locals[l.0 as usize];
-            d.with_note(local.span, format!("`{}` is bound here as a borrow of `{n}` (§5.4)", local.name))
+            let (at, note) = self.bound_note(l);
+            d.with_note(at, note)
         })
     }
 

@@ -50,7 +50,7 @@ impl Walker<'_> {
             self.needs_a_place(at);
             return self.expr(r, x, Pos::Read);
         };
-        let (l, live) = (place.root, self.live(r, place.root));
+        let (l, live) = (place.root, self.live(r, &place));
         self.expr(r, x, Pos::Read);
         let Some(&ty) = self.info.expr_types.get(&x) else {
             onsa_diag::internal::bug(Some(at), "a consumed place with no type")
