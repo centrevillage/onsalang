@@ -89,10 +89,6 @@ impl Walker<'_> {
             (_, Bind::Owned | Bind::OwnedMut) if place.proj.contains(&Proj::Index) => error(format!(
                 "cannot move `{name}` out of an array: its elements move with the array (`for x in move xs`) (§5.2)"
             )),
-            // W4-09 (S-85): the field consumes its root.
-            (_, Bind::Owned | Bind::OwnedMut) if !place.proj.is_empty() => plain(format!(
-                "cannot move `{name}` out of `{root}`: Affine values move as a whole (partial moves are not allowed) (§5.2)"
-            )),
             (_, Bind::Owned | Bind::OwnedMut) => match (pos, mark) {
                 (Pos::Consume, None) => {
                     error(format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)"))
@@ -108,7 +104,8 @@ impl Walker<'_> {
                 // An erroneous move (E0712 at the anonymous function) moves nothing.
                 _ if self.captured(l) => return,
                 _ if !live => return self.record(&place, at),
-                _ => return self.move_local(r, l, at, direct),
+                // S-85: a path of fields is taken out, and its root moves whole.
+                _ => return self.move_place(r, &place, at, direct),
             },
         };
         if live {

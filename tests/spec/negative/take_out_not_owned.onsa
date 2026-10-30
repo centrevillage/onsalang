@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// S-85, S-609, R-95 (§5.2: "所有する値の Affine のフィールドを消費する位置に置くと…"; "Affine 値は所有していなければ `move` で渡せない。借用引数、借用
+// 束縛、`inout` 引数は所有していない。その場所を `move` 引数に置くと、印の有無によらず修正候補の無い E0711"): the take-out is for an
+// owned root only. The field path of a borrowed argument, of an `inout` argument and of a borrowed binding (a binding of a
+// `match` or `for` over a borrowed place, a binding derived from an argument) is not owned, so the Affine field cannot be taken
+// out at any consuming position, with the mark and without it: E0711 and no candidate (`fixes = 0`: the direction of the
+// repair is the mode of the parameter or the caller, far from the error). The error is at the path. The Copy field and the borrowed
+// binding of the field (`let b = h.buf` of a borrowed argument) are no error; they are the contrasts. The forms with an
+// owned root are values/take_out_consumes_root.onsa, the array element is negative/take_out_array_element.onsa. One error
+// per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Outer {
+  inner: Holder,
+  rate: U32,
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+// ------------------------------------------------------------------- a borrowed argument
+
+pub fn borrowed_returned(h: Holder) -> Buf[F32] {
+  h.buf                               //~ E0711
+}
+
+pub fn borrowed_moved_into_a_let(h: Holder) -> U32 uses {Alloc} {
+  let b = move h.buf                  //~ E0711
+  b.len()
+}
+
+pub fn borrowed_moved_into_an_argument(h: Holder) uses {Alloc} {
+  take(move h.buf)                    //~ E0711
+}
+
+pub fn borrowed_passed_without_the_mark(h: Holder) uses {Alloc} {
+  take(h.buf)                         //~ E0711
+}
+
+pub fn borrowed_nested_path(o: Outer) uses {Alloc} {
+  take(move o.inner.buf)              //~ E0711
+}
+
+pub fn borrowed_tuple_element(t: (Buf[F32], U32)) -> Buf[F32] {
+  t.0                                 //~ E0711
+}
+
+pub fn borrowed_in_a_tuple_literal(h: Holder) -> (Buf[F32], U32) {
+  (move h.buf, 1)                     //~ E0711
+}
+
+// ------------------------------------------------------------------- an `inout` argument
+
+pub fn inout_returned(inout h: Holder) -> Buf[F32] {
+  h.buf                               //~ E0711
+}
+
+pub fn inout_moved_into_a_let(inout h: Holder) -> U32 uses {Alloc} {
+  let b = move h.buf                  //~ E0711
+  b.len()
+}
+
+pub fn inout_moved_into_an_argument(inout h: Holder) uses {Alloc} {
+  take(move h.buf)                    //~ E0711
+}
+
+pub fn inout_passed_without_the_mark(inout h: Holder) uses {Alloc} {
+  take(h.buf)                         //~ E0711
+}
+
+pub fn inout_nested_path(inout o: Outer) uses {Alloc} {
+  take(move o.inner.buf)              //~ E0711
+}
+
+// ----------------------------------------------------------------------- a borrowed binding
+
+pub fn derived_binding(h: Holder) uses {Alloc} {
+  let q = h
+  take(move q.buf)                    //~ E0711
+}
+
+pub fn binding_of_a_borrowed_match(o: Option[Pair]) uses {Alloc} {
+  match o {
+    Some(p) => take(move p.a),        //~ E0711
+    None => {},
+  }
+}
+
+pub fn binding_of_a_borrowed_for(xs: [Holder; 2]) uses {Alloc} {
+  for s in xs {
+    take(move s.buf)                  //~ E0711
+  }
+}
+
+// ------------------------------------------------------------------------------ the contrasts
+
+pub fn borrowed_binding_of_the_field(h: Holder) -> U32 uses {Alloc} {
+  let b = h.buf
+  b.len()
+}
+
+pub fn borrowed_copy_field(h: Holder) -> F32 {
+  let g = h.gain
+  g + h.gain
+}

@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5"]
+
+// S-787, S-85 (§5.2: "Affine のフィールドの経路の `move` は根の全体を消費する（上）ので、根のどの場所とも重なる（`h(inout x.a, move
+// x.b)`）"; "引数は全て評価してから呼び出す…引数の順によらない"): the other side of negative/overlap_args_move_field.onsa, with the
+// `move` of the field path as the first argument. It consumes the root as a whole, so the later argument that is a place of the
+// root (a sibling field, the same field, a Copy field of a nested root, a tuple element; passed `inout` or borrowed; the
+// `move` ones are in the other file) overlaps with it: E0702 at the later argument. A later argument that reads the root to make a value (`p.b.len()`) is not a place of the call but a use after the
+// move of the earlier argument ("同じ呼び出しの後の引数で読むと E0704", `take2(move b, b.len())`), and the same read in an
+// earlier argument is right (`take2r(b.len(), move b)`). Both orders of the call are checked in the one file, one error per
+// function (P-01). Today the `move` of the field is an E0711 "partial moves are not allowed" (S-85, the work W4-09).
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Outer {
+  inner: Pair,
+  rate: U32,
+}
+
+pub fn mi(move b: Buf[F32], inout c: Buf[F32]) uses {Alloc} {}
+
+pub fn mb(move b: Buf[F32], c: Buf[F32]) uses {Alloc} {}
+
+pub fn mm(move b: Buf[F32], move c: Buf[F32]) uses {Alloc} {}
+
+pub fn mlen(move b: Buf[F32], n: U32) uses {Alloc} {}
+
+pub fn mlen_first(n: U32, move b: Buf[F32]) uses {Alloc} {}
+
+// -------------------------------------------------------------- the later argument is a place of the root
+
+pub fn inout_of_a_sibling(move p: Pair) uses {Alloc} {
+  mi(move p.a, inout p.b)             //~ E0702
+}
+
+pub fn inout_of_the_same_field(move p: Pair) uses {Alloc} {
+  mi(move p.a, inout p.a)             //~ E0702
+}
+
+pub fn borrow_of_a_sibling(move p: Pair) uses {Alloc} {
+  mb(move p.a, p.b)                   //~ E0702
+}
+
+pub fn borrow_of_the_root_field_again(move p: Pair) uses {Alloc} {
+  mb(move p.a, p.a)                   //~ E0702
+}
+
+pub fn a_copy_field_of_the_nested_root(move o: Outer) uses {Alloc} {
+  mlen(move o.inner.a, o.rate)        //~ E0702
+}
+
+pub fn a_nested_sibling(move o: Outer) uses {Alloc} {
+  mb(move o.inner.a, o.inner.b)       //~ E0702
+}
+
+pub fn a_tuple_element(move t: (Buf[F32], Buf[F32])) uses {Alloc} {
+  mb(move t.0, t.1)                   //~ E0702
+}
+
+// ------------------------------------------------- the later argument reads the root to make a value
+
+pub fn the_later_argument_reads(move p: Pair) uses {Alloc} {
+  mlen(move p.a, p.b.len())           //~ E0704
+}
+
+// ---------------------------------------------------------------------------- the contrasts
+
+pub fn the_earlier_argument_reads(move p: Pair) uses {Alloc} {
+  mlen_first(p.b.len(), move p.a)
+}
+
+pub fn the_other_value_is_a_new_value(move p: Pair) uses {Alloc} {
+  mm(move p.a, Buf.zeroed(2))
+}
+
+pub fn two_roots(move p: Pair, move q: Pair) uses {Alloc} {
+  mm(move p.a, move q.a)
+}
+
+pub fn the_root_of_another_local(move p: Pair, inout q: Buf[F32]) uses {Alloc} {
+  mi(move p.a, inout q)
+}

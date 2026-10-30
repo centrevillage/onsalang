@@ -517,9 +517,9 @@ pub fn copied(n: U32, s: Str) -> U32 uses {Alloc} {
     assert_eq!(fixes(src), bare(Code::E0711, &[2, 6, 9, 12, 15]));
 }
 
-/// §5.2: an owned value is not moved out of an element (E0711), nor out of
-/// a field until W4-09 (S-85; the partial move of now), marked or not; a
-/// Dup one is copied and leaves its root.
+/// §5.2: an owned value is not moved out of an element (E0711), marked or
+/// not; a field of it is taken out, and its root moves (S-85); a Dup one is
+/// copied and leaves its root.
 #[test]
 fn a_path_of_an_owned_value() {
     let src = "pub fn element(move xs: [Buf[F32]; 2]) uses {Alloc} {
@@ -540,7 +540,8 @@ pub fn copied(move h: Holder, move t: (U32, U32)) uses {Alloc} {
   take(move h.buf)
 }
 ";
-    assert_eq!(fixes(src), bare(Code::E0711, &[2, 5, 8, 11, 16]));
+    assert_eq!(fixes(src), bare(Code::E0711, &[2, 5]));
+    assert_eq!(seen(src).1, BTreeSet::from(["h".to_string()]));
 }
 
 /// §5.2: a whole owned Affine local is moved where it is marked and where
@@ -1022,7 +1023,7 @@ pub fn borrowed(xs: [Span[F32]; 2], n: U32) -> U32 {
 }
 
 /// S-784: the note of `?` is of an element of an array and of a borrowed or
-/// `inout` Affine place, not of a field of an owned value (S-85, W4-09).
+/// `inout` Affine place; a field of an owned value is taken out (S-85).
 #[test]
 fn the_note_of_try_on_a_field() {
     let src = "pub struct W { r: Result[Buf[F32], U32] }
@@ -1042,7 +1043,7 @@ pub fn element(move w: [Result[Buf[F32], U32]; 2]) -> Result[U32, U32] uses {All
         .filter(|d| d.span.file == FileId(0))
         .map(|d| (d.code, d.notes.len()))
         .collect();
-    assert_eq!(notes, [(Code::E0711, 0), (Code::E0711, 1)]);
+    assert_eq!(notes, [(Code::E0711, 1)]);
 }
 
 /// The types of the calls of U3a: a struct whose methods take `self` in
@@ -3094,4 +3095,122 @@ fn a_write_in_deeply_nested_for_loops() {
     };
     let found = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
     assert_eq!(found, [(Code::E0715, DEPTH + 1)]);
+}
+
+/// The analysis of `body` after [`PRELUDE`], reporting nothing in it, and
+/// each function of `body` by its name.
+fn clean(body: &str) -> (String, crate::Analysis, impl Fn(&crate::Analysis, &str) -> crate::DefId) {
+    let src = format!("{PRELUDE}{body}");
+    let (_, a) = analyzed(&src);
+    let said: Vec<_> = a.diagnostics.iter().filter(|d| d.span.file == FileId(0)).collect();
+    assert!(said.is_empty(), "{said:?}");
+    let named = |a: &crate::Analysis, n: &str| (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == n);
+    (src, a, move |a: &crate::Analysis, n: &str| named(a, n).expect("the function"))
+}
+
+/// S-85 (§5.2): a field taken out is kept once (a loop's summary walks it
+/// too, and keeps it not), with its root and path, for the stages after.
+#[test]
+fn a_field_taken_out_is_kept_once() {
+    use crate::body::Step::{Elem, Field};
+    let (src, a, def) = clean(
+        "pub struct Out { h: Holder, t: (Buf[F32], U32) }
+pub fn t(n: U32) uses {Alloc} {
+  for i in 0 ..< n {
+    let o = Out { h: Holder { buf: mk(), n: i }, t: (mk(), 1) }
+    take(move o.h.buf)
+  }
+  let p = Out { h: Holder { buf: mk(), n: 1 }, t: (mk(), 1) }
+  let x = move p.t.0
+  take(move x)
+}
+",
+    );
+    let info = &a.bodies[&def(&a, "t")];
+    let taken: Vec<_> = (info.taken.iter())
+        .map(|t| (&src[t.at.start as usize..t.at.end as usize], info.locals[t.root.0 as usize].name.as_str(), &t.path))
+        .collect();
+    let (h, buf, tf) = (Field("h".into()), Field("buf".into()), Field("t".into()));
+    assert_eq!(taken, [("o.h.buf", "o", &vec![h, buf]), ("p.t.0", "p", &vec![tf, Elem(0)])]);
+}
+
+/// S-85 (§5.2): the E0704 of a value after a field was taken out of it
+/// says so, notes where, and how to read the others (in a loop too); after
+/// a whole move, as before.
+#[test]
+fn the_note_of_a_use_after_a_field_was_taken_out() {
+    let src = format!(
+        "{PRELUDE}pub fn after(move h: Holder) -> U32 uses {{Alloc}} {{
+  take(move h.buf)
+  h.n
+}}
+pub fn looped(n: U32) uses {{Alloc}} {{
+  let h = Holder {{ buf: mk(), n: 1 }}
+  for i in 0 ..< n {{ take(move h.buf) }}
+}}
+pub fn whole(move h: Holder) -> U32 uses {{Alloc}} {{
+  let g = move h
+  h.n
+}}
+"
+    );
+    let (_, a) = analyzed(&src);
+    let said: Vec<_> = (a.diagnostics.iter().filter(|d| d.span.file == FileId(0) && d.code == Code::E0704))
+        .map(|d| {
+            (d.message.as_str(), d.notes.iter().map(|n| (n.span.is_some(), n.message.as_str())).collect::<Vec<_>>())
+        })
+        .collect();
+    let rule = (false, "read the other fields before, or take them out together with a destructuring `let` (§5.2)");
+    let taken = vec![(true, "taken out here"), rule];
+    assert_eq!(
+        said,
+        [
+            ("`h` was moved when `h.buf` was taken out and cannot be used again (§5.2)", taken.clone()),
+            ("`h` is moved here in a previous iteration of the loop when `h.buf` was taken out (§5.2)", taken),
+            ("`h` was moved and cannot be used again (§5.2)", vec![(true, "moved here")]),
+        ]
+    );
+}
+
+/// S-85 (§12.2): the rest of a value a field is taken out of is dropped,
+/// and needs `Alloc` when a part beside a step of the path does: a `Buf`
+/// beside the field or beside a field on the way, of a generic struct by
+/// its argument, a tuple's; not a Copy rest, nor a `T` (as its whole drop,
+/// W6-02).
+#[test]
+fn the_rest_of_a_value_a_field_is_taken_out_of() {
+    let (src, a, def) = clean(
+        "pub struct Pair { a: Buf[F32], b: Buf[F32] }
+pub struct G[T: ?Dup] { a: Buf[F32], b: T }
+pub struct Out { h: Holder, k: F32 }
+pub struct Out2 { h: Holder, s: Str }
+pub fn copy_rest(move h: Holder) -> Buf[F32] uses {Alloc} { h.buf }
+pub fn buf_rest(move p: Pair) -> Buf[F32] uses {Alloc} { p.a }
+pub fn nested_copy(move o: Out) -> Buf[F32] uses {Alloc} { o.h.buf }
+pub fn nested_outer(move o: Out2) -> Buf[F32] uses {Alloc} { o.h.buf }
+pub fn tuple(move t: (Buf[F32], Str, U32)) -> Buf[F32] uses {Alloc} { t.0 }
+pub fn of_buf(move g: G[Buf[F32]]) -> Buf[F32] uses {Alloc} { g.a }
+pub fn of_u32(move g: G[U32]) -> Buf[F32] uses {Alloc} { g.a }
+pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
+",
+    );
+    let rest = |n: &str| {
+        let found: Vec<_> =
+            crate::rt::rest_drops(&a, &a.bodies[&def(&a, n)]).map(|(at, root)| (at, root.to_string())).collect();
+        assert!(found.iter().all(|(at, _)| src[..at.start as usize].ends_with("{ ")), "{found:?}");
+        found.into_iter().map(|(_, root)| root).collect::<Vec<_>>()
+    };
+    let none: [&str; 0] = [];
+    for (n, roots) in [
+        ("copy_rest", &none[..]),
+        ("buf_rest", &["p"]),
+        ("nested_copy", &none),
+        ("nested_outer", &["o"]),
+        ("tuple", &["t"]),
+        ("of_buf", &["g"]),
+        ("of_u32", &none),
+        ("of_t", &none),
+    ] {
+        assert_eq!(rest(n), roots, "{n}");
+    }
 }

@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 0
+
+// S-85, R-95 (§5.2: "対象は struct とタプルのフィールドの経路で（`move s.inner.buf` も可）、配列の要素は取り出せない（`move xs[i]` は E0711。
+// 要素は `for x in move xs` で取り出す）"): the element of an array is not a path that a take-out can follow, even when the array
+// is owned: the root would have to be consumed for one element, and the others are not a rest that is dropped on the spot
+// (the elements are taken out by `for x in move xs`). So an Affine element at a consuming position is an E0711, with
+// the `move` (and in the return position, where none is written), with a constant index and with a variable
+// one, and as a part of a longer path (a field of the array in a struct, a field of an element). The error is at the path. The whole array moved, `for x in move xs` and the
+// element that is a Copy value are the contrasts. One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Rack {
+  xs: [Buf[F32]; 2],
+  n: U32,
+}
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn take_all(move xs: [Buf[F32]; 2]) uses {Alloc} {}
+
+// ----------------------------------------------------------------------- an owned array
+
+pub fn moved_into_a_let(move xs: [Buf[F32]; 2]) -> Buf[F32] uses {Alloc} {
+  let b = move xs[0]                  //~ E0711
+  b
+}
+
+pub fn moved_into_an_argument(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  take(move xs[1])                    //~ E0711
+}
+
+pub fn a_variable_index(move xs: [Buf[F32]; 2], i: U32) uses {Alloc} {
+  take(move xs[i])                    //~ E0711
+}
+
+pub fn returned(move xs: [Buf[F32]; 2]) -> Buf[F32] uses {Alloc} {
+  xs[0]                               //~ E0711
+}
+
+pub fn a_field_of_an_element(move xs: [Holder; 2]) -> Buf[F32] uses {Alloc} {
+  let b = move xs[0].buf              //~ E0711
+  b
+}
+
+pub fn an_element_of_a_field(move r: Rack) -> Buf[F32] uses {Alloc} {
+  let b = move r.xs[0]                //~ E0711
+  b
+}
+
+pub fn an_owned_local() uses {Alloc} {
+  let xs = [mk(), mk()]
+  take(move xs[0])                    //~ E0711
+}
+
+// The same element with no `move` at a consuming position is an E0711 with no fix: a `move` added would
+// leave the E0711 above (§18.1: a fix leaves no error of its stage), as a place that is not owned is at a
+// `move` parameter (§5.2: "印の有無によらず修正候補の無い E0711"). Added by the parent.
+
+pub fn unmarked_into_an_argument(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  take(xs[1])                         //~ E0711
+}
+
+pub fn unmarked_into_a_let(move xs: [Buf[F32]; 2]) -> Buf[F32] uses {Alloc} {
+  let b = xs[1]                       //~ E0711
+  b
+}
+
+// ---------------------------------------------------------------------------- the contrasts
+
+pub fn the_whole_array_moved(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  take_all(move xs)
+}
+
+pub fn the_elements_taken_out_by_a_for(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  for x in move xs {
+    take(move x)
+  }
+}
+
+pub fn a_copy_element(xs: [U32; 2]) -> U32 {
+  xs[0] + xs[1]
+}

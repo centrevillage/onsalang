@@ -62,14 +62,14 @@ fn a_stage_runs_after_an_error_of_its_own_stage_and_not_of_an_earlier_one() {
 
 #[test]
 fn a_unit_whose_modes_failed_gets_no_rt_and_no_effects() {
-    // R-74, S-64: a partial move (E0711) in both; before W4-06 the effects (E0601) and the
-    // rt rules (E0901) ran on them too.
-    let src = "pub struct Holder {\n  buf: Buf[F32],\n  gain: F32,\n}\n\n\
-               pub fn take_field(move s: Holder) -> Buf[F32] { s.buf }\n\n\
-               pub rt fn take_field_rt(move s: Holder) -> Buf[F32] { s.buf }\n";
+    // R-74, S-64: a use after a field was taken out (E0704) in both, whose rest needs `Alloc` to
+    // drop; before W4-06 the effects (E0601) and the rt rules (E0901) ran on them too.
+    let src = "pub struct Pair {\n  a: Buf[F32],\n  b: Buf[F32],\n}\n\n\
+               pub fn take_field(move s: Pair) -> Buf[F32] { let x = move s.a\n  if x.len() > s.b.len() { x } else { x } }\n\n\
+               pub rt fn take_field_rt(move s: Pair) -> Buf[F32] { let x = move s.a\n  if x.len() > s.b.len() { x } else { x } }\n";
     let a = check(src);
     let codes: Vec<(Code, Stage)> = a.diagnostics.iter().map(|d| (d.code, d.stage)).collect();
-    assert_eq!(codes, [(Code::E0711, Stage::Modes), (Code::E0711, Stage::Modes)]);
+    assert_eq!(codes, [(Code::E0704, Stage::Modes), (Code::E0704, Stage::Modes)]);
     assert!(a.failures.skips(def(&a, "take_field_rt"), Stage::Effects));
 }
 

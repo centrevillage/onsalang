@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§8.1", "§10", "§12.2"]
+
+// R-32, S-85 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値（`[Str; 2]` など）の破棄: 要る"): a value moved or
+// taken out on one path of an `if` is dropped whole on the other path, and that drop needs `Alloc`: a function without
+// `uses {Alloc}` is an E0601 and an `rt fn` an E0901. This version counts a local moved anywhere in the body as moved on
+// every path (R-32, W6-02). Found by the break side of W4-09 U2 and added by the parent as the case that keeps the form
+// (rules/leader.md 4.9). The functions are one-liners, so that the line does not depend on where the drop is reported.
+// One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn moved_on_one_path(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { None } }   //~ E0601
+
+pub fn taken_out_on_one_path(c: Bool, move h: Holder) -> Option[Buf[F32]] { if c { Some(move h.buf) } else { None } }   //~ E0601
+
+pub fn taken_out_on_the_other_path(c: Bool, move h: Holder) -> Option[Buf[F32]] { if c { None } else { Some(move h.buf) } }   //~ E0601
+
+pub rt fn rt_moved_on_one_path(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { None } }   //~ E0901
+
+pub rt fn rt_taken_out_on_one_path(c: Bool, move h: Holder) -> Option[Buf[F32]] { if c { Some(move h.buf) } else { None } }   //~ E0901
+
+// The contrasts: with `uses {Alloc}`, and moved on both paths.
+
+pub fn alloc_taken_out_on_one_path(c: Bool, move h: Holder) -> Option[Buf[F32]] uses {Alloc} { if c { Some(move h.buf) } else { None } }
+
+pub rt fn rt_moved_on_both_paths(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { Some(move b) } }

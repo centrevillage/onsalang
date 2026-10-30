@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "23:11"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// S-85, R-95 (§5.2: "Affine 値を `move` 無しでこれらの位置に置くと E0711（修正候補は `move` の挿入）"; "所有する値の Affine のフィールドを
+// 消費する位置に置くと…`s` 全体を消費する"): the field path of an owned value, put at the initialization of a `let` without
+// `move`, is an E0711 at the path, and the one candidate inserts `move`. After it the take-out is right (the rest of `s` is a
+// Copy value, so nothing else is reported), the file is clean. One diagnostic in the file, because `clean` is about the
+// whole file (tests/README.md). The same for a move argument is fixes/e0703_take_out_argument.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn take_out(move s: Holder) -> Buf[F32] {
+  let b = s.buf //~ E0711
+  b
+}

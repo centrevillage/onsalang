@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§8.1", "§10", "§12.2"]
+
+// S-85, R-95, R-32 (§12.2: "ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合、§6.3）: 要る"): the rest of a take-out
+// that holds a value of a type parameter without `Copy` needs `Alloc`, as the drop of such a whole value does: a function
+// without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. Split by the parent from negative/take_out_rest_alloc.onsa
+// (W4-09 U2): the drop of a generic `T` needs no `Alloc` yet for any value in this version (R-32, W6-02). The contrast
+// with `uses {Alloc}` is in that file. One error per function (P-01).
+
+pub struct Both[T: ?Dup] {
+  a: T,
+  b: T,
+}
+
+pub fn the_rest_is_a_type_parameter[T: ?Dup](move p: Both[T]) -> T { p.a }   //~ E0601
+
+pub rt fn rt_the_rest_is_a_type_parameter[T: ?Dup](move p: Both[T]) -> T { p.a }   //~ E0901

@@ -16,17 +16,20 @@ use crate::ty::TyId;
 /// literal that is one (E0702, [`Walker::arg_places`]): its expression, how
 /// it is passed, its place, and its root if a binding of the index (S-796);
 /// `copied`, a Dup value at a `move` parameter or receiver, which counts as
-/// a read (S-801).
+/// a read (S-801); `unknown`, a value with no kind there, a read too, said
+/// as written (§18.1).
 pub(super) struct Passed {
     at: ExprId,
     mode: Mode,
     place: Place,
     via: Option<LocalId>,
     copied: bool,
+    unknown: bool,
 }
 
-/// The note of a Dup value passed to a `move` parameter (S-801).
+/// The note of a Dup value passed to a `move` parameter (S-801), and of a value with no kind.
 const COPIED: &str = "a Dup value passed to a `move` parameter is copied, and read here (§5.2)";
+const UNKNOWN: &str = "a value whose kind is not known (§18.1) counts as a read";
 
 /// How a place is passed, in a message.
 fn how(m: Mode) -> &'static str {
@@ -63,8 +66,8 @@ impl Walker<'_> {
         let passed: Vec<Passed> = places.into_iter().map(|((x, place), m)| self.passed(x, m, place)).collect();
         let mut later = Vec::new();
         for (j, b) in passed.iter().enumerate() {
-            let excl = b.mode != Mode::Borrow;
-            let mut earlier = passed[..j].iter().filter(|a| excl || a.mode != Mode::Borrow);
+            let excl = |p: &Passed| p.mode != Mode::Borrow && !p.unknown;
+            let mut earlier = passed[..j].iter().filter(|a| excl(b) || excl(a));
             if let Some(a) = earlier.find(|a| self.deps.meets(&a.place, &b.place)) {
                 later.push((self.ast.expr(b.at).span, b.place.root));
                 let d = self.overlapping(a, b);
@@ -104,14 +107,14 @@ impl Walker<'_> {
         let kind = ty.and_then(|t| self.kind_of(t));
         // A value with no kind (§18.1: an unknown bound, the error type) may move or not: a read too.
         let read = mode == Mode::Move && kind != Some(Kind::Affine);
-        let copied = read && kind.is_some();
-        if read {
+        let (copied, unknown) = (read && kind.is_some(), read && kind.is_none());
+        if copied {
             mode = Mode::Borrow;
-        } else if mode == Mode::Move {
+        } else if mode == Mode::Move && !unknown {
             place.proj.clear();
         }
         let via = self.deps.indexed(place.root).then_some(place.root);
-        Passed { at: x, mode, place, via, copied }
+        Passed { at: x, mode, place, via, copied, unknown }
     }
 
     /// The E0702 of `b`, which overlaps the earlier `a`: "twice" of two of
@@ -164,6 +167,7 @@ impl Walker<'_> {
         let ((first, note), last) = if b.0.start < a.0.start { (b, a.0) } else { (a, b.0) };
         let d = Diagnostic::new(Stage::Modes, Code::E0702, last, message).with_note(first, note);
         let d = (of.iter().filter(|p| p.copied)).fold(d, |d, p| d.with_note(self.ast.expr(p.at).span, COPIED));
+        let d = (of.iter().filter(|p| p.unknown)).fold(d, |d, p| d.with_note(self.ast.expr(p.at).span, UNKNOWN));
         of.iter().filter_map(|p| p.via).fold(d, |d, l| {
             let (at, note) = self.bound_note(l);
             d.with_note(at, note)

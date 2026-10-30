@@ -45,7 +45,7 @@
 | `body/t1_cmp_lit.onsa` | R-55 |
 | `body/n1_newtype.onsa`、`types/newtype*.onsa` | R-51。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0020_tuple_struct.onsa`、`tests/spec/negative/tuple_struct_many.onsa`（使う側は型の位置だけ） |
 | `body/d1_while_true.onsa` | R-52 |
-| `body/pm1_partial.onsa` | R-74、R-95。R-74 の形（modes の誤りの単位で効果の検査を行わない）は W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`（今の `onsa check` は 6 行の E0711 だけ）。R-95 は W4-09 |
+| `body/pm1_partial.onsa` | R-74、R-95。R-74 の形（modes の誤りの単位で効果の検査を行わない）は W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`。R-95 の形（`take_field` と分解 `via_let`）は W4-09 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/values/take_out_consumes_root.onsa`・`take_out_rest_copy.onsa`（取り出して残りの Copy だけを破棄する形。分解は `unit_stage_modes_stops_rt.onsa` の `via_let`）。S-85 の後は取り出しが modes の誤りでなくなるので、`unit_stage_modes_stops_rt.onsa` と `_alloc.onsa` の modes の誤りは配列の要素の取り出しの E0711 に替えた |
 | `body/b2_builtin_methods.onsa` | R-96 |
 | `flow/e1/` | R-13 |
 | `flow/e2/`、`flow/e17/` | R-14（`e2` は R-06 の `match` も）。S-110 で規則を改めたので、期待は各ファイルの先頭のコメント |
@@ -157,7 +157,7 @@
 | `parent/r88/` | R-88（std の版の固定。期待値は `onsa.toml` の先頭のコメント。S-83） |
 | `parent/r93.onsa` | R-93、R-81（評価順。S-75 の期待値で書いたテストで、今の結果は各テストの上のコメント） |
 | `parent/r94/` | R-94、R-131（数の trait の形。`check.onsa` は `onsa check`、`run.onsa` は `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-84） |
-| `parent/r95.onsa` | R-95（Affine のフィールドの取り出し。期待値と今の出力は各項目の上のコメント。S-85） |
+| `parent/r95.onsa` | R-95（Affine のフィールドの取り出し。S-85）。W4-09 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/values/take_out_consumes_root.onsa`（`take_ret`・`take_let`・`take_pair`・`take_tuple`・`take_nested`・`read_first`・`into_buf` の通る形。分解 `destructure` は `unit_stage_modes_stops_rt.onsa` の `via_let`）、`take_out_rest_copy.onsa`・`negative/take_out_rest_alloc.onsa`（残りの破棄の効果）、`negative/take_out_use_after.onsa`（`use_after`）、`negative/take_out_array_element.onsa`（`take_elem`）、`negative/take_out_not_owned.onsa`（`take_borrowed`）。`impl Drop` を実装する型の形（`Res`・`take_res`・`destructure_res`。`impl Drop` が E0200 で届かない）は第 2 期で、事例に移していない |
 | `parent/r98.onsa` | R-98（名前の無いノードの名前と配置。今の実装の構文で書いた。`onsa interface` と `onsa graph` で確かめる。期待値と今の出力は先頭のコメント。S-86） |
 | `parent/r99.onsa` | R-99（`@param` の値型と値。期待値と今の出力は各 flow の上のコメント。S-87） |
 | `parent/r100/` | R-100（`delay.onsa` は `vdelay` の `MAX` と `F32`、`check` と `test` で確かめる。`size.onsa` は大きさの上限、`interface` で確かめる。期待値と今の出力は各項目の上のコメント。S-88） |

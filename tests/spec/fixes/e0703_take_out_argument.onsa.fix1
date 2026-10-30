@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "26:8"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-85, R-95 (§5.2: "`f(move x)`（Affine 値。Dup 値は `f(x)`）"; the position of a `move` argument is the path): the field path
+// of an owned value passed to a `move` parameter without `move` is an E0703 at the path, the mark of the call does not
+// match the parameter, and the one candidate inserts `move`. After it the take-out is right (the rest of `s` is a Copy
+// value; the function has `uses {Alloc}` for the callee), so the file is clean. One diagnostic in the file, because
+// `clean` is about the whole file (tests/README.md). The same for the initialization of a `let` is
+// fixes/e0711_take_out_let.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn take_out(move s: Holder) uses {Alloc} {
+  take(move s.buf) //~ E0703
+}

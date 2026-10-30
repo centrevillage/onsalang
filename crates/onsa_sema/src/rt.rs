@@ -8,11 +8,11 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprKind, Lit, StmtKind, StrSeg};
 
-use crate::body::Target;
+use crate::body::{BodyInfo, Step, Target};
 use crate::def::DefKind;
 use crate::modes::MovedLocals;
 use crate::ty::{BuiltinTy, Env, Ty, TyId};
-use crate::walk::Walk;
+use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId, Package, module_of_def};
 
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
@@ -242,6 +242,14 @@ fn body_rules(
             );
         }
     }
+    // The rest of a value a field is taken out of (S-85).
+    for (at, root) in rest_drops(a, body) {
+        let message = format!(
+            "taking `{}` out of `{root}` drops the rest of it here, whose destruction needs `Alloc`; `rt` functions cannot allocate (§10, §12.2)",
+            src(at)
+        );
+        found.push(Diagnostic::new(Stage::Effects, Code::E0901, at, message).with_found(src(at)));
+    }
     // A temporary dropped by an expression statement.
     for stmt in &ast.stmts {
         if !def_span.contains(stmt.span.start) {
@@ -270,6 +278,49 @@ fn body_rules(
 /// and `Buf`, or anything containing them. Flow state is Affine but drops freely.
 pub(crate) fn needs_alloc_drop(a: &Analysis, t: TyId) -> bool {
     drops_alloc(&Walk::new(a), t, None, 0).unwrap_or(false)
+}
+
+/// The fields taken out of a value in `body` whose rest needs `Alloc` to
+/// drop (S-85, §12.2): where, and the name of the value.
+pub(crate) fn rest_drops<'b>(a: &'b Analysis, body: &'b BodyInfo) -> impl Iterator<Item = (Span, &'b str)> {
+    body.taken.iter().filter_map(move |t| {
+        let local = &body.locals[t.root.0 as usize];
+        // As `needs_alloc_drop`: a walk that stops is no answer, so no use.
+        let rest = rest_drops_alloc(&Walk::new(a), (local.ty, None, 0), &t.path, t.at).unwrap_or(false);
+        rest.then_some((t.at, local.name.as_str()))
+    })
+}
+
+/// Whether dropping what is left of a value of the type `t` (read under
+/// `env`, `depth` named types in) when `path` is taken out of it at `at`
+/// needs `Alloc`: the parts beside each step ([`drops_alloc`]).
+fn rest_drops_alloc(w: &Walk, (t, env, depth): (TyId, Option<&Env>, u32), path: &[Step], at: Span) -> Option<bool> {
+    let Some((step, more)) = path.split_first() else { return Some(false) };
+    let (ty, env) = w.at(t, env)?;
+    let taken = |name: &str| matches!(step, Step::Field(n) if n == name);
+    let (parts, inner, depth): (Vec<_>, _, _) = match (ty, step) {
+        (Ty::Tuple(ts), Step::Elem(i)) => {
+            (ts.iter().enumerate().map(|(k, &t)| (t, k as u32 == *i)).collect(), None, depth)
+        }
+        (Ty::Named(d, args), _) => match w.enter(*d, args, env, (depth, None))? {
+            (Holds::Alias(t), inner, depth) => return rest_drops_alloc(w, (t, inner.as_ref(), depth), path, at),
+            (Holds::Fields(fs, _), inner, depth) => (fs.iter().map(|f| (f.ty, taken(&f.name))).collect(), inner, depth),
+            _ => (Vec::new(), None, depth),
+        },
+        _ => (Vec::new(), None, depth),
+    };
+    // A tuple's parts are read under `env`, the fields under their declaration's.
+    let env = if inner.is_some() { inner.as_ref() } else { env };
+    let mut on = None;
+    for (t, taken) in parts {
+        match taken {
+            true => on = Some(t),
+            false if drops_alloc(w, t, env, depth)? => return Some(true),
+            false => {}
+        }
+    }
+    let Some(t) = on else { onsa_diag::internal::bug(Some(at), "a field taken out that its type does not have") };
+    rest_drops_alloc(w, (t, env, depth), more, at)
 }
 
 /// [`needs_alloc_drop`] of `t` read under `env` (R-30), `depth` named types

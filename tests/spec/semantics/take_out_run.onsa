@@ -1,0 +1,183 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§9.1", "§12.2"]
+
+// S-85, R-95 (§5.2: "所有する値の Affine のフィールドを消費する位置に置くと…`s` 全体を消費する。取り出したフィールド以外はその場で破棄され"),
+// run in the interpreter: the value that comes out of a take-out is the field that was named and no other (not the first field,
+// not a copy of the root), at each of the consuming positions (the tail, a `let`, a `move` argument, a nested path, a tuple
+// element, the receiver of `unwrap`, the operand of a postfix `?` on both the `Ok` and the `Err` path), a Copy field read
+// before the take-out keeps the value it had, the root assigned again as a whole after a take-out is the new value, and the
+// loop that gives the whole back before each iteration takes the field of the new value each time. The checks of the
+// uses after the take-out and of the effects are negative/take_out_use_after.onsa and negative/take_out_rest_alloc.onsa. The
+// run needs the lowering of the take-out (the work W8-04), until then the Core stage stops with an E0200.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Outer {
+  inner: Holder,
+  rate: U32,
+}
+
+pub struct HolderR {
+  r: Result[Buf[F32], U32],
+  n: U32,
+}
+
+pub struct Slot {
+  o: Option[Buf[F32]],
+  n: U32,
+}
+
+fn pair(la: U32, lb: U32) -> Pair uses {Alloc} {
+  Pair { a: Buf.zeroed(la), b: Buf.zeroed(lb) }
+}
+
+fn len_of(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+fn at_the_tail(move s: Holder) -> Buf[F32] uses {Alloc} {
+  s.buf
+}
+
+fn at_a_let(move p: Pair) -> U32 uses {Alloc} {
+  let b = move p.a
+  b.len()
+}
+
+fn at_a_second_field(move p: Pair) -> U32 uses {Alloc} {
+  let b = move p.b
+  b.len()
+}
+
+fn at_a_move_argument(move p: Pair) -> U32 uses {Alloc} {
+  len_of(move p.b)
+}
+
+fn at_a_nested_path(move o: Outer) -> Buf[F32] uses {Alloc} {
+  o.inner.buf
+}
+
+fn at_a_tuple_element(move t: (Buf[F32], Buf[F32])) -> U32 uses {Alloc} {
+  let b = move t.1
+  b.len()
+}
+
+fn at_a_move_self_receiver(move h: Slot) -> Buf[F32] uses {Alloc} {
+  h.o.unwrap()
+}
+
+fn at_a_try(move h: HolderR) -> Result[U32, U32] uses {Alloc} {
+  let b = h.r?
+  Ok(b.len())
+}
+
+fn copy_field_first(move s: Holder) -> (Buf[F32], F32) uses {Alloc} {
+  let g = s.gain
+  let b = move s.buf
+  (move b, g)
+}
+
+fn assigned_again(la: U32, lb: U32) -> U32 uses {Alloc} {
+  var p = pair(la, lb)
+  let x = move p.a
+  p = pair(7, 9)
+  x.len() + p.a.len() + p.b.len()
+}
+
+fn given_back_in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var p = pair(1, 100)
+
+  var total: U32 = 0
+  for i in 0 ..< n {
+    total = total + len_of(move p.a)
+    p = pair(i + 10, 100)
+  }
+  total + p.a.len()
+}
+
+fn each_arm(c: Bool, move p: Pair) -> U32 uses {Alloc} {
+  if c {
+    len_of(move p.a)
+  } else {
+    len_of(move p.b)
+  }
+}
+
+test "the tail of a function takes the named field" {
+  var x: Buf[F32] = Buf.zeroed(3)
+  x[0] = 7.0
+  let b = at_the_tail(Holder { buf: move x, gain: 0.5 })
+  assert b.len() == 3
+  assert b[0] == 7.0
+}
+
+test "a let takes the field that is named, the first or the second" {
+  assert at_a_let(pair(2, 5)) == 2
+  assert at_a_second_field(pair(2, 5)) == 5
+}
+
+test "a move argument takes the named field" {
+  assert at_a_move_argument(pair(2, 5)) == 5
+}
+
+test "a nested path takes the innermost field" {
+  var x: Buf[F32] = Buf.zeroed(4)
+  x[1] = 2.5
+  let b = at_a_nested_path(Outer { inner: Holder { buf: move x, gain: 1.0 }, rate: 3 })
+  assert b.len() == 4
+  assert b[1] == 2.5
+}
+
+test "a tuple element takes the named element" {
+  let t: (Buf[F32], Buf[F32]) = (Buf.zeroed(2), Buf.zeroed(6))
+  assert at_a_tuple_element(move t) == 6
+}
+
+test "the receiver of unwrap takes the field" {
+  let b = at_a_move_self_receiver(Slot { o: Some(Buf.zeroed(5)), n: 1 })
+  assert b.len() == 5
+}
+
+test "a postfix question mark takes the field on the Ok path" {
+  let r = at_a_try(HolderR { r: Ok(Buf.zeroed(4)), n: 1 })
+  assert r.is_ok()
+  assert r.unwrap() == 4
+}
+
+test "a postfix question mark returns the error on the Err path" {
+  let r = at_a_try(HolderR { r: Err(7), n: 1 })
+  assert r.is_err()
+}
+
+test "a Copy field read before the take-out keeps its value" {
+  var x: Buf[F32] = Buf.zeroed(3)
+  x[2] = 4.0
+  let r = copy_field_first(Holder { buf: move x, gain: 0.5 })
+  assert r.1 == 0.5
+  assert r.0.len() == 3
+  assert r.0[2] == 4.0
+}
+
+test "the whole assigned again after a take-out is the new value" {
+  assert assigned_again(2, 5) == 2 + 7 + 9
+}
+
+test "the whole given back in a loop takes the field of the new value" {
+  assert given_back_in_a_loop(0) == 1
+  assert given_back_in_a_loop(3) == 1 + 10 + 11 + 12
+}
+
+test "the arm that runs takes its field" {
+  assert each_arm(true, pair(2, 5)) == 2
+  assert each_arm(false, pair(2, 5)) == 5
+}

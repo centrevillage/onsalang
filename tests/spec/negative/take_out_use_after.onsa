@@ -1,0 +1,211 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+
+// S-85, S-789, R-95 (§5.2: "取り出したフィールド以外はその場で破棄され、以後 `s` は使えない（E0704）。…他のフィールドが要るときは先に
+// 読むか、分解で一緒に取り出す。Rust の部分移動と違い、残りのフィールドを後で使うことはできない（フィールドごとに移動の状態を
+// 持たない）"; "移した `var` は全体に代入すると再び使え、フィールドや要素への代入は使用に数える（E0704）"): after the take-out of a
+// field of an owned value the root is consumed as a whole, so the next use of the root, of the field again, of another field
+// (even a Copy one), of a part by an assignment, is the E0704 of a use after the move. The movement is counted along the control
+// flow: the next iteration of a loop is a use (whatever the count of the iterations), a branch that took the field out
+// leaves the root unusable after it, the take-out of a field of a root that was moved whole is the error too. The error is at
+// the use after the take-out (the take-out itself for the next iteration of a loop). The note that shows the place of the
+// take-out and the way to read first is not checked here. The forms that are right (the root assigned again as a whole,
+// the root read before the take-out) are in values/take_out_consumes_root.onsa. One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Outer {
+  inner: Holder,
+  rate: U32,
+}
+
+pub struct Slot {
+  o: Option[Buf[F32]],
+  n: U32,
+}
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn mk_pair() -> Pair uses {Alloc} {
+  Pair { a: mk(), b: mk() }
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn show(s: Holder) -> F32 {
+  s.gain
+}
+
+pub fn sink[T: ?Dup](move x: T) {}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+// ------------------------------------------------------------------ the root or a part, read after
+
+pub fn another_field_read(move s: Holder) -> F32 uses {Alloc} {
+  let b = move s.buf
+  take(move b)
+  s.gain                              //~ E0704
+}
+
+pub fn another_buf_field_read(move p: Pair) -> U32 uses {Alloc} {
+  take(move p.a)
+  p.b.len()                           //~ E0704
+}
+
+pub fn the_root_borrowed_after(move s: Holder) -> F32 uses {Alloc} {
+  take(move s.buf)
+  show(s)                             //~ E0704
+}
+
+pub fn the_root_moved_after(move s: Holder) uses {Alloc} {
+  take(move s.buf)
+  sink(move s)                        //~ E0704
+}
+
+pub fn the_same_field_again(move p: Pair) uses {Alloc} {
+  take(move p.a)
+  take(move p.a)                      //~ E0704
+}
+
+pub fn the_sibling_field(move p: Pair) uses {Alloc} {
+  take(move p.a)
+  take(move p.b)                      //~ E0704
+}
+
+pub fn a_field_of_a_moved_root(move p: Pair) uses {Alloc} {
+  sink(move p)
+  take(move p.a)                      //~ E0704
+}
+
+pub fn an_owned_local() -> F32 uses {Alloc} {
+  let s = Holder { buf: mk(), gain: 1.0 }
+  let b = move s.buf
+  take(move b)
+  s.gain                              //~ E0704
+}
+
+pub fn through_a_nested_path(move o: Outer) -> U32 uses {Alloc} {
+  let b = move o.inner.buf
+  take(move b)
+  o.rate                              //~ E0704
+}
+
+pub fn through_a_nested_path_the_sibling(move o: Outer) -> F32 uses {Alloc} {
+  take(move o.inner.buf)
+  o.inner.gain                        //~ E0704
+}
+
+pub fn through_a_tuple_element(move t: (Buf[F32], U32)) -> U32 uses {Alloc} {
+  let a = move t.0
+  take(move a)
+  t.1                                 //~ E0704
+}
+
+pub fn through_a_move_self_receiver(move h: Slot) -> U32 uses {Alloc} {
+  let b = h.o.unwrap()
+  b.len() + h.n                       //~ E0704
+}
+
+// ------------------------------------------------------------------ an assignment to a part
+
+pub fn a_field_assigned_after() uses {Alloc} {
+  var p = mk_pair()
+  let x = move p.a
+  take(move x)
+  p.a = mk()                          //~ E0704
+}
+
+pub fn a_field_assigned_after_a_branch(c: Bool) uses {Alloc} {
+  var p = mk_pair()
+  if c {
+    take(move p.a)
+  }
+  p.b = mk()                          //~ E0704
+}
+
+// ---------------------------------------------------------------- along the control flow
+
+pub fn the_next_iteration(move p: Pair, n: U32) uses {Alloc} {
+  for _ in 0 ..< n {
+    take(move p.a)                    //~ E0704
+  }
+}
+
+pub fn the_next_iteration_of_a_while(move p: Pair, n: U32) uses {Alloc} {
+  var i: U32 = 0
+  while i < n {
+    take(move p.a)                    //~ E0704
+    i = i + 1
+  }
+}
+
+pub fn one_arm_of_an_if(c: Bool, move p: Pair) -> U32 uses {Alloc} {
+  if c {
+    take(move p.a)
+  }
+  p.b.len()                           //~ E0704
+}
+
+pub fn both_arms_of_an_if(c: Bool, move p: Pair) -> U32 uses {Alloc} {
+  if c {
+    take(move p.a)
+  } else {
+    take(move p.b)
+  }
+  p.a.len()                           //~ E0704
+}
+
+pub fn one_arm_of_a_match(c: Bool, move p: Pair) -> U32 uses {Alloc} {
+  match c {
+    true => take(move p.a),
+    false => {},
+  }
+  p.b.len()                           //~ E0704
+}
+
+pub fn the_owned_binding_of_a_match(move o: Option[Pair]) -> U32 uses {Alloc} {
+  match move o {
+    Some(p) => {
+      take(move p.a)
+      p.b.len()                       //~ E0704
+    },
+    None => 0,
+  }
+}
+
+pub fn in_an_anonymous_function() -> U32 uses {Alloc} {
+  apply(fn(i: U32) -> U32 {
+    let p = mk_pair()
+    take(move p.a)
+    i + p.b.len()                     //~ E0704
+  })
+}
+
+// ---------------------------------------------------------------------------- the contrasts
+
+pub fn read_first(move s: Holder) -> (Buf[F32], F32) uses {Alloc} {
+  let g = s.gain
+  let b = move s.buf
+  (move b, g)
+}
+
+pub fn assigned_whole_again() -> U32 uses {Alloc} {
+  var p = mk_pair()
+  take(move p.a)
+  p = mk_pair()
+  p.b.len()
+}

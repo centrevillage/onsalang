@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§10", "§12.2"]
+
+// S-85, R-95 (§5.2: "取り出したフィールド以外はその場で破棄され"; §12.2: "Copy 値…の生成と破棄: 要らない", "受け取った Shared 値・
+// `Buf` を、そのまま返す・`move` の引数に渡す: 要らない"; §10 rule 1): the effect of a take-out is the effect of dropping the
+// rest of the root. When the rest holds only Copy values (`gain: F32`, `rate: U32`) nothing needs `Alloc`: the `Buf` that is
+// taken out is handed on as it is. So the functions here have no `uses {Alloc}`, and the same functions are `rt fn` without
+// an E0901. No diagnostic is expected anywhere in this file. The rest that holds a `Buf` or a Shared value needs `Alloc`
+// (negative/take_out_rest_alloc.onsa). Every binding is read.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Outer {
+  inner: Holder,
+  rate: U32,
+}
+
+pub struct Slot {
+  o: Option[Buf[F32]],
+  n: U32,
+}
+
+impl Holder {
+  pub fn into_buf(move self) -> Buf[F32] {
+    self.buf
+  }
+
+  pub rt fn into_buf_rt(move self) -> Buf[F32] {
+    self.buf
+  }
+}
+
+pub rt fn hand_on(move b: Buf[F32]) -> Buf[F32] {
+  b
+}
+
+// ---------------------------------------------------------------- a function without `Alloc`
+
+pub fn at_the_tail(move s: Holder) -> Buf[F32] {
+  s.buf
+}
+
+pub fn at_a_let(move s: Holder) -> Buf[F32] {
+  let b = move s.buf
+  b
+}
+
+pub fn at_a_move_argument(move s: Holder) -> Buf[F32] {
+  hand_on(move s.buf)
+}
+
+pub fn at_a_move_self_receiver(move h: Slot) -> Buf[F32] {
+  h.o.unwrap()
+}
+
+pub fn a_nested_path(move o: Outer) -> Buf[F32] {
+  o.inner.buf
+}
+
+pub fn a_tuple_element(move t: (Buf[F32], F32)) -> Buf[F32] {
+  t.0
+}
+
+pub fn a_copy_field_first(move s: Holder) -> (Buf[F32], F32) {
+  let g = s.gain
+  let b = move s.buf
+  (move b, g)
+}
+
+// --------------------------------------------------------------------------- an `rt fn`
+
+pub rt fn rt_at_the_tail(move s: Holder) -> Buf[F32] {
+  s.buf
+}
+
+pub rt fn rt_at_a_let(move s: Holder) -> Buf[F32] {
+  let b = move s.buf
+  b
+}
+
+pub rt fn rt_at_a_move_argument(move s: Holder) -> Buf[F32] {
+  hand_on(move s.buf)
+}
+
+pub rt fn rt_a_nested_path(move o: Outer) -> Buf[F32] {
+  o.inner.buf
+}
+
+pub rt fn rt_a_tuple_element(move t: (Buf[F32], F32)) -> Buf[F32] {
+  t.0
+}

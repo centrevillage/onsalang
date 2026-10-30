@@ -156,6 +156,10 @@ pub(crate) fn bind_params(lw: &mut Lowerer, cx: &mut FnCx, d: DefId, f: &SFnDef)
 }
 
 pub(crate) fn lower_fn_body(lw: &mut Lowerer, cx: &mut FnCx, body: ExprId) -> R<Block> {
+    // S-85, X-8: the rest is dropped over the whole body, so it stops whole (W8-04).
+    if let Some(t) = cx.info.taken.first() {
+        return Err(unsupported(t.at, Feature::TakenFields, &[]));
+    }
     let AK::Block(b) = &cx.expr(body).kind else {
         return Err(internal(cx.expr(body).span, "function body is not a block"));
     };

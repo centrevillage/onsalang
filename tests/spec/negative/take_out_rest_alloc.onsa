@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§8.1", "§10", "§12.2"]
+
+// S-85, R-95 (§5.2: "取り出したフィールド以外はその場で破棄され"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る", "ジェ
+// ネリックな `T` の値の破棄（`T: Copy` の制約が無い場合）: 要る"; §8.1: 暗黙の `Alloc` に所有する値の破棄を含む; §10 rule 1 and
+// §6.3: "値が破棄される位置は、その型の破棄が必要とするもの（`Alloc`、非 rt）を要求する（E0601 / E0901）"): the effect of a take-out is the effect of dropping the rest of the
+// root. When the rest holds a `Buf`, a Shared value (`Str`), or a value of a type parameter without `Copy`, the function needs
+// `Alloc`: a function without `uses {Alloc}` is an E0601 and an `rt fn` is an E0901 (the code of a drop in an `rt fn` in this
+// version, the same as negative/rt_drop_through_ptr.onsa). The rest is counted along the whole path of the field, so a sibling in
+// a nested struct (`o.inner.buf` with a `Buf` next to it in `inner`) and a sibling of the nested struct are both in it. The
+// take-out itself is right, and the same functions with `uses {Alloc}` have no error (the last part of the file). The
+// rest is dropped where the field is taken out (§5.2 "その場で破棄され"), so the error is there when it is the first use
+// (§8.1 "診断は最初の使用の位置に置く"; the line in a longer body is negative/take_out_rest_alloc_position.onsa, and the rest of
+// a type parameter is negative/take_out_rest_alloc_generic.onsa, both split by the parent for later works). The rest that holds only Copy values needs no `Alloc`
+// (values/take_out_rest_copy.onsa). One error per function (P-01).
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Named {
+  name: Str,
+  buf: Buf[F32],
+}
+
+pub struct Mid {
+  buf: Buf[F32],
+  extra: Buf[F32],
+}
+
+pub struct Outer {
+  inner: Mid,
+  rate: U32,
+}
+
+pub struct Side {
+  inner: Mid,
+  side: Buf[F32],
+}
+
+pub struct Slot {
+  o: Option[Buf[F32]],
+  tag: Str,
+}
+
+pub struct Both[T: ?Dup] {
+  a: T,
+  b: T,
+}
+
+pub rt fn hand_on(move b: Buf[F32]) -> Buf[F32] {
+  b
+}
+
+// ------------------------------------------------------- a function without `Alloc`: E0601
+
+pub fn the_rest_is_a_buf(move p: Pair) -> Buf[F32] { p.a }   //~ E0601
+
+pub fn the_rest_is_a_shared_value(move s: Named) -> Buf[F32] { s.buf }   //~ E0601
+
+pub fn the_rest_is_in_the_nested_struct(move o: Outer) -> Buf[F32] { o.inner.buf }   //~ E0601
+
+pub fn the_rest_is_next_to_the_nested_struct(move o: Side) -> Buf[F32] { o.inner.buf }   //~ E0601
+
+pub fn the_rest_is_a_tuple_element(move t: (Buf[F32], Str)) -> Buf[F32] { t.0 }   //~ E0601
+
+pub fn the_rest_after_a_move_argument(move p: Pair) -> Buf[F32] { hand_on(move p.a) }   //~ E0601
+
+pub fn the_rest_after_a_move_self_receiver(move h: Slot) -> Buf[F32] { h.o.unwrap() }   //~ E0601
+
+// ------------------------------------------------------------------- an `rt fn`: E0901
+
+pub rt fn rt_the_rest_is_a_buf(move p: Pair) -> Buf[F32] { p.a }   //~ E0901
+
+pub rt fn rt_the_rest_is_a_shared_value(move s: Named) -> Buf[F32] { s.buf }   //~ E0901
+
+pub rt fn rt_the_rest_is_in_the_nested_struct(move o: Outer) -> Buf[F32] { o.inner.buf }   //~ E0901
+
+pub rt fn rt_the_rest_is_next_to_the_nested_struct(move o: Side) -> Buf[F32] { o.inner.buf }   //~ E0901
+
+pub rt fn rt_the_rest_is_a_tuple_element(move t: (Buf[F32], Str)) -> Buf[F32] { t.0 }   //~ E0901
+
+// ----------------------------------------------------------- the contrasts: with `uses {Alloc}`
+
+pub fn alloc_the_rest_is_a_buf(move p: Pair) -> Buf[F32] uses {Alloc} { p.a }
+
+pub fn alloc_the_rest_is_a_shared_value(move s: Named) -> Buf[F32] uses {Alloc} { s.buf }
+
+pub fn alloc_the_rest_is_in_the_nested_struct(move o: Outer) -> Buf[F32] uses {Alloc} { o.inner.buf }
+
+pub fn alloc_the_rest_is_next_to_the_nested_struct(move o: Side) -> Buf[F32] uses {Alloc} { o.inner.buf }
+
+pub fn alloc_the_rest_is_a_tuple_element(move t: (Buf[F32], Str)) -> Buf[F32] uses {Alloc} { t.0 }
+
+pub fn alloc_the_rest_is_a_type_parameter[T: ?Dup](move p: Both[T]) -> T uses {Alloc} { p.a }

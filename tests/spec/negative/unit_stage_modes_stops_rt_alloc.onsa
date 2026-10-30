@@ -8,12 +8,7 @@
 // because §18.1 does not name E0902 in its list of the stages (the rule 1 is decided by the
 // effect row alone, §10); the reading here is "rt stage".
 
-pub struct Holder {
-  buf: Buf[F32],
-  gain: F32,
-}
-
-pub rt fn take_field_rt_alloc(move s: Holder) -> Buf[F32] uses {Alloc} { s.buf }   //~ E0711
+pub rt fn take_elem_rt_alloc(move xs: [Buf[F32]; 2]) -> Buf[F32] uses {Alloc} { xs[0] }   //~ E0711
 
 pub fn consume(move b: Buf[F32]) uses {Alloc} {}
 

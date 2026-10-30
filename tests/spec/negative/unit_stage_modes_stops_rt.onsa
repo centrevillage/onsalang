@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§18.1", "§5.2", "§8.1", "§10"]
 
-// R-74, S-64 (W4-06): a unit with a modes error (E0711 a partial move, E0704 a second `move`)
+// R-74, S-64 (W4-06): a unit with a modes error (E0711 an element of an array that cannot be taken out, E0704 a second `move`)
 // is not checked for rt and effects (§18.1: the stages are syntax, names, types, flow, modes,
 // then rt and effects; a unit that failed at a stage does not go on to the later ones). The
 // unit's only mark is the modes error, whether the function is `fn` or `rt fn` and whether it has
@@ -16,12 +16,13 @@ pub struct Holder {
   gain: F32,
 }
 
-// The partial move of a field out of an owned struct (§5.2): E0711 only.
-pub fn take_field(move s: Holder) -> Buf[F32] { s.buf }   //~ E0711
+// The element of an owned array cannot be taken out (§5.2: "配列の要素は取り出せない（`move xs[i]` は E0711）"): E0711 only. (A field of an
+// owned struct can be taken out since S-85, and the rest of the struct is then dropped: values/take_out_consumes_root.onsa.)
+pub fn take_elem(move xs: [Buf[F32]; 2]) -> Buf[F32] { xs[0] }   //~ E0711
 
-pub fn take_field_alloc(move s: Holder) -> Buf[F32] uses {Alloc} { s.buf }   //~ E0711
+pub fn take_elem_alloc(move xs: [Buf[F32]; 2]) -> Buf[F32] uses {Alloc} { xs[0] }   //~ E0711
 
-pub rt fn take_field_rt(move s: Holder) -> Buf[F32] { s.buf }   //~ E0711
+pub rt fn take_elem_rt(move xs: [Buf[F32]; 2]) -> Buf[F32] { xs[0] }   //~ E0711
 
 // The right way (destructuring the whole value) has no error.
 pub fn via_let(move s: Holder) -> Buf[F32] {

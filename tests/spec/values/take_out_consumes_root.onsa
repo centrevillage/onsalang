@@ -1,0 +1,242 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§9.1", "§12.2"]
+
+// S-85, R-95 (§5.2): "所有する値の Affine のフィールドを消費する位置に置くと（`let b = move s.buf`、`f(move s.buf)`、返り値の
+// `s.buf`）、`s` 全体を消費する。取り出したフィールド以外はその場で破棄され、以後 `s` は使えない". A field path of an owned
+// value (a `move` parameter, an owned local, an owned binding of a `match move`) that is put at a consuming position takes the
+// field out and consumes the root; this file is the right forms, each used as it should be, so that no diagnostic is expected
+// anywhere. The positions: the tail and the `return` (no mark is written there, §5.2), the initialization of a `let` and the
+// right side of an assignment (`move`), a `move` argument, an element of a tuple or struct literal, the receiver of a `move
+// self` method (no mark, `h.o.unwrap()`; the operand of a postfix `?` is in values/try_operand_field_path.onsa), a nested
+// path (`move o.inner.buf`) and a tuple element (`move t.0`). A Copy field and a Shared field are copied ("Copy と Shared の
+// フィールドは複製されるので、`s` を消費しない"), so the root can be used after them. A `var` that was taken from is usable
+// again after an assignment of the whole ("移した `var` は全体に代入すると再び使え", S-789), and the control flow
+// is counted as for any move: the arms of a branch, a loop that gives the whole back before the next iteration, the owned
+// binding of a `match move`, the body of an anonymous function, a generic type. The rest of the root is dropped on
+// the spot, which needs `Alloc` when it holds a `Buf` or a Shared value (§12.2), so every function here has `uses {Alloc}`;
+// the case where it holds only Copy values is values/take_out_rest_copy.onsa, and the effects are in
+// negative/take_out_rest_alloc.onsa. The uses after the take-out are the E0704 of negative/take_out_use_after.onsa.
+// Every binding is read.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct Outer {
+  inner: Holder,
+  rate: U32,
+}
+
+pub struct Slot {
+  o: Option[Buf[F32]],
+  n: U32,
+}
+
+pub struct Named {
+  name: Str,
+  buf: Buf[F32],
+}
+
+pub struct Rack {
+  xs: [Buf[F32]; 2],
+  n: U32,
+}
+
+pub struct Both[T: ?Dup] {
+  a: T,
+  b: T,
+}
+
+impl Holder {
+  pub fn into_buf(move self) -> Buf[F32] uses {Alloc} {
+    self.buf
+  }
+
+  pub fn into_parts(move self) -> (Buf[F32], F32) uses {Alloc} {
+    let g = self.gain
+    let b = move self.buf
+    (move b, g)
+  }
+}
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn mk_pair() -> Pair uses {Alloc} {
+  Pair { a: mk(), b: mk() }
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn keep(move n: Str) uses {Alloc} {}
+
+pub fn take_all(move xs: [Buf[F32]; 2]) uses {Alloc} {}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+// ------------------------------------------------------------ the consuming positions
+
+pub fn at_the_tail(move s: Holder) -> Buf[F32] uses {Alloc} {
+  s.buf
+}
+
+pub fn at_a_return(c: Bool, move s: Holder) -> Buf[F32] uses {Alloc} {
+  if c {
+    return s.buf
+  }
+  mk()
+}
+
+pub fn at_a_let(move s: Holder) -> Buf[F32] uses {Alloc} {
+  let b = move s.buf
+  b
+}
+
+pub fn at_a_move_argument(move s: Holder) -> U32 uses {Alloc} {
+  take(move s.buf)
+}
+
+pub fn at_an_assignment(move s: Holder) -> Buf[F32] uses {Alloc} {
+  var d = mk()
+  d = move s.buf
+  d
+}
+
+pub fn in_a_tuple_literal(move s: Holder) -> (Buf[F32], U32) uses {Alloc} {
+  (move s.buf, 1)
+}
+
+pub fn in_a_struct_literal(move s: Holder) -> Pair uses {Alloc} {
+  Pair { a: move s.buf, b: mk() }
+}
+
+pub fn at_a_move_self_receiver(move h: Slot) -> U32 uses {Alloc} {
+  let b = h.o.unwrap()
+  b.len()
+}
+
+pub fn a_nested_path(move o: Outer) -> Buf[F32] uses {Alloc} {
+  let b = move o.inner.buf
+  b
+}
+
+pub fn a_tuple_element(move t: (Buf[F32], U32)) -> Buf[F32] uses {Alloc} {
+  let b = move t.0
+  b
+}
+
+pub fn a_tuple_element_of_a_tuple(move t: ((Buf[F32], U32), U32)) -> Buf[F32] uses {Alloc} {
+  t.0.0
+}
+
+pub fn a_field_that_is_an_array(move r: Rack) uses {Alloc} {
+  take_all(move r.xs)
+}
+
+pub fn the_field_of_an_owned_local() -> U32 uses {Alloc} {
+  let s = Holder { buf: mk(), gain: 1.0 }
+  take(move s.buf)
+}
+
+// ------------------------------------------------ a Copy field and a Shared field copy
+
+pub fn a_copy_field_then_the_field(move s: Holder) -> (Buf[F32], F32) uses {Alloc} {
+  let g = s.gain
+  let b = move s.buf
+  (move b, g)
+}
+
+pub fn a_copy_field_read_before_a_branch_takes_out(move s: Holder) -> Buf[F32] uses {Alloc} {
+  let g = s.gain + 1.0
+  if g > 0.0 {
+    s.buf
+  } else {
+    mk()
+  }
+}
+
+pub fn a_shared_field_is_copied(move s: Named) -> U32 uses {Alloc} {
+  keep(s.name)
+  take(move s.buf)
+}
+
+// ----------------------------------------------- a take-out and then the whole again
+
+pub fn the_whole_assigned_again() -> U32 uses {Alloc} {
+  var p = mk_pair()
+  let x = move p.a
+  p = mk_pair()
+  x.len() + p.b.len()
+}
+
+pub fn a_field_assigned_before_the_take_out() -> U32 uses {Alloc} {
+  var p = mk_pair()
+  p.a = mk()
+  take(move p.a)
+}
+
+pub fn the_whole_given_back_in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var p = mk_pair()
+
+  var total: U32 = 0
+  for _ in 0 ..< n {
+    total = total + take(move p.a)
+    p = mk_pair()
+  }
+  total + p.b.len()
+}
+
+// ------------------------------------------------------------------ flows and bodies
+
+pub fn each_arm_takes_out(c: Bool, move p: Pair) -> U32 uses {Alloc} {
+  if c {
+    take(move p.a)
+  } else {
+    take(move p.b)
+  }
+}
+
+pub fn the_arms_of_a_match(c: Bool, move p: Pair) -> U32 uses {Alloc} {
+  match c {
+    true => take(move p.a),
+    false => take(move p.b),
+  }
+}
+
+pub fn the_owned_binding_of_a_match(move o: Option[Pair]) -> U32 uses {Alloc} {
+  match move o {
+    Some(p) => take(move p.a),
+    None => 0,
+  }
+}
+
+pub fn in_an_anonymous_function() -> U32 uses {Alloc} {
+  apply(fn(i: U32) -> U32 {
+    let p = mk_pair()
+    i + take(move p.a)
+  })
+}
+
+pub fn a_generic_field(move p: Both[Buf[F32]]) -> Buf[F32] uses {Alloc} {
+  p.a
+}
+
+pub fn a_field_of_an_unbounded_type[T: ?Dup](move p: Both[T]) -> T uses {Alloc} {
+  p.a
+}
+
+pub fn a_copy_field_of_a_copy_type[T: Copy](move p: Both[T]) -> (T, T) {
+  (p.a, p.b)
+}

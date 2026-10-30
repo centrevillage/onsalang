@@ -1897,23 +1897,32 @@ reasons = ["S-788"]
 until = "W7-03"
 note = "生成項目 `In` が無く E0302（W7-03）。期待値は仕様から手で導いた（W4-07 U4 の t1）"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/try_operand_field_path.onsa"
-reasons = ["S-784", "S-85"]
-until = "W4-09"
-note = "W4-07 の切り替えから、所有の値のフィールドの経路の `?` に部分移動の E0711（19・24・30・36 行。S-85、W4-09）が出て、期待の根の使用の E0704 に届かない。W4-09 まで落ちる（W4-07 U4 の t1）"
+
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/values/try_operand_field_path.onsa"
-reasons = ["S-784", "S-85"]
-until = "W4-09"
-note = "所有の値の Affine のフィールドの経路の `?`（`h.r?`）に、新しい modes は部分移動の E0711 を出す（S-85、W4-09）。古い modes は何も出さず、W4-07 U4b-2 の切り替えから W4-09 まで落ちる"
+target = "tests/spec/semantics/take_out_run.onsa"
+reasons = ["S-85"]
+until = "W8-04"
+note = "取り出し（S-85）の降下（取り出さなかった残りの破棄）は W8-04。それまで Core が取り出しのある本体を E0200 で止める（X-8、W4-09 U2）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/overlap_args_move_field.onsa"
-reasons = ["S-787", "S-85"]
-until = "W4-09"
-note = "39・43・55 行の E0702 は W4-07 で通る。`move x.a` を二つ目の引数と並べる 47・51 行は、部分移動の E0711 が W4-09 まで残る（S-85。W4-07 U4 の t3）"
+target = "tests/spec/negative/take_out_rest_alloc_generic.onsa"
+reasons = ["S-85", "R-32"]
+until = "W6-02"
+note = "取り出しの残りが `T: ?Dup` の値のとき E0601 / E0901（§12.2）。総称の `T` の破棄は値の全体でも `Alloc` を要るとしない（R-32、`rt.rs::needs_alloc_drop`）。W4-09 U2 の `take_out_rest_alloc.onsa` から親が分けた"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/take_out_rest_alloc_position.onsa"
+reasons = ["S-85", "R-87", "S-82"]
+until = "W6-03"
+note = "取り出しの残りの破棄の E0601 を最初の使用（取り出しの式）の行に出す。今は全ての E0601 が署名に出る（`fixes/e0601_alloc_row.onsa` と同じ理由）。W4-09 U2 の `take_out_rest_alloc.onsa` から親が分けた"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/drop_on_the_other_path.onsa"
+reasons = ["R-32", "S-85"]
+until = "W6-02"
+note = "片方の道で移すか取り出した値を、もう片方の道で全体として破棄する `Alloc`（E0601 / E0901、§12.2）。`MovedLocals` が本体で一つの集合なので数えない（R-32）。W4-09 U2 の壊す側が見つけ、親が事例にした（`rules/leader.md` 4.9）"

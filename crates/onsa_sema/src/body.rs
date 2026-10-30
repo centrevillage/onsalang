@@ -194,6 +194,26 @@ pub struct BodyInfo {
     /// except the callers of an rt function: a call on a value of the error
     /// type makes no edge of the rt recursion (`Analysis::reached`).
     pub read_unread: bool,
+    /// The paths of Affine fields taken out of owned locals (S-85, §5.2),
+    /// each once, in the order the modes stage walked them: their roots are
+    /// moved, and what is left is dropped where it is taken
+    /// (`rt::rest_drops_alloc`; lowered from W8-04).
+    pub taken: Vec<Taken>,
+}
+
+/// A path of fields taken out of the owned local `root` at `at` (S-85).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Taken {
+    pub at: Span,
+    pub root: LocalId,
+    pub path: Vec<Step>,
+}
+
+/// A step of a [`Taken`]: a field by its name, a tuple element.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Step {
+    Field(String),
+    Elem(u32),
 }
 
 // ---------------------------------------------------------------- checker

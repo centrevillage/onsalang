@@ -12,7 +12,7 @@ use onsa_syntax::ast::{ExprKind, ItemKind, Lit, StmtKind, StrSeg};
 use crate::body::Target;
 use crate::def::DefKind;
 use crate::modes::MovedLocals;
-use crate::rt::needs_alloc_drop;
+use crate::rt::{needs_alloc_drop, rest_drops};
 use crate::ty::{BuiltinTy, Ty};
 use crate::{Analysis, DefId, Package, module_of_def};
 
@@ -96,6 +96,10 @@ fn first_use(
                 format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)),
             ));
         }
+    }
+    // The rest of a value a field is taken out of (S-85).
+    for (at, root) in rest_drops(a, body) {
+        uses.push((at, format!("taking `{}` out of `{root}` drops the rest of it, which needs `Alloc`", src(at))));
     }
     for stmt in &ast.stmts {
         if !def.span.contains(stmt.span.start) {

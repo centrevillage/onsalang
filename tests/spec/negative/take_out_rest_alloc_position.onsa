@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§8.1"]
+
+// S-85, R-95 (§5.2: "取り出したフィールド以外はその場で破棄され"; §8.1: "診断は最初の使用の位置に置く"): the rest of a
+// take-out is dropped where the field is taken out, so when that drop is the first use of `Alloc` the E0601 is at the
+// take-out, after the code before it. Split by the parent from negative/take_out_rest_alloc.onsa (W4-09 U2): this
+// version puts every E0601 at the signature (R-87, S-82, W6-03, as fixes/e0601_alloc_row.onsa).
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub rt fn hand_on(move b: Buf[F32]) -> Buf[F32] {
+  b
+}
+
+pub fn the_rest_in_a_longer_body(move p: Pair, n: U32) -> Buf[F32] {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    total = total + i
+  }
+  let b = move p.a                    //~ E0601
+  hand_on(move b)
+}

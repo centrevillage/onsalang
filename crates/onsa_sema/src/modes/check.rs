@@ -14,7 +14,7 @@ use super::frozen::Frozen;
 use super::place::{Change, Deps, Place, Proj, path_text};
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
-use crate::body::{BodyInfo, LocalId, generics_of, root_of};
+use crate::body::{BodyInfo, LocalId, Step, Taken, generics_of, root_of};
 use crate::def::GenericDef;
 use crate::names::body::{BodyNames, Origin};
 use crate::ty::TyId;
@@ -26,7 +26,7 @@ use crate::{Analysis, DefId, Kind, Package, module_of_def};
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
     let mut ids: Vec<DefId> = a.bodies.keys().copied().collect();
     ids.sort();
-    let (mut moved, mut found) = (MovedLocals::new(), Vec::new());
+    let (mut moved, mut found, mut taken) = (MovedLocals::new(), Vec::new(), Vec::new());
     for id in ids {
         if !a.body_checked(id, Stage::Modes) {
             continue;
@@ -41,13 +41,22 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         let mut w = Walker::new(a, (&module.parsed.ast, &module.text), (names, info, root), generics_of(a, id));
         w.expr(&mut Run::new(), root, Pos::Return);
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
+        taken.push((id, w.m.taken));
         if !w.m.moved.is_empty() {
             moved.insert(id, w.m.moved);
         }
     }
     a.diagnostics.extend(found);
+    // The stages after read the fields taken out (S-85; D-15: decided here only).
+    for (id, t) in taken {
+        let Some(info) = a.bodies.get_mut(&id) else { bug(Some(a.def(id).span), "a body walked and gone") };
+        info.taken = t;
+    }
     moved
 }
+
+/// The rule of an E0704 after a field was taken out (S-85, §5.2).
+const TAKEN: &str = "read the other fields before, or take them out together with a destructuring `let` (§5.2)";
 
 /// The walk of one body: what it reads, and what it found. The walk does
 /// not stop at an error (an erroneous operation leaves the state as it is);
@@ -111,6 +120,10 @@ pub(super) struct Made {
     pub(super) found: Vec<Diagnostic>,
     /// The owned Affine locals a move made `Moved` ([`MovedLocals`]).
     moved: HashSet<LocalId>,
+    /// The paths of fields taken out (S-85): where, by every walk (the
+    /// E0704 after), and in order by the walk that reports ([`BodyInfo::taken`]).
+    takes: HashMap<Span, Place>,
+    pub(super) taken: Vec<Taken>,
     /// The expressions visited (memo 3: at most twice each).
     #[cfg(test)]
     pub(super) visits: usize,
@@ -176,14 +189,22 @@ impl<'a> Walker<'a> {
                 return false;
             }
             Why::Moved(m, via_loop) => {
+                // S-85: by a field taken out, said so, with how to read the others.
+                let took =
+                    self.m.takes.get(&m).map(|t| format!(" when `{}` was taken out", self.place_text(m, &[], t)));
+                let when = took.as_deref().unwrap_or_default();
                 let message = if via_loop {
                     // Only a binding that can be written is live again (S-789).
                     let assign = if self.writable(l) { "; assign it before the loop ends" } else { "" };
-                    format!("`{name}` is moved here in a previous iteration of the loop{assign} (§5.2)")
+                    format!("`{name}` is moved here in a previous iteration of the loop{when}{assign} (§5.2)")
                 } else {
-                    format!("`{name}` was moved and cannot be used again (§5.2)")
+                    format!("`{name}` was moved{when} and cannot be used again (§5.2)")
                 };
-                Diagnostic::new(Stage::Modes, Code::E0704, at, message).with_note(m, "moved here")
+                let d = Diagnostic::new(Stage::Modes, Code::E0704, at, message);
+                match took {
+                    None => d.with_note(m, "moved here"),
+                    Some(_) => d.with_note(m, "taken out here").with_rule(TAKEN),
+                }
             }
             Why::Stale(c, prefix, k) => {
                 // As written, unless read by a pattern.
@@ -243,6 +264,23 @@ impl<'a> Walker<'a> {
         if self.reports {
             self.m.found.push(d);
         }
+    }
+
+    /// The owned Affine place `p` is moved at `at` (§5.2): its root, also
+    /// when `p` is a path of fields, which it takes out (S-85).
+    pub(super) fn move_place(&mut self, r: &mut Run, p: &Place, at: Span, direct: bool) {
+        if !p.proj.is_empty() {
+            self.m.takes.insert(at, p.clone());
+            let step = |s: &Proj| match s {
+                Proj::Field(f) => Step::Field(f.clone()),
+                Proj::Elem(i) => Step::Elem(*i),
+                Proj::Index | Proj::Payload => bug(Some(at), "a field taken out through an element or a payload"),
+            };
+            if self.reports {
+                self.m.taken.push(Taken { at, root: p.root, path: p.proj.iter().map(step).collect() });
+            }
+        }
+        self.move_local(r, p.root, at, direct);
     }
 
     /// The owned Affine local `l` is moved at `at` (§5.2): a change (§7),
