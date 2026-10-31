@@ -1,0 +1,5 @@
+pub fn f(xs: [U32; 2], i: U32, n: U32) -> U32 {
+  var x: U32 = 0
+  x = { n }
+  x + xs[{ i }]
+}
