@@ -1,0 +1,11 @@
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+pub fn keep(move f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+pub fn c3(k: I32) -> I32 {
+  keep(inout fn(x: I32) -> I32 { x + k }).f.(1)
+}

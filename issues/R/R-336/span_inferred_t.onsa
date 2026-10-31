@@ -1,0 +1,7 @@
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn sp(xs: Span[F32]) -> U32 {
+  id(xs).len()
+}
