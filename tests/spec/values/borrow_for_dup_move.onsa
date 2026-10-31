@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2"]
+
+// S-808 (§5.4: "本体の Dup の値の `move`（`let c = move xs`。複製で読み、§5.2）も当たらない"; §5.2: "Dup 値の `move`
+// （`let y = move s`）は複製になる"): in the body of a borrowed `for`, a `move` of the iterated Dup value copies it and
+// changes nothing, so it is no E0715, for a Shared element and a Copy one. The `move` of an Affine source is the E0715 of
+// negative/for_borrowed_change.onsa.
+
+pub fn shared_elements(names: [Str; 3]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for s in names {
+    let c = move names
+    n = n + c.len() + s.len()
+  }
+  n
+}
+
+pub fn copy_elements(xs: [U32; 3]) -> U32 {
+  var n: U32 = 0
+  for x in xs {
+    let c = move xs
+    n = n + c[0] + x
+  }
+  n
+}
