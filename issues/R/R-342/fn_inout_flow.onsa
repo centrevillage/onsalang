@@ -1,0 +1,17 @@
+pub rt fn h(inout x: F32) -> F32 {
+  x
+}
+
+pub rt fn m(move x: F32) -> F32 {
+  x
+}
+
+pub flow fc(x: F32 at sample) -> F32 at sample {
+  let a = h(inout x)
+  a
+}
+
+pub flow fe(x: F32 at sample) -> F32 at sample {
+  let a = m(move x)
+  a
+}
