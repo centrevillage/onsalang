@@ -11,8 +11,9 @@
 // to the place that can have it, and removes it where there is none:
 // - the type of an input or an output of a flow that has no clock after it gets it there
 //   (`x: Option[F32 at sample]` becomes `x: Option[F32] at sample`);
-// - the type of a `let` or a `var` gets it on the value (`let y: Option[F32] = x at sample`);
-// - elsewhere, and where the flow input or output has a clock after the type already, it is removed.
+// - the type of a `let` or a `var` of a flow body gets it on the value (`let y: Option[F32] = x at sample`);
+// - elsewhere, and where the flow input or output has a clock after the type already, it is removed: a
+//   `let` or a `var` outside a flow body too, whose value has no clock either (E0821, §11.1, S-820).
 // An `at` after the type of an input or output of an `fn` is not this error but E0821 of the names
 // stage (see negative/names_clock_in_fn_head.onsa). One error per declaration unit.
 
@@ -79,27 +80,27 @@ pub const KS: [F32; 2] = [1.0, 2.0]         //~ E0020
 // ---- moved to the value of a `let` or a `var` -------------------------------------------------------
 
 pub fn let_in_a_fn(x: Option[F32]) -> F32 {
-  let y: Option[F32] = x at sample                  //~ E0020
+  let y: Option[F32] = x                  //~ E0020
   0.5
 }
 
 pub fn let_array_in_a_fn(xs: [F32; 2]) -> F32 {
-  let ys: [F32; 2] = xs at sample                   //~ E0020
+  let ys: [F32; 2] = xs                   //~ E0020
   ys[0]
 }
 
 pub fn let_pattern_in_a_fn(p: (F32, F32)) -> F32 {
-  let (a, b): (F32, F32) = p at sample              //~ E0020
+  let (a, b): (F32, F32) = p              //~ E0020
   a + b
 }
 
 pub fn var_in_a_fn(x: F32) -> F32 {
-  var y: F32 = x at sample                          //~ E0020
+  var y: F32 = x                          //~ E0020
   y
 }
 
 pub fn var_with_a_type_argument(x: Option[F32]) -> F32 {
-  var y: Option[F32] = x at block                   //~ E0020
+  var y: Option[F32] = x                   //~ E0020
   0.5
 }
 

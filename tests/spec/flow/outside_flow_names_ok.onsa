@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.1", "§11.3", "§11.4", "§2.2", "§3.1"]
+
+// W4-12 U3: what is written outside a flow and is no flow-only syntax, and what a flow body has next to
+// it, are fine (the errors are in negative/e0821_*.onsa). The names of the clocks are names of values
+// as well (§11.3: "`sample` や `block` を変数の名前に使ってもよい"); the built-in names of a flow are
+// ordinary names of a function (§11.4, module/overlap_flow_builtin_fn_ok.onsa), so a local named `prev` is
+// used as a value, and a call of an `rt fn` is a call as any (§11.2). The binary `^` is the exclusive or
+// (§3.1), not the reference `^name` of a flow, which is told by its place (§2.6). The values that a flow
+// is for, a series of values, are `[e; N]` outside a flow (§11.1). In the body of a flow the same syntax
+// is not an error: the instance call, the reference to a name defined below, `par`, and the `at` of an
+// expression next to the `at` of the heading.
+
+pub rt fn scale(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = x * 0.5 + prev~(^y) * 0.5
+  y
+}
+
+pub fn clock_names_as_variables(x: F32) -> F32 {
+  let sample = x
+  let block  = sample + 1.0
+  block
+}
+
+pub fn clock_names_as_arguments(sample: F32, block: F32) -> F32 {
+  sample + block
+}
+
+pub fn local_named_prev(x: F32) -> F32 {
+  let prev = x
+  prev + 1.0
+}
+
+pub fn exclusive_or(a: U32, b: U32) -> U32 {
+  a ^ b
+}
+
+pub fn exclusive_or_after_a_name(a: U32) -> U32 {
+  let b = a ^ 3
+  b ^ a
+}
+
+pub fn rt_fn_called_in_a_fn(x: F32) -> F32 {
+  scale(x) + scale(scale(x))
+}
+
+pub fn values_without_par(x: F32) -> F32 {
+  let ys = [x; 4]
+  ys[0] + ys[3]
+}
+
+pub fn branches_without_a_tilde(c: Bool, x: F32) -> F32 {
+  if c {
+    x
+  } else {
+    0.5
+  }
+}
+
+pub const SCALED: F32 = 0.5 * 2.0
+
+pub flow right_forms(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a  = lp~(x)
+  let q  = p at sample
+  let d  = scale(a) + q * prev~(^b)
+  let b  = a + d
+  let ps = par i in 0 ..< 2 { x }
+  b + ps[0] + ps[1]
+}
+
+test "the clock names are names of values" {
+  assert clock_names_as_variables(1.0) == 2.0
+  assert clock_names_as_arguments(1.0, 2.0) == 3.0
+}
+
+test "a local named prev is a value" {
+  assert local_named_prev(1.0) == 2.0
+}
+
+test "the binary ^ is the exclusive or" {
+  assert exclusive_or(6, 3) == 5
+  assert exclusive_or_after_a_name(5) == 3
+}
+
+test "an rt fn is called in a test" {
+  let sample = 4.0
+  assert scale(sample) == 2.0
+  assert rt_fn_called_in_a_fn(4.0) == 3.0
+}
+
+test "values without par and the branches without a tilde" {
+  assert values_without_par(2.0) == 4.0
+  assert branches_without_a_tilde(true, 3.0) == 3.0
+  assert SCALED == 1.0
+}

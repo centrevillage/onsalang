@@ -9344,7 +9344,7 @@ pub fn f(x: [F32; 2]) -> [F32; 2] {
 '''
 fixed = ['''
 pub fn f(x: [F32; 2]) -> [F32; 2] {
-  let y: [F32; 2] = x at sample
+  let y: [F32; 2] = x
   y
 }
 ''']

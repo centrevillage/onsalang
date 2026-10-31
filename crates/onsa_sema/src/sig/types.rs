@@ -242,8 +242,7 @@ impl<'p> Sema<'p> {
                 local.unwrap_or_else(|| self.wrong_kind_arg(cx, te.span, "a constant expression", "a type"))
             }
             (TypeKind::ConstArg(e), Some(true)) => {
-                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), *e, &cx.local())
-                {
+                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, cx.scope(), *e, &cx.local()) {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
                     Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
@@ -482,7 +481,7 @@ impl<'p> Sema<'p> {
     /// Array length (§4.1): an integer literal, a `const` with a literal
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
-        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, (&cx.generics, cx.self_ty), e, &cx.local()) {
+        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, cx.scope(), e, &cx.local()) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
             Err(crate::constarg::ConstErr::Unknown) => None,
@@ -512,8 +511,9 @@ pub(crate) fn lower_type_in_body<'p>(
     (t, locals, pos): (TypeId, HashSet<String>, Pos),
 ) -> (TyId, Vec<Diagnostic>) {
     let before = a.diagnostics.len();
+    let flow = matches!(a.def(def).kind, DefKind::Flow(_));
     let mut s = Sema::new(a, Vec::new());
-    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None, locals };
+    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None, locals, flow };
     let ty = s.lower_type(&cx, t);
     // Its well-formedness at its place `pos` (§4.5, §5.3, R-37), with no
     // error of its lowering.

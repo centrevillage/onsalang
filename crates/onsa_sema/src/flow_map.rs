@@ -41,7 +41,7 @@
 //! the omitted one its value `T.default()`. The arguments a builtin evaluates
 //! lazily (`builtin.rs`, `lazy_args`) go with `unwrap_or` in W5-03.
 
-use onsa_diag::unsupported::{Feature, FlowForm};
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{BinOp, Clock, ExprId, ExprKind, Ident, Path};
 
@@ -174,8 +174,8 @@ impl Rater<'_> {
     }
 
     /// `if~` / `match~` (§11.5): E0200 at the `~` (W7-06).
-    pub(super) fn tilde_branches(&mut self, tilde: Span, form: FlowForm) -> super::RStop {
-        self.unsupported(tilde, Feature::TildeBranches, &[&form.label()])
+    pub(super) fn tilde_branches(&mut self, tilde: Span, form: &str) -> super::RStop {
+        self.unsupported(tilde, Feature::TildeBranches, &[form])
     }
 
     /// A stateful node at `span` (an instance, a delay, a `par`): E0200 in a

@@ -567,7 +567,8 @@ fn fn_with_param(ty: &str) -> String {
 fn an_at_inside_a_type_or_after_the_type_of_a_plain_declaration_is_e0020() {
     // §11.3: "型の中（型引数、配列とタプルの要素、関数型の引数と返り値）と、入出力でない宣言の型（struct のフィールド、
     // enum の列挙子の要素、`type` の右辺、`const` の型）の後ろの `at` は、flow の中でも外でも構文の段の E0020 で、修正候補は
-    // クロックを書ける場所へ移す形（クロックの無い flow の入出力の型の後ろ、束縛では値の式）か、場所が無ければ除く形".
+    // クロックを書ける場所へ移す形（クロックの無い flow の入出力の型の後ろ、flow の本体の束縛では値の式）か、場所が無ければ除く形
+    // である（flow の外の束縛は、値の式にもクロックを書けないので除く形）" (S-820).
     let wrap = "pub struct Wrap[T] {\n  v: T,\n}\n\n";
     let with_wrap = |s: &str| format!("{wrap}{s}");
     let cases = vec![
@@ -625,17 +626,18 @@ fn an_at_inside_a_type_or_after_the_type_of_a_plain_declaration_is_e0020() {
             "pub const K: [F32 at init; 2] = [1.0, 2.0]\n".to_string(),
             &["pub const K: [F32; 2] = [1.0, 2.0]\n".to_string()],
         ),
-        // moved to the value of a let or a var
+        // removed: the value of a let or a var outside a flow body has no clock either (E0821, S-820)
         case(
             "the type of a let, in a fn",
             "pub fn f(x: Option[F32]) -> F32 {\n  let y: Option[F32 at sample] = x\n  0.5\n}\n".to_string(),
-            &["pub fn f(x: Option[F32]) -> F32 {\n  let y: Option[F32] = x at sample\n  0.5\n}\n".to_string()],
+            &["pub fn f(x: Option[F32]) -> F32 {\n  let y: Option[F32] = x\n  0.5\n}\n".to_string()],
         ),
         case(
             "the type of a var, in a fn",
             "pub fn f(x: F32) -> F32 {\n  var y: F32 at sample = x\n  y\n}\n".to_string(),
-            &["pub fn f(x: F32) -> F32 {\n  var y: F32 = x at sample\n  y\n}\n".to_string()],
+            &["pub fn f(x: F32) -> F32 {\n  var y: F32 = x\n  y\n}\n".to_string()],
         ),
+        // moved to the value of a let of a flow body
         case(
             "the type of a let, in a flow",
             "pub flow f(x: [F32; 2] at sample) -> F32 at sample {\n  let y: [F32 at sample; 2] = x\n  y[0]\n}\n"

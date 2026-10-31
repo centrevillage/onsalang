@@ -245,12 +245,6 @@ reasons = ["S-31"]
 until = "W9-06"
 note = "fast_budget / bulk_budget を超える"
 
-[[pending]]
-kind = "diag-code"
-target = "E0821"
-reasons = ["S-101", "S-102"]
-until = "W7-04"
-note = "flow の外の flow だけの構文"
 
 [[pending]]
 kind = "diag-code"
@@ -1378,12 +1372,6 @@ reasons = ["S-98", "S-236"]
 until = "W5-02"
 note = "fix-same-place: fix|E0411|call `…`|E0401。整数の縮小の候補 .narrow_u8() が Option を返す（仕様 §3.3 は候補を出さない）"
 
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/847b5cf3.onsa"
-reasons = ["S-101", "S-236"]
-until = "W7-04"
-note = "fix-same-place: fix|E0812|remove `…`|E0401。fn の中の flow の呼び出し lp~(x) は §11.5 で E0821（候補なし）。今は E0812 で ~ を除く候補を出し、関数でないものの呼び出しの E0401 になる。W3-19 で 2abf12eb.onsa の g[] が空の並びの E0002 になったので、g[2] の入力に付け替えた"
 
 # --- W2-09/i: 新しい種（tests/spec/c_runtime/ の W2-09/t の事例）で変異が変わり、ファズが見つけた修正候補の型（2026-10-08。親が R を登録して付け替える）
 
@@ -1454,12 +1442,6 @@ note = "型の最大値の端の範囲を総称の関数（T: Int）で書く。
 
 # --- W3-18 の gate のファズが見つけた入力（種を足してコーパスが変わり、既存の不具合が表に出た）
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/names_clock_in_fn_head.onsa"
-reasons = ["S-356", "S-101", "S-267"]
-until = "W4-12"
-note = "fn の入出力の型の後ろの at は名前の段の E0821。構文の段が at を読む（W3-09）のが前提"
 
 # --- W3-10: 新しい flow の構文を今の sema へ写した後も通らない事例（W3-10/t の新しい事例と、手順の組）。
 

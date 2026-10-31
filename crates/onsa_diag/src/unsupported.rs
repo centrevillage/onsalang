@@ -105,11 +105,6 @@ features! {
         Some("write the length as a literal or as the name of a constant");
     ComputedArrayLengths: Language, "constants computed by expressions as array lengths",
         Some("give the constant a literal value, or write the length as a literal");
-    /// `{}`: the form (`at`, `^name`, `prev~`, `if~`, ...). W3-10: the
-    /// checks read the flow syntax in a flow body (`onsa_sema::flow::map`);
-    /// written elsewhere it is the names stage's E0821 (W4-12), and until
-    /// then its item stops here (`onsa_sema::flow_syntax`).
-    FlowSyntaxOutsideFlow: Language, "the flow syntax `{}` outside a flow body (its error E0821)", None;
     /// `{}`: `if~` or `match~` (S-110, W7-06; K-02).
     TildeBranches: Language, "`{}`, which evaluates every branch", None;
     /// K-08, S-110: what the branch does not evaluate holds state (W7-06).
@@ -228,42 +223,6 @@ features! {
     /// `{}`: the effect.
     ManifestProvides: Manifest, "`provides` other than `Alloc` (`{}`)", None;
     ManifestBind: Manifest, "`bind` in a target", None;
-}
-
-/// A form of the flow syntax (S-102, S-44, S-110), as the E0200 that names
-/// one shows it ([`Feature::FlowSyntaxOutsideFlow`], [`Feature::TildeBranches`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FlowForm {
-    /// A clock: `x: T at k`, `-> T at k`, `e at k` (S-102).
-    Clock,
-    /// `^name` (S-44).
-    Feedback,
-    /// A built-in delay `name~(…)`, by its name (the names are the flow
-    /// stage's table, S-44).
-    Delay(&'static str),
-    /// `if~` (S-110).
-    IfTilde,
-    /// `match~` (S-110).
-    MatchTilde,
-}
-
-impl FlowForm {
-    /// How the form is shown in the E0200 (`at`, `prev~`).
-    pub fn label(self) -> String {
-        match self {
-            FlowForm::Clock => "at".into(),
-            FlowForm::Feedback => "^name".into(),
-            FlowForm::Delay(name) => format!("{name}~"),
-            FlowForm::IfTilde => "if~".into(),
-            FlowForm::MatchTilde => "match~".into(),
-        }
-    }
-
-    /// The E0200 of the form written outside a flow body, at `span`,
-    /// reported by `stage` (E0821 from W4-12).
-    pub fn outside_flow(self, stage: Stage, span: Span) -> Diagnostic {
-        Feature::FlowSyntaxOutsideFlow.diagnostic(stage, span, &[&self.label()])
-    }
 }
 
 impl Feature {
@@ -661,11 +620,6 @@ mod tests {
                 let rest = &code[i + "Feature::".len()..];
                 let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
                 used.insert(name);
-            }
-            // A form of the flow syntax outside a flow reports its feature
-            // ([`FlowForm::outside_flow`]).
-            if code.contains(".outside_flow(") {
-                used.insert(Feature::FlowSyntaxOutsideFlow.name().to_string());
             }
         }
         assert!(scanned > 50, "the scan found {scanned} source files only");

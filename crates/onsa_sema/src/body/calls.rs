@@ -21,19 +21,9 @@ impl<'a> Checker<'a> {
         {
             return Ok(t);
         }
+        // Outside a flow body a `~(` is the names stage's E0821 (§11.1).
         if kind == CallKind::Flow {
-            // The `~` comes right after the callee (`f~(`, §2.6).
-            let at = self.expr(callee).span.end;
-            return Err(self.diag(
-                Diagnostic::new(
-                    Stage::Types,
-                    Code::E0812,
-                    span,
-                    "`~(` creates a flow instance and is only written inside a flow body (§11.5)",
-                )
-                .with_found(self.src(span))
-                .with_fix(Fix::delete("remove `~`", Span::new(span.file, at, at + 1))),
-            ));
+            onsa_diag::internal::bug(Some(span), "a `~(` the names stage did not stop at");
         }
         // `v.(x)` (§6.1, S-191): the callee is a value, whatever its form;
         // the names stage tells `inc.(1)` of an item from it (E0020).

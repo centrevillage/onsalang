@@ -602,16 +602,66 @@ fn the_marks_of_the_calls_of_a_flow_body_are_one_table() {
     assert_eq!(n.instance(n.instances[0].0), Some(def(&a, "lp")));
 }
 
-/// Outside a flow body the walk records the callee of `~(` alone, and the
-/// types stage reports the `~` (E0812, U3's E0821; A9): a name not found
-/// there is no E0302 between the two units.
+/// Outside a flow body, `f~(…)` is the walk's E0821 before the names of
+/// its callee (S-815): a name not found there is no E0302, and the callee has
+/// no record. A flow called as `f(x)` is the E0821 after them (R-269).
 #[test]
-fn the_callee_of_a_tilde_outside_a_flow_body_is_the_types_stages() {
-    let pre = "pub struct P {\n  a: F32,\n}\nimpl P {\n  pub fn get(self) -> F32 {\n    self.a\n  }\n}\n";
-    for call in ["nope~(x)", "P.y~(x)", "P.get~(P { a: x })", "prev.x~(x, 0.0)"] {
+fn a_tilde_outside_a_flow_body_does_not_look_up_its_callee() {
+    use onsa_diag::Code::{E0302, E0821};
+    let pre = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    for (call, code) in [("nope~(x)", E0821), ("nope.y~(x)", E0821), ("x.prev~(0.5)", E0821), ("lp(x)", E0821)]
+        .into_iter()
+        .chain([("nope.lp(x)", E0302)])
+    {
         let (a, _) = analysis(&format!("{pre}pub fn u(x: F32) -> F32 {{\n  {call}\n}}\n"));
-        assert_eq!(stages(&a), [(onsa_diag::Code::E0812, onsa_diag::Stage::Types)], "{call}");
+        assert_eq!(stages(&a), [(code, onsa_diag::Stage::Names)], "{call}");
+        assert_eq!(names(&a, "u").paths.is_empty(), call != "lp(x)", "{call}");
     }
+}
+
+/// The E0821 of the walk, of a heading and of a constant expression of a
+/// signature is the one of `flow.rs` (D-15). In a flow body, a constant
+/// expression of a type holds an instance: E0417, no E0821.
+#[test]
+fn the_e0821_of_a_body_a_heading_and_a_constant_is_one_diagnostic() {
+    use super::flow::{Outside, outside_flow};
+    let pre = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    for (unit, at, form) in [
+        ("pub fn u(x: F32) -> F32 {\n  x at sample\n}\n", "at sample", Some(" at sample")),
+        ("pub fn u(x: F32 at sample) -> F32 {\n  x\n}\n", "at sample", Some(" at sample")),
+        (
+            "pub fn u(x: F32) -> F32 {\n  let f = fn(y: F32) -> F32 at block { y }\n  f.(x)\n}\n",
+            "at block",
+            Some(" at block"),
+        ),
+        ("pub fn u(x: F32) -> F32 {\n  lp~(x)\n}\n", "lp~(x)", None),
+        ("pub fn u(x: [F32; lp~(1.0)]) -> F32 {\n  1.0\n}\n", "lp~(1.0)", None),
+        ("pub fn u(x: [F32; lp(1.0)]) -> F32 {\n  1.0\n}\n", "lp(1.0)", None),
+    ] {
+        let src = format!("{pre}{unit}");
+        let (a, _) = analysis(&src);
+        let start = src.rfind(at).unwrap() as u32;
+        let span = onsa_diag::Span::new(FileId(0), start, start + at.len() as u32);
+        let form = form.map_or(Outside::Flow, |c| Outside::Clock(src.rfind(c).unwrap() as u32));
+        assert_eq!(format!("{:?}", a.diagnostics), format!("{:?}", [outside_flow(form, span, &src)]), "{unit}");
+    }
+    let (a, _) = analysis(&format!(
+        "{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  let a: [F32; lp~(1.0)] = [x; 2]\n  x\n}}\n"
+    ));
+    assert_eq!(stages(&a), [(onsa_diag::Code::E0417, onsa_diag::Stage::Types)]);
+}
+
+/// A unit with an E0821 is checked as any other (§18.1): its heading is
+/// lowered, and a call of it from another unit has no error.
+#[test]
+fn a_unit_with_an_e0821_keeps_its_heading() {
+    let (a, _) = analysis(
+        "pub fn g(x: F32) -> F32 {\n  prev~(x, 0.0)\n}\npub fn h(x: F32 at sample) -> F32 {\n  x\n}\n\
+         pub fn u(x: F32) -> F32 {\n  g(x) + h(x)\n}\n",
+    );
+    let e0821 = (onsa_diag::Code::E0821, onsa_diag::Stage::Names);
+    assert_eq!(stages(&a), [e0821, e0821]);
+    assert!(a.failed.is_empty(), "{:?}", a.failed);
 }
 
 /// A name the names stage holds as an error (a trait, E0200 in this

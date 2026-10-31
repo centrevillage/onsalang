@@ -7,10 +7,11 @@ use std::collections::HashMap;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
-    Ast, Block, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind, StrLit,
-    StrSeg, TypeId, TypeKind,
+    Ast, Block, Clock, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind,
+    StrLit, StrSeg, TypeId, TypeKind,
 };
 
+use super::flow::Outside;
 use super::kinds::Want;
 use super::paths::Place;
 use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Walker};
@@ -44,6 +45,20 @@ impl Walker<'_> {
                 self.typed([*ty], Pos::Bind);
                 Ok(())
             }
+            // What only a flow body holds (§11.1): E0821 at its start, after
+            // the expression before a clock.
+            ExprKind::At { expr, clock } if !self.flow => {
+                self.expr(*expr)?;
+                Err(self.outside(Outside::Clock(ast.expr(*expr).span.end), clock.span))
+            }
+            ExprKind::Feedback(_) if !self.flow => Err(self.outside(Outside::Past, ast.expr(e).span)),
+            ExprKind::If { tilde: Some(t), .. } | ExprKind::Match { tilde: Some(t), .. } if !self.flow => {
+                Err(self.outside(Outside::Branches, Span { end: t.end, ..ast.expr(e).span }))
+            }
+            ExprKind::Par { .. } if !self.flow => {
+                let span = ast.expr(e).span;
+                Err(self.outside(Outside::Par, Span { end: span.start + "par".len() as u32, ..span }))
+            }
             // `^y`: a local, or a builtin name of the flow (S-720); any other
             // name is the flow stage's until W7-04.
             ExprKind::Feedback(name) => {
@@ -74,8 +89,8 @@ impl Walker<'_> {
             // What a flow body cannot contain (§11.2) and the flow stage
             // reports as its E0806 until W7-04 reports it here (S-267).
             ExprKind::Closure { .. } | ExprKind::Try(_) | ExprKind::Move(_) if self.flow => Err(self.fail(Fail::Later)),
-            ExprKind::Closure { params, ret, body, effects, .. } => {
-                self.closure(e, params, *ret, effects.is_some(), *body)
+            ExprKind::Closure { params, ret, ret_clock, body, effects } => {
+                self.closure(e, params, (*ret, ret_clock.as_ref()), effects.is_some(), *body)
             }
             // Forms this version does not have (E0200 of the types stage),
             // whose names it does not read.
@@ -266,8 +281,16 @@ impl Walker<'_> {
 
     /// An anonymous function: each parameter, then its type, as in the text
     /// (§18.1, R-289), then the result type and the effect row (`row`). Its
-    /// whole heading sees every parameter (§5.1, S-739).
-    fn closure(&mut self, e: ExprId, params: &[Param], ret: Option<TypeId>, row: bool, body: ExprId) -> W {
+    /// whole heading sees every parameter (§5.1, S-739). A clock of it is
+    /// the E0821 of §11.3.
+    fn closure(
+        &mut self,
+        e: ExprId,
+        params: &[Param],
+        ret: (Option<TypeId>, Option<&Clock>),
+        row: bool,
+        body: ExprId,
+    ) -> W {
         self.open_closure(e);
         self.open_scope();
         // A parameter that is an E0304 is none (§18.1, S-675; `heading_locals`).
@@ -287,8 +310,14 @@ impl Walker<'_> {
                 self.declare(name, BindingKind::ClosureParam(p.mode), origin, None)?;
             }
             self.typed(p.ty, Pos::Arg(p.mode));
+            if let Some(c) = &p.clock {
+                return Err(self.fail(Fail::Report(super::clock_after(self.ast, self.text, p.ty, c))));
+            }
         }
-        self.typed(ret, Pos::Other);
+        self.typed(ret.0, Pos::Other);
+        if let Some(c) = ret.1 {
+            return Err(self.fail(Fail::Report(super::clock_after(self.ast, self.text, ret.0, c))));
+        }
         if row {
             let site = self.site(Typed::Row(e));
             self.type_sites.push(site);

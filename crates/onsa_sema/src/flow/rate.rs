@@ -276,8 +276,8 @@ impl<'a> Rater<'a> {
                 Some(t) => self.rate(t)?,
                 None => FlowRate::Const,
             },
-            ExprKind::If { tilde: Some(t), .. } => return Err(self.tilde_branches(*t, FlowForm::IfTilde)),
-            ExprKind::Match { tilde: Some(t), .. } => return Err(self.tilde_branches(*t, FlowForm::MatchTilde)),
+            ExprKind::If { tilde: Some(t), .. } => return Err(self.tilde_branches(*t, "if~")),
+            ExprKind::Match { tilde: Some(t), .. } => return Err(self.tilde_branches(*t, "match~")),
             ExprKind::If { cond, then, else_, tilde: None } => {
                 let mut r = self.rate(*cond)?;
                 self.branch += 1;

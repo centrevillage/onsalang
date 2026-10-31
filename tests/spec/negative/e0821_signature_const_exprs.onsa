@@ -1,0 +1,158 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§15.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W4-12 U3, S-267, S-812, R-341: the length of an array type is a constant expression (§4.5), and it is read
+// in the signature of a declaration as in its body, so the calls in it have the errors of a call written in
+// a body. A flow called in it (`[F32; lp~(1.0)]`, `[F32; lp(1.0)]`) is E0821 in the signature of an `fn` and
+// of a method: a flow is written in the body of a flow only (§11.1: "これらと `par`（§11.5）は、flow の本体に
+// だけ書ける"; §18.1: the names stage), and so it is in the heading of a flow itself (`-> [F32; lp~(1.0)] at
+// sample`), which is not a body. A constant called with `!` (`[F32; K!(1)]`) is the E0401 that `K!(x)` is in
+// a body: a constant is a value that is no function, and the `!` has nothing to be put in place of (§15.1:
+// "`x!(...)` は §5.2 の E0714（関数でない値は E0401）"; value_call_bang_not_a_function.onsa), so there is no
+// candidate (`fixes = 0` checks it). A constant parameter called as `N(1)` is the E0020 of a value, with a
+// candidate (fixes/e0020_const_param_call_in_signature.onsa). The same constant expressions in the body
+// (`let a = [0.0; lp~(1.0)]`, `[0; K!(1)]`) are the same errors. The names stage reports the first of the
+// errors of a unit by position, so an error of the signature comes before one of the body. One error per
+// unit (P-01).
+
+pub const K: U32 = 3
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct Voice {
+  v: F32,
+}
+
+// ---- a flow called in the signature -----------------------------------------------------------------
+
+pub fn instance_in_an_input_length(x: [F32; lp~(1.0)]) -> F32 {  //~ E0821
+  1.0
+}
+
+pub fn instance_in_an_output_length(x: F32) -> [F32; lp~(1.0)] {  //~ E0821
+  [x; 2]
+}
+
+pub fn plain_call_in_an_input_length(x: [F32; lp(1.0)]) -> F32 {  //~ E0821
+  1.0
+}
+
+pub fn plain_call_in_an_output_length(x: F32) -> [F32; lp(1.0)] {  //~ E0821
+  [x; 2]
+}
+
+pub fn delay_in_an_input_length(x: [F32; prev~(1.0, 0.0)]) -> F32 {  //~ E0821
+  1.0
+}
+
+pub fn instance_in_a_nested_type(x: [[F32; lp~(1.0)]; 2]) -> F32 {  //~ E0821
+  1.0
+}
+
+pub fn instance_in_a_tuple_type(x: (F32, [F32; lp~(1.0)])) -> F32 {  //~ E0821
+  1.0
+}
+
+pub fn instance_in_an_option_type(x: Option[[F32; lp~(1.0)]]) -> F32 {  //~ E0821
+  1.0
+}
+
+pub fn instance_in_the_second_input(x: F32, y: [F32; lp~(1.0)]) -> F32 {  //~ E0821
+  x
+}
+
+pub fn instance_in_a_generic[T](x: T, y: [F32; lp~(1.0)]) -> T {  //~ E0821
+  x
+}
+
+impl Voice {
+  pub fn instance_in_a_method_input(self, x: [F32; lp~(1.0)]) -> F32 {  //~ E0821
+    1.0
+  }
+
+  pub fn instance_in_a_method_output(self) -> [F32; lp~(1.0)] {  //~ E0821
+    [1.0; 2]
+  }
+}
+
+pub flow instance_in_the_output_of_a_flow(x: F32 at sample) -> [F32; lp~(1.0)] at sample {  //~ E0821
+  [x; 2]
+}
+
+pub flow instance_in_the_input_of_a_flow(x: [F32; lp~(1.0)] at sample) -> F32 at sample {  //~ E0821
+  x[0]
+}
+
+pub flow plain_call_in_the_output_of_a_flow(x: F32 at sample) -> [F32; lp(1.0)] at sample {  //~ E0821
+  [x; 2]
+}
+
+// ---- the same expression in a body ------------------------------------------------------------------
+
+pub fn instance_in_a_repeat_length(x: F32) -> F32 {
+  let a = [0.0; lp~(1.0)]                           //~ E0821
+  x
+}
+
+pub fn instance_in_a_type_of_a_let(x: F32) -> F32 {
+  let a: [F32; lp~(1.0)] = [0.0; 2]                 //~ E0821
+  x
+}
+
+test "an instance in an array length in a test" {
+  let a = [0.0; lp~(1.0)]                           //~ E0821
+  assert a[0] == 0.0
+}
+
+// ---- a constant called with `!` ---------------------------------------------------------------------
+
+pub fn bang_in_an_input_length(x: [F32; K!(1)]) -> F32 {  //~ E0401
+  1.0
+}
+
+pub fn bang_in_an_output_length(x: F32) -> [F32; K!(1)] {  //~ E0401
+  [x; 2]
+}
+
+pub fn bang_in_a_repeat_length(x: F32) -> F32 {
+  let a = [0; K!(1)]                                //~ E0401
+  x
+}
+
+pub fn bang_in_a_type_of_a_let(x: F32) -> F32 {
+  let a: [F32; K!(1)] = [0.0; 2]                    //~ E0401
+  x
+}
+
+impl Voice {
+  pub fn bang_in_a_method_output(self) -> [F32; K!(1)] {  //~ E0401
+    [1.0; 2]
+  }
+}
+
+pub flow bang_in_the_output_of_a_flow(x: F32 at sample) -> [F32; K!(1)] at sample {  //~ E0401
+  [x; 2]
+}
+
+test "a constant called with a bang in an array length in a test" {
+  let a = [0; K!(1)]                                //~ E0401
+  assert a[0] == 0
+}
+
+// ---- the right forms --------------------------------------------------------------------------------
+
+pub fn length_is_a_constant(x: [F32; K]) -> [F32; K] {
+  x
+}
+
+pub fn length_is_a_constant_parameter[const N: U32](x: [F32; N]) -> F32 {
+  x[0]
+}
+
+pub flow flow_with_array_lengths(x: [F32; K] at sample) -> [F32; K] at sample {
+  x
+}

@@ -1,0 +1,275 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.3", "§11.4", "§11.10", "§2.6", "§18.1"]
+// fixes = 0
+
+// W4-12 U3, S-815, S-267: the E0821 of an instance call `f~(...)` outside a flow is reported without looking
+// the callee up (§11.1: "`f~(...)` の E0821 は呼び先の名前を引かずに報告する（見つからない名前や flow
+// でない名前の `nope~(x)`・`g~(x)` も E0821。§11.3 の `at` がクロックの名前を引かないのと同じ）"). So a
+// name that is not found (`nope~(x)`, which is not an E0302), a function, a constant, a type, a value (an
+// input, a local binding, a field, a method of a value: `x.prev~(0.5)`), a unit variant, the built-in names
+// `sample_rate` and `sample_tick`, which are not seen outside a flow (§11.4: "`~` を付けた `prev~(x)` は
+// E0821"), and the built-in delays are all the same E0821, with no candidate (`fixes = 0` checks it): the
+// E0812 of a `~` on what is not a flow is for the body of a flow (§2.6), where the same lines are the
+// errors of e0812_tilde_on_value.onsa. The modifiers `.when~(c)` and the others are calls that keep a
+// state too (§11.10: "修飾子を付けた呼び出しも状態を持つもので、… flow の外は E0821 である"), whatever
+// the receiver is: the head `lp~(x)` is the first of the call, and a receiver that is a value or a binding
+// has no E0812 here (the receiver `s` of `let s = lp~(x)` is not reached: the first instance call of the unit
+// is the error). The range is the whole call, so the first character of the call is where it starts.
+// The module-qualified names are in packages/e0821_modules. One error per unit (P-01).
+
+pub const K: F32 = 1.0
+
+pub rt fn g(x: F32) -> F32 {
+  x
+}
+
+pub struct P {
+  a: F32,
+}
+
+impl P {
+  pub rt fn new(a: F32) -> P {
+    P { a: a }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.a
+  }
+}
+
+pub enum E {
+  A,
+  B(F32),
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// ---- a name that is not found, a function, a constant, a type ----------------------------------------
+
+pub fn name_not_found(x: F32) -> F32 {
+  let a = nope~(x)                                  //~ E0821
+  x
+}
+
+pub fn function_name(x: F32) -> F32 {
+  let a = g~(x)                                     //~ E0821
+  x
+}
+
+pub fn constant_name(x: F32) -> F32 {
+  let a = K~(x)                                     //~ E0821
+  x
+}
+
+pub fn type_name(x: F32) -> F32 {
+  let a = P~(x)                                     //~ E0821
+  x
+}
+
+pub fn method_named_by_its_type(x: F32) -> F32 {
+  let p = P.new(x)
+  let a = P.get~(p)                                 //~ E0821
+  x
+}
+
+pub fn state_type_of_a_flow(x: F32) -> F32 {
+  let a = lp.State~()                               //~ E0821
+  x
+}
+
+pub fn unit_variant(x: F32) -> F32 {
+  let a = E.A~()                                    //~ E0821
+  x
+}
+
+pub fn constant_of_a_built_in_type(x: F32) -> F32 {
+  let a = F32.PI~()                                 //~ E0821
+  x
+}
+
+// ---- a value and the methods of a value --------------------------------------------------------------
+
+pub fn input_called(x: F32) -> F32 {
+  let a = x~(1.0)                                   //~ E0821
+  x
+}
+
+pub fn local_binding_called(x: F32) -> F32 {
+  let s = x * 2.0
+  let a = s~(x)                                     //~ E0821
+  x
+}
+
+pub fn method_of_an_input(x: F32) -> F32 {
+  let a = x.prev~(0.5)                              //~ E0821
+  x
+}
+
+pub fn method_of_a_function_name(x: F32) -> F32 {
+  let a = g.y~(x)                                   //~ E0821
+  x
+}
+
+pub fn method_of_a_call_result(x: F32) -> F32 {
+  let a = g(x).y~()                                 //~ E0821
+  x
+}
+
+pub fn field_of_a_local_binding(x: F32) -> F32 {
+  let p = P.new(x)
+  let a = p.a~(1.0)                                 //~ E0821
+  x
+}
+
+pub fn method_of_a_local_binding(x: F32) -> F32 {
+  let p = P.new(x)
+  let a = p.get~()                                  //~ E0821
+  x
+}
+
+// ---- the names that a flow has and a fn has not ------------------------------------------------------
+
+pub fn sample_rate_with_a_tilde(x: F32) -> F32 {
+  let a = sample_rate~()                            //~ E0821
+  x
+}
+
+pub fn sample_tick_with_a_tilde(x: F32) -> U32 {
+  sample_tick~()                                    //~ E0821
+}
+
+pub fn prev_with_a_tilde(x: F32) -> F32 {
+  prev~(x, 0.0)                                     //~ E0821
+}
+
+pub fn delay_with_a_tilde(x: F32) -> F32 {
+  delay~(x, 4)                                      //~ E0821
+}
+
+pub fn a_local_named_prev(x: F32) -> F32 {
+  let prev = x
+  prev~(prev, 0.0)                                  //~ E0821
+}
+
+// ---- the modifiers ------------------------------------------------------------------------------------
+
+pub fn modifier_on_an_instance(x: F32, c: Bool) -> F32 {
+  lp~(x).when~(c)                                   //~ E0821
+}
+
+pub fn modifier_on_an_instance_in_a_let(x: F32, c: Bool) -> F32 {
+  let a = lp~(x).reset_if~(c)                       //~ E0821
+  x
+}
+
+pub fn modifier_chain(x: F32, c: Bool, r: Bool) -> F32 {
+  lp~(x).when~(c).reset_if~(r)                      //~ E0821
+}
+
+pub fn modifier_down(x: F32) -> F32 {
+  lp~(x).down~(2)                                   //~ E0821
+}
+
+pub fn modifier_on_a_delay(x: F32, c: Bool) -> F32 {
+  prev~(x, 0.0).when~(c)                            //~ E0821
+}
+
+pub fn modifier_on_an_input(x: F32, c: Bool) -> F32 {
+  x.when~(c)                                        //~ E0821
+}
+
+pub fn modifier_on_a_let_binding(x: F32, c: Bool) -> F32 {
+  let s = lp~(x)                                    //~ E0821
+  s.when~(c)
+}
+
+pub fn modifier_on_a_value(x: F32, c: Bool) -> F32 {
+  g(x).when~(c)                                     //~ E0821
+}
+
+pub fn modifier_name_not_in_the_list(x: F32, c: Bool) -> F32 {
+  lp~(x).nope~(c)                                   //~ E0821
+}
+
+// ---- the same forms in a test, a const and a closure -------------------------------------------------
+
+test "a name not found in a test" {
+  let a = nope~(1.0)                                //~ E0821
+  assert a == 1.0
+}
+
+test "a function in a test" {
+  let a = g~(1.0)                                   //~ E0821
+  assert a == 1.0
+}
+
+test "a sample_rate with a tilde in a test" {
+  let r = sample_rate~()                            //~ E0821
+  assert r > 0.0
+}
+
+test "a method of a value in a test" {
+  let x = 1.0
+  let a = x.prev~(0.5)                              //~ E0821
+  assert a == 0.5
+}
+
+test "a modifier in a test" {
+  let a = lp~(1.0).when~(true)                      //~ E0821
+  assert a == 1.0
+}
+
+pub const NAME_NOT_FOUND_IN_A_CONST: F32 = nope~(1.0)  //~ E0821
+
+pub const CONSTANT_IN_A_CONST: F32 = K~(1.0)        //~ E0821
+
+pub const SAMPLE_TICK_IN_A_CONST: U32 = sample_tick~()  //~ E0821
+
+pub const MODIFIER_IN_A_CONST: F32 = lp~(1.0).down~(2)  //~ E0821
+
+pub fn name_not_found_in_a_closure(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 { nope~(y) }            //~ E0821
+  f.(x)
+}
+
+pub fn function_in_a_closure(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 { g~(y) }               //~ E0821
+  f.(x)
+}
+
+pub fn value_in_a_closure(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 { y.prev~(0.5) }        //~ E0821
+  f.(x)
+}
+
+// ---- the call as an argument and in a branch ---------------------------------------------------------
+
+pub fn name_not_found_in_an_argument(x: F32) -> F32 {
+  g(nope~(x))                                       //~ E0821
+}
+
+pub fn name_not_found_in_a_branch(c: Bool, x: F32) -> F32 {
+  if c {
+    nope~(x)                                        //~ E0821
+  } else {
+    x
+  }
+}
+
+pub fn function_in_an_arm(n: U32, x: F32) -> F32 {
+  match n {
+    0 => g~(x),                                     //~ E0821
+    _ => x,
+  }
+}
+
+// ---- a flow body is another thing: there the callee is looked up ------------------------------------
+
+pub flow right_forms(x: F32 at sample) -> F32 at sample {
+  let a = g(x)
+  let b = sample_rate()
+  lp~(a) + b
+}

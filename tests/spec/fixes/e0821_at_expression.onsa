@@ -1,0 +1,141 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.3", "§18.1"]
+// fixes = 1
+
+// W4-12 U3, S-267, S-356: the rate `at` written outside a flow, in an expression (`x at sample`), is E0821
+// (§11.3: "`at` を書けるのは flow の入出力の宣言と本体の式だけで、flow の外は E0821"; §11.1), in the body of
+// an `fn`, a `test` and the initializer of a `const`. It is the only form of E0821 that has a candidate:
+// the one candidate takes off the `at` and the clock (§11.1: "`at` だけは、それを外すことを修正候補にする").
+// The clock is not looked up outside a flow (§11.3: "flow の外の `at` は E0821 で、クロックの名前を引かない"),
+// so a name that is no clock (`x at nope`) is the same error and the same candidate, not an E0302. A value
+// without an `at` is what the candidate gives, so no unit is left with an error of the names stage; the
+// order of the errors of a unit and the heads (`fn f(x: F32 at sample)`, in negative/names_clock_in_fn_head.onsa)
+// are in other files. A clock as the name of a variable is no `at` (the last unit). One error per unit (P-01).
+
+pub fn clock_in_a_let(x: F32) -> F32 {
+  let a = x at sample                               //~ E0821
+  a
+}
+
+pub fn clock_as_the_tail(x: F32) -> F32 {
+  x at sample                                       //~ E0821
+}
+
+pub fn clock_block(x: F32) -> F32 {
+  let a = x at block                                //~ E0821
+  a
+}
+
+pub fn clock_init(x: F32) -> F32 {
+  let a = x at init                                 //~ E0821
+  a
+}
+
+pub fn clock_event(x: F32) -> F32 {
+  let a = x at event                                //~ E0821
+  a
+}
+
+pub fn clock_that_is_no_clock(x: F32) -> F32 {
+  let a = x at nope                                 //~ E0821
+  a
+}
+
+pub fn clock_of_a_literal(x: F32) -> F32 {
+  let a = 1.0 at sample                             //~ E0821
+  a + x
+}
+
+pub fn clock_in_parentheses(x: F32) -> F32 {
+  let a = (x at block) + 1.0                        //~ E0821
+  a
+}
+
+pub fn clock_in_an_argument(x: F32) -> F32 {
+  id(x at sample)                                   //~ E0821
+}
+
+pub fn clock_in_a_branch(c: Bool, x: F32) -> F32 {
+  if c {
+    x at block                                      //~ E0821
+  } else {
+    x
+  }
+}
+
+pub fn clock_in_an_arm(n: U32, x: F32) -> F32 {
+  match n {
+    0 => x at sample,                               //~ E0821
+    _ => x,
+  }
+}
+
+pub fn clock_in_a_loop(x: F32) -> F32 {
+  var acc = 0.0
+  for i in 0 ..< 4 {
+    acc = acc + (x at sample)                       //~ E0821
+  }
+  acc
+}
+
+pub rt fn clock_in_an_rt_fn(x: F32) -> F32 {
+  x at sample                                       //~ E0821
+}
+
+pub struct Voice {
+  v: F32,
+}
+
+impl Voice {
+  pub fn clock_in_a_method(self, x: F32) -> F32 {
+    x at block                                      //~ E0821
+  }
+}
+
+pub fn clock_in_a_generic[T](x: T) -> T {
+  x at sample                                       //~ E0821
+}
+
+pub fn clock_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { y at block }          //~ E0821
+  g.(x)
+}
+
+test "a clock in a test" {
+  let y: F32 = 1.0 at init                          //~ E0821
+  assert y == 1.0
+}
+
+test "a clock on a name in a test" {
+  let x: F32 = 1.0
+  let y = x at nope                                 //~ E0821
+  assert y == 1.0
+}
+
+pub const CLOCK_IN_A_CONST: F32 = 1.0 at init       //~ E0821
+
+pub const CLOCK_THAT_IS_NO_CLOCK_IN_A_CONST: F32 = 1.0 at nope  //~ E0821
+
+// ---- fine ---------------------------------------------------------------------------------------------
+
+pub rt fn id(x: F32) -> F32 {
+  x
+}
+
+pub fn clock_names_as_variables(x: F32) -> F32 {
+  let sample = x
+  let block = sample + 1.0
+  block
+}
+
+test "clock names as variables in a test" {
+  let sample: F32 = 1.0
+  let block = sample + 1.0
+  assert block == 2.0
+}
+
+pub flow right_form(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let q = p at sample
+  x * q
+}

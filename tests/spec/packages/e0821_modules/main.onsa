@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.10", "§15.1", "§18.1"]
+// fixes = 0
+
+// W4-12 U3, S-815, R-269: the E0821 of a flow written outside a flow when the callee is named through a
+// module (§11.1, §15.1). An instance call `f~(...)` is E0821 without the callee being looked up, so the
+// module-qualified `util.lp~(x)`, `util.scale~(x)` (a function), `util.nope~(x)` (a name that the module
+// has not) and the module itself `util~(x)` are the same error, and so is a name that a `use` took in
+// (`lp~(x)`, `scale~(x)`) and a modifier on them (`util.lp~(x).when~(c)`): the first character of the call
+// is where it starts. A flow called without the `~` (`util.lp(x)`, `lp(x)`) is E0821 after the callee is
+// found, and a name that the module has not is the E0302 at that name (`util.nope(x)`), as the callee is
+// looked up. There is no candidate (`fixes = 0`). The right forms are in the last units, and the flow
+// syntax of the module itself (util.onsa) is E0821 as well. One error per unit (P-01).
+
+use util
+use util.{scale, lp}
+
+pub fn qualified_instance(x: F32) -> F32 {
+  let a = util.lp~(x)                               //~ E0821
+  x
+}
+
+pub fn qualified_function_with_a_tilde(x: F32) -> F32 {
+  let a = util.scale~(x)                            //~ E0821
+  x
+}
+
+pub fn qualified_name_not_found_with_a_tilde(x: F32) -> F32 {
+  let a = util.nope~(x)                             //~ E0821
+  x
+}
+
+pub fn module_with_a_tilde(x: F32) -> F32 {
+  let a = util~(x)                                  //~ E0821
+  x
+}
+
+pub fn imported_instance(x: F32) -> F32 {
+  let a = lp~(x)                                    //~ E0821
+  x
+}
+
+pub fn imported_function_with_a_tilde(x: F32) -> F32 {
+  let a = scale~(x)                                 //~ E0821
+  x
+}
+
+pub fn qualified_modifier(x: F32, c: Bool) -> F32 {
+  util.lp~(x).when~(c)                              //~ E0821
+}
+
+pub fn qualified_plain_call(x: F32) -> F32 {
+  let a = util.lp(x)                                //~ E0821
+  x
+}
+
+pub fn imported_plain_call(x: F32) -> F32 {
+  let a = lp(x)                                     //~ E0821
+  x
+}
+
+pub fn qualified_plain_call_in_an_operand(x: F32) -> F32 {
+  x + 0.5 * util.lp(x)                              //~ E0821
+}
+
+pub fn qualified_name_not_found(x: F32) -> F32 {
+  let a = util.nope(x)                              //~ E0302
+  x
+}
+
+test "a qualified instance in a test" {
+  let a = util.lp~(1.0)                             //~ E0821
+  assert a == 1.0
+}
+
+test "a qualified plain call in a test" {
+  let a = util.lp(1.0)                              //~ E0821
+  assert a == 1.0
+}
+
+pub const QUALIFIED_INSTANCE_IN_A_CONST: F32 = util.lp~(1.0)  //~ E0821
+
+pub const IMPORTED_PLAIN_CALL_IN_A_CONST: F32 = lp(1.0)  //~ E0821
+
+pub fn qualified_instance_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { util.lp~(y) }         //~ E0821
+  g.(x)
+}
+
+// ---- the right forms ---------------------------------------------------------------------------------
+
+pub fn function_of_a_module(x: F32) -> F32 {
+  util.scale(x) + scale(x)
+}
+
+pub flow flow_of_a_module(x: F32 at sample) -> F32 at sample {
+  let a = util.scale(x)
+  util.lp~(a) + lp~(x)
+}

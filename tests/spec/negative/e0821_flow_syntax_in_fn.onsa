@@ -1,0 +1,294 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.4", "§2.6", "§18.1"]
+// fixes = 0
+
+// W4-12 U3, S-267, S-815, R-139: the syntax that only the body of a flow can have is E0821 where a flow is
+// not: the body of an `fn` (an `rt fn`, a method, a generic function, a closure in them), a `test` and the
+// initializer of a `const` (§11.1: "flow の外（fn の本体、`test`、`const` の初期化式）に、インスタンス
+// の呼び出し `f~(...)`（組込みの遅延を含む）、`~` 無しの flow の呼び出し、帰還の参照 `^名前`、`par`、
+// `if~` / `match~`、レートの `at` … を書くと E0821 で、修正候補は付けない"). The names stage reports it
+// (§18.1: "flow の外の flow だけの構文（E0821）" is of the names stage), so a type error in the same unit
+// is not reached, and the first one by position is the only error of the unit. The `~` without a flow
+// (the plain call `lp(x)`) is in e0821_plain_flow_call.onsa, a callee that is not looked up in
+// e0821_callee_not_looked_up.onsa, the rate `at` in fixes/e0821_at_expression.onsa (the only form with
+// a candidate: `fixes = 0` checks that no error of this file has one), and the order of the errors of a
+// unit in e0821_position_order.onsa. The forms are the ones of tests/review-phase1/parent/t5.onsa
+// (`with_par`, `with_instance`, `with_prev`, `with_feedback`), moved here. Each form is in the body of a
+// function, in a `test` and in a `const` at least, and the other places give the same error. The right
+// forms in a flow body are in the last unit (`if~` and `match~` with an instance in a branch are E0200 in
+// this version, so they are not there). One error per unit (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct Voice {
+  v: F32,
+}
+
+// ---- the instance call `f~(...)` ---------------------------------------------------------------------
+
+pub fn with_instance(x: F32) -> F32 {
+  let y = lp~(x)                                    //~ E0821
+  x
+}
+
+pub fn instance_as_the_tail(x: F32) -> F32 {
+  lp~(x)                                            //~ E0821
+}
+
+pub fn instance_in_an_operand(x: F32) -> F32 {
+  x * 0.5 + lp~(x)                                  //~ E0821
+}
+
+pub rt fn instance_in_an_rt_fn(x: F32) -> F32 {
+  lp~(x)                                            //~ E0821
+}
+
+impl Voice {
+  pub fn instance_in_a_method(self, x: F32) -> F32 {
+    lp~(x)                                          //~ E0821
+  }
+}
+
+pub fn instance_in_a_generic[T](x: T) -> T {
+  let y = lp~(1.0)                                  //~ E0821
+  x
+}
+
+pub fn instance_in_a_branch(c: Bool, x: F32) -> F32 {
+  if c {
+    lp~(x)                                          //~ E0821
+  } else {
+    x
+  }
+}
+
+pub fn instance_in_an_arm(n: U32, x: F32) -> F32 {
+  match n {
+    0 => lp~(x),                                    //~ E0821
+    _ => x,
+  }
+}
+
+pub fn instance_in_a_loop(x: F32) -> F32 {
+  var acc = 0.0
+  for i in 0 ..< 4 {
+    acc = acc + lp~(x)                              //~ E0821
+  }
+  acc
+}
+
+pub fn instance_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { lp~(y) }              //~ E0821
+  g.(x)
+}
+
+pub fn instance_in_a_closure_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 {
+    let h = fn(z: F32) -> F32 { lp~(z) }            //~ E0821
+    h.(y)
+  }
+  g.(x)
+}
+
+test "an instance in a test" {
+  let y = lp~(1.0)                                  //~ E0821
+  assert y == 1.0
+}
+
+pub const INSTANCE_IN_A_CONST: F32 = lp~(1.0)       //~ E0821
+
+// ---- the built-in delays `prev~` `delay~` `vdelay~` --------------------------------------------------
+
+pub fn with_prev(x: F32) -> F32 {
+  let y = prev~(x)                                  //~ E0821
+  x
+}
+
+pub fn prev_with_a_start(x: F32) -> F32 {
+  prev~(x, 0.0)                                     //~ E0821
+}
+
+pub fn delay_in_a_fn(x: F32) -> F32 {
+  delay~(x, 4)                                      //~ E0821
+}
+
+pub fn vdelay_in_a_fn(x: F32) -> F32 {
+  vdelay~(x, 1.5, 8)                                //~ E0821
+}
+
+pub fn prev_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { prev~(y, 0.0) }       //~ E0821
+  g.(x)
+}
+
+test "a delay in a test" {
+  let y = prev~(1.0, 0.0)                           //~ E0821
+  assert y == 0.0
+}
+
+test "a delay with a length in a test" {
+  let y = delay~(1.0, 4)                            //~ E0821
+  assert y == 0.0
+}
+
+pub const PREV_IN_A_CONST: F32 = prev~(1.0, 0.0)    //~ E0821
+
+pub const DELAY_IN_A_CONST: F32 = delay~(1.0, 4)    //~ E0821
+
+// ---- the reference to a signal `^name` ---------------------------------------------------------------
+
+pub fn with_feedback(x: F32) -> F32 {
+  let y = prev~(^z)                                 //~ E0821
+  x
+}
+
+pub fn feedback_on_its_own_binding(x: F32) -> F32 {
+  let y = x + prev~(^y)                             //~ E0821
+  y
+}
+
+pub fn reference_alone(x: F32) -> F32 {
+  let y = ^x                                        //~ E0821
+  y
+}
+
+pub fn reference_to_a_name_not_found(x: F32) -> F32 {
+  let y = ^z                                        //~ E0821
+  x
+}
+
+pub fn reference_in_an_operand(x: F32) -> F32 {
+  x + ^x                                            //~ E0821
+}
+
+pub fn reference_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { ^y }                  //~ E0821
+  g.(x)
+}
+
+test "a reference in a test" {
+  let a = 1.0
+  let y = ^a                                        //~ E0821
+  assert y == 1.0
+}
+
+pub const BASE: F32 = 1.0
+
+pub const REFERENCE_IN_A_CONST: F32 = ^BASE        //~ E0821
+
+// ---- `par` -------------------------------------------------------------------------------------------
+
+pub fn with_par(x: F32) -> F32 {
+  let y = par i in 0 ..< 4 { 1.0 }                  //~ E0821
+  x
+}
+
+pub fn par_with_a_use(x: F32) -> F32 {
+  let ys = par i in 0 ..< 4 {                       //~ E0821
+    x
+  }
+  ys[0]
+}
+
+pub fn par_as_the_tail(x: F32) -> [F32; 2] {
+  par i in 0 ..< 2 { x }                            //~ E0821
+}
+
+pub fn par_in_a_branch(c: Bool, x: F32) -> F32 {
+  if c {
+    let ys = par i in 0 ..< 2 { x }                 //~ E0821
+    ys[0]
+  } else {
+    x
+  }
+}
+
+pub fn par_with_an_instance_in_its_body(x: F32) -> F32 {
+  let ys = par i in 0 ..< 2 {                       //~ E0821
+    lp~(x)
+  }
+  ys[0]
+}
+
+pub fn par_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> [F32; 2] { par i in 0 ..< 2 { y } }  //~ E0821
+  g.(x)[0]
+}
+
+test "a par in a test" {
+  let ys = par i in 0 ..< 2 { 1.0 }                 //~ E0821
+  assert ys[0] == 1.0
+}
+
+pub const PAR_IN_A_CONST: [F32; 2] = par i in 0 ..< 2 { 1.0 }  //~ E0821
+
+// ---- `if~` and `match~` ------------------------------------------------------------------------------
+
+pub fn with_if_tilde(c: Bool, x: F32) -> F32 {
+  let a = if~ c { x } else { 0.5 }                  //~ E0821
+  a
+}
+
+pub fn with_match_tilde(c: Bool, x: F32) -> F32 {
+  let a = x
+  match~ c {                                        //~ E0821
+    true => a,
+    false => 0.5,
+  }
+}
+
+pub fn if_tilde_as_the_tail(c: Bool, x: F32) -> F32 {
+  if~ c { x } else { 0.5 }                          //~ E0821
+}
+
+pub fn if_tilde_with_an_instance(c: Bool, x: F32) -> F32 {
+  if~ c { lp~(x) } else { 0.5 }                     //~ E0821
+}
+
+pub fn if_tilde_in_a_closure(c: Bool, x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { if~ c { y } else { 0.5 } }  //~ E0821
+  g.(x)
+}
+
+pub fn match_tilde_in_a_closure(c: Bool, x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 {
+    match~ c {                                      //~ E0821
+      true => y,
+      false => 0.5,
+    }
+  }
+  g.(x)
+}
+
+test "an if~ in a test" {
+  let y = if~ true { 1.0 } else { 0.5 }             //~ E0821
+  assert y == 1.0
+}
+
+test "a match~ in a test" {
+  let y = match~ true {                             //~ E0821
+    true => 1.0,
+    false => 0.5,
+  }
+  assert y == 1.0
+}
+
+pub const IF_TILDE_IN_A_CONST: F32 = if~ true { 1.0 } else { 0.5 }  //~ E0821
+
+pub const MATCH_TILDE_IN_A_CONST: F32 = match~ true {  //~ E0821
+  true => 1.0,
+  false => 0.5,
+}
+
+// ---- the same syntax in the body of a flow is fine ---------------------------------------------------
+
+pub flow right_forms(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)
+  let d = prev~(^b)
+  let b = a + d
+  let ps = par i in 0 ..< 2 { x }
+  b + ps[0] + ps[1]
+}

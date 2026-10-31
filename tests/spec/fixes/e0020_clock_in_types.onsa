@@ -11,8 +11,9 @@
 // to the place that can have it, and removes it where there is none:
 // - the type of an input or an output of a flow that has no clock after it gets it there
 //   (`x: Option[F32 at sample]` becomes `x: Option[F32] at sample`);
-// - the type of a `let` or a `var` gets it on the value (`let y: Option[F32] = x at sample`);
-// - elsewhere, and where the flow input or output has a clock after the type already, it is removed.
+// - the type of a `let` or a `var` of a flow body gets it on the value (`let y: Option[F32] = x at sample`);
+// - elsewhere, and where the flow input or output has a clock after the type already, it is removed: a
+//   `let` or a `var` outside a flow body too, whose value has no clock either (E0821, §11.1, S-820).
 // An `at` after the type of an input or output of an `fn` is not this error but E0821 of the names
 // stage (see negative/names_clock_in_fn_head.onsa). One error per declaration unit.
 

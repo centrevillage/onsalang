@@ -68,6 +68,6 @@ pub struct TwoInAField {
 }
 
 pub fn two_in_a_let(p: (F32, F32)) -> F32 {
-  let y: (F32, F32 at block) = p at sample          //~ E0020
+  let y: (F32, F32 at block) = p          //~ E0020
   0.5
 }

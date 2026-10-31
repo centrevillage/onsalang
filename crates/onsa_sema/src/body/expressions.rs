@@ -104,18 +104,22 @@ impl<'a> Checker<'a> {
                 onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
             }
             ExprKind::Block(b) => self.check_block(b, expected),
-            // The flow syntax outside a flow body does not reach here
-            // (`crate::flow_syntax`). In a flow body, `if~` and `match~` are
-            // typed as `if` and `match`, and the flow checks read the `~`
-            // (`crate::flow::map`); `at` and `^` are theirs.
-            ExprKind::If { tilde: Some(t), .. } if self.flow.is_none() => Err(self.flow_form(*t, FlowForm::IfTilde)),
-            ExprKind::Match { tilde: Some(t), .. } if self.flow.is_none() => {
-                Err(self.flow_form(*t, FlowForm::MatchTilde))
+            // What only a flow body holds is the names stage's E0821 outside
+            // one (§11.1). In a flow body, `if~` and `match~` are typed as
+            // `if` and `match`, and the flow checks read the `~`
+            // (`crate::flow::map`); `at`, `^` and `par` are theirs.
+            ExprKind::If { tilde: Some(_), .. } | ExprKind::Match { tilde: Some(_), .. } if self.flow.is_none() => {
+                onsa_diag::internal::bug(Some(span), "flow syntax the names stage did not stop at")
             }
-            ExprKind::Closure { ret_clock: Some(c), .. } | ExprKind::At { clock: c, .. } => {
-                Err(self.flow_form(c.span, FlowForm::Clock))
+            ExprKind::Closure { ret_clock: Some(_), .. } | ExprKind::Feedback(_) | ExprKind::Par { .. } => {
+                onsa_diag::internal::bug(Some(span), "flow syntax the names stage did not stop at")
             }
-            ExprKind::Feedback(_) => Err(self.flow_form(span, FlowForm::Feedback)),
+            // The names stage reads the operand of `at` before its clock
+            // (§18.1), and may stop in it with no error (S-675).
+            ExprKind::At { expr, .. } => {
+                self.check_expr(*expr, None)?;
+                onsa_diag::internal::bug(Some(span), "flow syntax the names stage did not stop at")
+            }
             ExprKind::If { cond, then, else_, .. } => {
                 let bool_ = self.bool_();
                 self.check_expr(*cond, Some(bool_))?;
@@ -139,11 +143,6 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Handle { .. } => Err(self.unsupported(span, Feature::EffectHandlers, &[])),
             ExprKind::Unsafe(_) => Err(self.unsupported(span, Feature::Unsafe, &[])),
-            ExprKind::Par { .. } => Err(self.err(
-                Code::E0401,
-                span,
-                "`par` replicates flow instances and is only written inside a flow body (§11.5)",
-            )),
             &ExprKind::Binary { op, op_span, lhs, rhs } => self.check_binary(op, op_span, lhs, rhs),
             ExprKind::Cast { expr: inner, ty } => {
                 let it = self.check_expr(*inner, None)?;
@@ -349,7 +348,8 @@ impl<'a> Checker<'a> {
         // is no constant).
         let (ast, names) = (self.ast, &self.names);
         let local = |e| crate::body::starts_at_local(ast, names, e);
-        match crate::constarg::expr(self.a, self.m, self.ast, self.text, (&generics, self.self_ty), len, &local) {
+        let scope = (&generics[..], self.self_ty, self.flow.is_some());
+        match crate::constarg::expr(self.a, self.m, self.ast, self.text, scope, len, &local) {
             Ok((value, constant)) => {
                 let u32 = self.u32();
                 self.record(len, u32);

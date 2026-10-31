@@ -10,7 +10,7 @@ use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, ItemKind, Lit, Path};
 
 use crate::def::{DefKind, GenericDef};
-use crate::names::body::{method_named, value_called};
+use crate::names::body::{Outside, instance_form, method_named, outside_flow, value_called};
 use crate::names::{BuiltinMember, PathEnd};
 use crate::resolve::{Builtin, Callee, Entity, NameKind, ResolveError};
 use crate::ty::{IntKind, Ty, TyId};
@@ -47,8 +47,9 @@ impl From<Diagnostic> for ConstErr {
 /// An array length or a const argument written as an expression (`4`, `-1`, `N`,
 /// `SIZE`, `cfg.N`, `I32.BITS`, `Self.N`): the one reader of the forms, for the
 /// signatures and the bodies, with the type and const parameters in scope and the
-/// type `Self` names (§2.2); `local` tells a chain of a body that starts at a
-/// local. `Ok((value, constant))`: `constant` is the `const` item a name denotes.
+/// type `Self` names (§2.2), and whether it is in a flow body (`flow`, §11.1);
+/// `local` tells a chain of a body that starts at a local. `Ok((value,
+/// constant))`: `constant` is the `const` item a name denotes.
 /// Of an operation (E0200 until W9-03), a call, a local or a name of no constant
 /// in it is the error first (§4.5, §18.1, S-713 (a)); of a call (E0417), the
 /// error of the names stage of its callee and its arguments, as a body has it.
@@ -57,21 +58,22 @@ pub(crate) fn expr(
     m: ModId,
     ast: &Ast,
     text: &str,
-    (generics, self_ty): (&[GenericDef], Option<TyId>),
+    (generics, self_ty, flow): (&[GenericDef], Option<TyId>, bool),
     e: ExprId,
     local: &dyn Fn(ExprId) -> bool,
 ) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
-    Reader { m, ast, text, generics, self_ty, local }.expr(a, e)
+    Reader { m, ast, text, generics, self_ty, flow, local }.expr(a, e)
 }
 
 /// What [`expr`] reads with: the module `m` of `ast`, the parameters in
-/// scope, the type `Self` names and the locals.
+/// scope, the type `Self` names, whether in a flow body and the locals.
 struct Reader<'r> {
     m: ModId,
     ast: &'r Ast,
     text: &'r str,
     generics: &'r [GenericDef],
     self_ty: Option<TyId>,
+    flow: bool,
     local: &'r dyn Fn(ExprId) -> bool,
 }
 
@@ -91,14 +93,24 @@ impl Reader<'_> {
         }
         if let ExprKind::Call { callee, kind, args } = &ast.expr(e).kind {
             let callee = match kind {
-                CallKind::Plain | CallKind::Bang => self.callee(a, *callee),
+                // Before the names of its callee (§11.1, S-815).
+                CallKind::Flow if !self.flow => {
+                    return Err(outside_flow(instance_form(ast, *callee), span, self.text).into());
+                }
+                CallKind::Plain | CallKind::Bang => self.callee(a, *callee, (span, *kind == CallKind::Bang)),
                 CallKind::Value { .. } => self.before(a, *callee, false),
-                // The callee of an instance is the flow stage's (W4-12).
                 CallKind::Flow => None,
             };
+            // The names stage's errors first, of the callee, then of the
+            // arguments (§18.1).
+            let (names, later) = match callee {
+                Some(ConstErr::Report(d)) if d.stage != Stage::Names => (None, Some(ConstErr::Report(d))),
+                c => (c, None),
+            };
             let mut args = args.iter().map(|x| x.expr);
-            return Err(callee
+            return Err(names
                 .or_else(|| args.find_map(|x| self.before(a, x, false)))
+                .or(later)
                 .unwrap_or_else(|| value_not_constant(found, "a call", span).into()));
         }
         let mut leaves = Vec::new();
@@ -123,11 +135,12 @@ impl Reader<'_> {
         }
     }
 
-    /// The error of the names stage of the callee `c` of `c(...)`, as a body
-    /// has it (§15.1, §6.1): what is not found, a method named through its
-    /// type, a constant called (E0020) and what is no value; a local and the
-    /// members of a value (`K.x()`) are the types stage's.
-    fn callee(&self, a: &mut Analysis, c: ExprId) -> Option<ConstErr> {
+    /// The error of the callee `c` of the call `c(...)` at `call` (`c!(...)`
+    /// when `bang`), as a body has it (§15.1, §6.1, §11.1): what is not
+    /// found, a method named through its type, a value called (E0020, with
+    /// `!` E0401), a flow outside a flow body (E0821) and what is no value;
+    /// a local and the members of a value (`K.x()`) are the types stage's.
+    fn callee(&self, a: &mut Analysis, c: ExprId, (call, bang): (Span, bool)) -> Option<ConstErr> {
         let Some(path) = path_of(self.ast, c).filter(|_| !(self.local)(c)) else { return self.before(a, c, false) };
         let span = self.ast.expr(c).span;
         let shown = self.text[span.start as usize..span.end as usize].to_string();
@@ -148,10 +161,15 @@ impl Reader<'_> {
             },
         };
         let want = "a function";
-        match kind.at_callee() {
-            // A flow is U3's E0821 (W4-12).
-            Callee::Called | Callee::Flow => None,
+        match kind.at_callee(bang) {
+            Callee::Called => None,
+            Callee::Flow if self.flow => None,
+            Callee::Flow => Some(outside_flow(Outside::Flow, call, self.text).into()),
             Callee::Value => Some(value_called(self.text, span).into()),
+            Callee::NoFunction => {
+                let msg = format!("`{shown}` is not a function");
+                Some(Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(shown).into())
+            }
             Callee::NoValue => Some(ResolveError::Kind { shown, span, kind, want }.into_diagnostic().into()),
         }
     }

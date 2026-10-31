@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§4.5", "§18.1"]
+// fixes = 1
+
+// W4-12 U3, S-191, S-812, R-341: a constant parameter called as `N(1)` in the length of an array type is
+// the E0020 of a value called as `x(...)` (§15.1: "値を `x(...)` の形で呼ぶと、型によらず E0020"; §6.1: a
+// function value is called `x.(...)`), in the signature of a declaration as in its body (the `N(1)` of
+// `a_constant_parameter` in fixes/e0020_value_call_not_a_function.onsa). The one candidate puts the `.`
+// before the `(`, which gives a call of a value that is no function: an error of the type stage that
+// the candidate of an earlier stage may leave (§18.1). The signature is read before the body, so the
+// first error of a unit by position is the one of the signature. One error per unit (P-01).
+
+pub struct Voice {
+  v: F32,
+}
+
+pub fn call_in_an_input_length[const N: U32](x: [F32; N(1)]) -> F32 {  //~ E0020
+  1.0
+}
+
+pub fn call_in_an_output_length[const N: U32](x: F32) -> [F32; N(1)] {  //~ E0020
+  [x; 2]
+}
+
+pub fn call_with_no_argument_in_an_input_length[const N: U32](x: [F32; N()]) -> F32 {  //~ E0020
+  1.0
+}
+
+pub fn call_in_a_nested_type[const N: U32](x: [[F32; N(1)]; 2]) -> F32 {  //~ E0020
+  1.0
+}
+
+impl Voice {
+  pub fn call_in_a_method_input[const N: U32](self, x: [F32; N(1)]) -> F32 {  //~ E0020
+    1.0
+  }
+}
+
+pub fn call_in_a_repeat_length[const N: U32](x: F32) -> F32 {
+  let a = [0; N(1)]                                 //~ E0020
+  x
+}
+
+pub fn call_in_a_type_of_a_let[const N: U32](x: F32) -> F32 {
+  let a: [F32; N(1)] = [0.0; 2]                     //~ E0020
+  x
+}
+
+// ---- the right forms --------------------------------------------------------------------------------
+
+pub fn length_is_the_parameter[const N: U32](x: [F32; N]) -> [F32; N] {
+  x
+}

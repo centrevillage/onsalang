@@ -15,7 +15,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::unsupported::{Feature, FlowForm};
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
@@ -486,13 +486,6 @@ impl<'a> Checker<'a> {
     /// E0200 for `feature` (S-224), with the details its phrase takes.
     pub(crate) fn unsupported(&mut self, span: Span, feature: Feature, details: &[&str]) -> Stop {
         self.unsupported_in(Stage::Types, span, feature, details)
-    }
-
-    /// E0200 for a form of the flow syntax outside a flow body (E0821 from
-    /// W4-12): `crate::flow_syntax` stops its item first, so this is reached
-    /// only through a gap in it.
-    pub(crate) fn flow_form(&mut self, span: Span, form: FlowForm) -> Stop {
-        self.diag(form.outside_flow(Stage::Names, span).with_found(self.src(span)))
     }
 
     /// E0200 for `feature` found by `stage`.

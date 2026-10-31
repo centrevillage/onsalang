@@ -1,0 +1,18 @@
+// The module that main.onsa takes its function and its flow from. The unit `flow_syntax_in_a_module` is an
+// E0821 of this file: the rule does not depend on the file the declaration is in.
+
+pub rt fn scale(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  0.5 * (x + prev~(x))
+}
+
+pub fn flow_syntax_in_a_module(x: F32) -> F32 {
+  lp~(x)                                            //~ E0821
+}
+
+pub fn plain_call_in_a_module(x: F32) -> F32 {
+  lp(x)                                             //~ E0821
+}

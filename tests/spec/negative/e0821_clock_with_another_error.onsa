@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "58:13"
+// code = "E0821"
+// candidate = 1
+// leaves = ["59:13 E0821"]
+//
+// [[test.fix]]
+// at = "64:13"
+// code = "E0821"
+// candidate = 1
+// leaves = ["65:3 E0821"]
+//
+// [[test.fix]]
+// at = "68:50"
+// code = "E0821"
+// candidate = 1
+// leaves = ["68:58 E0821"]
+//
+// [[test.fix]]
+// at = "72:47"
+// code = "E0821"
+// candidate = 1
+// leaves = ["73:11 E0821"]
+//
+// [[test.fix]]
+// at = "77:55"
+// code = "E0821"
+// candidate = 1
+// leaves = ["78:11 E0302"]
+//
+// [[test.fix]]
+// at = "83:13"
+// code = "E0821"
+// candidate = 1
+// leaves = ["84:11 E0302"]
+
+// W4-12 U3, R-286, S-267: a rate `at` that is the first of two errors of the names stage in one declaration:
+// a second `at`, an instance call, a clock of the heading and an instance call of the body, or a name that
+// is not found after it. The first one by start is the only error reported (§18.1: the first of the errors of
+// a unit by position), as in e0821_position_order.onsa, and the `at` has its one candidate (§11.1: it takes
+// the `at` and its clock off), so `fixes = 1`. The promise of the candidates (§18.1: no error of the same or
+// an earlier stage is left) is for a diagnostic that is the only error of those stages in its unit; these
+// units have a second error of the names stage, which the candidate does not take off, so it is outside the
+// promise, and the next check reports it. The entries in the header say what is left (`leaves`, the position
+// in the fixed text: the lines do not move, and the `at` of the heading that stays moves left by the width
+// of the one taken off). One error per unit (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn two_clocks_in_a_body(x: F32) -> F32 {
+  let a = x at sample                               //~ E0821
+  let b = x at block
+  a + b
+}
+
+pub fn clock_then_instance(x: F32) -> F32 {
+  let y = x at sample                               //~ E0821
+  lp~(y)
+}
+
+pub fn clocks_of_the_input_and_the_output(x: F32 at block) -> F32 at sample {  //~ E0821
+  x
+}
+
+pub fn clock_of_the_head_then_the_body(x: F32 at sample) -> F32 {  //~ E0821
+  let y = lp~(x)
+  y
+}
+
+pub fn clock_of_the_head_then_a_name_not_found(x: F32 at sample) -> F32 {  //~ E0821
+  let y = nope
+  x
+}
+
+pub fn clock_then_a_name_not_found(x: F32) -> F32 {
+  let a = x at sample                               //~ E0821
+  let b = nope
+  a
+}

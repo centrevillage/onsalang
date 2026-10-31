@@ -47,16 +47,13 @@ impl Walker<'_> {
 
     /// E0308 when the name `segs` of the kind `kind` is no value at the place
     /// of a value, and neither a value nor a flow at the callee of a call
-    /// (the call of a flow is the E0811 of `flow.rs` in a flow body, U3's
+    /// (the call of a flow is the E0811 of `flow.rs` in a flow body, the
     /// E0821 outside); the callee of an instance is `flow.rs`'s.
     pub(super) fn kind_fail(&self, kind: NameKind, segs: &[&Ident], place: Place) -> Option<Fail> {
         let want = match place {
             Place::Value | Place::DotCallee => "a value",
-            Place::Callee(call) => match kind.at_callee() {
-                Callee::Called | Callee::Flow => return None,
-                // `K!(x)`: a value that is no function, the E0401 of the
-                // types stage (§5.2, S-812, R-341).
-                Callee::Value if self.bang(call) => return None,
+            Place::Callee(call) => match kind.at_callee(self.bang(call)) {
+                Callee::Called | Callee::Flow | Callee::NoFunction => return None,
                 Callee::Value => return self.value_called(segs),
                 Callee::NoValue => "a function",
             },

@@ -23,6 +23,7 @@ use onsa_syntax::ast::{
 use onsa_syntax::foreign::{self, RowId};
 
 use crate::def::*;
+use crate::names::body::clock_after;
 use crate::resolve::{Builtin, Entity, NameKind};
 use crate::ty::*;
 use crate::{Analysis, Module, Package, flatten};
@@ -75,12 +76,20 @@ struct Cx<'p> {
     /// path of it names first (§15.1, §4.5, S-729). Of a type of a body, the
     /// visible ones it names; in a heading, its parameters (S-741, S-733).
     locals: HashSet<String>,
+    /// A type of a flow body, whose constant expressions may hold what
+    /// only a flow body holds (§11.1).
+    flow: bool,
 }
 
 impl Cx<'_> {
     /// Whether `name` is one of [`Self::locals`], a value (S-729).
     fn is_local(&self, name: &str) -> bool {
         self.locals.contains(name)
+    }
+
+    /// What a constant expression reads with ([`crate::constarg::expr`]).
+    fn scope(&self) -> (&[GenericDef], Option<TyId>, bool) {
+        (&self.generics, self.self_ty, self.flow)
     }
 
     /// Whether a constant expression starts at one of [`Self::locals`]: a
@@ -159,24 +168,16 @@ impl<'p> Sema<'p> {
     pub(crate) fn add_def(&mut self, def: Def) -> DefId {
         let module = def.item.and_then(|i| self.module(def.module).map(|m| (i, m)));
         let failed = module.and_then(|(i, m)| m.parsed.ast.item(i).failed);
-        // The flow syntax outside a flow body (E0821 from W4-12): E0200, and
-        // the def is not checked further (as a cut heading).
-        let flow_syntax = match (failed, module) {
-            (None, Some((i, m))) => crate::flow_syntax::first_form(&m.parsed, &m.text, i),
-            _ => None,
-        };
         self.a.defs.push(def);
         let id = DefId(self.a.defs.len() as u32 - 1);
         if let Some(f) = failed {
             self.a.failed.insert(id, f);
         }
-        if let Some((span, form)) = flow_syntax {
-            self.report(id, form.outside_flow(Stage::Names, span));
-            self.a.failed.insert(id, onsa_syntax::ast::Failed::Heading);
-        } else if let Some(span) =
+        if let Some(span) =
             module.filter(|_| failed.is_none()).and_then(|(i, m)| crate::flow_syntax::first_mem(&m.parsed, i))
         {
-            // `@mem` (§12.4) until W9-06: the same way.
+            // `@mem` (§12.4) until W9-06: E0200, and the def is not checked
+            // further (as a cut heading).
             self.unsupported(id, span, Feature::MemStorage, &[]);
             self.a.failed.insert(id, onsa_syntax::ast::Failed::Heading);
         }
@@ -248,6 +249,7 @@ impl<'p> Sema<'p> {
             def: id,
             reach: Some(def.vis),
             locals: HashSet::new(),
+            flow: false,
         })
     }
 
@@ -721,6 +723,10 @@ impl<'p> Sema<'p> {
                             self.a.types.error()
                         }
                     };
+                    // The clock of an input of a flow only (§11.3, S-368).
+                    if let Some(c) = &p.clock {
+                        self.report(cx.def, clock_after(cx.ast, cx.text, p.ty, c));
+                    }
                     out.push(ParamSig { name: n, mode: p.mode, ty, span: p.span });
                 }
             }
@@ -757,6 +763,9 @@ impl<'p> Sema<'p> {
             Some(t) => self.lower_type(&cx, t),
             None => self.a.types.unit(),
         };
+        if let Some(c) = &f.ret_clock {
+            self.report(id, clock_after(cx.ast, cx.text, f.ret, c));
+        }
         let effects = self.lower_effects(&cx, f.effects.as_ref());
         // §10 rule 1: an `rt` function cannot have `Alloc` in its effect row (E0902).
         if f.rt && effects.alloc {
@@ -794,6 +803,7 @@ fn cx_clone<'p>(cx: &Cx<'p>) -> Cx<'p> {
         def: cx.def,
         reach: cx.reach,
         locals: cx.locals.clone(),
+        flow: cx.flow,
     }
 }
 

@@ -400,7 +400,7 @@ codes! {
         "a flow input or output without `at`, an output clock other than `sample`, or a value type that cannot cross";
     E0811 = 811, Flow, [Names, Flow], Required, Optional,
         "calling a flow creates a stateful instance and needs `~`";
-    E0812 = 812, Flow, [Names, Types, Flow], Optional, Optional,
+    E0812 = 812, Flow, [Names, Flow], Optional, Optional,
         "`~` used on something that is not a flow";
     E0813 = 813, Flow, [Flow], Optional, Optional,
         "first argument of `prev~` / `delay~` / `vdelay~` must be at the clock `sample`";
@@ -416,7 +416,7 @@ codes! {
         "state with bulk memory placed in a plain value";
     E0820 = 820, Flow, [Build], Optional, Optional,
         "the memory of an exported flow exceeds the budget of the target";
-    E0821 = 821, Flow, [Flow], Optional, Optional,
+    E0821 = 821, Flow, [Names], Optional, Optional,
         "flow-only syntax used outside a flow";
     E0901 = 901, Rt, [Effects], Optional, Optional,
         "`rt` function calls a non-`rt` function";

@@ -38,10 +38,9 @@ pub(super) enum Place {
     /// The callee of the call `.0` (`f(x)`, `a.m(x)`, `x.m!(y)`): its last
     /// name may be a method of the value before it, or an associated function.
     Callee(ExprId),
-    /// The callee of the instance `.0` (`f~(x)`): in a flow body, its errors are
-    /// the walk's, before the `~` of `flow.rs` (§2.6, S-590, R-247); in any
-    /// other body the walk records what it finds alone, and the types stage
-    /// reports the `~` (E0812 until U3's E0821, A9).
+    /// The callee of the instance `.0` (`f~(x)`) of a flow body: its errors
+    /// come before the `~` of `flow.rs` (§2.6, S-590, R-247). Outside a flow
+    /// body the call is an E0821 before its callee (S-815).
     Instance(ExprId),
     /// The `[…]` of a callee after a field (`p.m[I32](1)`): the type
     /// arguments of a method or an index, which the types stage tells apart
@@ -86,10 +85,7 @@ impl<'a> Walker<'a> {
         for (&(e, _), r) in chain.iter().zip(records) {
             self.out.paths.insert(e, r);
         }
-        match fail {
-            Some(f) if !matches!(place, Place::Instance(_)) || self.flow => Err(self.fail(f)),
-            _ => Ok(()),
-        }
+        fail.map_or(Ok(()), |f| Err(self.fail(f)))
     }
 
     /// The records of the names of a chain, one for each element from its

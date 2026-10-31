@@ -1,0 +1,213 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.3", "§18.1"]
+
+// W4-12 U3, R-286, S-267, S-815: where E0821 starts, and which error of a unit comes first. E0821 is of the
+// names stage (§18.1), and the names stage reports the first of its errors in a unit by the start of its
+// range (§18.1: "残った診断のうち、`diagnostics` の並べ方（… 開始の位置 …）で最初のもの"; a later
+// name error is not reported before an E0821 that starts earlier, and an E0821 that starts later does not
+// hide a name error). Where an E0821 starts: a call at its first character (the callee, or the path of the
+// callee: `lp~(x)`, `lp(x)`, `nope~(x)`), the rate `at` at the `at`, the reference `^name` at the `^`, `par`
+// at the `par`, `if~` and `match~` at the `if` and the `match`. The column of the marks of the first part is
+// checked, and the lines of the others. The stages around it: a unit with an error of the syntax stage
+// reports it only (the names are not read), and a type error or an unused binding in the same unit is not
+// reported (the type stage is after the names stage, and E0309 is reported for a unit that has no other
+// error, §18.1). The `at` has a candidate that the others have not, so the number of the candidates is not
+// written in this file. One error per unit (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- where an E0821 starts ---------------------------------------------------------------------------
+
+pub fn start_of_an_instance(x: F32) -> F32 {
+  let y = lp~(x)                                    //~ E0821 @11
+  x
+}
+
+pub fn start_of_a_plain_call(x: F32) -> F32 {
+  let y = x + lp(x)                                 //~ E0821 @15
+  x
+}
+
+pub fn start_of_a_name_not_found(x: F32) -> F32 {
+  let y = nope~(x)                                  //~ E0821 @11
+  x
+}
+
+pub fn start_of_a_method(x: F32) -> F32 {
+  let y = x.prev~(0.5)                              //~ E0821 @11
+  x
+}
+
+pub fn start_of_a_modifier(x: F32, c: Bool) -> F32 {
+  let y = lp~(x).when~(c)                           //~ E0821 @11
+  x
+}
+
+pub fn start_of_a_delay(x: F32) -> F32 {
+  let y = 0.5 * prev~(x, 0.0)                       //~ E0821 @17
+  x
+}
+
+pub fn start_of_a_reference(x: F32) -> F32 {
+  let y = 0.5 * ^x                                  //~ E0821 @17
+  x
+}
+
+pub fn start_of_a_par(x: F32) -> F32 {
+  let y = par i in 0 ..< 2 { x }                    //~ E0821 @11
+  x
+}
+
+pub fn start_of_an_if_tilde(c: Bool, x: F32) -> F32 {
+  let y = if~ c { x } else { 0.5 }                  //~ E0821 @11
+  x
+}
+
+pub fn start_of_a_match_tilde(c: Bool, x: F32) -> F32 {
+  let y = match~ c {                                //~ E0821 @11
+    true => x,
+    false => 0.5,
+  }
+  x
+}
+
+pub fn start_of_a_clock(x: F32) -> F32 {
+  let y = x at sample                               //~ E0821 @13
+  y
+}
+
+pub fn start_of_a_clock_in_a_sum(x: F32) -> F32 {
+  let y = 0.5 * (x at block)                        //~ E0821 @20
+  y
+}
+
+// ---- the first of the errors of a unit ---------------------------------------------------------------
+
+pub fn instance_then_name_not_found(x: F32) -> F32 {
+  let y = lp~(x)                                    //~ E0821
+  let z = nope
+  x
+}
+
+pub fn name_not_found_then_instance(x: F32) -> F32 {
+  let z = nope                                      //~ E0302
+  let y = lp~(x)
+  x
+}
+
+pub fn argument_not_found_in_an_instance(x: F32) -> F32 {
+  let y = lp~(nope)                                 //~ E0821
+  x
+}
+
+// The call starts at the callee `lp`, before the `nope` of its argument: the E0821 is the first by start
+// (the callee is found and is a flow, R-269), and the E0302 of the argument is not reported.
+pub fn plain_call_with_an_argument_not_found(x: F32) -> F32 {
+  let y = lp(nope)                                  //~ E0821 @11
+  x
+}
+
+pub fn instance_in_the_argument_of_a_name_not_found(x: F32) -> F32 {
+  let y = nope(lp~(x))                              //~ E0302
+  x
+}
+
+pub fn instance_after_a_name_not_found_in_the_line(x: F32) -> F32 {
+  let y = nope + lp~(x)                             //~ E0302
+  x
+}
+
+pub fn instance_before_a_name_not_found_in_the_line(x: F32) -> F32 {
+  let y = lp~(x) + nope                             //~ E0821
+  x
+}
+
+pub fn reference_to_a_name_not_found(x: F32) -> F32 {
+  let y = ^nope                                     //~ E0821
+  x
+}
+
+pub fn par_then_name_not_found(x: F32) -> F32 {
+  let ys = par i in 0 ..< 2 {                       //~ E0821
+    nope
+  }
+  x
+}
+
+pub fn name_not_found_then_par(x: F32) -> F32 {
+  let z = nope                                      //~ E0302
+  let ys = par i in 0 ..< 2 { x }
+  x
+}
+
+pub fn two_instances(x: F32) -> F32 {
+  let y = lp~(x)                                    //~ E0821
+  let z = lp~(y)
+  z
+}
+
+pub fn instance_then_clock(x: F32) -> F32 {
+  let y = lp~(x)                                    //~ E0821
+  y at sample
+}
+
+pub fn in_a_closure_then_after_it(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { lp~(y) }              //~ E0821
+  let z = nope
+  g.(x)
+}
+
+pub fn before_a_closure_then_in_it(x: F32) -> F32 {
+  let z = nope                                      //~ E0302
+  let g = fn(y: F32) -> F32 { lp~(y) }
+  g.(x)
+}
+
+// ---- the stages around it ----------------------------------------------------------------------------
+
+pub fn type_error_after_it(x: F32) -> F32 {
+  let y = lp~(x)                                    //~ E0821
+  let b: Bool = 1.0
+  x
+}
+
+pub fn type_error_before_it(x: F32) -> F32 {
+  let b: Bool = 1.0
+  let y = lp~(x)                                    //~ E0821
+  x
+}
+
+pub fn unused_binding(x: F32) -> F32 {
+  let unused = 1.0
+  let y = lp~(x)                                    //~ E0821
+  x
+}
+
+pub fn syntax_error_in_the_unit(x: F32) -> F32 {
+  let y: F32 at sample = x                          //~ E0020
+  let z = lp~(y)
+  z
+}
+
+pub fn the_error_of_the_next_unit(x: F32) -> F32 {
+  let y = lp~(x)                                    //~ E0821
+  y
+}
+
+// ---- the head and the body of one declaration --------------------------------------------------------
+
+pub fn clock_of_the_head_then_a_type_error(x: F32) -> F32 at sample {  //~ E0821
+  let b: Bool = 1.0
+  x
+}
+
+pub fn type_not_found_before_the_clock(x: Nope at sample) -> F32 {  //~ E0302
+  0.5
+}
+
+pub fn clock_of_the_head_hidden_by_a_type_argument(x: F32 at sample, y: Option[F32 at sample]) -> F32 {  //~ E0020
+  x
+}

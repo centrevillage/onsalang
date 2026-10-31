@@ -54,7 +54,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::unsupported::{Feature, FlowForm};
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind,

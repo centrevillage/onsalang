@@ -1,24 +1,25 @@
 // onsa.toml
 // [test]
 // spec = ["§11.1", "§11.3", "§18.1"]
+// fixes = 1
 
 // E0821 for an `at` after the type of an input or the output of an `fn` (§11.3: "`at` を書けるのは flow
 // の入出力の宣言と本体の式だけで、flow の外は E0821 … `fn f(x: Option[F32 at sample])` は E0020、
 // `fn f(x: F32 at sample)` は E0821", S-356). The syntax stage reads the `at` of the heading (S-356 and
 // the decision of fixes/e0020_clock_in_types.onsa: the E0020 for the clock in a type is of the syntax
 // stage), and the names stage reports it, as a flow-only syntax outside a flow (§18.1). The `at` in
-// a type argument of the same heading is the E0020 of the syntax stage, which hides this one.
-// One error per declaration unit.
+// a type argument of the same heading is the E0020 of the syntax stage, which hides this one (that is in
+// e0821_position_order.onsa; the heading with two clocks is in e0821_clock_with_another_error.onsa).
+// W4-12 U3, S-379: the arguments and the return type of a closure are the same (§11.3: "無名関数の引数と
+// 返り値の同じ形は E0821"), and so are those of a method, an associated function and a generic function.
+// The one candidate takes off the `at` and its clock (§11.1: "`at` だけは、それを外すことを修正候補に
+// する"), so `fixes = 1`. One error per declaration unit.
 
 pub fn input_clock(x: F32 at sample) -> F32 {       //~ E0821
   x
 }
 
 pub fn output_clock(x: F32) -> F32 at sample {      //~ E0821
-  x
-}
-
-pub fn both_clocks(x: F32 at block) -> F32 at sample {  //~ E0821
   x
 }
 
@@ -32,4 +33,72 @@ pub fn second_input_clock(x: F32, p: F32 at init) -> F32 {  //~ E0821
 
 pub fn array_input_clock(xs: [F32; 2] at sample) -> F32 {  //~ E0821
   xs[0]
+}
+
+pub rt fn rt_output_clock(x: F32) -> F32 at block {  //~ E0821
+  x
+}
+
+pub fn clock_of_a_name_that_is_no_clock(x: F32 at nope) -> F32 {  //~ E0821
+  x
+}
+
+pub fn generic_input_clock[T](x: T at sample) -> T {  //~ E0821
+  x
+}
+
+pub struct Voice {
+  v: F32,
+}
+
+impl Voice {
+  pub fn method_input_clock(self, x: F32 at block) -> F32 {  //~ E0821
+    x
+  }
+
+  pub fn method_output_clock(self, x: F32) -> F32 at sample {  //~ E0821
+    x
+  }
+
+  pub fn associated_input_clock(x: F32 at init) -> Voice {  //~ E0821
+    Voice { v: x }
+  }
+}
+
+pub fn closure_input_clock(x: F32) -> F32 {
+  let f = fn(y: F32 at sample) -> F32 { y }  //~ E0821
+  f.(x)
+}
+
+pub fn closure_output_clock(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 at sample { y }  //~ E0821
+  f.(x)
+}
+
+pub fn closure_second_input_clock(x: F32) -> F32 {
+  let f = fn(y: F32, z: F32 at block) -> F32 { y + z }  //~ E0821
+  f.(x, x)
+}
+
+pub fn closure_in_a_closure(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 {
+    let g = fn(z: F32 at sample) -> F32 { z }  //~ E0821
+    g.(y)
+  }
+  f.(x)
+}
+
+test "a closure with a clock in a test" {
+  let f = fn(y: F32 at sample) -> F32 { y }  //~ E0821
+  assert f.(1.0) == 1.0
+}
+
+pub const WITH_A_CLOSURE: F32 = (fn(y: F32 at sample) -> F32 { y }).(1.0)  //~ E0821
+
+// ---- a clock as the name of a variable is fine (§11.3: `sample` and `block` are names of values too) ----
+
+pub fn clock_names_as_variables(x: F32) -> F32 {
+  let sample = x
+  let block = sample + 1.0
+  block
 }

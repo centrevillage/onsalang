@@ -143,12 +143,13 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diag
             continue;
         }
         let Some(parent) = cst.parent(clock) else { continue };
+        let mut outside = false;
         let found = match cst.kind(parent) {
             NodeKind::AtExpr | NodeKind::Param | NodeKind::Fn | NodeKind::Flow | NodeKind::ClosureExpr => None,
             NodeKind::LetStmt | NodeKind::VarStmt => {
-                to_value(cst, text, clock, parent, marks).map(|fixes| (RowId::ClockOnBinding, fixes))
+                to_value(cst, text, clock, parent, (marks, &mut outside)).map(|fixes| (RowId::ClockOnBinding, fixes))
             }
-            _ => in_type(cst, text, clock, marks).map(|fixes| (RowId::ClockInType, fixes)),
+            _ => in_type(cst, text, clock, (marks, &mut outside)).map(|fixes| (RowId::ClockInType, fixes)),
         };
         let Some((id, fixes)) = found else { continue };
         // A candidate that would nest deeper than the limit is not made
@@ -159,10 +160,26 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diag
         // is an `at` node over it.
         let too_deep = crate::nesting::too_deep(limit, span, &fixes, 1);
         let fixes = if too_deep { Vec::new() } else { fixes };
-        let d = diagnostic(text, id, Hit::new(cst.span(clock), fixes));
+        let mut d = diagnostic(text, id, Hit::new(cst.span(clock), fixes));
+        if outside && let Some(rule) = d.notes.first_mut() {
+            d.message = OUTSIDE.0.into();
+            *rule = onsa_diag::Note::rule(OUTSIDE.1);
+        }
         out.push(if too_deep { d.with_rule(crate::nesting::TOO_DEEP_RULE) } else { d });
     }
 }
+
+/// The insertions of the candidates, and whether the clock is on a binding
+/// outside a flow body, whose value takes no clock either ([`to_value`]).
+type Ins<'a> = (&'a mut Insertions, &'a mut bool);
+
+/// The message and the note of a clock on a binding outside a flow body, in
+/// place of its row's (§11.1, §11.3, S-820).
+const OUTSIDE: (&str, &str) = (
+    "a binding outside a flow body has no clock",
+    "outside a flow body neither a binding nor a value has a clock: an `at` on an expression there is \
+     E0821 (§11.1, §11.3)",
+);
 
 /// The text a clock is written with after a value or a type: ` at name`,
 /// from its name token.
@@ -230,10 +247,11 @@ fn take_out(cst: &Cst, clock: NodeId) -> Option<Out> {
 /// (§11.3: `let y: F32 = x at sample`). A value that is no plain operand
 /// takes parentheses ([`crate::ast::Operand::bare_before_as_at`], E0011).
 /// A value that has a clock already (in parentheses or not) is no place for
-/// another: the candidate takes the clock out (S-356). `None` when the
+/// another, nor is a value outside a flow body: the candidate takes the
+/// clock out (S-356, S-820). `None` when the
 /// statement was not read whole; no candidate when the value is `move x`
 /// or the clock holds a comment.
-fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, marks: &mut Insertions) -> Option<Vec<Fix>> {
+fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, outside): Ins) -> Option<Vec<Fix>> {
     if !cst.is_complete(stmt) {
         return None;
     }
@@ -252,7 +270,14 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, marks: &mut Inse
     }
     let first_expr = |n: NodeId| cst.child_nodes(n).find(|&c| cst.kind(c).class() == Class::Expr);
     let value = cst.child_nodes(stmt).filter(|&n| cst.kind(n).class() == Class::Expr).last()?;
+    // Outside a flow body a value takes no clock either (§11.1, S-820).
+    let body =
+        cst.ancestors(stmt).find(|&n| matches!(cst.kind(n), NodeKind::Flow | NodeKind::Fn | NodeKind::ClosureExpr));
+    *outside = body.is_none_or(|n| cst.kind(n) != NodeKind::Flow);
     let Some(out) = take_out(cst, clock) else { return Some(Vec::new()) };
+    if *outside {
+        return Some(vec![Fix::new("remove the clock", out.edits(""))]);
+    }
     let mut inner = value;
     while cst.kind(inner) == NodeKind::ParenExpr {
         inner = first_expr(inner)?;
@@ -282,7 +307,7 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, marks: &mut Inse
 /// around it was not read whole (`Option[F32 at sample at block]`: the
 /// second `at` is the E0002 of the unit, as at the type of an input); no
 /// candidate when the clock holds a comment.
-fn in_type(cst: &Cst, text: &str, clock: NodeId, marks: &mut Insertions) -> Option<Vec<Fix>> {
+fn in_type(cst: &Cst, text: &str, clock: NodeId, (marks, outside): Ins) -> Option<Vec<Fix>> {
     let mut place = clock;
     while let Some(p) = cst.parent(place) {
         place = p;
@@ -329,7 +354,7 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId, marks: &mut Insertions) -> Opti
     }
     if matches!(cst.kind(place), NodeKind::LetStmt | NodeKind::VarStmt)
         && !has_clock(place)
-        && let Some(fixes) = to_value(cst, text, clock, place, marks)
+        && let Some(fixes) = to_value(cst, text, clock, place, (marks, outside))
         && !fixes.is_empty()
     {
         return Some(fixes);

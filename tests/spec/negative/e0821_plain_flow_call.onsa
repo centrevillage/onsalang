@@ -1,0 +1,169 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.4", "§15.1", "§2.6", "§18.1"]
+// fixes = 0
+
+// W4-12 U3, R-269, S-267, S-816: a flow called without the `~` outside a flow is E0821 whatever the `~`
+// is (§2.6: "flow の外では、flow の呼び出しと `if~` / `match~` は `~` の有無によらず E0821（§11.1）";
+// §11.1: "`~` 無しの flow の呼び出し … を書くと E0821 で、修正候補は付けない"), in the body of an `fn`, in
+// a `test` and in the initializer of a `const`. It is the error of the names stage that finds the callee
+// to be a flow (the callee is looked up here, unlike the `f~(...)` of e0821_callee_not_looked_up.onsa),
+// so it comes before the E0401 "not a function" of the type stage that these calls give now, and before
+// the type errors around it (`let a: Bool = lp(x)`, §18.1: "名前の誤りがある単位では型検査をしない").
+// The range is the call, so the first character of the callee is where it starts: a name that is not
+// found before it (`nope(lp(x))`) is the E0302, and one after it (`lp(nope)`, in e0821_position_order.onsa)
+// is not reported (§18.1: the first one by position). The
+// forms that are another error and stay: the built-in names `prev(1.0)` and `sample_rate()` are E0302
+// outside a flow (§11.4, flow_builtin_outside_flow.onsa), and `lp.(x)` is the E0308 of a flow written in a
+// place of a value (§15.1, S-816, flow_called_with_dot.onsa). `fixes = 0` checks that no error of the file
+// has a candidate. One error per unit (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub rt fn id(x: F32) -> F32 {
+  x
+}
+
+pub struct Voice {
+  v: F32,
+}
+
+// ---- `lp(x)` and `lp()` -------------------------------------------------------------------------------
+
+pub fn with_plain_call(x: F32) -> F32 {
+  let y = lp(x)                                     //~ E0821
+  x
+}
+
+pub fn plain_call_as_the_tail(x: F32) -> F32 {
+  lp(x)                                             //~ E0821
+}
+
+pub fn plain_call_with_no_argument(x: F32) -> F32 {
+  let y = lp()                                      //~ E0821
+  x
+}
+
+pub fn plain_call_with_two_arguments(x: F32) -> F32 {
+  lp(x, x)                                          //~ E0821
+}
+
+pub fn plain_call_in_an_operand(x: F32) -> F32 {
+  x * 0.5 + lp(x)                                   //~ E0821
+}
+
+pub fn plain_call_in_an_argument(x: F32) -> F32 {
+  id(lp(x))                                         //~ E0821
+}
+
+pub rt fn plain_call_in_an_rt_fn(x: F32) -> F32 {
+  lp(x)                                             //~ E0821
+}
+
+impl Voice {
+  pub fn plain_call_in_a_method(self, x: F32) -> F32 {
+    lp(x)                                           //~ E0821
+  }
+}
+
+pub fn plain_call_in_a_generic[T](x: T) -> T {
+  let y = lp(1.0)                                   //~ E0821
+  x
+}
+
+pub fn plain_call_in_a_branch(c: Bool, x: F32) -> F32 {
+  if c {
+    lp(x)                                           //~ E0821
+  } else {
+    x
+  }
+}
+
+pub fn plain_call_in_an_arm(n: U32, x: F32) -> F32 {
+  match n {
+    0 => lp(x),                                     //~ E0821
+    _ => x,
+  }
+}
+
+pub fn plain_call_in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { lp(y) }               //~ E0821
+  g.(x)
+}
+
+test "a plain call in a test" {
+  let y = lp(1.0)                                   //~ E0821
+  assert y == 1.0
+}
+
+test "a plain call with no argument in a test" {
+  let y = lp()                                      //~ E0821
+  assert y == 1.0
+}
+
+pub const PLAIN_CALL_IN_A_CONST: F32 = lp(1.0)      //~ E0821
+
+pub const PLAIN_CALL_WITH_NO_ARGUMENT_IN_A_CONST: F32 = lp()  //~ E0821
+
+// ---- the type errors and the name errors around it ---------------------------------------------------
+
+pub fn type_error_of_the_let(x: F32) -> F32 {
+  let a: Bool = lp(x)                               //~ E0821
+  x
+}
+
+pub fn type_error_after_it(x: F32) -> F32 {
+  let a = lp(x)                                     //~ E0821
+  let b: Bool = 1.0
+  x
+}
+
+pub fn callee_not_found_before_the_flow(x: F32) -> F32 {
+  let y = nope(lp(x))                               //~ E0302
+  x
+}
+
+pub fn name_not_found_in_an_earlier_argument(x: F32) -> F32 {
+  let y = id(nope) + lp(x)                          //~ E0302
+  x
+}
+
+pub fn name_not_found_in_a_later_line(x: F32) -> F32 {
+  let y = lp(x)                                     //~ E0821
+  let z = nope
+  x
+}
+
+pub fn name_not_found_in_an_earlier_line(x: F32) -> F32 {
+  let z = nope                                      //~ E0302
+  let y = lp(x)
+  x
+}
+
+// A flow called with `!` is a call of a flow without its `~` too (S-819), not the E0401 of the types stage.
+pub fn flow_called_with_a_bang(x: F32) -> F32 {
+  lp!(x)                                            //~ E0821
+}
+
+// ---- what stays what it was --------------------------------------------------------------------------
+
+pub fn prev_is_not_found(x: F32) -> F32 {
+  prev(1.0)                                         //~ E0302
+}
+
+pub fn sample_rate_is_not_found() -> F32 {
+  sample_rate()                                     //~ E0302
+}
+
+pub fn flow_called_with_a_dot(x: F32) -> F32 {
+  lp.(x)                                            //~ E0308
+}
+
+// ---- the right forms ---------------------------------------------------------------------------------
+
+pub flow right_forms(x: F32 at sample) -> F32 at sample {
+  let a = id(x)
+  lp~(a)
+}

@@ -122,12 +122,14 @@ impl NameKind {
         }
     }
 
-    /// What a name of the kind is at the callee of `x(...)` (§15.1, §6.1):
-    /// the one table of a body and a constant expression.
-    pub fn at_callee(self) -> Callee {
+    /// What a name of the kind is at the callee of `x(...)`, or of `x!(...)`
+    /// when `bang` (§15.1, §6.1, §5.2): the one table of a body and a
+    /// constant expression.
+    pub fn at_callee(self, bang: bool) -> Callee {
         match self {
             NameKind::Flow => Callee::Flow,
-            NameKind::Constant => Callee::Value,
+            NameKind::Constant | NameKind::ConstParam if bang => Callee::NoFunction,
+            NameKind::Constant | NameKind::ConstParam => Callee::Value,
             kind if kind.is_value() => Callee::Called,
             _ => Callee::NoValue,
         }
@@ -168,10 +170,13 @@ pub enum Callee {
     /// What is called so, or what a later stage reads there.
     Called,
     /// A flow: in a flow body called with `~` (E0811, §2.6), outside one
-    /// the E0821 of §11.1 (W4-12 U3).
+    /// the E0821 of §11.1.
     Flow,
     /// A value that is no function: the E0020 of the row `value_call`.
     Value,
+    /// A value that is no function called with `!`: E0401, of the types
+    /// stage (§5.2, S-812).
+    NoFunction,
     /// What is no value: E0308.
     NoValue,
 }

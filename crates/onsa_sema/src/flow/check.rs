@@ -398,7 +398,7 @@ impl<'a> Checker<'a> {
     /// names stage ([`NameKind::at_callee`]).
     fn names_a_flow(&self, callee: ExprId) -> bool {
         matches!(self.names.paths.get(&callee), Some(&PathRes::Item { entity, .. })
-            if NameKind::of(entity, &self.a.defs).is_some_and(|k| k.at_callee() == Callee::Flow))
+            if NameKind::of(entity, &self.a.defs).is_some_and(|k| k.at_callee(false) == Callee::Flow))
     }
 
     /// E0714 for `!` on a builtin name of a flow (`sample_rate!()`, §5.2;
