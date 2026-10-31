@@ -1,0 +1,3 @@
+fn g
+pub flow t(x:F32 at sample)->F32 at sample{ let y = g~(nope) 
+}

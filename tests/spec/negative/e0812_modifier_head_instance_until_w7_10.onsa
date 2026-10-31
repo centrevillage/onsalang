@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.10", "§18.1"]
+// fixes = 0
+
+// W4-12 U2, R-252: this file fixes the output of this version, not a sentence of the spec, and it changes
+// when W7-10 lands: the form `lp~(x).when~(true)` is a correct form of §11.10 ("受け手は flow の呼び出し（組込みの
+// 遅延を含む）か修飾子の連鎖である"), and W7-10 makes it pass (the modifiers `when`, `reset_if`, `down` and `up`
+// are not implemented before it). Until then the call is read as the call of a method `when` on the value
+// that `lp~(x)` gives, and the E0812 of a value receiver is reported, as it is for `x.when~(c)`
+// (e0812_tilde_on_value.onsa), with no candidate (§2.6: "受け手か呼び先が値なら候補を出さず"; `fixes = 0`).
+// The range is the whole call, so the column of each mark is where the call starts (the head `lp`).
+// When W7-10 makes these forms pass, the unit of each flow below changes to the correct form of §11.10 and
+// this file is rewritten or removed with it. One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow modifier_on_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x).when~(true)                        //~ E0812 @11
+  a
+}
+
+pub flow modifier_on_a_builtin_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c)                                 //~ E0812 @3
+}
+
+pub flow two_modifiers_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = lp~(x).when~(c).reset_if~(c)              //~ E0812 @11
+  a
+}

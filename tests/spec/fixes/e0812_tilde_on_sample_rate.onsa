@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "22:11"
+// code = "E0812"
+// candidate = 1
+// clean = true
+
+// W4-12 U2, S-817, R-285: `sample_rate` is a built-in name of a flow that is called without `~`
+// (`sample_rate()`, §11.4), so `sample_rate~()` is E0812 (§2.6: "flow でないものに `~` を付けると E0812"),
+// and the one candidate removes the `~` (§2.6: "`~` 無しで呼ぶ flow の組込み名（`sample_rate`、`sample_tick`）
+// を指すときだけ `~` を外す修正候補を示す"). The edit is the one character that §18.1 asks for ("変えるトークン
+// だけを置き換える最小の編集"), not a replacement of the whole call: the line comment between the parentheses
+// is in the text of the call, and it is still there in the copy `.fix1` (the text after the candidate has
+// `sample_rate(` then the comment line, then `)`; a candidate that replaced the call by `sample_rate()` would
+// lose it). The unit is clean after the candidate (`clean`). One candidate unit in the file, as `clean` asks.
+
+pub flow sample_rate_with_a_tilde(x: F32 at sample) -> F32 at sample {
+  let r = sample_rate~(                             //~ E0812 @11
+    // the rate
+  )
+  x * r
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let r = sample_rate()
+  x * r
+}

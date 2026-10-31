@@ -15,9 +15,9 @@ use super::kinds::value_call_fix;
 use super::paths::Place;
 use super::{Fail, PathRes, W, Walker};
 use crate::Analysis;
-use crate::def::DefKind;
+use crate::DefId;
 use crate::flow_names::FlowBuiltin;
-use crate::resolve::{Builtin, Entity, NameKind};
+use crate::resolve::{Builtin, Callee, Entity, NameKind};
 
 /// What the record of a callee is, as the forms of a call read it: the one
 /// table of the values and the items of a call (§15.1, §6.1; A6, D-15).
@@ -33,7 +33,9 @@ pub(super) enum Called {
     /// function of a namespace, a variant with elements, an associated
     /// function of a builtin type.
     Item,
-    /// Anything else (a flow, a builtin name of a flow).
+    /// A flow ([`Callee::Flow`]), called with `~` (§2.6).
+    Flow(DefId),
+    /// Anything else (a type, a module, a builtin name of a flow).
     Other,
 }
 
@@ -57,10 +59,9 @@ impl Walker<'_> {
     /// The call `e` (§6.1): its callee, the form of the call that the
     /// callee decides, then its arguments.
     pub(super) fn call(&mut self, e: ExprId, callee: ExprId, kind: CallKind, args: &[Arg]) -> W {
-        let ast = self.ast;
         let place = match kind {
             CallKind::Value { .. } => Place::DotCallee,
-            CallKind::Flow => Place::Instance,
+            CallKind::Flow => Place::Instance(e),
             _ => Place::Callee(e),
         };
         match self.indexed(callee) {
@@ -70,11 +71,9 @@ impl Walker<'_> {
                 self.form(callee, kind)?;
             }
         }
-        if let (CallKind::Flow, Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. })) =
-            (kind, self.out.paths.get(&callee))
-            && matches!(self.a.def(d).kind, DefKind::Flow(_))
-        {
-            self.out.instances.push((d, ast.expr(callee).span));
+        // The `~` after the names of the callee, before its arguments (R-286).
+        if self.flow {
+            self.flow_mark(e, callee, kind, args)?;
         }
         // The constant of a delay (`delay~(x, N)`, §11.4).
         let constant = match self.out.paths.get(&callee) {
@@ -97,6 +96,10 @@ impl Walker<'_> {
             }
             PathRes::BuiltinAssoc { .. } => Called::Item,
             PathRes::Item { entity, .. } => match NameKind::of(*entity, &a.defs) {
+                Some(k) if k.at_callee() == Callee::Flow => match *entity {
+                    Entity::Def(d) | Entity::Member(d) => Called::Flow(d),
+                    _ => Called::Other,
+                },
                 Some(NameKind::Function) => Called::Item,
                 Some(NameKind::Constant) => Called::Value,
                 Some(NameKind::Variant) if unit_variant(a, *entity) => Called::UnitVariant,

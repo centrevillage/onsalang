@@ -149,7 +149,8 @@ impl Reader<'_> {
         };
         let want = "a function";
         match kind.at_callee() {
-            Callee::Called => None,
+            // A flow is U3's E0821 (W4-12).
+            Callee::Called | Callee::Flow => None,
             Callee::Value => Some(value_called(self.text, span).into()),
             Callee::NoValue => Some(ResolveError::Kind { shown, span, kind, want }.into_diagnostic().into()),
         }

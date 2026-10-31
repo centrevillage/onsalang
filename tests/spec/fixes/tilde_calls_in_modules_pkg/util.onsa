@@ -1,0 +1,9 @@
+// The module that main.onsa takes its function and its flow from.
+
+pub rt fn scale(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  0.5 * (x + prev~(x))
+}

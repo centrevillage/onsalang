@@ -97,8 +97,9 @@ impl Stage {
 /// Whether every diagnostic of a code carries a fix candidate (D-04).
 ///
 /// `Required` only where the spec text says the code always shows a candidate:
-/// E0003, E0713, E0714, E0811, E0812 (W3-02, D5; E0004 is
-/// not, S-430; E0320 is not: a file or directory name has none, §2.3, S-300).
+/// E0003, E0713, E0714, E0811 (W3-02, D5; E0004 is
+/// not, S-430; E0320 is not: a file or directory name has none, §2.3, S-300;
+/// E0812 is not: a `~` on a value has none, §2.6, S-590).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FixRule {
     Required,
@@ -397,9 +398,9 @@ codes! {
         "`@param` is missing, misplaced, or malformed";
     E0810 = 810, Flow, [Names, Flow], Optional, Optional,
         "a flow input or output without `at`, an output clock other than `sample`, or a value type that cannot cross";
-    E0811 = 811, Flow, [Flow], Required, Optional,
+    E0811 = 811, Flow, [Names, Flow], Required, Optional,
         "calling a flow creates a stateful instance and needs `~`";
-    E0812 = 812, Flow, [Types, Flow], Required, Optional,
+    E0812 = 812, Flow, [Names, Types, Flow], Optional, Optional,
         "`~` used on something that is not a flow";
     E0813 = 813, Flow, [Flow], Optional, Optional,
         "first argument of `prev~` / `delay~` / `vdelay~` must be at the clock `sample`";
@@ -486,7 +487,7 @@ mod tests {
         // W3-02 D5: the spec text says these always show a candidate.
         let required: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Required).map(|c| c.as_str()).collect();
-        assert_eq!(required, ["E0003", "E0713", "E0714", "E0811", "E0812"]);
+        assert_eq!(required, ["E0003", "E0713", "E0714", "E0811"]);
         // R-301: a form of E0020 a later stage finds keeps its code with no candidate.
         let syntax: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Syntax).map(|c| c.as_str()).collect();

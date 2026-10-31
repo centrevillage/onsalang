@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.4", "§18.1"]
+// fixes = 1
+
+// W4-12 U2, S-817, R-285: `sample_tick~()` is E0812 like `sample_rate~()` (e0812_tilde_on_sample_rate.onsa):
+// the built-in name of a flow is called without `~` (§11.4), and the one candidate removes the `~`
+// (§2.6). Whether `sample_tick()` itself is accepted is another matter: this version reports it as the
+// E0200 of the flow stage (negative/flow_sample_tick_unsupported.onsa, until W7-09), a stage after the
+// names stage that the candidate of an earlier-stage error may leave behind (§18.1), so this file has no
+// `clean`. The line comment between the parentheses is in the text of the call, and the edit leaves it
+// outside (S-251): the text after the candidate in `.fix1` keeps it. One error per flow (P-01).
+
+pub flow tick_with_a_tilde(x: F32 at sample) -> U32 at sample {
+  let t = sample_tick(                             //~ E0812 @11
+    // the tick
+  )
+  t
+}
+
+pub flow tick_as_the_output(x: F32 at sample) -> U32 at sample {
+  sample_tick()                                    //~ E0812 @3
+}
+
+pub flow tick_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    x * (sample_tick() as F32)                     //~ E0812 @10
+  }
+  ys[0] + ys[1]
+}

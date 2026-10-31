@@ -14,18 +14,6 @@ use super::{Fail, Walker};
 use crate::names::{BuiltinMember, PathEnd};
 use crate::resolve::{Callee, Entity, NameKind, ResolveError, no_members};
 
-/// The call whose callee a method named through its type is at `place`
-/// (none at the place of a value, where it is no value, and in the `[…]`
-/// of `p.m[P.get](1)`, no type and no value either); the callee of an
-/// instance is the flow stage's (W4-12).
-fn method_call_at(place: Place) -> Option<Option<ExprId>> {
-    match place {
-        Place::Callee(call) => Some(Some(call)),
-        Place::Value | Place::DotCallee | Place::TypeOrValue => Some(None),
-        Place::Instance => None,
-    }
-}
-
 /// What a path of a pattern or a struct literal names (§7, §15.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Want {
@@ -59,20 +47,20 @@ impl Walker<'_> {
 
     /// E0308 when the name `segs` of the kind `kind` is no value at the place
     /// of a value, and neither a value nor a flow at the callee of a call
-    /// (the call of a flow is W4-12's, E0821); the callee of an instance is
-    /// the flow stage's.
+    /// (the call of a flow is the E0811 of `flow.rs` in a flow body, U3's
+    /// E0821 outside); the callee of an instance is `flow.rs`'s.
     pub(super) fn kind_fail(&self, kind: NameKind, segs: &[&Ident], place: Place) -> Option<Fail> {
         let want = match place {
             Place::Value | Place::DotCallee => "a value",
             Place::Callee(call) => match kind.at_callee() {
-                Callee::Called => return None,
+                Callee::Called | Callee::Flow => return None,
                 // `K!(x)`: a value that is no function, the E0401 of the
                 // types stage (§5.2, S-812, R-341).
                 Callee::Value if self.bang(call) => return None,
                 Callee::Value => return self.value_called(segs),
                 Callee::NoValue => "a function",
             },
-            Place::Instance | Place::TypeOrValue => return None,
+            Place::Instance(_) | Place::TypeOrValue => return None,
         };
         (!kind.is_value()).then(|| self.kind_error(kind, segs, want))
     }
@@ -84,13 +72,24 @@ impl Walker<'_> {
         Fail::Report(ResolveError::Kind { shown: self.src(span), span, kind, want }.into_diagnostic())
     }
 
-    /// E0308 for a method `cur` named through its type (§15.1): called in
-    /// the function form (`P.get(p)`, with the candidate of
-    /// [`Self::method_call`]), or as a value (`let f = P.get`, S-205).
+    /// The error of a method `cur` named through its type at `place` (§15.1,
+    /// [`Self::method_at`]): `P.get(p)`, `let f = P.get` (S-205), `P.get~(p)`.
     pub(super) fn method_form(&self, cur: Entity, segs: &[&Ident], place: Place) -> Option<Fail> {
-        let call = method_call_at(place)?;
         let bang = PathEnd::Entity(cur).method(self.a)?;
-        Some(Fail::Report(self.method_call(call, segs, bang)))
+        Some(Fail::Report(self.method_at(place, segs, bang)))
+    }
+
+    /// E0308 for a method `segs` named through its type at `place`: at the
+    /// callee of a call (with the candidate of [`Self::method_call`]), at
+    /// the place of a value (where it is no value) and in the `[…]` of
+    /// `p.m[P.get](1)` (no type and no value either); at the callee of an
+    /// instance (in a flow body), the E0812 of `flow.rs` (S-814).
+    fn method_at(&self, place: Place, segs: &[&Ident], bang: bool) -> Diagnostic {
+        match place {
+            Place::Callee(call) => self.method_call(Some(call), segs, bang),
+            Place::Instance(call) => self.tilde_on_method(call, segs),
+            Place::Value | Place::DotCallee | Place::TypeOrValue => self.method_call(None, segs, bang),
+        }
     }
 
     /// The error of the last name of `segs` after the builtin type `of`, which
@@ -99,10 +98,9 @@ impl Walker<'_> {
     /// (`Str.len`), E0308, or an associated constant called (`F32.PI()`, a
     /// value called with `(…)`, E0020; §6.1, §15.1).
     pub(super) fn builtin_called(&self, of: Entity, segs: &[&Ident], place: Place) -> Option<Fail> {
-        let call = method_call_at(place)?;
         match crate::names::builtin_member(self.a, of, &segs[segs.len() - 1].name)? {
-            BuiltinMember::Method { bang } => Some(Fail::Report(self.method_call(call, segs, bang))),
-            BuiltinMember::Constant if call.is_some_and(|c| !self.bang(c)) => self.value_called(segs),
+            BuiltinMember::Method { bang } => Some(Fail::Report(self.method_at(place, segs, bang))),
+            BuiltinMember::Constant if matches!(place, Place::Callee(c) if !self.bang(c)) => self.value_called(segs),
             BuiltinMember::Constant | BuiltinMember::Function => None,
         }
     }

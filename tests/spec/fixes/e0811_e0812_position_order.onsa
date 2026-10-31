@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "59:11"
+// code = "E0812"
+// candidate = 1
+// leaves = ["60:11 E0302"]
+//
+// [[test.fix]]
+// at = "65:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["66:11 E0302"]
+//
+// [[test.fix]]
+// at = "71:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["72:11 E0302"]
+//
+// [[test.fix]]
+// at = "89:11"
+// code = "E0812"
+// candidate = 1
+// leaves = ["89:13 E0302"]
+//
+// [[test.fix]]
+// at = "94:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["94:15 E0302"]
+//
+
+// W4-12 U2, S-267, R-286: the names stage reports the first error of a unit by position (§18.1: "残った診断
+// のうち、`diagnostics` の並べ方…で最初のもの"), and the E0811 and E0812 of a call are errors of that stage, at
+// the start of the call. A `lp(x)`, a `prev(x, 0.0)` or a `g~(x)` is therefore reported before a name that
+// is not found on a later line (the E0302 of `let z = nope`), and the E0302 is reported when it comes first;
+// it is not an error of an earlier kind that wins whatever the position (R-286: the E0302 of a later line
+// won over them before). Inside one call the callee comes first: `g~(nope)` and `lp(nope)` are the E0812
+// and the E0811 of the call, `lp~(nope)` and `nope.y~(x)` are the E0302 of the name (the callee `nope` is
+// the first thing that is not found). The candidate of the E0811 and the E0812 leaves the E0302 behind, an
+// error of the same stage that the unit still has, so the entries in the header say what is left (`leaves`,
+// the position in the text after the candidate). The range is the whole call, so the column of each mark
+// is where the call starts. One error of this kind per flow (P-01): the E0302 on the later line is not
+// marked, because the unit reports its first error only.
+
+pub rt fn g(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow e0812_then_a_name_not_found(x: F32 at sample) -> F32 at sample {
+  let y = g~(x)                                     //~ E0812 @11
+  let z = nope
+  x
+}
+
+pub flow e0811_then_a_name_not_found(x: F32 at sample) -> F32 at sample {
+  let y = lp(x)                                     //~ E0811 @11
+  let z = nope
+  x
+}
+
+pub flow old_delay_then_a_name_not_found(x: F32 at sample) -> F32 at sample {
+  let y = prev(x, 0.0)                              //~ E0811 @11
+  let z = nope
+  x
+}
+
+pub flow a_name_not_found_then_e0812(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302 @11
+  let y = g~(x)
+  x
+}
+
+pub flow a_name_not_found_then_e0811(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302 @11
+  let y = lp(x)
+  x
+}
+
+pub flow e0812_with_a_name_not_found_in_the_argument(x: F32 at sample) -> F32 at sample {
+  let y = g~(nope)                                  //~ E0812 @11
+  x
+}
+
+pub flow e0811_with_a_name_not_found_in_the_argument(x: F32 at sample) -> F32 at sample {
+  let y = lp(nope)                                  //~ E0811 @11
+  x
+}
+
+pub flow instance_with_a_name_not_found_in_the_argument(x: F32 at sample) -> F32 at sample {
+  let y = lp~(nope)                                 //~ E0302 @15
+  x
+}
+
+pub flow name_not_found_before_a_dot_call(x: F32 at sample) -> F32 at sample {
+  let y = nope.y~(x)                                //~ E0302 @11
+  x
+}
+
+pub flow e0812_between_two_names_not_found(x: F32 at sample) -> F32 at sample {
+  let a = nope                                      //~ E0302 @11
+  let y = g~(x)
+  let b = missing
+  x
+}

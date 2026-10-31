@@ -71,6 +71,9 @@ impl Walker<'_> {
             }
             ExprKind::Block(b) => self.block(b),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
+            // What a flow body cannot contain (§11.2) and the flow stage
+            // reports as its E0806 until W7-04 reports it here (S-267).
+            ExprKind::Closure { .. } | ExprKind::Try(_) | ExprKind::Move(_) if self.flow => Err(self.fail(Fail::Later)),
             ExprKind::Closure { params, ret, body, effects, .. } => {
                 self.closure(e, params, *ret, effects.is_some(), *body)
             }
@@ -194,6 +197,12 @@ impl Walker<'_> {
     }
 
     pub(super) fn stmt(&mut self, s: StmtId) -> W {
+        // A flow body holds `let`s at its top level only, which `walk_flow`
+        // walks itself; any other statement is the flow stage's E0806 until
+        // W7-04 reports it here (§11.2, S-267).
+        if self.flow {
+            return Err(self.fail(Fail::Later));
+        }
         let ast = self.ast;
         match &ast.stmt(s).kind {
             // The names before the value, as in the text (§18.1, R-289).
@@ -210,9 +219,6 @@ impl Walker<'_> {
                 self.expr(*init)?;
                 var(self)
             }
-            // An assignment of a flow body is an error of the flow stage
-            // (E0806) until W7-04 reports it here.
-            StmtKind::Assign { .. } if self.flow => Err(self.fail(Fail::Later)),
             StmtKind::Assign { target, value } => {
                 self.place(*target)?;
                 self.expr(*value)

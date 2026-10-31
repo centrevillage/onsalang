@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.10", "§15.1", "§18.1"]
+// fixes = 0
+
+// W4-12 U2, S-267, S-590, R-225: `~` on a value, or on a name whose receiver is a value, is E0812 of the
+// names stage, and there is no candidate (§2.6: "受け手か呼び先が値（値のメソッド、インスタンスの出力の
+// メソッド、引数、ローカルの束縛、フィールド、定数、単位形の列挙子）なら候補を出さず"): without the `~`
+// the form is no call that the writer meant (`x.prev(0.5)` would be an E0413 of the type stage, R-225), and
+// removing the `~` of an input or a constant gives the E0020 of a value called as `x(...)` (§15.1). `fixes = 0`
+// checks that no diagnostic of the file has a candidate. The values are an input, a local binding, a
+// constant, a unit variant, a constant of a built-in type, a field, a method of a value, and the chain that
+// reaches a value in its middle (`x.prev~`, `g.y~`, `g(x).y~`), which is not a chain of names. The
+// modifier forms `x.when~(c)` and `s.when~(c)` are E0812 as well (§11.10: "受け手は flow の呼び出し（組込みの
+// 遅延を含む）か修飾子の連鎖である。`let` で受けた名前…、値、`par`、`if~` / `match~` は E0812"), also
+// without a candidate, and the head `lp~(x)` of a modifier chain is in e0812_modifier_head_instance_until_w7_10.onsa.
+// The range is the whole call, so the column of each mark is where the call starts. One error per flow (P-01).
+
+pub const K: F32 = 1.0
+
+pub rt fn g(x: F32) -> F32 {
+  x
+}
+
+pub struct P {
+  a: F32,
+}
+
+impl P {
+  pub rt fn new(a: F32) -> P {
+    P { a: a }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.a
+  }
+}
+
+pub enum E {
+  A,
+  B(F32),
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow constant(x: F32 at sample) -> F32 at sample {
+  let a = K~(x)                                     //~ E0812 @11
+  a
+}
+
+pub flow input(x: F32 at sample) -> F32 at sample {
+  let a = x~(1.0)                                   //~ E0812 @11
+  a
+}
+
+pub flow local_binding(x: F32 at sample) -> F32 at sample {
+  let s = x * 2.0
+  let a = s~(x)                                     //~ E0812 @11
+  a
+}
+
+pub flow unit_variant(x: F32 at sample) -> F32 at sample {
+  let e = E.A~()                                    //~ E0812 @11
+  x
+}
+
+pub flow constant_of_a_builtin_type(x: F32 at sample) -> F32 at sample {
+  let a = F32.PI~()                                 //~ E0812 @11
+  a
+}
+
+pub flow method_of_an_input(x: F32 at sample) -> F32 at sample {
+  let a = x.prev~(0.5)                              //~ E0812 @11
+  a
+}
+
+pub flow method_of_a_function_name(x: F32 at sample) -> F32 at sample {
+  let a = g.y~(x)                                   //~ E0812 @11
+  a
+}
+
+pub flow method_of_a_call_result(x: F32 at sample) -> F32 at sample {
+  let a = g(x).y~()                                 //~ E0812 @11
+  a
+}
+
+pub flow field_of_a_local_binding(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  let a = p.a~(1.0)                                 //~ E0812 @11
+  a
+}
+
+pub flow method_of_a_local_binding(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  let a = p.get~()                                  //~ E0812 @11
+  a
+}
+
+pub flow value_inside_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  lp~(K~(x))                                        //~ E0812 @7
+}
+
+pub flow value_in_a_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { K~(x) } else { 0.0 }                 //~ E0812 @16
+}
+
+pub flow value_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    x~(1.0) * i.round_f32()                         //~ E0812 @5
+  }
+  ys[0] + ys[1]
+}
+
+pub flow modifier_on_an_input(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  x.when~(c)                                        //~ E0812 @3
+}
+
+pub flow modifier_on_a_let_binding(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let s = lp~(x)
+  s.when~(c)                                        //~ E0812 @3
+}
+
+pub flow modifier_on_a_value(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  g(x).when~(c)                                     //~ E0812 @3
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  let e = E.B(K)
+  let v = match e {
+    E.A => 0.0,
+    E.B(w) => w,
+  }
+  p.a * p.get() + g(x) * F32.PI + v + lp~(x)
+}

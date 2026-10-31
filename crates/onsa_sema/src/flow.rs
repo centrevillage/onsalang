@@ -63,7 +63,7 @@ use onsa_syntax::ast::{
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
 use crate::consteval::{self, ConstValue};
-use crate::def::{DefKind, FlowInput};
+use crate::def::FlowInput;
 use crate::resolve::Entity;
 use crate::ty::{FloatKind, Len, Rate, Ty, TyId};
 use crate::{Analysis, DefId, Kind, Module};

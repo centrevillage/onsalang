@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// W4-12 U2, S-267, S-590: the `~` of a call in a flow body is decided by the kind of the callee, and the
+// callee is found through the module it comes from (§15.1), whether it is written by its qualified name
+// (`util.scale~(x)`) or by the name that a `use` takes in (`scale~(x)`). The function of a module is an
+// item that is called as `f(x)`, so `~` on it is E0812 with the candidate that removes the `~` (§2.6: "名前
+// 空間の関数"); a flow of a module called without `~` is E0811 with the candidate that inserts it
+// (`util.lp(x)` is `util.lp~(x)`). The module itself is no flow (`util~(x)` is E0812 with no candidate,
+// which `fixes = 1` allows and the check of the candidates guards: removing the `~` would give an error
+// of the same stage), and a name that the module does not have is the E0302 at that name (`util.nope~(x)`).
+// The range of the E0811 and the E0812 is the whole call, so the column of a mark is the first character
+// of the path. One error per flow (P-01).
+
+use util
+use util.{scale, lp}
+
+pub flow qualified_function(x: F32 at sample) -> F32 at sample {
+  let a = util.scale~(x)                            //~ E0812 @11
+  a
+}
+
+pub flow imported_function(x: F32 at sample) -> F32 at sample {
+  let a = scale~(x)                                 //~ E0812 @11
+  a
+}
+
+pub flow qualified_flow_without_a_tilde(x: F32 at sample) -> F32 at sample {
+  let a = util.lp(x)                                //~ E0811 @11
+  a
+}
+
+pub flow imported_flow_without_a_tilde(x: F32 at sample) -> F32 at sample {
+  let a = lp(x)                                     //~ E0811 @11
+  a
+}
+
+pub flow imported_flow_as_an_operand(x: F32 at sample) -> F32 at sample {
+  x + 0.5 * lp(x)                                   //~ E0811 @13
+}
+
+pub flow module_name(x: F32 at sample) -> F32 at sample {
+  let a = util~(x)                                  //~ E0812 @11
+  x
+}
+
+pub flow name_not_found_in_a_module(x: F32 at sample) -> F32 at sample {
+  let a = util.nope~(x)                             //~ E0302 @16
+  x
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = util.scale(x)
+  let b = scale(a)
+  let c = util.lp~(b)
+  c + lp~(x)
+}

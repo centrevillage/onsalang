@@ -1,0 +1,3 @@
+[package]
+name = "tilde_calls_in_modules_pkg"
+edition = "2026"

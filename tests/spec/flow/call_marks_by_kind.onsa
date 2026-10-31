@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.4", "§15.1"]
+
+// W4-12 U2: the mark of a call in a flow body follows the kind of the callee (§2.6, §6.1), and each kind
+// written with its own mark is accepted: a flow and a built-in delay with `~` (`lp~(x)`, `prev~(x, 0.0)`,
+// `delay~(x, 4)`, `vdelay~(x, 1.5, 8)`), a built-in name of a flow with `(` (`sample_rate()`), an item that
+// is called as `f(x)` with `(` (a function, an associated function, a variant with elements). The
+// negative cases of every other mark are in negative/e0812_tilde_on_*.onsa, fixes/e0811_flow_without_tilde.onsa
+// and fixes/e0806_bang_on_flow.onsa. The forms are written in one expression, in a branch and in a `par`
+// body, and as the arguments of one another.
+
+pub rt fn g(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub struct P {
+  a: F32,
+}
+
+impl P {
+  pub rt fn new(a: F32) -> P {
+    P { a: a }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.a
+  }
+}
+
+pub enum E {
+  A,
+  B(F32),
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x, 0.0) * 0.5
+}
+
+pub flow each_kind_with_its_mark(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)
+  let b = prev~(a, 0.0)
+  let c = delay~(b, 4)
+  let d = vdelay~(c, 1.5, 8)
+  let r = sample_rate()
+  let p = P.new(d)
+  let e = E.B(p.get())
+  let v = match e {
+    E.A => 0.0,
+    E.B(w) => w,
+  }
+  g(v) * r
+}
+
+pub flow marks_as_arguments_of_one_another(x: F32 at sample) -> F32 at sample {
+  lp~(g(lp~(prev~(x, 0.0)))) + g(P.new(sample_rate()).get())
+}
+
+pub flow marks_in_a_branch_and_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)
+  let y = if a > 0.0 { g(a) } else { P.new(a).get() }
+  let ys = par i in 0 ..< 2 {
+    lp~(g(y)) * i.round_f32() + sample_rate()
+  }
+  ys[0] + ys[1]
+}

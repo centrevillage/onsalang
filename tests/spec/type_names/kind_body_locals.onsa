@@ -308,10 +308,11 @@ pub flow name_declared_later_in_a_flow(x: F32 at sample) -> F32 at sample {
   a
 }
 
+// The body of a `par` is one expression (a `let` there is E0806, §11.2), so the type place is the target
+// of an `as` in it.
 pub flow index_of_a_par_in_a_flow(x: F32 at sample) -> F32 at sample {
   let ys = par i in 0 ..< 3 {
-    let _: i = 1                                    //~ E0308
-    x * i.round_f32()
+    x * (1.0 as i)                                  //~ E0308
   }
   ys[0]
 }

@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// W4-12 U2, S-267, S-590, S-723, S-814: `~` on a name that is found and is not a flow, and not an item that
+// is called as `f(x)`, is E0812 of the names stage and has no candidate (§2.6: "型・モジュール・trait と、
+// 型の名前で書いたメソッド（`P.get~(p)`）の E0812 も候補を出さない"): a type (`P~(x)`), a module
+// (`math~(x)`), the type that a flow makes for its state (`lp.State~()`, §11.6), and a method written with
+// the name of its type (`P.get~(p)`, `Str.len~(x)`: the method takes a value as its receiver and is called
+// `p.get()`, which a note says). None of them is a call that the writer meant with the `~` left out (a type
+// or a module is no callee, and the method needs a receiver: §15.1, E0308), so there is no candidate;
+// `fixes = 0` checks it. The trait is not here: this version reports its definition as E0200 (§18.1). The
+// range is the whole call, so the column of each mark is where the call starts. One error per flow (P-01).
+
+use std.math
+
+pub struct P {
+  a: F32,
+}
+
+impl P {
+  pub rt fn new(a: F32) -> P {
+    P { a: a }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.a
+  }
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow type_name(x: F32 at sample) -> F32 at sample {
+  let a = P~(x)                                     //~ E0812 @11
+  x
+}
+
+pub flow module_name(x: F32 at sample) -> F32 at sample {
+  let a = math~(x)                                  //~ E0812 @11
+  x
+}
+
+pub flow state_type_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let a = lp.State~()                               //~ E0812 @11
+  x
+}
+
+pub flow method_with_the_name_of_its_type(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  let a = P.get~(p)                                 //~ E0812 @11
+  a
+}
+
+pub flow method_of_a_builtin_type(x: F32 at sample) -> F32 at sample {
+  let a = Str.len~(x)                               //~ E0812 @11
+  x
+}
+
+pub flow type_name_as_the_output(x: F32 at sample) -> F32 at sample {
+  P~(x)                                             //~ E0812 @3
+}
+
+pub flow type_name_inside_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  lp~(P~(x))                                        //~ E0812 @7
+}
+
+pub flow type_name_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    P~(x) * i.round_f32()                           //~ E0812 @5
+  }
+  ys[0] + ys[1]
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  p.get() + math.sin(x) + lp~(x)
+}

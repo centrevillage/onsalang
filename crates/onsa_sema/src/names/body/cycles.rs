@@ -50,8 +50,8 @@ pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
             if flow { (Code::E0817, "cyclic flow instances, §11.5") } else { (Code::E0312, "cyclic constant, §6.6") };
         let in_cycle = |t: &DefId| at.get(t).is_some_and(|&q| comp[q] == c);
         let notes = flow.then(|| {
-            let instances = decls.iter().flat_map(|d| &a.names[d].instances).filter(|(t, _)| in_cycle(t));
-            instances.map(|&(_, span)| (span, "this instance is in the cycle".to_string())).collect()
+            let instances = decls.iter().flat_map(|d| &a.names[d].instances).filter(|(_, t, _)| in_cycle(t));
+            instances.map(|&(_, _, span)| (span, "this instance is in the cycle".to_string())).collect()
         });
         let (first, d) = crate::names::cycle_diagnostic((a, flat), what, decls, notes);
         a.diagnostics.push(d);
@@ -66,7 +66,7 @@ pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
 fn edges(a: &Analysis, d: DefId) -> Vec<DefId> {
     let n = &a.names[&d];
     if matches!(a.def(d).kind, DefKind::Flow(_)) {
-        return n.instances.iter().map(|&(f, _)| f).collect();
+        return n.instances.iter().map(|&(_, f, _)| f).collect();
     }
     let names = n.paths.values().chain(n.interp.values().flatten().map(|(_, r)| r));
     let items = names.filter_map(|r| match r {

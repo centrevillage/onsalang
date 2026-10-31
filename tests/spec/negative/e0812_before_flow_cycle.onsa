@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 0
+
+// W4-12 U2, S-761, S-267: the walk of a flow body in the names stage stops at the first error of the unit
+// (§18.1: "一つの単位の中では、最初のエラーで検査を止める"), and an instance written after it does not count
+// as an edge of the cycle of flow instances (E0817, §11.5), which is found from what the walk recorded
+// (S-761: "止まった後に書いた名前を…循環の辺に数えない"). The flows `cyc_a` and `cyc_b` instantiate each
+// other, but `cyc_a` has the E0812 of a `~` on a value before the instance of `cyc_b`: the unit `cyc_a` reports
+// the E0812 only, and `cyc_b`, whose own walk is complete, has no error either, because the cycle is not
+// reported until the E0812 is removed and the next check records both edges. The same holds for a flow
+// that instantiates itself after the error. The `~` is on a value so that there is no candidate
+// (`fixes = 0`): a candidate would give the cycle at once, and where that is reported is not what this
+// file is about. The range is the whole call, so the column of the mark is where the call starts. One
+// error per flow (P-01).
+
+pub flow cyc_a(x: F32 at sample) -> F32 at sample {
+  let y = x~(1.0)                                   //~ E0812 @11
+  let z = cyc_b~(x)
+  y + z
+}
+
+pub flow cyc_b(x: F32 at sample) -> F32 at sample {
+  let z = cyc_a~(x)
+  z
+}
+
+pub flow cyc_self(x: F32 at sample) -> F32 at sample {
+  let y = x~(1.0)                                   //~ E0812 @11
+  let z = cyc_self~(x)
+  y + z
+}

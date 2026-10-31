@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// W4-12 U2, S-723, S-720, S-590: the name of a flow builtin (`prev`, `delay`, `vdelay`, `sample_rate`,
+// `sample_tick`) is a kind of name only as the callee of its own call form (§11.4), and a `.` after it
+// is a `.` after a name that is no namespace and no value: the E0308 of §15.1 ("名前空間でない名前の後の
+// `.`"), whether the call is the form `prev.x(x, 0.0)` or the instance `prev.x~(x, 0.0)`. The E0812 of
+// "`prev.x` is not a flow" that the flow stage gave is not the code here: the error of a name found in a
+// wrong kind comes before the judgement of the `~` (S-590). There is no candidate (`fixes = 0`): the
+// writer who put a `.name` after `prev` has no one form in mind (`prev.init~(x, 0.0)` is not
+// `prev~(x, 0.0)` by removing a character), and a candidate that removed the `~` would leave the E0308. The
+// range is the one of the form with `(` (S-720): `prev.x`, so the column of each mark is where `prev`
+// starts. One error per flow (P-01).
+
+pub flow call_form_for_comparison(x: F32 at sample) -> F32 at sample {
+  let a = prev.x(x, 0.0)                            //~ E0308 @11
+  a
+}
+
+pub flow prev_dot_name(x: F32 at sample) -> F32 at sample {
+  let a = prev.x~(x, 0.0)                           //~ E0308 @11
+  a
+}
+
+pub flow prev_dot_init(x: F32 at sample) -> F32 at sample {
+  let a = prev.init~(x, 0.0)                        //~ E0308 @11
+  a
+}
+
+pub flow sample_rate_dot_name(x: F32 at sample) -> F32 at sample {
+  let a = sample_rate.x~()                          //~ E0308 @11
+  a
+}
+
+pub flow delay_dot_name(x: F32 at sample) -> F32 at sample {
+  let a = delay.process~(x, 4)                      //~ E0308 @11
+  a
+}
+
+pub flow vdelay_dot_name(x: F32 at sample) -> F32 at sample {
+  let a = vdelay.process~(x, 1.5, 8)                //~ E0308 @11
+  a
+}
+
+pub flow sample_tick_dot_name(x: F32 at sample) -> U32 at sample {
+  let a = sample_tick.x~()                          //~ E0308 @11
+  a
+}
+
+pub flow prev_dot_two_names(x: F32 at sample) -> F32 at sample {
+  let a = prev.x.y~(x)                              //~ E0308 @11
+  a
+}
+
+pub flow prev_dot_name_as_the_output(x: F32 at sample) -> F32 at sample {
+  prev.x~(x, 0.0)                                   //~ E0308 @3
+}
+
+pub flow prev_dot_name_as_an_operand(x: F32 at sample) -> F32 at sample {
+  x - prev.x~(x, 0.0)                               //~ E0308 @7
+}
+
+pub flow prev_dot_name_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    prev.x~(x, 0.0) * i.round_f32()                 //~ E0308 @5
+  }
+  ys[0] + ys[1]
+}
+
+// ---- Not errors: the builtins as the callee of their own call forms ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let r = sample_rate()
+  prev~(x, 0.0) + delay~(x, 4) + vdelay~(x, 1.5, 8) * r
+}

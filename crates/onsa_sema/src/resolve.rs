@@ -126,8 +126,7 @@ impl NameKind {
     /// the one table of a body and a constant expression.
     pub fn at_callee(self) -> Callee {
         match self {
-            // The call of a flow is W4-12's (E0821).
-            NameKind::Flow => Callee::Called,
+            NameKind::Flow => Callee::Flow,
             NameKind::Constant => Callee::Value,
             kind if kind.is_value() => Callee::Called,
             _ => Callee::NoValue,
@@ -168,6 +167,9 @@ impl NameKind {
 pub enum Callee {
     /// What is called so, or what a later stage reads there.
     Called,
+    /// A flow: in a flow body called with `~` (E0811, §2.6), outside one
+    /// the E0821 of §11.1 (W4-12 U3).
+    Flow,
     /// A value that is no function: the E0020 of the row `value_call`.
     Value,
     /// What is no value: E0308.

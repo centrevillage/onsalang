@@ -6,9 +6,10 @@
 //! The parts: this module (the record and the entry [`walk_bodies`]),
 //! `scope` (the tree of the scopes, the bindings and the lookup of a local),
 //! `exprs` (the walk of the statements, expressions and patterns, and of
-//! a flow body), `calls` (the form of a call its callee decides), `paths` (the names whose head is no local) and `cycles`
-//! (the cycles of the constants and of the flow instances, from the
-//! records).
+//! a flow body), `calls` (the form of a call its callee decides), `flow`
+//! (the `~` of a call of a flow body and its instances), `paths` (the names
+//! whose head is no local) and `cycles` (the cycles of the constants and of
+//! the flow instances, from the records).
 //!
 //! The walk reports the first error of the names of a body (§18.1), and
 //! the types stage does not check a body it reported in. The types stage
@@ -19,6 +20,7 @@
 mod calls;
 mod cycles;
 mod exprs;
+mod flow;
 mod kinds;
 mod paths;
 pub(crate) use exprs::heads;
@@ -102,8 +104,12 @@ pub(crate) struct BodyNames {
     /// as the row of a signature (§8.1, S-738).
     pub effects: HashMap<ExprId, crate::ty::EffectSet>,
     /// The instances of flows (`f~(x)`, §11.5) of a flow body, in the order
-    /// of the walk: the flow and its name, the edges of the cycles of E0817.
-    pub instances: Vec<(DefId, onsa_diag::Span)>,
+    /// of the walk: the call, the flow and its name; the edges of the cycles
+    /// of E0817, and the calls the flow stage checks as instances (`flow.rs`,
+    /// the one place that decides it, D-15).
+    pub instances: Vec<(ExprId, DefId, onsa_diag::Span)>,
+    /// A call of [`Self::instances`] to its index there.
+    pub instance_of: HashMap<ExprId, usize>,
     /// `false` when the walk stopped before the end of the body: at an error
     /// of the names stage ([`Self::reported`]), or at a name the names stage
     /// holds as an error (§18.1, S-692), where the types stage stops too with
@@ -118,6 +124,13 @@ pub(crate) struct BodyNames {
     /// A type of the body reads what the check does not read (a name held as
     /// an error, S-690): [`crate::body::BodyInfo::read_unread`].
     pub read_unread: bool,
+}
+
+impl BodyNames {
+    /// The flow the call `e` makes an instance of ([`Self::instances`]).
+    pub(crate) fn instance(&self, e: ExprId) -> Option<DefId> {
+        self.instance_of.get(&e).map(|&k| self.instances[k].1)
+    }
 }
 
 /// One binding of a body (§5.1).
@@ -280,7 +293,7 @@ enum Fail {
     /// read ([`Analysis::unread`]): no diagnostic.
     Held,
     /// A form whose error is of a later stage, and which the walk does not
-    /// read into: an assignment of a flow body (E0806 until W7-04), `unsafe`
+    /// read into: what a flow body cannot contain (E0806 until W7-04), `unsafe`
     /// and `handle` (E0200, whose names this version does not read, S-713).
     Later,
 }
@@ -536,8 +549,8 @@ impl<'a> Walker<'a> {
     /// of the pattern of a `let` stops the walk at it, after the errors of
     /// the statements before it ([`Self::fail_at_let`]), and its type is read
     /// there; a type sees every `let` of the body (S-740). The walk stops at
-    /// its first assignment: its error is the flow stage's (E0806) until
-    /// W7-04 reports it in the names stage.
+    /// the first form the body cannot contain (`exprs.rs`): its error is the
+    /// flow stage's (E0806) until W7-04 reports it in the names stage.
     fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
         self.flow = true;
         self.open_scope();

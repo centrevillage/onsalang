@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// W4-12 U2, S-267, S-590 (R-225): `~` on an item that is called as `f(x)`, in a flow body, is E0812 of the
+// names stage (§2.6, §18.1), and the one candidate removes the `~` (§2.6: "呼び先が `f(x)` で呼ぶ項目（関数、
+// 関連関数、名前空間の関数、効果の操作、要素を持つ列挙子）…を指すときだけ `~` を外す修正候補を示す").
+// The items here are a function, an associated function, a variant with elements and a generic function
+// (the function of a module is in e0812_tilde_on_namespace_fn_pkg, the built-in names in
+// e0812_tilde_on_sample_rate.onsa and e0812_tilde_on_sample_tick.onsa). The range of the diagnostic is the
+// whole call (§18.1), so the column of every mark is the first character of the callee path. The
+// functions are `rt fn`, so the form with the `~` removed is a call that a flow may make: every unit is
+// clean after its candidate, and the candidate changes one character (the copy `.fix1`). The E0812 is
+// found whether the call is the right side of a `let`, an operand, an argument, inside a branch or
+// inside a `par` body. One error per flow (P-01).
+
+pub rt fn g(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub rt fn identity[T: Copy](x: T) -> T {
+  x
+}
+
+pub struct P {
+  a: F32,
+}
+
+impl P {
+  pub rt fn new(a: F32) -> P {
+    P { a: a }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.a
+  }
+}
+
+pub enum E {
+  A,
+  B(F32),
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow function_in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = g~(x)                                     //~ E0812 @11
+  a
+}
+
+pub flow function_as_the_output(x: F32 at sample) -> F32 at sample {
+  g~(x)                                             //~ E0812 @3
+}
+
+pub flow function_as_an_operand(x: F32 at sample) -> F32 at sample {
+  x + g~(x)                                         //~ E0812 @7
+}
+
+pub flow function_as_an_argument(x: F32 at sample) -> F32 at sample {
+  g(g~(x))                                          //~ E0812 @5
+}
+
+pub flow function_inside_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  lp~(g~(x))                                        //~ E0812 @7
+}
+
+pub flow function_in_a_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { g~(x) } else { 0.0 }                 //~ E0812 @16
+}
+
+pub flow function_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    g~(x) * i.round_f32()                           //~ E0812 @5
+  }
+  ys[0] + ys[1]
+}
+
+pub flow generic_function(x: F32 at sample) -> F32 at sample {
+  let a = identity~(x)                              //~ E0812 @11
+  a
+}
+
+pub flow associated_function(x: F32 at sample) -> F32 at sample {
+  let p = P.new~(x)                                 //~ E0812 @11
+  p.get()
+}
+
+pub flow associated_function_as_an_operand(x: F32 at sample) -> F32 at sample {
+  x + P.new~(x).get()                               //~ E0812 @7
+}
+
+pub flow variant_with_elements(x: F32 at sample) -> F32 at sample {
+  let e = E.B~(x)                                   //~ E0812 @11
+  match e {
+    E.A => 0.0,
+    E.B(v) => v,
+  }
+}
+
+// ---- Not errors: the same items without the `~`, and the flow with it ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = g(x)
+  let b = identity(a)
+  let p = P.new(b)
+  let e = E.B(p.get())
+  let v = match e {
+    E.A => 0.0,
+    E.B(w) => w,
+  }
+  lp~(v) + prev~(x, 0.0) + delay~(x, 4)
+}

@@ -311,18 +311,25 @@ reasons = ["R-241"]
 note = "a `^` at the head of the line after an attribute's line: the E0020 of a line that starts with a prefix, whose candidate joins it to the attribute's line and leaves the E0002 of the declaration's place"
 
 [[allowed]]
-class = "fix|E0811|add `…`|E0808"
-left = "`…` needs a length of at least # (§#.#)"
-input = "tests/fuzz/94445c8c.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: `delay` without its `~`, and a length of 0; the candidate adds the `~` and the E0808 of the length shows"
+class = "fix|E0811|add `…`|E0811"
+left = "`…` is a built-in delay; it holds state and is written `…` (§#.#, §#.#)"
+input = "tests/fuzz/548227ed.onsa"
+reasons = ["S-236", "S-267"]
+note = "an input with two errors: the nested old delays `prev(prev(), )`, outer and inner without their `~`; the candidate of the outer E0811 adds its `~` and the inner E0811 shows (tests/spec/negative/flow_old_delays.onsa, `leaves`)"
 
 [[allowed]]
-class = "fix|E0811|add `…`|E0412"
-left = "`…` takes # or # arguments (the last, `…`, may be omitted) but # were given"
-input = "tests/fuzz/f60db52d.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: `prev` without its `~`, and no argument; the candidate adds the `~` and the E0412 of the arguments shows"
+class = "fix|E0812|remove `…`|E0302"
+left = "cannot find `…`"
+input = "tests/fuzz/d5aac3cc.onsa"
+reasons = ["S-384", "S-811"]
+note = "an input with two errors: `~` on the function `g` and a name not found in its argument (`g~(nope)`); the E0812 of the callee comes first, its candidate removes the `~` and the E0302 of the argument shows"
+
+[[allowed]]
+class = "fix|E0811|add `…`|E0302"
+left = "cannot find `…`"
+input = "tests/fuzz/f9b658ee.onsa"
+reasons = ["S-384", "S-811"]
+note = "an input with two errors: the flow `lp` without its `~` and a name not found in its argument (`lp(e)`); the E0811 of the callee comes first, its candidate adds the `~` and the E0302 of the argument shows"
 
 [[allowed]]
 class = "fix|E0020|remove the `…`|E0002"

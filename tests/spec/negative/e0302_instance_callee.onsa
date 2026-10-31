@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// W4-12 U2, S-590, R-247, S-723: the callee of `name~(...)` in a flow body that is not found is the E0302
+// of the names stage (§15.1: a name that is not found), not the E0812 "`nope` is not a flow" that the
+// flow stage gave before (§2.6: the `~` is judged by the kind of a callee that was found). The position
+// is the name that is not found: `nope` in `nope~(x)` and `math.nope~(x)`, `y` in `lp.y~(x)` and
+// `P.y~(x)`, the namespaces `math`, `lp` and `P` being found. There is no candidate: the writer's spelling
+// is not guessed (`fixes = 0`), and a candidate that removed the `~` would leave the E0302 behind. One
+// error per flow (P-01).
+
+use std.math
+
+pub struct P {
+  a: F32,
+}
+
+impl P {
+  pub rt fn new(a: F32) -> P {
+    P { a: a }
+  }
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow name_not_found(x: F32 at sample) -> F32 at sample {
+  let a = nope~(x)                                  //~ E0302 @11
+  a
+}
+
+pub flow name_not_found_in_a_module(x: F32 at sample) -> F32 at sample {
+  let a = math.nope~(x)                             //~ E0302 @16
+  a
+}
+
+pub flow name_not_found_in_a_flow_namespace(x: F32 at sample) -> F32 at sample {
+  let a = lp.y~(x)                                  //~ E0302 @14
+  a
+}
+
+pub flow name_not_found_in_a_type(x: F32 at sample) -> F32 at sample {
+  let a = P.y~(x)                                   //~ E0302 @13
+  a
+}
+
+pub flow name_not_found_as_the_output(x: F32 at sample) -> F32 at sample {
+  nope~(x)                                          //~ E0302 @3
+}
+
+pub flow name_not_found_as_an_operand(x: F32 at sample) -> F32 at sample {
+  x * nope~(x)                                      //~ E0302 @7
+}
+
+pub flow name_not_found_inside_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  lp~(nope~(x))                                     //~ E0302 @7
+}
+
+pub flow name_not_found_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    nope~(x) * i.round_f32()                        //~ E0302 @5
+  }
+  ys[0] + ys[1]
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  p.a + math.sin(x) + lp~(x)
+}

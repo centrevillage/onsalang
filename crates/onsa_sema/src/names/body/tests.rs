@@ -446,6 +446,25 @@ fn a_flow_body_binds_its_inputs_then_its_lets_and_walks_no_assignment() {
 }
 
 #[test]
+fn the_walk_stops_at_what_a_flow_body_cannot_contain_and_not_in_a_function_body() {
+    // A statement but a `let` at the top of a flow body, `fn`, `?` and `move`:
+    // the E0806 of the flow stage (§11.2, S-267) until W7-04.
+    let forms = [
+        "var v = x",
+        "while false {\n  }",
+        "let n = { let m = x\n  m }",
+        "let c = fn() -> I32 { 1 }",
+        "let t = x?",
+        "let u = move x",
+    ];
+    for form in forms {
+        let body = |head: &str| format!("pub {head}(x: F32) -> F32 {{\n  {form}\n  x\n}}\n");
+        let (a, _) = analysis(&(body("flow f") + &body("fn g")));
+        assert_eq!((names(&a, "f").complete, names(&a, "g").complete), (false, true), "{form}");
+    }
+}
+
+#[test]
 fn a_name_held_as_an_error_stops_the_check_of_its_body_with_no_diagnostic() {
     // `dup` is declared twice (E0304): where it is used, the walk and the
     // check stop, and the end of the check (the type of `None`) is not run.
@@ -533,5 +552,92 @@ fn a_value_called_in_a_flow_body_has_no_candidate() {
         let (a, _) = analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n"));
         assert_eq!(stages(&a), [(onsa_diag::Code::E0020, onsa_diag::Stage::Names)], "{body}");
         assert!(a.diagnostics[0].fixes.is_empty(), "{body}: {:?}", a.diagnostics[0].fixes);
+    }
+}
+
+/// The `~` of a call of a flow body, in the names stage (`flow.rs`, §2.6,
+/// S-590, S-723, S-813, S-814, S-817): each row of the table, whether it
+/// has a candidate and a note; a flow called with `~` is the one instance.
+#[test]
+fn the_marks_of_the_calls_of_a_flow_body_are_one_table() {
+    use onsa_diag::Code::{E0302, E0308, E0806, E0811, E0812};
+    let pre = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\npub fn g(x: F32) -> F32 {\n  x\n}\n\
+               pub const K: F32 = 1.0\npub struct P {\n  a: F32,\n}\nimpl P {\n  pub fn get(self) -> F32 {\n    self.a\n  }\n}\n\
+               pub enum E {\n  A,\n  B(F32),\n}\n";
+    // (the call, its code, a candidate, a note)
+    let rows = [
+        ("lp(x)", E0811, true, false),
+        ("prev(x, 0.0)", E0811, true, false),
+        ("lp!(x)", E0806, true, false),
+        ("prev!(x, 0.0)", E0806, true, false),
+        ("g~(x)", E0812, true, false),
+        ("E.B~(x)", E0812, true, false),
+        ("sample_rate~()", E0812, true, false),
+        ("sample_tick~()", E0812, true, false),
+        ("K~(x)", E0812, false, true),
+        ("E.A~()", E0812, false, true),
+        ("x.prev~(0.5)", E0812, false, true),
+        ("g.y~(x)", E0812, false, true),
+        ("g(x).y~(x)", E0812, false, true),
+        ("lp~(x).when~(x > 0.0)", E0812, false, true),
+        ("P~(x)", E0812, false, false),
+        ("P.get~(P { a: x })", E0812, false, true),
+        ("nope~(x)", E0302, false, false),
+        ("prev.x~(x, 0.0)", E0308, false, true),
+    ];
+    for (call, code, fix, note) in rows {
+        let (a, _) =
+            analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  let y = {call}\n  x\n}}\n"));
+        assert_eq!(stages(&a), [(code, onsa_diag::Stage::Names)], "{call}");
+        let d = &a.diagnostics[0];
+        assert_eq!((d.fixes.len(), d.notes.is_empty()), (usize::from(fix), !note), "{call}: {d:?}");
+        // A candidate takes off, puts or changes the one mark (§18.1).
+        assert!(d.fixes.iter().all(|f| f.edits().iter().all(|e| e.span.len() <= 1)), "{call}: {d:?}");
+    }
+    let (a, _) =
+        analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  lp~(x) + prev~(x, 0.0)\n}}\n"));
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let n = names(&a, "u");
+    assert_eq!((n.instances.len(), n.instance_of.len()), (1, 1));
+    assert_eq!(n.instance(n.instances[0].0), Some(def(&a, "lp")));
+}
+
+/// Outside a flow body the walk records the callee of `~(` alone, and the
+/// types stage reports the `~` (E0812, U3's E0821; A9): a name not found
+/// there is no E0302 between the two units.
+#[test]
+fn the_callee_of_a_tilde_outside_a_flow_body_is_the_types_stages() {
+    let pre = "pub struct P {\n  a: F32,\n}\nimpl P {\n  pub fn get(self) -> F32 {\n    self.a\n  }\n}\n";
+    for call in ["nope~(x)", "P.y~(x)", "P.get~(P { a: x })", "prev.x~(x, 0.0)"] {
+        let (a, _) = analysis(&format!("{pre}pub fn u(x: F32) -> F32 {{\n  {call}\n}}\n"));
+        assert_eq!(stages(&a), [(onsa_diag::Code::E0812, onsa_diag::Stage::Types)], "{call}");
+    }
+}
+
+/// A name the names stage holds as an error (a trait, E0200 in this
+/// version, §18.1, S-675) before the `~` of a call in the same statement:
+/// both stages stop at it in the order of the tree, and the flow stage
+/// reaches no call whose `~` the names stage did not decide (no internal
+/// error).
+#[test]
+fn a_held_name_before_a_mark_stops_both_stages_at_it() {
+    let pre = "pub trait Show {\n  fn show(self) -> F32\n}\npub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n\
+               pub fn g(a: F32, b: F32) -> F32 {\n  a\n}\npub struct P {\n  a: F32,\n  b: F32,\n}\n";
+    for value in [
+        "Show + lp(x)",
+        "g(Show, lp(x))",
+        "[Show, lp(x)]",
+        "P { b: Show, a: lp(x) }",
+        "Show.m(lp(x))",
+        "Show~(lp(x))",
+        "Show(1).y~(x)",
+        "Show.x~(lp(x))",
+        "prev~(Show, lp(x))",
+        "Show + lp!(x)",
+        "Show + nope~(x)",
+    ] {
+        let (a, _) =
+            analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  let y = {value}\n  x\n}}\n"));
+        assert_eq!(stages(&a), [(onsa_diag::Code::E0200, onsa_diag::Stage::Names)], "{value}");
     }
 }

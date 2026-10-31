@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§18.1"]
+// fixes = 1
+
+// W4-12 U2, S-267, S-236: `~` on a function that is not an `rt fn` is the E0812 of the names stage with the
+// candidate that removes the `~`, like the `rt fn` of e0812_tilde_on_item.onsa: the kind of the callee
+// decides (§2.6), not whether the function may be called in a flow body. After the candidate the call
+// `slow(x)` is an error of the flow stage (a flow body calls `rt fn` only, §11.2), a stage after the
+// names stage, which the promise of a candidate allows to be left (§18.1: "当てた後に同じ段か前の段の誤り
+// が残らないとき"; the next check reports it). The range is the whole call, so the column of the mark is
+// where the call starts.
+
+pub fn slow(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow function_that_is_not_rt(x: F32 at sample) -> F32 at sample {
+  slow~(x)                                          //~ E0812 @3
+}

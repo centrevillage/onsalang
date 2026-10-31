@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§18.1"]
+// fixes = 0
+
+// W4-12 U2, S-267, R-286: the restrictions of a flow body (E0806, §11.2) and the `~` of its calls (E0811,
+// E0812, §2.6) are errors of the same names stage (§18.1: "本体の制限（E0806。代入の形を含む）" and "呼び先が
+// flow かどうかで決まる `~` の有無"), so the first of them by position is the one a unit reports. Each flow
+// has a form a flow body cannot contain (`var`, `while`, `return`, `assert`, an expression statement, a
+// `let` in a nested block, an anonymous function, `move`, an `inout` or `move` argument of an instance or
+// of a delay) before a call of a flow without `~` (E0811) or a `~` on a function (E0812): the E0806 is
+// reported. The expression statement `lp(x)` and its call start and end at the same place, and E0806 comes
+// before E0811 by code (§18.1). No E0806 here has a candidate (§11.2). One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub rt fn g(x: F32) -> F32 {
+  x
+}
+
+pub flow with_var(x: F32 at sample) -> F32 at sample {
+  var z = 0.0                                       //~ E0806 @3
+  let y = lp(x)
+  y + z
+}
+
+pub flow with_while(x: F32 at sample) -> F32 at sample {
+  let a = 1.0
+  while a > 0.0 {                                   //~ E0806 @3
+    x
+  }
+  let y = lp(x)
+  y
+}
+
+pub flow with_return(x: F32 at sample) -> F32 at sample {
+  return x                                          //~ E0806 @3
+  let y = lp(x)
+  y
+}
+
+pub flow with_assert(x: F32 at sample) -> F32 at sample {
+  assert x > 0.0                                    //~ E0806 @3
+  let y = g~(x)
+  y
+}
+
+pub flow with_expression_statement(x: F32 at sample) -> F32 at sample {
+  lp(x)                                             //~ E0806 @3
+  x
+}
+
+pub flow with_nested_let(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    let q = 1.0                                     //~ E0806 @5
+    q
+  } else {
+    lp(x)
+  }
+}
+
+pub flow with_anonymous_function(x: F32 at sample) -> F32 at sample {
+  let c = fn(v: F32) -> F32 { lp(v) }               //~ E0806 @11
+  x
+}
+
+pub flow with_move(x: F32 at sample) -> F32 at sample {
+  let a = move x                                    //~ E0806 @11
+  let y = lp(x)
+  a + y
+}
+
+pub flow with_inout_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = lp~(inout x)                              //~ E0806 @15
+  let b = lp(x)
+  a + b
+}
+
+pub flow with_move_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(move x)                             //~ E0806 @17
+  let b = g~(x)
+  a + b
+}

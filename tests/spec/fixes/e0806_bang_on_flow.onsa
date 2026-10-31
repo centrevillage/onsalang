@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§11.2", "§18.1"]
+// fixes = 1
+
+// W4-12 U2, S-813, S-811: `!(` is the mark of a method that takes `inout self` (§5.2), and a flow body may
+// not call such a method (§11.2: "一覧に無いもの（…、`!` の呼び出し、…）は書けない（E0806）"). When the callee
+// is a flow or a built-in delay, the `!` is a `~` that was mistyped, and the E0806 of the names stage has
+// one candidate that replaces the `!` with `~` (§11.2: "`!` の呼び出しの E0806 は、呼び先が flow か組込みの
+// 遅延なら `!` を `~` に置き換える修正候補（`lp!(x)` は `lp~(x)`）"); the unit is clean after it. The range
+// is the whole call (§18.1), so the column of each mark is where the call starts. The other `!(` of a flow
+// body (a method of a binding, a function) and `.(` are the E0806 of W7-04. One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow flow_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = lp!(x)                                    //~ E0806 @11
+  a
+}
+
+pub flow prev_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = prev!(x, 0.0)                             //~ E0806 @11
+  a
+}
+
+pub flow delay_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = delay!(x, 4)                              //~ E0806 @11
+  a
+}
+
+pub flow vdelay_with_a_bang(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let a = vdelay!(x, d, 64)                         //~ E0806 @11
+  a
+}
+
+pub flow flow_with_a_bang_as_the_output(x: F32 at sample) -> F32 at sample {
+  lp!(x)                                            //~ E0806 @3
+}
+
+pub flow flow_with_a_bang_as_an_operand(x: F32 at sample) -> F32 at sample {
+  x - 0.5 * lp!(x)                                  //~ E0806 @13
+}
+
+pub flow flow_with_a_bang_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    lp!(x) * i.round_f32()                          //~ E0806 @5
+  }
+  ys[0] + ys[1]
+}
+
+pub flow flow_with_a_bang_inside_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  lp~(lp!(x))                                       //~ E0806 @7
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let a = lp~(x)
+  a + prev~(x, 0.0) + delay~(x, 4) + vdelay~(x, d, 64)
+}

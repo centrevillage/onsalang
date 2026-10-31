@@ -212,13 +212,6 @@ note = "遅延の長さの範囲、vdelay の MAX、空の par の範囲"
 
 [[pending]]
 kind = "diag-code"
-target = "E0812"
-reasons = ["S-101", "S-110"]
-until = "W7-06"
-note = "flow でないものへの ~（W7-04）、状態の無い if~ / match~（W7-06）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0813"
 reasons = ["S-102", "R-132"]
 until = "W7-02"
@@ -1472,27 +1465,6 @@ note = "fn の入出力の型の後ろの at は名前の段の E0821。構文�
 
 [[pending]]
 kind = "fix-contract"
-target = "tests/spec/negative/flow_old_delays.onsa:37:21 E0811 fix1"
-reasons = ["S-44", "S-116"]
-until = "W7-04"
-note = "prev(y, 0.0) の E0811（W3-10 は flow の段で出し、印と合う。名前の段へ移すのは W4-12）の候補 ~ の挿入の後、^ の無い前方参照 y の E0801 が残る（同じ単位の誤りを一度に直す候補は E0801 の ^ の挿入で、W7-04）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/flow_old_delays.onsa:42:21 E0811 fix1"
-reasons = ["S-44", "S-116"]
-until = "W7-04"
-note = "vdelay(y, d, 64, 0.0) の E0811 の候補 ~ の挿入の後、^ の無い前方参照 y の E0801 が残る（37 行目と同じ。E0801 の ^ の挿入は W7-04）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/flow_old_delays.onsa:63:3 E0811 fix1"
-reasons = ["S-44", "S-267"]
-until = "W4-12"
-note = "prev(prev(x, 0.0), 0.0) の外側の E0811 の候補 ~ の挿入の後、内側の prev( の E0811 が同じ単位に残る。W3-10 は flow の段で最初の一つを報告する。名前の段の E0811（W4-12）が入れ子をどう報告し、候補をどう組むかで決まる"
-
-[[pending]]
-kind = "fix-contract"
 target = "tests/spec/negative/flow_delay_one.onsa:45:5 E0807 fix1"
 reasons = ["S-110", "R-14"]
 until = "W7-06"
@@ -1511,27 +1483,6 @@ target = "tests/spec/flow_semantics/lookback_nesting_forms.onsa"
 reasons = ["R-13", "S-44"]
 until = "W7-07"
 note = "遅延の第 1 引数の中の遅延（関数の呼び出し・添字・vdelay~・delay~ の中）。保存の二相化は W7-07、それまで W3-10 で E0200（K-08）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/f2fafaf0.onsa"
-reasons = ["S-267", "S-236", "S-723"]
-until = "W4-12"
-note = "fix-same-place: fix|E0812|remove `…`|E0302。flow の中の解けない名前への v~(x) の E0812 の候補（~ を除く）の後に E0302。名前の段は flow の段より前なので、段の順（S-267）と単位の中の選び方で決まる。W3-10 で tests/fuzz/4ea5a011.onsa（旧い Sig[F32] の flow）がこの型で落ちなくなったので、代わりに載せる（4ea5a011 は回帰の入力として残る）。W4-06 の設計メモ（83 回目）: 元の入力の `v~(x)` が E0302 でなく E0812 なので段の止め方では直らず、W4-12 U3 の「見つからない名前は E0302」（S-723）へ送る"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/2965366c.onsa"
-reasons = ["S-44", "S-116"]
-until = "W7-04"
-note = "fix-same-place: fix|E0811|add `…`|E0801。prev(y, 0.0) の E0811 の候補 ~ の挿入の後、^ の無い前方参照 y の E0801 が残る（negative/flow_old_delays.onsa の fix-contract の項目と同じ）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/548227ed.onsa"
-reasons = ["S-44", "S-267"]
-until = "W4-12"
-note = "fix-same-place: fix|E0811|add `…`|E0811。入れ子の旧い遅延 prev(prev(x, 0.0), 0.0) の外側の E0811 の候補の後に内側の E0811 が残る（negative/flow_old_delays.onsa の fix-contract の項目と同じ）"
 
 # --- W3-06/t2: 空白、改行の後の記号、並びの中の `,` の抜け（W3-06 の単位 1a・1b で外す）
 
@@ -1568,15 +1519,6 @@ target = "tests/fuzz/a872709d.onsa"
 reasons = ["R-281"]
 until = "W5-11"
 note = "fix-same-place: fix|E0020|write the attribute with `…`|E0005。閉じない { の回復が、属性で始まる行を次の項目と読まず本体の文として読むので、@ の候補を当てると E0005 が残る"
-
-# --- W4-04 U3b の gate のファズが見つけた修正候補の型（事例を足してコーパスが変わった。7cd8d17 でも出る）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/22c9f449.onsa"
-reasons = ["S-267", "S-236"]
-until = "W4-12"
-note = "fix-same-place: fix|E0812|remove `…`|E0805。flow の中の非 rt の fn への hp~(x) の E0812 の候補（~ を除く）の後に、非 rt の fn を sample のクロックで呼ぶ E0805（仕様は E0815、S-147、W7-02）。仕様では E0812 は名前の段、残る誤りは flow の検査の段で、後の段の診断は出てよい（§18.1）。実装は E0812 をまだ flow の段で出すので、近似が同じ段と見る。W4-12 で E0812 を名前の段へ移すと落ちなくなる"
 
 # --- W4-04 U5 の gate のファズが見つけた修正候補の型（事例を足してコーパスが変わった。e741747 でも出る）
 

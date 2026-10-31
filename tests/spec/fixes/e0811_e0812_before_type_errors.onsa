@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§18.1"]
+// fixes = 1
+
+// W4-12 U2, S-267: the `~` of a call in a flow body is judged by the names stage (§18.1: "呼び先が flow かどうか
+// で決まる `~` の有無"), which comes before the types ("依存する段の間では、位置によらず先の段の誤りを報告する").
+// A flow with a type error (`x + 1`: an integer literal added to an `F32`, E0401) on an earlier line and a
+// `lp(x)` (E0811) or a `g~(x)` (E0812) on a later one reports the E0811 or the E0812 only; the type error is
+// not reported until the candidate has been applied (the next check reports it). The candidate of each
+// leaves the type error behind, a diagnostic of a later stage, which the promise of a candidate allows
+// (§18.1: "当てた後に同じ段か前の段の誤りが残らないとき"); the type error on the line of the call
+// (`let a: I32 = lp(x)`, S-267) is of the same kind. The range is the whole call, so the column of each
+// mark is where the call starts. One error of the names stage per flow (P-01).
+
+pub rt fn g(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow type_error_then_e0811(x: F32 at sample) -> F32 at sample {
+  let a = x + 1
+  let b = lp(x)                                     //~ E0811 @11
+  a + b
+}
+
+pub flow type_error_then_e0812(x: F32 at sample) -> F32 at sample {
+  let a = x + 1
+  let b = g~(x)                                     //~ E0812 @11
+  a + b
+}
+
+pub flow type_error_of_the_same_let_e0811(x: F32 at sample) -> F32 at sample {
+  let a: I32 = lp(x)                                //~ E0811 @16
+  x
+}
+
+pub flow type_error_of_the_same_let_e0812(x: F32 at sample) -> F32 at sample {
+  let a: I32 = g~(x)                                //~ E0812 @16
+  x
+}
+
+pub flow type_error_in_the_argument_e0811(x: F32 at sample) -> F32 at sample {
+  lp(x + 1)                                         //~ E0811 @3
+}
+
+pub flow type_error_in_a_par_body_e0812(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    g~(x + 1) * i.round_f32()                       //~ E0812 @5
+  }
+  ys[0] + ys[1]
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = x + 1.0
+  lp~(a) + g(x)
+}

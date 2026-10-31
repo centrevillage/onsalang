@@ -38,9 +38,11 @@ pub(super) enum Place {
     /// The callee of the call `.0` (`f(x)`, `a.m(x)`, `x.m!(y)`): its last
     /// name may be a method of the value before it, or an associated function.
     Callee(ExprId),
-    /// The callee of an instance (`f~(x)`): the flow stage reads it and
-    /// reports its errors (W4-12); the walk records what it finds alone.
-    Instance,
+    /// The callee of the instance `.0` (`f~(x)`): in a flow body, its errors are
+    /// the walk's, before the `~` of `flow.rs` (§2.6, S-590, R-247); in any
+    /// other body the walk records what it finds alone, and the types stage
+    /// reports the `~` (E0812 until U3's E0821, A9).
+    Instance(ExprId),
     /// The `[…]` of a callee after a field (`p.m[I32](1)`): the type
     /// arguments of a method or an index, which the types stage tells apart
     /// (§4.5); the walk records what it finds, but a method named through
@@ -85,7 +87,7 @@ impl<'a> Walker<'a> {
             self.out.paths.insert(e, r);
         }
         match fail {
-            Some(f) if place != Place::Instance => Err(self.fail(f)),
+            Some(f) if !matches!(place, Place::Instance(_)) || self.flow => Err(self.fail(f)),
             _ => Ok(()),
         }
     }
@@ -134,12 +136,11 @@ impl<'a> Walker<'a> {
         // type an alias there stands for), and whether it is the name of the
         // method of a call.
         let at = out.len() + 1;
-        let method = matches!(place, Place::Callee(_) | Place::Instance) && at + 1 == segs.len();
+        let method = matches!(place, Place::Callee(_) | Place::Instance(_)) && at + 1 == segs.len();
         let assoc_fn = method || (place == Place::DotCallee && at + 1 == segs.len());
-        // `Option.None`, `Result.Ok(1)`, `O.None` (S-607); the callee of an
-        // instance is the flow stage's (W4-12).
+        // `Option.None`, `Result.Ok(1)`, `O.None` (S-607).
         let (variant, called) = match &err {
-            Some(ResolveError::NotFound { .. }) if place != Place::Instance => {
+            Some(ResolveError::NotFound { .. }) => {
                 // A method of a builtin type with a name after it is no value
                 // either (`Str.len.zz`, as `P.get.zz`).
                 let place = if at + 1 == segs.len() { place } else { Place::Value };
@@ -264,14 +265,13 @@ impl<'a> Walker<'a> {
         FlowBuiltin::named(name).filter(|_| self.flow && !found)
     }
 
-    /// A builtin name of a flow body at the head of `segs` (§2.2, §11.4):
-    /// the callee of a call (`prev~(x)`, `sample_rate()`; the flow stage
-    /// reads it, and its marks, E0811, E0812); anywhere else E0308 (S-720,
-    /// the one place of its error in a body).
+    /// A builtin name of a flow body alone at `segs` (§2.2, §11.4): the
+    /// callee of a call (`prev~(x)`, `sample_rate()`; its mark is `flow.rs`'s,
+    /// E0811, E0812); anywhere else, after it a `.` too (`prev.x~(x, 0.0)`,
+    /// S-723), E0308 (S-720, the one place of its error in a body).
     fn flow_builtin(&self, b: FlowBuiltin, segs: &[&Ident], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let called = match place {
-            Place::Instance => true,
-            Place::Callee(_) => segs.len() == 1,
+            Place::Instance(_) | Place::Callee(_) => segs.len() == 1,
             Place::Value | Place::DotCallee | Place::TypeOrValue => false,
         };
         let fail = (!called).then(|| Fail::Report(b.misplaced(segs.iter().map(|s| s.span), self.text)));

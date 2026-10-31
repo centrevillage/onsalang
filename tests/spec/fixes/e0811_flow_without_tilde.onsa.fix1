@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.5", "§18.1"]
+// fixes = 1
+
+// W4-12 U2, S-267: a flow called without `~` in a flow body is E0811 of the names stage (§2.6: "flow を
+// `~` 無しで呼ぶ…と E0811"; §18.1: "呼び先が flow かどうかで決まる `~` の有無"), and the one candidate
+// inserts the `~` right after the callee (`lp(x)` is `lp~(x)`). The range is the whole call, so the column
+// of each mark is where the call starts. The built-in delays called without `~` are in
+// negative/flow_old_delays.onsa, the flow of a module in tilde_calls_in_modules_pkg, and an instance in
+// the branch of a plain `if` is the E0811 of the flow stage (W7-06). Two calls in one flow have one
+// error between them: `lp(lp~(x))` is the outer call and `lp~(lp(x))` the inner. One error per flow (P-01).
+
+pub rt fn g(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow sub(x: F32 at sample, c: F32 at block) -> F32 at sample {
+  x * c
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)                                     //~ E0811 @11
+  a
+}
+
+pub flow as_the_output(x: F32 at sample) -> F32 at sample {
+  lp~(x)                                             //~ E0811 @3
+}
+
+pub flow as_an_operand(x: F32 at sample) -> F32 at sample {
+  x + 0.5 * lp~(x)                                   //~ E0811 @13
+}
+
+pub flow as_an_argument_of_a_function(x: F32 at sample) -> F32 at sample {
+  g(lp~(x))                                          //~ E0811 @5
+}
+
+pub flow with_two_inputs(x: F32 at sample, c: F32 at block) -> F32 at sample {
+  let a = sub~(x, c)                                 //~ E0811 @11
+  a
+}
+
+pub flow outer_of_two_calls(x: F32 at sample) -> F32 at sample {
+  lp~(lp~(x))                                        //~ E0811 @3
+}
+
+pub flow inner_of_two_calls(x: F32 at sample) -> F32 at sample {
+  lp~(lp~(x))                                        //~ E0811 @7
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    lp~(x) * i.round_f32()                           //~ E0811 @5
+  }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_condition_of_an_if(x: F32 at sample) -> F32 at sample {
+  if lp~(x) > 0.0 { 1.0 } else { 0.0 }               //~ E0811 @6
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample, c: F32 at block) -> F32 at sample {
+  let a = lp~(x)
+  let b = sub~(a, c)
+  g(lp~(b)) + prev~(x, 0.0)
+}

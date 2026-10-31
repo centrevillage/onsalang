@@ -3,10 +3,10 @@
 //! calls of instances, delays and `sample_rate()`.
 
 use super::*;
-use crate::ResolveError;
 use crate::body::BANG_ON_NO_INOUT_SELF;
 use crate::flow_names::FlowBuiltin;
 use crate::names::body::{Origin, PathRes};
+use crate::resolve::{Callee, NameKind};
 
 impl<'a> Checker<'a> {
     pub(super) fn fcx(&mut self) -> &mut FlowCx {
@@ -341,9 +341,11 @@ impl<'a> Checker<'a> {
         Ok(self.a.types.intern(Ty::Array(t, Len::Const(hi - lo))))
     }
 
-    /// Calls in flow mode (§11.5, §2.6): flow instances `f~(...)`, the delays
-    /// `prev~` / `delay~` / `vdelay~`, `sample_rate()`, E0811 / E0812. `None` hands
-    /// the call back to the ordinary checker (functions, methods, constructors).
+    /// Calls in flow mode (§11.5): flow instances `f~(...)`, the delays
+    /// `prev~` / `delay~` / `vdelay~`, `sample_rate()`, as the names stage
+    /// decided them (its `~`: E0811, E0812, the E0806 of `lp!(x)`, R-286;
+    /// `names/body/flow.rs`). `None` hands the call back to the ordinary
+    /// checker (functions, methods, constructors).
     pub(crate) fn check_flow_call(
         &mut self,
         e: ExprId,
@@ -352,139 +354,62 @@ impl<'a> Checker<'a> {
         args: &[Arg],
         expected: Option<TyId>,
     ) -> R<Option<TyId>> {
-        // `v.(x)` calls a function value; the flow stage reads it with W8-09.
-        if matches!(kind, CallKind::Value { .. }) {
-            return Ok(None);
+        if let Some(d) = self.names.instance(e) {
+            return self.check_instance(e, d, args, expected).map(Some);
         }
         let span = self.expr(e).span;
-        // 1. The builtin names (§2.2), as the names stage found them (one an
+        // The builtin names (§2.2), as the names stage found them (one an
         // item or a `use` of the module takes is an E0304 there, held as an
-        // error in the body, §18.1, S-675): the delays are stateful flows
-        // (`prev~(…)`), `sample_rate()` is not, `sample_tick~()` is no flow.
+        // error in the body, §18.1, S-675).
         let builtin = match self.names.paths.get(&callee) {
             Some(&PathRes::FlowBuiltin(b)) => Some(b),
             _ => None,
         };
-        if let Some(b) = builtin.filter(|&b| !(b == FlowBuiltin::SampleTick && kind == CallKind::Flow)) {
-            let name = b.name();
-            let delay = match b {
-                FlowBuiltin::Delay(d) => Some(d),
-                _ => None,
-            };
-            return match (delay, kind) {
-                (Some(d), CallKind::Flow) => self.check_delay(e, d, args, expected).map(Some),
-                (Some(_), CallKind::Plain) => {
-                    // `~` goes right after the callee (`prev~(`, §2.6).
-                    let at = self.expr(callee).span.end;
-                    Err(self.diag(
-                        Diagnostic::new(
-                            Stage::Flow,
-                            Code::E0811,
-                            span,
-                            format!(
-                                "`{name}` is a built-in delay; it holds state and is written `{name}~(…)` (§2.6, §11.4)"
-                            ),
-                        )
-                        .with_found(self.src(span))
-                        .with_fix(Fix::insert("add `~`", span.file, at, "~")),
-                    ))
-                }
-                (None, CallKind::Plain) if b == FlowBuiltin::SampleRate => self.check_sample_rate(e, args).map(Some),
-                (None, CallKind::Plain) => Err(self.unsupported_in(Stage::Flow, span, Feature::SampleTick, &[])),
-                _ => Err(self.flow_bad_mark(span, kind, name)),
-            };
-        }
-        // 2. A path that names a flow, as the names stage found it.
-        let flow_def = match self.names.paths.get(&callee) {
-            Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. })
-                if matches!(self.a.def(d).kind, DefKind::Flow(_)) =>
-            {
-                Some(d)
+        match (builtin, kind) {
+            (Some(FlowBuiltin::Delay(d)), CallKind::Flow) => self.check_delay(e, d, args, expected).map(Some),
+            (Some(FlowBuiltin::SampleRate), CallKind::Plain) => self.check_sample_rate(e, args).map(Some),
+            (Some(FlowBuiltin::SampleTick), CallKind::Plain) => {
+                Err(self.unsupported_in(Stage::Flow, span, Feature::SampleTick, &[]))
             }
-            Some(_) => None,
-            None if self.of_a_local(callee) => None,
-            // An error the names stage found at the callee of an instance and
-            // left to this stage (W4-12, R-286), the one name it resolves
-            // again: a name held as an error (§18.1, S-675, S-680), neither a
-            // flow nor not one; a name not visible here (`lib.pf~(x)` of a
-            // `priv` flow), its E0303 (§15.1); else no flow.
-            None => match crate::constarg::path_of(self.ast, callee) {
-                Some(path) => match self.a.resolve_path(self.m, &path) {
-                    Err(err @ (ResolveError::Failed | ResolveError::NotVisible { .. })) => {
-                        return Err(self.resolve_error(&path, err));
-                    }
-                    _ => None,
-                },
-                None => None,
-            },
-        };
-        match (flow_def, kind) {
-            (Some(d), CallKind::Flow) => self.check_instance(e, d, args, expected).map(Some),
-            (Some(d), CallKind::Plain) => {
-                let name = self.a.def(d).name.clone();
-                // `~` goes right after the callee (`f~(`, §2.6).
-                let at = self.expr(callee).span.end;
-                Err(self.diag(
-                    Diagnostic::new(
-                        Stage::Flow,
-                        Code::E0811,
-                        span,
-                        format!("`{name}` is a flow; calling it creates a stateful instance and needs `~` (§2.6)"),
-                    )
-                    .with_found(self.src(span))
-                    .with_fix(Fix::insert("add `~`", span.file, at, "~")),
-                ))
+            // `sample_rate!()`, `sample_tick!()` (W7-04).
+            (Some(FlowBuiltin::SampleRate | FlowBuiltin::SampleTick), CallKind::Bang) => {
+                Err(self.bang_on_builtin(span))
             }
-            (Some(d), CallKind::Bang) => {
-                let name = self.a.def(d).name.clone();
-                Err(self.flow_bad_mark(span, kind, &name))
+            // The names stage stopped in the callee of an instance with no
+            // diagnostic (a name held as an error, §18.1, S-675), where the
+            // check stops too.
+            (None, CallKind::Flow) if !self.names.complete => {
+                self.check_expr(callee, None)?;
+                onsa_diag::internal::bug(Some(span), "an instance the names stage did not record")
             }
-            (None, CallKind::Flow) => {
-                let at = self.expr(callee).span.end;
-                let shown = self.src(self.expr(callee).span);
-                Err(self.diag(
-                    Diagnostic::new(
-                        Stage::Flow,
-                        Code::E0812,
-                        span,
-                        format!(
-                            "`{shown}` is not a flow; `~` creates a flow instance and is written on flows only (§2.6)"
-                        ),
-                    )
-                    .with_found(self.src(span))
-                    .with_fix(Fix::delete("remove `~`", Span::new(span.file, at, at + 1))),
-                ))
+            // Any other `~`, a delay without it, and a flow or a delay with
+            // `!` are the names stage's (`names/body/flow.rs`).
+            (Some(_), _) | (None, CallKind::Flow) => {
+                onsa_diag::internal::bug(Some(span), "a mark of a call of a flow body the names stage passed")
             }
-            (None, _) | (_, CallKind::Value { .. }) => Ok(None),
+            (None, CallKind::Plain | CallKind::Bang) if self.names_a_flow(callee) => {
+                onsa_diag::internal::bug(Some(span), "a call of a flow the names stage passed")
+            }
+            (None, _) => Ok(None),
         }
     }
 
-    fn flow_bad_mark(&mut self, span: Span, kind: CallKind, name: &str) -> crate::body::Stop {
-        match kind {
-            CallKind::Flow => {
-                let fix = self.src(span).replacen("~(", "(", 1);
-                self.diag(
-                    Diagnostic::new(
-                        Stage::Flow,
-                        Code::E0812,
-                        span,
-                        format!(
-                            "`{name}` is not a flow; `~` creates a flow instance and is written on flows only (§2.6)"
-                        ),
-                    )
-                    .with_found(self.src(span))
-                    .with_fix(Fix::replace("remove `~`", span, fix)),
-                )
-            }
-            _ => {
-                let fix = self.src(span).replacen("!(", "(", 1);
-                self.diag(
-                    Diagnostic::new(Stage::Flow, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
-                        .with_found(self.src(span))
-                        .with_fix(Fix::replace("remove `!`", span, fix)),
-                )
-            }
-        }
+    /// Whether the record of `callee` names a flow, by the table of the
+    /// names stage ([`NameKind::at_callee`]).
+    fn names_a_flow(&self, callee: ExprId) -> bool {
+        matches!(self.names.paths.get(&callee), Some(&PathRes::Item { entity, .. })
+            if NameKind::of(entity, &self.a.defs).is_some_and(|k| k.at_callee() == Callee::Flow))
+    }
+
+    /// E0714 for `!` on a builtin name of a flow (`sample_rate!()`, §5.2;
+    /// its E0806 is W7-04's).
+    fn bang_on_builtin(&mut self, span: Span) -> crate::body::Stop {
+        let fix = self.src(span).replacen("!(", "(", 1);
+        self.diag(
+            Diagnostic::new(Stage::Flow, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
+                .with_found(self.src(span))
+                .with_fix(Fix::replace("remove `!`", span, fix)),
+        )
     }
 
     fn plain_args(&mut self, args: &[Arg]) -> R<()> {
