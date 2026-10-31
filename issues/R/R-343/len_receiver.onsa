@@ -1,0 +1,24 @@
+use std.test.gen
+
+fn digits() -> [U32; 3] {
+  let _ = gen.u32(0, 1)
+  [1, 2, 3]
+}
+
+fn boom() -> [U32; 3] {
+  assert false
+  [1, 2, 3]
+}
+
+test "elided" {
+  assert digits().len() == 3
+}
+
+test "boom elided" {
+  assert boom().len() == 3
+}
+
+test "boom bound" {
+  let xs = boom()
+  assert xs.len() == 3
+}
