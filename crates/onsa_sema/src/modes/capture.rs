@@ -71,7 +71,7 @@ impl Walker<'_> {
 
     /// `l` is read at `at`: at its first read in an anonymous function that
     /// captures it (memo 2.7, after the E0712 of the function), a
-    /// second-class value is E0710 (R-331, S-217) and a Shared one E0200
+    /// second-class value is E0710 (R-331, S-217, S-190) and a Shared one E0200
     /// (R-85 (5), S-80: by its type, so a static value and a `T` with no
     /// bound too); a Copy one is copied.
     pub(super) fn read_captured(&mut self, l: LocalId, at: Span) {
@@ -90,7 +90,7 @@ impl Walker<'_> {
         if !first || info.locals[l.0 as usize].state == Bind::Inout {
             return;
         }
-        let d = match (self.class_of(ty), self.kind_of(ty)) {
+        let d = match (self.class_of_local(l, ty), self.kind_of(ty)) {
             (Some(class), _) => self.second_class_error(class, "captured", at),
             (None, Some(Kind::Shared)) => Feature::CapturedShared.diagnostic(Stage::Modes, at, &[]),
             _ => return,

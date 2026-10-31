@@ -1,0 +1,3 @@
+[package]
+name = "fn_param_second_class_pkg"
+edition = "2026"

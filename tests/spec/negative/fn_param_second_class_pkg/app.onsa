@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§5.2", "§5.3", "§15.1"]
+// fixes = 0
+
+// S-190, S-809 (§5.2): the second class of the default-mode parameter of a function type goes through a module. The parameter
+// is declared with an alias that another module defines (`f: ops.Unary`, imported by its name or used by its path), and the
+// functions it is passed to are in the other module: the `move` parameter (`ops.keep`), the type parameter (`ops.id`), the method
+// of an imported struct, and the default-mode parameter (`ops.call`), which takes it. Each function below has one E0710
+// (§18.1) at the expression of the value, no candidate (`fixes = 0`), and the file has no other error.
+
+use ops
+use ops.{Op, Unary, call, id, inc, keep}
+
+pub fn return_the_parameter(f: Unary) -> Unary {
+  f //~ E0710
+}
+
+pub fn return_the_qualified_parameter(f: ops.Unary) -> ops.Unary {
+  f //~ E0710
+}
+
+pub fn store_in_a_field_of_an_imported_struct(f: Unary) -> Op {
+  Op { f: f } //~ E0710
+}
+
+pub fn pass_to_a_move_parameter(f: Unary) -> Op {
+  keep(f) //~ E0710
+}
+
+pub fn pass_to_a_qualified_move_parameter(f: Unary) -> Op {
+  ops.keep(f) //~ E0710
+}
+
+pub fn pass_to_a_type_parameter(f: Unary) -> I32 {
+  id(f).(1) //~ E0710
+}
+
+pub fn pass_to_a_qualified_type_parameter(f: Unary) -> I32 {
+  ops.id(f).(1) //~ E0710
+}
+
+pub fn pass_to_a_method(f: Unary, o: Op) -> Op {
+  o.hold(f) //~ E0710
+}
+
+pub fn capture_in_the_argument(f: Unary) -> I32 {
+  call(fn(x: I32) -> I32 { f.(x) }, 1) //~ E0710
+}
+
+pub fn closure_to_a_type_parameter(k: I32) -> I32 {
+  ops.id(fn(x: I32) -> I32 { x + k }).(1) //~ E0710
+}
+
+pub fn match_on_the_parameter(f: ops.Unary) -> I32 {
+  match f { //~ E0710
+    g => g.(1),
+  }
+}

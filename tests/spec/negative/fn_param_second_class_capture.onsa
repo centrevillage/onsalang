@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§19.1"]
+// fixes = 0
+
+// S-190 (§5.2: "… 無名関数で捕捉する、`move` の引数へ渡すと E0710"; §19.1: "既定のモードの関数型の引数を、引数の位置の無名関数が
+// 捕捉する形（`array.from_fn(fn(i) { f.(i) })`）… 今は E0710"): the default-mode parameter of a function type cannot be captured
+// by an anonymous function, even when the anonymous function itself is passed to a default-mode parameter of a function type
+// (the environment would hold a value that is not first class), and cannot be passed to a `move` parameter of a function
+// type (a `move` parameter keeps the function value, so it takes only a function without a capture). The error is at the
+// use of the parameter in the body of the anonymous function, and at the argument of the `move` parameter. One error per
+// function (§18.1); no candidate (`fixes = 0`). A function value in a variable and a closure that captures a local value,
+// passed to a `move` parameter, are in negative/fn_param_move_closure.onsa.
+
+use std.array
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+impl Op {
+  pub fn make(move f: fn(I32) -> I32) -> Op {
+    Op { f: f }
+  }
+
+  pub fn hold(self, move f: fn(I32) -> I32) -> Op {
+    Op { f: f }
+  }
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn ap(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+pub fn ap2(g: fn() -> fn(I32) -> I32) -> I32 {
+  g.().(1)
+}
+
+pub fn keep(move f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+// ------------------------------------------------------------------ a capture
+
+pub fn capture_in_the_argument(f: fn(I32) -> I32) -> I32 {
+  ap(fn(x: I32) -> I32 { f.(x) }) //~ E0710
+}
+
+pub fn capture_with_a_local_value(f: fn(I32) -> I32, k: I32) -> I32 {
+  ap(fn(x: I32) -> I32 { f.(x) + k }) //~ E0710
+}
+
+pub fn capture_passed_on(f: fn(I32) -> I32) -> I32 {
+  ap(fn(x: I32) -> I32 { ap(f) + x }) //~ E0710
+}
+
+pub fn capture_in_a_block_body(f: fn(I32) -> I32) -> I32 {
+  ap(fn(x: I32) -> I32 {
+    let y = x + 1
+    f.(y) //~ E0710
+  })
+}
+
+pub fn capture_for_from_fn(f: fn(U32) -> U32) -> U32 {
+  let a: [U32; 4] = array.from_fn(fn(i: U32) -> U32 { f.(i) }) //~ E0710
+  a[0]
+}
+
+pub fn capture_through_two_closures(f: fn(I32) -> I32) -> I32 {
+  ap(fn(x: I32) -> I32 {
+    ap(fn(y: I32) -> I32 { f.(y) }) + x //~ E0710
+  })
+}
+
+pub fn capture_of_a_closure_parameter() -> I32 {
+  let h = fn(g: fn(I32) -> I32) -> I32 {
+    ap(fn(x: I32) -> I32 { g.(x) }) //~ E0710
+  }
+  h.(inc)
+}
+
+pub fn capture_of_a_parameter_of_an_alias(f: Unary) -> I32 {
+  ap(fn(x: I32) -> I32 { f.(x) }) //~ E0710
+}
+
+pub fn capture_returned_from_the_closure(f: fn(I32) -> I32) -> I32 {
+  ap2(fn() -> fn(I32) -> I32 { f }) //~ E0710
+}
+
+pub fn capture_returned_from_a_block_closure(f: fn(I32) -> I32) -> I32 {
+  ap2(fn() -> fn(I32) -> I32 {
+    f //~ E0710
+  })
+}
+
+type Unary = fn(I32) -> I32
+
+// --------------------------------------------------------- a `move` parameter
+
+pub fn pass_to_a_move_parameter(f: fn(I32) -> I32) -> I32 {
+  let o = keep(f) //~ E0710
+  o.f.(1)
+}
+
+pub fn pass_to_a_move_parameter_in_a_chain(f: fn(I32) -> I32) -> I32 {
+  keep(f).f.(1) //~ E0710
+}
+
+pub fn pass_in_parentheses(f: fn(I32) -> I32) -> I32 {
+  let o = keep((f)) //~ E0710
+  o.f.(1)
+}
+
+pub fn pass_the_tail_of_an_if(f: fn(I32) -> I32, c: Bool) -> I32 {
+  let o = keep(if c {
+    f //~ E0710
+  } else {
+    inc
+  })
+  o.f.(1)
+}
+
+pub fn pass_to_an_associated_function(f: fn(I32) -> I32) -> I32 {
+  let o = Op.make(f) //~ E0710
+  o.f.(1)
+}
+
+pub fn pass_to_a_method(f: fn(I32) -> I32, o: Op) -> I32 {
+  let p = o.hold(f) //~ E0710
+  p.f.(1)
+}
+
+pub fn pass_to_a_move_parameter_of_a_function_value(h: fn(move fn(I32) -> I32) -> I32, f: fn(I32) -> I32) -> I32 {
+  h.(f) //~ E0710
+}
+
+pub fn pass_a_closure_parameter_to_a_move_parameter() -> I32 {
+  let h = fn(g: fn(I32) -> I32) -> I32 {
+    keep(g).f.(1) //~ E0710
+  }
+  h.(inc)
+}

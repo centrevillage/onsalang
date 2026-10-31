@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§13.5"]
+// fixes = 0
+
+// S-809 (§5.2: "宣言の型が関数型でない引数（総称の `x: T`、組込みのメソッドの引数）へ渡すと E0710. 宣言の型が関数型でない引数へ
+// 渡せないのは、捕捉する無名関数も同じである（`id(fn(x: I32) -> I32 { x + k })` は E0710）。型パラメータの本体は値を写して持ち出せる
+// からである"): the second-class function values, the default-mode parameter of a function type and an anonymous function that
+// captures, go only to a parameter whose declared type is a function type. A parameter of a type parameter `x: T` does not take
+// them, whatever the bounds of `T` are (`T`, `T: Copy`, `T: ?Dup`; the body of a generic function copies the value out, and the
+// function value is Copy, §4.1), and the parameter of a method of a builtin type does not either (`fs.fill!(f)` of an array;
+// a builtin method has no parameter of a function type in the first period, so each one counts as a type that is not a function
+// type). The error is at the value that is passed (the tail of an `if`, a `match` and a block and a parenthesis keep the
+// position of the tail). The function item and the anonymous function without a capture are first class and pass
+// (values/fn_param_ok.onsa). One error per function (§18.1); no candidate (`fixes = 0`).
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn id_copy[T: Copy](x: T) -> T {
+  x
+}
+
+pub fn touch[T: ?Dup](x: T) -> I32 {
+  1
+}
+
+pub fn first[T](x: T, y: T) -> T {
+  x
+}
+
+// ---------------------------------------------------- the parameter of a function type
+
+pub fn parameter_to_a_type_parameter(f: fn(I32) -> I32) -> I32 {
+  id(f).(1) //~ E0710
+}
+
+pub fn parameter_to_a_copy_type_parameter(f: fn(I32) -> I32) -> I32 {
+  id_copy(f).(1) //~ E0710
+}
+
+pub fn parameter_to_a_maybe_dup_type_parameter(f: fn(I32) -> I32) -> I32 {
+  touch(f) //~ E0710
+}
+
+pub fn parameter_as_the_second_argument(f: fn(I32) -> I32) -> I32 {
+  first(inc, f).(1) //~ E0710
+}
+
+pub fn parameter_in_parentheses(f: fn(I32) -> I32) -> I32 {
+  id((f)).(1) //~ E0710
+}
+
+pub fn parameter_as_the_tail_of_an_if(f: fn(I32) -> I32, c: Bool) -> I32 {
+  id(if c {
+    f //~ E0710
+  } else {
+    inc
+  }).(1)
+}
+
+pub fn parameter_as_the_tail_of_a_block(f: fn(I32) -> I32) -> I32 {
+  id({
+    f //~ E0710
+  }).(1)
+}
+
+pub fn parameter_as_the_arm_of_a_match(f: fn(I32) -> I32, n: I32) -> I32 {
+  id(match n {
+    0 => f, //~ E0710
+    _ => inc,
+  }).(1)
+}
+
+pub fn parameter_of_an_alias(f: Unary) -> I32 {
+  id(f).(1) //~ E0710
+}
+
+type Unary = fn(I32) -> I32
+
+// ---------------------------------------------------- an anonymous function that captures
+
+pub fn closure_to_a_type_parameter(k: I32) -> I32 {
+  id(fn(x: I32) -> I32 { x + k }).(1) //~ E0710
+}
+
+pub fn closure_to_a_copy_type_parameter(k: I32) -> I32 {
+  id_copy(fn(x: I32) -> I32 { x + k }).(1) //~ E0710
+}
+
+pub fn closure_to_a_maybe_dup_type_parameter(k: I32) -> I32 {
+  touch(fn(x: I32) -> I32 { x + k }) //~ E0710
+}
+
+pub fn closure_in_parentheses(k: I32) -> I32 {
+  id((fn(x: I32) -> I32 { x + k })).(1) //~ E0710
+}
+
+pub fn closure_as_the_tail_of_an_if(k: I32, c: Bool) -> I32 {
+  id(if c {
+    fn(x: I32) -> I32 { x + k } //~ E0710
+  } else {
+    inc
+  }).(1)
+}
+
+// ------------------------------------------------------------- a builtin method
+
+pub fn parameter_to_fill(f: fn(I32) -> I32) -> I32 {
+  var fs = [inc, inc]
+  fs.fill!(f) //~ E0710
+  fs[0].(1)
+}
+
+pub fn parameter_to_fill_in_parentheses(f: fn(I32) -> I32) -> I32 {
+  var fs = [inc, inc]
+  fs.fill!((f)) //~ E0710
+  fs[0].(1)
+}
+
+pub fn tail_of_an_if_to_fill(f: fn(I32) -> I32, c: Bool) -> I32 {
+  var fs = [inc, inc]
+  fs.fill!(if c {
+    f //~ E0710
+  } else {
+    inc
+  })
+  fs[0].(1)
+}
+
+pub fn closure_to_fill(k: I32) -> I32 {
+  var fs = [inc, inc]
+  fs.fill!(fn(x: I32) -> I32 { x + k }) //~ E0710
+  fs[0].(1)
+}

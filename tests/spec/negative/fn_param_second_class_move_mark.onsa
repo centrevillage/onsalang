@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 0
+
+// S-609 and S-809 (§5.2: "`move` の印は、所有が移って前の値が以後使えなくなる所（Affine 値）にだけ付ける. `move` 引数に渡す Dup 値
+// （Copy、Shared、関数値の変数）には `move` を書かず", whose E0703 has the candidate that removes the `move`; S-809: "`id(move f)` は
+// E0703（`move` を消す候補）を出さず E0710 だけ（当てた後に E0710 が残るので、§18.1 の 27 行）"): the mark `move` on the default-mode
+// parameter of a function type is an E0710 and only that. The E0703 of a mark on a Dup value is not given, because the candidate
+// that removes the `move` would leave the E0710 of the same function (§18.1: a candidate leaves no error of its stage or an
+// earlier stage, and a diagnostic with no such candidate gives none). Whether the argument is passed to a `move` parameter or
+// to a type parameter, the one error is at the argument, and `fixes = 0` says there is no candidate. The function value in a
+// variable, which is first class, has the E0703 with the candidate (negative/fn_param_move_mark_candidate.onsa).
+// One error per function (§18.1).
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+impl Op {
+  pub fn hold(self, move f: fn(I32) -> I32) -> Op {
+    Op { f: f }
+  }
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn keep(move f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn mark_to_a_move_parameter(f: fn(I32) -> I32) -> I32 {
+  keep(move f).f.(1) //~ E0710
+}
+
+pub fn mark_to_a_move_parameter_in_a_let(f: fn(I32) -> I32) -> I32 {
+  let o = keep(move f) //~ E0710
+  o.f.(1)
+}
+
+pub fn mark_to_a_type_parameter(f: fn(I32) -> I32) -> I32 {
+  id(move f).(1) //~ E0710
+}
+
+pub fn mark_to_a_method(f: fn(I32) -> I32, o: Op) -> I32 {
+  o.hold(move f).f.(1) //~ E0710
+}
+
+pub fn mark_on_a_closure_parameter() -> I32 {
+  let h = fn(g: fn(I32) -> I32) -> I32 {
+    keep(move g).f.(1) //~ E0710
+  }
+  h.(inc)
+}
+
+pub fn mark_on_a_parameter_of_an_alias(f: Unary) -> I32 {
+  id(move f).(1) //~ E0710
+}
+
+type Unary = fn(I32) -> I32
+
+// The mark `inout` on it to a type parameter is the same (W4-11 U1): the E0703 whose candidate removes the `inout` would leave
+// this E0710.
+pub fn inout_mark_to_a_type_parameter(f: fn(I32) -> I32) -> I32 {
+  id(inout f).(1) //~ E0710
+}

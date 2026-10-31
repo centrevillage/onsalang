@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§5.2", "§5.3"]
+// fixes = 0
+
+// S-190 (§5.2: "既定のモードの関数型の引数（関数と無名関数の引数）… は、関数の中で第二級"; §4.1: "関数型の引数のモード
+// （`inout`、`move`）は型の一部で、無名関数も名前付き関数と同じ形で宣言する"): the second class belongs to a parameter of
+// every kind of function whose declared type is a function type that takes the default mode, not only to the
+// parameter of a free function. The parameter of a method and of an associated function, of an anonymous function, of a generic function
+// (`f: fn(T) -> T`), a parameter whose type is an alias of a function type (also an alias of an alias), and a parameter
+// of a function type whose own parameters have a mode (`fn(inout F32)`, `fn(move Buf[F32])`) are all returned and stored
+// with an E0710 at the parameter. A parameter whose type only contains a function type (`(fn(I32) -> I32, I32)`, `Op`) is not one (values/fn_param_ok.onsa).
+// One error per function (§18.1); no candidate (`fixes = 0`).
+
+pub struct Holder {
+  n: I32,
+}
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+type Unary = fn(I32) -> I32
+
+type Same = Unary
+
+impl Holder {
+  pub fn pick(self, f: fn(I32) -> I32) -> fn(I32) -> I32 {
+    f //~ E0710
+  }
+
+  pub fn store(self, f: fn(I32) -> I32) -> Op {
+    Op { f: f } //~ E0710
+  }
+
+  pub fn make(f: fn(I32) -> I32) -> fn(I32) -> I32 {
+    f //~ E0710
+  }
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+// ----------------------------------------------------- an anonymous function
+
+pub fn closure_returns_its_parameter() -> I32 {
+  let h = fn(g: fn(I32) -> I32) -> fn(I32) -> I32 {
+    g //~ E0710
+  }
+  h.(inc).(1)
+}
+
+pub fn closure_stores_its_parameter() -> I32 {
+  let h = fn(g: fn(I32) -> I32) -> I32 {
+    let k = g //~ E0710
+    k.(1)
+  }
+  h.(inc)
+}
+
+pub fn closure_in_a_field_returns_its_parameter() -> I32 {
+  let o = Wrapper { make: fn(g: fn(I32) -> I32) -> fn(I32) -> I32 { g } } //~ E0710
+  o.make.(inc).(1)
+}
+
+pub struct Wrapper {
+  make: fn(fn(I32) -> I32) -> fn(I32) -> I32,
+}
+
+// -------------------------------------------------------------- an alias and a generic
+
+pub fn alias_returned(f: Unary) -> Unary {
+  f //~ E0710
+}
+
+pub fn alias_stored(f: Unary) -> I32 {
+  let g = f //~ E0710
+  g.(1)
+}
+
+pub fn alias_of_an_alias_returned(f: Same) -> Unary {
+  f //~ E0710
+}
+
+pub fn alias_stored_in_a_field(f: Unary) -> Op {
+  Op { f: f } //~ E0710
+}
+
+pub fn generic_returned[T](f: fn(T) -> T) -> fn(T) -> T {
+  f //~ E0710
+}
+
+pub fn generic_stored[T](f: fn(T) -> T, x: T) -> T {
+  let g = f //~ E0710
+  g.(x)
+}
+
+// ------------------------------------------------------ the modes of the function type
+
+pub fn inout_function_returned(f: fn(inout F32)) -> fn(inout F32) {
+  f //~ E0710
+}
+
+pub fn inout_function_stored(f: fn(inout F32), inout v: F32) {
+  let g = f //~ E0710
+  g.(inout v)
+}
+
+pub fn move_function_returned(f: fn(move Buf[F32]) -> U32) -> fn(move Buf[F32]) -> U32 {
+  f //~ E0710
+}
+
+pub fn function_of_functions_returned(f: fn(fn(I32) -> I32) -> I32) -> fn(fn(I32) -> I32) -> I32 {
+  f //~ E0710
+}
+
+pub fn function_returning_a_function_stored(f: fn(I32) -> fn(I32) -> I32) -> I32 {
+  let g = f //~ E0710
+  g.(1).(2)
+}

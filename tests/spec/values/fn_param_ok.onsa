@@ -1,0 +1,197 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§6.1", "§19.1"]
+
+// S-190, S-809 (§5.2: "既定のモードの関数型の引数（`f: fn(I32) -> I32`）は、捕捉する無名関数も受け、関数の中では第二級になる. 呼ぶことと、
+// 別の関数の既定のモードの関数型の引数へ渡すことはでき"): what the default-mode parameter of a function type may do in the
+// function. It is called (`f.(x)`, also in a branch, a loop, a guard and an argument), and passed to a parameter of the declared
+// type of a function type that takes the default mode (a free function, a method, a parameter whose type is an alias, a generic
+// `fn(T) -> T`, a function value of a function type, `array.from_fn`), also through the tail of an `if`, a `match` and a block and
+// a parenthesis. The anonymous function that captures goes to the same parameters (§5.3). The result of calling a parameter
+// is a new value and is first class. The uses that are not allowed are the cases of negative/fn_param_second_class*.onsa.
+// `par` is a construct of a flow body and takes no function value, so it is not here. The check is all this case does: the interpreter
+// does not run the calls through function values yet (W8-09; the values are in semantics/fn_values.onsa).
+
+use std.array
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+type Unary = fn(I32) -> I32
+
+impl Op {
+  pub fn run(self, f: fn(I32) -> I32, x: I32) -> I32 {
+    f.(x) + self.f.(x)
+  }
+}
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+fn call(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+fn call_alias(f: Unary, x: I32) -> I32 {
+  f.(x)
+}
+
+fn call_generic[T](f: fn(T) -> T, x: T) -> T {
+  f.(x)
+}
+
+fn call_of_functions(g: fn(fn(I32) -> I32) -> I32, f: fn(I32) -> I32) -> I32 {
+  g.(f)
+}
+
+fn call_returning_a_function(f: fn(I32) -> fn(I32) -> I32) -> I32 {
+  let g = f.(1)
+  g.(2)
+}
+
+// ------------------------------------------------------------------ the uses of the parameter
+
+fn call_twice(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(f.(x))
+}
+
+fn call_in_an_argument(f: fn(I32) -> I32, x: I32) -> I32 {
+  call(inc, f.(x))
+}
+
+fn call_in_a_branch(f: fn(I32) -> I32, c: Bool, x: I32) -> I32 {
+  if c {
+    f.(x)
+  } else {
+    x
+  }
+}
+
+fn call_in_a_loop(f: fn(I32) -> I32, n: U32) -> I32 {
+  var acc: I32 = 0
+  for _ in 0 ..< n {
+    acc = f.(acc)
+  }
+  acc
+}
+
+fn call_in_a_guard(f: fn(I32) -> I32, x: I32) -> I32 {
+  match x {
+    n if f.(n) > 5 => 1,
+    _ => 0,
+  }
+}
+
+fn call_and_bind_the_result(f: fn(I32) -> I32, x: I32) -> I32 {
+  let y = f.(x)
+  let z = (y, y)
+  z.0 + z.1
+}
+
+fn match_on_the_result(f: fn(I32) -> I32, x: I32) -> I32 {
+  match f.(x) {
+    0 => 100,
+    n => n,
+  }
+}
+
+// -------------------------------------------------- passed to a function type parameter
+
+fn pass_on(f: fn(I32) -> I32, x: I32) -> I32 {
+  call(f, x)
+}
+
+fn pass_on_twice(f: fn(I32) -> I32, x: I32) -> I32 {
+  call(f, call(f, x))
+}
+
+fn pass_to_an_alias(f: fn(I32) -> I32, x: I32) -> I32 {
+  call_alias(f, x)
+}
+
+fn pass_an_alias_on(f: Unary, x: I32) -> I32 {
+  call(f, x)
+}
+
+fn pass_to_a_generic_function_type(f: fn(I32) -> I32, x: I32) -> I32 {
+  call_generic(f, x)
+}
+
+fn pass_to_a_method(f: fn(I32) -> I32, o: Op, x: I32) -> I32 {
+  o.run(f, x)
+}
+
+fn pass_to_a_function_value(g: fn(fn(I32) -> I32) -> I32, f: fn(I32) -> I32) -> I32 {
+  g.(f)
+}
+
+fn pass_in_parentheses(f: fn(I32) -> I32, x: I32) -> I32 {
+  call((f), x)
+}
+
+fn pass_the_tail_of_an_if(f: fn(I32) -> I32, c: Bool, x: I32) -> I32 {
+  call(if c {
+    f
+  } else {
+    inc
+  }, x)
+}
+
+fn pass_the_arm_of_a_match(f: fn(I32) -> I32, n: I32, x: I32) -> I32 {
+  call(match n {
+    0 => f,
+    _ => inc,
+  }, x)
+}
+
+fn pass_the_tail_of_a_block(f: fn(I32) -> I32, x: I32) -> I32 {
+  call({
+    f
+  }, x)
+}
+
+fn pass_to_from_fn(f: fn(U32) -> U32) -> U32 {
+  let a: [U32; 4] = array.from_fn(f)
+  a[0] + a[3]
+}
+
+// ------------------------------------------------ an anonymous function that captures
+
+fn closure_to_a_function(k: I32, x: I32) -> I32 {
+  call(fn(y: I32) -> I32 { y + k }, x)
+}
+
+fn closure_to_an_alias(k: I32, x: I32) -> I32 {
+  call_alias(fn(y: I32) -> I32 { y * k }, x)
+}
+
+fn closure_to_a_generic_function_type(k: I32, x: I32) -> I32 {
+  call_generic(fn(y: I32) -> I32 { y - k }, x)
+}
+
+fn closure_to_a_method(k: I32, o: Op, x: I32) -> I32 {
+  o.run(fn(y: I32) -> I32 { y + k }, x)
+}
+
+fn closure_to_a_function_value(k: I32, g: fn(fn(I32) -> I32) -> I32) -> I32 {
+  g.(fn(y: I32) -> I32 { y + k })
+}
+
+fn closure_in_a_closure(k: I32, x: I32) -> I32 {
+  call(fn(y: I32) -> I32 { call(fn(z: I32) -> I32 { z + y }, 1) + k }, x)
+}
+
+fn closure_the_tail_of_an_if(k: I32, c: Bool, x: I32) -> I32 {
+  call(if c {
+    fn(y: I32) -> I32 { y + k }
+  } else {
+    inc
+  }, x)
+}
+
+fn closure_to_from_fn(k: U32) -> U32 {
+  let a: [U32; 4] = array.from_fn(fn(i: U32) -> U32 { i + k })
+  a[0] + a[3]
+}

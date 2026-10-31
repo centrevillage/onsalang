@@ -15,7 +15,7 @@
 // diagnostic of this file has at most the one candidate (`fixes = 1`), the `move` moved to the owned Affine ends of the block, `if` or `match` where a value is consumed (a `move`
 // argument, the initialization of a `let`), or removed (a call, a literal, a constant, the operand of a postfix `?`, a block or an `if` of new values). The candidate of each form,
 // after which the file has no diagnostic, is in fixes/e0711_move_*.onsa (one diagnostic in a file, because `clean` is about the whole file), and the forms that have no
-// candidate are in negative/move_not_a_place_no_candidate.onsa. The candidate of the name of a function (`ap(move inc)`, which removes the `move`) is the work W4-11. One error per function (P-01).
+// candidate are in negative/move_not_a_place_no_candidate.onsa. The candidate of the name of a function (`ap(move inc)`) removes the `move`, as that of the other operands that are not places. One error per function (P-01).
 
 pub const LIMIT: U32 = 4
 

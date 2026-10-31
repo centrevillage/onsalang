@@ -17,11 +17,17 @@ use crate::ty::{Ty, TyId};
 pub(super) enum Pos {
     /// An operand, a condition, a guard, an index, a statement's value.
     Read,
-    /// A borrowed or `inout` argument, a receiver, an index base, a borrowed head.
+    /// A borrowed or `inout` argument, a receiver, an index base, a borrowed
+    /// `for` head.
     Arg(Mode),
+    /// A borrowed argument of a parameter whose declared type is not a
+    /// function type (a `T`, a builtin method's): its callee may keep a copy
+    /// (S-809).
+    Kept,
     /// The argument of a `move` parameter (S-609).
     MoveArg,
-    /// The value of a `let`, `for` or `match` head whose row is a borrow (§5.4).
+    /// The value of a `let` or `match` head whose row is a borrow (§5.4;
+    /// S-810: a `match` head binds as a `let` does, whatever its arms).
     Bind,
     /// An owned head: of a `let`, `match` or `for`, the value of a `var`
     /// (S-795: a Dup value's `move` chooses the owned binding).
@@ -42,6 +48,18 @@ impl Pos {
     /// A value at it is consumed (§5.2): moved, copied or an error.
     pub(super) fn consumes(self) -> bool {
         matches!(self, Pos::Own | Pos::Value | Pos::MoveArg | Pos::Return | Pos::Extract)
+    }
+
+    /// What a second-class value at it would be (§5.3), `None` where one
+    /// stands (an operand, a function-type argument).
+    pub(super) fn out(self) -> Option<&'static str> {
+        Some(match self {
+            Pos::Read | Pos::Arg(_) | Pos::Unknown => return None,
+            Pos::Bind | Pos::Own | Pos::Value => "stored",
+            Pos::Return => "returned",
+            Pos::MoveArg | Pos::Extract => "moved",
+            Pos::Kept => "passed to a parameter whose type is not a function type",
+        })
     }
 }
 
@@ -141,7 +159,18 @@ impl<'a> Walker<'a> {
     pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: Option<TyId>) {
         match self.planar_literal(e, param) {
             Some(parts) => parts.iter().for_each(|&y| self.expr(r, y, Pos::Arg(Mode::Borrow))),
-            None => self.expr(r, e, Pos::Arg(Mode::Borrow)),
+            None => self.expr(r, e, self.borrowed_at(param)),
+        }
+    }
+
+    /// The position of a borrowed argument of a parameter of the declared
+    /// type `param` (S-809): `Kept` unless a function type (an alias
+    /// resolved) or the error type; a builtin method's (`None`) is not one,
+    /// none being a function type now (W5-02 gives them their types).
+    pub(super) fn borrowed_at(&self, param: Option<TyId>) -> Pos {
+        match param.map(|t| self.a.types.get(t)) {
+            Some(Ty::Fn(_) | Ty::Error) => Pos::Arg(Mode::Borrow),
+            _ => Pos::Kept,
         }
     }
 

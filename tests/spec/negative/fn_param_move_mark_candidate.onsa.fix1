@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// S-609 (§5.2: "`move` 引数に渡す Dup 値（Copy、Shared、関数値の変数）には `move` を書かず（`tk(n)`、`ts(s)`、`ap(f)`）、その場で複製して
+// 渡す … 書くと E0703 で、修正候補はその `move` を消す形である"): the function value that is first class, in a variable (a `let` or a
+// `var` that holds a function item or an anonymous function without a capture), in the field of a value, in a `move` parameter
+// or an `inout` parameter, is a Dup value. A `move` on it given to a `move` parameter or a constructor is an E0703 with the
+// one candidate that removes the `move`, and after it the function has no error. This is the form that stays as it is after the
+// work W4-11, which gives the default-mode parameter of a function type an E0710 and no candidate for the same mark
+// (negative/fn_param_second_class_move_mark.onsa). One error per function (§18.1).
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn ap(move f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+pub fn mark_on_a_let_of_a_function_item() -> I32 {
+  let g = inc
+  ap(g) //~ E0703
+}
+
+pub fn mark_on_a_let_of_a_closure_without_a_capture() -> I32 {
+  let g = fn(x: I32) -> I32 { x * 2 }
+  ap(g) //~ E0703
+}
+
+pub fn mark_on_a_var() -> I32 {
+  var g: fn(I32) -> I32 = inc
+  g = fn(x: I32) -> I32 { x * 3 }
+  ap(g) //~ E0703
+}
+
+pub fn mark_on_a_field_of_a_value(o: Op) -> I32 {
+  ap(o.f) //~ E0703
+}
+
+pub fn mark_on_a_move_parameter(move f: fn(I32) -> I32) -> I32 {
+  ap(f) //~ E0703
+}
+
+pub fn mark_on_an_inout_parameter(inout f: fn(I32) -> I32) -> I32 {
+  ap(f) //~ E0703
+}
+
+pub fn mark_in_a_constructor() -> Option[fn(I32) -> I32] {
+  let g = inc
+  Some(g) //~ E0703
+}

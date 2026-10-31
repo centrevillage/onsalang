@@ -1,0 +1,177 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// S-190 (§5.2: "… 保存する（`let` / `var` の初期化、代入、フィールド、要素）… と E0710"; §5.4: "既定のモードの関数型の引数は
+// 捕捉を持ちうるので、`let` に束縛できず"): the default-mode parameter of a function type cannot be stored. It is an E0710
+// at the expression of the parameter in the initialization of a `let` and a `var` (with and without a type), in
+// `let _ = f` (which names no binding, and is the same E0710), in an assignment to a variable, a field and an element, in the
+// field of a struct literal, in an element of an array, a tuple and a variant, in the tail of an `if`, a `match` and a
+// block that initializes a `let`, and in a destructuring `let`. One error per function (§18.1); no candidate (`fixes = 0`).
+// What is returned is in negative/fn_param_second_class.onsa.
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+// -------------------------------------------------------------------- a binding
+
+pub fn let_initializer(f: fn(I32) -> I32) -> I32 {
+  let g = f //~ E0710
+  g.(1)
+}
+
+pub fn var_initializer(f: fn(I32) -> I32) -> I32 {
+  var g = f //~ E0710
+  g = inc
+  g.(1)
+}
+
+pub fn let_with_a_type(f: fn(I32) -> I32) -> I32 {
+  let g: fn(I32) -> I32 = f //~ E0710
+  g.(1)
+}
+
+pub fn let_discarding(f: fn(I32) -> I32) -> I32 {
+  let _ = f //~ E0710
+  1
+}
+
+pub fn let_in_parentheses(f: fn(I32) -> I32) -> I32 {
+  let g = (f) //~ E0710
+  g.(1)
+}
+
+pub fn let_of_the_tail_of_an_if(f: fn(I32) -> I32, c: Bool) -> I32 {
+  let g = if c {
+    f //~ E0710
+  } else {
+    inc
+  }
+  g.(1)
+}
+
+pub fn let_of_the_tail_of_a_match(f: fn(I32) -> I32, n: I32) -> I32 {
+  let g = match n {
+    0 => inc,
+    _ => f, //~ E0710
+  }
+  g.(1)
+}
+
+pub fn let_of_the_tail_of_a_block(f: fn(I32) -> I32) -> I32 {
+  let g = {
+    f //~ E0710
+  }
+  g.(1)
+}
+
+pub fn let_with_the_keyword(f: fn(I32) -> I32) -> I32 {
+  let g = move f //~ E0710
+  g.(1)
+}
+
+pub fn destructuring_a_tuple(f: fn(I32) -> I32) -> I32 {
+  let (g, n) = (f, 1) //~ E0710
+  g.(n)
+}
+
+// ------------------------------------------------------------------ an assignment
+
+pub fn assign_to_a_variable(f: fn(I32) -> I32) -> I32 {
+  var g: fn(I32) -> I32 = inc
+  g = f //~ E0710
+  g.(1)
+}
+
+pub fn assign_to_a_field(f: fn(I32) -> I32) -> I32 {
+  var o = Op { f: inc }
+  o.f = f //~ E0710
+  o.f.(1)
+}
+
+pub fn assign_to_an_element(f: fn(I32) -> I32) -> I32 {
+  var fs = [inc, inc]
+  fs[0] = f //~ E0710
+  fs[0].(1)
+}
+
+pub fn assign_the_tail_of_an_if(f: fn(I32) -> I32, c: Bool) -> I32 {
+  var g: fn(I32) -> I32 = inc
+  g = if c {
+    f //~ E0710
+  } else {
+    inc
+  }
+  g.(1)
+}
+
+// ---------------------------------------------------------- a field and an element
+
+pub fn field_of_a_struct_literal(f: fn(I32) -> I32) -> I32 {
+  let o = Op { f: f } //~ E0710
+  o.f.(1)
+}
+
+pub fn field_of_the_literal_in_a_call(f: fn(I32) -> I32) -> Op {
+  let o = Op { f: inc }
+  take_op(o, Op { f: f }) //~ E0710
+}
+
+pub fn take_op(a: Op, b: Op) -> Op {
+  if a.f.(0) == 0 {
+    a
+  } else {
+    b
+  }
+}
+
+pub fn element_of_an_array(f: fn(I32) -> I32) -> I32 {
+  let fs = [f, inc] //~ E0710
+  fs[0].(1)
+}
+
+pub fn element_of_a_repeated_array(f: fn(I32) -> I32) -> I32 {
+  let fs = [f; 2] //~ E0710
+  fs[0].(1)
+}
+
+pub fn element_of_a_tuple(f: fn(I32) -> I32) -> I32 {
+  let t = (f, 1) //~ E0710
+  t.0.(t.1)
+}
+
+pub fn element_of_a_variant(f: fn(I32) -> I32) -> I32 {
+  let o = Some(f) //~ E0710
+  match o {
+    Some(g) => g.(1),
+    None => 0,
+  }
+}
+
+pub fn element_of_a_user_variant(f: fn(I32) -> I32) -> I32 {
+  let h = Holder.Of(f) //~ E0710
+  match h {
+    Holder.Of(g) => g.(1),
+    Holder.Empty => 0,
+  }
+}
+
+pub enum Holder {
+  Of(fn(I32) -> I32),
+  Empty,
+}
+
+pub fn element_in_the_tail_of_an_if(f: fn(I32) -> I32, c: Bool) -> I32 {
+  let t = if c {
+    (f, 1) //~ E0710
+  } else {
+    (inc, 2)
+  }
+  t.0.(t.1)
+}

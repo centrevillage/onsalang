@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 0
+
+// S-190, S-809 and the B1 of W4-11 (§5.2: a default-mode parameter of a function type and an anonymous function that captures
+// pass only to a parameter declared with a function type, and are not stored, moved or passed to a type parameter: E0710;
+// §18.1: a candidate leaves no error of its stage or an earlier one, and a diagnostic with no such candidate gives none): a mark
+// `move` or `inout` on an `if`, a `match` or a block whose tail is such a value, at a position where the tail is an E0710, is
+// that E0710 at the tail and only that. The E0711 of a `move` on no place and the E0703 of a mark, whose candidates remove the
+// mark, are not given: the E0710 would stay (the W4-11 U1 break side's M-1). A mark `inout` to a `move` parameter or an element
+// keeps its E0703 with no candidate (R-337). The marks written on the tail itself are in the last function. One error per
+// function (§18.1).
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn keep(move f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn move_on_an_if_to_a_type_parameter(f: fn(I32) -> I32, c: Bool) -> I32 {
+  id(move if c {
+    f //~ E0710
+  } else {
+    inc
+  }).(1)
+}
+
+pub fn move_on_a_block_to_a_type_parameter(f: fn(I32) -> I32) -> I32 {
+  id(move {
+    f //~ E0710
+  }).(1)
+}
+
+pub fn move_on_a_match_to_a_type_parameter(f: fn(I32) -> I32, c: Bool) -> I32 {
+  id(move match c {
+    true => f, //~ E0710
+    false => inc,
+  }).(1)
+}
+
+pub fn move_on_an_if_to_a_move_parameter(f: fn(I32) -> I32, c: Bool) -> I32 {
+  keep(move if c {
+    f //~ E0710
+  } else {
+    inc
+  }).f.(1)
+}
+
+pub fn move_on_an_if_in_an_element(f: fn(I32) -> I32, c: Bool) -> I32 {
+  let o = Some(move if c {
+    f //~ E0710
+  } else {
+    inc
+  })
+  match o {
+    Some(g) => g.(1),
+    None => 0,
+  }
+}
+
+pub fn move_on_an_if_in_a_let(f: fn(I32) -> I32, c: Bool) -> I32 {
+  let g = move if c {
+    f //~ E0710
+  } else {
+    inc
+  }
+  g.(1)
+}
+
+pub fn move_on_an_if_of_a_closure(k: I32, c: Bool) -> I32 {
+  id(move if c {
+    fn(x: I32) -> I32 { x + k } //~ E0710
+  } else {
+    inc
+  }).(1)
+}
+
+pub fn inout_on_an_if_to_a_type_parameter(f: fn(I32) -> I32, c: Bool) -> I32 {
+  id(inout if c {
+    f //~ E0710
+  } else {
+    inc
+  }).(1)
+}
+
+pub fn inout_on_an_if_to_a_move_parameter(f: fn(I32) -> I32, c: Bool) -> I32 {
+  keep(inout if c { //~ E0703
+    f
+  } else {
+    inc
+  }).f.(1)
+}
+
+pub fn move_on_the_tail_to_a_type_parameter(f: fn(I32) -> I32, c: Bool) -> I32 {
+  id(if c {
+    move f //~ E0710
+  } else {
+    inc
+  }).(1)
+}

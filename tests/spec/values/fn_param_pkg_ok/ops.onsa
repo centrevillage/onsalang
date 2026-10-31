@@ -1,0 +1,30 @@
+// The declarations that app.onsa uses: a function type under a name of another module, and
+// functions that take it in the default mode, in the `move` mode and as a type parameter.
+
+pub type Unary = fn(I32) -> I32
+
+pub struct Op {
+  f: Unary,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn call(f: Unary, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn keep(move f: Unary) -> Op {
+  Op { f: f }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+impl Op {
+  pub fn hold(self, move f: Unary) -> Op {
+    Op { f: f }
+  }
+}

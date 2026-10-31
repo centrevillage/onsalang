@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// S-810 (§5.2: "… `match` の見出しに置く（腕によらない）… と E0710"; §5.3: "`Span` … は、§5.4 の規則で `let` と `for` と
+// `match` の腕に束縛できる" says the `Span` binds in an arm and the function value does not): the default-mode parameter of a function
+// type at the head of a `match` is an E0710 whatever the arms are, at the expression of the head, the same as `let _ = f`
+// (negative/fn_param_second_class_store.onsa). The arm may bind the value and use it (`g => g.(1)`) or return it (`g => g`),
+// bind nothing (`_ => 1`), have a guard, or the head may be the tail of an `if`, a block or a parenthesis, or have the keyword
+// `move` (a binding head accepts the mark). The error is one per function (§18.1), at the head and not at the arms.
+// No candidate (`fixes = 0`). The head that is a call of the parameter, a field of a parameter and a parameter that is first class
+// (`inout`, `move`) are in values/fn_param_ok.onsa.
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn head_of_a_binding_arm(f: fn(I32) -> I32) -> fn(I32) -> I32 {
+  match f { //~ E0710
+    g => g,
+  }
+}
+
+pub fn head_of_an_arm_that_calls(f: fn(I32) -> I32) -> I32 {
+  match f { //~ E0710
+    g => g.(1),
+  }
+}
+
+pub fn head_of_a_wildcard_arm(f: fn(I32) -> I32) -> I32 {
+  match f { //~ E0710
+    _ => 1,
+  }
+}
+
+pub fn head_of_a_guarded_arm(f: fn(I32) -> I32, c: Bool) -> I32 {
+  match f { //~ E0710
+    g if c => g.(1),
+    _ => 2,
+  }
+}
+
+pub fn head_of_a_guard_that_calls(f: fn(I32) -> I32) -> I32 {
+  match f { //~ E0710
+    _ if f.(1) > 0 => 1,
+    _ => 2,
+  }
+}
+
+pub fn head_in_parentheses(f: fn(I32) -> I32) -> I32 {
+  match (f) { //~ E0710
+    g => g.(1),
+  }
+}
+
+pub fn head_with_the_keyword(f: fn(I32) -> I32) -> I32 {
+  match move f { //~ E0710
+    g => g.(1),
+  }
+}
+
+pub fn head_that_is_the_tail_of_an_if(f: fn(I32) -> I32, c: Bool) -> I32 {
+  match (if c {
+    f //~ E0710
+  } else {
+    inc
+  }) {
+    g => g.(1),
+  }
+}
+
+pub fn head_that_is_the_tail_of_an_if_without_parentheses(f: fn(I32) -> I32, c: Bool) -> I32 {
+  match if c {
+    f //~ E0710
+  } else {
+    inc
+  } {
+    g => g.(1),
+  }
+}
+
+pub fn head_that_is_the_tail_of_a_block(f: fn(I32) -> I32) -> I32 {
+  match ({
+    f //~ E0710
+  }) {
+    _ => 1,
+  }
+}
+
+pub fn head_of_a_parameter_of_an_alias(f: Unary) -> I32 {
+  match f { //~ E0710
+    g => g.(1),
+  }
+}
+
+type Unary = fn(I32) -> I32
+
+pub fn head_of_a_closure_parameter() -> I32 {
+  let h = fn(g: fn(I32) -> I32) -> I32 {
+    match g { //~ E0710
+      k => k.(1),
+    }
+  }
+  h.(inc)
+}
+
+pub fn head_inside_an_arm(f: fn(I32) -> I32, n: I32) -> I32 {
+  match n {
+    0 => 1,
+    _ => match f { //~ E0710
+      g => g.(n),
+    },
+  }
+}

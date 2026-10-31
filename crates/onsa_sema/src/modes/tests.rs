@@ -913,6 +913,76 @@ pub fn returned(k: U32) -> fn(U32) -> U32 {
     assert_eq!(fixes(src), bare(Code::E0710, &[2, 12, 15]));
 }
 
+/// S-190 (§5.2): a function-type parameter is second-class by its binding,
+/// of the default mode only: an `inout` or `move` one and a `T` a function
+/// type fills are first-class, and a function value of the first class
+/// passes to a `T` (S-809); one of the default mode of a function or an
+/// anonymous function is E0710.
+#[test]
+fn a_function_parameter_of_the_default_mode_is_second_class() {
+    let src = "pub fn by_inout(inout f: fn(U32) -> U32) -> fn(U32) -> U32 {
+  let g = f
+  g
+}
+pub fn by_move(move f: fn(U32) -> U32) -> fn(U32) -> U32 {
+  let g = f
+  g
+}
+pub fn same[T](x: T) -> T {
+  let y = x
+  y
+}
+pub fn first_class(move f: fn(U32) -> U32) -> U32 {
+  same(f).(1) + same(fn(i: U32) -> U32 { i }).(1)
+}
+pub fn by_default(f: fn(U32) -> U32) -> fn(U32) -> U32 {
+  f
+}
+pub fn of_a_closure() -> U32 {
+  let c = fn(g: fn(U32) -> U32) -> U32 { let h = g
+    h.(1) }
+  c.(same)
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0710, &[17, 20]));
+}
+
+/// Review of the memo of W4-11, finding 4: the tail of an anonymous
+/// function that returns a function parameter it captures is one E0710.
+#[test]
+fn a_captured_function_parameter_returned_is_one_e0710() {
+    let src = "pub fn twice(h: fn() -> fn(U32) -> U32) -> U32 { h.().(1) }
+pub fn tail(f: fn(U32) -> U32) -> U32 {
+  twice(fn() -> fn(U32) -> U32 { f })
+}
+";
+    assert_eq!(fixes(src), bare(Code::E0710, &[3]));
+}
+
+/// R-337 (§18.1): `inout` on a second-class value taken by value is E0703
+/// with no candidate, as removing it leaves an E0710; on a first-class one
+/// it is removed.
+#[test]
+fn inout_on_a_second_class_value_by_value_has_no_candidate() {
+    let src = "pub fn param(f: fn(U32) -> U32) {
+  keep(inout f)
+}
+pub fn element(f: fn(U32) -> U32) {
+  let o = Some(inout f)
+}
+pub fn closure(k: U32) {
+  keep(inout fn(i: U32) -> U32 { i + k })
+}
+pub fn plain() {
+  keep(inout fn(i: U32) -> U32 { i })
+}
+";
+    let removed = vec![("remove `inout`".to_string(), "keep(fn(i: U32) -> U32 { i })".to_string())];
+    let mut want = bare(Code::E0703, &[2, 5, 8]);
+    want.push((Code::E0703, 11, removed));
+    assert_eq!(fixes(src), want);
+}
+
 /// Review of U2a, finding 1 (§5.3): the elements of a planar literal at a
 /// borrowed argument stand at the argument: not moved, used after.
 #[test]

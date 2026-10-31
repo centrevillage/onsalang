@@ -1,0 +1,245 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§5.2", "§5.3", "§5.4"]
+
+// S-190, S-809 (§5.3: "捕捉の無い関数値（名前付きの関数、捕捉しない無名関数）は Copy の第一級の値で、保存も返却もできる. ただし、
+// 既定のモードの関数型の引数は捕捉を持ちうるので、受け取った関数の中では第二級"; §5.2: "保存できる関数値を受け取るのは `move` の関数型の
+// 引数で、捕捉の無い関数値だけを受けて所有する"): the function values that are first class, which the work W4-11 keeps as they are while
+// it gives the default-mode parameter of a function type the second class (negative/fn_param_second_class*.onsa). The `inout` and
+// the `move` parameter of a function type are first class (`let g = f`, returned, in a field, in an array and in a variant),
+// the function item and the anonymous function without a capture go anywhere (to a `move` parameter, a type parameter, a method of a
+// builtin type, a `let`), a function value in a variable is first class, and a type that only contains a function type
+// is not a function type (a tuple, a struct, an `Option`, an array of function values is copied and bound by a `let`, its function
+// values are called, and its field is returned and stored). A match on such a value is not a match on a second-class head
+// (negative/fn_param_second_class_match.onsa). The `move` marks of the call are not written (a function item is not a place, `move inc` is
+// an E0711; the function value in a variable takes no mark, S-609).
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+type Unary = fn(I32) -> I32
+
+pub enum Slot {
+  Of(fn(I32) -> I32),
+  Empty,
+}
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn keep(move f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+fn call(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+// ------------------------------------------------------- an inout parameter and a move parameter
+
+fn inout_parameter_in_a_let(inout f: fn(I32) -> I32) -> I32 {
+  let g = f
+  g.(1)
+}
+
+fn inout_parameter_returned(inout f: fn(I32) -> I32) -> fn(I32) -> I32 {
+  f
+}
+
+fn inout_parameter_in_a_field(inout f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+fn inout_parameter_in_an_array(inout f: fn(I32) -> I32) -> [fn(I32) -> I32; 2] {
+  [f, inc]
+}
+
+fn inout_parameter_to_a_type_parameter(inout f: fn(I32) -> I32) -> I32 {
+  id(f).(1)
+}
+
+fn inout_parameter_assigned(inout f: fn(I32) -> I32) {
+  f = inc
+}
+
+fn move_parameter_in_a_let(move f: fn(I32) -> I32) -> I32 {
+  let g = f
+  g.(1)
+}
+
+fn move_parameter_returned(move f: fn(I32) -> I32) -> fn(I32) -> I32 {
+  f
+}
+
+fn move_parameter_in_a_field(move f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+fn move_parameter_in_a_variant(move f: fn(I32) -> I32) -> Slot {
+  Slot.Of(f)
+}
+
+fn move_parameter_in_a_tuple(move f: fn(I32) -> I32) -> (fn(I32) -> I32, I32) {
+  (f, 1)
+}
+
+fn move_parameter_assigned(move f: fn(I32) -> I32) -> I32 {
+  var g: fn(I32) -> I32 = inc
+  g = f
+  g.(1)
+}
+
+fn move_parameter_to_a_type_parameter(move f: fn(I32) -> I32) -> I32 {
+  id(f).(1)
+}
+
+fn move_parameter_to_a_move_parameter(move f: fn(I32) -> I32) -> Op {
+  keep(f)
+}
+
+fn move_parameter_to_a_default_parameter(move f: fn(I32) -> I32) -> I32 {
+  call(f, 1)
+}
+
+fn move_parameter_as_a_match_head(move f: fn(I32) -> I32) -> I32 {
+  match f {
+    g => g.(1),
+  }
+}
+
+fn move_parameter_of_an_alias(move f: Unary) -> Unary {
+  f
+}
+
+// ----------------------------------------------- a function item and a closure without a capture
+
+fn item_to_a_move_parameter() -> I32 {
+  let o = keep(inc)
+  o.f.(1)
+}
+
+fn closure_without_a_capture_to_a_move_parameter() -> I32 {
+  let o = keep(fn(x: I32) -> I32 { x * 2 })
+  o.f.(1)
+}
+
+fn item_to_a_type_parameter() -> I32 {
+  id(inc).(1)
+}
+
+fn closure_without_a_capture_to_a_type_parameter() -> I32 {
+  id(fn(x: I32) -> I32 { x * 2 }).(1)
+}
+
+fn items_to_a_builtin_method() -> I32 {
+  var fs = [inc, inc]
+  fs.fill!(inc)
+  fs.fill!(fn(x: I32) -> I32 { x * 2 })
+  fs[0].(1)
+}
+
+fn item_in_the_tail_of_an_if(c: Bool) -> Op {
+  keep(if c {
+    inc
+  } else {
+    fn(x: I32) -> I32 { x * 3 }
+  })
+}
+
+fn function_value_variable_stored(f: Unary) -> I32 {
+  let g  = inc
+  let o  = Op { f: g }
+  let h  = id(g)
+  let fs = [g, h]
+  o.f.(1) + fs[0].(1) + call(g, 1) + keep(g).f.(1) + f.(1)
+}
+
+fn function_value_variable_returned() -> fn(I32) -> I32 {
+  let g = fn(x: I32) -> I32 { x * 4 }
+  g
+}
+
+fn function_value_variable_matched() -> I32 {
+  let g = inc
+  match g {
+    h => h.(1),
+  }
+}
+
+// --------------------------------------------- a type that contains a function type
+
+fn tuple_parameter_in_a_let(p: (fn(I32) -> I32, I32)) -> I32 {
+  let q = p
+  q.0.(q.1)
+}
+
+fn tuple_parameter_returned(p: (fn(I32) -> I32, I32)) -> (fn(I32) -> I32, I32) {
+  p
+}
+
+fn tuple_parameter_destructured(p: (fn(I32) -> I32, I32)) -> I32 {
+  let (g, n) = p
+  g.(n)
+}
+
+fn struct_parameter_in_a_let(o: Op) -> I32 {
+  let p = o
+  p.f.(1)
+}
+
+fn struct_parameter_returned(o: Op) -> Op {
+  o
+}
+
+fn field_of_a_parameter_returned(o: Op) -> fn(I32) -> I32 {
+  o.f
+}
+
+fn field_of_a_parameter_in_a_let(o: Op) -> I32 {
+  let g = o.f
+  g.(1)
+}
+
+fn field_of_a_parameter_stored(o: Op) -> Op {
+  Op { f: o.f }
+}
+
+fn field_of_a_parameter_to_a_type_parameter(o: Op) -> I32 {
+  id(o.f).(1)
+}
+
+fn element_of_a_parameter_returned(fs: [fn(I32) -> I32; 2]) -> fn(I32) -> I32 {
+  fs[0]
+}
+
+fn array_parameter_in_a_let(fs: [fn(I32) -> I32; 2]) -> I32 {
+  let gs = fs
+  gs[1].(1)
+}
+
+fn option_parameter_in_a_let(o: Option[fn(I32) -> I32]) -> Option[fn(I32) -> I32] {
+  let p = o
+  p
+}
+
+fn variant_parameter_matched(s: Slot) -> I32 {
+  match s {
+    Slot.Of(g) => g.(1),
+    Slot.Empty => 0,
+  }
+}
+
+fn call_result_is_first_class(f: fn(I32) -> fn(I32) -> I32) -> fn(I32) -> I32 {
+  let g = f.(1)
+  g
+}
+
+fn call_result_returned(f: fn(I32) -> fn(I32) -> I32) -> fn(I32) -> I32 {
+  f.(1)
+}

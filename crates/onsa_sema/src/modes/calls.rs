@@ -146,7 +146,8 @@ impl Walker<'_> {
             // An element, as of a literal (§5.2, S-793): a Dup value's `move` is E0703 (S-795).
             (Takes::Element, _) => self.consume(r, e, Pos::Value, mark),
             (Takes::Param(m, ty), _) => {
-                if a.mode != m {
+                // S-809: a mark on a second-class function value there is its E0710 only (removed, it stays: §18.1).
+                if a.mode != m && !(m == Mode::Borrow && self.marked_tail(e, self.borrowed_at(ty))) {
                     self.mismatch(a, m);
                 }
                 match m {
@@ -191,13 +192,14 @@ impl Walker<'_> {
     /// its value `t` (a `move` one, an element): with the candidate that
     /// removes it when the value is then copied or new (§5.2), not when it
     /// is an Affine place (moved with `move` or passed by another mode: no
-    /// one fix).
+    /// one fix) or second-class (R-337: removed, its E0710 stays, §18.1).
     fn by_value(&mut self, a: &Arg, t: Takes) {
         let at = self.ast.expr(a.expr).span;
         let x = self.ast.without_parens(a.expr);
         let ty = self.info.expr_types.get(&x).copied();
-        let dup = place_of(self.ast, self.names, x).is_none()
-            || ty.is_some_and(|t| matches!(self.kind_of(t), Some(Kind::Copy | Kind::Shared)));
+        let dup = (place_of(self.ast, self.names, x).is_none()
+            || ty.is_some_and(|t| matches!(self.kind_of(t), Some(Kind::Copy | Kind::Shared))))
+            && self.tail_class(x).is_none();
         let message = match t {
             Takes::Element => "a constructor takes its elements by value, not `inout` (§5.2)",
             _ => "this parameter is `move`: it takes the value, not `inout` (§5.2)",

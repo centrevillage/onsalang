@@ -1,0 +1,3 @@
+[package]
+name = "fn_param_pkg_ok"
+edition = "2026"

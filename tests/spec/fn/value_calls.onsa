@@ -231,7 +231,7 @@ fn in_a_literal(f: fn(I32) -> I32, x: I32) -> (I32, [I32; 2]) {
   (f.(x), [f.(x), f.(x + 1)])
 }
 
-fn in_a_struct_literal(f: fn(F32) -> F32, x: F32) -> Shaper {
+fn in_a_struct_literal(move f: fn(F32) -> F32, x: F32) -> Shaper {
   Shaper { gain: f.(x), curve: f }
 }
 

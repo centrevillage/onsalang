@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 0
+
+// R-337, S-792 (§5.2: "構築子 … の要素は … 値で受ける。`inout` の印は E0703 である"; the parameter that is a `move` parameter of a
+// function type takes the value, not `inout`): the mark `inout` on the value that a `move` parameter or a constructor takes is an
+// E0703. When the operand is second class (the default-mode parameter of a function type, an anonymous function that captures),
+// the candidate that removes the `inout` would leave the E0710 of the same function (§18.1: "この約束を満たす候補を作れなければ、候補を出さない"), so
+// the E0703 has no candidate (`fixes = 0`) and the file has no other error. One error per function (§18.1).
+
+use std.array
+
+pub struct Op {
+  f: fn(I32) -> I32,
+}
+
+pub enum Slot {
+  Of(fn(I32) -> I32),
+  Empty,
+}
+
+impl Op {
+  pub fn make(move f: fn(I32) -> I32) -> Op {
+    Op { f: f }
+  }
+}
+
+pub fn keep(move f: fn(I32) -> I32) -> Op {
+  Op { f: f }
+}
+
+pub fn inout_to_a_move_parameter(f: fn(I32) -> I32) -> I32 {
+  keep(inout f).f.(1) //~ E0703
+}
+
+pub fn inout_to_a_constructor(f: fn(I32) -> I32) -> Option[fn(I32) -> I32] {
+  Some(inout f) //~ E0703
+}
+
+pub fn inout_to_a_user_variant(f: fn(I32) -> I32) -> Slot {
+  Slot.Of(inout f) //~ E0703
+}
+
+pub fn inout_to_an_associated_function(f: fn(I32) -> I32) -> Op {
+  Op.make(inout f) //~ E0703
+}
+
+pub fn inout_on_a_closure_that_captures(k: I32) -> I32 {
+  keep(inout fn(x: I32) -> I32 { x + k }).f.(1) //~ E0703
+}

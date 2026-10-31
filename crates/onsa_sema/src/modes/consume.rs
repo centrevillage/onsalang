@@ -4,6 +4,7 @@
 
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, PatId};
+use onsa_syntax::tails::Tail;
 
 use super::check::Walker;
 use super::flow::Run;
@@ -11,13 +12,16 @@ use super::place::{Place, Proj, place_of};
 use super::walk::Pos;
 use crate::Kind;
 use crate::binding::Bind;
-use crate::body::{MOVE_NEEDS_A_PLACE, view_base};
+use crate::body::{LocalId, MOVE_NEEDS_A_PLACE, Target, view_base};
 use crate::sig::second_class;
 use crate::ty::{BuiltinTy, Ty, TyId};
 
 /// S-784, S-785: at `?` and a `move self` receiver, how to read the value
 /// instead.
 const EXTRACT: &str = "`?` and a `move self` receiver consume their operand (§5.2, §9.1): read it with `match` instead, or own it (a `move` parameter)";
+
+/// S-190: what keeps a function value instead.
+const KEEP_FN: &str = "to keep a function value, declare the parameter `move f: fn(...)`; it then takes function values with no captures (§5.2)";
 
 /// A second-class value (memo 1.2, §5.3), by why it is: a borrow row binds
 /// a view only (§5.4).
@@ -27,6 +31,8 @@ pub(super) enum SecondClass {
     View,
     /// An anonymous function that captures.
     Closure,
+    /// A function-type parameter of the default mode (S-190).
+    FnParam,
 }
 
 impl Walker<'_> {
@@ -44,6 +50,9 @@ impl Walker<'_> {
         }
         let Some(place) = place_of(self.ast, self.names, x) else {
             let Some(m) = mark else { return self.expr(r, x, pos) };
+            if self.marked_tail(x, pos) {
+                return self.expr(r, x, pos);
+            }
             self.needs_a_place(x, m, pos);
             return self.expr(r, x, Pos::Read);
         };
@@ -115,6 +124,9 @@ impl Walker<'_> {
         if pos.consumes() {
             return self.consume(r, e, pos, Some(span.start));
         }
+        if self.marked_tail(e, pos) {
+            return self.expr(r, e, pos);
+        }
         if place_of(self.ast, self.names, e).is_none() {
             self.needs_a_place(e, span.start, pos);
         } else if pos != Pos::Unknown {
@@ -128,14 +140,26 @@ impl Walker<'_> {
 
     /// The one predicate of the second-class values (memo 2.6; the head is
     /// the types stage's, D-15): a `Span` or an array of them, and an
-    /// anonymous function that captures. W4-11 adds the function parameters
-    /// of the default mode.
+    /// anonymous function that captures, a function-type parameter of the
+    /// default mode.
     pub(super) fn second_class(&self, e: ExprId) -> Option<SecondClass> {
         let x = self.ast.without_parens(e);
         if let ExprKind::Closure { .. } = self.ast.expr(x).kind {
             return self.info.captures.get(&x).is_some_and(|c| !c.is_empty()).then_some(SecondClass::Closure);
         }
-        self.class_of(*self.info.expr_types.get(&x)?)
+        let ty = *self.info.expr_types.get(&x)?;
+        match self.info.targets.get(&x) {
+            Some(&Target::Local(l)) => self.class_of_local(l, ty),
+            _ => self.class_of(ty),
+        }
+    }
+
+    /// The second-class values of the local `l` of the type `ty`: a
+    /// function-type parameter of the default mode by its binding
+    /// ([`crate::body::LocalInfo::fn_param`]), else by its type.
+    pub(super) fn class_of_local(&self, l: LocalId, ty: TyId) -> Option<SecondClass> {
+        let fn_param = self.info.locals[l.0 as usize].fn_param(&self.a.types);
+        if fn_param { Some(SecondClass::FnParam) } else { self.class_of(ty) }
     }
 
     /// The second-class values of the type `ty` (an array of them too), by
@@ -151,19 +175,15 @@ impl Walker<'_> {
     }
 
     /// The E0710 of a second-class `e` out of its place at `pos` (memo 2.6,
-    /// §5.3): at a consuming position any, at a borrow row's value any but a
-    /// `Span` (S-217, S-788: the name it binds stays second-class). `true` if
-    /// reported; `e` is then walked as read.
+    /// §5.3): at a consuming position any, at a borrow row's value and at a
+    /// parameter not of a function type (S-809) any but a `Span` (S-217,
+    /// S-788: the name it binds stays second-class). `true` if reported; `e`
+    /// is then walked as read.
     pub(super) fn out_of_place(&mut self, r: &mut Run, e: ExprId, pos: Pos) -> bool {
-        let how = match pos {
-            Pos::Read | Pos::Arg(_) | Pos::Unknown => return false,
-            Pos::Bind | Pos::Own | Pos::Value => "stored",
-            Pos::Return => "returned",
-            Pos::MoveArg | Pos::Extract => "moved",
-        };
+        let Some(how) = pos.out() else { return false };
         let class = match self.second_class(e) {
             None => return false,
-            Some(SecondClass::View) if pos == Pos::Bind => return false,
+            Some(SecondClass::View) if matches!(pos, Pos::Bind | Pos::Kept) => return false,
             Some(class) => class,
         };
         self.report(self.second_class_error(class, how, self.ast.expr(e).span));
@@ -171,16 +191,39 @@ impl Walker<'_> {
         true
     }
 
+    /// The second-class value in the tails of `e` (§5.2), through a `move`
+    /// on one: the first (they are of one type).
+    pub(super) fn tail_class(&self, e: ExprId) -> Option<SecondClass> {
+        let mut tails = Vec::new();
+        self.ast.tails(e, &mut tails);
+        tails.into_iter().find_map(|t| match t {
+            Tail::Value(v) => match self.ast.expr(v).kind {
+                ExprKind::Move(x) => self.second_class(x),
+                _ => self.second_class(v),
+            },
+            Tail::Exits | Tail::Unit(_) => None,
+        })
+    }
+
+    /// S-809's B1 through the tails (§18.1): a mark on `e` at `pos` is no
+    /// error of its own when a tail is a function value that is E0710 there,
+    /// which removing the mark would leave; `e` is walked at `pos`.
+    pub(super) fn marked_tail(&self, e: ExprId, pos: Pos) -> bool {
+        pos.out().is_some() && matches!(self.tail_class(e), Some(SecondClass::FnParam | SecondClass::Closure))
+    }
+
     /// The E0710 of the second-class value at `at` of `class`, which cannot
-    /// be `how` (stored, returned, moved, captured: §5.3).
+    /// be `how` (stored, returned, moved, captured, passed: §5.3).
     pub(super) fn second_class_error(&self, class: SecondClass, how: &str, at: Span) -> Diagnostic {
         let what = match class {
             SecondClass::View => "a `Span` (or an array of them)",
             SecondClass::Closure => "an anonymous function that captures",
+            SecondClass::FnParam => "a function-type parameter of the default mode (it may capture)",
         };
         let message =
             format!("this value is second-class, {what}: it stands at an argument only and cannot be {how} (§5.3)");
-        Diagnostic::new(Stage::Modes, Code::E0710, at, message)
+        let d = Diagnostic::new(Stage::Modes, Code::E0710, at, message);
+        if class == SecondClass::FnParam { d.with_rule(KEEP_FN) } else { d }
     }
 
     /// S-217: a `for` or `match` head of a borrow row on a place of an

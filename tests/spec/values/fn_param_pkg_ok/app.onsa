@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§5.2", "§5.3", "§15.1"]
+
+// S-190, S-809 (§5.2): what the default-mode parameter of a function type may do, through a module (the other side of
+// negative/fn_param_second_class_pkg/). The parameter is declared with an alias that another module defines; it is called and
+// passed to the default-mode parameter of a function type of the other module (`ops.call`, by its name or by its path), also with the
+// anonymous function that captures. The function item and the anonymous function without a capture go to the `move` parameter and
+// the type parameter of the other module.
+
+use ops
+use ops.{Op, Unary, call, id, inc, keep}
+
+pub fn call_the_parameter(f: Unary, x: I32) -> I32 {
+  f.(x) + f.(1)
+}
+
+pub fn pass_to_an_imported_function(f: Unary, x: I32) -> I32 {
+  call(f, x)
+}
+
+pub fn pass_to_a_qualified_function(f: ops.Unary, x: I32) -> I32 {
+  ops.call(f, x)
+}
+
+pub fn pass_the_tail_of_an_if(f: Unary, c: Bool, x: I32) -> I32 {
+  call(if c {
+    f
+  } else {
+    inc
+  }, x)
+}
+
+pub fn closure_to_an_imported_function(k: I32, x: I32) -> I32 {
+  call(fn(y: I32) -> I32 { y + k }, x)
+}
+
+pub fn closure_to_a_qualified_function(k: I32, x: I32) -> I32 {
+  ops.call(fn(y: I32) -> I32 { y * k }, x)
+}
+
+pub fn item_to_a_move_parameter() -> Op {
+  keep(inc)
+}
+
+pub fn closure_without_a_capture_to_a_move_parameter() -> Op {
+  ops.keep(fn(x: I32) -> I32 { x * 2 })
+}
+
+pub fn item_to_a_type_parameter() -> I32 {
+  id(inc).(1)
+}
+
+pub fn field_of_an_imported_struct(o: Op) -> Unary {
+  o.f
+}

@@ -31,7 +31,7 @@ use crate::infer::{Cause, Infer, LitKind, Mismatch};
 use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes, StructRes};
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::structpat::Written;
-use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId};
+use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId, Types};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 
 pub(crate) mod bounds;
@@ -96,6 +96,15 @@ pub struct LocalInfo {
 impl LocalInfo {
     pub(crate) fn set_state(&mut self, state: Bind) {
         self.state = state;
+    }
+
+    /// A function-type parameter of the default mode (§5.2, S-190), of a
+    /// function or an anonymous function: second-class in its body, as it
+    /// may hold captures (§13.5). By its declared type (an alias resolved);
+    /// not a `T` a function type fills, nor an `inout` or `move` one.
+    pub fn fn_param(&self, types: &Types) -> bool {
+        matches!(self.kind, LocalKind::Param(Mode::Borrow) | LocalKind::ClosureParam(Mode::Borrow))
+            && matches!(types.get(self.ty), Ty::Fn(_))
     }
 }
 

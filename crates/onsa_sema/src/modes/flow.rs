@@ -74,7 +74,7 @@ impl Walker<'_> {
             }
             ExprKind::Match { scrutinee, arms, .. } => {
                 let subject = Head::Match { scrutinee: *scrutinee };
-                let head = self.head_pos(subject, Pos::Arg(Mode::Borrow));
+                let head = self.head_pos(subject, Pos::Bind);
                 if head != Pos::Own {
                     self.view_of_inout(*scrutinee, arms.iter().map(|a| a.pat));
                 }
