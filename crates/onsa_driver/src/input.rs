@@ -125,7 +125,8 @@ impl Loaded {
     }
 
     /// The module of the file passed inside the package (§15.1): `interface`
-    /// and `graph` narrow their results to it. `None`: no file was passed
+    /// and `graph` narrow their results to it, and `test` its tests (§18.2).
+    /// `None`: no file was passed
     /// inside a package. A file that is not a module (under the root's
     /// `tests/`) is an E0200, which stops these commands before they ask.
     pub fn focus_module(&self) -> Option<String> {

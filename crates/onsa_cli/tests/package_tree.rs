@@ -19,7 +19,7 @@
 //!
 //! Not written here: the links and the special files (`package_links.rs`), the choice of the
 //! package from a path (`package_input.rs`), the E0320 for a name that breaks §2.3 and the E0200 of
-//! `tests/` of the root (U2: `tests/spec/negative`), the range of `onsa test` (W4-15).
+//! `tests/` of the root (U2: `tests/spec/negative`), the range of `onsa test` (`test_file_selection.rs`).
 //!
 //! Tests that the implementation does not pass yet carry `#[ignore = "<work>"]` naming the work
 //! that fixes their cause.

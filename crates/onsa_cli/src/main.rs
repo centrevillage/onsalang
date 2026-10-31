@@ -646,7 +646,10 @@ fn graph(svg: bool, flow: &str, paths: &[PathBuf]) -> Outcome {
 /// `onsa test <paths> [--json] [--filter <text>]` (T3-8, §18.2): check, lower,
 /// match `--filter`, run the selected tests. The checks and the E0200 of
 /// lowering stop the run before the filter is matched; a filter that selects
-/// no test is a usage error (exit 2, nothing on the standard output).
+/// no test of the package is a usage error (exit 2, nothing on the standard
+/// output). A file passed inside a package selects the tests of its module
+/// (S-286); the filter is still matched on the whole package (S-311), and
+/// the diagnostics that stop the run are all those of the package.
 fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
     let form = if json { Form::TestJson } else { Form::Text };
     let (loaded, analyzed) = match analyzed(form, paths) {
@@ -657,7 +660,11 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
         Ok(m) => m,
         Err(o) => return o,
     };
-    let opts = onsa_driver::TestOptions { filter };
+    let focus = match onsa_driver::guard(|| loaded.focus_module()) {
+        Ok(focus) => focus,
+        Err(e) => return internal(&loaded.sources, &e),
+    };
+    let opts = onsa_driver::TestOptions { filter, module: focus };
     let report = match onsa_driver::run_tests(&loaded.sources, &module, &opts) {
         Ok(onsa_driver::TestRun::Ran(r)) => r,
         Ok(onsa_driver::TestRun::NoMatch) => {

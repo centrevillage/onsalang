@@ -21,7 +21,7 @@
 //! Not written here: the tree that is gathered (`package_tree.rs`), links and special files
 //! (`package_links.rs`), the names of the files (E0320) and the `tests/` of the root (U2), the form
 //! of the arguments of `graph`, `build` and the others (U4, `command_paths.rs`), `audit`, `play` and `probe` (not in
-//! this version of the CLI), the range of `onsa test` (W4-15), the
+//! this version of the CLI), the range of `onsa test` (`test_file_selection.rs`), the
 //! content of the manifest (W4-02), and `use` (W4-03).
 //!
 //! Tests that the implementation does not pass yet carry `#[ignore = "<work>"]` naming the work

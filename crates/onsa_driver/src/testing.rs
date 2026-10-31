@@ -6,8 +6,10 @@
 //! path and name identify it (S-55, R-68). The order of the steps (§18.2,
 //! S-242): the checks and the E0200 that do not depend on the target come
 //! first, on the whole package (the caller has lowered it), then `--filter`
-//! is matched, then the E0200 of the interpreter that the selected tests
-//! reach (§15.2, W2-13), then the tests run.
+//! is matched on every test of the package, then the tests are narrowed to
+//! the module of a file passed inside the package (§15.1, S-286, S-311),
+//! then the E0200 of the interpreter that the selected tests reach (§15.2,
+//! W2-13), then the tests run.
 
 use onsa_diag::{Diagnostic, SourceMap, Span};
 use serde::Serialize;
@@ -19,6 +21,9 @@ use crate::{InternalError, debug_contract, fill_found, guard_on_stack, reduce};
 pub struct TestOptions {
     /// Run only the tests whose full name text (§11.8) holds this text.
     pub filter: Option<String>,
+    /// Run only the tests of this module (`dsp.voice`), not of the modules
+    /// below it: that of the file passed inside a package (§18.2, S-286).
+    pub module: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -177,7 +182,9 @@ fn message_lines(message: &str) -> impl Iterator<Item = &str> {
 /// What `onsa test` did with a lowered module.
 #[derive(Debug, Clone)]
 pub enum TestRun {
-    /// The tests `--filter` selected (every test without it) ran.
+    /// The selected tests ran: those `--filter` selected (every test without
+    /// it) of the module of [`TestOptions::module`] (of every module without
+    /// it). None of them is a success with nothing run (S-286).
     Ran(TestReport),
     /// `--filter` selected no test: a usage error, exit code 2 (§18.2).
     NoMatch,
@@ -190,12 +197,15 @@ pub enum TestRun {
 /// failures and panics (spec §9.2) fail the test and name the position; a
 /// failure of the interpreter itself is an internal error (S-67, R-137).
 ///
-/// `--filter` is matched first (S-242): a filter that selects no test is
-/// [`TestRun::NoMatch`]; an empty one, as no filter, selects every test, so
-/// a package without tests runs nothing and is not a usage error (S-286).
-/// Then, before any test runs, the forms the interpreter cannot run that the
-/// selected tests reach (spec §15.2: the tests are the entries of the run)
-/// are E0200, all at once ([`onsa_interp::unsupported`]). The interpreter
+/// `--filter` is matched first, on every test of the package (S-242,
+/// S-311): a filter that selects no test is [`TestRun::NoMatch`]; an empty
+/// one, as no filter, selects every test, so a package without tests runs
+/// nothing and is not a usage error (S-286). Then the selected tests are
+/// narrowed to [`TestOptions::module`], which may leave none: nothing runs
+/// and it is no error (S-286, S-311). Then, before any test runs, the forms
+/// the interpreter cannot run that the tests left reach (spec §15.2: the
+/// tests that run are the entries) are E0200, all at once
+/// ([`onsa_interp::unsupported`]). The interpreter
 /// evaluates a `const` only when the run reads it, so no `const` outside
 /// that reach is evaluated. The interpreter runs on the stack of a command
 /// (R-05).
@@ -209,6 +219,10 @@ pub fn run_tests(
         if selected.is_empty() && opts.filter.as_deref().is_some_and(|f| !f.is_empty()) {
             return TestRun::NoMatch;
         }
+        let selected: Vec<_> = match opts.module.as_deref() {
+            Some(m) => selected.into_iter().filter(|(_, mark)| mark.module == m).collect(),
+            None => selected,
+        };
         let roots: Vec<onsa_core::FnId> = selected.iter().map(|&(id, _)| id).collect();
         let unsupported = onsa_interp::unsupported(module, &roots);
         if unsupported.is_empty() {

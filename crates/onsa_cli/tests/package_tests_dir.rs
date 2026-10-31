@@ -17,7 +17,7 @@
 //!   is an ordinary directory.
 //!
 //! Not written here: a `tests/` that has its own `onsa.toml` (a nested package, `package_tree.rs`),
-//! the other modules' naming (`package_naming.rs`), the range of `onsa test` (W4-15).
+//! the other modules' naming (`package_naming.rs`), the range of `onsa test` (`test_file_selection.rs`).
 //!
 //! Every test here runs (W4-14 U2 took the last ignores out).
 
