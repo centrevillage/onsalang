@@ -16,7 +16,7 @@ fn type_as_value() -> F32 { let a = P
 fn value_as_type(x: helper) -> F32 { 1.0 }
 
 // 期待: E0020（値を `x(...)` で呼ぶと型によらず E0020、候補は `x.(1.0)`。§15.1、S-191）。
-// 今: E0401「`F32` is not a function and cannot be called」（W4-12 U1 で名前の段の E0020 になる）。
+// 今: 名前の段の E0020（W4-12 U1 から）で、修正候補は `x.(1.0)`。
 fn call_non_function(x: F32) -> F32 { x(1.0) }
 
 // 期待: E0412（引数の数のコードを型引数にも使う）。

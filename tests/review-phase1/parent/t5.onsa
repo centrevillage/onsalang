@@ -5,28 +5,28 @@
 pub flow lp(x: Sig[F32]) -> Sig[F32] { x }
 
 // 期待: E0821（修正候補なし。note で `array.from_fn` / `[e; N]`）。
-// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_par`（R-139）。W4-12 U3 で E0821 になる。
+// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_par`（R-139）。W4-12 U3 から E0821。
 fn with_par(x: F32) -> F32 {
   let y = par i in 0..<4 { 1.0 }
   x
 }
 
 // 期待: E0821（修正候補なし。note で `lp.init` / `lp.process` を使うか、この関数を flow にする）。
-// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_instance`（S-267、S-815）。W4-12 U3 で E0821 になる。
+// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_instance`（S-267、S-815）。W4-12 U3 から E0821。
 fn with_instance(x: F32) -> F32 {
   let y = lp~(x)
   x
 }
 
 // 期待: E0821（修正候補なし。note で、状態を `inout` 引数で持つ）。
-// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_prev`（`prev~(x)`）。W4-12 U3 で E0821 になる。
+// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_prev`（`prev~(x)`）。W4-12 U3 から E0821。
 fn with_prev(x: F32) -> F32 {
   let y = prev~(x)
   x
 }
 
 // 期待: E0821（`~` の有無によらない）。
-// 移した先: `tests/spec/negative/e0821_plain_flow_call.onsa` の `with_plain_call`（R-269）。W4-12 U3 で E0821 になる。flow の中なら E0811（`~` の挿入）。
+// 移した先: `tests/spec/negative/e0821_plain_flow_call.onsa` の `with_plain_call`（R-269）。W4-12 U3 から E0821。flow の中なら E0811（`~` の挿入）。
 fn with_plain_call(x: F32) -> F32 {
   let y = lp(x)
   x
@@ -46,7 +46,7 @@ pub flow use_g(x: Sig[F32]) -> Sig[F32] {
 }
 
 // 期待: E0821。
-// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_feedback`（`prev~(^z)`）。W4-12 U3 で E0821 になる。flow の中なら、遅延の第 1 引数の外の `^名前` は E0801。
+// 移した先: `tests/spec/negative/e0821_flow_syntax_in_fn.onsa` の `with_feedback`（`prev~(^z)`）。W4-12 U3 から E0821。flow の中なら、遅延の第 1 引数の外の `^名前` は E0801。
 fn with_feedback(x: F32) -> F32 {
   let y = prev~(^z)
   x
