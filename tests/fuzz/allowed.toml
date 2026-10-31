@@ -540,3 +540,10 @@ left = "expected imported name, found `…`"
 input = "tests/fuzz/da925388.onsa"
 reasons = ["R-338"]
 note = "an input with two errors: a blank after the `.` of a `use` path, and the keyword `fn` after it; the candidate of the blank, reported first, leaves the E0002 of the keyword (W4-10 U1's cases moved the mutants)"
+
+[[allowed]]
+class = "fix|E0412|remove the parentheses|E0401"
+left = "expected `…`, found `…`"
+input = "tests/fuzz/20cb57ba.onsa"
+reasons = ["R-344"]
+note = "an input with two errors: the parentheses after the unit variant `None`, and an `Option` in a body that returns `U32`; the candidate of the parentheses leaves the E0401 of the type, which the E0412 hid (the sweep at 195e052, shard 0/2)"
