@@ -526,3 +526,10 @@ left = "expected an expression, found `…`"
 input = "tests/fuzz/8caf1bdb.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a line break before the `[` of a type in a parameter's tuple type (`(n` and `[2]`), and a `]` alone in the body, which the input has before the candidate (W4-07 U4b-2's cases moved the mutants)"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "expected imported name, found `…`"
+input = "tests/fuzz/da925388.onsa"
+reasons = ["R-338"]
+note = "an input with two errors: a blank after the `.` of a `use` path, and the keyword `fn` after it; the candidate of the blank, reported first, leaves the E0002 of the keyword (W4-10 U1's cases moved the mutants)"
