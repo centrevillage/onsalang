@@ -146,7 +146,7 @@ fn a_leading_underscore_is_e0320_with_one_candidate_that_leaves_the_program_clea
         ("const", "const _MAX: U32 = 8\n\npub fn m() -> U32 {\n  _MAX * 2\n}\n"),
         ("alias", "type _Alias = I32\n\npub fn al(x: _Alias) -> _Alias {\n  x\n}\n"),
         ("type_param", "pub fn id1[_T](x: _T) -> _T {\n  x\n}\n"),
-        ("effect_var", "pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} {\n  f(x)\n}\n"),
+        ("effect_var", "pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} {\n  f.(x)\n}\n"),
     ];
     for (tag, source) in sources {
         after_the_candidate(tag, source);
@@ -158,8 +158,8 @@ fn a_leading_underscore_is_e0320_with_one_candidate_that_leaves_the_program_clea
 #[test]
 fn the_candidates_the_spec_names_drop_the_underscore() {
     let fixed =
-        after_the_candidate("spec_e", "pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} {\n  f(x)\n}\n");
-    assert_eq!(fixed, "pub fn ap[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} {\n  f(x)\n}\n");
+        after_the_candidate("spec_e", "pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} {\n  f.(x)\n}\n");
+    assert_eq!(fixed, "pub fn ap[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} {\n  f.(x)\n}\n");
     let fixed = after_the_candidate("spec_x", "pub fn l() -> I32 {\n  let _x = 1\n  _x + 1\n}\n");
     assert_eq!(fixed, "pub fn l() -> I32 {\n  let x = 1\n  x + 1\n}\n");
 }
@@ -182,7 +182,7 @@ fn a_binding_with_a_leading_underscore_is_not_an_e0302() {
 fn a_name_with_an_underscore_at_the_end_is_fine_in_every_shape() {
     let sources: [(&str, &str); 8] = [
         ("self_type", "pub struct Self_ {\n  x: I32,\n}\n"),
-        ("inout_var", "pub fn f[T, inout_](g: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {\n  g(x)\n}\n"),
+        ("inout_var", "pub fn f[T, inout_](g: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {\n  g.(x)\n}\n"),
         ("fn_names", "pub fn match_(type_: I32) -> I32 {\n  let self_ = type_ + 1\n  self_\n}\n"),
         ("field", "pub struct P {\n  x_: I32,\n}\n"),
         ("type_param", "pub fn id1[T_](x: T_) -> T_ {\n  x\n}\n"),

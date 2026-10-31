@@ -6,5 +6,5 @@ pub fn get(h: Hz) -> F32 { h.0 }
 
 pub fn ctor_value() -> Hz {
   let f = Hz
-  f(1.0)
+  f.(1.0)
 }

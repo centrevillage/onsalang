@@ -25,11 +25,11 @@ pub fn alias_some() -> A {
 }
 
 pub fn alias_call(o: A) -> I32 {
-  o()
+  o.()
 }
 
 pub fn alias_call_args(o: A) -> I32 {
-  o(1, 2)
+  o.(1, 2)
 }
 
 pub fn alias_match(x: A) -> I32 {
@@ -53,13 +53,13 @@ pub fn alias_match_pair(x: A) -> I32 {
 
 pub fn alias_in_option(x: Option[A]) -> I32 {
   match x {
-    Some(f) => f(),
+    Some(f) => f.(),
     None => 0,
   }
 }
 
 pub fn alias_real_error(o: A) -> I32 {
-  let r = o()
+  let r = o.()
   let a: I32 = true                                 //~ E0401
   a
 }
@@ -77,11 +77,11 @@ pub fn chain_some() -> B {
 }
 
 pub fn chain_call(o: B) -> I32 {
-  o()
+  o.()
 }
 
 pub fn chain_call_args(o: B) -> I32 {
-  o(1, 2)
+  o.(1, 2)
 }
 
 pub fn chain_match(x: B) -> I32 {
@@ -105,13 +105,13 @@ pub fn chain_match_pair(x: B) -> I32 {
 
 pub fn chain_in_option(x: Option[B]) -> I32 {
   match x {
-    Some(f) => f(),
+    Some(f) => f.(),
     None => 0,
   }
 }
 
 pub fn chain_real_error(o: B) -> I32 {
-  let r = o()
+  let r = o.()
   let a: I32 = true                                 //~ E0401
   a
 }
@@ -129,11 +129,11 @@ pub fn direct_some() -> D {
 }
 
 pub fn direct_call(o: D) -> I32 {
-  o()
+  o.()
 }
 
 pub fn direct_call_args(o: D) -> I32 {
-  o(1, 2)
+  o.(1, 2)
 }
 
 pub fn direct_match(x: D) -> I32 {
@@ -157,13 +157,13 @@ pub fn direct_match_pair(x: D) -> I32 {
 
 pub fn direct_in_option(x: Option[D]) -> I32 {
   match x {
-    Some(f) => f(),
+    Some(f) => f.(),
     None => 0,
   }
 }
 
 pub fn direct_real_error(o: D) -> I32 {
-  let r = o()
+  let r = o.()
   let a: I32 = true                                 //~ E0401
   a
 }

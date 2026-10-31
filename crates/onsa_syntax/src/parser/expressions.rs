@@ -8,7 +8,7 @@ const CARET_RULE: &str = "a prefix `^` is the mark of a name, written right befo
 
 /// The rule of a mark `!` or `~` after what names no item, method or flow
 /// (`t.0!(x)`, `mk2().0~(x)`, §2.6, S-606).
-const MARK_RULE: &str = "the marks `!` and `~` are written right after the name of an item, a method or a flow, before its `(` (`buf.push!(x)`, `saw~(f0)`); a tuple index is no name, and a value is called with `.(` (§2.6, §6.1)";
+pub(super) const MARK_RULE: &str = "the marks `!` and `~` are written right after the name of an item, a method or a flow, before its `(` (`buf.push!(x)`, `saw~(f0)`); a tuple index is no name, and a value is called with `.(` (§2.6, §6.1)";
 
 /// The rule of a `::[` after what names no path (`(e)::[T](x)`,
 /// `t.0::[T](x)`, §4.5, S-606).
@@ -217,12 +217,16 @@ impl<'a> Parser<'a> {
                     let mark = self.peek_index();
                     let by_name = callee.last().takes_a_mark();
                     // After another value, a `!(` that touches it is not read
-                    // on (W4-12): in a list, the missing `,` before `!(x)`.
+                    // on (S-631): in a list, the missing `,` before `!(x)`;
+                    // else the rule of the marks (R-339).
                     if !by_name && t.kind == TokenKind::Bang && expr.kind != NodeKind::TupleIndexExpr {
+                        self.value_bang = Some(mark);
                         break;
                     }
-                    // SPEC-GAP(S-631): in a list, `t.0!(x)` has no candidate,
-                    // and `t.0 !(x)` and a line break before `!(` the `,`.
+                    // In a list, `t.0!(x)` has no candidate (§2.6), and
+                    // `t.0 !(x)` and a line break before `!(` the `,` (§2.5,
+                    // S-631: the `,` after a `!(` that touches would let
+                    // `two(t.0!(x))` pass as `two(t.0, !(x))`).
                     if !by_name && self.gap(mark) == Gap::None {
                         return Err(self.fail_noting(
                             Want::Other,

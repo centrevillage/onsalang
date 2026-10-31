@@ -180,17 +180,18 @@ fn const_generics_and_arrays() {
 
 #[test]
 fn closures_take_types_from_the_expected_function_type() {
-    let a =
-        ok("pub fn apply(f: fn(U32) -> U32) -> U32 { f(1) }\npub fn g(k: U32) -> U32 {\n  apply(fn(i) { i + k })\n}\n");
+    let a = ok(
+        "pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }\npub fn g(k: U32) -> U32 {\n  apply(fn(i) { i + k })\n}\n",
+    );
     let body = &a.bodies[&def(&a, "g")];
     let (closure, captures) = body.captures.iter().next().unwrap();
     assert_eq!(captures.len(), 1);
     assert_eq!(body.locals[captures[0].0 as usize].name, "k");
     assert!(matches!(a.types.get(body.expr_types[closure]), Ty::Fn(_)));
     assert_eq!(codes("pub fn g() -> U32 {\n  let _ = fn(i) { i }\n  1\n}\n"), vec![Code::E0420]);
-    ok("pub fn g() -> U32 {\n  let f = fn(i: U32) -> U32 { i }\n  f(1)\n}\n");
+    ok("pub fn g() -> U32 {\n  let f = fn(i: U32) -> U32 { i }\n  f.(1)\n}\n");
     assert_eq!(
-        codes("pub fn apply(f: fn(U32) -> U32) -> U32 { f(1) }\npub fn g() -> U32 { apply(fn(i, j) { i }) }\n"),
+        codes("pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }\npub fn g() -> U32 { apply(fn(i, j) { i }) }\n"),
         vec![Code::E0412]
     );
 }

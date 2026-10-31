@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.1", "§18.1"]
+// fixes = 0
+
+// A unit variant called with something in the parentheses (§4.4, S-514): an argument (`None(1)`,
+// `E.A(1)`) or a comment between the parentheses is a wrong number of elements, E0412, and no candidate
+// is shown (the candidate that takes the parentheses away would take the comment, or the argument,
+// with it). The note is not compared here. The other way to write it, `None.()` and `E.A.()`, calls a
+// value through `.(` whose type is no function, which is the E0401 of the type stage and not a
+// variant error (§15.1). `fixes = 0` checks that no error of the file has a candidate. See
+// tests/spec/fixes/e0412_unit_variant_call.onsa for the empty parentheses. One error per function
+// (P-01).
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub fn a_comment_between_the_parentheses() -> E {
+  E.A(                                              //~ E0412
+    // c
+  )
+}
+
+pub fn an_argument_of_the_prelude_variant() -> Option[I32] {
+  None(1)                                           //~ E0412
+}
+
+pub fn an_argument_of_a_variant() -> E {
+  E.A(1)                                            //~ E0412
+}
+
+pub fn two_arguments() -> E {
+  E.A(1, 2)                                         //~ E0412
+}
+
+pub fn the_prelude_variant_through_a_dot() -> Option[I32] {
+  None.()                                           //~ E0401
+}
+
+pub fn a_variant_through_a_dot() -> E {
+  E.A.()                                            //~ E0401
+}
+
+pub fn a_variant_through_a_dot_with_an_argument() -> E {
+  E.A.(1)                                           //~ E0401
+}

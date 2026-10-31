@@ -984,8 +984,8 @@ pub static ROWS: &[Row] = &[
         rule: "a clock is written after the type of an input or output of a flow (`x: F32 at sample`) or on an expression (`p at sample`); the type of a value is a plain type everywhere (§11.3)",
         detect: Detect::Tree,
     },
-    // Found by the names stage at a constant called (W4-04 U8a, §15.1); the
-    // values of a body (a local, a parameter) from W4-12.
+    // Found by the names stage at a value called (§15.1): a constant (W4-04
+    // U8a), a local, a parameter or a const parameter (W4-12).
     Row {
         id: RowId::ValueCall,
         name: "value_call",
@@ -993,6 +993,26 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a value is called as `f.(x)`; `f(x)` calls an item declared with `fn`",
         rule: "a value is called with `.(`, whatever its type (`f.(x)`); `f(x)` is the call of an item declared with `fn`, and a constant is read without `(…)` (§6.1, §15.1)",
+        detect: Detect::Reported,
+    },
+    // Found by the names stage at an item called with `.(` (§6.1, W4-12).
+    Row {
+        id: RowId::ItemDotCall,
+        name: "item_dot_call",
+        phase: Phase::Names,
+        code: Code::E0020,
+        message: "an item is called as `f.(x)`; `.(` calls a function value",
+        rule: "a function declared with `fn`, an associated function, a function of a namespace and a variant with elements are called as `f(x)`; `.(` is the call of a function value (§6.1)",
+        detect: Detect::Reported,
+    },
+    // Found by the names stage at a value with `[…]` called (§6.1, W4-12).
+    Row {
+        id: RowId::IndexedValueCall,
+        name: "indexed_value_call",
+        phase: Phase::Names,
+        code: Code::E0020,
+        message: "an element of a value is called as `ops[i].(x)`; `f(x)` calls an item declared with `fn`",
+        rule: "an element of a value is called with `.(`, whatever its type (`ops[i].(x)`); `f(x)` is the call of an item declared with `fn` (§6.1, §15.1)",
         detect: Detect::Reported,
     },
     // Found by the names stage at a name of `RATE_TYPES` not found (S-120).

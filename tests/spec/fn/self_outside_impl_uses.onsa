@@ -46,7 +46,7 @@ pub fn called_in_arguments() -> I32 {
 
 pub fn as_value() -> I32 {
   let h = f
-  h(2)
+  h.(2)
 }
 
 test "a call in a test" {

@@ -1023,13 +1023,6 @@ note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。fo
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_call_forms_names.onsa"
-reasons = ["S-191"]
-until = "W4-12"
-note = "名前の経路の呼び出しの E0020（名前の段）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_call_forms_type.onsa"
 reasons = ["S-191"]
 until = "W5-02"
@@ -1422,27 +1415,6 @@ note = "値として使う関数を経由して届く使用。関数値の呼び
 
 [[pending]]
 kind = "foreign-form"
-target = "value_call"
-reasons = ["S-191"]
-until = "W4-12"
-note = "名前の経路の呼び出し（名前の段）"
-
-[[pending]]
-kind = "foreign-form"
-target = "item_dot_call"
-reasons = ["S-191"]
-until = "W4-12"
-note = "名前の経路の呼び出し（名前の段）"
-
-[[pending]]
-kind = "foreign-form"
-target = "indexed_value_call"
-reasons = ["S-191"]
-until = "W4-12"
-note = "名前の経路の呼び出し（名前の段）"
-
-[[pending]]
-kind = "foreign-form"
 target = "field_call"
 reasons = ["S-191"]
 until = "W5-02"
@@ -1783,8 +1755,8 @@ note = "`Al.N * 2`・計算した定数・`Word.BITS` を長さに書く形。�
 kind = "test-case"
 target = "tests/spec/self/const_pattern.onsa"
 reasons = ["S-446", "S-595", "S-185"]
-until = "W4-12"
-note = "定数のパターン `Self.N =>`（S-595 の表の 9 行）。名前の段は W4-04 U6 で解決し、定数のパターンの型付けは W4-12"
+until = "W5-09"
+note = "定数のパターン `Self.N =>`（S-595 の表の 9 行）。名前の段は W4-04 U6 で解決し、定数のパターンの型付けは W5-09"
 
 [[pending]]
 kind = "test-case"

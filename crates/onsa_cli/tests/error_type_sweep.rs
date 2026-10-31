@@ -270,9 +270,9 @@ const BODIES: &[(&str, &str, Shape)] = &[
     ("idx", "let _ = x[0]", Plain),
     ("idx_y", "let _ = x[y]", Plain),
     ("try", "let _ = x?", Opt),
-    ("call", "let _ = x(1)", Plain),
+    ("call", "let _ = x.(1)", Plain),
     ("call_dot", "let _ = x.(1, 2)", Plain),
-    ("call_inout_arg", "let _ = x(inout y)", Plain),
+    ("call_inout_arg", "let _ = x.(inout y)", Plain),
     // patterns of a `let`
     ("let_tuple", "let (_, _) = x", Plain),
     ("let_tuple3", "let (_, _, _) = x", Plain),

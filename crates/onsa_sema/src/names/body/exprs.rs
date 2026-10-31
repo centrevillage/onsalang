@@ -7,16 +7,13 @@ use std::collections::HashMap;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
-    Ast, Block, CallKind, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind,
-    StrLit, StrSeg, TypeId, TypeKind,
+    Ast, Block, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind, StrLit,
+    StrSeg, TypeId, TypeKind,
 };
 
 use super::kinds::Want;
 use super::paths::Place;
 use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Walker};
-use crate::def::DefKind;
-use crate::flow_names::FlowBuiltin;
-use crate::resolve::Entity;
 use crate::sig::Pos;
 
 /// The choices open while a pattern is walked (§7): the names bound by the
@@ -37,39 +34,7 @@ impl Walker<'_> {
         match &ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => self.interp(e, s),
             ExprKind::Path(_) | ExprKind::Field { .. } => self.name_at(e, Place::Value),
-            ExprKind::Call { callee, kind, args } => {
-                let place = match kind {
-                    CallKind::Value { .. } => Place::Value,
-                    CallKind::Flow => Place::Instance,
-                    _ => Place::Callee(e),
-                };
-                match &ast.expr(*callee).kind {
-                    // `p.m[I32](1)`: a method's type arguments or an index
-                    // of a field, which the types stage tells apart (§4.5).
-                    ExprKind::Index { base, index }
-                        if place != Place::Value && matches!(ast.expr(*base).kind, ExprKind::Field { .. }) =>
-                    {
-                        self.expr(*base)?;
-                        self.name_at(*index, Place::TypeOrValue)?
-                    }
-                    _ => self.name_at(*callee, place)?,
-                }
-                if let (CallKind::Flow, Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. })) =
-                    (kind, self.out.paths.get(callee))
-                    && matches!(self.a.def(d).kind, DefKind::Flow(_))
-                {
-                    self.out.instances.push((d, ast.expr(*callee).span));
-                }
-                // The constant of a delay (`delay~(x, N)`, §11.4).
-                let constant = match self.out.paths.get(callee) {
-                    Some(PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => d.const_index(),
-                    _ => None,
-                };
-                (0..).zip(args).try_for_each(|(k, a)| match Some(k) == constant {
-                    true => self.const_expr(a.expr),
-                    false => self.expr(a.expr),
-                })
-            }
+            ExprKind::Call { callee, kind, args } => self.call(e, *callee, *kind, args),
             ExprKind::Repeat { elem, len } => {
                 self.expr(*elem)?;
                 self.const_expr(*len)
@@ -134,7 +99,7 @@ impl Walker<'_> {
     /// A constant expression (§4.5: the length of `[x; n]`, a bound of
     /// `par`, the constant of a delay), walked as any expression; a name in
     /// it has no candidate that would leave it no constant (§18.1, S-236).
-    fn const_expr(&mut self, e: ExprId) -> W {
+    pub(super) fn const_expr(&mut self, e: ExprId) -> W {
         let outer = std::mem::replace(&mut self.in_const, true);
         let r = self.expr(e);
         self.in_const = outer;

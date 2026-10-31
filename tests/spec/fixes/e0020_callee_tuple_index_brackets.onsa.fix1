@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a call whose callee is a tuple index followed by `[...]` (§6.1, S-630): `t.0` is no name
+// (§2.3), so it cannot be an item, and the `[...]` after it is an index, never the type arguments of an
+// item. So the callee is a value whatever stands before the tuple index, the syntax alone decides (as
+// for `t.0(x)`, e0020_callee_tuple_index.onsa), and the one candidate is `t.0[1].(x)`. The `[...]` may
+// repeat (`t.0[1][0](x)`). A callee that ends with a name is another case (`t.f[1](x)` is decided by
+// the type stage, §6.2). One error per function (P-01).
+
+pub struct Rig {
+  t: ([fn(I32) -> I32; 2], I32),
+}
+
+pub struct Outer {
+  r: Rig,
+}
+
+pub fn after_a_name(t: ([fn(I32) -> I32; 2], I32), x: I32) -> I32 {
+  t.0[1].(x)                                         //~ E0020
+}
+
+pub fn after_a_field(s: Rig, x: I32) -> I32 {
+  s.t.0[1].(x)                                       //~ E0020
+}
+
+pub fn after_two_fields(o: Outer, x: I32) -> I32 {
+  o.r.t.0[1].(x)                                     //~ E0020
+}
+
+pub fn after_two_indexes(t: ([[fn(I32) -> I32; 2]; 2], I32), x: I32) -> I32 {
+  t.0[1][0].(x)                                      //~ E0020
+}
+
+pub fn after_two_tuple_indexes(t: (([fn(I32) -> I32; 2], I32), I32), x: I32) -> I32 {
+  t.0.0[1].(x)                                       //~ E0020
+}
+
+pub fn with_an_expression_as_the_index(t: ([fn(I32) -> I32; 2], I32), i: U32, x: I32) -> I32 {
+  t.0[i].(x)                                         //~ E0020
+}
+
+pub fn with_no_argument(t: ([fn() -> I32; 2], I32)) -> I32 {
+  t.0[1].()                                          //~ E0020
+}
+
+pub fn as_an_operand(t: ([fn(I32) -> I32; 2], I32), x: I32) -> I32 {
+  1 + t.0[1].(x) * 2                                 //~ E0020
+}
+
+pub fn in_an_argument(t: ([fn(I32) -> I32; 2], I32), x: I32) -> I32 {
+  max(t.0[1].(x), 1)                                 //~ E0020
+}
+
+pub fn in_a_closure(t: ([fn(I32) -> I32; 2], I32), x: I32) -> I32 {
+  let g = fn(u: ([fn(I32) -> I32; 2], I32), y: I32) -> I32 { u.0[1].(y) }   //~ E0020
+  g.(t, x)
+}
+
+pub fn in_a_branch(t: ([fn(I32) -> I32; 2], I32), c: Bool, x: I32) -> I32 {
+  if c {
+    t.0[1].(x)                                       //~ E0020
+  } else {
+    x
+  }
+}
+
+pub fn max(a: I32, b: I32) -> I32 {
+  if a > b { a } else { b }
+}
+
+pub fn fine(t: ([fn(I32) -> I32; 2], I32), x: I32) -> I32 {
+  t.0[1].(x) + t.0[0].(x)
+}

@@ -217,7 +217,7 @@ fn a_closure_reads_its_effect_row_as_a_signature_does() {
     assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
     assert_eq!(lines_of(&doc), vec![3, 8], "{doc}");
     let main = "pub fn apply[e](f: fn() -> I32 uses {e}) -> I32 uses {e} {\n  \
-                let g = fn(h: fn() -> I32 uses {e}) -> I32 uses {e} { h() }\n  g(f)\n}\n";
+                let g = fn(h: fn() -> I32 uses {e}) -> I32 uses {e} { h.() }\n  g.(f)\n}\n";
     let d = with_main("closure_effect_var", main);
     let (out, doc) = check_json(d.root(), &["."]);
     assert_eq!(out.code, 0, "the row of the closure reads `e` as an effect variable: {doc}");
@@ -390,14 +390,14 @@ fn the_error_type_of_a_failed_name_has_no_use_that_is_checked_against_it() {
         ("none", "pub fn u() -> {X} {\n  None\n}\n", false),
         ("empty", "pub fn u() -> {X} {\n  []\n}\n", false),
         ("some", "pub fn u() -> {X} {\n  Some(1)\n}\n", false),
-        ("call", "pub fn u(o: {X}) -> I32 {\n  o()\n}\n", false),
-        ("call_args", "pub fn u(o: {X}) -> I32 {\n  o(1, 2)\n}\n", false),
+        ("call", "pub fn u(o: {X}) -> I32 {\n  o.()\n}\n", false),
+        ("call_args", "pub fn u(o: {X}) -> I32 {\n  o.(1, 2)\n}\n", false),
         ("match", "pub fn u(x: {X}) -> I32 {\n  match x {\n    Some(v) => v,\n    None => 0,\n  }\n}\n", false),
         ("match_one_arm", "pub fn u(x: {X}) -> I32 {\n  match x {\n    Some(v) => v,\n  }\n}\n", false),
         ("match_tuple", "pub fn u(x: {X}) -> I32 {\n  match x {\n    (p, _) => p,\n  }\n}\n", false),
         (
             "in_option",
-            "pub fn u(x: Option[{X}]) -> I32 {\n  match x {\n    Some(f) => f(),\n    None => 0,\n  }\n}\n",
+            "pub fn u(x: Option[{X}]) -> I32 {\n  match x {\n    Some(f) => f.(),\n    None => 0,\n  }\n}\n",
             false,
         ),
         ("literal", "pub fn u() -> I32 {\n  let _ = {X} { a: 1 }\n  1\n}\n", true),

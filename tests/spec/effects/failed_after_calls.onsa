@@ -41,7 +41,7 @@ pub fn calls_with_both() -> I32 uses {Gone, Alloc} {
   a
 }
 
-pub fn calls_a_function_value(g: fn() -> I32 uses {Alloc, Gone}) -> I32 { g() }   //~ E0601
+pub fn calls_a_function_value(g: fn() -> I32 uses {Alloc, Gone}) -> I32 { g.() }   //~ E0601
 
 pub rt fn row_of_an_rt_function() -> I32 uses {Alloc, Gone} {   //~ E0902
   1

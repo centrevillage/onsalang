@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§2.5", "§2.6", "§18.1"]
+// fixes = 1
+
+// E0002 for a `!(` that stands after a tuple index with a space in between, inside a list of elements
+// (§2.5, §2.6, S-631): the space makes it no mark of a call (a mark is written right
+// after the name, §2.5), so it is the next element of the list, which starts with a prefix `!`. The
+// `,` between the two elements is missing, E0002, and the one candidate inserts it (`two(t.0, !(x), 1)`).
+// The same without the space, `two(t.0!(x), 1)`, is a mark after a tuple index, E0002 with no candidate
+// (tests/spec/negative/callee_tuple_index_marks.onsa). The candidate needs no check of the later stages
+// (the list it makes has a wrong number of arguments, a later stage). One error per function (P-01).
+
+pub struct Pair {
+  t: (fn(I32) -> I32, I32),
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn mk2() -> (fn(I32) -> I32, I32) {
+  (two_to_one, 1)
+}
+
+pub fn two_to_one(x: I32) -> I32 {
+  x
+}
+
+pub fn after_a_name(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  two(t.0, !(x), 1)                                  //~ E0002
+}
+
+pub fn after_a_field(p: Pair, x: I32) -> I32 {
+  two(p.t.0, !(x), 1)                                //~ E0002
+}
+
+pub fn after_the_result_of_a_call(x: I32) -> I32 {
+  two(mk2().0, !(x), 1)                              //~ E0002
+}
+
+pub fn as_the_last_element(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  two(1, t.0, !(x))                                  //~ E0002
+}

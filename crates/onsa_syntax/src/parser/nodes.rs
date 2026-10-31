@@ -21,6 +21,7 @@ impl<'a> Parser<'a> {
             nl: self.nl.clone(),
             no_struct_lit: self.no_struct_lit,
             detached: self.detached,
+            value_bang: self.value_bang,
             ends: self.ends.len(),
             prefixed: self.prefixed.len(),
         }
@@ -39,6 +40,7 @@ impl<'a> Parser<'a> {
         self.nl = s.nl;
         self.no_struct_lit = s.no_struct_lit;
         self.detached = s.detached;
+        self.value_bang = s.value_bang;
         self.ends.truncate(s.ends);
         self.prefixed.truncate(s.prefixed);
     }

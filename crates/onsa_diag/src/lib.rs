@@ -387,7 +387,7 @@ pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId
     if !d.code.stages().contains(&d.stage) {
         out.push(format!("{code} from the {} stage, which the registry does not list", d.stage.name()));
     }
-    if d.code.fix_rule() == FixRule::Required && d.fixes.is_empty() {
+    if d.code.fix_required(d.stage) && d.fixes.is_empty() {
         out.push(format!("{code} has no fix candidate (the registry requires one)"));
     }
     if d.code.note_rule() == NoteRule::Rule && !d.notes.iter().any(|n| n.span.is_none()) {
@@ -844,6 +844,9 @@ mod tests {
         assert_eq!(problems.len(), 2, "{problems:?}");
         let d = d.with_fix(Fix::replace("write `var`", Span::new(f, 0, 7), "var")).with_rule("rule");
         assert!(contract(&d, &sources, &any).is_empty());
+        // A form of E0020 a later stage finds needs no candidate (§18.1, R-301).
+        let later = Diagnostic::new(Stage::Names, Code::E0020, Span::new(f, 0, 7), "m").with_rule("rule");
+        assert!(contract(&later, &sources, &any).is_empty());
         let same = Diagnostic::new(Stage::Syntax, Code::E0002, Span::new(f, 0, 3), "m").with_fix(Fix::replace(
             "t",
             Span::new(f, 0, 3),

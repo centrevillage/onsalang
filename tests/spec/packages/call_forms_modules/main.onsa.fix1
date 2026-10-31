@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// The form of a call when the callee comes from another module (§6.1, §15.1, S-191): what a `use` takes
+// is an item or a value like any other, and the module a path starts from does not change the form. A
+// function, a function of a module (`util.double(x)`), an associated function and a variant with
+// elements of an imported type are called `f(x)`, and written `.(` they are E0020 whose one candidate
+// takes the `.` away. A constant of the module that holds function values (`OPS`) is a value, so
+// `OPS[0](x)` is E0020 whose candidate is `OPS[0].(x)`, and `util.OPS[0].(x)` is the right form. One
+// error per function (P-01).
+
+use util
+use util.{double, OPS, Counter, Shape, apply}
+
+pub fn an_imported_function(x: I32) -> I32 {
+  double(x)                                        //~ E0020
+}
+
+pub fn a_function_of_a_module(x: I32) -> I32 {
+  util.double(x)                                   //~ E0020
+}
+
+pub fn an_associated_function_of_an_imported_type() -> Counter {
+  Counter.new(1)                                   //~ E0020
+}
+
+pub fn a_variant_with_elements_of_an_imported_type() -> Shape {
+  Shape.Ring(1)                                    //~ E0020
+}
+
+pub fn an_element_of_an_imported_constant(x: I32) -> I32 {
+  OPS[0].(x)                                         //~ E0020
+}
+
+pub fn an_element_of_a_constant_of_a_module(x: I32) -> I32 {
+  util.OPS[1].(x)                                    //~ E0020
+}
+
+pub fn a_value_in_the_argument_of_an_imported_function(f: fn(I32) -> I32, x: I32) -> I32 {
+  apply(f, f.(x))                                    //~ E0020
+}
+
+pub fn fine(f: fn(I32) -> I32, x: I32) -> I32 {
+  let _ = Counter.new(1)
+  let _ = Shape.Ring(2)
+  double(x) + util.double(x) + util.negate(x) + OPS[0].(x) + util.OPS[1].(x) + apply(f, x) + util.apply(f, x)
+}

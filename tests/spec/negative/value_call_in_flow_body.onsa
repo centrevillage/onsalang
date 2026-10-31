@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§6.1", "§11.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// E0020 for a value called as `x(...)` in a flow body (§15.1: a value called as `x(...)` is E0020 whatever
+// its type is, S-191). The inputs of a flow, its `let` bindings, its constants and their elements are
+// values, so the name stage gives E0020 here as in a function; `(` is the mark that a flow body may
+// write, so the mark is not the reason of the error (§2.6: the marks that the context forbids, `!(` and
+// `.(` in a flow body, are E0806, and are not in this file). There is no candidate (§11.2, S-811): the
+// one form `x.(1.0)` is itself an error of the flow body (E0806 of the names stage), and a candidate
+// must leave no error of its own stage behind (§18.1). `fixes = 0` checks it. One error per flow (P-01).
+
+pub const K: F32 = 2.0
+
+pub rt fn gain(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub const OPS: [fn(F32) -> F32; 1] = [gain]
+
+pub flow call_an_input(x: F32 at sample) -> F32 at sample {
+  x(1.0)                                            //~ E0020
+}
+
+pub flow call_a_let(x: F32 at sample) -> F32 at sample {
+  let g = x * 2.0
+  g(x)                                              //~ E0020
+}
+
+pub flow call_a_constant(x: F32 at sample) -> F32 at sample {
+  let y = K(x)                                      //~ E0020
+  y
+}
+
+pub flow call_an_element_of_a_constant(x: F32 at sample) -> F32 at sample {
+  OPS[0](x)                                         //~ E0020
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = x * K
+  y
+}

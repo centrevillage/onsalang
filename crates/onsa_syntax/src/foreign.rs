@@ -509,6 +509,8 @@ pub enum RowId {
     TypeArgsSquareComma,
     TypeArgsOnExpression,
     ValueCall,
+    ItemDotCall,
+    IndexedValueCall,
     TypePositionPath,
     SpaceInTypeArgsMark,
     RangeDots,
@@ -571,14 +573,14 @@ pub fn row(id: RowId) -> &'static Row {
 
 /// The diagnostic of a form of `id` found at `span` with `fixes`, from a
 /// stage after the syntax (names, types, flow): the code, the stage, the
-/// message and the note are the row's. No candidate makes it E0002 (S-48).
+/// message and the note are the row's. No candidate keeps its code (§18.1, R-301).
 pub fn report(id: RowId, text: &str, span: Span, fixes: Vec<Fix>) -> Diagnostic {
     diagnostic(text, id, Hit::new(span, fixes))
 }
 
 fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
     let row = row(id);
-    let code = if hit.fixes.is_empty() { row.code.without_fixes() } else { row.code };
+    let code = if hit.fixes.is_empty() { row.code.without_fixes(row.phase.stage()) } else { row.code };
     let mut d = Diagnostic::new(row.phase.stage(), code, hit.span, row.message);
     let found = &text[hit.span.start as usize..hit.span.end as usize];
     if !found.trim().is_empty() {

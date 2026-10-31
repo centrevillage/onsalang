@@ -41,7 +41,7 @@ pub fn closure() -> U32 {
 }
 
 pub fn call(f: fn(U32) -> U32) -> U32 {
-  f(1)
+  f.(1)
 }
 
 pub fn captures(k: U32) -> U32 {

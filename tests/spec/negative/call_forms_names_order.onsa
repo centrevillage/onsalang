@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§6.1", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "52:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["53:3 E0302"]
+//
+// [[test.fix]]
+// at = "57:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["58:3 E0302"]
+//
+// [[test.fix]]
+// at = "62:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["63:3 E0302"]
+
+// The order of the errors of the forms of a call in one unit (§18.1, §2.6). A unit stops at its first
+// error, and the stages come in an order: the name stage before the type stage, and inside a stage the
+// position. The E0020 of a value called as `f(x)` and of an item called as `inc.(x)` is of the name
+// stage, so it is reported before every error of the type stage wherever the two stand, and before
+// the name error (E0302) that comes after it in the text, and it is not reported after an earlier
+// name error. The errors of the type stage (E0714 of `h!(x)`, E0401 of `K!(x)`, E0412 of `E.A()`) are
+// hidden by every error of the name stage of the unit, E0302 first. The E0308 of `lp.(x)` is a name
+// error, so the position decides. One error per unit, so the other errors of the unit are not
+// reported and have no mark. A unit of the first part holds two errors, so the candidate of its E0020
+// leaves the E0302 after it (§18.1 promises only for the one error of a unit); `[[test.fix]]` says so.
+
+pub const K: I32 = 3
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+// ------------------------------------------------ the E0020 comes first in the text
+
+pub fn value_call_then_unknown_name(f: fn(I32) -> I32, x: I32) -> I32 {
+  let a = f(x)                                      //~ E0020
+  nope(a)
+}
+
+pub fn item_dot_call_then_unknown_name(x: I32) -> I32 {
+  let a = inc.(x)                                   //~ E0020
+  nope(a)
+}
+
+pub fn element_call_then_unknown_name(ops: [fn(I32) -> I32; 2], x: I32) -> I32 {
+  let a = ops[0](x)                                 //~ E0020
+  nope(a)
+}
+
+// ------------------------------------------------ the name error comes first in the text
+
+pub fn unknown_name_then_value_call(f: fn(I32) -> I32, x: I32) -> I32 {
+  let a = nope(x)                                   //~ E0302
+  f(a)
+}
+
+pub fn unknown_name_then_item_dot_call(x: I32) -> I32 {
+  let a = nope(x)                                   //~ E0302
+  inc.(a)
+}
+
+// ------------------------------------------------ the type stage does not come before the name stage
+
+pub fn value_call_then_type_error(f: fn(I32) -> I32, x: I32) -> I32 {
+  let a = f(x)                                      //~ E0020
+  let b: I32 = true
+  a + b
+}
+
+pub fn type_error_then_value_call(f: fn(I32) -> I32, x: I32) -> I32 {
+  let b: I32 = true
+  f(b + x)                                          //~ E0020
+}
+
+pub fn bang_on_a_function_value_then_unknown_name(h: fn(I32) -> I32, x: I32) -> I32 {
+  let a = h!(x)
+  nope(a)                                           //~ E0302
+}
+
+pub fn bang_on_a_constant_then_unknown_name(x: I32) -> I32 {
+  let a = K!(x)
+  nope(a)                                           //~ E0302
+}
+
+pub fn call_of_a_unit_variant_then_unknown_name() -> E {
+  let a = E.A()
+  nope(a)                                           //~ E0302
+}
+
+// ------------------------------------------------ two name errors: the position decides
+
+pub fn flow_through_a_dot_then_unknown_name(x: F32) -> F32 {
+  let a = lp.(x)                                    //~ E0308
+  nope(a)
+}
+
+pub fn unknown_name_then_flow_through_a_dot(x: F32) -> F32 {
+  let a = nope(x)                                   //~ E0302
+  lp.(a)
+}
+
+// ------------------------------------------------ other units are reported as they are
+
+pub fn fine(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x) + inc(x)
+}

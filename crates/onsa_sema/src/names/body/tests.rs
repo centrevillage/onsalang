@@ -490,3 +490,48 @@ fn a_long_ring_of_constants_or_of_flows_is_one_diagnostic() {
     assert_eq!(got, [(E0817, n)]);
     assert_eq!(names(&a, "f1").instances.len(), 1);
 }
+
+/// The code and the stage of the diagnostics of `src`, in order.
+fn stages(a: &Analysis) -> Vec<(onsa_diag::Code, onsa_diag::Stage)> {
+    a.diagnostics.iter().map(|d| (d.code, d.stage)).collect()
+}
+
+/// The table of the values of a call (`calls.rs::Called`): every row of a
+/// value is the E0020 of `ops[i](x)` at its head, an item is not (W5-10).
+#[test]
+fn the_values_of_a_call_are_one_table_for_the_head_of_an_index() {
+    let pre = "pub const K: [I32; 2] = [1, 2]\npub enum E {\n  A,\n  B(I32),\n}\npub fn inc(x: I32) -> I32 {\n  x\n}\n";
+    use onsa_diag::{Code::E0020, Stage::Names};
+    for (sig, head) in [("(k: [I32; 2])", "k"), ("[const N: U32]()", "N"), ("()", "K"), ("()", "E.A"), ("()", "F32.PI")]
+    {
+        let (a, _) = analysis(&format!("{pre}pub fn u{sig} -> I32 {{\n  {head}[0](1)\n}}\n"));
+        assert_eq!(stages(&a), [(E0020, Names)], "{head}");
+    }
+    let (a, _) = analysis(&format!("{pre}pub fn u() -> I32 {{\n  inc[0](1)\n}}\n"));
+    assert!(stages(&a).iter().all(|&(c, _)| c != E0020), "inc: {:?}", a.diagnostics);
+}
+
+/// `!(` on a value is no E0020 of the names stage (S-812, R-341), and an
+/// item called with `.(` in a flow body is the flow stage's E0806 (S-811).
+#[test]
+fn a_bang_on_a_value_and_a_dot_call_in_a_flow_body_are_left_to_a_later_stage() {
+    let pre = "pub const K: F32 = 1.0\npub rt fn g(x: F32) -> F32 {\n  x\n}\n";
+    for body in ["K!(x)", "F32.PI!()", "h!(x)"] {
+        let (a, _) = analysis(&format!("{pre}pub fn u(x: F32, h: fn(F32) -> F32) -> F32 {{\n  {body}\n}}\n"));
+        assert!(stages(&a).iter().all(|&(_, s)| s == onsa_diag::Stage::Types), "{body}: {:?}", a.diagnostics);
+    }
+    let (a, _) = analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  g.(x)\n}}\n"));
+    assert_eq!(stages(&a), [(onsa_diag::Code::E0806, onsa_diag::Stage::Flow)], "{:?}", a.diagnostics);
+}
+
+/// In a flow body the E0020 of a value called as `f(x)` has no candidate,
+/// at the head of an index too (`calls.rs::call_form`, §11.2, S-811).
+#[test]
+fn a_value_called_in_a_flow_body_has_no_candidate() {
+    let pre = "pub const K: F32 = 1.0\npub const OPS: [F32; 2] = [1.0, 2.0]\n";
+    for body in ["x(1.0)", "K(x)", "OPS[0](x)", "F32.PI(x)"] {
+        let (a, _) = analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n"));
+        assert_eq!(stages(&a), [(onsa_diag::Code::E0020, onsa_diag::Stage::Names)], "{body}");
+        assert!(a.diagnostics[0].fixes.is_empty(), "{body}: {:?}", a.diagnostics[0].fixes);
+    }
+}

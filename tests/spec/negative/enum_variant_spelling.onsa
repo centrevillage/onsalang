@@ -31,7 +31,7 @@ pub fn misspelt_unit_variant() -> Shape {
 
 pub fn misspelt_variant_as_a_value() -> Shape {
   let f = Shape.Circel                              //~ E0302
-  f(1.0)
+  f.(1.0)
 }
 
 pub fn misspelt_variant_of_a_generic_enum() -> Tree[I32] {

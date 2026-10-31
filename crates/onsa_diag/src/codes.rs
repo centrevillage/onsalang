@@ -97,22 +97,35 @@ impl Stage {
 /// Whether every diagnostic of a code carries a fix candidate (D-04).
 ///
 /// `Required` only where the spec text says the code always shows a candidate:
-/// E0003, E0020, E0713, E0714, E0811, E0812 (W3-02, D5; E0004 is
+/// E0003, E0713, E0714, E0811, E0812 (W3-02, D5; E0004 is
 /// not, S-430; E0320 is not: a file or directory name has none, §2.3, S-300).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FixRule {
     Required,
+    /// Required of a diagnostic of the syntax stage only: E0020, whose form
+    /// found by a later stage keeps its code with no candidate (§18.1, R-301).
+    Syntax,
     Optional,
 }
 
 impl Code {
-    /// The code of a diagnostic of this code that is left without a
-    /// candidate: the general E0002 when every diagnostic of the code carries
-    /// one (S-48, §18.1), else the code itself. The one judgment of it (the
+    /// Whether a diagnostic of this code from `stage` carries a candidate
+    /// ([`FixRule`]).
+    pub fn fix_required(self, stage: Stage) -> bool {
+        match self.fix_rule() {
+            FixRule::Required => true,
+            FixRule::Syntax => stage == Stage::Syntax,
+            FixRule::Optional => false,
+        }
+    }
+
+    /// The code of a diagnostic of this code from `stage` that is left
+    /// without a candidate: the general E0002 when it carries one there
+    /// (S-48, §18.1), else the code itself. The one judgment of it (the
     /// table of the forms of other languages, and the candidates that the
     /// syntax stage drops after it made them).
-    pub fn without_fixes(self) -> Code {
-        if self.fix_rule() == FixRule::Required { Code::E0002 } else { self }
+    pub fn without_fixes(self, stage: Stage) -> Code {
+        if self.fix_required(stage) { Code::E0002 } else { self }
     }
 }
 
@@ -254,7 +267,7 @@ codes! {
         "prefix operators stacked without parentheses";
     E0013 = 13, Syntax, [Syntax], Optional, Optional,
         "block-like expression used as an operand without parentheses";
-    E0020 = 20, Syntax, [Syntax, Names, Types, Flow], Required, Rule,
+    E0020 = 20, Syntax, [Syntax, Names, Types, Flow], Syntax, Rule,
         "syntax from another language; see the suggested Onsa form";
     E0200 = 200, Unsupported, [Syntax, Names, Types, Flow, Modes, Effects, Build, Manifest], Optional, Optional,
         "feature not supported in this version of the compiler";
@@ -473,10 +486,25 @@ mod tests {
         // W3-02 D5: the spec text says these always show a candidate.
         let required: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Required).map(|c| c.as_str()).collect();
-        assert_eq!(required, ["E0003", "E0020", "E0713", "E0714", "E0811", "E0812"]);
+        assert_eq!(required, ["E0003", "E0713", "E0714", "E0811", "E0812"]);
+        // R-301: a form of E0020 a later stage finds keeps its code with no candidate.
+        let syntax: Vec<&str> =
+            Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Syntax).map(|c| c.as_str()).collect();
+        assert_eq!(syntax, ["E0020"]);
         let rule: Vec<&str> =
             Code::ALL.iter().filter(|c| c.note_rule() == NoteRule::Rule).map(|c| c.as_str()).collect();
         assert_eq!(rule, ["E0020"]);
+    }
+
+    #[test]
+    fn a_code_left_with_no_candidate_is_e0002_where_it_needs_one() {
+        assert_eq!(Code::E0020.without_fixes(Stage::Syntax), Code::E0002);
+        // R-301: a later stage keeps E0020 with no candidate (§18.1).
+        for stage in [Stage::Names, Stage::Types, Stage::Flow] {
+            assert_eq!(Code::E0020.without_fixes(stage), Code::E0020, "{stage:?}");
+        }
+        assert_eq!(Code::E0714.without_fixes(Stage::Types), Code::E0002);
+        assert_eq!(Code::E0302.without_fixes(Stage::Syntax), Code::E0302);
     }
 
     #[test]

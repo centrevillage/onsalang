@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§11.1", "§15.1", "§2.6"]
+// fixes = 0
+
+// A flow called through `.(` in a function (§15.1, §6.1, S-816): `.(` calls a function value, and a
+// flow is no value, so `lp.(x)` is the E0308 of a name of the wrong kind in the position of a value,
+// whatever the type of the argument is. It is not the E0020 of an item called through `.(` (that error
+// is for the items that are called as `f(x)`, and a flow is called `lp~(x)`, only in a flow body), and it
+// is not the E0821 of a flow called outside a flow (the mark is not the one of a call of a flow).
+// There is no candidate: `lp(x)` and `lp~(x)` would be errors of a flow outside a flow (E0821). The
+// note is not compared. `fixes = 0` checks that no error of the file has a candidate. The same call in a
+// flow body is the same E0308 (S-816; the E0806 of `.(` in a flow body is for a value or an item called
+// as `f(x)`, §11.2). One error per function or flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn in_a_function(x: F32) -> F32 {
+  lp.(x)                                            //~ E0308
+}
+
+pub fn with_no_argument() -> F32 {
+  lp.()                                             //~ E0308
+}
+
+pub fn in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { lp.(y) }              //~ E0308
+  g.(x)
+}
+
+test "a flow called through a dot" {
+  let y = lp.(1.0)                                  //~ E0308
+  assert y == 1.0
+}
+
+pub fn in_an_argument(x: F32) -> F32 {
+  x + lp.(x)                                        //~ E0308
+}
+
+pub fn in_a_branch(c: Bool, x: F32) -> F32 {
+  if c {
+    lp.(x)                                          //~ E0308
+  } else {
+    x
+  }
+}
+
+pub flow in_a_flow_body(x: F32 at sample) -> F32 at sample {
+  let y = lp.(x)                                    //~ E0308
+  y
+}

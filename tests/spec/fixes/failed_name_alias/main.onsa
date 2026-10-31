@@ -11,7 +11,7 @@ use fx.{util}                                       //~ E0302
 pub type A = fn() -> I32 uses {util}
 
 pub fn h(a: A) -> I32 {
-  a()
+  a.()
 }
 
 pub fn p() -> I32 {

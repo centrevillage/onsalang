@@ -45,9 +45,9 @@ impl[T] Holder[T] {
 }
 
 pub fn run_camel[T, itemKey](f: fn(T) -> T uses {itemKey}, x: T) -> T uses {itemKey} { //~ E0320
-  f(x)
+  f.(x)
 }
 
 pub fn run_double[T, item__key](f: fn(T) -> T uses {item__key}, x: T) -> T uses {item__key} { //~ E0320
-  f(x)
+  f.(x)
 }

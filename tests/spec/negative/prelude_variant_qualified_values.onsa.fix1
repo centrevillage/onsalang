@@ -30,7 +30,7 @@ pub fn err_variant(e: I32) -> Result[I32, I32] {
 
 pub fn as_a_function_value() -> Option[I32] {
   let f = Some                               //~ E0302
-  f(2)
+  f.(2)
 }
 
 pub fn in_a_let() -> I32 {

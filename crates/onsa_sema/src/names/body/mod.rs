@@ -6,7 +6,7 @@
 //! The parts: this module (the record and the entry [`walk_bodies`]),
 //! `scope` (the tree of the scopes, the bindings and the lookup of a local),
 //! `exprs` (the walk of the statements, expressions and patterns, and of
-//! a flow body), `paths` (the names whose head is no local) and `cycles`
+//! a flow body), `calls` (the form of a call its callee decides), `paths` (the names whose head is no local) and `cycles`
 //! (the cycles of the constants and of the flow instances, from the
 //! records).
 //!
@@ -16,6 +16,7 @@
 //! literals and types of the body, and makes its locals from the bindings
 //! of the record.
 
+mod calls;
 mod cycles;
 mod exprs;
 mod kinds;

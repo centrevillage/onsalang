@@ -108,7 +108,7 @@ pub fn grouping() -> I32 {
 
 // The arguments of a function type.
 pub fn functions_one_line(f: fn(I32, F32) -> I32) -> I32 {
-  f(1, 2.0)
+  f.(1, 2.0)
 }
 
 pub fn functions_block(
@@ -118,7 +118,7 @@ pub fn functions_block(
   ) -> I32,
   n: I32,
 ) -> I32 {
-  f(n, 2.0)
+  f.(n, 2.0)
 }
 
 pub fn functions_continuation(
@@ -126,5 +126,5 @@ pub fn functions_continuation(
         F32) -> I32,
   n: I32,
 ) -> I32 {
-  g(n, 3.0)
+  g.(n, 3.0)
 }

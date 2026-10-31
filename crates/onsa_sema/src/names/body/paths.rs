@@ -31,6 +31,10 @@ use crate::ty::TyId;
 pub(super) enum Place {
     /// A value, whose fields may follow.
     Value,
+    /// The callee of `v.(x)`: as a value, and an associated function of a
+    /// builtin type as at [`Place::Callee`] (`F32.from_bits.(1)`, the E0020 of
+    /// `calls.rs`; as a value, `let f = F32.from_bits`, it is W5-02's).
+    DotCallee,
     /// The callee of the call `.0` (`f(x)`, `a.m(x)`, `x.m!(y)`): its last
     /// name may be a method of the value before it, or an associated function.
     Callee(ExprId),
@@ -131,6 +135,7 @@ impl<'a> Walker<'a> {
         // method of a call.
         let at = out.len() + 1;
         let method = matches!(place, Place::Callee(_) | Place::Instance) && at + 1 == segs.len();
+        let assoc_fn = method || (place == Place::DotCallee && at + 1 == segs.len());
         // `Option.None`, `Result.Ok(1)`, `O.None` (S-607); the callee of an
         // instance is the flow stage's (W4-12).
         let (variant, called) = match &err {
@@ -144,7 +149,7 @@ impl<'a> Walker<'a> {
             _ => (None, None),
         };
         let assoc = match &err {
-            Some(ResolveError::NotFound { .. }) => self.builtin_assoc(of, segs[at], method, owner),
+            Some(ResolveError::NotFound { .. }) => self.builtin_assoc(of, segs[at], assoc_fn, owner),
             _ => None,
         };
         let fail = match err {
@@ -267,7 +272,7 @@ impl<'a> Walker<'a> {
         let called = match place {
             Place::Instance => true,
             Place::Callee(_) => segs.len() == 1,
-            Place::Value | Place::TypeOrValue => false,
+            Place::Value | Place::DotCallee | Place::TypeOrValue => false,
         };
         let fail = (!called).then(|| Fail::Report(b.misplaced(segs.iter().map(|s| s.span), self.text)));
         (vec![PathRes::FlowBuiltin(b)], fail)

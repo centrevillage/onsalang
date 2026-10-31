@@ -19,7 +19,7 @@ pub fn codes() -> serde_json::Value {
                 "code": c.as_str(),
                 "category": format!("{:?}", c.category()).to_lowercase(),
                 "stages": c.stages().iter().map(|s| s.name()).collect::<Vec<_>>(),
-                "fix": match c.fix_rule() { onsa_diag::FixRule::Required => "required", onsa_diag::FixRule::Optional => "optional" },
+                "fix": match c.fix_rule() { onsa_diag::FixRule::Required => "required", onsa_diag::FixRule::Syntax => "syntax", onsa_diag::FixRule::Optional => "optional" },
                 "note": match c.note_rule() { onsa_diag::NoteRule::Rule => "rule", onsa_diag::NoteRule::Optional => "optional" },
                 "title": c.title(),
             })
@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(list[0]["code"], "E0001");
         assert_eq!(list[0]["category"], "syntax");
         assert!(list.iter().any(|c| c["code"] == "E1104" && c["category"] == "manifest"));
-        assert!(list.iter().any(|c| c["code"] == "E0020" && c["fix"] == "required" && c["note"] == "rule"));
+        assert!(list.iter().any(|c| c["code"] == "E0020" && c["fix"] == "syntax" && c["note"] == "rule"));
         assert!(!list.iter().any(|c| c["code"] == "E0814"), "E0814 is retired (S-147)");
     }
 

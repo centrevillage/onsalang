@@ -254,6 +254,10 @@ pub(crate) struct Parser<'a> {
     /// The last postfix opener not read on because of a gap before it
     /// ([`Parser::touches`], S-89): the table reads it at the failure there.
     detached: Option<Detached>,
+    /// The last `!` of a `!(` not read on after a value that is no name
+    /// (`inc(1)!(x)`): with no `,` of a list before it, the failure there
+    /// notes the rule of the marks, as at a `~(` (R-339).
+    value_bang: Option<usize>,
     /// The last tokens of the statements and declarations that end no operand
     /// (`for`, `while`, a declaration but `const` and `type`) or a bound value
     /// (`let`, `var`, an assignment), in order: a symbol at the head of the
@@ -281,6 +285,7 @@ struct Snapshot {
     nl: Vec<bool>,
     no_struct_lit: bool,
     detached: Option<Detached>,
+    value_bang: Option<usize>,
     ends: usize,
     prefixed: usize,
 }
@@ -327,6 +332,7 @@ impl<'a> Parser<'a> {
             items: Vec::new(),
             trials: 0,
             detached: None,
+            value_bang: None,
             ends: Vec::new(),
             prefixed: Vec::new(),
         }

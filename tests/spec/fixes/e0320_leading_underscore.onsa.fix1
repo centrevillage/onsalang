@@ -68,7 +68,7 @@ pub fn id1[T](x: T) -> T { //~ E0320
 }
 
 pub fn ap[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} { //~ E0320
-  f(x)
+  f.(x)
 }
 
 impl Q {

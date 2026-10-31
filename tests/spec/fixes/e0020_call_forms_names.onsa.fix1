@@ -1,15 +1,36 @@
 // onsa.toml
 // [test]
-// spec = ["§6.1", "§18.1"]
+// spec = ["§6.1", "§15.1", "§18.1"]
 // fixes = 1
 
 // E0020 for a call whose callee is a path of names, or a path of names with `[...]` (§6.1): name
-// resolution decides. `f(x)` where `f` is a local binding is `f.(x)`; `inc.(x)` where `inc` is an
+// resolution decides (S-191). `f(x)` where `f` is a local binding is `f.(x)`; `inc.(x)` where `inc` is an
 // item is `inc(x)`; `ops[i](x)` where `ops` is a local binding (an array of function values) is
 // `ops[i].(x)` (S-256: for an item `ops`, the `[...]` would be type arguments, `ops::[...](x)`).
+// The `[...]` after a value is an index whatever the value is: a constant (`OPS[0](x)`), an element of
+// an element (`ops[0][0](x)`). The other way round, an item called through `.(` is `inc(1)` for every
+// kind of item: a function, a variant with elements (`E.B.(1)`), a function of a namespace
+// (`math.sin.(1.0)`), an associated function of a built-in type (`F32.from_bits.(1)`) and of the
+// type itself (`Self.new.(1)`). The candidate of each is the one correct form, and a unit written with
+// it has no error left (the forms whose candidate leaves an error of the type stage, `N(1)` for a
+// constant that is no function, are in e0020_value_call_not_a_function.onsa). One error per
+// function (P-01).
+
+use std.math
 
 pub fn inc(x: I32) -> I32 {
   x + 1
+}
+
+pub fn dec(x: I32) -> I32 {
+  x - 1
+}
+
+pub const OPS: [fn(I32) -> I32; 2] = [inc, dec]
+
+pub enum E {
+  A,
+  B(I32),
 }
 
 pub fn call_a_binding(x: F32) -> F32 {
@@ -37,6 +58,10 @@ pub struct Point {
 impl Point {
   pub fn new(x: F32, y: F32) -> Point {
     Point { x: x, y: y }
+  }
+
+  pub fn splat(a: F32) -> Point {
+    Self.new(a, a)                                 //~ E0020
   }
 }
 
@@ -66,6 +91,26 @@ pub fn call_an_associated_function_as_a_value() -> Point {
 
 pub fn call_a_variant_as_a_value(x: I32) -> Option[I32] {
   Some(x)                                          //~ E0020
+}
+
+pub fn call_an_element_of_a_constant() -> I32 {
+  OPS[0].(1)                                         //~ E0020
+}
+
+pub fn call_an_element_of_an_element(ops: [[fn(I32) -> I32; 2]; 2]) -> I32 {
+  ops[0][0].(1)                                      //~ E0020
+}
+
+pub fn call_a_function_of_a_namespace_as_a_value() -> F32 {
+  math.sin(1.0)                                    //~ E0020
+}
+
+pub fn call_a_variant_with_elements_as_a_value() -> E {
+  E.B(1)                                           //~ E0020
+}
+
+pub fn call_an_associated_function_of_a_built_in_type_as_a_value() -> F32 {
+  F32.from_bits(1)                                 //~ E0020
 }
 
 pub fn fine(f: fn(F32) -> F32, x: F32) -> F32 {

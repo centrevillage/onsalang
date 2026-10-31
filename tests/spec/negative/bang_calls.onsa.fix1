@@ -43,7 +43,7 @@ pub fn bang_on_a_function_in_an_argument() -> U32 {
 }
 
 pub fn bang_on_a_function_value(f: fn(U32) -> U32) -> U32 {
-  f(1)                                     //~ E0714
+  f.(1)                                     //~ E0714
 }
 
 pub fn bang_on_some() -> Option[U32] {

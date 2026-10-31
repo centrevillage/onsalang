@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a value called as `x(...)`, whatever the type of the value is (§15.1, S-191): the name
+// stage knows that the callee is a value, not an item, and does not look at its type. So a value that
+// is no function at all gets the same error and the same candidate `.(`: a number bound by `let`, a
+// constant, a constant parameter, an element of a constant (`TABLE[0](1)`), a constant of a built-in
+// type (`F32.PI()`), and the element of a unit variant or of a built-in constant (`E.A[0](1)`,
+// `F32.PI[0](1)`: the `[...]` is an index after a value). The candidate is the one correct form for
+// a function value; a unit written with it still has an error of the type stage (the value is no
+// function, or it has no index), which the name stage cannot see and §18.1 allows to remain after a
+// candidate of an earlier stage. One error per function (P-01).
+
+pub const K: I32 = 3
+
+pub const TABLE: [I32; 2] = [1, 2]
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub fn a_number_bound_by_let(x: I32) -> I32 {
+  let n = 1
+  n(x)                                              //~ E0020
+}
+
+pub fn a_number_parameter(n: I32, x: I32) -> I32 {
+  n(x)                                              //~ E0020
+}
+
+pub fn a_constant() -> I32 {
+  K(1)                                              //~ E0020
+}
+
+pub fn a_constant_parameter[const N: U32]() -> U32 {
+  N(1)                                              //~ E0020
+}
+
+pub fn an_element_of_a_constant() -> I32 {
+  TABLE[0](1)                                       //~ E0020
+}
+
+pub fn a_constant_of_a_built_in_type() -> F32 {
+  F32.PI()                                          //~ E0020
+}
+
+pub fn an_element_of_a_unit_variant() -> I32 {
+  E.A[0](1)                                         //~ E0020
+}
+
+pub fn an_element_of_a_constant_of_a_built_in_type() -> F32 {
+  F32.PI[0](1)                                      //~ E0020
+}
+
+pub fn in_a_branch(c: Bool, n: I32) -> I32 {
+  if c {
+    n(1)                                            //~ E0020
+  } else {
+    0
+  }
+}
+
+pub fn in_an_argument(n: I32) -> I32 {
+  K + n(2)                                          //~ E0020
+}
+
+pub fn in_a_closure(n: I32) -> I32 {
+  let g = fn(y: I32) -> I32 { n(y) }                //~ E0020
+  g.(1)
+}
+
+pub fn in_a_generic_function[T](x: T, n: I32) -> T {
+  let _ = n(1)                                      //~ E0020
+  x
+}

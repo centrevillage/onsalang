@@ -3,14 +3,15 @@
 //! `[`, the marks `!` and `~`, `::[`) and the table of the forms of other
 //! languages ([`crate::foreign`]). A chain is read link by link
 //! ([`Callee::start`], [`Callee::then`]) from the kinds of its links
-//! ([`Link`]); a later stage that reads a callee from the AST (the calls
-//! decided by name, W4-12) reads it through the same links.
+//! ([`Link`]). The names stage reads the form of a call decided by name
+//! from the kinds of the nodes of the AST and from what the names are
+//! (`onsa_sema`'s `names/body/calls.rs`), which these links do not know.
 //!
 //! Two questions are asked of it, and they are kept apart: whether a call's
 //! callee is written by name ([`Callee::by_name`]: the `(` and the `[`), and
 //! whether the last link names a path ([`Link::names_a_path`]: `::[`, the
 //! marks, the type arguments of other languages). Whether the two are to be
-//! one is W4-12's and W5-10's to decide. The table's reading of a callee in
+//! one is W5-10's to decide. The table's reading of a callee in
 //! parentheses from its tokens (`foreign/calls.rs`, `is_postfix_chain`) reads
 //! the same links in the text.
 
@@ -112,8 +113,8 @@ impl Callee {
             (_, Link::Field) => Member,
             (Names | Indexed, Link::Index) => Indexed,
             (Member, Link::Index) => MemberIndexed,
-            // SPEC-GAP(S-630): `[…]` after a tuple index (`t.0[1](x)`) is read as after any value
-            // (`mk().0[1](x)`): no callee by name, the E0020 of the syntax stage with `.(`.
+            // `[…]` after a tuple index (`t.0[1](x)`) is read as after any value
+            // (`mk().0[1](x)`): no callee by name, the E0020 of the syntax stage with `.(` (§6.1, S-630).
             _ => Value,
         };
         Callee { chain, last }

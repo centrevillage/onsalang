@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 1
+
+// E0412 for a unit variant called with an empty pair of parentheses (§4.4, S-514): a unit variant is a
+// value (`None`, `E.A`), so `None()` and `E.A()` give the error of a wrong number of elements, the
+// type stage. The parentheses hold nothing but blanks, so the one candidate takes them away. The
+// candidate has an error of no stage left. The forms that get no candidate are in
+// tests/spec/negative/unit_variant_call_no_candidate.onsa. One error per function (P-01).
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub fn the_prelude_variant() -> Option[I32] {
+  None()                                            //~ E0412
+}
+
+pub fn a_variant_of_an_enum() -> E {
+  E.A()                                             //~ E0412
+}
+
+pub fn a_blank_in_the_parentheses() -> E {
+  E.A( )                                            //~ E0412
+}
+
+pub fn as_an_element_of_a_variant() -> Option[Option[I32]] {
+  Some(None())                                      //~ E0412
+}
+
+pub fn in_a_branch(c: Bool) -> E {
+  if c {
+    E.A()                                           //~ E0412
+  } else {
+    E.B(1)
+  }
+}
+
+pub fn in_an_arm(o: Option[I32]) -> Option[I32] {
+  match o {
+    Some(v) => Some(v),
+    None => None(),                                 //~ E0412
+  }
+}
+
+pub fn in_a_closure() -> E {
+  let g = fn() -> E { E.A() }                       //~ E0412
+  g.()
+}
+
+pub fn in_a_generic_function[T](x: T) -> Option[T] {
+  None()                                            //~ E0412
+}
+
+pub fn fine(c: Bool) -> E {
+  if c { E.A } else { E.B(1) }
+}
+
+pub fn fine_none() -> Option[I32] {
+  None
+}

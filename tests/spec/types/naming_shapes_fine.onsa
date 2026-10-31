@@ -84,11 +84,11 @@ pub fn pick[T_, ItemKey, HTTP2, T2D2](x: T_, y: ItemKey, z: HTTP2, w: T2D2) -> T
 }
 
 pub fn run_inout[T, inout_](f: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {
-  f(x)
+  f.(x)
 }
 
 pub fn run_words[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} {
-  f(x)
+  f.(x)
 }
 
 pub fn level_code(l: Level) -> I32 {

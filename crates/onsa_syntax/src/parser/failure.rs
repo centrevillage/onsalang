@@ -95,6 +95,10 @@ impl<'a> Parser<'a> {
             self.report(d);
             return resume;
         }
+        // A `!(` after a value that is no name, where no `,` of a list goes
+        // before it (R-339, S-631).
+        let value_bang = self.value_bang == Some(at) && general.as_ref().is_some_and(Vec::is_empty);
+        let noted = noted.or(value_bang.then_some((t, super::expressions::MARK_RULE)));
         // A reserved word, where nothing of this version takes it: its E0200
         // where it is read, instead of the general E0002 (§2.2, S-169, S-371).
         let shown = noted.map_or(t, |(found, _)| found);

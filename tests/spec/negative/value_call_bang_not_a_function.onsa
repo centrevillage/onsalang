@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// A value that cannot be called, called with `!(` (§5.2, S-812): a constant, a constant parameter and a
+// constant of a built-in type are values of a type that is no function, so the call is E0401 (`.(` on
+// them is the same error, §15.1), and a unit variant is E0412 (the error of a variant given elements,
+// S-514). The error is of the type stage, it is not E0714 and not the E0020 of the name stage (that error
+// is for a call written with `(` only). Nothing can be put in place of the `!` that makes a call, so there
+// is no candidate (`fixes = 0` checks that no error of the file has one). Compare
+// tests/spec/fixes/e0714_value_call_bang.onsa for the function values, whose candidate is `.(`.
+// One error per function (P-01).
+
+pub const K: I32 = 3
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub fn a_constant(x: I32) -> I32 {
+  K!(x)                                             //~ E0401
+}
+
+pub fn a_constant_parameter[const N: U32]() -> U32 {
+  N!(1)                                             //~ E0401
+}
+
+pub fn a_constant_of_a_built_in_type() -> F32 {
+  F32.PI!()                                         //~ E0401
+}
+
+pub fn a_unit_variant() -> E {
+  E.A!()                                            //~ E0412
+}
+
+pub fn the_prelude_unit_variant() -> Option[I32] {
+  None!()                                           //~ E0412
+}
+
+pub fn a_constant_in_a_closure(x: I32) -> I32 {
+  let g = fn(y: I32) -> I32 { K!(y) }               //~ E0401
+  g.(x)
+}
+
+test "a constant called with a bang" {
+  let y = K!(1)                                     //~ E0401
+  assert y == 3
+}
+
+pub fn a_constant_in_an_argument(x: I32) -> I32 {
+  x + K!(x)                                         //~ E0401
+}

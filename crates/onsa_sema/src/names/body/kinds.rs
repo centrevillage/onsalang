@@ -21,7 +21,7 @@ use crate::resolve::{Callee, Entity, NameKind, ResolveError, no_members};
 fn method_call_at(place: Place) -> Option<Option<ExprId>> {
     match place {
         Place::Callee(call) => Some(Some(call)),
-        Place::Value | Place::TypeOrValue => Some(None),
+        Place::Value | Place::DotCallee | Place::TypeOrValue => Some(None),
         Place::Instance => None,
     }
 }
@@ -63,10 +63,13 @@ impl Walker<'_> {
     /// the flow stage's.
     pub(super) fn kind_fail(&self, kind: NameKind, segs: &[&Ident], place: Place) -> Option<Fail> {
         let want = match place {
-            Place::Value => "a value",
-            Place::Callee(_) => match kind.at_callee() {
+            Place::Value | Place::DotCallee => "a value",
+            Place::Callee(call) => match kind.at_callee() {
                 Callee::Called => return None,
-                Callee::Value => return Some(self.value_called(segs)),
+                // `K!(x)`: a value that is no function, the E0401 of the
+                // types stage (§5.2, S-812, R-341).
+                Callee::Value if self.bang(call) => return None,
+                Callee::Value => return self.value_called(segs),
                 Callee::NoValue => "a function",
             },
             Place::Instance | Place::TypeOrValue => return None,
@@ -99,20 +102,28 @@ impl Walker<'_> {
         let call = method_call_at(place)?;
         match crate::names::builtin_member(self.a, of, &segs[segs.len() - 1].name)? {
             BuiltinMember::Method { bang } => Some(Fail::Report(self.method_call(call, segs, bang))),
-            BuiltinMember::Constant if call.is_some() => Some(self.value_called(segs)),
+            BuiltinMember::Constant if call.is_some_and(|c| !self.bang(c)) => self.value_called(segs),
             BuiltinMember::Constant | BuiltinMember::Function => None,
         }
     }
 
-    /// E0020 for the value `segs` called as `x(...)` ([`value_called`]).
-    pub(super) fn value_called(&self, segs: &[&Ident]) -> Fail {
-        Fail::Report(value_called(self.text, span_of(segs)))
+    /// E0020 for the value `segs` called as `x(...)` ([`value_called`],
+    /// [`Self::call_form`]).
+    pub(super) fn value_called(&self, segs: &[&Ident]) -> Option<Fail> {
+        let span = span_of(segs);
+        self.call_form(RowId::ValueCall, span, value_call_fix(span)).map(Fail::Report)
+    }
+
+    /// Whether the call `call` is `f!(x)`.
+    pub(super) fn bang(&self, call: ExprId) -> bool {
+        matches!(self.ast.expr(call).kind, ExprKind::Call { kind: CallKind::Bang, .. })
     }
 
     /// E0308 for the method `segs` named through its type (§15.1), at the
     /// callee of `call` or as a value (none). The candidate calls it on the
     /// first argument (`p.get()`, `b.m!(x)` for an `inout self` method, with
-    /// the `!` written or added); none with no argument or no call.
+    /// the `!` added or taken off as the receiver is declared); none with no
+    /// argument or no call.
     fn method_call(&self, call: Option<ExprId>, segs: &[&Ident], bang: bool) -> Diagnostic {
         let span = span_of(segs);
         let name = &segs[segs.len() - 1].name;
@@ -152,8 +163,10 @@ impl Walker<'_> {
             Some(r) => edits.push(Edit::replace(Span { start: ty.end, ..ty }, r)),
             None => edits.push(Edit::replace(ty, recv)),
         }
-        if bang && *kind != CallKind::Bang {
-            edits.push(Edit::replace(Span::new(span.file, last.end, last.end), "!"));
+        match (bang, *kind == CallKind::Bang) {
+            (true, false) => edits.push(Edit::replace(Span::new(span.file, last.end, last.end), "!")),
+            (false, true) => edits.push(Edit::replace(Span::new(span.file, last.end, last.end + 1), "")),
+            _ => {}
         }
         // The title is one line: the receiver may span lines (§18.1).
         d.with_fix(Fix::new(format!("call `{name}` on the first argument"), edits))
@@ -176,13 +189,19 @@ impl Walker<'_> {
 /// §15.1, the row `value_call`); the candidate calls it with `.(` (§6.1).
 /// The one form of a body and a constant expression.
 pub(crate) fn value_called(text: &str, span: Span) -> Diagnostic {
-    let fix = Fix::new("call the function value with `.(`", vec![Edit::replace(Span { start: span.end, ..span }, ".")]);
-    foreign::report(RowId::ValueCall, text, span, vec![fix])
+    foreign::report(RowId::ValueCall, text, span, vec![value_call_fix(span)])
+}
+
+/// The candidate of the E0020 of a value at `span` called as `x(...)`: `.(`.
+pub(super) fn value_call_fix(span: Span) -> Fix {
+    Fix::new("call the function value with `.(`", vec![Edit::replace(Span { start: span.end, ..span }, ".")])
 }
 
 /// E0308 for the method `shown`, whose name is `name`, named through its
-/// type at `span` (§15.1), with no candidate.
+/// type at `span` (§15.1), with no candidate; a note says that a method is
+/// only called (§6.1, S-205).
 pub(crate) fn method_named(shown: String, name: &str, span: Span) -> Diagnostic {
     let msg = format!("`{shown}` is a method, which is called on a value (`value.{name}(…)`, §6.2, §15.1)");
-    Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(shown)
+    let rule = "a method is only called, on a value; it is no value of its own (§6.1)";
+    Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(shown).with_rule(rule)
 }

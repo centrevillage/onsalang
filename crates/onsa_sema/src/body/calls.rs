@@ -36,34 +36,36 @@ impl<'a> Checker<'a> {
             ));
         }
         // `v.(x)` (§6.1, S-191): the callee is a value, whatever its form;
-        // the names stage tells `inc.(1)` of an item from it (W4-12).
+        // the names stage tells `inc.(1)` of an item from it (E0020).
         if !matches!(kind, CallKind::Value { .. }) {
             // 1. A function, a variant or a constructor of the prelude, or
             // an associated function of a builtin type, as the names stage
             // resolved the callee.
             let cspan = self.expr(callee).span;
-            match self.names.paths.get(&callee).cloned() {
+            let record = self.names.paths.get(&callee).cloned();
+            // `F32.PI!()`: a constant, a value of 3 (§5.2, S-812).
+            let constant = matches!(&record, Some(PathRes::BuiltinAssoc { ty, name, .. })
+                if builtin::has_assoc_const(&self.a.types, *ty, name));
+            match record {
                 Some(PathRes::Item { entity, owner }) => {
                     let name = self.last_name(callee);
                     return match entity {
                         Entity::Builtin(Builtin::Panic) => Err(self.unsupported(name.span, Feature::Panic, &[])),
                         // `None`, which takes no value (what is neither a value
-                        // nor a flow is the names stage's E0308).
-                        Entity::Builtin(Builtin::None) => {
-                            let shown = self.src(cspan);
-                            Err(self.err(Code::E0401, cspan, format!("`{shown}` is not a function")))
-                        }
+                        // nor a flow is the names stage's E0308): the branch
+                        // of the builtin `None` until W5-03 makes it a variant.
+                        Entity::Builtin(Builtin::None) => Err(self.unit_variant_called(e, callee, kind, args)),
                         _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
                     };
                 }
-                Some(PathRes::BuiltinAssoc { ty, owner, .. }) => {
+                Some(PathRes::BuiltinAssoc { ty, owner, .. }) if !constant => {
                     let name = self.last_name(callee);
                     return self.check_builtin_assoc_call(e, callee, (ty, owner), &name, args, expected);
                 }
                 _ => {}
             }
             // 2. A method `recv.name(...)` of the value before it.
-            if let ExprKind::Field { base, name } = &self.expr(callee).kind {
+            if !constant && let ExprKind::Field { base, name } = &self.expr(callee).kind {
                 let (base, name) = (*base, name.clone());
                 // After a constructor of the prelude (`Some.x()`): an
                 // associated function that is none, in the words of
@@ -94,12 +96,14 @@ impl<'a> Checker<'a> {
             ));
         };
         if kind == CallKind::Bang {
-            // The `!` comes right after the callee (`f!(`, §2.6).
+            // The `!` comes right after the callee (`h!(`, §2.6), and a
+            // function value is called with `.(` (§5.2, S-812).
             let at = self.expr(callee).span.end;
+            let dot = onsa_diag::Edit::replace(Span::new(span.file, at, at + 1), ".");
             return Err(self.diag(
                 Diagnostic::new(Stage::Types, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
                     .with_found(self.src(span))
-                    .with_fix(Fix::delete("remove `!`", Span::new(span.file, at, at + 1))),
+                    .with_fix(Fix::new("call the function value with `.(`", vec![dot])),
             ));
         }
         self.info.targets.insert(e, Target::Value);
@@ -162,11 +166,7 @@ impl<'a> Checker<'a> {
                 self.of_owner(d, &targs, owner, span)?;
                 let variant = self.a.def(d).as_enum().unwrap().variants[i as usize].clone();
                 if variant.fields.is_empty() {
-                    return Err(self.err(
-                        Code::E0412,
-                        span,
-                        format!("`{}` is a unit variant and takes no arguments", variant.name),
-                    ));
+                    return Err(self.unit_variant_called(e, callee, kind, args));
                 }
                 let params: Vec<(Mode, TyId)> =
                     variant.fields.iter().map(|&f| (Mode::Borrow, self.a.types.subst(f, &targs))).collect();
@@ -335,6 +335,25 @@ impl<'a> Checker<'a> {
         let name = name.name.clone();
         self.info.targets.insert(e, Target::BuiltinMethod { recv: ty, name, self_mode: None, lazy_args: false });
         Ok(ret)
+    }
+
+    /// E0412 for the unit variant called by `e` (§4.4, S-514). With no
+    /// argument and nothing but blanks between its parentheses (a comment
+    /// stays, §18.1), the candidate takes them out; else a note says that it
+    /// is written as a value.
+    fn unit_variant_called(&mut self, e: ExprId, callee: ExprId, kind: CallKind, args: &[Arg]) -> Stop {
+        let (span, cspan) = (self.expr(e).span, self.expr(callee).span);
+        let message = format!("`{}` is a unit variant and takes no arguments", self.last_name(callee).name);
+        let d = Diagnostic::new(Stage::Types, Code::E0412, span, message).with_found(self.src(span));
+        let parens = Span { start: cspan.end, ..span };
+        let inside = self.src(Span { start: parens.start + 1, end: parens.end - 1, ..span });
+        let d = match kind == CallKind::Plain && args.is_empty() && inside.trim().is_empty() {
+            true => d.with_fix(Fix::delete("remove the parentheses", parens)),
+            false => {
+                d.with_rule(format!("a unit variant is a value, written without `(…)` (`{}`, §4.4)", self.src(cspan)))
+            }
+        };
+        self.diag(d)
     }
 
     /// Arity and argument types. `Span[T]` parameters accept `[T; N]`,

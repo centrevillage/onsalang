@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§6.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0714 for a function value called with `!(` (§5.2, §2.6, S-812): `!` marks a call of an `inout self`
+// method, and a function value is called with `.(`. The error is of the type stage (the value is known
+// to be a function there), and the one candidate puts the mark of the kind in place of the written one:
+// `h!(x)` becomes `h.(x)`, one character replaced. The error is not the E0020 of the name stage (that
+// error is for a call written with `(` only), and the candidate leaves no error. One error per function
+// (P-01). The values that are no function (`K!(x)`) are in
+// tests/spec/negative/value_call_bang_not_a_function.onsa.
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn an_argument(h: fn(I32) -> I32, x: I32) -> I32 {
+  h.(x)                                             //~ E0714
+}
+
+pub fn a_local_binding(x: I32) -> I32 {
+  let f = inc
+  f.(x)                                             //~ E0714
+}
+
+pub fn an_argument_with_no_argument(h: fn() -> I32) -> I32 {
+  h.()                                              //~ E0714
+}
+
+pub fn in_a_closure(x: I32) -> I32 {
+  let g = fn(h: fn(I32) -> I32, y: I32) -> I32 { h.(y) }   //~ E0714
+  g.(inc, x)
+}
+
+test "a function value called with a bang" {
+  let f = inc
+  let y = f.(1)                                     //~ E0714
+  assert y == 2
+}
+
+pub fn in_a_branch(h: fn(I32) -> I32, c: Bool, x: I32) -> I32 {
+  if c {
+    h.(x)                                           //~ E0714
+  } else {
+    x
+  }
+}
+
+pub fn in_an_argument(h: fn(I32) -> I32, x: I32) -> I32 {
+  inc(h.(x))                                        //~ E0714
+}
+
+pub fn in_a_match_arm(o: Option[fn(I32) -> I32], x: I32) -> I32 {
+  match o {
+    Some(g) => g.(x),                               //~ E0714
+    None => x,
+  }
+}
+
+pub fn in_a_loop(ops: [fn(I32) -> I32; 2], x: I32) -> I32 {
+  var acc = x
+  for g in ops {
+    acc = g.(acc)                                   //~ E0714
+  }
+  acc
+}
+
+pub fn in_a_generic_function[T](h: fn(T) -> T, x: T) -> T {
+  h.(x)                                             //~ E0714
+}
+
+pub fn fine(h: fn(I32) -> I32, x: I32) -> I32 {
+  h.(x)
+}

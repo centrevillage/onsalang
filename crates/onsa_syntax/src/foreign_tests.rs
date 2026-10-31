@@ -64,6 +64,16 @@ fn the_rows_have_distinct_names_and_codes_of_their_kind() {
     assert_eq!(crate::foreign::row(RowId::Semicolon).name, "semicolon");
 }
 
+/// A row of a later stage found with no candidate keeps its E0020 (§18.1,
+/// R-301): the syntax stage alone makes it the general E0002.
+#[test]
+fn a_row_of_a_later_stage_keeps_e0020_with_no_candidate() {
+    let span = onsa_diag::Span::new(FileId(0), 0, 1);
+    for id in [RowId::ValueCall, RowId::ItemDotCall, RowId::IndexedValueCall] {
+        assert_eq!(crate::foreign::report(id, "f(x)", span, Vec::new()).code, Code::E0020, "{id:?}");
+    }
+}
+
 #[test]
 fn every_row_of_the_syntax_stage_has_a_matcher() {
     // The registry of the matchers (R-206): each row found where the parser
@@ -909,9 +919,21 @@ fn a_tuple_index_ends_a_callee_as_a_value() {
 }
 
 /// After a value that ends with no tuple index, a `!(` that touches it is
-/// read as before (W4-12): in a list, the missing `,` before `!(x)`. In the
+/// read as before (S-631): in a list, the missing `,` before `!(x)`. In the
 /// arms of a `match`, an opener after a gap that no `=>` follows has the gap
 /// taken out as its one candidate, and none when that does not read (§2.5).
+/// A `!(` that touches a value that is no name, where no `,` of a list goes
+/// before it, notes the rule of the marks as a `~(` there does (R-339).
+#[test]
+fn a_bang_after_another_value_notes_the_marks_where_no_comma_goes() {
+    for src in ["let v = inc(1)!(x)", "let v = W { a: inc(1)!(x) }", "let v = match x { 1 => inc(1)!(x), _ => 0 }"] {
+        let p = parse(&body(&format!("  {src}")));
+        let d = &p.diagnostics[0];
+        assert!(d.code == Code::E0002 && d.fixes.is_empty(), "{src}: {:?}", p.diagnostics);
+        assert!(d.notes.iter().any(|n| n.message.contains("the marks")), "{src}: {:?}", d.notes);
+    }
+}
+
 #[test]
 fn a_bang_after_another_value_and_an_opener_in_the_arms() {
     for src in ["two(inc(1)!(2), 1)", "[(t)!(x)]", "(x?!(y), 1)"] {

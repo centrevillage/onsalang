@@ -37,11 +37,11 @@ pub struct Pair[ItemKey3] { //~ E0320
 }
 
 pub fn run_camel[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} { //~ E0320
-  f(x)
+  f.(x)
 }
 
 pub fn run_double[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} { //~ E0320
-  f(x)
+  f.(x)
 }
 
 pub fn double_ended() -> I32 { //~ E0320

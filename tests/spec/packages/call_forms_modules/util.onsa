@@ -1,0 +1,28 @@
+pub fn double(x: I32) -> I32 {
+  x * 2
+}
+
+pub fn negate(x: I32) -> I32 {
+  0 - x
+}
+
+pub const OPS: [fn(I32) -> I32; 2] = [double, negate]
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn new(n: I32) -> Counter {
+    Counter { n: n }
+  }
+}
+
+pub enum Shape {
+  Dot,
+  Ring(I32),
+}
+
+pub fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}

@@ -75,7 +75,7 @@ pub(crate) fn complete(
             _ => fixes.into_iter().filter_map(|f| completed(text, units, f, &mut reads)).collect(),
         };
         if d.fixes.is_empty() {
-            d.code = d.code.without_fixes();
+            d.code = d.code.without_fixes(d.stage);
         }
     }
     reads
