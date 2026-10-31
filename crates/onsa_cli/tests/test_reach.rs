@@ -4,7 +4,8 @@
 //! What the spec fixes, and so what is checked here:
 //! - a `target` declaration of `std` that the target does not provide is E0200 at the use,
 //!   when the use is reachable from an entry of the run, before the run starts (§15.2). The
-//!   entries of `onsa test` are the tests that run, which `--filter` selects (§15.2, §18.2).
+//!   entries of `onsa test` are the tests that run, which the file passed and `--filter` select
+//!   (§15.2, §18.2).
 //!   Reachable means that the entry can follow it statically: the function it calls, the
 //!   function it uses as a value, the flow whose instance it makes, the initializer of a
 //!   `const` it reads, and so on in turn; whether the run passes it is not looked at (§15.2);
