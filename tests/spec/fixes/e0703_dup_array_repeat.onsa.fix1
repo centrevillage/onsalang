@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "14:9"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-795 (§5.2): a `move` on a Copy value in a `[e; N]` literal is an E0703 at the operand of the `move`, and the one candidate removes it.
+
+pub fn repeat(n: U32) -> [U32; 3] {
+  [n; 3] //~ E0703
+}

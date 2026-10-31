@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "14:16"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-605, S-343 (§5.2): the `move` at the end of an arm of an `if` that is an operand of a binary operator is an E0703, and the one candidate removes it.
+
+pub fn operand(c: Bool, n: U32) -> U32 {
+  (if c { n } else { 1 }) + 2 //~ E0703
+}

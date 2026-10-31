@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:12"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the argument of a `move` parameter is a `match` that has the `move` on the whole. The candidate removes it and puts a `move` on the end of
+// each arm that is an owned Affine place.
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn arg_match(k: U32, move x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  eat(match k { //~ E0711
+    0 => move x,
+    _ => move y,
+  })
+}

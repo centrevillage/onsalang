@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "25:10"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-34 (§5.2: "struct / 配列 / タプルのリテラルと構築子の要素 … Affine 値を `move` 無しでこれらの位置に置くと E0711（修正候補は `move` の挿入）"): the tuple literal in the argument of
+// a borrowed parameter is a new value made of its elements, so the owned Affine place `a` in it is moved without the mark, an E0711 at the place. The literal does not take
+// the position of the parameter (the type of the parameter, a tuple, is not what makes an element consumed). The one candidate inserts the `move`. The new value `mk()` takes
+// none. After it the file has no diagnostic.
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn total(p: (Buf[F32], Buf[F32])) -> U32 uses {Alloc} {
+  p.0.len() + p.1.len()
+}
+
+pub fn tuple_arg(move a: Buf[F32]) -> U32 uses {Alloc} {
+  total((a, mk())) //~ E0711
+}

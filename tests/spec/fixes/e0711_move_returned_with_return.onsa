@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:17"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the same as fixes/e0711_move_returned_if.onsa, with `return`. The candidate only removes the `move` on the whole `if`.
+
+pub fn returned_with_return(c: Bool, d: Bool, move x: Buf[F32], move y: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  if d {
+    return move if c { x } else { y } //~ E0711
+  }
+  Buf.zeroed(1)
+}

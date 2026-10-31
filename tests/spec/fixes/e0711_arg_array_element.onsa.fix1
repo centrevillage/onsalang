@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "23:14"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-34 (§5.2): the same for the array literal in the argument of a borrowed parameter of the type `[Buf[F32]; 2]`: the owned place `a` is moved into the new array without the
+// mark, an E0711 at the place, and the one candidate inserts the `move`. (The planar array of `[Span[T]; N]` takes the places as they are, values/move_arg_literal_elements.onsa.)
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn total_arr(p: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  p[0].len() + p[1].len()
+}
+
+pub fn array_arg(move a: Buf[F32]) -> U32 uses {Alloc} {
+  total_arr([move a, mk()]) //~ E0711
+}

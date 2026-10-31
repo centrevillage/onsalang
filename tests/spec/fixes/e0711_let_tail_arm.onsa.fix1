@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:18"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// S-100, S-604 (§5.2: "消費する位置に置いたブロックでは、各腕を `let y = <腕の値>` と書いたときと同じに扱う。Affine の変数 … には `move` を書き"): an arm of an `if` at the initialization
+// of a `let` that is an owned Affine place needs the `move`. The E0711 is at the place in the arm, and the one candidate inserts the `move` there; the arm of a new value takes none.
+// After it the file has no diagnostic. A function with two arms without the mark reports the first (negative/move_tail_consuming_arms.onsa).
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn let_arm(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  let y = if c { move a } else { mk() } //~ E0711
+  y.len()
+}

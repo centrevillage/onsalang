@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:16"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-795 (§5.2): a `move` on a Copy value in the field of a struct literal is an E0703 at the operand of the `move`, and the one candidate removes it.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn field(n: I32) -> Pt {
+  Pt { x: move n, y: 0 } //~ E0703
+}

@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:12"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the argument of a `move` parameter is a block that has the `move` on the whole. The candidate removes it and puts a `move` on the end of the
+// block.
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn arg_block(move x: Buf[F32]) uses {Alloc} {
+  eat({ move x }) //~ E0711
+}

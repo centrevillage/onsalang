@@ -142,9 +142,9 @@ impl Walker<'_> {
                 self.expr(r, e, Pos::Read)
             }
             (Takes::Param(Mode::Move, _), _) => self.consume(r, e, Pos::MoveArg, mark),
-            (Takes::Element, Mode::Borrow) => self.expr(r, e, Pos::Consume),
-            // A Dup value marked `move` on an element is copied, as on a literal's element (§5.2, S-793).
-            (Takes::Element, _) => self.consume(r, e, Pos::Consume, mark),
+            (Takes::Element, Mode::Borrow) => self.expr(r, e, Pos::Value),
+            // An element, as of a literal (§5.2, S-793): a Dup value's `move` is E0703 (S-795).
+            (Takes::Element, _) => self.consume(r, e, Pos::Value, mark),
             (Takes::Param(m, ty), _) => {
                 if a.mode != m {
                     self.mismatch(a, m);
@@ -170,7 +170,7 @@ impl Walker<'_> {
     fn mismatch(&mut self, a: &Arg, m: Mode) {
         let (at, file, start) = (self.ast.expr(a.expr).span, a.span.file, a.span.start);
         if a.mode == Mode::Move && place_of(self.ast, self.names, a.expr).is_none() {
-            return self.needs_a_place(at);
+            return self.needs_a_place(a.expr, start, Pos::Arg(m));
         }
         let (message, fix) = match (m, a.mode) {
             (Mode::Borrow, Mode::Inout) => ("borrowed, not `inout`", self.unmark(file, start, "inout")),

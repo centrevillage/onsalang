@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:21"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-605, S-609 (§5.2): a literal under a `move` in the element of a constructor is an E0711 at the operand of the `move` (a literal is not a place), and the one candidate
+// removes it.
+
+pub fn ctor_literal() -> U32 {
+  let o = Some(move 1) //~ E0711
+  o.unwrap()
+}

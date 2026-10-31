@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "24:18"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-605, S-343 (§5.2: "それ以外の位置（文、条件、二項演算子の被演算子、添字、範囲の端、借用と `inout` の引数）に置いたブロックの末尾の `move` は E0703 で、末尾の `move` ごとに一件、その `move` を
+// 消す修正候補を示す"): the `move` at the end of an arm of an `if` in the argument of a borrowed parameter is an E0703 at the operand of the `move`, and the one candidate removes it. After it the
+// function reads the place, and the file has no diagnostic. One diagnostic in the file, because `clean` is about the whole file (tests/README.md).
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn rd(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn borrowed_arg_if(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { a } else { mk() }) //~ E0703
+}

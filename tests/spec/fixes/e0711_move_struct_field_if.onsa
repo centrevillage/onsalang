@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:20"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the field of a struct literal is a value position, a consuming position. The candidate removes the `move` on the whole `if` and puts a `move`
+// on the end of each arm that is an owned Affine place.
+
+pub struct Holder {
+  b: Buf[F32],
+}
+
+pub fn field_if(c: Bool, move x: Buf[F32], move y: Buf[F32]) -> Holder uses {Alloc} {
+  Holder { b: move if c { x } else { y } } //~ E0711
+}

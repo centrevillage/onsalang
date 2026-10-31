@@ -74,7 +74,7 @@ impl Walker<'_> {
             }
             ExprKind::Match { scrutinee, arms, .. } => {
                 let head = self.head_pos(Head::Match { scrutinee: *scrutinee }, Pos::Arg(Mode::Borrow));
-                if head != Pos::Consume {
+                if head != Pos::Own {
                     self.view_of_inout(*scrutinee, arms.iter().map(|a| a.pat));
                 }
                 self.head(r, *scrutinee, head, &arms.iter().map(|a| a.pat).collect::<Vec<_>>());
@@ -136,7 +136,7 @@ impl Walker<'_> {
                 self.declare(r, *pat);
             }
             StmtKind::Var { init, .. } => {
-                self.expr(r, *init, Pos::Consume);
+                self.expr(r, *init, Pos::Own);
                 let Some(&l) = self.origins.get(&Origin::Var(s)) else {
                     bug(Some(ast.stmt(s).span), "a `var` with no local")
                 };
@@ -144,7 +144,7 @@ impl Walker<'_> {
             }
             // The value, then the target (§3.5).
             StmtKind::Assign { target, value } => {
-                self.expr(r, *value, Pos::Consume);
+                self.expr(r, *value, Pos::Value);
                 self.write_place(r, *target, How::Assign);
             }
             StmtKind::For { pat, moved, iter, body } => {
@@ -156,10 +156,10 @@ impl Walker<'_> {
                         self.report(d.with_fix(self.unmark(m.file, m.start, "move")));
                         self.expr(r, *iter, Pos::Read);
                     }
-                    Some(m) => self.consume(r, *iter, Pos::Consume, Some(m.start)),
+                    Some(m) => self.consume(r, *iter, Pos::Own, Some(m.start)),
                     None => {
                         let head = self.head_pos(Head::For(s), Pos::Arg(Mode::Borrow));
-                        if head != Pos::Consume {
+                        if head != Pos::Own {
                             self.view_of_inout(*iter, [*pat]);
                         }
                         self.expr(r, *iter, head)
@@ -187,7 +187,7 @@ impl Walker<'_> {
     fn head_pos(&self, head: Head, borrow: Pos) -> Pos {
         match self.info.heads.get(&head) {
             Some(HeadRow::Borrow { .. }) => borrow,
-            _ => Pos::Consume,
+            _ => Pos::Own,
         }
     }
 

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "21:12"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the arms of the `if` under a `move` in the argument of a `move` parameter are an owned Affine place and a new value. The candidate removes
+// the `move` of the whole and puts one on the arm that is a place; the new value takes none ("新しく作った値と Copy の値には書かない").
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn arg_if_mixed(c: Bool, move x: Buf[F32]) uses {Alloc} {
+  eat(if c { move x } else { mk() }) //~ E0711
+}

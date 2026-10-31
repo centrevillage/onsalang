@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:8"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the block that stands where the function returns has the `move` on the whole `if`. The mark of a returned value is accepted but not written
+// (S-541), and a `move` on the arms would not be an error of this position but it is written only where a value is consumed, so the candidate only removes the
+// `move` on the whole.
+
+pub fn returned_if(c: Bool, move x: Buf[F32], move y: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  move if c { x } else { y } //~ E0711
+}

@@ -1,0 +1,197 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "80:10"
+// code = "E0711"
+// candidate = 1
+// leaves = ["80:18 E0711"]
+// [[test.fix]]
+// at = "84:14"
+// code = "E0711"
+// candidate = 1
+// leaves = ["84:22 E0711"]
+// [[test.fix]]
+// at = "92:14"
+// code = "E0711"
+// candidate = 1
+// leaves = ["92:22 E0711"]
+// [[test.fix]]
+// at = "112:18"
+// code = "E0711"
+// candidate = 1
+// leaves = ["112:34 E0711"]
+// [[test.fix]]
+// at = "118:10"
+// code = "E0711"
+// candidate = 1
+// leaves = ["119:10 E0711"]
+// [[test.fix]]
+// at = "125:15"
+// code = "E0703"
+// candidate = 1
+// leaves = ["125:31 E0703"]
+// [[test.fix]]
+// at = "130:10"
+// code = "E0703"
+// candidate = 1
+// leaves = ["131:10 E0703"]
+
+// R-34, S-100 (§5.2: "Affine 値を `move` 無しでこれらの位置に置くと E0711（修正候補は `move` の挿入）"; "消費する位置に置いたブロックでは、各腕を `let y = <腕の値>` と書いたときと同じに扱う"):
+// the tuple or array literal in the argument of a borrowed parameter (`total((a, b))`, `total_arr([a, b])`) is a new value made of its elements, so an owned Affine place in it
+// is moved without the mark: an E0711 at the first place without it, with the one candidate that inserts the `move` (the unit stops at its first error, §18.1, so a function
+// with two such places reports the first). The type of the parameter does not make the elements borrowed. The same for a `move` parameter and the element of a struct literal
+// or of a literal in a `let`. The right forms (the marks, a place that is only read, the planar array of a `[Span[T]; N]` parameter) are at the end of this file and in
+// values/move_arg_literal_elements.onsa. The arms of an `if` and a `match` at the initialization of a `let` and in an argument follow the same rule, and are in the
+// last part: the first arm without the mark is reported (S-100). One error per function (P-01).
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub struct Holder {
+  b: Buf[F32],
+}
+
+pub fn total(p: (Buf[F32], Buf[F32])) -> U32 uses {Alloc} {
+  p.0.len() + p.1.len()
+}
+
+pub fn total_arr(p: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  p[0].len() + p[1].len()
+}
+
+pub fn total_planar(xs: [Span[F32]; 2]) -> U32 {
+  xs[0].len() + xs[1].len()
+}
+
+pub fn take_pair(move p: (Buf[F32], Buf[F32])) -> U32 uses {Alloc} {
+  p.0.len() + p.1.len()
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+// ------------------------------------------------------------------ the elements of a literal
+
+pub fn tuple_arg(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  total((move a, b)) //~ E0711 @10
+}
+
+pub fn array_arg(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  total_arr([move a, b]) //~ E0711 @14
+}
+
+pub fn tuple_arg_second_element(move b: Buf[F32]) -> U32 uses {Alloc} {
+  total((mk(), move b)) //~ E0711 @16
+}
+
+pub fn tuple_arg_of_a_move_parameter(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take_pair((move a, b)) //~ E0711 @14
+}
+
+pub fn tuple_of_a_local(move a: Buf[F32]) -> U32 uses {Alloc} {
+  let t = (move a, mk()) //~ E0711 @12
+  take_pair(move t)
+}
+
+pub fn struct_field(move a: Buf[F32]) -> Holder {
+  Holder { b: move a } //~ E0711 @15
+}
+
+pub fn array_of_a_local() -> U32 uses {Alloc} {
+  let a = mk()
+  total_arr([move a, mk()]) //~ E0711 @14
+}
+
+// ------------------------------------------------------------------ the arms of a block at a consuming position
+
+pub fn pick_let(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = if c { move a } else { b } //~ E0711 @18
+  y
+}
+
+pub fn pick_let_match(k: U32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = match k {
+    0 => move a, //~ E0711 @10
+    _ => b,
+  }
+  y
+}
+
+pub fn pick_arg(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take(if c { move a } else { b }) //~ E0703 @15
+}
+
+pub fn pick_arg_match(k: U32, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take(match k {
+    0 => move a, //~ E0703 @10
+    _ => b,
+  })
+}
+
+// ------------------------------------------------------------------ right
+
+pub fn tuple_arg_with_the_marks(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  total((move a, move b))
+}
+
+pub fn array_arg_with_the_marks(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  total_arr([move a, move b])
+}
+
+pub fn new_values_in_a_literal() -> U32 uses {Alloc} {
+  total((mk(), Buf.zeroed(3)))
+}
+
+pub fn a_place_that_is_only_read(a: Buf[F32]) -> U32 uses {Alloc} {
+  a.len() + total((mk(), mk()))
+}
+
+pub fn planar_arg(a: Buf[F32], b: Buf[F32]) -> U32 {
+  total_planar([a, b]) + a.len()
+}
+
+pub fn pick_let_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = if c { move a } else { move b }
+  y
+}
+
+pub fn pick_match_moved(k: U32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = match k {
+    0 => move a,
+    _ => move b,
+  }
+  y
+}
+
+pub fn pick_arg_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take(if c { move a } else { move b })
+}
+
+pub fn pick_tail(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  if c { a } else { b }
+}
+
+pub fn pick_tail_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  if c { move a } else { move b }
+}
+
+pub fn returned_early_with_the_mark(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  if c {
+    return move a
+  }
+  b
+}
+
+pub fn pick_workaround(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var y: Buf[F32] = Buf.zeroed(0)
+  if c {
+    y = move a
+  } else {
+    y = move b
+  }
+  y
+}

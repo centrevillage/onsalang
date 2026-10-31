@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:17"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-605, S-807 (§5.2: "`move` の被演算子 … 場所でない値 … に付けると、位置によらず E0711"; §7: "他の場所でない反復元（呼び出し、定数、`if`）に付けた `move` は E0711"): the heading of a
+// `for` is a consuming position, so the `if` that has the `move` on the whole is an E0711 at the operand of the `move`, and the one candidate removes it and puts a `move` on the end of each arm
+// that is an owned Affine place, which makes the iteration own the elements. After it the file has no diagnostic.
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn for_head_if(c: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) uses {Alloc} {
+  for x in move if c { xs } else { ys } { //~ E0711
+    eat(move x)
+  }
+}

@@ -39,15 +39,9 @@ impl<'a> Checker<'a> {
                 Ok(self.record(e, t))
             }
             ExprKind::Paren(inner) => self.check_expr(*inner, expected),
-            ExprKind::Move(inner) => {
-                // `move x` (§5.2, S-21): same type as its operand, which must be a place.
-                let t = self.check_expr(*inner, expected)?;
-                if !self.is_place(*inner) {
-                    let ispan = self.expr(*inner).span;
-                    return Err(self.err(Code::E0711, ispan, super::MOVE_NEEDS_A_PLACE));
-                }
-                Ok(t)
-            }
+            // `move x` (§5.2, S-21): same type as its operand. Whether it is a
+            // place is the modes stage's (R-198: its candidate asks the kinds).
+            ExprKind::Move(inner) => self.check_expr(*inner, expected),
             ExprKind::Tuple(elems) => {
                 if elems.is_empty() {
                     return Ok(self.unit());

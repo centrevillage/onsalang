@@ -63,6 +63,8 @@ pub fn extra_move(b: U32) {
 
 pub fn bump2(b: U32) {}
 
+pub fn three() -> U32 { 3 }
+
 pub fn used_after_move(move b: Buf[F32]) -> U32 uses {Alloc} {
   take(move b)
   b.len()                       //~ E0704
@@ -110,7 +112,7 @@ pub fn match_moves(move o: Option[Buf[F32]]) uses {Alloc} {
 }
 
 pub fn move_of_a_call() -> U32 {
-  let y = move bump2(1)         //~ E0711
+  let y = move three()         //~ E0711
   y
 }
 

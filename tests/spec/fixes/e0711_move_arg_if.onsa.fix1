@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:12"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-605, S-807 (§5.2: "`move` の被演算子は場所 … で、場所でない値（呼び出しの結果、リテラル、定数、関数の項目の名前、ブロック、`if`・`match`）に付けると、
+// 位置によらず E0711 である"; "修正候補は、ブロックと `if`・`match` なら外の `move` を消して各末尾の Affine の変数に `move` を置く形"): the argument of a `move`
+// parameter is an `if` that has the `move` on the whole. It is an E0711 at the operand of the `move`, and the one candidate removes it and puts a `move` on the end of each arm
+// that is an owned Affine place, which is a consuming position, so after it the file has no diagnostic. One diagnostic in the file, because `clean` is about the
+// whole file (tests/README.md). The other forms have a file each: fixes/e0711_move_arg_*.onsa and fixes/e0711_move_*.onsa.
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn arg_if(c: Bool, move x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  eat(if c { move x } else { move y }) //~ E0711
+}

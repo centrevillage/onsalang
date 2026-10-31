@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "22:12"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-605, R-311 (§5.2: "修正候補は、ブロックと `if`・`match` なら … 、それ以外は `move` を消す形"; "場所でない値（新しく作った値、Copy のリテラル）を `move` の引数に渡すときは、
+// `move` を書かない（`take(Buf.zeroed(4))`）"): the result of a call under a `move` in the argument of a `move` parameter is an E0711 at the operand of the `move`, and the one candidate
+// removes it. After it the argument is the new value that has no mark, which is right.
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn call_result() uses {Alloc} {
+  eat(move mk()) //~ E0711
+}

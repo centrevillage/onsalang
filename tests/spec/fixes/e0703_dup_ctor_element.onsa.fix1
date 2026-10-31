@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:13"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-795, S-793 (§5.2: "構築子 … の要素は、struct / 配列 / タプルのリテラルの要素と同じ消費する位置で"): a `move` on a Copy value in the element of a constructor (`Some(move n)`) is an
+// E0703 at the operand of the `move`, and the one candidate removes it.
+
+pub fn ctor(n: U32) -> Option[U32] {
+  Some(n) //~ E0703
+}

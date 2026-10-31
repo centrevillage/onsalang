@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:12"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-795 (§5.2: "代入の右辺 … の Dup 値の `move` は … E0703 で、修正候補はその `move` を消す形"): a `move` on a Copy value at the right of an assignment moves nothing, an E0703 at
+// the `move`, and the one candidate removes it. After it the file has no diagnostic.
+
+pub fn assign(n: U32) -> U32 {
+  var x: U32 = 0
+  x = n //~ E0703
+  x
+}

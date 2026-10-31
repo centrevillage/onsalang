@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:31"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-605, S-343 (§5.2): the `move` at the end of an arm of an `if` that is the end of the range of a `for` is an E0703, and the one candidate removes it.
+
+pub fn range_end(c: Bool, n: U32) -> U32 {
+  var total: U32 = 0
+  for k in 0 ..< (if c { move n } else { 4 }) { //~ E0703
+    total = total + k
+  }
+  total
+}

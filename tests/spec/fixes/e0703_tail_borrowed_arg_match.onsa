@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "23:15"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-605, S-343 (§5.2): the same for the arm of a `match` in the argument of a borrowed parameter. The one candidate removes the `move`.
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn rd(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn borrowed_arg_match(k: U32, move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(match k {
+    0 => move a, //~ E0703
+    _ => mk(),
+  })
+}

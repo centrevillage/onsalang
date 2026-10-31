@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:16"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the initialization of a `let` is the heading of a binding, a consuming position. The `if` with the `move` on the whole is an E0711, and the
+// candidate removes the `move` and puts one on the end of each arm that is an owned Affine place. (The other side of this change is the move of the stage of this
+// error from the type stage to the modes stage, negative/unit_stage_move_not_a_place.onsa.)
+
+pub fn let_if(c: Bool, move x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  let z = move if c { x } else { y } //~ E0711
+  z.len()
+}

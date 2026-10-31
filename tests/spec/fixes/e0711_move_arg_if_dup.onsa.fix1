@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:11"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the arms of the `if` under a `move` in the argument of a `move` parameter are Dup values (Copy). There is no Affine place among the ends,
+// so the candidate only removes the `move` of the whole, and no `move` is put on the arms (a `move` on a Dup value there is an E0703, S-609).
+
+pub fn tk(move n: U32) -> U32 {
+  n
+}
+
+pub fn arg_if_dup(c: Bool, n: U32, m: U32) -> U32 {
+  tk(if c { n } else { m }) //~ E0711
+}

@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// R-198, S-605 (§5.2: "`move` の被演算子は場所 … で、場所でない値 … に付けると、位置によらず E0711 である"; §18.1: "検査の段には依存の順がある（構文 → 名前 → 型 → flow の検査 →
+// 引数のモードと移動 → rt と効果 → 使われない束縛）。ある段が誤りを見つけた単位では、その結果に依存する後の段を行わない"): the E0711 of a `move` on a value that is not a place
+// is a mistake of the modes stage, the stage of the arguments and moves, after the type stage (a `let` is not different from an argument). In a function that has a mistake of
+// the type stage too (an E0401, here before or after the `move`), the E0711 is not reported, and only the mistake of the type stage is, wherever the two are in the function.
+// The units are checked separately (P1), so the E0711 of another function is reported at the same time. One diagnostic per function (P-01).
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+// ------------------------------------------------------------------ alone: the E0711 of the modes stage
+
+pub fn let_alone() -> U32 uses {Alloc} {
+  let z = move mk() //~ E0711
+  z.len()
+}
+
+pub fn argument_alone() uses {Alloc} {
+  eat(move mk()) //~ E0711
+}
+
+// ------------------------------------------------------------------ with a mistake of the type stage in the same function
+
+pub fn let_then_type_error() -> U32 uses {Alloc} {
+  let z = move mk()
+  let n: U32 = true //~ E0401
+  z.len() + n
+}
+
+pub fn type_error_then_let() -> U32 uses {Alloc} {
+  let n: U32 = true //~ E0401
+  let z = move mk()
+  z.len() + n
+}
+
+pub fn argument_then_type_error() -> U32 uses {Alloc} {
+  eat(move mk())
+  let n: U32 = true //~ E0401
+  n
+}
+
+pub fn if_then_type_error(c: Bool, move x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  let z = move if c { x } else { y }
+  let n: U32 = true //~ E0401
+  z.len() + n
+}
+
+// ------------------------------------------------------------------ the units are separate
+
+pub fn another_unit_with_a_type_error() -> U32 {
+  let n: U32 = true //~ E0401
+  n
+}

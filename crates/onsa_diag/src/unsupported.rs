@@ -174,10 +174,6 @@ features! {
         Some("write it as an integer literal, or as a `const` whose value is an integer literal");
     VariantCtorValues: Language, "variant constructors as function values", None;
     CallsThroughFnValues: Language, "calls through function values", None;
-    /// S-343: a `move` on the last expression of a block placed where no value
-    /// is consumed (W4-09 after S-343 is decided).
-    MoveOnUnconsumedTail: Language, "`move` on the last expression of a block that stands where no value is consumed",
-        Some("write `move` where the value is consumed (a `let`, an assignment, a `move` argument, the result of the function), or remove it");
     /// S-85, X-8: the drop of the rest where a field is taken out (W8-04).
     TakenFields: Language, "taking a field out of a value (the rest is dropped)", None;
     FromFnValue: Language, "`array.from_fn` with a non-literal function value",

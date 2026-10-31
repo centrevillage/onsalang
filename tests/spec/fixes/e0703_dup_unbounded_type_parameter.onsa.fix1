@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:13"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-795 (§5.2: "境界の無い型パラメータ" is a Dup value): a `move` on a value of a type parameter without a bound (it is Dup) in the element of a constructor is an E0703 at the
+// `move`, and the one candidate removes it. The value of `T: ?Dup` takes the mark (negative/move_dup_value_position.onsa).
+
+pub fn unbounded[T](move t: T) -> Option[T] {
+  Some(t) //~ E0703
+}

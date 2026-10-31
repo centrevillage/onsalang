@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.4", "§7"]
+
+// S-605, S-343 (§5.2: "`match` と `for` の見出しに置いたブロックの末尾にも `move` を書け、そのとき腕の束縛と反復は所有になる（§5.4）"): the other side of
+// negative/move_tail_unconsumed.onsa. A `move` at the end of an arm of an `if` that is the heading of a `match` or a `for` is accepted, and the binding of the arm and the
+// iteration own the value: the element or the payload is passed on with `take(move x)`, which a borrowed heading does not allow (negative/binding_heading_borrow_move.onsa).
+// Run in the interpreter.
+
+fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+fn for_head_tail(c: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for x in if c { move xs } else { move ys } {
+    n = n + take(move x)
+  }
+  n
+}
+
+fn for_head_tail_in_a_parenthesis(c: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for x in (if c { move xs } else { move ys }) {
+    n = n + take(move x)
+  }
+  n
+}
+
+fn for_head_nested(c: Bool, d: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for x in if c { if d { move xs } else { move ys } } else { move ys } {
+    n = n + take(move x)
+  }
+  n
+}
+
+fn match_head_tail(c: Bool, move a: Option[Buf[F32]], move b: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match if c { move a } else { move b } {
+    Some(x) => take(move x),
+    None => 0,
+  }
+}
+
+fn match_head_tail_in_a_parenthesis(c: Bool, move a: Option[Buf[F32]], move b: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match (if c { move a } else { move b }) {
+    Some(x) => take(move x),
+    None => 0,
+  }
+}
+
+fn match_head_tail_with_a_new_value(c: Bool, move a: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match if c { move a } else { Some(Buf.zeroed(7)) } {
+    Some(x) => take(move x),
+    None => 0,
+  }
+}
+
+test "the end of an arm that is the heading of a for owns the iteration" {
+  assert for_head_tail(true, [Buf.zeroed(1), Buf.zeroed(2)], [Buf.zeroed(3), Buf.zeroed(4)]) == 3
+  assert for_head_tail(false, [Buf.zeroed(1), Buf.zeroed(2)], [Buf.zeroed(3), Buf.zeroed(4)]) == 7
+  assert for_head_tail_in_a_parenthesis(true, [Buf.zeroed(1), Buf.zeroed(2)], [Buf.zeroed(3), Buf.zeroed(4)]) == 3
+  assert for_head_nested(true, false, [Buf.zeroed(1), Buf.zeroed(2)], [Buf.zeroed(3), Buf.zeroed(4)]) == 7
+}
+
+test "the end of an arm that is the heading of a match owns the binding of the arm" {
+  assert match_head_tail(true, Some(Buf.zeroed(3)), None) == 3
+  assert match_head_tail(false, None, Some(Buf.zeroed(5))) == 5
+  assert match_head_tail(true, None, Some(Buf.zeroed(5))) == 0
+  assert match_head_tail_in_a_parenthesis(false, None, Some(Buf.zeroed(6))) == 6
+  assert match_head_tail_with_a_new_value(false, None) == 7
+  assert match_head_tail_with_a_new_value(true, Some(Buf.zeroed(2))) == 2
+}

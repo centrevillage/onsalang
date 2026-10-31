@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+
+// S-605, S-343 (§5.2: "`match` と `for` の見出しに置いたブロックの末尾にも `move` を書け、そのとき腕の束縛と反復は所有になる（§5.4）"; "片方の腕でだけ消費した変数は、その後で使えない（E0704）"):
+// a `move` at the end of an arm of an `if` that is the heading of a `match` or a `for` consumes the place, so a use after the `match` or the `for` is an E0704, also for the place of
+// the arm that was not taken (the move is counted along the flow, on one path). A heading whose arms have no `move` is a borrowed heading, which does not consume the places. One
+// error per function (P-01).
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn for_head_then_use(c: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for x in if c { move xs } else { move ys } {
+    n = n + take(move x)
+  }
+  n + xs[0].len() //~ E0704
+}
+
+pub fn for_head_then_use_other_arm(c: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for x in if c { move xs } else { move ys } {
+    n = n + take(move x)
+  }
+  n + ys[0].len() //~ E0704
+}
+
+pub fn match_head_then_use(c: Bool, move a: Option[Buf[F32]], move b: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  let n = match if c { move a } else { move b } {
+    Some(x) => take(move x),
+    None => 0,
+  }
+  n + a.unwrap().len() //~ E0704
+}
+
+pub fn match_head_arm_binding_twice(c: Bool, move a: Option[Buf[F32]], move b: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match if c { move a } else { move b } {
+    Some(x) => take(move x) + x.len(), //~ E0704
+    None => 0,
+  }
+}
+
+pub fn for_head_element_twice(c: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for x in if c { move xs } else { move ys } {
+    n = n + take(move x)
+    n = n + take(move x) //~ E0704
+  }
+  n
+}
+
+// ------------------------------------------------------------------ right
+
+pub fn borrowed_heading_keeps_the_places(c: Bool, xs: [Buf[F32]; 2], ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = 0
+  for x in if c { xs } else { ys } {
+    n = n + x.len()
+  }
+  n + xs[0].len()
+}
+
+pub fn the_places_used_before(c: Bool, move xs: [Buf[F32]; 2], move ys: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n: U32 = xs[0].len() + ys[0].len()
+  for x in if c { move xs } else { move ys } {
+    n = n + take(move x)
+  }
+  n
+}

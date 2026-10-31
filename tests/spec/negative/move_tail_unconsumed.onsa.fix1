@@ -1,0 +1,202 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "74:18"
+// code = "E0703"
+// candidate = 1
+// leaves = ["74:29 E0703"]
+
+// S-605, S-343 (§5.2: "`match` と `for` の見出しに置いたブロックの末尾にも `move` を書け、そのとき腕の束縛と反復は所有になる（§5.4）。それ以外の位置
+// （文、条件、二項演算子の被演算子、添字、範囲の端、借用と `inout` の引数）に置いたブロックの末尾の `move` は E0703 で、末尾の `move` ごとに一件、その
+// `move` を消す修正候補を示す"; "返り値の位置に書いた `move` … は意味を変えない余分な情報で、検査は受け付ける"): a `move` at the end of a block, an
+// `if` or a `match` that is placed where nothing is consumed is an E0703 at the operand of the `move`, and the one candidate removes it. The positions here
+// are a borrowed argument, the condition of an `if` and of a `while`, an operand of a binary operator, an index, and the two ends of the range
+// of a `for`; an `inout` argument takes the tail in its index (the block as the `inout` operand itself is not a place, §5.1, and is not written
+// here). The tail of a `match` or a `for` head and of a returned block stays right (values/move_tail_heading_run.onsa and the end of this
+// file). A condition, an operand and an index are Dup values, and the `move` there is an E0703 for the position as well as for the value. One `move` in a
+// function, so one diagnostic; a function with two tails with a `move` reports the first (the unit stops at its first error, §18.1) and the
+// column says which. A block in the position of a statement is the work W5-08 and is not written here.
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn rd(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn bump(inout x: F32) {
+  x = x + 1.0
+}
+
+pub struct Holder {
+  b: Buf[F32],
+  gain: F32,
+}
+
+// ------------------------------------------------------------------ a borrowed argument
+
+pub fn borrowed_arg_if(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { a } else { mk() }) //~ E0703
+}
+
+pub fn borrowed_arg_else_arm(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { mk() } else { a }) //~ E0703
+}
+
+pub fn borrowed_arg_match(k: U32, move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(match k {
+    0 => a, //~ E0703
+    _ => mk(),
+  })
+}
+
+pub fn borrowed_arg_block(move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd({ a }) //~ E0703
+}
+
+pub fn borrowed_arg_nested(c: Bool, d: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { if d { a } else { mk() } } else { mk() }) //~ E0703
+}
+
+pub fn borrowed_arg_local(c: Bool) -> U32 uses {Alloc} {
+  let b = mk()
+  rd(if c { b } else { mk() }) //~ E0703
+}
+
+pub fn borrowed_arg_field_path(c: Bool, move h: Holder) -> U32 uses {Alloc} {
+  rd(if c { h.b } else { mk() }) //~ E0703
+}
+
+pub fn borrowed_arg_two_tails(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { a } else { move b }) //~ E0703 @18
+}
+
+// ------------------------------------------------------------------ an `inout` argument
+
+pub fn inout_arg_index(c: Bool, i: U32, inout xs: [F32; 4]) {
+  bump(inout xs[if c { i } else { 0 }]) //~ E0703
+}
+
+// ------------------------------------------------------------------ a condition
+
+pub fn if_condition(c: Bool, f: Bool) -> U32 {
+  if (if c { f } else { true }) { 1 } else { 0 } //~ E0703
+}
+
+pub fn while_condition(c: Bool, f: Bool) -> U32 {
+  var k: U32 = 0
+  while (if c { f } else { false }) { //~ E0703
+    k = k + 1
+  }
+  k
+}
+
+pub fn if_condition_match(k: U32, f: Bool) -> U32 {
+  if (match k {
+    0 => f, //~ E0703
+    _ => true,
+  }) {
+    1
+  } else {
+    0
+  }
+}
+
+// ------------------------------------------------------------------ an operand of a binary operator
+
+pub fn binary_left(c: Bool, n: U32) -> U32 {
+  (if c { n } else { 1 }) + 2 //~ E0703
+}
+
+pub fn binary_right(c: Bool, n: U32) -> U32 {
+  2 * (if c { 1 } else { n }) //~ E0703
+}
+
+pub fn comparison(c: Bool, n: U32) -> Bool {
+  (if c { n } else { 1 }) < 3 //~ E0703
+}
+
+pub fn logical(c: Bool, f: Bool) -> Bool {
+  c && (if c { f } else { true }) //~ E0703
+}
+
+// ------------------------------------------------------------------ an index
+
+pub fn index_if(c: Bool, i: U32, xs: [F32; 4]) -> F32 {
+  xs[if c { i } else { 0 }] //~ E0703
+}
+
+pub fn index_lone_arm(i: U32, xs: [F32; 4]) -> F32 {
+  xs[match i { _ => i }] //~ E0703
+}
+
+// ------------------------------------------------------------------ the ends of the range of a `for`
+
+pub fn range_end(c: Bool, n: U32) -> U32 {
+  var total: U32 = 0
+  for k in 0 ..< (if c { n } else { 4 }) { //~ E0703
+    total = total + k
+  }
+  total
+}
+
+pub fn range_start(c: Bool, n: U32) -> U32 {
+  var total: U32 = 0
+  for k in (if c { n } else { 0 }) ..< 4 { //~ E0703
+    total = total + k
+  }
+  total
+}
+
+// ------------------------------------------------------------------ right
+
+pub fn borrowed_arg_without_the_mark(c: Bool, a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { a } else { mk() })
+}
+
+pub fn borrowed_arg_of_an_owned_place(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { a } else { mk() })
+}
+
+pub fn condition_without_the_mark(c: Bool, f: Bool) -> U32 {
+  if (if c { f } else { true }) { 1 } else { 0 }
+}
+
+pub fn index_without_the_mark(c: Bool, i: U32, xs: [F32; 4]) -> F32 {
+  xs[if c { i } else { 0 }]
+}
+
+// A returned block takes the tail with the mark: it is extra information that is not an error.
+
+pub fn returned_tail_with_the_mark(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  if c { move a } else { move b }
+}
+
+pub fn returned_match_tail_with_the_mark(k: U32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  match k {
+    0 => move a,
+    _ => move b,
+  }
+}
+
+pub fn returned_with_return(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  return if c { move a } else { move b }
+}
+
+// The receiver of a method that borrows `self` and the operand of a prefix operator consume nothing either:
+// they are among the other positions of §5.2 ("それ以外の位置"). Added by the parent.
+
+pub fn tail_in_a_borrowed_receiver(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  (if c { a } else { b }).len() //~ E0703
+}
+
+pub fn tail_under_a_minus(c: Bool, n: I32) -> I32 {
+  -(if c { n } else { 1 }) //~ E0703
+}
+
+pub fn tail_under_a_not(c: Bool, f: Bool) -> Bool {
+  !(if c { f } else { true }) //~ E0703
+}

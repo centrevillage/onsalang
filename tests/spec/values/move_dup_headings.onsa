@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.4"]
+
+// S-795, S-541, S-609 (§5.2: "束縛の見出し（`let` / `var` の初期化、`match` の対象、`for` の反復元）の Dup の値の `move` は所有の束縛を選ぶ印として受け付ける";
+// "返り値の位置に書いた `move` … は意味を変えない余分な情報で、検査は受け付ける"; "総称の `T: ?Dup` の値は Affine でありうるので `move` を書く"): the other side of
+// negative/move_dup_value_position.onsa. A `move` on a Dup value at the heading of a binding (`let y = move n`, `var y = move n`, `match move n`, `for x in move xs`),
+// and at the end of a block placed in a heading, is accepted and copies the value, so the original stays usable; the same at the place the function returns. A value
+// of a type parameter `T: ?Dup` takes the mark at every position, and its caller passes a Dup actual without it. Run in the interpreter.
+
+fn pair_m[T: ?Dup](move t: T) -> (T, U32) {
+  (move t, 1)
+}
+
+fn some_m[T: ?Dup](move t: T) -> Option[T] {
+  Some(move t)
+}
+
+fn assign_m[T: ?Dup](move t: T, move u: T) -> T {
+  var x = move t
+  x = move u
+  x
+}
+
+fn let_head(n: U32) -> U32 {
+  let y = move n
+  y + n
+}
+
+fn var_head(n: U32) -> U32 {
+  var y = move n
+  y = y + 1
+  y + n
+}
+
+fn match_head(o: Option[U32]) -> U32 {
+  let r = match move o {
+    Some(x) => x + 1,
+    None => 0,
+  }
+  r + o.unwrap()
+}
+
+fn for_head(xs: [U32; 3]) -> U32 {
+  var total: U32 = 0
+  for x in move xs {
+    total = total + x
+  }
+  total + xs[0]
+}
+
+fn let_head_tail(c: Bool, n: U32, m: U32) -> U32 {
+  let y = if c { move n } else { m }
+  y + n
+}
+
+fn let_head_match_tail(o: Option[U32], n: U32, m: U32) -> U32 {
+  let y = match o {
+    Some(_) => move n,
+    None => m,
+  }
+  y + n
+}
+
+fn match_head_tail(c: Bool, a: Option[U32], b: Option[U32]) -> U32 {
+  let r = match if c { move a } else { b } {
+    Some(x) => x + 1,
+    None => 0,
+  }
+  r + a.unwrap()
+}
+
+fn for_head_tail(c: Bool, xs: [U32; 3], ys: [U32; 3]) -> U32 {
+  var total: U32 = 0
+  for x in if c { move xs } else { move ys } {
+    total = total + x
+  }
+  total + xs[0]
+}
+
+fn returned(n: U32) -> U32 {
+  move n
+}
+
+fn returned_early(c: Bool, n: U32, m: U32) -> U32 {
+  if c {
+    return move n
+  }
+  m
+}
+
+fn returned_tail(c: Bool, n: U32, m: U32) -> U32 {
+  if c { move n } else { m }
+}
+
+fn call_pair(n: U32) -> U32 {
+  let p = pair_m(n)
+  p.0 + p.1 + n
+}
+
+fn call_some(n: U32) -> U32 {
+  some_m(n).unwrap() + n
+}
+
+fn call_assign(n: U32, m: U32) -> U32 {
+  assign_m(n, m) + n
+}
+
+fn call_pair_affine(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let p = pair_m(move b)
+  p.0.len() + p.1
+}
+
+test "a Dup value written with move at the heading of a binding is copied" {
+  assert let_head(3) == 6
+  assert var_head(3) == 7
+  assert match_head(Some(3)) == 7
+  assert for_head([1, 2, 3]) == 7
+}
+
+test "a Dup value written with move at the end of a block in a heading is copied" {
+  assert let_head_tail(true, 3, 4) == 6
+  assert let_head_tail(false, 3, 4) == 7
+  assert let_head_match_tail(Some(1), 3, 4) == 6
+  assert let_head_match_tail(None, 3, 4) == 7
+  assert match_head_tail(true, Some(3), Some(9)) == 7
+  assert match_head_tail(false, Some(3), Some(9)) == 13
+  assert for_head_tail(true, [1, 2, 3], [4, 5, 6]) == 7
+  assert for_head_tail(false, [1, 2, 3], [4, 5, 6]) == 16
+}
+
+test "a Dup value written with move where the function returns is copied" {
+  assert returned(5) == 5
+  assert returned_early(true, 5, 6) == 5
+  assert returned_early(false, 5, 6) == 6
+  assert returned_tail(true, 5, 6) == 5
+  assert returned_tail(false, 5, 6) == 6
+}
+
+test "a value of a type parameter without Dup takes the mark and its caller passes a Dup actual without it" {
+  assert call_pair(3) == 7
+  assert call_some(3) == 6
+  assert call_assign(3, 4) == 7
+}
+
+test "an Affine actual is passed with the mark to a function with a type parameter without Dup" {
+  assert call_pair_affine(Buf.zeroed(4)) == 5
+}

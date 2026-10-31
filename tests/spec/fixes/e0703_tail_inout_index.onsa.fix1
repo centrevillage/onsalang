@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:29"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-605, S-343 (§5.2): the `move` at the end of an arm of an `if` in the index of the place passed to an `inout` parameter is an E0703, and the one candidate removes it.
+
+pub fn bump(inout x: F32) {
+  x = x + 1.0
+}
+
+pub fn inout_index(c: Bool, i: U32, inout xs: [F32; 4]) {
+  bump(inout xs[if c { i } else { 0 }]) //~ E0703
+}

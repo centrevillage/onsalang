@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:12"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2): the right of an assignment is a value position, a consuming position. The candidate removes the `move` on the whole `if` and puts a `move` on
+// the end of each arm that is an owned Affine place.
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn assign_if(c: Bool, move x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  var t = mk()
+  t = if c { move x } else { move y } //~ E0711
+  t.len()
+}

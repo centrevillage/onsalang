@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "14:19"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// S-605, S-343 (§5.2): the `move` at the end of an arm of an `if` that is the condition of an `if` is an E0703, and the one candidate removes it.
+
+pub fn condition(c: Bool, f: Bool) -> U32 {
+  if (if c { f } else { true }) { 1 } else { 0 } //~ E0703
+}

@@ -23,8 +23,12 @@ pub(super) enum Pos {
     MoveArg,
     /// The value of a `let`, `for` or `match` head whose row is a borrow (§5.4).
     Bind,
-    /// An owned head, `var`, an assignment's value, an element of a literal.
-    Consume,
+    /// An owned head: of a `let`, `match` or `for`, the value of a `var`
+    /// (S-795: a Dup value's `move` chooses the owned binding).
+    Own,
+    /// Where a value is put: an assignment's value, an element of a literal
+    /// or a constructor (S-795: a Dup value's `move` is E0703).
+    Value,
     /// `return e` and the tail of a function or anonymous function.
     Return,
     /// A consuming position with no mark written: the operand of `?`, a
@@ -37,7 +41,7 @@ pub(super) enum Pos {
 impl Pos {
     /// A value at it is consumed (§5.2): moved, copied or an error.
     pub(super) fn consumes(self) -> bool {
-        matches!(self, Pos::Consume | Pos::MoveArg | Pos::Return | Pos::Extract)
+        matches!(self, Pos::Own | Pos::Value | Pos::MoveArg | Pos::Return | Pos::Extract)
     }
 }
 
@@ -70,11 +74,11 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
-            ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.iter().for_each(|&x| self.expr(r, x, Pos::Consume)),
-            ExprKind::Struct { fields, .. } => fields.iter().for_each(|&(_, x)| self.expr(r, x, Pos::Consume)),
+            ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.iter().for_each(|&x| self.expr(r, x, Pos::Value)),
+            ExprKind::Struct { fields, .. } => fields.iter().for_each(|&(_, x)| self.expr(r, x, Pos::Value)),
             ExprKind::Try(x) => self.expr(r, *x, Pos::Extract),
             ExprKind::Repeat { elem, len } => {
-                self.expr(r, *elem, Pos::Consume);
+                self.expr(r, *elem, Pos::Value);
                 self.expr(r, *len, Pos::Read);
             }
             ExprKind::Index { base, index } => {
@@ -112,7 +116,7 @@ impl<'a> Walker<'a> {
     /// elements bound, the ones compared, a variant's position whole, not
     /// `_`), at `e`, each noted at the first element that reads it.
     pub(super) fn head(&mut self, r: &mut Run, e: ExprId, pos: Pos, pats: &[PatId]) {
-        let place = place_of(self.ast, self.names, e).filter(|p| pos != Pos::Consume && self.deps.indexed(p.root));
+        let place = place_of(self.ast, self.names, e).filter(|p| pos != Pos::Own && self.deps.indexed(p.root));
         let Some(place) = place else { return self.expr(r, e, pos) };
         let at = self.ast.expr(e).span;
         self.path(r, e);

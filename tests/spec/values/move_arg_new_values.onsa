@@ -6,7 +6,8 @@
 // S-609, S-100 (§5.2: "場所でない値（新しく作った値、Copy のリテラル）を `move` の引数に渡すときは、`move` を書かない（`take(Buf.zeroed(4))`）";
 // "`move` の印は、所有が移って前の値が以後使えなくなる所（Affine 値）にだけ付ける"): the argument of a `move` parameter that is
 // a new value (the result of a call, a constructor, a literal of a struct) has no mark, and it is not an E0703; the place of an
-// owned Affine value has the mark (negative/modes_call_marks.onsa). Run in the interpreter.
+// owned Affine value has the mark (negative/modes_call_marks.onsa). R-311: a tuple or an array of new values (`pair_of((Buf.zeroed(4), 2))`) is a new value too, so it
+// is passed without a mark and is not an E0703. A tuple in a variable is an owned place and has the mark (`take_pair(move t)`). Run in the interpreter.
 
 pub struct Wrap {
   b: Buf[F32],
@@ -32,6 +33,14 @@ fn take_n(move n: U32) -> U32 {
   n + 1
 }
 
+fn take_pair(move t: (Buf[F32], U32)) -> U32 uses {Alloc} {
+  t.0.len() + t.1
+}
+
+fn take_array(move xs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  xs[0].len() + xs[1].len()
+}
+
 fn pass_a_call_result() -> U32 uses {Alloc} {
   take(make())
 }
@@ -52,6 +61,27 @@ fn pass_a_copy_literal() -> U32 {
   take_n(4)
 }
 
+fn pass_a_tuple() -> U32 uses {Alloc} {
+  take_pair((Buf.zeroed(4), 2))
+}
+
+fn pass_a_tuple_of_a_call() -> U32 uses {Alloc} {
+  take_pair((make(), 3))
+}
+
+fn pass_an_array() -> U32 uses {Alloc} {
+  take_array([Buf.zeroed(1), make()])
+}
+
+fn pass_a_tuple_in_a_variable() -> U32 uses {Alloc} {
+  let t = (Buf.zeroed(4), 2)
+  take_pair(move t)
+}
+
+fn pass_the_elements_with_the_mark(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take_array([move a, move b])
+}
+
 test "a new value is passed to a move parameter without a mark" {
   assert take(Buf.zeroed(4)) == 4
   assert pass_a_call_result() == 2
@@ -63,4 +93,15 @@ test "a new value is passed to a move parameter without a mark" {
 
 test "a Copy literal is passed to a move parameter without a mark" {
   assert pass_a_copy_literal() == 5
+}
+
+test "a tuple and an array of new values are passed to a move parameter without a mark" {
+  assert pass_a_tuple() == 6
+  assert pass_a_tuple_of_a_call() == 5
+  assert pass_an_array() == 3
+}
+
+test "a tuple in a variable is passed with the mark, and the elements of a literal with the mark" {
+  assert pass_a_tuple_in_a_variable() == 6
+  assert pass_the_elements_with_the_mark(Buf.zeroed(2), Buf.zeroed(3)) == 5
 }

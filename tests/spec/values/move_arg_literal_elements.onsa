@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.3"]
+
+// R-34 (§5.2: "struct / 配列 / タプルのリテラルと構築子の要素 … に書く式の形"; §5.3: "別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け"): the elements of a
+// tuple or array literal in the argument of a borrowed parameter are consumed into the new value, so an owned Affine place takes the mark (`total((move a, move b))`), and the
+// places are not usable after it. Only a `[Span[T]; N]` parameter takes the array literal as the planar views of the places, which are not consumed and stay usable. The
+// errors of an element without the mark are in negative/move_arg_literal_elements.onsa. Run in the interpreter.
+
+fn total(p: (Buf[F32], Buf[F32])) -> U32 uses {Alloc} {
+  p.0.len() + p.1.len()
+}
+
+fn total_arr(p: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  p[0].len() + p[1].len()
+}
+
+fn total_planar(xs: [Span[F32]; 2]) -> U32 {
+  xs[0].len() + xs[1].len()
+}
+
+fn tuple_with_the_marks(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  total((move a, move b))
+}
+
+fn array_with_the_marks(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  total_arr([move a, move b])
+}
+
+fn tuple_with_a_new_value(move a: Buf[F32]) -> U32 uses {Alloc} {
+  total((move a, Buf.zeroed(1)))
+}
+
+fn planar_places_stay_usable(a: Buf[F32], b: Buf[F32]) -> U32 {
+  total_planar([a, b]) + a.len() + b.len()
+}
+
+fn planar_places_of_owned_buffers() -> U32 uses {Alloc} {
+  let a = Buf.zeroed(3)
+  let b = Buf.zeroed(4)
+  total_planar([a, b]) + a.len()
+}
+
+test "the elements of a tuple or an array literal take the mark" {
+  assert tuple_with_the_marks(Buf.zeroed(2), Buf.zeroed(3)) == 5
+  assert array_with_the_marks(Buf.zeroed(2), Buf.zeroed(3)) == 5
+  assert tuple_with_a_new_value(Buf.zeroed(2)) == 3
+}
+
+test "the planar array literal of a Span parameter does not consume the places" {
+  assert planar_places_stay_usable(Buf.zeroed(2), Buf.zeroed(3)) == 10
+  assert planar_places_of_owned_buffers() == 10
+}

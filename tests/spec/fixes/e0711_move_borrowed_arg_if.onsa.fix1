@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "21:11"
+// code = "E0711"
+// candidate = 1
+// clean = true
+
+// R-198, S-807 (§5.2: "末尾に `move` を置くのは消費する位置（束縛の見出し、値を置く位置、`move` の引数）だけで、消費しない位置と返り値の位置では外の `move` を消すだけにする
+// （末尾の `move` が上の E0703 になるため、§18.1）"): the argument of a borrowed parameter is an `if` that has the `move` on the whole. The candidate only removes the
+// `move`; a candidate that put a `move` on the arms would leave two E0703 behind (S-605), which the promise of §18.1 does not allow. After the candidate the file has no
+// diagnostic.
+
+pub fn rd(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn borrowed_arg_if(c: Bool, move x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  rd(if c { x } else { y }) //~ E0711
+}

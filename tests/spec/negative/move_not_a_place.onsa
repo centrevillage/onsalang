@@ -1,6 +1,7 @@
 // onsa.toml
 // [test]
-// spec = ["§5.2"]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
 
 // R-198, S-609 (§5.2): "`move` の被演算子は場所（局所の変数と、そのフィールド・添字の経路。括弧で囲んだ場所は中身と
 // 同じ）で、場所でない値（呼び出しの結果、リテラル、定数、関数の項目の名前、ブロック、`if`・`match`）に付けると、位置
@@ -10,9 +11,11 @@
 // that is not a place is passed without the mark (values/move_dup_args.onsa: `take(Buf.zeroed(4))`). The
 // arms of the `if`, `match` and the block are new values in most of the functions, and variables in the two
 // that are the form of the issue R-198 (`eat(move if c { x } else { y })`); the error is the `move`
-// of the operand. The candidates of the repair (the `move` moved to the tails, or removed) are not
-// counted here: they are
-// the work W4-09. One error per function (P-01).
+// of the operand. S-807, S-605 (§5.2: "修正候補は、ブロックと `if`・`match` なら外の `move` を消して各末尾の Affine の変数に `move` を置く形、それ以外は `move` を消す形"): each
+// diagnostic of this file has at most the one candidate (`fixes = 1`), the `move` moved to the owned Affine ends of the block, `if` or `match` where a value is consumed (a `move`
+// argument, the initialization of a `let`), or removed (a call, a literal, a constant, the operand of a postfix `?`, a block or an `if` of new values). The candidate of each form,
+// after which the file has no diagnostic, is in fixes/e0711_move_*.onsa (one diagnostic in a file, because `clean` is about the whole file), and the forms that have no
+// candidate are in negative/move_not_a_place_no_candidate.onsa. The candidate of the name of a function (`ap(move inc)`, which removes the `move`) is the work W4-11. One error per function (P-01).
 
 pub const LIMIT: U32 = 4
 

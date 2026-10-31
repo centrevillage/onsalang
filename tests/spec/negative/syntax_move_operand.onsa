@@ -108,9 +108,9 @@ pub fn marked_inout_in_parentheses() -> I32 {
 
 // A mark on a postfix expression stands in every consuming position and in an argument, and may be
 // an element of a tuple of two or more elements. The values of `postfix_operands` are Copy, which a
-// `move` parameter takes without the mark (S-609, §5.2), so the mark stands where a binding or a
-// literal takes the value (`let a = move y`, the elements of a tuple and of an array); the mark in an
-// argument is on an Affine value (`postfix_affine_operands`).
+// `move` parameter takes without the mark (S-609, §5.2), so the mark stands where a binding takes the
+// value (`let a = move y`; the elements of a tuple and of an array copy a Dup value with no mark, S-795);
+// the mark in an argument is on an Affine value (`postfix_affine_operands`).
 pub fn postfix_operands(y: I32, s: (I32, I32)) -> I32 {
   let a = move y
   let b = move s.0
@@ -118,9 +118,9 @@ pub fn postfix_operands(y: I32, s: (I32, I32)) -> I32 {
   bump(inout xs[0])
   var v = xs[1]
   bump(inout v)
-  let (e, f) = (move a, move b)
-  let t = (move e, move f)
-  let u = [move a, move b]
+  let (e, f) = (a, b)
+  let t = (e, f)
+  let u = [a, b]
   let w = move t.0
   v + w + u[0]
 }

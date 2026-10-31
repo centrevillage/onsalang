@@ -8,9 +8,9 @@
 // 形"; "Affine 値を `move` 無しでこれらの位置に置くと E0711（修正候補は `move` の挿入）"; §5.2: "Dup 値の `move` は … 複製になる"):
 // a constructor is a call in the syntax and a literal in the modes. Its element is a consuming position like the element of a
 // tuple. An `inout` mark is E0703; its candidate (remove the `inout`) is given where the value is Dup or no place, and none where
-// it is an Affine place (the `move` left would be an E0711 in the same stage, so the fix is not one). A Dup `move` is a copy
-// (`Some(move n)` is right). An Affine place without a mark is E0711 with the candidate `add move`; a borrowed Affine one is E0711
-// with no candidate (§5.4). One error per function (P-01).
+// it is an Affine place (the `move` left would be an E0711 in the same stage, so the fix is not one). A Dup value takes no `move`
+// (`Some(n)` is right; `Some(move n)` is an E0703, S-795, in negative/move_dup_value_position.onsa). An Affine place without a mark is
+// E0711 with the candidate `add move`; a borrowed Affine one is E0711 with no candidate (§5.4). One error per function (P-01).
 
 pub enum Slot {
   Num(U32),
@@ -113,23 +113,19 @@ pub fn dup_without_mark(n: U32) -> Option[U32] {
   Some(n)
 }
 
-pub fn dup_with_move_is_a_copy(n: U32) -> Option[U32] {
-  Some(move n)
-}
-
-pub fn dup_with_move_and_use_after(n: U32) -> U32 {
-  let o = Some(move n)
+pub fn dup_and_use_after(n: U32) -> U32 {
+  let o = Some(n)
   n + o.unwrap()
 }
 
-pub fn dup_in_a_user_variant_with_move(n: U32) -> Slot {
-  Slot.Num(move n)
+pub fn dup_in_a_user_variant(n: U32) -> Slot {
+  Slot.Num(n)
 }
 
-pub fn dup_var_with_move_stays_usable() -> U32 {
+pub fn dup_var_stays_usable() -> U32 {
   var n: U32 = 1
   n = 2
-  let o = Ok(move n)
+  let o = Ok(n)
   let m: Result[U32, U32] = o
   m.unwrap() + n
 }

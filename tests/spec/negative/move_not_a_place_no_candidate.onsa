@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 0
+
+// R-198, S-807, S-609 (§5.2: "修正候補は、ブロックと `if`・`match` なら外の `move` を消して各末尾の Affine の変数に `move` を置く形 … 末尾に借用か `inout` の Affine の場所があれば候補は無い";
+// "Affine 値は所有していなければ `move` で渡せない。借用引数、借用束縛、`inout` 引数は所有していない。その場所を `move` 引数に置くと、印の有無によらず修正候補の無い E0711"): a `move`
+// on a block, an `if` or a `match` is an E0711 at the operand of the `move`, and when one of its ends is a place that the function does not own (a borrowed parameter, an `inout` parameter, a
+// borrowed binding of a `match`), neither moving the mark to the ends nor removing it makes the call right, so there is no candidate (`fixes = 0`). The other ends do not
+// matter: one end that is not owned is enough. One diagnostic per function (P-01). The forms that have a candidate are in negative/move_not_a_place.onsa and fixes/e0711_move_*.onsa.
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn eat(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn rd(b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn borrowed_ends(c: Bool, x: Buf[F32], y: Buf[F32]) uses {Alloc} {
+  eat(move if c { x } else { y }) //~ E0711
+}
+
+pub fn one_end_borrowed(c: Bool, x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  eat(move if c { x } else { y }) //~ E0711
+}
+
+pub fn one_end_borrowed_and_one_new(c: Bool, x: Buf[F32]) uses {Alloc} {
+  eat(move if c { x } else { mk() }) //~ E0711
+}
+
+pub fn inout_end(c: Bool, inout x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  eat(move if c { x } else { y }) //~ E0711
+}
+
+pub fn borrowed_block_end(x: Buf[F32]) uses {Alloc} {
+  eat(move { x }) //~ E0711
+}
+
+pub fn borrowed_nested(c: Bool, d: Bool, x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  eat(move if c { if d { x } else { y } } else { y }) //~ E0711
+}
+
+pub fn borrowed_in_a_match(k: U32, x: Buf[F32], move y: Buf[F32]) uses {Alloc} {
+  eat(move match k { //~ E0711
+    0 => x,
+    _ => y,
+  })
+}
+
+pub fn borrowed_binding_of_a_match(o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => eat(move { b }), //~ E0711
+    None => {},
+  }
+}
+
+pub fn borrowed_in_a_let(c: Bool, x: Buf[F32], y: Buf[F32]) -> U32 uses {Alloc} {
+  let z = move if c { x } else { y } //~ E0711
+  z.len()
+}
+
+pub fn borrowed_in_a_borrowed_argument(c: Bool, x: Buf[F32], y: Buf[F32]) -> U32 uses {Alloc} {
+  rd(move if c { x } else { y }) //~ E0711
+}

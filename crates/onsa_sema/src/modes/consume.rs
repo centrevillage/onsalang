@@ -2,7 +2,6 @@
 //! consuming position, decided by the state of its root, its kind and its
 //! `move` mark. An erroneous consumption moves nothing (review 2).
 
-use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, PatId};
 
@@ -31,7 +30,7 @@ pub(super) enum SecondClass {
 }
 
 impl Walker<'_> {
-    /// The value `e` at the consuming position `pos` (`Consume`, `MoveArg`,
+    /// The value `e` at the consuming position `pos` (`Own`, `Value`, `MoveArg`,
     /// `Return` or `Extract`), with the offset of the `move` written on it,
     /// if any.
     pub(super) fn consume(&mut self, r: &mut Run, e: ExprId, pos: Pos, mark: Option<u32>) {
@@ -44,10 +43,8 @@ impl Walker<'_> {
             return;
         }
         let Some(place) = place_of(self.ast, self.names, x) else {
-            if mark.is_none() {
-                return self.expr(r, x, pos);
-            }
-            self.needs_a_place(at);
+            let Some(m) = mark else { return self.expr(r, x, pos) };
+            self.needs_a_place(x, m, pos);
             return self.expr(r, x, Pos::Read);
         };
         let (l, live) = (place.root, self.live(r, &place));
@@ -65,20 +62,17 @@ impl Walker<'_> {
             _ => plain(message),
         };
         let d = match (kind, local.state) {
-            // Copied; a `move` on a `move` argument is E0703 (S-609).
-            (Kind::Copy | Kind::Shared, _) => match (pos, mark) {
-                (Pos::MoveArg, Some(m)) => Diagnostic::new(
-                    Stage::Modes,
-                    Code::E0703,
-                    at,
-                    format!(
-                        "`{name}` is {}, so it is copied; a `move` parameter takes it with no `move` (§5.2)",
-                        kind.name()
-                    ),
-                )
-                .with_fix(self.unmark(at.file, m, "move")),
-                _ => return,
-            },
+            // Copied; a `move` on a `move` argument (S-609) or where a value is put (S-795) is E0703.
+            (Kind::Copy | Kind::Shared, _) => {
+                let (how, Some(m)) = (pos, mark) else { return };
+                let how = match how {
+                    Pos::MoveArg => "a `move` parameter takes it with no `move`",
+                    Pos::Value => "`move` here moves nothing",
+                    _ => return,
+                };
+                let message = format!("`{name}` is {}, so it is copied; {how} (§5.2)", kind.name());
+                Diagnostic::new(Stage::Modes, Code::E0703, at, message).with_fix(self.unmark(at.file, m, "move"))
+            }
             // R-117, S-41: with no candidate (the fix is the mode, away from here).
             (_, Bind::Inout) => error(format!(
                 "cannot move `{name}`: `{root}` is an `inout` parameter, which does not own its value (§5.2)"
@@ -90,7 +84,7 @@ impl Walker<'_> {
                 "cannot move `{name}` out of an array: its elements move with the array (`for x in move xs`) (§5.2)"
             )),
             (_, Bind::Owned | Bind::OwnedMut) => match (pos, mark) {
-                (Pos::Consume, None) => {
+                (Pos::Own | Pos::Value, None) => {
                     error(format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)"))
                         .with_fix(self.add_move(e))
                 }
@@ -113,14 +107,24 @@ impl Walker<'_> {
         }
     }
 
-    /// `move e` at `pos` (`e` its operand): consumed where a value is, else
-    /// the E0200 of a `move` on a tail (W4-09 makes it S-605's E0703).
+    /// `move e` at `pos` (`e` its operand, a tail where it is not the
+    /// operand of a call, §5.2): consumed where a value is; else, on a place,
+    /// the E0703 of S-605 (one for each tail, the walk reports the first) and
+    /// on no place R-198's E0711 (at any position). At the argument of an
+    /// unknown callee (§18.1), R-198's only.
     pub(super) fn marked(&mut self, r: &mut Run, m: ExprId, e: ExprId, pos: Pos) {
         let span = self.ast.expr(m).span;
         if pos.consumes() {
             return self.consume(r, e, pos, Some(span.start));
         }
-        self.report(Feature::MoveOnUnconsumedTail.diagnostic(Stage::Modes, span, &[]));
+        if place_of(self.ast, self.names, e).is_none() {
+            self.needs_a_place(e, span.start, pos);
+        } else if pos != Pos::Unknown {
+            let message = "`move` here consumes nothing: this value is not consumed where it stands (§5.2)";
+            let at = self.ast.expr(self.ast.without_parens(e)).span;
+            let d = Diagnostic::new(Stage::Modes, Code::E0703, at, message);
+            self.report(d.with_fix(self.unmark(span.file, span.start, "move")));
+        }
         self.expr(r, e, Pos::Read);
     }
 
@@ -155,7 +159,7 @@ impl Walker<'_> {
     pub(super) fn out_of_place(&mut self, r: &mut Run, e: ExprId, pos: Pos) -> bool {
         let how = match pos {
             Pos::Read | Pos::Arg(_) | Pos::Unknown => return false,
-            Pos::Bind | Pos::Consume => "stored",
+            Pos::Bind | Pos::Own | Pos::Value => "stored",
             Pos::Return => "returned",
             Pos::MoveArg | Pos::Extract => "moved",
         };
@@ -201,10 +205,15 @@ impl Walker<'_> {
         }
     }
 
-    /// R-198: `move` on the value at `at`, which is no place: E0711 at any
-    /// position, with no candidate (W4-09 adds them).
-    pub(super) fn needs_a_place(&mut self, at: Span) {
-        self.report(Diagnostic::new(Stage::Modes, Code::E0711, at, MOVE_NEEDS_A_PLACE));
+    /// R-198: `move` (at `m`) on `e`, no place, at `pos`: E0711 at any
+    /// position, with the candidate of `marks.rs`.
+    pub(super) fn needs_a_place(&mut self, e: ExprId, m: u32, pos: Pos) {
+        if !self.reports {
+            return;
+        }
+        let d = Diagnostic::new(Stage::Modes, Code::E0711, self.ast.expr(e).span, MOVE_NEEDS_A_PLACE);
+        let fix = self.unplaced(e, m, pos);
+        self.report(fix.into_iter().fold(d, Diagnostic::with_fix));
     }
 
     /// The candidate that writes `move` before `e` (outside its parentheses:

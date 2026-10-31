@@ -588,7 +588,8 @@ pub fn moves(k: Bool) -> Buf[F32] uses {Alloc} {
 
 /// S-609: a Dup value marked `move` on a `move` argument is E0703 with the
 /// candidate that removes the mark and its blanks (a local, a parameter, a
-/// field, a Shared value); at a consuming position the mark is kept.
+/// field, a Shared value); at a head and a return the mark is kept, where a
+/// value is put it is E0703 too (S-795, its words).
 #[test]
 fn a_dup_value_marked_on_a_move_argument() {
     let src = "pub fn local() {
@@ -611,14 +612,23 @@ pub fn kept(n: U32) -> U32 {
 }
 ";
     let remove = |l: usize, line: &str| (Code::E0703, l, vec![("remove `move`".to_string(), line.to_string())]);
-    assert_eq!(fixes(src), [remove(3, "tk(n)"), remove(6, "tk(n)"), remove(9, "tk(t.0)"), remove(12, "ts(s)")]);
+    let expected = [
+        remove(3, "tk(n)"),
+        remove(6, "tk(n)"),
+        remove(9, "tk(t.0)"),
+        remove(12, "ts(s)"),
+        remove(16, "let t = (n, 1)"),
+    ];
+    assert_eq!(fixes(src), expected);
+    let said = messages("pub fn kept(n: U32) -> U32 {\n  let t = (move n, 1)\n  t.0\n}\n");
+    assert_eq!(said, ["`n` is Copy, so it is copied; `move` here moves nothing (§5.2)"]);
 }
 
-/// R-198: `move` on a value that is no place is E0711 at any position, with
-/// no candidate (W4-09 adds those of a block and an `if`): a call, a
-/// literal, a constant, a function item, a block, an `if`, on a `move`
-/// argument and a `for` head. It moves nothing. (The types stage reports
-/// the `move e` of the other positions, E0711 too.)
+/// R-198: `move` on a value that is no place is E0711 at any position (the
+/// modes stage's, the types stage does not ask): a call, a literal, a
+/// constant, a block, an `if`, on a `move` argument and a `for` head. It
+/// moves nothing. The candidate removes it, and of a block and an `if` at a
+/// consuming position writes it on the owned Affine tails (S-807).
 #[test]
 fn a_move_on_a_value_that_is_no_place() {
     let src = "pub fn call() uses {Alloc} {
@@ -644,12 +654,93 @@ pub fn head() uses {Alloc} {
 }
 ";
     let (_, moved) = seen(src);
-    assert_eq!(fixes(src), bare(Code::E0711, &[2, 5, 8, 12, 17, 20]));
+    let fix = |l: usize, title: &str, line: &str| (Code::E0711, l, vec![(title.to_string(), line.to_string())]);
+    let (remove, tails) = ("remove `move`", "write `move` on the tails");
+    let expected = [
+        fix(2, remove, "take(mk())"),
+        fix(5, remove, "tk(1)"),
+        fix(8, remove, "tk(K)"),
+        fix(12, tails, "take({ move b })"),
+        fix(17, tails, "take(if k { move b } else { mk() })"),
+        fix(20, remove, "for x in make_array() {}"),
+    ];
+    assert_eq!(fixes(src), expected);
     assert_eq!(moved, BTreeSet::from(["b".to_string()]));
 }
 
-/// The E0200 of a `move` on a tail where no value is consumed (W4-09 makes
-/// it S-605's E0703): an operand, a borrowed argument.
+/// R-198's candidate (S-807, §5.2): at a consuming position (a head, where a
+/// value is put, a `move` argument) the `move` goes onto each owned Affine
+/// tail (a path of fields too, before its parentheses), at a borrowed
+/// argument and a return it goes only; a Dup tail takes none; a borrowed
+/// Affine tail, and an element at a consuming position, leave no candidate.
+/// Each, applied, leaves no diagnostic of the stage (§18.1), so it stops.
+#[test]
+fn the_candidates_of_a_move_on_no_place() {
+    let src = "pub fn own(c: Bool, move x: Buf[F32]) -> U32 uses {Alloc} {
+  let z = move if c { x } else { mk() }
+  z.len()
+}
+pub fn value(move x: Buf[F32]) -> U32 uses {Alloc} {
+  let t = (move { x }, 1)
+  t.1
+}
+pub fn arm(c: Bool, move x: Buf[F32], move h: Holder) uses {Alloc} {
+  take(move match c { true => (x), false => h.buf })
+}
+pub fn borrowed_arg(c: Bool, move x: Buf[F32], move y: Buf[F32]) -> U32 uses {Alloc} {
+  len_of(move if c { x } else { y })
+}
+pub fn returned(c: Bool, move x: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  move if c { x } else { mk() }
+}
+pub fn dup(c: Bool, n: U32) -> U32 {
+  let z = move if c { n } else { 1 }
+  z
+}
+pub fn exits(c: Bool, move x: Buf[F32]) uses {Alloc} {
+  take(move if c { x } else { return })
+}
+pub fn borrowed_tail(c: Bool, x: Buf[F32]) uses {Alloc} {
+  take(move if c { x } else { mk() })
+}
+pub fn element(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} {
+  take(move if c { xs[0] } else { mk() })
+}
+pub fn element_read(c: Bool, move xs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  len_of(move if c { xs[0] } else { mk() })
+}
+pub fn element_returned(c: Bool, move xs: [Buf[F32]; 2]) -> Buf[F32] uses {Alloc} {
+  move if c { xs[0] } else { mk() }
+}
+pub fn commented(c: Bool, move x: Buf[F32]) uses {Alloc} {
+  take(move if c { ( // c
+    x // d
+  ) } else { mk() })
+}
+";
+    let fix = |l: usize, title: &str, line: &str| (Code::E0711, l, vec![(title.to_string(), line.to_string())]);
+    let (remove, tails) = ("remove `move`", "write `move` on the tails");
+    let expected = [
+        fix(2, tails, "let z = if c { move x } else { mk() }"),
+        fix(6, tails, "let t = ({ move x }, 1)"),
+        fix(10, tails, "take(match c { true => move (x), false => move h.buf })"),
+        fix(13, remove, "len_of(if c { x } else { y })"),
+        fix(16, remove, "if c { x } else { mk() }"),
+        fix(19, remove, "let z = if c { n } else { 1 }"),
+        fix(23, tails, "take(if c { move x } else { return })"),
+        (Code::E0711, 26, Vec::new()),
+        (Code::E0711, 29, Vec::new()),
+        fix(32, remove, "len_of(if c { xs[0] } else { mk() })"),
+        // The break side of U3: an element taken at a return, a comment in the parentheses.
+        (Code::E0711, 35, Vec::new()),
+        (Code::E0711, 38, Vec::new()),
+    ];
+    assert_eq!(call_fixes(src), expected);
+    each_fix_clears(src);
+}
+
+/// S-605, S-343: a `move` on a tail where no value is consumed is E0703, with
+/// the candidate that removes it: an operand, a borrowed argument.
 #[test]
 fn a_move_where_no_value_is_consumed() {
     let src = "pub fn operand(n: U32) -> U32 {
@@ -661,7 +752,8 @@ pub fn argument(k: Bool) -> U32 uses {Alloc} {
   len_of(if k { move b } else { mk() })
 }
 ";
-    assert_eq!(fixes(src), bare(Code::E0200, &[2, 7]));
+    let remove = |l: usize, line: &str| (Code::E0703, l, vec![("remove `move`".to_string(), line.to_string())]);
+    assert_eq!(fixes(src), [remove(2, "let x = ({ n }) + 1"), remove(7, "len_of(if k { b } else { mk() })")]);
 }
 
 /// Review 2: an erroneous consumption moves nothing, so the same local is
@@ -938,18 +1030,15 @@ fn the_note_of_a_move_in_a_previous_iteration() {
     assert_eq!(vars, ["`b` is moved here in a previous iteration of the loop; assign it before the loop ends (§5.2)"]);
 }
 
-/// R-198: one message for `move` on a value that is no place, in the types
-/// stage (`let y = move mk()`) and in the modes stage (`take(move mk())`).
+/// R-198: one message for `move` on a value that is no place, of the modes
+/// stage only (`analyzed` fails on one of the types stage), at an argument
+/// (`take(move mk())`) and at a `let` (`let y = move mk()`).
 #[test]
 fn one_message_for_a_move_on_no_place() {
-    let modes = messages("pub fn t() uses {Alloc} {\n  take(move mk())\n}\n");
-    let src = format!("{PRELUDE}pub fn t() uses {{Alloc}} {{\n  let y = move mk()\n}}\n");
-    let parsed = onsa_syntax::parse(FileId(0), &src);
-    let modules = vec![crate::Module { segments: vec!["main".into()], file: FileId(0), text: src.clone(), parsed }];
-    let a = crate::analyze(&crate::Package::new("t", modules, vec![crate::flow_tests::std_package()]));
-    let types: Vec<_> = (a.diagnostics.iter()).filter(|d| d.code == Code::E0711).map(|d| d.message.clone()).collect();
-    assert_eq!(modes, [crate::body::MOVE_NEEDS_A_PLACE]);
-    assert_eq!(types, [crate::body::MOVE_NEEDS_A_PLACE]);
+    let modes = messages(
+        "pub fn t() uses {Alloc} {\n  take(move mk())\n}\npub fn u() uses {Alloc} {\n  let y = move mk()\n}\n",
+    );
+    assert_eq!(modes, [crate::body::MOVE_NEEDS_A_PLACE; 2]);
 }
 
 /// A `var` declared in a block of a loop and left by `break` (memo 1.3:
@@ -1277,8 +1366,7 @@ pub fn user_borrowed(v: W) -> U32 uses {Alloc} {
 }
 
 /// The forms carried to U3a: an element of a constructor is consumed (a
-/// `Span` is E0710, R-325; a Dup one marked `move` is fine, not S-609's
-/// E0703); `take(b)` of an `inout` Affine `b` is E0711 with no candidate
+/// `Span` is E0710, R-325; a Dup one marked `move` is E0703, S-795); `take(b)` of an `inout` Affine `b` is E0711 with no candidate
 /// (R-117); a planar literal at a borrowed parameter of a method and of a
 /// generic function; the tails of
 /// an `if` at a `move` parameter (§5.2); a place moved and borrowed in one
@@ -1315,8 +1403,8 @@ pub fn generic(a: Buf[F32], b: Buf[F32]) {
     let skip = CALLEES.matches('\n').count();
     let (diags, moved) = seen(&format!("{CALLEES}{src}"));
     let lines: Vec<_> = diags.into_iter().map(|(c, l, _)| (c, l - skip)).collect();
-    assert_eq!(lines, [(Code::E0710, 2), (Code::E0711, 9), (Code::E0702, 20)]);
-    assert_eq!(call_fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 0);
+    assert_eq!(lines, [(Code::E0710, 2), (Code::E0703, 6), (Code::E0711, 9), (Code::E0702, 20)]);
+    assert_eq!(call_fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 1);
     assert_eq!(moved, BTreeSet::from(["a", "b", "x"].map(String::from)));
 }
 

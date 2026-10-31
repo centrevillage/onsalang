@@ -1,0 +1,310 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "222:19"
+// code = "E0703"
+// candidate = 1
+// leaves = ["222:30 E0703"]
+
+// S-795, S-793 (§5.2: "値を置く位置（代入の右辺、struct / 配列 / タプルのリテラルと構築子の要素）と `move` の引数に置いたブロックの末尾の Dup の値の `move` は、
+// 直接の `move` の引数と同じく E0703"; "代入の右辺とリテラル・構築子の要素の Dup 値も同じで（`x = n`、`Some(n)`、`(n, 1)`）、書くと E0703 で、修正候補はその
+// `move` を消す形である（ブロックの末尾も同じで、末尾ごとに一件）"): a `move` on a Dup value (a Copy value, a Shared `Str`, a function value in a variable, a value of a type
+// parameter without a bound) at the right of an assignment, in the element of a tuple, an array, a `[e; N]` literal, a struct literal or a constructor, and at the end of a
+// block placed there, moves nothing, so it is an E0703 at the operand of the `move` with the one candidate that removes it. The heading of a binding (`let y = move n`,
+// `var y = move n`, `match move n`, `for x in move xs`) takes the mark (values/move_dup_headings.onsa). A value of `T: ?Dup` may be Affine, so the mark is written
+// there at every position, and the caller of such a function writes none for a Dup actual (`pair_m(n)`, and `pair_m(move n)` is an E0703). An Affine value is moved
+// with the mark in each of these positions (the end of this file). One `move` in a function, so one diagnostic; a function with two tails with a `move` reports the
+// first (the unit stops at its first error, §18.1).
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Gain {
+  n: U32,
+  name: Str,
+}
+
+pub enum Slot {
+  Num(U32),
+  Data(Buf[F32]),
+  Empty,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn pair_m[T: ?Dup](move t: T) -> (T, U32) {
+  (move t, 1)
+}
+
+// ------------------------------------------------------------------ the right of an assignment
+
+pub fn assign_variable(n: U32) -> U32 {
+  var x: U32 = 0
+  x = move n //~ E0703
+  x
+}
+
+pub fn assign_to_inout(inout x: U32, n: U32) {
+  x = move n //~ E0703
+}
+
+pub fn assign_to_a_field(n: U32) -> U32 uses {Alloc} {
+  var g = Gain { n: 0, name: "g" }
+  g.n = move n //~ E0703
+  g.n
+}
+
+pub fn assign_to_an_element(n: U32) -> U32 {
+  var xs: [U32; 2] = [0, 0]
+  xs[1] = move n //~ E0703
+  xs[1]
+}
+
+pub fn assign_a_field_path(g: Gain) -> U32 {
+  var x: U32 = 0
+  x = move g.n //~ E0703
+  x
+}
+
+pub fn assign_a_shared_value(s: Str) -> Str uses {Alloc} {
+  var t: Str = "t"
+  t = move s //~ E0703
+  t
+}
+
+pub fn assign_a_copy_struct(p: Pt) -> Pt {
+  var q = Pt { x: 0, y: 0 }
+  q = move p //~ E0703
+  q
+}
+
+pub fn assign_a_function_value(move f: fn(I32) -> I32) -> I32 {
+  var g = f
+  g = move f //~ E0703
+  g.(1)
+}
+
+pub fn assign_a_value_of_an_unbounded_type_parameter[T](move t: T, move u: T) -> T {
+  var x = t
+  x = move u //~ E0703
+  x
+}
+
+// ------------------------------------------------------------------ the elements of a literal
+
+pub fn tuple_first(n: U32) -> (U32, U32) {
+  (move n, 1) //~ E0703
+}
+
+pub fn tuple_second(n: U32) -> (U32, U32) {
+  (1, move n) //~ E0703
+}
+
+pub fn tuple_nested(n: U32) -> ((U32, U32), U32) {
+  ((1, move n), 2) //~ E0703
+}
+
+pub fn tuple_in_a_let(n: U32) -> U32 {
+  let t = (move n, 1) //~ E0703
+  t.0 + t.1
+}
+
+pub fn array_element(n: U32) -> [U32; 2] {
+  [move n, 2] //~ E0703
+}
+
+pub fn array_repeat(n: U32) -> [U32; 3] {
+  [move n; 3] //~ E0703
+}
+
+pub fn struct_field(n: U32) -> Gain {
+  Gain { n: move n, name: "g" } //~ E0703
+}
+
+pub fn struct_field_shared(s: Str) -> Gain {
+  Gain { n: 1, name: move s } //~ E0703
+}
+
+pub fn struct_field_copy_struct(p: Pt) -> (Pt, U32) {
+  (move p, 1) //~ E0703
+}
+
+pub fn element_of_a_unbounded_type_parameter[T](move t: T) -> (T, U32) {
+  (move t, 1) //~ E0703
+}
+
+pub fn element_of_a_function_value(move f: fn(I32) -> I32) -> (fn(I32) -> I32, U32) {
+  (move f, 1) //~ E0703
+}
+
+// ------------------------------------------------------------------ the elements of a constructor
+
+pub fn some(n: U32) -> Option[U32] {
+  Some(move n) //~ E0703
+}
+
+pub fn some_in_a_let(n: U32) -> U32 {
+  let o = Some(move n) //~ E0703
+  o.unwrap()
+}
+
+pub fn ok(n: U32) -> Result[U32, U32] {
+  Ok(move n) //~ E0703
+}
+
+pub fn err(n: U32) -> Result[U32, U32] {
+  Err(move n) //~ E0703
+}
+
+pub fn user_variant(n: U32) -> Slot {
+  Slot.Num(move n) //~ E0703
+}
+
+pub fn constructor_nested(n: U32) -> Option[Option[U32]] {
+  Some(Some(move n)) //~ E0703
+}
+
+pub fn constructor_of_a_shared_value(s: Str) -> Option[Str] {
+  Some(move s) //~ E0703
+}
+
+pub fn constructor_of_a_unbounded_type_parameter[T](move t: T) -> Option[T] {
+  Some(move t) //~ E0703
+}
+
+pub fn constructor_in_a_tuple(n: U32) -> (Option[U32], U32) {
+  (Some(move n), 1) //~ E0703
+}
+
+// ------------------------------------------------------------------ the end of a block placed there
+
+pub fn assign_if_tail(c: Bool, n: U32) -> U32 {
+  var x: U32 = 0
+  x = if c { move n } else { 0 } //~ E0703
+  x
+}
+
+pub fn assign_else_tail(c: Bool, n: U32) -> U32 {
+  var x: U32 = 0
+  x = if c { 0 } else { move n } //~ E0703
+  x
+}
+
+pub fn assign_match_tail(k: U32, n: U32) -> U32 {
+  var x: U32 = 0
+  x = match k {
+    0 => move n, //~ E0703
+    _ => 1,
+  }
+  x
+}
+
+pub fn assign_lone_arm_tail(n: U32) -> U32 {
+  var x: U32 = 0
+  x = match n { _ => move n } //~ E0703
+  x
+}
+
+pub fn assign_nested_tail(c: Bool, d: Bool, n: U32) -> U32 {
+  var x: U32 = 0
+  x = if c { if d { move n } else { 0 } } else { 1 } //~ E0703
+  x
+}
+
+pub fn assign_two_tails(c: Bool, n: U32, m: U32) -> U32 {
+  var x: U32 = 0
+  x = if c { move n } else { move m } //~ E0703 @19
+  x
+}
+
+pub fn tuple_element_tail(c: Bool, n: U32) -> (U32, U32) {
+  (if c { move n } else { 0 }, 1) //~ E0703
+}
+
+pub fn array_element_tail(c: Bool, n: U32) -> [U32; 2] {
+  [1, if c { 0 } else { move n }] //~ E0703
+}
+
+pub fn struct_field_tail(c: Bool, n: U32) -> Gain {
+  Gain { n: if c { move n } else { 0 }, name: "g" } //~ E0703
+}
+
+pub fn constructor_element_tail(c: Bool, n: U32) -> Option[U32] {
+  Some(if c { move n } else { 0 }) //~ E0703
+}
+
+pub fn constructor_match_tail(k: U32, n: U32) -> Option[U32] {
+  Some(match k {
+    0 => move n, //~ E0703
+    _ => 1,
+  })
+}
+
+// ------------------------------------------------------------------ the body of an anonymous function
+
+pub fn apply(f: fn(U32) -> (U32, U32)) -> (U32, U32) {
+  f.(1)
+}
+
+pub fn in_an_anonymous_function() -> (U32, U32) {
+  apply(fn(i) { (move i, 1) }) //~ E0703
+}
+
+pub fn in_an_anonymous_function_right() -> (U32, U32) {
+  apply(fn(i) { (i, 1) })
+}
+
+// ------------------------------------------------------------------ the argument of a function with a type parameter
+
+pub fn pair_with_a_dup_actual(n: U32) -> (U32, U32) {
+  pair_m(move n) //~ E0703
+}
+
+// ------------------------------------------------------------------ right
+
+pub fn without_the_mark(n: U32, s: Str) -> (Option[U32], Gain, [U32; 2]) uses {Alloc} {
+  let g = Gain { n: n, name: s }
+  (Some(n), g, [n, n])
+}
+
+pub fn assign_without_the_mark(n: U32) -> U32 {
+  var x: U32 = 0
+  x = n
+  x
+}
+
+pub fn pair_with_a_dup_actual_without_the_mark(n: U32) -> (U32, U32) {
+  pair_m(n)
+}
+
+pub fn pair_with_an_affine_actual(move b: Buf[F32]) -> (Buf[F32], U32) {
+  pair_m(move b)
+}
+
+pub fn unbounded_maybe_dup_parameter_with_the_mark[T: ?Dup](move t: T) -> Option[T] {
+  Some(move t)
+}
+
+pub fn an_affine_value_with_the_mark(move b: Buf[F32]) -> (Option[Buf[F32]], U32) {
+  (Some(move b), 1)
+}
+
+pub fn an_affine_value_assigned(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  var x = move a
+  x = move b
+  x
+}
+
+pub fn an_affine_value_in_a_variant(move b: Buf[F32]) -> Slot {
+  Slot.Data(move b)
+}
+
+pub fn an_affine_tail_in_a_constructor(c: Bool, move a: Buf[F32]) -> Option[Buf[F32]] uses {Alloc} {
+  Some(if c { move a } else { Buf.zeroed(1) })
+}
