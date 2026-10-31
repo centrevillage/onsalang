@@ -1,0 +1,7 @@
+pub fn inc(x: I32) -> Bool {
+  true
+}
+
+pub fn f(x: Bool) -> Bool {
+  inc(1)~(x)
+}
