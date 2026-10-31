@@ -81,8 +81,8 @@ pub(super) struct Walker<'a> {
 }
 
 /// What the walk is in: the anonymous functions (`capture.rs`), the
-/// borrowed `for` loops (`frozen.rs`), and the call whose arguments it walks
-/// (`calls.rs`).
+/// borrowed `for` loops and the guards of a borrowed `match` (`frozen.rs`),
+/// and the call whose arguments it walks (`calls.rs`).
 #[derive(Default)]
 pub(super) struct Inside {
     pub(super) frames: Vec<Frame>,
@@ -280,15 +280,16 @@ impl<'a> Walker<'a> {
                 self.m.taken.push(Taken { at, root: p.root, path: p.proj.iter().map(step).collect() });
             }
         }
-        self.move_local(r, p.root, at, direct);
+        self.move_local(r, p, at, direct);
     }
 
-    /// The owned Affine local `l` is moved at `at` (§5.2): a change (§7),
-    /// after the call of a `direct` argument. Of a place a `for` holds, the
-    /// E0715 only (S-798).
-    pub(super) fn move_local(&mut self, r: &mut Run, l: LocalId, at: Span, direct: bool) {
-        let whole = Place { root: l, proj: Vec::new() };
-        if self.held(&whole, at) {
+    /// The owned Affine local of `p` is moved at `at` (§5.2), the whole (a
+    /// field taken out of it too, S-85): a change (§7), after the call of a
+    /// `direct` argument. Of a place a `for` or a guard holds, the E0715
+    /// only (S-798).
+    fn move_local(&mut self, r: &mut Run, p: &Place, at: Span, direct: bool) {
+        let (l, whole) = (p.root, Place { root: p.root, proj: Vec::new() });
+        if self.held(&whole, at, (!p.proj.is_empty()).then_some(p)) {
             return self.record(&whole, at);
         }
         r.cur.set(l, Status::Moved { at, via_loop: false });

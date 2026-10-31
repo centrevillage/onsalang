@@ -46,8 +46,8 @@ impl Walker<'_> {
     /// other write reads its place first (an E0704 of a moved or stale root,
     /// S-789). A value captured is not written (R-25). An `inout` argument
     /// and a receiver change their place after the call (§7, S-796). A place
-    /// a borrowed `for` holds is not written, after the E0701 (E0715,
-    /// `frozen.rs`). A partial view writes its base (memo 1.2: whether it
+    /// a borrowed `for` or a guard holds is not written, after the E0701
+    /// (E0715, `frozen.rs`). A partial view writes its base (memo 1.2: whether it
     /// can, by its root), walked as the call of `slice` it is.
     pub(super) fn write_place(&mut self, r: &mut Run, target: ExprId, how: How) {
         let at = self.ast.expr(target).span;
@@ -73,7 +73,7 @@ impl Walker<'_> {
         if !self.writable(l) {
             return self.read_only(l, at, how);
         }
-        if self.held(&place, at) {
+        if self.held(&place, at, None) {
             return self.record(&place, at);
         }
         if whole {

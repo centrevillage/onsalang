@@ -1,0 +1,152 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.1", "§5.2", "§18.1"]
+// fixes = 0
+
+// R-110, R-161, S-42, S-796, S-799 (§18.1: the diagnostics of one unit are reported in the order of position, end, code,
+// and the stages that are not independent drop the later one; §5.1: "`let` の束縛と借用の引数は変更できない（代入すると、
+// また `inout` で渡すと E0701）"; §5.2: "`inout` と借用の両方に渡すと（`h(x, inout x)`）エラー（E0702）"; "`match o { Some(b) =>
+// f(b, inout o) }` と `g(inout o, b)` はどちらも E0702"; "引数に置いたブロック式や腕の中の代入 … も同じ変更で、引数の順によらず
+// E0702 である"): the change in a guard that is an E0715 is also an error of another code in the same place, and the
+// error of the first code in the order is the one that is reported.
+// - A `let` or a borrowed argument cannot be changed: E0701 at the change, and the E0715 is not reported with it. The
+//   candidate that turns the `let` into `var` (R-161) is not given, because the program is still an error with a `var`
+//   (the E0715 of the guard): `fixes = 0`.
+// - A change that is the argument of a call with a borrowed argument of the same place, or of a place derived from it
+//   (`f2(b, inout o)`, `fn2(b, { o = None … })` with `b` bound by the arm, `h(xs, inout xs)`), is E0702 in the place
+//   where the E0715 would be, so E0702 comes first in the order of the codes.
+// The forms where no E0702 is made, so that the E0715 stays, are in match_guard_change.onsa. The E0711 of a `move` of the
+// binding of the arm (`eatb(move b)`) and the case where the E0702 is after the E0715 in the order (`g(inout o, b)`) are
+// not here: the columns of the two spans are not given by the specification.
+// One error per function (P-01).
+
+pub struct W {
+  a: Option[Buf[F32]],
+  c: U32,
+}
+
+impl W {
+  pub fn clear(inout self) -> Bool {
+    self.a = None
+    true
+  }
+}
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn reset(inout o: Option[Buf[F32]]) -> Bool {
+  o = None
+  true
+}
+
+pub fn eat(move o: Option[Buf[F32]]) -> Bool uses {Alloc} {
+  true
+}
+
+pub fn f2(b: Buf[F32], inout o: Option[Buf[F32]]) -> U32 {
+  1
+}
+
+pub fn fn2(b: Buf[F32], n: U32) -> U32 {
+  n
+}
+
+pub fn h(xs: [U32; 2], inout ys: [U32; 2]) -> U32 {
+  1
+}
+
+// ------------------------------------------------------------ E0701 before E0715
+
+pub fn let_subject_assigned() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    Some(b) if {
+      o = None //~ E0701
+      true
+    } => b.len(),
+    _ => 0,
+  }
+}
+
+pub fn let_subject_as_inout() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    Some(_) if reset(inout o) => 1, //~ E0701
+    _ => 0,
+  }
+}
+
+pub fn let_subject_changed_by_a_bang_method() -> U32 uses {Alloc} {
+  let w = W { a: mko(), c: 0 }
+  match w.a {
+    Some(_) if w.clear!() => 1, //~ E0701
+    _ => 0,
+  }
+}
+
+pub fn let_subject_assigned_in_a_later_arm() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    None => 0,
+    Some(_) if {
+      o = None //~ E0701
+      true
+    } => 1,
+    _ => 2,
+  }
+}
+
+pub fn borrowed_argument_subject_as_inout(o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(_) if reset(inout o) => 1, //~ E0701
+    _ => 0,
+  }
+}
+
+pub fn borrowed_argument_subject_assigned(o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(_) if {
+      o = None //~ E0701
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+// ------------------------------------------------------------ E0702 in the place of the E0715
+
+pub fn inout_beside_the_binding_of_the_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if f2(b, inout o) > 0 => 1, //~ E0702
+    _ => 0,
+  }
+}
+
+pub fn block_beside_the_binding_of_the_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if fn2(b, { o = None //~ E0702
+      1 }) > 0 => 1,
+    _ => 0,
+  }
+}
+
+pub fn inout_beside_a_borrow_of_the_subject() -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  match xs {
+    _ if h(xs, inout xs) > 0 => 1, //~ E0702
+    _ => 0,
+  }
+}
+
+pub fn inout_beside_the_binding_of_a_later_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    None => 0,
+    Some(b) if f2(b, inout o) > 0 => 1, //~ E0702
+    _ => 2,
+  }
+}

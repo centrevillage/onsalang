@@ -1,0 +1,251 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§5.4", "§5.2", "§3.5"]
+
+// R-110, S-42, S-613, S-796, S-799 (§7: "借用の `match x` のガードでは、`x` とその一部を変更できない … 重なりの判定と当たらない形は、
+// 借用の `for` の E0715 と同じである（§5.4）"), run in the interpreter: the values of the guards that change something and are not
+// hit by the E0715 of negative/match_guard_change*.onsa (the forms are checked in values/match_guard_ok.onsa). The change is of
+// another field or place, or the subject is `match move o`, or the heading is a call or a literal that needs no drop or a
+// constant, which have no place that the guard can change ("派生元は無いので … E0715 は当たらない": `match (n, m)` is not
+// `match n`), or the binding that is the heading is a Copy value; a guard that changes a variable runs in the order of the arms,
+// and the arm that follows reads what the guard wrote. A Copy binding keeps its value at the binding (§7), so the `a` of
+// `(a, b)` is the 1 that the literal held when the arm was chosen, and the `n` the arm reads is the 0 that the guard wrote.
+// Until the general lowering of the value of a `match` with a guard exists (W8-06) these forms are E0200 in the interpreter
+// (negative/lower_match_general.onsa); W8-06 has to make this file pass.
+
+pub struct W {
+  a: Option[Buf[F32]],
+  c: U32,
+}
+
+const TABLE: [U32; 3] = [4, 5, 6]
+
+fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+fn reset(inout o: Option[Buf[F32]]) -> Bool {
+  o = None
+  true
+}
+
+fn put(inout n: U32) -> Bool {
+  n = 7
+  true
+}
+
+fn some_len(o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match o {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+fn change_the_other_field() -> U32 uses {Alloc} {
+  var w = W { a: Some(Buf.zeroed(3)), c: 0 }
+  match w.a {
+    Some(b) if {
+      w.c = 1
+      true
+    } => b.len() * 10 + w.c,
+    _ => 0,
+  }
+}
+
+fn pass_the_other_field_as_inout() -> U32 uses {Alloc} {
+  var w = W { a: Some(Buf.zeroed(3)), c: 0 }
+  match w.a {
+    Some(b) if put(inout w.c) => b.len() * 10 + w.c,
+    _ => 0,
+  }
+}
+
+fn change_the_other_member_of_a_tuple() -> U32 uses {Alloc} {
+  var p = (mko(), 0)
+  match p.0 {
+    Some(_) if {
+      p.1 = 5
+      true
+    } => p.1,
+    _ => 0,
+  }
+}
+
+fn change_another_array() -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  var ys: [U32; 2] = [0, 0]
+  match xs {
+    v if {
+      ys[0] = 7
+      true
+    } => v[1] + ys[0],
+    _ => 0,
+  }
+}
+
+fn change_another_option() -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  match o {
+    Some(_) if reset(inout p) => some_len(o) * 10 + some_len(p),
+    _ => 0,
+  }
+}
+
+fn match_move_owns_the_value() -> U32 uses {Alloc} {
+  var o = mko()
+  match move o {
+    Some(b) if {
+      o = None
+      true
+    } => b.len(),
+    _ => 0,
+  }
+}
+
+fn the_heading_is_a_call() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) => match b.len() {
+      k if {
+        o = None
+        k > 0
+      } => k,
+      _ => 0,
+    },
+    None => 0,
+  }
+}
+
+fn the_heading_is_a_constant() -> U32 {
+  var k: U32 = 0
+  match TABLE {
+    v if {
+      k = 2
+      v[0] > 0
+    } => k * 10 + v[1],
+    _ => 0,
+  }
+}
+
+fn the_heading_is_a_literal_that_needs_no_drop() -> U32 {
+  var n: U32 = 1
+  var m: U32 = 2
+  match (n, m) {
+    (a, b) if {
+      n = 0
+      a > 0
+    } => a * 100 + b * 10 + n,
+    _ => 0,
+  }
+}
+
+// The literal is built once, before the arms are tried (W4-10, A1): an arm after a guard that changes `n` tests the
+// literal as it was built, not `n` as the guard left it.
+fn a_later_arm_tests_the_literal_as_it_was_built() -> U32 {
+  var n: U32 = 1
+  var m: U32 = 2
+  match (n, m) {
+    (a, _) if {
+      n = 0
+      false
+    } => a,
+    (0, _) => 100,
+    _ => 2,
+  }
+}
+
+fn copy_binding_in_a_chain() -> U32 uses {Alloc} {
+  var o: Option[(Buf[F32], U32)] = Some((Buf.zeroed(2), 0))
+  match o {
+    Some(t) => match t {
+      (_, n) => match n {
+        0 if {
+          o = None
+          true
+        } => 1,
+        _ => 0,
+      },
+    },
+    None => 0,
+  }
+}
+
+fn copy_member_of_the_subject() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 0 }
+  match w {
+    W { a: _, c: k } => match k {
+      0 if {
+        w.c = 1
+        true
+      } => 1 + w.c,
+      _ => 0,
+    },
+  }
+}
+
+fn guard_in_the_body_of_an_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  match o {
+    Some(b) if b.len() > 0 => match p {
+      Some(_) if reset(inout o) => 1,
+      _ => 0,
+    },
+    _ => 0,
+  }
+}
+
+fn guard_reads_a_part_of_the_subject() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 4 }
+  match w.a {
+    Some(b) if w.c == 4 && b.len() > 1 => b.len() + w.c,
+    _ => 0,
+  }
+}
+
+fn guard_changes_a_local_of_its_own() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if {
+      var t: U32 = 0
+      t = b.len()
+      t > 1
+    } => b.len(),
+    _ => 0,
+  }
+}
+
+test "the guard changes another field or place" {
+  assert change_the_other_field() == 31
+  assert pass_the_other_field_as_inout() == 37
+  assert change_the_other_member_of_a_tuple() == 5
+  assert change_another_array() == 9
+  assert change_another_option() == 20
+}
+
+test "match move owns the value, so the guard can change the variable" {
+  assert match_move_owns_the_value() == 2
+}
+
+test "a heading without a place has nothing for the guard to change" {
+  assert the_heading_is_a_call() == 2
+  assert the_heading_is_a_constant() == 25
+  assert the_heading_is_a_literal_that_needs_no_drop() == 120
+  assert a_later_arm_tests_the_literal_as_it_was_built() == 2
+}
+
+test "a Copy binding keeps its value at the binding" {
+  assert copy_binding_in_a_chain() == 1
+  assert copy_member_of_the_subject() == 2
+}
+
+test "the frame of a guard is held while the guard is walked" {
+  assert guard_in_the_body_of_an_arm() == 1
+}
+
+test "a guard that reads a part of the subject, or changes a local of its own" {
+  assert guard_reads_a_part_of_the_subject() == 6
+  assert guard_changes_a_local_of_its_own() == 2
+}

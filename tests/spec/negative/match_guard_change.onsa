@@ -1,0 +1,358 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.4", "§5.2", "§3.5"]
+// fixes = 0
+
+// R-110, S-42, S-799 (§7: "借用の `match x` のガードでは、`x` とその一部を変更できない（代入、`inout` への受け渡し、
+// `!` のメソッド、`move` は E0715）。腕の判定が字面どおりに決まる。重なりの判定と当たらない形は、借用の `for` の
+// E0715 と同じである（§5.4）"): the guard of an arm of a borrowed `match x` cannot change the subject or a part of it,
+// whatever the form of the change (an assignment, a call with the place as an `inout` argument, a `!` method, a
+// `move`), in the guard of any arm (the first, a later one after a guard that changes nothing), and wherever in the
+// guard it is: the right of `&&` and of `||`, a statement of a block that is the guard (before a `return` that the
+// block holds, after a `return` that an `if` of the block makes), an `if` or an arm of a `match` in the block, a
+// `while` in the block. The `match` itself can be anywhere: in a `while`, the condition of a `while`, an argument
+// of a call, the heading of a `let`, an arm of an `if` or of a `match`. The error is at the change (the left side
+// of the assignment, the `inout` argument, the receiver of the `!` call, the operand of the `move`) and has no
+// candidate (`fixes = 0`). The arm body that follows is not a second error: the E0704 that the change would give
+// to the binding of the arm in the body (`b.len()`) is not reported, because a change that is an error changes
+// nothing (S-798, S-799). The kinds of subject are in match_guard_change_subjects.onsa, the derived subjects, the
+// tails and the nested guards in match_guard_change_derived.onsa, the `for` that meets a guard in
+// match_guard_change_for.onsa, the order among the codes in match_guard_change_order.onsa. The last two functions are
+// the argument of a call that only makes a value from the binding of the arm (`fcount(b.len(), inout o)`): it does
+// not overlap the change (§5.2: "引数の中で同じ変数を読んで値を作るだけなら重ならない"), so no E0702 is made and the
+// E0715 stays; the forms that are not hit are in values/match_guard_ok.onsa. One error per
+// function (P-01).
+
+pub struct W {
+  a: Option[Buf[F32]],
+  c: U32,
+}
+
+impl W {
+  pub fn clear(inout self) -> Bool {
+    self.a = None
+    true
+  }
+}
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn reset(inout o: Option[Buf[F32]]) -> Bool {
+  o = None
+  true
+}
+
+pub fn eat(move o: Option[Buf[F32]]) -> Bool uses {Alloc} {
+  true
+}
+
+pub fn clear_i(inout x: Option[I32]) -> Bool {
+  x = None
+  false
+}
+
+pub fn id(n: U32) -> U32 {
+  n
+}
+
+pub fn plus(n: U32, m: U32) -> U32 {
+  n + m
+}
+
+pub fn fcount(n: U32, inout o: Option[Buf[F32]]) -> U32 {
+  n
+}
+
+// ----------------------------------------------------------------------------------- the four forms
+
+pub fn assign_in_a_guard_block() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if {
+      o = None //~ E0715
+      true
+    } => b.len(),
+    _ => 0,
+  }
+}
+
+pub fn inout_in_a_guard() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn bang_method_in_a_guard() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 0 }
+  match w.a {
+    Some(_) if w.clear!() => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn move_in_a_guard() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if eat(move o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn assign_to_a_part_of_the_subject() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 0 }
+  match w {
+    W { a: Some(_), c: _ } if {
+      w.c = 1 //~ E0715
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn assign_to_the_whole_of_a_field_subject() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 0 }
+  match w.a {
+    Some(_) if {
+      w = W { a: None, c: 1 } //~ E0715
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+// --------------------------------------------------------------------------------- a later arm
+
+pub fn assign_in_the_guard_of_the_second_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    None => 0,
+    Some(_) if {
+      o = None //~ E0715
+      true
+    } => 1,
+    _ => 2,
+  }
+}
+
+pub fn inout_in_the_guard_of_the_third_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if false => 0,
+    Some(_) if true => 1,
+    Some(_) if reset(inout o) => 2, //~ E0715
+    _ => 3,
+  }
+}
+
+pub fn bang_method_in_the_guard_of_a_later_arm() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 0 }
+  match w.a {
+    None => 0,
+    Some(_) if w.clear!() => 1, //~ E0715
+    _ => 2,
+  }
+}
+
+pub fn move_in_the_guard_of_a_later_arm() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    None => 0,
+    Some(_) if eat(move o) => 1, //~ E0715
+    _ => 2,
+  }
+}
+
+// -------------------------------------------------------------------------- where in the guard
+
+pub fn right_of_an_and() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if true && reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn right_of_an_or() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if false || reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn right_of_an_and_that_cannot_run() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if false && reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn before_a_return_of_the_guard_block(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if {
+      o = None //~ E0715
+      if c {
+        return 7
+      }
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn after_a_return_of_the_guard_block(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if {
+      if c {
+        return 7
+      }
+      o = None //~ E0715
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn in_an_if_of_the_guard_block(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if {
+      if c {
+        o = None //~ E0715
+      }
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn in_an_arm_of_a_match_of_the_guard_block(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if {
+      match c {
+        true => reset(inout o), //~ E0715
+        false => false,
+      }
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn in_a_while_of_the_guard_block(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if {
+      while c {
+        o = None //~ E0715
+      }
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+// ----------------------------------------------------------------- where the `match` is
+
+pub fn match_in_a_while(n: U32) -> U32 uses {Alloc} {
+  var o = mko()
+  var i: U32 = 0
+  while i < n {
+    match o {
+      Some(_) if reset(inout o) => 1, //~ E0715
+      _ => 0,
+    }
+    i = i + 1
+  }
+  i
+}
+
+pub fn match_as_the_condition_of_a_while() -> U32 uses {Alloc} {
+  var o = mko()
+  var i: U32 = 0
+  while match o {
+    Some(_) if reset(inout o) => true, //~ E0715
+    _ => false,
+  } {
+    i = i + 1
+  }
+  i
+}
+
+pub fn match_as_an_argument() -> U32 uses {Alloc} {
+  var o = mko()
+  id(match o {
+    Some(_) if reset(inout o) => 1, //~ E0715
+    _ => 0,
+  })
+}
+
+pub fn match_as_the_heading_of_a_let() -> U32 uses {Alloc} {
+  var o = mko()
+  let r = match o {
+    Some(_) if reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+  r
+}
+
+pub fn match_as_the_heading_of_a_let_with_a_copy_subject() -> I32 {
+  var x: Option[I32] = Some(5)
+  let r = match x {
+    Some(_) if clear_i(inout x) => 1, //~ E0715
+    Some(v) => v,
+    None => 99,
+  }
+  r
+}
+
+pub fn match_in_an_arm_of_an_if(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  if c {
+    match o {
+      Some(_) if eat(move o) => 1, //~ E0715
+      _ => 0,
+    }
+  } else {
+    2
+  }
+}
+
+pub fn match_in_a_branch_of_a_match(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match c {
+    true => match o {
+      Some(_) if reset(inout o) => 1, //~ E0715
+      _ => 0,
+    },
+    false => 2,
+  }
+}
+
+// ------------------------------------------------- the argument that only reads: no E0702, so E0715
+
+pub fn argument_that_only_makes_a_value() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if fcount(b.len(), inout o) > 0 => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn block_that_is_not_beside_the_binding() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if plus(b.len(), {
+      o = None //~ E0715
+      1
+    }) > 0 => 1,
+    _ => 0,
+  }
+}

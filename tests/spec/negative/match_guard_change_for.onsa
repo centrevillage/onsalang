@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.4", "§18.1"]
+// fixes = 0
+
+// R-24, R-110, S-798 (§5.4: the body of a borrowed `for` cannot change the iterated place; §7: the guard of a borrowed
+// `match` cannot change the subject): the two rules meet. The `for` that is in a guard iterates a binding of the
+// subject, and the guard that is in the body of a `for` changes the place that the loop iterates. The change hits the
+// frame of the `for` (and, in the first two, the frame of the guard too) and is one E0715, at the change, with no
+// candidate (`fixes = 0`). These are the forms of match_guard_change_derived.onsa whose error the `for` already gave
+// before the E0715 of the guard (R-110) existed; they are kept apart so that the one that the guard adds cannot hide
+// a regression of them. One error per function (P-01).
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn clear_o(inout o: Option[Buf[F32]]) {
+  o = None
+}
+
+pub fn for_in_the_guard_writes_the_subject() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if {
+      for _ in b {
+        o = None //~ E0715
+      }
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn for_in_the_guard_passes_the_subject_as_inout() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if {
+      for _ in b {
+        clear_o(inout o) //~ E0715
+      }
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn guard_in_the_body_of_a_for_writes_the_iterated_place() -> U32 uses {Alloc} {
+  var os: [Option[Buf[F32]]; 2] = [None, None]
+  var n: U32 = 0
+  for _ in os {
+    match n {
+      0 if {
+        os[0] = None //~ E0715
+        true
+      } => {
+        n = n + 1
+      },
+      _ => {
+        n = n + 2
+      },
+    }
+  }
+  n
+}

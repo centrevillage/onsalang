@@ -1188,6 +1188,13 @@ note = "値の match の一般の経路（§7）。W2-07 で E0200、正式な�
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/semantics/match_guard_values.onsa"
+reasons = ["R-06"]
+until = "W8-06"
+note = "ガードの中で対象を変えない match の値（§7、W4-10）。ガード付きの値の match は解釈器で E0200、正式な実装は W8-06"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/semantics/closure_exit_from_fn.onsa"
 reasons = ["R-08", "S-192"]
 until = "W8-09"

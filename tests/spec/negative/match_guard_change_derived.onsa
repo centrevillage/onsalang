@@ -1,0 +1,264 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.4", "§5.2", "§18.1"]
+// fixes = 0
+
+// R-110, S-42, S-604, S-796, S-798 (§5.4: "借用のとき、派生元は末尾の場所の全てで … `for` と `match` の見出しも同じ規則で決め、
+// … E0715 も末尾の場所の各々に当たる"; "反復元が派生した借用束縛かその経路なら、派生元の場所に経路を合成した場所で重なりを
+// 見るので、派生元とその重なる一部の変更も E0715 である"; §7: the E0715 of the guard is judged the way of the borrowed
+// `for`): a `match` whose heading is a binding derived from the subject of an outer `match` (the binding of an arm,
+// a `let` of it) holds the place that it derives from, so a guard that changes the root of the derivation is E0715,
+// as the body of a `for` over such a binding is. A heading that is an `if`, a `match` or a block holds each of the
+// places at its tails, the first, the second or the one that both are, a tail that leaves is not a tail, a static
+// value at a tail holds nothing, and the place at the other tail is still held. Frames nest: the guard of a `match`
+// that is in a guard (the `for` that is in a guard and the guard that is in the body of a `for` are in
+// match_guard_change_for.onsa). A change that hits more than one frame is one E0715 (the text is the outermost's; the note of each frame is not checked
+// here), at the change, with no candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct W {
+  a: Option[Buf[F32]],
+  c: U32,
+}
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn mkoo() -> Option[Option[Buf[F32]]] uses {Alloc} {
+  Some(Some(Buf.zeroed(2)))
+}
+
+pub fn reset(inout o: Option[Buf[F32]]) -> Bool {
+  o = None
+  true
+}
+
+pub fn reset_oo(inout o: Option[Option[Buf[F32]]]) -> Bool {
+  o = None
+  true
+}
+
+pub fn clear_o(inout o: Option[Buf[F32]]) {
+  o = None
+}
+
+pub fn eat(move o: Option[Buf[F32]]) -> Bool uses {Alloc} {
+  true
+}
+
+// ------------------------------------------------------------- a heading derived from the subject
+
+pub fn derived_binding_as_the_heading() -> U32 uses {Alloc} {
+  var o = mkoo()
+  match o {
+    Some(i) => match i {
+      Some(c) if {
+        o = None //~ E0715
+        true
+      } => c.len(),
+      _ => 0,
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_binding_passed_as_inout() -> U32 uses {Alloc} {
+  var o = mkoo()
+  match o {
+    Some(i) => match i {
+      Some(_) if reset_oo(inout o) => 1, //~ E0715
+      _ => 0,
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_binding_in_the_second_arm() -> U32 uses {Alloc} {
+  var o = mkoo()
+  match o {
+    Some(i) => match i {
+      None => 0,
+      Some(_) if reset_oo(inout o) => 1, //~ E0715
+      _ => 2,
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_binding_of_a_let() -> U32 uses {Alloc} {
+  var o = mkoo()
+  match o {
+    Some(i) => {
+      let j = i
+      match j {
+        Some(_) if reset_oo(inout o) => 1, //~ E0715
+        _ => 0,
+      }
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_binding_of_a_chain_of_lets() -> U32 uses {Alloc} {
+  var o = mkoo()
+  match o {
+    Some(i) => {
+      let j = i
+      let k = j
+      match k {
+        Some(c) if {
+          o = None //~ E0715
+          true
+        } => c.len(),
+        _ => 0,
+      }
+    },
+    None => 0,
+  }
+}
+
+pub fn derived_binding_of_a_member() -> U32 uses {Alloc} {
+  var p: (Option[Option[Buf[F32]]], U32) = (mkoo(), 0)
+  match p {
+    (Some(i), _) => match i {
+      Some(_) if {
+        p.0 = None //~ E0715
+        true
+      } => 1,
+      _ => 0,
+    },
+    _ => 0,
+  }
+}
+
+pub fn derived_binding_changed_by_the_whole_root() -> U32 uses {Alloc} {
+  var p: (Option[Option[Buf[F32]]], U32) = (mkoo(), 0)
+  match p {
+    (Some(i), _) => match i {
+      Some(_) if {
+        p = (None, 1) //~ E0715
+        true
+      } => 1,
+      _ => 0,
+    },
+    _ => 0,
+  }
+}
+
+// -------------------------------------------------------------------- the tails of a heading
+
+pub fn first_tail_of_an_if(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  match if c { o } else { p } {
+    Some(_) if reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn second_tail_of_an_if(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  match if c { o } else { p } {
+    Some(b) if {
+      p = None //~ E0715
+      true
+    } => b.len(),
+    _ => 0,
+  }
+}
+
+pub fn both_tails_are_the_same_place(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match (if c { o } else { o }) {
+    Some(_) if reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn tails_of_a_match_heading(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  match (match c { true => o, false => p }) {
+    Some(_) if reset(inout p) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn tails_that_are_fields(c: Bool) -> U32 uses {Alloc} {
+  var v = W { a: mko(), c: 0 }
+  var w = W { a: mko(), c: 0 }
+  match if c { v.a } else { w.a } {
+    Some(_) if {
+      w.a = None //~ E0715
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn tail_that_is_a_place_with_a_static_value(c: Bool) -> U32 uses {Alloc} {
+  var s: Str = "x"
+  match if c { s } else { "y" } {
+    t if {
+      s = "z" //~ E0715
+      t.len() > 0
+    } => t.len(),
+    _ => 0,
+  }
+}
+
+pub fn the_other_tail_leaves(c: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  match if c { o } else { return 5 } {
+    Some(_) if reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn tails_of_a_nested_if(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  var q = mko()
+  match if c { o } else { if d { p } else { q } } {
+    Some(_) if reset(inout q) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+// ------------------------------------------------------------------------------ nested frames
+
+pub fn guard_of_a_match_in_the_guard_writes_the_outer_subject() -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  match o {
+    Some(_) if match p {
+      Some(_) if reset(inout o) => true, //~ E0715
+      _ => false,
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn guard_of_a_match_in_the_guard_writes_both_subjects() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if match o {
+      Some(_) if reset(inout o) => true, //~ E0715
+      _ => false,
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn guard_of_a_match_in_the_guard_writes_the_inner_subject() -> U32 uses {Alloc} {
+  var o = mko()
+  var p = mko()
+  match o {
+    Some(_) if match p {
+      Some(_) if reset(inout p) => true, //~ E0715
+      _ => false,
+    } => 1,
+    _ => 0,
+  }
+}

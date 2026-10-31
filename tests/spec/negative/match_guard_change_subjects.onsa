@@ -1,0 +1,251 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§5.4", "§18.1"]
+// fixes = 0
+
+// R-110, S-42, S-85, S-217 (§7: "借用の `match x` のガードでは、`x` とその一部を変更できない"; §5.2: a part view is
+// the whole of its base and the elements of one array overlap whatever the index; §5.4: the E0715 of a borrowed
+// `for` is judged by the place): the kinds of the subject of a `match` whose guard changes it. The type of the subject
+// does not matter: a Copy value is the subject as well (`match n` with `n = 0` in the guard), because the arms are
+// decided by what the text says, not by the value that the guard changed (S-42: the change would send the later
+// arms to another value). A `let` of an Affine type is the subject too and its `move` is an E0715, not the E0701
+// of a binding that cannot be changed (a `let` can be moved, §5.2). The subject can be an `inout` argument, a field
+// of `self`, a part view `xs.slice(0, 2)` (the guard writes the base `xs[3]`, a place that the range does not
+// separate), an element with a run-time index (`os[i]` and the `inout os[j]`: indices are not compared). The
+// take-out of a field (`move w.a`, §5.2) consumes the whole `w`, so it overlaps every part of `w`, `w.c` too. The
+// error is at the change and has no candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct W {
+  a: Option[Buf[F32]],
+  c: U32,
+}
+
+impl W {
+  pub fn clear(inout self) -> Bool {
+    self.a = None
+    true
+  }
+
+  pub fn m_assign(inout self) -> U32 uses {Alloc} {
+    match self.a {
+      Some(b) if {
+        self.a = None //~ E0715
+        true
+      } => b.len(),
+      _ => 0,
+    }
+  }
+
+  pub fn m_bang(inout self) -> U32 uses {Alloc} {
+    match self.a {
+      Some(_) if self.clear!() => 1, //~ E0715
+      _ => 0,
+    }
+  }
+}
+
+pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(2))
+}
+
+pub fn reset(inout o: Option[Buf[F32]]) -> Bool {
+  o = None
+  true
+}
+
+pub fn eat(move o: Option[Buf[F32]]) -> Bool uses {Alloc} {
+  true
+}
+
+pub fn put(inout n: U32) -> Bool {
+  n = 7
+  true
+}
+
+// -------------------------------------------------------------------------------- a Copy value
+
+pub fn copy_subject_assigned() -> U32 {
+  var n: U32 = 1
+  match n {
+    k if {
+      n = 0 //~ E0715
+      k > 0
+    } => k,
+    _ => 0,
+  }
+}
+
+pub fn copy_subject_with_a_literal_arm_after() -> U32 {
+  var n: U32 = 1
+  match n {
+    k if {
+      n = 5 //~ E0715
+      false
+    } => k,
+    5 => 100,
+    _ => 2,
+  }
+}
+
+pub fn copy_subject_as_inout() -> U32 {
+  var n: U32 = 1
+  match n {
+    0 => 0,
+    _ if put(inout n) => 1, //~ E0715
+    _ => 2,
+  }
+}
+
+pub fn copy_option_subject() -> I32 {
+  var x: Option[I32] = Some(5)
+  match x {
+    Some(v) if {
+      x = None //~ E0715
+      v > 0
+    } => v,
+    _ => 0,
+  }
+}
+
+pub fn shared_subject_assigned() -> U32 uses {Alloc} {
+  var s: Str = "a"
+  match s {
+    t if {
+      s = "b" //~ E0715
+      t.len() > 0
+    } => t.len(),
+    _ => 0,
+  }
+}
+
+// ----------------------------------------------------------------------- a `let` of an Affine type
+
+pub fn let_subject_moved() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    Some(_) if eat(move o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn let_subject_moved_in_a_block() -> U32 uses {Alloc} {
+  let o = mko()
+  match o {
+    Some(_) if {
+      let t = move o //~ E0715
+      eat(move t)
+    } => 1,
+    _ => 0,
+  }
+}
+
+// -------------------------------------------------------------------- an argument and `self`
+
+pub fn inout_argument_subject(inout o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(_) if reset(inout o) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn inout_argument_subject_assigned(inout o: Option[Buf[F32]]) -> U32 {
+  match o {
+    Some(_) if {
+      o = None //~ E0715
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn inout_field_subject(inout w: W) -> U32 {
+  match w.c {
+    0 if put(inout w.c) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+// ----------------------------------------------------------------------- a part view and an element
+
+pub fn part_view_subject_writes_the_base() -> F32 uses {Alloc} {
+  var xs = Buf.zeroed(4)
+  match xs.slice(0, 2) {
+    s if {
+      xs[3] = 1.0 //~ E0715
+      s.len() > 0
+    } => s[0],
+    _ => 0.0,
+  }
+}
+
+pub fn part_view_subject_writes_the_whole_base() -> F32 uses {Alloc} {
+  var xs = Buf.zeroed(4)
+  match xs.slice(0, 2) {
+    s if {
+      xs.fill!(1.0) //~ E0715
+      s.len() > 0
+    } => s[0],
+    _ => 0.0,
+  }
+}
+
+pub fn element_subject_with_a_run_time_index(i: U32, j: U32) -> U32 uses {Alloc} {
+  var os: [Option[Buf[F32]]; 2] = [None, None]
+  match os[i] {
+    Some(_) if reset(inout os[j]) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn element_subject_with_the_same_literal_index() -> U32 uses {Alloc} {
+  var os: [Option[Buf[F32]]; 2] = [None, None]
+  match os[0] {
+    Some(_) if reset(inout os[0]) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn array_subject_writes_an_element(i: U32) -> U32 uses {Alloc} {
+  var os: [Option[Buf[F32]]; 2] = [None, None]
+  match os {
+    _ if reset(inout os[i]) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn tuple_subject_writes_a_member() -> U32 uses {Alloc} {
+  var p = (mko(), 0)
+  match p {
+    (Some(_), _) if reset(inout p.0) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+// ------------------------------------------------------------------------- the take-out of a field
+
+pub fn take_out_overlaps_a_field_subject() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 0 }
+  match w.c {
+    0 if eat(move w.a) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn take_out_of_the_field_subject() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 0 }
+  match w.a {
+    Some(_) if eat(move w.a) => 1, //~ E0715
+    _ => 0,
+  }
+}
+
+pub fn take_out_in_a_block_guard() -> U32 uses {Alloc} {
+  var w = W { a: mko(), c: 3 }
+  match w.c {
+    3 if {
+      let t = move w.a //~ E0715
+      eat(move t)
+    } => 1,
+    _ => 0,
+  }
+}

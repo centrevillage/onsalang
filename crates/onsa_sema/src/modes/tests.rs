@@ -3150,8 +3150,8 @@ pub fn moved() -> U32 uses {Alloc} {
 }
 
 /// R-161's condition 5 (W4-09 memo 7.4): the head of a borrowed `match`
-/// with a guard holds its places (W4-10's E0715), so a `let` it reads has
-/// no candidate `var`, whatever its patterns bind.
+/// with a guard holds its places (the E0715 of a change in the guard, §7),
+/// so a `let` it reads has no candidate `var`, whatever its patterns bind.
 #[test]
 fn no_candidate_for_a_let_a_guard_holds() {
     let src = "pub fn guarded() -> U32 {
@@ -3179,6 +3179,119 @@ fn a_write_in_deeply_nested_for_loops() {
         src.push_str("xs[0] = mk()\n");
         src.push_str(&"}\n".repeat(DEPTH));
         src.push_str("}\n");
+        said(&src).into_iter().map(|d| (d.0, d.4.len())).collect::<Vec<_>>()
+    };
+    let found = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+    assert_eq!(found, [(Code::E0715, DEPTH + 1)]);
+}
+
+/// W4-10 memo 2.4 (§7, R-110): a change of the head of a borrowed `match`
+/// in a guard is one E0715, worded by the outermost frame it overlaps and
+/// noted at each (a `for` in the guard over a binding derived from the
+/// head, S-798); a field taken out names the whole it moves (S-85). The
+/// arm's body is outside the frame: its change is §7's, here unused.
+#[test]
+fn a_change_of_what_a_guard_holds() {
+    let src = "pub fn nested() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(b) if { for _ in b { o = None }
+      true } => 1,
+    _ => 0,
+  }
+}
+pub fn taken() -> U32 uses {Alloc} {
+  var h = mkh()
+  match h.n {
+    0 if take3(move h.buf) > 0 => 1,
+    _ => 0,
+  }
+}
+pub fn in_the_body() -> U32 uses {Alloc} {
+  var o = mko()
+  match o {
+    Some(_) if true => {
+      o = None
+      0
+    },
+    _ => 0,
+  }
+}
+";
+    let found = said(src);
+    let codes: Vec<_> = found.iter().map(|d| (d.0, d.1, d.2.as_str(), d.3.as_str())).collect();
+    let guard = "in a guard of a `match` on";
+    assert_eq!(
+        codes,
+        [
+            (Code::E0715, 4, "o", &*format!("cannot change `o` {guard} `o`, which it overlaps (§7)")),
+            (
+                Code::E0715,
+                12,
+                "h.buf",
+                &*format!(
+                    "cannot change `h` (taking out `h.buf` moves the whole) {guard} `h.n`, which it overlaps (§7)"
+                )
+            ),
+        ]
+    );
+    let notes: Vec<_> = found[0].4.iter().map(|(at, m)| (at.as_deref(), m.as_str())).collect();
+    let rule = "the arms are tried on the value as it was matched; change it in the arm's body (§7)";
+    assert_eq!(
+        notes,
+        [
+            (None, rule),
+            (Some("o"), "matched by this `match`"),
+            (Some("b"), "iterated by this `for`"),
+            (Some("b"), "`b` is bound here as a borrow of `o` (§5.4)"),
+        ]
+    );
+}
+
+/// §18.1: the candidate `move` is none where a guard or a borrowed `for`
+/// holds the whole of the root it moves (applied, it would leave an E0715
+/// of this stage); elsewhere it stays.
+#[test]
+fn no_candidate_move_on_a_held_place() {
+    let src = "pub fn in_a_guard() -> U32 uses {Alloc} {
+  var b = mk()
+  match b {
+    c if eat(b) => c.len(),
+    _ => 0,
+  }
+}
+pub fn in_a_for() uses {Alloc} {
+  var xs = make_array()
+  for _ in xs {
+    let t = xs
+  }
+}
+pub fn outside() -> Bool uses {Alloc} {
+  var b = mk()
+  eat(b)
+}
+pub fn after_the_for() uses {Alloc} {
+  var xs = make_array()
+  for _ in xs {}
+  let t = xs
+}
+";
+    let found: Vec<_> = writes(src).into_iter().map(|(c, l, _, f)| (c, l, f.len())).collect();
+    assert_eq!(found, [(Code::E0703, 4, 0), (Code::E0711, 11, 0), (Code::E0703, 16, 1), (Code::E0711, 21, 1)]);
+}
+
+/// Memo 3 (rules 3.4): a write in 200 nested guards of borrowed `match`es
+/// on the place (one level of §2.5's 256 each; 255 is E0006) is one E0715
+/// with a note at each head, on a large stack.
+#[test]
+fn a_write_in_deeply_nested_guards() {
+    const DEPTH: usize = 200;
+    let run = || {
+        let mut src = String::from("pub fn deep() -> Bool uses {Alloc} {\n  var o = mko()\n");
+        src.push_str(&"match o {\nSome(_) if ".repeat(DEPTH));
+        src.push_str("{ o = None\ntrue }");
+        src.push_str(&" => true,\n_ => false,\n}".repeat(DEPTH));
+        src.push_str("\n}\n");
         said(&src).into_iter().map(|d| (d.0, d.4.len())).collect::<Vec<_>>()
     };
     let found = onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();

@@ -73,7 +73,8 @@ impl Walker<'_> {
                 r.cur.join(&then);
             }
             ExprKind::Match { scrutinee, arms, .. } => {
-                let head = self.head_pos(Head::Match { scrutinee: *scrutinee }, Pos::Arg(Mode::Borrow));
+                let subject = Head::Match { scrutinee: *scrutinee };
+                let head = self.head_pos(subject, Pos::Arg(Mode::Borrow));
                 if head != Pos::Own {
                     self.view_of_inout(*scrutinee, arms.iter().map(|a| a.pat));
                 }
@@ -81,12 +82,16 @@ impl Walker<'_> {
                 // The state an arm is tried at: no arm before matched, or
                 // one matched and its guard was false.
                 let (mut tried, mut out) = (r.cur.clone(), Delta::bottom());
+                // A guard changes no place of the head (§7: E0715, `frozen.rs`).
+                let mut held = arms.iter().any(|a| a.guard.is_some()).then(|| self.frame(subject));
                 for arm in arms {
                     r.cur = tried.clone();
                     let outer = r.declared.len();
                     self.declare(r, arm.pat);
                     if let Some(g) = arm.guard {
+                        self.inside.frozen.extend(held.take());
                         self.expr(r, g, Pos::Read);
+                        held = self.inside.frozen.pop();
                         tried.join(&r.cur);
                     }
                     self.expr(r, arm.body, pos);
@@ -165,7 +170,8 @@ impl Walker<'_> {
                         self.expr(r, *iter, head)
                     }
                 }
-                self.freeze(s);
+                let frame = self.frame(Head::For(s));
+                self.inside.frozen.push(frame);
                 self.run_loop(r, s, (None, Some(*pat), *body));
                 self.inside.frozen.pop();
             }

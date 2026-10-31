@@ -7,7 +7,7 @@ use onsa_syntax::ast::{ExprId, ExprKind, PatId};
 
 use super::check::Walker;
 use super::flow::Run;
-use super::place::{Proj, place_of};
+use super::place::{Place, Proj, place_of};
 use super::walk::Pos;
 use crate::Kind;
 use crate::binding::Bind;
@@ -85,16 +85,14 @@ impl Walker<'_> {
             )),
             (_, Bind::Owned | Bind::OwnedMut) => match (pos, mark) {
                 (Pos::Own | Pos::Value, None) => {
-                    error(format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)"))
-                        .with_fix(self.add_move(e))
+                    let d = error(format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)"));
+                    self.add_move(e, &place).into_iter().fold(d, Diagnostic::with_fix)
                 }
-                (Pos::MoveArg, None) => Diagnostic::new(
-                    Stage::Modes,
-                    Code::E0703,
-                    at,
-                    "this parameter is `move`; write `move` before the argument (§5.2)",
-                )
-                .with_fix(self.add_move(e)),
+                (Pos::MoveArg, None) => {
+                    let message = "this parameter is `move`; write `move` before the argument (§5.2)";
+                    let d = Diagnostic::new(Stage::Modes, Code::E0703, at, message);
+                    self.add_move(e, &place).into_iter().fold(d, Diagnostic::with_fix)
+                }
                 // An erroneous move (E0712 at the anonymous function) moves nothing.
                 _ if self.captured(l) => return,
                 _ if !live => return self.record(&place, at),
@@ -217,10 +215,16 @@ impl Walker<'_> {
     }
 
     /// The candidate that writes `move` before `e` (outside its parentheses:
-    /// a mark is not written in them, §5.2).
-    fn add_move(&self, e: ExprId) -> Fix {
+    /// a mark is not written in them, §5.2), of the place `p`. None when a
+    /// `for` or a guard holds the whole of its root, which the `move` moves
+    /// (a field taken out too, S-85): it would leave an E0715 of this stage
+    /// (§18.1).
+    fn add_move(&self, e: ExprId, p: &Place) -> Option<Fix> {
+        if self.holds(&Place { root: p.root, proj: Vec::new() }) {
+            return None;
+        }
         let span = self.ast.expr(e).span;
-        Fix::insert("add `move`", span.file, span.start, "move ")
+        Some(Fix::insert("add `move`", span.file, span.start, "move "))
     }
 
     /// The candidate that removes the mark `word` at `m` and the blanks
