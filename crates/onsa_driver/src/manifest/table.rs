@@ -122,6 +122,9 @@ pub enum Need {
         or: Option<(&'static str, &'static str)>,
         build: bool,
     },
+    /// In a package with `@export` items, by the build after the check of
+    /// its sources (§14.2, S-832): [`super::Manifest::missing_prefix`].
+    Exports,
 }
 
 /// The values of a key of a target this version does not support: each is
@@ -195,12 +198,12 @@ const FP_NOTE: &str = "a fn or a flow takes a relaxed profile with `@fp(relaxed)
 pub static ROWS: &[Row] = &[
     row(Table::Root, "package", Field::Package, Shape::Table(Table::Package), Yes).need(Need::Always),
     row(Table::Root, "dependencies", Field::Dependencies, Shape::Table(Table::Dependencies), Yes),
-    row(Table::Root, "export", Field::Export, Shape::Table(Table::Export), Yes),
+    row(Table::Root, "export", Field::Export, Shape::Table(Table::Export), Yes).need(Need::Exports),
     row(Table::Root, "targets", Field::Targets, Shape::Table(Table::Targets), Yes),
     row(Table::Root, "plugin", Field::Plugin, Shape::Tables(Table::Plugin), Yes),
     row(Table::Package, "name", Field::Name, Str, Yes).with(Rule::PackageName).need(Need::Always),
     row(Table::Package, "edition", Field::Edition, Str, Yes).with(OneOf(&["2026"], None)).need(Need::Always),
-    row(Table::Export, "prefix", Field::Prefix, Str, Yes).with(Rule::Prefix),
+    row(Table::Export, "prefix", Field::Prefix, Str, Yes).with(Rule::Prefix).need(Need::Exports),
     row(Table::Target, "kind", Field::Kind, Str, Yes)
         .with(OneOf(KINDS, None))
         .need(Need::Always)

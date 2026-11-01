@@ -1,0 +1,32 @@
+// onsa.toml
+// [package]
+// name = "e1104_prefix_missing_heading_empty"
+// edition = "2026"
+//
+// [export]                                     #~ E1104 [t]
+// prefix = "e1104_prefix_missing_heading_empty_"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 1
+//
+// [[test.fix]]
+// at = "6:5"
+// code = "E1104"
+// candidate = 1
+// clean = true
+
+// E1104: the package has an `@export` item, so the build of `t` needs `prefix`, and the `[export]` heading
+// has none. The report is at the heading; `check` is not stopped, since the source is read first (§14.2
+// "`@export` の項目を出すターゲットのビルドで必須"、§15.3 `[export]` row, §18.1; S-639, S-832, R-121).
+// `e1104_prefix_missing_heading_empty_` is a `prefix` of the form (§14.2), so the one candidate inserts
+// `prefix = "<package>_"`, and after it the build has no diagnostic (`clean`; S-597, S-836).
+
+@export
+pub fn f() -> I32 { 1 }

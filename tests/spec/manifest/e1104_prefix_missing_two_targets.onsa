@@ -1,0 +1,28 @@
+// onsa.toml
+// export = {}                                  #~ E1104 [a, b]
+//
+// [package]
+// name = "e1104_prefix_missing_two_targets"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.b]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: `prefix` is needed by the build of every target that emits the `@export` item, and the table
+// `[export]` is the package's, not the target's. The build of `a` and the build of `b` each report the one
+// E1104, at the same line (§14.2 "`@export` の項目を出すターゲットのビルドで必須", §15.3, §18.1; S-639, S-832).
+
+@export
+pub fn f() -> I32 { 1 }

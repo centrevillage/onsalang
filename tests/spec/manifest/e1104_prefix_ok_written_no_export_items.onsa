@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1104_prefix_ok_written_no_export_items"
+// edition = "2026"
+//
+// [export]
+// prefix = "vc_"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// No diagnostic: `prefix` is written and the package has no `@export` item; it is not needed, and writing it is
+// not an error (§14.2 "書いても誤りにしない"; S-639 (q1), S-832).
+
+pub fn f() -> I32 { 1 }

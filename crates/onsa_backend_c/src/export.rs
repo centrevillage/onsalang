@@ -514,7 +514,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
 /// Header of the exported plain functions (`@export`), and their API
 /// (the header name is the caller's).
 pub(crate) fn fn_header(cx: &mut Cx, fns: &[FnId], header: &str) -> R<(String, Vec<crate::FnApi>)> {
-    let up: String = format!("{}{}", cx.opts.prefix, ident(&cx.opts.package)).to_ascii_uppercase();
+    let up: String = format!("{}{}", cx.opts.prefix(), ident(&cx.opts.package)).to_ascii_uppercase();
     let mut h = String::new();
     let _ = writeln!(
         h,
@@ -567,7 +567,7 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
         return Err(unsupported(def.span, Feature::ExportAggregateReturn, &[]));
     }
     let short = def.name.rsplit('.').next().unwrap_or(&def.name).to_string();
-    let sym = format!("{}{}", cx.opts.prefix, ident(&short));
+    let sym = format!("{}{}", cx.opts.prefix(), ident(&short));
     let ret = if def.ret == Ty::Unit { "void".to_string() } else { cx.names.name(&def.ret) };
     let mut decls = Vec::new();
     let mut fwd = Vec::new();
@@ -662,7 +662,7 @@ pub(crate) fn fn_wrapper(cx: &mut Cx, f: FnId) -> R<String> {
 /// panic in this version (W10-03 removes it): the one place that makes it,
 /// for the headers, the definition and [`crate::CUnit::take_panic`].
 pub(crate) fn take_panic_name(opts: &crate::EmitOptions) -> String {
-    format!("{}take_panic", opts.prefix)
+    format!("{}take_panic", opts.prefix())
 }
 
 /// `<prefix>take_panic` and its flag (one per translation unit, T4-4).

@@ -237,7 +237,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         };
         let meta = &m.flows[i];
         let short = meta.name.rsplit('.').next().unwrap_or(&meta.name).to_string();
-        let symbol = format!("{}{}", opts.prefix, ident(&short));
+        let symbol = format!("{}{}", opts.prefix(), ident(&short));
         let upper: String =
             symbol.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect();
         let layout = onsa_core::flow_layout_for(m, meta.fns.state, opts.bulk_threshold, opts.ptr_size);
@@ -390,7 +390,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     }
     let mut fns = Vec::new();
     if !export_fns.is_empty() {
-        let header = format!("{}{}.h", opts.prefix, ident(&opts.package));
+        let header = format!("{}{}.h", opts.prefix(), ident(&opts.package));
         match crate::export::fn_header(&mut cx, &export_fns, &header) {
             Ok((h, apis)) => {
                 headers.push((header, h));
@@ -538,8 +538,9 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         out.push('\n');
     }
 
-    // Export wrappers.
-    if opts.panic == PanicMode::Poison {
+    // Export wrappers; `<prefix>take_panic` is theirs (a build without exports has no prefix).
+    let poison = opts.panic == PanicMode::Poison && opts.exports_any();
+    if poison {
         out.push_str(&crate::export::take_panic(&cx));
     }
     for e in cx.exports.clone() {
@@ -558,7 +559,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     if !diags.is_empty() {
         return Err(diags);
     }
-    let take_panic = (opts.panic == PanicMode::Poison).then(|| crate::export::take_panic_name(opts));
+    let take_panic = poison.then(|| crate::export::take_panic_name(opts));
     Ok(CUnit {
         source: out,
         headers,

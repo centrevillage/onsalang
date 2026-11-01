@@ -130,8 +130,9 @@ pub type Locator = Box<dyn Fn(Span) -> (String, u32)>;
 /// What to emit and how (manifest `[export]` and the target, spec §15.3).
 pub struct EmitOptions {
     pub package: String,
-    /// C symbol prefix of the exports (`onsa_`).
-    pub prefix: String,
+    /// The C prefix of the exported names (`[export] prefix`, §14.2): none
+    /// in a build without exports, which reads no prefix ([`Self::prefix`]).
+    pub prefix: Option<String>,
     pub exports: Vec<ExportFlow>,
     /// Exported plain functions, by qualified name.
     pub export_fns: Vec<String>,
@@ -155,7 +156,7 @@ impl Default for EmitOptions {
     fn default() -> Self {
         EmitOptions {
             package: "onsa".into(),
-            prefix: "onsa_".into(),
+            prefix: None,
             exports: Vec::new(),
             export_fns: Vec::new(),
             panic: PanicMode::Trap,
@@ -166,6 +167,19 @@ impl Default for EmitOptions {
             ptr_size: onsa_core::layout::PTR_SIZE,
             cflags: FP_CFLAGS.iter().map(|f| f.to_string()).collect(),
         }
+    }
+}
+
+impl EmitOptions {
+    /// The prefix of the exported names: a build with exports has one (the
+    /// manifest's E1104 stops one without, S-832).
+    pub(crate) fn prefix(&self) -> &str {
+        self.prefix.as_deref().unwrap_or_else(|| onsa_diag::internal::bug(None, "an export without a `prefix`"))
+    }
+
+    /// Something is exported: the names that need the prefix are made.
+    pub(crate) fn exports_any(&self) -> bool {
+        !self.exports.is_empty() || !self.export_fns.is_empty()
     }
 }
 

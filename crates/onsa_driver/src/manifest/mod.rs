@@ -38,9 +38,13 @@ pub struct Manifest {
     pub package: Spanned<ManifestPackage>,
     /// By package name.
     pub dependencies: BTreeMap<String, Spanned<String>>,
-    pub export: Option<Spanned<ManifestExport>>,
+    /// Not written: no `prefix`.
+    pub export: Spanned<ManifestExport>,
     /// By target name.
     pub targets: BTreeMap<String, Spanned<ManifestTarget>>,
+    /// The E1104 of a `prefix` not written, which the build of a package with
+    /// `@export` items reports after the check of its sources (§14.2, S-832).
+    pub missing_prefix: Option<Diagnostic>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -52,8 +56,9 @@ pub struct ManifestPackage {
 /// `[export]`: what the C ABI exposes (spec §14.2, §15.3).
 #[derive(Debug, Default, Clone)]
 pub struct ManifestExport {
-    /// C symbol prefix (default `onsa_`). What is exported is the `@export`
-    /// of the items (§14.2, [`crate::ExportSettings::of`]).
+    /// The C prefix of the exported names, without a default (R-121 (1)).
+    /// What is exported is the `@export` of the items (§14.2,
+    /// [`crate::ExportSettings::of`]).
     pub prefix: Option<Spanned<String>>,
 }
 

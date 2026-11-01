@@ -492,17 +492,20 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     let analyzed = tests::changed_candidates(root, analyzed);
     let check = &analyzed.diagnostics;
     // Every candidate, applied alone and checked again (§18.1, S-236, W3-17).
-    let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);
-    // A written `fixes = 0` counts the candidates too: none is expected (X-15).
-    let copies = t.fixes.map(|n| {
-        let guard = |old: &_, new: &_| crate::copy_guard::case(setup, &loaded, old, new);
-        crate::fixes::compare(&loaded.sources, &disk_files(root, case, setup, &loaded), check, n, update, &guard)
-    });
-    candidates(&mut run, root, contract, copies);
+    let of_check = |run: &mut CaseRun| {
+        let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);
+        // A written `fixes = 0` counts the candidates too: none is expected (X-15).
+        let copies = t.fixes.map(|n| {
+            let guard = |old: &_, new: &_| crate::copy_guard::case(setup, &loaded, old, new);
+            crate::fixes::compare(&loaded.sources, &disk_files(root, case, setup, &loaded), check, n, update, &guard)
+        });
+        candidates(run, root, contract, copies);
+    };
     // A `mode = "test"` case without targets that checks compares its markers
     // with what `onsa test` reports before the tests run ([`run_tests`]).
     let test_stage = check.is_empty() && targets.is_empty() && t.mode == Mode::Test;
     if !check.is_empty() || targets.is_empty() {
+        of_check(&mut run);
         if targeted > 0 {
             run.problems.push(Problem::Case(if targets.is_empty() {
                 "markers name targets, but the case has none".into()
@@ -539,9 +542,27 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             conformance_scope(&mut run, &loaded, &analyzed);
         }
         markers.extend(on_targets);
+        let mut late = Vec::new();
         for target in &targets {
             let ctx = BuildCtx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, markers: &markers };
-            build_target(&ctx, target, update, &mut run);
+            let after = build_target(&ctx, target, update, &mut run);
+            late.extend(after.filter(|ds| ds.iter().any(|d| !d.fixes.is_empty())).map(|ds| (target, ds)));
+        }
+        // The candidates of the manifest's that a build reports after the sources are the case's (`tests/README.md`).
+        match &late[..] {
+            [] => of_check(&mut run),
+            [(target, ds)] if targets.len() == 1 => {
+                let contract = crate::fix_contract::check_build(case, setup, &loaded, ds, (target, stages.build));
+                let copies = t.fixes.zip(markers::manifest_file(root, case, setup, &loaded)).map(|(n, file)| {
+                    let guard = |old: &_, new: &_| crate::copy_guard::manifest(setup, &loaded, old, new);
+                    crate::fixes::compare(&loaded.sources, &[file], ds, n, update, &guard)
+                });
+                candidates(&mut run, root, contract, copies);
+            }
+            _ => run.problems.push(Problem::Case(
+                "a build reports a candidate of the manifest after the sources, which a case with one target checks"
+                    .into(),
+            )),
         }
         if hosts {
             run_hosts(&mut run, &t.host);

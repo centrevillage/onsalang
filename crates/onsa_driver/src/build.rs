@@ -138,7 +138,8 @@ pub enum BuildError {
     /// The package or its exports do not check (exit 1).
     Diagnostics { sources: SourceMap, diagnostics: Vec<Diagnostic> },
     /// The manifest's diagnostics and those of the target's build that need
-    /// no source, in one report before the sources are read (exit 2, §18.1).
+    /// no source, in one report before the sources are read; or the E1104 of
+    /// `prefix` after their check (exit 2, §18.1, S-832).
     Manifest { sources: SourceMap, diagnostics: Vec<Diagnostic> },
     /// An internal error (S-67, exit 101): a panic, a broken Core (R-82), or
     /// generated C the C compiler rejects. `sources` renders its position.
@@ -170,8 +171,10 @@ pub struct ResolvedTarget {
 /// What a build exports (spec §14.2, §15.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportSettings {
-    /// The C prefix of the exported names (default `onsa_`).
-    pub prefix: String,
+    /// The C prefix of the exported names (`[export] prefix`, §14.2): no
+    /// default (R-121 (1), S-95); a build with exports stops without one
+    /// (E1104, S-832).
+    pub prefix: Option<String>,
     /// Flows by module path.
     pub flows: Vec<String>,
     /// Functions by module path.
@@ -183,13 +186,13 @@ impl ExportSettings {
     /// ([`onsa_sema::Analysis::exports`]), and the `prefix` of `manifest`.
     pub fn of(analyzed: &Analyzed, manifest: Option<&Manifest>) -> ExportSettings {
         let a = &analyzed.analysis;
-        let prefix = manifest.and_then(|m| Some(m.export.as_ref()?.value.prefix.as_ref()?.value.clone()));
+        let prefix = manifest.and_then(|m| Some(m.export.value.prefix.as_ref()?.value.clone()));
         let (mut flows, mut fns) = (Vec::new(), Vec::new());
         for d in a.exports() {
             let list = if a.def(d).as_flow().is_some() { &mut flows } else { &mut fns };
             list.push(a.qualified_name(d));
         }
-        ExportSettings { prefix: prefix.unwrap_or_else(|| "onsa_".into()), flows, fns }
+        ExportSettings { prefix, flows, fns }
     }
 }
 
@@ -275,6 +278,13 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     }
     let settings = &resolved.settings;
     let export = &ExportSettings::of(analyzed, loaded.manifest());
+    // The sources tell whether `prefix` is required: after their check (§14.2, §18.1, S-832).
+    // SPEC-GAP(S-839): the E1104 stops the build before its own checks (E0610) and the C backend's (E0302).
+    if export.prefix.is_none() && !(export.flows.is_empty() && export.fns.is_empty()) {
+        let d = loaded.manifest().and_then(|m| m.missing_prefix.clone());
+        let d = d.unwrap_or_else(|| onsa_diag::internal::bug(None, "an export without a `prefix` or its E1104"));
+        return Err(BuildError::Manifest { sources: loaded.sources.clone(), diagnostics: vec![d] });
+    }
     let export_diags = check_exports(analyzed, settings);
     if !export_diags.is_empty() {
         return Err(diagnostics(LowerError::reported(export_diags)));
@@ -644,6 +654,61 @@ mod tests {
         assert_eq!(codes(&broken, "t"), [Code::E1102, Code::E0200]);
         assert_eq!(codes(&broken, "u"), [Code::E1102]);
         assert_eq!(broken.manifest_diagnostics().len(), 1, "the check reports the E1102 alone");
+    }
+
+    /// S-832, §14.2: `prefix` is required by a build whose package has
+    /// `@export` items, after the check of its sources (an error of the check
+    /// is reported alone); not by a package without them, whose build reads
+    /// no prefix (R-121 (1)); the check does not report it.
+    #[test]
+    fn a_build_with_exports_needs_a_prefix_after_the_check() {
+        let build = |export: &str, src: &str| {
+            let text = format!(
+                "[package]\nname = \"p\"\nedition = \"2026\"\n{export}[targets.t]\nkind = \"source\"\nlang = \"c\"\n\
+                 platform = \"host\"\n"
+            );
+            let source = crate::ManifestSource { path: MANIFEST.into(), text, form: crate::ManifestForm::File };
+            let files = vec![crate::SourceFile { path: "a.onsa".into(), text: src.into() }];
+            let mut loaded =
+                Loaded::from_input(PackageInput { manifest: Some(source), files, ..Default::default() }).unwrap();
+            assert!(loaded.manifest_diagnostics().is_empty());
+            let analyzed =
+                crate::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+            build_analyzed(&loaded, &analyzed, "t")
+        };
+        let exported = "@export\npub fn f() -> I32 {\n  1\n}\n";
+        match build("", exported) {
+            Err(BuildError::Manifest { diagnostics, .. }) => {
+                let found: Vec<(Code, &str, usize)> =
+                    diagnostics.iter().map(|d| (d.code, d.message.as_str(), d.fixes.len())).collect();
+                assert_eq!(found, [(Code::E1104, "missing key `export.prefix`", 1)]);
+            }
+            other => panic!("{other:?}"),
+        }
+        let broken = "@export\npub fn f() -> I32 {\n  true\n}\n";
+        match build("", broken) {
+            Err(BuildError::Diagnostics { diagnostics, .. }) => {
+                assert!(diagnostics.iter().all(|d| d.code != Code::E1104), "{diagnostics:?}")
+            }
+            other => panic!("{other:?}"),
+        }
+        let out = build("[export]\nprefix = \"vc_\"\n", exported).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(out.export.prefix.as_deref(), Some("vc_"));
+        assert_eq!(out.unit.fns.iter().map(|f| f.symbol.as_str()).collect::<Vec<_>>(), ["vc_f"]);
+        // An E0610 of the build too (the target provides no `Alloc`): the E1104 first, as the check
+        // passes; the E0610 after the `prefix` is written (S-832, §18.1: the check of the sources is the check's).
+        let alloc = "@export\npub fn f() -> U32 uses {Alloc} {\n  2\n}\n";
+        let codes = |r: Result<BuildOutput, BuildError>| match r {
+            Err(BuildError::Manifest { diagnostics, .. } | BuildError::Diagnostics { diagnostics, .. }) => {
+                diagnostics.iter().map(|d| d.code).collect::<Vec<_>>()
+            }
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(codes(build("", alloc)), [Code::E1104]);
+        assert_eq!(codes(build("[export]\nprefix = \"vc_\"\n", alloc)), [Code::E0610]);
+        // No `@export`: no prefix, none read, and no name of the export (no header, no `take_panic`).
+        let out = build("", "pub fn f() -> I32 {\n  1\n}\n").unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!((out.export.prefix, out.unit.headers.len(), out.unit.take_panic), (None, 0, None));
     }
 
     #[test]

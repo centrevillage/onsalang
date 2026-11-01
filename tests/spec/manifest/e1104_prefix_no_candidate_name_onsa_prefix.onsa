@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "onsa_tools"
+// edition = "2026"
+//
+// [export]                                     #~ E1104 [t]
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104 without a candidate: `<package>_` is `onsa_tools_`, which starts with `onsa_`, so it is not a `prefix`
+// (§14.2); there is no candidate (`fixes = 0`; §14.2 "`<package>_` が下の規則を満たすときは", §18.1; S-597,
+// S-832, S-95).
+
+@export
+pub fn f() -> I32 { 1 }

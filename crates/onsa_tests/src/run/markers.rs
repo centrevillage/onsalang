@@ -156,17 +156,29 @@ pub(super) fn manifest_stage(
         if compare_in(run, &loaded.sources, &expected, actual, Stage::Manifest, None, loaded.toml_file()) {
             negative_rules(run, &case.path, actual);
         }
-        let disk = match read.form {
-            ManifestForm::File => root.join(&case.path).join(&source.path),
-            ManifestForm::Fragment => root.join(&case.path),
-        };
-        let copies = setup.test.fixes.map(|n| {
+        let copies = setup.test.fixes.zip(manifest_file(root, case, setup, loaded)).map(|(n, file)| {
             let guard = |old: &_, new: &_| crate::copy_guard::manifest(setup, loaded, old, new);
-            crate::fixes::compare(&loaded.sources, &[(read.file, disk)], actual, n, update, &guard)
+            crate::fixes::compare(&loaded.sources, &[file], actual, n, update, &guard)
         });
         candidates(run, root, crate::fix_contract::check_manifest(case, setup, loaded), copies);
     }
     None
+}
+
+/// The manifest's file of a case and where it is on disk: `onsa.toml`, or
+/// the file of a fragment (the copies of its candidates are beside it).
+pub(super) fn manifest_file(
+    root: &std::path::Path,
+    case: &Case,
+    setup: &Setup,
+    loaded: &Loaded,
+) -> Option<(FileId, std::path::PathBuf)> {
+    let (source, read) = (setup.input.manifest.as_ref()?, loaded.manifest.as_ref()?);
+    let disk = match read.form {
+        ManifestForm::File => root.join(&case.path).join(&source.path),
+        ManifestForm::Fragment => root.join(&case.path),
+    };
+    Some((read.file, disk))
 }
 
 /// The settings of `[test]` compared after the sources are read

@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "e1104_prefix_missing_flow"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [export]                                     #~ E1104 [t]
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 1
+//
+// [[test.fix]]
+// at = "11:5"
+// code = "E1104"
+// candidate = 1
+// clean = true
+
+// E1104: an `@export` flow is an item the build emits, like an `@export` fn: `prefix` is needed, the heading
+// `[export]` (after the target here) has none, and the report is at the heading. The candidate inserts
+// `prefix = "e1104_prefix_missing_flow_"` and the build is clean after it (§14.2, §15.3, §18.1; S-639, S-832,
+// S-597).
+
+@export
+pub flow gain(x: F32 at sample) -> F32 at sample { x * 0.5 }

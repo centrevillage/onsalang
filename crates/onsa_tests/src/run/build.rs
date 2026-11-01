@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 
-use onsa_diag::FileId;
+use onsa_diag::{Diagnostic, FileId};
 use onsa_driver::{Analyzed, BuildError, Loaded};
 
 use crate::Expected;
@@ -81,8 +81,15 @@ pub(super) struct BuildCtx<'a> {
 }
 
 /// Build one target, compare its diagnostics with the markers that apply to
-/// it, and check what it produced.
-pub(super) fn build_target(ctx: &BuildCtx<'_>, target: &str, update: Update, run: &mut CaseRun) {
+/// it, and check what it produced. `Some`: the manifest's diagnostics the
+/// build reports after the check of the sources (`prefix`, S-832), whose
+/// candidates the caller checks (`fix_contract::check_build`).
+pub(super) fn build_target(
+    ctx: &BuildCtx<'_>,
+    target: &str,
+    update: Update,
+    run: &mut CaseRun,
+) -> Option<Vec<Diagnostic>> {
     let BuildCtx { stages, root, case, setup, loaded, analyzed, markers } = *ctx;
     let t = &setup.test;
     let expected: Vec<(FileId, Expected)> = markers
@@ -108,16 +115,22 @@ pub(super) fn build_target(ctx: &BuildCtx<'_>, target: &str, update: Update, run
         // The markers `#~` of the target's values are compared with its manifest's (`tests/README.md`).
         Err(BuildError::Diagnostics { diagnostics, sources } | BuildError::Manifest { diagnostics, sources }) => {
             compare_in(run, &loaded.sources, &expected, &diagnostics, Stage::Build, Some(target), loaded.toml_file());
+            // The target resolves: the manifest's are after the sources.
+            let after = diagnostics.iter().all(|d| d.stage == onsa_diag::Stage::Manifest)
+                && onsa_driver::resolve_target(loaded, target).is_ok();
+            if after {
+                return Some(diagnostics);
+            }
             run.problems.extend(crate::fix_contract::unchecked(&sources, &diagnostics));
-            return;
+            return None;
         }
         Err(error) => {
             run.problems.push(stage_problem(&loaded.sources, StageFailure::Build { target, error: &error }));
-            return;
+            return None;
         }
     };
     if !expected.is_empty() {
-        return;
+        return None;
     }
     if t.golden.contains(&GoldenKind::C) {
         let [c, h] = golden::c_paths(&case.name, target);
@@ -128,6 +141,7 @@ pub(super) fn build_target(ctx: &BuildCtx<'_>, target: &str, update: Update, run
         }
     }
     run.builds.push(Built { target: target.to_string(), output: Arc::new(out), conformance: t.conformance });
+    None
 }
 
 /// The diagnostics of the manifest of the build of `target` (its values),

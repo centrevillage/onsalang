@@ -1,0 +1,30 @@
+// onsa.toml
+// export = {}                                  #~ E1104 [b]
+//
+// [package]
+// name = "e1104_prefix_missing_other_target_e0200"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "exe"                                 #~ E0200 [a]
+// platform = "host"
+//
+// [targets.b]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104 of one target and E0200 of another: the build of `a` stops on the E0200 of its `kind` before it reads the
+// source, so it does not tell whether `prefix` is needed and reports the E0200 alone. The build of `b` has no
+// error in its manifest, reads the source, and reports the missing `prefix` (§18.1 "マニフェストを読む全てのコマンド
+// …ソースを読む前に…誤りがあれば…止まる", "`prefix` が要るかはソースを読まないと決まらない"; §15.3 "ターゲットに属する
+// 値の E0200 は、そのターゲットのビルド…で出す"; S-832, S-827, S-154).
+// `export` is an inline table so that the E1104 has no candidate and the case may have two targets (S-836).
+
+@export
+pub fn f() -> I32 { 1 }

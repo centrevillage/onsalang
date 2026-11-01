@@ -77,7 +77,11 @@
 //! ([`reload`]): the manifest is one unit (§18.1), so what it holds after the
 //! candidate is what the entry `leaves` (none by default); `clean` asks the
 //! check of the sources too; 4, 5 and `same_code` look at a fragment's file
-//! (an `onsa.toml` is not Onsa).
+//! (an `onsa.toml` is not Onsa). The candidates of the manifest's
+//! diagnostics that the build of the case's one target reports after the
+//! check of its sources (`prefix`, S-832) are checked so too, with the target
+//! built again after the candidate ([`check_build`]): what its manifest
+//! reports then counts with the manifest's, and `clean` asks the build to pass.
 //!
 //! The fuzzing cannot know how many errors a mutant holds, so it uses the
 //! near "same place" of S-236 ([`same_place`](fn@same_place), `onsa_cases --fix-same-place`,
@@ -86,7 +90,7 @@
 use std::collections::BTreeMap;
 
 use onsa_diag::{Applied, Code, Diagnostic, FileId, Fix, SourceMap, Span};
-use onsa_driver::{Analyzed, Loaded, ManifestForm, PackageInput};
+use onsa_driver::{Analyzed, BuildError, BuildOutput, Loaded, ManifestForm, PackageInput};
 
 use crate::case::{Case, CaseKind, Setup};
 use crate::run::Problem;
@@ -176,20 +180,54 @@ fn target_name(file: &str, sources: &SourceMap, d: &Diagnostic, k: usize) -> Str
 /// Check every candidate of the check's diagnostics `analyzed` of a case (the
 /// module's documentation). `loaded` is the case as it ran.
 pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -> Checked {
-    candidates(Files::of(case, loaded, loaded.modules.iter().map(|(id, _)| *id)), setup, loaded, Some(analyzed))
+    candidates(Files::of(case, loaded, loaded.modules.iter().map(|(id, _)| *id)), setup, loaded, Of::Check(analyzed))
 }
 
 /// Check every candidate of the manifest's diagnostics of a case the
 /// manifest stops (the module's documentation, the manifest).
 pub fn check_manifest(case: &Case, setup: &Setup, loaded: &Loaded) -> Checked {
     let Some(read) = &loaded.manifest else { return Checked::default() };
-    candidates(Files::of(case, loaded, std::iter::once(read.file)), setup, loaded, None)
+    candidates(Files::of(case, loaded, std::iter::once(read.file)), setup, loaded, Of::Manifest)
 }
 
-/// [`check`] of `analyzed`, or with `None` [`check_manifest`].
-fn candidates(files: Files, setup: &Setup, loaded: &Loaded, analyzed: Option<&Analyzed>) -> Checked {
-    let before = analyzed.map(Before::of);
-    let diagnostics = analyzed.map_or(loaded.manifest_diagnostics(), |a| &a.diagnostics);
+/// The build of a target of a case, as the runner builds it (`run::Stages::build`).
+pub type Build = fn(&Loaded, &Analyzed, &str) -> Result<BuildOutput, BuildError>;
+
+/// Check every candidate of `diagnostics`, the manifest's that `build` of
+/// `target` reports after the check of the sources (the module's
+/// documentation, the manifest), building it again after each.
+pub fn check_build(
+    case: &Case,
+    setup: &Setup,
+    loaded: &Loaded,
+    diagnostics: &[Diagnostic],
+    (target, build): (&str, Build),
+) -> Checked {
+    let Some(read) = &loaded.manifest else { return Checked::default() };
+    candidates(
+        Files::of(case, loaded, std::iter::once(read.file)),
+        setup,
+        loaded,
+        Of::Build(diagnostics, target, build),
+    )
+}
+
+/// Whose candidates [`candidates`] checks.
+#[derive(Clone, Copy)]
+enum Of<'a> {
+    Check(&'a Analyzed),
+    Manifest,
+    Build(&'a [Diagnostic], &'a str, Build),
+}
+
+/// [`check`], [`check_manifest`] or [`check_build`].
+fn candidates(files: Files, setup: &Setup, loaded: &Loaded, of: Of) -> Checked {
+    let before = if let Of::Check(a) = of { Some(Before::of(a)) } else { None };
+    let diagnostics = match of {
+        Of::Check(a) => &a.diagnostics,
+        Of::Manifest => loaded.manifest_diagnostics(),
+        Of::Build(diagnostics, ..) => diagnostics,
+    };
     let mut out = Checked::default();
     let specs = &setup.test.fix;
     let mut used = vec![false; specs.len()];
@@ -219,7 +257,7 @@ fn candidates(files: Files, setup: &Setup, loaded: &Loaded, analyzed: Option<&An
                 used[i] = true;
             }
             let rank = d.stage.check_rank();
-            if rank.is_none() && analyzed.is_some() {
+            if rank.is_none() && matches!(of, Of::Check(_)) {
                 out.problems.push(unchecked_stage(&target, d));
                 continue;
             }
@@ -247,7 +285,7 @@ fn candidates(files: Files, setup: &Setup, loaded: &Loaded, analyzed: Option<&An
             }
             let (messages, clean) = match rank.zip(before.as_ref()) {
                 Some((rank, before)) => judge(&files, rank, before, &edits, &after, spec),
-                None => (judge_manifest(&files, &after, spec), 0),
+                None => (judge_manifest(&files, &after, spec, of), 0),
             };
             out.clean_units += clean;
             for message in messages {
@@ -491,10 +529,28 @@ fn leaves(spec: Option<&FixSpec>) -> (Vec<(Place, Code)>, Vec<String>) {
 /// What breaks the contract after a candidate of the manifest's (the
 /// module's documentation, the manifest): its diagnostics after it are the
 /// `leaves` of `spec` (none by default); `clean`, nothing at all, the check
-/// of the sources too.
-fn judge_manifest(files: &Files, after: &After, spec: Option<&FixSpec>) -> Vec<String> {
-    let (sources, left) = (&after.loaded.sources, after.loaded.manifest_diagnostics());
+/// of the sources too. A candidate of the build's: those of the manifest of
+/// the build again too (when the check passes), and `clean` asks it to pass.
+fn judge_manifest(files: &Files, after: &After, spec: Option<&FixSpec>, of: Of) -> Vec<String> {
+    let (sources, mut left) = (&after.loaded.sources, after.loaded.manifest_diagnostics().to_vec());
     let (expected, mut out) = leaves(spec);
+    let mut all = after.analyzed.as_ref().map_or_else(|| left.clone(), |a| a.diagnostics.clone());
+    if let (Of::Build(_, target, build), Some(a)) = (of, after.analyzed.as_ref().filter(|a| a.diagnostics.is_empty())) {
+        match build(&after.loaded, a, target) {
+            Ok(_) => {}
+            Err(BuildError::Manifest { diagnostics, .. }) => {
+                left.extend(diagnostics.iter().cloned());
+                all.extend(diagnostics);
+            }
+            Err(BuildError::Diagnostics { diagnostics, .. }) => all.extend(diagnostics),
+            Err(BuildError::Usage(m)) => out.push(format!("the build of `{target}` after it stops: {m}")),
+            Err(BuildError::Internal { sources, error }) => out.push(format!(
+                "the build of `{target}` after it ends in an internal error: {}",
+                error.render(&sources)
+            )),
+        }
+    }
+    let left = &left[..];
     let mut places: Vec<(Place, Code)> = left.iter().map(|d| (files.place(sources, d.span), d.code)).collect();
     places.sort();
     if places != expected {
@@ -505,9 +561,8 @@ fn judge_manifest(files: &Files, after: &After, spec: Option<&FixSpec>) -> Vec<S
             if shown.is_empty() { "nothing".into() } else { shown.join(", ") + " (`leaves`)" }
         ));
     }
-    let all = after.analyzed.as_ref().map_or(left, |a| &a.diagnostics);
     if spec.is_some_and(|s| s.clean) && !all.is_empty() {
-        out.push(format!("`clean`: the check after it reports {}", describe(files, sources, all)));
+        out.push(format!("`clean`: the check after it reports {}", describe(files, sources, &all)));
     }
     out
 }

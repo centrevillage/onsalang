@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1104_prefix_ok_empty_heading_no_export_items"
+// edition = "2026"
+//
+// [export]
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// No diagnostic: the `[export]` heading has no `prefix`, and the package has no `@export` item, so `prefix` is
+// not needed (§14.2 "`@export` の項目が無いパッケージでは要らず"; S-639, S-832).
+
+pub fn f() -> I32 { 1 }

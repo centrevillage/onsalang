@@ -1,0 +1,8 @@
+[package]                                       #~ E1104 [t]
+name = "e1104_prefix_missing_no_table"
+edition = "2026"
+
+[targets.t]
+kind = "source"
+lang = "c"
+platform = "host"

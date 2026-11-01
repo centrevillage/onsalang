@@ -1,0 +1,15 @@
+pub rt fn twice[T: Num](x: T) -> T { x + x }
+
+pub rt fn pick(a: I32, b: I32) -> I32 {
+  if a == b { 0 } else { a }
+}
+
+@export
+pub fn version() -> I32 { twice(pick(1, 2)) }
+
+@export
+pub flow quad(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..< 4 {
+    twice(x) * i.round_f32()
+  }
+}

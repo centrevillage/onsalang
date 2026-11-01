@@ -43,7 +43,14 @@ pub fn read(source: &ManifestSource, file: FileId) -> ManifestRead {
             return done(Manifest::default(), vec![d]);
         }
     };
-    let reader = Reader { source, file, diagnostics: RefCell::default(), target: RefCell::default() };
+    let reader = Reader {
+        source,
+        file,
+        diagnostics: RefCell::default(),
+        target: RefCell::default(),
+        package: RefCell::default(),
+        missing_prefix: RefCell::default(),
+    };
     let manifest = reader.manifest(doc.as_table());
     done(manifest, reader.diagnostics.into_inner())
 }
@@ -70,6 +77,10 @@ struct Reader<'s> {
     diagnostics: RefCell<Vec<Diagnostic>>,
     /// The diagnostics of the build of the target being read ([`ManifestTarget::build_diagnostics`]).
     target: RefCell<Vec<Diagnostic>>,
+    /// The package name as read, for the candidate of `prefix` (`<package>_`).
+    package: RefCell<String>,
+    /// [`Manifest::missing_prefix`].
+    missing_prefix: RefCell<Option<Diagnostic>>,
 }
 
 /// How a table is written (TOML), which decides where a key it lacks is
@@ -130,17 +141,19 @@ impl<'s> Reader<'s> {
             name: self.need(f, Field::Name, None, None).map(Got::str).unwrap_or_default(),
             edition: self.need(f, Field::Edition, None, None).map(Got::str),
         });
+        self.package.replace(package.value.name.value.clone());
         let dependencies = self.strings(f.take(Field::Dependencies));
-        let export = f
-            .take(Field::Export)
-            .map(|g| self.table(g, |f| ManifestExport { prefix: f.take(Field::Prefix).map(Got::str) }));
+        let export = self.need_table(&mut f, Field::Export, |f| ManifestExport {
+            prefix: self.need(f, Field::Prefix, None, None).map(Got::str),
+        });
         let targets = f.take(Field::Targets).map(|g| self.map(g, |g| self.table(g, |f| self.target(f))));
         // `[[plugin]]` is walked for its keys; its values are U4's.
         for p in f.take(Field::Plugin).map(Got::tables).unwrap_or_default() {
             self.table(p, |f| f.take(Field::Au).map(|g| self.table(g, |_| ())));
         }
         f.done();
-        Manifest { package, dependencies, export, targets: targets.unwrap_or_default() }
+        let missing_prefix = self.missing_prefix.take();
+        Manifest { package, dependencies, export, targets: targets.unwrap_or_default(), missing_prefix }
     }
 
     fn target(&self, f: &mut Fields) -> ManifestTarget {
@@ -411,13 +424,14 @@ impl<'s> Reader<'s> {
     /// A key its row requires ([`Need`], §15.3), in a target of `kind` and
     /// `lang` as read. Each one missing is an E1104 at [`Fields::key`], with
     /// the insertion of its value when its closed list has one value
-    /// (S-597); a key of another type is not missing (an E1103 already).
+    /// (S-597), or of `<package>_` when it is a `prefix` (§14.2); a key of
+    /// another type is not missing (an E1103 already).
     fn need<'a>(&self, f: &mut Fields<'a>, field: Field, kind: Option<&str>, lang: Option<&str>) -> Option<Got<'a>> {
         let got = f.take(field);
         let row = row(f.table, field);
         let build = match row.need {
             Need::No => return got,
-            Need::Always => false,
+            Need::Always | Need::Exports => false,
             Need::Target { kinds, or, build } => {
                 let k = kind.is_some_and(|k| kinds.contains(&k));
                 if !k && !or.is_some_and(|(k, l)| kind == Some(k) && lang == Some(l)) {
@@ -434,11 +448,17 @@ impl<'s> Reader<'s> {
                 self.span(f.key.clone()),
                 format!("missing key `{path}`"),
             );
-            let fix = match row.rule {
-                Rule::OneOf([only], _) => self.insertion(f, row.key, &format!("\"{only}\"")),
+            let value = match row.rule {
+                Rule::OneOf([only], _) => Some(only.to_string()),
+                Rule::Prefix => Some(format!("{}_", self.package.borrow())).filter(|p| is_prefix(p)),
                 _ => None,
             };
-            self.report(build, fix.into_iter().fold(d, Diagnostic::with_fix));
+            let fix = value.and_then(|v| self.insertion(f, row.key, &format!("\"{v}\"")));
+            let d = fix.into_iter().fold(d, Diagnostic::with_fix);
+            match row.need {
+                Need::Exports => drop(self.missing_prefix.replace(Some(escaped(d)))),
+                _ => self.report(build, d),
+            }
         }
         got
     }
@@ -450,7 +470,9 @@ impl<'s> Reader<'s> {
             return self.table(g, build);
         }
         let row = row(f.table, field);
-        let (Shape::Table(table), false, Need::Always) = (row.shape, f.wrong.contains(&field), row.need) else {
+        let (Shape::Table(table), false, Need::Always | Need::Exports) =
+            (row.shape, f.wrong.contains(&field), row.need)
+        else {
             return Spanned::default();
         };
         let path = dotted(&f.path, row.key);
@@ -696,7 +718,7 @@ mod tests {
         assert_eq!(at(&m.package.key), "package");
         assert_eq!(m.dependencies["std"].value, "0.1.0");
         assert_eq!(at(&m.dependencies["std"].key), "std");
-        assert_eq!(m.export.as_ref().unwrap().value.prefix.as_ref().unwrap().value, "vc_");
+        assert_eq!(m.export.value.prefix.as_ref().unwrap().value, "vc_");
         let t = &m.targets["daisy"];
         assert_eq!(at(&t.key), "daisy");
         assert!(at(&t.span).starts_with("[targets.daisy]"), "{:?}", at(&t.span));
@@ -899,6 +921,68 @@ mod tests {
         let after = "    \n[test]\nmode = \"check\"\n// [package]\n// edition = \"2026\"\n";
         assert_eq!(fixed(text, ManifestForm::Fragment).unwrap(), after);
         assert_eq!(fixed("package = { name = \"a\" }\n", ManifestForm::File), None);
+    }
+
+    /// The E1104 of a `prefix` not written (§14.2, S-832) is the build's,
+    /// not the check's ([`Manifest::missing_prefix`]): at the key of
+    /// `[export]`, or the start of the body without it. Its candidate (S-597,
+    /// S-836) is `prefix = "<package>_"` where that is a `prefix`, as a line
+    /// where `[export]` takes it, and none in an inline table; after it the
+    /// manifest has no E1104 of `prefix` and no diagnostic.
+    #[test]
+    fn a_prefix_not_written_is_an_e1104_of_the_build_with_the_line_of_its_package() {
+        let head = |name: &str| format!("[package]\nname = \"{name}\"\nedition = \"2026\"\n");
+        let cases = [
+            ("a", "", Some("[export]\nprefix = \"a_\"\n")),
+            ("my_synth", "[export] # e\n[targets.t]\nkind = \"source\"\nlang = \"c\"\n", None),
+            ("v2", "export.x = 1\n", None),
+            ("a", "export = {}\n", None),
+            ("onsa", "", None),
+            ("onsa_tools", "", None),
+            ("synth_", "", None),
+        ];
+        for (name, rest, appended) in cases {
+            // A key of the top level is before every header.
+            let (top, dotted) = (rest.starts_with("export "), rest.starts_with("export."));
+            let text = if top || dotted { format!("{rest}{}", head(name)) } else { format!("{}{rest}", head(name)) };
+            let r = read_as(&text, ManifestForm::File);
+            assert_eq!(r.diagnostics.iter().filter(|d| d.code != Code::E1102).count(), 0, "{text:?}");
+            let d = r.manifest.missing_prefix.unwrap_or_else(|| panic!("{text:?}: no E1104"));
+            assert_eq!(
+                (d.code, d.stage, d.message.as_str()),
+                (Code::E1104, Stage::Manifest, "missing key `export.prefix`")
+            );
+            let place = &text[d.span.start as usize..d.span.end as usize];
+            assert_eq!(place, if rest.is_empty() { "" } else { "export" }, "{text:?}");
+            let fixed = d.fixes.first().map(|fix| {
+                let (e, mut out) = (&fix.edits()[0], text.clone());
+                out.replace_range(e.span.start as usize..e.span.end as usize, &e.replace);
+                out
+            });
+            let want = match (appended, rest) {
+                (Some(a), _) => Some(format!("{text}{a}")),
+                (None, r) if r.starts_with("[export]") => {
+                    Some(text.replace("# e\n", &format!("# e\nprefix = \"{name}_\"\n")))
+                }
+                (None, _) if dotted => Some(text.replace("export.x", "export.prefix = \"v2_\"\nexport.x")),
+                (None, _) => None,
+            };
+            assert_eq!(fixed, want, "{text:?}");
+            if let Some(new) = fixed {
+                let again = read_as(&new, ManifestForm::File);
+                assert!(again.manifest.missing_prefix.is_none(), "{new:?}");
+                assert_eq!(again.diagnostics.len(), r.diagnostics.len(), "{new:?}: {:?}", again.diagnostics);
+            }
+        }
+        // Written, or of another type (an E1103): none.
+        for text in ["[export]\nprefix = \"a_\"\n", "export = 1\n", "[export]\nprefix = 1\n"] {
+            let text = format!("{text}{}", head("a"));
+            assert!(read_as(&text, ManifestForm::File).manifest.missing_prefix.is_none(), "{text}");
+        }
+        // A fragment: comment lines at its end.
+        let r = read_as(&format!("    \n{}", head("a")), ManifestForm::Fragment);
+        let fix = &r.manifest.missing_prefix.unwrap().fixes[0];
+        assert_eq!(fix.edits()[0].replace, "// [export]\n// prefix = \"a_\"\n");
     }
 
     /// A text of the manifest in a message or a note has its control

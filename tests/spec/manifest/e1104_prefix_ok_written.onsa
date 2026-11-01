@@ -1,0 +1,26 @@
+// onsa.toml
+// [package]
+// name = "e1104_prefix_ok_written"
+// edition = "2026"
+//
+// [export]
+// prefix = "vc_"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// No diagnostic: the package has `@export` items and `prefix` is written, so the build of `t` has nothing to
+// report (§14.2, §15.3 `[export]` row; S-639, S-832).
+
+@export
+pub fn f() -> I32 { 1 }
+
+@export
+pub flow gain(x: F32 at sample) -> F32 at sample { x * 0.5 }

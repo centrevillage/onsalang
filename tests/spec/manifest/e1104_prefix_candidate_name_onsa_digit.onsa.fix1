@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "onsa2"
+// edition = "2026"
+//
+// [export]                                     #~ E1104 [t]
+// prefix = "onsa2_"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§18.1"]
+// mode = "check"
+// fixes = 1
+//
+// [[test.fix]]
+// at = "6:5"
+// code = "E1104"
+// candidate = 1
+// clean = true
+
+// E1104 with a candidate at the edge of the `onsa_` rule: `<package>_` is `onsa2_`, which does not start with
+// `onsa_`, and is lowercase letters and digits ending with `_`, so it is a `prefix` and the candidate inserts
+// `prefix = "onsa2_"`; the build is clean after it (§14.2, §18.1; S-597, S-832, S-95).
+
+@export
+pub fn f() -> I32 { 1 }

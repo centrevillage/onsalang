@@ -816,6 +816,84 @@ fn the_candidates_of_a_manifest_that_stops_the_case() {
     assert_eq!(orphans, ["tests/pkg/onsa.toml.fix2: its case declares `fixes = 1`, not 2; remove it or declare it"]);
 }
 
+/// A case whose `@export` item needs the `prefix` its manifest lacks: the E1104 of the build of `t`
+/// after the sources (S-832), with `targets` and `[test]` as given.
+fn without_prefix(targets: &[&str], test: &str) -> String {
+    let marks = targets.join(", ");
+    let targets: String = targets
+        .iter()
+        .map(|t| format!("// [targets.{t}]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n"))
+        .collect();
+    let test: String = test.lines().map(|l| format!("// {l}\n")).collect();
+    format!(
+        "// onsa.toml\n// [package]\n// name = \"c\"\n// edition = \"2026\"\n// [export]  #~ E1104 [{marks}]\n{targets}//\n\
+         // [test]\n// mode = \"check\"\n{test}\n@export\npub fn f() -> I32 {{ 1 }}\n"
+    )
+}
+
+/// The build of `onsa_driver`, but one that finds no E1104 of `prefix` reports one without a candidate
+/// at the start of its manifest: a candidate that does not take the E1104 away.
+fn stubborn(loaded: &Loaded, analyzed: &Analyzed, target: &str) -> Result<BuildOutput, BuildError> {
+    let built = onsa_driver::build_analyzed(loaded, analyzed, target);
+    match (&built, &loaded.manifest) {
+        (Ok(_), Some(read)) => Err(BuildError::Manifest {
+            sources: loaded.sources.clone(),
+            diagnostics: vec![Diagnostic::new(
+                onsa_diag::Stage::Manifest,
+                onsa_diag::Code::E1104,
+                onsa_diag::Span::new(read.file, 0, 0),
+                "missing key `export.prefix`",
+            )],
+        }),
+        _ => built,
+    }
+}
+
+/// W3-17, `tests/README.md`: the candidates of the manifest's diagnostic that a build reports after the
+/// check of the sources (the E1104 of `prefix`) are the case's `fixes` and `[[test.fix]]`, in a case
+/// with one target: each applied, the case analyzed and its target built again, whose manifest's
+/// diagnostics count with the manifest's; `clean` asks the build to pass. Two targets are an error of
+/// the case. The candidates of the build's other diagnostics are still unchecked.
+#[test]
+fn the_candidates_of_the_manifest_a_build_reports_after_the_sources() {
+    let fix = "[[test.fix]]\nat = \"5:5\"\ncode = \"E1104\"\ncandidate = 1\n";
+    let clean = format!("fixes = 1\n{fix}clean = true");
+    let files = [
+        ("tests/ok.onsa", without_prefix(&["t"], &clean)),
+        ("tests/zero.onsa", without_prefix(&["t"], "fixes = 0")),
+        ("tests/leaves.onsa", without_prefix(&["t"], &format!("fixes = 1\n{fix}leaves = [\"5:5 E1104\"]"))),
+        ("tests/two.onsa", without_prefix(&["t", "u"], "fixes = 1")),
+    ];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    let repo = Repo::new("build_candidates", &files);
+    let r = repo.run_with(Update::Rewrite);
+    let failures = |path: &str| case(&r, path).failures.clone();
+    assert!(failures("tests/ok.onsa").is_empty(), "{:?}", failures("tests/ok.onsa"));
+    assert_eq!(case(&r, "tests/ok.onsa").run.fix_targets.len(), 1);
+    let copy = std::fs::read_to_string(repo.0.join("tests/ok.onsa.fix1")).unwrap();
+    assert!(copy.contains("// [export]  #~ E1104 [t]\n// prefix = \"c_\"\n"), "{copy}");
+    let has = |path: &str, text: &str| failures(path).iter().any(|f| f.contains(text));
+    assert!(
+        has("tests/zero.onsa", "has 1 candidates, more than `fixes = 0` declares"),
+        "{:?}",
+        failures("tests/zero.onsa")
+    );
+    let leaves = "after it, the manifest (one unit, §18.1) reports nothing; expected E1104 at 5:5 (`leaves`)";
+    assert!(has("tests/leaves.onsa", leaves), "{:?}", failures("tests/leaves.onsa"));
+    let two = "a build reports a candidate of the manifest after the sources, which a case with one target checks";
+    assert!(has("tests/two.onsa", two), "{:?}", failures("tests/two.onsa"));
+    // A build that still reports the E1104 after the candidate breaks the contract, and `clean`.
+    let stages = Stages { build: stubborn, ..Stages::DRIVER };
+    let (cases, _) = case::collect(&repo.0);
+    let ok = cases.iter().find(|c| c.path == "tests/ok.onsa").unwrap();
+    let opts = RunOptions { golden: Update::Off, host_steps: HostSteps::Skip };
+    let problems: Vec<String> =
+        run_case_with(&stages, &repo.0, ok, opts).problems.iter().map(|p| format!("{p:?}")).collect();
+    let left = "reports E1104 at 1:1; expected nothing";
+    assert!(problems.iter().any(|p| p.contains(left)), "{problems:?}");
+    assert!(problems.iter().any(|p| p.contains("`clean`: the check after it reports E1104 at 1:1")), "{problems:?}");
+}
+
 /// The guard of the copies of a manifest's candidate (`copy_guard::manifest`): a copy that does not
 /// hold the E1102 the output holds keeps a rule, and is not rewritten; one that holds it too is.
 #[test]

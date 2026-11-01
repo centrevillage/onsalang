@@ -58,7 +58,7 @@ fn one_fn(ty: Ty, body: Expr, extra_types: Vec<TypeDef>) -> Module {
 }
 
 fn emit_fn(m: &Module) -> String {
-    let opts = EmitOptions { export_fns: vec!["m.f".into()], ..Default::default() };
+    let opts = EmitOptions { prefix: Some("t_".into()), export_fns: vec!["m.f".into()], ..Default::default() };
     emit(m, &opts).unwrap_or_else(|d| panic!("{d:?}")).source
 }
 
@@ -211,7 +211,7 @@ fn array_wrappers_are_shared_and_enums_switch() {
         fp_relaxed: false,
         test: None,
     });
-    let opts = EmitOptions { export_fns: vec!["m.g".into()], ..Default::default() };
+    let opts = EmitOptions { prefix: Some("t_".into()), export_fns: vec!["m.g".into()], ..Default::default() };
     let c = emit(&m2, &opts).unwrap_or_else(|d| panic!("{d:?}")).source;
     assert!(c.contains("typedef struct m__E { uint8_t tag; union { struct { int32_t f0; } v_B; } u; } m__E;"), "{c}");
     assert!(c.contains("if ((*x).tag == 0) {"), "{c}");
@@ -228,7 +228,7 @@ fn exported_functions_are_recorded() {
     let m = one_fn(Ty::Int(IntKind::I32), local(0, Ty::Int(IntKind::I32)), Vec::new());
     let opts = EmitOptions {
         package: "pk".into(),
-        prefix: "vc_".into(),
+        prefix: Some("vc_".into()),
         export_fns: vec!["m.f".into()],
         panic: crate::PanicMode::Poison,
         ..Default::default()
@@ -253,6 +253,19 @@ fn exported_functions_are_recorded() {
     assert!(header.contains("int vc_take_panic(void);"), "{header}");
     let trap = emit(&m, &EmitOptions { panic: crate::PanicMode::Trap, ..opts }).unwrap_or_else(|d| panic!("{d:?}"));
     assert_eq!(trap.take_panic, None);
+}
+
+/// R-121 (1), S-95: a unit without exports reads no prefix (it has none):
+/// no header of an export and no `<prefix>take_panic`, under `poison` too.
+#[test]
+fn a_unit_without_exports_reads_no_prefix() {
+    let m = one_fn(Ty::Int(IntKind::I32), local(0, Ty::Int(IntKind::I32)), Vec::new());
+    let opts = EmitOptions { panic: crate::PanicMode::Poison, ..Default::default() };
+    assert_eq!(opts.prefix, None);
+    let unit = emit(&m, &opts).unwrap_or_else(|d| panic!("{d:?}"));
+    assert!(unit.headers.is_empty(), "{:?}", unit.headers);
+    assert_eq!(unit.take_panic, None);
+    assert!(!unit.source.contains("take_panic"), "{}", unit.source);
 }
 
 /// The `onsa_panic` of `mode` in the runtime header: the text of its branch
@@ -291,7 +304,12 @@ fn checks_under_trap_and_reset_are_a_compare_and_a_branch() {
         (crate::PanicMode::Trap, "#define ONSA_PANIC_TRAP", "__builtin_trap();"),
         (crate::PanicMode::Reset, "#define ONSA_PANIC_RESET", "onsa_reset_hook();"),
     ] {
-        let opts = EmitOptions { export_fns: vec!["m.f".into()], panic: mode, ..Default::default() };
+        let opts = EmitOptions {
+            prefix: Some("t_".into()),
+            export_fns: vec!["m.f".into()],
+            panic: mode,
+            ..Default::default()
+        };
         let unit = emit(&m, &opts).unwrap_or_else(|d| panic!("{d:?}"));
         assert!(unit.source.contains(define), "{mode:?}: {}", unit.source);
         assert!(unit.source.contains("onsa_mul_i32(onsa_add_i32(x, y, \"\", 0), y, \"\", 0)"), "{}", unit.source);

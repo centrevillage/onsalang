@@ -1,0 +1,23 @@
+// onsa.toml
+// export = {}                                  #~ E1104 [t]
+//
+// [package]
+// name = "e1104_prefix_missing_inline_table"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: `export` written as an inline table has no `prefix`; the report is at the line of the key `export`,
+// the place of the table's heading. An inline table takes no line, so the E1104 has no candidate (`fixes = 0`;
+// §14.2, §18.1 "インラインの表で書いた表…には出さない"; S-639, S-832, S-836).
+
+@export
+pub fn f() -> I32 { 1 }
