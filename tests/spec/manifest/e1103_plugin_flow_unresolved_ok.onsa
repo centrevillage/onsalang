@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_flow_unresolved_ok"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "nowhere.nothing"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// A `flow` that names no flow of the package is not an error of `check` in this version: the E1103 for a `flow`
+// that is not an `@export` flow comes with the build of a plugin target (S-641, M10). A later version reports it, and
+// this case then changes (§14.3, §15.3; S-580, S-641).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

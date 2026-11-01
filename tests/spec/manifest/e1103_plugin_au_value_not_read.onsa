@@ -1,0 +1,31 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_au_value_not_read"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1103_plugin_au_value_not_read.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+// au = { subtype = 1 }
+//
+// [targets.t]
+// kind = "au"                                  #~ E0200 [t]
+// platform = "host"
+//
+// [export]
+// prefix = "p_"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// The value of `au` is not read in this version: `au = { subtype = 1 }` (an integer, and no `manufacturer`) is not
+// an error. The key is the table's own, so it is not an E1102 either (§15.3 `au` row; S-580, S-841, S-826).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

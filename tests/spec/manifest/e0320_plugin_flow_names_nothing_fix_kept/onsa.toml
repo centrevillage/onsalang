@@ -1,0 +1,11 @@
+[package]
+name = "e0320_plugin_flow_names_nothing_fix_kept"
+edition = "2026"
+
+[[plugin]]
+flow = "m.nothing"
+id = "com.example.voice0"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"

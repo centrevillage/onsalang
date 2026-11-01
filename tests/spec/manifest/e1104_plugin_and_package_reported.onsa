@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]                                    #~ E1104
+// edition = "2026"
+//
+// [[plugin]]                                   #~ E1104
+// flow = "e1104_plugin_and_package_reported.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: `name` of `[package]` and `id` of a `[[plugin]]` are missing; the two are reported, each at its heading,
+// and the manifest is one unit whose errors are all reported (§15.3, §18.1; S-580, S-99, S-827).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

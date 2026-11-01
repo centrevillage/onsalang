@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_version_over_255_au_ok"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1103_plugin_version_over_255_au_ok.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.2.300"
+// category = "effect"
+//
+// [targets.t]
+// kind = "au"                                  #~ E0200 [t]
+// platform = "host"
+//
+// [export]
+// prefix = "p_"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// `version = "1.2.300"` with an AU target is not an E1103 in this version: the limit of 255 for each part of AU is
+// phase 2 (S-841, S-826). The only report is the E0200 of the `kind` (§15.3 `version` row, §14.3; S-580, S-841).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

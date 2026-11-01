@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "e1104_plugin_each_table_reported"
+// edition = "2026"
+//
+// [[plugin]]                                   #~ E1104
+// flow = "e1104_plugin_each_table_reported.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// category = "effect"
+//
+// [[plugin]]                                   #~ E1104
+// flow = "e1104_plugin_each_table_reported.voice"
+// id = "com.example.other"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: two tables each lack a different key; both are reported, one at each heading, and the first does not
+// hide the second (§15.3, §18.1 "全ての誤りを報告する"; S-580).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

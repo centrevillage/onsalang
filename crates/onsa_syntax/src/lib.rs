@@ -55,7 +55,7 @@ pub use layout::continues;
 pub use lexer::{Lexed, lex};
 pub use literal::{FloatRange, FloatWidth, float_shown, float_value, hole_tuple_index};
 pub use lower::AstMap;
-pub use naming::{PathPart, is_module_name, path_name_error};
+pub use naming::{PathPart, is_module_name, module_name_by_rule, path_name_error};
 pub use operands::CandidateReads;
 pub use token::{Token, TokenKind};
 

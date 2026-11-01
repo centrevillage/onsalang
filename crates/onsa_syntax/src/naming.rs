@@ -125,6 +125,18 @@ pub fn is_module_name(name: &str) -> bool {
     Shape::Snake.matches(name)
 }
 
+/// The name by the rule of a module name that breaks it (§2.3), converted
+/// as the candidate of an identifier is; none when that is no module name.
+/// An E0320 of a path has no candidate; a note may show it (S-718).
+pub fn module_name_by_rule(name: &str) -> Option<String> {
+    let to = Shape::Snake.convert(name);
+    (is_module_name(&to) && to != name).then_some(to)
+}
+
+/// The note of a leading `_` that avoided a reserved word (§2.3, S-648);
+/// not on an item with `@export`, whose name does not end with `_` (R-347).
+const TAIL_NOT_HEAD: &str = "a name that is a reserved word takes a `_` at its end, not at its head";
+
 /// What part of a module path a name is (§2.3, S-300, S-313).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathPart {
@@ -208,7 +220,7 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         if let Some(to) = shape.candidate(&ident.name) {
             // `_type`: the leading `_` avoided a reserved word (§2.3, S-648).
             if has_leading_underscore(&ident.name) && to.ends_with('_') {
-                d = d.with_rule("a name that is a reserved word takes a `_` at its end, not at its head");
+                d = d.with_rule(TAIL_NOT_HEAD);
             }
             d = d.with_fix(Fix::replace("rename by the naming rule", ident.span, to));
         }
@@ -294,6 +306,24 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     for pat in &ast.pats {
         if let PatKind::Bind(id) = &pat.kind {
             check(id, Shape::Snake, "variable", true);
+        }
+    }
+    // The name of an item with `@export` does not end with `_` (§2.3, §14.2):
+    // a name by the rule that is a reserved word is no candidate (R-347).
+    for item in ast.root.iter().map(|&id| ast.item(id)).filter(|i| i.export().is_some()) {
+        let (ItemKind::Fn(crate::ast::FnDecl { name, .. }) | ItemKind::Flow(crate::ast::FlowDecl { name, .. })) =
+            &item.kind
+        else {
+            continue;
+        };
+        let keyword = |d: &Diagnostic| d.fixes.first().is_some_and(|f| f.edits()[0].replace.ends_with('_'));
+        for d in out.iter_mut().filter(|d| d.span == name.span && keyword(d)) {
+            d.fixes.clear();
+            d.notes.retain(|n| n.message != TAIL_NOT_HEAD);
+            d.notes.push(onsa_diag::Note::rule(
+                "the name by the rule is a reserved word, and the name of an item with `@export` does not end \
+                 with `_` (§14.2): rename by hand",
+            ));
         }
     }
     diagnostics.extend(out);
@@ -527,5 +557,32 @@ mod tests {
         let parsed = crate::parse(onsa_diag::FileId(0), src);
         let fixes: Vec<_> = parsed.diagnostics.iter().map(|d| d.fixes[0].edits()[0].replace.clone()).collect();
         assert_eq!(fixes, vec!["match_", "clock_", "when_", "ser_", "TRUE"]);
+    }
+
+    /// R-347 (§2.3, §14.2, §18.1): the name of an item with `@export` does
+    /// not end with `_`, so a name by the rule that is a reserved word is no
+    /// candidate there, and a note says so; without `@export`, and with a
+    /// name by the rule that is not one, the candidate stays.
+    #[test]
+    fn an_exported_name_by_the_rule_that_is_a_keyword_has_no_candidate() {
+        let src = "@export\npub flow Match(x: F32 at sample) -> F32 at sample { x }\n@export pub fn _type() {}\n\
+                   pub fn If() {}\n@export\npub fn Gain() {}\n@export\nstruct When {}\n";
+        let found = e0320s(src);
+        let none = Vec::<String>::new();
+        assert_eq!(
+            found,
+            [
+                ("Match".to_string(), none.clone(), 1),
+                ("_type".to_string(), none, 1),
+                ("If".to_string(), vec!["if_".to_string()], 0),
+                ("Gain".to_string(), vec!["gain".to_string()], 0),
+            ]
+        );
+        // The note of a leading `_` stays without `@export` only.
+        let note = |src: &str| {
+            let parsed = crate::parse(onsa_diag::FileId(0), src);
+            parsed.diagnostics.iter().any(|d| d.notes.iter().any(|n| n.message == TAIL_NOT_HEAD))
+        };
+        assert_eq!((note("pub fn _match() {}\n"), note("@export pub fn _match() {}\n")), (true, false));
     }
 }

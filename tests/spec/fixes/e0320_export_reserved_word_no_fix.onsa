@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§14.2", "§18.1"]
+// fixes = 0
+
+// R-347 (spec §2.3, §14.2, §18.1): the candidate of an E0320 whose name by the rule is a reserved word is that
+// name with a `_` at its end (§2.3: "規則に揃えた名前が予約語になるとき（`pub fn Match()` の `match`、§2.2）は、
+// 末尾に `_` を足した名前（`match_`）を候補にする"), but the name of an item with `@export` cannot end with `_`
+// (§2.3: "末尾の `_` は予約語を避ける綴り（`match_`、`Self_`）で、`@export` の項目の名前（§14.2）を除き、
+// どの形にも書ける"). Applied, `match_` would leave the E0320 of S-653, which the safety of a candidate does not
+// allow (§18.1), so these E0320 have no candidate (a note says to rename by hand). Without `@export` the
+// candidate stays `match_` (e0320 cases of naming). A leading `_` before a reserved word is the same.
+
+@export
+pub flow Match(x: F32 at sample) -> F32 at sample { x }  //~ E0320 @10
+
+@export
+pub fn If() -> I32 {                                     //~ E0320 @8
+  1
+}
+
+@export
+pub fn _match() -> I32 {                                 //~ E0320 @8
+  2
+}

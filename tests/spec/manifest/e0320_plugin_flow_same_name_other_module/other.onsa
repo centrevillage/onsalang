@@ -1,0 +1,1 @@
+pub flow BadName(x: F32 at sample) -> F32 at sample { x } //~ E0320

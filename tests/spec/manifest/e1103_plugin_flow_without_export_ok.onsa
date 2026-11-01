@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_flow_without_export_ok"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1103_plugin_flow_without_export_ok.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// The `flow` names a flow that has no `@export`; `check` does not report it in this version (S-641, M10; see
+// `e1103_plugin_flow_unresolved_ok`) (§14.3, §15.3; S-580, S-641).
+
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

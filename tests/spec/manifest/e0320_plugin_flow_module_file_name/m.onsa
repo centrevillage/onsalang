@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.3", "§18.1"]
+// fixes = 0
+
+// E0320: the `[[plugin]]` names `BadMod.voice`; `BadMod.onsa`, the module in the path, breaks the rule for module
+// names, at the top of the file with no candidate (a file's name is not a text edit, §2.3), as it does without a
+// `[[plugin]]` (§2.3 "その経路の途中のモジュール", §15.3 `flow` row; S-718).
+
+pub fn f() -> I32 { 1 }

@@ -182,21 +182,23 @@ impl Loaded {
     /// is at the head of its first module file in the order of the
     /// diagnostics (the file strings, §18.1, S-313). Every `.onsa` under the
     /// root's `tests/`, at any depth, is an E0200 and not a module: its names
-    /// are not checked (S-643).
+    /// are not checked (S-643). With each, the module path its name ends
+    /// (empty for an E0200), which a `[[plugin]]` may name (S-718).
     // SPEC-GAP(S-645): a directory's E0320 is at its first file, so `check`
     // narrowed to another file under it (`Bad-Dir/b.onsa`) does not show it.
-    pub fn input_diagnostics(&self) -> Vec<Diagnostic> {
+    pub fn input_diagnostics(&self) -> Vec<(Diagnostic, Vec<String>)> {
         let head = |file| Span::empty(file, 0);
         let mut out = Vec::new();
         let mut dirs: BTreeMap<&str, (&str, FileId)> = BTreeMap::new();
-        for &(file, _) in &self.modules {
+        for (file, module) in &self.modules {
+            let file = *file;
             let path = self.sources.file(file).name();
             let (dir, name) = match path.rsplit_once('/') {
                 Some((dir, name)) if self.manifest.is_some() => (Some(dir), name),
                 Some((_, name)) => (None, name),
                 None => (None, path),
             };
-            out.extend(path_name_error(head(file), PathPart::File, module_stem(name)));
+            out.extend(path_name_error(head(file), PathPart::File, module_stem(name)).map(|d| (d, module.clone())));
             let mut dir = dir;
             while let Some(d) = dir {
                 let first = dirs.entry(d).or_insert((path, file));
@@ -208,10 +210,11 @@ impl Loaded {
         }
         for (dir, (_, file)) in dirs {
             let name = dir.rsplit_once('/').map_or(dir, |(_, n)| n);
-            out.extend(path_name_error(head(file), PathPart::Directory, name));
+            let module = dir.split('/').map(str::to_string).collect();
+            out.extend(path_name_error(head(file), PathPart::Directory, name).map(|d| (d, module)));
         }
         for &file in &self.root_tests {
-            out.push(Feature::PackageTests.diagnostic(Stage::Names, head(file), &[]));
+            out.push((Feature::PackageTests.diagnostic(Stage::Names, head(file), &[]), Vec::new()));
         }
         out
     }

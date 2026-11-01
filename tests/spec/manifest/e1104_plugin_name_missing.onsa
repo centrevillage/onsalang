@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e1104_plugin_name_missing"
+// edition = "2026"
+//
+// [[plugin]]                                   #~ E1104
+// flow = "e1104_plugin_name_missing.voice"
+// id = "com.example.voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: `name` is required in every `[[plugin]]`; it is missing, so the report is at the heading of the table
+// that should hold it, and there is no fix candidate because no value is known for it (`fixes = 0`)
+// (§15.3 `[[plugin]]` rows, §14.3 "全て必須", §18.1; S-580, S-99, S-827).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

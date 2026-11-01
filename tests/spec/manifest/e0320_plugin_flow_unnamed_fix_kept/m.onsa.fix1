@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "m.onsa:18:10"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// E0320: the `[[plugin]]` names `m.voice`, whose name is right; the other flow `BadOther` of the package is not named
+// by the manifest, so its E0320 keeps the one candidate and the package is clean after it (§2.3, §15.3 `flow` row;
+// S-718).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }
+
+pub flow bad_other(x: F32 at sample) -> F32 at sample { x } //~ E0320

@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "e1104_plugin_first_table_missing_name"
+// edition = "2026"
+//
+// [[plugin]]                                   #~ E1104
+// flow = "e1104_plugin_first_table_missing_name.voice"
+// id = "com.example.voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [[plugin]]
+// flow = "e1104_plugin_first_table_missing_name.voice"
+// id = "com.example.other"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: only the first `[[plugin]]` lacks `name`; the second, complete table is not reported, and a table
+// that comes after the error is read as well (§15.3, §18.1; S-580).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

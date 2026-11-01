@@ -1,0 +1,38 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_category_ok_all"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1103_plugin_category_ok_all.voice"
+// id = "com.example.a"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "instrument"
+//
+// [[plugin]]
+// flow = "e1103_plugin_category_ok_all.voice"
+// id = "com.example.b"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [[plugin]]
+// flow = "e1103_plugin_category_ok_all.voice"
+// id = "com.example.c"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "note-effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// The three values of `category` are all accepted, in three tables with different `id` (§15.3 `category` row, §14.3; S-580).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

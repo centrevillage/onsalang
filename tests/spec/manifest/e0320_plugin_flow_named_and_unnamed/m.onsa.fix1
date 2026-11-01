@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.3", "§18.1"]
+// fixes = 1
+
+// E0320: two flows with a wrong name in one module, `BadName` named by the manifest and `BadOther` not. The first
+// has no candidate and the second has one, so there is one candidate in all (`fixes = 1`) (§2.3 "マニフェストが経路で
+// 名指す名前", §15.3 `flow` row; S-718).
+
+@export
+pub flow BadName(x: F32 at sample) -> F32 at sample { x } //~ E0320
+
+pub flow bad_other(x: F32 at sample) -> F32 at sample { x } //~ E0320

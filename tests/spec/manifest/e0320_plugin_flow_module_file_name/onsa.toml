@@ -1,0 +1,11 @@
+[package]
+name = "e0320_plugin_flow_module_file_name"
+edition = "2026"
+
+[[plugin]]
+flow = "BadMod.voice"
+id = "com.example.voice0"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"

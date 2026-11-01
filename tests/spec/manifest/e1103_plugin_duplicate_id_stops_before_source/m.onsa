@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// The E1103 of a repeated `id` stops the command before the source is read: the type error below has no
+// marker and is not reported (§18.1; S-580, S-99).
+
+pub fn f() -> I32 {
+  true
+}

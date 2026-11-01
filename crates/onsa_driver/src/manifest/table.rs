@@ -81,8 +81,8 @@ pub enum Field {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Read {
     Yes,
-    /// A key of the table whose value is not read yet (its work reads it:
-    /// `memory` W9-05/W9-06, `[[plugin]]` U4).
+    /// A key of the table whose value is not read yet (S-826: the values
+    /// of `au`, phase 2).
     Later,
 }
 
@@ -104,6 +104,8 @@ pub enum Rule {
     StdVersion,
     /// A number of bytes: 0 or more (S-827).
     Bytes,
+    /// `major.minor.patch`: three numbers joined by `.` (§14.3, §15.3).
+    Version,
 }
 
 /// Where a key is required (§15.3): one lacking is an E1104 at the key of
@@ -236,13 +238,17 @@ pub static ROWS: &[Row] = &[
     row(Table::Memory, "bulk_budget", Field::BulkBudget, Int, Yes)
         .with(Rule::Bytes)
         .unsupported(Any, Feature::ManifestBudgets),
-    row(Table::Plugin, "flow", Field::Flow, Str, Later),
-    row(Table::Plugin, "id", Field::Id, Str, Later),
-    row(Table::Plugin, "name", Field::Name, Str, Later),
-    row(Table::Plugin, "vendor", Field::Vendor, Str, Later),
-    row(Table::Plugin, "version", Field::Version, Str, Later),
-    row(Table::Plugin, "category", Field::Category, Str, Later),
-    // Read for its keys (E1102); its values are U4's.
+    // The path of `flow` is a string here; what it names is S-641's (M10).
+    row(Table::Plugin, "flow", Field::Flow, Str, Yes).need(Need::Always),
+    row(Table::Plugin, "id", Field::Id, Str, Yes).need(Need::Always),
+    row(Table::Plugin, "name", Field::Name, Str, Yes).need(Need::Always),
+    row(Table::Plugin, "vendor", Field::Vendor, Str, Yes).need(Need::Always),
+    // SPEC-GAP(S-841): the AU's "each 255 or less" is not checked in this version.
+    row(Table::Plugin, "version", Field::Version, Str, Yes).with(Rule::Version).need(Need::Always),
+    row(Table::Plugin, "category", Field::Category, Str, Yes)
+        .with(OneOf(&["instrument", "effect", "note-effect"], None))
+        .need(Need::Always),
+    // Read for its keys (E1102); required by AU only, and not in this version (S-841).
     row(Table::Plugin, "au", Field::Au, Shape::Table(Table::Au), Yes),
     // SPEC-GAP(S-826): §15.3 does not give the kinds of these values.
     row(Table::Au, "subtype", Field::Subtype, Str, Later),

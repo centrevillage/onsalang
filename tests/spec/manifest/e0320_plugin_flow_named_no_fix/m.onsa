@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.3", "§18.1"]
+// fixes = 0
+
+// E0320: `[[plugin]]` names the flow `BadName` by the path `m.BadName` in `onsa.toml`, so the E0320 on it has no fix
+// candidate (`fixes = 0`) although another flow uses the name: a candidate would rename the source only and leave
+// the manifest's string behind (§2.3 "マニフェストが経路で名指す名前", §15.3 `flow` row, §18.1; S-718).
+
+@export
+pub flow BadName(x: F32 at sample) -> F32 at sample { x } //~ E0320
+
+pub flow uses_it(x: F32 at sample) -> F32 at sample {
+  BadName~(x)
+}

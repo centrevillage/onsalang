@@ -1,0 +1,4 @@
+//~ E0320 @1
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

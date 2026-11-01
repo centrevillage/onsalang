@@ -1,0 +1,31 @@
+// onsa.toml
+// [package]
+// name = "e1104_plugin_required_keys_ok"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1104_plugin_required_keys_ok.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [[plugin]]
+// flow = "e1104_plugin_required_keys_ok.voice"
+// id = "com.example.other"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "instrument"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// Nothing is missing: both `[[plugin]]` tables have `flow`, `id`, `name`, `vendor`, `version` and `category`, so no
+// E1104 is reported (§15.3, §14.3; S-580).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

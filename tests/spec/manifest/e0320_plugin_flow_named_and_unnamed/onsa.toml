@@ -1,0 +1,11 @@
+[package]
+name = "e0320_plugin_flow_named_and_unnamed"
+edition = "2026"
+
+[[plugin]]
+flow = "m.BadName"
+id = "com.example.voice0"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"

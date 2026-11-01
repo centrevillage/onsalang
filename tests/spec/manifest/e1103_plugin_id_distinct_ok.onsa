@@ -1,0 +1,31 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_id_distinct_ok"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1103_plugin_id_distinct_ok.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [[plugin]]
+// flow = "e1103_plugin_id_distinct_ok.voice"
+// id = "com.example.voice2"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// Two tables with different `id` (and the same `name`, `vendor` and `version`) are not a duplicate: only the `id`
+// is compared (§15.3 `id` row, §14.3; S-580).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

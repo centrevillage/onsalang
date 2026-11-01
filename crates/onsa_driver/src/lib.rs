@@ -191,6 +191,9 @@ pub struct Analyzed {
     pub diagnostic_units: Vec<Option<usize>>,
     /// The units of the package's files (`onsa_syntax::units`), in one table.
     pub units: Vec<reduce::Unit>,
+    /// The flow each `[[plugin]]` names, in their order (S-718): what the
+    /// build reads (none: it names none).
+    pub plugin_flows: Vec<Option<onsa_sema::DefId>>,
 }
 
 impl Analyzed {
@@ -219,16 +222,22 @@ pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {
         }
         loaded.input_diagnostics()
     })?;
-    analyze(&mut loaded.sources, &name, &modules, paths)
+    let flows = loaded.manifest.iter().flat_map(|m| {
+        let at = |f: &Spanned<String>| Span::new(m.file, f.span.start as u32, f.span.end as u32);
+        m.manifest.plugin_flow_paths.iter().map(move |f| (f.value.clone(), at(f)))
+    });
+    analyze(&mut loaded.sources, &name, &modules, paths, &flows.collect::<Vec<_>>())
 }
 
-/// The analysis of a package. `paths`, the diagnostics of the input's paths,
-/// are outside every unit: each is reported (§2.3).
+/// The analysis of a package. `paths`, the diagnostics of the input's paths
+/// (with the module path each names), are outside every unit: each is
+/// reported (§2.3). `flows` are the paths of the `[[plugin]]` (S-718).
 fn analyze(
     sources: &mut SourceMap,
     name: &str,
     modules: &[(FileId, Vec<String>)],
-    paths: Vec<Diagnostic>,
+    mut paths: Vec<(Diagnostic, Vec<String>)>,
+    flows: &[manifest::plugin::PluginFlow],
 ) -> Result<Analyzed, InternalError> {
     guard(|| {
         let user_modules: Vec<Module> = modules
@@ -246,14 +255,17 @@ fn analyze(
         all.extend(analysis.diagnostics.iter().cloned());
         let files = pkg.modules.iter().map(|m| (m.file, &m.parsed.units));
         let reduce::Reduced { mut diagnostics, mut diagnostic_units, units } = reduce::per_unit(files, all);
+        let plugin_flows = manifest::plugin::resolve(&analysis, flows);
+        manifest::plugin::note_named(&analysis, &pkg, flows, &plugin_flows, &mut diagnostics, &mut paths);
         // The candidates of the E0320 the check reports alone (R-305).
         onsa_sema::rename_fixes(&pkg, &analysis, &mut diagnostics);
-        let paths: Vec<Diagnostic> = paths.into_iter().chain(analysis.path_diagnostics.iter().cloned()).collect();
+        let paths = paths.into_iter().map(|(d, _)| d).chain(analysis.path_diagnostics.iter().cloned());
+        let paths: Vec<Diagnostic> = paths.collect();
         diagnostic_units.extend(paths.iter().map(|_| None));
         diagnostics.extend(paths);
         fill_found(sources, &mut diagnostics);
         debug_contract(sources, &diagnostics, None);
-        Analyzed { pkg, analysis, diagnostics, diagnostic_units, units }
+        Analyzed { pkg, analysis, diagnostics, diagnostic_units, units, plugin_flows }
     })
 }
 

@@ -1,0 +1,19 @@
+[package]
+name = "e1103_plugin_duplicate_id_stops_before_source"
+edition = "2026"
+
+[[plugin]]
+flow = "m.voice"
+id = "com.example.voice0"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"
+
+[[plugin]]
+flow = "m.voice"
+id = "com.example.voice0"                    #~ E1103
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"

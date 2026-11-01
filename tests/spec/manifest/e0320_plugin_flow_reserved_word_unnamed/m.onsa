@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "m.onsa:17:10"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// E0320: the flow `Match` is not named by the manifest, so it has the candidate `match_` as any flow does (`fixes = 1`)
+// (§2.3 reserved-word candidate, §15.3 `flow` row; S-718).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }
+
+pub flow Match(x: F32 at sample) -> F32 at sample { x } //~ E0320

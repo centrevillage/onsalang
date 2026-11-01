@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.3", "§18.1"]
+// fixes = 0
+
+// E0320: the `[[plugin]]` names `BadDir.synth.voice`; the directory `BadDir/` in the path breaks the rule for module
+// names, once, at the top of the first `.onsa` file below it, with no candidate (§2.3 "その経路の途中のモジュール",
+// §15.3 `flow` row; S-718).
+
+pub fn f() -> I32 { 1 }

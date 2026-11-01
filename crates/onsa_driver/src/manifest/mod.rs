@@ -1,6 +1,7 @@
 //! The manifest `onsa.toml` (spec §15.3): its typed values with their places
 //! ([`Spanned`]), the closed table ([`table`]) and the one reader ([`read`]).
 
+pub(crate) mod plugin;
 mod read;
 pub mod table;
 
@@ -45,6 +46,9 @@ pub struct Manifest {
     /// The E1104 of a `prefix` not written, which the build of a package with
     /// `@export` items reports after the check of its sources (§14.2, S-832).
     pub missing_prefix: Option<Diagnostic>,
+    /// The `flow` of each `[[plugin]]`, a path the check resolves once
+    /// (`Analyzed::plugin_flows`, S-718).
+    pub plugin_flow_paths: Vec<Spanned<String>>,
 }
 
 #[derive(Debug, Default, Clone)]

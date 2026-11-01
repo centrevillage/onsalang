@@ -1,0 +1,10 @@
+[package]
+name = "e1104_plugin_stops_before_source"
+edition = "2026"
+
+[[plugin]]                                   #~ E1104
+flow = "m.voice"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"

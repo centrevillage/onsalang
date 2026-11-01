@@ -1,0 +1,11 @@
+[package]
+name = "e0320_plugin_flow_reserved_word_named"
+edition = "2026"
+
+[[plugin]]
+flow = "m.Match"
+id = "com.example.voice0"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"

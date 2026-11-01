@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_category_underscore"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1103_plugin_category_underscore.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "note_effect"                     #~ E1103
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `category` is `instrument`, `effect` or `note-effect`; `note_effect` is not spelt with a hyphen, so it is reported at the value
+// (§15.3 `category` row, §14.3, §18.1; S-580, S-597).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

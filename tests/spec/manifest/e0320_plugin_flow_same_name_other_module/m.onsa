@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.3", "§18.1"]
+// fixes = 1
+
+// E0320: `m.BadName` is named by the manifest and has no candidate; `BadName` of `other.onsa` has the same name but is
+// another flow, not named, and keeps its one candidate (`fixes = 1`). The path decides, not the name (§2.3, §15.3
+// `flow` row; S-718).
+
+@export
+pub flow BadName(x: F32 at sample) -> F32 at sample { x } //~ E0320

@@ -147,13 +147,48 @@ impl<'s> Reader<'s> {
             prefix: self.need(f, Field::Prefix, None, None).map(Got::str),
         });
         let targets = f.take(Field::Targets).map(|g| self.map(g, |g| self.table(g, |f| self.target(f))));
-        // `[[plugin]]` is walked for its keys; its values are U4's.
-        for p in f.take(Field::Plugin).map(Got::tables).unwrap_or_default() {
-            self.table(p, |f| f.take(Field::Au).map(|g| self.table(g, |_| ())));
-        }
+        let mut ids = BTreeMap::new();
+        let plugins = f.take(Field::Plugin).map(Got::tables).unwrap_or_default();
+        let plugin_flow_paths = plugins.into_iter().filter_map(|p| self.table(p, |f| self.plugin(f, &mut ids)).value);
+        let plugin_flow_paths = plugin_flow_paths.collect();
         f.done();
         let missing_prefix = self.missing_prefix.take();
-        Manifest { package, dependencies, export, targets: targets.unwrap_or_default(), missing_prefix }
+        Manifest {
+            package,
+            dependencies,
+            export,
+            targets: targets.unwrap_or_default(),
+            missing_prefix,
+            plugin_flow_paths,
+        }
+    }
+
+    /// A `[[plugin]]` (§14.3, §15.3): its `flow`, after the rules of its
+    /// values that need no target. An `id` of an earlier one (in `ids`, by
+    /// value) is an E1103 at the later, with the place of the first.
+    fn plugin(&self, f: &mut Fields, ids: &mut BTreeMap<String, Range<usize>>) -> Option<Spanned<String>> {
+        let flow = self.need(f, Field::Flow, None, None).map(Got::str);
+        // SPEC-GAP(S-843): §14.3 does not say whether an `id` may be empty or is
+        // compared in its case: any string, compared as written.
+        if let Some(id) = self.need(f, Field::Id, None, None).map(Got::str) {
+            match ids.get(&id.value) {
+                Some(first) => self.push(
+                    Diagnostic::new(
+                        Stage::Manifest,
+                        Code::E1103,
+                        self.span(id.span),
+                        format!("`\"{}\"` is the `id` of an earlier `[[plugin]]`", id.value),
+                    )
+                    .with_note(self.span(first.clone()), "the `id` of the first `[[plugin]]` with it"),
+                ),
+                None => drop(ids.insert(id.value, id.span)),
+            }
+        }
+        for field in [Field::Name, Field::Vendor, Field::Version, Field::Category] {
+            self.need(f, field, None, None);
+        }
+        f.take(Field::Au).map(|g| self.table(g, |_| ()));
+        flow
     }
 
     fn target(&self, f: &mut Fields) -> ManifestTarget {
@@ -273,11 +308,14 @@ impl<'s> Reader<'s> {
                 item.as_table_like().map(|t| Typed::Table(t, table, written))
             }
             Shape::Tables(table) => {
-                let one = |t: &'a dyn TableLike, at: Option<Range<usize>>, written| Got {
-                    value: Typed::Table(t, table, written),
-                    path: path.clone(),
-                    key: key_span.clone(),
-                    span: at.unwrap_or_else(|| span.clone()),
+                // The key of each table, the place of the E1104 of a key it
+                // lacks: its header `[[plugin]]`, or the inline table.
+                let one = |t: &'a dyn TableLike, at: Option<Range<usize>>, written| {
+                    let span = at.unwrap_or_else(|| span.clone());
+                    let text = &self.source.text[span.start..];
+                    let header = span.start..span.start + text.find("]]").map_or(0, |i| i + 2);
+                    let key = if written == Written::Header { header } else { span.clone() };
+                    Got { value: Typed::Table(t, table, written), path: path.clone(), key, span }
                 };
                 match item.as_array_of_tables() {
                     Some(a) => Some(Typed::Tables(a.iter().map(|t| one(t, t.span(), Written::Header)).collect())),
@@ -331,6 +369,10 @@ impl<'s> Reader<'s> {
             (Rule::StdVersion, Typed::Str(v)) if v != STD_VERSION => (
                 format!("`\"{v}\"` is not the version of the embedded std"),
                 vec![format!("the embedded std is version `{STD_VERSION}` (§15.3)")],
+            ),
+            (Rule::Version, Typed::Str(v)) if !is_version(v) => (
+                format!("`\"{v}\"` is not a version"),
+                vec!["a version is `major.minor.patch`: three numbers joined by `.` (§14.3)".to_string()],
             ),
             (Rule::Bytes, Typed::Int(n)) if *n < 0 => (
                 format!("`{path}` is `{n}`, not a number of bytes"),
@@ -577,6 +619,13 @@ impl<'s> Reader<'s> {
     }
 }
 
+/// `major.minor.patch` (§14.3): three numbers of ASCII digits joined by `.`.
+// SPEC-GAP(S-842): §14.3 does not say whether a number may have a leading `0`
+// or how many digits it may have: any digits are a number here.
+fn is_version(v: &str) -> bool {
+    v.split('.').count() == 3 && v.split('.').all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// The form of `prefix` (§14.2): lowercase letters, digits and `_`, from a
 /// letter to a `_`, without `__` and not from `onsa_`, the runtime's names.
 fn is_prefix(p: &str) -> bool {
@@ -767,6 +816,7 @@ mod tests {
             let value = match (r.shape, r.rule) {
                 (_, Rule::OneOf(values, _)) => format!("\"{}\"", values[values.len() - 1]),
                 (_, Rule::Prefix) => "\"x_\"".into(),
+                (_, Rule::Version) => "\"1.0.0\"".into(),
                 (Shape::Str, _) => "\"x\"".into(),
                 (Shape::Bool, _) => "true".into(),
                 (Shape::Int, _) => "0".into(),
@@ -780,7 +830,8 @@ mod tests {
         let memory = &m.targets["t"].value.memory.as_ref().unwrap().value;
         assert_eq!((memory.bulk.as_ref().unwrap().value, memory.fast_budget.as_ref().unwrap().value), (true, 0));
         let other = "[package]\nname = \"a\"\nedition = \"2026\"\n[targets.t]\nkind = \"source\"\nplatform = \"h\"\nlang = \"c\"\n\
-                     [[plugin]]\nflow = 4\nau = { subtype = 1 }\n";
+                     [[plugin]]\nflow = \"a.f\"\nid = \"i\"\nname = \"n\"\nvendor = \"v\"\nversion = \"1.0.0\"\n\
+                     category = \"effect\"\nau = { subtype = 1 }\n";
         file(other);
     }
 
@@ -792,7 +843,8 @@ mod tests {
     fn every_unknown_key_is_an_e1102_with_the_keys_of_its_table() {
         let text = "x = 1\n[package]\nname = \"a\"\nedition = \"2026\"\nflows = 2\n[export]\nfns = []\n[targets.t]\nkind = \"exe\"\n\
                     platform = \"h\"\nnumeric = \"strict\"\n[targets.t.memory]\nbulk_threshold = 64\n\
-                    [targets.t.mem]\nanything = 1\n[[plugin]]\nwhat = 4\nau = { zz = 1 }\n[[extra]]\n";
+                    [targets.t.mem]\nanything = 1\n[[plugin]]\nflow = \"a.f\"\nid = \"i\"\nname = \"n\"\nvendor = \"v\"\n\
+                    version = \"1.0.0\"\ncategory = \"effect\"\nwhat = 4\nau = { zz = 1 }\n[[extra]]\n";
         let found = diagnostics(text, ManifestForm::File);
         let expected = ["x", "flows", "fns", "numeric", "bulk_threshold", "mem", "what", "zz", "extra"];
         assert_eq!(found, expected.map(|k| (Code::E1102, k)));
@@ -1026,7 +1078,7 @@ mod tests {
         let m = r.manifest;
         let provides: Vec<&str> = m.targets["t"].value.provides.iter().map(|p| p.value.as_str()).collect();
         assert_eq!(provides, ["Alloc", "Fs"]);
-        for (text, value) in [("targets = 1\n", "1"), ("[targets]\nt = 2\n", "2"), ("plugin = [1, {}]\n", "1")] {
+        for (text, value) in [("targets = 1\n", "1"), ("[targets]\nt = 2\n", "2"), ("plugin = [1]\n", "1")] {
             let text = format!("{text}[package]\nname = \"a\"\nedition = \"2026\"\n");
             assert_eq!(diagnostics(&text, ManifestForm::File), [(Code::E1103, value)], "{text}");
         }
@@ -1371,5 +1423,122 @@ mod tests {
                 assert!(rows || table::named(t).is_some(), "{}", r.key);
             }
         }
+    }
+
+    /// The package and a `[[plugin]]` with every key it requires, before `rest`.
+    fn plugins(rest: &str) -> String {
+        format!("[package]\nname = \"a\"\nedition = \"2026\"\n{rest}")
+    }
+
+    const PLUGIN: &str = "[[plugin]]\nflow = \"m.f\"\nid = \"p\"\nname = \"P\"\nvendor = \"V\"\nversion = \"1.0.0\"\n\
+                          category = \"effect\"\n";
+
+    /// E1104 (§14.3, §15.3): the six keys of a `[[plugin]]` are required, by
+    /// every command, at its header (an inline one: at it), without a
+    /// candidate (no value is the one); each `[[plugin]]` on its own.
+    #[test]
+    fn every_key_of_a_plugin_is_required_at_its_header() {
+        let r = read_as(&plugins(PLUGIN), ManifestForm::File);
+        assert!(r.diagnostics.is_empty(), "{:?}", r.diagnostics);
+        assert_eq!(r.manifest.plugin_flow_paths.iter().map(|f| f.value.as_str()).collect::<Vec<_>>(), ["m.f"]);
+        let one = plugins(&PLUGIN.replace("vendor = \"V\"\n", ""));
+        assert_eq!(diagnostics(&one, ManifestForm::File), [(Code::E1104, "[[plugin]]")]);
+        let all = plugins("[[plugin]]\nau = {}\n");
+        let found = read_as(&all, ManifestForm::File).diagnostics;
+        let mut messages: Vec<&str> = found.iter().map(|d| d.message.as_str()).collect();
+        messages.sort();
+        let keys = ["category", "flow", "id", "name", "vendor", "version"];
+        assert_eq!(messages, keys.map(|k| format!("missing key `plugin.{k}`")));
+        assert!(found.iter().all(|d| d.code == Code::E1104
+            && d.fixes.is_empty()
+            && &all[d.span.start as usize..d.span.end as usize] == "[[plugin]]"));
+        // The second `[[plugin]]` lacks `id`: at its header, the line after the first one's.
+        let second = plugins(&format!("{PLUGIN}{}", PLUGIN.replace("id = \"p\"\n", "")));
+        let d = &read_as(&second, ManifestForm::File).diagnostics;
+        assert_eq!(d.len(), 1, "{d:?}");
+        assert_eq!(
+            (d[0].message.as_str(), d[0].span.start as usize),
+            ("missing key `plugin.id`", second.rfind("[[plugin]]").unwrap())
+        );
+        let inline = format!("plugin = [{{ flow = \"m.f\" }}]\n{}", plugins(""));
+        assert_eq!(diagnostics(&inline, ManifestForm::File), [(Code::E1104, "{ flow = \"m.f\" }"); 5]);
+    }
+
+    /// E1103 (§14.3, §15.3, §18.1): the values of a `[[plugin]]` are strings;
+    /// `version` is three numbers joined by `.`; `category` one of its list
+    /// (in a note). Each at its value, with no candidate, and every one of a
+    /// `[[plugin]]` reported. `flow` is only a string here (S-641), and the
+    /// values of `au` are not read (S-826).
+    #[test]
+    fn the_values_of_a_plugin_are_checked_at_the_values() {
+        let text = plugins(
+            "[[plugin]]\nflow = 1\nid = true\nname = 2\nvendor = [\"V\"]\nversion = \"1.0\"\ncategory = \"synth\"\n\
+             au = { subtype = 3 }\n",
+        );
+        let found = diagnostics(&text, ManifestForm::File);
+        assert_eq!(found, ["1", "true", "2", "[\"V\"]", "\"1.0\"", "\"synth\""].map(|v| (Code::E1103, v)));
+        let r = read_as(&text, ManifestForm::File);
+        assert!(r.diagnostics.iter().all(|d| d.fixes.is_empty()), "{:?}", r.diagnostics);
+        let category = r.diagnostics.iter().find(|d| d.message.contains("synth")).unwrap();
+        assert_eq!(
+            category.notes[0].message,
+            "the values of `plugin.category` are `\"instrument\"`, `\"effect\"`, `\"note-effect\"`"
+        );
+        for v in ["1.0.0", "0.0.0", "10.200.3000", "256.0.0"] {
+            let text = plugins(&PLUGIN.replace("1.0.0", v));
+            assert_eq!(diagnostics(&text, ManifestForm::File), [], "{v}");
+        }
+        for v in
+            ["1", "1.0", "1.0.0.0", "1..0", ".1.0", "1.0.", "v1.0.0", "1.0.0-beta", "1.0.x", "", "1. 0.0", "-1.0.0"]
+        {
+            let text = plugins(&PLUGIN.replace("1.0.0", v));
+            assert_eq!(diagnostics(&text, ManifestForm::File), [(Code::E1103, format!("\"{v}\"").as_str())], "{v}");
+        }
+        for v in ["instrument", "effect", "note-effect"] {
+            assert_eq!(diagnostics(&plugins(&PLUGIN.replace("effect", v)), ManifestForm::File), [], "{v}");
+        }
+        // A `flow` that names nothing is not the reader's (S-641).
+        assert_eq!(diagnostics(&plugins(&PLUGIN.replace("m.f", "no such.path")), ManifestForm::File), []);
+    }
+
+    /// E1103 (§14.3): an `id` of an earlier `[[plugin]]` is an error at the
+    /// later `id`, with the place of the first in a note; a third is one more.
+    #[test]
+    fn a_plugin_id_written_twice_is_an_e1103_at_the_later() {
+        let two = plugins(&format!("{PLUGIN}{}", PLUGIN.replace("m.f", "m.g")));
+        let r = read_as(&two, ManifestForm::File);
+        assert_eq!(r.diagnostics.len(), 1, "{:?}", r.diagnostics);
+        let (d, first) = (&r.diagnostics[0], two.find("\"p\"").unwrap());
+        assert_eq!((d.code, d.span.start as usize), (Code::E1103, two.rfind("\"p\"").unwrap()));
+        let note = d.notes[0].span.unwrap();
+        assert_eq!((note.start as usize, note.end as usize), (first, first + 3));
+        assert!(d.fixes.is_empty());
+        let three = plugins(&format!("{PLUGIN}{}{PLUGIN}", PLUGIN.replace("\"p\"", "\"q\"")));
+        let r = read_as(&three, ManifestForm::File);
+        let notes: Vec<u32> = r.diagnostics.iter().map(|d| d.notes[0].span.unwrap().start).collect();
+        assert_eq!((r.diagnostics.len(), notes), (1, vec![first as u32]));
+        let three = plugins(&PLUGIN.repeat(3));
+        let mut r = read_as(&three, ManifestForm::File);
+        r.diagnostics.sort_by_key(|d| d.span.start);
+        let at: Vec<(u32, u32)> =
+            r.diagnostics.iter().map(|d| (d.span.start, d.notes[0].span.unwrap().start)).collect();
+        let ids: Vec<u32> = three.match_indices("\"p\"").map(|(i, _)| i as u32).collect();
+        assert_eq!(at, [(ids[1], ids[0]), (ids[2], ids[0])]);
+        // Two ids that differ in case only are two ids.
+        assert_eq!(
+            diagnostics(&plugins(&format!("{PLUGIN}{}", PLUGIN.replace("\"p\"", "\"P\""))), ManifestForm::File),
+            []
+        );
+    }
+
+    /// One `[[plugin]]` with errors of every kind: each is reported (§18.1),
+    /// the E1102 of a key it does not know beside them.
+    #[test]
+    fn every_error_of_one_plugin_is_reported() {
+        let text = plugins(&format!("{PLUGIN}[[plugin]]\nid = \"p\"\nversion = \"x\"\ncategory = 1\ncolour = 2\n"));
+        let found = diagnostics(&text, ManifestForm::File);
+        let mut codes: Vec<(Code, &str)> = vec![(Code::E1104, "[[plugin]]"); 3];
+        codes.extend([(Code::E1103, "\"p\""), (Code::E1103, "\"x\""), (Code::E1103, "1"), (Code::E1102, "colour")]);
+        assert_eq!(found, codes);
     }
 }

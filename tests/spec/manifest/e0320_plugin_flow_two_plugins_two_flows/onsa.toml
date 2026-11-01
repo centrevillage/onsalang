@@ -1,0 +1,19 @@
+[package]
+name = "e0320_plugin_flow_two_plugins_two_flows"
+edition = "2026"
+
+[[plugin]]
+flow = "m.BadOne"
+id = "com.example.voice0"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"
+
+[[plugin]]
+flow = "m.BadTwo"
+id = "com.example.voice1"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"

@@ -1,0 +1,31 @@
+// onsa.toml
+// [package]
+// name = "e1104_plugin_au_key_not_required"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1104_plugin_au_key_not_required.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [targets.t]
+// kind = "au"                                  #~ E0200 [t]
+// platform = "host"
+//
+// [export]
+// prefix = "p_"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// A package with an AU target (`kind = "au"`) and a `[[plugin]]` with no `au` is not reported as E1104 by the checks
+// of this version: the rule that `au` is needed belongs to the AU of phase 2 (S-841, S-826). The only report is the
+// E0200 of the `kind` in the build of the target (§15.3 `au` row, §18.1; S-580, S-841).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }

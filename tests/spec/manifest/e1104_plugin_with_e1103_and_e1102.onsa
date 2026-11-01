@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1104_plugin_with_e1103_and_e1102"
+// edition = "2026"
+//
+// [[plugin]]                                   #~ E1104
+// flow = "e1104_plugin_with_e1103_and_e1102.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// version = "1.2"                              #~ E1103
+// category = "effect"
+// colour = 1                                   #~ E1102
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104, E1103 and E1102 in one table are independent: the missing `vendor` is at the heading, the `version` that is
+// not `major.minor.patch` is at its value, and the key the table does not list is at its name; none hides another
+// (§15.3, §18.1 "互いに独立に全て"; S-580, S-99, S-597).

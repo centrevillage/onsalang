@@ -1,0 +1,25 @@
+// onsa.toml
+// [package]
+// name = "e1103_plugin_with_target_error"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1103_plugin_with_target_error.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.2"                              #~ E1103
+// category = "effect"
+//
+// [targets.host]
+// kind = "dll"                                 #~ E1103
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// A wrong `version` of a `[[plugin]]` and a `kind` that is not in the list are two E1103 of one manifest; the check
+// of the targets and the check of the packages go on past each other (§15.3, §18.1; S-580, S-827).

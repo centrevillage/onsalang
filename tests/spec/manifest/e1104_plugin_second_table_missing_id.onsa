@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "e1104_plugin_second_table_missing_id"
+// edition = "2026"
+//
+// [[plugin]]
+// flow = "e1104_plugin_second_table_missing_id.voice"
+// id = "com.example.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [[plugin]]                                   #~ E1104
+// flow = "e1104_plugin_second_table_missing_id.voice"
+// name = "Voice"
+// vendor = "Example"
+// version = "1.0.0"
+// category = "effect"
+//
+// [test]
+// spec = ["§14.3", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: only the second `[[plugin]]` lacks `id`; the report is at the heading of the second table, and the first
+// table, which is complete, has none (§15.3, §18.1; S-580).
+
+@export
+pub flow voice(x: F32 at sample) -> F32 at sample { x }
