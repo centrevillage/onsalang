@@ -279,7 +279,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     let settings = &resolved.settings;
     let export = &ExportSettings::of(analyzed, loaded.manifest());
     // The sources tell whether `prefix` is required: after their check (§14.2, §18.1, S-832).
-    // SPEC-GAP(S-839): the E1104 stops the build before its own checks (E0610) and the C backend's (E0302).
+    // The E1104 stops the build before its own checks (E0610) and the C backend's (E0302), S-839.
     if export.prefix.is_none() && !(export.flows.is_empty() && export.fns.is_empty()) {
         let d = loaded.manifest().and_then(|m| m.missing_prefix.clone());
         let d = d.unwrap_or_else(|| onsa_diag::internal::bug(None, "an export without a `prefix` or its E1104"));
