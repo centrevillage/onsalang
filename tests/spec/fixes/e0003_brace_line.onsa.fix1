@@ -123,7 +123,7 @@ pub fn match_head(x: I32) -> I32 {
 }
 
 pub flow par_head(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0..<4 {
+  par~ i in 0..<4 {
   //~ E0003
     x * i.round_f32()
   }

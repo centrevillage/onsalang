@@ -182,24 +182,24 @@ pub const REFERENCE_IN_A_CONST: F32 = ^BASE        //~ E0821
 // ---- `par` -------------------------------------------------------------------------------------------
 
 pub fn with_par(x: F32) -> F32 {
-  let y = par i in 0 ..< 4 { 1.0 }                  //~ E0821
+  let y = par~ i in 0 ..< 4 { 1.0 }                  //~ E0821
   x
 }
 
 pub fn par_with_a_use(x: F32) -> F32 {
-  let ys = par i in 0 ..< 4 {                       //~ E0821
+  let ys = par~ i in 0 ..< 4 {                       //~ E0821
     x
   }
   ys[0]
 }
 
 pub fn par_as_the_tail(x: F32) -> [F32; 2] {
-  par i in 0 ..< 2 { x }                            //~ E0821
+  par~ i in 0 ..< 2 { x }                            //~ E0821
 }
 
 pub fn par_in_a_branch(c: Bool, x: F32) -> F32 {
   if c {
-    let ys = par i in 0 ..< 2 { x }                 //~ E0821
+    let ys = par~ i in 0 ..< 2 { x }                 //~ E0821
     ys[0]
   } else {
     x
@@ -207,23 +207,23 @@ pub fn par_in_a_branch(c: Bool, x: F32) -> F32 {
 }
 
 pub fn par_with_an_instance_in_its_body(x: F32) -> F32 {
-  let ys = par i in 0 ..< 2 {                       //~ E0821
+  let ys = par~ i in 0 ..< 2 {                       //~ E0821
     lp~(x)
   }
   ys[0]
 }
 
 pub fn par_in_a_closure(x: F32) -> F32 {
-  let g = fn(y: F32) -> [F32; 2] { par i in 0 ..< 2 { y } }  //~ E0821
+  let g = fn(y: F32) -> [F32; 2] { par~ i in 0 ..< 2 { y } }  //~ E0821
   g.(x)[0]
 }
 
 test "a par in a test" {
-  let ys = par i in 0 ..< 2 { 1.0 }                 //~ E0821
+  let ys = par~ i in 0 ..< 2 { 1.0 }                 //~ E0821
   assert ys[0] == 1.0
 }
 
-pub const PAR_IN_A_CONST: [F32; 2] = par i in 0 ..< 2 { 1.0 }  //~ E0821
+pub const PAR_IN_A_CONST: [F32; 2] = par~ i in 0 ..< 2 { 1.0 }  //~ E0821
 
 // ---- `if~` and `match~` ------------------------------------------------------------------------------
 
@@ -289,6 +289,6 @@ pub flow right_forms(x: F32 at sample) -> F32 at sample {
   let a = lp~(x)
   let d = prev~(^b)
   let b = a + d
-  let ps = par i in 0 ..< 2 { x }
+  let ps = par~ i in 0 ..< 2 { x }
   b + ps[0] + ps[1]
 }

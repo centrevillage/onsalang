@@ -70,7 +70,7 @@ pub flow right_forms(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let q  = p at sample
   let d  = scale(a) + q * prev~(^b)
   let b  = a + d
-  let ps = par i in 0 ..< 2 { x }
+  let ps = par~ i in 0 ..< 2 { x }
   b + ps[0] + ps[1]
 }
 

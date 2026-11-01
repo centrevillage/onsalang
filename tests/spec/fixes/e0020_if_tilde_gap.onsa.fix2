@@ -93,7 +93,7 @@ pub flow inner_if_space(a: Bool at sample, b: Bool at sample) -> F32 at sample {
 }
 
 pub flow in_par(c: Bool at sample) -> [F32; 2] at sample {
-  par i in 0..<2 {
+  par~ i in 0..<2 {
     if ~ c { 1.0 } else { 2.0 }                     //~ E0020
   }
 }

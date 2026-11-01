@@ -5,7 +5,7 @@ use super::*;
 /// The range symbol at the failure (`..<`, `..=`, `..`, `...`) after an
 /// expression on its line, outside a pattern (the range patterns are the
 /// rows `range_pattern` and `range_pattern_choice`, [`guard`]): whether it is
-/// in the head of a `for` or a `par`, where a range is the whole expression
+/// in the head of a `for` or a `par~`, where a range is the whole expression
 /// (§3.1), or else none for a symbol in a head after a range
 /// (`for i in 0..<4..5`: the general E0002, as no candidate makes it one).
 fn range_symbol(c: &Cursor) -> Option<bool> {
@@ -20,12 +20,12 @@ fn range_symbol(c: &Cursor) -> Option<bool> {
 }
 
 /// Whether the expression that closed at the failure is the start of the
-/// head of a `for` or a `par`, where a range is the whole expression (§3.1),
+/// head of a `for` or a `par~`, where a range is the whole expression (§3.1),
 /// or else none for one in a head after a range.
 fn head(c: &Cursor) -> Option<bool> {
     closed_expr(c)?;
     // The head: the expression that closed here starts right after `in`
-    // (or `in move`) of the innermost open `for` or `par` (the context: the
+    // (or `in move`) of the innermost open `for` or `par~` (the context: the
     // block of the body may be open before its `{`).
     let outer = c.closed.iter().rev().find(|n| n.0.class() == crate::cst::Class::Expr)?;
     let head = matches!(c.context(), Some((_, NodeKind::ForStmt | NodeKind::ParExpr)))
@@ -68,7 +68,7 @@ pub(super) fn range_dots(c: &Cursor) -> Option<Hit> {
     hit(span, fixes)
 }
 
-/// A range with one end in the head of a `for` or a `par` (`for i in 0.. {`,
+/// A range with one end in the head of a `for` or a `par~` (`for i in 0.. {`,
 /// `for i in ..<n {`; §7, S-278): E0002 with the note, as nothing says what
 /// the missing end is. A `{` after `..<` or `..=` is the parser's (S-338).
 pub(super) fn range_header_one_sided(c: &Cursor) -> Option<Hit> {
@@ -117,7 +117,7 @@ fn line_range(c: &Cursor) -> Option<(usize, bool)> {
     Some((s, head(c)?))
 }
 
-/// A range symbol at the head of a line in the head of a `for` or a `par`
+/// A range symbol at the head of a line in the head of a `for` or a `par~`
 /// (`for i in 0` and `..<n {` on the next line; §2.5, S-335): it goes at the
 /// end of the line, as a binary operator does, and the candidate moves it
 /// there. `..` and `...` are written as `..<` and `..=` there, one candidate
@@ -140,7 +140,7 @@ pub(super) fn leading_range(c: &Cursor) -> Option<Hit> {
     hit(c.span(s), fixes)
 }
 
-/// A range after an expression outside the head of a `for` or a `par`
+/// A range after an expression outside the head of a `for` or a `par~`
 /// (`let r = 0..<4`, `xs[1..<3]`, `for i in (0..<4)`): E0002 with the note,
 /// whatever its symbol (a candidate for `..` would leave the range where
 /// none goes, §18.1).

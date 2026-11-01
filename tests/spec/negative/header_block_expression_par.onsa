@@ -7,7 +7,7 @@
 // (W3-09).
 
 pub flow block_in_a_par_header(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0..<{ 4 } {                              //~ E0002
+  par~ i in 0..<{ 4 } {                              //~ E0002
     x * i.round_f32()
   }
 }

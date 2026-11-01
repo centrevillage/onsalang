@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§15.1"]
+
+// W4-20 U1/t, S-745: a `par~` and the modules (§11.5, §15.1). The body of a `par~` calls a flow of another
+// module, by its qualified name (`util.lp~(x)`) or by the name that a `use` takes in (`lp~(x)`), and a
+// flow of a module that has a `par~` in its own body is called as any flow (`util.bank~(x)`), also in a
+// `par~` of this module. Every replica has its own instance of the flow of the module. The old spelling
+// of the `par` without the `~` in these places is E0811 (negative/e0811_par_modules_pkg).
+
+use util
+use util.{lp, pair_sum}
+
+pub flow qualified_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 { util.lp~(x * i.round_f32()) }
+}
+
+pub flow imported_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 { lp~(x * i.round_f32()) }
+}
+
+pub flow a_flow_of_the_module_with_a_par(x: F32 at sample) -> [F32; 4] at sample {
+  util.bank~(x)
+}
+
+pub flow the_flow_with_a_par_in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    pair_sum(par~ j in 0 ..< 2 { util.lp~(x * (i + j).round_f32()) })
+  }
+}
+
+pub flow a_par_of_the_flow_with_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    util.bank~(x * i.round_f32())[3]
+  }
+}

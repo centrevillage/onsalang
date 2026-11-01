@@ -89,7 +89,7 @@ pub flow gain_of(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow gains_of(x: F32 at sample) -> [F32; 2] at sample {
-  par i in 0 ..< 2 {
+  par~ i in 0 ..< 2 {
     math.abs(x)
   }
 }

@@ -134,11 +134,11 @@ fn struct_literal_operands() -> I32 {
 }
 
 pub flow par_index(x: F32 at sample) -> F32 at sample {
-  (par i in 0 ..< 2 { x * (i + 1).round_f32() })[1]
+  (par~ i in 0 ..< 2 { x * (i + 1).round_f32() })[1]
 }
 
 pub flow par_in_a_sum(x: F32 at sample) -> F32 at sample {
-  let a = (par i in 0 ..< 2 { x * (i + 1).round_f32() })[0] + 1.0
+  let a = (par~ i in 0 ..< 2 { x * (i + 1).round_f32() })[0] + 1.0
   a
 }
 

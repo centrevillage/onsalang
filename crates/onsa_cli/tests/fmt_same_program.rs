@@ -739,7 +739,7 @@ fn c_par_flow() -> Case {
         "a par in a flow",
         &[
             "flow bank(x: F32 at sample) -> F32 at sample {",
-            "  let v=par i in 0..<4{",
+            "  let v=par~ i in 0..<4{",
             "      x*2.0",
             "  }",
             "  v[0]",
@@ -747,7 +747,7 @@ fn c_par_flow() -> Case {
         ],
         &[
             "flow bank(x: F32 at sample) -> F32 at sample {",
-            "  let v = par i in 0 ..< 4 {",
+            "  let v = par~ i in 0 ..< 4 {",
             "    x * 2.0",
             "  }",
             "  v[0]",

@@ -11,13 +11,13 @@
 
 // In a `par`.
 pub flow in_par(x: F32 at sample) -> F32 at sample {          //~ E0817
-  let xs = par i in 0..<2 { in_par~(x) * i.round_f32() }
+  let xs = par~ i in 0..<2 { in_par~(x) * i.round_f32() }
   xs[0] + xs[1]
 }
 
 // In a `par`, through another flow.
 pub flow par_a(x: F32 at sample) -> F32 at sample {           //~ E0817
-  let xs = par i in 0..<2 { par_b~(x) * i.round_f32() }
+  let xs = par~ i in 0..<2 { par_b~(x) * i.round_f32() }
   xs[0] + xs[1]
 }
 

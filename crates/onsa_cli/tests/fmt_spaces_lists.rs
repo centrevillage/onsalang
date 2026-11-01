@@ -1089,7 +1089,7 @@ fn a_block_in_the_body_of_a_par() {
         "a block form call in a par over a range",
         &[
             "flow g(x: F32 at sample) -> Span[F32] at sample {",
-            "  par i in 0 ..< 2 {",
+            "  par~ i in 0 ..< 2 {",
             "    mix(",
             "      x,",
             "      i.round_f32()",
@@ -1099,7 +1099,7 @@ fn a_block_in_the_body_of_a_par() {
         ],
         &[
             "flow g(x: F32 at sample) -> Span[F32] at sample {",
-            "  par i in 0 ..< 2 {",
+            "  par~ i in 0 ..< 2 {",
             "    mix(",
             "      x,",
             "      i.round_f32(),",

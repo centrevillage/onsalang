@@ -123,7 +123,7 @@ fn round_trip_of_sources_with_errors() {
         "$ fn f() {}\n",
         "fn f() {\n  let s = \"abc\n}\n",
         "impl A for B[T] {}\n",
-        "fn f() { par i in 3 { } }\n",
+        "fn f() { par~ i in 3 { } }\n",
         "fn f() { g(&mut x, &y) }\n",
         "fn f() {\n  x.\n}\n",
         "@a\n@b(\nfn f() {}\n",

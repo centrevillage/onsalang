@@ -709,28 +709,28 @@ pub flow output_clock_ser(x: F32 at sample) -> F32 at ser {  //~ E0200 @55
 }
 
 pub flow par_body_clock(x: F32 at sample) -> F32 at sample {
-  let xs = par i in 0..<2 {
+  let xs = par~ i in 0..<2 {
     clock  //~ E0200 @5
   }
   xs[0]
 }
 
 pub flow par_body_when(x: F32 at sample) -> F32 at sample {
-  let xs = par i in 0..<2 {
+  let xs = par~ i in 0..<2 {
     when  //~ E0200 @5
   }
   xs[0]
 }
 
 pub flow par_body_reset_if(x: F32 at sample) -> F32 at sample {
-  let xs = par i in 0..<2 {
+  let xs = par~ i in 0..<2 {
     reset_if  //~ E0200 @5
   }
   xs[0]
 }
 
 pub flow par_body_ser(x: F32 at sample) -> F32 at sample {
-  let xs = par i in 0..<2 {
+  let xs = par~ i in 0..<2 {
     ser  //~ E0200 @5
   }
   xs[0]

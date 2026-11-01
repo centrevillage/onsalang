@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "40:3"
+// code = "E0811"
+// candidate = 1
+// leaves = ["41:14 E0811"]
+
+// W4-20 U1/t, S-745: the `~` of a `par` is judged for each `par` on its own, so a nest of `par~` with
+// one `par` in it is E0811 at that one (§11.5: "flow の本体の `~` の無い `par i in …` は E0811"; the
+// text says "the body of a flow", and the body of a `par~` is in the body of the flow). The inner one,
+// the outer one and the middle one of three are each the error when only that one is written without the
+// `~`. When two are written without, the unit reports its first one by position (§18.1: the names stage
+// reports "最初のもの"), the outer. One error per flow (P-01). The forms with the `~` on every `par` are
+// in flow/par_tilde_nested.onsa.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow only_the_inner_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })  //~ E0811
+  }
+}
+
+pub flow only_the_outer_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0 ..< 3 {                                //~ E0811
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+  }
+}
+
+pub flow both_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0 ..< 3 {                                //~ E0811
+    pair_sum(par j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+  }
+}
+
+pub flow only_the_middle_of_three_without_the_tilde(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    pair_sum(par j in 0 ..< 2 {                     //~ E0811
+      pair_sum(par~ k in 0 ..< 2 { lp~(x * (i + j + k).round_f32()) })
+    })
+  }
+}
+
+pub flow the_inner_of_a_body_without_state(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par j in 0 ..< 2 { x * (i + j).round_f32() })  //~ E0811
+  }
+}
+
+pub flow the_inner_in_a_let_of_the_flow(x: F32 at sample) -> F32 at sample {
+  let rows = par~ i in 0 ..< 3 {
+    pair_sum(par j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })  //~ E0811
+  }
+  rows[0] + rows[1] + rows[2]
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+  }
+}

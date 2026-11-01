@@ -27,7 +27,7 @@ pub flow delay_in_unwrap_or(x: F32 at sample) -> F32 at sample {
 
 pub flow par_in_unwrap_or(x: F32 at sample) -> F32 at sample {
   let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
-  o.unwrap_or((par i in 0..<2 { x })[0]) //~ E0200
+  o.unwrap_or((par~ i in 0..<2 { x })[0]) //~ E0200
 }
 
 // A stateful node bound before the call is fine: it advances every sample.

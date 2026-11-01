@@ -531,7 +531,7 @@ impl<'a> Rater<'a> {
         }
     }
 
-    /// `par i in a..<b { e }` (§11.5): nodes of the body are nested in the `Par` node.
+    /// `par~ i in a..<b { e }` (§11.5): nodes of the body are nested in the `Par` node.
     fn rate_par(&mut self, e: ExprId, body: ExprId) -> RR<FlowRate> {
         self.stateful_here(self.expr(e).span)?;
         let (var, from, to) = self.fcx.pars[&e];

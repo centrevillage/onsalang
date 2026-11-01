@@ -365,7 +365,7 @@ pub fn in_a_for_header() -> I32 {
 }
 
 pub flow in_a_par_header(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0..<4u32 {                               //~ E0020
+  par~ i in 0..<4u32 {                               //~ E0020
     x * i.round_f32()
   }
 }

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "18:12"
+// code = "E0811"
+// candidate = 1
+// clean = true
+
+// W4-20 U1/t, S-745: a `par` without the `~` and without state in the body (E0811, not E0812: the `~` is needed, not unneeded; once it is there the `par~` without state is no error, §11.5). The one error of the file has the one candidate, the insertion of the `~`
+// right after `par` (§11.5), and the file with it checks clean (`clean` is about the whole file, so
+// the file has this one error and no other unit with a candidate; §18.1: "当てた後に同じ段か前の段の誤りが
+// 残らないとき"). The main position (`at`) is the start of the `par`, where the `par` expression begins
+// (as the range of the E0811 of a call begins at the call). One error per flow (P-01).
+
+pub flow replicas(x: F32 at sample) -> [F32; 4] at sample {
+  let ys = par i in 0 ..< 4 { x * i.round_f32() }   //~ E0811
+  ys
+}

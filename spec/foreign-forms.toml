@@ -4031,7 +4031,7 @@ pub fn f(a: I32, b: I32) -> [I32; 2] {
 ''',
 ]
 
-# 範囲の記号で始まる行（S-335）。範囲の記号は二項演算子と同じに、行末に置く。`for` と `par` の見出しが `{` を
+# 範囲の記号で始まる行（S-335）。範囲の記号は二項演算子と同じに、行末に置く。`for` と `par~` の見出しが `{` を
 # 期待して改行を見た位置で、次の行の頭の範囲の記号を見つける。候補は記号を前の行の末尾へ移す形で、`..` と `...`
 # （他言語の範囲。終わりを含むかが言語で分かれる、§7）は記号の書き換えと移動を一つの候補にして、`..<` と `..=` の
 # 二つを並べる。移すと見出しの外の範囲になる形（完結した文の後の行頭の記号）は、この行ではなく
@@ -4165,7 +4165,7 @@ pub fn f(n: U32) -> U32 {
 [[form.example]]
 source = '''
 pub flow f(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0
+  par~ i in 0
     ..<4 {
     x * i.round_f32()
   }
@@ -4174,7 +4174,7 @@ pub flow f(x: F32 at sample) -> [F32; 4] at sample {
 at = "3:5"
 fixed = ['''
 pub flow f(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0 ..<
+  par~ i in 0 ..<
     4 {
     x * i.round_f32()
   }
@@ -5781,7 +5781,7 @@ origin = "Rust"
 stage = "syntax"
 code = "E0020"
 spec = ["7", "18.1"]
-rule = "範囲はパターンに書けない（`for` と `par` の見出しだけ）。ガードで書く（`1..<3` は `k if 1 <= k && k < 3`）"
+rule = "範囲はパターンに書けない（`for` と `par~` の見出しだけ）。ガードで書く（`1..<3` は `k if 1 <= k && k < 3`）"
 
 [[form.example]]
 source = '''
@@ -6291,7 +6291,7 @@ pub fn f(lo: U32, hi: U32) -> U32 {
 ''',
 ]
 
-# `for` と `par` の見出しの片側の範囲（S-278）。欠けた端が何かは分からないので、候補を作らない。
+# `for` と `par~` の見出しの片側の範囲（S-278）。欠けた端が何かは分からないので、候補を作らない。
 [[form]]
 id = "range_header_one_sided"
 kind = "foreign"
@@ -6323,7 +6323,7 @@ pub fn f(n: U32) -> U32 {
 }
 '''
 
-# 範囲は `for` と `par` の見出しだけに書ける。見出しの外の範囲は値を作れないので、候補を作らない。
+# 範囲は `for` と `par~` の見出しだけに書ける。見出しの外の範囲は値を作れないので、候補を作らない。
 [[form]]
 id = "range_outside_header"
 kind = "foreign"
@@ -6331,7 +6331,7 @@ origin = "Rust と Kotlin"
 stage = "syntax"
 code = "E0002"
 spec = ["7", "18.1"]
-rule = "範囲は `for` と `par` の見出しだけに書ける。値としては持てない"
+rule = "範囲は `for` と `par~` の見出しだけに書ける。値としては持てない"
 
 [[form.example]]
 source = '''
@@ -7356,9 +7356,9 @@ pub flow g(x: F32 at sample) -> F32 at sample {
 '''
 at = "2:8"
 
-# 対象は、直前が名前でも `if` / `match` でもない前置の `~` で、被演算子に接するもの（S-123、S-363）。
-# 名前の後の `~` は flow の呼び出しの印（空白は `space_before_tilde`）、`if` / `match` の後の `~` は
-# `if~` / `match~` の印（空白は `space_after_branch_keyword`、`else if` の後は `else_if_tilde`）。
+# 対象は、直前が名前でも `if` / `match` / `par` でもない前置の `~` で、被演算子に接するもの（S-123、S-363）。
+# 名前の後の `~` は flow の呼び出しの印（空白は `space_before_tilde`）、`if` / `match` / `par` の後の `~` は
+# `if~` / `match~` / `par~` の印（空白は `space_after_branch_keyword`、`else if` の後は `else_if_tilde`）。
 # 空白のある前置の `~ m` は一覧に無い形で、候補の無い E0002 である（空白を除く候補 `~m` 自体がこの行の
 # E0020 になり、候補の約束を満たさないため）。被演算子が括弧（`~(m)`）でも同じで、接していれば候補 `!(m)` の
 # E0020、空白のある `~ (m)` は一覧に無い形で候補の無い E0002 である（R-202）。
@@ -9358,6 +9358,7 @@ pub fn f(x: [F32; 2]) -> [F32; 2] {
 # 括弧の中では `if` / `match` と `~` の間の改行も同じ形（S-385、§2.6）: 候補の一つ目は `~` をキーワードの直後へ
 # 移す形、`~` が同じ行で被演算子に接するときだけ二つ目に `!` の形（`~` の後が空白か改行なら `!` は出さない）。
 # 括弧の外は `if` / `match` で行が終わり、行末の E0002（tests/spec/negative/syntax_tilde_after_newline.onsa）。
+# `par` と `~` の間の空白も同じ行で、`par` の後は添字の名前なので、`~` が名前に接していても `!` の形を並べない（S-745）。
 [[form]]
 id = "space_after_branch_keyword"
 kind = "foreign"
@@ -9365,7 +9366,7 @@ origin = "C 系"
 stage = "syntax"
 code = "E0020"
 spec = ["2.5", "2.6", "18.1"]
-rule = "`if~` / `match~` は `if` / `match` の直後に空白を空けずに `~` を書く。ビット反転は前置の `!`"
+rule = "`if~` / `match~` / `par~` は `if` / `match` / `par` の直後に空白を空けずに `~` を書く。ビット反転は前置の `!`"
 
 [[form.example]]
 source = '''
@@ -9421,6 +9422,36 @@ pub flow g(k: U32 at sample) -> F32 at sample {
     0 => saw~(1.0),
     _ => saw~(2.0),
   }
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par ~ i in 0 ..< 2 { x }
+  a
+}
+'''
+at = "2:15"
+fixed = ['''
+pub flow g(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par~ i in 0 ..< 2 { x }
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par ~i in 0 ..< 2 { x }
+  a
+}
+'''
+at = "2:15"
+fixed = ['''
+pub flow g(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par~ i in 0 ..< 2 { x }
+  a
 }
 ''']
 

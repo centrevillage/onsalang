@@ -72,7 +72,7 @@ pub flow hole_in_the_else_branch(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow hole_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     len_of("{sample_tick}")   //~ E0308
   }
   ys[0]

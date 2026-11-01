@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W4-20 U1/t, S-745: E0020 for a space between `par` and `~` (§2.6: "`if~` / `match~` / `par~` は `if` /
+// `match` / `par` の直後に空白を空けずに `~` を書く（空白を空けると E0020 で、修正候補は空白を除く形 … `par`
+// の後は添字の名前なので [`!` の形は] 並べない）"; foreign-forms.toml `space_after_branch_keyword`). The
+// candidate is one, `par~ i`, whether the `~` touches the index (`par ~i`) or not (`par ~ i`) or the
+// space is wide: after `if` the touching `~c` has the second candidate `if !c`, but after `par` comes
+// the name of the index, so there is no prefix reading to give (`fixes = 1` is the number of the
+// candidates of every error of this file). The main position is the `~` (as in
+// fixes/e0020_if_tilde_gap.onsa). The unit is read by the syntax stage, so the body is not judged. One
+// error per declaration unit (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow both_sides(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par~ i in 0 ..< 2 { x * i.round_f32() }  //~ E0020
+  a
+}
+
+pub flow touching_the_name(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par~ i in 0 ..< 2 { x * i.round_f32() }   //~ E0020
+  a
+}
+
+pub flow wide_gap(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par~ i in 0 ..< 2 { x * i.round_f32() }  //~ E0020
+  a
+}
+
+pub flow as_the_tail(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { x * i.round_f32() }          //~ E0020
+}
+
+pub flow as_the_tail_touching(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { x * i.round_f32() }           //~ E0020
+}
+
+pub flow as_an_argument(x: F32 at sample) -> F32 at sample {
+  pair_sum(par~ i in 0 ..< 2 { x * i.round_f32() })  //~ E0020
+}
+
+pub flow with_state_in_the_body(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par~ i in 0 ..< 2 { lp~(x * i.round_f32()) }  //~ E0020
+  a
+}
+
+pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })  //~ E0020
+  }
+}
+
+pub flow the_outer_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {                              //~ E0020
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+  }
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par~ i in 0 ..< 2 { x * i.round_f32() }
+  a
+}

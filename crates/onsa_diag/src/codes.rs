@@ -393,7 +393,7 @@ codes! {
     E0807 = 807, Flow, [Flow], Optional, Optional,
         "`delay~` with length 1; write `prev~` instead";
     E0808 = 808, Flow, [Flow], Optional, Optional,
-        "delay length or `par` range out of its allowed values (a non-constant one is E0417)";
+        "delay length or `par~` range out of its allowed values (a non-constant one is E0417)";
     E0809 = 809, Flow, [Flow, Build], Optional, Optional,
         "`@param` is missing, misplaced, or malformed";
     E0810 = 810, Flow, [Names, Flow], Optional, Optional,

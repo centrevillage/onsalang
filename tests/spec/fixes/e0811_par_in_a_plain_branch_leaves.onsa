@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "39:5"
+// code = "E0811"
+// candidate = 1
+// leaves = ["39:5 E0811"]
+//
+// [[test.fix]]
+// at = "49:5"
+// code = "E0811"
+// candidate = 1
+// leaves = ["49:5 E0811"]
+//
+// [[test.fix]]
+// at = "55:10"
+// code = "E0811"
+// candidate = 1
+// leaves = ["55:10 E0811"]
+
+// W4-20 U1/t, S-745: the second error of e0811_par_in_a_plain_branch.onsa. After the candidate (the `~`
+// inserted after `par`) the names stage passes and the flow stage reports the error of the branch: a
+// `par~` is one of the things with state that a branch of a plain `if` or `match` cannot hold (§11.5;
+// §18.1: "`if` / `match` の枝の状態を持つものの E0811 … は flow の検査の段である"). So the candidate does not
+// leave a clean file (no `clean`), and the entries of the header name the error that stays (`leaves`:
+// the position in the text after the candidate, the start of the `par~`). The candidates of that error
+// (`if~` / `match~`, lifting the state out into a `let`) are not asked for here. This version reports
+// the branch as E0200 (a flow instance, a delay or a `par` evaluated on some samples only, W7-06), so
+// this file is on the list of what is waited for (until W7-06); the first file is not.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow in_the_then_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if c {
+    par i in 0 ..< 2 { lp~(x * i.round_f32()) }     //~ E0811
+  } else {
+    [x, x]
+  }
+}
+
+pub flow in_the_else_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if c {
+    [x, x]
+  } else {
+    par i in 0 ..< 2 { lp~(x * i.round_f32()) }     //~ E0811
+  }
+}
+
+pub flow in_an_arm(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  match k {
+    0 => par i in 0 ..< 2 { lp~(x * i.round_f32()) },  //~ E0811
+    _ => [x, x],
+  }
+}

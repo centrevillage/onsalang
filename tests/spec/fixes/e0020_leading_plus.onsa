@@ -131,7 +131,7 @@ pub flow in_a_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par(x: F32 at sample, y: F32 at sample) -> [F32; 4] at sample {
-  par i in 0..<4 {
+  par~ i in 0..<4 {
     mix(x
         +y, i.round_f32())                          //~ E0020
   }

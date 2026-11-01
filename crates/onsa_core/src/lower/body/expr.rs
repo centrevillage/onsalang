@@ -141,7 +141,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         AK::Handle { .. } => return Err(unsupported(span, Feature::EffectHandlers, &[])),
         AK::Unsafe(_) => return Err(unsupported(span, Feature::Unsafe, &[])),
         // Sema rejects `par` outside a flow body: lowering never sees one.
-        AK::Par { .. } => return Err(internal(span, "`par` outside a flow")),
+        AK::Par { .. } => return Err(internal(span, "`par~` outside a flow")),
         &AK::Binary { op, op_span, lhs, rhs } => return lower_binary(lw, cx, e, (op, op_span), lhs, rhs, ty),
         AK::Cast { expr: inner, .. } => {
             let x = lower_expr(lw, cx, *inner)?;

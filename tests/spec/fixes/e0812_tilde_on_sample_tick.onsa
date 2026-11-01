@@ -23,7 +23,7 @@ pub flow tick_as_the_output(x: F32 at sample) -> U32 at sample {
 }
 
 pub flow tick_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     x * (sample_tick~() as F32)                     //~ E0812 @10
   }
   ys[0] + ys[1]

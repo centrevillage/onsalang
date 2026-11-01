@@ -1,5 +1,5 @@
-//! The rows of the flow syntax (W3-09): the `~` of `if~` / `match~` with a
-//! blank (S-354), the `~` on a later `if` of a chain (S-355), and the clocks
+//! The rows of the flow syntax (W3-09): the `~` of `if~` / `match~` /
+//! `par~` with a blank (S-354, S-745), the `~` on a later `if` of a chain (S-355), and the clocks
 //! written on a binding or in a type (S-102, S-356).
 
 use onsa_diag::{Diagnostic, Edit, Fix, Span};
@@ -11,15 +11,18 @@ use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
 use crate::edits::{Insertions, insert_apart};
 use crate::token::{Gap, TokenKind};
 
-// ------------------------------------------------------------ `if~`, `match~`
+// ------------------------------------------------------------ `if~`, `match~`, `par~`
 
-/// Where an `if` or a `match` stands whose `~` the parser failed at
+/// Where an `if`, a `match` or a `par` stands whose `~` the parser failed at
 /// ([`Cursor::branch`]).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Branch {
     /// A `match`, or the first `if` of a chain: its `~` is the mark of
-    /// `match~` / `if~` (§2.6).
+    /// `match~` / `if~` (§2.6), before an expression.
     First,
+    /// A `par`: its `~` is the mark of `par~` (§2.6), before the name of the
+    /// replication index, so a `~` there has no prefix reading (S-745).
+    Replication,
     /// The `if` after an `else`: a later link of the chain of the first `if`
     /// (§11.5).
     Later,
@@ -28,7 +31,8 @@ pub(super) enum Branch {
 impl Cursor<'_> {
     /// The place of the keyword at token `kw` when the parser failed right
     /// after it, in the expression it opened: the one judgment of the table
-    /// of whether a `~` after `kw` belongs to `if~` / `match~` (S-354, S-355).
+    /// of whether a `~` after `kw` belongs to `if~` / `match~` / `par~`
+    /// (S-354, S-355, S-745).
     /// The parser opens the node of an `if` or a `match` at the keyword (the
     /// `if` of a guard opens none, so it is no branch: its `~` is the prefix
     /// `~` of `faust_bit_not`), and reads the `if` after an `else` as the
@@ -41,6 +45,7 @@ impl Cursor<'_> {
         }
         match (node, self.kind(kw)) {
             (NodeKind::MatchExpr, TokenKind::KwMatch) => Some(Branch::First),
+            (NodeKind::ParExpr, TokenKind::KwPar) => Some(Branch::Replication),
             (NodeKind::IfExpr, TokenKind::KwIf) if self.later_link(k) => Some(Branch::Later),
             (NodeKind::IfExpr, TokenKind::KwIf) => Some(Branch::First),
             _ => None,
@@ -64,18 +69,20 @@ impl Cursor<'_> {
     }
 }
 
-/// `if ~ c`, `if ~c`, `match ~ x` (S-354): the `~` of the first `if` of a
-/// chain, or of a `match`, after a blank on the line, or after a line break
+/// `if ~ c`, `if ~c`, `match ~ x`, `par ~ i` (S-354, S-745): the `~` of the
+/// first `if` of a chain, or of a `match` or a `par`, after a blank on the line, or after a line break
 /// in a list or the arms of a `match`, where it is a blank (S-385). The
 /// first candidate takes the blank out (`if~ c`), or moves the `~` up to the
 /// keyword; a `~` that touches its operand (on its line, with no blank) is
-/// also the bitwise negation of C, whose candidate (`if !c`) is the second.
+/// also the bitwise negation of C, whose candidate (`if !c`) is the second,
+/// but after `par`, where a name follows (§2.6).
 pub(super) fn space_after_branch_keyword(c: &Cursor) -> Option<Hit> {
     if c.want != Want::Expr || c.kind(c.at) != TokenKind::Tilde || !c.gap(c.at).is_some() {
         return None;
     }
     let kw = c.sig_before(c.at)?;
-    if c.branch(kw) != Some(Branch::First) {
+    let branch = c.branch(kw);
+    if !matches!(branch, Some(Branch::First | Branch::Replication)) {
         return None;
     }
     let title = format!("write `{}~`", c.src(kw));
@@ -89,7 +96,9 @@ pub(super) fn space_after_branch_keyword(c: &Cursor) -> Option<Hit> {
         super::edits::move_token_up(c, &title, c.at)?
     };
     let mut fixes = vec![first];
-    fixes.extend(bit_not(c).unwrap_or_default());
+    if branch == Some(Branch::First) {
+        fixes.extend(bit_not(c).unwrap_or_default());
+    }
     hit(c.span(c.at), fixes)
 }
 

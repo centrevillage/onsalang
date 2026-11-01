@@ -1064,8 +1064,10 @@ pub enum ExprKind {
     },
     /// `unsafe { ... }`
     Unsafe(ExprId),
-    /// `par i in a..<b { ... }`, `par i in a..=b { ... }`
+    /// `par~ i in a..<b { ... }`, `par~ i in a..=b { ... }`; `tilde` is its
+    /// `~`, whose absence in a flow body is the names stage's E0811 (§11.5).
     Par {
+        tilde: Option<Span>,
         var: Ident,
         range: RangeHead,
         body: ExprId,

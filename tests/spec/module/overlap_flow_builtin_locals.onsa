@@ -72,14 +72,14 @@ pub flow let_typed(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_index_prev(x: F32 at sample) -> F32 at sample {
-  let ys = par prev in 0 ..< 2 {                                      //~ E0304
+  let ys = par~ prev in 0 ..< 2 {                                      //~ E0304
     x * 2.0
   }
   ys[0]
 }
 
 pub flow par_index_sample_rate(x: F32 at sample) -> F32 at sample {
-  let ys = par sample_rate in 0 ..< 2 {                               //~ E0304
+  let ys = par~ sample_rate in 0 ..< 2 {                               //~ E0304
     x * 2.0
   }
   ys[0]

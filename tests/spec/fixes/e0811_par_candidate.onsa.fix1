@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W4-20 U1/t, S-745: the E0811 of a `par` without the `~` in a flow body has one candidate, the insertion
+// of the `~` right after `par` (§11.5: "`~` を足す修正候補を示す"; §2.6). It is the one candidate whatever
+// the body is (with state, without state), whatever the place is (a `let`, the tail, an argument) and
+// whatever the nest is (the one that lacks the `~`): `fixes = 1` is the number of the candidates of every
+// error of this file. The candidate of a `par` without state is the insertion, not the removal of the
+// `par`: the form with the `~` is no error (§11.5), so no E0812 follows. What the candidates leave
+// behind is in the files that are named e0811_par_clean_*. The errors are in e0811_par_without_tilde.onsa
+// and e0811_par_nested.onsa without the candidates. One error per flow (P-01).
+
+use std.math.{floor}
+
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase) + f0 / sample_rate())
+  2.0 * phase - 1.0
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+pub rt fn total(xs: [F32; 4]) -> F32 {
+  xs[0] + xs[1] + xs[2] + xs[3]
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow with_state_in_a_let(f0: F32 at block) -> [F32; 4] at sample {
+  let saws = par~ i in 0 ..< 4 { saw~(f0) }          //~ E0811
+  saws
+}
+
+pub flow with_state_as_the_tail(f0: F32 at block) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { saw~(f0) }                     //~ E0811
+}
+
+pub flow with_state_as_an_argument(f0: F32 at block) -> F32 at sample {
+  total(par~ i in 0 ..< 4 { saw~(f0) })              //~ E0811
+}
+
+pub flow without_state_in_a_let(x: F32 at sample) -> [F32; 4] at sample {
+  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }   //~ E0811
+  ys
+}
+
+pub flow without_state_as_the_tail(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { x * i.round_f32() }            //~ E0811
+}
+
+pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { prev~(x * (i + j).round_f32()) })  //~ E0811
+  }
+}
+
+pub flow the_outer_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {                                //~ E0811
+    pair_sum(par~ j in 0 ..< 2 { prev~(x * (i + j).round_f32()) })
+  }
+}
+
+pub flow in_a_block_body(f0: F32 at block, detune: F32 at block) -> [F32; 4] at sample {
+  let saws = par~ i in 0 ..< 4 {                     //~ E0811
+    saw~(f0 * (1.0 + detune * i.round_f32()))
+  }
+  saws
+}

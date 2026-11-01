@@ -1371,11 +1371,11 @@ fn a_range_with_one_end_in_a_header_is_e0002_with_a_note_and_no_candidate() {
         ),
         (
             "par_from",
-            "pub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par i in 0.. {\n    x * i.round_f32()\n  }\n}\n",
+            "pub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par~ i in 0.. {\n    x * i.round_f32()\n  }\n}\n",
         ),
         (
             "par_up_to",
-            "pub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par i in ..<4 {\n    x * i.round_f32()\n  }\n}\n",
+            "pub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par~ i in ..<4 {\n    x * i.round_f32()\n  }\n}\n",
         ),
     ];
     let d = Dir::new("header");
@@ -1475,7 +1475,7 @@ fn a_block_at_the_start_of_an_expression_in_a_header_is_e0002_with_a_note_and_no
         ),
         (
             "par_end",
-            "pub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par i in 0..<{ 4 } {\n    x * i.round_f32()\n  }\n}\n",
+            "pub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par~ i in 0..<{ 4 } {\n    x * i.round_f32()\n  }\n}\n",
         ),
     ];
     let good = [

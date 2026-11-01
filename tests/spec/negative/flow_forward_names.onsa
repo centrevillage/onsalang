@@ -17,7 +17,7 @@ pub rt fn wrap(x: F32) -> F32 {
 // ---- A use before the `let`, without `^` ----
 
 pub flow forward_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let xs = par i in 0..<2 {
+  let xs = par~ i in 0..<2 {
     y * i.round_f32()                                             //~ E0801
   }
   let y = x

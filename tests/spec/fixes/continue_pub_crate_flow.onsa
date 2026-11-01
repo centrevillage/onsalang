@@ -29,7 +29,7 @@ pub flow chain(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow bank(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..<2 {
+  let ys = par~ i in 0..<2 {
     lp~(x * i.round_f32())
   }
   ys[0] + ys[1]

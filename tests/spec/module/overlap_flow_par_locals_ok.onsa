@@ -8,7 +8,7 @@
 // siblings can have the same index. These hold today; overlap_flow_par.onsa has the names of the module.
 
 pub flow index_over_input(x: F32 at sample) -> F32 at sample {
-  let ys = par x in 0 ..< 4 {   //~ E0304
+  let ys = par~ x in 0 ..< 4 {   //~ E0304
     prev~(x)
   }
   ys[0]
@@ -16,15 +16,15 @@ pub flow index_over_input(x: F32 at sample) -> F32 at sample {
 
 pub flow index_over_let(x: F32 at sample) -> F32 at sample {
   let a = x * 2.0
-  let ys = par a in 0 ..< 4 {   //~ E0304
+  let ys = par~ a in 0 ..< 4 {   //~ E0304
     prev~(x)
   }
   ys[0]
 }
 
 pub flow index_over_index(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 4 {
-    par i in 0 ..< 2 {   //~ E0304
+  let ys = par~ i in 0 ..< 4 {
+    par~ i in 0 ..< 2 {   //~ E0304
       prev~(x)
     }
   }
@@ -32,10 +32,10 @@ pub flow index_over_index(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow sibling_indices(x: F32 at sample) -> F32 at sample {
-  let a = par i in 0 ..< 2 {
+  let a = par~ i in 0 ..< 2 {
     prev~(x)
   }
-  let b = par i in 0 ..< 2 {
+  let b = par~ i in 0 ..< 2 {
     prev~(x)
   }
   a[0] + b[0]

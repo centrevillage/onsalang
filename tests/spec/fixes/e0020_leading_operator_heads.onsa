@@ -92,7 +92,7 @@ pub fn for_head_end(n: U32) -> U32 {
 }
 
 pub flow par_head_end(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0..<4
+  par~ i in 0..<4
     + 0 {                                           //~ E0020
     x
   }

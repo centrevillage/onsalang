@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "25:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// W4-20 U1/t, S-745: a line break between `par` and the `~` inside parentheses; the one candidate moves the `~` to the keyword. The one error of the file has the one candidate and the file with it
+// checks clean (`clean` is about the whole file, so it has this one error). The main position (`at`) is the
+// `~`. One error per declaration unit (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub rt fn two(a: [F32; 2], b: F32) -> F32 {
+  a[0] + a[1] + b
+}
+
+pub flow replicas(x: F32 at sample) -> F32 at sample {
+  two(par
+    ~ i in 0 ..< 2 { lp~(x * i.round_f32()) }, 1.0)  //~ E0020
+}

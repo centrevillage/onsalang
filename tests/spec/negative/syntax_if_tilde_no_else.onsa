@@ -45,7 +45,7 @@ pub flow no_else_in_an_arm(a: Bool at sample, b: Bool at sample) -> F32 at sampl
 }
 
 pub flow no_else_in_a_par(c: Bool at sample) -> [F32; 2] at sample {
-  par i in 0..<2 {
+  par~ i in 0..<2 {
     if~ c { 1.0 }                                   //~ E0002
   }
 }

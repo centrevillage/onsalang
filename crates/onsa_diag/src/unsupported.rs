@@ -108,7 +108,7 @@ features! {
     TildeBranches: Language, "`{}`, which evaluates every branch", None;
     /// K-08, S-110: what the branch does not evaluate holds state (W7-06).
     StatefulInBranch: Language,
-        "a flow instance, a delay or a `par` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`, an argument a method evaluates on some paths)",
+        "a flow instance, a delay or a `par~` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`, an argument a method evaluates on some paths)",
         Some("bind it with a `let` before the expression that holds it");
     /// K-08, R-13: the store of the inner delay comes first (W7-07).
     NestedDelays: Language, "a delay inside the first argument of a delay",
@@ -123,7 +123,7 @@ features! {
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");
     /// R-03: the look-back of a replica (W7-04).
-    FeedbackInPar: Language, "a feedback reference `^name` inside a `par`", None;
+    FeedbackInPar: Language, "a feedback reference `^name` inside a `par~`", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
     SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
     /// S-44, S-116: its E0020 is the names stage's (W7-04).
@@ -160,11 +160,11 @@ features! {
     /// type's maximum (W8-03); never lowered as `..<` (R-81).
     InclusiveRangeFor: Language, "a range with its end (`a..=b`) in a `for` head",
         Some("write `a..<b + 1` when `b + 1` fits in the type");
-    /// S-224, S-257: the `b - a + 1` instances of `par i in a..=b` (W7-04).
-    InclusiveRangePar: Language, "a range with its end (`a..=b`) in a `par` head", None;
+    /// S-224, S-257: the `b - a + 1` instances of `par~ i in a..=b` (W7-04).
+    InclusiveRangePar: Language, "a range with its end (`a..=b`) in a `par~` head", None;
     /// R-195: the values of the constant expressions of §4.5 other than an
     /// integer literal and a `const` with a literal value (W7-02).
-    FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par` bound, a delay length, the maximum of a `vdelay~`)",
+    FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par~` bound, a delay length, the maximum of a `vdelay~`)",
         Some("write it as an integer literal, or as a `const` whose value is an integer literal");
     VariantCtorValues: Language, "variant constructors as function values", None;
     CallsThroughFnValues: Language, "calls through function values", None;
@@ -184,7 +184,7 @@ features! {
     DerivedClocks: Language, "the declaration of a derived clock (the reserved word `clock`)", None;
     ConditionalInstances: Language, "running an instance on a condition (the reserved word `when`)", None;
     ResetInstances: Language, "resetting an instance to its initial state (the reserved word `reset_if`)", None;
-    SerialFlows: Language, "the serial copies of a flow (the reserved word `ser`)", None;
+    SerialFlows: Language, "the serial copies of a flow, `ser~` (the reserved word `ser`)", None;
     /// Not yet a keyword of the lexer (W5-11): read where a name is
     /// declared or taken (`onsa_sema`).
     StaticMarks: Language, "the mark of what is static only (the reserved word `static`)", None;

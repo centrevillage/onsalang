@@ -175,7 +175,7 @@ impl<'a> Checker<'a> {
             StmtKind::Let { pat, init, .. } => return self.check_flow_let(s, *pat, *init),
             StmtKind::Var { .. } => "`var`; a flow has no mutable variables, state lives in `prev~` / `delay~`",
             StmtKind::Assign { .. } => "assignment; every signal is defined once by `let`",
-            StmtKind::For { .. } => "`for`; a flow body has no loops (use `par` to replicate structure)",
+            StmtKind::For { .. } => "`for`; a flow body has no loops (use `par~` to replicate structure)",
             StmtKind::While { .. } => "`while`; a flow body has no loops",
             StmtKind::Break | StmtKind::Continue => "loop control; a flow body has no loops",
             StmtKind::Return(_) => "`return`; the output is the final expression",
@@ -276,7 +276,7 @@ impl<'a> Checker<'a> {
             ExprKind::Unsafe(_) => "`unsafe`",
             ExprKind::Try(_) => "`?`; a flow has no error path",
             ExprKind::Move(_) => "`move`; signals are values and are never moved",
-            ExprKind::Par { var, range, body } => {
+            ExprKind::Par { var, range, body, .. } => {
                 let (var, range, body) = (var.clone(), *range, *body);
                 return self.check_par(e, &var, &range, body, expected).map(Some);
             }
@@ -293,8 +293,8 @@ impl<'a> Checker<'a> {
         Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
     }
 
-    /// `par i in a..<b { e }` (§11.5): `i` is an `Init`-rate `U32`, the result is `[T; b - a]`.
-    /// `par i in a..=b` (`b - a + 1` instances) is E0200 until W7-04 (S-224).
+    /// `par~ i in a..<b { e }` (§11.5): `i` is an `Init`-rate `U32`, the result is `[T; b - a]`.
+    /// `par~ i in a..=b` (`b - a + 1` instances) is E0200 until W7-04 (S-224).
     fn check_par(
         &mut self,
         e: ExprId,
@@ -305,8 +305,8 @@ impl<'a> Checker<'a> {
     ) -> R<TyId> {
         let span = self.expr(e).span;
         self.range_end_forms(range)?;
-        let lo = self.flow_const_u32(range.lo, "a `par` bound")?;
-        let hi = self.flow_const_u32(range.hi, "a `par` bound")?;
+        let lo = self.flow_const_u32(range.lo, "a `par~` bound")?;
+        let hi = self.flow_const_u32(range.hi, "a `par~` bound")?;
         let end = range.end;
         let (empty, count) = match end {
             RangeEnd::Excluded => (hi <= lo, "`b - a`"),
@@ -317,7 +317,7 @@ impl<'a> Checker<'a> {
             return Err(self.flow_err(
                 Code::E0808,
                 span,
-                format!("`par` replicates {count} instances; the bounds `{lo}{sym}{hi}` give none (§11.5)"),
+                format!("`par~` replicates {count} instances; the bounds `{lo}{sym}{hi}` give none (§11.5)"),
             ));
         }
         if end == RangeEnd::Included {

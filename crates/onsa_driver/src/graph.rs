@@ -116,7 +116,7 @@ impl Graph<'_> {
         let what = match (node, node.delay()) {
             (_, Some(d)) => format!("{}~", d.name()),
             (Node::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
-            (Node::Par { from, to, .. }, None) => format!("par {from}..<{to}"),
+            (Node::Par { from, to, .. }, None) => format!("par~ {from}..<{to}"),
             // `Node::delay` names every delay.
             (Node::Prev { .. } | Node::Delay { .. } | Node::Vdelay { .. }, None) => {
                 onsa_diag::internal::bug(None, "a delay node without its delay")
@@ -369,6 +369,16 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
         assert!(dot.contains("\"y1\" [label=\"y1 = prev~: F32 at sample\""), "{dot}");
         assert!(dot.contains("  \"x\" -> \"y\"\n"), "{dot}");
         assert!(dot.contains("  \"y\" -> \"out\"\n"), "{dot}");
+    }
+
+    /// The node of a `par~` names the replication with its `~` and its range,
+    /// as an instance names its flow (`saw~`, spec/tools.md §1.1, S-745).
+    #[test]
+    fn a_par_node_is_labelled_with_its_tilde() {
+        let src = "pub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  let xs = par~ i in 0 ..< 2 { x }\n  xs\n}\n";
+        let analyzed = analyzed(PackageInput::single_file("p.onsa", src));
+        let dot = super::graph(&analyzed, "f", None).unwrap();
+        assert!(dot.contains("[label=\"xs = par~ 0..<2: [F32; 2] at sample\""), "{dot}");
     }
 
     /// §18.2 (S-323): a name is the one flow of that name in the scope (the

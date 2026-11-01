@@ -513,7 +513,7 @@ const LEVELS: &[(&str, &str, usize)] = &[
     ("an else if chain", "  if~ c { x } else if d { y } else { z }", 4),
     ("match with a tilde", "  match~ k {\n    0 => x,\n    _ => y,\n  }", 2),
     ("match with a tilde and a clock in an arm", "  match~ k {\n    0 => x at sample,\n    _ => y,\n  }", 3),
-    ("par and a clock in its block", "  par i in 0..<4 { x at sample }", 4),
+    ("par and a clock in its block", "  par~ i in 0..<4 { x at sample }", 4),
     ("a delay with an init", "  prev~(x, 1.0)", 2),
     ("a clock in the first argument of a delay", "  delay~(x at sample, 4)", 3),
 ];

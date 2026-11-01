@@ -107,7 +107,7 @@ pub flow value_in_a_branch(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow value_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     x~(1.0) * i.round_f32()                         //~ E0812 @5
   }
   ys[0] + ys[1]

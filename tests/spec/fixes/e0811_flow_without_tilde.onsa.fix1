@@ -54,7 +54,7 @@ pub flow inner_of_two_calls(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     lp~(x) * i.round_f32()                           //~ E0811 @5
   }
   ys[0] + ys[1]

@@ -245,7 +245,7 @@ fn a_wrong_symbol_in_a_par_header_is_e0020_with_the_same_two_candidates() {
     ];
     let wrap = |header: &str| {
         format!(
-            "const N: U32 = 3\n\npub flow f(x: F32 at sample) -> [F32; 4] at sample {{\n  par i in {header} {{\n    x * i.round_f32()\n  }}\n}}\n"
+            "const N: U32 = 3\n\npub flow f(x: F32 at sample) -> [F32; 4] at sample {{\n  par~ i in {header} {{\n    x * i.round_f32()\n  }}\n}}\n"
         )
     };
     let d = Dir::new("par");
@@ -419,7 +419,7 @@ fn a_bare_clock_in_an_end_is_e0011() {
         assert_eq!(out, loop_with(fixed), "{header}");
     }
     // The head of a `par` in a flow.
-    let src = "pub flow g(n: U32 at init) -> [U32; 4] at sample {\n  par i in 0..<4 at init {\n    i\n  }\n}\n";
+    let src = "pub flow g(n: U32 at init) -> [U32; 4] at sample {\n  par~ i in 0..<4 at init {\n    i\n  }\n}\n";
     let path = d.file("b.onsa", src);
     let diags = check(&path);
     assert_eq!(diags.len(), 1, "{diags:?}");

@@ -72,7 +72,7 @@ pub flow echo(x: F32 at sample, g: F32 at block) -> F32 at sample {
 
 pub flow chain(x: F32 at sample) -> F32 at sample {
   let chained = only_in_alpha~(x)
-  let copies = par i in 0 ..< 3 {
+  let copies = par~ i in 0 ..< 3 {
     only_in_alpha~(chained)
   }
   (copies[0] + copies[1] + copies[2]) * 0.25

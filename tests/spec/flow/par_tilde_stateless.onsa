@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+
+// W4-20 U1/t, S-745: a `par~` whose body holds nothing with state (no instance, no built-in delay,
+// no `par~` that has one) is no error (§11.5: "それでも誤りにはしない（`~` を外した形が無いので … E0812 を
+// 当てない）"; §2.6: "状態を持つものを含まない `par~` は誤りにしない"). This differs from `if~` and `match~`
+// with no state in their branches, which are E0812 (negative/flow_state_branches.onsa), because there is no
+// form of the replication without the `~` to take the `~` off to. The same holds for each place of the
+// replication and for nesting. A `par~` with state in its body is in par_tilde_forms.onsa.
+
+pub rt fn scale(x: F32, i: U32) -> F32 {
+  x * i.round_f32()
+}
+
+pub rt fn total(xs: [F32; 4]) -> F32 {
+  xs[0] + xs[1] + xs[2] + xs[3]
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow as_the_tail(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { x * i.round_f32() }
+}
+
+pub flow as_a_let(x: F32 at sample) -> [F32; 4] at sample {
+  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }
+  ys
+}
+
+pub flow as_an_argument(x: F32 at sample) -> F32 at sample {
+  total(par~ i in 0 ..< 4 { x * i.round_f32() })
+}
+
+pub flow with_a_function_call(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { scale(x, i) }
+}
+
+pub flow with_an_if(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { if x > i.round_f32() { 1.0 } else { 0.0 } }
+}
+
+pub flow with_a_constant_body_that_reads_the_index(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 1 ..< 5 { i.round_f32() }
+}
+
+pub flow with_a_stateless_inner(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { x * (i + j).round_f32() })
+  }
+}
+
+pub flow beside_a_flow_with_state(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }
+  lp~(total(ys))
+}
+
+pub flow stateless_beside_stateful(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }
+  let zs = par~ i in 0 ..< 4 { lp~(x) * i.round_f32() }
+  total(ys) + total(zs)
+}

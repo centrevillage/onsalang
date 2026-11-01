@@ -194,13 +194,13 @@ pub fn octal_prefix_in_a_for_header() -> I32 {
 }
 
 pub flow leading_zero_in_a_par_header(x: F32 at sample) -> [F32; 8] at sample {
-  par i in 0..<010 {                                //~ E0020
+  par~ i in 0..<010 {                                //~ E0020
     x * i.round_f32()
   }
 }
 
 pub flow octal_prefix_in_a_par_header(x: F32 at sample) -> [F32; 8] at sample {
-  par i in 0..<0o10 {                               //~ E0020
+  par~ i in 0..<0o10 {                               //~ E0020
     x * i.round_f32()
   }
 }

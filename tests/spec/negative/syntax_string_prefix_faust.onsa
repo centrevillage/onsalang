@@ -51,7 +51,7 @@ pub flow in_a_branch_body(x: F32 at sample, c: Bool at sample) -> F32 at sample 
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ds = par i in 0..<2 {
+  let ds = par~ i in 0..<2 {
     x'                                              //~ E0002
   }
   ds[0]

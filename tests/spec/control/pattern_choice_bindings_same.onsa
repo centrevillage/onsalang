@@ -128,7 +128,7 @@ pub flow pick(x: F32 at sample, k: U32 at block) -> F32 at sample {
 }
 
 pub flow in_par(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
-  par i in 0 ..< 2 {
+  par~ i in 0 ..< 2 {
     match (i, k) {
       (j, 0) | (0, j) => x * j.round_f32(),
       _ => x,

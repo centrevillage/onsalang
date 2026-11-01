@@ -104,13 +104,13 @@ pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par(x: F32 at sample) -> [F32; 0X4] at sample {
-  par i in 0B0..<0x4 {
+  par~ i in 0B0..<0x4 {
     x * i.round_f32() + 1E-1
   }
 }
 
 pub flow in_a_par_over_a_const(x: F32 at sample) -> [F32; 0x10] at sample {
-  par i in 0..<COUNT {
+  par~ i in 0..<COUNT {
     x * i.round_f32()
   }
 }

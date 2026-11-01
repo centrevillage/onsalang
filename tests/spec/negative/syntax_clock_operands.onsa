@@ -101,7 +101,7 @@ pub flow at_in_a_match_arm(p: F32 at block, x: F32 at sample, k: U32 at sample) 
 }
 
 pub flow at_in_a_par(p: F32 at block, x: F32 at sample) -> F32 at sample {
-  let a = par i in 0..<4 {
+  let a = par~ i in 0..<4 {
     x + p at sample   //~ E0011
   }
   a[0]

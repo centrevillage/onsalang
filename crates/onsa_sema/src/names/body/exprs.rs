@@ -11,7 +11,7 @@ use onsa_syntax::ast::{
     StrLit, StrSeg, TypeId, TypeKind,
 };
 
-use super::flow::Outside;
+use super::flow::{Outside, par_head};
 use super::kinds::Want;
 use super::paths::Place;
 use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Walker};
@@ -55,10 +55,11 @@ impl Walker<'_> {
             ExprKind::If { tilde: Some(t), .. } | ExprKind::Match { tilde: Some(t), .. } if !self.flow => {
                 Err(self.outside(Outside::Branches, Span { end: t.end, ..ast.expr(e).span }))
             }
-            ExprKind::Par { .. } if !self.flow => {
-                let span = ast.expr(e).span;
-                Err(self.outside(Outside::Par, Span { end: span.start + "par".len() as u32, ..span }))
+            // `par` and `par~` alike (S-745), up to the `~`.
+            ExprKind::Par { tilde, .. } if !self.flow => {
+                Err(self.outside(Outside::Par, par_head(ast.expr(e).span, *tilde)))
             }
+            ExprKind::Par { tilde: None, .. } => Err(self.par_without_tilde(e)),
             // `^y`: a local, or a builtin name of the flow (S-720); any other
             // name is the flow stage's until W7-04.
             ExprKind::Feedback(name) => {
@@ -95,7 +96,7 @@ impl Walker<'_> {
             // Forms this version does not have (E0200 of the types stage),
             // whose names it does not read.
             ExprKind::Handle { .. } | ExprKind::Unsafe(_) => Err(self.fail(Fail::Later)),
-            ExprKind::Par { var, range, body } => {
+            ExprKind::Par { var, range, body, .. } => {
                 let declare = |w: &mut Self| w.declare(var, BindingKind::ParVar, Origin::Par(e), None).map(drop);
                 self.ahead(declare)?;
                 self.const_expr(range.lo)?;

@@ -232,7 +232,7 @@ pub enum NodeKind {
     HandleExpr,
     /// `unsafe Block`
     UnsafeExpr,
-    /// `par name in RangeExpr Block`
+    /// `par~ name in RangeExpr Block`
     ParExpr,
     /// `move Expr`
     MoveExpr,

@@ -59,7 +59,7 @@ pub flow marks_as_arguments_of_one_another(x: F32 at sample) -> F32 at sample {
 pub flow marks_in_a_branch_and_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let a = lp~(x)
   let y = if a > 0.0 { g(a) } else { P.new(a).get() }
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     lp~(g(y)) * i.round_f32() + sample_rate()
   }
   ys[0] + ys[1]

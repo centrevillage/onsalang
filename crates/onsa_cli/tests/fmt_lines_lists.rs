@@ -1614,8 +1614,8 @@ fn lists_in_a_closure_a_generic_call_a_loop_and_a_par() {
         ),
         flow_body(
             "a par with a one-line list and a block",
-            &["  par i in 0 ..< 2 {", "    mix(x, i.round_f32(),)", "  }"],
-            &["  par i in 0 ..< 2 {", "    mix(x, i.round_f32())", "  }"],
+            &["  par~ i in 0 ..< 2 {", "    mix(x, i.round_f32(),)", "  }"],
+            &["  par~ i in 0 ..< 2 {", "    mix(x, i.round_f32())", "  }"],
         ),
         flow_body(
             "a branch with a block in each side",

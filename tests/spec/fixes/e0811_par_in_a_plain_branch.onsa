@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W4-20 U1/t, S-745: a `par` without the `~` in a branch of a plain `if` or `match` is judged by two
+// stages (§18.1), and the names stage comes first: "`par~` の `~` の有無（E0811、§11.5）" is an error of
+// the names stage, so the first (and only) error of the unit is the `par` without the `~`, whatever the
+// body is, and its one candidate is the insertion of the `~` (§11.5; `fixes = 1`: not the candidates of
+// the error of the branch). The error of the branch, "`if` / `match` の枝の状態を持つものの E0811", is of the
+// flow stage, which a unit with an error of the names stage does not reach ("後の段の診断が既に出ていて
+// も報告しない"), so it is not marked here. What stays after the candidate is in
+// e0811_par_in_a_plain_branch_leaves.onsa.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow in_the_then_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if c {
+    par i in 0 ..< 2 { lp~(x * i.round_f32()) }     //~ E0811
+  } else {
+    [x, x]
+  }
+}
+
+pub flow in_the_else_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if c {
+    [x, x]
+  } else {
+    par i in 0 ..< 2 { lp~(x * i.round_f32()) }     //~ E0811
+  }
+}
+
+pub flow in_an_arm(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  match k {
+    0 => par i in 0 ..< 2 { lp~(x * i.round_f32()) },  //~ E0811
+    _ => [x, x],
+  }
+}
+
+pub flow in_a_let_of_a_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  let ys = if c {
+    par i in 0 ..< 2 { lp~(x * i.round_f32()) }     //~ E0811
+  } else {
+    [x, x]
+  }
+  ys
+}
+
+pub flow without_state_in_a_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if c {
+    par i in 0 ..< 2 { x * i.round_f32() }          //~ E0811
+  } else {
+    [x, x]
+  }
+}

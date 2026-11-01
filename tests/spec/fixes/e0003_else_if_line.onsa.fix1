@@ -132,7 +132,7 @@ pub flow in_a_flow(c: Bool at sample, d: Bool at sample, x: F32 at sample) -> F3
 }
 
 pub flow in_a_par(c: Bool at sample, d: Bool at sample, x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0..<4 {
+  par~ i in 0..<4 {
     if c {
       x
     } else if d {

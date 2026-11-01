@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5"]
+
+// W4-20 U1/t, S-745: a `par~` in the body of a `par~` (§11.5). Each `par~` has its own `~` (both are
+// written `par~`; the nesting is no reason to write one of them without). The inner one is the tail of the
+// outer body or an argument in it (a `let` in a body is E0806, §11.2). The
+// result of the outer one has the type `[T; N]` of the elements, and the inner replicas are separate
+// instances in each outer replica. The index of the outer `par~` is readable in the inner body. The
+// forms with a `~` missing on one of the two are E0811 (negative/e0811_par_nested.onsa).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub rt fn total(xs: [F32; 3]) -> F32 {
+  xs[0] + xs[1] + xs[2]
+}
+
+pub rt fn grand_total(rows: [[F32; 2]; 3]) -> F32 {
+  total([pair_sum(rows[0]), pair_sum(rows[1]), pair_sum(rows[2])])
+}
+
+pub flow inner_as_the_tail_of_the_body(x: F32 at sample) -> F32 at sample {
+  let rows = par~ i in 0 ..< 3 {
+    par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) }
+  }
+  grand_total(rows)
+}
+
+pub flow outer_as_an_argument(x: F32 at sample) -> F32 at sample {
+  grand_total(par~ i in 0 ..< 3 {
+    par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) }
+  })
+}
+
+pub flow inner_as_an_argument_in_the_tail(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+  }
+}
+
+pub flow inner_as_an_argument_in_a_let(x: F32 at sample) -> F32 at sample {
+  let rows = par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+  }
+  total(rows)
+}
+
+pub flow three_deep(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    pair_sum(par~ j in 0 ..< 2 {
+      pair_sum(par~ k in 0 ..< 2 { lp~(x * (i + j + k).round_f32()) })
+    })
+  }
+}
+
+pub flow stateless_inside_stateful(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    lp~(pair_sum(par~ j in 0 ..< 2 { x * (i + j).round_f32() }))
+  }
+}
+
+pub flow stateful_inside_stateless(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { lp~(x) * j.round_f32() }) * i.round_f32()
+  }
+}
+
+pub flow two_inner_in_one_body(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) }) +
+      pair_sum(par~ j in 0 ..< 2 { lp~(x * (i * j).round_f32()) })
+  }
+}

@@ -191,12 +191,12 @@ pub flow in_the_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let a = par i in 0 ..< 2 { if x > 0.0 { x } else { 0.0 } + 1.0 }  //~ E0013
+  let a = par~ i in 0 ..< 2 { if x > 0.0 { x } else { 0.0 } + 1.0 }  //~ E0013
   a[0]
 }
 
 pub flow in_a_par_heading(x: F32 at sample) -> F32 at sample {
-  let a = par i in 0 ..< if true { 2 } else { 3 } + 1 { x }  //~ E0013
+  let a = par~ i in 0 ..< if true { 2 } else { 3 } + 1 { x }  //~ E0013
   a[0]
 }
 

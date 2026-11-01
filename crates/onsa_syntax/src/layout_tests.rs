@@ -336,7 +336,7 @@ fn a_missing_comma_in_nested_type_arguments() {
         let (d, _) = one(src);
         assert_eq!(
             (d.code, d.message.as_str()),
-            (Code::E0002, "ranges are only written in `for` and `par` heads"),
+            (Code::E0002, "ranges are only written in `for` and `par~` heads"),
             "{src}"
         );
     }

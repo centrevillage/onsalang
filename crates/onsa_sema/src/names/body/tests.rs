@@ -419,7 +419,7 @@ fn self_and_an_alias_name_their_type_as_the_owner_of_what_follows() {
 
 #[test]
 fn a_flow_body_binds_its_inputs_then_its_lets_and_walks_no_assignment() {
-    let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  let y = prev~(^z) + x\n  let z = y * 0.5\n  let w = par i in 0 ..< 2 { x }\n  z + sample_rate()\n}\npub flow g(x: F32 at sample) -> F32 at sample {\n  let y = x\n  y = y + 1.0\n  y\n}\n";
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  let y = prev~(^z) + x\n  let z = y * 0.5\n  let w = par~ i in 0 ..< 2 { x }\n  z + sample_rate()\n}\npub flow g(x: F32 at sample) -> F32 at sample {\n  let y = x\n  y = y + 1.0\n  y\n}\n";
     let (a, module) = analysis(src);
     let n = names(&a, "f");
     assert!(n.complete);
@@ -689,5 +689,43 @@ fn a_held_name_before_a_mark_stops_both_stages_at_it() {
         let (a, _) =
             analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  let y = {value}\n  x\n}}\n"));
         assert_eq!(stages(&a), [(onsa_diag::Code::E0200, onsa_diag::Stage::Names)], "{value}");
+    }
+}
+
+/// `par` without `~` in a flow body is the names stage's E0811 at the `par`,
+/// with the one candidate that adds the `~` (§2.6, §11.5, S-745): nested, with
+/// no state in its body, in a branch of `if`. A `par~` with no state has no
+/// error. Outside a flow body `par` and `par~` are the E0821 up to the `~`,
+/// with no candidate (§11.1).
+#[test]
+fn a_par_without_its_tilde_is_e0811_in_a_flow_and_e0821_outside() {
+    use onsa_diag::Code::{E0811, E0821};
+    let pre = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    for body in [
+        "par i in 0 ..< 2 { lp~(x) }",
+        "par~ i in 0 ..< 2 { par j in 0 ..< 2 { lp~(x) } }",
+        "par i in 0 ..< 2 { x }",
+        "if x > 0.0 { par i in 0 ..< 2 { lp~(x) } } else { [x, x] }",
+    ] {
+        let src = format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  let y = {body}\n  x\n}}\n");
+        let (a, _) = analysis(&src);
+        assert_eq!(stages(&a), [(E0811, onsa_diag::Stage::Names)], "{body}");
+        let d = &a.diagnostics[0];
+        let (start, end) = (d.span.start as usize, d.span.end as usize);
+        assert_eq!((&src[start..end], &src[end..end + 1]), ("par", " "), "{body}");
+        let [fix] = &d.fixes[..] else { panic!("{body}: {d:?}") };
+        let fixed = onsa_diag::apply_text(&src, &fix.edits().iter().collect::<Vec<_>>()).unwrap();
+        assert_eq!(fixed, format!("{}par~{}", &src[..start], &src[end..]), "{body}");
+    }
+    let (a, _) = analysis(&format!(
+        "{pre}pub flow u(x: F32 at sample) -> [F32; 2] at sample {{\n  par~ i in 0 ..< 2 {{ x }}\n}}\n"
+    ));
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    for (par, shown) in [("par", "par"), ("par~", "par~")] {
+        let src = format!("pub fn u(x: F32) -> [F32; 2] {{\n  {par} i in 0 ..< 2 {{ x }}\n}}\n");
+        let (a, _) = analysis(&src);
+        assert_eq!(stages(&a), [(E0821, onsa_diag::Stage::Names)], "{par}");
+        let d = &a.diagnostics[0];
+        assert_eq!((&src[d.span.start as usize..d.span.end as usize], d.fixes.len()), (shown, 0), "{par}");
     }
 }

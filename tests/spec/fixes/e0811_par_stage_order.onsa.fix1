@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "47:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["48:11 E0302"]
+//
+// [[test.fix]]
+// at = "59:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["59:32 E0302"]
+//
+// [[test.fix]]
+// at = "64:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["64:28 E0302"]
+
+// W4-20 U1/t, S-745: the E0811 of a `par` without the `~` is an error of the names stage (§18.1: "`par~` の
+// `~` の有無（E0811、§11.5）" is judged by the name and the spelling), so it is ordered like the other errors
+// of that stage and before the stages after it. A type error on an earlier line (the E0401 of `x + 1`)
+// is not reported (the types come after the names: "依存する段の間では、位置によらず先の段の誤りを報告す
+// る"). A name that is not found (E0302) is of the same stage, so the first of the two by position is
+// the one error of the unit: the `par` when it comes first (also when the name is in its body or in its
+// header: the `par` starts before them), the name when it comes first. The candidate of the E0811 leaves
+// the E0302 behind, an error of the same stage that the unit still has, so the entries name it (`leaves`,
+// the position in the text after the candidate: the columns after the `par` on the line of the `par` move
+// by one). The type error that stays is of a later stage, which the promise of a candidate allows. One
+// error per flow (P-01).
+
+pub rt fn total(xs: [F32; 4]) -> F32 {
+  xs[0] + xs[1] + xs[2] + xs[3]
+}
+
+pub flow type_error_then_par(x: F32 at sample) -> F32 at sample {
+  let a = x + 1
+  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }   //~ E0811
+  a + total(ys)
+}
+
+pub flow par_then_a_name_not_found(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }   //~ E0811
+  let z = nope
+  total(ys)
+}
+
+pub flow a_name_not_found_then_par(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let ys = par i in 0 ..< 4 { x * i.round_f32() }
+  total(ys)
+}
+
+pub flow a_name_not_found_in_the_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 { nope * i.round_f32() }  //~ E0811
+  total(ys)
+}
+
+pub flow a_name_not_found_in_the_header(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< NOPE { x * i.round_f32() }  //~ E0811
+  total(ys)
+}

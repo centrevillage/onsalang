@@ -5,7 +5,7 @@ pub rt fn pick(a: I32, b: I32) -> I32 {
 }
 
 pub flow quad(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0 ..< 4 {
+  par~ i in 0 ..< 4 {
     twice(x) * i.round_f32()
   }
 }

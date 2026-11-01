@@ -74,14 +74,14 @@ pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..<2 {
+  let ys = par~ i in 0..<2 {
     delay~(x, 3)                                    //~ E0020 @6
   }
   ys[0]
 }
 
 pub flow one_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..<2 {
+  let ys = par~ i in 0..<2 {
     prev~(x)                                        //~ E0020 @6
   }
   ys[0]
@@ -113,7 +113,7 @@ pub flow a_variable_in_a_branch(x: F32 at sample, c: Bool at sample, k: U32 at i
 }
 
 pub flow a_variable_in_a_par_body(x: F32 at sample, k: U32 at init) -> F32 at sample {
-  let ys = par i in 0..<2 {
+  let ys = par~ i in 0..<2 {
     x@k                                             //~ E0002 @6
   }
   ys[0]

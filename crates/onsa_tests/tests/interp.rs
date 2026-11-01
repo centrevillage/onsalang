@@ -175,7 +175,7 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
 }
 
 pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {
-  let saws = par i in 0..<UNISON {
+  let saws = par~ i in 0..<UNISON {
     saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
   }
   sum(saws) * 0.25

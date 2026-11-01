@@ -42,7 +42,7 @@ pub fn bound(a: U32, b: U32) -> U32 {
 }
 
 pub flow in_a_par(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0 ..=
+  par~ i in 0 ..=
     3 {
     x * i.round_f32()
   }

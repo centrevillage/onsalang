@@ -1,0 +1,13 @@
+// The module that main.onsa takes its flows from.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow bank(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { lp~(x * i.round_f32()) }
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}

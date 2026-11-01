@@ -264,7 +264,7 @@ impl Poly {
 - `Poly.new` は効果を持たない。`Poly` は固定サイズの値で、その大きさは `onsa interface` に出る。
 - `self.voices[i]`（`inout`）と `self.params[i]`（借用）は異なるフィールドなので重ならない（§5.2）。
 - `array.from_fn` に渡す無名関数は `sample_rate` をコピーで捕捉する。引数の位置だけで使うので、ヒープを使わない（§5.3）。
-- `voice` に `@mem(bulk)` の遅延線があるとき、`memory.bulk = true` のターゲットでは、この `Poly` の書き方はできない（E0819、§12.4）。ボイスの列を flow の `par` で書き、発音の割り当ては、その flow のイベントの入力（`midi.Message at event`、§11.11）の段で書く。
+- `voice` に `@mem(bulk)` の遅延線があるとき、`memory.bulk = true` のターゲットでは、この `Poly` の書き方はできない（E0819、§12.4）。ボイスの列を flow の `par~` で書き、発音の割り当ては、その flow のイベントの入力（`midi.Message at event`、§11.11）の段で書く。
   ボイスごとの頭出しは、`voice.reset` を外から呼ぶ代わりに、ゲートの入力として `voice` の中で受けるか、`reset_if~`（§11.10）で書く。
 
 ---

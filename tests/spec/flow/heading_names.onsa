@@ -67,7 +67,7 @@ priv flow module_in(h: Hid at sample, g: Level at block, k: Gain at init) -> F32
 pub flow body_names(x: F32 at sample) -> F32 at sample {
   let h = Hid { a: x }
   let p = Pair { a: h.a, b: x }
-  let c = par i in 0 ..< 2 {
+  let c = par~ i in 0 ..< 2 {
     Pair { a: p.a * 0.5, b: p.b }.a
   }
   c[0] + c[1] + p.b

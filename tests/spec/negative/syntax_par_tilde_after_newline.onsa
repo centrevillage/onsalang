@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5", "§18.1"]
+
+// W4-20 U1/t, S-745: E0002 for a `~` on the line after a `par` that ends its line, outside parentheses
+// (§2.6: "括弧の外では `if` / `match` / `par` で行が終わり、行末の E0002 になる（§2.5）"; same as
+// negative/syntax_tilde_after_newline.onsa for `if` / `match`; foreign-forms.toml `space_after_branch_keyword`).
+// A line break between `par` and `~` is not the space of E0020, which is "right after the keyword, on the
+// same line": a `par` ends its line (§2.5: a line goes on after a binary operator, a range mark, `=`,
+// `->`, an attribute, a leading `.` or `uses`; `par` is none of them), so the `par` has no index and the
+// error is on the `par` line, with no candidate. Inside parentheses the same form is the E0020 of
+// fixes/e0020_par_tilde_newline.onsa. One error per declaration unit.
+
+pub flow let_then_a_line_break(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par                                       //~ E0002
+    ~ i in 0 ..< 2 { x * i.round_f32() }
+  a
+}
+
+pub flow tail_then_a_line_break(x: F32 at sample) -> [F32; 2] at sample {
+  par                                               //~ E0002
+    ~ i in 0 ..< 2 { x * i.round_f32() }
+}
+
+pub flow touching_the_name(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par                                       //~ E0002
+    ~i in 0 ..< 2 { x * i.round_f32() }
+  a
+}
+
+pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    par                                             //~ E0002
+      ~ j in 0 ..< 2 { x * (i + j).round_f32() }
+  }
+}
+
+pub flow with_the_tilde_alone_on_a_line(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par                                       //~ E0002
+    ~
+    i in 0 ..< 2 { x * i.round_f32() }
+  a
+}

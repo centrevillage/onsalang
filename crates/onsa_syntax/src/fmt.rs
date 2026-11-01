@@ -269,9 +269,11 @@ mod tests {
     #[test]
     fn ranges_have_a_space_on_each_side() {
         assert_eq!(
-            fmt("fn f(n: I32) {\n  for i in 0..<n+1 {}\n  par j in n-1..=n { g() }\n}"),
-            "fn f(n: I32) {\n  for i in 0 ..< n + 1 {}\n  par j in n - 1 ..= n { g() }\n}\n"
+            fmt("fn f(n: I32) {\n  for i in 0..<n+1 {}\n  par~ j in n-1..=n { g() }\n}"),
+            "fn f(n: I32) {\n  for i in 0 ..< n + 1 {}\n  par~ j in n - 1 ..= n { g() }\n}\n"
         );
+        // The `~` of `par~` touches the keyword, the name after one space (S-745).
+        assert_eq!(fmt("fn f() {\n  par~i in 0 ..< 2 { g() }\n}"), "fn f() {\n  par~ i in 0 ..< 2 { g() }\n}\n");
     }
 
     #[test]

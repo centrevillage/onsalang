@@ -130,12 +130,12 @@ fn ranges_only_in_heads() {
     // Weaker than the binary operators (§3.1).
     assert_eq!(body("for i in a + 1..<n * 2 { }"), "(block (for i in (range (+ a 1) ..< (* n 2)) (block)))");
     assert_eq!(
-        body("let s = par i in 0..<N { f~(i) }"),
-        "(block (let s = (par i in 0..<N (block tail (call~ f (i))))))"
+        body("let s = par~ i in 0..<N { f~(i) }"),
+        "(block (let s = (par~ i in 0..<N (block tail (call~ f (i))))))"
     );
     assert_eq!(
-        body("let s = par i in 0..=N { f~(i) }"),
-        "(block (let s = (par i in 0..=N (block tail (call~ f (i))))))"
+        body("let s = par~ i in 0..=N { f~(i) }"),
+        "(block (let s = (par~ i in 0..=N (block tail (call~ f (i))))))"
     );
     // A range is the whole head (§3.1): in parentheses or an argument it
     // is outside the head (`range_outside_header`, E0002 with the note).
@@ -143,7 +143,7 @@ fn ranges_only_in_heads() {
         let p = parse(&format!("fn f() {{\n  {src}\n}}"));
         assert_eq!(codes_of(&p), [Code::E0002], "{src}");
         let d = &p.diagnostics[0];
-        assert!(d.fixes.is_empty() && d.message.contains("`for` and `par` heads"), "{src}: {d:?}");
+        assert!(d.fixes.is_empty() && d.message.contains("`for` and `par~` heads"), "{src}: {d:?}");
         assert!(d.notes.iter().any(|n| n.message.contains("xs.slice(from, to)")), "{src}: {d:?}");
         d.found.clone().unwrap_or_default()
     };
@@ -194,7 +194,7 @@ fn operand_starts() {
         "fn(x: U32) -> U32 { x }",
         "unsafe { x }",
         "handle { x } with h",
-        "par i in 0..<2 { x }",
+        "par~ i in 0..<2 { x }",
     ];
     for src in operands {
         let p = parse(&format!("fn f() {{\n  let a = {src}\n}}"));
@@ -634,4 +634,32 @@ fn the_places_of_a_member_function() {
     assert_eq!(codes(&old), [Code::E0020], "{old}");
     assert_eq!(fixed(&old), fp);
     assert_eq!(fixed("#[export]\npub fn f() -> I32 {\n  1\n}\n"), "@export\npub fn f() -> I32 {\n  1\n}\n");
+}
+
+/// `par~` (§2.6, §11.5, S-745): the `~` touches `par`, and the syntax stage
+/// reads `par` without it the same (the names stage's E0811). A blank or, in
+/// parentheses, a line break between them is the E0020 of
+/// `space_after_branch_keyword` with one candidate (a name follows: no `!`
+/// form); outside parentheses `par` ends its line (E0002).
+#[test]
+fn the_tilde_of_par_touches_the_keyword() {
+    assert_eq!(body("par~ i in 0..<2 { x }"), "(block tail (par~ i in 0..<2 (block tail x)))");
+    assert_eq!(body("par i in 0..<2 { x }"), "(block tail (par i in 0..<2 (block tail x)))");
+    let flow = |s: &str| format!("flow g(x: F32 at sample) -> [F32; 2] at sample {{\n  {s}\n}}\n");
+    let two = |s: &str| {
+        format!(
+            "rt fn two(a: [F32; 2], b: F32) -> F32 {{ b }}\nflow g(x: F32 at sample) -> F32 at sample {{\n  {s}\n}}\n"
+        )
+    };
+    for (src, after) in [
+        (flow("par ~ i in 0..<2 { x }"), flow("par~ i in 0..<2 { x }")),
+        (flow("par\t~i in 0..<2 { x }"), flow("par~ i in 0..<2 { x }")),
+        (two("two(par\n    ~ i in 0..<2 { x }, 1.0)"), two("two(par~\n    i in 0..<2 { x }, 1.0)")),
+    ] {
+        let p = parse(&src);
+        assert_eq!(codes_of(&p), [Code::E0020], "{src}");
+        assert_eq!(p.diagnostics[0].fixes.len(), 1, "{src}: {:?}", p.diagnostics[0]);
+        assert_eq!(fixed(&src), after);
+    }
+    assert_eq!(codes(&flow("let a = par\n    ~i in 0..<2 { x }\n  a")), [Code::E0002]);
 }

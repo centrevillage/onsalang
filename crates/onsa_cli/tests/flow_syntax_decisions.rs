@@ -426,7 +426,7 @@ fn an_if_tilde_with_no_else_is_e0002_with_a_note_and_no_candidate() {
         ("a chain with no final else", "  if~ c { 1.0 } else if d { 2.0 }"),
         ("in lines", "  if~ c {\n    1.0\n  }"),
         ("an arm", "  if~ c {\n    if~ d { 1.0 }\n  } else {\n    2.0\n  }"),
-        ("a par", "  par i in 0..<2 {\n    if~ c { 1.0 }\n  }"),
+        ("a par", "  par~ i in 0..<2 {\n    if~ c { 1.0 }\n  }"),
         ("an argument", "  mix(if~ c { x }, 0.5)"),
     ];
     for (what, body) in bodies {

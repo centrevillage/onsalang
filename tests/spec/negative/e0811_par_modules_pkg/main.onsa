@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "main.onsa:35:3"
+// code = "E0811"
+// candidate = 1
+// leaves = ["main.onsa:35:23 E0811"]
+
+// W4-20 U1/t, S-745: the E0811 of a `par` without the `~` does not depend on what the body calls: a flow
+// of another module, by its qualified name (`util.lp~(x)`) or by the name a `use` takes in (`lp~(x)`),
+// or a function of the module, is the same error as the body of the single file (§11.5, §15.1). The
+// `~` of the `par` is judged by the spelling, the `~` of the calls in the body by the callee (the callee
+// is found through the module, §15.1). A call in the body with the `~`
+// missing is an error of the same stage (E0811 of the call) that comes after the `par` by position, so
+// the first error of the unit is the `par` (§18.1). One error per flow (P-01).
+
+use util
+use util.{lp, pair_sum}
+
+pub flow qualified_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0 ..< 3 { util.lp~(x * i.round_f32()) }  //~ E0811
+}
+
+pub flow imported_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0 ..< 3 { lp~(x * i.round_f32()) }       //~ E0811
+}
+
+pub flow a_function_of_the_module_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0 ..< 3 { pair_sum([x, x]) * i.round_f32() }  //~ E0811
+}
+
+pub flow the_call_in_the_body_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0 ..< 3 { lp(x * i.round_f32()) }        //~ E0811
+}
+
+pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    pair_sum(par j in 0 ..< 2 { util.lp~(x * (i + j).round_f32()) })  //~ E0811
+  }
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 { util.lp~(x * i.round_f32()) }
+}

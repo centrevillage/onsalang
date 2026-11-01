@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.1", "§11.5", "§18.1"]
+// fixes = 0
+
+// W4-20 U1/t, S-745: the `par~` outside a flow is E0821 (§11.1: "flow の外（fn の本体、`test`、`const` の
+// 初期化式、…）に … `par~`（`~` の無い `par` も）… を書くと E0821 で、修正候補は付けない"; §2.6). The body
+// of an `fn` (an `rt fn`, a method, a generic function, a branch, a closure in them), a `test` and the
+// initializer of a `const` give the same error, with state in the body (`lp~(x)`) or without. It is an
+// error of the names stage ("flow の外の flow だけの構文（E0821）"), so a type error of the same unit is
+// not reached; the `par` is the first thing by position in a unit that has an instance in its body
+// (the instance is not reported next to it). `fixes = 0`: no error of this file has a candidate (the
+// `~` is no help, the `par~` is not a form of a function; the note shows `array.from_fn` and `[e; N]`,
+// which this file does not check). The same spelling without the `~` is E0821, not E0811
+// (e0821_par_plain_outside_flow.onsa), the flow body it is right in is the last unit. One error per unit
+// (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct Voice {
+  v: F32,
+}
+
+pub fn in_a_let(x: F32) -> F32 {
+  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }  //~ E0821
+  ys[0]
+}
+
+pub fn as_the_tail(x: F32) -> [F32; 2] {
+  par~ i in 0 ..< 2 { x * i.round_f32() }           //~ E0821
+}
+
+pub fn as_an_argument(x: F32) -> F32 {
+  total(par~ i in 0 ..< 4 { x * i.round_f32() })    //~ E0821
+}
+
+pub rt fn in_an_rt_fn(x: F32) -> [F32; 2] {
+  par~ i in 0 ..< 2 { x * i.round_f32() }           //~ E0821
+}
+
+impl Voice {
+  pub fn in_a_method(self, x: F32) -> [F32; 2] {
+    par~ i in 0 ..< 2 { x * i.round_f32() }         //~ E0821
+  }
+}
+
+pub fn in_a_generic[T](x: T) -> T {
+  let ys = par~ i in 0 ..< 2 { 1.0 }                //~ E0821
+  x
+}
+
+pub fn in_a_branch(c: Bool, x: F32) -> F32 {
+  if c {
+    let ys = par~ i in 0 ..< 2 { x * i.round_f32() }  //~ E0821
+    ys[0]
+  } else {
+    x
+  }
+}
+
+pub fn in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> [F32; 2] { par~ i in 0 ..< 2 { y * i.round_f32() } }  //~ E0821
+  g.(x)[0]
+}
+
+pub fn with_an_instance_in_the_body(x: F32) -> F32 {
+  let ys = par~ i in 0 ..< 2 {                      //~ E0821
+    lp~(x)
+  }
+  ys[0]
+}
+
+pub fn nested_in_a_fn(x: F32) -> F32 {
+  let rows = par~ i in 0 ..< 2 {                    //~ E0821
+    pair_total(par~ j in 0 ..< 2 { x * (i + j).round_f32() })
+  }
+  rows[0]
+}
+
+pub fn with_a_type_error_before(x: F32) -> F32 {
+  let a = x + 1
+  let ys = par~ i in 0 ..< 2 { x * i.round_f32() }  //~ E0821
+  a + ys[0]
+}
+
+test "in a test" {
+  let ys = par~ i in 0 ..< 2 { 1.0 * i.round_f32() }  //~ E0821
+  assert ys[0] == 0.0
+}
+
+pub const IN_A_CONST: [F32; 2] = par~ i in 0 ..< 2 { 1.0 * i.round_f32() }  //~ E0821
+
+// ---- Not errors: the same syntax in the body of a flow ----
+
+pub rt fn pair_total(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub rt fn total(xs: [F32; 4]) -> F32 {
+  xs[0] + xs[1] + xs[2] + xs[3]
+}
+
+pub flow right_form(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { x * i.round_f32() }
+}

@@ -121,7 +121,7 @@ pub flow flow_plain(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow flow_par(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 4 {
+  let ys = par~ i in 0 ..< 4 {
     gone~(x)
   }
   let a: I32 = true
@@ -135,7 +135,7 @@ pub flow flow_delay(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow flow_par_range(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< N {
+  let ys = par~ i in 0 ..< N {
     x
   }
   let a: I32 = true

@@ -156,11 +156,12 @@ impl<'a> Lower<'a> {
             }
             NodeKind::UnsafeExpr => ExprKind::Unsafe(self.block(self.need(n, NodeKind::Block))),
             NodeKind::ParExpr => {
+                let tilde = self.tok(n, TokenKind::Tilde).map(|t| self.cst.token(t).span);
                 let var = self.name(n);
                 let range = self.need(n, NodeKind::RangeExpr);
                 let range = self.range_head(range);
                 let body = self.block(self.need(n, NodeKind::Block));
-                ExprKind::Par { var, range, body }
+                ExprKind::Par { tilde, var, range, body }
             }
             NodeKind::MoveExpr => ExprKind::Move(self.need_expr(n)),
             NodeKind::BinaryExpr => return self.chain(n),

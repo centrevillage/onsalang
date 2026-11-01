@@ -113,7 +113,7 @@ pub flow a_flow_let_seen_by_a_hole(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     len_of("{i}/{x}")
   }
   ys[0] + x

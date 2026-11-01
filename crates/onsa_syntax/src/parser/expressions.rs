@@ -500,7 +500,7 @@ impl<'a> Parser<'a> {
                     "a `{` at the start of an expression in a header starts the body",
                 )
                 .with_found("{")
-                .with_rule("in the header of `if`, `while`, `match`, `for` and `par`, a `{` at the start of an expression outside parentheses starts the body: a block expression there is written in parentheses, `({ … })`, and a range has both ends, `0..<n` (§3.1, §4.4, §7)");
+                .with_rule("in the header of `if`, `while`, `match`, `for` and `par~`, a `{` at the start of an expression outside parentheses starts the body: a block expression there is written in parentheses, `({ … })`, and a range has both ends, `0..<n` (§3.1, §4.4, §7)");
                 self.report(d);
                 return Err(ParseError);
             }
@@ -509,7 +509,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwMatch => {
                 let m = self.start(NodeKind::MatchExpr)?;
                 self.bump();
-                self.branch_tilde()?;
+                self.branch_tilde("the condition")?;
                 if self.at(TokenKind::KwMove) {
                     // `match move x` consumes the value (§7, S-21).
                     self.parse_move(MoveAs::Node, |p, mv| {
@@ -599,6 +599,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwPar => {
                 let m = self.start(NodeKind::ParExpr)?;
                 self.bump();
+                self.branch_tilde("the replication index")?;
                 self.parse_name("replication index")?;
                 self.expect(TokenKind::KwIn)?;
                 let range = self.parse_head_expr(true)?;
@@ -612,7 +613,7 @@ impl<'a> Parser<'a> {
                     return Err(self.unexpected("`{`"));
                 }
                 if range.kind != NodeKind::RangeExpr {
-                    return Err(self.error(Code::E0002, range.span, "`par` needs a range `a..<b` or `a..=b`"));
+                    return Err(self.error(Code::E0002, range.span, "`par~` needs a range `a..<b` or `a..=b`"));
                 }
                 self.parse_body()?;
                 return Ok(self.complete(m, NodeKind::ParExpr));
@@ -720,7 +721,7 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::IfExpr)?;
         self.expect(TokenKind::KwIf)?;
         let tilde = match chain {
-            None => self.branch_tilde()?,
+            None => self.branch_tilde("the condition")?,
             Some(_) if self.at(TokenKind::Tilde) => {
                 return Err(self.fail(Want::Expr, "the condition of `else if`"));
             }
@@ -751,15 +752,16 @@ impl<'a> Parser<'a> {
         Ok(self.complete(m, NodeKind::IfExpr))
     }
 
-    /// The `~` of `if~` and `match~` (§2.6), read when it touches the
-    /// keyword. With a blank between them the parser fails at it, and the
-    /// table names the form (`space_after_branch_keyword`, S-354).
-    fn branch_tilde(&mut self) -> PResult<bool> {
+    /// The `~` of `if~`, `match~` and `par~` (§2.6), read when it touches
+    /// the keyword, before `what`. With a blank between them the parser fails
+    /// at it, and the table names the form (`space_after_branch_keyword`,
+    /// S-354, S-745).
+    fn branch_tilde(&mut self, what: &str) -> PResult<bool> {
         if !self.at(TokenKind::Tilde) {
             return Ok(false);
         }
         if self.peek_gap().is_some() {
-            return Err(self.fail(Want::Expr, "the condition, after a `~` written without a blank"));
+            return Err(self.fail(Want::Expr, &format!("{what}, after a `~` written without a blank")));
         }
         self.bump();
         Ok(true)

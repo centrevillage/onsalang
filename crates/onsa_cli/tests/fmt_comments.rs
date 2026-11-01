@@ -1732,7 +1732,7 @@ pub fn pick[T,   // the type
 }
 
 pub flow w(f0: F32 at block) -> F32 at sample {
-  let s = par i in 0 ..< 4 { // copies
+  let s = par~ i in 0 ..< 4 { // copies
     saw~(f0 *   // scaled
       2.0)
   }
@@ -1770,8 +1770,8 @@ pub fn pick[T,                    // the type
 }
 
 pub flow w(f0: F32 at block) -> F32 at sample {
-  let s = par i in 0 ..< 4 { // copies
-    saw~(f0 *                // scaled
+  let s = par~ i in 0 ..< 4 { // copies
+    saw~(f0 *                 // scaled
       2.0)
   }
   sum(s)

@@ -47,7 +47,7 @@ pub flow a_tilde_gap_in_an_argument(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow a_tilde_gap_in_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..<4 {
+  let ys = par~ i in 0..<4 {
     lp ~(x)                                         //~ E0020
   }
   ys[0]

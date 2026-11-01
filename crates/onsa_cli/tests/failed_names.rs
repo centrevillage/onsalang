@@ -628,7 +628,7 @@ fn a_failed_name_in_a_value_place_stops_the_unit() {
             (
                 "flow_par_range",
                 format!(
-                    "pub flow u(x: F32 at sample) -> F32 at sample {{\n  let ys = par i in 0 ..< {len} {{\n    x\n  }}\n{end}"
+                    "pub flow u(x: F32 at sample) -> F32 at sample {{\n  let ys = par~ i in 0 ..< {len} {{\n    x\n  }}\n{end}"
                 ),
             ),
             // a real error before the failed name is reported

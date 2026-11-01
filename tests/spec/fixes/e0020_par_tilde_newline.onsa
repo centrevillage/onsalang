@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W4-20 U1/t, S-745: E0020 for a line break between `par` and the `~` inside parentheses (§2.6: "括弧の中で
+// は改行も空白と同じで（`two(if` 改行 `~c { … } else { … }, 1.0)`、§2.5）、修正候補の一つ目は `~` をキーワード
+// の直後へ移す形である"; foreign-forms.toml `space_after_branch_keyword`). The candidate is one, the `~`
+// moved to the keyword (`par~`): the `~` that touches its index on the same line (`~i`) has no second
+// candidate, because after `par` there is no prefix reading to offer (after `if` it is `!c`, see
+// fixes/e0020_if_tilde_gap.onsa and e0020_newline_if_tilde.onsa). The main position is the `~`, so the
+// marker is on the line of the `~` the candidate moves. Outside parentheses the `par` ends its line and the
+// error is the E0002 of negative/syntax_par_tilde_after_newline.onsa. One error per declaration unit
+// (P-01).
+
+pub rt fn two(a: [F32; 2], b: F32) -> F32 {
+  a[0] + a[1] + b
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow in_an_argument(x: F32 at sample) -> F32 at sample {
+  two(par
+    ~ i in 0 ..< 2 { x * i.round_f32() }, 1.0)      //~ E0020
+}
+
+pub flow touching_the_name(x: F32 at sample) -> F32 at sample {
+  two(par
+    ~i in 0 ..< 2 { x * i.round_f32() }, 1.0)       //~ E0020
+}
+
+pub flow in_a_group(x: F32 at sample) -> F32 at sample {
+  let a = (par
+    ~ i in 0 ..< 2 { x * i.round_f32() })           //~ E0020
+  a[0] + a[1]
+}
+
+pub flow in_an_array(x: F32 at sample) -> F32 at sample {
+  let v = [par
+    ~ i in 0 ..< 2 { x * i.round_f32() }]           //~ E0020
+  pair_sum(v[0])
+}
+
+pub flow with_a_wide_gap_on_the_second_line(x: F32 at sample) -> F32 at sample {
+  two(par
+    ~    i in 0 ..< 2 { x * i.round_f32() }, 1.0)   //~ E0020
+}
+
+pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    pair_sum(par
+      ~ j in 0 ..< 2 { prev~(x * (i + j).round_f32()) })  //~ E0020
+  }
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  two(par~
+    i in 0 ..< 2 { x * i.round_f32() }, 1.0)
+}

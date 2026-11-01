@@ -111,21 +111,21 @@ pub fn in_a_branch(n: U32, c: Bool) -> U32 {
 }
 
 pub flow par_half_open(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0
+  par~ i in 0
     ..<4 {                                          //~ E0020
     x * i.round_f32()
   }
 }
 
 pub flow par_closed(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0
+  par~ i in 0
     ..=3 {                                          //~ E0020
     x * i.round_f32()
   }
 }
 
 pub flow par_two_dots(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0
+  par~ i in 0
     ..4 {                                           //~ E0020
     x * i.round_f32()
   }

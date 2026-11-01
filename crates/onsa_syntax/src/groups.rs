@@ -263,7 +263,7 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
             Stage::Syntax,
             Code::E0013,
             at,
-            "a block-like expression (`if`, `match`, a block, an anonymous function, `unsafe`, `handle`, `par`) is written in parentheses when it is an operand (§3.1)",
+            "a block-like expression (`if`, `match`, a block, an anonymous function, `unsafe`, `handle`, `par~`) is written in parentheses when it is an operand (§3.1)",
         )
         .with_found(&text[at.start as usize..at.end as usize]);
         diagnostics.push(parenthesized(d, limit, span, "parenthesize it", parenthesizing(&found).collect()));
@@ -1038,7 +1038,7 @@ mod tests {
         e("match~ o { _ => x } + 1", "(match~ o { _ => x }) + 1");
         e("unsafe { n } + 10", "(unsafe { n }) + 10");
         e("handle { 1 } with h + 10", "(handle { 1 } with h) + 10");
-        e("par i in 0..<2 { x } + x", "(par i in 0..<2 { x }) + x");
+        e("par~ i in 0..<2 { x } + x", "(par~ i in 0..<2 { x }) + x");
         // One expression is one form: all its block-like operands, in one candidate.
         e("if a { 1 } else { 2 } + match o { _ => 1 }", "(if a { 1 } else { 2 }) + (match o { _ => 1 })");
         e("-{ n } * 2 + { m }.abs()", "-({ n }) * 2 + ({ m }).abs()");

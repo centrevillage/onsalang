@@ -106,7 +106,7 @@ fn in_a_loop(r: Ring[F32, 4]) -> U32 {
 
 flow in_a_par(x: F32 at sample) -> [U32; 4] at sample {
   let r = new_ring()
-  par i in 0 ..< 4 {
+  par~ i in 0 ..< 4 {
     r.head                                          //~ E0303
   }
 }

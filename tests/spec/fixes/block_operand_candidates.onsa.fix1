@@ -76,7 +76,7 @@ pub flow match_tilde(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow parallel(x: F32 at sample) -> F32 at sample {
-  let y = (par i in 0 ..< 2 { x })[0] + 1.0           //~ E0013
+  let y = (par~ i in 0 ..< 2 { x })[0] + 1.0           //~ E0013
   y
 }
 

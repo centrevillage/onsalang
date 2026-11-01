@@ -102,7 +102,7 @@ pub flow flow_in_a_branch_in_a_flow(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow flow_in_a_par_in_a_flow(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     lp * x                                          //~ E0308
   }
   ys[0] + ys[1]
@@ -143,7 +143,7 @@ pub flow trait_in_a_flow_let(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow type_in_a_par_in_a_flow(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 {
+  let ys = par~ i in 0 ..< 2 {
     Fp                                              //~ E0308
   }
   x

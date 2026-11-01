@@ -36,7 +36,7 @@ const HELD: [&str; 5] = ["thing", "thing.go(x)", "Al.new(x)", "(unsafe { x })", 
 /// The variants of each form, with `{H}` for the held part.
 const FORMS: [&[&str]; 7] = [
     &["({H} at sample)", "(({H}) at block)", "({H}.m() at sample)", "({H} + 1.0 at sample)"],
-    &["(par i in 0 ..< 2 { {H} })", "(par i in 0 ..< {H} { x })"],
+    &["(par~ i in 0 ..< 2 { {H} })", "(par~ i in 0 ..< {H} { x })"],
     &["(if~ {H} { x } else { x })", "(if~ c { {H} } else { x })"],
     &["(match~ {H} { _ => x })", "(match~ c { _ => {H} })"],
     &["lp~({H})", "lp~(x, {H})", "prev~({H}, 0.0)"],

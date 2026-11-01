@@ -145,7 +145,7 @@
 
 [[pending]]
 kind = "spec-example"
-target = "§11.5 d5cd462a: use std.math.{sum}"
+target = "§11.5 172cb751: use std.math.{sum}"
 reasons = ["R-23", "S-102", "S-45"]
 until = "W5-07"
 note = "std.math.sum、積和の括弧。写し flow/unison.onsa は std.dsp.sum（範囲は W3-18 で 0..<UNISON に、W3-11 で 0 ..< UNISON に書き換えた）"
@@ -1780,3 +1780,32 @@ target = "tests/spec/negative/drop_on_the_other_path.onsa"
 reasons = ["R-32", "S-85"]
 until = "W6-02"
 note = "片方の道で移すか取り出した値を、もう片方の道で全体として破棄する `Alloc`（E0601 / E0901、§12.2）。`MovedLocals` が本体で一つの集合なので数えない（R-32）。W4-09 U2 の壊す側が見つけ、親が事例にした（`rules/leader.md` 4.9）"
+
+# --- W4-20: `par~`（S-745）の事例のうち、後の作業を待つもの
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/par_tilde_closed_range.onsa"
+reasons = ["S-745", "S-257"]
+until = "W7-04"
+note = "par~ の見出しの ..= は今 E0200（Feature::InclusiveRangePar、W7-04）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:39:5 E0811 fix1"
+reasons = ["S-745", "S-110"]
+until = "W7-06"
+note = "枝の中の par に ~ を足した後に残るのは仕様では flow の検査の段の枝の E0811（leaves）だが、今は枝の中の par~ が E0200（W7-06）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:49:5 E0811 fix1"
+reasons = ["S-745", "S-110"]
+until = "W7-06"
+note = "39:5 と同じ（枝の E0811 が今は E0200）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:55:10 E0811 fix1"
+reasons = ["S-745", "S-110"]
+until = "W7-06"
+note = "39:5 と同じ（枝の E0811 が今は E0200）"

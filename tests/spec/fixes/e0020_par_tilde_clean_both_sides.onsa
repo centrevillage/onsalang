@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "20:15"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// W4-20 U1/t, S-745: `par ~ i`, a space on both sides of the `~`; the candidate is `par~ i`. The one error of the file has the one candidate and the file with it
+// checks clean (`clean` is about the whole file, so it has this one error). The main position (`at`) is the
+// `~`. One error per declaration unit (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow replicas(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par ~ i in 0 ..< 2 { lp~(x * i.round_f32()) }  //~ E0020
+  a
+}

@@ -54,7 +54,7 @@ pub flow right_of_or(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_in_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
-  if c { par i in 0..<2 { x } } else { [x, x] } //~ E0200
+  if c { par~ i in 0..<2 { x } } else { [x, x] } //~ E0200
 }
 
 // The condition, the scrutinee and the left of `&&` are always evaluated, and may hold state.

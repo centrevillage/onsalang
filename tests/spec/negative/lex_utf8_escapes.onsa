@@ -193,7 +193,7 @@ pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..<2 {
+  let ys = par~ i in 0..<2 {
     let s = "\é"                //~ E0001
     x
   }

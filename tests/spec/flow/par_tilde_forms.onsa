@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5"]
+
+// W4-20 U1/t, S-745: the replication of a flow is written `par~ i in a ..< b { e }` (§11.5: "複製
+// `par~ i in a ..< b { e }`"), with the `~` right after `par` as `if~` and `match~` have it (§2.6). It is
+// written in the body of a flow in the places a value can be: as the tail (the output), as the right side
+// of a `let`, as an argument and as an operand. The bounds are constant expressions (a literal, a `const`),
+// the lower bound need not be 0, and the index `i` is read in the body or not read at all (an index that
+// is not read is no error). Every replica has its own instance of `saw~`. The closed range `a ..= b` is
+// in par_tilde_closed_range.onsa, the nesting in par_tilde_nested.onsa and the body without state in
+// par_tilde_stateless.onsa. The old spelling without the `~` is E0811 (negative/e0811_par_*).
+
+use std.math.{floor}
+
+const N: U32 = 4
+
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase) + f0 / sample_rate())
+  2.0 * phase - 1.0
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+pub rt fn total(xs: [F32; 4]) -> F32 {
+  xs[0] + xs[1] + xs[2] + xs[3]
+}
+
+pub flow as_the_tail(f0: F32 at block) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { saw~(f0) }
+}
+
+pub flow as_a_let(f0: F32 at block) -> [F32; 4] at sample {
+  let saws = par~ i in 0 ..< 4 { saw~(f0) }
+  saws
+}
+
+pub flow as_an_argument(f0: F32 at block) -> F32 at sample {
+  total(par~ i in 0 ..< 4 { saw~(f0) })
+}
+
+pub flow as_an_operand(f0: F32 at block) -> F32 at sample {
+  let saws = par~ i in 0 ..< 4 { saw~(f0) }
+  0.25 * saws[0] + 0.75 * saws[3]
+}
+
+pub flow with_a_block_body(f0: F32 at block, detune: F32 at block) -> [F32; 4] at sample {
+  let saws = par~ i in 0 ..< 4 {
+    saw~(f0 * (1.0 + detune * i.round_f32()))
+  }
+  saws
+}
+
+pub flow with_a_constant_count(f0: F32 at block) -> [F32; N] at sample {
+  par~ i in 0 ..< N { saw~(f0 * (1.0 + i.round_f32())) }
+}
+
+pub flow with_a_lower_bound(f0: F32 at block) -> [F32; 3] at sample {
+  par~ i in 2 ..< 5 { saw~(f0 * i.round_f32()) }
+}
+
+pub flow with_one_replica(f0: F32 at block) -> [F32; 1] at sample {
+  par~ i in 5 ..< 6 { saw~(f0 * i.round_f32()) }
+}
+
+pub flow with_two_in_one_flow(f0: F32 at block) -> F32 at sample {
+  let lows  = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + i.round_f32())) }
+  let highs = par~ i in 0 ..< 4 { saw~(f0 * (5.0 + i.round_f32())) }
+  total(lows) + total(highs)
+}
+
+pub flow with_a_delay_in_the_body(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..< 4 { prev~(x * i.round_f32()) }
+}

@@ -717,8 +717,8 @@ impl<'a> Dumper<'a> {
                 self.expr(*e);
                 self.out.push(')');
             }
-            ExprKind::Par { var, range, body } => {
-                let _ = write!(self.out, "(par {} in ", var.name);
+            ExprKind::Par { tilde, var, range, body } => {
+                let _ = write!(self.out, "(par{} {} in ", if tilde.is_some() { "~" } else { "" }, var.name);
                 self.expr(range.lo);
                 self.out.push_str(range.end.symbol());
                 self.expr(range.hi);

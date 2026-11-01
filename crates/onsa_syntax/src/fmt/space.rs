@@ -120,10 +120,10 @@ const ROWS: &[Row] = &[
     row(k_in(&[T::Caret], &[N::FeedbackExpr]), ANY, NO),
     row(k_in(&[T::Question], &[N::Bound]), ANY, NO),
     row(k_in(&[T::At], &[N::Attr]), ANY, NO),
-    // §3.2, §2.5, §2.6: none before the marks of a name (`f~(x)`, `f!(x)`) and the `~` of `if~` and
-    // `match~` (after a mark of a name, the `(` of the arguments has none before it, below).
+    // §3.2, §2.5, §2.6: none before the marks of a name (`f~(x)`, `f!(x)`) and the `~` of `if~`,
+    // `match~` and `par~` (after a mark of a name, the `(` of the arguments has none before it, below).
     row(ANY, k_in(&[T::Tilde, T::Bang], &[N::CallExpr]), NO),
-    row(ANY, k_in(&[T::Tilde], &[N::IfExpr, N::MatchExpr]), NO),
+    row(ANY, k_in(&[T::Tilde], &[N::IfExpr, N::MatchExpr, N::ParExpr]), NO),
     // §3.2, §2.5: none round a member `.` (`a.b`, `v.(x)`, `use a.{x}`) and `::` (`f::[T](x)`), before `?`.
     row(ANY, k(&[T::Dot, T::ColonColon]), NO),
     row(k(&[T::Dot, T::ColonColon]), ANY, NO),

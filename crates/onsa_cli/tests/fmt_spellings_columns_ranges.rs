@@ -385,7 +385,7 @@ fn for_head(head: &str) -> String {
 fn par_head(head: &str) -> String {
     src(&[
         "pub flow f(x: F32 at sample) -> [F32; 3] at sample {",
-        &format!("  par i in {head} {{"),
+        &format!("  par~ i in {head} {{"),
         "    x",
         "  }",
         "}",
