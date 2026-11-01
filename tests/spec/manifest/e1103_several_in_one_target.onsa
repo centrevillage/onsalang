@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1103_several_in_one_target"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "dll"                                 #~ E1103
+// lang = "c"
+// platform = "host"
+// fp = 1                                       #~ E1103
+// provides = []
+// panic = "abort"                              #~ E1103
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// Three values of one target are three E1103; the first one does not stop the check of the others
+// (§18.1; S-597, S-827).

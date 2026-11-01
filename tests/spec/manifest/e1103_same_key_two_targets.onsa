@@ -1,0 +1,31 @@
+// onsa.toml
+// [package]
+// name = "e1103_same_key_two_targets"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "relaxed"                               #~ E1103
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [targets.b]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "relaxed"                               #~ E1103
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// The same wrong value in two targets is two E1103, one in each target (§18.1; S-827).

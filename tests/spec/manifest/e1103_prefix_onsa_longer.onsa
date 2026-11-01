@@ -1,0 +1,14 @@
+// onsa.toml
+// [package]
+// name = "e1103_prefix_onsa_longer"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_synth_"                       #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: a `prefix` that starts with `onsa_` is not allowed, whatever follows (§14.2, §15.3; S-95, S-99, S-827).

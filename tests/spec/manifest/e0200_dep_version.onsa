@@ -1,0 +1,14 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_version"
+// edition = "2026"
+//
+// [dependencies]
+// fx = "1.0.0"                                 #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: a dependency other than std is an E0200 at the key; the dependency mechanism as a whole is not in this version (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).

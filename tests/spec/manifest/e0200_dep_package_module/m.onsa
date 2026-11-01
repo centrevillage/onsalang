@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: a dependency of a package with modules; the `use fx.{…}` of a module file is not read either, and
+// the package's own module `util` is not touched (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).
+
+use util.{g}
+
+pub fn f() -> I32 { g() }

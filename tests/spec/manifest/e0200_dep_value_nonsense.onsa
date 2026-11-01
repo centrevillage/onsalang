@@ -1,0 +1,14 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_value_nonsense"
+// edition = "2026"
+//
+// [dependencies]
+// fx = { path = 1, tag = [], x = { y = true } } #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: a value with keys and types of any kind is not read: the one E0200 at the key, and no E1102 or E1103 (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).

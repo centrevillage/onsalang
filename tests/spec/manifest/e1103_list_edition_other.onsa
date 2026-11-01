@@ -1,0 +1,11 @@
+// onsa.toml
+// [package]
+// name = "e1103_list_edition_other"
+// edition = "2025"                             #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the only `edition` this version takes is "2026"; "2025" is not in the list (§15.3 table, §18.1; S-99, S-597, S-827).

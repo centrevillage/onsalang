@@ -1,0 +1,6 @@
+[package]
+name = "e1103_r88_std_version"
+edition = "2026"
+
+[dependencies]
+std = "9.9.9"                                   #~ E1103

@@ -1,0 +1,18 @@
+// onsa.toml
+// [package]
+// name = "e1103_prefix_without_export_items"
+// edition = "2026"
+//
+// [export]
+// prefix = "VC"                                #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the shape of `prefix` is checked even in a package with no `@export` item; `prefix` is not needed
+// there, but a value that is written is checked (§14.2 "書いても誤りにしない（値の形は下のとおり検査する）";
+// S-95, S-827).
+
+pub fn f() -> I32 { 1 }

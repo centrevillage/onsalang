@@ -1,0 +1,15 @@
+// onsa.toml
+// [package]
+// name = "e1103_type_std_table"
+// edition = "2026"
+//
+// [dependencies]
+// std = { path = "x" }                         #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the value of `std` is a version string; a table is a type error at the value, whatever its keys
+// (§15.3 std paragraph; §18.1; S-83, S-626, S-827).

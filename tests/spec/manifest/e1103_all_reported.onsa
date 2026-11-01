@@ -1,0 +1,25 @@
+// onsa.toml
+// [package]
+// name = "e1103_all_reported"
+// edition = "2027"                             #~ E1103
+//
+// [export]
+// prefix = "VC"                                #~ E1103
+//
+// [targets.host]
+// kind = "dll"                                 #~ E1103
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// The manifest is one unit and every error is reported: a value of `[package]`, one of `[export]` and one of a
+// target are three E1103, none hides another (§18.1 "全ての誤りを報告する"; S-597, S-827).

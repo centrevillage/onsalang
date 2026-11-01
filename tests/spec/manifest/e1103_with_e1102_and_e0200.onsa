@@ -1,0 +1,19 @@
+// onsa.toml
+// [package]
+// name = "e1103_with_e1102_and_e0200"
+// edition = 2026                               #~ E1103
+// colour = "red"                               #~ E1102
+//
+// [dependencies]
+// fx = "1.0.0"                                 #~ E0200
+//
+// [export]
+// prefix = ""                                  #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// An unknown key (E1102), the values that are wrong (E1103) and a dependency (E0200) in one manifest are all
+// reported, each at its line (§18.1 "一つの項目に二つ以上の誤り…互いに独立に全て報告し"; S-597, S-827).

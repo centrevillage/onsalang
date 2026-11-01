@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1103_type_panic_messages_string"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = "true"                      #~ E1103
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `panic_messages` is a boolean; the string "true" is a type error at the value (§15.3 table, §18.1; S-99, S-827).

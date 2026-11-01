@@ -1,0 +1,6 @@
+[package]
+name = "e0200_dep_package_module"
+edition = "2026"
+
+[dependencies]
+fx = "1.0.0"                                    #~ E0200

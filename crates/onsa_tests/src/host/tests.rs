@@ -12,7 +12,7 @@ use crate::run::{self, Report};
 use crate::scalar::Scalar;
 
 const HEAD: &str = "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n\
-                    // prefix = \"onsa_\"\n// # what is exported has `@export` (§14.2): `f` and `sub`\n//\n//\n// [targets.t]\n\
+                    // prefix = \"m_\"\n// # what is exported has `@export` (§14.2): `f` and `sub`\n//\n//\n// [targets.t]\n\
                     // kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n\
                     // provides = []\n//\n// [test]\n";
 
@@ -533,7 +533,7 @@ fn the_runner_runs_and_compares() {
 }
 
 const SHAPES_HEAD: &str = "// onsa.toml\n// [package]\n// name = \"s\"\n// edition = \"2026\"\n//\n// [export]\n\
-// prefix = \"onsa_\"\n//\n// [targets.t]\n\
+// prefix = \"s_\"\n//\n// [targets.t]\n\
 // kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n// provides = []\n//\n// [test]\n";
 
 /// Every sequence passes on a correct harness, and each catches a harness
@@ -664,13 +664,13 @@ fn the_program_and_its_input() {
     let src = driver::program(&out, &plans).source;
     let has = |needle: &str| assert!(src.contains(needle), "{needle:?} not in the program:\n{src}");
     // in place: the same buffers as input and output (swap, step 3; mirror, step 3)
-    has("onsa_swap_process(s, &p, in2_0_0, in2_1_0, in2_0_0, in2_1_0, 2u)");
+    has("s_swap_process(s, &p, in2_0_0, in2_1_0, in2_0_0, in2_1_0, 2u)");
     has("float* out2_0[2] = { in2_0_0, in2_0_1 };");
-    has("onsa_mirror_process(s, &p, in2_0, out2_0, 1u)");
+    has("s_mirror_process(s, &p, in2_0, out2_0, 1u)");
     // fill: read into the output buffers before the call
     has("static float out3_0_0[1]; onsa_driver_need(out3_0_0, sizeof(float) * 1u);");
     // reset is called, and its end is marked
-    has("onsa_host_step(2u);\n    onsa_acc_reset(s);\n    { uint32_t done = 0x52455354u;");
+    has("onsa_host_step(2u);\n    s_acc_reset(s);\n    { uint32_t done = 0x52455354u;");
     // the storage holds the pattern before init
     has("memset(onsa_host_mem_0, 0xa5, sizeof onsa_host_mem_0);");
     assert!(!src.contains("swap /*") && !src.contains("in C */"), "a name reached the C:\n{src}");
@@ -740,9 +740,9 @@ fn the_records_are_the_headers() {
     let lin = out.unit.flows.iter().find(|a| a.flow == "s.lin").unwrap();
     assert_eq!(lin.init_args.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["a", "b"]);
     let f = &out.unit.fns[0];
-    assert_eq!((f.fn_.as_str(), f.symbol.as_str(), f.ret.as_deref()), ("s.first", "onsa_first", Some("float")));
-    assert!(header(&f.header).contains("float onsa_first(const float* xs, uint32_t xs_len);"));
-    assert_eq!(out.unit.take_panic.as_deref(), Some("onsa_take_panic"));
+    assert_eq!((f.fn_.as_str(), f.symbol.as_str(), f.ret.as_deref()), ("s.first", "s_first", Some("float")));
+    assert!(header(&f.header).contains("float s_first(const float* xs, uint32_t xs_len);"));
+    assert_eq!(out.unit.take_panic.as_deref(), Some("s_take_panic"));
 }
 
 /// The plans of `hosts` on the module of [`case`].

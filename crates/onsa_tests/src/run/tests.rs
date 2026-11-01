@@ -94,7 +94,7 @@ fn entry(target: &str) -> String {
     )
 }
 
-const MANIFEST: &str = "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"onsa_\"\n// # what is exported has `@export` (§14.2)\n//\n// [targets.a]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"trap\"\n// provides = []\n//\n// [targets.b]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n// provides = []\n";
+const MANIFEST: &str = "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"m_\"\n// # what is exported has `@export` (§14.2)\n//\n// [targets.a]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"trap\"\n// provides = []\n//\n// [targets.b]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n// provides = []\n";
 
 fn case<'a>(r: &'a Report, path: &str) -> &'a CaseReport {
     r.cases.iter().find(|c| c.run.path == path).unwrap_or_else(|| panic!("no case {path}"))
@@ -561,7 +561,7 @@ fn fix_contract() {
 fn conformance_scope() {
     let head = |exported: &[&str]| {
         format!(
-            "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"onsa_\"\n\
+            "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"m_\"\n\
                  // # {exported:?} have `@export`\n//\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n\
                  // panic = \"trap\"\n// provides = []\n//\n// [test]\n// conformance = true\n\n"
         )
@@ -601,7 +601,11 @@ fn conformance_scope() {
 
 #[test]
 fn small_holes() {
-    let bad_target = MANIFEST.replace("panic = \"poison\"", "panic = \"boom\"") + "\npub fn f() -> I32 {\n  1\n}\n";
+    // A value the manifest takes and the build does not (E0200 of the build, U3).
+    let bad_target = MANIFEST.replace(
+        "lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"",
+        "lang = \"js\"\n// platform = \"host\"\n// panic = \"poison\"",
+    ) + "\npub fn f() -> I32 {\n  1\n}\n";
     let flow = |name: &str| {
         MANIFEST.replace("name = \"m\"", &format!("name = \"{name}\""))
             + "\n@export\npub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n"
@@ -635,7 +639,7 @@ fn small_holes() {
     has("tests/none.onsa", "unknown code `E9999`");
     has("tests/no_tests.onsa", "has no `test` block");
     // the case's own settings are wrong: never pending
-    has("tests/bad_target/m.onsa", "unknown panic setting `boom`");
+    has("tests/bad_target/m.onsa", "`lang = \"js\"`");
     assert!(case(&r, "tests/bad_target/m.onsa").pending.is_none());
     // the two flatten to the same name; each has its own scratch directory
     for p in ["tests/a_b.onsa", "tests/a/b.onsa"] {

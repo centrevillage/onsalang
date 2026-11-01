@@ -420,16 +420,6 @@ impl TargetSettings {
             }
         }
         let platform = platform(&t.platform.value).map_err(&usage)?;
-        match text(&t.fp).unwrap_or("strict") {
-            "strict" | "strict-ftz" => {}
-            "relaxed" => {
-                return Err(usage(
-                    "fp = \"relaxed\" cannot be a target profile; use `@fp(relaxed)` on a fn or a flow (spec §15.5)"
-                        .into(),
-                ));
-            }
-            other => return Err(usage(format!("unknown fp profile `{other}`"))),
-        }
         let panic = match text(&t.panic) {
             None => {
                 if platform.hosted {
@@ -442,9 +432,8 @@ impl TargetSettings {
             Some("trap") => PanicMode::Trap,
             Some("reset") => PanicMode::Reset,
             Some("halt") => PanicMode::Halt,
-            Some(other) => {
-                return Err(usage(format!("unknown panic setting `{other}` (poison / trap / reset / halt)")));
-            }
+            // The check of the manifest stopped every other value (E1103, `table::PANIC`).
+            Some(other) => onsa_diag::internal::bug(None, format!("[targets.{name}]: the panic setting `{other}`")),
         };
         for e in &t.provides {
             if e.value != "Alloc" {
@@ -658,7 +647,11 @@ mod tests {
         assert_eq!(TargetSettings::from_manifest("t", &t).unwrap().panic, PanicMode::Reset);
         let t = target("clap", "host");
         assert!(matches!(TargetSettings::from_manifest("t", &t), Err(BuildError::Usage(_))));
-        let t = ManifestTarget { fp: Some(Spanned::new("relaxed".into())), ..target("staticlib", "host") };
-        assert!(matches!(TargetSettings::from_manifest("t", &t), Err(BuildError::Usage(_))));
+        // Every value of `panic` the manifest takes is a mode (the check of the
+        // manifest stops the others, E1103).
+        for &p in crate::manifest::table::PANIC {
+            let t = ManifestTarget { panic: Some(Spanned::new(p.into())), ..target("staticlib", "host") };
+            assert!(TargetSettings::from_manifest("t", &t).is_ok(), "{p}");
+        }
     }
 }

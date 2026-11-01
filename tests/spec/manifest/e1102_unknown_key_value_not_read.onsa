@@ -1,0 +1,25 @@
+// onsa.toml
+// [package]
+// name = "e1102_unknown_key_value_not_read"
+// edition = "2026"
+// colour = 3                                   #~ E1102
+// flavour = { a = [1, true] }                  #~ E1102
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+// panik = "abort"                              #~ E1102
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// An unknown key is an E1102 only; its value is not read, so a value of any type is not an E1103 (§18.1 "未知の
+// キーは E1102 だけで値を調べず"; S-827).

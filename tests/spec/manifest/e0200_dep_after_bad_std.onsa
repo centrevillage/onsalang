@@ -1,0 +1,16 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_after_bad_std"
+// edition = "2026"
+//
+// [dependencies]
+// std = "9.9.9"                                #~ E1103
+// fx = "1.0.0"                                 #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the E1103 of the pin of std and the E0200 of the dependency are both reported, each at its own line (the
+// items are independent) (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).

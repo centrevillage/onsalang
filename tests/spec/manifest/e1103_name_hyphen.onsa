@@ -1,0 +1,11 @@
+// onsa.toml
+// [package]
+// name = "My-Pkg"                              #~ E1103
+// edition = "2026"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: a hyphen and a capital are not in a `snake_case` identifier (the name of R-47) (§15.3 table, §2.3, §18.1; S-99, S-628, S-827).

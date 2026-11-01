@@ -366,8 +366,12 @@ mod tests {
         };
         let e = read("// onsa.toml\n// [targets.t]\n// kind = \"source\"\n// platform = \"host\"\n").unwrap_err();
         assert!(e.starts_with("m.onsa: missing table `[package]`"), "{e}");
-        let e = read("// onsa.toml\n// [package]\n// name = 3\n").unwrap_err();
-        assert!(e.contains("line 3, column 11"), "{e}");
+        // A value of another type is its E1103, at the value in the file.
+        let m = read("// onsa.toml\n// [package]\n// name = 3\n").unwrap();
+        assert_eq!(
+            m.diagnostics.iter().map(|d| (d.code, d.span.start)).collect::<Vec<_>>(),
+            [(onsa_diag::Code::E1103, 36)]
+        );
         // A table the manifest does not know is its E1102, at the key of the header.
         let m = read("// onsa.toml\n// [tests]\n// mode = \"parse\"\n").unwrap();
         assert_eq!(

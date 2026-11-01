@@ -1,0 +1,19 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_use_not_reported"
+// edition = "2026"
+//
+// [dependencies]
+// fx = "1.0.0"                                 #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the manifest's error stops the command before the source is read, so the `use fx.{thing}` below, which
+// would be an E0302 once the line is removed, is not reported (S-627) (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).
+
+use fx.{thing}
+
+pub fn f() -> I32 { 1 }

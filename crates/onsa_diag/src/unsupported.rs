@@ -223,6 +223,8 @@ features! {
     /// `{}`: the effect.
     ManifestProvides: Manifest, "`provides` other than `Alloc` (`{}`)", None;
     ManifestBind: Manifest, "`bind` in a target", None;
+    /// `{}`: the package (§15.3: reported by the check of the manifest, for every command).
+    ManifestDependency: Manifest, "dependencies other than `std` (`{}`)", None;
 }
 
 impl Feature {

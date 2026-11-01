@@ -1,0 +1,14 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_int"
+// edition = "2026"
+//
+// [dependencies]
+// fx = 1                                       #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the value is not read, so an integer is the same E0200 at the key, not an E1103 (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).

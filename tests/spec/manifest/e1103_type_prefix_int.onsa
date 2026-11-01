@@ -1,0 +1,15 @@
+// onsa.toml
+// [package]
+// name = "e1103_type_prefix_int"
+// edition = "2026"
+//
+// [export]
+// prefix = 5                                   #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `prefix` is a string; an integer is a type error, reported at the value. The shape of a string
+// (§14.2) is not in question (§15.3 table, §18.1; S-99, S-827).

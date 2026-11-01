@@ -371,16 +371,6 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
         assert!(dot.contains("  \"y\" -> \"out\"\n"), "{dot}");
     }
 
-    /// R-88: the flows are looked for in the user's package, the last of
-    /// `flatten`, even when it has the name of a dependency (`std`).
-    #[test]
-    fn the_flow_is_found_in_the_users_package_named_like_a_dependency() {
-        let analyzed = analyzed(package(crate::STD_PACKAGE, &[("res.onsa", RESONATOR)]));
-        assert_eq!(analyzed.analysis.modules.names, [crate::STD_PACKAGE, crate::STD_PACKAGE]);
-        let dot = super::graph(&analyzed, "resonator", None).unwrap();
-        assert!(dot.contains("\"y\" -> \"out\""), "{dot}");
-    }
-
     /// §18.2 (S-323): a name is the one flow of that name in the scope (the
     /// module of the file passed, or the package), else the candidates are
     /// listed; a module-qualified name must be in the scope.

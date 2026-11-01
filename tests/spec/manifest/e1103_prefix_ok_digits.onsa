@@ -1,0 +1,15 @@
+// onsa.toml
+// [package]
+// name = "e1103_prefix_ok_digits"
+// edition = "2026"
+//
+// [export]
+// prefix = "a1_"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// The `prefix` "a1_" has the shape of §14.2 (small letters and digits, starts with a letter, ends with
+// `_`), so it is not reported (§14.2, §15.3; S-95, S-99, S-827).

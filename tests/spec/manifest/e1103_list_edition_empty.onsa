@@ -1,0 +1,11 @@
+// onsa.toml
+// [package]
+// name = "e1103_list_edition_empty"
+// edition = ""                                 #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the empty string is not in the list of `edition`; the key is present, so it is not an E1104 (§15.3 table, §18.1; S-99, S-597, S-827).

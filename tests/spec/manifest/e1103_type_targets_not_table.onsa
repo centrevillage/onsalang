@@ -1,0 +1,13 @@
+// onsa.toml
+// targets = 1                                  #~ E1103
+//
+// [package]
+// name = "e1103_type_targets_not_table"
+// edition = "2026"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `[targets]` is a table of tables; an integer is a type error at the value (§15.3 table, §18.1; S-99, S-827).

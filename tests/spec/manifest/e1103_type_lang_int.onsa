@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1103_type_lang_int"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = 1                                     #~ E1103
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `lang` is a string; an integer is a type error at the value (§15.3 table, §18.1; S-99, S-827).

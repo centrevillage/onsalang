@@ -1,0 +1,16 @@
+// onsa.toml
+// [package]
+// name = "e1103_std_version_match"
+// edition = "2026"
+//
+// [dependencies]
+// std = "0.1.0"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// `std = "x.y.z"` pins the embedded std. The version of the embedded std is the version of the compiler, which
+// `onsa --version` shows on its second line (`std 0.1.0` in the copy at the time of writing); the pin that
+// matches is not reported (§15.3 std paragraph, §18.2; S-83, S-626, S-827; R-88).

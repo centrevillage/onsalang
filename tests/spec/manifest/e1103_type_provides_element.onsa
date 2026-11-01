@@ -1,0 +1,25 @@
+// onsa.toml
+// [package]
+// name = "e1103_type_provides_element"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = [
+//   "Alloc",
+//   3,                                         #~ E1103
+// ]
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: an element of `provides` that is not a string is reported at the element, on its own line, not at the key (§15.3 table, §18.1; S-99, S-827).
+// (§18.1 "配列は要素").

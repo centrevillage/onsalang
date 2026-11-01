@@ -1,0 +1,16 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_header_table"
+// edition = "2026"
+//
+// [dependencies.fx]                            #~ E0200
+// path = "../fx"
+// version = "1.0.0"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: a dependency written as a table heading is reported at the key in the heading; the keys under it
+// are not read (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).

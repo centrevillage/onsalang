@@ -1,0 +1,16 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_with_std_pin"
+// edition = "2026"
+//
+// [dependencies]
+// std = "0.1.0"
+// fx = "1.0.0"                                 #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the pin of std that matches is not reported, and the dependency after it is (the embedded version is in
+// `onsa --version`) (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).

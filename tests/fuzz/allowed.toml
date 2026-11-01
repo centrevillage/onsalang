@@ -547,3 +547,10 @@ left = "expected `…`, found `…`"
 input = "tests/fuzz/20cb57ba.onsa"
 reasons = ["R-344"]
 note = "an input with two errors: the parentheses after the unit variant `None`, and an `Option` in a body that returns `U32`; the candidate of the parentheses leaves the E0401 of the type, which the E0412 hid (the sweep at 195e052, shard 0/2)"
+
+[[allowed]]
+class = "fix|E0020|call the function value with `…`|E0002"
+left = "this `…` is never closed"
+input = "tests/fuzz/e96971f5.onsa"
+reasons = ["S-384"]
+note = "an input with two errors in one unit: a call of the number `9(` (E0020) and a `(` of its arguments that is never closed; the E0020 hides the second, and the candidate `.(` leaves it"

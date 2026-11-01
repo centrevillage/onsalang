@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// R-88 (S-83): the manifest of `tests/review-phase1/parent/r88/`. std is embedded in the compiler, and
+// "9.9.9" is not its version, so the manifest is wrong and the command stops before the source (§15.3 std paragraph, §18.2; S-83, S-626, S-827; R-88).
+
+pub fn f() -> I32 { 1 }

@@ -1,0 +1,11 @@
+// onsa.toml
+// [package]
+// name = "my_synth2"
+// edition = "2026"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// A name that is a `snake_case` identifier (letters, digits after the first letter, `_`) is not reported (§15.3 table, §2.3, §18.1; S-99, S-628, S-827).

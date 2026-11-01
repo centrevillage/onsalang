@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1103_list_kind_underscore"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "wasm_worklet"                        #~ E1103
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `wasm-worklet` is spelled with a hyphen; "wasm_worklet" is not in the list, and no candidate is made (S-597) (§15.3 table, §18.1; S-99, S-597, S-827).

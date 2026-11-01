@@ -81,6 +81,24 @@ pub enum Read {
     Later,
 }
 
+/// The rule of a value beyond its shape; a value that breaks it is an E1103
+/// at the value (§15.3, §18.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rule {
+    Any,
+    /// One of a closed list (the list is the note, S-597), with a note for
+    /// every value outside it.
+    OneOf(&'static [&'static str], Option<&'static str>),
+    /// A `snake_case` identifier other than `std` (§15.3, S-628).
+    PackageName,
+    /// The form of `prefix` (§14.2).
+    Prefix,
+    /// The version of the embedded std (§15.3, S-83).
+    StdVersion,
+    /// A number of bytes: 0 or more (S-827).
+    Bytes,
+}
+
 /// A key of a table.
 #[derive(Debug, Clone, Copy)]
 pub struct Row {
@@ -89,14 +107,28 @@ pub struct Row {
     pub field: Field,
     pub shape: Shape,
     pub read: Read,
+    pub rule: Rule,
 }
 
 const fn row(table: Table, key: &'static str, field: Field, shape: Shape, read: Read) -> Row {
-    Row { table, key, field, shape, read }
+    Row { table, key, field, shape, read, rule: Rule::Any }
+}
+
+impl Row {
+    const fn with(self, rule: Rule) -> Row {
+        Row { rule, ..self }
+    }
 }
 
 use Read::{Later, Yes};
+use Rule::OneOf;
 use Shape::{Bool, Int, Str, Strs};
+
+/// The values of `panic` (§9.2), which `onsa build` maps to its modes.
+pub const PANIC: &[&str] = &["poison", "trap", "reset", "halt"];
+
+const KINDS: &[&str] = &["exe", "clap", "vst3", "au", "wasm-worklet", "staticlib", "source"];
+const FP_NOTE: &str = "a fn or a flow takes a relaxed profile with `@fp(relaxed)` (§15.5)";
 
 /// The rows of §15.3, table by table.
 pub static ROWS: &[Row] = &[
@@ -105,22 +137,22 @@ pub static ROWS: &[Row] = &[
     row(Table::Root, "export", Field::Export, Shape::Table(Table::Export), Yes),
     row(Table::Root, "targets", Field::Targets, Shape::Table(Table::Targets), Yes),
     row(Table::Root, "plugin", Field::Plugin, Shape::Tables(Table::Plugin), Yes),
-    row(Table::Package, "name", Field::Name, Str, Yes),
-    row(Table::Package, "edition", Field::Edition, Str, Yes),
-    row(Table::Export, "prefix", Field::Prefix, Str, Yes),
-    row(Table::Target, "kind", Field::Kind, Str, Yes),
+    row(Table::Package, "name", Field::Name, Str, Yes).with(Rule::PackageName),
+    row(Table::Package, "edition", Field::Edition, Str, Yes).with(OneOf(&["2026"], None)),
+    row(Table::Export, "prefix", Field::Prefix, Str, Yes).with(Rule::Prefix),
+    row(Table::Target, "kind", Field::Kind, Str, Yes).with(OneOf(KINDS, None)),
     row(Table::Target, "platform", Field::Platform, Str, Yes),
-    row(Table::Target, "lang", Field::Lang, Str, Yes),
-    row(Table::Target, "fp", Field::Fp, Str, Yes),
+    row(Table::Target, "lang", Field::Lang, Str, Yes).with(OneOf(&["c", "js"], None)),
+    row(Table::Target, "fp", Field::Fp, Str, Yes).with(OneOf(&["strict", "strict-ftz"], Some(FP_NOTE))),
     row(Table::Target, "provides", Field::Provides, Strs, Yes),
-    row(Table::Target, "panic", Field::Panic, Str, Yes),
+    row(Table::Target, "panic", Field::Panic, Str, Yes).with(OneOf(PANIC, None)),
     row(Table::Target, "panic_messages", Field::PanicMessages, Bool, Yes),
-    row(Table::Target, "main_frame", Field::MainFrame, Str, Yes),
+    row(Table::Target, "main_frame", Field::MainFrame, Str, Yes).with(OneOf(&["stack", "static"], None)),
     row(Table::Target, "memory", Field::Memory, Shape::Table(Table::Memory), Yes),
     row(Table::Target, "bind", Field::Bind, Shape::Table(Table::Bind), Yes),
-    row(Table::Memory, "bulk", Field::Bulk, Bool, Later),
-    row(Table::Memory, "fast_budget", Field::FastBudget, Int, Later),
-    row(Table::Memory, "bulk_budget", Field::BulkBudget, Int, Later),
+    row(Table::Memory, "bulk", Field::Bulk, Bool, Yes),
+    row(Table::Memory, "fast_budget", Field::FastBudget, Int, Yes).with(Rule::Bytes),
+    row(Table::Memory, "bulk_budget", Field::BulkBudget, Int, Yes).with(Rule::Bytes),
     row(Table::Plugin, "flow", Field::Flow, Str, Later),
     row(Table::Plugin, "id", Field::Id, Str, Later),
     row(Table::Plugin, "name", Field::Name, Str, Later),
@@ -134,14 +166,35 @@ pub static ROWS: &[Row] = &[
     row(Table::Au, "manufacturer", Field::Manufacturer, Str, Later),
 ];
 
-/// The shape of every entry of a table whose keys are names the writer
-/// chooses (§15.3), or `None` for a table of rows.
-pub fn named(table: Table) -> Option<Shape> {
-    match table {
-        Table::Dependencies | Table::Bind => Some(Str),
-        Table::Targets => Some(Shape::Table(Table::Target)),
-        _ => None,
-    }
+/// The rule of the names of a table of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Names {
+    Any,
+    /// A `snake_case` identifier, else an E1103 at the name; the word names
+    /// what is named (§15.3, S-828).
+    SnakeCase(&'static str),
+    /// Only `std`: another package is an E0200 at its key, whose value is
+    /// not read (§15.3, S-154, S-827 (d′)).
+    Std,
+}
+
+/// Every entry of a table whose keys are names the writer chooses.
+#[derive(Debug, Clone, Copy)]
+pub struct Named {
+    pub shape: Shape,
+    pub rule: Rule,
+    pub names: Names,
+}
+
+/// The entries of a table of names (§15.3), or `None` for a table of rows.
+pub fn named(table: Table) -> Option<Named> {
+    let (shape, rule, names) = match table {
+        Table::Dependencies => (Str, Rule::StdVersion, Names::Std),
+        Table::Bind => (Str, Rule::Any, Names::Any),
+        Table::Targets => (Shape::Table(Table::Target), Rule::Any, Names::SnakeCase("target")),
+        _ => return None,
+    };
+    Some(Named { shape, rule, names })
 }
 
 /// The row of `key` in `table`.

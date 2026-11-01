@@ -1,0 +1,11 @@
+// onsa.toml
+// [package]
+// name = "e1103_type_edition_table"
+// edition = { year = "2026" }                  #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `edition` is a string; an inline table is a type error, and its keys are not read (§15.3 table, §18.1; S-99, S-827).

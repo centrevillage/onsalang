@@ -78,10 +78,15 @@ pub struct ManifestTarget {
     pub bind: BTreeMap<String, Spanned<String>>,
 }
 
-/// `[targets.<name>.memory]`: its keys (`bulk`, `fast_budget`,
-/// `bulk_budget`) are not read yet (W9-05, W9-06).
+/// `[targets.<name>.memory]` (§12.4, §15.3): checked by every command, and
+/// not used yet (W9-05, W9-06).
 #[derive(Debug, Default, Clone)]
-pub struct ManifestMemory {}
+pub struct ManifestMemory {
+    pub bulk: Option<Spanned<bool>>,
+    /// Bytes, 0 or more.
+    pub fast_budget: Option<Spanned<i64>>,
+    pub bulk_budget: Option<Spanned<i64>>,
+}
 
 /// The manifest of an input as read: its values and the diagnostics of its
 /// check (`Stage::Manifest`, §18.1), which stop every command before the

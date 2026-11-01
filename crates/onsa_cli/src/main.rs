@@ -7,8 +7,8 @@ use clap::{Parser, Subcommand};
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 
 /// What `onsa --version` shows after `onsa `: the compiler's version and, on
-/// its own line, the embedded std's (spec §15.3, S-160).
-// SPEC-GAP(S-626): the spec does not fix the shape of the output; two lines, `onsa <version>` and `std <version>`.
+/// its own line, the embedded std's: two lines, `onsa <version>` and
+/// `std <version>` (spec §15.3, §18.2, S-160, S-626).
 static VERSION: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| format!("{}\nstd {}", env!("CARGO_PKG_VERSION"), onsa_driver::STD_VERSION));
 

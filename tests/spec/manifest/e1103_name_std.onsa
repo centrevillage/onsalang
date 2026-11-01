@@ -1,0 +1,12 @@
+// onsa.toml
+// [package]
+// name = "std"                                 #~ E1103
+// edition = "2026"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `std` cannot be the name of a package, because it is the name of the embedded standard library. The
+// value is an identifier, so this is not an E0304 (§15.3 table; §18.1; S-83, S-628, S-827).

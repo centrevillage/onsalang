@@ -168,7 +168,6 @@ const FX: &str = "\n[dependencies]\nfx = \"1.0.0\"\n";
 /// command runs, at the entry (line 6 of the manifest `MANIFEST` + `FX`). The diagnostic points
 /// into `onsa.toml`, so the exit code is 2 (§18.2) and `--json` still prints the document.
 #[test]
-#[ignore = "W4-02"]
 fn a_dependency_other_than_std_is_e0200_in_the_manifest_for_every_command() {
     let d = package("dep_fx", FX);
     // `check --json`
@@ -200,7 +199,6 @@ fn a_dependency_other_than_std_is_e0200_in_the_manifest_for_every_command() {
 /// Spec §15.3: each dependency other than std is its own E0200, at its own entry. An entry for
 /// std in the same table is not one of them (the pin is W4-02).
 #[test]
-#[ignore = "W4-02"]
 fn each_dependency_other_than_std_has_its_own_e0200() {
     let d = package("dep_two", "\n[dependencies]\nfx = \"1.0.0\"\nstd = \"0.0.0\"\nfy = \"2.1.0\"\n");
     let (out, doc) = check_json(&d);
@@ -219,7 +217,6 @@ fn each_dependency_other_than_std_has_its_own_e0200() {
 /// is 2. (What the source does with the name, and so whether E0302 is also reported for it, is
 /// not fixed.)
 #[test]
-#[ignore = "W4-02"]
 fn a_dependency_other_than_std_that_is_used_is_e0200_as_well() {
     let d = package("dep_used", FX);
     d.write("m.onsa", "use fx.{thing}\n\npub fn one() -> I32 {\n  1\n}\n");

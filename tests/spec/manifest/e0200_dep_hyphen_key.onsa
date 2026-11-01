@@ -1,0 +1,14 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_hyphen_key"
+// edition = "2026"
+//
+// [dependencies]
+// My-Fx = "1.0.0"                              #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the shape of the key is not read either: `My-Fx` is not an identifier, and it is still the one E0200 (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).

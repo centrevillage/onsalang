@@ -7,18 +7,19 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::ops::Range;
 
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 use toml_edit::{ImDocument, Item, TableLike};
 
-use super::table::{self, Field, Read, Shape, Table};
+use super::table::{self, Field, Names, Read, Rule, Shape, Table};
 use super::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestRead, ManifestTarget, Spanned};
-use crate::{ManifestForm, ManifestSource};
+use crate::{ManifestForm, ManifestSource, STD_PACKAGE, STD_VERSION};
 
 /// Read the manifest of `source`, whose places are in `file`. The
-/// diagnostics are those of the keys (E1101, E1102, the E1103 of a target
-/// name); a wrong value or a missing key is still an error of the reading
-/// (U2b), which names the manifest by its file string (`onsa.toml` for a
-/// package root, S-234) and keeps the line and the column.
+/// diagnostics are every one of its check, each independent of the others
+/// (E1101, E1102, E1103, the E0200 of a dependency, §18.1); a missing key is
+/// still an error of the reading (U2b2), which names the manifest by its file
+/// string (`onsa.toml` for a package root, S-234).
 pub fn read(source: &ManifestSource, file: FileId) -> Result<ManifestRead, String> {
     let done = |manifest, diagnostics| ManifestRead { file, form: source.form, manifest, diagnostics };
     let doc = match ImDocument::parse(source.text.as_str()) {
@@ -44,15 +45,14 @@ pub fn read(source: &ManifestSource, file: FileId) -> Result<ManifestRead, Strin
             return Ok(done(Manifest::default(), vec![d]));
         }
     };
-    let reader = Reader { source, file, diagnostics: RefCell::default() };
+    let reader = Reader { source, file, diagnostics: RefCell::default(), missing: RefCell::default() };
     let manifest = reader.manifest(doc.as_table());
     let diagnostics = reader.diagnostics.into_inner();
-    match manifest {
-        Ok(m) => Ok(done(m, diagnostics)),
-        // An error of the reading beside a diagnostic: the diagnostics are
-        // reported (all stop the command with exit 2; U2b makes the errors diagnostics).
-        Err(_) if !diagnostics.is_empty() => Ok(done(Manifest::default(), diagnostics)),
-        Err(e) => Err(format!("{}: {e}", source.path)),
+    match reader.missing.into_inner() {
+        // A missing key beside a diagnostic: the diagnostics are reported
+        // (both stop the command with exit 2; U2b2 makes it an E1104).
+        Some(e) if diagnostics.is_empty() => Err(format!("{}: {e}", source.path)),
+        _ => Ok(done(manifest, diagnostics)),
     }
 }
 
@@ -60,12 +60,15 @@ struct Reader<'s> {
     source: &'s ManifestSource,
     file: FileId,
     diagnostics: RefCell<Vec<Diagnostic>>,
+    /// The first key the reader requires that is not written ([`Reader::need`]).
+    missing: RefCell<Option<String>>,
 }
 
 /// A value read by the shape of its row.
 enum Typed<'a> {
     Str(String),
     Bool(bool),
+    Int(i64),
     Strs(Vec<Spanned<String>>),
     Table(&'a dyn TableLike, Table),
     /// The tables of an array of tables, each a [`Typed::Table`].
@@ -80,53 +83,61 @@ struct Got<'a> {
     span: Range<usize>,
 }
 
-/// The keys of one table, read by its rows; each is taken once.
+/// The keys of one table, read by its rows; each is taken once. `wrong`
+/// holds the keys written with a value of another type (an E1103 each).
 struct Fields<'a> {
     table: Table,
     path: String,
     got: Vec<(Field, Got<'a>)>,
+    wrong: Vec<Field>,
 }
 
 impl<'s> Reader<'s> {
-    fn manifest(&self, root: &dyn TableLike) -> Result<Manifest, String> {
-        let mut f = self.fields(Table::Root, root, "")?;
-        let package = self.table(f.need(Field::Package)?, |f| {
-            Ok(ManifestPackage { name: f.need(Field::Name)?.str(), edition: f.take(Field::Edition).map(Got::str) })
-        })?;
-        let dependencies = self.strings(f.take(Field::Dependencies))?;
+    fn manifest(&self, root: &dyn TableLike) -> Manifest {
+        let mut f = self.fields(Table::Root, root, "");
+        let package = self.need(&mut f, Field::Package).map(|g| {
+            self.table(g, |f| ManifestPackage {
+                name: self.need(f, Field::Name).map(Got::str).unwrap_or_default(),
+                edition: f.take(Field::Edition).map(Got::str),
+            })
+        });
+        let dependencies = self.strings(f.take(Field::Dependencies));
         let export = f
             .take(Field::Export)
-            .map(|g| self.table(g, |f| Ok(ManifestExport { prefix: f.take(Field::Prefix).map(Got::str) })));
-        let targets = match f.take(Field::Targets) {
-            Some(g) => self.map(g, |g| self.table(g, |f| self.target(f)))?,
-            None => BTreeMap::new(),
-        };
+            .map(|g| self.table(g, |f| ManifestExport { prefix: f.take(Field::Prefix).map(Got::str) }));
+        let targets = f.take(Field::Targets).map(|g| self.map(g, |g| self.table(g, |f| self.target(f))));
         // `[[plugin]]` is walked for its keys; its values are U4's.
         for p in f.take(Field::Plugin).map(Got::tables).unwrap_or_default() {
-            self.table(p, |f| f.take(Field::Au).map_or(Ok(()), |g| self.table(g, |_| Ok(())).map(drop)))?;
+            self.table(p, |f| f.take(Field::Au).map(|g| self.table(g, |_| ())));
         }
         f.done();
-        Ok(Manifest { package, dependencies, export: export.transpose()?, targets })
+        Manifest { package: package.unwrap_or_default(), dependencies, export, targets: targets.unwrap_or_default() }
     }
 
-    fn target(&self, f: &mut Fields) -> Result<ManifestTarget, String> {
-        Ok(ManifestTarget {
-            kind: f.need(Field::Kind)?.str(),
-            platform: f.need(Field::Platform)?.str(),
+    fn target(&self, f: &mut Fields) -> ManifestTarget {
+        ManifestTarget {
+            kind: self.need(f, Field::Kind).map(Got::str).unwrap_or_default(),
+            platform: self.need(f, Field::Platform).map(Got::str).unwrap_or_default(),
             lang: f.take(Field::Lang).map(Got::str),
             fp: f.take(Field::Fp).map(Got::str),
             provides: f.take(Field::Provides).map(Got::strs).unwrap_or_default(),
             panic: f.take(Field::Panic).map(Got::str),
             panic_messages: f.take(Field::PanicMessages).map(Got::bool),
             main_frame: f.take(Field::MainFrame).map(Got::str),
-            memory: f.take(Field::Memory).map(|g| self.table(g, |_| Ok(ManifestMemory {}))).transpose()?,
-            bind: self.strings(f.take(Field::Bind))?,
-        })
+            memory: f.take(Field::Memory).map(|g| {
+                self.table(g, |f| ManifestMemory {
+                    bulk: f.take(Field::Bulk).map(Got::bool),
+                    fast_budget: f.take(Field::FastBudget).map(Got::int),
+                    bulk_budget: f.take(Field::BulkBudget).map(Got::int),
+                })
+            }),
+            bind: self.strings(f.take(Field::Bind)),
+        }
     }
 
     /// The keys of `t`, the table `table` at `path`, read by its rows.
-    fn fields<'a>(&self, table: Table, t: &'a dyn TableLike, path: &str) -> Result<Fields<'a>, String> {
-        let mut got = Vec::new();
+    fn fields<'a>(&self, table: Table, t: &'a dyn TableLike, path: &str) -> Fields<'a> {
+        let mut f = Fields { table, path: path.to_string(), got: Vec::new(), wrong: Vec::new() };
         for (key, item) in t.iter() {
             if table == Table::Root && self.source.form == ManifestForm::Fragment && key == table::FRAGMENT_TEST {
                 continue;
@@ -138,27 +149,31 @@ impl<'s> Reader<'s> {
             if row.read == Read::Later {
                 continue;
             }
-            got.push((row.field, self.got(row.shape, t, key, item, path)?));
+            match self.got(row.shape, row.rule, t, key, item, path) {
+                Some(g) => f.got.push((row.field, g)),
+                None => f.wrong.push(row.field),
+            }
         }
-        Ok(Fields { table, path: path.to_string(), got })
+        f
     }
 
-    /// The value of `key` of `t` read as `shape`.
+    /// The value of `key` of `t` read as `shape`, checked by `rule`. A value
+    /// of another type is an E1103 at the value (an element of an array: at
+    /// the element, and the others are read) and is not read: none, and a
+    /// table is not walked.
     fn got<'a>(
         &self,
         shape: Shape,
+        rule: Rule,
         t: &'a dyn TableLike,
         key: &str,
         item: &'a Item,
         path: &str,
-    ) -> Result<Got<'a>, String> {
+    ) -> Option<Got<'a>> {
         let path = dotted(path, key);
         // An implicit table has no span of its own: the place of its key.
         let key_span = key_span(t, key, item);
         let span = item.span().unwrap_or_else(|| key_span.clone());
-        let wrong = |at: usize, found: &str, expected: &str| {
-            self.error(at, format!("`{path}`: invalid type: {found}, expected {expected}"))
-        };
         let expected = match shape {
             Shape::Str => "a string",
             Shape::Bool => "a boolean",
@@ -167,22 +182,25 @@ impl<'s> Reader<'s> {
             Shape::Table(_) => "a table",
             Shape::Tables(_) => "an array of tables",
         };
-        let not = || wrong(span.start, item.type_name(), expected);
+        let wrong = |at: Option<Range<usize>>, found: &str| {
+            let at = at.unwrap_or_else(|| span.clone());
+            self.e1103(at, format!("`{path}` takes {expected}, found {found}"), &[]);
+        };
         let value = match shape {
-            Shape::Str => Typed::Str(item.as_str().ok_or_else(not)?.to_string()),
-            Shape::Bool => Typed::Bool(item.as_bool().ok_or_else(not)?),
-            // No key read yet holds an integer (`fast_budget`, `bulk_budget`: W9-05).
-            Shape::Int => onsa_diag::internal::bug(None, format!("`{path}`: an integer is not read yet")),
-            Shape::Strs => {
-                let mut out = Vec::new();
-                for v in item.as_array().ok_or_else(not)? {
-                    let at = v.span().unwrap_or_default();
-                    let s = v.as_str().ok_or_else(|| wrong(at.start, v.type_name(), "a string"))?;
-                    out.push(Spanned { value: s.to_string(), key: key_span.clone(), span: at });
-                }
-                Typed::Strs(out)
-            }
-            Shape::Table(table) => Typed::Table(item.as_table_like().ok_or_else(not)?, table),
+            Shape::Str => item.as_str().map(|s| Typed::Str(s.to_string())),
+            Shape::Bool => item.as_bool().map(Typed::Bool),
+            Shape::Int => item.as_integer().map(Typed::Int),
+            Shape::Strs => item.as_array().map(|a| {
+                let each = |v: &toml_edit::Value| {
+                    let s = v.as_str();
+                    if s.is_none() {
+                        wrong(v.span(), v.type_name());
+                    }
+                    Some(Spanned { value: s?.to_string(), key: key_span.clone(), span: v.span().unwrap_or_default() })
+                };
+                Typed::Strs(a.iter().filter_map(each).collect())
+            }),
+            Shape::Table(table) => item.as_table_like().map(|t| Typed::Table(t, table)),
             Shape::Tables(table) => {
                 let one = |t: &'a dyn TableLike, at: Option<Range<usize>>| Got {
                     value: Typed::Table(t, table),
@@ -191,51 +209,118 @@ impl<'s> Reader<'s> {
                     span: at.unwrap_or_else(|| span.clone()),
                 };
                 match item.as_array_of_tables() {
-                    Some(a) => Typed::Tables(a.iter().map(|t| one(t, t.span())).collect()),
-                    None => {
-                        let mut out = Vec::new();
-                        for v in item.as_array().ok_or_else(not)? {
-                            let at = v.span();
-                            let t = v
-                                .as_inline_table()
-                                .ok_or_else(|| wrong(at.clone().unwrap_or_default().start, v.type_name(), "a table"))?;
-                            out.push(one(t, at));
-                        }
-                        Typed::Tables(out)
-                    }
+                    Some(a) => Some(Typed::Tables(a.iter().map(|t| one(t, t.span())).collect())),
+                    None => item.as_array().map(|a| {
+                        let each = |v: &'a toml_edit::Value| {
+                            let t = v.as_inline_table();
+                            if t.is_none() {
+                                wrong(v.span(), v.type_name());
+                            }
+                            Some(one(t?, v.span()))
+                        };
+                        Typed::Tables(a.iter().filter_map(each).collect())
+                    }),
                 }
             }
         };
-        Ok(Got { value, path, key: key_span, span })
+        let Some(value) = value else {
+            wrong(None, item.type_name());
+            return None;
+        };
+        let got = Got { value, path, key: key_span, span };
+        self.check(rule, &got);
+        Some(got)
+    }
+
+    /// The E1103 of a value that breaks the rule of its row (§15.3, §14.2),
+    /// with the rule in a note (S-597).
+    fn check(&self, rule: Rule, got: &Got) {
+        let path = &got.path;
+        let (message, notes) = match (rule, &got.value) {
+            (Rule::OneOf(values, also), Typed::Str(v)) if !values.contains(&v.as_str()) => {
+                let list: Vec<String> = values.iter().map(|v| format!("`\"{v}\"`")).collect();
+                let mut notes = vec![format!("the values of `{path}` are {}", list.join(", "))];
+                notes.extend(also.map(str::to_string));
+                (format!("`\"{v}\"` is not a value of `{path}`"), notes)
+            }
+            (Rule::PackageName, Typed::Str(v)) if v == STD_PACKAGE => (
+                format!("the package name cannot be `{STD_PACKAGE}`"),
+                vec![format!("`{STD_PACKAGE}` is the name of the embedded standard library (§15.3)")],
+            ),
+            (Rule::PackageName, Typed::Str(v)) => return self.snake_case(v, got.span.clone(), "package"),
+            (Rule::Prefix, Typed::Str(v)) if !is_prefix(v) => (
+                format!("`\"{v}\"` is not a `prefix`"),
+                vec![
+                    "a `prefix` is of lowercase letters, digits and `_`, begins with a letter, ends with `_`, \
+                      has no `__` and does not begin with `onsa_` (§14.2)"
+                        .to_string(),
+                ],
+            ),
+            (Rule::StdVersion, Typed::Str(v)) if v != STD_VERSION => (
+                format!("`\"{v}\"` is not the version of the embedded std"),
+                vec![format!("the embedded std is version `{STD_VERSION}` (§15.3)")],
+            ),
+            (Rule::Bytes, Typed::Int(n)) if *n < 0 => (
+                format!("`{path}` is `{n}`, not a number of bytes"),
+                vec!["a number of bytes is 0 or more".to_string()],
+            ),
+            _ => return,
+        };
+        self.e1103(got.span.clone(), message, &notes);
     }
 
     /// The table of `got` built by `build` from its keys.
-    fn table<T>(&self, got: Got, build: impl FnOnce(&mut Fields) -> Result<T, String>) -> Result<Spanned<T>, String> {
+    fn table<T>(&self, got: Got, build: impl FnOnce(&mut Fields) -> T) -> Spanned<T> {
         let (t, table) = got.as_table();
-        let mut f = self.fields(table, t, &got.path)?;
-        let value = build(&mut f)?;
+        let mut f = self.fields(table, t, &got.path);
+        let value = build(&mut f);
         f.done();
-        Ok(Spanned { value, key: got.key, span: got.span })
+        Spanned { value, key: got.key, span: got.span }
     }
 
-    /// The entries of the table of names of `got` ([`table::named`]), each built by `each`.
-    fn map<'a, T>(
-        &self,
-        got: Got<'a>,
-        each: impl Fn(Got<'a>) -> Result<T, String>,
-    ) -> Result<BTreeMap<String, T>, String> {
+    /// The entries of the table of names of `got` ([`table::named`]), each
+    /// built by `each`, and the diagnostics of their names.
+    fn map<'a, T>(&self, got: Got<'a>, each: impl Fn(Got<'a>) -> T) -> BTreeMap<String, T> {
         let (t, table) = got.as_table();
-        let Some(shape) = table::named(table) else {
+        let Some(named) = table::named(table) else {
             onsa_diag::internal::bug(None, format!("`{}` is read as a table of names", got.path));
         };
         let mut out = BTreeMap::new();
         for (key, item) in t.iter() {
-            if table == Table::Targets {
-                self.snake_case(key, key_span(t, key, item), "target");
+            let at = key_span(t, key, item);
+            match named.names {
+                Names::SnakeCase(what) => self.snake_case(key, at, what),
+                // Another package than std: its key, and no more (§15.3, S-827 (d′)).
+                Names::Std if key != STD_PACKAGE => {
+                    self.push(Feature::ManifestDependency.diagnostic(Stage::Manifest, self.span(at), &[key]));
+                    continue;
+                }
+                Names::Std | Names::Any => {}
             }
-            out.insert(key.to_string(), each(self.got(shape, t, key, item, &got.path)?)?);
+            if let Some(g) = self.got(named.shape, named.rule, t, key, item, &got.path) {
+                out.insert(key.to_string(), each(g));
+            }
         }
-        Ok(out)
+        out
+    }
+
+    /// A key the reader requires: `[package]`, `name`, `kind` and, as
+    /// before the table was closed, `platform` in every target (U3 moves it
+    /// to the build, E1104). The first one missing is the error of the
+    /// reading; the walk goes on (a key of another type is an E1103 already).
+    fn need<'a>(&self, f: &mut Fields<'a>, field: Field) -> Option<Got<'a>> {
+        let got = f.take(field);
+        if got.is_none() && !f.wrong.contains(&field) {
+            let Some(row) = table::row_of(f.table, field) else {
+                onsa_diag::internal::bug(None, format!("no row for {field:?} in {:?}", f.table));
+            };
+            let e = match f.table {
+                Table::Root => format!("missing table `[{}]`", row.key),
+                _ => format!("`[{}]`: missing key `{}`", f.path, row.key),
+            };
+            self.missing.borrow_mut().get_or_insert(e);
+        }
+        got
     }
 
     /// The E1102 of `key` of `t`, the table `table` at `path`, which the
@@ -253,7 +338,7 @@ impl<'s> Reader<'s> {
         let d =
             Diagnostic::new(Stage::Manifest, Code::E1102, self.span(key_span(t, key, item)), format!("unknown {what}"))
                 .with_rule(table::keys_note(table, path));
-        self.diagnostics.borrow_mut().push(d);
+        self.push(d);
     }
 
     /// The rule of a name the manifest gives (§15.3): a `snake_case`
@@ -261,15 +346,22 @@ impl<'s> Reader<'s> {
     /// place of the rule, for the names of the targets and of the package.
     fn snake_case(&self, name: &str, at: Range<usize>, what: &str) {
         if !onsa_syntax::is_module_name(name) {
-            let d = Diagnostic::new(
-                Stage::Manifest,
-                Code::E1103,
-                self.span(at),
+            self.e1103(
+                at,
                 format!("the {what} name `{name}` is not a `snake_case` identifier"),
-            )
-            .with_rule(format!("a {what} name is a `snake_case` identifier, as a module name (§2.3, §15.3)"));
-            self.diagnostics.borrow_mut().push(d);
+                &[format!("a {what} name is a `snake_case` identifier, as a module name (§2.3, §15.3)")],
+            );
         }
+    }
+
+    /// An E1103 at `at`, with `notes` without a place and no candidate (S-597).
+    fn e1103(&self, at: Range<usize>, message: String, notes: &[String]) {
+        let d = Diagnostic::new(Stage::Manifest, Code::E1103, self.span(at), message);
+        self.push(notes.iter().fold(d, |d, n| d.with_rule(n.clone())));
+    }
+
+    fn push(&self, d: Diagnostic) {
+        self.diagnostics.borrow_mut().push(d);
     }
 
     fn span(&self, at: Range<usize>) -> Span {
@@ -277,39 +369,26 @@ impl<'s> Reader<'s> {
     }
 
     /// A table of names whose entries are strings (`[dependencies]`, `bind`); none when not written.
-    fn strings(&self, got: Option<Got>) -> Result<BTreeMap<String, Spanned<String>>, String> {
-        got.map_or_else(|| Ok(BTreeMap::new()), |g| self.map(g, |g| Ok(g.str())))
+    fn strings(&self, got: Option<Got>) -> BTreeMap<String, Spanned<String>> {
+        got.map(|g| self.map(g, Got::str)).unwrap_or_default()
     }
+}
 
-    /// `message` at the byte `at` of the text, by its line and column (from 1).
-    fn error(&self, at: usize, message: String) -> String {
-        let text = &self.source.text;
-        let before = text.get(..at).unwrap_or(text);
-        let start = before.rfind('\n').map_or(0, |i| i + 1);
-        let line = before.matches('\n').count() + 1;
-        format!("line {line}, column {}: {message}", before[start..].chars().count() + 1)
-    }
+/// The form of `prefix` (§14.2): lowercase letters, digits and `_`, from a
+/// letter to a `_`, without `__` and not from `onsa_`, the runtime's names.
+fn is_prefix(p: &str) -> bool {
+    let b = p.as_bytes();
+    b.first().is_some_and(u8::is_ascii_lowercase)
+        && b.last() == Some(&b'_')
+        && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
+        && !p.contains("__")
+        && !p.starts_with("onsa_")
 }
 
 impl<'a> Fields<'a> {
     fn take(&mut self, field: Field) -> Option<Got<'a>> {
         let i = self.got.iter().position(|(f, _)| *f == field)?;
         Some(self.got.swap_remove(i).1)
-    }
-
-    /// A key the reader requires: `[package]`, `name`, `kind` and, as
-    /// before the table was closed, `platform` in every target (U3 moves it
-    /// to the build, E1104).
-    fn need(&mut self, field: Field) -> Result<Got<'a>, String> {
-        self.take(field).ok_or_else(|| {
-            let Some(row) = table::row_of(self.table, field) else {
-                onsa_diag::internal::bug(None, format!("no row for {field:?} in {:?}", self.table));
-            };
-            match self.table {
-                Table::Root => format!("missing table `[{}]`", row.key),
-                _ => format!("`[{}]`: missing key `{}`", self.path, row.key),
-            }
-        })
     }
 
     /// Every key read was taken: a key the builder leaves would be lost silently.
@@ -339,6 +418,13 @@ impl<'a> Got<'a> {
     fn bool(self) -> Spanned<bool> {
         match self.value {
             Typed::Bool(b) => self.spanned(b),
+            _ => self.mismatch(),
+        }
+    }
+
+    fn int(self) -> Spanned<i64> {
+        match self.value {
+            Typed::Int(n) => self.spanned(n),
             _ => self.mismatch(),
         }
     }
@@ -461,19 +547,23 @@ mod tests {
                 text.push_str(&format!("{h}\n"));
                 last = Some(h);
             }
-            let value = match r.shape {
-                Shape::Str => "\"x\"",
-                Shape::Bool => "true",
-                Shape::Int => "1",
-                Shape::Strs => "[\"Alloc\"]",
-                Shape::Table(_) | Shape::Tables(_) => continue,
+            let value = match (r.shape, r.rule) {
+                (_, Rule::OneOf(values, _)) => format!("\"{}\"", values[values.len() - 1]),
+                (_, Rule::Prefix) => "\"x_\"".into(),
+                (Shape::Str, _) => "\"x\"".into(),
+                (Shape::Bool, _) => "true".into(),
+                (Shape::Int, _) => "0".into(),
+                (Shape::Strs, _) => "[\"Alloc\"]".into(),
+                (Shape::Table(_) | Shape::Tables(_), _) => continue,
             };
             text.push_str(&format!("{} = {value}\n", r.key));
         }
         let m = file(&text).unwrap_or_else(|e| panic!("{text}\n{e}"));
-        assert_eq!(m.targets["t"].value.fp.as_ref().unwrap().value, "x", "{text}");
-        let other = "[package]\nname = \"a\"\n[targets.t]\nkind = \"s\"\nplatform = \"h\"\n[targets.t.memory]\n\
-                     bulk = \"no\"\nfast_budget = \"many\"\n[[plugin]]\nflow = 4\nau = { subtype = 1 }\n";
+        assert_eq!(m.targets["t"].value.fp.as_ref().unwrap().value, "strict-ftz", "{text}");
+        let memory = &m.targets["t"].value.memory.as_ref().unwrap().value;
+        assert_eq!((memory.bulk.as_ref().unwrap().value, memory.fast_budget.as_ref().unwrap().value), (true, 0));
+        let other = "[package]\nname = \"a\"\n[targets.t]\nkind = \"source\"\nplatform = \"h\"\n\
+                     [[plugin]]\nflow = 4\nau = { subtype = 1 }\n";
         file(other).unwrap();
     }
 
@@ -483,7 +573,7 @@ mod tests {
     /// (S-639) are such keys; a table the reader does not know is not walked.
     #[test]
     fn every_unknown_key_is_an_e1102_with_the_keys_of_its_table() {
-        let text = "x = 1\n[package]\nname = \"a\"\nflows = 2\n[export]\nfns = []\n[targets.t]\nkind = \"s\"\n\
+        let text = "x = 1\n[package]\nname = \"a\"\nflows = 2\n[export]\nfns = []\n[targets.t]\nkind = \"exe\"\n\
                     platform = \"h\"\nnumeric = \"strict\"\n[targets.t.memory]\nbulk_threshold = 64\n\
                     [targets.t.mem]\nanything = 1\n[[plugin]]\nwhat = 4\nau = { zz = 1 }\n[[extra]]\n";
         let found = diagnostics(text, ManifestForm::File);
@@ -519,37 +609,154 @@ mod tests {
     /// the name in its header, beside the other diagnostics.
     #[test]
     fn a_target_name_is_snake_case() {
-        let text = "[package]\nname = \"a\"\n[targets.ok_1]\nkind = \"s\"\nplatform = \"h\"\n\
-                    [targets.\"../x\"]\nkind = \"s\"\nplatform = \"h\"\nzz = 1\n[targets.Host]\nkind = \"s\"\nplatform = \"h\"\n";
+        let text = "[package]\nname = \"a\"\n[targets.ok_1]\nkind = \"exe\"\nplatform = \"h\"\n\
+                    [targets.\"../x\"]\nkind = \"exe\"\nplatform = \"h\"\nzz = 1\n[targets.Host]\nkind = \"exe\"\nplatform = \"h\"\n";
         let found = diagnostics(text, ManifestForm::File);
         assert_eq!(found, [(Code::E1103, "\"../x\""), (Code::E1102, "zz"), (Code::E1103, "Host")]);
     }
 
-    /// The errors of the reading of the values name the manifest by its file
-    /// string and keep the line and the column.
+    /// A missing key the reader requires is an error of the reading, which
+    /// names the manifest by its file string (U2b2 makes it an E1104); beside
+    /// a diagnostic, before or after it in the text, the diagnostics are
+    /// reported, and a key of another type is not missing.
     #[test]
-    fn the_errors_name_the_file_and_the_place() {
+    fn a_missing_key_is_an_error_until_a_diagnostic() {
         let cases = [
-            ("[package]\nname = 3\n", "onsa.toml: line 2, column 8: `package.name`: invalid type: integer"),
-            ("[package]\nname = \"a\"\nedition = 2026\n", "onsa.toml: line 3, column 11: `package.edition`"),
             ("", "onsa.toml: missing table `[package]`"),
             ("[package]\nedition = \"2026\"\n", "onsa.toml: `[package]`: missing key `name`"),
             (
-                "[package]\nname = \"a\"\n[targets.t]\nkind = \"s\"\n",
+                "[package]\nname = \"a\"\n[targets.t]\nkind = \"exe\"\n",
                 "onsa.toml: `[targets.t]`: missing key `platform`",
             ),
-            (
-                "[package]\nname = \"a\"\n[targets.t]\nkind = \"s\"\nplatform = \"h\"\nprovides = [\"Alloc\", 1]\n",
-                "line 6, column 22",
-            ),
-            ("[package]\nname = \"a\"\n[[plugin]]\nau = 3\n", "line 4, column 6: `plugin.au`: invalid type"),
         ];
         for (text, e) in cases {
-            let err = file(text).unwrap_err();
-            assert!(err.starts_with(e) || err.contains(e), "{text:?}: {err}");
+            assert_eq!(file(text).unwrap_err(), e, "{text:?}");
         }
-        // Beside a diagnostic, the diagnostics are reported (until U2b).
         assert_eq!(diagnostics("[packag]\nname = \"a\"\n", ManifestForm::File), [(Code::E1102, "packag")]);
+        let text = "[package]\nedition = \"2026\"\n[targets.t]\nkind = \"exe\"\nfp = \"loose\"\n";
+        assert_eq!(diagnostics(text, ManifestForm::File), [(Code::E1103, "\"loose\"")]);
+        assert_eq!(diagnostics("package = 3\n", ManifestForm::File), [(Code::E1103, "3")]);
+    }
+
+    /// E1103 (S-99): a value of another type than its row's is at the value
+    /// (an element of an array: at the element, beside the others); a value
+    /// that should be a table is not walked. Each is independent of the
+    /// others, and the walk goes on after it (§18.1).
+    #[test]
+    fn a_value_of_another_type_is_an_e1103_at_the_value() {
+        let text = "[package]\nname = 3\nedition = 2026\n[dependencies]\nstd = 1\n[export]\nprefix = true\n\
+                    [targets.t]\nkind = \"exe\"\nplatform = \"h\"\nprovides = [\"Alloc\", 1, \"Fs\", false]\n\
+                    panic_messages = \"no\"\nbind = 2\nmemory = { bulk = \"yes\", fast_budget = 1.5, bulk_budget = \"2\" }\n\
+                    [targets.u]\nkind = 1\nplatform = \"h\"\n[targets.v]\nkind = \"exe\"\nplatform = \"h\"\n\
+                    lang = [\"c\"]\n[targets.w]\nzz = 1\nplatform = \"h\"\n";
+        let found = diagnostics(text, ManifestForm::File);
+        let expected =
+            ["3", "2026", "1", "true", "1", "false", "\"no\"", "2", "\"yes\"", "1.5", "\"2\"", "1", "[\"c\"]"];
+        let mut all: Vec<(Code, &str)> = expected.iter().map(|&v| (Code::E1103, v)).collect();
+        all.push((Code::E1102, "zz"));
+        assert_eq!(found, all);
+        let r = read_as(text, ManifestForm::File).unwrap();
+        assert!(r.diagnostics.iter().all(|d| d.fixes.is_empty() && d.stage == Stage::Manifest), "{:?}", r.diagnostics);
+        let m = r.manifest;
+        let provides: Vec<&str> = m.targets["t"].value.provides.iter().map(|p| p.value.as_str()).collect();
+        assert_eq!(provides, ["Alloc", "Fs"]);
+        for (text, value) in [("targets = 1\n", "1"), ("[targets]\nt = 2\n", "2"), ("plugin = [1, {}]\n", "1")] {
+            let text = format!("{text}[package]\nname = \"a\"\n");
+            assert_eq!(diagnostics(&text, ManifestForm::File), [(Code::E1103, value)], "{text}");
+        }
+        // A module of `bind` takes a string (the form of the path is U3's).
+        let text = "[package]\nname = \"a\"\n[targets.t]\nkind = \"exe\"\nplatform = \"h\"\n[targets.t.bind]\n\
+                    \"audio.device\" = 3\n\"x\" = \"y\"\n";
+        assert_eq!(diagnostics(text, ManifestForm::File), [(Code::E1103, "3")]);
+    }
+
+    /// E1103 (S-99, S-597): a value outside the closed list of its key, with
+    /// the list in a note and no candidate; `fp` also names `@fp(relaxed)`.
+    #[test]
+    fn a_value_outside_its_closed_list_is_an_e1103_with_the_list() {
+        let text = "[package]\nname = \"a\"\nedition = \"2025\"\n[targets.t]\nkind = \"plugin\"\nplatform = \"h\"\n\
+                    lang = \"C\"\nfp = \"relaxed\"\npanic = \"abort\"\nmain_frame = \"heap\"\n\
+                    [targets.u]\nkind = \"wasm-worklet\"\nplatform = \"h\"\nlang = \"js\"\nfp = \"strict-ftz\"\n\
+                    panic = \"halt\"\nmain_frame = \"static\"\n";
+        let mut r = read_as(text, ManifestForm::File).unwrap();
+        r.diagnostics.sort_by_key(|d| d.span.start);
+        let found: Vec<&str> =
+            r.diagnostics.iter().map(|d| &text[d.span.start as usize..d.span.end as usize]).collect();
+        assert_eq!(found, ["\"2025\"", "\"plugin\"", "\"C\"", "\"relaxed\"", "\"abort\"", "\"heap\""]);
+        let notes = |i: usize| r.diagnostics[i].notes.iter().map(|n| n.message.as_str()).collect::<Vec<_>>();
+        assert_eq!(notes(0), ["the values of `package.edition` are `\"2026\"`"]);
+        assert_eq!(
+            notes(1),
+            ["the values of `targets.t.kind` are `\"exe\"`, `\"clap\"`, `\"vst3\"`, `\"au\"`, `\"wasm-worklet\"`, \
+                 `\"staticlib\"`, `\"source\"`"]
+        );
+        assert_eq!(notes(3).len(), 2);
+        assert!(notes(3)[1].contains("@fp(relaxed)"), "{:?}", notes(3));
+        for d in &r.diagnostics {
+            assert_eq!(d.code, Code::E1103);
+            assert!(d.fixes.is_empty() && d.notes.iter().all(|n| n.span.is_none()), "{d:?}");
+        }
+    }
+
+    /// E1103: the package name is a `snake_case` identifier and not `std`
+    /// (S-628, R-47), by the rule of the target names.
+    #[test]
+    fn the_package_name_is_snake_case_and_not_std() {
+        for (name, bad) in [("voice_2", false), ("Voice", true), ("my-synth", true), ("", true), ("std", true)] {
+            let text = format!("[package]\nname = \"{name}\"\n");
+            let r = read_as(&text, ManifestForm::File).unwrap();
+            assert_eq!(r.diagnostics.len(), usize::from(bad), "{name}: {:?}", r.diagnostics);
+            if bad {
+                assert_eq!((r.diagnostics[0].code, r.diagnostics[0].span.start), (Code::E1103, 17), "{name}");
+            }
+        }
+        let r = read_as("[package]\nname = \"std\"\n", ManifestForm::File).unwrap();
+        assert!(r.diagnostics[0].notes[0].message.contains("embedded standard library"), "{:?}", r.diagnostics);
+    }
+
+    /// E1103: the form of `prefix` (§14.2, S-95, R-121 (2)), written or not
+    /// any `@export`.
+    #[test]
+    fn a_prefix_has_its_form() {
+        let good = ["vc_", "my_synth_", "a1_", "x_"];
+        let bad = ["", "vc", "Vc_", "_vc_", "1a_", "v__", "a__b_", "vc-_", "onsa_", "onsa_x_", "é_"];
+        for (p, ok) in good.iter().map(|p| (p, true)).chain(bad.iter().map(|p| (p, false))) {
+            let text = format!("[package]\nname = \"a\"\n[export]\nprefix = \"{p}\"\n");
+            let found = diagnostics(&text, ManifestForm::File);
+            let expected = if ok { vec![] } else { vec![(Code::E1103, format!("\"{p}\""))] };
+            let found: Vec<(Code, String)> = found.into_iter().map(|(c, t)| (c, t.to_string())).collect();
+            assert_eq!(found, expected, "{p:?}");
+        }
+    }
+
+    /// The version of std is the embedded std's, else an E1103 with it in a
+    /// note (S-83, R-88 (2)); each package other than std is an E0200 at its
+    /// key, whose value is not read (S-154, S-827 (d′)).
+    #[test]
+    fn std_is_the_one_dependency_at_the_embedded_version() {
+        let text = format!(
+            "[package]\nname = \"a\"\n[dependencies]\nfx = \"1.0.0\"\nstd = \"{}\"\nfy = 3\nfz = {{ path = 1 }}\n",
+            crate::STD_VERSION
+        );
+        assert_eq!(
+            diagnostics(&text, ManifestForm::File),
+            [(Code::E0200, "fx"), (Code::E0200, "fy"), (Code::E0200, "fz")]
+        );
+        let r = read_as(&text, ManifestForm::File).unwrap();
+        assert!(r.diagnostics.iter().all(|d| d.stage == Stage::Manifest && d.message.contains("`std`")));
+        let text = "[package]\nname = \"a\"\n[dependencies]\nstd = \"0.0.0\"\n";
+        let r = read_as(text, ManifestForm::File).unwrap();
+        assert_eq!(diagnostics(text, ManifestForm::File), [(Code::E1103, "\"0.0.0\"")]);
+        assert!(r.diagnostics[0].notes[0].message.contains(crate::STD_VERSION), "{:?}", r.diagnostics);
+    }
+
+    /// `fast_budget` and `bulk_budget` are numbers of bytes, 0 or more (S-827).
+    #[test]
+    fn a_budget_is_0_or_more() {
+        let text = "[package]\nname = \"a\"\n[targets.t]\nkind = \"exe\"\nplatform = \"h\"\n[targets.t.memory]\n\
+                    fast_budget = 0\nbulk_budget = -1\n[targets.u]\nkind = \"exe\"\nplatform = \"h\"\n\
+                    memory = { fast_budget = -9223372036854775808, bulk_budget = 9223372036854775807 }\n";
+        assert_eq!(diagnostics(text, ManifestForm::File), [(Code::E1103, "-1"), (Code::E1103, "-9223372036854775808")]);
     }
 
     /// E1101: a text that is not TOML is one diagnostic at the place of the

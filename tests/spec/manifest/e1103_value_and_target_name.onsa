@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1103_value_and_target_name"
+// edition = "2026"
+//
+// [targets.Host]                               #~ E1103
+// kind = "dll"                                 #~ E1103
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// The E1103 of a target's name (at the heading) and the E1103 of a value in it are both reported, each at
+// its line (§15.3 name paragraph; §18.1; S-597, S-827, S-828).

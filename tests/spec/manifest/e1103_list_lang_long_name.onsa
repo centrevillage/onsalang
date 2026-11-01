@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1103_list_lang_long_name"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "javascript"                          #~ E1103
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `lang` is "c" or "js"; "javascript" is not in the list (§15.3 table, §18.1; S-99, S-597, S-827).

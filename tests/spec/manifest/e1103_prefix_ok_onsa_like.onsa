@@ -1,0 +1,15 @@
+// onsa.toml
+// [package]
+// name = "e1103_prefix_ok_onsa_like"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsax_"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// The `prefix` "onsax_" has the shape of §14.2 (small letters and digits, starts with a letter, ends with
+// `_`, and `onsax_` does not start with `onsa_`), so it is not reported (§14.2, §15.3; S-95, S-99, S-827).

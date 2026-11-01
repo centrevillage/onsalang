@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "e1103_budget_fast_bool"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [targets.host.memory]
+// fast_budget = true                           #~ E1103
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `fast_budget` is an integer; a boolean is a type error (§15.3 table, §18.1; S-827).

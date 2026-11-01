@@ -136,8 +136,8 @@ impl Package {
 pub const STD_PACKAGE: &str = "std";
 
 /// The version of the embedded std (§15.3), which `onsa --version` shows and
-/// a `std = "x.y.z"` entry is compared with (W4-02).
-// SPEC-GAP(S-626): the spec does not fix the value; it is the compiler's version.
+/// a `std = "x.y.z"` entry is compared with: the compiler's version, with
+/// which the embedded std changes (S-626).
 pub const STD_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// One module of the embedded std.

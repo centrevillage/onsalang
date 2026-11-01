@@ -1,0 +1,15 @@
+// onsa.toml
+// [package]
+// name = "e0200_dep_two"
+// edition = "2026"
+//
+// [dependencies]
+// fx = "1.0.0"                                 #~ E0200
+// fy = { path = "../fy" }                      #~ E0200
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: two dependencies are two E0200, one at each key (the manifest is one unit and every error is reported) (§15.3 dependency paragraph, §18.1; S-154, S-627, S-827).
