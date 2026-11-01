@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 
+use onsa_diag::timing::Phase;
 use onsa_diag::{Diagnostic, FileId, Stage};
 use onsa_syntax::ast::ItemId;
 
@@ -20,15 +21,21 @@ use crate::{Analysis, DefId, Package, binding, body, effects, flatten, modes, na
 /// with their stage, and dropped by the choice in a unit with another error
 /// (S-726).
 pub(crate) fn check_bodies(pkg: &Package, a: &mut Analysis) {
-    names::body::walk_bodies(pkg, a);
+    timed(Phase::Names, || names::body::walk_bodies(pkg, a));
     a.failures = Failures::of(pkg, a);
-    body::check_all(pkg, a);
+    timed(Phase::Types, || body::check_all(pkg, a));
     a.failures = Failures::of(pkg, a);
-    binding::settle_all(pkg, a);
-    let moved = modes::check_all(pkg, a);
+    timed(Phase::Bindings, || binding::settle_all(pkg, a));
+    let moved = timed(Phase::Modes, || modes::check_all(pkg, a));
     a.failures = Failures::of(pkg, a);
-    rt::check_all(pkg, a, &moved);
-    effects::check_all(pkg, a, &moved);
+    timed(Phase::Rt, || rt::check_all(pkg, a, &moved));
+    timed(Phase::Effects, || effects::check_all(pkg, a, &moved));
+}
+
+/// `f` in the phase `p` of the measurements (`onsa_diag::timing`).
+fn timed<T>(p: Phase, f: impl FnOnce() -> T) -> T {
+    let _p = onsa_diag::timing::phase(p);
+    f()
 }
 
 /// The earliest check stage that found an error in the unit of each def

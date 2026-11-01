@@ -7,6 +7,7 @@ use super::*;
 
 /// After type checking: assign rates, check the flow rules, collect nodes.
 pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: BodyInfo, fcx: FlowCx) {
+    let _flow = onsa_diag::timing::phase(onsa_diag::timing::Phase::Flow);
     let mut info = FlowInfo {
         inputs: fcx.inputs.iter().map(|(l, _)| *l).collect(),
         sample_rate_calls: fcx.sample_rate_calls.clone(),

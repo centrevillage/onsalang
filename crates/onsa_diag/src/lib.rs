@@ -16,6 +16,7 @@ mod codes;
 pub mod internal;
 mod source;
 pub mod stack;
+pub mod timing;
 pub mod unsupported;
 
 use std::collections::BTreeMap;

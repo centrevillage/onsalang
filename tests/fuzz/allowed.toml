@@ -561,3 +561,10 @@ left = "`…` needs a range `…` or `…`"
 input = "tests/fuzz/fd5651ae.onsa"
 reasons = ["S-384"]
 note = "an input with errors in one unit: a float literal with no digit after its point (E0020), a `par` with no range after `in` and a `{` never closed; the E0020 hides the others, and the candidate `0.0` leaves the E0002 of the range (the fuzz at 7c7bc9d)"
+
+[[allowed]]
+class = "fix|E0020|remove the spaces|E0002"
+left = "expected `…` or `…`, found `…`"
+input = "tests/fuzz/7434abe6.onsa"
+reasons = ["S-384"]
+note = "an input with two errors in one unit: a blank between a name and its `~` (E0020) and a `(` and a `{` never closed; the E0020 hides the second, and the candidate that takes the blank out leaves it (the fuzz of X-20/U1 at 0ad8c01, also before it)"

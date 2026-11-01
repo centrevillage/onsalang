@@ -23,6 +23,8 @@
 //! onsa_cases --fix-loop-gate [ROOT]  the gate item fix-loop (`onsa_tests::fix_loop::gate`)
 //! onsa_cases --fmt FILE      what `onsa fmt FILE` would write, on the standard output; the file is
 //!                            not written (tools/fmt_props.py, X-1 U12)
+//! onsa_cases --phases [--lower] [--rounds N] PATH...  the time of each phase of the compiler on
+//!                            each input (X-20, `onsa_tests::phases`)
 //! ```
 //!
 //! The first form prints:
@@ -106,13 +108,25 @@
 //! `--fix-loop-gate` is the gate item `fix-loop` over ROOT (default: the
 //! repository; `onsa_tests::fix_loop::gate`). Exits 1 when it fails to walk
 //! what it says, never on what the walks find.
+//!
+//! `--phases` checks each PATH (a `.onsa` file or a package, as `onsa check`
+//! reads it) N times (default 3) and prints a line per path, the least
+//! microseconds of the whole and of each phase (`onsa_diag::timing`):
+//!
+//! ```text
+//! {"path": "m.onsa", "outcome": "Clean", "total_us": 5120, "phases_us": {"syntax": 1830, ...}}
+//! ```
+//!
+//! With `--lower`, a check with no diagnostic goes on to Core and its verifier.
+//! A path that cannot be read is a line `{"path": …, "error": …}`. Exits 0, 2
+//! on a usage error.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | --continuing | --symbols | \
      --std-names | --builtin-members | --fix-same-place FILE... | --default-inits FILE... | --fix-loop [--json] [--branches] [--pick first|last] \
-     [--steps N] [--states N] [--diverge N] FILE... | --fix-loop-gate [ROOT] | --fmt FILE";
+     [--steps N] [--states N] [--diverge N] FILE... | --fix-loop-gate [ROOT] | --fmt FILE | --phases [--lower] [--rounds N] PATH...";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -128,7 +142,7 @@ fn main() -> ExitCode {
         "" | "--run" | "--fix-loop-gate" => rest.len() > 1,
         "--c" | "--vectors" => rest.is_empty() || rest.len() > 2,
         "--fmt" => rest.len() != 1,
-        "--fix-same-place" | "--fix-loop" | "--default-inits" => rest.is_empty(),
+        "--fix-same-place" | "--fix-loop" | "--default-inits" | "--phases" => rest.is_empty(),
         _ => !rest.is_empty(),
     };
     if too_many {
@@ -199,6 +213,7 @@ fn main() -> ExitCode {
             if g.failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
         }
         "--fmt" => fmt(&rest[0]),
+        "--phases" => phases(rest),
         "--c-items" => {
             print(&serde_json::json!(onsa_tests::c::ITEMS.iter().map(|i| i.name).collect::<Vec<_>>()));
             ExitCode::SUCCESS
@@ -335,6 +350,39 @@ fn fix_loop_args(args: &[String]) -> Result<(onsa_tests::fix_loop::Options, bool
 }
 
 /// `--fmt FILE`: the text `onsa fmt FILE` would write, on the standard output.
+fn phases(args: &[String]) -> ExitCode {
+    let (mut lower, mut rounds, mut paths) = (false, 3, Vec::new());
+    let mut args = args.iter();
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--lower" => lower = true,
+            "--rounds" => match args.next().and_then(|n| n.parse().ok()) {
+                Some(n) => rounds = n,
+                None => return usage("--rounds needs a number"),
+            },
+            o if o.starts_with("--") => return usage(&format!("unknown option `{o}` of --phases")),
+            p => paths.push(p),
+        }
+    }
+    if paths.is_empty() {
+        return usage("--phases needs a path");
+    }
+    for p in paths {
+        let measured = onsa_driver::read_input(Some(std::path::Path::new(p)))
+            .and_then(|input| onsa_tests::phases::measure(&input, lower, rounds));
+        match measured {
+            Ok((outcome, times)) => println!("{}", onsa_tests::phases::json(p, outcome, &times)),
+            Err(e) => println!("{}", serde_json::json!({"path": p, "error": e})),
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn usage(e: &str) -> ExitCode {
+    eprintln!("{e}; usage: {USAGE}");
+    ExitCode::from(2)
+}
+
 fn fmt(path: &str) -> ExitCode {
     // Read and refused as the command reads them (a file that is not UTF-8 too).
     let text = match std::fs::read_to_string(path) {

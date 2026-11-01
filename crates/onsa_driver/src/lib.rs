@@ -26,6 +26,7 @@ pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, Te
 
 use std::sync::Arc;
 
+use onsa_diag::timing::{Phase, phase};
 use onsa_diag::{Diagnostic, FileId, SourceMap, Span};
 use onsa_sema::{Module, Package};
 
@@ -64,6 +65,7 @@ fn package_graph(name: &str, modules: Vec<Module>, std: &Arc<Package>) -> Packag
 
 /// Parse one file; a panic names the file (S-67).
 fn parse_file(file: FileId, text: &str) -> onsa_syntax::Parsed {
+    let _syntax = phase(Phase::Syntax);
     let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
     onsa_syntax::parse(file, text)
 }
@@ -251,6 +253,7 @@ fn analyze(
         let std = Arc::new(std_package(sources));
         let pkg = package_graph(name, user_modules, &std);
         let analysis = onsa_sema::analyze(&pkg);
+        let _report = phase(Phase::Report);
         let mut all: Vec<Diagnostic> = pkg.modules.iter().flat_map(|m| m.parsed.diagnostics.iter().cloned()).collect();
         all.extend(analysis.diagnostics.iter().cloned());
         let files = pkg.modules.iter().map(|m| (m.file, &m.parsed.units));
@@ -286,6 +289,7 @@ pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, LowerError> 
 /// stage, verified at its boundary.
 pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> Result<onsa_core::Module, LowerError> {
     let lowered = guard(|| {
+        let _lower = phase(Phase::Lower);
         let mut r = onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts);
         // Every diagnostic names the offending source (§18.1).
         if let Err(onsa_core::LowerFailure::Unsupported(d)) = &mut r {
@@ -300,7 +304,9 @@ pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> R
             return Err(LowerError::Internal(InternalError::lowering(span, message)));
         }
     };
+    let verify = phase(Phase::Verify);
     verify_core(&module, CoreStage::Lower)?;
+    drop(verify);
     Ok(module)
 }
 

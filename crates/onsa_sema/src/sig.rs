@@ -13,6 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use onsa_diag::timing::{Phase, phase};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
@@ -102,7 +103,10 @@ impl Cx<'_> {
 pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
     let mut a = Analysis::default();
     let mut s = Sema::new(&mut a, flatten(pkg));
+    let names = phase(Phase::Names);
     crate::names::collect_names(&mut s);
+    drop(names);
+    let _signatures = phase(Phase::Signatures);
     let flows = s.lower_signatures();
     let pairs = s.lower_generated(&flows);
     s.a.known.ready = true;

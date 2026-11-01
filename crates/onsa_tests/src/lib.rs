@@ -31,6 +31,7 @@ pub mod golden;
 pub mod host;
 pub mod inventory;
 pub mod pending;
+pub mod phases;
 pub mod run;
 pub mod scalar;
 pub mod single_files;
