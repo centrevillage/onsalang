@@ -152,11 +152,7 @@ impl<'a> Parser<'a> {
             }
             self.events.push(Event::Token(self.full[k]));
             self.last_end = t.span.end;
-            if is_opening(t.kind) {
-                self.braces.push(k);
-            } else if is_closing(t.kind) {
-                close_bracket(&mut self.braces, &self.tokens, t.kind, 0);
-            }
+            crate::scan::pair(&mut self.braces, &self.tokens, k, 0);
         }
         self.pos = to;
         self.closed.clear();

@@ -118,11 +118,7 @@ impl<'a> Parser<'a> {
             self.last_end = t.span.end;
             self.closed.clear();
             self.events.push(Event::Token(self.full[i]));
-            if is_opening(t.kind) {
-                self.braces.push(i);
-            } else if is_closing(t.kind) {
-                close_bracket(&mut self.braces, &self.tokens, t.kind, 0);
-            }
+            crate::scan::pair(&mut self.braces, &self.tokens, i, 0);
         } else {
             self.pos = i;
         }

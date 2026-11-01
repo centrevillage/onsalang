@@ -465,6 +465,32 @@ fn a_bracket_closed_by_another_kind_does_not_close() {
     assert_eq!(crate::scan::closing(&tokens, 2), None);
 }
 
+/// Which bracket a closer closes (`crate::scan::pair`): the innermost one of
+/// its kind above the base, with the ones opened inside it; with none of its
+/// kind, nothing. [`crate::scan::closing`] reads it strictly: a closer of
+/// another kind first closes nothing.
+#[test]
+fn a_closer_closes_the_innermost_bracket_of_its_kind() {
+    use crate::token::TokenKind::{LBrace, LParen, RBrace, RBracket, RParen};
+    let tokens = crate::layout::code_tokens(&crate::lex(FileId(0), "{ f ( a ] } )").tokens).0;
+    let at = |kind| tokens.iter().position(|t| t.kind == kind).unwrap();
+    let mut open = Vec::new();
+    let closed: Vec<Option<usize>> = (0..tokens.len()).map(|i| crate::scan::pair(&mut open, &tokens, i, 0)).collect();
+    assert_eq!(closed[at(RBracket)], None);
+    assert_eq!(closed[at(RBrace)], Some(at(LBrace)), "the `}}` closes the `{{` with the `(` in it");
+    assert_eq!(closed[at(RParen)], None);
+    assert!(open.is_empty());
+    // A `}` whose `{` is below the base closes nothing, and leaves it open.
+    let mut open = vec![at(LBrace), at(LParen)];
+    assert_eq!(crate::scan::pair(&mut open, &tokens, at(RBrace), 1), None);
+    assert_eq!(open, [at(LBrace), at(LParen)]);
+    let tokens = crate::layout::code_tokens(&crate::lex(FileId(0), "( [ { ] ) ( [ ] )").tokens).0;
+    assert_eq!(crate::scan::closing(&tokens, 0), None);
+    let second = tokens.iter().rposition(|t| t.kind == LParen).unwrap();
+    let last = tokens.iter().rposition(|t| t.kind == RParen).unwrap();
+    assert_eq!(crate::scan::closing(&tokens, second), Some(last));
+}
+
 /// The traits a head has end with its list (§6.4): a line break after a
 /// name, or any token that is no part of the list; the candidate of a derive
 /// edits that head only.

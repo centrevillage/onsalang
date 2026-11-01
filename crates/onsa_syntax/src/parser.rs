@@ -294,17 +294,12 @@ impl<'a> Parser<'a> {
     pub(crate) fn new(file: FileId, text: &'a str, lexed: crate::Lexed) -> Parser<'a> {
         let crate::Lexed { tokens: all, diagnostics, literals } = lexed;
         let (tokens, full, lines) = crate::layout::code_tokens(&all);
+        // Whether each `{` is ever closed, the braces paired among themselves.
         let mut brace_closed = vec![false; tokens.len()];
         let mut open = Vec::new();
-        for (k, t) in tokens.iter().enumerate() {
-            match t.kind {
-                TokenKind::LBrace => open.push(k),
-                TokenKind::RBrace => {
-                    if let Some(o) = open.pop() {
-                        brace_closed[o] = true;
-                    }
-                }
-                _ => {}
+        for k in (0..tokens.len()).filter(|&k| matches!(tokens[k].kind, TokenKind::LBrace | TokenKind::RBrace)) {
+            if let Some(o) = crate::scan::pair(&mut open, &tokens, k, 0) {
+                brace_closed[o] = true;
             }
         }
         Parser {
@@ -336,33 +331,5 @@ impl<'a> Parser<'a> {
             ends: Vec::new(),
             prefixed: Vec::new(),
         }
-    }
-}
-
-/// A bracket that opens: `(`, `[`, `{`.
-fn is_opening(kind: TokenKind) -> bool {
-    matches!(kind, TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace)
-}
-
-/// A bracket that closes: `)`, `]`, `}`.
-fn is_closing(kind: TokenKind) -> bool {
-    matches!(kind, TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace)
-}
-
-/// Close the innermost bracket of `open` (above `base`) that a closing
-/// bracket of `kind` matches, with the brackets opened inside it and left
-/// open (`f(a }` closes the `{` and the `(`). `false` when none matches.
-fn close_bracket(open: &mut Vec<usize>, tokens: &[Token], kind: TokenKind, base: usize) -> bool {
-    let opening = match kind {
-        TokenKind::RParen => TokenKind::LParen,
-        TokenKind::RBracket => TokenKind::LBracket,
-        _ => TokenKind::LBrace,
-    };
-    match open[base.min(open.len())..].iter().rposition(|&b| tokens[b].kind == opening) {
-        Some(k) => {
-            open.truncate(base + k);
-            true
-        }
-        None => false,
     }
 }

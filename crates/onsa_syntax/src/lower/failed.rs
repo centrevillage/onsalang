@@ -1,5 +1,5 @@
-//! The heads of the items, and the items a syntax error stopped (S-59,
-//! R-71): what was read of their headings.
+//! The heads of the items, and their declarations read whole or stopped by
+//! a syntax error (S-59, R-71): what was read of their headings.
 
 use super::*;
 
@@ -167,6 +167,23 @@ impl<'a> Lower<'a> {
         if self.cst.is_complete(d) {
             return Some((self.item_kind(d), Failed::Unit));
         }
+        if self.cst.kind(d) == NodeKind::Target {
+            // How far the declaration in a `target` was read is its own.
+            let inner = self.nodes(d).into_iter().next()?;
+            let (kind, failed) = self.failed_kind(inner)?;
+            return Some((ItemKind::Target(Box::new(kind)), failed));
+        }
+        let (kind, heading) = self.read_kind(d, true)?;
+        Some((kind, if heading { Failed::Body } else { Failed::Heading }))
+    }
+
+    /// The kind of the declaration node `d`, read whole or, when `cut`, as
+    /// far as the parser read it (S-59): the one reading of a heading for
+    /// both (D-15; the `failed_*` readers read a part read whole as it is).
+    /// With whether the heading was read whole, which it is in a declaration
+    /// read whole ([`Lower::item_kind`]). `None` when its name was not read,
+    /// for an `impl` heading that was cut (R-180: W5-04), and for no declaration.
+    pub(super) fn read_kind(&mut self, d: NodeId, cut: bool) -> Option<(ItemKind, bool)> {
         let mut heading = true;
         let kind = match self.cst.kind(d) {
             NodeKind::Fn => {
@@ -184,10 +201,11 @@ impl<'a> Lower<'a> {
                     None => None,
                 };
                 // A body that was not reached: the heading may go on (`uses`).
+                // One read whole may have none (a member of a trait).
                 let body = match self.child(d, NodeKind::Block) {
                     Some(b) => Some(self.failed_expr(b)),
                     None => {
-                        heading = false;
+                        heading &= !cut;
                         None
                     }
                 };
@@ -249,7 +267,9 @@ impl<'a> Lower<'a> {
                 };
                 ItemKind::Enum(EnumDecl { name, generics, derives, variants })
             }
-            NodeKind::TypeAlias | NodeKind::OpaqueType => {
+            // The parser finishes an opaque type right after its name.
+            NodeKind::OpaqueType => ItemKind::OpaqueType { name: self.read_name(d)? },
+            NodeKind::TypeAlias => {
                 let name = self.read_name(d)?;
                 let ty = match self.failed_type(d, &mut heading) {
                     Some(t) => t,
@@ -317,9 +337,15 @@ impl<'a> Lower<'a> {
                 };
                 // The parser finishes a `const` right after its value: a
                 // failed one never has a finished value.
-                let at = self.first_expr(d).unwrap_or(d);
-                let span = self.span(at);
-                let value = Some(self.add_expr(at, span, ExprKind::Error));
+                let value = match self.first_expr(d) {
+                    Some(e) if !cut => Some(self.expr(e)),
+                    at if cut => {
+                        let at = at.unwrap_or(d);
+                        let span = self.span(at);
+                        Some(self.add_expr(at, span, ExprKind::Error))
+                    }
+                    _ => None,
+                };
                 ItemKind::Const(ConstDecl { name, ty, value })
             }
             NodeKind::Extern => {
@@ -333,10 +359,12 @@ impl<'a> Lower<'a> {
                 let items = self.failed_members(d, &mut heading);
                 ItemKind::Extern(ExternDecl { abi, lib, items })
             }
+            // A cut one is read by `failed_kind`: its declaration has its own `Failed`.
             NodeKind::Target => {
                 let inner = self.nodes(d).into_iter().next()?;
-                let (kind, failed) = self.failed_kind(inner)?;
-                return Some((ItemKind::Target(Box::new(kind)), failed));
+                let kind;
+                (kind, heading) = self.read_kind(inner, cut)?;
+                ItemKind::Target(Box::new(kind))
             }
             NodeKind::Test => {
                 let name = self.tok(d, TokenKind::Str)?;
@@ -355,12 +383,13 @@ impl<'a> Lower<'a> {
             // the names of its list read so far.
             NodeKind::Use => {
                 let tree = self.child(d, NodeKind::UseTree)?;
-                return Some((ItemKind::Use(self.use_decl(tree)), Failed::Heading));
+                heading = !cut;
+                ItemKind::Use(self.use_decl(tree))
             }
             // What is not a declaration.
             _ => return None,
         };
-        Some((kind, if heading { Failed::Body } else { Failed::Heading }))
+        Some((kind, heading))
     }
 
     /// The traits at the head of a failed struct or enum; `heading` turns

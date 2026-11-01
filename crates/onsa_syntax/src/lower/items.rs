@@ -55,105 +55,11 @@ impl<'a> Lower<'a> {
         Attr { name, args, span: self.span(n) }
     }
 
+    /// The kind of the declaration `n` read whole ([`Lower::read_kind`]).
     pub(super) fn item_kind(&mut self, n: NodeId) -> ItemKind {
-        match self.cst.kind(n) {
-            NodeKind::Fn => ItemKind::Fn(self.fn_decl(n)),
-            NodeKind::Flow => {
-                let name = self.name(n);
-                let params = self.params(self.need(n, NodeKind::ParamList));
-                let ret = self.first_type(n).unwrap_or_else(|| self.bug(n, "a return type"));
-                let ret_clock = self.clock(n);
-                let body = self.block(self.need(n, NodeKind::Block));
-                ItemKind::Flow(FlowDecl { name, params, ret, ret_clock, body })
-            }
-            NodeKind::Struct => {
-                let name = self.name(n);
-                let generics = self.generics(n);
-                let derives = self.derives(n);
-                let list = self.need(n, NodeKind::FieldList);
-                let fields = self.nodes(list).into_iter().map(|f| self.field(f)).collect();
-                ItemKind::Struct(StructDecl { name, generics, derives, repr: Repr::Onsa, fields })
-            }
-            NodeKind::Enum => {
-                let name = self.name(n);
-                let generics = self.generics(n);
-                let derives = self.derives(n);
-                let list = self.need(n, NodeKind::VariantList);
-                let variants = self.nodes(list).into_iter().map(|v| self.variant(v)).collect();
-                ItemKind::Enum(EnumDecl { name, generics, derives, variants })
-            }
-            NodeKind::TypeAlias => {
-                let name = self.name(n);
-                let ty = self.first_type(n).unwrap_or_else(|| self.bug(n, "a type"));
-                ItemKind::TypeAlias { name, ty }
-            }
-            NodeKind::OpaqueType => ItemKind::OpaqueType { name: self.name(n) },
-            NodeKind::Trait => {
-                let name = self.name(n);
-                let generics = self.generics(n);
-                let items = self.item_list(n);
-                ItemKind::Trait(TraitDecl { name, generics, items })
-            }
-            NodeKind::Impl => {
-                let generics = self.generics(n);
-                let types = self.of_class(n, Class::Type);
-                let (trait_, self_ty) = if self.has(n, TokenKind::KwFor) {
-                    let path = self.need(types[0], NodeKind::Path);
-                    (Some(self.path(path)), self.ty(types[1]))
-                } else {
-                    (None, self.ty(types[0]))
-                };
-                let items = self.item_list(n);
-                ItemKind::Impl(ImplDecl { generics, trait_, self_ty, items })
-            }
-            NodeKind::Effect => {
-                let blocking = self.has(n, TokenKind::KwBlocking);
-                let name = self.name(n);
-                let ops = self.item_list(n);
-                ItemKind::Effect(EffectDecl { blocking, name, ops })
-            }
-            NodeKind::Handler => {
-                let name = self.name(n);
-                let params = match self.child(n, NodeKind::ParamList) {
-                    Some(p) => self.params(p),
-                    None => Vec::new(),
-                };
-                let effect = self.path(self.need(n, NodeKind::Path));
-                let items = self.item_list(n);
-                ItemKind::Handler(HandlerDecl { name, params, effect, items })
-            }
-            NodeKind::Const => {
-                let name = self.name(n);
-                let ty = self.first_type(n).unwrap_or_else(|| self.bug(n, "a type"));
-                let value = self.first_expr(n).map(|e| self.expr(e));
-                ItemKind::Const(ConstDecl { name, ty, value })
-            }
-            NodeKind::Use => {
-                let tree = self.need(n, NodeKind::UseTree);
-                ItemKind::Use(self.use_decl(tree))
-            }
-            NodeKind::Extern => {
-                let strs: Vec<TokenIdx> =
-                    self.toks(n).into_iter().filter(|&t| self.kind_of(t) == TokenKind::Str).collect();
-                if strs.len() != 2 {
-                    self.bug(n, "an ABI and a library");
-                }
-                let abi = self.str_lit(strs[0]);
-                let lib = self.str_lit(strs[1]);
-                let items = self.item_list(n);
-                ItemKind::Extern(ExternDecl { abi, lib, items })
-            }
-            NodeKind::Target => {
-                let inner = self.nodes(n).into_iter().next().unwrap_or_else(|| self.bug(n, "a declaration"));
-                ItemKind::Target(Box::new(self.item_kind(inner)))
-            }
-            NodeKind::Test => {
-                let name = self.tok(n, TokenKind::Str).unwrap_or_else(|| self.bug(n, "a name"));
-                let name = self.str_lit(name);
-                let body = self.block(self.need(n, NodeKind::Block));
-                ItemKind::Test { name, body }
-            }
-            _ => self.bug(n, "the kind of a declaration"),
+        match self.read_kind(n, false) {
+            Some((kind, true)) => kind,
+            _ => self.bug(n, "a heading read whole"),
         }
     }
 
@@ -171,18 +77,6 @@ impl<'a> Lower<'a> {
             None => Vec::new(),
         };
         Variant { name, fields, span: self.span(v) }
-    }
-
-    pub(super) fn fn_decl(&mut self, n: NodeId) -> FnDecl {
-        let rt = self.has(n, TokenKind::KwRt);
-        let name = self.name(n);
-        let generics = self.generics(n);
-        let params = self.params(self.need(n, NodeKind::ParamList));
-        let ret = self.first_type(n);
-        let ret_clock = self.clock(n);
-        let effects = self.child(n, NodeKind::EffectRow).map(|e| self.effect_row(e));
-        let body = self.child(n, NodeKind::Block).map(|b| self.block(b));
-        FnDecl { rt, name, generics, params, ret, ret_clock, effects, body }
     }
 
     /// The members of a declaration's list: the members read whole and the

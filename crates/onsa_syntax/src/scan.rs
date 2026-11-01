@@ -62,27 +62,40 @@ pub(crate) fn closing_on_line(tokens: &[Token], open: usize) -> Option<usize> {
 
 fn scan_closing(tokens: &[Token], open: usize, on_line: bool) -> Option<usize> {
     closer(tokens.get(open)?.kind)?;
-    let mut wanted = Vec::new();
+    let mut brackets = Vec::new();
     for (i, t) in tokens.iter().enumerate().skip(open) {
-        if let Some(c) = closer(t.kind) {
-            wanted.push(c);
-            continue;
-        }
+        let innermost = brackets.last().copied();
+        let closed = pair(&mut brackets, tokens, i, 0);
         match t.kind {
-            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
-                if wanted.pop() != Some(t.kind) {
-                    return None;
-                }
-                if wanted.is_empty() {
-                    return Some(i);
-                }
-            }
+            // A closer of another kind first: it closes none, or one around the innermost.
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace if closed != innermost => return None,
+            _ if closed == Some(open) => return Some(i),
             TokenKind::Newline if on_line => return None,
             TokenKind::Eof => return None,
             _ => {}
         }
     }
     None
+}
+
+/// Read the token at `i` on the brackets left open, `open` (their positions;
+/// those above `base` are of the run read): an opener is opened, and a
+/// closer closes the innermost opener of its kind above `base`, with the
+/// brackets opened inside it and left open (`f(a }` closes the `{` and the
+/// `(`). The opener a closer closed; none for one that matches none (it
+/// closes nothing) and for any other token. The one judgment of which
+/// bracket a closer closes, for the parser and [`closing`].
+pub(crate) fn pair(open: &mut Vec<usize>, tokens: &[Token], i: usize, base: usize) -> Option<usize> {
+    let kind = tokens[i].kind;
+    if closer(kind).is_some() {
+        open.push(i);
+        return None;
+    }
+    let from = base.min(open.len());
+    let k = from + open[from..].iter().rposition(|&b| closer(tokens[b].kind) == Some(kind))?;
+    let opener = open[k];
+    open.truncate(k);
+    Some(opener)
 }
 
 /// The closer of an opening bracket.

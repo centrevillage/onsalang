@@ -129,13 +129,10 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-            if is_opening(t.kind) {
-                braces.push(i);
-            } else if is_closing(t.kind) && !close_bracket(&mut braces, &self.tokens, t.kind, base) {
-                // A `}` that closes no `{` of the member closes the list.
-                if t.kind == TokenKind::RBrace && member {
-                    break;
-                }
+            // A `}` that closes no `{` of the member closes the list.
+            let closed = crate::scan::pair(&mut braces, &self.tokens, i, base);
+            if closed.is_none() && t.kind == TokenKind::RBrace && member {
+                break;
             }
             i += 1;
         }
