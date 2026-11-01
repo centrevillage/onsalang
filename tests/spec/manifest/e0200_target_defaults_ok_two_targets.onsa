@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_defaults_ok_two_targets"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// main_frame = "stack"
+//
+// [targets.a.memory]
+// bulk = false
+//
+// [targets.b]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = ["Alloc"]
+// fp = "strict"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// No diagnostic for either target: the default values are accepted in every target (S-825; §15.3, §18.1; S-154, S-827)
+
+pub fn f() -> I32 { 1 }

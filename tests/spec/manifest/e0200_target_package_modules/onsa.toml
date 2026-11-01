@@ -1,0 +1,22 @@
+[package]
+name = "e0200_target_package_modules"
+edition = "2026"
+
+[export]
+prefix = "tpm_"
+
+[targets.plugin]
+kind = "clap"                                     #~ E0200 [plugin]
+platform = "host"
+provides = ["Alloc"]
+
+[targets.web]
+kind = "source"
+lang = "js"                                       #~ E0200 [web]
+platform = "host"
+
+[targets.lib]
+kind = "source"
+lang = "c"
+platform = "host"
+provides = []

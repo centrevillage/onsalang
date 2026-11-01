@@ -1,6 +1,11 @@
 //! The closed table of the manifest `onsa.toml` (spec §15.3, D-15): every
 //! table, key and kind of value, in one place. The reader walks the TOML by
 //! these rows ([`super::read`]); no other place compares the spelling of a key.
+//! A row names the values this version does not support, with their
+//! [`Feature`] (E0200 in the build of the target, S-154): the one place a
+//! later work takes them out of.
+
+use onsa_diag::unsupported::Feature;
 
 /// A table of the manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,6 +104,22 @@ pub enum Rule {
     Bytes,
 }
 
+/// The values of a key of a target this version does not support: each is
+/// an E0200 in the build of the target, at the value (an element of an
+/// array: at the element), and not in the other commands (§15.3, S-154).
+/// A value its row's rule breaks is not one of them (S-827); the default
+/// values are not (S-825).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unsupported {
+    /// A string, or each element of an array of strings, outside the list
+    /// of the values this version supports: a value the rule takes and the
+    /// list does not name is unsupported.
+    Except(&'static [&'static str]),
+    True,
+    /// Any value; a table that has an entry, at its key (S-824).
+    Any,
+}
+
 /// A key of a table.
 #[derive(Debug, Clone, Copy)]
 pub struct Row {
@@ -108,21 +129,30 @@ pub struct Row {
     pub shape: Shape,
     pub read: Read,
     pub rule: Rule,
+    pub unsupported: Option<(Unsupported, Feature)>,
 }
 
 const fn row(table: Table, key: &'static str, field: Field, shape: Shape, read: Read) -> Row {
-    Row { table, key, field, shape, read, rule: Rule::Any }
+    Row { table, key, field, shape, read, rule: Rule::Any, unsupported: None }
 }
 
 impl Row {
     const fn with(self, rule: Rule) -> Row {
         Row { rule, ..self }
     }
+
+    const fn unsupported(self, values: Unsupported, feature: Feature) -> Row {
+        Row { unsupported: Some((values, feature)), ..self }
+    }
 }
 
 use Read::{Later, Yes};
 use Rule::OneOf;
 use Shape::{Bool, Int, Str, Strs};
+use Unsupported::{Any, Except};
+
+/// The effect of `provides` that gives the heap (§15.3).
+pub const ALLOC: &str = "Alloc";
 
 /// The values of `panic` (§9.2), which `onsa build` maps to its modes.
 pub const PANIC: &[&str] = &["poison", "trap", "reset", "halt"];
@@ -140,19 +170,31 @@ pub static ROWS: &[Row] = &[
     row(Table::Package, "name", Field::Name, Str, Yes).with(Rule::PackageName),
     row(Table::Package, "edition", Field::Edition, Str, Yes).with(OneOf(&["2026"], None)),
     row(Table::Export, "prefix", Field::Prefix, Str, Yes).with(Rule::Prefix),
-    row(Table::Target, "kind", Field::Kind, Str, Yes).with(OneOf(KINDS, None)),
+    row(Table::Target, "kind", Field::Kind, Str, Yes)
+        .with(OneOf(KINDS, None))
+        .unsupported(Except(&["staticlib", "source"]), Feature::ManifestKind),
     row(Table::Target, "platform", Field::Platform, Str, Yes),
-    row(Table::Target, "lang", Field::Lang, Str, Yes).with(OneOf(&["c", "js"], None)),
-    row(Table::Target, "fp", Field::Fp, Str, Yes).with(OneOf(&["strict", "strict-ftz"], Some(FP_NOTE))),
-    row(Table::Target, "provides", Field::Provides, Strs, Yes),
+    row(Table::Target, "lang", Field::Lang, Str, Yes)
+        .with(OneOf(&["c", "js"], None))
+        .unsupported(Except(&["c"]), Feature::ManifestLang),
+    row(Table::Target, "fp", Field::Fp, Str, Yes)
+        .with(OneOf(&["strict", "strict-ftz"], Some(FP_NOTE)))
+        .unsupported(Except(&["strict"]), Feature::ManifestFp),
+    row(Table::Target, "provides", Field::Provides, Strs, Yes).unsupported(Except(&[ALLOC]), Feature::ManifestProvides),
     row(Table::Target, "panic", Field::Panic, Str, Yes).with(OneOf(PANIC, None)),
     row(Table::Target, "panic_messages", Field::PanicMessages, Bool, Yes),
-    row(Table::Target, "main_frame", Field::MainFrame, Str, Yes).with(OneOf(&["stack", "static"], None)),
+    row(Table::Target, "main_frame", Field::MainFrame, Str, Yes)
+        .with(OneOf(&["stack", "static"], None))
+        .unsupported(Except(&["stack"]), Feature::ManifestMainFrame),
     row(Table::Target, "memory", Field::Memory, Shape::Table(Table::Memory), Yes),
-    row(Table::Target, "bind", Field::Bind, Shape::Table(Table::Bind), Yes),
-    row(Table::Memory, "bulk", Field::Bulk, Bool, Yes),
-    row(Table::Memory, "fast_budget", Field::FastBudget, Int, Yes).with(Rule::Bytes),
-    row(Table::Memory, "bulk_budget", Field::BulkBudget, Int, Yes).with(Rule::Bytes),
+    row(Table::Target, "bind", Field::Bind, Shape::Table(Table::Bind), Yes).unsupported(Any, Feature::ManifestBind),
+    row(Table::Memory, "bulk", Field::Bulk, Bool, Yes).unsupported(Unsupported::True, Feature::ManifestBulk),
+    row(Table::Memory, "fast_budget", Field::FastBudget, Int, Yes)
+        .with(Rule::Bytes)
+        .unsupported(Any, Feature::ManifestBudgets),
+    row(Table::Memory, "bulk_budget", Field::BulkBudget, Int, Yes)
+        .with(Rule::Bytes)
+        .unsupported(Any, Feature::ManifestBudgets),
     row(Table::Plugin, "flow", Field::Flow, Str, Later),
     row(Table::Plugin, "id", Field::Id, Str, Later),
     row(Table::Plugin, "name", Field::Name, Str, Later),

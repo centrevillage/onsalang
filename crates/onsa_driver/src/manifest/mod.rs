@@ -76,6 +76,9 @@ pub struct ManifestTarget {
     pub memory: Option<Spanned<ManifestMemory>>,
     /// By module path.
     pub bind: BTreeMap<String, Spanned<String>>,
+    /// The diagnostics of its build that need no source, which the other
+    /// commands do not report: the E0200 of its values (§15.3, S-154).
+    pub build_diagnostics: Vec<Diagnostic>,
 }
 
 /// `[targets.<name>.memory]` (§12.4, §15.3): checked by every command, and

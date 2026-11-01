@@ -730,9 +730,10 @@ fn build(target: &str, out: Option<PathBuf>, paths: &[PathBuf]) -> Outcome {
             Outcome::Ok
         }
         Err(onsa_driver::BuildError::Usage(m)) => cannot_work(m),
-        Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-            print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::of(&diagnostics))
-        }
+        Err(
+            onsa_driver::BuildError::Diagnostics { sources, diagnostics }
+            | onsa_driver::BuildError::Manifest { sources, diagnostics },
+        ) => print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::of(&diagnostics)),
         Err(onsa_driver::BuildError::Internal { sources, error }) => internal(&sources, &error),
     }
 }

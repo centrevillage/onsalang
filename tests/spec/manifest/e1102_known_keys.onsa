@@ -18,8 +18,8 @@
 //
 // [targets.host.memory]
 // bulk = false
-// fast_budget = 262144
-// bulk_budget = 1048576
+// fast_budget = 262144                        #~ E0200 [host]
+// bulk_budget = 1048576                       #~ E0200 [host]
 //
 // [test]
 // spec = ["§15.3"]

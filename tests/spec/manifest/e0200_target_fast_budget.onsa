@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_fast_budget"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.t.memory]
+// fast_budget = 262144                           #~ E0200 [t]
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: `fast_budget` is not supported, whatever the value is: writing the key is the error (§15.3, §18.1; S-154,
+// S-827)
+
+pub fn f() -> I32 { 1 }

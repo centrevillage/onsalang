@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200 of the values of two targets (`kind` of `plugin`, `lang` of `web`) in a package with a module, a generic
+// function, a branch and a `par` flow, with exports: `check` is not stopped, each of the two targets reports only its
+// own value, and the target `lib` builds the exports (§15.3 on the values this version does not support, §14.2;
+// S-154, S-827).
+
+use util.{twice, pick}
+
+@export
+pub fn doubled(x: I32) -> I32 { twice(pick(x, 3)) }
+
+@export
+pub flow shaped(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { twice(x) } else { x }
+}

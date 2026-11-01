@@ -2,10 +2,9 @@
 //! the one closed list.
 //!
 //! Every E0200 names one [`Feature`] of this list, and is made here
-//! ([`Feature::diagnostic`], or [`Feature::usage`] for the errors of a
-//! target's settings that are not diagnostics yet). `onsa explain E0200`
-//! prints the same list ([`explain`]), so the list and the places that report
-//! E0200 cannot disagree (plan D-15). A self-test checks that no other code
+//! ([`Feature::diagnostic`]). `onsa explain E0200` prints the same list
+//! ([`explain`]), so the list and the places that report E0200 cannot
+//! disagree (plan D-15). A self-test checks that no other code
 //! makes an E0200 and that every feature of the list is reported somewhere.
 //!
 //! A feature is a noun phrase that completes "this version does not support
@@ -223,6 +222,14 @@ features! {
     /// `{}`: the effect.
     ManifestProvides: Manifest, "`provides` other than `Alloc` (`{}`)", None;
     ManifestBind: Manifest, "`bind` in a target", None;
+    /// `{}`: the value. R-166, §12.5.
+    ManifestMainFrame: Manifest, "`main_frame = \"{}\"` (only `stack`)", None;
+    /// `{}`: the value. §15.5 (W10-05).
+    ManifestFp: Manifest, "`fp = \"{}\"` (only `strict`)", None;
+    /// §12.4 (W9-06).
+    ManifestBulk: Manifest, "`memory.bulk = true`", None;
+    /// §12.4 (W9-05, W9-06).
+    ManifestBudgets: Manifest, "the budgets of `memory` (`fast_budget`, `bulk_budget`)", None;
     /// `{}`: the package (§15.3: reported by the check of the manifest, for every command).
     ManifestDependency: Manifest, "dependencies other than `std` (`{}`)", None;
 }
@@ -289,12 +296,6 @@ impl Feature {
             Some(n) => d.with_rule(n),
             None => d,
         }
-    }
-
-    /// The text of an error that is not a diagnostic yet (a target's settings
-    /// read by `onsa build`, until the manifest reports them, S-154).
-    pub fn usage(self, details: &[&str]) -> String {
-        format!("{} ({})", self.message(details), Code::E0200.as_str())
     }
 }
 

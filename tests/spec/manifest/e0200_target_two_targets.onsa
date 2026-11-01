@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_two_targets"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "exe"                                   #~ E0200 [a]
+// platform = "host"
+//
+// [targets.b]
+// kind = "source"
+// lang = "js"                                    #~ E0200 [b]
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the reports of a target belong to its own build: the build of `a` has its `kind`, the build of `b` its
+// `lang`, and each is compared with the marker that names it (§15.3, §18.1; S-154, S-827)
+
+pub fn f() -> I32 { 1 }

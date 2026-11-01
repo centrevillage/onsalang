@@ -10,7 +10,7 @@ use onsa_driver::{Loaded, ManifestForm};
 
 use super::{CaseRun, CheckedMarker, Problem, Stage, candidates};
 use crate::case::{Case, Setup};
-use crate::fragment::{Mode, TestSettings};
+use crate::fragment::{GoldenKind, Mode, TestSettings};
 use crate::golden::Update;
 
 /// Compare the markers with the diagnostics, record every marker compared,
@@ -28,7 +28,7 @@ pub(super) fn compare(
 }
 
 /// [`compare`], where `toml` is the file `onsa.toml` (not Onsa, for the rules of diagnostics).
-fn compare_in(
+pub(super) fn compare_in(
     run: &mut CaseRun,
     sources: &SourceMap,
     expected: &[(FileId, Expected)],
@@ -100,9 +100,10 @@ fn compare_in(
 
 /// The manifest's diagnostics against its `#~` markers, in every mode and
 /// before anything else reads the package (`tests/README.md`): a manifest
-/// without markers expects none. Whether the run stops here: the manifest
-/// has diagnostics or markers (a command stops on them before the sources,
-/// §18.1), and then a `//~` in a file of the case is an error of the case.
+/// without markers expects none. `None`: the run stops here, as the manifest
+/// has diagnostics or markers without a target (a command stops on them
+/// before the sources, §18.1), and then a `//~` in a file of the case is an
+/// error of the case. Else the markers that name targets, for their builds.
 /// The candidates of its diagnostics are checked as those of the check, with
 /// their copies beside the manifest's file ([`crate::fix_contract::check_manifest`]).
 pub(super) fn manifest_stage(
@@ -112,21 +113,27 @@ pub(super) fn manifest_stage(
     setup: &Setup,
     loaded: &Loaded,
     update: Update,
-) -> bool {
-    let (Some(source), Some(read)) = (&setup.input.manifest, &loaded.manifest) else { return false };
-    let markers = match crate::parse_manifest_markers(&source.text) {
-        Ok(m) => m,
+) -> Option<Vec<(FileId, Expected)>> {
+    let (Some(source), Some(read)) = (&setup.input.manifest, &loaded.manifest) else { return Some(Vec::new()) };
+    let (targeted, markers): (Vec<_>, Vec<_>) = match crate::parse_manifest_markers(&source.text) {
+        Ok(m) => m.into_iter().partition(|m| m.targets.is_some()),
         Err(e) => {
             run.problems.push(Problem::Case(format!("{}: bad markers: {e}", source.path)));
-            return true;
+            return None;
         }
     };
+    let t = &setup.test;
+    let c = [("a `#~` without a target", !markers.is_empty()), ("`golden` \"c\"", t.golden.contains(&GoldenKind::C))];
+    let c = c.into_iter().chain([("`conformance`", t.conformance), ("`[[test.host]]`", !t.host.is_empty())]);
+    for (what, _) in c.filter(|(_, set)| *set && !targeted.is_empty()) {
+        run.problems.push(Problem::Case(format!(
+            "{}: a `#~` names a target, whose build stops before its C, and the case has {what}",
+            source.path
+        )));
+    }
     let actual = &read.diagnostics;
     if markers.is_empty() && actual.is_empty() {
-        return false;
-    }
-    if markers.iter().any(|m| m.targets.is_some()) {
-        run.problems.push(Problem::Case(format!("{}: a `#~` marker names no target", source.path)));
+        return run.problems.is_empty().then(|| targeted.into_iter().map(|m| (read.file, m)).collect());
     }
     let later = after_the_sources(&setup.test);
     if !later.is_empty() {
@@ -159,7 +166,7 @@ pub(super) fn manifest_stage(
         });
         candidates(run, root, crate::fix_contract::check_manifest(case, setup, loaded), copies);
     }
-    true
+    None
 }
 
 /// The settings of `[test]` compared after the sources are read

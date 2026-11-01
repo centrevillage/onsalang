@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_every_value"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "exe"                                   #~ E0200 [t]
+// platform = "host"
+// fp = "strict-ftz"                              #~ E0200 [t]
+// provides = ["Fs"]                              #~ E0200 [t]
+// main_frame = "static"                          #~ E0200 [t]
+//
+// [targets.t.memory]
+// bulk = true                                    #~ E0200 [t]
+// fast_budget = 4096                             #~ E0200 [t]
+// bulk_budget = 8192                             #~ E0200 [t]
+//
+// [targets.t.bind]                               #~ E0200 [t]
+// "audio.device" = "daisy_hal.audio"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: every value of the closed list in one target is eight reports, one at each line (S-827; §15.3, §18.1; S-154,
+// S-827)
+
+pub fn f() -> I32 { 1 }

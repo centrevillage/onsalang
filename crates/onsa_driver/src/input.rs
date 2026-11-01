@@ -232,9 +232,12 @@ fn read_manifest_of(
         },
     };
     let mut read = manifest::read(source, file);
-    crate::fill_found(sources, &mut read.diagnostics);
     let toml = (source.form == ManifestForm::File).then_some(file);
-    crate::debug_contract(sources, &read.diagnostics, toml);
+    let targets = read.manifest.targets.values_mut().map(|t| &mut t.value.build_diagnostics);
+    for diagnostics in std::iter::once(&mut read.diagnostics).chain(targets) {
+        crate::fill_found(sources, diagnostics);
+        crate::debug_contract(sources, diagnostics, toml);
+    }
     Ok(read)
 }
 

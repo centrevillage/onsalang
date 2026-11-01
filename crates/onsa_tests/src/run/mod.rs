@@ -65,7 +65,7 @@ mod test_blocks;
 mod tests;
 
 pub use all::{run_all, run_all_with, run_each, runs_json};
-use build::{BuildCtx, build_target, conformance_scope, disk_files, host_not_run, run_hosts};
+use build::{BuildCtx, build_target, conformance_scope, disk_files, host_not_run, manifest_of_target, run_hosts};
 use markers::{canonical, compare, manifest_stage, negative_rules, parser_markers};
 pub use report::{CaseReport, Report, reconcile};
 use test_blocks::run_tests;
@@ -280,9 +280,13 @@ pub fn stage_problem(sources: &SourceMap, failure: StageFailure<'_>) -> Problem 
         StageFailure::Build { target, error: BuildError::Usage(m) } => {
             Problem::Case(format!("build of `{target}`: {m}"))
         }
-        StageFailure::Build { target, error: BuildError::Diagnostics { sources, diagnostics } } => Problem::Failed(
-            format!("build of `{target}`:\n{}", onsa_diag::to_text(sources, diagnostics).replace('\n', "\n  ")),
-        ),
+        StageFailure::Build {
+            target,
+            error: BuildError::Diagnostics { sources, diagnostics } | BuildError::Manifest { sources, diagnostics },
+        } => Problem::Failed(format!(
+            "build of `{target}`:\n{}",
+            onsa_diag::to_text(sources, diagnostics).replace('\n', "\n  ")
+        )),
     }
 }
 
@@ -349,9 +353,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             return run;
         }
     };
-    if manifest_stage(&mut run, root, case, setup, &loaded, update) {
-        return run;
-    }
+    let Some(on_targets) = manifest_stage(&mut run, root, case, setup, &loaded, update) else { return run };
     let targets = case::target_names(&loaded);
     let t = &setup.test;
     if !targets.is_empty() && matches!(t.mode, Mode::None | Mode::Parse) {
@@ -418,7 +420,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         return run;
     }
     run.ran = true;
-    for (file, m) in &markers {
+    for (file, m) in markers.iter().chain(&on_targets) {
         for name in m.targets.iter().flatten() {
             if !targets.contains(name) {
                 run.problems.push(Problem::Case(format!(
@@ -516,6 +518,10 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             negative_rules(&mut run, &case.path, check);
         }
         if !check.is_empty() {
+            // A build stops on its manifest before the sources (§18.1), whatever the check reports.
+            for target in &targets {
+                manifest_of_target(&mut run, &loaded, &on_targets, target);
+            }
             if !t.golden.is_empty() || !t.golden_graph.is_empty() || t.conformance {
                 run.problems
                     .push(Problem::Case("golden files and conformance need a check without diagnostics".into()));
@@ -532,6 +538,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         if t.conformance {
             conformance_scope(&mut run, &loaded, &analyzed);
         }
+        markers.extend(on_targets);
         for target in &targets {
             let ctx = BuildCtx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, markers: &markers };
             build_target(&ctx, target, update, &mut run);

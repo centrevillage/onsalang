@@ -1,0 +1,20 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_main_frame_static"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// main_frame = "static"                          #~ E0200 [t]
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: `main_frame = "static"` was read and thrown away before; it is a value this version does not support, so it
+// is reported at the value (R-166; §15.3, §18.1; S-154, S-827)
+
+pub fn f() -> I32 { 1 }

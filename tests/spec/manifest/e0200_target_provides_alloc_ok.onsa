@@ -1,0 +1,20 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_provides_alloc_ok"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = ["Alloc"]
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// No diagnostic: `provides = ["Alloc"]` is the one effect this version provides (S-824 "`Alloc` 以外"; §15.3, §18.1;
+// S-154, S-827)
+
+pub fn f() -> I32 { 1 }

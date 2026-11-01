@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_budget_zero"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.t.memory]
+// bulk = false
+// fast_budget = 0                                #~ E0200 [t]
+// bulk_budget = 0                                #~ E0200 [t]
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the value does not matter, `0` is a valid size and the key is still the error; `bulk = false` beside them is
+// the default and is not reported (S-825; §15.3, §18.1; S-154, S-827)
+
+pub fn f() -> I32 { 1 }

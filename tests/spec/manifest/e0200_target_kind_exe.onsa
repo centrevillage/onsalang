@@ -1,0 +1,18 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_kind_exe"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "exe"                                   #~ E0200 [t]
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: `kind = "exe"` is a value this version does not support. The report is at the value, in the build of the
+// target `t` (§15.3, §18.1; S-154, S-827).
+
+pub fn f() -> I32 { 1 }

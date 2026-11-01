@@ -601,10 +601,10 @@ fn conformance_scope() {
 
 #[test]
 fn small_holes() {
-    // A value the manifest takes and the build does not (E0200 of the build, U3).
+    // A platform the build cannot resolve: a usage error of the build (until W4-02 U3b).
     let bad_target = MANIFEST.replace(
         "lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"",
-        "lang = \"js\"\n// platform = \"host\"\n// panic = \"poison\"",
+        "lang = \"c\"\n// platform = \"zz80-none\"\n// panic = \"poison\"",
     ) + "\npub fn f() -> I32 {\n  1\n}\n";
     let flow = |name: &str| {
         MANIFEST.replace("name = \"m\"", &format!("name = \"{name}\""))
@@ -639,7 +639,7 @@ fn small_holes() {
     has("tests/none.onsa", "unknown code `E9999`");
     has("tests/no_tests.onsa", "has no `test` block");
     // the case's own settings are wrong: never pending
-    has("tests/bad_target/m.onsa", "`lang = \"js\"`");
+    has("tests/bad_target/m.onsa", "unknown architecture `zz80`");
     assert!(case(&r, "tests/bad_target/m.onsa").pending.is_none());
     // the two flatten to the same name; each has its own scratch directory
     for p in ["tests/a_b.onsa", "tests/a/b.onsa"] {
@@ -688,6 +688,65 @@ fn a_case_the_manifest_stops_asks_nothing_after_the_sources() {
     assert!(zero.failures.is_empty(), "{:?}", zero.failures);
     let checked: Vec<(Stage, bool)> = zero.run.checked.iter().map(|m| (m.stage, m.matched)).collect();
     assert_eq!(checked, [(Stage::Manifest, true)]);
+}
+
+/// A `#~` that names a target (`tests/README.md`, W4-02 U3a) is compared with the build of that
+/// target, which stops on its manifest whatever the check reports; it does not stop the case, whose
+/// `//~` the check compares. With a `#~` without a target, or a setting that compares C, the case is
+/// wrong.
+#[test]
+fn a_manifest_marker_that_names_a_target_is_of_its_build() {
+    let case_of = |test: &str, src: &str| {
+        let test: String = test.lines().map(|l| format!("// {l}\n")).collect();
+        format!(
+            "// onsa.toml\n// [package]\n// name = \"c\"\n// edition = \"2026\"\n//\n// [targets.t]\n\
+             // kind = \"clap\"  #~ E0200 [t]\n// platform = \"host\"\n//\n// [targets.u]\n// kind = \"source\"\n\
+             // lang = \"c\"\n// platform = \"host\"\n//\n// [test]\n{test}\n{src}"
+        )
+    };
+    const OK: &str = "pub fn f() -> I32 { 1 }\n";
+    let host = "[[test.host]]\nname = \"h\"\ntarget = \"u\"\nflow = \"c.f\"\n\
+                steps = [{ call = \"init\", config = {}, sample_rate = 8.0, status = 0 }]";
+    let mut files = vec![
+        ("built", case_of("fixes = 0", OK)),
+        ("checked", case_of("", "pub fn f() -> I32 { true } //~ E0401\n")),
+        ("other", case_of("", OK).replace("[t]", "[u]")),
+        ("checked_other", case_of("", "pub fn f() -> I32 { true } //~ E0401\n").replace("[t]", "[u]")),
+        ("mixed", case_of("", OK).replace("// name = \"c\"", "// name = \"c\"\n// colour = 1  #~ E1102")),
+    ];
+    for (name, test) in [("c", "golden = [\"c\"]"), ("conformance", "conformance = true"), ("host", host)] {
+        files.push((name, case_of(test, OK)));
+    }
+    let files: Vec<(String, &str)> = files.iter().map(|(n, t)| (format!("tests/{n}.onsa"), t.as_str())).collect();
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (p.as_str(), *t)).collect();
+    let r = Repo::new("manifest_targets", &files).run();
+    for (p, stages) in [
+        ("tests/built.onsa", vec![(Stage::Build, Some("t"))]),
+        ("tests/checked.onsa", vec![(Stage::Check, None), (Stage::Build, Some("t"))]),
+    ] {
+        let c = case(&r, p);
+        assert!(c.failures.is_empty(), "{p}: {:?}", c.failures);
+        let checked: Vec<(Stage, Option<&str>)> =
+            c.run.checked.iter().filter(|m| m.matched).map(|m| (m.stage, m.target.as_deref())).collect();
+        assert_eq!(checked, stages, "{p}");
+    }
+    // The E0200 of `t` without its marker, also where the check reports and the build goes no further.
+    for p in ["tests/other.onsa", "tests/checked_other.onsa"] {
+        let c = case(&r, p);
+        assert!(c.failures.iter().any(|f| f.contains("the build of `t` differs")), "{p}: {:?}", c.failures);
+        assert!(c.failures.iter().any(|f| f.contains("the build of `u` differs")), "{p}: {:?}", c.failures);
+    }
+    let wrong = [
+        ("mixed", "a `#~` without a target"),
+        ("c", "`golden` \"c\""),
+        ("conformance", "`conformance`"),
+        ("host", "`[[test.host]]`"),
+    ];
+    for (name, what) in wrong {
+        let c = case(&r, &format!("tests/{name}.onsa"));
+        let needle = format!("a `#~` names a target, whose build stops before its C, and the case has {what}");
+        assert!(c.failures.iter().any(|f| f.contains(&needle)), "{name}: {:?}", c.failures);
+    }
 }
 
 /// A manifest of a fragment without `edition`, with `extra` in `[package]`, `test` in `[test]` and `src` after it.

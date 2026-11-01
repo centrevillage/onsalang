@@ -17,9 +17,10 @@ fn voice_host_writes_a_wav() {
     let report = match onsa_driver::build(Some(&example), &opts) {
         Ok(r) => r,
         Err(onsa_driver::BuildError::Usage(m)) => panic!("build: {m}"),
-        Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-            panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics))
-        }
+        Err(
+            onsa_driver::BuildError::Diagnostics { sources, diagnostics }
+            | onsa_driver::BuildError::Manifest { sources, diagnostics },
+        ) => panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics)),
         Err(onsa_driver::BuildError::Internal { sources, error }) => panic!("build: {}", error.render(&sources)),
     };
     assert_eq!(report.archive.as_deref(), Some("libonsa_voice.a"), "{report:?}");

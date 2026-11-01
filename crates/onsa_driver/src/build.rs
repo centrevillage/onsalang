@@ -11,7 +11,6 @@ use std::process::Command;
 
 use onsa_backend_c::{EmitOptions, ExportFlow, PanicMode};
 use onsa_core::{ConstId, Expr, ExprKind, Lit, LowerOptions, Module, Ty, TypeDefKind};
-use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 use onsa_interp::{ArrayData, Interp, Value};
 use onsa_sema::package_tree::{BUILD_DIR, MANIFEST};
@@ -122,6 +121,9 @@ pub enum BuildError {
     Usage(String),
     /// The package or its exports do not check (exit 1).
     Diagnostics { sources: SourceMap, diagnostics: Vec<Diagnostic> },
+    /// The manifest's diagnostics and those of the target's build that need
+    /// no source, in one report before the sources are read (exit 2, §18.1).
+    Manifest { sources: SourceMap, diagnostics: Vec<Diagnostic> },
     /// An internal error (S-67, exit 101): a panic, a broken Core (R-82), or
     /// generated C the C compiler rejects. `sources` renders its position.
     Internal { sources: SourceMap, error: Box<InternalError> },
@@ -175,9 +177,20 @@ impl ExportSettings {
     }
 }
 
-/// Find `[targets.<target>]` in `manifest` and validate it.
-pub fn resolve_target(manifest: &Manifest, target: &str) -> Result<ResolvedTarget, BuildError> {
-    let Some(t) = manifest.targets.get(target) else {
+/// Find `[targets.<target>]` in the manifest of `loaded` and validate it:
+/// the diagnostics of the manifest and of the target's values stop the build
+/// together (§18.1, S-827).
+pub fn resolve_target(loaded: &Loaded, target: &str) -> Result<ResolvedTarget, BuildError> {
+    let Some(read) = &loaded.manifest else {
+        return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
+    };
+    let (manifest, t) = (&read.manifest, read.manifest.targets.get(target));
+    let mut diagnostics = read.diagnostics.clone();
+    diagnostics.extend(t.into_iter().flat_map(|t| t.value.build_diagnostics.iter().cloned()));
+    if !diagnostics.is_empty() {
+        return Err(BuildError::Manifest { sources: loaded.sources.clone(), diagnostics });
+    }
+    let Some(t) = t else {
         let names: Vec<&String> = manifest.targets.keys().collect();
         return Err(BuildError::Usage(format!(
             "no target `{target}` in {MANIFEST} (targets: {})",
@@ -209,10 +222,7 @@ pub struct BuildOutput {
 /// file system (R-80 (5), R-89 (3)): the one entry the tests and `onsa_web`
 /// share with `onsa build`.
 pub fn build_analyzed(loaded: &Loaded, analyzed: &Analyzed, target: &str) -> Result<BuildOutput, BuildError> {
-    let Some(manifest) = loaded.manifest() else {
-        return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
-    };
-    let resolved = resolve_target(manifest, target)?;
+    let resolved = resolve_target(loaded, target)?;
     build_resolved(loaded, analyzed, &resolved)
 }
 
@@ -291,12 +301,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
 pub fn build(path: Option<&Path>, opts: &BuildOptions) -> Result<BuildReport, BuildError> {
     let input = read_package_input(path).map_err(BuildError::Usage)?;
     let mut loaded = Loaded::from_input(input).map_err(BuildError::Usage)?;
-    // The manifest's diagnostics stop the build before the sources are read
-    // (§18.1); they point into `onsa.toml` (exit 2, §18.2).
-    if !loaded.manifest_diagnostics().is_empty() {
-        let diagnostics = loaded.manifest_diagnostics().to_vec();
-        return Err(BuildError::Diagnostics { sources: loaded.sources, diagnostics });
-    }
+    let resolved = resolve_target(&loaded, &opts.target)?;
     let root = guard(|| match &loaded.root {
         Some(root) => root.clone(),
         None => onsa_diag::internal::bug(None, "a package read from a path has no root"),
@@ -305,10 +310,6 @@ pub fn build(path: Option<&Path>, opts: &BuildOptions) -> Result<BuildReport, Bu
         Ok(root) => root,
         Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
     };
-    let Some(manifest) = loaded.manifest() else {
-        return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
-    };
-    let resolved = resolve_target(manifest, &opts.target)?;
     let analyzed = match crate::analyze_loaded(&mut loaded) {
         Ok(a) => a,
         Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
@@ -406,19 +407,10 @@ pub struct TargetSettings {
 }
 
 impl TargetSettings {
+    /// The settings of `t`, whose values the build supports (its
+    /// [`ManifestTarget::build_diagnostics`] are empty).
     pub fn from_manifest(name: &str, t: &ManifestTarget) -> Result<TargetSettings, BuildError> {
         let usage = |m: String| BuildError::Usage(format!("[targets.{name}]: {m}"));
-        match t.kind.value.as_str() {
-            "staticlib" => {}
-            "source" => {
-                if text(&t.lang).unwrap_or("c") != "c" {
-                    return Err(usage(Feature::ManifestLang.usage(&[text(&t.lang).unwrap_or_default()])));
-                }
-            }
-            other => {
-                return Err(usage(Feature::ManifestKind.usage(&[other])));
-            }
-        }
         let platform = platform(&t.platform.value).map_err(&usage)?;
         let panic = match text(&t.panic) {
             None => {
@@ -435,20 +427,12 @@ impl TargetSettings {
             // The check of the manifest stopped every other value (E1103, `table::PANIC`).
             Some(other) => onsa_diag::internal::bug(None, format!("[targets.{name}]: the panic setting `{other}`")),
         };
-        for e in &t.provides {
-            if e.value != "Alloc" {
-                return Err(usage(Feature::ManifestProvides.usage(&[&e.value])));
-            }
-        }
-        if !t.bind.is_empty() {
-            return Err(usage(Feature::ManifestBind.usage(&[])));
-        }
         Ok(TargetSettings {
             kind: t.kind.value.clone(),
             platform,
             panic,
             panic_messages: t.panic_messages.as_ref().is_none_or(|b| b.value),
-            provides_alloc: t.provides.iter().any(|e| e.value == "Alloc"),
+            provides_alloc: t.provides.iter().any(|e| e.value == crate::manifest::table::ALLOC),
         })
     }
 }
@@ -613,6 +597,37 @@ mod tests {
         assert!(matches!(init("UNREAD"), ExprKind::Call { .. }), "{:?}", init("UNREAD"));
     }
 
+    /// S-154, S-827, §18.1: the build of a target reports the manifest's
+    /// diagnostics and the E0200 of that target's values together, before
+    /// the sources; another target's values are not its; a name not in the
+    /// manifest is a usage error.
+    #[test]
+    fn a_build_stops_on_the_manifest_and_the_values_of_its_target_together() {
+        let manifest = |extra: &str| {
+            let text = format!(
+                "[package]\nname = \"p\"\nedition = \"2026\"\n{extra}\
+                 [targets.t]\nkind = \"exe\"\nplatform = \"host\"\n\
+                 [targets.u]\nkind = \"staticlib\"\nplatform = \"host\"\n"
+            );
+            let source = crate::ManifestSource { path: MANIFEST.into(), text, form: crate::ManifestForm::File };
+            let files = vec![crate::SourceFile { path: "a.onsa".into(), text: "pub fn f() -> I32 { 1 }\n".into() }];
+            Loaded::from_input(PackageInput { manifest: Some(source), files, ..Default::default() }).unwrap()
+        };
+        let codes = |loaded: &Loaded, target: &str| match resolve_target(loaded, target) {
+            Err(BuildError::Manifest { diagnostics, .. }) => diagnostics.iter().map(|d| d.code).collect(),
+            Ok(_) => Vec::new(),
+            Err(e) => panic!("{e:?}"),
+        };
+        let clean = manifest("");
+        assert_eq!(codes(&clean, "t"), [Code::E0200]);
+        assert_eq!(codes(&clean, "u"), []);
+        assert!(matches!(resolve_target(&clean, "v"), Err(BuildError::Usage(m)) if m.contains("no target `v`")));
+        let broken = manifest("colour = 1\n");
+        assert_eq!(codes(&broken, "t"), [Code::E1102, Code::E0200]);
+        assert_eq!(codes(&broken, "u"), [Code::E1102]);
+        assert_eq!(broken.manifest_diagnostics().len(), 1, "the check reports the E1102 alone");
+    }
+
     #[test]
     fn platforms() {
         let p = platform("aarch64-apple-darwin").unwrap();
@@ -645,8 +660,6 @@ mod tests {
         assert!(!s.provides_alloc);
         let t = target("staticlib", "thumbv7em-none-eabihf");
         assert_eq!(TargetSettings::from_manifest("t", &t).unwrap().panic, PanicMode::Reset);
-        let t = target("clap", "host");
-        assert!(matches!(TargetSettings::from_manifest("t", &t), Err(BuildError::Usage(_))));
         // Every value of `panic` the manifest takes is a mode (the check of the
         // manifest stops the others, E1103).
         for &p in crate::manifest::table::PANIC {

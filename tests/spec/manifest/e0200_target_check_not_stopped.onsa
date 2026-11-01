@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_check_not_stopped"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "exe"                                   #~ E0200 [t]
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// `check` is not stopped by the E0200 of a target value: the source is read and its E0401 is reported at its line,
+// beside the E0200 that only the build of `t` reports (§15.3 "未対応のターゲットがあっても、`check` と `test` は止まらない"; S-154; §15.3,
+// §18.1; S-154, S-827)
+
+pub fn f() -> I32 {
+  true                                           //~ E0401
+}

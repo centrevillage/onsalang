@@ -117,9 +117,11 @@ pub fn host_target(loaded: &Loaded) -> Result<String, String> {
     let mut names: Vec<&String> = m
         .targets
         .iter()
+        // `from_manifest` takes a target whose values the build supports.
         .filter(|(n, t)| {
-            TargetSettings::from_manifest(n, &t.value)
-                .is_ok_and(|s| s.platform.is_host() && s.panic == PanicMode::Poison)
+            t.value.build_diagnostics.is_empty()
+                && TargetSettings::from_manifest(n, &t.value)
+                    .is_ok_and(|s| s.platform.is_host() && s.panic == PanicMode::Poison)
         })
         .map(|(n, _)| n)
         .collect();
@@ -171,7 +173,7 @@ pub fn run_with(root: &Path, data: &Data, list: &Pending, tools: &[&'static Item
                 out.run.errors.push(format!("{}: build of `{target}`: {m}", package_path(pkg)));
                 continue;
             }
-            Err(BuildError::Diagnostics { sources, diagnostics }) => {
+            Err(BuildError::Diagnostics { sources, diagnostics } | BuildError::Manifest { sources, diagnostics }) => {
                 let why = format!(
                     "the build of `{target}` reports {} diagnostics:\n{}",
                     diagnostics.len(),

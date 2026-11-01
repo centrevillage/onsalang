@@ -12,7 +12,7 @@ use crate::case::{self, Case, Setup};
 use crate::fragment::GoldenKind;
 use crate::golden::{self, Update};
 
-use super::markers::compare;
+use super::markers::{compare, compare_in};
 use super::{Built, CaseRun, Problem, Stage, StageFailure, Stages, stage_problem};
 
 /// A host sequence that did not run, for a reason of the whole case.
@@ -105,8 +105,9 @@ pub(super) fn build_target(ctx: &BuildCtx<'_>, target: &str, update: Update, run
             compare(run, &loaded.sources, &expected, &[], Stage::Build, Some(target));
             out
         }
-        Err(BuildError::Diagnostics { diagnostics, sources }) => {
-            compare(run, &loaded.sources, &expected, &diagnostics, Stage::Build, Some(target));
+        // The markers `#~` of the target's values are compared with its manifest's (`tests/README.md`).
+        Err(BuildError::Diagnostics { diagnostics, sources } | BuildError::Manifest { diagnostics, sources }) => {
+            compare_in(run, &loaded.sources, &expected, &diagnostics, Stage::Build, Some(target), loaded.toml_file());
             run.problems.extend(crate::fix_contract::unchecked(&sources, &diagnostics));
             return;
         }
@@ -127,6 +128,22 @@ pub(super) fn build_target(ctx: &BuildCtx<'_>, target: &str, update: Update, run
         }
     }
     run.builds.push(Built { target: target.to_string(), output: Arc::new(out), conformance: t.conformance });
+}
+
+/// The diagnostics of the manifest of the build of `target` (its values),
+/// which stop it before the sources (§18.1), against the `#~` that name it:
+/// the build of a case whose check reports goes no further.
+pub(super) fn manifest_of_target(run: &mut CaseRun, loaded: &Loaded, markers: &[(FileId, Expected)], target: &str) {
+    let expected: Vec<(FileId, Expected)> =
+        markers.iter().filter(|(_, m)| m.targets.iter().flatten().any(|x| x == target)).cloned().collect();
+    let actual = match onsa_driver::resolve_target(loaded, target) {
+        Ok(_) => Vec::new(),
+        Err(BuildError::Manifest { diagnostics, .. }) => diagnostics,
+        Err(error) => {
+            return run.problems.push(stage_problem(&loaded.sources, StageFailure::Build { target, error: &error }));
+        }
+    };
+    compare_in(run, &loaded.sources, &expected, &actual, Stage::Build, Some(target), loaded.toml_file());
 }
 
 /// `conformance = true` covers every `pub flow` of the case: each has

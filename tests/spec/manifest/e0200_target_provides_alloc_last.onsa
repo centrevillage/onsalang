@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_provides_alloc_last"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "Stdout",                                    #~ E0200 [t]
+//   "Alloc",
+// ]
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the element before `"Alloc"` is the one reported; the order of the elements does not matter (S-824; §15.3,
+// §18.1; S-154, S-827)
+
+pub fn f() -> I32 { 1 }

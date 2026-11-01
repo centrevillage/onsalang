@@ -11,7 +11,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use toml_edit::{ImDocument, Item, TableLike};
 
-use super::table::{self, Field, Names, Read, Rule, Shape, Table};
+use super::table::{self, Field, Names, Read, Row, Rule, Shape, Table, Unsupported};
 use super::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestRead, ManifestTarget, Spanned};
 use crate::{ManifestForm, ManifestSource, STD_PACKAGE, STD_VERSION};
 
@@ -43,7 +43,7 @@ pub fn read(source: &ManifestSource, file: FileId) -> ManifestRead {
             return done(Manifest::default(), vec![d]);
         }
     };
-    let reader = Reader { source, file, diagnostics: RefCell::default() };
+    let reader = Reader { source, file, diagnostics: RefCell::default(), target: RefCell::default() };
     let manifest = reader.manifest(doc.as_table());
     done(manifest, reader.diagnostics.into_inner())
 }
@@ -55,10 +55,21 @@ fn shown(s: &str) -> String {
     s.chars().map(|c| if matches!(c, '"' | '\'') { c.to_string() } else { c.escape_debug().to_string() }).collect()
 }
 
+/// `d` with its texts [`shown`].
+fn escaped(mut d: Diagnostic) -> Diagnostic {
+    d.message = shown(&d.message);
+    for n in &mut d.notes {
+        n.message = shown(&n.message);
+    }
+    d
+}
+
 struct Reader<'s> {
     source: &'s ManifestSource,
     file: FileId,
     diagnostics: RefCell<Vec<Diagnostic>>,
+    /// The diagnostics of the build of the target being read ([`ManifestTarget::build_diagnostics`]).
+    target: RefCell<Vec<Diagnostic>>,
 }
 
 /// How a table is written (TOML), which decides where a key it lacks is
@@ -136,7 +147,7 @@ impl<'s> Reader<'s> {
         let kind = self.need(f, Field::Kind).map(Got::str).unwrap_or_default();
         // `lang` is required by `kind = "source"` (§15.3): not by another kind, or a kind not read.
         let lang = if kind.value == "source" { self.need(f, Field::Lang) } else { f.take(Field::Lang) };
-        ManifestTarget {
+        let mut t = ManifestTarget {
             kind,
             platform: self.need(f, Field::Platform).map(Got::str).unwrap_or_default(),
             lang: lang.map(Got::str),
@@ -153,7 +164,11 @@ impl<'s> Reader<'s> {
                 })
             }),
             bind: self.strings(f.take(Field::Bind)),
-        }
+            build_diagnostics: Vec::new(),
+        };
+        // Its keys and those of its tables are read: every diagnostic of its build is made.
+        t.build_diagnostics = self.target.take();
+        t
     }
 
     /// The keys of `t`, the table `table` at `path`, read by its rows.
@@ -178,7 +193,10 @@ impl<'s> Reader<'s> {
                 continue;
             }
             match self.got(row.shape, row.rule, t, key, item, path) {
-                Some(g) => f.got.push((row.field, g)),
+                Some(g) => {
+                    self.unsupported(row, &g);
+                    f.got.push((row.field, g))
+                }
                 None => f.wrong.push(row.field),
             }
         }
@@ -303,6 +321,32 @@ impl<'s> Reader<'s> {
             _ => return,
         };
         self.e1103(got.span.clone(), message, &notes);
+    }
+
+    /// The E0200 of each value of `got` its row does not support, for the
+    /// build of its target (S-154, S-824): at the value, an element, or the
+    /// key of a table.
+    fn unsupported(&self, row: &Row, got: &Got) {
+        let Some((values, feature)) = row.unsupported else { return };
+        let at = |span: &Range<usize>, details: &[&str]| {
+            let d = feature.diagnostic(Stage::Manifest, self.span(span.clone()), details);
+            self.target.borrow_mut().push(escaped(d));
+        };
+        match (values, &got.value) {
+            // A value outside the closed list of the rule is an E1103 alone (S-827).
+            (Unsupported::Except(vs), Typed::Str(v))
+                if !vs.contains(&v.as_str())
+                    && !matches!(row.rule, Rule::OneOf(all, _) if !all.contains(&v.as_str())) =>
+            {
+                at(&got.span, &[v])
+            }
+            (Unsupported::Except(vs), Typed::Strs(es)) => {
+                es.iter().filter(|e| !vs.contains(&e.value.as_str())).for_each(|e| at(&e.span, &[&e.value]))
+            }
+            (Unsupported::True, Typed::Bool(true)) | (Unsupported::Any, Typed::Int(_)) => at(&got.span, &[]),
+            (Unsupported::Any, Typed::Table(t, ..)) if !t.is_empty() => at(&got.key, &[]),
+            _ => {}
+        }
     }
 
     /// The table of `got` built by `build` from its keys.
@@ -444,12 +488,8 @@ impl<'s> Reader<'s> {
         self.push(notes.iter().fold(d, |d, n| d.with_rule(n.clone())));
     }
 
-    fn push(&self, mut d: Diagnostic) {
-        d.message = shown(&d.message);
-        for n in &mut d.notes {
-            n.message = shown(&n.message);
-        }
-        self.diagnostics.borrow_mut().push(d);
+    fn push(&self, d: Diagnostic) {
+        self.diagnostics.borrow_mut().push(escaped(d));
     }
 
     fn span(&self, at: Range<usize>) -> Span {
@@ -856,6 +896,63 @@ mod tests {
         let text = "[package]\nname = \"a\"\nedition = \"2026\"\n[targets.t]\nkind = \"exe\"\nplatform = \"h\"\n[targets.t.bind]\n\
                     \"audio.device\" = 3\n\"x\" = \"y\"\n";
         assert_eq!(diagnostics(text, ManifestForm::File), [(Code::E1103, "3")]);
+    }
+
+    /// The codes and the texts of the places of the diagnostics of the build
+    /// of `target` that need no source, in the order of the text.
+    fn built<'a>(text: &'a str, target: &str) -> Vec<(Code, &'a str)> {
+        let mut r = read_as(text, ManifestForm::File);
+        let t = &mut r.manifest.targets.get_mut(target).unwrap().value;
+        assert!(t.build_diagnostics.iter().all(|d| d.stage == Stage::Manifest && d.fixes.is_empty()));
+        t.build_diagnostics.sort_by_key(|d| d.span.start);
+        t.build_diagnostics.iter().map(|d| (d.code, &text[d.span.start as usize..d.span.end as usize])).collect()
+    }
+
+    /// S-154, S-824, S-825, S-827: each value a target's row does not support
+    /// is an E0200 of the build of that target only (not of the check), at
+    /// the value, an element of `provides` or the key of a `bind` with an
+    /// entry; the default values pass; a value of another type or outside the
+    /// closed list is an E1103 only; a budget below 0 is both.
+    #[test]
+    fn the_unsupported_values_of_a_target_are_e0200s_of_its_build() {
+        let text = "[package]\nname = \"a\"\nedition = \"2026\"\n\
+                    [targets.t]\nkind = \"exe\"\nplatform = \"h\"\nlang = \"js\"\nfp = \"strict-ftz\"\n\
+                    provides = [\"Alloc\", \"Fs\", \"Io\"]\nmain_frame = \"static\"\n\
+                    memory = { bulk = true, fast_budget = 0, bulk_budget = -1 }\nbind.\"a.b\" = \"c\"\n\
+                    [targets.u]\nkind = \"clap\"\nplatform = \"h\"\n[targets.u.bind]\nm = \"n\"\n\
+                    [targets.d]\nkind = \"source\"\nlang = \"c\"\nplatform = \"h\"\nfp = \"strict\"\nprovides = []\n\
+                    main_frame = \"stack\"\n[targets.d.memory]\nbulk = false\n[targets.d.bind]\n\
+                    [targets.e]\nkind = \"dll\"\nplatform = \"h\"\nfp = \"ftz\"\nprovides = [1]\nmain_frame = 2\n\
+                    memory = { bulk = \"y\", fast_budget = \"z\" }\n";
+        let t = ["\"exe\"", "\"js\"", "\"strict-ftz\"", "\"Fs\"", "\"Io\"", "\"static\"", "true", "0", "-1", "bind"];
+        assert_eq!(built(text, "t"), t.map(|v| (Code::E0200, v)));
+        assert_eq!(built(text, "u"), [(Code::E0200, "\"clap\""), (Code::E0200, "bind")]);
+        assert_eq!(built(text, "d"), []);
+        assert_eq!(built(text, "e"), []);
+        let check = ["-1", "\"dll\"", "\"ftz\"", "1", "2", "\"y\"", "\"z\""];
+        assert_eq!(diagnostics(text, ManifestForm::File), check.map(|v| (Code::E1103, v)));
+        let r = read_as(text, ManifestForm::File);
+        let fs = r.manifest.targets["t"].value.build_diagnostics.iter().find(|d| d.message.contains("Fs"));
+        assert_eq!(fs.unwrap().message, "this version does not support `provides` other than `Alloc` (`Fs`)");
+    }
+
+    /// Every row that names a [`Feature`] gives it the details its phrase
+    /// takes (the value for a string, none for the others), and its values
+    /// are of the shape of the row.
+    #[test]
+    fn the_feature_of_a_row_takes_its_details() {
+        for r in table::ROWS {
+            let Some((values, feature)) = r.unsupported else { continue };
+            let details = matches!(values, Unsupported::Except(_)) as usize;
+            assert_eq!(feature.arity(), details, "{}", r.key);
+            // The row's shape is one its values are read from (else the reader reports none).
+            let fits = match values {
+                Unsupported::Except(_) => matches!(r.shape, Shape::Str | Shape::Strs),
+                Unsupported::True => r.shape == Shape::Bool,
+                Unsupported::Any => matches!(r.shape, Shape::Int | Shape::Table(_)),
+            };
+            assert!(fits, "{}: {values:?} on {:?}", r.key, r.shape);
+        }
     }
 
     /// E1103 (S-99, S-597): a value outside the closed list of its key, with

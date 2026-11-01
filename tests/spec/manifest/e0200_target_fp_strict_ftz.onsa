@@ -1,0 +1,19 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_fp_strict_ftz"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict-ftz"                              #~ E0200 [t]
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E0200: `fp = "strict-ftz"` is not supported (`"strict"` is, §15.5), at the value (§15.3, §18.1; S-154, S-827)
+
+pub fn f() -> I32 { 1 }

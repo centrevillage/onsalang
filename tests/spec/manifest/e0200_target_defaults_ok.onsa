@@ -1,0 +1,28 @@
+// onsa.toml
+// [package]
+// name = "e0200_target_defaults_ok"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// main_frame = "stack"
+// provides = []
+//
+// [targets.t.memory]
+// bulk = false
+//
+// [targets.t.bind]
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// No diagnostic: the default values written out (`main_frame = "stack"`, `memory.bulk = false`, `fp = "strict"`,
+// `provides = []`, a `bind` with nothing in it) are the behaviour of this version, so none is an E0200 (S-825; §15.3,
+// §18.1; S-154, S-827)
+
+pub fn f() -> I32 { 1 }

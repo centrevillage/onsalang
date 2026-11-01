@@ -94,9 +94,10 @@ fn build_dir(work: &Path, target: &str) -> Built {
     let report = match onsa_driver::build(Some(work), &opts) {
         Ok(r) => r,
         Err(onsa_driver::BuildError::Usage(m)) => panic!("build: {m}"),
-        Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-            panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics))
-        }
+        Err(
+            onsa_driver::BuildError::Diagnostics { sources, diagnostics }
+            | onsa_driver::BuildError::Manifest { sources, diagnostics },
+        ) => panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics)),
         Err(onsa_driver::BuildError::Internal { sources, error }) => panic!("build: {}", error.render(&sources)),
     };
     Built { out, files: report.files.clone() }
@@ -142,9 +143,10 @@ fn case_package(tag: &str, rel: &str, target: &str) -> Built {
         let opts = onsa_driver::BuildOptions { target: target.into(), out: Some(out.clone()) };
         let report = match onsa_driver::build(Some(&path), &opts) {
             Ok(r) => r,
-            Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-                panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics))
-            }
+            Err(
+                onsa_driver::BuildError::Diagnostics { sources, diagnostics }
+                | onsa_driver::BuildError::Manifest { sources, diagnostics },
+            ) => panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics)),
             Err(_) => panic!("build of {rel} failed"),
         };
         return Built { out, files: report.files.clone() };
