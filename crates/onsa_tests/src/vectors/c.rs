@@ -118,7 +118,8 @@ pub fn host_target(loaded: &Loaded) -> Result<String, String> {
         .targets
         .iter()
         .filter(|(n, t)| {
-            TargetSettings::from_manifest(n, t).is_ok_and(|s| s.platform.is_host() && s.panic == PanicMode::Poison)
+            TargetSettings::from_manifest(n, &t.value)
+                .is_ok_and(|s| s.platform.is_host() && s.panic == PanicMode::Poison)
         })
         .map(|(n, _)| n)
         .collect();

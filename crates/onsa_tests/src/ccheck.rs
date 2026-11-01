@@ -216,9 +216,10 @@ pub fn collect_builds(root: &Path) -> Result<(Vec<(String, Built)>, String), Str
     if !errors.is_empty() {
         return Err(format!("the cases cannot be read:\n{}", errors.join("\n")));
     }
-    let cases: Vec<case::Case> =
-        cases.into_iter().filter(|c| c.setup.as_ref().is_ok_and(|s| !s.targets().is_empty())).collect();
-    let targets: usize = cases.iter().filter_map(|c| c.setup.as_ref().ok()).map(|s| s.targets().len()).sum();
+    // A case whose manifest does not read has no build here: the case runner reports it.
+    let count = |c: &case::Case| c.setup.as_ref().ok().and_then(|s| s.targets().ok()).map_or(0, |t| t.len());
+    let cases: Vec<case::Case> = cases.into_iter().filter(|c| count(c) > 0).collect();
+    let targets: usize = cases.iter().map(count).sum();
     let runs = run::run_each(root, &cases, |_| crate::golden::Update::Off, run::HostSteps::Skip);
     let builds: Vec<(String, Built)> =
         runs.into_iter().flat_map(|r| r.builds.into_iter().map(move |b| (r.path.clone(), b))).collect();

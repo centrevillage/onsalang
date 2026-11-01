@@ -387,8 +387,8 @@ fn cases(root: &std::path::Path) -> ExitCode {
         failed = true;
     }
     for c in cases {
-        match &c.setup {
-            Ok(s) => items.push(serde_json::json!({
+        match c.setup.clone().and_then(|s| s.targets().map(|t| (s, t))) {
+            Ok((s, targets)) => items.push(serde_json::json!({
                 "path": c.path,
                 "kind": c.kind,
                 "name": c.name,
@@ -397,8 +397,8 @@ fn cases(root: &std::path::Path) -> ExitCode {
                 "golden": s.test.golden,
                 "golden_graph": s.test.golden_graph,
                 "conformance": s.test.conformance,
-                "targets": s.targets(),
-                "files": files(&c, s),
+                "targets": targets,
+                "files": files(&c, &s),
             })),
             Err(e) => {
                 eprintln!("{}: {e}", c.path);

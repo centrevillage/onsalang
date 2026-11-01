@@ -15,7 +15,7 @@ onsa_backend_c.workspace = true
 onsa_backend_wasm.workspace = true
 onsa_backend_js.workspace = true
 serde_json.workspace = true
-toml.workspace = true
+toml_edit.workspace = true
 serde.workspace = true
 
 [lints]

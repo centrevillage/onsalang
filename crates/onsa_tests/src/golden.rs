@@ -47,7 +47,8 @@ pub fn declared(case: &Case) -> Vec<String> {
             GoldenKind::Core => out.push(core_path(&case.name)),
             GoldenKind::Interface => out.push(interface_path(&case.name)),
             GoldenKind::C => {
-                for t in setup.targets() {
+                // A manifest that does not read declares no C: the run of the case reports it.
+                for t in setup.targets().unwrap_or_default() {
                     out.extend(c_paths(&case.name, &t));
                 }
             }

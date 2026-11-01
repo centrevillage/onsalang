@@ -11,18 +11,19 @@ pub mod graph;
 mod input;
 pub mod interface;
 pub mod internal;
+pub mod manifest;
 pub mod reduce;
 mod testing;
 pub mod verify;
 
 pub use input::{
-    Loaded, ManifestSource, PackageInput, SourceFile, load, module_path, read_input, read_package_input, read_sources,
-    slash_path,
+    Loaded, ManifestForm, ManifestSource, PackageInput, SourceFile, load, module_path, read_input, read_package_input,
+    read_sources, slash_path,
 };
 pub use internal::{InternalError, Origin, guard, guard_on_stack};
+pub use manifest::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestTarget, Spanned};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use onsa_diag::{Diagnostic, FileId, SourceMap, Span};
@@ -36,87 +37,6 @@ pub use onsa_sema::{STD_PACKAGE, STD_VERSION, StdModule, std_modules};
 #[derive(Debug, Default)]
 pub struct CheckResult {
     pub diagnostics: Vec<Diagnostic>,
-}
-
-/// The manifest `onsa.toml` (spec §15.3). `[export]` and `[targets.*]` are
-/// used by `onsa build` (T4-5); `bind` is read but not supported yet.
-#[derive(Debug, Default, Clone, serde::Deserialize)]
-pub struct Manifest {
-    pub package: ManifestPackage,
-    #[serde(default)]
-    pub dependencies: HashMap<String, String>,
-    #[serde(default)]
-    pub export: Option<ManifestExport>,
-    #[serde(default)]
-    pub targets: HashMap<String, ManifestTarget>,
-}
-
-/// `[export]`: what the C ABI exposes (spec §14.2, §15.3).
-#[derive(Debug, Default, Clone, serde::Deserialize)]
-pub struct ManifestExport {
-    /// C symbol prefix (default `onsa_`). What is exported is the `@export`
-    /// of the items (§14.2, [`ExportSettings::of`]).
-    pub prefix: Option<String>,
-}
-
-/// `[targets.<name>]` (spec §15.3).
-#[derive(Debug, Default, Clone, serde::Deserialize)]
-pub struct ManifestTarget {
-    pub kind: String,
-    /// Target triple, or `host`.
-    pub platform: String,
-    /// `kind = "source"`: the language (`c` in this version).
-    pub lang: Option<String>,
-    /// `strict` (default) or `strict-ftz`.
-    pub numeric: Option<String>,
-    /// Effects the target provides (`Alloc` decides the heap).
-    #[serde(default)]
-    pub provides: Vec<String>,
-    /// `poison` / `trap` / `reset` / `halt` (spec §9.2).
-    pub panic: Option<String>,
-    pub panic_messages: Option<bool>,
-    pub main_frame: Option<String>,
-    pub memory: Option<ManifestMemory>,
-    #[serde(default)]
-    pub bind: HashMap<String, String>,
-}
-
-#[derive(Debug, Default, Clone, serde::Deserialize)]
-pub struct ManifestMemory {
-    pub bulk_threshold: Option<u32>,
-}
-
-#[derive(Debug, Default, Clone, serde::Deserialize)]
-pub struct ManifestPackage {
-    pub name: String,
-    #[serde(default)]
-    pub edition: String,
-}
-
-impl Manifest {
-    /// The top-level tables of the manifest: the fields of [`Manifest`], in
-    /// one place (W4-02 closes the table on the same list).
-    pub const TOP_LEVEL_KEYS: &'static [&'static str] = &["package", "dependencies", "export", "targets"];
-
-    /// Read a manifest from its text: the one reader of `onsa.toml` (S-99,
-    /// R-80 (5)). The errors keep the line, the column and the excerpt. The
-    /// top-level tables named in `extra_tables` are returned as they are
-    /// beside the manifest (the test fragments pass `["test"]`; `onsa.toml`
-    /// passes none, so a `[test]` there is read like any other key the
-    /// manifest does not know).
-    pub fn parse(text: &str, extra_tables: &[&str]) -> Result<(Manifest, toml::Table), String> {
-        let manifest: Manifest = toml::from_str(text).map_err(|e| e.to_string())?;
-        let mut extra = toml::Table::new();
-        if !extra_tables.is_empty() {
-            let mut table: toml::Table = toml::from_str(text).map_err(|e| e.to_string())?;
-            for name in extra_tables {
-                if let Some(v) = table.remove(*name) {
-                    extra.insert((*name).to_string(), v);
-                }
-            }
-        }
-        Ok((manifest, extra))
-    }
 }
 
 fn std_package(sources: &mut SourceMap) -> Package {
@@ -526,42 +446,6 @@ mod tests {
         let names: Vec<String> = analysis.exports().into_iter().map(|d| analysis.qualified_name(d)).collect();
         assert_eq!(names, ["a.c.mid", "b.zed", "b.alpha"]);
         assert!(analysis.defs.iter().any(|d| d.name == "half" && d.export.is_some()));
-    }
-
-    /// A deserializer that only records the fields a struct asks for.
-    struct FieldsOf<'a>(&'a mut Vec<&'static str>);
-
-    impl<'de> serde::Deserializer<'de> for FieldsOf<'_> {
-        type Error = serde::de::value::Error;
-
-        fn deserialize_any<V: serde::de::Visitor<'de>>(self, _: V) -> Result<V::Value, Self::Error> {
-            Err(serde::de::Error::custom("not a struct"))
-        }
-
-        fn deserialize_struct<V: serde::de::Visitor<'de>>(
-            self,
-            _: &'static str,
-            fields: &'static [&'static str],
-            _: V,
-        ) -> Result<V::Value, Self::Error> {
-            self.0.extend_from_slice(fields);
-            Err(serde::de::Error::custom("fields recorded"))
-        }
-
-        serde::forward_to_deserialize_any! {
-            bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes byte_buf
-            option unit unit_struct newtype_struct seq tuple tuple_struct map enum identifier ignored_any
-        }
-    }
-
-    #[test]
-    fn top_level_keys_are_the_manifest_fields() {
-        let mut fields = Vec::new();
-        let _ = <Manifest as serde::Deserialize>::deserialize(FieldsOf(&mut fields));
-        fields.sort_unstable();
-        let mut keys = Manifest::TOP_LEVEL_KEYS.to_vec();
-        keys.sort_unstable();
-        assert_eq!(fields, keys);
     }
 
     #[test]

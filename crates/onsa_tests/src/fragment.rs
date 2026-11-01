@@ -16,16 +16,17 @@
 //!
 //! The fragment starts on line 1 with the line `// onsa.toml`. Each following
 //! line is `//` (an empty line of the TOML) or starts with `// `; a blank line
-//! ends it. The TOML is read by the manifest's own reader
-//! (`onsa_driver::Manifest::parse`), which only sets aside the `[test]` table:
-//! the real `onsa.toml` has no `[test]`. A fragment with only `[test]` has no
-//! manifest (a single file without `onsa.toml`, spec §15.1); any other table
-//! makes it the manifest of a package holding only this file, so `[package]`
-//! is then required as in `onsa.toml`.
+//! ends it. A fragment with only `[test]` has no manifest (a single file
+//! without `onsa.toml`, spec §15.1); any other table makes it the manifest of
+//! a package holding only this file, so `[package]` is then required as in
+//! `onsa.toml`. The manifest is read by the compiler's own reader, once, when
+//! the case loads (`onsa_driver::Loaded::from_input`, with
+//! `ManifestForm::Fragment`, which skips the `[test]` table: the real
+//! `onsa.toml` has none).
 
 use serde::{Deserialize, Serialize};
 
-use onsa_driver::Manifest;
+use onsa_driver::manifest::table::FRAGMENT_TEST;
 
 /// The first line of a fragment.
 pub const HEADER: &str = "// onsa.toml";
@@ -108,9 +109,8 @@ impl TestSettings {
 /// A parsed fragment.
 #[derive(Debug, Clone, Default)]
 pub struct Fragment {
-    /// The manifest as its TOML text, read once here so that its errors are
-    /// the fragment's. The text keeps the lines and the columns of the file
-    /// (and holds the `[test]` table too).
+    /// The manifest as its TOML text: the head of the file, whose bytes it
+    /// keeps (it holds the `[test]` table too).
     pub manifest: Option<String>,
     pub test: TestSettings,
 }
@@ -118,7 +118,11 @@ pub struct Fragment {
 impl Fragment {
     /// The manifest of the case file `path`, which the text points into.
     pub fn manifest_source(&self, path: &str) -> Option<onsa_driver::ManifestSource> {
-        self.manifest.as_ref().map(|text| onsa_driver::ManifestSource { path: path.to_string(), text: text.clone() })
+        self.manifest.as_ref().map(|text| onsa_driver::ManifestSource {
+            path: path.to_string(),
+            text: text.clone(),
+            form: onsa_driver::ManifestForm::Fragment,
+        })
     }
 }
 
@@ -142,12 +146,21 @@ pub fn parse(text: &str) -> Result<Option<Fragment>, String> {
     if lines.first().is_none_or(|l| *l != HEADER) {
         return Ok(None);
     }
-    // The TOML keeps the lines and columns of the file: the header and `//`
-    // become empty lines, `// ` three spaces (indentation is whitespace in TOML).
-    let mut toml_text = String::from("\n");
+    // The TOML is the head of the file with its comment marks made spaces
+    // (the header, `//` and `// `; indentation is whitespace in TOML) and its
+    // line ends kept (CR LF too): a place in the TOML is the same byte of
+    // the file.
+    let mut toml_text = String::new();
     let mut end = lines.len();
-    for (i, line) in lines.iter().enumerate().skip(1) {
-        let body = if *line == "//" {
+    for (i, raw) in text.split_inclusive('\n').enumerate() {
+        let line = raw.strip_suffix('\n').unwrap_or(raw);
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if i == 0 {
+            toml_text.push_str(&" ".repeat(line.len()));
+            toml_text.push_str(&raw[line.len()..]);
+            continue;
+        }
+        let body = if line == "//" {
             ""
         } else if let Some(b) = line.strip_prefix("// ") {
             b
@@ -163,31 +176,15 @@ pub fn parse(text: &str) -> Result<Option<Fragment>, String> {
         if body.contains("//~") {
             return Err(format!("line {}: no `//~` marker inside the fragment", i + 1));
         }
-        if !body.is_empty() {
-            toml_text.push_str("   ");
-        }
+        toml_text.push_str(&" ".repeat(line.len() - body.len()));
         toml_text.push_str(body);
-        toml_text.push('\n');
+        toml_text.push_str(&raw[line.len()..]);
     }
     if end == 1 {
         return Err(format!("line 1: the `{HEADER}` fragment is empty"));
     }
     let table: toml::Table = toml::from_str(&toml_text).map_err(|e| format!("fragment: {e}"))?;
-    for key in table.keys() {
-        if key != "test" && !Manifest::TOP_LEVEL_KEYS.contains(&key.as_str()) {
-            return Err(format!(
-                "line {}: fragment: unknown table `{key}` (a fragment has the manifest's {} and `test`)",
-                line_of(&lines[..end], key),
-                Manifest::TOP_LEVEL_KEYS.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
-            ));
-        }
-    }
-    let manifest = if table.keys().all(|k| k == "test") {
-        None
-    } else {
-        Manifest::parse(&toml_text, &[]).map_err(|e| format!("fragment: {e}"))?;
-        Some(toml_text.clone())
-    };
+    let manifest = (!table.keys().all(|k| k == FRAGMENT_TEST)).then(|| toml_text.clone());
     // `[test]` read from the text too, so its errors keep their position.
     #[derive(Deserialize)]
     struct TestTable {
@@ -220,21 +217,6 @@ fn looks_like_mode(line: &str) -> bool {
     let Some(rest) = line.trim_start().strip_prefix("//!") else { return false };
     let lower = rest.trim_start().to_lowercase();
     lower.strip_prefix("mode").is_some_and(|r| r.trim_start().starts_with(':'))
-}
-
-/// The first line of the fragment that writes the top-level `key`.
-fn line_of(lines: &[&str], key: &str) -> usize {
-    lines
-        .iter()
-        .position(|l| {
-            let b = l.trim_start_matches('/').trim();
-            let b = b.trim_start_matches('[').trim_start();
-            b.strip_prefix(key).is_some_and(|r| {
-                let r = r.trim_start();
-                r.starts_with(']') || r.starts_with('.') || r.starts_with('=')
-            })
-        })
-        .map_or(1, |i| i + 1)
 }
 
 /// The forms inside `[test]` that need no other part of the case.
@@ -325,10 +307,66 @@ mod tests {
     fn with_manifest() {
         let text = "// onsa.toml\n// [package]\n// name = \"echo\"\n// edition = \"2026\"\n//\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n//\n// [test]\n// golden = [\"c\"]\n";
         let f = parse(text).unwrap().unwrap();
-        let (m, _) = Manifest::parse(&f.manifest.unwrap(), &[]).unwrap();
-        assert_eq!(m.package.name, "echo");
+        let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap();
+        assert_eq!(m.package.value.name.value, "echo");
         assert!(m.targets.contains_key("t"));
         assert_eq!(f.test.golden, vec![GoldenKind::C]);
+    }
+
+    /// The TOML of a fragment is the head of the file byte for byte, with LF
+    /// or CR LF line ends: the places the manifest's reader gives are places
+    /// of the file (W4-02).
+    #[test]
+    fn the_manifest_keeps_the_bytes_of_the_file() {
+        for eol in ["\n", "\r\n"] {
+            let text = [
+                "// onsa.toml",
+                "// [package]",
+                "// name = \"echo\"",
+                "//",
+                "// [targets.t]",
+                "// kind = \"source\"",
+                "// platform = \"host\"",
+                "// [test]",
+                "// mode = \"check\"",
+                "",
+                "fn f() {}",
+                "",
+            ]
+            .join(eol);
+            let f = parse(&text).unwrap().unwrap();
+            let toml = f.manifest.clone().unwrap();
+            // Every byte is the file's, or a space over a comment mark.
+            assert_eq!(toml.len(), text.find(&format!("{eol}{eol}")).unwrap() + eol.len(), "{eol:?}");
+            assert!(
+                toml.bytes().zip(text.bytes()).all(|(a, b)| a == b || (a == b' ' && !matches!(b, b'\n' | b'\r'))),
+                "{toml:?}"
+            );
+            let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap();
+            let name = &m.package.value.name;
+            assert_eq!(&text[name.key.clone()], "name", "{eol:?}");
+            assert_eq!(&text[name.span.clone()], "\"echo\"", "{eol:?}");
+            let t = &m.targets["t"];
+            assert_eq!(&text[t.key.clone()], "t", "{eol:?}");
+            assert_eq!(&text[t.value.platform.span.clone()], "\"host\"", "{eol:?}");
+        }
+    }
+
+    /// The manifest of a fragment is not read here: its errors are those of
+    /// the manifest's reader when the case loads, at the places of the file.
+    #[test]
+    fn the_manifest_is_read_by_the_reader_of_the_compiler() {
+        for text in [
+            "// onsa.toml\n// [targets.t]\n// kind = \"source\"\n// platform = \"host\"\n",
+            "// onsa.toml\n// [tests]\n// mode = \"parse\"\n",
+        ] {
+            let f = parse(text).unwrap().unwrap();
+            let e = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap_err();
+            assert!(e.starts_with("m.onsa: missing table `[package]`"), "{e}");
+        }
+        let f = parse("// onsa.toml\n// [package]\n// name = 3\n").unwrap().unwrap();
+        let e = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap_err();
+        assert!(e.contains("line 3, column 11"), "{e}");
     }
 
     #[test]
@@ -344,7 +382,6 @@ mod tests {
             "// onsa.toml\n// [test]\n// spec = [\"§11.4\", \"§11.4\"]\n",
             "// onsa.toml\n// [test]\n// mode = \"parse\"\n// golden = [\"core\"]\n",
             "// onsa.toml\n// [test]\n// mode = \"parse\" //~ E0010\n",
-            "// onsa.toml\n// [targets.t]\n// kind = \"source\"\n// platform = \"host\"\n",
             "// onsa.toml\n// test = 1\n",
             "//onsa.toml\n// [test]\n// mode = \"parse\"\n",
             "// ONSA.toml\n// [test]\n",
@@ -352,8 +389,6 @@ mod tests {
             "//  onsa.toml\n// [test]\n",
             "//!mode: parse\n",
             "//! mode : parse\n",
-            "// onsa.toml\n// [tests]\n// mode = \"parse\"\n",
-            "// onsa.toml\n// [package]\n// name = \"x\"\n// [test]\n// spec = []\n// [exports]\n",
         ];
         for b in bad {
             assert!(parse(b).is_err(), "{b:?}");
@@ -399,10 +434,6 @@ mod tests {
     fn errors_keep_the_position_of_the_file() {
         let e = parse("// onsa.toml\n// [test]\n// mode = \"run\"\n").unwrap_err();
         assert!(e.contains("line 3, column 11"), "{e}");
-        let e = parse("// onsa.toml\n// [package]\n// name = 3\n").unwrap_err();
-        assert!(e.contains("line 3, column 11"), "{e}");
-        let e = parse("// onsa.toml\n// [test]\n//\n// [tests]\n").unwrap_err();
-        assert!(e.starts_with("line 4:"), "{e}");
     }
 
     #[test]

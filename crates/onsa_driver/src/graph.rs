@@ -321,7 +321,7 @@ pub fn to_svg(dot: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Analyzed, Loaded, ManifestSource, PackageInput, SourceFile};
+    use crate::{Analyzed, Loaded, ManifestForm, ManifestSource, PackageInput, SourceFile};
 
     const RESONATOR: &str = "use std.math.{exp, cos}\n\
 pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {\n\
@@ -347,7 +347,7 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
     fn package(name: &str, files: &[(&str, &str)]) -> PackageInput {
         let text = format!("[package]\nname = \"{name}\"\nedition = \"2026\"\n");
         PackageInput {
-            manifest: Some(ManifestSource { path: "onsa.toml".into(), text }),
+            manifest: Some(ManifestSource { path: "onsa.toml".into(), text, form: ManifestForm::File }),
             files: files
                 .iter()
                 .map(|(path, text)| SourceFile { path: path.to_string(), text: text.to_string() })

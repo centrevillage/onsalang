@@ -15,7 +15,7 @@ use onsa_diag::{Diagnostic, FileId, SourceMap, Span, Stage};
 use onsa_sema::package_tree::{self, BUILD_DIR, MANIFEST, SUFFIX};
 use onsa_syntax::{PathPart, path_name_error};
 
-use crate::Manifest;
+use crate::manifest::{self, Manifest};
 
 /// One source file of a package input: its path (relative to the package
 /// root with a manifest; as given without one; `/` between the parts either
@@ -30,11 +30,23 @@ pub struct SourceFile {
 /// point into it (W4-02).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManifestSource {
-    /// The file string of the manifest in diagnostics: `onsa.toml` for the
-    /// manifest of a package root (relative to the root, S-234); a test
-    /// fragment gives its case file, whose lines the text keeps.
+    /// The file string of the manifest in diagnostics and in the errors of
+    /// its reading: `onsa.toml` for the manifest of a package root (relative
+    /// to the root, S-234); a test fragment gives its case file, whose bytes
+    /// the text keeps.
     pub path: String,
     pub text: String,
+    pub form: ManifestForm,
+}
+
+/// Where the text of a manifest comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ManifestForm {
+    /// The file `onsa.toml`.
+    File,
+    /// The fragment at the head of a test case: its top-level `[test]` is the
+    /// test runner's, and the reader skips it ([`crate::manifest::table::FRAGMENT_TEST`]).
+    Fragment,
 }
 
 /// What a build reads, without the file system (R-80 (5), plan D-05): the
@@ -88,12 +100,9 @@ impl Loaded {
     /// The sources of `input` in a `SourceMap` with their module paths, and
     /// its manifest read. Reads no file.
     pub fn from_input(input: PackageInput) -> Result<Loaded, String> {
-        let manifest = match &input.manifest {
-            Some(m) => Some(parse_manifest(m, input.root.as_deref())?),
-            None => None,
-        };
+        let manifest = input.manifest.as_ref().map(manifest::read).transpose()?;
         let name = match (&manifest, input.files.as_slice()) {
-            (Some(m), _) => m.package.name.clone(),
+            (Some(m), _) => m.package.value.name.value.clone(),
             (None, [file]) => stem(&file.path),
             (None, files) => return Err(format!("an input without onsa.toml is one file, not {}", files.len())),
         };
@@ -188,13 +197,6 @@ impl Loaded {
 /// none: an input made by a test).
 fn module_stem(name: &str) -> &str {
     name.strip_suffix(SUFFIX).unwrap_or(name)
-}
-
-/// Read the manifest of `source`. The errors name the manifest by its place
-/// under `root` when there is one (the CLI), else by its file string.
-pub(crate) fn parse_manifest(source: &ManifestSource, root: Option<&Path>) -> Result<Manifest, String> {
-    let shown = root.map_or_else(|| source.path.clone(), |r| r.join(MANIFEST).display().to_string());
-    Manifest::parse(&source.text, &[]).map(|(m, _)| m).map_err(|e| format!("{shown}: {e}"))
 }
 
 fn stem(path: &str) -> String {
@@ -337,7 +339,7 @@ fn read_manifest(dir: &Path) -> Result<ManifestSource, String> {
     if !meta.is_file() {
         return Err(format!("{}: not a regular file", path.display()));
     }
-    Ok(ManifestSource { path: MANIFEST.to_string(), text: read_text(&path)? })
+    Ok(ManifestSource { path: MANIFEST.to_string(), text: read_text(&path)?, form: ManifestForm::File })
 }
 
 /// The `.onsa` files of the package at `root` (spec §15.1,

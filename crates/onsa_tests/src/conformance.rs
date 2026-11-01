@@ -715,7 +715,11 @@ mod tests {
             .iter()
             .fold(src.to_string(), |s, f| s.replace(&format!("pub flow {f}("), &format!("@export\npub flow {f}(")));
         let input = onsa_driver::PackageInput {
-            manifest: Some(onsa_driver::ManifestSource { path: "onsa.toml".into(), text: manifest }),
+            manifest: Some(onsa_driver::ManifestSource {
+                path: "onsa.toml".into(),
+                text: manifest,
+                form: onsa_driver::ManifestForm::File,
+            }),
             files: vec![onsa_driver::SourceFile { path: "m.onsa".into(), text: src }],
             ..Default::default()
         };

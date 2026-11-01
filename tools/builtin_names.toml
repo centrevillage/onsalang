@@ -396,8 +396,10 @@
 "none" = { count = 1, note = "ターゲットの三つ組の OS の部分（contains で is_none の一部と同じ綴り）" }
 "reset" = { count = 1, note = "マニフェストの panic の値（生成される API の reset と同じ綴り）" }
 
-[same_spelling."crates/onsa_driver/src/lib.rs"]
+[same_spelling."crates/onsa_driver/src/manifest/table.rs"]
 "export" = { count = 1, note = "マニフェストの表の名前 [export]（§15.3。属性 @export とは別）" }
+"fp" = { count = 1, note = "マニフェストのターゲットのキー fp（§15.3。属性 @fp とは別）" }
+"panic" = { count = 1, note = "マニフェストのターゲットのキー panic（§15.3。組込みの panic とは別）" }
 
 [same_spelling."crates/onsa_sema/src/builtin.rs"]
 "u32" = { count = 1, note = "narrow_ / trunc_ の名前を作る型の接尾辞（std.test.gen の u32 と同じ綴り）" }

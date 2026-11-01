@@ -219,7 +219,7 @@ fn the_runner_reports_the_failure_of_every_stage() {
         path: "tests/verify/m.onsa".into(),
         kind: CaseKind::File,
         name: "m".into(),
-        setup: Setup::new(input, frag.test),
+        setup: Ok(Setup { input, test: frag.test }),
     };
     let run = run_case_with(
         &FAILING,

@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use onsa_driver::{PackageInput, SourceFile};
+use onsa_driver::{Loaded, PackageInput, SourceFile};
 
 use crate::fragment::{self, TestSettings};
 
@@ -45,34 +45,27 @@ pub struct Case {
     pub setup: Result<Setup, String>,
 }
 
+/// The input and the settings of a case. Its manifest is read once, when a
+/// run loads the input ([`Loaded::from_input`], D-15): the problems of the
+/// manifest are the run's, not the setup's.
 #[derive(Debug, Clone)]
 pub struct Setup {
     pub input: PackageInput,
     pub test: TestSettings,
-    /// Target names of the manifest, sorted.
-    targets: Vec<String>,
 }
 
 impl Setup {
-    /// The setup of `input`; its manifest is read for the target names.
-    pub fn new(input: PackageInput, test: TestSettings) -> Result<Setup, String> {
-        let mut targets: Vec<String> = match &input.manifest {
-            Some(m) => onsa_driver::Manifest::parse(&m.text, &[])
-                .map_err(|e| format!("{}: {e}", m.path))?
-                .0
-                .targets
-                .into_keys()
-                .collect(),
-            None => Vec::new(),
-        };
-        targets.sort();
-        Ok(Setup { input, test, targets })
+    /// Target names of the manifest, sorted, for what is not a run (the list
+    /// of the cases, the golden files, the C checks); a run takes them from
+    /// the package it loads ([`target_names`]). The error is the run's too.
+    pub fn targets(&self) -> Result<Vec<String>, String> {
+        Loaded::from_input(self.input.clone()).map(|l| target_names(&l))
     }
+}
 
-    /// Target names of the manifest, sorted.
-    pub fn targets(&self) -> Vec<String> {
-        self.targets.clone()
-    }
+/// Target names of the manifest of `loaded`, sorted (none without one).
+pub fn target_names(loaded: &Loaded) -> Vec<String> {
+    loaded.manifest.as_ref().map(|m| m.targets.keys().cloned().collect()).unwrap_or_default()
 }
 
 /// Every case under `root/tests`, sorted by path, and the directories that
@@ -159,7 +152,7 @@ fn read_file(root: &Path, p: &Path) -> Case {
         let manifest = frag.manifest_source(&file_path);
         let input =
             PackageInput { manifest, files: vec![SourceFile { path: file_path, text }], ..PackageInput::default() };
-        Setup::new(input, frag.test)
+        Ok(Setup { input, test: frag.test })
     })();
     Case { path, kind: CaseKind::File, name, setup }
 }
@@ -184,7 +177,7 @@ fn read_package(root: &Path, dir: &Path) -> Case {
             }
             test = Some(frag.test);
         }
-        Setup::new(input, test.unwrap_or_default())
+        Ok(Setup { input, test: test.unwrap_or_default() })
     })();
     Case { path, kind: CaseKind::Package, name, setup }
 }

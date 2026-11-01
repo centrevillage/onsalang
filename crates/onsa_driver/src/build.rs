@@ -17,7 +17,8 @@ use onsa_interp::{ArrayData, Interp, Value};
 use onsa_sema::package_tree::{BUILD_DIR, MANIFEST};
 
 use crate::{
-    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestTarget, guard, read_package_input,
+    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestTarget, Spanned, guard,
+    read_package_input,
 };
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
@@ -164,7 +165,7 @@ impl ExportSettings {
     /// ([`onsa_sema::Analysis::exports`]), and the `prefix` of `manifest`.
     pub fn of(analyzed: &Analyzed, manifest: Option<&Manifest>) -> ExportSettings {
         let a = &analyzed.analysis;
-        let prefix = manifest.and_then(|m| m.export.as_ref()?.prefix.clone());
+        let prefix = manifest.and_then(|m| Some(m.export.as_ref()?.value.prefix.as_ref()?.value.clone()));
         let (mut flows, mut fns) = (Vec::new(), Vec::new());
         for d in a.exports() {
             let list = if a.def(d).as_flow().is_some() { &mut flows } else { &mut fns };
@@ -174,14 +175,12 @@ impl ExportSettings {
     }
 }
 
-/// Find `[targets.<target>]` in `manifest` and validate it. `manifest_name`
-/// names the manifest in the messages.
-pub fn resolve_target(manifest: &Manifest, manifest_name: &str, target: &str) -> Result<ResolvedTarget, BuildError> {
+/// Find `[targets.<target>]` in `manifest` and validate it.
+pub fn resolve_target(manifest: &Manifest, target: &str) -> Result<ResolvedTarget, BuildError> {
     let Some(t) = manifest.targets.get(target) else {
-        let mut names: Vec<&String> = manifest.targets.keys().collect();
-        names.sort();
+        let names: Vec<&String> = manifest.targets.keys().collect();
         return Err(BuildError::Usage(format!(
-            "no target `{target}` in {manifest_name} (targets: {})",
+            "no target `{target}` in {MANIFEST} (targets: {})",
             if names.is_empty() {
                 "none".to_string()
             } else {
@@ -189,7 +188,7 @@ pub fn resolve_target(manifest: &Manifest, manifest_name: &str, target: &str) ->
             }
         )));
     };
-    let settings = TargetSettings::from_manifest(target, t)?;
+    let settings = TargetSettings::from_manifest(target, &t.value)?;
     Ok(ResolvedTarget { name: target.to_string(), settings })
 }
 
@@ -213,7 +212,7 @@ pub fn build_analyzed(loaded: &Loaded, analyzed: &Analyzed, target: &str) -> Res
     let Some(manifest) = &loaded.manifest else {
         return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
     };
-    let resolved = resolve_target(manifest, MANIFEST, target)?;
+    let resolved = resolve_target(manifest, target)?;
     build_resolved(loaded, analyzed, &resolved)
 }
 
@@ -302,7 +301,7 @@ pub fn build(path: Option<&Path>, opts: &BuildOptions) -> Result<BuildReport, Bu
     let Some(manifest) = &loaded.manifest else {
         return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
     };
-    let resolved = resolve_target(manifest, &root.join(MANIFEST).display().to_string(), &opts.target)?;
+    let resolved = resolve_target(manifest, &opts.target)?;
     let analyzed = match crate::analyze_loaded(&mut loaded) {
         Ok(a) => a,
         Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
@@ -403,19 +402,19 @@ pub struct TargetSettings {
 impl TargetSettings {
     pub fn from_manifest(name: &str, t: &ManifestTarget) -> Result<TargetSettings, BuildError> {
         let usage = |m: String| BuildError::Usage(format!("[targets.{name}]: {m}"));
-        match t.kind.as_str() {
+        match t.kind.value.as_str() {
             "staticlib" => {}
             "source" => {
-                if t.lang.as_deref().unwrap_or("c") != "c" {
-                    return Err(usage(Feature::ManifestLang.usage(&[t.lang.as_deref().unwrap_or_default()])));
+                if text(&t.lang).unwrap_or("c") != "c" {
+                    return Err(usage(Feature::ManifestLang.usage(&[text(&t.lang).unwrap_or_default()])));
                 }
             }
             other => {
                 return Err(usage(Feature::ManifestKind.usage(&[other])));
             }
         }
-        let platform = platform(&t.platform).map_err(&usage)?;
-        match t.numeric.as_deref().unwrap_or("strict") {
+        let platform = platform(&t.platform.value).map_err(&usage)?;
+        match text(&t.numeric).unwrap_or("strict") {
             "strict" | "strict-ftz" => {}
             "relaxed" => {
                 return Err(usage(
@@ -424,7 +423,7 @@ impl TargetSettings {
             }
             other => return Err(usage(format!("unknown numeric profile `{other}`"))),
         }
-        let panic = match t.panic.as_deref() {
+        let panic = match text(&t.panic) {
             None => {
                 if platform.hosted {
                     PanicMode::Poison
@@ -441,22 +440,27 @@ impl TargetSettings {
             }
         };
         for e in &t.provides {
-            if e != "Alloc" {
-                return Err(usage(Feature::ManifestProvides.usage(&[e])));
+            if e.value != "Alloc" {
+                return Err(usage(Feature::ManifestProvides.usage(&[&e.value])));
             }
         }
         if !t.bind.is_empty() {
             return Err(usage(Feature::ManifestBind.usage(&[])));
         }
         Ok(TargetSettings {
-            kind: t.kind.clone(),
+            kind: t.kind.value.clone(),
             platform,
             panic,
-            panic_messages: t.panic_messages.unwrap_or(true),
-            provides_alloc: t.provides.iter().any(|e| e == "Alloc"),
-            bulk_threshold: t.memory.as_ref().and_then(|m| m.bulk_threshold),
+            panic_messages: t.panic_messages.as_ref().is_none_or(|b| b.value),
+            provides_alloc: t.provides.iter().any(|e| e.value == "Alloc"),
+            bulk_threshold: t.memory.as_ref().and_then(|m| Some(m.value.bulk_threshold.as_ref()?.value)),
         })
     }
+}
+
+/// The text of a string of the manifest that may be left out.
+fn text(v: &Option<Spanned<String>>) -> Option<&str> {
+    v.as_ref().map(|s| s.value.as_str())
 }
 
 /// E0610: an exported function uses only the effects the target provides
@@ -635,21 +639,20 @@ mod tests {
 
     #[test]
     fn target_settings_defaults() {
-        let t = ManifestTarget { kind: "staticlib".into(), platform: "host".into(), ..Default::default() };
+        let target = |kind: &str, platform: &str| ManifestTarget {
+            kind: Spanned::new(kind.into()),
+            platform: Spanned::new(platform.into()),
+            ..Default::default()
+        };
+        let t = target("staticlib", "host");
         let s = TargetSettings::from_manifest("t", &t).unwrap();
         assert_eq!(s.panic, PanicMode::Poison);
         assert!(!s.provides_alloc);
-        let t =
-            ManifestTarget { kind: "staticlib".into(), platform: "thumbv7em-none-eabihf".into(), ..Default::default() };
+        let t = target("staticlib", "thumbv7em-none-eabihf");
         assert_eq!(TargetSettings::from_manifest("t", &t).unwrap().panic, PanicMode::Reset);
-        let t = ManifestTarget { kind: "clap".into(), platform: "host".into(), ..Default::default() };
+        let t = target("clap", "host");
         assert!(matches!(TargetSettings::from_manifest("t", &t), Err(BuildError::Usage(_))));
-        let t = ManifestTarget {
-            kind: "staticlib".into(),
-            platform: "host".into(),
-            numeric: Some("relaxed".into()),
-            ..Default::default()
-        };
+        let t = ManifestTarget { numeric: Some(Spanned::new("relaxed".into())), ..target("staticlib", "host") };
         assert!(matches!(TargetSettings::from_manifest("t", &t), Err(BuildError::Usage(_))));
     }
 }

@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use onsa_driver::{ManifestSource, PackageInput, SourceFile};
+use onsa_driver::{ManifestForm, ManifestSource, PackageInput, SourceFile};
 use serde_json::Value;
 
 use super::{Dir, doc_of, run};
@@ -85,7 +85,7 @@ pub fn input_of(name: &str, texts: &Texts) -> PackageInput {
         texts.iter().map(|(path, text)| SourceFile { path: path.clone(), text: text.clone() }).collect();
     files.sort_by(|a, b| a.path.split('/').cmp(b.path.split('/')));
     PackageInput {
-        manifest: Some(ManifestSource { path: "onsa.toml".into(), text: manifest(name) }),
+        manifest: Some(ManifestSource { path: "onsa.toml".into(), text: manifest(name), form: ManifestForm::File }),
         files,
         ..PackageInput::default()
     }
