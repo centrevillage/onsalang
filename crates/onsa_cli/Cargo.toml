@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+onsa_workspace_hack.workspace = true
 onsa_driver.workspace = true
 onsa_diag.workspace = true
 onsa_syntax.workspace = true

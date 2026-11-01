@@ -1,0 +1,30 @@
+[package]
+name = "onsa_workspace_hack"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+# One feature set of the libraries in every command (X-22). Cargo resolves the
+# features of a library over the packages a command selects, so `-p onsa_cli`
+# and `-p onsa_tests` built every onsa crate on serde twice (clap's derive gives
+# syn more features). Every member depends on this crate, so any selection
+# resolves the features named here. The gate item `cargo-features`
+# (`tools/cargo_features.py`) compares each member selected alone with the
+# workspace and names what to add here.
+
+# The libraries the code links.
+[dependencies]
+serde.workspace = true
+toml_edit = { workspace = true, features = ["serde"] }
+
+# The libraries under the proc-macros (a build script is not needed for these
+# to count in the resolution).
+[build-dependencies]
+syn = { version = "3", features = ["full"] }
+proc-macro2 = "1"
+quote = "1"
+
+[lints]
+workspace = true

@@ -156,6 +156,7 @@ version = "0.1.0"
 dependencies = [
  "onsa_core",
  "onsa_diag",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
@@ -163,6 +164,7 @@ name = "onsa_backend_js"
 version = "0.1.0"
 dependencies = [
  "onsa_core",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
@@ -170,6 +172,7 @@ name = "onsa_backend_wasm"
 version = "0.1.0"
 dependencies = [
  "onsa_core",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
@@ -181,6 +184,7 @@ dependencies = [
  "onsa_diag",
  "onsa_driver",
  "onsa_syntax",
+ "onsa_workspace_hack",
  "serde_json",
 ]
 
@@ -191,12 +195,14 @@ dependencies = [
  "onsa_diag",
  "onsa_sema",
  "onsa_syntax",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
 name = "onsa_diag"
 version = "0.1.0"
 dependencies = [
+ "onsa_workspace_hack",
  "serde",
  "serde_json",
 ]
@@ -213,6 +219,7 @@ dependencies = [
  "onsa_interp",
  "onsa_sema",
  "onsa_syntax",
+ "onsa_workspace_hack",
  "serde",
  "serde_json",
  "toml_edit",
@@ -224,6 +231,7 @@ version = "0.1.0"
 dependencies = [
  "onsa_core",
  "onsa_diag",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
@@ -232,6 +240,7 @@ version = "0.1.0"
 dependencies = [
  "onsa_diag",
  "onsa_driver",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
@@ -240,6 +249,7 @@ version = "0.1.0"
 dependencies = [
  "onsa_diag",
  "onsa_syntax",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
@@ -247,6 +257,7 @@ name = "onsa_syntax"
 version = "0.1.0"
 dependencies = [
  "onsa_diag",
+ "onsa_workspace_hack",
 ]
 
 [[package]]
@@ -260,6 +271,7 @@ dependencies = [
  "onsa_interp",
  "onsa_sema",
  "onsa_syntax",
+ "onsa_workspace_hack",
  "serde",
  "serde_json",
  "toml",
@@ -271,6 +283,18 @@ version = "0.1.0"
 dependencies = [
  "onsa_diag",
  "onsa_driver",
+ "onsa_workspace_hack",
+]
+
+[[package]]
+name = "onsa_workspace_hack"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "syn",
+ "toml_edit",
 ]
 
 [[package]]
