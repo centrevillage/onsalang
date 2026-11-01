@@ -725,3 +725,30 @@ fn a_broken_tree_names_where() {
     let e = p.cst.validate("fn f() {}\nxyz").unwrap_err();
     assert_eq!((e.span.start, e.span.end), (10, 13), "{e:?}");
 }
+
+/// The kinds whose keyword takes a `~` (§2.6, §11.5) are `if`, `match` and
+/// `par`, with their keywords, and every `~` the parser reads after a keyword
+/// is in a node of one of them (and is the `~` of its keyword): the one list
+/// ([`NodeKind::branch_keyword`]) that fmt and the rows read.
+#[test]
+fn the_tilde_after_a_keyword_is_in_a_node_whose_keyword_takes_it() {
+    let src = "flow g(x: F32 at sample) -> F32 at sample { x }\nflow f(c: Bool at sample, x: F32 at sample) -> F32 at sample {\n  \
+               let a = if~ c { g~(x) } else { x }\n  let b = match~ c {\n    true => g~(x),\n    false => x,\n  }\n  \
+               par~ i in 0..<2 {\n    g~(x)\n  }\n  a + b\n}\n";
+    let p = parse(src);
+    assert!(!p.syntax_errors(), "{:?}", p.diagnostics);
+    let mut seen = Vec::new();
+    for (i, t) in p.cst.tokens().iter().enumerate().filter(|(_, t)| t.kind == TokenKind::Tilde) {
+        let node = p.cst.kind(p.cst.token_parent(crate::cst::TokenIdx(i as u32)));
+        let before = p.cst.tokens()[..i].iter().rev().find(|t| t.kind.is_code()).unwrap().kind;
+        assert_eq!(node.branch_keyword(), before.is_keyword().then_some(before), "{node:?} at {:?}", t.span);
+        seen.push(node);
+    }
+    use NodeKind::*;
+    assert_eq!(seen, [IfExpr, CallExpr, MatchExpr, CallExpr, ParExpr, CallExpr]);
+    let kinds = [(IfExpr, TokenKind::KwIf), (MatchExpr, TokenKind::KwMatch), (ParExpr, TokenKind::KwPar)];
+    for (kind, kw) in kinds {
+        assert!(kind.branch_keyword() == Some(kw) && kind.block_like(), "{kind:?}");
+    }
+    assert_eq!(CallExpr.branch_keyword(), None);
+}

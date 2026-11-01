@@ -99,15 +99,14 @@ impl Lines {
     }
 
     /// Whether `tokens[i]` is at the head of its line: a line break, and no
-    /// other token, is before it (blanks aside). The one test of a token at
-    /// the head of a line (§2.5, S-124, S-335, S-374, S-380, S-444), by the
-    /// tokens; the first token of the file is at none (its caller says what
-    /// it is there). The head of a line by the text, the offsets of a
-    /// candidate that moves or adds whole lines, is
+    /// other token, is before it (blanks aside), or it is the first token of
+    /// the file. The one test of a token at the head of a line (§2.5, S-124,
+    /// S-335, S-374, S-380, S-444), by the tokens. The head of a line by the
+    /// text, the offsets of a candidate that moves or adds whole lines, is
     /// [`crate::lexer::line_head`].
     #[inline]
     pub(crate) fn at_line_head(&self, i: usize) -> bool {
-        self.line[i].before == Gap::Newline
+        i == 0 || self.line[i].before == Gap::Newline
     }
 
     /// Whether `tokens[i]` is a newline that goes on with its line

@@ -193,10 +193,7 @@ impl<'a> Lower<'a> {
     /// and the names of its list read, a keyword among them (R-272).
     pub(super) fn use_decl(&self, tree: NodeId) -> UseDecl {
         let names = self.child(tree, NodeKind::UseNames).map(|u| {
-            let names = self
-                .toks(u)
-                .into_iter()
-                .filter(|&t| self.kind_of(t) == TokenKind::Ident || self.kind_of(t).is_keyword());
+            let names = self.toks(u).into_iter().filter(|&t| crate::starts::names_a_member(self.kind_of(t)));
             names.map(|t| self.ident(t)).collect()
         });
         UseDecl { path: self.path(tree), names }

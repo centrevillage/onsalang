@@ -43,13 +43,14 @@ impl Cursor<'_> {
         if start != self.span(kw).start {
             return None;
         }
-        match (node, self.kind(kw)) {
-            (NodeKind::MatchExpr, TokenKind::KwMatch) => Some(Branch::First),
-            (NodeKind::ParExpr, TokenKind::KwPar) => Some(Branch::Replication),
-            (NodeKind::IfExpr, TokenKind::KwIf) if self.later_link(k) => Some(Branch::Later),
-            (NodeKind::IfExpr, TokenKind::KwIf) => Some(Branch::First),
-            _ => None,
+        if node.branch_keyword() != Some(self.kind(kw)) {
+            return None;
         }
+        Some(match node {
+            NodeKind::ParExpr => Branch::Replication,
+            NodeKind::IfExpr if self.later_link(k) => Branch::Later,
+            _ => Branch::First,
+        })
     }
 
     /// The open `if` node `k` is the `if` after the `else` of the open `if`

@@ -46,7 +46,7 @@ impl<'a> Parser<'a> {
             if self.dot_apart() {
                 return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
             }
-            if self.at(TokenKind::Dot) && (self.peek2().kind == TokenKind::Ident || self.peek2().kind.is_keyword()) {
+            if self.at(TokenKind::Dot) && crate::starts::names_a_member(self.peek2().kind) {
                 self.bump();
             } else {
                 break;
@@ -62,7 +62,7 @@ impl<'a> Parser<'a> {
     /// ordinary name (`std.test`, `x.type`, `use test.{Gen}`; §2.2).
     pub(super) fn parse_name_after_dot(&mut self, what: &str) -> PResult<Token> {
         let t = self.peek();
-        if t.kind == TokenKind::Ident || t.kind.is_keyword() {
+        if crate::starts::names_a_member(t.kind) {
             self.bump();
             Ok(t)
         } else {

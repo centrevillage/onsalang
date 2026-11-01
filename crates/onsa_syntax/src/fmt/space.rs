@@ -51,11 +51,20 @@ enum Tok {
     BinOp,
 }
 
-/// One side of a row: the tokens, and the nodes that hold them (empty: any).
+/// One side of a row: the tokens, and the nodes that hold them.
 #[derive(Clone, Copy)]
 struct Side {
     tok: Tok,
-    within: &'static [NodeKind],
+    within: Within,
+}
+
+/// The nodes that hold the tokens of one side of a row.
+#[derive(Clone, Copy)]
+enum Within {
+    Any,
+    Kinds(&'static [NodeKind]),
+    /// A node whose keyword takes a `~` ([`NodeKind::branch_keyword`]).
+    Branch,
 }
 
 struct Row {
@@ -64,14 +73,14 @@ struct Row {
     space: Space,
 }
 
-const ANY: Side = Side { tok: Tok::Any, within: &[] };
+const ANY: Side = Side { tok: Tok::Any, within: Within::Any };
 
 const fn k(kinds: &'static [TokenKind]) -> Side {
-    Side { tok: Tok::Kinds(kinds), within: &[] }
+    Side { tok: Tok::Kinds(kinds), within: Within::Any }
 }
 
 const fn k_in(kinds: &'static [TokenKind], within: &'static [NodeKind]) -> Side {
-    Side { tok: Tok::Kinds(kinds), within }
+    Side { tok: Tok::Kinds(kinds), within: Within::Kinds(within) }
 }
 
 const fn row(left: Side, right: Side, space: Space) -> Row {
@@ -101,8 +110,8 @@ pub(super) const TIGHT_BRACES: &[NodeKind] = &[N::EffectRow, N::UseNames];
 /// The table. Each row has where the rule comes from.
 const ROWS: &[Row] = &[
     // §3.2: one space on each side of a binary operator, `=`, `->`, `=>`, `as`, `at`, `..<`, `..=`.
-    row(Side { tok: Tok::BinOp, within: &[N::BinaryExpr] }, ANY, ONE),
-    row(ANY, Side { tok: Tok::BinOp, within: &[N::BinaryExpr] }, ONE),
+    row(Side { tok: Tok::BinOp, within: Within::Kinds(&[N::BinaryExpr]) }, ANY, ONE),
+    row(ANY, Side { tok: Tok::BinOp, within: Within::Kinds(&[N::BinaryExpr]) }, ONE),
     row(k(SPACED), ANY, ONE),
     row(ANY, k(SPACED), ONE),
     row(k_in(&[T::KwAs], &[N::CastExpr]), ANY, ONE),
@@ -123,7 +132,7 @@ const ROWS: &[Row] = &[
     // §3.2, §2.5, §2.6: none before the marks of a name (`f~(x)`, `f!(x)`) and the `~` of `if~`,
     // `match~` and `par~` (after a mark of a name, the `(` of the arguments has none before it, below).
     row(ANY, k_in(&[T::Tilde, T::Bang], &[N::CallExpr]), NO),
-    row(ANY, k_in(&[T::Tilde], &[N::IfExpr, N::MatchExpr, N::ParExpr]), NO),
+    row(ANY, Side { tok: Tok::Kinds(&[T::Tilde]), within: Within::Branch }, NO),
     // §3.2, §2.5: none round a member `.` (`a.b`, `v.(x)`, `use a.{x}`) and `::` (`f::[T](x)`), before `?`.
     row(ANY, k(&[T::Dot, T::ColonColon]), NO),
     row(k(&[T::Dot, T::ColonColon]), ANY, NO),
@@ -162,8 +171,13 @@ impl Tok {
 
 impl Side {
     fn matches(&self, cst: &Cst, t: TokenIdx) -> bool {
+        let node = || cst.kind(cst.token_parent(t));
         self.tok.admits(cst.token(t).kind)
-            && (self.within.is_empty() || self.within.contains(&cst.kind(cst.token_parent(t))))
+            && match self.within {
+                Within::Any => true,
+                Within::Kinds(kinds) => kinds.contains(&node()),
+                Within::Branch => node().branch_keyword().is_some(),
+            }
     }
 }
 

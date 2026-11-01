@@ -40,12 +40,20 @@ use crate::token::TokenKind;
 
 /// Canonical sources for what no file has: a struct pattern with `..` in the
 /// block form (S-500; the syntax stage reads the `..`, a later stage reports
-/// it, S-366).
-pub(super) const EXTRA: &[(&str, &str)] = &[(
-    "EXTRA[0]",
-    "fn f(p: P) -> I32 {\n  match p {\n    P {\n      x: 1,\n      ..\n    } => 1,\n    P { x: 2, .. } => 2,\n    \
-     P { .. } => 3,\n  }\n}\n",
-)];
+/// it, S-366); a block as the value of a `const`, the right side of an
+/// assignment and an index (R-287, [`EXPRESSION_BLOCK_HOLDERS`]).
+pub(super) const EXTRA: &[(&str, &str)] = &[
+    (
+        "EXTRA[0]",
+        "fn f(p: P) -> I32 {\n  match p {\n    P {\n      x: 1,\n      ..\n    } => 1,\n    P { x: 2, .. } => 2,\n    \
+         P { .. } => 3,\n  }\n}\n",
+    ),
+    ("EXTRA[1]", "pub const X: I32 = {\n  let r = 1\n  r\n}\n"),
+    (
+        "EXTRA[2]",
+        "pub fn f(xs: [U32; 2], i: U32, n: U32) -> U32 {\n  var x: U32 = 0\n  x = { n }\n  x + xs[{ i }]\n}\n",
+    ),
+];
 
 /// The kinds of the parents of the blocks that are block expressions (a form of their own,
 /// `shape::Base::Body`), met in the files of the repository. A kind met anew goes here when the
@@ -54,8 +62,10 @@ pub(super) const EXTRA: &[(&str, &str)] = &[(
 const EXPRESSION_BLOCK_HOLDERS: &[NodeKind] = &[
     NodeKind::Arg,
     NodeKind::ArrayExpr,
+    NodeKind::AssignStmt,
     NodeKind::Const,
     NodeKind::ExprStmt,
+    NodeKind::IndexExpr,
     NodeKind::LetStmt,
     NodeKind::MatchArm,
     NodeKind::ParenExpr,

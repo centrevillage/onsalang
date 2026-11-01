@@ -297,7 +297,7 @@ impl<'a> Parser<'a> {
                     let n = self.peek();
                     match n.kind {
                         // A keyword is a field name here; `.(` is read above.
-                        k if !(crate::starts::starts_member(k) || k.is_keyword()) => {
+                        k if !(crate::starts::starts_member(k) || crate::starts::names_a_member(k)) => {
                             return Err(self.unexpected("a field name or tuple index after `.`"));
                         }
                         TokenKind::Int => {

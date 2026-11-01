@@ -290,6 +290,20 @@ fn the_indentation_is_one_level_deeper_than_the_line_where_the_owner_starts() {
     assert_eq!(printed("type Op =\nfn(I32) ->\n    I32\n"), "type Op =\n  fn(I32) ->\n  I32\n");
 }
 
+/// A block as the value of a `const`, the right side of an assignment and an index (R-287): written
+/// with other blanks, printed as the canonical sources `table_tests::EXTRA[1]` and `EXTRA[2]`, which
+/// the printer keeps.
+#[test]
+fn a_block_as_a_value_an_assigned_value_and_an_index_is_printed_as_a_block_expression() {
+    for (name, want) in &super::table_tests::EXTRA[1..] {
+        assert_eq!(printed(want), *want, "{name}");
+    }
+    let src = "pub const X: I32 = {\n      let r = 1\n r }\n";
+    assert_eq!(printed(src), super::table_tests::EXTRA[1].1);
+    let src = "pub fn f(xs: [U32; 2], i: U32, n: U32) -> U32 {\nvar x: U32 = 0\n  x =   {n}\n  x + xs[ {  i } ]\n}\n";
+    assert_eq!(printed(src), super::table_tests::EXTRA[2].1);
+}
+
 /// The blank lines (S-122, S-499, S-502), the line after an attribute and the comments (§3.4).
 #[test]
 fn blank_lines_separate_parts_and_comments_stay_on_their_lines() {

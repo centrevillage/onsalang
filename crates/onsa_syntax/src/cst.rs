@@ -371,6 +371,33 @@ impl NodeKind {
         }
     }
 
+    /// The keyword after which an expression of this kind takes the `~` of
+    /// a branch or a replication that evaluates all (§2.6, §11.5): `if~`,
+    /// `match~`, `par~`. The spaces of fmt and the rows of a `~` out of place
+    /// (`foreign::flow`) read it; the parser reads the `~` after each of the
+    /// keywords (`Parser::branch_tilde`). The one judgment of the forms: a new
+    /// kind is decided here.
+    pub(crate) fn branch_keyword(self) -> Option<TokenKind> {
+        use NodeKind::*;
+        match self {
+            IfExpr => Some(TokenKind::KwIf),
+            MatchExpr => Some(TokenKind::KwMatch),
+            ParExpr => Some(TokenKind::KwPar),
+            Block | ClosureExpr | HandleExpr | UnsafeExpr | Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr
+            | ArrayExpr | RepeatExpr | MoveExpr | BinaryExpr | RangeExpr | CastExpr | AtExpr | FeedbackExpr
+            | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr | IndexExpr | TryExpr | StructLit
+            | PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType | WildPat | LitPat
+            | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat | OrPat | SourceFile
+            | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
+            | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias | OpaqueType
+            | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target | Test
+            | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
+            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => None,
+        }
+    }
+
     pub fn name(self) -> &'static str {
         use NodeKind::*;
         match self {

@@ -130,7 +130,7 @@ pub(super) fn space_around_dot(c: &Cursor) -> Option<Hit> {
     }
     let next = c.kind(c.at + 1);
     // A keyword too, unlike after a line break (`lines::newline_after_dot`).
-    if !(crate::starts::starts_member(next) || next.is_keyword()) {
+    if !(crate::starts::starts_member(next) || crate::starts::names_a_member(next)) {
         return None;
     }
     let mut blanks = Vec::new();

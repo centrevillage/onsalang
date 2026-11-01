@@ -84,7 +84,7 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                 }
                 let parts = clashes(ast, &ops);
                 if !parts.is_empty() {
-                    diagnostics.push(Flat::new(ast, text, id).e0010(parts, limit));
+                    diagnostics.push(Flat::new(ast, text, id, &ops, operands).e0010(parts, limit));
                 }
             }
             // E0011: a cast or a clock is parenthesized as an end of a range
@@ -270,35 +270,31 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
     }
 }
 
-/// The operators of the chain whose root is `root` (its `Binary` nodes, in
-/// the order the AST made them: the order of the joins of [`Chain`]) and
-/// its operands, from the left.
+/// The operators of the chain whose root is `root` (its `Binary` nodes) and
+/// its operands, both from the left: the one flattening of a chain.
 fn chain_nodes(ast: &Ast, root: ExprId) -> (Vec<ExprId>, Vec<ExprId>) {
     let (mut ops, mut operands) = (Vec::new(), Vec::new());
-    // Without recursion (a chain is up to 256 levels high); the left side
-    // first.
-    let mut todo = vec![root];
-    while let Some(e) = todo.pop() {
-        match ast.expr(e).kind {
-            ExprKind::Binary { lhs, rhs, .. } => {
-                ops.push(e);
-                todo.extend([rhs, lhs]);
-            }
-            _ => operands.push(e),
+    // In order, without recursion (a chain is up to 256 levels high).
+    let mut right = Vec::new();
+    let mut e = root;
+    loop {
+        if let ExprKind::Binary { rhs, lhs, .. } = ast.expr(e).kind {
+            right.push((e, rhs));
+            e = lhs;
+            continue;
         }
+        operands.push(e);
+        let Some((op, rhs)) = right.pop() else { break };
+        ops.push(op);
+        e = rhs;
     }
-    // The ascending ids are the order of the joins: `lower::chain` reads the
-    // chain with [`Chain`] and adds each `Binary` node (`add_expr`) at its
-    // join, after its operands. The parts of the E0010 message follow it
-    // (the test `the_parts_of_e0010_follow_the_joins`).
-    ops.sort_unstable();
     (ops, operands)
 }
 
 /// The judgment of E0010 on the edges of the tree of a chain (the AST,
 /// `ops` from [`chain_nodes`]): each operator with an operator operand the
 /// strengths of §3.1 do not allow ([`BinOp::takes`]), said once per pair
-/// of keys, in the order of `ops`. Empty when the chain is allowed.
+/// of keys, in the order of the joins. Empty when the chain is allowed.
 // SPEC-GAP(S-344): groups without a strength between them that are not
 // next to each other in the tree (`a % b == c + d`) pass: the judgment
 // is on the edges of the tree.
@@ -309,7 +305,13 @@ fn clashes(ast: &Ast, ops: &[ExprId]) -> Vec<String> {
     };
     let mut parts = Vec::new();
     let mut said = HashSet::new();
-    for &e in ops {
+    // The ascending ids are the order of the joins: `lower::chain` reads the
+    // chain with [`Chain`] and adds each `Binary` node (`add_expr`) at its
+    // join, after its operands. The parts of the E0010 message follow it
+    // (the test `the_parts_of_e0010_follow_the_joins`).
+    let mut joins = ops.to_vec();
+    joins.sort_unstable();
+    for &e in &joins {
         let ExprKind::Binary { op, op_span, lhs, rhs } = ast.expr(e).kind else { continue };
         for (side, c) in [(Side::Left, lhs), (Side::Right, rhs)] {
             let Some((child, child_span)) = binary(c) else { continue };
@@ -426,22 +428,14 @@ struct Flat<'a> {
 }
 
 impl<'a> Flat<'a> {
-    fn new(ast: &'a Ast, text: &'a str, root: ExprId) -> Flat<'a> {
-        let (mut operands, mut ops, mut keys) = (Vec::new(), Vec::new(), Vec::new());
-        // In order, without recursion (a chain is up to 256 levels high).
-        let mut right = Vec::new();
-        let mut e = root;
-        loop {
-            if let ExprKind::Binary { op, op_span, lhs, rhs } = ast.expr(e).kind {
-                right.push((op, op_span, rhs));
-                e = lhs;
-                continue;
+    /// The chain whose root is `root`, flat ([`chain_nodes`]).
+    fn new(ast: &'a Ast, text: &'a str, root: ExprId, nodes: &[ExprId], operands: Vec<ExprId>) -> Flat<'a> {
+        let (mut ops, mut keys) = (Vec::new(), Vec::new());
+        for &e in nodes {
+            if let ExprKind::Binary { op, op_span, .. } = ast.expr(e).kind {
+                ops.push(op);
+                keys.push(key(op, op_span));
             }
-            operands.push(e);
-            let Some((op, op_span, rhs)) = right.pop() else { break };
-            ops.push(op);
-            keys.push(key(op, op_span));
-            e = rhs;
         }
         Flat { ast, text, span: ast.expr(root).span, operands, ops, keys }
     }

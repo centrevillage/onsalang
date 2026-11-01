@@ -15,7 +15,7 @@ fn alone_on_its_line(c: &Cursor, i: usize) -> Option<Span> {
     if a > 0 && c.all[a - 1].kind == TokenKind::Whitespace {
         a -= 1;
     }
-    let starts = a == 0 || c.all[a - 1].kind == TokenKind::Newline;
+    let starts = c.at_line_head(i);
     let mut b = k + 1;
     if c.all.get(b).is_some_and(|t| t.kind == TokenKind::Whitespace) {
         b += 1;

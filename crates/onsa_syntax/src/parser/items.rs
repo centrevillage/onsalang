@@ -46,10 +46,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether `tokens[k]` has no code before it on its line (S-444: a doc
-    /// comment that does not is attached to nothing): the first token of the
-    /// file, or one at the head of its line ([`crate::layout::Lines::at_line_head`]).
+    /// comment that does not is attached to nothing, [`crate::layout::Lines::at_line_head`]).
     fn starts_its_line(&self, k: usize) -> bool {
-        k == 0 || self.lines.at_line_head(k)
+        self.lines.at_line_head(k)
     }
 
     /// The `Docs` node of the doc comments `docs` (from

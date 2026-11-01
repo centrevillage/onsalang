@@ -38,7 +38,7 @@ pub(crate) fn type_name(text: &str, t: Token) -> Option<Diagnostic> {
 }
 
 pub(super) fn is_segment(kind: TokenKind) -> bool {
-    kind == TokenKind::Ident || kind.is_keyword()
+    crate::starts::names_a_member(kind)
 }
 
 /// `::` between the names of a path (`F32::PI`, `std::math::sqrt`, `use

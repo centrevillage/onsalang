@@ -75,6 +75,15 @@ pub(crate) fn starts_member(kind: TokenKind) -> bool {
     matches!(kind, TokenKind::Ident | TokenKind::Int | TokenKind::LParen)
 }
 
+/// Whether a token of `kind` is a name where a keyword is an ordinary name
+/// (§2.2): after a member `.` (`x.type`, `std.test`) and among the names of
+/// a `use` (`use a.{test}`, R-272); a name or a keyword. The one test, for
+/// the parser, the lowering and the rows ([`starts_member`] adds the other
+/// members, `.0` and `.(`).
+pub(crate) fn names_a_member(kind: TokenKind) -> bool {
+    kind == TokenKind::Ident || kind.is_keyword()
+}
+
 /// Whether the tokens `first` and `second` declare a function (`fn name`),
 /// which no expression is (§6.1): the one test, for the parser and the
 /// missing `,` of a list (`foreign::lists::list_fixes`).
@@ -139,4 +148,23 @@ pub(crate) fn starts_element(list: NodeKind, kind: TokenKind) -> bool {
 /// (`[v; n]`).
 pub(crate) fn comma_list(kind: NodeKind) -> bool {
     element_starts(kind).is_some() && kind != NodeKind::ArrayExpr
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::token::{KEYWORDS, TokenKind};
+
+    /// The kinds that name a member are `Ident` and the keywords (§2.2), and
+    /// no other: a new keyword is a name after `.` without a change here.
+    #[test]
+    fn a_member_is_named_by_a_name_or_a_keyword() {
+        let mut named: Vec<usize> =
+            TokenKind::ALL.iter().filter(|&&k| super::names_a_member(k)).map(|&k| k as usize).collect();
+        let mut want: Vec<usize> = KEYWORDS.iter().map(|k| k.kind as usize).collect();
+        want.push(TokenKind::Ident as usize);
+        named.sort_unstable();
+        want.sort_unstable();
+        assert_eq!(named, want);
+        assert!(!super::names_a_member(TokenKind::Int) && super::starts_member(TokenKind::Int));
+    }
 }

@@ -3,7 +3,7 @@
 
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 
-use crate::ast::{Ast, ExprKind, GenericParam, Ident, ItemKind, Param, ParamName, PatKind, StmtKind};
+use crate::ast::{Ast, ExprKind, FlowDecl, FnDecl, GenericParam, Ident, ItemKind, Param, ParamName, PatKind, StmtKind};
 
 /// The three shapes of names (§2.3, S-650): a core starting with a letter
 /// and one optional trailing `_` (the spelling that avoids a reserved word,
@@ -101,14 +101,15 @@ impl Shape {
 
     /// The candidate of the E0320 of `name` (§2.3, §18.1): the name by the
     /// rule, with a `_` at its end when that is a reserved word (`match_`,
-    /// S-243). None when it is not of the shape (`_0` gives no identifier,
-    /// S-651) or is the name itself (R-260, R-262).
-    fn candidate(self, name: &str) -> Option<String> {
+    /// S-243), and whether it took that `_`. None when it is not of the shape
+    /// (`_0` gives no identifier, S-651) or is the name itself (R-260, R-262).
+    fn candidate(self, name: &str) -> Option<(String, bool)> {
         let mut to = self.convert(name);
-        if crate::token::TokenKind::keyword(&to).is_some() {
+        let reserved = crate::token::TokenKind::keyword(&to).is_some();
+        if reserved {
             to.push('_');
         }
-        (self.matches(&to) && to != name).then_some(to)
+        (self.matches(&to) && to != name).then_some((to, reserved))
     }
 }
 
@@ -202,6 +203,14 @@ fn split_words(s: &str) -> Vec<String> {
 
 pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     let mut out = Vec::new();
+    // The names of the items with `@export`, which do not end with `_` (§2.3,
+    // §14.2): a name by the rule that is a reserved word is no candidate (R-347).
+    let exported: Vec<Span> = (ast.root.iter().map(|&id| ast.item(id)).filter(|i| i.export().is_some()))
+        .filter_map(|i| match &i.kind {
+            ItemKind::Fn(FnDecl { name, .. }) | ItemKind::Flow(FlowDecl { name, .. }) => Some(name.span),
+            _ => None,
+        })
+        .collect();
     // `binding`: a name a pattern binds, whose leading `_` may mean a value
     // that is not used: that is `_` alone, the candidate of its E0309 after
     // this one (§2.3, §5.1, S-726).
@@ -217,12 +226,21 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         )
         .with_found(ident.name.clone());
         // S-82 (W4-04): the candidate also renames every use in the package.
-        if let Some(to) = shape.candidate(&ident.name) {
-            // `_type`: the leading `_` avoided a reserved word (§2.3, S-648).
-            if has_leading_underscore(&ident.name) && to.ends_with('_') {
-                d = d.with_rule(TAIL_NOT_HEAD);
+        match shape.candidate(&ident.name) {
+            Some((_, true)) if exported.contains(&ident.span) => {
+                d = d.with_rule(
+                    "the name by the rule is a reserved word, and the name of an item with `@export` does not end \
+                     with `_` (§14.2): rename by hand",
+                )
             }
-            d = d.with_fix(Fix::replace("rename by the naming rule", ident.span, to));
+            Some((to, reserved)) => {
+                // `_type`: the leading `_` avoided a reserved word (§2.3, S-648).
+                if has_leading_underscore(&ident.name) && reserved {
+                    d = d.with_rule(TAIL_NOT_HEAD);
+                }
+                d = d.with_fix(Fix::replace("rename by the naming rule", ident.span, to));
+            }
+            None => {}
         }
         if binding && has_leading_underscore(&ident.name) {
             d = d.with_rule("a value that is not used is bound to `_` alone, with no name");
@@ -308,24 +326,6 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
             check(id, Shape::Snake, "variable", true);
         }
     }
-    // The name of an item with `@export` does not end with `_` (§2.3, §14.2):
-    // a name by the rule that is a reserved word is no candidate (R-347).
-    for item in ast.root.iter().map(|&id| ast.item(id)).filter(|i| i.export().is_some()) {
-        let (ItemKind::Fn(crate::ast::FnDecl { name, .. }) | ItemKind::Flow(crate::ast::FlowDecl { name, .. })) =
-            &item.kind
-        else {
-            continue;
-        };
-        let keyword = |d: &Diagnostic| d.fixes.first().is_some_and(|f| f.edits()[0].replace.ends_with('_'));
-        for d in out.iter_mut().filter(|d| d.span == name.span && keyword(d)) {
-            d.fixes.clear();
-            d.notes.retain(|n| n.message != TAIL_NOT_HEAD);
-            d.notes.push(onsa_diag::Note::rule(
-                "the name by the rule is a reserved word, and the name of an item with `@export` does not end \
-                 with `_` (§14.2): rename by hand",
-            ));
-        }
-    }
     diagnostics.extend(out);
 }
 
@@ -335,9 +335,7 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
 /// another shape has the E0320 of [`check`].
 pub(crate) fn check_exported(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     for item in ast.root.iter().map(|&id| ast.item(id)) {
-        let (ItemKind::Fn(crate::ast::FnDecl { name, .. }) | ItemKind::Flow(crate::ast::FlowDecl { name, .. })) =
-            &item.kind
-        else {
+        let (ItemKind::Fn(FnDecl { name, .. }) | ItemKind::Flow(FlowDecl { name, .. })) = &item.kind else {
             continue;
         };
         let Some(core) = name.name.strip_suffix('_').filter(|_| Shape::Snake.matches(&name.name)) else { continue };
@@ -517,7 +515,7 @@ mod tests {
         ];
         for shape in [Shape::Snake, Shape::UpperCamel, Shape::UpperSnake] {
             for name in samples {
-                let Some(to) = shape.candidate(name) else {
+                let Some((to, _)) = shape.candidate(name) else {
                     let none = ["_0", "_1", "__", "_"].contains(&name) || shape.matches(name);
                     assert!(none, "{} `{name}` has no candidate", shape.describe());
                     continue;
@@ -527,9 +525,9 @@ mod tests {
             }
         }
         // S-149: `__` takes the name by the rule.
-        assert_eq!(Shape::Snake.candidate("a__b").as_deref(), Some("a_b"));
-        assert_eq!(Shape::UpperSnake.candidate("A__B").as_deref(), Some("A_B"));
-        assert_eq!(Shape::Snake.candidate("g__").as_deref(), Some("g"));
+        assert_eq!(Shape::Snake.candidate("a__b"), Some(("a_b".into(), false)));
+        assert_eq!(Shape::UpperSnake.candidate("A__B"), Some(("A_B".into(), false)));
+        assert_eq!(Shape::Snake.candidate("g__"), Some(("g".into(), false)));
         let src = "struct _0 {}\nenum C { _0 }\nconst _1: I32 = 1\n";
         assert!(e0320s(src).iter().all(|(_, c, _)| c.is_empty()), "{:?}", e0320s(src));
     }

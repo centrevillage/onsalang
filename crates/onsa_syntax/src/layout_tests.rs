@@ -982,6 +982,10 @@ fn the_line_facts_of_each_token() {
     assert_eq!((lines.before(at("?")), lines.after(at("?"))), (Space, Space));
     assert!(lines.at_line_head(at("b")) && lines.at_line_head(at(".")) && lines.at_line_head(at("-")));
     assert!(!lines.at_line_head(at("+")) && !lines.at_line_head(at("c")));
+    // The first token of the file is at the head of its line, after blanks too.
+    assert!(lines.at_line_head(at("a")));
+    let (_, _, blank_first) = crate::layout::code_tokens(&crate::lex(FileId(0), "  a").tokens);
+    assert!(blank_first.at_line_head(0));
     // The line breaks after `+` (and over the comment and the blank line) go
     // on; the one before `.` goes on; the one before `-` does not.
     let newlines: Vec<bool> =

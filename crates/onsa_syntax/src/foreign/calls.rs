@@ -63,7 +63,7 @@ fn is_postfix_chain(c: &Cursor, first: usize, last: usize) -> bool {
     while i <= last {
         let next = match (c.kind(i), c.kind(i + 1)) {
             (TokenKind::Dot, TokenKind::LParen) => after_group(i + 1),
-            (TokenKind::Dot, k) if k == TokenKind::Ident || k == TokenKind::Int || k.is_keyword() => Some(i + 2),
+            (TokenKind::Dot, k) if k == TokenKind::Int || crate::starts::names_a_member(k) => Some(i + 2),
             (TokenKind::LParen | TokenKind::LBracket, _) => after_group(i),
             (TokenKind::ColonColon, TokenKind::LBracket)
             | (TokenKind::Tilde, TokenKind::LParen)
