@@ -415,12 +415,12 @@ impl<'s> Reader<'s> {
     fn platform(&self, kind: &Spanned<String>, p: &Spanned<String>) {
         let (k, kinds) = (kind.value.as_str(), row(Table::Target, Field::Kind).unsupported);
         let supported = matches!(kinds, Some((Unsupported::Except(vs), _)) if vs.contains(&k));
-        let d = match crate::build::platform(&p.value) {
+        let d = match crate::platform::platform(&p.value) {
             Err(_) => Feature::ManifestPlatform
                 .diagnostic(Stage::Manifest, self.span(p.span.clone()), &[&p.value])
-                .with_rule(crate::build::platforms_note()),
+                .with_rule(crate::platform::platforms_note()),
             Ok(t) if !t.is_host() && supported && table::TOOLCHAIN.contains(&k) => {
-                let host = crate::build::host_triple();
+                let host = crate::platform::host_triple();
                 Feature::ManifestCross
                     .diagnostic(Stage::Manifest, self.span(kind.span.clone()), &[k, &p.value])
                     .with_rule(format!("the host is `\"host\"`, or its triple written letter for letter: `{host}`"))
@@ -1184,7 +1184,7 @@ mod tests {
             "thumbv7em-none-eabihf",
             "riscv32imac-unknown-none-elf",
         ] {
-            assert!(crate::build::platform(p).is_ok(), "{p}");
+            assert!(crate::platform::platform(p).is_ok(), "{p}");
         }
     }
 

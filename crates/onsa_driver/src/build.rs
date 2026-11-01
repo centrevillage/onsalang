@@ -5,128 +5,19 @@
 //! compiles them with `cc` and archives them with `ar`. Cross targets get
 //! the sources and the intended flags (`onsa_build.json`).
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use onsa_backend_c::{EmitOptions, ExportFlow, PanicMode};
-use onsa_core::{ConstId, Expr, ExprKind, Lit, LowerOptions, Module, Ty, TypeDefKind};
+use onsa_core::{LowerOptions, Module};
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
-use onsa_interp::{ArrayData, Interp, Value};
 use onsa_sema::package_tree::{BUILD_DIR, MANIFEST};
 
+use crate::consts::consts_stage;
+use crate::platform::{Platform, host_triple, platform};
 use crate::{
-    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestTarget, Spanned, guard,
-    read_package_input,
+    Analyzed, InternalError, Loaded, LowerError, Manifest, ManifestTarget, Spanned, guard, read_package_input,
 };
-
-/// A build platform (spec §15.3 item 1, §13.4): pointer width and the
-/// compiler flags that keep the IEEE semantics.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Platform {
-    pub triple: String,
-    pub arch: String,
-    pub os: String,
-    pub ptr_size: u32,
-    /// Has an operating system (hosted): `poison` is the default panic mode.
-    pub hosted: bool,
-    pub msvc: bool,
-    pub cflags: Vec<String>,
-}
-
-/// Triple of the machine the compiler runs on.
-pub fn host_triple() -> String {
-    let arch = match std::env::consts::ARCH {
-        "aarch64" => "aarch64",
-        "x86_64" => "x86_64",
-        "x86" => "i686",
-        "arm" => "armv7",
-        other => other,
-    };
-    let os = match std::env::consts::OS {
-        "macos" => "apple-darwin",
-        "linux" => "unknown-linux-gnu",
-        "windows" => "pc-windows-msvc",
-        "freebsd" => "unknown-freebsd",
-        other => other,
-    };
-    format!("{arch}-{os}")
-}
-
-/// The architectures this version knows, with their pointer widths in
-/// bytes; a name ending in `*` is the head of a name (S-824).
-const ARCHS: &[(u32, &[&str])] = &[
-    (8, &["x86_64", "aarch64", "arm64", "riscv64", "powerpc64", "mips64", "wasm64"]),
-    (4, &["i686", "i586", "i386", "riscv32*", "xtensa", "arm", "armv*", "thumbv*", "wasm32", "mips", "powerpc"]),
-];
-
-/// The operating systems this version knows: a word of the triple after its
-/// architecture, and the system; a word `none` is no system (S-824, S-837).
-const SYSTEMS: &[(&str, &str)] =
-    &[("darwin*", "macos"), ("apple", "macos"), ("linux*", "linux"), ("windows*", "windows"), ("freebsd*", "freebsd")];
-
-/// `word` is `name`, or starts with it when `name` ends in `*`.
-fn word_is(word: &str, name: &str) -> bool {
-    name.strip_suffix('*').map_or(word == name, |head| word.starts_with(head))
-}
-
-/// The note of a platform this version does not know (S-824): what
-/// [`platform`] knows.
-pub fn platforms_note() -> String {
-    let archs: Vec<String> = ARCHS.iter().flat_map(|(_, a)| a.iter()).map(|a| format!("`{a}`")).collect();
-    let systems: Vec<String> = SYSTEMS.iter().map(|(w, _)| format!("`{w}`")).collect();
-    format!(
-        "a platform is `\"host\"` or a target triple, read by its words between `-`: the first word is the \
-         architecture, one of {}; a later word `none` is no operating system, else a later word is the system, \
-         one of {} (`*`: the word may go on, as `darwin25.4.0`)",
-        archs.join(", "),
-        systems.join(", ")
-    )
-}
-
-/// Resolve a target triple (`"host"` is the compiler's own machine).
-pub fn platform(triple: &str) -> Result<Platform, String> {
-    let triple = if triple == "host" { host_triple() } else { triple.to_string() };
-    let parts: Vec<&str> = triple.split('-').collect();
-    if parts.len() < 2 {
-        return Err(format!("`{triple}` is not a target triple (`<arch>-<vendor>-<os>[-<abi>]`)"));
-    }
-    let (arch, words) = (parts[0].to_string(), &parts[1..]);
-    let rest = words.join("-");
-    let Some(&(ptr_size, _)) = ARCHS.iter().find(|(_, a)| a.iter().any(|a| word_is(&arch, a))) else {
-        return Err(format!("unknown architecture `{arch}` in `{triple}`"));
-    };
-    let bare = words.contains(&"none");
-    let msvc = rest.contains("msvc");
-    let os = match SYSTEMS.iter().find(|(name, _)| words.iter().any(|w| word_is(w, name))) {
-        _ if bare => "none".to_string(),
-        Some((_, os)) => os.to_string(),
-        None => return Err(format!("unknown operating system in `{triple}`")),
-    };
-    // The flags the generated C needs (spec §13.4) are the backend's; then
-    // the optimization level, then the flags of the architecture.
-    let (fp, opt) = if msvc { (onsa_backend_c::FP_CFLAGS_MSVC, "/O2") } else { (onsa_backend_c::FP_CFLAGS, "-O2") };
-    let mut cflags: Vec<String> = fp.iter().chain([&opt]).map(|f| f.to_string()).collect();
-    match arch.as_str() {
-        "i686" | "i586" | "i386" if !msvc => cflags.extend(["-m32".into(), "-msse2".into(), "-mfpmath=sse".into()]),
-        a if a.starts_with("thumbv") => {
-            cflags.extend(["-mthumb".into(), "-ffreestanding".into(), "-DONSA_NO_TLS".into()]);
-            if rest.ends_with("hf") {
-                cflags.push("-mfloat-abi=hard".into());
-            }
-        }
-        _ => {}
-    }
-    Ok(Platform { triple, arch, os, ptr_size, hosted: !bare, msvc, cflags })
-}
-
-impl Platform {
-    /// The compiler runs on this platform (so `cc` can build for it): its
-    /// triple is the host's, letter for letter (§15.3, S-837).
-    pub fn is_host(&self) -> bool {
-        self.triple == host_triple()
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct BuildOptions {
@@ -496,138 +387,10 @@ fn check_exports(analyzed: &Analyzed, settings: &TargetSettings) -> Vec<Diagnost
     out
 }
 
-/// The build-time `const` evaluation as a stage: [`inline_consts`] of the
-/// `const`s that `roots` reach, then the verifier at its boundary (R-82).
-///
-/// The evaluation and the reach are the same set (S-242, W2-13): a `const`
-/// that no entry reaches is not evaluated, so its initializer cannot stop the
-/// build (an internal error of the evaluation), and every `const` the C unit
-/// reaches after the evaluation was offered to it (the reach of the
-/// evaluated module from the same roots is a part of this one: an evaluated
-/// initializer calls nothing).
-fn consts_stage(mut module: Module, roots: &[onsa_core::FnId]) -> Result<Module, InternalError> {
-    let reached = onsa_core::reach(&module, roots).consts;
-    let replacements = crate::guard_on_stack(|| inline_consts(&module, &reached))?;
-    for (i, e) in replacements {
-        module.consts[i].init = e;
-    }
-    crate::verify_core(&module, CoreStage::Consts)?;
-    Ok(module)
-}
-
-/// `const` initializers that call functions are evaluated with the
-/// interpreter at build time (spec §6.6, T3-9): the literals that replace
-/// them, so the C backend can emit a static initializer. Only the `const`s
-/// of `reached`, and only through [`consts_stage`], which runs it on the
-/// stack of a command (R-05).
-fn inline_consts(module: &Module, reached: &BTreeSet<ConstId>) -> Vec<(usize, Expr)> {
-    let mut replacements: Vec<(usize, Expr)> = Vec::new();
-    {
-        let interp = Interp::new(module);
-        for &id in reached {
-            let (i, c) = (id.0 as usize, module.const_(id));
-            if is_static_init(&c.init) {
-                continue;
-            }
-            // A panic names this `const` (S-67).
-            let _scope = onsa_diag::internal::item_scope(c.init.span);
-            // Each `const` is an evaluation of its own from call depth 0, as
-            // in `onsa test` (spec §12.5). One that panics or reaches a form
-            // the interpreter cannot run stays as it is, and the C backend
-            // stops at it with E0200; E0419 at the initializer (spec §6.6,
-            // S-222) is W9-03's. A failure of the interpreter itself unwinds
-            // to the guard of `consts_stage` (S-67).
-            let v = match interp.const_value(id) {
-                Ok(v) => v,
-                Err(onsa_interp::Failure::Panic(_) | onsa_interp::Failure::Unsupported(_)) => continue,
-            };
-            if let Some(e) = value_to_expr(module, &v, &c.ty, c.init.span) {
-                replacements.push((i, e));
-            }
-        }
-    }
-    replacements
-}
-
-fn is_static_init(e: &Expr) -> bool {
-    match &e.kind {
-        ExprKind::Lit(_) | ExprKind::Const(_) | ExprKind::Zeroed => true,
-        ExprKind::Unary(_, x) => is_static_init(x),
-        ExprKind::Struct { fields, .. } | ExprKind::Variant { fields, .. } => fields.iter().all(is_static_init),
-        ExprKind::Array(xs) | ExprKind::Tuple(xs) => xs.iter().all(is_static_init),
-        ExprKind::Repeat { elem, .. } => is_static_init(elem),
-        _ => false,
-    }
-}
-
-/// A literal / aggregate expression with the value `v`.
-pub fn value_to_expr(m: &Module, v: &Value, ty: &Ty, span: onsa_diag::Span) -> Option<Expr> {
-    let lit = |l: Lit| Some(Expr::new(ty.clone(), span, ExprKind::Lit(l)));
-    match (v, ty) {
-        (Value::I8(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::I16(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::I32(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::I64(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::U8(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::U16(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::U32(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::U64(x), _) => lit(Lit::Int(*x as i128)),
-        (Value::F32(x), _) => lit(Lit::F32(*x)),
-        (Value::F64(x), _) => lit(Lit::F64(*x)),
-        (Value::Bool(x), _) => lit(Lit::Bool(*x)),
-        (Value::Char(x), _) => lit(Lit::Char(*x)),
-        (Value::Unit, _) => lit(Lit::Unit),
-        (Value::Array(data), Ty::Array(elem, _)) => {
-            let xs: Vec<Expr> = match data {
-                ArrayData::F32(xs) => {
-                    xs.iter().map(|x| Expr::new((**elem).clone(), span, ExprKind::Lit(Lit::F32(*x)))).collect()
-                }
-                ArrayData::Any(vs) => vs.iter().map(|x| value_to_expr(m, x, elem, span)).collect::<Option<Vec<_>>>()?,
-            };
-            Some(Expr::new(ty.clone(), span, ExprKind::Array(xs)))
-        }
-        (Value::Tuple(vs), Ty::Tuple(ts)) => {
-            let xs = vs.iter().zip(ts).map(|(x, t)| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
-            Some(Expr::new(ty.clone(), span, ExprKind::Tuple(xs)))
-        }
-        (Value::Struct(vs), Ty::Struct(id)) => {
-            let TypeDefKind::Struct { fields } = &m.ty(*id).kind else { return None };
-            let xs =
-                vs.iter().zip(fields).map(|(x, (_, t))| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
-            Some(Expr::new(ty.clone(), span, ExprKind::Struct { ty: *id, fields: xs }))
-        }
-        (Value::Enum { tag, fields: vs }, Ty::Enum(id)) => {
-            let TypeDefKind::Enum { variants } = &m.ty(*id).kind else { return None };
-            let (_, tys) = variants.get(*tag as usize)?;
-            let xs = vs.iter().zip(tys).map(|(x, t)| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
-            Some(Expr::new(ty.clone(), span, ExprKind::Variant { ty: *id, tag: *tag, fields: xs }))
-        }
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::PackageInput;
-
-    /// S-242, W2-13: the build-time evaluation evaluates the `const`s that the
-    /// entries reach (one reaches `READ` through `get`), and no other
-    /// (`UNREAD` keeps its initializer, a call), so the evaluation and the
-    /// reach are the same set.
-    #[test]
-    fn the_const_stage_evaluates_only_the_reached_consts() {
-        let src = "fn three() -> U32 {\n  3\n}\n\nfn four() -> U32 {\n  4\n}\n\nconst READ: U32 = three()\n\nconst UNREAD: U32 = four()\n\npub fn get() -> U32 {\n  READ\n}\n";
-        let mut loaded = Loaded::from_input(PackageInput::single_file("t.onsa", src)).unwrap();
-        let analyzed = crate::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
-        assert!(analyzed.diagnostics.is_empty());
-        let module = crate::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
-        let get = module.fns.iter().position(|f| f.name.ends_with("get")).map(|i| onsa_core::FnId(i as u32));
-        let module = consts_stage(module, &[get.unwrap()]).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
-        let init = |name: &str| &module.consts.iter().find(|c| c.name.ends_with(name)).unwrap().init.kind;
-        assert!(matches!(init("READ"), ExprKind::Lit(Lit::Int(3))), "{:?}", init("READ"));
-        assert!(matches!(init("UNREAD"), ExprKind::Call { .. }), "{:?}", init("UNREAD"));
-    }
 
     /// S-154, S-827, §18.1: the build of a target reports the manifest's
     /// diagnostics and the E0200 of that target's values together, before
@@ -713,63 +476,6 @@ mod tests {
         // No `@export`: no prefix, none read, and no name of the export (no header, no `take_panic`).
         let out = build("", "pub fn f() -> I32 {\n  1\n}\n").unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!((out.export.prefix, out.unit.headers.len(), out.unit.take_panic), (None, 0, None));
-    }
-
-    #[test]
-    fn platforms() {
-        let p = platform("aarch64-apple-darwin").unwrap();
-        assert_eq!((p.ptr_size, p.hosted, p.msvc, p.os.as_str()), (8, true, false, "macos"));
-        assert!(p.cflags.contains(&"-ffp-contract=off".to_string()));
-        let p = platform("thumbv7em-none-eabihf").unwrap();
-        assert_eq!((p.ptr_size, p.hosted), (4, false));
-        assert!(p.cflags.iter().any(|f| f == "-mfloat-abi=hard"));
-        assert!(p.cflags.iter().any(|f| f == "-DONSA_NO_TLS"));
-        let p = platform("i686-unknown-linux-gnu").unwrap();
-        assert_eq!(p.ptr_size, 4);
-        assert!(p.cflags.iter().any(|f| f == "-mfpmath=sse"));
-        let p = platform("x86_64-pc-windows-msvc").unwrap();
-        assert!(p.msvc && p.cflags.iter().any(|f| f == "/fp:strict"));
-        assert!(platform("sparc-sun-solaris").is_err());
-        assert!(platform("nonsense").is_err());
-    }
-
-    /// S-837 (1): the host is `"host"` and its triple letter for letter; another
-    /// spelling of the machine, another system on it or a versioned system is
-    /// not (none of them is a triple `host_triple` gives, on any machine).
-    #[test]
-    fn host_is_its_triple() {
-        assert!(platform("host").unwrap().is_host());
-        assert!(platform(&host_triple()).unwrap().is_host());
-        for t in ["arm64-apple-darwin", "aarch64-apple-ios", "aarch64-apple-darwin25.4.0"] {
-            assert_ne!(t, host_triple());
-            assert!(!platform(t).unwrap().is_host(), "{t}");
-        }
-    }
-
-    /// S-837 (B'): the words between `-` give the system: a word `none` is no
-    /// system, a system word may go on, `apple` is a whole word, and `none` or
-    /// a system inside another word is not read.
-    #[test]
-    fn systems_by_words() {
-        let read = |t: &str| platform(t).map(|p| (p.hosted, p.os));
-        let macos = Ok((true, "macos".to_string()));
-        assert_eq!(read("aarch64-nonexistent-apple-darwin"), macos);
-        assert_eq!(read("aarch64-apple-darwin25.4.0"), macos);
-        assert_eq!(read("aarch64-apple-ios"), macos);
-        assert_eq!(read("x86_64-unknown-linux-gnu"), Ok((true, "linux".to_string())));
-        for (t, os) in [
-            ("x86_64-unknown-linux6-gnu", "linux"),
-            ("x86_64-pc-windows11", "windows"),
-            ("x86_64-unknown-freebsd14", "freebsd"),
-        ] {
-            assert_eq!(read(t), Ok((true, os.to_string())), "{t}");
-        }
-        for t in ["x86_64-unknown-linux-none", "thumbv7em-none-eabihf", "riscv32imac-unknown-none-elf"] {
-            assert_eq!(read(t), Ok((false, "none".to_string())), "{t}");
-        }
-        for t in ["arm-unknown-eabi", "aarch64-applex-ios", "aarch64-xdarwin", "aarch64-nonelinux"] {
-            assert!(read(t).is_err(), "{t}");
-        }
     }
 
     #[test]

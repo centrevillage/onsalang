@@ -7,22 +7,34 @@
 //! reduced in one place, [`reduce`] (S-59).
 
 pub mod build;
+mod consts;
+mod file_commands;
 pub mod graph;
 mod input;
 pub mod interface;
 pub mod internal;
 pub mod manifest;
+mod platform;
 pub mod reduce;
 mod testing;
 pub mod verify;
 
+pub use build::{
+    BuildError, BuildOptions, BuildOutput, BuildReport, ExportSettings, ResolvedTarget, TargetSettings, build,
+    build_analyzed, build_resolved, resolve_target,
+};
+pub use file_commands::{AstDiff, Formatted, cst_dump, diff_ast, format_file, levels_dump, parse_only};
+pub use graph::{GraphError, graph};
 pub use input::{
     Loaded, ManifestForm, ManifestSource, PackageInput, SourceFile, load, module_path, read_input, read_package_input,
     read_sources, slash_path,
 };
+pub use interface::{Interface, interface, render_json, render_text};
 pub use internal::{InternalError, Origin, guard, guard_on_stack};
 pub use manifest::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestRead, ManifestTarget, Spanned};
+pub use platform::{Platform, host_triple, platform};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
+pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core, verify_core_in_debug_only};
 
 use std::sync::Arc;
 
@@ -68,105 +80,6 @@ fn parse_file(file: FileId, text: &str) -> onsa_syntax::Parsed {
     let _syntax = phase(Phase::Syntax);
     let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
     onsa_syntax::parse(file, text)
-}
-
-/// Parse only (the `mode = "parse"` depth of the test cases, D-05): the
-/// Onsa files of `loaded` (not its `onsa.toml`).
-pub fn parse_only(loaded: &Loaded) -> Result<CheckResult, InternalError> {
-    guard(|| {
-        let mut result = CheckResult::default();
-        for id in loaded.modules.iter().map(|(f, _)| *f).chain(loaded.root_tests.iter().copied()) {
-            let parsed = parse_file(id, loaded.sources.file(id).text());
-            let diagnostics = parsed.diagnostics.clone();
-            result.diagnostics.extend(reduce::per_unit([(id, &parsed.units)], diagnostics).diagnostics);
-        }
-        result
-    })
-}
-
-/// The canonical text of a file (`onsa fmt`), or its syntax diagnostics.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Formatted {
-    Text(String),
-    /// The file has syntax diagnostics: it is not formatted (spec §18.2).
-    Syntax(Vec<Diagnostic>),
-}
-
-/// Format the file `file` of `sources` (`onsa fmt`).
-pub fn format_file(sources: &SourceMap, file: FileId) -> Result<Formatted, InternalError> {
-    guard(|| {
-        let text = sources.file(file).text();
-        let parsed = parse_file(file, text);
-        // A panic names the file (S-67).
-        let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
-        formatted(&parsed, file, onsa_syntax::format(&parsed, text))
-    })?
-}
-
-/// What `onsa fmt` makes of the formatter's result: an output that is not
-/// the program of the input is an internal error at the first difference,
-/// without a diagnostic code (`spec/tools.md` §3.5).
-fn formatted(
-    parsed: &onsa_syntax::Parsed,
-    file: FileId,
-    result: Result<String, onsa_syntax::fmt::FormatError>,
-) -> Result<Formatted, InternalError> {
-    use onsa_syntax::fmt::FormatError;
-    match result {
-        Ok(out) => Ok(Formatted::Text(out)),
-        Err(FormatError::Syntax) => Ok(Formatted::Syntax(reduce::syntax_report(parsed, file))),
-        Err(FormatError::Unverified(d)) => Err(InternalError::unverified(&d)),
-    }
-}
-
-/// The CST of a file (`onsa dump --cst`, R-86): the text of its leaves
-/// (the source, byte for byte) or, with `tree`, the tree as indented lines.
-/// A file with syntax diagnostics has a CST too; they are not reported here.
-/// The tree is checked (`Cst::validate`) by the parse itself: a broken tree is
-/// an internal error.
-pub fn cst_dump(sources: &SourceMap, file: FileId, tree: bool) -> Result<String, InternalError> {
-    guard(|| {
-        let text = sources.file(file).text();
-        let parsed = parse_file(file, text);
-        if tree { parsed.cst.tree(text) } else { parsed.cst.text(text) }
-    })
-}
-
-/// The levels (spec §2.5) of each top-level item of a file that parsed, one
-/// line each, in the order of the file (`onsa dump --levels`, for the fmt
-/// properties: `tools/fmt_props.py`).
-pub fn levels_dump(sources: &SourceMap, file: FileId) -> Result<String, InternalError> {
-    guard(|| {
-        let parsed = parse_file(file, sources.file(file).text());
-        parsed.levels.iter().map(|l| format!("{l}\n")).collect()
-    })
-}
-
-/// The structural difference of two files (`onsa diff --ast`).
-#[derive(Debug, Clone)]
-pub enum AstDiff {
-    Items(Vec<onsa_syntax::diff::ItemDiff>),
-    /// A file has syntax diagnostics: the files are not compared (spec §18.2).
-    /// The diagnostics of both files (`reduce::syntax_report`).
-    Syntax(Vec<Diagnostic>),
-}
-
-/// Compare the files `old` and `new` of `sources` (`onsa diff --ast`).
-pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff, InternalError> {
-    guard(|| {
-        let files = [old, new];
-        let parsed: Vec<onsa_syntax::Parsed> =
-            files.iter().map(|&file| parse_file(file, sources.file(file).text())).collect();
-        if parsed.iter().any(|p| p.syntax_errors()) {
-            // Both files are reported, not only the first with an error (`spec/tools.md` §3.1).
-            // A file on both sides is reported once.
-            let n = if old == new { 1 } else { 2 };
-            return AstDiff::Syntax(
-                parsed.iter().zip(files).take(n).flat_map(|(p, file)| reduce::syntax_report(p, file)).collect(),
-            );
-        }
-        AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], &parsed[1]))
-    })
 }
 
 /// Check a loaded package. `std` is appended to `sources`. With a file passed
@@ -272,11 +185,6 @@ fn analyze(
     })
 }
 
-pub use graph::{GraphError, graph};
-pub use interface::{Interface, interface, render_json, render_text};
-
-pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core, verify_core_in_debug_only};
-
 /// Lower a checked package to Core (T3-3). Only meaningful when
 /// `Analyzed::diagnostics` is empty; lowering diagnostics (E0200 for
 /// features outside the core, every one once, S-67) come back as the
@@ -309,11 +217,6 @@ pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> R
     drop(verify);
     Ok(module)
 }
-
-pub use build::{
-    BuildError, BuildOptions, BuildOutput, BuildReport, ExportSettings, Platform, ResolvedTarget, TargetSettings,
-    build, build_analyzed, build_resolved, host_triple, platform, resolve_target,
-};
 
 /// In debug builds (the tests, the fuzzing), a diagnostic that breaks its
 /// rules (a required fix or note missing, edits that overlap or cut a token,
@@ -371,28 +274,6 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-
-    /// R-204: an output of fmt that is not the program of its input is an
-    /// internal error (101) that names the first difference and its place in
-    /// the input, without a diagnostic code (`spec/tools.md` §3.5). A
-    /// correct fmt does not make one, so the output is a false one.
-    #[test]
-    fn an_unverified_output_is_an_internal_error_at_the_place_in_the_input() {
-        let mut sources = SourceMap::default();
-        let file = sources.add("m.onsa", "fn f() -> I32 {\n  let a = 1\n  a // keep\n}\n");
-        let text = sources.file(file).text();
-        let parsed = onsa_syntax::parse(file, text);
-        let fake = "fn f() -> I32 {\n  let a = 1\n  a\n}\n";
-        let result = onsa_syntax::fmt::verify(&parsed, text, fake).map(|()| fake.to_string());
-        let e = formatted(&parsed, file, result).unwrap_err();
-        assert_eq!(e.origin, internal::Origin::Unverified);
-        let shown = e.render(&sources);
-        assert!(shown.starts_with("internal error: the output of fmt is not the same program: comment 1"), "{shown}");
-        assert!(shown.contains("  --> m.onsa:3:5\n"), "{shown}");
-        assert!(!shown.contains("error["), "{shown}");
-        // The real formatter gives the text.
-        assert_eq!(format_file(&sources, file), Ok(Formatted::Text(text.to_string())));
-    }
 
     #[test]
     fn std_parses_and_analyzes_cleanly() {
