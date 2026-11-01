@@ -651,7 +651,8 @@ fn small_holes() {
 
 /// A case the manifest stops (`#~`) reaches nothing after the sources: a
 /// setting of `[test]` compared there is an error of the case
-/// (`tests/README.md`); `fixes = 0` holds of it.
+/// (`tests/README.md`); `fixes` and `[[test.fix]]` are of the manifest's
+/// candidates, and `fixes = 0` holds of a manifest without one.
 #[test]
 fn a_case_the_manifest_stops_asks_nothing_after_the_sources() {
     let case_of = |test: &str| {
@@ -663,12 +664,10 @@ fn a_case_the_manifest_stops_asks_nothing_after_the_sources() {
     };
     let later = [
         ("mode", "mode = \"test\"", "`mode = \"test\"`"),
-        ("fixes", "fixes = 1", "`fixes`"),
         ("core", "golden = [\"core\"]", "`golden`"),
         ("c", "golden = [\"c\"]", "`golden`"),
         ("graph", "golden_graph = [\"f\"]", "`golden_graph`"),
         ("conformance", "conformance = true", "`conformance`"),
-        ("fix", "[[test.fix]]\nat = \"5:4\"\ncode = \"E1102\"\ncandidate = 1\nclean = true", "`[[test.fix]]`"),
         (
             "host",
             "[[test.host]]\nname = \"h\"\ntarget = \"a\"\nflow = \"c.f\"\nsteps = [{ call = \"init\", config = {}, sample_rate = 8.0, status = 0 }]",
@@ -689,6 +688,94 @@ fn a_case_the_manifest_stops_asks_nothing_after_the_sources() {
     assert!(zero.failures.is_empty(), "{:?}", zero.failures);
     let checked: Vec<(Stage, bool)> = zero.run.checked.iter().map(|m| (m.stage, m.matched)).collect();
     assert_eq!(checked, [(Stage::Manifest, true)]);
+}
+
+/// A manifest of a fragment without `edition`, with `extra` in `[package]`, `test` in `[test]` and `src` after it.
+fn no_edition(extra: &str, test: &str, src: &str) -> String {
+    let test: String = test.lines().map(|l| format!("// {l}\n")).collect();
+    format!("// onsa.toml\n// [package]  #~ E1104\n// name = \"c\"\n{extra}//\n// [test]\n{test}\n{src}")
+}
+
+/// The candidates of a manifest that stops the case (`tests/README.md`, §18.1; W4-02 U2b2): its
+/// copies `.fixK` beside `onsa.toml` or the fragment's file, written by `UPDATE_GOLDEN=1` and then
+/// compared, and counted by the search for orphans; `fixes = 0` and `[[test.fix]]` are compared,
+/// the manifest being one unit; `clean` asks the check of the sources too.
+#[test]
+fn the_candidates_of_a_manifest_that_stops_the_case() {
+    const OK: &str = "pub fn f() -> I32 { 1 }\n";
+    let fix = "[[test.fix]]\nat = \"2:5\"\ncode = \"E1104\"\ncandidate = 1\n";
+    let clean = format!("fixes = 1\n{fix}clean = true");
+    let colour = "// colour = 1  #~ E1102\n";
+    let files = [
+        ("tests/frag.onsa", no_edition("", &clean, OK)),
+        ("tests/pkg/onsa.toml", "[package]  #~ E1104\nname = \"c\"\n".to_string()),
+        ("tests/pkg/m.onsa", format!("// onsa.toml\n// [test]\n// fixes = 1\n\n{OK}")),
+        ("tests/zero.onsa", no_edition("", "fixes = 0", OK)),
+        ("tests/left.onsa", no_edition(colour, "fixes = 1", OK)),
+        ("tests/leaves.onsa", no_edition(colour, &format!("fixes = 1\n{fix}leaves = [\"5:4 E1102\"]"), OK)),
+        ("tests/dirty.onsa", no_edition(colour, &clean, OK)),
+        ("tests/source.onsa", no_edition("", &clean, "pub fn f() -> I32 { true }\n")),
+    ];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    let repo = Repo::new("manifest_candidates", &files);
+    let r = repo.run_with(Update::Rewrite);
+    let failures = |path: &str| case(&r, path).failures.clone();
+    for path in ["tests/frag.onsa", "tests/pkg", "tests/leaves.onsa"] {
+        assert!(failures(path).is_empty(), "{path}: {:?}", failures(path));
+        assert_eq!(case(&r, path).run.fix_targets.len(), 1, "{path}");
+    }
+    let frag = std::fs::read_to_string(repo.0.join("tests/frag.onsa.fix1")).unwrap();
+    assert!(frag.starts_with("// onsa.toml\n// [package]  #~ E1104\n// edition = \"2026\"\n"), "{frag}");
+    let toml = std::fs::read_to_string(repo.0.join("tests/pkg/onsa.toml.fix1")).unwrap();
+    assert_eq!(toml, "[package]  #~ E1104\nedition = \"2026\"\nname = \"c\"\n");
+    let has = |path: &str, text: &str| failures(path).iter().any(|f| f.contains(text));
+    assert!(
+        has("tests/zero.onsa", "has 1 candidates, more than `fixes = 0` declares"),
+        "{:?}",
+        failures("tests/zero.onsa")
+    );
+    let left = "after it, the manifest (one unit, §18.1) reports E1102 at 5:4; expected nothing";
+    assert!(has("tests/left.onsa", left), "{:?}", failures("tests/left.onsa"));
+    assert!(
+        has("tests/dirty.onsa", left) && has("tests/dirty.onsa", "`clean`: the check after it reports E1102 at 5:4")
+    );
+    assert!(
+        has("tests/source.onsa", "`clean`: the check after it reports E0401 at 14:21"),
+        "{:?}",
+        failures("tests/source.onsa")
+    );
+    // Compared again: the copies are kept; a copy of a K the case does not declare is an orphan.
+    std::fs::write(repo.0.join("tests/pkg/onsa.toml.fix2"), "x").unwrap();
+    let r = repo.run();
+    assert!(case(&r, "tests/pkg").failures.is_empty() && case(&r, "tests/pkg").run.fix_copies == 1);
+    let orphans: Vec<&String> = r.failures.iter().filter(|f| f.contains(".fix")).collect();
+    assert_eq!(orphans, ["tests/pkg/onsa.toml.fix2: its case declares `fixes = 1`, not 2; remove it or declare it"]);
+}
+
+/// The guard of the copies of a manifest's candidate (`copy_guard::manifest`): a copy that does not
+/// hold the E1102 the output holds keeps a rule, and is not rewritten; one that holds it too is.
+#[test]
+fn the_guard_of_the_copies_of_a_manifest() {
+    let text = no_edition("// colour = 1  #~ E1102\n", "fixes = 1", "pub fn f() -> I32 { 1 }\n");
+    let without = text.replace("// colour = 1  #~ E1102\n", "").replace("// name", "// edition = \"2026\"\n// name");
+    let repo = Repo::new("manifest_guard", &[("tests/g.onsa", &text), ("tests/g.onsa.fix1", &without)]);
+    let r = repo.run_with(Update::Rewrite);
+    let g = case(&r, "tests/g.onsa");
+    assert_eq!((g.run.copies_guarded, g.run.copies_rewritten.len()), (1, 0), "{:?}", g.failures);
+    assert!(
+        g.failures.iter().any(|f| f.contains("does not rewrite") && f.contains("E1102 at g.onsa:")),
+        "{:?}",
+        g.failures
+    );
+    // A copy that differs in a comment only: the same diagnostics, rewritten.
+    std::fs::write(
+        repo.0.join("tests/g.onsa.fix1"),
+        text.replace("// name", "// edition = \"2026\"\n// name") + "// x\n",
+    )
+    .unwrap();
+    let r = repo.run_with(Update::Rewrite);
+    let g = case(&r, "tests/g.onsa");
+    assert_eq!(g.run.copies_rewritten, ["tests/g.onsa.fix1"], "{:?}", g.failures);
 }
 
 #[test]

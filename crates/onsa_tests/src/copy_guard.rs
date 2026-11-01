@@ -24,7 +24,7 @@ use onsa_diag::{Code, FileId, SourceMap};
 use onsa_driver::{Analyzed, Loaded};
 
 use crate::case::Setup;
-use crate::fix_contract::{check_text, check_texts};
+use crate::fix_contract::{check_text, check_texts, reload};
 
 /// The guard of the copies of one candidate of a case: `old` and `new` hold
 /// the texts that replace files of `loaded` (the others stay). `Ok`: the
@@ -41,6 +41,35 @@ pub(crate) fn case(
     let (new_loaded, new_analyzed) =
         check_texts(setup, loaded, new).map_err(|e| format!("the check of the texts after the candidates {e}"))?;
     Ok(new_only((&old_loaded.sources, &old_analyzed), (&new_loaded.sources, &new_analyzed)))
+}
+
+/// [`case`] for the copies of a candidate of the manifest's, in a case the
+/// manifest stops: the manifest of each side loaded again ([`reload`]), its
+/// diagnostics compared as multisets of codes (the sources are not checked).
+pub(crate) fn manifest(
+    setup: &Setup,
+    loaded: &Loaded,
+    old: &BTreeMap<FileId, String>,
+    new: &BTreeMap<FileId, String>,
+) -> Result<Vec<String>, String> {
+    let old = reload(setup, loaded, old).map_err(|e| format!("the check of the copies {e}"))?;
+    let new = reload(setup, loaded, new).map_err(|e| format!("the check of the texts after the candidates {e}"))?;
+    let mut left: BTreeMap<Code, usize> = BTreeMap::new();
+    for d in old.manifest_diagnostics() {
+        *left.entry(d.code).or_default() += 1;
+    }
+    let ds = new.manifest_diagnostics();
+    let mut out = Vec::new();
+    for d in onsa_diag::printed_order(&new.sources, ds).into_iter().map(|i| &ds[i]) {
+        match left.get_mut(&d.code) {
+            Some(n) if *n > 0 => *n -= 1,
+            _ => {
+                let (f, lc) = (new.sources.file(d.span.file), new.sources.file(d.span.file).line_col(d.span.start));
+                out.push(format!("{} at {}:{}:{}", d.code.as_str(), f.name(), lc.line, lc.col));
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// The guard of one copy of a single-file example: `old` is the copy, `new`

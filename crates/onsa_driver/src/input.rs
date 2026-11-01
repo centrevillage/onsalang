@@ -231,7 +231,7 @@ fn read_manifest_of(
             None => return Err(format!("{}: the fragment is not in a file of the input", source.path)),
         },
     };
-    let mut read = manifest::read(source, file)?;
+    let mut read = manifest::read(source, file);
     crate::fill_found(sources, &mut read.diagnostics);
     let toml = (source.form == ManifestForm::File).then_some(file);
     crate::debug_contract(sources, &read.diagnostics, toml);

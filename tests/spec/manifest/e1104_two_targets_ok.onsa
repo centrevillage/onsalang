@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1104_two_targets_ok"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.other]
+// kind = "staticlib"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// A manifest with two targets and every required key is not reported: `lang` is needed by the target of
+// `kind = "source"` only, and the other target is a `staticlib` (§15.3 table, §18.1; S-99, S-597, S-827).

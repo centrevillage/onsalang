@@ -1,0 +1,25 @@
+// onsa.toml
+// [package]                                    #~ E1104
+// edition = "2026"
+// name = "e1104_edition_missing"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 1
+//
+// [[test.fix]]
+// at = "2:5"
+// code = "E1104"
+// candidate = 1
+// clean = true
+
+// E1104: `edition` is required and it is missing; the report is at the heading of `[package]`. The value is
+// fixed, "2026" (the only edition of this version), so the fix candidate inserts the key; after it the
+// manifest has no error (`clean`; §15.3 `edition` row, §18.1 "値が決まるときはキーの挿入"; S-597).
+// The column of the main position is the name `package` in the heading (the spec fixes the line only).

@@ -1,0 +1,6 @@
+package = 1                                     #~ E1103
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"

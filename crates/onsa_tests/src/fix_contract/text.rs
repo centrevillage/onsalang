@@ -79,7 +79,7 @@ pub fn check_candidate(run: &TextCheck, d: &Diagnostic, fix: &Fix) -> Result<Can
     let read = Readings::of(file, run.loaded.sources.file(file).text(), &text);
     let mut problems = edit_problems(&read, file, &edits, "").0;
     let diagnostics = again.analyzed.diagnostics.clone();
-    let after = After { loaded: again.loaded, analyzed: again.analyzed, applied };
+    let after = After { loaded: again.loaded, analyzed: Some(again.analyzed), applied };
     problems.extend(judge(&files, rank, &Before::of(&run.analyzed), &edits, &after, None).0);
     Ok(CandidateCheck { text, diagnostics, problems })
 }

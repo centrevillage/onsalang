@@ -1,0 +1,6 @@
+[targets.host]                                  #~ E1104 #~ E1104
+kind = "source"
+lang = "c"
+platform = "host"
+[package]
+edition = "2026"

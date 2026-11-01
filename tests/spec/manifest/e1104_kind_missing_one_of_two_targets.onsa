@@ -1,0 +1,20 @@
+// onsa.toml
+// [package]
+// name = "e1104_kind_missing_one_of_two_targets"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.plugin]                             #~ E1104
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104 is reported for the target that lacks `kind` only, at its heading; the target next to it that has
+// every key is not reported (§15.3 table, §18.1; S-99, S-597, S-827).

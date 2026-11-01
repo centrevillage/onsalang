@@ -76,8 +76,10 @@ pub fn diagnostic_contract(
         let b = cache.entry(file).or_insert_with(|| {
             let text = sources.file(file).text();
             let mut b: Vec<u32> = if Some(file) == toml {
+                // The heads of the lines (the first after a byte order mark too) and the end.
                 let heads = text.match_indices('\n').map(|(i, _)| i as u32 + 1);
-                [0, text.len() as u32].into_iter().chain(heads).collect()
+                let bom = if text.starts_with('\u{feff}') { 3 } else { 0 };
+                [0, bom, text.len() as u32].into_iter().chain(heads).collect()
             } else {
                 lex(file, text).tokens.iter().flat_map(|t| [t.span.start, t.span.end]).collect()
             };

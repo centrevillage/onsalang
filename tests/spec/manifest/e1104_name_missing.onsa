@@ -1,0 +1,11 @@
+// onsa.toml
+// [package]                                    #~ E1104
+// edition = "2026"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: `name` is required; it is missing, so the report is at the heading of `[package]`. No value is
+// known for it, so there is no fix candidate (`fixes = 0`) (§15.3 table, §18.1; S-99, S-597, S-827).

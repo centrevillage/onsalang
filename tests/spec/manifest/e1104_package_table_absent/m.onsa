@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 1
+//
+// [[test.fix]]
+// at = "onsa.toml:1:1"
+// code = "E1104"
+// candidate = 1
+// leaves = ["onsa.toml:5:2 E1104"]
+
+// Without `[package]` at all, the two required keys `name` and `edition` are two E1104 at the top of the
+// manifest (line 1), written on the same line. The candidate inserts `edition`; the E1104 of `name` is left
+// after it, at the heading of the `[package]` it added (`leaves`; §15.3 `name` and `edition` rows, §18.1;
+// S-314, S-597, S-827).
+
+pub fn f() -> I32 { 1 }

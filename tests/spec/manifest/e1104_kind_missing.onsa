@@ -1,0 +1,16 @@
+// onsa.toml
+// [package]
+// name = "e1104_kind_missing"
+// edition = "2026"
+//
+// [targets.host]                               #~ E1104
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: `kind` is required for a target; it is missing, so the report is at the heading `[targets.host]`.
+// No value is known, so there is no fix candidate (§15.3 table, §18.1; S-99, S-597, S-827).

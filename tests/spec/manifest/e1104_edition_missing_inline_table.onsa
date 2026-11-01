@@ -1,0 +1,11 @@
+// onsa.toml
+// package = { name = "e1104_edition_missing_inline_table" } #~ E1104
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: `package` written as an inline table has no `edition`; the report is at the line of the key
+// `package`, the place of the table's heading. An inline table takes no line, so the E1104 has
+// no candidate (§15.3 table, §18.1; S-99, S-597, S-827, S-836).

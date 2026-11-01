@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1104_lang_missing_second_target"
+// edition = "2026"
+//
+// [targets.lib]
+// kind = "staticlib"
+// platform = "host"
+//
+// [targets.gen]                                #~ E1104
+// kind = "source"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104 for `lang` is decided target by target: the `staticlib` target has no `lang` and is not reported;
+// the `source` target after it has none and is reported at its own heading (§15.3 `lang` row, §18.1;
+// S-99, S-827).

@@ -1,0 +1,12 @@
+// onsa.toml
+// [package]
+// name = "e1104_edition_int_is_not_missing"
+// edition = 2026                               #~ E1103
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103 only: `edition = 2026` is written, with the wrong type, so it is not missing; no E1104 is reported
+// for it, and there is no fix candidate (§15.3 table, §18.1; S-99, S-597, S-827).

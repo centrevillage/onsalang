@@ -1,0 +1,19 @@
+// onsa.toml
+// [package]                                    #~ E1104
+// colour = "red"                               #~ E1102
+// edition = 2026                               #~ E1103
+//
+// [targets.host]                               #~ E1104
+// lang = "c"
+// platform = "host"
+// fp = "relaxed"                               #~ E1103
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// An E1104 (`name` of `[package]` and `kind` of the target are missing), an E1103 (the integer `edition`
+// is not missing, it is wrong; `fp` is not in the list) and an E1102 (the key `colour`) in one manifest are
+// all reported, each at its line, and none is left to a usage error (§18.1 "一つの項目に二つ以上の誤り…
+// 互いに独立に全て報告し"; S-597, S-827).

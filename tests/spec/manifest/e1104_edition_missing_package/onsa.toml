@@ -1,0 +1,2 @@
+[package]                                       #~ E1104
+name = "e1104_edition_missing_package"

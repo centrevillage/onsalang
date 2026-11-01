@@ -51,6 +51,7 @@ use onsa_diag::{Code, FileId, SourceMap};
 use onsa_driver::{Analyzed, BuildError, BuildOutput, Interface, InternalError, Loaded, LowerError};
 
 use crate::case::{self, Case};
+use crate::fixes::CopyCheck;
 use crate::fragment::{GoldenKind, Mode};
 use crate::golden::{self, Update};
 use crate::{Expected, PanicMark, parse_markers};
@@ -312,6 +313,21 @@ pub fn run_case(root: &Path, case: &Case, opts: RunOptions) -> CaseRun {
     run_case_with(&Stages::DRIVER, root, case, opts)
 }
 
+/// What the contract of the candidates found, and the copies of `fixes = N`, in the run.
+fn candidates(run: &mut CaseRun, root: &Path, contract: crate::fix_contract::Checked, copies: Option<CopyCheck>) {
+    run.fix_targets = contract.targets;
+    run.edits_compared = contract.edits_compared;
+    run.clean_units = contract.clean_units;
+    run.problems.extend(contract.problems);
+    if let Some(copies) = copies {
+        run.problems.extend(copies.problems);
+        run.fix_copies = copies.copies;
+        run.copies_guarded = copies.guarded;
+        run.copies_rewritten = copies.rewritten.iter().map(|p| case::rel_path(root, p)).collect();
+        run.copies_forced = copies.forced.iter().map(|(p, f)| format!("{} ({f})", case::rel_path(root, p))).collect();
+    }
+}
+
 /// [`run_case`] through `stages`.
 pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions) -> CaseRun {
     let RunOptions { golden: update, host_steps } = opts;
@@ -333,7 +349,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             return run;
         }
     };
-    if manifest_stage(&mut run, setup, &loaded, &case.path) {
+    if manifest_stage(&mut run, root, case, setup, &loaded, update) {
         return run;
     }
     let targets = case::target_names(&loaded);
@@ -475,21 +491,12 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     let check = &analyzed.diagnostics;
     // Every candidate, applied alone and checked again (§18.1, S-236, W3-17).
     let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);
-    run.fix_targets = contract.targets;
-    run.edits_compared = contract.edits_compared;
-    run.clean_units = contract.clean_units;
-    run.problems.extend(contract.problems);
     // A written `fixes = 0` counts the candidates too: none is expected (X-15).
-    if let Some(n) = t.fixes {
-        let files = disk_files(root, case, setup, &loaded);
+    let copies = t.fixes.map(|n| {
         let guard = |old: &_, new: &_| crate::copy_guard::case(setup, &loaded, old, new);
-        let copies = crate::fixes::compare(&loaded.sources, &files, check, n, update, &guard);
-        run.problems.extend(copies.problems);
-        run.fix_copies = copies.copies;
-        run.copies_guarded = copies.guarded;
-        run.copies_rewritten = copies.rewritten.iter().map(|p| case::rel_path(root, p)).collect();
-        run.copies_forced = copies.forced.iter().map(|(p, f)| format!("{} ({f})", case::rel_path(root, p))).collect();
-    }
+        crate::fixes::compare(&loaded.sources, &disk_files(root, case, setup, &loaded), check, n, update, &guard)
+    });
+    candidates(&mut run, root, contract, copies);
     // A `mode = "test"` case without targets that checks compares its markers
     // with what `onsa test` reports before the tests run ([`run_tests`]).
     let test_stage = check.is_empty() && targets.is_empty() && t.mode == Mode::Test;

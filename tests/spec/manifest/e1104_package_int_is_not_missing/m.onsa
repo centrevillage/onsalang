@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103 only: `package = 1` is written, with the wrong type (it must be a table), so `name` and `edition` are
+// not reported as missing; the table is not read (§15.3, §18.1; S-99, S-827).
+
+pub fn f() -> I32 { 1 }

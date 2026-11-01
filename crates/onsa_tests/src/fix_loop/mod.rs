@@ -163,16 +163,35 @@ pub struct Checked {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// The check of a text as `onsa check` checks it ([`fix_contract::check_text`]);
-/// a panic outside the driver's stages is an internal error too, rendered
-/// with its position.
+/// The check of a text as `onsa check` checks it ([`fix_contract::check_text`]),
+/// after the manifest of a case's fragment, whose diagnostics stop it (§18.1,
+/// `tests/README.md`); a panic outside the driver's stages is an internal
+/// error too, rendered with its position.
 pub fn check(text: &str) -> Result<Checked, String> {
-    let run = onsa_driver::guard(|| fix_contract::check_text(text)).map_err(|e| {
+    let render = |e: onsa_driver::InternalError| {
         let mut sources = SourceMap::default();
         sources.add("m.onsa", text);
         e.render(&sources)
-    })??;
+    };
+    let manifest = onsa_driver::guard(|| fragment_manifest(text)).map_err(render)??;
+    if let Some(m) = manifest.filter(|m| !m.diagnostics.is_empty()) {
+        return Ok(m);
+    }
+    let run = onsa_driver::guard(|| fix_contract::check_text(text)).map_err(render)??;
     Ok(Checked { sources: run.loaded.sources, diagnostics: run.analyzed.diagnostics })
+}
+
+/// The manifest of the fragment of `text` read. A fragment that the runner
+/// cannot read is the case's error, not the compiler's (`onsa check` reads
+/// no fragment): `None` then, as for a text without one.
+fn fragment_manifest(text: &str) -> Result<Option<Checked>, String> {
+    let Ok(Some(source)) = crate::fragment::parse(text).map(|f| f.and_then(|f| f.manifest_source("m.onsa"))) else {
+        return Ok(None);
+    };
+    let input =
+        onsa_driver::PackageInput { manifest: Some(source), ..onsa_driver::PackageInput::single_file("m.onsa", text) };
+    let loaded = onsa_driver::Loaded::from_input(input)?;
+    Ok(Some(Checked { diagnostics: loaded.manifest_diagnostics().to_vec(), sources: loaded.sources }))
 }
 
 /// How a walk stopped (the module's documentation).

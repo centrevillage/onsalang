@@ -87,6 +87,10 @@ fn fix_sources(cases: &[Case]) -> Vec<(std::path::PathBuf, u32)> {
             };
             out.push((p, s.test.fixes.unwrap_or(0)));
         }
+        // A package's `onsa.toml` has the copies of the manifest's candidates (`tests/README.md`).
+        if let Some(m) = s.input.manifest.as_ref().filter(|m| m.form == onsa_driver::ManifestForm::File) {
+            out.push((Path::new(&c.path).join(&m.path), s.test.fixes.unwrap_or(0)));
+        }
     }
     out
 }

@@ -1,0 +1,12 @@
+// onsa.toml
+// package.edition = "2026"
+// package.name = "e1104_edition_missing_dotted_key" #~ E1104
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 1
+
+// E1104: `package` written with a dotted key has no `edition`; the report is at the line of the key. The
+// candidate inserts `package.edition = "2026"` as a line at the top level (a table of dotted keys takes a
+// line; S-836 is for a table written inline) (§15.3 table, §18.1; S-99, S-597, S-827).

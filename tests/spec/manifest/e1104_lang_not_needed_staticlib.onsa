@@ -1,0 +1,16 @@
+// onsa.toml
+// [package]
+// name = "e1104_lang_not_needed_staticlib"
+// edition = "2026"
+//
+// [targets.lib]
+// kind = "staticlib"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// No E1104: `lang` is required only when `kind = "source"`; a `staticlib` target needs none, and `check`
+// reports nothing (§15.3 `lang` row, §18.1; S-99, S-827).

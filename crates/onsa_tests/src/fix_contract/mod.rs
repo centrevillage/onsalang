@@ -71,6 +71,14 @@
 //! [`Problem::FixUnchecked`], never silenced. A `[[test.fix]]` entry that
 //! names no diagnostic or candidate is an error of the case.
 //!
+//! The candidates of the manifest's diagnostics, in a case the manifest
+//! stops (`tests/README.md`), are checked the same way ([`check_manifest`]),
+//! with the manifest loaded again from its text after the candidate
+//! ([`reload`]): the manifest is one unit (§18.1), so what it holds after the
+//! candidate is what the entry `leaves` (none by default); `clean` asks the
+//! check of the sources too; 4, 5 and `same_code` look at a fragment's file
+//! (an `onsa.toml` is not Onsa).
+//!
 //! The fuzzing cannot know how many errors a mutant holds, so it uses the
 //! near "same place" of S-236 ([`same_place`](fn@same_place), `onsa_cases --fix-same-place`,
 //! `tools/fuzz.py`).
@@ -78,7 +86,7 @@
 use std::collections::BTreeMap;
 
 use onsa_diag::{Applied, Code, Diagnostic, FileId, Fix, SourceMap, Span};
-use onsa_driver::{Analyzed, Loaded, PackageInput};
+use onsa_driver::{Analyzed, Loaded, ManifestForm, PackageInput};
 
 use crate::case::{Case, CaseKind, Setup};
 use crate::run::Problem;
@@ -123,17 +131,16 @@ struct Files {
 }
 
 impl Files {
-    fn of(case: &Case, loaded: &Loaded) -> Files {
-        let list = loaded
-            .modules
-            .iter()
-            .map(|(id, _)| {
-                let name = loaded.sources.file(*id).name().to_string();
+    /// The files `ids` of `case`: its modules, or its manifest's file.
+    fn of(case: &Case, loaded: &Loaded, ids: impl Iterator<Item = FileId>) -> Files {
+        let list = ids
+            .map(|id| {
+                let name = loaded.sources.file(id).name().to_string();
                 let rel = match case.kind {
                     CaseKind::File => case.path.clone(),
                     CaseKind::Package => format!("{}/{name}", case.path),
                 };
-                (*id, name, rel)
+                (id, name, rel)
             })
             .collect();
         Files { list, package: case.kind == CaseKind::Package }
@@ -169,8 +176,20 @@ fn target_name(file: &str, sources: &SourceMap, d: &Diagnostic, k: usize) -> Str
 /// Check every candidate of the check's diagnostics `analyzed` of a case (the
 /// module's documentation). `loaded` is the case as it ran.
 pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -> Checked {
-    let files = Files::of(case, loaded);
-    let before = Before::of(analyzed);
+    candidates(Files::of(case, loaded, loaded.modules.iter().map(|(id, _)| *id)), setup, loaded, Some(analyzed))
+}
+
+/// Check every candidate of the manifest's diagnostics of a case the
+/// manifest stops (the module's documentation, the manifest).
+pub fn check_manifest(case: &Case, setup: &Setup, loaded: &Loaded) -> Checked {
+    let Some(read) = &loaded.manifest else { return Checked::default() };
+    candidates(Files::of(case, loaded, std::iter::once(read.file)), setup, loaded, None)
+}
+
+/// [`check`] of `analyzed`, or with `None` [`check_manifest`].
+fn candidates(files: Files, setup: &Setup, loaded: &Loaded, analyzed: Option<&Analyzed>) -> Checked {
+    let before = analyzed.map(Before::of);
+    let diagnostics = analyzed.map_or(loaded.manifest_diagnostics(), |a| &a.diagnostics);
     let mut out = Checked::default();
     let specs = &setup.test.fix;
     let mut used = vec![false; specs.len()];
@@ -188,7 +207,7 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
             )));
         }
     }
-    for d in &analyzed.diagnostics {
+    for d in diagnostics {
         let place = files.place(&loaded.sources, d.span);
         for (k0, fix) in d.fixes.iter().enumerate() {
             let k = k0 + 1;
@@ -199,10 +218,11 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
             if let Some(i) = spec {
                 used[i] = true;
             }
-            let Some(rank) = d.stage.check_rank() else {
+            let rank = d.stage.check_rank();
+            if rank.is_none() && analyzed.is_some() {
                 out.problems.push(unchecked_stage(&target, d));
                 continue;
-            };
+            }
             let after = match recheck(setup, loaded, &files, fix) {
                 Ok(a) => a,
                 Err(why) => {
@@ -213,7 +233,7 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
             out.targets.push(target.clone());
             let spec = spec.map(|i| &specs[i]);
             let edits = moved(fix, &after.applied);
-            for (file, text) in &after.applied.texts {
+            for (file, text) in after.applied.texts.iter().filter(|(f, _)| Some(**f) != loaded.toml_file()) {
                 let name = loaded.sources.file(*file).name();
                 let read = Readings::of(*file, loaded.sources.file(*file).text(), text);
                 let (messages, compared) = edit_problems(&read, *file, &edits, &format!("in {name}, "));
@@ -225,7 +245,10 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
                     });
                 }
             }
-            let (messages, clean) = judge(&files, rank, &before, &edits, &after, spec);
+            let (messages, clean) = match rank.zip(before.as_ref()) {
+                Some((rank, before)) => judge(&files, rank, before, &edits, &after, spec),
+                None => (judge_manifest(&files, &after, spec), 0),
+            };
             out.clean_units += clean;
             for message in messages {
                 out.problems.push(Problem::FixContract {
@@ -257,7 +280,7 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
                 s.code,
                 s.at,
                 s.candidate,
-                describe(&files, &loaded.sources, &analyzed.diagnostics)
+                describe(&files, &loaded.sources, diagnostics)
             )));
         }
     }
@@ -304,10 +327,11 @@ pub fn unchecked_in_parse(sources: &SourceMap, diagnostics: &[Diagnostic]) -> Ve
     out
 }
 
-/// The case after one candidate, checked again.
+/// The case after one candidate, checked again (not analyzed when its
+/// manifest has diagnostics: the commands stop on them, §18.1).
 struct After {
     loaded: Loaded,
-    analyzed: Analyzed,
+    analyzed: Option<Analyzed>,
     applied: Applied,
 }
 
@@ -318,35 +342,62 @@ fn recheck(setup: &Setup, loaded: &Loaded, files: &Files, fix: &Fix) -> Result<A
         return Err(format!("it edits {}, a file outside the case", loaded.sources.file(e.span.file).name()));
     }
     let applied = onsa_diag::apply_mapped(&loaded.sources, fix.edits()).map_err(|e| format!("cannot apply it: {e}"))?;
-    let (loaded, analyzed) =
-        check_texts(setup, loaded, &applied.texts).map_err(|e| format!("the check after it {e}"))?;
+    let mut loaded = reload(setup, loaded, &applied.texts).map_err(|e| format!("the check after it {e}"))?;
+    let analyzed = match loaded.manifest_diagnostics().is_empty() {
+        true => Some(analyze(&mut loaded).map_err(|e| format!("the check after it {e}"))?),
+        false => None,
+    };
     Ok(After { loaded, analyzed, applied })
 }
 
 /// The case `loaded` (as it ran from `setup`) with the files of `texts`
-/// replaced, checked through the case's own entry (`Loaded::from_input`,
-/// `analyze_loaded`); the other files stay. The one way of checking a case
-/// again ([`recheck`], [`crate::copy_guard`]). `Err`: why it cannot be
-/// checked, a phrase after "the check" ("ends in an internal error: …").
+/// replaced, checked through the case's own entry ([`reload`],
+/// `analyze_loaded`). The one way of checking a case again ([`recheck`],
+/// [`crate::copy_guard`]). `Err`: why it cannot be checked, a phrase after
+/// "the check" ("ends in an internal error: …").
 pub(crate) fn check_texts(
     setup: &Setup,
     loaded: &Loaded,
     texts: &BTreeMap<FileId, String>,
 ) -> Result<(Loaded, Analyzed), String> {
+    let mut again = reload(setup, loaded, texts)?;
+    let analyzed = analyze(&mut again)?;
+    Ok((again, analyzed))
+}
+
+/// The case `loaded` (as it ran from `setup`) with the files of `texts`
+/// replaced, loaded again through the case's own entry
+/// (`Loaded::from_input`): the other files stay, and the manifest is read
+/// from its text after them (`onsa.toml`; a fragment from its file read
+/// again, [`crate::fragment::parse`]). `Err`: as [`check_texts`].
+pub(crate) fn reload(setup: &Setup, loaded: &Loaded, texts: &BTreeMap<FileId, String>) -> Result<Loaded, String> {
     let mut input: PackageInput = setup.input.clone();
     for ((id, _), f) in loaded.modules.iter().zip(input.files.iter_mut()) {
         if let Some(t) = texts.get(id) {
             f.text = t.clone();
         }
     }
-    let mut again = Loaded::from_input(input).map_err(|e| format!("cannot load the case again: {e}"))?;
+    if let (Some(m), Some(t)) = (&mut input.manifest, loaded.manifest.as_ref().and_then(|r| texts.get(&r.file))) {
+        match m.form {
+            ManifestForm::File => m.text = t.clone(),
+            ManifestForm::Fragment => {
+                let f = crate::fragment::parse(t).map_err(|e| format!("cannot read the fragment again: {e}"))?;
+                *m = f.and_then(|f| f.manifest_source(&m.path)).ok_or("finds no manifest in the fragment again")?;
+            }
+        }
+    }
+    let again = Loaded::from_input(input).map_err(|e| format!("cannot load the case again: {e}"))?;
     if again.modules.iter().map(|(f, _)| *f).ne(loaded.modules.iter().map(|(f, _)| *f)) {
         return Err("gives the files of the case other ids when they are loaded again".into());
     }
-    let analyzed = onsa_driver::analyze_loaded(&mut again).map_err(|e| {
+    Ok(again)
+}
+
+/// The analysis of a case loaded again. `Err`: as [`check_texts`].
+fn analyze(again: &mut Loaded) -> Result<Analyzed, String> {
+    onsa_driver::analyze_loaded(again).map_err(|e| {
         format!("ends in an internal error: {}", e.render(&again.sources).trim_end().replace('\n', "\n  "))
-    })?;
-    Ok((again, analyzed))
+    })
 }
 
 /// What breaks the contract after one candidate (the module's documentation,
@@ -360,15 +411,19 @@ fn judge(
     spec: Option<&FixSpec>,
 ) -> (Vec<String>, usize) {
     let sources = &after.loaded.sources;
+    let Some(analyzed) = &after.analyzed else {
+        let left = describe(files, sources, after.loaded.manifest_diagnostics());
+        return (vec![format!("after it, the manifest reports {left}, and the commands stop on it (§18.1)")], 0);
+    };
     let ranges = &after.applied.ranges;
-    let c = correspond(before.units, &after.analyzed.units, edits);
+    let c = correspond(before.units, &analyzed.units, edits);
     let clean: Vec<bool> = c.origins.iter().map(|o| o.iter().all(|&u| !before.dirty[u])).collect();
     // The diagnostics of the touched units (of its stage or an earlier one), and the others of
     // the clean ones (of any stage).
     let mut touched: Vec<(Place, Code)> = Vec::new();
     let mut fresh: Vec<(Place, Code)> = Vec::new();
     let mut shown = Vec::new();
-    for (d, unit) in after.analyzed.diagnostics.iter().zip(&after.analyzed.diagnostic_units) {
+    for (d, unit) in analyzed.diagnostics.iter().zip(&analyzed.diagnostic_units) {
         // The flow checks are before the modes and the effects (§18.1, S-267): a candidate of
         // a flow code may leave a diagnostic of those (`Stage::CHECK_ORDER`).
         let early = d.stage.check_rank().is_some_and(|r| r <= rank);
@@ -391,16 +446,7 @@ fn judge(
     fresh.sort();
     let mut left: Vec<(Place, Code)> = touched.iter().chain(&fresh).cloned().collect();
     left.sort();
-    let mut out = Vec::new();
-    let mut expected: Vec<(Place, Code)> = Vec::new();
-    for l in spec.map_or(&[][..], |s| &s.leaves[..]) {
-        // The fragment's reader checked the form already (`check_specs`).
-        match parse_leaf(l) {
-            Ok(leaf) => expected.push(leaf),
-            Err(e) => out.push(format!("`leaves`: {e}")),
-        }
-    }
-    expected.sort();
+    let (expected, mut out) = leaves(spec);
     let show = |v: &[(Place, Code)]| {
         if v.is_empty() {
             "none".to_string()
@@ -422,13 +468,48 @@ fn judge(
             onsa_diag::to_text(sources, &shown).trim_end().replace('\n', "\n  ")
         ));
     }
-    if spec.is_some_and(|s| s.clean) && !after.analyzed.diagnostics.is_empty() {
-        out.push(format!(
-            "`clean`: the check after it reports {}",
-            describe(files, sources, &after.analyzed.diagnostics)
-        ));
+    if spec.is_some_and(|s| s.clean) && !analyzed.diagnostics.is_empty() {
+        out.push(format!("`clean`: the check after it reports {}", describe(files, sources, &analyzed.diagnostics)));
     }
     (out, clean.iter().filter(|&&c| c).count())
+}
+
+/// The `leaves` of `spec`, sorted, and the errors of their form.
+fn leaves(spec: Option<&FixSpec>) -> (Vec<(Place, Code)>, Vec<String>) {
+    let (mut expected, mut out) = (Vec::new(), Vec::new());
+    for l in spec.map_or(&[][..], |s| &s.leaves[..]) {
+        // The fragment's reader checked the form already (`check_specs`).
+        match parse_leaf(l) {
+            Ok(leaf) => expected.push(leaf),
+            Err(e) => out.push(format!("`leaves`: {e}")),
+        }
+    }
+    expected.sort();
+    (expected, out)
+}
+
+/// What breaks the contract after a candidate of the manifest's (the
+/// module's documentation, the manifest): its diagnostics after it are the
+/// `leaves` of `spec` (none by default); `clean`, nothing at all, the check
+/// of the sources too.
+fn judge_manifest(files: &Files, after: &After, spec: Option<&FixSpec>) -> Vec<String> {
+    let (sources, left) = (&after.loaded.sources, after.loaded.manifest_diagnostics());
+    let (expected, mut out) = leaves(spec);
+    let mut places: Vec<(Place, Code)> = left.iter().map(|d| (files.place(sources, d.span), d.code)).collect();
+    places.sort();
+    if places != expected {
+        let shown: Vec<String> = expected.iter().map(|(p, c)| format!("{} at {}", c.as_str(), p.show())).collect();
+        out.push(format!(
+            "after it, the manifest (one unit, §18.1) reports {}; expected {}",
+            describe(files, sources, left),
+            if shown.is_empty() { "nothing".into() } else { shown.join(", ") + " (`leaves`)" }
+        ));
+    }
+    let all = after.analyzed.as_ref().map_or(left, |a| &a.diagnostics);
+    if spec.is_some_and(|s| s.clean) && !all.is_empty() {
+        out.push(format!("`clean`: the check after it reports {}", describe(files, sources, all)));
+    }
+    out
 }
 
 /// The diagnostics, briefly, in the printed order

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 1
+//
+// [[test.fix]]
+// at = "onsa.toml:1:2"
+// code = "E1104"
+// candidate = 1
+// clean = true
+
+// E1104 in the `onsa.toml` of a package with a module: `edition` is missing, the report is at the heading
+// of `[package]` (line 1), and the candidate inserts the key `edition = "2026"`; after it the manifest
+// has no error (§15.3 `edition` row, §18.1; S-597). The column of the main position is the name
+// `package` in the heading (the spec fixes the line only).
+
+use util.{g}
+
+pub fn f() -> I32 { g() }

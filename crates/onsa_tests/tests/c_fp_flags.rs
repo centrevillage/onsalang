@@ -1054,7 +1054,7 @@ fn a_build_with_the_allow_define_runs() {
 
 #[test]
 fn the_fragment_helper_keeps_the_package_and_drops_the_test_tables() {
-    let t = "// onsa.toml\n// [package]\n// name = \"x\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"x_\"\n//\n// [targets.host]\n// kind = \"source\"\n//\n// [test]\n// mode = \"test\"\n//\n// [[test.host]]\n// name = \"n\"\n// steps = [\n//   { call = \"fn\" },\n// ]\n\n@export\npub fn f() -> U32 { 1 }\n";
+    let t = "// onsa.toml\n// [package]\n// name = \"x\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"x_\"\n//\n// [targets.host]\n// kind = \"source\"\n// lang = \"c\"\n//\n// [test]\n// mode = \"test\"\n//\n// [[test.host]]\n// name = \"n\"\n// steps = [\n//   { call = \"fn\" },\n// ]\n\n@export\npub fn f() -> U32 { 1 }\n";
     let m = fragment_manifest(t);
     assert!(m.contains("[package]") && m.contains("[export]") && m.contains("[targets.host]"), "{m}");
     assert!(m.contains("prefix = \"x_\""), "{m}");

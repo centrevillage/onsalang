@@ -248,13 +248,6 @@ note = "C の名前の重なり。名前の集合は W10-01（S-112）、C の�
 
 [[pending]]
 kind = "diag-code"
-target = "E1104"
-reasons = ["S-99", "R-130"]
-until = "W4-02"
-note = "マニフェストの必須のキー"
-
-[[pending]]
-kind = "diag-code"
 target = "E0903"
 reasons = ["R-83"]
 until = "W6-03"

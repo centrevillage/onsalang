@@ -307,8 +307,7 @@ mod tests {
     fn with_manifest() {
         let text = "// onsa.toml\n// [package]\n// name = \"echo\"\n// edition = \"2026\"\n//\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n//\n// [test]\n// golden = [\"c\"]\n";
         let f = parse(text).unwrap().unwrap();
-        let m =
-            onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0)).unwrap().manifest;
+        let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0)).manifest;
         assert_eq!(m.package.value.name.value, "echo");
         assert!(m.targets.contains_key("t"));
         assert_eq!(f.test.golden, vec![GoldenKind::C]);
@@ -324,9 +323,11 @@ mod tests {
                 "// onsa.toml",
                 "// [package]",
                 "// name = \"echo\"",
+                "// edition = \"2026\"",
                 "//",
                 "// [targets.t]",
                 "// kind = \"source\"",
+                "// lang = \"c\"",
                 "// platform = \"host\"",
                 "// [test]",
                 "// mode = \"check\"",
@@ -343,9 +344,7 @@ mod tests {
                 toml.bytes().zip(text.bytes()).all(|(a, b)| a == b || (a == b' ' && !matches!(b, b'\n' | b'\r'))),
                 "{toml:?}"
             );
-            let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0))
-                .unwrap()
-                .manifest;
+            let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0)).manifest;
             let name = &m.package.value.name;
             assert_eq!(&text[name.key.clone()], "name", "{eol:?}");
             assert_eq!(&text[name.span.clone()], "\"echo\"", "{eol:?}");
@@ -364,16 +363,22 @@ mod tests {
             let f = parse(text).unwrap().unwrap();
             onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0))
         };
-        let e = read("// onsa.toml\n// [targets.t]\n// kind = \"source\"\n// platform = \"host\"\n").unwrap_err();
-        assert!(e.starts_with("m.onsa: missing table `[package]`"), "{e}");
+        // No `[package]`: the E1104 of its keys, at the start of the body.
+        let m = read("// onsa.toml\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n");
+        assert_eq!(
+            m.diagnostics.iter().map(|d| (d.code, d.span.start)).collect::<Vec<_>>(),
+            [(onsa_diag::Code::E1104, 13), (onsa_diag::Code::E1104, 13)]
+        );
         // A value of another type is its E1103, at the value in the file.
-        let m = read("// onsa.toml\n// [package]\n// name = 3\n").unwrap();
+        let m = read("// onsa.toml\n// [package]\n// name = 3\n// edition = \"2026\"\n");
         assert_eq!(
             m.diagnostics.iter().map(|d| (d.code, d.span.start)).collect::<Vec<_>>(),
             [(onsa_diag::Code::E1103, 36)]
         );
         // A table the manifest does not know is its E1102, at the key of the header.
-        let m = read("// onsa.toml\n// [tests]\n// mode = \"parse\"\n").unwrap();
+        let m = read(
+            "// onsa.toml\n// [tests]\n// mode = \"parse\"\n// [package]\n// name = \"a\"\n// edition = \"2026\"\n",
+        );
         assert_eq!(
             m.diagnostics.iter().map(|d| (d.code, d.span.start)).collect::<Vec<_>>(),
             [(onsa_diag::Code::E1102, 17)]

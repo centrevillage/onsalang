@@ -6,11 +6,12 @@ use onsa_diag::{Code, Diagnostic, FileId, SourceMap};
 
 use crate::Expected;
 
-use onsa_driver::Loaded;
+use onsa_driver::{Loaded, ManifestForm};
 
-use super::{CaseRun, CheckedMarker, Problem, Stage};
-use crate::case::Setup;
+use super::{CaseRun, CheckedMarker, Problem, Stage, candidates};
+use crate::case::{Case, Setup};
 use crate::fragment::{Mode, TestSettings};
+use crate::golden::Update;
 
 /// Compare the markers with the diagnostics, record every marker compared,
 /// and report a difference. Whether they match. Every diagnostic is also
@@ -102,7 +103,16 @@ fn compare_in(
 /// without markers expects none. Whether the run stops here: the manifest
 /// has diagnostics or markers (a command stops on them before the sources,
 /// §18.1), and then a `//~` in a file of the case is an error of the case.
-pub(super) fn manifest_stage(run: &mut CaseRun, setup: &Setup, loaded: &Loaded, path: &str) -> bool {
+/// The candidates of its diagnostics are checked as those of the check, with
+/// their copies beside the manifest's file ([`crate::fix_contract::check_manifest`]).
+pub(super) fn manifest_stage(
+    run: &mut CaseRun,
+    root: &std::path::Path,
+    case: &Case,
+    setup: &Setup,
+    loaded: &Loaded,
+    update: Update,
+) -> bool {
     let (Some(source), Some(read)) = (&setup.input.manifest, &loaded.manifest) else { return false };
     let markers = match crate::parse_manifest_markers(&source.text) {
         Ok(m) => m,
@@ -137,23 +147,30 @@ pub(super) fn manifest_stage(run: &mut CaseRun, setup: &Setup, loaded: &Loaded, 
         run.ran = run.mode != Mode::None;
         let expected: Vec<(FileId, Expected)> = markers.into_iter().map(|m| (read.file, m)).collect();
         if compare_in(run, &loaded.sources, &expected, actual, Stage::Manifest, None, loaded.toml_file()) {
-            negative_rules(run, path, actual);
+            negative_rules(run, &case.path, actual);
         }
+        let disk = match read.form {
+            ManifestForm::File => root.join(&case.path).join(&source.path),
+            ManifestForm::Fragment => root.join(&case.path),
+        };
+        let copies = setup.test.fixes.map(|n| {
+            let guard = |old: &_, new: &_| crate::copy_guard::manifest(setup, loaded, old, new);
+            crate::fixes::compare(&loaded.sources, &[(read.file, disk)], actual, n, update, &guard)
+        });
+        candidates(run, root, crate::fix_contract::check_manifest(case, setup, loaded), copies);
     }
     true
 }
 
 /// The settings of `[test]` compared after the sources are read
-/// (`tests/README.md`), which a case the manifest stops never reaches.
-/// `fixes = 0` is true of it (a manifest's diagnostic has no candidate).
+/// (`tests/README.md`), which a case the manifest stops never reaches
+/// (`fixes` and `[[test.fix]]` are of the manifest's candidates there).
 fn after_the_sources(t: &TestSettings) -> Vec<&'static str> {
     [
         ("`mode = \"test\"`", t.mode == Mode::Test),
-        ("`fixes`", t.fixes.is_some_and(|n| n > 0)),
         ("`golden`", !t.golden.is_empty()),
         ("`golden_graph`", !t.golden_graph.is_empty()),
         ("`conformance`", t.conformance),
-        ("`[[test.fix]]`", !t.fix.is_empty()),
         ("`[[test.host]]`", !t.host.is_empty()),
     ]
     .into_iter()

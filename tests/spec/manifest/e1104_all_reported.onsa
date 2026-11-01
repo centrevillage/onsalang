@@ -1,0 +1,26 @@
+// onsa.toml
+// [package]                                    #~ E1104
+// name = "e1104_all_reported"
+//
+// [targets.a]                                  #~ E1104
+// lang = "c"
+// platform = "host"
+//
+// [targets.b]                                  #~ E1104
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 1
+//
+// [[test.fix]]
+// at = "2:5"
+// code = "E1104"
+// candidate = 1
+// leaves = ["6:13 E1104", "10:13 E1104"]
+
+// The manifest is one unit and every error is reported: a key of `[package]` and the `kind` of two targets
+// are three E1104, none hides another. The E1104 of `edition` has the candidate; the two of `kind` are
+// left after it, one line lower (§18.1 "全ての誤りを報告する"; S-314, S-597, S-827).

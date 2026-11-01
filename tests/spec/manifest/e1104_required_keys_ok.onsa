@@ -1,0 +1,17 @@
+// onsa.toml
+// [package]
+// name = "e1104_required_keys_ok"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// Nothing is missing: `name` and `edition` of `[package]`, `kind` and `lang` (`kind = "source"`) and `platform`
+// of a target are all there, so no E1104 is reported (§15.3 table, §18.1; S-99, S-597, S-827).

@@ -1,0 +1,16 @@
+// onsa.toml
+// [package]
+// name = "e1104_kind_int_is_not_missing"
+// edition = "2026"
+//
+// [targets.host]
+// kind = 1                                     #~ E1103
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103 only: `kind = 1` is written, with the wrong type, so it is not missing. The target has no `lang`, but
+// whether it is needed depends on a `kind` that is not read, so no E1104 is reported (§15.3 table, §18.1; S-99, S-597, S-827).

@@ -319,6 +319,22 @@ fn the_compiler_is_walked_through_the_check_of_the_contract() {
     assert_eq!((r.errors, r.walks[0].stop, r.walks[0].steps.len()), (1, Stop::Clean, 20), "{r:?}");
 }
 
+/// The manifest of a case's fragment is checked first (§18.1): the walk takes the candidate of its
+/// E1104 (the missing `edition`, S-597), then the file's own `let mut`, and stops clean; a fragment
+/// the runner cannot read is a file as `onsa check` reads it.
+#[test]
+fn the_manifest_of_a_fragment_is_walked_first() {
+    let text = "// onsa.toml\n// [package]\n// name = \"p\"\n\npub fn f() -> I32 {\n  let mut n = 0\n  n\n}\n";
+    let r = walk("m.onsa", text, &Options::default(), &check);
+    let codes: Vec<(&str, u32)> = r.walks[0].steps.iter().map(|s| (s.code.as_str(), s.line)).collect();
+    assert_eq!((r.errors, r.walks[0].stop, codes), (1, Stop::Clean, vec![("E1104", 2), ("E0020", 7)]), "{r:?}");
+    // A fragment that does not read (a `//~` inside it): the file alone, its `let mut`.
+    let bad = text.replace("// name = \"p\"", "// name = \"p\" //~ E0001");
+    let r = walk("m.onsa", &bad, &Options::default(), &check);
+    let codes: Vec<&str> = r.walks[0].steps.iter().map(|s| s.code.as_str()).collect();
+    assert_eq!((r.walks[0].stop, codes), (Stop::Clean, vec!["E0020"]), "{r:?}");
+}
+
 /// A made-up repository root under the temporary directory.
 struct Root(std::path::PathBuf);
 
@@ -354,7 +370,7 @@ fn the_gate_walks_the_cases_and_the_saved_inputs() {
         "good",
         &[
             ("tests/spec/fixes/a.onsa", LET_MUT),
-            ("tests/spec/fixes/pkg/onsa.toml", b"[package]\nname = \"pkg\"\n"),
+            ("tests/spec/fixes/pkg/onsa.toml", b"[package]\nname = \"pkg\"\nedition = \"2026\"\n"),
             ("tests/fuzz/b.onsa", CLEAN),
         ],
     );
