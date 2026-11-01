@@ -24,6 +24,8 @@ pub(super) struct Heading {
     /// The keyword of the declaration (the next token).
     pub keyword: Token,
     pub declaration: &'static Declaration,
+    /// Where its attributes are (§6.5), in the list of declarations read.
+    pub place: crate::attrs::Place,
 }
 
 /// Why the head of a declaration did not read ([`Parser::read_heading`]):
@@ -60,10 +62,10 @@ impl<'a> Parser<'a> {
     /// at the place of the declaration read, as those of Onsa are
     /// ([`Parser::check_attrs`]): the parser read the head, and the table
     /// reads it no more (§6.5, D-15).
-    pub(super) fn parse_heading(&mut self) -> PResult<Heading> {
+    pub(super) fn parse_heading(&mut self, ctx: ItemCtx) -> PResult<Heading> {
         let mut hashes = Vec::new();
-        let read = self.read_heading(&mut hashes);
-        let place = read.as_ref().ok().map(|h| crate::attrs::place_of_declaration(h.keyword.kind));
+        let read = self.read_heading(&mut hashes, ctx != ItemCtx::Top);
+        let place = read.as_ref().ok().map(|h| h.place);
         let keyword = read.is_ok().then(|| self.peek_index());
         let failed = matches!(read, Err(Unread::Failed));
         for at in hashes {
@@ -78,8 +80,9 @@ impl<'a> Parser<'a> {
     }
 
     /// The head of [`Parser::parse_heading`]; the `#` of each attribute of
-    /// another language read on go to `hashes`.
-    fn read_heading(&mut self, hashes: &mut Vec<usize>) -> Result<Heading, Unread> {
+    /// another language read on go to `hashes`; `member` when it is read in
+    /// the list of a declaration (the place of its attributes, §6.5).
+    fn read_heading(&mut self, hashes: &mut Vec<usize>, member: bool) -> Result<Heading, Unread> {
         let mut attrs = Vec::new();
         let mut vis = None;
         loop {
@@ -101,7 +104,8 @@ impl<'a> Parser<'a> {
                 if self.keyword_before_keyword(t)? {
                     continue;
                 }
-                return Ok(Heading { attrs, vis, keyword: t, declaration });
+                let place = crate::attrs::place_of_declaration(t.kind, member);
+                return Ok(Heading { attrs, vis, keyword: t, declaration, place });
             }
             // Another attribute that fails (not closed on its line, or no
             // declaration after it): no declaration was begun.

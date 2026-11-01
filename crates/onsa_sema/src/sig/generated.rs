@@ -64,7 +64,9 @@ impl<'p> Sema<'p> {
                     fp_relaxed: false,
                 }),
             };
-            let def = Def { name: name.to_string(), module, vis, span, name_span, kind, item: None, owner: Some(flow) };
+            let owner = Some(flow);
+            let def =
+                Def { name: name.to_string(), module, vis, span, name_span, kind, item: None, owner, export: None };
             let m = self.add_def(def);
             if self.a.heading_failed(flow) {
                 self.a.failed.insert(m, onsa_syntax::ast::Failed::Heading);
@@ -171,8 +173,7 @@ impl<'p> Sema<'p> {
         }
     }
 
-    fn lower_param_attr(&mut self, cx: &Cx<'p>, id: DefId, attrs: &[Attr], rate: Rate, ty: TyId) -> Option<ParamMeta> {
-        let attr = attrs.iter().find(|a| a.name.name == onsa_syntax::attrs::PARAM)?;
+    fn lower_param_attr(&mut self, cx: &Cx<'p>, id: DefId, attr: &Attr, rate: Rate, ty: TyId) -> Option<ParamMeta> {
         // A number of `@param` is a value of the input's type (§11.7): a float
         // literal is rounded once to it (§2.4, R-20), and out of its range is
         // E0408 (R-45).
@@ -308,7 +309,11 @@ impl<'p> Sema<'p> {
             for &(k, at, span) in &h.inputs {
                 let (rate, ty) = (self.flow_def(h.flow).inputs[k].rate, self.flow_def(h.flow).inputs[k].ty);
                 self.check_rate_value_type(cx, h.flow, ty, span, rate == Rate::Sig);
-                let param = self.lower_param_attr(cx, h.flow, &f.params[at].attrs, rate, ty);
+                let attr = Attr::find(&f.params[at].attrs, onsa_syntax::attrs::PARAM);
+                let param = attr.and_then(|a| self.lower_param_attr(cx, h.flow, a, rate, ty));
+                if attr.is_none() {
+                    self.check_exported_input(h.flow, k);
+                }
                 if let DefKind::Flow(fd) = &mut self.a.defs[h.flow.0 as usize].kind {
                     fd.inputs[k].param = param;
                 }
@@ -319,6 +324,21 @@ impl<'p> Sema<'p> {
             }
             self.fill_by_params(h.flow, pairs);
         }
+    }
+
+    /// The E0809 of the `block` input `k`, with no `@param`, of a flow with
+    /// `@export` (§11.7, §14.2: the check reports it), with no candidate (S-833: `@param` or `@host`, and the values are
+    /// the writer's). `@host` is not in the table of the attributes yet (§6.5).
+    fn check_exported_input(&mut self, flow: DefId, k: usize) {
+        let input = &self.flow_def(flow).inputs[k];
+        if self.a.def(flow).export.is_none() || input.rate != Rate::Ctl {
+            return;
+        }
+        let name = &self.a.def(flow).name;
+        let msg = format!("the `block` input `{}` of the exported flow `{name}` has no `@param`", input.name);
+        let d = Diagnostic::new(Stage::Flow, Code::E0809, input.span, msg)
+            .with_rule("a `block` input of a flow with `@export` takes `@param` (§11.7)");
+        self.report(flow, d);
     }
 
     fn flow_def(&self, flow: DefId) -> &FlowDef {

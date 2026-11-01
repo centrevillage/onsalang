@@ -459,7 +459,7 @@ fn two_files_of_the_same_module_name_are_refused_and_each_alone_runs_its_test() 
     assert_usage_error(&out, true, "check --json x/a.onsa y/a.onsa");
 }
 
-const BUILD_TARGET: &str = "\n[export]\nprefix = \"pk_\"\nfns = [\"a.f\"]\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
+const BUILD_TARGET: &str = "\n[export]\nprefix = \"pk_\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
 
 /// §18.2: `build` reads one package too. With one package it works, with two it is refused (the
 /// test shows that the count of the paths is what is refused).
@@ -468,7 +468,7 @@ fn build_with_two_paths_is_a_usage_error_and_with_one_it_works() {
     let d = Dir::bare("many_build");
     for p in ["p", "q"] {
         d.write(&format!("{p}/onsa.toml"), &format!("[package]\nname = \"{p}\"\nedition = \"2026\"\n{BUILD_TARGET}"));
-        d.write(&format!("{p}/a.onsa"), OK_FN);
+        d.write(&format!("{p}/a.onsa"), &format!("@export\n{OK_FN}"));
     }
     let out = run(d.root(), &["build", "--target", "host", "p"]);
     assert_eq!(out.code, 0, "one package builds: {}{}", out.stdout, out.stderr);
@@ -494,7 +494,7 @@ fn fmt_still_takes_many_files() {
 fn build_with_a_file_is_a_usage_error_and_writes_nothing() {
     let d = Dir::bare("build_file");
     d.write("p/onsa.toml", &format!("[package]\nname = \"p\"\nedition = \"2026\"\n{BUILD_TARGET}"));
-    d.write("p/a.onsa", OK_FN);
+    d.write("p/a.onsa", &format!("@export\n{OK_FN}"));
     d.write("p/notes.txt", "hello\n");
     d.write("p/sub/x.onsa", OK_FN);
     for (i, file) in ["notes.txt", "a.onsa", "sub/x.onsa"].into_iter().enumerate() {

@@ -5,24 +5,6 @@
 //
 // [export]
 // prefix = "ctr_"
-// fns = [
-//   "c_trunc.trunc_i64_f64",
-//   "c_trunc.trunc_sat_i64_f64",
-//   "c_trunc.trunc_u64_f64",
-//   "c_trunc.trunc_sat_u64_f64",
-//   "c_trunc.trunc_sat_u64_f32",
-//   "c_trunc.trunc_u8_f64",
-//   "c_trunc.trunc_sat_u32_f32",
-//   "c_trunc.trunc_neg09_u32_f64",
-//   "c_trunc.trunc_neg09_u64_f64",
-//   "c_trunc.trunc_neg09_u64_f32",
-//   "c_trunc.trunc_sum_loop_i64",
-//   "c_trunc.trunc_sat_sum_loop_u64",
-//   "c_trunc.parts_u_f64",
-//   "c_trunc.trunc_in_some_arm",
-//   "c_trunc.trunc_in_none_arm",
-//   "c_trunc.trunc_in_closure_i64",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -332,62 +314,73 @@ fn trunc_arm(o: Option[F64], y: F64) -> I64 {
   r
 }
 
+@export
 pub fn trunc_i64_f64(n: F64, d: F64) -> I64 {
   let x = n / d
   x.trunc_i64()
 }
 
+@export
 pub fn trunc_sat_i64_f64(n: F64, d: F64) -> I64 {
   let x = n / d
   x.trunc_i64_sat()
 }
 
+@export
 pub fn trunc_u64_f64(n: F64, d: F64, part: U32) -> U32 {
   let x = n / d
   let r = x.trunc_u64()
   part_of(r, part)
 }
 
+@export
 pub fn trunc_sat_u64_f64(n: F64, d: F64, part: U32) -> U32 {
   let x = n / d
   let r = x.trunc_u64_sat()
   part_of(r, part)
 }
 
+@export
 pub fn trunc_sat_u64_f32(n: F32, d: F32, part: U32) -> U32 {
   let x = n / d
   let r = x.trunc_u64_sat()
   part_of(r, part)
 }
 
+@export
 pub fn trunc_u8_f64(n: F64, d: F64) -> U8 {
   let x = n / d
   x.trunc_u8()
 }
 
+@export
 pub fn trunc_sat_u32_f32(n: F32, d: F32) -> U32 {
   let x = n / d
   x.trunc_u32_sat()
 }
 
+@export
 pub fn trunc_neg09_u32_f64(k: F64) -> Bool {
   let x: F64 = -0.9 * k
   let r = x.trunc_u32()
   r == 0
 }
 
+@export
 pub fn trunc_neg09_u64_f64(k: F64) -> Bool {
   let x: F64 = -0.9 * k
   let r = x.trunc_u64()
   r == 0
 }
 
+@export
 pub fn trunc_neg09_u64_f32(k: F32) -> Bool {
   let x: F32 = -0.9 * k
   let r = x.trunc_u64()
   r == 0
 }
 
+@export
 pub fn trunc_sum_loop_i64(n: U32) -> I64 {
   var acc: I64 = 0
   for _ in 0..<n {
@@ -397,6 +390,7 @@ pub fn trunc_sum_loop_i64(n: U32) -> I64 {
   acc
 }
 
+@export
 pub fn trunc_sat_sum_loop_u64(n: U32, part: U32) -> U32 {
   var acc: U64 = 0
   for _ in 0..<n {
@@ -406,20 +400,24 @@ pub fn trunc_sat_sum_loop_u64(n: U32, part: U32) -> U32 {
   part_of(acc, part)
 }
 
+@export
 pub fn parts_u_f64(x: F64) -> U32 {
   let p = Parts { i: x.trunc_i64(), u: x.trunc_u32() }
   p.u
 }
 
+@export
 pub fn trunc_in_some_arm(x: F64, y: F64) -> I64 {
   trunc_arm(Some(x), y)
 }
 
+@export
 pub fn trunc_in_none_arm(x: F64, y: F64) -> I64 {
   let o: Option[F64] = None
   trunc_arm(o, y)
 }
 
+@export
 pub fn trunc_in_closure_i64(base: F64) -> I64 {
   let ys: [I64; 3] = array.from_fn(fn(i) {
     let y = if i < 1 {

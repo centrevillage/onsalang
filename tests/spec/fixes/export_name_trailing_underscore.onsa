@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§14.2", "§18.1"]
+// fixes = 1
+
+// W4-02 U1, S-653 (spec §14.2, §2.3): the name of an `@export` function or flow cannot end with `_`, because
+// the C name that is made from it would hold `__` (a flow `lp_` makes `t_lp__init`) and `__` is reserved in
+// C++. It is E0320 at the name, whatever the target is, and its candidate is the name without the `_` at
+// the end. As the candidate of any E0320 it changes the declaration and every use of the name in the package
+// (§2.3, §18.1), so the callers below are in the candidate too. The name without the `_` is not a reserved
+// word and not a name of the module here (the cases that have no candidate are in
+// export_name_trailing_underscore_no_candidate.onsa). One error in each declaration unit (P-01).
+
+@export
+pub fn gain_() -> I32 {                             //~ E0320 @8
+  1
+}
+
+@export pub fn same_line_() -> I32 {                //~ E0320 @16
+  2
+}
+
+@export
+pub flow lp_(x: F32 at sample) -> F32 at sample {   //~ E0320 @10
+  x
+}
+
+@export
+pub fn used_() -> I32 {                             //~ E0320 @8
+  3
+}
+
+@export
+pub fn digits1_() -> I32 {                          //~ E0320 @8
+  4
+}
+
+pub fn caller() -> I32 {
+  used_() + 1
+}
+
+pub flow user_of_lp(x: F32 at sample) -> F32 at sample {
+  lp_~(x)
+}

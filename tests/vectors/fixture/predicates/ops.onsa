@@ -9,10 +9,14 @@
 
 use std.math.{is_finite, is_nan}
 
+@export
 pub fn f32_is_nan(a: F32) -> Bool { is_nan(a) }
 
+@export
 pub fn f32_is_finite(a: F32) -> Bool { is_finite(a) }
 
+@export
 pub fn f64_is_nan(a: F64) -> Bool { is_nan(a) }
 
+@export
 pub fn f64_is_finite(a: F64) -> Bool { is_finite(a) }

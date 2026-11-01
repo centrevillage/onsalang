@@ -12,8 +12,6 @@ edition = "2026"
 
 [export]
 prefix = ""
-flows = ["dsp.gain"]
-fns = ["util.version"]
 
 [targets.host]
 kind = "staticlib"

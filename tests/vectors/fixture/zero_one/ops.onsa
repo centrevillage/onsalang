@@ -7,42 +7,62 @@
 // These operations are not accepted yet (the rule in tools/vectors/ops.py, PENDING_PACKAGES): the package
 // is a test case that waits in tests/pending.toml.
 
+@export
 pub fn const_i8_zero() -> I8 { I8.ZERO }
 
+@export
 pub fn const_i8_one() -> I8 { I8.ONE }
 
+@export
 pub fn const_i16_zero() -> I16 { I16.ZERO }
 
+@export
 pub fn const_i16_one() -> I16 { I16.ONE }
 
+@export
 pub fn const_i32_zero() -> I32 { I32.ZERO }
 
+@export
 pub fn const_i32_one() -> I32 { I32.ONE }
 
+@export
 pub fn const_i64_zero() -> I64 { I64.ZERO }
 
+@export
 pub fn const_i64_one() -> I64 { I64.ONE }
 
+@export
 pub fn const_u8_zero() -> U8 { U8.ZERO }
 
+@export
 pub fn const_u8_one() -> U8 { U8.ONE }
 
+@export
 pub fn const_u16_zero() -> U16 { U16.ZERO }
 
+@export
 pub fn const_u16_one() -> U16 { U16.ONE }
 
+@export
 pub fn const_u32_zero() -> U32 { U32.ZERO }
 
+@export
 pub fn const_u32_one() -> U32 { U32.ONE }
 
+@export
 pub fn const_u64_zero() -> U64 { U64.ZERO }
 
+@export
 pub fn const_u64_one() -> U64 { U64.ONE }
 
+@export
 pub fn const_f32_zero() -> F32 { F32.ZERO }
 
+@export
 pub fn const_f32_one() -> F32 { F32.ONE }
 
+@export
 pub fn const_f64_zero() -> F64 { F64.ZERO }
 
+@export
 pub fn const_f64_one() -> F64 { F64.ONE }

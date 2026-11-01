@@ -1,0 +1,6 @@
+[package]
+name = "export_nonpub_module"
+edition = "2026"
+
+[export]
+prefix = "export_nonpub_module_"

@@ -6,8 +6,6 @@ edition = "2026"
 
 [export]
 prefix = "t_"
-flows = ["m.gain"]
-fns = ["m.half", "m.bump", "m.sum"]
 
 [targets.host]
 kind = "staticlib"

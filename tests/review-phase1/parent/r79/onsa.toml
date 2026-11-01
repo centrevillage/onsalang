@@ -5,7 +5,6 @@ edition = "2026"
 
 [export]
 prefix = "r79_"
-fns = ["m.near"]
 
 [targets.host]
 kind = "staticlib"

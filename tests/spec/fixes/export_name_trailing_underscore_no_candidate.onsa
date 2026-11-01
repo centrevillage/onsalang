@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§14.2", "§18.1"]
+// fixes = 0
+
+// W4-02 U1, S-653 (spec §14.2, §2.3, §18.1): the E0320 of an `@export` name that ends with `_` has no
+// candidate when the name without the `_` is a reserved word (`match_` is `match`, §2.2), or is a name that
+// the module has already (a declaration with it would be E0304, §5.1, so the candidate would leave an error
+// in the unit that it touches: no candidate is given, §18.1). The error is the same E0320 at the name. The
+// written `fixes = 0` checks that no diagnostic of the file has a candidate. One error in each declaration
+// unit (P-01); the declaration that already has the name (`dup`, `echo`) is not an error itself.
+
+@export
+pub fn match_() -> I32 {                            //~ E0320 @8
+  1
+}
+
+@export
+pub fn type_() -> I32 {                             //~ E0320 @8
+  2
+}
+
+@export
+pub flow clock_(x: F32 at sample) -> F32 at sample { //~ E0320 @10
+  x
+}
+
+@export
+pub fn dup_() -> I32 {                              //~ E0320 @8
+  3
+}
+
+pub fn dup() -> I32 {
+  4
+}
+
+@export
+pub flow echo_(x: F32 at sample) -> F32 at sample { //~ E0320 @10
+  x
+}
+
+pub flow echo(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}

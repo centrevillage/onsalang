@@ -5,19 +5,6 @@
 //
 // [export]
 // prefix = "eo_"
-// flows = [
-//   "export_overlap_place.narrow",
-//   "export_overlap_place.widen",
-//   "export_overlap_place.split2",
-//   "export_overlap_place.gain2",
-//   "export_overlap_place.names",
-//   "export_overlap_place.names_r",
-//   "export_overlap_place.cast32",
-//   "export_overlap_place.flag",
-//   "export_overlap_place.twice",
-//   "export_overlap_place.fi",
-//   "export_overlap_place.add2",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -341,47 +328,56 @@
 // ]
 
 /// F32 in, U8 out.
+@export
 pub flow narrow(x: F32 at sample) -> U8 at sample {
   x.trunc_u8()
 }
 
 /// U8 in, F32 out.
+@export
 pub flow widen(x: U8 at sample) -> F32 at sample {
   x as F32
 }
 
 /// F32 in, two planar U8 out.
+@export
 pub flow split2(x: F32 at sample) -> [U8; 2] at sample {
   let n = x.trunc_u8()
   [n, n + 1]
 }
 
 /// Planar F32 in and out.
+@export
 pub flow gain2(x: [F32; 2] at sample) -> [F32; 2] at sample {
   [x[0] * 2.0, x[1] * 2.0]
 }
 
 /// Two inputs, one name the start of the other.
+@export
 pub flow names(x: U8 at sample, xs: F32 at sample) -> F32 at sample {
   (x as F32) + xs
 }
 
 /// The same in the other order.
+@export
 pub flow names_r(xs: F32 at sample, x: U8 at sample) -> F32 at sample {
   (x as F32) + xs
 }
 
 /// F32 in, I32 out: the same size, another element type (S-403).
+@export
 pub flow cast32(x: F32 at sample) -> I32 at sample {
   x.trunc_i32()
 }
 
 /// U8 in, Bool out: the same size, another element type (S-403).
+@export
 pub flow flag(x: U8 at sample) -> Bool at sample {
   x > 0
 }
 
 /// F32 in and out.
+@export
 pub flow twice(x: F32 at sample) -> F32 at sample {
   x * 2.0
 }
@@ -392,11 +388,13 @@ pub struct FI {
 }
 
 /// A struct output of an F32 field and an I32 field.
+@export
 pub flow fi(x: F32 at sample) -> FI at sample {
   FI { f: x * 2.0, i: x.trunc_i32() }
 }
 
 /// Two F32 inputs (S-409).
+@export
 pub flow add2(a: F32 at sample, b: F32 at sample) -> F32 at sample {
   a + b
 }

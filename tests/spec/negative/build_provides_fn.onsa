@@ -5,7 +5,6 @@
 //
 // [export]
 // prefix = "bp_"
-// fns = ["build_provides_fn.version", "build_provides_fn.version_on_heap", "build_provides_fn.table_on_heap"]
 //
 // [targets.bare]
 // kind = "source"
@@ -22,10 +21,13 @@
 // function there may have `Alloc` in its row (§12.3). The check reads only
 // the signature: the bodies below allocate nothing and are still rejected.
 // A function that is not exported is not checked at this stage.
+@export
 pub fn version() -> U32 { 2 }
 
+@export
 pub fn version_on_heap() -> U32 uses {Alloc} { 2 }   //~ E0610 [bare]
 
+@export
 pub fn table_on_heap(n: U32) -> U32 uses {Alloc} {   //~ E0610 [bare]
   if n == 0 { 0 } else { n - 1 }
 }

@@ -27,7 +27,7 @@ const FLOAT_LITERAL_RULE: &str = "a float literal with a point has digits on bot
 const SPACE_BEFORE_OPEN_RULE: &str = "a postfix `(` or `[` that opens a list (the arguments of a call, an index, type arguments, the parameters of a declaration, a pattern, an attribute) is written right after the token before it, with no blank or line break between them (`f(x)`, `xs[0]`, §2.5)";
 
 /// The note of the C ABI written at the head of a function (S-464).
-const EXPORTED_RULE: &str = "a function that C calls is chosen by the `[export]` of the manifest (§14.2), and a function of C that Onsa calls is declared in `extern \"C\" lib \"…\" { … }` (§14.1); the head of a function has neither";
+const EXPORTED_RULE: &str = "a function that C calls has `@export` on its declaration (§14.2), and a function of C that Onsa calls is declared in `extern \"C\" lib \"…\" { … }` (§14.1); no word before `fn` says either";
 
 const BLOCK_COMMENT_RULE: &str =
     "comments are line comments `//`, to the end of the line; `///` documents the next declaration (§2.1)";

@@ -5,15 +5,6 @@
 //
 // [export]
 // prefix = "cmp_"
-// fns = [
-//   "c_mul_precedence.mulw_addw_u32",
-//   "c_mul_precedence.muls_subs_u32",
-//   "c_mul_precedence.mul_add_u32",
-//   "c_mul_precedence.wmul_is_i16",
-//   "c_mul_precedence.rem_is_zero_i32",
-//   "c_mul_precedence.divides_i32",
-//   "c_mul_precedence.lo_bound_i8",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -138,30 +129,37 @@
 // c_mul.onsa and c_div_rem.onsa, and the same in the interpreter (the `test` blocks). The product is
 // evaluated first, and the checked product panics before the sum is looked at.
 
+@export
 pub fn mulw_addw_u32(a: U32, b: U32, c: U32) -> U32 {
   a *% b +% c
 }
 
+@export
 pub fn muls_subs_u32(a: U32, b: U32, c: U32) -> U32 {
   a *| b -| c
 }
 
+@export
 pub fn mul_add_u32(a: U32, b: U32, c: U32) -> U32 {
   a * b + c
 }
 
+@export
 pub fn wmul_is_i16(a: I16, b: I16, c: I16) -> Bool {
   a *% b == c
 }
 
+@export
 pub fn rem_is_zero_i32(a: I32, b: I32) -> Bool {
   a % b == 0
 }
 
+@export
 pub fn divides_i32(a: I32, b: I32) -> Bool {
   b != 0 && a % b == 0
 }
 
+@export
 pub fn lo_bound_i8(lo: I8, x: I8, hi: I8) -> Bool {
   lo <= x && x < hi
 }

@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§14.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// W4-02 U1, S-823 (spec §14.2, §18.1): a declaration with `priv` and `@export` is E0303 at its name too, but
+// it has no candidate: the writer wrote two things that contradict each other (the `@export` says it goes
+// out, the `priv` says it does not), so the intention is not one (to export it, `pub`; not to, remove the
+// `@export`), and the spec has the note show both (the note is not checked here). The written `fixes = 0`
+// checks that no diagnostic of the file has a candidate. One error in each declaration unit (P-01).
+
+@export
+priv fn explicit_priv_fn() -> I32 {                 //~ E0303 @9
+  1
+}
+
+@export priv fn same_line_priv_fn() -> I32 {        //~ E0303 @17
+  2
+}
+
+@export
+priv flow explicit_priv_flow(x: F32 at sample) -> F32 at sample { //~ E0303 @11
+  x
+}
+
+@export priv flow same_line_priv_flow(x: F32 at sample) -> F32 at sample { //~ E0303 @19
+  x * 2.0
+}
+
+@export
+priv rt fn explicit_priv_rt_fn(x: F32) -> F32 {     //~ E0303 @12
+  x
+}

@@ -23,7 +23,7 @@ fn voice_host_writes_a_wav() {
         Err(onsa_driver::BuildError::Internal { sources, error }) => panic!("build: {}", error.render(&sources)),
     };
     assert_eq!(report.archive.as_deref(), Some("libonsa_voice.a"), "{report:?}");
-    assert!(report.files.iter().any(|f| f == "onsa_voice.h"));
+    assert!(report.files.iter().any(|f| f == "voice_voice.h"), "{report:?}");
     let exe = dir.join("voice_host");
     let out = Command::new("cc")
         .args(onsa_tests::c::CFLAGS)

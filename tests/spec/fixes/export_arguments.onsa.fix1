@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§14.2", "§18.1"]
+// fixes = 1
+
+// W4-02 U1, S-639 (spec §6.5, §14.2): `@export` takes no argument, so `@export(…)` is E0005 and its candidate is
+// `@export` (the parentheses and what is in them are removed). It is so for any argument, the empty
+// parentheses (`@export()`) too, and for a fn and a flow alike. The error is at the attribute, one in each
+// declaration unit (P-01). The declarations are `pub` and have no other error, so the unit is clean when the
+// candidate is applied.
+
+@export                                           //~ E0005
+pub fn empty_parentheses() -> I32 {
+  1
+}
+
+@export                               //~ E0005
+pub fn named_argument() -> I32 {
+  2
+}
+
+@export                                       //~ E0005
+pub fn text_argument() -> I32 {
+  3
+}
+
+@export                                       //~ E0005
+pub fn two_arguments() -> I32 {
+  4
+}
+
+@export                                           //~ E0005
+pub flow flow_empty_parentheses(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@export                                          //~ E0005
+pub flow flow_name_argument(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+// The right form is not an error.
+
+@export
+pub fn plain() -> I32 {
+  5
+}

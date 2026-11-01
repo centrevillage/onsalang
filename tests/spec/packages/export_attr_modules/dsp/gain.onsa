@@ -1,0 +1,8 @@
+@export
+pub flow level(
+  x: F32 at sample,
+  @param(min: 0.0, max: 2.0, default: 1.0)
+  k: F32 at block,
+) -> F32 at sample {
+  x * k
+}

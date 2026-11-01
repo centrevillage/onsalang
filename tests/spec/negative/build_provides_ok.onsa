@@ -5,7 +5,6 @@
 //
 // [export]
 // prefix = "bo_"
-// fns = ["build_provides_ok.version_on_heap"]
 //
 // [targets.hosted]
 // kind = "source"
@@ -19,6 +18,7 @@
 
 // The positive side of E0610: the target provides `Alloc`, so an exported
 // function and `main` may have it in their rows (§12.3, §15.3).
+@export
 pub fn version_on_heap() -> U32 uses {Alloc} { 6 }
 
 pub fn main() uses {Alloc} {}

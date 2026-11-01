@@ -707,14 +707,16 @@ mod tests {
 
     /// The build of `src` (package `m`, every flow exported) for a host target.
     fn build(src: &str, flows: &[&str]) -> BuildOutput {
-        let manifest = format!(
-            "[package]\nname = \"m\"\nedition = \"2026\"\n\n[export]\nprefix = \"t_\"\nflows = [{}]\n\n\
-             [targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\npanic = \"trap\"\nprovides = []\n",
-            flows.iter().map(|f| format!("\"m.{f}\"")).collect::<Vec<_>>().join(", ")
-        );
+        let manifest = "[package]\nname = \"m\"\nedition = \"2026\"\n\n[export]\nprefix = \"t_\"\n\n\
+             [targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\npanic = \"trap\"\nprovides = []\n"
+            .to_string();
+        // The flows exported have `@export` (§14.2).
+        let src = flows
+            .iter()
+            .fold(src.to_string(), |s, f| s.replace(&format!("pub flow {f}("), &format!("@export\npub flow {f}(")));
         let input = onsa_driver::PackageInput {
             manifest: Some(onsa_driver::ManifestSource { path: "onsa.toml".into(), text: manifest }),
-            files: vec![onsa_driver::SourceFile { path: "m.onsa".into(), text: src.into() }],
+            files: vec![onsa_driver::SourceFile { path: "m.onsa".into(), text: src }],
             ..Default::default()
         };
         let mut loaded = onsa_driver::Loaded::from_input(input).unwrap();

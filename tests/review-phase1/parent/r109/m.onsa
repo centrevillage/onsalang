@@ -20,6 +20,7 @@ fn sum(xs: Span[F32]) -> F32 {
 
 fn twice(xs: [F32; 4]) -> F32 { sum(xs) + sum(TABLE) }
 
+@export
 pub fn total(k: F32) -> F32 {
   let a: [F32; 4] = [k, k, k, k]
   twice(a)

@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§14.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// W4-02 U1, S-823, S-639 (spec §14.2, §18.1): an exported function or flow is `pub`, so an `@export` on a
+// declaration that is not `pub` is E0303. `onsa check` reports it whatever the target is, at the name of the
+// declaration (the column marks are on the name, not on the attribute or on the keyword). A declaration
+// without a visibility word has one candidate, which writes the `pub` that was left out (`fixes = 1`); the
+// declaration with `priv` is in export_priv_no_candidate.onsa. The `@export` may be on the line of the
+// declaration or on the line before it. One error in each declaration unit (P-01). A declaration that is
+// not exported and has no `pub` is not an error.
+
+@export
+pub fn plain_fn() -> I32 {                              //~ E0303 @4
+  1
+}
+
+@export pub fn same_line_fn() -> I32 {                  //~ E0303 @12
+  2
+}
+
+@export
+pub flow plain_flow(x: F32 at sample) -> F32 at sample { //~ E0303 @6
+  x
+}
+
+@export pub flow same_line_flow(x: F32 at sample) -> F32 at sample { //~ E0303 @14
+  x * 2.0
+}
+
+@export
+pub rt fn rt_fn(x: F32) -> F32 {                        //~ E0303 @7
+  x
+}
+
+@export
+pub flow with_param(                                    //~ E0303 @6
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+fn not_exported() -> I32 {
+  3
+}
+
+flow not_exported_flow(x: F32 at sample) -> F32 at sample {
+  x
+}

@@ -1,1 +1,2 @@
+@export
 pub fn version() -> U32 { 1 }

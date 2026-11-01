@@ -6,20 +6,20 @@
  * ONSA_ALLOW_INEXACT_FP removes those checks and gives up the bit-exact results. */
 #define ONSA_PANIC_TRAP
 #include "onsa__runtime.h"
-#include "onsa_scaled.h"
+#include "const_call_scaled.h"
 
 /* ---- types ---- */
-struct onsa_scaled { bool poisoned; bool initialized; };
-typedef struct onsa_scaled const_call__scaled__State;
-typedef onsa_scaled_params const_call__scaled__Params;
+struct const_call_scaled { bool poisoned; bool initialized; };
+typedef struct const_call_scaled const_call__scaled__State;
+typedef const_call_scaled_params const_call__scaled__Params;
 struct const_call__scaled__Config { uint8_t onsa_empty; };
 typedef struct const_call__scaled__Config const_call__scaled__Config;
 ONSA_DEFINE_SPAN(f32, float)
 ONSA_DEFINE_SPAN_ADD_F32(f32)
-ONSA_STATIC_ASSERT(sizeof(const_call__scaled__State) == ONSA_SCALED_SIZE, "ONSA_SCALED fast region size (spec §12.4)");
-ONSA_STATIC_ASSERT(ONSA_ALIGNOF(const_call__scaled__State) == ONSA_SCALED_ALIGN, "ONSA_SCALED alignment (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, poisoned) == 0, "ONSA_SCALED layout prefix (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, initialized) == 1, "ONSA_SCALED layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(sizeof(const_call__scaled__State) == CONST_CALL_SCALED_SIZE, "CONST_CALL_SCALED fast region size (spec §12.4)");
+ONSA_STATIC_ASSERT(ONSA_ALIGNOF(const_call__scaled__State) == CONST_CALL_SCALED_ALIGN, "CONST_CALL_SCALED alignment (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, poisoned) == 0, "CONST_CALL_SCALED layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, initialized) == 1, "CONST_CALL_SCALED layout prefix (spec §12.4)");
 
 /* ---- constants ---- */
 static const float const_call__HALF = 0.5f;
@@ -59,16 +59,16 @@ ONSA_INLINE void const_call__scaled__reset(const_call__scaled__State* s) {
 ONSA_INLINE void const_call__scaled__process(const_call__scaled__State* s, const const_call__scaled__Params* params, onsa_span_f32 x, onsa_span_f32 out) {
   uint32_t len = x.len;
   if (out.len != len) {
-    onsa_panic("span lengths differ", "const_call.onsa", 30);
+    onsa_panic("span lengths differ", "const_call.onsa", 29);
   }
   const_call__scaled__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x_7 = x.ptr[onsa_idx(i, x.len, "const_call.onsa", 30)];
+    float x_7 = x.ptr[onsa_idx(i, x.len, "const_call.onsa", 29)];
     float v;
     float onsa_t2 = const_call__scaled__tick(&(*s), x_7);
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "const_call.onsa", 30)] = v;
+    out.ptr[onsa_idx(i, out.len, "const_call.onsa", 29)] = v;
   }
 }
 
@@ -77,7 +77,7 @@ ONSA_INLINE void const_call__scaled__params_default(const_call__scaled__Params* 
 }
 
 /* ---- export: const_call.scaled ---- */
-int onsa_scaled_init(onsa_scaled* s, void* bulk, float sample_rate) {
+int const_call_scaled_init(const_call_scaled* s, void* bulk, float sample_rate) {
   const_call__scaled__Config cfg;
   memset(&cfg, 0, sizeof cfg);
   (void)bulk;
@@ -85,11 +85,11 @@ int onsa_scaled_init(onsa_scaled* s, void* bulk, float sample_rate) {
   return 0;
 }
 
-void onsa_scaled_reset(onsa_scaled* s) { if (!s->initialized) return; const_call__scaled__reset(s); }
+void const_call_scaled_reset(const_call_scaled* s) { if (!s->initialized) return; const_call__scaled__reset(s); }
 
-void onsa_scaled_params_default(onsa_scaled_params* p) { const_call__scaled__params_default(p); }
+void const_call_scaled_params_default(const_call_scaled_params* p) { const_call__scaled__params_default(p); }
 
-int onsa_scaled_process(onsa_scaled* s, const onsa_scaled_params* p, const float* x, float* out, uint32_t frames) {
+int const_call_scaled_process(const_call_scaled* s, const const_call_scaled_params* p, const float* x, float* out, uint32_t frames) {
   const_call__scaled__Params q;
   if (!s->initialized || s->poisoned) {
     if (frames != 0) {

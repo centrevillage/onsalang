@@ -4,7 +4,6 @@ edition = "2026"
 
 [export]
 prefix = "t_"
-fns = ["m.run", "m.alias_field", "m.logic"]
 
 [targets.host]
 kind = "staticlib"

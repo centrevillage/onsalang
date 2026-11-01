@@ -511,7 +511,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     Ok(s)
 }
 
-/// Header of the exported plain functions (`[export] fns`), and their API
+/// Header of the exported plain functions (`@export`), and their API
 /// (the header name is the caller's).
 pub(crate) fn fn_header(cx: &mut Cx, fns: &[FnId], header: &str) -> R<(String, Vec<crate::FnApi>)> {
     let up: String = format!("{}{}", cx.opts.prefix, ident(&cx.opts.package)).to_ascii_uppercase();

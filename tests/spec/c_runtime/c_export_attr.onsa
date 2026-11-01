@@ -1,0 +1,77 @@
+// onsa.toml
+// [package]
+// name = "c_export_attr"
+// edition = "2026"
+//
+// [export]
+// prefix = "c_export_attr_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§6.5", "§11.7", "§14.2"]
+//
+// # W4-02 U1, S-639 (spec §6.5, §14.2): the functions and flows that are put out in the C API are the ones
+// # with `@export` on the declaration (`[export]` of the manifest has `prefix` only). A flow with a block
+// # input that has a `@param` is called through `process`, with the value in `params`: the block value 0.5
+// # halves the input (all values here are exact in F32).
+// [[test.host]]
+// name = "an exported flow is called"
+// target = "host"
+// flow = "c_export_attr.gain"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = { level = 0.5 }, frames = 3, input = [1.0, 2.0, -4.0], status = 0, output = [0.5, 1.0, -2.0] },
+//   { call = "process", params = { level = 2.0 }, frames = 2, input = [1.0, 0.25], status = 0, output = [2.0, 0.5] },
+// ]
+//
+// # A flow with an `init` input and no `block` input needs no `@param`. `n` is in the config, the output is
+// # the input plus `100 / n` (n = 4 gives 25).
+// [[test.host]]
+// name = "an exported flow with a config input is called"
+// target = "host"
+// flow = "c_export_attr.offset"
+// steps = [
+//   { call = "init", config = { n = 4 }, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 2.0], status = 0, output = [26.0, 27.0] },
+// ]
+//
+// # An exported function is called with the arguments and gives the result.
+// [[test.host]]
+// name = "an exported function is called"
+// target = "host"
+// fn = "c_export_attr.add_scaled"
+// steps = [
+//   { call = "fn", args = { a = 3, b = 4 }, status = 0, result = 19 },
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 1 },
+// ]
+
+@export
+pub flow gain(
+  x: F32 at sample,
+  @param(min: 0.0, max: 2.0, default: 1.0)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+@export
+pub flow offset(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  let k = 100 / n
+  x + k.round_f32()
+}
+
+// Not exported: it is called from the exported function and is not in the C API.
+pub fn scale(a: U32) -> U32 {
+  a * 5
+}
+
+@export
+pub fn add_scaled(a: U32, b: U32) -> U32 {
+  scale(a) + b
+}

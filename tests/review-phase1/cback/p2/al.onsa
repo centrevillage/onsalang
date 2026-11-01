@@ -14,12 +14,14 @@ fn swap2(p: Pair) -> Pair {
   r
 }
 
+@export
 pub fn alias1() -> I32 {
   var x = Pair { a: 1, b: 2 }
   x = swap(x)
   (x.a * 10) + x.b
 }
 
+@export
 pub fn alias2() -> I32 {
   var x = Pair { a: 1, b: 2 }
   x = swap2(x)
@@ -34,6 +36,7 @@ fn rot(xs: [I32; 3]) -> [I32; 3] {
   ys
 }
 
+@export
 pub fn alias3() -> I32 {
   var xs: [I32; 3] = [1, 2, 3]
   xs = rot(xs)

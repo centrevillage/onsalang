@@ -1,3 +1,4 @@
+@export
 pub fn narrow_u32(x: U32) -> I32 {
   match x.narrow_i32() {
     Some(v) => v,
@@ -5,22 +6,27 @@ pub fn narrow_u32(x: U32) -> I32 {
   }
 }
 
+@export
 pub fn shr_i8(x: I8, n: U32) -> I8 {
   x >> n
 }
 
+@export
 pub fn shr_i16(x: I16, n: U32) -> I16 {
   x >> n
 }
 
+@export
 pub fn wmul_u16(a: U16, b: U16) -> U16 {
   a *% b
 }
 
+@export
 pub fn wmul_i16(a: I16, b: I16) -> I16 {
   a *% b
 }
 
+@export
 pub fn cmul_u32(a: U32, b: U32) -> U32 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -28,10 +34,12 @@ pub fn cmul_u32(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn sat_i64(x: F64) -> I64 {
   x.trunc_i64_sat()
 }
 
+@export
 pub fn sat_u64(x: F64) -> U64 {
   x.trunc_u64_sat()
 }
@@ -41,6 +49,7 @@ fn next(inout c: U32) -> U32 {
   c
 }
 
+@export
 pub fn order() -> U32 {
   var xs: [U32; 4] = [0, 0, 0, 0]
   var c: U32 = 0
@@ -53,6 +62,7 @@ fn bump(inout c: I32) -> I64 {
   0
 }
 
+@export
 pub fn cast_order() -> I64 {
   var c: I32 = 1
   (c as I64) + bump(inout c)
@@ -63,6 +73,7 @@ fn bumpf(inout c: F32) -> I32 {
   0
 }
 
+@export
 pub fn trunc_order() -> I32 {
   var c: F32 = 1.0
   c.trunc_i32() + bumpf(inout c)

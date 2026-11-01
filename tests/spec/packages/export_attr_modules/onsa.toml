@@ -1,0 +1,13 @@
+[package]
+name = "export_attr_modules"
+edition = "2026"
+
+[export]
+prefix = "export_attr_modules_"
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "poison"
+provides = []

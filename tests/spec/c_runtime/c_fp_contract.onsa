@@ -5,19 +5,6 @@
 //
 // [export]
 // prefix = "cfc_"
-// fns = [
-//   "c_fp_contract.muladd_f32",
-//   "c_fp_contract.mulsub_f32",
-//   "c_fp_contract.nmuladd_f32",
-//   "c_fp_contract.negmul_add_f32",
-//   "c_fp_contract.dot2_f32",
-//   "c_fp_contract.mac_loop_f32",
-//   "c_fp_contract.via_helper_f32",
-//   "c_fp_contract.zero_sign_bits_f32",
-//   "c_fp_contract.muladd_f64",
-//   "c_fp_contract.mulsub_f64",
-//   "c_fp_contract.mac_loop_f64",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -199,26 +186,32 @@ fn product_f32(a: F32, b: F32) -> F32 {
   a * b
 }
 
+@export
 pub fn muladd_f32(a: F32, b: F32, c: F32) -> F32 {
   (a * b) + c
 }
 
+@export
 pub fn mulsub_f32(a: F32, b: F32, c: F32) -> F32 {
   (a * b) - c
 }
 
+@export
 pub fn nmuladd_f32(a: F32, b: F32, c: F32) -> F32 {
   c - (a * b)
 }
 
+@export
 pub fn negmul_add_f32(a: F32, b: F32, c: F32) -> F32 {
   -(a * b) + c
 }
 
+@export
 pub fn dot2_f32(a: F32, b: F32, c: F32, d: F32) -> F32 {
   (a * b) + (c * d)
 }
 
+@export
 pub fn mac_loop_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
   var acc: F32 = init
   for _ in 0 ..< n {
@@ -227,22 +220,27 @@ pub fn mac_loop_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
   acc
 }
 
+@export
 pub fn via_helper_f32(a: F32, b: F32, c: F32) -> F32 {
   product_f32(a, b) + c
 }
 
+@export
 pub fn zero_sign_bits_f32(a: F32, b: F32) -> U32 {
   ((a * b) + 0.0).to_bits()
 }
 
+@export
 pub fn muladd_f64(a: F64, b: F64, c: F64) -> F64 {
   (a * b) + c
 }
 
+@export
 pub fn mulsub_f64(a: F64, b: F64, c: F64) -> F64 {
   (a * b) - c
 }
 
+@export
 pub fn mac_loop_f64(a: F64, b: F64, init: F64, n: U32) -> F64 {
   var acc: F64 = init
   for _ in 0 ..< n {

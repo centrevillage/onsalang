@@ -13,7 +13,6 @@ name = "rt"
 edition = "2026"
 
 [export]
-fns = ["util.reset_hook", "util.param_info"]
 
 [targets.host]
 kind = "staticlib"

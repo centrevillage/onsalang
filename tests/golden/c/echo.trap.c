@@ -6,23 +6,23 @@
  * ONSA_ALLOW_INEXACT_FP removes those checks and gives up the bit-exact results. */
 #define ONSA_PANIC_TRAP
 #include "onsa__runtime.h"
-#include "onsa_echo.h"
+#include "echo_echo.h"
 
 /* ---- types ---- */
 typedef struct onsa_arr_f32_96001 { float a[96001]; } onsa_arr_f32_96001;
 typedef struct echo__echo__State__Bulk { onsa_arr_f32_96001 vdelay_0_buf; } echo__echo__State__Bulk;
-struct onsa_echo { void* bulk; float sample_rate; float feedback; float d; uint32_t vdelay_0_w; bool poisoned; bool initialized; };
-typedef struct onsa_echo echo__echo__State;
-typedef onsa_echo_params echo__echo__Params;
+struct echo_echo { void* bulk; float sample_rate; float feedback; float d; uint32_t vdelay_0_w; bool poisoned; bool initialized; };
+typedef struct echo_echo echo__echo__State;
+typedef echo_echo_params echo__echo__Params;
 struct echo__echo__Config { uint8_t onsa_empty; };
 typedef struct echo__echo__Config echo__echo__Config;
 ONSA_DEFINE_SPAN(f32, float)
 ONSA_DEFINE_SPAN_ADD_F32(f32)
-ONSA_STATIC_ASSERT(sizeof(echo__echo__State) == ONSA_ECHO_SIZE, "ONSA_ECHO fast region size (spec §12.4)");
-ONSA_STATIC_ASSERT(ONSA_ALIGNOF(echo__echo__State) == ONSA_ECHO_ALIGN, "ONSA_ECHO alignment (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(echo__echo__State, poisoned) == 24, "ONSA_ECHO layout prefix (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(echo__echo__State, initialized) == 25, "ONSA_ECHO layout prefix (spec §12.4)");
-ONSA_STATIC_ASSERT(sizeof(echo__echo__State__Bulk) == 384004, "ONSA_ECHO bulk region size (spec §12.4)");
+ONSA_STATIC_ASSERT(sizeof(echo__echo__State) == ECHO_ECHO_SIZE, "ECHO_ECHO fast region size (spec §12.4)");
+ONSA_STATIC_ASSERT(ONSA_ALIGNOF(echo__echo__State) == ECHO_ECHO_ALIGN, "ECHO_ECHO alignment (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(echo__echo__State, poisoned) == 24, "ECHO_ECHO layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(echo__echo__State, initialized) == 25, "ECHO_ECHO layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(sizeof(echo__echo__State__Bulk) == 384004, "ECHO_ECHO bulk region size (spec §12.4)");
 
 /* ---- functions ---- */
 ONSA_INLINE void echo__echo__ctl(echo__echo__State* s, const echo__echo__Params* p);
@@ -54,16 +54,16 @@ ONSA_INLINE float echo__echo__tick(echo__echo__State* s, float x) {
   }
   uint32_t vdelay_0_k = onsa_trunc_u32_f32(vdelay_0_dc, "echo.onsa", 45);
   float vdelay_0_f = (float)(vdelay_0_dc - ((float)vdelay_0_k));
-  uint32_t vdelay_0_wlk = onsa_sub_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(96001), "echo.onsa", 37), vdelay_0_k, "echo.onsa", 37);
+  uint32_t vdelay_0_wlk = onsa_sub_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(96001), "echo.onsa", 36), vdelay_0_k, "echo.onsa", 36);
   uint32_t onsa_t1 = onsa_rem_u32(vdelay_0_wlk, UINT32_C(96001), "echo.onsa", 45);
-  float vdelay_0_a = (*(echo__echo__State__Bulk*)s->bulk).vdelay_0_buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "echo.onsa", 37)];
+  float vdelay_0_a = (*(echo__echo__State__Bulk*)s->bulk).vdelay_0_buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "echo.onsa", 36)];
   uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(vdelay_0_wlk, UINT32_C(1), "echo.onsa", 45), UINT32_C(96001), "echo.onsa", 45);
-  float vdelay_0_b = (*(echo__echo__State__Bulk*)s->bulk).vdelay_0_buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "echo.onsa", 37)];
+  float vdelay_0_b = (*(echo__echo__State__Bulk*)s->bulk).vdelay_0_buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "echo.onsa", 36)];
   float vdelay_0 = (float)((float)((float)(1.0f - vdelay_0_f) * vdelay_0_a) + (float)(vdelay_0_f * vdelay_0_b));
   float y = (float)(onsa_t4 + (float)(onsa_t3 * vdelay_0));
   float onsa__out = y;
-  (*(echo__echo__State__Bulk*)s->bulk).vdelay_0_buf.a[onsa_idx(s->vdelay_0_w, UINT32_C(96001), "echo.onsa", 37)] = y;
-  s->vdelay_0_w = onsa_rem_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(1), "echo.onsa", 37), UINT32_C(96001), "echo.onsa", 37);
+  (*(echo__echo__State__Bulk*)s->bulk).vdelay_0_buf.a[onsa_idx(s->vdelay_0_w, UINT32_C(96001), "echo.onsa", 36)] = y;
+  s->vdelay_0_w = onsa_rem_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(1), "echo.onsa", 36), UINT32_C(96001), "echo.onsa", 36);
   return onsa__out;
 }
 
@@ -99,16 +99,16 @@ ONSA_INLINE void echo__echo__reset(echo__echo__State* s) {
 ONSA_INLINE void echo__echo__process(echo__echo__State* s, const echo__echo__Params* params, onsa_span_f32 x, onsa_span_f32 out) {
   uint32_t len = x.len;
   if (out.len != len) {
-    onsa_panic("span lengths differ", "echo.onsa", 37);
+    onsa_panic("span lengths differ", "echo.onsa", 36);
   }
   echo__echo__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x_11 = x.ptr[onsa_idx(i, x.len, "echo.onsa", 37)];
+    float x_11 = x.ptr[onsa_idx(i, x.len, "echo.onsa", 36)];
     float v;
     float onsa_t2 = echo__echo__tick(&(*s), x_11);
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "echo.onsa", 37)] = v;
+    out.ptr[onsa_idx(i, out.len, "echo.onsa", 36)] = v;
   }
 }
 
@@ -117,7 +117,7 @@ ONSA_INLINE void echo__echo__params_default(echo__echo__Params* out) {
 }
 
 /* ---- export: echo.echo ---- */
-int onsa_echo_init(onsa_echo* s, void* bulk, float sample_rate) {
+int echo_echo_init(echo_echo* s, void* bulk, float sample_rate) {
   echo__echo__Config cfg;
   memset(&cfg, 0, sizeof cfg);
   s->bulk = bulk;
@@ -125,11 +125,11 @@ int onsa_echo_init(onsa_echo* s, void* bulk, float sample_rate) {
   return 0;
 }
 
-void onsa_echo_reset(onsa_echo* s) { if (!s->initialized) return; echo__echo__reset(s); }
+void echo_echo_reset(echo_echo* s) { if (!s->initialized) return; echo__echo__reset(s); }
 
-void onsa_echo_params_default(onsa_echo_params* p) { echo__echo__params_default(p); }
+void echo_echo_params_default(echo_echo_params* p) { echo__echo__params_default(p); }
 
-int onsa_echo_process(onsa_echo* s, const onsa_echo_params* p, const float* x, float* out, uint32_t frames) {
+int echo_echo_process(echo_echo* s, const echo_echo_params* p, const float* x, float* out, uint32_t frames) {
   echo__echo__Params q;
   if (!s->initialized || s->poisoned) {
     if (frames != 0) {
@@ -150,7 +150,7 @@ int onsa_echo_process(onsa_echo* s, const onsa_echo_params* p, const float* x, f
   return 0;
 }
 
-const onsa_param_info onsa_echo_param_info[2] = {
+const onsa_param_info echo_echo_param_info[2] = {
   { "time", "time", 0.01f, 1.0f, 0.3f, NAN, "s", "linear", "" },
   { "feedback", "feedback", 0.0f, 0.95f, 0.5f, NAN, "", "linear", "" },
 };

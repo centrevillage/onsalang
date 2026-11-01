@@ -1,0 +1,34 @@
+// onsa.toml
+// [package]
+// name = "export_build_provides_ok"
+// edition = "2026"
+//
+// [export]
+// prefix = "export_build_provides_ok_"
+//
+// [targets.hosted]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = ["Alloc"]
+//
+// [targets.bare]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§12.3", "§14.2", "§15.3"]
+
+// W4-02 U1, S-639 (spec §14.2, §15.3): the positive side of negative/export_build_provides.onsa. The target
+// `hosted` provides `Alloc`, so the exported function may have it in its row there. The target `bare` builds
+// too, because the only function that is exported (`version`) has an empty row, and the one that has `Alloc`
+// is `pub` without `@export` (not exported, so the target `bare` does not look at its row).
+
+@export
+pub fn version() -> U32 { 6 }
+
+pub fn version_on_heap() -> U32 uses {Alloc} { 6 }

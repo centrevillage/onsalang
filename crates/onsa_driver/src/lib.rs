@@ -54,14 +54,9 @@ pub struct Manifest {
 /// `[export]`: what the C ABI exposes (spec §14.2, §15.3).
 #[derive(Debug, Default, Clone, serde::Deserialize)]
 pub struct ManifestExport {
-    /// C symbol prefix (default `onsa_`).
+    /// C symbol prefix (default `onsa_`). What is exported is the `@export`
+    /// of the items (§14.2, [`ExportSettings::of`]).
     pub prefix: Option<String>,
-    /// Flows by module path (`dsp.voice`).
-    #[serde(default)]
-    pub flows: Vec<String>,
-    /// Functions by module path (`util.onsa_version`).
-    #[serde(default)]
-    pub fns: Vec<String>,
 }
 
 /// `[targets.<name>]` (spec §15.3).
@@ -504,6 +499,33 @@ mod tests {
         assert_eq!(std_files, std_modules_count);
         let sqrt = analysis.defs.iter().filter(|d| d.name == "sqrt" && analysis.modules.pkg_of(d.module) == 0).count();
         assert_eq!(sqrt, 1);
+    }
+
+    /// §14.2, S-639 (dp1): the build exports the `@export` of its own package
+    /// only; a dependency's (`mid`, a form no case can write, §19.1) is
+    /// checked the same and not exported. The order (A4, not in the spec) is
+    /// of the paths of the modules (`a.c` before `b`, though `b` is read
+    /// first), and in a module of the declarations (`zed` before `alpha`).
+    #[test]
+    fn the_exports_are_of_the_package_itself_in_the_order_of_the_modules() {
+        let mut sources = SourceMap::default();
+        let std = Arc::new(std_package(&mut sources));
+        let mut module = |pkg: &str, path: &[&str], src: &str| {
+            let file = sources.add(format!("{pkg}/{}.onsa", path.join("/")), src);
+            let segments = path.iter().map(|s| s.to_string()).collect();
+            Module { segments, file, text: src.into(), parsed: parse_file(file, src) }
+        };
+        let mid = module("mid", &["m"], "@export\npub fn half(x: F32) -> F32 {\n  x * 0.5\n}\n");
+        let fns = "@export\npub fn zed() -> I32 {\n  1\n}\n\npub fn not_out() -> I32 {\n  2\n}\n\n\
+                   @export\npub fn alpha() -> I32 {\n  3\n}\n";
+        let b = module("user", &["b"], fns);
+        let ac = module("user", &["a", "c"], "@export\npub fn mid() -> I32 {\n  4\n}\n");
+        let mid = Arc::new(Package::new("mid", vec![mid], vec![std.clone()]));
+        let analysis = onsa_sema::analyze(&Package::new("user", vec![b, ac], vec![std, mid]));
+        assert!(analysis.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analysis.diagnostics));
+        let names: Vec<String> = analysis.exports().into_iter().map(|d| analysis.qualified_name(d)).collect();
+        assert_eq!(names, ["a.c.mid", "b.zed", "b.alpha"]);
+        assert!(analysis.defs.iter().any(|d| d.name == "half" && d.export.is_some()));
     }
 
     /// A deserializer that only records the fields a struct asks for.

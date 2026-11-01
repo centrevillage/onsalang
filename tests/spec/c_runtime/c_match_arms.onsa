@@ -5,16 +5,6 @@
 //
 // [export]
 // prefix = "cma_"
-// fns = [
-//   "c_match_arms.opt_u8_or",
-//   "c_match_arms.turn_n",
-//   "c_match_arms.shape_area",
-//   "c_match_arms.nested_opt",
-//   "c_match_arms.res_sum",
-//   "c_match_arms.loop_match",
-//   "c_match_arms.narrow_or_max",
-//   "c_match_arms.block_arms",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -234,6 +224,7 @@ fn area(s: Shape) -> I64 {
   }
 }
 
+@export
 pub fn opt_u8_or(sel: U32, v: U8) -> U8 {
   var o: Option[U8] = None
   if sel < 1 {
@@ -246,6 +237,7 @@ pub fn opt_u8_or(sel: U32, v: U8) -> U8 {
   r
 }
 
+@export
 pub fn turn_n(sel: U32, n: U32) -> U32 {
   var d = dir_of(sel)
   for _ in 0..<n {
@@ -254,6 +246,7 @@ pub fn turn_n(sel: U32, n: U32) -> U32 {
   dir_code(d)
 }
 
+@export
 pub fn shape_area(kind: U32, k: U32) -> I64 {
   var s = Shape.Dot
   if kind == 1 {
@@ -264,6 +257,7 @@ pub fn shape_area(kind: U32, k: U32) -> I64 {
   area(s)
 }
 
+@export
 pub fn nested_opt(sel: U32, v: I32) -> I32 {
   var o: Option[Option[I32]] = None
   if sel == 1 {
@@ -281,6 +275,7 @@ pub fn nested_opt(sel: U32, v: I32) -> I32 {
   r
 }
 
+@export
 pub fn res_sum(ok: U32, a: I32, b: I32) -> I32 {
   var r: Result[I32, I32] = Err(b)
   if ok > 0 {
@@ -293,6 +288,7 @@ pub fn res_sum(ok: U32, a: I32, b: I32) -> I32 {
   t
 }
 
+@export
 pub fn loop_match(n: U32, v: I32) -> I32 {
   var acc: I32 = 0
   for i in 0..<n {
@@ -309,6 +305,7 @@ pub fn loop_match(n: U32, v: I32) -> I32 {
   acc
 }
 
+@export
 pub fn narrow_or_max(x: U32) -> U8 {
   let r = match x.narrow_u8() {
     Some(v) => v,
@@ -317,6 +314,7 @@ pub fn narrow_or_max(x: U32) -> U8 {
   r
 }
 
+@export
 pub fn block_arms(sel: U32, v: I32) -> I32 {
   var o: Option[I32] = None
   if sel < 1 {

@@ -5,24 +5,6 @@
 //
 // [export]
 // prefix = "cmu_"
-// fns = [
-//   "c_mul.mul_u32",
-//   "c_mul.wmul_u32",
-//   "c_mul.smul_u32",
-//   "c_mul.checked_mul_u32",
-//   "c_mul.mul_i16",
-//   "c_mul.wmul_i16",
-//   "c_mul.u64_op",
-//   "c_mul.mul_then_div_u32",
-//   "c_mul.wmul_then_wsub_i16",
-//   "c_mul.wmul_loop_u32",
-//   "c_mul.wmul_loop_u64",
-//   "c_mul.mul_loop_u64",
-//   "c_mul.pair_hi_u32",
-//   "c_mul.mul_in_arm_u32",
-//   "c_mul.mul_in_closure_u32",
-//   "c_mul.wmul_in_closure_u64",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -347,18 +329,22 @@ fn mul_arm(o: Option[U32], k: U32) -> U32 {
   r
 }
 
+@export
 pub fn mul_u32(a: U32, b: U32) -> U32 {
   a * b
 }
 
+@export
 pub fn wmul_u32(a: U32, b: U32) -> U32 {
   a *% b
 }
 
+@export
 pub fn smul_u32(a: U32, b: U32) -> U32 {
   a *| b
 }
 
+@export
 pub fn checked_mul_u32(a: U32, b: U32) -> I64 {
   var r: I64 = I64.MIN
   match a.checked_mul(b) {
@@ -372,14 +358,17 @@ pub fn checked_mul_u32(a: U32, b: U32) -> I64 {
   r
 }
 
+@export
 pub fn mul_i16(a: I16, b: I16) -> I16 {
   a * b
 }
 
+@export
 pub fn wmul_i16(a: I16, b: I16) -> I16 {
   a *% b
 }
 
+@export
 pub fn u64_op(op: U32, part: U32, ah: U32, al: U32, bh: U32, bl: U32) -> U32 {
   let a = join(ah, al)
   let b = join(bh, bl)
@@ -387,15 +376,18 @@ pub fn u64_op(op: U32, part: U32, ah: U32, al: U32, bh: U32, bl: U32) -> U32 {
   part_of(r, part)
 }
 
+@export
 pub fn mul_then_div_u32(a: U32, b: U32, c: U32) -> U32 {
   a * b / c
 }
 
+@export
 pub fn wmul_then_wsub_i16(a: I16, b: I16, c: I16) -> I16 {
   let p = a *% b
   p -% c
 }
 
+@export
 pub fn wmul_loop_u32(n: U32) -> U32 {
   var x: U32 = 1
   for _ in 0..<n {
@@ -404,6 +396,7 @@ pub fn wmul_loop_u32(n: U32) -> U32 {
   x
 }
 
+@export
 pub fn wmul_loop_u64(n: U32, part: U32) -> U32 {
   var x: U64 = 1
   for _ in 0..<n {
@@ -412,6 +405,7 @@ pub fn wmul_loop_u64(n: U32, part: U32) -> U32 {
   part_of(x, part)
 }
 
+@export
 pub fn mul_loop_u64(n: U32, part: U32) -> U32 {
   var x: U64 = 1
   for _ in 0..<n {
@@ -420,20 +414,24 @@ pub fn mul_loop_u64(n: U32, part: U32) -> U32 {
   part_of(x, part)
 }
 
+@export
 pub fn pair_hi_u32(a: U32, b: U32) -> U32 {
   let p = Pair { lo: a *% b, hi: a * b }
   p.hi
 }
 
+@export
 pub fn mul_in_arm_u32(a: U32, b: U32) -> U32 {
   mul_arm(Some(a), b)
 }
 
+@export
 pub fn mul_in_closure_u32(a: U32, b: U32) -> U32 {
   let ys: [U32; 3] = array.from_fn(fn(i) { a * (b + i) })
   ys[2]
 }
 
+@export
 pub fn wmul_in_closure_u64(a: U32, part: U32) -> U32 {
   let k: U64 = 4294967297
   let ys: [U64; 3] = array.from_fn(fn(i) { ((a as U64) + (i as U64)) *% k })

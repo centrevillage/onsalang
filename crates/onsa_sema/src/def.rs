@@ -353,6 +353,8 @@ pub struct Def {
     pub item: Option<ItemId>,
     /// `impl` block or flow that owns this def.
     pub owner: Option<DefId>,
+    /// The `@export` of a function or flow of the top level (§14.2).
+    pub export: Option<Span>,
 }
 
 impl Def {

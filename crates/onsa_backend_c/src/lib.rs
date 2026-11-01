@@ -118,7 +118,7 @@ impl PanicMode {
     }
 }
 
-/// A flow to export (manifest `[export] flows`, spec §15.3), by qualified name.
+/// A flow to export (`@export`, spec §14.2), by qualified name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportFlow {
     pub flow: String,
@@ -200,7 +200,7 @@ pub struct CUnit {
     pub internal_header: String,
     /// The C API of each exported flow, as the backend named it.
     pub flows: Vec<FlowApi>,
-    /// The C API of each exported function (`[export] fns`), as the backend named it.
+    /// The C API of each exported function (`@export`), as the backend named it.
     pub fns: Vec<FnApi>,
     /// `<prefix>take_panic`: how an exported function reports a panic in this
     /// version (`panic = "poison"` only; spec §14.2 replaces it by the status, W10-03).

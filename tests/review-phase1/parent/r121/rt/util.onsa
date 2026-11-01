@@ -1,3 +1,5 @@
+@export
 pub fn reset_hook() -> U32 { 1 }
 
+@export
 pub fn param_info() -> U32 { 2 }

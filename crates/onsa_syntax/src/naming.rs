@@ -299,6 +299,36 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     diagnostics.extend(out);
 }
 
+/// The E0320 of a function or flow with `@export` whose name ends with `_`
+/// (§14.2, S-653): its C names would have `__` (`t_lp__init`). The candidate
+/// is the name without it, none when that is a reserved word; a name of
+/// another shape has the E0320 of [`check`].
+pub(crate) fn check_exported(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
+    for item in ast.root.iter().map(|&id| ast.item(id)) {
+        let (ItemKind::Fn(crate::ast::FnDecl { name, .. }) | ItemKind::Flow(crate::ast::FlowDecl { name, .. })) =
+            &item.kind
+        else {
+            continue;
+        };
+        let Some(core) = name.name.strip_suffix('_').filter(|_| Shape::Snake.matches(&name.name)) else { continue };
+        if item.export().is_none() {
+            continue;
+        }
+        let mut d = Diagnostic::new(
+            Stage::Names,
+            Code::E0320,
+            name.span,
+            "the name of an item with `@export` does not end with `_` (§14.2)",
+        )
+        .with_found(name.name.clone())
+        .with_rule("its C names join the name to more with `_`, and `__` is reserved in C++");
+        if crate::token::TokenKind::keyword(core).is_none() {
+            d = d.with_fix(Fix::replace("rename by the naming rule", name.span, core));
+        }
+        diagnostics.push(d);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

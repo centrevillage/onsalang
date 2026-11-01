@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§14.2"]
+
+// W4-02 U1, S-653 (spec §2.3, §14.2): a name that ends with `_` is a name that avoids a reserved word
+// (`match_`) and can be written for any kind, except the name of an `@export` item (its C name would hold
+// `__`, which is E0320: fixes/export_name_trailing_underscore.onsa). So the declarations here, which are not
+// exported, are fine, even with `pub`, and so are the ones that are exported and whose names do not end with
+// `_` (the `_` inside a name is fine). No diagnostic is expected.
+
+pub fn match_() -> I32 {
+  1
+}
+
+pub fn gain_() -> I32 {
+  2
+}
+
+fn private_helper_() -> I32 {
+  3
+}
+
+pub flow lp_(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@export
+pub fn inner_underscore() -> I32 {
+  match_() + gain_() + private_helper_()
+}
+
+@export
+pub flow two_words(x: F32 at sample) -> F32 at sample {
+  lp_~(x)
+}

@@ -477,7 +477,7 @@ fn a_manifest_given_as_a_link_is_the_directory_it_is_in() {
     assert_eq!(code_files(&doc), [(s("E0302"), s("b.onsa"))], "{doc}");
 }
 
-const BUILD_TARGET: &str = "\n[export]\nprefix = \"pk_\"\nfns = [\"a.f\"]\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
+const BUILD_TARGET: &str = "\n[export]\nprefix = \"pk_\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
 
 /// S-622, §15.1: the target of the link is the manifest that is read. The target `host` is in the
 /// manifest of `y` only, and `build --target host` of `x` finds it: it builds into `x/target/`.
@@ -485,7 +485,7 @@ const BUILD_TARGET: &str = "\n[export]\nprefix = \"pk_\"\nfns = [\"a.f\"]\n\n[ta
 fn the_target_of_a_manifest_link_is_the_manifest_that_is_read() {
     let t = Tree::bare("manifest_link_read");
     x_and_y(&t, &format!("{}{BUILD_TARGET}", manifest("shared")));
-    t.write("x/a.onsa", "pub fn f() -> I32 {\n  1\n}\n");
+    t.write("x/a.onsa", "@export\npub fn f() -> I32 {\n  1\n}\n");
     for (cwd, args) in [(t.root().to_path_buf(), vec!["x"]), (t.at("x"), vec![])] {
         let mut a = vec!["build", "--target", "host"];
         a.extend_from_slice(&args);

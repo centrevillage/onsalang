@@ -6,8 +6,7 @@ edition = "2026"
 std = "0.2.0"
 
 [export]
-prefix = "onsa_"
-flows = ["dsp.uni"]
+prefix = "p1_"
 
 [targets.small]
 kind = "source"

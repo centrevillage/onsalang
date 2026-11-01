@@ -5,7 +5,6 @@
 //
 // [export]
 // prefix = "rb_"
-// flows = ["reset_boundary.counter", "reset_boundary.fragile", "reset_boundary.tap", "reset_boundary.guarded"]
 //
 // [targets.host]
 // kind = "source"
@@ -107,6 +106,7 @@
 // ]
 
 // A running sum from `start`: the state is the previous sum.
+@export
 pub flow counter(x: F32 at sample, start: F32 at init) -> F32 at sample {
   let y = x + prev~(^y, start)
   y
@@ -114,6 +114,7 @@ pub flow counter(x: F32 at sample, start: F32 at init) -> F32 at sample {
 
 // Panics for a NaN input or one outside I32 (`trunc_i32`): the instance is poisoned. The counter
 // 1 2 3 ... is a sub-instance, so `reset` has to reach it.
+@export
 pub flow fragile(x: F32 at sample) -> F32 at sample {
   let n = x.trunc_i32()
   let c = counter~(1.0, 0.0)
@@ -121,11 +122,13 @@ pub flow fragile(x: F32 at sample) -> F32 at sample {
 }
 
 // The input three samples late.
+@export
 pub flow tap(x: F32 at sample) -> F32 at sample {
   delay~(x, 3)
 }
 
 // `100 / n` is computed once at init: n = 0 panics inside `init`. The sum is the state.
+@export
 pub flow guarded(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let k = 100 / n
   let y = x + prev~(^y)

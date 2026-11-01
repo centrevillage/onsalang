@@ -1,6 +1,7 @@
 const A: F32 = 1.5
 const B: F32 = -A
 
+@export
 pub fn get() -> F32 {
   B
 }

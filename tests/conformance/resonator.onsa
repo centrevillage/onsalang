@@ -4,8 +4,7 @@
 // edition = "2026"
 //
 // [export]
-// prefix = "onsa_"
-// flows = ["resonator.resonator"]
+// prefix = "resonator_"
 //
 // [targets.host]
 // kind = "source"
@@ -25,6 +24,7 @@
 // the flow is compared within the precision target (S-14).
 use std.math.{exp, cos}
 
+@export
 pub flow resonator(
   x: F32 at sample,
   @param(min: 20.0, max: 20000.0, default: 500.0, unit: "Hz")

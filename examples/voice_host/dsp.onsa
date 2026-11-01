@@ -31,6 +31,7 @@ pub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {
   y
 }
 
+@export
 pub flow voice(
   @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
   f0: F32 at block,

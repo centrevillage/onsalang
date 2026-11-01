@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§14.2", "§18.1"]
+// fixes = 0
+
+// W4-02 U1, S-632, S-639 (spec §11.7, §14.2): the `block` input of an exported flow (`@export`) must have a
+// `@param` (or a `@host`, which this file does not use), else E0809 at the input. `onsa check` reports it,
+// whatever the target is. The input of a `sample` or an `init` clock needs none (it is the signal or the
+// config of the flow), and a flow that is not exported needs none (the need is the export's). The error is at
+// the input without the attribute (the column marks are on its name), the first one if there are several:
+// a unit stops at its first error (§18.1, P-01). It has no candidate (S-833): `@param` and `@host` are two
+// fixes, and the values of a `@param` are the writer's.
+// The value checks of `@param` (the range, the type) are in negative/flow_sigs.onsa.
+
+@export
+pub flow f32_level(
+  x: F32 at sample,
+  level: F32 at block,                              //~ E0809 @3
+) -> F32 at sample {
+  x * level
+}
+
+@export
+pub flow bool_switch(
+  x: F32 at sample,
+  on: Bool at block,                                //~ E0809 @3
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+@export
+pub flow i32_count(
+  x: F32 at sample,
+  n: I32 at block,                                  //~ E0809 @3
+) -> F32 at sample {
+  if n > 0 { x } else { 0.0 }
+}
+
+// Two inputs without a `@param`: the first one is reported, the second is not.
+@export
+pub flow two_without(
+  x: F32 at sample,
+  a: F32 at block,                                  //~ E0809 @3
+  b: F32 at block,
+) -> F32 at sample {
+  x * a * b
+}
+
+// The input after one that has a `@param` and has none itself.
+@export
+pub flow after_a_param(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  a: F32 at block,
+  b: F32 at block,                                  //~ E0809 @3
+) -> F32 at sample {
+  x * a * b
+}
+
+// The only input is a `block` input, in a flow with no `sample` input.
+@export
+pub flow no_signal_in(
+  level: F32 at block,                              //~ E0809 @3
+) -> F32 at sample {
+  level
+}
+
+// ---- not errors in the same file
+
+@export
+pub flow with_params(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  a: F32 at block,
+  @param(min: 0, max: 10, default: 5)
+  n: I32 at block,
+) -> F32 at sample {
+  if n > 0 { x * a } else { 0.0 }
+}
+
+@export
+pub flow sample_and_init_only(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  let k = 100 / n
+  x + k.round_f32()
+}
+
+pub flow not_exported_block_input(x: F32 at sample, level: F32 at block) -> F32 at sample {
+  x * level
+}
+
+@export
+pub flow no_input() -> F32 at sample {
+  1.0
+}

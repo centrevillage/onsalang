@@ -4,12 +4,6 @@ edition = "2026"
 
 [export]
 prefix = "vec_"
-fns = [
-  "ops.f32_is_nan",
-  "ops.f32_is_finite",
-  "ops.f64_is_nan",
-  "ops.f64_is_finite",
-]
 
 [targets.host]
 kind = "source"

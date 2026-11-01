@@ -5,15 +5,6 @@
 //
 // [export]
 // prefix = "cmv_"
-// fns = [
-//   "c_match_value.rem_value_match_i16",
-//   "c_match_value.div_value_match_i16",
-//   "c_match_value.rem_value_match_none_i16",
-//   "c_match_value.shr_value_match_i8",
-//   "c_match_value.trunc_value_match_f64",
-//   "c_match_value.mul_by_mode_u32",
-//   "c_match_value.mul_result_u32",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -180,27 +171,33 @@ fn mul_result(r: Result[U32, U32], k: U32) -> U32 {
   }
 }
 
+@export
 pub fn rem_value_match_i16(a: I16, b: I16) -> I16 {
   rem_opt(Some(a), b)
 }
 
+@export
 pub fn div_value_match_i16(a: I16, b: I16) -> I16 {
   div_opt(Some(a), b)
 }
 
+@export
 pub fn rem_value_match_none_i16(b: I16) -> I16 {
   let o: Option[I16] = None
   rem_opt(o, b)
 }
 
+@export
 pub fn shr_value_match_i8(a: I8, n: U32) -> I8 {
   shr_opt(Some(a), n)
 }
 
+@export
 pub fn trunc_value_match_f64(x: F64) -> I64 {
   trunc_opt(Some(x))
 }
 
+@export
 pub fn mul_by_mode_u32(sel: U32, a: U32, b: U32) -> U32 {
   var m = Mode.Check
   if sel < 1 {
@@ -211,6 +208,7 @@ pub fn mul_by_mode_u32(sel: U32, a: U32, b: U32) -> U32 {
   mul_mode(m, a, b)
 }
 
+@export
 pub fn mul_result_u32(ok: U32, v: U32, k: U32) -> U32 {
   var r: Result[U32, U32] = Err(v)
   if ok > 0 {

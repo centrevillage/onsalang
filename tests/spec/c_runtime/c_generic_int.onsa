@@ -5,19 +5,6 @@
 //
 // [export]
 // prefix = "cgi_"
-// fns = [
-//   "c_generic_int.gen_rem_i8",
-//   "c_generic_int.gen_div_i8",
-//   "c_generic_int.gen_min_rem_i8",
-//   "c_generic_int.gen_shr_i16",
-//   "c_generic_int.gen_rem_neg1_i32",
-//   "c_generic_int.gen_shl_i32",
-//   "c_generic_int.gen_mul_u16",
-//   "c_generic_int.gen_wmul_u16",
-//   "c_generic_int.gen_smul_u32",
-//   "c_generic_int.gen_wmul_u64",
-//   "c_generic_int.gen_bits_i64",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -233,48 +220,59 @@ fn g_bits[T: Int](x: T) -> U32 {
   T.BITS
 }
 
+@export
 pub fn gen_rem_i8(a: I8, b: I8) -> I8 {
   g_rem(a, b)
 }
 
+@export
 pub fn gen_div_i8(a: I8, b: I8) -> I8 {
   g_div(a, b)
 }
 
+@export
 pub fn gen_min_rem_i8(d: I8) -> I8 {
   g_min_rem_neg1(d)
 }
 
+@export
 pub fn gen_shr_i16(a: I16, n: U32) -> I16 {
   g_shr(a, n)
 }
 
+@export
 pub fn gen_rem_neg1_i32(a: I32) -> I32 {
   g_rem_neg1(a)
 }
 
+@export
 pub fn gen_shl_i32(a: I32, n: U32) -> I32 {
   g_shl(a, n)
 }
 
+@export
 pub fn gen_mul_u16(a: U16, b: U16) -> U16 {
   g_mul(a, b)
 }
 
+@export
 pub fn gen_wmul_u16(a: U16, b: U16) -> U16 {
   g_wmul(a, b)
 }
 
+@export
 pub fn gen_smul_u32(a: U32, b: U32) -> U32 {
   g_smul(a, b)
 }
 
+@export
 pub fn gen_wmul_u64(ah: U32, al: U32, bh: U32, bl: U32, part: U32) -> U32 {
   let a = join(ah, al)
   let b = join(bh, bl)
   part_of(g_wmul(a, b), part)
 }
 
+@export
 pub fn gen_bits_i64(x: I64) -> U32 {
   g_bits(x)
 }

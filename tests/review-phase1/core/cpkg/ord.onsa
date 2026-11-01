@@ -3,6 +3,7 @@ fn next(inout k: U32) -> U32 {
   k
 }
 
+@export
 pub fn order_assign() -> U32 {
   var k: U32 = 0
   var ys: [U32; 3] = [0, 0, 0]

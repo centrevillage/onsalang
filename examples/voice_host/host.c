@@ -3,27 +3,27 @@
  * second at 48 kHz and writes it as a 16-bit WAV (out.wav). No heap, no
  * large stack values: the state lives in a static buffer sized by the
  * generated header. */
-#include "onsa_voice.h"
+#include "voice_voice.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-static _Alignas(ONSA_VOICE_ALIGN) uint8_t voice_mem[ONSA_VOICE_SIZE];
-static onsa_voice* voice;
-static onsa_voice_params params;
+static _Alignas(VOICE_VOICE_ALIGN) uint8_t voice_mem[VOICE_VOICE_SIZE];
+static voice_voice* voice;
+static voice_voice_params params;
 
 void setup(void) {
-  voice = (onsa_voice*)voice_mem;
-  if (onsa_voice_init(voice, NULL, 48000.0f) != 0) { /* BULK_SIZE が 0 なので NULL */
+  voice = (voice_voice*)voice_mem;
+  if (voice_voice_init(voice, NULL, 48000.0f) != 0) { /* BULK_SIZE が 0 なので NULL */
     return;                                             /* init が panic した。使い始めない */
   }
-  onsa_voice_params_default(&params);
+  voice_voice_params_default(&params);
 }
 
 void audio_callback(const float* const* in, float* const* out, size_t frames) {
   (void)in;
-  onsa_voice_process(voice, &params, out[0], (uint32_t)frames);
+  voice_voice_process(voice, &params, out[0], (uint32_t)frames);
 }
 
 static void put_u32(FILE* f, uint32_t v) {

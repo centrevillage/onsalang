@@ -245,7 +245,7 @@ impl<'a> Parser<'a> {
 
     /// The item whose node `m` is open (doc comments, attributes, visibility, declaration).
     pub(super) fn parse_item(&mut self, ctx: ItemCtx, m: Marker) -> PResult<Completed> {
-        let Heading { attrs, vis, keyword: t, declaration } = self.parse_heading()?;
+        let Heading { attrs, vis, keyword: t, declaration, place } = self.parse_heading(ctx)?;
         let Declaration { node, parse, places, .. } = *declaration;
         if !places.contains(&ctx) {
             let e = self.not_a_member(t, ctx);
@@ -256,7 +256,7 @@ impl<'a> Parser<'a> {
             self.bump();
             return Err(e);
         }
-        self.check_attrs(&attrs, crate::attrs::place_of_declaration(t.kind), Some(self.peek_index()));
+        self.check_attrs(&attrs, place, Some(self.peek_index()));
         // `priv use` is redundant (§15.1): a `use` is within its module.
         if let Some(word) = vis
             && t.kind == TokenKind::KwUse

@@ -1,3 +1,4 @@
+@export
 pub flow dl(x: Sig[F32]) -> Sig[F32] {
   let d = delay(x, 1024, 0.0)
   let bulk = prev(d, 0.0)

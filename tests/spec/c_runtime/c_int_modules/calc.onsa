@@ -233,46 +233,56 @@
 
 use edge.{BIG, MIN16, MIN32, NEG1_16, NEG1_32, TWO63, part_of, rem_i8}
 
+@export
 pub fn rem_min_neg1_i32(k: U32) -> I32 {
   MIN32 % NEG1_32
 }
 
+@export
 pub fn div_min_neg1_i32(k: U32) -> I32 {
   MIN32 / NEG1_32
 }
 
+@export
 pub fn rem_chain_i8(a: I8, b: I8) -> I8 {
   let r = rem_i8(a, b)
   rem_i8(r, 127)
 }
 
+@export
 pub fn sat_u64_hi(k: F64) -> U32 {
   let x = TWO63 * k
   part_of(x.trunc_u64_sat(), 0)
 }
 
+@export
 pub fn sat_u64_lo(k: F64) -> U32 {
   let x = TWO63 * k
   part_of(x.trunc_u64_sat(), 1)
 }
 
+@export
 pub fn mul_scaled_u32(a: U32) -> U32 {
   BIG * a
 }
 
+@export
 pub fn wmul_scaled_u32(a: U32) -> U32 {
   BIG *% a
 }
 
+@export
 pub fn bits_of_nan_f32(z: F32) -> U32 {
   let n = z / z
   n.to_bits()
 }
 
+@export
 pub fn rem_const_operands_i16(k: U32) -> I16 {
   MIN16 % NEG1_16
 }
 
+@export
 pub fn div_const_operands_i16(k: U32) -> I16 {
   MIN16 / NEG1_16
 }

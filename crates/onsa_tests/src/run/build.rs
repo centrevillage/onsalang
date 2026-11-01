@@ -129,28 +129,25 @@ pub(super) fn build_target(ctx: &BuildCtx<'_>, target: &str, update: Update, run
     run.builds.push(Built { target: target.to_string(), output: Arc::new(out), conformance: t.conformance });
 }
 
-/// `conformance = true` covers every `pub flow` of the case: each is in
-/// `[export] flows`, which is not empty.
+/// `conformance = true` covers every `pub flow` of the case: each has
+/// `@export`, and there is one.
 pub(super) fn conformance_scope(run: &mut CaseRun, loaded: &Loaded, analyzed: &Analyzed) {
-    let export = onsa_driver::ExportSettings::from_manifest(loaded.manifest.as_ref().and_then(|m| m.export.as_ref()));
-    if export.flows.is_empty() {
-        run.problems.push(Problem::Case("`conformance` needs `[export] flows`".into()));
+    let a = &analyzed.analysis;
+    if !a.exports().iter().any(|&d| a.def(d).as_flow().is_some()) {
+        run.problems.push(Problem::Case("`conformance` needs a flow with `@export`".into()));
         return;
     }
     let user: BTreeSet<FileId> = loaded.modules.iter().map(|(f, _)| *f).collect();
-    let a = &analyzed.analysis;
     for (i, d) in a.defs.iter().enumerate() {
         if matches!(d.kind, onsa_sema::def::DefKind::Flow(_))
             && d.vis == onsa_syntax::ast::Vis::Pub
             && d.owner.is_none()
+            && d.export.is_none()
             && user.contains(&d.span.file)
         {
             let name = a.qualified_name(onsa_sema::DefId(i as u32));
-            if !export.flows.contains(&name) {
-                run.problems.push(Problem::Case(format!(
-                    "`conformance` covers every `pub flow`, but `{name}` is not in `[export] flows`"
-                )));
-            }
+            run.problems
+                .push(Problem::Case(format!("`conformance` covers every `pub flow`, but `{name}` has no `@export`")));
         }
     }
 }

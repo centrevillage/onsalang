@@ -1,0 +1,49 @@
+// onsa.toml
+// [package]
+// name = "export_build_provides"
+// edition = "2026"
+//
+// [export]
+// prefix = "export_build_provides_"
+//
+// [targets.bare]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.hosted]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = ["Alloc"]
+//
+// [test]
+// spec = ["§12.3", "§14.2", "§15.3"]
+
+// W4-02 U1, S-639 (spec §14.2, §15.3): the checks that the target decides reach the declarations with
+// `@export` (the build reads the attribute, not a list in the manifest). The effect row of an exported
+// function or flow may only hold the effects that the target provides (E0610, §14.2), and `bare` provides
+// none. `onsa check` does not report it (it does not depend on the target), the build of the target `bare`
+// does (the mark names the target), and the target `hosted`, which provides `Alloc`, builds it. A `pub` item
+// without `@export` is not exported, so it is not checked at this stage, however it is written. The error is
+// at the name of the declaration.
+
+@export
+pub fn version() -> U32 { 2 }
+
+@export
+pub fn version_on_heap() -> U32 uses {Alloc} { 2 }  //~ E0610 [bare]
+
+@export
+pub fn table_on_heap(n: U32) -> U32 uses {Alloc} {  //~ E0610 [bare]
+  if n == 0 { 0 } else { n - 1 }
+}
+
+pub fn not_exported() -> U32 uses {Alloc} { 3 }
+
+pub fn not_exported_either(n: U32) -> U32 uses {Alloc} {
+  if n == 0 { 0 } else { n - 1 }
+}

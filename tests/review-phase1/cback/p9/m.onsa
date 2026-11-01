@@ -1,7 +1,9 @@
+@export
 pub fn sat(x: F32) -> I32 {
   x.trunc_i32_sat()
 }
 
+@export
 pub fn mn(a: F32, b: F32) -> F32 {
   a.min(b)
 }

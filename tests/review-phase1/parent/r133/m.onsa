@@ -16,10 +16,12 @@
 //   C、gcc-15、arm64             nan_bits = 0x7FC00000、neg_nan_bits = 0xFFC00000
 // 仕様 §13.4 は全ての変換先でのビット一致を約束するが、NaN の符号とペイロードは決まっていない。
 
+@export
 pub fn nan_bits(z: F32) -> U32 {
   (z / z).to_bits()
 }
 
+@export
 pub fn neg_nan_bits(z: F32) -> U32 {
   (-(z / z)).to_bits()
 }

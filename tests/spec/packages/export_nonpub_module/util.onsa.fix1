@@ -1,0 +1,4 @@
+@export
+pub fn hidden() -> U32 {                                //~ E0303 @4
+  1
+}

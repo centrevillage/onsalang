@@ -5,12 +5,6 @@
 //
 // [export]
 // prefix = "csc_"
-// fns = [
-//   "c_self_compare.self_cmp_u8",
-//   "c_self_compare.self_cmp_i32",
-//   "c_self_compare.self_cmp_u64",
-//   "c_self_compare.self_cmp_f32",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -92,6 +86,7 @@
 // `self_cmp_<t>(x)` adds up one bit for each that is true: 1 for `==`, 2 for `!=`, 4 for `<=`, 8 for `<`,
 // 16 for `>=`, 32 for `>`. An integer gives 21; a NaN gives 2; `0.0` and `-0.0` give 21.
 
+@export
 pub fn self_cmp_u8(x: U8) -> U32 {
   var m: U32 = 0
   if x == x {
@@ -115,6 +110,7 @@ pub fn self_cmp_u8(x: U8) -> U32 {
   m
 }
 
+@export
 pub fn self_cmp_i32(x: I32) -> U32 {
   var m: U32 = 0
   if x == x {
@@ -138,6 +134,7 @@ pub fn self_cmp_i32(x: I32) -> U32 {
   m
 }
 
+@export
 pub fn self_cmp_u64(x: U64) -> U32 {
   var m: U32 = 0
   if x == x {
@@ -161,6 +158,7 @@ pub fn self_cmp_u64(x: U64) -> U32 {
   m
 }
 
+@export
 pub fn self_cmp_f32(x: F32) -> U32 {
   var m: U32 = 0
   if x == x {

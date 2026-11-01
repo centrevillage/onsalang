@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§14.2"]
+// canonical = false
+
+// W4-02 U1, S-639 (spec §6.5, §14.2): `@export` may be on the line of the declaration (`@export pub fn`), as
+// the other attributes may be (the `@mem` of a `let`, §12.4). It is no error. `onsa fmt` puts the attribute on
+// the line before the declaration, so the file is not in the canonical form (`canonical = false` checks that
+// the result of `onsa fmt` is readable and idempotent). No diagnostic is expected.
+
+@export pub fn same_line() -> U32 { 3 }
+
+@export pub rt fn same_line_rt(x: F32) -> F32 { x }
+
+@export pub flow same_line_flow(x: F32 at sample) -> F32 at sample { x }

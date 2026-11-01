@@ -5,10 +5,6 @@
 //
 // [export]
 // prefix = "epo_"
-// fns = [
-//   "export_planar_lengths_out.dup_at",
-//   "export_planar_lengths_out.trio_at",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -98,6 +94,7 @@ pub flow trio(x: F32 at sample) -> [F32; 3] at sample {
 }
 
 /// Runs `dup` over `src` into the views of 4 frames of channel 0 and `n` frames of channel 1.
+@export
 pub fn dup_at(src: Span[F32], n: U32) -> F32 {
   var st          = dup.init(dup.Config {}, 8.0)
   var a: [F32; 6] = [0.0; 6]
@@ -107,6 +104,7 @@ pub fn dup_at(src: Span[F32], n: U32) -> F32 {
 }
 
 /// Runs `trio` over `src` into the views of 4 frames of channel 0, `n1` of channel 1, `n2` of channel 2.
+@export
 pub fn trio_at(src: Span[F32], n1: U32, n2: U32) -> F32 {
   var st          = trio.init(trio.Config {}, 8.0)
   var a: [F32; 6] = [0.0; 6]

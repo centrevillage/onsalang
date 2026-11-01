@@ -94,7 +94,7 @@ fn entry(target: &str) -> String {
     )
 }
 
-const MANIFEST: &str = "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"onsa_\"\n// flows = [\"m.f\"]\n//\n// [targets.a]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"trap\"\n// provides = []\n//\n// [targets.b]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n// provides = []\n";
+const MANIFEST: &str = "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"onsa_\"\n// # what is exported has `@export` (§14.2)\n//\n// [targets.a]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"trap\"\n// provides = []\n//\n// [targets.b]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n// provides = []\n";
 
 fn case<'a>(r: &'a Report, path: &str) -> &'a CaseReport {
     r.cases.iter().find(|c| c.run.path == path).unwrap_or_else(|| panic!("no case {path}"))
@@ -102,42 +102,34 @@ fn case<'a>(r: &'a Report, path: &str) -> &'a CaseReport {
 
 #[test]
 fn build_stage_markers() {
-    // E0809 comes from the build of each target (the check is clean).
-    let src = format!(
-        "{MANIFEST}\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {{ //~ E0809\n  x * k\n}}\n"
-    );
-    let targeted = src.replace("//~ E0809", "//~ E0809 [a] //~ E0809 [b]");
-    let only_a = src.replace("//~ E0809", "//~ E0809 [a]");
+    // E0610 comes from the build of each target (the check is clean).
+    let src = format!("{MANIFEST}\n@export\npub fn f() -> I32 uses {{Alloc}} {{ //~ E0610\n  1\n}}\n");
+    let targeted = src.replace("//~ E0610", "//~ E0610 [a] //~ E0610 [b]");
+    let only_a = src.replace("//~ E0610", "//~ E0610 [a]");
     let repo = Repo::new(
         "build",
         &[("tests/all/m.onsa", &src), ("tests/each/m.onsa", &targeted), ("tests/only_a/m.onsa", &only_a)],
     );
     let r = repo.run();
-    // The E0809 of the build has a candidate (add `@param`), which the runner cannot
-    // check again (W3-17): it fails on each build, never silenced.
-    let unchecked = |f: &String| f.contains("m.onsa:24:30 E0809 fix1: a candidate of the build stage");
     for p in ["tests/all/m.onsa", "tests/each/m.onsa"] {
         let c = case(&r, p);
-        assert!(c.failures.len() == 2 && c.failures.iter().all(unchecked), "{p}: {:?}", c.failures);
+        assert!(c.failures.is_empty(), "{p}: {:?}", c.failures);
         let stages: Vec<(Stage, Option<&str>, bool)> =
             c.run.checked.iter().map(|m| (m.stage, m.target.as_deref(), m.matched)).collect();
         assert_eq!(stages, [(Stage::Build, Some("a"), true), (Stage::Build, Some("b"), true)], "{p}");
     }
-    // `b` reports E0809 too, but no marker expects it there.
+    // `b` reports E0610 too, but no marker expects it there.
     let c = case(&r, "tests/only_a/m.onsa");
-    let differs: Vec<&String> = c.failures.iter().filter(|f| !unchecked(f)).collect();
-    assert_eq!(differs.len(), 1, "{:?}", c.failures);
-    assert!(differs[0].contains("the build of `b` differs"), "{:?}", c.failures);
+    assert_eq!(c.failures.len(), 1, "{:?}", c.failures);
+    assert!(c.failures[0].contains("the build of `b` differs"), "{:?}", c.failures);
 }
 
 #[test]
 fn errors_of_the_case() {
     let check_error = format!("{MANIFEST}\npub fn g() -> I32 {{ x }} //~ E0302 [a]\n");
-    let unknown_target = format!(
-        "{MANIFEST}\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {{ //~ E0809 [z]\n  x * k\n}}\n"
-    );
+    let unknown_target = format!("{MANIFEST}\n@export\npub fn f() -> I32 uses {{Alloc}} {{ //~ E0610 [z]\n  1\n}}\n");
     let golden_and_build = MANIFEST.to_string()
-        + "//\n// [test]\n// golden = [\"c\"]\n\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample { //~ E0809\n  x * k\n}\n";
+        + "//\n// [test]\n// golden = [\"c\"]\n\n@export\npub fn f() -> I32 uses {Alloc} { //~ E0610\n  1\n}\n";
     let old_mode = "//! mode: parse\nfn f() {}\n";
     let repo = Repo::new(
         "errors",
@@ -567,22 +559,28 @@ fn fix_contract() {
 
 #[test]
 fn conformance_scope() {
-    let head = |flows: &str| {
+    let head = |exported: &[&str]| {
         format!(
             "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"onsa_\"\n\
-                 // flows = [{flows}]\n//\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n\
+                 // # {exported:?} have `@export`\n//\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n\
                  // panic = \"trap\"\n// provides = []\n//\n// [test]\n// conformance = true\n\n"
         )
     };
-    let two = "pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n\npub flow g(x: F32 at sample) -> F32 at sample {\n  x * 2.0\n}\n";
-    let init_only = "pub flow f(x: F32 at sample, n: F32 at init) -> F32 at sample {\n  x * n\n}\n";
+    let two = |exported: &[&str]| {
+        let f = "pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n\npub flow g(x: F32 at sample) -> F32 at sample {\n  x * 2.0\n}\n";
+        let f = exported
+            .iter()
+            .fold(f.to_string(), |s, n| s.replace(&format!("pub flow {n}("), &format!("@export\npub flow {n}(")));
+        head(exported) + &f
+    };
+    let init_only = "@export\npub flow f(x: F32 at sample, n: F32 at init) -> F32 at sample {\n  x * n\n}\n";
     let repo = Repo::new(
         "conformance",
         &[
-            ("tests/partial/m.onsa", &(head("\"m.f\"") + two)),
-            ("tests/empty/m.onsa", &(head("") + two)),
-            ("tests/init/m.onsa", &(head("\"m.f\"") + init_only)),
-            ("tests/full/m.onsa", &(head("\"m.f\", \"m.g\"") + two)),
+            ("tests/partial/m.onsa", &two(&["f"])),
+            ("tests/empty/m.onsa", &two(&[])),
+            ("tests/init/m.onsa", &(head(&["f"]) + init_only)),
+            ("tests/full/m.onsa", &two(&["f", "g"])),
         ],
     );
     let r = repo.run();
@@ -590,8 +588,8 @@ fn conformance_scope() {
         let c = case(&r, p);
         assert!(c.failures.iter().any(|f| f.contains(needle)), "{p}: {:?}", c.failures);
     };
-    has("tests/partial/m.onsa", "`m.g` is not in `[export] flows`");
-    has("tests/empty/m.onsa", "needs `[export] flows`");
+    has("tests/partial/m.onsa", "`m.g` has no `@export`");
+    has("tests/empty/m.onsa", "needs a flow with `@export`");
     // The C checks run the builds (`crate::ccheck`); the runner keeps them.
     for p in ["tests/init/m.onsa", "tests/full/m.onsa"] {
         let c = case(&r, p);
@@ -605,8 +603,8 @@ fn conformance_scope() {
 fn small_holes() {
     let bad_target = MANIFEST.replace("panic = \"poison\"", "panic = \"boom\"") + "\npub fn f() -> I32 {\n  1\n}\n";
     let flow = |name: &str| {
-        MANIFEST.replace("name = \"m\"", &format!("name = \"{name}\"")).replace("m.f", &format!("{name}.f"))
-            + "\npub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n"
+        MANIFEST.replace("name = \"m\"", &format!("name = \"{name}\""))
+            + "\n@export\npub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n"
     };
     let repo = Repo::new(
         "holes",
@@ -905,9 +903,7 @@ fn internal_errors_and_the_list() {
 
 #[test]
 fn runs_as_json() {
-    let src = format!(
-        "{MANIFEST}\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {{ //~ E0809\n  x * k\n}}\n"
-    );
+    let src = format!("{MANIFEST}\n@export\npub fn f() -> I32 uses {{Alloc}} {{ //~ E0610\n  1\n}}\n");
     let repo = Repo::new(
         "json",
         &[
@@ -927,7 +923,7 @@ fn runs_as_json() {
     assert_eq!(b["ran"], true);
     let m = b["markers"].as_array().unwrap();
     assert_eq!(m.len(), 2, "{b}");
-    assert_eq!(m[0]["code"], "E0809");
+    assert_eq!(m[0]["code"], "E0610");
     assert_eq!(m[0]["file"], "m.onsa");
     assert_eq!(m[0]["stage"], "build");
     assert_eq!(m[0]["target"], "a");

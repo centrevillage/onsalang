@@ -5,10 +5,6 @@
 //
 // [export]
 // prefix = "csc_"
-// fns = [
-//   "c_shift_chain.shr_chain_i8",
-//   "c_shift_chain.shl_chain_i16",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -63,10 +59,12 @@
 // `-128i8 >> 3` is -16 and `-16 >> 4` is -1; `1i16 << 7` is 128 and `128 << 8` is -32768 (the bit that
 // reaches the sign is kept, nothing panics); an amount of the bit width or more panics in either step.
 
+@export
 pub fn shr_chain_i8(a: I8, m: U32, n: U32) -> I8 {
   a >> m >> n
 }
 
+@export
 pub fn shl_chain_i16(a: I16, m: U32, n: U32) -> I16 {
   a << m << n
 }

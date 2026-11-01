@@ -341,6 +341,7 @@
 "sample" = 1
 
 [allow."crates/onsa_syntax/src/attrs.rs"]
+"export" = 1
 "fp" = 1
 "mem" = 1
 "param" = 1

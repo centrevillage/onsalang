@@ -265,7 +265,7 @@ pub fn plan(s: &Seq, out: &BuildOutput) -> Result<SeqPlan, PlanError> {
     let (callee, flow) = match (&s.flow, &s.fn_) {
         (Some(f), _) => {
             let api = out.unit.flows.iter().find(|a| &a.flow == f).ok_or_else(|| {
-                head(s.line, format!("the flow `{f}` is not exported for target `{}` (`[export] flows`)", s.target))
+                head(s.line, format!("the flow `{f}` is not exported for target `{}` (no `@export`)", s.target))
             })?;
             let meta = m
                 .flows
@@ -277,7 +277,7 @@ pub fn plan(s: &Seq, out: &BuildOutput) -> Result<SeqPlan, PlanError> {
         }
         (_, Some(f)) => {
             let api = out.unit.fns.iter().find(|a| &a.fn_ == f).ok_or_else(|| {
-                head(s.line, format!("the function `{f}` is not exported for target `{}` (`[export] fns`)", s.target))
+                head(s.line, format!("the function `{f}` is not exported for target `{}` (no `@export`)", s.target))
             })?;
             (Callee::Fn(api.clone(), out.unit.take_panic.clone()), None)
         }

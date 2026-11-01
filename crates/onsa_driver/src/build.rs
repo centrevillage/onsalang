@@ -1,6 +1,6 @@
 //! `onsa build --target <name>` (T4-5, spec §15.3, §14.2, §13.4): reads the
-//! manifest's `[export]` and `[targets.<name>]`, checks the exports (E0809,
-//! E0610), lowers with the target's memory settings, emits C, writes the
+//! manifest's `[export]` and `[targets.<name>]`, checks the effects of the
+//! items with `@export` (E0610), lowers with the target's memory settings, emits C, writes the
 //! files and, when the platform is the host and the kind is `staticlib`,
 //! compiles them with `cc` and archives them with `ar`. Cross targets get
 //! the sources and the intended flags (`onsa_build.json`).
@@ -14,14 +14,10 @@ use onsa_core::{ConstId, Expr, ExprKind, Lit, LowerOptions, Module, Ty, TypeDefK
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 use onsa_interp::{ArrayData, Interp, Value};
-use onsa_sema::def::DefKind;
 use onsa_sema::package_tree::{BUILD_DIR, MANIFEST};
-use onsa_sema::ty::Rate;
-use onsa_syntax::ast::Vis;
 
 use crate::{
-    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, guard,
-    read_package_input,
+    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestTarget, guard, read_package_input,
 };
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
@@ -145,16 +141,14 @@ pub struct BuildReport {
     pub note: Option<String>,
 }
 
-/// A target of the manifest, resolved and validated: its name, its
-/// settings and the manifest's `[export]`.
+/// A target of the manifest, resolved and validated: its name and settings.
 #[derive(Debug, Clone)]
 pub struct ResolvedTarget {
     pub name: String,
     pub settings: TargetSettings,
-    pub export: ExportSettings,
 }
 
-/// `[export]` with its defaults applied (spec §14.2, §15.3).
+/// What a build exports (spec §14.2, §15.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportSettings {
     /// The C prefix of the exported names (default `onsa_`).
@@ -166,9 +160,17 @@ pub struct ExportSettings {
 }
 
 impl ExportSettings {
-    pub fn from_manifest(e: Option<&ManifestExport>) -> ExportSettings {
-        let e = e.cloned().unwrap_or_default();
-        ExportSettings { prefix: e.prefix.unwrap_or_else(|| "onsa_".into()), flows: e.flows, fns: e.fns }
+    /// The items with `@export` of the package of `analyzed`
+    /// ([`onsa_sema::Analysis::exports`]), and the `prefix` of `manifest`.
+    pub fn of(analyzed: &Analyzed, manifest: Option<&Manifest>) -> ExportSettings {
+        let a = &analyzed.analysis;
+        let prefix = manifest.and_then(|m| m.export.as_ref()?.prefix.clone());
+        let (mut flows, mut fns) = (Vec::new(), Vec::new());
+        for d in a.exports() {
+            let list = if a.def(d).as_flow().is_some() { &mut flows } else { &mut fns };
+            list.push(a.qualified_name(d));
+        }
+        ExportSettings { prefix: prefix.unwrap_or_else(|| "onsa_".into()), flows, fns }
     }
 }
 
@@ -188,11 +190,7 @@ pub fn resolve_target(manifest: &Manifest, manifest_name: &str, target: &str) ->
         )));
     };
     let settings = TargetSettings::from_manifest(target, t)?;
-    Ok(ResolvedTarget {
-        name: target.to_string(),
-        settings,
-        export: ExportSettings::from_manifest(manifest.export.as_ref()),
-    })
+    Ok(ResolvedTarget { name: target.to_string(), settings })
 }
 
 /// What a build produces before anything is written: the Core module after
@@ -251,8 +249,8 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
         });
     }
     let settings = &resolved.settings;
-    let export = &resolved.export;
-    let export_diags = check_exports(analyzed, export, settings);
+    let export = &ExportSettings::of(analyzed, loaded.manifest.as_ref());
+    let export_diags = check_exports(analyzed, settings);
     if !export_diags.is_empty() {
         return Err(diagnostics(LowerError::reported(export_diags)));
     }
@@ -461,95 +459,24 @@ impl TargetSettings {
     }
 }
 
-/// E0809 (exported `block` inputs need `@param`, §11.7) and E0610 (exported
-/// functions may use only provided effects, §14.2), plus unknown names.
-fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &TargetSettings) -> Vec<Diagnostic> {
+/// E0610: an exported function uses only the effects the target provides
+/// (§14.2). The checks of the declarations are the check's (§14.2).
+fn check_exports(analyzed: &Analyzed, settings: &TargetSettings) -> Vec<Diagnostic> {
     let a = &analyzed.analysis;
     let mut out = Vec::new();
-    let no_span = onsa_diag::Span::new(onsa_diag::FileId(0), 0, 0);
-    for name in &export.flows {
-        let found = a.defs.iter().enumerate().find(|(i, d)| {
-            matches!(d.kind, DefKind::Flow(_)) && a.qualified_name(onsa_sema::DefId(*i as u32)) == *name
-        });
-        let Some((_, def)) = found else {
-            out.push(Diagnostic::new(
-                Stage::Build,
-                Code::E0302,
-                no_span,
-                format!("[export] flows: cannot find the flow `{name}`"),
-            ));
-            continue;
+    for d in a.exports() {
+        let Some(f) = a.def(d).as_fn() else { continue };
+        let error = |uses: &str| {
+            let msg = format!(
+                "the exported function `{}` uses {uses}, which the target does not provide (§14.2)",
+                a.qualified_name(d)
+            );
+            Diagnostic::new(Stage::Build, Code::E0610, a.def(d).name_span, msg)
         };
-        if def.vis != Vis::Pub {
-            out.push(Diagnostic::new(
-                Stage::Build,
-                Code::E0303,
-                def.name_span,
-                format!("the exported flow `{name}` must be `pub`"),
-            ));
-        }
-        let Some(f) = def.as_flow() else { continue };
-        for input in &f.inputs {
-            if input.rate == Rate::Ctl && input.param.is_none() {
-                out.push(
-                    Diagnostic::new(
-                        Stage::Build,
-                        Code::E0809,
-                        input.span,
-                        format!(
-                            "the exported flow `{name}` needs `@param` on its `block` input `{}` (§11.7)",
-                            input.name
-                        ),
-                    )
-                    .with_fix(onsa_diag::Fix::insert(
-                        "add `@param`",
-                        input.span.file,
-                        input.span.start,
-                        "@param(min: 0.0, max: 1.0, default: 0.0) ",
-                    )),
-                );
-            }
-        }
-    }
-    for name in &export.fns {
-        let found =
-            a.defs.iter().enumerate().find(|(i, d)| {
-                matches!(d.kind, DefKind::Fn(_)) && a.qualified_name(onsa_sema::DefId(*i as u32)) == *name
-            });
-        let Some((_, def)) = found else {
-            out.push(Diagnostic::new(
-                Stage::Build,
-                Code::E0302,
-                no_span,
-                format!("[export] fns: cannot find the function `{name}`"),
-            ));
-            continue;
-        };
-        if def.vis != Vis::Pub {
-            out.push(Diagnostic::new(
-                Stage::Build,
-                Code::E0303,
-                def.name_span,
-                format!("the exported function `{name}` must be `pub`"),
-            ));
-        }
-        let Some(f) = def.as_fn() else { continue };
         if f.effects.alloc && !settings.provides_alloc {
-            out.push(Diagnostic::new(
-                Stage::Build,
-                Code::E0610,
-                def.name_span,
-                format!("the exported function `{name}` uses `Alloc`, which the target does not provide (§14.2)"),
-            ));
+            out.push(error("`Alloc`"));
         }
-        for e in &f.effects.other {
-            out.push(Diagnostic::new(
-                Stage::Build,
-                Code::E0610,
-                def.name_span,
-                format!("the exported function `{name}` uses `{e}`, which the target does not provide (§14.2)"),
-            ));
-        }
+        out.extend(f.effects.other.iter().map(|e| error(&format!("`{e}`"))));
     }
     out
 }

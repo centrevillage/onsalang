@@ -17,6 +17,7 @@
 //   - `bare`: 生成した C は `onsa_panic("", "", 0)`（行も消える）。`onsa.h` には補助関数のメッセージが 10 個残る（"index out of range"、"division by zero" など）。
 //     `ONSA_NO_TLS` は定義されない。
 
+@export
 pub flow gain(
   x: Sig[F32],
   @param(min: 0.0, max: 1.0, default: 0.5) g: Ctl[F32],
@@ -24,10 +25,13 @@ pub flow gain(
   x * g
 }
 
+@export
 pub fn half(x: I32) -> I32 { x / 2 }
 
+@export
 pub fn bump(inout n: U32) { n = n + 1 }
 
+@export
 pub fn sum(xs: Span[F32]) -> F32 {
   var s = 0.0
   for i in 0..<xs.len() {

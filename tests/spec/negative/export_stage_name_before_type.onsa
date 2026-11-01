@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§14.2", "§18.1"]
+
+// W4-02 U1, S-823 (spec §14.2, §18.1): the E0303 of an `@export` declaration that is not `pub` is an error of
+// the names stage (what it needs is the heading, the attribute and the visibility word, like the E0303 of a
+// name that is not visible). A unit stops at its first error, and the stages are in an order (names, types,
+// flows, ...), so a unit that has the E0303 and an error of a later stage in the body reports the E0303
+// only. The unit is the declaration (§18.1): each declaration here has the error of the body that the types
+// stage would report (a `Bool` where an `I32` or an `F32` is wanted), and none of them is reported. The unit
+// that is `pub` is not the case of this file (it reports its type error: the last function). No `fixes` key,
+// since the `priv` declaration has no candidate and the others have one; the candidates are in
+// fixes/export_nonpub.onsa and fixes/export_priv_no_candidate.onsa.
+
+@export
+fn plain_fn_with_type_error() -> I32 {              //~ E0303 @4
+  true
+}
+
+@export
+priv fn priv_fn_with_type_error() -> I32 {          //~ E0303 @9
+  true
+}
+
+@export
+flow plain_flow_with_type_error(x: F32 at sample) -> F32 at sample { //~ E0303 @6
+  true
+}
+
+@export
+pub fn pub_fn_with_type_error() -> I32 {
+  true                                              //~ E0401
+}

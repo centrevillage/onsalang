@@ -611,7 +611,6 @@ edition = \"2026\"
 
 [export]
 prefix = \"sp_\"
-fns = [\"util.version\"]
 
 [targets.hosted]
 kind = \"source\"
@@ -666,12 +665,12 @@ fn interface_writes_the_diagnostics_of_the_check_to_stdout() {
 fn build_writes_the_diagnostics_to_stdout() {
     let d = Dir::new("stream_build");
     d.file("onsa.toml", MANIFEST);
-    d.file("util.onsa", "pub fn version() -> U32 {\n  let x: Bool = 1\n  1\n}\n");
+    d.file("util.onsa", "@export\npub fn version() -> U32 {\n  let x: Bool = 1\n  1\n}\n");
     let dir = d.path("");
     let out = onsa(&["build", "--target", "hosted", &dir]);
     assert_eq!(code(&out), 1, "{out:?}");
     let hs = headers(&stdout(&out));
-    assert_eq!(hs.iter().map(|h| (h.line, h.code.as_str())).collect::<Vec<_>>(), vec![(2, "E0401")], "{out:?}");
+    assert_eq!(hs.iter().map(|h| (h.line, h.code.as_str())).collect::<Vec<_>>(), vec![(3, "E0401")], "{out:?}");
     assert_eq!(hs[0].file, "util.onsa", "the file is the path from the package root: {hs:?}");
     no_diagnostic_on_stderr(&out);
 }

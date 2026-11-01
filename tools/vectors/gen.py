@@ -144,16 +144,11 @@ def fn_text(o):
     return f"pub fn {o.fn}({params}) -> {O.onsa_type(ret)} {{ {o.onsa} }}"
 
 
-def exported_fns(o):
-    return [o.fn + "_some", o.fn + "_val"] if o.ret.startswith("opt:") else [o.fn]
-
-
 def render_fixture(ops):
     out = {}
     for pkg in ["scalar"] + [n for n, _ in O.PENDING_PACKAGES]:
         pops = [o for o in ops if o.pkg == pkg]
         used = sorted({o.name for o in pops if o.group in ("int", "float") and o.name in O.STD_MATH})
-        names = [f for o in pops for f in exported_fns(o)]
         head = [
             "// onsa.toml",
             "// [test]",
@@ -169,11 +164,12 @@ def render_fixture(ops):
         if used:
             body += ["", f"use std.math.{{{', '.join(used)}}}"]
         for o in pops:
-            body += ["", fn_text(o)]
+            # Every function is exported (§14.2), each with `@export`.
+            body += ["", fn_text(o).replace("pub fn ", "@export\npub fn ")]
         out[f"fixture/{pkg}/ops.onsa"] = ("\n".join(head + body) + "\n").encode()
         toml = [
             "[package]", f'name = "vector_{pkg}"', 'edition = "2026"', "",
-            "[export]", 'prefix = "vec_"', "fns = [", *[f'  "ops.{n}",' for n in names], "]", "",
+            "[export]", 'prefix = "vec_"', "",
             "[targets.host]", 'kind = "source"', 'lang = "c"', 'platform = "host"', 'panic = "poison"', "provides = []",
         ]
         out[f"fixture/{pkg}/onsa.toml"] = ("\n".join(toml) + "\n").encode()

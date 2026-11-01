@@ -7,7 +7,6 @@ std = "0.2.0"
 
 [export]
 prefix = "ord_"
-fns = ["ord.order_assign"]
 
 [targets.host]
 kind = "source"

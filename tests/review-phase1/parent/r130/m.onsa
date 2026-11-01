@@ -1,2 +1,3 @@
 // R-130: 期待値は onsa.toml の先頭のコメント。
+@export
 pub fn one() -> I32 { 1 }

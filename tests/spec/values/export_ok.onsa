@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§11.7", "§14.2", "§18.1"]
+
+// W4-02 U1, S-639, S-632 (spec §6.5, §11.7, §14.2): the right places and forms of `@export`: the declaration
+// of a function or a flow at the top level, `pub`, with the attribute on the line before it (the same line is
+// in export_same_line.onsa), after a doc comment, on an `rt` function. The checks of an exported declaration
+// that `onsa check` makes (`pub`, the end of the name, the `@param` of a `block` input of a flow) all pass,
+// so no diagnostic is expected. The same flow without `@export` is fine too (the need of a `@param` is the
+// export's: `not_exported`). The errors of these checks are in the files `negative/export_*.onsa` and
+// `fixes/export_*.onsa`.
+
+@export
+pub fn version() -> U32 { 2 }
+
+/// A doc comment comes before the attribute.
+@export
+pub fn documented(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+@export
+pub rt fn rt_function(x: F32) -> F32 {
+  x * 0.5
+}
+
+@export
+pub fn bool_result(a: I32) -> Bool {
+  a > 0
+}
+
+@export
+pub flow no_param(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+@export
+pub flow with_params(
+  x: F32 at sample,
+  @param(min: 0.0, max: 2.0, default: 1.0)
+  gain: F32 at block,
+  @param(min: 0, max: 8, default: 2)
+  steps: I32 at block,
+) -> F32 at sample {
+  if steps > 0 { x * gain } else { 0.0 }
+}
+
+@export
+pub flow with_config(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  let k = 100 / n
+  x + k.round_f32()
+}
+
+pub flow not_exported(x: F32 at sample, gain: F32 at block) -> F32 at sample {
+  x * gain
+}
+
+fn not_exported_private() -> I32 {
+  1
+}

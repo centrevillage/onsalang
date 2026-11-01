@@ -1,1 +1,2 @@
+@export
 pub fn gain_init() -> I32 { 1 }

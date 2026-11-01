@@ -1,0 +1,8 @@
+use util.{version}
+
+// An exported function that only calls a pure one has an empty row, which every target provides.
+@export
+pub fn count() -> U32 { version() + 1 }
+
+// Not exported, so it is not looked at by the target that provides nothing.
+pub fn count_on_heap() -> U32 uses {Alloc} { 3 }

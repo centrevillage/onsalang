@@ -368,6 +368,18 @@ impl Attr {
     pub fn is_fp_relaxed(&self) -> bool {
         self.is(crate::attrs::FP, crate::attrs::RELAXED)
     }
+
+    /// The attribute `@name` of `attrs`, if one is there.
+    pub fn find<'a>(attrs: &'a [Attr], name: &str) -> Option<&'a Attr> {
+        attrs.iter().find(|a| a.name.name == name)
+    }
+}
+
+impl Item {
+    /// The span of the `@export` of the item (§14.2), if it has one.
+    pub fn export(&self) -> Option<Span> {
+        Attr::find(&self.attrs, crate::attrs::EXPORT).map(|a| a.span)
+    }
 }
 
 #[derive(Debug, Clone)]

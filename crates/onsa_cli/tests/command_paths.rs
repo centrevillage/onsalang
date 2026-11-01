@@ -33,7 +33,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use test_support::*;
 
-const MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[export]\nprefix = \"pk_\"\nfns = [\"alpha.alpha_fn\"]\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
+const MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[export]\nprefix = \"pk_\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
 
 /// `alpha_fn` is used by `sub/beta.onsa`; `alpha_only_fn` and the flows `only_in_alpha` and `echo`
 /// are not named by anything but this module (`echo` is in `beta` too).

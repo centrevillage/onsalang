@@ -36,8 +36,8 @@ pub struct Bound {
     pub ops: BTreeMap<usize, Shape>,
 }
 
-/// Bind the operations of package `pkg` to the functions `exported` (the
-/// manifest's `[export] fns`) of `module`, checked against the types of
+/// Bind the operations of package `pkg` to the functions `exported` (those
+/// with `@export`) of `module`, checked against the types of
 /// `OPS.tsv`. The errors are of the data or the fixture (they disagree):
 /// never pending.
 pub fn bind(data: &Data, pkg: &str, module: &Module, exported: &[String]) -> Result<Bound, Vec<String>> {

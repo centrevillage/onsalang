@@ -119,6 +119,7 @@
 use limits.{in_range_i16, in_range_u8, narrow_or_max}
 use std.array
 
+@export
 pub fn count_in_range(base: U32) -> U32 {
   let flags: [U32; 4] = array.from_fn(fn(i) {
     let v = narrow_or_max(base + i)
@@ -131,6 +132,7 @@ pub fn count_in_range(base: U32) -> U32 {
   flags[0] + flags[1] + flags[2] + flags[3]
 }
 
+@export
 pub fn wide_ok(x: I32) -> U32 {
   var r: U32 = 2
   match x.narrow_i16() {

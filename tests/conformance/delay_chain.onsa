@@ -4,8 +4,7 @@
 // edition = "2026"
 //
 // [export]
-// prefix = "onsa_"
-// flows = ["delay_chain.tap", "delay_chain.chain", "delay_chain.planar"]
+// prefix = "delay_chain_"
 //
 // [targets.host]
 // kind = "source"
@@ -29,10 +28,12 @@ pub struct Stereo {
   r: F32,
 }
 
+@export
 pub flow tap(x: F32 at sample) -> F32 at sample {
   delay~(x, 2) + prev~(x)
 }
 
+@export
 pub flow chain(
   x: F32 at sample,
   @param(min: 0.0, max: 1.0, default: 0.5)
@@ -47,6 +48,7 @@ pub flow chain(
   Stereo { l: (x * mix) + b, r: s * 0.25 }
 }
 
+@export
 pub flow planar(x: F32 at sample) -> [F32; 2] at sample {
   let d = delay~(x, 5)
   [x, d]

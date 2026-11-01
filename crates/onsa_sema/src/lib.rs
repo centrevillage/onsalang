@@ -303,6 +303,21 @@ impl Analysis {
         *err == ResolveError::Failed || self.through_partly_read(from, path)
     }
 
+    /// The items the build exports (§14.2): those with `@export` of the
+    /// package itself, the last of [`flatten`] (a dependency's are not
+    /// exported), in the order of the paths of their modules and, in a
+    /// module, of their declarations.
+    pub fn exports(&self) -> Vec<DefId> {
+        let own = self.modules.names.len().checked_sub(1);
+        let module = |d: &DefId| self.def(*d).module;
+        let mut out: Vec<DefId> = (0..self.defs.len() as u32)
+            .map(DefId)
+            .filter(|d| self.def(*d).export.is_some() && Some(self.modules.pkg_of(module(d))) == own)
+            .collect();
+        out.sort_by(|a, b| self.modules.get(module(a)).path.cmp(&self.modules.get(module(b)).path));
+        out
+    }
+
     /// Fully qualified name of a def (`dsp.voice.State`), for diagnostics.
     pub fn qualified_name(&self, id: DefId) -> String {
         let def = self.def(id);

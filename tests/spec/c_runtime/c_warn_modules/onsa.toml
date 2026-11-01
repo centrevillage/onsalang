@@ -4,13 +4,6 @@ edition = "2026"
 
 [export]
 prefix = "cwm_"
-fns = [
-  "stage.count_in_range",
-  "stage.wide_ok",
-  "limits.in_range_u8",
-  "limits.in_range_i16",
-  "limits.narrow_or_max",
-]
 
 [targets.host]
 kind = "source"

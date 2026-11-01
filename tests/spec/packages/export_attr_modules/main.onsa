@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§14.2", "§15.1"]
+
+// W4-02 U1, S-639 (spec §6.5, §14.2): `@export` goes on a declaration at the top level of any module of the
+// package (a function in `util`, a flow in `dsp/gain`, and the root module here), and it is not an error
+// there. It is the same on a declaration that the other modules `use` (`util.version`) and on one that no
+// one uses. No diagnostic is expected.
+use util.{version}
+
+@export
+pub fn root_version() -> U32 { version() + 1 }

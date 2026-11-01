@@ -7,6 +7,7 @@
 // These operations are not accepted yet (the rule in tools/vectors/ops.py, PENDING_PACKAGES): the package
 // is a test case that waits in tests/pending.toml.
 
+@export
 pub fn i8_checked_rem_some(a: I8, b: I8) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -14,6 +15,7 @@ pub fn i8_checked_rem_some(a: I8, b: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_rem_val(a: I8, b: I8) -> I8 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -21,6 +23,7 @@ pub fn i8_checked_rem_val(a: I8, b: I8) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_div_euclid_some(a: I8, b: I8) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -28,6 +31,7 @@ pub fn i8_checked_div_euclid_some(a: I8, b: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_div_euclid_val(a: I8, b: I8) -> I8 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -35,6 +39,7 @@ pub fn i8_checked_div_euclid_val(a: I8, b: I8) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_rem_euclid_some(a: I8, b: I8) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -42,6 +47,7 @@ pub fn i8_checked_rem_euclid_some(a: I8, b: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_rem_euclid_val(a: I8, b: I8) -> I8 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -49,6 +55,7 @@ pub fn i8_checked_rem_euclid_val(a: I8, b: I8) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_shl_some(a: I8, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -56,6 +63,7 @@ pub fn i8_checked_shl_some(a: I8, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_shl_val(a: I8, b: U32) -> I8 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -63,6 +71,7 @@ pub fn i8_checked_shl_val(a: I8, b: U32) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_shr_some(a: I8, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -70,6 +79,7 @@ pub fn i8_checked_shr_some(a: I8, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_shr_val(a: I8, b: U32) -> I8 {
   match a.checked_shr(b) {
     Some(v) => v,
@@ -77,6 +87,7 @@ pub fn i8_checked_shr_val(a: I8, b: U32) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_neg_some(a: I8) -> Bool {
   match a.checked_neg() {
     Some(_) => true,
@@ -84,6 +95,7 @@ pub fn i8_checked_neg_some(a: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_neg_val(a: I8) -> I8 {
   match a.checked_neg() {
     Some(v) => v,
@@ -91,6 +103,7 @@ pub fn i8_checked_neg_val(a: I8) -> I8 {
   }
 }
 
+@export
 pub fn i16_checked_rem_some(a: I16, b: I16) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -98,6 +111,7 @@ pub fn i16_checked_rem_some(a: I16, b: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_rem_val(a: I16, b: I16) -> I16 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -105,6 +119,7 @@ pub fn i16_checked_rem_val(a: I16, b: I16) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_div_euclid_some(a: I16, b: I16) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -112,6 +127,7 @@ pub fn i16_checked_div_euclid_some(a: I16, b: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_div_euclid_val(a: I16, b: I16) -> I16 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -119,6 +135,7 @@ pub fn i16_checked_div_euclid_val(a: I16, b: I16) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_rem_euclid_some(a: I16, b: I16) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -126,6 +143,7 @@ pub fn i16_checked_rem_euclid_some(a: I16, b: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_rem_euclid_val(a: I16, b: I16) -> I16 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -133,6 +151,7 @@ pub fn i16_checked_rem_euclid_val(a: I16, b: I16) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_shl_some(a: I16, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -140,6 +159,7 @@ pub fn i16_checked_shl_some(a: I16, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_shl_val(a: I16, b: U32) -> I16 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -147,6 +167,7 @@ pub fn i16_checked_shl_val(a: I16, b: U32) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_shr_some(a: I16, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -154,6 +175,7 @@ pub fn i16_checked_shr_some(a: I16, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_shr_val(a: I16, b: U32) -> I16 {
   match a.checked_shr(b) {
     Some(v) => v,
@@ -161,6 +183,7 @@ pub fn i16_checked_shr_val(a: I16, b: U32) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_neg_some(a: I16) -> Bool {
   match a.checked_neg() {
     Some(_) => true,
@@ -168,6 +191,7 @@ pub fn i16_checked_neg_some(a: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_neg_val(a: I16) -> I16 {
   match a.checked_neg() {
     Some(v) => v,
@@ -175,6 +199,7 @@ pub fn i16_checked_neg_val(a: I16) -> I16 {
   }
 }
 
+@export
 pub fn i32_checked_rem_some(a: I32, b: I32) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -182,6 +207,7 @@ pub fn i32_checked_rem_some(a: I32, b: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_rem_val(a: I32, b: I32) -> I32 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -189,6 +215,7 @@ pub fn i32_checked_rem_val(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_div_euclid_some(a: I32, b: I32) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -196,6 +223,7 @@ pub fn i32_checked_div_euclid_some(a: I32, b: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_div_euclid_val(a: I32, b: I32) -> I32 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -203,6 +231,7 @@ pub fn i32_checked_div_euclid_val(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_rem_euclid_some(a: I32, b: I32) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -210,6 +239,7 @@ pub fn i32_checked_rem_euclid_some(a: I32, b: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_rem_euclid_val(a: I32, b: I32) -> I32 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -217,6 +247,7 @@ pub fn i32_checked_rem_euclid_val(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_shl_some(a: I32, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -224,6 +255,7 @@ pub fn i32_checked_shl_some(a: I32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_shl_val(a: I32, b: U32) -> I32 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -231,6 +263,7 @@ pub fn i32_checked_shl_val(a: I32, b: U32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_shr_some(a: I32, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -238,6 +271,7 @@ pub fn i32_checked_shr_some(a: I32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_shr_val(a: I32, b: U32) -> I32 {
   match a.checked_shr(b) {
     Some(v) => v,
@@ -245,6 +279,7 @@ pub fn i32_checked_shr_val(a: I32, b: U32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_neg_some(a: I32) -> Bool {
   match a.checked_neg() {
     Some(_) => true,
@@ -252,6 +287,7 @@ pub fn i32_checked_neg_some(a: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_neg_val(a: I32) -> I32 {
   match a.checked_neg() {
     Some(v) => v,
@@ -259,6 +295,7 @@ pub fn i32_checked_neg_val(a: I32) -> I32 {
   }
 }
 
+@export
 pub fn i64_checked_rem_some(a: I64, b: I64) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -266,6 +303,7 @@ pub fn i64_checked_rem_some(a: I64, b: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_rem_val(a: I64, b: I64) -> I64 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -273,6 +311,7 @@ pub fn i64_checked_rem_val(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_div_euclid_some(a: I64, b: I64) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -280,6 +319,7 @@ pub fn i64_checked_div_euclid_some(a: I64, b: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_div_euclid_val(a: I64, b: I64) -> I64 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -287,6 +327,7 @@ pub fn i64_checked_div_euclid_val(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_rem_euclid_some(a: I64, b: I64) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -294,6 +335,7 @@ pub fn i64_checked_rem_euclid_some(a: I64, b: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_rem_euclid_val(a: I64, b: I64) -> I64 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -301,6 +343,7 @@ pub fn i64_checked_rem_euclid_val(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_shl_some(a: I64, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -308,6 +351,7 @@ pub fn i64_checked_shl_some(a: I64, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_shl_val(a: I64, b: U32) -> I64 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -315,6 +359,7 @@ pub fn i64_checked_shl_val(a: I64, b: U32) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_shr_some(a: I64, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -322,6 +367,7 @@ pub fn i64_checked_shr_some(a: I64, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_shr_val(a: I64, b: U32) -> I64 {
   match a.checked_shr(b) {
     Some(v) => v,
@@ -329,6 +375,7 @@ pub fn i64_checked_shr_val(a: I64, b: U32) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_neg_some(a: I64) -> Bool {
   match a.checked_neg() {
     Some(_) => true,
@@ -336,6 +383,7 @@ pub fn i64_checked_neg_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_neg_val(a: I64) -> I64 {
   match a.checked_neg() {
     Some(v) => v,
@@ -343,6 +391,7 @@ pub fn i64_checked_neg_val(a: I64) -> I64 {
   }
 }
 
+@export
 pub fn u8_checked_rem_some(a: U8, b: U8) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -350,6 +399,7 @@ pub fn u8_checked_rem_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_rem_val(a: U8, b: U8) -> U8 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -357,6 +407,7 @@ pub fn u8_checked_rem_val(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn u8_checked_div_euclid_some(a: U8, b: U8) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -364,6 +415,7 @@ pub fn u8_checked_div_euclid_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_div_euclid_val(a: U8, b: U8) -> U8 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -371,6 +423,7 @@ pub fn u8_checked_div_euclid_val(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn u8_checked_rem_euclid_some(a: U8, b: U8) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -378,6 +431,7 @@ pub fn u8_checked_rem_euclid_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_rem_euclid_val(a: U8, b: U8) -> U8 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -385,6 +439,7 @@ pub fn u8_checked_rem_euclid_val(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn u8_checked_shl_some(a: U8, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -392,6 +447,7 @@ pub fn u8_checked_shl_some(a: U8, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_shl_val(a: U8, b: U32) -> U8 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -399,6 +455,7 @@ pub fn u8_checked_shl_val(a: U8, b: U32) -> U8 {
   }
 }
 
+@export
 pub fn u8_checked_shr_some(a: U8, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -406,6 +463,7 @@ pub fn u8_checked_shr_some(a: U8, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_shr_val(a: U8, b: U32) -> U8 {
   match a.checked_shr(b) {
     Some(v) => v,
@@ -413,6 +471,7 @@ pub fn u8_checked_shr_val(a: U8, b: U32) -> U8 {
   }
 }
 
+@export
 pub fn u16_checked_rem_some(a: U16, b: U16) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -420,6 +479,7 @@ pub fn u16_checked_rem_some(a: U16, b: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_rem_val(a: U16, b: U16) -> U16 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -427,6 +487,7 @@ pub fn u16_checked_rem_val(a: U16, b: U16) -> U16 {
   }
 }
 
+@export
 pub fn u16_checked_div_euclid_some(a: U16, b: U16) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -434,6 +495,7 @@ pub fn u16_checked_div_euclid_some(a: U16, b: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_div_euclid_val(a: U16, b: U16) -> U16 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -441,6 +503,7 @@ pub fn u16_checked_div_euclid_val(a: U16, b: U16) -> U16 {
   }
 }
 
+@export
 pub fn u16_checked_rem_euclid_some(a: U16, b: U16) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -448,6 +511,7 @@ pub fn u16_checked_rem_euclid_some(a: U16, b: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_rem_euclid_val(a: U16, b: U16) -> U16 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -455,6 +519,7 @@ pub fn u16_checked_rem_euclid_val(a: U16, b: U16) -> U16 {
   }
 }
 
+@export
 pub fn u16_checked_shl_some(a: U16, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -462,6 +527,7 @@ pub fn u16_checked_shl_some(a: U16, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_shl_val(a: U16, b: U32) -> U16 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -469,6 +535,7 @@ pub fn u16_checked_shl_val(a: U16, b: U32) -> U16 {
   }
 }
 
+@export
 pub fn u16_checked_shr_some(a: U16, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -476,6 +543,7 @@ pub fn u16_checked_shr_some(a: U16, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_shr_val(a: U16, b: U32) -> U16 {
   match a.checked_shr(b) {
     Some(v) => v,
@@ -483,6 +551,7 @@ pub fn u16_checked_shr_val(a: U16, b: U32) -> U16 {
   }
 }
 
+@export
 pub fn u32_checked_rem_some(a: U32, b: U32) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -490,6 +559,7 @@ pub fn u32_checked_rem_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_rem_val(a: U32, b: U32) -> U32 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -497,6 +567,7 @@ pub fn u32_checked_rem_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_checked_div_euclid_some(a: U32, b: U32) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -504,6 +575,7 @@ pub fn u32_checked_div_euclid_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_div_euclid_val(a: U32, b: U32) -> U32 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -511,6 +583,7 @@ pub fn u32_checked_div_euclid_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_checked_rem_euclid_some(a: U32, b: U32) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -518,6 +591,7 @@ pub fn u32_checked_rem_euclid_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_rem_euclid_val(a: U32, b: U32) -> U32 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -525,6 +599,7 @@ pub fn u32_checked_rem_euclid_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_checked_shl_some(a: U32, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -532,6 +607,7 @@ pub fn u32_checked_shl_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_shl_val(a: U32, b: U32) -> U32 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -539,6 +615,7 @@ pub fn u32_checked_shl_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_checked_shr_some(a: U32, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -546,6 +623,7 @@ pub fn u32_checked_shr_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_shr_val(a: U32, b: U32) -> U32 {
   match a.checked_shr(b) {
     Some(v) => v,
@@ -553,6 +631,7 @@ pub fn u32_checked_shr_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u64_checked_rem_some(a: U64, b: U64) -> Bool {
   match a.checked_rem(b) {
     Some(_) => true,
@@ -560,6 +639,7 @@ pub fn u64_checked_rem_some(a: U64, b: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_rem_val(a: U64, b: U64) -> U64 {
   match a.checked_rem(b) {
     Some(v) => v,
@@ -567,6 +647,7 @@ pub fn u64_checked_rem_val(a: U64, b: U64) -> U64 {
   }
 }
 
+@export
 pub fn u64_checked_div_euclid_some(a: U64, b: U64) -> Bool {
   match a.checked_div_euclid(b) {
     Some(_) => true,
@@ -574,6 +655,7 @@ pub fn u64_checked_div_euclid_some(a: U64, b: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_div_euclid_val(a: U64, b: U64) -> U64 {
   match a.checked_div_euclid(b) {
     Some(v) => v,
@@ -581,6 +663,7 @@ pub fn u64_checked_div_euclid_val(a: U64, b: U64) -> U64 {
   }
 }
 
+@export
 pub fn u64_checked_rem_euclid_some(a: U64, b: U64) -> Bool {
   match a.checked_rem_euclid(b) {
     Some(_) => true,
@@ -588,6 +671,7 @@ pub fn u64_checked_rem_euclid_some(a: U64, b: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_rem_euclid_val(a: U64, b: U64) -> U64 {
   match a.checked_rem_euclid(b) {
     Some(v) => v,
@@ -595,6 +679,7 @@ pub fn u64_checked_rem_euclid_val(a: U64, b: U64) -> U64 {
   }
 }
 
+@export
 pub fn u64_checked_shl_some(a: U64, b: U32) -> Bool {
   match a.checked_shl(b) {
     Some(_) => true,
@@ -602,6 +687,7 @@ pub fn u64_checked_shl_some(a: U64, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_shl_val(a: U64, b: U32) -> U64 {
   match a.checked_shl(b) {
     Some(v) => v,
@@ -609,6 +695,7 @@ pub fn u64_checked_shl_val(a: U64, b: U32) -> U64 {
   }
 }
 
+@export
 pub fn u64_checked_shr_some(a: U64, b: U32) -> Bool {
   match a.checked_shr(b) {
     Some(_) => true,
@@ -616,6 +703,7 @@ pub fn u64_checked_shr_some(a: U64, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_shr_val(a: U64, b: U32) -> U64 {
   match a.checked_shr(b) {
     Some(v) => v,

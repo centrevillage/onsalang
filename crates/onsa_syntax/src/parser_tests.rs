@@ -617,3 +617,21 @@ fn a_head_read_on_keeps_what_was_written_right() {
         assert_eq!(items, [false, true], "{src:?}");
     }
 }
+
+/// §6.5, S-639: `@export` goes on a function of the top level, not on one in
+/// the list of a declaration (an `extern` block here; `impl` and `trait` are
+/// in the cases) nor on a `target` declaration; `@fp` goes on both kinds of
+/// function, and the old `@relaxed` of a member keeps its candidate.
+#[test]
+fn the_places_of_a_member_function() {
+    let ext = "extern \"C\" lib \"m\" {\n  @export\n  fn g() -> I32\n}\n";
+    assert_eq!(codes(ext), [Code::E0005], "{ext}");
+    let target = "@export\ntarget fn now() -> U32\n";
+    assert_eq!(codes(target), [Code::E0005], "{target}");
+    let fp = "struct S {}\n\nimpl S {\n  @fp(relaxed)\n  fn m(self) -> F32 {\n    1.0\n  }\n}\n";
+    assert_eq!(codes(fp), [], "{fp}");
+    let old = fp.replace("@fp(relaxed)", "@relaxed");
+    assert_eq!(codes(&old), [Code::E0020], "{old}");
+    assert_eq!(fixed(&old), fp);
+    assert_eq!(fixed("#[export]\npub fn f() -> I32 {\n  1\n}\n"), "@export\npub fn f() -> I32 {\n  1\n}\n");
+}

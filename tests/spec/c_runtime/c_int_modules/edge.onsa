@@ -10,14 +10,17 @@ pub const NEG1_16: I16 = -1
 pub const BIG: U32 = 4294967295
 pub const TWO63: F64 = 9223372036854775808.0
 
+@export
 pub fn rem_i8(a: I8, b: I8) -> I8 {
   a % b
 }
 
+@export
 pub fn mul_u32(a: U32, b: U32) -> U32 {
   a * b
 }
 
+@export
 pub fn shr_i16(a: I16, n: U32) -> I16 {
   a >> n
 }

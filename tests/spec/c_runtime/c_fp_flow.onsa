@@ -5,12 +5,6 @@
 //
 // [export]
 // prefix = "cff_"
-// flows = [
-//   "c_fp_flow.mac_x",
-//   "c_fp_flow.ema",
-//   "c_fp_flow.rel_mac",
-//   "c_fp_flow.mac_x_after",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -86,6 +80,7 @@
 // the relaxed flow may be fused, and its result does not depend on it. `mac_x_after` is the strict flow
 // again, written after the relaxed one: a relaxation of a flow does not reach the code that follows it.
 
+@export
 pub flow mac_x(
   x: F32 at sample,
   @param(min: -4.0, max: 4.0, default: 1.0)
@@ -96,6 +91,7 @@ pub flow mac_x(
   (a * x) + b
 }
 
+@export
 pub flow ema(
   x: F32 at sample,
   @param(min: -4.0, max: 4.0, default: 0.5)
@@ -106,6 +102,7 @@ pub flow ema(
 }
 
 @fp(relaxed)
+@export
 pub flow rel_mac(
   x: F32 at sample,
   @param(min: -4.0, max: 4.0, default: 1.0)
@@ -116,6 +113,7 @@ pub flow rel_mac(
   (a * x) + b
 }
 
+@export
 pub flow mac_x_after(
   x: F32 at sample,
   @param(min: -4.0, max: 4.0, default: 1.0)

@@ -342,7 +342,7 @@ fn package(d: &Dir, name: &str, body: &str) -> String {
     let dir = d.0.join(name);
     std::fs::create_dir_all(&dir).unwrap();
     let manifest = format!(
-        "[package]\nname = \"{name}\"\nedition = \"2026\"\n\n[export]\nprefix = \"p_\"\nfns = [\"m.read\"]\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\npanic = \"trap\"\nprovides = []\n"
+        "[package]\nname = \"{name}\"\nedition = \"2026\"\n\n[export]\nprefix = \"p_\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\npanic = \"trap\"\nprovides = []\n"
     );
     std::fs::write(dir.join("onsa.toml"), manifest).unwrap();
     std::fs::write(dir.join("m.onsa"), body).unwrap();
@@ -362,6 +362,7 @@ fn const_package(d: &Dir, name: &str, n: u32) -> String {
         "{DIVE}
 const C: U32 = dive({n})
 
+@export
 pub fn read() -> U32 {{
   C
 }}
@@ -485,6 +486,7 @@ fn user(n: U32) -> U32 {{
   }}
 }}
 
+@export
 pub fn read() -> U32 {{
   user(100)
 }}
@@ -514,7 +516,7 @@ fn a_chain_of_300_constants_is_not_a_deep_call() {
         body.push_str(&format!("const L{i}: U32 = L{} + 1\n", i - 1));
     }
     body.push_str(&format!(
-        "\npub fn read() -> U32 {{\n  L{}\n}}\n\ntest \"the end of the chain\" {{\n  assert read() == {n}\n}}\n",
+        "\n@export\npub fn read() -> U32 {{\n  L{}\n}}\n\ntest \"the end of the chain\" {{\n  assert read() == {n}\n}}\n",
         n - 1
     ));
     let pkg = package(&d, "chain", &body);

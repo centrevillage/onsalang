@@ -4,8 +4,7 @@
 // edition = "2026"
 //
 // [export]
-// prefix = "onsa_"
-// flows = ["boundary.ints", "boundary.mixed", "boundary.wrap", "boundary.side", "boundary.chars", "boundary.wide"]
+// prefix = "boundary_"
 //
 // [targets.host]
 // kind = "source"
@@ -25,6 +24,7 @@
 // (§13.4, the integer checks are the same everywhere). The outputs of mixed types
 // that the overlap check of `process` measures wrongly are in `boundary_overlap.onsa`.
 
+@export
 pub flow ints(
   x: I32 at sample,
   n: I32 at init,
@@ -34,26 +34,31 @@ pub flow ints(
   (x * n) + k + prev~(x)
 }
 
+@export
 pub flow mixed(x: F32 at sample, g: F64 at init, on: Bool at init) -> F64 at sample {
   let y = (x as F64) * g
   if on { y } else { 0.0 }
 }
 
+@export
 pub flow wrap(x: I8 at sample) -> I8 at sample {
   x * 2
 }
 
+@export
 pub flow side(x: [F32; 2] at sample) -> F32 at sample {
   x[0] - x[1]
 }
 
 // The comparisons are bound by `let` first: an `if` on a comparison is in
 // `tests/pipeline/if_compare.onsa`.
+@export
 pub flow chars(c: Char at sample, d: Char at init) -> Char at sample {
   let same = c == d
   if same { 'z' } else { c }
 }
 
+@export
 pub flow wide(x: U16 at sample, a: Char at init, b: U64 at init) -> U64 at sample {
   let on = a == 'a'
   if on { (x as U64) + b } else { 0 }

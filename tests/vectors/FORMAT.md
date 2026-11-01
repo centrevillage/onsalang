@@ -74,7 +74,7 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 ## fixture
 
 `fixture/<パッケージ>/` は、`OPS.tsv` から生成した Onsa のパッケージ（`onsa.toml` と `ops.onsa`）。
-演算ごとに `pub fn <fn>(a, b, c)` があり、`[export] fns` に全てを並べる。`Option` を返す演算は `<fn>_some`（`Bool`）と `<fn>_val`（値。`None` のときは読まない）の 2 つ。定数は引数の無い関数 `const_<型>_<名前>`。
+演算ごとに `pub fn <fn>(a, b, c)` があり、全てに `@export` を付ける。`Option` を返す演算は `<fn>_some`（`Bool`）と `<fn>_val`（値。`None` のときは読まない）の 2 つ。定数は引数の無い関数 `const_<型>_<名前>`。
 export の境界は panic で状態の値 1 を返す（§14.2）ので、読み手は `panic:*` を 1 として照らす。
 
 パッケージ `scalar` は今の実装が `onsa check` で受理する演算の全て。それ以外のパッケージは、まだ受理されない演算を原因ごとに分けたもので、原因の作業が終わったら `tools/vectors/ops.py` の `PENDING_PACKAGES` の規則を消し、生成し直す（関数の名前は変わらない）。

@@ -138,6 +138,7 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     let lexed = edits::lexed();
     let Read { mut ast, cst, map, mut diagnostics, levels, mut units, apart } = read(file, text, parser::ItemCtx::Top);
     naming::check(&ast, &mut diagnostics);
+    naming::check_exported(&ast, &mut diagnostics);
     units.mark_failed(&diagnostics, &mut ast);
     // The candidates that make a block-like expression an operand take its
     // parentheses (§3.1, S-537): the one place, after every check of the

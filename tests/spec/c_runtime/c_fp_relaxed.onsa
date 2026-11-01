@@ -5,19 +5,6 @@
 //
 // [export]
 // prefix = "cfr_"
-// fns = [
-//   "c_fp_relaxed.strict_before_f32",
-//   "c_fp_relaxed.rel_muladd_f32",
-//   "c_fp_relaxed.rel_loop_f32",
-//   "c_fp_relaxed.rel_muladd_f64",
-//   "c_fp_relaxed.rel_int_overflow",
-//   "c_fp_relaxed.rel_trunc",
-//   "c_fp_relaxed.rel_nan_check",
-//   "c_fp_relaxed.rel_inf",
-//   "c_fp_relaxed.strict_after_f32",
-//   "c_fp_relaxed.strict_loop_after_f32",
-//   "c_fp_relaxed.strict_after_f64",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -195,16 +182,19 @@
 //   rel_int_overflow       a + 1 on I32         rel_trunc         ((a * b) + 1.0).trunc_i32()
 //   rel_nan_check          1 when x != x        rel_inf           1 when a * 2.0 > F32.MAX
 
+@export
 pub fn strict_before_f32(a: F32, b: F32, c: F32) -> F32 {
   (a * b) + c
 }
 
 @fp(relaxed)
+@export
 pub fn rel_muladd_f32(a: F32, b: F32, c: F32) -> F32 {
   (a * b) + c
 }
 
 @fp(relaxed)
+@export
 pub fn rel_loop_f32(a: F32, n: U32) -> F32 {
   var acc: F32 = 0.0
   for _ in 0..<n {
@@ -214,21 +204,25 @@ pub fn rel_loop_f32(a: F32, n: U32) -> F32 {
 }
 
 @fp(relaxed)
+@export
 pub fn rel_muladd_f64(a: F64, b: F64, c: F64) -> F64 {
   (a * b) + c
 }
 
 @fp(relaxed)
+@export
 pub fn rel_int_overflow(a: I32) -> I32 {
   a + 1
 }
 
 @fp(relaxed)
+@export
 pub fn rel_trunc(a: F32, b: F32) -> I32 {
   ((a * b) + 1.0).trunc_i32()
 }
 
 @fp(relaxed)
+@export
 pub fn rel_nan_check(x: F32) -> U32 {
   if x != x {
     1
@@ -238,6 +232,7 @@ pub fn rel_nan_check(x: F32) -> U32 {
 }
 
 @fp(relaxed)
+@export
 pub fn rel_inf(a: F32) -> U32 {
   if (a * 2.0) > F32.MAX {
     1
@@ -246,10 +241,12 @@ pub fn rel_inf(a: F32) -> U32 {
   }
 }
 
+@export
 pub fn strict_after_f32(a: F32, b: F32, c: F32) -> F32 {
   (a * b) + c
 }
 
+@export
 pub fn strict_loop_after_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
   var acc: F32 = init
   for _ in 0..<n {
@@ -258,6 +255,7 @@ pub fn strict_loop_after_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
   acc
 }
 
+@export
 pub fn strict_after_f64(a: F64, b: F64, c: F64) -> F64 {
   (a * b) + c
 }

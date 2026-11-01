@@ -5,14 +5,6 @@
 //
 // [export]
 // prefix = "es_"
-// flows = [
-//   "export_silence_shapes.guard2",
-//   "export_silence_shapes.fold",
-//   "export_silence_shapes.fan",
-//   "export_silence_shapes.guard2_cfg",
-//   "export_silence_shapes.scaled",
-//   "export_silence_shapes.trunc1",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -184,30 +176,35 @@
 // ]
 
 /// Channel 0 is `x0 + trunc(x1)`, channel 1 is `x1`. `trunc_i32` panics for NaN.
+@export
 pub flow guard2(x: [F32; 2] at sample) -> [F32; 2] at sample {
   let n = x[1].trunc_i32()
   [x[0] + n.round_f32(), x[1]]
 }
 
 /// Stereo to mono.
+@export
 pub flow fold(x: [F32; 2] at sample) -> F32 at sample {
   let n = x[1].trunc_i32()
   x[0] + n.round_f32()
 }
 
 /// Mono to stereo.
+@export
 pub flow fan(x: F32 at sample) -> [F32; 2] at sample {
   let n = x.trunc_i32()
   [n.round_f32(), x]
 }
 
 /// `100 / n` is computed once at init: n = 0 panics inside `init`.
+@export
 pub flow guard2_cfg(x: [F32; 2] at sample, n: I32 at init) -> [F32; 2] at sample {
   let k = 100 / n
   [x[0] + k.round_f32(), x[1]]
 }
 
 /// `100 / d` is computed once per call: d = 0 panics in the block stage.
+@export
 pub flow scaled(
   x: F32 at sample,
   @param(min: 0, max: 1000, default: 5)
@@ -218,6 +215,7 @@ pub flow scaled(
 }
 
 /// `x + trunc(x)`.
+@export
 pub flow trunc1(x: F32 at sample) -> F32 at sample {
   x + x.trunc_i32().round_f32()
 }

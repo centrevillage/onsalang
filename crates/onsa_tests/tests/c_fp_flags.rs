@@ -232,19 +232,23 @@ fn eval_method_shim(tag: &str, value: i32) -> PathBuf {
 // Fixtures
 // ---------------------------------------------------------------------------------------------
 
-fn manifest(name: &str, prefix: &str, fns: &str, target: &str, panic: &str) -> String {
+/// The items with `@export` of the sources are exported (§14.2).
+fn manifest(name: &str, prefix: &str, target: &str, panic: &str) -> String {
     format!(
-        "[package]\nname = \"{name}\"\nedition = \"2026\"\n\n[export]\nprefix = \"{prefix}\"\nfns = [{fns}]\n\n\
+        "[package]\nname = \"{name}\"\nedition = \"2026\"\n\n[export]\nprefix = \"{prefix}\"\n\n\
          [targets.{target}]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\npanic = \"{panic}\"\nprovides = []\n"
     )
 }
 
 /// One exported F32 function, a product and a sum.
 fn fixture(tag: &str) -> Built {
-    let m = manifest("fx", "fx_", "\"fx.add\"", "host", "poison");
+    let m = manifest("fx", "fx_", "host", "poison");
     inline_package(
         tag,
-        &[("onsa.toml", &m), ("fx.onsa", "pub fn add(a: F32, b: F32) -> F32 {\n  let p = a * b\n  p + a\n}\n")],
+        &[
+            ("onsa.toml", &m),
+            ("fx.onsa", "@export\npub fn add(a: F32, b: F32) -> F32 {\n  let p = a * b\n  p + a\n}\n"),
+        ],
         "host",
     )
 }
@@ -268,10 +272,10 @@ fn a_source_build_writes_the_public_and_the_internal_runtime_headers() {
 #[test]
 fn onsa_h_does_not_depend_on_the_package_or_the_target() {
     let a = fixture("hdr_same_a");
-    let m = manifest("other", "zz_", "\"other.f\"", "fw", "reset");
+    let m = manifest("other", "zz_", "fw", "reset");
     let b = inline_package(
         "hdr_same_b",
-        &[("onsa.toml", &m), ("other.onsa", "pub fn f(x: U32) -> U32 {\n  x + 1\n}\n")],
+        &[("onsa.toml", &m), ("other.onsa", "@export\npub fn f(x: U32) -> U32 {\n  x + 1\n}\n")],
         "fw",
     );
     assert_eq!(a.text("onsa.h"), b.text("onsa.h"), "onsa.h is the same for every package and target (§14.2)");
@@ -684,14 +688,9 @@ fn the_condition_helper_finds_a_second_pair() {
 #[test]
 fn a_condition_has_no_second_pair_of_parentheses() {
     need(&[CLANG]);
-    let m = manifest(
-        "cond",
-        "cd_",
-        "\"cond.eq\", \"cond.ne\", \"cond.lt\", \"cond.both\", \"cond.count\"",
-        "host",
-        "poison",
-    );
+    let m = manifest("cond", "cd_", "host", "poison");
     let src = "\
+@export
 pub fn eq(a: I32, b: I32) -> I32 {
   if a == b {
     1
@@ -700,6 +699,7 @@ pub fn eq(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn ne(a: U8, b: U8) -> U8 {
   if a != b {
     a
@@ -708,6 +708,7 @@ pub fn ne(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn lt(a: I64, b: I64) -> I64 {
   if a < b {
     b
@@ -718,6 +719,7 @@ pub fn lt(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn both(a: I32, b: I32, c: I32, d: I32) -> I32 {
   if (a == b) && (c == d) {
     1
@@ -726,6 +728,7 @@ pub fn both(a: I32, b: I32, c: I32, d: I32) -> I32 {
   }
 }
 
+@export
 pub fn count(a: I32, stop: I32) -> I32 {
   var x: I32 = a
   var n: I32 = 0
@@ -943,33 +946,31 @@ int main(void) {
 
 const REASSOC_SRC: &str = "\
 @fp(relaxed)
+@export
 pub fn rel_sub_back(a: F32, b: F32) -> F32 {
   (a + b) - b
 }
 
 @fp(relaxed)
+@export
 pub fn rel_add_zero_bits(x: F32) -> U32 {
   (x + 0.0).to_bits()
 }
 
 @fp(relaxed)
+@export
 pub fn rel_sum4(a: F32, b: F32, c: F32, d: F32) -> F32 {
   ((a + b) + c) + d
 }
 
+@export
 pub fn strict_sub_back(a: F32, b: F32) -> F32 {
   (a + b) - b
 }
 ";
 
 fn reassoc_package(tag: &str) -> Built {
-    let m = manifest(
-        "reassoc",
-        "ra_",
-        "\"reassoc.rel_sub_back\", \"reassoc.rel_add_zero_bits\", \"reassoc.rel_sum4\", \"reassoc.strict_sub_back\"",
-        "host",
-        "poison",
-    );
+    let m = manifest("reassoc", "ra_", "host", "poison");
     inline_package(tag, &[("onsa.toml", &m), ("reassoc.onsa", REASSOC_SRC)], "host")
 }
 
@@ -1053,10 +1054,10 @@ fn a_build_with_the_allow_define_runs() {
 
 #[test]
 fn the_fragment_helper_keeps_the_package_and_drops_the_test_tables() {
-    let t = "// onsa.toml\n// [package]\n// name = \"x\"\n// edition = \"2026\"\n//\n// [export]\n// fns = [\n//   \"x.f\",\n// ]\n//\n// [targets.host]\n// kind = \"source\"\n//\n// [test]\n// mode = \"test\"\n//\n// [[test.host]]\n// name = \"n\"\n// steps = [\n//   { call = \"fn\" },\n// ]\n\npub fn f() -> U32 { 1 }\n";
+    let t = "// onsa.toml\n// [package]\n// name = \"x\"\n// edition = \"2026\"\n//\n// [export]\n// prefix = \"x_\"\n//\n// [targets.host]\n// kind = \"source\"\n//\n// [test]\n// mode = \"test\"\n//\n// [[test.host]]\n// name = \"n\"\n// steps = [\n//   { call = \"fn\" },\n// ]\n\n@export\npub fn f() -> U32 { 1 }\n";
     let m = fragment_manifest(t);
     assert!(m.contains("[package]") && m.contains("[export]") && m.contains("[targets.host]"), "{m}");
-    assert!(m.contains("\"x.f\","), "{m}");
+    assert!(m.contains("prefix = \"x_\""), "{m}");
     assert!(!m.contains("[test]") && !m.contains("test.host") && !m.contains("steps"), "{m}");
     let parsed: toml::Value = toml::from_str(&m).unwrap();
     assert_eq!(parsed["package"]["name"].as_str(), Some("x"));

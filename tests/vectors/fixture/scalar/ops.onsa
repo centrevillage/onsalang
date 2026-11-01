@@ -7,54 +7,79 @@
 
 use std.math.{abs, ceil, floor, max, min, round, sqrt, trunc}
 
+@export
 pub fn i8_add(a: I8, b: I8) -> I8 { a + b }
 
+@export
 pub fn i8_sub(a: I8, b: I8) -> I8 { a - b }
 
+@export
 pub fn i8_mul(a: I8, b: I8) -> I8 { a * b }
 
+@export
 pub fn i8_div(a: I8, b: I8) -> I8 { a / b }
 
+@export
 pub fn i8_rem(a: I8, b: I8) -> I8 { a % b }
 
+@export
 pub fn i8_wadd(a: I8, b: I8) -> I8 { a +% b }
 
+@export
 pub fn i8_wsub(a: I8, b: I8) -> I8 { a -% b }
 
+@export
 pub fn i8_wmul(a: I8, b: I8) -> I8 { a *% b }
 
+@export
 pub fn i8_sadd(a: I8, b: I8) -> I8 { a +| b }
 
+@export
 pub fn i8_ssub(a: I8, b: I8) -> I8 { a -| b }
 
+@export
 pub fn i8_smul(a: I8, b: I8) -> I8 { a *| b }
 
+@export
 pub fn i8_div_euclid(a: I8, b: I8) -> I8 { a.div_euclid(b) }
 
+@export
 pub fn i8_rem_euclid(a: I8, b: I8) -> I8 { a.rem_euclid(b) }
 
+@export
 pub fn i8_and(a: I8, b: I8) -> I8 { a & b }
 
+@export
 pub fn i8_or(a: I8, b: I8) -> I8 { a | b }
 
+@export
 pub fn i8_xor(a: I8, b: I8) -> I8 { a ^ b }
 
+@export
 pub fn i8_eq(a: I8, b: I8) -> Bool { a == b }
 
+@export
 pub fn i8_ne(a: I8, b: I8) -> Bool { a != b }
 
+@export
 pub fn i8_lt(a: I8, b: I8) -> Bool { a < b }
 
+@export
 pub fn i8_le(a: I8, b: I8) -> Bool { a <= b }
 
+@export
 pub fn i8_gt(a: I8, b: I8) -> Bool { a > b }
 
+@export
 pub fn i8_ge(a: I8, b: I8) -> Bool { a >= b }
 
+@export
 pub fn i8_min(a: I8, b: I8) -> I8 { min(a, b) }
 
+@export
 pub fn i8_max(a: I8, b: I8) -> I8 { max(a, b) }
 
+@export
 pub fn i8_checked_add_some(a: I8, b: I8) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -62,6 +87,7 @@ pub fn i8_checked_add_some(a: I8, b: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_add_val(a: I8, b: I8) -> I8 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -69,6 +95,7 @@ pub fn i8_checked_add_val(a: I8, b: I8) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_sub_some(a: I8, b: I8) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -76,6 +103,7 @@ pub fn i8_checked_sub_some(a: I8, b: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_sub_val(a: I8, b: I8) -> I8 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -83,6 +111,7 @@ pub fn i8_checked_sub_val(a: I8, b: I8) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_mul_some(a: I8, b: I8) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -90,6 +119,7 @@ pub fn i8_checked_mul_some(a: I8, b: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_mul_val(a: I8, b: I8) -> I8 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -97,6 +127,7 @@ pub fn i8_checked_mul_val(a: I8, b: I8) -> I8 {
   }
 }
 
+@export
 pub fn i8_checked_div_some(a: I8, b: I8) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -104,6 +135,7 @@ pub fn i8_checked_div_some(a: I8, b: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_checked_div_val(a: I8, b: I8) -> I8 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -111,64 +143,94 @@ pub fn i8_checked_div_val(a: I8, b: I8) -> I8 {
   }
 }
 
+@export
 pub fn i8_shl(a: I8, b: U32) -> I8 { a << b }
 
+@export
 pub fn i8_shr(a: I8, b: U32) -> I8 { a >> b }
 
+@export
 pub fn i8_not(a: I8) -> I8 { !a }
 
+@export
 pub fn i8_neg(a: I8) -> I8 { -a }
 
+@export
 pub fn i8_abs(a: I8) -> I8 { abs(a) }
 
+@export
 pub fn i16_add(a: I16, b: I16) -> I16 { a + b }
 
+@export
 pub fn i16_sub(a: I16, b: I16) -> I16 { a - b }
 
+@export
 pub fn i16_mul(a: I16, b: I16) -> I16 { a * b }
 
+@export
 pub fn i16_div(a: I16, b: I16) -> I16 { a / b }
 
+@export
 pub fn i16_rem(a: I16, b: I16) -> I16 { a % b }
 
+@export
 pub fn i16_wadd(a: I16, b: I16) -> I16 { a +% b }
 
+@export
 pub fn i16_wsub(a: I16, b: I16) -> I16 { a -% b }
 
+@export
 pub fn i16_wmul(a: I16, b: I16) -> I16 { a *% b }
 
+@export
 pub fn i16_sadd(a: I16, b: I16) -> I16 { a +| b }
 
+@export
 pub fn i16_ssub(a: I16, b: I16) -> I16 { a -| b }
 
+@export
 pub fn i16_smul(a: I16, b: I16) -> I16 { a *| b }
 
+@export
 pub fn i16_div_euclid(a: I16, b: I16) -> I16 { a.div_euclid(b) }
 
+@export
 pub fn i16_rem_euclid(a: I16, b: I16) -> I16 { a.rem_euclid(b) }
 
+@export
 pub fn i16_and(a: I16, b: I16) -> I16 { a & b }
 
+@export
 pub fn i16_or(a: I16, b: I16) -> I16 { a | b }
 
+@export
 pub fn i16_xor(a: I16, b: I16) -> I16 { a ^ b }
 
+@export
 pub fn i16_eq(a: I16, b: I16) -> Bool { a == b }
 
+@export
 pub fn i16_ne(a: I16, b: I16) -> Bool { a != b }
 
+@export
 pub fn i16_lt(a: I16, b: I16) -> Bool { a < b }
 
+@export
 pub fn i16_le(a: I16, b: I16) -> Bool { a <= b }
 
+@export
 pub fn i16_gt(a: I16, b: I16) -> Bool { a > b }
 
+@export
 pub fn i16_ge(a: I16, b: I16) -> Bool { a >= b }
 
+@export
 pub fn i16_min(a: I16, b: I16) -> I16 { min(a, b) }
 
+@export
 pub fn i16_max(a: I16, b: I16) -> I16 { max(a, b) }
 
+@export
 pub fn i16_checked_add_some(a: I16, b: I16) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -176,6 +238,7 @@ pub fn i16_checked_add_some(a: I16, b: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_add_val(a: I16, b: I16) -> I16 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -183,6 +246,7 @@ pub fn i16_checked_add_val(a: I16, b: I16) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_sub_some(a: I16, b: I16) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -190,6 +254,7 @@ pub fn i16_checked_sub_some(a: I16, b: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_sub_val(a: I16, b: I16) -> I16 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -197,6 +262,7 @@ pub fn i16_checked_sub_val(a: I16, b: I16) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_mul_some(a: I16, b: I16) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -204,6 +270,7 @@ pub fn i16_checked_mul_some(a: I16, b: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_mul_val(a: I16, b: I16) -> I16 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -211,6 +278,7 @@ pub fn i16_checked_mul_val(a: I16, b: I16) -> I16 {
   }
 }
 
+@export
 pub fn i16_checked_div_some(a: I16, b: I16) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -218,6 +286,7 @@ pub fn i16_checked_div_some(a: I16, b: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_checked_div_val(a: I16, b: I16) -> I16 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -225,64 +294,94 @@ pub fn i16_checked_div_val(a: I16, b: I16) -> I16 {
   }
 }
 
+@export
 pub fn i16_shl(a: I16, b: U32) -> I16 { a << b }
 
+@export
 pub fn i16_shr(a: I16, b: U32) -> I16 { a >> b }
 
+@export
 pub fn i16_not(a: I16) -> I16 { !a }
 
+@export
 pub fn i16_neg(a: I16) -> I16 { -a }
 
+@export
 pub fn i16_abs(a: I16) -> I16 { abs(a) }
 
+@export
 pub fn i32_add(a: I32, b: I32) -> I32 { a + b }
 
+@export
 pub fn i32_sub(a: I32, b: I32) -> I32 { a - b }
 
+@export
 pub fn i32_mul(a: I32, b: I32) -> I32 { a * b }
 
+@export
 pub fn i32_div(a: I32, b: I32) -> I32 { a / b }
 
+@export
 pub fn i32_rem(a: I32, b: I32) -> I32 { a % b }
 
+@export
 pub fn i32_wadd(a: I32, b: I32) -> I32 { a +% b }
 
+@export
 pub fn i32_wsub(a: I32, b: I32) -> I32 { a -% b }
 
+@export
 pub fn i32_wmul(a: I32, b: I32) -> I32 { a *% b }
 
+@export
 pub fn i32_sadd(a: I32, b: I32) -> I32 { a +| b }
 
+@export
 pub fn i32_ssub(a: I32, b: I32) -> I32 { a -| b }
 
+@export
 pub fn i32_smul(a: I32, b: I32) -> I32 { a *| b }
 
+@export
 pub fn i32_div_euclid(a: I32, b: I32) -> I32 { a.div_euclid(b) }
 
+@export
 pub fn i32_rem_euclid(a: I32, b: I32) -> I32 { a.rem_euclid(b) }
 
+@export
 pub fn i32_and(a: I32, b: I32) -> I32 { a & b }
 
+@export
 pub fn i32_or(a: I32, b: I32) -> I32 { a | b }
 
+@export
 pub fn i32_xor(a: I32, b: I32) -> I32 { a ^ b }
 
+@export
 pub fn i32_eq(a: I32, b: I32) -> Bool { a == b }
 
+@export
 pub fn i32_ne(a: I32, b: I32) -> Bool { a != b }
 
+@export
 pub fn i32_lt(a: I32, b: I32) -> Bool { a < b }
 
+@export
 pub fn i32_le(a: I32, b: I32) -> Bool { a <= b }
 
+@export
 pub fn i32_gt(a: I32, b: I32) -> Bool { a > b }
 
+@export
 pub fn i32_ge(a: I32, b: I32) -> Bool { a >= b }
 
+@export
 pub fn i32_min(a: I32, b: I32) -> I32 { min(a, b) }
 
+@export
 pub fn i32_max(a: I32, b: I32) -> I32 { max(a, b) }
 
+@export
 pub fn i32_checked_add_some(a: I32, b: I32) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -290,6 +389,7 @@ pub fn i32_checked_add_some(a: I32, b: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_add_val(a: I32, b: I32) -> I32 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -297,6 +397,7 @@ pub fn i32_checked_add_val(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_sub_some(a: I32, b: I32) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -304,6 +405,7 @@ pub fn i32_checked_sub_some(a: I32, b: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_sub_val(a: I32, b: I32) -> I32 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -311,6 +413,7 @@ pub fn i32_checked_sub_val(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_mul_some(a: I32, b: I32) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -318,6 +421,7 @@ pub fn i32_checked_mul_some(a: I32, b: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_mul_val(a: I32, b: I32) -> I32 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -325,6 +429,7 @@ pub fn i32_checked_mul_val(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn i32_checked_div_some(a: I32, b: I32) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -332,6 +437,7 @@ pub fn i32_checked_div_some(a: I32, b: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_checked_div_val(a: I32, b: I32) -> I32 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -339,64 +445,94 @@ pub fn i32_checked_div_val(a: I32, b: I32) -> I32 {
   }
 }
 
+@export
 pub fn i32_shl(a: I32, b: U32) -> I32 { a << b }
 
+@export
 pub fn i32_shr(a: I32, b: U32) -> I32 { a >> b }
 
+@export
 pub fn i32_not(a: I32) -> I32 { !a }
 
+@export
 pub fn i32_neg(a: I32) -> I32 { -a }
 
+@export
 pub fn i32_abs(a: I32) -> I32 { abs(a) }
 
+@export
 pub fn i64_add(a: I64, b: I64) -> I64 { a + b }
 
+@export
 pub fn i64_sub(a: I64, b: I64) -> I64 { a - b }
 
+@export
 pub fn i64_mul(a: I64, b: I64) -> I64 { a * b }
 
+@export
 pub fn i64_div(a: I64, b: I64) -> I64 { a / b }
 
+@export
 pub fn i64_rem(a: I64, b: I64) -> I64 { a % b }
 
+@export
 pub fn i64_wadd(a: I64, b: I64) -> I64 { a +% b }
 
+@export
 pub fn i64_wsub(a: I64, b: I64) -> I64 { a -% b }
 
+@export
 pub fn i64_wmul(a: I64, b: I64) -> I64 { a *% b }
 
+@export
 pub fn i64_sadd(a: I64, b: I64) -> I64 { a +| b }
 
+@export
 pub fn i64_ssub(a: I64, b: I64) -> I64 { a -| b }
 
+@export
 pub fn i64_smul(a: I64, b: I64) -> I64 { a *| b }
 
+@export
 pub fn i64_div_euclid(a: I64, b: I64) -> I64 { a.div_euclid(b) }
 
+@export
 pub fn i64_rem_euclid(a: I64, b: I64) -> I64 { a.rem_euclid(b) }
 
+@export
 pub fn i64_and(a: I64, b: I64) -> I64 { a & b }
 
+@export
 pub fn i64_or(a: I64, b: I64) -> I64 { a | b }
 
+@export
 pub fn i64_xor(a: I64, b: I64) -> I64 { a ^ b }
 
+@export
 pub fn i64_eq(a: I64, b: I64) -> Bool { a == b }
 
+@export
 pub fn i64_ne(a: I64, b: I64) -> Bool { a != b }
 
+@export
 pub fn i64_lt(a: I64, b: I64) -> Bool { a < b }
 
+@export
 pub fn i64_le(a: I64, b: I64) -> Bool { a <= b }
 
+@export
 pub fn i64_gt(a: I64, b: I64) -> Bool { a > b }
 
+@export
 pub fn i64_ge(a: I64, b: I64) -> Bool { a >= b }
 
+@export
 pub fn i64_min(a: I64, b: I64) -> I64 { min(a, b) }
 
+@export
 pub fn i64_max(a: I64, b: I64) -> I64 { max(a, b) }
 
+@export
 pub fn i64_checked_add_some(a: I64, b: I64) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -404,6 +540,7 @@ pub fn i64_checked_add_some(a: I64, b: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_add_val(a: I64, b: I64) -> I64 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -411,6 +548,7 @@ pub fn i64_checked_add_val(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_sub_some(a: I64, b: I64) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -418,6 +556,7 @@ pub fn i64_checked_sub_some(a: I64, b: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_sub_val(a: I64, b: I64) -> I64 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -425,6 +564,7 @@ pub fn i64_checked_sub_val(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_mul_some(a: I64, b: I64) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -432,6 +572,7 @@ pub fn i64_checked_mul_some(a: I64, b: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_mul_val(a: I64, b: I64) -> I64 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -439,6 +580,7 @@ pub fn i64_checked_mul_val(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn i64_checked_div_some(a: I64, b: I64) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -446,6 +588,7 @@ pub fn i64_checked_div_some(a: I64, b: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_checked_div_val(a: I64, b: I64) -> I64 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -453,64 +596,94 @@ pub fn i64_checked_div_val(a: I64, b: I64) -> I64 {
   }
 }
 
+@export
 pub fn i64_shl(a: I64, b: U32) -> I64 { a << b }
 
+@export
 pub fn i64_shr(a: I64, b: U32) -> I64 { a >> b }
 
+@export
 pub fn i64_not(a: I64) -> I64 { !a }
 
+@export
 pub fn i64_neg(a: I64) -> I64 { -a }
 
+@export
 pub fn i64_abs(a: I64) -> I64 { abs(a) }
 
+@export
 pub fn u8_add(a: U8, b: U8) -> U8 { a + b }
 
+@export
 pub fn u8_sub(a: U8, b: U8) -> U8 { a - b }
 
+@export
 pub fn u8_mul(a: U8, b: U8) -> U8 { a * b }
 
+@export
 pub fn u8_div(a: U8, b: U8) -> U8 { a / b }
 
+@export
 pub fn u8_rem(a: U8, b: U8) -> U8 { a % b }
 
+@export
 pub fn u8_wadd(a: U8, b: U8) -> U8 { a +% b }
 
+@export
 pub fn u8_wsub(a: U8, b: U8) -> U8 { a -% b }
 
+@export
 pub fn u8_wmul(a: U8, b: U8) -> U8 { a *% b }
 
+@export
 pub fn u8_sadd(a: U8, b: U8) -> U8 { a +| b }
 
+@export
 pub fn u8_ssub(a: U8, b: U8) -> U8 { a -| b }
 
+@export
 pub fn u8_smul(a: U8, b: U8) -> U8 { a *| b }
 
+@export
 pub fn u8_div_euclid(a: U8, b: U8) -> U8 { a.div_euclid(b) }
 
+@export
 pub fn u8_rem_euclid(a: U8, b: U8) -> U8 { a.rem_euclid(b) }
 
+@export
 pub fn u8_and(a: U8, b: U8) -> U8 { a & b }
 
+@export
 pub fn u8_or(a: U8, b: U8) -> U8 { a | b }
 
+@export
 pub fn u8_xor(a: U8, b: U8) -> U8 { a ^ b }
 
+@export
 pub fn u8_eq(a: U8, b: U8) -> Bool { a == b }
 
+@export
 pub fn u8_ne(a: U8, b: U8) -> Bool { a != b }
 
+@export
 pub fn u8_lt(a: U8, b: U8) -> Bool { a < b }
 
+@export
 pub fn u8_le(a: U8, b: U8) -> Bool { a <= b }
 
+@export
 pub fn u8_gt(a: U8, b: U8) -> Bool { a > b }
 
+@export
 pub fn u8_ge(a: U8, b: U8) -> Bool { a >= b }
 
+@export
 pub fn u8_min(a: U8, b: U8) -> U8 { min(a, b) }
 
+@export
 pub fn u8_max(a: U8, b: U8) -> U8 { max(a, b) }
 
+@export
 pub fn u8_checked_add_some(a: U8, b: U8) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -518,6 +691,7 @@ pub fn u8_checked_add_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_add_val(a: U8, b: U8) -> U8 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -525,6 +699,7 @@ pub fn u8_checked_add_val(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn u8_checked_sub_some(a: U8, b: U8) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -532,6 +707,7 @@ pub fn u8_checked_sub_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_sub_val(a: U8, b: U8) -> U8 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -539,6 +715,7 @@ pub fn u8_checked_sub_val(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn u8_checked_mul_some(a: U8, b: U8) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -546,6 +723,7 @@ pub fn u8_checked_mul_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_mul_val(a: U8, b: U8) -> U8 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -553,6 +731,7 @@ pub fn u8_checked_mul_val(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn u8_checked_div_some(a: U8, b: U8) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -560,6 +739,7 @@ pub fn u8_checked_div_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_checked_div_val(a: U8, b: U8) -> U8 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -567,60 +747,88 @@ pub fn u8_checked_div_val(a: U8, b: U8) -> U8 {
   }
 }
 
+@export
 pub fn u8_shl(a: U8, b: U32) -> U8 { a << b }
 
+@export
 pub fn u8_shr(a: U8, b: U32) -> U8 { a >> b }
 
+@export
 pub fn u8_not(a: U8) -> U8 { !a }
 
+@export
 pub fn u16_add(a: U16, b: U16) -> U16 { a + b }
 
+@export
 pub fn u16_sub(a: U16, b: U16) -> U16 { a - b }
 
+@export
 pub fn u16_mul(a: U16, b: U16) -> U16 { a * b }
 
+@export
 pub fn u16_div(a: U16, b: U16) -> U16 { a / b }
 
+@export
 pub fn u16_rem(a: U16, b: U16) -> U16 { a % b }
 
+@export
 pub fn u16_wadd(a: U16, b: U16) -> U16 { a +% b }
 
+@export
 pub fn u16_wsub(a: U16, b: U16) -> U16 { a -% b }
 
+@export
 pub fn u16_wmul(a: U16, b: U16) -> U16 { a *% b }
 
+@export
 pub fn u16_sadd(a: U16, b: U16) -> U16 { a +| b }
 
+@export
 pub fn u16_ssub(a: U16, b: U16) -> U16 { a -| b }
 
+@export
 pub fn u16_smul(a: U16, b: U16) -> U16 { a *| b }
 
+@export
 pub fn u16_div_euclid(a: U16, b: U16) -> U16 { a.div_euclid(b) }
 
+@export
 pub fn u16_rem_euclid(a: U16, b: U16) -> U16 { a.rem_euclid(b) }
 
+@export
 pub fn u16_and(a: U16, b: U16) -> U16 { a & b }
 
+@export
 pub fn u16_or(a: U16, b: U16) -> U16 { a | b }
 
+@export
 pub fn u16_xor(a: U16, b: U16) -> U16 { a ^ b }
 
+@export
 pub fn u16_eq(a: U16, b: U16) -> Bool { a == b }
 
+@export
 pub fn u16_ne(a: U16, b: U16) -> Bool { a != b }
 
+@export
 pub fn u16_lt(a: U16, b: U16) -> Bool { a < b }
 
+@export
 pub fn u16_le(a: U16, b: U16) -> Bool { a <= b }
 
+@export
 pub fn u16_gt(a: U16, b: U16) -> Bool { a > b }
 
+@export
 pub fn u16_ge(a: U16, b: U16) -> Bool { a >= b }
 
+@export
 pub fn u16_min(a: U16, b: U16) -> U16 { min(a, b) }
 
+@export
 pub fn u16_max(a: U16, b: U16) -> U16 { max(a, b) }
 
+@export
 pub fn u16_checked_add_some(a: U16, b: U16) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -628,6 +836,7 @@ pub fn u16_checked_add_some(a: U16, b: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_add_val(a: U16, b: U16) -> U16 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -635,6 +844,7 @@ pub fn u16_checked_add_val(a: U16, b: U16) -> U16 {
   }
 }
 
+@export
 pub fn u16_checked_sub_some(a: U16, b: U16) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -642,6 +852,7 @@ pub fn u16_checked_sub_some(a: U16, b: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_sub_val(a: U16, b: U16) -> U16 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -649,6 +860,7 @@ pub fn u16_checked_sub_val(a: U16, b: U16) -> U16 {
   }
 }
 
+@export
 pub fn u16_checked_mul_some(a: U16, b: U16) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -656,6 +868,7 @@ pub fn u16_checked_mul_some(a: U16, b: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_mul_val(a: U16, b: U16) -> U16 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -663,6 +876,7 @@ pub fn u16_checked_mul_val(a: U16, b: U16) -> U16 {
   }
 }
 
+@export
 pub fn u16_checked_div_some(a: U16, b: U16) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -670,6 +884,7 @@ pub fn u16_checked_div_some(a: U16, b: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_checked_div_val(a: U16, b: U16) -> U16 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -677,60 +892,88 @@ pub fn u16_checked_div_val(a: U16, b: U16) -> U16 {
   }
 }
 
+@export
 pub fn u16_shl(a: U16, b: U32) -> U16 { a << b }
 
+@export
 pub fn u16_shr(a: U16, b: U32) -> U16 { a >> b }
 
+@export
 pub fn u16_not(a: U16) -> U16 { !a }
 
+@export
 pub fn u32_add(a: U32, b: U32) -> U32 { a + b }
 
+@export
 pub fn u32_sub(a: U32, b: U32) -> U32 { a - b }
 
+@export
 pub fn u32_mul(a: U32, b: U32) -> U32 { a * b }
 
+@export
 pub fn u32_div(a: U32, b: U32) -> U32 { a / b }
 
+@export
 pub fn u32_rem(a: U32, b: U32) -> U32 { a % b }
 
+@export
 pub fn u32_wadd(a: U32, b: U32) -> U32 { a +% b }
 
+@export
 pub fn u32_wsub(a: U32, b: U32) -> U32 { a -% b }
 
+@export
 pub fn u32_wmul(a: U32, b: U32) -> U32 { a *% b }
 
+@export
 pub fn u32_sadd(a: U32, b: U32) -> U32 { a +| b }
 
+@export
 pub fn u32_ssub(a: U32, b: U32) -> U32 { a -| b }
 
+@export
 pub fn u32_smul(a: U32, b: U32) -> U32 { a *| b }
 
+@export
 pub fn u32_div_euclid(a: U32, b: U32) -> U32 { a.div_euclid(b) }
 
+@export
 pub fn u32_rem_euclid(a: U32, b: U32) -> U32 { a.rem_euclid(b) }
 
+@export
 pub fn u32_and(a: U32, b: U32) -> U32 { a & b }
 
+@export
 pub fn u32_or(a: U32, b: U32) -> U32 { a | b }
 
+@export
 pub fn u32_xor(a: U32, b: U32) -> U32 { a ^ b }
 
+@export
 pub fn u32_eq(a: U32, b: U32) -> Bool { a == b }
 
+@export
 pub fn u32_ne(a: U32, b: U32) -> Bool { a != b }
 
+@export
 pub fn u32_lt(a: U32, b: U32) -> Bool { a < b }
 
+@export
 pub fn u32_le(a: U32, b: U32) -> Bool { a <= b }
 
+@export
 pub fn u32_gt(a: U32, b: U32) -> Bool { a > b }
 
+@export
 pub fn u32_ge(a: U32, b: U32) -> Bool { a >= b }
 
+@export
 pub fn u32_min(a: U32, b: U32) -> U32 { min(a, b) }
 
+@export
 pub fn u32_max(a: U32, b: U32) -> U32 { max(a, b) }
 
+@export
 pub fn u32_checked_add_some(a: U32, b: U32) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -738,6 +981,7 @@ pub fn u32_checked_add_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_add_val(a: U32, b: U32) -> U32 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -745,6 +989,7 @@ pub fn u32_checked_add_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_checked_sub_some(a: U32, b: U32) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -752,6 +997,7 @@ pub fn u32_checked_sub_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_sub_val(a: U32, b: U32) -> U32 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -759,6 +1005,7 @@ pub fn u32_checked_sub_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_checked_mul_some(a: U32, b: U32) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -766,6 +1013,7 @@ pub fn u32_checked_mul_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_mul_val(a: U32, b: U32) -> U32 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -773,6 +1021,7 @@ pub fn u32_checked_mul_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_checked_div_some(a: U32, b: U32) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -780,6 +1029,7 @@ pub fn u32_checked_div_some(a: U32, b: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_checked_div_val(a: U32, b: U32) -> U32 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -787,60 +1037,88 @@ pub fn u32_checked_div_val(a: U32, b: U32) -> U32 {
   }
 }
 
+@export
 pub fn u32_shl(a: U32, b: U32) -> U32 { a << b }
 
+@export
 pub fn u32_shr(a: U32, b: U32) -> U32 { a >> b }
 
+@export
 pub fn u32_not(a: U32) -> U32 { !a }
 
+@export
 pub fn u64_add(a: U64, b: U64) -> U64 { a + b }
 
+@export
 pub fn u64_sub(a: U64, b: U64) -> U64 { a - b }
 
+@export
 pub fn u64_mul(a: U64, b: U64) -> U64 { a * b }
 
+@export
 pub fn u64_div(a: U64, b: U64) -> U64 { a / b }
 
+@export
 pub fn u64_rem(a: U64, b: U64) -> U64 { a % b }
 
+@export
 pub fn u64_wadd(a: U64, b: U64) -> U64 { a +% b }
 
+@export
 pub fn u64_wsub(a: U64, b: U64) -> U64 { a -% b }
 
+@export
 pub fn u64_wmul(a: U64, b: U64) -> U64 { a *% b }
 
+@export
 pub fn u64_sadd(a: U64, b: U64) -> U64 { a +| b }
 
+@export
 pub fn u64_ssub(a: U64, b: U64) -> U64 { a -| b }
 
+@export
 pub fn u64_smul(a: U64, b: U64) -> U64 { a *| b }
 
+@export
 pub fn u64_div_euclid(a: U64, b: U64) -> U64 { a.div_euclid(b) }
 
+@export
 pub fn u64_rem_euclid(a: U64, b: U64) -> U64 { a.rem_euclid(b) }
 
+@export
 pub fn u64_and(a: U64, b: U64) -> U64 { a & b }
 
+@export
 pub fn u64_or(a: U64, b: U64) -> U64 { a | b }
 
+@export
 pub fn u64_xor(a: U64, b: U64) -> U64 { a ^ b }
 
+@export
 pub fn u64_eq(a: U64, b: U64) -> Bool { a == b }
 
+@export
 pub fn u64_ne(a: U64, b: U64) -> Bool { a != b }
 
+@export
 pub fn u64_lt(a: U64, b: U64) -> Bool { a < b }
 
+@export
 pub fn u64_le(a: U64, b: U64) -> Bool { a <= b }
 
+@export
 pub fn u64_gt(a: U64, b: U64) -> Bool { a > b }
 
+@export
 pub fn u64_ge(a: U64, b: U64) -> Bool { a >= b }
 
+@export
 pub fn u64_min(a: U64, b: U64) -> U64 { min(a, b) }
 
+@export
 pub fn u64_max(a: U64, b: U64) -> U64 { max(a, b) }
 
+@export
 pub fn u64_checked_add_some(a: U64, b: U64) -> Bool {
   match a.checked_add(b) {
     Some(_) => true,
@@ -848,6 +1126,7 @@ pub fn u64_checked_add_some(a: U64, b: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_add_val(a: U64, b: U64) -> U64 {
   match a.checked_add(b) {
     Some(v) => v,
@@ -855,6 +1134,7 @@ pub fn u64_checked_add_val(a: U64, b: U64) -> U64 {
   }
 }
 
+@export
 pub fn u64_checked_sub_some(a: U64, b: U64) -> Bool {
   match a.checked_sub(b) {
     Some(_) => true,
@@ -862,6 +1142,7 @@ pub fn u64_checked_sub_some(a: U64, b: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_sub_val(a: U64, b: U64) -> U64 {
   match a.checked_sub(b) {
     Some(v) => v,
@@ -869,6 +1150,7 @@ pub fn u64_checked_sub_val(a: U64, b: U64) -> U64 {
   }
 }
 
+@export
 pub fn u64_checked_mul_some(a: U64, b: U64) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -876,6 +1158,7 @@ pub fn u64_checked_mul_some(a: U64, b: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_mul_val(a: U64, b: U64) -> U64 {
   match a.checked_mul(b) {
     Some(v) => v,
@@ -883,6 +1166,7 @@ pub fn u64_checked_mul_val(a: U64, b: U64) -> U64 {
   }
 }
 
+@export
 pub fn u64_checked_div_some(a: U64, b: U64) -> Bool {
   match a.checked_div(b) {
     Some(_) => true,
@@ -890,6 +1174,7 @@ pub fn u64_checked_div_some(a: U64, b: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_checked_div_val(a: U64, b: U64) -> U64 {
   match a.checked_div(b) {
     Some(v) => v,
@@ -897,100 +1182,148 @@ pub fn u64_checked_div_val(a: U64, b: U64) -> U64 {
   }
 }
 
+@export
 pub fn u64_shl(a: U64, b: U32) -> U64 { a << b }
 
+@export
 pub fn u64_shr(a: U64, b: U32) -> U64 { a >> b }
 
+@export
 pub fn u64_not(a: U64) -> U64 { !a }
 
+@export
 pub fn f32_add(a: F32, b: F32) -> F32 { a + b }
 
+@export
 pub fn f32_sub(a: F32, b: F32) -> F32 { a - b }
 
+@export
 pub fn f32_mul(a: F32, b: F32) -> F32 { a * b }
 
+@export
 pub fn f32_div(a: F32, b: F32) -> F32 { a / b }
 
+@export
 pub fn f32_rem(a: F32, b: F32) -> F32 { a % b }
 
+@export
 pub fn f32_eq(a: F32, b: F32) -> Bool { a == b }
 
+@export
 pub fn f32_ne(a: F32, b: F32) -> Bool { a != b }
 
+@export
 pub fn f32_lt(a: F32, b: F32) -> Bool { a < b }
 
+@export
 pub fn f32_le(a: F32, b: F32) -> Bool { a <= b }
 
+@export
 pub fn f32_gt(a: F32, b: F32) -> Bool { a > b }
 
+@export
 pub fn f32_ge(a: F32, b: F32) -> Bool { a >= b }
 
+@export
 pub fn f32_min(a: F32, b: F32) -> F32 { min(a, b) }
 
+@export
 pub fn f32_max(a: F32, b: F32) -> F32 { max(a, b) }
 
+@export
 pub fn f32_neg(a: F32) -> F32 { -a }
 
+@export
 pub fn f32_sqrt(a: F32) -> F32 { sqrt(a) }
 
+@export
 pub fn f32_floor(a: F32) -> F32 { floor(a) }
 
+@export
 pub fn f32_ceil(a: F32) -> F32 { ceil(a) }
 
+@export
 pub fn f32_trunc(a: F32) -> F32 { trunc(a) }
 
+@export
 pub fn f32_round(a: F32) -> F32 { round(a) }
 
+@export
 pub fn f32_abs(a: F32) -> F32 { abs(a) }
 
+@export
 pub fn f64_add(a: F64, b: F64) -> F64 { a + b }
 
+@export
 pub fn f64_sub(a: F64, b: F64) -> F64 { a - b }
 
+@export
 pub fn f64_mul(a: F64, b: F64) -> F64 { a * b }
 
+@export
 pub fn f64_div(a: F64, b: F64) -> F64 { a / b }
 
+@export
 pub fn f64_rem(a: F64, b: F64) -> F64 { a % b }
 
+@export
 pub fn f64_eq(a: F64, b: F64) -> Bool { a == b }
 
+@export
 pub fn f64_ne(a: F64, b: F64) -> Bool { a != b }
 
+@export
 pub fn f64_lt(a: F64, b: F64) -> Bool { a < b }
 
+@export
 pub fn f64_le(a: F64, b: F64) -> Bool { a <= b }
 
+@export
 pub fn f64_gt(a: F64, b: F64) -> Bool { a > b }
 
+@export
 pub fn f64_ge(a: F64, b: F64) -> Bool { a >= b }
 
+@export
 pub fn f64_min(a: F64, b: F64) -> F64 { min(a, b) }
 
+@export
 pub fn f64_max(a: F64, b: F64) -> F64 { max(a, b) }
 
+@export
 pub fn f64_neg(a: F64) -> F64 { -a }
 
+@export
 pub fn f64_sqrt(a: F64) -> F64 { sqrt(a) }
 
+@export
 pub fn f64_floor(a: F64) -> F64 { floor(a) }
 
+@export
 pub fn f64_ceil(a: F64) -> F64 { ceil(a) }
 
+@export
 pub fn f64_trunc(a: F64) -> F64 { trunc(a) }
 
+@export
 pub fn f64_round(a: F64) -> F64 { round(a) }
 
+@export
 pub fn f64_abs(a: F64) -> F64 { abs(a) }
 
+@export
 pub fn i8_as_i8(a: I8) -> I8 { a as I8 }
 
+@export
 pub fn i8_as_i16(a: I8) -> I16 { a as I16 }
 
+@export
 pub fn i8_as_i32(a: I8) -> I32 { a as I32 }
 
+@export
 pub fn i8_as_i64(a: I8) -> I64 { a as I64 }
 
+@export
 pub fn i8_narrow_u8_some(a: I8) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -998,6 +1331,7 @@ pub fn i8_narrow_u8_some(a: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_narrow_u8_val(a: I8) -> U8 {
   match a.narrow_u8() {
     Some(v) => v,
@@ -1005,6 +1339,7 @@ pub fn i8_narrow_u8_val(a: I8) -> U8 {
   }
 }
 
+@export
 pub fn i8_narrow_u16_some(a: I8) -> Bool {
   match a.narrow_u16() {
     Some(_) => true,
@@ -1012,6 +1347,7 @@ pub fn i8_narrow_u16_some(a: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_narrow_u16_val(a: I8) -> U16 {
   match a.narrow_u16() {
     Some(v) => v,
@@ -1019,6 +1355,7 @@ pub fn i8_narrow_u16_val(a: I8) -> U16 {
   }
 }
 
+@export
 pub fn i8_narrow_u32_some(a: I8) -> Bool {
   match a.narrow_u32() {
     Some(_) => true,
@@ -1026,6 +1363,7 @@ pub fn i8_narrow_u32_some(a: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_narrow_u32_val(a: I8) -> U32 {
   match a.narrow_u32() {
     Some(v) => v,
@@ -1033,6 +1371,7 @@ pub fn i8_narrow_u32_val(a: I8) -> U32 {
   }
 }
 
+@export
 pub fn i8_narrow_u64_some(a: I8) -> Bool {
   match a.narrow_u64() {
     Some(_) => true,
@@ -1040,6 +1379,7 @@ pub fn i8_narrow_u64_some(a: I8) -> Bool {
   }
 }
 
+@export
 pub fn i8_narrow_u64_val(a: I8) -> U64 {
   match a.narrow_u64() {
     Some(v) => v,
@@ -1047,10 +1387,13 @@ pub fn i8_narrow_u64_val(a: I8) -> U64 {
   }
 }
 
+@export
 pub fn i8_as_f32(a: I8) -> F32 { a as F32 }
 
+@export
 pub fn i8_as_f64(a: I8) -> F64 { a as F64 }
 
+@export
 pub fn i16_narrow_i8_some(a: I16) -> Bool {
   match a.narrow_i8() {
     Some(_) => true,
@@ -1058,6 +1401,7 @@ pub fn i16_narrow_i8_some(a: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_narrow_i8_val(a: I16) -> I8 {
   match a.narrow_i8() {
     Some(v) => v,
@@ -1065,12 +1409,16 @@ pub fn i16_narrow_i8_val(a: I16) -> I8 {
   }
 }
 
+@export
 pub fn i16_as_i16(a: I16) -> I16 { a as I16 }
 
+@export
 pub fn i16_as_i32(a: I16) -> I32 { a as I32 }
 
+@export
 pub fn i16_as_i64(a: I16) -> I64 { a as I64 }
 
+@export
 pub fn i16_narrow_u8_some(a: I16) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -1078,6 +1426,7 @@ pub fn i16_narrow_u8_some(a: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_narrow_u8_val(a: I16) -> U8 {
   match a.narrow_u8() {
     Some(v) => v,
@@ -1085,6 +1434,7 @@ pub fn i16_narrow_u8_val(a: I16) -> U8 {
   }
 }
 
+@export
 pub fn i16_narrow_u16_some(a: I16) -> Bool {
   match a.narrow_u16() {
     Some(_) => true,
@@ -1092,6 +1442,7 @@ pub fn i16_narrow_u16_some(a: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_narrow_u16_val(a: I16) -> U16 {
   match a.narrow_u16() {
     Some(v) => v,
@@ -1099,6 +1450,7 @@ pub fn i16_narrow_u16_val(a: I16) -> U16 {
   }
 }
 
+@export
 pub fn i16_narrow_u32_some(a: I16) -> Bool {
   match a.narrow_u32() {
     Some(_) => true,
@@ -1106,6 +1458,7 @@ pub fn i16_narrow_u32_some(a: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_narrow_u32_val(a: I16) -> U32 {
   match a.narrow_u32() {
     Some(v) => v,
@@ -1113,6 +1466,7 @@ pub fn i16_narrow_u32_val(a: I16) -> U32 {
   }
 }
 
+@export
 pub fn i16_narrow_u64_some(a: I16) -> Bool {
   match a.narrow_u64() {
     Some(_) => true,
@@ -1120,6 +1474,7 @@ pub fn i16_narrow_u64_some(a: I16) -> Bool {
   }
 }
 
+@export
 pub fn i16_narrow_u64_val(a: I16) -> U64 {
   match a.narrow_u64() {
     Some(v) => v,
@@ -1127,10 +1482,13 @@ pub fn i16_narrow_u64_val(a: I16) -> U64 {
   }
 }
 
+@export
 pub fn i16_as_f32(a: I16) -> F32 { a as F32 }
 
+@export
 pub fn i16_as_f64(a: I16) -> F64 { a as F64 }
 
+@export
 pub fn i32_narrow_i8_some(a: I32) -> Bool {
   match a.narrow_i8() {
     Some(_) => true,
@@ -1138,6 +1496,7 @@ pub fn i32_narrow_i8_some(a: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_narrow_i8_val(a: I32) -> I8 {
   match a.narrow_i8() {
     Some(v) => v,
@@ -1145,6 +1504,7 @@ pub fn i32_narrow_i8_val(a: I32) -> I8 {
   }
 }
 
+@export
 pub fn i32_narrow_i16_some(a: I32) -> Bool {
   match a.narrow_i16() {
     Some(_) => true,
@@ -1152,6 +1512,7 @@ pub fn i32_narrow_i16_some(a: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_narrow_i16_val(a: I32) -> I16 {
   match a.narrow_i16() {
     Some(v) => v,
@@ -1159,10 +1520,13 @@ pub fn i32_narrow_i16_val(a: I32) -> I16 {
   }
 }
 
+@export
 pub fn i32_as_i32(a: I32) -> I32 { a as I32 }
 
+@export
 pub fn i32_as_i64(a: I32) -> I64 { a as I64 }
 
+@export
 pub fn i32_narrow_u8_some(a: I32) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -1170,6 +1534,7 @@ pub fn i32_narrow_u8_some(a: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_narrow_u8_val(a: I32) -> U8 {
   match a.narrow_u8() {
     Some(v) => v,
@@ -1177,6 +1542,7 @@ pub fn i32_narrow_u8_val(a: I32) -> U8 {
   }
 }
 
+@export
 pub fn i32_narrow_u16_some(a: I32) -> Bool {
   match a.narrow_u16() {
     Some(_) => true,
@@ -1184,6 +1550,7 @@ pub fn i32_narrow_u16_some(a: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_narrow_u16_val(a: I32) -> U16 {
   match a.narrow_u16() {
     Some(v) => v,
@@ -1191,6 +1558,7 @@ pub fn i32_narrow_u16_val(a: I32) -> U16 {
   }
 }
 
+@export
 pub fn i32_narrow_u32_some(a: I32) -> Bool {
   match a.narrow_u32() {
     Some(_) => true,
@@ -1198,6 +1566,7 @@ pub fn i32_narrow_u32_some(a: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_narrow_u32_val(a: I32) -> U32 {
   match a.narrow_u32() {
     Some(v) => v,
@@ -1205,6 +1574,7 @@ pub fn i32_narrow_u32_val(a: I32) -> U32 {
   }
 }
 
+@export
 pub fn i32_narrow_u64_some(a: I32) -> Bool {
   match a.narrow_u64() {
     Some(_) => true,
@@ -1212,6 +1582,7 @@ pub fn i32_narrow_u64_some(a: I32) -> Bool {
   }
 }
 
+@export
 pub fn i32_narrow_u64_val(a: I32) -> U64 {
   match a.narrow_u64() {
     Some(v) => v,
@@ -1219,10 +1590,13 @@ pub fn i32_narrow_u64_val(a: I32) -> U64 {
   }
 }
 
+@export
 pub fn i32_round_f32(a: I32) -> F32 { a.round_f32() }
 
+@export
 pub fn i32_as_f64(a: I32) -> F64 { a as F64 }
 
+@export
 pub fn i64_narrow_i8_some(a: I64) -> Bool {
   match a.narrow_i8() {
     Some(_) => true,
@@ -1230,6 +1604,7 @@ pub fn i64_narrow_i8_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_narrow_i8_val(a: I64) -> I8 {
   match a.narrow_i8() {
     Some(v) => v,
@@ -1237,6 +1612,7 @@ pub fn i64_narrow_i8_val(a: I64) -> I8 {
   }
 }
 
+@export
 pub fn i64_narrow_i16_some(a: I64) -> Bool {
   match a.narrow_i16() {
     Some(_) => true,
@@ -1244,6 +1620,7 @@ pub fn i64_narrow_i16_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_narrow_i16_val(a: I64) -> I16 {
   match a.narrow_i16() {
     Some(v) => v,
@@ -1251,6 +1628,7 @@ pub fn i64_narrow_i16_val(a: I64) -> I16 {
   }
 }
 
+@export
 pub fn i64_narrow_i32_some(a: I64) -> Bool {
   match a.narrow_i32() {
     Some(_) => true,
@@ -1258,6 +1636,7 @@ pub fn i64_narrow_i32_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_narrow_i32_val(a: I64) -> I32 {
   match a.narrow_i32() {
     Some(v) => v,
@@ -1265,8 +1644,10 @@ pub fn i64_narrow_i32_val(a: I64) -> I32 {
   }
 }
 
+@export
 pub fn i64_as_i64(a: I64) -> I64 { a as I64 }
 
+@export
 pub fn i64_narrow_u8_some(a: I64) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -1274,6 +1655,7 @@ pub fn i64_narrow_u8_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_narrow_u8_val(a: I64) -> U8 {
   match a.narrow_u8() {
     Some(v) => v,
@@ -1281,6 +1663,7 @@ pub fn i64_narrow_u8_val(a: I64) -> U8 {
   }
 }
 
+@export
 pub fn i64_narrow_u16_some(a: I64) -> Bool {
   match a.narrow_u16() {
     Some(_) => true,
@@ -1288,6 +1671,7 @@ pub fn i64_narrow_u16_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_narrow_u16_val(a: I64) -> U16 {
   match a.narrow_u16() {
     Some(v) => v,
@@ -1295,6 +1679,7 @@ pub fn i64_narrow_u16_val(a: I64) -> U16 {
   }
 }
 
+@export
 pub fn i64_narrow_u32_some(a: I64) -> Bool {
   match a.narrow_u32() {
     Some(_) => true,
@@ -1302,6 +1687,7 @@ pub fn i64_narrow_u32_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_narrow_u32_val(a: I64) -> U32 {
   match a.narrow_u32() {
     Some(v) => v,
@@ -1309,6 +1695,7 @@ pub fn i64_narrow_u32_val(a: I64) -> U32 {
   }
 }
 
+@export
 pub fn i64_narrow_u64_some(a: I64) -> Bool {
   match a.narrow_u64() {
     Some(_) => true,
@@ -1316,6 +1703,7 @@ pub fn i64_narrow_u64_some(a: I64) -> Bool {
   }
 }
 
+@export
 pub fn i64_narrow_u64_val(a: I64) -> U64 {
   match a.narrow_u64() {
     Some(v) => v,
@@ -1323,10 +1711,13 @@ pub fn i64_narrow_u64_val(a: I64) -> U64 {
   }
 }
 
+@export
 pub fn i64_round_f32(a: I64) -> F32 { a.round_f32() }
 
+@export
 pub fn i64_round_f64(a: I64) -> F64 { a.round_f64() }
 
+@export
 pub fn u8_narrow_i8_some(a: U8) -> Bool {
   match a.narrow_i8() {
     Some(_) => true,
@@ -1334,6 +1725,7 @@ pub fn u8_narrow_i8_some(a: U8) -> Bool {
   }
 }
 
+@export
 pub fn u8_narrow_i8_val(a: U8) -> I8 {
   match a.narrow_i8() {
     Some(v) => v,
@@ -1341,24 +1733,34 @@ pub fn u8_narrow_i8_val(a: U8) -> I8 {
   }
 }
 
+@export
 pub fn u8_as_i16(a: U8) -> I16 { a as I16 }
 
+@export
 pub fn u8_as_i32(a: U8) -> I32 { a as I32 }
 
+@export
 pub fn u8_as_i64(a: U8) -> I64 { a as I64 }
 
+@export
 pub fn u8_as_u8(a: U8) -> U8 { a as U8 }
 
+@export
 pub fn u8_as_u16(a: U8) -> U16 { a as U16 }
 
+@export
 pub fn u8_as_u32(a: U8) -> U32 { a as U32 }
 
+@export
 pub fn u8_as_u64(a: U8) -> U64 { a as U64 }
 
+@export
 pub fn u8_as_f32(a: U8) -> F32 { a as F32 }
 
+@export
 pub fn u8_as_f64(a: U8) -> F64 { a as F64 }
 
+@export
 pub fn u16_narrow_i8_some(a: U16) -> Bool {
   match a.narrow_i8() {
     Some(_) => true,
@@ -1366,6 +1768,7 @@ pub fn u16_narrow_i8_some(a: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_narrow_i8_val(a: U16) -> I8 {
   match a.narrow_i8() {
     Some(v) => v,
@@ -1373,6 +1776,7 @@ pub fn u16_narrow_i8_val(a: U16) -> I8 {
   }
 }
 
+@export
 pub fn u16_narrow_i16_some(a: U16) -> Bool {
   match a.narrow_i16() {
     Some(_) => true,
@@ -1380,6 +1784,7 @@ pub fn u16_narrow_i16_some(a: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_narrow_i16_val(a: U16) -> I16 {
   match a.narrow_i16() {
     Some(v) => v,
@@ -1387,10 +1792,13 @@ pub fn u16_narrow_i16_val(a: U16) -> I16 {
   }
 }
 
+@export
 pub fn u16_as_i32(a: U16) -> I32 { a as I32 }
 
+@export
 pub fn u16_as_i64(a: U16) -> I64 { a as I64 }
 
+@export
 pub fn u16_narrow_u8_some(a: U16) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -1398,6 +1806,7 @@ pub fn u16_narrow_u8_some(a: U16) -> Bool {
   }
 }
 
+@export
 pub fn u16_narrow_u8_val(a: U16) -> U8 {
   match a.narrow_u8() {
     Some(v) => v,
@@ -1405,16 +1814,22 @@ pub fn u16_narrow_u8_val(a: U16) -> U8 {
   }
 }
 
+@export
 pub fn u16_as_u16(a: U16) -> U16 { a as U16 }
 
+@export
 pub fn u16_as_u32(a: U16) -> U32 { a as U32 }
 
+@export
 pub fn u16_as_u64(a: U16) -> U64 { a as U64 }
 
+@export
 pub fn u16_as_f32(a: U16) -> F32 { a as F32 }
 
+@export
 pub fn u16_as_f64(a: U16) -> F64 { a as F64 }
 
+@export
 pub fn u32_narrow_i8_some(a: U32) -> Bool {
   match a.narrow_i8() {
     Some(_) => true,
@@ -1422,6 +1837,7 @@ pub fn u32_narrow_i8_some(a: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_narrow_i8_val(a: U32) -> I8 {
   match a.narrow_i8() {
     Some(v) => v,
@@ -1429,6 +1845,7 @@ pub fn u32_narrow_i8_val(a: U32) -> I8 {
   }
 }
 
+@export
 pub fn u32_narrow_i16_some(a: U32) -> Bool {
   match a.narrow_i16() {
     Some(_) => true,
@@ -1436,6 +1853,7 @@ pub fn u32_narrow_i16_some(a: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_narrow_i16_val(a: U32) -> I16 {
   match a.narrow_i16() {
     Some(v) => v,
@@ -1443,6 +1861,7 @@ pub fn u32_narrow_i16_val(a: U32) -> I16 {
   }
 }
 
+@export
 pub fn u32_narrow_i32_some(a: U32) -> Bool {
   match a.narrow_i32() {
     Some(_) => true,
@@ -1450,6 +1869,7 @@ pub fn u32_narrow_i32_some(a: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_narrow_i32_val(a: U32) -> I32 {
   match a.narrow_i32() {
     Some(v) => v,
@@ -1457,8 +1877,10 @@ pub fn u32_narrow_i32_val(a: U32) -> I32 {
   }
 }
 
+@export
 pub fn u32_as_i64(a: U32) -> I64 { a as I64 }
 
+@export
 pub fn u32_narrow_u8_some(a: U32) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -1466,6 +1888,7 @@ pub fn u32_narrow_u8_some(a: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_narrow_u8_val(a: U32) -> U8 {
   match a.narrow_u8() {
     Some(v) => v,
@@ -1473,6 +1896,7 @@ pub fn u32_narrow_u8_val(a: U32) -> U8 {
   }
 }
 
+@export
 pub fn u32_narrow_u16_some(a: U32) -> Bool {
   match a.narrow_u16() {
     Some(_) => true,
@@ -1480,6 +1904,7 @@ pub fn u32_narrow_u16_some(a: U32) -> Bool {
   }
 }
 
+@export
 pub fn u32_narrow_u16_val(a: U32) -> U16 {
   match a.narrow_u16() {
     Some(v) => v,
@@ -1487,14 +1912,19 @@ pub fn u32_narrow_u16_val(a: U32) -> U16 {
   }
 }
 
+@export
 pub fn u32_as_u32(a: U32) -> U32 { a as U32 }
 
+@export
 pub fn u32_as_u64(a: U32) -> U64 { a as U64 }
 
+@export
 pub fn u32_round_f32(a: U32) -> F32 { a.round_f32() }
 
+@export
 pub fn u32_as_f64(a: U32) -> F64 { a as F64 }
 
+@export
 pub fn u64_narrow_i8_some(a: U64) -> Bool {
   match a.narrow_i8() {
     Some(_) => true,
@@ -1502,6 +1932,7 @@ pub fn u64_narrow_i8_some(a: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_narrow_i8_val(a: U64) -> I8 {
   match a.narrow_i8() {
     Some(v) => v,
@@ -1509,6 +1940,7 @@ pub fn u64_narrow_i8_val(a: U64) -> I8 {
   }
 }
 
+@export
 pub fn u64_narrow_i16_some(a: U64) -> Bool {
   match a.narrow_i16() {
     Some(_) => true,
@@ -1516,6 +1948,7 @@ pub fn u64_narrow_i16_some(a: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_narrow_i16_val(a: U64) -> I16 {
   match a.narrow_i16() {
     Some(v) => v,
@@ -1523,6 +1956,7 @@ pub fn u64_narrow_i16_val(a: U64) -> I16 {
   }
 }
 
+@export
 pub fn u64_narrow_i32_some(a: U64) -> Bool {
   match a.narrow_i32() {
     Some(_) => true,
@@ -1530,6 +1964,7 @@ pub fn u64_narrow_i32_some(a: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_narrow_i32_val(a: U64) -> I32 {
   match a.narrow_i32() {
     Some(v) => v,
@@ -1537,6 +1972,7 @@ pub fn u64_narrow_i32_val(a: U64) -> I32 {
   }
 }
 
+@export
 pub fn u64_narrow_i64_some(a: U64) -> Bool {
   match a.narrow_i64() {
     Some(_) => true,
@@ -1544,6 +1980,7 @@ pub fn u64_narrow_i64_some(a: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_narrow_i64_val(a: U64) -> I64 {
   match a.narrow_i64() {
     Some(v) => v,
@@ -1551,6 +1988,7 @@ pub fn u64_narrow_i64_val(a: U64) -> I64 {
   }
 }
 
+@export
 pub fn u64_narrow_u8_some(a: U64) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -1558,6 +1996,7 @@ pub fn u64_narrow_u8_some(a: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_narrow_u8_val(a: U64) -> U8 {
   match a.narrow_u8() {
     Some(v) => v,
@@ -1565,6 +2004,7 @@ pub fn u64_narrow_u8_val(a: U64) -> U8 {
   }
 }
 
+@export
 pub fn u64_narrow_u16_some(a: U64) -> Bool {
   match a.narrow_u16() {
     Some(_) => true,
@@ -1572,6 +2012,7 @@ pub fn u64_narrow_u16_some(a: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_narrow_u16_val(a: U64) -> U16 {
   match a.narrow_u16() {
     Some(v) => v,
@@ -1579,6 +2020,7 @@ pub fn u64_narrow_u16_val(a: U64) -> U16 {
   }
 }
 
+@export
 pub fn u64_narrow_u32_some(a: U64) -> Bool {
   match a.narrow_u32() {
     Some(_) => true,
@@ -1586,6 +2028,7 @@ pub fn u64_narrow_u32_some(a: U64) -> Bool {
   }
 }
 
+@export
 pub fn u64_narrow_u32_val(a: U64) -> U32 {
   match a.narrow_u32() {
     Some(v) => v,
@@ -1593,108 +2036,158 @@ pub fn u64_narrow_u32_val(a: U64) -> U32 {
   }
 }
 
+@export
 pub fn u64_as_u64(a: U64) -> U64 { a as U64 }
 
+@export
 pub fn u64_round_f32(a: U64) -> F32 { a.round_f32() }
 
+@export
 pub fn u64_round_f64(a: U64) -> F64 { a.round_f64() }
 
+@export
 pub fn f32_trunc_i8(a: F32) -> I8 { a.trunc_i8() }
 
+@export
 pub fn f32_trunc_i8_sat(a: F32) -> I8 { a.trunc_i8_sat() }
 
+@export
 pub fn f32_trunc_i16(a: F32) -> I16 { a.trunc_i16() }
 
+@export
 pub fn f32_trunc_i16_sat(a: F32) -> I16 { a.trunc_i16_sat() }
 
+@export
 pub fn f32_trunc_i32(a: F32) -> I32 { a.trunc_i32() }
 
+@export
 pub fn f32_trunc_i32_sat(a: F32) -> I32 { a.trunc_i32_sat() }
 
+@export
 pub fn f32_trunc_i64(a: F32) -> I64 { a.trunc_i64() }
 
+@export
 pub fn f32_trunc_i64_sat(a: F32) -> I64 { a.trunc_i64_sat() }
 
+@export
 pub fn f32_trunc_u8(a: F32) -> U8 { a.trunc_u8() }
 
+@export
 pub fn f32_trunc_u8_sat(a: F32) -> U8 { a.trunc_u8_sat() }
 
+@export
 pub fn f32_trunc_u16(a: F32) -> U16 { a.trunc_u16() }
 
+@export
 pub fn f32_trunc_u16_sat(a: F32) -> U16 { a.trunc_u16_sat() }
 
+@export
 pub fn f32_trunc_u32(a: F32) -> U32 { a.trunc_u32() }
 
+@export
 pub fn f32_trunc_u32_sat(a: F32) -> U32 { a.trunc_u32_sat() }
 
+@export
 pub fn f32_trunc_u64(a: F32) -> U64 { a.trunc_u64() }
 
+@export
 pub fn f32_trunc_u64_sat(a: F32) -> U64 { a.trunc_u64_sat() }
 
+@export
 pub fn f32_as_f32(a: F32) -> F32 { a as F32 }
 
+@export
 pub fn f32_as_f64(a: F32) -> F64 { a as F64 }
 
+@export
 pub fn f64_trunc_i8(a: F64) -> I8 { a.trunc_i8() }
 
+@export
 pub fn f64_trunc_i8_sat(a: F64) -> I8 { a.trunc_i8_sat() }
 
+@export
 pub fn f64_trunc_i16(a: F64) -> I16 { a.trunc_i16() }
 
+@export
 pub fn f64_trunc_i16_sat(a: F64) -> I16 { a.trunc_i16_sat() }
 
+@export
 pub fn f64_trunc_i32(a: F64) -> I32 { a.trunc_i32() }
 
+@export
 pub fn f64_trunc_i32_sat(a: F64) -> I32 { a.trunc_i32_sat() }
 
+@export
 pub fn f64_trunc_i64(a: F64) -> I64 { a.trunc_i64() }
 
+@export
 pub fn f64_trunc_i64_sat(a: F64) -> I64 { a.trunc_i64_sat() }
 
+@export
 pub fn f64_trunc_u8(a: F64) -> U8 { a.trunc_u8() }
 
+@export
 pub fn f64_trunc_u8_sat(a: F64) -> U8 { a.trunc_u8_sat() }
 
+@export
 pub fn f64_trunc_u16(a: F64) -> U16 { a.trunc_u16() }
 
+@export
 pub fn f64_trunc_u16_sat(a: F64) -> U16 { a.trunc_u16_sat() }
 
+@export
 pub fn f64_trunc_u32(a: F64) -> U32 { a.trunc_u32() }
 
+@export
 pub fn f64_trunc_u32_sat(a: F64) -> U32 { a.trunc_u32_sat() }
 
+@export
 pub fn f64_trunc_u64(a: F64) -> U64 { a.trunc_u64() }
 
+@export
 pub fn f64_trunc_u64_sat(a: F64) -> U64 { a.trunc_u64_sat() }
 
+@export
 pub fn f64_round_f32(a: F64) -> F32 { a.round_f32() }
 
+@export
 pub fn f64_as_f64(a: F64) -> F64 { a as F64 }
 
+@export
 pub fn f32_to_bits(a: F32) -> U32 { a.to_bits() }
 
+@export
 pub fn f32_from_bits(a: U32) -> F32 { F32.from_bits(a) }
 
+@export
 pub fn f64_to_bits(a: F64) -> U64 { a.to_bits() }
 
+@export
 pub fn f64_from_bits(a: U64) -> F64 { F64.from_bits(a) }
 
+@export
 pub fn f32_expr_muladd(a: F32, b: F32, c: F32) -> F32 { a * b + c }
 
+@export
 pub fn f32_expr_mulsub(a: F32, b: F32, c: F32) -> F32 { a * b - c }
 
+@export
 pub fn f32_expr_add3_l(a: F32, b: F32, c: F32) -> F32 { (a + b) + c }
 
+@export
 pub fn f32_expr_add3_r(a: F32, b: F32, c: F32) -> F32 { a + (b + c) }
 
+@export
 pub fn f32_expr_interp(a: F32, b: F32, c: F32) -> F32 { (1.0 - c) * a + c * b }
 
+@export
 pub fn f32_vdelay_k(d: F32, top: U32) -> U32 {
   let m  = top.round_f32()
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
   dc.trunc_u32()
 }
 
+@export
 pub fn f32_vdelay_f(d: F32, top: U32) -> F32 {
   let m  = top.round_f32()
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
@@ -1702,22 +2195,29 @@ pub fn f32_vdelay_f(d: F32, top: U32) -> F32 {
   dc - k.round_f32()
 }
 
+@export
 pub fn f64_expr_muladd(a: F64, b: F64, c: F64) -> F64 { a * b + c }
 
+@export
 pub fn f64_expr_mulsub(a: F64, b: F64, c: F64) -> F64 { a * b - c }
 
+@export
 pub fn f64_expr_add3_l(a: F64, b: F64, c: F64) -> F64 { (a + b) + c }
 
+@export
 pub fn f64_expr_add3_r(a: F64, b: F64, c: F64) -> F64 { a + (b + c) }
 
+@export
 pub fn f64_expr_interp(a: F64, b: F64, c: F64) -> F64 { (1.0 - c) * a + c * b }
 
+@export
 pub fn f64_vdelay_k(d: F64, top: U32) -> U32 {
   let m  = top as F64
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
   dc.trunc_u32()
 }
 
+@export
 pub fn f64_vdelay_f(d: F64, top: U32) -> F64 {
   let m  = top as F64
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
@@ -1725,70 +2225,104 @@ pub fn f64_vdelay_f(d: F64, top: U32) -> F64 {
   dc - (k as F64)
 }
 
+@export
 pub fn const_i8_min() -> I8 { I8.MIN }
 
+@export
 pub fn const_i8_max() -> I8 { I8.MAX }
 
+@export
 pub fn const_i8_bits() -> U32 { I8.BITS }
 
+@export
 pub fn const_i16_min() -> I16 { I16.MIN }
 
+@export
 pub fn const_i16_max() -> I16 { I16.MAX }
 
+@export
 pub fn const_i16_bits() -> U32 { I16.BITS }
 
+@export
 pub fn const_i32_min() -> I32 { I32.MIN }
 
+@export
 pub fn const_i32_max() -> I32 { I32.MAX }
 
+@export
 pub fn const_i32_bits() -> U32 { I32.BITS }
 
+@export
 pub fn const_i64_min() -> I64 { I64.MIN }
 
+@export
 pub fn const_i64_max() -> I64 { I64.MAX }
 
+@export
 pub fn const_i64_bits() -> U32 { I64.BITS }
 
+@export
 pub fn const_u8_min() -> U8 { U8.MIN }
 
+@export
 pub fn const_u8_max() -> U8 { U8.MAX }
 
+@export
 pub fn const_u8_bits() -> U32 { U8.BITS }
 
+@export
 pub fn const_u16_min() -> U16 { U16.MIN }
 
+@export
 pub fn const_u16_max() -> U16 { U16.MAX }
 
+@export
 pub fn const_u16_bits() -> U32 { U16.BITS }
 
+@export
 pub fn const_u32_min() -> U32 { U32.MIN }
 
+@export
 pub fn const_u32_max() -> U32 { U32.MAX }
 
+@export
 pub fn const_u32_bits() -> U32 { U32.BITS }
 
+@export
 pub fn const_u64_min() -> U64 { U64.MIN }
 
+@export
 pub fn const_u64_max() -> U64 { U64.MAX }
 
+@export
 pub fn const_u64_bits() -> U32 { U64.BITS }
 
+@export
 pub fn const_f32_pi() -> F32 { F32.PI }
 
+@export
 pub fn const_f32_max() -> F32 { F32.MAX }
 
+@export
 pub fn const_f32_epsilon() -> F32 { F32.EPSILON }
 
+@export
 pub fn const_f32_infinity() -> F32 { F32.INFINITY }
 
+@export
 pub fn const_f32_nan() -> F32 { F32.NAN }
 
+@export
 pub fn const_f64_pi() -> F64 { F64.PI }
 
+@export
 pub fn const_f64_max() -> F64 { F64.MAX }
 
+@export
 pub fn const_f64_epsilon() -> F64 { F64.EPSILON }
 
+@export
 pub fn const_f64_infinity() -> F64 { F64.INFINITY }
 
+@export
 pub fn const_f64_nan() -> F64 { F64.NAN }

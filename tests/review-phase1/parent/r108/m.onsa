@@ -19,6 +19,7 @@ fn make_sine() -> [F32; N] {
 
 const SINE: [F32; N] = make_sine()
 
+@export
 pub flow osc(@param(min: 0.0, max: 1.0, default: 0.0) idx: Ctl[F32]) -> Sig[F32] {
   SINE[(idx * 1023.0).trunc_u32_sat()]
 }

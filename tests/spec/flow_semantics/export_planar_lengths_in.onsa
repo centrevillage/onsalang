@@ -5,10 +5,6 @@
 //
 // [export]
 // prefix = "epi_"
-// fns = [
-//   "export_planar_lengths_in.mix2_at",
-//   "export_planar_lengths_in.mix3_at",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -127,6 +123,7 @@ pub flow mix3(x: [F32; 3] at sample) -> F32 at sample {
 }
 
 /// Runs `mix2` over the Spans `a` and `b` into an output of 4 frames; the last frame.
+@export
 pub fn mix2_at(a: Span[F32], b: Span[F32]) -> F32 {
   var st            = mix2.init(mix2.Config {}, 8.0)
   var out: [F32; 4] = [0.0; 4]
@@ -135,6 +132,7 @@ pub fn mix2_at(a: Span[F32], b: Span[F32]) -> F32 {
 }
 
 /// Runs `mix3` over the Spans `a`, `b` and `c` into an output of 4 frames; the last frame.
+@export
 pub fn mix3_at(a: Span[F32], b: Span[F32], c: Span[F32]) -> F32 {
   var st            = mix3.init(mix3.Config {}, 8.0)
   var out: [F32; 4] = [0.0; 4]

@@ -4,8 +4,7 @@
 // edition = "2026"
 //
 // [export]
-// prefix = "onsa_"
-// flows = ["boundary_overlap.split", "boundary_overlap.narrow"]
+// prefix = "boundary_overlap_"
 //
 // [targets.host]
 // kind = "source"
@@ -21,10 +20,12 @@
 // Inputs and outputs of different element types (§11.6). The overlap check of the
 // exported `process` (§14.2: 2 only for partially overlapping buffers) must measure
 // each buffer by its own element type; distinct buffers never overlap (R-141).
+@export
 pub flow split(x: F32 at sample) -> [Bool; 2] at sample {
   [x > 0.0, x < 0.0]
 }
 
+@export
 pub flow narrow(x: [I64; 2] at sample) -> [U8; 3] at sample {
   [1, 2, 3]
 }

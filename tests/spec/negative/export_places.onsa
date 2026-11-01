@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§14.2", "§18.1"]
+
+// W4-02 U1, S-639 (spec §6.5, §14.2): `@export` goes on the declaration of a function or a flow at the top
+// level of a module, and on nothing else. An attribute in a place it cannot be put in is E0005 (§6.5), at the
+// attribute (the same place as the other attributes in negative/attributes_table.onsa). The places that are
+// not allowed: a struct, an enum, a constant, a type alias, a `use`, an `impl` and the members of an `impl`
+// (a method and an associated constant), a `trait` and its member functions, an `extern` block and its member
+// functions, a `target` declaration, a `test`, an input of a flow, a `let` (in a flow and in a fn), and a
+// parameter of a fn. The member of a `trait` and of an `extern` block are in a form that this version does not
+// support (E0200, names stage); the attribute is a syntax error and the syntax stage comes first, so only
+// E0005 is reported for them (§18.1). One error in each declaration unit (P-01); the right places are in
+// values/export_ok.onsa. The spec does not say that a place has a candidate, so this file writes no `fixes`.
+
+// ---- the declarations of data
+
+@export                                             //~ E0005
+pub struct Wave {
+  x: F32,
+}
+
+@export                                             //~ E0005
+pub enum Shape {
+  Sine,
+  Saw,
+}
+
+@export                                             //~ E0005
+const LEVEL: I32 = 1
+
+@export                                             //~ E0005
+type Level = I32
+
+@export                                             //~ E0005
+use std.math
+
+@export                                             //~ E0005
+test "an attribute on a test" {
+  assert true
+}
+
+// ---- impl, trait, extern and target
+
+pub struct Target {
+  x: F32,
+}
+
+@export                                             //~ E0005
+impl Target {
+  pub fn get(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  @export                                           //~ E0005
+  pub fn method(self) -> F32 {
+    self.x
+  }
+
+  @export                                           //~ E0005
+  const MEMBER_CONST: I32 = 1
+}
+
+pub trait Area {
+  @export                                           //~ E0005
+  fn area(self) -> F32
+}
+
+@export                                             //~ E0005
+extern "C" lib "fastconv" {
+  fn fc_open(a: I32) -> I32
+}
+
+extern "C" lib "fastconv_two" {
+  @export                                           //~ E0005
+  fn fc_close(a: I32) -> I32
+}
+
+@export                                             //~ E0005
+target fn open(sample_rate: F32) -> I32
+
+// ---- the inside of a flow and of a fn
+
+pub flow export_on_input(
+  @export                                           //~ E0005
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+pub flow export_on_a_let(x: F32 at sample) -> F32 at sample {
+  @export let y = x                                 //~ E0005
+  y
+}
+
+pub fn export_on_a_let_in_a_fn(x: F32) -> F32 {
+  @export let y = x                                 //~ E0005
+  y
+}
+
+pub fn export_on_a_parameter(@export x: F32) -> F32 { //~ E0005
+  x
+}

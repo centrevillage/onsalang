@@ -31,6 +31,7 @@ pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
   y
 }
 
+@export
 pub flow voice(
   @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
   f0: Ctl[F32],

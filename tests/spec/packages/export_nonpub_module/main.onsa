@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§14.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// W4-02 U1, S-823 (spec §14.2, §18.1): the E0303 of an `@export` declaration that is not `pub` is reported in
+// the file of the module that has the declaration (`util.onsa`), at its name, with the candidate that writes
+// the `pub`. A declaration with no visibility word is visible in the package (§15.1), so `main` can use it
+// and the use is not an error: the error is the export's, not the use's.
+use util.{hidden}
+
+pub fn call() -> U32 { hidden() }

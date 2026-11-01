@@ -5,7 +5,6 @@ edition = "2026"
 
 [export]
 prefix = "t_"
-fns = ["m.nan_bits", "m.neg_nan_bits"]
 
 [targets.host]
 kind = "source"

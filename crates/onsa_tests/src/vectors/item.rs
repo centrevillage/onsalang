@@ -56,7 +56,7 @@ impl BuildFailure {
 pub struct Fixture {
     pub loaded: onsa_driver::Loaded,
     pub analyzed: onsa_driver::Analyzed,
-    /// `[export] fns`.
+    /// The functions with `@export`.
     pub exported: Vec<String>,
 }
 
@@ -75,8 +75,7 @@ pub fn load_fixture(root: &Path, pkg: &str) -> Result<Fixture, BuildFailure> {
             crate::c::head(&onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics))
         )));
     }
-    let exported =
-        onsa_driver::ExportSettings::from_manifest(loaded.manifest.as_ref().and_then(|m| m.export.as_ref())).fns;
+    let exported = onsa_driver::ExportSettings::of(&analyzed, loaded.manifest.as_ref()).fns;
     Ok(Fixture { loaded, analyzed, exported })
 }
 

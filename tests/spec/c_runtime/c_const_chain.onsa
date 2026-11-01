@@ -5,10 +5,6 @@
 //
 // [export]
 // prefix = "ccc_"
-// fns = [
-//   "c_const_chain.chain2",
-//   "c_const_chain.chain4",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -50,6 +46,7 @@ fn pair() -> [U32; 2] {
 const A1: [U32; 2] = pair()
 const A0: [U32; 2] = A1
 
+@export
 pub fn chain2() -> U32 {
   A0[1]
 }
@@ -63,6 +60,7 @@ const B2: U32 = B3
 const B1: U32 = B2
 const B0: U32 = B1 + 2
 
+@export
 pub fn chain4() -> U32 {
   B0
 }

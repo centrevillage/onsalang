@@ -5,7 +5,6 @@
 //
 // [export]
 // prefix = "cfi_"
-// flows = ["c_flow_int.lcg", "c_flow_int.quantize", "c_flow_int.strict"]
 //
 // [targets.host]
 // kind = "source"
@@ -76,17 +75,20 @@
 // The product of the generator is the multiplicative group and the sum the additive group: `*%` binds tighter
 // (§3.1), so the update is written without parentheses (S-45, W3-07).
 
+@export
 pub flow lcg(x: F32 at sample, seed: U32 at init) -> F32 at sample {
   let s   = prev~(^s, seed) *% 1664525 +% 1013904223
   let top = s >> 8
   x + top.round_f32()
 }
 
+@export
 pub flow quantize(x: F32 at sample) -> F32 at sample {
   let q = x.trunc_i32_sat()
   q.round_f32()
 }
 
+@export
 pub flow strict(x: F32 at sample) -> F32 at sample {
   let q = x.trunc_u32()
   q.round_f32()

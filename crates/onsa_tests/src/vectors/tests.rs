@@ -44,7 +44,6 @@ edition = "2026"
 
 [export]
 prefix = "vt_"
-fns = ["ops.add", "ops.cm_some", "ops.cm_val", "ops.half", "ops.k"]
 
 [targets.host]
 kind = "source"
@@ -54,8 +53,10 @@ panic = "poison"
 provides = []
 "#;
 
-const SOURCE_P: &str = "pub fn add(a: I32, b: I32) -> I32 { a + b }
+const SOURCE_P: &str = "@export
+pub fn add(a: I32, b: I32) -> I32 { a + b }
 
+@export
 pub fn cm_some(a: U8, b: U8) -> Bool {
   match a.checked_mul(b) {
     Some(_) => true,
@@ -63,10 +64,13 @@ pub fn cm_some(a: U8, b: U8) -> Bool {
   }
 }
 
+@export
 pub fn cm_val(a: U8, b: U8) -> U8 { a * b }
 
+@export
 pub fn half(a: F32) -> F32 { a / 2.0 }
 
+@export
 pub fn k() -> U32 { 7 }
 ";
 
@@ -333,10 +337,8 @@ fn the_registry_and_the_fixture_must_agree() {
         r.run.errors
     );
     let root = Root::new(DATA_TEXT, "");
-    let src = root.0.join(DIR).join(FIXTURE).join("p/onsa.toml");
-    std::fs::write(&src, MANIFEST_P.replace("\"ops.k\"", "\"ops.k\", \"ops.extra\"")).unwrap();
     let srcf = root.0.join(DIR).join(FIXTURE).join("p/ops.onsa");
-    std::fs::write(&srcf, format!("{SOURCE_P}\npub fn extra() -> U32 {{ 1 }}\n")).unwrap();
+    std::fs::write(&srcf, format!("{SOURCE_P}\n@export\npub fn extra() -> U32 {{ 1 }}\n")).unwrap();
     let r = root.interp();
     assert!(r.run.errors.iter().any(|e| e.contains("`extra` is no operation's")), "{:?}", r.run.errors);
     // a fixture directory no operation names

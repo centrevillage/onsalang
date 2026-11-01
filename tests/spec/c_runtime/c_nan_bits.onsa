@@ -5,16 +5,6 @@
 //
 // [export]
 // prefix = "cnb_"
-// fns = [
-//   "c_nan_bits.nan_bits_f32",
-//   "c_nan_bits.nan_bits_f64",
-//   "c_nan_bits.bits_roundtrip_f32",
-//   "c_nan_bits.bits_roundtrip_f64",
-//   "c_nan_bits.nan_loop_f32",
-//   "c_nan_bits.bits_pair_a_f32",
-//   "c_nan_bits.bits_in_arm_f32",
-//   "c_nan_bits.bits_in_closure_f32",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -248,6 +238,7 @@ fn bits_arm(o: Option[F32]) -> U32 {
   r
 }
 
+@export
 pub fn nan_bits_f32(sel: U32, z: F32) -> U32 {
   let inf = F32.INFINITY
   var x: F32 = 0.0
@@ -287,6 +278,7 @@ pub fn nan_bits_f32(sel: U32, z: F32) -> U32 {
   x.to_bits()
 }
 
+@export
 pub fn nan_bits_f64(sel: U32, z: F64) -> U64 {
   let inf = F64.INFINITY
   var x: F64 = 0.0
@@ -326,16 +318,19 @@ pub fn nan_bits_f64(sel: U32, z: F64) -> U64 {
   x.to_bits()
 }
 
+@export
 pub fn bits_roundtrip_f32(b: U32) -> U32 {
   let x = F32.from_bits(b)
   x.to_bits()
 }
 
+@export
 pub fn bits_roundtrip_f64(bh: U32, bl: U32, part: U32) -> U32 {
   let x = F64.from_bits(join(bh, bl))
   part_of(x.to_bits(), part)
 }
 
+@export
 pub fn nan_loop_f32(z: F32, n: U32) -> U32 {
   var x = z / z
   for _ in 0..<n {
@@ -344,16 +339,19 @@ pub fn nan_loop_f32(z: F32, n: U32) -> U32 {
   x.to_bits()
 }
 
+@export
 pub fn bits_pair_a_f32(z: F32) -> U32 {
   let n = z / z
   let p = Bits { a: n.to_bits(), b: (-n).to_bits() }
   p.a
 }
 
+@export
 pub fn bits_in_arm_f32(z: F32) -> U32 {
   bits_arm(Some(z / z))
 }
 
+@export
 pub fn bits_in_closure_f32(z: F32, k: U32) -> U32 {
   let ys: [U32; 3] = array.from_fn(fn(i) {
     let x = i.round_f32() / z

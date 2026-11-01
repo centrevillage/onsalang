@@ -5,11 +5,6 @@
 //
 // [export]
 // prefix = "ez_"
-// flows = [
-//   "export_zero_frames.tally",
-//   "export_zero_frames.tally_cfg",
-//   "export_zero_frames.trunc0",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -141,6 +136,7 @@
 // ]
 
 /// The running sum plus `100 / d`: the state is the previous sum, the block stage is the division.
+@export
 pub flow tally(
   x: F32 at sample,
   @param(min: 0, max: 1000, default: 100)
@@ -152,6 +148,7 @@ pub flow tally(
 }
 
 /// `100 / n` is computed once at init: n = 0 panics inside `init`. The sum plus 25 (n = 4).
+@export
 pub flow tally_cfg(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let k = 100 / n
   let y = x + prev~(^y)
@@ -159,6 +156,7 @@ pub flow tally_cfg(x: F32 at sample, n: I32 at init) -> F32 at sample {
 }
 
 /// `x + trunc(x)`: panics in the sample stage for NaN.
+@export
 pub flow trunc0(x: F32 at sample) -> F32 at sample {
   x + x.trunc_i32().round_f32()
 }

@@ -5,10 +5,6 @@
 //
 // [export]
 // prefix = "cmp_"
-// fns = [
-//   "c_match_panic_arm.unwrap_or_panic",
-//   "c_match_panic_arm.pick_or_panic",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -74,6 +70,7 @@
 //   unwrap_or_panic(sel, v)   Some(v) -> v, None -> a panic
 //   pick_or_panic(c, v)       an `if` whose else branch is a panic
 
+@export
 pub fn unwrap_or_panic(sel: U32, v: U32) -> U32 {
   var o: Option[U32] = None
   if sel < 1 {
@@ -86,6 +83,7 @@ pub fn unwrap_or_panic(sel: U32, v: U32) -> U32 {
   r
 }
 
+@export
 pub fn pick_or_panic(c: Bool, v: I32) -> I32 {
   let r = if c {
     v + 1

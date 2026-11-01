@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use onsa_diag::unsupported::Feature;
-use onsa_diag::{Code, Diagnostic, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Ast, ExprId, ExprKind, Failed, FnDecl, GenericParam, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, ParamName,
     StrLit, UseDecl, Vis,
@@ -251,11 +251,34 @@ impl<'p> Sema<'p> {
         if self.a.def(d).as_flow().is_some() {
             self.generated_defs(d);
         }
+        if let Some(export) = self.a.def(d).export
+            && item.vis != Vis::Pub
+        {
+            self.export_not_pub(at, name, d, export);
+        }
         self.declare(at.m, name, d);
         if let Some(f) = feature {
             self.unsupported(d, item.span, f, &[]);
         }
         Some(d)
+    }
+
+    /// The E0303 of the item `d` with `@export` (at `export`) that is not
+    /// `pub` (§14.2, S-823), of the names stage at its name: with no word, the
+    /// candidate writes `pub`; `priv` and `@export` disagree, and a note
+    /// shows both ways.
+    fn export_not_pub(&mut self, at: &Place<'_>, name: &Ident, d: DefId, export: Span) {
+        let msg = format!("`{}` has `@export`, so it must be `pub` (§14.2)", name.name);
+        let mut diag = Diagnostic::new(Stage::Names, Code::E0303, name.span, msg).with_note(export, "exported here");
+        if at.item.vis == Vis::Priv {
+            diag = diag.with_rule("to export it, make it `pub`; to keep it in its module, remove `@export`");
+        } else {
+            let Some(start) = self.module(at.m).and_then(|m| declaration_start(&m.parsed, at.id)) else {
+                onsa_diag::internal::bug(Some(name.span), "an item with `@export` and no declaration node")
+            };
+            diag = diag.with_fix(Fix::insert("make it `pub`", name.span.file, start, "pub "));
+        }
+        self.report(d, diag);
     }
 
     /// `name` in the items of `m` for the def `d`: E0304 when the module
@@ -342,6 +365,7 @@ impl Place<'_> {
             kind,
             item: Some(self.id),
             owner: None,
+            export: self.item.export(),
         }
     }
 
@@ -391,6 +415,15 @@ impl Place<'_> {
             fp_relaxed: self.item.attrs.iter().any(|a| a.is_fp_relaxed()),
         }
     }
+}
+
+/// Where the declaration of the item `id` begins, after its attributes and
+/// visibility (the `rt` or the `fn` of a function, the `flow` of a flow).
+fn declaration_start(parsed: &onsa_syntax::Parsed, id: ItemId) -> Option<u32> {
+    use onsa_syntax::cst::NodeKind;
+    let node = *parsed.map.items.get(id.index())?;
+    let decl = parsed.cst.child_nodes(node).find(|&c| matches!(parsed.cst.kind(c), NodeKind::Fn | NodeKind::Flow))?;
+    Some(parsed.cst.span(decl).start)
 }
 
 /// The names a `use` takes: those of its list, or with none the last of its

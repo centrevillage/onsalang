@@ -22,6 +22,7 @@ fn early(c: Bool) -> Big {
   b
 }
 
+@export
 pub fn first(c: Bool) -> F32 {
   tail_only().xs[0] + early(c).xs[0]
 }

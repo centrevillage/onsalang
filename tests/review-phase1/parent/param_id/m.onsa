@@ -8,6 +8,7 @@
 //   `id` に書ける文字列の規則は無く、同じ flow の中での重複も検査しない（下の `level` と `gain` は同じ `id`）。
 //   このファイルは S-102 より前の書き方（`Sig[F32]`）で書いてある。実装が `at` を読めるようになったら書き換える。
 
+@export
 pub flow tone(
   x: Sig[F32],
   @param(min: 20.0, max: 20000.0, default: 1000.0, unit: "Hz", scale: "log")

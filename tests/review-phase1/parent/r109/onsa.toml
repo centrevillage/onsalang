@@ -5,7 +5,6 @@ edition = "2026"
 
 [export]
 prefix = "t_"
-fns = ["m.total"]
 
 [targets.src]
 kind = "source"

@@ -7,8 +7,6 @@ name = "pb"
 edition = "2026"
 
 [export]
-flows = ["dsp.gain"]
-fns = ["util.version"]
 
 [targets.host]
 kind = "staticlib"

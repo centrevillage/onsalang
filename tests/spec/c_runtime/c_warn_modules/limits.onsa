@@ -5,14 +5,17 @@
 // `-Wtautological-constant-out-of-range-compare`), so the C of a function that is imported and inlined
 // must not hold the warned form either. `narrow_or_max` gives a `match` on the `Option` of `narrow_u8()`.
 
+@export
 pub fn in_range_u8(x: U8) -> Bool {
   (x >= 0) && (x <= U8.MAX)
 }
 
+@export
 pub fn in_range_i16(x: I16) -> Bool {
   (x >= I16.MIN) && (x <= I16.MAX)
 }
 
+@export
 pub fn narrow_or_max(x: U32) -> U8 {
   let r = match x.narrow_u8() {
     Some(v) => v,

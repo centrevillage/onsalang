@@ -4,8 +4,7 @@
 // edition = "2026"
 //
 // [export]
-// prefix = "onsa_"
-// flows = ["unison.unison", "unison.saw"]
+// prefix = "unison_"
 //
 // [targets.host]
 // kind = "source"
@@ -27,6 +26,7 @@ use std.math.{floor}
 
 const UNISON: U32 = 4
 
+@export
 pub flow unison(
   @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz")
   f0: F32 at block,
@@ -43,6 +43,7 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
   (i.round_f32() / (n - 1).round_f32()) - 0.5
 }
 
+@export
 pub flow saw(
   @param(min: 0.0, max: 24000.0, default: 0.0)
   f0: F32 at block,

@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§12.3", "§14.2", "§15.3"]
+
+// W4-02 U1, S-639 (spec §14.2, §15.3): E0610 through a module path. The exported function lives in the
+// module `util` (the `@export` is on the declaration in this file, not in the manifest), and the rule is
+// the same as for a function in the root module. Only the target without `Alloc` rejects it.
+@export
+pub fn version() -> U32 { 1 }
+
+@export
+pub fn version_on_heap() -> U32 uses {Alloc} { 2 }  //~ E0610 [bare]

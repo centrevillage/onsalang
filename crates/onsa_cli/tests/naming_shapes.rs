@@ -273,10 +273,8 @@ fn build_stops_at_the_names_that_would_have_made_one_c_name() {
 }
 
 /// R-263, §14.2, §2.3: an exported function `_g` would have had the C name `t_onsa_g`, not `t__g`. A name does
-/// not start with `_`, so `check` reports an E0320 at the declaration whatever the target is. (This needs
-/// `@export`, which the compiler does not read yet.)
+/// not start with `_`, so `check` reports an E0320 at the declaration whatever the target is.
 #[test]
-#[ignore = "W4-02: needs `@export` (S-639); the leading `_` is E0320 since W4-14 U3 (R-263)"]
 fn an_exported_function_whose_name_starts_with_an_underscore_is_e0320_in_check() {
     let d = Dir::bare("r263");
     d.write("onsa.toml", EXPORT_MANIFEST);

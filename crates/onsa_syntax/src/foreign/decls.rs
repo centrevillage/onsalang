@@ -122,7 +122,10 @@ pub(super) fn hash_attribute_in(c: &Cursor, head_failed: bool) -> Option<(RowId,
         .and_then(|shut| crate::attrs::sole_value(c.tokens, c.at + 3, shut));
     let mut edits =
         vec![Edit::replace(c.file_span(c.span(c.at).start, c.span(c.at + 1).end), "@"), Edit::delete(c.span(e))];
-    if args && value.is_none() && crate::attrs::attribute(name).is_some_and(|a| a.values.is_some()) {
+    if args
+        && value.is_none()
+        && crate::attrs::attribute(name).is_some_and(|a| !matches!(a.args, crate::attrs::Args::Free))
+    {
         return no_form();
     }
     if !crate::attrs::accepts(name, value.map(|v| c.src(v)), place) {
@@ -275,12 +278,10 @@ pub(super) fn old_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
             }
         }
         "relaxed" | "bulk" if !args => {
-            let (row, outer, places): (_, _, &[Place]) = if name == RELAXED {
-                (RowId::RelaxedAttribute, FP, &[Place::Fn, Place::Flow])
-            } else {
-                (RowId::BulkAttribute, MEM, &[Place::Let])
-            };
-            if !places.contains(&place) {
+            let (row, outer) =
+                if name == RELAXED { (RowId::RelaxedAttribute, FP) } else { (RowId::BulkAttribute, MEM) };
+            // The places of the attribute of Onsa it is written as (§6.5).
+            if !crate::attrs::attribute(outer).is_some_and(|a| a.places.contains(&place)) {
                 return no_candidate();
             }
             // The name stays; the attribute is written around it (S-251).
@@ -379,8 +380,8 @@ pub(super) fn const_fn(c: &Cursor) -> Option<Hit> {
 
 /// `extern "C" fn h` and `extern fn h` of Rust and C (§14.1, §14.2, S-464):
 /// the parser fails at the keyword of the function after `extern` and its
-/// string. What C calls is chosen by the manifest, which the writer does not
-/// edit, so there is no candidate.
+/// string. The form may mean a function that C calls (`@export`) or one of
+/// C (an `extern` block), so there is no candidate (S-639).
 pub(super) fn extern_fn(c: &Cursor) -> Option<Hit> {
     if !matches!(c.kind(c.at), TokenKind::KwFn | TokenKind::KwRt) || c.top() != Some(NodeKind::Extern) {
         return None;

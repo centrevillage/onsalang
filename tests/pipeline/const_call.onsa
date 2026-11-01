@@ -4,8 +4,7 @@
 // edition = "2026"
 //
 // [export]
-// prefix = "onsa_"
-// flows = ["const_call.scaled"]
+// prefix = "const_call_"
 //
 // [targets.host]
 // kind = "source"
@@ -27,6 +26,7 @@ fn half_of(x: F32) -> F32 {
   x * 0.5
 }
 
+@export
 pub flow scaled(x: F32 at sample) -> F32 at sample {
   x * HALF
 }

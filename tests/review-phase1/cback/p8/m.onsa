@@ -10,6 +10,7 @@ fn arr_total(xs: [F32; 4]) -> F32 {
   total(xs)
 }
 
+@export
 pub fn run() -> F32 {
   let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
   arr_total(a)
@@ -32,6 +33,7 @@ fn mix(o: Outer) -> Inner {
   r
 }
 
+@export
 pub fn alias_field() -> I32 {
   var o = Outer { i: Inner { a: 1, b: 2 }, j: Inner { a: 0, b: 0 } }
   o.i = mix(o)
@@ -43,6 +45,7 @@ fn side(inout n: I32) -> Bool {
   true
 }
 
+@export
 pub fn logic() -> I32 {
   var n: I32 = 0
   let a = (n == 1) && side(inout n)

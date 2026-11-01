@@ -13,7 +13,6 @@ colour = "blue"
 
 [export]
 prefix = "t_"
-fns = ["m.one"]
 
 [targets.host]
 kind = "staticlib"

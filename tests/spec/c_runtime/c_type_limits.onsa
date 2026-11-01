@@ -5,22 +5,6 @@
 //
 // [export]
 // prefix = "ctl_"
-// fns = [
-//   "c_type_limits.lim_u8",
-//   "c_type_limits.lim_u16",
-//   "c_type_limits.lim_u32",
-//   "c_type_limits.lim_u64",
-//   "c_type_limits.lim_i8",
-//   "c_type_limits.lim_i16",
-//   "c_type_limits.lim_i32",
-//   "c_type_limits.lim_i64",
-//   "c_type_limits.lim_wide_u8",
-//   "c_type_limits.lim_wide_u16",
-//   "c_type_limits.lim_wide_u32",
-//   "c_type_limits.lim_wide_i8",
-//   "c_type_limits.lim_wide_i16",
-//   "c_type_limits.lim_wide_i32",
-// ]
 //
 // [targets.host]
 // kind = "source"
@@ -241,6 +225,7 @@
 // 21, plus 64 when x is negative, plus 128 when x is MIN. `lim_wide_<t>` makes the same decisions after
 // widening with `as` (`(x as I32) >= 0` for a U8 is always true as well).
 
+@export
 pub fn lim_u8(x: U8) -> U32 {
   var m: U32 = 0
   if x >= 0 {
@@ -270,6 +255,7 @@ pub fn lim_u8(x: U8) -> U32 {
   m
 }
 
+@export
 pub fn lim_u16(x: U16) -> U32 {
   var m: U32 = 0
   if x >= 0 {
@@ -299,6 +285,7 @@ pub fn lim_u16(x: U16) -> U32 {
   m
 }
 
+@export
 pub fn lim_u32(x: U32) -> U32 {
   var m: U32 = 0
   if x >= 0 {
@@ -328,6 +315,7 @@ pub fn lim_u32(x: U32) -> U32 {
   m
 }
 
+@export
 pub fn lim_u64(x: U64) -> U32 {
   var m: U32 = 0
   if x >= 0 {
@@ -357,6 +345,7 @@ pub fn lim_u64(x: U64) -> U32 {
   m
 }
 
+@export
 pub fn lim_i8(x: I8) -> U32 {
   var m: U32 = 0
   if x >= I8.MIN {
@@ -386,6 +375,7 @@ pub fn lim_i8(x: I8) -> U32 {
   m
 }
 
+@export
 pub fn lim_i16(x: I16) -> U32 {
   var m: U32 = 0
   if x >= I16.MIN {
@@ -415,6 +405,7 @@ pub fn lim_i16(x: I16) -> U32 {
   m
 }
 
+@export
 pub fn lim_i32(x: I32) -> U32 {
   var m: U32 = 0
   if x >= I32.MIN {
@@ -444,6 +435,7 @@ pub fn lim_i32(x: I32) -> U32 {
   m
 }
 
+@export
 pub fn lim_i64(x: I64) -> U32 {
   var m: U32 = 0
   if x >= I64.MIN {
@@ -473,6 +465,7 @@ pub fn lim_i64(x: I64) -> U32 {
   m
 }
 
+@export
 pub fn lim_wide_u8(x: U8) -> U32 {
   let w      = x as I32
   var m: U32 = 0
@@ -491,6 +484,7 @@ pub fn lim_wide_u8(x: U8) -> U32 {
   m
 }
 
+@export
 pub fn lim_wide_u16(x: U16) -> U32 {
   let w      = x as I32
   var m: U32 = 0
@@ -509,6 +503,7 @@ pub fn lim_wide_u16(x: U16) -> U32 {
   m
 }
 
+@export
 pub fn lim_wide_u32(x: U32) -> U32 {
   let w      = x as I64
   var m: U32 = 0
@@ -527,6 +522,7 @@ pub fn lim_wide_u32(x: U32) -> U32 {
   m
 }
 
+@export
 pub fn lim_wide_i8(x: I8) -> U32 {
   let w      = x as I32
   var m: U32 = 0
@@ -545,6 +541,7 @@ pub fn lim_wide_i8(x: I8) -> U32 {
   m
 }
 
+@export
 pub fn lim_wide_i16(x: I16) -> U32 {
   let w      = x as I32
   var m: U32 = 0
@@ -563,6 +560,7 @@ pub fn lim_wide_i16(x: I16) -> U32 {
   m
 }
 
+@export
 pub fn lim_wide_i32(x: I32) -> U32 {
   let w      = x as I64
   var m: U32 = 0
