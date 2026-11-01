@@ -554,3 +554,10 @@ left = "this `…` is never closed"
 input = "tests/fuzz/e96971f5.onsa"
 reasons = ["S-384"]
 note = "an input with two errors in one unit: a call of the number `9(` (E0020) and a `(` of its arguments that is never closed; the E0020 hides the second, and the candidate `.(` leaves it"
+
+[[allowed]]
+class = "fix|E0020|add the `…` after the point|E0002"
+left = "`…` needs a range `…` or `…`"
+input = "tests/fuzz/fd5651ae.onsa"
+reasons = ["S-384"]
+note = "an input with errors in one unit: a float literal with no digit after its point (E0020), a `par` with no range after `in` and a `{` never closed; the E0020 hides the others, and the candidate `0.0` leaves the E0002 of the range (the fuzz at 7c7bc9d)"
