@@ -1,8 +1,9 @@
-//! The writes (W4-07 memo 2.4; §5.1, §5.2, §7): the target of an
+//! The writes (§5.1, §5.2, §7): the target of an
 //! assignment, an `inout` argument and the receiver of an `inout self`
 //! method. A place that cannot be changed is E0701 (with R-161's candidate
 //! when `var` is the one fix); a write to a place that can changes the state
-//! (§7, S-789). An erroneous write changes nothing (review 2).
+//! (§7, S-789). An erroneous write changes nothing (§18.1: a later
+//! diagnostic is then no symptom of it).
 
 use std::collections::BTreeMap;
 
@@ -29,6 +30,17 @@ pub(super) enum How {
     Bang,
 }
 
+/// What a change is of, in the arguments of a call (§7, S-796): a direct
+/// argument of the call (made after it; `exclusive`'s, not compared again
+/// with its places, [`Walker::changed_in_args`]), a tail of the argument of
+/// a `move` parameter (made after the call too), or any other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Of {
+    Arg,
+    Tail,
+    Other,
+}
+
 impl How {
     /// The words of an E0701 of the write.
     pub(super) fn verb(self) -> &'static str {
@@ -47,7 +59,7 @@ impl Walker<'_> {
     /// S-789). A value captured is not written (R-25). An `inout` argument
     /// and a receiver change their place after the call (§7, S-796). A place
     /// a borrowed `for` or a guard holds is not written, after the E0701
-    /// (E0715, `frozen.rs`). A partial view writes its base (memo 1.2: whether it
+    /// (E0715, `frozen.rs`). A partial view writes its base (§5.2: whether it
     /// can, by its root), walked as the call of `slice` it is.
     pub(super) fn write_place(&mut self, r: &mut Run, target: ExprId, how: How) {
         let at = self.ast.expr(target).span;
@@ -63,6 +75,7 @@ impl Walker<'_> {
             return self.expr(r, target, Pos::Read);
         };
         let (l, whole) = (place.root, how == How::Assign && place.proj.is_empty());
+        let of = if how == How::Assign { Of::Other } else { Of::Arg };
         let live = self.live(r, &place);
         if !whole {
             self.expr(r, target, Pos::Read);
@@ -74,32 +87,33 @@ impl Walker<'_> {
             return self.read_only(l, at, how);
         }
         if self.held(&place, at, None) {
-            return self.record(&place, at);
+            return self.record(&place, at, of);
         }
         if whole {
             r.cur.revive(l);
         } else if !live {
             // Its E0704 above; overlapping another argument, the E0702 at it, first (S-799).
-            return self.record(&place, at);
+            return self.record(&place, at, of);
         }
-        self.change(r, place, at, how != How::Assign);
+        self.change(r, place, at, of);
     }
 
-    /// The place `w` changes at `at`, now or (of a `direct` argument) after
+    /// The place `w` changes at `at`, now or (of an argument, `of`) after
     /// the call (§7, S-796: `g(inout o, len_of(b))` reads `b` before it).
-    pub(super) fn change(&mut self, r: &mut Run, w: Place, at: Span, direct: bool) {
-        self.record(&w, at);
-        match direct {
-            true => self.inside.after_call.push((w, at)),
-            false => self.changed(r, &w, at),
+    pub(super) fn change(&mut self, r: &mut Run, w: Place, at: Span, of: Of) {
+        self.record(&w, at, of);
+        match of {
+            Of::Arg | Of::Tail => self.inside.after_call.push((w, at)),
+            Of::Other => self.changed(r, &w, at),
         }
     }
 
-    /// The change of `w` at `at`, in the arguments of a call, to compare
-    /// with the places of the calls it is in (S-799).
-    pub(super) fn record(&mut self, w: &Place, at: Span) {
+    /// The change of `w` at `at`, of `of`, in the arguments of a call, to
+    /// compare with the places of the calls it is in (S-799); of a direct
+    /// argument, marked with the call's depth.
+    pub(super) fn record(&mut self, w: &Place, at: Span, of: Of) {
         if self.reports && self.inside.calls > 0 {
-            self.inside.changes.push((w.clone(), at));
+            self.inside.changes.push((w.clone(), at, (of == Of::Arg).then_some(self.inside.calls)));
         }
     }
 
@@ -118,7 +132,7 @@ impl Walker<'_> {
     }
 
     /// The E0701 of the write `how` at `at` to a place of `l`, which cannot
-    /// be changed (§5.1, §5.2, §5.4): by what `l` is (memo 2.4's table).
+    /// be changed (§5.1, §5.2, §5.4): by what `l` is.
     fn read_only(&mut self, l: LocalId, at: Span, how: How) {
         let local = &self.info.locals[l.0 as usize];
         let n = &local.name;
@@ -144,8 +158,8 @@ impl Walker<'_> {
     }
 
     /// R-161: the candidate that writes `var` for the `let` of `l`, only
-    /// when it is the one fix and leaves no error of this stage (§18.1,
-    /// memo 2.4): (1) the `let` binds the name alone; (2) the write is not
+    /// when it is the one fix and leaves no error of this stage
+    /// (§18.1): (1) the `let` binds the name alone; (2) the write is not
     /// in an anonymous function that captures `l` (R-25's E0701 there, before
     /// this one); (3) `var`'s value is
     /// consumed, so not a second-class one and not a borrowed Affine one;

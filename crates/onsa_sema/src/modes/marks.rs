@@ -3,7 +3,7 @@
 //! `move` goes and, at a consuming position, each tail that is an owned
 //! Affine place gets one; of any other value, the `move` goes.
 //!
-//! Applied, it leaves no error of the stage (memo 2.5): the `move`s left are
+//! Applied, it leaves no error of the stage (§18.1): the `move`s left are
 //! on owned Affine tails at a consuming position, which take them, and none
 //! is put on a tail that is no place or a Dup one (no E0703 of S-605, S-795).
 //! Applied again, nothing is left to fix: it stops at once.
@@ -14,10 +14,9 @@ use onsa_syntax::ast::{ExprId, ExprKind};
 use onsa_syntax::tails::Tail;
 
 use super::check::Walker;
-use super::place::{Proj, place_of};
+use super::consume::Movable;
+use super::place::place_of;
 use super::walk::Pos;
-use crate::Kind;
-use crate::binding::Bind;
 
 impl Walker<'_> {
     /// The candidate of the E0711 of the `move` at `m` on `e`, no place, at
@@ -29,15 +28,12 @@ impl Walker<'_> {
         if !matches!(self.ast.expr(x).kind, ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::Match { .. }) {
             return Some(remove);
         }
-        // S-807: at no consuming position, and at a return, the tails take no `move`.
-        let consumes = matches!(pos, Pos::Own | Pos::Value | Pos::MoveArg);
-        let takes = consumes || matches!(pos, Pos::Return | Pos::Extract);
         let mut tails = Vec::new();
         self.ast.tails(x, &mut tails);
         let mut edits = remove.edits().to_vec();
         for tail in tails {
             let Tail::Value(v) = tail else { continue };
-            if let Some(at) = self.wants_move(v, (consumes, takes))? {
+            if let Some(at) = self.wants_move(v, pos)? {
                 edits.push(Edit::insert(remove.edits()[0].span.file, at, "move "));
             }
         }
@@ -47,22 +43,21 @@ impl Walker<'_> {
         })
     }
 
-    /// Where the tail `v` (without parentheses) takes `move` (at a consuming
-    /// position, `consumes`): an owned Affine place with none, before its
-    /// parentheses. `None` if it is an Affine place that cannot move, or an
-    /// element of an array where the value is taken (`takes`, a return too).
-    fn wants_move(&mut self, v: ExprId, (consumes, takes): (bool, bool)) -> Option<Option<u32>> {
+    /// Where the tail `v` (without parentheses) at `pos` takes `move`
+    /// (S-807: where it is written, [`Pos::takes_move`]): an owned Affine
+    /// place with none, before its parentheses. `None` if it is an Affine
+    /// place that cannot move ([`Walker::movable`]), or an element of an
+    /// array where the value is consumed.
+    fn wants_move(&mut self, v: ExprId, pos: Pos) -> Option<Option<u32>> {
         let Some(place) = place_of(self.ast, self.names, v) else { return Some(None) };
         let Some(&ty) = self.info.expr_types.get(&v) else { bug(Some(self.ast.expr(v).span), "a tail with no type") };
-        if self.kind_of(ty) != Some(Kind::Affine) {
-            return Some(None);
-        }
-        match self.info.locals[place.root.0 as usize].state {
+        match self.movable(&place, ty) {
+            None | Some(Movable::Copied(_)) => Some(None),
             // An element does not move out of its array (§5.2): read, the `move` only goes.
-            Bind::Owned | Bind::OwnedMut if place.proj.contains(&Proj::Index) => (!takes).then_some(None),
-            Bind::Owned | Bind::OwnedMut if !consumes => Some(None),
-            Bind::Owned | Bind::OwnedMut => self.before_parens(v).map(Some),
-            _ => None,
+            Some(Movable::Element) => (!pos.consumes()).then_some(None),
+            Some(Movable::Owned) if !pos.takes_move() => Some(None),
+            Some(Movable::Owned) => self.before_parens(v).map(Some),
+            Some(Movable::Inout | Movable::Borrowed) => None,
         }
     }
 

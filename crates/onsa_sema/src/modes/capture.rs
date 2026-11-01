@@ -1,8 +1,8 @@
-//! The captures (W4-07 memo 2.7; §5.3, §5.4): an anonymous function is
+//! The captures (§5.3, §5.4): an anonymous function is
 //! walked once, in a frame of its own from a new state: it changes no state
 //! outside, and what it captures is a copy made with it, read from no state
 //! (no E0704). What it captures is the record of the names stage
-//! (`BodyInfo::captures`, in the order of the first reads; review 7).
+//! (`BodyInfo::captures`, in the order of the first reads; D-15).
 
 use std::mem::replace;
 
@@ -27,7 +27,8 @@ pub(super) struct Frame {
 
 impl Walker<'_> {
     /// The anonymous function `e` with the body `body`, walked by the walk
-    /// that reports only (a loop's summary does not go in, memo 1.3).
+    /// that reports only (a loop's summary does not go in: it changes no
+    /// state outside).
     pub(super) fn closure(&mut self, r: &mut Run, e: ExprId, body: ExprId) {
         if !self.reports {
             return;
@@ -53,7 +54,7 @@ impl Walker<'_> {
 
     /// The E0712 of the anonymous function `e` (§5.3): one, of the first
     /// value its body reads that cannot be captured (S-722): an `inout`
-    /// parameter whatever its kind (review 6), an Affine value.
+    /// parameter whatever its kind (§5.3), an Affine value.
     fn uncapturable(&mut self, e: ExprId) {
         let info = self.info;
         for &l in info.captures.get(&e).into_iter().flatten() {
@@ -70,7 +71,7 @@ impl Walker<'_> {
     }
 
     /// `l` is read at `at`: at its first read in an anonymous function that
-    /// captures it (memo 2.7, after the E0712 of the function), a
+    /// captures it (after the E0712 of the function), a
     /// second-class value is E0710 (R-331, S-217, S-190) and a Shared one E0200
     /// (R-85 (5), S-80: by its type, so a static value and a `T` with no
     /// bound too); a Copy one is copied.

@@ -1,4 +1,4 @@
-//! The calls (W4-07 memo 2.5; §5.2, §3.5): what the callee's parameters
+//! The calls (§5.2, §3.5): what the callee's parameters
 //! take, the marks of the arguments checked against it (E0703), and the `!`
 //! of an `inout self` method (E0713, E0714). The receiver and then the
 //! arguments are walked from the left, each at the position its parameter
@@ -20,7 +20,7 @@ use crate::body::{BANG_ON_NO_INOUT_SELF, Target};
 use crate::def::DefKind;
 use crate::ty::{Ty, TyId};
 
-/// What a parameter takes (memo 2.5).
+/// What a parameter takes (§5.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Takes {
     /// A parameter of the mode, and its type when the walk reads it (a
@@ -88,7 +88,7 @@ impl Walker<'_> {
         }
     }
 
-    /// What the call `e` of `callee` takes (memo 2.5): of a function or a
+    /// What the call `e` of `callee` takes (§5.2): of a function or a
     /// method, its declaration; of a function value, its type; of a builtin
     /// method, the mode of `self` the types stage chose, and borrows; of a
     /// constructor, elements (`n` the number of the arguments). `None` of
@@ -131,7 +131,7 @@ impl Walker<'_> {
         self.report(d);
     }
 
-    /// The argument `a` of a parameter that takes `t` (memo 2.5): its mark
+    /// The argument `a` of a parameter that takes `t` (§5.2): its mark
     /// checked, and its walk at the position the parameter gives.
     fn arg(&mut self, r: &mut Run, a: &Arg, t: Takes) {
         let (e, mark) = (a.expr, (a.mode != Mode::Borrow).then_some(a.span.start));
@@ -141,7 +141,10 @@ impl Walker<'_> {
                 self.by_value(a, t);
                 self.expr(r, e, Pos::Read)
             }
-            (Takes::Param(Mode::Move, _), _) => self.consume(r, e, Pos::MoveArg, mark),
+            (Takes::Param(Mode::Move, _), _) => {
+                self.inside.direct = true;
+                self.consume(r, e, Pos::MoveArg, mark)
+            }
             (Takes::Element, Mode::Borrow) => self.expr(r, e, Pos::Value),
             // An element, as of a literal (§5.2, S-793): a Dup value's `move` is E0703 (S-795).
             (Takes::Element, _) => self.consume(r, e, Pos::Value, mark),
@@ -164,7 +167,7 @@ impl Walker<'_> {
 
     /// The E0703 of the mark of `a` on a parameter of the mode `m` that is
     /// not it, `move` or `inout` written on a borrowed one or a mark `inout`
-    /// wants (memo 2.5): the candidate removes, adds or replaces the mark.
+    /// wants (§5.2): the candidate removes, adds or replaces the mark.
     /// After it, the argument stands where it stood before (the position is
     /// the parameter's), so it leaves no error the call had not. A `move` on
     /// a value that is no place is R-198's.

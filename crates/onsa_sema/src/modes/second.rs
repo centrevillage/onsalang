@@ -18,7 +18,7 @@ use crate::ty::{BuiltinTy, Ty, TyId};
 /// S-190: what keeps a function value instead.
 const KEEP_FN: &str = "to keep a function value, declare the parameter `move f: fn(...)`; it then takes function values with no captures (§5.2)";
 
-/// A second-class value (memo 1.2, §5.3), by why it is: a borrow row binds
+/// A second-class value (§5.3), by why it is: a borrow row binds
 /// a view only (§5.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SecondClass {
@@ -31,7 +31,7 @@ pub(super) enum SecondClass {
 }
 
 impl Walker<'_> {
-    /// The one predicate of the second-class values (memo 2.6; the head is
+    /// The one predicate of the second-class values (§5.3; the head is
     /// the types stage's, D-15): a `Span` or an array of them, and an
     /// anonymous function that captures, a function-type parameter of the
     /// default mode.
@@ -67,8 +67,8 @@ impl Walker<'_> {
         (view && second_class(self.a, ty)).then_some(SecondClass::View)
     }
 
-    /// The E0710 of a second-class `e` out of its place at `pos` (memo 2.6,
-    /// §5.3): at a consuming position any, at a borrow row's value and at a
+    /// The E0710 of a second-class `e` out of its place at `pos` (§5.3):
+    /// at a consuming position any, at a borrow row's value and at a
     /// parameter not of a function type (S-809) any but a `Span` (S-217,
     /// S-788: the name it binds stays second-class). `true` if reported; `e`
     /// is then walked as read.

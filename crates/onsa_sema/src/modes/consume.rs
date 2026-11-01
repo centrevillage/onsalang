@@ -1,6 +1,7 @@
-//! Consumption and moves (W4-07 memo 2.2; §5.2, §5.4): a value at a
+//! Consumption and moves (§5.2, §5.4): a value at a
 //! consuming position, decided by the state of its root, its kind and its
-//! `move` mark. An erroneous consumption moves nothing (review 2).
+//! `move` mark. An erroneous consumption moves nothing (§18.1: a later
+//! diagnostic is then no symptom of it).
 
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::ExprId;
@@ -9,8 +10,10 @@ use super::check::Walker;
 use super::flow::Run;
 use super::place::{Place, Proj, place_of};
 use super::walk::Pos;
+use super::write::Of;
 use crate::Kind;
 use crate::binding::Bind;
+use crate::ty::TyId;
 
 /// S-784, S-785: at `?` and a `move self` receiver, how to read the value
 /// instead.
@@ -21,16 +24,49 @@ const EXTRACT: &str = "`?` and a `move self` receiver consume their operand (§5
 pub(super) const MOVE_NEEDS_A_PLACE: &str =
     "`move` needs a place (a variable or its field); other values are already owned by the expression";
 
+/// What a place does at a consuming position (§5.2), by its kind, the state
+/// of its root and its path: the one table of the E0711s and E0703s here
+/// and of the candidate of `marks.rs`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Movable {
+    /// A Dup value: copied.
+    Copied(Kind),
+    /// An Affine value of an `inout` parameter (R-117, S-41) and of a
+    /// borrow: it cannot move.
+    Inout,
+    Borrowed,
+    /// An element of an owned array: it moves with the array only.
+    Element,
+    /// An owned Affine place: it moves.
+    Owned,
+}
+
 impl Walker<'_> {
+    /// What the place `p`, of the type `ty`, does where it is consumed;
+    /// `None` of no kind (the error type, a second-class value).
+    pub(super) fn movable(&mut self, p: &Place, ty: TyId) -> Option<Movable> {
+        Some(match (self.kind_of(ty)?, self.info.locals[p.root.0 as usize].state) {
+            (kind @ (Kind::Copy | Kind::Shared), _) => Movable::Copied(kind),
+            (_, Bind::Inout) => Movable::Inout,
+            (_, Bind::Borrow { .. }) => Movable::Borrowed,
+            (_, Bind::Owned | Bind::OwnedMut) if p.proj.contains(&Proj::Index) => Movable::Element,
+            (_, Bind::Owned | Bind::OwnedMut) => Movable::Owned,
+        })
+    }
+
     /// The value `e` at the consuming position `pos` (`Own`, `Value`, `MoveArg`,
     /// `Return` or `Extract`), with the offset of the `move` written on it,
     /// if any.
     pub(super) fn consume(&mut self, r: &mut Run, e: ExprId, pos: Pos, mark: Option<u32>) {
         // A direct argument changes its place after the call (§7, S-796).
-        let direct = std::mem::take(&mut self.inside.direct) || pos == Pos::MoveArg;
+        let of = match (std::mem::take(&mut self.inside.direct), pos) {
+            (true, _) => Of::Arg,
+            (false, Pos::MoveArg) => Of::Tail,
+            _ => Of::Other,
+        };
         let x = self.ast.without_parens(e);
         let at = self.ast.expr(x).span;
-        // The second-class values come first, before the table (memo 2.6, R-325).
+        // The second-class values come first, before the table (R-325).
         if self.out_of_place(r, x, pos) {
             return;
         }
@@ -48,7 +84,7 @@ impl Walker<'_> {
             onsa_diag::internal::bug(Some(at), "a consumed place with no type")
         };
         // The error type. Not live, its E0704 above (and a move recorded only, S-799).
-        let Some(kind) = self.kind_of(ty) else { return };
+        let Some(movable) = self.movable(&place, ty) else { return };
         let (text, local) = (self.text, &self.info.locals[l.0 as usize]);
         let (name, root) = (&text[at.start as usize..at.end as usize], &local.name);
         let plain = |message: String| Diagnostic::new(Stage::Modes, Code::E0711, at, message);
@@ -56,9 +92,9 @@ impl Walker<'_> {
             Pos::Extract => plain(message).with_rule(EXTRACT),
             _ => plain(message),
         };
-        let d = match (kind, local.state) {
+        let d = match movable {
             // Copied; a `move` on a `move` argument (S-609) or where a value is put (S-795) is E0703.
-            (Kind::Copy | Kind::Shared, _) => {
+            Movable::Copied(kind) => {
                 let (how, Some(m)) = (pos, mark) else { return };
                 let how = match how {
                     Pos::MoveArg => "a `move` parameter takes it with no `move`",
@@ -69,30 +105,31 @@ impl Walker<'_> {
                 Diagnostic::new(Stage::Modes, Code::E0703, at, message).with_fix(self.unmark(at.file, m, "move"))
             }
             // R-117, S-41: with no candidate (the fix is the mode, away from here).
-            (_, Bind::Inout) => error(format!(
+            Movable::Inout => error(format!(
                 "cannot move `{name}`: `{root}` is an `inout` parameter, which does not own its value (§5.2)"
             )),
-            (_, Bind::Borrow { .. }) => error(format!(
+            Movable::Borrowed => error(format!(
                 "cannot move `{name}`: `{root}` is borrowed here and the value is Affine; only owned values move (§5.2, §5.4)"
             )),
-            (_, Bind::Owned | Bind::OwnedMut) if place.proj.contains(&Proj::Index) => error(format!(
+            Movable::Element => error(format!(
                 "cannot move `{name}` out of an array: its elements move with the array (`for x in move xs`) (§5.2)"
             )),
-            (_, Bind::Owned | Bind::OwnedMut) => match (pos, mark) {
-                (Pos::Own | Pos::Value, None) => {
-                    let d = error(format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)"));
-                    self.add_move(e, &place).into_iter().fold(d, Diagnostic::with_fix)
-                }
-                (Pos::MoveArg, None) => {
-                    let message = "this parameter is `move`; write `move` before the argument (§5.2)";
-                    let d = Diagnostic::new(Stage::Modes, Code::E0703, at, message);
+            Movable::Owned => match mark {
+                None if pos.takes_move() => {
+                    let d = match pos {
+                        Pos::MoveArg => {
+                            let message = "this parameter is `move`; write `move` before the argument (§5.2)";
+                            Diagnostic::new(Stage::Modes, Code::E0703, at, message)
+                        }
+                        _ => error(format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)")),
+                    };
                     self.add_move(e, &place).into_iter().fold(d, Diagnostic::with_fix)
                 }
                 // An erroneous move (E0712 at the anonymous function) moves nothing.
                 _ if self.captured(l) => return,
-                _ if !live => return self.record(&place, at),
+                _ if !live => return self.record(&place, at, of),
                 // S-85: a path of fields is taken out, and its root moves whole.
-                _ => return self.move_place(r, &place, at, direct),
+                _ => return self.move_place(r, &place, at, of),
             },
         };
         if live {

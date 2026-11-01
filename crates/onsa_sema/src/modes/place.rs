@@ -1,4 +1,4 @@
-//! Places (W4-07 memo 1.2, 1.7; §5.1, §5.2): a local and the projections
+//! Places (§5.1, §5.2): a local and the projections
 //! that reach a part of it. It reads the syntax tree and the names only, not
 //! the walk (W8-05 makes it public): the projections of a pattern and the
 //! index of §7 too. W4-08 adds the views.
@@ -25,8 +25,9 @@ pub(super) struct Place {
 /// One step into a value: a field, a tuple element, an element of an
 /// array at an index, and (a pattern's) into the payload of a variant, which
 /// stands for the whole of the enum value (§5.2, S-796): no step follows it.
+/// A path of fields taken out is of these too ([`crate::body::Taken`]).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum Proj {
+pub(crate) enum Proj {
     Field(String),
     Elem(u32),
     Index,
@@ -73,7 +74,7 @@ pub(super) fn place_of(ast: &Ast, names: &BodyNames, e: ExprId) -> Option<Place>
 pub(super) type Reads<'a> = dyn FnMut(Option<LocalId>, &[Proj], PatId) + 'a;
 
 /// Each element the pattern `p` reads (S-803's D1, D2), with its
-/// projection from the value the pattern matches (memo 2.3) and its
+/// projection from the value the pattern matches (§5.4) and its
 /// pattern: a local it binds (`Some`), a literal or constant it compares
 /// and a variant whose value it reads whole at its position (`None`, a
 /// variant before the locals of its payload, [`Proj::Payload`]); `_` none.
@@ -148,7 +149,7 @@ pub(super) fn head_places((ast, names, info): (&Ast, &BodyNames, &BodyInfo), hea
     Some(sources.iter().map(place).collect())
 }
 
-/// The index of §7 (memo 2.3): the bindings of the heads of `let` and
+/// The index of §7 (§5.4): the bindings of the heads of `let` and
 /// `match` whose row is a borrow (a `for` holds its places, E0715), but
 /// the Copy ones (one of them holds the value it was bound to, §5.4), each
 /// with the places it derives from directly. A static value is no source,
@@ -164,8 +165,11 @@ pub(super) struct Deps {
     /// The locals of the places the heads read, and those a borrowed `for`
     /// or a guard holds (R-161's condition 5).
     read: HashSet<LocalId>,
+    /// The heads that hold the places of their value while a part of them
+    /// is walked: a `for`, a `match` with a guard ([`Deps::holds`]).
+    frames: HashSet<Head>,
     /// Of each root (no binding of the index), the bindings that derive
-    /// from it, in the order of the ids (memo 3).
+    /// from it, in the order of the ids (a change visits each once).
     by_root: HashMap<LocalId, Vec<LocalId>>,
     /// Of each binding, the roots it derives from ([`Deps::origins`]).
     roots: HashMap<LocalId, BTreeSet<LocalId>>,
@@ -225,11 +229,13 @@ impl Deps {
         let (mut heads, mut deps) = (Vec::new(), Deps::default());
         heads_in(ast, root, &mut heads);
         for (head, pat, scope, holds) in heads {
-            let Some(places) = head_places((ast, names, info), head) else { continue };
+            let places = head_places((ast, names, info), head);
             // R-161's condition 5: what a `for` or a guard holds (E0715) is read.
             if holds {
-                deps.read.extend(places.iter().map(|(p, _)| p.root));
+                deps.frames.insert(head);
+                deps.read.extend(places.iter().flatten().map(|(p, _)| p.root));
             }
+            let Some(places) = places else { continue };
             if let Head::For(_) = head {
                 continue;
             }
@@ -266,6 +272,11 @@ impl Deps {
     /// asks it first), not another judgment of the overlap.
     pub(super) fn origins(&self, l: LocalId) -> BTreeSet<LocalId> {
         self.roots.get(&l).cloned().unwrap_or_else(|| BTreeSet::from([l]))
+    }
+
+    /// Whether `head` holds the places of its value (E0715, `frozen.rs`).
+    pub(super) fn holds(&self, head: Head) -> bool {
+        self.frames.contains(&head)
     }
 
     /// Whether `l` is a binding of the index.

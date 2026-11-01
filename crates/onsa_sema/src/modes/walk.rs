@@ -1,4 +1,4 @@
-//! The walk of the expressions (W4-07 memo 2.1): each gives its
+//! The walk of the expressions (§5.2, §5.3): each gives its
 //! sub-expressions their positions, and a place at a consuming position goes
 //! to [`Walker::consume`]. A call gives its receiver and arguments the
 //! positions of the parameters of its callee (`calls.rs`).
@@ -48,6 +48,13 @@ impl Pos {
     /// A value at it is consumed (§5.2): moved, copied or an error.
     pub(super) fn consumes(self) -> bool {
         matches!(self, Pos::Own | Pos::Value | Pos::MoveArg | Pos::Return | Pos::Extract)
+    }
+
+    /// It consumes, and an owned Affine place at it is moved with `move`
+    /// written (§5.2, S-807): of the consuming positions, all but a return
+    /// and the ones with no mark (`Extract`).
+    pub(super) fn takes_move(self) -> bool {
+        matches!(self, Pos::Own | Pos::Value | Pos::MoveArg)
     }
 
     /// What a second-class value at it would be (§5.3), `None` where one
@@ -154,8 +161,8 @@ impl<'a> Walker<'a> {
     }
 
     /// The borrowed argument `e` of a parameter of the type `param`, if
-    /// read: a planar literal passes its elements on as arguments (memo 2.1,
-    /// §5.3: `planes([a, b])`). An `inout` one is a write (`write.rs`).
+    /// read: a planar literal passes its elements on as arguments (§5.3:
+    /// `planes([a, b])`). An `inout` one is a write (`write.rs`).
     pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: Option<TyId>) {
         match self.planar_literal(e, param) {
             Some(parts) => parts.iter().for_each(|&y| self.expr(r, y, Pos::Arg(Mode::Borrow))),
@@ -177,7 +184,7 @@ impl<'a> Walker<'a> {
     /// The elements of `e`, an array literal at a planar parameter of the
     /// type `param` (`[a, b]` at `[Span[T]; N]`, §5.3, S-196): each is an
     /// argument of its own, whose place is checked for exclusivity. The one
-    /// test of the walk, the writes and the places passed (memo 1.2).
+    /// test of the walk, the writes and the places passed (D-15).
     /// W7-03 adds a struct literal of a generated `Out` here.
     pub(super) fn planar_literal(&self, e: ExprId, param: Option<TyId>) -> Option<&'a [ExprId]> {
         let ast = self.ast;

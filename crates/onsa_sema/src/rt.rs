@@ -8,9 +8,9 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprKind, Lit, StmtKind, StrSeg};
 
-use crate::body::{BodyInfo, Step, Target};
+use crate::body::{BodyInfo, Target};
 use crate::def::DefKind;
-use crate::modes::MovedLocals;
+use crate::modes::{MovedLocals, Proj};
 use crate::ty::{BuiltinTy, Env, Ty, TyId};
 use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId, Package, module_of_def};
@@ -294,12 +294,12 @@ pub(crate) fn rest_drops<'b>(a: &'b Analysis, body: &'b BodyInfo) -> impl Iterat
 /// Whether dropping what is left of a value of the type `t` (read under
 /// `env`, `depth` named types in) when `path` is taken out of it at `at`
 /// needs `Alloc`: the parts beside each step ([`drops_alloc`]).
-fn rest_drops_alloc(w: &Walk, (t, env, depth): (TyId, Option<&Env>, u32), path: &[Step], at: Span) -> Option<bool> {
+fn rest_drops_alloc(w: &Walk, (t, env, depth): (TyId, Option<&Env>, u32), path: &[Proj], at: Span) -> Option<bool> {
     let Some((step, more)) = path.split_first() else { return Some(false) };
     let (ty, env) = w.at(t, env)?;
-    let taken = |name: &str| matches!(step, Step::Field(n) if n == name);
+    let taken = |name: &str| matches!(step, Proj::Field(n) if n == name);
     let (parts, inner, depth): (Vec<_>, _, _) = match (ty, step) {
-        (Ty::Tuple(ts), Step::Elem(i)) => {
+        (Ty::Tuple(ts), Proj::Elem(i)) => {
             (ts.iter().enumerate().map(|(k, &t)| (t, k as u32 == *i)).collect(), None, depth)
         }
         (Ty::Named(d, args), _) => match w.enter(*d, args, env, (depth, None))? {

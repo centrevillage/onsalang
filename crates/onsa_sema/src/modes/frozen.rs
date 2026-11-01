@@ -1,6 +1,6 @@
-//! The places a borrowed `for` holds while its loop is walked (W4-09 memo
-//! 2.1; §5.4, R-24, S-798) and a borrowed `match` while a guard of it is
-//! (W4-10 memo 2.1; §7, R-110): no change of one of them, nor of a part of
+//! The places a borrowed `for` holds while its loop is walked (§5.4, R-24,
+//! S-798) and a borrowed `match` while a guard of it is (§7, R-110): no
+//! change of one of them, nor of a part of
 //! one, where a derived binding stands for the places it derives from
 //! (S-796).
 
@@ -23,15 +23,28 @@ pub(super) struct Frozen {
 }
 
 impl Walker<'_> {
-    /// The frame of `head`: of a `for` while its loop is walked, of a
-    /// `match` while a guard of it is.
-    pub(super) fn frame(&self, head: Head) -> Frozen {
+    /// The frame of `head`, if it makes one ([`super::place::Deps::holds`]):
+    /// of a `for` while its loop is walked, of a `match` while a guard of it
+    /// is ([`Walker::holding`]).
+    pub(super) fn frame(&self, head: Head) -> Option<Frozen> {
+        if !self.deps.holds(head) {
+            return None;
+        }
         let places = head_places((self.ast, self.names, self.info), head).unwrap_or_default();
         let places = places.into_iter().map(|(p, at)| {
             let roots = self.deps.origins(p.root);
             (p, at, roots)
         });
-        Frozen { head, places: places.collect() }
+        Some(Frozen { head, places: places.collect() })
+    }
+
+    /// Walk `f` in the frame `held` (pushed, then popped and kept for the
+    /// next walk in it, a guard's).
+    pub(super) fn holding(&mut self, held: &mut Option<Frozen>, f: impl FnOnce(&mut Self)) {
+        let Some(frame) = held.take() else { return f(self) };
+        self.inside.frozen.push(frame);
+        f(self);
+        *held = self.inside.frozen.pop();
     }
 
     /// Whether the change of `w` at `at` (a write, a move; of the whole
@@ -74,7 +87,7 @@ impl Walker<'_> {
     /// The places the frames hold that `w` overlaps, outermost first, with
     /// the head of each frame.
     fn hits(&self, w: &Place) -> Vec<(Head, Place, Span)> {
-        // A place of no root in common is passed over before `meets` (memo 3: its ways are long).
+        // A place of no root in common is passed over before `meets` (its ways are long).
         let mine = self.deps.origins(w.root);
         (self.inside.frozen.iter())
             .flat_map(|f| f.places.iter().map(move |p| (f.head, p)))

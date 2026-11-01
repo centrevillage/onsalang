@@ -1,5 +1,5 @@
-//! The entry of the modes stage (W4-07 memo 1.1, 1.4, 2.10): one walk
-//! of each body the stage reads, in source order, and its one diagnostic.
+//! The entry of the modes stage: one walk of each body the stage reads,
+//! in source order, and its one diagnostic (§18.1).
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,7 +14,8 @@ use super::frozen::Frozen;
 use super::place::{Change, Deps, Place, Proj, path_text};
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
-use crate::body::{BodyInfo, LocalId, Step, Taken, generics_of, root_of};
+use super::write::Of;
+use crate::body::{BodyInfo, LocalId, Taken, generics_of, root_of};
 use crate::def::GenericDef;
 use crate::names::body::{BodyNames, Origin};
 use crate::ty::TyId;
@@ -90,14 +91,16 @@ pub(super) struct Inside {
     /// The changes of the places of the call's direct arguments, made after
     /// it (§7, S-796).
     pub(super) after_call: Vec<(Place, Span)>,
-    /// The next consumption is of a direct argument (a `move self` receiver).
+    /// The next consumption is of a direct argument (a `move self`
+    /// receiver, the argument of a `move` parameter).
     pub(super) direct: bool,
     /// An argument that overlaps an earlier one of its call (E0702), and
     /// the call: its root is not reported as used after a move in the call.
     pub(super) excuse: Option<(LocalId, Span)>,
-    /// The changes made in the arguments of the calls the walk is in, and
-    /// how many those calls are (S-193, S-799: `exclusive.rs`).
-    pub(super) changes: Vec<(Place, Span)>,
+    /// The changes made in the arguments of the calls the walk is in (of a
+    /// direct argument, the depth of its call), and how many those calls
+    /// are (S-193, S-799: `exclusive.rs`).
+    pub(super) changes: Vec<(Place, Span, Option<u32>)>,
     pub(super) calls: u32,
 }
 
@@ -115,7 +118,8 @@ pub(super) struct Made {
     /// Each place changed (§7) and its change, made once, by its number.
     pub(super) places: Vec<(Place, Change)>,
     pub(super) ids: HashMap<Place, u32>,
-    /// The summary of each loop, made once (memo 3).
+    /// The summary of each loop, made once (the walk does not grow with
+    /// the depth of the loops).
     pub(super) loops: HashMap<StmtId, LoopSum>,
     pub(super) found: Vec<Diagnostic>,
     /// The owned Affine locals a move made `Moved` ([`MovedLocals`]).
@@ -124,7 +128,8 @@ pub(super) struct Made {
     /// E0704 after), and in order by the walk that reports ([`BodyInfo::taken`]).
     takes: HashMap<Span, Place>,
     pub(super) taken: Vec<Taken>,
-    /// The expressions visited (memo 3: at most twice each).
+    /// The expressions visited (at most twice each: by the walk that
+    /// reports and by the one that makes a loop's summary).
     #[cfg(test)]
     pub(super) visits: usize,
 }
@@ -184,7 +189,7 @@ impl<'a> Walker<'a> {
         let Some(why) = self.unusable(r, p).filter(|_| self.reports) else { return true };
         let name = &self.info.locals[l.0 as usize].name;
         let d = match why {
-            // The E0702 of the argument, not this symptom (memo 2.10).
+            // The E0702 of the argument, not this symptom (§18.1).
             Why::Moved(m, _) if self.inside.excuse.is_some_and(|(x, c)| x == l && c.contains(m.start)) => {
                 return false;
             }
@@ -268,32 +273,30 @@ impl<'a> Walker<'a> {
 
     /// The owned Affine place `p` is moved at `at` (§5.2): its root, also
     /// when `p` is a path of fields, which it takes out (S-85).
-    pub(super) fn move_place(&mut self, r: &mut Run, p: &Place, at: Span, direct: bool) {
+    pub(super) fn move_place(&mut self, r: &mut Run, p: &Place, at: Span, of: Of) {
         if !p.proj.is_empty() {
             self.m.takes.insert(at, p.clone());
-            let step = |s: &Proj| match s {
-                Proj::Field(f) => Step::Field(f.clone()),
-                Proj::Elem(i) => Step::Elem(*i),
-                Proj::Index | Proj::Payload => bug(Some(at), "a field taken out through an element or a payload"),
-            };
             if self.reports {
-                self.m.taken.push(Taken { at, root: p.root, path: p.proj.iter().map(step).collect() });
+                if p.proj.iter().any(|s| matches!(s, Proj::Index | Proj::Payload)) {
+                    bug(Some(at), "a field taken out through an element or a payload")
+                }
+                self.m.taken.push(Taken { at, root: p.root, path: p.proj.clone() });
             }
         }
-        self.move_local(r, p, at, direct);
+        self.move_local(r, p, at, of);
     }
 
     /// The owned Affine local of `p` is moved at `at` (§5.2), the whole (a
-    /// field taken out of it too, S-85): a change (§7), after the call of a
-    /// `direct` argument. Of a place a `for` or a guard holds, the E0715
+    /// field taken out of it too, S-85): a change (§7) of `of`, after the
+    /// call of an argument. Of a place a `for` or a guard holds, the E0715
     /// only (S-798).
-    fn move_local(&mut self, r: &mut Run, p: &Place, at: Span, direct: bool) {
+    fn move_local(&mut self, r: &mut Run, p: &Place, at: Span, of: Of) {
         let (l, whole) = (p.root, Place { root: p.root, proj: Vec::new() });
         if self.held(&whole, at, (!p.proj.is_empty()).then_some(p)) {
-            return self.record(&whole, at);
+            return self.record(&whole, at, of);
         }
         r.cur.set(l, Status::Moved { at, via_loop: false });
-        self.change(r, whole, at, direct);
+        self.change(r, whole, at, of);
         if self.reports {
             self.m.moved.insert(l);
         }

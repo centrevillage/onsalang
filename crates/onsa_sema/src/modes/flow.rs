@@ -1,6 +1,7 @@
-//! The statements and the control (W4-07 memo 1.3, 3): blocks, branches
-//! (joined), loops (their head from a summary made once), the exits and the
-//! declarations of the bindings.
+//! The statements and the control (§5.2: a move counts along the flow of
+//! the control): blocks, branches (joined), loops (their head from a
+//! summary made once, `state.rs`), the exits and the declarations of the
+//! bindings.
 
 use std::mem::replace;
 
@@ -18,7 +19,8 @@ use crate::names::body::Origin;
 
 /// A walk's state, the `break` and `continue` states of the innermost loop
 /// it is in, and the bindings declared in the blocks it is in (innermost
-/// last), which leave the table at the end of their block (memo 1.3).
+/// last), which leave the table at the end of their block (no name reads
+/// them after it: the table stays small).
 pub(super) struct Run {
     pub(super) cur: Delta,
     exits: (Delta, Delta),
@@ -83,15 +85,13 @@ impl Walker<'_> {
                 // one matched and its guard was false.
                 let (mut tried, mut out) = (r.cur.clone(), Delta::bottom());
                 // A guard changes no place of the head (§7: E0715, `frozen.rs`).
-                let mut held = arms.iter().any(|a| a.guard.is_some()).then(|| self.frame(subject));
+                let mut held = self.frame(subject);
                 for arm in arms {
                     r.cur = tried.clone();
                     let outer = r.declared.len();
                     self.declare(r, arm.pat);
                     if let Some(g) = arm.guard {
-                        self.inside.frozen.extend(held.take());
-                        self.expr(r, g, Pos::Read);
-                        held = self.inside.frozen.pop();
+                        self.holding(&mut held, |w| w.expr(r, g, Pos::Read));
                         tried.join(&r.cur);
                     }
                     self.expr(r, arm.body, pos);
@@ -170,10 +170,8 @@ impl Walker<'_> {
                         self.expr(r, *iter, head)
                     }
                 }
-                let frame = self.frame(Head::For(s));
-                self.inside.frozen.push(frame);
-                self.run_loop(r, s, (None, Some(*pat), *body));
-                self.inside.frozen.pop();
+                let mut held = self.frame(Head::For(s));
+                self.holding(&mut held, |w| w.run_loop(r, s, (None, Some(*pat), *body)));
             }
             StmtKind::While { cond, body } => self.run_loop(r, s, (Some(*cond), None, *body)),
             StmtKind::Break => r.exits.0.join(&replace(&mut r.cur, Delta::bottom())),
@@ -197,7 +195,7 @@ impl Walker<'_> {
         }
     }
 
-    /// The loop `s` from the state before its head (memo 1.3, 3). The walk
+    /// The loop `s` from the state before its head ([`LoopSum`]). The walk
     /// that reports goes in once from the head `x ⊔ G`; the other applies
     /// the summary, made once for each loop by a walk that does not go into
     /// the loops inside (their summaries are made first and kept).
@@ -242,7 +240,7 @@ impl Walker<'_> {
         (exit, back)
     }
 
-    /// Declare the bindings of the pattern `p`: live (memo 1.3).
+    /// Declare the bindings of the pattern `p`: live.
     fn declare(&mut self, r: &mut Run, p: PatId) {
         self.each_local(p, &mut |l| r.declare(l));
     }

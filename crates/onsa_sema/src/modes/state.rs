@@ -1,4 +1,4 @@
-//! The states of the walk (W4-07 memo 1.2, 3): which bindings are not live
+//! The states of the walk (§5.2, §7): which bindings are not live
 //! at a point, the effect of a region on any state (one type for both), and
 //! a loop's summary.
 
@@ -53,14 +53,14 @@ fn join_into(into: &mut Out, from: &Out) {
     }
 }
 
-/// The effect of a region on any state `x` (memo 3, the gen/kill form):
+/// The effect of a region on any state `x` (the gen/kill form):
 /// `gens ⊔ (x − kill)`, a binding declared or assigned again in `kill`;
 /// `reach == false`: it does not fall through. It is the state at a point
 /// too, as the effect of the body up to it on the state where all is live:
 /// the bindings in `gens` are not live there. Both walks carry it, the one
-/// that reports and the one that makes a loop's summary (memo 1.2), so their
-/// states differ only where the second does not know the state before the
-/// loop (review 12: the text of an E0704 at a loop's head). Every operation
+/// that reports and the one that makes a loop's summary, so their states
+/// differ only where the second does not know the state before the loop
+/// (the text of an E0704 at a loop's head, not whether it is one). Every operation
 /// keeps an unreachable state unreachable.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(super) struct Delta {
@@ -144,7 +144,8 @@ pub(super) struct LoopSum {
 
 impl LoopSum {
     /// The head from the state `x` before it: `x ⊔ G` for the `gens` G of the
-    /// back edge, the least solution of `h = x ⊔ back(h)` (memo 3).
+    /// back edge, the least solution of `h = x ⊔ back(h)` (as `back(h)` is
+    /// `G ⊔ (h − K)`, below `G ⊔ h`): no iteration.
     pub(super) fn head(back: &Delta) -> Delta {
         let by_loop = |s: Status| match s {
             Status::Moved { at, .. } => Status::Moved { at, via_loop: true },

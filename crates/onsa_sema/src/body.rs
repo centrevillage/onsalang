@@ -28,6 +28,7 @@ use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
 use crate::deferred::{Deferred, DeferredKind, Required};
 use crate::exhaust::P;
 use crate::infer::{Cause, Infer, LitKind, Mismatch};
+use crate::modes::Proj;
 use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes, StructRes};
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::structpat::Written;
@@ -215,14 +216,8 @@ pub struct BodyInfo {
 pub struct Taken {
     pub at: Span,
     pub root: LocalId,
-    pub path: Vec<Step>,
-}
-
-/// A step of a [`Taken`]: a field by its name, a tuple element.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Step {
-    Field(String),
-    Elem(u32),
+    /// Its steps: fields and tuple elements only.
+    pub(crate) path: Vec<Proj>,
 }
 
 // ---------------------------------------------------------------- checker

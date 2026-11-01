@@ -1,5 +1,5 @@
-//! The exclusivity of the places of one call (§5.2, §3.5; W4-07 memo 2.5,
-//! W4-08 memo 2): its arguments that are places, which overlap one another
+//! The exclusivity of the places of one call (§5.2, §3.5; S-193, S-799):
+//! its arguments that are places, which overlap one another
 //! or a change made in another argument (E0702).
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
@@ -14,17 +14,23 @@ use crate::ty::TyId;
 
 /// An argument of a call that is a place, or an element of a planar
 /// literal that is one (E0702, [`Walker::arg_places`]): its expression, how
-/// it is passed, its place, and its root if a binding of the index (S-796);
-/// `copied`, a Dup value at a `move` parameter or receiver, which counts as
-/// a read (S-801); `unknown`, a value with no kind there, a read too, said
-/// as written (§18.1).
+/// it is passed, its place, its root if a binding of the index (S-796), and
+/// why it is read at a `move` parameter or receiver ([`Read`]).
 pub(super) struct Passed {
     at: ExprId,
     mode: Mode,
     place: Place,
     via: Option<LocalId>,
-    copied: bool,
-    unknown: bool,
+    read: Option<Read>,
+}
+
+/// Why a value passed to a `move` parameter or receiver is read there, not
+/// moved: a Dup value, copied (S-801), or a value with no kind (§18.1), which
+/// is said as written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Read {
+    Copied,
+    Unknown,
 }
 
 /// The note of a Dup value passed to a `move` parameter (S-801), and of a value with no kind.
@@ -41,7 +47,7 @@ fn how(m: Mode) -> &'static str {
 }
 
 impl Walker<'_> {
-    /// E0702 (memo 2.5; §5.2, S-787, S-796): an argument (the receiver
+    /// E0702 (§5.2, S-787, S-796): an argument (the receiver
     /// first) that is a place overlapping the place of an earlier one, one
     /// of them `inout` or `move`, at the later one; the places found so (a
     /// view, an element of a planar literal too), by where and their root.
@@ -66,7 +72,7 @@ impl Walker<'_> {
         let passed: Vec<Passed> = places.into_iter().map(|((x, place), m)| self.passed(x, m, place)).collect();
         let mut later = Vec::new();
         for (j, b) in passed.iter().enumerate() {
-            let excl = |p: &Passed| p.mode != Mode::Borrow && !p.unknown;
+            let excl = |p: &Passed| p.mode != Mode::Borrow && p.read != Some(Read::Unknown);
             let mut earlier = passed[..j].iter().filter(|a| excl(b) || excl(a));
             if let Some(a) = earlier.find(|a| self.deps.meets(&a.place, &b.place)) {
                 later.push((self.ast.expr(b.at).span, b.place.root));
@@ -78,7 +84,7 @@ impl Walker<'_> {
     }
 
     /// The places the argument `e` of a parameter of the type `param`
-    /// passes (memo 1.2, §5.3): of a planar literal, each of its elements'
+    /// passes (§5.3): of a planar literal, each of its elements'
     /// (S-196: the exclusivity is of each), else its own; each with the
     /// expression that passes it. The writes read the same places.
     pub(super) fn arg_places(&self, e: ExprId, param: Option<TyId>) -> Vec<(ExprId, Place)> {
@@ -88,7 +94,7 @@ impl Walker<'_> {
         }
     }
 
-    /// The place `e` is, through its partial views (S-805, memo 1.2: of
+    /// The place `e` is, through its partial views (S-805, §5.2: of
     /// `xs.slice(a, b)`, that of `xs` with one index more, whatever the
     /// range, as an element of `xs` overlaps the others).
     pub(super) fn view_place(&self, e: ExprId) -> Option<Place> {
@@ -106,15 +112,18 @@ impl Walker<'_> {
         let ty = self.info.expr_types.get(&self.ast.without_parens(x)).copied();
         let kind = ty.and_then(|t| self.kind_of(t));
         // A value with no kind (§18.1: an unknown bound, the error type) may move or not: a read too.
-        let read = mode == Mode::Move && kind != Some(Kind::Affine);
-        let (copied, unknown) = (read && kind.is_some(), read && kind.is_none());
-        if copied {
-            mode = Mode::Borrow;
-        } else if mode == Mode::Move && !unknown {
-            place.proj.clear();
+        let read = match (mode, kind) {
+            (Mode::Move, Some(Kind::Copy | Kind::Shared)) => Some(Read::Copied),
+            (Mode::Move, None) => Some(Read::Unknown),
+            _ => None,
+        };
+        match read {
+            Some(Read::Copied) => mode = Mode::Borrow,
+            None if mode == Mode::Move => place.proj.clear(),
+            _ => {}
         }
         let via = self.deps.indexed(place.root).then_some(place.root);
-        Passed { at: x, mode, place, via, copied, unknown }
+        Passed { at: x, mode, place, via, read }
     }
 
     /// The E0702 of `b`, which overlaps the earlier `a`: "twice" of two of
@@ -166,8 +175,9 @@ impl Walker<'_> {
     fn at_later(&self, message: String, a: (Span, String), b: (Span, String), of: &[&Passed]) -> Diagnostic {
         let ((first, note), last) = if b.0.start < a.0.start { (b, a.0) } else { (a, b.0) };
         let d = Diagnostic::new(Stage::Modes, Code::E0702, last, message).with_note(first, note);
-        let d = (of.iter().filter(|p| p.copied)).fold(d, |d, p| d.with_note(self.ast.expr(p.at).span, COPIED));
-        let d = (of.iter().filter(|p| p.unknown)).fold(d, |d, p| d.with_note(self.ast.expr(p.at).span, UNKNOWN));
+        let d = [(Read::Copied, COPIED), (Read::Unknown, UNKNOWN)].into_iter().fold(d, |d, (read, note)| {
+            (of.iter().filter(|p| p.read == Some(read))).fold(d, |d, p| d.with_note(self.ast.expr(p.at).span, note))
+        });
         of.iter().filter_map(|p| p.via).fold(d, |d, l| {
             let (at, note) = self.bound_note(l);
             d.with_note(at, note)
@@ -184,17 +194,15 @@ impl Walker<'_> {
     /// overlap a place `passed` in the call, other than the arguments it is
     /// in, at the later of the two, the first such place (S-796: a binding
     /// of the index stands for its places). The change of a direct argument
-    /// is `exclusive`'s, and changes are not compared with one another
+    /// (marked with the depth of this call, the one after `calls`) is
+    /// `exclusive`'s, and changes are not compared with one another
     /// (`h(next(inout k), next(inout k))`). Out of the arguments of every
     /// call, the record is emptied.
     pub(super) fn changed_in_args(&mut self, start: usize, passed: &[Passed]) {
-        for (w, at) in self.inside.changes[start..].iter().filter(|_| self.reports) {
+        let this = Some(self.inside.calls + 1);
+        for (w, at, _) in self.inside.changes[start..].iter().filter(|c| self.reports && c.2 != this) {
             let span = |p: &Passed| self.ast.expr(p.at).span;
-            let own = |p: &Passed| *at == span(p) || *at == self.ast.expr(self.ast.without_parens(p.at)).span;
             let holds = |p: &Passed| span(p).start <= at.start && at.end <= span(p).end;
-            if passed.iter().any(own) {
-                continue;
-            }
             let Some(q) = passed.iter().find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
             let (changed, arg) = (self.place_text(*at, &[], w), self.passed_text(q));
             let message = format!(

@@ -796,7 +796,23 @@ pub fn unbounded[T](move v: T) {
     assert_eq!(fixes(src), [(Code::E0711, 2, Vec::new()), add]);
 }
 
-/// The places of the walk and their overlap (memo 1.2, §5.2).
+/// The consuming positions (§5.2, S-807): `move` is written on an owned
+/// Affine place at all but a return and the ones with no mark, and only
+/// at consuming ones (`consume`'s table and the candidate of `marks.rs`
+/// read these and [`Walker::movable`]).
+#[test]
+fn where_a_move_is_written() {
+    use onsa_syntax::ast::Mode;
+    let all = [Pos::Read, Pos::Arg(Mode::Borrow), Pos::Arg(Mode::Inout), Pos::Kept, Pos::MoveArg, Pos::Bind];
+    let all = all.into_iter().chain([Pos::Own, Pos::Value, Pos::Return, Pos::Extract, Pos::Unknown]);
+    let (consumes, takes): (Vec<_>, Vec<_>) =
+        all.map(|p| (p.consumes().then_some(p), p.takes_move().then_some(p))).unzip();
+    let consumes: Vec<Pos> = consumes.into_iter().flatten().collect();
+    assert_eq!(consumes, [Pos::MoveArg, Pos::Own, Pos::Value, Pos::Return, Pos::Extract]);
+    assert_eq!(takes.into_iter().flatten().collect::<Vec<_>>(), [Pos::MoveArg, Pos::Own, Pos::Value]);
+}
+
+/// The places of the walk and their overlap (§5.2).
 #[test]
 fn places_overlap() {
     use super::place::{Deps, Place, Proj};
@@ -811,7 +827,7 @@ fn places_overlap() {
     assert!(!overlaps(&p(0, vec![]), &p(1, vec![])));
 }
 
-/// The second-class values (memo 2.6, §5.3, §5.4; S-217): a `Span` from a
+/// The second-class values (§5.3, §5.4; S-217): a `Span` from a
 /// borrow binds at a borrow row (`let`, `for`), and the name stays
 /// second-class: stored, a `var`, a `Span` of an `inout` parameter or of an
 /// owned row, a `move` of one, are E0710 at the value placed there.
@@ -947,7 +963,7 @@ pub fn of_a_closure() -> U32 {
     assert_eq!(fixes(src), bare(Code::E0710, &[17, 20]));
 }
 
-/// Review of the memo of W4-11, finding 4: the tail of an anonymous
+/// §5.3, S-190: the tail of an anonymous
 /// function that returns a function parameter it captures is one E0710.
 #[test]
 fn a_captured_function_parameter_returned_is_one_e0710() {
@@ -1111,7 +1127,7 @@ fn one_message_for_a_move_on_no_place() {
     assert_eq!(modes, [super::consume::MOVE_NEEDS_A_PLACE; 2]);
 }
 
-/// A `var` declared in a block of a loop and left by `break` (memo 1.3:
+/// A `var` declared in a block of a loop and left by `break` (§5.2:
 /// `forget` at the end of its block, `revive` at its declaration, `join` at
 /// the exit): live at each iteration, gone after the loop; a move of an
 /// outer binding on the path of the `break` is seen after the loop.
@@ -1607,7 +1623,7 @@ pub fn bump(inout n: U32) {}
     }
 }
 
-/// R-161 (memo 2.4): `var` for the `let` of the place written, the one fix
+/// R-161: `var` for the `let` of the place written, the one fix
 /// when the `let` binds the name alone and `var` takes its value with no
 /// error: of a Copy borrow, an owned value, a static value, at an
 /// assignment, an `inout` argument and a `!` receiver. Applied, every write
@@ -1645,7 +1661,7 @@ pub fn shared(s: Str) -> U32 uses {Alloc} {
     each_fix_clears(src);
 }
 
-/// R-161's conditions (memo 2.4): no candidate for a split `let`, a binding
+/// R-161's conditions: no candidate for a split `let`, a binding
 /// of a `for` or `match` head, a write in an anonymous function that
 /// captures the `let`, a borrowed Affine value (`var` would consume it,
 /// E0711), a second-class one, and a `let` another binding derives from
@@ -1841,9 +1857,9 @@ pub fn moved(h: Holder) -> U32 uses {Alloc} {
 }
 
 /// §7: a Copy binding holds the value it was bound to, and the bindings of
-/// a `for` are not in the index (review 5: a change of the iterated place is
+/// a `for` are not in the index (§5.4: a change of the iterated place is
 /// E0715, which changes nothing). An E0701 write changes nothing, so it
-/// leaves no E0704 at the head of a loop before it (review 2).
+/// leaves no E0704 at the head of a loop before it (§18.1).
 #[test]
 fn what_a_change_leaves_usable() {
     let src = "pub fn copy() -> U32 uses {Alloc} {
@@ -1902,7 +1918,7 @@ fn a_binding_of_tails_derives_from_each() {
     assert_eq!(diags(src), [at(9, (Code::E0704, false))]);
 }
 
-/// §5.3, memo 2.7 (U4a): at the first read of a value an anonymous function
+/// §5.3, §5.4: at the first read of a value an anonymous function
 /// captures, in this order: an `inout` parameter (of any kind) or an Affine
 /// value is one E0712 of the function, naming the first such read (S-722);
 /// a second-class value E0710 (R-331, S-217: an unbound `Span` parameter, a
@@ -2436,7 +2452,7 @@ pub fn the_whole() -> U32 uses {Alloc} {
     assert_eq!(lines, [(Code::E0704, 29), (Code::E0704, 40)]);
 }
 
-/// The forms of S-796's table (`target/notes/87/s796/`) in U4a: a nested
+/// The forms of S-796's table: a nested
 /// `match`, an or-pattern, an `inout self` receiver in an `impl` (a Copy
 /// field of a binding too: `self.upd!(v.n)`), a function value (the order
 /// counts for nothing, `a_borrow_binding_stands_for_its_place`).
@@ -2850,7 +2866,7 @@ fn all_said(body: &str) -> Vec<(Code, String, String, Notes)> {
     walk_found(PRELUDE, body).into_iter().map(|(c, _, t, m, n)| (c, t, m, n)).collect()
 }
 
-/// E0702 of two bindings of the index (§5.2, S-796, memo 3): each stands
+/// E0702 of two bindings of the index (§5.2, S-796, S-797): each stands
 /// for the places it derives from, the steps composed, along a chain of
 /// sources of two; `t2` moved is a borrow (E0711) too.
 #[test]
@@ -3078,7 +3094,7 @@ fn the_body_of_an_anonymous_function_is_not_in_the_window() {
     let mut w = Walker::new(&a, (ast, &src), (&a.names[&id], &a.bodies[&id], root), Vec::new());
     w.inside.calls = 1;
     w.expr(&mut Run::new(), root, Pos::Return);
-    let changed: Vec<_> = w.inside.changes.iter().map(|(_, at)| &src[at.start as usize..at.end as usize]).collect();
+    let changed: Vec<_> = w.inside.changes.iter().map(|(_, at, _)| &src[at.start as usize..at.end as usize]).collect();
     assert_eq!(changed, ["k"]);
     assert!(w.m.found.is_empty(), "{:?}", w.m.found);
 }
@@ -3183,7 +3199,7 @@ pub fn moved_first() -> U32 uses {Alloc} {
     assert!(messages.iter().all(|m| m.3.is_empty()), "no candidate: {messages:?}");
 }
 
-/// R-24, S-798 (§5.4, W4-09 memo 2.1): a change of a place a borrowed
+/// R-24, S-798 (§5.4): a change of a place a borrowed
 /// `for` holds is one E0715, noted at the head of each `for` it overlaps
 /// (not at another), and it changes no state: a `move` of it is no move,
 /// so a later one is no E0704 and the local is not among the moved.
@@ -3219,7 +3235,7 @@ pub fn moved() -> U32 uses {Alloc} {
     assert!(seen(src).1.is_empty(), "{:?}", seen(src).1);
 }
 
-/// R-161's condition 5 (W4-09 memo 7.4): the head of a borrowed `match`
+/// R-161's condition 5: the head of a borrowed `match`
 /// with a guard holds its places (the E0715 of a change in the guard, §7),
 /// so a `let` it reads has no candidate `var`, whatever its patterns bind.
 #[test]
@@ -3255,7 +3271,7 @@ fn a_write_in_deeply_nested_for_loops() {
     assert_eq!(found, [(Code::E0715, DEPTH + 1)]);
 }
 
-/// W4-10 memo 2.4 (§7, R-110): a change of the head of a borrowed `match`
+/// §7, R-110: a change of the head of a borrowed `match`
 /// in a guard is one E0715, worded by the outermost frame it overlaps and
 /// noted at each (a `for` in the guard over a binding derived from the
 /// head, S-798); a field taken out names the whole it moves (S-85). The
@@ -3383,7 +3399,7 @@ fn clean(body: &str) -> (String, crate::Analysis, impl Fn(&crate::Analysis, &str
 /// too, and keeps it not), with its root and path, for the stages after.
 #[test]
 fn a_field_taken_out_is_kept_once() {
-    use crate::body::Step::{Elem, Field};
+    use super::place::Proj::{Elem, Field};
     let (src, a, def) = clean(
         "pub struct Out { h: Holder, t: (Buf[F32], U32) }
 pub fn t(n: U32) uses {Alloc} {
