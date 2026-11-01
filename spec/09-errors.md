@@ -43,7 +43,7 @@ panic は効果行に現れない。
 | Onsa の中から呼ばれた関数（`rt` を含む） | 最も近い境界（export された flow・関数、または `main`）まで伝わる。`main` に達すれば通常の実行の規則に従う。 |
 | export された flow の `process` | その呼び出しを中断し、その呼び出しの出力を全て（全てのチャンネルと全てのフレーム。panic の前に計算したフレームも）ゼロで埋め、インスタンスを **poisoned** にする。以後の `process` は無音を出力し、`reset` まで復帰しない。C API は戻り値で通知する。 |
 | export された関数 | panic は FFI 境界を越えない。その呼び出しを中断し、状態の値 1 を返す（§14.2。結果は出力ポインタで受け取るので、panic した呼び出しの結果は書かれない）。 |
-| OS の無いターゲット | ターゲットの `panic` 設定に従う（下記）。`panic_messages = false` で、メッセージとファイル名の文字列を、生成した C とランタイムの補助関数のどちらからも除く（行番号は残す。§15.3）。 |
+| OS の無いプラットフォーム（§15.3） | ターゲットの `panic` 設定に従う（下記）。`panic_messages = false` で、メッセージとファイル名の文字列を、生成した C とランタイムの補助関数のどちらからも除く（行番号は残す。§15.3）。 |
 
 poisoned の実現と、ターゲットの `panic` 設定:
 
@@ -51,7 +51,7 @@ poisoned の実現と、ターゲットの `panic` 設定:
 |---|---|---|
 | `"poison"` | export の wrapper で `setjmp` し、panic で `longjmp` する。rt の境界では poisoned、`main` では終了。`jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は libc に依存しない（§12.4。wrapper のスタックは `audit --stack` に数える） | ホスト環境の既定。`setjmp` のある libc（newlib、picolibc）を持つ組込みでも選べる |
 | `"trap"` | 即座にトラップ命令。デバッガで止める用。poisoned にはならない | |
-| `"reset"` | ファームウェアが用意する `onsa_reset_hook()` を呼んで機器をリセットする（§14.2）。本番の組込み用 | OS の無いターゲットの既定 |
+| `"reset"` | ファームウェアが用意する `onsa_reset_hook()` を呼んで機器をリセットする（§14.2）。本番の組込み用 | OS の無いプラットフォームの既定 |
 | `"halt"` | 停止する | |
 
 WASM では panic はトラップになり、同梱の glue が捕まえて poisoned にする（`"poison"` と同じ意味）。`"trap"` / `"reset"` / `"halt"` では rt の中の panic も設定に従い、インスタンスは poisoned にならない。
