@@ -11,7 +11,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use toml_edit::{ImDocument, Item, TableLike};
 
-use super::table::{self, Field, Names, Read, Row, Rule, Shape, Table, Unsupported};
+use super::table::{self, Field, Names, Need, Read, Row, Rule, Shape, Table, Unsupported};
 use super::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestRead, ManifestTarget, Spanned};
 use crate::{ManifestForm, ManifestSource, STD_PACKAGE, STD_VERSION};
 
@@ -51,7 +51,7 @@ pub fn read(source: &ManifestSource, file: FileId) -> ManifestRead {
 /// `s` with its characters that print as something else (a control
 /// character, a line end) escaped, as `\u{1b}` and `\n`: the one place a
 /// text of the manifest goes into a message (U2b1's review).
-fn shown(s: &str) -> String {
+pub fn shown(s: &str) -> String {
     s.chars().map(|c| if matches!(c, '"' | '\'') { c.to_string() } else { c.escape_debug().to_string() }).collect()
 }
 
@@ -127,8 +127,8 @@ impl<'s> Reader<'s> {
         };
         let mut f = self.fields(Table::Root, root, "", body..body, Written::Header);
         let package = self.need_table(&mut f, Field::Package, |f| ManifestPackage {
-            name: self.need(f, Field::Name).map(Got::str).unwrap_or_default(),
-            edition: self.need(f, Field::Edition).map(Got::str),
+            name: self.need(f, Field::Name, None, None).map(Got::str).unwrap_or_default(),
+            edition: self.need(f, Field::Edition, None, None).map(Got::str),
         });
         let dependencies = self.strings(f.take(Field::Dependencies));
         let export = f
@@ -144,13 +144,14 @@ impl<'s> Reader<'s> {
     }
 
     fn target(&self, f: &mut Fields) -> ManifestTarget {
-        let kind = self.need(f, Field::Kind).map(Got::str).unwrap_or_default();
-        // `lang` is required by `kind = "source"` (§15.3): not by another kind, or a kind not read.
-        let lang = if kind.value == "source" { self.need(f, Field::Lang) } else { f.take(Field::Lang) };
+        let kind = self.need(f, Field::Kind, None, None).map(Got::str);
+        let k = kind.as_ref().map(|k| k.value.as_str());
+        let lang = self.need(f, Field::Lang, k, None).map(Got::str);
+        let platform = self.need(f, Field::Platform, k, lang.as_ref().map(|l| l.value.as_str())).map(Got::str);
         let mut t = ManifestTarget {
-            kind,
-            platform: self.need(f, Field::Platform).map(Got::str).unwrap_or_default(),
-            lang: lang.map(Got::str),
+            kind: kind.unwrap_or_default(),
+            platform,
+            lang,
             fp: f.take(Field::Fp).map(Got::str),
             provides: f.take(Field::Provides).map(Got::strs).unwrap_or_default(),
             panic: f.take(Field::Panic).map(Got::str),
@@ -166,6 +167,9 @@ impl<'s> Reader<'s> {
             bind: self.strings(f.take(Field::Bind)),
             build_diagnostics: Vec::new(),
         };
+        if let Some(p) = &t.platform {
+            self.platform(&t.kind, p);
+        }
         // Its keys and those of its tables are read: every diagnostic of its build is made.
         t.build_diagnostics = self.target.take();
         t
@@ -302,6 +306,7 @@ impl<'s> Reader<'s> {
                 vec![format!("`{STD_PACKAGE}` is the name of the embedded standard library (§15.3)")],
             ),
             (Rule::PackageName, Typed::Str(v)) => return self.snake_case(v, got.span.clone(), "package"),
+            (Rule::ModulePath, Typed::Str(v)) => return self.module_path(v, got.span.clone()),
             (Rule::Prefix, Typed::Str(v)) if !is_prefix(v) => (
                 format!("`\"{v}\"` is not a `prefix`"),
                 vec![
@@ -329,8 +334,7 @@ impl<'s> Reader<'s> {
     fn unsupported(&self, row: &Row, got: &Got) {
         let Some((values, feature)) = row.unsupported else { return };
         let at = |span: &Range<usize>, details: &[&str]| {
-            let d = feature.diagnostic(Stage::Manifest, self.span(span.clone()), details);
-            self.target.borrow_mut().push(escaped(d));
+            self.report(true, feature.diagnostic(Stage::Manifest, self.span(span.clone()), details))
         };
         match (values, &got.value) {
             // A value outside the closed list of the rule is an E1103 alone (S-827).
@@ -347,6 +351,25 @@ impl<'s> Reader<'s> {
             (Unsupported::Any, Typed::Table(t, ..)) if !t.is_empty() => at(&got.key, &[]),
             _ => {}
         }
+    }
+
+    /// The E0200 of the build of a target with the platform `p`, written
+    /// whether it is required or not (§15.3): a platform this version does
+    /// not know (S-824); a known one other than the host for a kind of
+    /// [`table::TOOLCHAIN`] the version supports, at the kind (S-161).
+    fn platform(&self, kind: &Spanned<String>, p: &Spanned<String>) {
+        let (k, kinds) = (kind.value.as_str(), row(Table::Target, Field::Kind).unsupported);
+        let supported = matches!(kinds, Some((Unsupported::Except(vs), _)) if vs.contains(&k));
+        let d = match crate::build::platform(&p.value) {
+            Err(_) => Feature::ManifestPlatform
+                .diagnostic(Stage::Manifest, self.span(p.span.clone()), &[&p.value])
+                .with_rule(crate::build::platforms_note()),
+            Ok(t) if !t.is_host() && supported && table::TOOLCHAIN.contains(&k) => {
+                Feature::ManifestCross.diagnostic(Stage::Manifest, self.span(kind.span.clone()), &[k, &p.value])
+            }
+            Ok(_) => return,
+        };
+        self.report(true, d);
     }
 
     /// The table of `got` built by `build` from its keys.
@@ -375,7 +398,8 @@ impl<'s> Reader<'s> {
                     self.push(Feature::ManifestDependency.diagnostic(Stage::Manifest, self.span(at), &[key]));
                     continue;
                 }
-                Names::Std | Names::Any => {}
+                Names::ModulePath => self.module_path(key, at),
+                Names::Std => {}
             }
             if let Some(g) = self.got(named.shape, named.rule, t, key, item, &got.path) {
                 out.insert(key.to_string(), each(g));
@@ -384,16 +408,25 @@ impl<'s> Reader<'s> {
         out
     }
 
-    /// A key the reader requires (§15.3): `name`, `edition`, `kind`, `lang`
-    /// where `kind = "source"` and, as before the table was closed,
-    /// `platform` in every target (U3 moves it to the build). Each one
-    /// missing is an E1104 at [`Fields::key`], with the insertion of its
-    /// value when its closed list has one value (S-597); a key of another
-    /// type is not missing (an E1103 already).
-    fn need<'a>(&self, f: &mut Fields<'a>, field: Field) -> Option<Got<'a>> {
+    /// A key its row requires ([`Need`], §15.3), in a target of `kind` and
+    /// `lang` as read. Each one missing is an E1104 at [`Fields::key`], with
+    /// the insertion of its value when its closed list has one value
+    /// (S-597); a key of another type is not missing (an E1103 already).
+    fn need<'a>(&self, f: &mut Fields<'a>, field: Field, kind: Option<&str>, lang: Option<&str>) -> Option<Got<'a>> {
         let got = f.take(field);
+        let row = row(f.table, field);
+        let build = match row.need {
+            Need::No => return got,
+            Need::Always => false,
+            Need::Target { kinds, or, build } => {
+                let k = kind.is_some_and(|k| kinds.contains(&k));
+                if !k && !or.is_some_and(|(k, l)| kind == Some(k) && lang == Some(l)) {
+                    return got;
+                }
+                build
+            }
+        };
         if got.is_none() && !f.wrong.contains(&field) {
-            let row = row(f.table, field);
             let path = dotted(&f.path, row.key);
             let d = Diagnostic::new(
                 Stage::Manifest,
@@ -405,7 +438,7 @@ impl<'s> Reader<'s> {
                 Rule::OneOf([only], _) => self.insertion(f, row.key, &format!("\"{only}\"")),
                 _ => None,
             };
-            self.push(fix.into_iter().fold(d, Diagnostic::with_fix));
+            self.report(build, fix.into_iter().fold(d, Diagnostic::with_fix));
         }
         got
     }
@@ -417,7 +450,9 @@ impl<'s> Reader<'s> {
             return self.table(g, build);
         }
         let row = row(f.table, field);
-        let (Shape::Table(table), false) = (row.shape, f.wrong.contains(&field)) else { return Spanned::default() };
+        let (Shape::Table(table), false, Need::Always) = (row.shape, f.wrong.contains(&field), row.need) else {
+            return Spanned::default();
+        };
         let path = dotted(&f.path, row.key);
         let mut absent =
             Fields { table, path, got: Vec::new(), wrong: Vec::new(), key: f.key.clone(), written: Written::Absent };
@@ -482,6 +517,15 @@ impl<'s> Reader<'s> {
         }
     }
 
+    /// The form of a module path of `bind` (§15.2, §15.3): `snake_case`
+    /// module names (§2.3) joined by `.`, else an E1103 at `at` (S-827).
+    fn module_path(&self, path: &str, at: Range<usize>) {
+        if !path.split('.').all(onsa_syntax::is_module_name) {
+            let note = "a module path is `snake_case` module names joined by `.` (§2.3, §15.2)".to_string();
+            self.e1103(at, format!("`\"{path}\"` is not a module path"), &[note]);
+        }
+    }
+
     /// An E1103 at `at`, with `notes` without a place and no candidate (S-597).
     fn e1103(&self, at: Range<usize>, message: String, notes: &[String]) {
         let d = Diagnostic::new(Stage::Manifest, Code::E1103, self.span(at), message);
@@ -489,7 +533,13 @@ impl<'s> Reader<'s> {
     }
 
     fn push(&self, d: Diagnostic) {
-        self.diagnostics.borrow_mut().push(escaped(d));
+        self.report(false, d);
+    }
+
+    /// `d` in the check of every command, or with `build` in the build of the target being read.
+    fn report(&self, build: bool, d: Diagnostic) {
+        let into = if build { &self.target } else { &self.diagnostics };
+        into.borrow_mut().push(escaped(d));
     }
 
     fn span(&self, at: Range<usize>) -> Span {
@@ -651,7 +701,10 @@ mod tests {
         assert_eq!(at(&t.key), "daisy");
         assert!(at(&t.span).starts_with("[targets.daisy]"), "{:?}", at(&t.span));
         let t = &t.value;
-        assert_eq!((t.kind.value.as_str(), t.platform.value.as_str()), ("staticlib", "thumbv7em-none-eabihf"));
+        assert_eq!(
+            (t.kind.value.as_str(), t.platform.as_ref().unwrap().value.as_str()),
+            ("staticlib", "thumbv7em-none-eabihf")
+        );
         assert_eq!(t.lang.as_ref().unwrap().value, "c");
         assert_eq!(t.fp.as_ref().unwrap().value, "strict-ftz");
         assert_eq!(t.provides.iter().map(|p| at(&p.span)).collect::<Vec<_>>(), ["\"Alloc\""]);
@@ -772,16 +825,14 @@ mod tests {
         found.sort();
         let expected = [
             ("1", "`targets.u.kind` takes a string, found integer"),
-            ("e", "missing key `targets.e.platform`"),
             ("m", "missing key `targets.m.kind`"),
-            ("m", "missing key `targets.m.platform`"),
             ("package", "missing key `package.name`"),
             ("s", "missing key `targets.s.lang`"),
             ("t", "missing key `targets.t.kind`"),
         ];
         assert_eq!(found, expected);
         let e1104: Vec<&Diagnostic> = r.diagnostics.iter().filter(|d| d.code == Code::E1104).collect();
-        assert!(e1104.len() == 6 && e1104.iter().all(|d| d.stage == Stage::Manifest && d.fixes.is_empty()));
+        assert!(e1104.len() == 4 && e1104.iter().all(|d| d.stage == Stage::Manifest && d.fixes.is_empty()));
         // No `[package]`: its two keys at the start of the body (a fragment's after `// onsa.toml`).
         for (form, text, at) in [(ManifestForm::File, "# c\n\n[targets]\n", 0), (ManifestForm::Fragment, "    \n\n", 5)]
         {
@@ -916,13 +967,13 @@ mod tests {
     #[test]
     fn the_unsupported_values_of_a_target_are_e0200s_of_its_build() {
         let text = "[package]\nname = \"a\"\nedition = \"2026\"\n\
-                    [targets.t]\nkind = \"exe\"\nplatform = \"h\"\nlang = \"js\"\nfp = \"strict-ftz\"\n\
+                    [targets.t]\nkind = \"exe\"\nplatform = \"host\"\nlang = \"js\"\nfp = \"strict-ftz\"\n\
                     provides = [\"Alloc\", \"Fs\", \"Io\"]\nmain_frame = \"static\"\n\
                     memory = { bulk = true, fast_budget = 0, bulk_budget = -1 }\nbind.\"a.b\" = \"c\"\n\
-                    [targets.u]\nkind = \"clap\"\nplatform = \"h\"\n[targets.u.bind]\nm = \"n\"\n\
-                    [targets.d]\nkind = \"source\"\nlang = \"c\"\nplatform = \"h\"\nfp = \"strict\"\nprovides = []\n\
+                    [targets.u]\nkind = \"clap\"\nplatform = \"host\"\n[targets.u.bind]\nm = \"n\"\n\
+                    [targets.d]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nfp = \"strict\"\nprovides = []\n\
                     main_frame = \"stack\"\n[targets.d.memory]\nbulk = false\n[targets.d.bind]\n\
-                    [targets.e]\nkind = \"dll\"\nplatform = \"h\"\nfp = \"ftz\"\nprovides = [1]\nmain_frame = 2\n\
+                    [targets.e]\nkind = \"dll\"\nplatform = \"host\"\nfp = \"ftz\"\nprovides = [1]\nmain_frame = 2\n\
                     memory = { bulk = \"y\", fast_budget = \"z\" }\n";
         let t = ["\"exe\"", "\"js\"", "\"strict-ftz\"", "\"Fs\"", "\"Io\"", "\"static\"", "true", "0", "-1", "bind"];
         assert_eq!(built(text, "t"), t.map(|v| (Code::E0200, v)));
@@ -934,6 +985,135 @@ mod tests {
         let r = read_as(text, ManifestForm::File);
         let fs = r.manifest.targets["t"].value.build_diagnostics.iter().find(|d| d.message.contains("Fs"));
         assert_eq!(fs.unwrap().message, "this version does not support `provides` other than `Alloc` (`Fs`)");
+    }
+
+    /// R-47, §15.3, §18.1: `platform` is required in the build of a target
+    /// that gives C or native code (`exe`, a plugin, `staticlib`, `source`
+    /// with `lang = "c"`): an E1104 at the key of the target, without a
+    /// candidate, and not in the check. Not in `source` with `lang = "js"`
+    /// or `wasm-worklet`, nor where `kind` or `lang` is missing or not read.
+    #[test]
+    fn platform_is_required_in_the_build_of_a_target_of_c_or_native_code() {
+        let kinds = ["exe", "clap", "vst3", "au", "staticlib", "source\"\nlang = \"c"];
+        let not = ["source\"\nlang = \"js", "wasm-worklet", "source", "source\"\nlang = \"x", "source\"\nlang = 1 #\""];
+        for (kind, needed) in kinds.iter().map(|k| (*k, true)).chain(not.iter().map(|k| (*k, false))) {
+            let text = format!("[package]\nname = \"a\"\nedition = \"2026\"\n[targets.t]\nkind = \"{kind}\"\n");
+            let r = read_as(&text, ManifestForm::File);
+            let t = &r.manifest.targets["t"].value;
+            let e1104: Vec<&Diagnostic> = t.build_diagnostics.iter().filter(|d| d.code == Code::E1104).collect();
+            assert_eq!(e1104.len(), needed as usize, "{kind}: {:?}", t.build_diagnostics);
+            assert!(
+                e1104.iter().all(|d| &text[d.span.start as usize..d.span.end as usize] == "t" && d.fixes.is_empty())
+            );
+            assert!(r.diagnostics.iter().all(|d| d.code != Code::E1104 || !d.message.contains("platform")), "{kind}");
+        }
+        for text in ["[targets.t]\nlang = \"c\"\n", "[targets.t]\nkind = 1\n"] {
+            let text = format!("[package]\nname = \"a\"\nedition = \"2026\"\n{text}");
+            assert_eq!(built(&text, "t"), [], "{text}");
+        }
+    }
+
+    /// S-824: a platform this version does not tell (not a triple, an
+    /// unknown architecture, an unknown system) is one E0200 of the build at
+    /// the value, with what this version knows in a note; one written where
+    /// it is not required too. Only a platform it tells is a cross one
+    /// (S-161): `staticlib` with an unknown platform is the one E0200.
+    #[test]
+    fn a_platform_this_version_does_not_tell_is_one_e0200_of_the_build() {
+        let target = |kind: &str, platform: &str| {
+            format!(
+                "[package]\nname = \"a\"\nedition = \"2026\"\n[targets.t]\nkind = \"{kind}\"\nplatform = \"{platform}\"\n"
+            )
+        };
+        for p in ["nonsense", "zz80-none", "x86_64-unknown-plan9"] {
+            let text = target("staticlib", p);
+            assert_eq!(built(&text, "t"), [(Code::E0200, format!("\"{p}\"").as_str())], "{p}");
+            assert!(read_as(&text, ManifestForm::File).diagnostics.is_empty(), "{p}");
+            let r = read_as(&text, ManifestForm::File);
+            let d = &r.manifest.targets["t"].value.build_diagnostics[0];
+            assert!(
+                d.notes.iter().any(|n| n.message.contains("`\"host\"`") && n.message.contains("`thumbv*`")),
+                "{d:?}"
+            );
+        }
+        let js = target("source\"\nlang = \"js", "nonsense");
+        assert_eq!(built(&js, "t"), [(Code::E0200, "\"js\""), (Code::E0200, "\"nonsense\"")]);
+        for p in [
+            "host",
+            "aarch64-apple-darwin",
+            "x86_64-unknown-linux-gnu",
+            "thumbv7em-none-eabihf",
+            "riscv32imac-unknown-none-elf",
+        ] {
+            assert!(crate::build::platform(p).is_ok(), "{p}");
+        }
+    }
+
+    /// S-161: a known platform other than the host for a kind an outer C
+    /// toolchain builds is an E0200 of the build at the kind, with
+    /// `kind = "source"` and `lang = "c"` in a note; `source` is not one, and
+    /// a kind already unsupported (`exe`) is not reported twice.
+    #[test]
+    fn a_cross_staticlib_is_an_e0200_of_the_build_at_its_kind() {
+        let target = |kind: &str| {
+            format!(
+                "[package]\nname = \"a\"\nedition = \"2026\"\n[targets.t]\nkind = \"{kind}\"\nplatform = \"thumbv7em-none-eabihf\"\n"
+            )
+        };
+        let text = target("staticlib");
+        assert_eq!(built(&text, "t"), [(Code::E0200, "\"staticlib\"")]);
+        let r = read_as(&text, ManifestForm::File);
+        let d = &r.manifest.targets["t"].value.build_diagnostics[0];
+        assert!(d.notes.iter().any(|n| n.message.contains("`kind = \"source\"` with `lang = \"c\"`")), "{d:?}");
+        assert_eq!(built(&target("source\"\nlang = \"c"), "t"), []);
+        assert_eq!(built(&target("exe"), "t"), [(Code::E0200, "\"exe\"")]);
+        let host = text.replace("thumbv7em-none-eabihf", "host");
+        assert_eq!(built(&host, "t"), []);
+    }
+
+    /// [`table::TOOLCHAIN`] and the kinds of every [`Need`] are kinds of
+    /// §15.3, and a kind of the toolchain is one the row of `kind` supports:
+    /// else the E0200 of a cross platform (S-161) would never be made, and a
+    /// required key never missing.
+    #[test]
+    fn the_kinds_the_reader_names_are_kinds_and_a_toolchain_kind_is_supported() {
+        let k = row(Table::Target, Field::Kind);
+        let (Rule::OneOf(kinds, _), Some((Unsupported::Except(supported), _))) = (k.rule, k.unsupported) else {
+            panic!("the row of `kind`: {k:?}")
+        };
+        assert!(table::TOOLCHAIN.iter().all(|t| kinds.contains(t)), "{:?}", table::TOOLCHAIN);
+        assert!(table::TOOLCHAIN.iter().any(|t| supported.contains(t)), "{supported:?}");
+        for r in table::ROWS {
+            if let Need::Target { kinds: of, or, .. } = r.need {
+                assert!(of.iter().chain(or.as_ref().map(|(k, _)| k)).all(|t| kinds.contains(t)), "{}", r.key);
+            }
+        }
+    }
+
+    /// S-827, §15.2, §15.3: a key and a value of `bind` are module paths,
+    /// `snake_case` names (§2.3) joined by `.`; another form is an E1103 of
+    /// the check (the key at the key, the value at the value), besides the
+    /// E0200 of a `bind` with an entry.
+    #[test]
+    fn a_key_and_a_value_of_bind_are_module_paths() {
+        let bind = |key: &str, value: &str| {
+            format!(
+                "[package]\nname = \"a\"\nedition = \"2026\"\n[targets.t]\nkind = \"source\"\nlang = \"c\"\n\
+                     platform = \"host\"\n[targets.t.bind]\n\"{key}\" = \"{value}\"\n"
+            )
+        };
+        for ok in ["a", "a.b", "match.x_1", "a_.b2"] {
+            assert_eq!(diagnostics(&bind(ok, ok), ManifestForm::File), [], "{ok}");
+            assert_eq!(built(&bind(ok, ok), "t"), [(Code::E0200, "bind")], "{ok}");
+        }
+        for bad in ["", "A", "a..b", ".a", "a.", "1a", "a-b", "a.B", "_a"] {
+            let text = bind(bad, "m");
+            let found = diagnostics(&text, ManifestForm::File);
+            assert_eq!(found, [(Code::E1103, format!("\"{bad}\"").as_str())], "key {bad:?}");
+            let text = bind("m", bad);
+            let found = diagnostics(&text, ManifestForm::File);
+            assert_eq!(found, [(Code::E1103, format!("\"{bad}\"").as_str())], "value {bad:?}");
+        }
     }
 
     /// Every row that names a [`Feature`] gives it the details its phrase

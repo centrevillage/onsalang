@@ -4,7 +4,7 @@
 mod read;
 pub mod table;
 
-pub use read::read;
+pub use read::{read, shown};
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -61,8 +61,9 @@ pub struct ManifestExport {
 #[derive(Debug, Default, Clone)]
 pub struct ManifestTarget {
     pub kind: Spanned<String>,
-    /// Target triple, or `host`.
-    pub platform: Spanned<String>,
+    /// Target triple, or `host`; required in the build of a target that
+    /// gives C or native code (`table::Need`).
+    pub platform: Option<Spanned<String>>,
     /// `kind = "source"`: the language (`c` in this version).
     pub lang: Option<Spanned<String>>,
     /// `strict` (default) or `strict-ftz` (§15.5).
@@ -77,7 +78,8 @@ pub struct ManifestTarget {
     /// By module path.
     pub bind: BTreeMap<String, Spanned<String>>,
     /// The diagnostics of its build that need no source, which the other
-    /// commands do not report: the E0200 of its values (§15.3, S-154).
+    /// commands do not report: the E0200 of its values and its platform, and
+    /// the E1104 of `platform` (§15.3, §18.1, S-154).
     pub build_diagnostics: Vec<Diagnostic>,
 }
 

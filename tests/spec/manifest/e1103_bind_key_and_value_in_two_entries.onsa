@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "e1103_bind_key_and_value_in_two_entries"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.t.bind]
+// "Audio.device" = "daisy_hal.audio"           #~ E1103
+// "midi.port" = "daisy_hal..midi"              #~ E1103
+// "clock.timer" = "daisy_hal.clock"
+//
+// [test]
+// spec = ["§2.3", "§15.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: a bad key in one entry and a bad value in another are two reports, each at its line, and the good entry
+// is not reported; one does not hide the other (§15.2, §15.3 `bind` row, §18.1 "互いに独立に全て報告し"; S-827).
+
+pub fn f() -> I32 { 1 }

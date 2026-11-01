@@ -1,0 +1,19 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_cross_staticlib"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "staticlib"                           #~ E0200 [t]
+// platform = "thumbv7em-none-eabihf"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E0200: a `staticlib` for a platform that is not the host needs an external toolchain, which this version does
+// not use. The report is at the value of `kind`, in the build of `t`; `kind = "source"` with `lang = "c"` is
+// the form that builds (§15.3 paragraph on the toolchain, §18.1; S-161, S-827, S-154).
+
+pub fn f() -> I32 { 1 }

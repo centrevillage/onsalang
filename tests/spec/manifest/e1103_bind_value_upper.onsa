@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e1103_bind_value_upper"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.t.bind]
+// "audio.device" = "Daisy_hal.audio"           #~ E1103
+//
+// [test]
+// spec = ["§2.3", "§15.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the value `Daisy_hal.audio` has an upper-case letter; module names are `snake_case`. A value is the path of the implementation module: module names joined with `.` (§2.3),
+// so a value that is not one is reported at the value, in every command (§15.2, §15.3 `bind` row, §18.1;
+// S-827).
+
+pub fn f() -> I32 { 1 }

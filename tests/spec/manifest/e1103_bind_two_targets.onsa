@@ -1,0 +1,31 @@
+// onsa.toml
+// [package]
+// name = "e1103_bind_two_targets"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.a.bind]
+// "audio.device" = "daisy_hal.audio"
+// "midi.port" = "daisy-hal.midi"               #~ E1103
+//
+// [targets.b]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.b.bind]
+// "Audio.device" = "other_hal.audio"           #~ E1103
+//
+// [test]
+// spec = ["§2.3", "§15.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the manifest is checked for every target before the source is read, so a bad `bind` of the second
+// target is reported beside the one of the first (§15.3 `bind` row, §18.1; S-827).
+
+pub fn f() -> I32 { 1 }

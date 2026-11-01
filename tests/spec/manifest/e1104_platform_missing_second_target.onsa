@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1104_platform_missing_second_target"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.b]                                  #~ E1104 [b]
+// kind = "staticlib"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104: the target `a` writes `platform` and has no report; the target `b` does not, so only the build of `b`
+// reports the E1104, at the heading `[targets.b]` (§15.3 `platform` row, §18.1; R-47, S-824, S-827).
+
+pub fn f() -> I32 { 1 }

@@ -1,0 +1,18 @@
+// onsa.toml
+// [package]
+// name = "e1104_platform_missing_with_unsupported_values"
+// edition = "2026"
+//
+// [targets.t]                                  #~ E1104 [t]
+// kind = "exe"                                 #~ E0200 [t]
+// main_frame = "static"                        #~ E0200 [t]
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1104 with two E0200: the missing `platform` and the two unsupported values (`kind`, `main_frame`) of one
+// target are three independent reports of the build of `t` (§18.1 "互いに独立に全て報告し"; R-47, S-824, S-827).
+
+pub fn f() -> I32 { 1 }

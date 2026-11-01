@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e1103_bind_key_leading_underscore"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.t.bind]
+// "_audio" = "daisy_hal.audio"                 #~ E1103
+//
+// [test]
+// spec = ["§2.3", "§15.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the key `_audio` starts with `_`, which a name cannot do (§2.3). A key is the path of a module that has `target` declarations: module names joined with `.`
+// (§2.3), so a key that is not one is reported at the key, in every command (§15.2, §15.3 `bind` row, §18.1;
+// S-827).
+
+pub fn f() -> I32 { 1 }

@@ -1,0 +1,19 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_empty"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = ""                                #~ E0200 [t]
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E0200: `platform = ""` is the empty string, which this version cannot tell from nothing. The report is one E0200 at the value, in the build of `t`; `platform` has
+// no rule on its form, so it is not an E1103 and `check` is not stopped (§15.3 `platform` row, §18.1; S-824, S-827, S-154).
+
+pub fn f() -> I32 { 1 }

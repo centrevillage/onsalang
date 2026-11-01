@@ -230,6 +230,11 @@ features! {
     ManifestBulk: Manifest, "`memory.bulk = true`", None;
     /// §12.4 (W9-05, W9-06).
     ManifestBudgets: Manifest, "the budgets of `memory` (`fast_budget`, `bulk_budget`)", None;
+    /// `{}`: the value (S-824); its note, what this version knows, is the driver's.
+    ManifestPlatform: Manifest, "the platform `\"{}\"`", None;
+    /// `{}`: the kind; `{}`: the platform (§15.3, S-161).
+    ManifestCross: Manifest, "`kind = \"{}\"` for a platform other than the host (`{}`)",
+        Some("`kind = \"source\"` with `lang = \"c\"` gives the C sources for any platform");
     /// `{}`: the package (§15.3: reported by the check of the manifest, for every command).
     ManifestDependency: Manifest, "dependencies other than `std` (`{}`)", None;
 }

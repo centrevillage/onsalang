@@ -350,7 +350,7 @@ mod tests {
             assert_eq!(&text[name.span.clone()], "\"echo\"", "{eol:?}");
             let t = &m.targets["t"];
             assert_eq!(&text[t.key.clone()], "t", "{eol:?}");
-            assert_eq!(&text[t.value.platform.span.clone()], "\"host\"", "{eol:?}");
+            assert_eq!(&text[t.value.platform.as_ref().unwrap().span.clone()], "\"host\"", "{eol:?}");
         }
     }
 

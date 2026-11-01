@@ -96,12 +96,32 @@ pub enum Rule {
     OneOf(&'static [&'static str], Option<&'static str>),
     /// A `snake_case` identifier other than `std` (§15.3, S-628).
     PackageName,
+    /// `snake_case` names joined by `.` (§15.2, S-827).
+    ModulePath,
     /// The form of `prefix` (§14.2).
     Prefix,
     /// The version of the embedded std (§15.3, S-83).
     StdVersion,
     /// A number of bytes: 0 or more (S-827).
     Bytes,
+}
+
+/// Where a key is required (§15.3): one lacking is an E1104 at the key of
+/// its table ([`super::read`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Need {
+    No,
+    /// In every manifest, by the check of every command.
+    Always,
+    /// In a target whose `kind` is one of `kinds`, or whose `kind` and
+    /// `lang` are `or`; not in one whose `kind` (or that `lang`) is not
+    /// read. `build`: by the build of the target (its
+    /// [`super::ManifestTarget::build_diagnostics`]), else by every command.
+    Target {
+        kinds: &'static [&'static str],
+        or: Option<(&'static str, &'static str)>,
+        build: bool,
+    },
 }
 
 /// The values of a key of a target this version does not support: each is
@@ -129,16 +149,21 @@ pub struct Row {
     pub shape: Shape,
     pub read: Read,
     pub rule: Rule,
+    pub need: Need,
     pub unsupported: Option<(Unsupported, Feature)>,
 }
 
 const fn row(table: Table, key: &'static str, field: Field, shape: Shape, read: Read) -> Row {
-    Row { table, key, field, shape, read, rule: Rule::Any, unsupported: None }
+    Row { table, key, field, shape, read, rule: Rule::Any, need: Need::No, unsupported: None }
 }
 
 impl Row {
     const fn with(self, rule: Rule) -> Row {
         Row { rule, ..self }
+    }
+
+    const fn need(self, need: Need) -> Row {
+        Row { need, ..self }
     }
 
     const fn unsupported(self, values: Unsupported, feature: Feature) -> Row {
@@ -157,25 +182,38 @@ pub const ALLOC: &str = "Alloc";
 /// The values of `panic` (§9.2), which `onsa build` maps to its modes.
 pub const PANIC: &[&str] = &["poison", "trap", "reset", "halt"];
 
-const KINDS: &[&str] = &["exe", "clap", "vst3", "au", "wasm-worklet", "staticlib", "source"];
+/// The kind of a static library, which `cc` and `ar` build on the host.
+pub const STATICLIB: &str = "staticlib";
+const SOURCE: &str = "source";
+/// The kinds an outer C toolchain builds (§15.3): with a platform not the
+/// host, an E0200 of the build (S-161).
+pub const TOOLCHAIN: &[&str] = &["exe", "clap", "vst3", "au", STATICLIB];
+const KINDS: &[&str] = &["exe", "clap", "vst3", "au", "wasm-worklet", STATICLIB, SOURCE];
 const FP_NOTE: &str = "a fn or a flow takes a relaxed profile with `@fp(relaxed)` (§15.5)";
 
 /// The rows of §15.3, table by table.
 pub static ROWS: &[Row] = &[
-    row(Table::Root, "package", Field::Package, Shape::Table(Table::Package), Yes),
+    row(Table::Root, "package", Field::Package, Shape::Table(Table::Package), Yes).need(Need::Always),
     row(Table::Root, "dependencies", Field::Dependencies, Shape::Table(Table::Dependencies), Yes),
     row(Table::Root, "export", Field::Export, Shape::Table(Table::Export), Yes),
     row(Table::Root, "targets", Field::Targets, Shape::Table(Table::Targets), Yes),
     row(Table::Root, "plugin", Field::Plugin, Shape::Tables(Table::Plugin), Yes),
-    row(Table::Package, "name", Field::Name, Str, Yes).with(Rule::PackageName),
-    row(Table::Package, "edition", Field::Edition, Str, Yes).with(OneOf(&["2026"], None)),
+    row(Table::Package, "name", Field::Name, Str, Yes).with(Rule::PackageName).need(Need::Always),
+    row(Table::Package, "edition", Field::Edition, Str, Yes).with(OneOf(&["2026"], None)).need(Need::Always),
     row(Table::Export, "prefix", Field::Prefix, Str, Yes).with(Rule::Prefix),
     row(Table::Target, "kind", Field::Kind, Str, Yes)
         .with(OneOf(KINDS, None))
-        .unsupported(Except(&["staticlib", "source"]), Feature::ManifestKind),
-    row(Table::Target, "platform", Field::Platform, Str, Yes),
+        .need(Need::Always)
+        .unsupported(Except(&[STATICLIB, SOURCE]), Feature::ManifestKind),
+    // The targets that give C or native code (R-47).
+    row(Table::Target, "platform", Field::Platform, Str, Yes).need(Need::Target {
+        kinds: TOOLCHAIN,
+        or: Some((SOURCE, "c")),
+        build: true,
+    }),
     row(Table::Target, "lang", Field::Lang, Str, Yes)
         .with(OneOf(&["c", "js"], None))
+        .need(Need::Target { kinds: &[SOURCE], or: None, build: false })
         .unsupported(Except(&["c"]), Feature::ManifestLang),
     row(Table::Target, "fp", Field::Fp, Str, Yes)
         .with(OneOf(&["strict", "strict-ftz"], Some(FP_NOTE)))
@@ -211,7 +249,8 @@ pub static ROWS: &[Row] = &[
 /// The rule of the names of a table of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Names {
-    Any,
+    /// `snake_case` names joined by `.`, else an E1103 at the name (S-827).
+    ModulePath,
     /// A `snake_case` identifier, else an E1103 at the name; the word names
     /// what is named (§15.3, S-828).
     SnakeCase(&'static str),
@@ -232,7 +271,7 @@ pub struct Named {
 pub fn named(table: Table) -> Option<Named> {
     let (shape, rule, names) = match table {
         Table::Dependencies => (Str, Rule::StdVersion, Names::Std),
-        Table::Bind => (Str, Rule::Any, Names::Any),
+        Table::Bind => (Str, Rule::ModulePath, Names::ModulePath),
         Table::Targets => (Shape::Table(Table::Target), Rule::Any, Names::SnakeCase("target")),
         _ => return None,
     };

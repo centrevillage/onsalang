@@ -601,7 +601,7 @@ fn conformance_scope() {
 
 #[test]
 fn small_holes() {
-    // A platform the build cannot resolve: a usage error of the build (until W4-02 U3b).
+    // A platform this version does not tell: the E0200 of the build of its target (S-824).
     let bad_target = MANIFEST.replace(
         "lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"",
         "lang = \"c\"\n// platform = \"zz80-none\"\n// panic = \"poison\"",
@@ -621,7 +621,8 @@ fn small_holes() {
             ("tests/a/b.onsa", &flow("b")),
             ("tests/onsa.toml", "[package]\nname = \"all\"\nedition = \"2026\"\n"),
             ("tests/locked/x.onsa", "pub fn f() -> I32 {\n  1\n}\n"),
-            (pending::PATH, &entry("tests/bad_target/m.onsa")),
+            ("tests/bad_mode.onsa", "// onsa.toml\n// [test]\n// mode = \"bogus\"\n\npub fn f() -> I32 {\n  1\n}\n"),
+            (pending::PATH, &(entry("tests/bad_target/m.onsa") + &entry("tests/bad_mode.onsa"))),
         ],
     );
     let locked = repo.0.join("tests/locked");
@@ -639,8 +640,12 @@ fn small_holes() {
     has("tests/none.onsa", "unknown code `E9999`");
     has("tests/no_tests.onsa", "has no `test` block");
     // the case's own settings are wrong: never pending
-    has("tests/bad_target/m.onsa", "unknown architecture `zz80`");
-    assert!(case(&r, "tests/bad_target/m.onsa").pending.is_none());
+    has("tests/bad_mode.onsa", "unknown variant `bogus`");
+    assert!(case(&r, "tests/bad_mode.onsa").pending.is_none());
+    // a platform this version does not tell is an E0200 of the build: a difference from the
+    // markers, which the list holds
+    let c = case(&r, "tests/bad_target/m.onsa");
+    assert!(c.failures.is_empty() && c.pending.is_some(), "{:?}", c.failures);
     // the two flatten to the same name; each has its own scratch directory
     for p in ["tests/a_b.onsa", "tests/a/b.onsa"] {
         assert!(case(&r, p).failures.is_empty(), "{p}: {:?}", case(&r, p).failures);

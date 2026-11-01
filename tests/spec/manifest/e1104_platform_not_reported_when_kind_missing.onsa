@@ -1,0 +1,18 @@
+// onsa.toml
+// [package]
+// name = "e1104_platform_not_reported_when_kind_missing"
+// edition = "2026"
+//
+// [targets.t]                                  #~ E1104
+// lang = "c"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// A target without `kind` and without `platform` has one E1104, for `kind`, in every command: whether `platform`
+// is needed depends on the `kind`, which is not known, so no second E1104 is made for `platform` (§15.3, §18.1;
+// R-47, S-824, S-827).
+
+pub fn f() -> I32 { 1 }

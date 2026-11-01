@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "e1103_bind_with_other_manifest_error"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "relaxed"                               #~ E1103
+//
+// [targets.t.bind]
+// "audio.device" = "daisy_hal.audio"
+// "midi.port" = "midi hal"                     #~ E1103
+//
+// [test]
+// spec = ["§2.3", "§15.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the error of the form of a `bind` value and an error of the value of another key are two reports of the
+// same table `t` (§15.3, §18.1 "互いに独立に全て報告し"; S-827).
+
+pub fn f() -> I32 { 1 }

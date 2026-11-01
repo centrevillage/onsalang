@@ -281,3 +281,18 @@ fn a_value_not_in_a_closed_list_is_escaped_in_the_text_of_its_e1103() {
     let manifest = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"d\\u001b[2Jl\\rl\"\nlang = \"c\"\nplatform = \"host\"\n";
     assert_value_is_escaped("escape_kind", manifest);
 }
+
+/// The triple of `platform` is written into the line of a build that succeeds (`built `t` for …`), and
+/// its ESC does not come out raw there either (W4-02 U3b, the review's low 4).
+#[test]
+fn the_platform_is_escaped_in_the_line_of_a_build() {
+    let manifest = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.t]\nkind = \"source\"\nlang = \"c\"\n\
+                    platform = \"x86_64-\\u001b[31m-linux\"\n";
+    let d = package("escape_platform", manifest, GOOD_SOURCE);
+    let out = run(d.root(), &["build", "--target", "t", &d.arg()]);
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(out.stdout.starts_with("built `t` for x86_64-"), "{}", out.stdout);
+    for (name, text) in [("standard output", &out.stdout), ("standard error", &out.stderr)] {
+        assert_eq!(stray_control(text), None, "a control character of the platform in the {name}: {text:?}");
+    }
+}

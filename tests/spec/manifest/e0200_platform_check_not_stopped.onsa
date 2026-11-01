@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_check_not_stopped"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "nonsense"                        #~ E0200 [t]
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// `check` is not stopped by the E0200 of a `platform` this version cannot tell: the source is read and its
+// E0401 is reported at its line, beside the E0200 that only the build of `t` reports (§15.3, §18.1; S-824, S-827, S-154).
+
+pub fn f() -> I32 {
+  true  //~ E0401
+}

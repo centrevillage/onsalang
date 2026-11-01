@@ -1,0 +1,18 @@
+// onsa.toml
+// [package]
+// name = "e1104_platform_not_reported_when_lang_missing"
+// edition = "2026"
+//
+// [targets.t]                                  #~ E1104
+// kind = "source"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// A `source` target without `lang` and without `platform` has one E1104, for `lang`, in every command: whether
+// `platform` is needed depends on the `lang` (`"c"` needs it, `"js"` does not), which is not known (§15.3,
+// §18.1; R-47, S-824, S-827).
+
+pub fn f() -> I32 { 1 }

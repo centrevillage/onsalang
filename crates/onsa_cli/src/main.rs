@@ -720,12 +720,13 @@ fn build(target: &str, out: Option<PathBuf>, paths: &[PathBuf]) -> Outcome {
     let opts = onsa_driver::BuildOptions { target: target.to_string(), out };
     match onsa_driver::build(path, &opts) {
         Ok(r) => {
-            outln!("built `{}` for {} ({}) in {}", r.target, r.platform, r.kind, r.out_dir.display());
+            let platform = onsa_driver::manifest::shown(&r.platform);
+            outln!("built `{}` for {platform} ({}) in {}", r.target, r.kind, r.out_dir.display());
             for f in &r.files {
                 outln!("  {f}");
             }
             if let Some(n) = &r.note {
-                outln!("note: {n}");
+                outln!("note: {}", onsa_driver::manifest::shown(n));
             }
             Outcome::Ok
         }

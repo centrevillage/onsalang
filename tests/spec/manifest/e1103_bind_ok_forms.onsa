@@ -1,0 +1,27 @@
+// onsa.toml
+// [package]
+// name = "e1103_bind_ok_forms"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [targets.t.bind]                             #~ E0200 [t]
+// "audio.device" = "daisy_hal.audio"
+// "clock" = "timer1"
+// "midi_in.port2" = "hal_1.midi_in.v2"
+// "audio_.device_" = "hal_.audio_"
+//
+// [test]
+// spec = ["§2.3", "§15.2", "§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// No E1103: a key and a value that are module names joined with `.` are not an error of the manifest, whether the
+// path has one name or several, has digits after the first letter, an inner `_` or a trailing `_` (§2.3: the
+// trailing `_` is allowed). A `bind` with an entry is still an E0200 of the build of `t`, at the heading (§15.2,
+// §15.3 `bind` row, §18.1; S-824, S-827).
+
+pub fn f() -> I32 { 1 }

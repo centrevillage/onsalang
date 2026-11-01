@@ -53,6 +53,32 @@ pub fn host_triple() -> String {
     format!("{arch}-{os}")
 }
 
+/// The architectures this version knows, with their pointer widths in
+/// bytes; a name ending in `*` is the head of a name (S-824).
+const ARCHS: &[(u32, &[&str])] = &[
+    (8, &["x86_64", "aarch64", "arm64", "riscv64", "powerpc64", "mips64", "wasm64"]),
+    (4, &["i686", "i586", "i386", "riscv32*", "xtensa", "arm", "armv*", "thumbv*", "wasm32", "mips", "powerpc"]),
+];
+
+/// The operating systems this version knows: a word in the triple after its
+/// architecture, and the system. `none`, or an `eabi` without `linux`, is no
+/// system (S-824).
+const SYSTEMS: &[(&str, &str)] =
+    &[("darwin", "macos"), ("apple", "macos"), ("linux", "linux"), ("windows", "windows"), ("freebsd", "freebsd")];
+
+/// The note of a platform this version does not know (S-824): what
+/// [`platform`] knows.
+pub fn platforms_note() -> String {
+    let archs: Vec<String> = ARCHS.iter().flat_map(|(_, a)| a.iter()).map(|a| format!("`{a}`")).collect();
+    let systems: Vec<String> = SYSTEMS.iter().map(|(w, _)| format!("`{w}`")).collect();
+    format!(
+        "a platform is `\"host\"` or a triple `<arch>-<vendor>-<os>[-<abi>]`; this version knows the architectures \
+         {} (`*`: any end) and the systems `none` (also an `eabi` without `linux`), {}",
+        archs.join(", "),
+        systems.join(", ")
+    )
+}
+
 /// Resolve a target triple (`"host"` is the compiler's own machine).
 pub fn platform(triple: &str) -> Result<Platform, String> {
     let triple = if triple == "host" { host_triple() } else { triple.to_string() };
@@ -62,26 +88,16 @@ pub fn platform(triple: &str) -> Result<Platform, String> {
     }
     let arch = parts[0].to_string();
     let rest = parts[1..].join("-");
-    let ptr_size = match arch.as_str() {
-        "x86_64" | "aarch64" | "arm64" | "riscv64" | "powerpc64" | "mips64" | "wasm64" => 8,
-        "i686" | "i586" | "i386" | "riscv32" | "xtensa" | "arm" | "wasm32" | "mips" | "powerpc" => 4,
-        a if a.starts_with("thumbv") || a.starts_with("armv") || a.starts_with("riscv32") => 4,
-        a => return Err(format!("unknown architecture `{a}` in `{triple}`")),
+    let known = |a: &str| a.strip_suffix('*').map_or(arch == a, |head| arch.starts_with(head));
+    let Some(&(ptr_size, _)) = ARCHS.iter().find(|(_, a)| a.iter().any(|a| known(a))) else {
+        return Err(format!("unknown architecture `{arch}` in `{triple}`"));
     };
     let bare = rest.contains("none") || rest.contains("eabi") && !rest.contains("linux");
     let msvc = rest.contains("msvc");
-    let os = if bare {
-        "none".to_string()
-    } else if rest.contains("darwin") || rest.contains("apple") {
-        "macos".into()
-    } else if rest.contains("linux") {
-        "linux".into()
-    } else if rest.contains("windows") {
-        "windows".into()
-    } else if rest.contains("freebsd") {
-        "freebsd".into()
-    } else {
-        return Err(format!("unknown operating system in `{triple}`"));
+    let os = match SYSTEMS.iter().find(|(w, _)| rest.contains(w)) {
+        _ if bare => "none".to_string(),
+        Some((_, os)) => os.to_string(),
+        None => return Err(format!("unknown operating system in `{triple}`")),
     };
     // The flags the generated C needs (spec §13.4) are the backend's; then
     // the optimization level, then the flags of the architecture.
@@ -341,7 +357,7 @@ pub fn build(path: Option<&Path>, opts: &BuildOptions) -> Result<BuildReport, Bu
     };
 
     // Compile on the host.
-    if settings.kind == "staticlib" {
+    if settings.kind == crate::manifest::table::STATICLIB {
         if settings.platform.is_host() && !settings.platform.msvc {
             let obj = format!("onsa_{}.o", loaded.name);
             let lib = format!("libonsa_{}.a", loaded.name);
@@ -408,10 +424,12 @@ pub struct TargetSettings {
 
 impl TargetSettings {
     /// The settings of `t`, whose values the build supports (its
-    /// [`ManifestTarget::build_diagnostics`] are empty).
+    /// [`ManifestTarget::build_diagnostics`] are empty, so it has a platform
+    /// this version knows).
     pub fn from_manifest(name: &str, t: &ManifestTarget) -> Result<TargetSettings, BuildError> {
-        let usage = |m: String| BuildError::Usage(format!("[targets.{name}]: {m}"));
-        let platform = platform(&t.platform.value).map_err(&usage)?;
+        let triple = t.platform.as_ref().map_or("", |p| p.value.as_str());
+        let platform =
+            platform(triple).unwrap_or_else(|m| onsa_diag::internal::bug(None, format!("[targets.{name}]: {m}")));
         let panic = match text(&t.panic) {
             None => {
                 if platform.hosted {
@@ -651,7 +669,7 @@ mod tests {
     fn target_settings_defaults() {
         let target = |kind: &str, platform: &str| ManifestTarget {
             kind: Spanned::new(kind.into()),
-            platform: Spanned::new(platform.into()),
+            platform: Some(Spanned::new(platform.into())),
             ..Default::default()
         };
         let t = target("staticlib", "host");
