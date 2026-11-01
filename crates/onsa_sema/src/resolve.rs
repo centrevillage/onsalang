@@ -467,6 +467,25 @@ pub fn hidden_words(vis: Vis) -> String {
     }
 }
 
+/// What holds a field or a member, as the message of its E0303 names it
+/// ([`Modules::hidden_why`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Owner {
+    /// The struct of a field.
+    Struct,
+    /// The type of a member.
+    Type,
+}
+
+impl Owner {
+    fn word(self) -> &'static str {
+        match self {
+            Owner::Struct => "struct",
+            Owner::Type => "type",
+        }
+    }
+}
+
 /// The module graph and the tables of names. Owned by `Analysis`.
 #[derive(Debug, Default)]
 pub struct Modules {
@@ -521,6 +540,13 @@ impl Modules {
         &self.mods[m.0 as usize]
     }
 
+    /// The source of the module `m`, of the packages `flat`
+    /// ([`crate::flatten`]): none of a directory alone and of a package root.
+    pub(crate) fn source<'p>(&self, flat: &[&'p crate::Package], m: ModId) -> Option<&'p crate::Module> {
+        let info = self.get(m);
+        flat.get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
+    }
+
     pub fn get_mut(&mut self, m: ModId) -> &mut ModInfo {
         &mut self.mods[m.0 as usize]
     }
@@ -556,10 +582,10 @@ impl Modules {
     /// (`owner`, of the kind named) is not visible there is hidden by the
     /// type, else by its own visibility. Not visible, a name is `priv` out of
     /// its module or has no word out of its package.
-    pub fn hidden_why(&self, own: Vis, owner: Option<(&str, &crate::def::Def)>, from: ModId) -> String {
+    pub fn hidden_why(&self, own: Vis, owner: Option<(Owner, &crate::def::Def)>, from: ModId) -> String {
         match owner {
             Some((kind, ty)) if !self.visible(ty.vis, ty.module, from) => {
-                format!("its {kind} `{}` {}", ty.name, hidden_words(ty.vis))
+                format!("its {} `{}` {}", kind.word(), ty.name, hidden_words(ty.vis))
             }
             _ => format!("it {}", hidden_words(own)),
         }

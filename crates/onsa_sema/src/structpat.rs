@@ -15,7 +15,7 @@ use onsa_syntax::foreign::{self, RowId};
 
 use crate::body::{Checker, R, Stop};
 use crate::def::{DefId, DefKind, FieldDef, Fields};
-use crate::resolve::Entity;
+use crate::resolve::{Entity, Owner};
 use crate::ty::{Ty, TyId};
 
 /// What names the fields of a struct (`Checker::whole_reach`).
@@ -44,8 +44,8 @@ impl<'a> Checker<'a> {
     /// the struct is resolved and unified with `ty`, each written field is
     /// checked and given to `sub`, in the order written, and the number of
     /// the declared fields is returned. The diagnostics are of `stage`.
-    /// `None`: the struct is not known (an alias of the error type, §18.1,
-    /// R-271), and each written field is given to `sub` with the error type.
+    /// An alias of the error type is no struct here: its path has no record
+    /// (S-728, `names/body/paths.rs`).
     pub(crate) fn struct_pattern(
         &mut self,
         stage: Stage,
@@ -53,18 +53,11 @@ impl<'a> Checker<'a> {
         ty: TyId,
         written: Written<'_>,
         sub: SubPattern<'_, 'a>,
-    ) -> R<Option<usize>> {
+    ) -> R<usize> {
         let Written { pat, path, fields, rest } = written;
         let (entity, owner) = self.ctor_of(pat)?;
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
-            Entity::Def(d) if self.a.error_alias(d) => {
-                let error = self.a.types.error();
-                for (_, fp) in fields {
-                    sub(self, *fp, error, None)?;
-                }
-                return Ok(None);
-            }
             _ => return Err(self.pattern_err(stage, Code::E0401, path.span, "a struct pattern needs a struct")),
         };
         let Some(sd) = self.a.def(d).as_struct() else {
@@ -103,7 +96,7 @@ impl<'a> Checker<'a> {
             sub(self, *fp, ft, Some(i))?;
         }
         if failed {
-            return Ok(Some(defs.len()));
+            return Ok(defs.len());
         }
         // The fields left are visible here: a field not visible that the
         // pattern leaves out is the E0303 above (§15.1, §7, S-366).
@@ -129,7 +122,7 @@ impl<'a> Checker<'a> {
                 let msg = format!("struct patterns name every field; missing {names} (use `_`, §7)");
                 Err(self.diag(Diagnostic::new(stage, Code::E0410, span, msg).with_found(self.src(span))))
             }
-            _ => Ok(Some(defs.len())),
+            _ => Ok(defs.len()),
         }
     }
 
@@ -148,7 +141,7 @@ impl<'a> Checker<'a> {
             return Ok(());
         }
         let def = self.a.def(d);
-        let why = self.a.modules.hidden_why(field.vis, Some(("struct", def)), self.m);
+        let why = self.a.modules.hidden_why(field.vis, Some((Owner::Struct, def)), self.m);
         let msg = format!("the field `{}` of `{}` is not visible here: {why}", field.name, def.name);
         let d = Diagnostic::new(Stage::Names, Code::E0303, at, msg)
             .with_found(self.src(at))
@@ -182,7 +175,7 @@ impl<'a> Checker<'a> {
             return Ok(());
         };
         let def = self.a.def(d);
-        let why = self.a.modules.hidden_why(f.vis, Some(("struct", def)), self.m);
+        let why = self.a.modules.hidden_why(f.vis, Some((Owner::Struct, def)), self.m);
         let (form, through) = match whole {
             Whole::Literal => {
                 ("made by a struct literal", format!("`{}` is made by a function of its module", def.name))

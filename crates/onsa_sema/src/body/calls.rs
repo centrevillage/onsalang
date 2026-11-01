@@ -231,11 +231,7 @@ impl<'a> Checker<'a> {
                 }
                 let targs = self.fresh_args(md);
                 // The impl's own generic arguments come from the receiver.
-                let impl_self = mdef.owner.and_then(|o| match &self.a.def(o).kind {
-                    DefKind::Impl(i) => Some(i.self_ty),
-                    _ => None,
-                });
-                if let Some(st) = impl_self {
+                if let Some(st) = self.a.self_ty_of(md) {
                     let st2 = self.a.types.subst(st, &targs);
                     self.unify_at(name.span, recv, st2)?;
                 }

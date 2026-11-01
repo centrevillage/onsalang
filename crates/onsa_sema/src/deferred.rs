@@ -346,7 +346,7 @@ impl<'a> Checker<'a> {
     /// S-211): E0408 when it is not finite in the type or a literal that is
     /// not 0 rounds to 0 ([`onsa_syntax::float_value`], the one conversion).
     fn float_lit(&mut self, item: &Deferred, k: FloatKind, lit: ExprId) -> Look {
-        let ExprKind::Lit(Lit::Float { text }) = &self.ast_expr(lit).kind else {
+        let ExprKind::Lit(Lit::Float { text }) = &self.expr(lit).kind else {
             onsa_diag::internal::bug(Some(item.span), "a deferred float literal that is no float literal")
         };
         // A text that is no float has the lexer's E0001 (`1.5abc`).

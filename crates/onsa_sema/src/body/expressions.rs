@@ -375,17 +375,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A struct literal whose struct is not known (an alias of the error
-    /// type, §18.1, R-271): each value is checked on its own, and the
-    /// literal is an error.
-    fn fields_of_unknown(&mut self, fields: &[(Ident, ExprId)]) -> R<TyId> {
-        let error = self.a.types.error();
-        for (_, value) in fields {
-            self.check_expr(*value, Some(error))?;
-        }
-        Ok(error)
-    }
-
+    /// The struct literal `e` (§4.4). An alias of the error type is no
+    /// struct here: its path has no record (S-728, `names/body/paths.rs`).
     fn check_struct_lit(
         &mut self,
         e: ExprId,
@@ -397,10 +388,6 @@ impl<'a> Checker<'a> {
         let Some(&StructRes { entity, owner }) = self.names.structs.get(&e) else { return Err(self.held_stop()) };
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
-            // An alias of the error type (§18.1, R-271).
-            Entity::Def(d) if self.a.error_alias(d) => {
-                return self.fields_of_unknown(fields);
-            }
             _ => return Err(self.diag(crate::body::not_a_struct(self.src(path.span), path.span))),
         };
         let s = self.a.def(d).as_struct().unwrap().clone();

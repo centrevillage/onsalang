@@ -269,6 +269,25 @@ pub(crate) struct Checker<'a> {
     typed: Vec<bool>,
 }
 
+/// The body of the def `id` the types stage checks, with the type `Self`
+/// stands for there and the type the body has: of a function, a test, a
+/// `const` and a flow; none of another def and of a declaration with no
+/// body.
+fn body_of(a: &mut Analysis, id: DefId) -> Option<(Option<TyId>, ExprId, TyId)> {
+    let self_ty = a.self_ty_of(id);
+    Some(match &a.def(id).kind {
+        DefKind::Fn(f) => (self_ty, f.body?, f.ret),
+        DefKind::Test { body, .. } => {
+            let body = *body;
+            (None, body, a.types.unit())
+        }
+        DefKind::Const(c) => (self_ty, c.value?, c.ty),
+        // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`).
+        DefKind::Flow(f) => (None, f.body, f.out),
+        _ => return None,
+    })
+}
+
 /// Check every body of the package and its dependencies.
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
@@ -276,40 +295,14 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     for i in 0..n {
         let id = DefId(i as u32);
         let def = &a.defs[i];
-        let Some(item) = def.item else { continue };
+        if def.item.is_none() {
+            continue;
+        }
         // A panic names this declaration (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
         let m = def.module;
-        let info = a.modules.get(m);
-        let Some(module) = flat.get(info.pkg).and_then(|p| info.module.and_then(|mi| p.modules.get(mi))) else {
-            continue;
-        };
-        let _ = item;
-        let (self_ty, body, ret) = match &def.kind {
-            DefKind::Fn(f) => {
-                let Some(b) = f.body else { continue };
-                let self_ty = def.owner.and_then(|o| match &a.defs[o.0 as usize].kind {
-                    DefKind::Impl(i) => Some(i.self_ty),
-                    _ => None,
-                });
-                (self_ty, b, f.ret)
-            }
-            DefKind::Test { body, .. } => {
-                let unit = a.types.unit();
-                (None, *body, unit)
-            }
-            DefKind::Const(c) => {
-                let Some(v) = c.value else { continue };
-                let self_ty = def.owner.and_then(|o| match &a.defs[o.0 as usize].kind {
-                    DefKind::Impl(i) => Some(i.self_ty),
-                    _ => None,
-                });
-                (self_ty, v, c.ty)
-            }
-            // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`).
-            DefKind::Flow(f) => (None, f.body, f.out),
-            _ => continue,
-        };
+        let Some(module) = a.modules.source(&flat, m) else { continue };
+        let Some((self_ty, body, ret)) = body_of(a, id) else { continue };
         let generics = generics_of(a, id);
         // The body of an item whose unit has a syntax error is not checked
         // (spec §18.1, S-59).
@@ -700,10 +693,6 @@ impl<'a> Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
-    pub(crate) fn ast_expr(&self, e: ExprId) -> &'a Expr {
-        self.ast.expr(e)
-    }
-
     pub(crate) fn body_type(&self, e: ExprId) -> Option<TyId> {
         self.info.expr_types.get(&e).copied()
     }

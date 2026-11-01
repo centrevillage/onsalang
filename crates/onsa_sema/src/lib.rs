@@ -25,7 +25,11 @@ mod flow_syntax;
 mod flow_tests;
 pub mod infer;
 pub mod kind;
+#[cfg(test)]
+mod kind_tests;
 pub mod layout;
+#[cfg(test)]
+mod layout_tests;
 mod modes;
 mod names;
 /// The files of a package tree (§15.1): the driver reads packages with it, and
@@ -44,6 +48,8 @@ mod unread;
 #[cfg(test)]
 mod unread_tests;
 mod walk;
+#[cfg(test)]
+mod walk_tests;
 
 /// For the unit tests: the text of the diagnostic's range in `text` after
 /// applying its candidate `k` (the candidates edit inside that range).
@@ -56,6 +62,8 @@ pub(crate) fn fixed_region(text: &str, d: &onsa_diag::Diagnostic, k: usize) -> S
     after[d.span.start as usize..end].to_string()
 }
 pub mod ty;
+#[cfg(test)]
+mod ty_tests;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -249,8 +257,7 @@ impl Analysis {
 
     /// The parsed AST of a module, given the package that was analyzed.
     pub fn ast<'a>(&self, pkg: &'a Package, m: ModId) -> Option<&'a Module> {
-        let info = self.modules.get(m);
-        flatten(pkg).get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
+        self.modules.source(&flatten(pkg), m)
     }
 
     /// Module of a file, if the file is one.
@@ -391,6 +398,15 @@ impl Analysis {
         matches!(self.def(id).kind, DefKind::Alias(t) if matches!(self.types.get(t), Ty::Error))
     }
 
+    /// The type `Self` stands for in the def `id` (§2.2, S-595): the type of
+    /// the `impl` it is a member of; none out of one.
+    pub(crate) fn self_ty_of(&self, id: DefId) -> Option<TyId> {
+        match &self.def(self.def(id).owner?).kind {
+            DefKind::Impl(i) => Some(i.self_ty),
+            _ => None,
+        }
+    }
+
     pub fn kind_of(&self, ty: TyId) -> Option<Kind> {
         kind::kind_of(self, ty)
     }
@@ -409,6 +425,5 @@ pub fn analyze(pkg: &Package) -> Analysis {
 
 /// The module (file) a def was declared in.
 pub(crate) fn module_of_def<'p>(pkg: &'p Package, a: &Analysis, id: DefId) -> Option<&'p Module> {
-    let info = a.modules.get(a.def(id).module);
-    flatten(pkg).get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
+    a.ast(pkg, a.def(id).module)
 }

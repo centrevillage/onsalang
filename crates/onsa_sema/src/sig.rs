@@ -38,6 +38,8 @@ mod flow_sig;
 mod generated;
 mod heading;
 mod impls;
+#[cfg(test)]
+mod tests;
 mod types;
 mod wellformed;
 
@@ -144,7 +146,7 @@ impl<'p> Sema<'p> {
     }
 
     pub(crate) fn module(&self, m: ModId) -> Option<&'p Module> {
-        crate::names::module_of(&self.flat, &self.a.modules, m)
+        self.a.modules.source(&self.flat, m)
     }
 
     // ------------------------------------------------------------ diagnostics

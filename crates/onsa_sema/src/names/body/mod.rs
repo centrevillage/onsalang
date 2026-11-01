@@ -313,15 +313,12 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         if a.failed.contains_key(&id) {
             continue;
         }
-        let Some(module) = crate::names::module_of(&flat, &a.modules, def.module) else { continue };
+        let Some(module) = a.modules.source(&flat, def.module) else { continue };
         let ast = &module.parsed.ast;
         // The type and const parameters a body sees: of the function, or of
         // the `impl` of an associated `const`; `Self` of an `impl`.
         let owner_generics = || def.owner.map_or(&[][..], |o| a.def(o).generics());
-        let self_ty = def.owner.and_then(|o| match &a.def(o).kind {
-            DefKind::Impl(i) => Some(i.self_ty),
-            _ => None,
-        });
+        let self_ty = a.self_ty_of(id);
         let (body, params, generics): (ExprId, &[Param], &[GenericDef]) = match &def.kind {
             DefKind::Fn(f) => match f.body {
                 Some(b) => (b, fn_params(ast, item), &f.generics),

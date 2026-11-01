@@ -90,26 +90,28 @@ impl Walker<'_> {
         })
     }
 
-    /// What the record of a callee is ([`Called`]).
+    /// What the record of a callee is ([`Called`]): of the kind of its name
+    /// at the callee ([`NameKind::at_callee`]); a local is a value.
     pub(super) fn called(&self, r: &PathRes) -> Called {
         let a = self.a;
-        match r {
-            PathRes::Local(_) | PathRes::ConstParam(_) => Called::Value,
-            PathRes::BuiltinAssoc { ty, name, .. } if crate::builtin::has_assoc_const(&a.types, *ty, name) => {
-                Called::Value
-            }
-            PathRes::BuiltinAssoc { .. } => Called::Item,
-            PathRes::Item { entity, .. } => match NameKind::of(*entity, &a.defs) {
-                Some(k) if k.at_callee(false) == Callee::Flow => match *entity {
-                    Entity::Def(d) | Entity::Member(d) => Called::Flow(d),
-                    _ => Called::Other,
-                },
-                Some(NameKind::Function) => Called::Item,
-                Some(NameKind::Constant) => Called::Value,
-                Some(NameKind::Variant) if unit_variant(a, *entity) => Called::UnitVariant,
-                Some(NameKind::Variant) => Called::Item,
-                _ => Called::Other,
+        let (kind, entity) = match r {
+            PathRes::Local(_) => return Called::Value,
+            PathRes::ConstParam(_) => (NameKind::ConstParam, None),
+            PathRes::BuiltinAssoc { ty, name, .. } => match crate::builtin::has_assoc_const(&a.types, *ty, name) {
+                true => (NameKind::Constant, None),
+                false => (NameKind::Function, None),
             },
+            PathRes::Item { entity, .. } => match NameKind::of(*entity, &a.defs) {
+                Some(k) => (k, Some(*entity)),
+                None => return Called::Other,
+            },
+            _ => return Called::Other,
+        };
+        match (kind.at_callee(false), entity) {
+            (Callee::Flow, Some(Entity::Def(d) | Entity::Member(d))) => Called::Flow(d),
+            (Callee::Value, _) => Called::Value,
+            (Callee::Called, Some(e)) if kind == NameKind::Variant && unit_variant(a, e) => Called::UnitVariant,
+            (Callee::Called, _) => Called::Item,
             _ => Called::Other,
         }
     }

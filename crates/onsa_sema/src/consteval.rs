@@ -28,7 +28,7 @@ pub enum ConstValue {
 }
 
 pub(crate) fn eval(ck: &mut Checker<'_>, e: ExprId) -> Option<ConstValue> {
-    let expr = ck.ast_expr(e);
+    let expr = ck.expr(e);
     match &expr.kind {
         ExprKind::Lit(Lit::Int { value, .. }) => Some(ConstValue::Int(*value as i128)),
         ExprKind::Lit(Lit::Float { text }) => match ck.ty(ck.shallow(ck.body_type(e)?)) {
@@ -56,7 +56,7 @@ pub(crate) fn eval(ck: &mut Checker<'_>, e: ExprId) -> Option<ConstValue> {
         ExprKind::Array(elems) => elems.iter().map(|&x| eval(ck, x)).collect::<Option<Vec<_>>>().map(ConstValue::Array),
         ExprKind::Repeat { elem, len } => {
             let v = eval(ck, *elem)?;
-            let n = match ck.body_type(*len).and_then(|_| match &ck.ast_expr(*len).kind {
+            let n = match ck.body_type(*len).and_then(|_| match &ck.expr(*len).kind {
                 ExprKind::Lit(Lit::Int { value, .. }) => Some(*value as usize),
                 _ => None,
             }) {

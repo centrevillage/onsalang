@@ -9,7 +9,7 @@ use onsa_diag::{Edit, Fix, Span};
 use onsa_syntax::ast::{Ident, Path, Vis};
 
 use crate::def::{Declared, Def, DefKind, ModId};
-use crate::resolve::{Builtin, DepTarget, Entity, Modules, NameKind, ResolveError, UseAt, UseBinding};
+use crate::resolve::{Builtin, DepTarget, Entity, Modules, NameKind, Owner, ResolveError, UseAt, UseBinding};
 
 /// The tables a path outside a `use` reads after its head.
 pub(crate) type Names<'a> = (&'a HashMap<String, Entity>, &'a [Def], &'a HashMap<BuiltinTy, TyId>);
@@ -305,7 +305,7 @@ impl Modules {
         if self.visible(crate::resolve::narrower(member.vis, ty.vis), ty.module, from) {
             return Ok(());
         }
-        let why = self.hidden_why(member.vis, Some(("type", ty)), from);
+        let why = self.hidden_why(member.vis, Some((Owner::Type, ty)), from);
         Err(ResolveError::NotVisible { name: name.name.clone(), span: name.span, defined: member.name_span, why })
     }
 

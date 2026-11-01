@@ -60,8 +60,8 @@ fn join_into(into: &mut Out, from: &Out) {
 /// the bindings in `gens` are not live there. Both walks carry it, the one
 /// that reports and the one that makes a loop's summary, so their states
 /// differ only where the second does not know the state before the loop
-/// (the text of an E0704 at a loop's head, not whether it is one). Every operation
-/// keeps an unreachable state unreachable.
+/// (the text of an E0704 at a loop's head, not whether it is one). Every
+/// operation keeps an unreachable state unreachable.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(super) struct Delta {
     reach: bool,

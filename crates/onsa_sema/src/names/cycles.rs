@@ -21,7 +21,7 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use crate::def::ModId;
 use crate::resolve::{Dep, DepTarget, Entity, Modules};
 use crate::sig::Sema;
-use crate::{Analysis, DefId, Module, Package};
+use crate::{Analysis, DefId, Package};
 
 /// The edges of the graph of the dependencies of the `use`, by point: the
 /// module `m` is the point `m`, and S(m) the point `N + m`.
@@ -238,17 +238,10 @@ impl<'p> Sema<'p> {
     }
 }
 
-/// The source of the module `m`: none of a directory alone and of a
-/// package root.
-pub(crate) fn module_of<'p>(flat: &[&'p Package], modules: &Modules, m: ModId) -> Option<&'p Module> {
-    let info = modules.get(m);
-    flat.get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
-}
-
 /// The key of the file of `m` in the order of the diagnostics: the path
 /// of the file in its package (S-313).
 pub(crate) fn file_key(flat: &[&Package], modules: &Modules, m: ModId) -> String {
-    match module_of(flat, modules, m) {
+    match modules.source(flat, m) {
         Some(module) => format!("{}.onsa", module.segments.join("/")),
         None => String::new(),
     }

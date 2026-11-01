@@ -103,7 +103,7 @@ impl<'a> Checker<'a> {
             }
             PatKind::Struct { path, fields, rest } => {
                 let mut bound: Vec<(usize, P)> = Vec::new();
-                let Some(count) = self.struct_pattern(
+                let count = self.struct_pattern(
                     Stage::Types,
                     span,
                     ty,
@@ -113,11 +113,7 @@ impl<'a> Checker<'a> {
                         bound.extend(i.map(|i| (i, sub)));
                         Ok(())
                     },
-                )?
-                else {
-                    // A struct that is not known covers what it may (R-271).
-                    return Ok(P::Wild);
-                };
+                )?;
                 let mut subs = vec![P::Wild; count];
                 for (i, sub) in bound {
                     subs[i] = sub;
