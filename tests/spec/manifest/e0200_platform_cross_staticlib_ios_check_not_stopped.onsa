@@ -1,0 +1,20 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_cross_staticlib_ios_check_not_stopped"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "staticlib"                           #~ E0200 [t]
+// platform = "aarch64-apple-ios"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// `check` is not stopped by the E0200 of a cross `staticlib` on the other OS of the same architecture: the source
+// is read and its E0401 is reported at its line (§15.3, §18.1; S-837 (1), S-161).
+
+pub fn f() -> I32 {
+  true  //~ E0401
+}

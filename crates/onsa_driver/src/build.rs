@@ -60,11 +60,15 @@ const ARCHS: &[(u32, &[&str])] = &[
     (4, &["i686", "i586", "i386", "riscv32*", "xtensa", "arm", "armv*", "thumbv*", "wasm32", "mips", "powerpc"]),
 ];
 
-/// The operating systems this version knows: a word in the triple after its
-/// architecture, and the system. `none`, or an `eabi` without `linux`, is no
-/// system (S-824).
+/// The operating systems this version knows: a word of the triple after its
+/// architecture, and the system; a word `none` is no system (S-824, S-837).
 const SYSTEMS: &[(&str, &str)] =
-    &[("darwin", "macos"), ("apple", "macos"), ("linux", "linux"), ("windows", "windows"), ("freebsd", "freebsd")];
+    &[("darwin*", "macos"), ("apple", "macos"), ("linux*", "linux"), ("windows*", "windows"), ("freebsd*", "freebsd")];
+
+/// `word` is `name`, or starts with it when `name` ends in `*`.
+fn word_is(word: &str, name: &str) -> bool {
+    name.strip_suffix('*').map_or(word == name, |head| word.starts_with(head))
+}
 
 /// The note of a platform this version does not know (S-824): what
 /// [`platform`] knows.
@@ -72,8 +76,9 @@ pub fn platforms_note() -> String {
     let archs: Vec<String> = ARCHS.iter().flat_map(|(_, a)| a.iter()).map(|a| format!("`{a}`")).collect();
     let systems: Vec<String> = SYSTEMS.iter().map(|(w, _)| format!("`{w}`")).collect();
     format!(
-        "a platform is `\"host\"` or a triple `<arch>-<vendor>-<os>[-<abi>]`; this version knows the architectures \
-         {} (`*`: any end) and the systems `none` (also an `eabi` without `linux`), {}",
+        "a platform is `\"host\"` or a target triple, read by its words between `-`: the first word is the \
+         architecture, one of {}; a later word `none` is no operating system, else a later word is the system, \
+         one of {} (`*`: the word may go on, as `darwin25.4.0`)",
         archs.join(", "),
         systems.join(", ")
     )
@@ -86,15 +91,14 @@ pub fn platform(triple: &str) -> Result<Platform, String> {
     if parts.len() < 2 {
         return Err(format!("`{triple}` is not a target triple (`<arch>-<vendor>-<os>[-<abi>]`)"));
     }
-    let arch = parts[0].to_string();
-    let rest = parts[1..].join("-");
-    let known = |a: &str| a.strip_suffix('*').map_or(arch == a, |head| arch.starts_with(head));
-    let Some(&(ptr_size, _)) = ARCHS.iter().find(|(_, a)| a.iter().any(|a| known(a))) else {
+    let (arch, words) = (parts[0].to_string(), &parts[1..]);
+    let rest = words.join("-");
+    let Some(&(ptr_size, _)) = ARCHS.iter().find(|(_, a)| a.iter().any(|a| word_is(&arch, a))) else {
         return Err(format!("unknown architecture `{arch}` in `{triple}`"));
     };
-    let bare = rest.contains("none") || rest.contains("eabi") && !rest.contains("linux");
+    let bare = words.contains(&"none");
     let msvc = rest.contains("msvc");
-    let os = match SYSTEMS.iter().find(|(w, _)| rest.contains(w)) {
+    let os = match SYSTEMS.iter().find(|(name, _)| words.iter().any(|w| word_is(w, name))) {
         _ if bare => "none".to_string(),
         Some((_, os)) => os.to_string(),
         None => return Err(format!("unknown operating system in `{triple}`")),
@@ -117,10 +121,10 @@ pub fn platform(triple: &str) -> Result<Platform, String> {
 }
 
 impl Platform {
-    /// The compiler runs on this platform (so `cc` can build for it).
+    /// The compiler runs on this platform (so `cc` can build for it): its
+    /// triple is the host's, letter for letter (§15.3, S-837).
     pub fn is_host(&self) -> bool {
-        let host = platform(&host_triple()).ok();
-        host.is_some_and(|h| h.arch == self.arch && h.os == self.os)
+        self.triple == host_triple()
     }
 }
 
@@ -725,9 +729,47 @@ mod tests {
         assert!(p.cflags.iter().any(|f| f == "-mfpmath=sse"));
         let p = platform("x86_64-pc-windows-msvc").unwrap();
         assert!(p.msvc && p.cflags.iter().any(|f| f == "/fp:strict"));
-        assert!(platform("host").unwrap().is_host());
         assert!(platform("sparc-sun-solaris").is_err());
         assert!(platform("nonsense").is_err());
+    }
+
+    /// S-837 (1): the host is `"host"` and its triple letter for letter; another
+    /// spelling of the machine, another system on it or a versioned system is
+    /// not (none of them is a triple `host_triple` gives, on any machine).
+    #[test]
+    fn host_is_its_triple() {
+        assert!(platform("host").unwrap().is_host());
+        assert!(platform(&host_triple()).unwrap().is_host());
+        for t in ["arm64-apple-darwin", "aarch64-apple-ios", "aarch64-apple-darwin25.4.0"] {
+            assert_ne!(t, host_triple());
+            assert!(!platform(t).unwrap().is_host(), "{t}");
+        }
+    }
+
+    /// S-837 (B'): the words between `-` give the system: a word `none` is no
+    /// system, a system word may go on, `apple` is a whole word, and `none` or
+    /// a system inside another word is not read.
+    #[test]
+    fn systems_by_words() {
+        let read = |t: &str| platform(t).map(|p| (p.hosted, p.os));
+        let macos = Ok((true, "macos".to_string()));
+        assert_eq!(read("aarch64-nonexistent-apple-darwin"), macos);
+        assert_eq!(read("aarch64-apple-darwin25.4.0"), macos);
+        assert_eq!(read("aarch64-apple-ios"), macos);
+        assert_eq!(read("x86_64-unknown-linux-gnu"), Ok((true, "linux".to_string())));
+        for (t, os) in [
+            ("x86_64-unknown-linux6-gnu", "linux"),
+            ("x86_64-pc-windows11", "windows"),
+            ("x86_64-unknown-freebsd14", "freebsd"),
+        ] {
+            assert_eq!(read(t), Ok((true, os.to_string())), "{t}");
+        }
+        for t in ["x86_64-unknown-linux-none", "thumbv7em-none-eabihf", "riscv32imac-unknown-none-elf"] {
+            assert_eq!(read(t), Ok((false, "none".to_string())), "{t}");
+        }
+        for t in ["arm-unknown-eabi", "aarch64-applex-ios", "aarch64-xdarwin", "aarch64-nonelinux"] {
+            assert!(read(t).is_err(), "{t}");
+        }
     }
 
     #[test]

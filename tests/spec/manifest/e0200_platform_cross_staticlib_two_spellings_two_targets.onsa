@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_cross_staticlib_two_spellings_two_targets"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "staticlib"                           #~ E0200 [a]
+// platform = "arm64-apple-darwin"
+//
+// [targets.b]
+// kind = "staticlib"                           #~ E0200 [b]
+// platform = "aarch64-apple-darwin25.4.0"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the cross check is made for each target on its own, so two `staticlib` targets that are cross by two
+// different spellings are two reports, each in the build of its own target, at its own `kind` (§15.3, §18.1;
+// S-837 (1), S-161).
+
+pub fn f() -> I32 { 1 }

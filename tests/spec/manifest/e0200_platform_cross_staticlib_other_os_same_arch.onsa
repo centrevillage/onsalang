@@ -1,0 +1,20 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_cross_staticlib_other_os_same_arch"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "staticlib"                           #~ E0200 [t]
+// platform = "aarch64-apple-ios"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E0200: a different OS on the same architecture is cross, so the `staticlib` for it is the E0200 of the build
+// of `t`, at the value of `kind` (§15.3 paragraph on the toolchain: "同じ機械の上の別の OS (`aarch64-apple-ios`)
+// はクロスである"; S-837 (1), S-161). Whatever the machine, `aarch64-apple-ios` is not the triple that "host"
+// names.
+
+pub fn f() -> I32 { 1 }

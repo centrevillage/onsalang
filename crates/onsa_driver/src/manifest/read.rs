@@ -378,7 +378,10 @@ impl<'s> Reader<'s> {
                 .diagnostic(Stage::Manifest, self.span(p.span.clone()), &[&p.value])
                 .with_rule(crate::build::platforms_note()),
             Ok(t) if !t.is_host() && supported && table::TOOLCHAIN.contains(&k) => {
-                Feature::ManifestCross.diagnostic(Stage::Manifest, self.span(kind.span.clone()), &[k, &p.value])
+                let host = crate::build::host_triple();
+                Feature::ManifestCross
+                    .diagnostic(Stage::Manifest, self.span(kind.span.clone()), &[k, &p.value])
+                    .with_rule(format!("the host is `\"host\"`, or its triple written letter for letter: `{host}`"))
             }
             Ok(_) => return,
         };

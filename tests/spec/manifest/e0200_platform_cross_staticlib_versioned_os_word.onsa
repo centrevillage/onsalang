@@ -1,0 +1,19 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_cross_staticlib_versioned_os_word"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "staticlib"                           #~ E0200 [t]
+// platform = "aarch64-apple-darwin25.4.0"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the `-dumpmachine` form of a triple (the OS word carries a version) is a triple this version tells, but
+// it is not the string that "host" names, so the `staticlib` for it is cross: the E0200 of the build of `t`, at
+// the value of `kind` (§15.3 paragraph on the toolchain; S-837 (1)).
+
+pub fn f() -> I32 { 1 }

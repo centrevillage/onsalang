@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e0200_platform_cross_staticlib_other_target_host_builds"
+// edition = "2026"
+//
+// [targets.a]
+// kind = "staticlib"                           #~ E0200 [a]
+// platform = "aarch64-apple-ios"
+//
+// [targets.b]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+//
+// [test]
+// spec = ["§15.3", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E0200: the target `b` has no marker, so its build is expected to have no diagnostic; the cross `staticlib` of
+// `a` does not touch it (§15.3, §18.1; S-837 (1), S-161).
+
+pub fn f() -> I32 { 1 }
