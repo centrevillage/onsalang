@@ -374,7 +374,7 @@ codes! {
         "value used after it was moved";
     E0710 = 710, Modes, [Types, Modes], Optional, Optional,
         "second-class value used outside an argument position";
-    E0711 = 711, Modes, [Types, Modes], Optional, Optional,
+    E0711 = 711, Modes, [Modes], Optional, Optional,
         "borrowed Affine value passed as `move`";
     E0712 = 712, Modes, [Modes], Optional, Optional,
         "closure cannot capture this value";

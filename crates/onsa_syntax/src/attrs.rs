@@ -162,8 +162,19 @@ pub struct Written<'a> {
     pub arguments: Vec<(Span, &'a str)>,
 }
 
+/// The rule of the table: the note of its E0005 ([`RULE`]) and the end of
+/// the note of a `#[…]` of other languages (`foreign::rows`), as a literal
+/// that `concat!` takes. A test checks that it names the attributes of
+/// [`ATTRIBUTES`].
+macro_rules! attributes_rule {
+    () => {
+        "the attributes are `@repr(c)` on a struct, `@fp(relaxed)` on a fn or a flow, `@param(…)` on an input of a flow, `@mem(bulk)` on a `let` and `@export` on a fn or a flow of the top level, and no others (§6.5)"
+    };
+}
+pub(crate) use attributes_rule;
+
 /// The rule of the table (the note of its E0005).
-const RULE: &str = "the attributes are `@repr(c)` on a struct, `@fp(relaxed)` on a fn or a flow, `@param(…)` on an input of a flow, `@mem(bulk)` on a `let` and `@export` on a fn or a flow of the top level, and no others (§6.5)";
+pub(crate) const RULE: &str = attributes_rule!();
 
 /// The E0005 of the attribute `w` at `place`, if the table refuses it: a name
 /// out of the table, a place it cannot be attached to, a value out of its

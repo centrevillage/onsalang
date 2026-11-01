@@ -12,13 +12,18 @@ use super::place::{Place, Proj, place_of};
 use super::walk::Pos;
 use crate::Kind;
 use crate::binding::Bind;
-use crate::body::{LocalId, MOVE_NEEDS_A_PLACE, Target, view_base};
+use crate::body::{LocalId, Target, view_base};
 use crate::sig::second_class;
 use crate::ty::{BuiltinTy, Ty, TyId};
 
 /// S-784, S-785: at `?` and a `move self` receiver, how to read the value
 /// instead.
 const EXTRACT: &str = "`?` and a `move self` receiver consume their operand (§5.2, §9.1): read it with `match` instead, or own it (a `move` parameter)";
+
+/// The E0711 of `move` on a value that is no place (§5.2, R-198), wherever
+/// it stands ([`Walker::needs_a_place`]).
+pub(super) const MOVE_NEEDS_A_PLACE: &str =
+    "`move` needs a place (a variable or its field); other values are already owned by the expression";
 
 /// S-190: what keeps a function value instead.
 const KEEP_FN: &str = "to keep a function value, declare the parameter `move f: fn(...)`; it then takes function values with no captures (§5.2)";

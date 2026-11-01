@@ -728,11 +728,6 @@ pub(crate) fn starts_at_local(ast: &Ast, names: &crate::names::body::BodyNames, 
     matches!(names.paths.get(&cur), Some(PathRes::Local(_)))
 }
 
-/// The E0711 of `move` on a value that is no place (§5.2, R-198), wherever
-/// it stands: the types stage's and the modes stage's.
-pub(crate) const MOVE_NEEDS_A_PLACE: &str =
-    "`move` needs a place (a variable or its field); other values are already owned by the expression";
-
 /// The E0714 of `!` on a call of no `inout self` method (§5.2), wherever it
 /// stands: the types stage's, the flow stage's and the modes stage's.
 pub(crate) const BANG_ON_NO_INOUT_SELF: &str = "`!` marks `inout self` method calls only (§5.2)";

@@ -35,8 +35,12 @@ const BLOCK_COMMENT_RULE: &str =
 /// The rule of the forms of type arguments in an expression (the note, §4.5).
 const TYPE_ARGS_RULE: &str = "a type argument in an expression is written after the name, `name::[T]` (`id::[U8](250)`); a `[` alone is an index (§4.5)";
 
-/// The rule of the attributes of other languages (§6.4, §6.5).
-const HASH_ATTRIBUTE_RULE: &str = "an attribute is written `@name(...)`, and the attributes are `@repr`, `@fp`, `@param` and `@mem`; the traits derived from a type are written at the head of its declaration, `: Trait + Trait` (§6.4, §6.5)";
+/// The rule of the attributes of other languages (§6.4, §6.5): the
+/// attributes are those of the table ([`crate::attrs::RULE`]).
+const HASH_ATTRIBUTE_RULE: &str = concat!(
+    "an attribute is written `@name(...)`, and the traits derived from a type are written at the head of its declaration, `: Trait + Trait` (§6.4); ",
+    crate::attrs::attributes_rule!()
+);
 
 /// The rule of the tuple structs (§4.4).
 const TUPLE_STRUCT_RULE: &str = "there are no tuple structs (newtypes); a struct has named fields, and a value told apart by its type is a struct with one field, made by a function (`Q.new(x)`, §4.4)";
@@ -1030,8 +1034,6 @@ pub static ROWS: &[Row] = &[
 /// The rows of the data file that no work has made yet (the later works
 /// of W3 to W7; [`Waiting`]).
 pub static WAITING: &[Waiting] = &[
-    Waiting { name: "item_dot_call", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "indexed_value_call", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "field_call", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "float_constant_pattern", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },

@@ -1108,7 +1108,7 @@ fn one_message_for_a_move_on_no_place() {
     let modes = messages(
         "pub fn t() uses {Alloc} {\n  take(move mk())\n}\npub fn u() uses {Alloc} {\n  let y = move mk()\n}\n",
     );
-    assert_eq!(modes, [crate::body::MOVE_NEEDS_A_PLACE; 2]);
+    assert_eq!(modes, [super::consume::MOVE_NEEDS_A_PLACE; 2]);
 }
 
 /// A `var` declared in a block of a loop and left by `break` (memo 1.3:

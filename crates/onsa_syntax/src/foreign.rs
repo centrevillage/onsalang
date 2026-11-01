@@ -430,6 +430,23 @@ impl Matcher {
     }
 }
 
+/// Declares [`RowId`] and [`RowId::ALL`] from one list, so that a variant
+/// with no row in [`ROWS`] is found by a test, not at its first report.
+macro_rules! row_ids {
+    ($(#[$meta:meta])* pub enum RowId { $($variant:ident,)* }) => {
+        $(#[$meta])*
+        pub enum RowId {
+            $($variant,)*
+        }
+
+        impl RowId {
+            /// Every row, in the order of its declaration.
+            pub const ALL: &'static [RowId] = &[$(RowId::$variant),*];
+        }
+    };
+}
+
+row_ids! {
 /// The rows the compiler finds. `name` is the row's `id` in
 /// `spec/foreign-forms.toml`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -542,6 +559,7 @@ pub enum RowId {
     ClockOnBinding,
     ClockInType,
     RateAsType,
+}
 }
 
 pub struct Row {

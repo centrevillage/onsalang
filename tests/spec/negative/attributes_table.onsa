@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§6.5", "§11.7", "§12.4", "§15.5", "§18.1"]
 
-// E0005: the attributes are `@repr` (a struct), `@fp` (a fn and a flow), `@param` (an input of a flow) and
-// `@mem` (a `let`), and no others (spec §6.5, S-103, S-133). An attribute that is not in the list is E0005
+// E0005: the attributes are `@repr` (a struct), `@fp` (a fn and a flow), `@param` (an input of a flow),
+// `@mem` (a `let`) and `@export` (a fn and a flow of the top level), and no others (spec §6.5, S-103, S-133). An attribute that is not in the list is E0005
 // (`@deprecated` too: it is defined when it is needed, §6.5), and so is an attribute in a place it cannot
 // be put in. The conditions inside the places and the values of `@param` and `@mem` have the codes of their own
 // (E0809, E0818), and the values of `@repr` and `@fp` are in fixes/e0005_attribute_values.onsa. The old

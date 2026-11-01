@@ -7,7 +7,7 @@
 
 use onsa_diag::{Code, FileId};
 
-use crate::foreign::{ROWS, RowId};
+use crate::foreign::{ROWS, RowId, WAITING};
 
 fn parse(src: &str) -> crate::Parsed {
     crate::parse(FileId(0), src)
@@ -62,6 +62,27 @@ fn the_rows_have_distinct_names_and_codes_of_their_kind() {
         assert!(r.rule.contains('§'), "{}: the rule names its section", r.name);
     }
     assert_eq!(crate::foreign::row(RowId::Semicolon).name, "semicolon");
+}
+
+/// A row is made (`ROWS`) or waits for a later work (`WAITING`), not both:
+/// a row moved into `ROWS` leaves `WAITING` (the module's documentation).
+#[test]
+fn no_row_is_both_made_and_waiting() {
+    assert!(!WAITING.is_empty() && !ROWS.is_empty());
+    for w in WAITING {
+        assert!(ROWS.iter().all(|r| r.name != w.name), "{} is in ROWS and WAITING", w.name);
+    }
+}
+
+/// Every `RowId` has its row in `ROWS` (one, by the test above), so that
+/// [`crate::foreign::row`] finds it: a row a later stage reports
+/// (`Detect::Reported`) has no matcher to tell that it is missing.
+#[test]
+fn every_row_id_has_its_row() {
+    for &id in RowId::ALL {
+        assert!(ROWS.iter().any(|r| r.id == id), "{id:?} has no row in ROWS");
+    }
+    assert_eq!(RowId::ALL.len(), ROWS.len());
 }
 
 /// A row of a later stage found with no candidate keeps its E0020 (§18.1,
@@ -341,6 +362,23 @@ fn a_derive_notes_the_kinds_it_leaves_out() {
         let mut want = vec![crate::foreign::row(RowId::HashAttribute).rule];
         want.extend(left_out.then_some(kinds));
         assert_eq!(rules, want, "{src}");
+    }
+}
+
+/// The rule of the attributes names those of the table and no others (§6.5),
+/// and the note of a `#[…]` ends with it.
+#[test]
+fn the_rule_of_the_attributes_names_the_table() {
+    use crate::attrs::{ATTRIBUTES, RULE};
+    let named: Vec<&str> = RULE
+        .split("`@")
+        .skip(1)
+        .map(|s| s.split(|c: char| !c.is_ascii_alphanumeric() && c != '_').next().unwrap_or(""))
+        .collect();
+    let table: Vec<&str> = ATTRIBUTES.iter().map(|a| a.name).collect();
+    assert_eq!(named, table);
+    for id in [RowId::HashAttribute, RowId::HashAttributeNoCandidate, RowId::HashAttributeUnfixable] {
+        assert!(crate::foreign::row(id).rule.ends_with(RULE), "{id:?}");
     }
 }
 
