@@ -284,7 +284,7 @@
 [allow."crates/onsa_sema/src/rt.rs"]
 "zeroed" = 1
 
-[allow."crates/onsa_sema/src/sig.rs"]
+[allow."crates/onsa_sema/src/sig/derives.rs"]
 "Default" = 1
 "Eq" = 1
 "Hash" = 1
@@ -293,7 +293,6 @@
 "PartialEq" = 1
 "PartialOrd" = 1
 "Show" = 1
-"U32" = 1
 
 [allow."crates/onsa_sema/src/sig/generated.rs"]
 "BULK_SIZE" = 1
@@ -311,6 +310,9 @@
 "render" = 1
 "reset" = 1
 "sample_rate" = 2
+
+[allow."crates/onsa_sema/src/sig/heading.rs"]
+"U32" = 1
 
 [allow."crates/onsa_sema/src/ty.rs"]
 "Alloc" = 1

@@ -133,7 +133,7 @@ impl Analysis {
         self_ty: Option<TyId>,
     ) -> Result<(Entity, Option<TyId>), ResolveError> {
         let head = &path.segments[0];
-        if head.name == "Self" {
+        if super::is_self_type(&head.name) {
             let Some(t) = self_ty else { return Err(ResolveError::SelfOutsideImpl { span: head.span }) };
             return self.type_namespace(t).map(|ns| (ns, Some(t))).ok_or(ResolveError::Failed);
         }

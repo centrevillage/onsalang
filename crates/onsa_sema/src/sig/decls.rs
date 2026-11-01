@@ -205,7 +205,7 @@ impl Graph<'_> {
     fn resolve(&self, w: &From, p: &Path) -> Option<Entity> {
         let a = self.a;
         let ([head, rest @ ..], Some(this)) = (&p.segments[..], w.this) else { return a.resolve_path(w.m, p).ok() };
-        if head.name != "Self" {
+        if !crate::names::is_self_type(&head.name) {
             return a.resolve_path(w.m, p).ok();
         }
         let table = match this {

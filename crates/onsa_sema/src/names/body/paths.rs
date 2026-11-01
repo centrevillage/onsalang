@@ -96,9 +96,9 @@ impl<'a> Walker<'a> {
         if let Some(b) = self.lookup(head) {
             return (vec![PathRes::Local(b)], None);
         }
-        if head.name == "self" {
+        if head.name == crate::names::SELF_VALUE {
             let d = Diagnostic::new(Stage::Names, Code::E0302, head.span, "`self` is only available inside a method");
-            return (Vec::new(), Some(Fail::Report(d.with_found("self"))));
+            return (Vec::new(), Some(Fail::Report(d.with_found(crate::names::SELF_VALUE))));
         }
         match self.heading(head) {
             Some(r @ PathRes::ConstParam(_)) => return (vec![r], None),

@@ -9,7 +9,10 @@
 //! (`generated`), then the `use` of an item a flow does not generate
 //! ([`Sema::fail_ungenerated`]). The parts are in a module each, an `impl` of
 //! `Sema`: `types` (the types, also those written in a body), `flow_sig` and
-//! `generated`.
+//! `generated`; and of the lowering of a def, `heading` (the lists of
+//! parameters with their bounds, the values a heading binds and the effect
+//! rows), `derives` (the traits at the head of a struct or an enum) and
+//! `impls` (an inherent `impl`, and `impl Copy` and `impl Dup`).
 
 use std::collections::{HashMap, HashSet};
 
@@ -30,14 +33,20 @@ use crate::ty::*;
 use crate::{Analysis, Module, Package, flatten};
 mod bound_list;
 mod decls;
+mod derives;
 mod flow_sig;
 mod generated;
+mod heading;
+mod impls;
 mod types;
 mod wellformed;
 
 use flow_sig::FlowHeading;
+use heading::{heading_locals, kind_error, local_member};
 
 pub(crate) use decls::{Decls, item_kind};
+pub(crate) use derives::kind_constraint;
+pub(crate) use heading::read_effects;
 pub(crate) use types::lower_type_in_body;
 pub(crate) use wellformed::{Pos, second_class};
 
@@ -86,6 +95,11 @@ impl Cx<'_> {
     /// Whether `name` is one of [`Self::locals`], a value (S-729).
     fn is_local(&self, name: &str) -> bool {
         self.locals.contains(name)
+    }
+
+    /// The parameter in scope named `name`: its index in [`Self::generics`].
+    fn param(&self, name: &str) -> Option<usize> {
+        self.generics.iter().position(|g| g.name == name)
     }
 
     /// What a constant expression reads with ([`crate::constarg::expr`]).
@@ -313,178 +327,11 @@ impl<'p> Sema<'p> {
             }
             // A constant is lowered in the order of the declarations.
             ItemKind::OpaqueType { .. } | ItemKind::Const(_) => {}
-            ItemKind::Impl(i) => {
-                if i.trait_.is_some() {
-                    if let Some(dup) = i.trait_.as_ref().and_then(kind_constraint) {
-                        self.copy_impl(&cx, item_id, i, dup);
-                    }
-                    return None;
-                }
-                let cx = self.impl_cx(cx, i);
-                let aliased = self.alias_impl(&cx, i.self_ty);
-                let self_ty = cx.self_ty.unwrap_or_else(|| self.a.types.error());
-                let (fns, consts) = match &self.a.defs[id.0 as usize].kind {
-                    DefKind::Impl(imp) => (imp.fns.clone(), imp.consts.clone()),
-                    _ => unreachable!(),
-                };
-                if let DefKind::Impl(imp) = &mut self.a.defs[id.0 as usize].kind {
-                    imp.generics = cx.generics.clone();
-                    imp.self_ty = self_ty;
-                }
-                let (key_def, key_builtin) = self.member_key(id).unwrap_or((None, None));
-                // The E0307 of an alias is the error of the heading.
-                if !aliased {
-                    self.impl_heading(&cx, i, self_ty, key_def.is_some() || key_builtin.is_some());
-                }
-                // A name the heading reads and the check does not (§18.1,
-                // S-689): the members are checked, and read it too (an unknown
-                // bound of their generics, an error type of `self`).
-                let held = self.a.read_held.contains(&id);
-                // The members are named before, with their E0304
-                // (`Sema::name_members`), and a constant lowered in the order
-                // of the declarations.
-                for &sub in fns.iter().chain(&consts) {
-                    if held {
-                        self.a.read_held.insert(sub);
-                    }
-                    let sub_item = self.a.defs[sub.0 as usize].item.unwrap();
-                    let reach = self.type_vis((key_def, key_builtin)).map(|t| self.member_reach(&cx, sub, t));
-                    if let ItemKind::Fn(f) = &cx.ast.item(sub_item).kind {
-                        self.lower_fn(Cx { def: sub, reach, ..cx_clone(&cx) }, sub, f);
-                    }
-                }
-            }
+            ItemKind::Impl(i) => self.lower_impl(cx, id, item_id, i),
             ItemKind::Test { .. } => {}
             _ => {}
         }
         None
-    }
-
-    /// The context of the members of the inherent `impl` `i` (its `cx`): its
-    /// generics, and its type as `Self` (§2.2). Its heading has no
-    /// visibility (§15.1).
-    fn impl_cx(&mut self, cx: Cx<'p>, i: &ImplDecl) -> Cx<'p> {
-        let mut cx = Cx { reach: None, ..cx };
-        cx.generics = self.lower_generics(&cx, &i.generics);
-        cx.self_ty = Some(self.lower_type(&cx, i.self_ty));
-        cx
-    }
-
-    /// E0307 for the type `self_ty` of the inherent `impl` `i` written as it
-    /// may not be (§6.3): with no name of a declaration (`keyed` false: a
-    /// tuple, an array, `()`, a function type, a parameter; §4.4, R-320), or
-    /// with type arguments other than the parameters of the `impl`, each
-    /// once in any order (a concrete or compound type, one twice, one left
-    /// out; §6.2, S-137), judged as written, of a target of the error type
-    /// too. Arguments with an error of a name (its E0302, a name held, §18.1)
-    /// are not judged; one of the types stage (an E0417, a length this version
-    /// does not compute) is no parameter, and the E0307 of the names stage
-    /// comes first.
-    fn impl_heading(&mut self, cx: &Cx<'p>, i: &ImplDecl, self_ty: TyId, keyed: bool) {
-        let target = cx.ast.ty(i.self_ty);
-        let shown = one_line(&src(cx, target.span));
-        let named = self.reported.get(&cx.def).is_some_and(|&at| self.a.diagnostics[at].stage != Stage::Types);
-        let named = named || self.a.read_held.contains(&cx.def);
-        // A scalar (`impl F32`) has no arguments.
-        let (head, written): (_, &[TypeId]) = match &target.kind {
-            TypeKind::Path { path, args } => (self.a.resolve_path(cx.m, path).ok(), args),
-            _ => (None, &[]),
-        };
-        // An opaque type of `extern` is not judged.
-        let opaque = matches!(head, Some(Entity::Def(d))
-            if matches!(self.a.def(d).kind, DefKind::Unsupported(Declared::Type | Declared::Block)));
-        // A target whose own count of arguments is not the declared one is
-        // only its E0412 (§4.5, S-759 (2')): its arguments are not judged.
-        let miscounted = head.and_then(|e| self.declared_params(e)).is_some_and(|p| p.len() != written.len());
-        let types = &self.a.types;
-        let failed = match types.get(self_ty) {
-            Ty::Named(_, args) | Ty::Builtin(_, args) => args.iter().any(|&t| types.has_error(t)),
-            t => matches!(t, Ty::Error),
-        };
-        if (named && failed) || opaque || miscounted {
-            return;
-        }
-        // The parameter of the `impl` an argument is: its name alone (`T`, not `T[I32]`).
-        let param = |a: TypeId| match &cx.ast.ty(a).kind {
-            TypeKind::Path { path, args } if args.is_empty() && path.segments.len() == 1 => {
-                cx.generics.iter().position(|g| g.name == path.segments[0].name)
-            }
-            _ => None,
-        };
-        let mut seen = vec![false; cx.generics.len()];
-        let wrong = written.iter().position(|&a| param(a).is_none_or(|p| std::mem::replace(&mut seen[p], true)));
-        let (span, what) = match (keyed, wrong, seen.iter().position(|s| !s)) {
-            (false, ..) => (target.span, format!("`{shown}` is not the name of a type declaration")),
-            (true, Some(k), _) => {
-                let at = cx.ast.ty(written[k]).span;
-                let twice = param(written[k]).is_some();
-                let how = if twice { "is written twice" } else { "is not a parameter of the `impl`" };
-                (at, format!("`{}` {how}", one_line(&src(cx, at))))
-            }
-            (true, None, Some(g)) => {
-                let name = &cx.generics[g].name;
-                (target.span, format!("the parameter `{name}` of the `impl` is not an argument of `{shown}`"))
-            }
-            (true, None, None) => return,
-        };
-        let rule = "the type of an `impl` is the name of its declaration, with the parameters of the `impl` as its arguments, each once (§4.4, §6.2)";
-        let d = Diagnostic::new(Stage::Names, Code::E0307, span, what).with_found(src(cx, span)).with_rule(rule);
-        self.report(cx.def, d);
-    }
-
-    /// `impl Copy for X` and `impl Dup for X` (E0020, `copy_impl`, §4.6,
-    /// S-140), at the form (§18.1: from `impl` to its type). The candidate
-    /// takes the whole `impl` out with its doc comments and attributes (the
-    /// start of its unit, §18.1), and the note names a field of `X` that does
-    /// not meet the constraint ([`Sema::name_non_copy_fields`]). No note when
-    /// `X` names no struct or enum (its own error goes with the `impl`).
-    fn copy_impl(&mut self, cx: &Cx<'p>, item: onsa_syntax::ast::ItemId, i: &ImplDecl, dup: bool) {
-        let span = cx.ast.item(item).span;
-        let units = self.module(cx.m).map(|m| &m.parsed.units);
-        let unit = units.and_then(|us| us.of(span).map(|u| us.list[u].span.start));
-        let fix = Fix::delete("remove the `impl`", Span { start: unit.unwrap_or(span.start), ..span });
-        let form = Span { end: cx.ast.ty(i.self_ty).span.end, ..span };
-        let Some(at) = self.keep(cx.def, foreign::report(RowId::CopyImpl, cx.text, form, vec![fix])) else { return };
-        let TypeKind::Path { path, .. } = &cx.ast.ty(i.self_ty).kind else { return };
-        if let Ok(Entity::Def(t)) = self.a.resolve_path(cx.m, path)
-            && matches!(self.a.def(t).kind, DefKind::Struct(_) | DefKind::Enum(_))
-        {
-            self.kind_heads.push((at, t, dup));
-        }
-    }
-
-    /// E0307 for an `impl` whose type `t` names a type alias (§4.4, S-91,
-    /// R-105): the methods of a type are found by the name of its
-    /// declaration. The candidate is the name of the type it stands for when
-    /// that one is declared in the module, with no type arguments; the `impl`
-    /// is lowered for that type all the same. An alias of the error type is
-    /// an E0307 too, with no candidate: it stays when the alias is fixed, and
-    /// is no use of the error type (§18.1, S-754). Whether `t` names an alias.
-    fn alias_impl(&mut self, cx: &Cx<'p>, t: TypeId) -> bool {
-        let TypeKind::Path { path, .. } = &cx.ast.ty(t).kind else { return false };
-        let Ok(Entity::Def(d)) = self.a.resolve_path(cx.m, path) else { return false };
-        if !matches!(self.a.def(d).kind, DefKind::Alias(_)) {
-            return false;
-        }
-        let ty = self.alias_ty(d);
-        let shown = src(cx, path.span);
-        let mut diag = Diagnostic::new(
-            Stage::Names,
-            Code::E0307,
-            path.span,
-            format!("`{shown}` is a type alias; an `impl` names the type it stands for by its declaration (§4.4)"),
-        )
-        .with_found(shown);
-        if let Ty::Named(orig, args) = self.a.types.get(ty)
-            && args.is_empty()
-            && let def = self.a.def(*orig)
-            && def.module == cx.m
-            && def.owner.is_none()
-        {
-            diag = diag.with_fix(Fix::replace(format!("write `{}`", def.name), path.span, def.name.clone()));
-        }
-        self.report(cx.def, diag);
-        true
     }
 
     /// The associated items of the type of an `impl`: of a user type by its
@@ -495,23 +342,6 @@ impl<'p> Sema<'p> {
             (None, Some(t)) => Some(self.a.modules.assoc_builtin.entry(t).or_default()),
             _ => None,
         }
-    }
-
-    /// How far the member `sub` of an inherent `impl` of a type of `ty_vis`
-    /// reaches: the narrower of its visibility and its type's (§15.1, S-665).
-    /// A `pub` on it wider than the type is redundant (E0020, S-662).
-    // The E0020, reported first, is the one error of the member; an E0303 of
-    // a name in its heading comes once it is fixed (S-698).
-    fn member_reach(&mut self, cx: &Cx<'p>, sub: DefId, ty_vis: Vis) -> Vis {
-        let own = self.a.def(sub).vis;
-        let at = self.a.def(sub).item.and_then(|i| cx.ast.item(i).vis_span);
-        if let (Vis::Pub, Vis::Default | Vis::Priv, Some(at)) = (own, ty_vis, at) {
-            let blanks =
-                cx.text[at.end as usize..].len() - cx.text[at.end as usize..].trim_start_matches([' ', '\t']).len();
-            let fix = Fix::delete("remove `pub`", Span { end: at.end + blanks as u32, ..at });
-            self.report(sub, foreign::report(RowId::ImplMemberPub, cx.text, at, vec![fix]));
-        }
-        crate::resolve::narrower(own, ty_vis)
     }
 
     /// The type of the alias `id`, lowered once in the order of the
@@ -543,149 +373,6 @@ impl<'p> Sema<'p> {
             *t = ty;
         }
         ty
-    }
-
-    fn lower_generics(&mut self, cx: &Cx<'p>, gs: &[GenericParam]) -> Vec<GenericDef> {
-        self.heading_clashes(cx.def, cx.m, gs, &cx.generics);
-        let mut out = cx.generics.clone();
-        // The names of the list, each seen in every bound of it.
-        let listed: Vec<(&str, NameKind)> = gs
-            .iter()
-            .map(|g| (crate::names::param_name(g).name.as_str(), param_kind(g)))
-            .chain(cx.generics.iter().map(|g| (g.name.as_str(), NameKind::of_generic(&g.kind))))
-            .collect();
-        for g in gs {
-            let def = match g {
-                GenericParam::Type { name, bounds } => {
-                    // The bounds read, each with its `?` and its name (S-747).
-                    let mut list = Vec::new();
-                    let mut unknown = false;
-                    // The path of a bound is resolved as any other (§15.1,
-                    // R-278): a trait of the prelude, or a kind constraint; a
-                    // user trait is an E0200 (S-719), a name of another kind
-                    // an E0308 (S-713 (c)).
-                    for b in bounds {
-                        let n = b.path.segments.last().unwrap();
-                        match heading_name(self.a, cx.m, &b.path, (&listed, &cx.locals), cx.self_ty) {
-                            Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => {
-                                list.push((Bound::Dup, true, n.span));
-                            }
-                            // `?` on another trait or kind constraint (S-711).
-                            Ok((NameKind::Trait | NameKind::KindConstraint, _)) if b.relaxed => {
-                                self.report(cx.def, bound_list::relaxed(n));
-                                unknown = true;
-                            }
-                            Ok((_, Some(Entity::Builtin(Builtin::Kind(bound))))) => list.push((bound, false, n.span)),
-                            // A trait this version does not take as a bound
-                            // (E0200; with an E0308 in the unit, the first by
-                            // its place, §18.1, S-731).
-                            Ok((_, Some(Entity::Builtin(Builtin::Trait(i))))) => match TRAITS[i as usize].1 {
-                                Some(bound) => list.push((bound, false, n.span)),
-                                None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
-                            },
-                            Ok((NameKind::Trait, _)) => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
-                            // A bound with an error of its name is a part of the
-                            // declaration not read (§18.1): unknown to its users, its
-                            // implicit `Dup` too (S-768 (1)).
-                            Ok((kind, _)) => {
-                                let d = kind_error(&b.path, kind, "a trait or a kind constraint", b.path.span);
-                                self.report(cx.def, d);
-                                unknown = true;
-                            }
-                            // An unknown bound (§18.1, S-689).
-                            Err(e) if self.a.unread_path(cx.def, cx.m, &b.path, &e) => unknown = true,
-                            Err(e) => {
-                                self.report(cx.def, e.into_diagnostic());
-                                unknown = true;
-                            }
-                        }
-                    }
-                    // A list with a contradiction is unknown to its users (S-747).
-                    unknown |= self.bound_list(cx.def, &list);
-                    let bs = list.iter().filter(|b| !b.1).map(|b| b.0).collect();
-                    let dup = !list.iter().any(|b| b.1);
-                    let kind = GenericKind::Type { bounds: bs, dup, unknown };
-                    GenericDef { name: name.name.clone(), span: name.span, kind }
-                }
-                GenericParam::Const { name, ty } => {
-                    let t = self.lower_type(cx, *ty);
-                    if !matches!(self.a.types.get(t), Ty::Int(IntKind::U32) | Ty::Error) {
-                        self.report(
-                            cx.def,
-                            Feature::ConstGenericKinds
-                                .diagnostic(Stage::Names, cx.ast.ty(*ty).span, &[])
-                                .with_fix(Fix::replace("write `U32`", cx.ast.ty(*ty).span, "U32")),
-                        );
-                    }
-                    GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Const(t) }
-                }
-                GenericParam::Effect { name } => {
-                    GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Effect }
-                }
-            };
-            out.push(def);
-        }
-        out
-    }
-
-    /// The traits at the head of a struct or an enum (§6.4): the closed list
-    /// of the derivable ones ([`DERIVABLE`]); `Hash`, `Show` and `Ordinal` are
-    /// E0200 in this version (S-13, W5-06), a kind constraint is `copy_bound`
-    /// (§4.6) and any other name, or a path of more than one name (S-488),
-    /// E0416. The diagnostics of the names stage go before the E0416 of the
-    /// types stage (§18.1), whatever the order of the list. `None` when the
-    /// list is not known (§18.1, S-460), or holds a name the names stage
-    /// holds as an error.
-    fn lower_derives(&mut self, cx: &Cx<'p>, derives: &Derives) -> Option<Vec<Derive>> {
-        let Derives::Listed(paths) = derives else { return None };
-        let mut out = Vec::new();
-        let mut underivable = Vec::new();
-        for (k, p) in paths.iter().enumerate() {
-            let [n] = p.segments.as_slice() else {
-                underivable.push(p);
-                continue;
-            };
-            match (DERIVABLE.iter().find(|(name, ..)| *name == n.name), kind_constraint(p)) {
-                (Some(&(_, d, now)), _) => {
-                    if !now {
-                        self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]);
-                    }
-                    out.push(d);
-                }
-                (None, Some(dup)) => {
-                    let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_derive(cx, paths, k)]);
-                    if let Some(at) = self.keep(cx.def, d) {
-                        self.kind_heads.push((at, cx.def, dup));
-                    }
-                }
-                (None, None) => underivable.push(p),
-            }
-        }
-        // A name held as an error: the list is not known (§18.1).
-        let (held, underivable): (Vec<&Path>, _) =
-            underivable.into_iter().partition(|p| self.a.record_if_held(cx.def, cx.m, p));
-        for span in underivable.into_iter().map(|p| p.span) {
-            let name = src(cx, span);
-            let list: Vec<String> = DERIVABLE.iter().map(|(name, ..)| format!("`{name}`")).collect();
-            self.report(
-                cx.def,
-                Diagnostic::new(Stage::Types, Code::E0416, span, format!("`{name}` cannot be derived"))
-                    .with_found(name)
-                    .with_rule(foreign::DERIVE_RULE)
-                    .with_rule(format!("the traits a type derives are {}", list.join(", "))),
-            );
-        }
-        held.is_empty().then_some(out)
-    }
-
-    /// The effects of a row of a signature or a function type
-    /// ([`read_effects`]): its errors are reported, and the lowering goes on.
-    fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
-        let (set, errors) = read_effects(self.a, cx.def, cx.m, (&cx.generics, cx.self_ty, &cx.locals), row);
-        for d in errors {
-            self.report(cx.def, d);
-        }
-        set
     }
 
     /// The parameters but `self`, whose mode the names stage has
@@ -811,88 +498,6 @@ fn cx_clone<'p>(cx: &Cx<'p>) -> Cx<'p> {
     }
 }
 
-/// The parameters `params` of a heading of the type, const and effect
-/// parameters `generics` (and those of `cx`, of its `impl`), `self` of a
-/// method too, of a flow (`flow`) or not: values its whole heading sees
-/// (§5.1, S-741, S-733). One that is an E0304 ([`hides`], as the body
-/// declares it) is none: its name names what it clashes with (§18.1, S-675).
-/// A name of one at the head of a path of `types` (and of the constant
-/// expressions in them) or of `paths` (bounds, the effect row) is a use of
-/// it, which an E0320 renames (§2.3).
-fn heading_locals(
-    a: &Analysis,
-    cx: &Cx<'_>,
-    (params, generics, flow): (&[Param], &[GenericParam], bool),
-    (types, paths): (Vec<TypeId>, Vec<&Path>),
-) -> HashSet<String> {
-    let mut seen: HashMap<&str, Span> = cx.generics.iter().map(|g| (g.name.as_str(), g.span)).collect();
-    seen.extend(generics.iter().map(crate::names::param_name).map(|n| (n.name.as_str(), n.span)));
-    let mut declared = HashMap::new();
-    for p in params {
-        let (name, span) = match &p.name {
-            ParamName::Ident(i) => (i.name.as_str(), i.span),
-            ParamName::SelfParam(s) if cx.self_ty.is_some() => ("self", *s),
-            _ => continue,
-        };
-        let visible = seen.get(name).copied();
-        seen.entry(name).or_insert(span);
-        let ident = Ident { name: name.to_string(), span };
-        if crate::names::hides(a, cx.m, &ident, visible, flow).is_none() {
-            declared.insert(name, span);
-        }
-    }
-    let mut names = Vec::new();
-    types.into_iter().for_each(|t| crate::names::body::heads(cx.ast, t, &mut names));
-    names.extend(paths.into_iter().filter_map(|p| p.segments.first()));
-    for n in names {
-        if let Some(&decl) = declared.get(n.name.as_str()) {
-            a.note_use(decl, n.span);
-        }
-    }
-    declared.into_keys().map(str::to_string).collect()
-}
-
-/// The derivable traits (§6.4, S-34), in the order of the spec: the closed
-/// list, and whether this version derives each (`false`: E0200, S-13,
-/// S-145). The one list of their names.
-const DERIVABLE: [(&str, Derive, bool); 8] = [
-    ("PartialEq", Derive::PartialEq, true),
-    ("Eq", Derive::Eq, true),
-    ("PartialOrd", Derive::PartialOrd, true),
-    ("Ord", Derive::Ord, true),
-    ("Hash", Derive::Hash, false),
-    ("Show", Derive::Show, false),
-    ("Default", Derive::Default, true),
-    ("Ordinal", Derive::Ordinal, false),
-];
-
-/// The candidate that takes the trait `k` of the head `paths` out (§4.6,
-/// `copy_bound`): with the `+` before it, or after it when it is the first,
-/// or with the `:` when it is the only one.
-fn drop_derive(cx: &Cx<'_>, paths: &[onsa_syntax::ast::Path], k: usize) -> Fix {
-    let p = paths[k].span;
-    let span = if k > 0 {
-        Span::new(p.file, paths[k - 1].span.end, p.end)
-    } else if paths.len() > 1 {
-        Span::new(p.file, p.start, paths[1].span.start)
-    } else {
-        // The `:` before the only trait (blanks may be between them).
-        let before = cx.text[..p.start as usize].trim_end();
-        let colon = before.strip_suffix(':').map_or(p.start, |b| b.len() as u32);
-        Span::new(p.file, colon, p.end)
-    };
-    Fix::delete(format!("remove `{}`", &cx.text[p.start as usize..p.end as usize]), span)
-}
-
-/// The kind constraint `p` names (§4.6), by its spelling: whether it is
-/// `Dup` (else `Copy`); none for another name or a path of more names. The
-/// one judgment of `copy_bound` and `copy_impl` (`impl Copy for X` is no
-/// trait implementation, S-140).
-pub(crate) fn kind_constraint(p: &Path) -> Option<bool> {
-    let [n] = p.segments.as_slice() else { return None };
-    foreign::KIND_CONSTRAINTS.contains(&n.name.as_str()).then(|| n.name == foreign::DUP)
-}
-
 /// `s` on one line, for a message: line breaks and runs of blanks are one
 /// space.
 fn one_line(s: &str) -> String {
@@ -901,121 +506,4 @@ fn one_line(s: &str) -> String {
 
 fn src(cx: &Cx<'_>, span: Span) -> String {
     cx.text[span.start as usize..span.end as usize].to_string()
-}
-
-/// The one reading of an effect row (§8.1, S-74, D-08), of a signature, of a
-/// function type and of a closure: a single name of an effect variable of
-/// `generics`, else a path as [`heading_name`] reads it (§15.1). `Alloc` (the
-/// lang item) is read; another effect is an E0200 at its name, but in std,
-/// which declares them (S-659); a name of another kind is an E0308 (S-713
-/// (b)). A name not found is its E0302, with the `use` of the effect std
-/// declares of that name as the candidate (S-659 (3)); a name the check does
-/// not read is left out with no diagnostic (§18.1; read by `def`,
-/// [`Analysis::unread_path`]). The errors go back to the caller, which
-/// reports them.
-// The effects read stay when a name held as an error is left out, as an
-// unknown effect of an open row, and the check goes on (§18.1, S-691).
-// A local it sees (`locals`, S-738) is a value, no effect.
-pub(crate) fn read_effects(
-    a: &mut Analysis,
-    def: DefId,
-    from: crate::ModId,
-    (generics, self_ty, locals): (&[GenericDef], Option<TyId>, &HashSet<String>),
-    row: Option<&EffectRow>,
-) -> (EffectSet, Vec<Diagnostic>) {
-    let mut set = EffectSet::default();
-    let mut errors = Vec::new();
-    let listed: Vec<(&str, NameKind)> =
-        generics.iter().map(|g| (g.name.as_str(), NameKind::of_generic(&g.kind))).collect();
-    for p in row.map_or(&[][..], |r| &r.effects[..]) {
-        let n = p.segments.last().unwrap();
-        let var = generics.iter().position(|g| g.name == n.name && matches!(g.kind, GenericKind::Effect));
-        if let (1, Some(i)) = (p.segments.len(), var) {
-            a.note_use(generics[i].span, n.span);
-            set.vars.push(i as u32);
-            continue;
-        }
-        match heading_name(a, from, p, (&listed, locals), self_ty) {
-            Ok((_, Some(Entity::Def(d)))) if Some(d) == a.alloc => set.alloc = true,
-            Ok((_, Some(Entity::Def(d))))
-                if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
-            {
-                set.other.push(n.name.clone());
-            }
-            // Another effect (of a user's `effect`, S-719, E0200); or a name
-            // that is no effect (`uses {I32}`, `uses {T}`). With both in a
-            // unit, the first by its place is reported (§18.1, S-731).
-            Ok((kind, _)) => {
-                errors.push(match kind {
-                    NameKind::Effect => Feature::Effects.diagnostic(Stage::Names, n.span, &[&n.name]),
-                    kind => kind_error(p, kind, "an effect", p.span),
-                });
-                set.other.push(n.name.clone());
-            }
-            Err(e) if a.unread_path(def, from, p, &e) => {}
-            Err(e) => {
-                let fix = match (&e, p.segments.as_slice()) {
-                    (crate::ResolveError::NotFound { .. }, [_]) => {
-                        a.modules.std_effect_use(from, &n.name, (&a.prelude, &a.defs, &a.builtin_key))
-                    }
-                    _ => None,
-                };
-                let d = e.into_diagnostic();
-                errors.push(match fix {
-                    Some(fix) => d.with_fix(fix),
-                    None => d,
-                });
-            }
-        }
-    }
-    (set, errors)
-}
-
-/// The kind of what the path `p` of a bound or an effect row names (§15.1),
-/// and what it names but a parameter of the heading of `listed` (the names a
-/// heading binds that are no item of a module, with their kinds, and the
-/// values `locals` the place sees, [`Cx::locals`]) and an
-/// associated name of a builtin type: through `Self` (`self_ty`) and the
-/// aliases ([`Analysis::path_end`]). A parameter of a list has no members
-/// (the E0302 of its head, as in a body), a local neither (its E0308).
-fn heading_name(
-    a: &Analysis,
-    from: ModId,
-    p: &Path,
-    (listed, locals): (&[(&str, NameKind)], &HashSet<String>),
-    self_ty: Option<TyId>,
-) -> Result<(NameKind, Option<Entity>), crate::ResolveError> {
-    let head = &p.segments[0];
-    let local = locals.contains(&head.name).then_some(NameKind::Local);
-    if let Some(kind) = local.or_else(|| listed.iter().find(|(n, _)| *n == head.name).map(|&(_, k)| k)) {
-        return match &p.segments[1..] {
-            [] => Ok((kind, None)),
-            [next, ..] if kind == NameKind::Local => {
-                Err(crate::ResolveError::NotANamespace { name: head.name.clone(), span: next.span, kind: Some(kind) })
-            }
-            _ => Err(crate::ResolveError::NotFound { name: head.name.clone(), span: head.span }),
-        };
-    }
-    let end = a.path_end(from, p, self_ty)?;
-    let entity = match end {
-        crate::names::PathEnd::Entity(e) => Some(e),
-        crate::names::PathEnd::Builtin { .. } => None,
-    };
-    Ok((end.kind(a, p.span), entity))
-}
-
-/// E0308 for the path `p` at `span`, of the kind `kind`, where `want` is
-/// (§15.1): the one form of a signature.
-fn kind_error(p: &Path, kind: NameKind, want: &'static str, span: Span) -> Diagnostic {
-    let shown = p.segments.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(".");
-    crate::ResolveError::Kind { shown, span, kind, want }.into_diagnostic()
-}
-
-/// The kind of a parameter of a list of a heading (§15.1).
-fn param_kind(g: &GenericParam) -> NameKind {
-    match g {
-        GenericParam::Type { .. } => NameKind::Type,
-        GenericParam::Const { .. } => NameKind::ConstParam,
-        GenericParam::Effect { .. } => NameKind::Effect,
-    }
 }

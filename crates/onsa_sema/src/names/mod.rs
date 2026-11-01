@@ -30,6 +30,17 @@ pub(crate) use cycles::{ImportGraph, cycle_diagnostic, cyclic, module_of};
 pub(crate) use heading::{param_clashes, param_name};
 pub(crate) use typed::{BuiltinMember, PathEnd, builtin_member, builtin_ty, self_outside_impl};
 
+/// The name of the receiver of a method (§2.2, §6.2): the binding its
+/// heading and its body see.
+pub(crate) const SELF_VALUE: &str = "self";
+
+/// Whether `name` is `Self`, the type of the `impl` (§2.2): the one
+/// comparison of the names stage and the signatures, each of which reads
+/// what it stands for.
+pub(crate) fn is_self_type(name: &str) -> bool {
+    name == "Self"
+}
+
 /// The names stage, in its order: the tree, the prelude, the items (those
 /// of `std.core` then in the prelude, S-659) and their clashes, each `use` and the clashes of their names, the cycles of
 /// their dependencies, then the `use` whose head is no head (their

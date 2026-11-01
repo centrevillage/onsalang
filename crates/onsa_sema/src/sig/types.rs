@@ -74,7 +74,7 @@ impl<'p> Sema<'p> {
                 }
                 if path.segments.len() == 1 {
                     let seg = &path.segments[0];
-                    if seg.name == "Self" {
+                    if crate::names::is_self_type(&seg.name) {
                         return match cx.self_ty {
                             // `Self` is the type of the `impl`, its arguments decided (§4.4).
                             Some(_) if !args_ast.is_empty() => {
@@ -89,7 +89,7 @@ impl<'p> Sema<'p> {
                             }
                         };
                     }
-                    if let Some(i) = cx.generics.iter().position(|g| g.name == seg.name) {
+                    if let Some(i) = cx.param(&seg.name) {
                         self.a.note_use(cx.generics[i].span, seg.span);
                         // A const parameter (R-282) and an effect-row variable
                         // are no type (§15.1).
@@ -296,8 +296,7 @@ impl<'p> Sema<'p> {
         let Some(next) = rest.first() else {
             return Some(self.not_a_type(cx, None, NameKind::Local, span, path));
         };
-        let d = crate::resolve::no_members(&head.name, NameKind::Local, next.span);
-        self.report(cx.def, d.with_found(head.name.clone()));
+        self.report(cx.def, local_member(head, next).into_diagnostic());
         Some(self.a.types.error())
     }
 

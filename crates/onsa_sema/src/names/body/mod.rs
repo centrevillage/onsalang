@@ -529,7 +529,7 @@ impl<'a> Walker<'a> {
         for p in params {
             match &p.name {
                 ParamName::SelfParam(span) if has_self => {
-                    let name = Ident { name: "self".into(), span: *span };
+                    let name = Ident { name: crate::names::SELF_VALUE.into(), span: *span };
                     self.declare(&name, BindingKind::SelfParam(p.mode), Origin::SelfParam, None)?;
                 }
                 ParamName::SelfParam(_) => {}
