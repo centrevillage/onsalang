@@ -175,7 +175,7 @@ fast_budget = 262144    # 任意。export する flow の fast 領域がこれ�
 | `[dependencies]` | `<パッケージ名>` | 版の文字列。この版で書けるのは `std` だけ（下記） |
 | `[export]` | `prefix` | `@export` の項目（§14.2）を出すターゲットのビルドで必須（無ければ E1104） |
 | `[targets.<名前>]` | `kind` | 必須。`exe` `clap` `vst3` `au` `wasm-worklet` `staticlib` `source` |
-| | `platform` | ターゲットのトリプルか `"host"`。C かネイティブのコードを出すターゲット（`exe`、プラグイン、`staticlib`、`lang = "c"` の `source`）で必須で、無ければそのターゲットのビルドで E1104（生成物がポインタの幅などで変わるため）。トリプルの OS の欄が `none` のもの（`thumbv7em-none-eabihf`）を OS の無いプラットフォームとし、`panic` の既定（§9.2）と `ONSA_NO_TLS`（§14.2）が変わる |
+| | `platform` | ターゲットのトリプルか `"host"`。C かネイティブのコードを出すターゲット（`exe`、プラグイン、`staticlib`、`lang = "c"` の `source`）で必須で、無ければそのターゲットのビルドで E1104（生成物がポインタの幅などで変わるため）。トリプルを `-` で切った語に `none` があるもの（`thumbv7em-none-eabihf`、`riscv32imac-unknown-none-elf`）を OS の無いプラットフォームとし、`panic` の既定（§9.2）と `ONSA_NO_TLS`（§14.2）が変わる |
 | | `lang` | `kind = "source"` で必須。変換先の言語（`"c"`、`"js"`、§13） |
 | | `fp` | `"strict"`（既定）、`"strict-ftz"`（§15.5） |
 | | `provides` | 効果の名前の配列。既定は空で、ヒープ（`Alloc`）を含め、与える効果は全て書く |
@@ -195,6 +195,7 @@ fast_budget = 262144    # 任意。export する flow の fast 領域がこれ�
 - `main` または export される関数の効果行に、`provides` に無い効果が含まれていれば E0610。
 - `@export` の flow と関数は、`staticlib`・プラグイン・`wasm-worklet`・`source` のターゲットに出力される（依存のパッケージの `@export` は出さない、§14.2）。
 - ビルドはハーメティック（ネットワークも環境変数も読まない）で、`onsa.lock` が同じなら、Onsa が生成するファイル（C のソースとヘッダ、WASM など）は同一である。`staticlib` の `.a`、実行ファイル、プラグインの束（§14.3）は外部の C ツールチェーンの出力で、この約束の外にある。
+  ホストの `platform` は、`"host"` と、`"host"` が指すトリプル（コンパイラが動く機械のもの。クロスの E0200 の note が示す）に字で一致するトリプルである。同じ機械を別の綴りで指すもの（`arm64-apple-darwin`）と、同じ機械の上の別の OS（`aarch64-apple-ios`）はクロスである。
   ホストの `platform` では PATH の `cc` と `ar` を使う（環境変数を読む唯一の例外）。クロスの `platform` で外部のツールチェーンを要する `kind`（`staticlib`、プラグインなど）は、この版ではそのターゲットのビルドで E0200 になる（note で `kind = "source"` と `lang = "c"` を示す）。
   ツールチェーンを指定する形は §19.1。
 - `std` は、どのパッケージにも暗黙の依存で、`[dependencies]` に書かなくてもキー `std` で使える（単一ファイルのパッケージも同じ）。std はコンパイラに埋め込まれている。`std = "x.y.z"` と書くと版の固定になり、埋め込みの std の版と一致しなければ E1103 になる。
