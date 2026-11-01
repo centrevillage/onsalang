@@ -23,7 +23,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 clap = { version = "4", features = ["derive"] }
 toml = "0.8"
-toml_edit = "0.22"
+# `serde` for one feature set in every command (W4-02, 2026-11-01): onsa_driver
+# uses toml_edit with the default features, and onsa_tests reaches it through
+# toml with `serde` too, so without this `-p onsa_cli` and `-p onsa_tests` built
+# onsa_driver and every crate above it twice.
+toml_edit = { version = "0.22", features = ["serde"] }
 
 [workspace.lints.clippy]
 all = "warn"
