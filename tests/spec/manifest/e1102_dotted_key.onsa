@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e1102_dotted_key"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+// memory.bulk = false
+// memory.size = 1                              #~ E1102
+//
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// E1102: a dotted key is read like the table it names: `memory.size` is an unknown key of the memory
+// table and `memory.bulk` is a known one (§15.3, §18.1; S-99).

@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_dot"
+// edition = "2026"
+//
+// [targets."a.b"]                              #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: a name with `.` is not an identifier (§15.3, §2.3; S-828). Written with quotes it is one name; bare,
+// the dot would make a sub-table.

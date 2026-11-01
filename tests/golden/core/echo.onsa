@@ -13,18 +13,12 @@
 // panic = "trap"
 // provides = []
 //
-// [targets.trap.memory]
-// bulk_threshold = 4096
-//
 // [targets.poison]
 // kind = "source"
 // lang = "c"
 // platform = "host"
 // panic = "poison"
 // provides = ["Alloc"]
-//
-// [targets.poison.memory]
-// bulk_threshold = 4096
 //
 // [test]
 // spec = ["§17.4"]

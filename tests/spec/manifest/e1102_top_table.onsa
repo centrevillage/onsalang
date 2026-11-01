@@ -1,0 +1,18 @@
+// onsa.toml
+// [package]
+// name = "e1102_top_table"
+// edition = "2026"
+//
+// [bogus]                                      #~ E1102
+// colour = 1
+// panik = 2
+// name = "x"
+//
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// E1102: a top-level table that the table of §15.3 does not list is reported at its heading
+// (§15.3 "一覧に無い表とキーは E1102", §18.1; S-99, R-130). The keys inside an unknown table are not
+// read (§18.1 "未知のキーは E1102 だけで値を調べず"): `colour`, `panik` and `name` carry no marker,
+// so the case fails if the unknown table's content is reported.

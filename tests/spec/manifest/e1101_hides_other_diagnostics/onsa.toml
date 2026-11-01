@@ -1,0 +1,15 @@
+[package]
+name = "e1101_hides_other_diagnostics"
+edition = "2026"
+colour = "red"
+
+[bogus]
+x = 1
+
+[targets.Bad]
+kind = "source"
+
+y = = 1                                      #~ E1101
+
+[export]
+flows = ["voice"]

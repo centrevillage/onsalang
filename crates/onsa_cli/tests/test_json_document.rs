@@ -155,7 +155,6 @@ fn a_run_stopped_by_a_diagnostic_has_an_empty_tests_array() {
 /// Spec §18.1 and §18.2: a diagnostic that points into `onsa.toml` is exit code 2 and still prints
 /// the document, with an empty `tests`.
 #[test]
-#[ignore = "W4-02"]
 fn a_manifest_diagnostic_prints_the_document_with_an_empty_tests_array() {
     let d = Dir::bare("manifest");
     d.write("onsa.toml", "[package]\nname = \"demo\"\nedition = \"2026\"\nbogus = 1\n");

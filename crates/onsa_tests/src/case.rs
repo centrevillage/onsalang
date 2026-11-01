@@ -65,7 +65,7 @@ impl Setup {
 
 /// Target names of the manifest of `loaded`, sorted (none without one).
 pub fn target_names(loaded: &Loaded) -> Vec<String> {
-    loaded.manifest.as_ref().map(|m| m.targets.keys().cloned().collect()).unwrap_or_default()
+    loaded.manifest().map(|m| m.targets.keys().cloned().collect()).unwrap_or_default()
 }
 
 /// Every case under `root/tests`, sorted by path, and the directories that

@@ -63,13 +63,24 @@ pub use token::{Token, TokenKind};
 /// `diagnostics`, with the token boundaries of their files from the lexer: the
 /// one place the driver (in debug builds) and the test runner check them
 /// (plan D-04, W3-02). Each problem names the diagnostic's code and position.
-pub fn diagnostic_contract(sources: &onsa_diag::SourceMap, diagnostics: &[onsa_diag::Diagnostic]) -> Vec<String> {
+/// The boundaries of `toml`, the file `onsa.toml`, are the heads of its lines
+/// and its end: a candidate there adds whole lines (W4-02).
+pub fn diagnostic_contract(
+    sources: &onsa_diag::SourceMap,
+    diagnostics: &[onsa_diag::Diagnostic],
+    toml: Option<FileId>,
+) -> Vec<String> {
     let boundaries: std::cell::RefCell<std::collections::HashMap<FileId, Vec<u32>>> = Default::default();
     let is_boundary = |file: FileId, at: u32| {
         let mut cache = boundaries.borrow_mut();
         let b = cache.entry(file).or_insert_with(|| {
-            let mut b: Vec<u32> =
-                lex(file, sources.file(file).text()).tokens.iter().flat_map(|t| [t.span.start, t.span.end]).collect();
+            let text = sources.file(file).text();
+            let mut b: Vec<u32> = if Some(file) == toml {
+                let heads = text.match_indices('\n').map(|(i, _)| i as u32 + 1);
+                [0, text.len() as u32].into_iter().chain(heads).collect()
+            } else {
+                lex(file, text).tokens.iter().flat_map(|t| [t.span.start, t.span.end]).collect()
+            };
             b.sort_unstable();
             b.dedup();
             b

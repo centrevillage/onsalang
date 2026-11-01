@@ -10,4 +10,4 @@ prefix = "t_"
 [targets.host]
 kind = "staticlib"
 platform = "host"
-numeric = "strict-ftz"
+fp = "strict-ftz"

@@ -1,0 +1,7 @@
+[package]
+name = "e1101_syntax"
+edition = "2026"
+x = = 1                                      #~ E1101
+
+[export]
+prefix = "x_"

@@ -113,7 +113,7 @@ pub enum RowRecords {
 
 /// The target of the fixture the vectors run on.
 pub fn host_target(loaded: &Loaded) -> Result<String, String> {
-    let m = loaded.manifest.as_ref().ok_or("no onsa.toml")?;
+    let m = loaded.manifest().ok_or("no onsa.toml")?;
     let mut names: Vec<&String> = m
         .targets
         .iter()

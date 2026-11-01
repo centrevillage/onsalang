@@ -645,6 +645,48 @@ fn small_holes() {
     assert!(r.failures.iter().any(|f| f.contains("tests/locked: cannot read the directory")), "{:?}", r.failures);
 }
 
+/// A case the manifest stops (`#~`) reaches nothing after the sources: a
+/// setting of `[test]` compared there is an error of the case
+/// (`tests/README.md`); `fixes = 0` holds of it.
+#[test]
+fn a_case_the_manifest_stops_asks_nothing_after_the_sources() {
+    let case_of = |test: &str| {
+        let test: String = test.lines().map(|l| format!("// {l}\n")).collect();
+        format!(
+            "// onsa.toml\n// [package]\n// name = \"c\"\n// edition = \"2026\"\n// colour = 1  #~ E1102\n//\n\
+             // [test]\n{test}\npub fn f() -> I32 {{ 1 }}\n"
+        )
+    };
+    let later = [
+        ("mode", "mode = \"test\"", "`mode = \"test\"`"),
+        ("fixes", "fixes = 1", "`fixes`"),
+        ("core", "golden = [\"core\"]", "`golden`"),
+        ("c", "golden = [\"c\"]", "`golden`"),
+        ("graph", "golden_graph = [\"f\"]", "`golden_graph`"),
+        ("conformance", "conformance = true", "`conformance`"),
+        ("fix", "[[test.fix]]\nat = \"5:4\"\ncode = \"E1102\"\ncandidate = 1\nclean = true", "`[[test.fix]]`"),
+        (
+            "host",
+            "[[test.host]]\nname = \"h\"\ntarget = \"a\"\nflow = \"c.f\"\nsteps = [{ call = \"init\", config = {}, sample_rate = 8.0, status = 0 }]",
+            "`[[test.host]]`",
+        ),
+    ];
+    let mut files: Vec<(String, String)> =
+        later.iter().map(|(name, test, _)| (format!("tests/{name}.onsa"), case_of(test))).collect();
+    files.push(("tests/zero.onsa".into(), case_of("fixes = 0")));
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect();
+    let r = Repo::new("manifest_stops", &files).run();
+    for (name, _, setting) in later {
+        let c = case(&r, &format!("tests/{name}.onsa"));
+        let needle = format!("`[test]` asks what comes after them: {setting}");
+        assert!(c.failures.len() == 1 && c.failures[0].contains(&needle), "{name}: {:?}", c.failures);
+    }
+    let zero = case(&r, "tests/zero.onsa");
+    assert!(zero.failures.is_empty(), "{:?}", zero.failures);
+    let checked: Vec<(Stage, bool)> = zero.run.checked.iter().map(|m| (m.stage, m.matched)).collect();
+    assert_eq!(checked, [(Stage::Manifest, true)]);
+}
+
 #[test]
 fn pending_list() {
     let failing = "pub fn f() -> I32 { 1 } //~ E0302\n";

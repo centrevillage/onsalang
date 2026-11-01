@@ -1,0 +1,15 @@
+// onsa.toml
+// [package]
+// name = "e1102_export_fns"
+// edition = "2026"
+//
+// [export]
+// prefix = "x_"
+// fns = ["f"]                                  #~ E1102
+//
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// E1102: `fns` of `[export]` was removed (S-639), like `flows` (`e1102_export_flows.onsa`): an
+// unknown key with no candidate (`fixes = 0`; S-597).

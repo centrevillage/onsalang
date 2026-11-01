@@ -21,8 +21,7 @@ pub enum Table {
     Bind,
     /// `[[plugin]]`.
     Plugin,
-    /// `au = { subtype, manufacturer }` of a `[[plugin]]`: §15.3 does not
-    /// give the kinds of its values, so its rows come with its rules (U4).
+    /// `au = { subtype, manufacturer }` of a `[[plugin]]`.
     Au,
 }
 
@@ -54,7 +53,6 @@ pub enum Field {
     Platform,
     Lang,
     Fp,
-    Numeric,
     Provides,
     Panic,
     PanicMessages,
@@ -62,7 +60,6 @@ pub enum Field {
     Memory,
     Bind,
     Bulk,
-    BulkThreshold,
     FastBudget,
     BulkBudget,
     Flow,
@@ -71,15 +68,16 @@ pub enum Field {
     Version,
     Category,
     Au,
+    Subtype,
+    Manufacturer,
 }
 
-/// Whether the reader of this version reads a key.
+/// Whether the reader of this version reads the value of a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Read {
     Yes,
-    /// Skipped as an unknown key is, its value unchecked: the reader before
-    /// the closed table did not know it, and U2a1 changes no output (U2a2
-    /// reads it).
+    /// A key of the table whose value is not read yet (its work reads it:
+    /// `memory` W9-05/W9-06, `[[plugin]]` U4).
     Later,
 }
 
@@ -106,16 +104,14 @@ pub static ROWS: &[Row] = &[
     row(Table::Root, "dependencies", Field::Dependencies, Shape::Table(Table::Dependencies), Yes),
     row(Table::Root, "export", Field::Export, Shape::Table(Table::Export), Yes),
     row(Table::Root, "targets", Field::Targets, Shape::Table(Table::Targets), Yes),
-    row(Table::Root, "plugin", Field::Plugin, Shape::Tables(Table::Plugin), Later),
+    row(Table::Root, "plugin", Field::Plugin, Shape::Tables(Table::Plugin), Yes),
     row(Table::Package, "name", Field::Name, Str, Yes),
     row(Table::Package, "edition", Field::Edition, Str, Yes),
     row(Table::Export, "prefix", Field::Prefix, Str, Yes),
     row(Table::Target, "kind", Field::Kind, Str, Yes),
     row(Table::Target, "platform", Field::Platform, Str, Yes),
     row(Table::Target, "lang", Field::Lang, Str, Yes),
-    row(Table::Target, "fp", Field::Fp, Str, Later),
-    // The old name of `fp`, read as before: U2a2 takes it out (E1102).
-    row(Table::Target, "numeric", Field::Numeric, Str, Yes),
+    row(Table::Target, "fp", Field::Fp, Str, Yes),
     row(Table::Target, "provides", Field::Provides, Strs, Yes),
     row(Table::Target, "panic", Field::Panic, Str, Yes),
     row(Table::Target, "panic_messages", Field::PanicMessages, Bool, Yes),
@@ -123,9 +119,6 @@ pub static ROWS: &[Row] = &[
     row(Table::Target, "memory", Field::Memory, Shape::Table(Table::Memory), Yes),
     row(Table::Target, "bind", Field::Bind, Shape::Table(Table::Bind), Yes),
     row(Table::Memory, "bulk", Field::Bulk, Bool, Later),
-    // Not a key of §15.3, read as before (it moves the bulk placement of the
-    // golden `core/echo`): U2a2 takes it out (E1102).
-    row(Table::Memory, "bulk_threshold", Field::BulkThreshold, Int, Yes),
     row(Table::Memory, "fast_budget", Field::FastBudget, Int, Later),
     row(Table::Memory, "bulk_budget", Field::BulkBudget, Int, Later),
     row(Table::Plugin, "flow", Field::Flow, Str, Later),
@@ -134,7 +127,11 @@ pub static ROWS: &[Row] = &[
     row(Table::Plugin, "vendor", Field::Vendor, Str, Later),
     row(Table::Plugin, "version", Field::Version, Str, Later),
     row(Table::Plugin, "category", Field::Category, Str, Later),
-    row(Table::Plugin, "au", Field::Au, Shape::Table(Table::Au), Later),
+    // Read for its keys (E1102); its values are U4's.
+    row(Table::Plugin, "au", Field::Au, Shape::Table(Table::Au), Yes),
+    // SPEC-GAP(S-826): §15.3 does not give the kinds of these values.
+    row(Table::Au, "subtype", Field::Subtype, Str, Later),
+    row(Table::Au, "manufacturer", Field::Manufacturer, Str, Later),
 ];
 
 /// The shape of every entry of a table whose keys are names the writer
@@ -160,3 +157,21 @@ pub fn row_of(table: Table, field: Field) -> Option<&'static Row> {
 /// The top-level table a test fragment holds beside the manifest, which the
 /// test runner reads (`[test]`, [`crate::ManifestForm::Fragment`]).
 pub const FRAGMENT_TEST: &str = "test";
+
+/// The note of an E1102 in `table` at `path` (§18.1): the keys it takes, in
+/// the order of the rows; at the top, the names of the tables.
+pub fn keys_note(table: Table, path: &str) -> String {
+    let keys: Vec<String> = ROWS
+        .iter()
+        .filter(|r| r.table == table)
+        .map(|r| match r.shape {
+            Shape::Table(_) if table == Table::Root => format!("`[{}]`", r.key),
+            Shape::Tables(_) => format!("`[[{}]]`", r.key),
+            _ => format!("`{}`", r.key),
+        })
+        .collect();
+    match table {
+        Table::Root => format!("the tables of the manifest are {}", keys.join(", ")),
+        _ => format!("the keys of `{path}` are {}", keys.join(", ")),
+    }
+}

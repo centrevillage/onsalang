@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// E1101: a key written twice in one table is not TOML, and is reported at the second (§18.1 "TOML として
+// 読めない"; S-99). TOML's reading stops there, so the case has no other diagnostic.
+
+pub fn f() -> I32 { 1 }

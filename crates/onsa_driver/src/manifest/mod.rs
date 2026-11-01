@@ -9,6 +9,10 @@ pub use read::read;
 use std::collections::BTreeMap;
 use std::ops::Range;
 
+use onsa_diag::{Diagnostic, FileId};
+
+use crate::ManifestForm;
+
 /// A value of the manifest with its places in the text, in bytes: `key`, the
 /// key that names it (for a table, the last key of its header); `span`, the
 /// value (for a table, from its header to its last value). An implicit table
@@ -61,8 +65,8 @@ pub struct ManifestTarget {
     pub platform: Spanned<String>,
     /// `kind = "source"`: the language (`c` in this version).
     pub lang: Option<Spanned<String>>,
-    /// `strict` (default) or `strict-ftz`: the old name of `fp`, read until U2a2.
-    pub numeric: Option<Spanned<String>>,
+    /// `strict` (default) or `strict-ftz` (§15.5).
+    pub fp: Option<Spanned<String>>,
     /// Effects the target provides (`Alloc` decides the heap).
     pub provides: Vec<Spanned<String>>,
     /// `poison` / `trap` / `reset` / `halt` (spec §9.2).
@@ -74,8 +78,20 @@ pub struct ManifestTarget {
     pub bind: BTreeMap<String, Spanned<String>>,
 }
 
+/// `[targets.<name>.memory]`: its keys (`bulk`, `fast_budget`,
+/// `bulk_budget`) are not read yet (W9-05, W9-06).
 #[derive(Debug, Default, Clone)]
-pub struct ManifestMemory {
-    /// Not a key of §15.3, read until U2a2.
-    pub bulk_threshold: Option<Spanned<u32>>,
+pub struct ManifestMemory {}
+
+/// The manifest of an input as read: its values and the diagnostics of its
+/// check (`Stage::Manifest`, §18.1), which stop every command before the
+/// sources are read. `file` is the file its places are in: `onsa.toml`, or
+/// for a test fragment its case file.
+#[derive(Debug, Clone)]
+pub struct ManifestRead {
+    pub file: FileId,
+    pub form: ManifestForm,
+    /// Empty (no name) when the text is not TOML (E1101).
+    pub manifest: Manifest,
+    pub diagnostics: Vec<Diagnostic>,
 }

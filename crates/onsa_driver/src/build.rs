@@ -209,7 +209,7 @@ pub struct BuildOutput {
 /// file system (R-80 (5), R-89 (3)): the one entry the tests and `onsa_web`
 /// share with `onsa build`.
 pub fn build_analyzed(loaded: &Loaded, analyzed: &Analyzed, target: &str) -> Result<BuildOutput, BuildError> {
-    let Some(manifest) = &loaded.manifest else {
+    let Some(manifest) = loaded.manifest() else {
         return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
     };
     let resolved = resolve_target(manifest, target)?;
@@ -233,7 +233,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     // build's own go through `LowerError::reported`, as lowering's do.
     let diagnostics = |e: LowerError| match e {
         LowerError::Diagnostics(diagnostics) => {
-            crate::debug_contract(&loaded.sources, &diagnostics);
+            crate::debug_contract(&loaded.sources, &diagnostics, loaded.toml_file());
             BuildError::Diagnostics { sources: loaded.sources.clone(), diagnostics }
         }
         LowerError::Internal(e) => BuildError::Internal { sources: loaded.sources.clone(), error: Box::new(e) },
@@ -248,14 +248,15 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
         });
     }
     let settings = &resolved.settings;
-    let export = &ExportSettings::of(analyzed, loaded.manifest.as_ref());
+    let export = &ExportSettings::of(analyzed, loaded.manifest());
     let export_diags = check_exports(analyzed, settings);
     if !export_diags.is_empty() {
         return Err(diagnostics(LowerError::reported(export_diags)));
     }
 
     // Lower and emit.
-    let lower_opts = LowerOptions { bulk_threshold: settings.bulk_threshold, ptr_size: settings.platform.ptr_size };
+    // `bulk_threshold` is not a key of §15.3: `memory.bulk` replaces it (W9-06).
+    let lower_opts = LowerOptions { bulk_threshold: None, ptr_size: settings.platform.ptr_size };
     let module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
     let sources = loaded.sources.clone();
     let emit_opts = EmitOptions {
@@ -264,7 +265,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
         exports: export.flows.iter().map(|f| ExportFlow { flow: f.clone() }).collect(),
         export_fns: export.fns.clone(),
         panic: settings.panic,
-        bulk_threshold: settings.bulk_threshold,
+        bulk_threshold: None,
         provides_alloc: settings.provides_alloc,
         panic_messages: settings.panic_messages,
         locate: Some(Box::new(move |span: onsa_diag::Span| {
@@ -290,6 +291,12 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
 pub fn build(path: Option<&Path>, opts: &BuildOptions) -> Result<BuildReport, BuildError> {
     let input = read_package_input(path).map_err(BuildError::Usage)?;
     let mut loaded = Loaded::from_input(input).map_err(BuildError::Usage)?;
+    // The manifest's diagnostics stop the build before the sources are read
+    // (§18.1); they point into `onsa.toml` (exit 2, §18.2).
+    if !loaded.manifest_diagnostics().is_empty() {
+        let diagnostics = loaded.manifest_diagnostics().to_vec();
+        return Err(BuildError::Diagnostics { sources: loaded.sources, diagnostics });
+    }
     let root = guard(|| match &loaded.root {
         Some(root) => root.clone(),
         None => onsa_diag::internal::bug(None, "a package read from a path has no root"),
@@ -298,7 +305,7 @@ pub fn build(path: Option<&Path>, opts: &BuildOptions) -> Result<BuildReport, Bu
         Ok(root) => root,
         Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
     };
-    let Some(manifest) = &loaded.manifest else {
+    let Some(manifest) = loaded.manifest() else {
         return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
     };
     let resolved = resolve_target(manifest, &opts.target)?;
@@ -396,7 +403,6 @@ pub struct TargetSettings {
     pub panic: PanicMode,
     pub panic_messages: bool,
     pub provides_alloc: bool,
-    pub bulk_threshold: Option<u32>,
 }
 
 impl TargetSettings {
@@ -414,14 +420,15 @@ impl TargetSettings {
             }
         }
         let platform = platform(&t.platform.value).map_err(&usage)?;
-        match text(&t.numeric).unwrap_or("strict") {
+        match text(&t.fp).unwrap_or("strict") {
             "strict" | "strict-ftz" => {}
             "relaxed" => {
                 return Err(usage(
-                    "numeric = \"relaxed\" cannot be a target profile; use `@fp(relaxed)` on a fn or a flow (spec §15.5)".into(),
+                    "fp = \"relaxed\" cannot be a target profile; use `@fp(relaxed)` on a fn or a flow (spec §15.5)"
+                        .into(),
                 ));
             }
-            other => return Err(usage(format!("unknown numeric profile `{other}`"))),
+            other => return Err(usage(format!("unknown fp profile `{other}`"))),
         }
         let panic = match text(&t.panic) {
             None => {
@@ -453,7 +460,6 @@ impl TargetSettings {
             panic,
             panic_messages: t.panic_messages.as_ref().is_none_or(|b| b.value),
             provides_alloc: t.provides.iter().any(|e| e.value == "Alloc"),
-            bulk_threshold: t.memory.as_ref().and_then(|m| Some(m.value.bulk_threshold.as_ref()?.value)),
         })
     }
 }
@@ -652,7 +658,7 @@ mod tests {
         assert_eq!(TargetSettings::from_manifest("t", &t).unwrap().panic, PanicMode::Reset);
         let t = target("clap", "host");
         assert!(matches!(TargetSettings::from_manifest("t", &t), Err(BuildError::Usage(_))));
-        let t = ManifestTarget { numeric: Some(Spanned::new("relaxed".into())), ..target("staticlib", "host") };
+        let t = ManifestTarget { fp: Some(Spanned::new("relaxed".into())), ..target("staticlib", "host") };
         assert!(matches!(TargetSettings::from_manifest("t", &t), Err(BuildError::Usage(_))));
     }
 }

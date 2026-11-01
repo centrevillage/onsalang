@@ -6,7 +6,11 @@ use onsa_diag::{Code, Diagnostic, FileId, SourceMap};
 
 use crate::Expected;
 
+use onsa_driver::Loaded;
+
 use super::{CaseRun, CheckedMarker, Problem, Stage};
+use crate::case::Setup;
+use crate::fragment::{Mode, TestSettings};
 
 /// Compare the markers with the diagnostics, record every marker compared,
 /// and report a difference. Whether they match. Every diagnostic is also
@@ -19,6 +23,19 @@ pub(super) fn compare(
     stage: Stage,
     target: Option<&str>,
 ) -> bool {
+    compare_in(run, sources, expected, actual, stage, target, None)
+}
+
+/// [`compare`], where `toml` is the file `onsa.toml` (not Onsa, for the rules of diagnostics).
+fn compare_in(
+    run: &mut CaseRun,
+    sources: &SourceMap,
+    expected: &[(FileId, Expected)],
+    actual: &[Diagnostic],
+    stage: Stage,
+    target: Option<&str>,
+    toml: Option<FileId>,
+) -> bool {
     let actual_pos: Vec<(FileId, Code, u32, u32)> = actual
         .iter()
         .map(|d| {
@@ -26,7 +43,7 @@ pub(super) fn compare(
             (d.span.file, d.code, lc.line, lc.col)
         })
         .collect();
-    for p in onsa_syntax::diagnostic_contract(sources, actual) {
+    for p in onsa_syntax::diagnostic_contract(sources, actual, toml) {
         run.problems.push(Problem::Internal(format!("a diagnostic breaks the rules of diagnostics (plan D-04): {p}")));
     }
     let mut used = vec![false; actual_pos.len()];
@@ -78,6 +95,70 @@ pub(super) fn compare(
         run.problems.push(Problem::Failed(msg.trim_end().to_string()));
     }
     ok
+}
+
+/// The manifest's diagnostics against its `#~` markers, in every mode and
+/// before anything else reads the package (`tests/README.md`): a manifest
+/// without markers expects none. Whether the run stops here: the manifest
+/// has diagnostics or markers (a command stops on them before the sources,
+/// §18.1), and then a `//~` in a file of the case is an error of the case.
+pub(super) fn manifest_stage(run: &mut CaseRun, setup: &Setup, loaded: &Loaded, path: &str) -> bool {
+    let (Some(source), Some(read)) = (&setup.input.manifest, &loaded.manifest) else { return false };
+    let markers = match crate::parse_manifest_markers(&source.text) {
+        Ok(m) => m,
+        Err(e) => {
+            run.problems.push(Problem::Case(format!("{}: bad markers: {e}", source.path)));
+            return true;
+        }
+    };
+    let actual = &read.diagnostics;
+    if markers.is_empty() && actual.is_empty() {
+        return false;
+    }
+    if markers.iter().any(|m| m.targets.is_some()) {
+        run.problems.push(Problem::Case(format!("{}: a `#~` marker names no target", source.path)));
+    }
+    let later = after_the_sources(&setup.test);
+    if !later.is_empty() {
+        run.problems.push(Problem::Case(format!(
+            "{}: the manifest stops the commands before the sources, and `[test]` asks what comes after them: {}",
+            source.path,
+            later.join(", ")
+        )));
+    }
+    let files = loaded.modules.iter().map(|(f, _)| *f).chain(loaded.root_tests.iter().copied());
+    if let Some(f) = files.map(|f| loaded.sources.file(f)).find(|f| f.text().contains("//~")) {
+        run.problems.push(Problem::Case(format!(
+            "{}: holds `//~`, but the manifest stops the commands before the sources (its markers `#~`)",
+            f.name()
+        )));
+    }
+    if run.problems.is_empty() {
+        run.ran = run.mode != Mode::None;
+        let expected: Vec<(FileId, Expected)> = markers.into_iter().map(|m| (read.file, m)).collect();
+        if compare_in(run, &loaded.sources, &expected, actual, Stage::Manifest, None, loaded.toml_file()) {
+            negative_rules(run, path, actual);
+        }
+    }
+    true
+}
+
+/// The settings of `[test]` compared after the sources are read
+/// (`tests/README.md`), which a case the manifest stops never reaches.
+/// `fixes = 0` is true of it (a manifest's diagnostic has no candidate).
+fn after_the_sources(t: &TestSettings) -> Vec<&'static str> {
+    [
+        ("`mode = \"test\"`", t.mode == Mode::Test),
+        ("`fixes`", t.fixes.is_some_and(|n| n > 0)),
+        ("`golden`", !t.golden.is_empty()),
+        ("`golden_graph`", !t.golden_graph.is_empty()),
+        ("`conformance`", t.conformance),
+        ("`[[test.fix]]`", !t.fix.is_empty()),
+        ("`[[test.host]]`", !t.host.is_empty()),
+    ]
+    .into_iter()
+    .filter_map(|(name, set)| set.then_some(name))
+    .collect()
 }
 
 /// A code only the syntax stage reports: its markers come from the parser alone.

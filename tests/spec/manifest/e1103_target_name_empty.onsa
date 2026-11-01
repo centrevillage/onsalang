@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_empty"
+// edition = "2026"
+//
+// [targets.""]                                 #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the empty name is not an identifier (§2.3, §15.3; S-828).

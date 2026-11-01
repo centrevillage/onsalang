@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_dotdot"
+// edition = "2026"
+//
+// [targets.".."]                               #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the name `..` is not an identifier (§15.3, S-828): `onsa build` puts the output in `target/<name>/`,
+// and this name would leave `target/`. A quoted name is read like a bare one.

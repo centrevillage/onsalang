@@ -1,0 +1,12 @@
+[package]
+name = "e1102_plugin_key"
+edition = "2026"
+
+[[plugin]]
+flow = "voice"
+id = "com.example.voice"
+name = "Voice"
+vendor = "Example"
+version = "1.0.0"
+category = "effect"
+colour = 1                                   #~ E1102

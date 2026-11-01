@@ -11,8 +11,8 @@ cases from the test runner (`onsa_cases --run`); this module never reads Rust.
 The table of the codes (`tasks/diag-codes.md`) is read in `repo.py`: the retired codes (its "欠番:" line) and the
 codes of the second phase (the rows of its table marked "第 2 期").
 
-A negative example is a `//~` marker that a run compared and a diagnostic
-matched. Not counted: the markers of a case with `mode = "none"`, of a case
+A negative example is a marker (`//~` in a source, `#~` in a manifest) that a
+run compared and a diagnostic matched. Not counted: the markers of a case with `mode = "none"`, of a case
 listed as a whole in tests/pending.toml (`test-case` "<path>"), and of the
 directories the scan excludes (the runner never reports them). A case listed
 by test (`<path>::<name>`) still compares its markers, so they count. A

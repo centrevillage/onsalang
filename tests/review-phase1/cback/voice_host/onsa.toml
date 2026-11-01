@@ -13,18 +13,15 @@ prefix = "voice_"
 [targets.host]
 kind = "staticlib"
 platform = "host"
-numeric = "strict"
+fp = "strict"
 provides = []
 
 # A Cortex-M7 board: sources and flags only (cross compile with the board's toolchain).
 [targets.daisy]
 kind = "staticlib"
 platform = "thumbv7em-none-eabihf"
-numeric = "strict-ftz"
+fp = "strict-ftz"
 provides = []
 panic = "reset"
 panic_messages = false
 main_frame = "static"
-
-[targets.daisy.memory]
-bulk_threshold = 4096

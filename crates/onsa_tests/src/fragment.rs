@@ -307,7 +307,8 @@ mod tests {
     fn with_manifest() {
         let text = "// onsa.toml\n// [package]\n// name = \"echo\"\n// edition = \"2026\"\n//\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n//\n// [test]\n// golden = [\"c\"]\n";
         let f = parse(text).unwrap().unwrap();
-        let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap();
+        let m =
+            onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0)).unwrap().manifest;
         assert_eq!(m.package.value.name.value, "echo");
         assert!(m.targets.contains_key("t"));
         assert_eq!(f.test.golden, vec![GoldenKind::C]);
@@ -342,7 +343,9 @@ mod tests {
                 toml.bytes().zip(text.bytes()).all(|(a, b)| a == b || (a == b' ' && !matches!(b, b'\n' | b'\r'))),
                 "{toml:?}"
             );
-            let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap();
+            let m = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0))
+                .unwrap()
+                .manifest;
             let name = &m.package.value.name;
             assert_eq!(&text[name.key.clone()], "name", "{eol:?}");
             assert_eq!(&text[name.span.clone()], "\"echo\"", "{eol:?}");
@@ -352,21 +355,25 @@ mod tests {
         }
     }
 
-    /// The manifest of a fragment is not read here: its errors are those of
-    /// the manifest's reader when the case loads, at the places of the file.
+    /// The manifest of a fragment is not read here: its errors and its
+    /// diagnostics are those of the manifest's reader when the case loads,
+    /// at the places of the file.
     #[test]
     fn the_manifest_is_read_by_the_reader_of_the_compiler() {
-        for text in [
-            "// onsa.toml\n// [targets.t]\n// kind = \"source\"\n// platform = \"host\"\n",
-            "// onsa.toml\n// [tests]\n// mode = \"parse\"\n",
-        ] {
+        let read = |text: &str| {
             let f = parse(text).unwrap().unwrap();
-            let e = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap_err();
-            assert!(e.starts_with("m.onsa: missing table `[package]`"), "{e}");
-        }
-        let f = parse("// onsa.toml\n// [package]\n// name = 3\n").unwrap().unwrap();
-        let e = onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap()).unwrap_err();
+            onsa_driver::manifest::read(&f.manifest_source("m.onsa").unwrap(), onsa_diag::FileId(0))
+        };
+        let e = read("// onsa.toml\n// [targets.t]\n// kind = \"source\"\n// platform = \"host\"\n").unwrap_err();
+        assert!(e.starts_with("m.onsa: missing table `[package]`"), "{e}");
+        let e = read("// onsa.toml\n// [package]\n// name = 3\n").unwrap_err();
         assert!(e.contains("line 3, column 11"), "{e}");
+        // A table the manifest does not know is its E1102, at the key of the header.
+        let m = read("// onsa.toml\n// [tests]\n// mode = \"parse\"\n").unwrap();
+        assert_eq!(
+            m.diagnostics.iter().map(|d| (d.code, d.span.start)).collect::<Vec<_>>(),
+            [(onsa_diag::Code::E1102, 17)]
+        );
     }
 
     #[test]

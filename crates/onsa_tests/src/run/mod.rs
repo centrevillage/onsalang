@@ -65,7 +65,7 @@ mod tests;
 
 pub use all::{run_all, run_all_with, run_each, runs_json};
 use build::{BuildCtx, build_target, conformance_scope, disk_files, host_not_run, run_hosts};
-use markers::{canonical, compare, negative_rules, parser_markers};
+use markers::{canonical, compare, manifest_stage, negative_rules, parser_markers};
 pub use report::{CaseReport, Report, reconcile};
 use test_blocks::run_tests;
 
@@ -73,6 +73,8 @@ use test_blocks::run_tests;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Stage {
+    /// The manifest's check, before the sources are read (`#~`).
+    Manifest,
     Parse,
     Check,
     Build,
@@ -331,6 +333,9 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             return run;
         }
     };
+    if manifest_stage(&mut run, setup, &loaded, &case.path) {
+        return run;
+    }
     let targets = case::target_names(&loaded);
     let t = &setup.test;
     if !targets.is_empty() && matches!(t.mode, Mode::None | Mode::Parse) {
@@ -446,7 +451,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     }
 
     if t.mode == Mode::Parse {
-        match onsa_driver::parse_only(&loaded.sources) {
+        match onsa_driver::parse_only(&loaded) {
             Ok(result) => {
                 compare(&mut run, &loaded.sources, &markers, &result.diagnostics, Stage::Parse, None);
                 // Candidates are checked again only in `check` and `test` (W3-17): one here fails.

@@ -1,0 +1,32 @@
+// onsa.toml
+// [package]
+// name = "e1102_all_reported"
+// edition = "2026"
+// colour = "red"                               #~ E1102
+// flavour = "mint"                             #~ E1102
+//
+// [export]
+// prefix = "x_"
+// suffix = "_x"                                #~ E1102
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+// panik = "trap"                               #~ E1102
+//
+// [bogus]                                      #~ E1102
+// x = 1
+//
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// E1102 is not a first-error rule: a manifest is one unit and every error in it is reported (§18.1
+// "全ての誤りを報告する"; S-597). Two unknown keys of one table, one unknown key in each of `[export]`
+// and a target, and an unknown top-level table give five E1102.

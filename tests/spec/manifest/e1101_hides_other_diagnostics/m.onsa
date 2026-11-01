@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// When the manifest is not TOML, TOML's reading stops and no other manifest diagnostic is reported:
+// the unknown key `colour`, the unknown table `[bogus]`, the target name `Bad` (E1103) and the unknown key
+// `flows` carry no marker, and only the E1101 is expected (§18.1, S-99).
+
+pub fn f() -> I32 { 1 }

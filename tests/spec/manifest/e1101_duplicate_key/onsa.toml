@@ -1,0 +1,4 @@
+[package]
+name = "e1101_duplicate_key"
+name = "other"                               #~ E1101
+edition = "2026"

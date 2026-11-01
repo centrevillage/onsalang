@@ -75,7 +75,7 @@ pub fn load_fixture(root: &Path, pkg: &str) -> Result<Fixture, BuildFailure> {
             crate::c::head(&onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics))
         )));
     }
-    let exported = onsa_driver::ExportSettings::of(&analyzed, loaded.manifest.as_ref()).fns;
+    let exported = onsa_driver::ExportSettings::of(&analyzed, loaded.manifest()).fns;
     Ok(Fixture { loaded, analyzed, exported })
 }
 

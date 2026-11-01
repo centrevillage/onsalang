@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "e1102_target_numeric"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+// numeric = "strict"                           #~ E1102
+//
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// E1102: `numeric`, the old name of `fp` (S-57), is an unknown key like any other: no candidate that
+// renames it (`fixes = 0`; S-99, S-166, S-597).

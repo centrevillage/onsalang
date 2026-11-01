@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_digit_start"
+// edition = "2026"
+//
+// [targets.3d]                                 #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: an identifier does not start with a digit (§2.3, §15.3; S-828). TOML allows it in a bare key.

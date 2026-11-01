@@ -7,9 +7,9 @@
 extern "C" {
 #endif
 
-#define ECHO_ECHO_SIZE      32   /* bytes of the fast region (spec §12.4) */
-#define ECHO_ECHO_BULK_SIZE 384004   /* bytes of the bulk region */
-#define ECHO_ECHO_ALIGN     8
+#define ECHO_ECHO_SIZE      384024   /* bytes of the fast region (spec §12.4) */
+#define ECHO_ECHO_BULK_SIZE 0   /* bytes of the bulk region */
+#define ECHO_ECHO_ALIGN     4
 #define ECHO_ECHO_PARAM_COUNT 2
 
 typedef struct echo_echo echo_echo;   /* the state (fast region); opaque */

@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "e1102_target_key"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+// panik = "trap"                               #~ E1102
+//
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// E1102: a key that `[targets.<name>]` does not list is reported at its line, here `panik`, a
+// misspelling of `panic` (§15.3, §18.1; S-99, R-130). A misspelling is not turned into a fix
+// candidate: the writer's intent is not one (`fixes = 0`; S-597). The target's own fields are not reported.

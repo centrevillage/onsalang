@@ -68,17 +68,33 @@ pub struct PanicMark {
 
 /// Parse the `//~` markers of one file.
 pub fn parse_markers(text: &str) -> Result<Markers, String> {
+    markers_of(text, "//~")
+}
+
+/// Parse the `#~` markers of the text of a manifest (`onsa.toml`, or a
+/// fragment whose lines are those of its case file): codes only, with the
+/// grammar of `//~` (`tests/README.md`).
+pub fn parse_manifest_markers(text: &str) -> Result<Vec<Expected>, String> {
+    let m = markers_of(text, "#~")?;
+    if !m.testfails.is_empty() || !m.panics.is_empty() {
+        return Err("`#~ TESTFAIL` and `#~ PANIC` name tests, and a manifest holds none".into());
+    }
+    Ok(m.expected)
+}
+
+/// The markers that start with `prefix` (`//~` or `#~`) in `text`.
+fn markers_of(text: &str, prefix: &str) -> Result<Markers, String> {
     let mut expected = Vec::new();
     let mut testfails = Vec::new();
     let mut panics = Vec::new();
     for (i, line) in text.lines().enumerate() {
         let lineno = i as u32 + 1;
-        let Some(idx) = line.find("//~") else { continue };
-        for marker in line[idx + 3..].split("//~") {
+        let Some(idx) = line.find(prefix) else { continue };
+        for marker in line[idx + prefix.len()..].split(prefix) {
             let marker = marker.trim();
             let (code_str, rest) = marker.split_once(char::is_whitespace).unwrap_or((marker, ""));
             if code_str.is_empty() {
-                return Err(format!("line {lineno}: empty `//~` marker"));
+                return Err(format!("line {lineno}: empty `{prefix}` marker"));
             }
             if code_str == "TESTFAIL" {
                 let rest = rest.trim();

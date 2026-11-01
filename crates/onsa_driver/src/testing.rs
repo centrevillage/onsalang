@@ -233,7 +233,7 @@ pub fn run_tests(
         // are reported once (§18.1, S-309).
         let mut diagnostics = reduce::exact(unsupported.iter().map(onsa_interp::Unsupported::diagnostic).collect());
         fill_found(sources, &mut diagnostics);
-        debug_contract(sources, &diagnostics);
+        debug_contract(sources, &diagnostics, None);
         TestRun::Unsupported(diagnostics)
     })
 }

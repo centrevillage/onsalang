@@ -1,0 +1,32 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_underscore"
+// edition = "2026"
+//
+// [targets._host]                              #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [targets.a__b]                               #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: a name that starts with `_` is not an identifier (§2.3: "頭の `_` はどの形でも書けない"; S-828), and
+// neither is a name with `__` (`a__b`, second target; §2.3). Both are reported at their headings.

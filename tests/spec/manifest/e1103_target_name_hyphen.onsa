@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_hyphen"
+// edition = "2026"
+//
+// [targets.daisy-seed]                         #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `-` is not in an identifier (§2.3), though TOML allows it in a bare key (§15.3; S-828).

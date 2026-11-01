@@ -8,6 +8,3 @@ prefix = "t_"
 [targets.host]
 kind = "staticlib"
 platform = "host"
-
-[targets.host.memory]
-bulk_threshold = 64

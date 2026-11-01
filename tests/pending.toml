@@ -248,27 +248,6 @@ note = "C の名前の重なり。名前の集合は W10-01（S-112）、C の�
 
 [[pending]]
 kind = "diag-code"
-target = "E1101"
-reasons = ["S-99", "R-130"]
-until = "W4-02"
-note = "マニフェストを TOML として読めない"
-
-[[pending]]
-kind = "diag-code"
-target = "E1102"
-reasons = ["S-99", "R-130", "S-166"]
-until = "W4-02"
-note = "マニフェストの未知の表・キー"
-
-[[pending]]
-kind = "diag-code"
-target = "E1103"
-reasons = ["S-99", "R-130", "S-165"]
-until = "W10-01"
-note = "マニフェストの値の形（W4-02）、flows / fns の重複（W10-01、S-165）"
-
-[[pending]]
-kind = "diag-code"
 target = "E1104"
 reasons = ["S-99", "R-130"]
 until = "W4-02"

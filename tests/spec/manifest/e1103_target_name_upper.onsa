@@ -1,0 +1,34 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_upper"
+// edition = "2026"
+//
+// [targets.Host]                               #~ E1103
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the name of `[targets.<name>]` is a `snake_case` identifier, like the package's (§15.3, §2.3; S-828).
+// A capital letter breaks it, and the report is at the heading's line. The target `host`, which differs only in
+// the case, is a valid name and is not reported: the name `Host` would write to the same directory as
+// `host` on a case-insensitive file system.

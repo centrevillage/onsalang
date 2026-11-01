@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use onsa_diag::{Code, SourceMap};
+use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 
 /// What `onsa --version` shows after `onsa `: the compiler's version and, on
 /// its own line, the embedded std's (spec §15.3, S-160).
@@ -142,6 +142,18 @@ enum Outcome {
 }
 
 impl Outcome {
+    /// The outcome of the diagnostics a command reports (§18.2): one that
+    /// points into `onsa.toml` (`Stage::Manifest`) is 2, the others 1.
+    fn of(diagnostics: &[Diagnostic]) -> Outcome {
+        if diagnostics.iter().any(|d| d.stage == Stage::Manifest) {
+            Outcome::CannotWork
+        } else if diagnostics.is_empty() {
+            Outcome::Ok
+        } else {
+            Outcome::Problems
+        }
+    }
+
     fn code(self) -> u8 {
         match self {
             Outcome::Ok => 0,
@@ -421,13 +433,20 @@ fn one_path(paths: &[PathBuf]) -> Result<Option<&std::path::Path>, Outcome> {
     }
 }
 
-/// Load the package of the one path of `paths` ([`one_path`]).
-fn load(paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
-    onsa_driver::load(one_path(paths)?).map_err(cannot_work)
+/// Load the package of the one path of `paths` ([`one_path`]). The
+/// diagnostics of its manifest stop the command before the sources are read
+/// (§18.1): printed in `form`, exit 2.
+fn load(form: Form, paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
+    let loaded = onsa_driver::load(one_path(paths)?).map_err(cannot_work)?;
+    let diagnostics = loaded.manifest_diagnostics();
+    if !diagnostics.is_empty() {
+        return Err(print_diagnostics(form, &loaded.sources, diagnostics, Outcome::of(diagnostics)));
+    }
+    Ok(loaded)
 }
 
 fn check(json: bool, paths: &[PathBuf]) -> Outcome {
-    let mut loaded = match load(paths) {
+    let mut loaded = match load(Form::json(json), paths) {
         Ok(l) => l,
         Err(o) => return o,
     };
@@ -435,8 +454,7 @@ fn check(json: bool, paths: &[PathBuf]) -> Outcome {
         Ok(r) => r,
         Err(e) => return internal(&loaded.sources, &e),
     };
-    let then = if result.diagnostics.is_empty() { Outcome::Ok } else { Outcome::Problems };
-    print_diagnostics(Form::json(json), &loaded.sources, &result.diagnostics, then)
+    print_diagnostics(Form::json(json), &loaded.sources, &result.diagnostics, Outcome::of(&result.diagnostics))
 }
 
 fn explain(code: &str) -> Outcome {
@@ -494,7 +512,7 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
 /// Load and analyze one package; print the diagnostics and return the
 /// outcome when it does not check.
 fn analyzed(form: Form, paths: &[PathBuf]) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), Outcome> {
-    let mut loaded = load(paths)?;
+    let mut loaded = load(form, paths)?;
     let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
         Ok(a) => a,
         Err(e) => return Err(internal(&loaded.sources, &e)),
@@ -713,7 +731,7 @@ fn build(target: &str, out: Option<PathBuf>, paths: &[PathBuf]) -> Outcome {
         }
         Err(onsa_driver::BuildError::Usage(m)) => cannot_work(m),
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-            print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::Problems)
+            print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::of(&diagnostics))
         }
         Err(onsa_driver::BuildError::Internal { sources, error }) => internal(&sources, &error),
     }

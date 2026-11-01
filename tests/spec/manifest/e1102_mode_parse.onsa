@@ -1,0 +1,13 @@
+// onsa.toml
+// [package]
+// name = "e1102_mode_parse"
+// edition = "2026"
+// colour = "red"                               #~ E1102
+//
+// [test]
+// spec = ["§18.1"]
+// mode = "parse"
+// fixes = 0
+
+// The manifest's diagnostics are compared with the `#~` markers in every `mode`, before the source is
+// read (`tests/README.md`): `mode = "parse"` parses the source only, and the marker is still checked.

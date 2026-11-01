@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// A `[test]` table in the real `onsa.toml` of a package is an E1102: the manifest's tables are the closed
+// table of §15.3, and `[test]` is the harness's table, readable only in the fragment (S-99). The keys in it
+// are not read. Its pair is `../test_table_in_fragment.onsa`, where the same table is read.
+
+pub fn f() -> I32 { 1 }

@@ -3,4 +3,4 @@
 # 今（2026-10-29）: どちらも E0307「`Q` is a type alias; …」「`B` is a type alias; …」（W4-04 U8b から）。
 [package]
 name = "r105impl"
-version = "0.1.0"
+edition = "2026"

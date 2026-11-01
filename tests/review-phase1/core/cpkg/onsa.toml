@@ -11,5 +11,5 @@ prefix = "ord_"
 [targets.host]
 kind = "source"
 platform = "host"
-numeric = "strict"
+fp = "strict"
 provides = []

@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "e1102_known_keys"
+// edition = "2026"
+//
+// [export]
+// prefix = "x_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [targets.host.memory]
+// bulk = false
+// fast_budget = 262144
+// bulk_budget = 1048576
+//
+// [test]
+// spec = ["§15.3"]
+
+// Every key of the table of §15.3 whose value this unit does not read is written with a value of the
+// table: none is an E1102, so the manifest has no diagnostic (§15.3). The values are checked in W4-02
+// U2b and U3; this case checks that the closed table lists these keys.

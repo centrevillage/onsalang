@@ -13,9 +13,6 @@
 // panic = "trap"
 // provides = []
 //
-// [targets.host.memory]
-// bulk_threshold = 4096
-//
 // [test]
 // conformance = true
 

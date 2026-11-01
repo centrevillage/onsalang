@@ -1,0 +1,41 @@
+// onsa.toml
+// [package]
+// name = "e1103_target_name_ok"
+// edition = "2026"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [targets.daisy_seed]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [targets.a1]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// fp = "strict"
+// provides = []
+// panic = "trap"
+// panic_messages = true
+// main_frame = "stack"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+
+// Names that are `snake_case` identifiers (§2.3, §15.3; S-828) are not reported: `host`, `daisy_seed`,
+// and `a1` (a digit after the first letter). The case has no diagnostic.

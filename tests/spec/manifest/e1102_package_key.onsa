@@ -1,0 +1,13 @@
+// onsa.toml
+// [package]
+// name = "e1102_package_key"
+// edition = "2026"
+// colour = "red"                               #~ E1102
+//
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// E1102: a key that `[package]` does not list (its keys are `name` and `edition`) is reported at the
+// key's line (§15.3, §18.1; S-99, R-130). The note lists the keys of the table; the Rust test
+// `crates/onsa_cli/tests/manifest_diagnostics.rs` reads it, and neither it nor the message is compared here.

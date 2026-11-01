@@ -1,0 +1,15 @@
+// onsa.toml
+// [package]
+// name = "e1102_export_key"
+// edition = "2026"
+//
+// [export]
+// prefix = "x_"
+// suffix = "_x"                                #~ E1102
+//
+// [test]
+// spec = ["§15.3"]
+// fixes = 0
+
+// E1102: a key that `[export]` does not list (its only key is `prefix`) is reported at its line
+// (§15.3, §18.1; S-99, R-130). The known key `prefix` next to it is not reported.

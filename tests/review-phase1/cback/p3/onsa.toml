@@ -17,7 +17,7 @@ provides = []
 [targets.web]
 kind = "source"
 lang = "js"
-numeric = "strict"
+fp = "strict"
 
 [targets.csrc]
 kind = "source"

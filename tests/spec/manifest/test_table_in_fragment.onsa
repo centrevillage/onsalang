@@ -1,0 +1,13 @@
+// onsa.toml
+// [package]
+// name = "test_table_in_fragment"
+// edition = "2026"
+//
+// [test]
+// spec = ["§15.3"]
+// mode = "check"
+
+// The fragment is the one place a `[test]` table may be written: it is read as a manifest with the
+// table `[test]` added, and it is no E1102 (S-99; `tests/README.md`). Every case here has one; the pair of
+// this case is the package `test_table_in_manifest/`, where the same `[test]` in the real `onsa.toml`
+// is an E1102.

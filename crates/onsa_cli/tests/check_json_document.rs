@@ -751,7 +751,6 @@ fn an_input_error_prints_nothing_on_standard_output_with_json() {
 }
 
 #[test]
-#[ignore = "W4-02"]
 fn a_manifest_diagnostic_is_a_document_with_exit_code_2_and_the_manifest_as_its_file() {
     // §18.1, §18.2: a diagnostic that points into `onsa.toml` (E1102 for an unknown key) is a
     // diagnostic like any other, with exit code 2, and `--json` prints the document for it.

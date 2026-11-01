@@ -1,0 +1,13 @@
+// onsa.toml
+// [package]
+// name = "e1102_mode_none"
+// edition = "2026"
+// colour = "red"                               #~ E1102
+//
+// [test]
+// spec = ["§18.1"]
+// mode = "none"
+// fixes = 0
+
+// The manifest's diagnostics are compared with the `#~` markers in every `mode`, before the source is
+// read (`tests/README.md`): `mode = "none"` only collects the case, and the marker is still checked.

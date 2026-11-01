@@ -15,7 +15,7 @@ use onsa_diag::{Diagnostic, FileId, SourceMap, Span, Stage};
 use onsa_sema::package_tree::{self, BUILD_DIR, MANIFEST, SUFFIX};
 use onsa_syntax::{PathPart, path_name_error};
 
-use crate::manifest::{self, Manifest};
+use crate::manifest::{self, Manifest, ManifestRead};
 
 /// One source file of a package input: its path (relative to the package
 /// root with a manifest; as given without one; `/` between the parts either
@@ -83,8 +83,10 @@ pub struct Loaded {
     pub root: Option<PathBuf>,
     /// Each module's file and path, a name for each part ([`module_path`]).
     pub modules: Vec<(FileId, Vec<String>)>,
-    /// The manifest; `None` for a single file without `onsa.toml` (spec §15.1).
-    pub manifest: Option<Manifest>,
+    /// The manifest as read, with its diagnostics; `None` for a single file
+    /// without `onsa.toml` (spec §15.1). Its name is empty when it has none
+    /// (every command stops on its diagnostics).
+    pub manifest: Option<ManifestRead>,
     /// The file passed inside a package ([`PackageInput::focus`]).
     pub focus: Option<FileId>,
     /// The files of [`PackageInput::root_tests`], in `sources` for their E0200.
@@ -100,14 +102,14 @@ impl Loaded {
     /// The sources of `input` in a `SourceMap` with their module paths, and
     /// its manifest read. Reads no file.
     pub fn from_input(input: PackageInput) -> Result<Loaded, String> {
-        let manifest = input.manifest.as_ref().map(manifest::read).transpose()?;
-        let name = match (&manifest, input.files.as_slice()) {
-            (Some(m), _) => m.package.value.name.value.clone(),
-            (None, [file]) => stem(&file.path),
-            (None, files) => return Err(format!("an input without onsa.toml is one file, not {}", files.len())),
-        };
-        if manifest.is_none() && !input.root_tests.is_empty() {
-            return Err("an input without onsa.toml has no root `tests/`".to_string());
+        let source = input.manifest;
+        if source.is_none() {
+            if input.files.len() != 1 {
+                return Err(format!("an input without onsa.toml is one file, not {}", input.files.len()));
+            }
+            if !input.root_tests.is_empty() {
+                return Err("an input without onsa.toml has no root `tests/`".to_string());
+            }
         }
         let mut sources = SourceMap::default();
         let mut modules = Vec::with_capacity(input.files.len());
@@ -121,16 +123,38 @@ impl Loaded {
             file
         };
         for f in input.files {
-            let module = if manifest.is_some() { module_path(Path::new(&f.path)) } else { vec![stem(&f.path)] };
+            let module = if source.is_some() { module_path(Path::new(&f.path)) } else { vec![stem(&f.path)] };
             modules.push((add(&mut sources, f), module));
         }
         let root_tests = input.root_tests.into_iter().map(|f| add(&mut sources, f)).collect();
+        let manifest = source.map(|s| read_manifest_of(&mut sources, &modules, &s)).transpose()?;
+        let name = match &manifest {
+            Some(m) => m.manifest.package.value.name.value.clone(),
+            None => stem(sources.file(modules[0].0).name()),
+        };
         if let Some(f) = &input.focus
             && focus.is_none()
         {
             return Err(format!("{f}: the file to narrow to is not a file of the input"));
         }
         Ok(Loaded { sources, name, root: input.root, modules, manifest, focus, root_tests })
+    }
+
+    /// The manifest's values; `None` for a single file without `onsa.toml`.
+    pub fn manifest(&self) -> Option<&Manifest> {
+        self.manifest.as_ref().map(|m| &m.manifest)
+    }
+
+    /// The diagnostics of the manifest's check (§18.1): every command stops
+    /// on them before it reads the sources, with exit code 2 (§18.2).
+    pub fn manifest_diagnostics(&self) -> &[Diagnostic] {
+        self.manifest.as_ref().map_or(&[], |m| &m.diagnostics)
+    }
+
+    /// The file `onsa.toml` in `sources`, whose text is TOML, not Onsa
+    /// (a test fragment's manifest is in its case file).
+    pub fn toml_file(&self) -> Option<FileId> {
+        self.manifest.as_ref().filter(|m| m.form == ManifestForm::File).map(|m| m.file)
     }
 
     /// The module of the file passed inside the package (§15.1): `interface`
@@ -191,6 +215,27 @@ impl Loaded {
         }
         out
     }
+}
+
+/// The manifest of `source` read, in `sources`: `onsa.toml` is a file of its
+/// own; a test fragment's places are in its case file, a module of the input.
+fn read_manifest_of(
+    sources: &mut SourceMap,
+    modules: &[(FileId, Vec<String>)],
+    source: &ManifestSource,
+) -> Result<ManifestRead, String> {
+    let file = match source.form {
+        ManifestForm::File => sources.add(source.path.clone(), source.text.clone()),
+        ManifestForm::Fragment => match modules.iter().find(|(f, _)| sources.file(*f).name() == source.path) {
+            Some((f, _)) => *f,
+            None => return Err(format!("{}: the fragment is not in a file of the input", source.path)),
+        },
+    };
+    let mut read = manifest::read(source, file)?;
+    crate::fill_found(sources, &mut read.diagnostics);
+    let toml = (source.form == ManifestForm::File).then_some(file);
+    crate::debug_contract(sources, &read.diagnostics, toml);
+    Ok(read)
 }
 
 /// The name of a module file without its `.onsa` (all of it when it has

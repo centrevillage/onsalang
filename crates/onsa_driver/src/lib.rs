@@ -21,7 +21,7 @@ pub use input::{
     read_sources, slash_path,
 };
 pub use internal::{InternalError, Origin, guard, guard_on_stack};
-pub use manifest::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestTarget, Spanned};
+pub use manifest::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestRead, ManifestTarget, Spanned};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
 
 use std::sync::Arc;
@@ -68,12 +68,13 @@ fn parse_file(file: FileId, text: &str) -> onsa_syntax::Parsed {
     onsa_syntax::parse(file, text)
 }
 
-/// Parse only (the `mode = "parse"` depth of the test cases, D-05).
-pub fn parse_only(sources: &SourceMap) -> Result<CheckResult, InternalError> {
+/// Parse only (the `mode = "parse"` depth of the test cases, D-05): the
+/// Onsa files of `loaded` (not its `onsa.toml`).
+pub fn parse_only(loaded: &Loaded) -> Result<CheckResult, InternalError> {
     guard(|| {
         let mut result = CheckResult::default();
-        for (id, file) in sources.files() {
-            let parsed = parse_file(id, file.text());
+        for id in loaded.modules.iter().map(|(f, _)| *f).chain(loaded.root_tests.iter().copied()) {
+            let parsed = parse_file(id, loaded.sources.file(id).text());
             let diagnostics = parsed.diagnostics.clone();
             result.diagnostics.extend(reduce::per_unit([(id, &parsed.units)], diagnostics).diagnostics);
         }
@@ -207,10 +208,17 @@ impl Analyzed {
 /// Parse and analyze a loaded package, keeping the analysis (`std` is
 /// appended to `sources`), with the diagnostics of its paths
 /// ([`Loaded::input_diagnostics`]).
+/// A package whose manifest has diagnostics is not analyzed: the command
+/// stops on them first (§18.1), and one that did not is an internal error.
 pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {
     let modules = loaded.modules.clone();
     let name = loaded.name.clone();
-    let paths = guard(|| loaded.input_diagnostics())?;
+    let paths = guard(|| {
+        if let Some(d) = loaded.manifest_diagnostics().first() {
+            onsa_diag::internal::bug(Some(d.span), "the manifest has diagnostics, and they did not stop the command");
+        }
+        loaded.input_diagnostics()
+    })?;
     analyze(&mut loaded.sources, &name, &modules, paths)
 }
 
@@ -244,7 +252,7 @@ fn analyze(
         diagnostic_units.extend(paths.iter().map(|_| None));
         diagnostics.extend(paths);
         fill_found(sources, &mut diagnostics);
-        debug_contract(sources, &diagnostics);
+        debug_contract(sources, &diagnostics, None);
         Analyzed { pkg, analysis, diagnostics, diagnostic_units, units }
     })
 }
@@ -292,10 +300,11 @@ pub use build::{
 /// In debug builds (the tests, the fuzzing), a diagnostic that breaks its
 /// rules (a required fix or note missing, edits that overlap or cut a token,
 /// plan D-04) is an internal error: the stage that made it is wrong (W3-02 D11).
-/// Release builds report the diagnostic as it is.
-pub(crate) fn debug_contract(sources: &SourceMap, diagnostics: &[Diagnostic]) {
+/// Release builds report the diagnostic as it is. `toml` is the file
+/// `onsa.toml`, which is not cut by the lexer of Onsa.
+pub(crate) fn debug_contract(sources: &SourceMap, diagnostics: &[Diagnostic], toml: Option<FileId>) {
     if cfg!(debug_assertions) {
-        let problems = onsa_syntax::diagnostic_contract(sources, diagnostics);
+        let problems = onsa_syntax::diagnostic_contract(sources, diagnostics, toml);
         if !problems.is_empty() {
             onsa_diag::internal::bug(
                 diagnostics.first().map(|d| d.span),

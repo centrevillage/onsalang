@@ -11,7 +11,7 @@ prefix = "p1_"
 [targets.small]
 kind = "source"
 platform = "thumbv7em-none-eabihf"
-numeric = "strict"
+fp = "strict"
 provides = []
 panic = "reset"
 panic_messages = false
