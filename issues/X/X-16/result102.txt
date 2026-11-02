@@ -1,0 +1,7 @@
+idle:30	exit 0	30 s	2 MB written	0.0 MB/s
+onsa_cli-cli	exit 0	7 s	50 MB written	7.6 MB/s
+idle:20	exit 0	20 s	1 MB written	0.1 MB/s
+fuzz-shard0	exit 0	14 s	1 MB written	0.1 MB/s
+fmt-props-shard0	exit 0	26 s	0 MB written	0.0 MB/s
+fmt-cst-shard0	exit 0	6 s	1 MB written	0.2 MB/s
+idle:20	exit 0	20 s	0 MB written	0.0 MB/s
