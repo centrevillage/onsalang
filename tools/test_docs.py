@@ -1371,6 +1371,18 @@ class DocsCommands(DocsTree):
         self.assertEqual(out[out.index(field[0]) : out.index(field[0]) + 4], [*field, "- ぶつかりうる事例: なし"])
         self.assertIn("- 他の作業の持ち越し: なし", self.run_("ticket", "W1-01", "U1/i")[1])
 
+    def test_the_dated_label_is_carried(self):
+        """W4-18 U10f's carry-over: `- 持ち越し（日付、書き手）:`, the label `note` writes, is a `持ち越し` for `stale` and
+        for `他の作業の持ち越し` of `ticket` as `- 持ち越し:` is; a mark of a thing done after it covers its line."""
+        self.layout()
+        dated = ["- 持ち越し（2026-11-01、親）: S-1 を決める。", "- 持ち越し（2026-11-01、親）:（済み: U1）S-1 を決める。",
+                 "- 持ち越し（2026-11-02、docs）: W1-01 へ: z"]  # fmt: skip
+        self.write("tasks/W/W1-02.md", self.read("tasks/W/W1-02.md") + "\n".join(dated) + "\n")
+        at = {x: n for n, x in enumerate(self.read("tasks/W/W1-02.md").split("\n"), 1)}
+        self.assertEqual(self.run_("stale"), (0, [f"S-1 DECIDED\ttasks/W/W1-02.md:{at[dated[0]]}\t{dated[0]}",
+                                                  "docs stale: 1 line(s) in the `持ち越し` of 1 work(s)"]))  # fmt: skip
+        self.assertIn(f"  - tasks/W/W1-02.md:{at[dated[2]]}: {dated[2]}", self.run_("ticket", "W1-01", "U1/i")[1])
+
     def test_stale(self):
         """X-21 P-2: the lines of the `持ち越し` of the works not DONE (`--all`: every work) that name a DECIDED S beside
         決める, or a DONE R beside 決める or 直す, with no mark of a thing done on the line, on the next line of its

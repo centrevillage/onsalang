@@ -2282,7 +2282,7 @@ def cmd_answers(args):
 # ---------------------------------------------------------------- ticket (DT-6, DF-6)
 
 UNIT_ROLE = re.compile(r"[^/\s]+/[tib](?:-fix\d+)?(?P<handover>-handover)?")
-CARRIED = re.compile(r"- 持ち越し[:：]")
+CARRIED = re.compile(r"- 持ち越し[（(:：]")  # `- 持ち越し:`, and `- 持ち越し（日付、書き手）:` that `note` writes
 # the fields of a ticket the parent fills (DF-6), with their guides (none for most)
 TICKET_FIELDS = (
     ("する", ""), ("しない", ""),
