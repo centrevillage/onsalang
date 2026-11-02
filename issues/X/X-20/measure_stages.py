@@ -6,7 +6,7 @@
   measure_stages.py report OUT.jsonl...    the sums, the slowest inputs, the growth by family
 
 BIN is an `onsa_cases` (debug or release). Each input is checked (and lowered to Core when the
-check reports nothing, `--lower`) in its own process, ROUNDS times (default 3, `--rounds`); a line
+check reports nothing, `--lower`) in its own process, ROUNDS times (default 1, `--rounds`); a line
 keeps the least of each phase and of the whole, with the wall clock and the cpu (user + sys) of
 the process and its largest resident memory. Run it on a quiet machine, one at a time (no
 parallel runs: the memory is measured too). A generated family stops growing past 10 s
@@ -268,7 +268,7 @@ def family_report(name, rs):
 
 def main():
     argv = sys.argv[1:]
-    rounds = 3
+    rounds = 1  # the user, 2026-11-02: once is enough; the noise is the machine's load, which more rounds do not take away
     if "--rounds" in argv:
         i = argv.index("--rounds")
         rounds = int(argv[i + 1])
