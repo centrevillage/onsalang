@@ -72,7 +72,7 @@
 //! as guards), `flow` (`if~`, the clocks) and `spaces` (the blanks inside a
 //! line, a literal against a name).
 //!
-//! To add a row (the later works, W3-05 to W5-09):
+//! To add a row:
 //!
 //! 1. move the row from [`WAITING`] to [`ROWS`] in `foreign/rows.rs` (a
 //!    `RowId` here, the `id`, stage and code of its row in

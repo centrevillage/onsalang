@@ -198,7 +198,7 @@ pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     // The operator groups (E0010) are checked on the AST, so an E0010 in the
     // part of a failed body that has no AST is not found, and the parse error
     // after it is the unit's syntax error: §18.1 ("the first in the text")
-    // may not hold there until the recovery by statement (M7, T7-1) lowers
+    // may not hold there until the recovery by statement (S-59) lowers
     // the statements before the error (accepted, 2026-10-08).
     groups::check(&ast, &|e| map.expr_kind(&cst, e), limit, &mut diagnostics);
     let mut apart = edits::Insertions::default();

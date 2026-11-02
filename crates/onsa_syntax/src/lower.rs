@@ -16,9 +16,10 @@
 //!
 //! Where the code is: this module holds the reading of the tree, the
 //! adding of the nodes, the types, the patterns and the literals;
-//! `items` the items read whole, `failed` the heads of the items and the
-//! items a syntax error stopped, and `exprs` the blocks, the statements
-//! and the expressions.
+//! `decls` the heads of the items and their declarations, read whole or
+//! stopped by a syntax error (one reader for each kind); `items` the items
+//! read whole and their parts; and `exprs` the blocks, the statements and
+//! the expressions.
 
 use onsa_diag::Span;
 
@@ -27,8 +28,8 @@ use crate::cst::{Class, Cst, Elem, NodeId, NodeKind, TokenIdx};
 use crate::literal::{Literals, char_value, int_value, str_lit, tuple_index_value};
 use crate::token::TokenKind;
 
+mod decls;
 mod exprs;
-mod failed;
 mod items;
 
 /// From each AST node to the CST node it was made from (same indices as the

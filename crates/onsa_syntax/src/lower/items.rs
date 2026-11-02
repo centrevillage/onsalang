@@ -1,6 +1,7 @@
 //! The items read whole and their parts: the visibility, the derives, the
-//! attributes, the kinds of the items, the fields, the variants, the
-//! signatures, the generics, the parameters, the effect rows and the paths.
+//! attributes, the kind of an item read whole (`decls::read_kind` reads
+//! it), the fields, the variants, the signatures, the generics, the
+//! parameters, the effect rows and the paths.
 
 use super::*;
 

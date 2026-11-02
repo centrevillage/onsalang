@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
     }
 
     /// `at name`: a clock (§11.3). The name is read as it is; which names
-    /// are clocks W3-10 looks up (S-359: an unknown one is the names stage's
+    /// are clocks the names stage looks up (S-359: an unknown one is its
     /// E0302).
     pub(super) fn parse_clock(&mut self) -> PResult<()> {
         let m = self.start(NodeKind::Clock)?;

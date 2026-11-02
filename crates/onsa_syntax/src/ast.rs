@@ -594,7 +594,8 @@ pub struct TypeExpr {
     pub span: Span,
     pub kind: TypeKind,
     /// The parentheses written around the type (`(I32)` is `I32`, §2.4,
-    /// R-43): no part of the type, kept for `onsa fmt` (W3-12 removes them).
+    /// R-43): no part of the type, kept for the AST dump (`dump.rs`), which
+    /// `diff --ast` and the check of `onsa fmt` compare (fmt keeps them).
     pub parens: u32,
 }
 
@@ -826,8 +827,9 @@ impl BinOp {
     /// operator (§3.1, §3.3; S-339, S-341): the one judgment of the
     /// parentheses of a written operand ([`BinOp::takes`] for a chain, E0011
     /// for `as` and `at`). The guard candidates of the patterns read it for
-    /// the ends of a range and the guard of the arm; `fmt` (W3-12) for the
-    /// parentheses it may remove.
+    /// the ends of a range and the guard of the arm, and those of the compound
+    /// assignments for the right operand written out (`foreign/guard.rs`,
+    /// `foreign/assign.rs`).
     pub fn bare(self, side: Side, operand: Operand) -> bool {
         match operand {
             Operand::Plain => true,
@@ -1008,10 +1010,10 @@ pub enum ExprKind {
     Path(Path),
     /// `_` (typed hole, §18.1)
     Hole,
-    /// A body, a value or (from M7, T7-1) a statement a syntax error left
-    /// unread, in a failed item ([`Item::failed`]). The later stages do not
-    /// check the body of a failed item, so they never meet it; a statement the
-    /// recovery of M7 skips will be an expression statement of it.
+    /// A body, a value or (with the recovery by statement of S-59) a statement
+    /// a syntax error left unread, in a failed item ([`Item::failed`]). The
+    /// later stages do not check the body of a failed item, so they never meet
+    /// it; a statement that recovery skips will be an expression statement of it.
     Error,
     /// `(e)`
     Paren(ExprId),
@@ -1151,7 +1153,8 @@ pub struct Pat {
     pub span: Span,
     pub kind: PatKind,
     /// The parentheses written around the pattern (`(p)` is `p`, §2.4,
-    /// R-43): no part of the pattern, kept for `onsa fmt` (W3-12).
+    /// R-43): no part of the pattern, kept for the AST dump (as
+    /// [`TypeExpr::parens`]).
     pub parens: u32,
 }
 
