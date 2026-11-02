@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§6.3", "§3.2", "§4.5"]
+
+// Comparison of composite values whose parts are literals (R-55). The trait of an operator is
+// checked in the statement in which the types of the operands have no type variable left, and at
+// the end of the function after the defaults of the literals are applied (spec §4.7: "演算子の
+// trait（E0401、§6.3）… も、型変数が無くなった文で検査し、関数の終わりには既定を当てた後で検査
+// する"). `Some(1)`, `[1, 2]` and `(1, 2)` are `Option`, array and tuple of an integer literal
+// variable, which is `I32` at the end of the function, and §6.3 gives the tuple, the array and
+// `Option` the `PartialEq` of their elements, so the comparison is fine and the type variable is
+// not an error. A composite of float literals only stays open and is E0405
+// (negative/infer_compare_float.onsa); a type that has no `PartialEq` is E0401
+// (negative/infer_compare_trait.onsa).
+//
+// Every value below is worked out by hand from the spec text (§6.3: the tuple and the array
+// compare element by element, `Option` by the derive of its declaration). The order of the array
+// and the tuple (lexicographic) is checked in infer_compare_order.onsa; its value is R-119 / W8-10.
+
+use std.array
+
+// ------------------------------------------------- the literals only
+
+test "Option of literals" {
+  assert !(Some(1) == Some(2))
+  assert Some(1) == Some(1)
+  assert Some(1) != Some(2)
+  assert !(Some(1) != Some(1))
+}
+
+test "Option of a literal and None" {
+  assert !(Some(1) == None)
+  assert !(None == Some(1))
+  assert Some(1) != None
+}
+
+test "array of literals" {
+  assert [1, 2] == [1, 2]
+  assert !([1, 2] == [2, 1])
+  assert [1, 2] != [1, 3]
+  assert !([1, 2] != [1, 2])
+}
+
+test "tuple of literals" {
+  assert (1, 2) == (1, 2)
+  assert !((1, 2) == (2, 1))
+  assert (1, 2) != (1, 3)
+  assert !((1, 2) != (1, 2))
+}
+
+test "tuple of different kinds of literals" {
+  assert (1, true) == (1, true)
+  assert (1, true) != (1, false)
+}
+
+// ------------------------------------------------- nested
+
+test "nested composites of literals" {
+  assert Some([1, 2]) == Some([1, 2])
+  assert Some([1, 2]) != Some([1, 3])
+  assert [Some(1), None] == [Some(1), None]
+  assert [Some(1), None] != [None, Some(1)]
+  assert ((1, 2), [3]) == ((1, 2), [3])
+  assert ((1, 2), [3]) != ((1, 2), [4])
+  assert Some((1, [2, 3])) == Some((1, [2, 3]))
+  assert [(1, 2), (3, 4)] != [(1, 2), (3, 5)]
+}
+
+// ------------------------------------------------- the position of the comparison
+
+fn as_a_value() -> Bool {
+  Some(1) == Some(2)
+}
+
+fn as_a_condition(flag: Bool) -> I32 {
+  if flag && [1, 2] == [1, 2] {
+    1
+  } else if (1, 2) != (1, 2) {
+    2
+  } else {
+    3
+  }
+}
+
+fn in_a_loop() -> I32 {
+  var n = 0
+  for _ in 0 ..< 3 {
+    if [1, 2] == [1, 2] {
+      n = n + 1
+    }
+  }
+  n
+}
+
+test "the comparison is a value, a condition and in a loop" {
+  assert !as_a_value()
+  assert as_a_condition(true) == 1
+  assert as_a_condition(false) == 3
+  assert in_a_loop() == 3
+}
+
+test "the comparison in a closure" {
+  let eq: [Bool; 2] = array.from_fn(fn(i) { Some([1, 2]) == Some([1, 2]) })
+  let ne: [Bool; 2] = array.from_fn(fn(i) { (1, 2) != (1, 2) })
+  assert eq[0] && eq[1]
+  assert !ne[0] && !ne[1]
+}
+
+// ------------------------------------------------- a later statement decides the literals
+
+test "the literals are decided by a later annotation" {
+  let a          = [1, 2]
+  let e          = a == [1, 2]
+  let b: [U8; 2] = a
+  assert e
+  assert b == [1, 2]
+}
+
+test "the literals of an assigned variable are decided by a later assignment" {
+  var o      = Some(1)
+  let before = o == Some(1)
+  o = Some(2)
+  let after = o == Some(1)
+  assert before
+  assert !after
+}
+
+test "a tuple whose literals are decided by a later annotation" {
+  let t            = (1, 200)
+  let e            = t == (1, 200)
+  let u: (I32, U8) = t
+  assert e
+  assert u.1 == 200
+}
+
+test "a binding that holds the literal composite" {
+  let p = Some(1)
+  let q = [1, 2]
+  let r = (1, 2)
+  assert p == Some(1)
+  assert q == [1, 2]
+  assert r == (1, 2)
+  assert p != Some(2)
+  assert q != [1, 3]
+  assert r != (1, 3)
+}

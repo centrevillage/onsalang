@@ -71,13 +71,13 @@ pub fn equality_on_an_open_option() -> Bool {
 pub fn arithmetic_on_a_float() -> F32 {
   let v = make()
   let s = v + v
-  let f: F32 = v
+  let _: F32 = v
   s
 }
 
 pub fn equality_on_an_option_of_a_float() -> Bool {
   let o = None
   let e = o == None
-  let p: Option[F32] = o
+  let _: Option[F32] = o
   e
 }

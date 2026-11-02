@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.3", "§6.4", "§3.2"]
+
+// E0401: the operator of a comparison whose composite type has no `PartialEq` / `PartialOrd`
+// (R-55). The tuple and the array have the trait only when all the elements have it, `Option`
+// has `PartialEq` but no `PartialOrd` (the table of §6.3), a struct or an enum has the trait
+// only when its declaration derives it or an `impl` gives it (§6.4; `Key` below derives
+// `PartialEq` and `Eq` but not `PartialOrd`), and the function value has none. If
+// the type is decided by a later statement, the error is at the operator and not at the
+// statement that decided it (§4.7: 型変数が無くなった文で検査する; the same position rule as
+// negative/infer_operator.onsa). One error per function (P-01). A type that is never decided is
+// in negative/infer_compare_trait_open.onsa. The types that have the trait, and the literals
+// that default, are in semantics/infer_compare_literals.onsa and semantics/infer_compare_typed.onsa.
+
+pub struct Plain {
+  x: F32,
+}
+
+pub struct Key: PartialEq + Eq {
+  id: U32,
+}
+
+pub enum Mode {
+  A,
+  B,
+}
+
+fn make[T]() -> T {
+  make()
+}
+
+// ---------------------------------------------------------------- the element has no PartialEq
+
+pub fn array_of_structs() -> Bool {
+  [Plain { x: 1.0 }] == [Plain { x: 1.0 }] //~ E0401
+}
+
+pub fn array_of_structs_not_equal(a: [Plain; 2], b: [Plain; 2]) -> Bool {
+  a != b //~ E0401
+}
+
+pub fn tuple_with_a_struct() -> Bool {
+  (Plain { x: 1.0 }, 1) == (Plain { x: 1.0 }, 1) //~ E0401
+}
+
+pub fn option_of_a_struct() -> Bool {
+  Some(Plain { x: 1.0 }) == None //~ E0401
+}
+
+pub fn array_of_enums() -> Bool {
+  [Mode.A] == [Mode.B] //~ E0401
+}
+
+pub fn nested_struct(a: Option[[Plain; 1]], b: Option[[Plain; 1]]) -> Bool {
+  a == b //~ E0401
+}
+
+pub fn function_values(f: fn(I32) -> I32) -> Bool {
+  f == f //~ E0401
+}
+
+pub fn array_of_function_values(f: fn(I32) -> I32) -> Bool {
+  [f] == [f] //~ E0401
+}
+
+pub fn in_a_branch(flag: Bool, a: [Plain; 1]) -> Bool {
+  if flag {
+    a == a //~ E0401
+  } else {
+    false
+  }
+}
+
+pub fn in_a_loop(a: [Plain; 1]) -> Bool {
+  var r = true
+  for _ in 0 ..< 2 {
+    r = r && a == a //~ E0401
+  }
+  r
+}
+
+// ---------------------------------------------------------------- the order needs PartialOrd
+
+pub fn order_of_option_literals() -> Bool {
+  Some(1) < Some(2) //~ E0401
+}
+
+pub fn order_of_arrays_of_a_struct_with_only_equality() -> Bool {
+  [Key { id: 1 }] < [Key { id: 2 }] //~ E0401
+}
+
+pub fn order_of_a_tuple_with_an_option(a: (Option[I32], I32), b: (Option[I32], I32)) -> Bool {
+  a >= b //~ E0401
+}
+
+// ---------------------------------------------------------------- decided by a later statement: E0401 at the operator
+
+pub fn array_decided_later() -> [Plain; 2] {
+  let a = [make(), make()]
+  let e = a == a //~ E0401
+  a
+}
+
+pub fn tuple_decided_later() -> I32 {
+  let t               = (make(), 1)
+  let e               = t == t //~ E0401
+  let p: (Plain, I32) = t
+  p.1
+}
+
+pub fn option_of_an_array_decided_later() -> Option[[Plain; 1]] {
+  let o = None
+  let e = o == None //~ E0401
+  o
+}
+
+pub fn order_of_an_open_option() -> Option[I32] {
+  let a = Some(make())
+  let e = a < a //~ E0401
+  a
+}
+
+pub fn order_of_a_tuple_with_a_bool() -> Bool {
+  (1, true) > (0, false) //~ E0401
+}
+
+// ---------------------------------------------------------------- fine: the elements have the trait
+
+pub fn derived_struct_in_an_array() -> Bool {
+  [Key { id: 1 }] == [Key { id: 1 }]
+}
+
+pub fn derived_struct_in_an_option(a: Option[Key]) -> Bool {
+  a != None
+}
+
+pub fn order_of_scalars_in_a_tuple(a: (I32, F32), b: (I32, F32)) -> Bool {
+  a < b
+}

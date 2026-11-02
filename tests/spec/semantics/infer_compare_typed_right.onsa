@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§6.3", "§6.4", "§3.2"]
+
+// A value whose type is decided (an argument, a field, the result of a call) on the left of a
+// comparison with a composite literal on the right (R-55). The literal takes the element type of
+// the typed side and the trait of the operator is checked on the decided type (spec §4.7: the
+// operator trait is checked in the statement in which the type variables are gone; §6.3: the
+// array, the tuple and `Option` have `PartialEq` when the elements have it). The result of these
+// forms does not depend on the time at which the operator is checked, so this file is a
+// regression for the change of that time (R-55); the forms with an annotated local or a literal
+// on the left are in infer_compare_typed.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+
+pub struct Frame: PartialEq {
+  xs: [I32; 2],
+  tag: U8,
+}
+
+fn pair() -> (I32, I32) {
+  (1, 2)
+}
+
+fn check_right(v: [I32; 2]) {
+  assert v == [1, 2]
+}
+
+fn is_right(v: [I32; 2]) -> Bool {
+  v == [1, 2]
+}
+
+test "an argument and a literal on the right" {
+  check_right([1, 2])
+  assert is_right([1, 2])
+  assert !is_right([2, 1])
+}
+
+test "a field and a literal on the right" {
+  let f = Frame { xs: [1, 2], tag: 7 }
+  assert f.xs == [1, 2]
+  assert f.xs != [1, 3]
+}
+
+test "the result of a call and a literal on the right" {
+  assert pair() == (1, 2)
+  assert pair() != (2, 1)
+}
+
+fn in_a_loop(v: [I32; 2]) -> I32 {
+  var n = 0
+  for _ in 0 ..< 3 {
+    if v == [1, 2] {
+      n = n + 1
+    }
+  }
+  n
+}
+
+fn in_a_closure(v: [I32; 2]) -> [Bool; 2] {
+  array.from_fn(fn(i) { v == [1, 2] })
+}
+
+test "a loop and a closure" {
+  assert in_a_loop([1, 2]) == 3
+  assert in_a_loop([2, 1]) == 0
+  let r = in_a_closure([1, 2])
+  assert r[0] && r[1]
+  let s = in_a_closure([2, 2])
+  assert !s[0] && !s[1]
+}

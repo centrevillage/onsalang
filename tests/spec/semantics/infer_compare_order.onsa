@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.3", "§3.2"]
+
+// The order (`<` `<=` `>` `>=`) of the array and the tuple whose parts are literals, or that is
+// compared with a typed value, is fine in the type check (R-55): the tuple and the array have
+// `PartialOrd` when all the elements have it (the table of §6.3), and the trait of the operator
+// is checked in the statement in which the type has no type variable left and at the end of
+// the function after the defaults of the literals are applied (§4.7). The check only: the
+// lowering of the order of an aggregate value is not done in this version (R-119, W8-10), so
+// this file is not run (`mode` is the default `check`). What is not `PartialOrd` (`Option`, a
+// struct without a derive) is E0401 in negative/infer_compare_trait.onsa, and a float literal that nothing
+// decides is E0405 in negative/infer_compare_float.onsa.
+
+fn array_of_literals() -> Bool {
+  [1, 2] < [1, 3]
+}
+
+fn array_of_literals_ge() -> Bool {
+  [1, 2] >= [1, 2]
+}
+
+fn tuple_of_literals() -> Bool {
+  (1, 2) <= (1, 3)
+}
+
+fn tuple_of_different_kinds() -> Bool {
+  (1, 'b') > (0, 'a')
+}
+
+fn nested_literals() -> Bool {
+  ((1, 2), [3]) < ((1, 2), [4])
+}
+
+fn typed_array_and_literal(v: [I32; 2]) -> Bool {
+  v < [1, 3] && [0, 9] < v
+}
+
+fn typed_tuple_and_literal(t: (I32, F32)) -> Bool {
+  t <= (1, 2.5) && (2, 0.0) > t
+}
+
+fn annotated_local() -> Bool {
+  let v: [U8; 2] = [1, 2]
+  v >= [1, 2]
+}
+
+fn decided_later() -> Bool {
+  let a          = [1, 2]
+  let e          = a < [1, 3]
+  let _: [U8; 2] = a
+  e
+}
+
+fn in_a_branch(flag: Bool, v: [I32; 2]) -> Bool {
+  if flag {
+    v < [1, 3]
+  } else {
+    [1, 3] <= v
+  }
+}
+
+fn in_a_loop(v: [I32; 2]) -> I32 {
+  var n = 0
+  for _ in 0 ..< 3 {
+    if v > [0, 0] {
+      n = n + 1
+    }
+  }
+  n
+}
+
+fn generic_function[T: PartialOrd](a: T, b: T) -> Bool {
+  a < b
+}
+
+fn generic_call_with_literals() -> Bool {
+  generic_function([1, 2], [1, 3])
+}

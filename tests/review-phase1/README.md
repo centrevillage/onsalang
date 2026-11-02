@@ -38,9 +38,9 @@
 | `body/t2_neg_generic.onsa` | R-03、R-94 |
 | `body/l1_strpat.onsa` | R-03。W3-21/t で期待値付きのテストへ移した: `tests/spec/negative/pattern_str.onsa`（補間を含む文字列のパターン E0020。候補の形は `crates/onsa_cli/tests/cli/pattern_guard_candidates.rs`） |
 | `body/p1_pat_range.onsa`、`body/u1_unresolved.onsa` | R-03。W2-06 で期待値付きのテストへ移した: `tests/spec/negative/pattern_range.onsa`（パターンのリテラルの範囲 E0408 と符号なしの `-1` の E0401）、`tests/spec/negative/infer_unresolved.onsa`（関数の終わりに残る型変数の E0406。`Buf.zeroed(4)` と `None` は作った式に出す、S-226） |
-| `body/i1_generic_lit.onsa` | R-53 |
+| `body/i1_generic_lit.onsa` | R-53。W5-01 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/semantics/infer_generic_literal_call.onsa`（`lit_to_generic` の `id(3)`、`lit_to_max` の `max(1, 2)`。今も通る）、`tests/spec/negative/infer_as_literal.onsa`（`later_decides` の `y + (1.0 as F32)` は §4.7 の「その場で既知を要する操作」の E0420。今も同じ） |
 | `body/b1_let_borrow_affine.onsa` | R-54。W4-16 U1a/t で期待値付きのテストへ写した: `tests/spec/values/binding_borrow_let.onsa`（`whole`・`field`）、実行は `binding_borrow_run.onsa`。W4-16 U1a で直した（今の `onsa check` は何も出さない）。R-54 を直したので消した（85 回目） |
-| `body/t1_cmp_lit.onsa` | R-55 |
+| `body/t1_cmp_lit.onsa` | R-55。W5-01 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/semantics/infer_compare_literals.onsa`（`opt_lits`・`arr_lits`）、`tests/spec/negative/infer_compare_float.onsa`（`tup_lits` の `(1, 2.0) == (1, 2.0)` は関数の終わりの E0405）。W5-01 で直す |
 | `body/n1_newtype.onsa`、`types/newtype*.onsa` | R-51。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0020_tuple_struct.onsa`、`tests/spec/negative/tuple_struct_many.onsa`（使う側は型の位置だけ） |
 | `body/d1_while_true.onsa` | R-52 |
 | `body/pm1_partial.onsa` | R-74、R-95。R-74 の形（modes の誤りの単位で効果の検査を行わない）は W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`。R-95 の形（`take_field` と分解 `via_let`）は W4-09 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/values/take_out_consumes_root.onsa`・`take_out_rest_copy.onsa`（取り出して残りの Copy だけを破棄する形。分解は `unit_stage_modes_stops_rt.onsa` の `via_let`）。S-85 の後は取り出しが modes の誤りでなくなるので、`unit_stage_modes_stops_rt.onsa` と `_alloc.onsa` の modes の誤りは配列の要素の取り出しの E0711 に替えた |
@@ -131,7 +131,7 @@
 | `parent/r54.onsa`、`parent/r54_for.onsa` | R-54（S-41）。W4-16 U1a/t で期待値付きのテストへ写した: `tests/spec/values/binding_borrow_let.onsa`（`whole`・`field`・`destructured_tuple`・`for_element`）、実行は `binding_borrow_run.onsa`、使い方の否定例は `tests/spec/negative/binding_borrow_move.onsa`。W4-16 U1a で直した（今の `onsa check` は何も出さない）。R-54 を直したので消した（85 回目） |
 | `parent/r117.onsa` | R-117。W4-07 で期待値付きのテストへ移した: `tests/spec/negative/binding_inout_not_origin_no_candidate.onsa`（`let c = move b` の E0711）・`move_borrowed_place_no_candidate.onsa`。W4-07 U4b-2 で直したので消した（90 回目） |
 | `parent/r118.onsa` | R-118。W4-07 で期待値付きのテストへ移した: `tests/spec/negative/match_change_after_use.onsa`（腕の中で対象を変えた後の E0704）。W4-07 U4b-2 で直したので消した（90 回目） |
-| `parent/r55.onsa` | R-55（範囲を広げた再現） |
+| `parent/r55.onsa` | R-55（範囲を広げた再現）。W5-01 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/semantics/infer_compare_literals.onsa`（`a`〜`c`）、`tests/spec/negative/infer_compare_float.onsa`（`d`）、`tests/spec/semantics/infer_compare_typed.onsa`（`q1`・`q3`・`p5`）、`tests/spec/semantics/infer_compare_typed_right.onsa`（`q2`。今も通る）。W5-01 で直す |
 | `parent/r119.onsa` | R-119 |
 | `parent/r120.onsa` | R-120。W4-05 U4a で期待値付きのテストへ移した: `tests/spec/negative/option_result_order.onsa`（E0401） |
 | `parent/r61.onsa` | R-61（計算で決まる定数を長さに使う） |
@@ -146,7 +146,7 @@
 | `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67）。W1-04 で期待値付きの事例へ移した: `tests/spec/negative/lower_unsupported.onsa`、`names_reserved_inputs.onsa`（W7-03 の実装待ち） |
 | `parent/r78.onsa` | R-78（意味を変えない余分な情報。fmt が取り除くのが期待値で、各関数の上のコメントに書いた。S-68）。W3-12 で期待値付きのテストへ移した: `crates/onsa_cli/tests/cli/fmt_rewrites.rs` の `r78_the_extra_information_of_r78_onsa_is_taken_off_as_its_comments_say`（九つの関数の入力と期待する全文。`pick` の腕は `{ v }`・`{ 0 }` で、ブロックの波括弧は残る。`-> ()` と `uses {}` の除去が第 2 期へ回ったので、今は ignore）。書き換えごとの形は同じファイルの他のテストと `tests/spec/fmt/rewrite_*.onsa` |
 | `parent/r79/` | R-79（std の `target` 宣言を変換先が与えないとき。期待値は `m.onsa` の各項目の上のコメント。S-69） |
-| `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71） |
+| `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71）。R-53 の部分（利用者の総称の enum の列挙子を後の文で決める形）は W5-01 U1/t で `tests/spec/semantics/infer_generic_literal_call.onsa`（`user_float_later`・`user_nothing_later`）と `tests/spec/negative/infer_generic_literal_open.onsa` へ移した（今も通る）。R-79 の部分（W5-02）のために入力は残す |
 | `parent/r80/` | R-80（NRVO の判定の食い違い。`onsa build --target host .` の生成コードで確かめる。期待値は `m.onsa` の先頭のコメント） |
 | `parent/r83.onsa` | R-83（効果の使用の診断。期待値と今の出力は各関数の上のコメント。S-77） |
 | `parent/r84.onsa`、`parent/r84_type.onsa` | R-84、R-103（名前の段と名前の隠蔽。期待値と今の出力は各項目の上のコメント。S-78、S-79）。`parent/r84_type.onsa`（利用者の型が組込み型・prelude と同じ名前）は W4-03 U3a1/t で期待値付きのテストへ写した: `tests/spec/packages/overlap_prelude_names/types.onsa`、`crates/onsa_cli/tests/cli/name_overlaps.rs`。`parent/r84.onsa` のローカルの隠蔽は W4-04 U7a で E0304 になった（今の `onsa check` の出力は 12 行の E0302 と 17・23・29 行の E0304）。`order` の段の順（型の誤りの後の名前の誤り）は `tests/spec/negative/unit_stage_order.onsa` の `names_before_types` が守り、署名の名前の誤りの単位で本体の型を検査しない形（W4-06）は同じファイルの `missing_type_with_type_error` が守る。`parent/r84_type.onsa` の元の入力は W4-03 を終えた後に消した（73 回目） |

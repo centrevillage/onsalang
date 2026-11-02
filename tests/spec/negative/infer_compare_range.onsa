@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§3.4", "§6.3"]
+
+// E0408 / E0401: a literal of a composite that is compared with a typed value takes the element
+// type of the typed side, and is checked against it as soon as the type is decided (R-55; spec
+// §4.7: 型が決まった時点で範囲外のリテラルは E0408、符号なしの型の `-1` は E0401, §3.4). The
+// comparison itself is fine (the array, the tuple and `Option` have `PartialEq`, §6.3), so the
+// error is the one of the literal and not E0401 of the operator. If a later statement decides
+// the type of an open literal, the error is at the literal (the statement that made it).
+// One error per function (P-01).
+// This file holds the forms with the typed value on the left (an argument), which the version
+// before the fix of R-55 already reports in this way; the others are in
+// infer_compare_range_later.onsa.
+
+pub fn array_with_a_big_literal(v: [U8; 2]) -> Bool {
+  v == [1, 300] //~ E0408
+}
+
+pub fn tuple_with_a_big_literal(t: (I32, U8)) -> Bool {
+  t != (1, 256) //~ E0408
+}
+
+pub fn option_with_a_big_literal(o: Option[I8]) -> Bool {
+  o == Some(128) //~ E0408
+}
+
+pub fn nested_with_a_big_literal(o: Option[[U8; 2]]) -> Bool {
+  o == Some([1, 256]) //~ E0408
+}
+
+pub fn negative_literal_for_an_unsigned_element(v: [U32; 2]) -> Bool {
+  v == [-1, 2] //~ E0401
+}
+
+pub fn negative_literal_for_an_unsigned_tuple(t: (I32, U8)) -> Bool {
+  t == (1, -1) //~ E0401
+}
+
+pub fn negative_literal_for_an_unsigned_option(o: Option[U8]) -> Bool {
+  o == Some(-1) //~ E0401
+}
+
+// ---------------------------------------------------------------- fine: the literals fit
+
+pub fn literals_fit(v: [U8; 2], o: Option[I8], t: (I32, U8)) -> Bool {
+  v == [1, 255] && o == Some(-128) && t == (-1, 0)
+}

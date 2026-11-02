@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.3", "§6.4", "§3.2"]
+
+// E0406 and no E0401: a comparison of a composite whose type nothing decides (R-55). If the type
+// variable is still left at the end of the function, the operator is not checked: the only
+// error is E0406 at the expression that made the variable (spec §4.7: 型変数が無くなった文で
+// 検査する、リテラル以外の型変数が関数の終わりに残れば、その型変数を作った式の位置に E0406; §4.5:
+// 決まらないまま関数が終われば、要求は検査せず…). The forms below that are fine are decided by a
+// later statement to a type that has `PartialEq`. The composites whose type is decided are in
+// negative/infer_compare_trait.onsa. One error per function (P-01).
+
+pub struct Key: PartialEq + Eq {
+  id: U32,
+}
+
+fn make[T]() -> T {
+  make()
+}
+
+// ---------------------------------------------------------------- never decided: E0406 only
+
+pub fn array_never_decided() -> Bool {
+  let a = [make(), make()] //~ E0406
+  a == a
+}
+
+pub fn option_never_decided() -> Bool {
+  let o = None //~ E0406
+  o == None
+}
+
+pub fn tuple_never_decided() -> Bool {
+  let t = (make(), 1) //~ E0406
+  t == t
+}
+
+pub fn in_a_branch(flag: Bool) -> Bool {
+  let o = None //~ E0406
+  if flag {
+    o == None
+  } else {
+    false
+  }
+}
+
+// ---------------------------------------------------------------- fine: decided to a type that has PartialEq
+
+pub fn derived_struct_decided_later() -> Option[Key] {
+  let o = None
+  let _ = o == None
+  o
+}
+
+pub fn array_decided_later_to_a_derived_struct() -> [Key; 2] {
+  let a = [make(), make()]
+  let _ = a == a
+  a
+}

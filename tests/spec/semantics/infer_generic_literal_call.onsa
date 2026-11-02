@@ -1,0 +1,181 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§6.3", "§13.4"]
+
+// A call of a generic function whose arguments are literals only, and an enumerator of a
+// user generic enum, are fine when the type parameter is decided by a literal default or by a
+// later statement (R-53). The requirement on the parameter (the implicit `Dup`, a bound such as
+// `AnyNum` of `max`) is checked in the statement in which the type has no type variable left,
+// and at the end of the function after the defaults of the literals are applied (spec §4.5: "型
+// パラメータの要求（境界と暗黙の `Dup`）は、型パラメータが決まった文で検査し、関数の終わりには
+// リテラルの既定を当てた後で検査する"; §4.7: the integer literal that is still open at the end of
+// the function is `I32`). The parameter that nothing decides is E0406 and a float literal that
+// nothing decides is E0405 (negative/infer_generic_literal_open.onsa).
+//
+// The same forms, `id(2)`, `id(200)`, `or_default(Some(3), 9)` and the enumerators of a pattern,
+// are in infer_generic_later.onsa; this file adds `max`, `min` and `abs` of `std.math`, and a
+// user enum whose enumerator is built before a later statement decides it.
+//
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+use std.math.{max, min, abs}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+pub enum Maybe[T] {
+  Nothing,
+  Just(T),
+}
+
+fn take_maybe(m: Maybe[F32]) -> F32 {
+  match m {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => 0.0,
+  }
+}
+
+fn take_option(o: Option[F32]) -> F32 {
+  match o {
+    Some(x) => x,
+    None => 0.0,
+  }
+}
+
+fn take_maybe_u8(m: Maybe[U8]) -> U8 {
+  match m {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => 0,
+  }
+}
+
+// ------------------------------------------------- the literal defaults to I32
+
+fn lit_to_generic() -> I32 {
+  let a = id(3)
+  a
+}
+
+fn lit_to_max() -> I32 {
+  let m = max(1, 2)
+  m
+}
+
+test "a generic call with integer literals only is I32 at the end of the function" {
+  assert lit_to_generic() == 3
+  assert lit_to_max() == 2
+  assert max(1, 2) == 2
+  assert max(5, 3) == 5
+  assert min(5, 3) == 3
+  assert abs(-4) == 4
+  assert abs(4) == 4
+}
+
+test "the result of a generic call with literals is decided by a later annotation" {
+  let m     = max(200, 100)
+  let n: U8 = m
+  assert n == 200
+  let a      = id(7)
+  let b: I64 = a
+  assert b == 7
+}
+
+test "the result of a generic call with float literals is decided by a later annotation" {
+  let m      = max(1.0, 2.5)
+  let f: F32 = m
+  assert f == 2.5
+  let a      = abs(-1.5)
+  let g: F64 = a
+  assert g == 1.5
+}
+
+// ------------------------------------------------- an enumerator of a user generic enum
+
+fn user_float_later() -> F32 {
+  let m = Maybe.Just(1.5)
+  take_maybe(m)
+}
+
+fn user_nothing_later() -> F32 {
+  let m = Maybe.Nothing
+  take_maybe(m)
+}
+
+fn user_integer_default() -> I32 {
+  let m = Maybe.Just(3)
+  match m {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => 0,
+  }
+}
+
+fn user_integer_later() -> U8 {
+  let m = Maybe.Just(200)
+  take_maybe_u8(m)
+}
+
+test "an enumerator of a user generic enum is decided by a later statement" {
+  assert user_float_later() == 1.5
+  assert user_nothing_later() == 0.0
+  assert user_integer_default() == 3
+  assert user_integer_later() == 200
+}
+
+test "the builtin Option and the user Maybe are alike" {
+  let o = Some(1.5)
+  let n = None
+  let m = Maybe.Just(1.5)
+  let z = Maybe.Nothing
+  assert take_option(o) == 1.5
+  assert take_option(n) == 0.0
+  assert take_maybe(m) == 1.5
+  assert take_maybe(z) == 0.0
+}
+
+// ------------------------------------------------- branches, loops and closures
+
+fn in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    let a = id(3)
+    a
+  } else {
+    let m = max(1, 2)
+    m
+  }
+}
+
+fn in_a_loop() -> I32 {
+  var total = 0
+  for _ in 0 ..< 3 {
+    let m = max(1, 2)
+    total = total + m
+  }
+  total
+}
+
+test "the literal default in a branch, a loop and a closure" {
+  assert in_a_branch(true) == 3
+  assert in_a_branch(false) == 2
+  assert in_a_loop() == 6
+  let xs: [I32; 2] = array.from_fn(fn(i) {
+    let m = max(4, 9)
+    m
+  })
+  assert xs[0] == 9
+  assert xs[1] == 9
+}
+
+// ------------------------------------------------- a generic function that calls with literals
+
+fn twice_the_default[T](x: T) -> (T, T) {
+  (id(x), id(x))
+}
+
+test "a generic function that passes its parameter on" {
+  let p = twice_the_default(3)
+  assert p.0 == 3
+  assert p.1 == 3
+}

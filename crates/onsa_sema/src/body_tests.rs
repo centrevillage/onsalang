@@ -264,6 +264,46 @@ fn operators_and_groups() {
     ok("pub fn f(a: Option[U8], b: Option[U8]) -> Bool { a == b }\n");
 }
 
+/// The trait of an operator waits for the statement that decides its operand type (§4.7, §6.3,
+/// S-235, R-55): the message names the decided type, the error is at the operator, and a type
+/// left open is reported by E0406 / E0405 alone.
+#[test]
+fn operator_traits_wait_for_the_decided_type() {
+    // The one diagnostic of `src`, with the text at its position.
+    let one = |src: &str| {
+        let a = check(src);
+        assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
+        let d = a.diagnostics[0].clone();
+        let at = src[d.span.start as usize..d.span.end as usize].to_string();
+        (d.code, at, d.message)
+    };
+    // Literals inside a composite type: the default decides them at the end.
+    ok("pub fn f() -> Bool { Some(1) == Some(2) }\n");
+    ok("pub fn f() -> Bool { [1, 2] == [1, 2] && (1, 2) != (2, 1) }\n");
+    ok("pub fn f(v: [I32; 2]) -> Bool { [1, 2] == v }\n");
+    ok("pub fn f() -> Bool {\n  let v: [I32; 2] = [1, 2]\n  v == [1, 2]\n}\n");
+    ok("pub fn f() -> Bool {\n  let o = None\n  let e = o == None\n  let _: Option[F32] = o\n  e\n}\n");
+    // Not met: the decided type in the message, no `?` of a variable.
+    let (code, at, msg) = one("pub fn f() -> Bool { Some(1) < Some(2) }\n");
+    assert_eq!((code, at.as_str()), (Code::E0401, "<"));
+    assert!(msg.contains("`Option[I32]`") && !msg.contains('?'), "{msg}");
+    // A later statement decides a type without the trait: E0401 at the operator.
+    let make = "fn make[T]() -> T { make() }\n";
+    let (code, at, msg) =
+        one(&format!("{make}pub fn f() -> Bool {{\n  let v = make()\n  let _ = v + v\n  let b: Bool = v\n  b\n}}\n"));
+    assert_eq!((code, at.as_str()), (Code::E0401, "+"));
+    assert!(msg.contains("`Bool`"), "{msg}");
+    let (code, at, _) =
+        one(&format!("{make}pub fn f() -> U8 {{\n  let v = make()\n  let _ = -v\n  let u: U8 = v\n  u\n}}\n"));
+    assert_eq!((code, at.as_str()), (Code::E0401, "-v"));
+    // Never decided: E0406 at the expression that made the variable, the operator is not judged.
+    let (code, at, _) = one(&format!("{make}pub fn f() -> Bool {{\n  let v = make()\n  let _ = v < v\n  true\n}}\n"));
+    assert_eq!((code, at.as_str()), (Code::E0406, "make()"));
+    // A float literal left open: E0405 at the literal.
+    let (code, at, _) = one("pub fn f() -> Bool { [1.5, 2.0] == [1.5, 2.0] }\n");
+    assert_eq!((code, at.as_str()), (Code::E0405, "1.5"));
+}
+
 #[test]
 fn methods_and_associated_items() {
     let a = ok(

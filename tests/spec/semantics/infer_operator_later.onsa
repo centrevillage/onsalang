@@ -38,28 +38,28 @@ test "!= and a comparison with a value that comes later" {
 fn arithmetic_waits() -> F32 {
   let z      = make()
   let s      = z + z
-  let w: F32 = z
+  let _: F32 = z
   s
 }
 
 fn negation_waits() -> I32 {
   let z      = make()
   let n      = -z
-  let w: I32 = z
+  let _: I32 = z
   n
 }
 
 fn comparison_waits() -> Bool {
   let z     = make()
   let c     = z < z
-  let w: U8 = z
+  let _: U8 = z
   c
 }
 
 fn bit_operator_waits() -> U32 {
   let z      = make()
   let b      = z & z
-  let w: U32 = z
+  let _: U32 = z
   b
 }
 

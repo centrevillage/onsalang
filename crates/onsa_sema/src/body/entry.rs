@@ -168,6 +168,9 @@ impl<'a> Checker<'a> {
         if !self.failed {
             self.open_variable_net();
         }
+        if !self.failed {
+            self.open_operator_net();
+        }
         // Resolve the tables.
         let keys: Vec<ExprId> = self.info.expr_types.keys().copied().collect();
         for e in keys {

@@ -1218,20 +1218,6 @@ note = "main.onsa の値の match（リテラルのパターン、列挙子の�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/infer_operator.onsa"
-reasons = ["S-235", "R-55"]
-until = "W5-01"
-note = "演算子の trait は型が決まった文で検査する。後で trait を満たさない型に決まれば演算子の位置に E0401、決まらなければ E0406。今は未解決のまま E0401（== の Option[?0]）か、E0406 を先に出す"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/infer_operator_later.onsa"
-reasons = ["S-235", "R-55"]
-until = "W5-01"
-note = "let o = None の後の o == None、総称の結果への演算子は、後の文で型が決まるまで trait を判定しない（R-55）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/const_expr_neg.onsa"
 reasons = ["S-228"]
 until = "W5-16"

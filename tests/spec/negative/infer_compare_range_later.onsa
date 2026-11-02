@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§3.4", "§6.3"]
+
+// E0408 / E0401: a literal of a composite that is compared with a typed value takes the element
+// type of the typed side, and is checked against it as soon as the type is decided (R-55; spec
+// §4.7: 型が決まった時点で範囲外のリテラルは E0408、符号なしの型の `-1` は E0401, §3.4). The
+// comparison itself is fine (the array, the tuple and `Option` have `PartialEq`, §6.3), so the
+// error is the one of the literal and not E0401 of the operator. If a later statement decides
+// the type of an open literal, the error is at the literal (the statement that made it).
+// One error per function (P-01).
+// This file holds the forms with a literal on the left, an annotated local, and a literal that a
+// later statement decides; they are not reported in this way yet. The others are in
+// infer_compare_range.onsa.
+
+pub fn array_with_a_big_literal_on_the_left(v: [U8; 2]) -> Bool {
+  [256, 2] == v //~ E0408
+}
+
+pub fn annotated_local(flag: Bool) -> Bool {
+  let v: [U8; 2] = [1, 2]
+  if flag {
+    v == [1, 1000] //~ E0408
+  } else {
+    false
+  }
+}
+
+pub fn decided_by_a_later_annotation() -> Bool {
+  let a          = [1, 300] //~ E0408
+  let e          = a == a
+  let b: [U8; 2] = a
+  e
+}
+
+pub fn tuple_decided_by_a_later_annotation() -> Bool {
+  let t            = (1, 256) //~ E0408
+  let e            = t == t
+  let u: (I32, U8) = t
+  e
+}
+
+pub fn negative_literal_on_the_left(o: Option[U8]) -> Bool {
+  Some(-1) == o //~ E0401
+}
+
+pub fn negative_literal_for_an_annotated_local() -> Bool {
+  let v: [U8; 2] = [1, 2]
+  v == [-1, 2] //~ E0401
+}
+
+pub fn negative_literal_decided_later() -> Bool {
+  let a          = [-1, 2] //~ E0401
+  let e          = a == a
+  let b: [U8; 2] = a
+  e
+}
+
+// ---------------------------------------------------------------- fine: the literals fit
+
+pub fn the_default_fits() -> Bool {
+  let a = [1, 300]
+  a == [1, 300]
+}
+
+pub fn the_annotated_local_fits() -> Bool {
+  let v: [U8; 2] = [1, 2]
+  v == [1, 255] || [0, 255] == v
+}

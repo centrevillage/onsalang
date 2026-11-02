@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.3"]
+
+// E0405: a comparison of composites whose float literals nothing decides (R-55). The operands
+// are not judged before the end of the function, and a float literal that is still open then is
+// E0405 at the literal (spec §4.7 "未解決の報告": 浮動小数リテラルの型変数が残ればそのリテラルの
+// 位置に E0405), the same as `1.0 == 1.0`. The operator trait is not checked on the open type, so
+// the only error is E0405 (§4.5: 決まらないまま関数が終われば、要求は検査せず…). The integer
+// literals that come with the float literals do not matter (`(1, 2.0)` is E0405 for the `2.0`).
+// One error per function (P-01); the position inside the line is not a part of the marker.
+// The same comparisons whose literals are integer are in semantics/infer_compare_literals.onsa,
+// and the ones that a later statement or the typed side decides are at the end of this file.
+
+pub fn array_of_floats() -> Bool {
+  [1.0, 2.0] == [1.0, 2.0] //~ E0405
+}
+
+pub fn array_of_floats_not_equal() -> Bool {
+  [1.0, 2.0] != [1.0, 2.0] //~ E0405
+}
+
+pub fn tuple_of_an_integer_and_a_float() -> Bool {
+  (1, 2.0) == (1, 2.0) //~ E0405
+}
+
+pub fn option_of_a_float() -> Bool {
+  Some(1.5) == Some(1.5) //~ E0405
+}
+
+pub fn order_of_arrays_of_floats() -> Bool {
+  [1.0] < [2.0] //~ E0405
+}
+
+pub fn nested_floats() -> Bool {
+  Some([1.0, 2.0]) == Some([1.0, 2.0]) //~ E0405
+}
+
+pub fn bound_float_array() -> Bool {
+  let a = [1.0, 2.0] //~ E0405
+  a == a
+}
+
+pub fn in_a_branch(flag: Bool) -> Bool {
+  if flag {
+    (1.0, 2.0) == (1.0, 2.0) //~ E0405
+  } else {
+    false
+  }
+}
+
+pub fn in_a_loop() -> Bool {
+  var r = true
+  for _ in 0 ..< 2 {
+    r = r && Some(0.5) == Some(0.5) //~ E0405
+  }
+  r
+}
+
+pub fn in_a_closure() -> Bool {
+  let f = fn() -> Bool {
+    [1.0, 2.0] == [1.0, 2.0] //~ E0405
+  }
+  f.()
+}
+
+// ---------------------------------------------------------------- fine: the type of the float is decided
+
+pub fn decided_by_a_later_annotation() -> Bool {
+  let a           = [1.0, 2.0]
+  let e           = a == a
+  let _: [F32; 2] = a
+  e
+}
+
+pub fn decided_by_the_typed_side_on_the_left(v: (I32, F64)) -> Bool {
+  (1, 2.0) == v
+}
+
+pub fn decided_by_the_return_type() -> Option[F32] {
+  let o = Some(1.5)
+  let _ = o == Some(1.5)
+  o
+}
+
+pub fn decided_by_an_annotation() -> Bool {
+  let a: [F64; 2] = [1.0, 2.0]
+  a == [1.0, 2.0]
+}

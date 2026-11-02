@@ -43,7 +43,7 @@ fn and_num[T: Num](x: T, y: T) -> T { x & y }
 fn shr_float[T: Float](x: T) -> T { x >> 1 }
 
 // 期待: E0401（今と同じ）。修正候補なし。note「2 の補数の否定は `0 -% u`」。
-// 今: check.onsa:47:34: error[E0401]: `-` needs a signed integer or float; found `U32`。note なし。
+// 今: check.onsa:47:34: error[E0401]: `-` on the unsigned type `U32`; it has no unary `-` (§3.4)。note なし（W5-01 で文面を揃えた）。
 fn neg_concrete(u: U32) -> U32 { -u }
 
 // 期待: 通る。

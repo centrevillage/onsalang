@@ -17,7 +17,7 @@
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::FloatRange;
-use onsa_syntax::ast::{ExprId, ExprKind, Lit};
+use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Lit};
 
 use crate::body::{Checker, LocalId, R};
 use crate::def::Bound;
@@ -32,9 +32,10 @@ pub(crate) enum DeferredKind {
     /// and an unsigned type is then E0401 (§3.4). `lit`: the literal expression
     /// (`None` in a pattern).
     IntLit { value: u64, neg: bool, lit: Option<ExprId> },
-    /// A negation of a value whose type is still a literal variable: E0401 when it
-    /// is decided to be unsigned (§3.4).
-    UnsignedNeg,
+    /// An operator whose operand type `ty` still has a variable: its trait once the
+    /// type is decided (E0401 at the operator, §4.7, §6.3, S-235, R-55). The judgment is
+    /// [`Checker::operator_verdict`], the same as for an operand decided at the operator.
+    Operator { op: OpNeed },
     /// A float literal `lit`: its value once the type is known (E0408, §2.4,
     /// R-45, S-211: not finite, or a literal that is not 0 rounds to 0), and
     /// E0405 when its type is still open at the end.
@@ -48,6 +49,24 @@ pub(crate) enum DeferredKind {
     Require { bound: Bound, what: Required },
     /// A typed hole (E0421), reported at the end with the decided type.
     Hole { visible: Vec<LocalId> },
+}
+
+/// The operator an [`DeferredKind::Operator`] item checks (§3.2): a binary one, or a
+/// prefix `-` / `!`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OpNeed {
+    Binary(BinOp),
+    Neg,
+    Not,
+}
+
+/// What an operator requires of a type ([`Checker::operator_verdict`]).
+pub(crate) enum Verdict {
+    Met,
+    /// A variable is left whose type decides it.
+    Wait,
+    /// The message of the E0401.
+    Unmet(String),
 }
 
 /// The type a requirement is on.
@@ -166,6 +185,7 @@ impl<'a> Checker<'a> {
         // is reported (E0406 / E0405). When nothing reports it, the requirement is
         // E0406 at the expression that made it, rather than passing silently.
         let mut open_requirement: Option<Deferred> = None;
+        let mut open_operators = Vec::new();
         for item in &items {
             match self.look(item, true) {
                 Look::Fail(d) => {
@@ -176,10 +196,15 @@ impl<'a> Checker<'a> {
                     if open_requirement.is_none() && matches!(item.kind, DeferredKind::Require { .. }) {
                         open_requirement = Some(item.clone());
                     }
+                    if matches!(item.kind, DeferredKind::Operator { .. }) {
+                        open_operators.push(item.clone());
+                    }
                 }
                 Look::Done => {}
             }
         }
+        // Kept for [`Checker::open_operator_net`], after the net of the open variables.
+        self.deferred = open_operators;
         if let Some(item) = open_requirement {
             let what = match &item.kind {
                 DeferredKind::Require { what: Required::Param { param, owner }, .. } => {
@@ -198,14 +223,33 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The last net of the end (after `open_variable_net`): an operator whose operand type is
+    /// still open when nothing reported its variable is E0406 at the operator, rather than
+    /// passing silently (§4.5: the requirement is not checked, the open variable is reported).
+    pub(crate) fn open_operator_net(&mut self) {
+        let Some(item) = self.deferred.first().cloned() else { return };
+        let d = Diagnostic::new(
+            Stage::Types,
+            Code::E0406,
+            item.span,
+            "the type of this operand cannot be determined by the end of the function; annotate it (§4.5, §4.7)",
+        )
+        .with_found(self.src(item.span));
+        self.diag(d);
+    }
+
     /// One item. `end`: the body is finished (the open items fail or are dropped).
     fn look(&mut self, item: &Deferred, end: bool) -> Look {
         // Still waiting: answered without building the resolved type.
         let waits = match item.kind {
-            DeferredKind::IntLit { .. } | DeferredKind::UnsignedNeg | DeferredKind::FloatLit { .. } => {
+            DeferredKind::IntLit { .. } | DeferredKind::FloatLit { .. } => {
                 self.infer.is_unresolved(&self.a.types, item.ty)
             }
             DeferredKind::Require { .. } => self.infer.has_vars(&self.a.types, item.ty),
+            // A literal variable itself is judged by its kind ([`Checker::operator_verdict`]).
+            DeferredKind::Operator { .. } => {
+                !self.infer.is_unresolved(&self.a.types, item.ty) && self.infer.has_vars(&self.a.types, item.ty)
+            }
             _ => false,
         };
         if waits && !end {
@@ -218,18 +262,17 @@ impl<'a> Checker<'a> {
                 Ty::Int(k) => self.int_lit(item, r, k, *value, *neg),
                 _ => Look::Done,
             },
-            DeferredKind::UnsignedNeg => match self.ty(r) {
-                Ty::Var(_) => Look::Wait,
-                Ty::Int(k) if !k.signed() => Look::Fail(
-                    Diagnostic::new(
-                        Stage::Types,
-                        Code::E0401,
-                        item.span,
-                        format!("`-` on the unsigned type `{}`; it has no unary `-` (§3.4)", k.name()),
-                    )
-                    .with_found(self.src(item.span)),
-                ),
-                _ => Look::Done,
+            // A variable left at the end is not judged: E0406 / E0405 report it (§4.5).
+            DeferredKind::Operator { op } => match self.operator_verdict(*op, r) {
+                Verdict::Met => Look::Done,
+                Verdict::Wait => Look::Wait,
+                Verdict::Unmet(msg) => {
+                    let d = Diagnostic::new(Stage::Types, Code::E0401, item.span, msg).with_found(self.src(item.span));
+                    // The statement that decided the type, as for E0416; not the default (its
+                    // note speaks of a bound).
+                    let shown = self.display(r);
+                    Look::Fail(self.decided_note(d, item.ty, &shown, false))
+                }
             },
             DeferredKind::FloatLit { lit } => match self.ty(r) {
                 Ty::Var(_) if end => Look::Fail(
@@ -276,7 +319,7 @@ impl<'a> Checker<'a> {
                 let shown = self.display(r);
                 let msg = what.unmet(&shown, *bound);
                 let mut d = Diagnostic::new(Stage::Types, Code::E0416, item.span, msg).with_found(self.src(item.span));
-                d = self.decided_note(d, item.ty, &shown);
+                d = self.decided_note(d, item.ty, &shown, true);
                 Look::Fail(d)
             }
             DeferredKind::Hole { visible } => {
@@ -365,17 +408,17 @@ impl<'a> Checker<'a> {
     }
 
     /// The note of E0416: the expression whose check decided the type (§4.5),
-    /// or, for the integer default, a note without a position.
-    fn decided_note(&mut self, d: Diagnostic, ty: TyId, shown: &str) -> Diagnostic {
+    /// or, for the integer default when `default`, a note without a position.
+    fn decided_note(&mut self, d: Diagnostic, ty: TyId, shown: &str, default: bool) -> Diagnostic {
         match self.infer.decided_by(&self.a.types, ty) {
             Some(Cause::At { span, why }) => {
                 let why = why.map(|w| format!(" as {w}")).unwrap_or_default();
                 d.with_note(span, format!("the type became `{shown}` here{why}"))
             }
-            Some(Cause::Default) => d.with_rule(format!(
+            Some(Cause::Default) if default => d.with_rule(format!(
                 "the type became `{shown}` by the default of an integer literal (§4.7); a bound does not change the default: write a float literal such as `3.0` or annotate the type"
             )),
-            None => d,
+            _ => d,
         }
     }
 }

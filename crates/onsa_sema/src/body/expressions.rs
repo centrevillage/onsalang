@@ -171,59 +171,7 @@ impl<'a> Checker<'a> {
                 }
                 Err(self.diag(d))
             }
-            ExprKind::Unary { op, expr: inner } => {
-                let t = self.check_expr(*inner, None)?;
-                let s = self.shallow(t);
-                match op {
-                    UnOp::Neg => {
-                        // A `-` whose operand is a literal is a part of the literal's value
-                        // (§4.7, S-184, S-227): the literal's own check covers the sign.
-                        if let Some(lit) = self.ast.negated_literal(e) {
-                            self.info.neg_literals.insert(e);
-                            if let Some(item) = self
-                                .deferred
-                                .iter_mut()
-                                .rev()
-                                .find(|d| matches!(d.kind, DeferredKind::IntLit { lit: Some(l), .. } if l == lit))
-                            {
-                                item.span = span;
-                                if let DeferredKind::IntLit { neg, .. } = &mut item.kind {
-                                    *neg = true;
-                                }
-                            }
-                            return Ok(t);
-                        }
-                        match self.ty(s) {
-                            Ty::Int(k) if k.signed() => Ok(t),
-                            Ty::Float(_) | Ty::Error => Ok(t),
-                            Ty::Var(_) if self.infer.lit_of(&self.a.types, s).is_some() => {
-                                self.defer(span, t, DeferredKind::UnsignedNeg);
-                                Ok(t)
-                            }
-                            Ty::Param(_) if self.satisfies(s, Bound::Num) => Ok(t),
-                            Ty::Var(_) => Err(self.known(t, span, "operand of `-`").unwrap_err()),
-                            _ => {
-                                let shown = self.display(t);
-                                Err(self.err(
-                                    Code::E0401,
-                                    span,
-                                    format!("`-` needs a signed integer or float; found `{shown}`"),
-                                ))
-                            }
-                        }
-                    }
-                    UnOp::Not => match self.ty(s) {
-                        Ty::Bool | Ty::Int(_) => Ok(t),
-                        _ if self.traits_unknown(s) => Ok(t),
-                        Ty::Var(_) if self.infer.lit_of(&self.a.types, s) == Some(LitKind::Int) => Ok(t),
-                        Ty::Var(_) => Err(self.known(t, span, "operand of `!`").unwrap_err()),
-                        _ => {
-                            let shown = self.display(t);
-                            Err(self.err(Code::E0401, span, format!("`!` needs `Bool` or an integer; found `{shown}`")))
-                        }
-                    },
-                }
-            }
+            ExprKind::Unary { op, expr: inner } => self.check_unary(e, *op, *inner, span),
             ExprKind::Call { callee, kind, args } => self.check_call(e, *callee, *kind, args, expected),
             ExprKind::TupleIndex { base, index, index_span } => {
                 let bt = self.check_expr(*base, None)?;
@@ -626,84 +574,146 @@ impl<'a> Checker<'a> {
             OpGroup::Comparison => {
                 let rt = self.check_expr(rhs, None)?;
                 self.unify_at(self.expr(rhs).span, rt, t)?;
-                let s = self.shallow(t);
-                let bound = if matches!(op, BinOp::Eq | BinOp::Ne) { Bound::PartialEq } else { Bound::PartialOrd };
-                self.require_operand(s, bound, op, op_span)?;
+                self.require_op(OpNeed::Binary(op), t, op_span)?;
                 self.bool_()
             }
             OpGroup::Bitwise if matches!(op, BinOp::Shl | BinOp::Shr) => {
                 let u32 = self.u32();
                 self.check_expr(rhs, Some(u32))?;
-                let s = self.shallow(t);
-                self.require_int(s, op, op_span)?;
+                self.require_op(OpNeed::Binary(op), t, op_span)?;
                 t
             }
-            OpGroup::Bitwise => {
+            OpGroup::Bitwise | OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Remainder => {
                 let rt = self.check_expr(rhs, None)?;
                 self.unify_at(self.expr(rhs).span, rt, t)?;
-                let s = self.shallow(t);
-                self.require_int(s, op, op_span)?;
-                t
-            }
-            OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Remainder => {
-                let rt = self.check_expr(rhs, None)?;
-                self.unify_at(self.expr(rhs).span, rt, t)?;
-                let s = self.shallow(t);
-                if matches!(
-                    op,
-                    BinOp::WrapAdd | BinOp::WrapSub | BinOp::WrapMul | BinOp::SatAdd | BinOp::SatSub | BinOp::SatMul
-                ) {
-                    self.require_int(s, op, op_span)?;
-                } else {
-                    self.require_operand(s, Bound::Num, op, op_span)?;
-                }
+                self.require_op(OpNeed::Binary(op), t, op_span)?;
                 t
             }
         })
     }
 
-    /// The operand type of an operator must support it (via its builtin trait, §3.2).
-    pub(crate) fn require_operand(&mut self, s: TyId, bound: Bound, op: BinOp, span: Span) -> R<()> {
-        match self.ty(s) {
-            Ty::Var(_) => match (self.infer.lit_of(&self.a.types, s), bound) {
-                (Some(_), Bound::Num | Bound::PartialEq | Bound::PartialOrd) => Ok(()),
-                (Some(_), _) => Ok(()),
-                (None, _) => Err(self.known(s, span, &format!("operand of `{}`", op.symbol())).unwrap_err()),
-            },
-            _ => {
-                if self.satisfies(s, bound) {
-                    Ok(())
-                } else {
-                    let shown = self.display(s);
-                    Err(self.err(
-                        Code::E0401,
-                        span,
-                        format!("`{}` is not defined for `{shown}` (it needs `{}`; §3.2)", op.symbol(), bound.name()),
-                    ))
+    /// A prefix `-` or `!` (§3.2, §3.4).
+    fn check_unary(&mut self, e: ExprId, op: UnOp, inner: ExprId, span: Span) -> R<TyId> {
+        let t = self.check_expr(inner, None)?;
+        // A `-` whose operand is a literal is a part of the literal's value
+        // (§4.7, S-184, S-227): the literal's own check covers the sign.
+        if op == UnOp::Neg
+            && let Some(lit) = self.ast.negated_literal(e)
+        {
+            self.info.neg_literals.insert(e);
+            if let Some(item) = self
+                .deferred
+                .iter_mut()
+                .rev()
+                .find(|d| matches!(d.kind, DeferredKind::IntLit { lit: Some(l), .. } if l == lit))
+            {
+                item.span = span;
+                if let DeferredKind::IntLit { neg, .. } = &mut item.kind {
+                    *neg = true;
                 }
             }
+            return Ok(t);
+        }
+        let need = if op == UnOp::Neg { OpNeed::Neg } else { OpNeed::Not };
+        self.require_op(need, t, span)?;
+        Ok(t)
+    }
+
+    /// The trait an operator needs of its operand type `t` (§3.2, §6.3): judged here
+    /// when it is decided, else after the statement that decides it (§4.7, S-235, R-55).
+    /// E0401 at `span`, the operator.
+    pub(crate) fn require_op(&mut self, op: OpNeed, t: TyId, span: Span) -> R<()> {
+        // SPEC-GAP(S-857): an operand whose type is decided here is judged here, not after the
+        // statement: in one statement, its E0401 comes before the E0401 of an operator that
+        // waited and before a later type error of the statement.
+        match self.operator_verdict(op, t) {
+            Verdict::Met => Ok(()),
+            Verdict::Wait => {
+                self.defer(span, t, DeferredKind::Operator { op });
+                Ok(())
+            }
+            Verdict::Unmet(msg) => Err(self.err(Code::E0401, span, msg)),
         }
     }
 
-    fn require_int(&mut self, s: TyId, op: BinOp, span: Span) -> R<()> {
-        match self.ty(s) {
-            Ty::Int(_) => Ok(()),
-            _ if self.traits_unknown(s) => Ok(()),
-            Ty::Var(_) => match self.infer.lit_of(&self.a.types, s) {
-                Some(LitKind::Int) => Ok(()),
-                Some(LitKind::Float) => {
-                    Err(self.err(Code::E0401, span, format!("`{}` is defined for integers only (§3.4)", op.symbol())))
-                }
-                None => Err(self.known(s, span, &format!("operand of `{}`", op.symbol())).unwrap_err()),
-            },
-            _ => {
-                let shown = self.display(s);
-                Err(self.err(
-                    Code::E0401,
-                    span,
-                    format!("`{}` is defined for integers only; found `{shown}` (§3.4)", op.symbol()),
-                ))
-            }
+    /// Whether the type `t` has what the operator `op` needs: the one judgment of the
+    /// operators, at the operator and in a deferred item. A literal variable decides it
+    /// by its kind (an integer literal has every trait of an operator but the `-` of an
+    /// unsigned type; a float literal has none of the integer operators). Any other
+    /// variable left waits for the statement that decides it.
+    pub(crate) fn operator_verdict(&mut self, op: OpNeed, t: TyId) -> Verdict {
+        let s = self.shallow(t);
+        let int_only = match op {
+            OpNeed::Binary(b) => op_bound(b).is_none(),
+            OpNeed::Neg => false,
+            OpNeed::Not => true,
+        };
+        if matches!(self.ty(s), Ty::Var(_)) {
+            return match self.infer.lit_of(&self.a.types, s) {
+                Some(LitKind::Float) if int_only => Verdict::Unmet(match op {
+                    OpNeed::Binary(b) => format!("`{}` is defined for integers only (§3.4)", b.symbol()),
+                    _ => not_unmet("a float"),
+                }),
+                Some(LitKind::Int) if op == OpNeed::Neg => Verdict::Wait,
+                Some(_) => Verdict::Met,
+                None => Verdict::Wait,
+            };
         }
+        if self.infer.has_vars(&self.a.types, s) {
+            return Verdict::Wait;
+        }
+        // The bounds look into the type: the variables bound in it are followed first.
+        let r = self.infer.resolve(&mut self.a.types, s);
+        let ty = self.ty(r);
+        let met = self.traits_unknown(r)
+            || match op {
+                OpNeed::Binary(b) => match op_bound(b) {
+                    Some(bound) => self.satisfies(r, bound),
+                    None => matches!(ty, Ty::Int(_)),
+                },
+                OpNeed::Neg => match ty {
+                    Ty::Int(k) => k.signed(),
+                    Ty::Float(_) => true,
+                    Ty::Param(_) => self.satisfies(r, Bound::Num),
+                    _ => false,
+                },
+                OpNeed::Not => matches!(ty, Ty::Bool | Ty::Int(_)),
+            };
+        if met {
+            return Verdict::Met;
+        }
+        let shown = self.display(r);
+        Verdict::Unmet(match (op, ty) {
+            (OpNeed::Binary(b), _) => match op_bound(b) {
+                Some(bound) => {
+                    format!("`{}` is not defined for `{shown}` (it needs `{}`; §3.2)", b.symbol(), bound.name())
+                }
+                None => format!("`{}` is defined for integers only; found `{shown}` (§3.4)", b.symbol()),
+            },
+            (OpNeed::Neg, Ty::Int(k)) => format!("`-` on the unsigned type `{}`; it has no unary `-` (§3.4)", k.name()),
+            (OpNeed::Neg, _) => format!("`-` needs a signed integer or float; found `{shown}`"),
+            (OpNeed::Not, _) => not_unmet(&format!("`{shown}`")),
+        })
     }
+}
+
+/// The trait a binary operator needs of its operands (§3.2, §6.3); `None` for the
+/// operators of the integers only (the bitwise ones, the wrapping and saturating
+/// ones, §3.4).
+fn op_bound(op: BinOp) -> Option<Bound> {
+    use BinOp::*;
+    match op {
+        Eq | Ne => Some(Bound::PartialEq),
+        Lt | Le | Gt | Ge => Some(Bound::PartialOrd),
+        Add | Sub | Mul | Div | Rem => Some(Bound::Num),
+        BitAnd | BitOr | BitXor | Shl | Shr | WrapAdd | WrapSub | WrapMul | SatAdd | SatSub | SatMul => None,
+        // `check_binary` gives them `Bool` and asks for no trait.
+        And | Or => onsa_diag::internal::bug(None, "the trait of `&&` / `||` asked"),
+    }
+}
+
+/// The E0401 of `!` on a type that is neither `Bool` nor an integer (`found`: the type
+/// in backquotes, or `a float` for a float literal whose type is still open).
+fn not_unmet(found: &str) -> String {
+    format!("`!` needs `Bool` or an integer; found {found}")
 }

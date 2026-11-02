@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§3.3"]
+
+// E0420: the left of `as` is an operation that needs its subject's type at once, and a literal
+// that nothing has fixed is a type variable, so it is unresolved (spec §4.7 "その場で既知を要す
+// る操作": `as` の左辺 … 対象が型変数そのもの（リテラルの型変数を含む）なら未解決である. 既定の
+// 適用は関数の終わりなので、途中で型が要る操作は E0420 のままである). This is the form of R-53:
+// `var acc = 0.0` makes `acc` a float literal variable, `abs(acc)` is a generic call whose result
+// is still that variable, and `y + (1.0 as F32)` has a literal on the left of `as`. The result of
+// the call is fine (negative/infer_generic_literal_open.onsa); the error is the `as`. Writing the
+// type of the literal first, or using the literal where the expected type decides it, is fine.
+// One error per function (P-01).
+
+use std.math.{abs}
+
+pub fn the_form_of_the_review() -> F32 {
+  var acc = 0.0
+  let y   = abs(acc)
+  y + (1.0 as F32) //~ E0420
+}
+
+pub fn float_literal() -> F32 {
+  1.0 as F32 //~ E0420
+}
+
+pub fn integer_literal() -> I64 {
+  1 as I64 //~ E0420
+}
+
+pub fn parenthesized_literal() -> F64 {
+  (2.5) as F64 //~ E0420
+}
+
+pub fn literal_in_an_argument(x: F32) -> F32 {
+  x + (0.5 as F32) //~ E0420
+}
+
+pub fn literal_in_a_branch(flag: Bool) -> I64 {
+  if flag { 1 as I64 } else { 2 } //~ E0420
+}
+
+pub fn literal_in_a_closure() -> I64 {
+  let f = fn() -> I64 {
+    1 as I64 //~ E0420
+  }
+  f.()
+}
+
+pub fn variable_of_a_literal() -> F64 {
+  let a = 1.5
+  a as F64 //~ E0420
+}
+
+// ---------------------------------------------------------------- fine: the type is known at the `as`
+
+pub fn the_literal_is_annotated() -> F32 {
+  let one: F32 = 1.0
+  var acc: F32 = 0.0
+  let y        = abs(acc)
+  y + one
+}
+
+pub fn the_literal_is_widened_from_an_annotation() -> F64 {
+  let x: F32 = 1.0
+  x as F64
+}
+
+pub fn the_expected_type_decides_the_literal() -> F32 {
+  let a: F32 = 1.0
+  a + 2.0
+}
+
+pub fn the_variable_is_decided_before_the_as(n: I32) -> I64 {
+  var k = 0
+  k = n
+  k as I64
+}

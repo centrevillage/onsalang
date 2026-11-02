@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7"]
+
+// E0405 / E0406: a call of a generic function with literals only, and an enumerator of a user
+// generic enum, whose type parameter nothing decides (R-53). The literal is not an error at the
+// call: the type is decided by a later statement or by the default at the end of the function
+// (spec §4.5 "引数から決まらない型パラメータ… 関数の終わりまでに決まらなければ、その呼び出し
+// の位置に E0406"; §4.7: the integer literal defaults to `I32`, a float literal that is still
+// open at the end of the function is E0405 at the literal, and a type variable that is not a
+// literal is E0406 at the expression that made it). When it is left open the requirement on the
+// parameter is not checked: only E0405 / E0406 is reported. One error per function (P-01). The
+// forms that are fine are in semantics/infer_generic_literal_call.onsa.
+
+use std.math.{max, abs}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+pub enum Maybe[T] {
+  Nothing,
+  Just(T),
+}
+
+fn take_maybe(m: Maybe[F32]) -> F32 {
+  match m {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => 0.0,
+  }
+}
+
+// ---------------------------------------------------------------- E0405: a float literal is open
+
+pub fn float_through_id() -> Bool {
+  let a = id(1.5) //~ E0405
+  true
+}
+
+pub fn float_through_max() -> Bool {
+  let m = max(1.0, 2.0) //~ E0405
+  true
+}
+
+pub fn float_through_abs() -> Bool {
+  let a = abs(-1.5) //~ E0405
+  true
+}
+
+pub fn float_enumerator() -> Bool {
+  let m = Maybe.Just(1.5) //~ E0405
+  true
+}
+
+pub fn float_enumerator_in_a_branch(flag: Bool) -> Bool {
+  if flag {
+    let m = Maybe.Just(2.5) //~ E0405
+  }
+  true
+}
+
+// ---------------------------------------------------------------- E0406: a type variable is open
+
+pub fn enumerator_without_a_payload() -> Bool {
+  let m = Maybe.Nothing //~ E0406
+  true
+}
+
+pub fn enumerator_in_a_loop() -> Bool {
+  for _ in 0 ..< 2 {
+    let m = Maybe.Nothing //~ E0406
+  }
+  true
+}
+
+pub fn enumerator_in_a_closure() -> Bool {
+  let f = fn() -> Bool {
+    let m = Maybe.Nothing //~ E0406
+    true
+  }
+  f.()
+}
+
+// ---------------------------------------------------------------- fine: decided by a later statement
+
+pub fn float_decided_by_an_argument() -> F32 {
+  let m = Maybe.Just(1.5)
+  take_maybe(m)
+}
+
+pub fn nothing_decided_by_an_argument() -> F32 {
+  let m = Maybe.Nothing
+  take_maybe(m)
+}
+
+pub fn float_decided_by_an_annotation() -> Bool {
+  let a      = id(1.5)
+  let b: F32 = a
+  b == 1.5
+}
+
+pub fn max_decided_by_the_return_type() -> F64 {
+  let m = max(1.0, 2.0)
+  m
+}

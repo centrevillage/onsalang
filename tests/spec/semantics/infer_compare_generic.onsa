@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§6.3"]
+
+// A comparison inside and through a generic function, whose type parameter has the bound
+// `PartialEq` (R-55; spec §4.5: the requirement on a type parameter is checked in the statement
+// in which the parameter is decided, and at the end of the function after the defaults of the
+// literals are applied; §6.3: the tuple, the array and `Option` have `PartialEq` when the
+// elements have it). The operands of the comparison in the generic function are of a type parameter,
+// and the comparison at the call is the check of a bound, so this file holds the forms whose
+// result does not depend on the time at which the operator of a composite is checked: it is a
+// regression for the change of that time. The forms that do depend on it are in
+// semantics/infer_compare_literals.onsa and semantics/infer_compare_typed.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+fn same[T: PartialEq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn is_zero_pair[T: PartialEq](p: (T, T), z: T) -> Bool {
+  p == (z, z)
+}
+
+fn first_is[T: PartialEq](xs: [T; 2], x: T) -> Bool {
+  xs == [x, xs[1]]
+}
+
+test "the requirement of a type parameter is met by a composite of literals" {
+  assert same(Some(1), Some(1))
+  assert !same(Some(1), Some(2))
+  assert same([1, 2], [1, 2])
+  assert !same((1, 2), (1, 3))
+  assert same([Some(1), None], [Some(1), None])
+}
+
+test "a generic function that compares a composite of its parameter" {
+  assert is_zero_pair((0, 0), 0)
+  assert !is_zero_pair((0, 1), 0)
+  let f: F32 = 0.0
+  assert is_zero_pair((f, f), f)
+  assert first_is([4, 5], 4)
+  assert !first_is([4, 5], 5)
+}
+
+test "the type parameter is decided by a later statement" {
+  let a          = [1, 2]
+  let r          = same(a, [1, 2])
+  let b: [U8; 2] = a
+  assert r
+  assert same(b, [1, 2])
+}

@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§6.3", "§6.4", "§3.2"]
+
+// Comparison of a value whose type is already decided with a composite literal (R-55). The
+// two operands of a comparison have one type, so the literals take the element type of the typed
+// side, and the trait of the operator is checked on the decided type (spec §4.7: the operator
+// trait is checked in the statement in which the type variables are gone; §6.3: the array, the
+// tuple and `Option` have `PartialEq` when the elements have it). The literal may be
+// on either side. The comparison with a type that has no `PartialEq` is E0401 in
+// negative/infer_compare_trait.onsa; a literal out of the range of the decided element type is
+// E0408 in negative/infer_compare_typed.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+
+pub struct Key: PartialEq + Eq {
+  id: U32,
+}
+
+// ------------------------------------------------- the local is annotated
+
+test "an annotated local and a literal on the right" {
+  let v: [I32; 2] = [1, 2]
+  assert v == [1, 2]
+  assert !(v == [1, 3])
+  assert v != [2, 1]
+}
+
+test "an annotated local and a literal on the left" {
+  let v: [I32; 2] = [1, 2]
+  assert [1, 2] == v
+  assert !([1, 3] == v)
+  assert [2, 1] != v
+}
+
+test "the result of the comparison is kept in a binding" {
+  let v: [I32; 2] = [1, 2]
+  let r           = v == [1, 2]
+  let n           = v == [1, 3]
+  assert r
+  assert !n
+}
+
+test "the other composites with an annotated local" {
+  let o: Option[U8]       = Some(3)
+  let t: (I32, F32)       = (1, 2.5)
+  let n: [Option[I32]; 2] = [Some(1), None]
+  assert o == Some(3)
+  assert Some(3) == o
+  assert o != None
+  assert t == (1, 2.5)
+  assert (1, 2.5) == t
+  assert t != (1, 2.0)
+  assert n == [Some(1), None]
+  assert [None, None] != n
+}
+
+test "a floating-point element is decided by the typed side" {
+  let v: [F32; 2] = [1.0, 2.0]
+  assert v == [1.0, 2.0]
+  assert [1.0, 2.0] == v
+  assert v != [1.0, 3.0]
+}
+
+// ------------------------------------------------- an argument and a field, the literal on the left
+
+pub struct Frame: PartialEq {
+  xs: [I32; 2],
+  tag: U8,
+}
+
+fn pair() -> (I32, I32) {
+  (1, 2)
+}
+
+fn check_left(v: [I32; 2]) {
+  assert [1, 2] == v
+}
+
+fn is_left(v: [I32; 2]) -> Bool {
+  [1, 2] == v
+}
+
+test "an argument and a literal on the left" {
+  check_left([1, 2])
+  assert is_left([1, 2])
+  assert !is_left([2, 1])
+}
+
+test "a field and a literal on the left" {
+  let f = Frame { xs: [1, 2], tag: 7 }
+  assert [1, 2] == f.xs
+  assert [1, 3] != f.xs
+}
+
+test "the result of a call and a literal on the left" {
+  assert (1, 2) == pair()
+  assert (2, 1) != pair()
+}
+
+test "a struct that derives PartialEq inside a composite literal" {
+  let a: [Key; 1] = [Key { id: 1 }]
+  assert a == [Key { id: 1 }]
+  assert a != [Key { id: 2 }]
+  let o: Option[Key] = Some(Key { id: 4 })
+  assert o == Some(Key { id: 4 })
+  assert Some(Key { id: 5 }) != o
+}
+
+// ------------------------------------------------- the position of the comparison
+
+fn in_a_branch(flag: Bool, v: [I32; 2]) -> I32 {
+  if flag {
+    if [1, 2] == v { 1 } else { 2 }
+  } else {
+    if [3, 4] == v { 3 } else { 4 }
+  }
+}
+
+fn in_a_loop(v: [I32; 2]) -> I32 {
+  var n = 0
+  for _ in 0 ..< 3 {
+    if [1, 2] == v {
+      n = n + 1
+    }
+  }
+  n
+}
+
+test "branches and a loop" {
+  assert in_a_branch(true, [1, 2]) == 1
+  assert in_a_branch(true, [5, 6]) == 2
+  assert in_a_branch(false, [3, 4]) == 3
+  assert in_a_branch(false, [1, 2]) == 4
+  assert in_a_loop([1, 2]) == 3
+  assert in_a_loop([2, 1]) == 0
+}
+
+test "a closure that captures the typed local" {
+  let v: [I32; 2]           = [1, 2]
+  let is_one_two: [Bool; 2] = array.from_fn(fn(i) { v == [1, 2] })
+  let one_two_is: [Bool; 2] = array.from_fn(fn(i) { [1, 2] == v })
+  assert is_one_two[0] && is_one_two[1]
+  assert one_two_is[0] && one_two_is[1]
+}
