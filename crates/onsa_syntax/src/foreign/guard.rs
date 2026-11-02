@@ -3,8 +3,10 @@
 //! constant, an `@` binding), read from the tokens of an arm, and the one
 //! candidate that writes them in a guard (S-317, S-319).
 //!
-//! The pattern of an arm is read from its tokens ([`PatReader`]) into a
-//! tree whose holes are the forms; [`shape`] replaces each hole with a new
+//! The pattern of an arm is read from its tokens by the parser's grammar
+//! ([`crate::parser::reads_as_pattern`], the forms as `Error` nodes), then
+//! moved into a tree whose holes are the forms ([`Toks`]); [`shape`]
+//! replaces each hole with a new
 //! binding, an `@` binding with its name, and merges the alternatives of
 //! one skeleton; the condition ([`Cond`]) is written with the parentheses
 //! the groups of §3.1 need ([`BinOp::bare`]). The type stage (W5-09) is to
@@ -12,6 +14,7 @@
 
 use super::*;
 use crate::ast::{BinOp, Operand, RangeEnd, Side};
+use crate::cst::{Cst, NodeId};
 
 /// The forms a guard writes, in the order of the rows that report them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -96,185 +99,124 @@ enum PatKind {
     At { at: usize, rhs: Box<Pat> },
 }
 
-/// A reader of the tokens `toks` (indexes of `tokens`, without newlines and
-/// comments) of a pattern. It reads what `Parser::parse_pattern` reads (the
-/// literals of [`crate::starts::literal_pattern`], `_`, a group or a tuple,
-/// a path and after it the fields in a `(` that touches it or in a `{` after
-/// a type name), and the guard forms; anything else makes no candidate. It
-/// reads patterns nested `limit` deep at most (the parser counts the levels
-/// only up to its failure, §2.5; the tree and the walks over it are as deep).
-struct PatReader<'c, 'a> {
+/// The tokens `toks` (indexes of `tokens`, without newlines and line
+/// comments) of a pattern read by the parser
+/// ([`crate::parser::reads_as_pattern`]), and the tree of that reading.
+struct Toks<'c, 'a> {
     c: &'c Cursor<'a>,
     toks: Vec<usize>,
-    pos: usize,
-    depth: u32,
-    limit: u32,
-    /// Whether the block comments of `c` are among `toks` (they are tokens
-    /// the reader does not take), or left out as the line comments are.
-    blocks: bool,
 }
 
-impl<'c, 'a> PatReader<'c, 'a> {
-    /// A reader of `toks`, significant tokens of `c` (indexes of `tokens`),
-    /// the block comments among them when `blocks`.
-    fn new(c: &'c Cursor<'a>, toks: Vec<usize>, limit: u32, blocks: bool) -> PatReader<'c, 'a> {
-        PatReader { c, toks, pos: 0, depth: 0, limit, blocks }
+type Forms = [(u32, crate::parser::Guarded)];
+
+impl<'c, 'a> Toks<'c, 'a> {
+    /// The pattern of `toks` read from their first token: the whole of them
+    /// when `whole`, else one alternative. The block comments of `c` are
+    /// left out of the reading when `skip_blocks` (and out of `toks`).
+    fn read(c: &'c Cursor<'a>, toks: Vec<usize>, whole: bool, skip_blocks: bool) -> Option<(Toks<'c, 'a>, Pat)> {
+        let (first, last) = (c.full[*toks.first()?] as usize, c.full[*toks.last()?] as usize);
+        let run = c.all[first..=last].iter().filter(|t| !(skip_blocks && t.kind == TokenKind::BlockComment));
+        let (cst, forms) = crate::parser::reads_as_pattern(c.file, c.text, run.copied().collect(), c.literals, whole)?;
+        let t = Toks { c, toks };
+        let pat = cst.child_nodes(cst.root()).next()?;
+        let p = t.pat(&cst, &forms, pat)?;
+        Some((t, p))
     }
 
-    fn peek(&self) -> Option<TokenKind> {
-        self.toks.get(self.pos).map(|&i| self.c.kind(i))
+    /// The position in `toks` of the token that starts at `start`.
+    fn pos(&self, start: u32) -> Option<usize> {
+        self.toks.binary_search_by_key(&start, |&k| self.c.span(k).start).ok()
     }
 
-    fn bump(&mut self) -> usize {
-        self.pos += 1;
-        self.pos - 1
-    }
-
-    fn pat(&self, lo: usize, kind: PatKind) -> Pat {
-        Pat { lo, hi: self.pos - 1, kind }
-    }
-
-    fn or(&mut self) -> Option<Pat> {
-        let lo = self.pos;
-        let one = self.one()?;
-        if self.peek() != Some(TokenKind::Pipe) {
-            return Some(one);
-        }
-        let mut alts = vec![one];
-        while self.peek() == Some(TokenKind::Pipe) {
-            self.bump();
-            alts.push(self.one()?);
-        }
-        Some(self.pat(lo, PatKind::Or(alts)))
-    }
-
-    /// The patterns up to `close`, and whether a `,` follows the last one.
-    fn list(&mut self, close: TokenKind, fields: bool) -> Option<(Vec<Pat>, bool)> {
+    /// The patterns inside the node `n`: its child nodes but its path, a
+    /// field of a struct pattern by its pattern.
+    fn inner(&self, cst: &Cst, forms: &Forms, n: NodeId) -> Option<Vec<Pat>> {
         let mut out = Vec::new();
-        let mut comma = false;
-        while self.peek() != Some(close) {
-            comma = false;
-            if fields {
-                // The rest `..` is another error (S-109): it stays.
-                if self.peek().is_some_and(TokenKind::is_foreign_range) {
-                    let lo = self.bump();
-                    out.push(self.pat(lo, PatKind::Leaf(Leaf::Other)));
-                } else {
-                    if self.peek() != Some(TokenKind::Ident) {
-                        return None;
-                    }
-                    self.bump();
-                    if self.peek() != Some(TokenKind::Colon) {
-                        return None;
-                    }
-                    self.bump();
-                    out.push(self.or()?);
-                }
-            } else {
-                out.push(self.or()?);
+        for k in cst.child_nodes(n) {
+            match cst.kind(k) {
+                NodeKind::Path => {}
+                NodeKind::StructPatField => out.push(self.pat(cst, forms, cst.child_nodes(k).last()?)?),
+                _ => out.push(self.pat(cst, forms, k)?),
             }
-            if self.peek() != Some(TokenKind::Comma) {
-                break;
-            }
-            self.bump();
-            comma = true;
         }
-        (self.peek() == Some(close)).then(|| {
-            self.bump();
-            (out, comma)
-        })
+        Some(out)
     }
 
-    /// The text of the reader's tokens `a..=b`.
+    /// The pattern of the node `n` of the reading.
+    fn pat(&self, cst: &Cst, forms: &Forms, n: NodeId) -> Option<Pat> {
+        use crate::parser::Guarded;
+        let (a, b) = cst.significant_tokens(n)?;
+        let (lo, hi) = (self.pos(cst.token(a).span.start)?, self.pos(cst.token(b).span.start)?);
+        let kind = match cst.kind(n) {
+            NodeKind::WildPat | NodeKind::BindPat | NodeKind::StructPatRest => PatKind::Leaf(Leaf::Other),
+            NodeKind::LitPat | NodeKind::NegLitPat => PatKind::Leaf(Leaf::Lit),
+            NodeKind::PathPat => {
+                let constant = crate::naming::reads_constant(self.c.src(self.toks[hi]));
+                PatKind::Leaf(if constant { Leaf::Const } else { Leaf::Other })
+            }
+            NodeKind::ParenPat => PatKind::Paren(Box::new(self.inner(cst, forms, n)?.pop()?)),
+            NodeKind::TuplePat | NodeKind::TupleStructPat | NodeKind::StructPat => {
+                PatKind::Node(self.inner(cst, forms, n)?)
+            }
+            NodeKind::OrPat => PatKind::Or(self.inner(cst, forms, n)?),
+            NodeKind::Error => match forms.iter().find(|f| f.0 == cst.token(a).span.start)?.1 {
+                Guarded::Str => PatKind::Hole(Form::Str, Test::Equal(self.text(lo, lo))),
+                Guarded::Number => self.number(lo, hi)?,
+                Guarded::Range { sym } => self.range(lo, self.pos(sym)?, hi + 1),
+                Guarded::At => {
+                    let at = lo + 1;
+                    // A right side that is no pattern (`a @ ..`) is still the form of `@`.
+                    let rhs = match cst.child_nodes(n).nth(1) {
+                        Some(r) => self.pat(cst, forms, r)?,
+                        None => Pat { lo: at, hi: at, kind: PatKind::Bad(Form::At) },
+                    };
+                    PatKind::At { at, rhs: Box::new(rhs) }
+                }
+            },
+            _ => return None,
+        };
+        Some(Pat { lo, hi, kind })
+    }
+
+    /// The text of the tokens `a..=b` of `toks`.
     fn text(&self, a: usize, b: usize) -> String {
         let c = self.c;
         c.text[c.span(self.toks[a]).start as usize..c.span(self.toks[b]).end as usize].to_string()
     }
 
-    /// A comment between the reader's tokens `a` and `b` (S-251: an edit
+    /// A comment between the tokens `a` and `b` of `toks` (S-251: an edit
     /// over them would remove it).
     fn comment_in(&self, a: usize, b: usize) -> bool {
         (self.toks[a]..=self.toks[b]).any(|i| self.c.comment(i))
     }
 
-    /// A path at the reader (`a`, `a.B`, `Self.X`): whether its last name is
-    /// a constant's.
-    fn path(&mut self) -> Option<bool> {
-        self.bump();
-        while self.peek() == Some(TokenKind::Dot) {
-            self.bump();
-            if !self.peek().is_some_and(is_segment) {
-                return None;
-            }
-            self.bump();
+    /// A float or a `-` before a constant at `lo..=hi`: `-`, `(`s, the
+    /// number or the path and as many `)`s ([`crate::parser::Guarded::Number`]).
+    fn number(&self, lo: usize, hi: usize) -> Option<PatKind> {
+        let c = self.c;
+        let kind = |p: usize| c.kind(self.toks[p]);
+        let minus = kind(lo) == TokenKind::Minus;
+        let mut at = lo + usize::from(minus);
+        while minus && kind(at) == TokenKind::LParen {
+            at += 1;
         }
-        Some(crate::naming::reads_constant(self.c.src(self.toks[self.pos - 1])))
-    }
-
-    /// The literal or the constant after a `-`, `(`s and as many `)`s.
-    fn negative(&mut self, lo: usize) -> Option<Pat> {
-        let minus = self.peek() == Some(TokenKind::Minus);
-        if minus {
-            self.bump();
-        }
-        let mut opens = 0;
-        while minus && self.peek() == Some(TokenKind::LParen) {
-            self.bump();
-            opens += 1;
-        }
+        let opens = at - lo - usize::from(minus);
         // The number: a float (`1.5`), one written as in other languages
         // (`1.`, `0.5f32`, `.5`: the guard writes it in the Onsa spelling).
-        let at = self.pos;
-        let mut constant = false;
-        let float = match self.peek()? {
-            TokenKind::Int => None,
-            TokenKind::Float => Some(self.c.src(self.toks[at]).to_string()),
-            TokenKind::ForeignLit => Some(float_spelling_at(self.c, self.toks[at])?),
-            // `.5`: the point and the digits together, as the lexer reads `0.5`.
-            TokenKind::Dot
-                if self.toks.get(at + 1).is_some_and(|&n| {
-                    n == self.toks[at] + 1 && self.c.kind(n) == TokenKind::Int && !self.c.gap(n).is_some()
-                }) =>
-            {
-                self.bump();
-                Some(format!("0.{}", self.c.src(self.toks[at + 1])))
-            }
-            // `-LIMIT`, `-(LIMIT)`, `-I64.MAX` (S-319): the name is a constant's.
-            TokenKind::Ident | TokenKind::KwSelfType if minus => {
-                if !self.path()? {
-                    return None;
-                }
-                self.pos -= 1;
-                constant = true;
-                None
-            }
-            _ => return None,
+        let value = match kind(at) {
+            TokenKind::Float => c.src(self.toks[at]).to_string(),
+            TokenKind::ForeignLit => float_spelling_at(c, self.toks[at])?,
+            TokenKind::Dot => format!("0.{}", c.src(self.toks[at + 1])),
+            // `-LIMIT`, `-(LIMIT)`, `-I64.MAX` (S-319): the `-` is written
+            // against the constant (§2.5, S-123), the blanks after it in the
+            // pattern do not go into the guard.
+            _ => return Some(PatKind::Hole(Form::Negated, Test::Equal(format!("-{}", self.text(lo + 1, hi))))),
         };
-        self.bump();
-        for _ in 0..opens {
-            if self.peek() != Some(TokenKind::RParen) {
-                return None;
-            }
-            self.bump();
-        }
-        let kind = match float {
-            Some(value) => {
-                let close = ")".repeat(opens);
-                let open = "(".repeat(opens);
-                let sign = if minus { "-" } else { "" };
-                PatKind::Hole(Form::Float, Test::Equal(format!("{sign}{open}{value}{close}")))
-            }
-            // The `-` is written against the constant (§2.5, S-123): the blanks
-            // after it in the pattern do not go into the guard.
-            None if constant => {
-                PatKind::Hole(Form::Negated, Test::Equal(format!("-{}", self.text(lo + 1, self.pos - 1))))
-            }
-            None => PatKind::Leaf(Leaf::Lit),
-        };
-        Some(self.pat(lo, kind))
+        let (open, close, sign) = ("(".repeat(opens), ")".repeat(opens), if minus { "-" } else { "" });
+        Some(PatKind::Hole(Form::Float, Test::Equal(format!("{sign}{open}{value}{close}"))))
     }
 
-    /// The end `a..=b` of a range (reader's tokens), as the guard writes it:
+    /// The end `a..=b` of a range (tokens of `toks`), as the guard writes it:
     /// in parentheses when it is no bare operand of a comparison (S-341).
     /// `None` when it is not one expression, or holds a comment.
     fn end_text(&self, a: usize, b: usize, side: Side) -> Option<String> {
@@ -298,108 +240,16 @@ impl<'c, 'a> PatReader<'c, 'a> {
     }
 
     /// A range from `lo`, with its symbol at `sym` and its end before `end`.
-    fn range(&mut self, lo: usize, sym: usize, end: usize) -> Option<Pat> {
-        if lo == sym && sym + 1 == end {
-            // `..` alone (the rest of a tuple of Rust): no form.
-            return None;
-        }
+    fn range(&self, lo: usize, sym: usize, end: usize) -> PatKind {
         let symbol = self.c.kind(self.toks[sym]);
-        self.pos = end;
         let start = if lo < sym { self.end_text(lo, sym - 1, Side::Left).map(Some) } else { Some(None) };
         let stop = if sym + 1 < end { self.end_text(sym + 1, end - 1, Side::Right).map(Some) } else { Some(None) };
         let end_of = symbol.range_end();
-        let kind = match (start, stop) {
+        match (start, stop) {
             // `5..<` has no end to compare with.
             (Some(_), Some(None)) if end_of.is_some() => PatKind::Bad(Form::Range),
             (Some(lo), Some(hi)) => PatKind::Hole(Form::Range, Test::Range { lo, hi, end: end_of }),
             _ => PatKind::Bad(Form::Range),
-        };
-        Some(self.pat(lo, kind))
-    }
-
-    fn one(&mut self) -> Option<Pat> {
-        if self.depth >= self.limit {
-            return None;
-        }
-        self.depth += 1;
-        let p = self.one_at_depth();
-        self.depth -= 1;
-        p
-    }
-
-    fn one_at_depth(&mut self) -> Option<Pat> {
-        let lo = self.pos;
-        // The alternative as the parser reads it: newlines are seen, comments not.
-        let first = *self.toks.get(self.pos)?;
-        let blocks = self.blocks;
-        let read = move |k: &TokenKind| {
-            (!k.is_trivia() && (blocks || *k != TokenKind::BlockComment)) || *k == TokenKind::Newline
-        };
-        let rest = self.c.tokens[first..].iter().map(|t| t.kind).filter(read);
-        if let (end, Some(sym)) = crate::scan::pattern_alternative(rest) {
-            return self.range(lo, lo + sym, lo + end);
-        }
-        match self.peek()? {
-            TokenKind::Minus | TokenKind::Int | TokenKind::Float | TokenKind::ForeignLit | TokenKind::Dot => {
-                self.negative(lo)
-            }
-            TokenKind::Str => {
-                let at = self.bump();
-                let t = self.c.tokens[self.toks[at]];
-                let kind = match self.c.literals.interpolated(t.span) {
-                    true => PatKind::Hole(Form::Str, Test::Equal(self.text(lo, lo))),
-                    false => PatKind::Leaf(Leaf::Lit),
-                };
-                Some(self.pat(lo, kind))
-            }
-            // A string is read above.
-            k if crate::starts::literal_pattern(k) => {
-                self.bump();
-                Some(self.pat(lo, PatKind::Leaf(Leaf::Lit)))
-            }
-            TokenKind::Underscore => {
-                self.bump();
-                Some(self.pat(lo, PatKind::Leaf(Leaf::Other)))
-            }
-            TokenKind::LParen => {
-                self.bump();
-                let (mut inner, comma) = self.list(TokenKind::RParen, false)?;
-                let kind = match inner.len() {
-                    1 if !comma => PatKind::Paren(Box::new(inner.remove(0))),
-                    _ => PatKind::Node(inner),
-                };
-                Some(self.pat(lo, kind))
-            }
-            TokenKind::Ident | TokenKind::KwSelfType => {
-                let constant = self.path()?;
-                let last = self.c.src(self.toks[self.pos - 1]);
-                match self.peek() {
-                    // As the parser: `(` touching the path, `{` after an UpperCamel name.
-                    Some(TokenKind::LParen) if !self.c.gap(self.toks[self.pos]).is_some() => {
-                        self.bump();
-                        let (inner, _) = self.list(TokenKind::RParen, false)?;
-                        Some(self.pat(lo, PatKind::Node(inner)))
-                    }
-                    Some(TokenKind::LBrace) if crate::naming::reads_uppercase(last) => {
-                        self.bump();
-                        let (inner, _) = self.list(TokenKind::RBrace, true)?;
-                        Some(self.pat(lo, PatKind::Node(inner)))
-                    }
-                    // `n @ p`: the left side is a binding (§7).
-                    Some(TokenKind::At) => {
-                        let binding = self.pos == lo + 1 && crate::naming::reads_lowercase(last);
-                        if !binding {
-                            return None;
-                        }
-                        let at = self.bump();
-                        // A right side that is no pattern (`a @ ..`) is still the form of `@`.
-                        let rhs = self.one().unwrap_or(Pat { lo: at, hi: at, kind: PatKind::Bad(Form::At) });
-                        Some(self.pat(lo, PatKind::At { at, rhs: Box::new(rhs) }))
-                    }
-                    _ => Some(self.pat(lo, PatKind::Leaf(if constant { Leaf::Const } else { Leaf::Other }))),
-                }
-            }
-            _ => None,
         }
     }
 }
@@ -517,6 +367,8 @@ enum Why {
     NoForm,
     /// The arm's own guard has no last token before its `=>`.
     GuardEnd,
+    /// The arm's pattern does not read ([`Arm::read`]).
+    Unread,
     /// A form makes none (a range whose end is no expression, the right of
     /// `@` that is no literal, constant or range).
     Bad(Form),
@@ -531,7 +383,7 @@ impl Why {
     fn row(&self, head: Form) -> RowId {
         match self {
             Why::Bad(Form::At) => Form::At.choice_row(),
-            Why::Bad(_) | Why::EndComment => head.row(),
+            Why::Bad(_) | Why::EndComment | Why::Unread => head.row(),
             Why::Skeletons | Why::Comment | Why::NoForm | Why::GuardEnd => head.choice_row(),
         }
     }
@@ -555,7 +407,7 @@ impl Why {
                 "no candidate: once the forms are replaced the alternatives are not of one shape, and one \
                  guard cannot tell which matched; split them into arms, or write the guard by hand",
             ),
-            Why::Bad(_) | Why::NoForm | Why::GuardEnd => None,
+            Why::Bad(_) | Why::NoForm | Why::GuardEnd | Why::Unread => None,
         }
     }
 }
@@ -684,13 +536,29 @@ fn forms(p: &Pat, out: &mut Vec<(Form, usize, usize)>) {
 /// (one reading of the forms, D-15), from the name before an `@`.
 fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
     let start = if c.kind(c.at) == TokenKind::At { c.sig_before(c.at)? } else { c.at };
-    let toks = (start..c.tokens.len()).filter(|&i| !c.kind(i).is_trivia()).collect();
-    let mut reader = PatReader::new(c, toks, crate::parser::NESTING_LIMIT, true);
-    let p = reader.one()?;
+    // The tokens of one alternative from `start`, and of the right of each
+    // `@` it ends at ([`crate::scan::pattern_alternative`]): the reading
+    // reads one alternative, no further.
+    let mut toks: Vec<usize> = Vec::new();
+    let mut from = start;
+    loop {
+        let rest = (from..c.tokens.len()).filter(|&i| !c.kind(i).is_trivia() || c.kind(i) == TokenKind::Newline);
+        let (n, _) = crate::scan::pattern_alternative(rest.clone().map(|i| c.kind(i)));
+        let code: Vec<usize> = rest.filter(|&i| !c.kind(i).is_trivia()).take(n + 1).collect();
+        toks.extend(&code[..n.min(code.len())]);
+        match code.get(n) {
+            Some(&at) if n > 0 && c.kind(at) == TokenKind::At => {
+                toks.push(at);
+                from = at + 1;
+            }
+            _ => break,
+        }
+    }
+    let (t, p) = Toks::read(c, toks, false, false)?;
     let mut found = Vec::new();
     forms(&p, &mut found);
     let &(form, a, b) = found.first()?;
-    (reader.toks[a] == c.at).then(|| (form, reader.toks[a], reader.toks[b]))
+    (t.toks[a] == c.at).then(|| (form, t.toks[a], t.toks[b]))
 }
 
 /// The rows [`guard_pattern`] names ([`super::Matcher::many`]).
@@ -726,17 +594,25 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     let Some(&(NodeKind::MatchArm, arm_start)) = owner else {
         return found(form.row(), alone, Vec::new());
     };
-    let arm = match Arm::read(c, arm_start, crate::parser::NESTING_LIMIT) {
-        Ok(arm) => arm,
-        Err(why) => return Some((form.row(), Hit::new(alone, Vec::new()).with_note(why.and_then(|w| w.note())))),
-    };
+    // The one choice of the row (RF-23): the first form of the arm read, and
+    // why it makes no candidate ([`Why::row`]).
+    let read = Arm::read(c, arm_start);
     let mut in_arm = Vec::new();
-    forms(&arm.pat, &mut in_arm);
-    let (Some(&(head, a, _)), Some(&(_, _, b))) = (in_arm.first(), in_arm.last()) else {
-        return found(form.row(), alone, Vec::new());
+    if let Some((arm, _)) = &read {
+        forms(&arm.pat, &mut in_arm);
+    }
+    let (head, span) = match (&read, in_arm.first(), in_arm.last()) {
+        (Some((arm, _)), Some(&(head, a, _)), Some(&(_, _, b))) => {
+            (head, c.file_span(c.span(arm.toks[a]).start, c.span(arm.toks[b]).end))
+        }
+        _ => (form, alone),
     };
-    let span = c.file_span(c.span(arm.toks[a]).start, c.span(arm.toks[b]).end);
-    match arm.candidates(c) {
+    let outcome = match read {
+        Some((arm, None)) if !in_arm.is_empty() => arm.candidates(c),
+        Some((_, Some(why))) => Err(why),
+        Some((_, None)) | None => Err(Why::Unread),
+    };
+    match outcome {
         Ok(fixes) => found(head.row(), span, fixes),
         Err(why) => Some((why.row(head), Hit::new(span, Vec::new()).with_note(why.note()))),
     }
@@ -766,25 +642,27 @@ struct Arm {
 
 impl Arm {
     /// The arm that starts at `arm_start`: the pattern runs to `if` or `=>`
-    /// outside brackets, the guard to `=>`; its patterns nest `limit` deep
-    /// at most ([`PatReader`]). When it does not read, why, if a reason the
-    /// note says ([`Why::note`]): the reader takes no block comment, and one
+    /// outside brackets, the guard to `=>`, read as the parser reads a
+    /// pattern ([`Toks::read`]); `None` when it does not read. When it reads
+    /// only without the block comments, that arm and why, if a reason the
+    /// note says ([`Why::note`]): the reading takes no block comment, and one
     /// in what the candidate rewrites would be lost, as the shape tests a
-    /// comment ([`shape`]: [`Why::Comment`], [`Why::EndComment`]); read
-    /// without the block comments to see where they are.
-    fn read(c: &Cursor, arm_start: u32, limit: u32) -> Result<Arm, Option<Why>> {
-        Arm::read_tokens(c, arm_start, limit, false).map_err(|commented| {
-            let arm = commented.then(|| Arm::read_tokens(c, arm_start, limit, true).ok()).flatten()?;
-            match shape(c, &arm.toks, &arm.pat) {
-                Err(why @ (Why::Comment | Why::EndComment)) => Some(why),
-                _ => None,
-            }
-        })
+    /// comment ([`shape`]: [`Why::Comment`], [`Why::EndComment`]).
+    fn read(c: &Cursor, arm_start: u32) -> Option<(Arm, Option<Why>)> {
+        let commented = match Arm::read_tokens(c, arm_start, false) {
+            Ok(arm) => return Some((arm, None)),
+            Err(commented) => commented,
+        };
+        let arm = commented.then(|| Arm::read_tokens(c, arm_start, true).ok()).flatten()?;
+        match shape(c, &arm.toks, &arm.pat) {
+            Err(why @ (Why::Comment | Why::EndComment)) => Some((arm, Some(why))),
+            _ => None,
+        }
     }
 
     /// [`Arm::read`], without the block comments when `skip_blocks`; when it
     /// does not read, whether a block comment is among the pattern's tokens.
-    fn read_tokens(c: &Cursor, arm_start: u32, limit: u32, skip_blocks: bool) -> Result<Arm, bool> {
+    fn read_tokens(c: &Cursor, arm_start: u32, skip_blocks: bool) -> Result<Arm, bool> {
         let first = c.index_at(arm_start);
         let mut depth = 0i32;
         let mut toks = Vec::new();
@@ -818,12 +696,8 @@ impl Arm {
         };
         let last_pat = *toks.last().ok_or(false)?;
         let commented = toks.iter().any(|&t| c.kind(t) == TokenKind::BlockComment);
-        let mut reader = PatReader::new(c, toks, limit, !skip_blocks);
-        let pat = reader.or().ok_or(commented)?;
-        if reader.pos != reader.toks.len() {
-            return Err(commented);
-        }
-        Ok(Arm { toks: reader.toks, pat, if_tok, arrow, last_pat })
+        let (t, pat) = Toks::read(c, toks, true, skip_blocks).ok_or(commented)?;
+        Ok(Arm { toks: t.toks, pat, if_tok, arrow, last_pat })
     }
 
     /// The candidates: one, or two when a range is written `..` or `...`
@@ -891,46 +765,5 @@ impl Arm {
             fixes.push(Fix::new(title, edits));
         }
         Ok(fixes)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Whether the arm whose pattern starts at the first `(` of `src` is read
-    /// with patterns nested `limit` deep at most.
-    fn arm_reads(src: &str, limit: u32) -> bool {
-        let lexed = crate::lex(FileId(0), src);
-        let all = lexed.tokens;
-        let (tokens, full, lines) = crate::layout::code_tokens(&all);
-        let c = Cursor {
-            file: FileId(0),
-            text: src,
-            tokens: &tokens,
-            all: &all,
-            full: &full,
-            lines: &lines,
-            literals: &lexed.literals,
-            at: 0,
-            open: Vec::new(),
-            closed: &[],
-            want: Want::Pattern,
-            detached: None,
-            ends: &[],
-            reach: 0,
-            place: None,
-            declaration: None,
-        };
-        let start = src.find("((").unwrap_or_default() as u32;
-        Arm::read(&c, start, limit).is_ok()
-    }
-
-    #[test]
-    fn the_reader_stops_at_its_limit_of_nesting() {
-        // Five levels: the four groups and the literal.
-        let src = "fn f(x: F32) -> I32 {\n  match x {\n    ((((0.5)))) => 1,\n    _ => 0,\n  }\n}\n";
-        assert!(arm_reads(src, 5));
-        assert!(!arm_reads(src, 4));
     }
 }

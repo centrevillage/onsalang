@@ -54,7 +54,8 @@
 //! the parser nothing of its judgements; it reads the parser only to read a
 //! candidate's code again (`parser::reads_as_expr`, and
 //! `nesting::nests_too_deep` from the level the parser read to, [`Cursor::reach`]), which a candidate
-//! must keep readable (S-236).
+//! must keep readable (S-236), and to read the pattern of a guard form by
+//! the parser's own grammar (`parser::reads_as_pattern`, in `guard`).
 //!
 //! Where the code is: this module holds the types ([`Row`], [`RowId`],
 //! [`Cursor`], [`Want`], [`Hit`], [`Detect`], [`Detached`], [`End`]), the
@@ -1011,4 +1012,3 @@ pub use rows::{MATCHERS, READS, ROWS, WAITING};
 use assign::operand;
 use faust::bit_not;
 use literals::float_spelling_at;
-use paths::is_segment;

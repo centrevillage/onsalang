@@ -61,6 +61,7 @@ mod declarations;
 mod expressions;
 mod failure;
 mod file;
+mod guard_reading;
 mod heading;
 mod items;
 mod nodes;
@@ -74,6 +75,7 @@ pub(crate) use declarations::declaration_node;
 use declarations::{Declaration, declaration, is_declaration_keyword, starts_heading};
 pub(crate) use expressions::reads_as_expr;
 use failure::Own;
+pub(crate) use guard_reading::{Guarded, reads_as_pattern};
 use statements::MoveAs;
 use types::ClockAfter;
 pub(crate) use types::{reads_as_type, reads_as_type_list};
@@ -271,6 +273,9 @@ pub(crate) struct Parser<'a> {
     /// dropped with the diagnostics: the held errors of the others are
     /// reported after the file is read ([`Parser::release_held`]).
     prefixed: Vec<Span>,
+    /// The state of a guard reading ([`reads_as_pattern`]); `None` in every
+    /// other reading.
+    guard: Option<guard_reading::GuardReading>,
 }
 
 /// What a trial reading restores ([`Parser::snapshot`]).
@@ -288,6 +293,8 @@ struct Snapshot {
     value_bang: Option<usize>,
     ends: usize,
     prefixed: usize,
+    /// The guard forms read ([`reads_as_pattern`]).
+    guarded: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -330,6 +337,7 @@ impl<'a> Parser<'a> {
             value_bang: None,
             ends: Vec::new(),
             prefixed: Vec::new(),
+            guard: None,
         }
     }
 }

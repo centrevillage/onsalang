@@ -24,6 +24,7 @@ impl<'a> Parser<'a> {
             value_bang: self.value_bang,
             ends: self.ends.len(),
             prefixed: self.prefixed.len(),
+            guarded: self.guard.as_ref().map_or(0, |g| g.forms.len()),
         }
     }
 
@@ -43,6 +44,7 @@ impl<'a> Parser<'a> {
         self.value_bang = s.value_bang;
         self.ends.truncate(s.ends);
         self.prefixed.truncate(s.prefixed);
+        self.guard.iter_mut().for_each(|g| g.forms.truncate(s.guarded));
     }
 
     /// Keep the reading since the snapshot.

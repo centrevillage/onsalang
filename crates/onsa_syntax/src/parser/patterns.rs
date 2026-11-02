@@ -7,15 +7,22 @@ impl<'a> Parser<'a> {
 
     pub(super) fn parse_pattern(&mut self) -> PResult<Completed> {
         let first = self.parse_pattern_alt()?;
-        if !self.at_line_end(TokenKind::Pipe) {
+        if !self.at_pipe() {
             return Ok(first);
         }
         let m = self.precede(first, NodeKind::OrPat)?;
-        while self.at_line_end(TokenKind::Pipe) {
+        while self.at_pipe() {
             self.bump();
             self.parse_pattern_alt()?;
         }
         Ok(self.complete(m, NodeKind::OrPat))
+    }
+
+    /// A `|` between alternatives: at the end of a line (§2.5, S-374); a
+    /// guard reading reads one at the head of a line too, which the guard
+    /// form removes with the alternatives after the first.
+    fn at_pipe(&self) -> bool {
+        self.at_line_end(TokenKind::Pipe) || (self.guard.is_some() && self.at(TokenKind::Pipe))
     }
 
     /// After a `-` in a pattern: `(`s, an integer and as many `)`s (the negative
@@ -88,14 +95,24 @@ impl<'a> Parser<'a> {
         self.literals.interpolated(t.span)
     }
 
-    fn parse_pattern_alt(&mut self) -> PResult<Completed> {
+    pub(super) fn parse_pattern_alt(&mut self) -> PResult<Completed> {
         let t = self.peek();
         // A range (`1..<3`, `..=5`, `lo..<n + 1`; spec §7): no pattern. The
         // table of the forms reads it from its first token (the guard form).
         let rest =
             self.tokens[self.pos..].iter().map(|t| t.kind).filter(|k| !k.is_trivia() || *k == TokenKind::Newline);
-        if pattern_alternative(rest).1.is_some() {
+        if let (end, Some(sym)) = pattern_alternative(rest) {
+            if self.guard.is_some() {
+                return self.guard_range(sym, end);
+            }
             return Err(self.fail(Want::Pattern, "a pattern"));
+        }
+        if self.guard.is_some()
+            && t.kind == TokenKind::Ident
+            && self.peek2().kind == TokenKind::At
+            && crate::naming::reads_lowercase(self.token_text(t))
+        {
+            return self.guard_at();
         }
         let kind = match t.kind {
             TokenKind::Underscore => NodeKind::WildPat,
@@ -155,6 +172,9 @@ impl<'a> Parser<'a> {
                     "a pattern's `-` is on an integer literal or a constant; `-(-1)` is neither (§7)",
                 ));
             }
+            TokenKind::Minus | TokenKind::Float | TokenKind::ForeignLit | TokenKind::Dot if self.guard.is_some() => {
+                return self.guard_number();
+            }
             TokenKind::Int => {
                 let m = self.start(NodeKind::LitPat)?;
                 self.bump();
@@ -162,7 +182,14 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, NodeKind::LitPat));
             }
             // A string with an interpolation makes a value: no pattern (§7, S-225).
-            TokenKind::Str if self.has_holes(t) => return Err(self.fail(Want::Pattern, "a pattern")),
+            TokenKind::Str if self.has_holes(t) => {
+                if self.guard.is_some() {
+                    let m = self.start(NodeKind::Error)?;
+                    self.bump();
+                    return Ok(self.guarded(m, t.span.start, Guarded::Str));
+                }
+                return Err(self.fail(Want::Pattern, "a pattern"));
+            }
             k if crate::starts::literal_pattern(k) => NodeKind::LitPat,
             // `()`, `(p)` (a group, §2.4, R-43) or `(p, q, ...)`.
             TokenKind::LParen => {

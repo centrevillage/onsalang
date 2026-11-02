@@ -663,3 +663,84 @@ fn the_tilde_of_par_touches_the_keyword() {
     }
     assert_eq!(codes(&flow("let a = par\n    ~i in 0..<2 { x }\n  a")), [Code::E0002]);
 }
+
+/// The guard reading of the pattern `src` alone ([`crate::parser::reads_as_pattern`]):
+/// its tree, a node as its kind and its child nodes, an `Error` node as its
+/// guard form; `None` when it does not read.
+fn guard_reading(src: &str, whole: bool) -> Option<String> {
+    use crate::cst::{Cst, NodeId, NodeKind};
+    use crate::parser::Guarded;
+    fn show(cst: &Cst, forms: &[(u32, Guarded)], n: NodeId) -> String {
+        let head = match cst.kind(n) {
+            NodeKind::Error => {
+                let start = cst.span(n).start;
+                let form = forms.iter().find(|f| f.0 == start).map(|f| f.1);
+                form.map_or_else(|| "Error".to_string(), |f| format!("{f:?}"))
+            }
+            k => format!("{k:?}"),
+        };
+        let kids: Vec<String> = cst.child_nodes(n).map(|k| show(cst, forms, k)).collect();
+        if kids.is_empty() { head } else { format!("({head} {})", kids.join(" ")) }
+    }
+    let lexed = crate::lex(FileId(0), src);
+    let tokens = lexed.tokens.iter().copied().filter(|t| t.kind != crate::TokenKind::Eof).collect();
+    let (cst, forms) = crate::parser::reads_as_pattern(FileId(0), src, tokens, &lexed.literals, whole)?;
+    let pat = cst.child_nodes(cst.root()).next()?;
+    Some(show(&cst, &forms, pat))
+}
+
+/// The guard reading (§7, §18.1): the parser's grammar of the patterns,
+/// where each guard form it fails at in a file is an `Error` node, and a
+/// `|` at the head of a line is one between alternatives.
+#[test]
+fn the_guard_reading_reads_the_guard_forms_as_error_nodes() {
+    let read = |src: &str| guard_reading(src, true);
+    assert_eq!(read("1.5").as_deref(), Some("Number"));
+    assert_eq!(read("-(1.5)").as_deref(), Some("Number"));
+    assert_eq!(read("-LIMIT").as_deref(), Some("(Number Path)"));
+    assert_eq!(read("(1..<5, x)").as_deref(), Some("(TuplePat Range { sym: 2 } (BindPat Path))"));
+    assert_eq!(read("Some(\"a{x}\")").as_deref(), Some("(TupleStructPat Path Str)"));
+    assert_eq!(read("n @ 1").as_deref(), Some("(At BindPat LitPat)"));
+    // The right of `@` that is no pattern is left out: the form is `@`
+    // alone, and the alternative ends there.
+    assert_eq!(guard_reading("n @ ..", false).as_deref(), Some("(At BindPat)"));
+    assert_eq!(read("n @ .."), None);
+    assert_eq!(read("1.5\n| 2.5").as_deref(), Some("(OrPat Number Number)"));
+    assert_eq!(read("1 | 2").as_deref(), Some("(OrPat LitPat LitPat)"));
+    // One alternative when not whole; the whole must read to its end.
+    assert_eq!(guard_reading("1.5 | 2", false).as_deref(), Some("Number"));
+    assert_eq!(read("1.5 x"), None);
+    assert_eq!(read("-(-1)"), None);
+}
+
+/// A trial of the guard reading that is undone drops the guard forms it
+/// read: the right of `@` that reads `1.5` and then fails leaves only the
+/// form of `@` ([`crate::parser::reads_as_pattern`]).
+#[test]
+fn an_undone_trial_of_the_guard_reading_leaves_no_form() {
+    let src = "n @ (1.5, &)";
+    let lexed = crate::lex(FileId(0), src);
+    let tokens = lexed.tokens.iter().copied().filter(|t| t.kind != crate::TokenKind::Eof).collect();
+    let read = crate::parser::reads_as_pattern(FileId(0), src, tokens, &lexed.literals, false);
+    let forms: Vec<_> = read.map(|(_, forms)| forms.into_iter().map(|f| f.1).collect()).unwrap_or_default();
+    assert_eq!(forms, [crate::parser::Guarded::At]);
+}
+
+/// The guard reading nests as deep as the parser (§2.5): 256 levels read,
+/// 257 do not; an `@` counts one level, so the right of the 257th `@` of
+/// a chain is left out (the alternative ends at that `@`).
+#[test]
+fn the_guard_reading_stops_at_the_limit_of_nesting() {
+    onsa_diag::stack::run(|| {
+        let limit = crate::parser::NESTING_LIMIT as usize;
+        let groups = |n: usize| format!("{}1.5{}", "(".repeat(n), ")".repeat(n));
+        assert!(guard_reading(&groups(limit), true).is_some());
+        assert_eq!(guard_reading(&groups(limit + 1), true), None);
+        let chain = |n: usize| format!("{}1.5", "n @ ".repeat(n));
+        let count = |t: String| (t.matches("At").count(), t.matches("Number").count());
+        assert_eq!(guard_reading(&chain(limit), true).map(count), Some((limit, 1)));
+        assert_eq!(guard_reading(&chain(limit + 1), true), None);
+        assert_eq!(guard_reading(&chain(limit + 1), false).map(count), Some((limit, 0)));
+        assert_eq!(guard_reading(&chain(300), false).map(count), Some((limit, 0)));
+    });
+}

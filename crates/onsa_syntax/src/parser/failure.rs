@@ -61,6 +61,10 @@ impl<'a> Parser<'a> {
         noted: Option<(Token, &str)>,
         own: Option<Own>,
     ) -> Option<usize> {
+        // A guard reading only says whether the tokens read (no diagnostics).
+        if self.guard.is_some() {
+            return None;
+        }
         let at = self.peek_index();
         let t = self.tokens[at];
         // The number of a literal written as in other languages (`1u8`,
