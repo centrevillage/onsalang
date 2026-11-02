@@ -39,9 +39,9 @@ without the row or its numbers, the line says why it is not judged, and nothing 
 "patch", "to", "head" (of the tree applied to)}`, the paths absolute. A failure to write it prints a line
 and fails nothing.
 
-`patch` runs, in the worktree (`git -C`, no `cd`), `add -A`,
-`diff --cached --binary <base>` into the patch and `reset` (the index of the
-worktree is left empty). It stops when the base is not an ancestor of the
+`patch` runs, in the worktree (`git -C`, no `cd`), `add -A` and
+`diff --cached --binary <base>` into the patch, in an index of its own (the
+index of the worktree is not touched: `repo.own_index`). It stops when the base is not an ancestor of the
 worktree's HEAD. When the HEAD of the main tree (`--main`, default this
 repository) differs from the base, it prints the files that differ between
 them and the files of the patch among them (3.3: when only documents moved,
@@ -102,10 +102,9 @@ the uncommitted changes. git runs inside the command (no shell chains: rules/com
 tree holds (uncommitted changes and untracked files too) from a base (`--base`): in a worktree by default the base
 `take` takes (`base_of`; an agent who took over a unit passes the WIP commit of the unit before: rules/common.md
 2.4), in the main tree by default HEAD (an agent there commits nothing: rules/common.md 2.3). It counts them as
-`patch` counts them (`staged_diff`, `summary`: the same lines, the index left empty alike), and with `--estimate N`
-prints the line `estimate: …` of `take`. It does nothing and exits 1 out of a git tree or in a merge (`in_merge`:
-the `add -A` and `reset` of `staged_diff` would end it); `patch` (and so `take`) stops alike in a worktree in a
-merge.
+`patch` counts them (`staged_diff`, `summary`: the same lines, the real index not touched alike), and with
+`--estimate N` prints the line `estimate: …` of `take`. It does nothing and exits 1 out of a git tree or in a merge
+(`in_merge`: the tree may hold conflicts); `patch` (and so `take`) stops alike in a worktree in a merge.
 
 `commit` (the parent, in the main tree `--tree`; X9-17) commits the named paths alone, as they are now (untracked
 files and removals too; `git commit --only`): the changes of the other paths and the index stay. A named path
@@ -174,16 +173,17 @@ def is_code(path):
 HUNK = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
-def in_file_tests(tree, base, paths):
-    """{path: [added, removed]}: the lines of the diff of the index of `tree` from `base`
+def in_file_tests(tree, base, paths, env=None):
+    """{path: [added, removed]}: the lines of the diff of the index of `tree` (that of `env`) from `base`
     in the files `paths` that are in a test module of the file (`repo.test_lines`)."""
     out = {}
     if not paths:
         return out
-    show = lambda rev: git(tree, "show", rev).stdout.decode(errors="replace")  # noqa: E731
+    show = lambda rev: git(tree, "show", rev, env=env).stdout.decode(errors="replace")  # noqa: E731
     old = counts = None
     old_tests = new_tests = set()
-    for line in git(tree, "diff", "--cached", "-U0", base, "--", *paths).stdout.decode(errors="replace").split("\n"):
+    diff = git(tree, "diff", "--cached", "-U0", base, "--", *paths, env=env).stdout.decode(errors="replace")
+    for line in diff.split("\n"):
         if line.startswith("--- "):
             old = line[6:] if line.startswith("--- a/") else None
         elif line.startswith("+++ "):
@@ -200,16 +200,16 @@ def in_file_tests(tree, base, paths):
     return out
 
 
-def git(tree, *args, ok=(0,), input=None):
-    r = subprocess.run(["git", "-C", str(tree), *args], capture_output=True, input=input)
+def git(tree, *args, ok=(0,), input=None, env=None):
+    r = subprocess.run(["git", "-C", str(tree), *args], capture_output=True, input=input, env=env)
     if r.returncode not in ok:
         raise Failed(f"git {' '.join(args)}: exit {r.returncode}: {r.stderr.decode(errors='replace').strip()}")
     return r
 
 
-def numstat(tree, *args):
+def numstat(tree, *args, env=None):
     """[(added, removed, path)] of `git <args> --numstat -z` (`-` for a binary file)."""
-    fields, out = git(tree, *args, "--numstat", "-z").stdout.decode().split("\0"), []
+    fields, out = git(tree, *args, "--numstat", "-z", env=env).stdout.decode().split("\0"), []
     i = 0
     while i < len(fields) - 1:
         add, rm, path = fields[i].split("\t", 2)
@@ -240,19 +240,19 @@ def summary(stats, new, inner=None):
 
 def staged_diff(wt, base):
     """(the binary diff, `numstat`, the new files, `in_file_tests` of the Rust code) of all `wt` holds from `base`
-    (`add -A`: untracked files too; the index is left empty): what `patch` writes and counts, and `lines` counts.
-    It stops when `base` is not an ancestor of the HEAD."""
+    (`add -A` in an index of its own, `repo.own_index`: untracked files too; the real index, a `git mv` staged in it
+    too, is not touched): what `patch` writes and counts, and `lines` counts. It stops when `base` is not an ancestor
+    of the HEAD."""
     if git(wt, "merge-base", "--is-ancestor", base, "HEAD", ok=(0, 1)).returncode:
         raise Failed(f"{base} is not an ancestor of the HEAD of {wt}")
-    git(wt, "add", "-A")
-    try:
-        diff = git(wt, "diff", "--cached", "--binary", base).stdout
-        stats = numstat(wt, "diff", "--cached", base)
-        new = set(git(wt, "diff", "--cached", "--name-only", "--diff-filter=A", "-z", base).stdout.decode().split("\0"))
-        inner = in_file_tests(wt, base, [p for _, _, p in stats if p.endswith(".rs") and is_code(p)])
-    finally:
-        git(wt, "reset", "-q")
-    return diff, stats, new, inner
+    with repo.own_index() as env:
+        git(wt, "read-tree", "HEAD", env=env)
+        git(wt, "add", "-A", env=env)
+        diff = git(wt, "diff", "--cached", "--binary", base, env=env).stdout
+        stats = numstat(wt, "diff", "--cached", base, env=env)
+        new = git(wt, "diff", "--cached", "--name-only", "--diff-filter=A", "-z", base, env=env).stdout.decode()
+        inner = in_file_tests(wt, base, [p for _, _, p in stats if p.endswith(".rs") and is_code(p)], env)
+    return diff, stats, set(new.split("\0")), inner
 
 
 def patch(wt, base, out, main):

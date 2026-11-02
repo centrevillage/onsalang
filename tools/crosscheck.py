@@ -9,9 +9,14 @@ longer read (tools/selftest.py, `REAL_READS`).
   what they read;
 - `doc-fields`: the keys of `docs.RESTS_ON` are the ID fields of the field tables of the READMEs, each with
   its direction (`docs.undirected`), and the labels of the body of a work (tasks/W/README.md) hold one
-  持ち越し, the label `docs.py ticket` reads (`docs.CARRIED`).
+  持ち越し, the label `docs.py ticket` reads (`docs.CARRIED`);
+- `test-modules`: where the test modules of crates/*/src are, as the scan of the tests of onsa_diag reads them
+  (`onsa_cases --test-items`) and as the tools read them (`repo.test_lines` and the test files of `repo.NOT_CODE`,
+  which `work.py lines` and `refactor.py sizes` count by), the same lines of every file (RF-21); at least
+  TEST_MODULES_LEAST test files and files with test modules each, so that a scan finding none does not pass.
 
-A new check is one row of CHECKS: (name, a function of the root and the onsa_cases command to its problems).
+A new check is one row of CHECKS: (name, a function of the root and the onsa_cases command to its problems, or to
+(its problems, a note to print with them)).
 
     python3 -B tools/crosscheck.py [--root DIR]
 
@@ -62,7 +67,25 @@ def doc_fields(root, cmd=None):
     return problems
 
 
-CHECKS = (("c-items", c_items), ("budgets", budgets), ("doc-fields", doc_fields))
+TEST_MODULES_LEAST = 20
+
+
+def test_modules(root, cmd, least=TEST_MODULES_LEAST):
+    rust = repo.cases_json(root, cmd, "--test-items", str(Path(root).resolve()))
+    tools = []
+    for p in sorted(Path(root).glob("crates/*/src/**/*.rs")):
+        rel = p.relative_to(root).as_posix()
+        lines = sorted(repo.test_lines(repo.read(root, rel)))
+        tools += [f"{rel} *"] if repo.is_test_file(rel) else [" ".join([rel, *map(str, lines)])] if lines else []
+    files = sum(x.endswith(" *") for x in rust)
+    note = f"{files} test files, {len(rust) - files} files with test modules"
+    few = min(files, len(rust) - files) < least
+    problems = [f"onsa_cases --test-items: {note} ({least} each at least)"] if few else []
+    problems += [f"only the Rust scan: {x}" for x in rust if x not in tools]
+    return problems + [f"only tools/repo.py: {x}" for x in tools if x not in rust], note
+
+
+CHECKS = (("c-items", c_items), ("budgets", budgets), ("doc-fields", doc_fields), ("test-modules", test_modules))
 
 
 def main(argv=None, root=repo.ROOT, cmd=repo.CASES_CMD, checks=CHECKS):
@@ -75,8 +98,10 @@ def main(argv=None, root=repo.ROOT, cmd=repo.CASES_CMD, checks=CHECKS):
             problems = check(root, cmd)
         except repo.RepoError as e:
             problems = [f"cannot check: {e}"]
+        problems, note = problems if isinstance(problems, tuple) else (problems, "")
         failed += bool(problems)
-        print("\n".join([f"{name}: ok"] if not problems else [f"{name}: {p}" for p in problems]))
+        lines = [f"{name}: {p}" for p in problems] or [f"{name}: ok"]
+        print("\n".join(lines) + (f" ({note})" if note else ""))
     print(f"cross-check: {len(checks)} check(s), {failed} with problems" if checks else "cross-check: no check")
     return 1 if failed or not checks else 0
 

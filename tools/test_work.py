@@ -734,7 +734,7 @@ class Work(unittest.TestCase):
         self.assertIn("      30      0  c.py  (new)", lines)
         self.assertEqual(lines[-1], "estimate: +33 of the code (without the tests and the data) against 10: 3.30 times; "
                                     "within the size to refactor (rules/budgets.md: over 3 times and 100 lines more)")
-        self.assertEqual(git_in(wt, "diff", "--cached", "--name-only"), "")  # the index left empty, as patch leaves it
+        self.assertEqual(git_in(wt, "diff", "--cached", "--name-only"), "")  # the index as before (nothing staged)
         self.assertIn("?? c.py", git_in(wt, "status", "--porcelain"))
         code, taken = self.take("w1", "--estimate", 10)
         self.assertEqual(code, 1, taken)  # no work check: not applied
@@ -775,7 +775,7 @@ class Work(unittest.TestCase):
 
     def test_lines_in_the_main_tree(self):
         # X-17: in the main tree, from HEAD (an agent there commits nothing), the uncommitted change and the untracked
-        # file counted, the data left out, the index left empty; --base as in a worktree
+        # file counted, the data left out, the index as before; --base as in a worktree
         (self.main / "d.py").write_text("y = 2\n")
         git_in(self.main, "add", "d.py")
         git_in(self.main, "commit", "-qm", "d")
@@ -795,6 +795,24 @@ class Work(unittest.TestCase):
         self.assertEqual(code, 0, lines)
         self.assertEqual(lines[0], f"lines: {self.main} from {self.dev}, uncommitted changes and untracked files too")
         self.assertIn("  3 file(s), +6 -9; without the tests and the data: +5 -0", lines)
+
+    def test_lines_and_patch_keep_the_index(self):
+        # W4-18 U10e: what is staged, a `git mv` too, stays staged after `lines` (both trees) and `patch`
+        wt, out = work.new("w1", self.main), Path(self.tmp.name) / "w1.patch"
+        for tree in (self.main, wt):
+            git_in(tree, "mv", "a.txt", "moved.txt")
+            (tree / "n.py").write_text("x = 1\n")
+            git_in(tree, "add", "n.py")
+            staged = git_in(tree, "diff", "--cached", "--name-status", "-M")
+            self.assertEqual(staged, "R100\ta.txt\tmoved.txt\nA\tn.py\n")
+            runs = [["lines", "--tree", str(tree)]]
+            runs += [["patch", str(wt), self.dev, str(out), "--main", str(self.main)]] if tree == wt else []
+            for argv in runs:
+                with self.subTest(tree=tree, cmd=argv[0]):
+                    code, lines = quiet_out(work.main, argv)
+                    self.assertEqual(code, 0, lines)
+                    self.assertIn("       1      0  n.py  (new)", lines)
+                    self.assertEqual(git_in(tree, "diff", "--cached", "--name-status", "-M"), staged)
 
     def test_help(self):
         for name, c in work.COMMANDS.items():

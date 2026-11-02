@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import compare  # noqa: E402
 import fuzz  # noqa: E402
 import repo  # noqa: E402
-from selftest_support import quiet_out  # noqa: E402
+from selftest_support import git_in, quiet_out  # noqa: E402
 
 
 # A made-up `onsa` of `Compare`: what its spec says for the whole command (`check tests/a.onsa`), else for the case,
@@ -64,6 +64,22 @@ if "--json" in sys.argv:
 else:
     print("\\n".join(f"{{d}}/{{f}}:1:2: error[E0302]: m" + " (new)" * new for f in bad) or " ".join(sys.argv[1:-1]))
 sys.exit(1 if bad else 0)
+"""
+
+# A made-up `onsa build --target T --out O PKG` of `Compare.test_c`: [exit code, the C] of `build.json[its name][T]`
+# (else [0, "int a;"]); on 0 it writes the C, an archive of other bytes each time and the out directory, and says so.
+FAKE_BUILD = """#!{exe}
+import json, os, sys
+here, name = os.path.split(sys.argv[0])
+target, out, pkg = sys.argv[3], sys.argv[5], sys.argv[6]
+code, c = json.load(open(os.path.join(here, "build.json")))[name].get(target, [0, "int a;\\n"])
+if code == 0:
+    os.makedirs(out)
+    open(os.path.join(out, "m.c"), "w").write(c)
+    open(os.path.join(out, "m.a"), "wb").write(os.urandom(8))
+    open(os.path.join(out, "onsa_build.json"), "w").write(json.dumps({{"out_dir": out}}))
+print(f"built {{target}} in {{out}} from {{pkg}}" if code == 0 else "m.onsa:1:2: error[E0200]: m")
+sys.exit(code)
 """
 
 CASES = """
@@ -198,6 +214,60 @@ class Compare(unittest.TestCase):
         self.assertEqual(quiet_out(compare.main, ["core", before, after, "--root", str(self.root / "empty")]), (1, [
             f"core: no case in tests (but tests/review-phase1) and examples of {self.root / 'empty'}"]))
 
+    def test_fragment_manifest(self):
+        # The fragment without its [test] tables, to its first line of another form; none without a fragment or with
+        # [test] alone. Line ends CR LF too.
+        text = ("// onsa.toml\r\n// [package]\r\n// name = \"a\"\r\n//\r\n// [test]\r\n// mode = \"check\"\r\n"
+                "//   [[ test.fix ]]\r\n// [targets.t]\r\n// kind = \"source\"\r\n\r\n// [targets.u]\r\n")
+        self.assertEqual(compare.fragment_manifest(text), '[package]\nname = "a"\n\n[targets.t]\nkind = "source"\n')
+        for text in ("// onsa.toml\n// [test]\n// mode = \"check\"\n//\n\npub fn f() {}\n", "pub fn f() {}\n",
+                     "// onsa.toml \n// [package]\n"):
+            self.assertIsNone(compare.fragment_manifest(text), text)
+
+    def test_c(self):
+        # Every target of the inputs of `core` as they are in the HEAD (tests/fuzz and tests/review-phase1 left out),
+        # a fragment as a package of its own; the files written, an archive by its name alone, the out directory and
+        # the package named, the output and its codes compared.
+        (self.root / "tests/review-phase1").mkdir()
+        for rel in ("tests/a.onsa", "tests/fuzz/z.onsa", "tests/review-phase1/r.onsa"):
+            (self.root / rel).write_text("// onsa.toml\n// [package]\n// name = \"a\"\n// [targets.t1]\n// [test]\n"
+                                         "// mode = \"check\"\n// [targets.t2]\n\npub fn f() {}\n")  # fmt: skip
+        (self.root / "tests/b.onsa").write_text("// onsa.toml\n// [test]\n// mode = \"check\"\n\npub fn f() {}\n")
+        (self.root / "tests/p/onsa.toml").write_text("[package]\n[targets.host]\n")
+        (self.root / "tests/c.onsa").write_text("// onsa.toml\n// [targets\n")  # not TOML: nothing to build
+        (self.root / "examples/e").mkdir(parents=True)
+        (self.root / "examples/e/onsa.toml").write_text("[package]\n[targets.ex]\n")
+        (self.root / "examples/e/m.onsa").write_text("pub fn f() {}\n")
+        git_in(self.root, "init", "-q")
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "head")
+        (self.root / "tests/a.onsa").write_text("pub fn f() {}\n")  # not in the HEAD
+        with tempfile.TemporaryDirectory() as tmp:
+            builds = compare.c_builds(self.root, tmp)
+            self.assertEqual(list(map(str, builds)), ["tests/a.onsa [t1]", "tests/a.onsa [t2]", "tests/p [host]",
+                                                      "examples/e [ex]"])  # fmt: skip
+            self.assertEqual(sorted(p.name for p in builds[0].package.iterdir()), ["a.onsa", "onsa.toml"])
+            self.assertEqual((builds[0].package / "onsa.toml").read_text(), '[package]\nname = "a"\n[targets.t1]\n'
+                                                                           '[targets.t2]\n')  # fmt: skip
+        (self.bin / "build.json").write_text(json.dumps({"before": {}, "after": {"t2": [0, "int b;\n"],
+                                                                                 "host": [2, ""]}}))  # fmt: skip
+        for n in ("before", "after"):
+            (self.bin / n).write_text(FAKE_BUILD.format(exe=sys.executable))
+            (self.bin / n).chmod(0o755)
+        def run(*names):
+            return quiet_out(compare.main, ["c", *(str(self.bin / n) for n in names), "--root", str(self.root)])
+        head = f"c: 4 builds of 3 inputs with targets in the HEAD of {self.root}"
+        self.assertEqual(run("before", "before"), (0, [head, "4 cases, 0 differ, 0 fell in one binary only, 0 fell in "
+                                                       "both"]))  # fmt: skip
+        self.assertEqual(run("before", "after"), (1, [head,
+            "tests/a.onsa [t2]", "  before: exit 0, 3 files", "  after:  exit 0, 3 files",
+            "  m.c line 1: 'int a;' -> 'int b;'",
+            "tests/p [host]", "  before: exit 0, 3 files", "  after:  exit 2, 0 files",
+            "  output line 1: 'built host in <out> from <pkg>' -> 'm.onsa:1:2: error[E0200]: m'",
+            "  codes: none -> E0200",
+            "  files: -m.a -m.c -onsa_build.json",
+            "4 cases, 2 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+
     def test_speed_turns_round(self):
         b1, b2 = self.fakes({}, "b1", "b2")
         log = self.bin / "log"
@@ -330,7 +400,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "fmt", "core", "speed", "probe"])
+        self.assertEqual(names, ["diags", "fmt", "core", "c", "speed", "probe"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()

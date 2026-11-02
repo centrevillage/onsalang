@@ -6,7 +6,7 @@
 //! onsa_cases [ROOT]          the cases under tests/ and their settings (tools/spec_sections.py)
 //! onsa_cases --run [ROOT]    run every case; the markers each compared (tools/diag_codes.py, K-13)
 //! onsa_cases --c ITEM [ROOT] a gate item of the C checks (Q-07, W1-06; `onsa_tests::ccheck`)
-//! onsa_cases --c-items       the names of those items (tools/test_gate_steps.py matches them with the gate's)
+//! onsa_cases --c-items       the names of those items (the cross-check item, tools/crosscheck.py, matches them with the gate's)
 //! onsa_cases --vectors IMPL [ROOT]  the test vectors against `interp` or `c` (gate items vectors-interp,
 //!                            vectors-c; W2-02, `onsa_tests::vectors`)
 //! onsa_cases --codes         the registry of diagnostic codes (tools/diag_codes.py, S-109)
@@ -27,6 +27,8 @@
 //!                            each input (X-20, `onsa_tests::phases`)
 //! onsa_cases --serve         the commands of the gate's tools on the texts of the standard input,
 //!                            one request after another (tools/batch.py; `onsa_tests::serve`)
+//! onsa_cases --test-items [ROOT]  where the test modules of crates/*/src are, as the scan of the
+//!                            tests of onsa_diag reads them (the gate item cross-check, RF-21)
 //! ```
 //!
 //! The first form prints:
@@ -127,6 +129,10 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+// The scan is the tests' of onsa_diag, one file (RF-21).
+#[path = "../../../onsa_diag/src/unsupported/tests/scan.rs"]
+mod scan;
+
 /// The forms of the command, in the order of the usage: the flag (`""`: none),
 /// the least and the most arguments after it, and the words of the usage after it.
 const FORMS: &[(&str, usize, usize, &str)] = &[
@@ -148,6 +154,7 @@ const FORMS: &[(&str, usize, usize, &str)] = &[
     ("--fmt", 1, 1, "FILE"),
     ("--phases", 1, MANY, "[--lower] [--rounds N] PATH..."),
     ("--serve", 0, 0, ""),
+    ("--test-items", 0, 1, "[ROOT]"),
 ];
 const MANY: usize = usize::MAX;
 
@@ -250,6 +257,11 @@ fn main() -> ExitCode {
         }
         "--fmt" => fmt(&rest[0]),
         "--phases" => phases(rest),
+        "--test-items" => {
+            let root = root();
+            print(&serde_json::json!(scan::test_module_answers(&root, &scan::crate_sources(&root.join("crates")))));
+            ExitCode::SUCCESS
+        }
         "--c-items" => {
             print(&serde_json::json!(onsa_tests::c::ITEMS.iter().map(|i| i.name).collect::<Vec<_>>()));
             ExitCode::SUCCESS

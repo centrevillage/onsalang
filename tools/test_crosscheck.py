@@ -74,11 +74,32 @@ class CrossCheck(unittest.TestCase):
         with mock.patch.object(docs_tool, "RESTS_ON", {k: True for k in sorted(fields)[1:]}):
             self.assertTrue(any("has no direction in docs.RESTS_ON" in p for p in crosscheck.doc_fields(self.root)))
 
+    def test_test_modules(self):
+        self.write("crates/a/src/lib.rs", "fn a() {}\n#[cfg(test)]\nmod t {\n    fn b() {}\n}\n")
+        self.write("crates/a/src/x/tests.rs", "fn c() {}\n")
+        self.write("crates/a/src/y.rs", "fn d() {}\n")
+        self.write("crates/a/tests/t.rs", "fn e() {}\n")  # not below src/
+        same = ["crates/a/src/lib.rs 2 3 4 5", "crates/a/src/x/tests.rs *"]
+        note = "1 test files, 1 files with test modules"
+        self.assertEqual(crosscheck.test_modules(self.root, json_cmd({"--test-items": same}), 1), ([], note))
+        self.assertEqual(crosscheck.test_modules(self.root, json_cmd({"--test-items": same}))[0],
+                         [f"onsa_cases --test-items: {note} (20 each at least)"])  # fmt: skip
+        other = json_cmd({"--test-items": [same[1], "crates/a/src/lib.rs 2 3 4"]})
+        problems, _ = crosscheck.test_modules(self.root, other)
+        self.assertEqual(problems[1:], ["only the Rust scan: crates/a/src/lib.rs 2 3 4",
+                                        "only tools/repo.py: crates/a/src/lib.rs 2 3 4 5"])  # fmt: skip
+        problems, note = crosscheck.test_modules(self.root, json_cmd({"--test-items": []}), 0)
+        self.assertEqual((problems, note), (["only tools/repo.py: " + x for x in same], "0 test files, 0 files with "
+                                            "test modules"))  # fmt: skip
+
     def test_main(self):
         checks = (("ok", lambda root, cmd: []), ("bad", lambda root, cmd: ["x is wrong"]))
         self.assertEqual(quiet_out(crosscheck.main, [], self.root, None, checks), (1, ["ok: ok", "bad: x is wrong",
                          "cross-check: 2 check(s), 1 with problems"]))  # fmt: skip
         self.assertEqual(quiet_out(crosscheck.main, [], self.root, None, checks[:1])[0], 0)
+        noted = (("n", lambda root, cmd: ([], "3 files")), ("m", lambda root, cmd: (["x", "y"], "1 file")))
+        self.assertEqual(quiet_out(crosscheck.main, [], self.root, None, noted)[1][:3],
+                         ["n: ok (3 files)", "m: x", "m: y (1 file)"])  # fmt: skip
         self.assertEqual(quiet_out(crosscheck.main, [], self.root, None, ())[0], 1)  # nothing checked fails
         broken = (("c", lambda root, cmd: crosscheck.repo.cases_json(root, ("false",), "--c-items")),)
         code, lines = quiet_out(crosscheck.main, [], self.root, None, broken)

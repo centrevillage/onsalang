@@ -2,8 +2,8 @@
 """Before and after: the diagnostics, the formatting, the Core and the time of `onsa` binaries (rules/refactoring.md 8;
 X-9 X9-18, X9-19; X-6 B1).
 
-Its commands are `diags`, `fmt`, `core`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1); `compare.py help` shows
-them.
+Its commands are `diags`, `fmt`, `core`, `c`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1); `compare.py help`
+shows them.
 `diags` runs `check --json` of both binaries on every case of tests/: the seed files of the gate's fuzz
 (`fuzz.seeds`), a file in a package (a directory below tests/ with an `onsa.toml`, the outermost, as the case
 harness `onsa_tests::case::collect`) giving way to its directory. It lists the cases whose diagnostics differ in
@@ -14,8 +14,12 @@ case gave JSON on both sides.
 `fmt` runs `onsa fmt` of both binaries on the fuzz's seed files, a file at a time, each run on its own copy in a
 temporary directory of its own, and lists the files whose exit code, written text, stdout or the names of the files
 left in the directory differ. `core` runs `dump --core` of both on the cases of tests/ and examples (`core_cases`) and
-lists those whose exit code or output differ. Both list the falls and exit 1 as `diags` does, and when no case ran to
-exit 0 in both binaries.
+lists those whose exit code or output differ. `c` builds every target (`build --target … --out`) of the inputs of `core`
+as they are in the HEAD of `--root` (a copy of its tests/ but REVIEW and the fuzz's inputs, and examples, `c_builds`),
+a file with a manifest in its `// onsa.toml` fragment as a package of its own whose onsa.toml is the fragment without
+its `[test]` tables, and lists the builds whose exit code, output (the diagnostics) or files written (the C, the
+headers, `onsa_build.json`; of an object or an archive, the name) differ, the out directory named `<out>` and the
+package `<pkg>`. All three list the falls and exit 1 as `diags` does, and when no case ran to exit 0 in both binaries.
 `speed` measures as the removed `tools/speed.py` did (X9-19), the order of the binaries turned round every other round;
 the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inputs of `core` that every binary checks
 to exit 0 and the first then lowers (exit 0) get `dump --core`: a binary before a fix may fall lowering an input that
@@ -26,6 +30,7 @@ shows the wall seconds and the cpu seconds (user + sys of the children). The cpu
 `probe` writes the cases of a file (`probe_cases`) as packages below `--out` and runs every binary on each, `check
 --json` or `--cmd`, named as in `speed` (W4-03, 70th session: the scripts the agents copied per worktree).
 """
+import io
 import json
 import os
 import re
@@ -34,11 +39,14 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
+import tomllib
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import NamedTuple
 
 sys.dont_write_bytecode = True
 import fuzz  # noqa: E402
@@ -50,6 +58,9 @@ REVIEW = "tests/review-phase1"  # left by `core`: unknown inputs, not lowered al
 PARTS = ((2, "message"), (3, "fix titles"), (4, "fix edits"), (5, "notes"))  # the parts of `diagnostic` a pair names
 CASE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")  # a case of `probe`: a directory below --out
 DIAG_LINE = re.compile(r"^(.+?):(\d+):(\d+): \w+\[(\w+)\]", re.M)  # the text form: `file:line:col: error[E…]`
+FRAGMENT = "// onsa.toml"  # the first line of a fragment (onsa_tests::fragment::HEADER)
+TEST_TABLE = re.compile(r"\s*\[\[?\s*test\s*[.\]]")  # a header of `[test]` or a table below it, the runner's
+BINARY = (".o", ".a")  # files of `build` compared by the name alone
 
 
 def packaged(root, rels) -> list:
@@ -226,6 +237,112 @@ def core(args) -> int:
     units = core_cases(args.root)
     run = lambda b, c: outcome([b, "dump", "--core", c], args.root)  # noqa: E731
     return compared(args, units, run, texts, ok, f"tests (but {REVIEW}) and examples")
+
+
+def fragment_manifest(text):
+    """The manifest of a case file without its `[test]` tables (the runner's, which an onsa.toml does not take): the
+    lines of its `// onsa.toml` fragment (`//`, or `// ` and the TOML, to the first other line), as
+    `onsa_tests::fragment::parse` reads them. None when the file has no fragment or nothing but `[test]` in it."""
+    lines = [x.rstrip("\r") for x in text.split("\n")]
+    if lines[0] != FRAGMENT:
+        return None
+    toml, test = [], False
+    for x in lines[1:]:
+        if x != "//" and not x.startswith("// "):
+            break
+        x = x[3:]
+        test = bool(TEST_TABLE.match(x)) if x.lstrip().startswith("[") else test
+        toml += [] if test else [x]
+    return "\n".join(toml) + "\n" if "".join(toml).strip() else None
+
+
+class Build(NamedTuple):
+    case: str  # the input of `core`, from --root
+    package: Path
+    target: str
+
+    def __str__(self):
+        return f"{self.case} [{self.target}]"
+
+
+def c_builds(root, tmp) -> list:
+    """[Build] of every target of the inputs of `core_cases` in a copy of the HEAD of `root` below `tmp`."""
+    tree, packages = Path(tmp) / "head", Path(tmp) / "packages"
+    paths = ["tests", f":!{REVIEW}", f":!{fuzz.FUZZ_DIR}", "examples"]
+    git = subprocess.run(["git", "-C", str(root), "archive", "HEAD", "--", *paths], capture_output=True)
+    if git.returncode:
+        raise OSError(f"git archive HEAD in {root}: {git.stderr.decode('utf-8', 'replace').strip()}")
+    with tarfile.open(fileobj=io.BytesIO(git.stdout)) as tar:
+        tar.extractall(tree, filter="data")
+    builds = []
+    for i, case in enumerate(core_cases(tree)):
+        package = tree / case
+        manifest = (package / "onsa.toml") if package.is_dir() else None
+        text = manifest.read_text(encoding="utf-8") if manifest else fragment_manifest(fuzz.read_input(package))
+        if text is not None and not manifest:
+            package = packages / str(i)
+            package.mkdir(parents=True)
+            (package / "onsa.toml").write_text(text, encoding="utf-8")
+            shutil.copyfile(tree / case, package / Path(case).name)
+        try:
+            targets = tomllib.loads(text or "").get("targets")
+        except tomllib.TOMLDecodeError:
+            targets = None  # no target to build: `check` and `diags` see the error
+        builds += [Build(case, package, t) for t in targets] if isinstance(targets, dict) else []
+    return builds
+
+
+def built(binary, b, tmp):
+    """(the exit code, stdout and stderr, ((name, bytes, None for BINARY), …) of the files written) of `binary build`
+    of the Build `b` into a new directory below `tmp`, removed after; or (a str) how it fell."""
+    out = Path(tempfile.mkdtemp(dir=tmp)) / "out"
+    try:
+        r = subprocess.run([binary, "build", "--target", b.target, "--out", str(out), str(b.package)],
+                           cwd=tmp, capture_output=True, timeout=TIMEOUT)  # fmt: skip
+        named = lambda x: x.replace(bytes(out), b"<out>").replace(bytes(b.package), b"<pkg>")  # noqa: E731
+        files = tuple((p.relative_to(out).as_posix(), None if p.suffix in BINARY else named(p.read_bytes()))
+                      for p in sorted(out.rglob("*")) if p.is_file())  # fmt: skip
+    except subprocess.TimeoutExpired:
+        return f"timeout ({TIMEOUT} s)"
+    finally:
+        shutil.rmtree(out.parent, ignore_errors=True)
+    if r.returncode not in (0, 1, 2):
+        head = "".join(f": {h[:100]}" for h in (r.stderr or r.stdout).decode("utf-8", "replace").splitlines()[:1])
+        return (f"signal {-r.returncode}" if r.returncode < 0 else f"exit {r.returncode}") + head
+    return r.returncode, named(r.stdout + r.stderr), files
+
+
+def build_lines(before, after) -> list:
+    """The lines of a build of `c`: how a binary fell, or the exit codes and the numbers of files, the first line that
+    differs of the output and its codes, the files written on one side only, and the first line that differs of each
+    file written by both."""
+    if isinstance(before, str) or isinstance(after, str):
+        return texts(before, after)
+    out = [f"  before: exit {before[0]}, {len(before[2])} files", f"  after:  exit {after[0]}, {len(after[2])} files"]
+    if before[1] != after[1]:
+        codes = [[m[4] for m in DIAG_LINE.finditer(x[1].decode("utf-8", "replace"))] for x in (before, after)]
+        out.append(f"  output line {first_line(before[1], after[1])}")
+        if codes[0] != codes[1]:
+            out.append(f"  codes: {' '.join(codes[0]) or 'none'} -> {' '.join(codes[1]) or 'none'}")
+    fb, fa = dict(before[2]), dict(after[2])
+    if fb.keys() != fa.keys():
+        out.append("  files: " + " ".join([f"-{n}" for n in sorted(fb.keys() - fa.keys())] +
+                                          [f"+{n}" for n in sorted(fa.keys() - fb.keys())]))  # fmt: skip
+    return out + [f"  {n} line {first_line(fb[n], fa[n])}" for n in sorted(fb.keys() & fa.keys()) if fb[n] != fa[n]]
+
+
+def c(args) -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = os.path.realpath(tmp)  # as the binaries print it
+        try:
+            builds = c_builds(args.root, tmp)
+        except (OSError, tarfile.TarError) as e:
+            print(f"c: {e}")
+            return 1
+        inputs = len({b.case for b in builds})
+        print(f"c: {len(builds)} builds of {inputs} inputs with targets in the HEAD of {args.root}")
+        run = lambda binary, b: built(binary, b, tmp)  # noqa: E731
+        return compared(args, builds, run, build_lines, ok, f"the HEAD of tests (but {REVIEW}) and examples")
 
 
 def ok_run(argv) -> bool:
@@ -455,6 +572,13 @@ COMMANDS = {
               "降下に進む命令に一括でかけないので除く。rules/common.md 3.2）と examples（パッケージはディレクトリで）に回し、終了コードか出力が違う入力と落ちた入力を並べる。両方で終了コード 0 の入力が無ければ失敗",
               "意味解析・降下のリファクタリングの前後で、Core IR が変わっていないかを見るとき（check を回す diags では降下を確かめられない）。前のバイナリは diags と同じ",
               "compare.py core <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
+    "c": C(diags_args, c, ("parent", "i", "b"),
+           "二つのバイナリの build を、HEAD の tests/（tests/review-phase1 と fuzz の入力を除く）と examples の写しで、core と同じ入力の全てのターゲットに回し"
+           "（マニフェストを断片に持つファイルは、断片から [test] を除いた onsa.toml の一つのパッケージにして）、終了コード・出力（診断）・書いたファイル"
+           "（C、ヘッダ、onsa_build.json。.o と .a は名前だけ）が違うビルドと落ちたビルドを並べる",
+           "後端・降下の変更の前後で、生成する C とビルドの診断が変わっていないか（変わった所が意図どおりか）を見るとき。前のバイナリは diags と同じ。"
+           "入力は HEAD のものなので、作業ツリーで書き換えた事例は前のまま比べる",
+           "compare.py c <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "speed": C(speed_args, speed, ("parent", "i", "b"),
                "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小（壁時計と cpu）を、引数の順の番号と経路の違う部分の名前で並べる",
                "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）。前のバイナリは diags と同じ",

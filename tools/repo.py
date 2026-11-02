@@ -17,6 +17,7 @@
 - the roles and the subcommands of a tool with their help (`ROLES`, `Command`, `parse_command`, X9-7).
 """
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -726,15 +727,22 @@ def main_tree(root):
     return dirs[1].parent if dirs else None
 
 
+@contextlib.contextmanager
+def own_index():
+    """The environment of git commands that use an index of their own, empty at first, in a temporary directory (the
+    real index is not touched; `tree_hash`, `work.py lines` and `patch`; one place, D-15)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    with tempfile.TemporaryDirectory() as d:
+        yield {**env, "GIT_INDEX_FILE": os.path.join(d, "index")}
+
+
 def tree_hash(root, paths=()):
     """What `root` holds now, untracked files too (`add -A` in an index of its own: the real index is
     not touched; X-1 U3, U4; one place, D-15). With no `paths`, the git tree of the whole; with
     `paths`, a hash of their entries alone (`ls-files -s`): the other paths of HEAD (a commit of the
     documents) do not change it. A path that is in neither HEAD nor the tree adds nothing. RepoError
     when git fails."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    with tempfile.TemporaryDirectory() as d:
-        env["GIT_INDEX_FILE"] = os.path.join(d, "index")
+    with own_index() as env:
         adds = [["add", "-A", "--", p] for p in paths] if paths else [["add", "-A"]]
         out = ""
         last = ["ls-files", "-s", "-z", "--", *paths] if paths else ["write-tree"]
