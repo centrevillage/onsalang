@@ -6,7 +6,7 @@
 //! onsa_cases [ROOT]          the cases under tests/ and their settings (tools/spec_sections.py)
 //! onsa_cases --run [ROOT]    run every case; the markers each compared (tools/diag_codes.py, K-13)
 //! onsa_cases --c ITEM [ROOT] a gate item of the C checks (Q-07, W1-06; `onsa_tests::ccheck`)
-//! onsa_cases --c-items       the names of those items (tools/test_gate.py matches them with the gate's)
+//! onsa_cases --c-items       the names of those items (tools/test_gate_steps.py matches them with the gate's)
 //! onsa_cases --vectors IMPL [ROOT]  the test vectors against `interp` or `c` (gate items vectors-interp,
 //!                            vectors-c; W2-02, `onsa_tests::vectors`)
 //! onsa_cases --codes         the registry of diagnostic codes (tools/diag_codes.py, S-109)

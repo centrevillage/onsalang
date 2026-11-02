@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Self-tests of the `vectors` gate item (W2-01): the checks of tools/vectors/gen.py find what they are for.
 
-Run by tools/test_gate.py (the `gate-selftest` item), or alone: python3 -B tools/vectors/test_vectors.py
+Found by its name and run by tools/selftest.py (the `gate-selftest` item), or alone:
+python3 -B tools/vectors/test_vectors.py
 """
 import shutil
 import subprocess

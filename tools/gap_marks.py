@@ -45,8 +45,8 @@ TOKEN = "SPEC-GAP"
 # Any spelling of the token (`spec-gap`, `SPECGAP`, `Spec gap`, `SPEC_GAP`): a
 # line with one is a mark, and must be of the one form.
 SPELLING = re.compile(r"spec[\s_-]*gap", re.I)
-# The files that write the form as data (this check and its self-tests); they hold no mark.
-OWN = ("tools/gap_marks.py", "tools/test_gate.py")
+# The files that write the form as data (this check and the self-tests that write marks); they hold no mark.
+OWN = ("tools/gap_marks.py", "tools/test_gap_marks.py", "tools/test_gate.py", "tools/test_docs.py")
 HASH_COMMENT = {".py", ".sh", ".toml"}  # `#` comments; every other file uses `//`
 ID = repo.id_form("S", "R", "A")
 
