@@ -1,5 +1,5 @@
 // T-5（impl-review-0.3.md から持ち越し）: flow だけの構文を flow の外に書いたときの診断。
-// `onsa check tests/review-phase1/parent/t5.onsa` で確かめる。期待値（S-101）と移した先は各関数の上のコメント（`par`・`lp~(x)`・`prev~(x)`・`lp(x)`・`prev~(^z)` は W4-12 U3/t で期待値付きの事例へ移した。レート型の部分は S-102 の作業が残る）。
+// `onsa check tests/review-phase1/parent/t5.onsa` で確かめる。期待値（S-101）と移した先は各関数の上のコメント（`par`・`lp~(x)`・`prev~(x)`・`lp(x)`・`prev~(^z)` は W4-12 U3/t で期待値付きの事例へ移した。レート型の部分も全て移した）。
 // 逆向き（fn だけの構文を flow の本体に書いた）は E0806（§11.2）。
 
 pub flow lp(x: Sig[F32]) -> Sig[F32] { x }
@@ -34,8 +34,7 @@ fn with_plain_call(x: F32) -> F32 {
 
 // 期待（S-102）: レートは型ではなくなった。`Sig[F32]` / `Ctl[F32]` の形は E0020 で、flow の外なので修正候補はレートを外した `F32`。
 //   `at` を flow の外に書けば（`fn g(x: F32 at sample)`）E0821（`tests/spec/negative/names_clock_in_fn_head.onsa`）。この部分は W4-12 U3 の範囲の外。
-// 今: レート型は flow の外の宣言にも書けてしまい、宣言では何も出ない。使う所で分かりにくい E0401 になる
-//   （`g` の本体の `1.0` は「a float literal cannot have type `Ctl[F32]`」、flow から `g(x)` を呼ぶと「expected `Sig[F32]`, found `F32`」）。
+// 今: E0020「a rate is no type; it is written as the clock after the type」で、flow の外の候補はレートを外した `F32`（W4-04 U8b、S-120。期待値付きのテストは `tests/spec/fixes/e0020_sig_rate.onsa`・`e0020_sig_rate_places.onsa`）。
 struct WithRate { v: Sig[F32] }
 
 fn g(x: Sig[F32]) -> Ctl[F32] { 1.0 }

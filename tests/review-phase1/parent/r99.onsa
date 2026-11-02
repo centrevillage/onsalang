@@ -2,6 +2,7 @@
 // 型は入力の値型（文字列のキーは Str）。`default` は必須。数値は有限、`min < max`、`default` は範囲の中、`step > 0`、
 // log は `min > 0`、`Bool` には `default` `unit` `label` `id` だけ、同じキーは一度だけ。
 // 各 flow の上に期待値と今（2026-10-05）の出力を書いた。`onsa check` で確かめる。
+// 旧い構文のため、今の `check` は E0020 だけを出す。最終の構文に直した「今」は下のとおり。
 
 const FB_MAX: F32 = 0.95
 

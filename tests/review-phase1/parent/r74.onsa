@@ -7,8 +7,8 @@ pub struct Holder {
   gain: F32,
 }
 
-// 期待: E0711（部分移動）。今: E0711（単位の選び S-214 の前は E0601「`uses {Alloc}` を足せ」だけで、W4-06 で効果の検査も走らなくなった）。
+// 期待: E0711（部分移動）。今: 通る（S-85 から、取り出すと全体を消費し残りを破棄する。W4-09 U2）。降下は E0200「this version does not support taking a field out of a value (the rest is dropped)」（W8-04 まで）。
 pub fn take_field(move s: Holder) -> Buf[F32] { s.buf }
 
-// 期待: E0711。今: E0711（単位の選び S-214 の前は E0901（rt）だけで、W4-06 で rt の検査も走らなくなった）。
+// 期待: E0711。今: 通る（S-85 から、取り出すと全体を消費し残りを破棄する。W4-09 U2）。降下は E0200「this version does not support taking a field out of a value (the rest is dropped)」（W8-04 まで）。
 pub rt fn take_field_rt(move s: Holder) -> Buf[F32] { s.buf }

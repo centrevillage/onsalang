@@ -3,11 +3,9 @@
 [`history/review-impl-phase1.md`](../../history/review-impl-phase1.md)（R-01〜R-133）と `impl-review-0.3.md` の持ち越しの項目の指摘と、決定の点検（`consistency-check-phase1.md`）で見つけた穴を再現した入力を、資料として残したもの。2026-10-02〜06。
 
 - **自動では実行しない。** `onsa_tests` のランナーは `tests/` の全体を走査し、このディレクトリと `tests/fuzz` を除く（[`tests/README.md`](../README.md)）。パッケージの収集も `tests/` を除く（§15.1）。
-- **flow の旧い書き方。** 多くの flow の入力は 0.3 の草案の書き方（`x: Sig[F32]`、`prev(y, 0.0)`）で書いてある。W3-10（2026-10-10）から今の実装はこの書き方を受け付けない（`Sig[F32]` は E0302、`prev(` は E0811）。再現に使うときは、最終の構文（`x: F32 at sample`、後の `let` を読む遅延は `prev~(^y)`）に書き換える。
+- **flow の旧い書き方。** 多くの flow の入力は 0.3 の草案の書き方（`x: Sig[F32]`、`prev(y, 0.0)`）で書いてある。W3-10（2026-10-10）から今の実装はこの書き方を受け付けない（`Sig[F32]` は E0020、`prev(` は E0811）。再現に使うときは、最終の構文（`x: F32 at sample`、後の `let` を読む遅延は `prev~(^y)`）に書き換える。
 - 多くは「今の実装が誤る」入力で、期待値は各ファイルのコメントか `assert` に書いてある。修正の段階（レビュー §7）で、直した項目の入力を `tests/spec` などの回帰テストへ移す。
 - 除いたもの: ビルドの生成物（`target/`）、実行ファイル、golden の写し、ファズが生成した約 830 個の入力。
-- **確かめの残り（2026-10-19）。** R が全て DONE なのに、入力を移したか消したかを書いていない行が 13 ある。R-01（簡易ファズのスクリプト）、R-18、R-20、R-45、R-69、R-70（`syntax/` の行）、R-72（2 行）、R-73（2 行）、R-78、R-101、R-124、R-128 の行。
-  期待値付きのテストがその R を名指すのは 9 行で、R-18・R-72・R-128 の 4 行は名指すテストが無い。W4 の段の終わり（`rules/process.md` 8.6 の「段の終わり」の 2）で入力ごとに確かめ、行に書いてから、この項を消す。
 
 ## ディレクトリ
 
@@ -66,7 +64,7 @@
 | `core/ret.onsa` | R-07。W2-07 で直し、`tests/spec/semantics/return_unit.onsa` へ移した |
 | `core/try1.onsa`、`core/try2.onsa` | R-08。W2-07 で期待値付きのテストへ移した: `tests/spec/semantics/closure_exit_from_fn.onsa`（脱出の値。W8-09 まで実装待ち）、`tests/spec/negative/lower_closure_exit.onsa`（それまでの `?` と `return` の E0200） |
 | `core/euclid.onsa` | R-19。W2-03 で期待値付きのテストへ移した: `tests/spec/semantics/min_rem_neg1.onsa`、`crates/onsa_interp/src/tests.rs` の `min_rem_minus_one_is_zero`（仕様 §3.4 では `MIN % -1` と `MIN.rem_euclid(-1)` は 0 で panic しない。ファイルの test の名前の「panics」は決定の前のもの）。元の入力は旧い期待値のまま失敗するので消した（W2-06 のコミット、W2-03/b の F-6） |
-| `core/constf.onsa` | R-20 |
+| `core/constf.onsa` | R-20。W3-05 で直し、期待値付きのテストへ移した: `crates/onsa_sema/src/body_tests.rs` の `float_literal_ranges`（R-20 のコメントの `pub const K: F32 = 1.0000000596046447753906250001` が一度だけ丸めた値）、`tests/spec/semantics/float_literal_rounding.onsa`（"a const of F32 is rounded once" ほか）。今: `check`・`test` とも通る（"f32 const literal is rounded once" ok） |
 | `core/order*.onsa`、`core/cpkg/` | R-93 |
 | `core/fnmangle.onsa`、`core/mangle/` | R-48 |
 | `core/derive*.onsa`（推定） | R-60 |
@@ -89,7 +87,7 @@
 | `types/bounds.onsa`、`types/bufelem.onsa`、`types/span*.onsa`、`types/nestrate.onsa`、`types/ratefn.onsa`、`types/tyb*.onsa`（推定） | R-37。W4-05 U4a で署名と本体に書いた型の整形性を入れ、期待値付きのテストへ移した: `tests/spec/types/wellformed_*.onsa`。今: `bufelem`・`tyb2`・`tybounds` は E0416、`spanfield` は E0710、`spanpos` は E0710 と E0416（古い構文の E0020 も）。`bounds.onsa` は U4b で 1 行の `?Num` が E0416（S-711）、5 行の `Copy + ?Dup` が E0416（S-747。期待値付きは `tests/spec/types/bounds_*.onsa`）。`nestrate` は 1 行が E0810（`at` が無い）、2 行が E0020（クロックを型に書いた古い構文）、`ratefn` は E0020 と 8 行の E0309 |
 | `types/fieldvis/` | R-38。W4-03 U4a/t で期待値付きのテストへ移した: `tests/spec/packages/visibility_methods/`（`priv` の `p.m()`・`Point.m()`・`Point.C` は E0303）、`tests/spec/packages/visibility_fields/`（`priv` のフィールドの読み書き・リテラル・パターン）、`crates/onsa_cli/tests/cli/visibility.rs`。元の入力は S-36 の後は語の無いメンバとフィールドなので通る |
 | `types/cyc2/`、`types/cyc3/`、`types/reexp/` | R-39。W4-03 で期待値付きのテストへ移して消した（W4-03 を終えた 72 回目）: `types/cyc2/` は `tests/spec/packages/body_path_mutual/`（`use` を書かない相互参照は、それぞれの経路が E0302 で、E0310 にならない）と `crates/onsa_cli/tests/cli/body_paths.rs`（U2b/t）。`types/cyc3/`（自分のパッケージ名で相互に取り込む）は `tests/spec/fixes/pkg_own_name_mutual/`（二つの `use` が E0302 で、それぞれ候補はパッケージ名を外す形）と、`use b.{g}` の形に書き直した E0310 の事例 `tests/spec/packages/cycle/`・`crates/onsa_cli/tests/cli/use_cycles.rs`（U3a2/t）。`types/reexp/`（`pub use` の連鎖）は `tests/spec/packages/pub_use_chain/`・`pub_use_no_cycle/` と `crates/onsa_cli/tests/cli/use_reexport.rs`（S-596、U3b2/t） |
-| `types/dups.onsa` | R-40 |
+| `types/dups.onsa` | R-40。W4-04 U7a で直し、期待値付きのテストへ移した: `tests/spec/types/overlap_fields_variants.onsa`（フィールドと列挙子の重複）。今: `check` は 3・8・11 行の E0304、13 行の E0020（旧い構文） |
 | `types/implitems.onsa`、`types/flowimpl.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/item_contexts.onsa`・`item_contexts_units.onsa`、`tests/spec/types/flow_impl.onsa` |
 | `types/dupmod/`、`types/itemmod/`、`types/stdname/`、`types/stdmod/`、`types/upname/`（推定） | R-46。`types/dupmod/` は W4-03 U2a/t で期待値付きのテストへ写した: `tests/spec/packages/module_dupmod/`（`a.b.onsa` と `a/b.onsa` は別のモジュールで、どちらも検査される）、`crates/onsa_cli/tests/cli/use_paths.rs`。`types/itemmod/` と `types/stdmod/` は W4-03 U3a1/t で期待値付きのテストへ写した: `tests/spec/packages/overlap_item_child_module/`・`overlap_item_dir_only_child/`（モジュールの項目と同じ名前の子モジュールは E0304、R-177・S-666）、`crates/onsa_cli/tests/cli/name_overlaps.rs`（ルート直下の `std.onsa` と `std/` が依存のパッケージ名と重なる E0304、S-37・S-246）。`types/upname/`（マニフェストの `name`）は W4-03 の範囲の外で、R-47（W4-02）の残り。`types/dupmod/`・`itemmod/`・`stdmod/` の元の入力は、W4-03 を終えた後に消した（73 回目）。`types/stdname/` の `use std.math.{sin}`（`use` の頭）は、パッケージ名が `std` のマニフェストが E1103・E1102 で先に止まるので、ソースの診断として観察できず写さない（マニフェストの分とこの作業の外。R-47（W4-02）の残り） |
 | `types/single/`、`types/pkguse/`（推定） | R-47 |
@@ -97,38 +95,38 @@
 | `types/tzero.onsa` | R-56 |
 | `types/qlen/`、`types/constlen.onsa` | R-57、R-61 |
 | `types/testmod/`（推定） | R-68。W2-10 で期待値付きのテストへ移した: `tests/spec/packages/test_module_named_test/`（モジュール `test` の関数はテストとして走らない）、`crates/onsa_cli/tests/cli/test_identity.rs`（モジュールの経路と名前での識別） |
-| `types/localshadow.onsa`、`types/shadow.onsa` | R-103 |
+| `types/localshadow.onsa`、`types/shadow.onsa` | R-103。W4-04 で期待値付きのテストへ移した。`localshadow.onsa` は `tests/spec/module/overlap_local_bindings.onsa`・`overlap_local_stops_unit.onsa`、`crates/onsa_cli/tests/cli/name_overlaps.rs`。今: `check` は 7 行の E0304（`let sin`。単位は最初の 1 件で止まる）。`shadow.onsa` は `tests/spec/packages/overlap_prelude_names/types.onsa`・`main.onsa`、`overlap_prelude_panic/`。今: `check` は 1 行（`struct F32`）、5 行（`enum Option`）の E0304 |
 | `types/orphan/`、`types/implspec.onsa` | R-104（`orphan/` の期待値は `main.onsa` の先頭のコメント。S-70） |
 | `types/alias.onsa` | R-105。W4-04・W4-05 で期待値付きのテストへ移した（R-105 は DONE）: 別名を使う位置は `tests/spec/type_names/`（`positions.onsa` など）、`impl` の対象の別名は `tests/spec/fixes/e0307_alias_forms.onsa`、別名の循環は `tests/spec/types/cycle_alias.onsa`・`tests/spec/module/kind_alias_cycle.onsa`、型パラメータを書いた別名は `tests/spec/types/alias_params_then_use.onsa` |
 | `syntax/esc_utf8.onsa`、`syntax/interp_utf8.onsa` | R-01。W3-04 で期待値付きのテストへ移した: `tests/spec/negative/lex_utf8_escapes.onsa`（`unknown_japanese`）、`tests/spec/negative/lex_utf8_holes.onsa`（`single_kanji`）、`tests/cst/lex_utf8_*.onsa` と `eof_*_multibyte.onsa`（往復） |
-| `syntax/fmt_drop*.onsa` | R-69。`fmt_drop_orig.onsa` は W3-03 で期待値付きのテストへ移して消した（`crates/onsa_cli/tests/cli/syntax_units.rs` の `FMT_DROP`） |
-| `syntax/fmt_comments.onsa`、`syntax/fmt2.onsa`（fmt の前の原本は `.orig`） | R-70 |
+| `syntax/fmt_drop*.onsa` | R-69。`fmt_drop_orig.onsa` は W3-03 で期待値付きのテストへ移して消した（`crates/onsa_cli/tests/cli/syntax_units.rs` の `FMT_DROP`）。W3-03 で期待値付きのテストへ移した: `crates/onsa_cli/tests/cli/syntax_units.rs` の `FMT_DROP`（`fmt_does_not_take_a_failed_function_out_of_the_file`、`fmt_reports_the_e0002_of_the_failed_function_and_not_its_e0320`。R-69 を名指す）。`r2.onsa` と `fmt_drop.onsa` は壊れた後の出力で、入力として使えない（`check` も通る）。`fmt_drop2.onsa` は `tests/spec/negative/unit_syntax_hides_later.onsa` の `big_literal` と `syntax_units.rs` の `fmt_stops_for_an_integer_literal_without_a_value` にある。今: `fmt_drop2` の `check` は 2 行の E0408 だけで、`fmt --check` は終了コード 2 で書き換えない |
+| `syntax/fmt_comments.onsa`、`syntax/fmt2.onsa`（fmt の前の原本は `.orig`） | R-70。W3-11 で期待値付きのテストへ移した: `crates/onsa_cli/tests/cli/fmt_comments.rs`（R-70 を名指す。`/// x coordinate` の構造体、`// todo`、`// b0`、`// first` の形）、`tests/spec/fmt/comments_places.onsa`。今: `.orig` の `check` は通り、`fmt` は行末コメントの前の空白を揃えるだけ（`0.5,   // b0`、`.abs()  // magnitude`）で、コメントの位置は変わらない。`.onsa`（壊れた出力）は `fmt_comments.onsa` が 5 行の E0004（`} /// x coordinate`）で fmt が終了コード 2、`fmt2.onsa` は通って fmt で変わらない |
 | `syntax/cascade.onsa`、`syntax/impl_sema.onsa` | R-71。`impl_errs.onsa` は W3-03 で期待値付きのテストへ移して消した（`tests/spec/negative/unit_members.onsa`） |
-| `syntax/groups.onsa` | R-72 |
-| `syntax/lit.onsa` | R-73 |
+| `syntax/groups.onsa` | R-72。W3-07 で直した（候補の順は S-60）。名指すテストは無いが、同じ形が `crates/onsa_syntax/src/groups.rs` の `chains_the_strengths_allow` と `tests/spec/negative/operator_groups.onsa` にある。今: `r4.onsa` は通る。`groups.onsa` は 14 行の E0010（候補二つ）と、1・9 行の E0304（入力の引数名） |
+| `syntax/lit.onsa` | R-73。W3-05 で期待値付きのテストへ移した: `tests/spec/lex/numeric_spellings.onsa`・`numeric_spellings_places.onsa`（`1__000`、`1__2` は通る）。今: `check` は 2 行の E0309 だけ |
 | `syntax/tup1.onsa`、`syntax/tuples.onsa` | R-43。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_one_tuple.onsa`（要素 1 個の後の `,` の E0002）、`tests/spec/semantics/paren_group.onsa`（式・型・パターンの `(e)` はグループ化） |
 | `syntax/moveargs.onsa`、`syntax/paren_move.onsa` | R-42。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_move_operand.onsa` |
 | `syntax/nested*.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した（`types/implitems.onsa` の行と同じ事例） |
-| `syntax/bigfloat.onsa` | R-45 |
+| `syntax/bigfloat.onsa` | R-45。W3-05 で直し、期待値付きのテストへ移した: `tests/spec/negative/literal_float_range.onsa`（`const TOO_BIG: F32 = 1e39`、`let x: F32 = 1.0e40` の E0408）、`body_tests.rs` の `float_literal_ranges`、`tests/spec/semantics/float_literal_limits.onsa`。今: `check` は 2 行の E0408「literal `1.0e39` is out of range for `F32`: its value is not finite」 |
 | `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/modpkg/` | R-46（`syntax/modpkg/` は今の木に無い。W4-03 U3a1/t で確かめた） |
 | `syntax/naming.onsa` | R-46。W4-14 U3/t で期待値付きのテストへ移して消した: 型パラメータの `ItemKey` は仕様の反映（S-642。「1 語」の規則を外した）で通る形になり `tests/spec/types/naming_type_params_fine.onsa`、`HTTPServer` は `tests/spec/types/naming_shapes_fine.onsa`、`const Pi: F32`（`UPPER_SNAKE` に合わない）は `tests/spec/negative/naming_shapes.onsa` |
 | `syntax/arrow.onsa` | R-58。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/lex/continuation_function_types.onsa`（全部）と `continuation_top_level.onsa`（トップレベルの行末の `->` の継続） |
 | `syntax/faust.onsa` | R-59。W3-23/t で期待値付きのテストへ移した: `acc` の `~ _` は `tests/spec/fixes/e0020_faust.onsa` の `feedback_without_a_name` と `e0020_faust_feedback.onsa`、`eqn` の flow の本体の代入は既存の `tests/spec/fixes/e0806_assign.onsa`、`usize_fix` の `+=` は既存の `tests/spec/fixes/e0020_compound_assign.onsa` |
 | `syntax/else_paren.onsa` | R-62。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0003_else_line.onsa`（`in_a_call`、`in_an_arm`）と `e0003_brace_line.onsa`（`if_in_a_call`、`closure_head`） |
-| `syntax/unit*.onsa`、`syntax/emptyrow.onsa` | R-78 |
-| `syntax/ret_arm.onsa`、`syntax/space_idx.onsa` | R-101 |
+| `syntax/unit*.onsa`、`syntax/emptyrow.onsa` | R-78。`crates/onsa_cli/tests/cli/fmt_rewrites.rs` の `r78_the_extra_information_of_r78_onsa_is_taken_off_as_its_comments_say` が名指すが、今は ignore（`-> ()` と `uses {}` の除去は第 2 期）。値の無い末尾の `return` は仕様が外さないと決めた（`spec/tools.md` §3.3）ので、`r78()` の `set_one` の期待は仕様と食い違う。今: `fmt` は値のある末尾の `return` だけを外し、`-> ()`、`uses {}`、値の無い `return` は変えない |
+| `syntax/ret_arm.onsa`、`syntax/space_idx.onsa` | R-101。W3-06 で期待値付きのテストへ移した: `ret_arm.onsa` は `tests/spec/fixes/e0020_arm_return_forms.onsa`（`None => return 0,`）、`space_idx.onsa` は `tests/spec/fixes/e0020_space_index.onsa`・`e0020_space_calls.onsa`（どれも元の入力を名指す）。今: `ret_arm` の `check` は 4 行の E0020（候補 `{ return 0 }`）、`space_idx` は 2 行（`xs [0]`、候補二つ）と 6 行（`a ([x, x])`）の E0020 |
 | `syntax/interp.onsa` | R-102。W3-04 で期待値付きのテストへ移した: `tests/spec/lex/interp_paths_syntax.onsa`（字句と構文）、`tests/spec/lex/interp_paths_resolved.onsa`（名前の段の解決、W4-04 まで実装待ち） |
 | `syntax/fuzz.py`、`syntax/fuzz2.py` | 変異入力の簡易ファズ（R-01 の確認、Q-06 の参考）。`fuzz.py` は W1-04 の `tools/fuzz.py`（gate の項目 `fuzz`）に置き換えた。記録として残す。`fuzz2.py`（fmt の AST の保存）は W1-07 の `tools/fmt_props.py`（gate の項目 `fmt-props`）に置き換えた。どちらも記録として残す |
 | `parent/r1.onsa` | R-01。W3-04 で期待値付きのテストへ移した: `tests/spec/negative/lex_utf8_holes.onsa`（`single_kanji`） |
 | `parent/t2.onsa` | R-02。W4-05 U2 で期待値付きのテストへ移した: `tests/spec/types/cycle_value_self.onsa`（E0311）。今: `check` は `Node` に E0311 |
-| `parent/r2.onsa` | R-69 |
-| `parent/r4.onsa` | R-72 |
+| `parent/r2.onsa` | R-69。W3-03 で期待値付きのテストへ移した: `crates/onsa_cli/tests/cli/syntax_units.rs` の `FMT_DROP`（`fmt_does_not_take_a_failed_function_out_of_the_file`、`fmt_reports_the_e0002_of_the_failed_function_and_not_its_e0320`。R-69 を名指す）。`r2.onsa` と `fmt_drop.onsa` は壊れた後の出力で、入力として使えない（`check` も通る）。`fmt_drop2.onsa` は `tests/spec/negative/unit_syntax_hides_later.onsa` の `big_literal` と `syntax_units.rs` の `fmt_stops_for_an_integer_literal_without_a_value` にある。今: `fmt_drop2` の `check` は 2 行の E0408 だけで、`fmt --check` は終了コード 2 で書き換えない |
+| `parent/r4.onsa` | R-72。W3-07 で直した（候補の順は S-60）。名指すテストは無いが、同じ形が `crates/onsa_syntax/src/groups.rs` の `chains_the_strengths_allow` と `tests/spec/negative/operator_groups.onsa` にある。今: `r4.onsa` は通る。`groups.onsa` は 14 行の E0010（候補二つ）と、1・9 行の E0304（入力の引数名） |
 | `parent/t1.onsa` | R-30。W4-05 U1 と W4-16 U3 で直した（今の `onsa check` は 7 行の E0704）。期待値付きのテストは `tests/spec/types/affine_generic_holder_used_after.onsa` |
 | `parent/p2/` | R-09 |
 | `parent/r13*.onsa` | R-13（`prev(prev(x))` を含む） |
 | `parent/r15*.onsa` | R-15 |
 | `parent/r17.onsa` | R-17 |
-| `parent/r18.onsa` | R-18 |
+| `parent/r18.onsa` | R-18。名指すテストは無い。A-02 で不採用にした `unwrap_or` は今も通り（W5-03 が E0413 にして取り除く、R-96）、`d` を遅延評価する。今: `check` は 19 行の E0309（`_` に直すと通る）、直すと `test` の 1 つ目は ok、2 つ目は 20 行の assert で失敗。W5-03 の後に期待値付きのテスト（E0413）へ移して消す |
 | `parent/r19.onsa` | R-19。W2-03 で期待値付きのテストへ移した: `tests/spec/semantics/trunc_range.onsa`・`trunc64_edges.onsa`・`trunc64_range_contexts.onsa`・`min_rem_neg1.onsa`、`crates/onsa_interp/src/tests.rs` の `trunc_to_64_bits_at_the_powers_of_two`。元の入力は旧い期待値のまま失敗するので消した（W2-06 のコミット、W2-03/b の F-6） |
 | `parent/r54.onsa`、`parent/r54_for.onsa` | R-54（S-41）。W4-16 U1a/t で期待値付きのテストへ写した: `tests/spec/values/binding_borrow_let.onsa`（`whole`・`field`・`destructured_tuple`・`for_element`）、実行は `binding_borrow_run.onsa`、使い方の否定例は `tests/spec/negative/binding_borrow_move.onsa`。W4-16 U1a で直した（今の `onsa check` は何も出さない）。R-54 を直したので消した（85 回目） |
 | `parent/r117.onsa` | R-117。W4-07 で期待値付きのテストへ移した: `tests/spec/negative/binding_inout_not_origin_no_candidate.onsa`（`let c = move b` の E0711）・`move_borrowed_place_no_candidate.onsa`。W4-07 U4b-2 で直したので消した（90 回目） |
@@ -141,8 +139,8 @@
 | `parent/r70/` | R-70（コメントの位置の 17 の形。どれも正規形で書いてあり、fmt で変わらないのが期待値。S-58）。W3-11/t（U4）で期待値付きのテストへ移した: `crates/onsa_cli/tests/cli/fmt_comments.rs` の `the_seventeen_forms_of_r70_are_not_changed_by_fmt`（17 の形を一つずつ全文で写し、fmt で変わらないことを確かめる）と、コメントの置き場所の正規形の事例 `tests/spec/fmt/comments_places.onsa` |
 | `parent/r71/` | R-71（回復と診断の単位の 6 つの形。S-59）。W3-03 で期待値付きのテストへ移して消した: `tests/spec/negative/unit_members.onsa`（`a_impl`）、`unit_failed_visible.onsa`（`b_body`、`d_sig`、`f_struct`）、`unit_unclosed_brace.onsa`（`c_brace`）、`unit_syntax_hides_later.onsa` と `unit_stage_order.onsa`（`g_naming_then_syntax`） |
 | `parent/r72.onsa` | R-72、R-123（S-60、S-61）。W3-07 で期待値付きのテストへ移した: `tests/spec/fixes/e0010_candidates.onsa`・`e0010_candidates_groups.onsa`・`e0010_candidates_contexts.onsa`・`e0010_layout.onsa`・`e0010_nesting_boundary.onsa`（E0010 の修正候補）、`tests/spec/ops/groups.onsa`・`tests/spec/semantics/precedence_trees.onsa`（ビットの群の同じ演算子の連鎖）、`crates/onsa_cli/tests/cli/operator_groups.rs` の `the_candidates_of_e0010_are_the_readings_in_the_order_of_the_rule` ほか（候補の順と文面） |
-| `parent/r73.onsa` | R-73、R-124（数値リテラル。期待値は各関数の上のコメント。S-62、S-63） |
-| `parent/r74.onsa` | R-74（modes の失敗の後の rt と効果。期待値は各関数の上のコメント。S-64）。W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`・`unit_stage_modes_stops_rt_alloc.onsa`（今の `onsa check` は 11・14 行の E0711 だけ） |
+| `parent/r73.onsa` | R-73、R-124（数値リテラル。期待値は各関数の上のコメント。S-62、S-63）。W3-05 で直し、期待値付きのテストへ移した: `tests/spec/fixes/e0020_numeric_*.onsa`（`suffixes`、`float_forms`、`leading_zero`、`callee_overlap`、`exponent_clean_*`）、`tests/spec/lex/numeric_spellings*.onsa`、`tests/spec/negative/lex_numeric_e0001.onsa`、`literal_int_beyond_u64.onsa`、`numeric_literals_pkg/`。今: 全ての関数が「期待」の行のとおり |
+| `parent/r74.onsa` | R-74（modes の失敗の後の rt と効果。期待値は各関数の上のコメント。S-64）。W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`・`unit_stage_modes_stops_rt_alloc.onsa`（今の `onsa check` は通り、`onsa test` は 11・14 行の E0200。S-85 の後、取り出しは modes の誤りでない） |
 | `parent/r75/` | R-75（`onsa interface` の大きさと状態のフィールド。仕様の構文で書いたパッケージで、期待値は `dsp.onsa` の先頭のコメント。S-65） |
 | `parent/r76.onsa` | R-76（`onsa graph` の `par` の添字の閉路。期待値は先頭のコメント。S-66） |
 | `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67）。W1-04 で期待値付きの事例へ移した: `tests/spec/negative/lower_unsupported.onsa`、`names_reserved_inputs.onsa`（W7-03 の実装待ち） |
@@ -158,7 +156,7 @@
 | `parent/r93.onsa` | R-93、R-81（評価順。S-75 の期待値で書いたテストで、今の結果は各テストの上のコメント） |
 | `parent/r94/` | R-94、R-131（数の trait の形。`check.onsa` は `onsa check`、`run.onsa` は `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-84） |
 | `parent/r95.onsa` | R-95（Affine のフィールドの取り出し。S-85）。W4-09 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/values/take_out_consumes_root.onsa`（`take_ret`・`take_let`・`take_pair`・`take_tuple`・`take_nested`・`read_first`・`into_buf` の通る形。分解 `destructure` は `unit_stage_modes_stops_rt.onsa` の `via_let`）、`take_out_rest_copy.onsa`・`negative/take_out_rest_alloc.onsa`（残りの破棄の効果）、`negative/take_out_use_after.onsa`（`use_after`）、`negative/take_out_array_element.onsa`（`take_elem`）、`negative/take_out_not_owned.onsa`（`take_borrowed`）。`impl Drop` を実装する型の形（`Res`・`take_res`・`destructure_res`。`impl Drop` が E0200 で届かない）は第 2 期で、事例に移していない |
-| `parent/r98.onsa` | R-98（名前の無いノードの名前と配置。今の実装の構文で書いた。`onsa interface` と `onsa graph` で確かめる。期待値と今の出力は先頭のコメント。S-86） |
+| `parent/r98.onsa` | R-98（名前の無いノードの名前と配置。0.3 の草案の flow の書き方（`Sig[F32]`、`prev(…, 0.0)`）。今の実装は受け付けない。`onsa interface` と `onsa graph` で確かめる。期待値と今の出力は先頭のコメント。S-86） |
 | `parent/r99.onsa` | R-99（`@param` の値型と値。期待値と今の出力は各 flow の上のコメント。S-87） |
 | `parent/r100/` | R-100（`delay.onsa` は `vdelay` の `MAX` と `F32`、`check` と `test` で確かめる。`size.onsa` は大きさの上限、`interface` で確かめる。期待値と今の出力は各項目の上のコメント。S-88） |
 | `parent/r101/` | R-101（字句と fmt の細則。形ごとのファイルで、`align.onsa` は `onsa fmt`、他は `onsa check` で確かめる。期待値と今の出力は各ファイルの先頭のコメント。S-89）。W3-04 で字句の部分を期待値付きのテストへ移した: `ident.onsa` は `tests/spec/negative/lex_ident_ascii.onsa`（`let_japanese`）、`slashes.onsa` は `tests/spec/lex/doc_comment_positions.onsa`（`after_a_rule_and_no_doc`）。後置の括弧の前の空白（`space_*.onsa`）と腕の `return`（`arm_return.onsa`）は `tests/spec/fixes/e0020_space_*.onsa`・`e0020_spacing.onsa`・`e0020_arm_return_forms.onsa` にある |
@@ -172,12 +170,12 @@
 | `parent/r125.onsa` | R-125（std のテスト用の補助を呼べる場所。`onsa check` と `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-97） |
 | `parent/r126.onsa` | R-126（組込みのメソッドの一覧。`onsa check` で確かめる。期待値と今の出力は各項目の上のコメント。S-98） |
 | `parent/p7.onsa` | `impl-review-0.3.md` の P-7（ブロックの末尾の式の `move`。期待値と今の出力は各関数の上のコメント。S-100）。構文は W3-20 で期待値付きのテストへ移した: `tests/spec/values/move_tail_syntax.onsa`、`crates/onsa_cli/tests/cli/call_forms_syntax.rs`（返り値の位置の `move`）。fmt の部分（返り値の位置の `move` の除去）は W3-12 で移した: `crates/onsa_cli/tests/cli/fmt_rewrites.rs` の `p7_the_return_of_p7_onsa_is_taken_off_and_every_move_stays`（返り値の位置の `move` の除去は撤回され、`ret_move` は `move a` になる。末尾の `return` は外す）。検査（E0711、E0703、E0704）は W4-09 U3/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/move_arg_literal_elements.onsa`（`pick_let`・`pick_let_match` の腕の E0711、`pick_arg`・`pick_arg_match` の腕の E0703、通る形の `pick_let_moved`・`pick_tail`・`pick_arg_moved`・`pick_workaround`・早い `return move a`）、`tests/spec/negative/move_tail_unconsumed.onsa`（消費しない位置の末尾の `move` の E0703）、`move_tail_heading.onsa`・`tests/spec/values/move_tail_heading_run.onsa`（`match` と `for` の見出しの末尾）、`tests/spec/fixes/e0711_let_tail_arm.onsa`・`e0703_tail_*.onsa`（候補を当てた後に誤りが 0 になる形）。W4-09 U3 で直す |
-| `parent/t5.onsa` | `impl-review-0.3.md` の T-5（flow だけの構文を flow の外に書いたときの診断。期待値と移した先は各関数の上のコメント。S-101。レート型の部分は S-102）。W4-12 U3/t で期待値付きのテストへ移した: `par`・`lp~(x)`・`prev~(x)`・`prev~(^z)` は `tests/spec/negative/e0821_flow_syntax_in_fn.onsa`（`with_par`・`with_instance`・`with_prev`・`with_feedback`）、`lp(x)` は `e0821_plain_flow_call.onsa`（`with_plain_call`）。実装は W4-12 U3。レート型の部分（`WithRate`・`g`・`use_g`）は残る |
+| `parent/t5.onsa` | `impl-review-0.3.md` の T-5（flow だけの構文を flow の外に書いたときの診断。期待値と移した先は各関数の上のコメント。S-101。レート型の部分は S-102）。W4-12 U3/t で期待値付きのテストへ移した: `par`・`lp~(x)`・`prev~(x)`・`prev~(^z)` は `tests/spec/negative/e0821_flow_syntax_in_fn.onsa`（`with_par`・`with_instance`・`with_prev`・`with_feedback`）、`lp(x)` は `e0821_plain_flow_call.onsa`（`with_plain_call`）。実装は W4-12 U3。レート型の部分（`WithRate`・`g`・`use_g`）も全て移した: `tests/spec/fixes/e0020_sig_rate.onsa`・`e0020_sig_rate_places.onsa`（W4-04 U8b、S-120） |
 | `parent/t8.onsa` | `impl-review-0.3.md` の T-8 と R-105 の残り（診断コードの流用。期待値と今の出力は各項目の上のコメント。S-103） |
 | `parent/param_id/` | `impl-review-0.3.md` の §11.7 `id`（パラメータの ID の作り方。パッケージで、`onsa build --target host` の生成した C の表で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-104） |
 | `parent/strict_ftz/` | `impl-review-0.3.md` の §13.4 `strict-ftz`（FTZ / DAZ の設定。パッケージで、`onsa build --target host` の生成した C を確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-105） |
 | `parent/r133/` | R-133（NaN のビット表現。パッケージで、`onsa test` と、生成した C を arm64 / x86_64 / gcc-15 でコンパイルした `host.c` で確かめる。手順と期待値と今の出力は `m.onsa` の先頭のコメント。S-106）。W2-03（インタプリタ）と W2-05（C）で期待値付きのテストへ移した: テストベクトルの `f32.to_bits`・`f64.to_bits`（`vectors-interp`、`vectors-c` の clang・gcc-15・x86_64）、`tests/spec/c_runtime/c_nan_bits.onsa`、`crates/onsa_interp/src/tests.rs` の `to_bits_of_a_nan_is_the_positive_quiet_nan` |
-| `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
+| `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73）。名指すテストは無い（近い形は `tests/spec/types/const_type_fine.onsa`）。今: 先頭のコメントのとおり |
 | `parent/r129.onsa` | R-129（効果の名前の解決、S-74）。W4-03 U5b で期待値付きのテストへ移して消した: `tests/spec/effects/names_r129.onsa`（72 回目） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |
 | （R-132） | 専用の入力は無い。レートを型の形で書いたときの診断は `parent/t5.onsa`（S-102） |

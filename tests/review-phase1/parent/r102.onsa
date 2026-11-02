@@ -20,29 +20,29 @@ impl P {
 fn local(n: U32, p: P) -> Str uses {Alloc} { "{n} {p.x}" }
 
 // 期待: 通る（定数）。
-// 今: r102.onsa:24:38: error[E0001]: interpolation must be `{name}` or `{name.field}`; expressions are not allowed（定数は式ではないのに「式」と言う）。
+// 今: 通る
 fn constant() -> Str uses {Alloc} { "{MAX_VOICES}" }
 
 // 期待: 通る（タプルの添字）。
-// 今: r102.onsa:28:54: error[E0001]: interpolation must be `{name}` or `{name.field}`; expressions are not allowed。
+// 今: 通る
 fn tuple(t: (I32, I32), p: P) -> Str uses {Alloc} { "{t.0} {p.pos.1}" }
 
 // 期待: 通る（関連定数）。
-// 今: r102.onsa:32:35: error[E0001]: interpolation must be `{name}` or `{name.field}`; expressions are not allowed。
+// 今: 通る
 fn assoc() -> Str uses {Alloc} { "{F32.PI}" }
 
 // 期待: E0001。文面は「補間に書けるのは名前の経路だけ」、note で「式は `let` で名前を付けてから補間する」。修正候補なし。
-// 今: r102.onsa:36:40: error[E0001]: interpolation must be `{name}` or `{name.field}`; expressions are not allowed。note なし。
+// 今: r102.onsa:36:40: error[E0001]: an interpolation holds a name path only: a name, then `.` and a field, a tuple index or a member (§2.4)。note「式は `let` に取る」。修正候補なし。
 fn expr(n: U32) -> Str uses {Alloc} { "{n + 1}" }
 
 // 期待: E0001（呼び出し）。文面と note は `expr` と同じ。
-// 今: r102.onsa:40:38: error[E0001]: interpolation must be `{name}` or `{name.field}`; expressions are not allowed。note なし。
+// 今: r102.onsa:40:38: error[E0001]: an interpolation holds a name path only: a name, then `.` and a field, a tuple index or a member (§2.4)。note「式は `let` に取る」。修正候補なし。
 fn call(p: P) -> Str uses {Alloc} { "{p.x.round_f32()}" }
 
 // 期待: E0001（添字）。文面と note は `expr` と同じ。
-// 今: r102.onsa:44:47: error[E0001]: interpolation must be `{name}` or `{name.field}`; expressions are not allowed。note なし。
+// 今: r102.onsa:44:47: error[E0001]: an interpolation holds a name path only: a name, then `.` and a field, a tuple index or a member (§2.4)。note「式は `let` に取る」。修正候補なし。
 fn index(xs: [I32; 2]) -> Str uses {Alloc} { "{xs[0]}" }
 
 // 期待: E0001（書式の指定）。note で「書式の指定は無い」。
-// 今: r102.onsa:48:47: error[E0001]: interpolation must be `{name}` or `{name.field}`; expressions are not allowed。note なし。
+// 今: r102.onsa:48:47: error[E0001]: an interpolation holds a name path only: a name, then `.` and a field, a tuple index or a member (§2.4)。note「there is no format in an interpolation; the value is shown as `Show` shows it」。修正候補なし。
 fn format_spec(x: F32) -> Str uses {Alloc} { "{x:.2}" }
