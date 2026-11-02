@@ -99,10 +99,7 @@ impl From<VerifyFailure> for InternalError {
 
 /// `file:line:col` of `span`, when `sources` holds its file.
 fn position(sources: &SourceMap, span: Span) -> Option<String> {
-    if span.file.0 as usize >= sources.len() {
-        return None;
-    }
-    let file = sources.file(span.file);
+    let file = sources.get(span.file)?;
     let text = file.text();
     let mut at = (span.start as usize).min(text.len());
     // The span of a broken stage may cut a character; render the start of it.

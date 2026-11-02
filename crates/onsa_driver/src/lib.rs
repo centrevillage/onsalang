@@ -36,10 +36,10 @@ pub use platform::{Platform, host_triple, platform};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
 pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core, verify_core_in_debug_only};
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use onsa_diag::timing::{Phase, phase};
-use onsa_diag::{Diagnostic, FileId, SourceMap, Span};
+use onsa_diag::{Diagnostic, FileId, SharedFiles, SourceMap, Span};
 use onsa_sema::{Module, Package};
 
 /// The embedded standard library: its package name, version and modules
@@ -52,16 +52,45 @@ pub struct CheckResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-fn std_package(sources: &mut SourceMap) -> Package {
-    let modules = std_modules()
-        .iter()
-        .map(|m| {
-            let file = sources.add(format!("{STD_PACKAGE}/{}", m.file), m.text);
-            let segments = m.segments.iter().map(|s| s.to_string()).collect();
-            Module { segments, file, text: m.text.to_string(), parsed: parse_file(file, m.text) }
-        })
-        .collect();
-    Package::std(modules)
+/// The embedded std parsed once in the process (X-20 E (i)): its files are
+/// the same [`SharedFiles`] in every check, so its parse, made with their
+/// ids, is valid in each. The parse is counted in the phases of the check
+/// that makes it, the first of the process.
+struct Std {
+    files: SharedFiles,
+    package: Arc<Package>,
+}
+
+// Shared by the threads of a process (the tests check on many).
+const _: () = {
+    const fn shared<T: Send + Sync>() {}
+    shared::<Std>()
+};
+
+/// [`Std`], made by the first check of the process. A panic of the parse
+/// leaves it unmade (`OnceLock`): the next check parses again.
+fn std_parsed() -> &'static Std {
+    static STD: OnceLock<Std> = OnceLock::new();
+    STD.get_or_init(|| {
+        let files =
+            SharedFiles::new(std_modules().iter().map(|m| (format!("{STD_PACKAGE}/{}", m.file), m.text.into())));
+        let modules = files
+            .files()
+            .zip(std_modules())
+            .map(|((file, f), m)| {
+                let segments = m.segments.iter().map(|s| s.to_string()).collect();
+                Module { segments, file, text: m.text.to_string(), parsed: parse_file(file, f.text()) }
+            })
+            .collect();
+        Std { files, package: Arc::new(Package::std(modules)) }
+    })
+}
+
+/// The std of every check ([`std_parsed`]), its files attached to `sources`.
+fn std_package(sources: &mut SourceMap) -> Arc<Package> {
+    let std = std_parsed();
+    sources.share(&std.files);
+    std.package.clone()
 }
 
 /// The dependency graph of a package, made once (R-88 (1), design 3.3): the
@@ -82,7 +111,7 @@ fn parse_file(file: FileId, text: &str) -> onsa_syntax::Parsed {
     onsa_syntax::parse(file, text)
 }
 
-/// Check a loaded package. `std` is appended to `sources`. With a file passed
+/// Check a loaded package. `std` is attached to `sources`. With a file passed
 /// inside the package (`focus`), the whole package is checked and only the
 /// diagnostics of that file are kept (§15.1: `check` and the LSP; S-159).
 pub fn check_loaded(loaded: &mut Loaded) -> Result<CheckResult, InternalError> {
@@ -124,7 +153,7 @@ impl Analyzed {
 }
 
 /// Parse and analyze a loaded package, keeping the analysis (`std` is
-/// appended to `sources`), with the diagnostics of its paths
+/// attached to `sources`), with the diagnostics of its paths
 /// ([`Loaded::input_diagnostics`]).
 /// A package whose manifest has diagnostics is not analyzed: the command
 /// stops on them first (§18.1), and one that did not is an internal error.
@@ -163,7 +192,7 @@ fn analyze(
                 Module { segments: path.clone(), file: *file, text, parsed }
             })
             .collect();
-        let std = Arc::new(std_package(sources));
+        let std = std_package(sources);
         let pkg = package_graph(name, user_modules, &std);
         let analysis = onsa_sema::analyze(&pkg);
         let _report = phase(Phase::Report);
@@ -282,7 +311,7 @@ mod tests {
         for m in &std.modules {
             assert!(m.parsed.diagnostics.is_empty(), "std/{}: {:?}", m.path(), m.parsed.diagnostics);
         }
-        let pkg = Package::new("empty", Vec::new(), vec![Arc::new(std)]);
+        let pkg = Package::new("empty", Vec::new(), vec![std]);
         let analysis = onsa_sema::analyze(&pkg);
         assert!(analysis.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analysis.diagnostics));
     }
@@ -311,7 +340,7 @@ mod tests {
     #[test]
     fn a_package_shared_in_the_graph_is_analyzed_once() {
         let mut sources = SourceMap::default();
-        let std = Arc::new(std_package(&mut sources));
+        let std = std_package(&mut sources);
         let std_modules_count = std.modules.len();
         let src = "use std.math.{sqrt}\n\npub fn half(x: F32) -> F32 {\n  sqrt(x) * 0.5\n}\n";
         let file = sources.add("mid/m.onsa", src);
@@ -337,7 +366,7 @@ mod tests {
     #[test]
     fn the_exports_are_of_the_package_itself_in_the_order_of_the_modules() {
         let mut sources = SourceMap::default();
-        let std = Arc::new(std_package(&mut sources));
+        let std = std_package(&mut sources);
         let mut module = |pkg: &str, path: &[&str], src: &str| {
             let file = sources.add(format!("{pkg}/{}.onsa", path.join("/")), src);
             let segments = path.iter().map(|s| s.to_string()).collect();
@@ -354,6 +383,51 @@ mod tests {
         let names: Vec<String> = analysis.exports().into_iter().map(|d| analysis.qualified_name(d)).collect();
         assert_eq!(names, ["a.c.mid", "b.zed", "b.alpha"]);
         assert!(analysis.defs.iter().any(|d| d.name == "half" && d.export.is_some()));
+    }
+
+    /// X-20 E (i): once std is parsed in the process, a check parses the
+    /// user's files only, and its package depends on the one std (the
+    /// other tests may have parsed it first: the result is the same).
+    #[test]
+    fn the_std_is_parsed_once_in_the_process() {
+        let std = std_parsed();
+        let input = PackageInput::single_file("m.onsa", "fn f() -> I32 {\n  1\n}\n");
+        let mut loaded = Loaded::from_input(input).expect("the input loads");
+        let (analyzed, times) = onsa_diag::timing::record(|| analyze_loaded(&mut loaded).expect("no internal error"));
+        let syntax = times.phases.iter().find(|p| p.0 == Phase::Syntax).map(|p| p.2);
+        assert_eq!(syntax, Some(1), "{times:?}");
+        assert!(Arc::ptr_eq(&analyzed.pkg.deps[0], &std.package));
+    }
+
+    /// The user's files keep their ids, from 0 in the order the input loads
+    /// them and the manifest after them (`onsa_tests::fix_contract::apply_alone`
+    /// reads the one file of a single-file input as `FileId(0)`), and std's
+    /// modules have the ids of its shared files in every check.
+    #[test]
+    fn the_user_files_keep_their_ids() {
+        let check = || {
+            let text = "[package]\nname = \"p\"\nedition = \"2026\"\n".to_string();
+            let manifest = ManifestSource { path: "onsa.toml".into(), text, form: ManifestForm::File };
+            let file = |path: &str| SourceFile { path: path.into(), text: "pub fn f() -> I32 {\n  1\n}\n".into() };
+            let input = PackageInput {
+                manifest: Some(manifest),
+                files: vec![file("a.onsa"), file("b.onsa")],
+                ..Default::default()
+            };
+            let mut loaded = Loaded::from_input(input).expect("the input loads");
+            let analyzed = analyze_loaded(&mut loaded).expect("no internal error");
+            assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
+            let user: Vec<FileId> = analyzed.pkg.modules.iter().map(|m| m.file).collect();
+            assert_eq!((user, loaded.toml_file()), (vec![FileId(0), FileId(1)], Some(FileId(2))));
+            let std: Vec<FileId> = analyzed.pkg.deps[0].modules.iter().map(|m| m.file).collect();
+            for &f in &std {
+                assert_eq!(loaded.sources.file(f).text(), package_text(&analyzed.pkg, f).unwrap());
+            }
+            std
+        };
+        let shared: Vec<FileId> = std_parsed().files.files().map(|(f, _)| f).collect();
+        assert_eq!(check(), shared);
+        assert_eq!(check(), shared);
     }
 
     #[test]

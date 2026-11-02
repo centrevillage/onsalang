@@ -23,7 +23,7 @@ pub mod unsupported;
 use std::collections::BTreeMap;
 
 pub use codes::{Category, Code, FixRule, NoteRule, Stage};
-pub use source::{FileId, LineCol, LineIndex, SourceFile, SourceMap};
+pub use source::{FileId, LineCol, LineIndex, SHARED_BASE, SharedFiles, SourceFile, SourceMap};
 
 use serde::Serialize;
 
@@ -313,7 +313,7 @@ pub fn apply_mapped<'a>(sources: &SourceMap, edits: impl IntoIterator<Item = &'a
     let edits: Vec<&Edit> = edits.into_iter().collect();
     let mut by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
     for (i, e) in edits.iter().enumerate() {
-        if e.span.file.0 as usize >= sources.len() {
+        if sources.get(e.span.file).is_none() {
             return Err(format!("an edit in an unknown file: {:?}", e.span));
         }
         by_file.entry(e.span.file).or_default().push(i);
@@ -404,7 +404,7 @@ pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId
             out.push(format!("{code}: `{title}` has no edit"));
         }
         for e in f.edits() {
-            if e.span.file.0 as usize >= sources.len() || e.span.end as usize > sources.file(e.span.file).text().len() {
+            if sources.get(e.span.file).is_none_or(|f| e.span.end as usize > f.text().len()) {
                 out.push(format!("{code}: the edit {:?} of `{title}` is outside its file", e.span));
                 continue;
             }

@@ -1,5 +1,7 @@
 //! Source files and line/column lookup.
 
+use std::sync::Arc;
+
 /// Index of a file in a [`SourceMap`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
@@ -118,35 +120,71 @@ impl SourceFile {
     }
 }
 
-/// All source files of one compilation.
+/// The first id of the files the source maps of a process share
+/// ([`SharedFiles`]); the ids of a map's own files are below it.
+pub const SHARED_BASE: u32 = 1 << 31;
+
+/// Files read once in a process that every [`SourceMap`] attaching them
+/// holds at the same ids (the embedded std, X-20 E (i)): what was parsed
+/// with those ids is valid in each map.
+#[derive(Debug, Clone)]
+pub struct SharedFiles(Arc<[SourceFile]>);
+
+impl SharedFiles {
+    pub fn new(files: impl IntoIterator<Item = (String, String)>) -> SharedFiles {
+        let file = |(i, (name, text)): (usize, (String, String))| {
+            let index = LineIndex::new(&text);
+            SourceFile { id: FileId(SHARED_BASE + i as u32), name, text, index }
+        };
+        SharedFiles(files.into_iter().enumerate().map(file).collect())
+    }
+
+    /// The files with their ids (the one place of the ids).
+    pub fn files(&self) -> impl Iterator<Item = (FileId, &SourceFile)> {
+        self.0.iter().map(|f| (f.id, f))
+    }
+}
+
+/// All source files of one compilation: its own files, and the shared ones
+/// it attached ([`SourceMap::share`]).
 #[derive(Debug, Default, Clone)]
 pub struct SourceMap {
     files: Vec<SourceFile>,
+    shared: Option<SharedFiles>,
 }
 
 impl SourceMap {
     pub fn add(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
+        let id = FileId(self.files.len() as u32);
+        if id.0 >= SHARED_BASE {
+            crate::internal::bug(None, "the own files of a source map reach the ids of the shared files");
+        }
         let text = text.into();
         let index = LineIndex::new(&text);
-        let id = FileId(self.files.len() as u32);
         self.files.push(SourceFile { id, name: name.into(), text, index });
-        FileId(self.files.len() as u32 - 1)
+        id
+    }
+
+    /// Attach `shared`: attaching the same files again changes nothing,
+    /// other files are a bug (one map has one set of shared files).
+    pub fn share(&mut self, shared: &SharedFiles) {
+        match &self.shared {
+            None => self.shared = Some(shared.clone()),
+            Some(s) if Arc::ptr_eq(&s.0, &shared.0) => {}
+            Some(_) => crate::internal::bug(None, "a source map attaches two sets of shared files"),
+        }
+    }
+
+    /// The file `id`, if the map holds it.
+    pub fn get(&self, id: FileId) -> Option<&SourceFile> {
+        match id.0.checked_sub(SHARED_BASE) {
+            Some(i) => self.shared.as_ref()?.0.get(i as usize),
+            None => self.files.get(id.0 as usize),
+        }
     }
 
     pub fn file(&self, id: FileId) -> &SourceFile {
-        &self.files[id.0 as usize]
-    }
-
-    pub fn files(&self) -> impl Iterator<Item = (FileId, &SourceFile)> {
-        self.files.iter().enumerate().map(|(i, f)| (FileId(i as u32), f))
-    }
-
-    pub fn len(&self) -> usize {
-        self.files.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.files.is_empty()
+        self.get(id).unwrap_or_else(|| panic!("{id:?} is not a file of the source map"))
     }
 }
 
@@ -167,6 +205,34 @@ mod tests {
         assert_eq!(file.line_text(2), Some("cd"));
         assert_eq!(file.line_text(3), Some(""));
         assert_eq!(file.line_text(5), None);
+    }
+
+    /// X-20 E (i): two maps attaching the same shared files hold them at the
+    /// same ids, above their own files, which count from 0 as before; a map
+    /// that did not attach them does not hold them; other shared files are a bug.
+    #[test]
+    fn shared_files_have_the_same_ids_in_every_map() {
+        let shared =
+            SharedFiles::new([("std/a.onsa".to_string(), "x\ny".to_string()), ("std/b.onsa".into(), "z".into())]);
+        let ids: Vec<FileId> = shared.files().map(|(f, _)| f).collect();
+        assert_eq!(ids, [FileId(SHARED_BASE), FileId(SHARED_BASE + 1)]);
+        let mut maps = [SourceMap::default(), SourceMap::default()];
+        for (k, m) in maps.iter_mut().enumerate() {
+            assert!(m.get(ids[0]).is_none());
+            assert_eq!(m.add(format!("u{k}.onsa"), "u"), FileId(0));
+            m.share(&shared);
+            m.share(&shared);
+            assert_eq!(m.add("v.onsa", "v"), FileId(1));
+        }
+        for m in &maps {
+            assert_eq!((m.file(ids[0]).name(), m.file(ids[0]).line_text(2)), ("std/a.onsa", Some("y")));
+            assert_eq!(m.file(ids[1]).text(), "z");
+            assert_eq!(m.file(FileId(1)).name(), "v.onsa");
+            assert!(m.get(FileId(SHARED_BASE + 2)).is_none() && m.get(FileId(2)).is_none());
+        }
+        let other = SharedFiles::new([("std/a.onsa".to_string(), "x".to_string())]);
+        let again = std::panic::catch_unwind(move || maps[0].clone().share(&other));
+        assert!(again.unwrap_err().downcast_ref::<crate::internal::InternalBug>().is_some());
     }
 
     #[test]

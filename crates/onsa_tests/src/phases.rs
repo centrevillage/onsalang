@@ -2,6 +2,7 @@
 //! (`onsa_diag::timing`) on an input, as `onsa check` checks it and, with
 //! `--lower`, lowered to Core and verified when the check reports nothing
 //! (X-20; the script is `issues/X/X-20/measure_stages.py`).
+//! A process parses std once, in its first check (X-20 E (i)): the rounds after the first do not hold that parse.
 
 use std::time::Duration;
 
