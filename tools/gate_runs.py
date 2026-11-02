@@ -109,6 +109,21 @@ def whole_run(row):
     return whole_form(str(row.get("form", ""))) and not row.get("dirty") and not row.get("tree_changed")
 
 
+def last_ran(rows, name):
+    """The last row of a clean run (not `dirty`, its tree not changed meanwhile: the files it read were its
+    commit's) in which the item `name` ran (PASS or FAIL; a skip is not a run), or None (X-1 (1)). Only a sweep,
+    the whole and the stage end count: a work check or `--only` may run a part of it (the self-tests it picks)."""
+    for row in reversed(rows):
+        items = row.get("items")
+        status = items.get(name) if isinstance(items, dict) else None
+        form = str(row.get("form", ""))
+        clean = not row.get("dirty") and not row.get("tree_changed") and isinstance(row.get("commit"), str)
+        clean = clean and (form.startswith("sweep ") or whole_form(form))
+        if clean and isinstance(status, list) and status[:1] in (["PASS"], ["FAIL"]):
+            return row
+    return None
+
+
 def epoch(row):
     """The `time` of a row in seconds (0 when it is not of the form)."""
     try:
@@ -147,12 +162,12 @@ def sweep_line(root, rows, bad, k):
             parts.append(f"{i}/{k} never")
             continue
         commit = str(row.get("commit", ""))
-        parts.append(f"{i}/{k} last at {commit[:narrowing.SHORT]}, {_ago(root, commit)}")
+        parts.append(f"{i}/{k} last at {commit[:narrowing.SHORT]}, {ago(root, commit)}")
     tail = f"; {bad} unreadable line{'' if bad == 1 else 's'} in {HISTORY}" if bad else ""
     return f"sweep: next {next_shard(rows, k)}/{k} ({'; '.join(parts)}){tail}"
 
 
-def _ago(root, commit):
+def ago(root, commit):
     try:
         narrowing.git(root, "merge-base", "--is-ancestor", commit, "HEAD")
         ago = int(narrowing.git(root, "rev-list", "--count", f"{commit}..HEAD").strip())
@@ -251,7 +266,7 @@ def auto_line(root, rows, k):
         live.append(f"FAILED at {short(commit)}: {items} ({outs[-1] if outs else 'no output kept'})")
     else:
         r = max(last.values(), key=lambda r: order[id(r)])
-        live.append(f"last PASS at {short(r.get('commit'))} ({_ago(root, str(r.get('commit', '')))})")
+        live.append(f"last PASS at {short(r.get('commit'))} ({ago(root, str(r.get('commit', '')))})")
     return "auto sweep: " + "; ".join(live)
 
 

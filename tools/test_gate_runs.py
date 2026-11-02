@@ -203,5 +203,28 @@ class SaveBase(unittest.TestCase):
             self.assertEqual(gate.main(["--save-base", "--work", "W3-07"], root=self.root, out=io.StringIO()), 2)
 
 
+class LastRan(unittest.TestCase):
+    def test_the_last_clean_run_of_an_item(self):
+        # X-1 (1): PASS or FAIL in a clean row of a sweep, the whole or the stage end; a skip, a dirty row, a
+        # changed tree, a malformed row and a work check or `--only` (it may run a part, S2) are not runs
+        sw = "sweep 0/2"
+        rows = [{"commit": "a", "form": sw, "items": {"st": ["PASS", 1.0]}},
+                {"commit": "b", "form": "whole", "items": {"st": ["FAIL", 1.0]}},
+                {"commit": "c", "form": sw, "items": {"st": ["SKIPPED", 0.0]}},
+                {"commit": "d", "form": sw, "dirty": True, "items": {"st": ["PASS", 1.0]}},
+                {"commit": "e", "form": sw, "tree_changed": True, "items": {"st": ["PASS", 1.0]}},
+                {"commit": "f", "form": sw, "items": {"st": "PASS"}}, {"commit": "g", "form": sw, "items": []},
+                {"form": sw, "items": {"st": ["PASS", 1]}},
+                {"commit": "h", "form": sw, "items": {"other": ["PASS", 1.0]}},
+                {"commit": "i", "form": "work W1-01", "items": {"st": ["PASS", 1.0]}},
+                {"commit": "j", "form": "only st", "items": {"st": ["PASS", 1.0]}},
+                {"commit": "k", "items": {"st": ["PASS", 1.0]}}]  # fmt: skip
+        self.assertEqual(gate_runs.last_ran(rows, "st")["commit"], "b")
+        self.assertEqual(gate_runs.last_ran(rows[:1], "st")["commit"], "a")
+        self.assertEqual(gate_runs.last_ran([*rows[:1], {**rows[0], "commit": "s", "form": "stage-end W4"}], "st")["commit"], "s")
+        self.assertIsNone(gate_runs.last_ran(rows[2:], "st"))
+        self.assertIsNone(gate_runs.last_ran([], "st"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

@@ -8,7 +8,8 @@ number per file and name with the list `tools/builtin_names.toml`:
 
 - a literal the list does not allow (a new hard-coded name) fails;
 - a list entry larger than what is found fails too, so that the list only
-  shrinks (C-118: the first list is every literal of today; W5-02 reduces it).
+  shrinks (C-118: the first list is every literal of today; W5-02 reduces it);
+- a table out of the order `--print` writes (the files, and the literals of each, sorted) fails.
 The list has two tables (`TABLES`): `allow`, the builtin names written in the
 code, and `same_spelling`, literals spelled like a builtin name with another
 meaning, each with a note of its meaning; they are counted together.
@@ -526,6 +527,18 @@ def compare(found, lists, root):
     return problems
 
 
+def order_problems(lists):
+    """The tables of the list out of the order `render` writes (`--print`): the files, and the literals of each
+    file, sorted; the first pair out of order of each."""
+    problems = []
+    for table in TABLES:
+        for what, keys in [("files", list(lists[table]))] + [(f'"{f}"', list(n)) for f, n in lists[table].items()]:
+            bad = next(((a, b) for a, b in zip(keys, keys[1:]) if a > b), None)
+            if bad:
+                problems.append(f'{ALLOW}: [{table}] {what}: "{bad[0]}" comes before "{bad[1]}"; keep the order of --print')
+    return problems
+
+
 def render(found, lists=None, notes=None):
     """The list for `found`: the `same_spelling` entries of `lists` are kept
     (up to what is found), the rest goes to `allow`."""
@@ -567,7 +580,8 @@ def main(argv=None, root=ROOT, cmd=repo.CASES_CMD):
             lists, notes = load_allow(root / ALLOW) if (root / ALLOW).is_file() else (None, None)
             print(render(found, lists, notes), end="")
             return 0
-        problems = compare(found, load_allow(root / ALLOW)[0], root)
+        lists = load_allow(root / ALLOW)[0]
+        problems = order_problems(lists) + compare(found, lists, root)
     except (CheckError, OSError) as e:
         print(f"cannot check: {e}")
         return 1

@@ -30,13 +30,15 @@ The forms of a run (X-1; `tools/gate.py` builds the arguments):
 - the whole (no option) and the stage end (`--stage-end`) run every item, the
   heavy ones whole;
 - the work check (`--work ID`) narrows the items with `narrows` (`--changed-since
-  auto --sample SAMPLE --salt <the first ID>`, `tools/narrowing.py`) unless the diff
-  touches their tools, and runs an item with `touches` only when the diff touches
-  those places other than its `touches_except` (the self-test: `tools/` other than
-  SELFTEST_UNREAD, the data it does not read);
+  auto --sample SAMPLE --salt <the first ID>`, `tools/narrowing.py`), also when the diff
+  touches their tools (the note names the tool: the sweeps run it whole), runs an item
+  with `touches` only when the diff touches those places other than its `touches_except`
+  (the self-test: `tools/` other than SELFTEST_UNREAD, the data it does not read), and
+  passes `--changed-since auto` to an item with `picks` (the self-tests the diff reads);
 - the sweep (`--sweep`, the main tree only) runs `save-base`, the `static` items,
   the next of the SHARDS shards of the items with `narrows` (`--shard k/K`), and the
-  items with `sweep`;
+  items with `sweep`, but an item with `touches` only when its places changed since its
+  last clean PASS in the history (`gate.read_since`);
 - `--only NAMES` runs the items named (`static`: the static items) in the form of
   the other options.
 The work check warns past BUDGET_WORK seconds, a sweep past BUDGET_SWEEP. The
@@ -62,7 +64,7 @@ BASES_KEPT = 8  # the base binaries kept in target/base (M-3; 8 for the narrowed
 # outputs of the builds before (about 5 times a build from nothing, 1.6 GB on 2026-10-16).
 DEBUG_DIR_LIMIT = 8 * 2**30
 PARENT = 3  # the exit of an item whose findings wait for the parent (M-5): not 1, not CANNOT_RUN
-# The tools of the narrowable items: a diff that touches them runs the item whole.
+# The tools of the narrowable items: the note of a work check whose diff touches them names them.
 FUZZ_TOOLS = ("tools/fuzz.py", "tools/narrowing.py")
 FMT_TOOLS = ("tools/fmt_props.py", "tools/narrowing.py")
 # The data under tools/ the self-test does not read: a diff in tools/ that touches only these does not run it in a
@@ -90,6 +92,7 @@ class Step:
     narrows: tuple = ()  # its tools: narrowed in a work check, a shard in a sweep (X-1)
     touches: tuple = ()  # a work check runs it only when the diff touches one of these
     touches_except: tuple = ()  # the places in `touches` that do not count
+    picks: bool = False  # a work check passes it `--changed-since auto` (it picks what the diff reads)
     static: bool = False  # a static check: in every sweep, `--only static`
     sweep: bool = False  # in the sweep (the `static` and `narrows` items are, without it)
     sweep_only: bool = False  # only in the sweep; the other forms do not list it
@@ -130,6 +133,8 @@ STEPS = [
     Step("diag-negatives", (*PY, str(TOOLS / "diag_codes.py"), "--negatives"), static=True),
     Step("gap-marks", (*PY, str(TOOLS / "gap_marks.py")), static=True, parent=True),
     Step("builtin-names", (*PY, str(TOOLS / "builtin_names.py")), static=True),
+    # What a tool reads from another part of the repository, against that part (W4-18 U10b): the self-tests read none.
+    Step("cross-check", (*PY, str(TOOLS / "crosscheck.py")), static=True),
     # Every member selected alone resolves the features of the libraries as the workspace: no second build of
     # the crates above them (X-22, the crate onsa_workspace_hack).
     Step("cargo-features", (*PY, str(TOOLS / "cargo_features.py")), static=True),
@@ -144,7 +149,7 @@ STEPS = [
     # The keywords of the lexer against the list of §2.2 (W3-02): one case per word, `keywords/<word>`.
     Step("keywords", (*PY, str(TOOLS / "keywords.py")), pendable=True, by_case_only=True),
     Step("gate-selftest", (*PY, str(TOOLS / "selftest.py")), slow=True, touches=("tools/",),
-         touches_except=SELFTEST_UNREAD, sweep=True),
+         touches_except=SELFTEST_UNREAD, picks=True, sweep=True),
     Step("golden", (*PY, str(TOOLS / "gate.py"), "--golden"), info=True),
     Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),
     # The generated C (Q-07, W1-06): Clang and gcc-15 with -Wall -Wextra -Werror -pedantic and

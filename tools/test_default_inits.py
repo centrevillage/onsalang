@@ -3,6 +3,7 @@
 
 Alone: python3 -B tools/test_default_inits.py
 """
+import json
 import sys
 import tempfile
 import unittest
@@ -15,8 +16,21 @@ import repo  # noqa: E402
 from selftest_support import quiet, split_spec  # noqa: E402
 
 
-# The real `onsa_cases` from any directory: tools/default_inits.py runs it in the root it reads.
-REAL_CASES = ("cargo", "run", "-q", "--manifest-path", str(repo.ROOT / "Cargo.toml"), *repo.CASES_BIN, "--")
+# A made-up `onsa_cases --default-inits` (the compiler's side is onsa_tests::default_inits's tests): each file gets
+# the report of the first key of REPORTS its text holds, else none of a call.
+FAKE = ("import json, sys; reports = json.loads(sys.argv[1]); none = {'calls': 0, 'lexed': 0, 'syntax_errors': 0, "
+        "'hits': []}\nout = []\nfor f in sys.argv[3:]:\n    text = open(f, encoding='utf-8').read()\n"
+        "    out.append({'file': f, **next((r for k, r in reports.items() if k in text), none)})\nprint(json.dumps(out))")
+
+
+def cases(reports):
+    return (sys.executable, "-B", "-c", FAKE, json.dumps(reports))
+
+
+def calls(n, *hits, lexed=None, syntax_errors=0):
+    """The report of a source: `n` calls in the tree, `hits` (line, call, init) of the default."""
+    return {"calls": n, "lexed": n if lexed is None else lexed, "syntax_errors": syntax_errors,
+            "hits": [{"line": a, "call": c, "init": i} for a, c, i in hits]}  # fmt: skip
 INIT_FLOW = "pub flow f(x: F32 at sample, b: Bool at sample, s: F32 at init) -> F32 at sample {{\n  {}\n}}\n"
 
 
@@ -41,8 +55,8 @@ class DefaultInits(unittest.TestCase):
         self.write("std/a.onsa", std if std is not None else INIT_FLOW.format("prev~(x)"))
         self.write("examples/b.onsa", example if example is not None else INIT_FLOW.format("delay~(x, 4)"))
 
-    def check(self, cmd=REAL_CASES):
-        return default_inits.check(self.root, cmd)[0]
+    def check(self, reports=None, cmd=None):
+        return default_inits.check(self.root, cmd or cases(reports or {}))[0]
 
     def test_an_init_equal_to_the_default_fails(self):
         self.docs(
@@ -51,7 +65,11 @@ class DefaultInits(unittest.TestCase):
             std=INIT_FLOW.format("vdelay~(x, x, 8, 0x0_0) + prev~(x, (0e3))"),
             example="// c\n" + INIT_FLOW.format("delay~(x, 4, -0) + prev~(x, 00.00)"),
         )
-        problems = self.check()
+        reports = {"let y = prev~(x, 0.0)": calls(1, (2, "prev", "0.0")),
+                   "delay~(b, 3, false)": calls(1, (2, "delay", "false")),
+                   "vdelay~(x, x, 8, 0x0_0)": calls(2, (2, "vdelay", "0x0_0"), (2, "prev", "(0e3)")),
+                   "delay~(x, 4, -0)": calls(2, (3, "delay", "-0"), (3, "prev", "00.00"))}  # fmt: skip
+        problems = self.check(reports)
         shown = sorted(p.split("  ")[0] for p in problems)
         self.assertEqual(
             shown,
@@ -61,7 +79,7 @@ class DefaultInits(unittest.TestCase):
         )  # fmt: skip
         self.assertTrue(all("write the omitted form" in p for p in problems), problems)
         self.assertIn("`prev~` has the init `0.0`", "\n".join(problems))
-        self.assertEqual(quiet(default_inits.main, [], self.root, REAL_CASES), 1)
+        self.assertEqual(quiet(default_inits.main, [], self.root, cases(reports)), 1)
 
     def test_the_omitted_form_and_other_values_pass(self):
         # the omitted form, values that are not 0, `-0.0` (not the default), a name, `true`; the text
@@ -71,12 +89,14 @@ class DefaultInits(unittest.TestCase):
             tools="# t\n\n例の `prev~(^y, 0)`。\n\n```onsa\n" + INIT_FLOW.format("prev~(x, 2.0)") + "```\n",
             std=INIT_FLOW.format("delay~(b, 3, true)\n  x"),
         )
-        problems, summary = default_inits.check(self.root, REAL_CASES)
+        reports = {"prev~(x) + prev~(x, 1.0)": calls(5), "prev~(x, 2.0)": calls(1), "delay~(b, 3, true)": calls(1),
+                   "delay~(x, 4)": calls(1)}  # fmt: skip
+        problems, summary = default_inits.check(self.root, cases(reports))
         self.assertEqual(problems, [])
         # a block of each document is read (X-2 U7a: `spec/` and `spec/tools.md`, never 0)
         self.assertIn("1 spec/ blocks, 1 spec/tools.md blocks, 1 examples files, 1 std files; "
                       "8 delay calls", summary)  # fmt: skip
-        self.assertEqual(quiet(default_inits.main, [], self.root, REAL_CASES), 0)
+        self.assertEqual(quiet(default_inits.main, [], self.root, cases(reports)), 0)
 
     def test_reading_nothing_fails(self):
         self.docs("fn f() {}\n", std="fn g() {}\n", example="fn h() {}\n")
@@ -89,10 +109,10 @@ class DefaultInits(unittest.TestCase):
         self.docs(INIT_FLOW.format("prev~(x)"))
         script = ("import json, sys; print(json.dumps([{'file': f, 'internal': 'boom'} for f in sys.argv[2:]]"
                   " + [{'file': 'other', 'calls': 1, 'hits': []}]))")  # fmt: skip
-        problems = self.check((sys.executable, "-B", "-c", script))
+        problems = self.check(cmd=(sys.executable, "-B", "-c", script))
         self.assertEqual(len([p for p in problems if "could not read it: boom" in p]), 3, problems)
         script = "import json; print(json.dumps([]))"
-        problems = self.check((sys.executable, "-B", "-c", script))
+        problems = self.check(cmd=(sys.executable, "-B", "-c", script))
         self.assertEqual(len([p for p in problems if "could not read it: no report" in p]), 3, problems)
 
     def test_a_fence_that_cannot_be_trusted_fails(self):
@@ -103,22 +123,24 @@ class DefaultInits(unittest.TestCase):
         # the item with a syntax error has no tree, nor has the spaced `prev ~(` (§2.6): the tokens count them
         broken = INIT_FLOW.format("let a = prev~(x, 0.0)\n  let b = )\n  a")
         self.docs(broken + INIT_FLOW.replace("flow f", "flow g").format("prev ~(x, 0.0)"))
-        problems = self.check()
+        problems = self.check({"let b = )": calls(0, lexed=2, syntax_errors=1), "prev~(x)": calls(1),
+                               "delay~(x, 4)": calls(1)})  # fmt: skip
         self.assertEqual(problems, ["spec/11-c.md:7  2 of its 2 delay calls are not in the tree (an item with "
                                     "a syntax error); their init is not checked"])  # fmt: skip
         # a file of std/ with a syntax error fails by itself too, also when the tree holds all its calls
         self.docs(INIT_FLOW.format("prev~(x)"), std=broken)
-        problems = self.check()
+        problems = self.check({"let b = )": calls(0, lexed=1, syntax_errors=1), "prev~(x)": calls(1)})
         self.assertEqual(sorted(p.split("  ")[1].split(";")[0] for p in problems),
                          ["1 of its 1 delay calls are not in the tree (an item with a syntax error)",
                           "has a diagnostic of the syntax stage (`onsa check` shows it)"], problems)  # fmt: skip
         self.docs(INIT_FLOW.format("prev~(x)"), example="fn g() -> I32 { 1 + }\n" + INIT_FLOW.format("delay~(x, 4)"))
-        self.assertEqual([p.split("  ")[0] for p in self.check()], ["examples/b.onsa:1"])
+        reports = {"1 + }": calls(1, syntax_errors=1), "prev~(x)": calls(1)}
+        self.assertEqual([p.split("  ")[0] for p in self.check(reports)], ["examples/b.onsa:1"])
 
     def test_the_counts_agree_without_a_call_in_the_spec(self):
         # no delay call in the blocks of the spec, some in std/: nothing unread, so it passes
         self.docs("fn f() {}\n")
-        problems, summary = default_inits.check(self.root, REAL_CASES)
+        problems, summary = default_inits.check(self.root, cases({"prev~(x)": calls(1), "delay~(x, 4)": calls(1)}))
         self.assertEqual(problems, [])
         self.assertTrue(summary.endswith("; 2 delay calls"), summary)
 

@@ -303,7 +303,6 @@ class Work(unittest.TestCase):
         self.assertEqual((judged(150), judged(151)), (f"within {size.format(3, 100)}", f"over {size.format(3, 100)}"))
         self.budget("見積もりの 2 倍を超え、かつ差が 50 行以上")
         self.assertEqual((judged(100), judged(101)), (f"within {size.format(2, 50)}", f"over {size.format(2, 50)}"))
-        self.assertIsInstance(work.refactor_size(repo.ROOT), tuple)  # the row of this repository reads
         for value, name, says in (("x", "他の行", "no row 「リファクタリングに入る大きさ」"),
                                   ("3 倍を超えるもの", work.REFACTOR, "the row 「リファクタリングに入る大きさ」 says no")):  # fmt: skip
             with self.subTest(says=says):

@@ -12,27 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gate  # noqa: E402
 import gate_steps  # noqa: E402
 import pending  # noqa: E402
-import repo  # noqa: E402
 
 
 class RealSteps(unittest.TestCase):
-    _c_items = None
-
-    @classmethod
-    def c_items(cls):
-        """The items of the C checks, from their table (`onsa_cases --c-items`, onsa_tests::c::ITEMS)."""
-        if cls._c_items is None:
-            cls._c_items = repo.cases_json(repo.ROOT, repo.CASES_CMD, "--c-items")
-        return cls._c_items
-
-    def test_c_items_match_the_table(self):
-        # one step per row of onsa_tests::c::ITEMS, in its order, named as the row (W1-06)
-        prefix = gate_steps.C_CHECK
-        steps = [s for s in gate_steps.STEPS if s.argv[: len(prefix)] == prefix]
-        self.assertEqual([s.argv[len(prefix) :] for s in steps], [(n,) for n in self.c_items()])
-        self.assertEqual([s.name for s in steps], self.c_items())
-        self.assertTrue(all(s.pendable and not s.info for s in steps))
-
+    # the C items against the rows of onsa_tests::c::ITEMS (W1-06) are the cross-check item's (tools/crosscheck.py)
+    @staticmethod
+    def c_items():
+        return [s.name for s in gate_steps.STEPS if s.argv[: len(gate_steps.C_CHECK)] == gate_steps.C_CHECK]
     def test_required_items(self):
         names = [s.name for s in gate_steps.STEPS]
         self.assertEqual(len(names), len(set(names)))
@@ -81,20 +67,20 @@ class RealSteps(unittest.TestCase):
         steps = gate_steps.STEPS
         self.assertEqual(sorted(gate_steps.static_names()), sorted(
             ["pending", "ignores", "gap-marks", "diag-registry", "diag-negatives", "builtin-names", "spec-examples",
-             "spec-sections", "default-inits", "docs", "docs-fmt", "docs-due", "cargo-features"]))  # fmt: skip
+             "spec-sections", "default-inits", "docs", "docs-fmt", "docs-due", "cargo-features", "cross-check"]))  # fmt: skip
         self.assertEqual({s.name: s.narrows for s in steps if s.narrows},
                          {"fuzz": ("tools/fuzz.py", "tools/narrowing.py"),
                           **{n: ("tools/fmt_props.py", "tools/narrowing.py") for n in ("fmt-props", "fmt-cst")}})  # fmt: skip
         for s in steps:
             for p in s.narrows:
-                self.assertTrue((gate.ROOT / p).is_file(), p)
+                self.assertTrue((gate.TOOLS / Path(p).relative_to("tools")).is_file(), p)
         self.assertEqual({s.name: s.touches for s in steps if s.touches}, {"gate-selftest": ("tools/",)})
         # the self-test is not run by a diff of the table of the allowed names alone (X-1 U10)
         self.assertEqual({s.name: s.touches_except for s in steps if s.touches_except},
                          {"gate-selftest": ("tools/builtin_names.toml",)})  # fmt: skip
         for s in steps:
             for p in s.touches_except:
-                self.assertTrue((gate.ROOT / p).is_file(), p)
+                self.assertTrue((gate.TOOLS / Path(p).relative_to("tools")).is_file(), p)
         self.assertEqual([s.name for s in steps if s.parent], ["docs-due", "gap-marks"])
         # the documents changed after the last docs check (X-9 U1): `--stage-end` makes it fail
         due = next(s for s in steps if s.name == "docs-due")

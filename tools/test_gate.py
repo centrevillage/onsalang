@@ -4,6 +4,7 @@
 Alone: python3 -B tools/test_gate.py
 """
 import io
+import json
 import os
 import re
 import shutil
@@ -401,12 +402,14 @@ class GateForms(GateRun):
         self.assertIn("SKIPPED st", out)
         self.assertIn("the diff does not touch tools/", out)
         self.assertTrue(self.ran("plain"))
-        # a diff on the tool of an item runs it whole; any diff in tools/ runs the self-test
+        # a diff on the tool of an item narrows it too, the note names the tool (X-1 B1); any diff in tools/ runs
+        # the self-test
         self.forget()
         self.repo.write("tools/narrowing.py", "x = 1\n")
         code, out = self.run_main(["--work", "W3-07"], steps)
-        self.assertEqual(self.argv_of("fz"), [""])
-        self.assertIn("whole: the diff touches tools/narrowing.py", out)
+        self.assertEqual(self.argv_of("fz"), ["--changed-since", "auto", "--sample", "0.1", "--salt", "W3-07"])
+        self.assertIn("narrowed (sample 0.1, salt W3-07); the diff touches tools/narrowing.py: the whole runs in the "
+                      "sweeps", out)  # fmt: skip
         self.assertTrue(self.ran("st"))
         (self.root / "tools/narrowing.py").unlink()
         self.repo.write("tools/other.py", "x = 1\n")
@@ -438,14 +441,86 @@ class GateForms(GateRun):
                 self.assertEqual(self.argv_of("fz"), [""])
                 self.assertTrue(self.ran("st"))
 
+    def test_the_work_check_picks_the_self_tests(self):
+        # S2: an item with `picks` gets `--changed-since auto` in a work check whose diff is known, nothing else
+        steps = [fake("st", touches=("tools/",), picks=True, sweep=True)]
+        self.repo.write("tools/a.py", "x = 1\n")
+        code, out = self.run_main(["--work", "W3-07"], steps)
+        self.assertEqual((code, self.argv_of("st")), (0, ["--changed-since", "auto"]))
+        self.assertIn("the self-tests the diff reads", out)
+        for argv in ([], ["--stage-end", "W3"], ["--sweep"]):
+            with self.subTest(argv=argv):
+                self.forget()
+                self.run_main(argv, steps)
+                self.assertEqual(self.argv_of("st"), [""])
+
+    def test_the_sweep_skips_an_item_whose_places_did_not_change(self):
+        # X-1 (1): in a sweep, an item with `touches` runs unless its last clean run passed and its places other
+        # than `touches_except` are as at that commit; a skip is not a run, the whole and the stage end run it
+        st = fake("st", touches=("tools/",), touches_except=("tools/t.toml",), sweep=True)
+
+        def sweep(steps=(st,)):
+            self.forget()
+            return self.run_main(["--sweep"], list(steps))[1]
+
+        self.assertIn("ran: no clean run of it in the history", sweep())
+        self.assertTrue(self.ran("st"))
+        head = git_in(self.root, "rev-parse", "HEAD").strip()[:7]
+        skip = f"tools/ other than tools/t.toml unchanged since its last PASS at {head}"
+        for _ in range(2):  # the skipped run is not the base: the PASS of `head` stays it
+            self.assertIn(f"SKIPPED st", out := sweep())
+            self.assertFalse(self.ran("st"))
+        self.assertIn(skip + " (0 commits ago)", out)
+        self.repo.write("tools/t.toml", "x = 1\n")  # not counted, committed or not
+        self.assertIn(skip, sweep())
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "toml")
+        self.assertIn(skip + " (1 commit ago)", sweep())
+        self.repo.write("tools/new.py", "x = 1\n")  # untracked
+        self.assertIn(f"ran: tools/ other than tools/t.toml changed since its last PASS at {head}", sweep())
+        self.assertTrue(self.ran("st"))
+        # the stage end and the whole run it whatever the history says
+        (self.root / "tools/new.py").unlink()
+        self.assertIn("SKIPPED st", sweep())
+        for argv in ([], ["--stage-end", "W3"]):
+            self.forget()
+            self.run_main(argv, [st])
+            self.assertTrue(self.ran("st"), argv)
+        # a failed last run runs it, also when a PASS comes before it
+        self.forget()
+        self.run_main([], [fake("st", 1, touches=("tools/",), sweep=True)])
+        now = git_in(self.root, "rev-parse", "HEAD").strip()[:7]
+        self.assertIn(f"ran: its last run at {now} failed", sweep())
+        self.assertIn("SKIPPED st", sweep())
+
+    def test_the_sweep_runs_an_item_without_a_clean_pass_to_compare(self):
+        st = fake("st", touches=("tools/",), sweep=True)
+        head = git_in(self.root, "rev-parse", "HEAD").strip()
+        path = self.root / gate_runs.HISTORY
+        path.parent.mkdir(parents=True, exist_ok=True)
+        for row, says in (
+            ({"commit": head, "dirty": True, "items": {"st": ["PASS", 1.0]}}, "ran: no clean run of it in the history"),
+            ({"commit": head, "tree_changed": True, "items": {"st": ["PASS", 1.0]}}, "ran: no clean run"),
+            ({"commit": head, "items": {"st": ["SKIPPED", 0.0]}}, "ran: no clean run"),
+            ({"commit": head, "items": {"st": "PASS"}}, "ran: no clean run"),
+            ({"commit": "f" * 40, "items": {"st": ["PASS", 1.0]}}, f"ran: cannot compare with its last PASS at fffffff"),
+        ):
+            with self.subTest(row=row):
+                path.write_text(json.dumps({"form": "sweep 0/2", **row}) + "\n")
+                self.forget()
+                self.assertIn(says, self.run_main(["--sweep"], [st])[1])
+                self.assertTrue(self.ran("st"))
+
     def test_a_diff_that_cannot_be_read_runs_whole(self):
         git_in(self.root, "branch", "-D", "dev")
-        steps = [fake("fz", narrows=("tools/fuzz.py",)), fake("st", touches=("tools/",))]
+        steps = [fake("fz", narrows=("tools/fuzz.py",)), fake("st", touches=("tools/",), picks=True)]
         code, out = self.run_main(["--work", "W3-07"], steps)
         self.assertEqual(code, 0)
         self.assertEqual(self.argv_of("fz"), [""])
         self.assertIn("whole: the diff is not known", out)
         self.assertTrue(self.ran("st"))
+        self.assertEqual(self.argv_of("st"), [""])
+        self.assertIn("all: the diff is not known", out)
         self.assertIn("diff: cannot read it (git merge-base HEAD dev", out)
         self.assertEqual(out.splitlines()[-1], "gate: PASS")
 

@@ -21,13 +21,34 @@ import ops as O  # noqa: E402
 import spec_tokens  # noqa: E402
 
 
+def made_spec(ops):
+    """A spec that holds what spec_tokens reads (3.3 / 3.4, the table of 6.6, the formula of 11.4) for the
+    registry `ops`, and the text the tests change: the self-tests read no spec of the repository."""
+    def span(t):
+        return f"`a {t} b`" if spec_tokens.OPERATOR.fullmatch(t) and t not in spec_tokens.COMPARISONS else \
+            f"`{t}a`" if t == "!" else f"`{t}`"
+    tokens = sorted({t for o in ops if o.group != "const" for t in o.tokens} - {"checked_add"})
+    consts = sorted(o.name for o in ops if o.group == "const")
+    formula = ("dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }\nk  = dc.trunc_u32()\n"
+               "f  = dc - k  \ny  = (1.0 - f) * a + f * b\n")
+    return (f"### 3.3 変換\n\n{'、'.join(map(span, tokens))}。`a.checked_add(b)` など。\n\n### 3.5 評価順\n\n"
+            f"### 6.6 コンパイル時定数\n\n| 種 | 名 |\n|---|---|\n| 整数 | {'、'.join(f'`{c}`' for c in consts)} |\n"
+            f"\n---\n\n### 11.4 組込み\n\n```\n{formula}```\n\n### 11.5 呼び出しと複製\n")
+
+
 class VectorsTools(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # the data of the model and a made-up spec, not the committed tests/vectors/ nor the spec of the repository
         cls.tmp = tempfile.TemporaryDirectory()
         cls.copy = Path(cls.tmp.name) / "vectors"
-        shutil.copytree(gen.DATA, cls.copy)
-        cls.spec = gen.spec_text()
+        files = gen.generate()[3]
+        for name, data in files.items():
+            (cls.copy / name).parent.mkdir(parents=True, exist_ok=True)
+            (cls.copy / name).write_bytes(data)
+        (cls.copy / "FORMAT.md").write_text("made up\n", encoding="utf-8")
+        (cls.copy / "XCHECK").write_text(f"data_sha256 {gen.data_hash(files)}\n", encoding="utf-8")
+        cls.spec = made_spec(O.registry())
 
     @classmethod
     def tearDownClass(cls):
@@ -39,15 +60,16 @@ class VectorsTools(unittest.TestCase):
         shutil.copytree(self.copy, d)
         return d
 
-    def test_committed_data_passes(self):
-        self.assertEqual(gen.check(self.copy, quiet=True), [])
+    def test_generated_data_passes(self):
+        # the committed data is the `vectors` item's (gen.py --check)
+        self.assertEqual(gen.check(self.copy, quiet=True, spec=self.spec), [])
 
     def test_spec_tokens_is_imported_alone(self):
         # It finds tools/repo.py itself, not through the path gen.py makes (RF-18).
-        code = f"import sys; sys.path.insert(0, {str(HERE)!r}); import spec_tokens; print(spec_tokens.repo.ROOT)"
+        code = f"import sys; sys.path.insert(0, {str(HERE)!r}); import spec_tokens; print(spec_tokens.repo.__file__)"
         r = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True, timeout=60,
                            cwd=HERE.parent.parent)  # not tools/, which `-c` would put on the path
-        self.assertEqual((r.returncode, r.stdout.strip()), (0, str(HERE.parent.parent)), r.stderr)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, str(HERE.parent / "repo.py")), r.stderr)
 
     def test_an_edited_expected_value_is_found(self):
         d = self.fresh()
@@ -55,14 +77,14 @@ class VectorsTools(unittest.TestCase):
         text = p.read_text()
         self.assertIn("-2147483648 -1\t0", text)
         p.write_text(text.replace("-2147483648 -1\t0", "-2147483648 -1\tpanic:overflow", 1))
-        problems = gen.check(d, quiet=True)
+        problems = gen.check(d, quiet=True, spec=self.spec)
         self.assertTrue(any("int-i32.tsv" in x and "differs" in x for x in problems), problems)
 
     def test_a_missing_and_an_extra_file_are_found(self):
         d = self.fresh()
         (d / "const.tsv").unlink()
         (d / "extra.tsv").write_text("x\n")
-        problems = gen.check(d, quiet=True)
+        problems = gen.check(d, quiet=True, spec=self.spec)
         self.assertTrue(any("const.tsv" in x and "not in" in x for x in problems), problems)
         self.assertTrue(any("extra.tsv" in x and "not generated" in x for x in problems), problems)
 
@@ -74,7 +96,7 @@ class VectorsTools(unittest.TestCase):
                 return ("panic", "overflow")
             return real(t, op, args)
         with mock.patch.object(M, "int_op", broken):
-            problems = gen.check(self.copy, quiet=True)
+            problems = gen.check(self.copy, quiet=True, spec=self.spec)
         self.assertTrue(any("int-i32.tsv" in x and "differs" in x for x in problems), problems)
 
     def test_a_rule_the_known_answers_cover_is_found_at_once(self):
@@ -85,26 +107,26 @@ class VectorsTools(unittest.TestCase):
                 return ("panic", "overflow")
             return real(t, op, args)
         with mock.patch.object(M, "int_op", broken):
-            problems = gen.check(self.copy, quiet=True)
+            problems = gen.check(self.copy, quiet=True, spec=self.spec)
         self.assertTrue(any("known-answer" in x for x in problems), problems)
 
     def test_a_changed_nan_rule_is_found(self):
         real = M.from_bits  # a NaN pattern is a NaN, whatever its bits
         with mock.patch.object(M, "from_bits", lambda t, u: ("v", u)):
-            problems = gen.check(self.copy, quiet=True)
+            problems = gen.check(self.copy, quiet=True, spec=self.spec)
         self.assertTrue(any("conv-f32.tsv" in x and "differs" in x for x in problems), problems)
         self.assertEqual(real("f32", 0xFFC00001), M.NAN)
         with mock.patch.object(M, "to_bits", lambda t, bits: bits):  # the hardware's bits, not the normal NaN
-            self.assertTrue(any("known-answer" in x for x in gen.check(self.copy, quiet=True)))
+            self.assertTrue(any("known-answer" in x for x in gen.check(self.copy, quiet=True, spec=self.spec)))
 
     def test_xcheck_must_be_for_this_data(self):
         d = self.fresh()
         p = d / "XCHECK"
         lines = p.read_text().splitlines()
         p.write_text("\n".join("data_sha256 " + "0" * 64 if l.startswith("data_sha256 ") else l for l in lines) + "\n")
-        self.assertTrue(any("XCHECK" in x and "another data" in x for x in gen.check(d, quiet=True)))
+        self.assertTrue(any("XCHECK" in x and "another data" in x for x in gen.check(d, quiet=True, spec=self.spec)))
         (d / "XCHECK").unlink()
-        self.assertTrue(any("XCHECK: missing" in x for x in gen.check(d, quiet=True)))
+        self.assertTrue(any("XCHECK: missing" in x for x in gen.check(d, quiet=True, spec=self.spec)))
 
     def test_a_new_spec_token_is_found(self):
         spec = self.spec.replace("`a.checked_add(b)` など", "`a.checked_add(b)` や `a.checked_pow(b)` など", 1)

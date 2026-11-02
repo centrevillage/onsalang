@@ -46,15 +46,16 @@ class RunCases(unittest.TestCase):
 
     def test_refused(self):
         tail = "; give an absolute path outside the tree and the repository (nothing removed)"
+        inside = repo.ROOT / "tools/x-6-t2-none"  # a place in the repository (not read)
         (self.tree / "w").mkdir()
         (self.tree / "w/keep").write_text("")
         for work, why in (("tree/w", "not an absolute path"), (self.tree / "w", f"in {self.tree}"),
                           (self.tree, f"in {self.tree}"), (self.top, f"holds {self.tree}"),
-                          (repo.ROOT / "x-6-t2-none", f"in {repo.ROOT}")):  # fmt: skip
+                          (inside, f"in {inside.parents[1]}")):  # fmt: skip
             with self.subTest(work=work):
                 self.assertEqual(self.run_cases(work), (1, [f"--work {work}: {why}{tail}"]))
         self.assertTrue((self.tree / "w/keep").exists())
-        self.assertFalse((repo.ROOT / "x-6-t2-none").exists())
+        self.assertFalse(inside.exists())
 
     def test_outside(self):
         work = self.top / "out"

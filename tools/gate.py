@@ -14,8 +14,9 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
                 `tasks/W/`, or a unit of an item of `issues/X/`, `X-3/U1`, which no
                 `until` names), narrows
                 the heavy items to the seeds of the diff and a sample salted with
-                the first ID, and runs the self-test only when the diff touches
-                `tools/` other than the data the self-test does not read
+                the first ID (also when the diff touches their tools: the sweeps
+                run them whole), and runs the self-tests the diff reads only when
+                it touches `tools/` other than the data they do not read
                 (`gate_steps`: the forms; X-1).
 --stage-end W3  also fails when `tests/pending.toml` still has entries whose
                 `until` is a work of W3 (rules/process.md 8.6, the end of a stage), and
@@ -26,8 +27,9 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
                 of a work. Its last line is `gate (quick): ...`: it is not the
                 gate's verdict (rules/process.md 8.3 8).
 --sweep         the main tree only: saves the base binaries, runs the static
-                items, the self-test and the next shard of the heavy items (the
-                history, `gate_runs`). Its last line is `gate (sweep k/K): ...`.
+                items, the self-test (unless `tools/` is as at its last clean PASS)
+                and the next shard of the heavy items (the history, `gate_runs`).
+                Its last line is `gate (sweep k/K): ...`.
 --only NAMES    runs the items named (`a,b`; `static`: the static items) as the
                 other options would; the last line is `gate (only): ...`.
 --save-base     the main tree only: copies the binaries of HEAD to
@@ -75,7 +77,7 @@ import subprocess
 import sys
 import time
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -111,6 +113,9 @@ class Form:
     only: tuple = None  # the names given to `--only`
     changed: frozenset = None  # the paths the diff touches, when a work check read them
     diff_error: str = None  # why it could not
+    # in a sweep, per item with `touches`: (the paths changed since its last clean PASS or None, the reason
+    # of its skip, the note of its run; `read_since`)
+    since: dict = field(default_factory=dict)
 
     @property
     def w_works(self):
@@ -228,6 +233,11 @@ def _in_form(step, form, named):
 
 def _narrowing(step, form):
     """The options of a heavy item in this form, and the note of how it runs."""
+    if step.picks and form.work:  # the self-tests the diff reads (S2), all when it is not known
+        return (["--changed-since", "auto"], "the self-tests the diff reads") if form.changed is not None else \
+            ([], "all: the diff is not known")
+    if step.touches and form.sweep is not None:
+        return [], form.since.get(step.name, (None, None, ""))[2]
     if not step.narrows:
         return [], ""
     if form.sweep is not None:
@@ -237,10 +247,9 @@ def _narrowing(step, form):
     if form.changed is None:
         return [], "whole: the diff is not known"
     hit = sorted(p for p in form.changed if narrowing.under(p, step.narrows))
-    if hit:
-        return [], f"whole: the diff touches {hit[0]}"
+    tool = f"; the diff touches {hit[0]}: the whole runs in the sweeps" if hit else ""  # X-1 (B1)
     sample = ["--sample", str(gate_steps.SAMPLE), "--salt", form.works[0]]
-    return ["--changed-since", "auto", *sample], f"narrowed (sample {gate_steps.SAMPLE}, salt {form.works[0]})"
+    return ["--changed-since", "auto", *sample], f"narrowed (sample {gate_steps.SAMPLE}, salt {form.works[0]}){tool}"
 
 
 def _skipped(step, entry, form, named=None):
@@ -251,12 +260,45 @@ def _skipped(step, entry, form, named=None):
         return "runs only with --stage-end"
     if entry is not None and form.stage_end is None and entry.until not in form.w_works:
         return f"listed until {entry.until}: runs with --work {entry.until} or --stage-end"
-    if step.touches and form.work and named is None and form.changed is not None:
-        hit = (p for p in form.changed if not narrowing.under(p, step.touches_except))
-        if not any(narrowing.under(p, step.touches) for p in hit):
-            but = f" other than {', '.join(step.touches_except)}" if step.touches_except else ""
-            return f"the diff does not touch {', '.join(step.touches)}{but}"
+    if step.touches and form.work and named is None and form.changed is not None and _untouched(step, form.changed):
+        return f"the diff does not touch {_places(step)}"
+    if step.touches and form.sweep is not None:
+        return form.since.get(step.name, (None, None, None))[1]
     return None
+
+
+def _untouched(step, paths):
+    """None of `paths` is in the places of `step.touches` other than its `touches_except`."""
+    return not any(narrowing.under(p, step.touches) and not narrowing.under(p, step.touches_except) for p in paths)
+
+
+def _places(step):
+    but = f" other than {', '.join(step.touches_except)}" if step.touches_except else ""
+    return f"{', '.join(step.touches)}{but}"
+
+
+def read_since(steps, form, root, rows):
+    """In a sweep, each item with `touches` is skipped when its last clean run (`gate_runs.last_ran`) passed
+    and its places have not changed since that commit (X-1 (1)); else it runs, and its note says why."""
+    if form.sweep is None:
+        return
+    for step in (s for s in steps if s.touches):
+        row = gate_runs.last_ran(rows, step.name)
+        if row is None:
+            form.since[step.name] = (None, None, "ran: no clean run of it in the history")
+            continue
+        commit = row["commit"][:narrowing.SHORT]
+        if row["items"][step.name][0] != "PASS":
+            form.since[step.name] = (None, None, f"ran: its last run at {commit} failed")
+            continue
+        try:
+            changed = frozenset(narrowing.changed_paths(root, row["commit"]))
+        except narrowing.NarrowError as e:
+            form.since[step.name] = (None, None, f"ran: cannot compare with its last PASS at {commit} ({e})")
+            continue
+        skip = f"{_places(step)} unchanged since its last PASS at {commit} ({gate_runs.ago(root, row['commit'])})"
+        form.since[step.name] = (changed, skip if _untouched(step, changed) else None,
+                                 f"ran: {_places(step)} changed since its last PASS at {commit}")  # fmt: skip
 
 
 def read_diff(steps, form, root):
@@ -482,10 +524,12 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
         form = Form(tuple(args.work), args.stage_end, args.quick, only=only)
         if args.sweep:
             try:
-                form.sweep = (gate_runs.next_shard(gate_runs.read_history(root)[0], gate_steps.SHARDS), gate_steps.SHARDS)
+                rows = gate_runs.read_history(root)[0]
             except OSError as e:
                 print(f"--sweep cannot read the history to find its shard: {e}", file=sys.stderr)
                 return 2
+            form.sweep = (gate_runs.next_shard(rows, gate_steps.SHARDS), gate_steps.SHARDS)
+            read_since(steps, form, root, rows)
         read_diff(steps, form, root)
         before, start = _tree(root, kind), _start(root, kind)
         results = run_steps(steps, listed, cwd=root, out=out, form=form)

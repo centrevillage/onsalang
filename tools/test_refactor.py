@@ -66,7 +66,6 @@ class Refactor(unittest.TestCase):
         self.assertEqual(self.sizes()[1][1:], ["files over 40 lines: 0 of 4 (lines without the test modules, all)",
                                                "fns over 6 lines: 1 (from `fn` to its closing brace)",
                                                "       8  crates/a/src/lib.rs:26  outer"])  # fmt: skip
-        self.assertIsInstance(refactor.limits(repo.ROOT), dict)  # the row of this repository reads
 
     def test_no_limits_exit_2(self):
         for value, name, says in (("x", "他の行", "no row 「リファクタリングの対象の大きさ」"),

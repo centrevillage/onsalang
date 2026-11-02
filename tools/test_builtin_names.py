@@ -14,11 +14,8 @@ from unittest import mock
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import builtin_names  # noqa: E402
-import repo  # noqa: E402
 from selftest_support import json_cmd, split_spec  # noqa: E402
 
-
-BUILTIN_BASELINES = dict(builtin_names.BASELINES)
 
 NAMES_SPEC = """\
 # Spec
@@ -93,30 +90,29 @@ class BuiltinNames(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        # NAMES_SPEC is a small spec: the baselines are for the real one (test_baselines)
+        # NAMES_SPEC is a small spec: the baselines of the module are for the real one (the item checks them)
         patcher = mock.patch.object(builtin_names, "BASELINES", {})
         patcher.start()
         self.addCleanup(patcher.stop)
 
     def test_baselines(self):
         # N2: a place that stops giving a name of its baseline fails
-        real = repo.spec_text(repo.ROOT)
         baselines = {
-            "attributes (§6.5)": {"repr", "fp", "param", "mem"},
-            "clocks (§11.3)": {"init", "block", "sample"},
-            "generated API (§11.6, §12.4)": {"State", "process", "SIZE"},
+            "attributes (§6.5)": {"repr", "param"},
+            "clocks (§11.3)": {"init", "sample"},
+            "generated API (§11.6, §12.4)": {"State", "init", "SIZE"},
         }
-        self.assertTrue(builtin_names.builtin_names(real, [], baselines=baselines))
+        self.assertTrue(builtin_names.builtin_names(NAMES_SPEC, [], baselines=baselines))
         for old, new, needle in (
-            ("、`@mem(...)`（§12.4）、`@export`", "、`@export`", "attributes (§6.5) no longer gives mem"),
-            ("| `sample` | サンプルごとの値 |", "| `samples` | サンプルごとの値 |", "clocks (§11.3) no longer gives sample"),
-            ("rt fn voice.process(inout", "rt fn voice.run(inout", "no longer gives process"),
-            ("ヘッダの `SIZE` / `ALIGN`", "ヘッダの `ALIGN`", "no longer gives SIZE"),
+            ("、`@param(...)`（§11.7）", "", "attributes (§6.5) no longer gives param"),
+            ("| `sample` | サンプルごと |", "| `samples` | サンプルごと |", "clocks (§11.3) no longer gives sample"),
+            ("fn voice.init(cfg", "fn voice.start(cfg", "no longer gives init"),
+            ("ヘッダの `SIZE` / `BULK_SIZE`", "ヘッダの `BULK_SIZE`", "no longer gives SIZE"),
         ):
             with self.subTest(old=old):
-                self.assertIn(old, real)
+                self.assertIn(old, NAMES_SPEC)
                 with self.assertRaisesRegex(builtin_names.CheckError, re.escape(needle)):
-                    builtin_names.builtin_names(real.replace(old, new, 1), [], baselines=baselines)
+                    builtin_names.builtin_names(NAMES_SPEC.replace(old, new, 1), [], baselines=baselines)
 
     def test_a_bar_in_a_code_span_does_not_divide_a_cell(self):
         # X-2 U7c: the columns of the tables of the spec are read by repo.table_cells
@@ -124,11 +120,6 @@ class BuiltinNames(unittest.TestCase):
         self.assertIn(row, NAMES_SPEC)
         types = builtin_names.builtin_types(NAMES_SPEC.replace(row, "| `a | b` | `Pipe` | Copy |"))
         self.assertIn("Pipe", types)
-
-    def test_real_baselines_hold(self):
-        # the baselines of the module hold for the spec of the repository
-        with mock.patch.object(builtin_names, "BASELINES", BUILTIN_BASELINES):
-            builtin_names.builtin_names(repo.spec_text(repo.ROOT), [])
 
     def test_build_outputs_only_are_skipped(self):
         # N1: a `target` directory that is not a build output is scanned
@@ -323,15 +314,33 @@ fn f(n: &str) -> bool {
                 self.assertEqual(code, 1)
                 self.assertIn("cannot check", out)
 
-    def test_repository_list_is_sorted_and_positive(self):
-        lists, notes = builtin_names.load_allow(builtin_names.ROOT / builtin_names.ALLOW)
-        for table in builtin_names.TABLES:
-            files = lists[table]
-            self.assertEqual(list(files), sorted(files), table)
-            for names in files.values():
-                self.assertEqual(list(names), sorted(names), table)
-        # every same_spelling entry says its meaning
-        self.assertEqual(len(notes), sum(len(n) for n in lists["same_spelling"].values()))
+    def test_a_list_out_of_the_order_of_print_fails(self):
+        # W4-18 U10b: the item checks the order of the real list (no self-test reads it)
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" }\n')
+        self.write("crates/b/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "fn_x" }\n')
+        for bad, says in (
+            ('[allow."crates/b/src/lib.rs"]\n"zeroed" = 1\n[allow."crates/a/src/lib.rs"]\n"zeroed" = 1\n',
+             '[allow] files: "crates/b/src/lib.rs" comes before "crates/a/src/lib.rs"'),
+            ('[allow."crates/a/src/lib.rs"]\n"zeroed" = 1\n[allow."crates/b/src/lib.rs"]\n"zeroed" = 1\n"fn_x" = 1\n',
+             '[allow] "crates/b/src/lib.rs": "zeroed" comes before "fn_x"'),
+        ):
+            with self.subTest(says=says):
+                self.write(builtin_names.ALLOW, bad)
+                code, out = self.run_main()
+                self.assertEqual(code, 1, out)
+                self.assertIn(f"{builtin_names.ALLOW}: {says}; keep the order of --print", out)
+                self.assertEqual(out.count("comes before"), 1, out)
+        lists = {"allow": {"crates/a.rs": {"x": 1}}, "same_spelling": {"crates/b.rs": {"y": 1}, "crates/a.rs": {"z": 1}}}
+        self.assertEqual(builtin_names.order_problems(lists),
+                         [f'{builtin_names.ALLOW}: [same_spelling] files: "crates/b.rs" comes before "crates/a.rs"; '
+                          "keep the order of --print"])  # fmt: skip
+        # what --print writes is in the order the check asks
+        self.write(builtin_names.ALLOW, '[same_spelling."crates/b/src/lib.rs"]\n"zeroed" = { count = 1, note = "a field" }\n')
+        code, printed = self.run_main(["--print"])
+        self.assertEqual(code, 0)
+        self.write(builtin_names.ALLOW, printed)
+        self.assertEqual(builtin_names.order_problems(builtin_names.load_allow(self.root / builtin_names.ALLOW)[0]), [])
+        self.assertEqual(self.run_main()[0], 0, printed)
 
 
 if __name__ == "__main__":

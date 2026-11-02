@@ -581,12 +581,6 @@ class DocsLayout(DocsTree):
         self.assertEqual(repo.spec_text(other), one)
         self.assertEqual(repo.tools_text(self.root), NEW_LAYOUT["spec/tools.md"])
 
-    def test_the_real_spec_joins_back(self):
-        text = repo.spec_text(repo.ROOT)
-        split_spec(text, self.root)
-        self.assertGreater(len(repo.chapters(self.root)), 10)
-        self.assertEqual(repo.spec_text(self.root), text)
-
     def test_the_spec_that_cannot_be_joined(self):
         self.layout()
         readme = NEW_LAYOUT["spec/README.md"]
@@ -849,17 +843,11 @@ class DocsLayout(DocsTree):
         self.assertOne("decisions/README.md", row, row + "| `see` | ID の並び（S） | — | いいえ | 見る |\n",
                        "decisions/README.md:11: the ID field `see` has no direction in `docs.RESTS_ON` (`graph` needs it)")  # fmt: skip
 
-    def test_the_directions_are_the_id_fields_of_the_real_tree(self):
-        tree = docs_tool.Tree(repo.ROOT, [])
-        tables = [tree.index.table(name) for name in tree.index.files]
-        self.assertTrue(tables and all(isinstance(t, docs_tool.FieldTable) for t in tables))
-        fields = {key for t in tables for key, f in t.fields.items() if f.base == "ID"}
-        self.assertEqual(fields, set(docs_tool.RESTS_ON))
-        self.assertEqual(list(docs_tool.undirected(tree)), [])
-
-    def test_the_stages_of_the_works_and_the_carried_label_of_the_real_tree(self):
-        # X-2 U7c: (a) looks at the stage of every work of the real tree, and each is in the table
-        tree = docs_tool.Tree(repo.ROOT, [])
+    def test_the_stages_of_the_works(self):
+        # X-2 U7c: (a) looks at the stage of every work, and each is in the table (the real tree's ID fields and
+        # the label 持ち越し are the cross-check item's, W4-18 U10b)
+        self.layout()
+        tree = docs_tool.Tree(self.root, [])
         seen = []
         real = docs_tool._missing
 
@@ -873,9 +861,6 @@ class DocsLayout(DocsTree):
         self.assertEqual(len(stages), len(tree.index.files["W"]))
         self.assertGreater(len(stages), 0)
         self.assertEqual(found, [])
-        # `ticket` looks for the label 持ち越し (CARRIED): it is a label of the body of tasks/W/README.md
-        labels = docs_tool.body_labels(tree, repo.KIND["W"])
-        self.assertEqual([x for x in labels if docs_tool.CARRIED.fullmatch(f"- {x}:")], ["持ち越し"], labels)
 
     def test_amends_is_no_field(self):
         # X-2 U7a: `amends` and `amended_by` are out of the field table and of the tool; written, (a) finds them

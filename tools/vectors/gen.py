@@ -237,7 +237,9 @@ def spec_text():
     return repo.spec_text(ROOT)
 
 
-def check(root=DATA, *, sections_override=None, quiet=False):
+def check(root=DATA, *, sections_override=None, quiet=False, spec=None):
+    """The problems of the data in `root` against the model, and of the registry against `spec` (the
+    repository's when None; the self-tests give a made-up one)."""
     t0 = time.time()
     problems = []
     try:
@@ -255,7 +257,7 @@ def check(root=DATA, *, sections_override=None, quiet=False):
     for n in sorted(HAND_WRITTEN):
         if not (root / n).is_file():
             problems.append(f"{n}: missing")
-    problems += spec_tokens.check(ops, spec_text())
+    problems += spec_tokens.check(ops, spec_text() if spec is None else spec)
     problems += check_coverage(ops, sections, notes)
     problems += check_xcheck(root, data_hash(files))
     if not quiet:
