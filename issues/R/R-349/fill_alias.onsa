@@ -1,0 +1,21 @@
+use std.array
+fn mk() -> [Buf[F32]; 2] uses {Alloc} {
+  array.from_fn(fn(i: U32) -> Buf[F32] { Buf.zeroed(4) })
+}
+fn g(inout xs: [Buf[F32]; 2], b: Buf[F32]) uses {Alloc} {
+  xs.fill!(b)
+}
+test "fill! aliases the elements" {
+  var xs = mk()
+  let b = Buf.zeroed(3)
+  g(inout xs, b)
+  xs[0][0] = 1.0
+  assert xs[1][0] == 1.0
+}
+test "fill! aliases the argument" {
+  var xs = mk()
+  let b = Buf.zeroed(3)
+  g(inout xs, b)
+  xs[0][0] = 1.0
+  assert b[0] == 1.0
+}
