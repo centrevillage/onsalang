@@ -14,6 +14,7 @@
 
 mod codes;
 pub mod internal;
+mod quote;
 mod source;
 pub mod stack;
 pub mod timing;
@@ -561,7 +562,8 @@ fn json_diagnostics<'a>(sources: &'a SourceMap, diagnostics: &'a [Diagnostic]) -
 }
 
 /// Render diagnostics for a terminal: `file:line:col: error[E0010]: message`,
-/// in the order of the JSON ([`printed_order`]; `spec/tools.md` §4).
+/// in the order of the JSON ([`printed_order`]; `spec/tools.md` §4), with the
+/// quoted line and the strings of the candidates shown by the module `quote`.
 pub fn to_text(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
     use std::fmt::Write;
     let mut out = String::new();
@@ -570,20 +572,22 @@ pub fn to_text(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
         let lc = file.line_col(d.span.start);
         let _ = writeln!(out, "{}:{}:{}: error[{}]: {}", file.name(), lc.line, lc.col, d.code.as_str(), d.message);
         if let Some(line) = file.line_text(lc.line) {
-            let _ = writeln!(out, "  {line}");
-            let width = file.line_col(d.span.end.min(file.line_end(lc.line))).col.saturating_sub(lc.col).max(1);
-            let _ = writeln!(out, "  {}{}", " ".repeat((lc.col - 1) as usize), "^".repeat(width as usize));
+            let len = file.line_col(d.span.end.min(file.line_end(lc.line))).col.saturating_sub(lc.col);
+            let at = (d.span.start - file.line_start(lc.line)) as usize;
+            let (text, carets) = quote::line(line, at, (lc.col - 1) as usize, len as usize);
+            let _ = writeln!(out, "  {text}\n  {carets}");
         }
         for fix in &d.fixes {
             let _ = writeln!(out, "  fix: {}", fix.title());
             for e in fix.edits() {
                 let ef = sources.file(e.span.file);
                 let elc = ef.line_col(e.span.start);
-                let old = &ef.text()[e.span.start as usize..e.span.end as usize];
-                let what = match (old.is_empty(), e.replace.is_empty()) {
-                    (true, _) => format!("insert `{}`", e.replace),
+                let old = quote::visible(&ef.text()[e.span.start as usize..e.span.end as usize]);
+                let replace = quote::visible(&e.replace);
+                let what = match (old.is_empty(), replace.is_empty()) {
+                    (true, _) => format!("insert `{replace}`"),
                     (false, true) => format!("remove `{old}`"),
-                    (false, false) => format!("replace `{old}` with `{}`", e.replace),
+                    (false, false) => format!("replace `{old}` with `{replace}`"),
                 };
                 let _ = writeln!(out, "    {}:{}:{}: {what}", ef.name(), elc.line, elc.col);
             }

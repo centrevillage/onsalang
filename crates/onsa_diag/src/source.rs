@@ -98,6 +98,11 @@ impl SourceFile {
         LineCol { line, col }
     }
 
+    /// The byte offset of the start of a 1-based line.
+    pub fn line_start(&self, line: u32) -> u32 {
+        self.index.line_start(line)
+    }
+
     pub fn line_end(&self, line: u32) -> u32 {
         self.index.line_end(line)
     }
