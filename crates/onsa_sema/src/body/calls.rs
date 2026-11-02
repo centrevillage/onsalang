@@ -72,17 +72,17 @@ impl<'a> Checker<'a> {
         }
         // 3. A function value.
         let ft = self.check_expr(callee, None)?;
-        let ft = self.known(ft, self.expr(callee).span, "callee")?;
+        let ft = self.known_shape(ft, self.expr(callee).span, "callee")?;
         // A value of the error type: an unknown callee (§18.1, R-271).
         if matches!(self.ty(ft), Ty::Error) {
             return self.args_of_unknown_callee(args);
         }
         let Ty::Fn(f) = self.ty(ft) else {
-            let shown = self.display(ft);
+            let shown = self.described(ft);
             return Err(self.err(
                 Code::E0401,
                 self.expr(callee).span,
-                format!("`{shown}` is not a function and cannot be called"),
+                format!("{shown} is not a function and cannot be called"),
             ));
         };
         if kind == CallKind::Bang {

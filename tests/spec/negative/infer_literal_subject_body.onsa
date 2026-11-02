@@ -1,0 +1,229 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.1", "§6.6", "§9.1", "§11.2", "§2.4", "§15.1"]
+
+// The operations on a number that no number type has (spec §4.7 "その場で既知を要する操作" and the paragraph after it,
+// S-854: a call `.(`, E0401; a field `.x`, a tuple index `.0` and an index `[0]`, E0413; `?`, E0414) are
+// reported with the code of the annotated form in every place a body is: a `const` initializer (§6.6), a
+// closure body, a `test` body, a flow body (§11.2), the hole of an interpolated string (`"{n.x}"`, §2.4),
+// and a branch, a nested block, an argument and an operand. The rule is the same everywhere (the type of the
+// subject is open and no candidate of it fits), so a few forms of each place are written and the matrix of
+// the operations and the subjects is in infer_literal_subject_call.onsa, _field.onsa, _index.onsa and
+// _try.onsa. The flow body has a closed list of expressions (§11.2): a call of a value and `?` are not in it
+// (E0806), so a flow body has the field, the tuple index and the index only. A hole of a string is a name
+// path (`.x` and `.0`), so it has no call, index or `?`. One error per declaration (P-01).
+
+// ---------------------------------------------------------------- a const initializer
+
+const CONST_CALL: I32 = 17.(1)                      //~ E0401
+
+const CONST_FIELD: I32 = 17.x                       //~ E0413
+
+const CONST_TUPLE_INDEX: I32 = (17).0               //~ E0413
+
+const CONST_INDEX: I32 = (17)[0]                    //~ E0413
+
+const CONST_FLOAT_FIELD: F32 = 1.5.x                //~ E0413
+
+// ---------------------------------------------------------------- a closure body
+
+pub fn call_in_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 {
+    let n = 17
+    let _ = n.(y)                                   //~ E0401
+    0
+  }
+  f.(x)
+}
+
+pub fn field_in_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 {
+    let _ = 17.x                                    //~ E0413
+    y
+  }
+  f.(x)
+}
+
+pub fn tuple_index_in_a_closure(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 {
+    let n = 1.5
+    let _ = n.0                                     //~ E0413
+    y
+  }
+  f.(x)
+}
+
+pub fn index_in_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 {
+    let _ = (17)[0]                                 //~ E0413
+    y
+  }
+  f.(x)
+}
+
+pub fn try_in_a_closure(x: I32) -> Option[I32] {
+  let f = fn(y: I32) -> Option[I32] {
+    let n = 17
+    let _ = n?                                      //~ E0414
+    Some(y)
+  }
+  f.(x)
+}
+
+pub fn field_on_a_captured_integer(x: I32) -> I32 {
+  let n = 17
+  let f = fn(y: I32) -> I32 {
+    let _ = n.x                                     //~ E0413
+    y
+  }
+  f.(x)
+}
+
+// ---------------------------------------------------------------- a test body
+
+test "call in a test" {
+  let n = 17
+  let _ = n.(1)                                     //~ E0401
+}
+
+test "field in a test" {
+  let n = 17
+  let _ = n.x                                       //~ E0413
+}
+
+test "tuple index in a test" {
+  let _ = (1.5).0                                   //~ E0413
+}
+
+test "index in a test" {
+  let z = id(17)
+  let _ = z[0]                                      //~ E0413
+}
+
+// ---------------------------------------------------------------- a flow body
+
+pub flow field_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = 17
+  let a = n.x                                       //~ E0413
+  x
+}
+
+pub flow tuple_index_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let a = (1.5).0                                   //~ E0413
+  x
+}
+
+pub flow index_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let z = id(17)
+  let a = z[0]                                      //~ E0413
+  x
+}
+
+pub flow field_in_a_flow_replication(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { 17.x }                //~ E0413
+  x
+}
+
+pub flow field_in_a_flow_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if c { 17.x } else { 1 }                  //~ E0413
+  x
+}
+
+// ---------------------------------------------------------------- the hole of an interpolated string
+
+pub fn hole_field_of_a_bound_integer() -> Str uses {Alloc} {
+  let n = 17
+  "{n.x}"                                           //~ E0413
+}
+
+pub fn hole_tuple_index_of_a_bound_integer() -> Str uses {Alloc} {
+  let n = 17
+  "{n.0}"                                           //~ E0413
+}
+
+pub fn hole_field_of_a_bound_float() -> Str uses {Alloc} {
+  let n = 1.5
+  "{n.x}"                                           //~ E0413
+}
+
+pub fn hole_field_of_a_generic_result() -> Str uses {Alloc} {
+  let z = id(17)
+  "{z.x}"                                           //~ E0413
+}
+
+pub fn hole_tuple_index_of_a_loop_variable() -> I32 uses {Alloc} {
+  for i in 0 ..< 3 {
+    let _ = "{i.0}"                                 //~ E0413
+  }
+  0
+}
+
+pub fn hole_after_text_and_another_hole() -> Str uses {Alloc} {
+  let n = 17
+  "a {n} b {n.x}"                                   //~ E0413
+}
+
+// ---------------------------------------------------------------- a branch, a nested block, an argument and an operand
+
+pub fn field_in_a_branch(flag: Bool) -> I32 {
+  let n = 17
+  if flag {
+    let _ = n.x                                     //~ E0413
+    0
+  } else {
+    1
+  }
+}
+
+pub fn call_in_the_other_branch(flag: Bool, x: I32) -> I32 {
+  let n = 17
+  if flag {
+    1
+  } else {
+    let _ = n.(x)                                   //~ E0401
+    0
+  }
+}
+
+pub fn index_in_a_nested_block() -> I32 {
+  let n = 17
+  let r: I32 = {
+    let s: I32 = {
+      let _ = n[0]                                  //~ E0413
+      0
+    }
+    s
+  }
+  r
+}
+
+pub fn try_in_a_match_arm(k: U32) -> Option[I32] {
+  let n = 17
+  let _ = match k {
+    0 => {
+      let _ = n?                                    //~ E0414
+      0
+    },
+    _ => 1,
+  }
+  Some(0)
+}
+
+pub fn field_in_an_argument() -> I32 {
+  let n = 17
+  take(n.x)                                         //~ E0413
+}
+
+pub fn index_as_an_operand() -> I32 {
+  let n = 17
+  let _ = [1, 2][0] + n[0]                          //~ E0413
+  0
+}
+
+fn take(a: I32) -> I32 {
+  a
+}
+
+fn id[T](x: T) -> T {
+  x
+}

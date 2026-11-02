@@ -21,7 +21,7 @@ impl<'a> Checker<'a> {
             // names (`p.x.y`), else of the value (`f().x`).
             let at = if self.of_names(*base) { e } else { *base };
             let bt = self.check_expr(*base, None)?;
-            let bt = self.known(bt, self.expr(at).span, "value")?;
+            let bt = self.known_shape(bt, self.expr(at).span, "value")?;
             return self.field_type(bt, name);
         };
         if matches!(r, PathRes::Item { .. }) {
@@ -87,7 +87,7 @@ impl<'a> Checker<'a> {
             self.info.hole_targets.insert((e, k), target);
         }
         for seg in &segs[at as usize + 1..] {
-            let base = self.known(t, seg.span, "value")?;
+            let base = self.known_shape(t, seg.span, "value")?;
             // A tuple element that is no tuple index of an expression
             // (`{t.01}`) is a field, which the tuple has not (E0413).
             t = match onsa_syntax::hole_tuple_index(&seg.name) {
@@ -348,8 +348,8 @@ impl<'a> Checker<'a> {
             }
             Ty::Error => Ok(base),
             _ => {
-                let shown = self.display(base);
-                Err(self.err(Code::E0413, name.span, format!("`{shown}` has no field `{}`", name.name)))
+                let shown = self.described(base);
+                Err(self.err(Code::E0413, name.span, format!("{shown} has no field `{}`", name.name)))
             }
         }
     }

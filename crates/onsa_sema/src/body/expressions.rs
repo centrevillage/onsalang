@@ -175,12 +175,12 @@ impl<'a> Checker<'a> {
             ExprKind::Call { callee, kind, args } => self.check_call(e, *callee, *kind, args, expected),
             ExprKind::TupleIndex { base, index, index_span } => {
                 let bt = self.check_expr(*base, None)?;
-                let bt = self.known(bt, self.expr(*base).span, "value")?;
+                let bt = self.known_shape(bt, self.expr(*base).span, "value")?;
                 self.tuple_element(bt, *index, *index_span)
             }
             ExprKind::Index { base, index } => {
                 let bt = self.check_expr(*base, None)?;
-                let bt = self.known(bt, self.expr(*base).span, "value")?;
+                let bt = self.known_shape(bt, self.expr(*base).span, "value")?;
                 let u32 = self.u32();
                 self.check_expr(*index, Some(u32))?;
                 match self.ty(bt) {
@@ -193,14 +193,14 @@ impl<'a> Checker<'a> {
                     )),
                     Ty::Error => Ok(bt),
                     _ => {
-                        let shown = self.display(bt);
-                        Err(self.err(Code::E0413, span, format!("`{shown}` cannot be indexed")))
+                        let shown = self.described(bt);
+                        Err(self.err(Code::E0413, span, format!("{shown} cannot be indexed")))
                     }
                 }
             }
             ExprKind::Try(inner) => {
                 let it = self.check_expr(*inner, None)?;
-                let it = self.known(it, self.expr(*inner).span, "operand of `?`")?;
+                let it = self.known_shape(it, self.expr(*inner).span, "operand of `?`")?;
                 let ret = self.frames.last().unwrap().ret;
                 let ret_s = self.shallow(ret);
                 match (self.ty(it), self.ty(ret_s)) {
@@ -229,8 +229,8 @@ impl<'a> Checker<'a> {
                         ))
                     }
                     _ => {
-                        let shown = self.display(it);
-                        Err(self.err(Code::E0414, span, format!("`?` needs an `Option` or `Result`; found `{shown}`")))
+                        let shown = self.described(it);
+                        Err(self.err(Code::E0414, span, format!("`?` needs an `Option` or `Result`; found {shown}")))
                     }
                 }
             }
@@ -282,8 +282,8 @@ impl<'a> Checker<'a> {
             // (`field_type`; a tuple struct `struct Hz(F32)` is one, S-39).
             Ty::Named(d, _) if self.a.partly_read(d) => Ok(self.a.types.error()),
             _ => {
-                let shown = self.display(bt);
-                Err(self.err(Code::E0413, at, format!("`{shown}` has no element `{index}`")))
+                let shown = self.described(bt);
+                Err(self.err(Code::E0413, at, format!("{shown} has no element `{index}`")))
             }
         }
     }
@@ -652,7 +652,7 @@ impl<'a> Checker<'a> {
             return match self.infer.lit_of(&self.a.types, s) {
                 Some(LitKind::Float) if int_only => Verdict::Unmet(match op {
                     OpNeed::Binary(b) => format!("`{}` is defined for integers only (§3.4)", b.symbol()),
-                    _ => not_unmet("a float"),
+                    _ => not_unmet(LitKind::Float.words()),
                 }),
                 Some(LitKind::Int) if op == OpNeed::Neg => Verdict::Wait,
                 Some(_) => Verdict::Met,

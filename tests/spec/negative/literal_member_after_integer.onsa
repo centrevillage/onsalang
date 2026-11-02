@@ -7,7 +7,7 @@
 // statement decides it, so the receiver is unresolved), which tells that the `.` after the digits is the
 // member's `.` and not a point (spec §2.4, S-350): a `.` after the digits of an integer, followed by a name, is
 // a member, so there is no E0020 for `1.` and no E0002 for the name that follows. The call of an integer as
-// a function value (`1.(x)`) is a member's `.` too; the code of its type error is for W4 / W5 and is not
+// a function value (`1.(x)`) is a member's `.` too; its type error is E0401 (§4.7, S-854) and is not
 // written here. The marker is the line only. One error per declaration (P-01).
 
 pub fn method_on_an_integer() -> I32 {

@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.1", "§15.1"]
+
+// E0401 for calling a number as a function value (`.(`), whatever the number's type turns out to be (spec §4.7
+// "その場で既知を要する操作" and the paragraph after it, §15.1 "`.(` で呼んだ値の型が関数でない場合", S-854): the
+// candidates of a literal's type variable are the integer types or the float types, and none of them is a
+// function, so the error is the one the annotated form `let n: I32 = 17` gets, reported at once and not
+// E0420 (the annotated forms are in infer_literal_subject_annotated.onsa). The subject is the literal itself,
+// a parenthesized one, a binding, a `for` variable, a value bound by a pattern, the result of a generic call
+// that the literal is bound to, and an element taken out of an array or a tuple of literals. One error per
+// function (P-01). The other operations are in infer_literal_subject_field.onsa, _index.onsa and _try.onsa;
+// the operations whose answer depends on the type (a method, `as`, `match`) stay E0420 and are in
+// infer_literal_subject_open.onsa.
+
+// ---------------------------------------------------------------- call: an integer literal
+
+pub fn call_on_an_integer(x: I32) -> I32 {
+  let _ = 17.(x)                                    //~ E0401
+  0
+}
+
+pub fn call_on_a_parenthesized_integer(x: I32) -> I32 {
+  let _ = (17).(x)                                  //~ E0401
+  0
+}
+
+pub fn call_on_a_bound_integer(x: I32) -> I32 {
+  let n = 17
+  let _ = n.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_a_loop_variable(x: I32) -> I32 {
+  for i in 0 ..< 3 {
+    let _ = i.(x)                                   //~ E0401
+  }
+  0
+}
+
+pub fn call_on_a_matched_integer(x: I32) -> I32 {
+  let _ = match Some(17) {
+    Some(v) => {
+      let _ = v.(x)                                 //~ E0401
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn call_on_a_generic_result(x: I32) -> I32 {
+  let z = id(17)
+  let _ = z.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_an_indexed_element(x: I32) -> I32 {
+  let _ = [1, 2][0].(x)                             //~ E0401
+  0
+}
+
+pub fn call_on_a_tuple_element(x: I32) -> I32 {
+  let _ = (1, 2).0.(x)                              //~ E0401
+  0
+}
+
+pub fn call_on_an_integer_decided_later(x: I32) -> U8 {
+  let n = 17
+  let _ = n.(x)                                     //~ E0401
+  n
+}
+
+// ---------------------------------------------------------------- call: a float literal
+
+pub fn call_on_a_float(x: I32) -> I32 {
+  let _ = 1.5.(x)                                   //~ E0401
+  0
+}
+
+pub fn call_on_a_parenthesized_float(x: I32) -> I32 {
+  let _ = (1.5).(x)                                 //~ E0401
+  0
+}
+
+pub fn call_on_a_bound_float(x: I32) -> I32 {
+  let n = 1.5
+  let _ = n.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_a_matched_float(x: I32) -> I32 {
+  let _ = match Some(1.5) {
+    Some(v) => {
+      let _ = v.(x)                                 //~ E0401
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn call_on_a_generic_float_result(x: I32) -> I32 {
+  let z = id(1.5)
+  let _ = z.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_an_indexed_float_element(x: I32) -> I32 {
+  let _ = [1.5, 2.5][0].(x)                         //~ E0401
+  0
+}
+
+pub fn call_on_a_tuple_float_element(x: I32) -> I32 {
+  let _ = (1.5, 2.5).0.(x)                          //~ E0401
+  0
+}
+
+// ---------------------------------------------------------------- the form that W3-05 took out of a positive case
+
+// `let b = 17.(x)` was in the `fine` function of fixes/e0020_numeric_callee_overlap.onsa until W3-05 (S-350),
+// when the integer followed by `.(` became the member's `.` and the type stage answered E0420.
+pub fn carried_from_the_numeric_callee_cases(x: I32) -> I32 {
+  let b = 17.(x)                                    //~ E0401
+  b
+}
+
+fn id[T](x: T) -> T {
+  x
+}

@@ -172,8 +172,19 @@ impl Bounds<'_> {
                     _ => Some(&[][..]),
                 };
                 // A list that is not known derives every trait (§18.1, S-460):
-                // the uses that rely on it get no diagnostic.
-                let derived = |d: crate::def::Derive| derives.is_none_or(|ds| ds.contains(&d));
+                // the uses that rely on it get no diagnostic. A generic type meets a
+                // derived trait only when its type arguments meet it (§6.4, R-355).
+                let of_args = || {
+                    def.generics()
+                        .iter()
+                        .zip(args)
+                        .all(|(g, &a)| !matches!(g.kind, GenericKind::Type { .. }) || self.satisfies(a, b))
+                };
+                // Asked once: `PartialEq` asks the derives of `PartialEq` and of `Eq`, and a
+                // second walk of the arguments at each level would be exponential in the nesting.
+                let args_meet = std::cell::OnceCell::new();
+                let derived =
+                    |d: crate::def::Derive| derives.is_none_or(|ds| ds.contains(&d) && *args_meet.get_or_init(of_args));
                 match b {
                     Bound::Copy => self.a.kind_of(t) == Some(Kind::Copy),
                     Bound::Dup => matches!(self.a.kind_of(t), Some(Kind::Copy | Kind::Shared)),
@@ -186,10 +197,7 @@ impl Bounds<'_> {
                     // they are met (R-328).
                     Bound::Hash => derived(crate::def::Derive::Hash),
                     Bound::Show => derived(crate::def::Derive::Show),
-                    _ => {
-                        let _ = args;
-                        false
-                    }
+                    _ => false,
                 }
             }
             _ => false,

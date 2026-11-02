@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§9.1"]
+
+// E0414 for `?` on a number, whatever the number's type turns out to be (spec §4.7 "その場で既知を要する操作" and
+// the paragraph after it, S-854; §9.1): a number is neither `Option` nor `Result`, so the error is the one the
+// annotated form `let n: I32 = 17` gets (E0414), reported at once and not E0420
+// (infer_literal_subject_annotated.onsa). Every function returns `Option[I32]` (`Option[U8]` for
+// `decided_later`), so the operand is the only error. One error per function (P-01).
+
+// ---------------------------------------------------------------- try: an integer literal
+
+pub fn try_on_an_integer() -> Option[I32] {
+  let _ = 17?                                       //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_parenthesized_integer() -> Option[I32] {
+  let _ = (17)?                                     //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_bound_integer() -> Option[I32] {
+  let n = 17
+  let _ = n?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_loop_variable() -> Option[I32] {
+  for i in 0 ..< 3 {
+    let _ = i?                                      //~ E0414
+  }
+  Some(0)
+}
+
+pub fn try_on_a_matched_integer() -> Option[I32] {
+  let _ = match Some(17) {
+    Some(v) => {
+      let _ = v?                                    //~ E0414
+      0
+    },
+    None => 0,
+  }
+  Some(0)
+}
+
+pub fn try_on_a_generic_result() -> Option[I32] {
+  let z = id(17)
+  let _ = z?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_an_indexed_element() -> Option[I32] {
+  let _ = [1, 2][0]?                                //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_tuple_element() -> Option[I32] {
+  let _ = (1, 2).0?                                 //~ E0414
+  Some(0)
+}
+
+pub fn try_on_an_integer_decided_later() -> Option[U8] {
+  let n = 17
+  let _ = n?                                        //~ E0414
+  Some(n)
+}
+
+// ---------------------------------------------------------------- try: a float literal
+
+pub fn try_on_a_float() -> Option[I32] {
+  let _ = 1.5?                                      //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_parenthesized_float() -> Option[I32] {
+  let _ = (1.5)?                                    //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_bound_float() -> Option[I32] {
+  let n = 1.5
+  let _ = n?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_matched_float() -> Option[I32] {
+  let _ = match Some(1.5) {
+    Some(v) => {
+      let _ = v?                                    //~ E0414
+      0
+    },
+    None => 0,
+  }
+  Some(0)
+}
+
+pub fn try_on_a_generic_float_result() -> Option[I32] {
+  let z = id(1.5)
+  let _ = z?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_an_indexed_float_element() -> Option[I32] {
+  let _ = [1.5, 2.5][0]?                            //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_tuple_float_element() -> Option[I32] {
+  let _ = (1.5, 2.5).0?                             //~ E0414
+  Some(0)
+}
+
+fn id[T](x: T) -> T {
+  x
+}

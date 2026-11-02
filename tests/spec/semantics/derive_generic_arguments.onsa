@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3"]
+
+// The derived `==` of a generic type whose type argument has `PartialEq` (spec §6.4: a generic type meets a
+// derived trait when its type arguments meet it; §6.3: `==` is true when every field is equal; R-355).
+// The values are worked out by hand from the spec text.
+
+pub struct Pair[T]: PartialEq {
+  a: T,
+  b: T,
+}
+
+test "== and != of Pair[U8]" {
+  let p: Pair[U8] = Pair { a: 1, b: 2 }
+  let q: Pair[U8] = Pair { a: 1, b: 2 }
+  let r: Pair[U8] = Pair { a: 1, b: 3 }
+  assert p == q
+  assert p != r
+  assert !(p == r)
+}

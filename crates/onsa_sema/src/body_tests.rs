@@ -304,6 +304,63 @@ fn operator_traits_wait_for_the_decided_type() {
     assert_eq!((code, at.as_str()), (Code::E0405, "1.5"));
 }
 
+/// S-854: an operation whose answer the kind of a literal variable decides reports the error of an
+/// annotated type, with the type named `an integer` / `a float`; a method, `as` and another
+/// variable stay E0420. R-353: no internal `?N` in a message.
+#[test]
+fn literal_subjects_and_shown_variables() {
+    // The one diagnostic of the type stage (the unused bindings of the stage after it aside).
+    let one = |src: &str| {
+        let a = check(src);
+        let ds: Vec<_> = a.diagnostics.iter().filter(|d| d.code != Code::E0309).collect();
+        assert_eq!(ds.len(), 1, "{ds:?}");
+        (ds[0].code, ds[0].message.clone())
+    };
+    let body = |b: &str| format!("pub fn f(x: F32) -> Option[F32] {{\n  let n = 1\n  let m = 1.5\n  {b}\n  None\n}}\n");
+    for (b, code, msg) in [
+        ("let _ = n.(x)", Code::E0401, "an integer is not a function and cannot be called"),
+        ("let _ = m.(x)", Code::E0401, "a float is not a function and cannot be called"),
+        ("let _ = n.x", Code::E0413, "an integer has no field `x`"),
+        ("let _ = m.0", Code::E0413, "a float has no element `0`"),
+        ("let _ = n[0]", Code::E0413, "an integer cannot be indexed"),
+        ("let _ = m?", Code::E0414, "`?` needs an `Option` or `Result`; found a float"),
+        ("let _ = \"{n.x}\"", Code::E0413, "an integer has no field `x`"),
+        (
+            "let _ = n.checked_add(1)",
+            Code::E0420,
+            "the type of this receiver must be known here; add an annotation (§4.7)",
+        ),
+        (
+            "let _ = n as F32",
+            Code::E0420,
+            "the type of this operand of `as` must be known here; add an annotation (§4.7)",
+        ),
+    ] {
+        assert_eq!(one(&body(b)), (code, msg.to_string()), "{b}");
+    }
+    // Another variable still needs its type (E0420).
+    let (code, _) = one("fn make[T]() -> T { make() }\npub fn f() -> F32 {\n  let v = make()\n  let _ = v.x\n  v\n}\n");
+    assert_eq!(code, Code::E0420);
+    // R-353: the literal variables and the others inside a type.
+    let (_, msg) = one("pub fn f() -> U32 {\n  let o = Some(1)\n  let _ = o.x\n  1\n}\n");
+    assert_eq!(msg, "`Option[{integer}]` has no field `x`");
+    let (_, msg) = one("pub fn f(x: F32) -> U32 {\n  let _ = [1.5, 2.5].(x)\n  1\n}\n");
+    assert_eq!(msg, "`[{float}; 2]` is not a function and cannot be called");
+    let (_, msg) = one("pub fn f(x: F32) -> U32 {\n  let o = None\n  let _ = o.(x)\n  1\n}\n");
+    assert_eq!(msg, "`Option[_]` is not a function and cannot be called");
+}
+
+/// R-355 (§6.4): a generic type meets a derived trait only when its type arguments meet it.
+#[test]
+fn derives_of_a_generic_type_ask_its_arguments() {
+    let decl = "pub struct Plain { x: F32 }\npub struct Pair[T]: PartialEq { a: T, b: T }\n";
+    assert_eq!(codes(&format!("{decl}pub fn f(p: Pair[Plain]) -> Bool {{ p == p }}\n")), vec![Code::E0401]);
+    ok(&format!("{decl}pub fn f(p: Pair[F32]) -> Bool {{ p == p }}\n"));
+    ok(&format!("{decl}pub fn f[T: PartialEq](p: Pair[T]) -> Bool {{ p == p }}\n"));
+    assert_eq!(codes(&format!("{decl}pub fn f[T](p: Pair[T]) -> Bool {{ p == p }}\n")), vec![Code::E0401]);
+    ok(&format!("{decl}pub fn f(p: Pair[Pair[U8]]) -> Bool {{ p == p }}\n"));
+}
+
 #[test]
 fn methods_and_associated_items() {
     let a = ok(

@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§18.1"]
+
+// E0413 for an index on a number, whatever the number's type turns out to be (spec §4.7 "その場で既知を要する
+// 操作" and the paragraph after it, S-854): a number type cannot be indexed, so the error is the one the
+// annotated form `let n: I32 = 17` gets (E0413), reported at once and not E0420
+// (infer_literal_subject_annotated.onsa). The subject is the literal itself, a parenthesized one, a binding,
+// a `for` variable, a value bound by a pattern, the result of a generic call that the literal is bound to, and
+// an element taken out of an array or a tuple of literals. One error per function (P-01).
+
+// ---------------------------------------------------------------- index: an integer literal
+
+pub fn index_on_an_integer() -> I32 {
+  let _ = 17[0]                                     //~ E0413
+  0
+}
+
+pub fn index_on_a_parenthesized_integer() -> I32 {
+  let _ = (17)[0]                                   //~ E0413
+  0
+}
+
+pub fn index_on_a_bound_integer() -> I32 {
+  let n = 17
+  let _ = n[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_a_loop_variable() -> I32 {
+  for i in 0 ..< 3 {
+    let _ = i[0]                                    //~ E0413
+  }
+  0
+}
+
+pub fn index_on_a_matched_integer() -> I32 {
+  let _ = match Some(17) {
+    Some(v) => {
+      let _ = v[0]                                  //~ E0413
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn index_on_a_generic_result() -> I32 {
+  let z = id(17)
+  let _ = z[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_an_indexed_element() -> I32 {
+  let _ = [1, 2][0][0]                              //~ E0413
+  0
+}
+
+pub fn index_on_a_tuple_element() -> I32 {
+  let _ = (1, 2).0[0]                               //~ E0413
+  0
+}
+
+pub fn index_on_an_integer_decided_later() -> U8 {
+  let n = 17
+  let _ = n[0]                                      //~ E0413
+  n
+}
+
+// ---------------------------------------------------------------- index: a float literal
+
+pub fn index_on_a_float() -> I32 {
+  let _ = 1.5[0]                                    //~ E0413
+  0
+}
+
+pub fn index_on_a_parenthesized_float() -> I32 {
+  let _ = (1.5)[0]                                  //~ E0413
+  0
+}
+
+pub fn index_on_a_bound_float() -> I32 {
+  let n = 1.5
+  let _ = n[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_a_matched_float() -> I32 {
+  let _ = match Some(1.5) {
+    Some(v) => {
+      let _ = v[0]                                  //~ E0413
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn index_on_a_generic_float_result() -> I32 {
+  let z = id(1.5)
+  let _ = z[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_an_indexed_float_element() -> I32 {
+  let _ = [1.5, 2.5][0][0]                          //~ E0413
+  0
+}
+
+pub fn index_on_a_tuple_float_element() -> I32 {
+  let _ = (1.5, 2.5).0[0]                           //~ E0413
+  0
+}
+
+fn id[T](x: T) -> T {
+  x
+}

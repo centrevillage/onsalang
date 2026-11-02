@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§3.2"]
+
+// E0401 for an operator on a generic type whose trait is derived but whose type argument does not meet
+// it (spec §6.4: "総称の型（`struct Pair[T]: PartialEq`）は、型引数が満たすときだけ満たす"; §6.3: the operand
+// type of an operator meets the operator's trait, else E0401; R-355). The type arguments are asked, the const
+// arguments are not. Marker on the line of the operator. One error per function (P-01).
+
+pub struct Plain {
+  x: F32,
+}
+
+pub struct Pair[T]: PartialEq + PartialOrd {
+  a: T,
+  b: T,
+}
+
+pub struct Two[A, B]: PartialEq {
+  a: A,
+  b: B,
+}
+
+pub struct Both[T]: PartialEq + Eq {
+  a: T,
+}
+
+pub struct Ring[T, const N: U32]: PartialEq {
+  xs: [T; N],
+}
+
+pub enum Slot[T]: PartialEq {
+  Empty,
+  Full(T),
+}
+
+// ---------------------------------------------------------------- E0401: an argument without the trait
+
+pub fn equal_pair_of_plain(p: Pair[Plain]) -> Bool {
+  p == p //~ E0401
+}
+
+pub fn not_equal_pair_of_plain(p: Pair[Plain]) -> Bool {
+  p != p //~ E0401
+}
+
+pub fn less_pair_of_plain(p: Pair[Plain]) -> Bool {
+  p < p //~ E0401
+}
+
+pub fn order_of_a_pair_of_bool(p: Pair[Bool]) -> Bool {
+  p < p //~ E0401
+}
+
+pub fn second_argument_of_two(t: Two[U8, Plain]) -> Bool {
+  t == t //~ E0401
+}
+
+pub fn nested_inner_argument(p: Pair[Pair[Plain]]) -> Bool {
+  p == p //~ E0401
+}
+
+pub fn ring_of_plain(r: Ring[Plain, 4]) -> Bool {
+  r == r //~ E0401
+}
+
+pub fn slot_of_plain(s: Slot[Plain]) -> Bool {
+  s == s //~ E0401
+}
+
+pub fn both_derives_of_plain(b: Both[Plain]) -> Bool {
+  b == b //~ E0401
+}
+
+pub fn generic_argument_without_a_bound[T](p: Pair[T]) -> Bool {
+  p == p //~ E0401
+}
+
+// Thirty levels of a type that derives `PartialEq` and `Eq` around a type that has neither: the check of
+// the arguments is linear in the nesting.
+pub fn deep_nesting(p: Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Both[Plain]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]) -> Bool {
+  p == p //~ E0401
+}
+
+// ---------------------------------------------------------------- fine: the arguments meet the trait
+
+pub fn pair_of_u8(p: Pair[U8]) -> Bool {
+  p == p && p < p
+}
+
+pub fn nested_pairs(p: Pair[Pair[F32]]) -> Bool {
+  p != p
+}
+
+pub fn two_arguments(t: Two[U8, Pair[Char]]) -> Bool {
+  t == t
+}
+
+pub fn ring_of_i32(r: Ring[I32, 4]) -> Bool {
+  r == r
+}
+
+pub fn slot_of_a_derived_struct(s: Slot[Both[U8]]) -> Bool {
+  s == s
+}
+
+pub fn generic_argument_with_a_bound[T: PartialEq](p: Pair[T]) -> Bool {
+  p == p
+}

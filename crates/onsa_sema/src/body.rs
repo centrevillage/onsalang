@@ -547,9 +547,14 @@ impl<'a> Checker<'a> {
     pub(crate) fn display(&mut self, t: TyId) -> String {
         let r = self.infer.resolve(&mut self.a.types, t);
         let names: Vec<String> = self.generics.iter().map(|g| g.name.clone()).collect();
-        self.a.types.display(r, &|d| self.a.def(d).name.clone(), &|i| {
-            names.get(i as usize).cloned().unwrap_or_else(|| format!("<{i}>"))
-        })
+        // A variable left open: its literal kind, else a hole (R-353; no internal `?N`).
+        let var_name = |i: u32| self.infer.var_lit(i).map_or("_", LitKind::braced).to_string();
+        self.a.types.display_vars(
+            r,
+            &|d| self.a.def(d).name.clone(),
+            &|i| names.get(i as usize).cloned().unwrap_or_else(|| format!("<{i}>")),
+            &var_name,
+        )
     }
 
     pub(crate) fn unit(&mut self) -> TyId {
@@ -585,18 +590,17 @@ impl<'a> Checker<'a> {
             Err(Mismatch::Literal) => {
                 let e = self.display(expected);
                 let what = match self.infer.lit_of(&self.a.types, actual) {
-                    Some(LitKind::Int) => "an integer literal",
-                    Some(LitKind::Float) => "a float literal",
+                    Some(k) => format!("{} literal", k.words()),
                     None => match self.infer.lit_of(&self.a.types, expected) {
-                        Some(LitKind::Int) => {
+                        Some(k) => {
                             let shown = self.display(actual);
-                            return Err(self.err(Code::E0401, span, format!("expected an integer, found `{shown}`")));
+                            return Err(self.err(
+                                Code::E0401,
+                                span,
+                                format!("expected {}, found `{shown}`", k.words()),
+                            ));
                         }
-                        Some(LitKind::Float) => {
-                            let shown = self.display(actual);
-                            return Err(self.err(Code::E0401, span, format!("expected a float, found `{shown}`")));
-                        }
-                        None => "a literal",
+                        None => "a literal".to_string(),
                     },
                 };
                 Err(self.err(Code::E0401, span, format!("{what} cannot have type `{e}`")))
@@ -648,6 +652,24 @@ impl<'a> Checker<'a> {
             ));
         }
         Ok(s)
+    }
+
+    /// [`Checker::known`] for an operation whose answer the kind of a literal variable
+    /// already decides (a function value called, `.x`, `.0`, `[i]`, the operand of `?`;
+    /// S-854): such a variable passes, and the operation reports the error of an
+    /// annotated type, named by [`Checker::described`].
+    pub(crate) fn known_shape(&mut self, t: TyId, span: Span, what: &str) -> R<TyId> {
+        let s = self.shallow(t);
+        if self.infer.lit_of(&self.a.types, s).is_some() { Ok(s) } else { self.known(t, span, what) }
+    }
+
+    /// A type in the words of a diagnostic: `` `F32` ``, or `an integer` / `a float` for a
+    /// literal variable (S-854: the value may be a binding, so not "literal").
+    pub(crate) fn described(&mut self, t: TyId) -> String {
+        match self.infer.lit_of(&self.a.types, t) {
+            Some(k) => k.words().into(),
+            None => format!("`{}`", self.display(t)),
+        }
     }
 
     // ------------------------------------------------------------ locals

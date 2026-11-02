@@ -1,0 +1,162 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§3.3", "§3.4", "§6.2", "§4.5"]
+
+// E0420 stays for the operations whose answer depends on the type that a literal's type variable will get
+// (spec §4.7 "型ごとに有無や結果が決まる操作（メソッド呼び出し、`as` の左辺、`match` の対象）は E0420 のままである",
+// S-854). A method: `n.checked_add(1)` is there for the integer types only and `n.to_bits()` for the float types
+// only (§3.4, §3.3), and `0.round_f32()` is there for the integer types and `F64`, not for `F32` (§3.3). A
+// method that no number type has (`n.nope()`) is E0420 too, because whether some candidate type has the method
+// is told by the declarations of the types and not by the kind of the candidates (S-854). The left of `as`
+// (`1.5 as I32`, `1 as I64`: the conversion is chosen by the type). The subject of `match` (`match 17 { … }`).
+// An operation on a type variable that is not a literal's (`make()` of `fn make[T]() -> T`) is E0420 as
+// before, for a call, a field, a tuple index, an index and `?` too, because nothing is known of such a type.
+// The operations that no number type has are in infer_literal_subject_call.onsa, _field.onsa, _index.onsa and
+// _try.onsa. One error per function (P-01).
+
+pub fn make[T]() -> T {
+  make()
+}
+
+// ---------------------------------------------------------------- a method
+
+pub fn method_of_the_integer_types_on_a_bound_integer() -> I32 {
+  let n = 17
+  let _ = n.checked_add(1)                          //~ E0420
+  0
+}
+
+pub fn method_of_the_integer_types_on_a_literal() -> I32 {
+  let _ = 17.checked_add(1)                         //~ E0420
+  0
+}
+
+pub fn method_of_the_float_types_on_a_bound_float() -> I32 {
+  let n = 1.5
+  let _ = n.to_bits()                               //~ E0420
+  0
+}
+
+pub fn method_of_the_float_types_on_a_literal() -> I32 {
+  let _ = 1.5.to_bits()                             //~ E0420
+  0
+}
+
+pub fn method_that_no_number_has_on_a_literal() -> I32 {
+  let a = 17.nope()                                 //~ E0420
+  a
+}
+
+pub fn method_that_no_number_has_on_a_bound_integer() -> I32 {
+  let n = 17
+  let a = n.nope()                                  //~ E0420
+  a
+}
+
+pub fn method_that_no_number_has_on_a_bound_float() -> F32 {
+  let n = 1.5
+  let a = n.nope()                                  //~ E0420
+  a
+}
+
+pub fn method_of_a_conversion_on_a_literal() -> F32 {
+  0.round_f32()                                     //~ E0420
+}
+
+pub fn method_on_a_generic_result() -> I32 {
+  let z = id(17)
+  let _ = z.checked_add(1)                          //~ E0420
+  0
+}
+
+pub fn method_on_a_loop_variable() -> I32 {
+  for i in 0 ..< 3 {
+    let _ = i.checked_add(1)                        //~ E0420
+  }
+  0
+}
+
+pub fn method_on_an_indexed_element() -> I32 {
+  let _ = [1, 2][0].checked_add(1)                  //~ E0420
+  0
+}
+
+// ---------------------------------------------------------------- the left of `as`
+
+pub fn as_of_a_float_literal() -> I32 {
+  1.5 as I32                                        //~ E0420
+}
+
+pub fn as_of_an_integer_literal() -> I64 {
+  1 as I64                                          //~ E0420
+}
+
+pub fn as_of_a_bound_integer() -> I64 {
+  let n = 1
+  n as I64                                          //~ E0420
+}
+
+pub fn as_of_a_bound_float() -> I32 {
+  let n = 1.5
+  n as I32                                          //~ E0420
+}
+
+// ---------------------------------------------------------------- the subject of `match`
+
+pub fn match_on_an_integer_literal() -> I32 {
+  match 17 {                                        //~ E0420
+    0 => 1,
+    _ => 2,
+  }
+}
+
+pub fn match_on_a_bound_integer() -> I32 {
+  let n = 17
+  match n {                                         //~ E0420
+    0 => 1,
+    _ => 2,
+  }
+}
+
+pub fn match_on_a_bound_float() -> I32 {
+  let n = 1.5
+  match n {                                         //~ E0420
+    _ => 1,
+  }
+}
+
+// ---------------------------------------------------------------- a type variable that is not a literal's
+
+pub fn call_of_a_generic_result(x: I32) -> I32 {
+  let z = make()
+  let a = z.(x)                                     //~ E0420
+  a
+}
+
+pub fn field_of_a_generic_result() -> I32 {
+  let z = make()
+  let a = z.x                                       //~ E0420
+  a
+}
+
+pub fn tuple_index_of_a_generic_result() -> I32 {
+  let z = make()
+  let a = z.0                                       //~ E0420
+  a
+}
+
+pub fn index_of_a_generic_result() -> I32 {
+  let z = make()
+  let a = z[0]                                      //~ E0420
+  a
+}
+
+pub fn try_of_a_generic_result() -> Option[I32] {
+  let z = make()
+  let a = z?                                        //~ E0420
+  Some(0)
+}
+
+fn id[T](x: T) -> T {
+  x
+}

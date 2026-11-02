@@ -1,0 +1,26 @@
+// The operations on a number that no number type has, in a module that is not the root of the package, and
+// the generic function that the root calls with a literal (spec §4.7, §15.1, S-854).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub const LIB_FIELD: I32 = 17.x                     //~ E0413
+
+pub fn call_in_a_module(x: I32) -> I32 {
+  let n = 17
+  let _ = n.(x)                                     //~ E0401
+  0
+}
+
+pub fn field_in_a_module() -> I32 {
+  let n = 1.5
+  let _ = n.x                                       //~ E0413
+  0
+}
+
+pub fn try_in_a_module() -> Option[I32] {
+  let z = id(17)
+  let _ = z?                                        //~ E0414
+  Some(0)
+}

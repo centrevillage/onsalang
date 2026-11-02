@@ -1,0 +1,211 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.2", "§18.1"]
+
+// E0413 for a field or a tuple index on a number, whatever the number's type turns out to be (spec §4.7 "その場で
+// 既知を要する操作" and the paragraph after it, S-854): a number type has no field and no element, so the
+// error is the one the annotated form `let n: I32 = 17` gets (E0413), reported at once and not E0420
+// (infer_literal_subject_annotated.onsa). The field access is `.x` and the tuple index is `.0`; a literal
+// cannot be the subject of `.0` without parentheses (`17.0` is a float literal, §2.4). `decided_later` is
+// the same error when a later statement fixes the type (`n` is returned as `U8`): the error is not
+// postponed to the statement that decides the type. One error per function (P-01).
+
+// ---------------------------------------------------------------- field: an integer literal
+
+pub fn field_on_an_integer() -> I32 {
+  let _ = 17.x                                      //~ E0413
+  0
+}
+
+pub fn field_on_a_parenthesized_integer() -> I32 {
+  let _ = (17).x                                    //~ E0413
+  0
+}
+
+pub fn field_on_a_bound_integer() -> I32 {
+  let n = 17
+  let _ = n.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_a_loop_variable() -> I32 {
+  for i in 0 ..< 3 {
+    let _ = i.x                                     //~ E0413
+  }
+  0
+}
+
+pub fn field_on_a_matched_integer() -> I32 {
+  let _ = match Some(17) {
+    Some(v) => {
+      let _ = v.x                                   //~ E0413
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn field_on_a_generic_result() -> I32 {
+  let z = id(17)
+  let _ = z.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_an_indexed_element() -> I32 {
+  let _ = [1, 2][0].x                               //~ E0413
+  0
+}
+
+pub fn field_on_a_tuple_element() -> I32 {
+  let _ = (1, 2).0.x                                //~ E0413
+  0
+}
+
+pub fn field_on_an_integer_decided_later() -> U8 {
+  let n = 17
+  let _ = n.x                                       //~ E0413
+  n
+}
+
+// ---------------------------------------------------------------- field: a float literal
+
+pub fn field_on_a_float() -> I32 {
+  let _ = 1.5.x                                     //~ E0413
+  0
+}
+
+pub fn field_on_a_parenthesized_float() -> I32 {
+  let _ = (1.5).x                                   //~ E0413
+  0
+}
+
+pub fn field_on_a_bound_float() -> I32 {
+  let n = 1.5
+  let _ = n.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_a_matched_float() -> I32 {
+  let _ = match Some(1.5) {
+    Some(v) => {
+      let _ = v.x                                   //~ E0413
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn field_on_a_generic_float_result() -> I32 {
+  let z = id(1.5)
+  let _ = z.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_an_indexed_float_element() -> I32 {
+  let _ = [1.5, 2.5][0].x                           //~ E0413
+  0
+}
+
+pub fn field_on_a_tuple_float_element() -> I32 {
+  let _ = (1.5, 2.5).0.x                            //~ E0413
+  0
+}
+
+// ---------------------------------------------------------------- tuple index: an integer literal
+
+pub fn tuple_index_on_an_integer() -> I32 {
+  let _ = (17).0                                    //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_bound_integer() -> I32 {
+  let n = 17
+  let _ = n.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_loop_variable() -> I32 {
+  for i in 0 ..< 3 {
+    let _ = i.0                                     //~ E0413
+  }
+  0
+}
+
+pub fn tuple_index_on_a_matched_integer() -> I32 {
+  let _ = match Some(17) {
+    Some(v) => {
+      let _ = v.0                                   //~ E0413
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn tuple_index_on_a_generic_result() -> I32 {
+  let z = id(17)
+  let _ = z.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_an_indexed_element() -> I32 {
+  let _ = [1, 2][0].0                               //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_tuple_element() -> I32 {
+  let _ = (1, 2).0.0                                //~ E0413
+  0
+}
+
+pub fn tuple_index_on_an_integer_decided_later() -> U8 {
+  let n = 17
+  let _ = n.0                                       //~ E0413
+  n
+}
+
+// ---------------------------------------------------------------- tuple index: a float literal
+
+pub fn tuple_index_on_a_float() -> I32 {
+  let _ = (1.5).0                                   //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_bound_float() -> I32 {
+  let n = 1.5
+  let _ = n.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_matched_float() -> I32 {
+  let _ = match Some(1.5) {
+    Some(v) => {
+      let _ = v.0                                   //~ E0413
+      0
+    },
+    None => 0,
+  }
+  0
+}
+
+pub fn tuple_index_on_a_generic_float_result() -> I32 {
+  let z = id(1.5)
+  let _ = z.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_an_indexed_float_element() -> I32 {
+  let _ = [1.5, 2.5][0].0                           //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_tuple_float_element() -> I32 {
+  let _ = (1.5, 2.5).0.0                            //~ E0413
+  0
+}
+
+fn id[T](x: T) -> T {
+  x
+}

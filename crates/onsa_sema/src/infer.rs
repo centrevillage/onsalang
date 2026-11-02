@@ -13,6 +13,25 @@ pub enum LitKind {
     Float,
 }
 
+impl LitKind {
+    /// The kind in the words of a diagnostic, with its article: `an integer` / `a float`
+    /// (S-854; `… literal` for the literal itself).
+    pub fn words(self) -> &'static str {
+        match self {
+            LitKind::Int => "an integer",
+            LitKind::Float => "a float",
+        }
+    }
+
+    /// A variable of the kind inside a type shown in a diagnostic: `{integer}` / `{float}` (R-353).
+    pub fn braced(self) -> &'static str {
+        match self {
+            LitKind::Int => "{integer}",
+            LitKind::Float => "{float}",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum VarState {
     Unbound(Option<LitKind>),
@@ -78,10 +97,15 @@ impl Infer {
     /// The literal constraint of an unbound variable, if any.
     pub fn lit_of(&self, types: &Types, ty: TyId) -> Option<LitKind> {
         match types.get(self.shallow(types, ty)) {
-            Ty::Var(i) => match &self.vars[*i as usize] {
-                VarState::Unbound(l) => *l,
-                VarState::Bound(_) => None,
-            },
+            Ty::Var(i) => self.var_lit(*i),
+            _ => None,
+        }
+    }
+
+    /// The literal constraint of the variable `var` if it is unbound.
+    pub fn var_lit(&self, var: u32) -> Option<LitKind> {
+        match self.vars.get(var as usize) {
+            Some(VarState::Unbound(l)) => *l,
             _ => None,
         }
     }

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.1", "§15.1", "§18.1"]
+
+// E0401 / E0413 / E0414 for the operations on a number that no number type has, when the generic function
+// that the literal is bound to is declared in another module (spec §4.7, §15.1, S-854): the type variable of
+// the call is the calling function's, wherever the callee is declared, so the rule is that of a literal in
+// the same module (infer_pkg/main.onsa has the same for E0406 and E0420). One error per function (P-01).
+
+use lib.{id}
+
+pub fn call_on_a_result_of_another_module(x: I32) -> I32 {
+  let z = id(17)
+  let _ = z.(x)                                     //~ E0401
+  0
+}
+
+pub fn field_on_a_result_of_another_module() -> I32 {
+  let z = id(1.5)
+  let _ = z.x                                       //~ E0413
+  0
+}
+
+pub fn index_on_a_result_of_another_module() -> I32 {
+  let _ = id(17)[0]                                 //~ E0413
+  0
+}
+
+pub fn try_on_a_result_of_another_module() -> Option[I32] {
+  let _ = id(17)?                                   //~ E0414
+  Some(0)
+}

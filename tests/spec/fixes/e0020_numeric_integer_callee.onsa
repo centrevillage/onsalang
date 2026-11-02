@@ -6,8 +6,8 @@
 // E0020 for a call whose callee is an integer literal, and for the space in the `.(` of a literal that is
 // called as a value (spec §2.4, §6.1, §2.5, §18.1; S-350). After the digits of an integer, a `.` followed by a
 // name or `(` is the member's `.` (`1.abs()`, `1.(x)`), so `1.(x)` calls the integer 1 as a function value:
-// the syntax accepts it and the type stage rejects it (the error of the type stage is not written here:
-// whether it is E0420 or E0401 is for W4 / W5). The three forms of this file are the ones whose candidate the
+// the syntax accepts it and the type stage rejects it (E0401, §4.7, S-854, which is not written here, as
+// this file is about the syntax). The three forms of this file are the ones whose candidate the
 // syntax stage can now make, and that W3-20 left without one because `1.(x)` read as the float `1.` and `(x)`:
 // - the callee is the integer (`5(x)`, `0x1F(x)`, `0b11(x)`, `1_000(x)`): the candidate inserts the `.`
 //   (`5.(x)`), as for the callee of every other literal (fixes/e0020_callee_literal_number.onsa);

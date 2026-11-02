@@ -509,11 +509,23 @@ impl Types {
         }
     }
 
-    /// Source-like rendering, with user types by name via `name_of`.
+    /// Source-like rendering, with user types by name via `name_of`; a type variable is `?N`.
     pub fn display(&self, id: TyId, name_of: &dyn Fn(DefId) -> String, generic_name: &dyn Fn(u32) -> String) -> String {
+        self.display_vars(id, name_of, generic_name, &|i| format!("?{i}"))
+    }
+
+    /// [`Types::display`] with the type variables named by `var_name` (a diagnostic does not
+    /// show the internal `?N`, R-353).
+    pub fn display_vars(
+        &self,
+        id: TyId,
+        name_of: &dyn Fn(DefId) -> String,
+        generic_name: &dyn Fn(u32) -> String,
+        var_name: &dyn Fn(u32) -> String,
+    ) -> String {
         let ty = self.get(id);
-        let list =
-            |xs: &[TyId]| xs.iter().map(|&t| self.display(t, name_of, generic_name)).collect::<Vec<_>>().join(", ");
+        let display = |t: TyId| self.display_vars(t, name_of, generic_name, var_name);
+        let list = |xs: &[TyId]| xs.iter().map(|&t| display(t)).collect::<Vec<_>>().join(", ");
         match ty {
             Ty::Int(k) => k.name().to_string(),
             Ty::Float(k) => k.name().to_string(),
@@ -524,9 +536,9 @@ impl Types {
                 let n = match len {
                     Len::Const(n) => n.to_string(),
                     Len::Param(i) => generic_name(*i),
-                    Len::Var(i) => format!("?{i}"),
+                    Len::Var(i) => var_name(*i),
                 };
-                format!("[{}; {n}]", self.display(*t, name_of, generic_name))
+                format!("[{}; {n}]", display(*t))
             }
             Ty::Tuple(ts) => format!("({})", list(ts)),
             Ty::Named(d, args) => {
@@ -553,12 +565,12 @@ impl Types {
                             Mode::Inout => "inout ",
                             Mode::Move => "move ",
                         };
-                        format!("{m}{}", self.display(*t, name_of, generic_name))
+                        format!("{m}{}", display(*t))
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
                 let rt = if f.rt { "rt " } else { "" };
-                let ret = match self.display(f.ret, name_of, generic_name) {
+                let ret = match display(f.ret) {
                     _ if matches!(self.get(f.ret), Ty::Unit) => String::new(),
                     r if self.parens_before_uses(f.ret, !f.effects.is_empty()) => format!(" -> ({r})"),
                     r => format!(" -> {r}"),
@@ -578,7 +590,7 @@ impl Types {
             }
             Ty::Param(i) => generic_name(*i),
             Ty::ConstVal(n) => n.to_string(),
-            Ty::Var(i) => format!("?{i}"),
+            Ty::Var(i) => var_name(*i),
             // What a syntax error left unread (S-59): shown as a hole, so that a
             // diagnostic about the type around it does not name an inner error.
             Ty::Error => "_".into(),

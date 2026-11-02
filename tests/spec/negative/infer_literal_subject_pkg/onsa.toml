@@ -1,0 +1,3 @@
+[package]
+name = "infer_literal_subject_pkg_neg"
+edition = "2026"

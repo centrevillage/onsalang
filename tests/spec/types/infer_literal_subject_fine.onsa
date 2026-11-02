@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§4.5"]
+
+// The uses of a literal's type variable that stay fine when the operations that no number type has are
+// reported at once (S-854, spec §4.7): the literal is a binding, a `for` variable, a value bound by a pattern,
+// the result of a generic call or an element taken out of an array or a tuple, and an operator, a comparison,
+// an argument or the expected type decides its type. A type that is open is no error by itself; the operation
+// that needs its type is (infer_literal_subject_open.onsa). The tuple index and the index of the array or
+// tuple that holds the literals are fine: the subject of `.0` and `[0]` there is the tuple and the array, whose
+// head is known (the field of a number is the error, infer_literal_subject_field.onsa).
+
+pub fn bound_integer() -> I32 {
+  let n = 17
+  n + 1
+}
+
+pub fn bound_float() -> F32 {
+  let n = 1.5
+  n * 2.0
+}
+
+pub fn loop_variable() -> I32 {
+  var sum = 0
+  for i in 0 ..< 3 {
+    sum = sum + i
+  }
+  sum
+}
+
+pub fn matched_value() -> I32 {
+  match Some(17) {
+    Some(v) => v + 1,
+    None => 0,
+  }
+}
+
+pub fn generic_result() -> I32 {
+  let z = id(17)
+  z + 1
+}
+
+pub fn generic_float_result() -> F32 {
+  let z = id(1.5)
+  z * 2.0
+}
+
+pub fn indexed_element() -> I32 {
+  [1, 2][0] + 1
+}
+
+pub fn tuple_element() -> I32 {
+  (1, 2).0 + 1
+}
+
+pub fn element_of_a_bound_tuple() -> F32 {
+  let t = (1.5, 2.5)
+  t.0 + t.1
+}
+
+pub fn element_of_a_bound_array() -> I32 {
+  let xs = [1, 2, 3]
+  xs[0] + xs[2]
+}
+
+pub fn literal_decided_by_a_later_statement() -> U8 {
+  let n = 17
+  n
+}
+
+pub fn literal_decided_by_an_argument(x: U8) -> U8 {
+  let n = 17
+  x + n
+}
+
+pub fn annotated_integer_with_a_method() -> I32 {
+  let n: I32 = 17
+  let c      = n.checked_add(1)
+  match c {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn annotated_float_with_a_method() -> U32 {
+  let n: F32 = 1.5
+  n.to_bits()
+}
+
+pub fn conversion_of_an_annotated_number() -> I64 {
+  let n: I32 = 17
+  n as I64
+}
+
+fn id[T](x: T) -> T {
+  x
+}

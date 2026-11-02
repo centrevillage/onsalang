@@ -1,0 +1,303 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.1", "§15.1", "§9.1", "§18.1"]
+
+// E0401 / E0413 / E0414 for the operations on a number that no number type has, when the subject is not the
+// literal or its binding but a value derived from literals (spec §4.7, S-854): an operator and a comparison
+// unify the operands with the result (§4.7 "演算子、比較、関数の引数への受け渡しは、オペランドが未解決でも進められる"),
+// so the type of `n + 1`, of `let k = n`, of `(if c { 1 } else { 2 })` and of `1 + 2` is the literal's type
+// variable itself, and a prefix `-` that is part of the literal is the literal (§4.7 "括弧を除くと整数リテラル
+// そのものである前置の `-`"). The rule is told by the subject's type being a literal's type variable and not by
+// how it is written, so the code is the one of the annotated form (infer_literal_subject_annotated.onsa).
+// A call `.(` is E0401, a field, a tuple index and an index are E0413, and `?` is E0414. One error per
+// function (P-01).
+
+// ---------------------------------------------------------------- call: derived from an integer literals
+
+pub fn call_on_an_integer_sum(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let m = n + 1
+  let _ = m.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_a_sum_of_two_literals(x: I32, c: Bool) -> I32 {
+  let m = 1 + 2
+  let _ = m.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_an_alias_of_an_integer(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let k = n
+  let _ = k.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_a_negated_integer(x: I32, c: Bool) -> I32 {
+  let _ = (-17).(x)                                 //~ E0401
+  0
+}
+
+pub fn call_on_a_branch_of_integers(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1 } else { 2 }).(x)               //~ E0401
+  0
+}
+
+// ---------------------------------------------------------------- field: derived from an integer literals
+
+pub fn field_on_an_integer_sum(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let m = n + 1
+  let _ = m.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_a_sum_of_two_literals(x: I32, c: Bool) -> I32 {
+  let m = 1 + 2
+  let _ = m.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_an_alias_of_an_integer(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let k = n
+  let _ = k.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_a_negated_integer(x: I32, c: Bool) -> I32 {
+  let _ = (-17).x                                   //~ E0413
+  0
+}
+
+pub fn field_on_a_branch_of_integers(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1 } else { 2 }).x                 //~ E0413
+  0
+}
+
+// ---------------------------------------------------------------- tuple index: derived from an integer literals
+
+pub fn tuple_index_on_an_integer_sum(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let m = n + 1
+  let _ = m.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_sum_of_two_literals(x: I32, c: Bool) -> I32 {
+  let m = 1 + 2
+  let _ = m.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_an_alias_of_an_integer(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let k = n
+  let _ = k.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_negated_integer(x: I32, c: Bool) -> I32 {
+  let _ = (-17).0                                   //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_branch_of_integers(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1 } else { 2 }).0                 //~ E0413
+  0
+}
+
+// ---------------------------------------------------------------- index: derived from an integer literals
+
+pub fn index_on_an_integer_sum(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let m = n + 1
+  let _ = m[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_a_sum_of_two_literals(x: I32, c: Bool) -> I32 {
+  let m = 1 + 2
+  let _ = m[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_an_alias_of_an_integer(x: I32, c: Bool) -> I32 {
+  let n = 17
+  let k = n
+  let _ = k[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_a_negated_integer(x: I32, c: Bool) -> I32 {
+  let _ = (-17)[0]                                  //~ E0413
+  0
+}
+
+pub fn index_on_a_branch_of_integers(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1 } else { 2 })[0]                //~ E0413
+  0
+}
+
+// ---------------------------------------------------------------- try: derived from an integer literals
+
+pub fn try_on_an_integer_sum(x: I32, c: Bool) -> Option[I32] {
+  let n = 17
+  let m = n + 1
+  let _ = m?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_sum_of_two_literals(x: I32, c: Bool) -> Option[I32] {
+  let m = 1 + 2
+  let _ = m?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_an_alias_of_an_integer(x: I32, c: Bool) -> Option[I32] {
+  let n = 17
+  let k = n
+  let _ = k?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_negated_integer(x: I32, c: Bool) -> Option[I32] {
+  let _ = (-17)?                                    //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_branch_of_integers(x: I32, c: Bool) -> Option[I32] {
+  let _ = (if c { 1 } else { 2 })?                  //~ E0414
+  Some(0)
+}
+
+// ---------------------------------------------------------------- call: derived from a float literals
+
+pub fn call_on_a_float_product(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let m = f * 2.0
+  let _ = m.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_an_alias_of_a_float(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let k = f
+  let _ = k.(x)                                     //~ E0401
+  0
+}
+
+pub fn call_on_a_negated_float(x: I32, c: Bool) -> I32 {
+  let _ = (-1.5).(x)                                //~ E0401
+  0
+}
+
+pub fn call_on_a_branch_of_floats(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1.5 } else { 2.5 }).(x)           //~ E0401
+  0
+}
+
+// ---------------------------------------------------------------- field: derived from a float literals
+
+pub fn field_on_a_float_product(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let m = f * 2.0
+  let _ = m.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_an_alias_of_a_float(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let k = f
+  let _ = k.x                                       //~ E0413
+  0
+}
+
+pub fn field_on_a_negated_float(x: I32, c: Bool) -> I32 {
+  let _ = (-1.5).x                                  //~ E0413
+  0
+}
+
+pub fn field_on_a_branch_of_floats(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1.5 } else { 2.5 }).x             //~ E0413
+  0
+}
+
+// ---------------------------------------------------------------- tuple index: derived from a float literals
+
+pub fn tuple_index_on_a_float_product(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let m = f * 2.0
+  let _ = m.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_an_alias_of_a_float(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let k = f
+  let _ = k.0                                       //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_negated_float(x: I32, c: Bool) -> I32 {
+  let _ = (-1.5).0                                  //~ E0413
+  0
+}
+
+pub fn tuple_index_on_a_branch_of_floats(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1.5 } else { 2.5 }).0             //~ E0413
+  0
+}
+
+// ---------------------------------------------------------------- index: derived from a float literals
+
+pub fn index_on_a_float_product(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let m = f * 2.0
+  let _ = m[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_an_alias_of_a_float(x: I32, c: Bool) -> I32 {
+  let f = 1.5
+  let k = f
+  let _ = k[0]                                      //~ E0413
+  0
+}
+
+pub fn index_on_a_negated_float(x: I32, c: Bool) -> I32 {
+  let _ = (-1.5)[0]                                 //~ E0413
+  0
+}
+
+pub fn index_on_a_branch_of_floats(x: I32, c: Bool) -> I32 {
+  let _ = (if c { 1.5 } else { 2.5 })[0]            //~ E0413
+  0
+}
+
+// ---------------------------------------------------------------- try: derived from a float literals
+
+pub fn try_on_a_float_product(x: I32, c: Bool) -> Option[I32] {
+  let f = 1.5
+  let m = f * 2.0
+  let _ = m?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_an_alias_of_a_float(x: I32, c: Bool) -> Option[I32] {
+  let f = 1.5
+  let k = f
+  let _ = k?                                        //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_negated_float(x: I32, c: Bool) -> Option[I32] {
+  let _ = (-1.5)?                                   //~ E0414
+  Some(0)
+}
+
+pub fn try_on_a_branch_of_floats(x: I32, c: Bool) -> Option[I32] {
+  let _ = (if c { 1.5 } else { 2.5 })?              //~ E0414
+  Some(0)
+}
