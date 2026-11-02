@@ -16,8 +16,8 @@
     python3 -B tools/docs.py blind FILE...|--group N --out FILE | answers FILE...|--group N
     python3 -B tools/docs.py help [--role ROLE] [COMMAND]   (the purpose, the time, the roles, an example)
 
-Exit: 0 nothing found, 1 found, 2 an error of the tool (a file it cannot read, no document, a
-broken round trip of `fmt`; argparse's usage errors too). The documents are `repo.doc_files`.
+Exit: 0 nothing found (the warnings of `check` too), 1 found, 2 an error of the tool (a file it cannot
+read, no document, a broken round trip of `fmt`; argparse's usage errors too). The documents are `repo.doc_files`.
 The commands of the IDs (X-2 DT-2, DT-3, DT-6): 0 done, 1 not found or refused (nothing is
 written), 2 an error of the tool or of the use (not an ID, a kind not in the new layout, `new` in a
 git worktree, a write that fails). Their lines are `\\t`-separated: `ID status place title` (`refs`),
@@ -30,7 +30,8 @@ depth 0 with `-` for the type and from).
   `show`, `list`, `changes`, `ticket` and the writes need the directory of the kind. The writes check the
   swap files first, write through `write_atomic`, and `set`, `new` refuse a text whose head fields would
   break (a) or (b) of the file or (c) of it and its partners (`check_write`). `new S` shows the S of the
-  same sections or family (X9-12, `akin`); `ticket` the lines of `tests/` that name its IDs (X9-67).
+  same sections or family (X9-12, `akin`); `ticket` the lines of `tests/` that name its IDs (X9-67) and
+  the lines of the `持ち越し` of the other works that name it (W4-18 U10f, `carried_to`).
   `blind` and `answers` (X9-65, X9-66) read the drafts of the gaps (the files given, or of a group).
   `stale` (X-21 P-2) shows the lines of the `持ち越し` of the works (`carried`; not DONE unless `--all`) with no
   mark of a thing done that name a DECIDED S or a DONE R beside a verb of STALE: suspects, exit 0 whatever it finds.
@@ -62,6 +63,10 @@ depth 0 with `-` for the type and from).
   links of the READMEs), and (f) `tools` (X9-9: the tools, their commands and arguments that the rules, the
   agents' definitions and the root's README.md and CLAUDE.md name in a code span are there; `check_tools`;
   a tool is imported, never run). To add a check, add `(name, fn(tree) -> Findings)` to CHECKS; to add a
+  warning, `(name, fn(ids) -> Findings)` to WARNINGS (W4-18 U10f: `warning: path:line: what (name)` and their
+  count, never failing the check: `units`, the decisions and the issues of `ticket` a work DOING or DONE does not
+  name in its `単位`; `paths`, `scratch`, the paths `crates/…` not there and the variables `P<n>/` of a ticket in
+  the living documents (LIVE; not an R's place); `no-fix`, an OPEN R with no `fix`); to add a
   subcommand, add `name: repo.Command(add_arguments, run, roles, purpose, when, example)` to COMMANDS
   (its help, X9-7; `docs.py help`).
 
@@ -1122,6 +1127,74 @@ def check_tools(tree):
                 yield Finding(rel, line, f"`{span}`: {w} is not an argument of {of}")
 
 
+# ---------------------------------------------------------------- the warnings of check (W4-18 U10f)
+
+LABEL = re.compile(r"- ([^\s:：（(]+)[（(:：]")  # the label of an item at the indent 0 of a body: `- 単位（…）:`
+LIVE = {"W": ("DONE", False), "R": ("OPEN", True), "RF": ("OPEN", True)}  # the living documents: (a status, it or not)
+# a path of the code: no letter of Japanese in it (`\w` would take one), the end not a `.` of a sentence
+CRATE_PATH = re.compile(r"(?<![A-Za-z0-9_./-])crates/[A-Za-z0-9_./-]*[A-Za-z0-9_/]")
+NOT_ONE_PATH = ("*", "{", "<", "…")  # after a path: a pattern or an elision, not a path to look for
+SCRATCH = re.compile(r"(?<![A-Za-z0-9_./-])P\d+/")  # a variable of a ticket: a session's scratchpad (`P102/`)
+
+
+def labelled(tree, rel):
+    """(line number, line, label) of the body: the label (LABEL) of the item at the indent 0 the line is in or
+    under, None out of one (a heading, a paragraph)."""
+    label, lines, start = None, tree.lines(rel), body_start(tree, rel)
+    for n, line in enumerate(lines[start:], start + 1):
+        if line[:1] not in ("", " ", "\t"):
+            label = m.group(1) if (m := LABEL.match(line)) else None
+        yield n, line, label
+
+
+def live_lines(ids):
+    """(rel, line number, line, a record) of the bodies of the living documents (LIVE); a record is a line of
+    an R's place (`場所`, or its first item in the form of the review `重さ・判断・観点｜場所｜…`): a fact of the past."""
+    for kind, (status, alive) in LIVE.items():
+        for _, rel, v in ids.heads([kind]):
+            if (v.get("status") == status) == alive:
+                for n, line, label in labelled(ids.tree, rel):
+                    yield rel, n, line, kind == "R" and (label == "場所" or (line.startswith("- ") and "｜" in line))
+
+
+def warn_units(ids):
+    """The decisions and the issues of a work in progress or done (`realized`, as `ticket` shows them) its
+    `単位` does not name; a work with no `単位` is passed over (the works moved from the table of the rework)."""
+    for w, rel, v in ids.heads(["W"]):
+        if v.get("status") not in ("DOING", "DONE"):
+            continue
+        unit = [(n, line) for n, line, label in labelled(ids.tree, rel) if label == "単位"]
+        if missing := [i for i in sum(realized(ids, w), []) if not any(_mentions(x, i) for _, x in unit)] if unit else []:
+            yield Finding(rel, unit[0][0], f"`単位` does not name {len(missing)} of the decisions and the issues of "
+                                           f"`ticket`: {', '.join(missing)}")  # fmt: skip
+
+
+def warn_paths(ids):
+    """The paths `crates/…` the living documents name that are not there (the records of an R's place left)."""
+    for rel, n, line, record in live_lines(ids):
+        for m in [] if record else CRATE_PATH.finditer(line):
+            if line[m.end() : m.end() + 1] not in NOT_ONE_PATH and not (ids.root / m.group(0)).exists():
+                yield Finding(rel, n, f"`{m.group(0)}` is not there")
+
+
+def warn_scratch(ids):
+    """The variables of a ticket (SCRATCH) left in the living documents: the scratchpad is gone after its session."""
+    for rel, n, line, _ in live_lines(ids):
+        for m in SCRATCH.finditer(line):
+            yield Finding(rel, n, f"`{m.group(0)}`: a variable of a ticket (a session's scratchpad)")
+
+
+def warn_no_fix(ids):
+    """The R that are OPEN with no `fix` (no work is to fix them)."""
+    for _, rel, v in ids.heads(["R"]):
+        if v.get("status") == "OPEN" and not _listed(v.get("fix")):
+            yield Finding(rel, 1, "OPEN with no `fix`")
+
+
+# the warnings of `check`: shown with their count, never failing it (W4-18 U10f)
+WARNINGS = [("units", warn_units), ("paths", warn_paths), ("scratch", warn_scratch), ("no-fix", warn_no_fix)]
+
+
 CHECKS = [
     ("tables", check_tables),
     ("heads", check_heads),
@@ -1145,6 +1218,12 @@ def cmd_check(args):
         counts.append((name, len(found)))
     for note in tree.notes:
         print(note)
+    ids, warned = Ids(args.root, tree=tree), []
+    for name, warn in WARNINGS:
+        warned.append((name, [f"warning: {f} ({name})" for f in warn(ids)]))
+        print("\n".join(warned[-1][1]), end="\n" if warned[-1][1] else "")
+    if warns := sum(len(w) for _, w in warned):
+        print(f"docs check: {warns} warning(s), not failing it (" + ", ".join(f"{name} {len(w)}" for name, w in warned) + ")")
     total = sum(n for _, n in counts)
     if total:
         print(f"docs check: {total} problem(s) (" + ", ".join(f"{name} {n}" for name, n in counts) + ")")
@@ -1240,9 +1319,9 @@ class Ids:
     """What the commands know about the IDs, on one Tree: the files of `Index` (their head fields read
     once)."""
 
-    def __init__(self, root, files=()):
+    def __init__(self, root, files=(), tree=None):
         self.root = Path(root)
-        self.tree = Tree(root, files)
+        self.tree = tree or Tree(root, files)
         self.index, self.layout, self._where = self.tree.index, self.tree.index.layout, {}
 
     def has(self, name):
@@ -1338,9 +1417,14 @@ def named_ids(tree, rel, text=True):
     lines, head = tree.lines(rel), tree.head(rel)
     found = [(key, m) for key, value in (head.values or {}).items() for v in _listed(value) for m in repo.ID_RE.findall(v)]
     if text:
-        start = 0 if head.values is None else len(lines) - len(head.body.split("\n"))
-        found += [(None, m) for line in lines[start:] for m in repo.ID_RE.findall(line)]
+        found += [(None, m) for line in lines[body_start(tree, rel) :] for m in repo.ID_RE.findall(line)]
     return found
+
+
+def body_start(tree, rel):
+    """The index of the first line after the head fields (0 when they are not there or broken)."""
+    lines, head = tree.lines(rel), tree.head(rel)
+    return 0 if head.values is None else len(lines) - len(head.body.split("\n"))
 
 
 def excerpt(line, a, b):
@@ -2251,6 +2335,20 @@ def case_items(found):
                    for i, at in found.items() if at)  # fmt: skip
 
 
+def realized(ids, w):
+    """([the decisions a work makes real], [the R and RF it fixes]): their `tasks` and `fix` name it (`ticket`, the
+    warning `units` of `check`)."""
+    return ids.having(DECISIONS, "tasks", w), ids.having(ISSUES, "fix", w)
+
+
+def carried_to(ids, w):
+    """The items of `他の作業の持ち越し`: `path:line: excerpt` of the lines of the `持ち越し` (`carried`) of the other
+    works that name `w`, the works in order."""
+    return "".join(f"\n  - {rel.as_posix()}:{n}: {excerpt(line, *spans[0])}"
+                   for i, rel, _ in sorted(ids.heads(["W"]), key=lambda r: id_key(r[0])) if i != w
+                   for n, line, _ in carried(ids.tree.lines(rel), body_start(ids.tree, rel)) if (spans := _mentions(line, w)))  # fmt: skip
+
+
 def ticket_args(p):
     p.add_argument("id", metavar="W")
     p.add_argument("unit", metavar="UNIT/ROLE", help="`U2/i`, `U1/t`, `U2/i-fix1`")
@@ -2266,7 +2364,7 @@ def cmd_ticket(args):
     if w.rel is None:
         return 1
     v, head = w.values, ids.tree.head(w.rel)
-    decisions, issues = ids.having(DECISIONS, "tasks", w.id), ids.having(ISSUES, "fix", w.id)
+    decisions, issues = realized(ids, w.id)
     secs = {s for i in decisions + issues for s in _listed(ids.where(i).values.get("spec"))}
     depends = "、".join(f"{d}（{ids.state(d)}）" for d in _listed(v.get("depends")))
     doing = ", ".join(_listed(v.get("doing")))
@@ -2285,6 +2383,7 @@ def cmd_ticket(args):
         "- 直す R:" + ("".join(map(item, issues)) or " なし"),
         f"- 仕様の節: {'、'.join(sorted(secs, key=section_key)) or 'なし'}",
         "- 持ち越し: " + ("作業のファイルの `持ち越し` を読む" if any(CARRIED.match(x) for x in head.body.split("\n")) else "なし"),
+        "- 他の作業の持ち越し:" + (carried_to(ids, w.id) or " なし"),
         "- ぶつかりうる事例:" + (case_items(case_lines(ids.root, decisions + issues)) or " なし"),
         f"- 役割と単位: {args.unit}",
         *(f"- {f}: {guide}".rstrip() for f, guide in TICKET_FIELDS + (HANDOVER_FIELDS if unit["handover"] else ())),
@@ -2350,9 +2449,7 @@ def cmd_stale(args):
         if v.get("status") == "DONE" and not args.all:
             continue
         works += 1
-        lines, head = ids.tree.lines(rel), ids.tree.head(rel)
-        start = 0 if head.values is None else len(lines) - len(head.body.split("\n"))
-        for n, line, covered in carried(lines, start):
+        for n, line, covered in carried(ids.tree.lines(rel), body_start(ids.tree, rel)):
             names = [] if covered else [
                 f"{i} {STALE[k][0]}" for i in dict.fromkeys(repo.ID_RE.findall(line))
                 if (k := repo.kind_of(i).name) in STALE and ids.where(i).status == STALE[k][0] and STALE[k][1].search(line)]  # fmt: skip
@@ -2373,7 +2470,8 @@ COMMANDS = {
     "swaps": C(lambda p: None, cmd_swaps, EDITORS, "vim のスワップファイル（`.<name>.sw?`）を並べる",
                "文書を編集する前に、スワップファイルが無いことを確かめる。確かめは、編集と別のコマンドで行う"
                "（`.claude/agents/` は見ないので、定義を開いているかは利用者に聞く）", "docs.py swaps"),
-    "check": C(lambda p: None, cmd_check, EDITORS, "文書の表・頭の欄・ID と § の参照・関係・README のリンクを確かめる（gate の `docs`）",
+    "check": C(lambda p: None, cmd_check, EDITORS, "文書の表・頭の欄・ID と § の参照・関係・README のリンクを確かめる（gate の `docs`）。"
+               "警告（`warning:` の行。作業の `単位` に無い決定と R、生きている文書の無い経路と票の変数、`fix` の空の R）は終了コードを落とさない",
                "文書を編集した後に、`fmt` で行を整えてから通す。文書の点検の担当は始めに回し、落ちていれば、その出力を報告して止める",
                "docs.py check"),
     "due": C(lambda p: p.add_argument("--stage-end", metavar="STAGE"), cmd_due, ("parent",),
@@ -2420,7 +2518,8 @@ COMMANDS = {
                  "利用者が「書き終わった」と言った後に、回答をまとめて読む（回答の無い S は「回答なし」と出る）",
                  "docs.py answers --group 12"),
     "ticket": C(ticket_args, cmd_ticket, ("parent",),
-                "作業のファイルと決定から、作業票の骨組みを出す（実現する決定の件数、それと直す R を名指す `tests/` の行）",
+                "作業のファイルと決定から、作業票の骨組みを出す（実現する決定の件数、それと直す R を名指す `tests/` の行、"
+                "他の作業の `持ち越し` でその作業を名指す行）",
                 "作業票を書くとき（親は残りの欄を埋める。「ぶつかりうる事例」の行を読み、ぶつかる事例を作業票に挙げる）。"
                 "引き継ぎの作業票は `<単位>/<役割>-handover` で、引き継ぎの欄が手引きとともに足される",
                 "docs.py ticket W3-05 U2/i-handover"),

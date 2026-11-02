@@ -877,6 +877,42 @@ class DocsLayout(DocsTree):
         self.assertOne("README.md", "[仕様](spec/README.md)", "[仕様](spec/README.md)、[無い](docs/none.md#x)", "README.md:3: the link docs/none.md#x is not found")
         self.assertOne("rules/README.md", "(common.md)", "(commons.md)", "rules/README.md:3: the link commons.md is not found")
 
+    def test_check_warnings(self):
+        """W4-18 U10f: the warnings of `check` are shown with their count and never fail it: the decisions and the issues
+        a work in progress or done does not name in its `単位`, the paths `crates/…` and the variables `P<n>/` of the living
+        documents (a work not DONE, an OPEN R; not an R's place), an OPEN R with no `fix`."""
+        self.layout()
+        w1, w2, r1, r2 = "tasks/W/W1-01.md", "tasks/W/W1-02.md", "issues/R/R-1.md", "issues/R/R-2.md"
+        self.write(w1, self.read_(w1) + "- 単位（表）: なし\n- 持ち越し: crates/gone.rs、P30/x\n")  # DONE: not living
+        self.write(w2, self.read_(w2) + "- 単位:\n  - U1: S-2\n  - U2: crates/a/x.rs:12、crates/a/y.rs、crates/a/*.rs、"
+                   "`crates/b.rs`。P91/t.md、XP91/、target/notes/91/\n- 持ち越し: R-1\n")  # fmt: skip
+        self.write("crates/a/y.rs", "")
+        self.write(r1, self.read_(r1) + "- 高・直す｜crates/old1.rs｜—\n- 場所: crates/old2.rs\n  - crates/old3.rs\n- 内容: crates/old4.rs、P80/\n")
+        self.write(r2, '+++\nstatus = "OPEN"\n+++\n# R-2 宛先が無い\n')
+        self.write("issues/R/R-3.md", '+++\nstatus = "DONE"\n+++\n# R-3 済んだ\n')
+        warnings = [
+            f"warning: {w1}:6: `単位` does not name 1 of the decisions and the issues of `ticket`: S-1 (units)",
+            f"warning: {w2}:9: `単位` does not name 1 of the decisions and the issues of `ticket`: R-1 (units)",
+            f"warning: {w2}:11: `crates/a/x.rs` is not there (paths)", f"warning: {w2}:11: `crates/b.rs` is not there (paths)",
+            f"warning: {r1}:13: `crates/old4.rs` is not there (paths)",
+            f"warning: {w2}:11: `P91/`: a variable of a ticket (a session's scratchpad) (scratch)",
+            f"warning: {r1}:13: `P80/`: a variable of a ticket (a session's scratchpad) (scratch)",
+            f"warning: {r2}:1: OPEN with no `fix` (no-fix)",
+        ]  # fmt: skip
+        self.assertEqual(self.check(), (0, warnings))
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out):
+            docs_tool.main(["check", "--root", str(self.root)])
+        self.assertEqual(out.getvalue().splitlines()[-2], "docs check: 8 warning(s), not failing it (units 2, paths 3, scratch 2, no-fix 1)")
+        self.edit(r1, 'status = "OPEN"', 'status = "DONE"')  # not living: no paths, no variables
+        self.edit(w2, 'status = "DOING"', 'status = "PLAN"')  # not in progress: its `単位` not read; still living
+        self.edit(w2, 'doing = ["U2/i"]', 'commit = "x"')  # the same lines
+        warned = [warnings[0], *warnings[2:4], warnings[5], warnings[7]]
+        self.assertEqual(self.check(), (0, warned))
+        self.edit("decisions/A/A-1.md", '"DECIDED"', '"DONE"')  # a problem fails it, the warnings shown with it
+        code, lines = self.check()
+        self.assertEqual((code, lines[1:]), (1, warned))
+
     def test_check_tools(self):
         # X9-9: the tools, their commands and arguments named in a code span of the rules and the definitions
         self.layout()
@@ -1277,7 +1313,7 @@ class DocsCommands(DocsTree):
             "# 作業 W1-02 U2/i: 式", "", "- 作業のファイル: tasks/W/W1-02.md（`docs.py show W1-02`）", "- 状態: DOING（doing: U2/i）",
             "- 規模: M", "- 依存: W1-01（DONE）", "- 実現する決定（1 件）:", "  - S-2 OPEN R-1 と A-1。（§3.1, §2.2）",
             "- 直す R:", "  - R-1 OPEN 候補（§3.1, tools.md §1）", "- 仕様の節: §2.2、§3.1、tools.md §1",
-            "- 持ち越し: 作業のファイルの `持ち越し` を読む", "- ぶつかりうる事例: なし", "- 役割と単位: U2/i",
+            "- 持ち越し: 作業のファイルの `持ち越し` を読む", "- 他の作業の持ち越し: なし", "- ぶつかりうる事例: なし", "- 役割と単位: U2/i",
             *fields,
         ]  # fmt: skip
         self.assertEqual(self.run_("ticket", "W1-02", "U2/i"), (0, expected))
@@ -1307,10 +1343,10 @@ class DocsCommands(DocsTree):
         shown = "、".join(f"tests/many.onsa:{n}" for n in range(1, 6))
         cases = ["- ぶつかりうる事例:", "  - S-2: tests/spec/a.onsa:1", f"  - R-1: {shown} ほか 3 件"]
         out = self.run_("ticket", "W1-02", "U2/i")[1]
-        self.assertEqual(out[12:15], cases)
-        self.assertEqual(out[15], "- 役割と単位: U2/i")
+        self.assertEqual(out[13:16], cases)
+        self.assertEqual(out[16], "- 役割と単位: U2/i")
         handover = self.run_("ticket", "W1-02", "U2/i-handover")[1]
-        self.assertEqual(handover[: len(out)], [out[0].replace("U2/i", "U2/i-handover"), *out[1:15], "- 役割と単位: U2/i-handover", *out[16:]])
+        self.assertEqual(handover[: len(out)], [out[0].replace("U2/i", "U2/i-handover"), *out[1:16], "- 役割と単位: U2/i-handover", *out[17:]])
         self.assertEqual(handover[len(out) :], [f"- {f}: {g}" for f, g in docs_tool.HANDOVER_FIELDS])
         self.assertEqual([x.split(":")[0] for x in handover[len(out) :]], [
             "- 読む順", "- 状態の基", "- 道具", "- 前の gate の要約と知られた失敗", "- 古くなった注記とぶつかる事例",
@@ -1321,6 +1357,19 @@ class DocsCommands(DocsTree):
             self.assertEqual(self.run_("ticket", "W1-02", unit)[0], 2, unit)
         shutil.rmtree(self.root / "tests")  # not "なし" when there is nothing to read
         self.assertEqual(self.run_("ticket", "W1-02", "U2/i"), (2, ["docs.py ticket: tests/: no directory (the lines of the cases)"]))
+
+    def test_ticket_carried_to_the_work(self):
+        """W4-18 U10f: `他の作業の持ち越し` has the lines of the `持ち越し` of the other works (DONE too) that name the work
+        as a word, as `path:line: excerpt`; not its own, not the other sections."""
+        self.layout()
+        self.write("tasks/W/W1-01.md", self.read("tasks/W/W1-01.md") + "- 結果: W1-02 へ\n- 持ち越し:\n  - W1-02 へ: x\n"
+                   "  - W1-020 と W1-01\n  " + "あ" * 70 + " W1-02 " + "い" * 70 + "\n")  # fmt: skip
+        self.write("tasks/W/W1-02.md", self.read("tasks/W/W1-02.md") + "- 持ち越し: W1-02 の自分\n")
+        field = ["- 他の作業の持ち越し:", "  - tasks/W/W1-01.md:8: - W1-02 へ: x",
+                 f"  - tasks/W/W1-01.md:10: …{'あ' * 59} W1-02 {'い' * 59}…"]  # fmt: skip
+        out = self.run_("ticket", "W1-02", "U2/i")[1]
+        self.assertEqual(out[out.index(field[0]) : out.index(field[0]) + 4], [*field, "- ぶつかりうる事例: なし"])
+        self.assertIn("- 他の作業の持ち越し: なし", self.run_("ticket", "W1-01", "U1/i")[1])
 
     def test_stale(self):
         """X-21 P-2: the lines of the `持ち越し` of the works not DONE (`--all`: every work) that name a DECIDED S beside
