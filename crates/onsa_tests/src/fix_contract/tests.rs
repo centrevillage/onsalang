@@ -386,3 +386,23 @@ fn the_diagnostics_named_are_in_the_printed_order() {
     let types = Diagnostic::new(onsa_diag::Stage::Types, Code::E0401, Span::new(file, 0, 2), "m");
     assert_eq!(describe(&files, &sources, &[syntax, types]), "E0401 at 1:1, E0020 at 3:5");
 }
+
+/// The guard of the stages the runner cannot check again (W4-02 U1): no
+/// diagnostic of lowering, the build or `onsa test` has a candidate now, so
+/// one made here goes through it, in the runner ([`unchecked`]) and in the
+/// check of one text ([`check_candidate`]).
+#[test]
+fn a_candidate_of_the_build_stage_is_never_checked_again() {
+    let src = "pub fn f() -> I32 {\n  1\n}\n";
+    let mut sources = SourceMap::default();
+    let file = sources.add("m.onsa", src);
+    let span = Span::new(file, 7, 8);
+    let d = Diagnostic::new(onsa_diag::Stage::Build, Code::E0610, span, "m").with_fix(Fix::replace("g", span, "g"));
+    let problems = unchecked(&sources, std::slice::from_ref(&d));
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    let Problem::FixUnchecked(m) = &problems[0] else { panic!("{problems:?}") };
+    assert!(m.starts_with("m.onsa:1:8 E0610 fix1: a candidate of the build stage"), "{m}");
+    let run = check_text(src).unwrap();
+    let Err(e) = check_candidate(&run, &d, &d.fixes[0]) else { panic!("a candidate of the build checked again") };
+    assert_eq!(e, "a candidate of the build stage");
+}

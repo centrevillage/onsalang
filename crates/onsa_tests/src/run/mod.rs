@@ -50,9 +50,9 @@ use std::sync::Arc;
 use onsa_diag::{Code, FileId, SourceMap};
 use onsa_driver::{Analyzed, BuildError, BuildOutput, Interface, InternalError, Loaded, LowerError};
 
-use crate::case::{self, Case};
+use crate::case::{self, Case, Setup};
 use crate::fixes::CopyCheck;
-use crate::fragment::{GoldenKind, Mode};
+use crate::fragment::{GoldenKind, Mode, TestSettings};
 use crate::golden::{self, Update};
 use crate::{Expected, PanicMark, parse_markers};
 
@@ -332,7 +332,10 @@ fn candidates(run: &mut CaseRun, root: &Path, contract: crate::fix_contract::Che
     }
 }
 
-/// [`run_case`] through `stages`.
+/// [`run_case`] through `stages`: the case's settings and markers
+/// ([`validate`]), fmt and the parser on its files ([`canonical_pass`]), the
+/// check ([`check_stage`]) or the builds ([`build_stage`]), and the outputs
+/// of a check without diagnostics ([`outputs`]).
 pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions) -> CaseRun {
     let RunOptions { golden: update, host_steps } = opts;
     let hosts = host_steps == HostSteps::Run;
@@ -356,6 +359,70 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     let Some(on_targets) = manifest_stage(&mut run, root, case, setup, &loaded, update) else { return run };
     let targets = case::target_names(&loaded);
     let t = &setup.test;
+    let Some(CaseMarkers { mut markers, testfails, panics }) = validate(&mut run, t, &loaded, &targets, &on_targets)
+    else {
+        return run;
+    };
+    canonical_pass(&mut run, t, &loaded, &markers);
+
+    if t.mode == Mode::Parse {
+        match onsa_driver::parse_only(&loaded) {
+            Ok(result) => {
+                compare(&mut run, &loaded.sources, &markers, &result.diagnostics, Stage::Parse, None);
+                // Candidates are checked again only in `check` and `test` (W3-17): one here fails.
+                run.problems.extend(crate::fix_contract::unchecked_in_parse(&loaded.sources, &result.diagnostics));
+            }
+            Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
+        }
+        return run;
+    }
+
+    let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
+        Ok(a) => a,
+        Err(e) => {
+            run.problems.push(internal_problem(&loaded.sources, &e, None));
+            return run;
+        }
+    };
+    // The runner's self-tests may change the candidates (`tests::Repo::changing_candidates`).
+    #[cfg(test)]
+    let analyzed = tests::changed_candidates(root, analyzed);
+    let check = &analyzed.diagnostics;
+    let cx = Cx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, targets: &targets, update, hosts };
+    // A `mode = "test"` case without targets that checks compares its markers
+    // with what `onsa test` reports before the tests run ([`run_tests`]).
+    let test_stage = check.is_empty() && targets.is_empty() && t.mode == Mode::Test;
+    if !check.is_empty() || targets.is_empty() {
+        if !check_stage(&cx, &mut run, &markers, &on_targets, test_stage) {
+            return run;
+        }
+    } else {
+        build_stage(&cx, &mut run, &mut markers, on_targets);
+    }
+    outputs(&cx, &mut run, &markers, &testfails, &panics, test_stage);
+    run
+}
+
+/// The markers of a case's files ([`validate`]).
+struct CaseMarkers {
+    /// The markers of diagnostics, each with its file.
+    markers: Vec<(FileId, Expected)>,
+    /// `//~ TESTFAIL "name"`: the module of the file, and the test.
+    testfails: Vec<(String, String)>,
+    /// `//~ PANIC "name"`: the module and the file, and the mark.
+    panics: Vec<(String, FileId, PanicMark)>,
+}
+
+/// The settings of the case against its targets, and the markers of its
+/// files. `None`: the case is `mode = "none"`, or has a problem of its own
+/// and does not run.
+fn validate(
+    run: &mut CaseRun,
+    t: &TestSettings,
+    loaded: &Loaded,
+    targets: &[String],
+    on_targets: &[(FileId, Expected)],
+) -> Option<CaseMarkers> {
     if !targets.is_empty() && matches!(t.mode, Mode::None | Mode::Parse) {
         run.problems.push(Problem::Case(format!("targets need `mode = \"check\"` or `\"test\"` (not {:?})", t.mode)));
     }
@@ -417,10 +484,10 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         }
     }
     if !run.problems.is_empty() || t.mode == Mode::None {
-        return run;
+        return None;
     }
     run.ran = true;
-    for (file, m) in markers.iter().chain(&on_targets) {
+    for (file, m) in markers.iter().chain(on_targets) {
         for name in m.targets.iter().flatten() {
             if !targets.contains(name) {
                 run.problems.push(Problem::Case(format!(
@@ -433,9 +500,14 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     }
     if !run.problems.is_empty() {
         run.ran = false;
-        return run;
+        return None;
     }
-    let targeted = markers.iter().filter(|(_, m)| m.targets.is_some()).count();
+    Some(CaseMarkers { markers, testfails, panics })
+}
+
+/// fmt on the files without markers (canonical, or with `canonical = false`
+/// changed by it), and the parser's diagnostics against the markers.
+fn canonical_pass(run: &mut CaseRun, t: &TestSettings, loaded: &Loaded, markers: &[(FileId, Expected)]) {
     let unmarked = loaded.modules.iter().filter(|(file, _)| !loaded.sources.file(*file).text().contains("//~")).count();
     if !t.canonical() && unmarked == 0 {
         run.problems.push(Problem::Case(
@@ -451,7 +523,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         let r = onsa_driver::guard(|| {
             let mut problems = CaseRun::default();
             let changed = !f.text().contains("//~") && canonical(&mut problems, f.name(), f.text(), t.canonical());
-            parser_markers(&mut problems, &loaded.sources, *file, &markers);
+            parser_markers(&mut problems, &loaded.sources, *file, markers);
             (problems.problems, changed)
         });
         match r {
@@ -467,112 +539,138 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             "fmt leaves every file of the case unchanged; take `canonical = false` out of the case".into(),
         ));
     }
+}
 
-    if t.mode == Mode::Parse {
-        match onsa_driver::parse_only(&loaded) {
-            Ok(result) => {
-                compare(&mut run, &loaded.sources, &markers, &result.diagnostics, Stage::Parse, None);
-                // Candidates are checked again only in `check` and `test` (W3-17): one here fails.
-                run.problems.extend(crate::fix_contract::unchecked_in_parse(&loaded.sources, &result.diagnostics));
-            }
-            Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
-        }
-        return run;
+/// What the stages after the analysis of a case read.
+struct Cx<'a> {
+    stages: &'a Stages,
+    root: &'a Path,
+    case: &'a Case,
+    setup: &'a Setup,
+    loaded: &'a Loaded,
+    analyzed: &'a Analyzed,
+    targets: &'a [String],
+    update: Update,
+    /// Whether the host sequences run ([`HostSteps`]).
+    hosts: bool,
+}
+
+/// Every candidate, applied alone and checked again (§18.1, S-236, W3-17).
+fn of_check(cx: &Cx<'_>, run: &mut CaseRun) {
+    let Cx { root, case, setup, loaded, analyzed, update, .. } = *cx;
+    let (t, check) = (&setup.test, &analyzed.diagnostics);
+    let contract = crate::fix_contract::check(case, setup, loaded, analyzed);
+    // A written `fixes = 0` counts the candidates too: none is expected (X-15).
+    let copies = t.fixes.map(|n| {
+        let guard = |old: &_, new: &_| crate::copy_guard::case(setup, loaded, old, new);
+        crate::fixes::compare(&loaded.sources, &disk_files(root, case, setup, loaded), check, n, update, &guard)
+    });
+    candidates(run, root, contract, copies);
+}
+
+/// The check that reports diagnostics, or of a case without targets: its
+/// candidates and its markers. `false`: it reports diagnostics, and the
+/// case stops here (no build runs, §18.1).
+fn check_stage(
+    cx: &Cx<'_>,
+    run: &mut CaseRun,
+    markers: &[(FileId, Expected)],
+    on_targets: &[(FileId, Expected)],
+    test_stage: bool,
+) -> bool {
+    let Cx { case, setup, loaded, analyzed, targets, hosts, .. } = *cx;
+    let (t, check) = (&setup.test, &analyzed.diagnostics);
+    let targeted = markers.iter().filter(|(_, m)| m.targets.is_some()).count();
+    of_check(cx, run);
+    if targeted > 0 {
+        run.problems.push(Problem::Case(if targets.is_empty() {
+            "markers name targets, but the case has none".into()
+        } else {
+            format!(
+                "markers name targets, but the build stage does not run (check reports {} diagnostics); \
+                 a code of the check takes no `[targets]`",
+                check.len()
+            )
+        }));
     }
-
-    let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
-        Ok(a) => a,
-        Err(e) => {
-            run.problems.push(internal_problem(&loaded.sources, &e, None));
-            return run;
+    if !test_stage && compare(run, &loaded.sources, markers, check, Stage::Check, None) {
+        negative_rules(run, &case.path, check);
+    }
+    if !check.is_empty() {
+        // A build stops on its manifest before the sources (§18.1), whatever the check reports.
+        for target in targets {
+            manifest_of_target(run, loaded, on_targets, target);
         }
-    };
-    // The runner's self-tests may change the candidates (`tests::Repo::changing_candidates`).
-    #[cfg(test)]
-    let analyzed = tests::changed_candidates(root, analyzed);
-    let check = &analyzed.diagnostics;
-    // Every candidate, applied alone and checked again (§18.1, S-236, W3-17).
-    let of_check = |run: &mut CaseRun| {
-        let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);
-        // A written `fixes = 0` counts the candidates too: none is expected (X-15).
-        let copies = t.fixes.map(|n| {
-            let guard = |old: &_, new: &_| crate::copy_guard::case(setup, &loaded, old, new);
-            crate::fixes::compare(&loaded.sources, &disk_files(root, case, setup, &loaded), check, n, update, &guard)
-        });
-        candidates(run, root, contract, copies);
-    };
-    // A `mode = "test"` case without targets that checks compares its markers
-    // with what `onsa test` reports before the tests run ([`run_tests`]).
-    let test_stage = check.is_empty() && targets.is_empty() && t.mode == Mode::Test;
-    if !check.is_empty() || targets.is_empty() {
-        of_check(&mut run);
-        if targeted > 0 {
-            run.problems.push(Problem::Case(if targets.is_empty() {
-                "markers name targets, but the case has none".into()
-            } else {
-                format!(
-                    "markers name targets, but the build stage does not run (check reports {} diagnostics); \
-                     a code of the check takes no `[targets]`",
-                    check.len()
-                )
-            }));
-        }
-        if !test_stage && compare(&mut run, &loaded.sources, &markers, check, Stage::Check, None) {
-            negative_rules(&mut run, &case.path, check);
-        }
-        if !check.is_empty() {
-            // A build stops on its manifest before the sources (§18.1), whatever the check reports.
-            for target in &targets {
-                manifest_of_target(&mut run, &loaded, &on_targets, target);
-            }
-            if !t.golden.is_empty() || !t.golden_graph.is_empty() || t.conformance {
-                run.problems
-                    .push(Problem::Case("golden files and conformance need a check without diagnostics".into()));
-            }
-            if hosts {
-                let why = format!("the check reports {} diagnostics", check.len());
-                for h in &t.host {
-                    host_not_run(&mut run, h, &why);
-                }
-            }
-            return run;
-        }
-    } else {
-        if t.conformance {
-            conformance_scope(&mut run, &loaded, &analyzed);
-        }
-        markers.extend(on_targets);
-        let mut late = Vec::new();
-        for target in &targets {
-            let ctx = BuildCtx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, markers: &markers };
-            let after = build_target(&ctx, target, update, &mut run);
-            late.extend(after.filter(|ds| ds.iter().any(|d| !d.fixes.is_empty())).map(|ds| (target, ds)));
-        }
-        // The candidates of the manifest's that a build reports after the sources are the case's (`tests/README.md`).
-        match &late[..] {
-            [] => of_check(&mut run),
-            [(target, ds)] if targets.len() == 1 => {
-                let contract = crate::fix_contract::check_build(case, setup, &loaded, ds, (target, stages.build));
-                let copies = t.fixes.zip(markers::manifest_file(root, case, setup, &loaded)).map(|(n, file)| {
-                    let guard = |old: &_, new: &_| crate::copy_guard::manifest(setup, &loaded, old, new);
-                    crate::fixes::compare(&loaded.sources, &[file], ds, n, update, &guard)
-                });
-                candidates(&mut run, root, contract, copies);
-            }
-            _ => run.problems.push(Problem::Case(
-                "a build reports a candidate of the manifest after the sources, which a case with one target checks"
-                    .into(),
-            )),
+        if !t.golden.is_empty() || !t.golden_graph.is_empty() || t.conformance {
+            run.problems.push(Problem::Case("golden files and conformance need a check without diagnostics".into()));
         }
         if hosts {
-            run_hosts(&mut run, &t.host);
+            let why = format!("the check reports {} diagnostics", check.len());
+            for h in &t.host {
+                host_not_run(run, h, &why);
+            }
         }
+        return false;
     }
+    true
+}
 
-    // The check reports nothing: the outputs of the analysis, and the tests.
+/// The builds of the targets after a check without diagnostics, the
+/// candidates of the check or of the manifest's diagnostics a build reports
+/// after the sources, and the host sequences.
+fn build_stage(
+    cx: &Cx<'_>,
+    run: &mut CaseRun,
+    markers: &mut Vec<(FileId, Expected)>,
+    on_targets: Vec<(FileId, Expected)>,
+) {
+    let Cx { stages, root, case, setup, loaded, analyzed, targets, update, hosts } = *cx;
+    let t = &setup.test;
+    if t.conformance {
+        conformance_scope(run, loaded, analyzed);
+    }
+    markers.extend(on_targets);
+    let mut late = Vec::new();
+    for target in targets {
+        let ctx = BuildCtx { stages, root, case, setup, loaded, analyzed, markers };
+        let after = build_target(&ctx, target, update, run);
+        late.extend(after.filter(|ds| ds.iter().any(|d| !d.fixes.is_empty())).map(|ds| (target, ds)));
+    }
+    // The candidates of the manifest's that a build reports after the sources are the case's (`tests/README.md`).
+    match &late[..] {
+        [] => of_check(cx, run),
+        [(target, ds)] if targets.len() == 1 => {
+            let contract = crate::fix_contract::check_build(case, setup, loaded, ds, (target, stages.build));
+            let copies = t.fixes.zip(markers::manifest_file(root, case, setup, loaded)).map(|(n, file)| {
+                let guard = |old: &_, new: &_| crate::copy_guard::manifest(setup, loaded, old, new);
+                crate::fixes::compare(&loaded.sources, &[file], ds, n, update, &guard)
+            });
+            candidates(run, root, contract, copies);
+        }
+        _ => run.problems.push(Problem::Case(
+            "a build reports a candidate of the manifest after the sources, which a case with one target checks".into(),
+        )),
+    }
+    if hosts {
+        run_hosts(run, &t.host);
+    }
+}
+
+/// The check reports nothing: the outputs of the analysis (the goldens of
+/// Core, the interface and the graphs), and the tests.
+fn outputs(
+    cx: &Cx<'_>,
+    run: &mut CaseRun,
+    markers: &[(FileId, Expected)],
+    testfails: &[(String, String)],
+    panics: &[(String, FileId, PanicMark)],
+    test_stage: bool,
+) {
+    let Cx { stages, root, case, setup, loaded, analyzed, update, .. } = *cx;
+    let t = &setup.test;
     let needs_core = t.golden.contains(&GoldenKind::Core) || t.mode == Mode::Test;
     let module = if needs_core {
-        match (stages.lower_core)(&analyzed) {
+        match (stages.lower_core)(analyzed) {
             Ok(m) => Some(m),
             Err(e) => {
                 run.problems.push(stage_problem(&loaded.sources, StageFailure::Lower(&e)));
@@ -591,12 +689,12 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         && let Some(m) = &module
     {
         // `lower_core` verified it (R-82).
-        gold(&mut run, golden::core_path(&case.name), &onsa_core::dump(m));
+        gold(run, golden::core_path(&case.name), &onsa_core::dump(m));
     }
     if t.golden.contains(&GoldenKind::Interface) {
-        match (stages.interface)(&analyzed) {
+        match (stages.interface)(analyzed) {
             Ok(iface) => {
-                gold(&mut run, golden::interface_path(&case.name), &onsa_driver::render_text(&iface));
+                gold(run, golden::interface_path(&case.name), &onsa_driver::render_text(&iface));
                 // The JSON form must parse and name the package.
                 match serde_json::from_str::<serde_json::Value>(&onsa_driver::render_json(&iface)) {
                     Ok(json) if json["package"] == loaded.name.as_str() => {}
@@ -610,8 +708,8 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         }
     }
     for flow in &t.golden_graph {
-        match onsa_driver::graph(&analyzed, flow, None) {
-            Ok(dot) => gold(&mut run, golden::graph_path(&case.name, flow), &dot),
+        match onsa_driver::graph(analyzed, flow, None) {
+            Ok(dot) => gold(run, golden::graph_path(&case.name, flow), &dot),
             Err(onsa_driver::GraphError::Usage(e)) => {
                 run.problems.push(Problem::Failed(format!("graph `{flow}`: {e}")))
             }
@@ -621,8 +719,8 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     if t.mode == Mode::Test
         && let Some(m) = &module
     {
-        let stage_markers: &[(FileId, Expected)] = if test_stage { &markers } else { &[] };
-        run_tests(&mut run, &case.path, &loaded.sources, m, stage_markers, &testfails, &panics);
+        let stage_markers: &[(FileId, Expected)] = if test_stage { markers } else { &[] };
+        run_tests(run, &case.path, &loaded.sources, m, stage_markers, testfails, panics);
     }
     // One name space: an entry `<path>::<name>` names a test or a host sequence.
     for h in &t.host {
@@ -634,5 +732,4 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             )));
         }
     }
-    run
 }

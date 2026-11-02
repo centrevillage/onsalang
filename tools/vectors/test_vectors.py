@@ -4,6 +4,7 @@
 Run by tools/test_gate.py (the `gate-selftest` item), or alone: python3 -B tools/vectors/test_vectors.py
 """
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -39,6 +40,13 @@ class VectorsTools(unittest.TestCase):
 
     def test_committed_data_passes(self):
         self.assertEqual(gen.check(self.copy, quiet=True), [])
+
+    def test_spec_tokens_is_imported_alone(self):
+        # It finds tools/repo.py itself, not through the path gen.py makes (RF-18).
+        code = f"import sys; sys.path.insert(0, {str(HERE)!r}); import spec_tokens; print(spec_tokens.repo.ROOT)"
+        r = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True, timeout=60,
+                           cwd=HERE.parent.parent)  # not tools/, which `-c` would put on the path
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, str(HERE.parent.parent)), r.stderr)
 
     def test_an_edited_expected_value_is_found(self):
         d = self.fresh()

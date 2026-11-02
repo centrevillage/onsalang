@@ -925,8 +925,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
 
 def build(root, cases=False):
     """Build the compiler (or, with `cases`, the fix stage's `onsa_cases`)."""
-    what = ["-p", "onsa_tests", "--bin", "onsa_cases"] if cases else ["-p", "onsa_cli"]
-    r = subprocess.run(["cargo", "build", "-q", *what], cwd=root)
+    r = subprocess.run(repo.CASES_BUILD if cases else ("cargo", "build", "-q", "-p", "onsa_cli"), cwd=root)
     return r.returncode == 0
 
 
@@ -1090,7 +1089,7 @@ def binaries(args):
     cases = args.cases_binary
     if cases is None:
         if not build(args.root, cases=True):
-            print("fuzz: cannot build onsa_cases (cargo build -p onsa_tests --bin onsa_cases)", file=sys.stderr)
+            print(f"fuzz: cannot build onsa_cases ({' '.join(repo.CASES_BUILD)})", file=sys.stderr)
             return None
         cases = target / "debug" / "onsa_cases"
     return target, binary, cases

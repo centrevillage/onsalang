@@ -382,8 +382,9 @@ mod tests {
         }
     }
 
-    /// The text without comments (each comment a space), and for each
-    /// character whether it is inside a string or character literal.
+    /// The text without comments (each comment a space, and the line breaks
+    /// of a block comment), and for each character whether it is inside a
+    /// string or character literal.
     fn lex(text: &str) -> (Vec<char>, Vec<bool>) {
         let c: Vec<char> = text.chars().collect();
         let (mut out, mut lit) = (Vec::new(), Vec::new());
@@ -400,7 +401,7 @@ mod tests {
                 continue;
             }
             if ch == '/' && at(i + 1) == Some('*') {
-                let mut depth = 0;
+                let (from, mut depth) = (i, 0);
                 while i < c.len() {
                     if c[i] == '/' && at(i + 1) == Some('*') {
                         depth += 1;
@@ -415,8 +416,9 @@ mod tests {
                         i += 1;
                     }
                 }
-                out.push(' ');
-                lit.push(false);
+                let breaks = c[from..i.min(c.len())].iter().filter(|&&x| x == '\n').count();
+                out.extend(std::iter::once(' ').chain(std::iter::repeat_n('\n', breaks)));
+                lit.extend(std::iter::repeat_n(false, 1 + breaks));
                 continue;
             }
             let ident_before = i > 0 && (c[i - 1].is_alphanumeric() || c[i - 1] == '_');
@@ -508,14 +510,12 @@ mod tests {
         i
     }
 
-    /// The code of a source file without comments and without the items
-    /// marked `#[cfg(test)]` (a `mod x;` to its `;`, an item with a body to
-    /// its closing brace), and the names of the `#[cfg(test)] mod x;` files.
-    fn non_test_code(text: &str) -> (String, Vec<String>) {
-        let (c, lit) = lex(text);
+    /// The items marked `#[cfg(test)]` (a `mod x;` to its `;`, an item with a
+    /// body to its closing brace) of a lexed text ([`lex`]): from the
+    /// attribute, from the item after its attributes, and the item's end.
+    fn test_items(c: &[char], lit: &[bool]) -> Vec<(usize, usize, usize)> {
         let attr: Vec<char> = "#[cfg(test)]".chars().collect();
-        let mut keep = vec![true; c.len()];
-        let mut test_mods = Vec::new();
+        let mut items = Vec::new();
         let mut i = 0;
         while i + attr.len() <= c.len() {
             if lit[i] || c[i..i + attr.len()] != attr[..] {
@@ -552,7 +552,20 @@ mod tests {
                     break;
                 }
             }
-            let end = item_end(&c, &lit, j);
+            let end = item_end(c, lit, j);
+            items.push((i, j, end));
+            i = end;
+        }
+        items
+    }
+
+    /// The code of a source file without comments and without the items
+    /// marked `#[cfg(test)]`, and the names of the `#[cfg(test)] mod x;` files.
+    fn non_test_code(text: &str) -> (String, Vec<String>) {
+        let (c, lit) = lex(text);
+        let mut keep = vec![true; c.len()];
+        let mut test_mods = Vec::new();
+        for (i, j, end) in test_items(&c, &lit) {
             let item: String = c[j..end].iter().collect();
             let words: Vec<&str> =
                 item.split(|x: char| !(x.is_alphanumeric() || x == '_')).filter(|w| !w.is_empty()).collect();
@@ -565,7 +578,6 @@ mod tests {
             for k in keep.iter_mut().take(end).skip(i) {
                 *k = false;
             }
-            i = end;
         }
         (c.iter().zip(&keep).filter(|(_, k)| **k).map(|(x, _)| *x).collect(), test_mods)
     }
@@ -594,10 +606,9 @@ mod tests {
         assert!(code.contains("fn d() { E0200 }"), "{code}");
     }
 
-    /// Every E0200 is made here, and every feature is reported somewhere
-    /// (D-15): the other crates name a [`Feature`], never the code.
-    #[test]
-    fn every_e0200_comes_from_the_list_and_every_feature_is_reported() {
+    /// Every `.rs` file of the crates' `src/` with its text, its code without
+    /// the tests ([`non_test_code`]), and whether it is the file of a test module.
+    fn crate_sources() -> Vec<(PathBuf, String, String, bool)> {
         let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let mut files = Vec::new();
         for entry in std::fs::read_dir(crates).unwrap() {
@@ -606,18 +617,34 @@ mod tests {
                 rust_files(&src, &mut files);
             }
         }
-        let this = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut code_of = Vec::new();
         let mut test_files = Vec::new();
-        for f in &files {
-            let (code, test_mods) = non_test_code(&std::fs::read_to_string(f).unwrap());
-            test_files.extend(module_paths(f, &test_mods));
-            code_of.push((f, code));
+        for f in files {
+            let text = std::fs::read_to_string(&f).unwrap();
+            let (code, test_mods) = non_test_code(&text);
+            test_files.extend(module_paths(&f, &test_mods));
+            code_of.push((f, text, code));
         }
+        let test = |f: &Path| test_files.iter().any(|t| f.starts_with(t));
+        // Every file is read before: a test module's file may come before the file that declares it.
+        code_of
+            .into_iter()
+            .map(|(f, text, code)| {
+                let t = test(&f);
+                (f, text, code, t)
+            })
+            .collect()
+    }
+
+    /// Every E0200 is made here, and every feature is reported somewhere
+    /// (D-15): the other crates name a [`Feature`], never the code.
+    #[test]
+    fn every_e0200_comes_from_the_list_and_every_feature_is_reported() {
+        let this = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut used = BTreeSet::new();
         let mut scanned = 0;
-        for (f, code) in &code_of {
-            if f.starts_with(&this) || test_files.iter().any(|t| f.starts_with(t)) {
+        for (f, _, code, test) in &crate_sources() {
+            if f.starts_with(&this) || *test {
                 continue;
             }
             scanned += 1;
@@ -633,5 +660,60 @@ mod tests {
         assert!(scanned > 50, "the scan found {scanned} source files only");
         let unused: Vec<&str> = Feature::ALL.iter().map(|f| f.name()).filter(|n| !used.contains(*n)).collect();
         assert!(unused.is_empty(), "features of the list that nothing reports: {unused:?}");
+    }
+
+    /// The lines (from 1) of the `#[cfg(test)] mod x { … }` of a source file,
+    /// as the scan reads them: from the attribute to the closing brace.
+    fn test_module_lines(text: &str) -> BTreeSet<usize> {
+        let (c, lit) = lex(text);
+        let line = |k: usize| 1 + c[..k].iter().filter(|&&x| x == '\n').count();
+        let mut lines = BTreeSet::new();
+        for (i, j, end) in test_items(&c, &lit) {
+            let head: String = c[j..end].iter().take_while(|&&x| x != '{' && x != ';').collect();
+            if c[end - 1] == '}' && head.split_whitespace().rev().nth(1) == Some("mod") {
+                lines.extend(line(i)..=line(end - 1));
+            }
+        }
+        lines
+    }
+
+    /// The tools' answer for each file (`tools/repo.py`, read by `work.py lines`
+    /// and `refactor.py sizes`): `<path> *` for a test file, else the lines of its test modules.
+    const TOOLS_ANSWER: &str = "import sys\nfrom pathlib import Path\nsys.path.insert(0, 'tools')\nimport repo\n\
+        for rel in sys.argv[1:]:\n    lines = sorted(repo.test_lines(Path(rel).read_text()))\n    \
+        if repo.is_test_file(rel):\n        print(rel, '*')\n    elif lines:\n        print(rel, *lines)\n";
+
+    /// Where a test module is, the two places that decide it read the same
+    /// lines of every crate (RF-21): this scan, and the tools that count the
+    /// code without the tests (`tools/repo.py`: `test_lines` and the test files of `NOT_CODE`).
+    #[test]
+    fn the_test_modules_are_those_the_tools_read() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).unwrap();
+        let sources = crate_sources();
+        let rel = |f: &Path| f.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+        let ours: Vec<String> = sources
+            .iter()
+            .filter_map(|(f, text, _, test)| {
+                let lines: Vec<String> = test_module_lines(text).iter().map(usize::to_string).collect();
+                let answer = if *test { "*".to_string() } else { lines.join(" ") };
+                (!answer.is_empty()).then(|| format!("{} {answer}", rel(f)))
+            })
+            .collect();
+        let tools = std::process::Command::new("python3")
+            .args(["-B", "-c", TOOLS_ANSWER])
+            .args(sources.iter().map(|(f, ..)| rel(f)))
+            .current_dir(root)
+            .output()
+            .expect("python3 runs tools/repo.py");
+        assert!(tools.status.success(), "{}", String::from_utf8_lossy(&tools.stderr));
+        let theirs = String::from_utf8(tools.stdout).unwrap();
+        let theirs: Vec<&str> = theirs.lines().collect();
+        let whole = ours.iter().filter(|l| l.ends_with(" *")).count();
+        assert!(whole >= 20 && ours.len() - whole >= 20, "the scan found {whole} test files and {} others", ours.len());
+        let only_ours = ours.iter().filter(|l| !theirs.contains(&l.as_str()));
+        let only_theirs = theirs.iter().filter(|l| !ours.iter().any(|o| o == *l));
+        let diff: Vec<String> =
+            only_ours.map(|l| format!("scan:  {l}")).chain(only_theirs.map(|l| format!("tools: {l}"))).collect();
+        assert!(diff.is_empty(), "{diff:#?}");
     }
 }

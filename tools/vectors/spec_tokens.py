@@ -7,9 +7,15 @@ does a registry token the spec does not have. What the vectors leave out on purp
 closed list with its reason; it is the only place that says so.
 """
 import re
+import sys
+from pathlib import Path
 
 import ops as O
-import repo  # tools/: on the path of the entry points (gen.py)
+
+TOOLS = str(Path(__file__).resolve().parent.parent)
+if TOOLS not in sys.path:
+    sys.path.append(TOOLS)  # after this directory's own modules (ops), as gen.py puts it
+import repo  # noqa: E402
 
 # Spans of 3.3 / 3.4 that are not operations of the vectors.
 NOT_OPERATIONS = {

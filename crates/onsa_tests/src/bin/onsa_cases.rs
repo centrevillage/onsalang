@@ -124,9 +124,35 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | --continuing | --symbols | \
-     --std-names | --builtin-members | --fix-same-place FILE... | --default-inits FILE... | --fix-loop [--json] [--branches] [--pick first|last] \
-     [--steps N] [--states N] [--diverge N] FILE... | --fix-loop-gate [ROOT] | --fmt FILE | --phases [--lower] [--rounds N] PATH...";
+/// The forms of the command, in the order of the usage: the flag (`""`: none),
+/// the least and the most arguments after it, and the words of the usage after it.
+const FORMS: &[(&str, usize, usize, &str)] = &[
+    ("", 0, 1, "[ROOT]"),
+    ("--run", 0, 1, "[ROOT]"),
+    ("--c", 1, 2, "ITEM [ROOT]"),
+    ("--vectors", 1, 2, "interp|c [ROOT]"),
+    ("--c-items", 0, 0, ""),
+    ("--codes", 0, 0, ""),
+    ("--keywords", 0, 0, ""),
+    ("--continuing", 0, 0, ""),
+    ("--symbols", 0, 0, ""),
+    ("--std-names", 0, 0, ""),
+    ("--builtin-members", 0, 0, ""),
+    ("--fix-same-place", 1, MANY, "FILE..."),
+    ("--default-inits", 1, MANY, "FILE..."),
+    ("--fix-loop", 1, MANY, "[--json] [--branches] [--pick first|last] [--steps N] [--states N] [--diverge N] FILE..."),
+    ("--fix-loop-gate", 0, 1, "[ROOT]"),
+    ("--fmt", 1, 1, "FILE"),
+    ("--phases", 1, MANY, "[--lower] [--rounds N] PATH..."),
+];
+const MANY: usize = usize::MAX;
+
+/// The usage, from [`FORMS`].
+fn usage_text() -> String {
+    let forms: Vec<String> =
+        FORMS.iter().map(|(flag, _, _, words)| format!("{flag} {words}").trim().to_string()).collect();
+    format!("onsa_cases {}", forms.join(" | "))
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -138,15 +164,10 @@ fn main() -> ExitCode {
         Some(r) => PathBuf::from(r),
         None => onsa_tests::case::repo_root(),
     };
-    let too_many = match mode {
-        "" | "--run" | "--fix-loop-gate" => rest.len() > 1,
-        "--c" | "--vectors" => rest.is_empty() || rest.len() > 2,
-        "--fmt" => rest.len() != 1,
-        "--fix-same-place" | "--fix-loop" | "--default-inits" | "--phases" => rest.is_empty(),
-        _ => !rest.is_empty(),
-    };
-    if too_many {
-        eprintln!("usage: {USAGE}");
+    // A flag the table does not have takes no argument: it is unknown (the last arm).
+    let form = FORMS.iter().find(|f| f.0 == mode);
+    if !form.map_or(rest.is_empty(), |&(_, least, most, _)| (least..=most).contains(&rest.len())) {
+        eprintln!("usage: {}", usage_text());
         return ExitCode::from(2);
     }
     match mode {
@@ -203,7 +224,7 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(e) => {
-                eprintln!("{e}; usage: {USAGE}");
+                eprintln!("{e}; usage: {}", usage_text());
                 ExitCode::from(2)
             }
         },
@@ -249,7 +270,7 @@ fn main() -> ExitCode {
             }
         },
         other => {
-            eprintln!("unknown option `{other}`; usage: {USAGE}");
+            eprintln!("unknown option `{other}`; usage: {}", usage_text());
             ExitCode::from(2)
         }
     }
@@ -379,7 +400,7 @@ fn phases(args: &[String]) -> ExitCode {
 }
 
 fn usage(e: &str) -> ExitCode {
-    eprintln!("{e}; usage: {USAGE}");
+    eprintln!("{e}; usage: {}", usage_text());
     ExitCode::from(2)
 }
 

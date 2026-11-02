@@ -35,7 +35,11 @@ ROOT = Path(__file__).resolve().parent.parent
 PENDING = Path("tests") / "pending.toml"
 # The saved fuzz inputs (tools/fuzz.py, W1-04); `onsa_tests::case::EXCLUDED` keeps them out of the cases.
 FUZZ_DIR = Path("tests") / "fuzz"
-CASES_CMD = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--")
+# `onsa_cases` (`crates/onsa_tests/src/bin/onsa_cases.rs`): its cargo arguments, its build, and the command that runs
+# it (the one spelling, D-15).
+CASES_BIN = ("-p", "onsa_tests", "--bin", "onsa_cases")
+CASES_BUILD = ("cargo", "build", "-q", *CASES_BIN)
+CASES_CMD = ("cargo", "run", "-q", *CASES_BIN, "--")
 
 CODE = re.compile(r"(?<![A-Za-z0-9_])E\d{4}(?![0-9])")
 

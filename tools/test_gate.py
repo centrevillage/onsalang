@@ -6429,8 +6429,7 @@ class IgnoresStale(TempRepo):
 
 
 # The real `onsa_cases` from any directory: tools/default_inits.py runs it in the root it reads.
-REAL_CASES = ("cargo", "run", "-q", "--manifest-path", str(repo.ROOT / "Cargo.toml"), "-p", "onsa_tests", "--bin",
-              "onsa_cases", "--")  # fmt: skip
+REAL_CASES = ("cargo", "run", "-q", "--manifest-path", str(repo.ROOT / "Cargo.toml"), *repo.CASES_BIN, "--")
 INIT_FLOW = "pub flow f(x: F32 at sample, b: Bool at sample, s: F32 at init) -> F32 at sample {{\n  {}\n}}\n"
 
 

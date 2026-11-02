@@ -49,6 +49,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import repo
+
 TOOLS = Path(__file__).resolve().parent
 PY = (sys.executable, "-B")
 SAMPLE = 0.1  # the fraction of the sample of the work check (X-1 M-1)
@@ -67,9 +69,9 @@ FMT_TOOLS = ("tools/fmt_props.py", "tools/narrowing.py")
 # work check (X-1 U10). The self-test writes its own table of the allowed names; `builtin-names` checks the real one.
 SELFTEST_UNREAD = ("tools/builtin_names.toml",)
 # The C checks (Q-07, W1-06): one item per row of `onsa_tests::c::ITEMS`.
-C_CHECK = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--c")
+C_CHECK = (*repo.CASES_CMD, "--c")
 # The test vectors against an implementation (W2-02): `interp` or `c`.
-VECTORS = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--vectors")
+VECTORS = (*repo.CASES_CMD, "--vectors")
 
 
 @dataclass(frozen=True)
@@ -110,8 +112,7 @@ STEPS = [
     # W3-22): the cases of tests/spec/fixes and the saved inputs of the fuzzing. It shows the cycles and the
     # divergences (report only, until the known ones are sorted out) and fails when it walks nothing, runs
     # out of its time, or a walk ends in an internal error.
-    Step("fix-loop", ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--fix-loop-gate"),
-         info=True, slow=True),  # fmt: skip
+    Step("fix-loop", (*repo.CASES_CMD, "--fix-loop-gate"), info=True, slow=True),
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py")), static=True),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check"), static=True),
     # The documents write the `init` of a delay in the omitted form (S-539 (c3a)): the ```onsa blocks of the spec
