@@ -264,7 +264,9 @@ dependencies = [
 name = "onsa_tests"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "onsa_backend_c",
+ "onsa_cli",
  "onsa_core",
  "onsa_diag",
  "onsa_driver",

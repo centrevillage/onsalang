@@ -25,6 +25,8 @@
 //!                            not written (tools/fmt_props.py, X-1 U12)
 //! onsa_cases --phases [--lower] [--rounds N] PATH...  the time of each phase of the compiler on
 //!                            each input (X-20, `onsa_tests::phases`)
+//! onsa_cases --serve         the commands of the gate's tools on the texts of the standard input,
+//!                            one request after another (tools/batch.py; `onsa_tests::serve`)
 //! ```
 //!
 //! The first form prints:
@@ -144,6 +146,7 @@ const FORMS: &[(&str, usize, usize, &str)] = &[
     ("--fix-loop-gate", 0, 1, "[ROOT]"),
     ("--fmt", 1, 1, "FILE"),
     ("--phases", 1, MANY, "[--lower] [--rounds N] PATH..."),
+    ("--serve", 0, 0, ""),
 ];
 const MANY: usize = usize::MAX;
 
@@ -206,8 +209,19 @@ fn main() -> ExitCode {
             ExitCode::from(report.exit_code())
         }
         "--fix-same-place" => {
-            print(&serde_json::json!(fix_same_place(rest)));
+            print!("{}", onsa_tests::single_files::fix_same_place(rest, onsa_tests::single_files::read_input));
             ExitCode::SUCCESS
+        }
+        "--serve" => {
+            // As `onsa` does before its command.
+            onsa_driver::verify_core_in_debug_only();
+            match onsa_tests::serve::serve(&mut std::io::stdin().lock(), &mut std::io::stdout().lock()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("onsa_cases --serve: {e}");
+                    ExitCode::from(2)
+                }
+            }
         }
         "--default-inits" => {
             print(&serde_json::json!(default_inits(rest)));
@@ -314,25 +328,6 @@ fn default_inits(files: &[String]) -> Vec<serde_json::Value> {
                     v
                 }
                 Err(e) => serde_json::json!({"file": path, "internal": e.message}),
-            },
-        }
-    })
-}
-
-/// `--fix-same-place`: each file on a thread with the stack of a command, in parallel.
-fn fix_same_place(files: &[String]) -> Vec<serde_json::Value> {
-    onsa_tests::single_files::on_stacks(files.len(), |i| {
-        let path = &files[i];
-        match onsa_tests::single_files::read_input(path) {
-            Err(e) => serde_json::json!({"file": path, "unreadable": e}),
-            // A panic outside the driver's stages is an internal error too.
-            Ok(text) => match onsa_driver::guard(|| onsa_tests::fix_contract::same_place(&text)) {
-                Ok(r) => {
-                    let mut v = serde_json::json!(r);
-                    v["file"] = serde_json::json!(path);
-                    v
-                }
-                Err(e) => serde_json::json!({"file": path, "candidates": 0, "violations": [], "internal": e.message}),
             },
         }
     })

@@ -34,6 +34,7 @@ pub mod pending;
 pub mod phases;
 pub mod run;
 pub mod scalar;
+pub mod serve;
 pub mod single_files;
 pub mod vectors;
 

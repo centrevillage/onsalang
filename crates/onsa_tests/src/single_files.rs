@@ -4,11 +4,38 @@
 
 /// The text of an input file, or why it cannot be read (as `onsa check`).
 pub fn read_input(path: &str) -> Result<String, String> {
-    match std::fs::read(path).map(String::from_utf8) {
+    text_of(std::fs::read(path))
+}
+
+/// The text of the bytes of an input, or why they cannot be read ([`read_input`]).
+pub fn text_of(bytes: std::io::Result<Vec<u8>>) -> Result<String, String> {
+    match bytes.map(String::from_utf8) {
         Err(e) => Err(e.to_string()),
         Ok(Err(_)) => Err("not UTF-8".into()),
         Ok(Ok(text)) => Ok(text),
     }
+}
+
+/// What `onsa_cases --fix-same-place` prints for `files`, read by `read`
+/// (the files, or the texts of `onsa_cases --serve`): the near "same place"
+/// of each file, each on a thread with the stack of a command, in parallel.
+pub fn fix_same_place(files: &[String], read: impl Fn(&str) -> Result<String, String> + Sync) -> String {
+    let items = on_stacks(files.len(), |i| {
+        let path = &files[i];
+        match read(path) {
+            Err(e) => serde_json::json!({"file": path, "unreadable": e}),
+            // A panic outside the driver's stages is an internal error too.
+            Ok(text) => match onsa_driver::guard(|| crate::fix_contract::same_place(&text)) {
+                Ok(r) => {
+                    let mut v = serde_json::json!(r);
+                    v["file"] = serde_json::json!(path);
+                    v
+                }
+                Err(e) => serde_json::json!({"file": path, "candidates": 0, "violations": [], "internal": e.message}),
+            },
+        }
+    });
+    format!("{}\n", serde_json::to_string_pretty(&items).expect("serializes"))
 }
 
 /// `f` of each index below `n`, on threads with the stack of a command, in
