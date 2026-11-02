@@ -4,7 +4,8 @@
 
 - **第 2 期（fmt の書き換えの残り。29 回目、W3-12 の範囲を縮めた）:** `-> ()`・空の `uses {}` の除去（S-540。無名関数では外さない、S-546）と、冗長な括弧の除去（S-339 の基準、S-115・S-336・S-45 の fmt、S-536 の括弧、S-537 の fmt の部分）を入れる。
   範囲にコメントがあれば書き換えない（S-536 (1)、S-538 (s2)）。書き換えはどのプログラムでも各段の判定を変えない（仕様 §18.2。gate の性質 `meaning` が確かめる）。
-  - 注意（2026-11-02、W4 の終わりの `tests/review-phase1/` の確かめ）: `crates/onsa_cli/tests/cli/fmt_rewrites.rs` の ignore 中の `r78_the_extra_information_of_r78_onsa_is_taken_off_as_its_comments_say` の期待は、`set_one` の値の無い末尾の `return` も外すが、仕様 `spec/tools.md` §3.3 と §6.1 は fmt がそれを外さないと決めている（`tests/spec/fmt/rewrite_valueless_return_kept.onsa`）。ignore を外すときに、その `return` を期待に残す。
+  - 注意（2026-11-02、W4 の終わりの `tests/review-phase1/` の確かめ）: `crates/onsa_cli/tests/cli/fmt_rewrites.rs` の ignore 中の `r78_the_extra_information_of_r78_onsa_is_taken_off_as_its_comments_say` の期待は、`set_one` の値の無い末尾の `return` も外すが、仕様 `spec/tools.md` §3.3 と §6.1 は fmt がそれを外さないと決めている（`tests/spec/fmt/rewrite_valueless_return_kept.onsa`）。
+    ignore を外すときに、その `return` を期待に残す。
   - 材料: `tasks/phase2/`（`u1b_07a0e81.patch`、`u1fix1_d43de9e.patch`、`u2t_dd958b1.patch`、`u1_all_d43de9e.patch`、`handback_f.md`。28 回目の scratchpad の `p2save/` から写した）。
     担当の報告は残さない（X-2 の DF-D）。28 回目の壊す側（/b）の報告の指摘 1〜6（`-> ()`・`uses {}`・`init` の除去の形で、第 2 期の確かめに使える）だけを、その節と再現の入力のまま `tasks/phase2/handback_b_findings.md`・`tasks/phase2/b_repro/` に写した。
   - `crates/onsa_cli/tests/fmt_rewrites.rs` の `PH2:` の ignore 12 件のうち、`x_combinations` の `reset_all`・`alloc_only`、`x_module` の `touch`、`r78` の `set_one` は、値の無い末尾の `return` を外す期待値で、S-547 と食い違う。ignore を外すときに直す（`tasks/phase2/` のパッチの側も同じ）。
@@ -35,6 +36,8 @@
   正確な辺は今の辺の一部なので、緩める向きで壊れない。入れるときに §15.1 の「この検査は `use` の一覧で閉じる」を改める。
 - **Windows の junction（55 回目、2026-10-23、S-592）:** パッケージの木の中の Windows の junction を、シンボリックリンクと同じに辿らないか（Rust の `FileType::is_symlink` が junction を含むかは未確認）を、Windows で動かす作業で確かめる。
 - **std 以外の依存（R-88 の (3)、2026-11-01、99 回目）:** 依存の取得元、版の解決、`onsa.lock` の形を決めて入れる（§19.1、計画 §5。パッケージの `tests/` の R-122 と一緒）。第 1 期は std 以外の依存のキーに E0200 だけで値を読まない（S-627、W4-02 U2b1）。パッケージ ID と見える依存の表（R-88 の (1)）と `std` の版の比べ（(2)）は W4-01・W4-03・W4-02 で済み。
+  - 注意（2026-11-02、W4-18 の持ち越しから。W4-06 U1/b の壊す側、M13・K18）: 段の失敗の記録（`onsa_sema/src/stages.rs` の `Failures::of`）は依存のパッケージ（std を含む）の単位も数えるが、driver の `reduce::per_unit` は利用者のパッケージのモジュールだけを単位にする。
+    今は依存が std だけで std に誤りが無いので出力は同じ。std 以外の依存を入れる前に、どちらの範囲を正とするかを §18.1 と決めて揃える。
 - **再公開（57 回目、2026-10-23、S-596）:** `pub use` を、std 以外の依存と一緒に入れる（§19.1）。第 1 期は `pub` の位置の E0200。決めること: 取り込めるのを項目だけにするか、モジュールとパッケージも再公開できるか、再公開した束縛を経路の途中に通すか、`onsa interface` の表示、失敗した `pub use` の名前の扱い（S-462。第 1 期は他のモジュールの本体の経路の最後の要素も E0302、S-693）。
   材料は S-596 の下書き（`decisions/S/S-596.draft.md` の形の表 23 行と、独立のレビューの結論。下書きと助言は「項目だけ」で一致した）と `target/notes/57/gap41/`。第 1 期の `pub use` の事例（W4-03 で E0200 に直す 4 か所）の項目の再公開の正例と E0303 の否定例を、入れるときに戻す。
   W4-03 U3b2（69 回目）で E0200 に直す前の形: `tests/spec/packages/visibility/main.onsa` の `pub use util.{shown}`（`pub` の項目の再公開の正例）と `pub use util.{SHARED} //~ E0303`（可視性の語の無い項目の再公開は E0303）、`tests/spec/types/visibility.onsa` の `pub use std.math.{sqrt}`、`tests/spec/fixes/e0020_field_visibility.onsa` の `pub use std.dsp.{db_to_amp}`（std の項目の再公開の正例）、R-39 の `tests/review-phase1/types/reexp`（`a.onsa` の `pub use b.{g}`、`b.onsa` の `pub use c.{g}`、`c.onsa` の `pub fn g() -> I32 { 1 }` の再公開の連鎖。U3b2 で `tests/spec/packages/pub_use_chain` に写した）。
