@@ -388,7 +388,9 @@ def show(f, t):
 
 
 def run_cargo(crate, binary, listing, timeout, cwd=ROOT):
-    """{(group, name): status} of the ignored tests cargo runs or lists (group: `tests/x.rs`, or `src`)."""
+    """{(group, name): status} of the ignored tests cargo runs or lists (group: `tests/x.rs`, or `src`).
+
+    In a test target of module files (`tests/cli/main.rs`), a test `m::…::name` is of `tests/cli/m.rs`."""
     cmd = ["cargo", "test", "-p", crate, *(["--test", binary] if binary else []), "--no-fail-fast", "--", "--ignored"]
     r = subprocess.run(cmd + (["--list"] if listing else []), cwd=cwd, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, text=True, timeout=timeout)
@@ -398,7 +400,9 @@ def run_cargo(crate, binary, listing, timeout, cwd=ROOT):
             group = run.group(1) if run.group(1).startswith("tests/") else "src"
             binaries += 1
         elif res := re.match(r"test (\S+) \.\.\. (ok|FAILED)$" if not listing else r"(\S+): test$", line):
-            out[(group, res.group(1).rsplit("::", 1)[-1])] = "listed" if listing else res.group(2)
+            path = res.group(1).split("::")
+            file = group[: -len("main.rs")] + path[0] + ".rs" if group.endswith("/main.rs") and path[1:] else group
+            out[(file, path[-1])] = "listed" if listing else res.group(2)
     return out, r.returncode if binaries else f"{r.returncode}, and no `Running` line", r.stdout
 
 
@@ -422,7 +426,7 @@ def passing(args):
         rel = f.relative_to(crate_dir).as_posix()
         key = (rel if rel.startswith("tests/") else "src", t.name)
         seen.add(key)
-        if args.test and key[0] != f"tests/{args.test}.rs":
+        if args.test and key[0] != f"tests/{args.test}.rs" and not key[0].startswith(f"tests/{args.test}/"):
             continue
         if args.reason is None or args.reason in (t.reason or ""):
             status = {"ok": "pass", "FAILED": "fail"}.get(ran.get(key), ran.get(key, "not run"))

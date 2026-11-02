@@ -4298,6 +4298,29 @@ class Ignores(unittest.TestCase):
             self.assertFalse(any("direct_bare" in x for x in lines), lines)  # no reason, so `--reason` leaves it out
             self.assertTrue(any("`stray`" in x for x in lines), lines)
 
+    def test_passing_against_a_target_of_module_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "crates" / "c" / "tests" / "cli").mkdir(parents=True)
+            for m in ("m", "n"):
+                (Path(tmp) / "crates" / "c" / "tests" / "cli" / f"{m}.rs").write_text(RUST, encoding="utf-8")
+            out = "\n".join(["     Running tests/cli/main.rs (target/debug/deps/cli-0)", "m::direct_with_reason: test",
+                             "n::both_a: test", "both_b: test"])
+            done = subprocess.CompletedProcess([], 0, stdout=out)
+            with mock.patch.object(ignores, "ROOT", Path(tmp)), mock.patch.object(ignores.subprocess, "run",
+                                                                                   return_value=done) as run:
+                buf = io.StringIO()
+                with mock.patch.object(sys, "stdout", buf):
+                    code = ignores.main(["passing", "-p", "c", "--test", "cli", "--list"])
+            self.assertEqual(run.call_args.args[0][4:6], ["--test", "cli"])
+            lines = buf.getvalue().splitlines()
+            self.assertEqual(code, 1)  # `both_b` of `main.rs` itself: no file of the tests shows it
+            self.assertTrue(any(x.startswith("listed\t") and "cli/m.rs" in x and "\tdirect_with_reason\t" in x
+                                for x in lines), lines)
+            self.assertTrue(any(x.startswith("not run\t") and "cli/n.rs" in x and "\tdirect_with_reason\t" in x
+                                for x in lines), lines)
+            self.assertTrue(any(x.startswith("listed\t") and "cli/n.rs" in x and "\tboth_a\t" in x for x in lines), lines)
+            self.assertTrue(any("`both_b` of tests/cli/main.rs" in x for x in lines), lines)
+
 
 class PendingEdit(TempRepo):
     """tools/pending.py list / remove / add: the other entries stay byte for byte, the list stays valid."""
