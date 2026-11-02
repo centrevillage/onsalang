@@ -152,15 +152,13 @@ fn rate_color(r: FlowRate) -> &'static str {
 // scope lists no candidates, even when other modules have a flow of that name.
 fn find_flow(analyzed: &Analyzed, name: &str, scope: Option<&str>) -> Result<DefId, String> {
     let a = &analyzed.analysis;
-    // The user's package is the last of `flatten` (its ID), not the one of its
-    // name: a dependency may have the same name (R-88).
-    let user_pkg = onsa_sema::flatten(&analyzed.pkg).len() - 1;
+    // The user's package by its place, not its name: a dependency may have the same name (R-88).
     let module_of = |id: DefId| a.modules.get(a.def(id).module).path.as_str();
     let mut flows = a
         .defs
         .iter()
         .enumerate()
-        .filter(|(_, d)| matches!(d.kind, DefKind::Flow(_)) && a.modules.pkg_of(d.module) == user_pkg)
+        .filter(|(_, d)| matches!(d.kind, DefKind::Flow(_)) && a.modules.is_own(d.module))
         .map(|(i, _)| DefId(i as u32));
     let place = match scope {
         Some(m) => format!("module `{m}`, the module of the file passed"),

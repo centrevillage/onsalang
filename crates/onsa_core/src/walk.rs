@@ -55,49 +55,45 @@ pub fn walk_place(p: &Place, f: &mut dyn FnMut(&Expr)) {
 
 pub fn walk_expr(e: &Expr, f: &mut dyn FnMut(&Expr)) {
     f(e);
+    for_each_child(e, &mut |c| match c {
+        Child::Expr(x) => walk_expr(x, f),
+        Child::Block(b) => walk_block(b, f),
+    });
+}
+
+/// A direct part of an expression ([`for_each_child`]).
+pub enum Child<'e> {
+    Expr(&'e Expr),
+    Block(&'e Block),
+}
+
+/// The direct parts of `e`, one level, in evaluation order: the one list of
+/// the children of each kind of expression (D-15), which [`walk_expr`] and
+/// the move bookkeeping (without the blocks) read.
+pub fn for_each_child<'e>(e: &'e Expr, f: &mut dyn FnMut(Child<'e>)) {
+    let mut exprs = |xs: &mut dyn Iterator<Item = &'e Expr>| xs.for_each(|x| f(Child::Expr(x)));
     match &e.kind {
         ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed | ExprKind::Panic { .. } => {}
-        ExprKind::Unary(_, x) | ExprKind::Cast(x) | ExprKind::SpanOf(x) | ExprKind::Tag(x) => walk_expr(x, f),
+        ExprKind::Unary(_, x) | ExprKind::Cast(x) | ExprKind::SpanOf(x) | ExprKind::Tag(x) => f(Child::Expr(x)),
         ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } | ExprKind::Logic { lhs, rhs, .. } => {
-            walk_expr(lhs, f);
-            walk_expr(rhs, f);
+            exprs(&mut [&**lhs, &**rhs].into_iter())
         }
-        ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => {
-            for a in args {
-                walk_expr(&a.expr, f);
-            }
-        }
-        ExprKind::Field { base, .. } | ExprKind::Payload { base, .. } => walk_expr(base, f),
-        ExprKind::Index { base, index } => {
-            walk_expr(base, f);
-            walk_expr(index, f);
-        }
-        ExprKind::Struct { fields, .. } | ExprKind::Variant { fields, .. } => {
-            for x in fields {
-                walk_expr(x, f);
-            }
-        }
-        ExprKind::Array(xs) | ExprKind::Tuple(xs) => {
-            for x in xs {
-                walk_expr(x, f);
-            }
-        }
-        ExprKind::Repeat { elem, .. } => walk_expr(elem, f),
+        ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => exprs(&mut args.iter().map(|a| &a.expr)),
+        ExprKind::Field { base, .. } | ExprKind::Payload { base, .. } => f(Child::Expr(base)),
+        ExprKind::Index { base, index } => exprs(&mut [&**base, &**index].into_iter()),
+        ExprKind::Struct { fields: xs, .. } | ExprKind::Variant { fields: xs, .. } => exprs(&mut xs.iter()),
+        ExprKind::Array(xs) | ExprKind::Tuple(xs) => exprs(&mut xs.iter()),
+        ExprKind::Repeat { elem, .. } => f(Child::Expr(elem)),
         ExprKind::IfExpr { cond, then, else_ } => {
-            walk_expr(cond, f);
-            walk_block(then, f);
-            walk_block(else_, f);
+            f(Child::Expr(cond));
+            f(Child::Block(then));
+            f(Child::Block(else_));
         }
         ExprKind::Switch { scrutinee, arms, default } => {
-            walk_expr(scrutinee, f);
-            for (_, b) in arms {
-                walk_block(b, f);
-            }
-            if let Some(b) = default {
-                walk_block(b, f);
-            }
+            f(Child::Expr(scrutinee));
+            arms.iter().map(|(_, b)| b).chain(default).for_each(|b| f(Child::Block(b)));
         }
-        ExprKind::Block(b) => walk_block(b, f),
+        ExprKind::Block(b) => f(Child::Block(b)),
     }
 }
 

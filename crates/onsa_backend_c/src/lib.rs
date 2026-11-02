@@ -108,6 +108,17 @@ pub enum PanicMode {
 }
 
 impl PanicMode {
+    /// The values of the target's `panic` (§9.2), each of the mode at its
+    /// place in [`Self::MODES`]: the one table of both, which the manifest's
+    /// check and the build ([`Self::parse`]) read.
+    pub const NAMES: [&'static str; 4] = ["poison", "trap", "reset", "halt"];
+    const MODES: [PanicMode; 4] = [PanicMode::Poison, PanicMode::Trap, PanicMode::Reset, PanicMode::Halt];
+
+    /// The mode of the value `name` of `panic`.
+    pub fn parse(name: &str) -> Option<PanicMode> {
+        Self::NAMES.iter().position(|n| *n == name).map(|i| Self::MODES[i])
+    }
+
     pub fn define(self) -> &'static str {
         match self {
             PanicMode::Poison => "ONSA_PANIC_POISON",
@@ -137,7 +148,9 @@ pub struct EmitOptions {
     /// Exported plain functions, by qualified name.
     pub export_fns: Vec<String>,
     pub panic: PanicMode,
-    /// `memory.bulk_threshold` of the target (spec §12.4); `None` = all fast.
+    /// Arrays of at least this many bytes in a flow state go to the bulk
+    /// region (§12.4); `None` = all fast. No key of the manifest sets it:
+    /// `onsa build` passes `None`, and `memory.bulk` replaces it (W9-06).
     pub bulk_threshold: Option<u32>,
     /// The target provides `Alloc`: emit `_new` / `_free`.
     pub provides_alloc: bool,

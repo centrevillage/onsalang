@@ -141,11 +141,11 @@ impl Cx<'_> {
             ExprKind::IfExpr { .. } | ExprKind::Switch { .. } | ExprKind::Block(_) => self.stored(e, None),
             _ => {
                 // Other expressions: look for nested blocks' statements and stores.
-                let mut subs: Vec<&Expr> = Vec::new();
-                collect_children(e, &mut subs);
-                for x in subs {
-                    self.inner(x);
-                }
+                crate::walk::for_each_child(e, &mut |c| {
+                    if let crate::walk::Child::Expr(x) = c {
+                        self.inner(x);
+                    }
+                });
             }
         }
     }
@@ -209,29 +209,5 @@ fn yields_place(b: &Block) -> bool {
             _ => false,
         },
         None => false,
-    }
-}
-
-/// Direct child expressions (one level).
-fn collect_children<'e>(e: &'e Expr, out: &mut Vec<&'e Expr>) {
-    match &e.kind {
-        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed | ExprKind::Panic { .. } => {}
-        ExprKind::Unary(_, x) | ExprKind::Cast(x) | ExprKind::SpanOf(x) | ExprKind::Tag(x) => out.push(x),
-        ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } | ExprKind::Logic { lhs, rhs, .. } => {
-            out.push(lhs);
-            out.push(rhs);
-        }
-        ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => out.extend(args.iter().map(|a| &a.expr)),
-        ExprKind::Field { base, .. } | ExprKind::Payload { base, .. } => out.push(base),
-        ExprKind::Index { base, index } => {
-            out.push(base);
-            out.push(index);
-        }
-        ExprKind::Struct { fields, .. } | ExprKind::Variant { fields, .. } => out.extend(fields.iter()),
-        ExprKind::Array(xs) | ExprKind::Tuple(xs) => out.extend(xs.iter()),
-        ExprKind::Repeat { elem, .. } => out.push(elem),
-        ExprKind::IfExpr { cond, .. } => out.push(cond),
-        ExprKind::Switch { scrutinee, .. } => out.push(scrutinee),
-        ExprKind::Block(_) => {}
     }
 }

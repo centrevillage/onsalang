@@ -343,12 +343,10 @@ impl TargetSettings {
                     PanicMode::Reset
                 }
             }
-            Some("poison") => PanicMode::Poison,
-            Some("trap") => PanicMode::Trap,
-            Some("reset") => PanicMode::Reset,
-            Some("halt") => PanicMode::Halt,
             // The check of the manifest stopped every other value (E1103, `table::PANIC`).
-            Some(other) => onsa_diag::internal::bug(None, format!("[targets.{name}]: the panic setting `{other}`")),
+            Some(v) => PanicMode::parse(v).unwrap_or_else(|| {
+                onsa_diag::internal::bug(None, format!("[targets.{name}]: the panic setting `{v}`"))
+            }),
         };
         Ok(TargetSettings {
             kind: t.kind.value.clone(),

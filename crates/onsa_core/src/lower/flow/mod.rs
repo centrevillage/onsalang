@@ -54,7 +54,7 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::Span;
 use onsa_sema::DefId;
-use onsa_sema::def::{DefKind, Fields, FlowDef};
+use onsa_sema::def::{DefKind, Fields, FlowDef, FlowTy};
 use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
 use onsa_sema::ty::{BuiltinTy, Len, Rate, Ty as STy};
 use onsa_syntax::ast::ExprId;
@@ -230,10 +230,16 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         return Err(internal(span, "flow body has errors"));
     }
     let need = |name: &str| member(&fd, name).ok_or_else(|| internal(span, format!("flow without `{name}`")));
-    let state_def = need("State")?;
-    let config_def = need("Config")?;
-    let params_def = need("Params")?;
-    let out_def = need("Out")?;
+    // A generated type by its role (§11.6), not its name.
+    let need_ty = |t: FlowTy| {
+        let mut ds = fd.members.iter().map(|&(_, d)| d);
+        let found = ds.find(|&d| matches!(&a.def(d).kind, DefKind::Struct(s) if s.flow_ty == Some(t)));
+        found.ok_or_else(|| internal(span, format!("flow without `{}`", t.name())))
+    };
+    let state_def = need_ty(FlowTy::State)?;
+    let config_def = need_ty(FlowTy::Config)?;
+    let params_def = need_ty(FlowTy::Params)?;
+    let out_def = need_ty(FlowTy::Out)?;
     let state_ty = lw.type_id(state_def, Vec::new(), span)?;
     let config_ty = lw.type_id(config_def, Vec::new(), span)?;
     let params_ty = lw.type_id(params_def, Vec::new(), span)?;

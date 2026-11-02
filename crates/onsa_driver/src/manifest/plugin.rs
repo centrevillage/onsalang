@@ -17,12 +17,10 @@ pub(crate) fn resolve(a: &Analysis, flows: &[PluginFlow]) -> Vec<Option<DefId>> 
     if flows.is_empty() {
         return Vec::new();
     }
-    // The package itself is the last of `flatten` (R-88).
-    let own = a.modules.names.len() - 1;
     // Of two flows of a path (the later an E0305), the first, as `onsa graph`.
     let mut by_path: HashMap<String, DefId> = HashMap::new();
     for d in (0..a.defs.len() as u32).map(DefId) {
-        if matches!(a.def(d).kind, DefKind::Flow(_)) && a.modules.pkg_of(a.def(d).module) == own {
+        if matches!(a.def(d).kind, DefKind::Flow(_)) && a.modules.is_own(a.def(d).module) {
             by_path.entry(a.qualified_name(d)).or_insert(d);
         }
     }

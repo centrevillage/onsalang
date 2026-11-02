@@ -84,11 +84,7 @@
 
 [allow."crates/onsa_core/src/lower/flow/mod.rs"]
 "BULK_SIZE" = 1
-"Config" = 1
-"Out" = 1
-"Params" = 1
 "SIZE" = 1
-"State" = 1
 "init" = 1
 "process" = 1
 "process_inplace" = 1
@@ -143,11 +139,7 @@
 "ALIGN" = 1
 "Alloc" = 1
 "BULK_SIZE" = 1
-"Config" = 1
-"Out" = 1
-"Params" = 1
 "SIZE" = 1
-"State" = 3
 
 [allow."crates/onsa_driver/src/manifest/table.rs"]
 "Alloc" = 1
@@ -384,6 +376,7 @@
 
 [same_spelling."crates/onsa_backend_c/src/lib.rs"]
 "panic" = { count = 1, note = "Debug の表示のフィールド名（マニフェストの panic の設定）" }
+"reset" = { count = 1, note = "マニフェストの panic の値の閉じた一覧（§15.3、§9.2。生成される API の reset と同じ綴り）" }
 
 [same_spelling."crates/onsa_backend_c/src/names.rs"]
 "INFINITY" = { count = 1, note = "C の予約された名前の表" }
@@ -397,14 +390,10 @@
 [same_spelling."crates/onsa_core/src/verify.rs"]
 "block" = { count = 1, note = "検証器のメッセージの文脈の名前（クロックの block と同じ綴り）" }
 
-[same_spelling."crates/onsa_driver/src/build.rs"]
-"reset" = { count = 1, note = "マニフェストの panic の値（生成される API の reset と同じ綴り）" }
-
 [same_spelling."crates/onsa_driver/src/manifest/table.rs"]
 "export" = { count = 1, note = "マニフェストの表の名前 [export]（§15.3。属性 @export とは別）" }
 "fp" = { count = 1, note = "マニフェストのターゲットのキー fp（§15.3。属性 @fp とは別）" }
 "panic" = { count = 1, note = "マニフェストのターゲットのキー panic（§15.3。組込みの panic とは別）" }
-"reset" = { count = 1, note = "マニフェストの panic の値の閉じた一覧（§15.3、§9.2。生成される API の reset と同じ綴り）" }
 
 [same_spelling."crates/onsa_driver/src/platform.rs"]
 "host" = { count = 1, note = "マニフェストの platform の値 \"host\"（§15.3。属性 @host とは別）" }

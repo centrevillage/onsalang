@@ -128,8 +128,6 @@ pub(crate) struct Lowerer<'a> {
     pub pkg: &'a Package,
     pub a: &'a Analysis,
     pub m: Module,
-    /// Package index of the user package in `flat`.
-    pub user_pkg: usize,
     fn_ids: HashMap<(DefId, Vec<GenericArg>), FnId>,
     worklist: Vec<(DefId, Vec<GenericArg>, FnId)>,
     type_ids: HashMap<(DefId, Vec<GenericArg>), TypeId>,
@@ -139,7 +137,7 @@ pub(crate) struct Lowerer<'a> {
     messages: HashMap<String, MsgId>,
     pub(crate) flow_fns: HashMap<DefId, flow::FlowFns>,
     pub(crate) flows_in_progress: HashSet<DefId>,
-    /// `bulk_threshold` of the target (spec §12.4); `None`: everything fast.
+    /// [`LowerOptions::bulk_threshold`]; `None`: everything fast.
     pub bulk_threshold: Option<u32>,
     /// Pointer width of the target in bytes (the bulk slot, `Span`s), T4-5.
     pub ptr_size: u32,
@@ -163,6 +161,8 @@ pub(crate) struct Lowerer<'a> {
 #[derive(Debug, Clone)]
 pub struct LowerOptions {
     /// Arrays of at least this many bytes in a flow state go to the bulk region (§12.4).
+    /// No key of the manifest sets it: `onsa build` passes `None`, the tests
+    /// of Core set it, and `memory.bulk` replaces it (W9-06).
     pub bulk_threshold: Option<u32>,
     /// Pointer width of the target in bytes (8 on the reference host).
     pub ptr_size: u32,
@@ -179,7 +179,7 @@ pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
     lower_with(pkg, a, &LowerOptions::default())
 }
 
-/// [`lower`] with options (the target's `bulk_threshold`).
+/// [`lower`] with options (the target's pointer width, `bulk_threshold`).
 ///
 /// Lowering does not stop at the first unsupported feature of an item
 /// (S-67): the innermost expression that uses it becomes a placeholder and
@@ -188,14 +188,12 @@ pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
 /// failure stops lowering, unless it is a consequence of a placeholder.
 pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, LowerFailure> {
     let flat = onsa_sema::flatten(pkg);
-    let user_pkg = flat.len() - 1;
     let places: usize =
         flat.iter().flat_map(|p| p.modules.iter()).map(|m| m.parsed.ast.exprs.len() + m.parsed.ast.pats.len()).sum();
     let mut lw = Lowerer {
         pkg,
         a,
         m: Module::default(),
-        user_pkg,
         fn_ids: HashMap::new(),
         worklist: Vec::new(),
         type_ids: HashMap::new(),
@@ -216,7 +214,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
     // Roots: non-generic items of the user package, in definition order.
     for (i, def) in a.defs.iter().enumerate() {
         let id = DefId(i as u32);
-        if a.modules.get(def.module).pkg != user_pkg {
+        if !a.modules.is_own(def.module) {
             continue;
         }
         match &def.kind {
@@ -329,7 +327,7 @@ impl<'a> Lowerer<'a> {
     /// name starts with its package's name. A place; the privileges of std
     /// read the role (`Modules::is_std`).
     fn is_dep_def(&self, id: DefId) -> bool {
-        self.a.modules.get(self.a.def(id).module).pkg != self.user_pkg
+        !self.a.modules.is_own(self.a.def(id).module)
     }
 
     /// `dsp.voice.wrap01`, `std.math.exp`, `methods.Point.new`, `voice.voice.init`.

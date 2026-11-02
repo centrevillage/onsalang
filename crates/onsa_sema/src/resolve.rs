@@ -560,6 +560,13 @@ impl Modules {
         self.get(m).pkg
     }
 
+    /// Whether `m` is a module of the package itself, the last of
+    /// [`crate::flatten`] (R-88), not of a dependency: what every reader of
+    /// the package itself reads (D-15).
+    pub fn is_own(&self, m: ModId) -> bool {
+        self.pkg_of(m) + 1 == self.names.len()
+    }
+
     /// Whether `m` is a module of the embedded std, by its package's role
     /// (R-88 (1)): the privileges of std read this.
     pub fn is_std(&self, m: ModId) -> bool {

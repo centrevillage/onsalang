@@ -315,11 +315,10 @@ impl Analysis {
     /// exported), in the order of the paths of their modules and, in a
     /// module, of their declarations.
     pub fn exports(&self) -> Vec<DefId> {
-        let own = self.modules.names.len().checked_sub(1);
         let module = |d: &DefId| self.def(*d).module;
         let mut out: Vec<DefId> = (0..self.defs.len() as u32)
             .map(DefId)
-            .filter(|d| self.def(*d).export.is_some() && Some(self.modules.pkg_of(module(d))) == own)
+            .filter(|d| self.def(*d).export.is_some() && self.modules.is_own(module(d)))
             .collect();
         out.sort_by(|a, b| self.modules.get(module(a)).path.cmp(&self.modules.get(module(b)).path));
         out

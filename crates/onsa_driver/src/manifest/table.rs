@@ -184,8 +184,8 @@ use Unsupported::{Any, Except};
 /// The effect of `provides` that gives the heap (§15.3).
 pub const ALLOC: &str = "Alloc";
 
-/// The values of `panic` (§9.2), which `onsa build` maps to its modes.
-pub const PANIC: &[&str] = &["poison", "trap", "reset", "halt"];
+/// The values of `panic` (§9.2), those of the modes of the C backend.
+pub const PANIC: &[&str] = &onsa_backend_c::PanicMode::NAMES;
 
 /// The kind of a static library, which `cc` and `ar` build on the host.
 pub const STATICLIB: &str = "staticlib";

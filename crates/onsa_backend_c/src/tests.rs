@@ -268,6 +268,25 @@ fn a_unit_without_exports_reads_no_prefix() {
     assert!(!unit.source.contains("take_panic"), "{}", unit.source);
 }
 
+/// Each mode has one value of `panic`, the one its `#define` spells (K6 of
+/// W4-18): the names and the modes of the table are paired right.
+#[test]
+fn each_panic_mode_has_one_name() {
+    use crate::PanicMode;
+    let modes: Vec<PanicMode> = PanicMode::NAMES.iter().map(|n| PanicMode::parse(n).unwrap()).collect();
+    for (n, m) in PanicMode::NAMES.iter().zip(&modes) {
+        assert_eq!(m.define(), format!("ONSA_PANIC_{}", n.to_uppercase()));
+    }
+    for m in [PanicMode::Poison, PanicMode::Trap, PanicMode::Reset, PanicMode::Halt] {
+        // Exhaustive: a new mode is a compile error here until it is listed.
+        match m {
+            PanicMode::Poison | PanicMode::Trap | PanicMode::Reset | PanicMode::Halt => {}
+        }
+        assert_eq!(modes.iter().filter(|&&x| x == m).count(), 1, "{m:?}");
+    }
+    assert_eq!(PanicMode::parse("Poison"), None);
+}
+
 /// The `onsa_panic` of `mode` in the runtime header: the text of its branch
 /// of the `#if defined(ONSA_PANIC_POISON)` chain.
 fn panic_branch(header: &str, mode: crate::PanicMode) -> &str {

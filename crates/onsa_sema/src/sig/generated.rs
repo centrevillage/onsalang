@@ -30,6 +30,15 @@ const GENERATED: &[(&str, Generated)] = &[
     ("params_default", Generated::Fn(FlowFn::ParamsDefault)),
 ];
 
+impl FlowTy {
+    /// The name of the type (`State`), of [`GENERATED`]: what a later stage
+    /// shows, which selects the type by its `FlowTy`, not by this name.
+    pub fn name(self) -> &'static str {
+        let named = GENERATED.iter().find(|(_, g)| *g == Generated::Type(self));
+        named.map_or_else(|| onsa_diag::internal::bug(None, format!("no name of {self:?}")), |(n, _)| n)
+    }
+}
+
 impl<'p> Sema<'p> {
     /// The defs of every item the flow `flow` may generate, made with it in
     /// the names stage, so that a `use` and a type written before the flow

@@ -123,9 +123,13 @@ pub struct TypeIface {
     pub derives: Vec<String>,
     pub fields: Vec<FieldIface>,
     pub variants: Vec<VariantIface>,
-    /// `State` / `Config` / `Params` / `Out` of a flow.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub flow_ty: Option<String>,
+    /// `State` / `Config` / `Params` / `Out` of a flow: by its name in the JSON.
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "flow_ty_name")]
+    pub flow_ty: Option<FlowTy>,
+}
+
+fn flow_ty_name<S: serde::Serializer>(t: &Option<FlowTy>, s: S) -> Result<S::Ok, S::Error> {
+    t.map(FlowTy::name).serialize(s)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -388,15 +392,7 @@ impl Builder<'_> {
         match &def.kind {
             DefKind::Struct(s) => {
                 iface.derives = s.derives.iter().flatten().map(|x| format!("{x:?}")).collect();
-                iface.flow_ty = s.flow_ty.map(|t| {
-                    match t {
-                        FlowTy::State => "State",
-                        FlowTy::Config => "Config",
-                        FlowTy::Params => "Params",
-                        FlowTy::Out => "Out",
-                    }
-                    .to_string()
-                });
+                iface.flow_ty = s.flow_ty;
                 match &s.fields {
                     Fields::Named(fs) => {
                         for f in fs {
@@ -519,7 +515,7 @@ impl Builder<'_> {
                 DefKind::Struct(_) | DefKind::Enum(_) => {
                     let mut item = self.type_item(*m, &display);
                     if let (Item::Struct(t), Some(l)) = (&mut item, layout)
-                        && t.flow_ty.as_deref() == Some("State")
+                        && t.flow_ty == Some(FlowTy::State)
                     {
                         // Flow state layout from Core lowering (T3-6, §12.4).
                         t.size = Some(l.size);
@@ -668,7 +664,7 @@ fn type_header(t: &TypeIface, keyword: &str, out: &mut String, indent: &str) {
             Some(b) => props.push(format!("size {s}, bulk {b}, align {a}")),
             None => props.push(format!("size {s}, align {a}")),
         },
-        _ if t.flow_ty.as_deref() == Some("State") => props.push("size: not available (lowering failed)".into()),
+        _ if t.flow_ty == Some(FlowTy::State) => props.push("size: not available (lowering failed)".into()),
         _ => {}
     }
     if !t.derives.is_empty() {
