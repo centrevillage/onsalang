@@ -178,7 +178,7 @@ import repo  # noqa: E402
 ROOT = repo.ROOT
 # Changing the version changes every perturbation (a new set of inputs).
 VERSION = "1"
-PER_KIND = 2
+PER_KIND = 1  # 2 while fmt was being made; 1 since (X-1 (2)): every source still, half the perturbations
 TIME_BUDGET = 300  # seconds for the whole run
 PROPERTIES = ("core", "cst")
 KINDS = ("space", "blank", "comment", "break", "continue", "inside", "mixed")
