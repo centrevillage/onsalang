@@ -6,7 +6,7 @@
 // E0020 for angle brackets in a declaration (§4.5, §18.1): type parameters and bounds are
 // written in `[ ]`, in a function, a struct, an enum and an `impl`. The candidate replaces the
 // brackets only; the parameters, bounds and the spacing between them stay as written (the edits
-// are in crates/onsa_cli/tests/foreign_candidates.rs).
+// are in crates/onsa_cli/tests/cli/foreign_candidates.rs).
 
 pub fn bounded<T: Ord + Eq>(x: T) -> T {            //~ E0020
   x

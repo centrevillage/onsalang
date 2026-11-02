@@ -3,6 +3,7 @@
 //! of the `f64` that holds the `F32` value), through arrays, tuples and structs (W3-05), each
 //! written as in the source (`P { a: 0.1, b: 0.1 }`).
 
+use crate::test_support::Dir;
 use std::process::Command;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
@@ -21,12 +22,10 @@ pub const D: F64 = 0.1
 
 #[test]
 fn the_floats_of_a_const_are_shown_in_their_type() {
-    let dir = std::env::temp_dir().join(format!("onsa_interface_const_floats_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("c.onsa");
+    let dir = Dir::bare("interface_const_floats");
+    let path = dir.0.join("c.onsa");
     std::fs::write(&path, SOURCE).unwrap();
     let out = Command::new(ONSA).arg("interface").arg(&path).output().expect("run onsa");
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     let text = String::from_utf8(out.stdout).unwrap();
     let consts: Vec<&str> = text.lines().map(str::trim).filter(|l| l.starts_with("pub const ")).collect();

@@ -9,35 +9,12 @@
 //!
 //! Every test uses only the binary (`onsa check --json`, `onsa fmt --check`).
 
-use std::path::PathBuf;
 use std::process::Command;
 
+use crate::test_support::{Dir, code_of};
 use serde_json::Value;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_headings_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 /// The exit code and the diagnostics of `onsa check --json <path>`.
 fn check(path: &str) -> (i32, Vec<Value>) {
@@ -57,10 +34,6 @@ fn check(path: &str) -> (i32, Vec<Value>) {
         Err(e) => panic!("onsa check --json printed no JSON ({e}): {text}"),
     };
     (code, diags)
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn found_of(d: &Value) -> &str {
@@ -116,7 +89,7 @@ fn the_range_of_a_form_before_the_name_is_the_whole_form() {
         ("field_crate", "E0002", "pub struct P {\n  pub(crate) x: I32,\n}\n", "pub(crate)"),
         ("copy_in_the_head", "E0020", "pub struct P: Copy {\n  x: I32,\n}\n", "Copy"),
     ];
-    let d = Dir::new("ranges");
+    let d = Dir::bare("ranges");
     for (name, code, src, found) in forms {
         let diag = one(&d, name, src, code);
         assert_eq!(found_of(&diag), found, "{name}: {diag}");
@@ -153,7 +126,7 @@ fn a_restricted_visibility_and_a_pub_struct_field_have_no_candidate_and_have_a_n
         // A tuple of two elements or more: the names of the fields are not made up (spec §4.4).
         ("tuple_of_two", "pub struct Pair(F32, F32)\n"),
     ];
-    let d = Dir::new("nocandidate");
+    let d = Dir::bare("nocandidate");
     for (name, src) in forms {
         let diag = one(&d, name, src, "E0002");
         assert_eq!(count(&diag, "fixes"), 0, "{name}: a form with no candidate has none: {diag}");
@@ -165,7 +138,7 @@ fn a_restricted_visibility_and_a_pub_struct_field_have_no_candidate_and_have_a_n
 fn a_spelling_only_difference_and_a_tuple_of_one_keep_their_candidate() {
     // `#[repr(C)]` is written `@repr(c)` (the same concept spelled otherwise), and a
     // tuple of one element has one candidate, a struct with the field `value` (spec §4.4).
-    let d = Dir::new("keepcandidate");
+    let d = Dir::bare("keepcandidate");
     for (name, src) in
         [("repr_upper_c", "#[repr(C)]\npub struct P {\n  x: I32,\n}\n"), ("tuple_of_one", "pub struct Hz(F32)\n")]
     {
@@ -185,7 +158,7 @@ fn the_other_places_of_pub_crate_and_pub_pkg_keep_the_candidate_that_takes_it_ou
         ("plain_struct_field", "struct P {\n  pub(crate) x: I32,\n}\n"),
         ("priv_struct_field", "priv struct P {\n  pub(pkg) x: I32,\n}\n"),
     ];
-    let d = Dir::new("keepfix");
+    let d = Dir::bare("keepfix");
     for (name, src) in forms {
         let diag = one(&d, name, src, "E0020");
         assert_eq!(count(&diag, "fixes"), 1, "{name}: one candidate: {diag}");
@@ -199,7 +172,7 @@ fn the_candidate_of_angle_brackets_is_made_only_for_a_list_that_reads() {
     // R-193: when the text between the brackets does not read as type parameters or type arguments, writing it
     // in `[ ]` leaves an error of the syntax stage, which the promise of §18.1 does not allow, so there is no
     // E0020 and no candidate: the general E0002.
-    let d = Dir::new("angle");
+    let d = Dir::bare("angle");
     let unreadable = [
         ("two_names", "pub fn b<T q>(x: T) -> T {\n  x\n}\n"),
         ("number", "pub fn b<3>(x: I32) -> I32 {\n  x\n}\n"),
@@ -267,7 +240,7 @@ fn the_right_forms_go_through_fmt_unchanged() {
     // `fmt --check` exits with 0 for a file that is in the canonical form already, so the heading with
     // `: trait + trait`, `priv`, the attributes, and `@mem(bulk)` in front of a `let` (on the line of the `let`,
     // `spec/tools.md` §3.2) all pass the syntax stage and `fmt` does not move them.
-    let d = Dir::new("fmt");
+    let d = Dir::bare("fmt");
     let path = d.file("right.onsa", RIGHT_FORMS);
     let out = Command::new(ONSA).args(["fmt", "--check", &path]).output().expect("run onsa");
     assert_eq!(out.status.code(), Some(0), "fmt --check: {out:?}");
@@ -279,7 +252,7 @@ fn mem_bulk_is_read_and_then_stopped_with_e0200_until_w9_06() {
     // S-43, §12.4: the syntax of `@mem(bulk)` is read; its meaning (the place of the state in the bulk area) is
     // not in this version, so the one error of the file is the E0200 of a later stage than the syntax (§18.1:
     // what the spec has and the compiler does not handle yet). W9-06 takes this test out.
-    let d = Dir::new("bulk");
+    let d = Dir::bare("bulk");
     let path = d.file("bulk.onsa", RIGHT_FORMS);
     let (code, diags) = check(&path);
     assert_eq!(code, 1, "{diags:?}");

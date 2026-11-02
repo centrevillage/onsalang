@@ -10,7 +10,7 @@
 // candidate as the other guard forms of the arm (a choice becomes one guard when every branch has the
 // same shape once the `-LIMIT`s are replaced; `-LIMIT | LIMIT` and `-LIMIT | 1` do not and are E0002).
 // A name that does not exist is the same E0020 (the form decides, the names are not resolved yet).
-// The shape of the candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs. One error per
+// The shape of the candidates is in crates/onsa_cli/tests/cli/pattern_guard_candidates.rs. One error per
 // function.
 
 const LIMIT: I32 = 4

@@ -15,7 +15,7 @@ use std::path::Path;
 use onsa_driver::{ManifestForm, ManifestSource, PackageInput, SourceFile};
 use serde_json::Value;
 
-use super::{Dir, doc_of, run};
+use super::{Dir, Out, doc_of, run};
 
 /// A small generator with a fixed seed (splitmix64), so that a failing package can be written again
 /// from its seed alone.
@@ -187,6 +187,14 @@ fn diags_of(doc: &Value) -> Vec<Diag> {
 /// are the business of the tests that run the command. The exit code is the command's: 2 for an input
 /// that does not load, 101 with `internal error` for an internal error, else 1 with diagnostics and 0.
 pub fn check_input(input: &PackageInput) -> Checked {
+    let out = check_input_out(input);
+    let diags = if out.code == 0 || out.code == 1 { diags_of(&doc_of(&out)) } else { Vec::new() };
+    Checked { code: out.code, stderr: out.stderr, diags }
+}
+
+/// `check_input` as the output of the command: the exit code, the document on the standard output (empty
+/// when the command ends with 2 or 101) and the error on the standard error.
+pub fn check_input_out(input: &PackageInput) -> Out {
     let input = input.clone();
     let ran = onsa_diag::stack::spawn("check", move || {
         onsa_driver::guard(|| -> Result<String, (i32, String)> {
@@ -201,12 +209,18 @@ pub fn check_input(input: &PackageInput) -> Checked {
     match ran {
         Ok(Ok(json)) => {
             let doc: Value = serde_json::from_str(&json).expect("the document is one JSON value");
-            let diags = diags_of(&doc);
-            Checked { code: if diags.is_empty() { 0 } else { 1 }, stderr: String::new(), diags }
+            let code = if diags_of(&doc).is_empty() { 0 } else { 1 };
+            Out { code, stdout: json, stderr: String::new() }
         }
-        Ok(Err((code, stderr))) => Checked { code, stderr, diags: Vec::new() },
-        Err(e) => Checked { code: 101, stderr: format!("internal error: {e:?}"), diags: Vec::new() },
+        Ok(Err((code, stderr))) => Out { code, stdout: String::new(), stderr },
+        Err(e) => Out { code: 101, stdout: String::new(), stderr: format!("internal error: {e:?}") },
     }
+}
+
+/// `onsa check <file>` of a file named `name` outside any package that holds `text` (a package of the one
+/// file, as `onsa_driver::read_input` reads it), run in this process with no file written (`check_input`).
+pub fn check_file(name: &str, text: &str) -> Checked {
+    check_input(&PackageInput::single_file(name, text))
 }
 
 /// True when the command ended as a check does: exit code 0 or 1 and no internal error.

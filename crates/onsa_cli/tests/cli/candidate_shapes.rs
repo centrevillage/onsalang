@@ -7,35 +7,12 @@
 //!
 //! Every test uses only the binary (`onsa check --json`).
 
-use std::path::PathBuf;
 use std::process::Command;
 
+use crate::test_support::Dir;
 use serde_json::Value;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_shapes_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 /// The diagnostics of `onsa check --json <path>` (the exit code is 0 or 1).
 fn check(path: &str) -> Vec<Value> {
@@ -109,7 +86,7 @@ fn apply(text: &str, edits: &[Edit]) -> String {
 
 /// The program after the only candidate of the only diagnostic, which is an E0020 of a block comment.
 fn after_the_doc_comment_candidate(tag: &str, source: &str) -> String {
-    let dir = Dir::new(tag);
+    let dir = Dir::bare(tag);
     let path = dir.file("main.onsa", source);
     let diags = check(&path);
     assert_eq!(diags.len(), 1, "{tag}: one diagnostic expected, got {diags:?}");
@@ -187,7 +164,7 @@ fn these_forms_have_no_candidate() {
         ),
     ];
     for (tag, source) in cases {
-        let dir = Dir::new(tag);
+        let dir = Dir::bare(tag);
         let path = dir.file("main.onsa", source);
         let diags = check(&path);
         assert!(!diags.is_empty(), "{tag}: a diagnostic is expected");

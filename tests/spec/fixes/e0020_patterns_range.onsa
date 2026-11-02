@@ -15,7 +15,7 @@
 // ranges are replaced (`Some(1..<3) | Some(5..<7)` does, `Some(1..<3) | None` does not and is E0002,
 // S-317). The name of the new binding is not fixed by the spec (S-253): the candidate must leave no
 // error of the syntax stage and no E0304, which the runner checks for each candidate; the shape of the
-// candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs. One error per function.
+// candidates is in crates/onsa_cli/tests/cli/pattern_guard_candidates.rs. One error per function.
 //
 // The arm of a one-ended range is not the first thing of a line in this file: what the spec says of a
 // line that starts with a binary-only operator (§2.5) is not settled for `..<5 =>` (a gap in the report

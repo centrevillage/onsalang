@@ -22,7 +22,7 @@ use crate::test_support;
 
 use std::collections::BTreeMap;
 
-use test_support::sweep::{Rng, Texts, check_package, ended_well, package};
+use test_support::sweep::{Rng, Texts, check_input, ended_well, input_of};
 
 /// The classes in their order; `Second`: holds a `Span`.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -151,8 +151,7 @@ fn the_type_of_a_const_is_placed_as_the_spec_classes_say() {
     }
     let mut texts = Texts::new();
     texts.insert("main.onsa".to_string(), text);
-    let d = package("const_placement_model", "demo", &texts);
-    let checked = check_package(d.root());
+    let checked = check_input(&input_of("demo", &texts));
     assert!(ended_well(&checked), "check did not end as a check does:\n{}", checked.stderr);
     let mut got: BTreeMap<u64, Vec<(u64, String)>> = BTreeMap::new();
     for x in &checked.diags {

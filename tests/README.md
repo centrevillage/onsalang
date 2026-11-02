@@ -43,7 +43,7 @@
 - `//~ PANIC "名前" [@列]`（`mode = "test"`）: その `test` がこの行で panic することを期待する。行は本体から見た位置（失敗の `calls` の最も外、本体の中の panic なら `span`。§18.1）の始まりの行で、`@列` はその位置の始まりの列（§3.5）。
   - 印が求めるのは検査されるコードの panic で、test の本体自身の確かめ（`assert` 文、`assert_near` の呼び出し）の失敗は受けない（§9.2 ではどちらも panic で、器が位置と種類で分ける）。本体が呼んだ関数の中の `assert` で落ちたときは、本体から見た呼び出しの位置の失敗として照合する。
   - panic を期待する式は、確かめより前の行に一つの文で書く（`let y = xs[4]` の行に印を置き、`assert y == 0` は次の行に書く）。
-  - 同じ行に panic しうる式が二つあれば `@列` を書く。後置の鎖（`xs[i][j]`、`xs[i].get(j)`、`o.unwrap().unwrap()`）の内と外の panic は始まりの列が同じで、印で分けられない（CLI のテスト `crates/onsa_cli/tests/test_failure_positions.rs` で確かめる）。
+  - 同じ行に panic しうる式が二つあれば `@列` を書く。後置の鎖（`xs[i][j]`、`xs[i].get(j)`、`o.unwrap().unwrap()`）の内と外の panic は始まりの列が同じで、印で分けられない（CLI のテスト `crates/onsa_cli/tests/cli/test_failure_positions.rs` で確かめる）。
   - 一つの `test` に印は一つで、TESTFAIL と並べない。新しい事例は、panic を期待するとき PANIC を使う。今の TESTFAIL の事例は直さない。
 
 ## 書く人

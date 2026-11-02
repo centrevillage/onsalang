@@ -9,7 +9,7 @@
 // before the closing bracket. The comments at the end of consecutive lines are in one column, one space
 // after the longest code. A pair of braces that holds a comment is not put on one line, and a line break
 // after a comment stays. The file is canonical, so `onsa fmt` leaves it unchanged. What `fmt` makes of the
-// comments that are not in this form is in crates/onsa_cli/tests/fmt_comments.rs.
+// comments that are not in this form is in crates/onsa_cli/tests/cli/fmt_comments.rs.
 
 /// The fields have a doc and a comment at the end of the line.
 pub struct Voice {

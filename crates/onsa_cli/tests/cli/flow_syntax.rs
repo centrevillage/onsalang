@@ -29,42 +29,11 @@
 //! silenced by `tests/pending.toml`).
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 
+use crate::test_support::fmt::{diff_ast, expect_fmt, formatted};
+use crate::test_support::{Dir, check, code, code_of, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_flow_syntax_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -100,20 +69,6 @@ fn in_a_flow(body: &str) -> String {
 /// A flow with the given inputs and output.
 fn with_head(inputs: &str, output: &str, body: &str) -> String {
     format!("pub flow f({inputs}) -> {output} {{\n{body}\n}}\n")
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn line_of(d: &Value) -> u64 {
@@ -277,33 +232,23 @@ const NORMAL_FORMS: &[(&str, &str, &str)] = &[
 
 #[test]
 fn fmt_writes_the_flow_syntax_in_the_normal_form() {
-    let d = Dir::new("normal");
-    for (what, written, normal) in NORMAL_FORMS {
-        let path = d.file("a.onsa", &in_a_flow(written));
-        let out = onsa(&["fmt", &path]);
-        assert_eq!(code(&out), 0, "{what}: {out:?}");
-        assert_eq!(read(&path), in_a_flow(normal), "{what}");
-        // The normal form is a fixed point of `fmt`, and `fmt --check` accepts it (§18.2).
-        let check = onsa(&["fmt", "--check", &path]);
-        assert_eq!(code(&check), 0, "{what}: the normal form is not accepted by --check: {check:?}");
-        let again = onsa(&["fmt", &path]);
-        assert_eq!(code(&again), 0, "{what}: {again:?}");
-        assert_eq!(read(&path), in_a_flow(normal), "{what}: fmt twice");
-    }
+    // `fmt` writes the normal form, which is a fixed point of `fmt` and which `fmt --check` accepts (§18.2):
+    // `expect_fmt` runs the formatter in this process, with no file written (X-16).
+    let cases: Vec<(&str, String, String)> =
+        NORMAL_FORMS.iter().map(|(what, written, normal)| (*what, in_a_flow(written), in_a_flow(normal))).collect();
+    let cases: Vec<(&str, &str, &str)> = cases.iter().map(|(w, a, b)| (*w, a.as_str(), b.as_str())).collect();
+    expect_fmt("flow_normal", &cases);
 }
 
 #[test]
 fn fmt_does_not_change_the_program_that_has_flow_syntax() {
     // §18.2: fmt keeps the meaning; the file as written and the file as formatted are the same program
     // (`diff --ast` finds nothing). A change that drops the clock, the mark or the tilde would show.
-    let d = Dir::new("fmt_same");
     for (what, written, _) in NORMAL_FORMS {
-        let a = d.file("a.onsa", &in_a_flow(written));
-        let b = d.file("b.onsa", &in_a_flow(written));
-        let out = onsa(&["fmt", &b]);
-        assert_eq!(code(&out), 0, "{what}: {out:?}");
-        let diff = onsa(&["diff", "--ast", &a, &b]);
-        assert_eq!(code(&diff), 0, "{what}: the program changed: {diff:?}");
+        let a = in_a_flow(written);
+        let b = formatted(what, "b.onsa", &a);
+        let (c, diff) = diff_ast(&a, &b);
+        assert_eq!(c, 0, "{what}: the program changed: {diff}");
     }
 }
 
@@ -338,17 +283,10 @@ const HEADS: &[(&str, &str, &str)] = &[
 
 #[test]
 fn fmt_writes_the_head_of_a_flow_in_the_normal_form() {
-    let d = Dir::new("heads");
+    expect_fmt("flow_heads", HEADS);
     for (what, written, normal) in HEADS {
-        let path = d.file("a.onsa", written);
-        let out = onsa(&["fmt", &path]);
-        assert_eq!(code(&out), 0, "{what}: {out:?}");
-        assert_eq!(read(&path), *normal, "{what}");
-        let check = onsa(&["fmt", "--check", &path]);
-        assert_eq!(code(&check), 0, "{what}: {check:?}");
-        let before = d.file("before.onsa", written);
-        let diff = onsa(&["diff", "--ast", &before, &path]);
-        assert_eq!(code(&diff), 0, "{what}: the program changed: {diff:?}");
+        let (c, diff) = diff_ast(written, normal);
+        assert_eq!(c, 0, "{what}: the program changed: {diff}");
     }
 }
 
@@ -389,14 +327,9 @@ test \"flow syntax in a test\" {
   assert y == z
 }
 ";
-    let d = Dir::new("outside");
-    let path = d.file("a.onsa", written);
-    let before = d.file("before.onsa", written);
-    let out = onsa(&["fmt", &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
-    assert_eq!(read(&path), normal);
-    let diff = onsa(&["diff", "--ast", &before, &path]);
-    assert_eq!(code(&diff), 0, "{diff:?}");
+    assert_eq!(formatted("flow syntax outside a flow", "a.onsa", written), normal);
+    let (c, diff) = diff_ast(written, normal);
+    assert_eq!(c, 0, "{diff}");
 }
 
 // ---- diff --ast: each part of the syntax is in the tree (R-81) ------------------------------------
@@ -471,16 +404,13 @@ fn different() -> Vec<(&'static str, String, String)> {
 
 #[test]
 fn diff_ast_sees_each_part_of_the_flow_syntax() {
-    let d = Dir::new("diff");
     for (what, one, other) in different() {
-        let a = d.file("a.onsa", &one);
-        let b = d.file("b.onsa", &other);
-        let out = onsa(&["diff", "--ast", &a, &b]);
+        let (c, out) = diff_ast(&one, &other);
         assert_eq!(
-            code(&out),
+            c,
             1,
-            "{what}: the programs differ ({}): {out:?}",
-            if code(&out) == 2 { "a file has a syntax error" } else { "diff found nothing" }
+            "{what}: the programs differ ({}): {out}",
+            if c == 2 { "a file has a syntax error" } else { "diff found nothing" }
         );
     }
 }
@@ -520,7 +450,7 @@ const LEVELS: &[(&str, &str, usize)] = &[
 
 #[test]
 fn the_levels_of_the_flow_syntax_are_those_of_section_2_5() {
-    let d = Dir::new("levels");
+    let d = Dir::bare("levels");
     for (what, body, want) in LEVELS {
         let path = d.file("a.onsa", &in_a_flow(body));
         assert_eq!(levels(&path), vec![*want], "{what}: {body:?}");
@@ -538,7 +468,7 @@ fn nested_clock(n: usize) -> String {
 #[test]
 fn a_clock_makes_the_level_256_and_is_accepted() {
     // 254 parentheses: the `at` is level 256, the limit (§2.5). The syntax stage reports nothing.
-    let d = Dir::new("nest_ok");
+    let d = Dir::bare("nest_ok");
     let path = d.file("a.onsa", &nested_clock(254));
     assert_eq!(levels(&path), vec![256]);
     let diff = onsa(&["diff", "--ast", &path, &path]);
@@ -549,7 +479,7 @@ fn a_clock_makes_the_level_256_and_is_accepted() {
 fn a_clock_makes_the_level_257_and_is_e0006_at_the_at() {
     // 255 parentheses: the `at` is level 257. E0006 is reported at the token that makes the level,
     // the `at` (§2.5: "その段を作るトークン（… キーワード）"), and the unit is not read further.
-    let d = Dir::new("nest_over");
+    let d = Dir::bare("nest_over");
     let text = nested_clock(255);
     let path = d.file("a.onsa", &text);
     let diags = check(&path);
@@ -597,7 +527,7 @@ fn fmt_and_diff_stop_at_an_error_of_the_syntax_stage_in_the_flow_syntax() {
     // does not compare it (exit code 2); the diagnostic goes to the standard output
     // (spec/tools.md §3.1, §4). E0011 is of the syntax stage as every E00xx is (§18.2), so it
     // stops them too.
-    let d = Dir::new("syntax_errors");
+    let d = Dir::bare("syntax_errors");
     let other = d.file("other.onsa", &in_a_flow("  x"));
     for (what, text, want) in syntax_errors() {
         let path = d.file("a.onsa", &text);
@@ -630,7 +560,7 @@ fn the_clock_on_a_binding_has_a_candidate_that_moves_it_and_a_note() {
     // §18.1: the E0020 gives the right rule in a note; an edit changes only the tokens it changes (the
     // `at` and the clock are taken out, `at` and the clock are put after the value), so no edit
     // contains the type, the `=` or the value.
-    let d = Dir::new("binding");
+    let d = Dir::bare("binding");
     let text = in_a_flow("  let y: F32 at sample = x\n  y");
     let path = d.file("a.onsa", &text);
     let diags = check(&path);
@@ -661,7 +591,7 @@ fn the_clock_on_a_binding_of_a_sum_is_written_in_parentheses_by_the_candidate() 
     // parentheses (the spec gives the one example `let y: F32 = x at sample` and the promise of §18.1:
     // no error of the syntax stage is left in the unit). The text after the candidate is read by the
     // syntax stage and the clock stands over the whole sum.
-    let d = Dir::new("binding_sum");
+    let d = Dir::bare("binding_sum");
     let text = in_a_flow("  let y: F32 at sample = x + 1.0\n  y");
     let path = d.file("a.onsa", &text);
     let diags = check(&path);
@@ -688,7 +618,7 @@ fn a_clock_is_not_continued_on_the_next_line() {
     // attribute; `at` is none of them, so `x at` and `sample` on the next line are two statements and
     // the first is cut after `at` (E0002). One diagnostic for the unit; the line is that of the `at`
     // or the one after it.
-    let d = Dir::new("continue");
+    let d = Dir::bare("continue");
     let text = in_a_flow("  let y = x at\n  sample\n  y");
     let path = d.file("a.onsa", &text);
     let diags = check(&path);
@@ -705,7 +635,7 @@ fn e0011_of_a_clock_is_one_error_per_unit_and_hides_nothing_in_the_next_unit() {
     // §18.1: a unit stops at its first error and units are independent. Two flows with a bare `at`
     // give two E0011; the names error of the unit after them is still reported; the names in the
     // unit with E0011 are not looked up.
-    let d = Dir::new("units");
+    let d = Dir::bare("units");
     let text = "\
 pub flow first(p: F32 at block, x: F32 at sample) -> F32 at sample {
   nope(p at sample + x)

@@ -14,47 +14,8 @@
 //!   line breaks); `onsa fmt` stops at the syntax error and writes nothing, so it does not move the
 //!   comment by itself (§18.2); the reverse order (`///` before the attribute) is attached.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
+use crate::test_support::{Dir, code, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        // A helper is called from several tests at once, so the tag alone does not make a name.
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!("onsa_doc_targets_{}_{n}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 /// The diagnostics of `check --json` as JSON values, with the exit code.
 fn check(path: &str) -> (i32, Vec<Value>) {
@@ -146,7 +107,7 @@ fn a_doc_comment_of_a_member_of_an_effect_a_handler_or_an_extern_block_is_no_e00
         ("a target function", "/// t\npub target fn close(d: I32)\n"),
     ];
     for (what, src) in sources {
-        let d = Dir::new("s431");
+        let d = Dir::bare("s431");
         let path = d.file("s431.onsa", src);
         let (_, diags) = check(&path);
         let found = codes(&diags);
@@ -175,7 +136,7 @@ fn a_doc_comment_after_the_last_member_of_those_is_still_e0004() {
         ),
     ];
     for (what, src) in sources {
-        let d = Dir::new("s431_end");
+        let d = Dir::bare("s431_end");
         let path = d.file("s431_end.onsa", src);
         let (_, diags) = check(&path);
         let strays: Vec<&Value> = diags.iter().filter(|x| x["code"] == "E0004").collect();
@@ -247,7 +208,7 @@ fn misplaced() -> Vec<(&'static str, &'static str, &'static str)> {
 #[test]
 fn a_doc_comment_after_the_attributes_is_one_e0004_with_one_candidate_that_moves_the_line() {
     for (what, src, expected) in misplaced() {
-        let d = Dir::new("s432");
+        let d = Dir::bare("s432");
         let path = d.file("s432.onsa", src);
         let (status, diags) = check(&path);
         assert_eq!(status, 1, "{what}: {diags:?}");
@@ -262,7 +223,7 @@ fn a_doc_comment_after_the_attributes_is_one_e0004_with_one_candidate_that_moves
         );
 
         // Applied, it is a program with no error: the doc comment is before the attribute and takes it.
-        let d2 = Dir::new("s432_fixed");
+        let d2 = Dir::bare("s432_fixed");
         let path2 = d2.file("s432_fixed.onsa", &fixed);
         let (status2, diags2) = check(&path2);
         assert_eq!((status2, codes(&diags2)), (0, Vec::new()), "{what}: after the candidate: {diags2:?}\n{fixed}");
@@ -274,7 +235,7 @@ fn the_forms_with_the_doc_comment_moved_are_programs_with_no_error() {
     // The expected texts above are free of any other error, so the test of the candidate cannot
     // fail for a reason that is not the candidate.
     for (what, src, expected) in misplaced() {
-        let d = Dir::new("s432_expected");
+        let d = Dir::bare("s432_expected");
         let path = d.file("s432_expected.onsa", expected);
         let (status, diags) = check(&path);
         assert_eq!((status, codes(&diags)), (0, Vec::new()), "{what}: {diags:?}\n{expected}");
@@ -290,7 +251,7 @@ fn fmt_stops_at_a_doc_comment_after_the_attributes_and_does_not_move_it() {
     // §18.2: `onsa fmt` does not write a file with a syntax error (exit code 2). S-432 rejects the
     // reading in which `fmt` moves the comment before the attribute by itself.
     for (what, src, _) in misplaced() {
-        let d = Dir::new("s432_fmt");
+        let d = Dir::bare("s432_fmt");
         let path = d.file("s432_fmt.onsa", src);
         for args in [&["fmt"][..], &["fmt", "--check"][..]] {
             let mut full = args.to_vec();
@@ -330,7 +291,7 @@ pub flow g(
   x * level
 }
 ";
-    let d = Dir::new("s432_ok");
+    let d = Dir::bare("s432_ok");
     let path = d.file("s432_ok.onsa", src);
     let (status, diags) = check(&path);
     assert_eq!((status, codes(&diags)), (0, Vec::new()), "{diags:?}");

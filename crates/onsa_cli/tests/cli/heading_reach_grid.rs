@@ -243,8 +243,7 @@ fn generate(seed: u64) -> (Vec<String>, Vec<Case>) {
 fn sweep(seed: u64, problems: &mut Vec<String>) -> (usize, usize, usize) {
     let (lines, cases) = generate(seed);
     let texts = Texts::from([("m.onsa".to_string(), lines.join("\n") + "\n")]);
-    let d = package("heading_grid", "demo", &texts);
-    let c = check_package(d.root());
+    let c = check_input(&input_of("demo", &texts));
     assert!(ended_well(&c), "seed {seed}: code {} {}", c.code, c.stderr);
     let case_lines: std::collections::BTreeSet<usize> = cases.iter().map(|c| c.line).collect();
     for x in &c.diags {
@@ -310,8 +309,7 @@ fn the_constant_in_a_length_is_no_name_of_the_head() {
                 pub struct Ring[T, const K: U32] { v: [T; K] }\n\
                 pub fn b(r: Ring[I32, N]) -> I32 { 0 }\n\
                 pub fn c(v: [Hid; N]) -> I32 { 0 }\n";
-    let d = package("heading_len", "demo", &Texts::from([("m.onsa".to_string(), text.to_string())]));
-    let c = check_package(d.root());
+    let c = check_input(&input_of("demo", &Texts::from([("m.onsa".to_string(), text.to_string())])));
     assert!(ended_well(&c), "{} {}", c.code, c.stderr);
     let got: Vec<(&str, u64)> = c.diags.iter().map(|x| (x.code.as_str(), x.line)).collect();
     assert_eq!(got, [("E0303", 8)], "{:?}", c.diags);

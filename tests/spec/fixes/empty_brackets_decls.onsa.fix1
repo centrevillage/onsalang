@@ -12,7 +12,7 @@
 // candidate leaves no error of the syntax stage, and nothing else changes. One error per
 // declaration unit: an enum, a struct, a function, an `impl` with the error in its head (its
 // members are not checked), a method. The trait forms (`trait T[]`, `impl[] T for S`, a trait
-// method) and the extern function are in crates/onsa_cli/tests/empty_brackets.rs: trait
+// method) and the extern function are in crates/onsa_cli/tests/cli/empty_brackets.rs: trait
 // definitions and extern blocks are not in this version (E0200, a later stage), so a file that
 // holds them has errors that this one does not mark.
 

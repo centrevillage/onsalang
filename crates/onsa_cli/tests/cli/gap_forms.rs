@@ -11,41 +11,8 @@
 //!   touching a string (an E0002).
 //!
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_gap_forms_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
+use crate::test_support::{Dir, code, onsa};
+use std::process::Output;
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -110,7 +77,7 @@ pub fn f(x: I32, y: I32) -> I32 {
 #[test]
 fn fmt_does_not_write_a_call_of_a_call_with_a_space() {
     // R-203 (S-89, S-399): the space before the `(` of `g(x) (y)` stops `fmt` (exit 2); the file is as it was.
-    let d = Dir::new("call_of_call");
+    let d = Dir::bare("call_of_call");
     let path = d.file("a.onsa", CALL_OF_A_CALL);
     let out = onsa(&["fmt", &path]);
     assert_eq!(read(&path), CALL_OF_A_CALL, "`fmt` rewrote a file whose `g(x) (y)` is a syntax error");
@@ -120,7 +87,7 @@ fn fmt_does_not_write_a_call_of_a_call_with_a_space() {
 
 #[test]
 fn check_reports_a_call_of_a_call_with_a_space_as_a_syntax_error() {
-    let d = Dir::new("call_of_call_check");
+    let d = Dir::bare("call_of_call_check");
     let path = d.file("a.onsa", CALL_OF_A_CALL);
     assert_eq!(codes(&path), vec!["E0002".to_string()]);
 }
@@ -128,7 +95,7 @@ fn check_reports_a_call_of_a_call_with_a_space_as_a_syntax_error() {
 #[test]
 fn fmt_does_not_write_a_tuple_after_a_tuple_in_an_array() {
     // `[(1, 2) (3, 4)]` is a missing `,` (S-399); `fmt` used to write `[(1, 2)(3, 4)]`.
-    let d = Dir::new("tuple_after_tuple");
+    let d = Dir::bare("tuple_after_tuple");
     let path = d.file("a.onsa", TUPLE_AFTER_TUPLE);
     let out = onsa(&["fmt", &path]);
     assert_eq!(read(&path), TUPLE_AFTER_TUPLE);
@@ -147,7 +114,7 @@ fn fmt_does_not_write_a_file_with_a_space_before_an_opener() {
         "pub fn f(o: Option[I32]) -> I32 {\n  match o {\n    Some (x) => x,\n    None => 0,\n  }\n}\n",
     ];
     for (i, text) in forms.iter().enumerate() {
-        let d = Dir::new(&format!("opener_{i}"));
+        let d = Dir::bare(&format!("opener_{i}"));
         let path = d.file("a.onsa", text);
         let out = onsa(&["fmt", &path]);
         assert_eq!(read(&path), *text, "form {i}: `fmt` rewrote a file with a space before an opener");
@@ -159,7 +126,7 @@ fn fmt_does_not_write_a_file_with_a_space_before_an_opener() {
 fn the_right_forms_pass_fmt_and_the_output_passes_check() {
     // R-203: `g(x).(y)` and `[(1, 2), (3, 4)]` are the right forms; `fmt` keeps them and `check` finds no
     // syntax error in the output.
-    let d = Dir::new("right_forms");
+    let d = Dir::bare("right_forms");
     let path = d.file("a.onsa", RIGHT_FORMS);
     let out = onsa(&["fmt", &path]);
     assert_eq!(code(&out), 0, "{out:?}");
@@ -240,7 +207,7 @@ pub fn parameter_colon(a
   a + b
 }
 ";
-    let d = Dir::new("lists_around_tokens");
+    let d = Dir::bare("lists_around_tokens");
     let path = d.file("a.onsa", text);
     let found = codes(&path);
     assert!(found.is_empty(), "diagnostics for forms that have no rule of placement: {found:?}");
@@ -256,7 +223,7 @@ extern \"C\" lib\"m\" {
   rt fn cos(x: F64) -> F64
 }
 ";
-    let d = Dir::new("extern_lib");
+    let d = Dir::bare("extern_lib");
     let path = d.file("a.onsa", text);
     let found = codes(&path);
     assert!(!found.iter().any(|c| c == "E0002"), "`lib\"m\"` is read as a name touching a string: {found:?}");

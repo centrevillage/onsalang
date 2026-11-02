@@ -11,7 +11,7 @@
 //   elements of a list may be on lines of their own, with comments between, a blank line, and a `,`
 //   after the last one.
 // - (`:`, `=>`, `as` and `at` have no rule of placement either, S-374, but `onsa fmt` joins the line, so those
-//   forms are in crates/onsa_cli/tests/gap_forms.rs: a case here must be in the normal form of `fmt`.)
+//   forms are in crates/onsa_cli/tests/cli/gap_forms.rs: a case here must be in the normal form of `fmt`.)
 // - The postfix `(` and `[`, the member `.`, `?`, the marks `~` `!` and a prefix `-` `!` `^` touch what they
 //   belong to; a `-` between two operands has a space on both sides (`a - b`, fmt writes it so), and a
 //   prefix `-` after a `,` or an opening bracket touches its operand (`[a - b, -b]`).

@@ -7,4 +7,4 @@ pub fn f() -> I32 {
 // `///`, in this order (Rust and Doxygen read it differently). This file has no onsa.toml
 // fragment because the comment must be at the very start of the file. The harness checks that each
 // candidate leaves no error in the unit (S-236); that there are two, in this order, and that the
-// tokens outside the comment stay are checked in crates/onsa_cli/tests/foreign_candidates.rs.
+// tokens outside the comment stay are checked in crates/onsa_cli/tests/cli/foreign_candidates.rs.

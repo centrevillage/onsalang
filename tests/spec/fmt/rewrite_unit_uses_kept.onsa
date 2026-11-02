@@ -10,7 +10,7 @@
 // effect (`uses {Alloc}`, also on a function type), a `()` that is a type argument (`Result[(), Str]`),
 // a tuple, the type and the value of a unit in a `let`. The file is canonical, so `onsa fmt` leaves it
 // unchanged; the same declarations written with `-> ()` and `uses {}` are in
-// crates/onsa_cli/tests/fmt_rewrites.rs.
+// crates/onsa_cli/tests/cli/fmt_rewrites.rs.
 
 fn ok_unit() -> Result[(), Str] {
   Ok(())

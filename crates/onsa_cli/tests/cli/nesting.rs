@@ -12,7 +12,8 @@
 //! still be pending), and it is removed together with the item (W3-14). A process that ends by a
 //! signal fails the test either way.
 
-use std::path::{Path, PathBuf};
+use crate::test_support::Dir;
+use std::path::Path;
 use std::process::{Command, Output};
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
@@ -22,29 +23,6 @@ const DEEP: usize = 290;
 const DEEP_CALLS: usize = 280;
 /// Steps in the inputs that must be accepted: well under 256 under any way of counting.
 const SHALLOW: usize = 180;
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_nesting_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 fn onsa(args: &[&str]) -> Output {
     let out = Command::new(ONSA).args(args).output().expect("run onsa");
@@ -153,7 +131,7 @@ macro_rules! ensure {
 /// Far from the limit, everything is accepted, with no diagnostic (so the limit is not too low).
 #[test]
 fn shallow_inputs_are_accepted() {
-    let d = Dir::new("shallow");
+    let d = Dir::bare("shallow");
     let files = [
         d.file("paren.onsa", &one_line("f", "", "I32", &paren(SHALLOW))),
         d.file("sum.onsa", &one_line("f", "", "I32", &sum_chain(SHALLOW))),
@@ -178,7 +156,7 @@ fn shallow_inputs_are_accepted() {
 #[test]
 fn deep_inputs_are_e0006() {
     limit_test("deep inputs", || {
-        let d = Dir::new("deep");
+        let d = Dir::bare("deep");
         let inputs = [
             ("paren", one_line("f", "", "I32", &paren(DEEP))),
             ("sum", one_line("f", "", "I32", &sum_chain(DEEP))),
@@ -207,7 +185,7 @@ fn deep_inputs_are_e0006() {
 #[test]
 fn units_are_independent() {
     limit_test("independent units", || {
-        let d = Dir::new("units");
+        let d = Dir::bare("units");
         let mut src = String::new();
         src.push_str(&one_line("a", "", "I32", &paren(DEEP))); // line 1: E0006
         src.push_str(&one_line("b", "", "I32", "1 + 1")); // line 2: fine
@@ -236,7 +214,7 @@ fn units_are_independent() {
 #[test]
 fn fmt_leaves_a_deep_file_alone() {
     limit_test("fmt of a deep file", || {
-        let d = Dir::new("fmt");
+        let d = Dir::bare("fmt");
         let deep_src = one_line("f", "", "I32", &paren(DEEP));
         let deep = d.file("deep.onsa", &deep_src);
         let ok = d.file("ok.onsa", "pub fn f() -> I32 {\n  1\n}\n");

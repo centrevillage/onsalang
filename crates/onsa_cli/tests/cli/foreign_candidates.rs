@@ -13,35 +13,12 @@
 //! removes the mark (an ignored test is not silenced by `tests/pending.toml`: it is skipped).
 //! Run them with `cargo test -p onsa_cli --test foreign_candidates -- --ignored`.
 
-use std::path::PathBuf;
 use std::process::Command;
 
+use crate::test_support::{Dir, code_of};
 use serde_json::Value;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_foreign_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 /// The exit code and the diagnostics of `onsa check --json <path>`.
 fn check(path: &str) -> (i32, Vec<Value>) {
@@ -69,10 +46,6 @@ fn run_tests(path: &str) -> (i32, String) {
     let out = Command::new(ONSA).args(["test", path]).output().expect("run onsa");
     let code = out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"));
     (code, String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
@@ -176,7 +149,7 @@ fn fmt_leaves_a_file_with_a_foreign_form_as_it_is_and_exits_with_2() {
         ("let_mut", "pub fn f() -> I32 {\n  let mut n = 0\n  n\n}\n"),
         ("loop", "pub fn f() -> I32 {\n  loop {\n    break\n  }\n  1\n}\n"),
     ];
-    let d = Dir::new("fmt");
+    let d = Dir::bare("fmt");
     for (name, f) in forms {
         let src = format!("{f}\npub fn g()->I32{{\n  2\n}}\n");
         let path = d.file(&format!("{name}.onsa"), &src);
@@ -277,7 +250,7 @@ fn the_harmless_redundant_forms_are_accepted_and_keep_their_value() {
     // P2 (§0.2, §0.5.1) and §6.1: redundant parentheses, a `return` in the last position, `-> ()`, an empty
     // `uses {}` are accepted with no diagnostic (`onsa fmt` takes them away); the values are the
     // ones of the forms without the extras. These are not E0020, which is for the harmful extras.
-    let d = Dir::new("harmless");
+    let d = Dir::bare("harmless");
     let path = d.file("harmless.onsa", HARMLESS);
     let (code, diags) = check(&path);
     assert!(diags.is_empty(), "a harmless form is rejected: {diags:?}");
@@ -328,7 +301,7 @@ test \"a parenthesized pattern is the pattern\" {
 #[test]
 fn a_parenthesized_type_or_pattern_is_grouping() {
     // §2.4: `(e)` is grouping in an expression, a pattern and a type; only `(e,)` is E0002.
-    let d = Dir::new("paren");
+    let d = Dir::bare("paren");
     let path = d.file("paren.onsa", PARENTHESIZED);
     let (_, diags) = check(&path);
     assert!(diags.is_empty(), "a parenthesized type or pattern is rejected: {diags:?}");
@@ -362,7 +335,7 @@ fn the_candidate_for_angle_brackets_edits_the_brackets_only() {
             "pub struct W[T] {\n  v: T,\n}\n\nimpl[T: Ord] W[T] {\n}\n",
         ),
     ];
-    let d = Dir::new("angle");
+    let d = Dir::bare("angle");
     for (name, src, expected) in cases {
         let path = d.file(&format!("{name}.onsa"), src);
         let (_, diags) = check(&path);
@@ -433,7 +406,7 @@ fn a_foreign_form_with_no_candidate_is_e0002_with_a_note_and_no_candidate() {
         ("nested_block_comment", "/* a /* b */ c */\npub fn f() -> I32 {\n  1\n}\n"),
         ("multiline_block_comment_then_code", "pub fn f() -> I32 {\n  let a = 1 /* x\n  */ + 2\n  a\n}\n"),
     ];
-    let d = Dir::new("nocandidate");
+    let d = Dir::bare("nocandidate");
     for (name, src) in sources {
         let path = d.file(&format!("{name}.onsa"), src);
         let (code, diags) = check(&path);
@@ -461,7 +434,7 @@ fn one_syntactic_form_has_one_candidate_that_edits_every_token_of_the_form() {
         ("three_semicolons", "pub fn f() -> I32 {\n  let a = 1;;;\n  a\n}\n", ";", "", 3),
         ("path", "use std\n\npub fn f() -> F32 {\n  std::math::sqrt(2.0)\n}\n", "::", ".", 2),
     ];
-    let d = Dir::new("tokens");
+    let d = Dir::bare("tokens");
     for (name, src, old, new, edits_expected) in cases {
         let path = d.file(&format!("{name}.onsa"), src);
         let (_, diags) = check(&path);
@@ -489,7 +462,7 @@ fn a_stack_of_three_prefix_operators_is_one_error_with_one_candidate() {
     // inner operator: `-(-(-x))`. (`---x` with no space is an increment whose operand is not a
     // name, E0002 with no candidate; it is in the first test above.)
     let src = "pub fn f(x: I32) -> I32 {\n  - - -x\n}\n";
-    let d = Dir::new("stack");
+    let d = Dir::bare("stack");
     let path = d.file("stack.onsa", src);
     let (_, diags) = check(&path);
     expect_one(&diags, "E0012", "stack");
@@ -517,7 +490,7 @@ fn comment_lines<'a>(text: &'a str, prefix: &str) -> Vec<&'a str> {
 fn a_doc_block_comment_becomes_a_doc_line_comment_only_before_a_declaration() {
     // S-247: `/** */` is `///` when a declaration that takes a doc comment follows, `//` when none
     // does; the ` * ` that begins the continuation lines is not stripped. The words stay.
-    let d = Dir::new("doc");
+    let d = Dir::bare("doc");
     let before = "/** the gain */\npub fn f() -> I32 {\n  1\n}\n";
     let path = d.file("before.onsa", before);
     let (_, diags) = check(&path);
@@ -579,7 +552,7 @@ fn an_inner_doc_block_comment_at_the_start_of_the_file_has_two_candidates() {
     // S-247: `/*! */` as the first thing of the file has the candidates `//!` and `///`, in this
     // order (Rust and Doxygen read it differently). Each keeps the words and the code.
     let src = "/*! the module */\npub fn f() -> I32 {\n  1\n}\n";
-    let d = Dir::new("inner");
+    let d = Dir::bare("inner");
     let path = d.file("inner.onsa", src);
     let (_, diags) = check(&path);
     expect_one(&diags, "E0020", "inner doc");
@@ -603,7 +576,7 @@ fn a_block_comment_candidate_leaves_the_code_and_the_lines_as_they_were() {
     // this with `same_code`; this test also runs the program, so a candidate that comments out
     // code and still checks would change the value.)
     let src = "pub fn f() -> I32 {\n  let a = 1 /* one */ + 2\n  a\n}\n\ntest \"the sum\" {\n  assert f() == 3\n}\n";
-    let d = Dir::new("blockvalue");
+    let d = Dir::bare("blockvalue");
     let path = d.file("blockvalue.onsa", src);
     let (_, diags) = check(&path);
     expect_one(&diags, "E0020", "block comment between operands");
@@ -651,7 +624,7 @@ fn a_float_pattern_is_e0020_and_its_candidate_is_a_guard_that_checks() {
             "pub fn f(x: F32, flag: Bool) -> I32 {\n  match x {\n    0.5 | 1.5 if flag => 1,\n    _ => 0,\n  }\n}\n",
         ),
     ];
-    let d = Dir::new("floatpat");
+    let d = Dir::bare("floatpat");
     for (name, src) in cases {
         let path = d.file(&format!("{name}.onsa"), src);
         let (_, diags) = check(&path);
@@ -713,7 +686,7 @@ fn several_block_comments_on_one_line_are_fixed_one_at_a_time_and_keep_their_wor
     // candidate the tokens outside the comments and the line breaks are the same (`same_code`); in
     // the end nothing is reported, and the words are still there, in the order they were written.
     let src = "pub fn f() -> I32 {\n  let a = 1 /* first */ + 2 /* second */\n  a\n}\n";
-    let d = Dir::new("several");
+    let d = Dir::bare("several");
     let mut text = src.to_string();
     let mut steps = 0;
     loop {

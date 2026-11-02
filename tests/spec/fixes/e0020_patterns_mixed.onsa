@@ -22,7 +22,7 @@
 // S-248). The conditions are joined with `&&`, a choice becomes one guard when its branches have one
 // shape once all of them are replaced, and the arm's own guard follows with `&&`. The runner applies
 // the candidate of each diagnostic here and checks that it leaves no error of the syntax stage and no
-// E0304; the shape of the candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs. A unit
+// E0304; the shape of the candidates is in crates/onsa_cli/tests/cli/pattern_guard_candidates.rs. A unit
 // stops at its first error (§18.1), so a function with two wrong arms is one error.
 
 const LIMIT: I32 = 4

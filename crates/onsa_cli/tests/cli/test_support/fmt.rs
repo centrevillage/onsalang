@@ -64,3 +64,25 @@ pub fn expect_fmt(tag: &str, cases: &[(&str, &str, &str)]) {
         assert_eq!(*r, Fmt::Text(expected.to_string()), "{what}: the output is not a fixed point of fmt");
     }
 }
+
+/// `onsa diff --ast` of two texts, in this process with no file written (X-16): the exit code of the command
+/// (0 the same program, 1 a difference, 2 a diagnostic of the syntax stage, 101 an internal error, `spec/tools.md`
+/// §3.5) and what it reports, for the messages.
+pub fn diff_ast(old: &str, new: &str) -> (i32, String) {
+    let mut sources = SourceMap::default();
+    let (a, b) = (sources.add("old.onsa", old), sources.add("new.onsa", new));
+    match onsa_diag::stack::run(|| onsa_driver::diff_ast(&sources, a, b)) {
+        Ok(onsa_driver::AstDiff::Items(d)) => (if d.is_empty() { 0 } else { 1 }, format!("{d:?}")),
+        Ok(onsa_driver::AstDiff::Syntax(diagnostics)) => (2, onsa_diag::to_text(&sources, &diagnostics)),
+        Err(e) => (101, e.render(&sources)),
+    }
+}
+
+/// The text after `onsa fmt` of a file named `name`; any other end (a diagnostic of the syntax stage, an
+/// internal error) fails the test with `what`.
+pub fn formatted(what: &str, name: &str, text: &str) -> String {
+    match format(name, text) {
+        Fmt::Text(out) => out,
+        other => panic!("{what}: onsa fmt does not end with 0: {other:?}"),
+    }
+}

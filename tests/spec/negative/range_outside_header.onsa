@@ -6,7 +6,7 @@
 // value, and a part of an array is written `xs.slice(from, to)` (§5.3), which the note shows.
 // The spelling does not matter: a candidate for `0..n` (`0..<n`) would leave this error, so the
 // candidates of §18.1 are not made and the general syntax error stands (that the diagnostics have
-// no `fixes` and a note is checked in crates/onsa_cli/tests/range_syntax.rs). One diagnostic per
+// no `fixes` and a note is checked in crates/onsa_cli/tests/cli/range_syntax.rs). One diagnostic per
 // function.
 
 pub fn take(r: U32) -> U32 {

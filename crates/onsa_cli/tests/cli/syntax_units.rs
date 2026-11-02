@@ -24,54 +24,10 @@
 //! (W3-15), the top-level shape of `--json` (W3-16; the readers below accept an array and an
 //! object with `diagnostics`).
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::process::Output;
 
+use crate::test_support::{Dir, code, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        // A helper is called from several tests at once, so the tag alone does not make a name.
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!("onsa_syntax_units_{}_{n}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent).unwrap();
-        }
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-
-    fn path(&self, name: &str) -> String {
-        self.0.join(name).to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn stdout(out: &Output) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
@@ -160,7 +116,7 @@ fn with_tail(head: &str) -> String {
 /// Run the three commands on a file the syntax stage fails: `fmt`, `fmt --check` and
 /// `diff --ast` stop with 2 and change nothing.
 fn assert_stops(src: &str) {
-    let d = Dir::new("stops");
+    let d = Dir::bare("stops");
     let path = d.file("bad.onsa", src);
     let other = d.file("other.onsa", src);
     for args in [vec!["fmt", &path], vec!["fmt", "--check", &path]] {
@@ -177,7 +133,7 @@ fn assert_stops(src: &str) {
 /// The report of the stop: exactly the one diagnostic `(line, code)` of the unit, on the standard
 /// output, for the three commands.
 fn assert_reports(src: &str, line: usize, want: &str) {
-    let d = Dir::new("reports");
+    let d = Dir::bare("reports");
     let path = d.file("bad.onsa", src);
     let other = d.file("other.onsa", src);
     for args in [vec!["fmt", &path], vec!["fmt", "--check", &path]] {
@@ -313,7 +269,7 @@ fn fmt_reports_the_e0002_of_the_failed_function_and_not_its_e0320() {
 // ---------------------------------------------------------------------------------------------
 
 fn assert_formats(src: &str, canonical: &str) {
-    let d = Dir::new("formats");
+    let d = Dir::bare("formats");
     let path = d.file("late.onsa", src);
     let out = onsa(&["fmt", &path]);
     assert_eq!(code(&out), 0, "{out:?}");
@@ -371,7 +327,7 @@ fn fmt_formats_a_file_whose_diagnostic_is_an_unsupported_feature() {
 
 #[test]
 fn diff_ast_compares_files_with_errors_of_later_stages() {
-    let d = Dir::new("diff_late");
+    let d = Dir::bare("diff_late");
     let a = d.file("a.onsa", "pub fn f(a: I32) -> I32 {\n  missing\n}\n");
     let b = d.file("b.onsa", "pub fn f(a: I32) -> I32 {\n  other_missing\n}\n");
     let out = onsa(&["diff", "--ast", &a, &b]);
@@ -417,7 +373,7 @@ pub fn SixthName(a: I32) -> I32 {
 
 #[test]
 fn check_reports_one_diagnostic_per_unit_syntax_first() {
-    let d = Dir::new("check_units");
+    let d = Dir::bare("check_units");
     let path = d.file("units.onsa", SEVERAL_UNITS);
     let out = onsa(&["check", &path]);
     assert_eq!(code(&out), 1, "{out:?}");
@@ -430,7 +386,7 @@ fn check_reports_one_diagnostic_per_unit_syntax_first() {
 
 #[test]
 fn fmt_reports_the_syntax_diagnostics_of_check_and_nothing_else() {
-    let d = Dir::new("fmt_report");
+    let d = Dir::bare("fmt_report");
     let path = d.file("units.onsa", SEVERAL_UNITS);
     for args in [vec!["fmt", &path], vec!["fmt", "--check", &path]] {
         let out = onsa(&args);
@@ -447,7 +403,7 @@ fn fmt_reports_the_syntax_diagnostics_of_check_and_nothing_else() {
 
 #[test]
 fn diff_ast_reports_the_same_diagnostics_as_fmt() {
-    let d = Dir::new("diff_report");
+    let d = Dir::bare("diff_report");
     let a = d.file("a.onsa", SEVERAL_UNITS);
     let b = d.file("b.onsa", "pub fn fine() -> I32 {\n  1\n}\n");
     let out = onsa(&["diff", "--ast", &a, &b]);
@@ -459,7 +415,7 @@ fn diff_ast_reports_the_same_diagnostics_as_fmt() {
 #[test]
 fn a_unit_with_a_naming_error_and_a_later_syntax_error_reports_the_syntax_error() {
     // The case S-214 is about: the E0320 comes first in the text, the E0010 is of an earlier stage.
-    let d = Dir::new("s214");
+    let d = Dir::bare("s214");
     let src = "pub fn f(badName: I32) -> I32 {\n  1 + 2 * 3 % 4\n}\n";
     let path = d.file("s214.onsa", src);
     let check = onsa(&["check", &path]);
@@ -472,7 +428,7 @@ fn a_unit_with_a_naming_error_and_a_later_syntax_error_reports_the_syntax_error(
 
 #[test]
 fn a_unit_with_a_naming_error_alone_is_reported_by_check_and_not_by_fmt() {
-    let d = Dir::new("naming_alone");
+    let d = Dir::bare("naming_alone");
     let src = "pub fn f(badName: I32) -> I32 {\n  badName\n}\n";
     let path = d.file("naming.onsa", src);
     let check = onsa(&["check", &path]);
@@ -484,7 +440,7 @@ fn a_unit_with_a_naming_error_alone_is_reported_by_check_and_not_by_fmt() {
 #[test]
 fn text_and_json_give_the_same_position_and_code() {
     // onsa-tools §4: file, line and column of the first line are `--json`'s `span` values.
-    let d = Dir::new("text_json");
+    let d = Dir::bare("text_json");
     let path = d.file("units.onsa", SEVERAL_UNITS);
     let text = onsa(&["check", &path]);
     let json = onsa(&["check", "--json", &path]);
@@ -520,7 +476,7 @@ const SYNTAX_B: &str = "pub fn b( {\n  1\n}\n";
 
 #[test]
 fn fmt_with_several_files_reports_every_syntax_error_and_writes_the_clean_ones() {
-    let d = Dir::new("many_order");
+    let d = Dir::bare("many_order");
     let b = d.file("b.onsa", SYNTAX_B);
     let ok = d.file("c.onsa", UGLY_OK);
     let a = d.file("a.onsa", SYNTAX_A);
@@ -540,7 +496,7 @@ fn fmt_with_several_files_reports_every_syntax_error_and_writes_the_clean_ones()
 
 #[test]
 fn fmt_check_with_several_files_reports_the_syntax_errors_and_names_the_unformatted() {
-    let d = Dir::new("many_check");
+    let d = Dir::bare("many_check");
     let a = d.file("a.onsa", SYNTAX_A);
     let ok = d.file("b.onsa", UGLY_OK);
     let out = onsa(&["fmt", "--check", &a, &ok]);
@@ -557,7 +513,7 @@ fn check_orders_the_diagnostics_of_several_files_by_file() {
     // S-312: one run reads one package through one path, so the several files are the files of a
     // package given by its directory. The package is made with `b.onsa` first; the diagnostics are
     // ordered by the file string (the path from the root, §18.1), not by the order on the disk.
-    let d = Dir::new("check_order");
+    let d = Dir::bare("check_order");
     d.file("onsa.toml", "[package]\nname = \"demo\"\nedition = \"2026\"\n");
     d.file("b.onsa", "pub fn b() -> I32 {\n  missing_b\n}\n");
     d.file("a.onsa", "pub fn a() -> I32 {\n  let x: Bool = 1\n  1\n}\n");
@@ -569,7 +525,7 @@ fn check_orders_the_diagnostics_of_several_files_by_file() {
 
 #[test]
 fn fmt_orders_its_report_by_file() {
-    let d = Dir::new("fmt_order");
+    let d = Dir::bare("fmt_order");
     let b = d.file("b.onsa", SYNTAX_B);
     let a = d.file("a.onsa", SYNTAX_A);
     let out = onsa(&["fmt", &b, &a]);
@@ -584,7 +540,7 @@ fn fmt_orders_its_report_by_file() {
 
 #[test]
 fn diff_ast_orders_its_report_by_file() {
-    let d = Dir::new("diff_order");
+    let d = Dir::bare("diff_order");
     let z = d.file("z.onsa", SYNTAX_B);
     let a = d.file("a.onsa", SYNTAX_A);
     let out = onsa(&["diff", "--ast", &z, &a]);
@@ -629,14 +585,14 @@ fn assert_diagnostic_on_stdout(args: &[&str], line: usize, want: &str) {
 
 #[test]
 fn check_writes_its_diagnostics_to_stdout() {
-    let d = Dir::new("stream_check");
+    let d = Dir::bare("stream_check");
     let p = d.file("t.onsa", TYPE_ERROR);
     assert_diagnostic_on_stdout(&["check", &p], 2, "E0401");
 }
 
 #[test]
 fn check_json_writes_its_diagnostics_to_stdout() {
-    let d = Dir::new("stream_check_json");
+    let d = Dir::bare("stream_check_json");
     let p = d.file("t.onsa", TYPE_ERROR);
     let out = onsa(&["check", "--json", &p]);
     assert_eq!(code(&out), 1, "{out:?}");
@@ -649,21 +605,21 @@ fn check_json_writes_its_diagnostics_to_stdout() {
 
 #[test]
 fn test_writes_the_diagnostics_of_the_check_to_stdout() {
-    let d = Dir::new("stream_test");
+    let d = Dir::bare("stream_test");
     let p = d.file("t.onsa", TYPE_ERROR);
     assert_diagnostic_on_stdout(&["test", &p], 2, "E0401");
 }
 
 #[test]
 fn interface_writes_the_diagnostics_of_the_check_to_stdout() {
-    let d = Dir::new("stream_interface");
+    let d = Dir::bare("stream_interface");
     let p = d.file("t.onsa", TYPE_ERROR);
     assert_diagnostic_on_stdout(&["interface", &p], 2, "E0401");
 }
 
 #[test]
 fn build_writes_the_diagnostics_to_stdout() {
-    let d = Dir::new("stream_build");
+    let d = Dir::bare("stream_build");
     d.file("onsa.toml", MANIFEST);
     d.file("util.onsa", "@export\npub fn version() -> U32 {\n  let x: Bool = 1\n  1\n}\n");
     let dir = d.path("");
@@ -678,7 +634,7 @@ fn build_writes_the_diagnostics_to_stdout() {
 #[test]
 fn fmt_writes_the_syntax_diagnostics_to_stdout_not_to_stderr() {
     // The case S-232 changes: `fmt` wrote them to the standard error.
-    let d = Dir::new("stream_fmt");
+    let d = Dir::bare("stream_fmt");
     let p = d.file("t.onsa", "pub fn f( {\n  1\n}\n");
     let out = onsa(&["fmt", &p]);
     assert_eq!(code(&out), 2, "{out:?}");
@@ -688,7 +644,7 @@ fn fmt_writes_the_syntax_diagnostics_to_stdout_not_to_stderr() {
 
 #[test]
 fn diff_ast_writes_the_syntax_diagnostics_to_stdout() {
-    let d = Dir::new("stream_diff");
+    let d = Dir::bare("stream_diff");
     let a = d.file("a.onsa", "pub fn f( {\n  1\n}\n");
     let b = d.file("b.onsa", "pub fn f() -> I32 {\n  1\n}\n");
     let out = onsa(&["diff", "--ast", &a, &b]);
@@ -709,7 +665,7 @@ fn assert_stderr_only(args: &[&str]) {
 
 #[test]
 fn a_missing_file_is_a_sentence_on_stderr_for_every_command() {
-    let d = Dir::new("stream_missing");
+    let d = Dir::bare("stream_missing");
     let missing = d.path("missing.onsa");
     let present = d.file("present.onsa", "pub fn f() -> I32 {\n  1\n}\n");
     assert_stderr_only(&["check", &missing]);
@@ -723,7 +679,7 @@ fn a_missing_file_is_a_sentence_on_stderr_for_every_command() {
 
 #[test]
 fn a_usage_error_is_a_sentence_on_stderr() {
-    let d = Dir::new("stream_usage");
+    let d = Dir::bare("stream_usage");
     let dir = d.path("");
     assert_stderr_only(&["check"]);
     assert_stderr_only(&["fmt"]);
@@ -736,7 +692,7 @@ fn a_usage_error_is_a_sentence_on_stderr() {
 fn a_missing_file_among_the_files_of_fmt_splits_the_streams() {
     // The syntax diagnostic of one file goes to the standard output, the I/O sentence about
     // another to the standard error, in the same run.
-    let d = Dir::new("stream_mixed");
+    let d = Dir::bare("stream_mixed");
     let bad = d.file("bad.onsa", "pub fn f( {\n  1\n}\n");
     let missing = d.path("missing.onsa");
     let out = onsa(&["fmt", &bad, &missing]);
@@ -754,7 +710,7 @@ fn a_missing_file_among_the_files_of_fmt_splits_the_streams() {
 
 #[test]
 fn the_e0002_of_an_unclosed_brace_points_at_the_brace_and_has_a_note() {
-    let d = Dir::new("unclosed_note");
+    let d = Dir::bare("unclosed_note");
     let src = "\
 pub fn unclosed() -> I32 {
   if true {

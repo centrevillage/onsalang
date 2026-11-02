@@ -26,7 +26,7 @@ use crate::test_support;
 
 use std::collections::BTreeMap;
 
-use test_support::sweep::{Rng, Texts, check_package, ended_well, package};
+use test_support::sweep::{Rng, Texts, check_input, ended_well, input_of};
 
 /// The module with the flows. `gain` has `process_inplace` (its sample input and output are both `F32`);
 /// `src` has no sample input; `cvt`'s output is `I32` through an alias; `pass`'s input is `F32` through one.
@@ -332,8 +332,7 @@ fn texts(main: String) -> Texts {
 /// One program checked: the diagnostics as sorted (code, line) pairs against `expect`; on a mismatch the
 /// program is added to `problems`.
 fn run_one(tag: &str, main: &str, expect: &[(&str, u64)], problems: &mut Vec<String>) {
-    let d = package(tag, "demo", &texts(main.to_string()));
-    let c = check_package(d.root());
+    let c = check_input(&input_of("demo", &texts(main.to_string())));
     let mut got: Vec<(String, u64)> = c.diags.iter().map(|x| (format!("{}@{}", x.code, x.file), x.line)).collect();
     got.sort();
     let mut want: Vec<(String, u64)> = expect.iter().map(|(c, l)| (format!("{c}@main.onsa"), *l)).collect();

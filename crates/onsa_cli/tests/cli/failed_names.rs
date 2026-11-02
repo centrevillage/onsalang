@@ -27,16 +27,47 @@
 
 use crate::test_support;
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use serde_json::Value;
+use test_support::sweep::{Texts, check_input_out, input_of, write_texts};
 use test_support::*;
 
-fn check_json(cwd: &Path, args: &[&str]) -> (Out, Value) {
-    let mut a = vec!["check", "--json"];
-    a.extend_from_slice(args);
-    let out = run(cwd, &a);
+/// The files of a scratch package (with the manifest of `Dir::pkg`), kept in memory (X-16).
+struct Pkg(RefCell<Texts>);
+
+impl Pkg {
+    fn new(_tag: &str) -> Pkg {
+        Pkg(RefCell::new(Texts::new()))
+    }
+
+    fn write(&self, rel: &str, text: &str) {
+        self.0.borrow_mut().insert(rel.to_string(), text.to_string());
+    }
+
+    fn read(&self, rel: &str) -> String {
+        self.0.borrow().get(rel).unwrap_or_else(|| panic!("no file {rel}")).clone()
+    }
+
+    /// The package, where a command runs (`check_json`).
+    fn root(&self) -> &Pkg {
+        self
+    }
+}
+
+/// `onsa check --json <args>` in the package. With `.`, the package is checked in this process with no file
+/// written (`check_input_out`); with a file, the files are written to a scratch directory and the command runs.
+fn check_json(pkg: &Pkg, args: &[&str]) -> (Out, Value) {
+    let out = if args == ["."] {
+        check_input_out(&input_of("demo", &pkg.0.borrow()))
+    } else {
+        let d = Dir::pkg("failed_names");
+        write_texts(&d, &pkg.0.borrow());
+        let mut a = vec!["check", "--json"];
+        a.extend_from_slice(args);
+        run(d.root(), &a)
+    };
     let doc = doc_of(&out);
     (out, doc)
 }
@@ -85,11 +116,11 @@ fn offset(text: &str, line: u64, col: u64) -> usize {
 type FileEdits = (String, Vec<(usize, usize, String)>);
 
 /// Apply every edit of one candidate to the files of `d` (all edits together, from the end of each file).
-fn apply(d: &Dir, fix: &Value) {
+fn apply(d: &Pkg, fix: &Value) {
     let mut by_file: Vec<FileEdits> = Vec::new();
     for e in array_of(fix, "edits") {
         let sp = span_of(&e["span"]);
-        let text = std::fs::read_to_string(d.root().join(&sp.file)).unwrap();
+        let text = d.read(&sp.file);
         let (a, b) = (offset(&text, sp.line, sp.col), offset(&text, sp.end_line, sp.end_col));
         let rep = str_of(e, "replace").to_string();
         match by_file.iter_mut().find(|(f, _)| *f == sp.file) {
@@ -98,7 +129,7 @@ fn apply(d: &Dir, fix: &Value) {
         }
     }
     for (file, mut edits) in by_file {
-        let mut text = std::fs::read_to_string(d.root().join(&file)).unwrap();
+        let mut text = d.read(&file);
         edits.sort_by(|x, y| y.0.cmp(&x.0));
         for (a, b, rep) in edits {
             text.replace_range(a..b, &rep);
@@ -108,8 +139,8 @@ fn apply(d: &Dir, fix: &Value) {
 }
 
 /// A package with `util.onsa` (the real `double`, and `Color`), `hidden.onsa` (a `priv fn`) and `main.onsa`.
-fn with_main(tag: &str, main: &str) -> Dir {
-    let d = Dir::pkg(tag);
+fn with_main(tag: &str, main: &str) -> Pkg {
+    let d = Pkg::new(tag);
     d.write("util.onsa", UTIL);
     d.write("hidden.onsa", HIDDEN);
     d.write("main.onsa", main);
@@ -694,12 +725,7 @@ fn the_candidate_of_a_failed_use_leaves_the_units_that_did_not_read_it_clean() {
         }
         apply(&d, &fixes_of(uses_diag[0])[0]);
         let (out, doc) = check_json(d.root(), &["."]);
-        let ctl_line = std::fs::read_to_string(d.root().join("main.onsa"))
-            .unwrap()
-            .lines()
-            .position(|l| l.starts_with("pub fn ctl_unit"))
-            .unwrap() as u64
-            + 1;
+        let ctl_line = d.read("main.onsa").lines().position(|l| l.starts_with("pub fn ctl_unit")).unwrap() as u64 + 1;
         let bad: Vec<&Value> = diagnostics(&doc)
             .iter()
             .filter(|x| str_of(x, "code") == "E0302" || span_of(&x["span"]).line >= ctl_line)
@@ -756,7 +782,7 @@ fn a_failed_use_is_one_diagnostic_and_its_names_are_silent() {
 /// else, so a call of the same name in another module is the E0302 of a name that no `use` took.
 #[test]
 fn the_failed_names_are_the_names_of_the_module_that_has_the_use() {
-    let d = Dir::pkg("failed_local");
+    let d = Pkg::new("failed_local");
     d.write("util.onsa", UTIL);
     d.write("first.onsa", &format!("use util.{{n1}}\n{}", user("n1", "n1(1)")));
     d.write("second.onsa", &user("n1", "n1(1)"));
@@ -777,7 +803,7 @@ fn the_failed_names_are_the_names_of_the_module_that_has_the_use() {
 /// `use` is clean (it has none of its own).
 #[test]
 fn check_of_one_file_shows_the_diagnostics_of_that_file() {
-    let d = Dir::pkg("failed_one_file");
+    let d = Pkg::new("failed_one_file");
     d.write("util.onsa", UTIL);
     d.write("first.onsa", "use util.{n1}\n");
     d.write("second.onsa", "use util.{double}\n");
@@ -901,7 +927,7 @@ fn an_empty_list_is_an_e0002_whose_candidate_takes_the_use_off() {
     let fixes = fixes_of(&e0002);
     assert_eq!(fixes.len(), 1, "the candidate takes the `use` off: {e0002}");
     apply(&d, &fixes[0]);
-    let text = std::fs::read_to_string(d.root().join("main.onsa")).unwrap();
+    let text = d.read("main.onsa");
     assert!(!text.contains("use util"), "the `use` is taken off: {text:?}");
     let (out, doc) = check_json(d.root(), &["."]);
     assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);

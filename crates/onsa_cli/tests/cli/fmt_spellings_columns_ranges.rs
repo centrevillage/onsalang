@@ -33,45 +33,7 @@
 
 use crate::test_support;
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        // The counter makes the directory the test's own even when two tests use the same tag.
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!("onsa_fmt_u1_{}_{n}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
+use crate::test_support::{Dir, code, onsa};
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -954,7 +916,7 @@ fn diff_code(d: &Dir, one: &str, other: &str) -> i32 {
 
 /// Every pair has the same value: `diff --ast` reports nothing (exit code 0), in both orders.
 fn same_values(tag: &str, pairs: &[(&str, &str)]) {
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     let mut wrong = Vec::new();
     for (x, y) in pairs {
         for (p, q) in [(x, y), (y, x)] {
@@ -969,7 +931,7 @@ fn same_values(tag: &str, pairs: &[(&str, &str)]) {
 
 /// Every pair has two values: `diff --ast` reports the difference (exit code 1), in both orders.
 fn other_values(tag: &str, pairs: &[(&str, &str)]) {
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     let mut wrong = Vec::new();
     for (x, y) in pairs {
         for (p, q) in [(x, y), (y, x)] {
@@ -1123,7 +1085,7 @@ fn at(template: &str, lit: &str) -> String {
 
 #[test]
 fn a_number_is_compared_by_value_in_every_place() {
-    let d = Dir::new("places");
+    let d = Dir::bare("places");
     let mut wrong = Vec::new();
     for (what, template) in places() {
         for (x, y) in [("0X1F", "0x1f"), ("1_0", "10"), ("0B11", "3")] {
@@ -1144,7 +1106,7 @@ fn a_number_is_compared_by_value_in_every_place() {
 
 #[test]
 fn a_float_is_compared_by_value_in_every_place() {
-    let d = Dir::new("floatplaces");
+    let d = Dir::bare("floatplaces");
     let mut wrong = Vec::new();
     for (what, template) in places() {
         for (x, y) in [("1E3", "1e3"), ("1e+3", "1000.0"), ("01.5", "1.5"), ("1_0.5", "10.50")] {
@@ -1165,7 +1127,7 @@ fn a_float_is_compared_by_value_in_every_place() {
 
 #[test]
 fn the_numbers_of_a_pattern_and_of_a_length_are_compared_by_value() {
-    let d = Dir::new("patterns");
+    let d = Dir::bare("patterns");
     let pat = |lit: &str| {
         src(&["fn f(v: I32) -> I32 {", "  match v {", &format!("    {lit} => 1,"), "    _ => 0,", "  }", "}"])
     };
@@ -1184,7 +1146,7 @@ fn the_numbers_of_a_pattern_and_of_a_length_are_compared_by_value() {
 #[test]
 fn a_difference_other_than_a_number_is_still_reported_when_the_numbers_are_spelled_apart() {
     // The comparison by value must not hide a real difference in the same program.
-    let d = Dir::new("real");
+    let d = Dir::bare("real");
     let one = src(&["fn f() -> I32 {", "  g(0X1F, 1_0)", "}"]);
     let same = src(&["fn f() -> I32 {", "  g(0x1f, 10)", "}"]);
     let other_callee = src(&["fn f() -> I32 {", "  h(0x1f, 10)", "}"]);
@@ -1196,7 +1158,7 @@ fn a_difference_other_than_a_number_is_still_reported_when_the_numbers_are_spell
 
 #[test]
 fn a_file_and_its_formatted_form_are_not_a_difference() {
-    let d = Dir::new("roundtrip");
+    let d = Dir::bare("roundtrip");
     let input = src(&[
         "fn f(n: U32) -> F32 {",
         "  let a = 0XFF",

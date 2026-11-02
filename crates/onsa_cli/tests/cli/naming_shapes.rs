@@ -27,6 +27,7 @@
 
 use crate::test_support;
 
+use crate::test_support::code_of;
 use serde_json::Value;
 use test_support::*;
 
@@ -95,10 +96,6 @@ fn fixes_of(d: &Value) -> Vec<&Value> {
         None => vec![],
         Some(f) => f.as_array().expect("`fixes` is an array").iter().collect(),
     }
-}
-
-fn code_of(d: &Value) -> &str {
-    str_of(d, "code")
 }
 
 /// The only diagnostic of a source, which must be one E0320.

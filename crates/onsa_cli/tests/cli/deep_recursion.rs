@@ -21,37 +21,7 @@
 //! here is 300 levels (not more: the limit, not the stack, must end it), and a
 //! shallow call is at most 50.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_deep_recursion_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
+use crate::test_support::{Dir, onsa};
 
 /// The exit code; a signal is a failure of the test, with the output.
 fn code(args: &[&str]) -> (i32, String) {
@@ -189,7 +159,7 @@ fn shapes(d: u32) -> Vec<(&'static str, &'static str, &'static str, String)> {
 /// 1, and the tests before and after it run and pass (spec §12.5, §9.2, §18.2).
 #[test]
 fn a_deep_recursion_fails_the_test_and_exits_with_1() {
-    let d = Dir::new("shapes");
+    let d = Dir::bare("shapes");
     for (tag, defs, shallow, deep) in shapes(300) {
         let f = d.file(&format!("{tag}.onsa"), &program(defs, shallow, &deep));
         let (c, text) = code(&["test", &f]);
@@ -205,7 +175,7 @@ fn a_deep_recursion_fails_the_test_and_exits_with_1() {
 /// the body of the test, the tail call counted).
 #[test]
 fn the_limit_is_128_nested_calls_for_every_shape() {
-    let d = Dir::new("boundary");
+    let d = Dir::bare("boundary");
     for (tag, defs, shallow, deep) in shapes(127) {
         let f = d.file(&format!("{tag}_127.onsa"), &program(defs, shallow, &deep));
         let (c, text) = code(&["test", &f]);
@@ -226,7 +196,7 @@ fn the_limit_is_128_nested_calls_for_every_shape() {
 /// shallow ones 0 (spec §18.2: the filter is a part of the full name).
 #[test]
 fn filter_selects_the_deep_test_or_the_others() {
-    let d = Dir::new("filter");
+    let d = Dir::bare("filter");
     let (_, defs, shallow, deep) = shapes(300).remove(0);
     let f = d.file("direct.onsa", &program(defs, shallow, &deep));
     let (c, text) = code(&["test", "--filter", "deep", &f]);
@@ -241,7 +211,7 @@ fn filter_selects_the_deep_test_or_the_others() {
 /// tests between them pass (the depth count goes back with each test).
 #[test]
 fn several_deep_tests_in_one_file() {
-    let d = Dir::new("several");
+    let d = Dir::bare("several");
     let text = format!(
         "{DIVE}
 test \"deep one\" {{
@@ -284,7 +254,7 @@ test \"deep three\" {{
 /// turn a normal recursion into a failure).
 #[test]
 fn a_shallow_recursion_exits_with_0() {
-    let d = Dir::new("shallow");
+    let d = Dir::bare("shallow");
     for (tag, defs, shallow, _) in shapes(50) {
         let src = format!("{defs}\n\ntest \"shallow\" {{\n{shallow}\n}}\n");
         let f = d.file(&format!("{tag}.onsa"), &src);
@@ -302,7 +272,7 @@ fn a_shallow_recursion_exits_with_0() {
 /// no `kind` (S-233). The records are ordered by name.
 #[test]
 fn json_output_of_a_deep_recursion() {
-    let d = Dir::new("json");
+    let d = Dir::bare("json");
     let (_, defs, shallow, deep) = shapes(300).remove(0);
     let f = d.file("direct.onsa", &program(defs, shallow, &deep));
     let out = onsa(&["test", "--json", &f]);
@@ -382,7 +352,7 @@ test \"reads it\" {{
 /// E0419 of the initializer or the failure of the test that reads it.
 #[test]
 fn a_deep_recursion_in_a_const_ends_by_an_exit_code() {
-    let d = Dir::new("const");
+    let d = Dir::bare("const");
     let src = format!(
         "{DIVE}
 const DEEP: U32 = dive(300)
@@ -406,7 +376,7 @@ test \"uses the constant\" {{
 /// fails in both (exit code 1: a diagnostic, §18.2).
 #[test]
 fn a_const_passes_or_fails_the_same_in_test_and_in_build() {
-    let d = Dir::new("const_agree");
+    let d = Dir::bare("const_agree");
     let ok = const_package(&d, "okpkg", 127);
     let (c, text) = code(&["test", &ok]);
     assert_eq!(c, 0, "test, 128 nested calls:\n{text}");
@@ -428,7 +398,7 @@ fn a_const_passes_or_fails_the_same_in_test_and_in_build() {
 /// W2-04/b (NOTES-W2-04-b.md, 1): the old result depended on the order.
 #[test]
 fn a_const_is_the_same_wherever_and_whenever_it_is_read() {
-    let d = Dir::new("const_order");
+    let d = Dir::bare("const_order");
     let defs = format!(
         "{DIVE}
 const C: U32 = dive(127)
@@ -473,7 +443,7 @@ fn user(n: U32) -> U32 {{
 /// from a recursion 100 deep, and the test, in a package.
 #[test]
 fn a_const_read_from_a_deep_call_builds_and_tests() {
-    let d = Dir::new("const_deep_build");
+    let d = Dir::bare("const_deep_build");
     let body = format!(
         "{DIVE}
 const C: U32 = dive(127)
@@ -509,7 +479,7 @@ test \"reads it deep\" {{
 /// within what every build handles).
 #[test]
 fn a_chain_of_300_constants_is_not_a_deep_call() {
-    let d = Dir::new("const_chain");
+    let d = Dir::bare("const_chain");
     let n = 300;
     let mut body = String::from("const L0: U32 = 1\n");
     for i in 1..n {

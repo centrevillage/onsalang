@@ -76,8 +76,7 @@ fn a_candidate_applied_alone_adds_no_heading_error_to_the_single_files_of_the_sp
         let file = path.file_name().unwrap().to_string_lossy().into_owned();
         let name = path.strip_prefix(repo_root()).unwrap().to_string_lossy().into_owned();
         let texts = Texts::from([(file, text)]);
-        let d = package("candidate_headings", "demo", &texts);
-        let base = check_package(d.root());
+        let base = check_input(&input_of("demo", &texts));
         if !ended_well(&base) {
             problems.push(format!("{name}: the file ends with code {} {}", base.code, base.stderr));
             continue;
@@ -88,8 +87,7 @@ fn a_candidate_applied_alone_adds_no_heading_error_to_the_single_files_of_the_sp
             for (k, fix) in diag.fixes.iter().enumerate() {
                 let mut t = texts.clone();
                 apply_fix_texts(&mut t, fix);
-                write_texts(&d, &t);
-                let after = check_package(d.root());
+                let after = check_input(&input_of("demo", &t));
                 applied += 1;
                 if !ended_well(&after) {
                     problems.push(format!(
@@ -107,7 +105,6 @@ fn a_candidate_applied_alone_adds_no_heading_error_to_the_single_files_of_the_sp
                 }
             }
         }
-        write_texts(&d, &texts);
         names.push(name);
     }
     assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
@@ -131,14 +128,12 @@ fn the_candidate_of_a_wide_member_shows_the_heading_error_that_was_behind_it() {
     let text =
         "struct Pkg { x: I32 }\npriv struct Hid { x: I32 }\nimpl Pkg { pub fn leak() -> Hid { Hid { x: 1 } } }\n";
     let texts = Texts::from([("m.onsa".to_string(), text.to_string())]);
-    let d = package("candidate_wide", "demo", &texts);
-    let c = check_package(d.root());
+    let c = check_input(&input_of("demo", &texts));
     assert_eq!(codes_of(&c), [("E0020".to_string(), 3)], "{:?}", c.diags);
     assert_eq!(c.diags[0].fixes.len(), 1);
     let mut t = texts.clone();
     apply_fix_texts(&mut t, &c.diags[0].fixes[0]);
-    write_texts(&d, &t);
-    let after = check_package(d.root());
+    let after = check_input(&input_of("demo", &t));
     assert_eq!(codes_of(&after), [("E0303".to_string(), 3)], "{:?}", after.diags);
     assert!(after.diags[0].fixes.is_empty(), "an E0303 of a head has no candidate");
 }
@@ -150,14 +145,12 @@ fn the_candidate_of_a_wide_member_shows_the_heading_error_that_was_behind_it() {
 fn the_candidate_of_a_failed_alias_shows_the_heading_error_of_the_unit_that_names_it() {
     let text = "flow voice(x: F32 at sample) -> F32 at sample { x }\ntype S5 = voice\npub fn f9(a: S5) -> I32 { 0 }\n";
     let texts = Texts::from([("m.onsa".to_string(), text.to_string())]);
-    let d = package("candidate_failed_alias", "demo", &texts);
-    let c = check_package(d.root());
+    let c = check_input(&input_of("demo", &texts));
     assert_eq!(codes_of(&c), [("E0308".to_string(), 2)], "{:?}", c.diags);
     assert!(!c.diags[0].fixes.is_empty(), "a candidate that writes the state type");
     let mut t = texts.clone();
     apply_fix_texts(&mut t, &c.diags[0].fixes[0]);
     assert!(t["m.onsa"].contains("type S5 = voice.State"), "{}", t["m.onsa"]);
-    write_texts(&d, &t);
-    let after = check_package(d.root());
+    let after = check_input(&input_of("demo", &t));
     assert_eq!(codes_of(&after), [("E0303".to_string(), 3)], "{:?}", after.diags);
 }

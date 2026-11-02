@@ -9,7 +9,7 @@
 // brackets out, from the opening one to the closing one. A pattern `Some()` of a variant that has
 // an element and a handler that takes arguments are errors in the same place, and the candidate
 // is the same; what is left after it is a count that does not fit (E0412, a later stage, which
-// crates/onsa_cli/tests/empty_brackets.rs checks). Effects and handlers are not in this version
+// crates/onsa_cli/tests/cli/empty_brackets.rs checks). Effects and handlers are not in this version
 // (E0200, a stage after this one), so the names here are not declared and nothing is checked
 // beyond the syntax. One error per declaration unit.
 

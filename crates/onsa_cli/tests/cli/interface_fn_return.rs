@@ -6,9 +6,9 @@
 //! (`fn() -> (fn()) uses {Alloc}`). A signature read again as a declaration gives the same one: the
 //! repair loop reads this output.
 
-use std::path::PathBuf;
 use std::process::{Command, Output};
 
+use crate::test_support::Dir;
 use serde_json::Value;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
@@ -24,29 +24,6 @@ const FNS: &[(&str, &str)] = &[
     ("pub fn g(f: fn() -> fn() uses {Alloc}) -> I32", "1"),
     ("pub fn h() -> fn(fn() -> (fn()) uses {Alloc}) -> I32", "e"),
 ];
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_interface_fn_return_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 fn onsa(args: &[&str]) -> Output {
     let out = Command::new(ONSA).args(args).output().expect("run onsa");
@@ -81,7 +58,7 @@ fn json_signatures(v: &Value, out: &mut Vec<String>) {
 
 #[test]
 fn a_returned_function_type_before_uses_is_in_parentheses_and_reads_back() {
-    let d = Dir::new("sig");
+    let d = Dir::bare("sig");
     let headers: Vec<String> = FNS.iter().map(|(h, _)| h.to_string()).collect();
     let path = d.file("p.onsa", &source(&headers));
     let text = text_signatures(&path);

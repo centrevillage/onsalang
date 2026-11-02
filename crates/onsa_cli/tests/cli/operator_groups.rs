@@ -22,57 +22,8 @@
 //! A test that needs the reading of §3.1 (the partial order of the groups) ran ignored until W3-07/i; each
 //! ignore names the work that removes it (a test cannot be silenced by `tests/pending.toml`).
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::test_support::{Dir, check, code_of};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_groups_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
-}
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
     d.get("fixes").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default()
@@ -170,7 +121,7 @@ const CLASHES: &[Clash] = &[
 
 #[test]
 fn the_message_of_e0010_names_the_operators_that_clash() {
-    let d = Dir::new("message");
+    let d = Dir::bare("message");
     for (params, ret, expr, ops) in CLASHES {
         let path = d.file("a.onsa", &wrap(params, ret, expr));
         let diags = check(&path);
@@ -184,7 +135,7 @@ fn the_message_of_e0010_names_the_operators_that_clash() {
 
 #[test]
 fn the_message_of_a_chain_of_comparisons_names_the_comparison() {
-    let d = Dir::new("chain_message");
+    let d = Dir::bare("chain_message");
     for (expr, op) in [("a < b < c", "<"), ("a == b == c", "=="), ("a != b != c", "!="), ("a >= b >= c", ">=")] {
         let path = d.file("a.onsa", &wrap("a: I32, b: I32, c: I32", "Bool", expr));
         let diags = check(&path);
@@ -236,7 +187,7 @@ const CANDIDATES: &[Cands] = &[
 
 #[test]
 fn the_candidates_of_e0010_are_the_readings_in_the_order_of_the_rule() {
-    let d = Dir::new("candidates");
+    let d = Dir::bare("candidates");
     for (params, ret, expr, want) in CANDIDATES {
         let src = wrap(params, ret, expr);
         let path = d.file("a.onsa", &src);
@@ -258,7 +209,7 @@ fn a_parenthesis_candidate_inserts_only_parentheses() {
     // many `(` as `)`, and every edit is an insertion of `(` only or `)` only (one or more).
     // Changed by the parent (W3-07): two insertions at one position overlap (§18.1), so the parentheses
     // one position needs are one insertion (`))`), as in E0012.
-    let d = Dir::new("insertions");
+    let d = Dir::bare("insertions");
     for (params, ret, expr, want) in CANDIDATES {
         if want.iter().any(|w| !w.contains('(')) {
             continue; // the comparison chain makes `&&` out of nothing; it is not a parenthesis candidate
@@ -291,7 +242,7 @@ fn a_parenthesis_candidate_inserts_only_parentheses() {
 fn a_comparison_chain_candidate_inserts_the_middle_operand_and_the_and() {
     // `a < b < c` -> `a < b && b < c`: the edit changes no token that is already there (the operands and
     // the symbols stay), it inserts `&& b ` after the first comparison.
-    let d = Dir::new("chain_edit");
+    let d = Dir::bare("chain_edit");
     let src = wrap("a: I32, b: I32, c: I32", "Bool", "a < b < c");
     let path = d.file("a.onsa", &src);
     let diags = check(&path);
@@ -316,7 +267,7 @@ const NO_CANDIDATE: &[(&str, &str, &str, &str)] = &[
 
 #[test]
 fn more_than_three_readings_or_a_middle_that_is_evaluated_twice_give_no_candidate_and_a_note() {
-    let d = Dir::new("none");
+    let d = Dir::bare("none");
     for (what, params, ret, expr) in NO_CANDIDATE {
         let path = d.file("a.onsa", &wrap(params, ret, expr));
         let diags = check(&path);
@@ -333,7 +284,7 @@ fn more_than_three_readings_or_a_middle_that_is_evaluated_twice_give_no_candidat
 #[test]
 fn the_note_of_a_chain_with_a_middle_that_is_not_a_path_shows_let() {
     // §18.1: "それ以外は 2 回評価されるので、`let` に取る書き方を note で示す".
-    let d = Dir::new("let_note");
+    let d = Dir::bare("let_note");
     for expr in ["a < id(b) < c", "a < b + 1 < c"] {
         let path = d.file("a.onsa", &wrap("a: I32, b: I32, c: I32", "Bool", expr));
         let diags = check(&path);
@@ -347,7 +298,7 @@ fn the_note_of_a_chain_with_a_middle_that_is_not_a_path_shows_let() {
 fn the_candidates_that_type_check_leave_the_program_without_a_diagnostic() {
     // §18.1: a candidate leaves no diagnostic of the stage of the error or an earlier one in the unit;
     // here both readings of these expressions also type check, so the whole check is silent.
-    let d = Dir::new("clean");
+    let d = Dir::bare("clean");
     let cases: [(&str, &str, &str); 6] = [
         ("w: U32, n: U32", "U32", "w + 1 % n"),
         ("a: U32, b: U32, c: U32", "U32", "a * b % c"),
@@ -395,7 +346,7 @@ fn a_product_in_a_sum_in_a_constant_argument_is_not_a_syntax_error() {
     // types and what this version does not lower (E0200 for an expression as an array length and for
     // the arguments written in an expression) are for the stages after the syntax; here only the syntax
     // stage is looked at: no E0010, E0002 or E0001.
-    let d = Dir::new("const_args");
+    let d = Dir::bare("const_args");
     for (what, src) in CONST_ARGS {
         let path = d.file("a.onsa", src);
         let diags = check(&path);
@@ -408,7 +359,7 @@ fn a_product_in_a_sum_in_a_constant_argument_is_not_a_syntax_error() {
 #[test]
 fn the_remainder_with_a_sum_in_a_constant_argument_is_e0010() {
     // §4.5 "普通の式と同じ規則" and §3.1: `N % 2 + 1` has two groups without a strength between them.
-    let d = Dir::new("const_args_e0010");
+    let d = Dir::bare("const_args_e0010");
     for (what, src) in [
         ("an array length", "pub fn f(a: [F32; N % 2 + 1]) -> U32 {\n  1\n}\n"),
         ("the arguments of a type", "pub fn f(r: Rg[F32, N % 2 + 1]) -> U32 {\n  1\n}\n"),
@@ -426,7 +377,7 @@ fn the_remainder_with_a_sum_in_a_constant_argument_is_e0010() {
 fn an_e0010_hides_the_later_stages_of_its_unit_but_not_the_other_units() {
     // §18.1: within a unit the first error stops the check and the stages run in an order (the syntax
     // before the types); the units are checked independently and all their errors are reported.
-    let d = Dir::new("units");
+    let d = Dir::bare("units");
     let src = "pub fn a(w: U32, n: U32) -> U32 {\n  let bad: Bool = 1\n  w + 1 % n\n}\n\n\
                pub fn b() -> Bool {\n  1\n}\n\n\
                pub fn c(p: Bool, q: Bool, r: Bool) -> Bool {\n  p && q || r\n}\n";
@@ -443,7 +394,7 @@ fn an_e0010_hides_the_later_stages_of_its_unit_but_not_the_other_units() {
 fn a_binary_minus_followed_by_a_prefix_minus_is_one_e0020_with_the_spaced_form_as_its_candidate() {
     // S-320: `a--b` and `5--3` are E0020 and the candidate is `a - -b`. The edit changes the token `--`
     // and no other (§18.1), and the main span starts at it. A note shows the rule.
-    let d = Dir::new("minus");
+    let d = Dir::bare("minus");
     let cases: [(&str, &str, &str, &str); 4] = [
         ("a: I32, b: I32", "I32", "a--b", "a - -b"),
         ("", "I32", "5--3", "5 - -3"),
@@ -478,7 +429,7 @@ fn a_binary_minus_followed_by_a_prefix_minus_is_one_e0020_with_the_spaced_form_a
 
 #[test]
 fn the_spaced_candidate_of_a_binary_minus_and_a_prefix_minus_leaves_no_diagnostic() {
-    let d = Dir::new("minus_clean");
+    let d = Dir::bare("minus_clean");
     for (params, ret, expr) in [("a: I32, b: I32", "I32", "a--b"), ("x: I32, a: I32, b: I32", "I32", "x * a--b")] {
         let src = wrap(params, ret, expr);
         let path = d.file("a.onsa", &src);
@@ -495,7 +446,7 @@ fn a_binary_operator_other_than_minus_followed_by_a_prefix_minus_is_not_the_form
     // S-320 is about `--`, one token. `a+-b`, `a*-b`, `a/-b` and `a - -b` are separate tokens and no
     // form of the closed list of spec/foreign-forms.toml (§18.1: a form that is not in the list is not
     // an E0020).
-    let d = Dir::new("minus_other");
+    let d = Dir::bare("minus_other");
     for expr in ["a+-b", "a*-b", "a/-b", "a - -b", "a-b", "a-(-b)"] {
         let path = d.file("a.onsa", &wrap("a: I32, b: I32", "I32", expr));
         let diags = check(&path);

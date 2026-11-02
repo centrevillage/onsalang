@@ -24,47 +24,10 @@
 //! The reserved word's own fmt stop is also in `syntax_units.rs` (`fmt_stops_for_a_reserved_word`),
 //! for `clock`.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::process::Output;
 
+use crate::test_support::{Dir, code, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        // A helper is called from several tests at once, so the tag alone does not make a name.
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!("onsa_lexical_syntax_{}_{n}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, bytes: &[u8]) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, bytes).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn stdout(out: &Output) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
@@ -111,7 +74,7 @@ const LF_SOURCE: &str = "pub fn f(a: I32) -> I32 {\n  let b = a\n  b\n}\n";
 #[test]
 fn a_crlf_file_checks_clean_and_fmt_writes_lf() {
     // §2.5: "CR LF も一つの改行として読み、`onsa fmt` が LF に揃える".
-    let d = Dir::new("crlf_fmt");
+    let d = Dir::bare("crlf_fmt");
     let crlf = LF_SOURCE.replace('\n', "\r\n");
     let path = d.file("crlf.onsa", crlf.as_bytes());
 
@@ -133,7 +96,7 @@ fn a_crlf_file_checks_clean_and_fmt_writes_lf() {
 #[test]
 fn diff_ast_does_not_see_crlf() {
     // §18.2 and spec/tools.md §3.5: a rewrite of `fmt` is no difference of the programs.
-    let d = Dir::new("crlf_diff");
+    let d = Dir::bare("crlf_diff");
     let lf = d.file("lf.onsa", LF_SOURCE.as_bytes());
     let crlf = d.file("crlf.onsa", LF_SOURCE.replace('\n', "\r\n").as_bytes());
     let out = onsa(&["diff", "--ast", &lf, &crlf]);
@@ -143,7 +106,7 @@ fn diff_ast_does_not_see_crlf() {
 #[test]
 fn the_lines_of_a_diagnostic_count_crlf_once() {
     // §18.1: a span has the line it stands on, from 1. `$` is on the third line.
-    let d = Dir::new("crlf_lines");
+    let d = Dir::bare("crlf_lines");
     let src = "pub fn f(a: I32) -> I32 {\r\n  let b = a\r\n  b $ 1\r\n}\r\n";
     let path = d.file("crlf_lines.onsa", src.as_bytes());
     let (status, diags) = check_diagnostics(&path);
@@ -155,7 +118,7 @@ fn the_lines_of_a_diagnostic_count_crlf_once() {
 #[test]
 fn a_crlf_file_with_a_lexical_error_is_not_rewritten() {
     // §18.2: `fmt` writes nothing for a file with a syntax-stage diagnostic (exit code 2).
-    let d = Dir::new("crlf_error");
+    let d = Dir::bare("crlf_error");
     let src = "pub fn f(a: I32) -> I32 {\r\n  a $ 1\r\n}\r\n";
     let path = d.file("crlf_error.onsa", src.as_bytes());
     for args in [&["fmt"][..], &["fmt", "--check"][..]] {
@@ -175,7 +138,7 @@ fn a_crlf_file_with_a_lexical_error_is_not_rewritten() {
 fn the_column_after_multi_byte_text_counts_characters() {
     // `$` follows a string of four characters (12 bytes, one outside the BMP): the column is 18, the
     // number of characters before it plus one, not a byte or a UTF-16 offset.
-    let d = Dir::new("columns");
+    let d = Dir::bare("columns");
     let src = "pub fn f() -> I32 {\n  let s = \"日本語😀\" $ 1\n  1\n}\n";
     let path = d.file("columns.onsa", src.as_bytes());
     let (status, diags) = check_diagnostics(&path);
@@ -190,7 +153,7 @@ fn the_column_after_multi_byte_text_counts_characters() {
 
 #[test]
 fn a_string_that_does_not_close_on_its_line_is_e0001_on_that_line() {
-    let d = Dir::new("string_lines");
+    let d = Dir::bare("string_lines");
     let src = "pub fn f() -> Str {\n  \"a\n  b\"\n}\n";
     let path = d.file("string_lines.onsa", src.as_bytes());
     let (status, diags) = check_diagnostics(&path);
@@ -242,7 +205,7 @@ fn multi_byte_characters_in_strings_end_in_a_diagnostic_and_not_in_an_internal_e
         "\"日本{{日本}}日本{é}\"",
     ];
     for literal in literals {
-        let d = Dir::new("multibyte");
+        let d = Dir::bare("multibyte");
         let src = string_in_a_function(literal);
         let path = d.file("multibyte.onsa", src.as_bytes());
 
@@ -291,7 +254,7 @@ fn a_character_that_a_source_may_not_hold_stops_fmt_wherever_it_stands() {
         ("U+2069 in code", "pub fn f(a: I32) -> I32 {\n  a \u{2069}+ 1\n}\n".to_string(), 2),
     ];
     for (what, src, line) in cases {
-        let d = Dir::new("chars");
+        let d = Dir::bare("chars");
         let path = d.file("chars.onsa", src.as_bytes());
         let (status, diags) = check_diagnostics(&path);
         assert_eq!(status, 1, "{what}: {diags:?}");
@@ -312,7 +275,7 @@ fn a_character_that_a_source_may_not_hold_stops_fmt_wherever_it_stands() {
 #[test]
 fn a_tab_and_the_characters_outside_the_lists_are_fine_in_comments_and_strings() {
     // §2.5: only the listed characters are errors; everything else may stand in a comment or a string.
-    let d = Dir::new("allowed");
+    let d = Dir::bare("allowed");
     let src = "pub fn f() -> Str {\n  // a\tb \u{a0} \u{200e} \u{200f} \u{feff} \u{2060} \u{3000}\n  \"a\tb \u{a0} \u{200e} \u{feff} \u{2060} \u{3000} 日本\"\n}\n";
     let path = d.file("allowed.onsa", src.as_bytes());
     let (status, diags) = check_diagnostics(&path);
@@ -343,7 +306,7 @@ fn a_doc_comment_with_nothing_to_document_is_e0004_and_stops_fmt() {
         ),
     ];
     for (what, src, line) in cases {
-        let d = Dir::new("e0004");
+        let d = Dir::bare("e0004");
         let path = d.file("e0004.onsa", src.as_bytes());
         let (status, diags) = check_diagnostics(&path);
         assert_eq!(status, 1, "{what}: {diags:?}");
@@ -368,7 +331,7 @@ fn a_doc_comment_with_nothing_to_document_is_e0004_and_stops_fmt() {
 fn doc_comments_on_the_declarations_that_take_them_are_not_errors() {
     // §2.1: the items (not `use` or `test`), the members of an `impl`, a struct's fields, an enum's
     // variants and a flow's inputs; `////` is an ordinary comment, also at the end of the file.
-    let d = Dir::new("docs_ok");
+    let d = Dir::bare("docs_ok");
     let src = "\
 //! Module documentation.
 
@@ -434,7 +397,7 @@ fn a_reserved_word_where_a_name_stands_is_e0200_and_stops_fmt() {
             ("a use list", format!("use kp.{{{word}}}\n"), 1),
         ];
         for (what, src, line) in cases {
-            let d = Dir::new("reserved");
+            let d = Dir::bare("reserved");
             let path = d.file("reserved.onsa", src.as_bytes());
             let (status, diags) = check_diagnostics(&path);
             assert_eq!(status, 1, "{word} as {what}: {diags:?}");
@@ -456,7 +419,7 @@ fn a_reserved_word_where_a_name_stands_is_e0200_and_stops_fmt() {
 #[test]
 fn names_that_start_with_a_reserved_word_are_ordinary_names() {
     // §2.2 reserves the four words, not the names that start with them.
-    let d = Dir::new("prefix");
+    let d = Dir::bare("prefix");
     let src = "\
 pub fn clock_rate(serial: I32, whenever: I32) -> I32 {
   let reset_ifx = serial
@@ -475,7 +438,7 @@ fn a_reserved_word_after_a_dot_is_a_name_and_not_an_e0200() {
     // §2.2: "パスの `.` の直後 … は、他のキーワードと同じく名前として読む（`s.clock` は後の段の
     // E0413 …）". The syntax stage reads `s.clock`; the type stage says there is no such field.
     for word in ["clock", "when", "reset_if", "ser"] {
-        let d = Dir::new("after_dot");
+        let d = Dir::bare("after_dot");
         let src = format!("pub struct S {{\n  a: I32,\n}}\n\npub fn f(s: S) -> I32 {{\n  s.{word}\n}}\n");
         let path = d.file("after_dot.onsa", src.as_bytes());
         let (status, diags) = check_diagnostics(&path);

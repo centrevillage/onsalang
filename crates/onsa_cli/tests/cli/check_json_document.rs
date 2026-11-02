@@ -27,47 +27,10 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::test_support::{Dir, code_of};
 use serde_json::Value;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-/// A scratch directory; `pkg` has a manifest, `bare` has none.
-struct Dir(PathBuf);
-
-impl Dir {
-    fn bare(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_check_json_doc_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn pkg(tag: &str) -> Dir {
-        let d = Dir::bare(tag);
-        d.write("onsa.toml", "[package]\nname = \"demo\"\nedition = \"2026\"\n");
-        d
-    }
-
-    fn write(&self, rel: &str, text: &str) {
-        let p = self.0.join(rel);
-        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
-        std::fs::write(&p, text).unwrap();
-    }
-
-    fn abs(&self, rel: &str) -> String {
-        self.0.join(rel).to_string_lossy().into_owned()
-    }
-
-    fn root(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 struct Out {
     code: i32,
@@ -116,10 +79,6 @@ fn check_json(cwd: &Path, args: &[&str]) -> (i32, Value) {
     let out = run(cwd, &a);
     let doc = doc_of(&out);
     (out.code, doc)
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn file_of(d: &Value) -> &str {
@@ -411,7 +370,7 @@ fn the_package_gives_the_same_document_however_it_is_named_and_from_wherever() {
     let (c0, base) = check_json(d.root(), &["."]);
     assert_eq!(c0, 1);
     assert_eq!(sorted_files_of(&base), NESTED_FILES);
-    let manifest = d.abs("onsa.toml");
+    let manifest = d.path("onsa.toml");
     let root_abs = d.root().to_string_lossy().into_owned();
     let variants: Vec<(String, PathBuf, Vec<String>)> = vec![
         ("the absolute root from another directory".into(), elsewhere.root().to_path_buf(), vec![root_abs.clone()]),
@@ -443,7 +402,7 @@ fn the_edits_and_the_notes_of_a_package_use_the_root_path_too() {
          pub fn missing_bang(inout p: Pt) {\n  p.scale(2)\n}\n\npub fn twice() -> I32 {\n  1\n}\n\npub fn twice() -> I32 {\n  2\n}\n",
     );
     let elsewhere = Dir::bare("edits_notes_elsewhere");
-    for (cwd, arg) in [(d.root().to_path_buf(), ".".to_string()), (elsewhere.root().to_path_buf(), d.abs(""))] {
+    for (cwd, arg) in [(d.root().to_path_buf(), ".".to_string()), (elsewhere.root().to_path_buf(), d.path(""))] {
         let (code, doc) = check_json(&cwd, &[&arg]);
         assert_eq!(code, 1);
         let ds = diagnostics(&doc);
@@ -462,7 +421,7 @@ fn without_a_manifest_span_file_is_the_path_as_passed() {
     let d = Dir::bare("as_passed");
     d.write("rel/x.onsa", &unresolved("f", "zzz"));
     d.write("top.onsa", &unresolved("g", "yyy"));
-    let abs = d.abs("rel/x.onsa");
+    let abs = d.path("rel/x.onsa");
     for (arg, want) in [
         ("rel/x.onsa".to_string(), "rel/x.onsa".to_string()),
         ("./rel/x.onsa".to_string(), "./rel/x.onsa".to_string()),
@@ -510,7 +469,7 @@ fn a_file_inside_a_package_is_named_by_the_root_path_and_only_its_diagnostics_ar
     d.write("a.onsa", "pub fn ga() -> I32 {\n  1\n}\n\npub fn bad_a() -> I32 {\n  zzz\n}\n");
     d.write("sub/b.onsa", "use a.{ga}\n\npub fn f() -> I32 {\n  ga() + yyy\n}\n");
     let sub = d.root().join("sub");
-    for (cwd, arg) in [(sub.clone(), "b.onsa".to_string()), (d.root().to_path_buf(), d.abs("sub/b.onsa"))] {
+    for (cwd, arg) in [(sub.clone(), "b.onsa".to_string()), (d.root().to_path_buf(), d.path("sub/b.onsa"))] {
         let (code, doc) = check_json(&cwd, &[&arg]);
         assert_eq!(code, 1);
         let ds = diagnostics(&doc);

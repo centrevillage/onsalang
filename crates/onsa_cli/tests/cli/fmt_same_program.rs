@@ -56,45 +56,10 @@
 //!
 //! Every test uses only the binary.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        // The counter makes the directory the test's own even when two tests use the same tag.
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!("onsa_fmt_u5_{}_{n}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
+use crate::test_support::fmt::{Fmt, diff_ast, format};
+use crate::test_support::sweep::check_file;
+use crate::test_support::{Dir, code, onsa};
+use std::process::Output;
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -151,23 +116,27 @@ impl Case {
 }
 
 /// The text passes the syntax stage (`fmt --check` does not end with 2) and `onsa check` (exit code 0).
-fn assert_valid(d: &Dir, name: &str, what: &str, which: &str, text: &str) {
-    let p = d.file(name, text);
-    let out = onsa(&["fmt", "--check", &p]);
-    assert_ne!(code(&out), 2, "{what}: the {which} text has a diagnostic of the syntax stage: {out:?}");
-    let out = onsa(&["check", &p]);
-    assert_eq!(code(&out), 0, "{what}: `onsa check` finds a problem in the {which} text: {out:?}\n{text}");
+/// In this process, with no file written (X-16).
+fn assert_valid(name: &str, what: &str, which: &str, text: &str) {
+    let r = format(name, text);
+    assert!(!matches!(r, Fmt::Syntax(_)), "{what}: the {which} text has a diagnostic of the syntax stage: {r:?}");
+    let c = check_file(name, text);
+    assert_eq!(
+        c.code, 0,
+        "{what}: `onsa check` finds a problem in the {which} text: {:?} {}\n{text}",
+        c.diags, c.stderr
+    );
 }
 
 /// Runs `onsa fmt` on every input (one command, so the files are written one after the other), expects
 /// the exit code 0 (the check before writing lets a correct rewrite through), compares the whole text of
-/// each output, and checks that the output is a fixed point.
+/// each output, and checks that the output is a fixed point (that check in this process, `format`).
 fn expect_fmt(tag: &str, cases: &[Case]) {
     assert!(!cases.is_empty(), "no case to run");
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     for (i, c) in cases.iter().enumerate() {
-        assert_valid(&d, &format!("e{i}.onsa"), c.what, "expected", &c.expected);
-        assert_valid(&d, &format!("i{i}.onsa"), c.what, "input", &c.input);
+        assert_valid(&format!("e{i}.onsa"), c.what, "expected", &c.expected);
+        assert_valid(&format!("i{i}.onsa"), c.what, "input", &c.input);
     }
     let paths: Vec<String> = cases.iter().enumerate().map(|(i, c)| d.file(&format!("c{i}.onsa"), &c.input)).collect();
     let mut args = vec!["fmt"];
@@ -185,20 +154,9 @@ fn expect_fmt(tag: &str, cases: &[Case]) {
     assert!(wrong.is_empty(), "{} of {} files are not as expected:\n{}", wrong.len(), cases.len(), wrong.join("\n"));
     for (c, path) in cases.iter().zip(&paths) {
         let written = read(path);
-        let out = onsa(&["fmt", "--check", path]);
-        assert_eq!(code(&out), 0, "{}: the output is not a fixed point of fmt --check: {out:?}", c.what);
-        let out = onsa(&["fmt", path]);
-        assert_eq!(code(&out), 0, "{}: {out:?}", c.what);
-        assert_eq!(read(path), written, "{}: a second fmt changes the output", c.what);
+        let again = format(path, &written);
+        assert_eq!(again, Fmt::Text(written), "{}: the output is not a fixed point of fmt (fmt --check)", c.what);
     }
-}
-
-/// The exit code and the whole output of `onsa diff --ast` on two texts.
-fn diff_of(d: &Dir, tag: &str, a: &str, b: &str) -> (i32, String) {
-    let pa = d.file(&format!("{tag}_a.onsa"), a);
-    let pb = d.file(&format!("{tag}_b.onsa"), b);
-    let out = onsa(&["diff", "--ast", &pa, &pb]);
-    (code(&out), all_text(&out))
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -880,7 +838,7 @@ fn all_the_cases_in_one_command_are_written() {
 
 #[test]
 fn fmt_check_of_a_file_that_differs_by_the_last_return_only_reports_it_with_1() {
-    let d = Dir::new("check_ret");
+    let d = Dir::bare("check_ret");
     let with_return = src(&["fn f(a: I32) -> I32 {", "  let b = a + 1", "  return b", "}"]);
     let p = d.file("r.onsa", &with_return);
     let out = onsa(&["fmt", "--check", &p]);
@@ -900,7 +858,7 @@ fn fmt_check_of_a_file_that_differs_by_the_last_return_only_reports_it_with_1() 
 /// reformat" with 1, none stops with 101 or 2, and none is written.
 #[test]
 fn fmt_check_of_every_case_is_1_and_writes_nothing() {
-    let d = Dir::new("check_all");
+    let d = Dir::bare("check_all");
     let cases = all_cases();
     for (i, c) in cases.iter().enumerate() {
         let p = d.file(&format!("k{i}.onsa"), &c.input);
@@ -917,7 +875,7 @@ fn fmt_check_of_every_case_is_1_and_writes_nothing() {
 
 #[test]
 fn a_file_with_a_return_a_file_with_a_syntax_error_and_a_normal_file_in_one_command() {
-    let d = Dir::new("many");
+    let d = Dir::bare("many");
     let ret_in = src(&["fn  a( ) -> I32 {", " let x = 0XFF", " return x", "}"]);
     let ret_out = src(&["fn a() -> I32 {", "  let x = 0xFF", "  x", "}"]);
     let bad = src(&["fn b() -> I32 {", "  let a = 1;", "  return a", "}"]);
@@ -926,7 +884,7 @@ fn a_file_with_a_return_a_file_with_a_syntax_error_and_a_normal_file_in_one_comm
     let b = d.file("b.onsa", &bad);
     let c = d.file("c.onsa", &normal);
     for (what, text) in [("a", &ret_out), ("c", &normal)] {
-        assert_valid(&d, &format!("v_{what}.onsa"), what, "expected", text);
+        assert_valid(&format!("v_{what}.onsa"), what, "expected", text);
     }
     let out = onsa(&["fmt", &a, &b, &c]);
     assert_eq!(code(&out), 2, "the syntax diagnostic of one file ends the command with 2, not 101: {out:?}");
@@ -951,13 +909,12 @@ fn a_file_with_a_return_a_file_with_a_syntax_error_and_a_normal_file_in_one_comm
 /// Every pair (input, expected) of the cases for which `keep` is true is "no difference" (exit code 0), in
 /// both orders.
 fn expect_no_difference(tag: &str, keep: impl Fn(&Case) -> bool) {
-    let d = Dir::new(tag);
     let mut wrong = Vec::new();
-    for (i, c) in all_cases().iter().enumerate().filter(|(_, c)| keep(c)) {
+    for c in all_cases().iter().filter(|c| keep(c)) {
         for (k, (a, b)) in [(&c.input, &c.expected), (&c.expected, &c.input)].into_iter().enumerate() {
-            let (rc, report) = diff_of(&d, &format!("p{i}_{k}"), a, b);
+            let (rc, report) = diff_ast(a, b);
             if rc != 0 {
-                wrong.push(format!("{} (order {k}): exit code {rc}: {report}", c.what));
+                wrong.push(format!("{} ({tag}, order {k}): exit code {rc}: {report}", c.what));
             }
         }
     }
@@ -979,21 +936,16 @@ fn a_file_and_its_formatted_form_with_the_last_return_taken_off_are_not_a_differ
 
 #[test]
 fn the_last_return_and_its_value_alone_are_not_a_difference() {
-    let d = Dir::new("ret_alone");
     let with_return = src(&["fn f() -> I32 {", "  return 1", "}"]);
     let without = src(&["fn f() -> I32 {", "  1", "}"]);
     for (k, (a, b)) in [(&with_return, &without), (&without, &with_return)].into_iter().enumerate() {
-        let (rc, report) = diff_of(&d, &format!("alone{k}"), a, b);
+        let (rc, report) = diff_ast(a, b);
         assert_eq!(rc, 0, "`return 1` against `1` (order {k}): {report}");
     }
     // The same function with its return and a comment on the same line, in both files (the comment is the
     // same, so it is not a difference whether or not `diff --ast` compares the comments).
-    let (rc, report) = diff_of(
-        &d,
-        "alone_c",
-        &src(&["fn f() -> I32 {", "  return 1 // c", "}"]),
-        &src(&["fn f() -> I32 {", "  1 // c", "}"]),
-    );
+    let (rc, report) =
+        diff_ast(&src(&["fn f() -> I32 {", "  return 1 // c", "}"]), &src(&["fn f() -> I32 {", "  1 // c", "}"]));
     assert_eq!(rc, 0, "`return 1 // c` against `1 // c`: {report}");
 }
 
@@ -1001,7 +953,6 @@ fn the_last_return_and_its_value_alone_are_not_a_difference() {
 /// early exit), another value, another declaration.
 #[test]
 fn a_return_that_is_not_the_last_statement_or_has_another_value_is_a_difference() {
-    let d = Dir::new("ret_diff");
     let early = src(&[
         "fn f(a: I32) -> I32 {",
         "  for i in 0 ..< 3 {",
@@ -1022,13 +973,13 @@ fn a_return_that_is_not_the_last_statement_or_has_another_value_is_a_difference(
         "  7",
         "}",
     ]);
-    let (rc, report) = diff_of(&d, "early", &early, &no_exit);
+    let (rc, report) = diff_ast(&early, &no_exit);
     assert_eq!(rc, 1, "an early `return` is not removed: {report}");
     let one = src(&["fn f() -> I32 {", "  return 1", "}"]);
     let two = src(&["fn f() -> I32 {", "  return 2", "}"]);
-    let (rc, report) = diff_of(&d, "values", &one, &two);
+    let (rc, report) = diff_ast(&one, &two);
     assert_eq!(rc, 1, "`return 1` against `return 2`: {report}");
-    let (rc, report) = diff_of(&d, "values_plain", &one, &src(&["fn f() -> I32 {", "  2", "}"]));
+    let (rc, report) = diff_ast(&one, &src(&["fn f() -> I32 {", "  2", "}"]));
     assert_eq!(rc, 1, "`return 1` against `2`: {report}");
 }
 
@@ -1040,9 +991,8 @@ fn a_return_that_is_not_the_last_statement_or_has_another_value_is_a_difference(
 /// Two files that differ in a doc comment only: `diff --ast` reports no difference (the declaration
 /// `name` is not named).
 fn expect_no_doc_difference(tag: &str, name: &str, a: &str, b: &str) {
-    let d = Dir::new(tag);
     for (k, (x, y)) in [(a, b), (b, a)].into_iter().enumerate() {
-        let (rc, report) = diff_of(&d, &format!("d{k}"), x, y);
+        let (rc, report) = diff_ast(x, y);
         assert_eq!(rc, 0, "{tag} (order {k}): only a doc comment differs: {report}\n{x}\n{y}");
         assert!(!report.contains(name), "{tag} (order {k}): the declaration `{name}` is not named: {report}");
     }
@@ -1115,15 +1065,14 @@ fn a_doc_comment_of_a_few_lines_that_loses_a_line_is_no_difference() {
 /// writes still sees them, `spec/tools.md` §3.5).
 #[test]
 fn a_doc_comment_that_is_added_or_moved_to_another_declaration_is_no_difference() {
-    let d = Dir::new("doc_moved");
     let two = |doc_on_first: bool| {
         let (a, b) = if doc_on_first { ("/// Doc.\n", "") } else { ("", "/// Doc.\n") };
         format!("{a}fn first_one() -> I32 {{\n  1\n}}\n\n{b}fn second_one() -> I32 {{\n  2\n}}\n")
     };
-    let (rc, report) = diff_of(&d, "moved", &two(true), &two(false));
+    let (rc, report) = diff_ast(&two(true), &two(false));
     assert_eq!(rc, 0, "the doc comment belongs to the other function: {report}");
     let bare = "fn first_one() -> I32 {\n  1\n}\n\nfn second_one() -> I32 {\n  2\n}\n";
-    let (rc, report) = diff_of(&d, "added", &two(true), bare);
+    let (rc, report) = diff_ast(&two(true), bare);
     assert_eq!(rc, 0, "a doc comment is added: {report}");
 }
 
@@ -1132,10 +1081,9 @@ fn a_doc_comment_that_is_added_or_moved_to_another_declaration_is_no_difference(
 /// 属性があってもよい"), and the indentation do not change what the doc comment belongs to.
 #[test]
 fn a_doc_comment_with_other_blank_lines_round_it_is_not_a_difference() {
-    let d = Dir::new("doc_same");
     let tight = "/// Doc.\nfn gain_curve() -> I32 {\n  1\n}\n";
-    let (rc, report) = diff_of(&d, "blank", tight, "/// Doc.\n\nfn gain_curve() -> I32 {\n  1\n}\n");
+    let (rc, report) = diff_ast(tight, "/// Doc.\n\nfn gain_curve() -> I32 {\n  1\n}\n");
     assert_eq!(rc, 0, "a blank line between the doc comment and the declaration: {report}");
-    let (rc, report) = diff_of(&d, "indent", tight, "   /// Doc.\nfn   gain_curve( )->I32{\n1\n}\n");
+    let (rc, report) = diff_ast(tight, "   /// Doc.\nfn   gain_curve( )->I32{\n1\n}\n");
     assert_eq!(rc, 0, "the indentation and the white space: {report}");
 }

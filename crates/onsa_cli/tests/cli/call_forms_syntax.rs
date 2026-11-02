@@ -23,43 +23,8 @@
 //! names the work that removes the mark (an ignored test is not silenced by `tests/pending.toml`: it
 //! is skipped). Run them with `cargo test -p onsa_cli --test call_forms_syntax -- --ignored`.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::test_support::{Dir, check, code, code_of, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_call_forms_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -68,20 +33,6 @@ fn read(path: &str) -> String {
 /// A function with `body` (lines already indented by two spaces) as its body.
 fn in_a_function(body: &str) -> String {
     format!("pub fn f() -> U8 {{\n{body}\n}}\n")
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
@@ -190,7 +141,7 @@ const NORMAL_FORMS: &[(&str, &str, &str)] = &[
 
 #[test]
 fn fmt_writes_a_value_call_in_the_normal_form() {
-    let d = Dir::new("normal");
+    let d = Dir::bare("normal");
     for (what, written, normal) in NORMAL_FORMS {
         let path = d.file("a.onsa", &in_a_function(written));
         let out = onsa(&["fmt", &path]);
@@ -208,7 +159,7 @@ fn fmt_writes_a_value_call_in_the_normal_form() {
 #[test]
 fn fmt_check_names_the_file_that_has_a_value_call_out_of_form() {
     // §18.2: `fmt --check` exits with 1 and writes nothing for a file that is not in the normal form.
-    let d = Dir::new("check");
+    let d = Dir::bare("check");
     let text = in_a_function("  f.( x )");
     let path = d.file("a.onsa", &text);
     let out = onsa(&["fmt", "--check", &path]);
@@ -238,7 +189,7 @@ pub fn f(s: Shaper, ops: [fn(I32) -> I32; 2], t: (fn(I32) -> I32, I32), g: fn(I3
   a + b + c + d + e + r
 }
 ";
-    let d = Dir::new("kept");
+    let d = Dir::bare("kept");
     let path = d.file("a.onsa", text);
     let out = onsa(&["fmt", "--check", &path]);
     assert_eq!(code(&out), 0, "{out:?}");
@@ -274,7 +225,7 @@ const SAME: &[(&str, &str, &str)] = &[
 
 #[test]
 fn diff_ast_sees_a_value_call_and_does_not_see_its_spaces() {
-    let d = Dir::new("diff");
+    let d = Dir::bare("diff");
     for (what, one, other) in DIFFERENT {
         let a = d.file("a.onsa", &in_a_function(one));
         let b = d.file("b.onsa", &in_a_function(other));
@@ -317,7 +268,7 @@ fn fmt_and_diff_stop_at_an_error_of_the_syntax_stage_of_these_forms() {
     // §18.2: a file with a diagnostic of the syntax stage is not rewritten (exit code 2) and
     // `diff --ast` does not compare it (exit code 2); the diagnostic goes to the standard output
     // (spec/tools.md §3.1, §4). R-43 was `fmt` rewriting `(1,)` into `(1)`: another program.
-    let d = Dir::new("syntax_errors");
+    let d = Dir::bare("syntax_errors");
     let other = d.file("other.onsa", "pub fn f() -> U8 {\n  250\n}\n");
     for (what, text, expected) in SYNTAX_ERRORS {
         let path = d.file("a.onsa", text);
@@ -367,7 +318,7 @@ fn the_candidate_for_a_callee_that_is_no_path_edits_the_tokens_that_change() {
     // `(` is removed and the `)` becomes the `.` (the `(` of the arguments stays). `g(x)(y)`
     // becomes `g(x).(y)`: an insertion of `.` between the `)` and the `(`. One diagnostic, one
     // candidate; the main position is the first token of the call (S-316).
-    let d = Dir::new("callee_edits");
+    let d = Dir::bare("callee_edits");
     for (what, body, start, replaced, replacements, after) in CALLEE_FORMS {
         let text = in_a_function(body);
         let path = d.file("a.onsa", &text);
@@ -416,7 +367,7 @@ pub fn fine(s: S, h: H) -> U8 {
   s.f.(1) + h.(1).(2)
 }
 ";
-    let d = Dir::new("units");
+    let d = Dir::bare("units");
     let path = d.file("a.onsa", text);
     let diags = check(&path);
     let lines: Vec<u64> = diags.iter().filter(|x| code_of(x) == "E0020").map(|x| start_of(x).0).collect();
@@ -430,7 +381,7 @@ fn a_space_round_the_dot_of_a_value_call_is_removed_by_the_candidate() {
     // removes the space (one edit that replaces the space with nothing).
     let cases: [(&str, &str, &str); 3] =
         [("before", "  g .(1)", "  g.(1)"), ("after", "  g. (1)", "  g.(1)"), ("both", "  g . (1)", "  g.(1)")];
-    let d = Dir::new("spacing");
+    let d = Dir::bare("spacing");
     for (what, body, after) in cases {
         let text = in_a_function(body);
         let path = d.file("a.onsa", &text);
@@ -474,7 +425,7 @@ const MARK_ERRORS: &[(&str, &str, u64)] = &[
 fn the_operand_of_a_mark_is_a_postfix_expression() {
     // §5.2: `move y + 1` and `take(move y + 1)` are E0002, and so are `1 + (move y)` and
     // `if (move y) == 1 {`. The error is the one of the syntax stage: nothing from a later stage.
-    let d = Dir::new("marks");
+    let d = Dir::bare("marks");
     for (what, body, line) in MARK_ERRORS {
         let text = in_a_function(body);
         let path = d.file("a.onsa", &text);
@@ -499,7 +450,7 @@ fn the_marks_on_a_postfix_expression_and_in_a_tuple_of_two_are_read() {
         ("an array of marked elements", "  let u = [move a, move b]"),
         ("a marked call", "  let z = move take(y)"),
     ];
-    let d = Dir::new("marks_ok");
+    let d = Dir::bare("marks_ok");
     for (what, body) in bodies {
         let path = d.file("a.onsa", &in_a_function(body));
         let diags = check(&path);
@@ -527,7 +478,7 @@ const ONE_ELEMENT: &[(&str, &str)] = &[
 fn a_comma_after_the_only_element_is_e0002_and_fmt_does_not_rewrite_it() {
     // §2.4: `(e,)`, `(I32,)` and `(p,)` are E0002. R-43 was `fmt` writing `(1,)` as `(1)`, a
     // different program: the file is not rewritten.
-    let d = Dir::new("one_element");
+    let d = Dir::bare("one_element");
     for (what, text) in ONE_ELEMENT {
         let path = d.file("a.onsa", text);
         let diags = check(&path);
@@ -553,7 +504,7 @@ pub fn f(t: (I32), o: Option[(I32)]) -> I32 {
   }
 }
 ";
-    let d = Dir::new("group");
+    let d = Dir::bare("group");
     let path = d.file("a.onsa", text);
     let diags = check(&path);
     assert!(diags.is_empty(), "{diags:?}");
@@ -620,7 +571,7 @@ fn a_move_on_the_last_expression_of_a_block_is_read_by_the_syntax_stage() {
     // §5.2: the blocks that are where a value is consumed and where the function returns take a
     // `move` on their last expression. `tests/fuzz/67f69e84.onsa` is the case that found it: the
     // candidate of E0711 (`move` before `a`) gave an E0002.
-    let d = Dir::new("move_tail");
+    let d = Dir::bare("move_tail");
     for (what, text) in MOVE_ON_THE_LAST_EXPRESSION {
         let path = d.file("a.onsa", text);
         let diags = check(&path);
@@ -638,7 +589,7 @@ fn fmt_keeps_a_move_in_a_consuming_position_and_does_not_fail_on_a_returned_one(
     // the rewrite list of spec/tools.md §3.3.
     let consuming = "fn f(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {\n  let y = if c { move a } else { move b }\n  y\n}\n";
     let returned = "fn f(move a: Buf[F32]) -> Buf[F32] {\n  return move a\n}\n";
-    let d = Dir::new("move_tail_fmt");
+    let d = Dir::bare("move_tail_fmt");
     let path = d.file("a.onsa", consuming);
     let out = onsa(&["fmt", &path]);
     assert_eq!(code(&out), 0, "{out:?}");
@@ -675,7 +626,7 @@ pub fn f(x: Pair[Option[I32], F32], r: Ring[F32, 4]) -> Pair[I32, F32] {
   y
 }
 ";
-    let d = Dir::new("type_commas");
+    let d = Dir::bare("type_commas");
     let path = d.file("a.onsa", text);
     let diags = check(&path);
     // `Pair` and `Ring` are not declared: the names stage reports them, but nothing of the
@@ -706,7 +657,7 @@ const BAD_TYPE_BRACKETS: &[(&str, &str)] = &[
 fn no_candidate_inserts_the_colons_in_a_type_position() {
     // R-196 (found by the fuzzer: `tests/fuzz/82d90c5e.onsa`): the E0020 of `f[a, b](x)` is for an
     // expression; in a type position its candidate `::` leaves the same error after it is applied.
-    let d = Dir::new("type_brackets");
+    let d = Dir::bare("type_brackets");
     for (what, text) in BAD_TYPE_BRACKETS {
         let text = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
         let path = d.file("a.onsa", &text);

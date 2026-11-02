@@ -11,7 +11,7 @@
 // fixes/empty_brackets_decls.onsa and fixes/empty_brackets_uses.onsa. The pattern `Some()` of a
 // variant that has an element leaves a count that does not fit (E0412, a later stage). The forms that
 // a case file cannot hold (`impl[]T for S` of a trait, `with h()else`) are in
-// crates/onsa_cli/tests/empty_brackets.rs. One error per declaration unit.
+// crates/onsa_cli/tests/cli/empty_brackets.rs. One error per declaration unit.
 
 pub struct S {
   n: I32,

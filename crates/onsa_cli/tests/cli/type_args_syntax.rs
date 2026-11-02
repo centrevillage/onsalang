@@ -17,43 +17,9 @@
 //! silenced by `tests/pending.toml`). Those that passed before it say so in their names (an error of
 //! the syntax stage is an error before the list is read too).
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::test_support::fmt::{diff_ast, expect_fmt, formatted};
+use crate::test_support::{Dir, check, code, code_of, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_type_args_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -62,20 +28,6 @@ fn read(path: &str) -> String {
 /// A function with `body` (lines already indented by two spaces) as its body.
 fn in_a_function(body: &str) -> String {
     format!("pub fn f() -> U8 {{\n{body}\n}}\n")
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
@@ -169,25 +121,20 @@ const NORMAL_FORMS: &[(&str, &str, &str)] = &[
 
 #[test]
 fn fmt_writes_the_list_in_the_normal_form() {
-    let d = Dir::new("normal");
-    for (what, written, normal) in NORMAL_FORMS {
-        let path = d.file("a.onsa", &in_a_function(written));
-        let out = onsa(&["fmt", &path]);
-        assert_eq!(code(&out), 0, "{what}: {out:?}");
-        assert_eq!(read(&path), in_a_function(normal), "{what}");
-        // The normal form is a fixed point of `fmt`, and `fmt --check` accepts it (§18.2).
-        let check = onsa(&["fmt", "--check", &path]);
-        assert_eq!(code(&check), 0, "{what}: the normal form is not accepted by --check: {check:?}");
-        let again = onsa(&["fmt", &path]);
-        assert_eq!(code(&again), 0, "{what}: {again:?}");
-        assert_eq!(read(&path), in_a_function(normal), "{what}: fmt twice");
-    }
+    // `fmt` writes the normal form, which is a fixed point of `fmt` and which `fmt --check` accepts (§18.2):
+    // `expect_fmt` runs the formatter in this process, with no file written (X-16).
+    let cases: Vec<(&str, String, String)> = NORMAL_FORMS
+        .iter()
+        .map(|(what, written, normal)| (*what, in_a_function(written), in_a_function(normal)))
+        .collect();
+    let cases: Vec<(&str, &str, &str)> = cases.iter().map(|(w, a, b)| (*w, a.as_str(), b.as_str())).collect();
+    expect_fmt("type_args_normal", &cases);
 }
 
 #[test]
 fn fmt_check_names_the_file_that_has_a_list_out_of_form() {
     // §18.2: `fmt --check` exits with 1 and writes nothing for a file that is not in the normal form.
-    let d = Dir::new("check");
+    let d = Dir::bare("check");
     let text = in_a_function("  id::[ U8 ](250)");
     let path = d.file("a.onsa", &text);
     let out = onsa(&["fmt", "--check", &path]);
@@ -217,13 +164,7 @@ pub fn f(s: Str, v: V, inout buf: Buf[F32]) -> U8 {
   z
 }
 ";
-    let d = Dir::new("kept");
-    let path = d.file("a.onsa", text);
-    let out = onsa(&["fmt", "--check", &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
-    let out = onsa(&["fmt", &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
-    assert_eq!(read(&path), text);
+    expect_fmt("type_args_kept", &[("the lists are kept", text, text)]);
 }
 
 // ---- fmt and diff --ast stop at the errors of the syntax stage (§18.2) -------------------------
@@ -257,7 +198,7 @@ fn fmt_and_diff_stop_at_an_error_of_the_syntax_stage_around_the_mark() {
     // §18.2: a file with a diagnostic of the syntax stage is not rewritten (exit code 2) and
     // `diff --ast` does not compare it (exit code 2); the diagnostic goes to the standard output
     // (spec/tools.md §3.1, §4). A file that is the same in the normal form is the other side.
-    let d = Dir::new("syntax_errors");
+    let d = Dir::bare("syntax_errors");
     let other = d.file("other.onsa", "pub fn f() -> U8 {\n  250\n}\n");
     for (what, text, _) in SYNTAX_ERRORS {
         let path = d.file("a.onsa", text);
@@ -303,32 +244,24 @@ const SAME: &[(&str, &str, &str)] = &[
 
 #[test]
 fn diff_ast_sees_a_list_and_does_not_see_its_spaces() {
-    let d = Dir::new("diff");
     for (what, one, other) in DIFFERENT {
-        let a = d.file("a.onsa", &in_a_function(one));
-        let b = d.file("b.onsa", &in_a_function(other));
-        let out = onsa(&["diff", "--ast", &a, &b]);
-        assert_eq!(code(&out), 1, "{what}: the programs differ: {out:?}");
+        let (c, out) = diff_ast(&in_a_function(one), &in_a_function(other));
+        assert_eq!(c, 1, "{what}: the programs differ: {out}");
     }
     for (what, one, other) in SAME {
-        let a = d.file("a.onsa", &in_a_function(one));
-        let b = d.file("b.onsa", &in_a_function(other));
-        let out = onsa(&["diff", "--ast", &a, &b]);
-        assert_eq!(code(&out), 0, "{what}: the programs are the same: {out:?}");
+        let (c, out) = diff_ast(&in_a_function(one), &in_a_function(other));
+        assert_eq!(c, 0, "{what}: the programs are the same: {out}");
     }
 }
 
 #[test]
 fn fmt_does_not_change_the_program_that_has_a_list() {
     // §18.2: fmt keeps the meaning; `diff --ast` of a file and its formatted self finds nothing.
-    let d = Dir::new("fmt_same");
     for (what, written, _) in NORMAL_FORMS {
-        let a = d.file("a.onsa", &in_a_function(written));
-        let b = d.file("b.onsa", &in_a_function(written));
-        let out = onsa(&["fmt", &b]);
-        assert_eq!(code(&out), 0, "{what}: {out:?}");
-        let diff = onsa(&["diff", "--ast", &a, &b]);
-        assert_eq!(code(&diff), 0, "{what}: fmt changed the program: {diff:?}");
+        let a = in_a_function(written);
+        let b = formatted(what, "b.onsa", &a);
+        let (c, diff) = diff_ast(&a, &b);
+        assert_eq!(c, 0, "{what}: fmt changed the program: {diff}");
     }
 }
 
@@ -339,7 +272,7 @@ fn a_form_that_cannot_be_read_is_one_e0002_with_no_candidate() {
     // §4.5, §18.1: the syntax cannot say what the writer meant. One diagnostic in the function, E0002,
     // no candidate (a candidate needs a reading of the form). The note may show the form. A list that
     // is not closed is left out: where the recovery stops is not in the spec for a bracket.
-    let d = Dir::new("e0002");
+    let d = Dir::bare("e0002");
     for (what, text, want) in
         SYNTAX_ERRORS.iter().filter(|(w, _, c)| *c == "E0002" && *w != "a list that is not closed")
     {
@@ -353,7 +286,7 @@ fn a_form_that_cannot_be_read_is_one_e0002_with_no_candidate() {
 
 #[test]
 fn a_list_that_is_not_closed_is_an_e0002_and_no_e0020() {
-    let d = Dir::new("e0002_open");
+    let d = Dir::bare("e0002_open");
     let path = d.file("a.onsa", "pub fn f() -> U8 {\n  id::[U8(250)\n}\n");
     let diags = check(&path);
     assert!(!diags.is_empty(), "an error is expected");
@@ -365,7 +298,7 @@ fn a_list_that_is_not_closed_is_an_e0002_and_no_e0020() {
 
 /// The one diagnostic of a file that holds the text and the program with candidate `k` applied.
 fn candidate(text: &str, k: usize) -> (usize, String, Value) {
-    let d = Dir::new("candidate");
+    let d = Dir::bare("candidate");
     let path = d.file("a.onsa", text);
     let diags = check(&path);
     assert_eq!(diags.len(), 1, "one diagnostic expected for {text}: {diags:?}");
@@ -411,7 +344,7 @@ fn each_form_has_the_candidates_of_the_spec_in_order() {
 fn a_form_of_the_syntax_stage_is_e0020_and_not_a_chain_of_comparisons() {
     // §4.5: `f<T>(x)` (the `>` is followed by `(`) is not the E0010 of a chain of comparisons; it is
     // one E0020 whose first candidate is the Onsa form. A real chain (`a < b > c`) stays E0010 (§3.1).
-    let d = Dir::new("not_a_chain");
+    let d = Dir::bare("not_a_chain");
     let path = d.file("a.onsa", &in_a_function("  id<U8>(250)"));
     let diags = check(&path);
     assert_eq!(diags.iter().map(code_of).collect::<Vec<_>>(), ["E0020"], "{diags:?}");
@@ -426,7 +359,7 @@ fn the_note_of_each_form_shows_the_mark() {
     // says that a type argument in an expression is written `name::[…]` (a `[` alone is an index).
     let forms =
         ["  id<U8>(250)", "  pair<U8, F32>(1, 2.0)", "  id::<U8>(250)", "  pair[U8, F32](1, 2.0)", "  Rg[F32, 4].CAP"];
-    let d = Dir::new("notes");
+    let d = Dir::bare("notes");
     for written in forms {
         let path = d.file("a.onsa", &in_a_function(written));
         let diags = check(&path);
@@ -456,7 +389,7 @@ fn the_edits_of_a_candidate_change_the_brackets_and_not_the_types() {
         ("  Buf::[F32]::zeroed(4)", &["::"]),
         ("  std::conv::parse::[I32](s)", &["::", "::"]),
     ];
-    let d = Dir::new("edits");
+    let d = Dir::bare("edits");
     for (written, replaced) in cases {
         let text = in_a_function(written);
         let path = d.file("a.onsa", &text);

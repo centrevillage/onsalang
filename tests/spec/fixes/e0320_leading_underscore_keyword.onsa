@@ -6,7 +6,7 @@
 // E0320 for a leading `_` where the name without the `_` is a keyword (spec 2.3): `_type` without its
 // `_` is `type` (§2.2), so the candidate is the name with a `_` at its end, `type_`, as for `Match`
 // (e0320_keyword). It changes the declaration and every use of the name in the package. The note says
-// that a `_` at the end avoids a keyword (checked in crates/onsa_cli/tests/naming_shapes.rs).
+// that a `_` at the end avoids a keyword (checked in crates/onsa_cli/tests/cli/naming_shapes.rs).
 
 pub fn _match() -> I32 { //~ E0320
   1

@@ -10,4 +10,4 @@
 
 // E1102: a key that `[package]` does not list (its keys are `name` and `edition`) is reported at the
 // key's line (§15.3, §18.1; S-99, R-130). The note lists the keys of the table; the Rust test
-// `crates/onsa_cli/tests/manifest_diagnostics.rs` reads it, and neither it nor the message is compared here.
+// `crates/onsa_cli/tests/cli/manifest_diagnostics.rs` reads it, and neither it nor the message is compared here.

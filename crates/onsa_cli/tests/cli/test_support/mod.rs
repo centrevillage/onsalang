@@ -10,7 +10,7 @@ pub mod fmt;
 pub mod sweep;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::Value;
@@ -52,12 +52,73 @@ impl Dir {
     pub fn arg(&self) -> String {
         self.0.to_string_lossy().into_owned()
     }
+
+    /// Write the file `rel` (text or bytes; its directories made) and give its path as an argument.
+    pub fn file(&self, rel: &str, bytes: &(impl AsRef<[u8]> + ?Sized)) -> String {
+        let p = self.0.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, bytes).unwrap();
+        p.to_string_lossy().into_owned()
+    }
+
+    /// The path of `rel` under the directory as an argument (nothing is written).
+    pub fn path(&self, rel: &str) -> String {
+        self.0.join(rel).to_string_lossy().into_owned()
+    }
+
+    /// The names of the entries of the directory itself, sorted.
+    pub fn names(&self) -> Vec<String> {
+        let mut v: Vec<String> = std::fs::read_dir(&self.0)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        v.sort();
+        v
+    }
 }
 
+/// The directory goes when the test ends, a failing one too (the drop runs as the panic unwinds). A test
+/// that took the permissions off the directory or a directory in it (`fmt_write.rs`) gets them back first.
 impl Drop for Dir {
     fn drop(&mut self) {
+        if std::fs::remove_dir_all(&self.0).is_ok() {
+            return;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let sub = std::fs::read_dir(&self.0).into_iter().flatten().flatten().map(|e| e.path());
+            for d in sub.filter(|p| p.is_dir()).chain([self.0.clone()]) {
+                let _ = std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o755));
+            }
+        }
         let _ = std::fs::remove_dir_all(&self.0);
     }
+}
+
+/// One run of `onsa <args>` in the directory of the test process (the paths of `args` are absolute).
+pub fn onsa(args: &[&str]) -> Output {
+    Command::new(ONSA).args(args).output().expect("run onsa")
+}
+
+/// The exit code of a run; a signal fails the test.
+pub fn code(out: &Output) -> i32 {
+    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
+}
+
+/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
+pub fn check(path: &str) -> Vec<Value> {
+    let out = onsa(&["check", "--json", path]);
+    let c = code(&out);
+    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8(out.stdout).expect("utf-8 output");
+    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
+    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
+}
+
+/// The `code` of a diagnostic.
+pub fn code_of(d: &Value) -> &str {
+    str_of(d, "code")
 }
 
 pub struct Out {

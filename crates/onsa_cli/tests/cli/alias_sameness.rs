@@ -25,7 +25,7 @@ use crate::test_support;
 
 use std::collections::BTreeMap;
 
-use test_support::sweep::{Rng, Texts, check_package, ended_well, package};
+use test_support::sweep::{Rng, Texts, check_input, ended_well, input_of};
 
 const HEAD: &str = "\
 pub struct W[T] { a: T }
@@ -110,8 +110,7 @@ fn an_alias_is_the_type_it_names_and_an_alias_with_an_error_is_silent_where_name
     let text = text.replace(" @@\n", "\n");
     let mut texts = Texts::new();
     texts.insert("main.onsa".to_string(), text.clone());
-    let d = package("alias_sameness", "demo", &texts);
-    let checked = check_package(d.root());
+    let checked = check_input(&input_of("demo", &texts));
     assert!(ended_well(&checked), "check did not end as a check does:\n{}", checked.stderr);
     let mut got = ByLine::new();
     for x in &checked.diags {

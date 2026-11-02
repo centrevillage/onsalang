@@ -4,6 +4,7 @@
 
 use std::process::Command;
 
+use crate::test_support::Dir;
 use onsa_diag::unsupported::{Feature, list_line};
 
 #[test]
@@ -28,9 +29,8 @@ fn explain_e0200_lists_every_unsupported_feature() {
 /// carries the form this version accepts as a note.
 #[test]
 fn a_lowering_e0200_has_found_and_a_note() {
-    let dir = std::env::temp_dir().join(format!("onsa_e0200_found_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("m.onsa");
+    let dir = Dir::bare("e0200_found");
+    let file = dir.0.join("m.onsa");
     std::fs::write(
         &file,
         "pub fn f(n: I32) -> I32 {\n  match n { 1 => 10, _ => 20 }\n}\n\ntest \"t\" {\n  assert f(1) == 10\n}\n",
@@ -40,7 +40,6 @@ fn a_lowering_e0200_has_found_and_a_note() {
         .args(["test", "--json", file.to_str().unwrap()])
         .output()
         .expect("run onsa");
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
     // The document of `onsa test --json` (§18.1, S-233): no test ran.

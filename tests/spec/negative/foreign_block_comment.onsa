@@ -37,7 +37,7 @@
 
 // E0020: a block comment with code after it on the same line (§2.1: there are no block comments,
 // §18.1). Writing it as `//` would comment the code out, so a candidate may not do that: it must
-// leave every token but the comment as it was (crates/onsa_cli/tests/foreign_candidates.rs
+// leave every token but the comment as it was (crates/onsa_cli/tests/cli/foreign_candidates.rs
 // checks the candidates; where the words go is not decided).
 
 pub fn between_operands() -> I32 {

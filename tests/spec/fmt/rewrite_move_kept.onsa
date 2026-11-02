@@ -11,7 +11,7 @@
 // assignment, an argument, an element of a struct literal, the subject of a `match`, the source of a
 // `for`. A function that returns `Holder { buf: move a }` has the `move` in the element of the literal,
 // which is a consuming position, not the returned one. The file is canonical, so `onsa fmt` leaves it
-// unchanged; functions with a returned `move` are in crates/onsa_cli/tests/fmt_rewrites.rs.
+// unchanged; functions with a returned `move` are in crates/onsa_cli/tests/cli/fmt_rewrites.rs.
 // Only the syntax is checked here (`mode = "parse"`): the modes of the values are the check of W4-09.
 
 pub struct Holder {

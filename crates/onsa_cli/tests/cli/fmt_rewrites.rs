@@ -60,56 +60,10 @@
 //!
 //! Every test uses only the binary.
 
+use crate::test_support::fmt::{Fmt, diff_ast, format};
+use crate::test_support::sweep::check_file;
+use crate::test_support::{Dir, code, onsa};
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
-use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        // The counter makes the directory the test's own even when two tests use the same tag.
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!("onsa_fmt_w312_{}_{n}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-
-    /// The names of the entries of the directory, in order.
-    fn names(&self) -> Vec<String> {
-        let mut v: Vec<String> = std::fs::read_dir(&self.0)
-            .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-            .collect();
-        v.sort();
-        v
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -156,73 +110,76 @@ impl Case {
 }
 
 /// The text passes the syntax stage (`fmt --check` does not end with 2) and, at the level `Full`,
-/// `onsa check` (exit code 0).
-fn assert_valid(d: &Dir, name: &str, what: &str, which: &str, text: &str, level: Level) {
-    let p = d.file(name, text);
-    let out = onsa(&["fmt", "--check", &p]);
-    assert_ne!(code(&out), 2, "{what}: the {which} text has a diagnostic of the syntax stage: {out:?}\n{text}");
+/// `onsa check` (exit code 0). In this process, with no file written (X-16).
+fn assert_valid(name: &str, what: &str, which: &str, text: &str, level: Level) {
+    let r = format(name, text);
+    assert!(
+        !matches!(r, Fmt::Syntax(_)),
+        "{what}: the {which} text has a diagnostic of the syntax stage: {r:?}\n{text}"
+    );
     if level == Level::Full {
-        let out = onsa(&["check", &p]);
-        assert_eq!(code(&out), 0, "{what}: `onsa check` finds a problem in the {which} text: {out:?}\n{text}");
+        let c = check_file(name, text);
+        assert_eq!(
+            c.code, 0,
+            "{what}: `onsa check` finds a problem in the {which} text: {:?} {}\n{text}",
+            c.diags, c.stderr
+        );
     }
 }
 
 /// The expected text is in the canonical form of `spec/tools.md` §3.2 (a check of the test itself).
-fn assert_canonical(d: &Dir, name: &str, what: &str, text: &str) {
-    let p = d.file(name, text);
-    let out = onsa(&["fmt", "--check", &p]);
+fn assert_canonical(name: &str, what: &str, text: &str) {
+    let r = format(name, text);
     assert_eq!(
-        code(&out),
-        0,
-        "{what}: the expected text is not in the canonical form (a mistake of the test): {out:?}\n{text}"
+        r,
+        Fmt::Text(text.to_string()),
+        "{what}: the expected text is not in the canonical form (a mistake of the test)\n{text}"
     );
 }
 
 /// Runs `onsa fmt` on every input, expects the exit code 0 (the check before writing lets a correct
 /// rewrite through), compares the whole text of each output, checks that the output is a fixed point,
 /// that it still passes the check, and that `onsa diff --ast` sees the input and the output as the
-/// same program. All the differences are reported together.
+/// same program. All the differences are reported together. The formatter, the check and the diff run
+/// in this process (`test_support::fmt`, `test_support::sweep::check_file`), with no file written (X-16);
+/// what `onsa fmt` does with the file is pinned by the tests at the end of this file and `fmt_write.rs`.
 fn expect_fmt(tag: &str, cases: &[Case]) {
     assert!(!cases.is_empty(), "no case to run");
-    let d = Dir::new(tag);
     for (i, c) in cases.iter().enumerate() {
-        assert_valid(&d, &format!("e{i}.onsa"), c.what, "expected", &c.expected, c.level);
-        assert_canonical(&d, &format!("k{i}.onsa"), c.what, &c.expected);
-        assert_valid(&d, &format!("i{i}.onsa"), c.what, "input", &c.input, c.level);
+        assert_valid(&format!("e{i}.onsa"), c.what, "expected", &c.expected, c.level);
+        assert_canonical(&format!("k{i}.onsa"), c.what, &c.expected);
+        assert_valid(&format!("i{i}.onsa"), c.what, "input", &c.input, c.level);
     }
     let mut problems: Vec<String> = Vec::new();
     for (i, c) in cases.iter().enumerate() {
-        let orig = d.file(&format!("orig{i}.onsa"), &c.input);
-        let path = d.file(&format!("c{i}.onsa"), &c.input);
-        let out = onsa(&["fmt", &path]);
-        if code(&out) != 0 {
-            problems.push(format!("{}: `onsa fmt` ends with {}: {out:?}", c.what, code(&out)));
-            continue;
-        }
-        let got = read(&path);
+        let name = format!("c{i}.onsa");
+        let got = match format(&name, &c.input) {
+            Fmt::Text(got) => got,
+            other => {
+                problems.push(format!("{} ({tag}): `onsa fmt` does not end with 0: {other:?}", c.what));
+                continue;
+            }
+        };
         if got != c.expected {
             problems.push(format!("{}\n--- input\n{}--- expected\n{}--- got\n{got}", c.what, c.input, c.expected));
             continue;
         }
-        let out = onsa(&["fmt", "--check", &path]);
-        if code(&out) != 0 {
-            problems.push(format!("{}: the output is not a fixed point of `fmt --check`: {out:?}", c.what));
+        let again = format(&name, &got);
+        if again != Fmt::Text(got.clone()) {
+            problems.push(format!("{}: the output is not a fixed point of `fmt` (`fmt --check`): {again:?}", c.what));
         }
-        let out = onsa(&["fmt", &path]);
-        if code(&out) != 0 || read(&path) != got {
-            problems.push(format!("{}: a second `fmt` changes the output or fails: {out:?}", c.what));
-        }
-        let out = onsa(&["diff", "--ast", &orig, &path]);
-        if code(&out) != 0 {
+        let (code, diff) = diff_ast(&c.input, &got);
+        if code != 0 {
             problems.push(format!(
-                "{}: `diff --ast` reports a difference between the input and the output: {out:?}",
+                "{}: `diff --ast` reports a difference between the input and the output: {code} {diff}",
                 c.what
             ));
         }
         if c.level == Level::Full {
-            let out = onsa(&["check", &path]);
-            if code(&out) != 0 {
-                problems.push(format!("{}: the output no longer passes `onsa check`: {out:?}", c.what));
+            let k = check_file(&name, &got);
+            if k.code != 0 {
+                problems
+                    .push(format!("{}: the output no longer passes `onsa check`: {:?} {}", c.what, k.diags, k.stderr));
             }
         }
     }
@@ -233,14 +190,6 @@ fn expect_fmt(tag: &str, cases: &[Case]) {
         cases.len(),
         problems.join("\n")
     );
-}
-
-/// The exit code and the whole output of `onsa diff --ast` on two texts.
-fn diff_of(d: &Dir, tag: &str, a: &str, b: &str) -> (i32, String) {
-    let pa = d.file(&format!("{tag}_a.onsa"), a);
-    let pb = d.file(&format!("{tag}_b.onsa"), b);
-    let out = onsa(&["diff", "--ast", &pa, &pb]);
-    (code(&out), format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)))
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -2356,11 +2305,10 @@ fn p7_the_return_of_p7_onsa_is_taken_off_and_every_move_stays() {
 
 #[test]
 fn diff_ast_sees_a_file_and_its_rewritten_form_as_the_same_program() {
-    let d = Dir::new("diff_same");
     let mut wrong = Vec::new();
-    for (i, c) in all_cases().into_iter().enumerate() {
+    for c in all_cases() {
         for (k, (a, b)) in [(&c.input, &c.expected), (&c.expected, &c.input)].into_iter().enumerate() {
-            let (rc, report) = diff_of(&d, &format!("p{i}_{k}"), a, b);
+            let (rc, report) = diff_ast(a, b);
             if rc != 0 {
                 wrong.push(format!("{} (order {k}): exit code {rc}: {report}", c.what));
             }
@@ -2379,14 +2327,13 @@ fn flow_with(init: &str) -> String {
 
 #[test]
 fn diff_ast_tells_apart_what_the_rewrites_of_fmt_keep() {
-    let d = Dir::new("diff_apart");
     let mut wrong = Vec::new();
     let mut apart = |what: &str, a: String, b: String| {
-        let (rc, report) = diff_of(&d, &format!("a{}", what.len()), &a, &b);
+        let (rc, report) = diff_ast(&a, &b);
         if rc != 1 {
             wrong.push(format!("{what}: exit code {rc}, expected 1: {report}"));
         }
-        let (rc, report) = diff_of(&d, &format!("b{}", what.len()), &b, &a);
+        let (rc, report) = diff_ast(&b, &a);
         if rc != 1 {
             wrong.push(format!("{what} (reversed): exit code {rc}, expected 1: {report}"));
         }
@@ -2541,10 +2488,7 @@ fn a_return_without_a_value_stays_with_or_without_a_comment_and_one_with_a_value
             ),
         ],
     );
-    let d = Dir::new("return_comment_diff");
-    let (rc, report) = diff_of(
-        &d,
-        "kept",
+    let (rc, report) = diff_ast(
         &src(&["fn a(inout x: I32) {", "  x = 1", "  return // done", "}"]),
         &src(&["fn a(inout x: I32) {", "  x = 1", "}"]),
     );
@@ -2558,7 +2502,7 @@ fn a_return_without_a_value_stays_with_or_without_a_comment_and_one_with_a_value
 #[test]
 fn the_files_of_the_returns_without_a_value_are_canonical() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/spec/fmt/");
-    let d = Dir::new("valueless_files");
+    let d = Dir::bare("valueless_files");
     for name in ["rewrite_valueless_return_kept.onsa", "rewrite_tail_return_kept.onsa"] {
         let text = read(&format!("{root}{name}"));
         let p = d.file(name, &text);
@@ -2621,13 +2565,8 @@ fn an_empty_uses_before_another_uses_stays() {
             same("a type alias", &["type Maker = fn() -> fn() -> I32 uses {} uses {Alloc}"]),
         ],
     );
-    let d = Dir::new("uses_before_uses_diff");
-    let (rc, report) = diff_of(
-        &d,
-        "inner",
-        &src(&["fn f() -> fn() uses {} uses {Alloc} {}"]),
-        &src(&["fn f() -> fn() uses {Alloc} {}"]),
-    );
+    let (rc, report) =
+        diff_ast(&src(&["fn f() -> fn() uses {} uses {Alloc} {}"]), &src(&["fn f() -> fn() uses {Alloc} {}"]));
     assert_eq!(rc, 1, "`diff --ast` sees the `uses {{Alloc}}` of the function and of its result as one: {report}");
 }
 
@@ -2695,14 +2634,14 @@ fn a_comment_in_the_range_of_a_rewrite_keeps_its_tokens_and_one_out_of_it_stays_
 /// Runs `fmt` on one input and checks what holds whatever the place of the comments is: the exit code 0, a
 /// fixed point, every comment text once and in its order, the same program for `diff --ast`.
 fn expect_comments_kept(tag: &str, text: &str, comments: &[&str]) {
-    let d = Dir::new(tag);
-    let orig = d.file("orig.onsa", text);
-    let path = d.file("a.onsa", text);
-    let out = onsa(&["check", &path]);
-    assert_eq!(code(&out), 0, "the input does not pass `onsa check`: {out:?}\n{text}");
-    let out = onsa(&["fmt", &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
-    let got = read(&path);
+    // In this process, with no file written (X-16).
+    let name = format!("{tag}.onsa");
+    let c = check_file(&name, text);
+    assert_eq!(c.code, 0, "the input does not pass `onsa check`: {:?} {}\n{text}", c.diags, c.stderr);
+    let got = match format(&name, text) {
+        Fmt::Text(got) => got,
+        other => panic!("onsa fmt does not end with 0: {other:?}"),
+    };
     let mut from = 0;
     for c in comments {
         assert_eq!(got.matches(c).count(), 1, "the comment `{c}` is not in the output once:\n{got}");
@@ -2710,12 +2649,12 @@ fn expect_comments_kept(tag: &str, text: &str, comments: &[&str]) {
         assert!(at >= from, "the comment `{c}` is out of its order:\n{got}");
         from = at;
     }
-    let out = onsa(&["fmt", "--check", &path]);
-    assert_eq!(code(&out), 0, "the output is not a fixed point: {out:?}\n{got}");
-    let out = onsa(&["diff", "--ast", &orig, &path]);
-    assert_eq!(code(&out), 0, "`diff --ast` reports a difference: {out:?}\n{got}");
-    let out = onsa(&["check", &path]);
-    assert_eq!(code(&out), 0, "the output does not pass `onsa check`: {out:?}\n{got}");
+    let again = format(&name, &got);
+    assert_eq!(again, Fmt::Text(got.clone()), "the output is not a fixed point\n{got}");
+    let (rc, diff) = diff_ast(text, &got);
+    assert_eq!(rc, 0, "`diff --ast` reports a difference: {diff}\n{got}");
+    let c = check_file(&name, &got);
+    assert_eq!(c.code, 0, "the output does not pass `onsa check`: {:?} {}\n{got}", c.diags, c.stderr);
 }
 
 #[test]
@@ -2791,18 +2730,17 @@ fn a_comment_in_an_empty_uses_is_kept_once() {
 fn spellings_of_a_negative_zero_integer_init_are_kept_or_taken_off_without_failing() {
     // `-0` is a prefix `-` and the literal `0`: whether it is "a literal equal to the default" is not in
     // §11.4 (a gap of the spec). Either way `fmt` writes the file, keeps a fixed point and the same program.
-    let d = Dir::new("neg_zero");
+    // In this process, with no file written (X-16).
     let text = src(&["pub flow a(n: I32 at sample) -> I32 at sample {", "  prev~(n, -0)", "}"]);
-    let orig = d.file("orig.onsa", &text);
-    let path = d.file("a.onsa", &text);
-    let out = onsa(&["fmt", &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
-    let out = onsa(&["fmt", "--check", &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
-    let out = onsa(&["diff", "--ast", &orig, &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
-    let out = onsa(&["check", &path]);
-    assert_eq!(code(&out), 0, "{out:?}");
+    let got = match format("a.onsa", &text) {
+        Fmt::Text(got) => got,
+        other => panic!("onsa fmt does not end with 0: {other:?}"),
+    };
+    assert_eq!(format("a.onsa", &got), Fmt::Text(got.clone()), "not a fixed point");
+    let (rc, diff) = diff_ast(&text, &got);
+    assert_eq!(rc, 0, "{diff}");
+    let c = check_file("a.onsa", &got);
+    assert_eq!(c.code, 0, "{:?} {}", c.diags, c.stderr);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -2816,7 +2754,7 @@ const BROKEN: &str = "fn h() -> I32 {\n  let a = 1;\n  a\n}\n";
 
 #[test]
 fn fmt_leaves_no_file_but_the_ones_it_was_given() {
-    let d = Dir::new("no_leftover");
+    let d = Dir::bare("no_leftover");
     let a = d.file("a.onsa", ROUGH);
     let b = d.file("b.onsa", FINE);
     let c = d.file("c.onsa", BROKEN);
@@ -2831,7 +2769,7 @@ fn fmt_leaves_no_file_but_the_ones_it_was_given() {
 
 #[test]
 fn fmt_of_a_file_alone_leaves_no_other_file() {
-    let d = Dir::new("no_leftover_alone");
+    let d = Dir::bare("no_leftover_alone");
     let a = d.file("a.onsa", ROUGH);
     let before = d.names();
     let out = onsa(&["fmt", &a]);
@@ -2845,7 +2783,7 @@ fn fmt_of_a_file_alone_leaves_no_other_file() {
 
 #[test]
 fn fmt_check_changes_nothing_and_leaves_no_file() {
-    let d = Dir::new("check_nothing");
+    let d = Dir::bare("check_nothing");
     let a = d.file("a.onsa", ROUGH);
     let b = d.file("b.onsa", FINE);
     let c = d.file("c.onsa", BROKEN);
@@ -2873,7 +2811,7 @@ fn fmt_writes_a_new_file_and_leaves_the_old_one_whole() {
     // S-56: the file is written to a temporary file and renamed over the name. A second name of the old
     // file (a hard link) shows it: the new text is under the name that was formatted, and the old file is
     // still the old text, never half written.
-    let d = Dir::new("rename");
+    let d = Dir::bare("rename");
     let a = d.file("a.onsa", ROUGH);
     let link = d.0.join("link.onsa");
     std::fs::hard_link(&a, &link).unwrap();

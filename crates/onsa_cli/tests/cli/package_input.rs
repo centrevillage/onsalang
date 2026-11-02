@@ -31,6 +31,7 @@ use crate::test_support;
 
 use std::path::{Path, PathBuf};
 
+use crate::test_support::code_of;
 use serde_json::Value;
 use test_support::*;
 
@@ -40,10 +41,6 @@ const OK_TEST: &str = "pub fn f() -> I32 {\n  1\n}\n\ntest \"t\" {\n  assert f()
 /// One E0302 at line 2.
 fn unresolved(name: &str, ident: &str) -> String {
     format!("pub fn {name}() -> I32 {{\n  {ident}\n}}\n")
-}
-
-fn code_of(d: &Value) -> &str {
-    str_of(d, "code")
 }
 
 fn file_of(d: &Value) -> String {

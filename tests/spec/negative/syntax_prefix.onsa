@@ -57,5 +57,5 @@ pub fn parenthesized(x: F32, flag: Bool, i: I32, xs: [F32; 2], k: U32) -> F32 {
 // A `--` or `++` with no space is an increment (E0020 or E0002, spec/foreign-forms.toml rows
 // `increment` and `increment_unfixable`, S-250); the stacks above are written with spaces (S-297).
 // `- - -x` is one syntactic form (S-248): the candidate is `-(-(-x))` (checked in
-// crates/onsa_cli/tests/foreign_candidates.rs). `---x` with no space is `--` and `-x`: an increment whose
+// crates/onsa_cli/tests/cli/foreign_candidates.rs). `---x` with no space is `--` and `-x`: an increment whose
 // operand is not a name, E0002 with no candidate (negative/foreign_no_candidate.onsa).

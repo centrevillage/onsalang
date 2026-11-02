@@ -7,7 +7,7 @@
 // literal (§4.4): a block expression in a header is written in parentheses. A `{` that follows a
 // keyword inside the header (`if c { 1 } else { 2 }` as an end) belongs to that expression. A violation
 // is E0002 of the syntax stage with a note, and has no candidate. That `0.. {` (a range with one end,
-// S-278) is a different E0002 is in crates/onsa_cli/tests/pattern_guard_candidates.rs. One diagnostic
+// S-278) is a different E0002 is in crates/onsa_cli/tests/cli/pattern_guard_candidates.rs. One diagnostic
 // per function. The case of `par` is in header_block_expression_par.onsa.
 
 pub fn block_as_the_end(n: U32) -> U32 {

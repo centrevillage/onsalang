@@ -13,41 +13,7 @@
 //! whole (`#[ignore]`), and the stream check of the first test is a test of its own. More cases of
 //! the report are in `syntax_units.rs`.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_fmt_many_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
+use crate::test_support::{Dir, code, onsa};
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -59,7 +25,7 @@ const BAD: &str = "fn b() -> I32 {\n  let a = 1;\n a\n}\n";
 
 #[test]
 fn a_syntax_error_in_the_middle_does_not_stop_the_other_files() {
-    let d = Dir::new("middle");
+    let d = Dir::bare("middle");
     let a = d.file("a.onsa", UGLY_A);
     let b = d.file("b.onsa", BAD);
     let c = d.file("c.onsa", UGLY_C);
@@ -78,7 +44,7 @@ fn a_syntax_error_in_the_middle_does_not_stop_the_other_files() {
 #[test]
 fn the_diagnostic_of_the_file_with_the_error_is_on_the_standard_output() {
     // S-232: a diagnostic goes to the standard output, in `fmt` too (it went to the standard error).
-    let d = Dir::new("middle_stream");
+    let d = Dir::bare("middle_stream");
     let a = d.file("a.onsa", UGLY_A);
     let b = d.file("b.onsa", BAD);
     let out = onsa(&["fmt", &a, &b]);
@@ -90,7 +56,7 @@ fn the_diagnostic_of_the_file_with_the_error_is_on_the_standard_output() {
 
 #[test]
 fn fmt_check_reports_every_file_and_writes_none() {
-    let d = Dir::new("check");
+    let d = Dir::bare("check");
     let a = d.file("a.onsa", UGLY_A);
     let b = d.file("b.onsa", BAD);
     let c = d.file("c.onsa", UGLY_C);
@@ -103,7 +69,7 @@ fn fmt_check_reports_every_file_and_writes_none() {
 
 #[test]
 fn an_unreadable_file_does_not_stop_the_others() {
-    let d = Dir::new("missing");
+    let d = Dir::bare("missing");
     let a = d.file("a.onsa", UGLY_A);
     let missing = d.0.join("missing.onsa").to_string_lossy().into_owned();
     let c = d.file("c.onsa", UGLY_C);
@@ -117,7 +83,7 @@ fn an_unreadable_file_does_not_stop_the_others() {
 fn the_syntax_diagnostic_that_stops_fmt_is_reported() {
     // E0010 stops `fmt`, and is the diagnostic of the unit even though the E0320 comes earlier in
     // the text (S-214: the earlier stage wins). The report is on the standard output (S-232).
-    let d = Dir::new("hidden");
+    let d = Dir::bare("hidden");
     let src = "fn f(badName: I32) -> I32 {\n  1 + 2 % 3\n}\n";
     let p = d.file("hide.onsa", src);
     let out = onsa(&["fmt", &p]);

@@ -7,7 +7,7 @@
 // found). Here that `use` would make this module depend on `b`, and `b` depends on this module
 // (b.onsa has `use a.{f}`), so the cycle (E0310) would be left after the candidate is applied, and the
 // candidate is not given (the case runner applies any candidate that is given and finds the cycle; the
-// count is checked in crates/onsa_cli/tests/use_cycles.rs). The package has no cycle as written.
+// count is checked in crates/onsa_cli/tests/cli/use_cycles.rs). The package has no cycle as written.
 
 pub fn f() -> I32 {
   b.g()                                             //~ E0302

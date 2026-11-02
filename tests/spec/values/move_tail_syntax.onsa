@@ -8,7 +8,7 @@
 // position is inherited by the blocks nested in them. The forms of a block placed where the function
 // returns (`return move a`, a function ending in `move a`, the arms there) are accepted too, but
 // `onsa fmt` removes that `move` (§5.2), so they cannot be in a file that has to be canonical; they
-// are in crates/onsa_cli/tests/call_forms_syntax.rs. Only the syntax is checked here (mode =
+// are in crates/onsa_cli/tests/cli/call_forms_syntax.rs. Only the syntax is checked here (mode =
 // "parse"): the E0711 of an arm that consumes without the mark, the E0703 of the argument forms and
 // the E0704 after a conditional move belong to the modes stage (W4-09).
 

@@ -22,60 +22,11 @@
 //! output of the compiler. The tests were written before the syntax of W3-13: those that fail until it
 //! (the compiler reads these forms as before) run ignored until W3-13/i.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::test_support::{Dir, check, code, code_of, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_empty_brackets_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
@@ -196,7 +147,7 @@ fn a_blank_before_empty_brackets_is_the_blank_first() {
     // is reported (S-281), the E0020 of the blank, with its candidate that takes the blank out; the
     // empty brackets are left for the next round (§18.1 binds a unit's only error alone). The same
     // for a blank before the `.` of a tuple index with a leading zero (§2.4).
-    let d = Dir::new("blank");
+    let d = Dir::bare("blank");
     for (written, after) in [
         ("pub enum E {\n  A ( ),\n  B,\n}\n", "pub enum E {\n  A( ),\n  B,\n}\n"),
         ("pub fn f() -> I32 {\n  handle { 1 } with h ()\n}\n", "pub fn f() -> I32 {\n  handle { 1 } with h()\n}\n"),
@@ -218,7 +169,7 @@ fn a_blank_before_empty_brackets_is_the_blank_first() {
 fn the_word_after_the_brackets_of_a_handler_stays_a_word_of_its_own() {
     // `with h()else`: the brackets go, and `else` stays the keyword (not `helse`, §18.1), so the
     // `else` that does not go there is still an error of the syntax stage (the file has two).
-    let d = Dir::new("joined");
+    let d = Dir::bare("joined");
     let written = "pub fn f() -> I32 {\n  handle { 1 } with h()else\n}\n";
     let ds = check(&d.file("a.onsa", written));
     let e0002: Vec<&Value> = ds.iter().filter(|x| code_of(x) == "E0002").collect();
@@ -232,7 +183,7 @@ fn the_word_after_the_brackets_of_a_handler_stays_a_word_of_its_own() {
 
 #[test]
 fn the_forms_of_declarations_that_are_not_in_this_version_have_the_one_candidate() {
-    let d = Dir::new("candidates");
+    let d = Dir::bare("candidates");
     for (what, written, after) in CANDIDATES {
         let path = d.file("a.onsa", written);
         let ds = check(&path);
@@ -299,7 +250,7 @@ const WITH_A_COMMENT: &[(&str, &str)] = &[
 
 #[test]
 fn brackets_with_a_comment_inside_have_no_candidate_and_a_note() {
-    let d = Dir::new("comment");
+    let d = Dir::bare("comment");
     for (what, written) in WITH_A_COMMENT {
         let path = d.file("a.onsa", written);
         let ds = check(&path);
@@ -315,7 +266,7 @@ fn brackets_with_a_comment_inside_have_no_candidate_and_a_note() {
 fn a_comment_outside_the_brackets_keeps_the_candidate() {
     // §2.5: only a comment inside the brackets takes the candidate away; a comment after the closing bracket
     // stays where it is when the brackets are taken out.
-    let d = Dir::new("outside");
+    let d = Dir::bare("outside");
     let written = "pub enum E {\n  A(), // note\n  B,\n}\n\npub fn f[](x: I32) -> I32 { // note\n  x\n}\n";
     let path = d.file("a.onsa", written);
     let ds = check(&path);
@@ -359,7 +310,7 @@ const WITH_AN_ELEMENT: &[(&str, &str, &str)] = &[
 
 #[test]
 fn a_variant_with_an_element_is_left_with_a_count_error_after_the_candidate() {
-    let d = Dir::new("count");
+    let d = Dir::bare("count");
     for (what, written, after) in WITH_AN_ELEMENT {
         let path = d.file("a.onsa", written);
         let ds = check(&path);
@@ -383,7 +334,7 @@ fn a_variant_with_an_element_is_left_with_a_count_error_after_the_candidate() {
 fn a_unit_variant_and_none_leave_nothing_after_the_candidate() {
     // The pattern of a unit variant (`E.A()`, `None()`): taking the brackets out gives the pattern that is
     // written right, so the file is clean (§2.5: only a variant that has an element is left with E0412).
-    let d = Dir::new("unit");
+    let d = Dir::bare("unit");
     let written = "pub enum E {\n  A,\n  B(I32),\n}\n\npub fn f(e: E, o: Option[I32]) -> I32 {\n  let a = match e {\n    E.A() => 1,\n    E.B(n) => n,\n  }\n  a\n}\n\npub fn g(o: Option[I32]) -> I32 {\n  match o {\n    None() => 0,\n    Some(n) => n,\n  }\n}\n";
     let path = d.file("a.onsa", written);
     let ds = check(&path);
@@ -432,7 +383,7 @@ const STOPS_FMT: &[(&str, &str, &str)] = &[
 
 #[test]
 fn fmt_does_not_write_a_file_with_empty_brackets_or_a_leading_zero_and_exits_with_2() {
-    let d = Dir::new("fmt");
+    let d = Dir::bare("fmt");
     for (what, written, expected) in STOPS_FMT {
         for args in [&["fmt"][..], &["fmt", "--check"][..]] {
             let path = d.file("a.onsa", written);
@@ -453,7 +404,7 @@ fn fmt_does_not_write_a_file_with_empty_brackets_or_a_leading_zero_and_exits_wit
 #[test]
 fn fmt_writes_the_files_next_to_a_file_that_it_does_not_write() {
     // spec/tools.md §3.1: one file with an error of the syntax stage does not stop the others.
-    let d = Dir::new("fmt_many");
+    let d = Dir::bare("fmt_many");
     let bad = "pub fn f(t: (I32, I32)) -> I32 {\n  t.01\n}\n";
     let bad2 = "pub enum E {\n  A(),\n  B,\n}\n";
     let loose = "pub fn g() -> I32 {\n  1+2\n}\n";
@@ -476,7 +427,7 @@ fn fmt_writes_the_files_next_to_a_file_that_it_does_not_write() {
 fn fmt_keeps_the_brackets_that_mean_something() {
     // §2.5: the empty brackets of a call, a function's arguments and the unit are not touched by `fmt`; the
     // elements of a variant and the type parameters are kept. (A file in the normal form is a fixed point.)
-    let d = Dir::new("fmt_keep");
+    let d = Dir::bare("fmt_keep");
     let text = "pub enum E {\n  A,\n  B(I32),\n}\n\npub fn zero() -> I32 {\n  0\n}\n\npub fn id[T](x: T) -> T {\n  x\n}\n\npub fn run(f: fn() -> I32, u: ()) -> I32 {\n  let g = fn() -> I32 { 1 }\n  zero() + f.() + g.() + id(0)\n}\n";
     let path = d.file("a.onsa", text);
     let out = onsa(&["fmt", "--check", &path]);
@@ -491,7 +442,7 @@ fn fmt_keeps_the_brackets_that_mean_something() {
 #[test]
 fn a_tuple_index_without_a_leading_zero_is_kept_by_fmt() {
     // §2.4: `t.0`, `t.1`, `t.10` are read (the digits are one index, so `t.10` is not `t.1` and a `0`).
-    let d = Dir::new("fmt_index");
+    let d = Dir::bare("fmt_index");
     let text = "pub fn f(t: (I32, I32, I32, I32, I32, I32, I32, I32, I32, I32, I32)) -> I32 {\n  t.0 + t.1 + t.10\n}\n";
     let path = d.file("a.onsa", text);
     let out = onsa(&["fmt", &path]);

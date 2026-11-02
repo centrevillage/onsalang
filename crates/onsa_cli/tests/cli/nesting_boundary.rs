@@ -25,35 +25,13 @@
 //! last); a type with arguments (`Option[...]`: the name or the `[`), a struct literal, an enum or
 //! struct pattern. Their lines are tested in the case files.
 
-use std::path::{Path, PathBuf};
+use crate::test_support::Dir;
+use std::path::Path;
 use std::process::{Command, Output};
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 const LIMIT: usize = 256;
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_nesting_boundary_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 fn onsa(args: &[&str]) -> Output {
     let out = Command::new(ONSA).args(args).output().expect("run onsa");
@@ -331,7 +309,7 @@ fn run_over(d: &Dir, i: &Input) -> Result<(), String> {
 /// Exactly 256 levels are accepted, in every kind of form and in every kind of unit.
 #[test]
 fn the_largest_accepted_inputs() {
-    let d = Dir::new("ok");
+    let d = Dir::bare("ok");
     for (accepted, _) in pairs() {
         run_ok(&d, &accepted).unwrap_or_else(|e| panic!("{e}"));
     }
@@ -346,7 +324,7 @@ fn the_largest_accepted_inputs() {
 #[test]
 fn one_over_is_e0006_at_the_token() {
     limit_test("one over the limit", || {
-        let d = Dir::new("over");
+        let d = Dir::bare("over");
         let errors: Vec<String> = pairs().iter().filter_map(|(_, o)| run_over(&d, o).err()).collect();
         ensure!(errors.is_empty(), "{} of the inputs fail:\n{}", errors.len(), errors.join("\n"));
         Ok(())
@@ -358,7 +336,7 @@ fn one_over_is_e0006_at_the_token() {
 #[test]
 fn a_chain_one_over_is_e0006() {
     limit_test("a chain one over the limit", || {
-        let d = Dir::new("chain");
+        let d = Dir::bare("chain");
         let f = d.file("chain.onsa", &chain(LIMIT));
         let out = onsa(&["check", "--json", &f]);
         ensure!(code(&out) == 1, "exits {} (want 1): {}", code(&out), text(&out));
@@ -377,7 +355,7 @@ fn a_chain_one_over_is_e0006() {
 #[test]
 fn the_first_form_over_and_no_closing_diagnostics() {
     limit_test("the first form over", || {
-        let d = Dir::new("first");
+        let d = Dir::bare("first");
         let head = "pub fn f() -> I32 { ";
         let inputs = [
             // 300 levels, closed
@@ -400,7 +378,7 @@ fn the_first_form_over_and_no_closing_diagnostics() {
 #[test]
 fn units_at_the_limit_do_not_add_up() {
     limit_test("units at the limit", || {
-        let d = Dir::new("units");
+        let d = Dir::bare("units");
         let n = LIMIT - 1;
         let unit = |name: &str, n: usize| format!("pub fn {name}() -> I32 {{ {}1{} }}\n", rep("(", n), rep(")", n));
         let mut src = String::new();
@@ -423,7 +401,7 @@ fn units_at_the_limit_do_not_add_up() {
 /// file at 256 levels is formatted, and the result (shallower) is still accepted.
 #[test]
 fn fmt_accepts_the_largest_input_and_does_not_make_it_deeper() {
-    let d = Dir::new("fmt");
+    let d = Dir::bare("fmt");
     let n = LIMIT - 1;
     let src = format!("pub fn f() -> I32 {{\n  {}1{}\n}}\n", rep("(", n), rep(")", n));
     let f = d.file("deep.onsa", &src);

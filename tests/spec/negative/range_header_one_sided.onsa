@@ -6,7 +6,7 @@
 // loop needs both ends, so `5..` and `..<5` cannot be read as a header (the one-ended range is a
 // pattern only, where it is the guard form, fixes/e0020_patterns_range.onsa). Unlike `0..n`, no
 // candidate can be made: nothing says what the missing end is. That the diagnostic has a note and no
-// candidate is checked in crates/onsa_cli/tests/pattern_guard_candidates.rs. One diagnostic per
+// candidate is checked in crates/onsa_cli/tests/cli/pattern_guard_candidates.rs. One diagnostic per
 // function.
 //
 // A `{` right after a range symbol that opens a block expression as the end (`for i in 0..<{ n } {`)

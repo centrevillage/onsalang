@@ -16,57 +16,8 @@
 //! spec; none is taken from the output of the compiler. A test that needs the E0013 runs ignored until W3-13/i; each
 //! ignore names the work that removes it (a test cannot be silenced by `tests/pending.toml`).
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::test_support::{Dir, check, code, code_of, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_block_operands_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
-}
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
     d.get("fixes").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default()
@@ -192,7 +143,7 @@ const FORMS: &[Form] = &[
 
 #[test]
 fn an_expression_with_block_like_operands_is_one_e0013_with_one_candidate() {
-    let d = Dir::new("one");
+    let d = Dir::bare("one");
     for (params, ret, expr, fixed) in FORMS {
         let src = wrap(params, ret, expr);
         let path = d.file("a.onsa", &src);
@@ -209,7 +160,7 @@ fn an_expression_with_block_like_operands_is_one_e0013_with_one_candidate() {
 fn the_candidate_of_an_e0013_inserts_only_parentheses_and_leaves_no_diagnostic() {
     // §18.1: an edit changes only the token it changes, so the candidate is made of insertions of `(` and
     // `)` (empty ranges), one pair for each operand; and these forms type check, so nothing is left.
-    let d = Dir::new("parens");
+    let d = Dir::bare("parens");
     for (params, ret, expr, fixed) in FORMS {
         let src = wrap(params, ret, expr);
         let path = d.file("a.onsa", &src);
@@ -231,7 +182,7 @@ fn the_candidate_of_an_e0013_inserts_only_parentheses_and_leaves_no_diagnostic()
 #[test]
 fn the_main_position_is_the_first_token_of_the_first_operand_without_parentheses() {
     // §3.1: the main position is the first block-like operand with no parentheses of the expression.
-    let d = Dir::new("position");
+    let d = Dir::bare("position");
     let cases: [(&str, &str, &str, usize); 4] = [
         ("c: Bool", "I32", "if c { 1 } else { 2 } + 10", 3),
         ("c: Bool", "I32", "10 + if c { 1 } else { 2 }", 8),
@@ -256,7 +207,7 @@ fn the_first_candidate_applied_over_and_over_reaches_a_file_with_no_diagnostic()
                pub fn b(o: Option[I32]) -> I32 {\n  -match o { Some(n) => n, None => 0 }\n}\n\n\
                pub fn d(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {\n  if c { xs } else { ys }[0] + if c { 1 } else { 2 }\n}\n\n\
                pub fn e(c: Bool) -> I32 {\n  let r = if c { 1 } else { 2 }\n    + 1\n  r\n}\n";
-    let dir = Dir::new("loop");
+    let dir = Dir::bare("loop");
     let mut text = src.to_string();
     let mut last = usize::MAX;
     for step in 0..8 {
@@ -280,7 +231,7 @@ fn the_first_candidate_applied_over_and_over_reaches_a_file_with_no_diagnostic()
 
 #[test]
 fn the_candidate_of_a_line_that_starts_with_an_operator_leaves_a_clean_program() {
-    let d = Dir::new("leading");
+    let d = Dir::bare("leading");
     // (the expression on two lines, the text after the candidate).
     let cases: [(&str, &str); 2] = [
         ("if c { 1 } else { 2 }\n  + 10", "(if c { 1 } else { 2 }) +\n  10"),
@@ -304,7 +255,7 @@ fn the_candidate_of_a_line_that_starts_with_an_operator_leaves_a_clean_program()
 fn the_call_of_a_block_like_expression_is_an_e0020_with_the_parenthesized_dot_call_as_its_candidate() {
     // §6.1, §3.1: `if c { h } else { g }(1)` is `(if c { h } else { g }).(1)`; the call `(` is not
     // a postfix symbol of the E0013 list, so the original is one E0020.
-    let d = Dir::new("call");
+    let d = Dir::bare("call");
     let src = "pub fn f(c: Bool, h: fn(I32) -> I32, g: fn(I32) -> I32) -> I32 {\n  if c { h } else { g }(1)\n}\n";
     let path = d.file("a.onsa", src);
     let diags = check(&path);
@@ -326,7 +277,7 @@ fn a_block_body_then_a_spaced_minus_and_an_arrow_is_an_e0002_with_no_candidate_a
     // §2.5: `{ 1 } - 1 =>` is a missing `,` between two arms (the `=>` before the next `,` or `}`), and the
     // candidate would leave the E0020 of the space after the prefix `-`, so there is none; the block-like
     // expression is not read as an operand, so there is no E0013.
-    let d = Dir::new("arms");
+    let d = Dir::bare("arms");
     let src = "pub fn f(x: I32) -> I32 {\n  match x {\n    0 => { 1 } - 1 => 2,\n    _ => 0,\n  }\n}\n";
     let path = d.file("a.onsa", src);
     let diags = check(&path);
@@ -351,7 +302,7 @@ pub fn g()->I32{
 #[test]
 fn fmt_does_not_write_a_file_with_an_e0013_and_ends_with_the_exit_code_2() {
     // §18.2: a diagnostic of the syntax stage stops `fmt` (and `fmt --check`, and `diff --ast`) with 2.
-    let d = Dir::new("fmt_error");
+    let d = Dir::bare("fmt_error");
     let path = d.file("a.onsa", E0013_FILE);
     let out = onsa(&["fmt", &path]);
     assert_eq!(code(&out), 2, "fmt: {out:?}");
@@ -400,7 +351,7 @@ pub fn h(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
 fn fmt_keeps_the_parentheses_of_a_block_like_operand() {
     // spec/tools.md §3.3: the parentheses of `(if c { 1 } else { 2 }) + 1` are not redundant (E0013 without
     // them), so `fmt` does not take them off.
-    let d = Dir::new("fmt_keep");
+    let d = Dir::bare("fmt_keep");
     let path = d.file("a.onsa", MESSY);
     let out = onsa(&["fmt", &path]);
     assert_eq!(code(&out), 0, "fmt: {out:?}");

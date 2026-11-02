@@ -63,45 +63,7 @@
 
 use crate::test_support;
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        // The counter makes the directory the test's own even when two tests use the same tag.
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!("onsa_fmt_u4_{}_{n}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
+use crate::test_support::{Dir, code, onsa};
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -147,7 +109,7 @@ fn expect_fmt(tag: &str, cases: &[Case]) {
 /// standard output, `spec/tools.md` §3.1) and does not touch the file.
 fn expect_refused(tag: &str, diag: &str, inputs: &[(&str, String)]) {
     assert!(!inputs.is_empty(), "no case to run");
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     for (i, (what, input)) in inputs.iter().enumerate() {
         let path = d.file(&format!("r{i}.onsa"), input);
         let out = onsa(&["fmt", &path]);

@@ -15,7 +15,7 @@
 //
 // The fix candidate (`v if v == "a{x}b"`) and the note are not part of the marker, and the
 // text does not say how the name of the binding is chosen, so no `fixes` case is written here (the
-// shape of the candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs). The arms of one
+// shape of the candidates is in crates/onsa_cli/tests/cli/pattern_guard_candidates.rs). The arms of one
 // pattern with more than one interpolated string are one error and one candidate (S-319); a choice is
 // one guard only when its branches have one shape, and is E0002 when they do not (S-317).
 

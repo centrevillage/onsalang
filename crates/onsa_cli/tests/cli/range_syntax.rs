@@ -21,43 +21,8 @@
 //! The tests that need `..<` ran ignored until W3-18/i (a test cannot be silenced by
 //! `tests/pending.toml`); each ignore names the work that removes it.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::test_support::{Dir, check, code, code_of, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_range_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -68,20 +33,6 @@ fn loop_with(header: &str) -> String {
     format!(
         "pub fn f(n: U32, lo: U32, hi: U32, t: (U32, U32), xs: [F32; 3]) -> U32 {{\n  var c: U32 = 0\n  for _ in {header} {{\n    c = c + 1\n  }}\n  c\n}}\n"
     )
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
@@ -181,7 +132,7 @@ fn a_wrong_symbol_is_e0020_at_the_symbol_with_two_candidates_that_change_only_it
     // §18.1: the main span is the foreign form, here the one token; the candidates are the two readings
     // of the writer, `a..<b` first; the edit is the least one that changes the token (S-251), so the
     // ends, the operators and the spaces are the writer's. A note shows the rule.
-    let d = Dir::new("wrong");
+    let d = Dir::bare("wrong");
     for (what, header, symbol, with_lt, with_eq) in WRONG_SYMBOLS {
         let src = loop_with(header);
         let path = d.file("a.onsa", &src);
@@ -218,7 +169,7 @@ fn a_wrong_symbol_is_e0020_at_the_symbol_with_two_candidates_that_change_only_it
 fn the_candidate_with_the_half_open_symbol_leaves_a_program_with_no_diagnostic() {
     // §18.1: a candidate leaves no diagnostic of the same stage or an earlier one in the unit it
     // touches; with `..<` the unit is checked fully, so the whole check is silent.
-    let d = Dir::new("clean");
+    let d = Dir::bare("clean");
     for (what, header, _, with_lt, _) in WRONG_SYMBOLS {
         let path = d.file("a.onsa", &loop_with(header));
         let fixed = {
@@ -248,7 +199,7 @@ fn a_wrong_symbol_in_a_par_header_is_e0020_with_the_same_two_candidates() {
             "const N: U32 = 3\n\npub flow f(x: F32 at sample) -> [F32; 4] at sample {{\n  par~ i in {header} {{\n    x * i.round_f32()\n  }}\n}}\n"
         )
     };
-    let d = Dir::new("par");
+    let d = Dir::bare("par");
     for (what, header, symbol, with_lt, with_eq) in cases {
         let src = wrap(header);
         let path = d.file("a.onsa", &src);
@@ -286,7 +237,7 @@ const OUTSIDE: &[(&str, &str)] = &[
 
 #[test]
 fn a_range_outside_a_header_is_one_e0002_with_no_candidate_and_a_note() {
-    let d = Dir::new("outside");
+    let d = Dir::bare("outside");
     for (what, body) in OUTSIDE {
         let src =
             format!("pub fn take(r: U32) -> U32 {{\n  r\n}}\n\npub fn f(n: U32, xs: [I32; 4]) -> U32 {{\n{body}\n}}\n");
@@ -306,7 +257,7 @@ fn a_range_outside_a_header_is_one_e0002_with_no_candidate_and_a_note() {
 #[test]
 fn the_note_of_a_part_of_an_array_shows_slice() {
     // §7: "部分は `xs.slice(from, to)`（§5.3）で書くことを note で示す".
-    let d = Dir::new("slice");
+    let d = Dir::bare("slice");
     for (what, range) in [("half open", "xs[1..<3]"), ("closed", "xs[1..=2]"), ("two dots", "xs[1..3]")] {
         let src = format!("pub fn f(xs: [I32; 4]) -> I32 {{\n  let s = {range}\n  0\n}}\n");
         let path = d.file("a.onsa", &src);
@@ -323,7 +274,7 @@ fn the_note_of_a_part_of_an_array_shows_slice() {
 fn the_half_open_range_is_read_whatever_the_ends() {
     // §7, §3.1, §4: the tokens around the symbol are read as the ends. `1.` is not a float before the
     // symbol, the digits after a `.` are an index, `-` is a prefix, `_` separates digits.
-    let d = Dir::new("read");
+    let d = Dir::bare("read");
     for header in [
         "0..<n",
         "1..<3",
@@ -354,7 +305,7 @@ fn the_half_open_range_is_read_whatever_the_ends() {
 fn a_bare_conversion_in_an_end_is_e0011() {
     // §3.3 (S-340): `as` is weaker than the range symbols too, so a conversion in an end is written in
     // parentheses: E0011, and its candidate puts them (both ends of one head, one diagnostic).
-    let d = Dir::new("bare_cast");
+    let d = Dir::bare("bare_cast");
     for (header, fixed) in [
         ("0..<n as U32", "0..<(n as U32)"),
         ("lo as U32..<9", "(lo as U32)..<9"),
@@ -390,7 +341,7 @@ fn a_bare_clock_in_an_end_is_e0011() {
     // written in parentheses too: E0011 (of the syntax stage, also in a fn, where the clock itself is
     // the names stage's E0821), its candidate puts them; `as` and `at` in the two ends of one head are
     // one diagnostic.
-    let d = Dir::new("bare_clock");
+    let d = Dir::bare("bare_clock");
     for (header, fixed) in [
         ("0..<n at sample", "0..<(n at sample)"),
         ("lo at block..<9", "(lo at block)..<9"),
@@ -450,7 +401,7 @@ const SYNTAX_ERRORS: &[(&str, &str, &str)] = &[
 fn fmt_and_diff_stop_at_a_wrong_range_symbol() {
     // §18.2: a file with a diagnostic of the syntax stage is not rewritten (exit code 2) and
     // `diff --ast` does not compare it (exit code 2); the diagnostic goes to the standard output.
-    let d = Dir::new("stop");
+    let d = Dir::bare("stop");
     let other = d.file("other.onsa", "pub fn f(n: U32) -> U32 {\n  n\n}\n");
     for (what, text, want) in SYNTAX_ERRORS {
         let path = d.file("a.onsa", text);
@@ -492,7 +443,7 @@ fn header_of(text: &str) -> &str {
 
 #[test]
 fn fmt_writes_the_operators_in_the_ends_and_keeps_the_symbol() {
-    let d = Dir::new("fmt_ends");
+    let d = Dir::bare("fmt_ends");
     for (what, header, wanted) in ENDS_AS_WRITTEN {
         let src = loop_with(header);
         let path = d.file("a.onsa", &src);
@@ -517,7 +468,7 @@ fn fmt_writes_the_operators_in_the_ends_and_keeps_the_symbol() {
 
 #[test]
 fn fmt_does_not_turn_one_symbol_into_the_other() {
-    let d = Dir::new("fmt_symbol");
+    let d = Dir::bare("fmt_symbol");
     for (symbol, other) in [("..<", "..="), ("..=", "..<")] {
         let src = loop_with(&format!("0{symbol}n"));
         let path = d.file("a.onsa", &src);
@@ -551,7 +502,7 @@ const SAME: &[(&str, &str, &str)] = &[
 
 #[test]
 fn diff_ast_sees_the_symbol_and_the_ends_and_not_the_spaces_in_them() {
-    let d = Dir::new("diff");
+    let d = Dir::bare("diff");
     for (what, one, other) in DIFFERENT {
         let a = d.file("a.onsa", &loop_with(one));
         let b = d.file("b.onsa", &loop_with(other));
@@ -586,7 +537,7 @@ test \"a closed range\" {
   assert total(3) == 6
 }
 ";
-    let d = Dir::new("closed");
+    let d = Dir::bare("closed");
     let path = d.file("a.onsa", src);
     let out = onsa(&["test", "--json", &path]);
     assert_eq!(code(&out), 1, "{out:?}");
@@ -605,7 +556,7 @@ fn a_closed_range_is_not_a_syntax_error_for_fmt() {
     // one of them: the candidate `a..=b` of E0020 (§7) must leave no diagnostic of the syntax stage in
     // the unit it touches (§18.1), and it leaves this E0200. So a file with a closed range header is
     // formatted (it is a program of the language).
-    let d = Dir::new("closed_fmt");
+    let d = Dir::bare("closed_fmt");
     let text = loop_with("0 ..= n");
     let path = d.file("a.onsa", &text);
     let out = onsa(&["fmt", "--check", &path]);

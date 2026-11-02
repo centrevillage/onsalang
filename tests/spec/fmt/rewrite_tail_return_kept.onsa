@@ -11,7 +11,7 @@
 // `let`, one in the condition of an `if`. A `return` without a value stays wherever it is (S-547), in the
 // tail position too (the last functions; with dead code before it, `rewrite_valueless_return_kept.onsa`).
 // The file is canonical, so `onsa fmt` leaves it unchanged; the same functions with a `return` in the tail
-// position are in crates/onsa_cli/tests/fmt_rewrites.rs.
+// position are in crates/onsa_cli/tests/cli/fmt_rewrites.rs.
 
 fn first_big(xs: [I32; 4]) -> I32 {
   for i in 0 ..< 4 {

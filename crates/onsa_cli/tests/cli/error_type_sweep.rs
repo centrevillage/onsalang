@@ -36,7 +36,7 @@ use crate::test_support;
 
 use std::collections::BTreeMap;
 
-use test_support::sweep::{Texts, check_package, ended_well, package};
+use test_support::sweep::{Texts, check_input, ended_well, input_of};
 
 // ---- the source with its marks ---------------------------------------------------------------------------
 
@@ -89,7 +89,6 @@ fn verify(tag: &str, src: &Src) -> Vec<String> {
     let mut texts = Texts::new();
     texts.insert("main.onsa".to_string(), src.text.clone());
     texts.insert("util.onsa".to_string(), UTIL.to_string());
-    let d = package(tag, "demo", &texts);
     // `SWEEP_DUMP=<dir>` keeps the packages, to run them with another build or to read a failing one
     if let Ok(dump) = std::env::var("SWEEP_DUMP") {
         let dir = std::path::Path::new(&dump).join(tag);
@@ -99,7 +98,7 @@ fn verify(tag: &str, src: &Src) -> Vec<String> {
         }
         std::fs::write(dir.join("onsa.toml"), "[package]\nname = \"demo\"\nedition = \"2026\"\n").unwrap();
     }
-    let checked = check_package(d.root());
+    let checked = check_input(&input_of("demo", &texts));
     let want_code = if src.marks.is_empty() { 0 } else { 1 };
     let mut problems = Vec::new();
     if !ended_well(&checked) || checked.code != want_code {

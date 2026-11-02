@@ -33,43 +33,8 @@
 //! The tests were written before W3-09 and ran ignored until W3-09/i (the parser did not read `at`
 //! and `if~`; an ignored test is not silenced by `tests/pending.toml`).
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::test_support::{Dir, check, code, code_of, onsa};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_flow_decisions_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -85,20 +50,6 @@ fn in_a_flow(body: &str) -> String {
 /// A function whose body is `body` (lines already indented by two spaces).
 fn in_a_fn(body: &str) -> String {
     format!("pub fn f(c: Bool, d: Bool, k: U32, m: U32, xs: [I32; 2]) -> U32 {{\n{body}\n}}\n")
-}
-
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-fn check(path: &str) -> Vec<Value> {
-    let out = onsa(&["check", "--json", path]);
-    let c = code(&out);
-    assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn array_of<'a>(d: &'a Value, key: &str) -> Vec<&'a Value> {
@@ -195,7 +146,7 @@ fn case(what: &'static str, source: String, fixed: &[String]) -> Case {
 }
 
 fn check_cases(tag: &str, wanted_code: &str, cases: &[Case]) {
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     for c in cases {
         let after = candidates_applied(&d, c.what, &c.source, wanted_code);
         assert_eq!(after.len(), c.fixed.len(), "{}: number of candidates\n{}", c.what, c.source);
@@ -236,7 +187,7 @@ fn the_one_at_a_time_helper_follows_separate_errors_of_a_unit() {
     // The helper of the tests of S-355 and S-356 (`converge`) on a form that is read today: the `;` that end
     // different statements are separate errors (§18.1, S-248), a unit reports its first, and applying the first
     // candidate again and again ends with none. (It shows that the helper checks what the later tests rely on.)
-    let d = Dir::new("helper");
+    let d = Dir::bare("helper");
     let written = in_a_fn("  let a = 1; let b = 2; let c = 3\n  m");
     let got = converge(&d, "separate semicolons", &written, 6);
     assert_eq!(got.len(), 2, "number of steps");
@@ -313,7 +264,7 @@ fn a_tab_between_if_and_the_tilde_is_the_space_of_the_error() {
 fn if_with_the_tilde_glued_to_the_condition_is_read_and_fmt_spaces_it() {
     // S-354: `if~c` is accepted (the `~` is right after the keyword), and `onsa fmt` writes the condition after one
     // space (spec/tools.md §3.2: `if~ c`).
-    let d = Dir::new("if_glued");
+    let d = Dir::bare("if_glued");
     let cases = [
         ("if~c", "  if~c { 1.0 } else { 2.0 }", "  if~ c { 1.0 } else { 2.0 }"),
         ("match~k", "  match~k { 0 => 1.0, _ => 2.0 }", "  match~ k { 0 => 1.0, _ => 2.0 }"),
@@ -358,7 +309,7 @@ fn while_with_a_prefix_tilde_stays_the_bit_negation_with_one_candidate() {
         &[in_a_fn("  while !c {\n    break\n  }\n  1")],
     )];
     check_cases("while_tilde", "E0020", &cases);
-    let d = Dir::new("while_tilde_spaced");
+    let d = Dir::bare("while_tilde_spaced");
     let diag = only_diagnostic(&d, "while ~ c", &in_a_fn("  while ~ c {\n    break\n  }\n  1"), "E0002");
     assert!(array_of(&diag, "fixes").is_empty(), "`while ~ c` has no candidate: {diag}");
 }
@@ -370,7 +321,7 @@ fn a_prefix_tilde_with_a_space_is_e0002_and_without_a_space_e0020_with_the_bang(
     // §2.6 and S-363: `~m` (touching the operand) is the C-family bit negation, E0020 with the candidate `!m`; `~ m`
     // (a space) is E0002 with no candidate, because removing the space would write `~m`, which is an error itself.
     // The scope is a `~` after neither a name nor `if` / `match`.
-    let d = Dir::new("prefix_tilde");
+    let d = Dir::bare("prefix_tilde");
     let touching = [
         ("let", "  let n = ~m\n  n", "  let n = !m\n  n"),
         ("an argument", "  id(~m)", "  id(!m)"),
@@ -402,7 +353,7 @@ fn a_prefix_tilde_with_a_space_is_e0002_and_without_a_space_e0020_with_the_bang(
 fn an_if_followed_by_a_line_break_is_e0002_not_the_space_of_the_tilde() {
     // S-354 is "right after the keyword, on the same line". §2.5: a line goes on after a binary operator, a range mark,
     // `=`, `->`, an attribute, a leading `.` or `uses`; `if` is none of these, so the `if` has no condition.
-    let d = Dir::new("if_break");
+    let d = Dir::bare("if_break");
     for (what, body) in [
         ("if", "  let a = if\n    ~c { 1 } else { 2 }\n  a"),
         ("match", "  match\n    ~k {\n    0 => 1,\n    _ => 2,\n  }"),
@@ -419,7 +370,7 @@ fn an_if_followed_by_a_line_break_is_e0002_not_the_space_of_the_tilde() {
 fn an_if_tilde_with_no_else_is_e0002_with_a_note_and_no_candidate() {
     // §11.5: "`else` は省けない（省くと構文の段の E0002 で、修正候補は無く、全ての枝を評価して一つを選ぶので
     // `else` が要ることを note で示す）".
-    let d = Dir::new("no_else");
+    let d = Dir::bare("no_else");
     let bodies = [
         ("a last expression", "  if~ c { 1.0 }"),
         ("a let", "  let a = if~ c { 1.0 }\n  a"),
@@ -519,7 +470,7 @@ fn a_tilde_on_a_later_if_of_a_chain_is_e0020_with_one_candidate() {
 fn the_tildes_of_one_chain_are_separate_errors_fixed_one_at_a_time() {
     // §11.5: "一つの連鎖に複数あれば `~` ごとの誤り"; §18.1: a unit stops at its first error. Applying the first candidate
     // again and again ends in the chain with the `~` on the head and nowhere else.
-    let d = Dir::new("tilde_chain");
+    let d = Dir::bare("tilde_chain");
     let cases = [
         (
             "two links, no tilde on the head",
@@ -681,7 +632,7 @@ fn the_ats_of_one_type_are_separate_errors_fixed_one_at_a_time() {
     // S-356: "一つの型に複数の `at` は位置ごとの誤り". A unit stops at its first error (§18.1); the candidate of the first
     // removes it, the next is reported by the next check, and the first candidate again and again ends in a type with
     // no `at` inside it.
-    let d = Dir::new("type_clock_multi");
+    let d = Dir::bare("type_clock_multi");
     let pair = "pub struct Pair[A, B] {\n  first: A,\n  second: B,\n}\n\n";
     let cases = [
         (
@@ -729,7 +680,7 @@ fn the_ats_of_one_type_are_separate_errors_fixed_one_at_a_time() {
 fn an_error_of_a_clock_in_a_type_has_its_note_and_one_candidate() {
     // §18.1: an E0020 shows the correct rule in a note (the clock belongs to a value; where it goes), and the candidate
     // is one (the place is decided: S-356 moves it where a clock can be written, and removes it where there is none).
-    let d = Dir::new("type_clock_note");
+    let d = Dir::bare("type_clock_note");
     for (what, text) in [
         ("a type argument", fn_with_param("Option[F32 at sample]")),
         ("a field", "pub struct S {\n  a: F32 at sample,\n}\n".to_string()),
@@ -745,7 +696,7 @@ fn an_error_of_a_clock_in_a_type_has_its_note_and_one_candidate() {
 #[test]
 fn fmt_and_diff_stop_at_the_new_errors_and_do_not_change_the_file() {
     // §18.2: `onsa fmt` does not rewrite a file that has an error of the syntax stage; `diff --ast` stops with the same code.
-    let d = Dir::new("stop");
+    let d = Dir::bare("stop");
     let sources = [
         in_a_flow("  if ~ c { 1.0 } else { 2.0 }"),
         in_a_flow("  if c { 1.0 } else if~ d { 2.0 } else { 3.0 }"),
@@ -771,7 +722,7 @@ fn a_keyword_after_a_dot_is_read_and_rejected_by_the_type_stage() {
     // §2.2: "`.` の直後のキーワードは名前として読み、フィールドとメソッドの名前にはキーワードを宣言できないので、
     // `xs.at(0)` のような形は後の段で解決できない誤りになる". Once `at` is a keyword, the syntax stage still reads `xs.at(0)` and
     // `s.at`; the type stage reports E0413 (no such method or field), and there is no E0002.
-    let d = Dir::new("member_keyword");
+    let d = Dir::bare("member_keyword");
     let head = "pub struct S {\n  a: F32,\n}\n\n";
     let cases = [
         ("a method", "pub fn f(xs: [I32; 2]) -> I32 {\n  xs.at(0)\n}\n"),
@@ -795,7 +746,7 @@ fn a_keyword_after_a_dot_is_read_and_rejected_by_the_type_stage() {
 fn a_keyword_as_a_declared_name_is_still_rejected() {
     // §2.2: the keywords cannot be declared as a field or a method name, so only a `.` makes a keyword a name.
     // (A new `at` is covered in negative/syntax_at_keyword.onsa; `if` is a keyword today.)
-    let d = Dir::new("declared_keyword");
+    let d = Dir::bare("declared_keyword");
     let has_e0002 = |what: &str, text: &str| {
         let path = d.file("a.onsa", text);
         let diags = check(&path);
@@ -811,7 +762,7 @@ fn a_keyword_as_a_declared_name_is_still_rejected() {
 fn a_caret_with_no_name_after_it_is_e0002_with_a_note_and_no_candidate() {
     // §2.6: "名前の続かない `^`（`^(y)`、`^1.0`、`^^y`）は構文の段の E0002 で、`^` は `let` の名前の直前にだけ書くことを
     // note で示す". The `^` is a part of the name, not an operator.
-    let d = Dir::new("caret");
+    let d = Dir::bare("caret");
     let bodies = [
         "  let y = x + prev~(^(y))\n  y",
         "  let y = x + prev~(^1.0)\n  y",
@@ -837,7 +788,7 @@ fn a_caret_with_no_name_after_it_is_e0002_with_a_note_and_no_candidate() {
 #[test]
 fn a_caret_before_a_name_and_the_binary_caret_are_read() {
     // The boundary of S-358: `^y` is the reference (a part of the name), `^` between two operands is the exclusive or.
-    let d = Dir::new("caret_ok");
+    let d = Dir::bare("caret_ok");
     let bodies = [
         "  let y = x + prev~(^y)\n  y",
         "  let y = x + prev~(^y.v)\n  y",

@@ -5,7 +5,7 @@
 
 // CR LF is one newline (§2.5, S-201): the whole file, the fragment included, ends its lines in CR LF
 // and checks with no diagnostic, the same as with LF (`onsa fmt` writes LF; the fmt cases are in
-// crates/onsa_cli/tests/lexical_syntax.rs). The line ends are in every place a newline matters:
+// crates/onsa_cli/tests/cli/lexical_syntax.rs). The line ends are in every place a newline matters:
 // between statements, after a binary operator and before a `.` (continuations), in a list, after
 // a comment, after a doc comment, inside the braces of a block, and after a string (a string
 // holds no line end, so CR LF never changes its value).

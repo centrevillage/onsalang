@@ -29,35 +29,12 @@
 //! `cargo test -p onsa_cli --test pattern_guard_candidates -- --ignored`.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::process::Command;
 
+use crate::test_support::{Dir, code_of};
 use serde_json::Value;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_guardpat_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 /// The diagnostics of `onsa check --json <path>`.
 fn check(path: &str) -> Vec<Value> {
@@ -81,10 +58,6 @@ fn run_tests(path: &str) -> (i32, String) {
     let out = Command::new(ONSA).args(["test", path]).output().expect("run onsa");
     let code = out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"));
     (code, String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn fixes_of(d: &Value) -> Vec<&Value> {
@@ -933,7 +906,7 @@ fn check_case(d: &Dir, c: &Case) {
 }
 
 fn check_all(tag: &str, cases: Vec<Case>) {
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     for c in &cases {
         check_case(&d, c);
     }
@@ -1049,7 +1022,7 @@ fn the_new_binding_of_a_candidate_is_not_a_visible_name() {
     // §7 (S-253): the name of the new binding is not decided, but it is not a name that is visible at
     // the arm (a parameter, an item of the module, a local, a loop variable, a binding of an outer arm
     // or of the same pattern, an interpolated name), and after the candidate there is no E0304 (§5.1).
-    let d = Dir::new("crowds");
+    let d = Dir::bare("crowds");
     for c in CROWDS {
         let path = d.file(&format!("{}.onsa", c.name), c.program);
         let diags = check(&path);
@@ -1111,7 +1084,7 @@ fn a_guard_form_candidate_keeps_the_comments_and_the_other_tokens() {
     // §18.1 (S-251): an edit replaces the tokens it changes and never a comment between them; the
     // tokens outside the form (`n`) and the comments stay where they were; the program after the
     // candidate has no diagnostic and keeps its meaning.
-    let d = Dir::new("comments");
+    let d = Dir::bare("comments");
     for (name, src) in [("float", COMMENTS), ("range", COMMENTS_RANGE)] {
         let path = d.file(&format!("{name}.onsa"), src);
         let diags = check(&path);
@@ -1150,7 +1123,7 @@ fn the_candidate_for_the_rest_of_a_struct_pattern_replaces_the_dots_only() {
     // declaration, in place of `..`: one edit, and it replaces `..` and nothing else. (The text of the
     // candidate is pinned in fixes/e0020_patterns_rest_forms.onsa.)
     let src = "pub struct P3 {\n  x: I32,\n  y: I32,\n  z: I32,\n}\n\npub fn f(p: P3) -> I32 {\n  match p {\n    P3 { z: c, .. } => c,\n  }\n}\n";
-    let d = Dir::new("rest");
+    let d = Dir::bare("rest");
     let path = d.file("rest.onsa", src);
     let diags = check(&path);
     assert_eq!(diags.len(), 1, "{diags:?}");
@@ -1185,7 +1158,7 @@ fn the_candidate_for_the_rest_of_a_struct_pattern_replaces_the_dots_only() {
 fn the_main_span_of_a_string_pattern_and_of_a_negated_constant_is_the_form() {
     // §18.1 (S-316): the main range is the range of the foreign form, from its first token to its last:
     // the string for an interpolated string, `-LIMIT` for a negated constant.
-    let d = Dir::new("spans");
+    let d = Dir::bare("spans");
     let string =
         "pub fn f(s: Str, x: U32) -> I32 uses {Alloc} {\n  match s {\n    \"a{x}b\" => 1,\n    _ => 0,\n  }\n}\n";
     let negated =
@@ -1235,7 +1208,7 @@ fn differing_branches(tag: &str, strings: bool) {
         ("string_and_a_float_elsewhere", bad("", "t: (F32, Str), x: U32", "t", "(0.5, \"a{x}\") | (1.5, \"b\")", "1")),
         ("range_and_a_binding_beside_a_float", bad("", "t: (F32, I32)", "t", "(0.5, 1..<3) | (1.5, n)", "n")),
     ];
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     for (name, src) in forms.iter().filter(|(n, _)| n.contains("string") == strings) {
         let path = d.file(&format!("{name}.onsa"), src);
         let diags = check(&path);
@@ -1266,7 +1239,7 @@ fn comment_in_a_branch(tag: &str, strings: bool) {
         ("negated", bad(l, "x: I32", "x", "-LIMIT | // the second constant\n    -OTHER", "1")),
         ("at", bad("", "n: I32", "n", "k @ 1 | // the second arm\n    k @ 2", "k")),
     ];
-    let d = Dir::new(tag);
+    let d = Dir::bare(tag);
     for (name, src) in forms.iter().filter(|(n, _)| (*n == "string") == strings) {
         let diags = check(&d.file(&format!("{name}.onsa"), src));
         assert_eq!(diags.len(), 1, "{name}: one diagnostic expected, got {diags:?}\n{src}");
@@ -1300,7 +1273,7 @@ fn an_at_binding_that_is_not_a_literal_or_a_range_is_e0002_with_a_note_and_no_ca
         ("an_enum_variant", bad(COLOR, "c: Color", "c", "k @ Color.Red", "1")),
         ("another_at", bad("", "n: I32", "n", "a @ b @ 1", "a")),
     ];
-    let d = Dir::new("at_note");
+    let d = Dir::bare("at_note");
     for (name, src) in &forms {
         let diags = check(&d.file(&format!("{name}.onsa"), src));
         assert_eq!(diags.len(), 1, "{name}: one diagnostic expected, got {diags:?}\n{src}");
@@ -1328,7 +1301,7 @@ fn a_negated_negative_literal_in_a_pattern_is_e0002_and_the_message_is_not_about
     // "float literals cannot be patterns", which is another rule; it must not talk about floats. The
     // spec does not fix the words, so only this is checked.
     let forms = ["-(-1)", "-(-128)", "-(-(1))", "Some(-(-1))", "(-(-2), _)", "1 | -(-2)"];
-    let d = Dir::new("negneg");
+    let d = Dir::bare("negneg");
     for (i, pat) in forms.iter().enumerate() {
         let scrut = if pat.starts_with("Some") {
             "o"
@@ -1378,7 +1351,7 @@ fn a_range_with_one_end_in_a_header_is_e0002_with_a_note_and_no_candidate() {
             "pub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par~ i in ..<4 {\n    x * i.round_f32()\n  }\n}\n",
         ),
     ];
-    let d = Dir::new("header");
+    let d = Dir::bare("header");
     for (name, src) in loops {
         let diags = check(&d.file(&format!("{name}.onsa"), src));
         assert_eq!(diags.len(), 1, "{name}: one diagnostic expected, got {diags:?}");
@@ -1416,7 +1389,7 @@ fn fmt_does_not_rewrite_a_file_with_a_guard_form_pattern() {
         ("choice_without_a_shape", prog("", "o: Option[I32]", "o", "Some(1..<3) | None", "1", "")),
         ("negated_negative", prog("", "n: I32", "n", "-(-1)", "1", "")),
     ];
-    let d = Dir::new("fmt");
+    let d = Dir::bare("fmt");
     for (name, f) in &forms {
         let src = format!("{f}\npub fn g()->I32{{\n  2\n}}\n");
         let path = d.file(&format!("{name}.onsa"), &src);
@@ -1432,7 +1405,7 @@ fn fmt_does_not_rewrite_a_file_with_a_guard_form_pattern() {
 fn fmt_formats_a_file_with_the_rest_of_a_struct_pattern_and_keeps_it() {
     // S-366 (decided 2026-10-09): the `..` of a struct pattern is read by the syntax stage and is
     // E0020 where the fields are counted, so `onsa fmt` formats the file and writes the `..` back.
-    let d = Dir::new("fmt_rest");
+    let d = Dir::bare("fmt_rest");
     let src = "pub struct P3 {\n  x: I32,\n  y: I32,\n}\n\npub fn f(p: P3) -> I32 {\n  match p {\n    P3 { x: a,   .. } => a,\n  }\n}\n\npub fn g()->I32{\n  2\n}\n";
     let path = d.file("rest.onsa", src);
     let out = Command::new(ONSA).args(["fmt", path.as_str()]).output().expect("run onsa");
@@ -1497,7 +1470,7 @@ fn a_block_at_the_start_of_an_expression_in_a_header_is_e0002_with_a_note_and_no
             "pub fn f(a: Bool, b: Bool) -> U32 {\n  if if a { b } else { false } {\n    1\n  } else {\n    2\n  }\n}\n",
         ),
     ];
-    let d = Dir::new("header_block");
+    let d = Dir::bare("header_block");
     for (name, src) in bad {
         let diags = check(&d.file(&format!("bad_{name}.onsa"), src));
         assert_eq!(diags.len(), 1, "{name}: one diagnostic expected, got {diags:?}");

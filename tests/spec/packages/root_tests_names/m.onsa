@@ -7,7 +7,7 @@
 // `tests/My-File.onsa` and `tests/Bad-Dir/x.onsa` have names that would be E0320 in a module and they
 // carry no E0320. A `tests/` inside `tests/` (`tests/tests/x.onsa`) is E0200 as well (it is below the
 // root `tests/`, spec 15.1). The file `tests/.x.onsa` starts with `.`, so it is not gathered; passed by
-// its path it is E0200 only (crates/onsa_cli/tests/package_tests_dir.rs).
+// its path it is E0200 only (crates/onsa_cli/tests/cli/package_tests_dir.rs).
 
 pub fn f() -> I32 {
   1

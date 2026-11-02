@@ -6,7 +6,7 @@
 // E0302 in the package `fx`, from tests/review-phase1/types/cyc3: two modules take each other by the
 // package's own name, so both `use` lines are E0302 (§15.1, S-37, S-663). Each has one candidate that takes
 // the package name off. The candidate of one `use` is applied alone, and the other `use` stays as it is.
-// Taking both off gives the cycle (E0310), which crates/onsa_cli/tests/use_cycles.rs checks.
+// Taking both off gives the cycle (E0310), which crates/onsa_cli/tests/cli/use_cycles.rs checks.
 
 use b.{g}                                        //~ E0302
 

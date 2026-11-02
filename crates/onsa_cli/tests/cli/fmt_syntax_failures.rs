@@ -8,41 +8,7 @@
 //! file check the exit code 2 as well as the unchanged file (W3-03/t tightened the `assert_ne!`
 //! checks that said "open"). More codes are in `syntax_units.rs`.
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_fmt_syntax_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
-
-fn code(out: &Output) -> i32 {
-    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
-}
+use crate::test_support::{Dir, code, onsa};
 
 /// `f` fails in the parser with E0408 (the index does not fit); `g` is fine and badly spaced.
 const TUPLE_INDEX_OVERFLOW: &str = "\
@@ -73,7 +39,7 @@ fn read(path: &str) -> String {
 #[test]
 fn the_fixture_fails_in_the_parser_with_a_code_that_is_not_e00xx() {
     // The premise of the R-146 tests: the parser fails `f` with E0408, which is not E00xx.
-    let d = Dir::new("premise");
+    let d = Dir::bare("premise");
     let path = d.file("overflow.onsa", TUPLE_INDEX_OVERFLOW);
     let out = onsa(&["check", "--json", &path]);
     let text = String::from_utf8_lossy(&out.stdout);
@@ -82,7 +48,7 @@ fn the_fixture_fails_in_the_parser_with_a_code_that_is_not_e00xx() {
 
 #[test]
 fn fmt_leaves_a_file_with_a_failed_item_as_it_is() {
-    let d = Dir::new("fmt_failed_item");
+    let d = Dir::bare("fmt_failed_item");
     let path = d.file("overflow.onsa", TUPLE_INDEX_OVERFLOW);
     let out = onsa(&["fmt", &path]);
     assert_eq!(read(&path), TUPLE_INDEX_OVERFLOW, "`fmt` rewrote a file the parser failed an item of");
@@ -91,7 +57,7 @@ fn fmt_leaves_a_file_with_a_failed_item_as_it_is() {
 
 #[test]
 fn fmt_check_does_not_write_and_does_not_call_the_file_formatted() {
-    let d = Dir::new("fmt_check_failed_item");
+    let d = Dir::bare("fmt_check_failed_item");
     let path = d.file("overflow.onsa", TUPLE_INDEX_OVERFLOW);
     let out = onsa(&["fmt", "--check", &path]);
     assert_eq!(read(&path), TUPLE_INDEX_OVERFLOW);
@@ -101,7 +67,7 @@ fn fmt_check_does_not_write_and_does_not_call_the_file_formatted() {
 #[test]
 fn fmt_leaves_a_file_with_a_syntax_error_as_it_is_and_exits_with_2() {
     // §18.2: a diagnostic of the lexer or the parser (E00xx) stops `fmt`; exit code 2.
-    let d = Dir::new("fmt_syntax_error");
+    let d = Dir::bare("fmt_syntax_error");
     let path = d.file("syntax.onsa", SYNTAX_ERROR);
     let out = onsa(&["fmt", &path]);
     assert_eq!(read(&path), SYNTAX_ERROR, "`fmt` rewrote a file with a syntax error");
@@ -111,7 +77,7 @@ fn fmt_leaves_a_file_with_a_syntax_error_as_it_is_and_exits_with_2() {
 #[test]
 fn fmt_still_formats_a_file_with_a_naming_error() {
     // §18.2: the diagnostics that are not of the lexer or the parser (E0320 here) do not stop `fmt`.
-    let d = Dir::new("fmt_naming");
+    let d = Dir::bare("fmt_naming");
     let path = d.file("naming.onsa", "pub fn BadName()->I32{\n  1\n}\n");
     let out = onsa(&["fmt", &path]);
     assert_eq!(code(&out), 0, "{out:?}");
@@ -125,7 +91,7 @@ fn fmt_still_formats_a_file_with_a_naming_error() {
 #[test]
 fn diff_ast_does_not_report_two_files_with_failed_items_as_equal() {
     // Both files lose `f` in the AST; the text of `f` differs. Equal ASTs would say "no difference".
-    let d = Dir::new("diff_failed_items");
+    let d = Dir::bare("diff_failed_items");
     let a = d.file("a.onsa", TUPLE_INDEX_OVERFLOW);
     let b = d.file("b.onsa", &TUPLE_INDEX_OVERFLOW.replace("99999999999", "88888888888"));
     let out = onsa(&["diff", "--ast", &a, &b]);
@@ -135,7 +101,7 @@ fn diff_ast_does_not_report_two_files_with_failed_items_as_equal() {
 #[test]
 fn diff_ast_does_not_compare_a_file_with_a_syntax_error_and_exits_with_2() {
     // §18.2: `diff --ast` does not compare a file with a syntax diagnostic; exit code 2.
-    let d = Dir::new("diff_syntax_error");
+    let d = Dir::bare("diff_syntax_error");
     let a = d.file("a.onsa", SYNTAX_ERROR);
     let b = d.file("b.onsa", &SYNTAX_ERROR.replace("1\n", "3\n"));
     let out = onsa(&["diff", "--ast", &a, &b]);

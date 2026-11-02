@@ -2,37 +2,8 @@
 //! found, 2 the command could not work, 101 an internal error (S-67). The
 //! main rows of the table, through the built `onsa`.
 
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_exit_codes_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn onsa(args: &[&str]) -> Output {
-    Command::new(ONSA).args(args).output().expect("run onsa")
-}
+use crate::test_support::{Dir, onsa};
+use std::path::Path;
 
 fn code(args: &[&str]) -> i32 {
     let out = onsa(args);
@@ -47,7 +18,7 @@ const UNRESOLVED: &str = "pub fn f() -> I32 {\n  y\n}\n";
 
 #[test]
 fn check_fmt_diff_explain() {
-    let d = Dir::new("main");
+    let d = Dir::bare("main");
     let ok = d.file("ok.onsa", OK);
     let ugly = d.file("ugly.onsa", UGLY);
     let other = d.file("other.onsa", OTHER);

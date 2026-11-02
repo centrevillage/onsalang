@@ -9,35 +9,12 @@
 //! names) is in check_json_document.rs (S-215, S-234). The reader below takes the `diagnostics`
 //! array of that one object and nothing else.
 
-use std::path::PathBuf;
 use std::process::Command;
 
+use crate::test_support::{Dir, code_of};
 use serde_json::Value;
 
 const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_diag_json_{}_{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        Dir(d)
-    }
-
-    fn file(&self, name: &str, text: &str) -> String {
-        let p = self.0.join(name);
-        std::fs::write(&p, text).unwrap();
-        p.to_string_lossy().into_owned()
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 /// The `diagnostics` array of the document `onsa check --json <paths>` prints (§18.1: the output
 /// is one JSON object).
@@ -54,10 +31,6 @@ fn check_json(paths: &[&str]) -> Vec<Value> {
         .as_array()
         .unwrap_or_else(|| panic!("`diagnostics` is not an array: {doc}"))
         .clone()
-}
-
-fn code_of(d: &Value) -> &str {
-    d["code"].as_str().expect("`code` is a string")
 }
 
 fn by_code<'a>(ds: &'a [Value], code: &str) -> Vec<&'a Value> {
@@ -239,7 +212,7 @@ pub fn BadName() -> I32 {
 
 #[test]
 fn a_span_has_file_line_col_end_line_end_col() {
-    let d = Dir::new("keys");
+    let d = Dir::bare("keys");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     let codes: Vec<&str> = ds.iter().map(code_of).collect();
@@ -260,7 +233,7 @@ fn a_span_has_file_line_col_end_line_end_col() {
 
 #[test]
 fn end_line_is_there_for_a_one_line_span() {
-    let d = Dir::new("end_line");
+    let d = Dir::bare("end_line");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     for code in ["E0713", "E0714", "E0020", "E0320"] {
@@ -274,7 +247,7 @@ fn end_line_is_there_for_a_one_line_span() {
 
 #[test]
 fn a_candidate_has_title_and_edits_with_a_span_and_replace() {
-    let d = Dir::new("shape");
+    let d = Dir::bare("shape");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     let mut seen = 0;
@@ -295,7 +268,7 @@ fn a_candidate_has_title_and_edits_with_a_span_and_replace() {
 
 #[test]
 fn the_candidates_give_the_text_the_spec_describes() {
-    let d = Dir::new("apply");
+    let d = Dir::bare("apply");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     // (code, the line of the file that changes, the line after applying the candidate)
@@ -319,7 +292,7 @@ fn the_candidates_give_the_text_the_spec_describes() {
 
 #[test]
 fn an_insertion_is_a_replacement_of_an_empty_range() {
-    let d = Dir::new("insertion");
+    let d = Dir::bare("insertion");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     let found = by_code(&ds, "E0713");
@@ -344,7 +317,7 @@ fn columns_count_characters_and_not_bytes_or_utf16_units() {
     // the diagnostic on the same line.
     let emoji = "😀".repeat(12);
     let src = format!("pub fn f(xs: Span[F32]) -> U32 {{\n  let n = \"{emoji}\".len() + xs.len!()\n  n\n}}\n");
-    let d = Dir::new("columns");
+    let d = Dir::bare("columns");
     let path = d.file("wide.onsa", &src);
     let ds = check_json(&[&path]);
     let found = by_code(&ds, "E0714");
@@ -365,7 +338,7 @@ fn a_candidate_that_joins_two_lines_is_a_range_over_two_lines_and_gives_the_join
     // E0003: `else` on the line after `}` (§2.5). The candidate moves it to the previous line,
     // so the fixed text has `} else {` on one line.
     let src = "pub fn choose(c: Bool) -> I32 {\n  if c { 1 }\n  else { 2 }\n}\n";
-    let d = Dir::new("join");
+    let d = Dir::bare("join");
     let path = d.file("else.onsa", src);
     let ds = check_json(&[&path]);
     let found = by_code(&ds, "E0003");
@@ -384,7 +357,7 @@ fn spans_of_a_diagnostic_that_covers_several_lines_end_on_the_later_line() {
     // Any diagnostic whose range crosses a line break keeps `end_line` and `end_col` consistent:
     // the end is after the start, `end_col` is a column of `end_line`. The corpus is the files
     // below; the test does not say which diagnostic covers several lines.
-    let d = Dir::new("multi");
+    let d = Dir::bare("multi");
     let src = "pub fn choose(c: Bool) -> I32 {\n  if c { 1 }\n  else { 2 }\n}\n";
     let path = d.file("else.onsa", src);
     let ds = check_json(&[&path]);
@@ -405,7 +378,7 @@ fn spans_of_a_diagnostic_that_covers_several_lines_end_on_the_later_line() {
 
 #[test]
 fn a_diagnostic_without_a_candidate_has_an_empty_fixes_array() {
-    let d = Dir::new("nofix");
+    let d = Dir::bare("nofix");
     let path = d.file("nofix.onsa", "pub fn f() -> I32 {\n  1 $ 2\n}\n");
     let ds = check_json(&[&path]);
     let found = by_code(&ds, "E0001");
@@ -417,7 +390,7 @@ fn a_diagnostic_without_a_candidate_has_an_empty_fixes_array() {
 fn the_edits_of_two_candidates_of_different_diagnostics_are_independent() {
     // Applying the first candidate of every diagnostic at once gives a file where each line has
     // its own change (the case runner of tests/spec applies them the same way).
-    let d = Dir::new("all");
+    let d = Dir::bare("all");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     let mut edits: Vec<Edit> = Vec::new();
@@ -450,7 +423,7 @@ fn note_span(n: &Value, what: &str) -> Option<Span> {
 /// E0020 for a `;` (§2.5, §18.1): the correct rule goes in a note, and that note has no position.
 #[test]
 fn a_note_that_explains_a_rule_has_a_message_and_no_span() {
-    let d = Dir::new("note_rule");
+    let d = Dir::bare("note_rule");
     let path = d.file("semi.onsa", "pub fn g() -> I32 {\n  let a = 1;\n  a\n}\n");
     let ds = check_json(&[&path]);
     let found = by_code(&ds, "E0020");
@@ -467,7 +440,7 @@ fn a_note_that_explains_a_rule_has_a_message_and_no_span() {
 /// declaration gets the diagnostic and the earlier one is shown by a note, with a position.
 #[test]
 fn a_note_that_points_at_a_place_has_a_message_and_a_full_span() {
-    let d = Dir::new("note_place");
+    let d = Dir::bare("note_place");
     let path = d.file("dup.onsa", "pub fn twice() -> I32 {\n  1\n}\n\npub fn twice() -> I32 {\n  2\n}\n");
     let ds = check_json(&[&path]);
     let found = by_code(&ds, "E0304");
@@ -489,7 +462,7 @@ fn a_note_that_points_at_a_place_has_a_message_and_a_full_span() {
 
 #[test]
 fn every_note_of_every_diagnostic_has_a_message_and_a_span_or_no_span_key() {
-    let d = Dir::new("notes_all");
+    let d = Dir::bare("notes_all");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     assert!(ds.len() >= 5);
@@ -504,7 +477,7 @@ fn every_note_of_every_diagnostic_has_a_message_and_a_span_or_no_span_key() {
 fn a_diagnostic_with_no_note_has_an_empty_notes_array() {
     // The diagnostics of E0713 and E0714 say what is wrong in the message and give the fix in the
     // candidate. At least one diagnostic of MIXED has nothing to add in a note, and its `notes` is `[]`.
-    let d = Dir::new("notes_empty");
+    let d = Dir::bare("notes_empty");
     let path = d.file("mixed.onsa", MIXED);
     let ds = check_json(&[&path]);
     assert!(

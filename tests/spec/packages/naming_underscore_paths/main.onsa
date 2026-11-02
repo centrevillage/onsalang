@@ -8,7 +8,7 @@
 // Spec 2.3 makes that impossible: a name does not start with `_` in any shape, so `pub fn _f` is E0320
 // and the file `_util.onsa` is E0320 (at its top, with no candidate), while a `_` at the end is fine
 // (`voice_.onsa`). The program is refused by `onsa check`, and `onsa build` stops there with the same
-// diagnostics (crates/onsa_cli/tests/naming_shapes.rs), not with an internal error of the C compiler.
+// diagnostics (crates/onsa_cli/tests/cli/naming_shapes.rs), not with an internal error of the C compiler.
 
 use voice
 use voice_

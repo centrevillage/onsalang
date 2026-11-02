@@ -24,7 +24,7 @@ use crate::test_support;
 
 use std::collections::BTreeMap;
 
-use test_support::sweep::{Rng, Texts, check_package, ended_well, package};
+use test_support::sweep::{Rng, Texts, check_input, ended_well, input_of};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum W {
@@ -113,8 +113,7 @@ fn a_list_of_bounds_is_judged_from_the_front_and_its_users_as_the_spec_says() {
     }
     let mut texts = Texts::new();
     texts.insert("main.onsa".to_string(), text);
-    let d = package("bound_list_model", "demo", &texts);
-    let checked = check_package(d.root());
+    let checked = check_input(&input_of("demo", &texts));
     assert!(ended_well(&checked), "check did not end as a check does:\n{}", checked.stderr);
     let mut got: BTreeMap<u64, Vec<(u64, String)>> = BTreeMap::new();
     for x in &checked.diags {
