@@ -190,8 +190,9 @@ impl EmitOptions {
         self.prefix.as_deref().unwrap_or_else(|| onsa_diag::internal::bug(None, "an export without a `prefix`"))
     }
 
-    /// Something is exported: the names that need the prefix are made.
-    pub(crate) fn exports_any(&self) -> bool {
+    /// Something is exported: the names that need the prefix are made, and
+    /// the build needs a `prefix` (S-832). The one test of it (D-15).
+    pub fn exports_any(&self) -> bool {
         !self.exports.is_empty() || !self.export_fns.is_empty()
     }
 }

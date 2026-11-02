@@ -14,6 +14,7 @@ use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 use onsa_sema::package_tree::{BUILD_DIR, MANIFEST};
 
 use crate::consts::consts_stage;
+use crate::manifest::table::After;
 use crate::platform::{Platform, host_triple, platform};
 use crate::{
     Analyzed, InternalError, Loaded, LowerError, Manifest, ManifestTarget, Spanned, guard, read_package_input,
@@ -33,9 +34,10 @@ pub enum BuildError {
     /// The package or its exports do not check (exit 1).
     Diagnostics { sources: SourceMap, diagnostics: Vec<Diagnostic> },
     /// The manifest's diagnostics and those of the target's build that need
-    /// no source, in one report before the sources are read; or the E1104 of
-    /// `prefix` after their check (exit 2, §18.1, S-832).
-    Manifest { sources: SourceMap, diagnostics: Vec<Diagnostic> },
+    /// no source, in one report before the sources are read; or, when
+    /// `after_sources`, those of [`after_sources`] after their check (exit 2,
+    /// §18.1, S-832).
+    Manifest { sources: SourceMap, diagnostics: Vec<Diagnostic>, after_sources: bool },
     /// An internal error (S-67, exit 101): a panic, a broken Core (R-82), or
     /// generated C the C compiler rejects. `sources` renders its position.
     Internal { sources: SourceMap, error: Box<InternalError> },
@@ -102,7 +104,7 @@ pub fn resolve_target(loaded: &Loaded, target: &str) -> Result<ResolvedTarget, B
     let mut diagnostics = read.diagnostics.clone();
     diagnostics.extend(t.into_iter().flat_map(|t| t.value.build_diagnostics.iter().cloned()));
     if !diagnostics.is_empty() {
-        return Err(BuildError::Manifest { sources: loaded.sources.clone(), diagnostics });
+        return Err(BuildError::Manifest { sources: loaded.sources.clone(), diagnostics, after_sources: false });
     }
     let Some(t) = t else {
         let names: Vec<&String> = manifest.targets.keys().collect();
@@ -173,22 +175,6 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     }
     let settings = &resolved.settings;
     let export = &ExportSettings::of(analyzed, loaded.manifest());
-    // The sources tell whether `prefix` is required: after their check (§14.2, §18.1, S-832).
-    // The E1104 stops the build before its own checks (E0610) and the C backend's (E0302), S-839.
-    if export.prefix.is_none() && !(export.flows.is_empty() && export.fns.is_empty()) {
-        let d = loaded.manifest().and_then(|m| m.missing_prefix.clone());
-        let d = d.unwrap_or_else(|| onsa_diag::internal::bug(None, "an export without a `prefix` or its E1104"));
-        return Err(BuildError::Manifest { sources: loaded.sources.clone(), diagnostics: vec![d] });
-    }
-    let export_diags = check_exports(analyzed, settings);
-    if !export_diags.is_empty() {
-        return Err(diagnostics(LowerError::reported(export_diags)));
-    }
-
-    // Lower and emit.
-    // `bulk_threshold` is not a key of §15.3: `memory.bulk` replaces it (W9-06).
-    let lower_opts = LowerOptions { bulk_threshold: None, ptr_size: settings.platform.ptr_size };
-    let module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
     let sources = loaded.sources.clone();
     let emit_opts = EmitOptions {
         package: loaded.name.clone(),
@@ -206,6 +192,20 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
         ptr_size: settings.platform.ptr_size,
         cflags: settings.platform.cflags.clone(),
     };
+    // They stop the build before its own checks (E0610) and the C backend's (E0302), S-839.
+    let late = after_sources(loaded.manifest(), &emit_opts);
+    if !late.is_empty() {
+        return Err(BuildError::Manifest { sources: loaded.sources.clone(), diagnostics: late, after_sources: true });
+    }
+    let export_diags = check_exports(analyzed, settings);
+    if !export_diags.is_empty() {
+        return Err(diagnostics(LowerError::reported(export_diags)));
+    }
+
+    // Lower and emit.
+    // `bulk_threshold` is not a key of §15.3: `memory.bulk` replaces it (W9-06).
+    let lower_opts = LowerOptions { bulk_threshold: None, ptr_size: settings.platform.ptr_size };
+    let module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
     // The exports are the entries of the build (spec §15.2, S-242): the
     // evaluation of the `const`s and the C unit start from them.
     let roots = onsa_backend_c::export_roots(&module, &emit_opts);
@@ -213,6 +213,17 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     let unit = onsa_backend_c::emit(&module, &emit_opts).map_err(|d| diagnostics(LowerError::reported(d)))?;
     let files = unit.files(&loaded.name);
     Ok(BuildOutput { module, settings: settings.clone(), export: export.clone(), unit, files })
+}
+
+/// The diagnostics of the manifest that the sources make required, after
+/// their check (§14.2, §18.1, S-832): those of `manifest` whose
+/// [`After`] holds of the build's `opts`. The one place of them.
+pub(crate) fn after_sources(manifest: Option<&Manifest>, opts: &EmitOptions) -> Vec<Diagnostic> {
+    let holds = |when: &After| match when {
+        After::Exports => opts.exports_any(),
+    };
+    let all = manifest.into_iter().flat_map(|m| &m.after_sources);
+    all.filter(|(when, _)| holds(when)).map(|(_, d)| d.clone()).collect()
 }
 
 /// Build the package at `path` for `target`: a package directory or its

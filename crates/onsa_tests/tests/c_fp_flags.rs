@@ -96,7 +96,7 @@ fn build_dir(work: &Path, target: &str) -> Built {
         Err(onsa_driver::BuildError::Usage(m)) => panic!("build: {m}"),
         Err(
             onsa_driver::BuildError::Diagnostics { sources, diagnostics }
-            | onsa_driver::BuildError::Manifest { sources, diagnostics },
+            | onsa_driver::BuildError::Manifest { sources, diagnostics, .. },
         ) => panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics)),
         Err(onsa_driver::BuildError::Internal { sources, error }) => panic!("build: {}", error.render(&sources)),
     };
@@ -145,7 +145,7 @@ fn case_package(tag: &str, rel: &str, target: &str) -> Built {
             Ok(r) => r,
             Err(
                 onsa_driver::BuildError::Diagnostics { sources, diagnostics }
-                | onsa_driver::BuildError::Manifest { sources, diagnostics },
+                | onsa_driver::BuildError::Manifest { sources, diagnostics, .. },
             ) => panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics)),
             Err(_) => panic!("build of {rel} failed"),
         };

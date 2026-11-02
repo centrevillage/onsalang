@@ -173,7 +173,9 @@ pub fn run_with(root: &Path, data: &Data, list: &Pending, tools: &[&'static Item
                 out.run.errors.push(format!("{}: build of `{target}`: {m}", package_path(pkg)));
                 continue;
             }
-            Err(BuildError::Diagnostics { sources, diagnostics } | BuildError::Manifest { sources, diagnostics }) => {
+            Err(
+                BuildError::Diagnostics { sources, diagnostics } | BuildError::Manifest { sources, diagnostics, .. },
+            ) => {
                 let why = format!(
                     "the build of `{target}` reports {} diagnostics:\n{}",
                     diagnostics.len(),

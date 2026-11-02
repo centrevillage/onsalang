@@ -43,9 +43,10 @@ pub struct Manifest {
     pub export: Spanned<ManifestExport>,
     /// By target name.
     pub targets: BTreeMap<String, Spanned<ManifestTarget>>,
-    /// The E1104 of a `prefix` not written, which the build of a package with
-    /// `@export` items reports after the check of its sources (§14.2, S-832).
-    pub missing_prefix: Option<Diagnostic>,
+    /// The diagnostics the build reports after the check of the sources, each
+    /// when they are as its [`table::After`] says (§14.2, S-832): the E1104 of
+    /// a `prefix` not written ([`crate::build::after_sources`]).
+    pub after_sources: Vec<(table::After, Diagnostic)>,
     /// The `flow` of each `[[plugin]]`, a path the check resolves once
     /// (`Analyzed::plugin_flows`, S-718).
     pub plugin_flow_paths: Vec<Spanned<String>>,

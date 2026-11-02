@@ -113,14 +113,13 @@ pub(super) fn build_target(
             out
         }
         // The markers `#~` of the target's values are compared with its manifest's (`tests/README.md`).
-        Err(BuildError::Diagnostics { diagnostics, sources } | BuildError::Manifest { diagnostics, sources }) => {
+        // Those of the manifest after the sources: the case checks their candidates.
+        Err(BuildError::Manifest { diagnostics, after_sources: true, .. }) => {
             compare_in(run, &loaded.sources, &expected, &diagnostics, Stage::Build, Some(target), loaded.toml_file());
-            // The target resolves: the manifest's are after the sources.
-            let after = diagnostics.iter().all(|d| d.stage == onsa_diag::Stage::Manifest)
-                && onsa_driver::resolve_target(loaded, target).is_ok();
-            if after {
-                return Some(diagnostics);
-            }
+            return Some(diagnostics);
+        }
+        Err(BuildError::Diagnostics { diagnostics, sources } | BuildError::Manifest { diagnostics, sources, .. }) => {
+            compare_in(run, &loaded.sources, &expected, &diagnostics, Stage::Build, Some(target), loaded.toml_file());
             run.problems.extend(crate::fix_contract::unchecked(&sources, &diagnostics));
             return None;
         }

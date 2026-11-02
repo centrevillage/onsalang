@@ -844,6 +844,7 @@ fn stubborn(loaded: &Loaded, analyzed: &Analyzed, target: &str) -> Result<BuildO
                 onsa_diag::Span::new(read.file, 0, 0),
                 "missing key `export.prefix`",
             )],
+            after_sources: true,
         }),
         _ => built,
     }

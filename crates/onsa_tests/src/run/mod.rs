@@ -282,7 +282,7 @@ pub fn stage_problem(sources: &SourceMap, failure: StageFailure<'_>) -> Problem 
         }
         StageFailure::Build {
             target,
-            error: BuildError::Diagnostics { sources, diagnostics } | BuildError::Manifest { sources, diagnostics },
+            error: BuildError::Diagnostics { sources, diagnostics } | BuildError::Manifest { sources, diagnostics, .. },
         } => Problem::Failed(format!(
             "build of `{target}`:\n{}",
             onsa_diag::to_text(sources, diagnostics).replace('\n', "\n  ")
