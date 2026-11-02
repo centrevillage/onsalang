@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// mode = "test"
+pub struct Plain { x: F32 }
+pub struct Pair[T]: PartialEq { a: T, b: T }
+test "derive generic" {
+  let p: Pair[Plain] = Pair { a: Plain { x: 1.0 }, b: Plain { x: 1.0 } }
+  assert p == p
+}
