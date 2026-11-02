@@ -20,7 +20,7 @@ status = "OPEN"
     - W3-19 は見積もり 540 行に対し正味約 566 行。
     - 利用者はソースの肥大を気にしている（2026-10-09、W3-15 の報告で）。
       - 今は注意だけにし、本格的なリファクタリングは別の時期に行う。
-      - W3-15 で `crates/onsa_syntax/src/foreign.rs` が約 2100 行（S-317 の部分は約 230 行）、`crates/onsa_tests/src/fix_contract.rs` の器の直しが約 300 行になった。
+      - W3-15 で `crates/onsa_syntax/src/foreign.rs` が約 2100 行（S-317 の部分は約 230 行）、`crates/onsa_tests/src/fix_contract/` の器の直しが約 300 行になった。
       - W3-15/b の報告の「リファクタリングの候補」の節（分けられる単位、`PatReader` と `parse_pattern_alt` の重複、使われない枝）を材料にする。
       - 作業の見積もりを出すときは、見積もりと実際の行数の差も記録する。
   - **リファクタリングの候補（時期は別に決める）:**
