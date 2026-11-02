@@ -8,7 +8,7 @@
     ignore を外すときに、その `return` を期待に残す。
   - 材料: `tasks/phase2/`（`u1b_07a0e81.patch`、`u1fix1_d43de9e.patch`、`u2t_dd958b1.patch`、`u1_all_d43de9e.patch`、`handback_f.md`。28 回目の scratchpad の `p2save/` から写した）。
     担当の報告は残さない（X-2 の DF-D）。28 回目の壊す側（/b）の報告の指摘 1〜6（`-> ()`・`uses {}`・`init` の除去の形で、第 2 期の確かめに使える）だけを、その節と再現の入力のまま `tasks/phase2/handback_b_findings.md`・`tasks/phase2/b_repro/` に写した。
-  - `crates/onsa_cli/tests/fmt_rewrites.rs` の `PH2:` の ignore 12 件のうち、`x_combinations` の `reset_all`・`alloc_only`、`x_module` の `touch`、`r78` の `set_one` は、値の無い末尾の `return` を外す期待値で、S-547 と食い違う。ignore を外すときに直す（`tasks/phase2/` のパッチの側も同じ）。
+  - `crates/onsa_cli/tests/cli/fmt_rewrites.rs` の `PH2:` の ignore 12 件のうち、`x_combinations` の `reset_all`・`alloc_only`、`x_module` の `touch`、`r78` の `set_one` は、値の無い末尾の `return` を外す期待値で、S-547 と食い違う。ignore を外すときに直す（`tasks/phase2/` のパッチの側も同じ）。
   - `tests/spec/fmt/rewrite_unit_uses_until_ph2.onsa` は除去までの形で、除去を入れたら書き換える。
   - 歩きの重複（所見）: `fmt/plan.rs` と `rewrites::normalize` が、どちらも `REWRITES` × 全ての節に CST の側を当てる（選んだ節の一覧を一度作って両方が読める）。`///` の行末の空白は `comment()` を通らず `align::finish` が落とし、比べる側は `comment_text` を使う（食い違えば確かめが 101 にするので安全側）。
   - **W3-12（W3-20 の直し、2026-10-09）:** `-> (fn()) uses {…}` の返り値の関数型を囲む括弧は冗長でない（外すと `uses` が内側の型に付き、型が変わる）。S-339 の基準で外さないことを確かめる事例を足す。型を文字列にする所は `TyStore::parens_before_uses` が同じ規則を持つ。
