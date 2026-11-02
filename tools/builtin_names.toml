@@ -384,7 +384,7 @@
 "f32" = { count = 1, note = "C の名前の部品にする型の接尾辞（std.test.gen の f32 と同じ綴り）" }
 "u32" = { count = 1, note = "C の名前の部品にする型の接尾辞（std.test.gen の u32 と同じ綴り）" }
 
-[same_spelling."crates/onsa_cli/src/main.rs"]
+[same_spelling."crates/onsa_cli/src/lib.rs"]
 "core" = { count = 2, note = "onsa dump の引数 --core の名前（clap の conflicts_with。モジュール std.core とは別）" }
 
 [same_spelling."crates/onsa_core/src/verify.rs"]

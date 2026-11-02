@@ -1,7 +1,13 @@
-//! The `onsa` command (spec §18.2). M0: `check` and `explain`; M1: `fmt`.
+//! The commands of `onsa` (spec §18.2). M0: `check` and `explain`; M1: `fmt`.
+//!
+//! The binary (`src/bin/onsa.rs`) reads its arguments ([`Cli`]) and runs
+//! [`run_command`] on the file system ([`Disk`]), the standard output and the
+//! standard error. `onsa_cases --serve` runs the same function on texts and
+//! buffers (W4-18 U10c, X-16, X-20), so the gate's tools see what the
+//! command prints without a file and a process for each input.
 
-use std::path::PathBuf;
-use std::process::ExitCode;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
@@ -14,16 +20,16 @@ static VERSION: std::sync::LazyLock<String> =
 
 #[derive(Parser)]
 #[command(name = "onsa", version = VERSION.as_str(), about = "Onsa compiler")]
-struct Cli {
+pub struct Cli {
     #[command(subcommand)]
-    command: Command,
+    pub command: Command,
 }
 
 /// The path of a command that reads a package (§15.1, §18.2, S-323): the
 /// last argument, which may be omitted. One place for its form; the count
 /// is [`one_path`]'s, so that two paths are refused in the words of §15.1.
 #[derive(clap::Args)]
-struct PackagePath {
+pub struct PackagePath {
     /// One path: a `.onsa` file, a package directory or `onsa.toml` (the
     /// package above the working directory when omitted, §15.1)
     #[arg(value_name = "PATH")]
@@ -31,7 +37,7 @@ struct PackagePath {
 }
 
 #[derive(Subcommand)]
-enum Command {
+pub enum Command {
     /// Check types, effects, rt, flow and policy
     Check {
         /// Print diagnostics as JSON (spec §18.1)
@@ -164,93 +170,153 @@ impl Outcome {
     }
 }
 
-/// Standard output is written through [`write_out`]: a failure to write
+/// Standard output is written through [`Io::out`]: a failure to write
 /// (a closed pipe) is an input and output error of the command (exit 2), not
 /// a panic of the compiler.
 macro_rules! out {
-    ($($t:tt)*) => { write_out(&format!($($t)*)) };
+    ($io:expr, $($t:tt)*) => { $io.out(&format!($($t)*)) };
 }
 
 macro_rules! outln {
-    ($($t:tt)*) => { write_out(&format!("{}\n", format!($($t)*))) };
+    ($io:expr, $($t:tt)*) => { $io.out(&format!("{}\n", format!($($t)*))) };
 }
 
-static STDOUT_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+/// Standard error, as `eprintln!` writes it ([`Io::err`]).
+macro_rules! errln {
+    ($io:expr, $($t:tt)*) => { $io.err(&format!("{}\n", format!($($t)*))) };
+}
 
-fn write_out(text: &str) {
-    use std::io::Write;
-    let mut stdout = std::io::stdout().lock();
-    if let Err(e) = stdout.write_all(text.as_bytes()).and_then(|()| stdout.flush()) {
-        let mut first = STDOUT_ERROR.lock().unwrap_or_else(|p| p.into_inner());
-        first.get_or_insert_with(|| e.to_string());
+/// Where a command reads its files and writes its outputs: for `onsa`, the
+/// file system and the standard output and error; for `onsa_cases --serve`,
+/// texts and buffers.
+pub struct Io<'a> {
+    out: &'a mut (dyn Write + Send),
+    err: &'a mut (dyn Write + Send),
+    files: &'a (dyn Files + Sync),
+    /// The first failure to write to the standard output: the command goes
+    /// on, and ends in 2 unless it ends in an internal error.
+    out_error: Option<String>,
+}
+
+impl<'a> Io<'a> {
+    pub fn new(
+        out: &'a mut (dyn Write + Send),
+        err: &'a mut (dyn Write + Send),
+        files: &'a (dyn Files + Sync),
+    ) -> Io<'a> {
+        Io { out, err, files, out_error: None }
+    }
+
+    /// Write and flush `text` to the standard output; the first failure is kept.
+    fn out(&mut self, text: &str) {
+        if let Err(e) = self.out.write_all(text.as_bytes()).and_then(|()| self.out.flush()) {
+            self.out_error.get_or_insert_with(|| e.to_string());
+        }
+    }
+
+    /// Write `text` to the standard error; a failure panics with the message of `eprint!`.
+    fn err(&mut self, text: &str) {
+        if let Err(e) = self.err.write_all(text.as_bytes()) {
+            panic!("failed printing to stderr: {e}");
+        }
     }
 }
 
-fn main() -> ExitCode {
-    // The Core verifier runs in debug builds of the CLI only, until W8-02 (R-82).
-    onsa_driver::verify_core_in_debug_only();
-    let cli = Cli::parse();
-    // The command runs on a thread with the stack of the test runner, so both
-    // reach the same depth (`onsa_diag::stack`). A panic outside the driver's
-    // stages (printing, the file system) is still an internal error (S-67).
-    let run = onsa_diag::stack::spawn("onsa", move || onsa_driver::guard(|| run(cli.command)))
-        .map_err(|e| format!("cannot start the command: {e}"));
-    let outcome = match run.map(|t| t.join()) {
+/// The files the commands read (and `fmt` replaces), but those of `build`,
+/// which the driver reads itself.
+pub trait Files {
+    /// The text of the file `path`, as `std::fs::read_to_string` reads it.
+    fn read(&self, path: &Path) -> std::io::Result<String>;
+    /// The name of the file `path` that two paths of one file share
+    /// (`std::fs::canonicalize`, or `path` when it cannot be had).
+    fn canonical(&self, path: &Path) -> PathBuf;
+    /// The package of the one path of a command (`onsa_driver::load`).
+    fn load(&self, path: Option<&Path>) -> Result<onsa_driver::Loaded, String>;
+    /// Write `text` as the new text of the file `path` (`fmt`).
+    fn replace(&self, path: &Path, text: &str) -> std::io::Result<()>;
+}
+
+/// The file system: the files of `onsa`.
+pub struct Disk;
+
+impl Files for Disk {
+    fn read(&self, path: &Path) -> std::io::Result<String> {
+        std::fs::read_to_string(path)
+    }
+
+    fn canonical(&self, path: &Path) -> PathBuf {
+        std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    }
+
+    fn load(&self, path: Option<&Path>) -> Result<onsa_driver::Loaded, String> {
+        onsa_driver::load(path)
+    }
+
+    fn replace(&self, path: &Path, text: &str) -> std::io::Result<()> {
+        write_replacing(path, text)
+    }
+}
+
+/// Run `command` and return its exit code (spec §18.2). The command runs on a
+/// thread with the stack of the test runner, so both reach the same depth
+/// (`onsa_diag::stack`). A panic outside the driver's stages (printing, the
+/// file system) is still an internal error (S-67).
+pub fn run_command(command: Command, io: &mut Io<'_>) -> u8 {
+    let joined = std::thread::scope(|s| {
+        onsa_diag::stack::spawn_scoped(s, "onsa", || onsa_driver::guard(|| run(command, io))).map(|t| t.join())
+    });
+    let outcome = match joined {
         Ok(Ok(Ok(outcome))) => outcome,
-        Ok(Ok(Err(e))) => internal(&SourceMap::default(), &e),
+        Ok(Ok(Err(e))) => internal(io, &SourceMap::default(), &e),
         Ok(Err(_)) => {
-            eprintln!("onsa: internal error: the command's thread ended abnormally");
+            errln!(io, "onsa: internal error: the command's thread ended abnormally");
             Outcome::Internal
         }
-        Err(e) => {
-            eprintln!("onsa: {e}");
-            Outcome::CannotWork
-        }
+        Err(e) => cannot_work(io, format!("cannot start the command: {e}")),
     };
-    let failed_write = STDOUT_ERROR.lock().unwrap_or_else(|p| p.into_inner()).take();
-    let outcome = match failed_write {
-        Some(e) if outcome != Outcome::Internal => cannot_work(format!("cannot write to standard output: {e}")),
+    let outcome = match io.out_error.take() {
+        Some(e) if outcome != Outcome::Internal => cannot_work(io, format!("cannot write to standard output: {e}")),
         _ => outcome,
     };
-    ExitCode::from(outcome.code())
+    outcome.code()
 }
 
 /// What a command ends with: its outcome, also the one it stops at early
 /// (`Err`, which `?` passes up).
 type Done = Result<Outcome, Outcome>;
 
-fn run(command: Command) -> Outcome {
+fn run(command: Command, io: &mut Io<'_>) -> Outcome {
     let done = match command {
-        Command::Check { json, path } => check(json, &path.paths),
-        Command::Fmt { check, paths } => Ok(fmt(check, &paths)),
-        Command::Diff { ast, old, new } => Ok(diff(ast, &old, &new)),
+        Command::Check { json, path } => check(io, json, &path.paths),
+        Command::Fmt { check, paths } => Ok(fmt(io, check, &paths)),
+        Command::Diff { ast, old, new } => Ok(diff(io, ast, &old, &new)),
         Command::Dump { core, cst, tree, levels, paths } => {
             if levels {
-                dump_levels(&paths)
+                dump_levels(io, &paths)
             } else if cst {
-                dump_cst(tree, &paths)
+                dump_cst(io, tree, &paths)
             } else {
-                dump(core, &paths)
+                dump(io, core, &paths)
             }
         }
-        Command::Test { json, filter, path } => test(json, filter, &path.paths),
-        Command::Interface { json, path } => interface(json, &path.paths),
-        Command::Graph { svg, flow, path } => graph(svg, &flow, &path.paths),
-        Command::Build { target, out, paths } => build(&target, out, &paths),
-        Command::Explain { code } => Ok(explain(&code)),
+        Command::Test { json, filter, path } => test(io, json, filter, &path.paths),
+        Command::Interface { json, path } => interface(io, json, &path.paths),
+        Command::Graph { svg, flow, path } => graph(io, svg, &flow, &path.paths),
+        Command::Build { target, out, paths } => build(io, &target, out, &paths),
+        Command::Explain { code } => Ok(explain(io, &code)),
     };
     done.unwrap_or_else(|o| o)
 }
 
 /// Report an internal error (S-67): standard error only, exit 101.
 // Spec §18.2 (S-182): with `--json` too, nothing goes to standard output; the text goes to standard error.
-fn internal(sources: &SourceMap, e: &onsa_driver::InternalError) -> Outcome {
-    eprint!("onsa: {}", e.render(sources));
+fn internal(io: &mut Io<'_>, sources: &SourceMap, e: &onsa_driver::InternalError) -> Outcome {
+    io.err(&format!("onsa: {}", e.render(sources)));
     Outcome::Internal
 }
 
-fn cannot_work(message: impl std::fmt::Display) -> Outcome {
-    eprintln!("onsa: {message}");
+fn cannot_work(io: &mut Io<'_>, message: impl std::fmt::Display) -> Outcome {
+    errln!(io, "onsa: {message}");
     Outcome::CannotWork
 }
 
@@ -275,20 +341,31 @@ impl Form {
 
 /// The text or the JSON of diagnostics, made inside a guard with the sources,
 /// so that a span a stage broke is an internal error naming its file.
-fn render(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic]) -> Result<String, Outcome> {
+fn render(
+    io: &mut Io<'_>,
+    form: Form,
+    sources: &SourceMap,
+    diagnostics: &[onsa_diag::Diagnostic],
+) -> Result<String, Outcome> {
     onsa_driver::guard(|| match form {
         Form::Text => onsa_diag::to_text(sources, diagnostics),
         Form::Json => format!("{}\n", onsa_diag::to_json(sources, diagnostics)),
         Form::TestJson => format!("{}\n", onsa_driver::TestReport::default().render_json(sources, diagnostics)),
     })
-    .map_err(|e| internal(sources, &e))
+    .map_err(|e| internal(io, sources, &e))
 }
 
 /// Print diagnostics on standard output; `then` is the outcome when they print.
-fn print_diagnostics(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic], then: Outcome) -> Outcome {
-    match render(form, sources, diagnostics) {
+fn print_diagnostics(
+    io: &mut Io<'_>,
+    form: Form,
+    sources: &SourceMap,
+    diagnostics: &[onsa_diag::Diagnostic],
+    then: Outcome,
+) -> Outcome {
+    match render(io, form, sources, diagnostics) {
         Ok(text) => {
-            out!("{text}");
+            out!(io, "{text}");
             then
         }
         Err(o) => o,
@@ -305,7 +382,7 @@ fn print_diagnostics(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::
 /// a file to rewrite, else 0. An internal error stops at once.
 // SPEC-GAP(S-261): with several files, 2 wins over 1, and the list of the
 // files to reformat is a result of the command, on the standard output.
-fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
+fn fmt(io: &mut Io<'_>, check: bool, paths: &[PathBuf]) -> Outcome {
     let mut changed = false;
     let mut failed = false;
     let mut sources = SourceMap::default();
@@ -313,13 +390,13 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
     // A file named twice is processed once (its diagnostics are not repeated).
     let mut seen = std::collections::HashSet::new();
     for path in paths {
-        if !seen.insert(std::fs::canonicalize(path).unwrap_or_else(|_| path.clone())) {
+        if !seen.insert(io.files.canonical(path)) {
             continue;
         }
-        let text = match std::fs::read_to_string(path) {
+        let text = match io.files.read(path) {
             Ok(t) => t,
             Err(e) => {
-                eprintln!("onsa: cannot read {}: {e}", path.display());
+                errln!(io, "onsa: cannot read {}: {e}", path.display());
                 failed = true;
                 continue;
             }
@@ -336,16 +413,16 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
             // failed, §3.5) stops at once: the files before it stay written,
             // the files after it are not taken, and the syntax diagnostics of
             // the files before it are not printed.
-            Err(e) => return internal(&sources, &e),
+            Err(e) => return internal(io, &sources, &e),
         };
         if out == text {
             continue;
         }
         changed = true;
         if check {
-            outln!("would reformat {}", path.display());
-        } else if let Err(e) = write_replacing(path, &out) {
-            eprintln!("onsa: cannot write {}: {e}", path.display());
+            outln!(io, "would reformat {}", path.display());
+        } else if let Err(e) = io.files.replace(path, &out) {
+            errln!(io, "onsa: cannot write {}: {e}", path.display());
             failed = true;
         }
     }
@@ -356,7 +433,7 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
     } else {
         Outcome::Ok
     };
-    if report.is_empty() { then } else { print_diagnostics(Form::Text, &sources, &report, then) }
+    if report.is_empty() { then } else { print_diagnostics(io, Form::Text, &sources, &report, then) }
 }
 
 /// The bytes of the name of the file that the name of the temporary file of
@@ -426,62 +503,65 @@ fn write_replacing(path: &std::path::Path, text: &str) -> std::io::Result<()> {
 /// The one path a command that reads a package takes (§15.1, §18.2; S-312):
 /// two or more is a usage error (a run handles one package), none is the
 /// working directory (`None`).
-fn one_path(paths: &[PathBuf]) -> Result<Option<&std::path::Path>, Outcome> {
+fn one_path<'p>(io: &mut Io<'_>, paths: &'p [PathBuf]) -> Result<Option<&'p Path>, Outcome> {
     match paths {
         [] => Ok(None),
         [p] => Ok(Some(p.as_path())),
-        _ => Err(cannot_work(format!(
-            "a command that reads a package takes one path (a `.onsa` file, a package directory or \
+        _ => Err(cannot_work(
+            io,
+            format!(
+                "a command that reads a package takes one path (a `.onsa` file, a package directory or \
              `onsa.toml`), not {}: a run handles one package",
-            paths.len()
-        ))),
+                paths.len()
+            ),
+        )),
     }
 }
 
 /// Load the package of the one path of `paths` ([`one_path`]). The
 /// diagnostics of its manifest stop the command before the sources are read
 /// (§18.1): printed in `form`, exit 2.
-fn load(form: Form, paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
-    let loaded = onsa_driver::load(one_path(paths)?).map_err(cannot_work)?;
+fn load(io: &mut Io<'_>, form: Form, paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
+    let path = one_path(io, paths)?;
+    let loaded = io.files.load(path).map_err(|e| cannot_work(io, e))?;
     let diagnostics = loaded.manifest_diagnostics();
     if !diagnostics.is_empty() {
-        return Err(print_diagnostics(form, &loaded.sources, diagnostics, Outcome::of(diagnostics)));
+        return Err(print_diagnostics(io, form, &loaded.sources, diagnostics, Outcome::of(diagnostics)));
     }
     Ok(loaded)
 }
 
-fn check(json: bool, paths: &[PathBuf]) -> Done {
-    let mut loaded = load(Form::json(json), paths)?;
-    let result = onsa_driver::check_loaded(&mut loaded).map_err(|e| internal(&loaded.sources, &e))?;
-    Ok(print_diagnostics(Form::json(json), &loaded.sources, &result.diagnostics, Outcome::of(&result.diagnostics)))
+fn check(io: &mut Io<'_>, json: bool, paths: &[PathBuf]) -> Done {
+    let mut loaded = load(io, Form::json(json), paths)?;
+    let result = onsa_driver::check_loaded(&mut loaded).map_err(|e| internal(io, &loaded.sources, &e))?;
+    Ok(print_diagnostics(io, Form::json(json), &loaded.sources, &result.diagnostics, Outcome::of(&result.diagnostics)))
 }
 
-fn explain(code: &str) -> Outcome {
+fn explain(io: &mut Io<'_>, code: &str) -> Outcome {
     let Some(code) = Code::parse(code) else {
-        return cannot_work(format!("unknown diagnostic code `{code}`"));
+        return cannot_work(io, format!("unknown diagnostic code `{code}`"));
     };
     match code.explain() {
-        Some(text) => out!("{text}"),
-        None => outln!("# {}: {}\n\n(No long explanation written yet.)", code.as_str(), code.title()),
+        Some(text) => out!(io, "{text}"),
+        None => outln!(io, "# {}: {}\n\n(No long explanation written yet.)", code.as_str(), code.title()),
     }
     Outcome::Ok
 }
 
 /// `onsa diff --ast old new`: items added / removed / changed, ignoring trivia (`spec/tools.md` §3.5).
-fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
+fn diff(io: &mut Io<'_>, ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
     if !ast {
-        return cannot_work("`diff` needs `--ast` (textual diff is what `git diff` is for)");
+        return cannot_work(io, "`diff` needs `--ast` (textual diff is what `git diff` is for)");
     }
     let mut sources = SourceMap::default();
     let mut files = Vec::new();
     for path in [old_path, new_path] {
-        let text = match std::fs::read_to_string(path) {
+        let text = match io.files.read(path) {
             Ok(t) => t,
-            Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
+            Err(e) => return cannot_work(io, format!("cannot read {}: {e}", path.display())),
         };
         // The same file on both sides is one file (its diagnostics once).
-        let canonical = |p: &PathBuf| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone());
-        if files.len() == 1 && canonical(old_path) == canonical(new_path) {
+        if files.len() == 1 && io.files.canonical(old_path) == io.files.canonical(new_path) {
             files.push(files[0]);
             continue;
         }
@@ -490,18 +570,25 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
     let diffs = match onsa_driver::diff_ast(&sources, files[0], files[1]) {
         Ok(onsa_driver::AstDiff::Items(d)) => d,
         Ok(onsa_driver::AstDiff::Syntax(diagnostics)) => {
-            return print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::CannotWork);
+            return print_diagnostics(io, Form::Text, &sources, &diagnostics, Outcome::CannotWork);
         }
-        Err(e) => return internal(&sources, &e),
+        Err(e) => return internal(io, &sources, &e),
     };
     let line = |span: Option<onsa_diag::Span>| span.map(|s| sources.file(s.file).line_col(s.start).line).unwrap_or(0);
     for d in &diffs {
         use onsa_syntax::diff::Change;
         match d.change {
-            Change::Added => outln!("+ {}  (new:{})", d.key, line(d.new)),
-            Change::Removed => outln!("- {}  (old:{})", d.key, line(d.old)),
+            Change::Added => outln!(io, "+ {}  (new:{})", d.key, line(d.new)),
+            Change::Removed => outln!(io, "- {}  (old:{})", d.key, line(d.old)),
             Change::Changed => {
-                outln!("~ {}  (old:{} new:{}; first change at new:{})", d.key, line(d.old), line(d.new), line(d.first))
+                outln!(
+                    io,
+                    "~ {}  (old:{} new:{}; first change at new:{})",
+                    d.key,
+                    line(d.old),
+                    line(d.new),
+                    line(d.first)
+                )
             }
         }
     }
@@ -510,20 +597,25 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
 
 /// Load and analyze one package; print the diagnostics and return the
 /// outcome when it does not check.
-fn analyzed(form: Form, paths: &[PathBuf]) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), Outcome> {
-    let mut loaded = load(form, paths)?;
+fn analyzed(
+    io: &mut Io<'_>,
+    form: Form,
+    paths: &[PathBuf],
+) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), Outcome> {
+    let mut loaded = load(io, form, paths)?;
     let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
         Ok(a) => a,
-        Err(e) => return Err(internal(&loaded.sources, &e)),
+        Err(e) => return Err(internal(io, &loaded.sources, &e)),
     };
     if !analyzed.diagnostics.is_empty() {
-        return Err(print_diagnostics(form, &loaded.sources, &analyzed.diagnostics, Outcome::Problems));
+        return Err(print_diagnostics(io, form, &loaded.sources, &analyzed.diagnostics, Outcome::Problems));
     }
     Ok((loaded, analyzed))
 }
 
 /// Lower to Core; print the E0200 and return the outcome when it does not lower.
 fn lowered(
+    io: &mut Io<'_>,
     form: Form,
     loaded: &onsa_driver::Loaded,
     analyzed: &onsa_driver::Analyzed,
@@ -531,37 +623,36 @@ fn lowered(
     match onsa_driver::lower_core(analyzed) {
         Ok(m) => Ok(m),
         Err(onsa_driver::LowerError::Diagnostics(diags)) => {
-            Err(print_diagnostics(form, &loaded.sources, &diags, Outcome::Problems))
+            Err(print_diagnostics(io, form, &loaded.sources, &diags, Outcome::Problems))
         }
-        Err(onsa_driver::LowerError::Internal(e)) => Err(internal(&loaded.sources, &e)),
+        Err(onsa_driver::LowerError::Internal(e)) => Err(internal(io, &loaded.sources, &e)),
     }
 }
 
 /// `onsa dump --cst [--tree] <file>`: the CST of one file (R-86). Exit 0
 /// also when the file has syntax errors (the CST is complete); the syntax
 /// diagnostics are not printed.
-fn dump_cst(tree: bool, paths: &[PathBuf]) -> Done {
-    let (sources, file) = read_one(paths, "dump --cst")?;
-    let out = onsa_driver::cst_dump(&sources, file, tree).map_err(|e| internal(&sources, &e))?;
-    out!("{out}");
+fn dump_cst(io: &mut Io<'_>, tree: bool, paths: &[PathBuf]) -> Done {
+    let (sources, file) = read_one(io, paths, "dump --cst")?;
+    let out = onsa_driver::cst_dump(&sources, file, tree).map_err(|e| internal(io, &sources, &e))?;
+    out!(io, "{out}");
     Ok(Outcome::Ok)
 }
 
 /// `onsa dump --levels`: the levels of each declaration of one file (the fmt properties).
-fn dump_levels(paths: &[PathBuf]) -> Done {
-    let (sources, file) = read_one(paths, "dump --levels")?;
-    let out = onsa_driver::levels_dump(&sources, file).map_err(|e| internal(&sources, &e))?;
-    out!("{out}");
+fn dump_levels(io: &mut Io<'_>, paths: &[PathBuf]) -> Done {
+    let (sources, file) = read_one(io, paths, "dump --levels")?;
+    let out = onsa_driver::levels_dump(&sources, file).map_err(|e| internal(io, &sources, &e))?;
+    out!(io, "{out}");
     Ok(Outcome::Ok)
 }
 
 /// The one file a command of one file (`command`) takes, read into its sources.
-fn read_one(paths: &[PathBuf], command: &str) -> Result<(SourceMap, onsa_diag::FileId), Outcome> {
+fn read_one(io: &mut Io<'_>, paths: &[PathBuf], command: &str) -> Result<(SourceMap, onsa_diag::FileId), Outcome> {
     let [path] = paths else {
-        return Err(cannot_work(format!("`{command}` takes one file")));
+        return Err(cannot_work(io, format!("`{command}` takes one file")));
     };
-    let text =
-        std::fs::read_to_string(path).map_err(|e| cannot_work(format!("cannot read {}: {e}", path.display())))?;
+    let text = io.files.read(path).map_err(|e| cannot_work(io, format!("cannot read {}: {e}", path.display())))?;
     let mut sources = SourceMap::default();
     let file = sources.add(onsa_driver::slash_path(path), text);
     Ok((sources, file))
@@ -571,13 +662,13 @@ fn read_one(paths: &[PathBuf], command: &str) -> Result<(SourceMap, onsa_diag::F
 /// path is that of `check`; a file inside a package does not narrow the
 /// Core, which is the whole program after monomorphization (`dump` is an
 /// internal tool, outside the table of §18.2).
-fn dump(core: bool, paths: &[PathBuf]) -> Done {
+fn dump(io: &mut Io<'_>, core: bool, paths: &[PathBuf]) -> Done {
     if !core {
-        return Err(cannot_work("`dump` needs `--core`"));
+        return Err(cannot_work(io, "`dump` needs `--core`"));
     }
-    let (loaded, analyzed) = analyzed(Form::Text, paths)?;
-    let module = lowered(Form::Text, &loaded, &analyzed)?;
-    out!("{}", onsa_core::dump(&module));
+    let (loaded, analyzed) = analyzed(io, Form::Text, paths)?;
+    let module = lowered(io, Form::Text, &loaded, &analyzed)?;
+    out!(io, "{}", onsa_core::dump(&module));
     Ok(Outcome::Ok)
 }
 
@@ -588,8 +679,8 @@ fn dump(core: bool, paths: &[PathBuf]) -> Done {
 // SPEC-GAP(S-657): with a file passed inside a package, the diagnostics
 // that stop `interface` and `graph` are all those of the package (exit 1),
 // also those of the other modules; only the results are narrowed.
-fn interface(json: bool, paths: &[PathBuf]) -> Done {
-    let (loaded, analyzed) = analyzed(Form::json(json), paths)?;
+fn interface(io: &mut Io<'_>, json: bool, paths: &[PathBuf]) -> Done {
+    let (loaded, analyzed) = analyzed(io, Form::json(json), paths)?;
     let narrowed = onsa_driver::interface(&analyzed).and_then(|mut iface| {
         onsa_driver::guard(|| {
             if let Some(module) = loaded.focus_module() {
@@ -598,11 +689,11 @@ fn interface(json: bool, paths: &[PathBuf]) -> Done {
             iface
         })
     });
-    let iface = narrowed.map_err(|e| internal(&loaded.sources, &e))?;
+    let iface = narrowed.map_err(|e| internal(io, &loaded.sources, &e))?;
     if json {
-        outln!("{}", onsa_driver::render_json(&iface));
+        outln!(io, "{}", onsa_driver::render_json(&iface));
     } else {
-        out!("{}", onsa_driver::render_text(&iface));
+        out!(io, "{}", onsa_driver::render_text(&iface));
     }
     Ok(Outcome::Ok)
 }
@@ -610,17 +701,18 @@ fn interface(json: bool, paths: &[PathBuf]) -> Done {
 /// `onsa graph [--svg] <flow> [<path>]` (T3-12, §18.2): the flow is named in
 /// the module of a file passed inside a package, else in the package.
 // SPEC-GAP(S-657): the diagnostics that stop it are not narrowed, as for `interface`.
-fn graph(svg: bool, flow: &str, paths: &[PathBuf]) -> Done {
-    let (loaded, analyzed) = analyzed(Form::Text, paths)?;
-    let scope = onsa_driver::guard(|| loaded.focus_module()).map_err(|e| internal(&loaded.sources, &e))?;
+fn graph(io: &mut Io<'_>, svg: bool, flow: &str, paths: &[PathBuf]) -> Done {
+    let (loaded, analyzed) = analyzed(io, Form::Text, paths)?;
+    let scope = onsa_driver::guard(|| loaded.focus_module()).map_err(|e| internal(io, &loaded.sources, &e))?;
     let dot = onsa_driver::graph(&analyzed, flow, scope.as_deref()).map_err(|e| match e {
-        onsa_driver::GraphError::Usage(e) => cannot_work(e),
-        onsa_driver::GraphError::Internal(e) => internal(&loaded.sources, &e),
+        onsa_driver::GraphError::Usage(e) => cannot_work(io, e),
+        onsa_driver::GraphError::Internal(e) => internal(io, &loaded.sources, &e),
     })?;
     if svg {
-        out!("{}", onsa_driver::graph::to_svg(&dot).map_err(cannot_work)?);
+        let svg = onsa_driver::graph::to_svg(&dot).map_err(|e| cannot_work(io, e))?;
+        out!(io, "{svg}");
     } else {
-        out!("{dot}");
+        out!(io, "{dot}");
     }
     Ok(Outcome::Ok)
 }
@@ -632,23 +724,23 @@ fn graph(svg: bool, flow: &str, paths: &[PathBuf]) -> Done {
 /// output). A file passed inside a package selects the tests of its module
 /// (S-286); the filter is still matched on the whole package (S-311), and
 /// the diagnostics that stop the run are all those of the package.
-fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Done {
+fn test(io: &mut Io<'_>, json: bool, filter: Option<String>, paths: &[PathBuf]) -> Done {
     let form = if json { Form::TestJson } else { Form::Text };
-    let (loaded, analyzed) = analyzed(form, paths)?;
-    let module = lowered(form, &loaded, &analyzed)?;
-    let focus = onsa_driver::guard(|| loaded.focus_module()).map_err(|e| internal(&loaded.sources, &e))?;
+    let (loaded, analyzed) = analyzed(io, form, paths)?;
+    let module = lowered(io, form, &loaded, &analyzed)?;
+    let focus = onsa_driver::guard(|| loaded.focus_module()).map_err(|e| internal(io, &loaded.sources, &e))?;
     let opts = onsa_driver::TestOptions { filter, module: focus };
     let report = match onsa_driver::run_tests(&loaded.sources, &module, &opts) {
         Ok(onsa_driver::TestRun::Ran(r)) => r,
         Ok(onsa_driver::TestRun::NoMatch) => {
             let filter = opts.filter.as_deref().unwrap_or_default();
-            return Err(cannot_work(format!("`--filter {filter:?}` matches no test")));
+            return Err(cannot_work(io, format!("`--filter {filter:?}` matches no test")));
         }
         // E0200, as those of lowering: no test ran (S-224).
         Ok(onsa_driver::TestRun::Unsupported(diags)) => {
-            return Err(print_diagnostics(form, &loaded.sources, &diags, Outcome::Problems));
+            return Err(print_diagnostics(io, form, &loaded.sources, &diags, Outcome::Problems));
         }
-        Err(e) => return Err(internal(&loaded.sources, &e)),
+        Err(e) => return Err(internal(io, &loaded.sources, &e)),
     };
     // Inside a guard with the sources, as the diagnostics: a span a stage
     // broke is an internal error naming its file.
@@ -659,31 +751,33 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Done {
             report.render_text(&loaded.sources)
         }
     });
-    out!("{}", text.map_err(|e| internal(&loaded.sources, &e))?);
+    let text = text.map_err(|e| internal(io, &loaded.sources, &e))?;
+    out!(io, "{text}");
     Ok(if report.failed() == 0 { Outcome::Ok } else { Outcome::Problems })
 }
 
 /// `onsa build --target <name> [--out <dir>] [<path>]` (T4-5, §18.2).
-fn build(target: &str, out: Option<PathBuf>, paths: &[PathBuf]) -> Done {
+fn build(io: &mut Io<'_>, target: &str, out: Option<PathBuf>, paths: &[PathBuf]) -> Done {
     let opts = onsa_driver::BuildOptions { target: target.to_string(), out };
-    Ok(match onsa_driver::build(one_path(paths)?, &opts) {
+    let path = one_path(io, paths)?;
+    Ok(match onsa_driver::build(path, &opts) {
         Ok(r) => {
             let platform = onsa_driver::manifest::shown(&r.platform);
-            outln!("built `{}` for {platform} ({}) in {}", r.target, r.kind, r.out_dir.display());
+            outln!(io, "built `{}` for {platform} ({}) in {}", r.target, r.kind, r.out_dir.display());
             for f in &r.files {
-                outln!("  {f}");
+                outln!(io, "  {f}");
             }
             if let Some(n) = &r.note {
-                outln!("note: {}", onsa_driver::manifest::shown(n));
+                outln!(io, "note: {}", onsa_driver::manifest::shown(n));
             }
             Outcome::Ok
         }
-        Err(onsa_driver::BuildError::Usage(m)) => cannot_work(m),
+        Err(onsa_driver::BuildError::Usage(m)) => cannot_work(io, m),
         Err(
             onsa_driver::BuildError::Diagnostics { sources, diagnostics }
             | onsa_driver::BuildError::Manifest { sources, diagnostics, .. },
-        ) => print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::of(&diagnostics)),
-        Err(onsa_driver::BuildError::Internal { sources, error }) => internal(&sources, &error),
+        ) => print_diagnostics(io, Form::Text, &sources, &diagnostics, Outcome::of(&diagnostics)),
+        Err(onsa_driver::BuildError::Internal { sources, error }) => internal(io, &sources, &error),
     })
 }
 
@@ -696,5 +790,39 @@ mod tests {
         let codes: Vec<u8> =
             [Outcome::Ok, Outcome::Problems, Outcome::CannotWork, Outcome::Internal].iter().map(|o| o.code()).collect();
         assert_eq!(codes, [0, 1, 2, 101]);
+    }
+
+    /// Run `args` (after `onsa`) with buffers for the outputs: (exit code, stdout, stderr).
+    fn run_with(args: &[&str], out: &mut (dyn Write + Send)) -> (u8, String) {
+        let cli = Cli::try_parse_from(std::iter::once("onsa").chain(args.iter().copied())).unwrap();
+        let mut err = Vec::new();
+        let code = run_command(cli.command, &mut Io::new(out, &mut err, &Disk));
+        (code, String::from_utf8(err).unwrap())
+    }
+
+    #[test]
+    fn a_command_writes_to_the_outputs_it_is_given() {
+        let mut out = Vec::new();
+        assert_eq!(run_with(&["explain", "E0811"], &mut out), (0, String::new()));
+        assert!(String::from_utf8(out).unwrap().contains("E0811"));
+        let mut out = Vec::new();
+        assert_eq!(run_with(&["explain", "E99"], &mut out), (2, "onsa: unknown diagnostic code `E99`\n".into()));
+        assert!(out.is_empty());
+    }
+
+    /// A failure to write the standard output is exit 2 with its message on the standard error, once.
+    #[test]
+    fn a_failed_write_to_the_standard_output_is_exit_2() {
+        struct Closed;
+        impl Write for Closed {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("closed"))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let (code, err) = run_with(&["explain", "E0811"], &mut Closed);
+        assert_eq!((code, err.as_str()), (2, "onsa: cannot write to standard output: closed\n"));
     }
 }

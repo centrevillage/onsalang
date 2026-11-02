@@ -19,4 +19,4 @@ workspace = true
 
 [[bin]]
 name = "onsa"
-path = "src/main.rs"
+path = "src/bin/onsa.rs"
