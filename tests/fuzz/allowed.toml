@@ -568,3 +568,17 @@ left = "expected `…` or `…`, found `…`"
 input = "tests/fuzz/7434abe6.onsa"
 reasons = ["S-384"]
 note = "an input with two errors in one unit: a blank between a name and its `~` (E0020) and a `(` and a `{` never closed; the E0020 hides the second, and the candidate that takes the blank out leaves it (the fuzz of X-20/U1 at 0ad8c01, also before it)"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected `…` or `…`, found identifier"
+input = "tests/fuzz/4d70eed7.onsa"
+reasons = ["R-356"]
+note = "an input with two errors: a `{` on the next line and a missing `,` in the struct literal (`2 u`); the candidate of the `{`, reported first, leaves the E0002 of the missing `,` (W5-01 U2's cases moved the mutants)"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected newline or `…`, found integer literal"
+input = "tests/fuzz/1e227865.onsa"
+reasons = ["R-356"]
+note = "an input with two errors: an `else` on the next line and two expressions on one line in the block (`2 6`); the candidate of the `else`, reported first, leaves the E0002 of the second error (W5-01 U2's cases moved the mutants)"

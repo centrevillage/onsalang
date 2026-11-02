@@ -1,0 +1,2 @@
+fn e(c:l)->I{if c{}
+else{2 6//~
