@@ -1,0 +1,6 @@
+const B: Bool = !true
+
+@export
+pub fn f() -> Bool {
+  B
+}

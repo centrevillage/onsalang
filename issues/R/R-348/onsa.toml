@@ -1,0 +1,11 @@
+[package]
+name = "k"
+edition = "2026"
+
+[export]
+prefix = "k_"
+
+[targets.c]
+kind = "source"
+lang = "c"
+platform = "host"
