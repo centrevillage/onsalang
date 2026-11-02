@@ -1,0 +1,4 @@
+fn g(inout xs: [Buf[F32]; 2], b: Buf[F32]) -> U32 uses {Alloc} {
+  xs.fill!(b)
+  xs.len()
+}
