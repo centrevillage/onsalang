@@ -65,8 +65,8 @@ BASES_KEPT = 8  # the base binaries kept in target/base (M-3; 8 for the narrowed
 DEBUG_DIR_LIMIT = 8 * 2**30
 PARENT = 3  # the exit of an item whose findings wait for the parent (M-5): not 1, not CANNOT_RUN
 # The tools of the narrowable items: the note of a work check whose diff touches them names them.
-FUZZ_TOOLS = ("tools/fuzz.py", "tools/narrowing.py")
-FMT_TOOLS = ("tools/fmt_props.py", "tools/narrowing.py")
+FUZZ_TOOLS = ("tools/fuzz.py", "tools/batch.py", "tools/narrowing.py")
+FMT_TOOLS = ("tools/fmt_props.py", "tools/batch.py", "tools/narrowing.py")
 # The data under tools/ the self-test does not read: a diff in tools/ that touches only these does not run it in a
 # work check (X-1 U10). The self-test writes its own table of the allowed names; `builtin-names` checks the real one.
 SELFTEST_UNREAD = ("tools/builtin_names.toml",)

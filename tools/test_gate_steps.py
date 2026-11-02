@@ -69,8 +69,9 @@ class RealSteps(unittest.TestCase):
             ["pending", "ignores", "gap-marks", "diag-registry", "diag-negatives", "builtin-names", "spec-examples",
              "spec-sections", "default-inits", "docs", "docs-fmt", "docs-due", "cargo-features", "cross-check"]))  # fmt: skip
         self.assertEqual({s.name: s.narrows for s in steps if s.narrows},
-                         {"fuzz": ("tools/fuzz.py", "tools/narrowing.py"),
-                          **{n: ("tools/fmt_props.py", "tools/narrowing.py") for n in ("fmt-props", "fmt-cst")}})  # fmt: skip
+                         {"fuzz": ("tools/fuzz.py", "tools/batch.py", "tools/narrowing.py"),
+                          **{n: ("tools/fmt_props.py", "tools/batch.py", "tools/narrowing.py")
+                             for n in ("fmt-props", "fmt-cst")}})  # fmt: skip
         for s in steps:
             for p in s.narrows:
                 self.assertTrue((gate.TOOLS / Path(p).relative_to("tools")).is_file(), p)

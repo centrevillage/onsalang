@@ -141,6 +141,13 @@ configuration), unless `--binary` names it; the fix stage runs
 `<target directory>/debug/onsa_cases` (`--cases-binary`). `--time-budget` bounds the
 whole run: when it is spent, the remaining mutants and truncations do not
 run and the item fails (it never passes on fewer inputs than it says).
+The commands of both run in `onsa_cases --serve`, one process per thread
+and no file per input (`batch.Pool`, W4-18 U10c): an input that ends the
+server (a stack overflow aborts it, and the command again) or takes more
+than `TIMEOUT` runs again as before, a file and a process of the command;
+the item fails when the server ends where the command does not crash (a
+binary without `--serve` too) and past `batch.MAX_DEATHS` ends. The base
+binaries (`--base`) run each input as before.
 
 Exit 0 when nothing new crashes and the replay agrees with the list, 1
 otherwise, 2 on a usage error (or when the compiler cannot be built).
@@ -164,6 +171,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import batch  # noqa: E402
 import narrowing  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
@@ -185,9 +193,8 @@ MINIMIZE_RUNS = 400
 MINIMIZE_SECONDS = 60  # per crash class
 # One mutant in FIX_EVERY goes through the fix stage (W3-17); the saved inputs all do.
 FIX_EVERY = 4
-# The paths given to one run of `onsa_cases --fix-same-place`.
-FIX_BATCH = 400
 FIX_COMMAND = "fix-same-place"
+NAME = "m.onsa"  # the name of an input's file, as the commands show it
 # The classes of the fix stage that the spec puts outside the contract, or that an R keeps (R-207).
 ALLOWED = FUZZ_DIR / "allowed.toml"
 ALLOWED_FIELDS = ("class", "left", "input", "reasons", "note")
@@ -277,35 +284,35 @@ def classify(command, returncode, stderr, timed_out=False):
     return Crash(f"exit {returncode}|{message_head(raw or '')}", name, "\n".join(lines[:4]))
 
 
-class Runner:
-    """Runs the compiler on inputs, each in a directory of its own."""
+def crashed(command, result):
+    """Whether a `batch.Result` of `command` is a crash (`batch.Pool`)."""
+    return classify(command, result.code, result.err, timed_out=result.code is None) is not None
 
-    def __init__(self, argv, work):
-        self.argv = list(argv)
-        self.work = Path(work)
-        self.work.mkdir(parents=True, exist_ok=True)
+
+def pool(argv, fix_argv, work, serve=True):
+    """The `batch.Pool` of the compiler `argv` and of `fix_argv` (`onsa_cases`, whose `--serve` answers the
+    commands of both, W4-18 U10c); with `serve` False, each input in a process of its own (the base's)."""
+    argv, fix_argv = ([os.path.abspath(a[0]), *a[1:]] if a else [] for a in (argv, fix_argv))
+    return batch.Pool([*fix_argv, "--serve"] if serve else None,
+                      lambda words: [*(fix_argv if words[0].startswith("--") else argv), *words], work, TIMEOUT, crashed)
+
+
+class Runner:
+    """Runs the compiler's commands on inputs (`batch.Pool`)."""
+
+    def __init__(self, pool):
+        self.pool = pool
 
     def crashes(self, text, commands=ONSA_COMMANDS):
         """The crashes of the commands on `text` (a str whose bytes are
         `encode(text)`)."""
-        d = Path(tempfile.mkdtemp(dir=self.work))
-        try:
-            path = d / "m.onsa"
-            path.write_bytes(encode(text))
-            out = []
-            for cmd in commands:
-                try:
-                    r = subprocess.run(
-                        [*self.argv, *cmd, str(path)], capture_output=True, timeout=TIMEOUT
-                    )
-                    c = classify(cmd, r.returncode, r.stderr.decode("utf-8", "replace"))
-                except subprocess.TimeoutExpired:
-                    c = classify(cmd, None, "", timed_out=True)
-                if c:
-                    out.append(c)
-            return out
-        finally:
-            shutil.rmtree(d, ignore_errors=True)
+        out = []
+        for cmd in commands:
+            r = self.pool.run(cmd, [(NAME, encode(text))])
+            c = classify(cmd, r.code, r.err, timed_out=r.code is None)
+            if c:
+                out.append(c)
+        return out
 
 
 def normalized(text):
@@ -323,13 +330,10 @@ def fix_signature(v):
 
 
 class FixRunner:
-    """Runs `onsa_cases --fix-same-place` on inputs, written to a directory
-    of their own (W3-17)."""
+    """Runs `onsa_cases --fix-same-place` on inputs (`batch.Pool`), `jobs` at once (W3-17)."""
 
-    def __init__(self, argv, work):
-        self.argv = list(argv)
-        self.work = Path(work)
-        self.work.mkdir(parents=True, exist_ok=True)
+    def __init__(self, pool, jobs):
+        self.pool, self.jobs = pool, jobs
         # Inputs `onsa check` cannot read either (not UTF-8): no candidate to check, counted.
         self.unreadable = 0
 
@@ -337,38 +341,26 @@ class FixRunner:
         """For each text, its violations as `Crash`es (the command is
         `FIX_COMMAND`). Raises RuntimeError when the tool fails (never a
         silent pass)."""
-        d = Path(tempfile.mkdtemp(dir=self.work))
-        try:
-            paths = []
-            for i, text in enumerate(texts):
-                path = d / f"m{i}.onsa"
-                path.write_bytes(encode(text))
-                paths.append(str(path))
-            out = []
-            deadline = time.monotonic() + timeout
-            for start in range(0, len(paths), FIX_BATCH):
-                batch = paths[start:start + FIX_BATCH]
-                left = deadline - time.monotonic()
-                if left <= 0:
-                    raise RuntimeError(f"the time ran out after {start} of {len(paths)} inputs")
-                try:
-                    r = subprocess.run([*self.argv, "--" + FIX_COMMAND, *batch], capture_output=True, timeout=left)
-                except subprocess.TimeoutExpired:
-                    raise RuntimeError(f"timed out after {start} of {len(paths)} inputs") from None
-                try:
-                    items = json.loads(r.stdout) if r.returncode == 0 else None
-                except ValueError:
-                    items = None
-                if not isinstance(items, list) or len(items) != len(batch):
-                    err = r.stderr.decode("utf-8", "replace").strip().splitlines()
-                    raise RuntimeError(f"exit {r.returncode}: {err[-1] if err else 'no list of results'}")
-                for item in items:
-                    if item.get("unreadable"):
-                        self.unreadable += 1
-                    out.append([violation_crash(v) for v in item.get("violations", [])])
-            return out
-        finally:
-            shutil.rmtree(d, ignore_errors=True)
+        deadline = time.monotonic() + timeout
+
+        def item(i):
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"the time ran out at input {i} of {len(texts)}")
+            r = self.pool.run(("--" + FIX_COMMAND,), [(NAME, encode(texts[i]))])
+            try:
+                items = json.loads(r.out) if r.code == 0 else None
+            except ValueError:
+                items = None
+            if r.code is None or not isinstance(items, list) or len(items) != 1:
+                err = r.err.strip().splitlines()
+                raise RuntimeError(f"timed out at input {i} of {len(texts)}" if r.code is None
+                                   else f"exit {r.code}: {err[-1] if err else 'no list of results'}")
+            return items[0]
+
+        with ThreadPoolExecutor(self.jobs) as ex:
+            items = list(ex.map(item, range(len(texts))))
+        self.unreadable += sum(1 for i in items if i.get("unreadable"))
+        return [[violation_crash(v) for v in i.get("violations", [])] for i in items]
 
 
 def violation_crash(v):
@@ -568,7 +560,7 @@ def base_shows(base, crash, text, seconds, work):
     if seconds <= 0:
         return False, "no time left"
     try:
-        found = FixRunner(base.onsa_cases, work).violations([text], min(TIMEOUT, seconds))[0]
+        found = FixRunner(pool((), base.onsa_cases, work, serve=False), 1).violations([text], min(TIMEOUT, seconds))[0]
     except RuntimeError as e:
         return False, str(e)
     return any(v.signature == crash.signature and v.left == crash.left for v in found), None
@@ -805,8 +797,8 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     tells a new class of the fix stage from one before. Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / WORK
-    runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
-    fixer = FixRunner(fix_argv, runner.work / "fix")
+    served = pool(argv, fix_argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
+    runner, fixer = Runner(served), FixRunner(served, jobs)
     failures = []
     start = time.time()
     deadline = time.monotonic() + time_budget
@@ -821,6 +813,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     try:
         picked = narrowing.pick(seed_files, selection, root) if selection else None
     except narrowing.NarrowError as e:
+        served.close()
         out(f"fuzz: cannot narrow the seeds: {e}")
         return 2
     inputs, cuts, swept_cuts, chosen = plan(seed_files, per_seed, version, deep, truncated, swept,
@@ -888,7 +881,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
             # A crash fails even when it is from before (GF-3): the base does not run it.
             shown, why = False, None
             if isinstance(base, narrowing.Base) and c.command == FIX_COMMAND:
-                shown, why = base_shows(base, c, small, deadline - time.monotonic(), runner.work / "base")
+                shown, why = base_shows(base, c, small, deadline - time.monotonic(), served.work / "base")
             if shown and narrowed:
                 before.append(f"pre-existing (the base {base.shown} shows it): {c.command}: {signature} "
                               f"(seed {seed}, {which})")
@@ -896,7 +889,8 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
                 failures.append(f"{line} (pre-existing: the base {base.shown} shows it)")
             else:
                 failures.append(line + (f" (the base cannot tell: {why})" if why else ""))
-    shutil.rmtree(runner.work, ignore_errors=True)
+    failures += served.close()
+    shutil.rmtree(served.work, ignore_errors=True)
 
     if isinstance(base, narrowing.Base):
         base_part = f"; base {base.shown}: {len(before)} pre-existing"
@@ -1069,9 +1063,13 @@ def sort_command(args):
         return 2
     target, binary, cases = tools
     with tempfile.TemporaryDirectory(prefix="onsa-fuzz-sort-") as work:
-        runner = Runner([str(binary)], work)
-        return sort_inputs(args.root, runner, FixRunner([str(cases)], runner.work / "fix"), args.jobs,
-                           target / WORK / NEW, args.go)
+        served = pool([str(binary)], [str(cases)], work)
+        code = sort_inputs(args.root, Runner(served), FixRunner(served, args.jobs), args.jobs, target / WORK / NEW,
+                           args.go)
+        failures = served.close()
+    for f in failures:
+        print(f"FAIL {f}")
+    return 1 if failures else code
 
 
 def binaries(args):

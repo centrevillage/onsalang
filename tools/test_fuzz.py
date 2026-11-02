@@ -5,6 +5,7 @@ Alone: python3 -B tools/test_fuzz.py
 """
 import dataclasses
 import io
+import os
 import re
 import shutil
 import sys
@@ -54,9 +55,37 @@ sys.exit(1 if "e" in text else 0)
 """
 
 
+# A stand-in for `onsa_cases --serve` (W4-18 U10c): each request runs the fakes (the compiler is
+# `fake_onsa.py` beside it, or $FAKE_SERVE_ONSA) on its files in a directory of its own; a fake ended
+# by a signal ends the server with SIGKILL, as a stack overflow aborts the real one.
+FAKE_SERVE = r"""
+import os, subprocess, sys, tempfile
+if sys.argv[1:] == ["--serve"]:
+    here = os.path.dirname(os.path.abspath(__file__))
+    onsa = os.environ.get("FAKE_SERVE_ONSA", os.path.join(here, "fake_onsa.py"))
+    inp, out = sys.stdin.buffer, sys.stdout.buffer
+    while line := inp.readline():
+        words, n = line.decode().rstrip("\n").rsplit("\t", 1)
+        with tempfile.TemporaryDirectory() as d:
+            names = []
+            for _ in range(int(n)):
+                name, size = inp.readline().decode().rstrip("\n").rsplit("\t", 1)
+                with open(os.path.join(d, name), "wb") as f:
+                    f.write(inp.read(int(size)))
+                names.append(name)
+            script = os.path.abspath(__file__) if words.startswith("--") else onsa
+            r = subprocess.run([sys.executable, "-B", script, *words.split(" "), *names], cwd=d, capture_output=True)
+        if r.returncode < 0:
+            os.kill(os.getpid(), 9)
+        out.write(f"{r.returncode}\t{len(r.stdout)}\t{len(r.stderr)}\n".encode() + r.stdout + r.stderr)
+        out.flush()
+    sys.exit(0)
+"""
+
+
 # A stand-in for `onsa_cases --fix-same-place` (W3-17): an input with `BADCANDIDATE` breaks the
 # contract of a fix candidate; with `CRASH_FIX` in a path list's first input, the tool fails.
-FAKE_CASES = r"""
+FAKE_CASES = FAKE_SERVE + r"""
 import json, sys
 assert sys.argv[1] == "--fix-same-place"
 out = []
@@ -274,7 +303,8 @@ class Fuzz(TempRepo):
         self.assertEqual(code, 0, text)
 
     def test_minimize_keeps_the_class(self):
-        runner = fuzz.Runner(self.argv, self.repo.root / "work")
+        runner = fuzz.Runner(fuzz.pool(self.argv, self.fix_argv, self.repo.root / "work"))
+        self.addCleanup(runner.pool.close)
         text = "fn a() {}\nfn b() { X }\nfn c() {}\n"
         sig = runner.crashes(text)[0].signature
         small = fuzz.minimize(runner, text, sig)
@@ -441,8 +471,10 @@ class Fuzz(TempRepo):
         files = fuzz.seeds(self.repo.root)
         self.assertEqual(fuzz.encode(files[0][1]), raw)
         echo = self.repo.write("echo.py", "import sys\nsys.stdout.buffer.write(open(sys.argv[-1], 'rb').read())\n")
-        runner = fuzz.Runner([sys.executable, "-B", str(echo)], self.repo.root / "work")
-        self.assertEqual(runner.crashes(files[0][1]), [])
+        runner = fuzz.Runner(fuzz.pool([sys.executable, "-B", str(echo)], self.fix_argv, self.repo.root / "work"))
+        self.addCleanup(runner.pool.close)
+        with mock.patch.dict("os.environ", {"FAKE_SERVE_ONSA": str(echo)}):
+            self.assertEqual(runner.crashes(files[0][1]), [])
 
     def test_deep_mutants_only_on_request(self):
         # only the mutants are made here; none of them runs (an overflow aborts)
@@ -618,8 +650,9 @@ class Fuzz(TempRepo):
     # X9-23: `fuzz.py sort`, with the fake compiler and fix stage (a signal is a SIGKILL, rules/common.md 3.1).
     def sort(self, go=False):
         lines = []
-        runner = fuzz.Runner(self.argv, self.repo.root / "target" / "fuzz" / "work-sort")
-        fixer = fuzz.FixRunner(self.fix_argv, runner.work / "fix")
+        served = fuzz.pool(self.argv, self.fix_argv, self.repo.root / "target" / "fuzz" / "work-sort")
+        runner, fixer = fuzz.Runner(served), fuzz.FixRunner(served, 2)
+        self.addCleanup(served.close)
         code = fuzz.sort_inputs(self.repo.root, runner, fixer, 2, self.new_dir, go, out=lines.append)
         return code, "\n".join(lines)
 
@@ -734,8 +767,13 @@ class Fuzz(TempRepo):
             calls.clear()
             self.assertEqual(fuzz.main(["sort", *base, "--go", "--jobs", "3"]), 0)
             (root, runner, fixer, jobs, new_dir, go), = calls
-            self.assertEqual((root, runner.argv, fixer.argv, jobs, new_dir, go),
-                             (self.repo.root, ["onsa"], ["onsa_cases"], 3, self.new_dir, True))
+            # one pool: onsa_cases --serve, and each command the way before (W4-18 U10c)
+            served = runner.pool
+            self.assertEqual((root, fixer.pool is served, fixer.jobs, jobs, new_dir, go),
+                             (self.repo.root, True, 3, 3, self.new_dir, True))
+            self.assertEqual((served.serve, served.fallback(("check",)), served.fallback(("--fix-same-place",))),
+                             ([os.path.abspath("onsa_cases"), "--serve"], [os.path.abspath("onsa"), "check"],
+                              [os.path.abspath("onsa_cases"), "--fix-same-place"]))
             with self.assertRaises(SystemExit) as e:
                 quiet(fuzz.main, ["sort", *base, "--per-seed", "1"])
             self.assertEqual(e.exception.code, 2)
