@@ -21,6 +21,8 @@ pub enum Expr { Lit(Lit, Ty), Local(LocalId), Const(ConstId),
 pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr) }
 ```
 
+（略記。今の定義は `crates/onsa_core/src/ir.rs`）
+
 - 全ての式に型が付く。ジェネリクスは無い（単相化済み）。レートは無い（flow は降下済み）。
 - `Prim` は `std.math` の `target` 宣言と組込みメソッド（`trunc_i32_sat`、`to_bits`、`Span.len` など）。`PrimId` の一覧を `onsa_core::prim` に置き、各バックエンドはこの一覧に対して対応表を持つ（表の欠けはテストで検出）。
 - `verify(Module)` は、常に（release も）段の境目ごとに走らせる（降下と正規化の後、ターゲットの pass の後）。失敗は内部エラー（終了コード 101、診断コード無し。S-67）で、破った規則の番号、関数名、Core の位置を報告し、その関数の Core のダンプを不具合の報告用に残す（レビュー R-82）。検証器は D-15 に従い、Core の構造から性質を確かめる。

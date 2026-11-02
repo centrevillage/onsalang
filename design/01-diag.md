@@ -15,3 +15,5 @@ pub struct Diagnostic {
 ```
 
 JSON は §18.1 の形そのもの（`span` は `file` / `line` / `col` / `end_line` / `end_col` に展開し、`end_line` は常に出す。列は文字で数える）。挿入は空の範囲の置き換えで表し、`insert_before` / `insert_after` は持たない（レビュー R-87、S-81）。修正候補の範囲は CST のトークンの範囲から作る（R-86）。
+
+`FileId` は利用者のファイルを 0 から数える。std など一度だけ読んで共有するファイルは `SHARED_BASE`（`1 << 31`）以上の番号を `SharedFiles` が持ち、各 `SourceMap` に `share` で付ける（X-20）。テキストの診断の引用行は `quote.rs` の一か所が切る（幅 120 字。R-345、R-346）。
