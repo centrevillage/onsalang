@@ -126,7 +126,10 @@ The properties (`--property`):
 fmt(p) is the standard output of `onsa_cases --fmt p` (`--cases-binary`),
 which formats with the function of `onsa fmt` and ends as it does, but
 writes no file: `onsa fmt p` would replace the file and sync it to the disk
-(`spec/tools.md` §3.6) for nearly every input (X-1 U12).
+(`spec/tools.md` §3.6) for nearly every input (X-1 U12). Every command gets
+its inputs as texts, asked of `onsa_cases --serve` (`tools/batch.py`: one
+process per thread, no file written, W4-18 U10c); an input whose server
+ends runs alone, in files under the work directory.
 
 The perturbations come from a generator seeded with the version, the path,
 the source, the kind and the index (`fuzz.seeded_random`): the same tree
@@ -158,9 +161,7 @@ import functools
 import os
 import re
 import shutil
-import subprocess
 import sys
-import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -178,7 +179,6 @@ ROOT = repo.ROOT
 # Changing the version changes every perturbation (a new set of inputs).
 VERSION = "1"
 PER_KIND = 2
-TIMEOUT = 20  # seconds per run
 TIME_BUDGET = 300  # seconds for the whole run
 PROPERTIES = ("core", "cst")
 KINDS = ("space", "blank", "comment", "break", "continue", "inside", "mixed")
@@ -999,27 +999,21 @@ class Failure:
 
 
 class Onsa:
+    """The commands of the compiler `argv` and of `fmt_argv` (`onsa_cases`), asked of its `--serve`
+    (`fuzz.pool`, each run within `fuzz.TIMEOUT`); an input whose server ends runs alone under `work`."""
+
     def __init__(self, argv, work, fmt_argv):
-        self.argv = list(argv)
-        self.fmt_argv = list(fmt_argv)  # `onsa_cases`
-        self.work = Path(work)
-        self.work.mkdir(parents=True, exist_ok=True)
+        self.pool = fuzz.pool(argv, fmt_argv, work)
 
-    def run(self, *args):
-        """(exit code, stdout bytes, stderr str) of the compiler; the code is None on a timeout."""
-        return self.call([*self.argv, *map(str, args)])
+    def run(self, words, *files):
+        """(exit code, stdout bytes, stderr str) of the command of `words` (`onsa`'s, or `--fmt`: on the
+        standard output what `onsa fmt` would write) on `files` ([`file`]); the code is None on a timeout."""
+        r = self.pool.run(tuple(words), files)
+        return r.code, r.out, r.err
 
-    def fmt(self, path):
-        """The same of `onsa_cases --fmt path`: on the standard output, what `onsa fmt path` would write."""
-        return self.call([*self.fmt_argv, "--fmt", str(path)])
-
-    @staticmethod
-    def call(argv):
-        try:
-            r = subprocess.run(argv, capture_output=True, timeout=TIMEOUT)
-        except subprocess.TimeoutExpired:
-            return None, b"", f"more than {TIMEOUT} s"
-        return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace")
+    def close(self):
+        """End the servers: the failures of the run (`batch.Pool.close`)."""
+        return self.pool.close()
 
     def crash(self, cmd, code, err):
         """The crash (internal error, signal, raw panic, time out) of a run, or None."""
@@ -1027,31 +1021,26 @@ class Onsa:
         return None if c is None else f"{c.command}: {c.signature}"
 
 
-def write(path, text):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(fuzz.encode(text))
-    return path
+def file(name, text):
+    """A file of a command: its name (the path the command shows) and the bytes of `text`."""
+    return name, fuzz.encode(text)
 
 
-def fmt_text(onsa, path, text):
-    """Format `text` written to `path`: (the formatted text or None, the failure or None). The failure is
-    ("internal", what) or ("rejected", what). Formatted, `path` holds the formatted text, as after
-    `onsa fmt path`, but written here (no sync; `onsa_cases --fmt` writes no file)."""
-    write(path, text)
-    code, out, err = onsa.fmt(path)
+def fmt_text(onsa, name, text):
+    """Format `text` as the file `name`: (the formatted text or None, the failure or None). The failure is
+    ("internal", what) or ("rejected", what)."""
+    code, out, err = onsa.run(("--fmt",), file(name, text))
     crash = onsa.crash(("fmt",), code, err)
     if crash:
         return None, ("internal", crash)
     if code != 0:
         return None, ("rejected", f"fmt exit {code}: " + " | ".join(err.strip().splitlines()[:2]))
-    if out != fuzz.encode(text):
-        path.write_bytes(out)
     return fuzz.decode(out), None
 
 
 @dataclass(frozen=True)
 class Baseline:
-    path: Path  # the source, written
+    file: tuple  # the source, a file of a command ([`file`])
     formatted: str  # fmt(x)
     tokens: tuple  # written_tokens(fmt(x))
     levels: list  # the levels of the items of x (`dump --levels`), None when they failed
@@ -1066,7 +1055,7 @@ def written_tokens(text):
 
 def diff_ast(onsa, a, b):
     """The failure of `onsa diff --ast a b` as (prop, detail), or None when there is no difference."""
-    code, out, err = onsa.run("diff", "--ast", a, b)
+    code, out, err = onsa.run(("diff", "--ast"), a, b)
     crash = onsa.crash(("diff", "--ast"), code, err)
     if crash:
         return "internal", crash
@@ -1076,16 +1065,16 @@ def diff_ast(onsa, a, b):
 
 
 def check_input(onsa, d, name, case, label, kind, text, base, prop):
-    """The failures of one input. `base` is the Baseline of the source (None
-    for the source itself). Returns (failures, the Baseline of this input or
-    None when fmt did not accept it)."""
+    """The failures of one input, whose files are named `<d>/<a, b or c>/<name>`. `base` is the
+    Baseline of the source (None for the source itself). Returns (failures, the Baseline of this
+    input or None when fmt did not accept it)."""
     fails = []
 
     def fail(what, detail):
         fails.append(Failure(what, case, label, detail.strip(), text))
 
     if prop == "cst":
-        code, out, err = onsa.run("dump", "--cst", write(d / "a" / name, text))
+        code, out, err = onsa.run(("dump", "--cst"), file(f"{d}/a/{name}", text))
         crash = onsa.crash(("dump", "--cst"), code, err)
         if crash:
             fail("internal", crash)
@@ -1095,25 +1084,25 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
             fail("cst", "the output is not the source")
         return fails, None
 
-    a = write(d / "a" / name, text)
+    a = file(f"{d}/a/{name}", text)
     if base is not None:
         # The perturbation itself changes no program (§2.5).
-        problem = diff_ast(onsa, base.path, a)
+        problem = diff_ast(onsa, base.file, a)
         if problem:
             fail("perturbation" if problem[0] == "ast" else problem[0], "x and p: " + problem[1])
 
-    b = d / "b" / name
-    formatted, problem = fmt_text(onsa, b, text)
+    formatted, problem = fmt_text(onsa, f"{d}/b/{name}", text)
     if problem:
         # The caller decides whether the source itself may be unread.
         if problem[0] == "internal" or label != "source":
             fail(*problem)
         return fails, None
 
+    b = file(f"{d}/b/{name}", formatted)
     problem = diff_ast(onsa, a, b)
     if problem:
         fail(*problem)
-    code, out, err = onsa.run("fmt", "--check", b)
+    code, out, err = onsa.run(("fmt", "--check"), b)
     crash = onsa.crash(("fmt", "--check"), code, err)
     if crash:
         fail("internal", crash)
@@ -1138,7 +1127,7 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
     for problem in comment_problems(text, formatted):
         fail("comments", problem)
     if base is not None:
-        convergence_problems(onsa, d / "c" / name, kind, formatted, base, fail)
+        convergence_problems(onsa, f"{d}/c/{name}", kind, formatted, base, fail)
 
     # 5 and 8 on `x`, on the inputs with markers, and on an input whose rewrites differ from those of `x`.
     tokens, levels = written_tokens(formatted), None if base is None else base.levels
@@ -1161,23 +1150,23 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
     return fails, Baseline(a, formatted, tokens, levels)
 
 
-def convergence_problems(onsa, path, kind, formatted, base, fail):
+def convergence_problems(onsa, name, kind, formatted, base, fail):
     """The normal form with the comments (7): `fmt(p) == fmt(x)` for space and
-    blank; for comment and mixed, `fmt(p)` without the markers, written to
-    `path` and formatted again, is `fmt(x)`."""
+    blank; for comment and mixed, `fmt(p)` without the markers, formatted again
+    as the file `name`, is `fmt(x)`."""
     if kind in CONVERGES and formatted != base.formatted:
         fail("convergence", "fmt(p) is not fmt(x): " + first_difference(base.formatted, formatted))
     if kind in CONVERGES_STRIPPED:
-        again, problem = fmt_text(onsa, path, strip_markers(formatted))
+        again, problem = fmt_text(onsa, name, strip_markers(formatted))
         if problem:
             fail(problem[0], "on fmt(p) without the markers: " + problem[1])
         elif again != base.formatted:
             fail("convergence", "fmt(p) without the markers is not fmt(x): " + first_difference(base.formatted, again))
 
 
-def levels_of(onsa, path):
-    """The levels of each item of `path` (`onsa dump --levels`), or the failure as (prop, detail)."""
-    code, out, err = onsa.run("dump", "--levels", path)
+def levels_of(onsa, f):
+    """The levels of each item of the file `f` (`onsa dump --levels`), or the failure as (prop, detail)."""
+    code, out, err = onsa.run(("dump", "--levels"), f)
     crash = onsa.crash(("dump", "--levels"), code, err)
     if crash:
         return None, ("internal", crash)
@@ -1204,10 +1193,10 @@ def depth_problem(onsa, want, after):
 DIAGNOSTIC = re.compile(r"^\S.*?:\d+:\d+: (?:error|warning)\[([A-Z]\d{4})\]", re.M)
 
 
-def verdict(onsa, path):
-    """`onsa check path` as (its exit code, the codes of its diagnostics in order), or the failure
-    as (prop, detail)."""
-    code, out, err = onsa.run("check", path)
+def verdict(onsa, f):
+    """`onsa check` of the file `f` as (its exit code, the codes of its diagnostics in order), or the
+    failure as (prop, detail)."""
+    code, out, err = onsa.run(("check",), f)
     crash = onsa.crash(("check",), code, err)
     if crash:
         return None, ("internal", crash)
@@ -1288,7 +1277,7 @@ def sources(root, cmd):
 
 def run(root, argv, prop, per_kind, version, jobs, cases_cmd, fmt_argv, out=print, target_dir=None,
         time_budget=TIME_BUDGET, minimize=False, show=20, verbose=False, selection=None):
-    """The gate item. `argv` runs the compiler, `fmt_argv` `onsa_cases` (for `--fmt`); `selection`
+    """The gate item. `argv` runs the compiler, `fmt_argv` `onsa_cases` (`--serve`, `--fmt`); `selection`
     (`narrowing.Selection`, None for the whole run) picks the sources. Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fmt_props"
@@ -1321,29 +1310,25 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, fmt_argv, out=prin
     def one_source(src):
         if time.monotonic() > deadline:
             return None
-        d = Path(tempfile.mkdtemp(dir=tmp))
         name = Path(src.path).name
-        try:
-            inputs = inputs_of(src.path, src.text, per_kind, version)
-            fails, base = check_input(onsa, d / "0", name, src.path, *inputs[0], None, prop)
-            if base is None and prop != "cst":
-                if fails:  # it failed inside
-                    return ("ran", fails, 1)
-                if src.unread_ok:
-                    return ("skipped", [], 0)
-                why = ("fmt does not read it, and it is not a pending test case, a negative example of a "
-                       "syntax code or of mode none")
-                return ("ran", [Failure("unread", src.path, "source", why, src.text)], 1)
-            ran = 1
-            for k, (label, kind, p) in enumerate(inputs[1:], 1):
-                if time.monotonic() > deadline:
-                    return None
-                f, _ = check_input(onsa, d / str(k), name, src.path, label, kind, p, base, prop)
-                fails += f
-                ran += 1
-            return ("ran", fails, ran)
-        finally:
-            shutil.rmtree(d, ignore_errors=True)
+        inputs = inputs_of(src.path, src.text, per_kind, version)
+        fails, base = check_input(onsa, "0", name, src.path, *inputs[0], None, prop)
+        if base is None and prop != "cst":
+            if fails:  # it failed inside
+                return ("ran", fails, 1)
+            if src.unread_ok:
+                return ("skipped", [], 0)
+            why = ("fmt does not read it, and it is not a pending test case, a negative example of a "
+                   "syntax code or of mode none")
+            return ("ran", [Failure("unread", src.path, "source", why, src.text)], 1)
+        ran = 1
+        for k, (label, kind, p) in enumerate(inputs[1:], 1):
+            if time.monotonic() > deadline:
+                return None
+            f, _ = check_input(onsa, str(k), name, src.path, label, kind, p, base, prop)
+            fails += f
+            ran += 1
+        return ("ran", fails, ran)
 
     with ThreadPoolExecutor(jobs) as ex:
         results = list(ex.map(one_source, files))
@@ -1374,9 +1359,10 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, fmt_argv, out=prin
         for f in failures[:show] if show >= 0 else failures:
             fail_dir.mkdir(parents=True, exist_ok=True)
             saved = fail_dir / (f.case.replace("/", "__").removesuffix(".onsa") + f".{f.label.replace('#', '')}.onsa")
-            saved.write_bytes(fuzz.encode(shrink(onsa, f, tmp) if minimize else f.text))
+            saved.write_bytes(fuzz.encode(shrink(onsa, f) if minimize else f.text))
             out(f"FAIL {f.prop}: {f.case} [{f.label}]: {f.detail}\n     input: {saved}")
     finally:
+        problems += onsa.close()
         shutil.rmtree(tmp, ignore_errors=True)
     if show >= 0 and len(failures) > show:
         out(f"... {len(failures) - show} more failures (--show -1 shows all)")
@@ -1395,7 +1381,7 @@ SHRINKABLE = (
 ERROR_CODE = re.compile(r"error\[(E\d{4})\]")
 
 
-def shrink(onsa, failure, tmp):
+def shrink(onsa, failure):
     """A smaller input on which the same property fails: for `internal` the
     same crash; for `rejected` the same first code, while the input without
     what the perturbations add (`unperturb`) is still read. The other
@@ -1403,25 +1389,20 @@ def shrink(onsa, failure, tmp):
     if failure.prop not in SHRINKABLE:
         return failure.text
     name = Path(failure.case).name
-    tmp.mkdir(parents=True, exist_ok=True)
 
     def code_of(detail):
         return (ERROR_CODE.findall(detail) or [None])[0]
 
     def still_fails(candidate):
-        d = Path(tempfile.mkdtemp(dir=tmp))
-        try:
-            if failure.prop == "rejected":
-                _, problem = fmt_text(onsa, d / "a" / name, candidate)
-                if not problem or problem[0] != "rejected" or code_of(problem[1]) != code_of(failure.detail):
-                    return False
-                return fmt_text(onsa, d / "b" / name, unperturb(candidate))[1] is None
-            fails, _ = check_input(onsa, d, name, failure.case, "shrink", None, candidate, None, "core")
-            if failure.prop == "internal":
-                return any(f.prop == "internal" and f.detail == failure.detail for f in fails)
-            return any(f.prop == failure.prop for f in fails)
-        finally:
-            shutil.rmtree(d, ignore_errors=True)
+        if failure.prop == "rejected":
+            _, problem = fmt_text(onsa, f"a/{name}", candidate)
+            if not problem or problem[0] != "rejected" or code_of(problem[1]) != code_of(failure.detail):
+                return False
+            return fmt_text(onsa, f"b/{name}", unperturb(candidate))[1] is None
+        fails, _ = check_input(onsa, "0", name, failure.case, "shrink", None, candidate, None, "core")
+        if failure.prop == "internal":
+            return any(f.prop == "internal" and f.detail == failure.detail for f in fails)
+        return any(f.prop == failure.prop for f in fails)
 
     return fuzz.ddmin(failure.text, still_fails)
 
@@ -1435,7 +1416,7 @@ def main(argv=None):
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--binary", type=Path, help="the compiler (default: build <target directory>/debug/onsa)")
     ap.add_argument("--cases-binary", type=Path,
-                    help="onsa_cases, for --fmt (default: build <target directory>/debug/onsa_cases)")
+                    help="onsa_cases, for --serve and --fmt (default: build <target directory>/debug/onsa_cases)")
     ap.add_argument("--time-budget", type=float, default=TIME_BUDGET, help="seconds for the whole run")
     ap.add_argument("--minimize", action="store_true", help="shrink the failing inputs that are shown")
     ap.add_argument("--show", type=int, default=20, help="failures to show (-1: all)")
@@ -1457,7 +1438,7 @@ def main(argv=None):
     cases = args.cases_binary
     if cases is None:
         if not fuzz.build(args.root, cases=True):
-            print("fmt-props: cannot build onsa_cases (cargo build -p onsa_tests --bin onsa_cases)", file=sys.stderr)
+            print(f"fmt-props: cannot build onsa_cases ({' '.join(repo.CASES_BUILD)})", file=sys.stderr)
             return 2
         cases = target / "debug" / "onsa_cases"
     return run(

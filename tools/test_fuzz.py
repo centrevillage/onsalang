@@ -20,7 +20,7 @@ import fuzz  # noqa: E402
 import narrowing  # noqa: E402
 import repo  # noqa: E402
 import spec_blocks  # noqa: E402
-from selftest_support import entry, quiet, quiet_out, TempRepo  # noqa: E402
+from selftest_support import entry, FAKE_SERVE, quiet, quiet_out, TempRepo  # noqa: E402
 
 
 def allowed(cls, inp, reasons=("S-45",), note="n", left="m"):
@@ -52,34 +52,6 @@ if "Y" in text and check:
 if "Z" in text:
     os.kill(os.getpid(), 9)
 sys.exit(1 if "e" in text else 0)
-"""
-
-
-# A stand-in for `onsa_cases --serve` (W4-18 U10c): each request runs the fakes (the compiler is
-# `fake_onsa.py` beside it, or $FAKE_SERVE_ONSA) on its files in a directory of its own; a fake ended
-# by a signal ends the server with SIGKILL, as a stack overflow aborts the real one.
-FAKE_SERVE = r"""
-import os, subprocess, sys, tempfile
-if sys.argv[1:] == ["--serve"]:
-    here = os.path.dirname(os.path.abspath(__file__))
-    onsa = os.environ.get("FAKE_SERVE_ONSA", os.path.join(here, "fake_onsa.py"))
-    inp, out = sys.stdin.buffer, sys.stdout.buffer
-    while line := inp.readline():
-        words, n = line.decode().rstrip("\n").rsplit("\t", 1)
-        with tempfile.TemporaryDirectory() as d:
-            names = []
-            for _ in range(int(n)):
-                name, size = inp.readline().decode().rstrip("\n").rsplit("\t", 1)
-                with open(os.path.join(d, name), "wb") as f:
-                    f.write(inp.read(int(size)))
-                names.append(name)
-            script = os.path.abspath(__file__) if words.startswith("--") else onsa
-            r = subprocess.run([sys.executable, "-B", script, *words.split(" "), *names], cwd=d, capture_output=True)
-        if r.returncode < 0:
-            os.kill(os.getpid(), 9)
-        out.write(f"{r.returncode}\t{len(r.stdout)}\t{len(r.stderr)}\n".encode() + r.stdout + r.stderr)
-        out.flush()
-    sys.exit(0)
 """
 
 

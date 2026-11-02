@@ -20,6 +20,38 @@ import repo
 import spec_blocks
 
 
+# A stand-in for `onsa_cases --serve` (W4-18 U10c; tools/test_fuzz.py, tools/test_fmt_props.py): each
+# request runs the fakes (the compiler is `fake_onsa.py` beside it, or $FAKE_SERVE_ONSA; words starting
+# with `--`, this script) on its files in a directory of its own; a fake ended by a signal ends the server
+# with SIGKILL, as a stack overflow aborts the real one.
+FAKE_SERVE = r"""
+import sys
+if sys.argv[1:] == ["--serve"]:
+    import os, subprocess, tempfile  # here alone: the fakes it runs start sooner
+    here = os.path.dirname(os.path.abspath(__file__))
+    onsa = os.environ.get("FAKE_SERVE_ONSA", os.path.join(here, "fake_onsa.py"))
+    inp, out = sys.stdin.buffer, sys.stdout.buffer
+    while line := inp.readline():
+        words, n = line.decode().rstrip("\n").rsplit("\t", 1)
+        with tempfile.TemporaryDirectory() as d:
+            names = []
+            for _ in range(int(n)):
+                name, size = inp.readline().decode().rstrip("\n").rsplit("\t", 1)
+                path = os.path.join(d, name)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as f:
+                    f.write(inp.read(int(size)))
+                names.append(name)
+            script = os.path.abspath(__file__) if words.startswith("--") else onsa
+            r = subprocess.run([sys.executable, "-B", script, *words.split(" "), *names], cwd=d, capture_output=True)
+        if r.returncode < 0:
+            os.kill(os.getpid(), 9)
+        out.write(f"{r.returncode}\t{len(r.stdout)}\t{len(r.stderr)}\n".encode() + r.stdout + r.stderr)
+        out.flush()
+    sys.exit(0)
+"""
+
+
 # The IDs of the made-up repository (`Repo`): {ID: (status, title)}. Only `status` and the heading are
 # written: `pending.load_docs` reads no field table.
 REPO_IDS = {

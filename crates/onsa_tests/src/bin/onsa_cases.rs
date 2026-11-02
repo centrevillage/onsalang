@@ -101,7 +101,8 @@
 //! `cannot-apply`, `limit`). Exits 0, 2 on a usage error.
 //!
 //! `--fmt FILE` formats with the command's function (`onsa_driver::format_file`,
-//! with its check of the output, `spec/tools.md` §3.5) and ends as `onsa fmt`
+//! with its check of the output, `spec/tools.md` §3.5; `onsa_tests::single_files::fmt`,
+//! which `--serve` runs too) and ends as `onsa fmt`
 //! does: 2 when the file cannot be read or has a syntax diagnostic (§3.1;
 //! the diagnostics go to the standard error, as text, since the standard
 //! output is the formatted text), 101 on an internal error, printed as the
@@ -365,7 +366,6 @@ fn fix_loop_args(args: &[String]) -> Result<(onsa_tests::fix_loop::Options, bool
     Ok((options, json, files))
 }
 
-/// `--fmt FILE`: the text `onsa fmt FILE` would write, on the standard output.
 fn phases(args: &[String]) -> ExitCode {
     let (mut lower, mut rounds, mut paths) = (false, 3, Vec::new());
     let mut args = args.iter();
@@ -399,26 +399,11 @@ fn usage(e: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
+/// `--fmt FILE`: the text `onsa fmt FILE` would write, on the standard output.
 fn fmt(path: &str) -> ExitCode {
     // Read and refused as the command reads them (a file that is not UTF-8 too).
-    let text = match std::fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln!("onsa: cannot read {path}: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let mut sources = onsa_diag::SourceMap::default();
-    let file = sources.add(onsa_driver::slash_path(std::path::Path::new(path)), text);
-    // The diagnostics are made inside the guard, as the command makes them: a broken span is an internal error.
-    let formatted = onsa_driver::guard_on_stack(|| {
-        onsa_driver::format_file(&sources, file).map(|f| match f {
-            onsa_driver::Formatted::Text(out) => Ok(out),
-            onsa_driver::Formatted::Syntax(d) => Err(onsa_diag::to_text(&sources, &d)),
-        })
-    });
-    match formatted.and_then(|r| r) {
-        Ok(Ok(out)) => {
+    match onsa_tests::single_files::fmt(path, std::fs::read_to_string(path)) {
+        Ok(out) => {
             use std::io::Write;
             let mut stdout = std::io::stdout().lock();
             if let Err(e) = stdout.write_all(out.as_bytes()).and_then(|()| stdout.flush()) {
@@ -427,13 +412,9 @@ fn fmt(path: &str) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Ok(Err(diagnostics)) => {
-            eprint!("{diagnostics}");
-            ExitCode::from(2)
-        }
-        Err(e) => {
-            eprint!("onsa: {}", e.render(&sources));
-            ExitCode::from(101)
+        Err((code, err)) => {
+            eprint!("{err}");
+            ExitCode::from(code)
         }
     }
 }

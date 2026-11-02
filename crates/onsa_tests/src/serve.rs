@@ -10,8 +10,9 @@
 //!
 //! The words are those of `onsa` (`check`, `fmt --check`, `diff --ast`, …):
 //! read by `onsa_cli::Cli` and run by `onsa_cli::run_command` as `onsa` runs
-//! them, the files read from the request ([`Texts`]); or `--fix-same-place`,
-//! the function of `onsa_cases --fix-same-place`. The names are the paths
+//! them, the files read from the request ([`Texts`]); or `--fix-same-place`
+//! and `--fmt`, the functions of those forms of `onsa_cases` (`--fmt` takes
+//! one file). The names are the paths
 //! the command shows (no tab, no newline). A request that cannot be read
 //! ends the serving with an error: the tool sees the process end and runs
 //! that input alone.
@@ -91,6 +92,15 @@ pub fn answer(request: &Request) -> Answer {
         let read = |name: &str| crate::single_files::text_of(texts.bytes(Path::new(name)).map(<[u8]>::to_vec));
         let out = crate::single_files::fix_same_place(&names, read);
         return Answer { code: 0, out: out.into_bytes(), err: Vec::new() };
+    }
+    if request.words == "--fmt" {
+        let [(name, _)] = request.files.as_slice() else {
+            return Answer { code: 2, out: Vec::new(), err: b"onsa_cases --serve: --fmt takes one file\n".to_vec() };
+        };
+        return match crate::single_files::fmt(name, onsa_cli::Files::read(&texts, Path::new(name))) {
+            Ok(out) => Answer { code: 0, out: out.into_bytes(), err: Vec::new() },
+            Err((code, err)) => Answer { code, out: Vec::new(), err: err.into_bytes() },
+        };
     }
     run_cli(std::iter::once("onsa").chain(request.words.split(' ')).chain(names), &texts)
 }
@@ -237,6 +247,26 @@ mod tests {
         // Read as `std::fs::read_to_string` reads a file that is not UTF-8.
         let a = ask("check", &[("m.onsa", b"\xff")]);
         assert_eq!((a.code, text(&a.err)), (2, "onsa: cannot read m.onsa: stream did not contain valid UTF-8\n"));
+    }
+
+    #[test]
+    fn fmt_answers_as_onsa_cases_fmt() {
+        // What `onsa fmt` would write, on the standard output, which `fmt --check` reads as formatted.
+        let a = ask("--fmt", &[("d/m.onsa", UNFORMATTED)]);
+        assert_eq!((a.code, a.err.is_empty()), (0, true));
+        assert_ne!(a.out, UNFORMATTED);
+        assert_eq!(ask("fmt --check", &[("d/m.onsa", &a.out)]).code, 0);
+        assert_eq!(ask("--fmt", &[("m.onsa", CLEAN)]).out, CLEAN);
+        // A syntax diagnostic on the standard error, as text, with the name of the file.
+        let a = ask("--fmt", &[("d/m.onsa", b"fn (")]);
+        assert_eq!((a.code, a.out.is_empty()), (2, true));
+        assert!(text(&a.err).contains("d/m.onsa:1:"), "{}", text(&a.err));
+        let a = ask("--fmt", &[("m.onsa", b"\xff")]);
+        assert_eq!((a.code, text(&a.err)), (2, "onsa: cannot read m.onsa: stream did not contain valid UTF-8\n"));
+        for files in [&[][..], &[("a.onsa", CLEAN), ("b.onsa", CLEAN)]] {
+            let a = ask("--fmt", files);
+            assert_eq!((a.code, text(&a.err)), (2, "onsa_cases --serve: --fmt takes one file\n"));
+        }
     }
 
     #[test]

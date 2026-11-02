@@ -13,7 +13,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fmt_props  # noqa: E402
 import narrowing  # noqa: E402
-from selftest_support import entry, TempRepo  # noqa: E402
+from selftest_support import entry, FAKE_SERVE, TempRepo  # noqa: E402
 
 
 FAKE_FMT = r"""
@@ -115,7 +115,8 @@ class FmtProps(TempRepo):
 
     def setUp(self):
         super().setUp()
-        self.fake = self.repo.write("fake_onsa.py", FAKE_FMT)
+        # The fake is the compiler, `onsa_cases --fmt` and `onsa_cases --serve` (whose compiler is itself).
+        self.fake = self.repo.write("fake_onsa.py", FAKE_SERVE + FAKE_FMT)
         self.argv = [sys.executable, "-B", str(self.fake)]
         fmt_props.load_symbols(self.repo.root, self.cases_cmd([]))
 
@@ -389,19 +390,19 @@ class FmtProps(TempRepo):
 
     def test_no_file_is_formatted_in_place(self):
         # X-1 U12: fmt(p) is the standard output of `onsa_cases --fmt`; the compiler is asked `fmt --check` alone
-        # (`onsa fmt FILE` would sync the file to the disk), and the item writes the file of fmt(p) itself.
+        # (`onsa fmt FILE` would sync the file to the disk), and fmt(p) goes to the next command as a text.
         self.repo.write("tests/spec/a.onsa", "fn f() {\n  let x = g( a, b ) // c\n  x\n}\n")
-        calls, call = [], fmt_props.Onsa.call
+        calls, run = [], fmt_props.Onsa.run
 
-        def spy(argv):
-            calls.append(argv)
-            return call(argv)
+        def spy(onsa, words, *files):
+            calls.append(words)
+            return run(onsa, words, *files)
 
-        with mock.patch.object(fmt_props.Onsa, "call", staticmethod(spy)):
+        with mock.patch.object(fmt_props.Onsa, "run", spy):
             code, text = self.go()
         self.assertEqual(code, 0, text)
-        self.assertTrue([a for a in calls if a[-2] == "--fmt"], calls)
-        self.assertEqual([a for a in calls if "fmt" in a and "--check" not in a], [])
+        self.assertIn(("--fmt",), calls)
+        self.assertEqual([w for w in calls if "fmt" in w and "--check" not in w], [])
 
     def test_the_meaning_compares_the_exit_code_and_the_codes_alone(self):
         # fmt moves the line of the diagnostic (it drops the blank lines): its place and its text change,
@@ -421,10 +422,10 @@ class FmtProps(TempRepo):
         self.assertTrue({"space", "blank", "break", "comment", "mixed"} <= {kind for _, kind, _ in inputs}, inputs)
         asked, run = {"check": set(), "dump": set()}, fmt_props.Onsa.run
 
-        def spy(onsa, *args):
-            if args[0] in asked:
-                asked[args[0]].add(Path(args[-1]).parent.parent.name)  # <work>/<input>/{a,b}/<name>
-            return run(onsa, *args)
+        def spy(onsa, words, *files):
+            if words[0] in asked:
+                asked[words[0]].add(Path(files[-1][0]).parent.parent.name)  # <input>/{a,b}/<name>
+            return run(onsa, words, *files)
 
         with mock.patch.object(fmt_props.Onsa, "run", spy):
             code, text = self.go(per_kind=2)
