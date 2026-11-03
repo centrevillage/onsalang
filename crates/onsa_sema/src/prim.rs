@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use crate::Analysis;
 use crate::def::{DefId, DefKind};
-use crate::ty::{FloatKind, IntKind, Ty, TyId, Types};
+use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
 
 const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
 const INTS: [IntKind; 8] =
@@ -177,12 +177,10 @@ pub enum Prim {
     RemEuclid(IntKind),
     IsNan(FloatKind),
     IsFinite(FloatKind),
-    /// `xs.len()` of a `Span` / `Buf` (arrays fold to a literal).
+    /// `xs.len()` of a `Span` (an array's folds to a literal).
     Len,
     /// `xs.slice(from, to)` -> `Span` (panics when out of range).
     Slice,
-    /// `xs.get(i)` -> `Option[T]`.
-    Get,
     /// `xs.fill!(v)` (`inout` receiver).
     Fill,
     /// `xs.add_from!(other)` (`inout` receiver, `other: Span`).
@@ -220,7 +218,6 @@ impl Prim {
             Prim::IsFinite(k) => format!("is_finite.{}", k.name()),
             Prim::Len => "len".into(),
             Prim::Slice => "slice".into(),
-            Prim::Get => "get".into(),
             Prim::Fill => "fill".into(),
             Prim::AddFrom => "add_from".into(),
             Prim::CopyFrom => "copy_from".into(),
@@ -236,7 +233,7 @@ impl Prim {
     /// ([`PrimRow::instantiate`] the other way), without a `_`, so that a new
     /// primitive must say whether a declaration gives it. `None` for the ones
     /// no row gives yet (the members of the sequences come with their
-    /// declarations, W5-02 U5–U6). Of one Core makes itself, the family,
+    /// declarations, W5-02 U6). Of one Core makes itself, the family,
     /// which may have no row (`U32` to `F64` of a flow's rate).
     pub fn row_prim(&self) -> Option<PrimRow> {
         match self {
@@ -255,15 +252,12 @@ impl Prim {
             Prim::ToBits(k) => Some(PrimRow::ToBits(*k)),
             Prim::DivEuclid(k) => Some(PrimRow::DivEuclid(*k)),
             Prim::RemEuclid(k) => Some(PrimRow::RemEuclid(*k)),
-            Prim::IsNan(_)
-            | Prim::IsFinite(_)
-            | Prim::Len
-            | Prim::Slice
-            | Prim::Get
-            | Prim::Fill
-            | Prim::AddFrom
-            | Prim::CopyFrom
-            | Prim::BufZeroed => None,
+            Prim::Len => Some(PrimRow::Len),
+            Prim::Slice => Some(PrimRow::Slice),
+            Prim::Fill => Some(PrimRow::Fill),
+            Prim::AddFrom => Some(PrimRow::AddFrom),
+            Prim::CopyFrom => Some(PrimRow::CopyFrom),
+            Prim::IsNan(_) | Prim::IsFinite(_) | Prim::BufZeroed => None,
         }
     }
 
@@ -315,8 +309,16 @@ impl Scalar {
     /// member of (`F32` of `F32.from_bits`), then the type arguments `targs`
     /// of the use. Sema's types; lowering reads the same list through
     /// [`row_self`] in Core's.
+    /// The `Self` is read by its head: of `Span[T]`, its `T` is a type
+    /// argument of the use.
     pub fn of_use(a: &Analysis, def: DefId, targs: &[TyId]) -> Option<Vec<Scalar>> {
-        row_self(a, def).into_iter().chain(targs.iter().copied()).map(|t| Scalar::of(&a.types, t)).collect()
+        let own = row_self(a, def).map(|t| match a.types.get(t) {
+            Ty::Int(k) => Scalar::Int(*k),
+            Ty::Float(k) => Scalar::Float(*k),
+            _ => Scalar::Other,
+        });
+        let args = targs.iter().map(|&t| Scalar::of(&a.types, t));
+        own.map(Some).into_iter().chain(args).collect()
     }
 }
 
@@ -361,6 +363,13 @@ pub enum PrimRow {
     NarrowParts,
     /// `core.num.add_parts[T]` (and the others of the operation) at an integer.
     Parts(CheckedOp),
+    /// The members of `Span[T]` (§5.3), at any element its bounds admit;
+    /// `add_from` at a number.
+    Len,
+    Slice,
+    Fill,
+    CopyFrom,
+    AddFrom,
 }
 
 impl PrimRow {
@@ -394,6 +403,14 @@ impl PrimRow {
             PrimRow::ToBits(k) => own(args, Scalar::Float(k), Prim::ToBits(k)),
             PrimRow::DivEuclid(k) => own(args, Scalar::Int(k), Prim::DivEuclid(k)),
             PrimRow::RemEuclid(k) => own(args, Scalar::Int(k), Prim::RemEuclid(k)),
+            PrimRow::Len => Some(Prim::Len),
+            PrimRow::Slice => Some(Prim::Slice),
+            PrimRow::Fill => Some(Prim::Fill),
+            PrimRow::CopyFrom => Some(Prim::CopyFrom),
+            PrimRow::AddFrom => match args {
+                [Scalar::Other, Scalar::Int(_) | Scalar::Float(_)] => Some(Prim::AddFrom),
+                _ => None,
+            },
             PrimRow::FromFn => None,
         }
     }
@@ -460,6 +477,15 @@ pub fn rows() -> &'static [Row] {
             v.push(member(k.name(), "div_euclid", PrimRow::DivEuclid(k), 1));
             v.push(member(k.name(), "rem_euclid", PrimRow::RemEuclid(k), 1));
         }
+        // The members of `Span[T]` (§5.3).
+        let span = [
+            ("len", PrimRow::Len, 0),
+            ("slice", PrimRow::Slice, 2),
+            ("fill", PrimRow::Fill, 1),
+            ("copy_from", PrimRow::CopyFrom, 1),
+            ("add_from", PrimRow::AddFrom, 1),
+        ];
+        v.extend(span.map(|(name, prim, arity)| member(BuiltinTy::Span.name(), name, prim, arity)));
         // The integers wider than the significand (§3.3's table; the unit
         // test checks std's against `as`).
         use {FloatKind::*, IntKind::*};

@@ -13,7 +13,7 @@ use crate::body::bounds::Bounds;
 use crate::def::{DefId, DefKind, FnDef, GenericKind};
 use crate::flow_tests::std_package;
 use crate::prim::{MathFn, PrimRow, Scalar, key_of, row, rows};
-use crate::ty::{FloatKind, IntKind, Ty, TyId};
+use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, Module, Package, analyze};
 
 fn module(segments: &[&str], file: u32, src: &str) -> Module {
@@ -68,6 +68,12 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
         "I8.div_euclid",
         "core.num.narrow_parts",
         "core.num.div_parts",
+        // The members of `Span[T]` (§5.3, `std/core/seq.onsa`).
+        "Span.len",
+        "Span.slice",
+        "Span.fill",
+        "Span.copy_from",
+        "Span.add_from",
     ] {
         assert!(decls.contains_key(member), "no declaration `{member}` in {keys:?}");
     }
@@ -82,11 +88,14 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
 const INTS: [IntKind; 8] =
     [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
 
-/// The builtin types a type argument is tried at.
+/// The builtin types a type argument is tried at: a Shared and an Affine one
+/// too, which `Copy` keeps out (`Span[T]`, S-853).
 fn builtins(a: &mut Analysis) -> Vec<TyId> {
     let mut v: Vec<TyId> = INTS.iter().map(|&k| a.types.int(k)).collect();
     v.extend([a.types.float(FloatKind::F32), a.types.float(FloatKind::F64), a.types.bool(), a.types.unit()]);
     v.push(a.types.intern(Ty::Char));
+    let (f32, s) = (a.types.float(FloatKind::F32), a.types.builtin(BuiltinTy::Str, vec![]));
+    v.extend([s, a.types.builtin(BuiltinTy::Buf, vec![f32])]);
     v
 }
 
@@ -203,7 +212,7 @@ fn the_conversion_methods_are_where_as_does_not_convert() {
             }
             match (a.types.get(from), a.types.get(to)) {
                 (Ty::Int(_), Ty::Int(_)) => {
-                    let opt = a.types.builtin(crate::ty::BuiltinTy::Option, vec![to]);
+                    let opt = a.types.builtin(BuiltinTy::Option, vec![to]);
                     want.insert(format!("narrow_{lower}"), opt);
                 }
                 (_, Ty::Float(_)) => {

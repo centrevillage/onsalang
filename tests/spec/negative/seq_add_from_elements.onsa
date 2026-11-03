@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§3.2", "§6.3", "§18.1"]
+// fixes = 0
+
+// R-350 (S-855): `add_from!(other)` adds the elements of `other` to the elements of the receiver with `+`, so
+// the element has to be a number: "`add_from!` の要素は `AnyNum` に限る（E0416）", for the three receivers
+// `[T; N]`, `Buf[T]` and `Span[T]` (a `Bool`, a `Char` and an array are Copy, so `Buf` and `Span` accept them
+// as elements and the array has `slice` and `copy_from!`; only `add_from!` is the E0416 of the call). The
+// unsigned integers are numbers (`AnyNum`, values/seq_copy_elements.onsa). Before, the call passed the check and
+// ended in the internal error "arithmetic on Bool" of `onsa test`. No candidate (`fixes = 0`). One error per
+// function (P-01).
+
+pub fn bool_array(inout xs: [Bool; 2], ys: [Bool; 2]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn char_array(inout xs: [Char; 2], ys: [Char; 2]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn array_of_arrays(inout xs: [[F32; 2]; 2], ys: [[F32; 2]; 2]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn inner_array_of_bools(inout xs: [[Bool; 2]; 2], k: U32, ys: [Bool; 2]) {
+  xs[k].add_from!(ys) //~ E0416
+}
+
+pub fn bool_buf(inout b: Buf[Bool], ys: [Bool; 2]) {
+  b.add_from!(ys) //~ E0416
+}
+
+pub fn bool_span(inout s: Span[Bool], ys: Span[Bool]) {
+  s.add_from!(ys) //~ E0416
+}
+
+pub fn view_of_bools(inout xs: [Bool; 4], ys: [Bool; 2]) {
+  xs.slice(0, 2).add_from!(ys) //~ E0416
+}
+
+pub fn local_array_of_bools() {
+  var xs: [Bool; 2] = [true, false]
+  let ys: [Bool; 2] = [false, true]
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn fine_numbers(inout a: [U32; 2], b: [U32; 2], inout c: Span[I8], d: Span[I8], inout e: Buf[U8], f: [U8; 2]) {
+  a.add_from!(b)
+  c.add_from!(d)
+  e.add_from!(f)
+}

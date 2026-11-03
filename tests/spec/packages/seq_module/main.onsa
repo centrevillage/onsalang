@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§15.1", "§4.4", "§18.1"]
+// fixes = 0
+
+// The conditions of the methods of an array (S-853 (C): `get` and `fill!` need a Dup element, `slice`,
+// `copy_from!` and `add_from!` a Copy one, `add_from!` a number) are judged on the element type behind the
+// names of another module: the field of a struct and a type alias (§4.4) of the module `store`. The Copy
+// elements have the methods, the Affine ones (`Buf[F32]`) are the E0416 of the call. No candidate (`fixes = 0`).
+// One error per function (P-01).
+use store
+use store.{Frame, Owners, Rack}
+
+fn fine_field_of_copy_elements(inout r: Rack, v: F32) -> U32 {
+  r.xs.fill!(v)
+  r.xs.slice(0, 2).len()
+}
+
+fn fine_call_into_the_module(r: Rack) -> F32 {
+  store.total(r.xs)
+}
+
+fn fine_alias_of_copy_elements(inout f: Frame, g: Frame) -> U32 {
+  f.copy_from!(g)
+  f.add_from!(g)
+  f.len()
+}
+
+fn fine_len_of_affine_elements(r: Rack, o: Owners) -> U32 {
+  r.bufs.len() + o.len()
+}
+
+fn get_of_a_field(r: Rack) {
+  let _ = r.bufs.get(0) //~ E0416
+}
+
+fn fill_of_a_field(inout r: Rack, b: Buf[F32]) {
+  r.bufs.fill!(b) //~ E0416
+}
+
+fn slice_of_a_field(r: Rack) -> U32 {
+  r.bufs.slice(0, 1).len() //~ E0416
+}
+
+fn get_of_an_alias(o: Owners) {
+  let _ = o.get(1) //~ E0416
+}
+
+fn fill_of_an_alias(inout o: Owners, b: Buf[F32]) {
+  o.fill!(b) //~ E0416
+}
+
+fn copy_from_of_an_alias(inout o: Owners, p: Owners) {
+  o.copy_from!(p) //~ E0416
+}
+
+fn add_from_of_an_alias(inout o: Owners, p: Owners) {
+  o.add_from!(p) //~ E0416
+}

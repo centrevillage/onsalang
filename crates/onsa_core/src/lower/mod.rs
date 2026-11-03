@@ -347,7 +347,10 @@ impl<'a> Lowerer<'a> {
                     if let STy::Named(d, _) = self.a.types.get(i.self_ty) {
                         parts.push(self.a.def(*d).name.clone());
                     } else {
-                        parts.push(self.a.display_type(i.self_ty));
+                        // `[T; N]`, `Span[T]` of std (§5.3): by the names of the parameters.
+                        let param =
+                            |k: u32| i.generics.get(k as usize).map_or_else(|| format!("<{k}>"), |g| g.name.clone());
+                        parts.push(self.a.types.display(i.self_ty, &|d| self.a.def(d).name.clone(), &param));
                     }
                 }
                 _ => parts.push(self.a.def(o).name.clone()),

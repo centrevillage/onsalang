@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.5", "§4.6"]
+
+// The element of a type parameter is judged by what the parameter is known to be in the body (§4.5: a type
+// parameter has an implicit `Dup`, and `Copy` is a bound). So `[T, const N: U32]` has `len`, `get` and `fill!`
+// (T is Dup), `[T: Copy, const N: U32]` has `slice` and `copy_from!` too, and `[T: ?Dup, const N: U32]` has `len`
+// only. The same body with a weaker bound is the E0416 of negative/seq_generic_receivers.onsa. (`add_from!`
+// needs `T: AnyNum`, which is a bound that only std writes in this version, E0200 for a user, so there is no
+// fine generic `add_from!` here.)
+
+fn first_or[T, const N: U32](xs: [T; N], d: T) -> T {
+  match xs.get(0) {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+fn fill_all[T, const N: U32](inout xs: [T; N], v: T) {
+  xs.fill!(v)
+}
+
+fn view_len[T: Copy, const N: U32](xs: [T; N], a: U32, b: U32) -> U32 {
+  xs.slice(a, b).len()
+}
+
+fn copy_over[T: Copy, const N: U32](inout xs: [T; N], ys: [T; N]) {
+  xs.copy_from!(ys)
+}
+
+fn count[T: ?Dup, const N: U32](xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+fn count_copy[T: Copy, const N: U32](xs: [T; N]) -> U32 {
+  xs.len() + view_len(xs, 0, 1)
+}
+
+test "get and fill! of a type parameter that is Dup" {
+  var xs: [U32; 3] = [4, 5, 6]
+  assert first_or(xs, 99) == 4
+  fill_all(inout xs, 7)
+  assert xs[2] == 7
+  var flags: [Bool; 2] = [false, false]
+  fill_all(inout flags, true)
+  assert first_or(flags, false)
+  let empty: [F32; 0] = []
+  assert first_or(empty, 1.5) == 1.5
+}
+
+test "slice and copy_from! of a type parameter that is Copy" {
+  var xs: [F32; 4] = [0.0; 4]
+  let ys: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  copy_over(inout xs, ys)
+  assert xs[3] == 4.0
+  assert view_len(xs, 1, 4) == 3
+  assert view_len(ys, 2, 2) == 0
+  assert count_copy(ys) == 5
+}
+
+test "len of a type parameter with ?Dup" {
+  let bufs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(3)]
+  assert count(bufs) == 2
+  let xs: [U32; 5] = [0; 5]
+  assert count(xs) == 5
+}

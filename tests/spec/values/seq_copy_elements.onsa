@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.5", "§4.6", "§3.2"]
+
+// Elements that are Copy and not `F32`: every method of the list is there for them (§5.3: "`slice`・`copy_from!`・
+// `add_from!` は要素が Copy のとき持つ", S-853), and `add_from!` takes every number, the unsigned ones too
+// (S-855, R-350: "`add_from!` の要素は `AnyNum`"). `Bool` is Copy, so `get`, `fill!`, `slice` and `copy_from!` of
+// `[Bool; N]` are there; its `add_from!` is E0416 (negative/seq_add_from_elements.onsa). An array is Copy when its
+// element is, so `[[F32; 2]; 2]` has all of them but `add_from!`.
+
+fn bump(inout xs: [U32; 3], ys: [U32; 3]) {
+  xs.add_from!(ys)
+}
+
+// `d` is what a missing element gives, so that the `None` is told from both values.
+fn flag_at(xs: [Bool; 4], i: U32, d: Bool) -> Bool {
+  match xs.get(i) {
+    Some(f) => f,
+    None => d,
+  }
+}
+
+fn row_sum_at(rows: [[F32; 2]; 3], i: U32) -> F32 {
+  match rows.get(i) {
+    Some(r) => r[0] + r[1],
+    None => -1.0,
+  }
+}
+
+test "add_from! adds element by element, also on unsigned integers" {
+  var xs: [U32; 3] = [1, 2, 3]
+  let ys: [U32; 3] = [10, 20, 30]
+  bump(inout xs, ys)
+  assert xs[0] == 11
+  assert xs[1] == 22
+  assert xs[2] == 33
+  assert ys[2] == 30
+}
+
+test "add_from! on signed integers and on a view" {
+  var xs: [I32; 4] = [1, 2, 3, 4]
+  let ys: [I32; 2] = [-5, -6]
+  xs.slice(1, 3).add_from!(ys)
+  assert xs[0] == 1
+  assert xs[1] == -3
+  assert xs[2] == -3
+  assert xs[3] == 4
+}
+
+test "add_from! on a Buf of unsigned integers" {
+  var b: Buf[U32] = Buf.zeroed(3)
+  b.fill!(2)
+  let ys: [U32; 3] = [1, 2, 3]
+  b.add_from!(ys)
+  assert b[0] == 3
+  assert b[2] == 5
+}
+
+test "a Bool array has get, fill!, slice and copy_from!" {
+  var flags: [Bool; 4] = [false, false, false, false]
+  flags.fill!(true)
+  assert flags[3]
+  let off: [Bool; 2] = [false, false]
+  flags.slice(1, 3).copy_from!(off)
+  assert flags[0]
+  assert !flags[1]
+  assert !flags[2]
+  assert flags[3]
+  assert flags.slice(1, 4).len() == 3
+  assert flag_at(flags, 0, false)
+  assert !flag_at(flags, 1, true)
+  assert flag_at(flags, 4, true)
+  assert !flag_at(flags, 4, false)
+}
+
+test "an array of arrays has get, fill!, slice and copy_from!" {
+  var rows: [[F32; 2]; 3] = [[0.0; 2]; 3]
+  rows.fill!([1.0, 2.0])
+  assert rows[2][1] == 2.0
+  let other: [[F32; 2]; 1] = [[7.0, 8.0]]
+  rows.slice(1, 2).copy_from!(other)
+  assert rows[0][0] == 1.0
+  assert rows[1][0] == 7.0
+  assert rows[1][1] == 8.0
+  assert rows[2][0] == 1.0
+  assert rows.slice(0, 2).len() == 2
+  assert row_sum_at(rows, 1) == 15.0
+  assert row_sum_at(rows, 3) == -1.0
+}
+
+test "fill! of an inner array through xs[k]" {
+  var rows: [[F32; 2]; 2] = [[0.0; 2]; 2]
+  rows[1].fill!(3.0)
+  assert rows[0][0] == 0.0
+  assert rows[1][0] == 3.0
+  assert rows[1][1] == 3.0
+}

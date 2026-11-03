@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§9.2"]
+
+// `slice(from, to)` is the half-open range `[from, to)` of a `Span`, and "範囲外は panic" (§5.3, §9.2: "範囲外の添字
+// アクセス `xs[i]` と `xs.slice(from, to)`"). Inside the range, also the empty ranges at the start, in the middle
+// and at the end, it is a view of `to - from` elements. A view that goes beyond `len()` panics, for the three
+// receivers `[T; N]`, `Buf[T]` and `Span[T]`, and for a view of a view. (A range with `from > to` is not in this
+// case: the spec does not say whether it is "out of the range".)
+
+fn view_len(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+fn view_of(xs: Span[F32], a: U32, b: U32) -> U32 {
+  view_len(xs.slice(a, b))
+}
+
+test "slice inside the range is a view of to - from elements" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert view_len(xs.slice(0, 4)) == 4
+  assert view_len(xs.slice(1, 3)) == 2
+  assert view_len(xs.slice(2, 2)) == 0
+  assert view_len(xs.slice(0, 0)) == 0
+  assert view_len(xs.slice(4, 4)) == 0
+  assert view_len(xs.slice(3, 4)) == 1
+}
+
+test "slice of a Buf and of a Span inside the range" {
+  let b: Buf[F32] = Buf.zeroed(4)
+  assert view_len(b.slice(1, 4)) == 3
+  assert view_len(b.slice(4, 4)) == 0
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert view_of(xs, 1, 4) == 3
+  assert view_of(xs.slice(1, 4), 1, 3) == 2
+  assert view_of(xs.slice(1, 4), 3, 3) == 0
+}
+
+test "slice of an array past the end panics" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let n            = view_len(xs.slice(2, 5)) //~ PANIC "slice of an array past the end panics"
+  assert n == 3
+}
+
+test "slice of an array with both ends past the end panics" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let n            = view_len(xs.slice(5, 6)) //~ PANIC "slice of an array with both ends past the end panics"
+  assert n == 1
+}
+
+test "slice of an array that starts past the end and is empty panics" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let n            = view_len(xs.slice(5, 5)) //~ PANIC "slice of an array that starts past the end and is empty panics"
+  assert n == 0
+}
+
+test "slice of a Buf past the end panics" {
+  let b: Buf[F32] = Buf.zeroed(3)
+  let n           = view_len(b.slice(0, 4)) //~ PANIC "slice of a Buf past the end panics"
+  assert n == 4
+}
+
+test "slice of a Span past the end panics" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let n            = view_of(xs, 0, 5) //~ PANIC "slice of a Span past the end panics"
+  assert n == 5
+}
+
+test "slice of a view is checked against the view and not the array" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let n            = view_of(xs.slice(0, 2), 1, 3) //~ PANIC "slice of a view is checked against the view and not the array"
+  assert n == 2
+}

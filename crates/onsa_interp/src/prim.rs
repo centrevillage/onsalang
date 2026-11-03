@@ -4,7 +4,7 @@ use onsa_core::prim::{CheckedOp, MathFn, NAN_BITS_F32, NAN_BITS_F64, Prim};
 use onsa_core::{Arg, BinOp, FloatKind, IntKind, Overflow, Ty};
 use onsa_diag::Span;
 
-use crate::numeric::{float_of, int_of, math_f32, math_f64, mismatch, none, some, trunc_to_int};
+use crate::numeric::{float_of, int_of, math_f32, math_f64, mismatch, trunc_to_int};
 use crate::place::Frame;
 use crate::value::{SpanRef, Value, in_range, int_value, slot, zero_array};
 use crate::{Interp, R, internal, panic};
@@ -15,9 +15,7 @@ impl<'m> Interp<'m> {
     /// A primitive: its arguments, then the operation, in a function of its
     /// own, off the way down a recursion through an argument (R-05).
     pub(super) fn prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: &Ty, span: Span) -> R<Value> {
-        if let Prim::Len | Prim::Slice | Prim::Get | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed =
-            prim
-        {
+        if let Prim::Len | Prim::Slice | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed = prim {
             return self.seq_prim(f, prim, args, ty, span);
         }
         let mut vs = Vec::with_capacity(args.len());
@@ -46,11 +44,6 @@ impl<'m> Interp<'m> {
                     );
                 }
                 Ok(Value::Span(SpanRef { root: s.root, projs: s.projs, start: s.start + from, len: to - from }))
-            }
-            Prim::Get => {
-                let s = self.seq_of_arg(f, &args[0])?;
-                let i = self.eval_u32(f, &args[1].expr)?;
-                Ok(if i < s.len { some(self.seq_get(&s, i, span)?) } else { none() })
             }
             Prim::Fill => {
                 let s = self.seq_of_arg(f, &args[0])?;
@@ -207,7 +200,7 @@ impl<'m> Interp<'m> {
             }
             Prim::AssertNear => self.assert_near(prim, vs, span),
             Prim::Pending(_) => self.lacking(prim, span),
-            Prim::Len | Prim::Slice | Prim::Get | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed => {
+            Prim::Len | Prim::Slice | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed => {
                 internal(span, format!("the sequence primitive `{}` on values", prim.name()))
             }
         }
@@ -252,7 +245,6 @@ pub(crate) fn supports(p: &Prim) -> bool {
         | Prim::IsFinite(_)
         | Prim::Len
         | Prim::Slice
-        | Prim::Get
         | Prim::Fill
         | Prim::AddFrom
         | Prim::CopyFrom

@@ -1,0 +1,39 @@
+//! The methods of the sequences (spec §5.3): `[T; N]`, `Buf[T]` and
+//! `Span[T]`. An array and a `Buf` take from `Span[T]` the methods their own
+//! `impl`s have not, with the receiver as a `Span` of it (§5.3). The bounds
+//! are the conditions of the elements (S-853): `get` and `fill` of an array
+//! need a Dup element (the implicit `Dup` of `T`), the others a Copy one
+//! (`Span[T]`), `add_from` a number (`AnyNum`, S-855). `len` of an array is
+//! the compiler's, of any element (W5-17 declares it here).
+//!
+//! An `impl` of an array, of `Span[T]` and a `target fn` that returns a
+//! `Span` are std's alone (§15.2).
+
+impl[T, const N: U32] [T; N] {
+  /// `Some` of the element at `i`, `None` past the end.
+  pub rt fn get(self, i: U32) -> Option[T] { if i < N { Some(self[i]) } else { None } }
+  /// Every element set to `v`.
+  pub rt fn fill(inout self, v: T) {
+    for i in 0 ..< N {
+      self[i] = v
+    }
+  }
+}
+
+impl[T: Copy] Span[T] {
+  /// The number of the elements.
+  pub target rt fn len(self) -> U32
+  /// The view of the elements `from ..< to` (out of range, a panic).
+  pub target rt fn slice(self, from: U32, to: U32) -> Span[T]
+  /// `Some` of the element at `i`, `None` past the end.
+  pub rt fn get(self, i: U32) -> Option[T] { if i < self.len() { Some(self[i]) } else { None } }
+  /// Every element set to `v`.
+  pub target rt fn fill(inout self, v: T)
+  /// Each element set to the one of `other` at its index.
+  pub target rt fn copy_from(inout self, other: Span[T])
+}
+
+impl[T: AnyNum] Span[T] {
+  /// The element of `other` at its index added to each element.
+  pub target rt fn add_from(inout self, other: Span[T])
+}

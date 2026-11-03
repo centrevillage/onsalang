@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§6.3", "§18.1"]
+// fixes = 0
+
+// The element of a type parameter has only what the declaration says (§4.5: an implicit `Dup`, `?Dup` takes it
+// off, `Copy` is a bound), so the conditions of §5.3 are judged on that in the body of a generic function, and
+// an unmet one is the E0416 of the call (S-853 (C), S-855). `[T, const N: U32]` is Dup and has `len`, `get` and
+// `fill!` (values/seq_generic_receivers.onsa), but a view and a copy of the elements need `T: Copy`; with
+// `T: ?Dup` only `len` is left; and `T: Copy` is not a number, so `add_from!` needs `AnyNum` (a bound that only
+// std writes in this version, E0200 for a user, so there is no fine generic `add_from!`). No candidate
+// (`fixes = 0`). One error per function (P-01).
+
+pub fn slice_of_a_dup_parameter[T, const N: U32](xs: [T; N]) -> U32 {
+  xs.slice(0, 1).len() //~ E0416
+}
+
+pub fn copy_from_of_a_dup_parameter[T, const N: U32](inout xs: [T; N], ys: [T; N]) {
+  xs.copy_from!(ys) //~ E0416
+}
+
+pub fn get_of_a_maybe_affine_parameter[T: ?Dup, const N: U32](xs: [T; N]) -> U32 {
+  match xs.get(0) { //~ E0416
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn fill_of_a_maybe_affine_parameter[T: ?Dup, const N: U32](inout xs: [T; N], v: T) {
+  xs.fill!(v) //~ E0416
+}
+
+pub fn slice_of_a_maybe_affine_parameter[T: ?Dup, const N: U32](xs: [T; N]) -> U32 {
+  xs.slice(0, 1).len() //~ E0416
+}
+
+pub fn add_from_of_a_copy_parameter[T: Copy, const N: U32](inout xs: [T; N], ys: [T; N]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn add_from_of_a_dup_parameter[T, const N: U32](inout xs: [T; N], ys: [T; N]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn fine_len_of_a_maybe_affine_parameter[T: ?Dup, const N: U32](xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+pub fn fine_the_methods_with_copy[T: Copy, const N: U32](inout xs: [T; N], ys: [T; N]) -> U32 {
+  xs.copy_from!(ys)
+  xs.slice(0, 1).len() + xs.len()
+}

@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§7", "§6.1", "§18.1"]
+// fixes = 0
+
+// The E0416 of an array method (S-853 (C), S-855) is the error of the call wherever the call stands: in a branch
+// of an `if`, in the body of a `for`, in an arm of a `match`, in the argument of another call, in the body of a
+// closure and in a generic function. The element is `Buf[F32]` (Affine; not Dup for `get` and `fill!`, not
+// Copy for `slice`, `copy_from!` and `add_from!`) or `Bool` (a number is needed for `add_from!`). No candidate
+// (`fixes = 0`). One error per function (P-01).
+
+pub fn in_a_branch(xs: [Buf[F32]; 2], c: Bool) -> U32 {
+  if c {
+    xs.slice(0, 1).len() //~ E0416
+  } else {
+    0
+  }
+}
+
+pub fn in_a_loop(xs: [Buf[F32]; 2], n: U32) -> U32 {
+  var total: U32 = 0
+  for _ in 0 ..< n {
+    total = total + xs.slice(0, 1).len() //~ E0416
+  }
+  total
+}
+
+pub fn in_an_arm(xs: [Buf[F32]; 2], o: Option[U32]) -> U32 {
+  match o {
+    Some(k) => xs.slice(k, k + 1).len(), //~ E0416
+    None => 0,
+  }
+}
+
+pub fn in_a_call_argument(xs: [Buf[F32]; 2]) -> U32 {
+  max2(xs.slice(0, 1).len(), 1) //~ E0416
+}
+
+fn max2(a: U32, b: U32) -> U32 {
+  if a < b { b } else { a }
+}
+
+pub fn in_a_closure(xs: [Buf[F32]; 2]) -> U32 {
+  let f = fn(ys: [Buf[F32]; 2]) -> U32 { ys.slice(0, 1).len() } //~ E0416
+  f.(xs)
+}
+
+pub fn fill_in_a_branch(inout xs: [Buf[F32]; 2], b: Buf[F32], c: Bool) {
+  if c {
+    xs.fill!(b) //~ E0416
+  }
+}
+
+pub fn add_from_in_a_loop(inout xs: [Bool; 2], ys: [Bool; 2], n: U32) {
+  for _ in 0 ..< n {
+    xs.add_from!(ys) //~ E0416
+  }
+}
+
+pub fn get_in_a_generic_function[T: ?Dup, const N: U32](xs: [T; N], n: U32) {
+  for _ in 0 ..< n {
+    let _ = xs.get(0) //~ E0416
+  }
+}
+
+pub fn fine_in_a_loop(xs: [F32; 4], n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< n {
+    total = total + xs.slice(0, 1).len() + i
+  }
+  total
+}

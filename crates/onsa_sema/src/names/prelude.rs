@@ -49,7 +49,7 @@ const ALLOC: &str = "Alloc";
 
 /// Fills `a.prelude` with the compiler's names, and `a.builtin_key` with the
 /// key of each generic builtin (the type with no arguments) its associated
-/// items are under. Before the items are collected.
+/// items are under, and `a.array_key`. Before the items are collected.
 pub(super) fn build(a: &mut Analysis) {
     let mut put = |name: &str, b: Builtin| a.prelude.insert(name.to_string(), Entity::Builtin(b));
     for (i, (name, _)) in TRAITS.iter().enumerate() {
@@ -67,6 +67,8 @@ pub(super) fn build(a: &mut Analysis) {
         };
         a.prelude.insert(name.to_string(), Entity::Builtin(Builtin::Scalar(t)));
     }
+    let error = a.types.error();
+    a.array_key = Some(a.types.intern(crate::ty::Ty::Array(error, crate::ty::Len::Const(0))));
     for b in GENERICS {
         let key = a.types.builtin(b, Vec::new());
         a.builtin_key.insert(b, key);

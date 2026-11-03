@@ -26,8 +26,9 @@ impl<'p> Sema<'p> {
             imp.self_ty = self_ty;
         }
         let (key_def, key_builtin) = self.member_key(id).unwrap_or((None, None));
-        // The E0307 of an alias is the error of the heading.
-        if !aliased {
+        // The E0307 of an alias is the error of the heading; std's `impl`
+        // of the arrays has none (§15.2, S-861).
+        if !aliased && !self.std_array_impl(id) {
             self.impl_heading(&cx, i, self_ty, key_def.is_some() || key_builtin.is_some());
         }
         // A name the heading reads and the check does not (§18.1,

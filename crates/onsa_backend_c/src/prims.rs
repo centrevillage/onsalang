@@ -35,7 +35,6 @@ pub(crate) fn supports(p: &Prim) -> bool {
         | Prim::IsFinite(_)
         | Prim::Len
         | Prim::Slice
-        | Prim::Get
         | Prim::Fill
         | Prim::AddFrom
         | Prim::CopyFrom => true,

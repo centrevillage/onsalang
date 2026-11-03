@@ -1,0 +1,138 @@
+// onsa.toml
+// [package]
+// name = "seq_get_values"
+// edition = "2026"
+//
+// [export]
+// prefix = "sgv_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.1"]
+//
+// [[test.host]]
+// name = "get in C of an array"
+// target = "host"
+// fn = "seq_get_values.array_get"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = 10 },
+//   { call = "fn", args = { i = 2 }, status = 0, result = 30 },
+//   { call = "fn", args = { i = 3 }, status = 0, result = -1 },
+//   { call = "fn", args = { i = 4 }, status = 0, result = -1 },
+//   { call = "fn", args = { i = 4294967295 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "get in C of a Span"
+// target = "host"
+// fn = "seq_get_values.span_get"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = 10 },
+//   { call = "fn", args = { i = 3 }, status = 0, result = 40 },
+//   { call = "fn", args = { i = 4 }, status = 0, result = -1 },
+//   { call = "fn", args = { i = 5 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "get in C of a view stops at the end of the view"
+// target = "host"
+// fn = "seq_get_values.view_get"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = 20 },
+//   { call = "fn", args = { i = 1 }, status = 0, result = 30 },
+//   { call = "fn", args = { i = 2 }, status = 0, result = -1 },
+//   { call = "fn", args = { i = 3 }, status = 0, result = -1 },
+// ]
+
+// `get(i) -> Option[T]` of the three sequences (S-71, S-794, §5.3: `Span[T]` has `get(i) -> Option[T]`, and
+// `[T; N]` and `Buf[T]` have the same ones): `Some` in the range, `None` at `len()` and beyond, with no panic.
+// The same values are checked in the interpreter (the `test` blocks) and in the C of the target (the
+// `[[test.host]]` groups above). `None` is -1 here. The C backend has no `Buf` in this version (E0200), so `Buf`
+// is checked in the interpreter only. The element conditions are in negative/seq_get_*.onsa.
+
+fn pick(xs: Span[I32], i: U32) -> I32 {
+  match xs.get(i) {
+    Some(v) => v,
+    None => -1,
+  }
+}
+
+@export
+pub fn array_get(i: U32) -> I32 {
+  let xs: [I32; 3] = [10, 20, 30]
+  match xs.get(i) {
+    Some(v) => v,
+    None => -1,
+  }
+}
+
+// A `Span` argument: the array, passed on whole, is read through the `Span`.
+@export
+pub fn span_get(i: U32) -> I32 {
+  let xs: [I32; 4] = [10, 20, 30, 40]
+  pick(xs, i)
+}
+
+// The view `xs.slice(1, 3)` is the elements 20 and 30; the 40 after it is not reached.
+@export
+pub fn view_get(i: U32) -> I32 {
+  let xs: [I32; 4] = [10, 20, 30, 40]
+  pick(xs.slice(1, 3), i)
+}
+
+test "get of an array is Some in the range and None at len and beyond" {
+  let xs: [U32; 3] = [10, 20, 30]
+  assert xs.get(0) == Some(10)
+  assert xs.get(2) == Some(30)
+  assert xs.get(3) == None
+  assert xs.get(4) == None
+  assert xs.get(4294967295) == None
+}
+
+test "get of an array of length 1 and of an empty array" {
+  let one: [F32; 1]  = [1.5]
+  let none: [F32; 0] = []
+  assert one.get(0) == Some(1.5)
+  assert one.get(1) == None
+  assert none.get(0) == None
+}
+
+test "get of a Buf" {
+  var b: Buf[F32] = Buf.zeroed(2)
+  b[1] = 2.5
+  assert b.get(0) == Some(0.0)
+  assert b.get(1) == Some(2.5)
+  assert b.get(2) == None
+  assert b.get(3) == None
+}
+
+test "get of a Span passed whole" {
+  let xs: [I32; 4] = [10, 20, 30, 40]
+  assert pick(xs, 0) == 10
+  assert pick(xs, 3) == 40
+  assert pick(xs, 4) == -1
+}
+
+test "get of a view is relative to the view" {
+  let xs: [I32; 4] = [10, 20, 30, 40]
+  assert pick(xs.slice(1, 3), 0) == 20
+  assert pick(xs.slice(1, 3), 1) == 30
+  assert pick(xs.slice(1, 3), 2) == -1
+  assert pick(xs.slice(2, 4), 1) == 40
+  assert pick(xs.slice(2, 2), 0) == -1
+}
+
+test "get of a view of a Buf" {
+  var b: Buf[I32] = Buf.zeroed(4)
+  b.fill!(7)
+  b[2] = 9
+  assert pick(b.slice(1, 4), 1) == 9
+  assert pick(b.slice(1, 4), 3) == -1
+}

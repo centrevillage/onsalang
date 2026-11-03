@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.6", "§5.2"]
+
+// A Shared element (`Str`) is Dup, so `len`, `get` and `fill!` of `[Str; N]` are there (S-853: "`[T; N]` は
+// `len()` を要素によらず持ち、`get`・`fill!` は要素が Dup のとき", S-794 "Shared の要素と Dup の `T` の `get` は
+// 通る", S-847 "Shared の要素の `fill!` と全ての配列の `len` は通る"). The methods that need Copy (`slice`,
+// `copy_from!`, `add_from!`) are E0416 for it: negative/seq_slice_shared.onsa. This version cannot run a
+// Shared type (E0200 in the lowering), so the case only checks: the values of `get` and `fill!` of a Shared
+// element are for the `test` blocks that W5-02 U6 (`Str`) can add.
+
+pub fn len_of(xs: [Str; 3]) -> U32 {
+  xs.len()
+}
+
+pub fn get_length(xs: [Str; 3], i: U32) -> U32 uses {Alloc} {
+  match xs.get(i) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub fn get_of_a_var() -> U32 uses {Alloc} {
+  var xs: [Str; 2] = ["a", "bc"]
+  xs.fill!("z")
+  match xs.get(1) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub fn fill_with(inout xs: [Str; 3], s: Str) uses {Alloc} {
+  xs.fill!(s)
+}
+
+pub fn fill_an_inner_array(inout rows: [[Str; 2]; 2]) uses {Alloc} {
+  rows[0].fill!("eee")
+}
+
+pub fn get_of_an_inner_array(rows: [[Str; 2]; 2]) -> U32 uses {Alloc} {
+  match rows[1].get(0) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub fn len_of_a_parameter[T, const N: U32](xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+pub fn get_of_a_parameter[T, const N: U32](xs: [T; N], i: U32) -> U32 uses {Alloc} {
+  match xs.get(i) {
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn use_the_parameters(xs: [Str; 3]) -> U32 uses {Alloc} {
+  len_of_a_parameter(xs) + get_of_a_parameter(xs, 1)
+}

@@ -197,12 +197,31 @@ impl<'a> Checker<'a> {
     ) -> R<TyId> {
         let span = self.expr(e).span;
         // The members of the `impl`s of the head of the receiver's type: of a
-        // user type, of a scalar (std's, §3.3, §3.4) the same way (§6.2).
-        let (table, owner) = match self.ty(recv) {
-            Ty::Named(d, _) => (self.a.modules.assoc.get(&d), Some(d)),
-            Ty::Int(k) => (self.a.modules.assoc_builtin.get(&self.a.types.int(k)), None),
-            Ty::Float(k) => (self.a.modules.assoc_builtin.get(&self.a.types.float(k)), None),
+        // user type, of a scalar (std's, §3.3, §3.4) the same way (§6.2), of
+        // an array and of `Span` (std's, §5.3).
+        let span_key = self.a.builtin_key.get(&BuiltinTy::Span).copied();
+        let (mut key, owner) = match self.ty(recv) {
+            Ty::Named(d, _) => (None, Some(d)),
+            Ty::Int(k) => (Some(self.a.types.int(k)), None),
+            Ty::Float(k) => (Some(self.a.types.float(k)), None),
+            Ty::Array(..) => (self.a.array_key, None),
+            Ty::Builtin(BuiltinTy::Span, _) => (span_key, None),
             _ => (None, None),
+        };
+        // §5.3: an array and a `Buf` take from `Span[T]` the methods their
+        // own `impl`s (and the `len` of an array) have not, as a `Span` of
+        // their element `T`: one step, `Span` takes from none.
+        let mut this = recv;
+        if let Some(elem) = self.viewed_element(recv)
+            && !key.and_then(|k| self.a.modules.assoc_builtin.get(&k)).is_some_and(|t| t.contains_key(&name.name))
+            && builtin::method_self(&self.a.types, recv, &name.name).is_none()
+        {
+            key = span_key;
+            this = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
+        }
+        let table = match owner {
+            Some(d) => self.a.modules.assoc.get(&d),
+            None => key.and_then(|k| self.a.modules.assoc_builtin.get(&k)),
         };
         if table.is_some() || owner.is_some() {
             // Of an E0304, an unknown callee too (§18.1, S-737).
@@ -242,10 +261,15 @@ impl<'a> Checker<'a> {
                     self.inout_receiver(callee)?;
                 }
                 let targs = self.fresh_args(md);
-                // The impl's own generic arguments come from the receiver.
+                // The impl's own generic arguments come from the receiver; of
+                // std's `impl` of a sequence, its element (S-853).
+                let mut element = None;
                 if let Some(st) = self.a.self_ty_of(md) {
+                    if matches!(self.ty(st), Ty::Array(..) | Ty::Builtin(BuiltinTy::Span, _)) {
+                        element = Some(Required::SeqElement { recv: self.display(recv), method: name.name.clone() });
+                    }
                     let st2 = self.a.types.subst(st, &targs);
-                    self.unify_at(name.span, recv, st2)?;
+                    self.unify_at(name.span, this, st2)?;
                 }
                 let params: Vec<(Mode, TyId)> =
                     f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, &targs))).collect();
@@ -254,7 +278,7 @@ impl<'a> Checker<'a> {
                     self.unify_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, span)?;
-                let inst = self.finish_instance(md, targs, span)?;
+                let inst = self.instance(md, targs, span, element)?;
                 self.a.note_use(self.a.def(md).name_span, name.span);
                 self.info.targets.insert(e, Target::Method { def: md, inst });
                 let _ = kind;
@@ -273,9 +297,6 @@ impl<'a> Checker<'a> {
             let shown = self.display(recv);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` has no method `{}`", name.name)));
         };
-        if sig.self_mode == Mode::Inout {
-            self.inout_receiver(callee)?;
-        }
         let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
         if let Some(exp) = expected {
             self.unify_at(span, sig.ret, exp)?;
@@ -284,6 +305,16 @@ impl<'a> Checker<'a> {
         let (self_mode, lazy_args) = (Some(sig.self_mode), sig.lazy_args);
         self.info.targets.insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), self_mode, lazy_args });
         Ok(sig.ret)
+    }
+
+    /// The element of an array or a `Buf` of the type `t`, which takes the
+    /// members of `Span` (§5.3, [`builtin::takes_span_members`]).
+    fn viewed_element(&self, t: TyId) -> Option<TyId> {
+        match self.ty(t) {
+            Ty::Array(elem, _) => Some(elem),
+            Ty::Builtin(b, args) if builtin::takes_span_members(b) => args.first().copied(),
+            _ => None,
+        }
     }
 
     /// `Buf.zeroed(4)`: an associated function of the builtin type `ty` (a
@@ -321,7 +352,7 @@ impl<'a> Checker<'a> {
             let what = format!("the element type of `{}`", self.src(self.expr(callee).span));
             self.type_argument(span, targ, what);
             if matches!(g, BuiltinTy::Buf | BuiltinTy::Span) {
-                self.defer(span, targ, DeferredKind::Require { bound: Bound::Copy, what: Required::BufElement });
+                self.defer(span, targ, DeferredKind::Require { bound: Bound::Copy, what: Required::BufElement(g) });
             }
         }
         if let Some(exp) = expected {
@@ -479,7 +510,7 @@ impl<'a> Checker<'a> {
     /// literals from W4-08.
     fn inout_place(&self, e: ExprId, planar: bool) -> bool {
         let e = self.ast.without_parens(e);
-        if let Some(base) = view_base((self.ast, &self.info, &self.a.types), e, |t| self.shallow(t)) {
+        if let Some(base) = view_base((self.ast, &self.info, self.a), e, |t| self.shallow(t)) {
             return self.inout_place(base, false);
         }
         match &self.expr(e).kind {

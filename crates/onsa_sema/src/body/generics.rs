@@ -55,6 +55,19 @@ impl<'a> Checker<'a> {
     /// origin (E0406 when still open at the end) and carries the requirements of
     /// its parameter (the bounds and the implicit `Dup`, E0416, S-235).
     pub(super) fn finish_instance(&mut self, def: DefId, args: Vec<TyId>, span: Span) -> R<Option<InstId>> {
+        self.instance(def, args, span, None)
+    }
+
+    /// [`Self::finish_instance`]; the requirements of the parameters of an
+    /// `impl` as `element` when it is given (the element of a sequence
+    /// receiver, S-853).
+    pub(super) fn instance(
+        &mut self,
+        def: DefId,
+        args: Vec<TyId>,
+        span: Span,
+        element: Option<Required>,
+    ) -> R<Option<InstId>> {
         if args.is_empty() {
             return Ok(None);
         }
@@ -74,8 +87,11 @@ impl<'a> Checker<'a> {
         };
         for (k, (g, &arg)) in generics.iter().zip(&args).enumerate() {
             let owner = if k < impl_count { impl_name.clone() } else { name.clone() };
-            let what = match g.kind {
-                GenericKind::Const(_) => format!("the const parameter `{}` of {owner}", g.name),
+            let what = match (&g.kind, &element) {
+                (GenericKind::Const(_), _) => format!("the const parameter `{}` of {owner}", g.name),
+                (_, Some(Required::SeqElement { recv, method })) if k < impl_count => {
+                    format!("the element type of `{method}` of `{recv}`")
+                }
                 _ => format!("the type parameter `{}` of {owner}", g.name),
             };
             // A parameter with an unknown bound requires nothing of its users (§18.1, S-768).
@@ -84,7 +100,10 @@ impl<'a> Checker<'a> {
                 continue;
             };
             self.type_argument(span, arg, what);
-            let required = || Required::Param { param: g.name.clone(), owner: owner.clone() };
+            let required = || match (&element, k < impl_count) {
+                (Some(e), true) => e.clone(),
+                _ => Required::Param { param: g.name.clone(), owner: owner.clone() },
+            };
             if *dup {
                 self.defer(span, arg, DeferredKind::Require { bound: Bound::Dup, what: required() });
             }

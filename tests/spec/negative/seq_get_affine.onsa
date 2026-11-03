@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§5.2", "§18.1"]
+// fixes = 0
+
+// S-794 (S-853 (C)): `get(i)` of an array is there when the element is Dup, and an Affine element (`Buf[F32]`,
+// a struct that holds one) is not: the borrowed array would give out an owned `Option[Buf[F32]]` of an element
+// that stays in the array, the same value twice (§5.2: "配列の要素は取り出せない"). The call is the E0416 of the
+// position, whatever the place of the receiver is. The note shows the kind of the element and the forms that
+// do not copy it (borrow by the index, `for x in move xs`, `array.from_fn`), and there is no candidate
+// (`fixes = 0`). One error per function (P-01).
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+pub struct Rack {
+  bufs: [Buf[F32]; 2],
+}
+
+pub fn borrowed(xs: [Buf[F32]; 2]) {
+  let _ = xs.get(0) //~ E0416
+}
+
+pub fn borrowed_inout(inout xs: [Buf[F32]; 2]) {
+  let _ = xs.get(1) //~ E0416
+}
+
+pub fn local_var() uses {Alloc} {
+  var xs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(2)]
+  let _                 = xs.get(0) //~ E0416
+  xs[0][0] = 1.0
+}
+
+pub fn local_let() uses {Alloc} {
+  let xs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(2)]
+  let _                 = xs.get(0) //~ E0416
+}
+
+pub fn field_of_a_struct(r: Rack) {
+  let _ = r.bufs.get(0) //~ E0416
+}
+
+pub fn element_of_an_array_of_arrays(xs: [[Buf[F32]; 2]; 2], k: U32) {
+  let _ = xs[k].get(0) //~ E0416
+}
+
+pub fn struct_that_holds_a_buf(xs: [Owner; 2]) {
+  let _ = xs.get(0) //~ E0416
+}
+
+pub fn used_result(xs: [Buf[F32]; 2]) -> U32 {
+  match xs.get(0) { //~ E0416
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn fine_len_of_the_same_array(xs: [Buf[F32]; 2]) -> U32 {
+  xs.len() + xs[0].len()
+}

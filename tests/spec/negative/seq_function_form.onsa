@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§15.1", "§6.2", "§18.1"]
+
+// §15.1: "メソッドを関数の形で呼ぶ（修正候補は `value.m(...)`）" is E0308, for the methods of the sequences too:
+// the name of the type (`Span`, `Buf`) is found and `len`, `get` and `slice` are methods (§5.3: `Span[T]` has
+// them, and "`Buf[T]` にも同じものがある"), which are called with the dot (`s.len()`). The function form is not
+// E0302 (the name is found) and not E0413 (the method exists). (The candidates are not in this case: `fixes` is
+// not written.) One error per function (P-01).
+
+pub fn len_of_a_span(s: Span[F32]) -> U32 {
+  Span.len(s) //~ E0308
+}
+
+pub fn get_of_a_span(s: Span[F32]) -> Bool {
+  match Span.get(s, 0) { //~ E0308
+    Some(_) => true,
+    None => false,
+  }
+}
+
+pub fn slice_of_a_span(s: Span[F32]) -> U32 {
+  Span.slice(s, 0, 1).len() //~ E0308
+}
+
+pub fn len_of_a_buf(b: Buf[F32]) -> U32 {
+  Buf.len(b) //~ E0308
+}
+
+pub fn get_of_a_buf(b: Buf[F32]) -> Bool {
+  match Buf.get(b, 0) { //~ E0308
+    Some(_) => true,
+    None => false,
+  }
+}
+
+pub fn fine_the_dot_form(s: Span[F32], b: Buf[F32]) -> U32 {
+  s.len() + b.len()
+}

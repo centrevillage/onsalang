@@ -19,6 +19,10 @@ pub struct Named {
   gain: F32,
 }
 
+pub fn array_size(xs: Array[U32]) -> U32 {
+  1
+}
+
 pub fn map_size(m: Map[Str, U32]) -> U32 {
   1
 }
@@ -46,7 +50,7 @@ pub fn str_parameter(s: Str) -> U32 {
 }
 
 pub fn array_parameter(xs: Array[U32]) -> U32 {
-  apply(fn(n) { n + xs.len() }) //~ E0200
+  apply(fn(n) { n + array_size(xs) }) //~ E0200
 }
 
 pub fn map_parameter(m: Map[Str, U32]) -> U32 {

@@ -436,7 +436,7 @@ fn methods_and_associated_items() {
         ),
         vec![Code::E0308]
     );
-    ok(
+    ok_with_std(
         "pub fn g(xs: [F32; 4], inout out: Span[F32]) -> U32 {\n  out.fill!(0.0)\n  out.add_from!(xs)\n  xs.len() + xs.slice(0, 2).len()\n}\n",
     );
     assert_eq!(codes("pub fn g(xs: [F32; 4]) -> F32 { xs.nope() }\n"), vec![Code::E0413]);
@@ -445,14 +445,16 @@ fn methods_and_associated_items() {
 
 #[test]
 fn span_parameters_accept_arrays_and_bufs() {
-    ok(
+    ok_with_std(
         "pub fn total(xs: Span[F32]) -> U32 { xs.len() }\npub fn g(a: [F32; 4], b: Span[F32]) -> U32 { total(a) + total(b) }\n",
     );
     assert_eq!(
         codes("pub fn total(xs: Span[F32]) -> U32 { xs.len() }\npub fn g(a: [U8; 4]) -> U32 { total(a) }\n"),
         vec![Code::E0401]
     );
-    ok("pub fn planar(ch: [Span[F32]; 2]) -> U32 { ch[0].len() }\npub fn g(a: [[F32; 4]; 2]) -> U32 { planar(a) }\n");
+    ok_with_std(
+        "pub fn planar(ch: [Span[F32]; 2]) -> U32 { ch[0].len() }\npub fn g(a: [[F32; 4]; 2]) -> U32 { planar(a) }\n",
+    );
 }
 
 #[test]

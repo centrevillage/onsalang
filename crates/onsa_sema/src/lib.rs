@@ -203,6 +203,9 @@ pub struct Analysis {
     pub alloc: Option<DefId>,
     /// `TyId` keys of generic builtins in `Modules::assoc_builtin`.
     pub builtin_key: HashMap<ty::BuiltinTy, TyId>,
+    /// The key of the members of `[T; N]` there, of std's `impl` of the
+    /// arrays (`std/core/seq.onsa`, §15.2, S-861): no type of a program.
+    pub array_key: Option<TyId>,
     /// The primitive of each `target` declaration of std (S-69 (2),
     /// [`prim::record`]): lowering reads it, not the name.
     pub prims: HashMap<DefId, prim::PrimRow>,

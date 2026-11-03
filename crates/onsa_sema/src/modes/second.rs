@@ -124,7 +124,7 @@ impl Walker<'_> {
     /// `pats`: E0710 at the value. (A `let` of one is of an owned row, and
     /// consumed.)
     pub(super) fn view_of_inout(&mut self, value: ExprId, pats: impl IntoIterator<Item = PatId>) {
-        let base = view_base((self.ast, self.info, &self.a.types), value, |t| t).unwrap_or(value);
+        let base = view_base((self.ast, self.info, self.a), value, |t| t).unwrap_or(value);
         let Some(place) = place_of(self.ast, self.names, base) else { return };
         if self.info.locals[place.root.0 as usize].state != Bind::Inout {
             return;

@@ -98,7 +98,7 @@ impl Walker<'_> {
     /// `xs.slice(a, b)`, that of `xs` with one index more, whatever the
     /// range, as an element of `xs` overlaps the others).
     pub(super) fn view_place(&self, e: ExprId) -> Option<Place> {
-        match view_base((self.ast, self.info, &self.a.types), self.ast.without_parens(e), |t| t) {
+        match view_base((self.ast, self.info, self.a), self.ast.without_parens(e), |t| t) {
             Some(base) => Some(self.view_place(base)?.then(&[Proj::Index])),
             None => place_of(self.ast, self.names, e),
         }

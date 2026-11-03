@@ -22,7 +22,7 @@ use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Lit};
 use crate::body::{Checker, LocalId, R};
 use crate::def::Bound;
 use crate::infer::Cause;
-use crate::ty::{FloatKind, IntKind, Ty, TyId};
+use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 
 /// What a deferred item checks.
 #[derive(Debug, Clone)]
@@ -87,11 +87,14 @@ pub(crate) enum Required {
     Param { param: String, owner: String },
     /// The element of `[e; N]` (`Dup`, §2.4).
     RepeatElement,
-    /// The element of `Buf` / `Span` (`Copy`, §4.5).
-    BufElement,
+    /// The element of `Buf` / `Span` (`Copy`, §4.5), named as written (R-351).
+    BufElement(BuiltinTy),
     /// The element of `Array` / `Set`, the key and the value of `Map`
     /// (`Dup`, §4.5, S-767).
     SharedElement,
+    /// The element of the receiver `recv`, as written, of the method
+    /// `method` of std's `impl` of a sequence: its bounds (§5.3, S-853).
+    SeqElement { recv: String, method: String },
 }
 
 impl Required {
@@ -102,7 +105,9 @@ impl Required {
             Required::RepeatElement => format!(
                 "`[e; N]` repeats the value of `e`, so its type must be Copy or Shared (`Dup`); `{shown}` is not; make an Affine array with `array.from_fn` (§2.4)"
             ),
-            Required::BufElement => format!("the element type of `Buf` must be Copy; `{shown}` is not (§4.5)"),
+            Required::BufElement(b) => {
+                format!("the element type of `{}` must be Copy; `{shown}` is not (§4.5)", b.name())
+            }
             Required::SharedElement => format!(
                 "the elements of `Array`, `Set` and `Map` are Copy or Shared (`Dup`); `{shown}` is Affine (§4.5)"
             ),
@@ -111,6 +116,14 @@ impl Required {
             ),
             Required::Param { param, owner } => {
                 format!("`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)", bound.name())
+            }
+            Required::SeqElement { recv, method } => {
+                let need = match bound {
+                    Bound::Dup => "a Copy or Shared (`Dup`) element".to_string(),
+                    Bound::Copy => "a Copy element".to_string(),
+                    b => format!("an element that meets `{}`", b.name()),
+                };
+                format!("`{recv}` has `{method}` only with {need}; its element `{shown}` is not (§5.3)")
             }
         }
     }
@@ -342,6 +355,9 @@ impl<'a> Checker<'a> {
                 let msg = what.unmet(&shown, *bound);
                 let mut d = Diagnostic::new(Stage::Types, Code::E0416, item.span, msg).with_found(self.src(item.span));
                 d = self.decided_note(d, item.ty, &shown, true);
+                if let Required::SeqElement { .. } = what {
+                    d = self.seq_element_notes(d, r, &shown, *bound);
+                }
                 Look::Fail(d)
             }
             DeferredKind::Hole { visible } => {

@@ -171,6 +171,11 @@ impl<'p> Sema<'p> {
             _ => def.generics().to_vec(),
         };
         let Some(cx) = self.cx_for(id, generics, None) else { return };
+        // S-861: std alone writes an `impl` of `Span[T]` and a `target fn`
+        // that returns a `Span` (`slice`, §15.2): there a `Span` stands as
+        // at an argument.
+        let view = Pos::Arg(Mode::Borrow);
+        let std = self.a.modules.is_std(self.a.def(id).module);
         let roots: Vec<(TypeId, TyId, Pos, Slot)> =
             match (decls::item_kind(&cx.ast.item(item).kind), &self.a.def(id).kind) {
                 (ItemKind::Struct(s), DefKind::Struct(StructDef { fields: Fields::Named(fs), .. })) => s
@@ -191,7 +196,8 @@ impl<'p> Sema<'p> {
                     let params = f.params.iter().filter(|p| !matches!(p.name, ParamName::SelfParam(_)));
                     let roots = params.zip(&fd.params).enumerate();
                     let roots = roots.filter_map(|(k, (p, l))| Some((p.ty?, l.ty, Pos::Arg(p.mode), Slot::Param(k))));
-                    roots.chain(f.ret.map(|t| (t, fd.ret, Pos::Other, Slot::Ret))).collect()
+                    let ret = if std && fd.target { view } else { Pos::Other };
+                    roots.chain(f.ret.map(|t| (t, fd.ret, ret, Slot::Ret))).collect()
                 }
                 (ItemKind::Const(c), DefKind::Const(cd)) => vec![(c.ty, cd.ty, Pos::Other, Slot::Const)],
                 // S-772: the types of the inputs and the output of a flow
@@ -206,7 +212,7 @@ impl<'p> Sema<'p> {
                 // the heading, the whole `impl` one unit (§18.1).
                 // S-769: it is a place of a type, not an argument: `impl voice.Out` is an E0710.
                 (ItemKind::Impl(i), DefKind::Impl(imp)) if i.trait_.is_none() => {
-                    vec![(i.self_ty, imp.self_ty, Pos::Other, Slot::Target)]
+                    vec![(i.self_ty, imp.self_ty, if std { view } else { Pos::Other }, Slot::Target)]
                 }
                 _ => Vec::new(),
             };
@@ -401,8 +407,8 @@ impl<'p> Sema<'p> {
         span: Span,
     ) -> Result<(), Diagnostic> {
         let (wants, args): (Vec<_>, _) = match shape {
-            Ty::Builtin(BuiltinTy::Buf | BuiltinTy::Span, args) => {
-                (vec![(vec![Bound::Copy], Required::BufElement, None)], args)
+            &Ty::Builtin(b @ (BuiltinTy::Buf | BuiltinTy::Span), ref args) => {
+                (vec![(vec![Bound::Copy], Required::BufElement(b), None)], args)
             }
             // The elements, keys and values of the Shared collections (S-767).
             Ty::Builtin(BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set, args) => {
@@ -415,7 +421,7 @@ impl<'p> Sema<'p> {
                         let all = bounds.iter().copied().chain(dup.then_some(Bound::Dup)).collect();
                         (all, Required::Param { param: g.name.clone(), owner: owner.clone() }, Some(g.span))
                     }
-                    _ => (Vec::new(), Required::BufElement, None),
+                    _ => (Vec::new(), Required::BufElement(BuiltinTy::Buf), None),
                 };
                 (self.a.def(*d).generics().iter().map(want).collect(), args)
             }

@@ -1,0 +1,14 @@
+// The types of the other module: an array of Copy elements, one of Affine elements (a `Buf` each) and a
+// struct that holds both.
+pub struct Rack {
+  xs: [F32; 4],
+  bufs: [Buf[F32]; 2],
+}
+
+pub type Frame = [F32; 4]
+
+pub type Owners = [Buf[F32]; 2]
+
+pub fn total(xs: [F32; 4]) -> F32 {
+  xs[0] + xs[3]
+}

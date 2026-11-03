@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§18.1"]
+// fixes = 0
+
+// S-853 (C), S-847: `fill!`, `copy_from!` and `add_from!` of a planar array (`[Span[F32]; N]`) take the element
+// type (`Span[F32]`) or a sequence of it as the argument, so the call makes a second class type argument: E0710
+// at the call (§4.5: "その型引数を作った式（… メソッドの呼び出し …）の位置に E0710"), and the element is not
+// judged for `Copy` or `AnyNum` (a second class type has no kind, §4.6, so the E0710 is the only error). The
+// arguments are the channels of another planar array. The E0710 of `get` and `slice` is in
+// seq_planar_get_slice.onsa; this case is apart from it because the arguments are second class too, and the
+// spec does not say whether the argument is a second error. No candidate (`fixes = 0`). One error per
+// function (P-01).
+
+pub fn fill_of_a_planar_array(inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  xs.fill!(ys[0]) //~ E0710
+}
+
+pub fn copy_from_of_a_planar_array(inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  xs.copy_from!(ys) //~ E0710
+}
+
+pub fn add_from_of_a_planar_array(inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  xs.add_from!(ys) //~ E0710
+}
+
+pub fn copy_from_of_planar_u32(inout xs: [Span[U32]; 3], ys: [Span[U32]; 3]) {
+  xs.copy_from!(ys) //~ E0710
+}
+
+pub fn fine_the_channels(inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  xs[0].copy_from!(ys[0])
+  xs[1].add_from!(ys[1])
+}

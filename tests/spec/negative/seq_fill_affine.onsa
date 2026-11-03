@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§5.2", "§18.1"]
+// fixes = 0
+
+// R-349 (S-847, S-853 (C)): `fill!(v)` of an array writes the value `v` into every element, so the element
+// has to be Dup (§5.3: "`get`・`fill!` は要素が Dup のとき"). With an Affine element (`Buf[F32]`) it copies one owned
+// value into the elements, and the borrowed `b` and the elements then share the one storage (the run-time
+// aliasing of issues/R/R-349/fill_alias.onsa). It is the E0416 of the call, whatever the place of the receiver
+// is, and there is no candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+pub struct Rack {
+  bufs: [Buf[F32]; 2],
+}
+
+// The function of issues/R/R-349/fill_affine.onsa.
+pub fn g(inout xs: [Buf[F32]; 2], b: Buf[F32]) -> U32 uses {Alloc} {
+  xs.fill!(b) //~ E0416
+  xs.len()
+}
+
+// The function of issues/R/R-349/fill_alias.onsa: the write through the first element would show in the
+// second element and in the borrowed `b`.
+pub fn alias(inout xs: [Buf[F32]; 2], b: Buf[F32]) -> F32 uses {Alloc} {
+  xs.fill!(b) //~ E0416
+  xs[0][0] = 1.0
+  xs[1][0] + b[0]
+}
+
+pub fn local_var(b: Buf[F32]) uses {Alloc} {
+  var xs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(1)]
+  xs.fill!(b) //~ E0416
+}
+
+pub fn field_of_a_struct(inout r: Rack, b: Buf[F32]) {
+  r.bufs.fill!(b) //~ E0416
+}
+
+pub fn element_of_an_array_of_arrays(inout xs: [[Buf[F32]; 2]; 2], k: U32, b: Buf[F32]) {
+  xs[k].fill!(b) //~ E0416
+}
+
+pub fn struct_that_holds_a_buf(inout xs: [Owner; 2], o: Owner) {
+  xs.fill!(o) //~ E0416
+}
+
+pub fn fine_fill_of_copy_elements(inout xs: [F32; 2], v: F32) -> U32 {
+  xs.fill!(v)
+  xs.len()
+}

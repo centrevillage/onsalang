@@ -33,8 +33,10 @@ pub struct MethodSig {
 /// The receivers a builtin method is defined on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Recv {
-    /// `[T; N]`, `Span[T]`, `Buf[T]`, `Array[T]` (§5.3, S-12).
-    Seq,
+    /// `[T; N]`, its `len` of any element (§5.3, S-862). The other members
+    /// of the sequences are std's (`std/core/seq.onsa`); `Array[T]` has
+    /// none in this version (D5).
+    Array,
     Str,
     Option,
     Result,
@@ -47,10 +49,7 @@ enum T {
     Inner,
     U32,
     Bool,
-    Unit,
     Str,
-    SpanOfInner,
-    OptInner,
     OptStr,
     OptU32,
 }
@@ -72,30 +71,23 @@ fn methods() -> &'static [Method] {
     static TABLE: OnceLock<Vec<Method>> = OnceLock::new();
     TABLE.get_or_init(|| {
         let mut v = Vec::new();
-        let mut add = |recv, name: &str, params: &'static [T], ret, bang: bool| {
-            let self_mode = if bang { Mode::Inout } else { Mode::Borrow };
-            v.push(Method { recv, name: name.to_string(), params, ret, self_mode, lazy_args: false })
+        let mut add = |recv, name: &str, params: &'static [T], ret| {
+            v.push(Method { recv, name: name.to_string(), params, ret, self_mode: Mode::Borrow, lazy_args: false })
         };
-        // Sequences (§5.3, S-12).
-        add(Recv::Seq, "len", &[], T::U32, false);
-        add(Recv::Seq, "is_empty", &[], T::Bool, false);
-        add(Recv::Seq, "slice", &[T::U32, T::U32], T::SpanOfInner, false);
-        add(Recv::Seq, "get", &[T::U32], T::OptInner, false);
-        add(Recv::Seq, "fill", &[T::Inner], T::Unit, true);
-        add(Recv::Seq, "add_from", &[T::SpanOfInner], T::Unit, true);
-        add(Recv::Seq, "copy_from", &[T::SpanOfInner], T::Unit, true);
+        // The arrays (§5.3); no `is_empty` (§4.2).
+        add(Recv::Array, "len", &[], T::U32);
         // Strings (§4.2).
-        add(Recv::Str, "len", &[], T::U32, false);
-        add(Recv::Str, "is_empty", &[], T::Bool, false);
-        add(Recv::Str, "substr", &[T::U32, T::U32], T::Str, false);
-        add(Recv::Str, "get_substr", &[T::U32, T::U32], T::OptStr, false);
-        add(Recv::Str, "find", &[T::Str], T::OptU32, false);
-        add(Recv::Str, "is_char_boundary", &[T::U32], T::Bool, false);
+        add(Recv::Str, "len", &[], T::U32);
+        add(Recv::Str, "is_empty", &[], T::Bool);
+        add(Recv::Str, "substr", &[T::U32, T::U32], T::Str);
+        add(Recv::Str, "get_substr", &[T::U32, T::U32], T::OptStr);
+        add(Recv::Str, "find", &[T::Str], T::OptU32);
+        add(Recv::Str, "is_char_boundary", &[T::U32], T::Bool);
         // Option and Result (§4.1).
-        add(Recv::Option, "is_some", &[], T::Bool, false);
-        add(Recv::Option, "is_none", &[], T::Bool, false);
-        add(Recv::Result, "is_ok", &[], T::Bool, false);
-        add(Recv::Result, "is_err", &[], T::Bool, false);
+        add(Recv::Option, "is_some", &[], T::Bool);
+        add(Recv::Option, "is_none", &[], T::Bool);
+        add(Recv::Result, "is_ok", &[], T::Bool);
+        add(Recv::Result, "is_err", &[], T::Bool);
         // `move self`: it takes the content out (§9.1, S-785).
         for recv in [Recv::Option, Recv::Result] {
             let name = "unwrap".to_string();
@@ -119,8 +111,7 @@ fn methods() -> &'static [Method] {
 /// element type (none of the key of a generic type, `Analysis::builtin_key`).
 fn method_row(recv_ty: &Ty, name: &str) -> Option<(&'static Method, Option<TyId>)> {
     let (families, inner): (&[Recv], Option<TyId>) = match recv_ty {
-        Ty::Array(elem, _) => (&[Recv::Seq], Some(*elem)),
-        Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, args) => (&[Recv::Seq], args.first().copied()),
+        Ty::Array(elem, _) => (&[Recv::Array], Some(*elem)),
         Ty::Builtin(BuiltinTy::Str, _) => (&[Recv::Str], None),
         Ty::Builtin(BuiltinTy::Option, args) => (&[Recv::Option], args.first().copied()),
         Ty::Builtin(BuiltinTy::Result, args) => (&[Recv::Result], args.first().copied()),
@@ -142,6 +133,14 @@ pub(crate) fn method_self(types: &Types, recv: TyId, name: &str) -> Option<Mode>
     method_row(types.get(recv), name).map(|(m, _)| m.self_mode)
 }
 
+/// Whether a receiver of the generic builtin `b` takes the members of
+/// `Span[T]` its own `impl`s have not (§5.3: "`Buf[T]` にも同じものがある",
+/// D-07): `Buf`. An array does too (it has no name; the types stage's). The
+/// one question of the names and the types stages (D-15).
+pub(crate) fn takes_span_members(b: BuiltinTy) -> bool {
+    b == BuiltinTy::Buf
+}
+
 /// Method `name` on a receiver of (resolved, non-variable) type `recv`.
 pub fn method(types: &mut Types, recv: TyId, name: &str) -> Option<MethodSig> {
     let recv_ty = types.get(recv).clone();
@@ -157,10 +156,7 @@ fn sig_ty(types: &mut Types, t: T, inner: Option<TyId>) -> Option<TyId> {
         T::Inner => inner?,
         T::U32 => types.int(IntKind::U32),
         T::Bool => types.bool(),
-        T::Unit => types.unit(),
         T::Str => types.builtin(BuiltinTy::Str, vec![]),
-        T::SpanOfInner => types.builtin(BuiltinTy::Span, vec![inner?]),
-        T::OptInner => types.builtin(BuiltinTy::Option, vec![inner?]),
         T::OptStr => {
             let s = types.builtin(BuiltinTy::Str, vec![]);
             types.builtin(BuiltinTy::Option, vec![s])
@@ -257,7 +253,11 @@ mod tests {
         for x in ["PI", "BITS", "from_bits", "narrow_u8", "trunc_i64_sat", "to_bits", "abs", "checked_add"] {
             assert!(!n.iter().any(|y| y == x), "{x} is std's (§6.6, §3.3), in {n:?}");
         }
-        for x in ["len", "fill", "unwrap", "is_err", "zeroed"] {
+        // The sequences' but `len` of an array are std's (`std/core/seq.onsa`, D1).
+        for x in ["get", "fill", "slice", "copy_from", "add_from"] {
+            assert!(!n.iter().any(|y| y == x), "{x} is std's (§5.3), in {n:?}");
+        }
+        for x in ["len", "unwrap", "is_err", "zeroed"] {
             assert!(n.iter().any(|y| y == x), "{x} not in {n:?}");
         }
         let mut sorted = n.clone();
@@ -272,12 +272,13 @@ mod tests {
         let i32 = types.int(IntKind::I32);
         let f32 = types.float(FloatKind::F32);
         let buf = types.builtin(BuiltinTy::Buf, vec![f32]);
+        let arr = types.intern(Ty::Array(f32, crate::ty::Len::Const(2)));
         let s = types.builtin(BuiltinTy::Str, vec![]);
         let opt = types.builtin(BuiltinTy::Option, vec![f32]);
         let res = types.builtin(BuiltinTy::Result, vec![f32, s]);
         for m in methods() {
             let recv = match m.recv {
-                Recv::Seq => buf,
+                Recv::Array => arr,
                 Recv::Str => s,
                 Recv::Option => opt,
                 Recv::Result => res,
@@ -288,6 +289,10 @@ mod tests {
         assert!(method(&mut types, i32, "checked_add").is_none());
         assert!(method(&mut types, f32, "to_bits").is_none());
         assert!(method(&mut types, s, "fill").is_none());
+        // `Buf[T]` and `Span[T]` take std's members (§5.3), and an array its
+        // `len` only, with no `is_empty` (§4.2).
+        assert!(method(&mut types, buf, "len").is_none());
+        assert!(method(&mut types, arr, "is_empty").is_none());
         assert!(assoc_fn(&mut types, Some(BuiltinTy::Buf), "zeroed", f32).is_some());
         assert!(assoc_fn(&mut types, Some(BuiltinTy::Span), "zeroed", f32).is_none());
         assert!(assoc_fn(&mut types, None, "from_bits", f32).is_none());

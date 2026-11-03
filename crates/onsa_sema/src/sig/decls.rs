@@ -480,6 +480,9 @@ impl<'p> Sema<'p> {
     /// struct or enum it names, of the builtin type by its key. None for
     /// another type.
     pub(super) fn member_key(&self, id: DefId) -> Option<(Option<DefId>, Option<TyId>)> {
+        if self.std_array_impl(id) {
+            return Some((None, self.a.array_key));
+        }
         match self.impl_type(id)? {
             Entity::Def(d) | Entity::Member(d)
                 if matches!(self.a.def(d).kind, DefKind::Struct(_) | DefKind::Enum(_)) =>
@@ -488,6 +491,17 @@ impl<'p> Sema<'p> {
             }
             e => builtin_ty(self.a, e).map(|t| (None, Some(t))),
         }
+    }
+
+    /// Whether the inherent `impl` `id` is std's of the arrays (`impl[T,
+    /// const N: U32] [T; N]`), which std alone writes (§15.2, S-861).
+    pub(super) fn std_array_impl(&self, id: DefId) -> bool {
+        let def = self.a.def(id);
+        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return false };
+        let Some(ItemKind::Impl(i)) = def.item.map(|it| item_kind(&ast.item(it).kind)) else { return false };
+        i.trait_.is_none()
+            && matches!(ast.ty(i.self_ty).kind, TypeKind::Array { .. })
+            && self.a.modules.is_std(def.module)
     }
 
     /// The type the inherent `impl` `id` is of: what it names, and of an

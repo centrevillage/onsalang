@@ -42,6 +42,7 @@ mod expressions;
 mod generics;
 mod named;
 mod patterns;
+mod receivers;
 mod statements;
 
 // ---------------------------------------------------------------- tables
@@ -734,18 +735,20 @@ pub(crate) fn starts_at_local(ast: &Ast, names: &crate::names::body::BodyNames, 
 pub(crate) const BANG_ON_NO_INOUT_SELF: &str = "`!` marks `inout self` method calls only (§5.2)";
 
 /// The base of `e` when `e` is a partial view of it (S-217: `xs.slice(a, b)`):
-/// a call of a builtin method whose type, as `ty` reads it, is a `Span`,
-/// known by that and not by its name (Q-14). The one rule of the typing
-/// (`inout`, S-178) and of the states of the bindings (§5.4).
+/// a call of a method of std whose type, as `ty` reads it, is a `Span` (std
+/// alone returns one, S-861), known by that and not by its name (Q-14). The
+/// one rule of the typing (`inout`, S-178) and of the states of the bindings
+/// (§5.4).
 pub(crate) fn view_base(
-    (ast, info, types): (&Ast, &BodyInfo, &crate::ty::Types),
+    (ast, info, a): (&Ast, &BodyInfo, &Analysis),
     e: ExprId,
     ty: impl Fn(TyId) -> TyId,
 ) -> Option<ExprId> {
     let ExprKind::Call { callee, .. } = &ast.expr(e).kind else { return None };
     let ExprKind::Field { base, .. } = &ast.expr(*callee).kind else { return None };
-    let span = info.expr_types.get(&e).is_some_and(|&t| matches!(types.get(ty(t)), Ty::Builtin(BuiltinTy::Span, _)));
-    (span && matches!(info.targets.get(&e), Some(Target::BuiltinMethod { .. }))).then_some(*base)
+    let span = info.expr_types.get(&e).is_some_and(|&t| matches!(a.types.get(ty(t)), Ty::Builtin(BuiltinTy::Span, _)));
+    let std = matches!(info.targets.get(&e), Some(Target::Method { def, .. }) if a.modules.is_std(a.def(*def).module));
+    (span && std).then_some(*base)
 }
 
 /// E0401 for the struct literal whose path `shown` at `span` names a type

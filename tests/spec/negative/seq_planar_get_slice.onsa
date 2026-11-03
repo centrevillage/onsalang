@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§18.1"]
+// fixes = 0
+
+// S-853 (C): the element of a planar array (`[Span[F32]; N]`, the channels) is second class (§5.3), so the
+// methods that make a value of the element type, `get` (`Option[Span[F32]]`) and `slice` (`Span[Span[F32]]`),
+// have a second class type argument made by the call: E0710 at the call (§4.5: "推論で決まった型引数 … 第二級の型に
+// 決まれば、その型引数を作った式（… メソッドの呼び出し …）の位置に E0710"). `len` is there (the number of the
+// channels, values/seq_len_any_element.onsa) and `xs[k]` is the channel. No candidate (`fixes = 0`). One error
+// per function (P-01).
+
+pub fn get_of_a_planar_array(xs: [Span[F32]; 2]) -> U32 {
+  match xs.get(0) { //~ E0710
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn get_of_an_inout_planar_array(inout xs: [Span[F32]; 2]) {
+  let _ = xs.get(1) //~ E0710
+}
+
+pub fn get_of_planar_u32(xs: [Span[U32]; 3]) {
+  let _ = xs.get(2) //~ E0710
+}
+
+pub fn slice_of_a_planar_array(xs: [Span[F32]; 2]) -> U32 {
+  xs.slice(0, 1).len() //~ E0710
+}
+
+pub fn slice_of_an_inout_planar_array(inout xs: [Span[F32]; 2]) -> U32 {
+  xs.slice(0, 2).len() //~ E0710
+}
+
+pub fn slice_in_a_for(xs: [Span[F32]; 2]) -> U32 {
+  var n: U32 = 0
+  for _ in xs.slice(0, 1) { //~ E0710
+    n = n + 1
+  }
+  n
+}
+
+pub fn fine_len_and_the_channel(xs: [Span[F32]; 2]) -> U32 {
+  xs.len() + xs[0].len() + xs[1].slice(0, 1).len()
+}

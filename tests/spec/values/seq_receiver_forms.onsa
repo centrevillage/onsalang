@@ -1,0 +1,152 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.2", "§5.4"]
+
+// The places that a method of a sequence can be called on, with elements that have the methods: a borrowed
+// argument (`get`, `len`, `slice` read), a `var`, an `inout` argument (`fill!`, `copy_from!`, `add_from!`), a
+// field of a struct, `xs[k]` of an array of arrays, and a `Buf` (§5.3: "`Buf[T]` にも同じものがある"). The elements
+// are `F32`, so Dup and Copy and a number: all six methods are there for every place. The same places with an
+// element that does not have the method are the E0416 of negative/seq_*.onsa.
+
+pub struct Voice {
+  buf: [F32; 4],
+  tmp: [F32; 4],
+}
+
+fn first_or(xs: [F32; 4], d: F32) -> F32 {
+  match xs.get(0) {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+fn clear(inout xs: [F32; 4]) {
+  xs.fill!(0.0)
+}
+
+fn mix(inout v: Voice) {
+  v.buf.copy_from!(v.tmp)
+  v.buf.add_from!(v.tmp)
+}
+
+fn fill_field(inout v: Voice, x: F32) {
+  v.tmp.fill!(x)
+}
+
+fn field_get(v: Voice, i: U32) -> F32 {
+  match v.buf.get(i) {
+    Some(x) => x,
+    None => -1.0,
+  }
+}
+
+fn fill_row(inout rows: [[F32; 2]; 3], k: U32, x: F32) {
+  rows[k].fill!(x)
+}
+
+fn copy_row(inout rows: [[F32; 2]; 3], k: U32, src: [F32; 2]) {
+  rows[k].copy_from!(src)
+}
+
+fn add_row(inout rows: [[F32; 2]; 3], k: U32, src: [F32; 2]) {
+  rows[k].add_from!(src)
+}
+
+fn row_get(rows: [[F32; 2]; 3], k: U32, i: U32) -> F32 {
+  match rows[k].get(i) {
+    Some(x) => x,
+    None => -1.0,
+  }
+}
+
+fn row_tail(rows: [[F32; 2]; 3], k: U32) -> U32 {
+  rows[k].slice(1, 2).len()
+}
+
+fn span_methods(inout s: Span[F32], o: Span[F32]) -> U32 {
+  s.fill!(1.0)
+  s.add_from!(o)
+  s.len() + s.slice(0, 2).len()
+}
+
+fn span_copy(inout s: Span[F32], o: Span[F32]) {
+  s.copy_from!(o)
+}
+
+fn span_get(s: Span[F32], i: U32) -> F32 {
+  match s.get(i) {
+    Some(x) => x,
+    None => -1.0,
+  }
+}
+
+test "a borrowed argument and an inout argument" {
+  var xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert first_or(xs, 9.0) == 1.0
+  clear(inout xs)
+  assert xs[3] == 0.0
+  assert first_or(xs, 9.0) == 0.0
+}
+
+test "a var is a receiver of every method" {
+  var xs: [F32; 4] = [0.0; 4]
+  var ys: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  xs.fill!(1.5)
+  xs.copy_from!(ys)
+  xs.add_from!(ys)
+  assert xs[0] == 2.0
+  assert xs[3] == 8.0
+  assert xs.slice(1, 3).len() == 2
+  ys.fill!(0.5)
+  assert ys[2] == 0.5
+}
+
+test "the fields of a struct are receivers" {
+  var v = Voice { buf: [0.0; 4], tmp: [0.0; 4] }
+  fill_field(inout v, 2.5)
+  mix(inout v)
+  assert field_get(v, 0) == 5.0
+  assert field_get(v, 3) == 5.0
+  assert field_get(v, 4) == -1.0
+}
+
+test "xs[k] of an array of arrays is a receiver" {
+  var rows: [[F32; 2]; 3] = [[0.0; 2]; 3]
+  fill_row(inout rows, 1, 2.0)
+  copy_row(inout rows, 2, [3.0, 4.0])
+  add_row(inout rows, 2, [10.0, 20.0])
+  assert row_get(rows, 0, 0) == 0.0
+  assert row_get(rows, 1, 1) == 2.0
+  assert row_get(rows, 2, 0) == 13.0
+  assert row_get(rows, 2, 1) == 24.0
+  assert row_get(rows, 2, 2) == -1.0
+  assert row_tail(rows, 2) == 1
+}
+
+test "a Buf is a receiver of every method" {
+  var b: Buf[F32] = Buf.zeroed(4)
+  b.fill!(1.0)
+  let ys: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  b.add_from!(ys)
+  assert b[0] == 2.0
+  assert b[3] == 5.0
+  b.slice(0, 2).copy_from!(ys.slice(0, 2))
+  assert b[1] == 2.0
+  assert b[2] == 4.0
+  assert b.slice(1, 3).len() == 2
+  assert b.get(0) == Some(1.0)
+  assert b.get(4) == None
+}
+
+test "a Span argument is a receiver of every method" {
+  var xs: [F32; 4] = [0.0; 4]
+  let ys: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert span_methods(inout xs, ys) == 6
+  assert xs[0] == 2.0
+  assert xs[3] == 5.0
+  span_copy(inout xs, ys)
+  assert xs[2] == 3.0
+  assert span_get(xs, 3) == 4.0
+  assert span_get(xs, 4) == -1.0
+}

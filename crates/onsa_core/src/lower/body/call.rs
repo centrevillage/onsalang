@@ -129,6 +129,16 @@ pub(super) fn lower_call(
             if f.target {
                 return lower_target_call(lw, cx, e, (def, f), &gargs, Some((recv, self_mode)), args, ty);
             }
+            // An array or a `Buf` receiver of a member of `Span[T]` is a
+            // `Span` of it (§5.3), as `self` is declared.
+            let this = match row_self(lw.a, def) {
+                Some(t) => Some(lw.core_ty(t, &gargs, span)?),
+                None => None,
+            };
+            let recv = match this {
+                Some(this @ Ty::Span(_)) => coerce(lw, cx, recv, &this, self_mode)?,
+                _ => recv,
+            };
             let params = sig_params(lw, cx, f, &gargs, span)?;
             let mut cargs = vec![Arg { mode: self_mode, expr: recv }];
             cargs.extend(lower_args(lw, cx, args, &params)?);
@@ -312,70 +322,12 @@ fn lower_builtin_method(
     }
     let recv = lower_expr(lw, cx, base)?;
     match &recv.ty {
-        Ty::Array(..) | Ty::Span(_) | Ty::Buf(_) => lower_seq_method(lw, cx, recv, name, lowered_args, ty, span),
+        // The one method of the table of an array, `len` (§5.3; the others
+        // are std's): its length.
+        Ty::Array(_, n) => Ok(u32_lit(span, *n)),
         &Ty::Enum(id) => lower_enum_method(lw, cx, id, recv, name, lowered_args, ty, span),
         other => Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, other)])),
     }
-}
-
-fn lower_seq_method(
-    lw: &mut Lowerer,
-    cx: &mut FnCx,
-    recv: Expr,
-    name: &str,
-    args: Vec<Expr>,
-    ty: Ty,
-    span: Span,
-) -> R<Expr> {
-    let seq_ty = crate::dump::type_name(&lw.m, &recv.ty);
-    let borrow = |e: Expr| Arg { mode: Mode::Borrow, expr: e };
-    let len_of = |cx: &mut FnCx, recv: Expr| -> R<Expr> {
-        match &recv.ty {
-            Ty::Array(_, n) => Ok(u32_lit(span, *n)),
-            _ => {
-                let s = span_of(cx, recv, Mode::Borrow)?;
-                Ok(Expr::new(Ty::u32(), span, ExprKind::Prim { prim: Prim::Len, args: vec![borrow(s)] }))
-            }
-        }
-    };
-    let kind = match name {
-        "len" => return len_of(cx, recv),
-        "is_empty" => {
-            let l = len_of(cx, recv)?;
-            ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(l), rhs: Box::new(u32_lit(span, 0)) }
-        }
-        "slice" => {
-            let s = span_of(cx, recv, Mode::Borrow)?;
-            let mut a = vec![borrow(s)];
-            a.extend(args.into_iter().map(borrow));
-            ExprKind::Prim { prim: Prim::Slice, args: a }
-        }
-        "get" => {
-            let s = span_of(cx, recv, Mode::Borrow)?;
-            let mut a = vec![borrow(s)];
-            a.extend(args.into_iter().map(borrow));
-            ExprKind::Prim { prim: Prim::Get, args: a }
-        }
-        "fill" | "add_from" | "copy_from" => {
-            let s = span_of(cx, recv, Mode::Inout)?;
-            let mut a = vec![Arg { mode: Mode::Inout, expr: s }];
-            for x in args {
-                let x = match name {
-                    "fill" => x,
-                    _ => span_of(cx, x, Mode::Borrow)?,
-                };
-                a.push(borrow(x));
-            }
-            let prim = match name {
-                "fill" => Prim::Fill,
-                "add_from" => Prim::AddFrom,
-                _ => Prim::CopyFrom,
-            };
-            ExprKind::Prim { prim, args: a }
-        }
-        _ => return Err(unsupported(span, Feature::Methods, &[name, &seq_ty])),
-    };
-    Ok(Expr::new(ty, span, kind))
 }
 
 #[allow(clippy::too_many_arguments)]

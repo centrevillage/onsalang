@@ -1042,23 +1042,6 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let tag = self.span_tag(&args[0].expr.ty)?;
                 Ok(format!("onsa_slice_{tag}({s}, {}, {}, {loc})", vs[0], vs[1]))
             }
-            Prim::Get => {
-                let s = self.span_arg(&args[0].expr)?;
-                let vs = self.operands(&refs[1..])?;
-                let i = self.materialize_str(&vs[0], &Ty::u32());
-                let Ty::Enum(id) = &e.ty else { return Err(internal("get result")) };
-                let some = ident(&self.cx.variants(*id)[1].0);
-                let (t, tn) = self.temp(&e.ty);
-                self.line(&format!("{tn} {t};"));
-                self.open(&format!("{} {{", if_(&format!("{i} < {s}.len"))));
-                self.line(&format!("{t} = ({tn}){{ .tag = 1, .u = {{ .v_{some} = {{ .f0 = {s}.ptr[{i}] }} }} }};"));
-                self.indent -= 1;
-                self.line("} else {");
-                self.indent += 1;
-                self.line(&format!("{t} = ({tn}){{ .tag = 0 }};"));
-                self.close("}");
-                Ok(t)
-            }
             Prim::Fill => {
                 let s = self.span_arg(&args[0].expr)?;
                 let vs = self.operands(&refs[1..])?;

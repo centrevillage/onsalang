@@ -219,7 +219,9 @@ fn span_coercions_and_bang_methods() {
         "pub rt fn fill(inout out: Span[F32]) {\n  out.fill!(0.0)\n}\n\npub rt fn g(inout buf: [F32; 8]) -> U32 {\n  fill(inout buf)\n  buf.fill!(1.0)\n  let n = buf.len()\n  n\n}\n",
     );
     assert!(d.contains("fill(inout span(buf))"), "{d}");
-    assert!(d.contains("fill(inout span(buf), 1.0:F32)"), "{d}");
+    // `fill` of a `Span` is a primitive, of an array std's Onsa (§5.3, S-853).
+    assert!(d.contains("fill(inout out, 0.0:F32)"), "{d}");
+    assert!(d.contains("std.core.seq.[T; N].fill__F32__8(inout buf, 1.0:F32)"), "{d}");
     assert!(d.contains("let n: U32 = 8:U32"), "{d}");
 }
 

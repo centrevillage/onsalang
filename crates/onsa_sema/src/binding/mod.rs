@@ -260,7 +260,7 @@ impl<'a> Settle<'a> {
     /// `("gain", v).0`, S-615), stopping at the end of a chain
     /// of names (`m.LIMIT`).
     fn borrowed(&self, e: ExprId, any_place: bool) -> Option<(Option<ExprId>, bool)> {
-        if let Some(base) = view_base((self.ast, self.info, &self.a.types), e, |t| t) {
+        if let Some(base) = view_base((self.ast, self.info, self.a), e, |t| t) {
             return self.borrowed(self.ast.without_parens(base), any_place);
         }
         if let Some(root) = self.ast.place_root_node(e)

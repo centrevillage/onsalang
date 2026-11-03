@@ -397,7 +397,14 @@ impl Modules {
             }
             Entity::Builtin(Builtin::Scalar(t)) => self.builtin_member(t, name, from, defs),
             Entity::Builtin(Builtin::Generic(b)) => match builtin_key.get(&b) {
-                Some(&t) => self.builtin_member(t, name, from, defs),
+                // `Buf.len`: of `Span` when not of `Buf` (§5.3), so a method
+                // in the function form is the E0308 of a method (§15.1).
+                Some(&t) => match (self.builtin_member(t, name, from, defs), builtin_key.get(&BuiltinTy::Span)) {
+                    (Err(ResolveError::NotFound { .. }), Some(&s)) if crate::builtin::takes_span_members(b) => {
+                        self.builtin_member(s, name, from, defs)
+                    }
+                    (found, _) => found,
+                },
                 None => Err(ResolveError::NotFound { name: name.name.clone(), span: name.span }),
             },
             // The owner's name, as of a def above (`Num.ZERO`: `Num`).

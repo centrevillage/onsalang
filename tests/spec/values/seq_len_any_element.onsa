@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.2", "§4.5", "§4.6"]
+
+// `len()` of an array is there whatever the element is (§5.3: "`[T; N]` は `len()` を要素によらず持ち"): a Copy
+// element, an Affine one (`Buf[F32]`, so that the array cannot be copied), the second
+// class `Span[F32]` of a planar array ("平面の配列のチャンネルの数", S-853), and the element of a type
+// parameter with `?Dup`. The Shared element (`Str`) is in seq_get_shared.onsa (this version cannot run a
+// Shared type, E0200 in the lowering). The methods that need the element to be Dup or Copy are in
+// negative/seq_*.onsa.
+
+fn len_copy(xs: [F32; 4]) -> U32 {
+  xs.len()
+}
+
+fn len_affine(xs: [Buf[F32]; 2]) -> U32 {
+  xs.len()
+}
+
+fn len_affine_inout(inout xs: [Buf[F32]; 2]) -> U32 {
+  xs.len()
+}
+
+fn len_planar(xs: [Span[F32]; 3]) -> U32 {
+  xs.len()
+}
+
+fn len_nested(xs: [[F32; 3]; 2]) -> U32 {
+  (xs.len() * 10) + xs[0].len()
+}
+
+fn len_of_a_parameter[T, const N: U32](xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+fn len_of_a_maybe_affine_parameter[T: ?Dup, const N: U32](xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+test "len of an array of Copy and nested elements" {
+  let a: [F32; 4]      = [0.0; 4]
+  let n: [[F32; 3]; 2] = [[0.0; 3]; 2]
+  assert len_copy(a) == 4
+  assert len_nested(n) == 23
+}
+
+test "len of an array of Buf, which is Affine" {
+  var bufs: [Buf[F32]; 2] = [Buf.zeroed(2), Buf.zeroed(5)]
+  assert len_affine(bufs) == 2
+  assert len_affine_inout(inout bufs) == 2
+  assert bufs[1].len() == 5
+}
+
+test "len of a planar array is the number of channels" {
+  let a: [F32; 4] = [0.0; 4]
+  let b: [F32; 2] = [0.0; 2]
+  let c: [F32; 7] = [0.0; 7]
+  assert len_planar([a, b, c]) == 3
+  assert len_planar([c, b, a]) == 3
+}
+
+test "len of a type parameter array, with and without ?Dup" {
+  let a: [F32; 4]         = [0.0; 4]
+  let bufs: [Buf[F32]; 2] = [Buf.zeroed(2), Buf.zeroed(5)]
+  assert len_of_a_parameter(a) == 4
+  assert len_of_a_maybe_affine_parameter(a) == 4
+  assert len_of_a_maybe_affine_parameter(bufs) == 2
+}

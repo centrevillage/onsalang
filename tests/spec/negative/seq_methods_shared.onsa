@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§18.1"]
+// fixes = 0
+
+// S-847, S-853 (C): a Shared element (`Str`) is Dup and not Copy, so `get` and `fill!` of the array are there
+// (values/seq_get_shared.onsa) and `slice`, `copy_from!` and `add_from!` are the E0416 of the call: a view of
+// a Shared element would be a `Span[Str]` (§4.5: the element of a `Span` is Copy), and `add_from!` is for
+// numbers. No candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn slice_of_a_borrowed_array(xs: [Str; 3]) -> U32 {
+  xs.slice(0, 2).len() //~ E0416
+}
+
+pub fn slice_of_an_inout_array(inout xs: [Str; 3]) -> U32 {
+  xs.slice(1, 3).len() //~ E0416
+}
+
+pub fn slice_of_an_inner_array(xs: [[Str; 2]; 2], k: U32) -> U32 {
+  xs[k].slice(0, 1).len() //~ E0416
+}
+
+pub fn copy_from_of_str_arrays(inout xs: [Str; 3], ys: [Str; 3]) {
+  xs.copy_from!(ys) //~ E0416
+}
+
+pub fn copy_from_of_an_inner_array(inout xs: [[Str; 2]; 2], k: U32, ys: [Str; 2]) {
+  xs[k].copy_from!(ys) //~ E0416
+}
+
+pub fn add_from_of_str_arrays(inout xs: [Str; 3], ys: [Str; 3]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn fine_len_get_and_fill(inout xs: [Str; 3], s: Str) -> U32 uses {Alloc} {
+  xs.fill!(s)
+  match xs.get(0) {
+    Some(t) => t.len(),
+    None => 0,
+  }
+}

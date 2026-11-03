@@ -8,13 +8,18 @@ use onsa_diag::{Code, FileId, Stage};
 use crate::{Analysis, DefId, Module, Package, analyze};
 
 fn check(src: &str) -> Analysis {
+    check_in(src, Vec::new())
+}
+
+/// With std, whose `impl`s have the methods of the sequences (§5.3).
+fn check_in(src: &str, deps: Vec<std::sync::Arc<Package>>) -> Analysis {
     let modules = vec![Module {
         segments: vec!["main".into()],
         file: FileId(0),
         text: src.to_string(),
         parsed: onsa_syntax::parse(FileId(0), src),
     }];
-    analyze(&Package::new("t", modules, Vec::new()))
+    analyze(&Package::new("t", modules, deps))
 }
 
 fn def(a: &Analysis, name: &str) -> DefId {
@@ -67,7 +72,7 @@ fn a_unit_whose_modes_failed_gets_no_rt_and_no_effects() {
     let src = "pub struct Pair {\n  a: Buf[F32],\n  b: Buf[F32],\n}\n\n\
                pub fn take_field(move s: Pair) -> Buf[F32] { let x = move s.a\n  if x.len() > s.b.len() { x } else { x } }\n\n\
                pub rt fn take_field_rt(move s: Pair) -> Buf[F32] { let x = move s.a\n  if x.len() > s.b.len() { x } else { x } }\n";
-    let a = check(src);
+    let a = check_in(src, vec![crate::flow_tests::std_package()]);
     let codes: Vec<(Code, Stage)> = a.diagnostics.iter().map(|d| (d.code, d.stage)).collect();
     assert_eq!(codes, [(Code::E0704, Stage::Modes), (Code::E0704, Stage::Modes)]);
     assert!(a.failures.skips(def(&a, "take_field_rt"), Stage::Effects));

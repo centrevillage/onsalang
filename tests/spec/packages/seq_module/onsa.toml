@@ -1,0 +1,3 @@
+[package]
+name = "seq_module"
+edition = "2026"

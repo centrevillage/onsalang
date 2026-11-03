@@ -23,17 +23,10 @@
 
 [allow."crates/onsa_core/src/lower/body/call.rs"]
 "None" = 1
-"add_from" = 2
-"copy_from" = 1
-"fill" = 3
-"get" = 1
-"is_empty" = 1
 "is_err" = 1
 "is_none" = 1
 "is_ok" = 2
 "is_some" = 2
-"len" = 1
-"slice" = 1
 "unwrap" = 1
 "unwrap_or" = 1
 "zeroed" = 1
@@ -91,20 +84,15 @@
 "Alloc" = 1
 
 [allow."crates/onsa_sema/src/builtin.rs"]
-"add_from" = 1
-"copy_from" = 1
-"fill" = 1
 "find" = 1
-"get" = 1
 "get_substr" = 1
 "is_char_boundary" = 1
-"is_empty" = 2
+"is_empty" = 1
 "is_err" = 1
 "is_none" = 1
 "is_ok" = 1
 "is_some" = 1
 "len" = 2
-"slice" = 1
 "substr" = 1
 "unwrap" = 1
 "unwrap_or" = 1

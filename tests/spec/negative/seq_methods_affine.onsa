@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-847, S-853 (C): `slice`, `copy_from!` and `add_from!` of an array need the element to be Copy (§5.3:
+// "`slice`・`copy_from!`・`add_from!` は要素が Copy のとき持つ"), so an Affine element (`Buf[F32]`, a struct that holds
+// one) is the E0416 of the call. `slice` would make a `Span[Buf[F32]]` (§4.5: the element of a `Span` is Copy)
+// and the other two copy owned values. No candidate (`fixes = 0`). One error per function (P-01); the places of
+// the receiver are in seq_get_affine.onsa and seq_fill_affine.onsa.
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+pub fn slice_of_a_borrowed_array(xs: [Buf[F32]; 2]) -> U32 {
+  xs.slice(0, 1).len() //~ E0416
+}
+
+pub fn slice_of_an_inout_array(inout xs: [Buf[F32]; 2]) -> U32 {
+  xs.slice(1, 2).len() //~ E0416
+}
+
+pub fn slice_of_a_struct_array(xs: [Owner; 2]) -> U32 {
+  xs.slice(0, 2).len() //~ E0416
+}
+
+pub fn slice_in_a_for(xs: [Buf[F32]; 2]) -> U32 {
+  var n: U32 = 0
+  for _ in xs.slice(0, 1) { //~ E0416
+    n = n + 1
+  }
+  n
+}
+
+pub fn copy_from_of_buf_arrays(inout xs: [Buf[F32]; 2], ys: [Buf[F32]; 2]) {
+  xs.copy_from!(ys) //~ E0416
+}
+
+pub fn copy_from_of_struct_arrays(inout xs: [Owner; 2], ys: [Owner; 2]) {
+  xs.copy_from!(ys) //~ E0416
+}
+
+pub fn copy_from_of_an_inner_array(inout xs: [[Buf[F32]; 2]; 2], k: U32, ys: [Buf[F32]; 2]) {
+  xs[k].copy_from!(ys) //~ E0416
+}
+
+pub fn add_from_of_buf_arrays(inout xs: [Buf[F32]; 2], ys: [Buf[F32]; 2]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn add_from_of_struct_arrays(inout xs: [Owner; 2], ys: [Owner; 2]) {
+  xs.add_from!(ys) //~ E0416
+}
+
+pub fn fine_the_len_and_the_element_buf(xs: [Buf[F32]; 2]) -> U32 {
+  xs.len() + xs[0].slice(0, 1).len()
+}

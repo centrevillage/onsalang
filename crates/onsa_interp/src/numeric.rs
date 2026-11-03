@@ -293,14 +293,6 @@ pub(super) fn float_of(v: &Value, k: FloatKind, span: Span) -> f64 {
     }
 }
 
-pub(super) fn some(v: Value) -> Value {
-    Value::Enum { tag: 1, fields: vec![v] }
-}
-
-pub(super) fn none() -> Value {
-    Value::Enum { tag: 0, fields: Vec::new() }
-}
-
 /// Round half to even (S-25).
 fn round_even_f32(x: f32) -> f32 {
     x.round_ties_even()
