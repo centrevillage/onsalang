@@ -15,7 +15,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 
-use onsa_core::prim::{CheckedOp, MathFn, Prim};
+use onsa_core::prim::{MathFn, Prim};
 use onsa_core::walk::{has_return, walk_block};
 use onsa_core::{
     BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,

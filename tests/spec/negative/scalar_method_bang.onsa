@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§5.2", "§18.1"]
+
+// E0714 (W5-02 U4b): a `!` on the call of a method of the scalar types (spec §5.2: the `!` marks a call of a
+// method with `inout self`; a call of any other method, a function or a constructor with it is E0714). None of the
+// methods of the scalar types takes `inout self` (§3.3, §3.4). One error per function (P-01). The last function is
+// fine.
+
+pub fn bits_with_a_bang(x: F32) -> U32 {
+  x.to_bits!()                                      //~ E0714
+}
+
+pub fn trunc_with_a_bang(x: F32) -> I32 {
+  x.trunc_i32!()                                    //~ E0714
+}
+
+pub fn narrow_with_a_bang(n: I32) -> Option[U8] {
+  n.narrow_u8!()                                    //~ E0714
+}
+
+pub fn round_with_a_bang(x: F64) -> F32 {
+  x.round_f32!()                                    //~ E0714
+}
+
+pub fn floor_division_with_a_bang(a: I32, b: I32) -> I32 {
+  a.div_euclid!(b)                                  //~ E0714
+}
+
+pub fn checked_with_a_bang(a: U8, b: U8) -> Option[U8] {
+  a.checked_add!(b)                                 //~ E0714
+}
+
+pub fn fine(x: F32, a: I32, b: I32) -> U32 {
+  x.to_bits() + a.div_euclid(b).narrow_u32().unwrap()
+}

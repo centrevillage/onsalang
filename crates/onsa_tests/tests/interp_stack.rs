@@ -33,6 +33,8 @@ fn lower_here(src: &str) -> onsa_core::Module {
 /// The recursive shapes of `tests/spec/semantics/recursion_deep.onsa`: each
 /// `t.<name>(n)` recurses `n` levels deep.
 const SHAPES: &str = "
+use std.math
+
 pub fn dive(n: U32) -> U32 {
   if n == 0 {
     0
@@ -138,7 +140,7 @@ pub fn sqrt_chain(n: U32) -> U32 {
   if n == 0 {
     0
   } else {
-    let _: F64 = (sqrt_chain(n - 1) as F64).sqrt()
+    let _: F64 = math.sqrt(sqrt_chain(n - 1) as F64)
     1
   }
 }

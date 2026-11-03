@@ -1,0 +1,3 @@
+[package]
+name = "scalar_method_modules"
+edition = "2026"

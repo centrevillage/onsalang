@@ -46,13 +46,13 @@ pub fn calls(t: Bool) -> I32 {
   x + y + z
 }
 
-// A method call in the block form after a chain: the `(` of `.max(` is on a continued line.
+// A method call in the block form after a chain: the `(` of `.rem_euclid(` is on a continued line.
 pub fn chains(a: I32, b: I32) -> I32 {
   let y = a
-    .max(
+    .rem_euclid(
       b,
     )
-    .min(
+    .div_euclid(
       100,
     )
   y

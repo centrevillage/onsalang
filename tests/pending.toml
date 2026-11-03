@@ -910,6 +910,13 @@ reasons = ["S-131", "S-146"]
 until = "W9-03"
 note = "const の初期化式の整数の panic（U64 の積、MIN / -1、2^63 と 2^64 の trunc）が E0419 にならない（§6.6）。今は onsa check で 0 件"
 
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/scalar_method_const_panic.onsa"
+reasons = ["S-131", "S-146"]
+until = "W9-03"
+note = "const の初期化式のスカラーのメソッドの panic（trunc_* の範囲外と NaN、div_euclid・rem_euclid の 0 と MIN / -1）が E0419 にならない（§6.6、W5-02 U4b/t）。今は onsa check で 0 件"
+
 # --- W2-05/t: C のランタイムの整数の文脈（2026-10-08）
 
 # --- W2-05/t: C のターゲットで走る整数の事例（2026-10-08）

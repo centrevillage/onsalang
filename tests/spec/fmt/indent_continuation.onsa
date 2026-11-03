@@ -43,11 +43,11 @@ type Binary =
 pub fn chains(a: I32, b: I32) -> I32 {
   let y =
     a
-    .max(b)
-    .min(100)
+    .rem_euclid(b)
+    .div_euclid(100)
   let z = a
-    .max(b)
-    .min(100)
+    .rem_euclid(b)
+    .div_euclid(100)
   y + z
 }
 

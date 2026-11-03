@@ -206,7 +206,9 @@ fn methods_and_builtin_prims() {
         "pub fn f(x: F64, n: I64) -> I32 {\n  let a = x.trunc_i32_sat()\n  let b = n.narrow_i32().unwrap_or(0)\n  let _ = x.to_bits()\n  a + b\n}\n",
     );
     assert!(d.contains("trunc_sat.F64.I32(x)"), "{d}");
-    assert!(d.contains("narrow.I64.I32(n)"), "{d}");
+    // `narrow_*` is Onsa over its primitive (S-71).
+    assert!(d.contains("std.core.num.I64.narrow_i32(n)"), "{d}");
+    assert!(d.contains("narrow_parts.I64.I32(self)"), "{d}");
     assert!(d.contains("to_bits.F64(x)"), "{d}");
     assert!(d.contains("switch "), "{d}");
 }

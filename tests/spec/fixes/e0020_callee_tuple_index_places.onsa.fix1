@@ -47,7 +47,7 @@ pub fn with_an_argument_that_is_a_tuple_element(t: (fn(I32) -> I32, I32), x: I32
 }
 
 pub fn as_a_receiver(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
-  t.0.(x).abs()                                      //~ E0020
+  t.0.(x).rem_euclid(3)                              //~ E0020
 }
 
 pub fn as_an_operand(t: (fn(I32) -> I32, I32), x: I32) -> I32 {

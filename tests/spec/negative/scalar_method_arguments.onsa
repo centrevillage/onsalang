@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§6.2", "§15.1", "§18.1"]
+
+// E0412 and E0401 (W5-02 U4b): the number and the types of the arguments of the methods of the scalar types
+// (§3.3, §3.4, §6.2). A conversion method takes no argument; `div_euclid`, `rem_euclid` and the `checked_*` methods
+// take one, of the type of the receiver. A wrong number of arguments is E0412 (the same code as for a function) and
+// a wrong type is E0401. One error per function (P-01). The last function is fine.
+
+pub fn bits_with_an_argument(x: F32) -> U32 {
+  x.to_bits(1)                                      //~ E0412
+}
+
+pub fn trunc_with_an_argument(x: F32) -> I32 {
+  x.trunc_i32(x)                                    //~ E0412
+}
+
+pub fn narrow_with_an_argument(n: I32) -> Option[U8] {
+  n.narrow_u8(1)                                    //~ E0412
+}
+
+pub fn round_with_an_argument(x: F64, y: F64) -> F32 {
+  x.round_f32(y)                                    //~ E0412
+}
+
+pub fn floor_division_without_one(a: I32) -> I32 {
+  a.div_euclid()                                    //~ E0412
+}
+
+pub fn remainder_with_two(a: I32, b: I32) -> I32 {
+  a.rem_euclid(b, b)                                //~ E0412
+}
+
+pub fn checked_without_one(a: U8) -> Option[U8] {
+  a.checked_add()                                   //~ E0412
+}
+
+pub fn checked_with_two(a: I64, b: I64) -> Option[I64] {
+  a.checked_mul(b, b)                               //~ E0412
+}
+
+pub fn floor_division_by_a_float(a: I32) -> I32 {
+  a.div_euclid(1.5)                                 //~ E0401
+}
+
+pub fn remainder_by_another_width(a: I32, b: I64) -> I32 {
+  a.rem_euclid(b)                                   //~ E0401
+}
+
+pub fn checked_with_a_float(a: I32, x: F32) -> Option[I32] {
+  a.checked_add(x)                                  //~ E0401
+}
+
+pub fn checked_with_a_bool(a: U8) -> Option[U8] {
+  a.checked_sub(true)                               //~ E0401
+}
+
+pub fn checked_with_another_sign(a: I32, b: U32) -> Option[I32] {
+  a.checked_mul(b)                                  //~ E0401
+}
+
+pub fn fine(a: I32, b: I32, x: F32) -> I32 {
+  a.div_euclid(b).rem_euclid(3) + a.checked_add(b).unwrap() + x.trunc_i32_sat()
+}

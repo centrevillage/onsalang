@@ -399,44 +399,39 @@ fn the_runtime_header_takes_the_nan_bits_from_core() {
     assert!(defined < header.find("return ONSA_NAN_BITS_F32;").expect("the use"));
 }
 
-/// R-11, R-145: `narrow_*` is the runtime's check for the pair of types, with
+/// R-11, R-145: `narrow_parts` is the runtime's check for the pair of types, with
 /// the signs of both (a signed lower bound converted to unsigned made every
 /// value fall outside, R-11); the generated function compares no limit itself
 /// (no `-Wsign-compare` or `-Wtype-limits`, R-145).
 #[test]
 fn narrow_from_unsigned_compares_the_upper_bound_alone() {
-    let opt = TypeDef {
-        name: "m.Opt".into(),
-        kind: TypeDefKind::Enum {
-            variants: vec![("None".into(), vec![]), ("Some".into(), vec![Ty::Int(IntKind::I32)])],
-        },
-    };
+    let parts = Ty::Tuple(vec![Ty::Bool, Ty::Int(IntKind::I32)]);
     for (from, fits, define) in [
         (
             IntKind::U32,
-            "if (onsa_narrow_u32_i32(x, &onsa_t2)) {",
+            "bool onsa_t2 = onsa_narrow_u32_i32(x, &onsa_t1);",
             "ONSA_DEFINE_NARROW(u32, uint32_t, 0, i32, int32_t, 1)",
         ),
         (
             IntKind::U64,
-            "if (onsa_narrow_u64_i32(x, &onsa_t2)) {",
+            "bool onsa_t2 = onsa_narrow_u64_i32(x, &onsa_t1);",
             "ONSA_DEFINE_NARROW(u64, uint64_t, 0, i32, int32_t, 1)",
         ),
         (
             IntKind::I64,
-            "if (onsa_narrow_i64_i32(x, &onsa_t2)) {",
+            "bool onsa_t2 = onsa_narrow_i64_i32(x, &onsa_t1);",
             "ONSA_DEFINE_NARROW(i64, int64_t, 1, i32, int32_t, 1)",
         ),
     ] {
         let narrow = e(
-            Ty::Enum(TypeId(0)),
+            parts.clone(),
             ExprKind::Prim {
-                prim: onsa_core::prim::Prim::Narrow { from, to: IntKind::I32 },
+                prim: onsa_core::prim::Prim::NarrowParts { from, to: IntKind::I32 },
                 args: vec![Arg { mode: Mode::Borrow, expr: local(0, Ty::Int(from)) }],
             },
         );
         let m = Module {
-            types: vec![opt.clone()],
+            types: Vec::new(),
             consts: Vec::new(),
             fns: vec![FnDef {
                 name: "m.f".into(),
@@ -446,13 +441,13 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
                 rt: true,
                 locals: vec![
                     Local { name: "x".into(), ty: Ty::Int(from) },
-                    Local { name: "v".into(), ty: Ty::Enum(TypeId(0)) },
+                    Local { name: "v".into(), ty: parts.clone() },
                 ],
                 body: Some(Block {
                     stmts: vec![Stmt { span: sp(), kind: StmtKind::Let(LocalId(1), narrow) }],
                     value: Some(Box::new(e(
                         Ty::Int(IntKind::I32),
-                        ExprKind::Tag(Box::new(local(1, Ty::Enum(TypeId(0))))),
+                        ExprKind::Field { base: Box::new(local(1, parts.clone())), index: 1 },
                     ))),
                 }),
                 span: sp(),

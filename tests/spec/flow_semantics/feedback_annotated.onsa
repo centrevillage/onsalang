@@ -18,7 +18,7 @@ pub flow field(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow method(x: F32 at sample) -> F32 at sample {
-  let a      = prev~(^b.abs())
+  let a      = prev~(F32.from_bits(^b.to_bits()))
   let b: F32 = x - 1.0
   a + b
 }

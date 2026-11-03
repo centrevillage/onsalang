@@ -106,7 +106,7 @@ pub(super) fn lower_call(
             let d = lw.a.def(def).clone();
             let DefKind::Fn(f) = &d.kind else { return Err(internal(span, "call to a non-fn")) };
             if f.target {
-                return lower_target_call(lw, cx, e, def, f, &gargs, args, ty);
+                return lower_target_call(lw, cx, e, (def, f), &gargs, None, args, ty);
             }
             let params = sig_params(lw, cx, f, &gargs, span)?;
             let cargs = lower_args(lw, cx, args, &params)?;
@@ -126,6 +126,9 @@ pub(super) fn lower_call(
             let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "method call shape")) };
             let recv = lower_expr(lw, cx, *base)?;
             let self_mode = core_mode(f.self_mode.unwrap_or(ast::Mode::Borrow));
+            if f.target {
+                return lower_target_call(lw, cx, e, (def, f), &gargs, Some((recv, self_mode)), args, ty);
+            }
             let params = sig_params(lw, cx, f, &gargs, span)?;
             let mut cargs = vec![Arg { mode: self_mode, expr: recv }];
             cargs.extend(lower_args(lw, cx, args, &params)?);
@@ -178,15 +181,16 @@ fn sig_params(lw: &mut Lowerer, cx: &FnCx, f: &SFnDef, gargs: &[GenericArg], spa
 
 /// A call to a `target fn` of `std` (D-07): its row of the table, resolved
 /// by sema ([`onsa_sema::Analysis::prims`], S-69 (2)), instantiated at the
-/// type arguments of the call; `array.from_fn` is inlined.
+/// type arguments of the call; `array.from_fn` is inlined. The receiver
+/// `recv` of a method is its first operand, as its `self` takes it.
 #[allow(clippy::too_many_arguments)]
 fn lower_target_call(
     lw: &mut Lowerer,
     cx: &mut FnCx,
     e: ExprId,
-    def: DefId,
-    f: &SFnDef,
+    (def, f): (DefId, &SFnDef),
     gargs: &[GenericArg],
+    recv: Option<(Expr, Mode)>,
     args: &[ast::Arg],
     ty: Ty,
 ) -> R<Expr> {
@@ -211,8 +215,13 @@ fn lower_target_call(
     let Some(prim) = row.instantiate(&scalars) else {
         return Err(internal(span, "a `target` declaration without a primitive for its type arguments"));
     };
+    let mut cargs = Vec::new();
+    if let Some((recv, mode)) = recv {
+        let Some(GenericArg::Ty(this)) = &own else { return Err(internal(span, "a `target` method of no type")) };
+        cargs.push(Arg { mode, expr: coerce(lw, cx, recv, this, mode)? });
+    }
     let params = sig_params(lw, cx, f, gargs, span)?;
-    let cargs = lower_args(lw, cx, args, &params)?;
+    cargs.extend(lower_args(lw, cx, args, &params)?);
     Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
 }
 
@@ -302,56 +311,11 @@ fn lower_builtin_method(
         return Ok(Expr::new(ty, span, ExprKind::Prim { prim: Prim::BufZeroed, args }));
     }
     let recv = lower_expr(lw, cx, base)?;
-    let rty = recv.ty.clone();
-    let prim_call = |prim: Prim, recv: Expr, rest: Vec<Expr>| {
-        let mut a = vec![borrow(recv)];
-        a.extend(rest.into_iter().map(borrow));
-        ExprKind::Prim { prim, args: a }
-    };
-    let kind = match (&rty, name) {
-        (Ty::Int(k), n) if n.starts_with("narrow_") => {
-            let to = IntKind::parse(&n[7..].to_uppercase()).ok_or_else(|| internal(span, "narrow target"))?;
-            prim_call(Prim::Narrow { from: *k, to }, recv, lowered_args)
-        }
-        (Ty::Int(k), "round_f32") => prim_call(Prim::IntToFloat { from: *k, to: FloatKind::F32 }, recv, lowered_args),
-        (Ty::Int(k), "round_f64") => prim_call(Prim::IntToFloat { from: *k, to: FloatKind::F64 }, recv, lowered_args),
-        (Ty::Int(k), "abs") => prim_call(Prim::IntAbs(*k), recv, lowered_args),
-        (Ty::Int(k), "min") => prim_call(Prim::IntMin(*k), recv, lowered_args),
-        (Ty::Int(k), "max") => prim_call(Prim::IntMax(*k), recv, lowered_args),
-        (Ty::Int(k), "checked_add") => prim_call(Prim::Checked(CheckedOp::Add, *k), recv, lowered_args),
-        (Ty::Int(k), "checked_sub") => prim_call(Prim::Checked(CheckedOp::Sub, *k), recv, lowered_args),
-        (Ty::Int(k), "checked_mul") => prim_call(Prim::Checked(CheckedOp::Mul, *k), recv, lowered_args),
-        (Ty::Int(k), "checked_div") => prim_call(Prim::Checked(CheckedOp::Div, *k), recv, lowered_args),
-        (Ty::Int(k), "div_euclid") => prim_call(Prim::DivEuclid(*k), recv, lowered_args),
-        (Ty::Int(k), "rem_euclid") => prim_call(Prim::RemEuclid(*k), recv, lowered_args),
-        (Ty::Float(k), n) if n.starts_with("trunc_") => {
-            let sat = n.ends_with("_sat");
-            let mid = n.trim_start_matches("trunc_").trim_end_matches("_sat");
-            let to = IntKind::parse(&mid.to_uppercase()).ok_or_else(|| internal(span, "trunc target"))?;
-            prim_call(Prim::TruncToInt { from: *k, to, sat }, recv, lowered_args)
-        }
-        (Ty::Float(k), "round_f32") => {
-            prim_call(Prim::FloatToFloat { from: *k, to: FloatKind::F32 }, recv, lowered_args)
-        }
-        (Ty::Float(k), "round_f64") => {
-            prim_call(Prim::FloatToFloat { from: *k, to: FloatKind::F64 }, recv, lowered_args)
-        }
-        (Ty::Float(k), "to_bits") => prim_call(Prim::ToBits(*k), recv, lowered_args),
-        (Ty::Float(k), "is_nan") => prim_call(Prim::IsNan(*k), recv, lowered_args),
-        (Ty::Float(k), "is_finite") => prim_call(Prim::IsFinite(*k), recv, lowered_args),
-        (Ty::Float(k), n) => {
-            let Some(mf) = MathFn::parse(n) else {
-                return Err(unsupported(span, Feature::Methods, &[n, &crate::dump::type_name(&lw.m, &rty)]));
-            };
-            prim_call(Prim::Math(mf, *k), recv, lowered_args)
-        }
-        (Ty::Array(..) | Ty::Span(_) | Ty::Buf(_), n) => {
-            return lower_seq_method(lw, cx, recv, n, lowered_args, ty, span);
-        }
-        (Ty::Enum(id), n) => return lower_enum_method(lw, cx, *id, recv, n, lowered_args, ty, span),
-        _ => return Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, &rty)])),
-    };
-    Ok(Expr::new(ty, span, kind))
+    match &recv.ty {
+        Ty::Array(..) | Ty::Span(_) | Ty::Buf(_) => lower_seq_method(lw, cx, recv, name, lowered_args, ty, span),
+        &Ty::Enum(id) => lower_enum_method(lw, cx, id, recv, name, lowered_args, ty, span),
+        other => Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, other)])),
+    }
 }
 
 fn lower_seq_method(

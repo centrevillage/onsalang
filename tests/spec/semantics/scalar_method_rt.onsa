@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§10"]
+
+// W5-02 U4b: the conversion methods, `to_bits`, `div_euclid` and `rem_euclid` are callable in an `rt fn` (spec
+// §10 rule 4: an `rt fn` calls no function that is not `rt`; §3.3: "rt ではこちらを使う" for `trunc_<型>_sat`, and
+// the program of the audio thread converts, splits and reads the bits of its values). The expected values
+// are worked out by hand: 2.75 cut toward zero is 2; the bits of 1.0 are 0x3F800000; -7 = (-4) * 2 + 1.
+
+pub rt fn to_index(x: F32) -> I32 {
+  x.trunc_i32_sat()
+}
+
+pub rt fn to_index_wide(x: F64) -> I64 {
+  x.trunc_i64_sat()
+}
+
+pub rt fn to_single(x: F64) -> F32 {
+  x.round_f32()
+}
+
+pub rt fn to_double(n: U64) -> F64 {
+  n.round_f64()
+}
+
+pub rt fn single_bits(x: F32) -> U32 {
+  x.to_bits()
+}
+
+pub rt fn double_bits(x: F64) -> U64 {
+  x.to_bits()
+}
+
+pub rt fn wrap_index(i: I32, n: I32) -> I32 {
+  i.rem_euclid(n)
+}
+
+pub rt fn floor_div(i: I32, n: I32) -> I32 {
+  i.div_euclid(n)
+}
+
+pub rt fn lane(i: U32) -> U8 {
+  match i.narrow_u8() {
+    Some(b) => b,
+    None => 255,
+  }
+}
+
+pub rt fn chain_of_methods(x: F32) -> U32 {
+  x.trunc_i32_sat().round_f32().to_bits()
+}
+
+test "an rt fn calls the methods of the scalars" {
+  assert to_index(2.75) == 2
+  assert to_index(-2.75) == -2
+  assert to_index(F32.NAN) == 0
+  assert to_index(1.0e20) == 2147483647
+  assert to_index_wide(-1.0e30) == I64.MIN
+  assert to_single(1.0) == 1.0
+  assert to_double(18446744073709551615) == 18446744073709551616.0
+  assert single_bits(1.0) == 0x3F800000
+  assert double_bits(1.0) == 0x3FF0000000000000
+  assert wrap_index(-7, 4) == 1
+  assert floor_div(-7, 2) == -4
+  assert lane(7) == 7
+  assert lane(256) == 255
+  assert chain_of_methods(1.0) == 0x3F800000
+}

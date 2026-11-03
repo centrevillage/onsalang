@@ -1,54 +1,169 @@
-//! The associated constants and functions of the scalar types (spec §6.6,
-//! §3.3, §6.3): std defines the builtin types, so it declares their members.
-//! `ZERO` and `ONE` come with the number traits (W5-05); the methods with
-//! the conversions.
+//! The associated constants, functions and methods of the scalar types
+//! (spec §6.6, §3.3, §3.4, §6.3): std defines the builtin types, so it
+//! declares their members, those of the spec's lists and no other. A method
+//! converts only between the types `as` does not (§3.3); `abs`, `min`,
+//! `sqrt` and the like are the functions of `std.math`, not methods (§3.4).
+//! `ZERO` and `ONE` come with the number traits (W5-05).
+//!
+//! The methods that return an `Option` are Onsa (S-71): a `target`
+//! declaration returns no `Option` (D-07), so their primitives return
+//! whether the result is defined, and the result when it is.
+
+/// Whether `x` is a value of `B`, and that value (§3.3). For `narrow_*`.
+target rt fn narrow_parts[A, B](x: A) -> (Bool, B)
+/// Whether `a + b` is a value of `T` (no overflow, §3.4), and the sum.
+target rt fn add_parts[T](a: T, b: T) -> (Bool, T)
+/// As `add_parts`, of `a - b`.
+target rt fn sub_parts[T](a: T, b: T) -> (Bool, T)
+/// As `add_parts`, of `a * b`.
+target rt fn mul_parts[T](a: T, b: T) -> (Bool, T)
+/// As `add_parts`, of `a / b`: neither a zero `b` nor `MIN / -1`.
+target rt fn div_parts[T](a: T, b: T) -> (Bool, T)
+
+/// `Some` of the value when it is defined.
+rt fn some_if[T](parts: (Bool, T)) -> Option[T] {
+  let (defined, v) = parts
+  if defined { Some(v) } else { None }
+}
 
 impl I8 {
   pub const MIN: I8 = -128
   pub const MAX: I8 = 127
   pub const BITS: U32 = 8
+  pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u16(self) -> Option[U16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u32(self) -> Option[U32] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u64(self) -> Option[U64] { some_if(narrow_parts(self)) }
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 impl I16 {
   pub const MIN: I16 = -32768
   pub const MAX: I16 = 32767
   pub const BITS: U32 = 16
+  pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u16(self) -> Option[U16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u32(self) -> Option[U32] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u64(self) -> Option[U64] { some_if(narrow_parts(self)) }
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 impl I32 {
   pub const MIN: I32 = -2147483648
   pub const MAX: I32 = 2147483647
   pub const BITS: U32 = 32
+  pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i16(self) -> Option[I16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u16(self) -> Option[U16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u32(self) -> Option[U32] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u64(self) -> Option[U64] { some_if(narrow_parts(self)) }
+  pub target rt fn round_f32(self) -> F32
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 impl I64 {
   pub const MIN: I64 = -9223372036854775808
   pub const MAX: I64 = 9223372036854775807
   pub const BITS: U32 = 64
+  pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i16(self) -> Option[I16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i32(self) -> Option[I32] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u16(self) -> Option[U16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u32(self) -> Option[U32] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u64(self) -> Option[U64] { some_if(narrow_parts(self)) }
+  pub target rt fn round_f32(self) -> F32
+  pub target rt fn round_f64(self) -> F64
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 impl U8 {
   pub const MIN: U8 = 0
   pub const MAX: U8 = 255
   pub const BITS: U32 = 8
+  pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 impl U16 {
   pub const MIN: U16 = 0
   pub const MAX: U16 = 65535
   pub const BITS: U32 = 16
+  pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i16(self) -> Option[I16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 impl U32 {
   pub const MIN: U32 = 0
   pub const MAX: U32 = 4294967295
   pub const BITS: U32 = 32
+  pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i16(self) -> Option[I16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i32(self) -> Option[I32] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u16(self) -> Option[U16] { some_if(narrow_parts(self)) }
+  pub target rt fn round_f32(self) -> F32
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 impl U64 {
   pub const MIN: U64 = 0
   pub const MAX: U64 = 18446744073709551615
   pub const BITS: U32 = 64
+  pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i16(self) -> Option[I16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i32(self) -> Option[I32] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_i64(self) -> Option[I64] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u16(self) -> Option[U16] { some_if(narrow_parts(self)) }
+  pub rt fn narrow_u32(self) -> Option[U32] { some_if(narrow_parts(self)) }
+  pub target rt fn round_f32(self) -> F32
+  pub target rt fn round_f64(self) -> F64
+  pub target rt fn div_euclid(self, other: Self) -> Self
+  pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
+  pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
+  pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
+  pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
 }
 
 /// The values are the mathematical ones rounded to the type, as a literal
@@ -61,6 +176,23 @@ impl F32 {
   pub const NAN: F32 = 0.0 / 0.0
   /// The float of the bits `u` (§3.3), the inverse of `to_bits()`.
   pub target rt fn from_bits(u: U32) -> F32
+  pub target rt fn to_bits(self) -> U32
+  pub target rt fn trunc_i8(self) -> I8
+  pub target rt fn trunc_i8_sat(self) -> I8
+  pub target rt fn trunc_i16(self) -> I16
+  pub target rt fn trunc_i16_sat(self) -> I16
+  pub target rt fn trunc_i32(self) -> I32
+  pub target rt fn trunc_i32_sat(self) -> I32
+  pub target rt fn trunc_i64(self) -> I64
+  pub target rt fn trunc_i64_sat(self) -> I64
+  pub target rt fn trunc_u8(self) -> U8
+  pub target rt fn trunc_u8_sat(self) -> U8
+  pub target rt fn trunc_u16(self) -> U16
+  pub target rt fn trunc_u16_sat(self) -> U16
+  pub target rt fn trunc_u32(self) -> U32
+  pub target rt fn trunc_u32_sat(self) -> U32
+  pub target rt fn trunc_u64(self) -> U64
+  pub target rt fn trunc_u64_sat(self) -> U64
 }
 
 /// As of `F32` (§6.6).
@@ -72,4 +204,22 @@ impl F64 {
   pub const NAN: F64 = 0.0 / 0.0
   /// The float of the bits `u` (§3.3), the inverse of `to_bits()`.
   pub target rt fn from_bits(u: U64) -> F64
+  pub target rt fn round_f32(self) -> F32
+  pub target rt fn to_bits(self) -> U64
+  pub target rt fn trunc_i8(self) -> I8
+  pub target rt fn trunc_i8_sat(self) -> I8
+  pub target rt fn trunc_i16(self) -> I16
+  pub target rt fn trunc_i16_sat(self) -> I16
+  pub target rt fn trunc_i32(self) -> I32
+  pub target rt fn trunc_i32_sat(self) -> I32
+  pub target rt fn trunc_i64(self) -> I64
+  pub target rt fn trunc_i64_sat(self) -> I64
+  pub target rt fn trunc_u8(self) -> U8
+  pub target rt fn trunc_u8_sat(self) -> U8
+  pub target rt fn trunc_u16(self) -> U16
+  pub target rt fn trunc_u16_sat(self) -> U16
+  pub target rt fn trunc_u32(self) -> U32
+  pub target rt fn trunc_u32_sat(self) -> U32
+  pub target rt fn trunc_u64(self) -> U64
+  pub target rt fn trunc_u64_sat(self) -> U64
 }

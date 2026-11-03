@@ -23,34 +23,17 @@
 
 [allow."crates/onsa_core/src/lower/body/call.rs"]
 "None" = 1
-"_sat" = 2
-"abs" = 1
 "add_from" = 2
-"checked_add" = 1
-"checked_div" = 1
-"checked_mul" = 1
-"checked_sub" = 1
 "copy_from" = 1
-"div_euclid" = 1
 "fill" = 3
 "get" = 1
 "is_empty" = 1
 "is_err" = 1
-"is_finite" = 1
-"is_nan" = 1
 "is_none" = 1
 "is_ok" = 2
 "is_some" = 2
 "len" = 1
-"max" = 1
-"min" = 1
-"narrow_" = 1
-"rem_euclid" = 1
-"round_f32" = 2
-"round_f64" = 2
 "slice" = 1
-"to_bits" = 1
-"trunc_" = 2
 "unwrap" = 1
 "unwrap_or" = 1
 "zeroed" = 1
@@ -108,43 +91,21 @@
 "Alloc" = 1
 
 [allow."crates/onsa_sema/src/builtin.rs"]
-"abs" = 2
 "add_from" = 1
-"ceil" = 1
-"checked_add" = 1
-"checked_div" = 1
-"checked_mul" = 1
-"checked_sub" = 1
 "copy_from" = 1
-"div_euclid" = 1
 "fill" = 1
 "find" = 1
-"floor" = 1
 "get" = 1
 "get_substr" = 1
 "is_char_boundary" = 1
 "is_empty" = 2
 "is_err" = 1
-"is_finite" = 1
-"is_nan" = 1
 "is_none" = 1
 "is_ok" = 1
 "is_some" = 1
 "len" = 2
-"max" = 2
-"min" = 2
-"narrow_{}" = 1
-"rem_euclid" = 1
-"round" = 1
-"round_f32" = 2
-"round_f64" = 2
 "slice" = 1
-"sqrt" = 1
 "substr" = 1
-"to_bits" = 1
-"trunc" = 1
-"trunc_{}" = 1
-"trunc_{}_sat" = 1
 "unwrap" = 1
 "unwrap_or" = 1
 "zeroed" = 1
@@ -353,9 +314,6 @@
 [same_spelling."crates/onsa_driver/src/platform.rs"]
 "host" = { count = 1, note = "マニフェストの platform の値 \"host\"（§15.3。属性 @host とは別）" }
 "none" = { count = 1, note = "ターゲットの三つ組の OS の部分（contains で is_none の一部と同じ綴り）" }
-
-[same_spelling."crates/onsa_sema/src/builtin.rs"]
-"u32" = { count = 1, note = "narrow_ / trunc_ の名前を作る型の接尾辞（std.test.gen の u32 と同じ綴り）" }
 
 [same_spelling."crates/onsa_sema/src/sig/generated.rs"]
 "log" = { count = 1, note = "@param の scale の値（std.math.log と同じ綴り）" }

@@ -232,23 +232,36 @@ fn int_to_float_rounds_to_nearest_even() {
     })
 }
 
+/// The `(Bool, T)` of the parts of `narrow_*` and `checked_*` (S-71): the
+/// value is 0 when it is not defined.
+fn parts_of(v: Value) -> (bool, i128) {
+    let Value::Tuple(xs) = v else { panic!("{v:?} is no tuple") };
+    let [Value::Bool(ok), x] = xs.as_slice() else { panic!("{xs:?}") };
+    (*ok, as_i128(x.clone()))
+}
+
+fn parts_ty(k: IntKind) -> Ty {
+    Ty::Tuple(vec![Ty::Bool, Ty::Int(k)])
+}
+
 #[test]
-fn narrow_and_checked_return_options() {
+fn the_parts_of_narrow_and_checked_say_whether_the_value_is_defined() {
     on_stack(|| {
-        let v = eval(prim(
-            Prim::Narrow { from: IntKind::I64, to: IntKind::I32 },
-            Ty::Enum(TypeId(0)),
-            vec![int(IntKind::I64, 1 << 40)],
-        ))
-        .unwrap();
-        assert!(matches!(v, Value::Enum { tag: 0, .. }));
-        let v = eval(prim(
-            Prim::Checked(onsa_core::prim::CheckedOp::Add, IntKind::U8),
-            Ty::Enum(TypeId(0)),
-            vec![int(IntKind::U8, 200), int(IntKind::U8, 55)],
-        ))
-        .unwrap();
-        assert!(matches!(v, Value::Enum { tag: 1, .. }));
+        let narrow = |from, to, x| {
+            parts_of(eval(prim(Prim::NarrowParts { from, to }, parts_ty(to), vec![int(from, x)])).unwrap())
+        };
+        assert_eq!(narrow(IntKind::I64, IntKind::I32, 1 << 40), (false, 0));
+        assert_eq!(narrow(IntKind::I64, IntKind::I32, -5), (true, -5));
+        assert_eq!(narrow(IntKind::I32, IntKind::U8, -1), (false, 0));
+        let parts =
+            |op, k, a, b| parts_of(eval(prim(Prim::Parts(op, k), parts_ty(k), vec![int(k, a), int(k, b)])).unwrap());
+        use onsa_core::prim::CheckedOp::*;
+        assert_eq!(parts(Add, IntKind::U8, 200, 55), (true, 255));
+        assert_eq!(parts(Add, IntKind::U8, 200, 56), (false, 0));
+        assert_eq!(parts(Sub, IntKind::U32, 0, 1), (false, 0));
+        assert_eq!(parts(Div, IntKind::I8, -128, -1), (false, 0));
+        assert_eq!(parts(Div, IntKind::I8, 7, 0), (false, 0));
+        assert_eq!(parts(Div, IntKind::I8, -7, 2), (true, -3));
     })
 }
 
@@ -649,15 +662,11 @@ fn u64_products_beyond_i128() {
         let e = eval(bin(BinOp::Mul, Overflow::Checked, u(max), u(max))).unwrap_err();
         assert!(e.message.contains("overflow"), "{}", e.message);
         let checked = |a: i128, b: i128| {
-            eval(prim(
-                Prim::Checked(onsa_core::prim::CheckedOp::Mul, IntKind::U64),
-                Ty::Enum(TypeId(0)),
-                vec![u(a), u(b)],
-            ))
-            .unwrap()
+            let mul = Prim::Parts(onsa_core::prim::CheckedOp::Mul, IntKind::U64);
+            parts_of(eval(prim(mul, parts_ty(IntKind::U64), vec![u(a), u(b)])).unwrap())
         };
-        assert!(matches!(checked(max, max), Value::Enum { tag: 0, .. }));
-        assert!(matches!(checked(4_294_967_295, 4_294_967_297), Value::Enum { tag: 1, .. }));
+        assert_eq!(checked(max, max), (false, 0));
+        assert_eq!(checked(4_294_967_295, 4_294_967_297), (true, max));
         // I64: the most negative product, I64.MIN * I64.MIN = 2^126, saturates to MAX and wraps to 0.
         let i = |n: i128| int(IntKind::I64, n);
         let min = i64::MIN as i128;
@@ -840,7 +849,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
             (
                 "narrow from another width",
                 int_("I64", "an integer of `I32`"),
-                prim(Prim::Narrow { from: IntKind::I64, to: IntKind::I8 }, Ty::Enum(TypeId(0)), vec![i32_(1)]),
+                prim(Prim::NarrowParts { from: IntKind::I64, to: IntKind::I8 }, parts_ty(IntKind::I8), vec![i32_(1)]),
             ),
             (
                 "is_nan of an integer",

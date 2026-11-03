@@ -1,0 +1,50 @@
+// The module that holds the methods of the scalar types in its public items (W5-02 U4b): a constant, a
+// function, a flow, and the member of an `impl`. Nothing here imports `std`: the methods of the scalar types
+// need no `use` (spec §3.3, §15.1: a built-in type and its members are always visible).
+
+const ONE: F32 = 1.0
+
+pub const ONE_BITS: U32 = ONE.to_bits()
+
+pub fn to_level(x: F32) -> I16 {
+  x.trunc_i16_sat()
+}
+
+pub fn to_byte(n: I32) -> Option[U8] {
+  n.narrow_u8()
+}
+
+pub fn split(n: I32, d: I32) -> (I32, I32) {
+  (n.div_euclid(d), n.rem_euclid(d))
+}
+
+pub fn narrow_bits(x: F64) -> U32 {
+  x.round_f32().to_bits()
+}
+
+pub struct Packet {
+  gain: F32,
+  count: I32,
+}
+
+impl Packet {
+  pub fn new(gain: F32, count: I32) -> Packet {
+    Packet { gain: gain, count: count }
+  }
+
+  pub fn level(self) -> I16 {
+    self.gain.trunc_i16_sat()
+  }
+
+  pub fn words(self) -> Option[U16] {
+    self.count.narrow_u16()
+  }
+
+  pub fn ratio(self, d: I32) -> Option[I32] {
+    self.count.checked_div(d)
+  }
+}
+
+pub flow level_of(x: F32 at sample) -> F32 at sample {
+  x.trunc_i16_sat() as F32
+}

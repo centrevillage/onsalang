@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§4.7", "§18.1"]
+
+// E0420 (W5-02 U4b): a method of the scalar types called on a receiver whose type is still open when the call is
+// read (spec §4.7: a literal is a type variable until the end of the function or a later statement decides it, so
+// a method that depends on the type of the receiver cannot be found). The receivers are number literals, a
+// parenthesized sum of literals and a `var` that holds a literal; the methods are of the closed list (§3.3,
+// §3.4). One error per function (P-01). The last function is fine: the same calls on receivers of a known type.
+
+pub fn narrow_a_literal() -> Option[U8] {
+  1.narrow_u8()                                     //~ E0420
+}
+
+pub fn bits_of_a_literal() -> U32 {
+  1.0.to_bits()                                     //~ E0420
+}
+
+pub fn trunc_a_literal() -> I32 {
+  2.5.trunc_i32()                                   //~ E0420
+}
+
+pub fn floor_division_of_a_literal() -> I32 {
+  7.div_euclid(2)                                   //~ E0420
+}
+
+pub fn checked_add_to_a_literal() -> Option[I32] {
+  0.checked_add(1)                                  //~ E0420
+}
+
+pub fn parenthesized_literals() -> Option[I8] {
+  (1 + 2).narrow_i8()                               //~ E0420
+}
+
+pub fn var_of_a_literal() -> I32 {
+  var acc = 0
+  acc.rem_euclid(3)                                 //~ E0420
+}
+
+pub fn fine() -> I32 {
+  let a: I32 = 7
+  let x: F32 = 2.5
+  a.div_euclid(2) + x.trunc_i32() + a.checked_add(1).unwrap()
+}

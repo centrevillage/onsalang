@@ -22,13 +22,13 @@ pub(crate) fn supports(p: &Prim) -> bool {
         | Prim::IntAbs(_)
         | Prim::IntMin(_)
         | Prim::IntMax(_)
-        | Prim::Narrow { .. }
+        | Prim::NarrowParts { .. }
         | Prim::IntToFloat { .. }
         | Prim::FloatToFloat { .. }
         | Prim::TruncToInt { .. }
         | Prim::ToBits(_)
         | Prim::FromBits(_)
-        | Prim::Checked(..)
+        | Prim::Parts(..)
         | Prim::DivEuclid(_)
         | Prim::RemEuclid(_)
         | Prim::IsNan(_)

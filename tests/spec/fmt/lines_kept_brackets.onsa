@@ -82,12 +82,12 @@ pub fn breaks_in_brackets(a: I32, b: I32) -> I32 {
 // A line that starts with `.` inside a pair of brackets.
 pub fn chains_in_brackets(a: I32, b: I32) -> I32 {
   let m = id(a
-    .max(b))
+    .rem_euclid(b))
   let n = sum3(
     a
-      .max(b),
+      .rem_euclid(b),
     b
-      .min(a),
+      .div_euclid(a),
     1,
   )
   m + n

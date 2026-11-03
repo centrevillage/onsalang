@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§10"]
+
+// W5-02 U4b: the checked methods, which return an `Option` and never panic, are callable in an `rt fn` (spec
+// §3.4: "panic しうる整数の演算子とメソッドには、全て検査付きのメソッドがある"; §10 rule 4). The ticket for the
+// declarations has to make them `rt`, since an `rt fn` calls no function that is not `rt`; the spec does not
+// say it in so many words, so this file is a case of its own. The expected values are worked out by hand:
+// 100 + 100 does not fit an I8 and 100 + 27 does (127 = I8.MAX); 5 - 6 does not fit a U8; MIN / -1 does not
+// fit; 10 / 0 has no result; 7 * 6 = 42.
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+pub rt fn add_i8(a: I8, b: I8) -> Option[I8] {
+  a.checked_add(b)
+}
+
+pub rt fn sub_u8(a: U8, b: U8) -> Option[U8] {
+  a.checked_sub(b)
+}
+
+pub rt fn mul_i32(a: I32, b: I32) -> Option[I32] {
+  a.checked_mul(b)
+}
+
+pub rt fn div_i32(a: I32, b: I32) -> Option[I32] {
+  a.checked_div(b)
+}
+
+test "an rt fn calls the checked methods" {
+  assert is_none(add_i8(100, 100))
+  assert val(add_i8(100, 27), 0) == 127
+  assert is_none(sub_u8(5, 6))
+  assert val(sub_u8(6, 5), 9) == 1
+  assert val(mul_i32(7, 6), 0) == 42
+  assert is_none(mul_i32(I32.MAX, 2))
+  assert is_none(div_i32(I32.MIN, -1))
+  assert is_none(div_i32(10, 0))
+  assert val(div_i32(-7, 2), 0) == -3
+}

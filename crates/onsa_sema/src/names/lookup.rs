@@ -281,19 +281,20 @@ impl Modules {
 
     fn builtin_member(&self, key: TyId, name: &Ident, from: ModId, defs: &[Def]) -> Result<Entity, ResolveError> {
         if let Some(a) = self.assoc_member(self.assoc_builtin.get(&key), &name.name)? {
-            let adef = &defs[a.0 as usize];
-            if self.visible(adef.vis, adef.module, from) {
-                return Ok(Entity::Member(a));
-            }
-            let why = self.hidden_why(adef.vis, None, from);
-            return Err(ResolveError::NotVisible {
-                name: name.name.clone(),
-                span: name.span,
-                defined: adef.name_span,
-                why,
-            });
+            self.builtin_reach(&defs[a.0 as usize], name, from)?;
+            return Ok(Entity::Member(a));
         }
         Err(ResolveError::NotFound { name: name.name.clone(), span: name.span })
+    }
+
+    /// The member `member` of a builtin type, named at `name` in `from`
+    /// (`F32.PI`, `x.to_bits()`): an E0303 when it is not visible there.
+    pub(crate) fn builtin_reach(&self, member: &Def, name: &Ident, from: ModId) -> Result<(), ResolveError> {
+        if self.visible(member.vis, member.module, from) {
+            return Ok(());
+        }
+        let why = self.hidden_why(member.vis, None, from);
+        Err(ResolveError::NotVisible { name: name.name.clone(), span: name.span, defined: member.name_span, why })
     }
 
     /// The member `member` of the type `ty` of the inherent `impl`, named at

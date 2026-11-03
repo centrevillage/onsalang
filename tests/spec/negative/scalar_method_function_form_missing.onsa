@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§15.1", "§18.1"]
+
+// E0302 (W5-02 U4b): the function form of a method that the scalar type does not have (spec §15.1: a name that
+// is not found is E0302; the E0308 of the function form is for a name that is found and is a method, as in
+// negative/scalar_method_function_form.onsa). The computations of `std.math` and the conversions that `as` writes
+// are not members of the scalar types (§3.3, §3.4), so `F32.sqrt(x)` is the same error as `F32.zz(x)` (and
+// `F32.MIN`, §6.6). One error per function (P-01). The last function is fine.
+
+pub fn root(x: F32) -> F32 {
+  F32.sqrt(x)                                       //~ E0302
+}
+
+pub fn absolute(x: F64) -> F64 {
+  F64.abs(x)                                        //~ E0302
+}
+
+pub fn bigger(a: I32, b: I32) -> I32 {
+  I32.max(a, b)                                     //~ E0302
+}
+
+pub fn smaller(a: U8, b: U8) -> U8 {
+  U8.min(a, b)                                      //~ E0302
+}
+
+pub fn round_down(x: F32) -> F32 {
+  F32.floor(x)                                      //~ E0302
+}
+
+pub fn widen(x: F32) -> F64 {
+  F32.round_f64(x)                                  //~ E0302
+}
+
+pub fn widen_integer(n: I32) -> Option[I64] {
+  I32.narrow_i64(n)                                 //~ E0302
+}
+
+pub fn not_a_number(x: F32) -> Bool {
+  F32.is_nan(x)                                     //~ E0302
+}
+
+pub fn fine(u: U32) -> F32 {
+  F32.from_bits(u)
+}

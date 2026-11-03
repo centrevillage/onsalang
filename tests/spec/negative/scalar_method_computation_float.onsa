@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§15.1", "§18.1"]
+
+// E0413 (W5-02 U4b): a computation of a float that the spec writes as a function of `std.math` has no method
+// form (§3.4: the methods of the integers and the floats are the conversions of §3.3, the floor division and
+// the checked ones, "それ以外の計算 (abs, min, max, sqrt, floor, is_nan など) は std.math の関数で書き、メソッドの
+// 形は無い"). The type of the receiver is known in each function, so it is E0413 and not E0420. One error per
+// function (P-01). The candidates (the function form) are not counted here. The last function is fine: the
+// same computations in the function form.
+
+use std.math.{abs, ceil, floor, max, min, round, sqrt, trunc}
+
+pub fn absolute(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn root(x: F32) -> F32 {
+  x.sqrt()                                          //~ E0413
+}
+
+pub fn round_down(x: F64) -> F64 {
+  x.floor()                                         //~ E0413
+}
+
+pub fn round_up(x: F64) -> F64 {
+  x.ceil()                                          //~ E0413
+}
+
+pub fn cut(x: F32) -> F32 {
+  x.trunc()                                         //~ E0413
+}
+
+pub fn nearest(x: F64) -> F64 {
+  x.round()                                         //~ E0413
+}
+
+pub fn smaller(a: F32, b: F32) -> F32 {
+  a.min(b)                                          //~ E0413
+}
+
+pub fn bigger(a: F64, b: F64) -> F64 {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn not_a_number(x: F32) -> Bool {
+  x.is_nan()                                        //~ E0413
+}
+
+pub fn finite(x: F64) -> Bool {
+  x.is_finite()                                     //~ E0413
+}
+
+pub fn in_a_chain(x: F32, y: F32) -> F32 {
+  (x * y).abs()                                     //~ E0413
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x.abs()                                           //~ E0413
+}
+
+pub fn on_a_field(p: (F32, F32)) -> F32 {
+  p.0.sqrt()                                        //~ E0413
+}
+
+pub fn on_an_element(xs: [F32; 2]) -> F32 {
+  xs[1].max(0.0)                                    //~ E0413
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  max(abs(a), sqrt(b)) + min(floor(a), ceil(b)) + trunc(a) + round(b)
+}

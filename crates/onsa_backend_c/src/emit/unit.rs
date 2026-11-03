@@ -146,7 +146,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
             let mut tys = Vec::new();
             walk_block(b, &mut |e| {
                 tys.push(e.ty.clone());
-                if let ExprKind::Prim { prim: Prim::Narrow { from, to }, .. } = &e.kind
+                if let ExprKind::Prim { prim: Prim::NarrowParts { from, to }, .. } = &e.kind
                     && !narrows.contains(&(*from, *to))
                 {
                     narrows.push((*from, *to));

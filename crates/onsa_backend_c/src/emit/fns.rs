@@ -921,6 +921,19 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         }
     }
 
+    /// The `(Bool, T)` of `narrow_parts` or `add_parts` (and the others), of
+    /// the type `ty`: `call` of the out-parameter is the runtime's function,
+    /// which says whether the result is defined and writes it only then, so
+    /// nothing undefined is computed (R-10) and the result is 0 when not.
+    fn parts(&mut self, ty: &Ty, k: IntKind, call: impl FnOnce(&str) -> String) -> String {
+        let tn = self.cx.names.name(ty);
+        let (r, rc) = self.temp(&Ty::Int(k));
+        let (ok, okc) = self.temp(&Ty::Bool);
+        self.line(&format!("{rc} {r} = 0;"));
+        self.line(&format!("{okc} {ok} = {};", call(&r)));
+        format!("(({tn}){{ .f0 = {ok}, .f1 = {r} }})")
+    }
+
     fn prim(&mut self, prim: &Prim, args: &[onsa_core::Arg], e: &Expr) -> R<String> {
         let loc = self.loc(e.span);
         let refs: Vec<&Expr> = args.iter().map(|a| &a.expr).collect();
@@ -966,27 +979,12 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let vs = self.operands(&refs)?;
                 Ok(format!("onsa_max_{}({}, {})", int_tag(*k), vs[0], vs[1]))
             }
-            Prim::Narrow { from, to } => {
+            Prim::NarrowParts { from, to } => {
                 // The range check is the runtime's (ONSA_DEFINE_NARROW): no comparison
                 // that the types decide, none of a signed and an unsigned value (R-11, R-145).
                 let vs = self.operands(&refs)?;
-                let Ty::Enum(id) = &e.ty else { return Err(internal("narrow result")) };
-                let (t, tn) = self.temp(&e.ty);
-                let (r, rc) = self.temp(&Ty::Int(*to));
-                let some = ident(&self.cx.variants(*id)[1].0);
-                self.line(&format!("{tn} {t};"));
-                self.line(&format!("{rc} {r};"));
-                self.open(&format!(
-                    "{} {{",
-                    if_(&format!("onsa_narrow_{}_{}({}, &{r})", int_tag(*from), int_tag(*to), vs[0]))
-                ));
-                self.line(&format!("{t} = ({tn}){{ .tag = 1, .u = {{ .v_{some} = {{ .f0 = {r} }} }} }};"));
-                self.indent -= 1;
-                self.line("} else {");
-                self.indent += 1;
-                self.line(&format!("{t} = ({tn}){{ .tag = 0 }};"));
-                self.close("}");
-                Ok(t)
+                let (f, t) = (int_tag(*from), int_tag(*to));
+                Ok(self.parts(&e.ty, *to, |r| format!("onsa_narrow_{f}_{t}({}, &{r})", vs[0])))
             }
             Prim::IntToFloat { to, .. } | Prim::FloatToFloat { to, .. } => {
                 let vs = self.operands(&refs)?;
@@ -1009,28 +1007,10 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let vs = self.operands(&refs)?;
                 Ok(format!("onsa_from_bits_{}({})", float_tag(*k), vs[0]))
             }
-            Prim::Checked(op, k) => {
+            Prim::Parts(op, k) => {
                 let vs = self.operands(&refs)?;
-                let Ty::Enum(id) = &e.ty else { return Err(internal("checked result")) };
-                let (t, tn) = self.temp(&e.ty);
-                let (r, rc) = self.temp(&Ty::Int(*k));
-                let some = ident(&self.cx.variants(*id)[1].0);
-                let opn = match op {
-                    CheckedOp::Add => "cadd",
-                    CheckedOp::Sub => "csub",
-                    CheckedOp::Mul => "cmul",
-                    CheckedOp::Div => "cdiv",
-                };
-                self.line(&format!("{tn} {t};"));
-                self.line(&format!("{rc} {r};"));
-                self.open(&format!("{} {{", if_(&format!("onsa_{opn}_{}({}, {}, &{r})", int_tag(*k), vs[0], vs[1]))));
-                self.line(&format!("{t} = ({tn}){{ .tag = 1, .u = {{ .v_{some} = {{ .f0 = {r} }} }} }};"));
-                self.indent -= 1;
-                self.line("} else {");
-                self.indent += 1;
-                self.line(&format!("{t} = ({tn}){{ .tag = 0 }};"));
-                self.close("}");
-                Ok(t)
+                let t = int_tag(*k);
+                Ok(self.parts(&e.ty, *k, |r| format!("onsa_c{}_{t}({}, {}, &{r})", op.name(), vs[0], vs[1])))
             }
             Prim::DivEuclid(k) => {
                 let vs = self.operands(&refs)?;

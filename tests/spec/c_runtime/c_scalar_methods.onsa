@@ -1,0 +1,250 @@
+// onsa.toml
+// [package]
+// name = "c_scalar_methods"
+// edition = "2026"
+//
+// [export]
+// prefix = "csm_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.6", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "consts"
+// target = "host"
+// fn = "c_scalar_methods.const_cut"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "const_tie"
+// target = "host"
+// fn = "c_scalar_methods.const_tie"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 16777216.0 },
+// ]
+//
+// [[test.host]]
+// name = "const_bits"
+// target = "host"
+// fn = "c_scalar_methods.const_bits"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 1078530011 },
+// ]
+//
+// [[test.host]]
+// name = "const_floor_q"
+// target = "host"
+// fn = "c_scalar_methods.const_floor_q"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = -4 },
+// ]
+//
+// [[test.host]]
+// name = "const_floor_r"
+// target = "host"
+// fn = "c_scalar_methods.const_floor_r"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat"
+// target = "host"
+// fn = "c_scalar_methods.trunc_sat"
+// steps = [
+//   { call = "fn", args = { x = 2.5 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = -2.5 }, status = 0, result = -2 },
+//   { call = "fn", args = { x = 4294967296.0 }, status = 0, result = 2147483647 },
+//   { call = "fn", args = { x = -4294967296.0 }, status = 0, result = -2147483648 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_panics_out_of_range"
+// target = "host"
+// fn = "c_scalar_methods.trunc_panic"
+// steps = [
+//   { call = "fn", args = { x = 2.5 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = 4294967296.0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_or"
+// target = "host"
+// fn = "c_scalar_methods.narrow_or"
+// steps = [
+//   { call = "fn", args = { n = 254 }, status = 0, result = 254 },
+//   { call = "fn", args = { n = 256 }, status = 0, result = 255 },
+//   { call = "fn", args = { n = -1 }, status = 0, result = 255 },
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "floor_div"
+// target = "host"
+// fn = "c_scalar_methods.floor_div"
+// steps = [
+//   { call = "fn", args = { a = -7, b = 2 }, status = 0, result = -4 },
+//   { call = "fn", args = { a = 7, b = -2 }, status = 0, result = -3 },
+//   { call = "fn", args = { a = -7, b = -2 }, status = 0, result = 4 },
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 1 },
+//   { call = "fn", args = { a = 5, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "floor_rem"
+// target = "host"
+// fn = "c_scalar_methods.floor_rem"
+// steps = [
+//   { call = "fn", args = { a = -7, b = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 7, b = -2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = -7, b = -2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 5, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "checked_or"
+// target = "host"
+// fn = "c_scalar_methods.checked_or"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { a = 2147483647, b = 1 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "bits_of"
+// target = "host"
+// fn = "c_scalar_methods.bits_of"
+// steps = [
+//   { call = "fn", args = { x = 1.0 }, status = 0, result = 1065353216 },
+//   { call = "fn", args = { x = 2.0 }, status = 0, result = 1073741824 },
+// ]
+//
+// [[test.host]]
+// name = "round_wide"
+// target = "host"
+// fn = "c_scalar_methods.round_wide"
+// steps = [
+//   { call = "fn", args = { x = 16777217.0 }, status = 0, result = 16777216.0 },
+//   { call = "fn", args = { x = 16777219.0 }, status = 0, result = 16777220.0 },
+//   { call = "fn", args = { x = 1.5 }, status = 0, result = 1.5 },
+// ]
+
+// The methods of the scalar types on a target that is built to C (spec §3.3, §3.4, §6.6; W5-02 U4b): the
+// initializers of the `const`s are evaluated at compile time and the methods in the bodies are generated into
+// C, with the expectations worked out by hand. 2.5 cut toward zero is 2; 16777217 is the tie of 2^24 and
+// 2^24 + 2 and the even one, 2^24, wins; 16777219 is the tie of 16777218 and 16777220 and the even one is
+// 16777220; F32.PI has the bits 0x40490FDB = 1078530011; -7 = (-4) * 2 + 1, 7 = (-3) * (-2) + 1 and
+// -7 = 4 * (-2) + 1 (the remainder is in [0, |b|)); `MIN.rem_euclid(-1)` is 0 and `MIN.div_euclid(-1)` and a
+// division by 0 panic (status 1 on the poison target); the bits of 1.0 are 0x3F800000 = 1065353216 and of 2.0
+// 0x40000000 = 1073741824.
+
+const HALF_UP: F64 = 2.5
+const CUT: I32 = HALF_UP.trunc_i32()
+const TIE: F64 = 16777217.0
+const TIE_EVEN: F32 = TIE.round_f32()
+const PI_BITS: U32 = F32.PI.to_bits()
+const NEG_SEVEN: I32 = -7
+const FLOOR_Q: I32 = NEG_SEVEN.div_euclid(2)
+const FLOOR_R: I32 = NEG_SEVEN.rem_euclid(2)
+
+@export
+pub fn const_cut() -> I32 {
+  CUT
+}
+
+@export
+pub fn const_tie() -> F32 {
+  TIE_EVEN
+}
+
+@export
+pub fn const_bits() -> U32 {
+  PI_BITS
+}
+
+@export
+pub fn const_floor_q() -> I32 {
+  FLOOR_Q
+}
+
+@export
+pub fn const_floor_r() -> I32 {
+  FLOOR_R
+}
+
+@export
+pub fn trunc_sat(x: F32) -> I32 {
+  x.trunc_i32_sat()
+}
+
+@export
+pub fn trunc_panic(x: F32) -> I32 {
+  x.trunc_i32()
+}
+
+@export
+pub fn narrow_or(n: I32) -> U8 {
+  match n.narrow_u8() {
+    Some(b) => b,
+    None => 255,
+  }
+}
+
+@export
+pub fn floor_div(a: I32, b: I32) -> I32 {
+  a.div_euclid(b)
+}
+
+@export
+pub fn floor_rem(a: I32, b: I32) -> I32 {
+  a.rem_euclid(b)
+}
+
+@export
+pub fn checked_or(a: I32, b: I32) -> I32 {
+  match a.checked_add(b) {
+    Some(v) => v,
+    None => -1,
+  }
+}
+
+@export
+pub fn bits_of(x: F32) -> U32 {
+  x.to_bits()
+}
+
+@export
+pub fn round_wide(x: F64) -> F32 {
+  x.round_f32()
+}
+
+test "the interpreter agrees with the expectations of the C target" {
+  assert CUT == 2
+  assert TIE_EVEN == 16777216.0
+  assert PI_BITS == 1078530011
+  assert FLOOR_Q == -4
+  assert FLOOR_R == 1
+  assert trunc_sat(3.0e10) == 2147483647
+  assert trunc_sat(-3.0e10) == -2147483648
+  assert narrow_or(256) == 255
+  assert narrow_or(254) == 254
+  assert floor_div(7, -2) == -3
+  assert floor_div(-7, -2) == 4
+  assert floor_rem(I32.MIN, -1) == 0
+  assert floor_rem(-7, -2) == 1
+  assert checked_or(2147483647, 1) == -1
+  assert bits_of(2.0) == 1073741824
+  assert round_wide(16777219.0) == 16777220.0
+}

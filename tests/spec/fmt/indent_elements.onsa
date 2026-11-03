@@ -39,7 +39,7 @@ pub fn block_form(a: I32, b: I32) -> I32 {
   )
   let y = two(
     a
-      .max(b),
+      .rem_euclid(b),
     b,
   )
   x + y

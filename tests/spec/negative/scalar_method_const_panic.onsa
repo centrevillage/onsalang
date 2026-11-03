@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§6.6", "§18.1"]
+
+// E0419 (W5-02 U4b): a method of the scalar types that panics in the initializer of a `const` (spec §6.6: the
+// compile-time evaluation reports a panic of the expression, "溢れ、ゼロ除算 ... など", as E0419 at its position).
+// The panics are the ones of §3.3 and §3.4: `trunc_<type>` of a value outside the range and of a NaN, and
+// `div_euclid` / `rem_euclid` by 0 and `MIN.div_euclid(-1)`. The saturating form and the checked methods do not panic,
+// so they are not here (they are in semantics/scalar_method_positions.onsa). One error per constant (P-01).
+
+const HUGE: F32 = 3.0e10
+const NEG_ONE: F32 = -1.0
+const NOT_A_NUMBER: F32 = F32.NAN
+const LOWEST: I32 = I32.MIN
+const MINUS_ONE: I32 = -1
+const NOTHING: I32 = 0
+const SEVEN: I32 = 7
+
+const OUT_OF_RANGE: I32 = HUGE.trunc_i32()          //~ E0419
+const NEGATIVE_FOR_UNSIGNED: U32 = NEG_ONE.trunc_u32()  //~ E0419
+const NAN_TRUNC: I32 = NOT_A_NUMBER.trunc_i32()     //~ E0419
+const FLOOR_OVERFLOW: I32 = LOWEST.div_euclid(MINUS_ONE)  //~ E0419
+const FLOOR_BY_ZERO: I32 = SEVEN.div_euclid(NOTHING)  //~ E0419
+const REMAINDER_BY_ZERO: I32 = SEVEN.rem_euclid(NOTHING)  //~ E0419

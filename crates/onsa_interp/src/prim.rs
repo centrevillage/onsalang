@@ -132,10 +132,9 @@ impl<'m> Interp<'m> {
                 let (x, y) = (int_of(a, *k, span), int_of(b, *k, span));
                 Ok(int_value(*k, if matches!(prim, Prim::IntMin(_)) { x.min(y) } else { x.max(y) }))
             }
-            Prim::Narrow { from, to } => {
+            Prim::NarrowParts { from, to } => {
                 let [a] = args(prim, vs, span);
-                let x = int_of(a, *from, span);
-                Ok(if in_range(*to, x) { some(int_value(*to, x)) } else { none() })
+                Ok(parts(*to, Some(int_of(a, *from, span))))
             }
             Prim::IntToFloat { from, to } => {
                 let [a] = args(prim, vs, span);
@@ -174,7 +173,7 @@ impl<'m> Interp<'m> {
                     FloatKind::F64 => Value::F64(f64::from_bits(int_of(a, IntKind::U64, span) as u64)),
                 })
             }
-            Prim::Checked(op, k) => {
+            Prim::Parts(op, k) => {
                 let [a, b] = args(prim, vs, span);
                 let (x, y) = (int_of(a, *k, span), int_of(b, *k, span));
                 let r = match op {
@@ -183,10 +182,7 @@ impl<'m> Interp<'m> {
                     CheckedOp::Mul => x.checked_mul(y),
                     CheckedOp::Div => (y != 0).then(|| x / y),
                 };
-                Ok(match r {
-                    Some(r) if in_range(*k, r) => some(int_value(*k, r)),
-                    _ => none(),
-                })
+                Ok(parts(*k, r))
             }
             Prim::DivEuclid(k) | Prim::RemEuclid(k) => {
                 let [a, b] = args(prim, vs, span);
@@ -243,13 +239,13 @@ pub(crate) fn supports(p: &Prim) -> bool {
         | Prim::IntAbs(_)
         | Prim::IntMin(_)
         | Prim::IntMax(_)
-        | Prim::Narrow { .. }
+        | Prim::NarrowParts { .. }
         | Prim::IntToFloat { .. }
         | Prim::FloatToFloat { .. }
         | Prim::TruncToInt { .. }
         | Prim::ToBits(_)
         | Prim::FromBits(_)
-        | Prim::Checked(..)
+        | Prim::Parts(..)
         | Prim::DivEuclid(_)
         | Prim::RemEuclid(_)
         | Prim::IsNan(_)
@@ -262,6 +258,15 @@ pub(crate) fn supports(p: &Prim) -> bool {
         | Prim::CopyFrom
         | Prim::BufZeroed
         | Prim::AssertNear => true,
+    }
+}
+
+/// The `(Bool, T)` of `narrow_parts` and `add_parts` (and the others):
+/// whether the exact result `r` is a value of `k`, and it (0 when not).
+fn parts(k: IntKind, r: Option<i128>) -> Value {
+    match r {
+        Some(r) if in_range(k, r) => Value::Tuple(vec![Value::Bool(true), int_value(k, r)]),
+        _ => Value::Tuple(vec![Value::Bool(false), int_value(k, 0)]),
     }
 }
 

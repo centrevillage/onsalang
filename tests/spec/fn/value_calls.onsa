@@ -247,8 +247,8 @@ fn followed_by_an_index(f: fn(I32) -> [I32; 2], x: I32) -> I32 {
   f.(x)[0] + f.(x)[1]
 }
 
-fn followed_by_a_method(f: fn(F32) -> F32, x: F32) -> F32 {
-  f.(x).abs()
+fn followed_by_a_method(f: fn(F32) -> F32, x: F32) -> U32 {
+  f.(x).to_bits()
 }
 
 fn followed_by_a_conversion(f: fn(I32) -> I32, x: I32) -> I64 {

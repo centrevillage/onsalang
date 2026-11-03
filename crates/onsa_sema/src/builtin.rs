@@ -1,6 +1,7 @@
 //! Builtin methods, associated items and conversions of the builtin types
 //! (spec §3.3, §4.1, §4.2, §5.3, S-09, S-12). Signatures only; the
-//! interpreter and backends implement them (`onsa_core::prim`).
+//! interpreter and backends implement them (`onsa_core::prim`). The members
+//! of the scalars are std's declarations (`std/core/num.onsa`).
 //!
 //! Every builtin method and associated function is one row of a table here
 //! ([`methods`], [`ZEROED`]); the lookups read the rows, so the names are
@@ -29,29 +30,9 @@ pub struct MethodSig {
     pub lazy_args: bool,
 }
 
-const INTS: [IntKind; 8] =
-    [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
-
-fn int_suffix(k: IntKind) -> &'static str {
-    match k {
-        IntKind::I8 => "i8",
-        IntKind::I16 => "i16",
-        IntKind::I32 => "i32",
-        IntKind::I64 => "i64",
-        IntKind::U8 => "u8",
-        IntKind::U16 => "u16",
-        IntKind::U32 => "u32",
-        IntKind::U64 => "u64",
-    }
-}
-
 /// The receivers a builtin method is defined on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Recv {
-    Int,
-    /// Signed integers only.
-    SignedInt,
-    Float,
     /// `[T; N]`, `Span[T]`, `Buf[T]`, `Array[T]` (§5.3, S-12).
     Seq,
     Str,
@@ -62,8 +43,6 @@ enum Recv {
 /// A type in a method's signature, relative to the receiver.
 #[derive(Debug, Clone, Copy)]
 enum T {
-    /// The receiver's type.
-    Recv,
     /// The element of a sequence, the content of `Option` / `Result`.
     Inner,
     U32,
@@ -71,15 +50,9 @@ enum T {
     Unit,
     Str,
     SpanOfInner,
-    Int(IntKind),
-    Float(FloatKind),
-    /// `U32` for `F32`, `U64` for `F64` (`to_bits`).
-    Bits,
-    OptRecv,
     OptInner,
     OptStr,
     OptU32,
-    OptInt(IntKind),
 }
 
 /// One builtin method.
@@ -103,36 +76,6 @@ fn methods() -> &'static [Method] {
             let self_mode = if bang { Mode::Inout } else { Mode::Borrow };
             v.push(Method { recv, name: name.to_string(), params, ret, self_mode, lazy_args: false })
         };
-        // Integers (§3.3, §3.4).
-        for t in INTS {
-            add(Recv::Int, &format!("narrow_{}", int_suffix(t)), &[], T::OptInt(t), false);
-        }
-        add(Recv::Int, "round_f32", &[], T::Float(FloatKind::F32), false);
-        add(Recv::Int, "round_f64", &[], T::Float(FloatKind::F64), false);
-        add(Recv::SignedInt, "abs", &[], T::Recv, false);
-        for name in ["checked_add", "checked_sub", "checked_mul", "checked_div"] {
-            add(Recv::Int, name, &[T::Recv], T::OptRecv, false);
-        }
-        for name in ["div_euclid", "rem_euclid", "min", "max"] {
-            add(Recv::Int, name, &[T::Recv], T::Recv, false);
-        }
-        // Floats (§3.3, S-09).
-        for t in INTS {
-            add(Recv::Float, &format!("trunc_{}", int_suffix(t)), &[], T::Int(t), false);
-            add(Recv::Float, &format!("trunc_{}_sat", int_suffix(t)), &[], T::Int(t), false);
-        }
-        add(Recv::Float, "round_f32", &[], T::Float(FloatKind::F32), false);
-        add(Recv::Float, "round_f64", &[], T::Float(FloatKind::F64), false);
-        add(Recv::Float, "to_bits", &[], T::Bits, false);
-        for name in ["abs", "sqrt", "floor", "ceil", "trunc", "round"] {
-            add(Recv::Float, name, &[], T::Recv, false);
-        }
-        for name in ["min", "max"] {
-            add(Recv::Float, name, &[T::Recv], T::Recv, false);
-        }
-        for name in ["is_nan", "is_finite"] {
-            add(Recv::Float, name, &[], T::Bool, false);
-        }
         // Sequences (§5.3, S-12).
         add(Recv::Seq, "len", &[], T::U32, false);
         add(Recv::Seq, "is_empty", &[], T::Bool, false);
@@ -176,9 +119,6 @@ fn methods() -> &'static [Method] {
 /// element type (none of the key of a generic type, `Analysis::builtin_key`).
 fn method_row(recv_ty: &Ty, name: &str) -> Option<(&'static Method, Option<TyId>)> {
     let (families, inner): (&[Recv], Option<TyId>) = match recv_ty {
-        Ty::Int(k) if k.signed() => (&[Recv::Int, Recv::SignedInt], None),
-        Ty::Int(_) => (&[Recv::Int], None),
-        Ty::Float(_) => (&[Recv::Float], None),
         Ty::Array(elem, _) => (&[Recv::Seq], Some(*elem)),
         Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, args) => (&[Recv::Seq], args.first().copied()),
         Ty::Builtin(BuiltinTy::Str, _) => (&[Recv::Str], None),
@@ -206,25 +146,20 @@ pub(crate) fn method_self(types: &Types, recv: TyId, name: &str) -> Option<Mode>
 pub fn method(types: &mut Types, recv: TyId, name: &str) -> Option<MethodSig> {
     let recv_ty = types.get(recv).clone();
     let (m, inner) = method_row(&recv_ty, name)?;
-    let mut ty = |t: T| sig_ty(types, t, recv, &recv_ty, inner);
+    let mut ty = |t: T| sig_ty(types, t, inner);
     let params = m.params.iter().map(|t| ty(*t)).collect::<Option<Vec<_>>>()?;
     let ret = ty(m.ret)?;
     Some(MethodSig { params, ret, self_mode: m.self_mode, lazy_args: m.lazy_args })
 }
 
-fn sig_ty(types: &mut Types, t: T, recv: TyId, recv_ty: &Ty, inner: Option<TyId>) -> Option<TyId> {
+fn sig_ty(types: &mut Types, t: T, inner: Option<TyId>) -> Option<TyId> {
     Some(match t {
-        T::Recv => recv,
         T::Inner => inner?,
         T::U32 => types.int(IntKind::U32),
         T::Bool => types.bool(),
         T::Unit => types.unit(),
         T::Str => types.builtin(BuiltinTy::Str, vec![]),
         T::SpanOfInner => types.builtin(BuiltinTy::Span, vec![inner?]),
-        T::Int(k) => types.int(k),
-        T::Float(k) => types.float(k),
-        T::Bits => types.int(if matches!(recv_ty, Ty::Float(FloatKind::F32)) { IntKind::U32 } else { IntKind::U64 }),
-        T::OptRecv => types.builtin(BuiltinTy::Option, vec![recv]),
         T::OptInner => types.builtin(BuiltinTy::Option, vec![inner?]),
         T::OptStr => {
             let s = types.builtin(BuiltinTy::Str, vec![]);
@@ -233,10 +168,6 @@ fn sig_ty(types: &mut Types, t: T, recv: TyId, recv_ty: &Ty, inner: Option<TyId>
         T::OptU32 => {
             let u = types.int(IntKind::U32);
             types.builtin(BuiltinTy::Option, vec![u])
-        }
-        T::OptInt(k) => {
-            let i = types.int(k);
-            types.builtin(BuiltinTy::Option, vec![i])
         }
     })
 }
@@ -306,12 +237,12 @@ pub fn cast_allowed(types: &Types, from: TyId, to: TyId) -> bool {
 /// The method to suggest instead of a rejected `as` (§3.3).
 pub fn cast_suggestion(types: &Types, from: TyId, to: TyId) -> Option<String> {
     match (types.get(from), types.get(to)) {
-        (Ty::Int(_), Ty::Int(b)) => Some(format!(".narrow_{}()", int_suffix(*b))),
+        (Ty::Int(_), Ty::Int(b)) => Some(format!(".narrow_{}()", b.name().to_lowercase())),
         (Ty::Int(_), Ty::Float(FloatKind::F32)) | (Ty::Float(_), Ty::Float(FloatKind::F32)) => {
             Some(".round_f32()".into())
         }
         (Ty::Int(_), Ty::Float(FloatKind::F64)) => Some(".round_f64()".into()),
-        (Ty::Float(_), Ty::Int(b)) => Some(format!(".trunc_{}()", int_suffix(*b))),
+        (Ty::Float(_), Ty::Int(b)) => Some(format!(".trunc_{}()", b.name().to_lowercase())),
         _ => None,
     }
 }
@@ -323,10 +254,10 @@ mod tests {
     #[test]
     fn names_list_every_row() {
         let n = names();
-        for x in ["PI", "BITS", "from_bits"] {
-            assert!(!n.iter().any(|y| y == x), "{x} is std's (§6.6), in {n:?}");
+        for x in ["PI", "BITS", "from_bits", "narrow_u8", "trunc_i64_sat", "to_bits", "abs", "checked_add"] {
+            assert!(!n.iter().any(|y| y == x), "{x} is std's (§6.6, §3.3), in {n:?}");
         }
-        for x in ["narrow_u8", "trunc_i64_sat", "to_bits", "len", "fill", "unwrap", "is_err", "zeroed"] {
+        for x in ["len", "fill", "unwrap", "is_err", "zeroed"] {
             assert!(n.iter().any(|y| y == x), "{x} not in {n:?}");
         }
         let mut sorted = n.clone();
@@ -339,17 +270,13 @@ mod tests {
     fn every_row_resolves_on_its_receiver() {
         let mut types = Types::default();
         let i32 = types.int(IntKind::I32);
-        let u8 = types.int(IntKind::U8);
         let f32 = types.float(FloatKind::F32);
-        let f64 = types.float(FloatKind::F64);
         let buf = types.builtin(BuiltinTy::Buf, vec![f32]);
         let s = types.builtin(BuiltinTy::Str, vec![]);
         let opt = types.builtin(BuiltinTy::Option, vec![f32]);
         let res = types.builtin(BuiltinTy::Result, vec![f32, s]);
         for m in methods() {
             let recv = match m.recv {
-                Recv::Int | Recv::SignedInt => i32,
-                Recv::Float => f32,
                 Recv::Seq => buf,
                 Recv::Str => s,
                 Recv::Option => opt,
@@ -357,12 +284,9 @@ mod tests {
             };
             assert!(method(&mut types, recv, &m.name).is_some(), "{}", m.name);
         }
-        // `abs` is for signed integers only; `to_bits` follows the width
-        assert!(method(&mut types, u8, "abs").is_none());
-        let b32 = method(&mut types, f32, "to_bits").unwrap().ret;
-        let b64 = method(&mut types, f64, "to_bits").unwrap().ret;
-        assert!(matches!(types.get(b32), Ty::Int(IntKind::U32)));
-        assert!(matches!(types.get(b64), Ty::Int(IntKind::U64)));
+        // The scalars have no row: their members are std's.
+        assert!(method(&mut types, i32, "checked_add").is_none());
+        assert!(method(&mut types, f32, "to_bits").is_none());
         assert!(method(&mut types, s, "fill").is_none());
         assert!(assoc_fn(&mut types, Some(BuiltinTy::Buf), "zeroed", f32).is_some());
         assert!(assoc_fn(&mut types, Some(BuiltinTy::Span), "zeroed", f32).is_none());

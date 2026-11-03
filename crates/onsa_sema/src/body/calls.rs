@@ -196,9 +196,17 @@ impl<'a> Checker<'a> {
         kind: CallKind,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        if let Ty::Named(d, targs_recv) = self.ty(recv) {
+        // The members of the `impl`s of the head of the receiver's type: of a
+        // user type, of a scalar (std's, §3.3, §3.4) the same way (§6.2).
+        let (table, owner) = match self.ty(recv) {
+            Ty::Named(d, _) => (self.a.modules.assoc.get(&d), Some(d)),
+            Ty::Int(k) => (self.a.modules.assoc_builtin.get(&self.a.types.int(k)), None),
+            Ty::Float(k) => (self.a.modules.assoc_builtin.get(&self.a.types.float(k)), None),
+            _ => (None, None),
+        };
+        if table.is_some() || owner.is_some() {
             // Of an E0304, an unknown callee too (§18.1, S-737).
-            let Ok(assoc) = self.a.modules.assoc_member(self.a.modules.assoc.get(&d), &name.name) else {
+            let Ok(assoc) = self.a.modules.assoc_member(table, &name.name) else {
                 return self.args_of_unknown_callee(args);
             };
             if let Some(md) = assoc {
@@ -206,14 +214,21 @@ impl<'a> Checker<'a> {
                     return self.args_of_unknown_callee(args);
                 }
                 let mdef = self.a.def(md).clone();
-                if let Err(err) = self.a.modules.member_reach(self.a.def(d), &mdef, name, self.m) {
+                let reach = match owner {
+                    Some(d) => self.a.modules.member_reach(self.a.def(d), &mdef, name, self.m),
+                    None => self.a.modules.builtin_reach(&mdef, name, self.m),
+                };
+                if let Err(err) = reach {
                     return Err(self.diag(err.into_diagnostic()));
                 }
                 let DefKind::Fn(f) = &mdef.kind else {
                     return Err(self.err(Code::E0413, name.span, format!("`{}` is not a method", name.name)));
                 };
                 if f.self_mode.is_none() {
-                    let tname = self.a.def(d).name.clone();
+                    let tname = match owner {
+                        Some(d) => self.a.def(d).name.clone(),
+                        None => self.display(recv),
+                    };
                     return Err(self.err(
                         Code::E0413,
                         name.span,
@@ -232,7 +247,6 @@ impl<'a> Checker<'a> {
                     let st2 = self.a.types.subst(st, &targs);
                     self.unify_at(name.span, recv, st2)?;
                 }
-                let _ = targs_recv;
                 let params: Vec<(Mode, TyId)> =
                     f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, &targs))).collect();
                 let ret = self.a.types.subst(f.ret, &targs);
@@ -246,7 +260,7 @@ impl<'a> Checker<'a> {
                 let _ = kind;
                 return Ok(ret);
             }
-            if !matches!(self.a.def(d).kind, DefKind::Struct(_) | DefKind::Enum(_)) {
+            if owner.is_some_and(|d| !matches!(self.a.def(d).kind, DefKind::Struct(_) | DefKind::Enum(_))) {
                 return Ok(self.a.types.error());
             }
         }

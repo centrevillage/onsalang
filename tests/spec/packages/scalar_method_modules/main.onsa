@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.2", "§15.1"]
+
+// W5-02 U4b: a module calls the functions, the constant, the flow and the `impl` member of another module
+// that call methods of the scalar types, and calls the methods of the scalar types itself on the results
+// (spec §3.3, §3.4, §15.1). Neither module imports `std`: the members of a built-in type are visible without
+// a `use`. The values are worked out by hand: 1.0 has the bits 0x3F800000; 40000.7 cut toward zero is 40000
+// and saturates to I16.MAX = 32767; 300 does not fit in a U8; -7 = (-4) * 2 + 1.
+
+use codec.{ONE_BITS, Packet, level_of, narrow_bits, split, to_byte, to_level}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+test "a constant of another module that calls a method" {
+  assert ONE_BITS == 0x3F800000
+  assert ONE_BITS.rem_euclid(16) == 0
+}
+
+test "a function of another module that calls a method, and a method on its result" {
+  assert to_level(2.9) == 2
+  assert to_level(40000.7) == 32767
+  assert to_level(-40000.7) == -32768
+  assert to_level(2.9).checked_add(32765).unwrap() == 32767
+  assert val(to_byte(255), 0) == 255
+  assert is_none(to_byte(300))
+  let (q, r) = split(-7, 2)
+  assert q == -4
+  assert r == 1
+  assert narrow_bits(1.0) == 0x3F800000
+}
+
+test "the impl member of another module that calls a method" {
+  let p = Packet.new(40000.7, 300)
+  assert p.level() == 32767
+  assert is_none(p.words().unwrap().narrow_u8())
+  assert val(p.words(), 0) == 300
+  assert val(p.ratio(7), 0) == 42
+  assert is_none(p.ratio(0))
+  assert p.gain.trunc_i32() == 40000
+  assert p.count.rem_euclid(7) == 6
+}
+
+test "the flow of another module that calls methods in a chain" {
+  let xs: [F32; 3] = [1.5, -40000.7, 40000.7]
+  let o            = level_of.render(level_of.Config {}, level_of.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == -32768.0
+  assert o.out[2] == 32767.0
+}

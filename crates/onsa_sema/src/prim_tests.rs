@@ -56,8 +56,19 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
     row_keys.sort();
     assert_eq!(keys, row_keys);
     assert!(!keys.is_empty());
-    // The members of the `impl`s of std, by their types (§6.6).
-    for member in ["F32.from_bits", "F64.from_bits"] {
+    // The members of the `impl`s of std, by their types (§6.6, §3.3, §3.4),
+    // and the helpers of `narrow_*` and `checked_*` (S-71).
+    for member in [
+        "F32.from_bits",
+        "F64.from_bits",
+        "F64.to_bits",
+        "F32.trunc_u8_sat",
+        "F64.round_f32",
+        "U64.round_f64",
+        "I8.div_euclid",
+        "core.num.narrow_parts",
+        "core.num.div_parts",
+    ] {
         assert!(decls.contains_key(member), "no declaration `{member}` in {keys:?}");
     }
     for (key, (def, f)) in &decls {
@@ -68,11 +79,12 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
     }
 }
 
+const INTS: [IntKind; 8] =
+    [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
+
 /// The builtin types a type argument is tried at.
 fn builtins(a: &mut Analysis) -> Vec<TyId> {
-    let ints =
-        [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
-    let mut v: Vec<TyId> = ints.iter().map(|&k| a.types.int(k)).collect();
+    let mut v: Vec<TyId> = INTS.iter().map(|&k| a.types.int(k)).collect();
     v.extend([a.types.float(FloatKind::F32), a.types.float(FloatKind::F64), a.types.bool(), a.types.unit()]);
     v.push(a.types.intern(Ty::Char));
     v
@@ -82,6 +94,7 @@ fn builtins(a: &mut Analysis) -> Vec<TyId> {
 fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
     let mut a = analyzed_std();
     let candidates = builtins(&mut a);
+    let ints: Vec<TyId> = INTS.iter().map(|&k| a.types.int(k)).collect();
     let len = a.types.intern(Ty::ConstVal(4));
     let (mut tried, mut members) = (0, 0);
     for (key, (def, f)) in std_targets(&a) {
@@ -91,6 +104,13 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
         let mut choices: Vec<Vec<TyId>> = Vec::new();
         for g in &f.generics {
             choices.push(match &g.kind {
+                // The helpers of `narrow_*` and `checked_*`, which std calls at
+                // the integers: no `Int` bound until W5-05.
+                GenericKind::Type { bounds, unknown: false, .. }
+                    if bounds.is_empty() && key.starts_with("core.num.") =>
+                {
+                    ints.clone()
+                }
                 GenericKind::Type { bounds, dup, unknown: false } => candidates
                     .iter()
                     .copied()
@@ -121,7 +141,7 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
             tried += 1;
         }
     }
-    assert!(tried > 40, "only {tried} uses tried");
+    assert!(tried > 200, "only {tried} uses tried");
     assert!(members > 0, "no member of an `impl` tried");
 }
 
@@ -155,4 +175,65 @@ fn a_use_at_a_type_without_a_primitive_is_e0200() {
     let a =
         check("use std.math\n\nfn f() -> F64 {\n  math.sqrt(4.0)\n}\n\nfn g[T: Num](x: T) -> T {\n  math.sqrt(x)\n}\n");
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+}
+
+/// The conversion methods of the scalars against `as` (spec §3.3, memo 2.3):
+/// of every pair of number types, `narrow_<B>()` (an `Option[B]`) of the
+/// integers and `round_<B>()` to the floats where `as` does not convert, and
+/// `trunc_<B>()` and `trunc_<B>_sat()` of the floats to every integer; no
+/// other conversion method, and none where `as` converts.
+#[test]
+fn the_conversion_methods_are_where_as_does_not_convert() {
+    let mut a = analyzed_std();
+    let ints: Vec<TyId> = INTS.iter().map(|&k| a.types.int(k)).collect();
+    let floats = [a.types.float(FloatKind::F32), a.types.float(FloatKind::F64)];
+    let numbers: Vec<TyId> = ints.iter().chain(&floats).copied().collect();
+    let (mut methods, mut casts) = (0, 0);
+    for &from in &numbers {
+        let mut want: BTreeMap<String, TyId> = BTreeMap::new();
+        for &to in &numbers {
+            let lower = scalar_name(&a, to).to_lowercase();
+            if crate::builtin::cast_allowed(&a.types, from, to) {
+                casts += 1;
+                continue;
+            }
+            match (a.types.get(from), a.types.get(to)) {
+                (Ty::Int(_), Ty::Int(_)) => {
+                    let opt = a.types.builtin(crate::ty::BuiltinTy::Option, vec![to]);
+                    want.insert(format!("narrow_{lower}"), opt);
+                }
+                (_, Ty::Float(_)) => {
+                    want.insert(format!("round_{lower}"), to);
+                }
+                (Ty::Float(_), Ty::Int(_)) => {
+                    want.insert(format!("trunc_{lower}"), to);
+                    want.insert(format!("trunc_{lower}_sat"), to);
+                }
+                other => panic!("no conversion of {other:?}"),
+            }
+        }
+        let table = a.modules.assoc_builtin.get(&from).expect("the members of a scalar");
+        let conversion = |n: &str| ["narrow_", "round_", "trunc_"].iter().any(|p| n.starts_with(p));
+        let found: BTreeMap<String, TyId> = table
+            .iter()
+            .filter(|(n, _)| conversion(n))
+            .map(|(n, &d)| {
+                let DefKind::Fn(f) = &a.def(d).kind else { panic!("`{n}` is no method") };
+                assert!(f.self_mode.is_some() && f.params.is_empty() && f.rt, "the heading of `{n}`");
+                (n.clone(), f.ret)
+            })
+            .collect();
+        assert_eq!(found, want, "the conversions of `{}`", scalar_name(&a, from));
+        methods += found.len();
+    }
+    // 38 `narrow_*`, 7 `round_*`, 32 `trunc_*` (§3.3).
+    assert_eq!((methods, casts), (77, 39));
+}
+
+fn scalar_name(a: &Analysis, t: TyId) -> &'static str {
+    match a.types.get(t) {
+        Ty::Int(k) => k.name(),
+        Ty::Float(k) => k.name(),
+        other => panic!("{other:?} is no number type"),
+    }
 }

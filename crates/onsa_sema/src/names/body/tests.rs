@@ -374,7 +374,7 @@ fn the_parameters_of_a_heading_are_by_their_index() {
 
 #[test]
 fn the_paths_of_patterns_name_their_items() {
-    let src = "pub enum Shape { Circle(F32), Dot }\npub struct P { x: I32 }\npub fn pm(s: Shape, o: Option[I32], p: P) -> I32 {\n  let P { x: x } = p\n  let a = match s {\n    Shape.Circle(r) => r.trunc_i32_sat(),\n    Shape.Dot => 2,\n  }\n  match o {\n    Some(v) => v + x + a,\n    None => 0,\n  }\n}\n";
+    let src = "pub enum Shape { Circle(F32), Dot }\npub struct P { x: I32 }\npub fn pm(s: Shape, o: Option[I32], p: P) -> I32 {\n  let P { x: x } = p\n  let a = match s {\n    Shape.Circle(r) => if r > 0.0 { 1 } else { 0 },\n    Shape.Dot => 2,\n  }\n  match o {\n    Some(v) => v + x + a,\n    None => 0,\n  }\n}\n";
     let (a, module) = analysis(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let n = names(&a, "pm");

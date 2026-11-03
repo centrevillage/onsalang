@@ -11,6 +11,8 @@ use crate::def::{DefId, DefKind};
 use crate::ty::{FloatKind, IntKind, Ty, TyId, Types};
 
 const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
+const INTS: [IntKind; 8] =
+    [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
 
 /// `std.math` functions (`target rt fn`, generic over `Float`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,30 +59,6 @@ impl MathFn {
         MathFn::Min,
         MathFn::Max,
     ];
-
-    pub fn parse(name: &str) -> Option<MathFn> {
-        Some(match name {
-            "exp" => MathFn::Exp,
-            "exp2" => MathFn::Exp2,
-            "log" => MathFn::Log,
-            "log2" => MathFn::Log2,
-            "sin" => MathFn::Sin,
-            "cos" => MathFn::Cos,
-            "tan" => MathFn::Tan,
-            "tanh" => MathFn::Tanh,
-            "pow" => MathFn::Pow,
-            "sqrt" => MathFn::Sqrt,
-            "floor" => MathFn::Floor,
-            "ceil" => MathFn::Ceil,
-            "trunc" => MathFn::Trunc,
-            "round" => MathFn::Round,
-            "abs" => MathFn::Abs,
-            "min" => MathFn::Min,
-            "max" => MathFn::Max,
-            "fmod" => MathFn::Fmod,
-            _ => return None,
-        })
-    }
 
     pub fn name(self) -> &'static str {
         match self {
@@ -145,6 +123,20 @@ pub enum CheckedOp {
     Div,
 }
 
+impl CheckedOp {
+    const ALL: [CheckedOp; 4] = [CheckedOp::Add, CheckedOp::Sub, CheckedOp::Mul, CheckedOp::Div];
+
+    /// The operation of its `<op>_parts` and `checked_<op>`.
+    pub fn name(self) -> &'static str {
+        match self {
+            CheckedOp::Add => "add",
+            CheckedOp::Sub => "sub",
+            CheckedOp::Mul => "mul",
+            CheckedOp::Div => "div",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
     /// `std.math` on `F32` / `F64`.
@@ -153,8 +145,9 @@ pub enum Prim {
     IntAbs(IntKind),
     IntMin(IntKind),
     IntMax(IntKind),
-    /// `x.narrow_i32()` -> `Option[I32]`.
-    Narrow {
+    /// `narrow_parts` of `x.narrow_i32()`: whether `x` fits, and its value
+    /// there (0 when it does not), a `(Bool, I32)`.
+    NarrowParts {
         from: IntKind,
         to: IntKind,
     },
@@ -163,7 +156,7 @@ pub enum Prim {
         from: IntKind,
         to: FloatKind,
     },
-    /// `x.round_f32()` on `F64` (and the identity on the same kind).
+    /// `x.round_f32()` on `F64`.
     FloatToFloat {
         from: FloatKind,
         to: FloatKind,
@@ -176,8 +169,10 @@ pub enum Prim {
     },
     ToBits(FloatKind),
     FromBits(FloatKind),
-    /// `x.checked_add(y)` -> `Option[T]`.
-    Checked(CheckedOp, IntKind),
+    /// `add_parts` of `x.checked_add(y)` (and the others of the operation):
+    /// whether the result is defined, and the result (0 when it is not), a
+    /// `(Bool, T)`.
+    Parts(CheckedOp, IntKind),
     DivEuclid(IntKind),
     RemEuclid(IntKind),
     IsNan(FloatKind),
@@ -210,7 +205,7 @@ impl Prim {
             Prim::IntAbs(k) => format!("abs.{}", k.name()),
             Prim::IntMin(k) => format!("min.{}", k.name()),
             Prim::IntMax(k) => format!("max.{}", k.name()),
-            Prim::Narrow { from, to } => format!("narrow.{}.{}", from.name(), to.name()),
+            Prim::NarrowParts { from, to } => format!("narrow_parts.{}.{}", from.name(), to.name()),
             Prim::IntToFloat { from, to } => format!("round.{}.{}", from.name(), to.name()),
             Prim::FloatToFloat { from, to } => format!("round.{}.{}", from.name(), to.name()),
             Prim::TruncToInt { from, to, sat } => {
@@ -218,16 +213,7 @@ impl Prim {
             }
             Prim::ToBits(k) => format!("to_bits.{}", k.name()),
             Prim::FromBits(k) => format!("from_bits.{}", k.name()),
-            Prim::Checked(op, k) => format!(
-                "checked_{}.{}",
-                match op {
-                    CheckedOp::Add => "add",
-                    CheckedOp::Sub => "sub",
-                    CheckedOp::Mul => "mul",
-                    CheckedOp::Div => "div",
-                },
-                k.name()
-            ),
+            Prim::Parts(op, k) => format!("{}_parts.{}", op.name(), k.name()),
             Prim::DivEuclid(k) => format!("div_euclid.{}", k.name()),
             Prim::RemEuclid(k) => format!("rem_euclid.{}", k.name()),
             Prim::IsNan(k) => format!("is_nan.{}", k.name()),
@@ -249,8 +235,9 @@ impl Prim {
     /// The row of the `std` `target` declaration this primitive instantiates
     /// ([`PrimRow::instantiate`] the other way), without a `_`, so that a new
     /// primitive must say whether a declaration gives it. `None` for the ones
-    /// no row gives yet (the members of the `impl`s of std come with their
-    /// declarations, W5-02 U4–U6) and the ones Core makes itself.
+    /// no row gives yet (the members of the sequences come with their
+    /// declarations, W5-02 U5–U6). Of one Core makes itself, the family,
+    /// which may have no row (`U32` to `F64` of a flow's rate).
     pub fn row_prim(&self) -> Option<PrimRow> {
         match self {
             Prim::Math(f, _) => Some(PrimRow::Math(*f)),
@@ -260,15 +247,15 @@ impl Prim {
             Prim::AssertNear => Some(PrimRow::AssertNear),
             Prim::Pending(p) => Some(PrimRow::Pending(*p)),
             Prim::FromBits(k) => Some(PrimRow::FromBits(*k)),
-            Prim::Narrow { .. }
-            | Prim::IntToFloat { .. }
-            | Prim::FloatToFloat { .. }
-            | Prim::TruncToInt { .. }
-            | Prim::ToBits(_)
-            | Prim::Checked(..)
-            | Prim::DivEuclid(_)
-            | Prim::RemEuclid(_)
-            | Prim::IsNan(_)
+            Prim::NarrowParts { .. } => Some(PrimRow::NarrowParts),
+            Prim::Parts(op, _) => Some(PrimRow::Parts(*op)),
+            &Prim::IntToFloat { from, to } => Some(PrimRow::IntToFloat { from, to }),
+            &Prim::FloatToFloat { from, to } => Some(PrimRow::FloatToFloat { from, to }),
+            &Prim::TruncToInt { from, to, sat } => Some(PrimRow::TruncToInt { from, to, sat }),
+            Prim::ToBits(k) => Some(PrimRow::ToBits(*k)),
+            Prim::DivEuclid(k) => Some(PrimRow::DivEuclid(*k)),
+            Prim::RemEuclid(k) => Some(PrimRow::RemEuclid(*k)),
+            Prim::IsNan(_)
             | Prim::IsFinite(_)
             | Prim::Len
             | Prim::Slice
@@ -349,10 +336,31 @@ pub enum PrimRow {
     /// `array.from_fn`: lowering expands it, it is no [`Prim`].
     FromFn,
     Pending(PendingPrim),
-    /// `F32.from_bits` / `F64.from_bits`: a row of each float, so that a
-    /// primitive leads back to its own ([`Prim::std_name`]); the `Self` a use
-    /// passes is that float.
+    /// `F32.from_bits` / `F64.from_bits`. The rows of a member are one of
+    /// each type, so that a primitive leads back to its own
+    /// ([`Prim::std_name`]); the `Self` a use passes is that type.
     FromBits(FloatKind),
+    /// The methods of the scalars (§3.3, §3.4), as their [`Prim`]s.
+    IntToFloat {
+        from: IntKind,
+        to: FloatKind,
+    },
+    FloatToFloat {
+        from: FloatKind,
+        to: FloatKind,
+    },
+    TruncToInt {
+        from: FloatKind,
+        to: IntKind,
+        sat: bool,
+    },
+    ToBits(FloatKind),
+    DivEuclid(IntKind),
+    RemEuclid(IntKind),
+    /// `core.num.narrow_parts[A, B]` at two integers.
+    NarrowParts,
+    /// `core.num.add_parts[T]` (and the others of the operation) at an integer.
+    Parts(CheckedOp),
 }
 
 impl PrimRow {
@@ -370,10 +378,22 @@ impl PrimRow {
             },
             PrimRow::AssertNear => Some(Prim::AssertNear),
             PrimRow::Pending(p) => Some(Prim::Pending(p)),
-            PrimRow::FromBits(k) => match args {
-                [Scalar::Float(own)] if *own == k => Some(Prim::FromBits(k)),
+            PrimRow::NarrowParts => match args {
+                &[Scalar::Int(from), Scalar::Int(to)] => Some(Prim::NarrowParts { from, to }),
                 _ => None,
             },
+            PrimRow::Parts(op) => match args {
+                &[Scalar::Int(k)] => Some(Prim::Parts(op, k)),
+                _ => None,
+            },
+            // A member: its `Self` is the type of its row.
+            PrimRow::FromBits(k) => own(args, Scalar::Float(k), Prim::FromBits(k)),
+            PrimRow::IntToFloat { from, to } => own(args, Scalar::Int(from), Prim::IntToFloat { from, to }),
+            PrimRow::FloatToFloat { from, to } => own(args, Scalar::Float(from), Prim::FloatToFloat { from, to }),
+            PrimRow::TruncToInt { from, to, sat } => own(args, Scalar::Float(from), Prim::TruncToInt { from, to, sat }),
+            PrimRow::ToBits(k) => own(args, Scalar::Float(k), Prim::ToBits(k)),
+            PrimRow::DivEuclid(k) => own(args, Scalar::Int(k), Prim::DivEuclid(k)),
+            PrimRow::RemEuclid(k) => own(args, Scalar::Int(k), Prim::RemEuclid(k)),
             PrimRow::FromFn => None,
         }
     }
@@ -384,6 +404,11 @@ impl PrimRow {
     pub fn provides(self, args: &[Scalar]) -> bool {
         self == PrimRow::FromFn || self.instantiate(args).is_some()
     }
+}
+
+/// `prim` when the `Self` of a use of a member, its one type, is `this`.
+fn own(args: &[Scalar], this: Scalar, prim: Prim) -> Option<Prim> {
+    (args == [this]).then_some(prim)
 }
 
 /// One `std` `target` declaration: its key (the module path under `std` and
@@ -415,7 +440,33 @@ pub fn rows() -> &'static [Row] {
             row("test.gen.u32", PrimRow::Pending(PendingPrim::GenU32), 2, false),
             row("test.gen.pair", PrimRow::Pending(PendingPrim::GenPair), 2, false),
         ]);
-        v.extend(FLOATS.iter().map(|k| row(&format!("{}.from_bits", k.name()), PrimRow::FromBits(*k), 1, true)));
+        v.push(row("core.num.narrow_parts", PrimRow::NarrowParts, 1, true));
+        v.extend(CheckedOp::ALL.map(|op| row(&format!("core.num.{}_parts", op.name()), PrimRow::Parts(op), 2, true)));
+        // The members of the scalars (§3.3, §3.4): `from_bits` and the methods.
+        let member = |ty: &str, name: &str, prim, arity| row(&format!("{ty}.{name}"), prim, arity, true);
+        for k in FLOATS {
+            v.push(member(k.name(), "from_bits", PrimRow::FromBits(k), 1));
+            v.push(member(k.name(), "to_bits", PrimRow::ToBits(k), 0));
+            for to in INTS {
+                for (sat, sfx) in [(false, ""), (true, "_sat")] {
+                    let name = format!("trunc_{}{sfx}", to.name().to_lowercase());
+                    v.push(member(k.name(), &name, PrimRow::TruncToInt { from: k, to, sat }, 0));
+                }
+            }
+        }
+        let (from, to) = (FloatKind::F64, FloatKind::F32);
+        v.push(member(from.name(), "round_f32", PrimRow::FloatToFloat { from, to }, 0));
+        for k in INTS {
+            v.push(member(k.name(), "div_euclid", PrimRow::DivEuclid(k), 1));
+            v.push(member(k.name(), "rem_euclid", PrimRow::RemEuclid(k), 1));
+        }
+        // The integers wider than the significand (§3.3's table; the unit
+        // test checks std's against `as`).
+        use {FloatKind::*, IntKind::*};
+        for (from, to) in [(I32, F32), (U32, F32), (I64, F32), (U64, F32), (I64, F64), (U64, F64)] {
+            let name = format!("round_{}", to.name().to_lowercase());
+            v.push(member(from.name(), &name, PrimRow::IntToFloat { from, to }, 0));
+        }
         v
     })
 }
