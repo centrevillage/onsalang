@@ -1,0 +1,11 @@
+pub fn a(x: I32) -> Option[I64] {
+  x.narrow_i64()
+}
+
+pub fn b(x: I32) -> I64 {
+  x as I64
+}
+
+pub fn c(x: I32) -> Option[I64] {
+  Some(x as I64)
+}
