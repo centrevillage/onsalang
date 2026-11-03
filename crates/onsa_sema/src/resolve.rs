@@ -303,6 +303,17 @@ pub struct Clashed {
     pub namespace: HashSet<String>,
 }
 
+/// The rule of an [`ResolveError::OfAType`] (§15.1): of a type of the name
+/// of one of the prelude, written with no `use` (a `use` of it is an E0304),
+/// and none when the rule of the prelude names the member too (S-703,
+/// `Sema::use_diagnostic`); else the `use` of the type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeRule {
+    None,
+    Prelude,
+    Take,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveError {
     /// A name the names stage holds as an error (§18.1, S-462, S-675): of a
@@ -326,6 +337,7 @@ pub enum ResolveError {
         ty: String,
         name: String,
         span: Span,
+        rule: TypeRule,
     },
     /// `Self` out of the body of an `impl` and its members' headings (§2.2,
     /// S-595): the one wording of a heading and a body.
@@ -377,17 +389,27 @@ impl ResolveError {
                     .with_found(name)
                     .with_note(defined, "defined here")
             }
-            ResolveError::OfAType { ty, name, span } => Diagnostic::new(
-                Stage::Names,
-                Code::E0302,
-                span,
-                format!(
-                    "`{ty}.{name}` is not taken by a `use`: the variants, the associated functions and the \
-                     associated constants of a type are named through it"
-                ),
-            )
-            .with_found(name.clone())
-            .with_rule(format!("take `{ty}`, and write `{ty}.{name}` where it is used")),
+            ResolveError::OfAType { ty, name, span, rule } => {
+                let d = Diagnostic::new(
+                    Stage::Names,
+                    Code::E0302,
+                    span,
+                    format!(
+                        "`{ty}.{name}` is not taken by a `use`: the variants, the associated functions and the \
+                         associated constants of a type are named through it"
+                    ),
+                )
+                .with_found(name.clone());
+                match rule {
+                    TypeRule::None => d,
+                    // The names stage does not know the kind of the member: both forms.
+                    TypeRule::Prelude => d.with_rule(format!(
+                        "`{ty}` is written with no `use`: write `{ty}.{name}`, or `value.{name}(…)` for a method, \
+                         where it is used"
+                    )),
+                    TypeRule::Take => d.with_rule(format!("take `{ty}`, and write `{ty}.{name}` where it is used")),
+                }
+            }
             ResolveError::SelfOutsideImpl { span } => {
                 Diagnostic::new(Stage::Names, Code::E0302, span, "`Self` is only valid inside `impl`")
                     .with_found("Self")
@@ -487,7 +509,7 @@ impl Owner {
 }
 
 /// The module graph and the tables of names. Owned by `Analysis`.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Modules {
     pub mods: Vec<ModInfo>,
     /// Package roots, by package index.

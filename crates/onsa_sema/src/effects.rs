@@ -18,8 +18,8 @@ use crate::{Analysis, DefId, Package, module_of_def};
 
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
     let mut diags = Vec::new();
-    for (i, def) in a.defs.iter().enumerate() {
-        let id = DefId(i as u32);
+    for id in a.new_defs() {
+        let def = a.def(id);
         let DefKind::Fn(f) = &def.kind else { continue };
         if f.rt || f.effects.alloc || f.body.is_none() || !a.body_checked(id, Stage::Effects) {
             continue;

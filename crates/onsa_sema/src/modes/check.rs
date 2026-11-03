@@ -25,7 +25,7 @@ use crate::{Analysis, DefId, Kind, Package, module_of_def};
 /// (§5.2, §5.4, §7; §18.1: a body whose unit failed before is skipped), and
 /// the locals each moved.
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
-    let mut ids: Vec<DefId> = a.bodies.keys().copied().collect();
+    let mut ids: Vec<DefId> = a.bodies.keys().copied().filter(|&id| a.is_new(id)).collect();
     ids.sort();
     let (mut moved, mut found, mut taken) = (MovedLocals::new(), Vec::new(), Vec::new());
     for id in ids {

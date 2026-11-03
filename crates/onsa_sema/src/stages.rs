@@ -45,7 +45,7 @@ fn timed<T>(p: Phase, f: impl FnOnce() -> T) -> T {
 /// What stops a walk with no diagnostic (a name the names stage holds as an
 /// error, S-692) is no failure of the unit and not in it: the marks of the
 /// bodies tell it (`complete`).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Failures {
     by_def: HashMap<DefId, Stage>,
 }

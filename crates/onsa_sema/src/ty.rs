@@ -276,7 +276,7 @@ pub struct Env<'e> {
 }
 
 /// The interner.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Types {
     tys: Vec<Ty>,
     map: HashMap<Ty, TyId>,

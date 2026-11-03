@@ -24,7 +24,6 @@ pub(crate) mod rename;
 mod tests;
 mod typed;
 
-use crate::def::ModId;
 use crate::sig::Sema;
 
 pub(crate) use clash::hides;
@@ -55,12 +54,18 @@ pub(crate) fn is_self_type(name: &str) -> bool {
 /// ([`Sema::fail_ungenerated`], R-50).
 pub(crate) fn collect_names(s: &mut Sema<'_>) {
     s.build_module_tree();
-    prelude::build(s.a);
+    // A continued analysis has std's prelude.
+    let fresh = !s.a.continues();
+    if fresh {
+        prelude::build(s.a);
+    }
     s.collect_items();
-    prelude::declared(s.a);
+    if fresh {
+        prelude::declared(s.a);
+    }
     s.check_item_clashes();
-    for m in 0..s.a.modules.mods.len() {
-        s.resolve_imports(ModId(m as u32));
+    for m in s.a.new_mods() {
+        s.resolve_imports(m);
     }
     s.check_use_clashes();
     s.check_cycles();

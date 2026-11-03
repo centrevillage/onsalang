@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+// fixes = 0
+
+// The associated functions of a builtin generic type are not taken by a `use`, as the ones of a declared
+// type are not (§15.1, E0302): they are named through the type. `Result.map_err` is declared in std and
+// `Option.unwrap` is not; neither is taken.
+
+use std.core.Result.{map_err}   //~ E0302
+
+use std.core.Option.{unwrap}   //~ E0302
+
+use std.core.Result.map_err   //~ E0302
+
+pub fn f() -> I32 {
+  1
+}

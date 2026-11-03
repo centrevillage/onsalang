@@ -30,7 +30,7 @@ use super::*;
 use crate::names::builtin_ty;
 
 /// What the order of the declarations leaves to the later stages.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Decls {
     /// The declarations of a cycle: a name of one is the error type, and a
     /// constant of one has no value, with no diagnostic (§18.1).
@@ -249,9 +249,12 @@ fn solve(g: &Graph) -> Vec<bool> {
 impl<'p> Sema<'p> {
     /// The graph of the declarations (the module's doc): its cycles reported,
     /// and the aliases and the constants of the modules lowered in its order.
-    pub(super) fn order_declarations(&mut self) {
+    /// The graph has std's declarations in a continued analysis too: a
+    /// type through one of std's generic types holds it as a value or not by
+    /// their clauses. Falls back where a package writes in std's tables.
+    pub(super) fn order_declarations(&mut self) -> Result<(), crate::base::Fallback> {
         self.alias_heads();
-        self.name_members();
+        self.name_members()?;
         let mut g = Graph {
             a: &*self.a,
             points: HashMap::new(),
@@ -313,7 +316,7 @@ impl<'p> Sema<'p> {
             self.report(first, d);
         }
         for d in order {
-            if self.a.decls.cyclic.contains(&d) {
+            if self.a.decls.cyclic.contains(&d) || !self.a.is_new(d) {
                 continue;
             }
             let _scope = onsa_diag::internal::item_scope(self.a.def(d).span);
@@ -323,6 +326,7 @@ impl<'p> Sema<'p> {
                 _ => {}
             }
         }
+        Ok(())
     }
 
     /// The edges from the declaration `d`.
@@ -404,8 +408,8 @@ impl<'p> Sema<'p> {
     /// cycle of aliases and a heading that failed. Each alias once, with no
     /// recursion (a chain of 20 000, R-298).
     fn alias_heads(&mut self) {
-        for i in 0..self.a.defs.len() {
-            let (mut cur, mut chain) = (DefId(i as u32), Vec::new());
+        for d in self.a.new_defs() {
+            let (mut cur, mut chain) = (d, Vec::new());
             let head = loop {
                 if let Some(&h) = self.a.decls.heads.get(&cur) {
                     break h;
@@ -441,12 +445,16 @@ impl<'p> Sema<'p> {
     /// whose heading is an E0307 too (§18.1, S-748). In the order of the
     /// source (§6.2, R-307): a member of the name of one before, or of a
     /// variant of its enum, is an E0304 (S-134, S-737), and the first of the
-    /// name is no name where it is used (§18.1).
-    fn name_members(&mut self) {
+    /// name is no name where it is used (§18.1). A continued analysis falls
+    /// back at a table of std's: of a builtin type, or of a type of std.
+    fn name_members(&mut self) -> Result<(), crate::base::Fallback> {
         let mut subs = Vec::new();
-        for i in 0..self.a.defs.len() {
-            let DefKind::Impl(imp) = &self.a.defs[i].kind else { continue };
-            let Some(key) = self.member_key(DefId(i as u32)) else { continue };
+        for d in self.a.new_defs() {
+            let DefKind::Impl(imp) = &self.a.def(d).kind else { continue };
+            let Some(key) = self.member_key(d) else { continue };
+            if self.a.continues() && (key.1.is_some() || key.0.is_some_and(|t| !self.a.is_new(t))) {
+                return Err(crate::base::Fallback);
+            }
             subs.extend(imp.fns.iter().chain(&imp.consts).map(|&sub| (key, sub)));
         }
         subs.sort_by_cached_key(|&(_, d)| (self.file_key(self.a.def(d).module), self.a.def(d).name_span.start));
@@ -465,6 +473,7 @@ impl<'p> Sema<'p> {
             let msg = format!("`{name}` is defined twice for this type");
             self.report(sub, Diagnostic::new(Stage::Names, Code::E0304, at, msg).with_note(note.0, note.1));
         }
+        Ok(())
     }
 
     /// The names of the variants of `d` when it is an enum, as written (the

@@ -114,7 +114,7 @@ pub(crate) fn row(kind: BindingKind, head: Option<&HeadRow>) -> Bind {
 
 /// Settle the bindings of every body the modes stage reads.
 pub(crate) fn settle_all(pkg: &Package, a: &mut Analysis) {
-    let ids: Vec<DefId> = a.bodies.keys().copied().collect();
+    let ids: Vec<DefId> = a.bodies.keys().copied().filter(|&id| a.is_new(id)).collect();
     for id in ids {
         if !a.body_checked(id, Stage::Modes) {
             continue;

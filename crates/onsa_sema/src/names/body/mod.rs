@@ -297,8 +297,8 @@ enum Fail {
 pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
     let mut names = HashMap::new();
-    for i in 0..a.defs.len() {
-        let (id, def) = (DefId(i as u32), &a.defs[i]);
+    for id in a.new_defs() {
+        let def = a.def(id);
         // A body whose unit has a syntax error is not checked (§18.1, S-59).
         let Some(item) = def.item else { continue };
         if a.failed.contains_key(&id) {
@@ -354,7 +354,7 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         }
         names.insert(id, out);
     }
-    a.names = names;
+    a.names.extend(names);
     cycles::report(&flat, a);
 }
 

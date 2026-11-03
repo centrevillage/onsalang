@@ -286,10 +286,8 @@ fn body_of(a: &mut Analysis, id: DefId) -> Option<(Option<TyId>, ExprId, TyId)> 
 /// Check every body of the package and its dependencies.
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
-    let n = a.defs.len();
-    for i in 0..n {
-        let id = DefId(i as u32);
-        let def = &a.defs[i];
+    for id in a.new_defs() {
+        let def = a.def(id);
         if def.item.is_none() {
             continue;
         }
@@ -310,7 +308,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         let names = a.names.remove(&id).unwrap_or_default();
         if names.reported || a.failures.skips(id, Stage::Types) {
             let body = BodyInfo::default();
-            match a.defs[i].kind {
+            match a.def(id).kind {
                 DefKind::Flow(_) => drop(a.flows.insert(id, crate::flow::FlowInfo { body, ..Default::default() })),
                 _ => drop(a.bodies.insert(id, body)),
             }
@@ -348,8 +346,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             origins,
             typed,
         };
-        let is_const = matches!(ck.a.defs[i].kind, DefKind::Const(_));
-        let is_flow = matches!(ck.a.defs[i].kind, DefKind::Flow(_));
+        let is_const = matches!(ck.a.def(id).kind, DefKind::Const(_));
+        let is_flow = matches!(ck.a.def(id).kind, DefKind::Flow(_));
         if is_const {
             ck.check_const(body, ret);
         } else if is_flow {

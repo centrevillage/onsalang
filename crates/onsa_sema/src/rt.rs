@@ -17,7 +17,7 @@ use crate::{Analysis, DefId, Package, module_of_def};
 
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
     let mut diags = Vec::new();
-    let rt_fns: Vec<DefId> = (0..a.defs.len() as u32).map(DefId).filter(|&id| a.rt_checked(id)).collect();
+    let rt_fns: Vec<DefId> = a.new_defs().filter(|&id| a.rt_checked(id)).collect();
     // Calls of each rt body, in source order: (span, callee) for rt callees.
     let mut edges: HashMap<DefId, Vec<(Span, DefId)>> = HashMap::new();
     for &id in &rt_fns {

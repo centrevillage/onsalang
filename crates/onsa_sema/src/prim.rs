@@ -538,8 +538,7 @@ pub(crate) fn key_of(a: &Analysis, def: DefId) -> String {
 /// `target` declaration outside std has none: it is the names stage's E0200
 /// (`UserTargets`).
 pub(crate) fn record(a: &mut Analysis) {
-    for i in 0..a.defs.len() {
-        let def = DefId(i as u32);
+    for def in a.new_defs() {
         let d = a.def(def);
         if !matches!(&d.kind, DefKind::Fn(f) if f.target) || !a.modules.is_std(d.module) {
             continue;

@@ -23,7 +23,7 @@ impl<'p> Sema<'p> {
     /// Then the heads of the paths of `use` ([`crate::resolve::Modules::heads`]).
     pub(crate) fn build_module_tree(&mut self) {
         let flat = self.flat.clone();
-        for (pkg, p) in flat.iter().enumerate() {
+        for (pkg, p) in self.a.new_pkgs(&flat) {
             let root = self.a.modules.add(new_module(String::new(), pkg, None));
             self.a.modules.roots.push(root);
             self.a.modules.names.push(p.name.clone());
@@ -41,8 +41,8 @@ impl<'p> Sema<'p> {
                 info.file = Some(m.file);
             }
         }
-        for p in &flat {
-            let root = self.a.modules.roots[self.a.modules.heads.len()];
+        for (pkg, p) in self.a.new_pkgs(&flat) {
+            let root = self.a.modules.roots[pkg];
             let mut heads = self.a.modules.get(root).children.clone();
             // A module under the root of the same name as a dependency is an
             // E0304 of the module (S-246, W4-03 U3a); the name is the package.
@@ -85,8 +85,7 @@ impl<'p> Sema<'p> {
         // The placeholders until the signatures are lowered.
         let error = self.a.types.error();
         let unit = self.a.types.unit();
-        for i in 0..self.a.modules.mods.len() {
-            let m = ModId(i as u32);
+        for m in self.a.new_mods() {
             let Some(module) = self.module(m) else { continue };
             let ast = &module.parsed.ast;
             self.a.modules.get_mut(m).use_at = use_at(&module.parsed);

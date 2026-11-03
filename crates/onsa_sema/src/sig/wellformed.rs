@@ -141,8 +141,8 @@ impl<'p> Sema<'p> {
         for d in std::mem::take(&mut self.a.decls.aliases) {
             self.wellformed_alias(d);
         }
-        for i in 0..self.a.defs.len() {
-            self.wellformed_def(DefId(i as u32));
+        for d in self.a.new_defs() {
+            self.wellformed_def(d);
         }
     }
 

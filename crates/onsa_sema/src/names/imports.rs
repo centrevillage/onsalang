@@ -12,7 +12,7 @@ use onsa_syntax::ast::Ident;
 
 use crate::Analysis;
 use crate::def::{DefId, DefKind, ModId};
-use crate::resolve::{Dep, DepTarget, Entity, Import, ResolveError, UseBinding};
+use crate::resolve::{Builtin, Dep, DepTarget, Entity, Import, ResolveError, TypeRule, UseBinding};
 
 use super::clash::{Unbindable, unbindable};
 use super::lookup::OWN_ITEMS;
@@ -101,8 +101,7 @@ impl<'p> Sema<'p> {
         let w = walk(self.a, m, &imp.path.segments, imp.names.as_deref());
         let head_fails = imp.path.segments.first().is_some_and(|h| self.a.modules.head(m, &h.name).is_none());
         let report = |s: &mut Self, e: &ResolveError, taken: &[&Ident]| {
-            if let Some(d) = e.clone().diagnostic().filter(|_| !head_fails) {
-                let d = s.prelude_rule(d, taken);
+            if let Some(d) = s.use_diagnostic(e, taken).filter(|_| !head_fails) {
                 s.report_mod(d);
             }
         };
@@ -157,8 +156,7 @@ impl<'p> Sema<'p> {
     /// leaves it unknown, no diagnostic. The names stage resolved the `use`,
     /// so its E0304 and its dependency (E0310) stand.
     pub(crate) fn fail_ungenerated(&mut self) {
-        for i in 0..self.a.modules.mods.len() {
-            let m = ModId(i as u32);
+        for m in self.a.new_mods() {
             let mut absent: Vec<(String, Span, DefId)> = (self.a.modules.get(m).uses.iter())
                 .filter_map(|(name, u)| match *u {
                     UseBinding::Bound { entity: Entity::Member(d), span } => Some((name.clone(), span, d)),
@@ -197,8 +195,7 @@ impl<'p> Sema<'p> {
     /// candidate is the path it means, given when that path is read whole and
     /// closes no cycle (§18.1).
     pub(crate) fn report_use_heads(&mut self) {
-        for i in 0..self.a.modules.mods.len() {
-            let m = ModId(i as u32);
+        for m in self.a.new_mods() {
             for imp in self.a.modules.get(m).imports.clone() {
                 let head = &imp.path.segments[0];
                 if self.a.modules.head(m, &head.name).is_some() {
@@ -227,14 +224,33 @@ impl<'p> Sema<'p> {
     /// (§15.1, S-703): one rule, of every such name in `taken`. The one table
     /// of the prelude says which names are.
     fn prelude_rule(&self, d: Diagnostic, taken: &[&Ident]) -> Diagnostic {
-        let names: Vec<String> =
-            (taken.iter()).filter(|n| self.a.prelude.contains_key(&n.name)).map(|n| format!("`{}`", n.name)).collect();
+        let names = self.prelude_names(taken);
         match names.as_slice() {
             _ if d.code != Code::E0302 => d,
             [] => d,
             [one] => d.with_rule(format!("{one} is a name of the prelude, written with no `use` (§15.1)")),
             _ => d.with_rule(format!("{} are names of the prelude, written with no `use` (§15.1)", names.join(", "))),
         }
+    }
+
+    /// The names of the prelude among `taken`.
+    fn prelude_names(&self, taken: &[&Ident]) -> Vec<String> {
+        (taken.iter()).filter(|n| self.a.prelude.contains_key(&n.name)).map(|n| format!("`{}`", n.name)).collect()
+    }
+
+    /// The diagnostic of the error `e` of a `use` that takes `taken`, with
+    /// the rule of the prelude ([`Sema::prelude_rule`]). Of a member of a
+    /// type of the prelude that the rule of the prelude names (`use
+    /// std.core.Option.Some`), that rule alone: the type's would write
+    /// `Option.Some`, an E0302 (§4.1).
+    fn use_diagnostic(&self, e: &ResolveError, taken: &[&Ident]) -> Option<Diagnostic> {
+        let mut e = e.clone();
+        if let ResolveError::OfAType { rule: rule @ TypeRule::Prelude, .. } = &mut e
+            && !self.prelude_names(taken).is_empty()
+        {
+            *rule = TypeRule::None;
+        }
+        e.diagnostic().map(|d| self.prelude_rule(d, taken))
     }
 
     /// The candidate of a `use` of `m` whose head is no head of a `use`, or
@@ -382,15 +398,20 @@ fn head_of(a: &Analysis, m: ModId, name: &Ident) -> Result<Entity, ResolveError>
 /// (R-250, S-611): the same as after the head of any other path, but that the
 /// variants and the associated items of a type are not taken (§15.1, R-50).
 /// After an E0200, its kind decides (§18.1, S-719, S-721: `Modules::member`).
+/// The tables of the members are not read here: the signatures stage makes
+/// them (R-360).
 fn step(a: &Analysis, cur: Entity, name: &Ident, from: ModId) -> Result<Entity, ResolveError> {
-    if let Entity::Def(d) | Entity::Member(d) = cur {
-        let def = a.def(d);
-        match def.kind {
-            DefKind::Struct(_) | DefKind::Enum(_) => {
-                return Err(ResolveError::OfAType { ty: def.name.clone(), name: name.name.clone(), span: name.span });
-            }
-            _ => {}
+    let ty = match cur {
+        Entity::Def(d) | Entity::Member(d) if matches!(a.def(d).kind, DefKind::Struct(_) | DefKind::Enum(_)) => {
+            Some(a.def(d).name.clone())
         }
+        Entity::Builtin(Builtin::Scalar(t)) => Some(a.display_type(t)),
+        Entity::Builtin(Builtin::Generic(b)) => Some(b.name().to_string()),
+        _ => None,
+    };
+    if let Some(ty) = ty {
+        let rule = if a.prelude.contains_key(&ty) { TypeRule::Prelude } else { TypeRule::Take };
+        return Err(ResolveError::OfAType { ty, name: name.name.clone(), span: name.span, rule });
     }
     a.modules.member(cur, name, from, (&a.prelude, &a.defs, &a.builtin_key))
 }

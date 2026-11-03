@@ -36,7 +36,7 @@ pub use platform::{Platform, host_triple, platform};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
 pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core, verify_core_in_debug_only};
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use onsa_diag::timing::{Phase, phase};
 use onsa_diag::{Diagnostic, FileId, SharedFiles, SourceMap, Span};
@@ -54,11 +54,13 @@ pub struct CheckResult {
 
 /// The embedded std parsed once in the process (X-20 E (i)): its files are
 /// the same [`SharedFiles`] in every check, so its parse, made with their
-/// ids, is valid in each. The parse is counted in the phases of the check
-/// that makes it, the first of the process.
+/// ids, is valid in each. With it, its analysis alone, which every check
+/// continues (W5-18). The parse and that analysis are counted in the phases
+/// of the check that makes them, the first of the process.
 struct Std {
     files: SharedFiles,
     package: Arc<Package>,
+    base: Mutex<onsa_sema::Base>,
 }
 
 // Shared by the threads of a process (the tests check on many).
@@ -67,8 +69,8 @@ const _: () = {
     shared::<Std>()
 };
 
-/// [`Std`], made by the first check of the process. A panic of the parse
-/// leaves it unmade (`OnceLock`): the next check parses again.
+/// [`Std`], made by the first check of the process. A panic of the parse or
+/// of the analysis leaves it unmade (`OnceLock`): the next check makes it again.
 fn std_parsed() -> &'static Std {
     static STD: OnceLock<Std> = OnceLock::new();
     STD.get_or_init(|| {
@@ -82,7 +84,9 @@ fn std_parsed() -> &'static Std {
                 Module { segments, file, text: m.text.to_string(), parsed: parse_file(file, f.text()) }
             })
             .collect();
-        Std { files, package: Arc::new(Package::std(modules)) }
+        let package = Arc::new(Package::std(modules));
+        let base = Mutex::new(onsa_sema::Base::new(package.clone()));
+        Std { files, package, base }
     })
 }
 
@@ -173,6 +177,20 @@ pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {
     analyze(&mut loaded.sources, &name, &modules, paths, &flows.collect::<Vec<_>>())
 }
 
+/// The package of the user's modules, parsed, on the std of the process.
+fn user_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, Vec<String>)]) -> Package {
+    let user_modules: Vec<Module> = modules
+        .iter()
+        .map(|(file, path)| {
+            let text = sources.file(*file).text().to_string();
+            let parsed = parse_file(*file, &text);
+            Module { segments: path.clone(), file: *file, text, parsed }
+        })
+        .collect();
+    let std = std_package(sources);
+    package_graph(name, user_modules, &std)
+}
+
 /// The analysis of a package. `paths`, the diagnostics of the input's paths
 /// (with the module path each names), are outside every unit: each is
 /// reported (§2.3). `flows` are the paths of the `[[plugin]]` (S-718).
@@ -184,17 +202,8 @@ fn analyze(
     flows: &[manifest::plugin::PluginFlow],
 ) -> Result<Analyzed, InternalError> {
     guard(|| {
-        let user_modules: Vec<Module> = modules
-            .iter()
-            .map(|(file, path)| {
-                let text = sources.file(*file).text().to_string();
-                let parsed = parse_file(*file, &text);
-                Module { segments: path.clone(), file: *file, text, parsed }
-            })
-            .collect();
-        let std = std_package(sources);
-        let pkg = package_graph(name, user_modules, &std);
-        let analysis = onsa_sema::analyze(&pkg);
+        let pkg = user_package(sources, name, modules);
+        let analysis = onsa_sema::analyze_on(&pkg, &std_parsed().base);
         let _report = phase(Phase::Report);
         let mut all: Vec<Diagnostic> = pkg.modules.iter().flat_map(|m| m.parsed.diagnostics.iter().cloned()).collect();
         all.extend(analysis.diagnostics.iter().cloned());
@@ -298,6 +307,8 @@ fn package_text(pkg: &Package, file: FileId) -> Option<&str> {
     onsa_sema::flatten(pkg).into_iter().flat_map(|p| &p.modules).find(|m| m.file == file).map(|m| m.text.as_str())
 }
 
+#[cfg(test)]
+mod base_tests;
 #[cfg(test)]
 mod tests {
     use std::path::Path;

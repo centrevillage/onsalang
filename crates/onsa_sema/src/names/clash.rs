@@ -85,17 +85,17 @@ impl<'p> Sema<'p> {
     /// The E0304 of the items and of the heads, before any `use` is resolved
     /// (a `use` reads the namespaces and the heads).
     pub(crate) fn check_item_clashes(&mut self) {
-        for i in 0..self.a.modules.mods.len() {
-            self.item_clashes(ModId(i as u32));
+        for m in self.a.new_mods() {
+            self.item_clashes(m);
         }
         self.head_clashes();
     }
 
     /// The E0304 of the names the `use` bound, once every `use` is resolved.
     pub(crate) fn check_use_clashes(&mut self) {
-        for i in 0..self.a.modules.mods.len() {
-            self.use_clashes(ModId(i as u32));
-            self.drop_clashed_deps(ModId(i as u32));
+        for m in self.a.new_mods() {
+            self.use_clashes(m);
+            self.drop_clashed_deps(m);
         }
     }
 
@@ -202,7 +202,8 @@ impl<'p> Sema<'p> {
     // SPEC-GAP(S-645): at the head of one file (`Sema::module_head`), outside
     // every unit.
     fn head_clashes(&mut self) {
-        for (pkg, p) in self.flat.clone().into_iter().enumerate() {
+        let flat = self.flat.clone();
+        for (pkg, p) in self.a.new_pkgs(&flat) {
             let root = self.a.modules.roots[pkg];
             let mut names: Vec<(String, ModId)> =
                 self.a.modules.get(root).children.iter().map(|(n, &c)| (n.clone(), c)).collect();

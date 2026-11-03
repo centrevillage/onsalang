@@ -5,6 +5,9 @@
 //! diagnostics. Bodies are checked by `stages::check_bodies` (T2-5 ..
 //! T2-12), in the order of the stages (§18.1).
 
+mod base;
+#[cfg(test)]
+mod base_tests;
 pub mod binding;
 pub mod body;
 #[cfg(test)]
@@ -75,6 +78,7 @@ use std::sync::Arc;
 use onsa_diag::{Diagnostic, FileId};
 use onsa_syntax::Parsed;
 
+pub use base::{Base, analyze_on};
 pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
 /// The names of the builtin methods and associated items (for the gate, Q-14).
 pub use builtin::names as builtin_member_names;
@@ -191,7 +195,7 @@ pub fn flatten(pkg: &Package) -> Vec<&Package> {
 }
 
 /// Result of analysis (T2-1 .. T2-4). Everything the body checker needs.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Analysis {
     pub modules: Modules,
     pub defs: Vec<Def>,
@@ -254,6 +258,9 @@ pub struct Analysis {
     /// The earliest stage that failed in the unit of each def, as of the
     /// last stage of the bodies that read it (`stages::check_bodies`).
     pub(crate) failures: stages::Failures,
+    /// What its stages run on: the part before is of the base it continues
+    /// ([`analyze_on`]), none of a fresh analysis.
+    pub(crate) start: base::Start,
 }
 
 impl Analysis {
@@ -427,9 +434,19 @@ impl Analysis {
 
 /// Analyze a package and its dependencies (T2-1 .. T2-4).
 pub fn analyze(pkg: &Package) -> Analysis {
-    let mut analysis = sig::collect_and_lower(pkg);
+    match run(pkg, Analysis::default()) {
+        Ok(a) => a,
+        Err(base::Fallback) => onsa_diag::internal::bug(None, "a fresh analysis fell back to itself"),
+    }
+}
+
+/// The stages of `pkg` on `a`, from its start (the one way of a fresh
+/// analysis and of a continued one): a continued one falls back when the
+/// package writes in the base ([`base::Fallback`]).
+fn run(pkg: &Package, a: Analysis) -> Result<Analysis, base::Fallback> {
+    let mut analysis = sig::collect_and_lower(pkg, a)?;
     stages::check_bodies(pkg, &mut analysis);
-    analysis
+    Ok(analysis)
 }
 
 /// The module (file) a def was declared in.

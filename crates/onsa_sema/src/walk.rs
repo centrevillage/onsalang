@@ -53,7 +53,7 @@ pub(crate) enum Under {
 /// than the items being found hold, whatever the items found before. Kept
 /// from the end of the lowering of the declarations (`ready`), whose fields
 /// are not all lowered before.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Known {
     pub(crate) ready: bool,
     /// The keys under each item being found, at its number.

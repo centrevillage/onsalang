@@ -116,14 +116,17 @@ impl Cx<'_> {
     }
 }
 
-pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
-    let mut a = Analysis::default();
+/// The names and the signatures of `pkg` on `a`, from its start: the
+/// walks of the kinds learn nothing of the declarations of this run until
+/// they are lowered (`walk::Known`).
+pub(crate) fn collect_and_lower(pkg: &Package, mut a: Analysis) -> Result<Analysis, crate::base::Fallback> {
+    a.known.ready = false;
     let mut s = Sema::new(&mut a, flatten(pkg));
     let names = phase(Phase::Names);
     crate::names::collect_names(&mut s);
     drop(names);
     let _signatures = phase(Phase::Signatures);
-    let flows = s.lower_signatures();
+    let flows = s.lower_signatures()?;
     crate::prim::record(s.a);
     let pairs = s.lower_generated(&flows);
     s.a.known.ready = true;
@@ -131,7 +134,7 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
     s.check_generated(flows, pairs);
     s.fail_ungenerated();
     s.name_non_copy_fields();
-    a
+    Ok(a)
 }
 
 impl<'p> Sema<'p> {
@@ -208,23 +211,22 @@ impl<'p> Sema<'p> {
     // ------------------------------------------------------------ lowering
 
     /// The stage of the types of the signatures: the aliases and the
-    /// constants in the order of the declarations (`decls`), then every def,
-    /// in the order of the defs. The headings of the flows it lowered, for
-    /// the next stage.
-    fn lower_signatures(&mut self) -> Vec<FlowHeading> {
-        self.order_declarations();
-        let n = self.a.defs.len();
+    /// constants in the order of the declarations (`decls`), then every def
+    /// it runs on, in the order of the defs. The headings of the flows it
+    /// lowered, for the next stage.
+    fn lower_signatures(&mut self) -> Result<Vec<FlowHeading>, crate::base::Fallback> {
+        self.order_declarations()?;
         let mut flows = Vec::new();
-        for i in 0..n {
-            let id = DefId(i as u32);
+        for id in self.a.new_defs() {
+            let def = self.a.def(id);
             // Lowered with their owner (impl / flow), or an E0200 (S-224).
-            if self.a.defs[i].owner.is_some() || matches!(self.a.defs[i].kind, DefKind::Unsupported(_)) {
+            if def.owner.is_some() || matches!(def.kind, DefKind::Unsupported(_)) {
                 continue;
             }
-            let _scope = onsa_diag::internal::item_scope(self.a.defs[i].span);
+            let _scope = onsa_diag::internal::item_scope(def.span);
             flows.extend(self.lower_def(id));
         }
-        flows
+        Ok(flows)
     }
 
     /// The note of each `copy_bound` diagnostic that names the first field
