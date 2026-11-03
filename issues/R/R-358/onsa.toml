@@ -1,0 +1,13 @@
+[package]
+name = "g"
+edition = "2026"
+
+[export]
+prefix = "g_"
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "trap"
+provides = ["Alloc"]

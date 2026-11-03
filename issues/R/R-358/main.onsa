@@ -1,0 +1,10 @@
+use std.dsp.test.{assert_near}
+fn h(b: Buf[F32]) -> U32 {
+  assert_near(1.0, 1.0, 0.1)
+  b.len()
+}
+@export
+pub fn e(n: U32) -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(n)
+  h(b)
+}
