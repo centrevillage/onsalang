@@ -9,9 +9,8 @@
 //! others are checked. O(D + B) for D declarations and B records, and the
 //! components ([`crate::names::cyclic`]) with no recursion.
 
-use std::collections::HashMap;
-
 use onsa_diag::Code;
+use onsa_diag::hash::HashMap;
 
 use super::PathRes;
 use crate::def::{DefKind, ModId};

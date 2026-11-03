@@ -4,7 +4,7 @@
 //! bindings, for the bodies whose units did not fail before (§18.1), and
 //! reports the first diagnostic of each body (P-01).
 
-use std::collections::{HashMap, HashSet};
+use onsa_diag::hash::{HashMap, HashSet};
 
 use crate::DefId;
 use crate::body::LocalId;

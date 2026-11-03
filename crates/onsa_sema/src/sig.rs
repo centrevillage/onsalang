@@ -14,8 +14,7 @@
 //! rows), `derives` (the traits at the head of a struct or an enum) and
 //! `impls` (an inherent `impl`, and `impl Copy` and `impl Dup`).
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::timing::{Phase, phase};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
@@ -142,10 +141,10 @@ impl<'p> Sema<'p> {
         Sema {
             a,
             flat,
-            reported: HashMap::new(),
+            reported: HashMap::default(),
             kind_heads: Vec::new(),
-            alias_at: HashMap::new(),
-            misfit: HashMap::new(),
+            alias_at: HashMap::default(),
+            misfit: HashMap::default(),
         }
     }
 
@@ -271,7 +270,7 @@ impl<'p> Sema<'p> {
             self_ty,
             def: id,
             reach: Some(def.vis),
-            locals: HashSet::new(),
+            locals: HashSet::default(),
             flow: false,
         })
     }

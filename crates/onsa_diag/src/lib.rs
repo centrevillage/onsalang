@@ -13,6 +13,7 @@
 //! an edit lie on token boundaries, which [`contract`] checks.
 
 mod codes;
+pub mod hash;
 pub mod internal;
 mod quote;
 mod source;

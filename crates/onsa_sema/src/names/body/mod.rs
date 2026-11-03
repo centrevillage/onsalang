@@ -31,9 +31,10 @@ mod scope;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 
 use onsa_diag::Diagnostic;
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_syntax::ast::{
     Ast, ExprId, ExprKind, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind, TypeId,
 };
@@ -296,7 +297,7 @@ enum Fail {
 /// and keep their records in [`Analysis::names`].
 pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
-    let mut names = HashMap::new();
+    let mut names = HashMap::default();
     for id in a.new_defs() {
         let def = a.def(id);
         // A body whose unit has a syntax error is not checked (§18.1, S-59).
@@ -376,7 +377,7 @@ fn lower_types(
     let held = a.read_held.contains(&def);
     let m = a.def(def).module;
     let mut fail = None;
-    let late = late.into_iter().map(|(_, (t, _))| ((t, HashSet::new()), true));
+    let late = late.into_iter().map(|(_, (t, _))| ((t, HashSet::default()), true));
     for ((site, locals), late) in sites.into_iter().map(|t| (t, false)).chain(late) {
         let (t, pos) = match site {
             Typed::Type(t, pos) => (t, pos),
@@ -481,7 +482,7 @@ impl<'a> Walker<'a> {
             flow_stop: None,
             flow_types: VecDeque::new(),
             in_const: false,
-            heading: HashMap::new(),
+            heading: HashMap::default(),
         }
     }
 

@@ -30,7 +30,7 @@ fn sorted<K: Debug, V: Debug>(entries: impl Iterator<Item = (K, V)>) -> String {
 /// modules are the base's: what the stages of std made, each table of its keys.
 fn std_part(a: &Analysis, n: (usize, usize, usize)) -> Vec<(&'static str, String)> {
     let std = |d: &DefId| (d.0 as usize) < n.0;
-    let inner = |t: &std::collections::HashMap<String, DefId>| sorted(t.iter());
+    let inner = |t: &onsa_diag::hash::HashMap<String, DefId>| sorted(t.iter());
     vec![
         ("defs", format!("{:?}", &a.defs[..n.0])),
         ("types", format!("{:?}", (0..n.1 as u32).map(|i| a.types.get(crate::TyId(i))).collect::<Vec<_>>())),

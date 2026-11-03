@@ -14,8 +14,8 @@
 //! the cycle stays. Tarjan's algorithm, iterative: O(N + U), no recursion.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 
+use onsa_diag::hash::HashMap;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::def::ModId;
@@ -50,7 +50,7 @@ impl ImportGraph {
         let n = modules.mods.len();
         let edges = edges(modules, |t| t);
         let comp = components(&edges);
-        let walks = Walks { answers: HashMap::new(), count: 0, seen: vec![[0; 2]; 2 * n] };
+        let walks = Walks { answers: HashMap::default(), count: 0, seen: vec![[0; 2]; 2 * n] };
         ImportGraph { edges, comp, walks: RefCell::new(walks) }
     }
 }

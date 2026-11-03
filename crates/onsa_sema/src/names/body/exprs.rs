@@ -2,8 +2,7 @@
 //! the source order (a `let` reads its value before it binds, as the types
 //! stage declares).
 
-use std::collections::HashMap;
-
+use onsa_diag::hash::HashMap;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{

@@ -226,13 +226,13 @@ fn solve(g: &Graph) -> Vec<bool> {
     let n = g.chains.len();
     let (mut left, mut holds) = (vec![2u8; n], vec![false; n]);
     let (mut below, mut gives) = (vec![Vec::new(); n], vec![Vec::new(); n]);
-    let mut watch: HashMap<(DefId, u32), Vec<usize>> = HashMap::new();
+    let mut watch: HashMap<(DefId, u32), Vec<usize>> = HashMap::default();
     for (c, &(arg, up)) in g.chains.iter().enumerate().skip(1) {
         below[up].push(c);
         watch.entry(arg).or_default().push(c);
     }
     g.clauses.iter().for_each(|&(param, under)| gives[under].push(param));
-    let (mut queue, mut params) = (vec![0], HashSet::new());
+    let (mut queue, mut params) = (vec![0], HashSet::default());
     while let Some(c) = queue.pop() {
         holds[c] = true;
         let freed = gives[c].iter().filter(|&&p| params.insert(p)).flat_map(|p| watch.get(p).into_iter().flatten());
@@ -257,7 +257,7 @@ impl<'p> Sema<'p> {
         self.name_members()?;
         let mut g = Graph {
             a: &*self.a,
-            points: HashMap::new(),
+            points: HashMap::default(),
             of: Vec::new(),
             edges: Vec::new(),
             clauses: Vec::new(),
@@ -274,7 +274,7 @@ impl<'p> Sema<'p> {
         let (comp, cycled) = crate::names::cyclic(&adj);
         let of = g.of;
         let cyclic: Vec<usize> = (0..of.len()).filter(|&p| cycled[p]).collect();
-        let mut mods: HashMap<usize, Vec<ModId>> = HashMap::new();
+        let mut mods: HashMap<usize, Vec<ModId>> = HashMap::default();
         cyclic.iter().for_each(|&p| mods.entry(comp[p]).or_default().push(self.a.def(of[p].0).module));
         // A cycle in modules that are one cycle of the imports: its E0310 is
         // the one (§18.1, S-734).
@@ -288,7 +288,7 @@ impl<'p> Sema<'p> {
             }
             c
         };
-        let mut first: HashMap<DefId, usize> = HashMap::new();
+        let mut first: HashMap<DefId, usize> = HashMap::default();
         for &p in &cyclic {
             let d = of[p].0;
             self.a.decls.cyclic.insert(d);
@@ -458,7 +458,7 @@ impl<'p> Sema<'p> {
             subs.extend(imp.fns.iter().chain(&imp.consts).map(|&sub| (key, sub)));
         }
         subs.sort_by_cached_key(|&(_, d)| (self.file_key(self.a.def(d).module), self.a.def(d).name_span.start));
-        let mut variants: HashMap<DefId, HashMap<String, Span>> = HashMap::new();
+        let mut variants: HashMap<DefId, HashMap<String, Span>> = HashMap::default();
         for ((def, builtin), sub) in subs {
             let (name, at) = (self.a.def(sub).name.clone(), self.a.def(sub).name_span);
             let variant = def.and_then(|d| variants.entry(d).or_insert_with(|| self.variants(d)).get(&name).copied());
@@ -480,8 +480,8 @@ impl<'p> Sema<'p> {
     /// variants are lowered later).
     fn variants(&self, d: DefId) -> HashMap<String, Span> {
         let def = self.a.def(d);
-        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return HashMap::new() };
-        let Some(ItemKind::Enum(e)) = def.item.map(|i| item_kind(&ast.item(i).kind)) else { return HashMap::new() };
+        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return HashMap::default() };
+        let Some(ItemKind::Enum(e)) = def.item.map(|i| item_kind(&ast.item(i).kind)) else { return HashMap::default() };
         e.variants.iter().map(|v| (v.name.name.clone(), v.name.span)).collect()
     }
 

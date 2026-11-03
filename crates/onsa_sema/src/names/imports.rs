@@ -379,7 +379,7 @@ fn takes_itself(name: &Ident) -> Diagnostic {
 /// The names of a list bind each its own name: two of one name would be the
 /// E0304 of a candidate that writes them (§15.1, §18.1).
 fn distinct(list: &[Ident]) -> bool {
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = onsa_diag::hash::HashSet::default();
     list.iter().all(|n| seen.insert(&n.name))
 }
 

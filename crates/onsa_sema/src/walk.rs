@@ -4,7 +4,8 @@
 //! walk stops (D-15).
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+
+use onsa_diag::hash::HashMap;
 
 use crate::def::{DefKind, FieldDef, Fields, FlowTy, VariantDef};
 use crate::kind::Kind;

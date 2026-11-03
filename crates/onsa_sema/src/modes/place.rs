@@ -3,9 +3,10 @@
 //! the walk (W8-05 makes it public): the projections of a pattern and the
 //! index of §7 too. W4-08 adds the views.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use onsa_diag::Span;
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, PatId, PatKind, Path, StmtKind};
 use onsa_syntax::hole_tuple_index;
@@ -340,7 +341,7 @@ impl Deps {
     /// of the bindings it derives from, else from the start of the ways from
     /// the root. A binding none of which overlaps is left out.
     fn along(&self, ways: &[Way], bound: &[LocalId]) -> HashMap<LocalId, Along> {
-        let mut out: HashMap<LocalId, Along> = HashMap::new();
+        let mut out: HashMap<LocalId, Along> = HashMap::default();
         for &l in bound {
             let mut at = Along::new();
             for s in self.sources(l) {

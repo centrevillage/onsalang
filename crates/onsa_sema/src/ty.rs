@@ -1,8 +1,7 @@
 //! Types (spec §4, `design/03-types.md`). Interned: a `TyId`
 //! identifies one structural type, so equality is `TyId` equality.
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_syntax::ast::Mode;
 
 use crate::def::DefId;
@@ -343,7 +342,7 @@ impl Types {
 
     /// Whether the error type is in `id`. Each type is visited once.
     pub fn has_error(&self, id: TyId) -> bool {
-        let (mut seen, mut todo) = (HashSet::new(), vec![id]);
+        let (mut seen, mut todo) = (HashSet::default(), vec![id]);
         while let Some(t) = todo.pop() {
             if !seen.insert(t) {
                 continue;
@@ -484,7 +483,7 @@ impl Types {
     /// stand for (`type A2 = (A1, A1)`).
     pub fn named(&self, id: TyId) -> Vec<DefId> {
         let mut out = Vec::new();
-        self.named_in(id, &mut HashSet::new(), &mut out);
+        self.named_in(id, &mut HashSet::default(), &mut out);
         out
     }
 

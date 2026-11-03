@@ -177,20 +177,27 @@ fn draw(all: Vec<PathBuf>, n: usize, mut seed: u64) -> Vec<PathBuf> {
     out
 }
 
+/// The cases drawn from `tests/spec`, each as the package a check reads.
+fn drawn() -> Vec<(String, Package)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let drawn = draw(onsa_files(&root.join("tests/spec")), DRAWN, SEED);
+    assert_eq!(drawn.len(), DRAWN);
+    let read = |p: &PathBuf| {
+        let text = std::fs::read_to_string(p).expect("the case reads");
+        let name = p.file_name().and_then(|n| n.to_str()).expect("a file name");
+        (p.display().to_string(), made(&[(name, &text)]).0)
+    };
+    drawn.iter().map(read).collect()
+}
+
 #[test]
 fn a_continued_analysis_is_the_fresh_one() {
     let started = Instant::now();
     // The cases nest deeper than the default stack of a test thread.
     onsa_diag::stack::run(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let drawn = draw(onsa_files(&root.join("tests/spec")), DRAWN, SEED);
-        assert_eq!(drawn.len(), DRAWN);
         let mut continued = 0;
-        for p in &drawn {
-            let text = std::fs::read_to_string(p).expect("the case reads");
-            let name = p.file_name().and_then(|n| n.to_str()).expect("a file name");
-            let (pkg, _) = made(&[(name, &text)]);
-            continued += usize::from(compare(&p.display().to_string(), &pkg));
+        for (what, pkg) in &drawn() {
+            continued += usize::from(compare(what, pkg));
         }
         // Those that fall back are the few that write in std's tables.
         assert!(continued * 10 >= DRAWN * 9, "{continued} of {DRAWN} continued");
@@ -232,4 +239,39 @@ fn a_check_continues_the_base() {
     assert!(!analyzed.analysis.continues());
     let fresh = onsa_sema::analyze(&analyzed.pkg);
     assert_eq!(format!("{:?}", analyzed.analysis.diagnostics), format!("{:?}", fresh.diagnostics));
+}
+
+/// The seed of the hash of sema's tables (W5-18 B1, `onsa_diag::hash`)
+/// leaves the output: the diagnostics in their order, and the Core of a
+/// package with none, on the drawn cases and the made inputs. The analyses
+/// are fresh, so that each table is made under the seed (the base of the
+/// process keeps the seed of the process).
+#[test]
+fn the_seed_of_the_tables_leaves_the_output() {
+    let started = Instant::now();
+    onsa_diag::stack::run(|| {
+        let mut pkgs = drawn();
+        pkgs.extend(MADE.iter().map(|(what, files, _)| (what.to_string(), made(files).0)));
+        let mut cores = 0;
+        for (what, pkg) in &pkgs {
+            let parsed = pkg.modules.iter().all(|m| m.parsed.diagnostics.is_empty());
+            let output = |k| {
+                onsa_diag::hash::with_seed(k, || {
+                    let a = onsa_sema::analyze(pkg);
+                    let clean = parsed && a.diagnostics.is_empty() && a.path_diagnostics.is_empty();
+                    let core = clean.then(|| core_text(pkg, &a));
+                    (format!("{:?}", a.diagnostics), format!("{:?}", a.path_diagnostics), core)
+                })
+            };
+            let first = output(0);
+            for k in [0x9e37_79b9_7f4a_7c15, 12345] {
+                assert_eq!(first, output(k), "{what}: seed {k}");
+            }
+            cores += usize::from(first.2.is_some());
+        }
+        // Not a pass with nothing compared.
+        assert_eq!(pkgs.len(), DRAWN + MADE.len());
+        assert!(cores > 0, "no Core compared");
+    });
+    eprintln!("the_seed_of_the_tables_leaves_the_output: {:?}", started.elapsed());
 }

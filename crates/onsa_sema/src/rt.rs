@@ -3,8 +3,7 @@
 //! E0902 (`Alloc` in the effect row) is checked with the signature; E0904 /
 //! E0905 need effects other than `Alloc` and are phase 2.
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprKind, Lit, StmtKind, StrSeg};
 
@@ -19,7 +18,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
     let mut diags = Vec::new();
     let rt_fns: Vec<DefId> = a.new_defs().filter(|&id| a.rt_checked(id)).collect();
     // Calls of each rt body, in source order: (span, callee) for rt callees.
-    let mut edges: HashMap<DefId, Vec<(Span, DefId)>> = HashMap::new();
+    let mut edges: HashMap<DefId, Vec<(Span, DefId)>> = HashMap::default();
     for &id in &rt_fns {
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         if let Some(d) = body_rules(pkg, a, id, moved.get(&id)) {
@@ -30,7 +29,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
     }
     // E0903: cycles in the rt call graph (§10 rule 5), each reported once at
     // the call that closes it.
-    let mut color: HashMap<DefId, u8> = HashMap::new(); // 1 = on stack, 2 = done
+    let mut color: HashMap<DefId, u8> = HashMap::default(); // 1 = on stack, 2 = done
     let mut reported: Vec<HashSet<DefId>> = Vec::new();
     for &start in &rt_fns {
         if color.contains_key(&start) || !edges.contains_key(&start) {

@@ -72,9 +72,9 @@ pub mod ty;
 #[cfg(test)]
 mod ty_tests;
 
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Diagnostic, FileId};
 use onsa_syntax::Parsed;
 
@@ -189,7 +189,7 @@ pub fn flatten(pkg: &Package) -> Vec<&Package> {
         out.push(p);
     }
     let mut out = Vec::new();
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     go(pkg, &mut seen, &mut out);
     out
 }

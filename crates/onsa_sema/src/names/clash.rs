@@ -16,8 +16,7 @@
 //! it sees (§5.1, [`hides`]): its E0304 is in its unit, and the name it
 //! clashes with is no error elsewhere (§18.1).
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use onsa_syntax::ast::Ident;
@@ -144,7 +143,7 @@ impl<'p> Sema<'p> {
     /// before.
     fn use_clashes(&mut self, m: ModId) {
         let bound = self.a.modules.get(m).bound.clone();
-        let mut first: HashMap<&str, Span> = HashMap::new();
+        let mut first: HashMap<&str, Span> = HashMap::default();
         for (name, span) in &bound {
             match self.use_clash(m, name, *span, first.get(name.as_str()).copied()) {
                 Some(diag) => {

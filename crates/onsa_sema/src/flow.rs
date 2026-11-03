@@ -52,8 +52,7 @@
 //! `consts` (the constant expressions), `rate` (the rate pass) and `reads`
 //! (the state marking). The tables are here.
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{

@@ -104,7 +104,7 @@ fn holds(a: &Analysis, seen: &mut HashMap<(TyId, Pos, u8), bool>, ty: TyId, at: 
 /// it has no kind, and a type parameter takes it only as `?Escape` (§4.5,
 /// §4.6; S-766, S-771, S-862). The one judgment of both.
 pub(crate) fn no_kind_argument(a: &Analysis, t: TyId) -> bool {
-    holds(a, &mut HashMap::new(), t, ARGUMENT)
+    holds(a, &mut HashMap::default(), t, ARGUMENT)
 }
 
 /// The place of a type argument: inside another type.

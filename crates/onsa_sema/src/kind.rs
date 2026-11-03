@@ -1,7 +1,8 @@
 //! Kinds (spec §4.6): Copy / Shared / Affine, from the structure of a type.
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+
+use onsa_diag::hash::{HashMap, HashSet};
 
 use crate::body::bounds::Bounds;
 use crate::def::{Bound, GenericDef, GenericKind};

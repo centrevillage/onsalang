@@ -71,6 +71,9 @@ impl Report {
         for c in self.cases.iter().filter(|c| !c.failures.is_empty()) {
             let _ = write!(out, "\n{}:\n  {}", c.run.path, c.failures.join("\n").replace('\n', "\n  "));
         }
+        // An output that follows the order of a table changes with the seed (W5-18).
+        let seed = onsa_diag::hash::process_seed();
+        let _ = write!(out, "\n(the hash seed of the run: {seed}; ONSA_HASH_SEED={seed} repeats it in a debug build)");
         out.trim_start().to_string()
     }
 

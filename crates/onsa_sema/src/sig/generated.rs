@@ -94,7 +94,7 @@ impl<'p> Sema<'p> {
     /// (§18.1, R-50).
     pub(crate) fn members_unknown(&self, flow: DefId) -> bool {
         let Some(f) = self.a.def(flow).as_flow() else { return false };
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         std::iter::once(f.out).chain(f.inputs.iter().map(|i| i.ty)).any(|t| self.has_error(t, &mut seen))
     }
 

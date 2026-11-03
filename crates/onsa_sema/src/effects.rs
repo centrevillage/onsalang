@@ -4,8 +4,7 @@
 //! `rt` functions are covered by E0901 / E0902, `test` bodies get `Alloc`
 //! from the runner (D-08), and `const` initializers from the compiler (§6.6).
 
-use std::collections::HashSet;
-
+use onsa_diag::hash::HashSet;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprKind, ItemKind, Lit, StmtKind, StrSeg};
 

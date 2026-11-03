@@ -6,8 +6,7 @@
 //! reports there is dropped by the choice of a unit's diagnostic
 //! (`onsa_driver::reduce`), which also chooses among those of one stage.
 
-use std::collections::HashMap;
-
+use onsa_diag::hash::HashMap;
 use onsa_diag::timing::Phase;
 use onsa_diag::{Diagnostic, FileId, Stage};
 use onsa_syntax::ast::ItemId;
@@ -57,11 +56,11 @@ impl Failures {
     /// the members of an item whose heading has an error are of its unit.
     /// O(D log U + U + N) for D diagnostics, U units and N defs.
     pub(crate) fn of(pkg: &Package, a: &Analysis) -> Failures {
-        let mut of_file: HashMap<FileId, Vec<&Diagnostic>> = HashMap::new();
+        let mut of_file: HashMap<FileId, Vec<&Diagnostic>> = HashMap::default();
         for d in &a.diagnostics {
             of_file.entry(d.span.file).or_default().push(d);
         }
-        let mut failed: HashMap<(FileId, ItemId), Stage> = HashMap::new();
+        let mut failed: HashMap<(FileId, ItemId), Stage> = HashMap::default();
         for m in flatten(pkg).into_iter().flat_map(|p| &p.modules) {
             let theirs = of_file.remove(&m.file).unwrap_or_default();
             let ds: Vec<&Diagnostic> = m.parsed.diagnostics.iter().chain(theirs).collect();

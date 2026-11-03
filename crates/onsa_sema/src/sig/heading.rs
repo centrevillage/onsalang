@@ -123,7 +123,7 @@ pub(super) fn heading_locals(
 ) -> HashSet<String> {
     let mut seen: HashMap<&str, Span> = cx.generics.iter().map(|g| (g.name.as_str(), g.span)).collect();
     seen.extend(generics.iter().map(crate::names::param_name).map(|n| (n.name.as_str(), n.span)));
-    let mut declared = HashMap::new();
+    let mut declared = HashMap::default();
     for p in params {
         let (name, span) = match &p.name {
             ParamName::Ident(i) => (i.name.as_str(), i.span),

@@ -1,8 +1,7 @@
 //! The entry of the modes stage: one walk of each body the stage reads,
 //! in source order, and its one diagnostic (§18.1).
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, StmtId};
@@ -27,7 +26,7 @@ use crate::{Analysis, DefId, Kind, Package, module_of_def};
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
     let mut ids: Vec<DefId> = a.bodies.keys().copied().filter(|&id| a.is_new(id)).collect();
     ids.sort();
-    let (mut moved, mut found, mut taken) = (MovedLocals::new(), Vec::new(), Vec::new());
+    let (mut moved, mut found, mut taken) = (MovedLocals::default(), Vec::new(), Vec::new());
     for id in ids {
         if !a.body_checked(id, Stage::Modes) {
             continue;

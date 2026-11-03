@@ -13,8 +13,7 @@
 //! `named` (the names the names stage resolved), `expressions`, `calls`, `statements` and `patterns`. The tests
 //! are `body_tests.rs`.
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{

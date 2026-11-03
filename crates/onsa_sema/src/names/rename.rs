@@ -2,8 +2,9 @@
 //! the declaration and every name of the package that names it, which the
 //! stages note as they resolve it ([`Analysis::note_use`]).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Note, Span};
 use onsa_syntax::ast::Ident;
 
@@ -50,10 +51,14 @@ enum Target {
 /// A declaration the analysis does not know (a parameter of a function with
 /// no body) keeps the candidate of its name alone.
 pub fn rename_fixes(pkg: &Package, a: &Analysis, diagnostics: &mut [Diagnostic]) {
+    // The tables below hold every use of std's bodies too: no candidate, no work.
+    if !diagnostics.iter().any(|d| d.code == Code::E0320 && !d.fixes.is_empty()) {
+        return;
+    }
     let flat = flatten(pkg);
-    let mut tokens = HashMap::new();
+    let mut tokens = HashMap::default();
     let texts: HashMap<_, &str> = flat.iter().flat_map(|p| &p.modules).map(|m| (m.file, m.text.as_str())).collect();
-    let mut uses: HashMap<Span, Vec<Span>> = HashMap::new();
+    let mut uses: HashMap<Span, Vec<Span>> = HashMap::default();
     for &(decl, at) in a.uses.borrow().iter() {
         uses.entry(decl).or_default().push(at);
     }
@@ -116,7 +121,7 @@ fn targets(a: &Analysis, ds: &[Diagnostic]) -> HashMap<usize, (Target, Span)> {
         let within = at.range((s.file, s.start)..=(s.file, s.end)).flat_map(|(_, is)| is.iter().copied());
         within.filter(|&i| ds[i].span.end <= s.end && ds[i].found.as_deref() == Some(n)).collect::<Vec<_>>()
     };
-    let (mut found, mut params, mut locals) = (HashMap::new(), HashMap::<_, Vec<_>>::new(), HashMap::new());
+    let (mut found, mut params, mut locals) = (HashMap::default(), HashMap::<_, Vec<_>>::default(), HashMap::default());
     for (k, def) in a.defs.iter().enumerate() {
         let d = DefId(k as u32);
         for i in hits(def.name_span, &def.name) {
@@ -224,7 +229,7 @@ struct Spaces<'a> {
 
 impl<'a> Spaces<'a> {
     fn new(a: &'a Analysis) -> Self {
-        let mut s = Spaces { assoc: HashMap::new(), bound: HashMap::new() };
+        let mut s = Spaces { assoc: HashMap::default(), bound: HashMap::default() };
         let users = a.modules.assoc.iter().map(|(&ty, t)| (t, Some(ty)));
         for (t, ty) in users.chain(a.modules.assoc_builtin.values().map(|t| (t, None))) {
             for (_, &x) in t.iter().filter(|&(n, &x)| *n == a.def(x).name) {

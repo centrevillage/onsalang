@@ -3,8 +3,7 @@
 //! fields of a struct and the variants of an enum, each name once in its
 //! list (R-40). Their E0304 is in the unit of the item (§18.1).
 
-use std::collections::HashMap;
-
+use onsa_diag::hash::HashMap;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{GenericParam, Ident};
 
@@ -45,7 +44,7 @@ impl Sema<'_> {
     /// (`what`) written twice in its list (§4.4, R-40): on the later, with
     /// the first in the note.
     pub(crate) fn member_clashes<'n>(&mut self, def: DefId, what: &str, names: impl Iterator<Item = &'n Ident>) {
-        let mut first: HashMap<&str, Span> = HashMap::new();
+        let mut first: HashMap<&str, Span> = HashMap::default();
         for n in names {
             let Some(&at) = first.get(n.name.as_str()) else {
                 first.insert(&n.name, n.span);

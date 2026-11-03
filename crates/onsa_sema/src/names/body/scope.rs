@@ -2,8 +2,7 @@
 //! binding, the lookup of a local name and the captures of the anonymous
 //! functions (§5.1, §5.3).
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Stage};
 use onsa_syntax::ast::{Ast, ExprId, Ident, PatId, PatKind};
 
@@ -160,7 +159,7 @@ impl Walker<'_> {
     /// Enter the anonymous function `e` (before its parameters).
     pub(super) fn open_closure(&mut self, e: ExprId) {
         self.out.captures.entry(e).or_default();
-        self.scopes.closures.push((e, self.out.bindings.len() as u32, HashSet::new()));
+        self.scopes.closures.push((e, self.out.bindings.len() as u32, HashSet::default()));
     }
 
     pub(super) fn close_closure(&mut self) {

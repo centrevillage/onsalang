@@ -1,8 +1,7 @@
 //! The module tree of every package (spec §15.1, S-312, S-313) and the defs
 //! and the tables of the items of every module.
 
-use std::collections::HashMap;
-
+use onsa_diag::hash::HashMap;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
@@ -89,7 +88,7 @@ impl<'p> Sema<'p> {
             let Some(module) = self.module(m) else { continue };
             let ast = &module.parsed.ast;
             self.a.modules.get_mut(m).use_at = use_at(&module.parsed);
-            let mut tests: HashMap<String, DefId> = HashMap::new();
+            let mut tests: HashMap<String, DefId> = HashMap::default();
             for &id in &ast.root {
                 let item = ast.item(id);
                 // A panic names this item (S-67).
@@ -465,9 +464,9 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
         module: None,
         file: None,
         parent,
-        children: HashMap::new(),
-        items: HashMap::new(),
-        uses: HashMap::new(),
+        children: HashMap::default(),
+        items: HashMap::default(),
+        uses: HashMap::default(),
         pub_use_names: Default::default(),
         bound: Vec::new(),
         imports: Vec::new(),

@@ -3,8 +3,7 @@
 //! A `use` reads the same [`Modules::member`] after its own head
 //! ([`Modules::head`]).
 
-use std::collections::HashMap;
-
+use onsa_diag::hash::HashMap;
 use onsa_diag::{Edit, Fix, Span};
 use onsa_syntax::ast::{Ident, Path, Vis};
 

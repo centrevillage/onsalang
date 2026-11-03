@@ -1,8 +1,7 @@
 //! Modules, their tables of names, imports and cycles (spec §15.1, S-11,
 //! S-17, S-20, S-611). The lookups of a path are in `crate::names::lookup`.
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{Ident, ItemId, Path, Vis};
 

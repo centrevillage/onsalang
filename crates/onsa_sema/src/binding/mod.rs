@@ -15,9 +15,8 @@
 //! not read it), nor is a body they skip (one that is not complete or whose
 //! unit failed before the modes, §18.1): its heads' bindings stay owned.
 
-use std::collections::HashMap;
-
 use onsa_diag::Stage;
+use onsa_diag::hash::HashMap;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
 use onsa_syntax::tails::Tail;
 
@@ -152,7 +151,7 @@ impl<'a> Settle<'a> {
         info: &'a mut BodyInfo,
         generics: Vec<GenericDef>,
     ) -> Self {
-        let mut bound: HashMap<Head, Vec<LocalId>> = HashMap::new();
+        let mut bound: HashMap<Head, Vec<LocalId>> = HashMap::default();
         for (i, b) in names.bindings.iter().enumerate() {
             let head = match b.origin {
                 Origin::Let(s) if b.kind == BindingKind::Let => Head::Let(s),
@@ -162,7 +161,7 @@ impl<'a> Settle<'a> {
             };
             bound.entry(head).or_default().push(LocalId(i as u32));
         }
-        Settle { a, ast, names, info, bound, generics, kinds: HashMap::new() }
+        Settle { a, ast, names, info, bound, generics, kinds: HashMap::default() }
     }
 
     fn expr(&mut self, e: ExprId) {

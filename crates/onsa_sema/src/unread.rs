@@ -10,8 +10,7 @@
 //! candidate; the driver turns the defs into units
 //! (`onsa_driver::Analyzed::unread_units`).
 
-use std::collections::{HashMap, HashSet};
-
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{FileId, Span};
 
 use crate::def::{DefKind, Fields};
@@ -96,7 +95,7 @@ impl Analysis {
     /// each function and call once: O(V + E) for V functions and E calls,
     /// and it ends, as each function is pushed at most once.
     fn rt_held(&self) -> HashSet<DefId> {
-        let mut callers: HashMap<DefId, Vec<DefId>> = HashMap::new();
+        let mut callers: HashMap<DefId, Vec<DefId>> = HashMap::default();
         for (&id, b) in self.bodies.iter().filter(|(id, _)| self.rt_with_body(**id)) {
             for t in b.targets.values() {
                 if let Target::Fn { def, .. } | Target::Method { def, .. } = t
