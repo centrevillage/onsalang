@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6", "§15.1"]
+
+// W5-02 U4a: `BITS` of an integer type in the length of an array and as a const argument (spec §4.5: "配列の
+// 長さと const 引数は定数式で書く。定数式は、... `I32.BITS` のような具体的な型の関連定数を含む ... 型は
+// `U32` である"). `BITS` is a `U32` whatever the type, so it is one of the constants that a length can
+// name; the value decides the type (§4.5: "型は評価した値で比べる", so `[F32; U8.BITS]` and `[F32; 8]` are the
+// same type). The operations on such a constant (`U8.BITS * 2`) wait for the evaluation of lengths
+// (scalar_bits_array_length_operations.onsa, W9-03). Today a length that is an associated constant of a
+// built-in type is E0200 "constants computed by expressions as array lengths".
+
+use std.array
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct Frame {
+  lanes: [F32; U8.BITS],
+  words: [U32; I64.BITS],
+}
+
+type Half = [F32; U16.BITS]
+
+pub fn first_and_last(x: [F32; U8.BITS]) -> F32 {
+  x[0] + x[7]
+}
+
+pub fn ones() -> [F32; I16.BITS] {
+  [1.0; I16.BITS]
+}
+
+pub fn take_eight(x: [F32; 8]) -> F32 {
+  x[3]
+}
+
+pub fn take_sixteen(x: Half) -> F32 {
+  x[15]
+}
+
+test "an array whose length is BITS has the length that BITS has" {
+  let a: [F32; U8.BITS] = [0.5; U8.BITS]
+  assert a.len() == 8
+  let b: [F32; I16.BITS] = [0.25; I16.BITS]
+  assert b.len() == 16
+  let c: [U32; U64.BITS] = [1; U64.BITS]
+  assert c.len() == 64
+}
+
+test "the value of BITS decides the type: an array of BITS is an array of that many" {
+  let a: [F32; U8.BITS] = [0.5; U8.BITS]
+  let b: [F32; 8]       = a
+  assert take_eight(a) == 0.5
+  assert first_and_last(b) == 1.0
+}
+
+test "a function signature and an alias name a length by BITS" {
+  assert ones().len() == 16
+  let h: Half = ones()
+  assert take_sixteen(h) == 1.0
+}
+
+test "a struct field and a repeat count name a length by BITS" {
+  let f = Frame { lanes: [2.0; U8.BITS], words: [7; I64.BITS] }
+  assert f.lanes.len() == 8
+  assert f.words.len() == 64
+  assert f.lanes[7] == 2.0
+  assert f.words[63] == 7
+}
+
+test "a const argument names BITS and has the value of BITS" {
+  let a: [F32; U8.BITS]     = [0.5; U8.BITS]
+  let r: Ring[F32, U8.BITS] = Ring { data: a, head: 0 }
+  let same: Ring[F32, 8]    = r
+  assert same.data[7] == 0.5
+  assert same.head == 0
+}
+
+test "a loop counts to BITS and indexes an array of that length" {
+  let a: [F32; U8.BITS] = array.from_fn(fn(i) { i.round_f32() })
+  var sum: F32          = 0.0
+  for i in 0 ..< U8.BITS {
+    sum = sum + a[i]
+  }
+  assert sum == 28.0
+}

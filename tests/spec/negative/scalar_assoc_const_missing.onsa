@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§15.1", "§18.1"]
+
+// W5-02 U4a: a name after a scalar type that the type does not have is E0302 (spec §15.1: "名前が見つからなければ
+// E0302"), when the type has other constants. The table of §6.6 is closed ("閉じた一覧"): an integer has
+// `ZERO ONE MIN MAX BITS` and a floating-point type has `ZERO ONE PI MAX EPSILON INFINITY NAN`, so `PI`,
+// `EPSILON`, `INFINITY` and `NAN` are not constants of an integer (they are the constants that belong to a
+// float), `BITS` is not a constant of a float, and `from_bits` is an associated function of the floats only
+// (§3.3). The spelling is the spelling of the table: `Max` and `pi` are not `MAX` and `PI`. No near spelling
+// is a candidate (§15.1), and `MIN` of a float is a diagnostic of its own (tests/spec/fixes/
+// e0302_float_min.onsa). One error per unit (§18.1), in the body of a function, of a flow, in a `const`
+// and in a length.
+
+pub fn pi_of_an_integer() -> I32 {
+  I32.PI //~ E0302
+}
+
+pub fn epsilon_of_an_unsigned() -> U8 {
+  U8.EPSILON //~ E0302
+}
+
+pub fn infinity_of_a_wide_integer() -> I64 {
+  I64.INFINITY //~ E0302
+}
+
+pub fn nan_of_an_integer() -> U32 {
+  U32.NAN //~ E0302
+}
+
+pub fn bits_of_a_float() -> U32 {
+  F32.BITS //~ E0302
+}
+
+pub fn bits_of_a_wide_float() -> U32 {
+  F64.BITS //~ E0302
+}
+
+pub fn spelling_in_lower_case() -> F32 {
+  F32.pi //~ E0302
+}
+
+pub fn spelling_in_camel_case() -> F32 {
+  F32.Max //~ E0302
+}
+
+pub fn the_name_of_the_other_width() -> F32 {
+  F32.EPSILON_F64 //~ E0302
+}
+
+pub fn from_bits_of_an_integer() -> I32 {
+  I32.from_bits(1) //~ E0302
+}
+
+pub fn from_bits_of_an_unsigned() -> U64 {
+  U64.from_bits(1) //~ E0302
+}
+
+pub fn bits_of_float_in_a_branch(flag: Bool) -> U32 {
+  if flag {
+    F32.BITS //~ E0302
+  } else {
+    0
+  }
+}
+
+pub fn a_missing_name_in_an_array_literal() -> [F32; 2] {
+  let ys: [F32; 2] = [F32.TAU, 1.0] //~ E0302
+  ys
+}
+
+pub flow scaled(x: F32 at sample) -> F32 at sample {
+  x * F32.TAU //~ E0302
+}
+
+const FLOOR: F32 = F32.SMALLEST //~ E0302
+
+pub fn length_by_a_missing_name(x: [F32; I32.PI]) -> F32 { //~ E0302
+  x[0]
+}
+
+pub fn the_names_that_are_there() -> F32 {
+  let a: U32 = I32.BITS
+  let b: I32 = I32.MAX
+  let c: F32 = F32.PI + F32.EPSILON + F32.MAX + F32.INFINITY + F32.NAN
+  let d: F32 = F32.from_bits(1)
+  d + c + b.round_f32() + a.round_f32()
+}

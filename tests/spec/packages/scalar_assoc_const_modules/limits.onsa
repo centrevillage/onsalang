@@ -1,0 +1,31 @@
+// The constants and the functions of another module that read the associated constants of the scalar
+// types (spec §6.6, §15.1): a `pub const` whose initializer reads one, a `pub fn` whose body reads one, and
+// an `impl` member that does.
+
+pub const TWO_PI: F32 = F32.PI * 2.0
+
+pub const HIGHEST: U8 = U8.MAX
+
+pub const LOWEST: I16 = I16.MIN
+
+pub fn clamp_finite(x: F32) -> F32 {
+  if x > F32.MAX {
+    F32.MAX
+  } else if x < -F32.MAX {
+    -F32.MAX
+  } else {
+    x
+  }
+}
+
+pub struct Phase {
+  turns: F32,
+}
+
+impl Phase {
+  pub const FULL: F32 = F32.PI * 2.0
+
+  pub fn radians(self) -> F32 {
+    self.turns * Self.FULL
+  }
+}

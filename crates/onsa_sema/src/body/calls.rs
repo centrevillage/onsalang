@@ -33,9 +33,6 @@ impl<'a> Checker<'a> {
             // resolved the callee.
             let cspan = self.expr(callee).span;
             let record = self.names.paths.get(&callee).cloned();
-            // `F32.PI!()`: a constant, a value of 3 (§5.2, S-812).
-            let constant = matches!(&record, Some(PathRes::BuiltinAssoc { ty, name, .. })
-                if builtin::has_assoc_const(&self.a.types, *ty, name));
             match record {
                 Some(PathRes::Item { entity, owner }) => {
                     let name = self.last_name(callee);
@@ -48,14 +45,14 @@ impl<'a> Checker<'a> {
                         _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
                     };
                 }
-                Some(PathRes::BuiltinAssoc { ty, owner, .. }) if !constant => {
+                Some(PathRes::BuiltinAssoc { ty, owner, .. }) => {
                     let name = self.last_name(callee);
                     return self.check_builtin_assoc_call(e, callee, (ty, owner), &name, args, expected);
                 }
                 _ => {}
             }
             // 2. A method `recv.name(...)` of the value before it.
-            if !constant && let ExprKind::Field { base, name } = &self.expr(callee).kind {
+            if let ExprKind::Field { base, name } = &self.expr(callee).kind {
                 let (base, name) = (*base, name.clone());
                 // After a constructor of the prelude (`Some.x()`): an
                 // associated function that is none, in the words of
@@ -275,10 +272,10 @@ impl<'a> Checker<'a> {
         Ok(sig.ret)
     }
 
-    /// `Buf.zeroed(4)`, `F32.from_bits(b)`: an associated function of the
-    /// builtin type `ty` (a generic one by its key, `Analysis::builtin_key`),
-    /// whose type argument the type an alias names it by decides (`owner`,
-    /// `Samples.zeroed(n)` of `type Samples = Buf[F32]`, §4.4).
+    /// `Buf.zeroed(4)`: an associated function of the builtin type `ty` (a
+    /// generic one by its key, `Analysis::builtin_key`), whose type argument
+    /// the type an alias names it by decides (`owner`, `Samples.zeroed(n)` of
+    /// `type Samples = Buf[F32]`, §4.4). std's (`F32.from_bits`) are members.
     fn check_builtin_assoc_call(
         &mut self,
         e: ExprId,
@@ -289,12 +286,12 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        let (scalar, generic) = match self.ty(ty) {
-            Ty::Builtin(g, _) => (None, Some(g)),
-            _ => (Some(ty), None),
+        let generic = match self.ty(ty) {
+            Ty::Builtin(g, _) => Some(g),
+            _ => None,
         };
         let targ = self.fresh();
-        let Some((params, ret)) = builtin::assoc_fn(&mut self.a.types, scalar, generic, &name.name, targ) else {
+        let Some((params, ret)) = builtin::assoc_fn(&mut self.a.types, generic, &name.name, targ) else {
             let shown = self.src(self.expr(callee).span);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` does not exist")));
         };

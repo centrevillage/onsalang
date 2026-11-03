@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.1", "§15.1", "§18.1"]
+
+// W5-02 U4a (R-295): a name after the name of an associated function of a scalar type. An associated function
+// is a function that can be used as a value (§6.1: "関連関数 ... は、項目の関数と同じく値として使える"), and
+// the name after a function's name is a name after a value, E0413 (§15.1: "値の後の `.` はそのフィールドと
+// メソッド ... 関数の名前の `g.y` は E0413"), as the user's `P.mk.x` is (the same form of a type of the
+// program is E0413 today). It is not the E0302 of a name that is not found (today `from_bits` is not found
+// after a name when no call follows, R-295), and it is not the E0308 of a name that is no value (that is the
+// method, which is not a value). One error per function (P-01).
+
+pub fn name_after_an_associated_function() -> F32 {
+  F32.from_bits.x //~ E0413
+}
+
+pub fn name_after_the_wide_associated_function() -> F64 {
+  F64.from_bits.bits //~ E0413
+}
+
+pub fn method_name_after_an_associated_function() -> U32 {
+  F32.from_bits.to_bits() //~ E0413
+}

@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.6", "§18.1"]
+
+// W5-02 U4a: an operation on an associated constant of an integer type in the length of an array that
+// overflows, goes below 0 or divides by 0 (spec §4.5: "溢れとゼロ除算は、その式の位置で E0419（コンパイル時の評価の
+// panic、§6.6）"; the length is a `U32`, so `U32.MAX + 1` does not fit and `U32.MIN - 1` is below 0). The
+// operation on the constants is evaluated in W9-03: today it is E0200 "expressions as array lengths". One
+// error per function (P-01). The length that is right is the last function.
+
+pub fn one_above_the_maximum(x: [F32; U32.MAX + 1]) -> F32 { //~ E0419
+  x[0]
+}
+
+pub fn one_below_the_minimum(x: [F32; U32.MIN - 1]) -> F32 { //~ E0419
+  x[0]
+}
+
+pub fn the_square_of_the_maximum(x: [F32; U32.MAX * U32.MAX]) -> F32 { //~ E0419
+  x[0]
+}
+
+pub fn division_by_the_minimum(x: [F32; 4 / U32.MIN]) -> F32 { //~ E0419
+  x[0]
+}
+
+pub fn the_right_forms(x: [F32; U32.MIN + 1]) -> F32 {
+  x[0]
+}

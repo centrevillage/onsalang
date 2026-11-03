@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use onsa_core::{ConstId, Expr, ExprKind, Lit, Module, Ty, TypeDefKind};
+use onsa_core::{ConstId, Expr, ExprKind, Lit, Module, Ty, TypeDefKind, UnOp};
 use onsa_interp::{ArrayData, Interp, Value};
 
 use crate::{CoreStage, InternalError};
@@ -64,7 +64,9 @@ fn inline_consts(module: &Module, reached: &BTreeSet<ConstId>) -> Vec<(usize, Ex
 fn is_static_init(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::Lit(_) | ExprKind::Const(_) | ExprKind::Zeroed => true,
-        ExprKind::Unary(_, x) => is_static_init(x),
+        // As the C backend writes it (`const_init`): `-` of a literal only;
+        // `-F64.INFINITY` (a `const` of `1.0 / 0.0`) is evaluated here.
+        ExprKind::Unary(UnOp::Neg, x) => matches!(x.kind, ExprKind::Lit(_)),
         ExprKind::Struct { fields, .. } | ExprKind::Variant { fields, .. } => fields.iter().all(is_static_init),
         ExprKind::Array(xs) | ExprKind::Tuple(xs) => xs.iter().all(is_static_init),
         ExprKind::Repeat { elem, .. } => is_static_init(elem),

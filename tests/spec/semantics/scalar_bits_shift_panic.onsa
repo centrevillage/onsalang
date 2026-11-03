@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§3.4", "§9.2"]
+
+// W5-02 U4a (R-136): a shift by `BITS` of the type is a shift by the whole width, which panics (§3.4: `<<`
+// and `>>` panic when the amount `n` is the bit width or more). `BITS` is the width of the type of the
+// name before the dot: 8 for `U8` and `I8`, 16 for `U16` and `I16` (the 64-bit types are in
+// scalar_bits_shift_panic_wide.onsa). The amount is bound first (`let n`), so the shift is the one
+// expression of the line that can panic. The amounts one below (`BITS - 1`) are read in
+// scalar_bits_widths.onsa. These panic today too, because the wrong `BITS` of R-136 is 32, which is
+// above these widths; they keep the right reading after the fix.
+
+test "a shift left of a U8 by U8.BITS panics" {
+  let one: U8 = 1
+  let n: U32  = U8.BITS
+  let y       = one << n //~ PANIC "a shift left of a U8 by U8.BITS panics"
+  assert y == 0
+}
+
+test "a shift right of an I8 by I8.BITS panics" {
+  let x: I8  = -1
+  let n: U32 = I8.BITS
+  let y      = x >> n //~ PANIC "a shift right of an I8 by I8.BITS panics"
+  assert y == -1
+}
+
+test "a shift left of a U16 by U16.BITS panics" {
+  let one: U16 = 1
+  let n: U32   = U16.BITS
+  let y        = one << n //~ PANIC "a shift left of a U16 by U16.BITS panics"
+  assert y == 0
+}
+
+test "a shift right of an I16 by I16.BITS panics" {
+  let x: I16 = 1
+  let n: U32 = I16.BITS
+  let y      = x >> n //~ PANIC "a shift right of an I16 by I16.BITS panics"
+  assert y == 0
+}

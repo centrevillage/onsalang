@@ -10,11 +10,11 @@ use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, ItemKind, Lit, Path};
 
 use crate::def::{DefKind, GenericDef};
+use crate::names::PathEnd;
 use crate::names::body::{Outside, instance_form, method_named, outside_flow, value_called};
-use crate::names::{BuiltinMember, PathEnd};
-use crate::resolve::{Builtin, Callee, Entity, NameKind, ResolveError};
+use crate::resolve::{Callee, Entity, NameKind, ResolveError};
 use crate::ty::{IntKind, Ty, TyId};
-use crate::{Analysis, ModId, builtin};
+use crate::{Analysis, ModId};
 
 /// The value of a constant expression in a type position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -289,7 +289,7 @@ pub(crate) fn literal(ast: &Ast, text: &str, e: ExprId) -> Option<Result<u32, Di
 /// alias, §4.4) at `span`: its value, when its type is `U32`; a name of
 /// another kind is an error ([`not_constant`]). `ast` is the module `m` the
 /// name is written in, and `self_ty` the type `Self` names. A body reads the
-/// entity its record has ([`of_entity`], [`of_builtin`]).
+/// entity its record has ([`of_entity`]).
 pub(crate) fn named(
     a: &mut Analysis,
     m: ModId,
@@ -324,16 +324,6 @@ fn named_def(
             match of_entity(a, m, ast, text, entity, span)? {
                 Some(v) => Ok((v, constant)),
                 None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
-            }
-        }
-        // `I32.BITS`, `U32.MAX`, `Sample.PI`: an associated constant of a
-        // scalar type, the last name.
-        Ok(PathEnd::Builtin { of: Entity::Builtin(Builtin::Scalar(t)), member: BuiltinMember::Constant }) => {
-            let name = &path.segments[path.segments.len() - 1].name;
-            match of_builtin(a, t, name, text, span) {
-                Some(Ok(Some(v))) => Ok((v, None)),
-                Some(Err(e)) => Err(e),
-                _ => onsa_diag::internal::bug(Some(span), "an associated constant of no scalar's table"),
             }
         }
         Ok(PathEnd::Builtin { member, .. }) => Err(not_constant(member.kind(), shown, span)),
@@ -410,34 +400,4 @@ pub(crate) fn of_entity(
             onsa_diag::unsupported::Feature::ComputedArrayLengths.diagnostic(Stage::Types, span, &[]).with_found(found),
         )),
     }
-}
-
-/// The associated constant `name` of the scalar type `t` at `span` (`I32.BITS`,
-/// `U32.MAX`), as [`named`] reads it; none when the compiler's table has none.
-pub(crate) fn of_builtin(
-    a: &mut Analysis,
-    t: crate::ty::TyId,
-    name: &str,
-    text: &str,
-    span: Span,
-) -> Option<Result<Option<u32>, ConstErr>> {
-    let found = text[span.start as usize..span.end as usize].to_string();
-    let u32_ = a.types.int(IntKind::U32);
-    let ct = builtin::assoc_const(&mut a.types, t, name)?;
-    if ct != u32_ {
-        let shown = a.types.display(ct, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
-        return Some(Err(Diagnostic::new(
-            Stage::Types,
-            Code::E0401,
-            span,
-            format!("a constant expression has the type `U32`; `{found}` is `{shown}` (§4.5)"),
-        )
-        .with_found(found)
-        .into()));
-    }
-    // A `U32` associated constant (`I32.BITS`): its value is the constant
-    // evaluator's (W5-08 types the whole grammar).
-    Some(Err(ConstErr::Uncomputed(
-        onsa_diag::unsupported::Feature::ComputedArrayLengths.diagnostic(Stage::Types, span, &[]).with_found(found),
-    )))
 }

@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§3.4", "§18.1"]
+
+// W5-02 U4a (R-136): the compile-time evaluation of a `const` that does arithmetic with `BITS` panics
+// where the width of the type makes the operation out of range (spec §6.6: "コンパイル時の評価が panic すると
+// （溢れ、ゼロ除算、...）、その式の位置で E0419"; §3.4: a shift by the bit width or more, a division by zero, an
+// unsigned subtraction below 0). The value is the width of the type, so:
+//   1 << U64.BITS is a shift of a U64 by 64, which is out of range, and 1 << (U64.BITS - 1) is the top bit;
+//   U8.BITS - 8 is 0, so dividing by it is a division by zero, and U8.BITS - 9 is below 0 for a U32.
+// Today `BITS` is 32 for every type (R-136), so a shift of a 64-bit type by `BITS` is in range, and the
+// evaluation of a `const` that nothing reads is not reported by `check` (W9-03, R-155), which is the
+// reason this file is listed with both.
+
+// ---------------------------------------------------------------- E0419
+
+const SHIFT_U64_BY_ITS_WIDTH: U64 = 1 << U64.BITS //~ E0419
+
+const SHIFT_I64_BY_ITS_WIDTH: I64 = 1 << I64.BITS //~ E0419
+
+const SHIFT_RIGHT_BY_ITS_WIDTH: U64 = U64.MAX >> U64.BITS //~ E0419
+
+const DIVIDE_BY_A_WIDTH_MINUS_ITSELF: U32 = 1 / (U8.BITS - 8) //~ E0419
+
+const A_WIDTH_BELOW_ZERO: U32 = U8.BITS - 9 //~ E0419
+
+const REMAINDER_BY_A_WIDTH_MINUS_ITSELF: U32 = 5 % (U16.BITS - 16) //~ E0419
+
+// ---------------------------------------------------------------- fine
+
+const TOP_BIT_OF_U64: U64 = 1 << (U64.BITS - 1)
+
+const TOP_BIT_OF_I64: I64 = 1 << (I64.BITS - 1)
+
+const TOP_BIT_OF_U8: U8 = 1 << (U8.BITS - 1)
+
+const WIDTH_MINUS_ONE: U32 = U16.BITS - 1
+
+const SHIFT_BY_A_NARROW_WIDTH: U64 = 1 << U8.BITS

@@ -421,17 +421,17 @@ fn par_ranges() {
     let delay = "const N: U32 = 4\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1)\n}\n";
     assert_eq!(codes(delay), vec![Code::E0200]);
     // The names of the leaves are resolved first (§18.1): a name that is not
-    // declared is E0302, a function is no constant (E0417), and a constant
-    // of a type is a constant expression (E0200 until W7-02).
+    // declared is E0302, a function is no constant (E0417).
     let g = "pub fn g() -> U32 { 3 }\npub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  par~ i in 0..<g + 1 { x }\n}\n";
     assert_eq!(codes(g), vec![Code::E0417]);
     assert_eq!(par("[F32; 2]", "0..<zzz + 1"), vec![Code::E0302]);
     assert_eq!(par("[F32; 2]", "0..<1 + zzz"), vec![Code::E0302]);
     assert_eq!(par("[F32; 2]", "0..<n + zzz"), vec![Code::E0302]);
-    assert_eq!(par("[F32; 32]", "0..<I32.BITS"), vec![Code::E0200]);
+    // An associated constant of std is a constant (§6.6): `I32.BITS` as `N`.
+    assert_eq!(par("[F32; 32]", "0..<I32.BITS"), vec![]);
     assert_eq!(par("[F32; 2]", "0..<F32.PI"), vec![Code::E0401]);
     let bits = "pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, I32.BITS)\n}\n";
-    assert_eq!(codes(bits), vec![Code::E0200]);
+    assert_eq!(codes(bits), vec![]);
     // A float literal among the operands is a type error (E0401).
     let float = "const N: U32 = 2\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1.5)\n}\n";
     assert_eq!(codes(float), vec![Code::E0401]);

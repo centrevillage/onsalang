@@ -479,13 +479,6 @@ note = "Result の map_err が無い（E0413、§9.1）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/bounds64.onsa::BITS of the 64-bit types"
-reasons = ["R-136"]
-until = "W5-02"
-note = "I64.BITS などが I32 以外で 32 のまま（§6.6）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/eval_order.onsa::struct literal fields are evaluated in the order written"
 reasons = ["R-93", "S-75"]
 until = "W8-03"
@@ -639,278 +632,6 @@ target = "tests/vectors/fixture/zero_one"
 reasons = ["S-84"]
 until = "W5-05"
 note = "組込み型の関連定数 ZERO / ONE が無い（E0302、§6.6）。テストベクトルの 20 演算"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/i8.BITS"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "0145f2dfdfe5d4d4"
-note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/i16.BITS"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "931654ae474ef419"
-note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/i64.BITS"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "fca8a22e738be66e"
-note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/u8.BITS"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "f8fe7f4dc9cc6fc8"
-note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/u16.BITS"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "66264e5fbb1ec14d"
-note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/u64.BITS"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "ff3f757762f5fdba"
-note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.BITS[c-clang]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "0145f2dfdfe5d4d4"
-note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.BITS[c-clang]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "931654ae474ef419"
-note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.BITS[c-clang]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "fca8a22e738be66e"
-note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u8.BITS[c-clang]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "f8fe7f4dc9cc6fc8"
-note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u16.BITS[c-clang]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "66264e5fbb1ec14d"
-note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.BITS[c-clang]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "ff3f757762f5fdba"
-note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.BITS[c-gcc]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "0145f2dfdfe5d4d4"
-note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.BITS[c-gcc]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "931654ae474ef419"
-note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.BITS[c-gcc]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "fca8a22e738be66e"
-note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u8.BITS[c-gcc]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "f8fe7f4dc9cc6fc8"
-note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u16.BITS[c-gcc]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "66264e5fbb1ec14d"
-note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.BITS[c-gcc]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "ff3f757762f5fdba"
-note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.BITS[c-sanitize]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "0145f2dfdfe5d4d4"
-note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.BITS[c-sanitize]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "931654ae474ef419"
-note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.BITS[c-sanitize]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "fca8a22e738be66e"
-note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u8.BITS[c-sanitize]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "f8fe7f4dc9cc6fc8"
-note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u16.BITS[c-sanitize]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "66264e5fbb1ec14d"
-note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.BITS[c-sanitize]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "ff3f757762f5fdba"
-note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.BITS[c-x86]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "0145f2dfdfe5d4d4"
-note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.BITS[c-x86]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "931654ae474ef419"
-note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.BITS[c-x86]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "fca8a22e738be66e"
-note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u8.BITS[c-x86]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "f8fe7f4dc9cc6fc8"
-note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u16.BITS[c-x86]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "66264e5fbb1ec14d"
-note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.BITS[c-x86]"
-reasons = ["R-136"]
-until = "W5-02"
-rows = 1
-digest = "ff3f757762f5fdba"
-note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-# --- W2-11: 実装済みの決定のテスト（2026-10-08）
 
 [[pending]]
 kind = "test-case"
@@ -1809,3 +1530,54 @@ target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:55:10 E0811 f
 reasons = ["S-745", "S-110"]
 until = "W7-06"
 note = "39:5 と同じ（枝の E0811 が今は E0200）"
+
+# --- W5-02 U4a/t: スカラーの関連定数と `from_bits` の事例のうち、後の作業を待つもの（2026-11-03、108 回目）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/scalar_from_bits_value.onsa"
+reasons = ["R-295"]
+until = "W8-09"
+note = "let g = F32.from_bits の後の g.(u)。check は通り、onsa test が関数値の降下の E0200（function values・calls through function values）で止まる"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/scalar_assoc_const_param.onsa"
+reasons = ["R-216"]
+until = "W9-03"
+note = "@param の値に書いた関連定数（F32.PI など）が E0809「must be a numeric literal」"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/scalar_assoc_const_param_errors.onsa"
+reasons = ["R-216"]
+until = "W9-03"
+note = "@param の値の関連定数の E0401・E0419 が、全て E0809「must be a numeric literal」になる"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/scalar_assoc_const_overflow.onsa"
+reasons = ["R-155"]
+until = "W9-03"
+note = "const の初期化式の関連定数の演算の溢れ・ゼロ除算（U8.MAX + 1 など）が check で E0419 にならない（診断なし）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/scalar_bits_const_panic.onsa"
+reasons = ["R-155"]
+until = "W9-03"
+note = "const の初期化式の 1 << U64.BITS・U8.BITS - 9 などの panic が check で E0419 にならない（診断なし）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/scalar_assoc_const_length_overflow.onsa"
+reasons = ["S-713"]
+until = "W9-03"
+note = "長さの演算の溢れ（E0419）が、演算を含む長さの E0200「expressions as array lengths」"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/scalar_bits_array_length_operations.onsa"
+reasons = ["S-713"]
+until = "W9-03"
+note = "BITS を含む演算の長さと計算した定数の長さが E0200（expressions as array lengths・constants computed by expressions）"

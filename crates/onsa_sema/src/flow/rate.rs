@@ -219,9 +219,7 @@ impl<'a> Rater<'a> {
     fn rate_target(&mut self, e: ExprId, t: &Target) -> RR<Option<FlowRate>> {
         Ok(Some(match t {
             Target::Local(id) => self.rate_of_local(*id),
-            Target::Const(_) | Target::BuiltinConst { .. } | Target::ConstParam(_) | Target::Variant { .. } => {
-                FlowRate::Const
-            }
+            Target::Const(_) | Target::ConstParam(_) | Target::Variant { .. } => FlowRate::Const,
             Target::Prelude(_) => FlowRate::Const,
             Target::Fn { .. } | Target::Method { .. } | Target::Value => {
                 let span = self.expr(e).span;

@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§3.4", "§18.1"]
+
+// W5-02 U4a: the compile-time evaluation of a `const` whose initializer does arithmetic with an associated
+// constant of an integer type panics when the mathematical result does not fit the type (spec §6.6: "コンパイル時
+// の評価が panic すると（溢れ、ゼロ除算、...）、その式の位置で E0419"; §3.4: "結果が型に収まらない" and "符号
+// なしの引き算が 0 を下回る場合" panic). The type of the value is the type of the constant, so one above the
+// `MAX` of a type is out of that type whatever the other types are, and one below the `MIN` is too. The
+// constants that evaluate are the last ones of the file. The evaluation is W9-03 (tests/spec/negative/
+// const_neg_min.onsa has the same wait).
+
+// ---------------------------------------------------------------- E0419
+
+const ONE_ABOVE_U8: U8 = U8.MAX + 1 //~ E0419
+
+const ONE_ABOVE_U16: U16 = U16.MAX + 1 //~ E0419
+
+const DOUBLE_I16: I16 = I16.MAX * 2 //~ E0419
+
+const ONE_BELOW_U64: U64 = U64.MIN - 1 //~ E0419
+
+const ONE_BELOW_I64: I64 = I64.MIN - 1 //~ E0419
+
+const ONE_ABOVE_I8: I8 = I8.MAX + 1 //~ E0419
+
+const ONE_BELOW_I32: I32 = I32.MIN - 1 //~ E0419
+
+const SQUARE_OF_THE_MAXIMUM: U32 = U32.MAX * U32.MAX //~ E0419
+
+const MINIMUM_BELOW_THE_MAXIMUM: U8 = U8.MIN - U8.MAX //~ E0419
+
+const DIVIDED_BY_THE_MINIMUM: U32 = 100 / U32.MIN //~ E0419
+
+// ---------------------------------------------------------------- fine
+
+const TOP_OF_U8: U8 = U8.MAX - 1
+
+const BOTTOM_OF_I16: I16 = I16.MIN + 1
+
+const BOTH_ENDS_OF_I8: I8 = I8.MAX + I8.MIN
+
+const AWAY_FROM_THE_TOP_OF_U64: U64 = U64.MAX - U64.MAX
+
+const WRAPPED: U8 = U8.MAX +% 1
+
+const SATURATED: I16 = I16.MAX +| 1
+
+const FLOAT_TOP: F32 = F32.MAX + F32.MAX

@@ -140,11 +140,6 @@ pub enum Target {
     },
     /// `Some`, `None`, `Ok`, `Err`.
     Prelude(Builtin),
-    /// `F32.PI`, `I32.MAX`, ...
-    BuiltinConst {
-        ty: TyId,
-        name: String,
-    },
     /// `x.m(...)` on a user type: the method def; the receiver is the callee's `base`.
     Method {
         def: DefId,

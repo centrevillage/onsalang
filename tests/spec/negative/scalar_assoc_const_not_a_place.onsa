@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§5.1", "§18.1"]
+
+// W5-02 U4a: an associated constant of a scalar type is not a place (spec §5.1: "代入の左辺は場所でなければ
+// ならない（E0415）。`const` は場所ではない"; "`inout` に場所でないもの（定数、一時値、呼び出しの結果）を渡すのも
+// E0415"). An associated constant is a constant (§6.6), so assigning to it and passing it as `inout` are E0415,
+// whatever the type is. Reading one into a `var` and changing the `var` is right (the last functions).
+// One error per function (P-01).
+
+pub fn set_f(inout x: F32) {
+  x = 1.0
+}
+
+pub fn set_u(inout x: U8) {
+  x = 1
+}
+
+pub fn set_w(inout x: U32) {
+  x = 1
+}
+
+pub fn assign_a_float_constant() {
+  F32.PI = 3.0 //~ E0415
+}
+
+pub fn assign_a_wide_float_constant() {
+  F64.EPSILON = 0.0 //~ E0415
+}
+
+pub fn assign_an_integer_constant() {
+  I32.MAX = 0 //~ E0415
+}
+
+pub fn assign_bits() {
+  U8.BITS = 9 //~ E0415
+}
+
+pub fn assign_a_constant_to_itself() {
+  F32.MAX = F32.MAX //~ E0415
+}
+
+pub fn assign_in_a_loop(n: U32) {
+  for i in 0 ..< n {
+    F32.EPSILON = 0.0 //~ E0415
+  }
+}
+
+pub fn assign_in_a_branch(flag: Bool) {
+  if flag {
+    U8.MIN = 1 //~ E0415
+  }
+}
+
+pub fn pass_a_float_constant_as_inout() {
+  set_f(inout F32.PI) //~ E0415
+}
+
+pub fn pass_an_integer_constant_as_inout() {
+  set_u(inout U8.MAX) //~ E0415
+}
+
+pub fn pass_bits_as_inout() {
+  set_w(inout U8.BITS) //~ E0415
+}
+
+pub fn the_forms_that_are_right() -> F32 {
+  var m: F32 = F32.MAX
+  m = F32.INFINITY
+  set_f(inout m)
+  var n: U8 = U8.MAX
+  set_u(inout n)
+  m
+}

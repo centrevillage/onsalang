@@ -1,0 +1,253 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§3.4", "§2.4", "§4.7"]
+
+// W5-02 U4a: the values and the types of the associated constants of the scalar types (spec §6.6), worked
+// out by hand from the table and the lines after it. The tests/vectors/const.tsv rows hold each value of
+// the table by its bits (the fixture reads each one at the interpreter and at C); this file checks what the
+// rows do not, the way a program meets the constants:
+//   - `PI` is the mathematical value rounded to the nearest even, the same rule as a literal (§2.4), and
+//     the bits of `to_bits()` are 0x40490FDB (`F32`) and 0x400921FB54442D18 (`F64`);
+//   - `EPSILON` is the gap between 1.0 and the next value: 2^-23 (`F32`), 2^-52 (`F64`);
+//   - `MAX` is the largest finite value, and an operation that passes it overflows to infinity (§3.4);
+//   - `INFINITY` is the positive infinity, and `NAN` is a NaN that is unequal to every value, itself too;
+//   - `MIN`, `MAX` of the integers are the values of the type, and the type of the constant is the type
+//     itself (`BITS` is `U32` for every type, which tests/spec/semantics/scalar_bits_widths.onsa reads).
+// `ZERO` and `ONE` are not read here (W5-05).
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+// ---------------------------------------------------------------- PI
+
+test "PI of F32 is the mathematical value rounded to the nearest even, as a literal is" {
+  assert F32.PI == 3.14159265358979323846
+  assert F32.PI.to_bits() == 0x40490FDB
+  assert (F32.PI as F64) == 3.1415927410125732
+}
+
+test "PI of F64 is the mathematical value rounded to the nearest even, as a literal is" {
+  assert F64.PI == 3.14159265358979323846264338327950288
+  assert F64.PI.to_bits() == 0x400921FB54442D18
+}
+
+test "the PI of F32 rounds from the PI of F64, and widening it is above the PI of F64" {
+  assert F64.PI.round_f32() == F32.PI
+  let wide: F64 = F32.PI as F64
+  assert wide > F64.PI
+  assert wide != F64.PI
+}
+
+// ---------------------------------------------------------------- EPSILON
+
+test "EPSILON of F32 is 2^-23" {
+  let one: F32 = 1.0
+  assert F32.EPSILON.to_bits() == 0x34000000
+  assert F32.EPSILON * 8388608.0 == 1.0
+  assert one + F32.EPSILON > one
+  assert (one + F32.EPSILON).to_bits() == 0x3F800001
+  assert (one + F32.EPSILON) - one == F32.EPSILON
+}
+
+test "adding a half of EPSILON of F32 to 1.0 is a tie that rounds to the even 1.0" {
+  let one: F32  = 1.0
+  let half: F32 = F32.EPSILON / 2.0
+  assert one + half == one
+}
+
+test "adding three quarters of EPSILON of F32 to 1.0 rounds to the next value" {
+  let one: F32  = 1.0
+  let part: F32 = F32.EPSILON * 0.75
+  assert one + part == one + F32.EPSILON
+}
+
+test "EPSILON of F64 is 2^-52" {
+  let one: F64 = 1.0
+  assert F64.EPSILON.to_bits() == 0x3CB0000000000000
+  assert F64.EPSILON * 4503599627370496.0 == 1.0
+  assert one + F64.EPSILON > one
+  assert (one + F64.EPSILON).to_bits() == 0x3FF0000000000001
+  assert (one + F64.EPSILON) - one == F64.EPSILON
+}
+
+test "adding a half of EPSILON of F64 to 1.0 is a tie that rounds to the even 1.0" {
+  let one: F64  = 1.0
+  let half: F64 = F64.EPSILON / 2.0
+  assert one + half == one
+}
+
+test "the EPSILON of F32 is far above the EPSILON of F64" {
+  let wide: F64 = F32.EPSILON as F64
+  assert wide > F64.EPSILON
+  assert wide == 1.1920928955078125e-7
+}
+
+// ---------------------------------------------------------------- MAX
+
+test "MAX of F32 is the largest finite value" {
+  assert F32.MAX.to_bits() == 0x7F7FFFFF
+  assert F32.MAX == 3.4028235e38
+  assert (F32.MAX as F64) == 3.4028234663852886e38
+  assert F32.MAX - F32.MAX == 0.0
+  assert F32.MAX < F32.INFINITY
+  assert -F32.MAX < F32.MAX
+}
+
+test "an operation that passes MAX of F32 overflows to infinity" {
+  assert F32.MAX + F32.MAX == F32.INFINITY
+  assert F32.MAX * 2.0 == F32.INFINITY
+  assert -F32.MAX - F32.MAX == -F32.INFINITY
+}
+
+test "MAX of F64 is the largest finite value" {
+  assert F64.MAX.to_bits() == 0x7FEFFFFFFFFFFFFF
+  assert F64.MAX == 1.7976931348623157e308
+  assert F64.MAX - F64.MAX == 0.0
+  assert F64.MAX < F64.INFINITY
+  assert F64.MAX + F64.MAX == F64.INFINITY
+}
+
+test "MAX of F64 is above MAX of F32, and rounding it to F32 overflows to infinity" {
+  assert F64.MAX > (F32.MAX as F64)
+  assert F64.MAX.round_f32() == F32.INFINITY
+}
+
+// ---------------------------------------------------------------- INFINITY
+
+test "INFINITY of F32 is the positive infinity" {
+  let neg: F32 = -F32.INFINITY
+  assert F32.INFINITY.to_bits() == 0x7F800000
+  assert neg.to_bits() == 0xFF800000
+  assert F32.INFINITY > F32.MAX
+  assert neg < -F32.MAX
+  assert F32.INFINITY + 1.0 == F32.INFINITY
+  assert 1.0 / F32.INFINITY == 0.0
+  assert F32.INFINITY - 1.0 == F32.INFINITY
+}
+
+test "INFINITY of F64 is the positive infinity" {
+  let neg: F64 = -F64.INFINITY
+  assert F64.INFINITY.to_bits() == 0x7FF0000000000000
+  assert neg.to_bits() == 0xFFF0000000000000
+  assert F64.INFINITY > F64.MAX
+  assert F64.INFINITY + 1.0 == F64.INFINITY
+  assert 1.0 / F64.INFINITY == 0.0
+  assert F64.INFINITY - 1.0 == F64.INFINITY
+}
+
+test "infinity minus infinity and infinity times 0.0 are NaN" {
+  let a: F32 = F32.INFINITY - F32.INFINITY
+  let b: F32 = F32.INFINITY * 0.0
+  let c: F64 = F64.INFINITY - F64.INFINITY
+  assert a != a
+  assert b != b
+  assert c != c
+}
+
+// ---------------------------------------------------------------- NAN
+
+test "NAN of F32 is unequal to every value, itself too" {
+  let n: F32 = F32.NAN
+  assert n != n
+  assert !(n == n)
+  assert n != 1.0
+  assert !(n < 1.0)
+  assert !(n > 1.0)
+  assert !(n <= n)
+  assert !(n >= n)
+}
+
+test "NAN of F64 is unequal to every value, itself too" {
+  let n: F64 = F64.NAN
+  assert n != n
+  assert !(n == n)
+  assert !(n < 1.0)
+  assert !(n >= n)
+}
+
+test "NAN spreads through the operations, and to_bits reads it as the positive quiet NaN" {
+  let n: F32 = F32.NAN
+  let m: F64 = F64.NAN
+  let p: F32 = n + 1.0
+  let q: F32 = n * 0.0
+  let r: F64 = m - m
+  assert p != p
+  assert q != q
+  assert r != r
+  assert n.to_bits() == 0x7FC00000
+  assert m.to_bits() == 0x7FF8000000000000
+}
+
+// ---------------------------------------------------------------- MIN and MAX of the integers
+
+test "the constants of the signed types are the values of the type" {
+  let a: I8  = I8.MAX
+  let b: I16 = I16.MAX
+  let c: I32 = I32.MAX
+  let d: I64 = I64.MAX
+  assert (a as I32) == 127
+  assert (b as I32) == 32767
+  assert c == 2147483647
+  assert d == 9223372036854775807
+  let e: I8  = I8.MIN
+  let f: I16 = I16.MIN
+  let g: I32 = I32.MIN
+  let h: I64 = I64.MIN
+  assert (e as I32) == -128
+  assert (f as I32) == -32768
+  assert (g as I64) == -2147483648
+  assert h == -9223372036854775807 - 1
+}
+
+test "the constants of the unsigned types are the values of the type" {
+  let a: U8  = U8.MAX
+  let b: U16 = U16.MAX
+  let c: U32 = U32.MAX
+  let d: U64 = U64.MAX
+  assert (a as U32) == 255
+  assert (b as U32) == 65535
+  assert (c as U64) == 4294967295
+  assert d == 18446744073709551615
+  assert d / 2 == 9223372036854775807
+  assert (U8.MIN as U32) + (U16.MIN as U32) + (U32.MIN as U32) == 0
+  assert U64.MIN == 0
+}
+
+test "the constants are the operands that make the edge of each type" {
+  assert U8.MAX +% 1 == 0
+  assert U8.MAX +| 1 == U8.MAX
+  assert U16.MAX +% 1 == 0
+  assert U16.MAX +| 1 == U16.MAX
+  assert U32.MAX +% 1 == 0
+  assert U64.MAX +% 1 == 0
+  assert U64.MAX +| 1 == U64.MAX
+  assert I8.MAX +% 1 == I8.MIN
+  assert I8.MIN -% 1 == I8.MAX
+  assert I8.MAX +| 1 == I8.MAX
+  assert I8.MIN -| 1 == I8.MIN
+  assert I16.MAX +% 1 == I16.MIN
+  assert I16.MIN -| 1 == I16.MIN
+  assert I32.MAX +% 1 == I32.MIN
+  assert I64.MAX +% 1 == I64.MIN
+  assert I64.MIN -| 1 == I64.MIN
+}
+
+test "no checked operation fits one more than the constant" {
+  assert is_none(U8.MAX.checked_add(1))
+  assert is_none(I16.MIN.checked_sub(1))
+  assert is_none(I64.MAX.checked_add(1))
+  assert is_none(U64.MIN.checked_sub(1))
+  assert val(U8.MAX.checked_sub(1), 7) == 254
+}

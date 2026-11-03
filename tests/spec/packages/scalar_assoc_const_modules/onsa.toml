@@ -1,0 +1,3 @@
+[package]
+name = "scalar_assoc_const_modules"
+edition = "2026"

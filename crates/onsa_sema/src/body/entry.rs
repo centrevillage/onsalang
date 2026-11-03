@@ -170,7 +170,7 @@ impl<'a> Checker<'a> {
             let Instance { def, args, span } = self.info.instances[i].clone();
             let Some(&row) = self.a.prims.get(&def) else { continue };
             let args: Vec<TyId> = args.iter().map(|&t| self.infer.resolve(&mut self.a.types, t)).collect();
-            let scalars: Option<Vec<Scalar>> = args.iter().map(|&t| Scalar::of(&self.a.types, t)).collect();
+            let scalars = Scalar::of_use(self.a, def, &args);
             if scalars.is_some_and(|s| !row.provides(&s)) {
                 let name = format!("std.{}", crate::prim::key_of(self.a, def));
                 let shown: Vec<String> = args.iter().map(|&t| self.display(t)).collect();

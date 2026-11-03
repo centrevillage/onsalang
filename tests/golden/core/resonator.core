@@ -2,12 +2,13 @@ type resonator.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2:
 type resonator.resonator.Config = struct {}
 type resonator.resonator.Params = struct { fc: F32, bw: F32 }
 type resonator.resonator.Out = struct { out: Buf[F32] }
+const std.core.num.F32.PI: F32 = 3.1415927:F32
 const resonator.resonator.SIZE: U32 = 28:U32
 const resonator.resonator.BULK_SIZE: U32 = 0:U32
 rt fn resonator.resonator.ctl(inout s: resonator.resonator.State, p: resonator.resonator.Params) -> () {
-  let r: F32 = math.exp.F32(((-(3.1415927:F32 * p.1)) / s.0))
+  let r: F32 = math.exp.F32(((-(const std.core.num.F32.PI * p.1)) / s.0))
   s.1 = r
-  let w: F32 = (((2.0:F32 * 3.1415927:F32) * p.0) / s.0)
+  let w: F32 = (((2.0:F32 * const std.core.num.F32.PI) * p.0) / s.0)
   let b1: F32 = ((2.0:F32 * r) * math.cos.F32(w))
   s.2 = b1
   let b2: F32 = (r * r)

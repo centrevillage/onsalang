@@ -50,6 +50,9 @@ ONSA_STATIC_ASSERT(ONSA_ALIGNOF(voice__echo__State) == VOICE_ECHO_ALIGN, "VOICE_
 ONSA_STATIC_ASSERT(offsetof(voice__echo__State, poisoned) == 384020, "VOICE_ECHO layout prefix (spec §12.4)");
 ONSA_STATIC_ASSERT(offsetof(voice__echo__State, initialized) == 384021, "VOICE_ECHO layout prefix (spec §12.4)");
 
+/* ---- constants ---- */
+static const float std__core__num__F32__PI = 3.1415927f;
+
 /* ---- functions ---- */
 ONSA_INLINE void voice__resonator__ctl(voice__resonator__State* s, const voice__resonator__Params* p);
 ONSA_INLINE float voice__resonator__tick(voice__resonator__State* s, float x);
@@ -78,9 +81,9 @@ ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__
 ONSA_INLINE void voice__echo__params_default(voice__echo__Params* out);
 
 ONSA_INLINE void voice__resonator__ctl(voice__resonator__State* s, const voice__resonator__Params* p) {
-  float r = expf((float)((float)(-(float)(3.1415927f * p->bw)) / s->sample_rate));
+  float r = expf((float)((float)(-(float)(std__core__num__F32__PI * p->bw)) / s->sample_rate));
   s->r = r;
-  float w = (float)((float)((float)(2.0f * 3.1415927f) * p->fc) / s->sample_rate);
+  float w = (float)((float)((float)(2.0f * std__core__num__F32__PI) * p->fc) / s->sample_rate);
   float b1 = (float)((float)(2.0f * r) * cosf(w));
   s->b1 = b1;
   float b2 = (float)(r * r);

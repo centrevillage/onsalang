@@ -227,8 +227,8 @@ pub(crate) enum PathRes {
         entity: Entity,
         owner: Option<TyId>,
     },
-    /// An associated item of a builtin type in the compiler's table
-    /// (`F32.PI`, `Buf.zeroed`, `crate::builtin`); `ty` is the type it is a
+    /// An associated function of a builtin type in the compiler's table
+    /// (`Buf.zeroed`, `crate::builtin`); `ty` is the type it is a
     /// member of (a generic one by its key, [`Analysis::builtin_key`]), and
     /// `owner` as of [`PathRes::Item`] (`Buf[F32]` of `Samples.zeroed`).
     BuiltinAssoc {

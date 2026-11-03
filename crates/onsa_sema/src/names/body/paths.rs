@@ -32,8 +32,8 @@ pub(super) enum Place {
     /// A value, whose fields may follow.
     Value,
     /// The callee of `v.(x)`: as a value, and an associated function of a
-    /// builtin type as at [`Place::Callee`] (`F32.from_bits.(1)`, the E0020 of
-    /// `calls.rs`; as a value, `let f = F32.from_bits`, it is W5-02's).
+    /// builtin type as at [`Place::Callee`] (`Buf.zeroed.(1)`, the E0020 of
+    /// `calls.rs`; as a value, `let f = Buf.zeroed`, it is W5-02's).
     DotCallee,
     /// The callee of the call `.0` (`f(x)`, `a.m(x)`, `x.m!(y)`): its last
     /// name may be a method of the value before it, or an associated function.
@@ -187,7 +187,7 @@ impl<'a> Walker<'a> {
                 None
             }
             // An associated function of a builtin type in a constant
-            // expression (`[0.0; F32.from_bits]`): a value that is no
+            // expression (`[0.0; Buf.zeroed]`): a value that is no
             // constant, the E0417 of the types stage, which reads the name
             // again (§4.5, W5-08).
             Some(ResolveError::NotFound { .. })
@@ -298,12 +298,12 @@ impl<'a> Walker<'a> {
     }
 
     /// An associated item `name` of the builtin type `of` in the compiler's
-    /// table: a constant (`F32.PI`), or, as the name of the method of a call,
-    /// a function (`Buf.zeroed`, whose call the types stage reads). A name
-    /// the table has not is not found (E0302, R-249: `F32.y`, `F32.y(1.0)`).
+    /// table, as the name of the method of a call: a function (`Buf.zeroed`,
+    /// whose call the types stage reads). A name the table has not is not
+    /// found (E0302, R-249: `F32.y`, `F32.y(1.0)`); std's members (`F32.PI`)
+    /// are found as those of a user type.
     fn builtin_assoc(&self, of: Entity, name: &Ident, method: bool, owner: Option<TyId>) -> Option<PathRes> {
         match crate::names::builtin_member(self.a, of, &name.name)? {
-            BuiltinMember::Constant => {}
             BuiltinMember::Function if method => {}
             BuiltinMember::Function | BuiltinMember::Method { .. } => return None,
         }

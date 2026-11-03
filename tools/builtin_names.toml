@@ -33,7 +33,6 @@
 "copy_from" = 1
 "div_euclid" = 1
 "fill" = 3
-"from_bits" = 1
 "get" = 1
 "is_empty" = 1
 "is_err" = 1
@@ -54,17 +53,10 @@
 "trunc_" = 2
 "unwrap" = 1
 "unwrap_or" = 1
-"zeroed" = 2
+"zeroed" = 1
 
 [allow."crates/onsa_core/src/lower/body/expr.rs"]
-"BITS" = 1
-"EPSILON" = 2
-"INFINITY" = 2
-"MAX" = 3
-"MIN" = 3
-"NAN" = 2
 "None" = 1
-"PI" = 2
 
 [allow."crates/onsa_core/src/lower/flow/boundary.rs"]
 "cfg" = 1
@@ -116,13 +108,6 @@
 "Alloc" = 1
 
 [allow."crates/onsa_sema/src/builtin.rs"]
-"BITS" = 1
-"EPSILON" = 1
-"INFINITY" = 1
-"MAX" = 2
-"MIN" = 2
-"NAN" = 1
-"PI" = 1
 "abs" = 2
 "add_from" = 1
 "ceil" = 1
@@ -135,7 +120,6 @@
 "fill" = 1
 "find" = 1
 "floor" = 1
-"from_bits" = 1
 "get" = 1
 "get_substr" = 1
 "is_char_boundary" = 1

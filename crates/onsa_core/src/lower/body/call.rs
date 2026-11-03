@@ -199,14 +199,13 @@ fn lower_target_call(
     if row == PrimRow::FromFn {
         return lower_from_fn(lw, cx, args, ty, span);
     }
-    let scalars: Vec<Scalar> = gargs
-        .iter()
-        .map(|g| match g {
-            GenericArg::Ty(Ty::Int(k)) => Scalar::Int(*k),
-            GenericArg::Ty(Ty::Float(k)) => Scalar::Float(*k),
-            _ => Scalar::Other,
-        })
-        .collect();
+    // The `Self` of a member first (`F32` of `F32.from_bits`), then the type
+    // arguments, as sema reads them (`Scalar::of_use`).
+    let own = match row_self(lw.a, def) {
+        Some(t) => Some(GenericArg::Ty(lw.core_ty(t, gargs, span)?)),
+        None => None,
+    };
+    let scalars: Vec<Scalar> = own.iter().chain(gargs).map(scalar).collect();
     // Sema reports the closed uses without a primitive (E0200); one through
     // a generic body is W5-07's (the `else` bodies).
     let Some(prim) = row.instantiate(&scalars) else {
@@ -215,6 +214,16 @@ fn lower_target_call(
     let params = sig_params(lw, cx, f, gargs, span)?;
     let cargs = lower_args(lw, cx, args, &params)?;
     Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
+}
+
+/// A type argument of a row as Core has it, read as [`Scalar::of`] reads
+/// sema's: by its head.
+fn scalar(g: &GenericArg) -> Scalar {
+    match g {
+        GenericArg::Ty(Ty::Int(k)) => Scalar::Int(*k),
+        GenericArg::Ty(Ty::Float(k)) => Scalar::Float(*k),
+        _ => Scalar::Other,
+    }
 }
 
 /// `array.from_fn(f)`: an array local filled by a loop; a closure argument is
@@ -280,7 +289,7 @@ fn lower_builtin_method(
     ty: Ty,
 ) -> R<Expr> {
     let span = cx.expr(e).span;
-    let assoc = matches!(name, "zeroed" | "from_bits");
+    let assoc = name == "zeroed";
     let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "builtin method shape")) };
     let base = *base;
     let mut lowered_args = Vec::new();
@@ -289,14 +298,8 @@ fn lower_builtin_method(
     }
     let borrow = |e: Expr| Arg { mode: Mode::Borrow, expr: e };
     if assoc {
-        let prim = match name {
-            "zeroed" => Prim::BufZeroed,
-            _ => match &ty {
-                Ty::Float(k) => Prim::FromBits(*k),
-                _ => return Err(internal(span, "from_bits type")),
-            },
-        };
-        return Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: lowered_args.into_iter().map(borrow).collect() }));
+        let args = lowered_args.into_iter().map(borrow).collect();
+        return Ok(Expr::new(ty, span, ExprKind::Prim { prim: Prim::BufZeroed, args }));
     }
     let recv = lower_expr(lw, cx, base)?;
     let rty = recv.ty.clone();

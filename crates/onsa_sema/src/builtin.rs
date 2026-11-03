@@ -2,10 +2,10 @@
 //! (spec §3.3, §4.1, §4.2, §5.3, S-09, S-12). Signatures only; the
 //! interpreter and backends implement them (`onsa_core::prim`).
 //!
-//! Every builtin method, associated constant and associated function is one
-//! row of a table here ([`methods`], [`ASSOC_CONSTS`], [`ASSOC_FNS`]); the
-//! lookups read the rows, so the names are written once, and [`names`] lists
-//! them for the gate's check of hard-coded builtin names (Q-14, W1-02).
+//! Every builtin method and associated function is one row of a table here
+//! ([`methods`], [`ZEROED`]); the lookups read the rows, so the names are
+//! written once, and [`names`] lists them for the gate's check of
+//! hard-coded builtin names (Q-14, W1-02).
 //! W5-02 moves these rows into std declarations (R-79).
 
 use std::sync::OnceLock;
@@ -241,113 +241,41 @@ fn sig_ty(types: &mut Types, t: T, recv: TyId, recv_ty: &Ty, inner: Option<TyId>
     })
 }
 
-/// The type of an associated constant.
-#[derive(Debug, Clone, Copy)]
-enum ConstTy {
-    /// The scalar itself.
-    Scalar,
-    U32,
-}
-
-/// Associated constants `Type.NAME` of the scalar types (§6.3, §6.6).
-const ASSOC_CONSTS: &[(Recv, &str, ConstTy)] = &[
-    (Recv::Float, "PI", ConstTy::Scalar),
-    (Recv::Float, "MIN", ConstTy::Scalar),
-    (Recv::Float, "MAX", ConstTy::Scalar),
-    (Recv::Float, "EPSILON", ConstTy::Scalar),
-    (Recv::Float, "INFINITY", ConstTy::Scalar),
-    (Recv::Float, "NAN", ConstTy::Scalar),
-    (Recv::Int, "MIN", ConstTy::Scalar),
-    (Recv::Int, "MAX", ConstTy::Scalar),
-    (Recv::Int, "BITS", ConstTy::U32),
-];
-
-/// The row of the associated constant `name` of a scalar type.
-fn assoc_const_row(types: &Types, scalar: TyId, name: &str) -> Option<ConstTy> {
-    let family = match types.get(scalar) {
-        Ty::Float(_) => Recv::Float,
-        Ty::Int(_) => Recv::Int,
-        _ => return None,
-    };
-    ASSOC_CONSTS.iter().find(|(r, n, _)| *r == family && *n == name).map(|&(_, _, ty)| ty)
-}
-
-/// Associated constant `Type.NAME` of a scalar type (`F32.PI`, `I32.MAX`).
-pub fn assoc_const(types: &mut Types, scalar: TyId, name: &str) -> Option<TyId> {
-    let ty = assoc_const_row(types, scalar, name)?;
-    Some(match ty {
-        ConstTy::Scalar => scalar,
-        ConstTy::U32 => types.int(IntKind::U32),
-    })
-}
-
-/// The owner and the signature of an associated function.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AssocFn {
-    /// `F32.from_bits(u)`: the bits (`U32` / `U64`) to the float.
-    FromBits,
-    /// `Buf.zeroed(n)`: a `Buf[T]` of `n` zero elements.
-    Zeroed,
-}
-
-/// Associated functions `Type.name(...)` of the builtin types.
-const ASSOC_FNS: &[(&str, AssocFn)] = &[("from_bits", AssocFn::FromBits), ("zeroed", AssocFn::Zeroed)];
+/// The associated function of the builtin types the table has (the
+/// associated constants and `from_bits` of the scalars are std's
+/// declarations, §6.6): `Buf.zeroed(n)`, a `Buf[T]` of `n` zero elements,
+/// until std declares it too (W5-02 U6).
+const ZEROED: &str = "zeroed";
 
 /// Associated function `Type.name(...)` of a builtin type: `(params, ret)`.
 /// `generic_arg` is the fresh type argument for `Buf.zeroed` (`T` from the
 /// expected type).
 pub fn assoc_fn(
     types: &mut Types,
-    scalar: Option<TyId>,
     builtin: Option<BuiltinTy>,
     name: &str,
     generic_arg: TyId,
 ) -> Option<(Vec<TyId>, TyId)> {
-    let u32 = types.int(IntKind::U32);
-    match (scalar.map(|t| types.get(t).clone()), assoc_fn_row(types, scalar, builtin, name)?) {
-        (Some(Ty::Float(k)), AssocFn::FromBits) => {
-            let bits = types.int(if k == FloatKind::F32 { IntKind::U32 } else { IntKind::U64 });
-            Some((vec![bits], scalar.unwrap()))
-        }
-        (_, AssocFn::Zeroed) => {
-            let buf = types.builtin(BuiltinTy::Buf, vec![generic_arg]);
-            Some((vec![u32], buf))
-        }
-        _ => None,
+    if !has_assoc_fn(builtin, name) {
+        return None;
     }
+    let u32 = types.int(IntKind::U32);
+    let buf = types.builtin(BuiltinTy::Buf, vec![generic_arg]);
+    Some((vec![u32], buf))
 }
 
-/// The row of the associated function `name` of a builtin type (a
-/// `scalar`, or a generic `builtin`).
-fn assoc_fn_row(types: &Types, scalar: Option<TyId>, builtin: Option<BuiltinTy>, name: &str) -> Option<AssocFn> {
-    let (_, f) = ASSOC_FNS.iter().find(|(n, _)| *n == name)?;
-    let owns = match f {
-        AssocFn::FromBits => scalar.is_some_and(|t| matches!(types.get(t), Ty::Float(_))),
-        AssocFn::Zeroed => builtin == Some(BuiltinTy::Buf),
-    };
-    owns.then_some(*f)
+/// Whether a builtin type (a generic `builtin`; a scalar has none in the
+/// table) has the associated function `name`: the question of the names
+/// stage, which makes no type (R-249).
+pub(crate) fn has_assoc_fn(builtin: Option<BuiltinTy>, name: &str) -> bool {
+    builtin == Some(BuiltinTy::Buf) && name == ZEROED
 }
 
-/// Whether a builtin type (a `scalar`, or a generic `builtin`) has the
-/// associated function `name`: the question of the names stage, which makes
-/// no type (R-249).
-pub(crate) fn has_assoc_fn(types: &Types, scalar: Option<TyId>, builtin: Option<BuiltinTy>, name: &str) -> bool {
-    assoc_fn_row(types, scalar, builtin, name).is_some()
-}
-
-/// Whether the scalar type `scalar` has the associated constant `name`: the
-/// question of the names stage, which makes no type (`Type.NAME` is
-/// resolved before it is typed).
-pub(crate) fn has_assoc_const(types: &Types, scalar: TyId, name: &str) -> bool {
-    assoc_const_row(types, scalar, name).is_some()
-}
-
-/// The names of every builtin method, associated constant and associated
-/// function, sorted and without duplicates (for the gate, Q-14).
+/// The names of every builtin method and associated function, sorted and
+/// without duplicates (for the gate, Q-14).
 pub fn names() -> Vec<String> {
     let mut v: Vec<String> = methods().iter().map(|m| m.name.clone()).collect();
-    v.extend(ASSOC_CONSTS.iter().map(|(_, n, _)| n.to_string()));
-    v.extend(ASSOC_FNS.iter().map(|(n, _)| n.to_string()));
+    v.push(ZEROED.to_string());
     v.sort();
     v.dedup();
     v
@@ -395,7 +323,10 @@ mod tests {
     #[test]
     fn names_list_every_row() {
         let n = names();
-        for x in ["narrow_u8", "trunc_i64_sat", "to_bits", "len", "fill", "unwrap", "is_err", "PI", "BITS", "zeroed"] {
+        for x in ["PI", "BITS", "from_bits"] {
+            assert!(!n.iter().any(|y| y == x), "{x} is std's (§6.6), in {n:?}");
+        }
+        for x in ["narrow_u8", "trunc_i64_sat", "to_bits", "len", "fill", "unwrap", "is_err", "zeroed"] {
             assert!(n.iter().any(|y| y == x), "{x} not in {n:?}");
         }
         let mut sorted = n.clone();
@@ -433,12 +364,8 @@ mod tests {
         assert!(matches!(types.get(b32), Ty::Int(IntKind::U32)));
         assert!(matches!(types.get(b64), Ty::Int(IntKind::U64)));
         assert!(method(&mut types, s, "fill").is_none());
-        let bits = assoc_const(&mut types, i32, "BITS").unwrap();
-        assert!(matches!(types.get(bits), Ty::Int(IntKind::U32)));
-        assert_eq!(assoc_const(&mut types, f32, "PI"), Some(f32));
-        assert_eq!(assoc_const(&mut types, i32, "PI"), None);
-        assert!(assoc_fn(&mut types, Some(f64), None, "from_bits", f32).is_some());
-        assert!(assoc_fn(&mut types, None, Some(BuiltinTy::Buf), "zeroed", f32).is_some());
-        assert!(assoc_fn(&mut types, Some(i32), None, "from_bits", f32).is_none());
+        assert!(assoc_fn(&mut types, Some(BuiltinTy::Buf), "zeroed", f32).is_some());
+        assert!(assoc_fn(&mut types, Some(BuiltinTy::Span), "zeroed", f32).is_none());
+        assert!(assoc_fn(&mut types, None, "from_bits", f32).is_none());
     }
 }

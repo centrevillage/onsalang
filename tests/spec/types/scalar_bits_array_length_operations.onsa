@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6", "§15.1"]
+
+// W5-02 U4a: operations on `BITS` in the length of an array (spec §4.5: a constant expression is made of
+// literals, names of constants including "`I32.BITS` のような具体的な型の関連定数", `+ - * / %`, a prefix `-` and
+// parentheses; "初期化式で計算した定数は名前で使える"), and a `const` whose initializer computes from `BITS`
+// and is named in a length. The value decides the type (`[F32; U8.BITS * 2]` is `[F32; 16]`). The value
+// of each is worked out by hand: U8.BITS is 8, U16.BITS is 16, U64.BITS is 64, so
+// 8 * 2 = 16, 8 + 16 = 24, 64 / 8 = 8, 64 % 24 = 16 and (16 - 8) * 4 = 32.
+// Evaluating an operation in a length is W9-03: today it is E0200 "constants computed by expressions as
+// array lengths", whatever the constants are, so this file waits for W9-03 as well as for R-136.
+
+const WORD: U32 = U64.BITS
+const LANES: U32 = WORD / U8.BITS
+
+pub fn doubled(x: [F32; U8.BITS * 2]) -> F32 {
+  x[15]
+}
+
+pub fn summed() -> [F32; U8.BITS + U16.BITS] {
+  [1.0; U8.BITS + U16.BITS]
+}
+
+pub fn lanes(x: [F32; LANES]) -> F32 {
+  x[7]
+}
+
+pub fn remainder() -> [U8; U64.BITS % 24] {
+  [3; U64.BITS % 24]
+}
+
+pub fn parenthesized() -> [F32; (U16.BITS - U8.BITS) * 4] {
+  [0.5; (U16.BITS - U8.BITS) * 4]
+}
+
+test "an operation on BITS in a length has the value of the operation" {
+  assert summed().len() == 24
+  assert remainder().len() == 16
+  assert parenthesized().len() == 32
+}
+
+test "the value of the operation decides the type" {
+  let a: [F32; 16] = [2.0; U8.BITS * 2]
+  assert doubled(a) == 2.0
+  let b: [F32; 8] = [4.0; LANES]
+  assert lanes(b) == 4.0
+  let c: [F32; U8.BITS + U16.BITS] = summed()
+  let d: [F32; 24]                 = c
+  assert d[23] == 1.0
+}
+
+test "a const that computes from BITS is a length by its name" {
+  assert WORD == 64
+  assert LANES == 8
+  let e: [F32; LANES] = [1.0; LANES]
+  assert e.len() == 8
+}

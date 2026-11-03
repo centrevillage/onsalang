@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.6", "§15.1", "§18.1"]
+
+// W5-02 U4a: the associated constants of the scalar types that a length cannot take (spec §4.5: "定数式 ... 型は
+// `U32` である。普通の式と同じ規則で、期待型を `U32` として検査する（`U32` でない定数は E0401）"; "関数の呼び出しは
+// 書けない ... E0417"; "溢れとゼロ除算は、その式の位置で E0419").
+//  - `MIN` and `MAX` of every integer type but `U32` are not `U32`, and a float constant is not an integer:
+//    E0401, whatever the value is (`U8.MAX` is 255, which fits).
+//  - A call (`from_bits(1)`, `to_bits()`) is not a constant expression: E0417.
+//  - An operation that overflows `U32` in the length is E0419 (scalar_assoc_const_length_overflow.onsa).
+// One error per function (P-01). The right forms are in tests/spec/types/scalar_bits_array_lengths.onsa.
+
+pub fn max_of_a_narrow_type(x: [F32; U8.MAX]) -> F32 { //~ E0401
+  x[0]
+}
+
+pub fn max_of_a_wide_unsigned_type(x: [F32; U64.MAX]) -> F32 { //~ E0401
+  x[0]
+}
+
+pub fn min_of_a_signed_type(x: [F32; I32.MIN]) -> F32 { //~ E0401
+  x[0]
+}
+
+pub fn max_of_a_signed_type(x: [F32; I16.MAX]) -> F32 { //~ E0401
+  x[0]
+}
+
+pub fn a_float_constant(x: [F32; F32.PI]) -> F32 { //~ E0401
+  x[0]
+}
+
+pub fn a_float_infinity(x: [F32; F64.INFINITY]) -> F32 { //~ E0401
+  x[0]
+}
+
+pub fn a_call_of_from_bits(x: [F32; F32.from_bits(1)]) -> F32 { //~ E0417
+  x[0]
+}
+
+pub fn a_call_of_the_wide_from_bits(x: [F32; F64.from_bits(1)]) -> F32 { //~ E0417
+  x[0]
+}
+
+pub fn a_call_of_to_bits(x: [F32; F32.PI.to_bits()]) -> F32 { //~ E0417
+  x[0]
+}

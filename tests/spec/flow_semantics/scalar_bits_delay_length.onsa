@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§11.4", "§4.5"]
+
+// W5-02 U4a (R-136): `BITS` of an integer type as the length of a delay line (spec §11.4: `delay~(e, N)` takes
+// `N: const U32`; §4.5: a constant expression names constants including "`I32.BITS` のような具体的な型の関連定数").
+// `delay~(x, N)` is a delay of `N` steps of the clock of `x`: the output at step `n` is the input at step
+// `n - N`, and the first `N` steps read the initial value, which is 0 when none is written. With
+// `N = U8.BITS` the delay is 8 steps, with `U16.BITS` it is 16. Today `BITS` is 32 for every type (R-136),
+// so the delay is 32 steps.
+//   input 1 2 3 ... 20 at the sample clock; delayed by 8: the outputs 0 to 7 are 0 and the output 8 is 1;
+//   delayed by 16: the outputs 0 to 15 are 0, the output 16 is 1 and the output 19 is 4.
+
+pub flow byte_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, U8.BITS)
+}
+
+pub flow half_word_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, U16.BITS)
+}
+
+pub flow signed_byte_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, I8.BITS, 0.5)
+}
+
+fn ramp() -> [F32; 20] {
+  [
+    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
+    11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0,
+  ]
+}
+
+test "a delay of U8.BITS is a delay of 8 steps" {
+  let o = byte_delay.render(byte_delay.Config {}, byte_delay.Params {}, ramp(), 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[7] == 0.0
+  assert o.out[8] == 1.0
+  assert o.out[19] == 12.0
+}
+
+test "a delay of U16.BITS is a delay of 16 steps" {
+  let o = half_word_delay.render(half_word_delay.Config {}, half_word_delay.Params {}, ramp(), 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[15] == 0.0
+  assert o.out[16] == 1.0
+  assert o.out[19] == 4.0
+}
+
+test "a delay of I8.BITS with an initial value reads it for 8 steps" {
+  let o = signed_byte_delay.render(signed_byte_delay.Config {}, signed_byte_delay.Params {}, ramp(), 8.0)
+  assert o.out[0] == 0.5
+  assert o.out[7] == 0.5
+  assert o.out[8] == 1.0
+  assert o.out[9] == 2.0
+}

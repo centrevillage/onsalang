@@ -15,8 +15,8 @@ impl<'a> Checker<'a> {
         let mut shape = ConstShape { leaves: Vec::new(), arith: true, neg: false, ops: false };
         self.const_shape(e, &mut shape);
         // Each leaf: its name as the record has it, read as the constants
-        // of type positions are (`constarg::of_entity`: `N`, `cfg.N`;
-        // `constarg::of_builtin`: `I32.BITS`).
+        // of type positions are (`constarg::of_entity`: `N`, `cfg.N`,
+        // `I32.BITS`).
         let mut leaves = Vec::new();
         for &l in &shape.leaves {
             let leaf = match &self.expr(l).kind {
@@ -85,14 +85,6 @@ impl<'a> Checker<'a> {
                 };
                 crate::constarg::of_entity(self.a, self.m, self.ast, self.text, entity, lspan)
                     .map(|v| v.map(|v| (v, d)))
-            }
-            Some(PathRes::BuiltinAssoc { ty, name, .. }) => {
-                match crate::constarg::of_builtin(self.a, ty, &name, self.text, lspan) {
-                    Some(r) => r.map(|v| v.map(|v| (v, None))),
-                    None => {
-                        onsa_diag::internal::bug(Some(lspan), "an associated constant the names stage did not find")
-                    }
-                }
             }
             // A field after a value (`K.n`), which has no record: the error
             // of its path, as a type position has it (W5-08 types the whole

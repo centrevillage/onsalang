@@ -213,46 +213,12 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
             let Ty::Enum(id) = &ty else { return Err(internal(span, "None type")) };
             ExprKind::Variant { ty: *id, tag: 0, fields: Vec::new() }
         }
-        Target::BuiltinConst { name, .. } => builtin_const(&ty, &name, span)?,
         Target::Fn { .. } | Target::Prelude(_) => return Err(unsupported(span, Feature::FnValues, &[])),
         Target::Method { .. } | Target::BuiltinMethod { .. } | Target::Value => {
             return Err(internal(span, "call target on a non-call"));
         }
     };
     Ok(Expr::new(ty, span, kind))
-}
-
-fn builtin_const(ty: &Ty, name: &str, span: Span) -> R<ExprKind> {
-    Ok(match ty {
-        Ty::Float(FloatKind::F32) => ExprKind::Lit(Lit::F32(match name {
-            "PI" => std::f32::consts::PI,
-            "MIN" => f32::MIN,
-            "MAX" => f32::MAX,
-            "EPSILON" => f32::EPSILON,
-            "INFINITY" => f32::INFINITY,
-            "NAN" => f32::NAN,
-            _ => return Err(internal(span, "builtin constant")),
-        })),
-        Ty::Float(FloatKind::F64) => ExprKind::Lit(Lit::F64(match name {
-            "PI" => std::f64::consts::PI,
-            "MIN" => f64::MIN,
-            "MAX" => f64::MAX,
-            "EPSILON" => f64::EPSILON,
-            "INFINITY" => f64::INFINITY,
-            "NAN" => f64::NAN,
-            _ => return Err(internal(span, "builtin constant")),
-        })),
-        Ty::Int(k) => {
-            let (lo, hi) = k.range();
-            ExprKind::Lit(Lit::Int(match name {
-                "MIN" => lo,
-                "MAX" => hi,
-                "BITS" => k.bits() as i128,
-                _ => return Err(internal(span, "builtin constant")),
-            }))
-        }
-        _ => return Err(internal(span, "builtin constant type")),
-    })
 }
 
 fn lower_binary(

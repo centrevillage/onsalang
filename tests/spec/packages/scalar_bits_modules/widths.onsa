@@ -1,0 +1,22 @@
+// `BITS` read in another module (spec §6.6, §15.1): a `pub const` whose initializer reads it, a `pub fn` whose
+// body reads it, and an `impl` member that does.
+
+pub const WORD: U32 = U64.BITS
+
+pub const BYTE: U32 = U8.BITS
+
+pub fn width_of_bytes(n: U32) -> U32 {
+  n * U8.BITS
+}
+
+pub struct Register {
+  count: U32,
+}
+
+impl Register {
+  pub const WIDE: U32 = U16.BITS
+
+  pub fn bits(self) -> U32 {
+    self.count * Self.WIDE
+  }
+}

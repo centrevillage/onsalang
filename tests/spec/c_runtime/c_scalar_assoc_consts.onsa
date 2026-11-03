@@ -1,0 +1,399 @@
+// onsa.toml
+// [package]
+// name = "c_scalar_assoc_consts"
+// edition = "2026"
+//
+// [export]
+// prefix = "csac_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§3.3", "§3.4", "§4.5", "§13.4"]
+//
+// [[test.host]]
+// name = "bits_of"
+// target = "host"
+// fn = "c_scalar_assoc_consts.bits_of"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 8 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 8 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 16 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 16 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 32 },
+//   { call = "fn", args = { sel = 5 }, status = 0, result = 32 },
+//   { call = "fn", args = { sel = 6 }, status = 0, result = 64 },
+//   { call = "fn", args = { sel = 7 }, status = 0, result = 64 },
+//   { call = "fn", args = { sel = 8 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "bits_of on a reset target"
+// target = "fw"
+// fn = "c_scalar_assoc_consts.bits_of"
+// steps = [
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 8 },
+//   { call = "fn", args = { sel = 6 }, status = 0, result = 64 },
+// ]
+//
+// [[test.host]]
+// name = "widths_in_consts"
+// target = "host"
+// fn = "c_scalar_assoc_consts.widths_in_consts"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 64 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 72 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 144 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 8 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "lanes"
+// target = "host"
+// fn = "c_scalar_assoc_consts.lanes"
+// steps = [
+//   { call = "fn", args = { x = 1.0 }, status = 0, result = 8.0 },
+//   { call = "fn", args = { x = 0.5 }, status = 0, result = 4.0 },
+//   { call = "fn", args = { x = -2.0 }, status = 0, result = -16.0 },
+// ]
+//
+// [[test.host]]
+// name = "top_bit"
+// target = "host"
+// fn = "c_scalar_assoc_consts.top_bit"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 128 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 32768 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 4611686018427387904 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "shift_by_the_width panics"
+// target = "host"
+// fn = "c_scalar_assoc_consts.shift_by_the_width"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 1 },
+//   { call = "fn", args = { sel = 1 }, status = 1 },
+//   { call = "fn", args = { sel = 2 }, status = 1 },
+//   { call = "fn", args = { sel = 3 }, status = 1 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "limits_signed"
+// target = "host"
+// fn = "c_scalar_assoc_consts.limits_signed"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = -128 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 127 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = -32768 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 32767 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = -2147483648 },
+//   { call = "fn", args = { sel = 5 }, status = 0, result = 2147483647 },
+//   { call = "fn", args = { sel = 6 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { sel = 7 }, status = 0, result = 9223372036854775807 },
+// ]
+//
+// [[test.host]]
+// name = "limits_unsigned"
+// target = "host"
+// fn = "c_scalar_assoc_consts.limits_unsigned"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 255 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 65535 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "float_bits"
+// target = "host"
+// fn = "c_scalar_assoc_consts.float_bits"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 1078530011 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 2139095039 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 872415232 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 2139095040 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 5 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 6 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "wide_float"
+// target = "host"
+// fn = "c_scalar_assoc_consts.wide_float"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 3.141592653589793 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 2.220446049250313e-16 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 1.7976931348623157e308 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 0.0 },
+// ]
+//
+// [[test.host]]
+// name = "wide_float_bits"
+// target = "host"
+// fn = "c_scalar_assoc_consts.wide_float_bits"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 1074340347 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 1413754136 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 1018167296 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 2146959360 },
+//   { call = "fn", args = { sel = 5 }, status = 0, result = 0 },
+// ]
+
+// The associated constants of the scalar types on a target that is built to C (spec §6.6, §13.4; W5-02 U4a):
+// the interpreter reads them from the tests in tests/spec/semantics/scalar_*.onsa, and this file reads them
+// through the generated C, with the same expectations worked out by hand from the table of §6.6. The
+// tests/vectors/const.tsv rows hold each value of the table by its bits at C too; this file adds what the
+// rows do not: `BITS` of every width as the amount of a shift (`1 << U64.BITS` panics, `1 << (U64.BITS - 2)`
+// is 2^62), `BITS` in a `const` and in the length of an array (`[F32; U8.BITS]` has 8 lanes in the C array),
+// and the constants as operands of the type they have.
+//   `sel` picks the constant. `bits_of` 0..7 is I8 U8 I16 U16 I32 U32 I64 U64. `float_bits` 0..4 is the bits of
+//   PI MAX EPSILON INFINITY NAN of F32 (0x40490FDB = 1078530011, 0x7F7FFFFF = 2139095039, 0x34000000 =
+//   872415232, 0x7F800000 = 2139095040, and the NaN read back as 0x7FC00000 = 2143289344), 5 is the bits of
+//   `F32.from_bits(1)` and 6 is 0 when `NAN != NAN`. `wide_float` 0..2 is PI EPSILON MAX of F64 and 3 is
+//   `F64.from_bits(0x3FF0000000000000)`, which is 1.0. `wide_float_bits` reports the bits of F64 as the
+//   high word (even `sel`) and the low word (odd `sel`) of PI, EPSILON and NAN, as c_nan_bits.onsa does,
+//   since the integer of a host script has 64 signed bits only: PI 0x400921FB54442D18 is 1074340347 and
+//   1413754136, EPSILON 0x3CB0000000000000 is 1018167296 and 0, NAN 0x7FF8000000000000 is 2146959360 and 0.
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+const WIDTH_OF_U64: U32 = U64.BITS
+const WIDTH_CHAIN: U32 = WIDTH_OF_U64 + U8.BITS
+const WIDTH_TWICE: U32 = WIDTH_CHAIN * 2
+const LANES: U32 = U8.BITS
+
+@export
+pub fn bits_of(sel: U32) -> U32 {
+  var r: U32 = 0
+  if sel == 0 {
+    r = I8.BITS
+  } else if sel == 1 {
+    r = U8.BITS
+  } else if sel == 2 {
+    r = I16.BITS
+  } else if sel == 3 {
+    r = U16.BITS
+  } else if sel == 4 {
+    r = I32.BITS
+  } else if sel == 5 {
+    r = U32.BITS
+  } else if sel == 6 {
+    r = I64.BITS
+  } else if sel == 7 {
+    r = U64.BITS
+  }
+  r
+}
+
+@export
+pub fn widths_in_consts(sel: U32) -> U32 {
+  var r: U32 = 0
+  if sel == 0 {
+    r = WIDTH_OF_U64
+  } else if sel == 1 {
+    r = WIDTH_CHAIN
+  } else if sel == 2 {
+    r = WIDTH_TWICE
+  } else if sel == 3 {
+    r = LANES
+  }
+  r
+}
+
+@export
+pub fn lanes(x: F32) -> F32 {
+  let a: [F32; U8.BITS] = [x; U8.BITS]
+  var s: F32            = 0.0
+  for i in 0 ..< U8.BITS {
+    s = s + a[i]
+  }
+  s
+}
+
+@export
+pub fn top_bit(sel: U32) -> U64 {
+  let a: U8  = 1
+  let b: U16 = 1
+  let c: U32 = 1
+  let d: U64 = 1
+  var r: U64 = 0
+  if sel == 0 {
+    r = (a << (U8.BITS - 1)) as U64
+  } else if sel == 1 {
+    r = (b << (U16.BITS - 1)) as U64
+  } else if sel == 2 {
+    r = (c << (U32.BITS - 1)) as U64
+  } else if sel == 3 {
+    r = d << (U64.BITS - 2)
+  }
+  r
+}
+
+@export
+pub fn shift_by_the_width(sel: U32) -> U32 {
+  let a: U8  = 1
+  let b: I16 = 1
+  let c: U32 = 1
+  let d: U64 = 1
+  var r: U32 = 0
+  if sel == 0 {
+    r = (a << U8.BITS) as U32
+  } else if sel == 1 {
+    r = val((b << I16.BITS).narrow_u32(), 0)
+  } else if sel == 2 {
+    r = c << U32.BITS
+  } else if sel == 3 {
+    r = val((d << U64.BITS).narrow_u32(), 0)
+  }
+  r
+}
+
+@export
+pub fn limits_signed(sel: U32) -> I64 {
+  var r: I64 = 0
+  if sel == 0 {
+    r = I8.MIN as I64
+  } else if sel == 1 {
+    r = I8.MAX as I64
+  } else if sel == 2 {
+    r = I16.MIN as I64
+  } else if sel == 3 {
+    r = I16.MAX as I64
+  } else if sel == 4 {
+    r = I32.MIN as I64
+  } else if sel == 5 {
+    r = I32.MAX as I64
+  } else if sel == 6 {
+    r = I64.MIN
+  } else if sel == 7 {
+    r = I64.MAX
+  }
+  r
+}
+
+@export
+pub fn limits_unsigned(sel: U32) -> U32 {
+  var r: U32 = 0
+  if sel == 0 {
+    r = U8.MAX as U32
+  } else if sel == 1 {
+    r = U16.MAX as U32
+  } else if sel == 2 {
+    r = U32.MAX
+  } else if sel == 3 {
+    r = val((U64.MAX >> 32).narrow_u32(), 0)
+  }
+  r
+}
+
+@export
+pub fn float_bits(sel: U32) -> U32 {
+  var r: U32 = 0
+  if sel == 0 {
+    r = F32.PI.to_bits()
+  } else if sel == 1 {
+    r = F32.MAX.to_bits()
+  } else if sel == 2 {
+    r = F32.EPSILON.to_bits()
+  } else if sel == 3 {
+    r = F32.INFINITY.to_bits()
+  } else if sel == 4 {
+    r = F32.NAN.to_bits()
+  } else if sel == 5 {
+    r = F32.from_bits(1).to_bits()
+  } else if sel == 6 {
+    let n: F32 = F32.NAN
+    if n != n {
+      r = 0
+    } else {
+      r = 1
+    }
+  }
+  r
+}
+
+@export
+pub fn wide_float(sel: U32) -> F64 {
+  var r: F64 = 0.0
+  if sel == 0 {
+    r = F64.PI
+  } else if sel == 1 {
+    r = F64.EPSILON
+  } else if sel == 2 {
+    r = F64.MAX
+  } else if sel == 3 {
+    r = F64.from_bits(0x3FF0000000000000)
+  }
+  r
+}
+
+@export
+pub fn wide_float_bits(sel: U32) -> U32 {
+  var x: U64 = 0
+  if sel < 2 {
+    x = F64.PI.to_bits()
+  } else if sel < 4 {
+    x = F64.EPSILON.to_bits()
+  } else if sel < 6 {
+    x = F64.NAN.to_bits()
+  }
+  if sel % 2 == 1 {
+    x = x & 4294967295
+  } else {
+    x = x >> 32
+  }
+  val(x.narrow_u32(), 0)
+}
+
+test "BITS as the amount of a shift, and in a const" {
+  assert bits_of(1) == 8
+  assert bits_of(6) == 64
+  assert widths_in_consts(1) == 72
+  assert top_bit(3) == 4611686018427387904
+  assert lanes(0.5) == 4.0
+}
+
+test "the limits of the types" {
+  assert limits_signed(6) == I64.MIN
+  assert limits_signed(0) == -128
+  assert limits_unsigned(3) == 4294967295
+  assert limits_unsigned(0) == 255
+}
+
+test "the bits of the constants of the floats" {
+  assert float_bits(0) == 1078530011
+  assert float_bits(2) == 872415232
+  assert float_bits(4) == 2143289344
+  assert float_bits(5) == 1
+  assert wide_float_bits(0) == 1074340347
+  assert wide_float_bits(1) == 1413754136
+  assert wide_float(1) == F64.EPSILON
+  assert wide_float(3) == 1.0
+}

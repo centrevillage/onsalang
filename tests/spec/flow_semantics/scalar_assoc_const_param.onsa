@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§11.7", "§3.4"]
+
+// W5-02 U4a: the values of `@param` (`min`, `max`, `default`) written with the associated constants of the
+// scalar types (spec §11.7: "`const` の初期化式と同じ規則で書き、コンパイル時に評価する（`const` の名前、
+// 関連定数、関数の呼び出し、補間を書ける）"). A flow with such a `@param` runs with the value it is given;
+// the bounds are metadata that the body does not read (§11.7: `@param` does not change the behaviour).
+// The values the metadata gets are in the interface (tests/spec/interface). Today a value that is not a
+// literal is E0809 "must be a numeric literal" (R-216, W9-03), which is the reason this file is listed.
+
+pub flow gain(
+  x: F32 at sample,
+  @param(min: 0.0, max: F32.PI, default: F32.PI / 2.0, unit: "rad")
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow count(
+  x: F32 at sample,
+  @param(min: 0, max: U8.MAX, default: 3)
+  steps: U8 at block,
+) -> F32 at sample {
+  x * (steps as F32)
+}
+
+pub flow wide_range(
+  x: F64 at sample,
+  @param(min: F64.EPSILON, max: F64.PI, default: 1.0, scale: "log")
+  level: F64 at block,
+) -> F64 at sample {
+  x * level
+}
+
+test "a flow with an @param whose values are associated constants runs with the value it is given" {
+  let xs: [F32; 2] = [2.0, 3.0]
+  let o            = gain.render(gain.Config {}, gain.Params { level: 0.5 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.5
+}
+
+test "a flow with an @param of an integer whose bounds are associated constants runs" {
+  let xs: [F32; 2] = [2.0, 1.0]
+  let o            = count.render(count.Config {}, count.Params { steps: 4 }, xs, 8.0)
+  assert o.out[0] == 8.0
+  assert o.out[1] == 4.0
+}
+
+test "a flow with an @param whose log range starts at EPSILON runs" {
+  let xs: [F64; 2] = [2.0, 3.0]
+  let o            = wide_range.render(wide_range.Config {}, wide_range.Params { level: 2.0 }, xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 6.0
+}

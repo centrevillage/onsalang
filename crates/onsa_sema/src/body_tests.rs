@@ -38,6 +38,12 @@ fn ok(src: &str) -> Analysis {
     a
 }
 
+fn ok_with_std(src: &str) -> Analysis {
+    let a = check_in(src, true);
+    assert!(a.diagnostics.is_empty(), "unexpected diagnostics: {:?}", a.diagnostics);
+    a
+}
+
 fn def(a: &Analysis, name: &str) -> crate::DefId {
     crate::DefId(a.defs.iter().position(|d| d.name == name).unwrap_or_else(|| panic!("no def {name}")) as u32)
 }
@@ -237,7 +243,8 @@ fn match_exhaustiveness() {
 
 #[test]
 fn conversions() {
-    ok(
+    // With std, which declares `F32.from_bits` (§3.3).
+    ok_with_std(
         "pub fn f(i: I32, x: F64, y: F32, n: U8) -> F64 {\n  let _ = i as I64\n  let _ = x.round_f32()\n  let _ = y.trunc_i32_sat()\n  let d = y.to_bits()\n  let _ = F32.from_bits(d)\n  let _ = n as F32\n  (i as F64) + x\n}\n",
     );
     assert_eq!(codes("pub fn f(x: I64) -> I32 { x as I32 }\n"), vec![Code::E0411]);
@@ -404,13 +411,19 @@ fn derives_of_a_generic_type_ask_its_arguments() {
 
 #[test]
 fn methods_and_associated_items() {
-    let a = ok(
+    // With std, which declares `F32.PI` (§6.6).
+    let a = ok_with_std(
         "pub struct P { x: F32, y: F32 }\nimpl P {\n  pub fn new(x: F32, y: F32) -> P { P { x: x, y: y } }\n  pub rt fn norm2(self) -> F32 { (self.x * self.x) + (self.y * self.y) }\n  pub rt fn scale(inout self, k: F32) { self.x = self.x * k }\n  const ORIGIN_X: F32 = 0.0\n}\npub fn g() -> F32 {\n  var p = P.new(1.0, 2.0)\n  p.scale!(2.0)\n  p.norm2() + P.ORIGIN_X + F32.PI\n}\n",
     );
     let body = &a.bodies[&def(&a, "g")];
     assert!(body.targets.values().any(|t| matches!(t, Target::Method { .. })));
-    assert!(body.targets.values().any(|t| matches!(t, Target::BuiltinConst { name, .. } if name == "PI")));
-    assert!(body.targets.values().any(|t| matches!(t, Target::Const(_))));
+    let consts: Vec<&str> = (body.targets.values())
+        .filter_map(|t| match t {
+            Target::Const(d) => Some(a.def(*d).name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(consts.contains(&"PI") && consts.contains(&"ORIGIN_X"), "{consts:?}");
     assert_eq!(
         codes(
             "pub struct P { x: F32 }\nimpl P { pub fn new(x: F32) -> P { P { x: x } } }\npub fn g(p: P) -> P { p.new(1.0) }\n"

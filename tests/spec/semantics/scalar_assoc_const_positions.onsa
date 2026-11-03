@@ -1,0 +1,204 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§3.4", "§4.5", "§15.1"]
+
+// W5-02 U4a: the places where an associated constant of a scalar type is read (spec §6.6): the initializer
+// of a `const` (which the compile-time evaluation runs, §6.6), a chain of constants, an aggregate of them,
+// the body of a function with its branches, loops and closures, the member of a user `impl`, and an
+// argument that decides the type parameter of a generic function. The value of each is worked out by hand:
+//   2 * PI changes only the exponent: the bits of 2 * 0x40490FDB are 0x40C90FDB, and PI / 2 is 0x3FC90FDB;
+//   (2 * PI) - PI is PI again (the subtraction of a value from its double is exact).
+// The ones that name `BITS` of a type other than `U32` are in scalar_bits_widths.onsa (R-136).
+
+use std.array
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+fn pick[T](a: T, b: T, first: Bool) -> T {
+  if first {
+    a
+  } else {
+    b
+  }
+}
+
+// ---------------------------------------------------------------- a const
+
+const TWO_PI: F32 = F32.PI * 2.0
+const HALF_PI: F32 = F32.PI / 2.0
+const LOWEST: F32 = -F32.MAX
+const TOP: U8 = U8.MAX
+const SMALLEST: I16 = I16.MIN
+const WIDE_EPSILON: F64 = F64.EPSILON
+const NOT_A_NUMBER: F32 = F32.NAN
+const FAR: F32 = F32.INFINITY
+
+const LIMITS: [I64; 2] = [I64.MIN, I64.MAX]
+const FLOATS: [F32; 3] = [F32.EPSILON, F32.PI, F32.MAX]
+
+pub struct Bounds {
+  lo: I32,
+  hi: I32,
+}
+
+const SIGNED32: Bounds = Bounds { lo: I32.MIN, hi: I32.MAX }
+
+const FIRST: F32 = F32.PI
+const SECOND: F32 = FIRST * 2.0
+const THIRD: F32 = SECOND - FIRST
+
+test "a const reads an associated constant" {
+  assert TWO_PI.to_bits() == 0x40C90FDB
+  assert HALF_PI.to_bits() == 0x3FC90FDB
+  assert LOWEST == -F32.MAX
+  assert TOP == 255
+  assert SMALLEST == -32768
+  assert WIDE_EPSILON == F64.EPSILON
+  assert FAR > F32.MAX
+}
+
+test "a const holds NAN, which is unequal to itself" {
+  assert NOT_A_NUMBER != NOT_A_NUMBER
+  assert NOT_A_NUMBER.to_bits() == 0x7FC00000
+}
+
+test "a const array and a const struct hold associated constants" {
+  assert LIMITS[0] == I64.MIN
+  assert LIMITS[1] == I64.MAX
+  assert FLOATS[0] == F32.EPSILON
+  assert FLOATS[1] == F32.PI
+  assert FLOATS[2] == F32.MAX
+  assert SIGNED32.lo == I32.MIN
+  assert SIGNED32.hi == I32.MAX
+}
+
+test "a const reads a const that reads an associated constant" {
+  assert FIRST == F32.PI
+  assert SECOND == TWO_PI
+  assert THIRD == F32.PI
+}
+
+// ---------------------------------------------------------------- a function body
+
+fn clamp_finite(x: F32) -> F32 {
+  if x > F32.MAX {
+    F32.MAX
+  } else if x < -F32.MAX {
+    -F32.MAX
+  } else {
+    x
+  }
+}
+
+fn saturate_u8(x: U32) -> U8 {
+  if x > (U8.MAX as U32) {
+    U8.MAX
+  } else {
+    val(x.narrow_u8(), U8.MAX)
+  }
+}
+
+fn smallest_of(xs: [F32; 3]) -> F32 {
+  var m = F32.MAX
+  for i in 0 ..< 3 {
+    if xs[i] < m {
+      m = xs[i]
+    }
+  }
+  m
+}
+
+fn largest_of(xs: [I32; 4]) -> I32 {
+  var m = I32.MIN
+  for i in 0 ..< 4 {
+    if xs[i] > m {
+      m = xs[i]
+    }
+  }
+  m
+}
+
+fn close(a: F32, b: F32) -> Bool {
+  let d = a - b
+  d < F32.EPSILON * 8.0 && d > -F32.EPSILON * 8.0
+}
+
+test "a branch compares with an associated constant" {
+  assert clamp_finite(F32.INFINITY) == F32.MAX
+  assert clamp_finite(-F32.INFINITY) == -F32.MAX
+  assert clamp_finite(1.5) == 1.5
+  assert saturate_u8(300) == 255
+  assert saturate_u8(255) == 255
+  assert saturate_u8(7) == 7
+}
+
+test "a loop starts from an associated constant" {
+  assert smallest_of([3.0, -1.0, 2.0]) == -1.0
+  assert smallest_of([F32.INFINITY, F32.INFINITY, F32.INFINITY]) == F32.MAX
+  assert largest_of([-5, -1, -9, -3]) == -1
+  assert largest_of([I32.MIN, I32.MIN, I32.MIN, I32.MIN]) == I32.MIN
+}
+
+test "EPSILON is the unit of a comparison with a tolerance" {
+  assert close(1.0, 1.0)
+  assert close(1.0, 1.0 + F32.EPSILON)
+  assert !close(1.0, 1.0 + F32.EPSILON * 16.0)
+}
+
+test "a closure that array.from_fn runs reads an associated constant" {
+  let xs: [F32; 3] = array.from_fn(fn(i) { F32.PI * i.round_f32() })
+  assert xs[0] == 0.0
+  assert xs[1] == F32.PI
+  assert xs[2] == TWO_PI
+  let ys: [U8; 3] = array.from_fn(fn(i) { U8.MAX - val(i.narrow_u8(), 0) })
+  assert ys[0] == 255
+  assert ys[2] == 253
+}
+
+test "an argument that is an associated constant decides the type of a generic function" {
+  assert pick(F32.PI, F32.MAX, true) == F32.PI
+  assert pick(F32.PI, F32.MAX, false) == F32.MAX
+  assert pick(U8.MAX, U8.MIN, false) == 0
+  assert pick(I64.MIN, I64.MAX, true) == I64.MIN
+}
+
+// ---------------------------------------------------------------- the member of an impl
+
+pub struct Wave {
+  hz: F32,
+}
+
+impl Wave {
+  pub const TAU: F32 = F32.PI * 2.0
+  pub const FINEST: F64 = F64.EPSILON
+  pub const BOTTOM: I16 = I16.MIN
+
+  pub fn step(self) -> F32 {
+    Self.TAU * self.hz
+  }
+
+  pub fn is_top(self, x: U8) -> Bool {
+    x == U8.MAX
+  }
+
+  pub fn lowest() -> F32 {
+    -F32.MAX
+  }
+}
+
+test "a user impl reads an associated constant in a constant and in a body" {
+  let w = Wave { hz: 0.5 }
+  assert Wave.TAU == TWO_PI
+  assert Wave.FINEST == F64.EPSILON
+  assert Wave.BOTTOM == I16.MIN
+  assert w.step() == F32.PI
+  assert w.is_top(255)
+  assert !w.is_top(254)
+  assert Wave.lowest() == LOWEST
+}

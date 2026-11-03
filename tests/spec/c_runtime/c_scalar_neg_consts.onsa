@@ -1,0 +1,102 @@
+// onsa.toml
+// [package]
+// name = "c_scalar_neg_consts"
+// edition = "2026"
+//
+// [export]
+// prefix = "csnc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§13.4"]
+//
+// [[test.host]]
+// name = "neg_bits"
+// target = "host"
+// fn = "c_scalar_neg_consts.neg_bits"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 4286578688 },
+//   { call = "fn", args = { sel = 1 }, status = 0, result = 4293918720 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 3 }, status = 0, result = 3221225472 },
+//   { call = "fn", args = { sel = 4 }, status = 0, result = 4286578688 },
+//   { call = "fn", args = { sel = 5 }, status = 0, result = 4286578688 },
+// ]
+//
+// [[test.host]]
+// name = "lowest"
+// target = "host"
+// fn = "c_scalar_neg_consts.lowest"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = -2147483647 },
+// ]
+
+// A `const` initializer that negates another `const` (`-F32.INFINITY`, where `INFINITY` is std's
+// `1.0 / 0.0`) is evaluated at build time and reaches C as its value (spec §6.6), as at `onsa test`.
+// `neg_bits` 0 is -F32.INFINITY (0xFF800000), 1 the high word of -F64.INFINITY (0xFFF00000), 2 is 0 when
+// -F32.NAN is not equal to itself, 3 is -TWO with TWO = 1.0 + 1.0 (0xC0000000), 4 and 5 -F32.INFINITY in
+// an array and in a struct. `lowest` is -I32.MAX. (W5-02 U4a/b: these stopped the C build with E0200.)
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+struct Range {
+  lo: F32,
+  hi: F32,
+}
+
+const NEG_INF: F32 = -F32.INFINITY
+const NEG_INF_WIDE: F64 = -F64.INFINITY
+const NEG_NAN: F32 = -F32.NAN
+const TWO: F32 = 1.0 + 1.0
+const NEG_TWO: F32 = -TWO
+const SPREAD: [F32; 3] = [1.0, F32.NAN, -F32.INFINITY]
+const FULL: Range = Range { lo: -F32.INFINITY, hi: F32.INFINITY }
+const LOWEST: I32 = -I32.MAX
+
+@export
+pub fn neg_bits(sel: U32) -> U32 {
+  var r: U32 = 1
+  if sel == 0 {
+    r = NEG_INF.to_bits()
+  } else if sel == 1 {
+    r = val((NEG_INF_WIDE.to_bits() >> 32).narrow_u32(), 0)
+  } else if sel == 2 {
+    let n: F32 = NEG_NAN
+    if n != n {
+      r = 0
+    }
+  } else if sel == 3 {
+    r = NEG_TWO.to_bits()
+  } else if sel == 4 {
+    r = SPREAD[2].to_bits()
+  } else if sel == 5 {
+    r = FULL.lo.to_bits()
+  }
+  r
+}
+
+@export
+pub fn lowest() -> I32 {
+  LOWEST
+}
+
+test "a negated constant has the value of the negated float" {
+  assert neg_bits(0) == 4286578688
+  assert neg_bits(1) == 4293918720
+  assert neg_bits(2) == 0
+  assert neg_bits(3) == 3221225472
+  assert neg_bits(4) == 4286578688
+  assert neg_bits(5) == 4286578688
+  assert lowest() == -2147483647
+}

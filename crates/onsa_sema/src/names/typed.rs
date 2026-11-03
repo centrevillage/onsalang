@@ -32,7 +32,7 @@ pub(crate) struct Typed {
 pub(crate) enum PathEnd {
     Entity(Entity),
     /// An associated name of the builtin type `of` the compiler's table has
-    /// (`F32.PI`, `F32.from_bits`, `Str.len`).
+    /// (`Buf.zeroed`, `Str.len`); std's (`F32.PI`) are its members.
     Builtin {
         of: Entity,
         member: BuiltinMember,
@@ -42,9 +42,7 @@ pub(crate) enum PathEnd {
 /// What an associated name of a builtin type is in the compiler's table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuiltinMember {
-    /// `F32.PI`.
-    Constant,
-    /// An associated function: `F32.from_bits`, `Buf.zeroed`.
+    /// An associated function: `Buf.zeroed`.
     Function,
     /// A method (`Str.len`), called with `!` or not.
     Method { bang: bool },
@@ -54,7 +52,6 @@ impl BuiltinMember {
     /// Its kind (§15.1): a method is a function.
     pub(crate) fn kind(self) -> NameKind {
         match self {
-            BuiltinMember::Constant => NameKind::Constant,
             BuiltinMember::Function | BuiltinMember::Method { .. } => NameKind::Function,
         }
     }
@@ -209,7 +206,7 @@ impl Analysis {
         if let ResolveError::NotFound { .. } = err {
             match builtin_member(self, typed.at, &path.segments[at].name) {
                 Some(member) if at + 1 == path.segments.len() => return Ok(PathEnd::Builtin { of: typed.at, member }),
-                // A member with a name after it (`Str.len.zz`, `F32.PI.x`),
+                // A member with a name after it (`Str.len.zz`),
                 // as `P.get.zz` and `P.N.x`.
                 Some(member) => {
                     let (name, span) = (path.segments[at].name.clone(), path.segments[at + 1].span);
@@ -240,20 +237,17 @@ pub(crate) fn builtin_ty(a: &Analysis, of: Entity) -> Option<TyId> {
 }
 
 /// What the associated name `name` of the builtin type `of` is in the
-/// compiler's table (§15.1): a method (`Str.len`), a constant (`F32.PI`) or
-/// an associated function (`F32.from_bits`); none of a name it has not. The
-/// one place of this question (D-15).
+/// compiler's table (§15.1): a method (`Str.len`) or an associated function
+/// (`Buf.zeroed`); none of a name it has not (std's members, `F32.PI`, are
+/// found before it is asked). The one place of this question (D-15).
 pub(crate) fn builtin_member(a: &Analysis, of: Entity, name: &str) -> Option<BuiltinMember> {
     let ty = builtin_ty(a, of)?;
-    let (scalar, generic) = match of {
-        Entity::Builtin(Builtin::Generic(g)) => (None, Some(g)),
-        _ => (Some(ty), None),
-    };
     if let Some(bang) = builtin::method_bang(&a.types, ty, name) {
         return Some(BuiltinMember::Method { bang });
     }
-    if scalar.is_some_and(|t| builtin::has_assoc_const(&a.types, t, name)) {
-        return Some(BuiltinMember::Constant);
-    }
-    builtin::has_assoc_fn(&a.types, scalar, generic, name).then_some(BuiltinMember::Function)
+    let generic = match of {
+        Entity::Builtin(Builtin::Generic(g)) => Some(g),
+        _ => None,
+    };
+    builtin::has_assoc_fn(generic, name).then_some(BuiltinMember::Function)
 }

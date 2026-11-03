@@ -236,6 +236,10 @@ fn pub_item_names(text: &str) -> Vec<String> {
     const KINDS: [&str; 8] = ["fn", "struct", "enum", "trait", "const", "type", "flow", "effect"];
     let mut names = Vec::new();
     for line in text.lines() {
+        // An item of the module, not a member of an `impl` (`std/core/num.onsa`).
+        if line.starts_with(char::is_whitespace) {
+            continue;
+        }
         let mut words = line.split_whitespace();
         if words.next() != Some("pub") {
             continue;

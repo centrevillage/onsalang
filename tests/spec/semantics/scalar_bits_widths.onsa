@@ -1,0 +1,153 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§3.4", "§7", "§4.7"]
+
+// W5-02 U4a (R-136): `BITS` of the eight integer types is the width of the type in bits, and its type is
+// `U32` for every type, so it is the amount of a shift (§3.4: the amount `n` is `U32`) whatever the type of
+// the value (§6.6 table: "`BITS` は `U32`、他は `Self`"). The value is worked out by hand:
+//   I8 and U8 are 8, I16 and U16 are 16, I32 and U32 are 32, I64 and U64 are 64.
+// Today `BITS` is 32 for every type (R-136); the tests below read it through other operations (a shift by
+// `BITS - 1` is the top bit, a shift by `BITS` is out of range) so that a value that is right only for
+// `U32` shows. A shift by `BITS` itself panics (tests/spec/semantics/scalar_bits_shift_panic.onsa).
+
+use std.array
+
+// ---------------------------------------------------------------- the value and the type
+
+test "BITS of every integer type is its width" {
+  assert I8.BITS == 8
+  assert U8.BITS == 8
+  assert I16.BITS == 16
+  assert U16.BITS == 16
+  assert I32.BITS == 32
+  assert U32.BITS == 32
+  assert I64.BITS == 64
+  assert U64.BITS == 64
+}
+
+test "BITS is a U32 whatever the type" {
+  let a: U32 = I8.BITS
+  let b: U32 = U8.BITS
+  let c: U32 = I16.BITS
+  let d: U32 = U16.BITS
+  let e: U32 = I32.BITS
+  let f: U32 = U32.BITS
+  let g: U32 = I64.BITS
+  let h: U32 = U64.BITS
+  assert a + b + c + d + e + f + g + h == 240
+}
+
+test "BITS adds and compares as a U32" {
+  assert U8.BITS + I64.BITS == 72
+  assert U64.BITS - U16.BITS == 48
+  assert I16.BITS * U8.BITS == 128
+  assert U64.BITS / I8.BITS == 8
+  assert I8.BITS < U16.BITS
+  assert U64.BITS > I32.BITS
+}
+
+// ---------------------------------------------------------------- a shift by BITS
+
+test "a shift by BITS - 1 of 1 is the top bit of the unsigned types" {
+  let a: U8  = 1
+  let b: U16 = 1
+  let c: U32 = 1
+  let d: U64 = 1
+  assert (a << (U8.BITS - 1)) == 128
+  assert (b << (U16.BITS - 1)) == 32768
+  assert (c << (U32.BITS - 1)) == 2147483648
+  assert (d << (U64.BITS - 1)) == 9223372036854775808
+}
+
+test "a shift by BITS - 1 of 1 is the minimum of the signed types" {
+  let a: I8  = 1
+  let b: I16 = 1
+  let c: I32 = 1
+  let d: I64 = 1
+  assert (a << (I8.BITS - 1)) == I8.MIN
+  assert (b << (I16.BITS - 1)) == I16.MIN
+  assert (c << (I32.BITS - 1)) == I32.MIN
+  assert (d << (I64.BITS - 1)) == I64.MIN
+}
+
+test "a mask of the low bits is one shifted up by BITS, minus one" {
+  let one: U32 = 1
+  assert (one << U8.BITS) - 1 == 255
+  assert (one << U16.BITS) - 1 == 65535
+  assert (one << I8.BITS) - 1 == (U8.MAX as U32)
+  assert (one << I16.BITS) - 1 == (U16.MAX as U32)
+}
+
+test "the top bit and everything below it make the maximum of the unsigned types" {
+  let a: U8   = 1
+  let b: U16  = 1
+  let c: U64  = 1
+  let ta: U8  = a << (U8.BITS - 1)
+  let tb: U16 = b << (U16.BITS - 1)
+  let tc: U64 = c << (U64.BITS - 1)
+  assert ta + (ta - 1) == U8.MAX
+  assert tb + (tb - 1) == U16.MAX
+  assert tc + (tc - 1) == U64.MAX
+}
+
+// ---------------------------------------------------------------- the places a constant is read
+
+const WIDTH_OF_U64: U32 = U64.BITS
+const WIDTH_CHAIN: U32 = WIDTH_OF_U64 + U8.BITS
+const WIDTH_TWICE: U32 = WIDTH_CHAIN * 2
+const WIDTHS: [U32; 4] = [I8.BITS, I16.BITS, I32.BITS, I64.BITS]
+
+test "a const reads BITS, another const reads that const, and an array holds them" {
+  assert WIDTH_OF_U64 == 64
+  assert WIDTH_CHAIN == 72
+  assert WIDTH_TWICE == 144
+  assert WIDTHS[0] == 8
+  assert WIDTHS[1] == 16
+  assert WIDTHS[2] == 32
+  assert WIDTHS[3] == 64
+}
+
+pub struct Register {
+  bits: U32,
+}
+
+impl Register {
+  pub const WIDE: U32 = U16.BITS
+
+  pub fn narrow() -> Register {
+    Register { bits: U8.BITS }
+  }
+
+  pub fn both(self) -> U32 {
+    self.bits + Self.WIDE + I64.BITS
+  }
+}
+
+test "a member of an impl reads BITS in a constant and in a body" {
+  assert Register.WIDE == 16
+  assert Register.narrow().bits == 8
+  assert Register.narrow().both() == 88
+}
+
+test "a closure reads BITS" {
+  let ws: [U32; 4] = array.from_fn(fn(i) { U8.BITS * (i + 1) })
+  assert ws[0] == 8
+  assert ws[1] == 16
+  assert ws[2] == 24
+  assert ws[3] == 32
+  let ps: [U32; 2] = array.from_fn(fn(i) { I64.BITS + i })
+  assert ps[1] == 65
+}
+
+test "a branch reads a different BITS in each arm" {
+  var n: U32 = 0
+  for i in 0 ..< 4 {
+    if i % 2 == 0 {
+      n = n + U8.BITS
+    } else {
+      n = n + U64.BITS
+    }
+  }
+  assert n == 144
+}

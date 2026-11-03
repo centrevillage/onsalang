@@ -56,6 +56,10 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
     row_keys.sort();
     assert_eq!(keys, row_keys);
     assert!(!keys.is_empty());
+    // The members of the `impl`s of std, by their types (§6.6).
+    for member in ["F32.from_bits", "F64.from_bits"] {
+        assert!(decls.contains_key(member), "no declaration `{member}` in {keys:?}");
+    }
     for (key, (def, f)) in &decls {
         let r = row(key).unwrap_or_else(|| panic!("no row of `{key}`"));
         assert_eq!(usize::from(r.arity), f.params.len(), "the arity of `{key}`");
@@ -79,9 +83,10 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
     let mut a = analyzed_std();
     let candidates = builtins(&mut a);
     let len = a.types.intern(Ty::ConstVal(4));
-    let mut tried = 0;
+    let (mut tried, mut members) = (0, 0);
     for (key, (def, f)) in std_targets(&a) {
         let r = a.prims[&def];
+        members += usize::from(crate::prim::row_self(&a, def).is_some());
         // The type arguments each generic parameter is tried at.
         let mut choices: Vec<Vec<TyId>> = Vec::new();
         for g in &f.generics {
@@ -104,7 +109,8 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
             combos = combos.iter().flat_map(|p| c.iter().map(move |&t| [p.clone(), vec![t]].concat())).collect();
         }
         for args in combos {
-            let scalars: Vec<Scalar> = args.iter().map(|&t| Scalar::of(&a.types, t).expect("closed")).collect();
+            // A member reads its `Self` first (`F32` of `F32.from_bits`).
+            let scalars = Scalar::of_use(&a, def, &args).expect("closed");
             assert!(r.provides(&scalars), "`{key}` gives no primitive at {scalars:?}");
             // The primitive leads back to its row, and so to the declaration
             // an E0200 names.
@@ -116,6 +122,7 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
         }
     }
     assert!(tried > 40, "only {tried} uses tried");
+    assert!(members > 0, "no member of an `impl` tried");
 }
 
 #[test]

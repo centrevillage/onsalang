@@ -1,0 +1,3 @@
+[package]
+name = "scalar_bits_modules"
+edition = "2026"

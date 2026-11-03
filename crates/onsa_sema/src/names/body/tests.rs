@@ -16,6 +16,16 @@ use crate::{Analysis, DefId, Module, Package, analyze};
 /// The analysis of `src`, one module with no syntax error (a case of a test
 /// here is read whole).
 fn analysis(src: &str) -> (Analysis, Module) {
+    analysis_in(src, Vec::new())
+}
+
+/// [`analysis`] with std, which declares the members of the builtin types
+/// (`F32.PI`, §6.6).
+fn analysis_with_std(src: &str) -> (Analysis, Module) {
+    analysis_in(src, vec![crate::flow_tests::std_package()])
+}
+
+fn analysis_in(src: &str, deps: Vec<std::sync::Arc<Package>>) -> (Analysis, Module) {
     let module = || Module {
         segments: vec!["main".into()],
         file: FileId(0),
@@ -24,7 +34,7 @@ fn analysis(src: &str) -> (Analysis, Module) {
     };
     let m = module();
     assert!(m.parsed.diagnostics.is_empty(), "a syntax error: {:?}", m.parsed.diagnostics);
-    (analyze(&Package::new("t", vec![module()], Vec::new())), m)
+    (analyze(&Package::new("t", vec![module()], deps)), m)
 }
 
 fn def(a: &Analysis, name: &str) -> DefId {
@@ -301,8 +311,11 @@ fn chains_record_the_namespaces_they_pass_and_the_item_they_end_at() {
         parsed: onsa_syntax::parse(FileId(file), src),
     };
     let m = module(&["main"], 0, main);
-    let mut a = analyze(&Package::new("t", vec![module(&["main"], 0, main), module(&["util"], 1, util)], Vec::new()));
+    // With std, which declares the members of the builtin types (§6.6).
+    let std = vec![crate::flow_tests::std_package()];
+    let mut a = analyze(&Package::new("t", vec![module(&["main"], 0, main), module(&["util"], 1, util)], std));
     let f32 = a.types.float(crate::ty::FloatKind::F32);
+    let i32 = a.types.int(crate::ty::IntKind::I32);
     let n = names(&a, "g");
     assert!(n.complete);
     let at = |text: &str| n.paths.get(&node(&m, text)).cloned();
@@ -314,8 +327,13 @@ fn chains_record_the_namespaces_they_pass_and_the_item_they_end_at() {
     assert_eq!(at("Shape"), Some(PathRes::Namespace(entity_of(&a, "Shape"))));
     assert_eq!(at("Shape.Circle"), item(Entity::Variant(def(&a, "Shape"), 0)));
     assert_eq!(at("F32"), Some(PathRes::Namespace(Entity::Builtin(crate::resolve::Builtin::Scalar(f32)))));
-    assert_eq!(at("F32.PI"), Some(PathRes::BuiltinAssoc { ty: f32, name: "PI".into(), owner: None }));
-    assert_eq!(at("F32.from_bits"), Some(PathRes::BuiltinAssoc { ty: f32, name: "from_bits".into(), owner: None }));
+    // The associated items of a builtin type are std's members, of the types
+    // that own them.
+    let member = |ty, name: &str| a.modules.assoc_builtin.get(&ty).and_then(|t| t.get(name)).copied();
+    assert_eq!(at("F32.PI"), item(Entity::Member(member(f32, "PI").unwrap())));
+    assert_eq!(at("F32.from_bits"), item(Entity::Member(member(f32, "from_bits").unwrap())));
+    assert!(member(i32, "MAX").is_some() && member(i32, "BITS").is_some());
+    assert!(member(i32, "PI").is_none() && member(f32, "MIN").is_none() && member(f32, "zeroed").is_none());
     assert_eq!(at("P.new"), item(Entity::Member(def(&a, "new"))));
     assert_eq!(at("Some"), item(Entity::Builtin(crate::resolve::Builtin::Some)));
     assert_eq!(at("K"), item(entity_of(&a, "K")));
@@ -343,24 +361,15 @@ fn chains_record_the_namespaces_they_pass_and_the_item_they_end_at() {
 }
 
 #[test]
-fn the_parameters_of_a_heading_are_by_their_index_and_a_builtin_type_has_its_own_items() {
+fn the_parameters_of_a_heading_are_by_their_index() {
     let src = "pub fn g[T, const N: U32, U, const M: U32](x: T, y: U) -> U32 {\n  let a = M\n  let b = N\n  let c = U.ZERO\n  a + b\n}\npub flow f(x: F32 at sample) -> F32 at sample {\n  let t = sample_tick()\n  x\n}\n";
-    let (mut a, m) = analysis(src);
+    let (a, m) = analysis(src);
     let n = names(&a, "g");
     let at = |n: &BodyNames, text: &str| n.paths.get(&node(&m, text)).cloned();
     assert_eq!((at(n, "M"), at(n, "N")), (Some(PathRes::ConstParam(3)), Some(PathRes::ConstParam(1))));
     assert_eq!(at(n, "U"), Some(PathRes::TypeParam(2)));
     use crate::flow_names::FlowBuiltin;
     assert_eq!(at(names(&a, "f"), "sample_tick"), Some(PathRes::FlowBuiltin(FlowBuiltin::SampleTick)));
-    // The associated constants of a builtin type are of the types that own them.
-    use crate::builtin::has_assoc_const;
-    use crate::ty::{FloatKind, IntKind};
-    let t = &mut a.types;
-    let (i32, f32, bool) = (t.int(IntKind::I32), t.float(FloatKind::F32), t.bool());
-    let t = &a.types;
-    assert!(has_assoc_const(t, i32, "MAX") && has_assoc_const(t, f32, "PI"));
-    assert!(!has_assoc_const(t, i32, "PI") && !has_assoc_const(t, bool, "MAX"));
-    assert!(!has_assoc_const(t, f32, "from_bits") && !has_assoc_const(t, f32, "zeroed"));
 }
 
 #[test]
@@ -523,7 +532,7 @@ fn the_values_of_a_call_are_one_table_for_the_head_of_an_index() {
     use onsa_diag::{Code::E0020, Stage::Names};
     for (sig, head) in [("(k: [I32; 2])", "k"), ("[const N: U32]()", "N"), ("()", "K"), ("()", "E.A"), ("()", "F32.PI")]
     {
-        let (a, _) = analysis(&format!("{pre}pub fn u{sig} -> I32 {{\n  {head}[0](1)\n}}\n"));
+        let (a, _) = analysis_with_std(&format!("{pre}pub fn u{sig} -> I32 {{\n  {head}[0](1)\n}}\n"));
         assert_eq!(stages(&a), [(E0020, Names)], "{head}");
     }
     let (a, _) = analysis(&format!("{pre}pub fn u() -> I32 {{\n  inc[0](1)\n}}\n"));
@@ -536,7 +545,7 @@ fn the_values_of_a_call_are_one_table_for_the_head_of_an_index() {
 fn a_bang_on_a_value_and_a_dot_call_in_a_flow_body_are_left_to_a_later_stage() {
     let pre = "pub const K: F32 = 1.0\npub rt fn g(x: F32) -> F32 {\n  x\n}\n";
     for body in ["K!(x)", "F32.PI!()", "h!(x)"] {
-        let (a, _) = analysis(&format!("{pre}pub fn u(x: F32, h: fn(F32) -> F32) -> F32 {{\n  {body}\n}}\n"));
+        let (a, _) = analysis_with_std(&format!("{pre}pub fn u(x: F32, h: fn(F32) -> F32) -> F32 {{\n  {body}\n}}\n"));
         assert!(stages(&a).iter().all(|&(_, s)| s == onsa_diag::Stage::Types), "{body}: {:?}", a.diagnostics);
     }
     let (a, _) = analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  g.(x)\n}}\n"));
@@ -549,7 +558,8 @@ fn a_bang_on_a_value_and_a_dot_call_in_a_flow_body_are_left_to_a_later_stage() {
 fn a_value_called_in_a_flow_body_has_no_candidate() {
     let pre = "pub const K: F32 = 1.0\npub const OPS: [F32; 2] = [1.0, 2.0]\n";
     for body in ["x(1.0)", "K(x)", "OPS[0](x)", "F32.PI(x)"] {
-        let (a, _) = analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n"));
+        let (a, _) =
+            analysis_with_std(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n"));
         assert_eq!(stages(&a), [(onsa_diag::Code::E0020, onsa_diag::Stage::Names)], "{body}");
         assert!(a.diagnostics[0].fixes.is_empty(), "{body}: {:?}", a.diagnostics[0].fixes);
     }

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§3.4", "§9.2"]
+
+// W5-02 U4a (R-136): a shift by `BITS` of the type is a shift by the whole width, which panics (§3.4: `<<`
+// and `>>` panic when the amount `n` is the bit width or more). For `U64` and `I64` that amount is 64.
+// Today `BITS` is 32 for every type (R-136), so these shifts do not panic (and 1 << 32 is not 0). The
+// amount is bound first (`let n`), so the shift is the one expression of the line that can panic. The
+// narrow types are in scalar_bits_shift_panic.onsa.
+
+use std.array
+
+test "a shift left of a U64 by U64.BITS panics" {
+  let one: U64 = 1
+  let n: U32   = U64.BITS
+  let y        = one << n //~ PANIC "a shift left of a U64 by U64.BITS panics"
+  assert y == 0
+}
+
+test "a shift right of an I64 by I64.BITS panics" {
+  let x: I64 = 1
+  let n: U32 = I64.BITS
+  let y      = x >> n //~ PANIC "a shift right of an I64 by I64.BITS panics"
+  assert y == 0
+}
+
+test "a shift by BITS of a wide type in a closure that array.from_fn runs panics" {
+  let one: U64     = 1
+  let ys: [U64; 2] = array.from_fn(fn(i) { one << U64.BITS }) //~ PANIC "a shift by BITS of a wide type in a closure that array.from_fn runs panics"
+  assert ys[0] == 0
+}

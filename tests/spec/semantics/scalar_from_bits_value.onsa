@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.1", "§3.3", "§15.1"]
+
+// W5-02 U4a (R-295): `F32.from_bits` and `F64.from_bits` are associated functions, and an associated function
+// is used as a value like the function of an item (spec §6.1: "関連関数と名前空間の関数は、項目の関数と同じく値と
+// して使える（`let mk = Point.new` の後に `mk.(1.0, 2.0)`）"). A function value is called with `.(`. The
+// type of the value is `fn(U32) -> F32` for `F32.from_bits` and `fn(U64) -> F64` for `F64.from_bits`. The
+// values are the ones of scalar_from_bits.onsa: 0x3F800000 is 1.0, 0x40000000 is 2.0, 0x3FF0000000000000 is 1.0.
+// Today the name of a built-in associated function without a call after it is not found (E0302, R-295).
+
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  pub fn new(x: F32) -> Point {
+    Point { x: x }
+  }
+}
+
+fn apply_narrow(f: fn(U32) -> F32, b: U32) -> F32 {
+  f.(b)
+}
+
+fn apply_wide(f: fn(U64) -> F64, b: U64) -> F64 {
+  f.(b)
+}
+
+test "the user's associated function is a value, which the built-in one is too" {
+  let mk = Point.new
+  assert mk.(2.0).x == 2.0
+  let g = F32.from_bits
+  assert g.(0x3F800000) == 1.0
+  assert g.(0x40000000) == 2.0
+}
+
+test "F64.from_bits is a value" {
+  let h = F64.from_bits
+  assert h.(0x3FF0000000000000) == 1.0
+  assert h.(0x4000000000000000) == 2.0
+}
+
+test "the associated function is passed to a function that takes a function" {
+  assert apply_narrow(F32.from_bits, 0x3F000000) == 0.5
+  assert apply_wide(F64.from_bits, 0x3FE0000000000000) == 0.5
+}
+
+test "the associated function is called through a value that was kept in an array" {
+  let fs: [fn(U32) -> F32; 1] = [F32.from_bits]
+  assert fs[0].(0xBF800000) == -1.0
+}

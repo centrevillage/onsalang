@@ -10,6 +10,8 @@ use crate::Analysis;
 use crate::def::{DefId, DefKind};
 use crate::ty::{FloatKind, IntKind, Ty, TyId, Types};
 
+const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
+
 /// `std.math` functions (`target rt fn`, generic over `Float`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MathFn {
@@ -257,12 +259,12 @@ impl Prim {
             Prim::IntMax(_) => Some(PrimRow::Math(MathFn::Max)),
             Prim::AssertNear => Some(PrimRow::AssertNear),
             Prim::Pending(p) => Some(PrimRow::Pending(*p)),
+            Prim::FromBits(k) => Some(PrimRow::FromBits(*k)),
             Prim::Narrow { .. }
             | Prim::IntToFloat { .. }
             | Prim::FloatToFloat { .. }
             | Prim::TruncToInt { .. }
             | Prim::ToBits(_)
-            | Prim::FromBits(_)
             | Prim::Checked(..)
             | Prim::DivEuclid(_)
             | Prim::RemEuclid(_)
@@ -320,6 +322,21 @@ impl Scalar {
             _ => Scalar::Other,
         })
     }
+
+    /// The types a row reads at a use of the `std` declaration `def`
+    /// ([`PrimRow::instantiate`]), in order: the `Self` of the `impl` it is a
+    /// member of (`F32` of `F32.from_bits`), then the type arguments `targs`
+    /// of the use. Sema's types; lowering reads the same list through
+    /// [`row_self`] in Core's.
+    pub fn of_use(a: &Analysis, def: DefId, targs: &[TyId]) -> Option<Vec<Scalar>> {
+        row_self(a, def).into_iter().chain(targs.iter().copied()).map(|t| Scalar::of(&a.types, t)).collect()
+    }
+}
+
+/// The `Self` of the `impl` the `std` declaration `def` is a member of, the
+/// first type its row reads ([`Scalar::of_use`]); none of a free item.
+pub fn row_self(a: &Analysis, def: DefId) -> Option<TyId> {
+    a.self_ty_of(def)
 }
 
 /// The primitive of a `std` `target` declaration before its instantiation
@@ -332,6 +349,10 @@ pub enum PrimRow {
     /// `array.from_fn`: lowering expands it, it is no [`Prim`].
     FromFn,
     Pending(PendingPrim),
+    /// `F32.from_bits` / `F64.from_bits`: a row of each float, so that a
+    /// primitive leads back to its own ([`Prim::std_name`]); the `Self` a use
+    /// passes is that float.
+    FromBits(FloatKind),
 }
 
 impl PrimRow {
@@ -349,6 +370,10 @@ impl PrimRow {
             },
             PrimRow::AssertNear => Some(Prim::AssertNear),
             PrimRow::Pending(p) => Some(Prim::Pending(p)),
+            PrimRow::FromBits(k) => match args {
+                [Scalar::Float(own)] if *own == k => Some(Prim::FromBits(k)),
+                _ => None,
+            },
             PrimRow::FromFn => None,
         }
     }
@@ -390,6 +415,7 @@ pub fn rows() -> &'static [Row] {
             row("test.gen.u32", PrimRow::Pending(PendingPrim::GenU32), 2, false),
             row("test.gen.pair", PrimRow::Pending(PendingPrim::GenPair), 2, false),
         ]);
+        v.extend(FLOATS.iter().map(|k| row(&format!("{}.from_bits", k.name()), PrimRow::FromBits(*k), 1, true)));
         v
     })
 }
@@ -399,11 +425,20 @@ pub fn row(key: &str) -> Option<&'static Row> {
     rows().iter().find(|r| r.key == key)
 }
 
-/// The key of the `std` declaration `def` (a free item; the members of the
-/// `impl`s of std come with their declarations, W5-02 U4).
+/// The key of the `std` declaration `def`: of a free item its module path
+/// under `std` and its name (`math.sqrt`); of a member of an `impl` the
+/// name of the builtin type and its own (`F32.from_bits`), whatever file
+/// the `impl` is in (there is one type).
 pub(crate) fn key_of(a: &Analysis, def: DefId) -> String {
     let d = a.def(def);
-    format!("{}.{}", a.modules.get(d.module).path, d.name)
+    let Some(t) = row_self(a, def) else { return format!("{}.{}", a.modules.get(d.module).path, d.name) };
+    let ty = match a.types.get(t) {
+        Ty::Int(k) => k.name(),
+        Ty::Float(k) => k.name(),
+        Ty::Builtin(b, _) => b.name(),
+        _ => onsa_diag::internal::bug(Some(d.span), "a `target` member of an `impl` of no builtin type"),
+    };
+    format!("{ty}.{}", d.name)
 }
 
 /// The row of every `target` declaration of `std`, once after the

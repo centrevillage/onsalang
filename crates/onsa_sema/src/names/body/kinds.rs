@@ -90,15 +90,13 @@ impl Walker<'_> {
     }
 
     /// The error of the last name of `segs` after the builtin type `of`, which
-    /// is no associated function or constant of it there: a method of it
-    /// called in the function form (`Str.len(s)`) or named as a value
-    /// (`Str.len`), E0308, or an associated constant called (`F32.PI()`, a
-    /// value called with `(…)`, E0020; §6.1, §15.1).
+    /// is no associated function of it there: a method of it called in the
+    /// function form (`Str.len(s)`) or named as a value (`Str.len`), E0308
+    /// (§6.1, §15.1). A constant of std (`F32.PI()`) is a member.
     pub(super) fn builtin_called(&self, of: Entity, segs: &[&Ident], place: Place) -> Option<Fail> {
         match crate::names::builtin_member(self.a, of, &segs[segs.len() - 1].name)? {
             BuiltinMember::Method { bang } => Some(Fail::Report(self.method_at(place, segs, bang))),
-            BuiltinMember::Constant if matches!(place, Place::Callee(c) if !self.bang(c)) => self.value_called(segs),
-            BuiltinMember::Constant | BuiltinMember::Function => None,
+            BuiltinMember::Function => None,
         }
     }
 

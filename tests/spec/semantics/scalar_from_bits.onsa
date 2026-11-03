@@ -1,0 +1,155 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.6", "§4.7"]
+
+// W5-02 U4a: `F32.from_bits(u)` and `F64.from_bits(u)`, the associated functions that read a bit pattern as
+// a floating-point value (spec §3.3 table "ビット表現", §3.4 "ビットのまま移す"). The argument is `U32`
+// for `F32` and `U64` for `F64`, the result is the type of the name before the dot, and `to_bits()` is the
+// way back. Every expected value is the IEEE 754 value of the pattern, worked out by hand:
+//   0x3F800000 = 1.0, 0x40000000 = 2.0, 0x3F000000 = 0.5, 0xBF800000 = -1.0,
+//   0x80000000 = -0.0, 0x00000001 = the smallest subnormal (2^-149),
+//   0x00800000 = the smallest normal (2^-126), 0x7F7FFFFF = the largest finite, 0x7F800000 = infinity;
+//   the same fields at 64 bits: 0x3FF0000000000000 = 1.0, 0x8000000000000000 = -0.0, and so on.
+// `to_bits()` of a NaN is the positive quiet NaN (§3.4), so the round trip keeps every value that is not a
+// NaN, and a pattern of a NaN reads back as that one NaN.
+
+use std.array
+
+// ---------------------------------------------------------------- F32
+
+test "F32.from_bits reads the patterns of ordinary values" {
+  assert F32.from_bits(0x3F800000) == 1.0
+  assert F32.from_bits(0x40000000) == 2.0
+  assert F32.from_bits(0x3F000000) == 0.5
+  assert F32.from_bits(0xBF800000) == -1.0
+  assert F32.from_bits(0x00000000) == 0.0
+  assert F32.from_bits(0x40490FDB) == F32.PI
+}
+
+test "F32.from_bits reads the pattern of the negative zero, which is equal to 0.0 and has a sign" {
+  let z: F32 = F32.from_bits(0x80000000)
+  assert z == 0.0
+  assert z.to_bits() == 0x80000000
+  assert 1.0 / z == -F32.INFINITY
+}
+
+test "F32.from_bits reads the patterns of the ends of the finite values" {
+  assert F32.from_bits(0x7F7FFFFF) == F32.MAX
+  assert F32.from_bits(0xFF7FFFFF) == -F32.MAX
+  assert F32.from_bits(0x7F800000) == F32.INFINITY
+  assert F32.from_bits(0xFF800000) == -F32.INFINITY
+}
+
+test "F32.from_bits reads a subnormal pattern, which stays subnormal in arithmetic" {
+  let tiny: F32 = F32.from_bits(0x00000001)
+  assert tiny > 0.0
+  assert tiny + tiny == F32.from_bits(0x00000002)
+  assert tiny * 0.5 == 0.0
+  assert F32.from_bits(0x007FFFFF) + tiny == F32.from_bits(0x00800000)
+}
+
+test "F32.from_bits reads every pattern of a NaN as a NaN, and to_bits gives back the quiet NaN" {
+  let quiet: F32     = F32.from_bits(0x7FC00000)
+  let signaling: F32 = F32.from_bits(0x7F800001)
+  let negative: F32  = F32.from_bits(0xFFC00001)
+  let ones: F32      = F32.from_bits(0xFFFFFFFF)
+  assert quiet != quiet
+  assert signaling != signaling
+  assert negative != negative
+  assert ones != ones
+  assert quiet.to_bits() == 0x7FC00000
+  assert signaling.to_bits() == 0x7FC00000
+  assert negative.to_bits() == 0x7FC00000
+  assert ones.to_bits() == 0x7FC00000
+}
+
+test "to_bits then F32.from_bits then to_bits keeps the bits of every pattern that is not a NaN" {
+  let bs: [U32; 12] = [
+    0x00000000, 0x80000000, 0x00000001, 0x80000001, 0x007FFFFF, 0x00800000,
+    0x3F800000, 0xC0490FDB, 0x7F7FFFFF, 0xFF7FFFFF, 0x7F800000, 0xFF800000,
+  ]
+  for i in 0 ..< 12 {
+    let x: F32 = F32.from_bits(bs[i])
+    assert x.to_bits() == bs[i]
+    assert F32.from_bits(x.to_bits()).to_bits() == bs[i]
+  }
+}
+
+test "F32.from_bits of to_bits gives back the value" {
+  let xs: [F32; 5] = [0.0, 1.5, -2.25, F32.PI, F32.EPSILON]
+  for i in 0 ..< 5 {
+    assert F32.from_bits(xs[i].to_bits()) == xs[i]
+  }
+}
+
+test "the patterns that follow 1.0 are the values that differ by EPSILON" {
+  let xs: [F32; 3] = array.from_fn(fn(i) { F32.from_bits(0x3F800000 + i) })
+  assert xs[0] == 1.0
+  assert xs[1] - xs[0] == F32.EPSILON
+  assert xs[2] - xs[1] == F32.EPSILON
+}
+
+// ---------------------------------------------------------------- F64
+
+test "F64.from_bits reads the patterns of ordinary values" {
+  assert F64.from_bits(0x3FF0000000000000) == 1.0
+  assert F64.from_bits(0x4000000000000000) == 2.0
+  assert F64.from_bits(0x3FE0000000000000) == 0.5
+  assert F64.from_bits(0xBFF0000000000000) == -1.0
+  assert F64.from_bits(0x0000000000000000) == 0.0
+  assert F64.from_bits(0x400921FB54442D18) == F64.PI
+}
+
+test "F64.from_bits reads the pattern of the negative zero, which is equal to 0.0 and has a sign" {
+  let z: F64 = F64.from_bits(0x8000000000000000)
+  assert z == 0.0
+  assert z.to_bits() == 0x8000000000000000
+  assert 1.0 / z == -F64.INFINITY
+}
+
+test "F64.from_bits reads the patterns of the ends of the finite values" {
+  assert F64.from_bits(0x7FEFFFFFFFFFFFFF) == F64.MAX
+  assert F64.from_bits(0xFFEFFFFFFFFFFFFF) == -F64.MAX
+  assert F64.from_bits(0x7FF0000000000000) == F64.INFINITY
+  assert F64.from_bits(0xFFF0000000000000) == -F64.INFINITY
+}
+
+test "F64.from_bits reads a subnormal pattern, which stays subnormal in arithmetic" {
+  let tiny: F64 = F64.from_bits(0x0000000000000001)
+  assert tiny > 0.0
+  assert tiny + tiny == F64.from_bits(0x0000000000000002)
+  assert tiny * 0.5 == 0.0
+}
+
+test "F64.from_bits reads every pattern of a NaN as a NaN, and to_bits gives back the quiet NaN" {
+  let quiet: F64     = F64.from_bits(0x7FF8000000000000)
+  let signaling: F64 = F64.from_bits(0x7FF0000000000001)
+  let ones: F64      = F64.from_bits(0xFFFFFFFFFFFFFFFF)
+  assert quiet != quiet
+  assert signaling != signaling
+  assert ones != ones
+  assert quiet.to_bits() == 0x7FF8000000000000
+  assert signaling.to_bits() == 0x7FF8000000000000
+  assert ones.to_bits() == 0x7FF8000000000000
+}
+
+test "to_bits then F64.from_bits then to_bits keeps the bits of every pattern that is not a NaN" {
+  let bs: [U64; 10] = [
+    0x0000000000000000, 0x8000000000000000, 0x0000000000000001, 0x000FFFFFFFFFFFFF,
+    0x0010000000000000, 0x3FF0000000000001, 0xC00921FB54442D18, 0x7FEFFFFFFFFFFFFF,
+    0x7FF0000000000000, 0xFFF0000000000000,
+  ]
+  for i in 0 ..< 10 {
+    let x: F64 = F64.from_bits(bs[i])
+    assert x.to_bits() == bs[i]
+    assert F64.from_bits(x.to_bits()).to_bits() == bs[i]
+  }
+}
+
+test "the same value in the two widths: widening F32 gives the F64 of the wider fields" {
+  let narrow: F32 = F32.from_bits(0x3FC00000)
+  let wide: F64   = F64.from_bits(0x3FF8000000000000)
+  assert (narrow as F64) == wide
+  assert wide.round_f32() == narrow
+}

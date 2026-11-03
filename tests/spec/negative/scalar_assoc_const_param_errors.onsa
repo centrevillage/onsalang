@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§6.6", "§3.3", "§18.1"]
+
+// W5-02 U4a: the associated constants of the scalar types as the values of `@param` (spec §11.7: the numeric
+// keys are "入力の値型 `T` の値 ... `const` の初期化式と同じ規則で書き、コンパイル時に評価する（... 関連定数 ...
+// を書ける。評価の panic は E0419）"; "型の合わない値は E0401（暗黙の変換は無い、§3.3）"; "数値は有限（NaN と
+// 無限大は不可）。両方あれば `min < max`。`default` は範囲の中" は E0809).
+//  - `F32.INFINITY` and `F32.NAN` are not finite: E0809. `F32.PI` for both `min` and `max` is not `min < max`, and a
+//    `default` above `F32.PI` is out of the range.
+//  - `U8.MAX` is a `U8`, so it is the value of an input of type `U8` only: for an `I8` or an `F32` input it is
+//    E0401, and `U8.BITS` is a `U32`, so it is E0401 for a `U8` input.
+//  - A value that overflows (`U8.MAX + 1`) is E0419.
+// The values are evaluated in W9-03 (R-216: today a value that is not a literal is E0809 "must be a numeric
+// literal"). One error per flow (P-01). The right flows are the last ones.
+
+pub flow infinite_max(
+  x: F32 at sample,
+  @param(min: 0.0, max: F32.INFINITY, default: 1.0) //~ E0809
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow not_a_number_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: F32.NAN) //~ E0809
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow equal_ends(
+  x: F32 at sample,
+  @param(min: F32.PI, max: F32.PI, default: F32.PI) //~ E0809
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow default_above_the_range(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: F32.PI) //~ E0809
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow unsigned_maximum_for_a_signed_input(
+  x: F32 at sample,
+  @param(min: 0, max: U8.MAX, default: 3) //~ E0401
+  steps: I8 at block,
+) -> F32 at sample {
+  x * (steps as F32)
+}
+
+pub flow unsigned_maximum_for_a_float_input(
+  x: F32 at sample,
+  @param(min: 0.0, max: U8.MAX, default: 1.0) //~ E0401
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow bits_for_a_narrow_input(
+  x: F32 at sample,
+  @param(min: 0, max: U8.BITS, default: 3) //~ E0401
+  steps: U8 at block,
+) -> F32 at sample {
+  x * (steps as F32)
+}
+
+pub flow wide_float_for_a_narrow_input(
+  x: F32 at sample,
+  @param(min: 0.0, max: F64.PI, default: 1.0) //~ E0401
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow overflow_in_a_value(
+  x: F32 at sample,
+  @param(min: 0, max: U8.MAX + 1, default: 3) //~ E0419
+  steps: U8 at block,
+) -> F32 at sample {
+  x * (steps as F32)
+}
+
+pub flow right_float(
+  x: F32 at sample,
+  @param(min: 0.0, max: F32.PI, default: F32.PI / 2.0)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow right_integer(
+  x: F32 at sample,
+  @param(min: 0, max: U8.MAX, default: 3)
+  steps: U8 at block,
+) -> F32 at sample {
+  x * (steps as F32)
+}

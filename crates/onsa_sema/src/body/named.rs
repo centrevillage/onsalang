@@ -57,14 +57,7 @@ impl<'a> Checker<'a> {
                     Err(self.err(Code::E0401, span, format!("`{shown}` is not a value")))
                 }
             },
-            PathRes::BuiltinAssoc { ty, name: assoc, .. } => {
-                let Some(t) = builtin::assoc_const(&mut self.a.types, ty, &assoc) else {
-                    onsa_diag::internal::bug(Some(span), "an associated constant the names stage did not find")
-                };
-                self.info.targets.insert(e, Target::BuiltinConst { ty: t, name: assoc });
-                Ok(t)
-            }
-            PathRes::Namespace(_) | PathRes::TypeParam(_) | PathRes::FlowBuiltin(_) => {
+            PathRes::Namespace(_) | PathRes::BuiltinAssoc { .. } | PathRes::TypeParam(_) | PathRes::FlowBuiltin(_) => {
                 onsa_diag::internal::bug(Some(span), "a value of a name the names stage reports")
             }
         }

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§15.1"]
+
+// W5-02 U4a: a module reads the constants of another module whose initializers read associated constants of
+// the scalar types, calls its functions and uses its `impl` member (spec §6.6, §15.1). The values are worked
+// out by hand: 2 * PI has the bits 0x40C90FDB, the maximum of a U8 is 255 and the minimum of an I16 is
+// -32768. `BITS` read through another module is in packages/scalar_bits_modules.
+
+use limits.{HIGHEST, LOWEST, Phase, TWO_PI, clamp_finite}
+
+const LOCAL_TWICE: F32 = TWO_PI * 2.0
+
+test "a constant of another module that reads an associated constant" {
+  assert TWO_PI.to_bits() == 0x40C90FDB
+  assert HIGHEST == U8.MAX
+  assert LOWEST == I16.MIN
+  assert LOCAL_TWICE == F32.PI * 4.0
+}
+
+test "a function of another module reads an associated constant in its body" {
+  assert clamp_finite(F32.INFINITY) == F32.MAX
+  assert clamp_finite(-F32.INFINITY) == -F32.MAX
+  assert clamp_finite(2.5) == 2.5
+}
+
+test "an impl member of another module reads an associated constant" {
+  let p = Phase { turns: 0.5 }
+  assert Phase.FULL == TWO_PI
+  assert p.radians() == F32.PI
+}

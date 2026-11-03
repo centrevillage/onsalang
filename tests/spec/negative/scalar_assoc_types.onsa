@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§3.3", "§4.7", "§18.1"]
+
+// W5-02 U4a: the types of the associated constants and of `from_bits` of the scalar types (spec §6.6 table,
+// §3.3 table "ビット表現"). There is no implicit conversion (§3.3), so a type that is not the one the
+// signature names is E0401.
+//  - `F32.from_bits(u)` takes a `U32` and `F64.from_bits(u)` a `U64`; the result is the type before the dot.
+//  - `BITS` is a `U32` for every type, `MIN` and `MAX` of an integer are of that integer type, and the
+//    constants of a float are of that float type.
+//  - A call takes the number of arguments the signature has, E0412 (§4.5: "関数の引数の数と同じコード").
+//  - A literal that is out of the range of the type the argument has is E0408 (§4.7), after the type is known.
+// One error per function (P-01). The forms that are right are the last functions of the file.
+
+pub fn a_float_literal_for_the_bits() -> F32 {
+  F32.from_bits(1.0)                                //~ E0401
+}
+
+pub fn the_bits_of_the_wide_type_for_the_narrow() -> F32 {
+  let u: U64 = 1
+  F32.from_bits(u)                                  //~ E0401
+}
+
+pub fn the_bits_of_the_narrow_type_for_the_wide() -> F64 {
+  let u: U32 = 1
+  F64.from_bits(u)                                  //~ E0401
+}
+
+pub fn a_float_for_the_bits_of_the_wide_type() -> F64 {
+  let x: F64 = 1.0
+  F64.from_bits(x)                                  //~ E0401
+}
+
+pub fn a_signed_integer_for_the_bits() -> F32 {
+  let i: I32 = 1
+  F32.from_bits(i)                                  //~ E0401
+}
+
+pub fn a_negative_literal_for_the_bits() -> F32 {
+  F32.from_bits(-1)                                 //~ E0401
+}
+
+pub fn a_bool_for_the_bits() -> F32 {
+  F32.from_bits(true)                               //~ E0401
+}
+
+pub fn the_result_is_the_type_before_the_dot() -> F64 {
+  F32.from_bits(1)                                  //~ E0401
+}
+
+pub fn the_result_is_a_float() -> U32 {
+  F32.from_bits(1)                                  //~ E0401
+}
+
+pub fn bits_is_not_the_type_it_is_the_bits_of() -> U8 {
+  U8.BITS                                           //~ E0401
+}
+
+pub fn bits_of_a_signed_type_is_not_signed() -> I64 {
+  I64.BITS                                          //~ E0401
+}
+
+pub fn max_of_a_narrow_type_is_not_a_wide_value() -> I32 {
+  I8.MAX                                            //~ E0401
+}
+
+pub fn max_of_an_unsigned_type_is_not_a_signed_value() -> I32 {
+  U16.MAX                                           //~ E0401
+}
+
+pub fn pi_of_the_narrow_float_is_not_the_wide() -> F64 {
+  F32.PI                                            //~ E0401
+}
+
+pub fn epsilon_of_the_wide_float_is_not_the_narrow() -> F32 {
+  F64.EPSILON                                       //~ E0401
+}
+
+pub fn infinity_of_a_float_is_not_an_integer() -> U32 {
+  F32.INFINITY                                      //~ E0401
+}
+
+pub fn no_argument() -> F32 {
+  F32.from_bits()                                   //~ E0412
+}
+
+pub fn two_arguments() -> F32 {
+  F32.from_bits(1, 2)                               //~ E0412
+}
+
+pub fn three_arguments_of_the_wide_type() -> F64 {
+  F64.from_bits(1, 2, 3)                            //~ E0412
+}
+
+pub fn a_literal_above_the_narrow_bits() -> F32 {
+  F32.from_bits(4294967296)                         //~ E0408
+}
+
+pub fn a_hexadecimal_literal_above_the_narrow_bits() -> F32 {
+  F32.from_bits(0x1_0000_0000)                      //~ E0408
+}
+
+pub fn a_literal_above_the_wide_bits() -> F64 {
+  F64.from_bits(18446744073709551616)               //~ E0408
+}
+
+pub fn the_forms_that_are_right(u: U32, v: U64) -> F64 {
+  let a: U32 = U8.BITS
+  let b: I8 = I8.MAX
+  let c: F64 = F64.PI
+  let d: F32 = F32.from_bits(u)
+  let e: F64 = F64.from_bits(v)
+  let f: F32 = F32.from_bits(0xFFFF_FFFF)
+  let g: F64 = F64.from_bits(0xFFFF_FFFF_FFFF_FFFF)
+  c + e + g + (d as F64) + (f as F64) + (a as F64) + (b as F64)
+}

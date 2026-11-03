@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§11.2", "§3.4"]
+
+// W5-02 U4a: the associated constants of the scalar types in a flow (spec §6.6, §11.2, §11.7): the body of
+// a flow reads them, and a flow reads a `const` whose initializer reads them. The values of `@param` are in
+// scalar_assoc_const_param.onsa. The expected values are worked out by hand:
+//   x * PI for the input 1.0 is PI; PI / 4 for the input 2.0 is PI / 2 (an exact scaling by a power of two);
+//   the largest finite value plus itself overflows to infinity (§3.4), and the negative one to -infinity.
+
+const QUARTER: F32 = F32.PI / 4.0
+
+pub flow times_pi(x: F32 at sample) -> F32 at sample {
+  x * F32.PI
+}
+
+pub flow by_const(x: F32 at sample) -> F32 at sample {
+  x * QUARTER
+}
+
+pub flow overflow(x: F32 at sample) -> F32 at sample {
+  let y = x + F32.MAX
+  y + F32.MAX
+}
+
+pub flow floor_at_epsilon(x: F32 at sample) -> F32 at sample {
+  let y = x - x
+  y + F32.EPSILON
+}
+
+pub flow wide(x: F64 at sample) -> F64 at sample {
+  x + F64.EPSILON
+}
+
+pub flow lowest_input(x: F32 at sample) -> F32 at sample {
+  prev~(x) + -F32.MAX
+}
+
+test "a flow body multiplies by an associated constant" {
+  let xs: [F32; 3] = [1.0, 2.0, 0.0]
+  let o            = times_pi.render(times_pi.Config {}, times_pi.Params {}, xs, 8.0)
+  assert o.out[0] == F32.PI
+  assert o.out[1] == F32.PI * 2.0
+  assert o.out[2] == 0.0
+}
+
+test "a flow reads a const that reads an associated constant" {
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o            = by_const.render(by_const.Config {}, by_const.Params {}, xs, 8.0)
+  assert o.out[0] == F32.PI / 2.0
+  assert o.out[1] == F32.PI
+}
+
+test "a flow adds the largest finite value twice and overflows to infinity" {
+  let xs: [F32; 2] = [0.0, 1.0]
+  let o            = overflow.render(overflow.Config {}, overflow.Params {}, xs, 8.0)
+  assert o.out[0] == F32.INFINITY
+  assert o.out[1] == F32.INFINITY
+}
+
+test "a flow adds EPSILON to a zero it makes" {
+  let xs: [F32; 2] = [5.0, -3.5]
+  let o            = floor_at_epsilon.render(floor_at_epsilon.Config {}, floor_at_epsilon.Params {}, xs, 8.0)
+  assert o.out[0] == F32.EPSILON
+  assert o.out[1] == F32.EPSILON
+}
+
+test "a flow of F64 adds the EPSILON of F64" {
+  let xs: [F64; 2] = [1.0, 0.0]
+  let o            = wide.render(wide.Config {}, wide.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0 + F64.EPSILON
+  assert o.out[1] == F64.EPSILON
+}
+
+test "a delayed sample plus the negative largest value" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o            = lowest_input.render(lowest_input.Config {}, lowest_input.Params {}, xs, 8.0)
+  assert o.out[0] == -F32.MAX
+  assert o.out[1] == 1.0 - F32.MAX
+  assert o.out[2] == 2.0 - F32.MAX
+}
