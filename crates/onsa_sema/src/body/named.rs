@@ -57,7 +57,7 @@ impl<'a> Checker<'a> {
                     Err(self.err(Code::E0401, span, format!("`{shown}` is not a value")))
                 }
             },
-            PathRes::Namespace(_) | PathRes::BuiltinAssoc { .. } | PathRes::TypeParam(_) | PathRes::FlowBuiltin(_) => {
+            PathRes::Namespace(_) | PathRes::TypeParam(_) | PathRes::FlowBuiltin(_) => {
                 onsa_diag::internal::bug(Some(span), "a value of a name the names stage reports")
             }
         }

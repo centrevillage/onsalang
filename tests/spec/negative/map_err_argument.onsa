@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§8.1", "§18.1"]
+
+// E0401 (W5-02 U6/t): the argument of `map_err` has the type `fn(move E) -> F`, where `E` is the error type of the
+// receiver (§9.1: `f: fn(move E) -> F`). A value of any other type is a type mismatch: a value that is not a function,
+// a function that takes another type, a function with another number of parameters, and a function that takes none
+// (§8.1: the argument types of a function must be equal to those of the type that is expected). `F` is free, so the
+// result of the function is never wrong. One error per function (P-01). The function at the end is fine.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+pub fn takes_u8(move e: U8) -> U32 {
+  1
+}
+
+pub fn takes_two(move e: Low, move k: U32) -> U32 {
+  k
+}
+
+pub fn takes_none() -> U32 {
+  1
+}
+
+pub fn not_a_function() -> Result[U32, U32] {
+  read_low().map_err(3)                                          //~ E0401
+}
+
+pub fn a_result_instead() -> Result[U32, U32] {
+  read_low().map_err(read_low())                                 //~ E0401
+}
+
+pub fn a_function_of_another_type() -> Result[U32, U32] {
+  read_low().map_err(takes_u8)                                   //~ E0401
+}
+
+pub fn an_anonymous_function_of_another_type() -> Result[U32, U32] {
+  read_low().map_err(fn(move e: U8) -> U32 { 1 })                //~ E0401
+}
+
+pub fn a_function_of_two_parameters() -> Result[U32, U32] {
+  read_low().map_err(takes_two)                                  //~ E0401
+}
+
+pub fn a_function_without_parameters() -> Result[U32, U32] {
+  read_low().map_err(takes_none)                                 //~ E0401
+}
+
+pub fn a_function_that_takes_the_ok_type() -> Result[U32, U32] {
+  read_low().map_err(fn(move n: U32) -> U32 { n })               //~ E0401
+}
+
+pub fn fine() -> Result[U32, U32] {
+  read_low().map_err(code)
+}

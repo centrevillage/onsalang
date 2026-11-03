@@ -37,3 +37,8 @@ impl[T: AnyNum] Span[T] {
   /// The element of `other` at its index added to each element.
   pub target rt fn add_from(inout self, other: Span[T])
 }
+
+impl[T: Copy] Buf[T] {
+  /// A `Buf` of `n` zero elements (§5.3, §12): it allocates.
+  pub target fn zeroed(n: U32) -> Buf[T] uses {Alloc}
+}

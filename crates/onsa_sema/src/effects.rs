@@ -13,7 +13,7 @@ use crate::body::Target;
 use crate::def::DefKind;
 use crate::modes::MovedLocals;
 use crate::rt::{needs_alloc_drop, rest_drops};
-use crate::ty::{BuiltinTy, Ty};
+use crate::ty::Ty;
 use crate::{Analysis, DefId, Package, module_of_def};
 
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
@@ -65,11 +65,6 @@ fn first_use(
                     && f.effects.alloc
                 {
                     uses.push((expr.span, "calls a function value whose type has `uses {Alloc}`".into()));
-                }
-            }
-            Target::BuiltinMethod { recv, name, .. } => {
-                if name == "zeroed" && matches!(a.types.get(*recv), Ty::Builtin(BuiltinTy::Buf, _)) {
-                    uses.push((expr.span, "`Buf.zeroed` allocates".into()));
                 }
             }
             _ => {}

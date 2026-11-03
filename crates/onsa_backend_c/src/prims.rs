@@ -17,7 +17,7 @@ use crate::unsupported;
 /// is generated ([`check`]).
 pub(crate) fn supports(p: &Prim) -> bool {
     match p {
-        Prim::BufZeroed | Prim::AssertNear | Prim::Pending(_) => false,
+        Prim::BufZeroed | Prim::StrLen | Prim::AssertNear | Prim::Pending(_) => false,
         Prim::Math(..)
         | Prim::IntAbs(_)
         | Prim::IntMin(_)

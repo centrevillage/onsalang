@@ -32,28 +32,25 @@ pub(crate) struct Typed {
 pub(crate) enum PathEnd {
     Entity(Entity),
     /// An associated name of the builtin type `of` the compiler's table has
-    /// (`Buf.zeroed`, `Str.len`); std's (`F32.PI`) are its members.
+    /// (`Option.unwrap`); std's (`F32.PI`, `Buf.zeroed`) are its members.
     Builtin {
         of: Entity,
         member: BuiltinMember,
     },
 }
 
-/// What an associated name of a builtin type is in the compiler's table.
+/// What an associated name of a builtin type is in the compiler's table:
+/// a method (`Option.unwrap`), called with `!` or not (the table has no
+/// associated function; std's are members, `Buf.zeroed`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuiltinMember {
-    /// An associated function: `Buf.zeroed`.
-    Function,
-    /// A method (`Str.len`), called with `!` or not.
     Method { bang: bool },
 }
 
 impl BuiltinMember {
     /// Its kind (§15.1): a method is a function.
     pub(crate) fn kind(self) -> NameKind {
-        match self {
-            BuiltinMember::Function | BuiltinMember::Method { .. } => NameKind::Function,
-        }
+        NameKind::Function
     }
 }
 
@@ -75,7 +72,7 @@ impl PathEnd {
                 _ => None,
             },
             PathEnd::Builtin { member: BuiltinMember::Method { bang }, .. } => Some(bang),
-            PathEnd::Entity(_) | PathEnd::Builtin { .. } => None,
+            PathEnd::Entity(_) => None,
         }
     }
 }
@@ -237,17 +234,10 @@ pub(crate) fn builtin_ty(a: &Analysis, of: Entity) -> Option<TyId> {
 }
 
 /// What the associated name `name` of the builtin type `of` is in the
-/// compiler's table (§15.1): a method (`Str.len`) or an associated function
-/// (`Buf.zeroed`); none of a name it has not (std's members, `F32.PI`, are
-/// found before it is asked). The one place of this question (D-15).
+/// compiler's table (§15.1): a method (`Option.unwrap`); none of a name it
+/// has not (std's members, `F32.PI`, `Str.len`, are found before it is
+/// asked). The one place of this question (D-15).
 pub(crate) fn builtin_member(a: &Analysis, of: Entity, name: &str) -> Option<BuiltinMember> {
-    let ty = builtin_ty(a, of)?;
-    if let Some(bang) = builtin::method_bang(&a.types, ty, name) {
-        return Some(BuiltinMember::Method { bang });
-    }
-    let generic = match of {
-        Entity::Builtin(Builtin::Generic(g)) => Some(g),
-        _ => None,
-    };
-    builtin::has_assoc_fn(generic, name).then_some(BuiltinMember::Function)
+    let bang = builtin::method_bang(&a.types, builtin_ty(a, of)?, name)?;
+    Some(BuiltinMember::Method { bang })
 }

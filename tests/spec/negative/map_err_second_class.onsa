@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2", "§5.3"]
+
+// E0710 (W5-02 U6/t, S-809): a function value received by a function in the default mode is second-class: it can be
+// called and passed on to a function-typed argument of the default mode (types/map_err_pass_on.onsa), and "返す、保存する、
+// `match` の見出しに置く、無名関数で捕捉する、`move` の引数へ渡す、宣言の型が関数型でない引数（総称の `x: T`、組込みの
+// メソッドの引数）へ渡すと E0710" (§5.2). So the conversion given to `map_err` cannot be an anonymous function that
+// captures the received value `f` (the capture is E0710 at the value captured), even though the anonymous function
+// is given to a function-typed argument; and `f` cannot go to an argument whose declared type is not a function type
+// (a generic `x: T`). One error per function (P-01). The function at the end calls `f` inside the argument, which is what
+// is allowed: it passes `f` itself.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn keep[T](x: T) -> T {
+  x
+}
+
+pub fn capture_in_the_conversion(f: fn(U32) -> U32) -> Result[U32, U32] {
+  read_low().map_err(fn(move e: Low) -> U32 { f.(1) })           //~ E0710
+}
+
+pub fn capture_in_a_block(f: fn(U32) -> U32) -> Result[U32, U32] {
+  read_low().map_err(fn(move e: Low) -> U32 {
+    let k = 2
+    f.(k)                                                        //~ E0710
+  })
+}
+
+pub fn capture_in_the_conversion_before_the_question_mark(f: fn(U32) -> U32) -> Result[U32, U32] {
+  let n = read_low().map_err(fn(move e: Low) -> U32 { f.(2) })?  //~ E0710
+  Ok(n)
+}
+
+pub fn pass_to_a_generic_argument(f: fn(U32) -> U32) -> U32 {
+  let g = keep(f)                                                //~ E0710
+  g.(1)
+}
+
+pub fn fine_the_value_is_passed_on(f: fn(move Low) -> U32) -> Result[U32, U32] {
+  read_low().map_err(f)
+}

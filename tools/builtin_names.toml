@@ -29,7 +29,6 @@
 "is_some" = 2
 "unwrap" = 1
 "unwrap_or" = 1
-"zeroed" = 1
 
 [allow."crates/onsa_core/src/lower/body/expr.rs"]
 "None" = 1
@@ -84,19 +83,13 @@
 "Alloc" = 1
 
 [allow."crates/onsa_sema/src/builtin.rs"]
-"find" = 1
-"get_substr" = 1
-"is_char_boundary" = 1
-"is_empty" = 1
 "is_err" = 1
 "is_none" = 1
 "is_ok" = 1
 "is_some" = 1
-"len" = 2
-"substr" = 1
+"len" = 1
 "unwrap" = 1
 "unwrap_or" = 1
-"zeroed" = 1
 
 [allow."crates/onsa_sema/src/def.rs"]
 "Add" = 1
@@ -133,9 +126,6 @@
 "WrappingAdd" = 1
 "WrappingMul" = 1
 "WrappingSub" = 1
-
-[allow."crates/onsa_sema/src/effects.rs"]
-"zeroed" = 1
 
 [allow."crates/onsa_sema/src/exhaust.rs"]
 "Err" = 1
@@ -176,9 +166,6 @@
 "U8" = 1
 "core" = 1
 "panic" = 1
-
-[allow."crates/onsa_sema/src/rt.rs"]
-"zeroed" = 1
 
 [allow."crates/onsa_sema/src/sig/derives.rs"]
 "Default" = 1
@@ -318,6 +305,7 @@
 
 [same_spelling."crates/onsa_syntax/src/foreign/paths.rs"]
 "f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
+"str" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表。std のモジュール std.core.str と同じ綴り）" }
 "u32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 
 [same_spelling."crates/onsa_syntax/src/literal.rs"]

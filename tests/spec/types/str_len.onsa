@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2"]
+
+// W5-02 U6/t: `s.len()` is the one member of `Str` that the spec lists besides `as_bytes` and `Str.from_utf8`
+// (§4.2: "`s.len() -> U32`  バイト数"; "空かどうかは `s.len() == 0` で書く"). It is read in every place a value
+// of `Str` is: a parameter, a literal, a field, an element, the payload of a pattern, the initializer of a `const`,
+// and the body of a `test`. This version runs no `Str` in `onsa test` (the lowering gives E0200), so the case is
+// checked and not run: the `test` block below is checked as the other functions are.
+
+pub struct Holder {
+  name: Str,
+}
+
+pub const NAME_LEN: U32 = "gain".len()
+
+pub const EMPTY_LEN: U32 = "".len()
+
+pub fn bytes_of(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn is_blank(s: Str) -> Bool {
+  s.len() == 0
+}
+
+pub fn of_a_literal() -> U32 {
+  "abc".len()
+}
+
+pub fn of_a_field(h: Holder) -> U32 {
+  h.name.len() + 1
+}
+
+pub fn of_an_element(xs: [Str; 2]) -> U32 {
+  xs[0].len() + xs[1].len()
+}
+
+pub fn of_a_payload(o: Option[Str]) -> U32 {
+  match o {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub fn of_a_branch(c: Bool, a: Str, b: Str) -> U32 {
+  if c { a.len() } else { b.len() }
+}
+
+pub fn of_a_result(r: Result[Str, U32]) -> U32 {
+  match r {
+    Ok(s) => s.len(),
+    Err(n) => n,
+  }
+}
+
+pub fn in_a_loop(xs: [Str; 3]) -> U32 {
+  var total = 0
+  for s in xs {
+    total = total + s.len()
+  }
+  total
+}
+
+pub fn in_an_anonymous_function(s: Str) -> U32 {
+  let f = fn(t: Str) -> U32 { t.len() }
+  f.(s)
+}
+
+test "the length of a string in a test" {
+  let s = "gain"
+  assert s.len() == 4
+  assert NAME_LEN == 4
+  assert EMPTY_LEN == 0
+  assert is_blank("")
+}

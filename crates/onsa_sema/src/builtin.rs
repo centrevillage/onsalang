@@ -1,19 +1,18 @@
-//! Builtin methods, associated items and conversions of the builtin types
-//! (spec §3.3, §4.1, §4.2, §5.3, S-09, S-12). Signatures only; the
-//! interpreter and backends implement them (`onsa_core::prim`). The members
-//! of the scalars are std's declarations (`std/core/num.onsa`).
+//! The builtin methods std does not declare yet (spec §4.1, §5.3, S-09):
+//! of `Option` and `Result` (W5-03 makes them std's enums) and `len` of an
+//! array (W5-17). Signatures only; lowering implements them. The other
+//! members of the builtin types are std's declarations (`std/core/`), and
+//! `as` is `crate::cast`.
 //!
-//! Every builtin method and associated function is one row of a table here
-//! ([`methods`], [`ZEROED`]); the lookups read the rows, so the names are
-//! written once, and [`names`] lists them for the gate's check of
-//! hard-coded builtin names (Q-14, W1-02).
-//! W5-02 moves these rows into std declarations (R-79).
+//! Every method is one row of the table here ([`methods`]); the lookups
+//! read the rows, so the names are written once, and [`names`] lists them
+//! for the gate's check of hard-coded builtin names (Q-14, W1-02).
 
 use std::sync::OnceLock;
 
 use onsa_syntax::ast::Mode;
 
-use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
+use crate::ty::{BuiltinTy, IntKind, Ty, TyId, Types};
 
 /// A builtin method: parameter types (receiver excluded) and result.
 #[derive(Debug, Clone)]
@@ -37,7 +36,6 @@ enum Recv {
     /// of the sequences are std's (`std/core/seq.onsa`); `Array[T]` has
     /// none in this version (D5).
     Array,
-    Str,
     Option,
     Result,
 }
@@ -49,9 +47,6 @@ enum T {
     Inner,
     U32,
     Bool,
-    Str,
-    OptStr,
-    OptU32,
 }
 
 /// One builtin method.
@@ -76,13 +71,6 @@ fn methods() -> &'static [Method] {
         };
         // The arrays (§5.3); no `is_empty` (§4.2).
         add(Recv::Array, "len", &[], T::U32);
-        // Strings (§4.2).
-        add(Recv::Str, "len", &[], T::U32);
-        add(Recv::Str, "is_empty", &[], T::Bool);
-        add(Recv::Str, "substr", &[T::U32, T::U32], T::Str);
-        add(Recv::Str, "get_substr", &[T::U32, T::U32], T::OptStr);
-        add(Recv::Str, "find", &[T::Str], T::OptU32);
-        add(Recv::Str, "is_char_boundary", &[T::U32], T::Bool);
         // Option and Result (§4.1).
         add(Recv::Option, "is_some", &[], T::Bool);
         add(Recv::Option, "is_none", &[], T::Bool);
@@ -112,7 +100,6 @@ fn methods() -> &'static [Method] {
 fn method_row(recv_ty: &Ty, name: &str) -> Option<(&'static Method, Option<TyId>)> {
     let (families, inner): (&[Recv], Option<TyId>) = match recv_ty {
         Ty::Array(elem, _) => (&[Recv::Array], Some(*elem)),
-        Ty::Builtin(BuiltinTy::Str, _) => (&[Recv::Str], None),
         Ty::Builtin(BuiltinTy::Option, args) => (&[Recv::Option], args.first().copied()),
         Ty::Builtin(BuiltinTy::Result, args) => (&[Recv::Result], args.first().copied()),
         _ => return None,
@@ -128,7 +115,7 @@ pub(crate) fn method_bang(types: &Types, recv: TyId, name: &str) -> Option<bool>
 }
 
 /// The mode of `self` of the method `name` of a receiver of the type
-/// `recv` (§5.2, §9.1); none of an associated function (`Buf.zeroed`).
+/// `recv` (§5.2, §9.1); none of a name the table has not.
 pub(crate) fn method_self(types: &Types, recv: TyId, name: &str) -> Option<Mode> {
     method_row(types.get(recv), name).map(|(m, _)| m.self_mode)
 }
@@ -156,91 +143,16 @@ fn sig_ty(types: &mut Types, t: T, inner: Option<TyId>) -> Option<TyId> {
         T::Inner => inner?,
         T::U32 => types.int(IntKind::U32),
         T::Bool => types.bool(),
-        T::Str => types.builtin(BuiltinTy::Str, vec![]),
-        T::OptStr => {
-            let s = types.builtin(BuiltinTy::Str, vec![]);
-            types.builtin(BuiltinTy::Option, vec![s])
-        }
-        T::OptU32 => {
-            let u = types.int(IntKind::U32);
-            types.builtin(BuiltinTy::Option, vec![u])
-        }
     })
 }
 
-/// The associated function of the builtin types the table has (the
-/// associated constants and `from_bits` of the scalars are std's
-/// declarations, §6.6): `Buf.zeroed(n)`, a `Buf[T]` of `n` zero elements,
-/// until std declares it too (W5-02 U6).
-const ZEROED: &str = "zeroed";
-
-/// Associated function `Type.name(...)` of a builtin type: `(params, ret)`.
-/// `generic_arg` is the fresh type argument for `Buf.zeroed` (`T` from the
-/// expected type).
-pub fn assoc_fn(
-    types: &mut Types,
-    builtin: Option<BuiltinTy>,
-    name: &str,
-    generic_arg: TyId,
-) -> Option<(Vec<TyId>, TyId)> {
-    if !has_assoc_fn(builtin, name) {
-        return None;
-    }
-    let u32 = types.int(IntKind::U32);
-    let buf = types.builtin(BuiltinTy::Buf, vec![generic_arg]);
-    Some((vec![u32], buf))
-}
-
-/// Whether a builtin type (a generic `builtin`; a scalar has none in the
-/// table) has the associated function `name`: the question of the names
-/// stage, which makes no type (R-249).
-pub(crate) fn has_assoc_fn(builtin: Option<BuiltinTy>, name: &str) -> bool {
-    builtin == Some(BuiltinTy::Buf) && name == ZEROED
-}
-
-/// The names of every builtin method and associated function, sorted and
-/// without duplicates (for the gate, Q-14).
+/// The names of every builtin method, sorted and without duplicates (for
+/// the gate, Q-14).
 pub fn names() -> Vec<String> {
     let mut v: Vec<String> = methods().iter().map(|m| m.name.clone()).collect();
-    v.push(ZEROED.to_string());
     v.sort();
     v.dedup();
     v
-}
-
-/// Whether `from as to` is a lossless widening (§3.3). Both resolved scalars.
-pub fn cast_allowed(types: &Types, from: TyId, to: TyId) -> bool {
-    match (types.get(from), types.get(to)) {
-        (Ty::Int(a), Ty::Int(b)) => {
-            if a == b {
-                return true;
-            }
-            match (a.signed(), b.signed()) {
-                (true, true) | (false, false) => b.bits() > a.bits(),
-                // unsigned -> wider signed is exact; signed -> unsigned never.
-                (false, true) => b.bits() > a.bits(),
-                (true, false) => false,
-            }
-        }
-        (Ty::Float(a), Ty::Float(b)) => a == b || *b == FloatKind::F64,
-        // Integers that fit the mantissa: F32 holds 24 bits, F64 holds 53.
-        (Ty::Int(a), Ty::Float(FloatKind::F32)) => a.bits() <= 16,
-        (Ty::Int(a), Ty::Float(FloatKind::F64)) => a.bits() <= 32,
-        _ => false,
-    }
-}
-
-/// The method to suggest instead of a rejected `as` (§3.3).
-pub fn cast_suggestion(types: &Types, from: TyId, to: TyId) -> Option<String> {
-    match (types.get(from), types.get(to)) {
-        (Ty::Int(_), Ty::Int(b)) => Some(format!(".narrow_{}()", b.name().to_lowercase())),
-        (Ty::Int(_), Ty::Float(FloatKind::F32)) | (Ty::Float(_), Ty::Float(FloatKind::F32)) => {
-            Some(".round_f32()".into())
-        }
-        (Ty::Int(_), Ty::Float(FloatKind::F64)) => Some(".round_f64()".into()),
-        (Ty::Float(_), Ty::Int(b)) => Some(format!(".trunc_{}()", b.name().to_lowercase())),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
@@ -257,7 +169,11 @@ mod tests {
         for x in ["get", "fill", "slice", "copy_from", "add_from"] {
             assert!(!n.iter().any(|y| y == x), "{x} is std's (§5.3), in {n:?}");
         }
-        for x in ["len", "unwrap", "is_err", "zeroed"] {
+        // `Str`'s and `Buf.zeroed` are std's (`std/core/`, D1, R-96, R-104).
+        for x in ["substr", "find", "get_substr", "is_char_boundary", "is_empty", "zeroed"] {
+            assert!(!n.iter().any(|y| y == x), "{x} is std's or none, in {n:?}");
+        }
+        for x in ["len", "unwrap", "is_err", "unwrap_or"] {
             assert!(n.iter().any(|y| y == x), "{x} not in {n:?}");
         }
         let mut sorted = n.clone();
@@ -270,7 +186,7 @@ mod tests {
     fn every_row_resolves_on_its_receiver() {
         let mut types = Types::default();
         let i32 = types.int(IntKind::I32);
-        let f32 = types.float(FloatKind::F32);
+        let f32 = types.float(crate::ty::FloatKind::F32);
         let buf = types.builtin(BuiltinTy::Buf, vec![f32]);
         let arr = types.intern(Ty::Array(f32, crate::ty::Len::Const(2)));
         let s = types.builtin(BuiltinTy::Str, vec![]);
@@ -279,7 +195,6 @@ mod tests {
         for m in methods() {
             let recv = match m.recv {
                 Recv::Array => arr,
-                Recv::Str => s,
                 Recv::Option => opt,
                 Recv::Result => res,
             };
@@ -289,12 +204,10 @@ mod tests {
         assert!(method(&mut types, i32, "checked_add").is_none());
         assert!(method(&mut types, f32, "to_bits").is_none());
         assert!(method(&mut types, s, "fill").is_none());
+        assert!(method(&mut types, s, "len").is_none(), "std's (`std/core/str.onsa`)");
         // `Buf[T]` and `Span[T]` take std's members (§5.3), and an array its
         // `len` only, with no `is_empty` (§4.2).
         assert!(method(&mut types, buf, "len").is_none());
         assert!(method(&mut types, arr, "is_empty").is_none());
-        assert!(assoc_fn(&mut types, Some(BuiltinTy::Buf), "zeroed", f32).is_some());
-        assert!(assoc_fn(&mut types, Some(BuiltinTy::Span), "zeroed", f32).is_none());
-        assert!(assoc_fn(&mut types, None, "from_bits", f32).is_none());
     }
 }

@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§4.5", "§18.1"]
+
+// E0412 (W5-02 U6/t): `map_err` takes one argument, the conversion (§9.1: `map_err[F](move self, f: fn(move E) -> F)`).
+// A wrong number of arguments is E0412, the same code as for a function (§4.5: "関数の引数の数と同じコード"). One error
+// per function (P-01). The last function is fine.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+pub fn no_argument() -> Result[U32, U32] {
+  read_low().map_err()                                           //~ E0412
+}
+
+pub fn two_arguments() -> Result[U32, U32] {
+  read_low().map_err(code, code)                                 //~ E0412
+}
+
+pub fn the_conversion_and_a_value() -> Result[U32, U32] {
+  read_low().map_err(code, 1)                                    //~ E0412
+}
+
+pub fn fine() -> Result[U32, U32] {
+  read_low().map_err(code)
+}

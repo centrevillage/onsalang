@@ -1058,7 +1058,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 Ok("((onsa_unit){0})".into())
             }
             // `crate::prims::check` stops the unit before it is generated.
-            Prim::BufZeroed | Prim::AssertNear | Prim::Pending(_) => {
+            Prim::BufZeroed | Prim::StrLen | Prim::AssertNear | Prim::Pending(_) => {
                 Err(internal(&format!("the primitive `{}` C does not provide", prim.name())))
             }
         }

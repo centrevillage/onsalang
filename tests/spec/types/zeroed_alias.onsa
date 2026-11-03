@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.7", "§8.1", "§12.2"]
+
+// W5-02 U6/t: `Buf.zeroed(n)` reached through a type alias (§4.4: "型引数を決めた別名は、その型引数を決める
+// （`type Samples = Buf[F32]` の `Samples.zeroed(n)` は `T = F32` の `Buf.zeroed`）"). The alias fixes the element
+// type, so the call needs no annotation (an unannotated `Buf.zeroed(4)` whose element is never decided is E0406,
+// §4.7) and every element is the zero of that type: `0.0` of `F32`, `0` of `U32`. The length is the argument, a
+// value of run time (§4.1: "長さは生成時に固定"). The function that makes a buffer has `Alloc` in its row
+// (§8.1, §12.2); the `test` bodies run with the effect given.
+
+type Samples = Buf[F32]
+
+type Counts = Buf[U32]
+
+type Wave = Samples
+
+pub struct Voice {
+  priv taps: Samples,
+}
+
+impl Voice {
+  pub fn new(n: U32) -> Voice uses {Alloc} {
+    Voice { taps: Samples.zeroed(n) }
+  }
+
+  pub fn size(self) -> U32 {
+    self.taps.len()
+  }
+
+  pub fn first(self) -> F32 {
+    self.taps[0]
+  }
+}
+
+fn make(n: U32) -> Samples uses {Alloc} {
+  Samples.zeroed(n)
+}
+
+fn make_wave(n: U32) -> Wave uses {Alloc} {
+  Wave.zeroed(n)
+}
+
+fn sum(b: Samples) -> F32 {
+  var total = 0.0
+  for i in 0 ..< b.len() {
+    total = total + b[i]
+  }
+  total
+}
+
+test "the length is the argument and the elements are the zero of F32" {
+  let b = Samples.zeroed(4)
+  assert b.len() == 4
+  assert b[0] == 0.0
+  assert b[3] == 0.0
+  assert (b[1] + 0.5) == 0.5
+}
+
+test "the element type is the one of the alias: U32 gives an integer zero" {
+  let c = Counts.zeroed(3)
+  assert c.len() == 3
+  assert c[2] == 0
+  assert (c[1] + 5) == 5
+}
+
+test "a length that is a value of run time" {
+  assert make(0).len() == 0
+  assert make(7).len() == 7
+  assert make_wave(5).len() == 5
+}
+
+test "an alias of an alias fixes the same element type" {
+  let w = Wave.zeroed(2)
+  assert w.len() == 2
+  assert (w[0] + 1.5) == 1.5
+}
+
+test "the buffer is written and read like any other" {
+  var b = Samples.zeroed(3)
+  b[1] = 2.0
+  assert b[0] == 0.0
+  assert b[1] == 2.0
+  assert sum(b) == 2.0
+}
+
+test "an alias in the field of a struct" {
+  let v = Voice.new(6)
+  assert v.size() == 6
+  assert v.first() == 0.0
+}
+
+test "the alias in a branch" {
+  let n = if make(2).len() == 2 { Samples.zeroed(3).len() } else { Counts.zeroed(9).len() }
+  assert n == 3
+}

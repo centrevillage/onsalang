@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2", "§5.3", "§4.5"]
+
+// W5-02 U6/t, S-809: a function that receives a function value of the default mode (a function type, so the value may
+// capture, §5.2) can pass it on to another function-typed argument of the default mode: "呼ぶことと、別の関数の既定のモードの
+// 関数型の引数へ渡すことはでき" (§5.2). The `f` of `map_err` is such an argument (its declared type is a function type,
+// §9.1), so the conversion a function received goes to `map_err` as it is, in a function that is generic in the error types
+// (§4.5), in a branch, and in a chain where the same value is given twice (the value is passed, not stored: it is not
+// kept, returned or captured, which are the E0710 of negative/map_err_second_class.onsa). Checked, not run (the lowering of
+// a call through a function value is the work W8-09).
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn lift[E, F](r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
+  r.map_err(f)
+}
+
+pub fn lift_low[F](f: fn(move Low) -> F) -> Result[U32, F] {
+  read_low().map_err(f)
+}
+
+pub fn lift_in_a_branch[E, F](c: Bool, r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
+  if c {
+    r.map_err(f)
+  } else {
+    Ok(0)
+  }
+}
+
+pub fn lift_before_the_question_mark[F](f: fn(move Low) -> F) -> Result[U32, F] {
+  let n = read_low().map_err(f)?
+  Ok(n + 1)
+}
+
+pub fn lift_twice[E, F](r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
+  let a = r.map_err(f)
+  let _ = a
+  r.map_err(f)
+}
+
+pub fn passed_to_a_function_that_passes_it_on[E, F](r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
+  lift(r, f)
+}
+
+pub fn used_by_the_caller(base: U32) -> Result[U32, U32] {
+  lift_low(fn(move e: Low) -> U32 { base })
+}

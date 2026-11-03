@@ -12,7 +12,7 @@ use onsa_diag::{Code, FileId};
 use crate::body::bounds::Bounds;
 use crate::def::{DefId, DefKind, FnDef, GenericKind};
 use crate::flow_tests::std_package;
-use crate::prim::{MathFn, PrimRow, Scalar, key_of, row, rows};
+use crate::prim::{INTS, MathFn, Prim, PrimRow, Scalar, key_of, row, rows};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, Module, Package, analyze};
 
@@ -74,6 +74,9 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
         "Span.fill",
         "Span.copy_from",
         "Span.add_from",
+        // `Buf.zeroed` and `Str.len` (§5.3, §4.2, R-104, R-96).
+        "Buf.zeroed",
+        "Str.len",
     ] {
         assert!(decls.contains_key(member), "no declaration `{member}` in {keys:?}");
     }
@@ -84,9 +87,6 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
         assert_eq!(a.prims.get(def), Some(&r.prim), "the row recorded for `{key}`");
     }
 }
-
-const INTS: [IntKind; 8] =
-    [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
 
 /// The builtin types a type argument is tried at: a Shared and an Affine one
 /// too, which `Copy` keeps out (`Span[T]`, S-853).
@@ -158,6 +158,21 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
     assert!(members > 0, "no member of an `impl` tried");
 }
 
+/// The declarations of `Buf.zeroed` and `Str.len` give their primitives at
+/// the types of their declarations (`Buf[F32]`, `Str`): what lowering reads.
+#[test]
+fn zeroed_and_the_len_of_a_str_instantiate_at_their_declarations() {
+    let mut a = analyzed_std();
+    let decls = std_targets(&a);
+    let f32 = a.types.float(FloatKind::F32);
+    for (key, args, prim) in [("Buf.zeroed", vec![f32], Prim::BufZeroed), ("Str.len", vec![], Prim::StrLen)] {
+        let (def, f) = &decls[key];
+        assert_eq!(a.prims[def].instantiate(&Scalar::of_use(&a, *def, &args).expect("closed")), Some(prim));
+        // `zeroed` allocates (§12), `len` reads (§10).
+        assert_eq!((f.effects.alloc, f.rt), (key == "Buf.zeroed", key == "Str.len"), "`{key}`");
+    }
+}
+
 #[test]
 fn a_row_has_no_primitive_for_what_its_family_lacks() {
     let sqrt = PrimRow::Math(MathFn::Sqrt);
@@ -206,7 +221,7 @@ fn the_conversion_methods_are_where_as_does_not_convert() {
         let mut want: BTreeMap<String, TyId> = BTreeMap::new();
         for &to in &numbers {
             let lower = scalar_name(&a, to).to_lowercase();
-            if crate::builtin::cast_allowed(&a.types, from, to) {
+            if crate::cast::cast_allowed(&a.types, from, to) {
                 casts += 1;
                 continue;
             }
@@ -226,6 +241,15 @@ fn the_conversion_methods_are_where_as_does_not_convert() {
             }
         }
         let table = a.modules.assoc_builtin.get(&from).expect("the members of a scalar");
+        // The method the E0411 of a rejected `as` suggests is one of them
+        // (`crate::cast`, W5-14 decides the suggestions).
+        for &to in &numbers {
+            if !crate::cast::cast_allowed(&a.types, from, to) {
+                let m = crate::cast::cast_suggestion(&a.types, from, to).expect("a suggestion");
+                let name = m.strip_prefix('.').and_then(|m| m.strip_suffix("()")).expect("`.name()`");
+                assert!(table.contains_key(name), "`{m}` of `{}`", scalar_name(&a, from));
+            }
+        }
         let conversion = |n: &str| ["narrow_", "round_", "trunc_"].iter().any(|p| n.starts_with(p));
         let found: BTreeMap<String, TyId> = table
             .iter()

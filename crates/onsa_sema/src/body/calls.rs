@@ -1,5 +1,4 @@
-//! The calls of functions, methods and builtin associated functions, and
-//! their arguments.
+//! The calls of functions and methods, and their arguments.
 
 use super::*;
 use crate::names::body::PathRes;
@@ -28,35 +27,27 @@ impl<'a> Checker<'a> {
         // `v.(x)` (§6.1, S-191): the callee is a value, whatever its form;
         // the names stage tells `inc.(1)` of an item from it (E0020).
         if !matches!(kind, CallKind::Value { .. }) {
-            // 1. A function, a variant or a constructor of the prelude, or
-            // an associated function of a builtin type, as the names stage
-            // resolved the callee.
+            // 1. A function (an associated one of a builtin type is std's,
+            // `Buf.zeroed`), a variant or a constructor of the prelude, as
+            // the names stage resolved the callee.
             let cspan = self.expr(callee).span;
-            let record = self.names.paths.get(&callee).cloned();
-            match record {
-                Some(PathRes::Item { entity, owner }) => {
-                    let name = self.last_name(callee);
-                    return match entity {
-                        Entity::Builtin(Builtin::Panic) => Err(self.unsupported(name.span, Feature::Panic, &[])),
-                        // `None`, which takes no value (what is neither a value
-                        // nor a flow is the names stage's E0308): the branch
-                        // of the builtin `None` until W5-03 makes it a variant.
-                        Entity::Builtin(Builtin::None) => Err(self.unit_variant_called(e, callee, kind, args)),
-                        _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
-                    };
-                }
-                Some(PathRes::BuiltinAssoc { ty, owner, .. }) => {
-                    let name = self.last_name(callee);
-                    return self.check_builtin_assoc_call(e, callee, (ty, owner), &name, args, expected);
-                }
-                _ => {}
+            if let Some(PathRes::Item { entity, owner }) = self.names.paths.get(&callee).cloned() {
+                let name = self.last_name(callee);
+                return match entity {
+                    Entity::Builtin(Builtin::Panic) => Err(self.unsupported(name.span, Feature::Panic, &[])),
+                    // `None`, which takes no value (what is neither a value
+                    // nor a flow is the names stage's E0308): the branch
+                    // of the builtin `None` until W5-03 makes it a variant.
+                    Entity::Builtin(Builtin::None) => Err(self.unit_variant_called(e, callee, kind, args)),
+                    _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
+                };
             }
             // 2. A method `recv.name(...)` of the value before it.
             if let ExprKind::Field { base, name } = &self.expr(callee).kind {
                 let (base, name) = (*base, name.clone());
                 // After a constructor of the prelude (`Some.x()`): an
-                // associated function that is none, in the words of
-                // `check_builtin_assoc_call` (`panic.x()` is E0200, S-713).
+                // associated function that is none (`panic.x()` is E0200,
+                // S-713).
                 if let Some(PathRes::Item { entity: Entity::Builtin(b), .. }) = self.names.paths.get(&base)
                     && *b != Builtin::Panic
                 {
@@ -142,7 +133,11 @@ impl<'a> Checker<'a> {
                     self.unify_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, span)?;
-                let inst = self.finish_instance(d, targs, span)?;
+                // Of std's `impl` of `Buf` (`Buf.zeroed`), the requirements
+                // are its element's (§4.5), as of a `Buf` written (R-351).
+                let element = self.a.self_ty_of(d).filter(|&t| matches!(self.ty(t), Ty::Builtin(BuiltinTy::Buf, _)));
+                let element = element.map(|_| Required::BufElement(BuiltinTy::Buf));
+                let inst = self.instance(d, targs, span, element)?;
                 self.info.targets.insert(e, Target::Fn { def: d, inst });
                 let fty = self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }));
                 self.record(callee, fty);
@@ -198,14 +193,14 @@ impl<'a> Checker<'a> {
         let span = self.expr(e).span;
         // The members of the `impl`s of the head of the receiver's type: of a
         // user type, of a scalar (std's, §3.3, §3.4) the same way (§6.2), of
-        // an array and of `Span` (std's, §5.3).
+        // an array and of a generic builtin type (std's, §4.2, §5.3, §9.1).
         let span_key = self.a.builtin_key.get(&BuiltinTy::Span).copied();
         let (mut key, owner) = match self.ty(recv) {
             Ty::Named(d, _) => (None, Some(d)),
             Ty::Int(k) => (Some(self.a.types.int(k)), None),
             Ty::Float(k) => (Some(self.a.types.float(k)), None),
             Ty::Array(..) => (self.a.array_key, None),
-            Ty::Builtin(BuiltinTy::Span, _) => (span_key, None),
+            Ty::Builtin(b, _) => (self.a.builtin_key.get(&b).copied(), None),
             _ => (None, None),
         };
         // §5.3: an array and a `Buf` take from `Span[T]` the methods their
@@ -244,10 +239,7 @@ impl<'a> Checker<'a> {
                     return Err(self.err(Code::E0413, name.span, format!("`{}` is not a method", name.name)));
                 };
                 if f.self_mode.is_none() {
-                    let tname = match owner {
-                        Some(d) => self.a.def(d).name.clone(),
-                        None => self.display(recv),
-                    };
+                    let tname = self.type_head(recv);
                     return Err(self.err(
                         Code::E0413,
                         name.span,
@@ -302,8 +294,8 @@ impl<'a> Checker<'a> {
             self.unify_at(span, sig.ret, exp)?;
         }
         self.check_args(args, &params, span)?;
-        let (self_mode, lazy_args) = (Some(sig.self_mode), sig.lazy_args);
-        self.info.targets.insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), self_mode, lazy_args });
+        let (self_mode, lazy_args) = (sig.self_mode, sig.lazy_args);
+        self.info.targets.insert(e, Target::BuiltinMethod { name: name.name.clone(), self_mode, lazy_args });
         Ok(sig.ret)
     }
 
@@ -315,54 +307,6 @@ impl<'a> Checker<'a> {
             Ty::Builtin(b, args) if builtin::takes_span_members(b) => args.first().copied(),
             _ => None,
         }
-    }
-
-    /// `Buf.zeroed(4)`: an associated function of the builtin type `ty` (a
-    /// generic one by its key, `Analysis::builtin_key`), whose type argument
-    /// the type an alias names it by decides (`owner`, `Samples.zeroed(n)` of
-    /// `type Samples = Buf[F32]`, §4.4). std's (`F32.from_bits`) are members.
-    fn check_builtin_assoc_call(
-        &mut self,
-        e: ExprId,
-        callee: ExprId,
-        (ty, owner): (TyId, Option<TyId>),
-        name: &Ident,
-        args: &[Arg],
-        expected: Option<TyId>,
-    ) -> R<TyId> {
-        let span = self.expr(e).span;
-        let generic = match self.ty(ty) {
-            Ty::Builtin(g, _) => Some(g),
-            _ => None,
-        };
-        let targ = self.fresh();
-        let Some((params, ret)) = builtin::assoc_fn(&mut self.a.types, generic, &name.name, targ) else {
-            let shown = self.src(self.expr(callee).span);
-            return Err(self.err(Code::E0413, name.span, format!("`{shown}` does not exist")));
-        };
-        if let Some(o) = owner
-            && let Ty::Builtin(_, of) = self.ty(o)
-            && let Some(&arg) = of.first()
-        {
-            self.unify_at(span, targ, arg)?;
-        }
-        if let Some(g) = generic {
-            // `Buf.zeroed(4)`: the element type may be decided later (§4.7, S-226), and
-            // it must be Copy (§4.5), a kind constraint checked when it is (S-235).
-            let what = format!("the element type of `{}`", self.src(self.expr(callee).span));
-            self.type_argument(span, targ, what);
-            if matches!(g, BuiltinTy::Buf | BuiltinTy::Span) {
-                self.defer(span, targ, DeferredKind::Require { bound: Bound::Copy, what: Required::BufElement(g) });
-            }
-        }
-        if let Some(exp) = expected {
-            self.unify_at(span, ret, exp)?;
-        }
-        let params: Vec<(Mode, TyId)> = params.into_iter().map(|t| (Mode::Borrow, t)).collect();
-        self.check_args(args, &params, span)?;
-        let name = name.name.clone();
-        self.info.targets.insert(e, Target::BuiltinMethod { recv: ty, name, self_mode: None, lazy_args: false });
-        Ok(ret)
     }
 
     /// E0412 for the unit variant called by `e` (§4.4, S-514). With no

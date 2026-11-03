@@ -21,7 +21,6 @@ use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
 use crate::Analysis;
 use crate::def::GenericKind;
 use crate::flow_names::FlowBuiltin;
-use crate::names::BuiltinMember;
 use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::ty::TyId;
@@ -31,9 +30,7 @@ use crate::ty::TyId;
 pub(super) enum Place {
     /// A value, whose fields may follow.
     Value,
-    /// The callee of `v.(x)`: as a value, and an associated function of a
-    /// builtin type as at [`Place::Callee`] (`Buf.zeroed.(1)`, the E0020 of
-    /// `calls.rs`; as a value, `let f = Buf.zeroed`, it is W5-02's).
+    /// The callee of `v.(x)`: as a value.
     DotCallee,
     /// The callee of the call `.0` (`f(x)`, `a.m(x)`, `x.m!(y)`): its last
     /// name may be a method of the value before it, or an associated function.
@@ -133,7 +130,6 @@ impl<'a> Walker<'a> {
         // method of a call.
         let at = out.len() + 1;
         let method = matches!(place, Place::Callee(_) | Place::Instance(_)) && at + 1 == segs.len();
-        let assoc_fn = method || (place == Place::DotCallee && at + 1 == segs.len());
         // `Option.None`, `Result.Ok(1)`, `O.None` (S-607).
         let (variant, called) = match &err {
             Some(ResolveError::NotFound { .. }) => {
@@ -144,10 +140,6 @@ impl<'a> Walker<'a> {
                 (self.qualified_variant(&path_of(segs), at, of), called)
             }
             _ => (None, None),
-        };
-        let assoc = match &err {
-            Some(ResolveError::NotFound { .. }) => self.builtin_assoc(of, segs[at], assoc_fn, owner),
-            _ => None,
         };
         let fail = match err {
             // An alias of the error type stands for a failed name (§18.1, S-728).
@@ -182,22 +174,6 @@ impl<'a> Walker<'a> {
             }
             Some(ResolveError::NotFound { .. }) if variant.is_some() => variant.map(Fail::Report),
             Some(ResolveError::NotFound { .. }) if called.is_some() => called,
-            Some(ResolveError::NotFound { .. }) if assoc.is_some() => {
-                out.extend([PathRes::Namespace(cur)].into_iter().chain(assoc));
-                None
-            }
-            // An associated function of a builtin type in a constant
-            // expression (`[0.0; Buf.zeroed]`): a value that is no
-            // constant, the E0417 of the types stage, which reads the name
-            // again (§4.5, W5-08).
-            Some(ResolveError::NotFound { .. })
-                if self.in_const
-                    && at + 1 == segs.len()
-                    && crate::names::builtin_member(a, of, &segs[at].name) == Some(BuiltinMember::Function) =>
-            {
-                out.push(PathRes::Namespace(cur));
-                None
-            }
             Some(err) => Some(self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner))),
         };
         // A chain held as an error has no record, as one held at its head
@@ -295,20 +271,6 @@ impl<'a> Walker<'a> {
             GenericKind::Const(_) => Some(PathRes::ConstParam(i)),
             GenericKind::Effect => None,
         }
-    }
-
-    /// An associated item `name` of the builtin type `of` in the compiler's
-    /// table, as the name of the method of a call: a function (`Buf.zeroed`,
-    /// whose call the types stage reads). A name the table has not is not
-    /// found (E0302, R-249: `F32.y`, `F32.y(1.0)`); std's members (`F32.PI`)
-    /// are found as those of a user type.
-    fn builtin_assoc(&self, of: Entity, name: &Ident, method: bool, owner: Option<TyId>) -> Option<PathRes> {
-        match crate::names::builtin_member(self.a, of, &name.name)? {
-            BuiltinMember::Function if method => {}
-            BuiltinMember::Function | BuiltinMember::Method { .. } => return None,
-        }
-        let ty = crate::names::builtin_ty(self.a, of)?;
-        Some(PathRes::BuiltinAssoc { ty, name: name.name.clone(), owner })
     }
 
     /// The chain of names `e` ends (`a.b.c` is `Field(Field(Path(a), b), c)`),

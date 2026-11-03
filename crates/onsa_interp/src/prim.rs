@@ -199,7 +199,7 @@ impl<'m> Interp<'m> {
                 Ok(Value::Bool(float_of(a, *k, span).is_finite()))
             }
             Prim::AssertNear => self.assert_near(prim, vs, span),
-            Prim::Pending(_) => self.lacking(prim, span),
+            Prim::Pending(_) | Prim::StrLen => self.lacking(prim, span),
             Prim::Len | Prim::Slice | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed => {
                 internal(span, format!("the sequence primitive `{}` on values", prim.name()))
             }
@@ -227,7 +227,7 @@ impl<'m> Interp<'m> {
 /// is E0200 before it starts ([`crate::unsupported`]).
 pub(crate) fn supports(p: &Prim) -> bool {
     match p {
-        Prim::Pending(_) => false,
+        Prim::Pending(_) | Prim::StrLen => false,
         Prim::Math(..)
         | Prim::IntAbs(_)
         | Prim::IntMin(_)

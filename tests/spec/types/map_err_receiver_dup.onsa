@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2", "§4.1"]
+
+// W5-02 U6/t, S-785, S-786: the receiver of `map_err` is consumed, "受け手の扱いは `?` の被演算子と同じ（§5.2）": an
+// owned Affine place is moved, a borrowed or `inout` Affine place cannot be (negative/map_err_receiver.onsa), and "Dup の
+// 場所は複製する" (§9.1). A `Result` whose parts are Copy or Shared is Dup (§4.1), so its place is read again after a
+// `map_err` as many times as it is wanted, whatever the place is: a borrowed parameter, an owned local, a field, an
+// element, and with a Shared payload (`Str`) as well as a Copy one (the owned values with a Shared part are
+// destroyed, which needs `Alloc`, §12.2, so that function has `uses {Alloc}`). No `move` is written on the receiver
+// (§5.2).
+// Checked, not run (the lowering of a call through a function value is the work W8-09).
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub struct Held {
+  r: Result[U32, Low],
+  n: U32,
+}
+
+pub fn wrap(move e: Low) -> High {
+  High.Wrapped(e)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+fn ok_or(r: Result[U32, High]) -> U32 {
+  match r {
+    Ok(n) => n,
+    Err(_) => 0,
+  }
+}
+
+fn ok_or_code(r: Result[U32, U32]) -> U32 {
+  match r {
+    Ok(n) => n,
+    Err(c) => c,
+  }
+}
+
+pub fn a_borrowed_parameter_twice(r: Result[U32, Low]) -> U32 {
+  let a = r.map_err(wrap)
+  let b = r.map_err(code)
+  ok_or(a) + ok_or_code(b)
+}
+
+pub fn an_owned_local_twice() -> U32 {
+  let r: Result[U32, Low] = Err(Low.Worse(3))
+
+  let a = r.map_err(wrap)
+  let b = r.map_err(code)
+  ok_or(a) + ok_or_code(b)
+}
+
+pub fn a_field_then_the_struct(h: Held) -> U32 {
+  let a = h.r.map_err(wrap)
+  ok_or(a) + h.n
+}
+
+pub fn an_element_then_the_array(xs: [Result[U32, Low]; 2]) -> U32 {
+  let a = xs[0].map_err(wrap)
+  let b = xs[0].map_err(code)
+  ok_or(a) + ok_or_code(b) + ok_or_code(xs[1].map_err(code))
+}
+
+pub fn an_inout_parameter(inout r: Result[U32, Low]) -> U32 {
+  let a = r.map_err(wrap)
+  ok_or(a)
+}
+
+pub fn a_shared_payload(r: Result[Str, Low]) -> U32 uses {Alloc} {
+  let a = r.map_err(code)
+  let b = r.map_err(code)
+  let n = match a {
+    Ok(s) => s.len(),
+    Err(c) => c,
+  }
+  match b {
+    Ok(s) => n + s.len(),
+    Err(c) => n + c,
+  }
+}

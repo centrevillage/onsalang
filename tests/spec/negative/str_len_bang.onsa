@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§5.2", "§18.1"]
+
+// E0714 (W5-02 U6/t): the `!` marks the call of a method with `inout self` (§5.2); a call of any other method with it is
+// E0714. `s.len()` of a `Str` reads the receiver and does not change it (§4.2), so `s.len!()` is E0714. One error per
+// function (P-01); the last function is fine.
+
+pub struct Holder {
+  name: Str,
+}
+
+pub fn on_a_parameter(s: Str) -> U32 {
+  s.len!()                                    //~ E0714
+}
+
+pub fn on_a_literal() -> U32 {
+  "abc".len!()                                //~ E0714
+}
+
+pub fn on_a_field(h: Holder) -> U32 {
+  h.name.len!()                               //~ E0714
+}
+
+pub fn on_an_element(xs: [Str; 2]) -> U32 {
+  xs[1].len!()                                //~ E0714
+}
+
+pub fn in_an_expression(s: Str) -> U32 {
+  2 * s.len!()                                //~ E0714
+}
+
+pub fn fine(s: Str) -> U32 {
+  s.len()
+}

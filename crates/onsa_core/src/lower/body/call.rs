@@ -1,5 +1,5 @@
-//! Lowering of function bodies: calls, the `target fn`s and the builtin
-//! methods (T3-3).
+//! Lowering of function bodies: calls, the `target fn`s of std and the
+//! methods of the compiler's table (T3-3).
 
 use super::*;
 
@@ -308,17 +308,11 @@ fn lower_builtin_method(
     ty: Ty,
 ) -> R<Expr> {
     let span = cx.expr(e).span;
-    let assoc = name == "zeroed";
     let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "builtin method shape")) };
     let base = *base;
     let mut lowered_args = Vec::new();
     for a in args {
         lowered_args.push(lower_expr(lw, cx, a.expr)?);
-    }
-    let borrow = |e: Expr| Arg { mode: Mode::Borrow, expr: e };
-    if assoc {
-        let args = lowered_args.into_iter().map(borrow).collect();
-        return Ok(Expr::new(ty, span, ExprKind::Prim { prim: Prim::BufZeroed, args }));
     }
     let recv = lower_expr(lw, cx, base)?;
     match &recv.ty {
@@ -326,6 +320,8 @@ fn lower_builtin_method(
         // are std's): its length.
         Ty::Array(_, n) => Ok(u32_lit(span, *n)),
         &Ty::Enum(id) => lower_enum_method(lw, cx, id, recv, name, lowered_args, ty, span),
+        // The stand-in `()` of a receiver of a type lowering does not support
+        // (`v.len()` of a `[Str; 2]`, S-67): its hole is used.
         other => Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, other)])),
     }
 }

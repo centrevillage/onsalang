@@ -1,0 +1,19 @@
+pub struct Label {
+  text: Str,
+}
+
+pub const TITLE_LEN: U32 = "gain".len()
+
+pub fn bytes_of(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn label(s: Str) -> Label {
+  Label { text: s }
+}
+
+impl Label {
+  pub fn width(self) -> U32 {
+    self.text.len()
+  }
+}

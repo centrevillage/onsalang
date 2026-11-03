@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2", "§5.4"]
+// fixes = 0
+
+// S-785, S-786 (W5-02 U6/t; §9.1: `map_err(move self, …)` "受け手を消費し、受け手の扱いは `?` の被演算子と同じ（§5.2）"; §5.2:
+// "中身を取り出す形（`move self` のメソッドの受け手 … と後置 `?` の被演算子）で … 書かなくても見える"): the receiver of
+// `map_err` is a consuming position where no mark is written. An owned Affine receiver (the `Ok` value is a `Buf`, so the
+// `Result` is Affine) is moved: a later use is E0704, a second `map_err` too, and so is the next turn of a loop. A borrowed
+// or `inout` Affine receiver, an element of an array and the field of a borrowed struct cannot be moved: E0711 with no
+// candidate (§5.2: "借用の Affine の場所は候補の無い E0711"; `fixes = 0` says it). A field of an owned struct moves the
+// whole struct (§5.2), so a later use of another field is E0704. The same cases with a Dup receiver are fine
+// (types/map_err_receiver_dup.onsa). One error per function (P-01).
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub struct Held {
+  r: Result[Buf[F32], Low],
+  n: U32,
+}
+
+pub fn wrap(move e: Low) -> High {
+  High.Wrapped(e)
+}
+
+pub fn read_buf() -> Result[Buf[F32], Low] uses {Alloc} {
+  Ok(Buf.zeroed(4))
+}
+
+// ---- an owned receiver is moved ----
+
+pub fn twice() uses {Alloc} {
+  let r = read_buf()
+  let a = r.map_err(wrap)
+  let b = r.map_err(wrap)                     //~ E0704
+  let _ = move a
+  let _ = move b
+}
+
+pub fn read_after() -> U32 uses {Alloc} {
+  let r = read_buf()
+  let a = r.map_err(wrap)
+  let n = r.unwrap().len()                    //~ E0704
+  let _ = move a
+  n
+}
+
+pub fn in_a_loop(n: U32) uses {Alloc} {
+  let r = read_buf()
+  for i in 0 ..< n {
+    let a = r.map_err(wrap)                   //~ E0704
+    let _ = move a
+  }
+}
+
+pub fn a_parameter_that_is_owned(move r: Result[Buf[F32], Low]) -> U32 uses {Alloc} {
+  let a = r.map_err(wrap)
+  let b = r.map_err(wrap)                     //~ E0704
+  let _ = move a
+  let _ = move b
+  0
+}
+
+pub fn a_field_of_an_owned_struct(move h: Held) -> U32 uses {Alloc} {
+  let a = h.r.map_err(wrap)
+  let _ = move a
+  h.n                                         //~ E0704
+}
+
+// ---- a place that is not owned cannot be moved ----
+
+pub fn borrowed(r: Result[Buf[F32], Low]) -> Result[Buf[F32], High] {
+  r.map_err(wrap)                             //~ E0711
+}
+
+pub fn inout_parameter(inout r: Result[Buf[F32], Low]) -> Result[Buf[F32], High] {
+  r.map_err(wrap)                             //~ E0711
+}
+
+pub fn element_of_an_array(xs: [Result[Buf[F32], Low]; 2]) -> Result[Buf[F32], High] {
+  xs[0].map_err(wrap)                         //~ E0711
+}
+
+pub fn field_of_a_borrowed_struct(h: Held) -> Result[Buf[F32], High] {
+  h.r.map_err(wrap)                           //~ E0711
+}
+
+// ---- fine: the owned receiver once, and the result used ----
+
+pub fn fine(move r: Result[Buf[F32], Low]) -> Result[Buf[F32], High] {
+  r.map_err(wrap)
+}

@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§12.2", "§4.4"]
+
+// E0805 (W5-02 U6/t): a call in a flow body is decided by what it calls, and "効果を持つ fn（`Alloc` を含む）" cannot
+// be called (§11.5, the table of the calls in a flow body). The creation of a `Buf` needs `Alloc` (§12.2), so
+// `Buf.zeroed` and `Samples.zeroed` (the alias of `Buf[F32]`, §4.4) are calls of a function with an effect. (The type
+// arguments written in an expression, `Buf::[F32].zeroed(4)`, are E0200 in this version, so only the aliases are used.) The value
+// of the call is not bound to a name here (a `Buf` as the value of a signal is another error, E0810, §11.3), so each
+// flow has the one E0805 (P-01). The flows at the end call functions without effects.
+
+type Samples = Buf[F32]
+
+type Counts = Buf[U32]
+
+type Wave = Samples
+
+pub rt fn level(x: F32) -> F32 { x }
+
+pub fn count() -> U32 { 4 }
+
+pub flow length_through_the_alias(x: F32 at sample) -> F32 at sample {
+  let n = Samples.zeroed(4).len()   //~ E0805
+  x
+}
+
+pub flow length_through_the_alias_of_an_alias(x: F32 at sample) -> F32 at sample {
+  let n = Wave.zeroed(8).len()   //~ E0805
+  x
+}
+
+pub flow element_in_an_expression(x: F32 at sample) -> F32 at sample {
+  x * Samples.zeroed(2)[0]   //~ E0805
+}
+
+pub flow integer_element(x: F32 at sample) -> F32 at sample {
+  let k = Counts.zeroed(2)[1]   //~ E0805
+  x
+}
+
+pub flow fine_the_calls_without_effects(x: F32 at sample) -> F32 at sample {
+  let n = count()
+  level(x)
+}

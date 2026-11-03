@@ -508,7 +508,7 @@ pub struct Modules {
     pub assoc: HashMap<DefId, HashMap<String, DefId>>,
     /// Associated items of builtin types (`impl F32 { const PI }` in std),
     /// keyed by the scalar's `TyId`, or by `Builtin(b, [])` for generic
-    /// builtins (`Buf.zeroed`).
+    /// builtins (`Buf.zeroed`, `Str.len`).
     pub assoc_builtin: HashMap<TyId, HashMap<String, DefId>>,
     /// The members first of a name that is an E0304 in their table (§6.2,
     /// S-737): no name where it is used, of either (§18.1).

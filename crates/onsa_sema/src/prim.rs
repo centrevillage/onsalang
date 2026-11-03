@@ -11,7 +11,8 @@ use crate::def::{DefId, DefKind};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
 
 const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
-const INTS: [IntKind; 8] =
+/// Every integer type, in the order of §3.4's table.
+pub(crate) const INTS: [IntKind; 8] =
     [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
 
 /// `std.math` functions (`target rt fn`, generic over `Float`).
@@ -189,6 +190,8 @@ pub enum Prim {
     CopyFrom,
     /// `Buf.zeroed(n)` -> `Buf[T]` (needs `Alloc`; interpreter only).
     BufZeroed,
+    /// `s.len()` of a `Str` (no backend has `Str` yet, W8).
+    StrLen,
     /// `std.dsp.test.assert_near(a, b, tol)` (interpreter only).
     AssertNear,
     /// A declaration of `std.test` no backend provides until M5.
@@ -222,6 +225,7 @@ impl Prim {
             Prim::AddFrom => "add_from".into(),
             Prim::CopyFrom => "copy_from".into(),
             Prim::BufZeroed => "buf.zeroed".into(),
+            Prim::StrLen => "str.len".into(),
             Prim::AssertNear | Prim::Pending(_) => match self.std_name() {
                 Some(name) => name,
                 None => onsa_diag::internal::bug(None, format!("the primitive {self:?} has no row")),
@@ -232,9 +236,8 @@ impl Prim {
     /// The row of the `std` `target` declaration this primitive instantiates
     /// ([`PrimRow::instantiate`] the other way), without a `_`, so that a new
     /// primitive must say whether a declaration gives it. `None` for the ones
-    /// no row gives yet (the members of the sequences come with their
-    /// declarations, W5-02 U6). Of one Core makes itself, the family,
-    /// which may have no row (`U32` to `F64` of a flow's rate).
+    /// no row gives (D8). Of one Core makes itself, the family, which may
+    /// have no row (`U32` to `F64` of a flow's rate).
     pub fn row_prim(&self) -> Option<PrimRow> {
         match self {
             Prim::Math(f, _) => Some(PrimRow::Math(*f)),
@@ -257,7 +260,9 @@ impl Prim {
             Prim::Fill => Some(PrimRow::Fill),
             Prim::AddFrom => Some(PrimRow::AddFrom),
             Prim::CopyFrom => Some(PrimRow::CopyFrom),
-            Prim::IsNan(_) | Prim::IsFinite(_) | Prim::BufZeroed => None,
+            Prim::BufZeroed => Some(PrimRow::BufZeroed),
+            Prim::StrLen => Some(PrimRow::StrLen),
+            Prim::IsNan(_) | Prim::IsFinite(_) => None,
         }
     }
 
@@ -370,6 +375,10 @@ pub enum PrimRow {
     Fill,
     CopyFrom,
     AddFrom,
+    /// `Buf.zeroed` at any element its bound admits.
+    BufZeroed,
+    /// `Str.len`.
+    StrLen,
 }
 
 impl PrimRow {
@@ -407,6 +416,8 @@ impl PrimRow {
             PrimRow::Slice => Some(Prim::Slice),
             PrimRow::Fill => Some(Prim::Fill),
             PrimRow::CopyFrom => Some(Prim::CopyFrom),
+            PrimRow::BufZeroed => Some(Prim::BufZeroed),
+            PrimRow::StrLen => Some(Prim::StrLen),
             PrimRow::AddFrom => match args {
                 [Scalar::Other, Scalar::Int(_) | Scalar::Float(_)] => Some(Prim::AddFrom),
                 _ => None,
@@ -486,6 +497,9 @@ pub fn rows() -> &'static [Row] {
             ("add_from", PrimRow::AddFrom, 1),
         ];
         v.extend(span.map(|(name, prim, arity)| member(BuiltinTy::Span.name(), name, prim, arity)));
+        // `Buf.zeroed` allocates (§12): no `rt`. `Str.len` (§4.2).
+        v.push(row(&format!("{}.zeroed", BuiltinTy::Buf.name()), PrimRow::BufZeroed, 1, false));
+        v.push(member(BuiltinTy::Str.name(), "len", PrimRow::StrLen, 0));
         // The integers wider than the significand (§3.3's table; the unit
         // test checks std's against `as`).
         use {FloatKind::*, IntKind::*};

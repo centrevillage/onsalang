@@ -1,0 +1,3 @@
+[package]
+name = "str_len_modules"
+edition = "2026"

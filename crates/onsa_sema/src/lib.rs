@@ -10,6 +10,7 @@ pub mod body;
 #[cfg(test)]
 mod body_tests;
 mod builtin;
+pub(crate) mod cast;
 mod constarg;
 pub mod consteval;
 pub mod def;

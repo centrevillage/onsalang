@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2", "§6.1", "§8.1"]
+
+// W5-02 U6/t, S-143, S-809: `Result` has the method `map_err`, declared `pub fn map_err[F](move self, f: fn(move E) -> F)
+// -> Result[T, F]` and "`f` の効果行は空" (§9.1). The conversion `f` is an argument of a function type of the default
+// mode, so it is any function value that fits `fn(move E) -> F`: the name of a function, an anonymous function that
+// captures nothing, and one that captures (§5.2: "既定のモードの関数型の引数 … は、捕捉する無名関数も受け"; §5.3). A function
+// with an effect row that is empty fits, an `rt` function too (§8.1, the compatibility of the function types). The result
+// is `Result[T, F]`: `T` stays and the error is what `f` returns. It is used before `?` (§9.1), in a branch and a loop,
+// chained, and with a `Buf` as the `Ok` value. The conversions here take their argument with `move`, the mode of the
+// type of `f`. This version checks it and does not run it (`f` is called in the body, and the lowering of a call
+// through a function value is the work W8-09), so the case is `check`.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn read_unit() -> Result[(), Low] {
+  Ok(())
+}
+
+pub fn read_buf() -> Result[Buf[F32], Low] uses {Alloc} {
+  Ok(Buf.zeroed(4))
+}
+
+pub fn wrap(move e: Low) -> High {
+  High.Wrapped(e)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+pub rt fn rt_code(move e: Low) -> U32 {
+  7
+}
+
+pub fn by_a_function() -> Result[U32, High] {
+  read_low().map_err(wrap)
+}
+
+pub fn by_an_rt_function() -> Result[U32, U32] {
+  read_low().map_err(rt_code)
+}
+
+pub fn by_an_anonymous_function() -> Result[U32, U32] {
+  read_low().map_err(fn(move e: Low) -> U32 { code(e) })
+}
+
+pub fn by_a_capturing_function(base: U32) -> Result[U32, U32] {
+  read_low().map_err(fn(move e: Low) -> U32 { code(e) + base })
+}
+
+pub fn by_a_function_that_builds(k: U32) -> Result[U32, High] {
+  read_low().map_err(fn(move e: Low) -> High { if k == 0 { High.Other } else { High.Wrapped(e) } })
+}
+
+pub fn before_the_question_mark() -> Result[U32, High] {
+  let n = read_low().map_err(wrap)?
+  Ok(n + 1)
+}
+
+pub fn on_a_parameter(r: Result[U32, Low]) -> Result[U32, High] {
+  r.map_err(wrap)
+}
+
+pub fn on_a_unit_result() -> Result[(), U32] {
+  read_unit().map_err(code)
+}
+
+pub fn with_an_annotated_binding() -> U32 {
+  let r: Result[U32, High] = read_low().map_err(wrap)
+  match r {
+    Ok(n) => n,
+    Err(_) => 0,
+  }
+}
+
+pub fn chained() -> Result[U32, High] {
+  read_low().map_err(code).map_err(fn(move n: U32) -> High { High.Other })
+}
+
+pub fn in_a_branch(c: Bool) -> Result[U32, High] {
+  if c {
+    read_low().map_err(wrap)
+  } else {
+    Ok(0)
+  }
+}
+
+pub fn in_a_match_arm(k: U32) -> Result[U32, High] {
+  match k {
+    0 => read_low().map_err(wrap),
+    _ => Err(High.Other),
+  }
+}
+
+pub fn in_a_loop(n: U32) -> Result[U32, High] {
+  var total = 0
+  for i in 0 ..< n {
+    total = total + read_low().map_err(wrap)? + i
+  }
+  Ok(total)
+}
+
+pub fn with_a_buffer_as_the_ok_value() -> Result[Buf[F32], High] uses {Alloc} {
+  read_buf().map_err(wrap)
+}
+
+pub fn with_a_buffer_then_question_mark() -> Result[U32, High] uses {Alloc} {
+  let b = read_buf().map_err(wrap)?
+  Ok(b.len())
+}

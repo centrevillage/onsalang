@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§15.1"]
+
+// W5-02 U6/t: `len()` of a `Str` in two modules (§4.2, §15.1). `names` calls it in a function, a constant and a method;
+// `main` calls it on its own parameters and literals, on the constant and the values that come from `names`, and
+// through the method of a struct of the other module. Neither module imports `std`: the member of a built-in type is
+// visible without a `use`. The package is checked and not run (this version runs no `Str` in `onsa test`, E0200 of
+// the lowering).
+
+use names.{Label, TITLE_LEN, bytes_of, label}
+
+pub fn through_the_function(s: Str) -> U32 {
+  bytes_of(s) + s.len()
+}
+
+pub fn of_the_constant() -> U32 {
+  "title".len() + TITLE_LEN
+}
+
+pub fn through_the_method(l: Label) -> U32 {
+  l.width() + 1
+}
+
+pub fn of_a_label_made_here(s: Str) -> U32 {
+  label(s).width() + s.len()
+}
+
+test "the length of a string across the modules" {
+  assert TITLE_LEN == 4
+  assert through_the_function("ab") == 4
+  assert label("abc").width() == 3
+}

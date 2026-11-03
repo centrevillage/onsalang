@@ -146,14 +146,13 @@ pub enum Target {
         def: DefId,
         inst: Option<InstId>,
     },
-    /// A builtin method (`xs.len()`, `out.fill!(0.0)`) or associated function (`Buf.zeroed`).
+    /// A method of the compiler's table (`o.unwrap()`, `xs.len()` of an
+    /// array, `crate::builtin`).
     BuiltinMethod {
-        recv: TyId,
         name: String,
-        /// The mode of `self` of a method, as the types stage chose it (§5.2;
-        /// the modes stage reads it, not the name); none of an associated
-        /// function.
-        self_mode: Option<Mode>,
+        /// The mode of `self`, as the types stage chose it (§5.2; the modes
+        /// stage reads it, not the name).
+        self_mode: Mode,
         /// [`crate::builtin::MethodSig::lazy_args`].
         lazy_args: bool,
     },

@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§6.2", "§15.1"]
+
+// E0308 (W5-02 U6/t): `len` is a method of `Str` (§4.2: `s.len() -> U32`), and a method is called on a value. Naming it
+// through the type, `Str.len(s)`, is the method called in the function form: E0308, whose note shows the form
+// `value.len(…)` (§15.1: "メソッドを関数の形で呼ぶ（修正候補は `value.m(...)`）"; §6.2: "同じ関数に二つの呼び方は無い"). One
+// error per function (P-01). The method form is fine.
+
+pub struct Holder {
+  name: Str,
+}
+
+pub fn on_a_parameter(s: Str) -> U32 {
+  Str.len(s)                                  //~ E0308
+}
+
+pub fn on_a_literal() -> U32 {
+  Str.len("abc")                              //~ E0308
+}
+
+pub fn on_a_field(h: Holder) -> U32 {
+  Str.len(h.name)                             //~ E0308
+}
+
+pub fn in_an_expression(s: Str) -> U32 {
+  1 + Str.len(s)                              //~ E0308
+}
+
+pub const FUNCTION_FORM: U32 = Str.len("abc")   //~ E0308
+
+pub fn fine_the_method_form(s: Str) -> U32 {
+  s.len()
+}

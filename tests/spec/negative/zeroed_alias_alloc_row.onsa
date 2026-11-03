@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§8.1", "§12.2"]
+
+// E0601 (W5-02 U6/t): the creation of a `Buf` needs `Alloc` (§12.2: "Shared 値・`Buf` の生成 … 要る"), and the body of
+// a function uses only the effects of its row (§8.1). `Samples.zeroed(n)` is `Buf.zeroed` with the element type fixed
+// by the alias (§4.4), so a function without `uses {Alloc}` that calls it through the alias is E0601 as it is with
+// `Buf.zeroed`. Each function is on one line so that the line of the use and the line of the function are one (the
+// place of the E0601 inside the body is the work W6-03: "診断は最初の使用の位置に置く"). One error per function (P-01).
+// The functions with `Alloc` in the row are fine.
+
+type Samples = Buf[F32]
+
+type Counts = Buf[U32]
+
+type Wave = Samples
+
+pub struct Voice {
+  taps: Samples,
+}
+
+pub fn through_the_alias(n: U32) -> U32 { Samples.zeroed(n).len() }   //~ E0601
+
+pub fn returned_to_the_caller(n: U32) -> Samples { Samples.zeroed(n) }   //~ E0601
+
+pub fn alias_of_an_alias(n: U32) -> U32 { Wave.zeroed(n).len() }   //~ E0601
+
+pub fn other_element(n: U32) -> U32 { Counts.zeroed(n)[0] }   //~ E0601
+
+pub fn in_a_struct_literal(n: U32) -> Voice { Voice { taps: Samples.zeroed(n) } }   //~ E0601
+
+pub fn with_the_row(n: U32) -> U32 uses {Alloc} { Samples.zeroed(n).len() }
+
+pub fn returned_with_the_row(n: U32) -> Samples uses {Alloc} { Samples.zeroed(n) }
+
+pub fn through_a_caller_with_the_row(n: U32) -> U32 uses {Alloc} { other_element_ok(n) }
+
+fn other_element_ok(n: U32) -> U32 uses {Alloc} { Counts.zeroed(n)[0] }

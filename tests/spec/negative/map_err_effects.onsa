@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§8.1", "§12.2"]
+
+// E0401 and E0601 (W5-02 U6/t): "`f` の効果行は空" (§9.1), so the conversion given to `map_err` is a function with no
+// effect. A function whose row has an effect does not fit the type (§8.1: the row of the function must be in the row of
+// the expected type, and "逆は E0401"): E0401 at the argument, whether it is a named function or an anonymous function
+// whose row is written. An anonymous function whose row is not written is checked against the expected type: "期待する型が
+// 純粋なら、本体で `Alloc` を使えない（外側の関数の効果行には数えない）" (§8.1), so a creation of a `Buf` in its body is
+// the E0601 of the use (the case where the row of the outer function has `Alloc` is in map_err_effects_outer_row.onsa).
+// Each function is on one line so that the line of the use and the line of the function are one. One error per function
+// (P-01). The functions at the end are fine.
+
+type Samples = Buf[F32]
+
+type Counts = Buf[U32]
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn pure_code(move e: Low) -> U32 {
+  1
+}
+
+pub fn noisy_code(move e: Low) -> U32 uses {Alloc} {
+  1
+}
+
+pub fn make_len() -> U32 uses {Alloc} {
+  Samples.zeroed(2).len()
+}
+
+// ---- a function with an effect row does not fit ----
+
+pub fn a_named_function_with_an_effect() -> Result[U32, U32] { read_low().map_err(noisy_code) }   //~ E0401
+
+pub fn an_anonymous_function_with_a_written_row() -> Result[U32, U32] uses {Alloc} { read_low().map_err(fn(move e: Low) -> U32 uses {Alloc} { 1 }) }   //~ E0401
+
+pub fn the_row_of_the_caller_does_not_help() -> Result[U32, U32] uses {Alloc} { read_low().map_err(noisy_code) }   //~ E0401
+
+// ---- the body of an anonymous function cannot use an effect ----
+
+pub fn creates_a_buffer() -> Result[U32, U32] { read_low().map_err(fn(move e: Low) -> U32 { Samples.zeroed(1).len() }) }   //~ E0601
+
+pub fn creates_a_buffer_of_integers() -> Result[U32, U32] { read_low().map_err(fn(move e: Low) -> U32 { Counts.zeroed(1)[0] }) }   //~ E0601
+
+pub fn calls_a_function_with_an_effect() -> Result[U32, U32] { read_low().map_err(fn(move e: Low) -> U32 { make_len() }) }   //~ E0601
+
+// ---- fine ----
+
+pub fn fine_a_pure_function() -> Result[U32, U32] {
+  read_low().map_err(pure_code)
+}
+
+pub fn fine_an_anonymous_function_without_effects() -> Result[U32, U32] uses {Alloc} {
+  let n = make_len()
+  read_low().map_err(fn(move e: Low) -> U32 { 1 + n })
+}

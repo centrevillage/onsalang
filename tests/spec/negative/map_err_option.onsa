@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§6.2", "§18.1"]
+
+// E0413 (W5-02 U6/t, R-96): "`Option` と `Result` のメソッドは、両方の `unwrap` と、`Result` の `map_err` だけである"
+// (§9.1). `map_err` is a member of `Result` only, so it is not a method of `Option` (the error type is not there to
+// convert), and not of any other type: each call is the E0413 of the method name. The candidates of the E0413 are the work
+// W5-14, so `fixes` is not written. One error per function (P-01). The call on a `Result` is in
+// types/map_err_conversions.onsa.
+
+pub struct Holder {
+  n: U32,
+}
+
+pub fn code(move n: U32) -> U32 {
+  n
+}
+
+pub fn first(k: U32) -> Option[U32] {
+  Some(k)
+}
+
+pub fn on_an_option_parameter(o: Option[U32]) -> Option[U32] {
+  o.map_err(code)                             //~ E0413
+}
+
+pub fn on_a_constructor() -> Option[U32] {
+  Some(1).map_err(code)                       //~ E0413
+}
+
+pub fn on_the_result_of_a_call() -> Option[U32] {
+  first(2).map_err(code)                      //~ E0413
+}
+
+pub fn on_an_option_of_a_result(o: Option[Result[U32, U32]]) {
+  let _ = o.map_err(code)                     //~ E0413
+}
+
+pub fn on_a_scalar(n: U32) {
+  let _ = n.map_err(code)                     //~ E0413
+}
+
+pub fn on_a_struct(h: Holder) {
+  let _ = h.map_err(code)                     //~ E0413
+}
+
+pub fn on_a_string(s: Str) {
+  let _ = s.map_err(code)                     //~ E0413
+}

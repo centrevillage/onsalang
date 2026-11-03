@@ -191,13 +191,6 @@ note = "発散の後の到達しない文（W5-08）と、前の腕で覆われ�
 
 [[pending]]
 kind = "diag-code"
-target = "E0805"
-reasons = ["R-17", "S-33"]
-until = "W7-05"
-note = "効果を持つ fn の呼び出し。rt でない fn は巻き上げる（R-17、S-33）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0808"
 reasons = ["S-88", "R-100", "S-151", "S-132"]
 until = "W7-04"
@@ -394,13 +387,6 @@ reasons = ["R-134"]
 until = "W6-03"
 note = "main の効果行を provides と照合しない（仕様 §15.3、E0610）。今は診断なし"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/try_type_map_err.onsa"
-reasons = ["S-71", "R-96"]
-until = "W5-03"
-note = "Result の map_err が無い（今は E0413）。std の Result の map_err（S-71）"
-
 # --- W1-04（2026-10-07）
 
 [[pending]]
@@ -480,9 +466,9 @@ note = "while true の発散を末尾に置けない（E0401、§7）"
 [[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/try_map_err.onsa"
-reasons = ["S-71"]
-until = "W5-03"
-note = "Result の map_err が無い（E0413、§9.1）"
+reasons = ["S-71", "S-872"]
+until = "W8-09"
+note = "構築子 Wrapped.Parse が map_err の f: fn(move E) -> F と合わない（E0401、S-872）。合う読みに決まった後は、map_err の本体の関数値の呼び出しの降下（E0200、W8-09）"
 
 [[pending]]
 kind = "test-case"
@@ -678,9 +664,9 @@ note = "process_inplace の生成の条件と、flow の名前空間に無い項
 [[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/enum_variant_values.onsa"
-reasons = ["S-191", "S-71"]
-until = "W5-03"
-note = ".( の呼び出し（W3-20）の後も map_err が無い"
+reasons = ["S-191", "S-71", "S-872"]
+until = "W8-09"
+note = "構築子 Failure.Io が map_err の f: fn(move E) -> F と合わない（E0401、S-872）。合う読みに決まった後は、関数値の降下（E0200、W8-09）"
 
 # --- W3-02/t: 修正候補の期待値（tests/spec/fixes/、断片の fixes = N と事例の隣の .fixK。2026-10-08）。
 # 候補を当てた結果と .fixK は、空白の幅を無視し、空白以外の各トークン（改行とコメントを含む）の種類と字面と、
@@ -1595,3 +1581,19 @@ target = "tests/spec/types/scalar_bits_array_length_operations.onsa"
 reasons = ["S-713"]
 until = "W9-03"
 note = "BITS を含む演算の長さと計算した定数の長さが E0200（expressions as array lengths・constants computed by expressions）"
+
+# --- W5-02 U6（2026-11-03）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/map_err_constructor.onsa"
+reasons = ["S-872"]
+until = "W5-03"
+note = "構築子を map_err に渡す形が f: fn(move E) -> F（§9.1 の宣言）と合わず E0401（S-872 の決定を待つ）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/map_err_effects_outer_row.onsa"
+reasons = ["R-359"]
+until = "W6-03"
+note = "外側の関数が uses {Alloc} だと、純粋な関数型の引数に渡した無名関数の本体の確保が E0601 にならない（§8.1、前から）"

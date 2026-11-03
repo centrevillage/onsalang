@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§19.2", "§18.1"]
+
+// E0413 (W5-02 U6/t, R-96): `Str` has the members of the list of §4.2 and no others. The list is `s.len()`,
+// `s.as_bytes()` and `Str.from_utf8(b)`; "長さを持つ型（`Str`、…）は `len()` だけを持ち、`is_empty` は無い（E0413）"
+// and "部分文字列・検索・文字の反復は最初の版に無い（§19.2）". So `substr`, `find`, `get_substr`, `is_char_boundary`
+// and `is_empty` are not members: each call is the E0413 of the method name, whatever the receiver is (a parameter, a
+// literal, a field, an element, the payload of a pattern) and wherever the call is (a function, a `const`, a `test`).
+// The candidates of the E0413 (the form `len() == 0` for `is_empty`) are the work W5-14, so `fixes` is not written.
+// One error per function (P-01). The function at the end is fine: the test for empty is `len() == 0`.
+
+pub struct Holder {
+  name: Str,
+}
+
+pub const BLANK: Bool = "".is_empty()   //~ E0413
+
+pub fn cut(s: Str) {
+  let _ = s.substr(0, 1)                      //~ E0413
+}
+
+pub fn search(s: Str) {
+  let _ = s.find("a")                         //~ E0413
+}
+
+pub fn cut_checked(s: Str) {
+  let _ = s.get_substr(0, 1)                  //~ E0413
+}
+
+pub fn boundary(s: Str) {
+  let _ = s.is_char_boundary(1)               //~ E0413
+}
+
+pub fn blank(s: Str) -> Bool {
+  s.is_empty()                                //~ E0413
+}
+
+pub fn on_a_literal() {
+  let _ = "gain".find("a")                    //~ E0413
+}
+
+pub fn on_a_field(h: Holder) {
+  let _ = h.name.substr(0, 1)                 //~ E0413
+}
+
+pub fn on_an_element(xs: [Str; 2]) -> Bool {
+  xs[0].is_empty()                            //~ E0413
+}
+
+pub fn on_a_payload(o: Option[Str]) -> Bool {
+  match o {
+    Some(s) => s.is_empty(),                  //~ E0413
+    None => true,
+  }
+}
+
+test "a member outside the list in a test" {
+  let s = "gain"
+  let _ = s.is_char_boundary(2)              //~ E0413
+}
+
+pub fn fine_the_test_for_empty(s: Str) -> Bool {
+  s.len() == 0
+}

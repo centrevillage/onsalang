@@ -42,6 +42,17 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The name of the type `t` with no type argument (`W` of `W[T]`, `Buf`
+    /// of `Buf[T]`): what names its members (§6.2), and no variable of the
+    /// inference in a message (§18.1, R-357).
+    pub(super) fn type_head(&mut self, t: TyId) -> String {
+        match self.ty(t) {
+            Ty::Named(d, _) => self.a.def(d).name.clone(),
+            Ty::Builtin(b, _) => b.name().to_string(),
+            _ => self.display(t),
+        }
+    }
+
     /// The type argument `t` a use made at `span`, named `what`: its origin
     /// (E0406 when still open at the end) and its implicit `Escape`, judged
     /// before the other requirements made after it (§4.5, S-862).
@@ -77,10 +88,7 @@ impl<'a> Checker<'a> {
         let (impl_count, impl_name) = match self.a.def(def).owner {
             Some(o) if matches!(self.a.def(o).kind, DefKind::Impl(_)) && def != o => {
                 let DefKind::Impl(i) = &self.a.def(o).kind else { unreachable!() };
-                let head = match self.ty(i.self_ty) {
-                    Ty::Named(d, _) => self.a.def(d).name.clone(),
-                    _ => self.display(i.self_ty),
-                };
+                let head = self.type_head(i.self_ty);
                 (self.a.def(o).generics().len(), format!("the `impl` of `{head}`"))
             }
             _ => (0, String::new()),

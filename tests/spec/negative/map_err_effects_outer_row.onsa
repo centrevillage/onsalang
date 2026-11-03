@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§8.1", "§12.2"]
+
+// E0601 (W5-02 U6/t): "無名関数は、期待する関数型の効果行 … に照らして本体を検査する。期待する型が純粋なら、本体で `Alloc` を使えない
+// （外側の関数の効果行には数えない）" (§8.1). The conversion given to `map_err` is expected to be pure (§9.1: "`f` の効果行は空"), so
+// the effect used in the body of an anonymous function is the E0601 of the use even when the row of the outer function has
+// that effect: the row of the outer function does not cover it. Each function is on one line so that the line of the use and
+// the line of the function are one. One error per function (P-01). The last function is fine: the effect is used outside
+// the body of the anonymous function.
+
+type Samples = Buf[F32]
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn make_len() -> U32 uses {Alloc} {
+  Samples.zeroed(2).len()
+}
+
+pub fn calls_a_function_with_an_effect() -> Result[U32, U32] uses {Alloc} { read_low().map_err(fn(move e: Low) -> U32 { make_len() }) }   //~ E0601
+
+pub fn creates_a_buffer() -> Result[U32, U32] uses {Alloc} { read_low().map_err(fn(move e: Low) -> U32 { Samples.zeroed(1).len() }) }   //~ E0601
+
+pub fn creates_a_buffer_in_a_branch(c: Bool) -> Result[U32, U32] uses {Alloc} { read_low().map_err(fn(move e: Low) -> U32 { if c { Samples.zeroed(3).len() } else { 0 } }) }   //~ E0601
+
+pub fn fine_the_effect_is_outside_the_body() -> Result[U32, U32] uses {Alloc} {
+  let n = make_len()
+  read_low().map_err(fn(move e: Low) -> U32 { 1 + n })
+}

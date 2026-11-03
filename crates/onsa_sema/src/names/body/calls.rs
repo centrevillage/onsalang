@@ -97,7 +97,6 @@ impl Walker<'_> {
         let (kind, entity) = match r {
             PathRes::Local(_) => return Called::Value,
             PathRes::ConstParam(_) => (NameKind::ConstParam, None),
-            PathRes::BuiltinAssoc { .. } => (NameKind::Function, None),
             PathRes::Item { entity, .. } => match NameKind::of(*entity, &a.defs) {
                 Some(k) => (k, Some(*entity)),
                 None => return Called::Other,

@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§5.2", "§18.1"]
+
+// E0714 (W5-02 U6/t): the `!` marks the call of a method with `inout self` (§5.2); a call of any other method with it is
+// E0714. `map_err` has `move self` (§9.1), not `inout self`, so `r.map_err!(f)` is E0714. One error per function (P-01);
+// the last function is fine.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+pub fn on_a_parameter(r: Result[U32, Low]) -> Result[U32, U32] {
+  r.map_err!(code)                                               //~ E0714
+}
+
+pub fn on_the_result_of_a_call() -> Result[U32, U32] {
+  read_low().map_err!(code)                                      //~ E0714
+}
+
+pub fn with_an_anonymous_function(r: Result[U32, Low]) -> Result[U32, U32] {
+  r.map_err!(fn(move e: Low) -> U32 { 1 })                       //~ E0714
+}
+
+pub fn before_the_question_mark() -> Result[U32, U32] {
+  let n = read_low().map_err!(code)?                             //~ E0714
+  Ok(n)
+}
+
+pub fn fine(r: Result[U32, Low]) -> Result[U32, U32] {
+  r.map_err(code)
+}

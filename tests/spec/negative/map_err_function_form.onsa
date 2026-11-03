@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§6.2", "§15.1"]
+
+// E0308 (W5-02 U6/t): `map_err` is a method of `Result` (§9.1: "`Result` の `map_err`"; `map_err(move self, f: …)`),
+// and a method is called on a value. Naming it through the type, `Result.map_err(r, f)`, is the method called in the
+// function form: E0308, whose note shows the form `value.map_err(…)` (§15.1: "メソッドを関数の形で呼ぶ（修正候補は
+// `value.m(...)`）"; §6.2: "同じ関数に二つの呼び方は無い"). One error per function (P-01). The method form is fine.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+pub fn on_a_parameter(r: Result[U32, Low]) -> Result[U32, U32] {
+  Result.map_err(r, code)                                        //~ E0308
+}
+
+pub fn on_the_result_of_a_call() -> Result[U32, U32] {
+  Result.map_err(read_low(), code)                               //~ E0308
+}
+
+pub fn with_an_anonymous_function(r: Result[U32, Low]) -> Result[U32, U32] {
+  Result.map_err(r, fn(move e: Low) -> U32 { 1 })                //~ E0308
+}
+
+pub fn in_a_chain(r: Result[U32, Low]) -> Result[U32, U32] {
+  Result.map_err(r, code).map_err(fn(move n: U32) -> U32 { n })  //~ E0308
+}
+
+pub fn fine_the_method_form(r: Result[U32, Low]) -> Result[U32, U32] {
+  r.map_err(code)
+}

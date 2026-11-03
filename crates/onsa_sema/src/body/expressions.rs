@@ -151,7 +151,7 @@ impl<'a> Checker<'a> {
                 // The error type (what a syntax error left unread, S-59) is not
                 // checked: no diagnostic for it (R-71).
                 let error = |t: TyId| matches!(self.a.types.get(t), Ty::Error);
-                if builtin::cast_allowed(&self.a.types, from, to) || error(from) || error(to) {
+                if crate::cast::cast_allowed(&self.a.types, from, to) || error(from) || error(to) {
                     return Ok(to);
                 }
                 let (fs, ts) = (self.display(from), self.display(to));
@@ -164,7 +164,7 @@ impl<'a> Checker<'a> {
                     ),
                 )
                 .with_found(self.src(span));
-                if let Some(m) = builtin::cast_suggestion(&self.a.types, from, to) {
+                if let Some(m) = crate::cast::cast_suggestion(&self.a.types, from, to) {
                     // `as` and the type after the operand change, the operand stays (S-251).
                     let rest = Span::new(span.file, self.expr(*inner).span.end, span.end);
                     d = d.with_fix(Fix::replace(format!("call `{m}`"), rest, m));

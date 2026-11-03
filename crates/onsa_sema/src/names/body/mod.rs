@@ -227,15 +227,6 @@ pub(crate) enum PathRes {
         entity: Entity,
         owner: Option<TyId>,
     },
-    /// An associated function of a builtin type in the compiler's table
-    /// (`Buf.zeroed`, `crate::builtin`); `ty` is the type it is a
-    /// member of (a generic one by its key, [`Analysis::builtin_key`]), and
-    /// `owner` as of [`PathRes::Item`] (`Buf[F32]` of `Samples.zeroed`).
-    BuiltinAssoc {
-        ty: TyId,
-        name: String,
-        owner: Option<TyId>,
-    },
     /// A builtin name of a flow body (§2.2, §11.4), recorded where the flow
     /// stage reads it (the callee of a delay or of `sample_rate()`); anywhere
     /// else it is not found (S-720, `paths.rs`).

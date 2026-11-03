@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§4.4", "§5.2"]
+
+// W5-02 U6/t, S-143: the constructor of a tuple-form variant is a function value that captures nothing (§4.4: "タプル形の
+// 列挙子は、捕捉の無い関数値（`Circle` は `fn(F32) -> Shape`）としても使える（Rust と同じ。例: `map_err(ConfigError.Io)`）"),
+// and the example of §9.1 passes one to `map_err`: `Fs.read(path).map_err(ConfigError.Io)?`. So the conversion of an
+// error into a variant that holds it is written with the name of the variant. Used alone, before `?`, and in a
+// chain. Checked, not run (the lowering of a call through a function value is the work W8-09).
+//
+// The type of `ConfigError.Io` is written `fn(IoError) -> ConfigError` in §4.4 and the parameter of `map_err` is
+// `fn(move E) -> F` in §9.1; whether the first fits the second is a gap of the spec (reported as NEW in the report
+// of this work). The cases here are what the two sentences say together; the function whose parameter has the
+// default mode (`fn code(e: Low)`) in the place of a constructor is not written.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub enum Top {
+  Failed(High),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn alone() -> Result[U32, High] {
+  read_low().map_err(High.Wrapped)
+}
+
+pub fn before_the_question_mark() -> Result[U32, High] {
+  let n = read_low().map_err(High.Wrapped)?
+  Ok(n + 1)
+}
+
+pub fn in_a_chain() -> Result[U32, Top] {
+  read_low().map_err(High.Wrapped).map_err(Top.Failed)
+}
+
+pub fn on_a_parameter(r: Result[U32, Low]) -> Result[U32, High] {
+  r.map_err(High.Wrapped)
+}

@@ -193,19 +193,6 @@ fn body_rules(
                     );
                 }
             }
-            Target::BuiltinMethod { recv, name, .. } => {
-                if name == "zeroed" && matches!(a.types.get(*recv), Ty::Builtin(BuiltinTy::Buf, _)) {
-                    found.push(
-                        Diagnostic::new(
-                            Stage::Effects,
-                            Code::E0901,
-                            span,
-                            "`Buf.zeroed` allocates and needs `Alloc`; `rt` functions cannot allocate (§10 rule 1)",
-                        )
-                        .with_found(src(span)),
-                    );
-                }
-            }
             _ => {}
         }
     }

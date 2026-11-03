@@ -105,7 +105,7 @@ impl Walker<'_> {
                 Ty::Fn(f) => (None, f.params.iter().map(|&(m, t)| Takes::Param(m, Some(t))).collect()),
                 _ => return None,
             },
-            Target::BuiltinMethod { self_mode, .. } => (*self_mode, vec![Takes::Param(Mode::Borrow, None); n]),
+            Target::BuiltinMethod { self_mode, .. } => (Some(*self_mode), vec![Takes::Param(Mode::Borrow, None); n]),
             Target::Variant { .. } | Target::Prelude(_) => (None, vec![Takes::Element; n]),
             _ => return None,
         })

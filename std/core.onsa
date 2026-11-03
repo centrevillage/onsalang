@@ -1,9 +1,25 @@
 //! The items of the prelude that std declares (spec §15.1, S-659): in scope
 //! everywhere with no `use`. `Option`, `Result` and the traits are the
-//! compiler's in this version, named as items of this module too (W5-03).
+//! compiler's in this version, named as items of this module too (W5-03);
+//! the methods of `Result` but `map_err` are the compiler's table (W5-03).
 
 /// Allocation on the heap (§8.2, §12): an explicit effect with no operations.
 pub effect Alloc {}
 
 /// That an `extern` function may block (§8.2, §14.1). It has no operations.
 pub blocking effect Block {}
+
+impl[T: ?Dup, E: ?Dup] Result[T, E] {
+  /// The error converted by `f`, the value kept (§9.1): before `?`, to the
+  /// error type of the function's result.
+  // SPEC-GAP(S-872): as §9.1 declares it, `f: fn(move E) -> F` and `F`
+  // with the implicit `Dup` (§4.5): a variant (`fn(E) -> …`, §4.4) and a
+  // function of the default mode are no such type (E0401), so §9.1's
+  // `map_err(ConfigError.Io)` is not written yet, nor an Affine `F`.
+  pub fn map_err[F](move self, f: fn(move E) -> F) -> Result[T, F] {
+    match move self {
+      Ok(x) => Ok(move x),
+      Err(e) => Err(f.(move e)),
+    }
+  }
+}
