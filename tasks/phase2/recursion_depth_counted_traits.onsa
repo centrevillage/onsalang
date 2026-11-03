@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§6.3", "§4.5", "§9.2"]
+
+// The methods of a trait implementation count in the call depth (spec §12.5: the calls that count are those
+// of functions, methods and anonymous functions declared outside std; S-229): a method of `impl Tr for Ty`,
+// a default method of a user `trait`, and a call through a generic bound. The depth of a `test` body is 0
+// and the limit is 128. Each `down_*(126)` makes 127 nested calls of a user function and calls the method
+// at the bottom as the 128th call, which passes; `down_*(127)` makes 128 and the method is the 129th call,
+// which panics at the call in the body of the test (§9.2: a panic in a test fails that test and no other).
+// The inherent methods are in recursion_depth_counted_methods.onsa.
+//
+// Pending (phase 2, tasks/phase2.md "trait の定義"): a `trait` declaration, an `impl Tr for Ty` and a bound
+// with a user trait are E0200 in this version.
+
+pub struct Meter {
+  level: U32,
+}
+
+pub trait Read {
+  fn read(self) -> U32
+
+  fn read_twice(self) -> U32 {
+    self.read() + self.read()
+  }
+}
+
+impl Read for Meter {
+  fn read(self) -> U32 {
+    self.level
+  }
+}
+
+// ------------------------------------------------- a method of a trait implementation
+
+fn down_read(m: Meter, n: U32) -> U32 {
+  if n == 0 {
+    m.read()
+  } else {
+    down_read(m, n - 1)
+  }
+}
+
+test "a method of an impl Tr for Ty called as the 128th call passes" {
+  assert down_read(Meter { level: 4 }, 126) == 4
+}
+
+test "a method of an impl Tr for Ty called as the 129th call panics" {
+  let k = down_read(Meter { level: 4 }, 127) //~ PANIC "a method of an impl Tr for Ty called as the 129th call panics"
+  assert k == 4
+}
+
+// ------------------------------------------------------- a default method
+
+fn down_twice(m: Meter, n: U32) -> U32 {
+  if n == 0 {
+    m.read_twice()
+  } else {
+    down_twice(m, n - 1)
+  }
+}
+
+test "a default method called as the 128th call, and its call of read as the 129th, panics" {
+  // The default method is declared by the user, so it counts; the `read` that it calls is the next call.
+  let k = down_twice(Meter { level: 4 }, 126) //~ PANIC "a default method called as the 128th call, and its call of read as the 129th, panics"
+  assert k == 8
+}
+
+test "a default method called as the 127th call, and its call of read as the 128th, passes" {
+  assert down_twice(Meter { level: 4 }, 125) == 8
+}
+
+// ----------------------------------------------------------- a generic bound
+
+fn read_bound[T: Read](x: T) -> U32 {
+  x.read()
+}
+
+fn down_bound(m: Meter, n: U32) -> U32 {
+  if n == 0 {
+    read_bound(m)
+  } else {
+    down_bound(m, n - 1)
+  }
+}
+
+test "a generic function that calls a method of its bound, the method as the 128th call, passes" {
+  // down_bound(125) is 126 calls, read_bound the 127th, and `x.read()` the 128th.
+  assert down_bound(Meter { level: 4 }, 125) == 4
+}
+
+test "a generic function that calls a method of its bound, the method as the 129th call, panics" {
+  let k = down_bound(Meter { level: 4 }, 126) //~ PANIC "a generic function that calls a method of its bound, the method as the 129th call, panics"
+  assert k == 4
+}
