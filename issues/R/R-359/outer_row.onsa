@@ -1,0 +1,33 @@
+pub fn map_err_like[T, E, F](r: Result[T, E], f: fn(move E) -> F) -> Result[T, F] {
+  match r {
+    Ok(v) => Ok(v),
+    Err(e) => Err(f.(e)),
+  }
+}
+
+
+type Samples = Buf[F32]
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn make_len() -> U32 uses {Alloc} {
+  Samples.zeroed(2).len()
+}
+
+pub fn calls_a_function_with_an_effect() -> Result[U32, U32] uses {Alloc} { map_err_like(read_low(), fn(move e: Low) -> U32 { make_len() }) }   //~ E0601
+
+pub fn creates_a_buffer() -> Result[U32, U32] uses {Alloc} { map_err_like(read_low(), fn(move e: Low) -> U32 { Samples.zeroed(1).len() }) }   //~ E0601
+
+pub fn creates_a_buffer_in_a_branch(c: Bool) -> Result[U32, U32] uses {Alloc} { map_err_like(read_low(), fn(move e: Low) -> U32 { if c { Samples.zeroed(3).len() } else { 0 } }) }   //~ E0601
+
+pub fn fine_the_effect_is_outside_the_body() -> Result[U32, U32] uses {Alloc} {
+  let n = make_len()
+  map_err_like(read_low(), fn(move e: Low) -> U32 { 1 + n })
+}
