@@ -610,3 +610,10 @@ left = "number prefix without digits"
 input = "tests/fuzz/698f6da0.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: the `{` of the `else` body of a `target fn` on the line after its heading, and a `0x` without digits after the closing `}`, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "expected `…` (a function body), found `…`"
+input = "tests/fuzz/218cf733.onsa"
+reasons = ["R-244"]
+note = "a blank and a `.` after the return type of a `fn` with no body (`-> F .0`): the E0020 of the blank around a member, whose candidate leaves the E0002 of the missing body at the same place, as after the name of a `let` (R-244)"
