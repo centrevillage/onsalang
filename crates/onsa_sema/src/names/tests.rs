@@ -130,3 +130,18 @@ fn the_candidate_of_a_use_needs_a_member_after_the_head() {
         assert_eq!(e0302[0].fixes.len(), fixes, "{main}: {:?}", e0302[0]);
     }
 }
+
+/// S-670: a `target` declaration out of `std`, of the module or a member of an `impl`, with an
+/// `else` body or none, is the one E0200 of the names stage; its `else` body is not read (no
+/// E0301 for a name it does not find), and a use of the member finds it (no E0413).
+#[test]
+fn a_target_declaration_out_of_std_is_one_e0200_and_its_else_body_is_not_read() {
+    let a = check("target fn f() -> I32 else { missing }\n");
+    assert_eq!(codes(&a), vec![Code::E0200]);
+    let src = "pub struct V { g: F32 }\nimpl V {\n  target fn level(self) -> F32 else { missing }\n  target fn bare(self) -> F32\n}\n\
+               pub fn f(v: V) -> F32 {\n  v.level() + v.bare()\n}\n";
+    let a = check(src);
+    assert_eq!(codes(&a), vec![Code::E0200, Code::E0200]);
+    let lines: Vec<u32> = a.diagnostics.iter().map(|d| d.span.start).collect();
+    assert_eq!(lines, [src.find("target fn level").unwrap() as u32, src.find("target fn bare").unwrap() as u32]);
+}

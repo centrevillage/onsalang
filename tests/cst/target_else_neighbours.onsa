@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§15.2", "§2.5", "§18.2"]
+
+// S-669: an `else` belongs to the heading on whose line it is written, and a `target fn` without `else` (the
+// declaration of a primitive, spec §15.2) does not take the `else` of the next declaration. Declarations with
+// and without an `else` body are mixed here, with ordinary items between them (spec §15.2: "std の `target fn`
+// は、見出しの後ろの `else` に本体を持てる"). The syntax stage only (`mode = "parse"`). The file is canonical.
+
+target fn first() -> I32
+
+target fn second() -> I32 else { 1 }
+
+target fn third() -> I32
+
+pub target rt fn fourth(x: F32) -> F32
+
+pub target rt fn fifth(x: F32) -> F32 else {
+  x
+}
+
+fn plain() -> I32 {
+  1
+}
+
+target fn sixth() -> I32 else {
+  2
+}

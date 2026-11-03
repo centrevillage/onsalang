@@ -1,0 +1,129 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.3", "§7", "§11.2"]
+
+// The same operations as infer_literal_subject_iter.onsa, _pattern.onsa and _span_arg.onsa (a `for` over a number,
+// a tuple pattern on a number, a number passed as a `Span` or as an array of `Span`s) on a number whose type is
+// known: the code that the literal forms get (S-860, spec §4.7 "注釈したときと同じコードをその場で報告する"). All are
+// E0401. The type is known by an annotation (`let n: I32 = 17`, `let n: F32 = 1.5`), by a parameter (`x: I32`),
+// by an operator with a typed operand (`let m = n + x`) or by the `flow` input. These stand today; they are kept
+// apart from the literal forms because those wait for W5-02 (a case that waits is silenced as a whole,
+// tests/README.md). The array literal of numbers for the planar parameter (`takes_planar([1.5, 2.5])`: the
+// element is the number) stands today as well. One error per function (P-01).
+
+pub fn takes_ints(s: Span[I32]) -> U32 {
+  s.len()
+}
+
+pub fn takes_floats(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+pub fn takes_planar(s: [Span[F32]; 2]) -> U32 {
+  s[0].len()
+}
+
+// ---------------------------------------------------------------- the operand of a for
+
+pub fn iterate_an_annotated_integer() -> I32 {
+  let n: I32 = 17
+  for i in n {                                      //~ E0401
+    let _ = i
+  }
+  0
+}
+
+pub fn iterate_an_annotated_float() -> I32 {
+  let n: F32 = 1.5
+  for i in n {                                      //~ E0401
+    let _ = i
+  }
+  0
+}
+
+pub fn iterate_a_parameter(x: I32) -> I32 {
+  for i in x {                                      //~ E0401
+    let _ = i
+  }
+  0
+}
+
+pub fn iterate_a_number_decided_by_an_operator(x: I32) -> I32 {
+  let n = 17
+  let m = n + x
+  for i in m {                                      //~ E0401
+    let _ = i
+  }
+  0
+}
+
+// ---------------------------------------------------------------- a tuple pattern
+
+pub fn let_on_an_annotated_integer() -> I32 {
+  let n: I32 = 17
+  let (a, b) = n                                    //~ E0401
+  0
+}
+
+pub fn let_on_an_annotated_float() -> I32 {
+  let n: F32 = 1.5
+  let (a, b) = n                                    //~ E0401
+  0
+}
+
+pub fn let_on_a_number_decided_by_an_operator(x: I32) -> I32 {
+  let n = 17
+  let m = n + x
+  let (a, b) = m                                    //~ E0401
+  0
+}
+
+pub fn for_head_on_parameters(x: I32, y: I32) -> I32 {
+  for (a, b) in [x, y] {                            //~ E0401
+    let _ = a
+  }
+  0
+}
+
+pub fn arm_on_an_annotated_integer() -> I32 {
+  let n: I32 = 17
+  match Some(n) {
+    Some((a, b)) => 0,                              //~ E0401
+    None => 1,
+  }
+}
+
+pub flow let_on_an_input_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let (a, b) = x                                    //~ E0401
+  x
+}
+
+// ---------------------------------------------------------------- an argument that is a Span
+
+pub fn span_of_integers_gets_an_annotated_integer() -> U32 {
+  let n: I32 = 17
+  takes_ints(n)                                     //~ E0401
+}
+
+pub fn span_of_integers_gets_an_annotated_float() -> U32 {
+  let n: F32 = 1.5
+  takes_ints(n)                                     //~ E0401
+}
+
+pub fn span_of_floats_gets_an_annotated_float() -> U32 {
+  let n: F32 = 1.5
+  takes_floats(n)                                   //~ E0401
+}
+
+pub fn span_of_floats_gets_a_parameter(x: F32) -> U32 {
+  takes_floats(x)                                   //~ E0401
+}
+
+pub fn planar_gets_an_annotated_float() -> U32 {
+  let n: F32 = 1.5
+  takes_planar(n)                                   //~ E0401
+}
+
+pub fn planar_gets_an_array_of_numbers() -> U32 {
+  takes_planar([1.5, 2.5])                          //~ E0401
+}

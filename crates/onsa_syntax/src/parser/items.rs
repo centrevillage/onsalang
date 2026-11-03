@@ -246,8 +246,10 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_item(&mut self, ctx: ItemCtx, m: Marker) -> PResult<Completed> {
         let Heading { attrs, vis, keyword: t, declaration, place } = self.parse_heading(ctx)?;
         let Declaration { node, parse, places, .. } = *declaration;
+        let next = self.peek2();
+        let (places, kind) = places.of(next.kind);
         if !places.contains(&ctx) {
-            let e = self.not_a_member(t, ctx);
+            let e = self.not_a_member(t, kind.map(|k| (next, k.instead)), ctx);
             // It is a declaration, a unit of its own (§18.1, R-44): its node
             // holds its keyword, so that the declarations out of place after
             // it are units of their own too, not one run of tokens.
@@ -266,7 +268,9 @@ impl<'a> Parser<'a> {
         Ok(self.complete(m, NodeKind::Item))
     }
 
-    /// E0002 for the declaration at `t` in the list of declarations of
+    /// E0002 for the declaration at `t` (of the kind the word `kind` after
+    /// it names, `target type`, with what to write instead of a form that is
+    /// no declaration, `target const`) in the list of declarations of
     /// `ctx`, where it is not a member: the members are a closed list
     /// (§18.1: methods and associated constants; the operations of an
     /// `effect`, the functions of a `handler` and of an `extern`, and the
@@ -274,7 +278,7 @@ impl<'a> Parser<'a> {
     /// own is never a member, so declarations do not nest without bound
     /// (they count no level, spec §2.5).
     // SPEC-GAP(S-263): the closed list of the declarations a declaration holds is not written in the spec; the conservative reading of §18.1, §8.1 and §14.1.
-    fn not_a_member(&mut self, t: Token, ctx: ItemCtx) -> ParseError {
+    fn not_a_member(&mut self, t: Token, kind: Option<(Token, Option<&str>)>, ctx: ItemCtx) -> ParseError {
         let (owner, members) = match ctx {
             ItemCtx::Trait => ("a `trait`", "functions and `const`s"),
             ItemCtx::Impl => ("an `impl`", "functions and `const`s"),
@@ -284,14 +288,14 @@ impl<'a> Parser<'a> {
             ItemCtx::Top => onsa_diag::internal::bug(Some(t.span), "a declaration of the top level is refused there"),
         };
         let word = self.token_text(t).to_string();
-        let d = Diagnostic::new(
-            Stage::Syntax,
-            Code::E0002,
-            t.span,
-            format!("`{word}` cannot be declared in {owner}; declare it at the top level of the module"),
-        )
-        .with_found(word)
-        .with_rule(format!("the members of {owner} are {members} (§18.1)"));
+        let what = kind.map_or_else(|| word.clone(), |(k, _)| format!("{word} {}", self.token_text(k)));
+        let message = match kind.and_then(|(_, instead)| instead) {
+            Some(instead) => format!("there is no `{what}`; {instead}"),
+            None => format!("`{what}` cannot be declared in {owner}; declare it at the top level of the module"),
+        };
+        let d = Diagnostic::new(Stage::Syntax, Code::E0002, t.span, message)
+            .with_found(word)
+            .with_rule(format!("the members of {owner} are {members} (§18.1)"));
         self.report(d);
         ParseError
     }
@@ -310,6 +314,16 @@ impl<'a> Parser<'a> {
 
     /// `[rt] fn name[generics](params) [-> T] [uses {..}] [body]`
     pub(super) fn parse_fn(&mut self, ctx: ItemCtx) -> PResult<()> {
+        let body = match ctx {
+            ItemCtx::Effect | ItemCtx::Extern => FnBody::Signature,
+            ItemCtx::Trait => FnBody::Optional,
+            _ => FnBody::Required,
+        };
+        self.parse_fn_with(body)
+    }
+
+    /// [`Parser::parse_fn`], whose body is as `body` says.
+    fn parse_fn_with(&mut self, body: FnBody) -> PResult<()> {
         let m = self.start(NodeKind::Fn)?;
         self.eat(TokenKind::KwRt);
         self.expect(TokenKind::KwFn)?;
@@ -321,19 +335,28 @@ impl<'a> Parser<'a> {
             self.parse_type()?;
         }
         self.parse_effect_row_opt()?;
-        match ctx {
-            ItemCtx::Effect | ItemCtx::Extern => {
+        match body {
+            FnBody::Signature | FnBody::Else => {
                 if self.at(TokenKind::LBrace) {
                     let t = self.peek();
                     return Err(self.error(Code::E0002, t.span, "this declaration is a signature and takes no body"));
                 }
+                // The `else` on the line of the heading's last token, and its body (§15.2, S-669).
+                if body == FnBody::Else
+                    && self.e0003_unless_on_the_line_as(TokenKind::KwElse, |word| {
+                        format!("`{word}` must be on the line of the declaration's heading")
+                    })
+                {
+                    self.bump();
+                    self.parse_body()?;
+                }
             }
-            ItemCtx::Trait => {
+            FnBody::Optional => {
                 if self.e0003_unless_on_the_line(TokenKind::LBrace) {
                     self.parse_block_expr()?;
                 }
             }
-            _ => {
+            FnBody::Required => {
                 if !self.e0003_unless_on_the_line(TokenKind::LBrace) {
                     return Err(self.unexpected("`{` (a function body)"));
                 }
@@ -655,6 +678,11 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// `target type Name`, and `target [rt] fn …` with no body or one after
+    /// `else` (§15.2, S-661, S-669); where each is written is the table's
+    /// (`TARGET_PLACES` of [`DECLARATIONS`](super::declarations::DECLARATIONS)).
+    /// The files of every package are read by this one rule; the names stage
+    /// refuses the declarations out of `std` (S-670).
     pub(super) fn parse_target(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Target)?;
         self.expect(TokenKind::KwTarget)?;
@@ -665,7 +693,7 @@ impl<'a> Parser<'a> {
                 self.parse_name("type name")?;
                 self.complete(o, NodeKind::OpaqueType);
             }
-            TokenKind::KwFn | TokenKind::KwRt => self.parse_fn(ItemCtx::Extern)?,
+            TokenKind::KwFn | TokenKind::KwRt => self.parse_fn_with(FnBody::Else)?,
             _ => return Err(self.unexpected("`fn` or `type` after `target`")),
         }
         self.complete(m, NodeKind::Target);

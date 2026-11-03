@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§15.2", "§18.2"]
+
+// The `else` of a `target fn` as `onsa fmt` writes it (spec/tools.md §3.2: "std の `target fn` の `else` は見出しの
+// 最後のトークンと同じ行に置き、前後に空白を一つ置く（`-> T else {`）", S-669): on the line of the last token of the
+// heading, with one space before `else` and one after it, whether the heading ends with a return type, with
+// `)` or with an effect row, on one line or on several, at the top level and as a member of an `impl`. The
+// body is indented as the block of any other item. The `else` and `with` of other forms stay on the line of the
+// `}` before them (attr_else_with.onsa). The file is read by the syntax stage only (`mode = "parse"`; a package
+// other than `std` has the E0200 of the names stage for it, tests/spec/module/target_user_else.onsa) and is
+// canonical, so `onsa fmt` leaves it unchanged. target_else_heading_loose.onsa has the same declarations
+// with the spaces broken.
+
+pub target rt fn abs[T: Num](x: T) -> T else {
+  if x < T.ZERO {
+    -x
+  } else {
+    x
+  }
+}
+
+target fn plain[T: Copy](x: T) -> T else { x }
+
+target rt fn ping() else {
+  let _ = 1
+}
+
+target fn tick() else {
+  let _ = 1
+}
+
+pub target fn grow(n: U32) -> Buf[F32] uses {Alloc} else {
+  Buf.zeroed(n)
+}
+
+pub target rt fn wide(
+  a: F32,
+  b: F32,
+) -> F32 else {
+  a + b
+}
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  target fn level(self) -> F32 else {
+    self.gain
+  }
+
+  pub target rt fn limit() -> U32 else { 8 }
+}
+
+impl Drop for Voice {
+  target rt fn drop(move self) else {
+    let _ = 1
+  }
+}

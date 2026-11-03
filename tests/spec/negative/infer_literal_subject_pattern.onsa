@@ -1,0 +1,162 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§7", "§11.2"]
+
+// E0401 for a tuple pattern on a number, whatever the number's type turns out to be (spec §4.7 "その場で既知を要する
+// 操作" and the paragraph after it: "タプルのパターンの対象" is one of the operations that the candidates' kind
+// alone decides, and they get the code of the annotated form `let (a, b) = n` with `n: I32` at once, not E0420;
+// S-860). The candidates of a literal's type variable are the integer types or the float types, and none of them is a
+// tuple. The place of the pattern is a `let`, the head of a `for`, an arm of a `match` (inside `Some(…)`), a
+// nested pattern and the body of a flow (`flow/check`'s own pattern check, which is not the one of a function:
+// S-860 names it). The annotated forms are in infer_literal_subject_annotated_shapes.onsa. A type variable that
+// is not a literal's (`make()` of `fn make[T: Copy]() -> T`) stays E0420 (infer_literal_subject_open_shapes.onsa).
+// One error per function (P-01).
+
+// ---------------------------------------------------------------- let: an integer literal
+
+pub fn let_on_an_integer() -> I32 {
+  let (a, b) = 17                                   //~ E0401
+  0
+}
+
+pub fn let_on_a_bound_integer() -> I32 {
+  let n = 17
+  let (a, b) = n                                    //~ E0401
+  0
+}
+
+pub fn let_on_an_integer_decided_later() -> U8 {
+  let n = 17
+  let (a, b) = n                                    //~ E0401
+  n
+}
+
+pub fn let_on_a_generic_result() -> I32 {
+  let z = id(17)
+  let (a, b) = z                                    //~ E0401
+  0
+}
+
+pub fn let_on_a_nested_integer() -> I32 {
+  let ((a, b), c) = (17, 1)                         //~ E0401
+  0
+}
+
+// ---------------------------------------------------------------- let: a float literal
+
+pub fn let_on_a_float() -> I32 {
+  let (a, b) = 1.5                                  //~ E0401
+  0
+}
+
+pub fn let_on_a_bound_float() -> I32 {
+  let n = 1.5
+  let (a, b) = n                                    //~ E0401
+  0
+}
+
+pub fn let_on_a_float_decided_later() -> F32 {
+  let n = 1.5
+  let (a, b) = n                                    //~ E0401
+  n
+}
+
+pub fn let_on_a_generic_float_result() -> I32 {
+  let z = id(1.5)
+  let (a, b) = z                                    //~ E0401
+  0
+}
+
+// ---------------------------------------------------------------- the head of a for
+
+pub fn for_head_on_integers() -> I32 {
+  for (a, b) in [1, 2] {                            //~ E0401
+    let _ = a
+  }
+  0
+}
+
+pub fn for_head_on_floats() -> I32 {
+  for (a, b) in [1.5, 2.5] {                        //~ E0401
+    let _ = a
+  }
+  0
+}
+
+pub fn for_head_on_a_bound_array() -> I32 {
+  let xs = [1, 2]
+  for (a, b) in xs {                                //~ E0401
+    let _ = a
+  }
+  0
+}
+
+pub fn for_head_on_a_range() -> I32 {
+  for (a, b) in 0 ..< 3 {                           //~ E0401
+    let _ = a
+  }
+  0
+}
+
+// ---------------------------------------------------------------- an arm of a match
+
+pub fn arm_on_an_integer() -> I32 {
+  match Some(17) {
+    Some((a, b)) => 0,                              //~ E0401
+    None => 1,
+  }
+}
+
+pub fn arm_on_a_float() -> I32 {
+  match Some(1.5) {
+    Some((a, b)) => 0,                              //~ E0401
+    None => 1,
+  }
+}
+
+pub fn arm_on_a_bound_integer() -> I32 {
+  let o = Some(17)
+  match o {
+    Some((a, b)) => 0,                              //~ E0401
+    None => 1,
+  }
+}
+
+// ---------------------------------------------------------------- the body of a flow
+
+pub flow let_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = 17
+  let (a, b) = n                                    //~ E0401
+  x
+}
+
+pub flow let_on_a_float_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = 1.5
+  let (a, b) = n                                    //~ E0401
+  x
+}
+
+pub flow let_on_a_literal_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let (a, b) = 17                                   //~ E0401
+  x
+}
+
+// ---------------------------------------------------------------- a closure and a test body
+
+pub fn let_in_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 {
+    let n = 17
+    let (a, b) = n                                  //~ E0401
+    y
+  }
+  f.(x)
+}
+
+test "tuple pattern in a test" {
+  let n = 17
+  let (a, b) = n                                    //~ E0401
+}
+
+fn id[T](x: T) -> T {
+  x
+}

@@ -350,6 +350,47 @@ fn literal_subjects_and_shown_variables() {
     assert_eq!(msg, "`Option[_]` is not a function and cannot be called");
 }
 
+/// S-860: iterating a literal variable, a tuple pattern on one and passing one as a `Span` (and
+/// a planar array of them) report the E0401 of an annotated type, the type named `an integer` /
+/// `a float`; another variable stays E0420.
+#[test]
+fn literal_subjects_of_iteration_tuple_patterns_and_spans() {
+    let one = |src: &str| {
+        let a = check(src);
+        let ds: Vec<_> = a.diagnostics.iter().filter(|d| d.code != Code::E0309).collect();
+        assert_eq!(ds.len(), 1, "{src}: {ds:?}");
+        (ds[0].code, ds[0].message.clone())
+    };
+    let decls = "fn takes(s: Span[I32]) -> I32 { 0 }\nfn planar(s: [Span[F32]; 2]) -> F32 { 0.0 }\n";
+    let body = |b: &str| format!("{decls}pub fn f() -> I32 {{\n  let n = 17\n  let m = 1.5\n  {b}\n  0\n}}\n");
+    let span = |t: &str, found: &str| {
+        format!("expected `{t}` (or an array / `Buf` of the same element), found {found} (§5.3)")
+    };
+    for (b, msg) in [
+        ("for i in n { }", "an integer cannot be iterated (§7)".to_string()),
+        ("for i in 1.5 { }", "a float cannot be iterated (§7)".to_string()),
+        ("let (a, b) = n", "expected a tuple pattern target, found an integer".to_string()),
+        ("for (a, b) in [1, 2] { }", "expected a tuple pattern target, found an integer".to_string()),
+        (
+            "match Some(m) {\n    Some((a, b)) => 1,\n    None => 0,\n  }",
+            "expected a tuple pattern target, found a float".into(),
+        ),
+        ("let _ = takes(17)", span("Span[I32]", "an integer")),
+        ("let _ = planar([1.5, 2.5])", span("Span[F32]", "a float")),
+        ("let _ = planar(m)", span("[Span[F32]; 2]", "a float")),
+    ] {
+        assert_eq!(one(&body(b)), (Code::E0401, msg), "{b}");
+    }
+    let flow = "pub flow g(x: F32 at sample) -> F32 at sample {\n  let (p, q) = 1.5\n  x\n}\n";
+    assert_eq!(one(flow), (Code::E0401, "expected a tuple pattern target, found a float".to_string()));
+    // Another variable still needs its type (E0420).
+    let make = "fn make[T]() -> T { make() }\n";
+    for b in ["for i in v { }", "let (a, b) = v", "let _ = takes(v)"] {
+        let src = format!("{make}{decls}pub fn f() -> I32 {{\n  let v = make()\n  {b}\n  0\n}}\n");
+        assert_eq!(one(&src).0, Code::E0420, "{b}");
+    }
+}
+
 /// R-355 (§6.4): a generic type meets a derived trait only when its type arguments meet it.
 #[test]
 fn derives_of_a_generic_type_ask_its_arguments() {

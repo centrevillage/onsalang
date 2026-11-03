@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§18.1", "§6.3"]
+
+// S-863, S-661, S-670: the `target fn` member of an `impl Tr for Ty` of a package other than `std`, with no body
+// or with an `else` body (the syntax stage reads both, target_user_impl_trait.onsa has the forms that are E0002).
+// This version does not support trait implementations (spec §6.3), so the heading `impl Tr for Ty` is an E0200 of
+// the names stage; the `impl` with a fault in its heading is one unit as a whole (spec §18.1 "診断の単位は宣言
+// である" and the paragraph after it: "`impl` の見出し（`impl Tr for Ty`）に誤りがあれば `impl` 全体を一つの
+// 単位とし、メンバは検査しない"), and the error of such a unit is one. So the E0200 of the `target` member (spec
+// §15.2 "形によらず、名前の段の E0200") is not reported besides it: there is one E0200 for the `impl`, on the line
+// of the heading, whatever the members are (one member or two, a generic `impl`). One error for each `impl`
+// (P-01). The inherent `impl` has the E0200 of the member (target_user_impl.onsa).
+
+pub struct Bare {
+  id: U32,
+}
+
+impl Drop for Bare {                                //~ E0200
+  target rt fn drop(move self)
+}
+
+pub struct WithBody {
+  id: U32,
+}
+
+impl Drop for WithBody {                            //~ E0200
+  target rt fn drop(move self) else {
+    let _ = 1
+  }
+}
+
+pub struct WithOneLineBody {
+  id: U32,
+}
+
+impl Drop for WithOneLineBody {                     //~ E0200
+  target rt fn drop(move self) else { }
+}
+
+pub struct Two {
+  id: U32,
+}
+
+impl Drop for Two {                                 //~ E0200
+  target rt fn drop(move self)
+  target fn extra(self) -> U32 else {
+    1
+  }
+}
+
+pub struct Generic[T] {
+  value: T,
+}
+
+impl[T: Copy] Drop for Generic[T] {                 //~ E0200
+  target rt fn drop(move self)
+}

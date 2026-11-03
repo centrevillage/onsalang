@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§5.3", "§7"]
+
+// The right forms next to the errors of infer_literal_subject_iter.onsa, _pattern.onsa and _span_arg.onsa
+// (S-860): what a literal's type variable may be given to without a type being known first. A `for` over a
+// range of literals and over an array of literals, a tuple pattern on a tuple (of literals too) and on the
+// elements of an array of tuples, the pattern in the arm of a `match` on an `Option` of a tuple, and an array of
+// numbers and a bound array passed as a `Span`, and an array of arrays as a planar argument (§5.3). The type of the literals is decided by the
+// operation that uses them (§4.7), and the values are what the tests check. Nothing here is reported.
+
+fn sum_ints(s: Span[I32]) -> I32 {
+  var total = 0
+  for v in s {
+    total = total + v
+  }
+  total
+}
+
+fn sum_floats(s: Span[F32]) -> F32 {
+  var total = 0.0
+  for v in s {
+    total = total + v
+  }
+  total
+}
+
+fn first_plane(s: [Span[F32]; 2]) -> F32 {
+  s[0][0]
+}
+
+test "for over a range of literals" {
+  var total = 0
+  for i in 0 ..< 4 {
+    total = total + i
+  }
+  assert total == 6
+}
+
+test "for over an array of literals" {
+  var total = 0
+  for v in [1, 2, 3] {
+    total = total + v
+  }
+  assert total == 6
+}
+
+test "tuple pattern on a tuple of literals" {
+  let (a, b) = (1, 2)
+  assert a + b == 3
+}
+
+test "tuple pattern on a bound tuple" {
+  let pair: (F32, F32) = (1.5, 2.5)
+
+  let (a, b) = pair
+  assert a + b == 4.0
+}
+
+test "tuple pattern on the elements of an array of tuples" {
+  var total = 0
+  for (a, b) in [(1, 2), (3, 4)] {
+    total = total + a * b
+  }
+  assert total == 14
+}
+
+test "tuple pattern in the arm of a match" {
+  let o = Some((1, 2))
+  let r = match o {
+    Some((a, b)) => a + b,
+    None => 0,
+  }
+  assert r == 3
+}
+
+test "an array of integers is a Span" {
+  assert sum_ints([1, 2, 3]) == 6
+}
+
+test "a bound array of integers is a Span" {
+  let xs = [4, 5]
+  assert sum_ints(xs) == 9
+}
+
+test "an array of floats is a Span" {
+  assert sum_floats([0.5, 1.5]) == 2.0
+}
+
+test "an array of arrays is a planar argument" {
+  assert first_plane([[1.5, 2.5], [3.5, 4.5]]) == 1.5
+}

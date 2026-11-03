@@ -223,13 +223,14 @@ impl<'a> Checker<'a> {
             }
             PatKind::Tuple(elems) => {
                 let elems = elems.clone();
-                let s = self.known(ty, span, "matched value")?;
+                // A literal variable is no tuple (S-860).
+                let s = self.known_shape(ty, span, "matched value")?;
                 let Ty::Tuple(ts) = self.ty(s) else {
-                    let shown = self.display(ty);
+                    let shown = self.described(ty);
                     return Err(self.flow_err(
                         Code::E0401,
                         span,
-                        format!("expected a tuple pattern target, found `{shown}`"),
+                        format!("expected a tuple pattern target, found {shown}"),
                     ));
                 };
                 if ts.len() != elems.len() {

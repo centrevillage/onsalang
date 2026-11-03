@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§8.1", "§14.1", "§18.1"]
+
+// S-661: only the `impl` takes a `target` member (target_user_impl.onsa, target_user_impl_trait.onsa). The
+// members of a `trait`, an `effect`, a `handler` and an `extern` block have no `target` form, and the syntax
+// stage reports it as E0002 whatever the package is, the same as before the `impl` took it ("trait・effect・
+// handler・extern のメンバの `target` は今の E0002のまま"). A declaration with a `target` member is the unit that
+// has the error, so it does not get the E0200 of the names stage that these declarations get in
+// tests/spec/negative/unsupported.onsa. One error for each declaration (P-01). The marker is on the line of the
+// `target` member.
+
+pub trait Describe {
+  target fn describe(self) -> I32                  //~ E0002
+}
+
+pub trait Measure[T] {
+  target rt fn measure(self) -> T                  //~ E0002
+}
+
+pub trait Sized {
+  target fn size(self) -> U32 else { 1 }           //~ E0002
+}
+
+pub effect Beep {
+  target fn beep(level: I32) -> I32                //~ E0002
+}
+
+pub effect Click {
+  target rt fn click(level: I32) -> I32 else {     //~ E0002
+    level
+  }
+}
+
+handler quiet: Beep {
+  target fn beep(level: I32) -> I32                //~ E0002
+}
+
+handler loud: Beep {
+  target fn beep(level: I32) -> I32 { level }      //~ E0002
+}
+
+extern "C" lib "m" {
+  target fn cos(x: F64) -> F64                     //~ E0002
+}
+
+extern "C" lib "fastconv" {
+  target type FcRaw                                //~ E0002
+}

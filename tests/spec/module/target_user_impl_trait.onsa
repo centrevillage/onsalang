@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§6.3", "§18.1"]
+
+// S-661, S-670: the syntax stage reads the members of an `impl Tr for Ty` as those of an inherent `impl`
+// (target_user_impl.onsa), and what an `impl` has no `target` form for is E0002 in both: a body in braces
+// (target_user_body.onsa), `target type` and `target const` (spec §15.2 "`impl` の中の `target type` と
+// `target const` は無く（E0002）"). The error is the syntax stage's, so the unit has no E0200 of the names stage,
+// not for the `impl Tr for Ty` itself either. One error for each `impl` (P-01). The members that are right
+// (`target fn` with no body, or with an `else` body) get the E0200 of the names stage; what that E0200 is for an
+// `impl Tr for Ty` of a package other than `std` is not decided (SPEC-GAP), so it is not written here.
+
+pub struct Brace {
+  id: U32,
+}
+
+impl Drop for Brace {
+  target rt fn drop(move self) { }                 //~ E0002
+}
+
+pub struct BraceBody {
+  id: U32,
+}
+
+impl Drop for BraceBody {
+  target rt fn drop(move self) {                   //~ E0002
+    let _ = 1
+  }
+}
+
+pub struct AType {
+  id: U32,
+}
+
+impl Drop for AType {
+  target type Sample                               //~ E0002
+}
+
+pub struct AConst {
+  id: U32,
+}
+
+impl Drop for AConst {
+  target const RATE: I32 = 1                       //~ E0002
+}
+
+pub struct Generic[T] {
+  value: T,
+}
+
+impl[T: Copy] Drop for Generic[T] {
+  target rt fn drop(move self) { }                 //~ E0002
+}

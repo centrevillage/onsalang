@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§15.2", "§2.5", "§18.2"]
+
+// S-669: the heading of a `target fn` can end with its effect row (spec §15.2: the implementation module has
+// "同じ名前と同じシグネチャ（`rt` と効果行を含む）の宣言"), and then the `else` is on the line of the `}` that
+// closes the row: "見出しの最後のトークンと同じ行" (§2.5), written with one space before `else` and one after
+// it (spec/tools.md §3.2). The syntax stage only (`mode = "parse"`). The file is canonical.
+
+pub target fn grow(n: U32) -> Buf[F32] uses {Alloc} else {
+  Buf.zeroed(n)
+}
+
+target fn fill_in(n: U32) uses {Alloc} else {
+  let _ = Buf.zeroed(n)
+}

@@ -41,7 +41,8 @@ use crate::token::TokenKind;
 /// Canonical sources for what no file has: a struct pattern with `..` in the
 /// block form (S-500; the syntax stage reads the `..`, a later stage reports
 /// it, S-366); a block as the value of a `const`, the right side of an
-/// assignment and an index (R-287, [`EXPRESSION_BLOCK_HOLDERS`]).
+/// assignment and an index (R-287, [`EXPRESSION_BLOCK_HOLDERS`]); the `else`
+/// body of a `target fn` (no file of `std` has one yet, S-669, `spec/tools.md` §3.2).
 pub(super) const EXTRA: &[(&str, &str)] = &[
     (
         "EXTRA[0]",
@@ -52,6 +53,11 @@ pub(super) const EXTRA: &[(&str, &str)] = &[
     (
         "EXTRA[2]",
         "pub fn f(xs: [U32; 2], i: U32, n: U32) -> U32 {\n  var x: U32 = 0\n  x = { n }\n  x + xs[{ i }]\n}\n",
+    ),
+    (
+        "EXTRA[3]",
+        "pub target rt fn abs[T: Num](x: T) -> T else { x }\n\nimpl A {\n  target fn f(self) -> I32 uses {Log} else {\n    \
+         1\n  }\n}\n",
     ),
 ];
 

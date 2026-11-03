@@ -337,7 +337,8 @@ pub enum ItemKind {
     Const(ConstDecl),
     Use(UseDecl),
     Extern(ExternDecl),
-    /// `target fn ...` / `target type ...` (§15.2). The inner item has no body.
+    /// `target fn ...` / `target type ...` (§15.2). The body of the inner
+    /// function is the one after its `else`, if any (S-669).
     Target(Box<ItemKind>),
     /// `test "name" { ... }`
     Test {
@@ -402,7 +403,7 @@ pub struct FnDecl {
     /// The clock after the result type (§11.3; outside a flow E0821, W4-12).
     pub ret_clock: Option<Clock>,
     pub effects: Option<EffectRow>,
-    /// `None` for signatures (trait, effect, extern, target).
+    /// `None` for signatures (trait, effect, extern, target); of a `target fn`, the body after `else`.
     pub body: Option<ExprId>,
 }
 

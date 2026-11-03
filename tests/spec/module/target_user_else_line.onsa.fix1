@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§2.5", "§18.1"]
+// fixes = 1
+
+// S-629, S-669: the `else` of a `target fn` is on the line of the last token of the heading, and an `else` on a
+// later line is E0003 (spec §15.2 "次の行は E0003", §2.5), in a package other than `std` too (the syntax stage
+// reads every package by one rule, S-670). The main position is the `else`, so the marker is on the line of the
+// `else`. The candidate moves the `else` and the rest of its line to the end of the line of the heading's last
+// token (before the comment of that line); a comment-only line or a blank line between them stays where it is
+// (§2.5). The error is the syntax stage's, so the unit with it has no E0200 of the names stage (that one is
+// in target_user_else.onsa). One error for each declaration (P-01): at the top level and as the member of an
+// `impl`, of an inherent one and of one for a trait.
+
+target fn open() -> I32 else { 1 }
+//~ E0003
+
+pub target rt fn close(x: F32) -> F32 else {
+//~ E0003
+  x
+}
+
+target fn generic[T: Copy](x: T) -> T else { x }
+//~ E0003
+
+target rt fn tick() else {
+//~ E0003
+  let _ = 1
+}
+
+pub target rt fn wide(
+  a: F32,
+  b: F32,
+) -> F32 else {
+//~ E0003
+  a + b
+}
+
+target fn commented() -> I32 else { 1 } // the heading
+//~ E0003
+
+target fn after_a_comment_line() -> I32 else { 1 }
+// the comment of a line of its own
+//~ E0003
+
+target fn after_a_blank_line() -> I32 else { 1 }
+
+//~ E0003
+
+target fn indented() -> I32 else { 1 }
+  //~ E0003
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  target fn level(self) -> F32 else { self.gain }
+  //~ E0003
+}
+
+pub struct Mixer {
+  gain: F32,
+}
+
+impl Mixer {
+  pub target rt fn bump(inout self) else {
+  //~ E0003
+    let _ = self.gain
+  }
+}
+
+pub struct Tuner {
+  gain: F32,
+}
+
+impl Tuner {
+  fn plain(self) -> F32 {
+    self.gain
+  }
+
+  target fn size(self) -> U32 else { 1 }
+  //~ E0003
+}
+
+pub struct Handle {
+  id: U32,
+}
+
+impl Drop for Handle {
+  target rt fn drop(move self) else {
+  //~ E0003
+    let _ = 1
+  }
+}

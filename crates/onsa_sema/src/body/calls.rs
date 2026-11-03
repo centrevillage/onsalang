@@ -388,7 +388,8 @@ impl<'a> Checker<'a> {
                         }
                         _ => self.check_expr(arg.expr, None)?,
                     };
-                    let at_s = self.known(at, aspan, "argument")?;
+                    // A literal variable is passed as no `Span` (S-860).
+                    let at_s = self.known_shape(at, aspan, "argument")?;
                     let ok = match (planar, self.ty(at_s)) {
                         // A length unified, as of any array (a const parameter `N`).
                         (Some(n), Ty::Array(ch, m)) => {
@@ -450,12 +451,14 @@ impl<'a> Checker<'a> {
     }
 
     /// E0401: `found` at `at` is passed where `want`, a `Span` or a planar
-    /// array of them, is (§5.3); a type not known yet (`1.0`, `[]`) as
-    /// written (§18.1: no variable of the inference in a message).
+    /// array of them, is (§5.3); a literal variable as `an integer` or `a
+    /// float` ([`Checker::described`], S-860), another type not known yet
+    /// (`[]`) as written (§18.1: no variable of the inference in a message).
     fn not_a_view(&mut self, at: Span, want: TyId, found: TyId) -> Stop {
-        let open = self.infer.has_vars(&self.a.types, found);
-        let (want, found) = (self.display(want), if open { self.src(at) } else { self.display(found) });
-        let msg = format!("expected `{want}` (or an array / `Buf` of the same element), found `{found}` (§5.3)");
+        let open = self.infer.lit_of(&self.a.types, found).is_none() && self.infer.has_vars(&self.a.types, found);
+        let want = self.display(want);
+        let found = if open { format!("`{}`", self.src(at)) } else { self.described(found) };
+        let msg = format!("expected `{want}` (or an array / `Buf` of the same element), found {found} (§5.3)");
         self.err(Code::E0401, at, msg)
     }
 

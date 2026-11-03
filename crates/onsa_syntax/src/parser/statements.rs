@@ -32,6 +32,21 @@ impl<'a> Parser<'a> {
     /// comment there (S-216, [`crate::edits::move_up`]); the reading goes on
     /// past the line breaks, as if it were on the line.
     pub(super) fn e0003_unless_on_the_line(&mut self, kind: TokenKind) -> bool {
+        self.e0003_unless_on_the_line_as(kind, |word| match kind {
+            TokenKind::KwElse | TokenKind::KwWith => format!("`{word}` must be on the same line as the closing `}}`"),
+            TokenKind::KwIf => "the `if` after `else` must be on the line of the `else`".to_string(),
+            _ => format!("`{word}` must be on the line of the last token of what it belongs to"),
+        })
+    }
+
+    /// [`Parser::e0003_unless_on_the_line`] with the message of its E0003
+    /// made from the word (the `else` of a `target fn` is on the line of
+    /// the declaration's heading, §15.2, S-661).
+    pub(super) fn e0003_unless_on_the_line_as(
+        &mut self,
+        kind: TokenKind,
+        message: impl FnOnce(&str) -> String,
+    ) -> bool {
         let i = (self.pos..self.tokens.len()).find(|&k| !self.tokens[k].kind.is_trivia()).unwrap_or(self.pos);
         let t = self.tokens[i];
         if t.kind != kind {
@@ -41,13 +56,7 @@ impl<'a> Parser<'a> {
             let word = self.token_text(t).to_string();
             let title = format!("move `{word}` to the end of the line before");
             let fix = crate::edits::move_up(self.file, self.text, &self.all, &title, self.last_end, t, " ");
-            let message = match kind {
-                TokenKind::KwElse | TokenKind::KwWith => {
-                    format!("`{word}` must be on the same line as the closing `}}`")
-                }
-                TokenKind::KwIf => "the `if` after `else` must be on the line of the `else`".to_string(),
-                _ => format!("`{word}` must be on the line of the last token of what it belongs to"),
-            };
+            let message = message(&word);
             let d = Diagnostic::new(Stage::Syntax, Code::E0003, t.span, message).with_found(word).with_fix(fix);
             self.report(d);
             self.with_nl(true, |p| p.skip_newlines());

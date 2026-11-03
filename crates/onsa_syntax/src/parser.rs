@@ -125,6 +125,19 @@ pub(crate) enum ItemCtx {
     InlineHandler,
 }
 
+/// How a function declaration takes its body ([`Parser::parse_fn`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FnBody {
+    /// A block, which it must have (a function of a module, an `impl`, a handler).
+    Required,
+    /// A block or none (a member of a trait).
+    Optional,
+    /// None: an operation of an `effect`, a function of an `extern`.
+    Signature,
+    /// A `target fn`: no block, and a body after `else` (§15.2, S-669).
+    Else,
+}
+
 impl ItemCtx {
     /// The list the members of a declaration of `kind` are read in, `None`
     /// for a declaration without members: the one table of it. The parser

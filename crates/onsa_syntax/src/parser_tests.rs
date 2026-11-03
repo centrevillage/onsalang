@@ -304,8 +304,12 @@ fn members_are_a_closed_list() {
     ] {
         assert_eq!(codes(&format!("impl A {{\n  {kw} {{\n  }}\n}}\n")), vec![Code::E0002], "{kw}");
     }
-    for member in ["use a.{b}", "type T = I32", "target fn f()"] {
+    for member in ["use a.{b}", "type T = I32", "target type T", "target const C: I32 = 1"] {
         assert_eq!(codes(&format!("impl A {{\n  {member}\n}}\n")), vec![Code::E0002], "{member}");
+    }
+    // A `target fn` is a member of an `impl` (§15.2, S-661), and of no other list.
+    for owner in ["trait T", "effect E", "handler h: E", "extern \"C\" lib \"x\""] {
+        assert_eq!(codes(&format!("{owner} {{\n  target fn f()\n}}\n")), vec![Code::E0002], "{owner}");
     }
     assert_eq!(codes("effect E {\n  const C: I32 = 1\n}\n"), vec![Code::E0002]);
     assert_eq!(codes("handler h: E {\n  const C: I32 = 1\n}\n"), vec![Code::E0002]);
@@ -345,6 +349,60 @@ fn chain_heights_follow_the_strengths() {
     assert!(Multiplicative.stronger(Additive) && Additive.stronger(Comparison) && Comparison.stronger(Or));
     assert!(!And.stronger(Or) && !Or.stronger(And) && !Bitwise.stronger(Or) && !Additive.stronger(Bitwise));
     assert!(!Additive.stronger(Multiplicative) && !Additive.stronger(Additive));
+}
+
+/// A `target fn` (§15.2, S-661, S-669): no body in braces, and a body after an `else` on the
+/// line of the last token of its heading, at the top level and in an `impl` (a trait
+/// implementation too), in the files of every package.
+#[test]
+fn a_target_fn_takes_a_body_after_else_on_the_line_of_its_heading() {
+    for src in [
+        "target fn f() -> I32 else { 1 }\n",
+        "pub target rt fn f[T: Num](x: T) -> T uses {Log} else {\n  x\n}\n",
+        "impl A {\n  target fn f(self) -> I32\n  target rt fn g(self) -> I32 else { 1 }\n}\n",
+        "impl Tr for A {\n  target fn f(self) -> I32 else { 1 }\n}\n",
+    ] {
+        let p = parse(src);
+        assert!(p.diagnostics.is_empty(), "{src}: {:?}", p.diagnostics);
+    }
+    // The body is the declaration's (the AST and the CST).
+    let p = parse("target fn f() -> I32 else { 1 }\n");
+    let crate::ast::ItemKind::Target(inner) = &p.ast.item(p.ast.root[0]).kind else { panic!("no target") };
+    assert!(matches!(&**inner, crate::ast::ItemKind::Fn(f) if f.body.is_some()));
+    let tree = p.cst.tree("target fn f() -> I32 else { 1 }\n");
+    assert!(tree.contains("KwElse") && tree.contains("Block"), "{tree}");
+    // An `else` on the next line: E0003 at it, whose candidate moves it up.
+    let src = "target fn f() -> I32\nelse { 1 }\n";
+    let p = parse(src);
+    assert_eq!(codes_of(&p), [Code::E0003]);
+    assert_eq!(p.diagnostics[0].message, "`else` must be on the line of the declaration's heading");
+    assert_eq!(p.diagnostics[0].span.start as usize, src.find("else").unwrap());
+    assert_eq!(fixed(src), "target fn f() -> I32 else { 1 }\n");
+    assert_eq!(
+        fixed("impl A {\n  target fn f() // c\n  else { 1 }\n}\n"),
+        "impl A {\n  target fn f() else { 1 } // c\n}\n"
+    );
+    // The kinds of `target` out of their places (the table of the declarations): the E0002 at
+    // `target`, named by its kind.
+    let top = "; declare it at the top level of the module";
+    let value = "there is no `target const`; write the associated constant with its value (`const C: F32 = 0.0 / 0.0`)";
+    for (src, message) in [
+        ("impl A {\n  target type T\n}\n", format!("`target type` cannot be declared in an `impl`{top}")),
+        ("trait T {\n  target fn f()\n}\n", format!("`target fn` cannot be declared in a `trait`{top}")),
+        ("impl A {\n  target const C: I32 = 1\n}\n", value.to_string()),
+        ("trait T {\n  target const C: I32\n}\n", value.to_string()),
+    ] {
+        let p = parse(src);
+        assert_eq!(codes_of(&p), [Code::E0002], "{src}");
+        assert_eq!(p.diagnostics[0].message, message, "{src}");
+        assert_eq!(p.diagnostics[0].span.start as usize, src.find("target").unwrap(), "{src}");
+    }
+    // A body in braces is E0002 in every package and place.
+    for src in ["target fn f() -> I32 { 1 }\n", "impl A {\n  target fn f() { }\n}\n"] {
+        let p = parse(src);
+        assert_eq!(codes_of(&p), [Code::E0002], "{src}");
+        assert_eq!(p.diagnostics[0].message, "this declaration is a signature and takes no body", "{src}");
+    }
 }
 
 #[test]

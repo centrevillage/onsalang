@@ -304,6 +304,13 @@ fn a_block_as_a_value_an_assigned_value_and_an_index_is_printed_as_a_block_expre
     assert_eq!(printed(src), super::table_tests::EXTRA[2].1);
 }
 
+/// The `else` of a `target fn` has one space before and after it (`spec/tools.md` §3.2, S-669).
+#[test]
+fn the_else_of_a_target_fn_has_a_space_on_each_side() {
+    let src = "pub target rt fn abs[T: Num](x: T)->T   else{ x }\n\nimpl A {\ntarget fn f(self)->I32 uses {Log}else   {\n1\n}\n}\n";
+    assert_eq!(printed(src), super::table_tests::EXTRA[3].1);
+}
+
 /// The blank lines (S-122, S-499, S-502), the line after an attribute and the comments (§3.4).
 #[test]
 fn blank_lines_separate_parts_and_comments_stay_on_their_lines() {

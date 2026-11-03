@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§15.2", "§2.5", "§18.2"]
+
+// S-669, S-670: the `else` body of a `target fn` (spec §15.2 "std の `target fn` は、見出しの後ろの `else` に本体を
+// 持てる"), written as `std` writes it and as `onsa fmt` writes it (spec/tools.md §3.2: `-> T else {`). The
+// `else` is on the line of the last token of the heading, whether the function is generic, `rt`, `pub`, has a
+// return type or none, and whether the heading is on one line or on several. The body is a block like any
+// other (statements, a value, `if`/`else`, `match`). The syntax stage reads the files of every package by
+// the same rule, so a package other than `std` reads the file; the E0200 for a package other than `std` is
+// the names stage's (tests/spec/module/target_user_else.onsa), and this case reads the syntax only
+// (`mode = "parse"`). The file is canonical, so `onsa fmt` leaves it unchanged.
+
+/// The primitive is given by the implementation; the body is for a type that it gives none.
+pub target rt fn abs[T: Num](x: T) -> T else {
+  if x < T.ZERO {
+    -x
+  } else {
+    x
+  }
+}
+
+pub target rt fn min[T: Num](a: T, b: T) -> T else {
+  if b < a { b } else { a }
+}
+
+target fn first[T: Copy](a: T, b: T) -> T else {
+  let c = a
+  let d = b
+  c
+}
+
+pub target fn plain(x: I32) -> I32 else { x }
+
+target rt fn ping() else {
+  let _ = 1
+}
+
+pub target fn wide(
+  a: F32,
+  b: F32,
+) -> F32 else {
+  a + b
+}
+
+target fn sign[T: Num](x: T) -> I32 else {
+  match x {
+    _ => 0,
+  }
+}

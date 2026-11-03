@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§2.5", "§18.1"]
+// fixes = 1
+
+// S-864, S-629, S-669: the `{` of the body after the `else` of a `target fn` is on the line of the `else`, and a
+// `{` on a later line is E0003 (spec §2.5 "`{` は、それが属する形の最後のトークンと同じ行に書く", §15.2 "`else` の後の
+// `{` も同じ行"), in a package other than `std` too (the syntax stage reads every package by one rule, S-670). The
+// main position is the `{`, so the marker is on the line of the `{`. The candidate moves the `{` and the rest of
+// its line to the end of the line of the `else` (before the comment of that line); a comment-only line or a blank
+// line between them stays where it is (§2.5). The `else` is on the line of the heading here (an `else` on a later
+// line is target_user_else_line.onsa). The error is the syntax stage's, so the unit with it has no E0200 of the
+// names stage. One error for each declaration (P-01): at the top level and as the member of an `impl`.
+
+target fn open() -> I32 else { 1 }
+//~ E0003
+
+pub target rt fn close(x: F32) -> F32 else {
+//~ E0003
+  x
+}
+
+target fn generic[T: Copy](x: T) -> T else { x }
+//~ E0003
+
+target rt fn tick() else {
+//~ E0003
+  let _ = 1
+}
+
+pub target rt fn wide(
+  a: F32,
+  b: F32,
+) -> F32 else {
+//~ E0003
+  a + b
+}
+
+target fn commented() -> I32 else { 1 } // the else
+//~ E0003
+
+target fn after_a_comment_line() -> I32 else { 1 }
+// the comment of a line of its own
+//~ E0003
+
+target fn after_a_blank_line() -> I32 else { 1 }
+
+//~ E0003
+
+target fn indented() -> I32 else { 1 }
+  //~ E0003
+
+pub target fn grow(n: U32) -> Buf[F32] uses {Alloc} else {
+//~ E0003
+  Buf.zeroed(n)
+}
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  target fn level(self) -> F32 else { self.gain }
+  //~ E0003
+}
+
+pub struct Mixer {
+  gain: F32,
+}
+
+impl Mixer {
+  pub target rt fn bump(inout self) else {
+  //~ E0003
+    let _ = self.gain
+  }
+}
+
+pub struct Handle {
+  id: U32,
+}
+
+impl Drop for Handle {
+  target rt fn drop(move self) else {
+  //~ E0003
+    let _ = 1
+  }
+}

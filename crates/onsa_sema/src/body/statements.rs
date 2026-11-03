@@ -160,7 +160,8 @@ impl<'a> Checker<'a> {
             return Ok(lt);
         }
         let it = self.check_expr(iter, None)?;
-        let it = self.known(it, span, "iterated value")?;
+        // A literal variable is iterated as no type of its kind is (S-860).
+        let it = self.known_shape(it, span, "iterated value")?;
         match self.ty(it) {
             Ty::Array(el, _) => Ok(el),
             Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, a) => Ok(a[0]),
@@ -169,8 +170,8 @@ impl<'a> Checker<'a> {
             }
             Ty::Error => Ok(it),
             _ => {
-                let shown = self.display(it);
-                Err(self.err(Code::E0401, span, format!("`{shown}` cannot be iterated (§7)")))
+                let shown = self.described(it);
+                Err(self.err(Code::E0401, span, format!("{shown} cannot be iterated (§7)")))
             }
         }
     }

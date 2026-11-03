@@ -43,7 +43,8 @@ impl<'p> Sema<'p> {
             }
             let sub_item = self.a.defs[sub.0 as usize].item.unwrap();
             let reach = self.type_vis((key_def, key_builtin)).map(|t| self.member_reach(&cx, sub, t));
-            if let ItemKind::Fn(f) = &cx.ast.item(sub_item).kind {
+            // `item_kind`: a `target fn` member too (S-661).
+            if let ItemKind::Fn(f) = decls::item_kind(&cx.ast.item(sub_item).kind) {
                 self.lower_fn(Cx { def: sub, reach, ..cx_clone(&cx) }, sub, f);
             }
         }

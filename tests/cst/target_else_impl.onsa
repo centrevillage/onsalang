@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§15.2", "§2.5", "§6.3", "§18.2"]
+
+// S-661, S-669, S-670: a `target fn` as a member of an `impl` (spec §15.2: "std の `target fn` は、固有の `impl` の
+// メンバにも書ける" and "構文の段は trait の実装のメンバの `target fn` も同じに読む"), with an `else` body or
+// without. The syntax stage reads an inherent `impl` and an `impl Tr for Ty` by one rule, a generic `impl`
+// too; the member can be a method with each receiver, or a function without one, between ordinary members. The
+// `else` is on the line of the last token of the heading, as at the top level (target_else_toplevel.onsa).
+// The orphan rule and the names of the traits belong to the later stages, so the traits here are not declared;
+// the syntax stage only (`mode = "parse"`). The file is canonical, so `onsa fmt` leaves it unchanged.
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  pub const LIMIT: U32 = 8
+
+  target fn level(self) -> F32 else {
+    self.gain
+  }
+
+  pub target rt fn bump(inout self) else {
+    let _ = self.gain
+  }
+
+  target rt fn size(self) -> U32
+
+  pub target fn limit() -> U32 else { 8 }
+
+  target fn consume(move self) -> F32
+
+  fn plain(self) -> F32 {
+    self.gain
+  }
+}
+
+pub struct Wrapper[T] {
+  value: T,
+}
+
+impl[T: Copy] Wrapper[T] {
+  target fn get(self) -> T else {
+    self.value
+  }
+
+  target fn raw(self) -> T
+}
+
+pub struct Handle {
+  id: U32,
+}
+
+impl Drop for Handle {
+  target rt fn drop(move self) else {
+    let _ = 1
+  }
+}
+
+impl Area for Voice {
+  target fn area(self) -> F32 else {
+    1.0
+  }
+
+  target fn perimeter(self) -> F32
+}
+
+impl[T: Copy] Show for Wrapper[T] {
+  target fn show(self) -> Str uses {Alloc} else {
+    "w"
+  }
+}

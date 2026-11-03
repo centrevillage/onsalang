@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.3", "§4.5"]
+
+// E0401 for a number passed as a `Span` or as an array of `Span`s, whatever the number's type turns out to be
+// (spec §4.7 "その場で既知を要する操作" and the paragraph after it: "`Span` と `Span` の配列の引数" is one of the
+// operations that the candidates' kind alone decides, so they get the code of the annotated form at once, not
+// E0420; S-860, the extension of S-854). The candidates of a literal's type variable are the integer types or
+// the float types, and a number is not a `Span` (§5.3: an array, a `Buf` or a `Span` is what a `Span` takes).
+// The parameter is `Span[I32]`, `Span[F32]` or `[Span[F32]; 2]`, and the argument is an integer literal or a
+// float literal, written itself or after `let n = …`, in a function call, a method call and a later argument
+// position. An array literal of numbers for the planar parameter is E0401 as before (the element is the
+// number, `[1.5, 2.5]`; it stands today and is in infer_literal_subject_annotated_shapes.onsa). A type variable
+// that is not a literal's stays E0420 (infer_literal_subject_open_shapes.onsa). One error per function (P-01).
+
+pub fn takes_ints(s: Span[I32]) -> U32 {
+  s.len()
+}
+
+pub fn takes_floats(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+pub fn takes_planar(s: [Span[F32]; 2]) -> U32 {
+  s[0].len()
+}
+
+pub fn scale(k: F32, s: Span[F32]) -> U32 {
+  s.len()
+}
+
+pub struct Rack {
+  n: U32,
+}
+
+impl Rack {
+  pub fn load(self, s: Span[I32]) -> U32 {
+    s.len()
+  }
+}
+
+// ---------------------------------------------------------------- Span[I32]
+
+pub fn ints_get_an_integer() -> U32 {
+  takes_ints(17)                                    //~ E0401
+}
+
+pub fn ints_get_a_bound_integer() -> U32 {
+  let n = 17
+  takes_ints(n)                                     //~ E0401
+}
+
+pub fn ints_get_a_float() -> U32 {
+  takes_ints(1.5)                                   //~ E0401
+}
+
+pub fn ints_get_a_bound_float() -> U32 {
+  let n = 1.5
+  takes_ints(n)                                     //~ E0401
+}
+
+pub fn ints_get_a_generic_result() -> U32 {
+  let z = id(17)
+  takes_ints(z)                                     //~ E0401
+}
+
+// ---------------------------------------------------------------- Span[F32]
+
+pub fn floats_get_a_float() -> U32 {
+  takes_floats(1.5)                                 //~ E0401
+}
+
+pub fn floats_get_a_bound_float() -> U32 {
+  let n = 1.5
+  takes_floats(n)                                   //~ E0401
+}
+
+pub fn floats_get_an_integer() -> U32 {
+  takes_floats(17)                                  //~ E0401
+}
+
+pub fn floats_get_a_bound_integer() -> U32 {
+  let n = 17
+  takes_floats(n)                                   //~ E0401
+}
+
+pub fn floats_get_a_float_decided_later() -> F32 {
+  let n = 1.5
+  let _ = takes_floats(n)                           //~ E0401
+  n
+}
+
+// ---------------------------------------------------------------- [Span[F32]; 2]
+
+pub fn planar_gets_a_float() -> U32 {
+  takes_planar(1.5)                                 //~ E0401
+}
+
+pub fn planar_gets_a_bound_float() -> U32 {
+  let n = 1.5
+  takes_planar(n)                                   //~ E0401
+}
+
+pub fn planar_gets_an_integer() -> U32 {
+  takes_planar(17)                                  //~ E0401
+}
+
+pub fn planar_gets_a_bound_integer() -> U32 {
+  let n = 17
+  takes_planar(n)                                   //~ E0401
+}
+
+// ---------------------------------------------------------------- other places of the argument
+
+pub fn a_later_argument() -> U32 {
+  scale(0.5, 17)                                    //~ E0401
+}
+
+pub fn a_later_argument_float() -> U32 {
+  scale(0.5, 1.5)                                   //~ E0401
+}
+
+pub fn a_method_argument(r: Rack) -> U32 {
+  r.load(17)                                        //~ E0401
+}
+
+pub fn a_method_argument_float(r: Rack) -> U32 {
+  r.load(1.5)                                       //~ E0401
+}
+
+pub fn in_a_closure(x: U32) -> U32 {
+  let f = fn(y: U32) -> U32 {
+    let n = 17
+    let _ = takes_ints(n)                           //~ E0401
+    y
+  }
+  f.(x)
+}
+
+test "span argument in a test" {
+  let n = 17
+  let _ = takes_ints(n)                             //~ E0401
+}
+
+fn id[T](x: T) -> T {
+  x
+}

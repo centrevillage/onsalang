@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.5", "§15.2", "§18.2"]
+
+// The declarations of target_else_heading.onsa with the spaces round `else` broken: none before the `{`
+// (`else{`), none before the `else` (`tick()else {`), more than one (`-> T   else   {`) and a tab on either side.
+// The language reads all of them, because the `else` is on the line of the last token of the heading whatever
+// the spaces are, and `onsa fmt` writes the forms of target_else_heading.onsa (spec/tools.md §3.2: "前後に空白を
+// 一つ置く（`-> T else {`）"). The file is not canonical on purpose (`canonical = false`) and has tabs.
+
+pub target rt fn abs[T: Num](x: T) -> T   else   {
+  if x < T.ZERO {
+    -x
+  } else {
+    x
+  }
+}
+
+target fn plain[T: Copy](x: T) -> T else{ x }
+
+target rt fn ping()	else	{
+  let _ = 1
+}
+
+target fn tick()else {
+  let _ = 1
+}
+
+pub target fn grow(n: U32) -> Buf[F32] uses {Alloc}   else{
+  Buf.zeroed(n)
+}
+
+pub target rt fn wide(
+  a: F32,
+  b: F32,
+)	->	F32	else {
+  a + b
+}
+
+pub struct Voice {
+  gain: F32,
+}
+
+impl Voice {
+  target fn level(self) -> F32  else  {
+    self.gain
+  }
+
+  pub target rt fn limit() -> U32 else{ 8 }
+}
+
+impl Drop for Voice {
+  target rt fn drop(move self)   else   {
+    let _ = 1
+  }
+}

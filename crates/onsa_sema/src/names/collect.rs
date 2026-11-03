@@ -123,10 +123,8 @@ impl<'p> Sema<'p> {
                     ItemKind::Test { name, body } => self.collect_test(&at, name, *body, &mut tests),
                     ItemKind::Target(inner) => {
                         at.target = true;
-                        if let Some(d) = self.collect_named(&at, inner)
-                            && !self.a.modules.is_std(m)
-                        {
-                            self.unsupported(d, item.span, Feature::UserTargets, &[]);
+                        if let Some(d) = self.collect_named(&at, inner) {
+                            self.user_target(m, d, item.span);
                         }
                     }
                     kind => {
@@ -307,6 +305,21 @@ impl<'p> Sema<'p> {
         self.report(d, diag.with_note(first, "first declared here"));
     }
 
+    /// The `target` declaration or member `d` of the module `m`: out of
+    /// `std` (§15.2, S-670), the one E0200 of the names stage for the whole
+    /// of it, whatever its form (with an `else` body or none, of the module
+    /// or of an `impl`), and its `else` body is no body of the package: its
+    /// names and types are not checked.
+    fn user_target(&mut self, m: ModId, d: DefId, span: Span) {
+        if self.a.modules.is_std(m) {
+            return;
+        }
+        self.unsupported(d, span, Feature::UserTargets, &[]);
+        if let DefKind::Fn(f) = &mut self.a.defs[d.0 as usize].kind {
+            f.body = None;
+        }
+    }
+
     /// The def of an `impl` and the defs of its functions and constants. A
     /// trait implementation is an E0200, and its members have no defs.
     fn collect_impl(&mut self, at: &Place<'_>, decl: &ImplDecl) {
@@ -325,14 +338,23 @@ impl<'p> Sema<'p> {
         for &id in &decl.items {
             let sub = at.ast.item(id);
             let member = Place { id, item: sub, ..*at };
-            let (name, kind) = match &sub.kind {
-                ItemKind::Fn(f) => (&f.name, DefKind::Fn(member.fn_def(f))),
-                ItemKind::Const(c) => (&c.name, DefKind::Const(member.const_def(c.value))),
+            let (name, kind, target) = match &sub.kind {
+                ItemKind::Fn(f) => (&f.name, DefKind::Fn(member.fn_def(f)), false),
+                // A `target fn` member (§15.2, S-661): the parser reads no other `target` there.
+                ItemKind::Target(inner) => match &**inner {
+                    ItemKind::Fn(f) => (&f.name, DefKind::Fn(Place { target: true, ..member }.fn_def(f)), true),
+                    _ => continue,
+                },
+                ItemKind::Const(c) => (&c.name, DefKind::Const(member.const_def(c.value)), false),
                 _ => continue,
             };
+            let is_fn = matches!(kind, DefKind::Fn(_));
             let def = Def { owner: Some(d), ..member.def(name.name.clone(), name.span, kind) };
             let sub_def = self.add_def(def);
-            if matches!(sub.kind, ItemKind::Fn(_)) { fns.push(sub_def) } else { consts.push(sub_def) }
+            if target {
+                self.user_target(at.m, sub_def, sub.span);
+            }
+            if is_fn { fns.push(sub_def) } else { consts.push(sub_def) }
         }
         if let DefKind::Impl(imp) = &mut self.a.defs[d.0 as usize].kind {
             imp.fns = fns;

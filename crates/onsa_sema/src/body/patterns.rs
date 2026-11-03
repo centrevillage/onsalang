@@ -71,7 +71,8 @@ impl<'a> Checker<'a> {
             PatKind::Path(path) => self.bind_ctor_pat(pat, path, &[], ty, irrefutable, false),
             PatKind::TupleStruct { path, elems } => self.bind_ctor_pat(pat, path, elems, ty, irrefutable, true),
             PatKind::Tuple(elems) => {
-                let s = self.known(ty, span, "matched value")?;
+                // A literal variable is no tuple (S-860).
+                let s = self.known_shape(ty, span, "matched value")?;
                 let Ty::Tuple(ts) = self.ty(s) else {
                     // A value of the error type: the elements are errors too,
                     // and their names are bound (§18.1, R-271).
@@ -81,12 +82,8 @@ impl<'a> Checker<'a> {
                         }
                         return Ok(P::Wild);
                     }
-                    let shown = self.display(ty);
-                    return Err(self.err(
-                        Code::E0401,
-                        span,
-                        format!("expected a tuple pattern target, found `{shown}`"),
-                    ));
+                    let shown = self.described(ty);
+                    return Err(self.err(Code::E0401, span, format!("expected a tuple pattern target, found {shown}")));
                 };
                 if ts.len() != elems.len() {
                     return Err(self.err(

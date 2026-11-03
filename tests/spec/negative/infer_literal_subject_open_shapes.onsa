@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.3", "§7"]
+
+// E0420 stays for the three operations of infer_literal_subject_iter.onsa, _pattern.onsa and _span_arg.onsa when the
+// subject is a type variable that is not a literal's (S-860: "リテラルでない型変数 … では、三つとも E0420 のまま
+// である（注釈で直る）"; spec §4.7: the subject of these operations must be known here, "対象が型変数そのもの
+// （リテラルの型変数を含む）なら未解決である", and only the kind of the candidates of a literal's variable is
+// enough to say the operation is wrong). `let v = make()` of `fn make[T: Copy]() -> T` has nothing known of `T`,
+// so a `for` over it, a tuple pattern on it and its passing as a `Span` or as an array of `Span`s ask for an
+// annotation, as the call, the field, the tuple index, the index and `?` do (infer_literal_subject_open.onsa).
+// An annotation mends each (`let v: I32 = make()`, and then the operation is the E0401 of
+// infer_literal_subject_annotated_shapes.onsa). One error per function (P-01).
+
+pub fn make[T: Copy]() -> T {
+  make()
+}
+
+pub fn takes_ints(s: Span[I32]) -> U32 {
+  s.len()
+}
+
+pub fn takes_floats(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+pub fn takes_planar(s: [Span[F32]; 2]) -> U32 {
+  s[0].len()
+}
+
+// ---------------------------------------------------------------- the operand of a for
+
+pub fn iterate_a_generic_result() -> I32 {
+  let v = make()
+  for i in v {                                      //~ E0420
+    let _ = i
+  }
+  0
+}
+
+// ---------------------------------------------------------------- a tuple pattern
+
+pub fn let_on_a_generic_result() -> I32 {
+  let v = make()
+  let (a, b) = v                                    //~ E0420
+  0
+}
+
+pub fn for_head_on_a_generic_result() -> I32 {
+  let v = make()
+  for (a, b) in v {                                 //~ E0420
+    let _ = a
+  }
+  0
+}
+
+pub fn arm_on_a_generic_result() -> I32 {
+  match Some(make()) {
+    Some((a, b)) => 0,                              //~ E0420
+    None => 1,
+  }
+}
+
+pub flow let_on_a_generic_result_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let v = make()
+  let (a, b) = v                                    //~ E0420
+  x
+}
+
+// ---------------------------------------------------------------- an argument that is a Span
+
+pub fn span_of_integers_gets_a_generic_result() -> U32 {
+  let v = make()
+  takes_ints(v)                                     //~ E0420
+}
+
+pub fn span_of_floats_gets_a_generic_result() -> U32 {
+  let v = make()
+  takes_floats(v)                                   //~ E0420
+}
+
+pub fn planar_gets_a_generic_result() -> U32 {
+  let v = make()
+  takes_planar(v)                                   //~ E0420
+}
