@@ -603,3 +603,10 @@ left = "expected newline or `…`, found identifier"
 input = "tests/fuzz/f613964a.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a line break before the mark `~(` in the elements of an array, and a `p` after the closing `]` on the line, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "number prefix without digits"
+input = "tests/fuzz/698f6da0.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: the `{` of the `else` body of a `target fn` on the line after its heading, and a `0x` without digits after the closing `}`, which the input has before the candidate"
