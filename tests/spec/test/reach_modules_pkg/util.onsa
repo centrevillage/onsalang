@@ -1,0 +1,12 @@
+use std.test.gen
+
+pub fn digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+// No test reaches it.
+pub fn unused_digit(n: U32) -> U32 {
+  let _ = gen.u32(1, n)
+  n
+}

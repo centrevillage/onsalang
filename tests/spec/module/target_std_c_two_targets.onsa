@@ -1,0 +1,37 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_two_targets"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_two_"
+//
+// [targets.fast]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.safe]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = ["Alloc"]
+//
+// [test]
+// spec = ["§15.2", "§15.3", "§11.8"]
+
+use std.dsp.test.{assert_near}
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the E0200 of a `std` function that the C backend does not provide is judged for
+// each target of the manifest, and both targets here are built by the C backend, so the same use is reported once
+// for each target (§15.2: "その変換先へのビルド … を始める前に、使った位置で E0200"; the marks name the target). A
+// target that provides `Alloc` and one that does not make no difference to it (the `std` function does not use
+// `Alloc`).
+@export
+pub fn near(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)   //~ E0200 [fast] //~ E0200 [safe]
+  x
+}

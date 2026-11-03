@@ -21,7 +21,7 @@ use super::build::{
 };
 use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, unsupported};
 use crate::ir::*;
-use crate::prim::{CheckedOp, MathFn, Prim};
+use crate::prim::{CheckedOp, MathFn, Prim, PrimRow, Scalar};
 
 mod call;
 mod expr;

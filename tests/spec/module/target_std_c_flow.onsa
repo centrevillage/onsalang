@@ -1,0 +1,71 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_flow"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_flow_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§11.5", "§11.8"]
+
+use std.dsp.test.{assert_near}
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the build reaches a `std` function that the C backend does not provide through an
+// exported flow, and through a flow whose instance it makes (§15.2: "届くとは、入口から、… インスタンスを作る flow …
+// を静的にたどれること"; a flow makes the instances of the flows it calls with `~`, §11.5). A function called with
+// arguments at the clocks that allow a call from a flow body (`init` or constants, §11.5) is reached too. The use is
+// reported where it is written.
+
+// Called by the body of `tone`, with a constant argument.
+fn scale(g: F32) -> F32 {
+  assert_near(1.0, 1.0, 0.1)   //~ E0200 [host]
+  g
+}
+
+@export
+pub flow tone(x: F32 at sample) -> F32 at sample {
+  let k = scale(2.0)
+  x * k
+}
+
+// `outer` is exported and makes an instance of `inner`, which is not exported: the build reaches the body of `inner`.
+fn inner_scale(g: F32) -> F32 {
+  assert_near(2.0, 2.0, 0.1)   //~ E0200 [host]
+  g
+}
+
+pub flow inner(x: F32 at sample) -> F32 at sample {
+  let k = inner_scale(3.0)
+  x * k
+}
+
+@export
+pub flow outer(x: F32 at sample) -> F32 at sample {
+  let a = inner~(x)
+  a
+}
+
+// The instance is made inside a `par~`: every copy reaches the body of `leaf`, whose use is one position, one report.
+fn leaf_scale(g: F32) -> F32 {
+  assert_near(3.0, 3.0, 0.1)   //~ E0200 [host]
+  g
+}
+
+pub flow leaf(x: F32 at sample) -> F32 at sample {
+  let k = leaf_scale(4.0)
+  x * k
+}
+
+@export
+pub flow replicated(x: F32 at sample) -> F32 at sample {
+  let xs = par~ i in 0..<2 { leaf~(x) * i.round_f32() }
+  xs[0] + xs[1]
+}

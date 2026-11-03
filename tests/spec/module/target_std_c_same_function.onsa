@@ -1,0 +1,50 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_same_function"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_same_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§11.8", "§18.1"]
+
+use std.dsp.test.{assert_near}
+use std.test.gen
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the E0200 of a `std` function that the C backend does not provide is "使った位置で"
+// (§15.2), one for each position of a use, so a function that uses them several times has several reports. §18.1 reduces
+// the reports of the checks to one for each unit ("最初のエラーで検査を止める"), but the E0200 of the build
+// comes after the checks, and §18.1 gives the only reduction of it: one use that several entries or several
+// instantiations reach is one report ("位置・コード・文面が同じ E0200 は一件")  — the uses below are at different
+// positions. (The test side reports every position: test_unsupported_std.onsa, test_unsupported_std_nested.onsa.)
+
+// Two uses of one function on two lines.
+@export
+pub fn twice(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)   //~ E0200 [host]
+  assert_near(x, 2.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+// A generator of pairs and the two generators that it takes, on one line: three uses at three columns.
+@export
+pub fn pairs(n: U32) -> U32 {
+  let _ = gen.pair(gen.u32(0, n), gen.f32(0.0, 1.0))   //~ E0200 [host] //~ E0200 [host] //~ E0200 [host]
+  n
+}
+
+// Different functions of `std` in one function.
+@export
+pub fn mixed(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200 [host]
+  assert_near(1.0, 1.0, 0.1)   //~ E0200 [host]
+  n
+}

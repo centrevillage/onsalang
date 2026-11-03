@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§18.2", "§11.8"]
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the property check `std.test.check(cases, g, p)` (§11.8) is a `std` function that
+// the interpreter of this version does not provide (S-69 (3): "M5 までの `std.test` の `check` / `gen` は、表に未対応の印を付ける"),
+// and so are the generators it takes. A `test` whose body calls it reaches the use, and it is reported at the call
+// (§15.2, "使った位置で"), as is the generator `gen.f32` that the call takes, at its own column of the same line.
+// `check` is called in the body of a test (§11.8: "それ以外では、呼ぶ関数の効果行に `Random` が要る"), and the
+// anonymous function that the call takes is the form of §11.8's example, so the case is written in it.
+// The tests do not run, so the `assert false` is never reached.
+
+use std.test.{check, gen}
+
+test "wrap01 stays in [0, 1)" {
+  check(100, gen.f32(0.0, 1.0), fn(x: F32) -> Bool {   //~ E0200 //~ E0200
+    0.0 <= x && x < 1.0
+  })
+  assert false
+}
+
+test "a test without a check" {
+  assert true
+}

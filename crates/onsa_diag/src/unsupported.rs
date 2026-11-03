@@ -179,6 +179,9 @@ features! {
     /// `{}`: the function's path (`std.test.gen.f32`). W2-03: `onsa test`
     /// finds them before it runs the tests.
     InterpreterStdFn: Language, "the `std` function `{}` in `onsa test` (the interpreter)", None;
+    /// `{}`, `{}`: the function's path and its type arguments (spec §15.2,
+    /// S-69): the compiler has no primitive of it for them.
+    StdTargetType: Language, "the `std` function `{}` for the type `{}`", None;
     /// The reserved words (§2.2, §19.1, S-169, S-279): wherever one is read
     /// (`onsa_syntax::token::KEYWORDS`).
     DerivedClocks: Language, "the declaration of a derived clock (the reserved word `clock`)", None;

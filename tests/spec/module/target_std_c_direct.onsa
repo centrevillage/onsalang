@@ -1,0 +1,53 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_direct"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_direct_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§11.8", "§18.1"]
+
+use std.dsp.test.{assert_near}
+use std.test.gen
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: a `std` function that the C backend does not provide (§15.2: "全ての変換先が与え
+// るのを原則とする。この版で与えない変換先があれば、その実行やビルドの入口から届く位置でそれを使うプログラムは、…
+// 使った位置で E0200"; the entries of a build are the items with `@export`). `assert_near` of `std.dsp.test` and the
+// generators `u32` and `f32` of `std.test.gen` (§11.8) are what the C target does not provide. Each exported
+// function below uses one of them directly, once, so each is reported at its use, and the report of one function does
+// not hide the use in another (§18.1: the units are independent and every error is reported at once).
+// `onsa check` does not depend on the target, so it reports none (the marks name the target `host`: they are for the
+// build of that target only; same_function and unreached beside this case).
+
+@export
+pub fn near(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+@export
+pub fn unsigned_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200 [host]
+  n
+}
+
+@export
+pub fn float_digit(n: U32) -> U32 {
+  let _ = gen.f32(0.0, 1.0)   //~ E0200 [host]
+  n
+}
+
+// An exported function that uses none of them: built, no mark.
+@export
+pub fn plain(x: F64) -> F64 {
+  x + 1.0
+}

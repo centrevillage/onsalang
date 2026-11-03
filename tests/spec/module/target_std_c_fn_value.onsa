@@ -1,0 +1,61 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_fn_value"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_fnv_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§6.1", "§11.8"]
+
+use std.dsp.test.{assert_near}
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the build reaches a `std` function that the C backend does not provide through a
+// function that an exported item uses as a value (§15.2: "届くとは、入口から、… 値として使う関数 … を静的にたどれる
+// こと"). Placing a function in a variable or an argument is a use as a value, whether or not the value is called.
+// Written in the final syntax of a call through a function value (`f.(x)`, §6.1), which the parser of this version
+// does not read yet; this version lowers no function value (W8-09).
+
+fn bound_digit(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+fn passed_digit(x: F64) -> F64 {
+  assert_near(x, 2.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+fn never_called_digit(x: F64) -> F64 {
+  assert_near(x, 3.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+fn apply(f: fn(F64) -> F64, x: F64) -> F64 {
+  f.(x)
+}
+
+@export
+pub fn bound(x: F64) -> F64 {
+  let f = bound_digit
+  f.(x)
+}
+
+@export
+pub fn passed(x: F64) -> F64 {
+  apply(passed_digit, x)
+}
+
+@export
+pub fn never_called(x: F64) -> F64 {
+  let _ = never_called_digit
+  x
+}

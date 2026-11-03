@@ -1,0 +1,40 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_per_target"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsp_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§11.8", "§18.2"]
+
+use std.dsp.test.{assert_near}
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: whether a `std` function is provided is decided for each target (§15.2: "全ての変換先
+// が与えるのを原則とする。この版で与えない変換先があれば、…"). `assert_near` is provided by the interpreter (§11.8: it
+// panics at the call when it fails) and is not provided by the C backend. The same function `close` is called by a
+// test, which `onsa test` runs in the interpreter and passes, and by an exported function, which the build of the C
+// target rejects at the use. One use, one position: the interpreter does not report it and the build does.
+
+fn close(a: F64, b: F64) {
+  assert_near(a, b, 0.5)   //~ E0200 [host]
+}
+
+test "close values pass in the interpreter" {
+  close(1.0, 1.2)
+}
+
+@export
+pub fn near(x: F64) -> F64 {
+  close(x, 1.0)
+  x
+}

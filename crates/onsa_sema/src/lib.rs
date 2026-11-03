@@ -35,6 +35,9 @@ mod names;
 /// The files of a package tree (§15.1): the driver reads packages with it, and
 /// `build.rs` includes the same file to generate the std table.
 pub mod package_tree;
+pub mod prim;
+#[cfg(test)]
+mod prim_tests;
 pub mod resolve;
 mod rt;
 mod sig;
@@ -200,6 +203,9 @@ pub struct Analysis {
     pub alloc: Option<DefId>,
     /// `TyId` keys of generic builtins in `Modules::assoc_builtin`.
     pub builtin_key: HashMap<ty::BuiltinTy, TyId>,
+    /// The primitive of each `target` declaration of std (S-69 (2),
+    /// [`prim::record`]): lowering reads it, not the name.
+    pub prims: HashMap<DefId, prim::PrimRow>,
     /// The names of each body, resolved by the names stage
     /// ([`names::body::walk_bodies`]).
     pub(crate) names: HashMap<DefId, names::body::BodyNames>,

@@ -1,0 +1,56 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_one_report"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_one_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§18.1", "§11.8"]
+
+use std.dsp.test.{assert_near}
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: one use that several entries reach, or that several instantiations of a generic
+// function reach, is one report (§18.1: "一つの使用が複数の入口（テスト）や総称の関数の複数の具体化から届いても、
+// 位置・コード・文面が同じ E0200 は一件である").
+
+// Reached by three exported functions.
+fn shared(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+@export
+pub fn first(x: F64) -> F64 {
+  shared(x)
+}
+
+@export
+pub fn second(x: F64) -> F64 {
+  shared(x) + 1.0
+}
+
+@export
+pub fn third(x: F64) -> F64 {
+  shared(shared(x))
+}
+
+// A generic function that the exported function calls at two types: one position, one report.
+fn generic_use[T: Copy](x: T) -> T {
+  assert_near(1.0, 1.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+@export
+pub fn at_two_types(a: F64, b: U32) -> F64 {
+  let _ = generic_use(b)
+  generic_use(a)
+}

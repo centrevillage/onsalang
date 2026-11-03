@@ -1,0 +1,45 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_test_body"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_tb_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§11.8", "§18.2"]
+
+use std.dsp.test.{assert_near}
+use std.test.gen
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: a `test` is not an entry of a build (§15.2: "ビルドでは export する項目など"; a
+// `test` is not exported and is not in the C that the build writes, §11.8, §18.2). The `std` functions that the C
+// backend does not provide are used below in the bodies of tests and in a function that only tests call, and the build
+// of the target reports nothing. `onsa check` reports nothing either. (`onsa test` reaches the generators from the
+// tests and reports them, which is the other half: the files named reach_* in tests/spec/test.)
+
+fn only_tests_call(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)
+  x
+}
+
+test "a function that only a test calls" {
+  assert only_tests_call(1.0) == 1.0
+}
+
+test "a generator in the body of a test" {
+  let _ = gen.u32(0, 3)
+}
+
+// An exported item that none of them reaches, so the package does build.
+@export
+pub fn plain(x: F64) -> F64 {
+  x + 1.0
+}

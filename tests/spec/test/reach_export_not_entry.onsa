@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§18.2", "§14.2", "§11.8"]
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the entries differ between the commands (§15.2: "入口は、`onsa test` では走らせる
+// テスト（渡したファイルと `--filter` で選んだもの、§18.2）、ビルドでは export する項目など"). An item with `@export`
+// is an entry of a build, not of `onsa test`, so a `std` function that the interpreter does not provide, used in an
+// exported function that no running test reaches, is not an E0200 of `onsa test`: the tests run and pass. The
+// generators of `std.test.gen` are the helpers of §11.8 that this version's interpreter does not run. The contrast
+// is reach_calls.onsa, where a test reaches the use, and target_std_c_direct.onsa (spec/module), where a build does.
+
+use std.test.gen
+
+@export
+pub fn exported_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+fn helper_of_the_export(n: U32) -> U32 {
+  let _ = gen.f32(0.0, 1.0)
+  n
+}
+
+@export
+pub fn exported_by_a_helper(n: U32) -> U32 {
+  helper_of_the_export(n)
+}
+
+fn plain(n: U32) -> U32 {
+  n + 1
+}
+
+test "a plain function next to the exported ones" {
+  assert plain(1) == 2
+}

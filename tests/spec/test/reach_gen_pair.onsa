@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§18.2", "§11.8"]
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the generator of pairs `gen.pair(g1, g2)` of `std.test.gen` (§11.8) is a `std`
+// function that the interpreter does not provide, like `gen.u32` and `gen.f32`, and the two generators that it takes
+// are uses of their own. A function that a running test calls builds them, so every use is reported at its position
+// (§15.2: "使った位置で"): the `pair` and the two generators it takes are three uses at three columns of one line.
+// The tests do not run, so the `assert false` is never reached.
+
+use std.test.{Gen}
+use std.test.gen
+
+fn pairs() -> Gen[(U32, F32)] {
+  gen.pair(gen.u32(0, 1), gen.f32(0.0, 1.0))   //~ E0200 //~ E0200 //~ E0200
+}
+
+// A pair of pairs: five uses.
+fn nested() -> Gen[((U32, U32), U32)] {
+  gen.pair(gen.pair(gen.u32(0, 1), gen.u32(1, 2)), gen.u32(2, 3))   //~ E0200 //~ E0200 //~ E0200 //~ E0200 //~ E0200
+}
+
+test "a function that builds a pair" {
+  let _ = pairs()
+  assert false
+}
+
+test "a function that builds a pair of pairs" {
+  let _ = nested()
+}

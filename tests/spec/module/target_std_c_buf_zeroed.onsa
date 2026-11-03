@@ -1,0 +1,28 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_buf_zeroed"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_buf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = ["Alloc"]
+//
+// [test]
+// spec = ["§15.2", "§12.3", "§18.1"]
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: `Buf.zeroed(n)`, an associated function of a built-in type, in the build of the C
+// target. The target provides `Alloc`, so the effect row is fine (no E0610, §14.2), but the C backend of this version
+// does not handle `Buf` (heap buffers): it is E0200 "検出した位置で" (§18.1), the use `Buf.zeroed(n)`. §15.2 reads the
+// same for a built-in associated function that the target does not provide as for a `std` function: reached from an
+// exported item and reported at the use (one report for the use; the mark is on the line of the use).
+@export
+pub fn len_of(n: U32) -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(n)   //~ E0200 [host]
+  b.len()
+}

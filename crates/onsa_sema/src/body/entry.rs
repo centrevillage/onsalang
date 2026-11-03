@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::kind::Placed;
+use crate::prim::Scalar;
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ entry points
@@ -160,6 +161,25 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// A use of a `std` `target` declaration at type arguments its row has no
+    /// primitive for (spec §15.2, S-69): E0200 at the use, with the types.
+    /// One whose arguments are still open (a type parameter of a generic
+    /// body) is not judged here: lowering instantiates it.
+    fn check_prim_uses(&mut self) {
+        for i in 0..self.info.instances.len() {
+            let Instance { def, args, span } = self.info.instances[i].clone();
+            let Some(&row) = self.a.prims.get(&def) else { continue };
+            let args: Vec<TyId> = args.iter().map(|&t| self.infer.resolve(&mut self.a.types, t)).collect();
+            let scalars: Option<Vec<Scalar>> = args.iter().map(|&t| Scalar::of(&self.a.types, t)).collect();
+            if scalars.is_some_and(|s| !row.provides(&s)) {
+                let name = format!("std.{}", crate::prim::key_of(self.a, def));
+                let shown: Vec<String> = args.iter().map(|&t| self.display(t)).collect();
+                self.unsupported(span, Feature::StdTargetType, &[&name, &shown.join(", ")]);
+                return;
+            }
+        }
+    }
+
     /// The checks at the end of the body (`deferred.rs`) and the resolution of the tables.
     pub(super) fn finish(mut self) -> BodyInfo {
         if !self.failed {
@@ -170,6 +190,9 @@ impl<'a> Checker<'a> {
         }
         if !self.failed {
             self.open_operator_net();
+        }
+        if !self.failed {
+            self.check_prim_uses();
         }
         // Resolve the tables.
         let keys: Vec<ExprId> = self.info.expr_types.keys().copied().collect();

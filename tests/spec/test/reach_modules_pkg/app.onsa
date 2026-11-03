@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§15.1", "§18.2", "§11.8"]
+
+use util.{digit}
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: `onsa test` reaches a `std` function that the interpreter does not provide through the
+// modules of the package (§15.1: a `use` is a dependency; §15.2: "届くとは、入口から、呼ぶ関数、…を静的にたどれる
+// こと"). The test below calls `util.digit`; the E0200 is in the file where the use is written, `util.onsa`. A
+// function of `util` that no test reaches (`util.unused_digit`) has the same use and no mark. The generators of
+// `std.test.gen` are the helpers of §11.8 that this version's interpreter does not run. No test runs.
+
+test "a function of another module" {
+  assert digit(2) == 2
+  assert false
+}

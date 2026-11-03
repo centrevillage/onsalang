@@ -1,0 +1,12 @@
+use deep.{check_level}
+use std.dsp.test.{assert_near}
+
+pub fn measure(x: F64) -> F64 {
+  check_level(x)
+}
+
+// Nothing calls it: its use is not reached.
+pub fn never_called(x: F64) -> F64 {
+  assert_near(x, 9.0, 0.1)
+  x
+}

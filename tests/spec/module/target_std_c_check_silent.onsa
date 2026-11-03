@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§11.8"]
+
+use std.dsp.test.{assert_near}
+use std.test.gen
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: `onsa check` does not depend on the target, so it does not report the E0200 of a
+// `std` function that the C backend does not provide, even where an exported item reaches the use (§15.2: "`onsa
+// check` は変換先によらないので、これを報告しない"). The package has no target, so there is no build to report it;
+// the same exported items with a C target are target_std_c_direct.onsa, which reports them for the build only.
+
+@export
+pub fn near(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)
+  x
+}
+
+@export
+pub fn digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}

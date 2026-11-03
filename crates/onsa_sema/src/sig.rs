@@ -124,6 +124,7 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
     drop(names);
     let _signatures = phase(Phase::Signatures);
     let flows = s.lower_signatures();
+    crate::prim::record(s.a);
     let pairs = s.lower_generated(&flows);
     s.a.known.ready = true;
     s.wellformed();

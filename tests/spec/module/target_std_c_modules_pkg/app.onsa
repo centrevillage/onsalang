@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§15.2", "§15.1", "§11.8"]
+
+use util.{measure}
+use deep.{DEEP_LEVEL}
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the build reaches a `std` function that the C backend does not provide through the
+// modules of the package (§15.1: a `use` is a dependency; §15.2: "届くとは、入口から、呼ぶ関数、…、読む `const` の
+// 初期化式を静的にたどれること"). The exported function below calls `util.measure`, which calls `deep.check_level`;
+// the E0200 is in the file where the use is written, in `deep.onsa` (`util.onsa` has a second one in a function that
+// nothing calls: no mark). `DEEP_LEVEL`, a plain `const` of `deep`, is read
+// by the second exported function: no mark.
+@export
+pub fn level(x: F64) -> F64 {
+  measure(x)
+}
+
+@export
+pub fn constant_level() -> F64 {
+  DEEP_LEVEL
+}

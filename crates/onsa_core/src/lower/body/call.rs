@@ -176,8 +176,9 @@ fn sig_params(lw: &mut Lowerer, cx: &FnCx, f: &SFnDef, gargs: &[GenericArg], spa
     Ok(out)
 }
 
-/// A call to a `target fn` of `std` (D-07): math primitives, `array.from_fn`
-/// (inlined), or a named primitive the interpreter provides.
+/// A call to a `target fn` of `std` (D-07): its row of the table, resolved
+/// by sema ([`onsa_sema::Analysis::prims`], S-69 (2)), instantiated at the
+/// type arguments of the call; `array.from_fn` is inlined.
 #[allow(clippy::too_many_arguments)]
 fn lower_target_call(
     lw: &mut Lowerer,
@@ -190,37 +191,30 @@ fn lower_target_call(
     ty: Ty,
 ) -> R<Expr> {
     let span = cx.expr(e).span;
-    let d = lw.a.def(def);
-    if !lw.a.modules.is_std(d.module) {
-        // Sema stops a `target` declaration outside `std` (`UserTargets` of
-        // the list of S-224): lowering never sees a call to one.
-        return Err(internal(span, "a call to a `target` declaration outside `std`"));
+    // Sema stops a `target` declaration outside `std` (`UserTargets` of the
+    // list of S-224) and records a row for each of std's.
+    let Some(&row) = lw.a.prims.get(&def) else {
+        return Err(internal(span, "a call to a `target` declaration without a row"));
+    };
+    if row == PrimRow::FromFn {
+        return lower_from_fn(lw, cx, args, ty, span);
     }
-    let module = lw.a.modules.get(d.module).path.clone();
-    let name = d.name.clone();
+    let scalars: Vec<Scalar> = gargs
+        .iter()
+        .map(|g| match g {
+            GenericArg::Ty(Ty::Int(k)) => Scalar::Int(*k),
+            GenericArg::Ty(Ty::Float(k)) => Scalar::Float(*k),
+            _ => Scalar::Other,
+        })
+        .collect();
+    // Sema reports the closed uses without a primitive (E0200); one through
+    // a generic body is W5-07's (the `else` bodies).
+    let Some(prim) = row.instantiate(&scalars) else {
+        return Err(internal(span, "a `target` declaration without a primitive for its type arguments"));
+    };
     let params = sig_params(lw, cx, f, gargs, span)?;
-    match (module.as_str(), name.as_str()) {
-        ("math", n) => {
-            let Some(mf) = MathFn::parse(n) else { return Err(internal(span, "unknown std.math function")) };
-            let cargs = lower_args(lw, cx, args, &params)?;
-            let prim = match &ty {
-                Ty::Float(k) => Prim::Math(mf, *k),
-                Ty::Int(k) => match mf {
-                    MathFn::Abs => Prim::IntAbs(*k),
-                    MathFn::Min => Prim::IntMin(*k),
-                    MathFn::Max => Prim::IntMax(*k),
-                    _ => return Err(internal(span, "math function on an integer")),
-                },
-                _ => return Err(internal(span, "math function type")),
-            };
-            Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
-        }
-        ("array", "from_fn") => lower_from_fn(lw, cx, args, ty, span),
-        _ => {
-            let cargs = lower_args(lw, cx, args, &params)?;
-            Ok(Expr::new(ty, span, ExprKind::Prim { prim: Prim::Std(format!("std.{module}.{name}")), args: cargs }))
-        }
-    }
+    let cargs = lower_args(lw, cx, args, &params)?;
+    Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
 }
 
 /// `array.from_fn(f)`: an array local filled by a loop; a closure argument is

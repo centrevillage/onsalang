@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§18.1", "§18.2", "§11.8"]
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: one use of a `std` function that the interpreter does not provide, reached by several
+// tests, is one report (§18.1: "一つの使用が複数の入口（テスト）や総称の関数の複数の具体化から届いても、位置・コード・
+// 文面が同じ E0200 は一件である"). The entries of `onsa test` are the tests it runs (§15.2, §18.2), and the use is
+// reported where it is written, not once for each test that reaches it. The generators of `std.test.gen` are the
+// helpers of §11.8 that this version's interpreter does not run. No test runs, so the `assert false` is never reached.
+
+use std.test.gen
+
+fn shared_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+// Reached by two tests through two different functions.
+fn via_one(n: U32) -> U32 {
+  shared_digit(n)
+}
+
+fn via_two(n: U32) -> U32 {
+  shared_digit(n) + 1
+}
+
+// A generic function that a test calls at two types: one position.
+fn generic_digit[T: Copy](x: T) -> T {
+  let _ = gen.f32(0.0, 1.0)   //~ E0200
+  x
+}
+
+test "first test" {
+  assert via_one(1) == 1
+  assert false
+}
+
+test "second test" {
+  assert via_two(1) == 2
+}
+
+test "third test calls the shared function itself" {
+  assert shared_digit(3) == 3
+}
+
+test "fourth test calls the generic function at two types" {
+  let f: F32 = 1.5
+  assert generic_digit(1) == 1
+  assert generic_digit(f) == f
+}

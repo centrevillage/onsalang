@@ -879,7 +879,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
             (
                 "assert_near of F32s",
                 "an `F64` expected, found an `F32`".into(),
-                prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f32_(1.0), f32_(5.0), f32_(0.0)]),
+                prim(Prim::AssertNear, Ty::Unit, vec![f32_(1.0), f32_(5.0), f32_(0.0)]),
             ),
             (
                 "an index of I32",
@@ -987,12 +987,12 @@ fn a_call_of_a_function_without_a_body_is_an_internal_error() {
 /// it (spec §15.2): in the body of a function a root is or calls, and in the
 /// initializer of a `const` a reached function reads; nowhere else. A run
 /// that reaches it stops with [`Failure::Unsupported`], not a panic.
-/// [`crate::std_prim`] decides both.
+/// [`crate::prim::supports`] decides both.
 #[test]
 fn an_unimplemented_std_function_is_unsupported() {
     on_stack(|| {
-        let gen_ = || prim(Prim::Std("std.test.gen.f32".into()), Ty::Unit, vec![f32_(0.0), f32_(1.0)]);
-        let near = prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f64_(1.0), f64_(1.0), f64_(0.0)]);
+        let gen_ = || prim(Prim::Pending(onsa_core::prim::PendingPrim::GenF32), Ty::Unit, vec![f32_(0.0), f32_(1.0)]);
+        let near = prim(Prim::AssertNear, Ty::Unit, vec![f64_(1.0), f64_(1.0), f64_(0.0)]);
         let read_g = Expr::new(Ty::Unit, sp(), ExprKind::Const(ConstId(0)));
         let call = |f: u32| Expr::new(Ty::Unit, sp(), ExprKind::Call { fn_: FnId(f), args: Vec::new() });
         let fn_ = |name: &str, value: Expr| FnDef {
@@ -1098,9 +1098,7 @@ fn show_of_floats_is_the_form_of_spec_6_3() {
 #[test]
 fn assert_near_follows_spec_11_8() {
     on_stack(|| {
-        let near = |a: f64, b: f64, tol: f64| {
-            eval(prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f64_(a), f64_(b), f64_(tol)]))
-        };
+        let near = |a: f64, b: f64, tol: f64| eval(prim(Prim::AssertNear, Ty::Unit, vec![f64_(a), f64_(b), f64_(tol)]));
         let inf = f64::INFINITY;
         for (a, b, tol) in [(1.0, 1.0, 0.0), (inf, inf, 0.0), (0.0, -0.0, -0.0), (1.0, 1.25, 0.5), (1.0, 2.0, f64::MAX)]
         {
@@ -1168,9 +1166,7 @@ fn a_panic_lists_the_calls_it_went_out_of() {
         assert_eq!(e.calls.len(), crate::MAX_CALL_DEPTH as usize);
         assert!(e.calls.iter().all(|c| c.callee == FnId(0)), "{:?}", e.calls);
         // A panic in the entry itself went out of no call.
-        let e =
-            eval(prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f64_(1.0), f64_(2.0), f64_(0.0)]))
-                .expect_err("a failure");
+        let e = eval(prim(Prim::AssertNear, Ty::Unit, vec![f64_(1.0), f64_(2.0), f64_(0.0)])).expect_err("a failure");
         assert!(e.calls.is_empty(), "{:?}", e.calls);
     })
 }

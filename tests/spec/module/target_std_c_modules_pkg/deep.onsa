@@ -1,0 +1,8 @@
+use std.dsp.test.{assert_near}
+
+pub fn check_level(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+pub const DEEP_LEVEL: F64 = 2.0

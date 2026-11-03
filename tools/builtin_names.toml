@@ -26,7 +26,6 @@
 "_sat" = 2
 "abs" = 1
 "add_from" = 2
-"array" = 1
 "checked_add" = 1
 "checked_div" = 1
 "checked_mul" = 1
@@ -35,7 +34,6 @@
 "div_euclid" = 1
 "fill" = 3
 "from_bits" = 1
-"from_fn" = 1
 "get" = 1
 "is_empty" = 1
 "is_err" = 1
@@ -45,7 +43,6 @@
 "is_ok" = 2
 "is_some" = 2
 "len" = 1
-"math" = 1
 "max" = 1
 "min" = 1
 "narrow_" = 1
@@ -108,32 +105,6 @@
 "None" = 1
 "Ok" = 1
 "Some" = 1
-
-[allow."crates/onsa_core/src/prim.rs"]
-"abs" = 2
-"add_from" = 1
-"ceil" = 2
-"copy_from" = 1
-"cos" = 2
-"exp" = 2
-"exp2" = 2
-"fill" = 1
-"floor" = 2
-"fmod" = 2
-"get" = 1
-"len" = 1
-"log" = 2
-"log2" = 2
-"max" = 2
-"min" = 2
-"pow" = 2
-"round" = 2
-"sin" = 2
-"slice" = 1
-"sqrt" = 2
-"tan" = 2
-"tanh" = 2
-"trunc" = 2
 
 [allow."crates/onsa_driver/src/interface.rs"]
 "ALIGN" = 1

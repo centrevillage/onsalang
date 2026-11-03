@@ -55,6 +55,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         return Err(diags);
     }
     let reach = onsa_core::reach(m, &export_roots(m, opts));
+    let (lacking, lacking_fns) = crate::prims::check(m, &reach);
     let consts = named_consts(m, &reach);
 
     // 2. Bulk regions of exported states (spec §12.4). A bulk-split state
@@ -304,7 +305,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     let mut protos = String::new();
     let mut bodies = String::new();
     let mut twins = String::new();
-    for f in &reach.fns {
+    for f in reach.fns.difference(&lacking_fns) {
         let def = m.fn_(*f);
         // A panic names this function (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
@@ -352,6 +353,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         }
     }
 
+    diags.extend(lacking);
     if !diags.is_empty() {
         return Err(diags);
     }

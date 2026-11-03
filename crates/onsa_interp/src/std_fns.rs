@@ -1,66 +1,58 @@
-//! The `std` `target fn`s the interpreter runs itself ([`Prim::Std`]): which
-//! it runs, and what each does.
+//! The primitives the interpreter does not provide (S-69 (3)): the check of
+//! a run before it starts; and the `std` `target fn`s it runs itself.
 
 use onsa_core::prim::Prim;
 use onsa_core::{Expr, ExprKind, FloatKind, FnId, Module, PanicOrigin};
 use onsa_diag::Span;
 
 use crate::numeric::float_of;
-use crate::prim::args;
+use crate::prim::{args, supports};
 use crate::value::{self, Value};
 use crate::{Failure, Interp, R, Signal, Unsupported, panic_from};
 
-/// The `std` `target fn`s the interpreter runs itself ([`Prim::Std`]). The
-/// one place that decides which it runs (D-15): [`unsupported`] and the
-/// evaluation both ask [`std_prim`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum StdPrim {
-    AssertNear,
-}
-
-pub(super) fn std_prim(name: &str) -> Option<StdPrim> {
-    match name {
-        "std.dsp.test.assert_near" => Some(StdPrim::AssertNear),
-        _ => None,
+/// The E0200 of a primitive the interpreter does not provide ([`supports`]):
+/// each is a `std` declaration, which it names.
+pub(super) fn unsupported_at(prim: &Prim, span: Span) -> Unsupported {
+    match prim.std_name() {
+        Some(std_fn) => Unsupported { std_fn, span },
+        None => onsa_diag::internal::bug(Some(span), format!("the interpreter lacks `{}`", prim.name())),
     }
-}
-
-fn std_unsupported(name: &str, span: Span) -> Unsupported {
-    Unsupported { std_fn: name.to_string(), span }
 }
 
 /// Every form this version of the interpreter cannot run (E0200, S-224) that
 /// a run from the entries `roots` reaches ([`onsa_core::reach`]; spec §15.2,
-/// S-242): the `std` `target fn`s it does not implement, in the bodies of the
-/// reached functions, then in the initializers of the reached `const`s, each
-/// in the order of the module. `onsa test` reports them before it runs any
-/// test, with the tests it runs as the roots, so what it reports does not
-/// depend on which code the run passes, only on what it reaches. A run
-/// from the roots evaluates no other `const` (the interpreter evaluates a
-/// `const` when it reads it), so it cannot step on an unreached one.
+/// S-242): the primitives it does not provide ([`supports`]), in the bodies
+/// of the reached functions, then in the initializers of the reached
+/// `const`s, each in the order of the module. `onsa test` reports them
+/// before it runs any test, with the tests it runs as the roots, so what it
+/// reports does not depend on which code the run passes, only on what it
+/// reaches. A run from the roots evaluates no other `const` (the
+/// interpreter evaluates a `const` when it reads it), so it cannot step on
+/// an unreached one.
 pub fn unsupported(m: &Module, roots: &[FnId]) -> Vec<Unsupported> {
     let mut out = Vec::new();
     onsa_core::reach(m, roots).walk(m, &mut |e: &Expr| {
-        if let ExprKind::Prim { prim: Prim::Std(name), .. } = &e.kind
-            && std_prim(name).is_none()
+        if let ExprKind::Prim { prim, .. } = &e.kind
+            && !supports(prim)
         {
-            out.push(std_unsupported(name, e.span));
+            out.push(unsupported_at(prim, e.span));
         }
     });
     out
 }
+
 impl<'m> Interp<'m> {
-    /// `std` `target fn`s the interpreter implements directly ([`std_prim`]);
-    /// the others are E0200 ([`unsupported`]).
-    pub(super) fn std_prim(&self, prim: &Prim, name: &str, vs: &[Value], span: Span) -> R<Value> {
-        match std_prim(name) {
-            Some(StdPrim::AssertNear) => {
-                let [a, b, tol] = args(prim, vs, span);
-                let f = |v| float_of(v, FloatKind::F64, span);
-                assert_near(f(a), f(b), f(tol), span)
-            }
-            None => Err(Signal::Fail(Failure::Unsupported(std_unsupported(name, span)))),
-        }
+    /// [`Prim::AssertNear`] on its operands.
+    pub(super) fn assert_near(&self, prim: &Prim, vs: &[Value], span: Span) -> R<Value> {
+        let [a, b, tol] = args(prim, vs, span);
+        let f = |v| float_of(v, FloatKind::F64, span);
+        assert_near(f(a), f(b), f(tol), span)
+    }
+
+    /// A primitive the interpreter does not provide: the check before the
+    /// run finds it first.
+    pub(super) fn lacking(&self, prim: &Prim, span: Span) -> R<Value> {
+        Err(Signal::Fail(Failure::Unsupported(unsupported_at(prim, span))))
     }
 }
 

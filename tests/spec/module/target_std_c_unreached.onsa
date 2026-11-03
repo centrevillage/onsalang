@@ -1,0 +1,87 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_unreached"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_unr_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§11.8", "§14.2"]
+
+use std.dsp.test.{assert_near}
+use std.test.{Gen}
+use std.test.gen
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: a use of a `std` function that the C backend does not provide, at a position that
+// the build does not reach, is not reported (§15.2: the program is reported only "その実行やビルドの入口から届く位置
+// でそれを使う" and the entries of a build are "export する項目など"). The build of the target succeeds: no mark.
+// The contrast is target_std_c_calls.onsa and target_std_c_direct.onsa, where an exported item reaches the use.
+
+// A function that nothing calls.
+fn nobody_calls(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)
+  x
+}
+
+// A chain whose first link nothing calls: no link is reached.
+fn deep_leaf(x: F64) -> F64 {
+  assert_near(x, 2.0, 0.1)
+  x
+}
+
+fn deep_mid(x: F64) -> F64 {
+  deep_leaf(x) + 1.0
+}
+
+fn deep_top(x: F64) -> F64 {
+  deep_mid(x) + 1.0
+}
+
+// `pub` without `@export` is not an entry of the build (§14.2: the exported items are the ones with the attribute).
+pub fn public_not_exported(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+fn pairs() -> Gen[(U32, U32)] {
+  gen.pair(gen.u32(0, 1), gen.u32(2, 3))
+}
+
+// A `const` that nothing reads, and a `const` that only an unreached function reads.
+fn const_digit(x: F64) -> F64 {
+  assert_near(x, 3.0, 0.1)
+  x
+}
+
+const NOBODY_READS: F64 = const_digit(1.0)
+
+const ONLY_UNREACHED_READS: F64 = const_digit(2.0)
+
+fn reads_the_const() -> F64 {
+  ONLY_UNREACHED_READS
+}
+
+// A flow that is not exported and that no exported flow instantiates.
+fn flow_scale(g: F32) -> F32 {
+  assert_near(1.0, 1.0, 0.1)
+  g
+}
+
+pub flow lonely(x: F32 at sample) -> F32 at sample {
+  let k = flow_scale(2.0)
+  x * k
+}
+
+// What the build does reach: code that uses none of them.
+@export
+pub fn plain(x: F64) -> F64 {
+  x + 1.0
+}

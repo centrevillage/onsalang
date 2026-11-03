@@ -72,7 +72,8 @@ pub struct CallSite {
 /// A form this version of the interpreter cannot run: E0200 (spec §18.1,
 /// S-224). [`unsupported`] finds every one in a module before it runs; an
 /// evaluation that reaches one stops with it. Today the one kind is a call of
-/// a `std` `target fn` the interpreter does not implement ([`std_prim`](std_fns::std_prim)).
+/// a `std` `target fn` whose primitive the interpreter does not provide
+/// ([`supports`](prim::supports)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unsupported {
     /// The qualified name of the `std` function (`std.test.gen.f32`).

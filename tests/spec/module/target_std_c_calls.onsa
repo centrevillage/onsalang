@@ -1,0 +1,88 @@
+// onsa.toml
+// [package]
+// name = "target_std_c_calls"
+// edition = "2026"
+//
+// [export]
+// prefix = "tsc_calls_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§15.2", "§11.8", "§6.1"]
+
+use std.dsp.test.{assert_near}
+use std.array
+
+// W5-02 U3a/t, S-69 (2)(3), R-79: the build reaches a `std` function that the C backend does not provide through
+// the functions that an exported item calls (§15.2: "届くとは、入口から、呼ぶ関数、…を静的にたどれること"), however
+// many calls away, and the E0200 is at the use (not at the exported item and not at the call that reaches it).
+// The calls are the ones of the language: a function, a method, an associated function, and the body of an
+// anonymous function that is the argument of `array.from_fn` (the one place this version lowers it).
+
+// Three calls away: `export_top` calls `second`, which calls `third`.
+fn third(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+fn second(x: F64) -> F64 {
+  third(x) + 1.0
+}
+
+@export
+pub fn export_top(x: F64) -> F64 {
+  second(x) + 1.0
+}
+
+// A call on a branch that is not taken is still on a path that the source follows ("実行時に通るかどうかは見ない").
+fn never_taken(x: F64) -> F64 {
+  assert_near(x, 2.0, 0.1)   //~ E0200 [host]
+  x
+}
+
+@export
+pub fn export_branch(flag: Bool, x: F64) -> F64 {
+  if flag {
+    return never_taken(x)
+  }
+  x
+}
+
+// A method and an associated function of a user type.
+pub struct Probe {
+  level: F64,
+}
+
+impl Probe {
+  pub fn new(level: F64) -> Probe {
+    assert_near(level, 3.0, 0.1)   //~ E0200 [host]
+    Probe { level: level }
+  }
+
+  pub fn read(self) -> F64 {
+    assert_near(self.level, 4.0, 0.1)   //~ E0200 [host]
+    self.level
+  }
+}
+
+@export
+pub fn export_type(x: F64) -> F64 {
+  let p = Probe.new(x)
+  p.read()
+}
+
+// The body of the anonymous function given to `array.from_fn`.
+@export
+pub fn export_closure(n: U32) -> U32 {
+  let xs: [U32; 3] = array.from_fn(fn(i) {
+    assert_near(1.0, 1.0, 0.1)   //~ E0200 [host]
+    i + n
+  })
+  xs.len()
+}

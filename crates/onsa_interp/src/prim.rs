@@ -209,7 +209,8 @@ impl<'m> Interp<'m> {
                 let [a] = args(prim, vs, span);
                 Ok(Value::Bool(float_of(a, *k, span).is_finite()))
             }
-            Prim::Std(name) => self.std_prim(prim, name, vs, span),
+            Prim::AssertNear => self.assert_near(prim, vs, span),
+            Prim::Pending(_) => self.lacking(prim, span),
             Prim::Len | Prim::Slice | Prim::Get | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed => {
                 internal(span, format!("the sequence primitive `{}` on values", prim.name()))
             }
@@ -229,6 +230,38 @@ impl<'m> Interp<'m> {
             FloatKind::F32 => Value::F32(math_f32(mf, x as f32, y as f32)),
             FloatKind::F64 => Value::F64(math_f64(mf, x, y)),
         })
+    }
+}
+
+/// Whether the interpreter provides `prim` (S-69 (3), spec §15.2): the one
+/// place that decides it (D-15). A run that reaches one it does not provide
+/// is E0200 before it starts ([`crate::unsupported`]).
+pub(crate) fn supports(p: &Prim) -> bool {
+    match p {
+        Prim::Pending(_) => false,
+        Prim::Math(..)
+        | Prim::IntAbs(_)
+        | Prim::IntMin(_)
+        | Prim::IntMax(_)
+        | Prim::Narrow { .. }
+        | Prim::IntToFloat { .. }
+        | Prim::FloatToFloat { .. }
+        | Prim::TruncToInt { .. }
+        | Prim::ToBits(_)
+        | Prim::FromBits(_)
+        | Prim::Checked(..)
+        | Prim::DivEuclid(_)
+        | Prim::RemEuclid(_)
+        | Prim::IsNan(_)
+        | Prim::IsFinite(_)
+        | Prim::Len
+        | Prim::Slice
+        | Prim::Get
+        | Prim::Fill
+        | Prim::AddFrom
+        | Prim::CopyFrom
+        | Prim::BufZeroed
+        | Prim::AssertNear => true,
     }
 }
 

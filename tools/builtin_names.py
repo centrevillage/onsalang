@@ -65,7 +65,7 @@ SPEC = repo.SPEC_SHOWN
 ALLOW = Path("tools") / "builtin_names.toml"
 CRATES = "crates"
 # The places of `design/06-placement.md` that hold the builtins' table and may name them.
-REGISTRY = ("crates/onsa_diag/",)
+REGISTRY = ("crates/onsa_diag/", "crates/onsa_sema/src/prim.rs")
 # Calls whose string argument is a part of a name: (method, how the part is matched).
 AFFIX_METHODS = {
     "starts_with": "prefix",

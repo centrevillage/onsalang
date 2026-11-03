@@ -1342,6 +1342,27 @@ reasons = ["S-242", "S-191", "S-190"]
 until = "W8-09"
 note = "値として使う関数を経由して届く使用。関数値の呼び出し .(（W3-20）と関数値の降下（W8-09）を今の実装が扱えない"
 
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/target_std_c_fn_value.onsa"
+reasons = ["S-242", "S-191", "S-190"]
+until = "W8-09"
+note = "C のビルドで、値として使う関数を経由して届く使用。関数値の降下（W8-09）の前の E0200 が先に出る（W5-02 U3a）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/test/reach_check.onsa"
+reasons = ["S-69", "S-242"]
+until = "W8-09"
+note = "`check` に渡す関数値と無名関数の降下（W8-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/target_std_c_buf_zeroed.onsa"
+reasons = ["R-138"]
+until = "W10-01"
+note = "使用の位置の E0200 は出る。`Buf` の型の E0200 が位置 1:1 にも出る（emit/types.rs の no_span、R-138）"
+
 # --- W3-15/i: 既存言語の書き方の閉じた一覧（spec/foreign-forms.toml、S-250）の行のうち、例がまだ通らないもの。
 # until は W3-15/t2 の案（proc は例が flow の at の構文を使うので W3-10）。照合は onsa_tests::foreign_forms
 

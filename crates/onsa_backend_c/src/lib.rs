@@ -26,6 +26,7 @@
 mod emit;
 mod export;
 mod names;
+mod prims;
 
 use onsa_core::Module;
 use onsa_diag::unsupported::Feature;
