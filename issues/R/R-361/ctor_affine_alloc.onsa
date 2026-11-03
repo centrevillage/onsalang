@@ -1,0 +1,30 @@
+pub enum Hold {
+  B(Buf[F32]),
+  C(U32),
+}
+
+pub fn x_value_twice(move b: Buf[F32]) -> (Hold, Hold) uses {Alloc} {
+  let f = Hold.B
+  (f.(b), f.(b))
+}
+
+pub fn x_value_then_use(move b: Buf[F32]) -> Hold uses {Alloc} {
+  let f = Hold.B
+  let h = f.(b)
+  let n = b.len()
+  h
+}
+
+pub fn x_borrowed_twice(b: Buf[F32]) -> (Hold, Hold) {
+  let f = Hold.B
+  (f.(b), f.(b))
+}
+
+pub fn x_lambda_like(b: Buf[F32]) -> Hold {
+  let f = fn(x: Buf[F32]) -> Hold { Hold.B(x) }
+  f.(b)
+}
+
+pub fn x_direct_borrowed(b: Buf[F32]) -> Hold {
+  Hold.B(b)
+}

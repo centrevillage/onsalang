@@ -1,0 +1,6 @@
+pub rt fn unwrap_owned_str(move r: Result[Str, U32]) -> Str { r.unwrap() }
+
+pub rt fn question_str(move r: Result[Str, U32]) -> Result[Str, U32] {
+  let s = r?
+  Ok(s)
+}
