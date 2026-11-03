@@ -261,6 +261,7 @@
 "Copy" = 1
 "Ctl" = 1
 "Dup" = 1
+"Escape" = 1
 "Init" = 1
 "Sig" = 1
 

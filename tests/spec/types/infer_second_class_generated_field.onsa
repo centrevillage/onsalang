@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§11.6"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §11.6: each field of the generated type `Out` is `Span[T]` or `[Span[T]; N]`; §4.5: a type "第二級の型か、それを含む型"
+// that a type parameter is decided to is the E0710 of the expression that made the type argument): a `Span` field of a generated value
+// passed to a generic function (`id(o.l)`) is the same as a `Span`, the E0710 of the call. It waits for R-334 (W7-03): this version
+// generates the field as `Buf[T]`, so the call is an E0416 of the implicit `Dup`. Moved from `infer_second_class_generated.onsa` (the
+// parent, W5-02 U5a). The error has no candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct St {
+  l: F32,
+  r: F32,
+}
+
+pub flow sw(l: F32 at sample, r: F32 at sample) -> St at sample {
+  St { l: r, r: l }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn a_field(o: sw.Out) -> U32 {
+  id(o.l).len() //~ E0710 @3
+}

@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§5.3"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5): a type argument of a variable that an earlier statement made (`let o = None`, the `T` of
+// `Option[T]`) is decided to a second-class type by a later call whose own type parameter is decided to the same type
+// (`ck(o, s)`). Two expressions made a type argument that became `Span[F32]`, and the unit has one error (§18.1). §4.7: "同じ時点で
+// 満たさない項目が複数あれば、検査が項目を作った順で先のものを報告する" (for the requirements that are checked later, which the E0710 of a type
+// argument shares the place of, §4.5), so the one that was made first is reported: the `None` or `none2()` of the earlier statement.
+// The statement that decided it is the note (a position that no mark checks). The sentence of §4.5 does not say which of the two it is, so
+// the reading is the one of §4.7 (reported in the report of the work as NEW). The error has no candidate (`fixes = 0`). One error per
+// function (P-01).
+
+pub fn none2[T]() -> Option[T] {
+  None
+}
+
+pub fn ck[T](a: Option[T], b: T) -> U32 {
+  0
+}
+
+pub fn the_first_is_a_constructor(s: Span[F32]) -> U32 {
+  let o = None //~ E0710 @11
+  ck(o, s)
+}
+
+pub fn the_first_is_a_call(s: Span[F32]) -> U32 {
+  let o = none2() //~ E0710 @11
+  ck(o, s)
+}

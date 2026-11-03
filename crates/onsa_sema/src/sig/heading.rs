@@ -26,6 +26,12 @@ impl<'p> Sema<'p> {
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => {
                                 list.push((Bound::Dup, true, n.span));
                             }
+                            // SPEC-GAP(S-868): `?Escape` is an E0200 (S-862), and the
+                            // parameter is read as one without it: its users get the
+                            // E0710 of a second-class type argument (b1).
+                            Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Escape))))) if b.relaxed => {
+                                self.unsupported(cx.def, n.span, Feature::RelaxedEscape, &[]);
+                            }
                             // `?` on another trait or kind constraint (S-711).
                             Ok((NameKind::Trait | NameKind::KindConstraint, _)) if b.relaxed => {
                                 self.report(cx.def, bound_list::relaxed(n));
@@ -36,7 +42,11 @@ impl<'p> Sema<'p> {
                             // trait this version does not take as a bound
                             // (E0200; with an E0308 in the unit, the first by
                             // its place, §18.1, S-731).
+                            // `AnyNum` and `Int` are bounds of std only until W5-05 (D4).
                             Ok((NameKind::Trait, e)) => match e.and_then(prelude_bound) {
+                                Some(Bound::AnyNum | Bound::Int) if !self.a.modules.is_std(cx.m) => {
+                                    self.unsupported(cx.def, n.span, Feature::TraitBounds, &[])
+                                }
                                 Some(bound) => list.push((bound, false, n.span)),
                                 None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             },
@@ -58,7 +68,9 @@ impl<'p> Sema<'p> {
                     }
                     // A list with a contradiction is unknown to its users (S-747).
                     unknown |= self.bound_list(cx.def, &list);
-                    let bs = list.iter().filter(|b| !b.1).map(|b| b.0).collect();
+                    // SPEC-GAP(S-868): `T: Escape` is the implicit requirement
+                    // written, met as `T: Dup` is (a1); every parameter has it.
+                    let bs = list.iter().filter(|b| !b.1 && b.0 != Bound::Escape).map(|b| b.0).collect();
                     let dup = !list.iter().any(|b| b.1);
                     let kind = GenericKind::Type { bounds: bs, dup, unknown };
                     GenericDef { name: name.name.clone(), span: name.span, kind }

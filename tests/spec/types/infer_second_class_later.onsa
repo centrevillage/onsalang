@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§5.3"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5: "推論で決まった型引数 … 第二級の型か、それを含む型に決まれば、その型引数を作った式 … の位置に E0710 で、型を決めた式を
+// 位置付きの note で示す（E0416 と同じ位置の規則、上記）"; §4.7: "型引数の中の型変数は後の文で決まってよい（`let b = Buf.zeroed(4)` の後の `b.len()`）"): the
+// element type of a built-in generic type (`Buf.zeroed(2)`) that a later statement decides to a second-class type is the E0710 of
+// `Buf.zeroed(2)`, the expression that made the type argument, and not of the statement that decided it (the line of the later statement
+// has no error). The later statement is an assignment to an element (`b[0] = xs[0]`) or an annotation of a `let`
+// (`let v: Span[F32] = b[0]`). The element type of a `Buf` is a type argument of an inferred type like any other, so the requirement
+// `T: Copy` of it (E0416) is not judged. The error has no candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn decided_by_an_assignment(xs: [Span[F32]; 2]) -> U32 uses {Alloc} {
+  var b = Buf.zeroed(2) //~ E0710 @11
+  b[0] = xs[0]
+  b.len()
+}
+
+pub fn decided_by_an_annotation() -> U32 uses {Alloc} {
+  let b = Buf.zeroed(2) //~ E0710 @11
+
+  let v: Span[F32] = b[0]
+  v.len()
+}
+
+pub fn decided_after_a_few_statements(xs: [Span[F32]; 2]) -> U32 uses {Alloc} {
+  var b = Buf.zeroed(2) //~ E0710 @11
+  let n = xs.len()
+  let m = n + 1
+  b[1] = xs[1]
+  m
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+// A `Buf` of scalars decided in the same ways.
+pub fn decided_to_a_scalar_by_an_assignment(xs: [Span[F32]; 2]) -> U32 uses {Alloc} {
+  var b = Buf.zeroed(2)
+  b[0] = xs[0][0]
+  b.len()
+}
+
+pub fn decided_to_a_scalar_by_an_annotation() -> U32 uses {Alloc} {
+  let b = Buf.zeroed(2)
+
+  let _: F32 = b[0]
+  b.len()
+}

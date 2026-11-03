@@ -69,6 +69,47 @@ pub(crate) fn second_class(a: &Analysis, t: TyId) -> bool {
     }
 }
 
+/// Whether the second-class `ty` stands in its place `at` (§5.3, §5.4):
+/// an argument not `move` (S-758), the element of a planar one, a borrow
+/// binding of a body.
+fn fits(a: &Analysis, ty: TyId, at: (Pos, u8)) -> bool {
+    let span = matches!(a.types.get(ty), Ty::Builtin(BuiltinTy::Span, _));
+    match at {
+        (Pos::Alias, _) => true,
+        (Pos::Arg(m), ROOT) => m != Mode::Move,
+        // S-770: a planar array is of `Span` elements only, as
+        // §5.3 lists it (`[voice.Out; 2]` is an E0710).
+        (Pos::Arg(m), PLANAR) => m != Mode::Move && span,
+        (Pos::Bind, ROOT | PLANAR) => span,
+        _ => false,
+    }
+}
+
+/// Whether a second-class part of `ty` stands out of its place, `ty` at
+/// `at`: what its E0710 is (a type is a graph of shared parts: each is
+/// looked at once, `seen`).
+fn holds(a: &Analysis, seen: &mut HashMap<(TyId, Pos, u8), bool>, ty: TyId, at: (Pos, u8)) -> bool {
+    if let Some(&h) = seen.get(&(ty, at.0, at.1)) {
+        return h;
+    }
+    let shape = a.types.get(ty);
+    let h =
+        second_class(a, ty) && !fits(a, ty, at) || places(shape, at).into_iter().any(|(t, at)| holds(a, seen, t, at));
+    seen.insert((ty, at.0, at.1), h);
+    h
+}
+
+/// Whether the type argument `t`, written or decided by the inference, is a
+/// second-class type or holds one out of the arguments of a function type:
+/// it has no kind, and a type parameter takes it only as `?Escape` (§4.5,
+/// §4.6; S-766, S-771, S-862). The one judgment of both.
+pub(crate) fn no_kind_argument(a: &Analysis, t: TyId) -> bool {
+    holds(a, &mut HashMap::new(), t, ARGUMENT)
+}
+
+/// The place of a type argument: inside another type.
+const ARGUMENT: (Pos, u8) = (Pos::Other, INSIDE);
+
 /// A part of a type as written: here at a place of the source, named by an
 /// alias (read as its right side is, the error type where it has an error,
 /// S-757), or else not written (`Self`, a part of those). The requirements
@@ -254,7 +295,7 @@ impl<'p> Sema<'p> {
         if here.is_none() && !self.holds(ty, at) {
             return Ok(ty);
         }
-        if second_class(self.a, ty) && !self.fits(ty, at) {
+        if second_class(self.a, ty) && !fits(self.a, ty, at) {
             return Err(self.misplaced(cx, ty, at, span));
         }
         let shape = self.a.types.get(ty).clone();
@@ -294,18 +335,8 @@ impl<'p> Sema<'p> {
         Ok(self.a.types.intern(shape))
     }
 
-    /// Whether a second-class part of `ty` stands out of its place, `ty` at
-    /// `at`: what its E0710 is (a type is a graph of shared parts: each is
-    /// looked at once).
     fn holds(&mut self, ty: TyId, at: (Pos, u8)) -> bool {
-        if let Some(&h) = self.misfit.get(&(ty, at.0, at.1)) {
-            return h;
-        }
-        let shape = self.a.types.get(ty).clone();
-        let h = second_class(self.a, ty) && !self.fits(ty, at)
-            || places(&shape, at).into_iter().any(|(t, at)| self.holds(t, at));
-        self.misfit.insert((ty, at.0, at.1), h);
-        h
+        holds(self.a, &mut self.misfit, ty, at)
     }
 
     /// The parts of the type `shape` as written at `here`, in the order of
@@ -335,26 +366,10 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// Whether the second-class `ty` stands in its place `at` (§5.3, §5.4):
-    /// an argument not `move` (S-758), the element of a planar one, a borrow
-    /// binding of a body.
-    fn fits(&self, ty: TyId, at: (Pos, u8)) -> bool {
-        let span = matches!(self.a.types.get(ty), Ty::Builtin(BuiltinTy::Span, _));
-        match at {
-            (Pos::Alias, _) => true,
-            (Pos::Arg(m), ROOT) => m != Mode::Move,
-            // S-770: a planar array is of `Span` elements only, as
-            // §5.3 lists it (`[voice.Out; 2]` is an E0710).
-            (Pos::Arg(m), PLANAR) => m != Mode::Move && span,
-            (Pos::Bind, ROOT | PLANAR) => span,
-            _ => false,
-        }
-    }
-
     /// The E0710 of the second-class `ty` out of its place `at`.
     fn misplaced(&self, cx: &Cx<'p>, ty: TyId, at: (Pos, u8), span: Span) -> Diagnostic {
         let shown = self.shown(cx, ty);
-        let moved = matches!(at.0, Pos::Arg(Mode::Move)) && self.fits(ty, (Pos::Arg(Mode::Borrow), at.1));
+        let moved = matches!(at.0, Pos::Arg(Mode::Move)) && fits(self.a, ty, (Pos::Arg(Mode::Borrow), at.1));
         let d = if moved {
             let msg =
                 format!("`{shown}` is second-class, a view it does not own: a `move` parameter cannot take it (§5.3)");
@@ -411,7 +426,7 @@ impl<'p> Sema<'p> {
             // S-771: so is an argument that holds one out of its place
             // (`C[(Span[F32], F32)]`, `N[[Span[F32]; 2]]`), not one at the
             // argument of a function type (`N[fn(Span[F32]) -> F32]`).
-            if self.holds(arg, (Pos::Other, INSIDE)) {
+            if self.holds(arg, ARGUMENT) {
                 continue;
             }
             let under = Bounds { a: self.a, generics: &cx.generics };

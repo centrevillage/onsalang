@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.2", "§5.3"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5: "関数型の引数の並びの `Span`（`W[fn(Span[F32]) -> F32]`）は引数の位置なので第二級の位置の誤りでなく、その関数型に要求を
+// 判定する"): the type parameter that stands for the whole function type (`fn ap[T](g: T)`) is decided to a function type whose argument is
+// a `Span`, and that is right (the `Span` is in the place of an argument). A type parameter that stands for the argument itself
+// (`fn ap[T](g: fn(T) -> U32)`) is decided to `Span[F32]` by the function that is passed, and that is the type argument `Span[F32]`: the E0710 of the call,
+// though no second-class value is passed in a position that a value is read (the argument is a function, and the view is its parameter). A
+// type parameter of the value and of the function argument together (`fn ap_with[T](x: T, g: fn(T) -> U32)`), the argument of an
+// anonymous function whose type is inferred from it (`fn(x) { x.len() }`, also when it captures), is decided by the view that is passed.
+// The error has no candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn ap_whole[T](g: T) -> U32 {
+  0
+}
+
+pub fn ap_argument[T](g: fn(T) -> U32) -> U32 {
+  0
+}
+
+pub fn ap_with[T](x: T, g: fn(T) -> U32) -> U32 {
+  g.(x)
+}
+
+// ------------------------------------------------------------------------- the argument of a function type
+
+pub fn function_of_a_view_is_the_whole_type() -> U32 {
+  ap_whole(fn(x: Span[F32]) -> U32 { x.len() })
+}
+
+pub fn function_of_a_planar_argument_is_the_whole_type() -> U32 {
+  ap_whole(fn(xs: [Span[F32]; 2]) -> U32 { xs.len() })
+}
+
+pub fn function_that_decides_the_argument() -> U32 {
+  ap_argument(fn(x: Span[F32]) -> U32 { x.len() }) //~ E0710 @3
+}
+
+pub fn function_that_decides_the_planar_argument() -> U32 {
+  ap_argument(fn(xs: [Span[F32]; 2]) -> U32 { xs.len() }) //~ E0710 @3
+}
+
+pub fn view_and_an_inferred_parameter(s: Span[F32]) -> U32 {
+  ap_with(s, fn(x) { x.len() }) //~ E0710 @3
+}
+
+pub fn view_and_a_capturing_function(s: Span[F32], k: U32) -> U32 {
+  ap_with(s, fn(x) { x.len() + k }) //~ E0710 @3
+}
+
+pub fn scalar_and_an_inferred_parameter(k: U32) -> U32 {
+  ap_with(k, fn(x) { x + 1 })
+}

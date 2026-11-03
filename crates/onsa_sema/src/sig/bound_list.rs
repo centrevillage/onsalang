@@ -1,6 +1,6 @@
 //! The list of the bounds of a type parameter (§4.5): `?` on a bound that
-//! is not `Dup` (S-711), the same bound twice and `?Dup` with a bound that
-//! requires `Dup` (S-747). Each an E0416 of the types stage, after the names
+//! is neither `Dup` nor `Escape` (S-711), the same bound twice and `?Dup`
+//! with a bound that requires `Dup` (S-747). Each an E0416 of the types stage, after the names
 //! of the list are read (an error of a name, or a trait this version does
 //! not take as a bound, is not compared).
 
@@ -8,13 +8,13 @@ use super::*;
 use crate::body::bounds::implies;
 
 /// The rule a `?` keeps to (§4.5).
-const RELAXED_RULE: &str =
-    "`?` lifts the implicit `Dup` of a type parameter, and only it: to take Affine types too, write `?Dup`";
+const RELAXED_RULE: &str = "`?` lifts an implicit requirement of a type parameter, `Dup` or `Escape`, and only those: to take Affine types too, write `?Dup`";
 
-/// The E0416 of `?` on the bound named `n`, not `Dup` (S-711): it has
-/// nothing to lift. No candidate: `?Copy` may mean `?Dup` or no bound.
+/// The E0416 of `?` on the bound named `n`, neither `Dup` nor `Escape`
+/// (S-711, S-862): it has nothing to lift. No candidate: `?Copy` may mean
+/// `?Dup` or no bound.
 pub(super) fn relaxed(n: &Ident) -> Diagnostic {
-    let msg = format!("`?{}` lifts nothing: only `Dup` is implicit on a type parameter (§4.5)", n.name);
+    let msg = format!("`?{}` lifts nothing: only `Dup` and `Escape` are implicit on a type parameter (§4.5)", n.name);
     Diagnostic::new(Stage::Types, Code::E0416, n.span, msg).with_found(n.name.clone()).with_rule(RELAXED_RULE)
 }
 

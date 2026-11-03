@@ -319,7 +319,7 @@ impl<'a> Checker<'a> {
             // `Buf.zeroed(4)`: the element type may be decided later (§4.7, S-226), and
             // it must be Copy (§4.5), a kind constraint checked when it is (S-235).
             let what = format!("the element type of `{}`", self.src(self.expr(callee).span));
-            self.defer(span, targ, DeferredKind::Origin { what });
+            self.type_argument(span, targ, what);
             if matches!(g, BuiltinTy::Buf | BuiltinTy::Span) {
                 self.defer(span, targ, DeferredKind::Require { bound: Bound::Copy, what: Required::BufElement });
             }

@@ -1,0 +1,9 @@
+// An enum with the name of a prelude name (§15.1).
+pub enum Escape { //~ E0304
+  A,
+  B,
+}
+
+pub fn fine() -> I32 {
+  3
+}

@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§11.6"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §5.3: "flow の生成型 `voice.In` / `voice.Out`（§11.6）も `Span` を持つので第二級"; §4.5: a type "第二級の型か、それを含む型" that
+// a type parameter is decided to is the E0710 of the expression that made the type argument): the generated type `sw.Out` of a flow
+// whose output is a struct holds a `Span` for each field, so it is second-class, and a generic function that takes it as a value
+// (`id(o)`) is the E0710 of the call, also when only a field is read from the result (`id(o).l`). (A `Span` field of the argument passed
+// so, `id(o.l)`, is in `infer_second_class_generated_field.onsa`, which waits for R-334.) A generic that takes a `Span` in its parameter (`xs: Span[T]`) takes the field as it is. The requirement
+// of `T` (the implicit `Dup`) is not judged for the generated type (S-766 and S-771 do the same for the written type argument), so it
+// is not an E0416 (a generated type has no kind, §4.6). The error has no candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct St {
+  l: F32,
+  r: F32,
+}
+
+pub flow sw(l: F32 at sample, r: F32 at sample) -> St at sample {
+  St { l: r, r: l }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn length_of_a_view[T: Copy](xs: Span[T]) -> U32 {
+  xs.len()
+}
+
+// -------------------------------------------------------------------------------- the generated type
+
+pub fn the_generated_value(o: sw.Out) -> U32 {
+  id(o).l.len() //~ E0710 @3
+}
+
+pub fn the_generated_value_not_read(o: sw.Out) -> U32 {
+  let _ = id(o) //~ E0710 @11
+  0
+}
+
+pub fn the_generated_value_inout(inout o: sw.Out) -> U32 {
+  id(o).r.len() //~ E0710 @3
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn a_field_taken_by_a_generic_view(o: sw.Out) -> U32 {
+  length_of_a_view(o.l)
+}
+
+pub fn the_length_of_a_field(o: sw.Out) -> U32 {
+  id(o.l.len())
+}

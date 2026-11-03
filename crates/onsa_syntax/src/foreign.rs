@@ -111,6 +111,9 @@ pub(crate) use spaces::held_errors;
 pub const COPY: &str = "Copy";
 /// The kind constraint `Dup` (§4.6).
 pub const DUP: &str = "Dup";
+/// The implicit requirement `Escape` of a type parameter (§4.5): a name of
+/// the prelude (§15.1), no kind constraint.
+pub const ESCAPE: &str = "Escape";
 /// The kind constraints (§4.6): the names a bound takes that are no trait, so
 /// that the head of a declaration does not take them (`copy_bound`) and the
 /// candidate of a derive leaves them out (S-463). The one list.

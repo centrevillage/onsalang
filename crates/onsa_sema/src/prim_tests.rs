@@ -104,21 +104,25 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
         let mut choices: Vec<Vec<TyId>> = Vec::new();
         for g in &f.generics {
             choices.push(match &g.kind {
-                // The helpers of `narrow_*` and `checked_*`, which std calls at
-                // the integers: no `Int` bound until W5-05.
-                GenericKind::Type { bounds, unknown: false, .. }
-                    if bounds.is_empty() && key.starts_with("core.num.") =>
-                {
-                    ints.clone()
+                GenericKind::Type { bounds, dup, unknown: false } => {
+                    let met: Vec<TyId> = candidates
+                        .iter()
+                        .copied()
+                        .filter(|&t| {
+                            let b = Bounds { a: &a, generics: &[] };
+                            bounds.iter().all(|&x| b.satisfies(t, x))
+                                && (!*dup || b.satisfies(t, crate::def::Bound::Dup))
+                        })
+                        .collect();
+                    // A bound that keeps no builtin type out is no bound: the
+                    // walk would try every type at it (D4).
+                    assert!(bounds.is_empty() || met.len() < candidates.len(), "a bound of `{key}` keeps nothing out");
+                    // The helpers of `narrow_*` and `checked_*` take the integers (`Int`, D4).
+                    if key.starts_with("core.num.") {
+                        assert_eq!(met, ints, "`{key}` at {:?}", g.name);
+                    }
+                    met
                 }
-                GenericKind::Type { bounds, dup, unknown: false } => candidates
-                    .iter()
-                    .copied()
-                    .filter(|&t| {
-                        let b = Bounds { a: &a, generics: &[] };
-                        bounds.iter().all(|&x| b.satisfies(t, x)) && (!*dup || b.satisfies(t, crate::def::Bound::Dup))
-                    })
-                    .collect(),
                 GenericKind::Const(_) => vec![len],
                 other => panic!("`{key}` has the generic {other:?}"),
             });

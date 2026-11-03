@@ -368,6 +368,13 @@ note = "E0710 の否定例 2 件。at は W3-10 で通るが、生成項目 swap
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/types/infer_second_class_generated_field.onsa"
+reasons = ["R-334"]
+until = "W7-03"
+note = "推論した型引数の E0710（S-862）の 1 件。生成型 Out のフィールドが Buf[T] で生成されるので、id(o.l) は暗黙の Dup の E0416 になる（W5-02 U5a で事例を分けた）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/negative/modes_flow_span_fields.onsa"
 reasons = ["S-102", "R-135"]
 until = "W7-03"

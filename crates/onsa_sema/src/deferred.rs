@@ -44,6 +44,12 @@ pub(crate) enum DeferredKind {
     /// `None`, `Buf.zeroed(4)`, `[]`): E0406 when it is still open at the end
     /// (§4.5, §4.7). `what` names it in the message.
     Origin { what: String },
+    /// A type argument a use made, of a type parameter or the element of a
+    /// builtin generic type: E0710 when it is decided to a type with no kind
+    /// (second-class, or one that holds it), before the requirements of the
+    /// same argument, which are then not judged (§4.5, the implicit `Escape`;
+    /// S-862, S-766). `what` names it as its origin does.
+    Escape { what: String },
     /// A requirement on a type (a bound, the implicit `Dup`, a kind constraint):
     /// E0416 when the decided type does not meet it (§4.5, §4.6).
     Require { bound: Bound, what: Required },
@@ -59,6 +65,10 @@ pub(crate) enum OpNeed {
     Neg,
     Not,
 }
+
+/// The rule of the E0710 of a type argument with no kind (§5.3, S-862).
+const GENERIC_VIEW: &str =
+    "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3)";
 
 /// What an operator requires of a type ([`Checker::operator_verdict`]).
 pub(crate) enum Verdict {
@@ -245,7 +255,7 @@ impl<'a> Checker<'a> {
             DeferredKind::IntLit { .. } | DeferredKind::FloatLit { .. } => {
                 self.infer.is_unresolved(&self.a.types, item.ty)
             }
-            DeferredKind::Require { .. } => self.infer.has_vars(&self.a.types, item.ty),
+            DeferredKind::Require { .. } | DeferredKind::Escape { .. } => self.infer.has_vars(&self.a.types, item.ty),
             // A literal variable itself is judged by its kind ([`Checker::operator_verdict`]).
             DeferredKind::Operator { .. } => {
                 !self.infer.is_unresolved(&self.a.types, item.ty) && self.infer.has_vars(&self.a.types, item.ty)
@@ -308,6 +318,18 @@ impl<'a> Checker<'a> {
                     )
                     .with_found(self.src(item.span)),
                 )
+            }
+            DeferredKind::Escape { what } => {
+                if self.infer.has_vars(&self.a.types, r) {
+                    return Look::Wait;
+                }
+                if !crate::sig::no_kind_argument(self.a, r) {
+                    return Look::Done;
+                }
+                let shown = self.display(r);
+                let msg = format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)");
+                let d = Diagnostic::new(Stage::Types, Code::E0710, item.span, msg).with_found(self.src(item.span));
+                Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(GENERIC_VIEW))
             }
             DeferredKind::Require { bound, what } => {
                 if self.infer.has_vars(&self.a.types, r) {

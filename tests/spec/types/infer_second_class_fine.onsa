@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§11.3"]
+
+// S-862 (1') (W5-02 U5a, §4.5: "`Span` を総称で受ける正しい形（`xs: Span[T]`、`xs: [Span[T]; N]`）"; "関数型の引数の並びの `Span` は引数の位置なので第二級の位置の誤り
+// でなく"): what the rule of the inferred type argument does not reach. The type parameter that is decided by the element of a `Span` or of a
+// planar argument (`xs: Span[T]` and `xs: [Span[T]; N]`, `T` is `F32`) is not decided to the view itself; the type parameter that stands
+// for a function type with a `Span` in its arguments (`g: T`) is right (infer_second_class_fn_type.onsa); the body of a flow has no view
+// (its input is a value of a sample, §11.3), so a generic function that is called in it is decided to a scalar; and the length of a
+// planar argument is read without a type parameter (§5.3). No diagnostic is expected anywhere in this file. The forms that are the E0710 of
+// the inferred type argument are in infer_second_class_{items,constructors,bounds,modes,later,two_origins,fn_type,planar,generated}.onsa.
+
+pub fn view_length[T: Copy](xs: Span[T]) -> U32 {
+  xs.len()
+}
+
+pub fn planar_length[T: Copy, const N: U32](xs: [Span[T]; N]) -> U32 {
+  N
+}
+
+pub fn planar_first_length[T: Copy, const N: U32](xs: [Span[T]; N]) -> U32 {
+  xs[0].len()
+}
+
+pub fn function_value[T](g: T) -> U32 {
+  0
+}
+
+rt fn id_in_a_flow[T](x: T) -> T {
+  x
+}
+
+pub flow through(x: F32 at sample) -> F32 at sample {
+  let y = id_in_a_flow(x)
+  y
+}
+
+// --------------------------------------------------------------------------------- the element type
+
+pub fn a_view(s: Span[F32]) -> U32 {
+  view_length(s)
+}
+
+pub fn a_view_of_integers(s: Span[U8]) -> U32 {
+  view_length(s)
+}
+
+pub fn a_buffer_as_a_view(b: Buf[F32]) -> U32 {
+  view_length(b)
+}
+
+pub fn an_array_as_a_view(xs: [F32; 4]) -> U32 {
+  view_length(xs)
+}
+
+pub fn a_planar_argument(xs: [Span[F32]; 2]) -> U32 {
+  planar_length(xs) + planar_first_length(xs)
+}
+
+pub fn a_planar_argument_of_arrays(xs: [[F32; 4]; 2]) -> U32 {
+  planar_length(xs) + planar_first_length(xs)
+}
+
+// ------------------------------------------------------------------------ the function type, the length
+
+pub fn a_function_of_a_view() -> U32 {
+  function_value(fn(x: Span[F32]) -> U32 { x.len() })
+}
+
+pub fn the_length_of_a_planar_argument(xs: [Span[F32]; 2]) -> U32 {
+  xs.len()
+}
+
+pub fn the_length_of_an_inout_planar_argument(inout xs: [Span[F32]; 3]) -> U32 {
+  xs.len()
+}

@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.6"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5: "推論で決まった型引数（項目の型パラメータと、`Buf.zeroed(4)` などの組込みの総称型の要素の型）も同じで、
+// 第二級の型か、それを含む型に決まれば、その型引数を作った式（呼び出し、メソッドの呼び出し、struct リテラル、列挙子、組込みの関連関数）の
+// 位置に E0710"; §5.3: "総称の項目の型パラメータと組込みの総称型の要素の型は、`?Escape` の型パラメータ（この版では E0200）の他は第二級の
+// 型にならない"): a type parameter of an item that is decided by the argument to a `Span`, or to a type that holds one, is the E0710 of the
+// call that made the type argument, in the types stage. `fn id[T](x: T) -> T` with `id(s)` (`s: Span[F32]`) is the example of the
+// section. The value is not what the error is about (the result, a part of it, or nothing of it is used), so the forms of the argument are the
+// units: the argument itself, a part of a view, an element of a planar argument, the whole planar argument, an `if` with two
+// views, an alias. The error has no candidate (`fixes = 0`). The marks with a column are at the start of the expression that made the type
+// argument. The other forms are in infer_second_class_{constructors,bounds,modes,later,two_origins,fn_type,planar,generated,fine}.onsa. One error per
+// function (P-01).
+
+pub struct W[T] {
+  x: T,
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn wrap[T](x: T) -> W[T] {
+  W { x: x }
+}
+
+pub fn pair[A, B](a: A, b: B) -> B {
+  b
+}
+
+pub fn two[T](x: T) -> W[T] {
+  wrap(x)
+}
+
+pub fn pick[T](a: T, b: T, c: Bool) -> T {
+  if c { a } else { b }
+}
+
+type V = Span[F32]
+
+// --------------------------------------------------------------------------- the argument itself
+
+pub fn identity_result_is_used(s: Span[F32]) -> U32 {
+  id(s).len() //~ E0710 @3
+}
+
+pub fn identity_result_is_bound(s: Span[F32]) -> U32 {
+  let n = id(s).len() //~ E0710 @11
+  n
+}
+
+pub fn wrapped_in_a_struct(s: Span[F32]) -> U32 {
+  let w = wrap(s) //~ E0710 @11
+  w.x.len()
+}
+
+pub fn wrapped_and_not_read(s: Span[F32]) -> U32 {
+  let _ = wrap(s) //~ E0710
+  0
+}
+
+pub fn two_type_parameters_one_of_them(s: Span[F32]) -> U32 {
+  pair(s, 1) //~ E0710 @3
+}
+
+pub fn two_type_parameters_the_other(s: Span[F32]) -> U32 {
+  pair(1, s).len() //~ E0710 @3
+}
+
+pub fn a_generic_that_calls_a_generic(s: Span[F32]) -> U32 {
+  two(s).x.len() //~ E0710 @3
+}
+
+pub fn the_result_is_a_span_of_an_arm(s: Span[F32], t: Span[F32], c: Bool) -> U32 {
+  pick(s, t, c).len() //~ E0710 @3
+}
+
+pub fn the_argument_is_an_if(s: Span[F32], t: Span[F32], c: Bool) -> U32 {
+  id(if c { s } else { t }).len() //~ E0710
+}
+
+pub fn nested_calls(s: Span[F32]) -> U32 {
+  id(id(s)).len() //~ E0710
+}
+
+pub fn through_an_alias(s: V) -> U32 {
+  id(s).len() //~ E0710
+}
+
+// ----------------------------------------------------------------------------- a part of a value
+
+pub fn part_of_a_view(s: Span[F32]) -> U32 {
+  id(s.slice(0, 1)).len() //~ E0710
+}
+
+pub fn part_of_a_buffer(b: Buf[F32]) -> U32 {
+  id(b.slice(0, 2)).len() //~ E0710
+}
+
+pub fn element_of_a_planar_argument(xs: [Span[F32]; 2]) -> U32 {
+  id(xs[0]).len() //~ E0710
+}
+
+pub fn element_by_a_run_time_index(xs: [Span[F32]; 2], k: U32) -> U32 {
+  id(xs[k]).len() //~ E0710
+}
+
+pub fn the_whole_planar_argument(xs: [Span[F32]; 2]) -> U32 {
+  id(xs)[0].len() //~ E0710
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+// A value that is not second-class makes the same call right: what is read from the view (`s.len()`) and an array that
+// a view could be taken of (`[F32; 4]`, which the type parameter takes as it is).
+pub fn the_length_is_the_argument(s: Span[F32]) -> U32 {
+  id(s.len())
+}
+
+pub fn an_array_that_a_view_could_be_taken_of(xs: [F32; 4]) -> U32 {
+  id(xs).len()
+}

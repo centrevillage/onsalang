@@ -830,7 +830,8 @@ fn places_overlap() {
 /// The second-class values (§5.3, §5.4; S-217): a `Span` from a
 /// borrow binds at a borrow row (`let`, `for`), and the name stays
 /// second-class: stored, a `var`, a `Span` of an `inout` parameter or of an
-/// owned row, a `move` of one, are E0710 at the value placed there.
+/// owned row, a `move` of one, are E0710 at the value placed there (one given
+/// to a type parameter is the types stage's, S-862).
 #[test]
 fn a_span_binds_at_a_borrow_row_only() {
     let src = "pub fn bound(input: [Span[F32]; 2], xs: Span[F32], n: U32) -> U32 {
@@ -861,11 +862,9 @@ pub fn whole(input: [Span[F32]; 2]) {
 pub fn returned() {
   let g = fn(x: Span[F32]) { x }
 }
-pub fn move_arg(xs: Span[F32]) {
-  keep(move xs)
-}
 ";
-    assert_eq!(fixes(src), bare(Code::E0710, &[9, 12, 15, 18, 21, 24, 27, 30]));
+    // `keep(move xs)` of the generic `keep` is the types stage's E0710 (S-862).
+    assert_eq!(fixes(src), bare(Code::E0710, &[9, 12, 15, 18, 21, 24, 27]));
 }
 
 /// R-334: a generated `Out` is not counted second-class until W7-03 makes
@@ -888,9 +887,6 @@ pub fn field(o: pair.Out) -> U32 {
 pub fn stored(o: pair.Out) {
   var p = (o, 1)
 }
-pub fn move_arg(o: pair.Out) {
-  keep(move o)
-}
 pub fn returned() {
   let g = fn(o: pair.Out) { o }
 }
@@ -902,7 +898,8 @@ pub fn rendered() -> F32 uses {Alloc} {
   p.out[0]
 }
 ";
-    assert_eq!(fixes(src), bare(Code::E0711, &[5, 12, 15, 18]));
+    // `keep(move o)` of the generic `keep` is the types stage's E0710 (S-862).
+    assert_eq!(fixes(src), bare(Code::E0711, &[5, 12, 15]));
 }
 
 /// §5.3: an anonymous function that captures stands at an argument only;
@@ -1452,18 +1449,14 @@ pub fn user_borrowed(v: W) -> U32 uses {Alloc} {
 }
 
 /// The forms carried to U3a: an element of a constructor is consumed (a
-/// `Span` is E0710, R-325; a Dup one marked `move` is E0703, S-795); `take(b)` of an `inout` Affine `b` is E0711 with no candidate
+/// `Span` is the types stage's E0710, S-862; a Dup one marked `move` is E0703, S-795); `take(b)` of an `inout` Affine `b` is E0711 with no candidate
 /// (R-117); a planar literal at a borrowed parameter of a method and of a
 /// generic function; the tails of
 /// an `if` at a `move` parameter (§5.2); a place moved and borrowed in one
 /// call, E0702 whatever the order (§5.2, S-787; U4a, was E0704 from the left).
 #[test]
 fn the_carried_forms_of_calls() {
-    let src = "pub fn span(xs: Span[F32]) -> U32 {
-  let k = Some(xs)
-  0
-}
-pub fn dup_marked(n: U32) -> Option[U32] {
+    let src = "pub fn dup_marked(n: U32) -> Option[U32] {
   Some(move n)
 }
 pub fn inout_arg(inout b: Buf[F32]) uses {Alloc} {
@@ -1489,7 +1482,7 @@ pub fn generic(a: Buf[F32], b: Buf[F32]) {
     let skip = CALLEES.matches('\n').count();
     let (diags, moved) = seen(&format!("{CALLEES}{src}"));
     let lines: Vec<_> = diags.into_iter().map(|(c, l, _)| (c, l - skip)).collect();
-    assert_eq!(lines, [(Code::E0710, 2), (Code::E0703, 6), (Code::E0711, 9), (Code::E0702, 20)]);
+    assert_eq!(lines, [(Code::E0703, 2), (Code::E0711, 5), (Code::E0702, 16)]);
     assert_eq!(call_fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 1);
     assert_eq!(moved, BTreeSet::from(["a", "b", "x"].map(String::from)));
 }

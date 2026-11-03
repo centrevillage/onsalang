@@ -1,7 +1,7 @@
 //! The names in scope in every module (spec §15.1, §4.1, S-107, S-659): the
 //! compiler's (the builtin types, the variants of `Option` and `Result`,
-//! `panic`, the traits of §6.3 and the kind constraints), and the items of
-//! `std.core` (`Alloc`, `Block`).
+//! `panic`, the traits of §6.3, the kind constraints and `Escape`), and the
+//! items of `std.core` (`Alloc`, `Block`).
 
 use crate::Analysis;
 use crate::def::{Bound, TRAITS};
@@ -60,6 +60,7 @@ pub(super) fn build(a: &mut Analysis) {
     }
     put(onsa_syntax::foreign::COPY, Builtin::Kind(Bound::Copy));
     put(onsa_syntax::foreign::DUP, Builtin::Kind(Bound::Dup));
+    put(onsa_syntax::foreign::ESCAPE, Builtin::Kind(Bound::Escape));
     for name in SCALARS {
         let Some(t) = a.types.scalar(name) else {
             onsa_diag::internal::bug(None, format!("`{name}` is not a scalar type"))

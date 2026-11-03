@@ -1,0 +1,6 @@
+// A type alias with the name of a prelude name (§15.1).
+pub type Escape = I32 //~ E0304
+
+pub fn fine() -> I32 {
+  8
+}

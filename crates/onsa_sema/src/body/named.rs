@@ -257,7 +257,7 @@ impl<'a> Checker<'a> {
             Entity::Builtin(b) => match b {
                 Builtin::None => {
                     let t = self.fresh();
-                    self.defer(name.span, t, DeferredKind::Origin { what: "the type in `None`".into() });
+                    self.type_argument(name.span, t, "the type in `None`".into());
                     let opt = self.a.types.builtin(BuiltinTy::Option, vec![t]);
                     if let Some(exp) = expected {
                         self.unify_at(name.span, opt, exp)?;
@@ -295,17 +295,17 @@ impl<'a> Checker<'a> {
     /// type, and an origin for the other type argument of `Result` (E0406, §4.7).
     pub(super) fn prelude_ctor(&mut self, b: Builtin, span: Span) -> TyId {
         let t = self.fresh();
-        self.defer(span, t, DeferredKind::Origin { what: format!("the type in `{}`", self.src(span)) });
+        self.type_argument(span, t, format!("the type in `{}`", self.src(span)));
         match b {
             Builtin::Some => self.a.types.builtin(BuiltinTy::Option, vec![t]),
             Builtin::Ok => {
                 let e2 = self.fresh();
-                self.defer(span, e2, DeferredKind::Origin { what: "the error type of `Ok`".into() });
+                self.type_argument(span, e2, "the error type of `Ok`".into());
                 self.a.types.builtin(BuiltinTy::Result, vec![t, e2])
             }
             _ => {
                 let ok = self.fresh();
-                self.defer(span, ok, DeferredKind::Origin { what: "the value type of `Err`".into() });
+                self.type_argument(span, ok, "the value type of `Err`".into());
                 self.a.types.builtin(BuiltinTy::Result, vec![ok, t])
             }
         }

@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5: "平面の配列を `xs: [T; N]` に渡す形は E0710 である。修正候補は無く、note で `Span` を総称で受ける形
+// （`xs: Span[T]`、`xs: [Span[T]; N]`）を示す"; §5.3: "`Span` を総称で受けるのは `xs: Span[T]`・`xs: [Span[T]; N]` の形である"): a planar argument
+// (`[Span[F32]; 2]`) passed to `xs: [T; N]` makes the type parameter `T` the type `Span[F32]`, and it is the E0710 of the call, in the
+// default mode and `inout`, whether the body reads the elements, only the length `N`, or nothing. A `Span` is taken by a generic with the
+// parameter `xs: Span[T]` or `xs: [Span[T]; N]` (`T` is then `F32`), which is the right form (the units at the end). The array
+// of scalars (or of arrays) passed to `xs: [T; N]` is right (`T = F32`), and so is the length of a planar argument (`xs.len()`, §5.3: the length of
+// an array does not depend on the element). The error has no candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn length_of[T, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn first_of[T, const N: U32](xs: [T; N]) -> T {
+  xs[0]
+}
+
+pub fn length_of_inout[T, const N: U32](inout xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn length_of_views[T: Copy, const N: U32](xs: [Span[T]; N]) -> U32 {
+  N
+}
+
+pub fn first_length_of_views[T: Copy, const N: U32](xs: [Span[T]; N]) -> U32 {
+  xs[0].len()
+}
+
+pub fn length_of_a_view[T: Copy](xs: Span[T]) -> U32 {
+  xs.len()
+}
+
+// ------------------------------------------------------------------------------- a planar argument
+
+pub fn only_the_length(xs: [Span[F32]; 2]) -> U32 {
+  length_of(xs) //~ E0710 @3
+}
+
+pub fn the_first_element(xs: [Span[F32]; 2]) -> U32 {
+  first_of(xs).len() //~ E0710 @3
+}
+
+pub fn inout_planar_argument(inout xs: [Span[F32]; 3]) -> U32 {
+  length_of_inout(inout xs) //~ E0710 @3
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn the_array_of_scalars(xs: [F32; 4]) -> U32 {
+  length_of(xs) + 1
+}
+
+pub fn the_array_of_arrays(xs: [[F32; 4]; 2]) -> U32 {
+  length_of(xs)
+}
+
+pub fn the_first_scalar(xs: [F32; 4]) -> F32 {
+  first_of(xs)
+}
+
+pub fn the_length_of_the_planar_argument(xs: [Span[F32]; 2]) -> U32 {
+  xs.len()
+}
+
+pub fn views_taken_by_a_generic_of_views(xs: [Span[F32]; 2]) -> U32 {
+  length_of_views(xs) + first_length_of_views(xs)
+}
+
+pub fn a_view_taken_by_a_generic_view(s: Span[F32]) -> U32 {
+  length_of_a_view(s)
+}
+
+pub fn an_array_taken_by_a_generic_view(xs: [F32; 4]) -> U32 {
+  length_of_a_view(xs)
+}

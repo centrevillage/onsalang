@@ -1,0 +1,44 @@
+// onsa.toml
+// [package]
+// name = "second_class_type_argument"
+// edition = "2026"
+//
+// [export]
+// prefix = "second_class_type_argument_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.5", "§5.3", "§13.4"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5 and §5.3), the build part: a function that is exported (`@export`) takes a `Span` and passes it to a generic
+// function whose type parameter is then decided to `Span[F32]`. The version before the rule generated the C of that instance (`id` over a
+// `Span`); the rule stops it at the check, in the types stage, with the E0710 of the call, so the build of the target has nothing to
+// generate. The error is in the source (the mark has no target), and the manifest is right.
+fn id[T](x: T) -> T {
+  x
+}
+
+fn sum(xs: Span[F32]) -> F32 {
+  var s = 0.0
+  for i in 0 ..< xs.len() {
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn total(xs: Span[F32]) -> F32 {
+  sum(id(xs)) //~ E0710 @7
+}
+
+@export
+pub fn length(xs: Span[F32]) -> U32 {
+  id(xs).len() //~ E0710 @3
+}

@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.2", "§5.3"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5 and §5.3): the mode of the parameter does not change what a type parameter may be decided to. The
+// parameter whose declared type is the type parameter `T` takes an `inout` and a `move` argument as well (§5.2), and a second-class
+// type that the type parameter is decided to is the E0710 of the call, in the types stage, before the modes of the argument are
+// looked at: the `inout` view (`ii(inout s)`) and the element of the planar argument (`ii(inout xs[0])`) are the type argument `Span[F32]`,
+// the planar argument itself is `[Span[F32]; 2]`, and the `move` of a view is the type argument and not the "moved" form of the
+// modes stage. The error has no candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn inout_param[T](inout x: T) -> U32 {
+  0
+}
+
+pub fn inout_planar[T, const N: U32](inout xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn move_param[T: ?Dup](move x: T) -> U32 {
+  0
+}
+
+// ------------------------------------------------------------------------------------- inout
+
+pub fn inout_view(inout s: Span[F32]) -> U32 {
+  inout_param(inout s) //~ E0710 @3
+}
+
+pub fn inout_element(inout xs: [Span[F32]; 2]) -> U32 {
+  inout_param(inout xs[0]) //~ E0710 @3
+}
+
+pub fn inout_the_planar_argument(inout xs: [Span[F32]; 2]) -> U32 {
+  inout_planar(inout xs) //~ E0710 @3
+}
+
+pub fn inout_part_of_a_view(inout s: Span[F32]) -> U32 {
+  inout_param(inout s.slice(0, 1)) //~ E0710 @3
+}
+
+// --------------------------------------------------------------------------------------- move
+
+pub fn move_view(s: Span[F32]) -> U32 {
+  move_param(move s) //~ E0710 @3
+}
+
+pub fn move_element(xs: [Span[F32]; 2]) -> U32 {
+  move_param(move xs[0]) //~ E0710 @3
+}
+
+pub fn move_bound_view(s: Span[F32]) -> U32 {
+  let half = s.slice(0, 1)
+  move_param(move half) //~ E0710 @3
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn inout_scalar_array(inout xs: [F32; 4]) -> U32 {
+  inout_param(inout xs)
+}
+
+pub fn inout_scalar_view_element(inout s: Span[F32]) -> U32 {
+  inout_param(inout s[0])
+}
+
+pub fn move_buffer(move b: Buf[F32]) -> U32 {
+  move_param(move b)
+}

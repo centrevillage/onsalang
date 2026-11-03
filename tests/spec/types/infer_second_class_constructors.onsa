@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.6"]
+// fixes = 0
+
+// S-862 (1') (W5-02 U5a, §4.5: the type argument that is decided by inference is the E0710 of "その型引数を作った式（呼び出し、メソッドの
+// 呼び出し、struct リテラル、列挙子、組込みの関連関数）の位置"): the other expressions that make a type argument. A struct literal of a
+// generic struct (`W { x: s }`), the constructors of `Option` and `Result` and of a generic enum of the program (`Some(s)`, `Ok(s)`,
+// `Shelf.One(s)`), a method of a type that has a type parameter of its own (`p.take(s)`: the receiver is not what makes `U`), and
+// the built-in generic function `array.from_fn`, whose element type is the type parameter `T` (an annotation that the planar array
+// is bound to is right, §5.4). The error is in the types stage and has no candidate (`fixes = 0`). The marks with a column are at the
+// start of the expression that made the type argument. One error per function (P-01).
+
+use std.array
+
+pub struct W[T] {
+  x: T,
+}
+
+pub struct Two[A, B] {
+  a: A,
+  b: B,
+}
+
+pub enum Shelf[T] {
+  One(T),
+  Empty,
+}
+
+pub struct P {
+  n: U32,
+}
+
+impl P {
+  pub fn take[U](self, y: U) -> U32 {
+    self.n
+  }
+}
+
+pub struct G[T] {
+  x: T,
+}
+
+impl[T] G[T] {
+  pub fn take[U](self, y: U) -> U32 {
+    1
+  }
+}
+
+// ------------------------------------------------------------------------------- struct literals
+
+pub fn struct_literal(s: Span[F32]) -> U32 {
+  let w = W { x: s } //~ E0710 @11
+  w.x.len()
+}
+
+pub fn struct_literal_not_read(s: Span[F32]) -> U32 {
+  let _ = W { x: s } //~ E0710
+  0
+}
+
+pub fn struct_literal_of_two_parameters(s: Span[F32]) -> U32 {
+  let t = Two { a: 1, b: s } //~ E0710 @11
+  t.a
+}
+
+pub fn struct_literal_in_a_tail(s: Span[F32]) -> U32 {
+  W { x: s }.x.len() //~ E0710 @3
+}
+
+// ----------------------------------------------------------------------------------- constructors
+
+pub fn option_some(s: Span[F32]) -> U32 {
+  let k = Some(s) //~ E0710 @11
+  match k {
+    Some(v) => v.len(),
+    None => 0,
+  }
+}
+
+pub fn option_some_of_an_element(xs: [Span[F32]; 2]) -> U32 {
+  let k = Some(xs[0]) //~ E0710 @11
+  match k {
+    Some(v) => v.len(),
+    None => 0,
+  }
+}
+
+pub fn result_ok(s: Span[F32]) -> U32 {
+  match Ok(s) { //~ E0710 @9
+    Ok(v) => v.len(),
+    Err(e) => e,
+  }
+}
+
+pub fn result_err(s: Span[F32]) -> U32 {
+  match Err(s) { //~ E0710 @9
+    Ok(n) => n,
+    Err(e) => e.len(),
+  }
+}
+
+pub fn user_enum(s: Span[F32]) -> U32 {
+  let h = Shelf.One(s) //~ E0710 @11
+  match h {
+    Shelf.One(v) => v.len(),
+    Shelf.Empty => 0,
+  }
+}
+
+// ----------------------------------------------------------------------------------- the methods
+
+pub fn method_type_parameter(p: P, s: Span[F32]) -> U32 {
+  p.take(s) //~ E0710
+}
+
+pub fn method_type_parameter_of_a_generic_type(g: G[U32], s: Span[F32]) -> U32 {
+  g.take(s) //~ E0710
+}
+
+// ------------------------------------------------------------------------------------- from_fn
+
+pub fn from_fn_of_views(s: Span[F32]) -> U32 {
+  let xs: [Span[F32]; 2] = array.from_fn(fn(i) { s }) //~ E0710 @28
+  xs.len()
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+// The same constructors with a value that is not second-class, and a `Span` that the constructor is not given.
+pub fn struct_literal_of_a_length(s: Span[F32]) -> U32 {
+  let w = W { x: s.len() }
+  w.x
+}
+
+pub fn option_some_of_a_length(s: Span[F32]) -> U32 {
+  match Some(s.len()) {
+    Some(n) => n,
+    None => 0,
+  }
+}
+
+pub fn method_type_parameter_of_a_length(p: P, s: Span[F32]) -> U32 {
+  p.take(s.len())
+}
+
+pub fn from_fn_of_scalars() -> U32 {
+  let xs: [F32; 2] = array.from_fn(fn(i) { i.round_f32() })
+  xs.len()
+}

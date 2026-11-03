@@ -81,7 +81,9 @@ impl Bounds<'_> {
             }
             (
                 Ty::Int(_),
-                Bound::Num
+                Bound::AnyNum
+                | Bound::Int
+                | Bound::Num
                 | Bound::PartialEq
                 | Bound::PartialOrd
                 | Bound::Eq
@@ -94,7 +96,8 @@ impl Bounds<'_> {
             ) => true,
             (
                 Ty::Float(_),
-                Bound::Num
+                Bound::AnyNum
+                | Bound::Num
                 | Bound::Float
                 | Bound::PartialEq
                 | Bound::PartialOrd
@@ -206,7 +209,8 @@ impl Bounds<'_> {
 }
 
 /// `have` implies `want` among the builtin bounds (§6.3): `Ord` ⇒ `PartialOrd`, `Eq`;
-/// `Eq` ⇒ `PartialEq`; `Float` ⇒ `Num`; `Num` ⇒ `PartialEq`, `PartialOrd`, `Copy`.
+/// `Eq` ⇒ `PartialEq`; `Float` ⇒ `Num`; `Num` ⇒ `AnyNum`; `Int` ⇒ `AnyNum`, `Eq`, `Ord`,
+/// `Hash`; `AnyNum` ⇒ `PartialEq`, `PartialOrd`, `Copy` (every number trait requires `Copy`).
 pub(crate) fn implies(have: Bound, want: Bound) -> bool {
     if have == want {
         return true;
@@ -215,8 +219,10 @@ pub(crate) fn implies(have: Bound, want: Bound) -> bool {
         Bound::Ord => matches!(want, Bound::PartialOrd | Bound::Eq | Bound::PartialEq),
         Bound::Eq => want == Bound::PartialEq,
         Bound::PartialOrd => want == Bound::PartialEq,
-        Bound::Float => matches!(want, Bound::Num | Bound::PartialEq | Bound::PartialOrd | Bound::Copy | Bound::Dup),
-        Bound::Num => matches!(want, Bound::PartialEq | Bound::PartialOrd | Bound::Copy | Bound::Dup),
+        Bound::Float => want == Bound::Num || implies(Bound::Num, want),
+        Bound::Num => implies(Bound::AnyNum, want),
+        Bound::Int => matches!(want, Bound::Eq | Bound::Ord | Bound::Hash) || implies(Bound::AnyNum, want),
+        Bound::AnyNum => matches!(want, Bound::PartialEq | Bound::PartialOrd | Bound::Copy | Bound::Dup),
         Bound::Copy => want == Bound::Dup,
         _ => false,
     }

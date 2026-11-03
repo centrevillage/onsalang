@@ -13,17 +13,21 @@ pub struct DefId(pub u32);
 pub struct ModId(pub u32);
 
 /// What a bound is in this version (§6.3, §4.6): a trait of the provisional
-/// rows of [`TRAITS`] (S-72; user traits are phase 2), or a kind constraint.
+/// rows of [`TRAITS`] (S-72; user traits are phase 2), a kind constraint, or
+/// the implicit `Escape` of a type parameter (§4.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Bound {
+    AnyNum,
     Num,
     Float,
+    Int,
     PartialEq,
     PartialOrd,
     Eq,
     Ord,
     Copy,
     Dup,
+    Escape,
     Hash,
     Show,
     Default,
@@ -32,7 +36,8 @@ pub enum Bound {
 /// The operator traits and the standard traits (§6.3), names of the prelude
 /// (§15.1, S-107): the one table of their names. Each row has the bound the
 /// trait is in this version (S-72), or `None` when a bound of it is an E0200
-/// (the operator and number traits W5-05, `Ordinal` W5-06).
+/// (the operator traits and `Unsigned` W5-05, `Ordinal` W5-06; `AnyNum` and
+/// `Int` are bounds of std only until W5-05).
 pub const TRAITS: [(&str, Option<Bound>); 34] = [
     ("Add", None),
     ("Sub", None),
@@ -62,21 +67,22 @@ pub const TRAITS: [(&str, Option<Bound>); 34] = [
     ("Iter", None),
     ("IntoIter", None),
     ("Drop", None),
-    ("AnyNum", None),
+    ("AnyNum", Some(Bound::AnyNum)),
     ("Num", Some(Bound::Num)),
     ("Float", Some(Bound::Float)),
-    ("Int", None),
+    ("Int", Some(Bound::Int)),
     ("Unsigned", None),
     ("Ordinal", None),
 ];
 
 impl Bound {
-    /// The name of the bound: of its row of [`TRAITS`], or of the kind
-    /// constraint (§4.6).
+    /// The name of the bound: of its row of [`TRAITS`], of the kind
+    /// constraint (§4.6), or `Escape` (§4.5).
     pub fn name(self) -> &'static str {
         match self {
             Bound::Copy => onsa_syntax::foreign::COPY,
             Bound::Dup => onsa_syntax::foreign::DUP,
+            Bound::Escape => onsa_syntax::foreign::ESCAPE,
             b => match TRAITS.iter().find(|(_, t)| *t == Some(b)) {
                 Some((name, _)) => name,
                 None => onsa_diag::internal::bug(None, format!("the bound {b:?} is in no row of the traits")),

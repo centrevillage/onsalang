@@ -79,6 +79,8 @@ features! {
     TraitDefinitions: Language, "trait definitions", None;
     TraitImpls: Language, "trait implementations (`impl Trait for Type`)", None;
     TraitBounds: Language, "user-defined traits as bounds", None;
+    /// S-862: the name is reserved in the prelude (W5-17).
+    RelaxedEscape: Language, "the bound `?Escape`, which lets a type parameter take second-class types", None;
     EffectDefinitions: Language, "effect definitions", None;
     HandlerDefinitions: Language, "handler declarations", None;
     EffectHandlers: Language, "effect handlers (`handle ... with`)", None;

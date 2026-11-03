@@ -10,15 +10,15 @@
 //! whether the result is defined, and the result when it is.
 
 /// Whether `x` is a value of `B`, and that value (§3.3). For `narrow_*`.
-target rt fn narrow_parts[A, B](x: A) -> (Bool, B)
+target rt fn narrow_parts[A: Int, B: Int](x: A) -> (Bool, B)
 /// Whether `a + b` is a value of `T` (no overflow, §3.4), and the sum.
-target rt fn add_parts[T](a: T, b: T) -> (Bool, T)
+target rt fn add_parts[T: Int](a: T, b: T) -> (Bool, T)
 /// As `add_parts`, of `a - b`.
-target rt fn sub_parts[T](a: T, b: T) -> (Bool, T)
+target rt fn sub_parts[T: Int](a: T, b: T) -> (Bool, T)
 /// As `add_parts`, of `a * b`.
-target rt fn mul_parts[T](a: T, b: T) -> (Bool, T)
+target rt fn mul_parts[T: Int](a: T, b: T) -> (Bool, T)
 /// As `add_parts`, of `a / b`: neither a zero `b` nor `MIN / -1`.
-target rt fn div_parts[T](a: T, b: T) -> (Bool, T)
+target rt fn div_parts[T: Int](a: T, b: T) -> (Bool, T)
 
 /// `Some` of the value when it is defined.
 rt fn some_if[T](parts: (Bool, T)) -> Option[T] {

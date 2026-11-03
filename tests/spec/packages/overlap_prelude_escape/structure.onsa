@@ -1,0 +1,8 @@
+// A struct with the name of a prelude name (§15.1).
+pub struct Escape { //~ E0304
+  v: I32,
+}
+
+pub fn fine() -> I32 {
+  2
+}

@@ -50,7 +50,7 @@ pub(crate) use decls::{Decls, item_kind};
 pub(crate) use derives::kind_constraint;
 pub(crate) use heading::read_effects;
 pub(crate) use types::lower_type_in_body;
-pub(crate) use wellformed::{Pos, second_class};
+pub(crate) use wellformed::{Pos, no_kind_argument, second_class};
 
 pub(crate) struct Sema<'p> {
     pub(crate) a: &'p mut Analysis,

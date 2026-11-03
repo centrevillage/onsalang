@@ -42,6 +42,14 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The type argument `t` a use made at `span`, named `what`: its origin
+    /// (E0406 when still open at the end) and its implicit `Escape`, judged
+    /// before the other requirements made after it (§4.5, S-862).
+    pub(super) fn type_argument(&mut self, span: Span, t: TyId, what: String) {
+        self.defer(span, t, DeferredKind::Origin { what: what.clone() });
+        self.defer(span, t, DeferredKind::Escape { what });
+    }
+
     /// Record an instantiation made by the expression at `span`. Its arguments
     /// may be decided by a later statement (§4.5, §4.7; S-174): each one is an
     /// origin (E0406 when still open at the end) and carries the requirements of
@@ -70,16 +78,18 @@ impl<'a> Checker<'a> {
                 GenericKind::Const(_) => format!("the const parameter `{}` of {owner}", g.name),
                 _ => format!("the type parameter `{}` of {owner}", g.name),
             };
-            self.defer(span, arg, DeferredKind::Origin { what });
             // A parameter with an unknown bound requires nothing of its users (§18.1, S-768).
-            if let GenericKind::Type { bounds, dup, unknown: false } = &g.kind {
-                let required = |param: &str| Required::Param { param: param.to_string(), owner: owner.clone() };
-                if *dup {
-                    self.defer(span, arg, DeferredKind::Require { bound: Bound::Dup, what: required(&g.name) });
-                }
-                for &b in bounds {
-                    self.defer(span, arg, DeferredKind::Require { bound: b, what: required(&g.name) });
-                }
+            let GenericKind::Type { bounds, dup, unknown: false } = &g.kind else {
+                self.defer(span, arg, DeferredKind::Origin { what });
+                continue;
+            };
+            self.type_argument(span, arg, what);
+            let required = || Required::Param { param: g.name.clone(), owner: owner.clone() };
+            if *dup {
+                self.defer(span, arg, DeferredKind::Require { bound: Bound::Dup, what: required() });
+            }
+            for &b in bounds {
+                self.defer(span, arg, DeferredKind::Require { bound: b, what: required() });
             }
         }
         let id = InstId(self.info.instances.len() as u32);
