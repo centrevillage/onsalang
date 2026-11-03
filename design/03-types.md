@@ -35,7 +35,7 @@
   - 破棄: `Drop`
   - derive: 宣言の頭に並べられる trait の閉じた一覧（§6.4）
   - 反復: `IntoIter`（消費する反復）と `Iter`
-  - （S-140 で外した: `Copy` と `Dup` は trait ではなく種の制約で、std に宣言しない。名前はコンパイラが prelude に与え、境界の判定は §4.6 の種の計算を直接使う）
+  - （S-140 で外した: `Copy` と `Dup` は trait ではなく種の制約で、std に宣言しない。名前はコンパイラが prelude に与え、境界の判定は §4.6 の種の計算を直接使う。型パラメータの暗黙の要求 `Escape`（§4.5、S-862）も同じくコンパイラが与える）
   - 数: `AnyNum`、`Num`、`Float`、`Int`、`Unsigned`（E0401 の修正候補と E0416 の note、`vdelay` の `T: Float`、S-84）。`Float` は組込みの浮動小数だけが実装する（S-108）
   - `Option` / `Result` とその列挙子（prelude と `?`、S-71）
   - `Alloc`（prelude と効果の判定、S-74）

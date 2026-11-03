@@ -24,7 +24,7 @@ pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr)
 （略記。今の定義は `crates/onsa_core/src/ir.rs`）
 
 - 全ての式に型が付く。ジェネリクスは無い（単相化済み）。レートは無い（flow は降下済み）。
-- `Prim` は `std.math` の `target` 宣言と組込みメソッド（`trunc_i32_sat`、`to_bits`、`Span.len` など）。`PrimId` の一覧を `onsa_core::prim` に置き、各バックエンドはこの一覧に対して対応表を持つ（表の欠けはテストで検出）。
+- `Prim` は `std.math` の `target` 宣言と組込みメソッド（`trunc_i32_sat`、`to_bits`、`Span.len` など）。`Prim` の一覧は `onsa_sema::prim` に置き（`onsa_core::prim` が再輸出する）、各バックエンドはこの一覧に対して対応表（`supports`）を持つ（表の欠けはテストで検出、`design/06-placement.md` の「`Prim` の表」の行）。
 - `verify(Module)` は、常に（release も）段の境目ごとに走らせる（降下と正規化の後、ターゲットの pass の後）。失敗は内部エラー（終了コード 101、診断コード無し。S-67）で、破った規則の番号、関数名、Core の位置を報告し、その関数の Core のダンプを不具合の報告用に残す（レビュー R-82）。検証器は D-15 に従い、Core の構造から性質を確かめる。
   規則は次の一覧で全てである。規則ごとに、その規則だけを破った Core を手で作って検証器が拒むことを確かめる否定のテストを置く。Core の形を変えるときは、一覧・検証器・テストを一緒に直す。
 
