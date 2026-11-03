@@ -735,6 +735,26 @@ class GateForms(GateRun):
             self.assertIn("parent: crates/a/src/lib.rs:1: S-15 is DROPPED", out)
 
 
+class HashSeed(unittest.TestCase):
+    def test_the_seed_of_the_environment_or_a_random_u64(self):
+        saved = os.environ.pop("ONSA_HASH_SEED", None)
+        try:
+            os.environ["ONSA_HASH_SEED"] = "12345"
+            self.assertEqual(gate.hash_seed(), "12345")
+            for unset in ("", None):
+                if unset is None:
+                    del os.environ["ONSA_HASH_SEED"]
+                else:
+                    os.environ["ONSA_HASH_SEED"] = unset
+                seed = gate.hash_seed()
+                self.assertRegex(seed, r"^[0-9]+$")
+                self.assertLess(int(seed), 2 ** 64)
+        finally:
+            os.environ.pop("ONSA_HASH_SEED", None)
+            if saved is not None:
+                os.environ["ONSA_HASH_SEED"] = saved
+
+
 class Golden(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -71,3 +71,5 @@
 ## 絞った確かめ
 
 一部の事例だけを走らせるには `tools/run_cases.py` を使う（[`rules/checks.md`](../rules/checks.md) 4.7）。
+
+debug のビルドは、解析の表の順を実行ごとの種で変える（W5-18）。gate は実行の種を決めて全ての項目に `ONSA_HASH_SEED` で渡し、要約の `hash seed:` の行に書く（`cargo test` の事例の失敗の報告も種を書く）。表の順で出力が揺れたら、その種を `ONSA_HASH_SEED=<種>` に置いて同じ命令を回すと、同じ順で再現する。

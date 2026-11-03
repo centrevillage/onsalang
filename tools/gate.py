@@ -72,6 +72,7 @@ import argparse
 import contextlib
 import fcntl
 import os
+import random
 import re
 import subprocess
 import sys
@@ -341,6 +342,13 @@ def one_gate(root, out=sys.stdout):
         yield
 
 
+def hash_seed():
+    """The seed of the hash tables for this run (W5-18): `ONSA_HASH_SEED` when it is set and not
+    empty, else a random `u64`. `main` puts it in the environment of every step, so the order of
+    the tables of a debug build in a failure repeats with `ONSA_HASH_SEED=<seed> tools/gate.sh …`."""
+    return os.environ.get("ONSA_HASH_SEED") or str(random.SystemRandom().getrandbits(64))
+
+
 def _env():
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -519,6 +527,7 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
         print(problem, file=sys.stderr)
         return 2
     with one_gate(root, out):
+        seed = os.environ["ONSA_HASH_SEED"] = hash_seed()
         entries, load_errors = pending.load(root / pending.PENDING)
         listed = {e.target: e for e in pending.of_kind(entries, "gate") if "/" not in e.target}
         form = Form(tuple(args.work), args.stage_end, args.quick, only=only)
@@ -544,6 +553,7 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
             notes += _history(root, form, results, failed, tree)
         elif kind == "worktree":
             notes += _record(root, form, results, failed, tree)
+        notes.append(f"hash seed: {seed} (ONSA_HASH_SEED={seed} repeats the order of the tables of a debug build)")
         for line in summary(results, entries, golden, stages, args.stage_end, not load_errors, args.quick, form, notes):
             print(line, file=out)
     return 1 if failed else 0
