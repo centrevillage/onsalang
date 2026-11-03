@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§6.1", "§6.2", "§4.5", "§9.2"]
+
+// The boundary of the call depth (spec §12.5) when the nested calls are of different kinds: a free function,
+// a method, an associated function, a generic function and an `inout` method each count as one nested call,
+// so a chain that passes through all of them is as deep as the number of its calls. The depth of a `test`
+// body is 0. A chain of k + 1 calls reaches depth k + 1: 128 nested calls pass and 129 panic at the call in
+// the body of the test (§9.2: a panic in a test fails that test and no other). The same chain is started
+// from each of its kinds, so no kind is cheaper than another at the entry or at the bottom.
+// All the functions are user code; the std is not in the chain (spec §12.5).
+
+pub struct Gauge {
+  base: U32,
+}
+
+impl Gauge {
+  pub fn make(base: U32) -> Gauge {
+    Gauge { base: base }
+  }
+
+  // method -> associated function
+  pub fn by_method(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      Gauge.by_assoc(self, n - 1)
+    }
+  }
+
+  // associated function -> generic function
+  pub fn by_assoc(g: Gauge, n: U32) -> U32 {
+    if n == 0 {
+      g.base
+    } else {
+      by_generic(true, g, n - 1)
+    }
+  }
+
+  // inout method -> free function
+  pub fn by_inout(inout self, n: U32) {
+    self.base = self.base + 1
+    if n > 0 {
+      by_free_inout(inout self, n - 1)
+    }
+  }
+}
+
+// generic function -> free function
+fn by_generic[T: Copy](tag: T, g: Gauge, n: U32) -> U32 {
+  if n == 0 {
+    3
+  } else {
+    by_free(g, n - 1)
+  }
+}
+
+// free function -> method
+fn by_free(x: Gauge, n: U32) -> U32 {
+  if n == 0 {
+    x.base
+  } else {
+    x.by_method(n - 1)
+  }
+}
+
+fn by_free_inout(inout g: Gauge, n: U32) {
+  g.by_inout!(n)
+}
+
+// The kind of the j-th call (from 0) of a chain that starts at kind s is (s + j) mod 4, with the order
+// method (0), associated function (1), generic function (2), free function (3). The value of the chain is
+// from the call at the bottom: the generic function returns 3, the others the base 7.
+
+test "a chain of four kinds of call, 128 nested calls, from a method, passes" {
+  let g = Gauge.make(7)
+  // The bottom is the 128th call, j = 127, kind 3 (free function).
+  assert g.by_method(127) == 7
+}
+
+test "a chain of four kinds of call, 129 nested calls, from a method, panics" {
+  let g = Gauge.make(7)
+  let v = g.by_method(128) //~ PANIC "a chain of four kinds of call, 129 nested calls, from a method, panics"
+  assert v == 7
+}
+
+test "the same chain from an associated function, 128 nested calls, passes" {
+  let g = Gauge.make(7)
+  // kind (1 + 127) mod 4 = 0 at the bottom: a method.
+  assert Gauge.by_assoc(g, 127) == 7
+}
+
+test "the same chain from an associated function, 129 nested calls, panics" {
+  let g = Gauge.make(7)
+  let v = Gauge.by_assoc(g, 128) //~ PANIC "the same chain from an associated function, 129 nested calls, panics"
+  assert v == 7
+}
+
+test "the same chain from a generic function, 128 nested calls, passes" {
+  let g = Gauge.make(7)
+  // kind (2 + 127) mod 4 = 1 at the bottom: an associated function.
+  assert by_generic(true, g, 127) == 7
+}
+
+test "the same chain from a generic function, 129 nested calls, panics" {
+  let g = Gauge.make(7)
+  let v = by_generic(true, g, 128) //~ PANIC "the same chain from a generic function, 129 nested calls, panics"
+  assert v == 3
+}
+
+test "the same chain from a free function, 128 nested calls, passes" {
+  let g = Gauge.make(7)
+  // kind (3 + 127) mod 4 = 2 at the bottom: the generic function.
+  assert by_free(g, 127) == 3
+}
+
+test "the same chain from a free function, 129 nested calls, panics" {
+  let g = Gauge.make(7)
+  let v = by_free(g, 128) //~ PANIC "the same chain from a free function, 129 nested calls, panics"
+  assert v == 7
+}
+
+// by_inout!(n) calls by_free_inout(n - 1), which calls by_inout!(n - 1): two calls per level of n, so the
+// chain from by_inout!(n) has 2n + 1 calls, and the chain from by_free_inout(n) has 2n + 2.
+
+test "an inout method and a free function that call each other, 128 nested calls, pass" {
+  var g = Gauge.make(0)
+  by_free_inout(inout g, 63)
+  assert g.base == 64
+}
+
+test "an inout method and a free function that call each other, 129 nested calls, panic" {
+  var g = Gauge.make(0)
+  g.by_inout!(64) //~ PANIC "an inout method and a free function that call each other, 129 nested calls, panic"
+  assert g.base == 65
+}

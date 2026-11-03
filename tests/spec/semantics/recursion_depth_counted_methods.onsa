@@ -1,0 +1,177 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§6.2", "§4.5", "§9.2"]
+
+// The methods and the associated functions of a user type count in the call depth (spec §12.5: the calls that
+// count are all the calls of functions whose body the evaluation runs; S-229). The depth of a
+// `test` body is 0 and the limit is 128. Each `down_*(126)` makes 127 nested calls of a user function and
+// calls the method at the bottom as the 128th call, which passes; `down_*(127)` makes 128 and the method is
+// the 129th call, which panics at the call in the body of the test (§9.2: a panic in a test fails that test
+// and no other). The method that is called does not recurse: it is the call at the bottom that makes the
+// difference. The `impl` blocks are inherent ones (`impl Ty`); the trait implementations wait for the user
+// traits of phase 2 (tasks/phase2.md).
+
+pub struct Cell[T] {
+  v: T,
+}
+
+pub struct Meter {
+  level: U32,
+}
+
+pub enum Mode {
+  Off,
+  On(U32),
+}
+
+impl Meter {
+  pub fn read(self) -> U32 {
+    self.level
+  }
+
+  pub fn make(level: U32) -> Meter {
+    Meter { level: level }
+  }
+
+  pub fn bump(inout self) {
+    self.level = self.level + 1
+  }
+}
+
+impl[T: Copy] Cell[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+impl Mode {
+  pub fn weight(self) -> U32 {
+    match self {
+      Mode.Off => 0,
+      Mode.On(k) => k,
+    }
+  }
+}
+
+// ------------------------------------------------------------------ a method
+
+fn down_read(m: Meter, n: U32) -> U32 {
+  if n == 0 {
+    m.read()
+  } else {
+    down_read(m, n - 1)
+  }
+}
+
+test "a method called as the 128th call passes" {
+  assert down_read(Meter.make(4), 126) == 4
+}
+
+test "a method called as the 129th call panics" {
+  let k = down_read(Meter.make(4), 127) //~ PANIC "a method called as the 129th call panics"
+  assert k == 4
+}
+
+// ------------------------------------------------------- an associated function
+
+fn down_make(n: U32) -> Meter {
+  if n == 0 {
+    Meter.make(9)
+  } else {
+    down_make(n - 1)
+  }
+}
+
+test "an associated function called as the 128th call passes" {
+  assert down_make(126).level == 9
+}
+
+test "an associated function called as the 129th call panics" {
+  let m = down_make(127) //~ PANIC "an associated function called as the 129th call panics"
+  assert m.level == 9
+}
+
+// ----------------------------------------------------------- an inout method
+
+fn down_bump(inout m: Meter, n: U32) {
+  if n == 0 {
+    m.bump!()
+  } else {
+    down_bump(inout m, n - 1)
+  }
+}
+
+test "an inout method called as the 128th call passes" {
+  var m = Meter.make(1)
+  down_bump(inout m, 126)
+  assert m.level == 2
+}
+
+test "an inout method called as the 129th call panics" {
+  var m = Meter.make(1)
+  down_bump(inout m, 127) //~ PANIC "an inout method called as the 129th call panics"
+  assert m.level == 2
+}
+
+// ---------------------------------------------- a method of a generic type
+
+fn down_get(c: Cell[F32], n: U32) -> F32 {
+  if n == 0 {
+    c.get()
+  } else {
+    down_get(c, n - 1)
+  }
+}
+
+test "a method of a generic type called as the 128th call passes" {
+  assert down_get(Cell { v: 1.5 }, 126) == 1.5
+}
+
+test "a method of a generic type called as the 129th call panics" {
+  let x = down_get(Cell { v: 1.5 }, 127) //~ PANIC "a method of a generic type called as the 129th call panics"
+  assert x == 1.5
+}
+
+// ------------------------------------------------------ a method of an enum
+
+fn down_weight(m: Mode, n: U32) -> U32 {
+  if n == 0 {
+    m.weight()
+  } else {
+    down_weight(m, n - 1)
+  }
+}
+
+test "a method of an enum called as the 128th call passes" {
+  assert down_weight(Mode.On(6), 126) == 6
+}
+
+test "a method of an enum called as the 129th call panics" {
+  let k = down_weight(Mode.On(6), 127) //~ PANIC "a method of an enum called as the 129th call panics"
+  assert k == 6
+}
+
+// ----------------------------------------- the call of the method is an argument
+
+fn pass_through(k: U32) -> U32 {
+  k
+}
+
+fn down_arg(m: Meter, n: U32) -> U32 {
+  if n == 0 {
+    pass_through(m.read())
+  } else {
+    down_arg(m, n - 1)
+  }
+}
+
+test "a method in an argument of a user call, both as the 128th call, passes" {
+  // m.read() is evaluated before pass_through is entered: it is the 128th call, and pass_through too.
+  assert down_arg(Meter.make(8), 126) == 8
+}
+
+test "a method in an argument of a user call, both as the 129th call, panics" {
+  let k = down_arg(Meter.make(8), 127) //~ PANIC "a method in an argument of a user call, both as the 129th call, panics"
+  assert k == 8
+}

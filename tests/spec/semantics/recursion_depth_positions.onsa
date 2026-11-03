@@ -1,0 +1,220 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§3.5", "§9.1", "§9.2"]
+
+// The boundary of the call depth (spec §12.5): the call of the recursion is written in a position that is
+// not the plain tail or `1 + f(n - 1)` of recursion_limit.onsa. The depth of a `test` body is 0, and the
+// call `f(k)` from the body makes k + 1 nested calls (the depth of the deepest is k + 1), a call that is
+// part of a larger expression included. So `f(127)` is 128 nested calls and passes, and `f(128)` is 129
+// and panics at the call in the body of the test (§9.2: a panic in a test fails that test and no other).
+// Every function here makes one nested call per level of its argument, whatever the call is part of:
+// `?`, a unary operator, a field of a literal, a destructuring `let`, an index, the scrutinee of
+// a `match`, the condition of a `while`, and an explicit `return`.
+// Everything in the file is user code, so each call is one call of a function (spec §12.5) whatever the expansion of std.
+
+pub struct Bad {
+  code: U32,
+}
+
+pub struct Wrap {
+  v: U32,
+}
+
+// ------------------------------------------------------------------- `?`
+
+fn try_opt(n: U32) -> Option[U32] {
+  if n == 0 {
+    Some(0)
+  } else {
+    let k = try_opt(n - 1)?
+    Some(k + 1)
+  }
+}
+
+fn try_res(n: U32) -> Result[U32, Bad] {
+  if n == 0 {
+    Ok(0)
+  } else {
+    Ok(try_res(n - 1)? + 1)
+  }
+}
+
+test "a recursion through ? on Option, 128 nested calls, passes" {
+  assert try_opt(127) == Some(127)
+}
+
+test "a recursion through ? on Option, 129 nested calls, panics" {
+  let o = try_opt(128) //~ PANIC "a recursion through ? on Option, 129 nested calls, panics"
+  assert o == Some(128)
+}
+
+fn value_or_flag(r: Result[U32, Bad]) -> U32 {
+  match r {
+    Ok(v) => v,
+    Err(_) => 9999,
+  }
+}
+
+test "a recursion through ? on Result, 128 nested calls, passes" {
+  assert value_or_flag(try_res(127)) == 127
+}
+
+test "a recursion through ? on Result, 129 nested calls, panics" {
+  let r = try_res(128) //~ PANIC "a recursion through ? on Result, 129 nested calls, panics"
+  assert value_or_flag(r) == 128
+}
+
+// -------------------------------------------------------------- unary, return
+
+fn neg_down(n: U32) -> I32 {
+  if n == 0 {
+    0
+  } else {
+    -neg_down(n - 1) + 1
+  }
+}
+
+fn not_down(n: U32) -> Bool {
+  if n == 0 {
+    true
+  } else {
+    !not_down(n - 1)
+  }
+}
+
+fn return_down(n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  return_down(n - 1) + 1
+}
+
+test "a call under a unary minus, 128 nested calls, passes" {
+  // neg_down(k) is 1 - neg_down(k - 1): 0, 1, 0, 1, ...
+  assert neg_down(127) == 1
+}
+
+test "a call under a unary minus, 129 nested calls, panics" {
+  let v = neg_down(128) //~ PANIC "a call under a unary minus, 129 nested calls, panics"
+  assert v == 0
+}
+
+test "a call under ! , 128 nested calls, passes" {
+  // 128 calls: the value flips 127 times from true.
+  assert !not_down(127)
+}
+
+test "a call under ! , 129 nested calls, panics" {
+  let b = not_down(128) //~ PANIC "a call under ! , 129 nested calls, panics"
+  assert b
+}
+
+test "a call in an explicit return, 128 nested calls, passes" {
+  assert return_down(127) == 127
+}
+
+test "a call in an explicit return, 129 nested calls, panics" {
+  let v = return_down(128) //~ PANIC "a call in an explicit return, 129 nested calls, panics"
+  assert v == 128
+}
+
+// --------------------------------------- a field, a pattern, an index, a scrutinee
+
+fn field_down(n: U32) -> Wrap {
+  if n == 0 {
+    Wrap { v: 0 }
+  } else {
+    Wrap { v: field_down(n - 1).v + 1 }
+  }
+}
+
+fn pair_down(n: U32) -> (U32, U32) {
+  if n == 0 {
+    (0, 100)
+  } else {
+    let (a, b) = pair_down(n - 1)
+    (a + 1, b)
+  }
+}
+
+fn index_down(n: U32) -> U32 {
+  let xs: [U32; 2] = [0, 1]
+  if n == 0 {
+    0
+  } else {
+    xs[index_down(n - 1)]
+  }
+}
+
+fn scrutinee_down(n: U32) -> Option[U32] {
+  if n == 0 {
+    Some(0)
+  } else {
+    match scrutinee_down(n - 1) {
+      Some(k) => Some(k + 1),
+      None => None,
+    }
+  }
+}
+
+fn while_down(n: U32) -> Bool {
+  if n == 0 {
+    return false
+  }
+  var seen = false
+  while while_down(n - 1) {
+    seen = true
+  }
+  seen
+}
+
+test "a call in the field of a literal, 128 nested calls, passes" {
+  assert field_down(127).v == 127
+}
+
+test "a call in the field of a literal, 129 nested calls, panics" {
+  let w = field_down(128) //~ PANIC "a call in the field of a literal, 129 nested calls, panics"
+  assert w.v == 128
+}
+
+test "a call under a destructuring let, 128 nested calls, passes" {
+  let (a, b) = pair_down(127)
+  assert a == 127
+  assert b == 100
+}
+
+test "a call under a destructuring let, 129 nested calls, panics" {
+  let (a, b) = pair_down(128) //~ PANIC "a call under a destructuring let, 129 nested calls, panics"
+  assert a == 128
+  assert b == 100
+}
+
+test "a call as an index, 128 nested calls, passes" {
+  // The call is the index: index_down(k) is 0 at every level.
+  assert index_down(127) == 0
+}
+
+test "a call as an index, 129 nested calls, panics" {
+  let v = index_down(128) //~ PANIC "a call as an index, 129 nested calls, panics"
+  assert v == 0
+}
+
+test "a call as the scrutinee of a match, 128 nested calls, passes" {
+  assert scrutinee_down(127) == Some(127)
+}
+
+test "a call as the scrutinee of a match, 129 nested calls, panics" {
+  let v = scrutinee_down(128) //~ PANIC "a call as the scrutinee of a match, 129 nested calls, panics"
+  assert v == Some(128)
+}
+
+test "a call as the condition of a while, 128 nested calls, passes" {
+  // while_down(0) is false, so no loop body runs at any level and the result is false.
+  assert !while_down(127)
+}
+
+test "a call as the condition of a while, 129 nested calls, panics" {
+  let b = while_down(128) //~ PANIC "a call as the condition of a while, 129 nested calls, panics"
+  assert !b
+}

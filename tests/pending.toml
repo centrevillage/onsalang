@@ -1117,6 +1117,13 @@ note = "const の初期化式が上限 128 を超えたときの E0419（今は 
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/negative/const_depth_args.onsa"
+reasons = ["S-222", "S-229"]
+until = "W9-03"
+note = "引数の位置の呼び出しを含む const の初期化式が上限 128 を超えたときの E0419（今は onsa check で診断なし。const_depth_limit.onsa と同じ）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/negative/const_depth_flow.onsa"
 reasons = ["S-102", "S-222"]
 until = "W9-03"

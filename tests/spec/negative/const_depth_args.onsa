@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§12.5", "§3.5", "§6.6"]
+
+// E0419 through the limit of the call depth, with calls in argument positions (spec §12.5, §3.5, §6.6). The
+// compile time evaluation of a `const` initializer has the limit of 128 nested calls, counted from the entry of
+// the initializer (the initializer itself is depth 0). The arguments are evaluated before the call, so a call
+// in an argument position is not nested in the call it is an argument of: `f(g(x))` is `g` and then `f`, both
+// at the depth of the function that contains the expression. `down_*(126)` makes 127 nested calls and the
+// calls of the expression at its bottom are the 128th, which is accepted; `down_*(127)` makes 128 and they are
+// the 129th, which is E0419 at the initializer. A chain of four calls that were nested in each other would
+// be over the limit at 126.
+// The lines without a marker are accepted: they show where the boundary is.
+
+pub struct Meter {
+  level: U32,
+}
+
+impl Meter {
+  pub fn make(level: U32) -> Meter {
+    Meter { level: level }
+  }
+
+  pub fn plus(self, k: U32) -> U32 {
+    self.level + k
+  }
+}
+
+fn id(x: U32) -> U32 {
+  x
+}
+
+fn add3(a: U32, b: U32, c: U32) -> U32 {
+  a + b + c
+}
+
+// The body of `wrap` calls `id`: that call is nested in `wrap`.
+fn wrap(x: U32) -> U32 {
+  id(x)
+}
+
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+fn down_chain(n: U32) -> U32 {
+  if n == 0 {
+    id(id(id(id(1))))
+  } else {
+    down_chain(n - 1)
+  }
+}
+
+fn down_args(n: U32) -> U32 {
+  if n == 0 {
+    add3(id(1), id(2), add3(id(3), id(4), id(5)))
+  } else {
+    down_args(n - 1)
+  }
+}
+
+fn down_method(n: U32) -> U32 {
+  if n == 0 {
+    Meter.make(id(1)).plus(id(2))
+  } else {
+    down_method(n - 1)
+  }
+}
+
+fn down_wrapped(n: U32) -> U32 {
+  if n == 0 {
+    id(wrap(1))
+  } else {
+    down_wrapped(n - 1)
+  }
+}
+
+fn down_after(n: U32) -> U32 {
+  if n == 0 {
+    id(dive(1))
+  } else {
+    down_after(n - 1)
+  }
+}
+
+// ----------------------------------------------------- a chain, several arguments
+
+const CHAIN_AT_LIMIT: U32 = down_chain(126)
+const CHAIN_OVER: U32 = down_chain(127) //~ E0419
+
+const ARGS_AT_LIMIT: U32 = down_args(126)
+const ARGS_OVER: U32 = down_args(127) //~ E0419
+
+const METHOD_AT_LIMIT: U32 = down_method(126)
+const METHOD_OVER: U32 = down_method(127) //~ E0419
+
+// ------------------------------------------------ the calls made by an argument call
+
+// `wrap` is the 127th call at 125 and the `id` in its body the 128th; at 126 that `id` is the 129th.
+const WRAPPED_AT_LIMIT: U32 = down_wrapped(125)
+const WRAPPED_OVER: U32 = down_wrapped(126) //~ E0419
+
+// `dive(1)` is the 127th call at 125 and `dive(0)` in it the 128th; at 126 `dive(0)` is the 129th.
+const AFTER_AT_LIMIT: U32 = down_after(125)
+const AFTER_OVER: U32 = down_after(126) //~ E0419
+
+// ------------------------------------- arguments at the entry of the initializer
+
+// The initializer itself is depth 0, so a chain of calls in argument positions there is at depth 1, and a
+// recursion in an argument is as deep as it is alone: `dive(127)` is 128 nested calls.
+const ENTRY_CHAIN: U32 = id(id(id(id(1))))
+const ENTRY_RECURSION: U32 = add3(dive(127), dive(127), id(1))
+const ENTRY_RECURSION_OVER: U32 = add3(dive(60), dive(128), id(1)) //~ E0419

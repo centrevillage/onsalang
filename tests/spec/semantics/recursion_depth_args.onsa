@@ -1,0 +1,176 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§3.5", "§6.2", "§9.2"]
+
+// A call in an argument position is not nested in the call it is an argument of (spec §12.5, §3.5: the
+// arguments are evaluated before the call, so `f(g(x))` is two calls one after the other, `g` first, not `g`
+// inside `f`). The depth of a `test` body is 0 and the limit is 128. The deepest function `down_*` below makes
+// n + 1 nested calls for `down_*(n)`, and then evaluates an expression whose calls are all one level deeper than
+// the function that evaluates it. With `down_*(126)` those calls are the 128th and the test passes; with
+// `down_*(127)` they are the 129th and the test panics at the call in the body of the test (§9.2: a panic in a
+// test fails that test and no other). If an argument call were nested in the call that takes it, a chain of
+// four would need depth 131 and the first test of each pair would panic.
+// Everything here is user code, so each call is one call of a function (spec §12.5) whatever the expansion of std.
+
+pub struct Meter {
+  level: U32,
+}
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+impl Meter {
+  pub fn make(level: U32) -> Meter {
+    Meter { level: level }
+  }
+
+  pub fn plus(self, k: U32) -> U32 {
+    self.level + k
+  }
+}
+
+fn id(x: U32) -> U32 {
+  x
+}
+
+fn add3(a: U32, b: U32, c: U32) -> U32 {
+  a + b + c
+}
+
+// The body of `wrap` calls `id`: that call is nested in `wrap`.
+fn wrap(x: U32) -> U32 {
+  id(x)
+}
+
+// -------------------------------------------------------- a chain of arguments
+
+fn down_chain(n: U32) -> U32 {
+  if n == 0 {
+    id(id(id(id(1))))
+  } else {
+    down_chain(n - 1)
+  }
+}
+
+test "a chain of four calls in argument positions, all the 128th call, passes" {
+  assert down_chain(126) == 1
+}
+
+test "a chain of four calls in argument positions, all the 129th call, panics" {
+  let k = down_chain(127) //~ PANIC "a chain of four calls in argument positions, all the 129th call, panics"
+  assert k == 1
+}
+
+// ------------------------------------------------------------- several arguments
+
+fn down_args(n: U32) -> U32 {
+  if n == 0 {
+    add3(id(1), id(2), add3(id(3), id(4), id(5)))
+  } else {
+    down_args(n - 1)
+  }
+}
+
+test "calls in several argument positions, all the 128th call, pass" {
+  assert down_args(126) == 15
+}
+
+test "calls in several argument positions, all the 129th call, panic" {
+  let k = down_args(127) //~ PANIC "calls in several argument positions, all the 129th call, panic"
+  assert k == 15
+}
+
+// ------------------------------------------------ a receiver and a method argument
+
+fn down_method(n: U32) -> U32 {
+  if n == 0 {
+    Meter.make(id(1)).plus(id(2))
+  } else {
+    down_method(n - 1)
+  }
+}
+
+test "a call as a receiver and a call as a method argument, all the 128th call, pass" {
+  assert down_method(126) == 3
+}
+
+test "a call as a receiver and a call as a method argument, all the 129th call, panic" {
+  let k = down_method(127) //~ PANIC "a call as a receiver and a call as a method argument, all the 129th call, panic"
+  assert k == 3
+}
+
+// ------------------------------------------------ elements and fields of a literal
+
+fn down_literal(n: U32) -> U32 {
+  if n == 0 {
+    let xs: [U32; 2] = [id(1), id(2)]
+    let p            = Pair { a: id(3), b: id(4) }
+    let t            = (id(5), id(6))
+    xs[0] + xs[1] + p.a + p.b + t.0 + t.1
+  } else {
+    down_literal(n - 1)
+  }
+}
+
+test "calls in the elements and fields of literals, all the 128th call, pass" {
+  assert down_literal(126) == 21
+}
+
+test "calls in the elements and fields of literals, all the 129th call, panic" {
+  let k = down_literal(127) //~ PANIC "calls in the elements and fields of literals, all the 129th call, panic"
+  assert k == 21
+}
+
+// ---------------------------------------------- the body of an argument call
+
+fn down_wrapped(n: U32) -> U32 {
+  if n == 0 {
+    id(wrap(1))
+  } else {
+    down_wrapped(n - 1)
+  }
+}
+
+test "a call in the body of an argument call is nested in that call, the 128th call, passes" {
+  // down_wrapped(125) is 126 calls: `wrap` is the 127th, the `id` in its body the 128th, and the `id` that
+  // takes the result of `wrap` is the 127th again (the call of `wrap` is finished).
+  assert down_wrapped(125) == 1
+}
+
+test "a call in the body of an argument call is nested in that call, the 129th call, panics" {
+  let k = down_wrapped(126) //~ PANIC "a call in the body of an argument call is nested in that call, the 129th call, panics"
+  assert k == 1
+}
+
+// ------------------------------------- a recursion in an argument, a call after it
+
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+fn down_after(n: U32) -> U32 {
+  if n == 0 {
+    // `dive(1)` is finished before `id` is entered, so the depth that it reached does not add to `id`'s.
+    id(dive(1))
+  } else {
+    down_after(n - 1)
+  }
+}
+
+test "a short recursion in the argument of a call at the bottom, the deepest the 129th call, panics" {
+  // down_after(126) is 127 calls; `dive(1)` is the 128th and `dive(0)` in it the 129th.
+  let k = down_after(126) //~ PANIC "a short recursion in the argument of a call at the bottom, the deepest the 129th call, panics"
+  assert k == 1
+}
+
+test "a short recursion in the argument of a call at the bottom, the deepest the 128th call, passes" {
+  // down_after(125) is 126 calls; `dive(1)` is the 127th, `dive(0)` the 128th, `id` the 127th.
+  assert down_after(125) == 1
+}
