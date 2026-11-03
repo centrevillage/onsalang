@@ -17,8 +17,9 @@ pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
 `?` の被演算子は消費する位置で、`move self` のメソッドの受け手と同じく印を書かない（§5.2）。場所の被演算子は §5.2 の消費の規則に従う: 所有の Affine の場所は移って以後使えず（E0704）、Affine のフィールドの経路は根の全体を消費し、配列の要素と、借用・`inout` の Affine の場所は E0711（修正候補なし）、Dup の場所は複製する。
 消費するかは被演算子の型の全体で決まり、`Result[U32, Buf[F32]]` の場所は `Ok` の道でも移る。場所でない被演算子（`f()?`）は一時の値を消費する。
 
-`Option` と `Result` のメソッドは、両方の `pub fn unwrap(move self) -> T`（`None` / `Err` なら panic する、§9.2）と、`Result` の `map_err` だけである。どちらも受け手を消費し、受け手の扱いは `?` の被演算子と同じ（§5.2）。
-`map_err` は `pub fn map_err[F](move self, f: fn(move E) -> F) -> Result[T, F]` で（`f` の効果行は空）、`?` の前でエラーの型を関数の返り値の型へ変換するのに使う（`Fs.read(path).map_err(ConfigError.Io)?`）。
+`Option` と `Result` のメソッドは、両方の `pub rt fn unwrap(move self) -> T`（`None` / `Err` なら panic する、§9.2）と、`Result` の `map_err` だけである。どちらも受け手を消費し、受け手の扱いは `?` の被演算子と同じ（§5.2）。
+`map_err` は `pub fn map_err[F: ?Dup](move self, f: fn(move E) -> F) -> Result[T, F]` で（`f` の効果行は空。変換の先は Affine の型でもよい）、`?` の前でエラーの型を関数の返り値の型へ変換するのに使う（`Fs.read(path).map_err(ConfigError.Io)?`）。
+`map_err` は `rt` でないので、`rt` の関数のエラーの変換は `match` で書く（§10）。
 値の取り出しや有無の判定は `match`、`?`、`==` で書く（P2）。組込みの API の候補は、仕様に入れる前に必要性を議論する（[`decisions/A/`](../decisions/A/README.md)）。
 
 ### 9.2 panic（バグ）
@@ -30,9 +31,10 @@ pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
 - `Alloc` の handler の領域が尽きたとき
 - `unwrap`、`assert` の失敗、`panic(msg)`
 
-panic は効果行に現れない。
+panic は効果行に現れず、`rt` の関数の中でも起こりうる（`rt` の関数でも `panic` を呼べ、`assert` を書ける、§10）。
+panic で抜ける道では、生きている値の破棄は起きない（巻き戻しは無い）。その破棄は `Alloc` に数えず（§12.2）、`Drop` も呼ばれない。
 
-`panic(msg)` は prelude の関数（§15.1）で、`msg` は補間を含まない文字列リテラルに限る（それ以外は E0417。組み立てた文字列は §19.1）。値を返さずに抜けるので、どの型の位置にも置ける（§7）。値の要る位置に置ける `assert` として、起こらないはずの分岐（網羅性を証明できない `match` の `_`、文脈上ありえない列挙子）に使う。範囲外の入力が実際に来うる場合（ホストから来るパラメータなど）は、panic ではなく既定値を書く。
+`panic(msg)` は prelude の `rt` の関数（§15.1）で、`msg` は補間を含まない文字列リテラルに限る（それ以外は E0417。組み立てた文字列は §19.1）。値を返さずに抜けるので、どの型の位置にも置ける（§7）。値の要る位置に置ける `assert` として、起こらないはずの分岐（網羅性を証明できない `match` の `_`、文脈上ありえない列挙子）に使う。範囲外の入力が実際に来うる場合（ホストから来るパラメータなど）は、panic ではなく既定値を書く。
 
 コンパイラは、成り立つことを証明できる検査（`for i in 0 ..< N` の中の `xs[i]`、`% N` の添字など）を取り除いてよい。意味は変わらない。`onsa audit` は、rt のコードに残る実行時の検査を列挙する。速さが要る箇所は、`+%` / `+|` や `xs.get(i)` で検査の要らない形に書き直せる。検査そのものを外す設定は、未決定である（§19.1）。
 

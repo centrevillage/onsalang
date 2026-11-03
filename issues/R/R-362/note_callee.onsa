@@ -1,0 +1,29 @@
+pub enum Wrap { W(Buf[F32]) }
+
+fn submit(move b: Buf[F32]) -> Result[U32, Buf[F32]] {
+  Err(move b)
+}
+
+fn full(move r: Buf[F32]) -> Wrap {
+  Wrap.W(move r)
+}
+
+pub fn a(move b: Buf[F32]) -> Result[U32, Wrap] {
+  let n = submit(move b).map_err(full)?
+  Ok(n)
+}
+
+pub fn c(move b: Buf[F32]) -> Result[U32, Wrap] {
+  let r = submit(move b)
+  let n = r.map_err(full)?
+  Ok(n)
+}
+
+fn mk() -> Result[U32, Buf[F32]] {
+  Ok(1)
+}
+
+pub fn d() -> Result[U32, Wrap] {
+  let n = mk().map_err(full)?
+  Ok(n)
+}
