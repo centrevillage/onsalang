@@ -1,0 +1,5 @@
+use std.core.Result.{map_err}
+
+pub fn f() -> I32 {
+  1
+}

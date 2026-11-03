@@ -1,0 +1,5 @@
+use std.test.Gen.{x}
+
+pub fn f() -> I32 {
+  1
+}
