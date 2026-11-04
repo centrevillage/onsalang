@@ -1,0 +1,152 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 1
+
+// S-127 (§6.1): "ブロックの途中の文に書いた式は、文の時点で型が `()` と決まっていなければ E0418" in every block of a body:
+// the body of a `fn`, of a method, of a `test`, of an `rt fn`, of an anonymous function, of a `for` and a `while`, a
+// block that is the value of the body, the branch of an `if` and the arm of a `match`, before a `return`, and in a
+// generic function. The candidate is `let _ = e`. The statement is the first of its block or follows a statement that
+// has the type `()`. One error per function (P-01).
+
+pub struct W {
+  n: I32,
+}
+
+impl W {
+  pub fn in_a_method(self) -> I32 {
+    let _ = self.n + 1                                      //~ E0418
+    self.n
+  }
+}
+
+pub fn one() -> I32 {
+  1
+}
+
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+pub fn in_a_fn() -> I32 {
+  let _ = one()                                             //~ E0418
+  2
+}
+
+pub fn after_a_unit_statement() -> I32 {
+  var t = 0
+  t = 1
+  let _ = t + 1                                             //~ E0418
+  t
+}
+
+test "in a test" {
+  let _ = one()                                             //~ E0418
+  assert true
+}
+
+pub rt fn in_an_rt_fn(x: F32) -> F32 {
+  let _ = x + 1.0                                           //~ E0418
+  x
+}
+
+pub fn in_an_anonymous_function() -> I32 {
+  apply(fn(n: I32) -> I32 {
+    let _ = n + 1                                           //~ E0418
+    n
+  })
+}
+
+pub fn in_a_for_body(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    let _ = i + 1                                           //~ E0418
+    t = t + i
+  }
+  t
+}
+
+pub fn in_a_while_body(n: U32) -> U32 {
+  var i: U32 = 0
+  while i < n {
+    let _ = i + 1                                           //~ E0418
+    i = i + 1
+  }
+  i
+}
+
+pub fn in_a_nested_block() -> I32 {
+  {
+    let _ = one()                                           //~ E0418
+    2
+  }
+}
+
+pub fn in_a_block_of_a_block() -> I32 {
+  let r = {
+    {
+      let _ = one()                                         //~ E0418
+      2
+    }
+  }
+  r
+}
+
+pub fn in_the_then_branch(c: Bool) -> I32 {
+  if c {
+    let _ = one()                                           //~ E0418
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_the_else_branch(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    let _ = one()                                           //~ E0418
+    2
+  }
+}
+
+pub fn in_a_branch_of_an_if_without_else(c: Bool) {
+  if c {
+    let _ = one()                                           //~ E0418
+    let _ = 1
+  }
+}
+
+pub fn in_an_arm_of_a_match(o: Option[I32]) -> I32 {
+  match o {
+    Some(n) => {
+      let _ = n + 1                                         //~ E0418
+      n
+    },
+    None => 0,
+  }
+}
+
+pub fn before_a_return(c: Bool) -> I32 {
+  if c {
+    let _ = one()                                           //~ E0418
+    return 1
+  }
+  2
+}
+
+pub fn in_a_generic_function[T: Default](x: T) -> T {
+  let _ = x                                                 //~ E0418
+  x
+}
+
+pub fn in_a_loop_in_a_branch(c: Bool, n: U32) -> U32 {
+  var t: U32 = 0
+  if c {
+    for i in 0 ..< n {
+      let _ = i * 2                                         //~ E0418
+      t = t + i
+    }
+  }
+  t
+}

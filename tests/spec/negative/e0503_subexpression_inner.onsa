@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§3.5", "§18.1"]
+// fixes = 0
+
+// S-291 (§7): "書くと、決して行われない外側の演算・呼び出しの式（文の見出しの位置ならその文）に E0503 である（`f({ return 1 })` は
+// `f(…)`、`1 + ({ return 5 })` は `+` の式）". The diverging form stands in a part of a part: the error is on the
+// innermost expression that takes it (`g(…)` in `f(g({ return 1 }))`: the call `g(…)` is not one of the diverging forms of §7, so the argument of
+// `f(…)` is not one), and the outer expression `f(…)` gets no second one. The lines are
+// split so that the marker shows which expression has the error: it is on the line of the inner one. No candidate.
+// One error per function (P-01).
+
+pub fn f(n: I32) -> I32 {
+  n
+}
+
+pub fn g(n: I32) -> I32 {
+  n
+}
+
+pub fn pair(n: I32, m: I32) -> I32 {
+  n + m
+}
+
+pub fn call_in_a_call() -> I32 {
+  f(
+    g({ return 1 })                                 //~ E0503
+  )
+}
+
+pub fn call_in_a_call_in_a_call() -> I32 {
+  f(
+    g(
+      f({ return 1 })                               //~ E0503
+    )
+  )
+}
+
+pub fn operation_in_an_operation(x: I32) -> I32 {
+  x + (
+    x * ({ return 1 })                              //~ E0503
+  )
+}
+
+pub fn call_in_an_operation(x: I32) -> I32 {
+  x + f(
+    g({ return 1 })                                 //~ E0503
+  )
+}
+
+pub fn operation_in_an_argument(x: I32) -> I32 {
+  pair(
+    x,
+    x + ({ return 1 })                              //~ E0503
+  )
+}
+
+pub fn the_first_diverging_argument_of_two() -> I32 {
+  pair(
+    g({ return 1 }),                                //~ E0503
+    2
+  )
+}

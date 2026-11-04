@@ -170,20 +170,6 @@ note = "型の大きさと状態の領域が U32 を超える（ターゲット�
 
 [[pending]]
 kind = "diag-code"
-target = "E0418"
-reasons = ["S-127"]
-until = "W5-08"
-note = "ブロックの途中の文の値"
-
-[[pending]]
-kind = "diag-code"
-target = "E0503"
-reasons = ["S-128", "S-187"]
-until = "W5-08"
-note = "発散の後の到達しない文（W5-08）と、前の腕で覆われる match の腕（W5-09）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0808"
 reasons = ["S-88", "R-100", "S-151", "S-132"]
 until = "W7-04"
@@ -686,13 +672,6 @@ target = "tests/spec/fixes/e0401_bounds.onsa"
 reasons = ["S-84"]
 until = "W5-05"
 note = "総称の演算子の境界を絞る E0401 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0418_discard.onsa"
-reasons = ["S-127"]
-until = "W5-08"
-note = "E0418 の候補"
 
 [[pending]]
 kind = "test-case"

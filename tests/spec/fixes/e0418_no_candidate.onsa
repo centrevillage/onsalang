@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 0
+
+// S-848 (§6.1): a statement whose type is not decided at the statement is an E0418 ("型がまだ決まっていない式（`fn
+// make[T: Default]() -> T` の文 `make()`）も、後の文を待たずに E0418 である"), and the candidate `let _ = e` is not made
+// when the type keeps an undecided type variable that is not an integer literal ("`e` の型に整数のリテラル以外のまだ
+// 決まっていない型変数が残るときは出さず、note で `let _: T = e` を示す"): the call of a generic function whose type
+// is only its return type, `None`, `Some(make())` (the head is known and the inside is open), a float literal. The
+// statement after that would decide the type (`o = Some(1)`) does not change the report. The forms that
+// get the candidate (an integer literal) are in e0418_values.onsa. One error per function (P-01).
+
+pub fn make[T: Default]() -> T {
+  panic("not called")
+}
+
+pub fn call_of_a_generic_function() -> I32 {
+  make()                                            //~ E0418
+  1
+}
+
+pub fn none() -> I32 {
+  None                                              //~ E0418
+  1
+}
+
+pub fn some_of_a_generic_call() -> I32 {
+  Some(make())                                      //~ E0418
+  1
+}
+
+pub fn float_literal() -> I32 {
+  1.5                                               //~ E0418
+  1
+}
+
+pub fn option_decided_by_a_later_statement() -> I32 {
+  var o = None
+  o                                                 //~ E0418
+  o = Some(1)
+  1
+}
+
+pub fn call_decided_by_a_later_let() -> I32 {
+  make()                                            //~ E0418
+  let x: I32 = make()
+  x
+}
+
+pub fn in_a_branch(c: Bool) -> I32 {
+  if c {
+    make()                                          //~ E0418
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_loop(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    None                                            //~ E0418
+    t = t + i
+  }
+  t
+}

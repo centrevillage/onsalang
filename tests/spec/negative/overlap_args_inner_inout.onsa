@@ -177,7 +177,7 @@ pub fn change_in_a_loop(inout x: Buf[F32], n: U32) -> U32 {
 pub fn change_in_a_while_loop(inout x: Buf[F32], n: U32) -> U32 {
   var i: U32 = 0
   while i < n {
-    br_after(x, touch(inout x)) //~ E0702
+    let _ = br_after(x, touch(inout x)) //~ E0702
     i = i + 1
   }
   i

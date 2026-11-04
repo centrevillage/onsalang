@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§5.2", "§7", "§18.1"]
+// fixes = 1
+
+// S-605 (§5.2, §7): "W5-08 の後、文の位置の末尾で型の段の E0418 と modes の E0703 を同じ文に出さない（型の段に誤りのある
+// 本体では modes を走らせない）". A statement in the middle of a block that is an `if`, a `match` or a block whose
+// tails are `move a` and `move b` has the type of the owned value, so it is an E0418 of the type stage, and there is
+// no E0703 on the `move` (a `move` that stands at the end of a block in a place that does not consume, §5.2). The
+// candidate is `let _ = e`, which puts the tails in an owned initializer, where the `move` is right, so nothing is
+// left. One error per function (P-01); the statement stands on one line.
+
+pub fn mk() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn if_with_two_moves(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  if c { move a } else { move b }                   //~ E0418
+  1
+}
+
+pub fn if_with_a_move_and_a_new_value(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  if c { move a } else { mk() }                     //~ E0418
+  1
+}
+
+pub fn match_with_two_moves(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  match c { true => move a, false => move b }       //~ E0418
+  1
+}
+
+pub fn block_with_a_move(move a: Buf[F32]) -> U32 uses {Alloc} {
+  { move a }                                        //~ E0418
+  1
+}
+
+pub fn nested_if(c: Bool, d: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  if c { if d { move a } else { move b } } else { mk() } //~ E0418
+  1
+}
+
+pub fn in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var i: U32 = 0
+  while i < n {
+    let a = mk()
+    let b = mk()
+    if i > 2 { move a } else { move b }             //~ E0418
+    i = i + 1
+  }
+  i
+}

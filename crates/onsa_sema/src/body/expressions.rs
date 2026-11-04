@@ -8,6 +8,9 @@ impl<'a> Checker<'a> {
 
     pub(crate) fn check_expr(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
         let span = self.expr(e).span;
+        if let Some(part) = self.info.diverging.evaluated_part(self.ast, e) {
+            return Err(self.never_carried_out(span, part));
+        }
         let t = self.check_expr_inner(e, expected)?;
         if let Some(exp) = expected {
             self.unify_at(span, t, exp)?;
@@ -395,8 +398,9 @@ impl<'a> Checker<'a> {
             f.depth += 1;
         }
         let r = (|| -> R<TyId> {
-            for &s in &b.stmts {
+            for (i, &s) in b.stmts.iter().enumerate() {
                 self.check_stmt(s)?;
+                self.after_stmt(b, i, expected)?;
             }
             match b.tail {
                 Some(t) => self.check_expr(t, expected),

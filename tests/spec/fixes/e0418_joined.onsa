@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§2.5", "§18.1"]
+// fixes = 2
+
+// S-127 (§6.1): "次の行がブロックの最後の式で、前置の `-` で始まるときは、つないだ形（`a` 改行 `-b` の `a - b`）も並べる。
+// つないだ形は、演算が型に合い、結果が返り値に合うときだけ出す". A line that starts with `-b` (no space) does not
+// continue the line before it (§2.5), so `a` is a statement whose value is dropped, and `-b` is the value of the
+// block: the function returns `-b`. The candidates are `let _ = a` and, in this order, the joined line `a - b`.
+// The joined form is made for every `a` whose operation with `b` is typed and gives the return type. The forms that
+// do not get it are in e0418_joined_not_offered.onsa. The marker stays on the line of `a`, so that it stays
+// on the line of the joined form. One error per function (P-01).
+
+pub struct P {
+  x: I32,
+}
+
+pub fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn minus_of_a_variable(a: I32, b: I32) -> I32 {
+  a                                                 //~ E0418
+  -b
+}
+
+pub fn minus_of_a_float(a: F32, b: F32) -> F32 {
+  a                                                 //~ E0418
+  -b
+}
+
+pub fn minus_of_a_call(a: I32, b: I32) -> I32 {
+  id(a)                                             //~ E0418
+  -b
+}
+
+pub fn minus_of_a_field(p: P, b: I32) -> I32 {
+  p.x                                               //~ E0418
+  -b
+}
+
+pub fn minus_of_a_literal(b: I32) -> I32 {
+  1                                                 //~ E0418
+  -b
+}
+
+pub fn minus_of_a_product(a: I32, b: I32) -> I32 {
+  a * 2                                             //~ E0418
+  -b
+}
+
+pub fn minus_a_literal(a: I32) -> I32 {
+  a                                                 //~ E0418
+  -1
+}
+
+pub fn minus_of_a_negated_value(a: I32, b: I32) -> I32 {
+  -a                                                //~ E0418
+  -b
+}
+
+pub fn in_a_branch(c: Bool, a: I32, b: I32) -> I32 {
+  if c {
+    a                                               //~ E0418
+    -b
+  } else {
+    0
+  }
+}
+
+pub fn in_an_arm(o: Option[I32], a: I32, b: I32) -> I32 {
+  match o {
+    Some(_) => {
+      a                                             //~ E0418
+      -b
+    },
+    None => 0,
+  }
+}
+
+pub fn in_an_anonymous_function(a: I32, b: I32) -> I32 {
+  apply(fn(n: I32) -> I32 {
+    n                                               //~ E0418
+    -b
+  })
+}
+
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}

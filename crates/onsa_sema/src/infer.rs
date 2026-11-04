@@ -336,26 +336,33 @@ impl Infer {
 
     /// Whether the resolved type still contains a variable.
     pub fn has_vars(&self, types: &Types, ty: TyId) -> bool {
-        let ty = self.shallow(types, ty);
-        match types.get(ty) {
-            Ty::Var(_) => true,
-            Ty::Array(e, l) => self.has_vars(types, *e) || self.open_len(types, *l),
-            Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => ts.iter().any(|&t| self.has_vars(types, t)),
-            Ty::Fn(f) => f.params.iter().any(|(_, t)| self.has_vars(types, *t)) || self.has_vars(types, f.ret),
-            _ => false,
-        }
+        self.holds_var(types, ty, |_| true)
     }
 
     /// Whether the type still contains a variable other than a literal one
     /// (E0406 is for those; a literal variable is E0405 or the `I32` default, §4.7).
     pub fn has_open_vars(&self, types: &Types, ty: TyId) -> bool {
+        self.holds_var(types, ty, |lit| lit.is_none())
+    }
+
+    /// Whether the type still contains a variable the end of the body does
+    /// not decide: any but an integer literal's (§4.7, §6.1).
+    pub fn has_undefaulted_vars(&self, types: &Types, ty: TyId) -> bool {
+        self.holds_var(types, ty, |lit| lit != Some(LitKind::Int))
+    }
+
+    /// Whether the type contains a variable (or an open length) whose literal
+    /// kind `counts`.
+    fn holds_var(&self, types: &Types, ty: TyId, counts: fn(Option<LitKind>) -> bool) -> bool {
         let ty = self.shallow(types, ty);
         match types.get(ty) {
-            Ty::Var(i) => matches!(self.vars[*i as usize], VarState::Unbound(None)),
-            Ty::Array(e, l) => self.has_open_vars(types, *e) || self.open_len(types, *l),
-            Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => ts.iter().any(|&t| self.has_open_vars(types, t)),
+            Ty::Var(i) => matches!(self.vars[*i as usize], VarState::Unbound(lit) if counts(lit)),
+            Ty::Array(e, l) => self.holds_var(types, *e, counts) || self.open_len(types, *l),
+            Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => {
+                ts.iter().any(|&t| self.holds_var(types, t, counts))
+            }
             Ty::Fn(f) => {
-                f.params.iter().any(|(_, t)| self.has_open_vars(types, *t)) || self.has_open_vars(types, f.ret)
+                f.params.iter().any(|(_, t)| self.holds_var(types, *t, counts)) || self.holds_var(types, f.ret, counts)
             }
             _ => false,
         }

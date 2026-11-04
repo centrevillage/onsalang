@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§2.5", "§18.1"]
+// fixes = 1
+
+// S-127 (§6.1): "つないだ形は、演算が型に合い、結果が返り値に合うときだけ出す". The line `-b` after the statement `a` is the
+// value of the block, but the joined form `a - b` is not a candidate when the result does not match the return type
+// (the type of `a - b` is the type of `a`, not the return type) or when the type of `a` has no `-` (a `Str`, a struct,
+// a `Bool`). The only candidate is `let _ = a`. The forms that get both candidates are in e0418_joined.onsa, the `-b` that is
+// not the last item is in e0418_joined_not_last.onsa. One error per function (P-01).
+
+pub struct P {
+  x: I32,
+}
+
+// ----------------------------------------------------------------- the result does not match the return type
+
+pub fn result_is_unsigned_and_the_return_is_signed(a: U32) -> I32 {
+  a                                                 //~ E0418
+  -1
+}
+
+pub fn operands_of_two_types(a: U32, b: I32) -> I32 {
+  a                                                 //~ E0418
+  -b
+}
+
+pub fn the_operation_does_not_type(a: I32, b: F32) -> F32 {
+  a                                                 //~ E0418
+  -b
+}
+
+// --------------------------------------------------------------------------- the type of `a` has no `-`
+
+pub fn a_str(a: Str, b: I32) -> I32 uses {Alloc} {
+  a                                                 //~ E0418
+  -b
+}
+
+pub fn a_struct(p: P, b: I32) -> I32 {
+  p                                                 //~ E0418
+  -b
+}
+
+pub fn a_bool(a: Bool, b: I32) -> I32 {
+  a                                                 //~ E0418
+  -b
+}

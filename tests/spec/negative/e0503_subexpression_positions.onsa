@@ -1,0 +1,200 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§3.5", "§18.1"]
+// fixes = 0
+
+// S-291, S-889 (§7): "発散する形は、常に評価される部分式の位置には書けない" and "決して行われない外側の演算・呼び出しの式（文の見出しの
+// 位置ならその文）に E0503" ("修正候補は無い"). The positions of the list of §7 (an example, not a closed list, S-889):
+// the operand of an operation, the argument of a call, the receiver and the argument of a method, the callee of a
+// function value, the element of a constructor, an array, a tuple and a struct literal, the field and the
+// tuple-index base, the condition of an `if` and a `while`, the subject of a `match`, the index and its base, the
+// left of `as` and `?`, the ends of a range and the source of a `for`, the operand of a `move`, the right of an
+// assignment, and the expression of a `return` and an `assert`. The diverging form is `{ return 1 }` in all of them
+// (the forms are in e0503_subexpression_forms.onsa); a diverging block that stands in a place that
+// takes an operand is parenthesized. Each function has one statement of the place on one line, and the error is on that line. One error per function (P-01).
+
+pub struct P {
+  x: I32,
+  y: I32,
+}
+
+impl P {
+  pub fn get(self) -> I32 {
+    self.x
+  }
+
+  pub fn add(self, k: I32) -> I32 {
+    self.x + k
+  }
+}
+
+pub fn g(n: I32) -> I32 {
+  n
+}
+
+pub fn pair(n: I32, m: I32) -> I32 {
+  n + m
+}
+
+pub fn eat(move n: I32) -> I32 {
+  n
+}
+
+// ------------------------------------------------------------------------------------------- operands
+
+pub fn right_operand(x: I32) -> I32 {
+  x + ({ return 1 })                                //~ E0503
+}
+
+pub fn left_operand(x: I32) -> I32 {
+  ({ return 1 }) + x                                //~ E0503
+}
+
+pub fn comparison_operand(x: I32) -> Bool {
+  x == ({ return true })                            //~ E0503
+}
+
+pub fn prefix_operand(x: I32) -> I32 {
+  -({ return 1 })                                   //~ E0503
+}
+
+pub fn not_operand(c: Bool) -> Bool {
+  !({ return true })                                //~ E0503
+}
+
+pub fn left_of_an_and(c: Bool) -> Bool {
+  ({ return true }) && c                            //~ E0503
+}
+
+pub fn left_of_an_or(c: Bool) -> Bool {
+  ({ return true }) || c                            //~ E0503
+}
+
+// ------------------------------------------------------------------------------- calls and methods
+
+pub fn first_argument() -> I32 {
+  pair({ return 1 }, 2)                             //~ E0503
+}
+
+pub fn last_argument() -> I32 {
+  pair(1, { return 1 })                             //~ E0503
+}
+
+pub fn parenthesized_argument() -> I32 {
+  g(({ return 1 }))                                 //~ E0503
+}
+
+pub fn receiver_of_a_method() -> I32 {
+  ({ return 1 }).get()                              //~ E0503
+}
+
+pub fn argument_of_a_method(p: P) -> I32 {
+  p.add({ return 1 })                               //~ E0503
+}
+
+pub fn callee_of_a_function_value(f: fn(I32) -> I32, x: I32) -> fn(I32) -> I32 {
+  ({ return f }).(x)                                //~ E0503
+}
+
+pub fn argument_of_a_function_value(f: fn(I32) -> I32) -> I32 {
+  f.({ return 1 })                                  //~ E0503
+}
+
+// --------------------------------------------------------------- constructors, literals, fields, indexes
+
+pub fn element_of_a_constructor() -> Option[I32] {
+  Some({ return None })                             //~ E0503
+}
+
+pub fn element_of_an_array() -> [I32; 2] {
+  [1, { return [0, 0] }]                            //~ E0503
+}
+
+pub fn element_of_a_repeated_array() -> [I32; 4] {
+  [({ return [0, 0, 0, 0] }); 4]                    //~ E0503
+}
+
+pub fn element_of_a_tuple() -> (I32, I32) {
+  (1, { return (0, 0) })                            //~ E0503
+}
+
+pub fn field_of_a_struct_literal() -> P {
+  P { x: { return P { x: 0, y: 0 } }, y: 2 }        //~ E0503
+}
+
+pub fn base_of_a_field() -> I32 {
+  ({ return 1 }).x                                  //~ E0503
+}
+
+pub fn base_of_a_tuple_index() -> I32 {
+  ({ return 1 }).0                                  //~ E0503
+}
+
+pub fn index_of_an_array(xs: [I32; 4]) -> I32 {
+  xs[{ return 1 }]                                  //~ E0503
+}
+
+pub fn base_of_an_index() -> I32 {
+  ({ return 1 })[0]                                 //~ E0503
+}
+
+// ---------------------------------------------------------------------------------------- conditions
+
+pub fn condition_of_an_if(c: Bool) -> Bool {
+  if ({ return c }) { true } else { false }         //~ E0503
+}
+
+pub fn condition_of_a_while() {
+  while ({ return }) {}                             //~ E0503
+}
+
+pub fn subject_of_a_match() -> I32 {
+  match ({ return 1 }) { _ => 2 }                   //~ E0503
+}
+
+// ------------------------------------------------------------------- as, ?, ranges and `for` sources
+
+pub fn left_of_an_as() -> F32 {
+  ({ return 1.0 }) as F32                           //~ E0503
+}
+
+pub fn left_of_a_question() -> Option[I32] {
+  ({ return None })?                                //~ E0503
+}
+
+pub fn lower_end_of_a_for(n: U32) {
+  for _ in ({ return }) ..< n {}                    //~ E0503
+}
+
+pub fn upper_end_of_a_for() {
+  for _ in 0 ..< ({ return }) {}                    //~ E0503
+}
+
+pub fn source_of_a_for() {
+  for _ in ({ return }) {}                          //~ E0503
+}
+
+// ---------------------------------------------------------- move, assignment, return and assert
+
+pub fn operand_of_a_move() -> I32 {
+  eat(move ({ return 1 }))                          //~ E0503
+}
+
+pub fn right_of_an_assignment(inout x: I32) {
+  x = ({ return })                                  //~ E0503
+}
+
+pub fn right_of_an_assignment_to_a_field(inout p: P) {
+  p.x = ({ return })                                //~ E0503
+}
+
+pub fn expression_of_a_return(c: Bool) -> I32 {
+  if c {
+    return ({ return 1 })                           //~ E0503
+  }
+  2
+}
+
+pub fn expression_of_an_assert() {
+  assert ({ return })                               //~ E0503
+}

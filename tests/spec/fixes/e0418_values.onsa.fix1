@@ -1,0 +1,169 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 1
+
+// S-127, S-848 (§6.1): "ブロックの途中の文に書いた式は、文の時点で型が `()` と決まっていなければ E0418". The kinds of
+// value a statement in the middle of a block can have: a call, an operation, a method, the value of an `if`, a `match`
+// or a block, a literal, a constructor, a tuple, an array, a place, a function value. The one candidate is
+// `let _ = e` ("修正候補は `let _ = e` である"), also when the type still has an integer literal as its only
+// type variable (`1`, `Some(1)`, `let x = 1` then `x`: "整数のリテラル以外のまだ決まっていない型変数が残るときは出さず").
+// A later statement that decides the type does not change the report (the type is not waited for). The forms
+// whose type keeps another undecided variable are in e0418_no_candidate.onsa, the positions in e0418_positions.onsa.
+// The `Str` literal is dropped, which needs `Alloc` (§8.1), so its function declares it. The statement is the first of its block and stands on one line, so that the line is the one of the marker. One
+// error per function (P-01).
+
+pub struct P {
+  x: I32,
+  y: I32,
+}
+
+pub enum Color {
+  Red,
+  Green,
+}
+
+impl P {
+  pub fn sum(self) -> I32 {
+    self.x + self.y
+  }
+}
+
+pub fn one() -> I32 {
+  1
+}
+
+pub fn twice(x: I32) -> I32 {
+  x * 2
+}
+
+// ------------------------------------------------------------------------------- calls and operations
+
+pub fn call_result() -> I32 {
+  let _ = one()                                             //~ E0418
+  2
+}
+
+pub fn call_with_an_argument(x: I32) -> I32 {
+  let _ = twice(x)                                          //~ E0418
+  x
+}
+
+pub fn binary_operation(x: I32) -> I32 {
+  let _ = x + 1                                             //~ E0418
+  x
+}
+
+pub fn comparison(x: I32) -> I32 {
+  let _ = x == 1                                            //~ E0418
+  x
+}
+
+pub fn logical_operation(c: Bool, d: Bool) -> Bool {
+  let _ = c && d                                            //~ E0418
+  c
+}
+
+pub fn prefix_operation(x: I32) -> I32 {
+  let _ = -x                                                //~ E0418
+  x
+}
+
+pub fn method_call(p: P) -> I32 {
+  let _ = p.sum()                                           //~ E0418
+  1
+}
+
+// ------------------------------------------------------------------ the value of if, match and a block
+
+pub fn if_value(c: Bool) -> I32 {
+  let _ = if c { 1 } else { 2 }                             //~ E0418
+  3
+}
+
+pub fn match_value(o: Option[I32]) -> I32 {
+  let _ = match o { Some(n) => n, None => 0 }               //~ E0418
+  1
+}
+
+pub fn block_value() -> I32 {
+  let _ = { 1 }                                             //~ E0418
+  2
+}
+
+// ----------------------------------------------------- literals, constructors, arrays, places, functions
+
+pub fn integer_literal() -> I32 {
+  let _ = 1                                                 //~ E0418
+  2
+}
+
+pub fn bool_literal() -> I32 {
+  let _ = true                                              //~ E0418
+  2
+}
+
+pub fn string_literal() -> I32 uses {Alloc} {
+  let _ = "text"                                            //~ E0418
+  2
+}
+
+pub fn struct_constructor() -> I32 {
+  let _ = P { x: 1, y: 2 }                                  //~ E0418
+  2
+}
+
+pub fn unit_variant() -> I32 {
+  let _ = Color.Red                                         //~ E0418
+  2
+}
+
+pub fn option_of_an_integer_literal() -> I32 {
+  let _ = Some(1)                                           //~ E0418
+  2
+}
+
+pub fn tuple_literal() -> I32 {
+  let _ = (1, 2)                                            //~ E0418
+  2
+}
+
+pub fn array_literal() -> I32 {
+  let _ = [1, 2, 3]                                         //~ E0418
+  2
+}
+
+pub fn repeated_array_literal() -> I32 {
+  let _ = [0; 4]                                            //~ E0418
+  2
+}
+
+pub fn variable(x: I32) -> I32 {
+  let _ = x                                                 //~ E0418
+  2
+}
+
+pub fn field(p: P) -> I32 {
+  let _ = p.x                                               //~ E0418
+  2
+}
+
+pub fn function_value() -> I32 {
+  let _ = fn(n: I32) -> I32 { n }                           //~ E0418
+  2
+}
+
+// ------------------------------------------------------ a later statement decides the type (S-848)
+
+pub fn integer_literal_decided_later() -> U32 {
+  let x = 1
+  let _ = x                                                 //~ E0418
+  let y: U32 = x
+  y
+}
+
+pub fn integer_literal_before_a_typed_let() -> U32 {
+  let _ = 1                                                 //~ E0418
+  let y: U32 = 2
+  y
+}

@@ -208,7 +208,7 @@ impl<'a> Checker<'a> {
     /// this body stops with the E0413; what leaks out of it (`read_held`,
     /// `uses`) is undone. Of what reads what the check does not, an error is
     /// elsewhere (§18.1): none.
-    fn quietly<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> Option<T> {
+    pub(super) fn quietly<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> Option<T> {
         let (failed, held, uses) = (self.failed, self.a.read_held.contains(&self.def), self.a.uses.borrow().len());
         self.failed = true;
         let out = f(self);

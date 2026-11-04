@@ -75,6 +75,8 @@ const EXPRESSION_BLOCK_HOLDERS: &[NodeKind] = &[
     NodeKind::LetStmt,
     NodeKind::MatchArm,
     NodeKind::ParenExpr,
+    NodeKind::StructLitField,
+    NodeKind::TupleExpr,
 ];
 
 /// The time the test may take in a debug build (it took about 4 s on 2026-10-13).

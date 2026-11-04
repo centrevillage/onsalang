@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "27:3"
+// code = "E0418"
+// candidate = 1
+// leaves = ["28:3 E0418"]
+//
+// [[test.fix]]
+// at = "33:3"
+// code = "E0418"
+// candidate = 1
+// leaves = ["34:3 E0418"]
+
+// S-127 (§6.1): "次の行がブロックの最後の式で、前置の `-` で始まるときは、つないだ形も並べる". When the `-b` line is not the
+// last item of the block (a statement follows it), the joined form `a - b` is not a candidate: `-b` is a statement
+// whose value is dropped too. Both statements are an E0418 and the only candidate of each is `let _ = e`. The function
+// holds two errors of the same code (the two statements are one construct, the line `-b` after `a`), so the
+// fix contract that applies one candidate and looks at what is left needs the other E0418 as a `leaves` of the
+// candidate (S-266); the position of the diagnostic is not written here. The forms where the joined form is not
+// made but `-b` is the last item are in e0418_joined_not_offered.onsa.
+
+pub fn minus_is_not_the_last_item(a: I32, b: I32) -> I32 {
+  let _ = a                                                 //~ E0418
+  -b
+  1
+}
+
+pub fn minus_before_a_unit_statement(a: I32, b: I32) {
+  let _ = a                                                 //~ E0418
+  -b
+  let _ = 1
+}

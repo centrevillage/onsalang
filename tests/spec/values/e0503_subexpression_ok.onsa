@@ -1,0 +1,171 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§3.5"]
+
+// S-291, S-889, S-891 (§7): the places of a sub-expression that are not always evaluated, and the forms that are not
+// diverging, are not an E0503: "部分式の位置のうち外は、`&&`・`||` の右と `match` の腕のガード（常には評価されない、§3.5）、無名関数の本体の中、
+// 初期化式の全体（上の `let`、括弧で囲んだ全体を含む）、`if` の枝とブロックの最後の式だけである". The right of `&&` and `||`
+// (a diverging form that is done only when the left lets it), the guard of an arm, the body of an anonymous function,
+// an `if` and a `match` that have a branch or an arm that does not diverge (they are not diverging, so they stand in a
+// place of an operand), the branch of an `if` and the last expression of a block (which are not places of an operand).
+// No statement follows a diverging form here (that is the E0503 of the statement after it). The forms with the error
+// are in negative/e0503_subexpression_positions.onsa and negative/e0503_subexpression_forms.onsa.
+
+pub fn g(n: I32) -> I32 {
+  n
+}
+
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+// ----------------------------------------------------------------- the right of `&&` and `||`
+
+pub fn right_of_an_and(c: Bool) -> Bool {
+  c && ({ return true })
+}
+
+pub fn right_of_an_or(c: Bool) -> Bool {
+  c || panic("x")
+}
+
+pub fn right_of_an_and_with_a_diverging_if(c: Bool, d: Bool) -> Bool {
+  c && (if d { return true } else { return false })
+}
+
+pub fn right_of_a_chain(c: Bool, d: Bool) -> Bool {
+  (c && d) || ({ return false })
+}
+
+pub fn in_a_condition(c: Bool) -> I32 {
+  if c && ({ return 1 }) { 1 } else { 2 }
+}
+
+// ------------------------------------------------------------------------------- the guard of an arm
+
+pub fn guard_that_returns(o: Option[I32]) -> Bool {
+  match o {
+    Some(x) if { return true } => x == 1,
+    _ => false,
+  }
+}
+
+pub fn guard_that_panics(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) if panic("x") => x,
+    _ => 0,
+  }
+}
+
+// ------------------------------------------------------------------------ in an anonymous function
+
+pub fn body_that_returns() -> I32 {
+  apply(fn(x: I32) -> I32 {
+    { return x }
+  })
+}
+
+pub fn body_with_all_branches_diverging() -> I32 {
+  apply(fn(x: I32) -> I32 {
+    if x > 0 { { return 1 } } else { panic("x") }
+  })
+}
+
+pub fn body_that_panics() -> I32 {
+  apply(fn(x: I32) -> I32 {
+    panic("x")
+  })
+}
+
+pub fn body_in_an_operand(x: I32) -> I32 {
+  x + apply(fn(n: I32) -> I32 {
+    { return n }
+  })
+}
+
+// ------------------------------------------------------------------- forms that do not diverge
+
+pub fn if_with_a_branch_that_does_not_diverge(c: Bool) -> I32 {
+  g(if c { return 1 } else { 2 })
+}
+
+pub fn if_with_the_other_branch(c: Bool) -> I32 {
+  g(if c { 1 } else { return 2 })
+}
+
+pub fn if_in_an_operand(c: Bool, x: I32) -> I32 {
+  x + (if c { return 1 } else { 2 })
+}
+
+pub fn match_with_an_arm_that_does_not_diverge(o: Option[I32]) -> I32 {
+  g(match o { Some(n) => n, None => { return 0 } })
+}
+
+pub fn match_in_an_operand(o: Option[I32], x: I32) -> I32 {
+  x + (match o { Some(_) => { return 1 }, None => 2 })
+}
+
+pub fn block_with_a_return_inside_an_if(c: Bool) -> I32 {
+  g({
+    if c {
+      return 1
+    }
+    2
+  })
+}
+
+pub fn while_with_a_break() -> I32 {
+  g({
+    while true {
+      break
+    }
+    1
+  })
+}
+
+pub fn while_with_a_variable_condition(c: Bool) -> I32 {
+  g({
+    while c {
+      return 1
+    }
+    2
+  })
+}
+
+// ---------------------------------------------------------- not a place of an operand: branch and last expression
+
+pub fn branch_of_an_if(c: Bool) -> I32 {
+  if c { { return 1 } } else { 2 }
+}
+
+pub fn branch_that_panics(c: Bool) -> I32 {
+  if c { panic("x") } else { 2 }
+}
+
+pub fn arm_of_a_match(o: Option[I32]) -> I32 {
+  match o {
+    Some(n) => n,
+    None => panic("x"),
+  }
+}
+
+pub fn last_expression_of_a_block(c: Bool) -> I32 {
+  let r = {
+    if c {
+      1
+    } else {
+      2
+    }
+  }
+  r
+}
+
+pub fn heading_of_a_let_with_a_diverging_branch(c: Bool) -> I32 {
+  let y = if c { 1 } else { return 2 }
+  y
+}
+
+pub fn diverging_branch_in_a_nested_value(c: Bool, d: Bool) -> I32 {
+  let y = 1 + (if c { if d { return 1 } else { 2 } } else { 3 })
+  y
+}

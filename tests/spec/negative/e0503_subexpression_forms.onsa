@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§3.5", "§18.1"]
+// fixes = 0
+
+// S-291, S-889, S-891 (§7): "発散する形（発散するものそのもの、発散する文で終わるブロック、全ての枝が発散する `if` と `match`）は、常に評価される
+// 部分式の位置には書けない". The forms of a diverging expression, each in the operand of an operation, in the argument of
+// a call and in the subject of a `match`: `{ return 1 }`, `panic("x")`, a block that ends with a diverging block
+// (`{ { return 1 } }`), an `if` whose branches all diverge, a `match` whose arms all diverge, a `while true` that holds
+// no `break` and a block that ends with it. The error is on the outer expression, which is never done, and has no
+// candidate. The forms that are not diverging (an `if` with a branch that does not diverge) are in
+// values/e0503_subexpression_ok.onsa. One error per function (P-01); a statement stands on one line.
+
+pub fn g(n: I32) -> I32 {
+  n
+}
+
+// ------------------------------------------------------------------------------ as an operand
+
+pub fn block_with_a_return(x: I32) -> I32 {
+  x + ({ return 1 })                                //~ E0503
+}
+
+pub fn panic_call(x: I32) -> I32 {
+  x + panic("x")                                    //~ E0503
+}
+
+pub fn block_in_a_block(x: I32) -> I32 {
+  x + ({ { return 1 } })                            //~ E0503
+}
+
+pub fn block_with_statements_and_a_diverging_end(x: I32) -> I32 {
+  x + ({                                            //~ E0503
+    let y = 1
+    { return y }
+  })
+}
+
+pub fn if_with_all_branches_diverging(c: Bool, x: I32) -> I32 {
+  x + (if c { return 1 } else { return 2 })         //~ E0503
+}
+
+pub fn if_with_a_panic_and_a_return(c: Bool, x: I32) -> I32 {
+  x + (if c { panic("x") } else { return 2 })       //~ E0503
+}
+
+pub fn match_with_all_arms_diverging(o: Option[I32], x: I32) -> I32 {
+  x + (match o { Some(_) => { return 1 }, None => { return 2 } }) //~ E0503
+}
+
+pub fn match_with_a_panic_arm(o: Option[I32], x: I32) -> I32 {
+  x + (match o { Some(_) => panic("x"), None => { return 2 } }) //~ E0503
+}
+
+pub fn while_true_without_a_break(x: I32) -> I32 {
+  x + ({ while true {} })                           //~ E0503
+}
+
+pub fn parenthesized_while_true(x: I32) -> I32 {
+  x + ({ while (true) { return 1 } })               //~ E0503
+}
+
+pub fn if_of_ifs(c: Bool, d: Bool, x: I32) -> I32 {
+  x + (if c { if d { return 1 } else { return 2 } } else { panic("x") }) //~ E0503
+}
+
+// ------------------------------------------------------------------------------ as an argument
+
+pub fn argument_block_with_a_return() -> I32 {
+  g({ return 1 })                                   //~ E0503
+}
+
+pub fn argument_panic_call() -> I32 {
+  g(panic("x"))                                     //~ E0503
+}
+
+pub fn argument_block_in_a_block() -> I32 {
+  g({ { return 1 } })                               //~ E0503
+}
+
+pub fn argument_if_with_all_branches_diverging(c: Bool) -> I32 {
+  g(if c { return 1 } else { return 2 })            //~ E0503
+}
+
+pub fn argument_match_with_all_arms_diverging(o: Option[I32]) -> I32 {
+  g(match o { Some(_) => { return 1 }, None => { return 2 } }) //~ E0503
+}
+
+pub fn argument_while_true() -> I32 {
+  g({ while true {} })                              //~ E0503
+}
+
+pub fn argument_parenthesized_block() -> I32 {
+  g((({ return 1 })))                               //~ E0503
+}
+
+// ------------------------------------------------------------------------ as the subject of a match
+
+pub fn subject_block_with_a_return() -> I32 {
+  match ({ return 1 }) { _ => 2 }                   //~ E0503
+}
+
+pub fn subject_panic_call() -> I32 {
+  match panic("x") { _ => 2 }                       //~ E0503
+}
+
+pub fn subject_if_with_all_branches_diverging(c: Bool) -> I32 {
+  match (if c { return 1 } else { return 2 }) { _ => 2 } //~ E0503
+}
+
+// ------------------------------------------------------- the same call and `panic` in other places
+
+pub fn must_of_a_panic(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => must(panic("boom")),                    //~ E0503
+  }
+}
+
+pub fn must(n: I32) -> I32 {
+  n
+}
+
+pub fn in_a_branch_of_an_if(c: Bool, x: I32) -> I32 {
+  if c {
+    x + panic("x")                                  //~ E0503
+  } else {
+    0
+  }
+}
+
+pub fn in_a_loop(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    t = t + ({ return i })                          //~ E0503
+  }
+  t
+}
+
+pub fn in_an_anonymous_function(x: I32) -> I32 {
+  apply(fn(n: I32) -> I32 {
+    n + ({ return 1 })                              //~ E0503
+  })
+}
+
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}

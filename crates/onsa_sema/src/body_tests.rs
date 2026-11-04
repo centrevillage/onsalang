@@ -885,3 +885,43 @@ fn only_a_call_of_a_missing_function_has_a_literal_to_write() {
         assert!(d.notes.is_empty(), "{src}: {:?}", d.notes);
     }
 }
+
+/// The text after each candidate of the one diagnostic of `src`.
+fn after_candidates(src: &str) -> Vec<String> {
+    let a = check(src);
+    let [d] = &a.diagnostics[..] else { panic!("{src}: {:?}", a.diagnostics) };
+    let applied = |f: &onsa_diag::Fix| onsa_diag::apply_text(src, &f.edits().iter().collect::<Vec<_>>()).unwrap();
+    d.fixes.iter().map(applied).collect()
+}
+
+/// §6.1, §18.1: the line break becomes the operator; a comment in it stays,
+/// and what is left of the line of `-b` too.
+#[test]
+fn the_joined_line_keeps_the_comments() {
+    let head = "fn f(a: I32, b: I32) -> I32 {\n  a";
+    for (rest, joined) in [
+        ("\n  -b\n}\n", " - b\n}\n"),
+        ("\n\n\n  -b\n}\n", " - b\n}\n"),
+        ("\n  -b // c\n}\n", " - b // c\n}\n"),
+        (" // c\n  -b\n}\n", " - b // c\n}\n"),
+        (" // c\n\n  // d\n  -b // e\n}\n", " - b // c\n\n  // d\n  // e\n}\n"),
+        (" // c\n  -b }\n", " - b // c\n  }\n"),
+    ] {
+        let src = format!("{head}{rest}");
+        assert_eq!(after_candidates(&src)[1], format!("{head}{joined}"), "{rest}");
+    }
+}
+
+/// §6.1: `a - b` is the reading of the joined line only when `a` is the left
+/// operand there: the groups of §3.1, and no block form (§3.3).
+#[test]
+fn the_joined_line_needs_a_left_operand() {
+    for a in ["if c { a } else { b }", "{ a }", "match c { _ => a }", "a & b", "a % b"] {
+        let src = format!("fn f(c: Bool, a: I32, b: I32) -> I32 {{\n  {a}\n  -b\n}}\n");
+        assert_eq!(after_candidates(&src).len(), 1, "{a}");
+    }
+    for a in ["a + b", "a * b", "-a", "a as I32"] {
+        let src = format!("fn f(c: Bool, a: I32, b: I32) -> I32 {{\n  {a}\n  -b\n}}\n");
+        assert_eq!(after_candidates(&src).len(), 2, "{a}");
+    }
+}

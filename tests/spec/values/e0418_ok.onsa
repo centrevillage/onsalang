@@ -1,0 +1,226 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§7", "§9.2"]
+
+// S-127, S-848 (§6.1): the statements in the middle of a block that are not an E0418: a statement whose type is `()`
+// (a call of a function that returns nothing, an assignment, an `inout` call, a `!` method, `assert`, an `if` without
+// `else`, a `for`, a `while`, a block and a `match` of unit values, a call of a function value that returns `()`, the
+// literal `()`), a value that is bound or dropped on purpose with `let _ = e` (a call, an operation, an `if`, a
+// `match`, a literal, a value whose type is not decided yet with an annotation of the binding), and the last
+// expression of a block, which is the value of the block and not a statement in the middle of it. The diverging
+// statement of a branch (`if c { return 1 }`) has the type `()` as a statement. The statements that are
+// diverging themselves and the statements after them are not here (S-128, W5-08 U3). The forms with the error are
+// in fixes/e0418_*.onsa.
+
+pub struct W {
+  n: I32,
+}
+
+impl W {
+  pub fn bump(inout self) {
+    self.n = self.n + 1
+  }
+}
+
+pub fn one() -> I32 {
+  1
+}
+
+pub fn nothing() {}
+
+pub fn put(inout n: I32) {
+  n = 1
+}
+
+pub fn make[T: Default]() -> T {
+  panic("not called")
+}
+
+pub fn apply_unit(f: fn(I32)) {
+  f.(1)
+}
+
+// ------------------------------------------------------------------------------ the type is `()`
+
+pub fn unit_call() -> I32 {
+  nothing()
+  1
+}
+
+pub fn unit_literal() -> I32 {
+  ()
+  1
+}
+
+pub fn assignment() -> I32 {
+  var t = 0
+  t = 1
+  t
+}
+
+pub fn inout_call() -> I32 {
+  var t = 0
+  put(inout t)
+  t
+}
+
+pub fn bang_method() -> I32 {
+  var w = W { n: 0 }
+  w.bump!()
+  w.n
+}
+
+pub fn assert_statement(x: I32) -> I32 {
+  assert x == 1
+  x
+}
+
+pub fn if_without_else(c: Bool) -> I32 {
+  var t = 0
+  if c {
+    t = 1
+  }
+  t
+}
+
+pub fn if_with_unit_branches(c: Bool) -> I32 {
+  var t = 0
+  if c { t = 1 } else { t = 2 }
+  t
+}
+
+pub fn match_of_unit_values(o: Option[I32]) -> I32 {
+  var t = 0
+  match o { Some(n) => { t = n }, None => { t = 2 } }
+  t
+}
+
+pub fn for_statement(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    t = t + i
+  }
+  t
+}
+
+pub fn while_statement(n: U32) -> U32 {
+  var i: U32 = 0
+  while i < n {
+    i = i + 1
+  }
+  i
+}
+
+pub fn block_of_unit_statements() -> I32 {
+  var t = 0
+  {
+    t = 1
+  }
+  t
+}
+
+pub fn function_value_that_returns_unit(f: fn(I32)) -> I32 {
+  f.(1)
+  1
+}
+
+pub fn function_value_applied_in_a_function() {
+  apply_unit(fn(n: I32) {
+    nothing()
+  })
+}
+
+pub fn return_in_a_branch(c: Bool) -> I32 {
+  if c {
+    return 1
+  }
+  2
+}
+
+// --------------------------------------------------------------------------- `let _ = e` writes the drop
+
+pub fn discarded_call() -> I32 {
+  let _ = one()
+  2
+}
+
+pub fn discarded_operation(x: I32) -> I32 {
+  let _ = x + 1
+  x
+}
+
+pub fn discarded_if(c: Bool) -> I32 {
+  let _ = if c { 1 } else { 2 }
+  3
+}
+
+pub fn discarded_match(o: Option[I32]) -> I32 {
+  let _ = match o { Some(n) => n, None => 0 }
+  1
+}
+
+pub fn discarded_literal() -> I32 {
+  let _ = 1
+  2
+}
+
+pub fn discarded_value_with_an_annotation() -> I32 {
+  let _: I32 = make()
+  1
+}
+
+pub fn discarded_in_a_loop(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    let _ = i + 1
+    t = t + i
+  }
+  t
+}
+
+// ------------------------------------------------------------------- the last expression of a block
+
+pub fn last_expression_of_a_function() -> I32 {
+  one()
+}
+
+pub fn last_expression_of_a_nested_block() -> I32 {
+  {
+    one()
+  }
+}
+
+pub fn last_expression_of_a_branch(c: Bool) -> I32 {
+  if c {
+    nothing()
+    one()
+  } else {
+    2
+  }
+}
+
+pub fn last_expression_of_an_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(_) => {
+      nothing()
+      one()
+    },
+    None => 0,
+  }
+}
+
+pub fn last_expression_of_an_anonymous_function() -> I32 {
+  apply(fn(n: I32) -> I32 {
+    nothing()
+    n + 1
+  })
+}
+
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+test "a unit statement and an assert in a test" {
+  nothing()
+  assert one() == 1
+}

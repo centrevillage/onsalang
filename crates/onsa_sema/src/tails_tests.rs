@@ -2,7 +2,7 @@
 //! (`onsa_syntax::tails`, §5.2, §5.4, §7), on the table of the names stage.
 
 use onsa_diag::FileId;
-use onsa_syntax::ast::ItemKind;
+use onsa_syntax::ast::{ExprId, ExprKind, ItemKind};
 use onsa_syntax::tails::Tail;
 
 use crate::tests::{check, def};
@@ -108,4 +108,90 @@ fn a_while_diverges_by_its_condition_and_its_breaks() {
         let src = whole(body);
         assert!(matches!(&tails_of(&src)[..], [t] if t.starts_with("() of ")), "{body}");
     }
+}
+
+/// The always evaluated part of `whole`, the last expression of a function
+/// (§7, S-291, S-889), or its statement `head` before it; by its text.
+fn parts(whole: &str, head: Option<&str>) -> (Option<String>, Option<String>) {
+    let first = head.map_or(String::new(), |h| format!("  {h}\n"));
+    let src = format!(
+        "fn g(n: I32) -> I32 {{ n }}\nfn f(c: Bool, x: I32, s: S) -> I32 {{\n{first}  {whole}\n}}\nstruct S {{ n: I32 }}\n"
+    );
+    let p = onsa_syntax::parse(FileId(0), &src);
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    let ItemKind::Fn(f) = &p.ast.item(p.ast.root[1]).kind else { panic!("not a function") };
+    let ExprKind::Block(b) = &p.ast.expr(f.body.expect("a body")).kind else { panic!("no block") };
+    let a = check(&src);
+    let table = &a.bodies[&def(&a, "f")].diverging;
+    let text = |e: ExprId| {
+        let s = p.ast.expr(e).span;
+        src[s.start as usize..s.end as usize].to_string()
+    };
+    let of_stmt = b.stmts.first().and_then(|&s| table.stmt_part(&p.ast, s));
+    (b.tail.and_then(|t| table.evaluated_part(&p.ast, t)).map(text), of_stmt.map(text))
+}
+
+#[test]
+fn the_parts_that_are_always_evaluated() {
+    const R: &str = "{ return 1 }";
+    for whole in [
+        "x + ({ return 1 })",
+        "({ return 1 }) + x",
+        "({ return 1 }) && c",
+        "-({ return 1 })",
+        "({ return 1 }) as I64",
+        "({ return 1 })?",
+        "move ({ return 1 })",
+        "({ return 1 }).n",
+        "({ return 1 }).0",
+        "(x, ({ return 1 }))",
+        "[x, ({ return 1 })]",
+        "[({ return 1 }); 2]",
+        "S { n: ({ return 1 }) }",
+        "g(({ return 1 }))",
+        "g(move ({ return 1 }))",
+        "({ return 1 }).(x)",
+        "({ return 1 }).m()",
+        "s.m(({ return 1 }))",
+        "s[({ return 1 })]",
+        "({ return 1 })[x]",
+        "if ({ return 1 }) { 1 } else { 2 }",
+        "match ({ return 1 }) { _ => 1 }",
+    ] {
+        assert_eq!(parts(whole, None).0.as_deref(), Some(R), "{whole}");
+    }
+    assert_eq!(parts("g(panic(\"x\"))", None).0.as_deref(), Some("panic(\"x\")"));
+    for (head, whole) in [
+        ("x = ({ return 1 })", "x"),
+        ("return ({ return 1 })", "x"),
+        ("assert ({ return 1 })", "x"),
+        ("while ({ return 1 }) {}", "x"),
+        ("for v in ({ return 1 }) {}", "x"),
+        ("for v in ({ return 1 })..<3 {}", "x"),
+        ("for v in 0..<({ return 1 }) {}", "x"),
+    ] {
+        assert_eq!(parts(whole, Some(head)).1.as_deref(), Some(R), "{head}");
+    }
+}
+
+/// What §7 keeps out of the parts, and an outer expression over a part that
+/// is no diverging form itself.
+#[test]
+fn the_parts_end_at_what_is_not_always_evaluated() {
+    for whole in [
+        "c && ({ return true })",
+        "c || panic(\"x\")",
+        "if c { return 1 } else { return 2 }",
+        "g(if c { return 1 } else { 2 })",
+        "match c { _ if { return true } => 1, _ => 2 }",
+        "g.(fn() { return })",
+        "({ return 1 })",
+        "{ return 1 }",
+        "g(g({ return 1 }))",
+    ] {
+        assert_eq!(parts(whole, None).0, None, "{whole}");
+    }
+    assert_eq!(parts("x", Some("let y = ({ return 1 })")).1, None, "S-268");
+    // The part of `if` and `while` is the condition.
+    assert_eq!(parts("x", Some("while c { return 1 }")).1, None);
 }

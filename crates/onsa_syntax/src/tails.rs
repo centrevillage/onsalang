@@ -7,7 +7,7 @@
 
 use onsa_diag::hash::HashSet;
 
-use crate::ast::{Arg, Ast, Block, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
+use crate::ast::{Arg, Ast, BinOp, Block, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
 /// What diverges in a body (§7): the table the walk of the names stage
 /// fills, child before parent, and the later stages read (D-15).
@@ -58,6 +58,79 @@ impl Diverging {
             Some(t) => self.expr(t),
             None => b.stmts.last().is_some_and(|&s| self.stmt(ast, s)),
         }
+    }
+
+    /// The part of the expression `e` that is always evaluated and diverges,
+    /// so that `e` is never carried out (§7, S-291, S-889). Not a part: the
+    /// right of `&&` and `||`, a guard (§3.5), the body of an anonymous
+    /// function, a branch and the last expression of a block. The types stage
+    /// asks before it checks `e`: the child would stop it at its open type
+    /// (E0420).
+    pub fn evaluated_part(&self, ast: &Ast, e: ExprId) -> Option<ExprId> {
+        if self.exprs.is_empty() {
+            return None;
+        }
+        match &ast.expr(e).kind {
+            ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs: x, .. }
+            | ExprKind::Unary { expr: x, .. }
+            | ExprKind::Cast { expr: x, .. }
+            | ExprKind::Try(x)
+            | ExprKind::Move(x)
+            | ExprKind::At { expr: x, .. }
+            | ExprKind::Field { base: x, .. }
+            | ExprKind::TupleIndex { base: x, .. }
+            | ExprKind::Repeat { elem: x, .. }
+            | ExprKind::If { cond: x, .. }
+            | ExprKind::Match { scrutinee: x, .. } => self.first(ast, [*x]),
+            ExprKind::Binary { lhs: a, rhs: b, .. } | ExprKind::Index { base: a, index: b } => {
+                self.first(ast, [*a, *b])
+            }
+            ExprKind::Tuple(xs) | ExprKind::Array(xs) => self.first(ast, xs.iter().copied()),
+            ExprKind::Struct { fields, .. } => self.first(ast, fields.iter().map(|(_, x)| *x)),
+            ExprKind::Range(r) => self.first(ast, [r.lo, r.hi]),
+            ExprKind::Call { callee, args, .. } => {
+                // The callee of a value call, or the receiver of a method: no
+                // `check_expr` reads the `Field` of a method.
+                let receiver = match ast.expr(*callee).kind {
+                    ExprKind::Field { base, .. } => Some(base),
+                    _ => None,
+                };
+                self.first(ast, [*callee].into_iter().chain(receiver).chain(args.iter().map(|a| a.expr)))
+            }
+            _ => None,
+        }
+    }
+
+    /// [`Diverging::evaluated_part`] of a statement's head (§7: E0503 at the
+    /// statement). The initializer of a `let` is no part of it (S-268). The
+    /// ends of a range go through here: `for` reads them with no `check_expr`
+    /// of the range.
+    pub fn stmt_part(&self, ast: &Ast, s: StmtId) -> Option<ExprId> {
+        if self.exprs.is_empty() {
+            return None;
+        }
+        match &ast.stmt(s).kind {
+            StmtKind::For { iter, .. } if matches!(ast.expr(*iter).kind, ExprKind::Range(_)) => {
+                self.evaluated_part(ast, *iter)
+            }
+            StmtKind::Assign { value: x, .. }
+            | StmtKind::Return(Some(x))
+            | StmtKind::Assert(x)
+            | StmtKind::While { cond: x, .. }
+            | StmtKind::For { iter: x, .. } => self.first(ast, [*x]),
+            _ => None,
+        }
+    }
+
+    /// The first of `parts` that diverges, through parentheses and `move`
+    /// (`f(move ({ return 1 }))` is one of `f`'s).
+    fn first(&self, ast: &Ast, parts: impl IntoIterator<Item = ExprId>) -> Option<ExprId> {
+        parts.into_iter().find_map(|mut x| {
+            while let ExprKind::Paren(inner) | ExprKind::Move(inner) = ast.expr(x).kind {
+                x = inner;
+            }
+            self.expr(x).then_some(x)
+        })
     }
 
     /// Record the expression `e`, after its children; `panic`: it is a call

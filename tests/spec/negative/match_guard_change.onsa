@@ -265,7 +265,7 @@ pub fn match_in_a_while(n: U32) -> U32 uses {Alloc} {
   var o = mko()
   var i: U32 = 0
   while i < n {
-    match o {
+    let _ = match o {
       Some(_) if reset(inout o) => 1, //~ E0715
       _ => 0,
     }

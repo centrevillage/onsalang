@@ -15,6 +15,9 @@ impl<'a> Checker<'a> {
 
     fn check_stmt_inner(&mut self, s: StmtId) -> R<()> {
         let stmt = self.ast.stmt(s);
+        if let Some(part) = self.info.diverging.stmt_part(self.ast, s) {
+            return Err(self.never_carried_out(stmt.span, part));
+        }
         match &stmt.kind {
             StmtKind::Let { pat, ty, init, .. } => {
                 let ann = match ty {
