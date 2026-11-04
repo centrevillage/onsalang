@@ -570,3 +570,24 @@ left = "number prefix without digits"
 input = "tests/fuzz/d58c5045.onsa"
 reasons = ["S-384"]
 note = "`- b  0x` は誤りが二つある入力（行頭の `- b` と、数字の無い `0x`）。つなぐ候補が `0x` ごと前の行へ移すので、残る誤りの位置が変わる。候補の約束は誤りが一つの単位に当たる（§18.1）"
+
+[[allowed]]
+class = "fix|E0002|write the `…` between the elements|E0020"
+left = "a prefix operator is written right before its operand"
+input = "tests/fuzz/32e948d8.onsa"
+reasons = ["S-384"]
+note = "切れた入力の `(ab, n - 1` は誤りが二つある入力（`,` の無い二つの要素と閉じていない括弧の中の `- 1`）。`,` を当てると `- 1` が前置の演算子の形として残る。候補の約束は誤りが一つの単位に当たる（§18.1）"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "expected newline after the declaration, found `…`"
+input = "tests/fuzz/9e4a532d.onsa"
+reasons = ["S-384"]
+note = "`- 1{` は誤りが二つある入力（行頭の `-` と行末の余分な `{`）。つなぐと `{` が宣言の後に残る"
+
+[[allowed]]
+class = "fix|E0020|write it against its operand|E0002"
+left = "expected a declaration, found identifier"
+input = "tests/fuzz/05b80269.onsa"
+reasons = ["S-384"]
+note = "行頭の `?D` は誤りが二つある入力（行頭の `?` と、宣言の位置の `D`）。`?` を前の行へ移すと `D` が残る"
