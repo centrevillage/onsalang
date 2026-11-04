@@ -3,11 +3,15 @@
 // mode = "test"
 // spec = ["§7", "§9.2", "§3.5"]
 
-// `panic(msg)` as the value of an arm or a branch (spec §7, §9.2). `panic` is a
-// prelude function whose message is a string literal without interpolation. It
-// does not return, so it can stand where a value of any type is needed, and it
-// is evaluated only when its arm or branch is taken. A panic fails the test it
-// happens in (the test carries a TESTFAIL marker).
+// `panic(msg)` as the value of an arm or a branch (spec §7, §9.2). `panic` is a prelude function whose
+// message is a string literal without interpolation. It does not return, so it can stand where a value
+// of any type is needed, and it is evaluated only when its arm or branch is taken. A panic fails the
+// test it happens in (the failing tests have a PANIC marker on the line of the failing call).
+// The type of the other arm or branch is any: an integer, a `Bool`, a float, a tuple, an `Option`, a
+// unit. A panic as the whole initial value of a `let`, or as an argument, is a form of §7 that is
+// unreachable code (E0503) and is not here. The order of the evaluation is shown by `inout`: the
+// parts of an expression are evaluated from the left (§3.5), and the arm that is not taken is not
+// evaluated.
 
 fn must(o: Option[I32]) -> I32 {
   match o {
@@ -24,12 +28,75 @@ fn pick(c: Bool) -> I32 {
   }
 }
 
+fn pick_bool(c: Bool) -> Bool {
+  if c {
+    true
+  } else {
+    panic("no")
+  }
+}
+
+fn pick_float(c: Bool) -> F32 {
+  if c {
+    1.5
+  } else {
+    panic("no")
+  }
+}
+
+fn pick_option(c: Bool) -> Option[I32] {
+  if c {
+    Some(3)
+  } else {
+    panic("no")
+  }
+}
+
+fn pick_unit(c: Bool) {
+  if c {
+    ()
+  } else {
+    panic("no")
+  }
+}
+
+fn bump(inout n: U32) -> U32 {
+  n = n + 1
+  n
+}
+
+fn bump_in_the_arm_that_is_taken(inout n: U32, c: Bool) -> U32 {
+  if c {
+    bump(inout n)
+  } else {
+    panic("no")
+  }
+}
+
+fn bump_before_a_branch(inout n: U32, c: Bool) -> U32 {
+  let before = bump(inout n)
+  let after = if c {
+    before + 10
+  } else {
+    panic("no")
+  }
+  after + n
+}
+
+fn bump_in_both_places(inout n: U32, o: Option[U32]) -> U32 {
+  let k = match o {
+    Some(_) => bump(inout n),
+    None => panic("no"),
+  }
+  k + bump(inout n)
+}
+
 test "a panic arm that is not taken is not evaluated" {
   assert must(Some(5)) == 5
 }
 
-test "reaching the panic arm fails the test" {   //~ TESTFAIL "reaching the panic arm fails the test"
-  let r = must(None)
+test "reaching the panic arm fails the test" {
+  let r = must(None) //~ PANIC "reaching the panic arm fails the test"
   assert r == 0
 }
 
@@ -37,22 +104,69 @@ test "a panic branch that is not taken is not evaluated" {
   assert pick(true) == 10
 }
 
-test "reaching the panic branch fails the test" {   //~ TESTFAIL "reaching the panic branch fails the test"
-  let r = pick(false)
+test "reaching the panic branch fails the test" {
+  let r = pick(false) //~ PANIC "reaching the panic branch fails the test"
   assert r == 0
 }
 
-test "panic stands where a value of any type is needed" {   //~ TESTFAIL "panic stands where a value of any type is needed"
-  let x: I32 = panic("boom")
-  assert x == 0
+test "a panic branch stands where a Bool is needed" {
+  assert pick_bool(true)
 }
 
-test "panic stands where a Bool is needed" {   //~ TESTFAIL "panic stands where a Bool is needed"
-  let b: Bool = panic("boom")
+test "reaching the panic branch of a Bool fails the test" {
+  let b = pick_bool(false) //~ PANIC "reaching the panic branch of a Bool fails the test"
   assert !b
 }
 
-test "a panic in an argument is raised before the call" {   //~ TESTFAIL "a panic in an argument is raised before the call"
-  let r = must(panic("boom"))
+test "a panic branch stands where a float is needed" {
+  assert pick_float(true) == 1.5
+}
+
+test "reaching the panic branch of a float fails the test" {
+  let x = pick_float(false) //~ PANIC "reaching the panic branch of a float fails the test"
+  assert x == 0.0
+}
+
+test "a panic branch stands where an Option is needed" {
+  assert pick_option(true) == Some(3)
+}
+
+test "reaching the panic branch of an Option fails the test" {
+  let o = pick_option(false) //~ PANIC "reaching the panic branch of an Option fails the test"
+  assert o == None
+}
+
+test "a panic branch stands where a unit is needed" {
+  pick_unit(true)
+}
+
+test "reaching the panic branch of a unit fails the test" {
+  pick_unit(false) //~ PANIC "reaching the panic branch of a unit fails the test"
+}
+
+test "the arm that is taken runs its side effect and the panic arm does not" {
+  var n: U32 = 0
+  let r      = bump_in_the_arm_that_is_taken(inout n, true)
+  assert r == 1
+  assert n == 1
+}
+
+test "a side effect before a branch happens once, and the panic branch that is not taken does not run" {
+  var n: U32 = 4
+  let r      = bump_before_a_branch(inout n, true)
+  assert r == 15 + 5
+  assert n == 5
+}
+
+test "the parts are evaluated from the left, and the panic arm that is not taken is not evaluated" {
+  var n: U32 = 0
+  let r      = bump_in_both_places(inout n, Some(1))
+  assert r == 1 + 2
+  assert n == 2
+}
+
+test "a panic arm that is taken in a function with an inout parameter fails the test" {
+  var n: U32 = 0
+  let r      = bump_in_both_places(inout n, None) //~ PANIC "a panic arm that is taken in a function with an inout parameter fails the test"
   assert r == 0
 }

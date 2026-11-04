@@ -12,7 +12,7 @@ use onsa_syntax::ast::{
 
 use super::flow::{Outside, par_head};
 use super::kinds::Want;
-use super::paths::Place;
+use super::paths::{PANIC, Place};
 use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Walker};
 use crate::sig::Pos;
 
@@ -26,10 +26,24 @@ pub(super) struct Choice {
 }
 
 impl Walker<'_> {
+    /// The expression `e`, then whether it diverges, after its children (§7).
+    pub(super) fn expr(&mut self, e: ExprId) -> W {
+        self.expr_inner(e)?;
+        let ast = self.ast;
+        let panic = match &ast.expr(e).kind {
+            ExprKind::Call { callee, .. } => {
+                matches!(self.out.paths.get(callee), Some(PathRes::Item { entity, .. }) if *entity == PANIC)
+            }
+            _ => false,
+        };
+        self.out.diverging.note_expr(ast, e, panic);
+        Ok(())
+    }
+
     /// The arms that bind, open a scope or make a record are here; every
     /// other expression walks its children in the order of
     /// [`onsa_syntax::ast::Ast::sub_exprs`] (R-91 (1)).
-    pub(super) fn expr(&mut self, e: ExprId) -> W {
+    fn expr_inner(&mut self, e: ExprId) -> W {
         let ast = self.ast;
         match &ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => self.interp(e, s),
@@ -248,7 +262,11 @@ impl Walker<'_> {
                 self.close_scope();
                 Ok(())
             }
-            StmtKind::While { cond, body } => self.exprs([*cond, *body]),
+            StmtKind::While { cond, body } => {
+                self.exprs([*cond, *body])?;
+                self.out.diverging.note_while(ast, s);
+                Ok(())
+            }
             StmtKind::Break | StmtKind::Continue | StmtKind::Return(None) => Ok(()),
             StmtKind::Return(Some(x)) | StmtKind::Assert(x) | StmtKind::Expr(x) => self.expr(*x),
         }

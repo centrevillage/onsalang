@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§7", "§6.1"]
+
+// E0406 (spec §4.7): a type variable that only expressions which do not return a value decide is not
+// determined at the end of the function, and the error is at the expression that made the variable.
+// The return type of a closure whose return type is not written is such a variable when its body only
+// diverges (`panic`, a block or a branch that ends in one, a loop of `while true`): the closure
+// `fn() { panic("x") }` has no value for the type to come from. A body with a branch that gives a value
+// decides the type, and a written return type decides it too (the right forms below). One error per
+// function (P-01); each closure is on one line.
+
+pub fn panics() {
+  let g = fn() { panic("x") }                       //~ E0406
+  let _ = g
+}
+
+pub fn panics_with_an_argument() {
+  let g = fn(n: I32) { panic("x") }                 //~ E0406
+  let _ = g
+}
+
+pub fn a_block_that_panics() {
+  let g = fn() { { panic("x") } }                   //~ E0406
+  let _ = g
+}
+
+pub fn both_branches_panic(c: Bool) {
+  let g = fn(b: Bool) { if b { panic("a") } else { panic("b") } } //~ E0406
+  let _ = g
+}
+
+pub fn a_loop_that_never_ends() {
+  let g = fn() { while true { } }                   //~ E0406
+  let _ = g
+}
+
+pub fn a_match_that_panics_in_every_arm(o: Option[I32]) {
+  let g = fn(p: Option[I32]) { match p { Some(_) => { panic("a") }, None => { panic("b") } } } //~ E0406
+  let _ = g
+}
+
+pub fn in_a_generic_body[T: Copy](x: T) {
+  let g = fn() { panic("x") }                       //~ E0406
+  let _ = g
+}
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn in_a_method(self) {
+    let g = fn() { panic("x") }                     //~ E0406
+    let _ = g
+  }
+}
+
+test "in a test" {
+  let g = fn() { panic("x") }                       //~ E0406
+  let _ = g
+}
+
+// A branch that gives a value decides the type, and a written type decides it.
+pub fn a_branch_that_gives_a_value(c: Bool) -> I32 {
+  let g = fn(b: Bool) { if b { 1 } else { panic("x") } }
+  g.(c)
+}
+
+pub fn a_written_return_type() -> I32 {
+  let g = fn() -> I32 { panic("x") }
+  g.()
+}
+
+pub fn a_written_unit_type() {
+  let g = fn() -> () { panic("x") }
+  g.()
+}
+
+pub fn an_expected_type() -> I32 {
+  let g: fn() -> I32 = fn() { panic("x") }
+  g.()
+}

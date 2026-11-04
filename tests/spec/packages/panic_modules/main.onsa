@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§15.1", "§7"]
+
+// `panic(msg)` is a function of the prelude, so a module needs no `use` for it (spec §15.1), and a
+// function of another module that diverges stands where a value is needed in this one as any call
+// does. A panic in the function of a module fails the test that called it: the failing call is the call
+// in the body of the test (§18.1), and a function of a module that has `panic` in an `rt` body, a
+// method and a loop of `while true` is called from here in the same way.
+use util
+use util.{stop_below, rt_stop, Counter, find}
+
+pub fn use_in_a_value_position(c: Bool, n: U32) -> U32 {
+  let k = if c {
+    stop_below(n, 3)
+  } else {
+    panic("no")
+  }
+  k + 1
+}
+
+test "a function of a module that does not panic" {
+  assert stop_below(5, 3) == 5
+  assert util.stop_below(4, 3) == 4
+}
+
+test "a panic in a function of a module fails the test" {
+  let r = stop_below(1, 3) //~ PANIC "a panic in a function of a module fails the test"
+  assert r == 0
+}
+
+test "a panic in a function of a module that is called through the path fails the test" {
+  let r = util.stop_below(2, 3) //~ PANIC "a panic in a function of a module that is called through the path fails the test"
+  assert r == 0
+}
+
+test "a branch of the local function that is not taken" {
+  assert use_in_a_value_position(true, 5) == 6
+}
+
+test "a branch of the local function that is taken" {
+  let r = use_in_a_value_position(false, 5) //~ PANIC "a branch of the local function that is taken"
+  assert r == 0
+}
+
+test "the call of a function of a module in the branch panics" {
+  let r = use_in_a_value_position(true, 1) //~ PANIC "the call of a function of a module in the branch panics"
+  assert r == 0
+}
+
+test "a method of a type of a module with a panic branch" {
+  let c = Counter.new(4)
+  assert c.checked() == 4
+}
+
+test "a method of a type of a module with a panic branch fails when it is taken" {
+  let c = Counter.new(0)
+  let r = c.checked() //~ PANIC "a method of a type of a module with a panic branch fails when it is taken"
+  assert r == 0
+}
+
+test "a search loop of a module" {
+  let xs: [U32; 3] = [4, 5, 6]
+  assert find(xs, 5) == 1
+}
+
+test "a search loop of a module that gives up by a panic" {
+  let xs: [U32; 3] = [4, 5, 6]
+  let r            = find(xs, 9) //~ PANIC "a search loop of a module that gives up by a panic"
+  assert r == 0
+}
+
+test "an rt function of a module with a panic statement" {
+  assert rt_stop(3) == 3
+}
+
+test "an rt function of a module with a panic statement fails when it is taken" {
+  let r = rt_stop(0) //~ PANIC "an rt function of a module with a panic statement fails when it is taken"
+  assert r == 0
+}

@@ -42,7 +42,7 @@
 | `body/b1_let_borrow_affine.onsa` | R-54。W4-16 U1a/t で期待値付きのテストへ写した: `tests/spec/values/binding_borrow_let.onsa`（`whole`・`field`）、実行は `binding_borrow_run.onsa`。W4-16 U1a で直した（今の `onsa check` は何も出さない）。R-54 を直したので消した（85 回目） |
 | `body/t1_cmp_lit.onsa` | R-55。W5-01 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/semantics/infer_compare_literals.onsa`（`opt_lits`・`arr_lits`）、`tests/spec/negative/infer_compare_float.onsa`（`tup_lits` の `(1, 2.0) == (1, 2.0)` は関数の終わりの E0405）。W5-01 で直す |
 | `body/n1_newtype.onsa`、`types/newtype*.onsa` | R-51。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0020_tuple_struct.onsa`、`tests/spec/negative/tuple_struct_many.onsa`（使う側は型の位置だけ） |
-| `body/d1_while_true.onsa` | R-52 |
+| `body/d1_while_true.onsa` | R-52。W5-08 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/semantics/while_true.onsa`、`while_true_forms.onsa`、`panic_positions.onsa` |
 | `body/pm1_partial.onsa` | R-74、R-95。R-74 の形（modes の誤りの単位で効果の検査を行わない）は W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`。R-95 の形（`take_field` と分解 `via_let`）は W4-09 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/values/take_out_consumes_root.onsa`・`take_out_rest_copy.onsa`（取り出して残りの Copy だけを破棄する形。分解は `unit_stage_modes_stops_rt.onsa` の `via_let`）。S-85 の後は取り出しが modes の誤りでなくなるので、`unit_stage_modes_stops_rt.onsa` と `_alloc.onsa` の modes の誤りは配列の要素の取り出しの E0711 に替えた |
 | `body/b2_builtin_methods.onsa` | R-96 |
 | `flow/e1/` | R-13 |

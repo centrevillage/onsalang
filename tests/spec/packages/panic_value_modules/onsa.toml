@@ -1,0 +1,3 @@
+[package]
+name = "panic_value_modules"
+edition = "2026"

@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§9.2", "§15.1", "§7"]
+
+// The argument of `panic(msg)` (spec §9.2, §15.1): `msg` is a string literal with no interpolation, so
+// a name of a `Str`, a number, a constant, a call and a string with an interpolation are E0417 (the
+// message is a static string; a string that is built is §19.1); the number of the arguments is one
+// (E0412, as every call); and `panic!("x")` is not a form of `panic` (`!` marks a call of a method
+// that changes its receiver, §5.2), so it is E0714. These are the errors of the call, so they are
+// found where a call of `panic` is written: in a branch, a closure, an arm, a generic body, a method,
+// an `rt` function and a test. One error per function (P-01). The right forms are in
+// semantics/panic_positions.onsa.
+
+const LIMIT: U32 = 3
+
+fn text() -> Str {
+  "text"
+}
+
+pub fn a_name(s: Str) -> I32 {
+  panic(s)                                          //~ E0417
+}
+
+pub fn a_number() -> I32 {
+  panic(1)                                          //~ E0417
+}
+
+pub fn a_constant() -> I32 {
+  panic(LIMIT)                                      //~ E0417
+}
+
+pub fn a_call() -> I32 {
+  panic(text())                                     //~ E0417
+}
+
+pub fn an_interpolation(b: I32) -> I32 uses {Alloc} {
+  panic("a{b}")                                     //~ E0417
+}
+
+pub fn an_interpolation_of_a_name_of_a_str(s: Str) -> I32 uses {Alloc} {
+  panic("a{s}b")                                    //~ E0417
+}
+
+pub fn a_name_in_a_branch(c: Bool, s: Str) -> I32 {
+  if c {
+    1
+  } else {
+    panic(s)                                        //~ E0417
+  }
+}
+
+pub fn a_number_in_an_arm(n: U32) -> I32 {
+  match n {
+    0 => 1,
+    _ => panic(2),                                  //~ E0417
+  }
+}
+
+pub fn a_name_in_a_closure(s: Str) -> I32 {
+  let f = fn(x: I32) -> I32 { panic(s) }            //~ E0417
+  f.(1)
+}
+
+pub fn a_name_in_a_generic_body[T: Copy](x: T, s: Str) -> T {
+  panic(s)                                          //~ E0417
+}
+
+pub rt fn a_name_in_an_rt_function(s: Str) -> I32 {
+  panic(s)                                          //~ E0417
+}
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn a_name_in_a_method(self, s: Str) -> I32 {
+    panic(s)                                        //~ E0417
+  }
+}
+
+test "a name in a test" {
+  let s = "x"
+  panic(s)                                          //~ E0417
+}
+
+pub fn no_argument() -> I32 {
+  panic()                                           //~ E0412
+}
+
+pub fn two_arguments() -> I32 {
+  panic("a", "b")                                   //~ E0412
+}
+
+pub fn three_arguments() -> I32 {
+  panic("a", "b", "c")                              //~ E0412
+}
+
+pub fn no_argument_in_a_branch(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    panic()                                         //~ E0412
+  }
+}
+
+pub fn two_arguments_in_an_arm(n: U32) -> I32 {
+  match n {
+    0 => 1,
+    _ => panic("a", "b"),                           //~ E0412
+  }
+}
+
+pub fn no_argument_in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 { panic() }             //~ E0412
+  f.(1)
+}
+
+pub fn no_argument_in_a_generic_body[T: Copy](x: T) -> T {
+  panic()                                           //~ E0412
+}
+
+test "two arguments in a test" {
+  panic("a", "b")                                   //~ E0412
+}

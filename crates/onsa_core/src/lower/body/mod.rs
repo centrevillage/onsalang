@@ -163,12 +163,16 @@ pub(crate) fn lower_fn_body(lw: &mut Lowerer, cx: &mut FnCx, body: ExprId) -> R<
     let AK::Block(b) = &cx.expr(body).kind else {
         return Err(internal(cx.expr(body).span, "function body is not a block"));
     };
-    let want = cx.ret != Ty::Unit;
-    lower_block(lw, cx, b, want)
+    let want = cx.ret.clone();
+    lower_block(lw, cx, b, &want)
 }
 
-/// Lower a block; `want_value` keeps the tail expression as the block value.
-fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want_value: bool) -> R<Block> {
+/// Lower a block of the type `want`; a type other than `()` keeps the tail
+/// expression as the block value. A block that wants one and ends in a
+/// diverging statement that Core does not see as one ([`Block::diverges`]: a
+/// `while` of §7) has a value no path reaches, so that Core has one form.
+fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want: &Ty) -> R<Block> {
+    let want_value = *want != Ty::Unit;
     let mut stmts = Vec::new();
     for &s in &b.stmts {
         lower_stmt(lw, cx, s, &mut stmts)?;
@@ -181,14 +185,24 @@ fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want_value: bool
         }
         None => None,
     };
-    Ok(Block { stmts, value })
+    let block = Block { stmts, value };
+    let last = b.stmts.last().filter(|&&s| want_value && cx.info.diverging.stmt(cx.ast, s));
+    match last {
+        Some(&s) if b.tail.is_none() && !block.diverges() => {
+            let msg = lw.msg("unreachable");
+            let panic = ExprKind::Panic { msg, origin: PanicOrigin::Panic };
+            let value = Some(Box::new(Expr::new(want.clone(), cx.ast.stmt(s).span, panic)));
+            Ok(Block { value, ..block })
+        }
+        _ => Ok(block),
+    }
 }
 
 /// A block expression in value position: its sema type decides whether it has a value.
 pub(super) fn lower_block_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Block> {
     let ty = lw.core_ty(cx.sema_ty(e)?, &cx.args, cx.expr(e).span)?;
     match &cx.expr(e).kind {
-        AK::Block(b) => lower_block(lw, cx, b, ty != Ty::Unit),
+        AK::Block(b) => lower_block(lw, cx, b, &ty),
         _ => {
             let v = lower_expr(lw, cx, e)?;
             if ty == Ty::Unit {
@@ -319,7 +333,7 @@ fn lower_expr_stmt(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, out: &mut Vec<Stm
             Ok(())
         }
         AK::Block(b) => {
-            let blk = lower_block(lw, cx, b, false)?;
+            let blk = lower_block(lw, cx, b, &Ty::Unit)?;
             out.extend(blk.stmts);
             Ok(())
         }

@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§7"]
+// fixes = 0
+
+// The kind of the binding of `let t = if c { p } else { … }` comes from the tails that do not diverge
+// (spec §5.4): a tail that is a `panic` or a `return` has no kind, so with a borrowed `Buf` `b` as the
+// only other tail the binding is a borrow (values/diverge_moves.onsa), and with a new value as the
+// other tail (`Buf.zeroed(2)`) it is owned, and each tail is then checked as the initial value of an
+// owner: the borrowed Affine value `b` is E0711 at the tail, and there is no candidate (`fixes = 0`).
+// The same in an arm and in a block. One error per function (P-01).
+
+pub fn a_new_value_makes_it_owned(c: Bool, b: Buf[F32]) -> U32 uses {Alloc} {
+  let t = if c { b } else { Buf.zeroed(2) }         //~ E0711
+  t.len()
+}
+
+pub fn a_new_value_in_an_arm_makes_it_owned(k: U32, b: Buf[F32]) -> U32 uses {Alloc} {
+  let t = match k {
+    0 => b,                                         //~ E0711
+    _ => Buf.zeroed(2),
+  }
+  t.len()
+}
+
+pub fn a_new_value_beside_a_panic_makes_it_owned(c: Bool, d: Bool, b: Buf[F32]) -> U32 uses {Alloc} {
+  let t = if c {
+    b                                               //~ E0711
+  } else {
+    if d {
+      Buf.zeroed(2)
+    } else {
+      panic("no")
+    }
+  }
+  t.len()
+}

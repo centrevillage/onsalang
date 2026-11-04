@@ -173,7 +173,12 @@ impl Walker<'_> {
                 let mut held = self.frame(Head::For(s));
                 self.holding(&mut held, |w| w.run_loop(r, s, (None, Some(*pat), *body)));
             }
-            StmtKind::While { cond, body } => self.run_loop(r, s, (Some(*cond), None, *body)),
+            StmtKind::While { cond, body } => {
+                self.run_loop(r, s, (Some(*cond), None, *body));
+                if self.info.diverging.forever(s) {
+                    r.cur = Delta::bottom();
+                }
+            }
             StmtKind::Break => r.exits.0.join(&replace(&mut r.cur, Delta::bottom())),
             StmtKind::Continue => r.exits.1.join(&replace(&mut r.cur, Delta::bottom())),
             StmtKind::Return(x) => {

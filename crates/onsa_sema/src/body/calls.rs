@@ -35,7 +35,7 @@ impl<'a> Checker<'a> {
             if let Some(PathRes::Item { entity, owner }) = self.names.paths.get(&callee).cloned() {
                 let name = self.last_name(callee);
                 return match entity {
-                    Entity::Builtin(Builtin::Panic) => Err(self.unsupported(name.span, Feature::Panic, &[])),
+                    Entity::Builtin(Builtin::Panic) => self.check_panic(e, &name, args, expected),
                     // `None`, which takes no value (what is neither a value
                     // nor a flow is the names stage's E0308): the branch
                     // of the builtin `None` until W5-03 makes it a variant.
@@ -47,11 +47,8 @@ impl<'a> Checker<'a> {
             if let ExprKind::Field { base, name } = &self.expr(callee).kind {
                 let (base, name) = (*base, name.clone());
                 // After a constructor of the prelude (`Some.x()`): an
-                // associated function that is none (`panic.x()` is E0200,
-                // S-713).
-                if let Some(PathRes::Item { entity: Entity::Builtin(b), .. }) = self.names.paths.get(&base)
-                    && *b != Builtin::Panic
-                {
+                // associated function that is none.
+                if let Some(PathRes::Item { entity: Entity::Builtin(_), .. }) = self.names.paths.get(&base) {
                     return Err(self.err(Code::E0413, name.span, format!("`{}` does not exist", self.src(cspan))));
                 }
                 let recv = self.check_expr(base, None)?;
@@ -88,6 +85,27 @@ impl<'a> Checker<'a> {
         self.info.targets.insert(e, Target::Value);
         self.check_args(args, &f.params, e)?;
         Ok(f.ret)
+    }
+
+    /// The call `panic(msg)` `e` (§9.2): it takes the type of its place (§7).
+    /// A `!` on it is the modes stage's E0714, as on a constructor.
+    fn check_panic(&mut self, e: ExprId, name: &Ident, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
+        // SPEC-GAP(S-888): in a flow body, a `panic` may be a constant
+        // expression of the clocks (E0419, §11.3) or take the clock around it.
+        if self.flow.is_some() {
+            return Err(self.unsupported(name.span, Feature::PanicInFlow, &[]));
+        }
+        let [arg] = args else {
+            let message = format!("this call takes 1 argument(s) but {} were given", args.len());
+            return Err(self.err(Code::E0412, self.expr(e).span, message));
+        };
+        if self.ast.panic_message(arg).is_none() {
+            let message = "the argument of `panic` is a string literal with no interpolation (§9.2)";
+            return Err(self.err(Code::E0417, arg.span, message));
+        }
+        self.check_expr(arg.expr, None)?;
+        self.info.targets.insert(e, Target::Prelude(Builtin::Panic));
+        Ok(expected.unwrap_or_else(|| self.fresh()))
     }
 
     #[allow(clippy::too_many_arguments)]

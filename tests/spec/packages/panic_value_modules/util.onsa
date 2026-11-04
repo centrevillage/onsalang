@@ -1,0 +1,25 @@
+pub struct Shaper {
+  curve: fn(I32) -> I32,
+}
+
+pub fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub const FUNCTION: fn(I32) -> I32 = panic          //~ E0308
+
+pub fn passed_in_the_module() -> I32 {
+  apply(panic, 1)                                   //~ E0308
+}
+
+pub fn in_a_struct_of_the_module() -> Shaper {
+  Shaper { curve: panic }                           //~ E0308
+}
+
+pub fn a_method_after_the_name() -> I32 {
+  panic.x()                                         //~ E0308
+}
+
+pub fn right() -> I32 {
+  panic("x")
+}

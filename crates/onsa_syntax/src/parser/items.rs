@@ -430,13 +430,16 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_enum(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Enum)?;
         self.expect(TokenKind::KwEnum)?;
-        self.parse_name("enum name")?;
+        let name = self.parse_name("enum name")?;
         self.parse_generics_opt()?;
         self.parse_derives_opt()?;
         let l = self.start(NodeKind::VariantList)?;
         self.e0003_unless_on_the_line(TokenKind::LBrace);
         self.expect(TokenKind::LBrace)?;
         self.with_nl(false, |p| {
+            if p.at(TokenKind::RBrace) {
+                return Err(p.error(Code::E0002, name.span, "an enum has at least one variant (§4.4)"));
+            }
             while !p.at(TokenKind::RBrace) {
                 let docs = p.element_docs();
                 let v = p.start(NodeKind::Variant)?;

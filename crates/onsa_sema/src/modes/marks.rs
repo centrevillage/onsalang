@@ -29,7 +29,7 @@ impl Walker<'_> {
             return Some(remove);
         }
         let mut tails = Vec::new();
-        self.ast.tails(x, &mut tails);
+        self.ast.tails(x, &self.info.diverging, &mut tails);
         let mut edits = remove.edits().to_vec();
         for tail in tails {
             let Tail::Value(v) = tail else { continue };

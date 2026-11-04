@@ -23,7 +23,7 @@ pub enum Builtin {
     Ok,
     /// `Err`
     Err,
-    /// `panic` (§9.2), E0200 where it is used until W5-08.
+    /// `panic` (§9.2).
     Panic,
     /// An operator trait or a standard trait (§6.3): its row of
     /// [`crate::def::TRAITS`]. The compiler's until std declares it (S-659).

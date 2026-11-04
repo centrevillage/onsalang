@@ -1,0 +1,144 @@
+// onsa.toml
+// [package]
+// name = "c_while_true"
+// edition = "2026"
+//
+// [export]
+// prefix = "cwt_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§13.4", "§14.2"]
+//
+// [[test.host]]
+// name = "steps_to_zero"
+// target = "host"
+// fn = "c_while_true.steps_to_zero"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { n = 1000 }, status = 0, result = 1000 },
+// ]
+//
+// [[test.host]]
+// name = "reach_seven"
+// target = "host"
+// fn = "c_while_true.reach_seven"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { n = 7 }, status = 0, result = 7 },
+//   { call = "fn", args = { n = 8 }, status = 1 },
+//   { call = "fn", args = { n = 3 }, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "spin_down has no value"
+// target = "host"
+// fn = "c_while_true.spin_down"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0 },
+//   { call = "fn", args = { n = 3 }, status = 0 },
+//   { call = "fn", args = { n = 3 }, status = 0 },
+// ]
+//
+// [[test.host]]
+// name = "ends_in_a_block"
+// target = "host"
+// fn = "c_while_true.ends_in_a_block"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 4 }, status = 0, result = 4 },
+// ]
+
+// A body that ends in `while true` (spec §7) is a body that diverges, so it gives a value of any type or
+// none, and the C of it must not end with a path that falls out of a function that has a result (a
+// `-Wreturn-type` error under `-Wall -Wextra -Werror`) or reaches a result that was not set. The function
+// is left by a `return` or a `panic` inside the loop; a panic is the status 1 of the call on a poison
+// target (§14.2) and the next call is not affected.
+//   steps_to_zero(n)    ends in `while true`, left by a `return` with the counter
+//   reach_seven(n)      ends in `while true`, left by a `return`, or by a `panic` past the value
+//   spin_down(n)        a function that returns no value, whose loop ends it and is left by a `return`
+//   ends_in_a_block(n)  the body ends in a block that ends in `while true`, left by a `return`
+
+@export
+pub fn steps_to_zero(n: U32) -> U32 {
+  var k: U32     = n
+  var steps: U32 = 0
+  while true {
+    if k == 0 {
+      return steps
+    }
+    k = k - 1
+    steps = steps + 1
+  }
+}
+
+@export
+pub fn reach_seven(n: U32) -> U32 {
+  var k: U32 = n
+  while true {
+    if k == 7 {
+      return k
+    }
+    if k > 7 {
+      panic("past")
+    }
+    k = k + 1
+  }
+}
+
+@export
+pub fn spin_down(n: U32) {
+  var k: U32 = n
+  while true {
+    if k == 0 {
+      return
+    }
+    k = k - 1
+  }
+}
+
+@export
+pub fn ends_in_a_block(n: U32) -> U32 {
+  var k: U32 = n
+  {
+    while true {
+      if k == 0 {
+        return n
+      }
+      k = k - 1
+    }
+  }
+}
+
+test "steps_to_zero: the values" {
+  assert steps_to_zero(0) == 0
+  assert steps_to_zero(5) == 5
+}
+
+test "reach_seven: the values" {
+  assert reach_seven(0) == 7
+  assert reach_seven(7) == 7
+  assert reach_seven(3) == 7
+}
+
+test "reach_seven(8) panics past the value" {
+  let _ = reach_seven(8) //~ PANIC "reach_seven(8) panics past the value"
+}
+
+test "spin_down gives no value and ends" {
+  spin_down(0)
+  spin_down(3)
+}
+
+test "ends_in_a_block: the values" {
+  assert ends_in_a_block(0) == 0
+  assert ends_in_a_block(4) == 4
+}

@@ -1416,7 +1416,6 @@ fn an_empty_pair_of_braces_is_written_with_nothing_inside() {
         case("a struct", &["struct S {", "}"], &["struct S {}"]),
         case("a struct, a space inside", &["pub struct S { }"], &["pub struct S {}"]),
         case("an impl", &["impl S {", "}"], &["impl S {}"]),
-        case("an enum", &["enum E {", "}"], &["enum E {}"]),
         body("a branch and its else", &["  if a < b {", "  } else {", "  }", "  a"], &["  if a < b {} else {}", "  a"]),
         body("a loop", &["  for x in a {", "  }", "  a"], &["  for x in a {}", "  a"]),
         body("an empty struct literal", &["  let s = S { }", "  s"], &["  let s = S {}", "  s"]),

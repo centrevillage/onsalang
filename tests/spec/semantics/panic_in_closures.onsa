@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§6.1"]
+
+// `panic(msg)` and a `while true` search in the body of a closure that has its return type written
+// (spec §7, §9.2): a diverging form stays in that body. The check takes them; a closure and a call
+// through a function value are lowered by W8-09, so they are apart from the cases that run today.
+
+fn through_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 {
+    if y > 0 {
+      y
+    } else {
+      panic("neg")
+    }
+  }
+  f.(x)
+}
+
+fn a_closure_that_only_panics() -> I32 {
+  let g = fn(y: I32) -> I32 {
+    panic("closure")
+  }
+  g.(1)
+}
+
+test "a closure with a panic branch gives the value of the other branch" {
+  assert through_a_closure(3) == 3
+}
+
+test "a closure with a panic branch fails when it is taken" {
+  let r = through_a_closure(0) //~ PANIC "a closure with a panic branch fails when it is taken"
+  assert r == 0
+}
+
+test "a closure that is only a panic fails when it is called" {
+  let r = a_closure_that_only_panics() //~ PANIC "a closure that is only a panic fails when it is called"
+  assert r == 0
+}
+
+fn a_closure_with_a_search_loop(want: U32) -> U32 {
+  let f = fn(w: U32) -> U32 {
+    var i: U32 = 0
+    while true {
+      if i == w {
+        return i + 100
+      }
+      i = i + 1
+    }
+  }
+  f.(want)
+}
+
+test "a search loop in a closure" {
+  assert a_closure_with_a_search_loop(2) == 102
+}

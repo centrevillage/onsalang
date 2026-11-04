@@ -88,7 +88,7 @@ impl Walker<'_> {
     /// on one: the first (they are of one type).
     pub(super) fn tail_class(&self, e: ExprId) -> Option<SecondClass> {
         let mut tails = Vec::new();
-        self.ast.tails(e, &mut tails);
+        self.ast.tails(e, &self.info.diverging, &mut tails);
         tails.into_iter().find_map(|t| match t {
             Tail::Value(v) => match self.ast.expr(v).kind {
                 ExprKind::Move(x) => self.second_class(x),

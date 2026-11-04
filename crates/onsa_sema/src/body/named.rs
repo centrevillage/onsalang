@@ -291,7 +291,6 @@ impl<'a> Checker<'a> {
                     self.info.targets.insert(e, Target::Prelude(b));
                     Ok(Some(fty))
                 }
-                Builtin::Panic => Err(self.unsupported(name.span, Feature::Panic, &[])),
                 _ => no_value(),
             },
             Entity::Module(_) => no_value(),

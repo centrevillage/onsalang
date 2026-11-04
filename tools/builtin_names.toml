@@ -285,6 +285,9 @@
 [same_spelling."crates/onsa_cli/src/lib.rs"]
 "core" = { count = 2, note = "onsa dump の引数 --core の名前（clap の conflicts_with。モジュール std.core とは別）" }
 
+[same_spelling."crates/onsa_core/src/ir.rs"]
+"panic" = { count = 1, note = "onsa test --json の failure の kind の値（§18.1、S-554。組込みの関数の呼び出しの判定ではない）" }
+
 [same_spelling."crates/onsa_core/src/verify.rs"]
 "block" = { count = 1, note = "検証器のメッセージの文脈の名前（クロックの block と同じ綴り）" }
 

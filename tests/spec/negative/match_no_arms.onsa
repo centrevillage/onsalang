@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.4"]
+
+// S-891 (spec §7): a `match` with no arm has nothing that covers the values, so it is E0501 for every
+// type of the scrutinee: an integer, a `Bool`, a type parameter, an `Option`, an enum that has
+// variants. It does not diverge (a type that has no value is not in the language, §4.4), so the error is
+// the E0501 and not a type error of the body. When the scrutinee is an error (a name that is not found),
+// no E0501 is added (S-692): the error of the name is the only one. One error per function (P-01).
+
+pub enum Color {
+  Red,
+  Green,
+}
+
+pub fn on_an_integer(n: I32) -> I32 {
+  match n {}                                        //~ E0501
+}
+
+pub fn on_a_bool(b: Bool) -> I32 {
+  match b {}                                        //~ E0501
+}
+
+pub fn on_a_type_parameter[T](x: T) -> I32 {
+  match x {}                                        //~ E0501
+}
+
+pub fn on_an_option(o: Option[I32]) -> I32 {
+  match o {}                                        //~ E0501
+}
+
+pub fn on_an_enum(c: Color) -> I32 {
+  match c {}                                        //~ E0501
+}
+
+pub fn on_a_tuple(t: (I32, Bool)) -> I32 {
+  match t {}                                        //~ E0501
+}
+
+pub fn as_a_statement(n: I32) {
+  match n {}                                        //~ E0501
+}
+
+pub fn as_a_value(n: I32) -> I32 {
+  let k = match n {}                                //~ E0501
+  k
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(n: I32) -> I32 {
+    match n {}                                      //~ E0501
+  }
+  f.(1)
+}
+
+test "in a test" {
+  let n: I32 = 1
+  match n {}                                        //~ E0501
+}
+
+pub fn on_a_name_that_is_not_found() -> I32 {
+  match missing {}                                  //~ E0302
+}

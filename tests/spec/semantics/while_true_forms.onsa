@@ -1,0 +1,305 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§6.1"]
+
+// The forms of `while true` that diverge (spec §7): a loop whose condition is the literal `true`
+// (also in parentheses, which `onsa fmt` takes away, §18.2, so the result of `fmt` does not change the
+// verdict) and that has no `break` leaving it. It can end a body that gives a value, and it can be a branch where a
+// value is needed. The function is left by a `return` or a `panic` in the loop. A `break` of an inner
+// loop leaves the inner loop only and does not count, and a `continue` does not leave the loop.
+// The blocks that end in such a form (`{ { return 1 } }`, `{ if c { return 1 } else { return 2 } }`,
+// `{ while true {} }`, a chain of `else if`, a parenthesized `match`) stand where a value is needed.
+// The loops that do not diverge (a `break`, a condition that is not the literal) are in
+// negative/while_true_not_diverging.onsa.
+
+fn first_index(xs: [U32; 4], want: U32) -> U32 {
+  var i: U32 = 0
+  while true {
+    if xs[i] == want {
+      return i
+    }
+    i = i + 1
+  }
+}
+
+fn first_index_in_parentheses(xs: [U32; 4], want: U32) -> U32 {
+  var i: U32 = 0
+  while (true) {
+    if xs[i] == want {
+      return i
+    }
+    i = i + 1
+  }
+}
+
+fn first_index_in_two_parentheses(xs: [U32; 4], want: U32) -> U32 {
+  var i: U32 = 0
+  while ((true)) {
+    if xs[i] == want {
+      return i
+    }
+    i = i + 1
+  }
+}
+
+fn leave_by_a_panic(xs: [U32; 4], want: U32) -> U32 {
+  var i: U32 = 0
+  while true {
+    if i == 4 {
+      panic("missing")
+    }
+    if xs[i] == want {
+      return i
+    }
+    i = i + 1
+  }
+}
+
+fn leave_by_a_return_without_a_value(n: U32) {
+  var k: U32 = n
+  while true {
+    if k == 0 {
+      return
+    }
+    k = k - 1
+  }
+}
+
+fn a_continue_does_not_leave(n: U32) -> U32 {
+  var k: U32 = 0
+  while true {
+    k = k + 1
+    if k < n {
+      continue
+    }
+    return k
+  }
+}
+
+fn a_break_of_an_inner_while(n: U32) -> U32 {
+  var k: U32 = 0
+  while true {
+    var j: U32 = 0
+    while j < 10 {
+      j = j + 1
+      if j == n {
+        break
+      }
+    }
+    k = k + j
+    if k > 5 {
+      return k
+    }
+  }
+}
+
+fn a_break_of_an_inner_for(n: U32) -> U32 {
+  var k: U32 = 0
+  while true {
+    for i in 0 ..< 10 {
+      if i == n {
+        break
+      }
+      k = k + 1
+    }
+    if k > 5 {
+      return k
+    }
+  }
+}
+
+fn a_break_of_an_inner_while_true(n: U32) -> U32 {
+  var k: U32 = 0
+  while true {
+    var j: U32 = 0
+    while true {
+      j = j + 1
+      if j == n {
+        break
+      }
+    }
+    k = k + j
+    if k > 5 {
+      return k
+    }
+  }
+}
+
+fn a_generic_search[T: Copy](xs: [T; 3], pick: U32) -> T {
+  var i: U32 = 0
+  while true {
+    if i == pick {
+      return xs[i]
+    }
+    i = i + 1
+  }
+}
+
+fn a_nested_block(c: Bool) -> I32 {
+  let k = if c {
+    5
+  } else {
+    { return 1 }
+  }
+  k
+}
+
+fn a_block_in_a_block(c: Bool) -> I32 {
+  let k = if c {
+    5
+  } else {
+    { { return 1 } }
+  }
+  k
+}
+
+fn an_if_in_a_block(c: Bool, d: Bool) -> I32 {
+  let k = if c {
+    5
+  } else {
+    if d {
+      return 1
+    } else {
+      return 2
+    }
+  }
+  k
+}
+
+fn a_chain_of_else_if(a: Bool, b: Bool, d: Bool) -> I32 {
+  let k = if a {
+    5
+  } else if b {
+    return 1
+  } else if d {
+    return 2
+  } else {
+    return 3
+  }
+  k
+}
+
+fn a_chain_in_a_block(a: Bool, b: Bool) -> I32 {
+  let k = if a {
+    5
+  } else {
+    if b {
+      return 1
+    } else if a {
+      return 2
+    } else {
+      return 3
+    }
+  }
+  k
+}
+
+fn a_while_true_in_a_block(c: Bool) -> I32 {
+  let k = if c {
+    5
+  } else {
+    while true {}
+  }
+  k
+}
+
+fn a_parenthesized_match(c: Bool, o: Option[I32]) -> I32 {
+  let k = if c {
+    5
+  } else {
+    (match o {
+      Some(_) => { return 1 },
+      None => { return 2 },
+    })
+  }
+  k
+}
+
+fn a_body_that_is_a_block_of_a_panic() -> I32 {
+  { panic("body") }
+}
+
+fn a_body_that_is_a_block_of_a_loop() -> I32 {
+  { while true {} }
+}
+
+test "the loop is left by a return" {
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  assert first_index(xs, 7) == 0
+  assert first_index(xs, 10) == 3
+}
+
+test "the loop in parentheses is left by a return" {
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  assert first_index_in_parentheses(xs, 9) == 2
+  assert first_index_in_two_parentheses(xs, 8) == 1
+}
+
+test "the loop that panics is left by a return when the value is found" {
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  assert leave_by_a_panic(xs, 8) == 1
+}
+
+test "the loop that panics is left by the panic when the value is missing" {
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  let r = leave_by_a_panic(xs, 1) //~ PANIC "the loop that panics is left by the panic when the value is missing"
+  assert r == 0
+}
+
+test "a function that returns no value is left by a return" {
+  leave_by_a_return_without_a_value(3)
+  leave_by_a_return_without_a_value(0)
+}
+
+test "a continue does not leave the loop" {
+  assert a_continue_does_not_leave(4) == 4
+}
+
+test "a break of an inner loop does not leave the outer loop" {
+  assert a_break_of_an_inner_while(3) == 6
+  assert a_break_of_an_inner_for(3) == 6
+  assert a_break_of_an_inner_while_true(3) == 6
+}
+
+test "a search loop of a generic function" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  assert a_generic_search(xs, 2) == 3.0
+}
+
+test "falling off the end of a search panics on the index" {
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  let r = first_index(xs, 1) //~ PANIC "falling off the end of a search panics on the index"
+  assert r == 0
+}
+
+test "a block that ends in a divergent form stands where a value is needed" {
+  assert a_nested_block(true) == 5
+  assert a_nested_block(false) == 1
+  assert a_block_in_a_block(true) == 5
+  assert a_block_in_a_block(false) == 1
+  assert an_if_in_a_block(true, true) == 5
+  assert an_if_in_a_block(false, true) == 1
+  assert an_if_in_a_block(false, false) == 2
+}
+
+test "a chain of else if that returns in every branch but the first" {
+  assert a_chain_of_else_if(true, true, true) == 5
+  assert a_chain_of_else_if(false, true, true) == 1
+  assert a_chain_of_else_if(false, false, true) == 2
+  assert a_chain_of_else_if(false, false, false) == 3
+  assert a_chain_in_a_block(true, true) == 5
+  assert a_chain_in_a_block(false, true) == 1
+}
+
+test "a loop or a parenthesized match as the branch of a value that is not taken" {
+  assert a_while_true_in_a_block(true) == 5
+  assert a_parenthesized_match(true, None) == 5
+  assert a_parenthesized_match(false, Some(3)) == 1
+  assert a_parenthesized_match(false, None) == 2
+}
+
+test "a body that is a block of a panic fails" {
+  let r = a_body_that_is_a_block_of_a_panic() //~ PANIC "a body that is a block of a panic fails"
+  assert r == 0
+}

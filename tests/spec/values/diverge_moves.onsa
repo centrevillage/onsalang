@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§9.2"]
+
+// How a path that diverges counts in the rules of the values (spec §5.2, §5.4, §7). Only the form that
+// the unit's rules decide is here; each body has no statement after a diverging path.
+// A value that is moved in one branch while the other branch leaves through a `panic` or a `while
+// true` is not used after the branches, so nothing is wrong: the variable is consumed on the only path
+// that goes on (§5.2: the moves are counted along the flow of control). A variable that no
+// branch touches is usable after all the branches. `let t = if c { p } else { panic("no") }` takes its
+// kind from the tails that do not diverge (§5.4): the tail `p` alone, so a borrowed `p` gives a
+// borrowed `t`, which an `rt` function can bind without an owner to drop it.
+
+pub fn eat(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn moved_in_a_branch_other_panics(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  let y = if c {
+    move a
+  } else {
+    panic("no")
+  }
+  y.len()
+}
+
+pub fn moved_in_a_branch_other_loops(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  let y = if c {
+    move a
+  } else {
+    while true {}
+  }
+  y.len()
+}
+
+pub fn moved_in_the_else_branch(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  let y = if c {
+    panic("no")
+  } else {
+    move a
+  }
+  y.len()
+}
+
+pub fn moved_in_an_arm_other_panics(k: U32, move a: Buf[F32]) -> U32 uses {Alloc} {
+  let y = match k {
+    0 => move a,
+    _ => panic("no"),
+  }
+  y.len()
+}
+
+pub fn moved_as_an_argument(c: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  eat(if c {
+    move a
+  } else {
+    panic("no")
+  })
+}
+
+pub fn moved_in_a_nested_branch(c: Bool, d: Bool, move a: Buf[F32]) -> U32 uses {Alloc} {
+  let y = if c {
+    if d {
+      move a
+    } else {
+      panic("d")
+    }
+  } else {
+    panic("c")
+  }
+  y.len()
+}
+
+pub fn another_variable_is_used_after(c: Bool, a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  let y = if c {
+    move b
+  } else {
+    panic("no")
+  }
+  a.len() + y.len()
+}
+
+pub fn a_variable_no_branch_touches(c: Bool, a: Buf[F32]) -> U32 {
+  if c {
+    panic("stop")
+  }
+  a.len()
+}
+
+pub fn a_variable_no_arm_touches(k: U32, a: Buf[F32]) -> U32 {
+  let n = match k {
+    0 => 1,
+    _ => panic("no"),
+  }
+  a.len() + n
+}
+
+pub fn a_variable_read_in_the_branch(c: Bool, a: Buf[F32]) -> U32 {
+  let n = if c {
+    a.len()
+  } else {
+    panic("no")
+  }
+  a.len() + n
+}
+
+pub rt fn a_borrowed_tail_is_a_borrow(c: Bool, b: Buf[F32]) -> U32 {
+  let t = if c {
+    b
+  } else {
+    panic("no")
+  }
+  t.len()
+}
+
+pub rt fn a_borrowed_tail_of_an_arm_is_a_borrow(k: U32, b: Buf[F32]) -> U32 {
+  let t = match k {
+    0 => b,
+    _ => panic("no"),
+  }
+  t.len()
+}
+
+pub rt fn the_loop_arm_does_not_count_either(c: Bool, b: Buf[F32]) -> U32 {
+  let t = if c {
+    b
+  } else {
+    while true {}
+  }
+  t.len()
+}

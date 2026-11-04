@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§7"]
+
+// S-40 (spec §6.1): when the type of the value of a body does not match the return type, E0401 is at the
+// last expression of the body; without an expression, at the last statement; without a statement,
+// at the body. It is not at the signature. The last statement can be an assignment, a `let`, a loop
+// that does not diverge (`while false`, a `for`), or an `if` without an `else`. The same in a method,
+// a generic function, an `rt` function and a closure. Every statement that is checked is on one line, so
+// the line is the line of the statement. One error per function (P-01).
+
+pub fn last_expression(x: I32) -> I32 {
+  let y = x + 1
+  y > 0                                             //~ E0401
+}
+
+pub fn last_expression_alone() -> I32 {
+  true                                              //~ E0401
+}
+
+pub fn last_expression_after_a_loop(n: U32) -> U32 {
+  var k: U32 = 0
+  while k < n { k = k + 1 }
+  k == n                                            //~ E0401
+}
+
+pub fn last_statement_is_an_assignment() -> U32 {
+  var i: U32 = 0
+  i = 1                                             //~ E0401
+}
+
+pub fn last_statement_is_a_let() -> I32 {
+  let x = 1                                         //~ E0401
+}
+
+pub fn last_statement_is_while_false() -> U32 {
+  while false { }                                   //~ E0401
+}
+
+pub fn last_statement_is_while_false_after_a_statement(n: U32) -> U32 {
+  let m = n + 1
+  while m < 0 { }                                   //~ E0401
+}
+
+pub fn last_statement_is_a_for() -> U32 {
+  for i in 0 ..< 3 { }                              //~ E0401
+}
+
+pub fn last_statement_is_an_if_without_else(c: Bool) -> I32 {
+  if c { return 1 }                                 //~ E0401
+}
+
+pub fn no_statement() -> I32 { }                    //~ E0401
+
+pub fn in_a_generic_body[T: Copy](x: T) -> T {
+  let y = x
+  1                                                 //~ E0401
+}
+
+pub rt fn in_an_rt_body(x: U32) -> U32 {
+  var i: U32 = 0
+  i = x                                             //~ E0401
+}
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn in_a_method(self) -> I32 {
+    let y = self.x
+    y > 0                                           //~ E0401
+  }
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    x > 0                                           //~ E0401
+  }
+  f.(1)
+}
+
+pub fn in_a_closure_that_ends_in_a_statement() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    var i: I32 = 0
+    i = x                                           //~ E0401
+  }
+  f.(1)
+}
+
+// The bodies that give their value are right.
+pub fn right_last_expression(x: I32) -> I32 {
+  let y = x + 1
+  y
+}
+
+pub fn right_end_in_a_return(c: Bool) -> I32 {
+  if c {
+    return 1
+  }
+  2
+}

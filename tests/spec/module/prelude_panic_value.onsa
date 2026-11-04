@@ -1,11 +1,19 @@
 // onsa.toml
 // [test]
-// spec = ["§15.1", "§9.2", "§18.1"]
+// spec = ["§15.1", "§9.2"]
 
-// `panic` is in the prelude (§15.1), so its name is found with no `use`; calling it is not built yet
-// (W5-08), so until then it is E0200 as any feature that the spec has and this version does not
-// build (§18.1), not E0302.
+// `panic` is in the prelude (§15.1), so its name is found with no `use`, and the call `panic("x")`
+// is right where a value of any type is needed (§9.2, §7). The name as a value is E0308
+// (panic_value_forms.onsa).
 
 pub fn boom() -> I32 {
-  panic("x")   //~ E0200
+  panic("x")
+}
+
+pub fn in_a_branch(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    panic("x")
+  }
 }

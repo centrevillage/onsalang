@@ -1,0 +1,197 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§15.1", "§6.1"]
+
+// `panic(msg)` (spec §9.2, §15.1) does not return, so it stands where a value of any type is needed
+// (§7): as an arm of a `match`, as a branch of an `if` that gives a value, as the whole value of a
+// body, and as a statement (`if c { panic("a") }`, where the other path goes on). It is evaluated only
+// when its path is taken. The positions here: a `let` from a branch, the end of a
+// body, the whole body, a statement, a generic body, a method, an `rt` function, and a `test` body.
+// The arm of a `match` is in match_panic.onsa, and the forms that the lowering does not take yet
+// are in panic_arms_scalar.onsa (W8-06) and panic_in_closures.onsa (W8-09). A panic that happens in a `test` fails that test
+// (the PANIC marker is on the line of the failing call, or of the `panic` that the body itself
+// holds). Every body has the panic where nothing follows it that would be unreachable.
+
+fn let_from_a_branch(c: Bool) -> I32 {
+  let k = if c {
+    1
+  } else {
+    panic("x")
+  }
+  k + 1
+}
+
+fn at_the_end(c: Bool) -> I32 {
+  if c {
+    7
+  } else {
+    panic("end")
+  }
+}
+
+fn never() -> I32 {
+  panic("never")
+}
+
+fn guard_then_go_on(n: U32) -> U32 {
+  if n == 0 {
+    panic("zero")
+  }
+  n - 1
+}
+
+fn as_a_statement(n: U32) {
+  if n == 0 {
+    panic("zero")
+  }
+}
+
+fn choose[T: Copy](c: Bool, a: T) -> T {
+  if c {
+    a
+  } else {
+    panic("no")
+  }
+}
+
+fn never_of[T]() -> T {
+  panic("never")
+}
+
+pub struct Gate {
+  open: Bool,
+}
+
+impl Gate {
+  pub fn pass(self, v: I32) -> I32 {
+    if self.open {
+      v
+    } else {
+      panic("closed")
+    }
+  }
+}
+
+pub rt fn in_an_rt_function(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    panic("rt")
+  }
+}
+
+fn nested(o: Option[I32], c: Bool) -> I32 {
+  match o {
+    Some(v) => {
+      if c {
+        v
+      } else {
+        panic("c")
+      }
+    },
+    None => {
+      if c {
+        0
+      } else {
+        panic("none")
+      }
+    },
+  }
+}
+
+test "a panic branch of a let that is not taken is not evaluated" {
+  assert let_from_a_branch(true) == 2
+}
+
+test "the panic branch of a let fails when it is taken" {
+  let r = let_from_a_branch(false) //~ PANIC "the panic branch of a let fails when it is taken"
+  assert r == 0
+}
+
+test "a panic at the end of a body that is not taken is not evaluated" {
+  assert at_the_end(true) == 7
+}
+
+test "a panic at the end of a body fails when it is taken" {
+  let r = at_the_end(false) //~ PANIC "a panic at the end of a body fails when it is taken"
+  assert r == 0
+}
+
+test "a body that is only a panic fails" {
+  let r = never() //~ PANIC "a body that is only a panic fails"
+  assert r == 0
+}
+
+test "a panic statement whose condition is false goes on" {
+  assert guard_then_go_on(5) == 4
+  as_a_statement(1)
+}
+
+test "a panic statement fails when it is taken, in the middle of a body" {
+  let r = guard_then_go_on(0) //~ PANIC "a panic statement fails when it is taken, in the middle of a body"
+  assert r == 0
+}
+
+test "a panic statement fails when it is taken, as the end of a body" {
+  as_a_statement(0) //~ PANIC "a panic statement fails when it is taken, as the end of a body"
+}
+
+test "a generic body with a panic branch gives the value of the other branch" {
+  assert choose(true, 5) == 5
+  assert choose(true, true)
+}
+
+test "a generic body with a panic branch fails when it is taken" {
+  let r = choose(false, 5) //~ PANIC "a generic body with a panic branch fails when it is taken"
+  assert r == 0
+}
+
+test "a generic body that is only a panic fails for the type that is asked for" {
+  let r: I32 = never_of() //~ PANIC "a generic body that is only a panic fails for the type that is asked for"
+  assert r == 0
+}
+
+test "a method with a panic branch gives the value of the other branch" {
+  let g = Gate { open: true }
+  assert g.pass(4) == 4
+}
+
+test "a method with a panic branch fails when it is taken" {
+  let g = Gate { open: false }
+  let r = g.pass(4) //~ PANIC "a method with a panic branch fails when it is taken"
+  assert r == 0
+}
+
+test "an rt function with a panic branch gives the value of the other branch" {
+  assert in_an_rt_function(true) == 1
+}
+
+test "an rt function with a panic branch fails when it is taken" {
+  let r = in_an_rt_function(false) //~ PANIC "an rt function with a panic branch fails when it is taken"
+  assert r == 0
+}
+
+test "a panic in a nested branch of an arm that is not taken is not evaluated" {
+  assert nested(Some(3), true) == 3
+  assert nested(None, true) == 0
+}
+
+test "a panic in a nested branch of an arm fails when it is taken" {
+  let r = nested(Some(3), false) //~ PANIC "a panic in a nested branch of an arm fails when it is taken"
+  assert r == 0
+}
+
+test "a panic branch of a let in a test that is not taken is not evaluated" {
+  let flag = true
+  let k = if flag {
+    4
+  } else {
+    panic("no")
+  }
+  assert k == 4
+}
+
+test "a panic as the whole body of a test fails that test" {
+  panic("boom") //~ PANIC "a panic as the whole body of a test fails that test"
+}

@@ -382,10 +382,8 @@ test \"passes\" {
     assert_eq!(str_of(record(&doc, "m", "passes"), "status"), "ok");
 }
 
-/// Spec §9.2 and §18.1: `panic(msg)` has `msg` as its `message`. (`panic` is in the prelude
-/// per §15.1, and this version does not have it yet, E0302; W5-08.)
+/// Spec §9.2 and §18.1: `panic(msg)` has `msg` as its `message`.
 #[test]
-#[ignore = "W5-08"]
 fn the_message_of_a_panic_call_is_its_argument() {
     let src = "pub fn stop() -> I32 {
   panic(\"stop here\")
@@ -411,6 +409,72 @@ test \"through a call\" {
     assert_eq!(str_of(f, "message"), "stop here");
     assert_eq!(span_of(&f["span"]), span("m.onsa", 2, 3, 2, 21));
     assert_call_starts(f, &[("m.onsa", 10, 11)]);
+}
+
+/// Spec §18.1 (S-554): `kind` is `"assert"` for an `assert` and `assert_near`, `"panic"` for what
+/// else panics, in the body of the test (`calls` empty) and in what it calls.
+#[test]
+fn the_kind_of_a_failure_tells_a_check_from_a_panic() {
+    let src = "use std.dsp.test.{assert_near}
+
+fn inner(x: I32) -> I32 {
+  assert x == 0
+  x
+}
+
+fn stop() -> I32 {
+  panic(\"stop\")
+}
+
+test \"assert\" {
+  assert 1 == 2
+}
+
+test \"assert in a call\" {
+  let n = inner(1)
+  assert n == 1
+}
+
+test \"assert_near\" {
+  assert_near(1.0, 2.0, 0.5)
+}
+
+test \"panic\" {
+  panic(\"boom\")
+}
+
+test \"panic in a call\" {
+  let n = stop()
+  assert n == 0
+}
+
+test \"builtin check\" {
+  let xs: [I32; 2] = [1, 2]
+  let i: U32 = 2
+  assert xs[i] == 0
+}
+
+test \"unwrap\" {
+  let o: Option[I32] = None
+  assert o.unwrap() == 0
+}
+";
+    let (d, out, doc) = pkg_run("failure_kind", &[("m.onsa", src)]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    for (name, kind) in [
+        ("assert", "assert"),
+        ("assert in a call", "assert"),
+        ("assert_near", "assert"),
+        ("panic", "panic"),
+        ("panic in a call", "panic"),
+        ("builtin check", "panic"),
+        ("unwrap", "panic"),
+    ] {
+        let f = failure_of(record(&doc, "m", name));
+        assert_eq!(str_of(f, "kind"), kind, "{name}: {f}");
+    }
+    let text = run(d.root(), &["test", &d.arg()]);
+    assert!(!text.stdout.contains("kind"), "the text output has no kind: {}", text.stdout);
 }
 
 // ---------------------------------------------------------------- --filter in the document

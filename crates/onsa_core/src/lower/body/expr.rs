@@ -114,7 +114,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             ExprKind::Struct { ty: id, fields: out }
         }
         AK::Block(b) => {
-            let blk = lower_block(lw, cx, b, ty != Ty::Unit)?;
+            let blk = lower_block(lw, cx, b, &ty)?;
             if ty == Ty::Unit && blk.stmts.is_empty() { ExprKind::Lit(Lit::Unit) } else { ExprKind::Block(blk) }
         }
         AK::If { cond, then, else_, .. } => {

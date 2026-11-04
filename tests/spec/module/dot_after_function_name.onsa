@@ -2,20 +2,20 @@
 // [test]
 // spec = ["§15.1", "§4.4", "§6.1", "§18.1"]
 
-// S-713 (f): the name of a function has a value, so a `.` after it is a field or a method of that
+// S-713 (f), S-887: the name of a function has a value, so a `.` after it is a field or a method of that
 // value, which the type stage reads (§15.1): a function value has none, and the name of a function
 // of the user is E0413 (`g.y`, `g.y()`, the same as `p.norm` of §6.1). `panic` is a function of the
-// prelude (§15.1) that has no value in this version (W5-08): its name in a value place is E0200
-// (§18.1), also with a field after it (`panic.x`); the method form is in dot_after_panic_method.onsa.
-// One error per unit (§18.1), so each form is in its own function; the places (a branch, a
-// closure, a match arm, a `test`) give the same codes.
+// prelude (§15.1) that is not a value (§6.1: there is no type of divergence, §7): its name in a value
+// place is E0308, also with a field after it (`panic.x`); the method form is in
+// dot_after_panic_method.onsa. One error per unit (§18.1), so each form is in its own function; the
+// places (a branch, a closure, a match arm, a `test`) give the same codes.
 
 fn g(x: I32) -> I32 {
   x
 }
 
 pub fn panic_field() -> I32 {
-  panic.x                                           //~ E0200
+  panic.x                                           //~ E0308
 }
 
 pub fn user_function_field() -> I32 {

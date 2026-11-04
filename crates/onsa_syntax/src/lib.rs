@@ -38,8 +38,6 @@ mod parser_tests;
 mod scan;
 mod starts;
 pub mod tails;
-#[cfg(test)]
-mod tails_tests;
 pub mod test_name;
 pub mod token;
 pub mod units;

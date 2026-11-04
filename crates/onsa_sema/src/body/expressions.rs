@@ -400,10 +400,17 @@ impl<'a> Checker<'a> {
             }
             match b.tail {
                 Some(t) => self.check_expr(t, expected),
+                // A block that ends in a diverging statement takes any type
+                // (§7; a trailing `return e` is allowed, §6.1).
+                None if self.info.diverging.block(self.ast, b) => Ok(expected.unwrap_or_else(|| self.fresh())),
                 None => {
-                    // A block that ends in `return` / `break` / `continue` diverges: it
-                    // takes any type (a trailing `return e` is allowed, §6.1).
-                    if self.ast.block_exits(b) { Ok(self.fresh()) } else { Ok(self.unit()) }
+                    let unit = self.unit();
+                    // A value of the wrong type is reported at the last
+                    // statement, which gives no value (§6.1, S-40).
+                    if let (Some(&last), Some(expected)) = (b.stmts.last(), expected) {
+                        self.unify_at(self.ast.stmt(last).span, unit, expected)?;
+                    }
+                    Ok(unit)
                 }
             }
         })();

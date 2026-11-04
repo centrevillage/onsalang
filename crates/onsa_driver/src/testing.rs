@@ -55,8 +55,8 @@ pub struct TestFailure {
     /// The positions of the calls from the panic back to the body of the
     /// test, innermost first; empty when `span` is in the body of the test.
     pub calls: Vec<Span>,
-    /// A failed `assert` or another panic (X9-36); neither the text output
-    /// nor `--json` shows it.
+    /// A failed `assert` or another panic (X9-36): the `kind` of `--json`
+    /// (§18.1, S-554); the text output does not show it.
     pub origin: onsa_core::PanicOrigin,
 }
 
@@ -140,6 +140,7 @@ impl TestReport {
         }
         #[derive(Serialize)]
         struct Failure<'a> {
+            kind: &'static str,
             message: &'a str,
             span: onsa_diag::JsonSpan<'a>,
             calls: Vec<Call<'a>>,
@@ -159,6 +160,7 @@ impl TestReport {
                     TestStatus::Failed => "failed",
                 },
                 failure: t.failure.as_ref().map(|f| Failure {
+                    kind: f.origin.kind(),
                     message: &f.message,
                     span: onsa_diag::json_span(sources, f.span),
                     calls: f.calls.iter().map(|&s| Call { span: onsa_diag::json_span(sources, s) }).collect(),

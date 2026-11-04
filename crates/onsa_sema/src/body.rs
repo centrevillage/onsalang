@@ -186,6 +186,8 @@ pub struct BodyInfo {
     /// the `-` is a part of the literal's value (§4.7, S-184, S-227). The lowering
     /// folds exactly these (R-03); every other `-` negates a value.
     pub neg_literals: HashSet<ExprId>,
+    /// What diverges (§7), as the names stage recorded it.
+    pub diverging: onsa_syntax::tails::Diverging,
     /// The rows of the heads of the bindings (§5.4), and the marks of the
     /// static values, the literals that need no drop and the owned aggregate
     /// literals with their first element, settled with the states of the
@@ -314,7 +316,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         // Nor is a body whose unit failed in the names stage (§18.1, S-78: in
         // its signature too), or whose names walk stopped at an error it
         // reported (its record ends there).
-        let names = a.names.remove(&id).unwrap_or_default();
+        let mut names = a.names.remove(&id).unwrap_or_default();
         if names.reported || a.failures.skips(id, Stage::Types) {
             let body = BodyInfo::default();
             match a.def(id).kind {
@@ -329,7 +331,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         // moved to the body below.
         let held = a.read_held.contains(&id);
         let (locals, origins) = locals_of(a, &names);
-        let mut info = BodyInfo { locals, ..Default::default() };
+        let diverging = std::mem::take(&mut names.diverging);
+        let mut info = BodyInfo { locals, diverging, ..Default::default() };
         info.captures = names.captures.iter().map(|(e, bs)| (*e, bs.iter().map(|b| LocalId(b.0)).collect())).collect();
         let typed = vec![false; info.locals.len()];
         let mut ck = Checker {

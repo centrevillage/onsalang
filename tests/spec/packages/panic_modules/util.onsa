@@ -1,0 +1,44 @@
+pub fn stop_below(n: U32, limit: U32) -> U32 {
+  if n < limit {
+    panic("below")
+  }
+  n
+}
+
+pub struct Counter {
+  n: U32,
+}
+
+impl Counter {
+  pub fn new(n: U32) -> Counter {
+    Counter { n: n }
+  }
+
+  pub fn checked(self) -> U32 {
+    if self.n == 0 {
+      panic("zero")
+    } else {
+      self.n
+    }
+  }
+}
+
+pub rt fn rt_stop(n: U32) -> U32 {
+  if n == 0 {
+    panic("zero")
+  }
+  n
+}
+
+pub fn find(xs: [U32; 3], want: U32) -> U32 {
+  var i: U32 = 0
+  while true {
+    if i == 3 {
+      panic("missing")
+    }
+    if xs[i] == want {
+      return i
+    }
+    i = i + 1
+  }
+}

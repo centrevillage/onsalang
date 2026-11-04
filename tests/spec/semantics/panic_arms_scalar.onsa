@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2"]
+
+// `panic(msg)` and a block that ends in a diverging form (spec §7, §9.2) as an arm of a `match` on a
+// number or a `Bool`. The check takes them; the value of such a `match` is lowered by W8-06, so they
+// are apart from panic_positions.onsa, match_panic.onsa and while_true_forms.onsa, which run today.
+
+fn classify(n: U32) -> I32 {
+  match n {
+    0 => 10,
+    1 => 20,
+    _ => panic("unreachable"),
+  }
+}
+
+test "a panic arm that is not taken is not evaluated" {
+  assert classify(0) == 10
+  assert classify(1) == 20
+}
+
+test "the panic arm of a wildcard fails for an unlisted value" {
+  let r = classify(7) //~ PANIC "the panic arm of a wildcard fails for an unlisted value"
+  assert r == 0
+}
+
+fn a_block_as_an_arm(n: U32) -> I32 {
+  match n {
+    0 => 10,
+    _ => { { panic("arm") } },
+  }
+}
+
+fn a_loop_as_an_arm(n: U32) -> I32 {
+  match n {
+    0 => 10,
+    _ => { while true {} },
+  }
+}
+
+test "an arm that is a block of a panic or of a loop is not evaluated when it is not taken" {
+  assert a_block_as_an_arm(0) == 10
+  assert a_loop_as_an_arm(0) == 10
+}
+
+test "a block of a panic as the arm of a match fails when it is taken" {
+  let r = a_block_as_an_arm(1) //~ PANIC "a block of a panic as the arm of a match fails when it is taken"
+  assert r == 0
+}
+
+fn pick_pair(c: Bool) -> (I32, Bool) {
+  match c {
+    true => (1, false),
+    false => panic("no"),
+  }
+}
+
+test "a panic arm stands where a tuple is needed" {
+  let p = pick_pair(true)
+  assert p.0 == 1
+  assert !p.1
+}
+
+test "reaching the panic arm of a tuple fails the test" {
+  let p = pick_pair(false) //~ PANIC "reaching the panic arm of a tuple fails the test"
+  assert p.0 == 0
+}

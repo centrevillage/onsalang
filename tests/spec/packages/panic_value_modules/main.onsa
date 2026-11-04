@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§9.2"]
+// fixes = 0
+
+// S-887: `panic` is not a value in a module either (spec §6.1, §15.1): the name in a value place is
+// E0308 whether the function it is passed to is of this module, imported by a `use`, or reached by the
+// path of the module. The same in `util.onsa`. There is no candidate (`fixes = 0`). One error per
+// function (P-01).
+use util
+use util.{apply}
+
+pub fn passed_to_an_imported_function() -> I32 {
+  apply(panic, 1)                                   //~ E0308
+}
+
+pub fn passed_to_a_function_by_the_path() -> I32 {
+  util.apply(panic, 1)                              //~ E0308
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 { apply(panic, x) }     //~ E0308
+  f.(1)
+}
+
+pub fn bound_by_a_let() {
+  let p = panic                                     //~ E0308
+}
+
+pub fn a_field_after_the_name() -> I32 {
+  panic.x                                           //~ E0308
+}
+
+pub fn right() -> I32 {
+  apply(fn(x: I32) -> I32 { panic("x") }, 1)
+}

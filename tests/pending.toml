@@ -458,20 +458,6 @@ note = "無名関数の中の ? と return の脱出（§6.1、§9.1、S-192）�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/match_panic.onsa"
-reasons = ["S-40"]
-until = "W5-08"
-note = "panic の値と呼び出しは W5-08 まで E0200（名前は prelude にある、§9.2・§15.1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/while_true.onsa"
-reasons = ["R-52", "S-40"]
-until = "W5-08"
-note = "while true の発散を末尾に置けない（E0401、§7）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/try_map_err.onsa"
 reasons = ["S-71", "S-872"]
 until = "W8-09"
@@ -998,13 +984,6 @@ until = "W8-06"
 note = "整数のリテラルの腕が 300 個の match の実行。リテラルの腕の値の match が E0200（平らな列挙子の switch でない match の値、§7）。受理の確かめは wide_match.onsa"
 
 # --- W3-03/t: 診断の単位と回復（2026-10-08）。W3-03/i が通したもの以外
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_match_panic_arm.onsa"
-reasons = ["S-40"]
-until = "W5-08"
-note = "panic の値と呼び出しは W5-08 まで E0200（名前は prelude にある、§9.2・§15.1）。W5-08 の後、値を返す match の最後の腕が panic の C が R-145 の警告に落ちないかを確かめる"
 # --- W3-17: 修正候補の約束（§18.1、S-236）を破る候補。候補ごとに載せ、直す作業が外す（2026-10-08）
 
 # --- W3-17: ファズの修正候補の「同じ箇所」の近似が見つけた型を示す保存した入力（2026-10-08）
@@ -1555,3 +1534,17 @@ target = "tests/spec/negative/map_err_effects_outer_row.onsa"
 reasons = ["R-359"]
 until = "W6-03"
 note = "外側の関数が uses {Alloc} だと、純粋な関数型の引数に渡した無名関数の本体の確保が E0601 にならない（§8.1、前から）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/panic_arms_scalar.onsa"
+reasons = ["S-40", "R-52"]
+until = "W8-06"
+note = "数と Bool の見出しの値の match の panic の腕が降下で E0200（ValueMatch。W8-06）。panic_positions.onsa などから分けた（W5-08 U1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/panic_in_closures.onsa"
+reasons = ["S-40", "R-52"]
+until = "W8-09"
+note = "無名関数の本体の panic と while true が降下で E0200（Closures・CallsThroughFnValues。W8-09）。panic_positions.onsa などから分けた（W5-08 U1）"

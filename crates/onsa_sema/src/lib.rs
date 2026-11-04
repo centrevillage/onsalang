@@ -68,6 +68,8 @@ pub(crate) fn fixed_region(text: &str, d: &onsa_diag::Diagnostic, k: usize) -> S
     let end = d.span.end as usize + after.len() - text.len();
     after[d.span.start as usize..end].to_string()
 }
+#[cfg(test)]
+mod tails_tests;
 pub mod ty;
 #[cfg(test)]
 mod ty_tests;

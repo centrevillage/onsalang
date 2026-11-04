@@ -35,6 +35,16 @@ pub enum PanicOrigin {
     Panic,
 }
 
+impl PanicOrigin {
+    /// The `kind` of a failure of `onsa test --json` (§18.1, S-554).
+    pub fn kind(self) -> &'static str {
+        match self {
+            PanicOrigin::Assert => "assert",
+            PanicOrigin::Panic => "panic",
+        }
+    }
+}
+
 /// A concrete type. Structs and enums refer to `Module::types`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Ty {

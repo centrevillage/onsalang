@@ -158,6 +158,12 @@ pub(super) fn lower_call(
                 ExprKind::Variant { ty: id, tag: index, fields: cargs.into_iter().map(|a| a.expr).collect() },
             ))
         }
+        Target::Prelude(Builtin::Panic) => {
+            let text = args.first().and_then(|a| cx.ast.panic_message(a));
+            let Some(text) = text else { return Err(internal(span, "panic without its message")) };
+            let msg = lw.msg(&text);
+            Ok(Expr::new(ty, span, ExprKind::Panic { msg, origin: PanicOrigin::Panic }))
+        }
         Target::Prelude(b) => {
             let Ty::Enum(id) = &ty else { return Err(internal(span, "prelude call type")) };
             let id = *id;

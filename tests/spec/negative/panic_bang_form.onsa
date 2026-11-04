@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§9.2", "§5.2", "§2.6"]
+
+// `panic!("x")` (spec §5.2): `!` marks the call of a method that changes its receiver (`inout self`), and
+// `panic` is a function, so the form is E0714 (the form of a macro in another language is not in
+// Onsa; `panic("x")` is the call, §9.2). The error is found where the call is written: a branch, an arm,
+// a closure, a generic body, a method, an `rt` function and a test. One error per function (P-01).
+// The candidate of E0714 takes the `!` away; this case does not count candidates.
+
+pub fn in_a_body() -> I32 {
+  panic!("x")                                       //~ E0714
+}
+
+pub fn in_a_branch(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    panic!("x")                                     //~ E0714
+  }
+}
+
+pub fn in_an_arm(n: U32) -> I32 {
+  match n {
+    0 => 1,
+    _ => panic!("x"),                               //~ E0714
+  }
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 { panic!("x") }         //~ E0714
+  f.(1)
+}
+
+pub fn in_a_generic_body[T: Copy](x: T) -> T {
+  panic!("x")                                       //~ E0714
+}
+
+pub rt fn in_an_rt_function() -> I32 {
+  panic!("x")                                       //~ E0714
+}
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn in_a_method(self) -> I32 {
+    panic!("x")                                     //~ E0714
+  }
+}
+
+test "in a test" {
+  panic!("x")                                       //~ E0714
+}

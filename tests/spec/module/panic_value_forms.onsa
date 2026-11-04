@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§9.2", "§7", "§18.1"]
+// fixes = 0
+
+// S-887: `panic` is not a value (spec §6.1). There is no type of divergence (§7) and the argument is a
+// string literal (§9.2), so no function type would fit it; the name of `panic` in a value place is
+// E0308 (as `Point.norm` and `Fs.read`, §6.1), whatever the form: bound by a `let`, passed as an
+// argument, compared, a field of a struct literal, returned, an element of an array, the initial value
+// of a `const`. A `.` after the name is E0308 too (dot_after_panic_method.onsa and
+// dot_after_function_name.onsa). There is no candidate (`fixes = 0`): the note shows the call
+// `panic("…")` and a closure with a written return type. The places (a branch, an argument, a closure,
+// a match arm, a generic function, a method, a `test`, a `const`) give the same code. One error per
+// function (P-01), each form in its own function. The call `panic("…")` is right
+// (semantics/panic_positions.onsa), and so is a closure that panics with its return type written.
+
+pub struct Shaper {
+  curve: fn(I32) -> I32,
+}
+
+pub struct P {
+  x: I32,
+}
+
+fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+const FUNCTION: fn(I32) -> I32 = panic              //~ E0308
+
+pub fn bound_by_a_let() {
+  let p = panic                                     //~ E0308
+}
+
+pub fn bound_by_a_var() {
+  var p = panic                                     //~ E0308
+}
+
+pub fn bound_with_a_type() {
+  let p: fn(I32) -> I32 = panic                     //~ E0308
+}
+
+pub fn passed_as_an_argument() -> I32 {
+  apply(panic, 1)                                   //~ E0308
+}
+
+pub fn passed_to_a_generic_function() -> I32 {
+  let p = id(panic)                                 //~ E0308
+  1
+}
+
+pub fn compared() -> Bool {
+  panic == panic                                    //~ E0308
+}
+
+pub fn a_field_of_a_struct_literal() -> Shaper {
+  Shaper { curve: panic }                           //~ E0308
+}
+
+pub fn returned() -> fn(I32) -> I32 {
+  panic                                             //~ E0308
+}
+
+pub fn returned_by_return() -> fn(I32) -> I32 {
+  return panic                                      //~ E0308
+}
+
+pub fn an_element_of_an_array() -> I32 {
+  let fs = [panic, panic]                           //~ E0308
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    apply(panic, 1)                                 //~ E0308
+  }
+}
+
+pub fn in_a_closure() -> I32 {
+  let f = fn(x: I32) -> I32 { apply(panic, x) }     //~ E0308
+  f.(1)
+}
+
+pub fn in_a_match_arm(n: U32) -> I32 {
+  match n {
+    0 => 0,
+    _ => apply(panic, 1),                           //~ E0308
+  }
+}
+
+pub fn in_a_generic_function[T: Num](x: T) -> T {
+  let p = panic                                     //~ E0308
+  x
+}
+
+impl P {
+  pub fn in_a_method(self) -> I32 {
+    apply(panic, self.x)                            //~ E0308
+  }
+}
+
+test "in a test" {
+  let p = panic                                     //~ E0308
+}
+
+// A closure with its return type written is the way to a function value that panics.
+pub fn a_closure_that_panics() -> I32 {
+  apply(fn(x: I32) -> I32 { panic("x") }, 1)
+}

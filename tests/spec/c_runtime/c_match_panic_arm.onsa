@@ -53,6 +53,17 @@
 // ]
 //
 // [[test.host]]
+// name = "middle_arm_panics"
+// target = "host"
+// fn = "c_match_panic_arm.middle_arm_panics"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 1 }, status = 1 },
+//   { call = "fn", args = { sel = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { sel = 9 }, status = 0, result = 3 },
+// ]
+//
+// [[test.host]]
 // name = "unwrap_or_panic on a reset target"
 // target = "fw"
 // fn = "c_match_panic_arm.unwrap_or_panic"
@@ -69,6 +80,7 @@
 // the status 1 of the call on a poison target (§14.2) and the next call is unaffected.
 //   unwrap_or_panic(sel, v)   Some(v) -> v, None -> a panic
 //   pick_or_panic(c, v)       an `if` whose else branch is a panic
+//   middle_arm_panics(sel)    a `match` whose middle arm is a panic, so the arms after it are tested
 
 @export
 pub fn unwrap_or_panic(sel: U32, v: U32) -> U32 {
@@ -93,14 +105,50 @@ pub fn pick_or_panic(c: Bool, v: I32) -> I32 {
   r
 }
 
+enum Sel {
+  Zero,
+  One,
+  Other,
+}
+
+fn sel_of(n: U32) -> Sel {
+  if n == 0 {
+    Sel.Zero
+  } else if n == 1 {
+    Sel.One
+  } else {
+    Sel.Other
+  }
+}
+
+@export
+pub fn middle_arm_panics(sel: U32) -> U32 {
+  let r = match sel_of(sel) {
+    Sel.Zero => 1,
+    Sel.One => panic("one"),
+    Sel.Other => 3,
+  }
+  r
+}
+
+test "middle_arm_panics: the values" {
+  assert middle_arm_panics(0) == 1
+  assert middle_arm_panics(2) == 3
+  assert middle_arm_panics(9) == 3
+}
+
+test "middle_arm_panics(1) panics" {
+  let _ = middle_arm_panics(1) //~ PANIC "middle_arm_panics(1) panics"
+}
+
 test "unwrap_or_panic: the values" {
   assert unwrap_or_panic(0, 42) == 42
   assert unwrap_or_panic(0, 0) == 0
   assert unwrap_or_panic(0, 7) == 7
 }
 
-test "unwrap_or_panic(1, 42) panics" {   //~ TESTFAIL "unwrap_or_panic(1, 42) panics"
-  let _ = unwrap_or_panic(1, 42)
+test "unwrap_or_panic(1, 42) panics" {
+  let _ = unwrap_or_panic(1, 42) //~ PANIC "unwrap_or_panic(1, 42) panics"
 }
 
 test "pick_or_panic: the values" {
@@ -108,6 +156,6 @@ test "pick_or_panic: the values" {
   assert pick_or_panic(true, -1) == 0
 }
 
-test "pick_or_panic(false, 1) panics" {   //~ TESTFAIL "pick_or_panic(false, 1) panics"
-  let _ = pick_or_panic(false, 1)
+test "pick_or_panic(false, 1) panics" {
+  let _ = pick_or_panic(false, 1) //~ PANIC "pick_or_panic(false, 1) panics"
 }

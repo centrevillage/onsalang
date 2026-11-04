@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§7", "§2.5"]
+// fixes = 0
+
+// S-891 (spec §4.4, §7): an `enum` has at least one variant, so an `enum` with no variant, with or
+// without type parameters and trait list, is E0002 (as the empty parentheses of a variant, §2.5). There
+// is no candidate: nothing says what the variant is (`fixes = 0`). A type that has no value is not
+// written in the language. An enum with one variant is right.
+
+pub enum Empty {}                                   //~ E0002
+
+enum Generic[T] {}                                  //~ E0002
+
+pub enum TwoParameters[T, U] {}                     //~ E0002
+
+enum WithTraits: PartialEq + Eq {}                  //~ E0002
+
+pub enum GenericWithTraits[T]: PartialEq {}         //~ E0002
+
+enum Spaced {   }                                   //~ E0002
+
+pub enum OneVariant {
+  Only,
+}
+
+enum OneVariantWithAnElement[T] {
+  Only(T),
+}

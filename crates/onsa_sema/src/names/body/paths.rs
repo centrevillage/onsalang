@@ -47,6 +47,9 @@ pub(super) enum Place {
     TypeOrValue,
 }
 
+/// The function `panic` of the prelude (§9.2).
+pub(super) const PANIC: Entity = Entity::Builtin(Builtin::Panic);
+
 /// Whether the entity is a value at the place of a value: a function (of
 /// an `extern` block too, a value of the error type), a constant, a variant,
 /// a constructor of the prelude or `panic` ([`NameKind::is_value`]). The
@@ -118,6 +121,12 @@ impl<'a> Walker<'a> {
             Err(ResolveError::NotFound { .. }) => return (Vec::new(), Some(self.not_found(head))),
             Err(err) => return (Vec::new(), Some(Fail::Report(err.into_diagnostic()))),
         };
+        // `panic` is called, and is no value (§6.1, S-887).
+        if first == PANIC
+            && !(segs.len() == 1 && matches!(place, Place::Callee(_) | Place::DotCallee | Place::Instance(_)))
+        {
+            return (Vec::new(), Some(Fail::Report(Self::panic_as_a_value(segs))));
+        }
         let typed = a.typed_members(first, owner, segs[1..].iter().copied(), self.m);
         let (err, owner, of) = (typed.err, typed.owner, typed.at);
         let mut out = Vec::new();
@@ -183,6 +192,18 @@ impl<'a> Walker<'a> {
             out.clear();
         }
         (out, fail)
+    }
+
+    /// E0308 for `panic` at the place of a value, or with a name after it
+    /// (`segs`, §6.1): it has no type to be a value of.
+    fn panic_as_a_value(segs: &[&Ident]) -> Diagnostic {
+        let message = "`panic` is no value: it can only be called";
+        Diagnostic::new(Stage::Names, Code::E0308, span_of(segs), message)
+            .with_found(segs.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join("."))
+            .with_rule(
+                "call it as `panic(\"…\")`; a function value that panics is an anonymous function \
+                 with its result type written, `fn(x: I32) -> I32 { panic(\"…\") }` (§6.1)",
+            )
     }
 
     /// The error of a path that did not resolve (`err`): none for what the

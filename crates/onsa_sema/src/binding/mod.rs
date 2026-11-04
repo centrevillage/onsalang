@@ -234,7 +234,7 @@ impl<'a> Settle<'a> {
     /// only from a borrow (S-41).
     fn head(&self, e: ExprId, any_place: bool) -> HeadRow {
         let mut tails = Vec::new();
-        self.ast.tails(e, &mut tails);
+        self.ast.tails(e, &self.info.diverging, &mut tails);
         let (mut sources, mut no_drop, mut borrows) = (Vec::new(), true, false);
         for tail in tails {
             match tail {

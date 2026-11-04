@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§6.1"]
+
+// A loop that ends a body that gives a value diverges only when its condition is the literal `true`
+// (in parentheses too) and no `break` leaves it (spec §7). Otherwise the loop is an ordinary statement
+// of the type `()`, so the body does not give its value, and the error is E0401 at the last statement
+// (§6.1): a `break` that leaves the loop (in a branch of an `if`, in an arm of a `match`, in a block,
+// in the loop of the parentheses), a condition that is a constant (`while ALWAYS`) or an expression
+// (`while 1 == 1`), and `while false`. A `break` of an inner loop does not count, so the loops that do
+// diverge are in semantics/while_true_forms.onsa. One error per function (P-01); each loop is on one
+// line, so the line of the statement is the line of the loop.
+
+const ALWAYS: Bool = true
+
+pub fn break_in_a_branch(c: Bool) -> I32 {
+  while true { if c { break } }                     //~ E0401
+}
+
+pub fn break_in_an_arm(o: Option[I32]) -> I32 {
+  while true { match o { Some(_) => { break }, None => {} } } //~ E0401
+}
+
+pub fn break_in_a_block(c: Bool) -> I32 {
+  while true { { break } }                          //~ E0401
+}
+
+pub fn break_in_the_loop_of_parentheses(c: Bool) -> I32 {
+  while (true) { if c { break } }                   //~ E0401
+}
+
+pub fn break_in_an_else_branch(c: Bool) -> I32 {
+  while true { if c { return 1 } else { break } }   //~ E0401
+}
+
+pub fn break_of_the_outer_loop_with_an_inner_loop(c: Bool) -> I32 {
+  while true { if c { for i in 0 ..< 3 { continue } } else { break } } //~ E0401
+}
+
+pub fn constant_condition() -> I32 {
+  while ALWAYS { return 1 }                         //~ E0401
+}
+
+pub fn expression_condition() -> I32 {
+  while 1 == 1 { return 1 }                         //~ E0401
+}
+
+pub fn negated_condition() -> I32 {
+  while !false { return 1 }                         //~ E0401
+}
+
+pub fn false_condition() -> I32 {
+  while false { return 1 }                          //~ E0401
+}
+
+pub fn a_loop_that_ends_a_closure() -> I32 {
+  let f = fn(c: Bool) -> I32 {
+    while true { if c { break } }                   //~ E0401
+  }
+  f.(true)
+}
+
+pub fn a_loop_that_ends_a_generic_body[T: Copy](x: T, c: Bool) -> T {
+  while true { if c { break } }                     //~ E0401
+}
+
+pub struct S {
+  n: I32,
+}
+
+impl S {
+  pub fn spin(self, c: Bool) -> I32 {
+    while true { if c { break } }                   //~ E0401
+  }
+}
+
+// A loop that leaves through a `return` and has no `break` is right (semantics/while_true_forms.onsa).
+pub fn right(c: Bool) -> I32 {
+  while true { if c { return 1 } }
+}
