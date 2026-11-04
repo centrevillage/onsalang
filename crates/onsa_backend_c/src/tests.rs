@@ -87,6 +87,16 @@ fn literals_round_trip() {
     assert_eq!(c_string("a\"b\n"), "\"a\\\"b\\n\"");
 }
 
+/// R-366: no two `?` in a row reach C (`??/` is a trigraph under `-std=c11`),
+/// and one alone stays as it is.
+#[test]
+fn a_string_holds_no_trigraph() {
+    assert_eq!(c_string("a?b"), "\"a?b\"");
+    assert_eq!(c_string("a ??/ b"), "\"a ?\\?/ b\"");
+    assert_eq!(c_string("???"), "\"?\\?\\?\"");
+    assert_eq!(c_string("? ?"), "\"? ?\"");
+}
+
 #[test]
 fn f32_ops_are_wrapped_and_f64_are_not() {
     let f32t = Ty::Float(FloatKind::F32);

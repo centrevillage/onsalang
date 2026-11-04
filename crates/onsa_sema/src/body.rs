@@ -241,6 +241,10 @@ pub(crate) struct Checker<'a> {
     self_ty: Option<TyId>,
     pub(crate) infer: Infer,
     pub(crate) frames: Vec<Frame>,
+    /// The blocks being checked, innermost last: the node, the block and the
+    /// item it is at ([`Checker::open_block`]; what stops at a statement
+    /// reads what follows it here, §7).
+    pub(crate) blocks: Vec<(ExprId, &'a Block, usize)>,
     pub(crate) info: BodyInfo,
     pub(crate) failed: bool,
     /// Flow mode (T3-1, `flow.rs`): set while checking a flow body.
@@ -346,6 +350,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             self_ty,
             infer: Infer::default(),
             frames: Vec::new(),
+            blocks: Vec::new(),
             info,
             failed: false,
             deferred: Vec::new(),
@@ -592,9 +597,17 @@ impl<'a> Checker<'a> {
 
     /// Unify, reporting E0401 at `span` on failure.
     pub(crate) fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
+        match self.mismatch_at(span, actual, expected) {
+            Some(d) => Err(self.diag(d)),
+            None => Ok(()),
+        }
+    }
+
+    /// Unify, giving the E0401 at `span` on failure, for the caller to report.
+    pub(crate) fn mismatch_at(&mut self, span: Span, actual: TyId, expected: TyId) -> Option<Diagnostic> {
         let cause = self.cause(span, Some(expected));
         let Err(mismatch) = self.infer.unify(&mut self.a.types, actual, expected, &cause) else {
-            return Ok(());
+            return None;
         };
         let (a, e) = (self.display(actual), self.display(expected));
         let (found, wanted) = (self.infer.lit_of(&self.a.types, actual), self.infer.lit_of(&self.a.types, expected));
@@ -604,7 +617,7 @@ impl<'a> Checker<'a> {
             // A literal in a part of the types (`fn({integer})`): neither is one.
             _ => format!("expected `{e}`, found `{a}`"),
         };
-        Err(self.err(Code::E0401, span, text))
+        Some(Diagnostic::new(Stage::Types, Code::E0401, span, text).with_found(self.src(span)))
     }
 
     /// The cause of a binding made while unifying at `span` with `expected`.

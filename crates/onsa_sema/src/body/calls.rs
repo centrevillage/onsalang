@@ -100,7 +100,10 @@ impl<'a> Checker<'a> {
             return Err(self.err(Code::E0412, self.expr(e).span, message));
         };
         if self.ast.panic_message(arg).is_none() {
-            let message = "the argument of `panic` is a string literal with no interpolation (§9.2)";
+            let message = match arg.mode {
+                Mode::Borrow => "the argument of `panic` is a string literal with no interpolation (§9.2)",
+                _ => "the argument of `panic` has no mark: take off the `move` or `inout` (§9.2)",
+            };
             return Err(self.err(Code::E0417, arg.span, message));
         }
         self.check_expr(arg.expr, None)?;

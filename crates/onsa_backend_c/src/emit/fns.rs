@@ -563,6 +563,18 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         Ok(())
     }
 
+    /// A value of type `ty` where the code never comes (after a `panic` or
+    /// a `return`): C still wants one.
+    fn never_read(&mut self, ty: &Ty) -> String {
+        if let Some(z) = zero_scalar(ty) {
+            return z;
+        }
+        let (t, tn) = self.temp(ty);
+        self.line(&format!("{tn} {t};"));
+        self.line(&format!("memset(&{t}, 0, sizeof {t});"));
+        t
+    }
+
     fn panic_stmt(&mut self, m: onsa_core::MsgId, span: Span) {
         let msg = self.cx.msg(&self.cx.m.messages[m.0 as usize]);
         let loc = self.loc(span);
@@ -905,18 +917,13 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 }
                 match &b.value {
                     Some(v) if !b.diverges() => self.expr(v),
-                    _ => Ok("((onsa_unit){0})".into()),
+                    // `{ return e }` in value position (R-365), or a block of `()`.
+                    _ => Ok(self.never_read(&e.ty)),
                 }
             }
             ExprKind::Panic { msg: m, .. } => {
                 self.panic_stmt(*m, e.span);
-                if let Some(z) = zero_scalar(&e.ty) {
-                    return Ok(z);
-                }
-                let (t, tn) = self.temp(&e.ty);
-                self.line(&format!("{tn} {t};"));
-                self.line(&format!("memset(&{t}, 0, sizeof {t});"));
-                Ok(t)
+                Ok(self.never_read(&e.ty))
             }
         }
     }

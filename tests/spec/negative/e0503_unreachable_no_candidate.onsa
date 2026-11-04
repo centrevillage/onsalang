@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1", "§4.7"]
+// fixes = 0
+
+// S-876, S-268, S-291 (§7, §18.1): the E0503 of the unreachable items without a candidate (`fixes = 0` says that no diagnostic of
+// the file has one). The candidate deletes the unreachable items, and "到達しない文を消す候補は、当てた後に関数の終わりの検査が誤りを出す形
+// （消す文だけが前の文の型を決めていた形。`let o = None` の後の `return 1` と `let z: Option[I32] = o`）では出さない（§18.1）". Three groups:
+// - the type of an earlier statement was decided only by the deleted one (`let o = None`, `var acc = 0.0`, `let xs = []`): without
+//   the deleted statement the check at the end of the function is E0406 or E0405, in the stage of the E0503;
+// - deleting the items makes the outer expression or statement unreachable, which is a new E0503 (the block in the `let` that
+//   then diverges as a whole, a block in an argument and in an operand, a block in a block that then diverges, the `if` and the `match` whose branches then all diverge);
+// - the deleted items hold a `break` that leaves the outer loop, which then has no `break` and diverges, so that the statement after
+//   the loop is unreachable.
+// The error is on the first unreachable item in all of them (the end of the function is checked after it, so the E0406 and the
+// E0405 are not reported). One error per function (P-01).
+
+fn f(n: I32) -> I32 {
+  n
+}
+
+fn g() {
+}
+
+// ------------------------------------------------------------------------------ the deleted statement decided a type
+
+pub fn none_decided_by_the_deleted_statement() -> I32 {
+  let o = None
+  return 1
+  let z: Option[I32] = o                            //~ E0503
+}
+
+pub fn none_decided_in_the_middle(x: I32) -> I32 {
+  let o = None
+  return x
+  let z: Option[I32] = o                            //~ E0503
+  x + 1
+}
+
+pub fn float_literal_decided_by_the_deleted_statement(x: F32) -> F32 {
+  var acc = 0.0
+  return x
+  acc = acc + x                                     //~ E0503
+}
+
+pub fn empty_array_decided_by_the_deleted_statement() -> I32 {
+  let xs = []
+  return 1
+  let ys: [I32; 0] = xs                             //~ E0503
+}
+
+pub fn type_decided_in_a_branch(c: Bool) -> I32 {
+  let o = None
+  if c {
+    return 1
+    let z: Option[I32] = o                          //~ E0503
+  }
+  2
+}
+
+pub fn type_decided_by_the_deleted_statement_after_a_while_true() {
+  let o = None
+  while true {}
+  let z: Option[I32] = o                            //~ E0503
+}
+
+// ------------------------------------------------------------------------------ deleting makes the outer part unreachable
+
+pub fn block_in_a_let() -> I32 {
+  let k = {
+    return 1
+    2                                               //~ E0503
+  }
+  k
+}
+
+pub fn block_in_an_argument() -> I32 {
+  f({
+    return 1
+    2                                               //~ E0503
+  })
+}
+
+pub fn block_in_an_operand(x: I32) -> I32 {
+  x + ({
+    return 1
+    2                                               //~ E0503
+  })
+}
+
+pub fn block_in_a_block() -> I32 {
+  {
+    {
+      return 1
+      g()                                           //~ E0503
+    }
+    g()
+  }
+  2
+}
+
+pub fn if_whose_two_branches_then_diverge(c: Bool, x: I32) -> I32 {
+  if c {
+    return 1
+    g()                                             //~ E0503
+  } else {
+    return 3
+  }
+  x
+}
+
+pub fn if_in_a_let_then_diverges(c: Bool, x: I32) -> I32 {
+  let k = if c {
+    return 1
+    x                                               //~ E0503
+  } else {
+    return 3
+  }
+  x
+}
+
+pub fn match_whose_arms_then_diverge(o: Option[I32], x: I32) -> I32 {
+  match o {
+    Some(v) => {
+      return v
+      g()                                           //~ E0503
+    },
+    None => { return 0 },
+  }
+  x
+}
+
+// ------------------------------------------------------------------------------ a break of the outer loop is deleted
+
+pub fn break_after_a_return(x: I32) -> I32 {
+  while true {
+    return 1
+    break                                           //~ E0503
+  }
+  x
+}
+
+pub fn break_in_a_deleted_branch(c: Bool, x: I32) -> I32 {
+  while true {
+    return 1
+    if c {                                          //~ E0503
+      break
+    }
+  }
+  x
+}
+
+pub fn break_after_a_panic(x: I32) -> I32 {
+  while true {
+    panic("x")
+    break                                           //~ E0503
+  }
+  x
+}
+
+pub fn break_in_a_deleted_arm(o: Option[I32], x: I32) -> I32 {
+  while true {
+    return 1
+    match o {                                       //~ E0503
+      Some(_) => { break },
+      None => {},
+    }
+  }
+  x
+}
+
+pub fn break_after_a_return_in_a_parenthesized_while_true(x: I32) -> I32 {
+  while (true) {
+    return 1
+    break                                           //~ E0503
+  }
+  x
+}

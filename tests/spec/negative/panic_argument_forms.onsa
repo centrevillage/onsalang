@@ -123,3 +123,11 @@ pub fn no_argument_in_a_generic_body[T: Copy](x: T) -> T {
 test "two arguments in a test" {
   panic("a", "b")                                   //~ E0412
 }
+
+pub fn a_move_mark() -> I32 {
+  panic(move "a")                                   //~ E0417
+}
+
+pub fn an_inout_mark() -> I32 {
+  panic(inout "a")                                  //~ E0417
+}

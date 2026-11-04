@@ -1,0 +1,22 @@
+// The functions of this module that are unreachable after a `return` (main.onsa calls them).
+
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+pub fn first(x: I32) -> I32 {
+  return x
+  x + 1                                             //~ E0503
+}
+
+pub fn fine(x: I32) -> I32 {
+  x * 2
+}
+
+impl Pair {
+  pub fn sum(self) -> I32 {
+    return self.a
+    self.a + self.b                                 //~ E0503
+  }
+}

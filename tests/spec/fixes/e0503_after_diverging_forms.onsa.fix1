@@ -1,0 +1,239 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-128 (§7): "発散する文（発散するものそのもの、発散する文で終わるブロック、全ての枝が発散する `if`（`else` を持つもの）と
+// `match`、上の `while true`）の後に、同じブロックの文や最後の式があると E0503（到達しない）。判定は文の構造だけで行う".
+// Each form of the diverging statement (`return e`, `break`, `continue`, `panic(...)`, a block that ends with one of
+// them and a block that ends with a block, an `if` and a `match` whose branches and arms all diverge, a `while true`
+// without a `break`), followed by a statement and by the last expression of the block. The value of the condition of
+// an `if` is not read (`if true { return 1 } else { return 2 }` diverges as `if c { … }` does). The error is on the first
+// unreachable item (the statement, or the last expression), and "修正候補は到達しない文を全て消す形" is the one
+// candidate of each. A `return` without a value is in e0503_valueless_return_*.onsa (its next line has a second
+// candidate there). One error per function (P-01); the unreachable item stands on one line.
+
+fn g() {
+}
+
+// ------------------------------------------------------------------------------ return
+
+pub fn after_return_statement(x: I32) -> I32 {
+  return x
+  
+}
+
+pub fn after_return_last_expression(x: I32) -> I32 {
+  return x
+                                               //~ E0503
+}
+
+pub fn after_return_in_a_unit_function(x: I32) {
+  if x > 0 {
+    return
+  } else {
+    return
+  }
+                                                 //~ E0503
+}
+
+// ------------------------------------------------------------------------------ break and continue
+
+pub fn after_break_statement(n: I32) -> I32 {
+  var i = 0
+  while i < n {
+    i = i + 1
+    break
+                                           //~ E0503
+  }
+  i
+}
+
+pub fn after_break_last_expression(n: I32) {
+  var i = 0
+  while i < n {
+    i = i + 1
+    break
+                                                 //~ E0503
+  }
+}
+
+pub fn after_continue_statement(n: I32) -> I32 {
+  var i = 0
+  while i < n {
+    i = i + 1
+    continue
+                                           //~ E0503
+  }
+  i
+}
+
+pub fn after_continue_last_expression(n: I32) {
+  var i = 0
+  while i < n {
+    i = i + 1
+    continue
+                                                 //~ E0503
+  }
+}
+
+// ------------------------------------------------------------------------------ panic
+
+pub fn after_panic_statement(x: I32) -> I32 {
+  panic("x")
+  
+}
+
+pub fn after_panic_last_expression(x: I32) -> I32 {
+  panic("x")
+                                               //~ E0503
+}
+
+// ------------------------------------------------------------------------------ a block that ends with one
+
+pub fn after_block_with_return_statement(x: I32) -> I32 {
+  {
+    let y = x * 2
+    return y
+  }
+  
+}
+
+pub fn after_block_with_return_last_expression(x: I32) -> I32 {
+  { return x }
+                                               //~ E0503
+}
+
+pub fn after_block_with_break(n: I32) {
+  var i = 0
+  while i < n {
+    { break }
+                                           //~ E0503
+  }
+}
+
+pub fn after_block_with_panic(x: I32) -> I32 {
+  { panic("x") }
+                                               //~ E0503
+}
+
+pub fn after_block_in_a_block_statement(x: I32) -> I32 {
+  { { return x } }
+  
+}
+
+pub fn after_block_in_a_block_last_expression(x: I32) -> I32 {
+  { { return x } }
+                                               //~ E0503
+}
+
+pub fn after_block_with_while_true(x: I32) -> I32 {
+  { while true {} }
+                                               //~ E0503
+}
+
+// ------------------------------------------------------------------------------ an if whose branches all diverge
+
+pub fn after_if_returns_statement(c: Bool, x: I32) -> I32 {
+  if c {
+    return 1
+  } else {
+    return 2
+  }
+  
+}
+
+pub fn after_if_returns_last_expression(c: Bool, x: I32) -> I32 {
+  if c { return 1 } else { return 2 }
+                                               //~ E0503
+}
+
+pub fn after_if_with_a_panic_and_a_return(c: Bool, x: I32) -> I32 {
+  if c { panic("x") } else { return 2 }
+                                               //~ E0503
+}
+
+pub fn after_else_if_chain(c: Bool, d: Bool, x: I32) -> I32 {
+  if c {
+    return 1
+  } else if d {
+    return 2
+  } else {
+    return 3
+  }
+                                               //~ E0503
+}
+
+pub fn after_if_with_a_diverging_block_in_a_branch(c: Bool, x: I32) -> I32 {
+  if c { { return 1 } } else { panic("x") }
+                                               //~ E0503
+}
+
+pub fn after_if_with_a_true_condition(x: I32) -> I32 {
+  if true { return 1 } else { return 2 }
+                                               //~ E0503
+}
+
+pub fn after_if_with_a_false_condition(x: I32) -> I32 {
+  if false { return 1 } else { return 2 }
+                                               //~ E0503
+}
+
+// ------------------------------------------------------------------------------ a match whose arms all diverge
+
+pub fn after_match_returns_statement(o: Option[I32], x: I32) -> I32 {
+  match o {
+    Some(v) => { return v },
+    None => { return 0 },
+  }
+  
+}
+
+pub fn after_match_returns_last_expression(o: Option[I32], x: I32) -> I32 {
+  match o {
+    Some(v) => { return v },
+    None => { return 0 },
+  }
+                                               //~ E0503
+}
+
+pub fn after_match_with_a_panic_arm(o: Option[I32], x: I32) -> I32 {
+  match o {
+    Some(v) => { return v },
+    None => panic("x"),
+  }
+                                               //~ E0503
+}
+
+// ------------------------------------------------------------------------------ a while true
+
+pub fn after_while_true_statement(x: I32) -> I32 {
+  while true {}
+  
+}
+
+pub fn after_while_true_last_expression(x: I32) -> I32 {
+  while true {}
+                                               //~ E0503
+}
+
+pub fn after_while_true_that_returns(x: I32) -> I32 {
+  while true {
+    return x
+  }
+                                               //~ E0503
+}
+
+pub fn after_parenthesized_while_true(x: I32) -> I32 {
+  while (true) {}
+                                               //~ E0503
+}
+
+pub fn after_while_true_with_a_break_in_an_inner_loop(x: I32) -> I32 {
+  while true {
+    while true {
+      break
+    }
+  }
+                                               //~ E0503
+}

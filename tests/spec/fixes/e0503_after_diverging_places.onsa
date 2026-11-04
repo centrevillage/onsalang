@@ -1,0 +1,235 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.5", "§6.1", "§6.2", "§18.1"]
+// fixes = 1
+
+// S-128 (§7): the unreachable item after a diverging statement in the places where a block stands: the body of a
+// `while` and of a `for`, a branch of an `if`, an arm of a `match`, an anonymous function, a `test`, an `rt` function,
+// a generic function, a method, a block in a block (the block holds the last item of its function, so that the deletion of the
+// items does not make the statement after the block unreachable: that is in negative/e0503_unreachable_no_candidate.onsa), and
+// the several unreachable items of one block. The error is on
+// the first unreachable item (the statement, or the last expression), and the one candidate of each deletes all the
+// unreachable items ("修正候補は到達しない文を全て消す形"), so that the function with several of them has one
+// candidate that removes them all, not one for each. A `return` without a value is in e0503_valueless_return_*.onsa.
+// One error per function (P-01); the unreachable item stands on one line.
+
+fn g() {
+}
+
+pub struct P {
+  x: I32,
+}
+
+// ------------------------------------------------------------------------------ loops
+
+pub fn in_a_while_body(n: I32) -> I32 {
+  var i = 0
+  while i < n {
+    return i
+    i = i + 1                                       //~ E0503
+  }
+  i
+}
+
+pub fn in_a_for_body(n: I32) -> I32 {
+  for i in 0 ..< n {
+    return i
+    g()                                             //~ E0503
+  }
+  n
+}
+
+pub fn in_a_for_body_after_a_break(n: I32) -> I32 {
+  var s = 0
+  for i in 0 ..< n {
+    if i > 3 {
+      break
+      s = s + 100                                   //~ E0503
+    }
+    s = s + i
+  }
+  s
+}
+
+pub fn in_a_loop_in_a_loop(n: I32) -> I32 {
+  var s = 0
+  for i in 0 ..< n {
+    for j in 0 ..< n {
+      s = s + j
+      continue
+      g()                                           //~ E0503
+    }
+    s = s + i
+  }
+  s
+}
+
+// ------------------------------------------------------------------------------ branches and arms
+
+pub fn in_an_if_branch(c: Bool, x: I32) -> I32 {
+  if c {
+    return x
+    g()                                             //~ E0503
+  }
+  x + 1
+}
+
+pub fn in_an_else_branch(c: Bool, x: I32) -> I32 {
+  if c {
+    g()
+  } else {
+    return x
+    g()                                             //~ E0503
+  }
+  x + 1
+}
+
+pub fn in_a_match_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => {
+      return v
+      v + 1                                         //~ E0503
+    },
+    None => 0,
+  }
+}
+
+pub fn in_the_last_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => {
+      panic("x")
+      0                                             //~ E0503
+    },
+  }
+}
+
+pub fn in_a_nested_branch(c: Bool, d: Bool, x: I32) -> I32 {
+  if c {
+    if d {
+      return 1
+      g()                                           //~ E0503
+    }
+  }
+  x
+}
+
+pub fn in_a_branch_of_a_value(c: Bool, x: I32) -> I32 {
+  let y = if c {
+    return x
+    x + 1                                           //~ E0503
+  } else {
+    2
+  }
+  y
+}
+
+// ------------------------------------------------------------------------------ a block in a block
+
+pub fn in_a_block(x: I32) -> I32 {
+  {
+    return x
+    x + 1                                           //~ E0503
+  }
+}
+
+pub fn in_a_block_in_a_block(x: I32) -> I32 {
+  {
+    {
+      return x
+      x + 1                                         //~ E0503
+    }
+  }
+}
+
+pub fn in_a_block_before_a_statement(c: Bool, x: I32) -> I32 {
+  if c {
+    {
+      return x
+      g()                                           //~ E0503
+    }
+  }
+  x + 1
+}
+
+// ------------------------------------------------------------------------------ functions and tests
+
+pub fn in_an_anonymous_function(x: I32) -> I32 {
+  let f = fn(a: I32) -> I32 {
+    return a
+    a + 1                                           //~ E0503
+  }
+  f.(x)
+}
+
+pub fn in_an_anonymous_function_in_a_loop(n: I32) -> I32 {
+  var s = 0
+  for i in 0 ..< n {
+    let f = fn(a: I32) -> I32 {
+      panic("x")
+      a                                             //~ E0503
+    }
+    s = s + f.(i)
+  }
+  s
+}
+
+pub rt fn in_an_rt_function(x: I32) -> I32 {
+  return x
+  x + 1                                             //~ E0503
+}
+
+fn double[T: Num](x: T) -> T {
+  return x + x
+  x                                                 //~ E0503
+}
+
+impl P {
+  pub fn get(self) -> I32 {
+    return self.x
+    self.x + 1                                      //~ E0503
+  }
+}
+
+test "in a test" {
+  panic("x")
+  assert 1 == 1                                     //~ E0503
+}
+
+test "in a test after a return in a branch" {
+  var n = 1
+  if n > 0 {
+    return
+  } else {
+    return
+  }
+  n = 2                                             //~ E0503
+}
+
+// ------------------------------------------------------------------------------ several unreachable items
+
+pub fn several_statements(x: I32) -> I32 {
+  return x
+  let a = x + 1                                     //~ E0503
+  let b = a * 2
+  b
+}
+
+pub fn several_forms(n: I32) -> I32 {
+  panic("x")
+  var s = 0                                         //~ E0503
+  for i in 0 ..< n {
+    s = s + i
+  }
+  if s > 3 {
+    return s
+  }
+  s
+}
+
+pub fn several_after_a_while_true() {
+  while true {}
+  g()                                               //~ E0503
+  g()
+  g()
+}

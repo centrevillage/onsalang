@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 1
+
+// S-128, S-886 (§7): in a function of `()`, the line after a `return` without a value is E0503, and "つないだ形は、その式が
+// ブロックの最後の項目で、返り値の型に合うときだけ出す". The forms that have only the deletion, one candidate
+// (the joined form would be an error or is not an expression): the next line is a value (`x * 2`, a variable, a call
+// that gives an `I32`, which joined as `return x * 2` is E0401 in a function of `()`, so it is not offered), the next
+// line is not an expression (a `let`, a `return`, a `while`), the call is not the last item (the two calls are the
+// unreachable items, and the one candidate deletes both). The forms with two candidates are in
+// e0503_valueless_return_joined.onsa. One error per function (P-01); the marker is on the line of the first
+// unreachable item.
+
+fn g() {
+}
+
+fn h(n: I32) {
+}
+
+fn k(n: I32) -> I32 {
+  n
+}
+
+pub fn next_line_is_a_value(x: I32) {
+  return
+                                               //~ E0503
+}
+
+pub fn next_line_is_a_variable(x: I32) {
+  return
+                                                   //~ E0503
+}
+
+pub fn next_line_is_a_call_with_a_value(x: I32) {
+  return
+                                                //~ E0503
+}
+
+pub fn next_line_is_a_let(x: I32) {
+  return
+  
+}
+
+pub fn next_line_is_a_return() {
+  return
+                                              //~ E0503
+}
+
+pub fn next_line_is_a_while(x: I32) {
+  return
+  
+}
+
+pub fn the_call_is_not_the_last_item() {
+  return
+  
+}
+
+pub fn a_call_and_a_value(x: I32) {
+  return
+  
+}
+
+pub fn value_in_a_branch(c: Bool, x: I32) {
+  if c {
+    return
+                                               //~ E0503
+  }
+}
+
+test "a value after a return in a test" {
+  return
+                                               //~ E0503
+}
+
+pub fn an_assignment_after_return(inout n: I32) {
+  return
+                                               //~ E0503
+}

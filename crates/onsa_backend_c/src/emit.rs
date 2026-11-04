@@ -123,10 +123,14 @@ impl Cx<'_> {
     }
 }
 
+/// `s` as a C string literal. The second of two `?` in a row is escaped:
+/// `-std=c11` reads `??/` as a trigraph (R-366).
 pub fn c_string(s: &str) -> String {
     let mut out = String::from("\"");
+    let mut after_question = false;
     for c in s.chars() {
         match c {
+            '?' if after_question => out.push_str("\\?"),
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
             '\n' => out.push_str("\\n"),
@@ -144,6 +148,7 @@ pub fn c_string(s: &str) -> String {
                 out.push_str("\"\"");
             }
         }
+        after_question = c == '?';
     }
     out.push('"');
     out

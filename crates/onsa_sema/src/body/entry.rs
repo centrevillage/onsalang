@@ -180,8 +180,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The checks at the end of the body (`deferred.rs`) and the resolution of the tables.
-    pub(super) fn finish(mut self) -> BodyInfo {
+    /// The checks at the end of the body (`deferred.rs`), until the first error.
+    pub(super) fn end_checks(&mut self) {
         if !self.failed {
             self.check_deferred_end();
         }
@@ -194,6 +194,11 @@ impl<'a> Checker<'a> {
         if !self.failed {
             self.check_prim_uses();
         }
+    }
+
+    /// The end of the body and the resolution of the tables.
+    pub(super) fn finish(mut self) -> BodyInfo {
+        self.end_checks();
         // Resolve the tables.
         let keys: Vec<ExprId> = self.info.expr_types.keys().copied().collect();
         for e in keys {

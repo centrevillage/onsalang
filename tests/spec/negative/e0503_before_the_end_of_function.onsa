@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-268, S-876 (§7): "到達しない部分は文の順の検査の中で見つかるので、関数の終わりの検査（E0406、E0405、後回しにした E0416、§4.7）より先に
+// 報告する". Each function would be E0406, E0405 or E0416 at the end of the function (the type of `None` that nothing decides, the
+// float literal that nothing decides, the bound `Float` that the default `I32` of an integer literal does not meet), if the
+// check reached the end. The E0503 of the unreachable item (the statement after the `return`, the `let` whose value diverges as
+// a whole) is reported first, and it is the one error of the function (§18.1), so the markers are E0503 only. Their candidate
+// would leave the E0406, the E0405 or the E0416 behind, which is the same stage, so none is made (S-876; `fixes = 0`).
+// One error per function (P-01).
+
+fn need_float[T: Float](x: T) -> T {
+  x
+}
+
+fn g() {
+}
+
+// ------------------------------------------------------------------------------ the unreachable statement is first
+
+pub fn e0406_after_a_return() -> I32 {
+  let o = None
+  return 1
+  2                                                 //~ E0503
+}
+
+pub fn e0405_after_a_return() -> F32 {
+  var acc = 0.0
+  return 1.0
+  2.0                                               //~ E0503
+}
+
+pub fn e0416_after_a_return() -> I32 {
+  let a = 1
+  let b = need_float(a)
+  return 0
+  b                                                 //~ E0503
+}
+
+pub fn e0406_after_a_panic() {
+  let o = None
+  panic("x")
+  g()                                               //~ E0503
+}
+
+pub fn e0406_after_a_while_true() {
+  let o = None
+  while true {}
+  g()                                               //~ E0503
+}
+
+pub fn e0405_after_a_diverging_if(c: Bool) {
+  var acc = 0.0
+  if c { return } else { return }
+  g()                                               //~ E0503
+}
+
+// ------------------------------------------------------------------------------ the let with a diverging value is first
+
+pub fn e0406_and_a_let_with_a_diverging_value() -> I32 {
+  let o = None
+  let x = { return 1 }                              //~ E0503
+  x
+}
+
+pub fn e0405_and_a_let_with_a_diverging_value() -> F32 {
+  var acc = 0.0
+  let x = { return 1.0 }                            //~ E0503
+  x
+}
+
+pub fn e0416_and_a_let_with_a_diverging_value() -> I32 {
+  let a = 1
+  let b = need_float(a)
+  let x = { return 0 }                              //~ E0503
+  x
+}
+
+pub fn e0406_and_a_var_with_a_diverging_value(c: Bool) -> I32 {
+  let o = None
+  var x = if c { return 1 } else { return 2 }       //~ E0503
+  x = 3
+  x
+}

@@ -20,31 +20,12 @@ impl<'a> Checker<'a> {
         }
         match &stmt.kind {
             StmtKind::Let { pat, ty, init, .. } => {
-                let ann = match ty {
-                    Some(t) => Some(self.lower_type_expr(*t)?),
-                    None => None,
-                };
-                let it = match ann {
-                    Some(t) => {
-                        let why = self.annotation_of(*pat);
-                        self.with_why(why, t, |ck| ck.check_expr(*init, ann))?
-                    }
-                    None => self.check_expr(*init, ann)?,
-                };
+                let it = self.check_init(*ty, *init, self.ast.pat(*pat).span, |ck| ck.annotation_of(*pat))?;
                 self.bind_pat(*pat, it, true)?;
                 Ok(())
             }
             StmtKind::Var { name, ty, init } => {
-                let ann = match ty {
-                    Some(t) => Some(self.lower_type_expr(*t)?),
-                    None => None,
-                };
-                let it = match ann {
-                    Some(t) => {
-                        self.with_why(format!("the annotation of `{}`", name.name), t, |ck| ck.check_expr(*init, ann))?
-                    }
-                    None => self.check_expr(*init, ann)?,
-                };
+                let it = self.check_init(*ty, *init, name.span, |_| format!("the annotation of `{}`", name.name))?;
                 let id = self.local_of(Origin::Var(s))?;
                 self.bind_local(id, it, name.span)?;
                 Ok(())
@@ -109,10 +90,7 @@ impl<'a> Checker<'a> {
                     Some(v) => {
                         self.with_why("the result of the function".into(), ret, |ck| ck.check_expr(*v, Some(ret)))?;
                     }
-                    None => {
-                        let unit = self.unit();
-                        self.unify_at(stmt.span, unit, ret)?;
-                    }
+                    None => self.bare_return(stmt.span, ret)?,
                 }
                 Ok(())
             }
@@ -126,6 +104,31 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
         }
+    }
+
+    /// The annotation and the initializer of the `let` or `var` that binds
+    /// at `binding`, `why` naming the annotation. A whole initializer that
+    /// diverges stops here, with the binding not yet read (§7, S-268:
+    /// `let (a, b) = { return 1 }` is no E0420).
+    fn check_init(
+        &mut self,
+        ty: Option<onsa_syntax::ast::TypeId>,
+        init: ExprId,
+        binding: Span,
+        why: impl FnOnce(&Self) -> String,
+    ) -> R<TyId> {
+        let it = match ty {
+            Some(t) => {
+                let t = self.lower_type_expr(t)?;
+                let why = why(self);
+                self.with_why(why, t, |ck| ck.check_expr(init, Some(t)))?
+            }
+            None => self.check_expr(init, None)?,
+        };
+        if self.info.diverging.expr(init) {
+            return Err(self.never_bound(binding, init, it));
+        }
+        Ok(it)
     }
 
     /// How the note of E0416 names an annotated `let` (`the annotation of `ys``).

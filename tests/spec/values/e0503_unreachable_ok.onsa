@@ -1,0 +1,176 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§6.1"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` takes off the `return` at the end of a function and writes `fn g() {}` for the empty body, and the file keeps the
+// shapes it is about.
+
+// S-128 (§7): what is not a diverging statement, so that the statement after it is reached: "判定は文の構造だけで行い、条件の値は
+// 見ない（`if false { … }` の中は誤りにならない）". An `if` without an `else`, an `if` and a `match` with a branch or an arm that does
+// not diverge, a `while` whose condition is a constant (`while ALWAYS`) or an expression (`while 1 == 1`) or the literal `false`, a
+// `while true` with a `break` of its own, a `for` loop, a `return` that is the last item of its block, a diverging statement inside
+// a closure or a branch (the statements after the closure and after the branch are reached), and the code inside
+// `if false { … }`, which is no error whatever the value of the condition is. No statement here is unreachable.
+
+const ALWAYS: Bool = true
+
+fn g() {
+}
+
+pub fn if_without_an_else(c: Bool, x: I32) -> I32 {
+  if c {
+    return 1
+  }
+  x + 1
+}
+
+pub fn if_with_a_constant_true_without_an_else(x: I32) -> I32 {
+  if true {
+    return 1
+  }
+  x + 1
+}
+
+pub fn if_with_a_false_condition(x: I32) -> I32 {
+  if false {
+    g()
+    return 1
+  }
+  x + 1
+}
+
+pub fn if_with_a_branch_that_does_not_diverge(c: Bool, x: I32) -> I32 {
+  if c {
+    return 1
+  } else {
+    g()
+  }
+  x + 1
+}
+
+pub fn if_with_a_false_condition_and_an_else(x: I32) -> I32 {
+  if false {
+    return 1
+  } else {
+    g()
+  }
+  x + 1
+}
+
+pub fn match_with_an_arm_that_does_not_diverge(o: Option[I32], x: I32) -> I32 {
+  match o {
+    Some(v) => { return v },
+    None => g(),
+  }
+  x + 1
+}
+
+pub fn while_with_a_constant(x: I32) -> I32 {
+  while ALWAYS {
+    return x
+  }
+  x + 1
+}
+
+pub fn while_with_an_expression(x: I32) -> I32 {
+  while 1 == 1 {
+    return x
+  }
+  x + 1
+}
+
+pub fn while_false(x: I32) -> I32 {
+  while false {
+    return x
+  }
+  x + 1
+}
+
+pub fn while_true_with_a_break(c: Bool, x: I32) -> I32 {
+  while true {
+    if c {
+      break
+    }
+    g()
+  }
+  x + 1
+}
+
+pub fn while_true_in_parentheses_with_a_break(x: I32) -> I32 {
+  while (true) {
+    break
+  }
+  x + 1
+}
+
+pub fn while_true_with_a_break_after_an_inner_loop(x: I32) -> I32 {
+  while true {
+    while true {
+      break
+    }
+    break
+  }
+  x + 1
+}
+
+pub fn for_loop_that_returns(n: I32) -> I32 {
+  for i in 0 ..< n {
+    return i
+  }
+  n + 1
+}
+
+pub fn a_return_in_a_closure(x: I32) -> I32 {
+  let f = fn(a: I32) -> I32 {
+    return a
+  }
+  f.(x) + 1
+}
+
+pub fn a_return_in_a_branch(c: Bool, x: I32) -> I32 {
+  if c {
+    g()
+    return 1
+  }
+  g()
+  x
+}
+
+pub fn a_return_as_the_last_item(x: I32) -> I32 {
+  g()
+  return x
+}
+
+pub fn a_break_as_the_last_item(n: I32) {
+  var i = 0
+  while i < n {
+    i = i + 1
+    break
+  }
+  g()
+}
+
+pub fn a_continue_in_a_branch(n: I32) -> I32 {
+  var i = 0
+  while i < n {
+    i = i + 1
+    if i > 3 {
+      continue
+    }
+    g()
+  }
+  i
+}
+
+pub fn a_panic_in_a_branch(c: Bool, x: I32) -> I32 {
+  if c {
+    panic("x")
+  }
+  x + 1
+}
+
+pub fn a_panic_as_the_last_item(x: I32) -> I32 {
+  g()
+  panic("x")
+}

@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§6.1", "§18.1"]
+// fixes = 0
+
+// S-886 (§7): in a function that gives a value, a `return` without a value is E0401 on the `return` (§6.1), and the joined
+// form (`return x * 2`) is made only when "その式がブロックの最後の項目で、返り値の型に合う". The forms that get no candidate (the
+// error stays, and `fixes = 0` says that no diagnostic of the file has one): the type of the next line does not fit (`"s"`
+// for an `I32`), the number does not fit the type of the function (`x * 300` for a `U8`, the E0408 that the joined
+// `return` would make), the next line is not the last item of the block (the two items after the `return` are unreachable,
+// and the candidate is a single edit that does not remove them), the next line is a `let`, which is not an expression.
+// Each is E0401 on the `return` (the order of the statements reaches it first, so the unreachable items are not
+// reported). One error per function (P-01).
+
+pub fn a_string_for_an_integer(x: I32) -> I32 {
+  return                                            //~ E0401
+  "s"
+}
+
+pub fn a_float_for_an_integer(x: I32) -> I32 {
+  return                                            //~ E0401
+  1.5
+}
+
+pub fn a_number_that_does_not_fit(x: U8) -> U8 {
+  return                                            //~ E0401
+  x * 300
+}
+
+pub fn a_negative_number_for_an_unsigned(x: U8) -> U8 {
+  return                                            //~ E0401
+  -1
+}
+
+pub fn the_next_line_is_not_the_last_item(x: I32) -> I32 {
+  return                                            //~ E0401
+  x * 2
+  x + 1
+}
+
+pub fn the_next_line_is_a_let(x: I32) -> I32 {
+  return                                            //~ E0401
+  let y = x * 2
+  y
+}
+
+pub fn a_value_and_a_statement(x: I32) -> I32 {
+  return                                            //~ E0401
+  x * 2
+  let y = x
+  y
+}
+
+pub fn in_a_branch_not_last(c: Bool, x: I32) -> I32 {
+  if c {
+    return                                          //~ E0401
+    x * 2
+    x + 1
+  } else {
+    3
+  }
+}
+
+pub fn the_return_is_alone(x: I32) -> I32 {
+  return                                            //~ E0401
+}

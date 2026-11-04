@@ -216,7 +216,8 @@ impl Ast {
         }
     }
 
-    fn stmt_leaves_loop(&self, s: StmtId) -> bool {
+    /// [`Ast::leaves_loop`] of a statement.
+    pub fn stmt_leaves_loop(&self, s: StmtId) -> bool {
         match &self.stmt(s).kind {
             StmtKind::Break => true,
             StmtKind::Continue | StmtKind::Return(None) => false,

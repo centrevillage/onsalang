@@ -1,0 +1,126 @@
+// onsa.toml
+// [package]
+// name = "c_panic_trigraph"
+// edition = "2026"
+//
+// [export]
+// prefix = "cpt_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "mixed"
+// target = "host"
+// fn = "c_panic_trigraph.mixed"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { sel = 1 }, status = 1 },
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "ends_with_a_trigraph"
+// target = "host"
+// fn = "c_panic_trigraph.ends_with_a_trigraph"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 8 },
+//   { call = "fn", args = { sel = 1 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "brackets"
+// target = "host"
+// fn = "c_panic_trigraph.brackets"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 9 },
+//   { call = "fn", args = { sel = 1 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "mixed on a reset target"
+// target = "fw"
+// fn = "c_panic_trigraph.mixed"
+// steps = [
+//   { call = "fn", args = { sel = 0 }, status = 0, result = 7 },
+// ]
+
+// R-366 (§9.2, §14.2): the message of `panic(msg)` is a string literal of the program, which the C backend writes as a string of the C
+// that it builds, and the string of the program means the characters that were written: `??/` is three characters, not the
+// `\` that a C compiler reads in it as a trigraph (`-std=c11`; the flags of the gate make the warning `-Wtrigraphs` an error). A message
+// that has a pair of `?` before a third character that makes a trigraph must come out of the build as it was written, whatever the
+// flags of the C compiler. The host steps build the C and run the panic of each function (the status 1 of a call that
+// panicked, §9.2, §14.2) and the call that does not:
+//   mixed(sel)               "a ??/ b ??= c": two trigraphs, `??/` (a `\`, followed by a space, which is no escape of C) and `??=`
+//   ends_with_a_trigraph     "end??/": the trigraph `??/` is a `\` that escapes the closing quote of the string, so a C that reads it
+//                            does not compile at all, with any flags
+//   brackets(sel)            the other trigraphs, `??(` `??)` `??!` `??<` `??>` `??'` `??-`, and a `??` that is no trigraph
+// The host steps cannot read the text of the message (the panic hook of the host is not a step), so what is asserted is that the C
+// of the messages compiles and the panic is the status 1. The message that is written in the C is left to a golden of the C or a
+// test of the backend.
+
+@export
+pub fn mixed(sel: U32) -> U32 {
+  if sel == 0 {
+    7
+  } else {
+    panic("a ??/ b ??= c")
+  }
+}
+
+@export
+pub fn ends_with_a_trigraph(sel: U32) -> U32 {
+  if sel == 0 {
+    8
+  } else {
+    panic("end??/")
+  }
+}
+
+@export
+pub fn brackets(sel: U32) -> U32 {
+  if sel == 0 {
+    9
+  } else {
+    panic("??( ??) ??! ??< ??> ??' ??- ??? ?")
+  }
+}
+
+test "mixed: the value" {
+  assert mixed(0) == 7
+}
+
+test "mixed(1) panics" {
+  let _ = mixed(1) //~ PANIC "mixed(1) panics"
+}
+
+test "ends_with_a_trigraph: the value" {
+  assert ends_with_a_trigraph(0) == 8
+}
+
+test "ends_with_a_trigraph(1) panics" {
+  let _ = ends_with_a_trigraph(1) //~ PANIC "ends_with_a_trigraph(1) panics"
+}
+
+test "brackets: the value" {
+  assert brackets(0) == 9
+}
+
+test "brackets(1) panics" {
+  let _ = brackets(1) //~ PANIC "brackets(1) panics"
+}

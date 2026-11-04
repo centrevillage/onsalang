@@ -49,7 +49,7 @@ pub enum Cause {
     Default,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Infer {
     vars: Vec<VarState>,
     /// For each bound variable, the order of the binding and its cause.

@@ -925,3 +925,41 @@ fn the_joined_line_needs_a_left_operand() {
         assert_eq!(after_candidates(&src).len(), 2, "{a}");
     }
 }
+
+/// §7, §18.1: the candidate takes the items after the statement and leaves
+/// a comment at the end of the statement; `let` keeps its initializer.
+#[test]
+fn the_rest_of_the_block_goes_from_its_first_token() {
+    let (head, rest) = ("fn f() -> I32 {\n  return 1 // why\n  ", "\n}\n");
+    let src = format!("{head}let a = 2 // c\n  a{rest}");
+    assert_eq!(after_candidates(&src), [format!("{head}{rest}")]);
+    let src = "fn f() -> I32 {\n  let x = { return 1 } // why\n  x\n}\n";
+    assert_eq!(after_candidates(src), ["fn f() -> I32 {\n  { return 1 } // why\n  \n}\n"]);
+}
+
+/// S-876: the look at the end of the body leaves no trace. A later trial
+/// reads the literal as it was (`n` is a `U8` after the join), and a trial
+/// around the E0503 keeps it to itself (§18.1: one diagnostic).
+#[test]
+fn the_look_at_the_end_of_the_body_is_undone() {
+    let src = "fn g(x: U8) {}\nfn f() {\n  let n = 1\n  return\n  g(n)\n}\n";
+    assert_eq!(after_candidates(src).len(), 2);
+    let src = "fn f(a: I32) -> I32 {\n  a\n  -({ return 1\n    2 })\n}\n";
+    assert_eq!(codes(src), [Code::E0418]);
+}
+
+/// §7, §18.1, S-886: the line after a `return` joins it, and a comment
+/// between them stays where it is, as of E0418 above.
+#[test]
+fn the_joined_return_keeps_the_comments() {
+    let head = "fn f(x: I32) -> I32 {\n  return";
+    for (rest, joined) in [
+        ("\n  x * 2\n}\n", " x * 2\n}\n"),
+        ("\n\n  x * 2 // c\n}\n", " x * 2 // c\n}\n"),
+        (" // c\n  x * 2\n}\n", " x * 2 // c\n}\n"),
+        (" // c\n  x * 2 // d\n}\n", " x * 2 // c\n  // d\n}\n"),
+    ] {
+        let src = format!("{head}{rest}");
+        assert_eq!(after_candidates(&src), [format!("{head}{joined}")], "{rest}");
+    }
+}

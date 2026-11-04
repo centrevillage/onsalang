@@ -107,7 +107,7 @@ impl<'a> Checker<'a> {
             ExprKind::TypeArgs { .. } => {
                 onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
             }
-            ExprKind::Block(b) => self.check_block(b, expected),
+            ExprKind::Block(b) => self.check_block(e, b, expected),
             // What only a flow body holds is the names stage's E0821 outside
             // one (§11.1). In a flow body, `if~` and `match~` are typed as
             // `if` and `match`, and the flow checks read the `~`
@@ -393,14 +393,16 @@ impl<'a> Checker<'a> {
         Ok(t)
     }
 
-    pub(crate) fn check_block(&mut self, b: &Block, expected: Option<TyId>) -> R<TyId> {
+    fn check_block(&mut self, id: ExprId, b: &'a Block, expected: Option<TyId>) -> R<TyId> {
         if let Some(f) = &mut self.flow {
             f.depth += 1;
         }
+        self.blocks.push((id, b, 0));
         let r = (|| -> R<TyId> {
             for (i, &s) in b.stmts.iter().enumerate() {
+                self.blocks.last_mut().unwrap().2 = i;
                 self.check_stmt(s)?;
-                self.after_stmt(b, i, expected)?;
+                self.after_stmt(expected)?;
             }
             match b.tail {
                 Some(t) => self.check_expr(t, expected),
@@ -418,6 +420,7 @@ impl<'a> Checker<'a> {
                 }
             }
         })();
+        self.blocks.pop();
         if let Some(f) = &mut self.flow {
             f.depth -= 1;
         }

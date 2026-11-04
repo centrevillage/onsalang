@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-128 (§7) with modules (§15.1): the unreachable item after a diverging statement is an error of the function that holds it, in
+// whichever module the function is. The E0503 of the functions of util.onsa is reported at their lines (the marker is in util.onsa),
+// and the functions of this module that call them, or that are unreachable after a call of them, do not change the error. A
+// call of a function of another module is not a diverging statement (no function has a type of divergence, §7), so what follows
+// the call `first(x)` is reached. One error per function (P-01), with one candidate each (the deletion of the unreachable items).
+
+use util.{first, fine, Pair}
+
+pub fn calls_a_function_with_an_error(x: I32) -> I32 {
+  let a = first(x)
+  a + fine(x)
+}
+
+pub fn unreachable_after_a_return(x: I32) -> I32 {
+  let a = first(x)
+  return a
+                                             //~ E0503
+}
+
+pub fn unreachable_with_an_imported_type(p: Pair) -> I32 {
+  return p.a
+                                                 //~ E0503
+}

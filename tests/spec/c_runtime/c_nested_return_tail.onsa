@@ -1,0 +1,147 @@
+// onsa.toml
+// [package]
+// name = "c_nested_return_tail"
+// edition = "2026"
+//
+// [export]
+// prefix = "cnrt_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§13.4", "§14.2"]
+//
+// [[test.host]]
+// name = "nested_block"
+// target = "host"
+// fn = "c_nested_return_tail.nested_block"
+// steps = [
+//   { call = "fn", args = { x = 1 }, status = 0, result = 6 },
+//   { call = "fn", args = { x = -5 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 100 }, status = 0, result = 105 },
+// ]
+//
+// [[test.host]]
+// name = "single_block"
+// target = "host"
+// fn = "c_nested_return_tail.single_block"
+// steps = [
+//   { call = "fn", args = { x = 4 }, status = 0, result = 8 },
+//   { call = "fn", args = { x = -4 }, status = 0, result = -8 },
+// ]
+//
+// [[test.host]]
+// name = "three_blocks"
+// target = "host"
+// fn = "c_nested_return_tail.three_blocks"
+// steps = [
+//   { call = "fn", args = { x = 2 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "after_a_statement"
+// target = "host"
+// fn = "c_nested_return_tail.after_a_statement"
+// steps = [
+//   { call = "fn", args = { x = 2 }, status = 0, result = 9 },
+//   { call = "fn", args = { x = -1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "a_constant_in_the_block"
+// target = "host"
+// fn = "c_nested_return_tail.a_constant_in_the_block"
+// steps = [
+//   { call = "fn", args = { x = 7 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "block_in_a_branch"
+// target = "host"
+// fn = "c_nested_return_tail.block_in_a_branch"
+// steps = [
+//   { call = "fn", args = { c = true, x = 3 }, status = 0, result = 4 },
+//   { call = "fn", args = { c = false, x = 3 }, status = 0, result = 6 },
+// ]
+
+// R-365 (§7, §13.4): the body of a function that gives a value ends with a block that ends with a `return` (S-891: "発散する文で終わるブロック
+// （`{ { return 1 } }`、`{ while true {} }`）"), which diverges, so the function has no value to give after it. The C of these used to be
+// `return …; return ((onsa_unit){0});` after the `return`, which the C compiler rejects ("incompatible result type", with and without
+// `-Wall -Wextra -Werror`) while the interpreter ran it. Each function is exported, so that the C is built and run by the
+// host steps and the same values are asserted by the `test`s of the interpreter:
+//   nested_block(x)         the body is `{ { return x + 5 } }`
+//   single_block(x)         the body is `{ return x * 2 }`
+//   three_blocks(x)         the body is `{ { { return x + 3 } } }`
+//   after_a_statement(x)    a `let`, then `{ { return y * 3 } }`
+//   a_constant_in_the_block the value is `(0 + 5)`, as in the report of R-365
+//   block_in_a_branch(c, x) both branches end with a block that returns, and nothing follows the `if`
+
+@export
+pub fn nested_block(x: I32) -> I32 {
+  { { return x + 5 } }
+}
+
+@export
+pub fn single_block(x: I32) -> I32 {
+  { return x * 2 }
+}
+
+@export
+pub fn three_blocks(x: I32) -> I32 {
+  { { { return x + 3 } } }
+}
+
+@export
+pub fn after_a_statement(x: I32) -> I32 {
+  let y = x + 1
+  { { return y * 3 } }
+}
+
+@export
+pub fn a_constant_in_the_block(x: I32) -> I32 {
+  { { return (0 + 5) } }
+}
+
+@export
+pub fn block_in_a_branch(c: Bool, x: I32) -> I32 {
+  if c {
+    { return x + 1 }
+  } else {
+    { { return x * 2 } }
+  }
+}
+
+test "nested_block: the values" {
+  assert nested_block(1) == 6
+  assert nested_block(-5) == 0
+  assert nested_block(100) == 105
+}
+
+test "single_block: the values" {
+  assert single_block(4) == 8
+  assert single_block(-4) == -8
+}
+
+test "three_blocks: the values" {
+  assert three_blocks(2) == 5
+}
+
+test "after_a_statement: the values" {
+  assert after_a_statement(2) == 9
+  assert after_a_statement(-1) == 0
+}
+
+test "a_constant_in_the_block: the values" {
+  assert a_constant_in_the_block(7) == 5
+}
+
+test "block_in_a_branch: the values" {
+  assert block_in_a_branch(true, 3) == 4
+  assert block_in_a_branch(false, 3) == 6
+}

@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§18.1"]
+// fixes = 1
+
+// S-268 (§7): "初期化式の全体が上の発散する形である `let` と `var` ... も、発散する文である。初期化式を評価してから束縛するので、
+// 到達しない最初の部分は束縛で、後の文の有無によらず、パターンに E0503 を出す。修正候補は、パターン・注釈・`=` と後の文を消し、
+// 初期化式を文として残す形である". The initial value is a diverging form as a whole: a block that ends with a `return`, an `if` and a
+// `match` whose branches and arms all diverge, a `panic(...)` call, a diverging form in parentheses (the whole of the value, not a
+// part of it), with an annotation, with a tuple pattern, with `var`, with and without a statement after the `let`. The error is on
+// the pattern, which is the first unreachable part, so the marker is on the line of the `let`. The one candidate deletes the pattern,
+// the annotation and the `=` and the statements after it, and leaves the value as a statement (`let x = { return 1 }` and `x + 1` give
+// `{ return 1 }`). The parts of a value are in e0503_subexpression_*.onsa, and the `let` whose value only some of the branches
+// diverge is in values/e0503_let_ok.onsa. One error per function (P-01).
+
+pub fn block_with_a_return(x: I32) -> I32 {
+  let a = { return x }                              //~ E0503
+  a + 1
+}
+
+pub fn block_with_a_return_and_no_statement_after() {
+  let a = { return }                                //~ E0503
+}
+
+pub fn block_with_a_return_value_and_no_statement_after(x: I32) -> I32 {
+  let a = { return x }                              //~ E0503
+}
+
+pub fn block_with_statements(x: I32) -> I32 {
+  let a = {                                         //~ E0503
+    let y = x * 2
+    return y
+  }
+  a
+}
+
+pub fn annotated(x: I32) -> I32 {
+  let a: I32 = { return x }                         //~ E0503
+  a + 1
+}
+
+pub fn annotated_with_an_if(c: Bool) -> I32 {
+  let a: I32 = if c { return 1 } else { return 2 }  //~ E0503
+  a
+}
+
+pub fn if_with_all_branches_returning(c: Bool) -> I32 {
+  let a = if c { return 1 } else { return 2 }       //~ E0503
+  a
+}
+
+pub fn if_with_a_panic_branch(c: Bool) -> I32 {
+  let a = if c { panic("x") } else { return 2 }     //~ E0503
+  a
+}
+
+pub fn else_if_chain(c: Bool, d: Bool) -> I32 {
+  let a = if c {                                    //~ E0503
+    return 1
+  } else if d {
+    return 2
+  } else {
+    return 3
+  }
+  a
+}
+
+pub fn match_with_all_arms_returning(o: Option[I32]) -> I32 {
+  let a = match o {                                 //~ E0503
+    Some(v) => { return v },
+    None => { return 0 },
+  }
+  a
+}
+
+pub fn match_with_a_panic_arm(o: Option[I32]) -> I32 {
+  let a = match o {                                 //~ E0503
+    Some(v) => { return v },
+    None => panic("x"),
+  }
+  a
+}
+
+pub fn panic_call(x: I32) -> I32 {
+  let a = panic("x")                                //~ E0503
+  a + x
+}
+
+pub fn block_ending_in_a_block(x: I32) -> I32 {
+  let a = { { return x } }                          //~ E0503
+  a
+}
+
+pub fn while_true_block() -> I32 {
+  let a = { while true {} }                         //~ E0503
+  a
+}
+
+pub fn parenthesized_whole(x: I32) -> I32 {
+  let a = ({ return x })                            //~ E0503
+  a + 1
+}
+
+pub fn tuple_pattern(x: I32) -> I32 {
+  let (a, b) = { return x }                         //~ E0503
+  a + b
+}
+
+pub fn var_declaration(x: I32) -> I32 {
+  var a = { return x }                              //~ E0503
+  a = a + 1
+  a
+}
+
+pub fn var_with_no_statement_after(x: I32) {
+  var a = { return }                                //~ E0503
+}
+
+pub fn in_a_loop_with_a_break(n: I32) -> I32 {
+  var i = 0
+  while i < n {
+    i = i + 1
+    let a = { break }                               //~ E0503
+    i = i + a
+  }
+  i
+}
+
+pub fn in_a_loop_with_a_continue(n: I32) -> I32 {
+  var i = 0
+  while i < n {
+    i = i + 1
+    let a = { continue }                            //~ E0503
+  }
+  i
+}
+
+pub fn in_a_branch(c: Bool, x: I32) -> I32 {
+  if c {
+    let a = { return x }                            //~ E0503
+  }
+  x
+}
+
+pub fn in_an_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => {
+      let a = { return v }                          //~ E0503
+      a
+    },
+    None => 0,
+  }
+}
+
+pub fn in_an_anonymous_function(x: I32) -> I32 {
+  let f = fn(p: I32) -> I32 {
+    let a = { return p }                            //~ E0503
+    a
+  }
+  f.(x)
+}
+
+pub rt fn in_an_rt_function(x: I32) -> I32 {
+  let a = { return x }                              //~ E0503
+  a
+}
+
+test "in a test" {
+  let a = { return }                                //~ E0503
+}
+
+test "in a test with a statement after" {
+  let a = { return }                                //~ E0503
+  assert 1 == 1
+}

@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 2
+
+// S-128, S-886 (§7): "値の無い `return` の次の行に式があるとき: ... `()` の関数では次の行の E0503 に、つないだ形
+// （`return x * 2`）を候補として並べる（`return` は行末で終わる、§2.5）。つないだ形は、その式がブロックの最後の項目で、
+// 返り値の型に合うときだけ出す". In a function of `()`, a `return` without a value ends its line, so the call on
+// the next line is a second statement, which is never done: E0503 on that line, with two candidates, in this
+// order: the deletion of the unreachable items, and the joined form `return g()` (the call is the last item of the
+// block, and its type `()` is the type that the function returns). The forms whose second candidate is not made
+// are in e0503_valueless_return_not_joined.onsa. One error per function (P-01); the marker is on the line of
+// the call, which is the first unreachable item.
+
+fn g() {
+}
+
+fn h(n: I32) {
+}
+
+rt fn h_rt(n: I32) {
+}
+
+pub struct Gate {
+  open: Bool,
+}
+
+impl Gate {
+  pub fn close(self) {
+  }
+}
+
+pub fn a_call(x: I32) {
+  if x > 0 {
+    g()
+  }
+  return g()                                               //~ E0503
+}
+
+pub fn a_call_with_an_argument(x: I32) {
+  return h(x)                                              //~ E0503
+}
+
+pub fn a_method_call(gate: Gate) {
+  return gate.close()                                      //~ E0503
+}
+
+pub fn in_a_branch(c: Bool, x: I32) {
+  if c {
+    return g()                                             //~ E0503
+  }
+  h(x)
+}
+
+pub fn in_a_loop_body(n: I32) {
+  for i in 0 ..< n {
+    h(i)
+    return h(i)                                            //~ E0503
+  }
+}
+
+pub fn in_an_else_branch(c: Bool) {
+  if c {
+    g()
+  } else {
+    return g()                                             //~ E0503
+  }
+}
+
+pub fn in_an_anonymous_function(x: I32) {
+  let f = fn(a: I32) {
+    return h(a)                                            //~ E0503
+  }
+  f.(x)
+}
+
+pub rt fn in_an_rt_function(x: I32) {
+  return h_rt(x)                                           //~ E0503
+}
+
+test "in a test" {
+  return g()                                               //~ E0503
+}

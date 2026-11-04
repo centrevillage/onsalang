@@ -180,7 +180,7 @@
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |
 | （R-132） | 専用の入力は無い。レートを型の形で書いたときの診断は `parent/t5.onsa`（S-102） |
 | `parent/c119.onsa` | 点検 C-119 と C-12（行頭の `- b` で関数が `-b` を返す。期待値と今の出力は先頭のコメント。S-127、S-124、S-123）。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0020_leading_minus.onsa`（`c119`。先頭のコメントの E0418 は候補を当てた後の後の段の診断で、移していない） |
-| `parent/c120.onsa` | 点検 C-120（行末の `return` の次の行が黙って実行されない。期待値と今の出力は先頭のコメント。S-128） |
+| `parent/c120.onsa` | 点検 C-120（行末の `return` の次の行が黙って実行されない。S-128）。W5-08 U3/t で期待値付きのテストへ移し、入力は消した: `tests/spec/fixes/e0503_valueless_return_not_joined.onsa`（`an_assignment_after_return`）、`e0401_valueless_return_joined.onsa` |
 | `parent/c121.onsa` | 点検 C-121（flow の使われない `let` と、行頭の `- prev` が黙って出力になる。期待値と今の出力は先頭のコメント。S-129） |
 
 対応が書かれていないファイル（`body/p01_multi.onsa`、`body/tr1_trait.onsa`、`core/` と `types/` の一部など）は、内容とレビュー文書の項目を見て対応を確かめる。

@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` takes off the `return` at the end of a function and writes `fn g() {}` for the empty body, and the file keeps the
+// shapes it is about.
+
+// S-268 (§7): the `let` whose initial value is not a diverging form as a whole: a branch or an arm of the value does not diverge, the
+// value is a function whose body diverges (the body of an anonymous function is not a part of the `let` that is evaluated), the
+// diverging form is in the right of `&&` (which is not always evaluated), and `if false { return 1 } else { 2 }`, whose condition is not
+// read. The `let` is a statement that is reached, and so are the statements after it.
+
+pub fn one_branch_returns(c: Bool) -> I32 {
+  let a = if c { return 1 } else { 2 }
+  a + 1
+}
+
+pub fn one_arm_returns(o: Option[I32]) -> I32 {
+  let a = match o {
+    Some(v) => v,
+    None => { return 0 },
+  }
+  a + 1
+}
+
+pub fn a_branch_that_panics(c: Bool) -> I32 {
+  let a = if c { 5 } else { panic("x") }
+  a + 1
+}
+
+pub fn a_false_condition(x: I32) -> I32 {
+  let a = if false { return 1 } else { x }
+  a + 1
+}
+
+pub fn a_function_that_returns(x: I32) -> I32 {
+  let f = fn(a: I32) -> I32 {
+    return a
+  }
+  f.(x) + 1
+}
+
+pub fn the_right_of_an_and(c: Bool) -> Bool {
+  let a = c && ({ return true })
+  !a
+}
+
+pub fn a_block_that_returns_in_a_branch(c: Bool, x: I32) -> I32 {
+  let a = {
+    if c {
+      return 1
+    }
+    x * 2
+  }
+  a + 1
+}
+
+pub fn a_loop_in_the_value(c: Bool, x: I32) -> I32 {
+  let a = {
+    while c {
+      return x
+    }
+    x
+  }
+  a + 1
+}

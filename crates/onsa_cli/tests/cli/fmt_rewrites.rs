@@ -2456,7 +2456,9 @@ fn a_return_without_a_value_stays_with_or_without_a_comment_and_one_with_a_value
                     "  return // last",
                     "}",
                 ],
-            ),
+            )
+            // `d` has a `return` after a `return` (E0503, §7): fmt keeps it all the same.
+            .syntax_only(),
             case(
                 "a return with a value and a comment at the end of its line",
                 &[
@@ -2496,7 +2498,7 @@ fn a_return_without_a_value_stays_with_or_without_a_comment_and_one_with_a_value
 }
 
 /// S-547 (W3-12/b2 1 and 2): `tests/spec/fmt/rewrite_valueless_return_kept.onsa` has the `return`s without a
-/// value after dead code that `onsa check` rejects (E0401, its markers) and that fmt took off or stopped on
+/// value after dead code that `onsa check` rejects (its markers) and that fmt took off or stopped on
 /// (exit code 101). The cases harness does not ask fmt about a file with markers, so this test does: the
 /// file is canonical, and `onsa check` says the same before and after `onsa fmt`.
 #[test]
@@ -2516,8 +2518,8 @@ fn the_files_of_the_returns_without_a_value_are_canonical() {
     let marked = read(&format!("{root}rewrite_valueless_return_kept.onsa"));
     let p = d.file("marked.onsa", &marked);
     let out = onsa(&["check", &p]);
-    let errors = String::from_utf8_lossy(&out.stdout).matches("error[E0401]").count();
-    assert_eq!((code(&out), errors), (1, marked.matches("//~ E0401").count()), "{out:?}");
+    let errors = String::from_utf8_lossy(&out.stdout).matches("error[E").count();
+    assert_eq!((code(&out), errors), (1, marked.matches("//~ E").count()), "{out:?}");
 }
 
 // ---------------------------------------------------------------------------------------------------
