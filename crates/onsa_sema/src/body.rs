@@ -24,7 +24,7 @@ use onsa_syntax::ast::{
 use crate::binding::{Bind, Head, HeadRow, LitClass};
 use crate::builtin;
 use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
-use crate::deferred::{Deferred, DeferredKind, OpNeed, Required, Verdict};
+use crate::deferred::{ArgumentName, Deferred, DeferredKind, OpNeed, Required, Verdict};
 use crate::exhaust::P;
 use crate::infer::{Cause, Infer, LitKind, Mismatch};
 use crate::modes::Proj;
@@ -589,31 +589,18 @@ impl<'a> Checker<'a> {
     /// Unify, reporting E0401 at `span` on failure.
     pub(crate) fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
         let cause = self.cause(span, Some(expected));
-        match self.infer.unify(&mut self.a.types, actual, expected, &cause) {
-            Ok(()) => Ok(()),
-            Err(Mismatch::Literal) => {
-                let e = self.display(expected);
-                let what = match self.infer.lit_of(&self.a.types, actual) {
-                    Some(k) => format!("{} literal", k.words()),
-                    None => match self.infer.lit_of(&self.a.types, expected) {
-                        Some(k) => {
-                            let shown = self.display(actual);
-                            return Err(self.err(
-                                Code::E0401,
-                                span,
-                                format!("expected {}, found `{shown}`", k.words()),
-                            ));
-                        }
-                        None => "a literal".to_string(),
-                    },
-                };
-                Err(self.err(Code::E0401, span, format!("{what} cannot have type `{e}`")))
-            }
-            Err(Mismatch::Types) => {
-                let (a, e) = (self.display(actual), self.display(expected));
-                Err(self.err(Code::E0401, span, format!("expected `{e}`, found `{a}`")))
-            }
-        }
+        let Err(mismatch) = self.infer.unify(&mut self.a.types, actual, expected, &cause) else {
+            return Ok(());
+        };
+        let (a, e) = (self.display(actual), self.display(expected));
+        let (found, wanted) = (self.infer.lit_of(&self.a.types, actual), self.infer.lit_of(&self.a.types, expected));
+        let text = match (mismatch, found, wanted) {
+            (Mismatch::Literal, Some(k), _) => format!("{} literal cannot have type `{e}`", k.words()),
+            (Mismatch::Literal, None, Some(k)) => format!("expected {}, found `{a}`", k.words()),
+            // A literal in a part of the types (`fn({integer})`): neither is one.
+            _ => format!("expected `{e}`, found `{a}`"),
+        };
+        Err(self.err(Code::E0401, span, text))
     }
 
     /// The cause of a binding made while unifying at `span` with `expected`.

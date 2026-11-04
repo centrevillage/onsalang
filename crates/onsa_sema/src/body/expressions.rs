@@ -68,7 +68,8 @@ impl<'a> Checker<'a> {
                         Some(el) => el,
                         None => {
                             let el = self.fresh();
-                            self.defer(span, el, DeferredKind::Origin { what: "the element type of `[]`".into() });
+                            let what = ArgumentName::Text("the element type of `[]`".into());
+                            self.defer(span, el, DeferredKind::Origin { what });
                             el
                         }
                     };

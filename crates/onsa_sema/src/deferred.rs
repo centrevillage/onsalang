@@ -48,13 +48,13 @@ pub(crate) enum DeferredKind {
     /// A type variable that an expression made (a type parameter of a call,
     /// `None`, `Buf.zeroed(4)`, `[]`): E0406 when it is still open at the end
     /// (§4.5, §4.7). `what` names it in the message.
-    Origin { what: String },
+    Origin { what: ArgumentName },
     /// A type argument a use made, of a type parameter or the element of a
     /// builtin generic type: E0710 when it is decided to a type with no kind
     /// (second-class, or one that holds it), before the requirements of the
     /// same argument, which are then not judged (§4.5, the implicit `Escape`;
     /// S-862, S-766). `what` names it as its origin does; `rule`: the way out.
-    Escape { what: String, rule: &'static str },
+    Escape { what: ArgumentName, rule: &'static str },
     /// A requirement on a type (a bound, the implicit `Dup`, a kind constraint):
     /// E0416 when the decided type does not meet it (§4.5, §4.6).
     Require { bound: Bound, what: Required },
@@ -105,6 +105,29 @@ pub(crate) enum Required {
     /// The element of the receiver of the type `recv` of the method `method`
     /// of std's `impl` of a sequence: its bounds (§5.3, S-853).
     SeqElement { recv: TyId, method: String },
+}
+
+/// What the message of a type argument calls it.
+#[derive(Debug, Clone)]
+pub(crate) enum ArgumentName {
+    Text(String),
+    /// The element of the receiver of the type `recv` of the method `method`,
+    /// shown when the error is reported, as [`Required::SeqElement`] is.
+    SeqElement {
+        recv: TyId,
+        method: String,
+    },
+}
+
+impl ArgumentName {
+    fn text(&self, show: impl FnOnce(TyId) -> String) -> String {
+        match self {
+            ArgumentName::Text(t) => t.clone(),
+            ArgumentName::SeqElement { recv, method } => {
+                format!("the element type of `{method}` of `{}`", show(*recv))
+            }
+        }
+    }
 }
 
 impl Required {
@@ -352,6 +375,7 @@ impl<'a> Checker<'a> {
                 if !self.infer.has_open_vars(&self.a.types, r) {
                     return Look::Done;
                 }
+                let what = what.text(|t| self.display(t));
                 Look::Fail(
                     Diagnostic::new(
                         Stage::Types,
@@ -369,7 +393,7 @@ impl<'a> Checker<'a> {
                 if !crate::sig::no_kind_argument(self.a, r) {
                     return Look::Done;
                 }
-                let shown = self.display(r);
+                let (shown, what) = (self.display(r), what.text(|t| self.display(t)));
                 let msg = format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)");
                 let d = Diagnostic::new(Stage::Types, Code::E0710, item.span, msg).with_found(self.src(item.span));
                 Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(*rule))

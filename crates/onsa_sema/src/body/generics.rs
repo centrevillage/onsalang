@@ -58,11 +58,11 @@ impl<'a> Checker<'a> {
     /// (E0406 when still open at the end) and its implicit `Escape`, judged
     /// before the other requirements made after it (§4.5, S-862).
     pub(super) fn type_argument(&mut self, span: Span, t: TyId, what: String) {
-        self.type_argument_with(span, t, what, GENERIC_VIEW);
+        self.type_argument_with(span, t, ArgumentName::Text(what), GENERIC_VIEW);
     }
 
     /// [`Self::type_argument`], with `rule` for its E0710.
-    fn type_argument_with(&mut self, span: Span, t: TyId, what: String, rule: &'static str) {
+    fn type_argument_with(&mut self, span: Span, t: TyId, what: ArgumentName, rule: &'static str) {
         self.defer(span, t, DeferredKind::Origin { what: what.clone() });
         self.defer(span, t, DeferredKind::Escape { what, rule });
     }
@@ -103,11 +103,13 @@ impl<'a> Checker<'a> {
         for (k, (g, &arg)) in generics.iter().zip(&args).enumerate() {
             let owner = if k < impl_count { impl_name.clone() } else { name.clone() };
             let what = match (&g.kind, &element) {
-                (GenericKind::Const(_), _) => format!("the const parameter `{}` of {owner}", g.name),
-                (_, Some(Required::SeqElement { recv, method })) if k < impl_count => {
-                    format!("the element type of `{method}` of `{}`", self.display(*recv))
+                (GenericKind::Const(_), _) => {
+                    ArgumentName::Text(format!("the const parameter `{}` of {owner}", g.name))
                 }
-                _ => format!("the type parameter `{}` of {owner}", g.name),
+                (_, Some(Required::SeqElement { recv, method })) if k < impl_count => {
+                    ArgumentName::SeqElement { recv: *recv, method: method.clone() }
+                }
+                _ => ArgumentName::Text(format!("the type parameter `{}` of {owner}", g.name)),
             };
             // A parameter with an unknown bound requires nothing of its users (§18.1, S-768).
             let GenericKind::Type { bounds, dup, unknown: false } = &g.kind else {

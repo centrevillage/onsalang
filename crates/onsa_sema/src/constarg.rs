@@ -314,7 +314,7 @@ fn named_def(
     match path_end(a, m, path, self_ty) {
         // A method named through its type, no value (§15.1, S-205).
         Ok(end) if end.method(a).is_some() => {
-            Err(method_named(shown, &path.segments[path.segments.len() - 1].name, span).into())
+            Err(method_named(path.dotted(), &path.segments[path.segments.len() - 1].name, span).into())
         }
         Ok(PathEnd::Entity(entity)) => {
             let constant = match entity {
@@ -328,6 +328,7 @@ fn named_def(
         }
         // A name of the spec this version has not (R-294).
         Ok(PathEnd::Builtin { member: BuiltinMember::Missing { feature, .. }, .. }) => {
+            let shown = path.dotted();
             Err(feature.diagnostic(Stage::Names, span, &[&shown]).with_found(shown).into())
         }
         Ok(PathEnd::Builtin { member, .. }) => Err(not_constant(member.kind(), shown, span)),

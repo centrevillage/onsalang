@@ -170,17 +170,13 @@ struct Missing {
     feature: Feature,
 }
 
-fn number(t: &Ty) -> bool {
-    matches!(t, Ty::Int(_) | Ty::Float(_))
-}
-
 fn str_ty(t: &Ty) -> bool {
     matches!(t, Ty::Builtin(BuiltinTy::Str, _))
 }
 
 /// What has `Default` with a literal for its value (§6.3).
 fn literal_default(t: &Ty) -> bool {
-    number(t) || str_ty(t) || *t == Ty::Bool
+    t.is_number() || str_ty(t) || *t == Ty::Bool
 }
 
 fn bytes(t: &Ty) -> bool {
@@ -199,8 +195,8 @@ fn no_len_yet(t: &Ty) -> bool {
 /// that no row names a member of std): `ZERO` and `ONE`, W5-05; `default`,
 /// W5-06.
 const MISSING: &[Missing] = &[
-    Missing { of: number, name: "ZERO", form: Form::Constant, feature: Feature::BuiltinValueName },
-    Missing { of: number, name: "ONE", form: Form::Constant, feature: Feature::BuiltinValueName },
+    Missing { of: Ty::is_number, name: "ZERO", form: Form::Constant, feature: Feature::BuiltinValueName },
+    Missing { of: Ty::is_number, name: "ONE", form: Form::Constant, feature: Feature::BuiltinValueName },
     Missing { of: literal_default, name: "default", form: Form::Function, feature: Feature::BuiltinValueName },
     Missing { of: bytes, name: "default", form: Form::Function, feature: Feature::BuiltinName },
     Missing { of: str_ty, name: "from_utf8", form: Form::Function, feature: Feature::BuiltinName },

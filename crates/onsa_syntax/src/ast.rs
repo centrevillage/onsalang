@@ -212,6 +212,13 @@ pub struct Path {
     pub span: Span,
 }
 
+impl Path {
+    /// Its names, in a message: `F32.ZERO`, whatever is written between them.
+    pub fn dotted(&self) -> String {
+        self.segments.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(".")
+    }
+}
+
 /// `at name`: the clock of an input or output of a flow or a function, or of
 /// an expression (§11.3). `span` runs from `at` to the end of the name; the
 /// name is not resolved here (clocks are a namespace of their own, §11.3).

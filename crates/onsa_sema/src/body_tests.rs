@@ -830,3 +830,58 @@ fn the_text_of_function_types_and_of_an_open_literal() {
     assert_eq!(d.code, Code::E0405);
     assert!(d.notes[0].message.contains("`let x: F32 = 2.5`"), "{:?}", d.notes);
 }
+
+#[test]
+fn a_literal_in_a_part_of_the_types_is_the_text_of_the_types() {
+    let take = "fn take[T](y: T, h: fn(T)) -> U32 {\n  1\n}\n";
+    let cases = [
+        ("fn g(inout x: F32) {\n}\n", "take(1, g)", "expected `fn({integer})`, found `fn(inout F32)`"),
+        ("fn g(x: F32) {\n}\n", "take(1, g)", "expected `fn({integer})`, found `fn(F32)`"),
+        ("fn g(x: F32) uses {Alloc} {\n}\n", "take(1, g)", "expected `fn({integer})`, found `fn(F32) uses {Alloc}`"),
+        ("fn g(x: I32) uses {Alloc} {\n}\n", "take(1.5, g)", "expected `fn({float})`, found `fn(I32) uses {Alloc}`"),
+    ];
+    for (g, call, text) in cases {
+        let src = format!("{g}{take}pub fn f() -> U32 {{\n  {call}\n}}\n");
+        let d = check_in(&src, true).diagnostics.remove(0);
+        assert_eq!((d.code, d.message.as_str()), (Code::E0401, text), "{src}");
+    }
+    // A literal itself keeps its own text.
+    let d = check_in("pub fn f() -> Bool {\n  1\n}\n", true).diagnostics.remove(0);
+    assert!(d.message.contains("literal cannot have type `Bool`"), "{}", d.message);
+}
+
+#[test]
+fn the_receiver_of_an_e0710_shows_what_is_decided() {
+    let src = "pub fn f() {\n  let xs = []\n  let _ = xs.get(0)\n  let _: [Span[F32]; 0] = xs\n}\n";
+    let d = check_in(src, true).diagnostics.remove(0);
+    assert_eq!(d.code, Code::E0710);
+    assert!(d.message.contains("the element type of `get` of `[Span[F32]; 0]`"), "{}", d.message);
+}
+
+#[test]
+fn a_path_over_lines_shows_its_names() {
+    let cases = [
+        ("pub fn f() -> F32 {\n  F32 // c\n    .ZERO\n}\n", Code::E0200, "the builtin value `F32.ZERO`"),
+        ("pub fn f(x: [F32; U32 // c\n  .ONE]) {\n}\n", Code::E0200, "the builtin value `U32.ONE`"),
+        ("pub fn f() -> Str {\n  Str\n    .default()\n}\n", Code::E0200, "the builtin value `Str.default`"),
+        ("pub fn f(s: Str) -> Bytes {\n  Str // c\n    .as_bytes(s)\n}\n", Code::E0308, "`Str.as_bytes` is a method"),
+    ];
+    for (src, code, text) in cases {
+        let d = check_in(src, true).diagnostics.remove(0);
+        assert_eq!(d.code, code, "{src}");
+        assert!(d.message.contains(text) && !d.message.contains('\n'), "{src}: {}", d.message);
+    }
+}
+
+#[test]
+fn only_a_call_of_a_missing_function_has_a_literal_to_write() {
+    let d = check_in("pub fn f() -> F32 {\n  F32.default()\n}\n", true).diagnostics.remove(0);
+    assert!(d.message.contains("the builtin value `F32.default`"), "{}", d.message);
+    assert!(d.notes.iter().any(|n| n.message.contains("write the value as a literal")), "{:?}", d.notes);
+    for src in ["pub fn f() {\n  let _ = F32.default\n}\n", "pub fn f(x: [F32; F32.default]) {\n}\n"] {
+        let d = check_in(src, true).diagnostics.remove(0);
+        assert_eq!(d.code, Code::E0200, "{src}");
+        assert!(d.message.contains("the builtin name `F32.default`"), "{src}: {}", d.message);
+        assert!(d.notes.is_empty(), "{src}: {:?}", d.notes);
+    }
+}

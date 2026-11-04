@@ -10,7 +10,7 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, Ident, Lit};
 use onsa_syntax::foreign::{self, RowId};
 
-use super::paths::{Place, span_of};
+use super::paths::{Place, path_of, span_of};
 use super::{Fail, Walker};
 use crate::names::{BuiltinMember, PathEnd};
 use crate::resolve::{Callee, Entity, NameKind, ResolveError, no_members};
@@ -97,6 +97,9 @@ impl Walker<'_> {
     pub(super) fn builtin_called(&self, of: Entity, segs: &[&Ident], place: Place) -> Option<Fail> {
         Some(Fail::Report(match crate::names::builtin_member(self.a, of, &segs[segs.len() - 1].name)? {
             BuiltinMember::Method { bang } => self.method_at(place, segs, bang),
+            BuiltinMember::Missing { called, .. } if matches!(place, Place::Callee(_)) => {
+                self.missing_name(called, segs)
+            }
             BuiltinMember::Missing { feature, .. } => self.missing_name(feature, segs),
         }))
     }
@@ -104,7 +107,7 @@ impl Walker<'_> {
     /// E0200 for the name `segs` of a builtin type this version has not, as
     /// written (R-294).
     pub(super) fn missing_name(&self, feature: Feature, segs: &[&Ident]) -> Diagnostic {
-        let (span, shown) = (span_of(segs), self.src(span_of(segs)));
+        let (span, shown) = (span_of(segs), path_of(segs).dotted());
         feature.diagnostic(Stage::Names, span, &[&shown]).with_found(shown)
     }
 
@@ -128,7 +131,7 @@ impl Walker<'_> {
     fn method_call(&self, call: Option<ExprId>, segs: &[&Ident], bang: bool) -> Diagnostic {
         let span = span_of(segs);
         let name = &segs[segs.len() - 1].name;
-        let d = method_named(self.src(span), name, span);
+        let d = method_named(path_of(segs).dotted(), name, span);
         let ast = self.ast;
         let Some(call) = call else { return d };
         let ExprKind::Call { args, kind, .. } = &ast.expr(call).kind else { return d };

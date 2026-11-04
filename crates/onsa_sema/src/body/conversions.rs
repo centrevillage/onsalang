@@ -33,10 +33,9 @@ impl<'a> Checker<'a> {
     pub(super) fn cast_error(&mut self, span: Span, inner: ExprId, ty: TypeId, from: TyId, to: TyId) -> Diagnostic {
         let (source, target) = (self.display(from), self.display(to));
         let (f, t) = (self.ty(from), self.ty(to));
-        let number = |t: &Ty| matches!(t, Ty::Int(_) | Ty::Float(_));
         let text = if matches!(f, Ty::Param(_)) || matches!(t, Ty::Param(_)) {
             format!("a type parameter has no `as`, which no trait gives: `{source}` to `{target}` (§3.3)")
-        } else if number(&f) && number(&t) {
+        } else if f.is_number() && t.is_number() {
             format!(
                 "`as` only widens without losing information; `{source}` to `{target}` needs a conversion function (§3.3)"
             )

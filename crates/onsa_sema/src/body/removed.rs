@@ -60,7 +60,8 @@ impl<'a> Checker<'a> {
     /// number or of a type parameter: a computation the spec gives as a
     /// function, not a method (§3.4). The functions are std's declarations.
     fn math_fn(&self, recv: TyId, name: &str) -> Option<DefId> {
-        if !matches!(self.ty(recv), Ty::Int(_) | Ty::Float(_) | Ty::Param(_)) {
+        let t = self.ty(recv);
+        if !t.is_number() && !matches!(t, Ty::Param(_)) {
             return None;
         }
         let d = *self.a.modules.get(crate::prim::math_module(self.a)?).items.get(name)?;

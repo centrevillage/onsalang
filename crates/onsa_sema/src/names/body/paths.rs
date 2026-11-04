@@ -62,7 +62,7 @@ pub(super) fn span_of(segs: &[&Ident]) -> Span {
     Span::new(first.file, first.start, last.end)
 }
 
-fn path_of(segs: &[&Ident]) -> Path {
+pub(super) fn path_of(segs: &[&Ident]) -> Path {
     Path { segments: segs.iter().map(|&s| s.clone()).collect(), span: span_of(segs) }
 }
 

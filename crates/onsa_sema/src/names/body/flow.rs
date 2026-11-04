@@ -17,7 +17,7 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, Ast, CallKind, Clock, ExprId, ExprKind, Ident, Mode, TypeId};
 
 use super::calls::Called;
-use super::paths::span_of;
+use super::paths::path_of;
 use super::{Fail, PathRes, W, Walker};
 use crate::DefId;
 use crate::flow_names::{Delay, FlowBuiltin};
@@ -223,7 +223,7 @@ impl Walker<'_> {
     /// E0812 for the `~` of the call `e` after the method `segs` named
     /// through its type (`P.get~(p)`, S-814), with no candidate.
     pub(super) fn tilde_on_method(&self, e: ExprId, segs: &[&Ident]) -> Diagnostic {
-        let (span, method) = (self.ast.expr(e).span, self.src(span_of(segs)));
+        let (span, method) = (self.ast.expr(e).span, path_of(segs).dotted());
         let msg = format!("`{method}` is a method, not a flow; `~` is written on flows only (§2.6)");
         let rule = format!("a method is called on a value, `value.{}(…)` (§6.2)", segs[segs.len() - 1].name);
         Diagnostic::new(Stage::Names, Code::E0812, span, msg).with_found(self.src(span)).with_rule(rule)

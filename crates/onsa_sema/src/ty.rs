@@ -258,6 +258,13 @@ pub enum Ty {
     Error,
 }
 
+impl Ty {
+    /// Whether it is a number type (§3.3): an integer or a float.
+    pub(crate) fn is_number(&self) -> bool {
+        matches!(self, Ty::Int(_) | Ty::Float(_))
+    }
+}
+
 /// The limits of the types the check makes (§4.4, S-264): the one place.
 pub const TYPE_DEPTH_LIMIT: u32 = 256;
 pub const TYPE_SIZE_LIMIT: u32 = 4096;
