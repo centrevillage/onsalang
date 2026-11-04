@@ -70,6 +70,9 @@ for path in sys.argv[2:]:
     if "BADCANDIDATE" in text:
         v.append({"code": "E0010", "line": 1, "col": 1, "title": "parenthesize the `&&` of 12", "left": "E0010",
                   "left_line": 1, "left_col": 1, "message": "m"})
+    if "SECONDCANDIDATE" in text:
+        v.append({"code": "E0010", "line": 1, "col": 1, "title": "take out the `&&`", "left": "E0010",
+                  "left_line": 1, "left_col": 1, "message": "m"})
     out.append({"file": path, "candidates": len(v), "violations": v, "internal": None})
 print(json.dumps(out))
 """
@@ -351,6 +354,7 @@ class Fuzz(TempRepo):
         self.assertEqual(code, 0, text)
 
     BAD = "fix|E0010|parenthesize the `…` of #|E0010"
+    SECOND = "fix|E0010|take out the `…`|E0010"
 
     def test_allowed_classes(self):
         # R-207: a class of the fix stage that the spec puts outside the contract is known through
@@ -390,6 +394,17 @@ class Fuzz(TempRepo):
         code, text = self.go()
         self.assertEqual(code, 1, text)
         self.assertIn("tests/fuzz/f.onsa: shows `internal|", text)
+        # a second class on the input is a failure until an entry of its own allows it: a diagnostic
+        # with two candidates has no input that shows only the second
+        self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE SECONDCANDIDATE")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn(f"tests/fuzz/f.onsa: shows `{self.SECOND}` with `m`, which is not the entry's", text)
+        self.repo.write("tests/fuzz/g.onsa", "SECONDCANDIDATE")
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa")
+                        + allowed(self.SECOND, "tests/fuzz/g.onsa"))
+        code, text = self.go()
+        self.assertEqual(code, 0, text)
 
     def test_allowed_entries_are_checked(self):
         self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE")

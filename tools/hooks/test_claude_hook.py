@@ -6,6 +6,7 @@ Alone: python3 -B tools/hooks/test_claude_hook.py
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -285,8 +286,9 @@ class ClaudeHook(unittest.TestCase):
         self.assertGreaterEqual(took, 0.5)
         self.assertLess(took, 2)
         saved = sorted((self.scratch / "handback").iterdir())[-1]
-        self.assertEqual(text.split("\n")[1:], [
-            "", "（本文なし: 今の呼び出しの SubagentHandback が、0.5 秒待っても記録に無い。最後の文: None）",
+        # the seconds in the text are the time waited, which `took` bounds: a loaded machine gives 0.6
+        self.assertEqual(re.sub(r"\d+\.\d 秒", "# 秒", text).split("\n")[1:], [
+            "", "（本文なし: 今の呼び出しの SubagentHandback が、# 秒待っても記録に無い。最後の文: None）",
             f"取り出し直す: python3 -B tools/handback.py save {path} {saved}", ""])  # fmt: skip
         with path.open("a") as f:
             f.write(late)

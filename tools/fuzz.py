@@ -72,8 +72,10 @@ text `…`, code points `U+#`, numbers `#`), `reasons` (S numbers of `decisions/
 `issues/R/` for a low harm recorded there) and `note`. A mutant is known
 when it shows the class with that message (the class alone is too coarse a
 net); the input must show them on every run (when it no longer does, the
-entry goes), and nothing else. Another saved input that shows only listed
-classes is a regression input, with no entry. The net gets
+entry goes), and no class without an entry of its own (one diagnostic with
+two candidates shows two classes, so no input shows only the second).
+Another saved input that shows only listed classes is a regression input,
+with no entry. The net gets
 coarser for such a class: the contract on the cases (`onsa_tests::fix_contract`)
 is what holds it.
 
@@ -772,13 +774,13 @@ def replay_saved(root, runner, fixer, jobs, deadline):
                 )
         elif rel in allowed_inputs:
             # A class the spec puts outside the contract (R-207): its input shows it with the
-            # message left, and nothing else.
+            # message left, and no class that no entry allows.
             key = allowed_inputs[rel]
             shown = {(c.signature, c.left) for c in crashes}
             if key not in shown:
                 failures.append(f"{rel}: the class `{key[0]}` with `{key[1]}` no longer shows; remove its entry "
                                 f"from {ALLOWED.as_posix()} (the file stays as a regression input)")
-            for other, left in sorted(shown - {key}):
+            for other, left in sorted(shown - allowed.keys()):
                 failures.append(f"{rel}: shows `{other}` with `{left}`, which is not the entry's in "
                                 f"{ALLOWED.as_posix()}")
         else:
