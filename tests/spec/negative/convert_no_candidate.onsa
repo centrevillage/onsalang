@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§6.1", "§18.1"]
+// fixes = 0
+
+// E0413 for a conversion function of a pair that `as` can write, where there is no candidate (§3.3, S-884, S-885,
+// §18.1). `fixes = 0` checks that none is offered (a note shows the form to write).
+// - An argument that is a literal (S-884): the literal has its default, `I32`, at the end of the function, and the
+//   pair is then one that `as` can write, so the call is the E0413 (`I64.narrow_from(1)` and `F64.round_from(1)`, and
+//   the `let k = 1` before it). `1 as F64` is the E0420 (§4.7: the type on the left of an `as` is needed when it
+//   is read), so the `as` form leaves an error.
+// - An argument whose type is decided by a later statement (`let a = 3`, then `take(a)` decides `I32`): the type of
+//   `a` is not known at the call, so `a as F64` is the E0420 there too.
+// - A function taken as a value (S-885, §6.1): `let g: fn(F32) -> F64 = F64.round_from`, `(F64.round_from).(y)` and
+//   `array.from_fn(F64.round_from)` (the source is the `U32` of the index); there is no call to rewrite.
+// - A call whose value is thrown away, as a statement before the last one: the candidate would leave a value that is
+//   thrown away (`x as F64` as a statement).
+// The functions without a marker are the pairs that `as` cannot write (they pass, S-884, S-885). One error in each
+// function (P-01).
+
+use std.array
+
+pub fn take(v: I32) -> I32 {
+  v
+}
+
+pub fn a_literal_to_a_float() -> F64 {
+  F64.round_from(1)                                 //~ E0413
+}
+
+pub fn a_literal_narrowed_to_a_wider_integer() -> Option[I64] {
+  I64.narrow_from(1)                                //~ E0413
+}
+
+pub fn a_literal_in_a_let() -> F64 {
+  let k = 1
+  F64.round_from(k)                                 //~ E0413
+}
+
+pub fn a_source_decided_by_a_later_statement() -> I32 {
+  let a = 3
+  let _ = F64.round_from(a)                         //~ E0413
+  take(a)
+}
+
+pub fn a_value_form_in_an_annotated_let() {
+  let g: fn(F32) -> F64 = F64.round_from            //~ E0413
+  let _ = g
+}
+
+pub fn a_value_form_called_in_parentheses(y: F32) -> F64 {
+  (F64.round_from).(y)                              //~ E0413
+}
+
+pub fn a_value_form_in_from_fn() -> [F64; 4] {
+  array.from_fn(F64.round_from)                     //~ E0413
+}
+
+pub fn a_value_that_is_thrown_away(x: F32) -> I32 {
+  F64.round_from(x)                                 //~ E0413
+  0
+}
+
+pub fn a_pair_that_as_cannot_write_is_a_call(x: F64) -> F32 {
+  F32.round_from(x)
+}
+
+pub fn a_pair_that_as_cannot_write_with_a_literal() -> F32 {
+  F32.round_from(1)
+}
+
+pub fn a_pair_that_as_cannot_write_is_a_value() -> [F32; 4] {
+  array.from_fn(F32.round_from)
+}

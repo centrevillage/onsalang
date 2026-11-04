@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+// fixes = 0
+
+// E0413 for a conversion function of a pair that `as` can write, where the type that the position needs is not the
+// type that the `as` form gives (§3.3, §18.1). A candidate that leaves an E0401 in the function breaks the promise of
+// §18.1, so there is none: the return type or the argument is another type (`-> I32` for `F64.round_from(x)`, `-> F64` for
+// `F32.round_from(x)`, `-> Option[I32]` for `I64.narrow_from(n)`), the condition of an `if` is a `Bool`, a function without a
+// return type returns `()`, the right of `&&`, `||` and `<<` is a `Bool` or a `U32`, an alias resolves to the other
+// type. `fixes = 0` checks that no candidate is offered. One error in each function (P-01).
+
+type Sample = F32
+
+pub fn take_f32(v: F32) -> F32 {
+  v
+}
+
+pub fn round_into_an_integer(x: F32) -> I32 {
+  F64.round_from(x)                                 //~ E0413
+}
+
+pub fn round_into_a_wider_return_type(x: F32) -> F64 {
+  F32.round_from(x)                                 //~ E0413
+}
+
+pub fn round_into_a_wider_alias(x: F32) -> Sample {
+  F64.round_from(x)                                 //~ E0413
+}
+
+pub fn round_in_an_argument(x: F32) -> F32 {
+  take_f32(F64.round_from(x))                       //~ E0413
+}
+
+pub fn round_in_an_annotated_let(x: F32) -> F32 {
+  let y: F32 = F64.round_from(x)                    //~ E0413
+  y
+}
+
+pub fn narrow_into_the_other_integer(n: I32) -> I32 {
+  I64.narrow_from(n)                                //~ E0413
+}
+
+pub fn narrow_into_the_other_option(n: I32) -> Option[I32] {
+  I64.narrow_from(n)                                //~ E0413
+}
+
+pub fn narrow_into_a_wider_integer(n: I32) -> I64 {
+  I32.narrow_from(n)                                //~ E0413
+}
+
+pub fn narrow_into_a_wider_option(n: I32) -> Option[I64] {
+  I32.narrow_from(n)                                //~ E0413
+}
+
+pub fn round_in_a_condition(x: F32) -> I32 {
+  if F32.round_from(x) { 1 } else { 0 }             //~ E0413
+}
+
+pub fn narrow_in_a_condition(n: I32) -> I32 {
+  if I32.narrow_from(n) { 1 } else { 0 }            //~ E0413
+}
+
+pub fn round_as_the_tail_of_a_unit_function(x: F32) {
+  F32.round_from(x)                                 //~ E0413
+}
+
+pub fn narrow_as_the_tail_of_a_unit_function(n: I32) {
+  I32.narrow_from(n)                                //~ E0413
+}
+
+pub fn round_right_of_an_and(a: Bool, x: F32) -> Bool {
+  a && F32.round_from(x)                            //~ E0413
+}
+
+pub fn round_right_of_an_or(a: Bool, x: F32) -> Bool {
+  a || F32.round_from(x)                            //~ E0413
+}
+
+pub fn round_right_of_a_shift(a: U32, x: F32) -> U32 {
+  a << F32.round_from(x)                            //~ E0413
+}
+
+pub fn round_right_of_a_shift_down(a: U32, x: F32) -> U32 {
+  a >> F32.round_from(x)                            //~ E0413
+}

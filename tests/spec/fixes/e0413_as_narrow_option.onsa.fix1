@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+// fixes = 1
+
+// E0413 for a `narrow_from` of a pair that `as` can write, where the expected type is `Option[T]` (§3.3, S-875). The
+// candidate follows the expected type: when `Option[T]` is expected, it is `Some(x as T)`, which keeps the type and
+// the value (a `narrow_from` of such a pair always gives `Some`). `x as T` would leave an E0401 here, so the runner
+// rejects it. For the same type it is `Some(x)`. The positions are an argument, the annotation of a `let`, the return type (the tail and `return`),
+// the left of an assignment and the type of a field (§4.7). The plain `T` is in e0413_as_narrow_t.onsa. One error in
+// each function (P-01).
+
+pub struct Slot {
+  o: Option[I64],
+}
+
+pub fn take_option(o: Option[I64]) -> Option[I64] {
+  o
+}
+
+pub fn in_an_argument(n: I32) -> Option[I64] {
+  take_option(Some(n as I64))                   //~ E0413
+}
+
+pub fn in_an_annotated_let(n: I32) -> Option[I64] {
+  let o: Option[I64] = Some(n as I64)           //~ E0413
+  o
+}
+
+pub fn as_the_tail(n: I32) -> Option[I64] {
+  Some(n as I64)                                //~ E0413
+}
+
+pub fn in_a_return(n: U16) -> Option[I64] {
+  return Some(n as I64)                         //~ E0413
+}
+
+pub fn in_an_assignment(n: I32) -> Option[I64] {
+  var o: Option[I64] = None
+  o = Some(n as I64)                            //~ E0413
+  o
+}
+
+pub fn in_a_field(n: I32) -> Slot {
+  Slot { o: Some(n as I64) }                    //~ E0413
+}
+
+pub fn the_same_type(n: I32) -> Option[I32] {
+  Some(n)                                //~ E0413
+}
+
+pub fn unsigned_to_a_wider_unsigned(n: U8) -> Option[U32] {
+  Some(n as U32)                                //~ E0413
+}
+
+pub fn unsigned_to_a_wider_signed(n: U32) -> Option[I64] {
+  Some(n as I64)                                //~ E0413
+}

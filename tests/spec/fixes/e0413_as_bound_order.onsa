@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.5", "§18.1"]
+// fixes = 1
+
+// E0413 for a conversion function of a pair that `as` can write, where the argument also breaks the bound of the
+// declaration (S-883, §3.3). `trunc_from` and `trunc_sat_from` take a `Float` (§3.3), so an integer argument breaks
+// the bound (E0416, §4.5); the decision about the pair is made before the bound and before the return type are
+// checked, so the diagnostic is the E0413 and not the E0416. The candidate is the `as` form: `I64.trunc_from(n)`
+// (`n: I32`) becomes `n as I64`, `I64.trunc_sat_from(n)` becomes `n as I64`, and a call to the same type
+// (`I32.trunc_from(n)`) is `n`, with the call removed. The pairs that `as` cannot write stay the E0416
+// (negative/convert_bound_order_e0416.onsa). One error in each function (P-01).
+
+pub fn trunc_to_a_wider_integer(n: I32) -> I64 {
+  I64.trunc_from(n)                                 //~ E0413
+}
+
+pub fn trunc_sat_to_a_wider_integer(n: I32) -> I64 {
+  I64.trunc_sat_from(n)                             //~ E0413
+}
+
+pub fn trunc_to_the_same_type(n: I32) -> I32 {
+  I32.trunc_from(n)                                 //~ E0413
+}
+
+pub fn trunc_sat_to_the_same_type(n: I32) -> I32 {
+  I32.trunc_sat_from(n)                             //~ E0413
+}
+
+pub fn trunc_from_an_unsigned_to_a_wider_signed(n: U16) -> I32 {
+  I32.trunc_from(n)                                 //~ E0413
+}
+
+pub fn trunc_sat_from_an_unsigned_to_a_wider_unsigned(n: U8) -> U64 {
+  U64.trunc_sat_from(n)                             //~ E0413
+}
+
+pub fn trunc_as_the_operand_of_a_sum(n: I32, a: I64) -> I64 {
+  I64.trunc_from(n) + a                             //~ E0413
+}
+
+pub fn trunc_in_a_let_without_annotation(n: I8) -> I16 {
+  let w = I16.trunc_sat_from(n)                     //~ E0413
+  w
+}

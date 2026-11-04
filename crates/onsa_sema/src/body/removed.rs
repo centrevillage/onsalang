@@ -139,7 +139,7 @@ impl<'a> Checker<'a> {
     /// before `as`, only where `as` converts `c` (§3.3); before `at`, any (the
     /// type of `e at k` is that of `e`, §11.3). In parentheses, the place of
     /// the outermost. The one answer of the candidates of every family.
-    fn place_fits(&mut self, e: ExprId, c: TyId) -> Option<Slot> {
+    pub(super) fn place_fits(&mut self, e: ExprId, c: TyId) -> Option<Slot> {
         let place = slot_of(self.ast, self.root, e)?;
         let parent = place.parent.map(|p| &self.ast.expr(p).kind);
         let fits = match (place.outer, parent) {
@@ -264,9 +264,10 @@ impl<'a> Checker<'a> {
 
     /// Whether a value of the type `c` may be where the type `t` is expected
     /// (§4.7): `t` is `c`, a variable not of a literal or of a literal of
-    /// the kind of `c`, or the error type. `c` has no parts (a number,
-    /// `Bool`, a type parameter): this is whether they unify.
-    fn may_fit(&self, t: TyId, c: TyId) -> bool {
+    /// the kind of `c`, the error type, or `Option` of what fits. `c` has
+    /// no variable and is a number, `Bool`, a type parameter or an `Option`
+    /// of one: this is whether they unify.
+    pub(super) fn may_fit(&self, t: TyId, c: TyId) -> bool {
         let t = self.shallow(t);
         match (self.ty(t), self.ty(c)) {
             (Ty::Error, _) => true,
@@ -275,6 +276,7 @@ impl<'a> Checker<'a> {
                 Some(LitKind::Int) => matches!(c, Ty::Int(_)),
                 Some(LitKind::Float) => matches!(c, Ty::Float(_)),
             },
+            (Ty::Builtin(BuiltinTy::Option, t), Ty::Builtin(BuiltinTy::Option, c)) => self.may_fit(t[0], c[0]),
             _ => t == c,
         }
     }

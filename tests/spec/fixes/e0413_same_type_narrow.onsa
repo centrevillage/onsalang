@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+// fixes = 1
+
+// E0413 for a call of `narrow_from` to the same type (§3.3, the supplement of S-231): `I32.narrow_from(n)` of an
+// `I32`. The call has an `Option` as its result, so the candidate follows the expected type (§4.7), with the call
+// removed: the argument alone, `n`, where `I32` is expected, and `Some(n)` where `Option[I32]` is expected. An alias
+// resolves before the types are compared. The positions that give no expected type have no candidate
+// (e0413_as_no_candidate_expected.onsa, `fixes = 0`). One error in each function (P-01).
+
+type Id = I32
+
+pub struct Cell {
+  v: I32,
+  o: Option[I32],
+}
+
+pub fn take(v: I32) -> I32 {
+  v
+}
+
+pub fn take_option(o: Option[I32]) -> Option[I32] {
+  o
+}
+
+pub fn the_tail_is_an_integer(n: I32) -> I32 {
+  I32.narrow_from(n)                                //~ E0413
+}
+
+pub fn the_tail_is_an_option(n: I32) -> Option[I32] {
+  I32.narrow_from(n)                                //~ E0413
+}
+
+pub fn an_annotated_let_of_an_integer(n: I32) -> I32 {
+  let m: I32 = I32.narrow_from(n)                   //~ E0413
+  m
+}
+
+pub fn an_annotated_let_of_an_option(n: I32) -> Option[I32] {
+  let o: Option[I32] = I32.narrow_from(n)           //~ E0413
+  o
+}
+
+pub fn an_argument_of_an_integer(n: I32) -> I32 {
+  take(I32.narrow_from(n))                          //~ E0413
+}
+
+pub fn an_argument_of_an_option(n: I32) -> Option[I32] {
+  take_option(I32.narrow_from(n))                   //~ E0413
+}
+
+pub fn a_return_of_an_integer(n: I32) -> I32 {
+  return I32.narrow_from(n)                         //~ E0413
+}
+
+pub fn a_return_of_an_option(n: I32) -> Option[I32] {
+  return I32.narrow_from(n)                         //~ E0413
+}
+
+pub fn a_field_of_an_integer(n: I32) -> Cell {
+  Cell { v: I32.narrow_from(n), o: None }           //~ E0413
+}
+
+pub fn a_field_of_an_option(n: I32) -> Cell {
+  Cell { v: 0, o: I32.narrow_from(n) }              //~ E0413
+}
+
+pub fn an_alias_of_an_integer(n: Id) -> I32 {
+  I32.narrow_from(n)                                //~ E0413
+}
+
+pub fn an_alias_of_an_option(n: I32) -> Option[Id] {
+  I32.narrow_from(n)                                //~ E0413
+}
+
+pub fn the_smallest_type_as_an_integer(n: I8) -> I8 {
+  I8.narrow_from(n)                                 //~ E0413
+}
+
+pub fn the_widest_unsigned_type_as_an_option(n: U64) -> Option[U64] {
+  U64.narrow_from(n)                                //~ E0413
+}

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§11.3", "§18.1"]
+// fixes = 1
+
+// E0413 for a conversion function of a pair that `as` can write (§3.3), as the left of an `as` or an `at`. `as` and `at`
+// are not chained, and the inner one is parenthesized (E0011, §3.1, §3.3, §11.3). Where the pair is another type,
+// the candidate is the `as` form and gets the parentheses: `F32.round_from(x) as F64` (`x: I16`) is `(x as F32) as F64`,
+// and `F64.round_from(x) at sample` (`x: F32`) is `(x as F64) at sample`. Where the pair is the same type, the call is
+// removed and there is no chain: `F32.round_from(x) as F64` (`x: F32`) is `x as F64`, and `F32.round_from(x) at sample`
+// is `x at sample`. The runner applies the candidate and rejects an E0011 that is left. One error in each function (P-01).
+
+pub fn widened_after_the_same_type(x: F32) -> F64 {
+  x as F64                          //~ E0413
+}
+
+pub fn widened_after_an_integer(x: I16) -> F64 {
+  (x as F32) as F64                          //~ E0413
+}
+
+pub fn as_in_parentheses_in_a_sum(x: F32, a: F64) -> F64 {
+  a + (x as F64)                    //~ E0413
+}
+
+pub flow at_after_the_same_type(x: F32 at sample) -> F32 at sample {
+  let y = x at sample               //~ E0413
+  y
+}
+
+pub flow at_after_a_widening(x: F32 at sample) -> F64 at sample {
+  let y = (x as F64) at sample               //~ E0413
+  y
+}
+
+pub flow at_after_an_integer(x: I16 at sample) -> F32 at sample {
+  let y = (x as F32) at sample               //~ E0413
+  y
+}

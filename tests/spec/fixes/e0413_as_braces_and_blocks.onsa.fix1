@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§18.1"]
+// fixes = 1
+
+// E0413 for a conversion function of a pair that `as` can write, where the argument is a block-like expression or
+// holds a `{` that a header would read as its body. Out of the parentheses of the call, a block-like expression is
+// an operand of `as` in parentheses (E0013), and in a header a struct literal and a block keep their parentheses
+// (§3.1, §18.1: the candidate holds what it needs). A trailing comma goes with the call. One error in each function
+// (P-01).
+
+struct P {
+  v: I32,
+  f: F32,
+}
+
+fn block_like_before_as(x: I32, c: Bool) -> F64 {
+  (if c { x } else { x }) as F64             //~ E0413
+}
+
+fn block_like_in_some(x: I32) -> Option[I64] {
+  Some((match x { _ => x }) as I64)               //~ E0413
+}
+
+fn block_like_of_the_same_type_as_an_operand(x: F32, c: Bool) -> F32 {
+  (if c { x } else { x }) * 2.0       //~ E0413
+}
+
+fn struct_literal_in_a_match_header() -> Bool {
+  match (P { v: 1, f: 1.0 }.v) as F64 { _ => true }      //~ E0413
+}
+
+fn struct_literal_of_the_same_type_in_a_match_header() -> Bool {
+  match (P { v: 1, f: 1.0 }.f) { _ => true }      //~ E0413
+}
+
+fn block_of_the_same_type_in_a_match_header(y: F32) -> Bool {
+  match ({ y }) { _ => true }         //~ E0413
+}
+
+fn struct_literal_under_an_operator_in_an_if_header(y: F32) -> Bool {
+  if 1.0 * (P { v: 1, f: 1.0 }.f) > y { true } else { false }     //~ E0413
+}
+
+fn trailing_comma(y: F32) -> F64 {
+  y as F64                                //~ E0413
+}
+
+fn trailing_comma_in_parentheses(y: F32, a: F64) -> F64 {
+  (y as F64) + a                            //~ E0413
+}
+
+fn trailing_comma_after_an_operator(y: F32, z: F32) -> F64 {
+  (y + z) as F64                            //~ E0413
+}

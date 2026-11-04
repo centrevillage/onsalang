@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+// fixes = 1
+
+// E0413 for a `narrow_from` of a pair that `as` can write, where the expected type is the plain `T` (§3.3, S-875).
+// `narrow_from` returns `Option[T]`, and the candidate follows the expected type: when `T` is expected, it is
+// `x as T`. The positions that give `T` are the annotation of a `let`, an argument, the return type (the tail and
+// `return`), the left of an assignment and the type of a field (§4.7). Every function has the one candidate (`x` alone for the
+// same type, with the call removed), and the runner applies it. The expected type `Option[T]` is in e0413_as_narrow_option.onsa, and the positions that
+// give no expected type are in e0413_as_no_candidate_expected.onsa. One error in each function (P-01).
+
+pub struct Cell {
+  v: I64,
+}
+
+pub fn take(v: I64) -> I64 {
+  v
+}
+
+pub fn in_an_annotated_let(n: I32) -> I64 {
+  let a: I64 = I64.narrow_from(n)                   //~ E0413
+  a
+}
+
+pub fn in_an_argument(n: I32) -> I64 {
+  take(I64.narrow_from(n))                          //~ E0413
+}
+
+pub fn as_the_tail(n: U8) -> I64 {
+  I64.narrow_from(n)                                //~ E0413
+}
+
+pub fn in_a_return(n: I16) -> I64 {
+  return I64.narrow_from(n)                         //~ E0413
+}
+
+pub fn in_an_assignment(n: I32) -> I64 {
+  var y: I64 = 0
+  y = I64.narrow_from(n)                            //~ E0413
+  y
+}
+
+pub fn in_a_field(n: I32) -> Cell {
+  Cell { v: I64.narrow_from(n) }                    //~ E0413
+}
+
+pub fn the_same_type(n: I64) -> I64 {
+  I64.narrow_from(n)                                //~ E0413
+}
+
+pub fn the_same_type_of_the_smallest(n: I8) -> I8 {
+  I8.narrow_from(n)                                 //~ E0413
+}
+
+pub fn unsigned_to_a_wider_unsigned(n: U16) -> U64 {
+  U64.narrow_from(n)                                //~ E0413
+}
+
+pub fn unsigned_to_a_wider_signed(n: U8) -> I16 {
+  I16.narrow_from(n)                                //~ E0413
+}

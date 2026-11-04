@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§6.1"]
+
+// E0401 for a conversion function taken as a value where the expected function type does not fit it (S-885, the
+// supplement). The source type of the value form comes from the expected type, so a mismatch is decided by the unification
+// of the type and is the E0401, and not the E0413 of a pair that `as` can write (a call is the E0413 first, in
+// negative/convert_no_candidate.onsa). `F64.round_from` is a function from a number to an `F64`. One error in each
+// function (P-01).
+
+pub fn the_result_is_not_a_float() {
+  let g: fn(F32) -> Bool = F64.round_from           //~ E0401
+  let _ = g
+}
+
+pub fn the_result_is_another_float() {
+  let g: fn(F32) -> F32 = F64.round_from            //~ E0401
+  let _ = g
+}
+
+pub fn the_result_is_an_integer() {
+  let g: fn(F32) -> I32 = F64.round_from            //~ E0401
+  let _ = g
+}

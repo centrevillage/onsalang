@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§18.1"]
+// fixes = 1
+
+// E0413 for a call of `round_from` to the same type (§3.3): `F32.round_from(y)` of an `F32`. The candidate removes the
+// call and keeps the argument alone (`y`), which has the type that the call gave. Where the argument is the operand of
+// an operator or of a prefix symbol, or the receiver of a call, the position decides the parentheses (§3.1): an
+// argument that binds weaker than its place gets parentheses (`F32.round_from(a + b) * c` is `(a + b) * c`, and
+// `x - F32.round_from(a - b)` is `x - (a - b)`), a name, a call, a field and an index get none, a prefix symbol on a
+// prefix symbol needs them (`-(-y)`, E0012), an `as` expression as an operand needs them (E0011), and a block-like
+// expression as an operand needs them (E0013). The `as` form for the pairs that are not the same type is in the other
+// e0413_as_* cases; the same type of `narrow_from` is in e0413_same_type_narrow.onsa. One error in each function (P-01).
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+pub fn twice(v: F32) -> F32 {
+  v + v
+}
+
+pub fn the_tail(y: F32) -> F32 {
+  F32.round_from(y)                                 //~ E0413
+}
+
+pub fn the_tail_of_f64(y: F64) -> F64 {
+  F64.round_from(y)                                 //~ E0413
+}
+
+pub fn in_a_let(y: F32) -> F32 {
+  let z: F32 = F32.round_from(y)                    //~ E0413
+  z
+}
+
+pub fn in_an_argument(y: F32) -> F32 {
+  twice(F32.round_from(y))                          //~ E0413
+}
+
+pub fn a_call_as_the_argument(y: F32) -> F32 {
+  F32.round_from(twice(y))                          //~ E0413
+}
+
+pub fn a_field_as_the_argument(p: Pair) -> F32 {
+  F32.round_from(p.a) * p.b                         //~ E0413
+}
+
+pub fn an_index_as_the_argument(ys: [F32; 4], i: U32) -> F32 {
+  F32.round_from(ys[i]) + 1.0                       //~ E0413
+}
+
+pub fn a_sum_as_the_left_of_a_product(a: F32, b: F32, c: F32) -> F32 {
+  F32.round_from(a + b) * c                         //~ E0413
+}
+
+pub fn a_difference_as_the_right_of_a_difference(x: F32, a: F32, b: F32) -> F32 {
+  x - F32.round_from(a - b)                         //~ E0413
+}
+
+pub fn a_sum_as_the_tail(a: F32, b: F32) -> F32 {
+  F32.round_from(a + b)                             //~ E0413
+}
+
+pub fn a_sum_in_an_argument(a: F32, b: F32) -> F32 {
+  twice(F32.round_from(a + b))                      //~ E0413
+}
+
+pub fn a_sum_as_the_receiver(a: F32, b: F32) -> U32 {
+  F32.round_from(a + b).to_bits()                   //~ E0413
+}
+
+pub fn a_name_as_the_receiver(a: F32) -> U32 {
+  F32.round_from(a).to_bits()                       //~ E0413
+}
+
+pub fn a_sum_after_a_prefix(a: F32, b: F32) -> F32 {
+  -F32.round_from(a + b)                            //~ E0413
+}
+
+pub fn a_prefix_after_a_prefix(y: F32) -> F32 {
+  -F32.round_from(-y)                               //~ E0413
+}
+
+pub fn an_as_expression_as_the_operand(i: I16, c: F32) -> F32 {
+  F32.round_from(i as F32) * c                      //~ E0413
+}
+
+pub fn a_block_like_as_the_operand(c: Bool, a: F32, b: F32) -> F32 {
+  F32.round_from(if c { a } else { b }) + 1.0       //~ E0413
+}

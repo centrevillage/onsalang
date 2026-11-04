@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.5"]
+
+// E0416 for an argument that breaks the bound of a conversion function, where the pair is one that `as` cannot
+// write (S-883, §3.3). The decision about the pair comes before the bound only when `as` can write the pair
+// (e0413_as_bound_order.onsa); for the other pairs the bound is the first check, so an integer for `trunc_from` and
+// `trunc_sat_from` (they take a `Float`) and a float for `narrow_from` (it takes an `Int`) are the E0416. One error
+// in each function (P-01).
+
+pub fn trunc_from_a_narrower_integer(n: I32) -> I8 {
+  I8.trunc_from(n)                                  //~ E0416
+}
+
+pub fn trunc_sat_from_a_signed_to_an_unsigned(n: I32) -> U32 {
+  U32.trunc_sat_from(n)                             //~ E0416
+}
+
+pub fn trunc_from_the_same_width_of_the_other_sign(n: U32) -> I32 {
+  I32.trunc_from(n)                                 //~ E0416
+}
+
+pub fn narrow_from_a_float(x: F32) -> Option[I64] {
+  I64.narrow_from(x)                                //~ E0416
+}

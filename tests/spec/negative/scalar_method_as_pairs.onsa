@@ -1,12 +1,16 @@
 // onsa.toml
 // [test]
 // spec = ["§3.3", "§15.1", "§18.1"]
+// fixes = 1
 
 // E0413 (W5-02 U4b): a conversion function for a pair of types that `as` can write does not exist (spec §3.3:
 // "`as` で書ける組には、変換の関連関数は無い"; the same type, the wider integer of the same sign, the wider signed integer
 // from an unsigned one, `F32` to `F64`, the small integers into a float that holds them). Every such pair is a
-// function of its own (P-01). The candidates (the `as` form) are W5-14, so the markers do not count them. The
-// methods of the pairs that `as` cannot write are in ops/convert_methods_table.onsa.
+// function of its own (P-01). Each has one candidate, the `as` form: `x as T` for a `round_from`, and `Some(x as T)` for a
+// `narrow_from`, because the function returns the `Option[T]` that is expected there (S-875, spec §3.3), so `fixes = 1`.
+// The same type (`I8.narrow_from(x)` of an `I8`) has the call removed: `x` for a `round_from` and `Some(x)` for a
+// `narrow_from` (the supplement of S-231).
+// The methods of the pairs that `as` cannot write are in ops/convert_methods_table.onsa.
 
 pub fn i8_narrow_i8(x: I8) -> Option[I8] {
   I8.narrow_from(x)    //~ E0413

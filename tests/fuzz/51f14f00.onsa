@@ -1,0 +1,1 @@
+fn t(y:F32)->F64{1+F64.round_from(y)}

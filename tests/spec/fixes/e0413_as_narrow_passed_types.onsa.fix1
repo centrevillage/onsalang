@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§4.7", "§7", "§18.1"]
+// fixes = 1
+
+// E0413 for a `narrow_from` of a pair that `as` can write, in the positions whose expected type is the one that the
+// type check passes there (S-880, §3.3, §4.7): the later branch of an `if` and the later arm of a `match` have the
+// type of the branch or the arm before, the right of `<<` and `>>` has the type `U32` (§3.4), and the later end of a
+// range has the type of the first end (§7). The candidate follows that type: `x as T` where `T` is expected and
+// `Some(x as T)` where `Option[T]` is expected (and `x` and `Some(x)` for a call to the same type). Where the expected
+// type has a type variable, the one of the two forms that can fit is the candidate: `Option[?v]` and `Option[T]`
+// take `Some(x as T)` (the `None` of the first branch, the `T` of a generic function). The right of a shift and
+// the end of a range are the operands of a binary symbol, so the `as` form gets parentheses there (`a << (n as U32)`,
+// `a ..< (n as U32)`, §3.1). The positions that give no type are in negative/scalar_method_as_narrow_open.onsa.
+// One error in each function (P-01).
+
+pub fn gen[T](o: Option[T]) -> Option[T] {
+  o
+}
+
+pub fn the_else_branch_after_an_option(c: Bool, a: I64, n: I32) -> Option[I64] {
+  let y = if c { Some(a) } else { Some(n as I64) }  //~ E0413
+  y
+}
+
+pub fn the_else_branch_after_none(c: Bool, n: I32) -> Option[I64] {
+  let y = if c { None } else { Some(n as I64) }     //~ E0413
+  y
+}
+
+pub fn the_else_branch_after_an_integer(c: Bool, a: I64, n: I32) -> I64 {
+  let y = if c { a } else { n as I64 }        //~ E0413
+  y
+}
+
+pub fn the_else_branch_after_an_option_of_the_same_type(c: Bool, a: I64, m: I64) -> Option[I64] {
+  let y = if c { Some(a) } else { Some(m) }  //~ E0413
+  y
+}
+
+pub fn the_second_arm_after_an_option(o: Option[I64], n: I32) -> Option[I64] {
+  let y = match o {
+    Some(v) => Some(v),
+    None => Some(n as I64),                         //~ E0413
+  }
+  y
+}
+
+pub fn the_second_arm_after_an_integer(o: Option[I64], n: I32) -> I64 {
+  let y = match o {
+    Some(v) => v,
+    None => n as I64,                         //~ E0413
+  }
+  y
+}
+
+pub fn the_right_of_a_shift(a: U32, n: U16) -> U32 {
+  a << (n as U32)                           //~ E0413
+}
+
+pub fn the_right_of_a_shift_down(a: U32, n: U16) -> U32 {
+  a >> (n as U32)                           //~ E0413
+}
+
+pub fn the_right_of_a_shift_of_the_same_type(a: U32, m: U32) -> U32 {
+  a << m                           //~ E0413
+}
+
+pub fn the_end_of_a_range(a: U32, n: U16) -> U32 {
+  var t: U32 = 0
+  for i in a ..< (n as U32) {               //~ E0413
+    t = t + i
+  }
+  t
+}
+
+pub fn the_end_of_a_range_of_the_same_type(a: U32, m: U32) -> U32 {
+  var t: U32 = 0
+  for i in a ..< m {               //~ E0413
+    t = t + i
+  }
+  t
+}
+
+pub fn the_argument_of_a_generic_option(n: I32) -> Option[I64] {
+  gen(Some(n as I64))                           //~ E0413
+}
+
+pub fn the_argument_of_a_generic_option_of_the_same_type(m: I64) -> Option[I64] {
+  gen(Some(m))                           //~ E0413
+}

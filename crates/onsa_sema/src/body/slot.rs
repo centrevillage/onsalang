@@ -15,13 +15,37 @@ pub(crate) enum Slot {
     Operand(OperandPlace),
     /// An expression statement, whose value is dropped.
     Discarded,
+    /// An end of a range, which takes every operator (§3.1) but not a bare
+    /// `as` or `at` (§3.3).
+    RangeEnd,
 }
 
 /// The form at the top of the text a candidate writes in a slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Form {
+    /// A name, a literal, a postfix chain, a bracket.
+    Plain,
+    /// `-x`, `!x`.
+    Prefix,
+    /// `x as T`, `e at k`.
+    AsAt,
+    /// A block-like expression ([`ExprKind::block_like`]).
+    Block,
     /// A chain whose root is this operator (`s.len() == 0`).
     Binary(BinOp),
+}
+
+impl Form {
+    /// The form of the expression `e`, as it is written.
+    pub(crate) fn of(ast: &Ast, e: ExprId) -> Form {
+        match ast.expr(e).kind {
+            ExprKind::Binary { op, .. } => Form::Binary(op),
+            ExprKind::Cast { .. } | ExprKind::At { .. } => Form::AsAt,
+            ExprKind::Unary { .. } => Form::Prefix,
+            ref kind if kind.block_like() => Form::Block,
+            _ => Form::Plain,
+        }
+    }
 }
 
 /// Where an expression is: its own slot, and the slot and the parent (none
@@ -53,11 +77,16 @@ pub(crate) fn slot_of(ast: &Ast, root: ExprId, e: ExprId) -> Option<Place> {
                 .collect(),
             _ => HashSet::default(),
         };
+        let ends = match kind {
+            ExprKind::Range(r) | ExprKind::Par { range: r, .. } => [Some(r.lo), Some(r.hi)],
+            _ => [None, None],
+        };
         for c in ast.sub_exprs(x) {
             let place = operands.iter().flatten().find(|(o, _)| *o == c);
             let s = match place {
                 Some(&(_, p)) => Slot::Operand(p),
                 None if dropped.contains(&c) => Slot::Discarded,
+                None if ends.contains(&Some(c)) => Slot::RangeEnd,
                 None => Slot::Free,
             };
             let around = match kind {
@@ -73,12 +102,33 @@ pub(crate) fn slot_of(ast: &Ast, root: ExprId, e: ExprId) -> Option<Place> {
 impl Slot {
     /// Whether `form` is written in parentheses in this slot (§3.1).
     pub(crate) fn wraps(self, form: Form) -> bool {
-        let Form::Binary(op2) = form;
+        let operand = match form {
+            Form::Plain | Form::Prefix => Operand::Plain,
+            Form::AsAt => Operand::AsAt,
+            Form::Binary(op) => Operand::Binary(op),
+            Form::Block => return matches!(self, Slot::Operand(_)),
+        };
         match self {
             Slot::Free | Slot::Discarded => false,
-            Slot::Operand(OperandPlace::Binary(op, side)) => !op.bare(side, Operand::Binary(op2)),
-            Slot::Operand(OperandPlace::AsAtLeft) => !Operand::Binary(op2).bare_before_as_at(),
-            Slot::Operand(OperandPlace::Prefix | OperandPlace::Postfix) => true,
+            Slot::RangeEnd => form == Form::AsAt,
+            Slot::Operand(OperandPlace::Binary(op, side)) => !op.bare(side, operand),
+            Slot::Operand(OperandPlace::AsAtLeft) => !operand.bare_before_as_at(),
+            Slot::Operand(OperandPlace::Prefix | OperandPlace::Postfix) => form != Form::Plain,
         }
     }
+}
+
+/// Whether the text of `e`, out of the parentheses of a call, has a `{`
+/// that a header would read as its body (§3.1): a struct literal or a block
+/// among the operands (each once, on a stack: chains may be long).
+pub(crate) fn opens_a_brace(ast: &Ast, e: ExprId) -> bool {
+    let mut todo = vec![e];
+    while let Some(x) = todo.pop() {
+        let kind = &ast.expr(x).kind;
+        if matches!(kind, ExprKind::Struct { .. } | ExprKind::Block(_)) {
+            return true;
+        }
+        todo.extend(kind.operands().into_iter().flatten().map(|(o, _)| o));
+    }
+    false
 }

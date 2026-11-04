@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 for a conversion function of a pair that `as` can write (§3.3), in the root file and in a module that it
+// imports (units.onsa). The candidate is the same in both files and does not depend on where a name comes from: the
+// operand of an operator in parentheses, the expected type `T` or `Option[T]` from the return type. One error in each
+// function (P-01); the functions that use the module are in `fine`.
+
+use units
+use units.{bias, widen, narrow}
+
+pub fn sum(x: F32) -> F64 {
+  (x as F64) + bias()                        //~ E0413
+}
+
+pub fn expected_option(n: I32) -> Option[I64] {
+  Some(n as I64)                                //~ E0413
+}
+
+pub fn expected_t(n: I32) -> I64 {
+  n as I64                                //~ E0413
+}
+
+pub fn fine(x: F32, n: I32) -> F64 {
+  let k = units.count(n)
+  widen(x) + bias() + (k as F64)
+}
+
+pub fn kept(n: I32) -> Option[I64] {
+  narrow(n)
+}

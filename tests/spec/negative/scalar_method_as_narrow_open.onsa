@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§7", "§18.1"]
+// fixes = 0
+
+// E0413 for a `narrow_from` of a pair that `as` can write, in the positions that give no type to choose between
+// `x as T` and `Some(x as T)` (S-875, S-880, §3.3): the first end of a range (nothing is known before it), the first
+// branch of an `if` and the first arm of a `match` that are not annotated (the later ones take their type, in
+// fixes/e0413_as_narrow_passed_types.onsa), and an argument of a type variable of its own (`ident[T](t: T)`: both
+// forms fit `?T`). The text of §3.3 offers no candidate there and shows the two forms in a note, so `fixes = 0`
+// checks that none is offered. One error in each function (P-01).
+
+pub fn ident[T](t: T) -> T {
+  t
+}
+
+pub fn the_start_of_a_range(n: U16) -> U32 {
+  var t: U32 = 0
+  for i in U32.narrow_from(n) ..< 8 {               //~ E0413
+    t = t + i
+  }
+  t
+}
+
+pub fn the_first_branch_without_an_annotation(c: Bool, a: I64, n: I32) -> Option[I64] {
+  let y = if c { I64.narrow_from(n) } else { Some(a) }  //~ E0413
+  y
+}
+
+pub fn the_first_arm_without_an_annotation(o: Option[I64], a: I64) -> Option[I64] {
+  let y = match o {
+    Some(v) => I64.narrow_from(v),                  //~ E0413
+    None => Some(a),
+  }
+  y
+}
+
+pub fn an_argument_of_a_bare_type_variable(n: I32) -> Option[I64] {
+  let r = ident(I64.narrow_from(n))                 //~ E0413
+  r
+}

@@ -10,15 +10,15 @@
 use std.math.{abs, max, sqrt}
 
 pub fn widen(x: F32) -> F64 {
-  F64.round_from(x)                                 //~ E0413
+  x as F64                                 //~ E0413
 }
 
 pub fn widen_int(n: I32) -> I64 {
-  I64.narrow_from(n)                                //~ E0413
+  n as I64                                //~ E0413
 }
 
 pub fn same_type(x: F32) -> F32 {
-  F32.round_from(x)                                 //~ E0413
+  x                                 //~ E0413
 }
 
 pub fn magnitude(x: F32) -> F32 {

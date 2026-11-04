@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§18.1"]
+// fixes = 1
+
+// E0413 for a conversion function of a pair that `as` can write (§3.3, S-98, R-158), as the operand of a binary
+// operator. The candidate is the `as` form. `as` is weaker than a postfix call and stronger than a binary operator
+// (§3.1), so an `as` expression is an operand of a binary operator only in parentheses (E0011: `acc + (x as F64)`),
+// and the candidate carries them: `F64.round_from(x) + a` becomes `(x as F64) + a`. The runner applies the candidate and
+// checks that no error is left in the function, so a candidate without the parentheses fails here (E0011). The
+// operand is the left or the right one of an arithmetic operator or a comparison, or sits in a longer chain or in
+// parentheses of its own. When the call is already the whole content of the parentheses of the writer
+// (`(F64.round_from(x)) + a`), they are the parentheses that `as` needs, so the candidate adds none (its copy, .fix1, is
+// the check). `round_from` returns the type that `as` gives, so the position needs no expected type (S-875). The call to the same
+// type is removed, with no parentheses (`F32.round_from(x) + a` is `x + a`).
+// One error in each function (P-01).
+
+pub fn left_of_add(x: F32, a: F64) -> F64 {
+  (x as F64) + a                             //~ E0413
+}
+
+pub fn right_of_add(x: F32, a: F64) -> F64 {
+  a + (x as F64)                             //~ E0413
+}
+
+pub fn left_of_sub(x: I8, a: F32) -> F32 {
+  (x as F32) - a                             //~ E0413
+}
+
+pub fn right_of_sub(x: U16, a: F32) -> F32 {
+  a - (x as F32)                             //~ E0413
+}
+
+pub fn left_of_mul(x: I16, a: F64) -> F64 {
+  (x as F64) * a                             //~ E0413
+}
+
+pub fn right_of_div(x: U32, a: F64) -> F64 {
+  a / (x as F64)                             //~ E0413
+}
+
+pub fn the_same_type_as_operand(x: F32, a: F32) -> F32 {
+  x + a                             //~ E0413
+}
+
+pub fn nearest_operand_of_a_product(x: F32, a: F64, b: F64) -> F64 {
+  a + b * (x as F64)                         //~ E0413
+}
+
+pub fn middle_of_a_chain(x: F32, a: F64, b: F64) -> F64 {
+  a + (x as F64) + b                         //~ E0413
+}
+
+pub fn inside_parentheses(x: F32, a: F64, b: F64) -> F64 {
+  ((x as F64) + a) * b                       //~ E0413
+}
+
+pub fn left_in_the_parentheses_of_the_writer(x: F32, a: F64) -> F64 {
+  (x as F64) + a                           //~ E0413
+}
+
+pub fn right_in_the_parentheses_of_the_writer(x: F32, a: F64) -> F64 {
+  a + (x as F64)                           //~ E0413
+}
+
+pub fn left_of_a_comparison(x: F32, a: F64) -> Bool {
+  (x as F64) < a                             //~ E0413
+}
+
+pub fn right_of_a_comparison(x: F32, a: F64) -> Bool {
+  a <= (x as F64)                            //~ E0413
+}
+
+pub fn left_of_an_equality(x: I8, a: F32) -> Bool {
+  (x as F32) == a                            //~ E0413
+}
+
+pub fn right_of_an_inequality(x: U8, a: F64) -> Bool {
+  a != (x as F64)                            //~ E0413
+}
+
+pub fn in_a_condition(x: F32, a: F64) -> F64 {
+  if (x as F64) < a { 1.0 } else { 2.0 }     //~ E0413
+}

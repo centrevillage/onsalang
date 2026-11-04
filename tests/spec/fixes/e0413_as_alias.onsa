@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.4", "§4.7", "§18.1"]
+// fixes = 1
+
+// E0413 for a conversion function of a pair that `as` can write (§3.3), with a type alias (§4.4). An alias is
+// resolved before the types are compared (S-210, S-875): `type Sample = F32` makes `F32.round_from(s)` of a `Sample` a
+// conversion between the same type, and an expected type `Sample` is `F32`, so the candidate of a `narrow_from` is `x as T`
+// when the expected type is an alias of `T`, and `Some(x as T)` when it is `Option` of one. One error in each
+// function (P-01).
+
+type Sample = F32
+type Wide = F64
+type Idx = U32
+
+pub fn alias_receiver(s: Sample) -> F32 {
+  F32.round_from(s)                                 //~ E0413
+}
+
+pub fn alias_expected(x: F32) -> Sample {
+  F32.round_from(x)                                 //~ E0413
+}
+
+pub fn alias_receiver_and_expected(s: Sample) -> Sample {
+  F32.round_from(s)                                 //~ E0413
+}
+
+pub fn alias_widened(s: Sample) -> Wide {
+  F64.round_from(s)                                 //~ E0413
+}
+
+pub fn alias_as_operand(s: Sample, a: Wide) -> Wide {
+  F64.round_from(s) + a                             //~ E0413
+}
+
+pub fn alias_narrow_to_t(n: U16) -> Idx {
+  U32.narrow_from(n)                                //~ E0413
+}
+
+pub fn alias_narrow_to_an_option(n: U16) -> Option[Idx] {
+  U32.narrow_from(n)                                //~ E0413
+}
+
+pub fn alias_narrow_in_an_argument(n: U16) -> Idx {
+  keep(U32.narrow_from(n))                          //~ E0413
+}
+
+pub fn keep(i: Idx) -> Idx {
+  i
+}

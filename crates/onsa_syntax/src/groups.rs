@@ -979,6 +979,25 @@ mod tests {
         assert_eq!(check("--x"), vec![(Code::E0002, None)]);
     }
 
+    /// The judgment on the AST is the one on the CST (D-15).
+    #[test]
+    fn block_like_of_the_ast_is_of_the_cst() {
+        let src = "fn f() { g(if c { 1 } else { 2 }, match o { _ => 1 }, { n }, fn(x: I32) -> I32 { x }, \
+                   unsafe { n }, handle { 1 } with h, par~ i in 0..<2 { x }, if~ c { x } else { 0.0 }, \
+                   match~ o { _ => x }, 1, a, P { x: 1 }, (a), (a, b), [a], [a; 2], -a, a + b, a as F64, \
+                   a at k, a.b, a.0, a[0], a?, ^a, h::[I32], _) }\n";
+        let read = crate::read(FileId(0), src, crate::parser::ItemCtx::Top);
+        assert!(read.ast.exprs.len() > 30);
+        let mut block_like = 0;
+        for i in 0..read.ast.exprs.len() as u32 {
+            let e = crate::ast::ExprId(i);
+            let of_cst = read.map.expr_kind(&read.cst, e).block_like();
+            assert_eq!(read.ast.expr(e).kind.block_like(), of_cst, "{:?}", read.ast.expr(e).kind);
+            block_like += of_cst as u32;
+        }
+        assert!(block_like >= 9, "{block_like}");
+    }
+
     /// E0013 (§3.1, S-537): a block-like expression as an operand.
     #[test]
     fn block_like_operands() {

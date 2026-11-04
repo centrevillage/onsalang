@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+// fixes = 0
+
+// E0413 for a `narrow_from` of a pair that `as` can write, in a position that gives no expected type (§3.3, S-875):
+// a `let` without an annotation, a receiver, the target of a `match`, the left of `?`, the operand of an arithmetic
+// operator and the left of an `as` (§4.7 lists the places that give an expected type, and these are not among
+// them). `x as T` and `Some(x as T)` are both readings there, so there is no candidate (and the note shows the two
+// forms). `fixes = 0` checks that no candidate is offered. One error in each function (P-01).
+
+pub fn in_a_let_without_annotation(n: I32) -> I64 {
+  let _ = I64.narrow_from(n)                        //~ E0413
+  0
+}
+
+pub fn receiver_of_unwrap(n: I32) -> I64 {
+  I64.narrow_from(n).unwrap()                       //~ E0413
+}
+
+pub fn target_of_a_match(n: I32) -> I64 {
+  match I64.narrow_from(n) {                        //~ E0413
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn left_of_a_try(n: I32) -> Option[I64] {
+  let v = I64.narrow_from(n)?                       //~ E0413
+  Some(v)
+}
+
+pub fn left_operand_of_an_addition(n: I32, a: I64) -> I64 {
+  I64.narrow_from(n) + a                            //~ E0413
+}
+
+pub fn right_operand_of_a_subtraction(n: I32, a: I64) -> I64 {
+  a - I64.narrow_from(n)                            //~ E0413
+}
+
+pub fn operand_of_a_comparison(n: I32, a: I64) -> Bool {
+  I64.narrow_from(n) < a                            //~ E0413
+}
+
+pub fn left_of_an_as(n: I32) -> I64 {
+  I32.narrow_from(n) as I64                         //~ E0413
+}
+
+pub fn the_same_type_in_a_let_without_annotation(n: I32) -> I32 {
+  let _ = I32.narrow_from(n)                        //~ E0413
+  0
+}

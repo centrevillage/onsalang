@@ -1,5 +1,6 @@
 //! The calls of functions and methods, and their arguments.
 
+use super::conversions::ConversionCall;
 use super::*;
 use crate::names::body::PathRes;
 
@@ -137,7 +138,8 @@ impl<'a> Checker<'a> {
                 }
                 self.check_args(args, &params, span)?;
                 if let Some(to) = conversion {
-                    self.conversion_use(name.span, targs[0], to)?;
+                    let call = ConversionCall { e, ret, expected };
+                    self.conversion_use(name.span, targs[0], to, Some(call))?;
                     if let Some(exp) = expected {
                         self.unify_at(span, ret, exp)?;
                     }

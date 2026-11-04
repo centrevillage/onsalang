@@ -878,6 +878,14 @@ impl ExprKind {
             | Range(_) => [None, None],
         }
     }
+
+    /// Whether this is a block-like expression: the judgment of
+    /// [`crate::cst::NodeKind::block_like`] where only the AST is at hand
+    /// (the candidates of the types stage). A test holds them together.
+    pub fn block_like(&self) -> bool {
+        use ExprKind::*;
+        matches!(self, Block(_) | If { .. } | Match { .. } | Closure { .. } | Handle { .. } | Unsafe(_) | Par { .. })
+    }
 }
 
 impl BinOp {

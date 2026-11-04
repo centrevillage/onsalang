@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§18.1"]
+// fixes = 1
+
+// E0413 for a conversion function of a pair that `as` can write (§3.3), as the receiver of a method call. A postfix
+// call binds stronger than `as` (§3.1), so the candidate puts the `as` expression in parentheses: `F64.round_from(x).to_bits()`
+// becomes `(x as F64).to_bits()` (`x as F64.to_bits()` is a syntax error, which the runner would find). The call to the
+// same type is removed and its argument is the receiver: `F32.round_from(x).to_bits()` (`x: F32`) is `x.to_bits()`. The
+// conversion that is the argument of another conversion (`truncation`) needs no parentheses. One error in each function (P-01).
+
+pub fn id_u64(v: U64) -> U64 {
+  v
+}
+
+pub fn to_bits_of_a_widened(x: F32) -> U64 {
+  F64.round_from(x).to_bits()                       //~ E0413
+}
+
+pub fn to_bits_of_the_same_type(x: F32) -> U32 {
+  F32.round_from(x).to_bits()                       //~ E0413
+}
+
+pub fn to_bits_of_an_integer(x: I16) -> U32 {
+  F32.round_from(x).to_bits()                       //~ E0413
+}
+
+pub fn truncation(x: F32) -> I32 {
+  I32.trunc_sat_from(F64.round_from(x))             //~ E0413
+}
+
+pub fn receiver_in_a_sum(x: F32, k: U64) -> U64 {
+  F64.round_from(x).to_bits() + k                   //~ E0413
+}
+
+pub fn receiver_in_an_argument(x: F32) -> U64 {
+  id_u64(F64.round_from(x).to_bits())               //~ E0413
+}
+
+pub fn receiver_in_a_let(x: U8) -> U64 {
+  let b = F64.round_from(x).to_bits()               //~ E0413
+  b
+}

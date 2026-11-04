@@ -1,0 +1,169 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 (W5-02 U4b): a conversion function for a pair of types that `as` can write does not exist (spec §3.3:
+// "`as` で書ける組には、変換の関連関数は無い"; the same type, the wider integer of the same sign, the wider signed integer
+// from an unsigned one, `F32` to `F64`, the small integers into a float that holds them). Every such pair is a
+// function of its own (P-01). Each has one candidate, the `as` form: `x as T` for a `round_from`, and `Some(x as T)` for a
+// `narrow_from`, because the function returns the `Option[T]` that is expected there (S-875, spec §3.3), so `fixes = 1`.
+// The same type (`I8.narrow_from(x)` of an `I8`) has the call removed: `x` for a `round_from` and `Some(x)` for a
+// `narrow_from` (the supplement of S-231).
+// The methods of the pairs that `as` cannot write are in ops/convert_methods_table.onsa.
+
+pub fn i8_narrow_i8(x: I8) -> Option[I8] {
+  Some(x)    //~ E0413
+}
+
+pub fn i8_narrow_i16(x: I8) -> Option[I16] {
+  Some(x as I16)    //~ E0413
+}
+
+pub fn i8_narrow_i32(x: I8) -> Option[I32] {
+  Some(x as I32)    //~ E0413
+}
+
+pub fn i8_narrow_i64(x: I8) -> Option[I64] {
+  Some(x as I64)    //~ E0413
+}
+
+pub fn i8_round_f32(x: I8) -> F32 {
+  x as F32    //~ E0413
+}
+
+pub fn i8_round_f64(x: I8) -> F64 {
+  x as F64    //~ E0413
+}
+
+pub fn i16_narrow_i16(x: I16) -> Option[I16] {
+  Some(x)    //~ E0413
+}
+
+pub fn i16_narrow_i32(x: I16) -> Option[I32] {
+  Some(x as I32)    //~ E0413
+}
+
+pub fn i16_narrow_i64(x: I16) -> Option[I64] {
+  Some(x as I64)    //~ E0413
+}
+
+pub fn i16_round_f32(x: I16) -> F32 {
+  x as F32    //~ E0413
+}
+
+pub fn i16_round_f64(x: I16) -> F64 {
+  x as F64    //~ E0413
+}
+
+pub fn i32_narrow_i32(x: I32) -> Option[I32] {
+  Some(x)    //~ E0413
+}
+
+pub fn i32_narrow_i64(x: I32) -> Option[I64] {
+  Some(x as I64)    //~ E0413
+}
+
+pub fn i32_round_f64(x: I32) -> F64 {
+  x as F64    //~ E0413
+}
+
+pub fn i64_narrow_i64(x: I64) -> Option[I64] {
+  Some(x)    //~ E0413
+}
+
+pub fn u8_narrow_i16(x: U8) -> Option[I16] {
+  Some(x as I16)    //~ E0413
+}
+
+pub fn u8_narrow_i32(x: U8) -> Option[I32] {
+  Some(x as I32)    //~ E0413
+}
+
+pub fn u8_narrow_i64(x: U8) -> Option[I64] {
+  Some(x as I64)    //~ E0413
+}
+
+pub fn u8_narrow_u8(x: U8) -> Option[U8] {
+  Some(x)    //~ E0413
+}
+
+pub fn u8_narrow_u16(x: U8) -> Option[U16] {
+  Some(x as U16)    //~ E0413
+}
+
+pub fn u8_narrow_u32(x: U8) -> Option[U32] {
+  Some(x as U32)    //~ E0413
+}
+
+pub fn u8_narrow_u64(x: U8) -> Option[U64] {
+  Some(x as U64)    //~ E0413
+}
+
+pub fn u8_round_f32(x: U8) -> F32 {
+  x as F32    //~ E0413
+}
+
+pub fn u8_round_f64(x: U8) -> F64 {
+  x as F64    //~ E0413
+}
+
+pub fn u16_narrow_i32(x: U16) -> Option[I32] {
+  Some(x as I32)    //~ E0413
+}
+
+pub fn u16_narrow_i64(x: U16) -> Option[I64] {
+  Some(x as I64)    //~ E0413
+}
+
+pub fn u16_narrow_u16(x: U16) -> Option[U16] {
+  Some(x)    //~ E0413
+}
+
+pub fn u16_narrow_u32(x: U16) -> Option[U32] {
+  Some(x as U32)    //~ E0413
+}
+
+pub fn u16_narrow_u64(x: U16) -> Option[U64] {
+  Some(x as U64)    //~ E0413
+}
+
+pub fn u16_round_f32(x: U16) -> F32 {
+  x as F32    //~ E0413
+}
+
+pub fn u16_round_f64(x: U16) -> F64 {
+  x as F64    //~ E0413
+}
+
+pub fn u32_narrow_i64(x: U32) -> Option[I64] {
+  Some(x as I64)    //~ E0413
+}
+
+pub fn u32_narrow_u32(x: U32) -> Option[U32] {
+  Some(x)    //~ E0413
+}
+
+pub fn u32_narrow_u64(x: U32) -> Option[U64] {
+  Some(x as U64)    //~ E0413
+}
+
+pub fn u32_round_f64(x: U32) -> F64 {
+  x as F64    //~ E0413
+}
+
+pub fn u64_narrow_u64(x: U64) -> Option[U64] {
+  Some(x)    //~ E0413
+}
+
+pub fn f32_round_f32(x: F32) -> F32 {
+  x    //~ E0413
+}
+
+pub fn f32_round_f64(x: F32) -> F64 {
+  x as F64    //~ E0413
+}
+
+pub fn f64_round_f64(x: F64) -> F64 {
+  x    //~ E0413
+}

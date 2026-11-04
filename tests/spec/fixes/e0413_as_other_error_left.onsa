@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "49:15"
+// code = "E0413"
+// candidate = 1
+// leaves = ["50:16 E0401"]
+//
+// [[test.fix]]
+// at = "55:11"
+// code = "E0413"
+// candidate = 1
+// leaves = ["55:7 E0401"]
+//
+// [[test.fix]]
+// at = "59:7"
+// code = "E0413"
+// candidate = 1
+// leaves = ["59:16 E0401"]
+//
+// [[test.fix]]
+// at = "63:15"
+// code = "E0413"
+// candidate = 1
+// leaves = ["64:16 E0401"]
+//
+// [[test.fix]]
+// at = "69:28"
+// code = "E0413"
+// candidate = 1
+// leaves = ["70:16 E0401"]
+
+
+
+// E0413 for a conversion function of a pair that `as` can write (§3.3), where another error of the same stage is in the
+// function (S-882, §18.1). A unit reports its first type error only, so the check reports the E0413 and not the
+// error after it. The candidate puts an expression of the type that the call had (`F64` for `F64.round_from(y)`) in
+// its place, and the neighbouring operand or the later statement that takes that type is a second error of the
+// input, outside the promise of §18.1 (the candidate of a diagnostic leaves no diagnostic of the same stage in the
+// unit, where the reported one is the only error of the unit). The candidate is still offered, and the entries in the
+// header say what is left (`leaves`, the position in the fixed text). The second error is a statement that uses the
+// binding (`let _: F32 = z`), an integer literal beside the float (`1 + F64.round_from(y)`) and the like. One
+// error in each function (P-01).
+
+pub fn a_later_statement_uses_the_binding(y: F32) -> F64 {
+  let z = F64.round_from(y)                         //~ E0413
+  let _: F32 = z
+  z
+}
+
+pub fn an_integer_literal_on_the_left(y: F32) -> F64 {
+  1 + F64.round_from(y)                             //~ E0413
+}
+
+pub fn an_integer_literal_on_the_right(y: F32) -> F64 {
+  F64.round_from(y) + 1                             //~ E0413
+}
+
+pub fn the_same_type_and_a_later_statement(y: F32) -> F32 {
+  let z = F32.round_from(y)                         //~ E0413
+  let _: F64 = z
+  z
+}
+
+pub fn an_option_and_a_later_statement(n: I32) -> Option[I64] {
+  let o: Option[I64] = I64.narrow_from(n)           //~ E0413
+  let _: I64 = o
+  o
+}

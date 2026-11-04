@@ -1,0 +1,21 @@
+// Functions that another module (main.onsa) imports, with the errors of the conversion functions in a module file.
+
+pub fn bias() -> F64 {
+  0.5
+}
+
+pub fn widen(x: F32) -> F64 {
+  x as F64                                 //~ E0413
+}
+
+pub fn narrow(n: I32) -> Option[I64] {
+  Some(n as I64)                                //~ E0413
+}
+
+pub fn scaled(x: F32, k: F64) -> F64 {
+  k * (x as F64)                             //~ E0413
+}
+
+pub fn count(n: I32) -> I32 {
+  n
+}
