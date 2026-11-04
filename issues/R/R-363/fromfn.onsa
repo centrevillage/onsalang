@@ -1,0 +1,23 @@
+use std.array
+
+fn build() -> [U32; 3] {
+  array.from_fn(fn(i) { 10 / (i - i) })
+}
+
+test "a lambda in the body" {
+  let a: [U32; 3] = array.from_fn(fn(i) { 10 / (i - i) })
+  assert a[0] == 0
+}
+
+test "b lambda in a called fn" {
+  let a = build()
+  assert a[0] == 0
+}
+
+test "c assert in a lambda" {
+  let a: [U32; 3] = array.from_fn(fn(i) {
+    assert i > 5
+    i
+  })
+  assert a[0] == 0
+}

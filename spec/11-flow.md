@@ -355,6 +355,7 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 結果のテキストの形は [`spec/tools.md`](tools.md) §4、`--json` の形は §18.1 に定める。
 
 性質の検査（property-based testing）は構文ではなくライブラリで行う。`std.test` の `check[T: Show](cases: U32, g: Gen[T], p: fn(T) -> Bool) uses {Random}` は、`g` から `cases` 個の値を生成して `p` を検査し、反例を `Show` で表示して panic する。
+反例の panic は `check` の呼び出しの位置で、文面は約束しない（`p` の中の panic は、その位置で、`calls` に `check` の呼び出しが入る、§18.1）。
 生成器は `gen.f32(lo, hi)`、`gen.u32(lo, hi)`、`gen.pair(g1, g2)` など。種はテストランナーが与えるので決定的で、`onsa test --seed` で変えられる。
 
 ```onsa

@@ -1,0 +1,11 @@
+use std.array
+
+fn bad(i: U32) -> U32 {
+  10 / (i - i)
+}
+
+test "a named fn in from_fn" {
+  let a: [U32; 3] = array.from_fn(bad)
+  assert a[0] == 0
+}
+
