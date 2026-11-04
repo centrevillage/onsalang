@@ -1209,6 +1209,7 @@ fn runs_as_json() {
     assert_eq!(c["markers"][0]["stage"], "check");
     assert_eq!(c["markers"][0]["target"], serde_json::Value::Null);
     assert_eq!(c["markers"][0]["matched"], true);
+    assert_eq!(c["host_names"], serde_json::json!([]));
     assert_eq!(c["problems"].as_array().unwrap().len(), 0);
     // a marker that no diagnostic matched is listed as not matched, with the problem
     let w = case("tests/wrong.onsa");

@@ -45,7 +45,9 @@
 //! (`onsa_syntax::Parsed::syntax_errors`, the one place `fmt` decides to
 //! refuse a file; `tools/fmt_props.py` reads it, W3-02/b 5).
 //!
-//! `--run` prints the form of `onsa_tests::run::runs_json`. Exits 1 when a
+//! `--run` prints the form of `onsa_tests::run::runs_json`; it does not run
+//! the host sequences of the cases (`host_names` names them), which only
+//! `cargo test -p onsa_tests --test cases` does. Exits 1 when a
 //! case or a std module cannot be read (`--run` reports those in its
 //! `errors` and in the runs instead, and exits 0), 2 on a usage error.
 //!

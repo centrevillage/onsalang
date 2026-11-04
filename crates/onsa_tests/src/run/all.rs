@@ -147,6 +147,7 @@ pub fn runs_json(runs: &[CaseRun], errors: &[String]) -> serde_json::Value {
                 "path": r.path,
                 "mode": r.mode,
                 "ran": r.ran,
+                "host_names": r.host_names,
                 "markers": markers,
                 "problems": r.problems.iter().map(|p| serde_json::json!({ "kind": p.kind(), "text": p.text() })).collect::<Vec<_>>(),
             })

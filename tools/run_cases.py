@@ -4,6 +4,8 @@
 The case runner `onsa_cases --run <root>` takes a root that holds `tests/`, not a file. This copies
 each `tests/<path>` of the tree (a file with its `.fixK` files, or a directory) under a work
 directory and runs the runner on it; it prints `ok` or `FAIL` and the problems of each case.
+The runner does not run the host sequences of a case (`[[test.host]]`, the calls at the C boundary), so its `ok`
+says nothing of their results: the line of such a case says how many did not run.
 
     tools/run_cases.py [--tree DIR] [--bin ONSA_CASES] --work DIR <path under tests/>...
 
@@ -38,6 +40,9 @@ def refused(work, trees):
         if w == t or t in w.parents or w in t.parents:
             return f"{'holds' if w in t.parents else 'in'} {t}"
     return None
+
+
+HOST_STEPS = "cargo test -p onsa_tests --test cases"
 
 
 def main(argv=None) -> int:
@@ -83,7 +88,9 @@ def main(argv=None) -> int:
     for c in cases:
         problems = c.get("problems", [])
         failed += bool(problems)
-        print(("FAIL " if problems else "ok   ") + c.get("path", c.get("name", "?")))
+        hosts = len(c.get("host_names", []))
+        skipped = f" ({hosts} host sequence(s) not run: only `{HOST_STEPS}` runs them)" if hosts else ""
+        print(("FAIL " if problems else "ok   ") + c.get("path", c.get("name", "?")) + skipped)
         for p in problems:
             print("     ", str(p)[:400])
     return 1 if failed else 0

@@ -18,7 +18,8 @@ FAKE_RUNNER = """#!{exe}
 import json, os, sys
 root = sys.argv[2]
 paths = sorted(os.path.relpath(os.path.join(d, f), root) for d, _, fs in os.walk(root) for f in fs)
-print(json.dumps({{"cases": [{{"path": p, "problems": []}} for p in paths]}}))
+hosts = lambda p: ["one", "two"] if p.endswith("fix1") else []
+print(json.dumps({{"cases": [{{"path": p, "problems": [], "host_names": hosts(p)}} for p in paths]}}))
 """
 
 
@@ -61,7 +62,9 @@ class RunCases(unittest.TestCase):
         work = self.top / "out"
         work.mkdir()
         (work / "stale").write_text("")
-        self.assertEqual(self.run_cases(work), (0, ["ok   tests/a.onsa", "ok   tests/a.onsa.fix1"]))
+        # a case with host sequences says that they did not run: its `ok` is not about them
+        not_run = "(2 host sequence(s) not run: only `cargo test -p onsa_tests --test cases` runs them)"
+        self.assertEqual(self.run_cases(work), (0, ["ok   tests/a.onsa", f"ok   tests/a.onsa.fix1 {not_run}"]))
         self.assertFalse((work / "stale").exists())
 
 
