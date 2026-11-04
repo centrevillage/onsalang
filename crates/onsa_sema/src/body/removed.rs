@@ -106,7 +106,10 @@ impl<'a> Checker<'a> {
             ));
         }
         let ret = self.a.types.subst(f.ret, &[recv]);
-        if kind != CallKind::Plain || expected.is_some_and(|t| !self.may_fit(t, ret)) || !self.form_fits(e, ret) {
+        if kind != CallKind::Plain
+            || expected.is_some_and(|t| !self.may_fit(t, ret))
+            || self.place_fits(e, ret).is_none()
+        {
             return Err(rule);
         }
         let Some(mut edits) = self.call_edits(e, name, args) else { return Err(rule) };
@@ -129,22 +132,31 @@ impl<'a> Checker<'a> {
         Ok(Fix::new(title, edits))
     }
 
-    /// Whether a call of the type `ret` in the place of `e` leaves no error
-    /// there (§18.1): none in an expression statement (its value is
-    /// dropped), and as a receiver only of a method `ret` has (in
-    /// `x.abs().sqrt()` the missing `sqrt` would be the error left).
-    fn form_fits(&mut self, e: ExprId, ret: TyId) -> bool {
-        match slot_of(self.ast, self.root, e) {
-            None | Some((Slot::Discarded, _)) => false,
-            Some((Slot::Operand(OperandPlace::Postfix), parent)) => match parent.map(|p| &self.expr(p).kind) {
-                Some(ExprKind::Field { name, .. }) => {
-                    let name = name.name.clone();
-                    self.has_method(ret, &name)
-                }
-                _ => false,
-            },
-            Some(_) => true,
-        }
+    /// The slot of `e` when a value of the type `c` put there by a candidate
+    /// leaves no error of its parent (§18.1); none in an expression
+    /// statement (its value is dropped). As a receiver, only of a method `c`
+    /// has (in `x.abs().sqrt()` the missing `sqrt` would be the error left);
+    /// before `as`, only where `as` converts `c` (§3.3); before `at`, any (the
+    /// type of `e at k` is that of `e`, §11.3). In parentheses, the place of
+    /// the outermost. The one answer of the candidates of every family.
+    fn place_fits(&mut self, e: ExprId, c: TyId) -> Option<Slot> {
+        let place = slot_of(self.ast, self.root, e)?;
+        let parent = place.parent.map(|p| &self.ast.expr(p).kind);
+        let fits = match (place.outer, parent) {
+            (Slot::Discarded, _) => false,
+            (Slot::Operand(OperandPlace::Postfix), Some(ExprKind::Field { name, .. })) => {
+                self.has_method(c, &name.name)
+            }
+            (Slot::Operand(OperandPlace::Postfix), _) => false,
+            (Slot::Operand(OperandPlace::AsAtLeft), Some(&ExprKind::Cast { ty, .. })) => {
+                // The type after `as`, lowered as its check does, quietly.
+                let to = self.quietly(|ck| ck.lower_type_expr(ty));
+                let error = |t: TyId| matches!(self.a.types.get(t), Ty::Error);
+                to.is_some_and(|to| crate::cast::cast_allowed(&self.a.types, c, to) || error(to))
+            }
+            _ => true,
+        };
+        fits.then_some(place.slot)
     }
 
     /// The edits of `x.f(a, …)` into `f(x, a, …)` (§18.1): `f(` before the
@@ -168,33 +180,41 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether a declaration of this module binds `name` in its body or as a
-    /// generic parameter (§5.1), as `names/rename.rs` reads them: a `use` of
-    /// it added to the module would make that binding an E0304 (S-79). The
-    /// bindings of this body are in `self.names`.
-    fn binds_in_module(&self, name: &str) -> bool {
-        let binds = |n: &BodyNames| n.bindings.iter().any(|b| b.name == name);
-        binds(&self.names)
-            || (self.a.defs.iter().enumerate()).filter(|(_, d)| d.module == self.m).any(|(i, d)| {
-                d.generics().iter().any(|g| g.name == name) || self.a.names.get(&DefId(i as u32)).is_some_and(binds)
-            })
+    /// generic parameter ([`crate::names::rename::bound_by`]): a `use` of it
+    /// added to the module would make that binding an E0304 (S-79). The set
+    /// of the module is made once in the check of the package (the bindings
+    /// of this body are in `self.names`).
+    fn binds_in_module(&mut self, name: &str) -> bool {
+        if !self.bound.contains_key(&self.m) {
+            let mut set: HashSet<String> = self.names.bindings.iter().map(|b| b.name.clone()).collect();
+            for (i, _) in self.a.defs.iter().enumerate().filter(|(_, d)| d.module == self.m) {
+                set.extend(crate::names::rename::bound_by(self.a, DefId(i as u32)).map(String::from));
+            }
+            self.bound.insert(self.m, set);
+        }
+        self.bound[&self.m].contains(name)
     }
 
     /// Whether `args` fit the parameters `params` of a function form at the
-    /// receiver's type `recv`: a trial check with no diagnostic. Its `Err`
-    /// is the answer "they do not" (`max(a, 1)` of an `F32` is an E0401),
-    /// not a failure dropped. What it leaves in this body stops with the
-    /// E0413; what leaks out of it (`read_held`, `uses`) is undone. Of an
-    /// argument that reads what the check does not, an error is elsewhere
-    /// (§18.1): no fit.
+    /// receiver's type `recv` (`max(a, 1)` of an `F32` is an E0401).
     fn args_fit(&mut self, args: &[Arg], params: &[ParamSig], recv: TyId, span: Span) -> bool {
         let params: Vec<(Mode, TyId)> = params.iter().map(|p| (p.mode, recv)).collect();
+        self.quietly(|ck| ck.check_args(args, &params, span)).is_some()
+    }
+
+    /// A trial of a candidate: `f` run with no diagnostic. Its `Err` is the
+    /// answer "it does not fit", not a failure dropped. What it leaves in
+    /// this body stops with the E0413; what leaks out of it (`read_held`,
+    /// `uses`) is undone. Of what reads what the check does not, an error is
+    /// elsewhere (§18.1): none.
+    fn quietly<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> Option<T> {
         let (failed, held, uses) = (self.failed, self.a.read_held.contains(&self.def), self.a.uses.borrow().len());
         self.failed = true;
-        let fits = self.check_args(args, &params, span).is_ok();
+        let out = f(self);
         self.failed = failed;
         self.a.uses.borrow_mut().truncate(uses);
         let read_unread = !held && self.a.read_held.remove(&self.def);
-        fits && !read_unread
+        out.ok().filter(|_| !read_unread)
     }
 
     /// Whether the builtin type `recv` has the method `name`: of `len`,
@@ -229,12 +249,7 @@ impl<'a> Checker<'a> {
         if kind != CallKind::Plain || !args.is_empty() || expected.is_some_and(|t| !self.may_fit(t, bool_)) {
             return None;
         }
-        // A `Bool` has no member and no `as` (§6.3, §3.3): in the place of a
-        // receiver or before `as` and `at`, the form leaves an error.
-        let wrap = match slot_of(self.ast, self.root, e)?.0 {
-            Slot::Discarded | Slot::Operand(OperandPlace::Postfix | OperandPlace::AsAtLeft) => return None,
-            slot => slot.wraps(Form::Binary(BinOp::Eq)),
-        };
+        let wrap = self.place_fits(e, bool_)?.wraps(Form::Binary(BinOp::Eq));
         let span = self.expr(e).span;
         let close = if wrap { ")" } else { "" };
         let mut edits = vec![

@@ -266,6 +266,9 @@ pub(crate) struct Checker<'a> {
     /// The expression of the body, under which a candidate finds the place
     /// of an expression (`slot.rs`).
     root: ExprId,
+    /// The names the defs of each module bind, made in the check of the
+    /// package where a candidate asks (`removed.rs`).
+    bound: &'a mut HashMap<ModId, HashSet<String>>,
 }
 
 /// The body of the def `id` the types stage checks, with the type `Self`
@@ -290,6 +293,7 @@ fn body_of(a: &mut Analysis, id: DefId) -> Option<(Option<TyId>, ExprId, TyId)> 
 /// Check every body of the package and its dependencies.
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
+    let mut bound = HashMap::default();
     for id in a.new_defs() {
         let def = a.def(id);
         if def.item.is_none() {
@@ -350,6 +354,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             origins,
             typed,
             root: body,
+            bound: &mut bound,
         };
         let is_const = matches!(ck.a.def(id).kind, DefKind::Const(_));
         let is_flow = matches!(ck.a.def(id).kind, DefKind::Flow(_));

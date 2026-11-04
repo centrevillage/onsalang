@@ -237,12 +237,20 @@ impl<'a> Spaces<'a> {
             }
         }
         for (i, def) in a.defs.iter().enumerate() {
-            let body = a.names.get(&DefId(i as u32)).map_or(&[][..], |n| &n.bindings[..]);
-            let names = def.generics().iter().map(|g| g.name.as_str());
-            s.bound.entry(def.module).or_default().extend(names.chain(body.iter().map(|b| b.name.as_str())));
+            s.bound.entry(def.module).or_default().extend(bound_by(a, DefId(i as u32)));
         }
         s
     }
+}
+
+/// The names the def `d` binds (§5.1): its generic parameters and the
+/// bindings of its body, as the names stage recorded them (none of a body
+/// being checked, which has them). What a name a `use` added to its module
+/// would clash with (S-79): the one reading of this and of the candidates of
+/// a method form (`body/removed.rs`).
+pub(crate) fn bound_by(a: &Analysis, d: DefId) -> impl Iterator<Item = &str> {
+    let body = a.names.get(&d).map_or(&[][..], |n| &n.bindings[..]);
+    a.def(d).generics().iter().map(|g| g.name.as_str()).chain(body.iter().map(|b| b.name.as_str()))
 }
 
 /// Whether the body of `d` binds `to`.

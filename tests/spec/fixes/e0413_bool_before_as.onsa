@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§4.2", "§18.1"]
+// fixes = 0
+
+// E0413 of a method whose form gives a `Bool` (`is_nan`, `is_finite` of `std.math`, and `is_empty`, whose form is
+// `len() == 0`), on the left of `as` (§3.3, §3.4, §4.2, S-98). `as` converts no `Bool` (§3.3), so `is_nan(x) as U32`
+// and `(s.len() == 0) as U32` would be an E0411, an error of the same stage that the candidate would leave, and none
+// is offered (`fixes = 0`, §18.1). The form of a number on the left of an `as` that converts it keeps its candidate
+// (`e0413_math_operand_places.onsa` has the other places). Taken from the inputs of the break side of W5-14 U2b. The
+// names are imported. One error per function (P-01). The function at the end is fine.
+
+use std.math.{is_finite, is_nan}
+
+pub fn nan_as_u32(x: F32) -> U32 {
+  x.is_nan() as U32                                 //~ E0413
+}
+
+pub fn finite_as_u8(x: F64) -> U8 {
+  x.is_finite() as U8                               //~ E0413
+}
+
+pub fn nan_as_bool(x: F32) -> Bool {
+  x.is_nan() as Bool                                //~ E0413
+}
+
+pub fn nan_in_parentheses(x: F32) -> U32 {
+  (x.is_nan()) as U32                               //~ E0413
+}
+
+pub fn empty_as_u32(s: Str) -> U32 {
+  s.is_empty() as U32                               //~ E0413
+}
+
+pub fn empty_in_a_sum(s: Str, n: U32) -> U32 {
+  n + (s.is_empty() as U32)                         //~ E0413
+}
+
+pub fn fine(x: F32, s: Str) -> Bool {
+  is_nan(x) || is_finite(x) || s.len() == 0
+}
