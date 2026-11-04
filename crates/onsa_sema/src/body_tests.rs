@@ -207,7 +207,7 @@ fn closures_take_types_from_the_expected_function_type() {
     ok("pub fn g() -> U32 {\n  let f = fn(i: U32) -> U32 { i }\n  f.(1)\n}\n");
     assert_eq!(
         codes("pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }\npub fn g() -> U32 { apply(fn(i, j) { i }) }\n"),
-        vec![Code::E0412]
+        vec![Code::E0401]
     );
 }
 

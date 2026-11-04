@@ -46,6 +46,8 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
             }
             Ok(Expr::new(want.clone(), span, ExprKind::Array(out)))
         }
+        // An `rt fn` value where a `fn` is wanted (§8.1): W8-09 lowers function values.
+        (Ty::FnPtr(_), Ty::FnPtr(_)) => Err(unsupported(span, Feature::FnValues, &[])),
         _ => Err(internal(
             span,
             format!(

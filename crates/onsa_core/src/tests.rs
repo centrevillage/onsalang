@@ -53,6 +53,21 @@ fn core_err(src: &str) -> Vec<onsa_diag::Diagnostic> {
     }
 }
 
+/// An `rt fn` value where a `fn` is wanted is checked (§8.1) and not lowered
+/// until W8-09: E0200 (Q-09), not an internal error.
+#[test]
+fn an_rt_function_value_at_a_function_type_is_not_supported_yet() {
+    let enums = "pub enum Low {\n  Bad,\n}\npub enum High {\n  Wrapped(Low),\n  Other,\n}\n";
+    let held = "fn read() -> Result[U32, Low] {\n  Ok(1)\n}\npub fn go() -> Result[U32, High] {\n  let conv = High.Wrapped\n  read().map_err(conv)\n}\n";
+    let take = "fn take(f: fn(U32) -> U32) -> U32 {\n  1\n}\n";
+    let param = "pub fn go(g: rt fn(U32) -> U32) -> U32 {\n  take(g)\n}\n";
+    let item = "pub rt fn mk(n: U32) -> U32 {\n  n\n}\npub fn go() -> U32 {\n  let f = mk\n  take(f)\n}\n";
+    for src in [format!("{enums}{held}"), format!("{take}{param}"), format!("{take}{item}")] {
+        let diags = core_err(&src);
+        assert_eq!(diags[0].code, onsa_diag::Code::E0200, "{src}");
+    }
+}
+
 fn failure_text(sources: &onsa_diag::SourceMap, f: &crate::LowerFailure) -> String {
     match f {
         crate::LowerFailure::Unsupported(d) => onsa_diag::to_text(sources, d),

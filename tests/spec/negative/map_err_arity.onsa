@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§9.1", "§4.5", "§18.1"]
 
-// E0412 (W5-02 U6/t): `map_err` takes one argument, the conversion (§9.1: `map_err[F](move self, f: fn(move E) -> F)`).
+// E0412 (W5-02 U6/t): `map_err` takes one argument, the conversion (§9.1: `map_err[F: ?Dup](move self, f: fn(move E) -> F)`).
 // A wrong number of arguments is E0412, the same code as for a function (§4.5: "関数の引数の数と同じコード"). One error
 // per function (P-01). The last function is fine.
 

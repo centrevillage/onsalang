@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§9.1", "§5.2", "§6.1", "§8.1"]
 
-// W5-02 U6/t, S-143, S-809: `Result` has the method `map_err`, declared `pub fn map_err[F](move self, f: fn(move E) -> F)
+// W5-02 U6/t, S-143, S-809: `Result` has the method `map_err`, declared `pub fn map_err[F: ?Dup](move self, f: fn(move E) -> F)
 // -> Result[T, F]` and "`f` の効果行は空" (§9.1). The conversion `f` is an argument of a function type of the default
 // mode, so it is any function value that fits `fn(move E) -> F`: the name of a function, an anonymous function that
 // captures nothing, and one that captures (§5.2: "既定のモードの関数型の引数 … は、捕捉する無名関数も受け"; §5.3). A function

@@ -486,19 +486,20 @@ impl<'a> Checker<'a> {
     ) -> R<TyId> {
         let span = self.expr(e).span;
         // Read here: the body checks arguments of its own.
-        let is_arg = self.arg_closure == Some(e);
+        let is_arg = self.arg_closure.take() == Some(e);
         let exp_fn: Option<FnTy> = expected.and_then(|t| match self.ty(self.shallow(t)) {
             Ty::Fn(f) => Some(f),
             _ => None,
         });
-        if let Some(f) = &exp_fn
+        let effects = match effects {
+            // As the names stage read it (S-738).
+            Some(_) => self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?,
+            None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
+        };
+        if let (Some(f), Some(exp)) = (&exp_fn, expected)
             && f.params.len() != params.len()
         {
-            return Err(self.err(
-                Code::E0412,
-                span,
-                format!("this function takes {} parameter(s) but {} are expected here", params.len(), f.params.len()),
-            ));
+            return self.closure_of_other_arity(span, params, ret, effects, f, exp);
         }
         let mut ptys = Vec::new();
         for (i, p) in params.iter().enumerate() {
@@ -534,11 +535,6 @@ impl<'a> Checker<'a> {
                 None => self.fresh(),
             },
         };
-        let effects = match effects {
-            // As the names stage read it (S-738).
-            Some(_) => self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?,
-            None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
-        };
         let rt = exp_fn.as_ref().map(|f| f.rt).unwrap_or(false);
         // The body runs in its own frame: `return` targets the closure (its
         // captures are the record's, §5.3).
@@ -565,6 +561,32 @@ impl<'a> Checker<'a> {
         if is_arg && let (Some(f), Some(exp)) = (&exp_fn, expected) {
             self.unify_arg_closure(span, params, t, f, exp)?;
         }
+        Ok(t)
+    }
+
+    /// The E0401 of an anonymous function with another number of parameters
+    /// than the function type `f` expected, as of a function item (§8.1,
+    /// S-894): its type as written, a type left out shown as not known.
+    fn closure_of_other_arity(
+        &mut self,
+        span: Span,
+        params: &[Param],
+        ret: Option<onsa_syntax::ast::TypeId>,
+        effects: crate::ty::EffectSet,
+        f: &FnTy,
+        exp: TyId,
+    ) -> R<TyId> {
+        let mut ptys = Vec::new();
+        for p in params {
+            let t = match p.ty {
+                Some(t) => self.lower_type_expr(t)?,
+                None => self.fresh(),
+            };
+            ptys.push((p.mode, t));
+        }
+        let ret = ret.map_or(Ok(f.ret), |t| self.lower_type_expr(t))?;
+        let t = self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params: ptys, ret, effects }));
+        self.unify_at(span, t, exp)?;
         Ok(t)
     }
 

@@ -106,6 +106,21 @@ pub fn another_result_type() -> U32 {
   apply(fn(k: U32) -> Bool { true }, 2)                          //~ E0401
 }
 
+// ---------------------------------------------------------------- another number of parameters (§8.1, S-894)
+
+pub fn a_parameter_too_many() -> U32 {
+  apply(fn(k: U32, m: U32) -> U32 { k }, 2)                      //~ E0401
+}
+
+pub fn a_parameter_too_few() -> U32 {
+  apply(fn() -> U32 { 1 }, 2)                                    //~ E0401
+}
+
+pub fn a_parameter_too_many_in_the_place_of_the_annotation() -> U32 {
+  let f: fn(U32) -> U32 = fn(k: U32, m: U32) -> U32 { k }        //~ E0401
+  f.(1)
+}
+
 // ---------------------------------------------------------------- the forms that are fine
 
 pub fn fine_the_mode_that_is_expected() -> Result[U32, High] {
