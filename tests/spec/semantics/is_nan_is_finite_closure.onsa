@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§6.1", "§13.4"]
+
+// `is_nan` and `is_finite` of `std.math` called from an anonymous function (spec §6.1: an anonymous function
+// is a function and is called with `.(`; §13.4). The values are NaN, the two infinities, zero and the largest
+// number. This waits for the function values of the Core (W8-09, as try_in_closure.onsa does).
+
+use std.math.{is_finite, is_nan}
+
+test "an anonymous function calls is_nan and is_finite" {
+  let nan_or_inf = fn(x: F64) -> Bool {
+    is_nan(x) || !is_finite(x)
+  }
+  assert nan_or_inf.(F64.NAN)
+  assert nan_or_inf.(F64.INFINITY)
+  assert nan_or_inf.(-F64.INFINITY)
+  assert !nan_or_inf.(0.0)
+  assert !nan_or_inf.(F64.MAX)
+}

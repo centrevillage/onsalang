@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0303: a helper of std that is not `pub` written as a member of its module (`use std.core.num`, then
+// `num.add_parts(a, b)`): the name is found and is not visible from here (§15.1), so E0303 at the name, and not
+// E0302 (see std_private_helpers_use.onsa for the helpers and for the module). One error per function (P-01).
+// The last function is fine: the method that the helpers serve.
+
+use std.core.num
+
+pub fn sum_parts(a: I32, b: I32) -> (Bool, I32) {
+  num.add_parts(a, b)                               //~ E0303
+}
+
+pub fn difference_parts(a: U8, b: U8) -> (Bool, U8) {
+  num.sub_parts(a, b)                               //~ E0303
+}
+
+pub fn quotient_parts(a: I64, b: I64) -> (Bool, I64) {
+  num.div_parts(a, b)                               //~ E0303
+}
+
+pub fn wrap(parts: (Bool, I32)) -> Option[I32] {
+  num.some_if(parts)                                //~ E0303
+}
+
+pub fn fine(a: I32, b: I32) -> Option[I32] {
+  a.checked_sub(b)
+}

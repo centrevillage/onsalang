@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§13.4", "§18.1"]
+
+// E0412: `is_nan` and `is_finite` of `std.math` take one argument (spec §13.4: `is_nan[T: Float](x: T) -> Bool`;
+// the number of the arguments of a function is E0412, §18.1). One error per function (P-01). The last function
+// is fine.
+
+use std.math.{is_finite, is_nan}
+
+pub fn none_is_nan() -> Bool {
+  is_nan()                                          //~ E0412
+}
+
+pub fn none_is_finite() -> Bool {
+  is_finite()                                       //~ E0412
+}
+
+pub fn two_is_nan(x: F32) -> Bool {
+  is_nan(x, x)                                      //~ E0412
+}
+
+pub fn two_is_finite(x: F64, y: F64) -> Bool {
+  is_finite(x, y)                                   //~ E0412
+}
+
+pub fn fine(x: F32) -> Bool {
+  is_nan(x) && is_finite(x)
+}

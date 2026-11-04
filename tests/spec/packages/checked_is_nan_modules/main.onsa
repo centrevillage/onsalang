@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§13.4", "§15.1"]
+
+// The checked methods that W5-14 adds and `is_nan` / `is_finite` of `std.math`, called through the functions of
+// another module (`util`) of the package, and `is_nan` imported again in this module under its own `use`
+// (spec §15.1: a `use` binds the name in its module alone). Worked out by hand: -7 % 4 = -3 and its negation
+// is 3; 300 << 8 = 76800, which leaves 76800 - 65536 = 11264 in a U16; the amount 16 is the width of a U16.
+
+use std.math.{is_nan}
+use util.{generic_usable, rem_neg, shifted, usable}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+test "the checked methods in another module" {
+  assert val(rem_neg(-7, 4), 99) == 3
+  assert val(rem_neg(I32.MIN, 1), 99) == 0
+  assert val(rem_neg(5, 0), 99) == 99
+  assert val(shifted(300, 8), 7) == 11264
+  assert val(shifted(300, 16), 7) == 7
+}
+
+test "is_nan and is_finite in another module" {
+  let nan: F32    = F32.NAN
+  let inf: F64    = F64.INFINITY
+  let finite: F64 = 2.5
+  assert usable(2.5)
+  assert !usable(nan)
+  assert generic_usable(finite)
+  assert !generic_usable(inf)
+  assert is_nan(nan)
+}

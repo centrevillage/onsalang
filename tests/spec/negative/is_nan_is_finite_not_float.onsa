@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.3", "§13.4", "§18.1"]
+
+// E0416: `is_nan` and `is_finite` of `std.math` are `[T: Float](x: T) -> Bool` (spec §13.4), so an argument that
+// is not a float does not satisfy the bound `T: Float`: a number literal, which the bound does not turn into a
+// float (§4.5: "境界はリテラルの既定を変えない",
+// `need_fl(3)` is `T = I32` and E0416), a variable of an integer type,
+// a `Bool`, an array, and a type parameter that is only `Num` (a `Float` is a `Num`, not the other way round, §6.3).
+// One error per function (P-01). The last function is fine.
+
+use std.math.{is_finite, is_nan}
+
+pub fn integer_literal() -> Bool {
+  is_nan(1)                                         //~ E0416
+}
+
+pub fn integer_variable(n: I32) -> Bool {
+  is_nan(n)                                         //~ E0416
+}
+
+pub fn unsigned_variable(u: U8) -> Bool {
+  is_finite(u)                                      //~ E0416
+}
+
+pub fn wide_integer(n: I64) -> Bool {
+  is_finite(n)                                      //~ E0416
+}
+
+pub fn boolean(b: Bool) -> Bool {
+  is_nan(b)                                         //~ E0416
+}
+
+pub fn array(xs: [F32; 2]) -> Bool {
+  is_finite(xs)                                     //~ E0416
+}
+
+pub fn only_a_number[T: Num](x: T) -> Bool {
+  is_nan(x)                                         //~ E0416
+}
+
+pub fn fine(x: F32, y: F64) -> Bool {
+  is_nan(x) || is_finite(y)
+}

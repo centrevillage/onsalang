@@ -28,17 +28,17 @@ i8.checked_add	i8_checked_add	int-i8.tsv	scalar	I8 I8	Option[I8]	§3.4 整数の
 i8.checked_sub	i8_checked_sub	int-i8.tsv	scalar	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 i8.checked_mul	i8_checked_mul	int-i8.tsv	scalar	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 i8.checked_div	i8_checked_div	int-i8.tsv	scalar	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-i8.checked_rem	i8_checked_rem	int-i8.tsv	checked	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-i8.checked_div_euclid	i8_checked_div_euclid	int-i8.tsv	checked	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-i8.checked_rem_euclid	i8_checked_rem_euclid	int-i8.tsv	checked	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+i8.checked_rem	i8_checked_rem	int-i8.tsv	scalar	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+i8.checked_div_euclid	i8_checked_div_euclid	int-i8.tsv	scalar	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+i8.checked_rem_euclid	i8_checked_rem_euclid	int-i8.tsv	scalar	I8 I8	Option[I8]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 i8.shl	i8_shl	int-i8.tsv	scalar	I8 U32	I8	§3.4 整数の表	<<	a << b
 i8.shr	i8_shr	int-i8.tsv	scalar	I8 U32	I8	§3.4 整数の表	>>	a >> b
-i8.checked_shl	i8_checked_shl	int-i8.tsv	checked	I8 U32	Option[I8]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-i8.checked_shr	i8_checked_shr	int-i8.tsv	checked	I8 U32	Option[I8]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+i8.checked_shl	i8_checked_shl	int-i8.tsv	scalar	I8 U32	Option[I8]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+i8.checked_shr	i8_checked_shr	int-i8.tsv	scalar	I8 U32	Option[I8]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 i8.not	i8_not	int-i8.tsv	scalar	I8	I8	§3.4 整数の表	!	!a
 i8.neg	i8_neg	int-i8.tsv	scalar	I8	I8	§3.4 整数の表	-	-a
 i8.abs	i8_abs	int-i8.tsv	scalar	I8	I8	§3.4 std.math	abs	abs(a)
-i8.checked_neg	i8_checked_neg	int-i8.tsv	checked	I8	Option[I8]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
+i8.checked_neg	i8_checked_neg	int-i8.tsv	scalar	I8	Option[I8]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
 i16.add	i16_add	int-i16.tsv	scalar	I16 I16	I16	§3.4 整数の表	+	a + b
 i16.sub	i16_sub	int-i16.tsv	scalar	I16 I16	I16	§3.4 整数の表	-	a - b
 i16.mul	i16_mul	int-i16.tsv	scalar	I16 I16	I16	§3.4 整数の表	*	a * b
@@ -67,17 +67,17 @@ i16.checked_add	i16_checked_add	int-i16.tsv	scalar	I16 I16	Option[I16]	§3.4 整
 i16.checked_sub	i16_checked_sub	int-i16.tsv	scalar	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 i16.checked_mul	i16_checked_mul	int-i16.tsv	scalar	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 i16.checked_div	i16_checked_div	int-i16.tsv	scalar	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-i16.checked_rem	i16_checked_rem	int-i16.tsv	checked	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-i16.checked_div_euclid	i16_checked_div_euclid	int-i16.tsv	checked	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-i16.checked_rem_euclid	i16_checked_rem_euclid	int-i16.tsv	checked	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+i16.checked_rem	i16_checked_rem	int-i16.tsv	scalar	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+i16.checked_div_euclid	i16_checked_div_euclid	int-i16.tsv	scalar	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+i16.checked_rem_euclid	i16_checked_rem_euclid	int-i16.tsv	scalar	I16 I16	Option[I16]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 i16.shl	i16_shl	int-i16.tsv	scalar	I16 U32	I16	§3.4 整数の表	<<	a << b
 i16.shr	i16_shr	int-i16.tsv	scalar	I16 U32	I16	§3.4 整数の表	>>	a >> b
-i16.checked_shl	i16_checked_shl	int-i16.tsv	checked	I16 U32	Option[I16]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-i16.checked_shr	i16_checked_shr	int-i16.tsv	checked	I16 U32	Option[I16]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+i16.checked_shl	i16_checked_shl	int-i16.tsv	scalar	I16 U32	Option[I16]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+i16.checked_shr	i16_checked_shr	int-i16.tsv	scalar	I16 U32	Option[I16]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 i16.not	i16_not	int-i16.tsv	scalar	I16	I16	§3.4 整数の表	!	!a
 i16.neg	i16_neg	int-i16.tsv	scalar	I16	I16	§3.4 整数の表	-	-a
 i16.abs	i16_abs	int-i16.tsv	scalar	I16	I16	§3.4 std.math	abs	abs(a)
-i16.checked_neg	i16_checked_neg	int-i16.tsv	checked	I16	Option[I16]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
+i16.checked_neg	i16_checked_neg	int-i16.tsv	scalar	I16	Option[I16]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
 i32.add	i32_add	int-i32.tsv	scalar	I32 I32	I32	§3.4 整数の表	+	a + b
 i32.sub	i32_sub	int-i32.tsv	scalar	I32 I32	I32	§3.4 整数の表	-	a - b
 i32.mul	i32_mul	int-i32.tsv	scalar	I32 I32	I32	§3.4 整数の表	*	a * b
@@ -106,17 +106,17 @@ i32.checked_add	i32_checked_add	int-i32.tsv	scalar	I32 I32	Option[I32]	§3.4 整
 i32.checked_sub	i32_checked_sub	int-i32.tsv	scalar	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 i32.checked_mul	i32_checked_mul	int-i32.tsv	scalar	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 i32.checked_div	i32_checked_div	int-i32.tsv	scalar	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-i32.checked_rem	i32_checked_rem	int-i32.tsv	checked	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-i32.checked_div_euclid	i32_checked_div_euclid	int-i32.tsv	checked	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-i32.checked_rem_euclid	i32_checked_rem_euclid	int-i32.tsv	checked	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+i32.checked_rem	i32_checked_rem	int-i32.tsv	scalar	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+i32.checked_div_euclid	i32_checked_div_euclid	int-i32.tsv	scalar	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+i32.checked_rem_euclid	i32_checked_rem_euclid	int-i32.tsv	scalar	I32 I32	Option[I32]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 i32.shl	i32_shl	int-i32.tsv	scalar	I32 U32	I32	§3.4 整数の表	<<	a << b
 i32.shr	i32_shr	int-i32.tsv	scalar	I32 U32	I32	§3.4 整数の表	>>	a >> b
-i32.checked_shl	i32_checked_shl	int-i32.tsv	checked	I32 U32	Option[I32]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-i32.checked_shr	i32_checked_shr	int-i32.tsv	checked	I32 U32	Option[I32]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+i32.checked_shl	i32_checked_shl	int-i32.tsv	scalar	I32 U32	Option[I32]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+i32.checked_shr	i32_checked_shr	int-i32.tsv	scalar	I32 U32	Option[I32]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 i32.not	i32_not	int-i32.tsv	scalar	I32	I32	§3.4 整数の表	!	!a
 i32.neg	i32_neg	int-i32.tsv	scalar	I32	I32	§3.4 整数の表	-	-a
 i32.abs	i32_abs	int-i32.tsv	scalar	I32	I32	§3.4 std.math	abs	abs(a)
-i32.checked_neg	i32_checked_neg	int-i32.tsv	checked	I32	Option[I32]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
+i32.checked_neg	i32_checked_neg	int-i32.tsv	scalar	I32	Option[I32]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
 i64.add	i64_add	int-i64.tsv	scalar	I64 I64	I64	§3.4 整数の表	+	a + b
 i64.sub	i64_sub	int-i64.tsv	scalar	I64 I64	I64	§3.4 整数の表	-	a - b
 i64.mul	i64_mul	int-i64.tsv	scalar	I64 I64	I64	§3.4 整数の表	*	a * b
@@ -145,17 +145,17 @@ i64.checked_add	i64_checked_add	int-i64.tsv	scalar	I64 I64	Option[I64]	§3.4 整
 i64.checked_sub	i64_checked_sub	int-i64.tsv	scalar	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 i64.checked_mul	i64_checked_mul	int-i64.tsv	scalar	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 i64.checked_div	i64_checked_div	int-i64.tsv	scalar	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-i64.checked_rem	i64_checked_rem	int-i64.tsv	checked	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-i64.checked_div_euclid	i64_checked_div_euclid	int-i64.tsv	checked	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-i64.checked_rem_euclid	i64_checked_rem_euclid	int-i64.tsv	checked	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+i64.checked_rem	i64_checked_rem	int-i64.tsv	scalar	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+i64.checked_div_euclid	i64_checked_div_euclid	int-i64.tsv	scalar	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+i64.checked_rem_euclid	i64_checked_rem_euclid	int-i64.tsv	scalar	I64 I64	Option[I64]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 i64.shl	i64_shl	int-i64.tsv	scalar	I64 U32	I64	§3.4 整数の表	<<	a << b
 i64.shr	i64_shr	int-i64.tsv	scalar	I64 U32	I64	§3.4 整数の表	>>	a >> b
-i64.checked_shl	i64_checked_shl	int-i64.tsv	checked	I64 U32	Option[I64]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-i64.checked_shr	i64_checked_shr	int-i64.tsv	checked	I64 U32	Option[I64]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+i64.checked_shl	i64_checked_shl	int-i64.tsv	scalar	I64 U32	Option[I64]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+i64.checked_shr	i64_checked_shr	int-i64.tsv	scalar	I64 U32	Option[I64]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 i64.not	i64_not	int-i64.tsv	scalar	I64	I64	§3.4 整数の表	!	!a
 i64.neg	i64_neg	int-i64.tsv	scalar	I64	I64	§3.4 整数の表	-	-a
 i64.abs	i64_abs	int-i64.tsv	scalar	I64	I64	§3.4 std.math	abs	abs(a)
-i64.checked_neg	i64_checked_neg	int-i64.tsv	checked	I64	Option[I64]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
+i64.checked_neg	i64_checked_neg	int-i64.tsv	scalar	I64	Option[I64]	§3.4 整数の表 検査付き	checked_neg	a.checked_neg()
 u8.add	u8_add	int-u8.tsv	scalar	U8 U8	U8	§3.4 整数の表	+	a + b
 u8.sub	u8_sub	int-u8.tsv	scalar	U8 U8	U8	§3.4 整数の表	-	a - b
 u8.mul	u8_mul	int-u8.tsv	scalar	U8 U8	U8	§3.4 整数の表	*	a * b
@@ -184,13 +184,13 @@ u8.checked_add	u8_checked_add	int-u8.tsv	scalar	U8 U8	Option[U8]	§3.4 整数の
 u8.checked_sub	u8_checked_sub	int-u8.tsv	scalar	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 u8.checked_mul	u8_checked_mul	int-u8.tsv	scalar	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 u8.checked_div	u8_checked_div	int-u8.tsv	scalar	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-u8.checked_rem	u8_checked_rem	int-u8.tsv	checked	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-u8.checked_div_euclid	u8_checked_div_euclid	int-u8.tsv	checked	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-u8.checked_rem_euclid	u8_checked_rem_euclid	int-u8.tsv	checked	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+u8.checked_rem	u8_checked_rem	int-u8.tsv	scalar	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+u8.checked_div_euclid	u8_checked_div_euclid	int-u8.tsv	scalar	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+u8.checked_rem_euclid	u8_checked_rem_euclid	int-u8.tsv	scalar	U8 U8	Option[U8]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 u8.shl	u8_shl	int-u8.tsv	scalar	U8 U32	U8	§3.4 整数の表	<<	a << b
 u8.shr	u8_shr	int-u8.tsv	scalar	U8 U32	U8	§3.4 整数の表	>>	a >> b
-u8.checked_shl	u8_checked_shl	int-u8.tsv	checked	U8 U32	Option[U8]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-u8.checked_shr	u8_checked_shr	int-u8.tsv	checked	U8 U32	Option[U8]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+u8.checked_shl	u8_checked_shl	int-u8.tsv	scalar	U8 U32	Option[U8]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+u8.checked_shr	u8_checked_shr	int-u8.tsv	scalar	U8 U32	Option[U8]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 u8.not	u8_not	int-u8.tsv	scalar	U8	U8	§3.4 整数の表	!	!a
 u16.add	u16_add	int-u16.tsv	scalar	U16 U16	U16	§3.4 整数の表	+	a + b
 u16.sub	u16_sub	int-u16.tsv	scalar	U16 U16	U16	§3.4 整数の表	-	a - b
@@ -220,13 +220,13 @@ u16.checked_add	u16_checked_add	int-u16.tsv	scalar	U16 U16	Option[U16]	§3.4 整
 u16.checked_sub	u16_checked_sub	int-u16.tsv	scalar	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 u16.checked_mul	u16_checked_mul	int-u16.tsv	scalar	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 u16.checked_div	u16_checked_div	int-u16.tsv	scalar	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-u16.checked_rem	u16_checked_rem	int-u16.tsv	checked	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-u16.checked_div_euclid	u16_checked_div_euclid	int-u16.tsv	checked	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-u16.checked_rem_euclid	u16_checked_rem_euclid	int-u16.tsv	checked	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+u16.checked_rem	u16_checked_rem	int-u16.tsv	scalar	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+u16.checked_div_euclid	u16_checked_div_euclid	int-u16.tsv	scalar	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+u16.checked_rem_euclid	u16_checked_rem_euclid	int-u16.tsv	scalar	U16 U16	Option[U16]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 u16.shl	u16_shl	int-u16.tsv	scalar	U16 U32	U16	§3.4 整数の表	<<	a << b
 u16.shr	u16_shr	int-u16.tsv	scalar	U16 U32	U16	§3.4 整数の表	>>	a >> b
-u16.checked_shl	u16_checked_shl	int-u16.tsv	checked	U16 U32	Option[U16]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-u16.checked_shr	u16_checked_shr	int-u16.tsv	checked	U16 U32	Option[U16]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+u16.checked_shl	u16_checked_shl	int-u16.tsv	scalar	U16 U32	Option[U16]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+u16.checked_shr	u16_checked_shr	int-u16.tsv	scalar	U16 U32	Option[U16]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 u16.not	u16_not	int-u16.tsv	scalar	U16	U16	§3.4 整数の表	!	!a
 u32.add	u32_add	int-u32.tsv	scalar	U32 U32	U32	§3.4 整数の表	+	a + b
 u32.sub	u32_sub	int-u32.tsv	scalar	U32 U32	U32	§3.4 整数の表	-	a - b
@@ -256,13 +256,13 @@ u32.checked_add	u32_checked_add	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整
 u32.checked_sub	u32_checked_sub	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 u32.checked_mul	u32_checked_mul	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 u32.checked_div	u32_checked_div	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-u32.checked_rem	u32_checked_rem	int-u32.tsv	checked	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-u32.checked_div_euclid	u32_checked_div_euclid	int-u32.tsv	checked	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-u32.checked_rem_euclid	u32_checked_rem_euclid	int-u32.tsv	checked	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+u32.checked_rem	u32_checked_rem	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+u32.checked_div_euclid	u32_checked_div_euclid	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+u32.checked_rem_euclid	u32_checked_rem_euclid	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 u32.shl	u32_shl	int-u32.tsv	scalar	U32 U32	U32	§3.4 整数の表	<<	a << b
 u32.shr	u32_shr	int-u32.tsv	scalar	U32 U32	U32	§3.4 整数の表	>>	a >> b
-u32.checked_shl	u32_checked_shl	int-u32.tsv	checked	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-u32.checked_shr	u32_checked_shr	int-u32.tsv	checked	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+u32.checked_shl	u32_checked_shl	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+u32.checked_shr	u32_checked_shr	int-u32.tsv	scalar	U32 U32	Option[U32]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 u32.not	u32_not	int-u32.tsv	scalar	U32	U32	§3.4 整数の表	!	!a
 u64.add	u64_add	int-u64.tsv	scalar	U64 U64	U64	§3.4 整数の表	+	a + b
 u64.sub	u64_sub	int-u64.tsv	scalar	U64 U64	U64	§3.4 整数の表	-	a - b
@@ -292,13 +292,13 @@ u64.checked_add	u64_checked_add	int-u64.tsv	scalar	U64 U64	Option[U64]	§3.4 整
 u64.checked_sub	u64_checked_sub	int-u64.tsv	scalar	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_sub	a.checked_sub(b)
 u64.checked_mul	u64_checked_mul	int-u64.tsv	scalar	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_mul	a.checked_mul(b)
 u64.checked_div	u64_checked_div	int-u64.tsv	scalar	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_div	a.checked_div(b)
-u64.checked_rem	u64_checked_rem	int-u64.tsv	checked	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
-u64.checked_div_euclid	u64_checked_div_euclid	int-u64.tsv	checked	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
-u64.checked_rem_euclid	u64_checked_rem_euclid	int-u64.tsv	checked	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
+u64.checked_rem	u64_checked_rem	int-u64.tsv	scalar	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_rem	a.checked_rem(b)
+u64.checked_div_euclid	u64_checked_div_euclid	int-u64.tsv	scalar	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_div_euclid	a.checked_div_euclid(b)
+u64.checked_rem_euclid	u64_checked_rem_euclid	int-u64.tsv	scalar	U64 U64	Option[U64]	§3.4 整数の表 検査付き	checked_rem_euclid	a.checked_rem_euclid(b)
 u64.shl	u64_shl	int-u64.tsv	scalar	U64 U32	U64	§3.4 整数の表	<<	a << b
 u64.shr	u64_shr	int-u64.tsv	scalar	U64 U32	U64	§3.4 整数の表	>>	a >> b
-u64.checked_shl	u64_checked_shl	int-u64.tsv	checked	U64 U32	Option[U64]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
-u64.checked_shr	u64_checked_shr	int-u64.tsv	checked	U64 U32	Option[U64]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
+u64.checked_shl	u64_checked_shl	int-u64.tsv	scalar	U64 U32	Option[U64]	§3.4 整数の表 検査付き	checked_shl	a.checked_shl(b)
+u64.checked_shr	u64_checked_shr	int-u64.tsv	scalar	U64 U32	Option[U64]	§3.4 整数の表 検査付き	checked_shr	a.checked_shr(b)
 u64.not	u64_not	int-u64.tsv	scalar	U64	U64	§3.4 整数の表	!	!a
 f32.add	f32_add	float-f32.tsv	scalar	F32 F32	F32	§3.4 浮動小数の表	+	a + b
 f32.sub	f32_sub	float-f32.tsv	scalar	F32 F32	F32	§3.4 浮動小数の表	-	a - b
@@ -320,8 +320,8 @@ f32.ceil	f32_ceil	float-f32.tsv	scalar	F32	F32	§3.4 std.math	ceil	ceil(a)
 f32.trunc	f32_trunc	float-f32.tsv	scalar	F32	F32	§3.4 std.math	trunc	trunc(a)
 f32.round	f32_round	float-f32.tsv	scalar	F32	F32	§3.4 std.math	round	round(a)
 f32.abs	f32_abs	float-f32.tsv	scalar	F32	F32	§3.4 std.math	abs	abs(a)
-f32.is_nan	f32_is_nan	float-f32.tsv	predicates	F32	Bool	§3.4 std.math	is_nan	is_nan(a)
-f32.is_finite	f32_is_finite	float-f32.tsv	predicates	F32	Bool	§3.4 std.math	is_finite	is_finite(a)
+f32.is_nan	f32_is_nan	float-f32.tsv	scalar	F32	Bool	§3.4 std.math	is_nan	is_nan(a)
+f32.is_finite	f32_is_finite	float-f32.tsv	scalar	F32	Bool	§3.4 std.math	is_finite	is_finite(a)
 f64.add	f64_add	float-f64.tsv	scalar	F64 F64	F64	§3.4 浮動小数の表	+	a + b
 f64.sub	f64_sub	float-f64.tsv	scalar	F64 F64	F64	§3.4 浮動小数の表	-	a - b
 f64.mul	f64_mul	float-f64.tsv	scalar	F64 F64	F64	§3.4 浮動小数の表	*	a * b
@@ -342,8 +342,8 @@ f64.ceil	f64_ceil	float-f64.tsv	scalar	F64	F64	§3.4 std.math	ceil	ceil(a)
 f64.trunc	f64_trunc	float-f64.tsv	scalar	F64	F64	§3.4 std.math	trunc	trunc(a)
 f64.round	f64_round	float-f64.tsv	scalar	F64	F64	§3.4 std.math	round	round(a)
 f64.abs	f64_abs	float-f64.tsv	scalar	F64	F64	§3.4 std.math	abs	abs(a)
-f64.is_nan	f64_is_nan	float-f64.tsv	predicates	F64	Bool	§3.4 std.math	is_nan	is_nan(a)
-f64.is_finite	f64_is_finite	float-f64.tsv	predicates	F64	Bool	§3.4 std.math	is_finite	is_finite(a)
+f64.is_nan	f64_is_nan	float-f64.tsv	scalar	F64	Bool	§3.4 std.math	is_nan	is_nan(a)
+f64.is_finite	f64_is_finite	float-f64.tsv	scalar	F64	Bool	§3.4 std.math	is_finite	is_finite(a)
 i8.as_i8	i8_as_i8	conv-i8.tsv	scalar	I8	I8	§3.3 変換の表	as	a as I8
 i8.as_i16	i8_as_i16	conv-i8.tsv	scalar	I8	I16	§3.3 変換の表	as	a as I16
 i8.as_i32	i8_as_i32	conv-i8.tsv	scalar	I8	I32	§3.3 変換の表	as	a as I32

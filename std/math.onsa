@@ -1,8 +1,9 @@
 //! Mathematical primitives (spec §13.4, D-07, S-09). Every function is a
 //! `target` declaration: each backend (interpreter, C, WASM, JS) provides it.
 //! The IEEE-exact set (`sqrt`, `floor`, `ceil`, `trunc`, `round`, `abs`,
-//! `min`, `max`, `fmod`) is bit-exact on every target; the transcendental set
-//! matches within the precision target (2 ULP).
+//! `min`, `max`, `is_nan`, `is_finite`) is bit-exact on every target; the
+//! transcendental set matches within the precision target (2 ULP). The
+//! remainder of floats is the operator `%` (§3.4), not a function.
 
 pub target rt fn exp[T: Float](x: T) -> T
 pub target rt fn exp2[T: Float](x: T) -> T
@@ -18,7 +19,8 @@ pub target rt fn floor[T: Float](x: T) -> T
 pub target rt fn ceil[T: Float](x: T) -> T
 pub target rt fn trunc[T: Float](x: T) -> T
 pub target rt fn round[T: Float](x: T) -> T
-pub target rt fn fmod[T: Float](x: T, y: T) -> T
 pub target rt fn abs[T: Num](x: T) -> T
 pub target rt fn min[T: Num](x: T, y: T) -> T
 pub target rt fn max[T: Num](x: T, y: T) -> T
+pub target rt fn is_nan[T: Float](x: T) -> Bool
+pub target rt fn is_finite[T: Float](x: T) -> Bool

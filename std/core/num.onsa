@@ -26,6 +26,13 @@ rt fn some_if[T](parts: (Bool, T)) -> Option[T] {
   if defined { Some(v) } else { None }
 }
 
+/// Whether the value is defined. `checked_div_euclid` is `None` where
+/// `checked_div` is: `div_euclid` panics where `/` does (§3.4).
+rt fn is_defined[T](parts: (Bool, T)) -> Bool {
+  let (defined, _) = parts
+  defined
+}
+
 impl I8 {
   pub const MIN: I8 = -128
   pub const MAX: I8 = 127
@@ -40,6 +47,16 @@ impl I8 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_neg(self) -> Option[Self] { some_if(sub_parts(0, self)) }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 impl I16 {
@@ -57,6 +74,16 @@ impl I16 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_neg(self) -> Option[Self] { some_if(sub_parts(0, self)) }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 impl I32 {
@@ -76,6 +103,16 @@ impl I32 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_neg(self) -> Option[Self] { some_if(sub_parts(0, self)) }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 impl I64 {
@@ -97,6 +134,16 @@ impl I64 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_neg(self) -> Option[Self] { some_if(sub_parts(0, self)) }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 impl U8 {
@@ -110,6 +157,15 @@ impl U8 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 impl U16 {
@@ -125,6 +181,15 @@ impl U16 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 impl U32 {
@@ -143,6 +208,15 @@ impl U32 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 impl U64 {
@@ -164,6 +238,15 @@ impl U64 {
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
   pub rt fn checked_div(self, other: Self) -> Option[Self] { some_if(div_parts(self, other)) }
+  pub rt fn checked_rem(self, other: Self) -> Option[Self] { if other == 0 { None } else { Some(self % other) } }
+  pub rt fn checked_shl(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self << n) } else { None } }
+  pub rt fn checked_shr(self, n: U32) -> Option[Self] { if n < Self.BITS { Some(self >> n) } else { None } }
+  pub rt fn checked_div_euclid(self, other: Self) -> Option[Self] {
+    if is_defined(div_parts(self, other)) { Some(self.div_euclid(other)) } else { None }
+  }
+  pub rt fn checked_rem_euclid(self, other: Self) -> Option[Self] {
+    if other == 0 { None } else { Some(self.rem_euclid(other)) }
+  }
 }
 
 /// The values are the mathematical ones rounded to the type, as a literal

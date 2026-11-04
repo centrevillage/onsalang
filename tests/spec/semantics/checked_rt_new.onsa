@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§10"]
+
+// The checked methods that W5-14 adds (`checked_rem`, `checked_neg`, `checked_shl`, `checked_shr`,
+// `checked_div_euclid`, `checked_rem_euclid`) are callable in an `rt fn`, like `checked_add` in
+// scalar_checked_rt.onsa (§10 rule 4: an `rt fn` calls no function that is not `rt`; the methods never
+// panic and allocate nothing). The spec does not say in so many words that the methods are `rt`; the example
+// of §10 calls `abs` of `std.math` in an `rt fn` and §3.4 says that a checked method "does not panic"
+// (しない), so this file is a case of its own, as scalar_checked_rt.onsa is. Values are worked out by hand:
+// -7 % 4 = -3; -(-7) = 7; 3 << 2 = 12 and 3 << 8 does not exist for a U8; 200 >> 3 = 25; -7 = (-2) * 4 + 1.
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+pub rt fn rem_i32(a: I32, b: I32) -> Option[I32] {
+  a.checked_rem(b)
+}
+
+pub rt fn neg_i32(a: I32) -> Option[I32] {
+  a.checked_neg()
+}
+
+pub rt fn shl_u8(a: U8, n: U32) -> Option[U8] {
+  a.checked_shl(n)
+}
+
+pub rt fn shr_u8(a: U8, n: U32) -> Option[U8] {
+  a.checked_shr(n)
+}
+
+pub rt fn div_euclid_i32(a: I32, b: I32) -> Option[I32] {
+  a.checked_div_euclid(b)
+}
+
+pub rt fn rem_euclid_i32(a: I32, b: I32) -> Option[I32] {
+  a.checked_rem_euclid(b)
+}
+
+test "an rt fn calls the checked methods that W5-14 adds" {
+  assert val(rem_i32(-7, 4), 99) == -3
+  assert is_none(rem_i32(-7, 0))
+  assert val(rem_i32(I32.MIN, -1), 99) == 0
+  assert val(neg_i32(-7), 99) == 7
+  assert is_none(neg_i32(I32.MIN))
+  assert val(shl_u8(3, 2), 99) == 12
+  assert is_none(shl_u8(3, 8))
+  assert val(shr_u8(200, 3), 99) == 25
+  assert is_none(shr_u8(200, 8))
+  assert val(div_euclid_i32(-7, 4), 99) == -2
+  assert val(rem_euclid_i32(-7, 4), 99) == 1
+  assert is_none(div_euclid_i32(I32.MIN, -1))
+  assert is_none(rem_euclid_i32(5, 0))
+}

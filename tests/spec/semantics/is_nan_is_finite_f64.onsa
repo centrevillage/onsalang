@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§13.4"]
+
+// `std.math.is_nan` and `std.math.is_finite` on an `F64` (spec §13.4: `is_nan[T: Float](x: T) -> Bool` and
+// `is_finite` are the judgements of NaN and of a finite value; §3.4: NaN is not equal to itself, a number
+// that overflows is an infinity, `0.0 / 0.0` and `inf - inf` are NaN, `-0.0` is a number, a subnormal number
+// is kept as it is). `is_nan` is true for NaN only; `is_finite` is false for NaN and for both infinities and
+// true for every other value. NaN has no `to_bits` of its own to compare (§3.4), so each NaN below is made
+// by an operation or from bits that make a NaN.
+
+use std.math.{is_finite, is_nan}
+
+test "F64: the special values" {
+  let nan: F64  = F64.NAN
+  let inf: F64  = F64.INFINITY
+  let ninf: F64 = -F64.INFINITY
+  assert is_nan(nan)
+  assert !is_finite(nan)
+  assert !is_nan(inf)
+  assert !is_finite(inf)
+  assert !is_nan(ninf)
+  assert !is_finite(ninf)
+}
+
+test "F64: the numbers, including the zeros and the ends of the range" {
+  let zero: F64  = 0.0
+  let nzero: F64 = -0.0
+  let one: F64   = 1.0
+  let big: F64   = F64.MAX
+  let nbig: F64  = -F64.MAX
+  let eps: F64   = F64.EPSILON
+  assert !is_nan(zero)
+  assert is_finite(zero)
+  assert !is_nan(nzero)
+  assert is_finite(nzero)
+  assert !is_nan(one)
+  assert is_finite(one)
+  assert !is_nan(big)
+  assert is_finite(big)
+  assert is_finite(nbig)
+  assert is_finite(eps)
+}
+
+test "F64: a subnormal number is a number" {
+  let smallest: F64 = F64.from_bits(1)
+  let biggest: F64  = F64.from_bits(0x000F_FFFF_FFFF_FFFF)
+  assert !is_nan(smallest)
+  assert is_finite(smallest)
+  assert !is_nan(biggest)
+  assert is_finite(biggest)
+}
+
+test "F64: the results of operations" {
+  let zero: F64 = 0.0
+  let inf: F64  = F64.INFINITY
+  let big: F64  = F64.MAX
+  let two: F64  = 2.0
+  // 0.0 / 0.0 and inf - inf are NaN (§3.4).
+  assert is_nan(zero / zero)
+  assert is_nan(inf - inf)
+  assert is_nan(inf * zero)
+  // A number that overflows is an infinity, and an infinity is not NaN.
+  assert !is_nan(big * two)
+  assert !is_finite(big * two)
+  // A non-zero number divided by zero is an infinity.
+  assert !is_nan(two / zero)
+  assert !is_finite(two / zero)
+  // Arithmetic on finite numbers that stays in range stays finite.
+  assert is_finite(big - two)
+  assert is_finite(big / two)
+}
+
+test "F64: NaN from bits, with any sign and payload" {
+  let quiet: F64    = F64.from_bits(0x7FF8_0000_0000_0000)
+  let negative: F64 = F64.from_bits(0xFFF8_0000_0000_0000)
+  let payload: F64  = F64.from_bits(0x7FF8_0000_0000_0001)
+  let inf: F64      = F64.from_bits(0x7FF0_0000_0000_0000)
+  let ninf: F64     = F64.from_bits(0xFFF0_0000_0000_0000)
+  assert is_nan(quiet)
+  assert is_nan(negative)
+  assert is_nan(payload)
+  assert !is_finite(negative)
+  assert !is_nan(inf)
+  assert !is_finite(inf)
+  assert !is_nan(ninf)
+  assert !is_finite(ninf)
+}
+
+test "F64: is_nan is true where x != x, and is_finite is a number that is neither NaN nor an infinity" {
+  let nan: F64 = F64.NAN
+  let inf: F64 = F64.INFINITY
+  let one: F64 = 1.0
+  assert (nan != nan) == is_nan(nan)
+  assert (inf != inf) == is_nan(inf)
+  assert (one != one) == is_nan(one)
+  assert is_finite(one) == (!is_nan(one) && one != inf && one != -inf)
+  assert is_finite(inf) == (!is_nan(inf) && inf != inf && inf != -inf)
+}

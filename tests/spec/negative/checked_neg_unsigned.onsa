@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§18.1"]
+
+// E0413: `checked_neg` is for the signed integers only (spec §3.4: "`checked_neg`（符号付きだけ）"; an unsigned
+// integer has no unary `-`, E0401 for `-a`, so its negation has no checked form either). The type of the
+// receiver is known in each function, so it is E0413 and not E0420. One error per function (P-01). The last
+// function is fine: the two's complement negation of an unsigned integer is written `0 -% u`, and a signed
+// integer has the operator `-`; the signed `checked_neg` is in the cases of checked_ops.onsa (§3.4).
+
+pub fn byte(a: U8) -> Option[U8] {
+  a.checked_neg()                                   //~ E0413
+}
+
+pub fn half_word(a: U16) -> Option[U16] {
+  a.checked_neg()                                   //~ E0413
+}
+
+pub fn word(a: U32) -> Option[U32] {
+  a.checked_neg()                                   //~ E0413
+}
+
+pub fn long_word(a: U64) -> Option[U64] {
+  a.checked_neg()                                   //~ E0413
+}
+
+pub fn through_a_field(p: Count) -> Option[U32] {
+  p.n.checked_neg()                                 //~ E0413
+}
+
+pub struct Count {
+  n: U32,
+}
+
+pub fn fine(c: I32, u: U32) -> I32 {
+  let _ = 0 -% u
+  -c
+}

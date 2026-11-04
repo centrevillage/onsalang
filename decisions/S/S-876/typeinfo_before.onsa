@@ -1,0 +1,20 @@
+pub fn opt() -> I32 {
+  let o = None
+  return 1
+  let z: Option[I32] = o
+  0
+}
+
+pub fn float_acc(x: F32) -> F32 {
+  var acc = 0.0
+  return 1.0
+  acc = acc + x
+  acc
+}
+
+pub fn empty_arr() -> U32 {
+  let xs = []
+  return 1
+  let ys: [I32; 0] = xs
+  0
+}

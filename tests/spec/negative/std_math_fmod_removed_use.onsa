@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+
+// E0302: `std.math` has no `fmod` (decision S-98 (W5-14): the remainder of the floats is the operator `%`, the
+// row `a % b` of §3.4, which is `fmod`; the functions of `std.math` that §13.4 lists for exact computation are
+// `sqrt`, `floor`, `ceil`, `trunc`, `round`, `abs`, `min`, `max`, `is_nan` and `is_finite`, and a name that std
+// does not declare is not found, §15.1). `use std.math.{fmod}` is E0302 at the name. A `use` of a name that std
+// has is fine, as is the operator `%`. `is_infinite` is not in std either (S-98 (5): only `is_nan` and
+// `is_finite`).
+
+use std.math.{fmod}                                 //~ E0302
+use std.math.{is_infinite}                          //~ E0302
+use std.math.{floor}
+
+pub fn fine(x: F32, y: F32) -> F32 {
+  floor(x) + (x % y)
+}

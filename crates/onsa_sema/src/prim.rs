@@ -15,7 +15,8 @@ const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
 pub(crate) const INTS: [IntKind; 8] =
     [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
 
-/// `std.math` functions (`target rt fn`, generic over `Float`).
+/// `std.math` functions (`target rt fn`, generic over `Float`), and the
+/// float `%` (§3.4), which is no function of std.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MathFn {
     Exp,
@@ -35,12 +36,13 @@ pub enum MathFn {
     Abs,
     Min,
     Max,
+    /// The float `%`: lowering's, of the operator.
     Fmod,
 }
 
 impl MathFn {
-    /// Every function, in the order of `std/math.onsa`.
-    pub const ALL: [MathFn; 18] = [
+    /// Every function of `std/math.onsa`, in its order (not `Fmod`).
+    pub const ALL: [MathFn; 17] = [
         MathFn::Exp,
         MathFn::Exp2,
         MathFn::Log,
@@ -55,7 +57,6 @@ impl MathFn {
         MathFn::Ceil,
         MathFn::Trunc,
         MathFn::Round,
-        MathFn::Fmod,
         MathFn::Abs,
         MathFn::Min,
         MathFn::Max,
@@ -235,42 +236,43 @@ impl Prim {
 
     /// The row of the `std` `target` declaration this primitive instantiates
     /// ([`PrimRow::instantiate`] the other way), without a `_`, so that a new
-    /// primitive must say whether a declaration gives it. `None` for the ones
-    /// no row gives (D8). Of one Core makes itself, the family, which may
-    /// have no row (`U32` to `F64` of a flow's rate).
-    pub fn row_prim(&self) -> Option<PrimRow> {
+    /// primitive must say which declaration gives it. Of one Core makes
+    /// itself, the family, which may have no row (`U32` to `F64` of a flow's
+    /// rate, the float `%`).
+    pub fn row_prim(&self) -> PrimRow {
         match self {
-            Prim::Math(f, _) => Some(PrimRow::Math(*f)),
-            Prim::IntAbs(_) => Some(PrimRow::Math(MathFn::Abs)),
-            Prim::IntMin(_) => Some(PrimRow::Math(MathFn::Min)),
-            Prim::IntMax(_) => Some(PrimRow::Math(MathFn::Max)),
-            Prim::AssertNear => Some(PrimRow::AssertNear),
-            Prim::Pending(p) => Some(PrimRow::Pending(*p)),
-            Prim::FromBits(k) => Some(PrimRow::FromBits(*k)),
-            Prim::NarrowParts { .. } => Some(PrimRow::NarrowParts),
-            Prim::Parts(op, _) => Some(PrimRow::Parts(*op)),
-            &Prim::IntToFloat { from, to } => Some(PrimRow::IntToFloat { from, to }),
-            &Prim::FloatToFloat { from, to } => Some(PrimRow::FloatToFloat { from, to }),
-            &Prim::TruncToInt { from, to, sat } => Some(PrimRow::TruncToInt { from, to, sat }),
-            Prim::ToBits(k) => Some(PrimRow::ToBits(*k)),
-            Prim::DivEuclid(k) => Some(PrimRow::DivEuclid(*k)),
-            Prim::RemEuclid(k) => Some(PrimRow::RemEuclid(*k)),
-            Prim::Len => Some(PrimRow::Len),
-            Prim::Slice => Some(PrimRow::Slice),
-            Prim::Fill => Some(PrimRow::Fill),
-            Prim::AddFrom => Some(PrimRow::AddFrom),
-            Prim::CopyFrom => Some(PrimRow::CopyFrom),
-            Prim::BufZeroed => Some(PrimRow::BufZeroed),
-            Prim::StrLen => Some(PrimRow::StrLen),
-            Prim::IsNan(_) | Prim::IsFinite(_) => None,
+            Prim::Math(f, _) => PrimRow::Math(*f),
+            Prim::IntAbs(_) => PrimRow::Math(MathFn::Abs),
+            Prim::IntMin(_) => PrimRow::Math(MathFn::Min),
+            Prim::IntMax(_) => PrimRow::Math(MathFn::Max),
+            Prim::AssertNear => PrimRow::AssertNear,
+            Prim::Pending(p) => PrimRow::Pending(*p),
+            Prim::FromBits(k) => PrimRow::FromBits(*k),
+            Prim::NarrowParts { .. } => PrimRow::NarrowParts,
+            Prim::Parts(op, _) => PrimRow::Parts(*op),
+            &Prim::IntToFloat { from, to } => PrimRow::IntToFloat { from, to },
+            &Prim::FloatToFloat { from, to } => PrimRow::FloatToFloat { from, to },
+            &Prim::TruncToInt { from, to, sat } => PrimRow::TruncToInt { from, to, sat },
+            Prim::ToBits(k) => PrimRow::ToBits(*k),
+            Prim::DivEuclid(k) => PrimRow::DivEuclid(*k),
+            Prim::RemEuclid(k) => PrimRow::RemEuclid(*k),
+            Prim::Len => PrimRow::Len,
+            Prim::Slice => PrimRow::Slice,
+            Prim::Fill => PrimRow::Fill,
+            Prim::AddFrom => PrimRow::AddFrom,
+            Prim::CopyFrom => PrimRow::CopyFrom,
+            Prim::BufZeroed => PrimRow::BufZeroed,
+            Prim::StrLen => PrimRow::StrLen,
+            Prim::IsNan(_) => PrimRow::IsNan,
+            Prim::IsFinite(_) => PrimRow::IsFinite,
         }
     }
 
     /// The `std` declaration whose primitive this is, by its qualified name
     /// (`std.test.gen.u32`): the E0200 of a backend that does not provide it
-    /// names the declaration (spec §15.2). `None` as for [`Prim::row_prim`].
+    /// names the declaration (spec §15.2). `None` of a family with no row.
     pub fn std_name(&self) -> Option<String> {
-        let prim = self.row_prim()?;
+        let prim = self.row_prim();
         let found = rows().iter().find(|r| r.prim == prim)?;
         Some(format!("std.{}", found.key))
     }
@@ -379,6 +381,9 @@ pub enum PrimRow {
     BufZeroed,
     /// `Str.len`.
     StrLen,
+    /// `std.math.is_nan` and `is_finite` at a float (§3.4).
+    IsNan,
+    IsFinite,
 }
 
 impl PrimRow {
@@ -418,6 +423,8 @@ impl PrimRow {
             PrimRow::CopyFrom => Some(Prim::CopyFrom),
             PrimRow::BufZeroed => Some(Prim::BufZeroed),
             PrimRow::StrLen => Some(Prim::StrLen),
+            PrimRow::IsNan => float(args).map(Prim::IsNan),
+            PrimRow::IsFinite => float(args).map(Prim::IsFinite),
             PrimRow::AddFrom => match args {
                 [Scalar::Other, Scalar::Int(_) | Scalar::Float(_)] => Some(Prim::AddFrom),
                 _ => None,
@@ -431,6 +438,14 @@ impl PrimRow {
     /// does not is E0200 (spec §15.2).
     pub fn provides(self, args: &[Scalar]) -> bool {
         self == PrimRow::FromFn || self.instantiate(args).is_some()
+    }
+}
+
+/// The float of a use whose one type argument is a float.
+fn float(args: &[Scalar]) -> Option<FloatKind> {
+    match args {
+        &[Scalar::Float(k)] => Some(k),
+        _ => None,
     }
 }
 
@@ -461,6 +476,8 @@ pub fn rows() -> &'static [Row] {
             .map(|&f| row(&format!("math.{}", f.name()), PrimRow::Math(f), f.arity() as u8, true))
             .collect();
         v.extend([
+            row("math.is_nan", PrimRow::IsNan, 1, true),
+            row("math.is_finite", PrimRow::IsFinite, 1, true),
             row("array.from_fn", PrimRow::FromFn, 1, false),
             row("dsp.test.assert_near", PrimRow::AssertNear, 3, false),
             row("test.check", PrimRow::Pending(PendingPrim::Check), 3, false),

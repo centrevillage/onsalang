@@ -44,13 +44,8 @@ PI_NUM, PI_DEN = 314159265358979323846264338327950288419716939937510582097494, 1
 # delete the rule: the operations fall back to `scalar` on the next generation (the function names do
 # not change). Found by W2-01 on 2026-10-08.
 PENDING_PACKAGES = [
-    # E0413: the checked methods after `checked_div` do not exist yet (W5-02)
-    ("checked", lambda o: o.group == "int" and o.name in (
-        "checked_rem", "checked_div_euclid", "checked_rem_euclid", "checked_shl", "checked_shr", "checked_neg")),
     # E0302: `T.ZERO` and `T.ONE` do not exist yet (W5-05)
     ("zero_one", lambda o: o.group == "const" and o.name in ("ZERO", "ONE")),
-    # E0302: std.math has no `is_nan` and `is_finite` yet (W5-02)
-    ("predicates", lambda o: o.group == "float" and o.name in ("is_nan", "is_finite")),
 ]
 
 

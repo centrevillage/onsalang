@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§6.2", "§18.1"]
+
+// E0412 and E0401: the arguments of the checked methods that W5-14 adds (spec §3.4). `checked_neg` takes none;
+// `checked_rem`, `checked_div_euclid` and `checked_rem_euclid` take one, of the type of the receiver (as
+// `checked_add` does, negative/scalar_method_arguments.onsa); `checked_shl` and `checked_shr` take one, the
+// amount, a U32 (the row `a << n` of §3.4: "`n` は `U32`"). A wrong number of arguments is E0412 and a wrong type
+// is E0401. One error per function (P-01). The last function is fine.
+
+pub fn neg_with_an_argument(a: I32) -> Option[I32] {
+  a.checked_neg(1)                                  //~ E0412
+}
+
+pub fn rem_without_one(a: I32) -> Option[I32] {
+  a.checked_rem()                                   //~ E0412
+}
+
+pub fn rem_with_two(a: U8, b: U8) -> Option[U8] {
+  a.checked_rem(b, b)                               //~ E0412
+}
+
+pub fn floor_division_without_one(a: I64) -> Option[I64] {
+  a.checked_div_euclid()                            //~ E0412
+}
+
+pub fn floor_remainder_with_two(a: U32, b: U32) -> Option[U32] {
+  a.checked_rem_euclid(b, b)                        //~ E0412
+}
+
+pub fn shift_left_without_one(a: U16) -> Option[U16] {
+  a.checked_shl()                                   //~ E0412
+}
+
+pub fn shift_right_with_two(a: I8) -> Option[I8] {
+  a.checked_shr(1, 2)                               //~ E0412
+}
+
+pub fn rem_by_a_float(a: I32, x: F32) -> Option[I32] {
+  a.checked_rem(x)                                  //~ E0401
+}
+
+pub fn rem_by_another_width(a: I32, b: I64) -> Option[I32] {
+  a.checked_rem(b)                                  //~ E0401
+}
+
+pub fn floor_division_by_a_bool(a: U8) -> Option[U8] {
+  a.checked_div_euclid(true)                        //~ E0401
+}
+
+pub fn floor_remainder_by_another_sign(a: I32, b: U32) -> Option[I32] {
+  a.checked_rem_euclid(b)                           //~ E0401
+}
+
+pub fn shift_left_by_an_i32(a: U8, n: I32) -> Option[U8] {
+  a.checked_shl(n)                                  //~ E0401
+}
+
+pub fn shift_right_by_a_u64(a: I64, n: U64) -> Option[I64] {
+  a.checked_shr(n)                                  //~ E0401
+}
+
+pub fn shift_left_by_a_float(a: U32, x: F32) -> Option[U32] {
+  a.checked_shl(x)                                  //~ E0401
+}
+
+pub fn fine(a: I32, b: I32, n: U32) -> Option[I32] {
+  let _ = a.checked_neg()
+  let _ = a.checked_rem_euclid(b)
+  let _ = a.checked_shr(n)
+  let _ = a.checked_div_euclid(b)
+  a.checked_shl(n)
+}

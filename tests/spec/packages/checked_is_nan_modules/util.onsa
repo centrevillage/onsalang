@@ -1,0 +1,23 @@
+// The functions of another module of the package, which use the checked methods that W5-14 adds and the
+// `is_nan` / `is_finite` of `std.math`: the use of std names in a module that is not the one with the tests.
+
+use std.math.{is_finite, is_nan}
+
+pub rt fn rem_neg(a: I32, b: I32) -> Option[I32] {
+  match a.checked_rem(b) {
+    Some(r) => r.checked_neg(),
+    None => None,
+  }
+}
+
+pub fn shifted(a: U16, n: U32) -> Option[U16] {
+  a.checked_shl(n)
+}
+
+pub rt fn usable(x: F32) -> Bool {
+  !is_nan(x) && is_finite(x)
+}
+
+pub fn generic_usable[T: Float](x: T) -> Bool {
+  !is_nan(x) && is_finite(x)
+}

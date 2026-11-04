@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§10", "§11.2", "§13.4"]
+
+// `is_nan` and `is_finite` of `std.math` called from an `rt fn` and from the body of a flow (the anonymous
+// function is in is_nan_is_finite_closure.onsa). Spec §10: an `rt fn` calls only `rt` functions; §11.2: the
+// body of a flow may call an `rt fn` with an empty effect row. The spec does not say in so many words that
+// the two functions of `std.math` are `rt` (§10 calls `abs` of `std.math` in an `rt fn`; §13.4 puts both in
+// the set that every target computes exactly), so this file is a case of its own, as scalar_checked_rt.onsa
+// is for the checked methods. A function that replaces NaN by 0.0, or an infinity by the largest number of
+// the type, is a guard that a feedback path puts in front of a filter; the values are worked out by hand.
+
+use std.math.{is_finite, is_nan}
+
+pub rt fn clean(x: F32) -> F32 {
+  if is_nan(x) {
+    0.0
+  } else {
+    x
+  }
+}
+
+pub rt fn clamp_infinity(x: F32) -> F32 {
+  if is_finite(x) || is_nan(x) {
+    x
+  } else if x > 0.0 {
+    F32.MAX
+  } else {
+    -F32.MAX
+  }
+}
+
+pub flow guard(x: F32 at sample) -> F32 at sample {
+  if is_nan(x) {
+    0.0
+  } else {
+    x
+  }
+}
+
+pub flow finite_only(x: F32 at sample) -> F32 at sample {
+  if is_finite(x) {
+    x
+  } else {
+    0.0
+  }
+}
+
+pub flow guarded_gain(x: F32 at sample) -> F32 at sample {
+  clean(x) * 0.5
+}
+
+test "an rt fn calls is_nan and is_finite" {
+  assert clean(F32.NAN) == 0.0
+  assert clean(2.5) == 2.5
+  assert clean(F32.INFINITY) == F32.INFINITY
+  assert clamp_infinity(F32.INFINITY) == F32.MAX
+  assert clamp_infinity(-F32.INFINITY) == -F32.MAX
+  assert clamp_infinity(-3.0) == -3.0
+  assert is_nan(clamp_infinity(F32.NAN))
+}
+
+test "the body of a flow calls is_nan" {
+  let nan: F32     = F32.NAN
+  let inf: F32     = F32.INFINITY
+  let xs: [F32; 4] = [nan, 2.0, inf, -1.0]
+  let o            = guard.render(guard.Config {}, guard.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == inf
+  assert o.out[3] == -1.0
+}
+
+test "the body of a flow calls is_finite" {
+  let nan: F32     = F32.NAN
+  let inf: F32     = F32.INFINITY
+  let xs: [F32; 4] = [nan, 2.0, -inf, -1.0]
+  let o            = finite_only.render(finite_only.Config {}, finite_only.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == -1.0
+}
+
+test "a flow calls an rt fn that calls is_nan" {
+  let nan: F32     = F32.NAN
+  let xs: [F32; 3] = [nan, 3.0, 4.0]
+  let o            = guarded_gain.render(guarded_gain.Config {}, guarded_gain.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.5
+  assert o.out[2] == 2.0
+}

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§6.6", "§13.4"]
+
+// `is_nan` and `is_finite` of `std.math` on the associated constants of `T: Float` (spec §6.3: `Float` has
+// `NAN`, `INFINITY`, `MAX`, `PI` as associated constants of type `Self`; §6.6; §13.4). The same function runs
+// on an `F32` and an `F64`: `T.NAN` is NaN, `T.INFINITY` is an infinity that is not NaN, `T.MAX` and `T.PI`
+// are finite. This waits for the number traits to be std's (W5-05, as generic_zero.onsa does for `T.ZERO`).
+
+use std.math.{is_finite, is_nan}
+
+fn constants_are_what_they_say[T: Float](x: T) -> Bool {
+  is_finite(x) && is_nan(T.NAN) && !is_finite(T.NAN) && !is_nan(T.INFINITY) && !is_finite(T.INFINITY) && is_finite(T.MAX) && is_finite(T.PI)
+}
+
+test "the associated constants of T: Float, at F32 and F64" {
+  let f_one: F32 = 1.0
+  let d_one: F64 = 1.0
+  assert constants_are_what_they_say(f_one)
+  assert constants_are_what_they_say(d_one)
+}

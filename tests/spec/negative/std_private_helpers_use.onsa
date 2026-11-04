@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0303: the helper functions that std writes its methods with are not `pub` (they have no visibility word, so
+// they are seen in the package of std alone, §15.1: "パッケージの外に出るのは `pub` を書いたものだけ"), and a `use`
+// of a name that is not visible from here is E0303 at the name (§18.1: the E0303 of a name that is not visible is
+// of the name stage). The checked methods are written in std with these helpers, `add_parts` and the like, in
+// `std/core/num.onsa`, so a user cannot call them. The names are those of std at this time; the module is
+// `std.core.num` because std holds it in the file `core/num.onsa` (§15.1: a file is a module). A `use` of the
+// module itself is fine. The method that the helpers serve is called as a method.
+
+use std.core.num
+use std.core.num.{add_parts}                        //~ E0303
+use std.core.num.{sub_parts}                        //~ E0303
+use std.core.num.{div_parts}                        //~ E0303
+use std.core.num.{some_if}                          //~ E0303
+
+pub fn fine(a: I32, b: I32) -> Option[I32] {
+  a.checked_add(b)
+}

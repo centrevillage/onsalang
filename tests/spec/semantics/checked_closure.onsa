@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§6.1"]
+
+// The checked methods that W5-14 adds (`checked_rem`, `checked_shl`, spec §3.4) called from an anonymous
+// function, which returns the `Option` (spec §6.1: an anonymous function is a function and is called with
+// `.(`). Worked out by hand: -15 = (-2) * 7 - 1; 3 << 6 = 192; 3 << 7 = 384, which leaves the low 8 bits 128;
+// the amount 8 is the bit width of a U8. This waits for the function values of the Core (W8-09, as
+// try_in_closure.onsa does).
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+test "an anonymous function returns the Option of a checked method" {
+  let rem_by_seven = fn(x: I32) -> Option[I32] {
+    x.checked_rem(7)
+  }
+  let shift_up = fn(x: U8, n: U32) -> Option[U8] {
+    x.checked_shl(n)
+  }
+  assert val(rem_by_seven.(-15), 99) == -1
+  assert val(rem_by_seven.(14), 99) == 0
+  assert val(shift_up.(3, 6), 99) == 192
+  assert val(shift_up.(3, 7), 99) == 128
+  assert is_none(shift_up.(3, 8))
+}

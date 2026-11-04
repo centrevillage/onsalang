@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§9.2"]
+
+// `checked_shl` and `checked_shr` at the width of every type but U64 and I64 (those are in checked_ops.onsa)
+// and at the bits that move (spec §3.4, the row `a << n`, `a >> n`): the amount `n` is a U32; the shift
+// panics only where `n` is the bit width or more, so `checked_shl` / `checked_shr` are `None` exactly there.
+// `<<` puts 0 in the low bits and drops the bits that leave on the top (no overflow, so `Some`); `>>` is
+// arithmetic for the signed types and logical for the unsigned ones. Every value is worked out by hand.
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+test "U8: None from the amount 8, bits that leave are dropped" {
+  let one: U8 = 1
+  let top: U8 = 128
+  let all: U8 = 255
+  assert val(one.checked_shl(7), 9) == 128
+  assert is_none(one.checked_shl(8))
+  assert val(top.checked_shl(1), 9) == 0
+  assert val(all.checked_shl(4), 9) == 240
+  assert val(top.checked_shr(7), 9) == 1
+  assert is_none(top.checked_shr(8))
+  assert val(all.checked_shr(1), 9) == 127
+  assert val(all.checked_shr(7), 9) == 1
+}
+
+test "I8: None from the amount 8, shl reaches the sign bit, shr copies it" {
+  let one: I8        = 1
+  let sixty_four: I8 = 64
+  let minus_one: I8  = -1
+  let min: I8        = I8.MIN
+  assert val(one.checked_shl(7), 9) == -128
+  assert is_none(one.checked_shl(8))
+  assert val(sixty_four.checked_shl(1), 9) == -128
+  assert val(sixty_four.checked_shl(2), 9) == 0
+  assert val(min.checked_shr(7), 9) == -1
+  assert val(min.checked_shr(1), 9) == -64
+  assert is_none(min.checked_shr(8))
+  assert val(minus_one.checked_shr(1), 9) == -1
+  assert val(minus_one.checked_shr(7), 9) == -1
+}
+
+test "U16 and I16: None from the amount 16" {
+  let one: U16  = 1
+  let top: U16  = 32768
+  let sone: I16 = 1
+  let smin: I16 = I16.MIN
+  assert val(one.checked_shl(15), 9) == 32768
+  assert is_none(one.checked_shl(16))
+  assert val(top.checked_shr(15), 9) == 1
+  assert is_none(top.checked_shr(16))
+  assert val(sone.checked_shl(15), 9) == -32768
+  assert is_none(sone.checked_shl(16))
+  assert val(smin.checked_shr(15), 9) == -1
+  assert is_none(smin.checked_shr(16))
+}
+
+test "U32 and I32: None from the amount 32, and for the largest amount" {
+  let one: U32  = 1
+  let top: U32  = 2147483648
+  let sone: I32 = 1
+  let smin: I32 = I32.MIN
+  assert val(one.checked_shl(31), 9) == 2147483648
+  assert is_none(one.checked_shl(32))
+  assert is_none(one.checked_shl(U32.MAX))
+  assert val(top.checked_shr(31), 9) == 1
+  assert is_none(top.checked_shr(32))
+  assert is_none(top.checked_shr(U32.MAX))
+  assert val(sone.checked_shl(31), 9) == I32.MIN
+  assert is_none(sone.checked_shl(32))
+  assert val(smin.checked_shr(31), 9) == -1
+  assert is_none(smin.checked_shr(U32.MAX))
+}
+
+test "the amount 0 returns the value itself, also for a value of 0" {
+  let a: U8  = 200
+  let b: I16 = -300
+  let z: U32 = 0
+  assert val(a.checked_shl(0), 9) == 200
+  assert val(a.checked_shr(0), 9) == 200
+  assert val(b.checked_shl(0), 9) == -300
+  assert val(b.checked_shr(0), 9) == -300
+  assert val(z.checked_shl(31), 9) == 0
+  assert val(z.checked_shr(31), 9) == 0
+}
+
+test "checked_shl and checked_shr agree with the operators where the amount is in range" {
+  let x: U32 = 0x1234_5678
+  let n: U32 = 8
+  assert val(x.checked_shl(n), 0) == (x << n)
+  assert val(x.checked_shr(n), 0) == (x >> n)
+  let y: I32 = -0x1234_5678
+  assert val(y.checked_shl(n), 0) == (y << n)
+  assert val(y.checked_shr(n), 0) == (y >> n)
+}

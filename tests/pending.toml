@@ -416,10 +416,10 @@ note = "T: AnyNum の境界が E0200（user-defined traits as bounds）。T.ZERO
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/checked_ops.onsa"
-reasons = ["R-79", "S-69"]
-until = "W5-14"
-note = "checked_neg / checked_rem / checked_div_euclid / checked_rem_euclid / checked_shl / checked_shr が無い（E0413、§3.4）"
+target = "tests/spec/semantics/is_nan_is_finite_generic_constants.onsa"
+reasons = ["S-98", "R-126", "S-84"]
+until = "W5-05"
+note = "総称の本体の T.NAN・T.INFINITY などの関連定数が E0302（generic_zero.onsa と同じ。§6.6）"
 
 [[pending]]
 kind = "test-case"
@@ -441,6 +441,20 @@ target = "tests/spec/semantics/callee_tuple_index_calls.onsa"
 reasons = ["R-08"]
 until = "W8-09"
 note = "タプルの要素の関数値の .( の呼び出しが E0200（§4.1、§6.1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/checked_closure.onsa"
+reasons = ["S-98", "R-126", "R-08"]
+until = "W8-09"
+note = "無名関数の中の checked_*。onsa test の無名関数と関数値の呼び出しが E0200（try_in_closure.onsa と同じ）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/is_nan_is_finite_closure.onsa"
+reasons = ["S-98", "R-126", "R-08"]
+until = "W8-09"
+note = "無名関数の中の is_nan / is_finite。onsa test の無名関数と関数値の呼び出しが E0200（try_in_closure.onsa と同じ）"
 
 [[pending]]
 kind = "test-case"
@@ -521,13 +535,6 @@ note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/nan_and_inf.onsa"
-reasons = ["S-98", "R-126", "S-44"]
-until = "W5-14"
-note = "std.math.is_nan が std に無い（E0302）。S-98 / R-126 は W5-02。構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/branches_plain_match.onsa"
 reasons = ["R-06"]
 until = "W8-06"
@@ -604,20 +611,6 @@ target = "c-x86/tests/pipeline/span_const.onsa[host]"
 reasons = ["R-109", "S-94"]
 until = "W10-04"
 note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
-
-[[pending]]
-kind = "test-case"
-target = "tests/vectors/fixture/checked"
-reasons = ["R-79", "S-69"]
-until = "W5-14"
-note = "checked_rem / checked_div_euclid / checked_rem_euclid / checked_shl / checked_shr / checked_neg が無い（E0413、§3.4）。テストベクトルの 44 演算"
-
-[[pending]]
-kind = "test-case"
-target = "tests/vectors/fixture/predicates"
-reasons = ["S-98", "R-126"]
-until = "W5-14"
-note = "std.math の is_nan / is_finite が無い（E0302）。テストベクトルの 4 演算"
 
 [[pending]]
 kind = "test-case"
@@ -888,13 +881,6 @@ target = "tests/spec/semantics/numeric_generic_edges.onsa"
 reasons = ["S-84"]
 until = "W5-05"
 note = "T: Int / T: Num + Int の境界が E0200（§6.3）。総称の関数の中の U64 の *% *| * と、MIN % -T.ONE、MIN / -T.ONE（§3.4）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/min_checked_rem.onsa"
-reasons = ["R-79", "S-69"]
-until = "W5-14"
-note = "checked_rem / checked_rem_euclid / checked_div_euclid / checked_neg が無い（E0413、§3.4）。全ての符号付きの幅の MIN と -1"
 
 [[pending]]
 kind = "test-case"

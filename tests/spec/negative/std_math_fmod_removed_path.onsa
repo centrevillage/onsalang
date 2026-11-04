@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+
+// E0302: `std.math` has no `fmod` and no `is_infinite` (decision S-98 (W5-14); see
+// std_math_fmod_removed_use.onsa). Written as a path through the module (`use std.math`, then `math.fmod(a, b)`),
+// the name is not found in the module: E0302 at the name, in an `F32`, an `F64` and a generic body. One error per
+// function (P-01). The last function is fine: the operator, and a function that std has.
+
+use std.math
+
+pub fn remainder_single(a: F32, b: F32) -> F32 {
+  math.fmod(a, b)                                   //~ E0302
+}
+
+pub fn remainder_double(a: F64, b: F64) -> F64 {
+  math.fmod(a, b)                                   //~ E0302
+}
+
+pub fn remainder_generic[T: Float](a: T, b: T) -> T {
+  math.fmod(a, b)                                   //~ E0302
+}
+
+pub fn infinite(x: F32) -> Bool {
+  math.is_infinite(x)                               //~ E0302
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  math.floor(a) + (a % b)
+}

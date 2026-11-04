@@ -1,0 +1,3 @@
+[package]
+name = "checked_is_nan_modules"
+edition = "2026"

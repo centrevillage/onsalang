@@ -77,9 +77,16 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
         // `Buf.zeroed` and `Str.len` (§5.3, §4.2, R-104, R-96).
         "Buf.zeroed",
         "Str.len",
+        // The float predicates (§3.4, S-98 (5)).
+        "math.is_nan",
+        "math.is_finite",
     ] {
         assert!(decls.contains_key(member), "no declaration `{member}` in {keys:?}");
     }
+    // The float `%` is the operator, no function (§3.4, S-98): its primitive
+    // has no row, and its E0200 would name no declaration.
+    assert!(!decls.contains_key("math.fmod"));
+    assert_eq!(Prim::Math(MathFn::Fmod, FloatKind::F32).std_name(), None);
     for (key, (def, f)) in &decls {
         let r = row(key).unwrap_or_else(|| panic!("no row of `{key}`"));
         assert_eq!(usize::from(r.arity), f.params.len(), "the arity of `{key}`");
@@ -148,7 +155,7 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
             // The primitive leads back to its row, and so to the declaration
             // an E0200 names.
             if let Some(p) = r.instantiate(&scalars) {
-                assert_eq!(p.row_prim(), Some(r), "`{key}` at {scalars:?}");
+                assert_eq!(p.row_prim(), r, "`{key}` at {scalars:?}");
                 assert_eq!(p.std_name().as_deref(), Some(format!("std.{key}").as_str()));
             }
             tried += 1;

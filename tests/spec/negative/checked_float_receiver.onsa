@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§18.1"]
+
+// E0413: the checked methods are for the integers (spec §3.4: "panic しうる整数の演算子とメソッドには、全て検査付きの
+// メソッドがあり"). A float does not panic (an overflow is an infinity, a division by zero is an infinity or
+// NaN, §3.4), so `F32` and `F64` have none of them. The type of the receiver is known in each function, so it is
+// E0413 and not E0420. One error per function (P-01). The last function is fine: the float operators, and a
+// checked method of an integer that exists today.
+
+pub fn add(x: F32, y: F32) -> Option[F32] {
+  x.checked_add(y)                                  //~ E0413
+}
+
+pub fn sub(x: F64, y: F64) -> Option[F64] {
+  x.checked_sub(y)                                  //~ E0413
+}
+
+pub fn mul(x: F32, y: F32) -> Option[F32] {
+  x.checked_mul(y)                                  //~ E0413
+}
+
+pub fn div(x: F64, y: F64) -> Option[F64] {
+  x.checked_div(y)                                  //~ E0413
+}
+
+pub fn rem(x: F32, y: F32) -> Option[F32] {
+  x.checked_rem(y)                                  //~ E0413
+}
+
+pub fn neg(x: F64) -> Option[F64] {
+  x.checked_neg()                                   //~ E0413
+}
+
+pub fn floor_div(x: F32, y: F32) -> Option[F32] {
+  x.checked_div_euclid(y)                           //~ E0413
+}
+
+pub fn floor_rem(x: F64, y: F64) -> Option[F64] {
+  x.checked_rem_euclid(y)                           //~ E0413
+}
+
+pub fn shift_left(x: F32) -> Option[F32] {
+  x.checked_shl(1)                                  //~ E0413
+}
+
+pub fn shift_right(x: F64) -> Option[F64] {
+  x.checked_shr(1)                                  //~ E0413
+}
+
+pub fn fine(x: F32, y: F32, n: I32, m: I32) -> Option[I32] {
+  let _ = x % y
+  let _ = -x
+  n.checked_add(m)
+}

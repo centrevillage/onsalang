@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§9.1", "§5.3"]
+
+// The checked methods that W5-14 adds (`checked_rem`, `checked_neg`, `checked_shl`, `checked_shr`,
+// `checked_div_euclid`, `checked_rem_euclid`, spec §3.4) in the forms a program puts them in: `?` on the
+// `Option` they return, a receiver that is a field or an element or a call, a loop that runs until `None`,
+// and a generic function that takes the `Option` (the anonymous function is in checked_closure.onsa).
+// Every value is worked out by hand.
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+// The remainder, then the negation, then a shift by 2: -(a % b) << 2. `?` leaves with `None` at the first
+// method that has no result.
+fn chain(a: I32, b: I32) -> Option[I32] {
+  let r = a.checked_rem(b)?
+  let n = r.checked_neg()?
+  n.checked_shl(2)
+}
+
+// The negation of a, then its remainder by b: (-a) % b. -I32.MIN has no result.
+fn neg_then_rem(a: I32, b: I32) -> Option[I32] {
+  a.checked_neg()?.checked_rem(b)
+}
+
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+// Receivers that are not names: a field, an element of an array, the result of a call.
+fn field_rem(p: Pair) -> Option[I32] {
+  p.a.checked_rem_euclid(p.b)
+}
+
+fn element_div(xs: [I32; 3]) -> Option[I32] {
+  xs[0].checked_div_euclid(xs[2])
+}
+
+fn twice(x: I32) -> I32 {
+  x * 2
+}
+
+fn call_receiver(x: I32) -> Option[I32] {
+  twice(x).checked_neg()
+}
+
+// How many times the shift of 1 by n is a value of the type: the amount runs until `None`, at the bit width.
+fn shifts_u8(x: U8) -> U32 {
+  var n: U32 = 0
+  while !is_none(x.checked_shl(n)) {
+    n = n + 1
+  }
+  n
+}
+
+fn shifts_i64(x: I64) -> U32 {
+  var n: U32 = 0
+  while !is_none(x.checked_shr(n)) {
+    n = n + 1
+  }
+  n
+}
+
+test "? chains the checked methods and leaves at the first None" {
+  // 7 % 3 = 1, -1, -1 << 2 = -4.
+  assert val(chain(7, 3), 99) == -4
+  // -7 % 3 = -1, 1, 1 << 2 = 4.
+  assert val(chain(-7, 3), 99) == 4
+  // A zero divisor: no remainder.
+  assert is_none(chain(7, 0))
+  // 5 % 5 = 0, -0 = 0, 0 << 2 = 0 (a Some of 0, not a None).
+  assert val(chain(5, 5), 99) == 0
+  assert val(neg_then_rem(-7, 4), 99) == 3
+  assert is_none(neg_then_rem(I32.MIN, 4))
+  assert is_none(neg_then_rem(5, 0))
+}
+
+test "the receiver is a field, an element or a call" {
+  // -7 = (-4) * 2 + 1, and 7 % -3 has the remainder 1 (7 = (-2) * (-3) + 1).
+  assert val(field_rem(Pair { a: -7, b: 2 }), 99) == 1
+  assert val(field_rem(Pair { a: 7, b: -3 }), 99) == 1
+  assert is_none(field_rem(Pair { a: 7, b: 0 }))
+  assert val(element_div([-7, 0, 2]), 99) == -4
+  assert is_none(element_div([-7, 0, 0]))
+  assert val(call_receiver(21), 99) == -42
+  // twice(-1073741824) is I32.MIN, which has no negation.
+  assert is_none(call_receiver(-1073741824))
+}
+
+test "a loop runs until the checked method is None" {
+  assert shifts_u8(1) == 8
+  assert shifts_i64(-1) == 64
+}
+
+test "U16 and I16: the remainders, the shifts and the minimum, read through a generic function" {
+  let a: U16 = 40000
+  assert val(a.checked_rem(300), 0) == 100
+  assert val(a.checked_rem_euclid(300), 0) == 100
+  assert val(a.checked_div_euclid(300), 0) == 133
+  assert val(a.checked_shr(8), 0) == 156
+  // 40000 << 1 is 80000, 80000 - 65536 = 14464: the bit that leaves is dropped.
+  assert val(a.checked_shl(1), 0) == 14464
+  let b: I16 = I16.MIN
+  assert val(b.checked_neg(), 7) == 7
+  assert val(b.checked_div_euclid(-1), 7) == 7
+  assert val(b.checked_rem_euclid(-1), 7) == 0
+}

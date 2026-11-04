@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§9.2"]
+
+// `checked_rem`, `checked_div_euclid` and `checked_rem_euclid` for every sign of the dividend and the divisor
+// (spec §3.4): `a % b` has the sign of `a`; `r = a.rem_euclid(b)` is in `0 <= r < |b|` and
+// `q = a.div_euclid(b)` satisfies `a == q * b + r`. The three are `Some` of that value where the operation
+// does not panic. Every row is worked out from those two formulas by hand, e.g. -7 = (-4) * 2 + 1 and
+// -1 = 1 * (-5) + 4.
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+// One row: the euclidean quotient and remainder of a / b.
+fn euclid(a: I32, b: I32, q: I32, r: I32) -> Bool {
+  val(a.checked_div_euclid(b), 99) == q && val(a.checked_rem_euclid(b), 99) == r
+}
+
+test "I32: the euclidean quotient and remainder, all four signs" {
+  assert euclid(7, 2, 3, 1)
+  assert euclid(-7, 2, -4, 1)
+  assert euclid(7, -2, -3, 1)
+  assert euclid(-7, -2, 4, 1)
+}
+
+test "I32: exact divisions, zero and small dividends" {
+  assert euclid(6, 3, 2, 0)
+  assert euclid(-6, 3, -2, 0)
+  assert euclid(6, -3, -2, 0)
+  assert euclid(0, 5, 0, 0)
+  assert euclid(0, -5, 0, 0)
+  assert euclid(-1, 5, -1, 4)
+  assert euclid(1, -5, 0, 1)
+  assert euclid(-1, -5, 1, 4)
+}
+
+test "I32: checked_rem has the sign of the dividend" {
+  let a: I32  = 7
+  let na: I32 = -7
+  assert val(a.checked_rem(2), 99) == 1
+  assert val(na.checked_rem(2), 99) == -1
+  assert val(a.checked_rem(-2), 99) == 1
+  assert val(na.checked_rem(-2), 99) == -1
+  assert val(na.checked_rem(7), 99) == 0
+}
+
+test "I32: the checked values are the values of the operators where they are Some" {
+  let a: I32 = -123456
+  let b: I32 = 789
+  assert val(a.checked_rem(b), 0) == a % b
+  assert val(a.checked_div_euclid(b), 0) == a.div_euclid(b)
+  assert val(a.checked_rem_euclid(b), 0) == a.rem_euclid(b)
+  assert val(a.checked_div_euclid(b), 0) * b + val(a.checked_rem_euclid(b), 0) == a
+}
+
+test "I8: the minimum with other divisors, and the maximum with the minimum" {
+  let min: I8 = I8.MIN
+  let max: I8 = I8.MAX
+  // -128 = (-64) * 2, and -128 = (-2) * 127 + 126.
+  assert val(min.checked_div_euclid(2), 99) == -64
+  assert val(min.checked_rem_euclid(2), 99) == 0
+  assert val(min.checked_div_euclid(127), 99) == -2
+  assert val(min.checked_rem_euclid(127), 99) == 126
+  // -128 / -128 is 1; 127 = 0 * (-128) + 127.
+  assert val(min.checked_div_euclid(min), 99) == 1
+  assert val(min.checked_rem_euclid(min), 99) == 0
+  assert val(max.checked_div_euclid(min), 99) == 0
+  assert val(max.checked_rem_euclid(min), 99) == 127
+  assert val(max.checked_rem(min), 99) == 127
+  assert val(min.checked_rem(max), 99) == -1
+}
+
+test "unsigned: the same methods, None for a zero divisor" {
+  let a: U8  = 200
+  let m: U32 = U32.MAX
+  assert val(a.checked_div_euclid(7), 99) == 28
+  assert val(a.checked_rem_euclid(7), 99) == 4
+  assert val(a.checked_rem(7), 99) == 4
+  assert val(m.checked_rem_euclid(m), 99) == 0
+  assert val(m.checked_div_euclid(m), 99) == 1
+  assert val(m.checked_rem(2), 99) == 1
+  assert is_none(a.checked_div_euclid(0))
+  assert is_none(a.checked_rem_euclid(0))
+  assert is_none(a.checked_rem(0))
+  assert is_none(m.checked_rem(0))
+}

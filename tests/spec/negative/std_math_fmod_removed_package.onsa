@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+
+// E0302: `std.math.fmod(a, b)` written through the package (`use std`, then `std.math.fmod(...)`): the module
+// `std.math` is found and the name is not (decision S-98; see std_math_fmod_removed_use.onsa), so it is E0302 at the
+// name, and not for a missing `use` (the path from `std` is bound here). One error per function (P-01). The last
+// function is fine.
+
+use std
+
+pub fn remainder_single(a: F32, b: F32) -> F32 {
+  std.math.fmod(a, b)                               //~ E0302
+}
+
+pub fn remainder_double(a: F64, b: F64) -> F64 {
+  std.math.fmod(a, b)                               //~ E0302
+}
+
+pub fn remainder_literal() -> F64 {
+  std.math.fmod(7.5, 2.0)                           //~ E0302
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  std.math.sqrt(a) + (a % b)
+}
