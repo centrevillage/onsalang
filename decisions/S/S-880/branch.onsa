@@ -1,0 +1,12 @@
+pub fn f(x: I32, c: Bool) -> Bool {
+  let y = if c { Some(x as I64) } else { x.narrow_i64() }
+  y == None
+}
+
+pub fn g(x: I32, o: Option[I64]) -> Bool {
+  let y = match o {
+    Some(v) => Some(v),
+    None => x.narrow_i64(),
+  }
+  y == None
+}

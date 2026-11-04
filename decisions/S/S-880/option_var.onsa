@@ -1,0 +1,15 @@
+fn g[T](o: Option[T]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+pub fn f(x: I32) -> Bool {
+  g(x.narrow_i64())
+}
+
+pub fn h(x: I32, c: Bool) -> Bool {
+  let y = if c { None } else { x.narrow_i64() }
+  y == None
+}
