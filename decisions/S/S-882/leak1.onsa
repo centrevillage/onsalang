@@ -1,0 +1,6 @@
+pub fn f(a: F32) -> F32 {
+  let k = 1.0
+  let r = a.max(k)
+  let b: F64 = k
+  r
+}
