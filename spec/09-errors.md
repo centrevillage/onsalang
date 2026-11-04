@@ -18,6 +18,7 @@ pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
 消費するかは被演算子の型の全体で決まり、`Result[U32, Buf[F32]]` の場所は `Ok` の道でも移る。場所でない被演算子（`f()?`）は一時の値を消費する。
 
 `Option` と `Result` のメソッドは、両方の `pub rt fn unwrap(move self) -> T`（`None` / `Err` なら panic する、§9.2）と、`Result` の `map_err` だけである。どちらも受け手を消費し、受け手の扱いは `?` の被演算子と同じ（§5.2）。
+`unwrap` は std の Onsa の本体で、その panic の位置は本体の `panic` の式である（呼び出しの位置は `calls` に入る、§18.1）。
 `map_err` は `pub fn map_err[F: ?Dup](move self, f: fn(move E) -> F) -> Result[T, F]` で（`f` の効果行は空。変換の先は Affine の型でもよい）、`?` の前でエラーの型を関数の返り値の型へ変換するのに使う（`Fs.read(path).map_err(ConfigError.Io)?`）。
 `map_err` は `rt` でないので、`rt` の関数のエラーの変換は `match` で書く（§10）。
 値の取り出しや有無の判定は `match`、`?`、`==` で書く（P2）。組込みの API の候補は、仕様に入れる前に必要性を議論する（[`decisions/A/`](../decisions/A/README.md)）。
@@ -40,7 +41,7 @@ panic で抜ける道では、生きている値の破棄は起きない（巻�
 
 | 文脈 | panic の挙動 |
 |---|---|
-| 通常の実行 | メッセージと位置を出力してプロセスを終了する（巻き戻しは無い） |
+| 通常の実行 | メッセージと panic した式の位置を出力してプロセスを終了する（巻き戻しは無い） |
 | テスト | そのテストを失敗にする |
 | Onsa の中から呼ばれた関数（`rt` を含む） | 最も近い境界（export された flow・関数、または `main`）まで伝わる。`main` に達すれば通常の実行の規則に従う。 |
 | export された flow の `process` | その呼び出しを中断し、その呼び出しの出力を全て（全てのチャンネルと全てのフレーム。panic の前に計算したフレームも）ゼロで埋め、インスタンスを **poisoned** にする。以後の `process` は無音を出力し、`reset` まで復帰しない。C API は戻り値で通知する。 |
