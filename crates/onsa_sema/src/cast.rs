@@ -1,8 +1,7 @@
 //! The conversions with `as` (spec §3.3): the lossless widenings it
 //! writes, and the conversion functions to suggest where it does not convert.
 //! The functions are std's (`std/core/num.onsa`); a unit test checks the
-//! names suggested against them (`prim_tests.rs`). W5-14 decides the
-//! suggestions.
+//! names suggested against them (`prim_tests.rs`).
 
 use crate::ty::{FloatKind, Ty, TyId, Types};
 

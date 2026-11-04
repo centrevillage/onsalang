@@ -115,7 +115,7 @@
 // ]
 
 // `narrow_from` from unsigned to signed integers, on a target that is built to C (spec §3.3): `Some(v)` when the
-// value fits the destination type, `None` when it does not. The pairs that need the method are the ones `as`
+// value fits the destination type, `None` when it does not. The pairs that need the function are the ones `as`
 // cannot write: a narrower destination, the same width with the other sign, and a signed source to a
 // wider unsigned one.
 // The unsigned-to-signed pairs are the point of this file (R-11: a comparison of the unsigned source with

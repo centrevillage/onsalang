@@ -116,7 +116,7 @@
 // ]
 
 // `narrow_from` from the same sign integers, on a target that is built to C (spec §3.3): `Some(v)` when the
-// value fits the destination type, `None` when it does not. The pairs that need the method are the ones `as`
+// value fits the destination type, `None` when it does not. The pairs that need the function are the ones `as`
 // cannot write: a narrower destination, the same width with the other sign, and a signed source to a
 // wider unsigned one.
 // The pairs of the same sign: a narrower destination of the same signedness. A value fits when it is inside
