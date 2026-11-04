@@ -884,7 +884,31 @@ impl ExprKind {
     /// (the candidates of the types stage). A test holds them together.
     pub fn block_like(&self) -> bool {
         use ExprKind::*;
-        matches!(self, Block(_) | If { .. } | Match { .. } | Closure { .. } | Handle { .. } | Unsafe(_) | Par { .. })
+        match self {
+            Block(_) | If { .. } | Match { .. } | Closure { .. } | Handle { .. } | Unsafe(_) | Par { .. } => true,
+            Lit(_)
+            | Path(_)
+            | Hole
+            | Error
+            | Paren(_)
+            | Tuple(_)
+            | Array(_)
+            | Repeat { .. }
+            | Struct { .. }
+            | Feedback(_)
+            | Move(_)
+            | Range(_)
+            | Binary { .. }
+            | Unary { .. }
+            | Cast { .. }
+            | At { .. }
+            | Call { .. }
+            | Field { .. }
+            | TypeArgs { .. }
+            | TupleIndex { .. }
+            | Index { .. }
+            | Try(_) => false,
+        }
     }
 }
 

@@ -138,8 +138,8 @@ impl<'a> Checker<'a> {
                 }
                 self.check_args(args, &params, span)?;
                 if let Some(to) = conversion {
-                    let call = ConversionCall { e, ret, expected };
-                    self.conversion_use(name.span, targs[0], to, Some(call))?;
+                    let call = ConversionCall { e, expected };
+                    self.conversion_use(name.span, targs[0], to, ret, Some(call))?;
                     if let Some(exp) = expected {
                         self.unify_at(span, ret, exp)?;
                     }

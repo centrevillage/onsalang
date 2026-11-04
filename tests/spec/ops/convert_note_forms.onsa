@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§3.3", "§6.1"]
+
+// The forms that the notes of the E0413 of a conversion function show, written out: a function taken as a value is an
+// anonymous function with the type of its parameter (§3.3, §6.1), of `narrow_from` with its result in `Some`, of the
+// same type with no `as`, and in `array.from_fn` the parameter is the `U32` of the index. A source that a later
+// statement decides is a binding with its type.
+
+use std.array
+
+pub fn narrow_as_a_value() -> Option[I64] {
+  let g: fn(I32) -> Option[I64] = fn(i: I32) { Some(i as I64) }
+  g.(1)
+}
+
+pub fn narrow_of_the_same_type_as_a_value() -> Option[I32] {
+  let g: fn(I32) -> Option[I32] = fn(i: I32) { Some(i) }
+  g.(1)
+}
+
+pub fn round_as_a_value(y: F32) -> F64 {
+  let g: fn(F32) -> F64 = fn(i: F32) { i as F64 }
+  g.(y)
+}
+
+pub fn round_with_no_annotation(y: F32) -> F64 {
+  let g = fn(i: F32) { i as F64 }
+  g.(y)
+}
+
+pub fn round_of_the_same_type_as_a_value(y: F32) -> F32 {
+  let g = fn(i: F32) { i }
+  g.(y)
+}
+
+pub fn in_from_fn() -> [F64; 4] {
+  array.from_fn(fn(i: U32) { i as F64 })
+}
+
+pub fn a_source_with_its_type() -> F64 {
+  let k: I32 = 1
+  k as F64
+}
+
+pub fn a_narrow_source_with_its_type() -> Option[I64] {
+  let k: I32 = 1
+  Some(k as I64)
+}
+
+pub fn a_narrow_of_a_literal() -> Option[I64] {
+  Some(1)
+}

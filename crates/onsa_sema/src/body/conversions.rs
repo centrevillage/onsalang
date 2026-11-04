@@ -14,32 +14,38 @@ use super::*;
 /// The constructor a `narrow_from` of a pair `as` converts always gives.
 const SOME: &str = "Some";
 
-/// The call a candidate replaces: the expression, the type of its result and
-/// the type expected of it (§4.7).
+/// The call a candidate replaces: the expression and the type expected of it
+/// (§4.7).
 pub(super) struct ConversionCall {
     pub e: ExprId,
-    pub ret: TyId,
     pub expected: Option<TyId>,
 }
 
 impl<'a> Checker<'a> {
     /// A use at `span`, the name of the function, of the conversion to `to`
-    /// from a value of `from`: an error now, or a check that waits for the
-    /// source. It comes before the requirements of the use (S-883). `call`:
-    /// the call, none of a function taken as a value.
-    pub(super) fn conversion_use(&mut self, span: Span, from: TyId, to: TyId, call: Option<ConversionCall>) -> R<()> {
+    /// from a value of `from`, with the result `ret`: an error now, or a
+    /// check that waits for the source. It comes before the requirements of
+    /// the use (S-883). `call`: the call, none of a function taken as a value.
+    pub(super) fn conversion_use(
+        &mut self,
+        span: Span,
+        from: TyId,
+        to: TyId,
+        ret: TyId,
+        call: Option<ConversionCall>,
+    ) -> R<()> {
         match self.conversion_verdict(from, to) {
             Verdict::Met => Ok(()),
             Verdict::Wait => {
-                self.defer(span, from, DeferredKind::Conversion { to, value: call.is_none() });
+                self.defer(span, from, DeferredKind::Conversion { to, ret, value: call.is_none() });
                 Ok(())
             }
             Verdict::Unmet(why) => {
                 let d = self.conversion_error(span, why);
                 let from = self.infer.resolve(&mut self.a.types, from);
                 let form = match call {
-                    Some(call) => self.as_form(&call, from, to),
-                    None => Err(self.as_in_a_function(from, to)),
+                    Some(call) => self.as_form(&call, from, to, ret),
+                    None => Err(self.as_in_a_function(from, to, ret)),
                 };
                 let d = match form {
                     Ok(fix) => d.with_fix(fix),
@@ -81,22 +87,32 @@ impl<'a> Checker<'a> {
 
     /// The note of a use whose source a later statement or the default
     /// decided (`as` takes the type of its operand where it is written, so
-    /// the `as` form would be an E0420, §4.7, S-884).
-    pub(crate) fn conversion_late_rule(&mut self, from: TyId, to: TyId, value: bool) -> String {
+    /// the `as` form would be an E0420, §4.7, S-884): each form written out
+    /// passes where the result of the call does.
+    pub(crate) fn conversion_late_rule(&mut self, from: TyId, to: TyId, ret: TyId, value: bool) -> String {
         if value {
-            return self.as_in_a_function(from, to);
+            return self.as_in_a_function(from, to, ret);
         }
-        let (source, target) = (self.display(from), self.display(to));
+        let (source, form) = (self.display(from), self.as_text("k", from, to, ret));
         let literal = if matches!(self.ty(to), Ty::Float(_)) { "1.0" } else { "1" };
+        let literal = if ret == to { literal.to_string() } else { format!("{SOME}({literal})") };
         format!(
-            "`as` takes the type of its operand where it is written (§4.7): write a literal of `{target}` (`{literal}`), or give the operand a type (`let k: {source} = …`) (§3.3)"
+            "`as` takes the type of its operand where it is written (§4.7): give the operand a type first (`let k: {source} = …`, then `{form}`), or write the result as a literal (`{literal}`) (§3.3)"
         )
     }
 
-    /// The note of the function taken as a value (S-885).
-    fn as_in_a_function(&mut self, from: TyId, to: TyId) -> String {
-        let body = if from == to { "i".to_string() } else { format!("i as {}", self.display(to)) };
-        format!("write an anonymous function in its place: `fn(i) {{ {body} }}` (§3.3)")
+    /// The note of the function taken as a value (S-885): its parameter
+    /// has its type, which `as` takes where it is written (§4.7).
+    fn as_in_a_function(&mut self, from: TyId, to: TyId, ret: TyId) -> String {
+        let (source, form) = (self.display(from), self.as_text("i", from, to, ret));
+        format!("write an anonymous function in its place: `fn(i: {source}) {{ {form} }}` (§3.3)")
+    }
+
+    /// The text of the conversion of the variable `x` that the function
+    /// from `from` to `to` with the result `ret` stands for.
+    fn as_text(&mut self, x: &str, from: TyId, to: TyId, ret: TyId) -> String {
+        let cast = if from == to { x.to_string() } else { format!("{x} as {}", self.display(to)) };
+        if ret == to { cast } else { format!("{SOME}({cast})") }
     }
 
     /// The note of a call with no candidate: the forms the pair has (§3.3).
@@ -120,14 +136,14 @@ impl<'a> Checker<'a> {
     /// is decided, so the operand of `as` is too (§4.7). None where neither
     /// or both fit, or where the form cannot be (§18.1). `Some` is a name
     /// no item takes (§15.1).
-    fn as_form(&mut self, call: &ConversionCall, from: TyId, to: TyId) -> Result<Fix, String> {
-        let rule = self.as_rule(from, to, call.ret);
+    fn as_form(&mut self, call: &ConversionCall, from: TyId, to: TyId, ret: TyId) -> Result<Fix, String> {
+        let rule = self.as_rule(from, to, ret);
         let fits = |ck: &Self, c: TyId| call.expected.is_none_or(|t| ck.may_fit(t, c));
-        let (bare, some) = (fits(self, to), call.ret != to && fits(self, call.ret));
+        let (bare, some) = (fits(self, to), ret != to && fits(self, ret));
         if bare == some {
             return Err(rule);
         }
-        let Some(slot) = self.place_fits(call.e, if some { call.ret } else { to }) else { return Err(rule) };
+        let Some(slot) = self.place_fits(call.e, if some { ret } else { to }) else { return Err(rule) };
         let ExprKind::Call { callee, args, .. } = &self.expr(call.e).kind else { return Err(rule) };
         // A `move` stands only on an argument (§5.2): none of the marked one.
         let (callee, &[Arg { mode: Mode::Borrow, expr: arg, .. }]) = (*callee, args.as_slice()) else {

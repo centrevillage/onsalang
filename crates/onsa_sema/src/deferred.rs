@@ -38,9 +38,9 @@ pub(crate) enum DeferredKind {
     Operator { op: OpNeed },
     /// The conversion function to `to` called on a value of the type `ty`, which a
     /// statement decides (E0413, §3.3, S-231). The judgment is
-    /// [`Checker::conversion_verdict`], as of a source decided at the call. `value`:
-    /// the function is taken as a value, not called (S-885).
-    Conversion { to: TyId, value: bool },
+    /// [`Checker::conversion_verdict`], as of a source decided at the call. `ret`: the
+    /// result of the function; `value`: it is taken as a value, not called (S-885).
+    Conversion { to: TyId, ret: TyId, value: bool },
     /// A float literal `lit`: its value once the type is known (E0408, §2.4,
     /// R-45, S-211: not finite, or a literal that is not 0 rounds to 0), and
     /// E0405 when its type is still open at the end.
@@ -306,11 +306,11 @@ impl<'a> Checker<'a> {
                 }
             },
             // As above: a variable left at the end is reported as a variable.
-            DeferredKind::Conversion { to, value } => match self.conversion_verdict(r, *to) {
+            DeferredKind::Conversion { to, ret, value } => match self.conversion_verdict(r, *to) {
                 Verdict::Met => Look::Done,
                 Verdict::Wait => Look::Wait,
                 Verdict::Unmet(why) => {
-                    let rule = self.conversion_late_rule(r, *to, *value);
+                    let rule = self.conversion_late_rule(r, *to, *ret, *value);
                     let (d, shown) = (self.conversion_error(item.span, why).with_rule(rule), self.display(r));
                     Look::Fail(self.decided_note(d, item.ty, &shown, false))
                 }

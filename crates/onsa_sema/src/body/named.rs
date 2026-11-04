@@ -226,7 +226,8 @@ impl<'a> Checker<'a> {
                         // call of it is (`F64.round_from` at `fn(F32) -> F64`,
                         // §3.3, S-885).
                         if let Some(to) = crate::prim::conversion_target(self.a, d) {
-                            self.conversion_use(name.span, args[0], to, None)?;
+                            let ret = self.a.types.subst(f.ret, &args);
+                            self.conversion_use(name.span, args[0], to, ret, None)?;
                         }
                         let inst = self.finish_instance(d, args, span)?;
                         self.info.targets.insert(e, Target::Fn { def: d, inst });
