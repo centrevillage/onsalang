@@ -53,8 +53,8 @@ pub(crate) enum DeferredKind {
     /// builtin generic type: E0710 when it is decided to a type with no kind
     /// (second-class, or one that holds it), before the requirements of the
     /// same argument, which are then not judged (§4.5, the implicit `Escape`;
-    /// S-862, S-766). `what` names it as its origin does.
-    Escape { what: String },
+    /// S-862, S-766). `what` names it as its origin does; `rule`: the way out.
+    Escape { what: String, rule: &'static str },
     /// A requirement on a type (a bound, the implicit `Dup`, a kind constraint):
     /// E0416 when the decided type does not meet it (§4.5, §4.6).
     Require { bound: Bound, what: Required },
@@ -72,8 +72,11 @@ pub(crate) enum OpNeed {
 }
 
 /// The rule of the E0710 of a type argument with no kind (§5.3, S-862).
-const GENERIC_VIEW: &str =
+pub(crate) const GENERIC_VIEW: &str =
     "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3)";
+
+/// The rule of that E0710 of the element of a method of an array.
+pub(crate) const VIEW_OF_ARRAY: &str = "call the method on one view of the array (`xs[k].get(i)`, §5.3)";
 
 /// What an operator requires of a type ([`Checker::operator_verdict`]), and a
 /// conversion function ([`Checker::conversion_verdict`]).
@@ -89,8 +92,9 @@ pub(crate) enum Verdict {
 #[derive(Debug, Clone)]
 pub(crate) enum Required {
     /// A type parameter `param` of `owner` (`` `need_f` ``, ``the `impl` of `Wrap` ``):
-    /// its bounds and the implicit `Dup`.
-    Param { param: String, owner: String },
+    /// its bounds and the implicit `Dup`. `std`: `owner` is std's, whose
+    /// declaration the user does not change.
+    Param { param: String, owner: String, std: bool },
     /// The element of `[e; N]` (`Dup`, §2.4).
     RepeatElement,
     /// The element of `Buf` / `Span` (`Copy`, §4.5), named as written (R-351).
@@ -98,15 +102,16 @@ pub(crate) enum Required {
     /// The element of `Array` / `Set`, the key and the value of `Map`
     /// (`Dup`, §4.5, S-767).
     SharedElement,
-    /// The element of the receiver `recv`, as written, of the method
-    /// `method` of std's `impl` of a sequence: its bounds (§5.3, S-853).
-    SeqElement { recv: String, method: String },
+    /// The element of the receiver of the type `recv` of the method `method`
+    /// of std's `impl` of a sequence: its bounds (§5.3, S-853).
+    SeqElement { recv: TyId, method: String },
 }
 
 impl Required {
     /// The message of the E0416 of the type `shown` that does not meet `bound`
     /// as this requirement: of a body, and of a type written (`sig::wellformed`).
-    pub(crate) fn unmet(&self, shown: &str, bound: Bound) -> String {
+    /// `show` shows another type, when the error is reported.
+    pub(crate) fn unmet(&self, shown: &str, bound: Bound, show: &mut dyn FnMut(TyId) -> String) -> String {
         match self {
             Required::RepeatElement => format!(
                 "`[e; N]` repeats the value of `e`, so its type must be Copy or Shared (`Dup`); `{shown}` is not; make an Affine array with `array.from_fn` (§2.4)"
@@ -117,10 +122,13 @@ impl Required {
             Required::SharedElement => format!(
                 "the elements of `Array`, `Set` and `Map` are Copy or Shared (`Dup`); `{shown}` is Affine (§4.5)"
             ),
-            Required::Param { param, owner } if bound == Bound::Dup => format!(
+            Required::Param { param, owner, std: true } if bound == Bound::Dup => {
+                format!("`{shown}` is not Copy or Shared, so it does not satisfy `{param}: Dup` of {owner} (§4.5)")
+            }
+            Required::Param { param, owner, .. } if bound == Bound::Dup => format!(
                 "`{shown}` is not Copy or Shared, so it does not satisfy `{param}: Dup` of {owner}; a type parameter takes only Copy or Shared types unless it is declared `{param}: ?Dup` (§4.5)"
             ),
-            Required::Param { param, owner } => {
+            Required::Param { param, owner, .. } => {
                 format!("`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)", bound.name())
             }
             Required::SeqElement { recv, method } => {
@@ -129,7 +137,7 @@ impl Required {
                     Bound::Copy => "a Copy element".to_string(),
                     b => format!("an element that meets `{}`", b.name()),
                 };
-                format!("`{recv}` has `{method}` only with {need}; its element `{shown}` is not (§5.3)")
+                format!("`{}` has `{method}` only with {need}; its element `{shown}` is not (§5.3)", show(*recv))
             }
         }
     }
@@ -236,7 +244,7 @@ impl<'a> Checker<'a> {
         self.deferred = open_operators;
         if let Some(item) = open_requirement {
             let what = match &item.kind {
-                DeferredKind::Require { what: Required::Param { param, owner }, .. } => {
+                DeferredKind::Require { what: Required::Param { param, owner, .. }, .. } => {
                     format!("the type parameter `{param}` of {owner}")
                 }
                 _ => "the type of this expression".to_string(),
@@ -323,7 +331,11 @@ impl<'a> Checker<'a> {
                         item.span,
                         "the type of this float literal cannot be determined; annotate it (§2.4)",
                     )
-                    .with_found(self.src(item.span)),
+                    .with_found(self.src(item.span))
+                    .with_rule(format!(
+                        "a literal takes no annotation of its own: give it its type in a binding (`let x: F32 = {}`)",
+                        self.src(item.span)
+                    )),
                 ),
                 Ty::Var(_) => Look::Wait,
                 Ty::Float(k) => self.float_lit(item, k, *lit),
@@ -350,7 +362,7 @@ impl<'a> Checker<'a> {
                     .with_found(self.src(item.span)),
                 )
             }
-            DeferredKind::Escape { what } => {
+            DeferredKind::Escape { what, rule } => {
                 if self.infer.has_vars(&self.a.types, r) {
                     return Look::Wait;
                 }
@@ -360,7 +372,7 @@ impl<'a> Checker<'a> {
                 let shown = self.display(r);
                 let msg = format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)");
                 let d = Diagnostic::new(Stage::Types, Code::E0710, item.span, msg).with_found(self.src(item.span));
-                Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(GENERIC_VIEW))
+                Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(*rule))
             }
             DeferredKind::Require { bound, what } => {
                 if self.infer.has_vars(&self.a.types, r) {
@@ -370,7 +382,7 @@ impl<'a> Checker<'a> {
                     return Look::Done;
                 }
                 let shown = self.display(r);
-                let msg = what.unmet(&shown, *bound);
+                let msg = what.unmet(&shown, *bound, &mut |t| self.display(t));
                 let mut d = Diagnostic::new(Stage::Types, Code::E0416, item.span, msg).with_found(self.src(item.span));
                 d = self.decided_note(d, item.ty, &shown, true);
                 if let Required::SeqElement { .. } = what {

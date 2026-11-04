@@ -126,7 +126,7 @@ impl<'a> Checker<'a> {
                 edits.push(edit);
             }
         }
-        if !self.args_fit(args, &f.params[1..], recv, self.expr(e).span) {
+        if !self.args_fit(args, &f.params[1..], recv, e) {
             return Err(rule);
         }
         Ok(Fix::new(title, edits))
@@ -197,9 +197,9 @@ impl<'a> Checker<'a> {
 
     /// Whether `args` fit the parameters `params` of a function form at the
     /// receiver's type `recv` (`max(a, 1)` of an `F32` is an E0401).
-    fn args_fit(&mut self, args: &[Arg], params: &[ParamSig], recv: TyId, span: Span) -> bool {
+    fn args_fit(&mut self, args: &[Arg], params: &[ParamSig], recv: TyId, e: ExprId) -> bool {
         let params: Vec<(Mode, TyId)> = params.iter().map(|p| (p.mode, recv)).collect();
-        self.quietly(|ck| ck.check_args(args, &params, span)).is_some()
+        self.quietly(|ck| ck.check_args(args, &params, e)).is_some()
     }
 
     /// A trial of a candidate: `f` run with no diagnostic. Its `Err` is the

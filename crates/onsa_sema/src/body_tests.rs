@@ -733,3 +733,100 @@ fn for_ranges() {
         assert!(!d[0].message.contains('?') && d[0].message.contains("integers"), "{head}: {}", d[0].message);
     }
 }
+
+/// The E0200 of a name the spec gives a builtin type names it, as written,
+/// at each place it is named (§18.1, R-294); a name the spec does not give
+/// stays the error of what does not exist.
+#[test]
+fn a_name_of_the_spec_this_version_has_not_is_its_e0200() {
+    let one = |src: &str| {
+        let a = check_in(src, true);
+        assert_eq!(a.diagnostics.len(), 1, "{src}: {:?}", a.diagnostics);
+        (a.diagnostics[0].code, a.diagnostics[0].message.clone())
+    };
+    let cases = [
+        ("pub fn f() -> F32 {\n  F32.ZERO\n}\n", "the builtin value `F32.ZERO`"),
+        ("type K = F32\npub fn f() -> F32 {\n  K.ONE\n}\n", "the builtin value `K.ONE`"),
+        ("const Z: I32 = I32.default()\npub fn f() -> I32 { 1 }\n", "the builtin value `I32.default`"),
+        ("pub fn f(x: I32) -> I32 {\n  match x {\n    I32.ZERO => 1,\n    _ => 0,\n  }\n}\n", "`I32.ZERO`"),
+        ("pub fn f(x: [F32; U32.ONE]) -> F32 {\n  1.0\n}\n", "the builtin value `U32.ONE`"),
+        ("pub fn f(b: Bytes) {\n  let _ = Str.from_utf8(b)\n}\n", "the builtin name `Str.from_utf8`"),
+        ("pub fn f(s: Str) -> Bytes {\n  s.as_bytes()\n}\n", "the builtin name `Str.as_bytes`"),
+        ("pub fn f(b: Bytes) -> U32 {\n  b.len()\n}\n", "the builtin name `Bytes.len`"),
+        ("pub fn f(a: Array[F32]) -> U32 {\n  a.len()\n}\n", "the builtin name `Array.len`"),
+    ];
+    for (src, name) in cases {
+        let (code, message) = one(src);
+        assert_eq!(code, Code::E0200, "{src}");
+        assert!(message.contains(name), "{src}: {message}");
+    }
+    // Of the kind of what it is, as any member (§15.1).
+    assert_eq!(one("pub fn f(x: F32.ZERO) {\n}\n").0, Code::E0308);
+    assert_eq!(one("pub fn f(s: Str) -> Bytes {\n  Str.as_bytes(s)\n}\n").0, Code::E0308);
+    // Not the name of another type, or not called (§6.1).
+    assert_eq!(one("pub fn f() -> Char {\n  Char.default()\n}\n").0, Code::E0302);
+    assert_eq!(one("pub fn f(a: Array[F32]) {\n  a.fill!(1.0)\n}\n").0, Code::E0413);
+    assert_eq!(one("pub fn f(x: I32) -> I32 {\n  x.default()\n}\n").0, Code::E0413);
+}
+
+/// The note of a type an argument decides names the callee as it is written;
+/// of what has no name it says "an argument" (§18.1, R-364).
+#[test]
+fn the_note_of_an_argument_names_the_callee_it_can() {
+    let id = "fn id[T: Num](x: T) -> T {\n  x\n}\n";
+    let ends = |src: String, end: &str| {
+        let a = check(&src);
+        let notes: Vec<_> = a.diagnostics.iter().flat_map(|d| &d.notes).map(|n| n.message.clone()).collect();
+        assert!(notes.iter().any(|n| n.ends_with(end)), "{src}: {notes:?}");
+    };
+    ends(format!("{id}pub fn f() -> Bool {{\n  (id).(true)\n}}\n"), "here as an argument");
+    ends(format!("{id}pub fn f() -> Bool {{\n  let g = id\n  g.(true)\n}}\n"), "here as an argument of `g`");
+    let chain = "pub struct W { }\nimpl W {\n  pub fn me(self, n: U32) -> W {\n    W { }\n  }\n  pub fn go[T: Num](self, x: T) -> U32 {\n    1\n  }\n}\n";
+    ends(format!("{chain}pub fn f(w: W) -> U32 {{\n  w.me(1).go(true)\n}}\n"), "here as an argument of `go`");
+    ends(format!("{chain}pub fn f(w: W) -> U32 {{\n  w.go(true)\n}}\n"), "here as an argument of `w.go`");
+}
+
+/// The messages of the requirements of a type a later statement decides show
+/// it as it is decided, and the way out the user has (§18.1; W5-02 U5b, U6).
+#[test]
+fn a_requirement_shows_what_is_decided_and_what_can_be_done() {
+    let first = |src: &str| check_in(src, true).diagnostics.remove(0);
+    let late = first("pub fn f() {\n  let xs = []\n  let _ = xs.get(0)\n  let _: [Buf[F32]; 0] = xs\n}\n");
+    assert!(late.message.starts_with("`[Buf[F32]; 0]` has `get` only with"), "{}", late.message);
+    assert!(late.notes[0].message.contains("as the annotation"), "{:?}", late.notes);
+    let planar = first("pub fn f(xs: [Span[F32]; 2]) {\n  let _ = xs.get(0)\n}\n");
+    assert_eq!(planar.code, Code::E0710);
+    assert!(planar.notes.iter().any(|n| n.message.contains("`xs[k].get(i)`")), "{:?}", planar.notes);
+    // `Buf.zeroed` called and as a value say the same.
+    let held = "pub struct H {\n  b: Buf[F32],\n}\nfn eat(move b: Buf[H]) {\n}\n";
+    for body in ["eat(Buf.zeroed(2))", "let g = Buf.zeroed\n  eat(g.(2))"] {
+        let a = check_in(&format!("{held}pub fn f() uses {{Alloc}} {{\n  {body}\n}}\n"), true);
+        // The first is of the heading of `eat`.
+        let d = a.diagnostics.iter().rfind(|d| d.code == Code::E0416).expect("E0416");
+        assert_eq!(d.message, "the element type of `Buf` must be Copy; `H` is not (§4.5)", "{body}");
+    }
+    // A parameter of std's is not one the user declares `?Dup`.
+    let of_std = check_in(
+        &format!(
+            "{held}fn conv(move s: Str) -> H {{\n  conv(s)\n}}\npub fn f(move r: Result[I32, Str]) {{\n  let _ = r.map_err(conv)\n}}\n"
+        ),
+        true,
+    );
+    let d = of_std.diagnostics.iter().rfind(|d| d.code == Code::E0416).expect("E0416");
+    assert_eq!(d.message, "`H` is not Copy or Shared, so it does not satisfy `F: Dup` of `map_err` (§4.5)");
+    let user = check_in(&format!("{held}fn own[T](x: T) {{ }}\npub fn f(move h: H) {{\n  own(h)\n}}\n"), true);
+    let d = user.diagnostics.iter().rfind(|d| d.code == Code::E0416).expect("E0416");
+    assert!(d.message.contains("unless it is declared `T: ?Dup`"), "{}", d.message);
+}
+
+/// A mismatch of function types shows the types its parts decide (§18.1),
+/// and a float literal's E0405 says where its type goes (§2.4).
+#[test]
+fn the_text_of_function_types_and_of_an_open_literal() {
+    let src = "fn c(g: fn(U32) -> Buf[F32]) -> U32 {\n  1\n}\npub fn f() -> U32 {\n  c(Buf.zeroed)\n}\n";
+    let d = check_in(src, true).diagnostics.remove(0);
+    assert_eq!(d.message, "expected `fn(U32) -> Buf[F32]`, found `fn(U32) -> Buf[F32] uses {Alloc}`");
+    let d = check_in("pub fn f() -> I32 {\n  I32.trunc_from(2.5)\n}\n", true).diagnostics.remove(0);
+    assert_eq!(d.code, Code::E0405);
+    assert!(d.notes[0].message.contains("`let x: F32 = 2.5`"), "{:?}", d.notes);
+}

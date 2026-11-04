@@ -10,8 +10,8 @@ use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, ItemKind, Lit, Path};
 
 use crate::def::{DefKind, GenericDef};
-use crate::names::PathEnd;
 use crate::names::body::{Outside, instance_form, method_named, outside_flow, value_called};
+use crate::names::{BuiltinMember, PathEnd};
 use crate::resolve::{Callee, Entity, NameKind, ResolveError};
 use crate::ty::{IntKind, Ty, TyId};
 use crate::{Analysis, ModId};
@@ -325,6 +325,10 @@ fn named_def(
                 Some(v) => Ok((v, constant)),
                 None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
             }
+        }
+        // A name of the spec this version has not (R-294).
+        Ok(PathEnd::Builtin { member: BuiltinMember::Missing { feature, .. }, .. }) => {
+            Err(feature.diagnostic(Stage::Names, span, &[&shown]).with_found(shown).into())
         }
         Ok(PathEnd::Builtin { member, .. }) => Err(not_constant(member.kind(), shown, span)),
         // A name held as an error (§18.1, S-462, S-675): no diagnostic, and

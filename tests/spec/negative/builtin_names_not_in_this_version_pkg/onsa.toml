@@ -1,0 +1,3 @@
+[package]
+name = "builtin_names_not_in_this_version_pkg"
+edition = "2026"

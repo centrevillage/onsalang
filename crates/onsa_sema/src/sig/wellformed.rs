@@ -416,10 +416,11 @@ impl<'p> Sema<'p> {
             }
             Ty::Named(d, args) => {
                 let owner = format!("`{}`", self.a.shown_name(*d));
+                let std = self.a.modules.is_std(self.a.def(*d).module);
                 let want = |g: &GenericDef| match &g.kind {
                     GenericKind::Type { bounds, dup, unknown: false } => {
                         let all = bounds.iter().copied().chain(dup.then_some(Bound::Dup)).collect();
-                        (all, Required::Param { param: g.name.clone(), owner: owner.clone() }, Some(g.span))
+                        (all, Required::Param { param: g.name.clone(), owner: owner.clone(), std }, Some(g.span))
                     }
                     _ => (Vec::new(), Required::BufElement(BuiltinTy::Buf), None),
                 };
@@ -441,8 +442,13 @@ impl<'p> Sema<'p> {
                 Written::Here(t) => cx.ast.ty(*t).span,
                 _ => span,
             };
-            let mut d = Diagnostic::new(Stage::Types, Code::E0416, at, what.unmet(&self.shown(cx, shown), b));
-            if let (Some(decl), Required::Param { param, owner }) = (declared, &what) {
+            let mut d = Diagnostic::new(
+                Stage::Types,
+                Code::E0416,
+                at,
+                what.unmet(&self.shown(cx, shown), b, &mut |t| self.shown(cx, t)),
+            );
+            if let (Some(decl), Required::Param { param, owner, .. }) = (declared, &what) {
                 d = d.with_note(decl, format!("the parameter `{param}` of {owner} is declared here"));
             }
             return Err(d.with_found(src(cx, at)));

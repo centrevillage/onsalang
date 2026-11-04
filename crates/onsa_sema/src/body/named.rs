@@ -229,7 +229,7 @@ impl<'a> Checker<'a> {
                             let ret = self.a.types.subst(f.ret, &args);
                             self.conversion_use(name.span, args[0], to, ret, None)?;
                         }
-                        let inst = self.finish_instance(d, args, span)?;
+                        let inst = self.instance(d, args, span, self.buf_element(d))?;
                         self.info.targets.insert(e, Target::Fn { def: d, inst });
                         Ok(Some(fty))
                     }

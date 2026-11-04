@@ -86,7 +86,7 @@ impl<'a> Checker<'a> {
             ));
         }
         self.info.targets.insert(e, Target::Value);
-        self.check_args(args, &f.params, span)?;
+        self.check_args(args, &f.params, e)?;
         Ok(f.ret)
     }
 
@@ -136,7 +136,7 @@ impl<'a> Checker<'a> {
                 if let (Some(exp), None) = (expected, conversion) {
                     self.unify_at(span, ret, exp)?;
                 }
-                self.check_args(args, &params, span)?;
+                self.check_args(args, &params, e)?;
                 if let Some(to) = conversion {
                     let call = ConversionCall { e, expected };
                     self.conversion_use(name.span, targs[0], to, ret, Some(call))?;
@@ -144,11 +144,7 @@ impl<'a> Checker<'a> {
                         self.unify_at(span, ret, exp)?;
                     }
                 }
-                // Of std's `impl` of `Buf` (`Buf.zeroed`), the requirements
-                // are its element's (§4.5), as of a `Buf` written (R-351).
-                let element = self.a.self_ty_of(d).filter(|&t| matches!(self.ty(t), Ty::Builtin(BuiltinTy::Buf, _)));
-                let element = element.map(|_| Required::BufElement(BuiltinTy::Buf));
-                let inst = self.instance(d, targs, span, element)?;
+                let inst = self.instance(d, targs, span, self.buf_element(d))?;
                 self.info.targets.insert(e, Target::Fn { def: d, inst });
                 let fty = self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }));
                 self.record(callee, fty);
@@ -167,7 +163,7 @@ impl<'a> Checker<'a> {
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
                 }
-                self.check_args(args, &params, span)?;
+                self.check_args(args, &params, e)?;
                 self.finish_instance(d, targs, span)?;
                 self.info.targets.insert(e, Target::Variant { def: d, index: i });
                 Ok(ret)
@@ -182,7 +178,7 @@ impl<'a> Checker<'a> {
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
                 }
-                self.check_args(args, &[(Mode::Borrow, t)], span)?;
+                self.check_args(args, &[(Mode::Borrow, t)], e)?;
                 self.info.targets.insert(e, Target::Prelude(b));
                 Ok(ret)
             }
@@ -247,7 +243,7 @@ impl<'a> Checker<'a> {
                 let mut element = None;
                 if let Some(st) = self.a.self_ty_of(md) {
                     if matches!(self.ty(st), Ty::Array(..) | Ty::Builtin(BuiltinTy::Span, _)) {
-                        element = Some(Required::SeqElement { recv: self.display(recv), method: name.name.clone() });
+                        element = Some(Required::SeqElement { recv, method: name.name.clone() });
                     }
                     let st2 = self.a.types.subst(st, &targs);
                     self.unify_at(name.span, this, st2)?;
@@ -258,7 +254,7 @@ impl<'a> Checker<'a> {
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
                 }
-                self.check_args(args, &params, span)?;
+                self.check_args(args, &params, e)?;
                 let inst = self.instance(md, targs, span, element)?;
                 self.a.note_use(self.a.def(md).name_span, name.span);
                 self.info.targets.insert(e, Target::Method { def: md, inst });
@@ -275,13 +271,18 @@ impl<'a> Checker<'a> {
             if self.traits_unknown(recv) {
                 return self.args_of_unknown_callee(args);
             }
+            // A method of the spec this version has not (R-294).
+            if let Some((builtin::Form::Method, feature)) = builtin::missing(&self.a.types, recv, &name.name) {
+                let shown = format!("{}.{}", self.type_head(recv), name.name);
+                return Err(self.unsupported(name.span, feature, &[&shown]));
+            }
             return Err(self.removed_method(e, recv, name, args, expected, kind));
         };
         let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
         if let Some(exp) = expected {
             self.unify_at(span, sig.ret, exp)?;
         }
-        self.check_args(args, &params, span)?;
+        self.check_args(args, &params, e)?;
         let (self_mode, lazy_args) = (sig.self_mode, sig.lazy_args);
         self.info.targets.insert(e, Target::BuiltinMethod { name: name.name.clone(), self_mode, lazy_args });
         Ok(sig.ret)
@@ -360,14 +361,38 @@ impl<'a> Checker<'a> {
         Ok(error)
     }
 
-    pub(crate) fn check_args(&mut self, args: &[Arg], params: &[(Mode, TyId)], span: Span) -> R<()> {
+    /// Of std's `impl` of `Buf` (`Buf.zeroed`), called or as a value, the
+    /// requirements are its element's (§4.5), as of a `Buf` written (R-351).
+    pub(super) fn buf_element(&self, d: DefId) -> Option<Required> {
+        let of_buf = self.a.self_ty_of(d).is_some_and(|t| matches!(self.ty(t), Ty::Builtin(BuiltinTy::Buf, _)));
+        of_buf.then_some(Required::BufElement(BuiltinTy::Buf))
+    }
+
+    /// What the note of a type an argument decides says it is: an argument
+    /// of the callee of the call `e`, by the name it is written with; of what
+    /// has no name (`(id).(true)`), an argument. A callee after a value that
+    /// is computed or on other lines goes by its last name (§18.1, R-364).
+    fn argument_why(&self, e: ExprId) -> String {
+        let ExprKind::Call { callee, .. } = self.expr(e).kind else { return "an argument".to_string() };
+        let written = self.src(self.expr(callee).span);
+        let name = match &self.expr(callee).kind {
+            ExprKind::Field { name, .. } if written.contains(['(', '\n']) => name.name.clone(),
+            ExprKind::Path(_) | ExprKind::Field { .. } | ExprKind::TypeArgs { .. } => written,
+            _ => return "an argument".to_string(),
+        };
+        format!("an argument of `{name}`")
+    }
+
+    /// The arguments `args` of the call `e` at the parameters `params`.
+    pub(crate) fn check_args(&mut self, args: &[Arg], params: &[(Mode, TyId)], e: ExprId) -> R<()> {
         if args.len() != params.len() {
             return Err(self.err(
                 Code::E0412,
-                span,
+                self.expr(e).span,
                 format!("this call takes {} argument(s) but {} were given", params.len(), args.len()),
             ));
         }
+        let why = self.argument_why(e);
         for (arg, &(mode, pt)) in args.iter().zip(params) {
             let ps = self.shallow(pt);
             let coerce = match self.ty(ps) {
@@ -381,9 +406,7 @@ impl<'a> Checker<'a> {
             let planar = matches!(coerce, Some((_, Some(_))));
             match coerce {
                 None => {
-                    let callee = self.src(span);
-                    let callee = callee.split('(').next().unwrap_or("").trim().to_string();
-                    self.with_why(format!("an argument of `{callee}`"), pt, |ck| ck.check_expr(arg.expr, Some(pt)))?;
+                    self.with_why(why.clone(), pt, |ck| ck.check_expr(arg.expr, Some(pt)))?;
                 }
                 Some((elem, planar)) => {
                     let aspan = self.expr(arg.expr).span;

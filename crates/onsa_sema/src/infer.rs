@@ -253,14 +253,15 @@ impl Infer {
                 Ok(())
             }
             // `rt` is checked by the rt pass (T2-9); modes and effects are part of the type.
-            (Ty::Fn(f1), Ty::Fn(f2)) if f1.params.len() == f2.params.len() && f1.effects == f2.effects => {
-                for ((m1, x), (m2, y)) in f1.params.iter().zip(&f2.params) {
-                    if m1 != m2 {
-                        return Err(Mismatch::Types);
-                    }
+            // The parts come first: the text of a mismatch of the modes or the
+            // effects shows the types they decide (§18.1).
+            (Ty::Fn(f1), Ty::Fn(f2)) if f1.params.len() == f2.params.len() => {
+                for ((_, x), (_, y)) in f1.params.iter().zip(&f2.params) {
                     self.unify(types, *x, *y, cause)?;
                 }
-                self.unify(types, f1.ret, f2.ret, cause)
+                self.unify(types, f1.ret, f2.ret, cause)?;
+                let modes = f1.params.iter().map(|p| p.0).eq(f2.params.iter().map(|p| p.0));
+                if modes && f1.effects == f2.effects { Ok(()) } else { Err(Mismatch::Types) }
             }
             (Ty::ConstVal(n), Ty::ConstVal(m)) if n == m => Ok(()),
             _ => Err(Mismatch::Types),

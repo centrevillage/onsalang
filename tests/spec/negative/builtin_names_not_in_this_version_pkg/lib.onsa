@@ -1,0 +1,21 @@
+pub fn zero() -> I32 {
+  I32.ZERO //~ E0200
+}
+
+pub const ONE: F32 = F32.ONE //~ E0200
+
+pub fn default_level() -> F32 {
+  F32.default() //~ E0200
+}
+
+pub fn bytes_of(s: Str) -> Bytes {
+  s.as_bytes() //~ E0200
+}
+
+pub fn length_of(b: Bytes) -> U32 {
+  b.len() //~ E0200
+}
+
+pub fn max_level() -> F32 {
+  F32.MAX
+}

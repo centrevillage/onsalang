@@ -5,6 +5,7 @@
 //! of a `.` after a name that is no namespace, and the E0020 of a constant
 //! called (the row `value_call`).
 
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, Ident, Lit};
 use onsa_syntax::foreign::{self, RowId};
@@ -94,8 +95,17 @@ impl Walker<'_> {
     /// or named as a value (`Option.unwrap`), E0308 (§6.1, §15.1). Of std's
     /// members (`Str.len(s)`, `F32.PI()`), as of a user type's.
     pub(super) fn builtin_called(&self, of: Entity, segs: &[&Ident], place: Place) -> Option<Fail> {
-        let BuiltinMember::Method { bang } = crate::names::builtin_member(self.a, of, &segs[segs.len() - 1].name)?;
-        Some(Fail::Report(self.method_at(place, segs, bang)))
+        Some(Fail::Report(match crate::names::builtin_member(self.a, of, &segs[segs.len() - 1].name)? {
+            BuiltinMember::Method { bang } => self.method_at(place, segs, bang),
+            BuiltinMember::Missing { feature, .. } => self.missing_name(feature, segs),
+        }))
+    }
+
+    /// E0200 for the name `segs` of a builtin type this version has not, as
+    /// written (R-294).
+    pub(super) fn missing_name(&self, feature: Feature, segs: &[&Ident]) -> Diagnostic {
+        let (span, shown) = (span_of(segs), self.src(span_of(segs)));
+        feature.diagnostic(Stage::Names, span, &[&shown]).with_found(shown)
     }
 
     /// E0020 for the value `segs` called as `x(...)` ([`value_called`],

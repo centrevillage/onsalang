@@ -2,6 +2,7 @@
 //! instances.
 
 use super::*;
+use crate::deferred::{GENERIC_VIEW, VIEW_OF_ARRAY};
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ generics
@@ -57,8 +58,13 @@ impl<'a> Checker<'a> {
     /// (E0406 when still open at the end) and its implicit `Escape`, judged
     /// before the other requirements made after it (§4.5, S-862).
     pub(super) fn type_argument(&mut self, span: Span, t: TyId, what: String) {
+        self.type_argument_with(span, t, what, GENERIC_VIEW);
+    }
+
+    /// [`Self::type_argument`], with `rule` for its E0710.
+    fn type_argument_with(&mut self, span: Span, t: TyId, what: String, rule: &'static str) {
         self.defer(span, t, DeferredKind::Origin { what: what.clone() });
-        self.defer(span, t, DeferredKind::Escape { what });
+        self.defer(span, t, DeferredKind::Escape { what, rule });
     }
 
     /// Record an instantiation made by the expression at `span`. Its arguments
@@ -93,12 +99,13 @@ impl<'a> Checker<'a> {
             }
             _ => (0, String::new()),
         };
+        let std = self.a.modules.is_std(self.a.def(def).module);
         for (k, (g, &arg)) in generics.iter().zip(&args).enumerate() {
             let owner = if k < impl_count { impl_name.clone() } else { name.clone() };
             let what = match (&g.kind, &element) {
                 (GenericKind::Const(_), _) => format!("the const parameter `{}` of {owner}", g.name),
                 (_, Some(Required::SeqElement { recv, method })) if k < impl_count => {
-                    format!("the element type of `{method}` of `{recv}`")
+                    format!("the element type of `{method}` of `{}`", self.display(*recv))
                 }
                 _ => format!("the type parameter `{}` of {owner}", g.name),
             };
@@ -107,10 +114,11 @@ impl<'a> Checker<'a> {
                 self.defer(span, arg, DeferredKind::Origin { what });
                 continue;
             };
-            self.type_argument(span, arg, what);
+            let of_seq = k < impl_count && matches!(element, Some(Required::SeqElement { .. }));
+            self.type_argument_with(span, arg, what, if of_seq { VIEW_OF_ARRAY } else { GENERIC_VIEW });
             let required = || match (&element, k < impl_count) {
                 (Some(e), true) => e.clone(),
-                _ => Required::Param { param: g.name.clone(), owner: owner.clone() },
+                _ => Required::Param { param: g.name.clone(), owner: owner.clone(), std },
             };
             if *dup {
                 self.defer(span, arg, DeferredKind::Require { bound: Bound::Dup, what: required() });

@@ -6,6 +6,7 @@
 //! `impl[T] G[T]`). The one place of this question for a body, a constant
 //! expression and a signature (D-15).
 
+use onsa_diag::unsupported::Feature;
 use onsa_syntax::ast::{Ident, Path};
 
 use crate::def::{DefKind, ModId};
@@ -39,18 +40,23 @@ pub(crate) enum PathEnd {
     },
 }
 
-/// What an associated name of a builtin type is in the compiler's table:
+/// What an associated name of a builtin type is in the compiler's tables:
 /// a method (`Option.unwrap`), called with `!` or not (the table has no
-/// associated function; std's are members, `Buf.zeroed`).
+/// associated function; std's are members, `Buf.zeroed`), or a name of the
+/// spec this version has not (`F32.ZERO`, the E0200 of `feature`, R-294).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuiltinMember {
     Method { bang: bool },
+    Missing { kind: NameKind, feature: Feature },
 }
 
 impl BuiltinMember {
     /// Its kind (§15.1): a method is a function.
     pub(crate) fn kind(self) -> NameKind {
-        NameKind::Function
+        match self {
+            BuiltinMember::Method { .. } => NameKind::Function,
+            BuiltinMember::Missing { kind, .. } => kind,
+        }
     }
 }
 
@@ -72,7 +78,7 @@ impl PathEnd {
                 _ => None,
             },
             PathEnd::Builtin { member: BuiltinMember::Method { bang }, .. } => Some(bang),
-            PathEnd::Entity(_) => None,
+            PathEnd::Builtin { .. } | PathEnd::Entity(_) => None,
         }
     }
 }
@@ -234,10 +240,19 @@ pub(crate) fn builtin_ty(a: &Analysis, of: Entity) -> Option<TyId> {
 }
 
 /// What the associated name `name` of the builtin type `of` is in the
-/// compiler's table (§15.1): a method (`Option.unwrap`); none of a name it
-/// has not (std's members, `F32.PI`, `Str.len`, are found before it is
-/// asked). The one place of this question (D-15).
+/// compiler's tables (§15.1): a method (`Option.unwrap`) or a name this
+/// version has not ([`builtin::missing`]); none of a name they have not
+/// (std's members, `F32.PI`, `Str.len`, are found before it is asked). The
+/// one place of this question (D-15).
 pub(crate) fn builtin_member(a: &Analysis, of: Entity, name: &str) -> Option<BuiltinMember> {
-    let bang = builtin::method_bang(&a.types, builtin_ty(a, of)?, name)?;
-    Some(BuiltinMember::Method { bang })
+    let ty = builtin_ty(a, of)?;
+    if let Some(bang) = builtin::method_bang(&a.types, ty, name) {
+        return Some(BuiltinMember::Method { bang });
+    }
+    let (form, feature) = builtin::missing(&a.types, ty, name)?;
+    Some(match form {
+        builtin::Form::Method => BuiltinMember::Method { bang: false },
+        builtin::Form::Function => BuiltinMember::Missing { kind: NameKind::Function, feature },
+        builtin::Form::Constant => BuiltinMember::Missing { kind: NameKind::Constant, feature },
+    })
 }

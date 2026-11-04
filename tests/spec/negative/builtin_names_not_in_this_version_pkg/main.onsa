@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.3", "§4.2", "§15.1", "§18.1"]
+
+// W5-14 U4/t (R-294): the E0200 of a name that the spec lists and this version does not handle, across modules (the
+// single-file cases are in negative/builtin_names_not_in_this_version.onsa). The error is at the use of the name, in
+// the module of the use (the markers are in `lib.onsa` and here), and not at the call of a function that has it in
+// its body: a function whose body has the error keeps its signature, so `lib.zero()` is used with no other
+// diagnostic. A module's constant that has the error is the same for a module that reads it (`lib.ONE`). A name that
+// the module imports with `use` is a name of the module as it is of the file. One error per function (P-01).
+// The unit that does not use a name outside the table (`lib.max_level()`) is fine.
+
+use lib
+
+pub fn zero_of_the_module() -> I32 {
+  lib.zero()
+}
+
+pub fn constant_of_the_module() -> F32 {
+  lib.ONE
+}
+
+pub fn calls_of_the_module(s: Str, b: Bytes) -> U32 {
+  lib.bytes_of(s).len() //~ E0200
+}
+
+pub fn the_module_function_that_is_fine() -> F32 {
+  lib.max_level()
+}
+
+pub fn zero_here() -> U64 {
+  U64.ZERO //~ E0200
+}
+
+pub fn default_here() -> Bool {
+  Bool.default() //~ E0200
+}
+
+pub fn from_utf8_here(b: Bytes) {
+  let _ = Str.from_utf8(b) //~ E0200
+}

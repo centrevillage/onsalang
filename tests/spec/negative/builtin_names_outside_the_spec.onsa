@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.2", "§15.1", "§18.1"]
+
+// W5-14 U4/t (R-294), the controls of negative/builtin_names_not_in_this_version.onsa: a name that the spec does not
+// list after a built-in type is not the E0200 of a feature that this version lacks. It is the E0302 of a name that is
+// not found (an associated name of a type, with a near spelling of one that the spec lists) and the E0413 of a
+// method that is not a member (§4.2: `Str` and `Bytes` have the listed members and no others). The names that the
+// tables list and this version handles (`I32.MAX`, `U8.BITS`, `F32.PI`, `s.len()`) are fine. These cases pass
+// before and after the work that makes the names of the tables E0200, so they are not in the pending list
+// (8.5). One error per function (P-01).
+
+pub fn unknown_constant_of_a_float() -> F32 {
+  F32.NOPE //~ E0302
+}
+
+pub fn constant_of_the_other_kind() -> U8 {
+  U8.EPSILON //~ E0302
+}
+
+pub fn unknown_associated_function_of_str(b: Bytes) -> Str {
+  Str.NOPE(b) //~ E0302
+}
+
+pub fn unknown_associated_function_of_bytes() -> Bytes {
+  Bytes.NOPE() //~ E0302
+}
+
+pub fn near_spelling_of_from_utf8(b: Bytes) -> Str {
+  Str.fromUtf8(b) //~ E0302
+}
+
+pub fn near_spelling_of_default() -> I32 {
+  I32.Default() //~ E0302
+}
+
+pub fn unknown_method_of_str(s: Str) -> Str {
+  s.NOPE() //~ E0413
+}
+
+pub fn unknown_method_of_bytes(b: Bytes) -> Bytes {
+  b.NOPE() //~ E0413
+}
+
+pub fn is_empty_of_bytes(b: Bytes) -> Bool {
+  b.is_empty() //~ E0413
+}
+
+pub fn unknown_as_value() {
+  let _ = Str.NOPE //~ E0302
+}
+
+pub fn len_of_str_is_handled(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn handled_constants_are_fine() -> F32 {
+  let a: I32 = I32.MAX
+  let b: U32 = U8.BITS
+  let c: F32 = F32.PI + F32.EPSILON
+  if a > 0 && b > 0 {
+    c
+  } else {
+    F32.MAX
+  }
+}

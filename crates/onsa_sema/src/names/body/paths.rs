@@ -21,6 +21,7 @@ use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
 use crate::Analysis;
 use crate::def::GenericKind;
 use crate::flow_names::FlowBuiltin;
+use crate::names::BuiltinMember;
 use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::ty::TyId;
@@ -326,14 +327,18 @@ impl<'a> Walker<'a> {
             Some(err @ ResolveError::NotFound { .. }) => match self.qualified_variant(path, at, typed.at) {
                 Some(d) => Err(Fail::Report(d)),
                 // An associated name of a builtin type (`F32.PI { x: 1 }`, R-302).
-                None => match (at + 1 == segs.len())
-                    .then(|| crate::names::builtin_member(a, typed.at, &segs[at].name))
-                    .flatten()
-                    .and_then(|k| self.want(k.kind(), &segs, want))
-                {
-                    Some(f) => Err(f),
-                    None => Err(error(self.written(err, &segs[..=at], typed.owner))),
-                },
+                None => {
+                    let member = (at + 1 == segs.len())
+                        .then(|| crate::names::builtin_member(a, typed.at, &segs[at].name))
+                        .flatten();
+                    match (member.and_then(|k| self.want(k.kind(), &segs, want)), member) {
+                        (Some(f), _) => Err(f),
+                        (None, Some(BuiltinMember::Missing { feature, .. })) => {
+                            Err(Fail::Report(self.missing_name(feature, &segs)))
+                        }
+                        (None, _) => Err(error(self.written(err, &segs[..=at], typed.owner))),
+                    }
+                }
             },
             Some(err) => Err(error(err)),
             None => {

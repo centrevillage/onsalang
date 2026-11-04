@@ -7,9 +7,13 @@
 //! Every method is one row of the table here ([`methods`]); the lookups
 //! read the rows, so the names are written once, and [`names`] lists them
 //! for the gate's check of hard-coded builtin names (Q-14, W1-02).
+//!
+//! [`MISSING`] is the one list of the names the spec gives the builtin types
+//! and this version has not (E0200, §18.1, R-294).
 
 use std::sync::OnceLock;
 
+use onsa_diag::unsupported::Feature;
 use onsa_syntax::ast::Mode;
 
 use crate::ty::{BuiltinTy, IntKind, Ty, TyId, Types};
@@ -144,6 +148,71 @@ fn sig_ty(types: &mut Types, t: T, inner: Option<TyId>) -> Option<TyId> {
         T::U32 => types.int(IntKind::U32),
         T::Bool => types.bool(),
     })
+}
+
+/// What a name of [`MISSING`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Form {
+    /// Named through the type (`F32.ZERO`).
+    Constant,
+    /// Named through the type (`I32.default()`), or as a value (§6.1).
+    Function,
+    /// Called on a value (`s.as_bytes()`); named through its type it is what
+    /// any method is there (E0308, §15.1).
+    Method,
+}
+
+/// A name the spec gives the types `of` and this version has not.
+struct Missing {
+    of: fn(&Ty) -> bool,
+    name: &'static str,
+    form: Form,
+    feature: Feature,
+}
+
+fn number(t: &Ty) -> bool {
+    matches!(t, Ty::Int(_) | Ty::Float(_))
+}
+
+fn str_ty(t: &Ty) -> bool {
+    matches!(t, Ty::Builtin(BuiltinTy::Str, _))
+}
+
+/// What has `Default` with a literal for its value (§6.3).
+fn literal_default(t: &Ty) -> bool {
+    number(t) || str_ty(t) || *t == Ty::Bool
+}
+
+fn bytes(t: &Ty) -> bool {
+    matches!(t, Ty::Builtin(BuiltinTy::Bytes, _))
+}
+
+/// What has a length (§4.2) this version does not give: `Bytes`, and `Array`,
+/// `Map` and `Set`, of phase 2.
+fn no_len_yet(t: &Ty) -> bool {
+    matches!(t, Ty::Builtin(BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set, _))
+}
+
+/// Every name the spec gives a builtin type and this version has not: E0200
+/// where it is named (§18.1, R-294), not the error of a name that does not
+/// exist. The work that declares a name takes its row off (a self-test asks
+/// that no row names a member of std): `ZERO` and `ONE`, W5-05; `default`,
+/// W5-06.
+const MISSING: &[Missing] = &[
+    Missing { of: number, name: "ZERO", form: Form::Constant, feature: Feature::BuiltinValueName },
+    Missing { of: number, name: "ONE", form: Form::Constant, feature: Feature::BuiltinValueName },
+    Missing { of: literal_default, name: "default", form: Form::Function, feature: Feature::BuiltinValueName },
+    Missing { of: bytes, name: "default", form: Form::Function, feature: Feature::BuiltinName },
+    Missing { of: str_ty, name: "from_utf8", form: Form::Function, feature: Feature::BuiltinName },
+    Missing { of: str_ty, name: "as_bytes", form: Form::Method, feature: Feature::BuiltinName },
+    Missing { of: no_len_yet, name: "len", form: Form::Method, feature: Feature::BuiltinName },
+];
+
+/// The row of [`MISSING`] of the name `name` of the type `recv`: what the
+/// name is and the feature of its E0200. Asked of what is not found.
+pub(crate) fn missing(types: &Types, recv: TyId, name: &str) -> Option<(Form, Feature)> {
+    let t = types.get(recv);
+    MISSING.iter().find(|m| m.name == name && (m.of)(t)).map(|m| (m.form, m.feature))
 }
 
 /// The names of every builtin method, sorted and without duplicates (for
