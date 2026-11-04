@@ -563,3 +563,10 @@ left = "the type of this statement is `…`, not `…`; a statement gives no val
 input = "tests/fuzz/88496320.onsa"
 reasons = ["S-384"]
 note = "`x as T` の誤りの文に、捨てる値の誤りが残る。誤りが二つある入力"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0001"
+left = "number prefix without digits"
+input = "tests/fuzz/d58c5045.onsa"
+reasons = ["S-384"]
+note = "`- b  0x` は誤りが二つある入力（行頭の `- b` と、数字の無い `0x`）。つなぐ候補が `0x` ごと前の行へ移すので、残る誤りの位置が変わる。候補の約束は誤りが一つの単位に当たる（§18.1）"
