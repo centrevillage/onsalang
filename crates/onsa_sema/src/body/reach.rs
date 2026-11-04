@@ -87,6 +87,8 @@ impl<'a> Checker<'a> {
         let ExprKind::Unary { op: UnOp::Neg, expr: x } = self.expr(last).kind else { return None };
         let on_the_left = match &self.expr(a).kind {
             ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Block(_) => false,
+            // `x as T - y` is an E0011 of the syntax stage.
+            ExprKind::Cast { .. } | ExprKind::At { .. } => false,
             ExprKind::Binary { op, .. } => matches!(op.group(), OpGroup::Additive | OpGroup::Multiplicative),
             _ => true,
         };

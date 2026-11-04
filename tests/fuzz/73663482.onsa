@@ -1,0 +1,3 @@
+fn l()->F64{F64.round_from(1)//
+  F64.round_from(-1) 
+}

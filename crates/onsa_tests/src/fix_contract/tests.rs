@@ -1,5 +1,5 @@
 use super::reading::{not_minimal, reading_difference};
-use super::same_place::{in_same_place, outer_form};
+use super::same_place::{in_same_place, one_candidate, outer_form};
 use super::*;
 use crate::fragment::Mode;
 use onsa_driver::reduce::Unit;
@@ -352,6 +352,24 @@ fn same_place_does_not_count_the_outer_link_of_a_chain_of_calls() {
     );
     assert_eq!(chain.candidates, 1, "{chain:?}");
     assert!(chain.violations.is_empty(), "{chain:?}");
+}
+
+#[test]
+fn same_place_checks_every_candidate_of_a_diagnostic() {
+    // The E0418 of `a` before `-b` has two candidates, `let _` and the joined form, and each
+    // is checked, with what it leaves named by its own title.
+    let src = "pub fn f(a: I32, b: I32) -> I32 {\n  a\n  -b\n}\n";
+    let both = same_place(src);
+    assert_eq!(both.candidates, 2, "{both:?}");
+    assert!(both.violations.is_empty(), "{both:?}");
+    // A second candidate that leaves a diagnostic, made by hand: no input of the compiler has one.
+    let run = check_text(src).unwrap();
+    let d = &run.analyzed.diagnostics[0];
+    let bad = onsa_diag::Fix::replace("write a Bool", d.span, "true");
+    let mut found = Vec::new();
+    one_candidate(src, &run, d, &bad, &mut found);
+    let v: Vec<(&str, &str)> = found.iter().map(|v| (v.title.as_str(), v.left.as_str())).collect();
+    assert_eq!(v, [("write a Bool", "E0418")], "{found:?}");
 }
 
 #[test]

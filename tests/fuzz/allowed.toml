@@ -533,3 +533,33 @@ left = "the type of this statement is `…`, not `…`; a statement gives no val
 input = "tests/fuzz/eb7dde4a.onsa"
 reasons = ["S-384"]
 note = "途中の文の `F32.from_bits!(0x30)` は誤りが二つある入力（`!` の印と、捨てる値）。候補の約束は誤りが一つの単位に当たる（§18.1）"
+
+[[allowed]]
+class = "fix|E0418|discard the value with `…`|E0413"
+left = "`…` converts `…` to `…`, so there is no conversion function for this pair (§#.#)"
+input = "tests/fuzz/73663482.onsa"
+reasons = ["S-384"]
+note = "途中の文の `F64.round_from(1)` は誤りが二つある入力（捨てる値と、`as` で書ける組の変換の関連関数）。候補の約束は誤りが一つの単位に当たる（§18.1）"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "expected newline or `…`, found identifier"
+input = "tests/fuzz/217315cf.onsa"
+reasons = ["S-384", "S-236"]
+note = "行頭の `-` と行末の余分な語の二つの誤りがある入力"
+
+
+[[allowed]]
+class = "fix|E0020|read it as octal|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/55f40d7e.onsa"
+reasons = ["S-281", "S-236"]
+note = "`read it as decimal` の許可（`76db4720`）と同じ入力の形の、二番目の候補。範囲の誤りが別にある入力"
+
+
+[[allowed]]
+class = "fix|E0411|remove `…`|E0418"
+left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
+input = "tests/fuzz/88496320.onsa"
+reasons = ["S-384"]
+note = "`x as T` の誤りの文に、捨てる値の誤りが残る。誤りが二つある入力"

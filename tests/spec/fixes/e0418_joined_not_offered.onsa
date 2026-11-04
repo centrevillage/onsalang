@@ -46,3 +46,10 @@ pub fn a_bool(a: Bool, b: I32) -> I32 {
   a                                                 //~ E0418
   -b
 }
+
+// ---------------------------------------------------------------- `a` is an `as` that is no operand (E0011)
+
+pub fn an_as_cannot_be_the_left_operand(x: I32) -> I32 {
+  x as I32                                          //~ E0418
+  -x
+}

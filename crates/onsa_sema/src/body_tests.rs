@@ -913,14 +913,15 @@ fn the_joined_line_keeps_the_comments() {
 }
 
 /// §6.1: `a - b` is the reading of the joined line only when `a` is the left
-/// operand there: the groups of §3.1, and no block form (§3.3).
+/// operand there: the groups of §3.1, no `as` (an E0011 unparenthesized,
+/// §3.1), and no block form (§3.3).
 #[test]
 fn the_joined_line_needs_a_left_operand() {
-    for a in ["if c { a } else { b }", "{ a }", "match c { _ => a }", "a & b", "a % b"] {
+    for a in ["if c { a } else { b }", "{ a }", "match c { _ => a }", "a & b", "a % b", "a as I32"] {
         let src = format!("fn f(c: Bool, a: I32, b: I32) -> I32 {{\n  {a}\n  -b\n}}\n");
         assert_eq!(after_candidates(&src).len(), 1, "{a}");
     }
-    for a in ["a + b", "a * b", "-a", "a as I32"] {
+    for a in ["a + b", "a * b", "-a"] {
         let src = format!("fn f(c: Bool, a: I32, b: I32) -> I32 {{\n  {a}\n  -b\n}}\n");
         assert_eq!(after_candidates(&src).len(), 2, "{a}");
     }

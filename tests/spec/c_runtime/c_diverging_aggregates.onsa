@@ -1,0 +1,152 @@
+// onsa.toml
+// [package]
+// name = "c_diverging_aggregates"
+// edition = "2026"
+//
+// [export]
+// prefix = "cda_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§12.7", "§13.4", "§14.2"]
+//
+// [[test.host]]
+// name = "the call of a struct by a panic"
+// target = "host"
+// fn = "c_diverging_aggregates.struct_by_panic"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 1 },
+//   { call = "fn", args = { x = 1 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "the call of a struct by a loop left by a panic"
+// target = "host"
+// fn = "c_diverging_aggregates.struct_by_loop"
+// steps = [
+//   { call = "fn", args = { x = 3 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "the call of a struct by both arms"
+// target = "host"
+// fn = "c_diverging_aggregates.struct_by_arms"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 1 },
+//   { call = "fn", args = { x = 1 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "the call of an array by a panic"
+// target = "host"
+// fn = "c_diverging_aggregates.array_by_panic"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "the call of a tuple by a panic"
+// target = "host"
+// fn = "c_diverging_aggregates.tuple_by_panic"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 1 },
+// ]
+
+// A function that returns a struct, an array or a tuple takes the place of its result as a pointer in C
+// (§12.7). A body that diverges on every path (§7) never writes to it, and the C must still compile with
+// no warning under `-Wall -Wextra -Werror` (§13.4): `-Wunused-parameter` is the risk. Each call below ends
+// in the panic of its function, the status 1 of the call on a poison target (§14.2).
+//   p1 to p5            the five forms, each called by one exported function
+//   message_names_it    the panic message reads as the C of the result, which is not a use of it
+
+struct S {
+  a: I32,
+  b: F32,
+}
+
+fn p1(x: I32) -> S {
+  panic("p1")
+}
+
+fn p2(x: I32) -> S {
+  while true {
+    if x > 0 {
+      panic("p2")
+    }
+  }
+}
+
+fn p3(c: Bool) -> S {
+  if c {
+    panic("p3 a")
+  } else {
+    panic("p3 b")
+  }
+}
+
+fn p4(x: I32) -> [I32; 2] {
+  panic("p4")
+}
+
+fn p5(x: I32) -> (I32, I32) {
+  panic("p5")
+}
+
+fn message_names_it(x: I32) -> S {
+  panic("(*out) \"(*out)")
+}
+
+@export
+pub fn struct_by_panic(x: I32) -> I32 {
+  if x == 0 {
+    let _ = message_names_it(x)
+  }
+  p1(x).a
+}
+
+@export
+pub fn struct_by_loop(x: I32) -> I32 {
+  p2(x).a
+}
+
+@export
+pub fn struct_by_arms(x: I32) -> I32 {
+  p3(x > 0).a
+}
+
+@export
+pub fn array_by_panic(x: I32) -> I32 {
+  p4(x)[0]
+}
+
+@export
+pub fn tuple_by_panic(x: I32) -> I32 {
+  p5(x).0
+}
+
+test "a struct by a panic" {
+  let _ = struct_by_panic(1) //~ PANIC "a struct by a panic"
+}
+
+test "a struct by a loop left by a panic" {
+  let _ = struct_by_loop(3) //~ PANIC "a struct by a loop left by a panic"
+}
+
+test "a struct by both arms" {
+  let _ = struct_by_arms(0) //~ PANIC "a struct by both arms"
+}
+
+test "an array by a panic" {
+  let _ = array_by_panic(0) //~ PANIC "an array by a panic"
+}
+
+test "a tuple by a panic" {
+  let _ = tuple_by_panic(0) //~ PANIC "a tuple by a panic"
+}

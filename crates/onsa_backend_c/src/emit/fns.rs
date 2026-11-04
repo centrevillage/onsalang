@@ -118,6 +118,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         }
 
         self.out.push_str(&pre);
+        let first_stmt = self.out.len();
         for s in &body.stmts {
             self.stmt(s)?;
         }
@@ -132,6 +133,11 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let e = self.expr(v)?;
                 self.line(&format!("return {e};"));
             }
+        }
+        // A body that diverges on every path never writes the result, and a
+        // `#pragma` of `@fp(relaxed)` must stay first.
+        if def.sret && !names_result(&self.out) {
+            self.out.insert_str(first_stmt, "  (void)out;\n");
         }
         let mut body_text = String::new();
         let _ = writeln!(body_text, "{proto} {{");
@@ -1111,6 +1117,13 @@ fn if_(cond: &str) -> String {
 /// `while (cond)`, as [`if_`].
 fn while_(cond: &str) -> String {
     format!("while ({})", condition(cond))
+}
+
+/// Whether the C `body` names the result `(*out)` outside its string literals
+/// (a message may read so, [`c_string`](super::c_string)).
+fn names_result(body: &str) -> bool {
+    let unquoted = body.replace("\\\\", "").replace("\\\"", "");
+    unquoted.split('"').step_by(2).any(|code| code.contains("(*out)"))
 }
 
 /// A C expression as the condition of `if (…)` / `while (…)`: without the

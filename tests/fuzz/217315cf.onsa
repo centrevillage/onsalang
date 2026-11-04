@@ -1,0 +1,2 @@
+fn s(c:l,b:I)->I{r = if c { 1 } else { 2 }
+ - b   t  //

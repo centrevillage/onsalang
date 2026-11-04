@@ -43,7 +43,7 @@ The gate item `fuzz` (this script without options) does three things:
    rule: the mutants whose index in the whole run is a multiple of it; never
    a truncation), and every
    saved input, go through the near "same place" of the contract of the fix
-   candidates (spec §18.1): `onsa_cases --fix-same-place` applies the first
+   candidates (spec §18.1): `onsa_cases --fix-same-place` applies each
    candidate of each diagnostic alone, checks the file again, and reports a
    diagnostic of the original's stage or an earlier one whose start lies in
    the original's range or a replacement, moved to the text after it (an
