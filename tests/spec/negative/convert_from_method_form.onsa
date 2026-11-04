@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§18.1"]
+
+// W5-14 S1/t: a conversion function called as a method of a value (spec 3.3, 3.4: the conversions are functions of the
+// type they convert to, called with the name of the type; a number has no other methods than the ones that 3.4 lists,
+// and any other name is E0413). The receiver has a known type in each function. One function for each
+// name (P-01).
+
+pub fn round_method(x: F32, y: F64) -> F32 {
+  x.round_from(y) //~ E0413
+}
+
+pub fn narrow_method(n: I32, m: I64) -> Option[I32] {
+  n.narrow_from(m) //~ E0413
+}
+
+pub fn trunc_method(n: I32, y: F64) -> I32 {
+  n.trunc_from(y) //~ E0413
+}
+
+pub fn trunc_sat_method(n: I32, y: F32) -> I32 {
+  n.trunc_sat_from(y) //~ E0413
+}
+
+pub fn round_method_of_an_integer(n: I64, m: I64) -> F64 {
+  n.round_from(m) //~ E0413
+}
+
+pub fn the_value_of_the_pair(y: F32) -> F32 {
+  y.round_from(y) //~ E0413
+}

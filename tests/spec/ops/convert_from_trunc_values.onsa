@@ -1,0 +1,225 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4"]
+
+// W5-14 S1/t: the values of `trunc_from` (spec 3.3, 3.4): a float is cut toward zero, and the result is the cut
+// value when it fits the target. A value in (-1, 0) is 0 even for an unsigned target (`-0.9` is 0, `-1.0`
+// panics, in trunc_panics). For each integer target and each source (`F32` and `F64`) the values are the small
+// ones around 0 and the largest and smallest values that still fit. Out of range values and NaN panic and are in
+// convert_from_trunc_panics.onsa. The helpers only give a literal its type.
+
+fn s_f32(v: F32) -> F32 {
+  v
+}
+
+fn s_f64(v: F64) -> F64 {
+  v
+}
+
+test "I8.trunc_from of an F32" {
+  assert I8.trunc_from(s_f32(0.0)) == 0
+  assert I8.trunc_from(s_f32(-0.0)) == 0
+  assert I8.trunc_from(s_f32(0.5)) == 0
+  assert I8.trunc_from(s_f32(-0.5)) == 0
+  assert I8.trunc_from(s_f32(0.9)) == 0
+  assert I8.trunc_from(s_f32(-0.9)) == 0
+  assert I8.trunc_from(s_f32(1.5)) == 1
+  assert I8.trunc_from(s_f32(-1.5)) == -1
+  assert I8.trunc_from(s_f32(127.0)) == 127
+  assert I8.trunc_from(s_f32(127.5)) == 127
+  assert I8.trunc_from(s_f32(-128.0)) == -128
+  assert I8.trunc_from(s_f32(-128.5)) == -128
+}
+
+test "I8.trunc_from of an F64" {
+  assert I8.trunc_from(s_f64(0.0)) == 0
+  assert I8.trunc_from(s_f64(-0.0)) == 0
+  assert I8.trunc_from(s_f64(0.5)) == 0
+  assert I8.trunc_from(s_f64(-0.5)) == 0
+  assert I8.trunc_from(s_f64(0.9)) == 0
+  assert I8.trunc_from(s_f64(-0.9)) == 0
+  assert I8.trunc_from(s_f64(1.5)) == 1
+  assert I8.trunc_from(s_f64(-1.5)) == -1
+  assert I8.trunc_from(s_f64(127.0)) == 127
+  assert I8.trunc_from(s_f64(127.5)) == 127
+  assert I8.trunc_from(s_f64(-128.0)) == -128
+  assert I8.trunc_from(s_f64(-128.5)) == -128
+}
+
+test "I16.trunc_from of an F32" {
+  assert I16.trunc_from(s_f32(0.0)) == 0
+  assert I16.trunc_from(s_f32(-0.0)) == 0
+  assert I16.trunc_from(s_f32(0.5)) == 0
+  assert I16.trunc_from(s_f32(-0.5)) == 0
+  assert I16.trunc_from(s_f32(0.9)) == 0
+  assert I16.trunc_from(s_f32(-0.9)) == 0
+  assert I16.trunc_from(s_f32(1.5)) == 1
+  assert I16.trunc_from(s_f32(-1.5)) == -1
+  assert I16.trunc_from(s_f32(32767.0)) == 32767
+  assert I16.trunc_from(s_f32(32767.5)) == 32767
+  assert I16.trunc_from(s_f32(-32768.0)) == -32768
+  assert I16.trunc_from(s_f32(-32768.5)) == -32768
+}
+
+test "I16.trunc_from of an F64" {
+  assert I16.trunc_from(s_f64(0.0)) == 0
+  assert I16.trunc_from(s_f64(-0.0)) == 0
+  assert I16.trunc_from(s_f64(0.5)) == 0
+  assert I16.trunc_from(s_f64(-0.5)) == 0
+  assert I16.trunc_from(s_f64(0.9)) == 0
+  assert I16.trunc_from(s_f64(-0.9)) == 0
+  assert I16.trunc_from(s_f64(1.5)) == 1
+  assert I16.trunc_from(s_f64(-1.5)) == -1
+  assert I16.trunc_from(s_f64(32767.0)) == 32767
+  assert I16.trunc_from(s_f64(32767.5)) == 32767
+  assert I16.trunc_from(s_f64(-32768.0)) == -32768
+  assert I16.trunc_from(s_f64(-32768.5)) == -32768
+}
+
+test "I32.trunc_from of an F32" {
+  assert I32.trunc_from(s_f32(0.0)) == 0
+  assert I32.trunc_from(s_f32(-0.0)) == 0
+  assert I32.trunc_from(s_f32(0.5)) == 0
+  assert I32.trunc_from(s_f32(-0.5)) == 0
+  assert I32.trunc_from(s_f32(0.9)) == 0
+  assert I32.trunc_from(s_f32(-0.9)) == 0
+  assert I32.trunc_from(s_f32(1.5)) == 1
+  assert I32.trunc_from(s_f32(-1.5)) == -1
+  assert I32.trunc_from(s_f32(2147483520.0)) == 2147483520
+  assert I32.trunc_from(s_f32(-2147483648.0)) == -2147483648
+}
+
+test "I32.trunc_from of an F64" {
+  assert I32.trunc_from(s_f64(0.0)) == 0
+  assert I32.trunc_from(s_f64(-0.0)) == 0
+  assert I32.trunc_from(s_f64(0.5)) == 0
+  assert I32.trunc_from(s_f64(-0.5)) == 0
+  assert I32.trunc_from(s_f64(0.9)) == 0
+  assert I32.trunc_from(s_f64(-0.9)) == 0
+  assert I32.trunc_from(s_f64(1.5)) == 1
+  assert I32.trunc_from(s_f64(-1.5)) == -1
+  assert I32.trunc_from(s_f64(2147483647.0)) == 2147483647
+  assert I32.trunc_from(s_f64(2147483647.5)) == 2147483647
+  assert I32.trunc_from(s_f64(-2147483648.0)) == -2147483648
+  assert I32.trunc_from(s_f64(-2147483648.5)) == -2147483648
+}
+
+test "I64.trunc_from of an F32" {
+  assert I64.trunc_from(s_f32(0.0)) == 0
+  assert I64.trunc_from(s_f32(-0.0)) == 0
+  assert I64.trunc_from(s_f32(0.5)) == 0
+  assert I64.trunc_from(s_f32(-0.5)) == 0
+  assert I64.trunc_from(s_f32(0.9)) == 0
+  assert I64.trunc_from(s_f32(-0.9)) == 0
+  assert I64.trunc_from(s_f32(1.5)) == 1
+  assert I64.trunc_from(s_f32(-1.5)) == -1
+  assert I64.trunc_from(s_f32(9223371487098961920.0)) == 9223371487098961920
+  assert I64.trunc_from(s_f32(-9223372036854775808.0)) == I64.MIN
+}
+
+test "I64.trunc_from of an F64" {
+  assert I64.trunc_from(s_f64(0.0)) == 0
+  assert I64.trunc_from(s_f64(-0.0)) == 0
+  assert I64.trunc_from(s_f64(0.5)) == 0
+  assert I64.trunc_from(s_f64(-0.5)) == 0
+  assert I64.trunc_from(s_f64(0.9)) == 0
+  assert I64.trunc_from(s_f64(-0.9)) == 0
+  assert I64.trunc_from(s_f64(1.5)) == 1
+  assert I64.trunc_from(s_f64(-1.5)) == -1
+  assert I64.trunc_from(s_f64(9223372036854774784.0)) == 9223372036854774784
+  assert I64.trunc_from(s_f64(-9223372036854775808.0)) == I64.MIN
+}
+
+test "U8.trunc_from of an F32" {
+  assert U8.trunc_from(s_f32(0.0)) == 0
+  assert U8.trunc_from(s_f32(-0.0)) == 0
+  assert U8.trunc_from(s_f32(0.5)) == 0
+  assert U8.trunc_from(s_f32(-0.5)) == 0
+  assert U8.trunc_from(s_f32(0.9)) == 0
+  assert U8.trunc_from(s_f32(-0.9)) == 0
+  assert U8.trunc_from(s_f32(1.5)) == 1
+  assert U8.trunc_from(s_f32(255.0)) == 255
+  assert U8.trunc_from(s_f32(255.5)) == 255
+}
+
+test "U8.trunc_from of an F64" {
+  assert U8.trunc_from(s_f64(0.0)) == 0
+  assert U8.trunc_from(s_f64(-0.0)) == 0
+  assert U8.trunc_from(s_f64(0.5)) == 0
+  assert U8.trunc_from(s_f64(-0.5)) == 0
+  assert U8.trunc_from(s_f64(0.9)) == 0
+  assert U8.trunc_from(s_f64(-0.9)) == 0
+  assert U8.trunc_from(s_f64(1.5)) == 1
+  assert U8.trunc_from(s_f64(255.0)) == 255
+  assert U8.trunc_from(s_f64(255.5)) == 255
+}
+
+test "U16.trunc_from of an F32" {
+  assert U16.trunc_from(s_f32(0.0)) == 0
+  assert U16.trunc_from(s_f32(-0.0)) == 0
+  assert U16.trunc_from(s_f32(0.5)) == 0
+  assert U16.trunc_from(s_f32(-0.5)) == 0
+  assert U16.trunc_from(s_f32(0.9)) == 0
+  assert U16.trunc_from(s_f32(-0.9)) == 0
+  assert U16.trunc_from(s_f32(1.5)) == 1
+  assert U16.trunc_from(s_f32(65535.0)) == 65535
+  assert U16.trunc_from(s_f32(65535.5)) == 65535
+}
+
+test "U16.trunc_from of an F64" {
+  assert U16.trunc_from(s_f64(0.0)) == 0
+  assert U16.trunc_from(s_f64(-0.0)) == 0
+  assert U16.trunc_from(s_f64(0.5)) == 0
+  assert U16.trunc_from(s_f64(-0.5)) == 0
+  assert U16.trunc_from(s_f64(0.9)) == 0
+  assert U16.trunc_from(s_f64(-0.9)) == 0
+  assert U16.trunc_from(s_f64(1.5)) == 1
+  assert U16.trunc_from(s_f64(65535.0)) == 65535
+  assert U16.trunc_from(s_f64(65535.5)) == 65535
+}
+
+test "U32.trunc_from of an F32" {
+  assert U32.trunc_from(s_f32(0.0)) == 0
+  assert U32.trunc_from(s_f32(-0.0)) == 0
+  assert U32.trunc_from(s_f32(0.5)) == 0
+  assert U32.trunc_from(s_f32(-0.5)) == 0
+  assert U32.trunc_from(s_f32(0.9)) == 0
+  assert U32.trunc_from(s_f32(-0.9)) == 0
+  assert U32.trunc_from(s_f32(1.5)) == 1
+  assert U32.trunc_from(s_f32(4294967040.0)) == 4294967040
+}
+
+test "U32.trunc_from of an F64" {
+  assert U32.trunc_from(s_f64(0.0)) == 0
+  assert U32.trunc_from(s_f64(-0.0)) == 0
+  assert U32.trunc_from(s_f64(0.5)) == 0
+  assert U32.trunc_from(s_f64(-0.5)) == 0
+  assert U32.trunc_from(s_f64(0.9)) == 0
+  assert U32.trunc_from(s_f64(-0.9)) == 0
+  assert U32.trunc_from(s_f64(1.5)) == 1
+  assert U32.trunc_from(s_f64(4294967295.0)) == 4294967295
+  assert U32.trunc_from(s_f64(4294967295.5)) == 4294967295
+}
+
+test "U64.trunc_from of an F32" {
+  assert U64.trunc_from(s_f32(0.0)) == 0
+  assert U64.trunc_from(s_f32(-0.0)) == 0
+  assert U64.trunc_from(s_f32(0.5)) == 0
+  assert U64.trunc_from(s_f32(-0.5)) == 0
+  assert U64.trunc_from(s_f32(0.9)) == 0
+  assert U64.trunc_from(s_f32(-0.9)) == 0
+  assert U64.trunc_from(s_f32(1.5)) == 1
+  assert U64.trunc_from(s_f32(18446742974197923840.0)) == 18446742974197923840
+}
+
+test "U64.trunc_from of an F64" {
+  assert U64.trunc_from(s_f64(0.0)) == 0
+  assert U64.trunc_from(s_f64(-0.0)) == 0
+  assert U64.trunc_from(s_f64(0.5)) == 0
+  assert U64.trunc_from(s_f64(-0.5)) == 0
+  assert U64.trunc_from(s_f64(0.9)) == 0
+  assert U64.trunc_from(s_f64(-0.9)) == 0
+  assert U64.trunc_from(s_f64(1.5)) == 1
+  assert U64.trunc_from(s_f64(18446744073709549568.0)) == 18446744073709549568
+}

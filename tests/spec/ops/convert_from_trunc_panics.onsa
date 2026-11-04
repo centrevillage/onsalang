@@ -1,0 +1,248 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§9.2"]
+
+// W5-14 S1/t: `trunc_from` panics when the cut value does not fit the target and for a NaN (spec 3.3, 3.4, 9.2).
+// For each integer target the first float beyond the upper limit and (for a signed target) the first beyond the
+// lower limit panic; `-1.0` panics for an unsigned target (its cut value is -1); an infinity and a NaN panic.
+// Every test panics in the line that has the marker (one marker for one test). The helpers only give a literal
+// its type.
+
+fn s_f32(v: F32) -> F32 {
+  v
+}
+
+fn s_f64(v: F64) -> F64 {
+  v
+}
+
+test "I8.trunc_from(128.0) panics" {
+  let y = I8.trunc_from(s_f64(128.0)) //~ PANIC "I8.trunc_from(128.0) panics"
+  assert y == 0
+}
+
+test "I8.trunc_from(-129.0) panics" {
+  let y = I8.trunc_from(s_f64(-129.0)) //~ PANIC "I8.trunc_from(-129.0) panics"
+  assert y == 0
+}
+
+test "I8.trunc_from of an F32 -129.0 panics" {
+  let y = I8.trunc_from(s_f32(-129.0)) //~ PANIC "I8.trunc_from of an F32 -129.0 panics"
+  assert y == 0
+}
+
+test "I8.trunc_from of an F32 128.0 panics" {
+  let y = I8.trunc_from(s_f32(128.0)) //~ PANIC "I8.trunc_from of an F32 128.0 panics"
+  assert y == 0
+}
+
+test "I16.trunc_from(32768.0) panics" {
+  let y = I16.trunc_from(s_f64(32768.0)) //~ PANIC "I16.trunc_from(32768.0) panics"
+  assert y == 0
+}
+
+test "I16.trunc_from(-32769.0) panics" {
+  let y = I16.trunc_from(s_f64(-32769.0)) //~ PANIC "I16.trunc_from(-32769.0) panics"
+  assert y == 0
+}
+
+test "I16.trunc_from of an F32 -32769.0 panics" {
+  let y = I16.trunc_from(s_f32(-32769.0)) //~ PANIC "I16.trunc_from of an F32 -32769.0 panics"
+  assert y == 0
+}
+
+test "I16.trunc_from of an F32 32768.0 panics" {
+  let y = I16.trunc_from(s_f32(32768.0)) //~ PANIC "I16.trunc_from of an F32 32768.0 panics"
+  assert y == 0
+}
+
+test "I32.trunc_from(2147483648.0) panics" {
+  let y = I32.trunc_from(s_f64(2147483648.0)) //~ PANIC "I32.trunc_from(2147483648.0) panics"
+  assert y == 0
+}
+
+test "I32.trunc_from(-2147483649.0) panics" {
+  let y = I32.trunc_from(s_f64(-2147483649.0)) //~ PANIC "I32.trunc_from(-2147483649.0) panics"
+  assert y == 0
+}
+
+test "I32.trunc_from of an F32 -2147483904.0 panics" {
+  let y = I32.trunc_from(s_f32(-2147483904.0)) //~ PANIC "I32.trunc_from of an F32 -2147483904.0 panics"
+  assert y == 0
+}
+
+test "I32.trunc_from of an F32 2147483648.0 panics" {
+  let y = I32.trunc_from(s_f32(2147483648.0)) //~ PANIC "I32.trunc_from of an F32 2147483648.0 panics"
+  assert y == 0
+}
+
+test "I64.trunc_from(9223372036854775808.0) panics" {
+  let y = I64.trunc_from(s_f64(9223372036854775808.0)) //~ PANIC "I64.trunc_from(9223372036854775808.0) panics"
+  assert y == 0
+}
+
+test "I64.trunc_from(-9223372036854777856.0) panics" {
+  let y = I64.trunc_from(s_f64(-9223372036854777856.0)) //~ PANIC "I64.trunc_from(-9223372036854777856.0) panics"
+  assert y == 0
+}
+
+test "I64.trunc_from of an F32 -9223373136366403584.0 panics" {
+  let y = I64.trunc_from(s_f32(-9223373136366403584.0)) //~ PANIC "I64.trunc_from of an F32 -9223373136366403584.0 panics"
+  assert y == 0
+}
+
+test "I64.trunc_from of an F32 9223372036854775808.0 panics" {
+  let y = I64.trunc_from(s_f32(9223372036854775808.0)) //~ PANIC "I64.trunc_from of an F32 9223372036854775808.0 panics"
+  assert y == 0
+}
+
+test "U8.trunc_from(256.0) panics" {
+  let y = U8.trunc_from(s_f64(256.0)) //~ PANIC "U8.trunc_from(256.0) panics"
+  assert y == 0
+}
+
+test "U8.trunc_from(-1.0) panics" {
+  let y = U8.trunc_from(s_f64(-1.0)) //~ PANIC "U8.trunc_from(-1.0) panics"
+  assert y == 0
+}
+
+test "U8.trunc_from of an F32 -1.0 panics" {
+  let y = U8.trunc_from(s_f32(-1.0)) //~ PANIC "U8.trunc_from of an F32 -1.0 panics"
+  assert y == 0
+}
+
+test "U8.trunc_from of an F32 256.0 panics" {
+  let y = U8.trunc_from(s_f32(256.0)) //~ PANIC "U8.trunc_from of an F32 256.0 panics"
+  assert y == 0
+}
+
+test "U16.trunc_from(65536.0) panics" {
+  let y = U16.trunc_from(s_f64(65536.0)) //~ PANIC "U16.trunc_from(65536.0) panics"
+  assert y == 0
+}
+
+test "U16.trunc_from(-1.0) panics" {
+  let y = U16.trunc_from(s_f64(-1.0)) //~ PANIC "U16.trunc_from(-1.0) panics"
+  assert y == 0
+}
+
+test "U16.trunc_from of an F32 -1.0 panics" {
+  let y = U16.trunc_from(s_f32(-1.0)) //~ PANIC "U16.trunc_from of an F32 -1.0 panics"
+  assert y == 0
+}
+
+test "U16.trunc_from of an F32 65536.0 panics" {
+  let y = U16.trunc_from(s_f32(65536.0)) //~ PANIC "U16.trunc_from of an F32 65536.0 panics"
+  assert y == 0
+}
+
+test "U32.trunc_from(4294967296.0) panics" {
+  let y = U32.trunc_from(s_f64(4294967296.0)) //~ PANIC "U32.trunc_from(4294967296.0) panics"
+  assert y == 0
+}
+
+test "U32.trunc_from(-1.0) panics" {
+  let y = U32.trunc_from(s_f64(-1.0)) //~ PANIC "U32.trunc_from(-1.0) panics"
+  assert y == 0
+}
+
+test "U32.trunc_from of an F32 -1.0 panics" {
+  let y = U32.trunc_from(s_f32(-1.0)) //~ PANIC "U32.trunc_from of an F32 -1.0 panics"
+  assert y == 0
+}
+
+test "U32.trunc_from of an F32 4294967296.0 panics" {
+  let y = U32.trunc_from(s_f32(4294967296.0)) //~ PANIC "U32.trunc_from of an F32 4294967296.0 panics"
+  assert y == 0
+}
+
+test "U64.trunc_from(18446744073709551616.0) panics" {
+  let y = U64.trunc_from(s_f64(18446744073709551616.0)) //~ PANIC "U64.trunc_from(18446744073709551616.0) panics"
+  assert y == 0
+}
+
+test "U64.trunc_from(-1.0) panics" {
+  let y = U64.trunc_from(s_f64(-1.0)) //~ PANIC "U64.trunc_from(-1.0) panics"
+  assert y == 0
+}
+
+test "U64.trunc_from of an F32 -1.0 panics" {
+  let y = U64.trunc_from(s_f32(-1.0)) //~ PANIC "U64.trunc_from of an F32 -1.0 panics"
+  assert y == 0
+}
+
+test "U64.trunc_from of an F32 18446744073709551616.0 panics" {
+  let y = U64.trunc_from(s_f32(18446744073709551616.0)) //~ PANIC "U64.trunc_from of an F32 18446744073709551616.0 panics"
+  assert y == 0
+}
+
+test "I8.trunc_from of an F64 NaN panics" {
+  let y = I8.trunc_from(F64.NAN) //~ PANIC "I8.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "I16.trunc_from of an F64 NaN panics" {
+  let y = I16.trunc_from(F64.NAN) //~ PANIC "I16.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "I32.trunc_from of an F64 NaN panics" {
+  let y = I32.trunc_from(F64.NAN) //~ PANIC "I32.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "I64.trunc_from of an F64 NaN panics" {
+  let y = I64.trunc_from(F64.NAN) //~ PANIC "I64.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "U8.trunc_from of an F64 NaN panics" {
+  let y = U8.trunc_from(F64.NAN) //~ PANIC "U8.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "U16.trunc_from of an F64 NaN panics" {
+  let y = U16.trunc_from(F64.NAN) //~ PANIC "U16.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "U32.trunc_from of an F64 NaN panics" {
+  let y = U32.trunc_from(F64.NAN) //~ PANIC "U32.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "U64.trunc_from of an F64 NaN panics" {
+  let y = U64.trunc_from(F64.NAN) //~ PANIC "U64.trunc_from of an F64 NaN panics"
+  assert y == 0
+}
+
+test "I32.trunc_from of an F32 NaN panics" {
+  let y = I32.trunc_from(F32.NAN) //~ PANIC "I32.trunc_from of an F32 NaN panics"
+  assert y == 0
+}
+
+test "U8.trunc_from of an F32 NaN panics" {
+  let y = U8.trunc_from(F32.NAN) //~ PANIC "U8.trunc_from of an F32 NaN panics"
+  assert y == 0
+}
+
+test "I64.trunc_from of an F32 NaN panics" {
+  let y = I64.trunc_from(F32.NAN) //~ PANIC "I64.trunc_from of an F32 NaN panics"
+  assert y == 0
+}
+
+test "I32.trunc_from of an F64 infinity panics" {
+  let y = I32.trunc_from(F64.INFINITY) //~ PANIC "I32.trunc_from of an F64 infinity panics"
+  assert y == 0
+}
+
+test "I32.trunc_from of a negative F32 infinity panics" {
+  let y = I32.trunc_from(-F32.INFINITY) //~ PANIC "I32.trunc_from of a negative F32 infinity panics"
+  assert y == 0
+}
+
+test "U64.trunc_from of an F32 infinity panics" {
+  let y = U64.trunc_from(F32.INFINITY) //~ PANIC "U64.trunc_from of an F32 infinity panics"
+  assert y == 0
+}

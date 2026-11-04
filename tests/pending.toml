@@ -535,6 +535,13 @@ note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }�
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/ops/convert_from_flow_values.onsa"
+reasons = ["S-231", "S-30"]
+until = "W7-03"
+note = "変換の関連関数を使う flow の値。render の形が仕様の形（init の入力が無ければ Config を取らず、block の入力が無ければ Params を取らない）で、今の render は常に 4 引数（E0412）。vdelay_varying_d.onsa の項目と同じ W7-03"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/flow_semantics/branches_plain_match.onsa"
 reasons = ["R-06"]
 until = "W8-06"
@@ -888,6 +895,13 @@ target = "tests/spec/negative/scalar_method_const_panic.onsa"
 reasons = ["S-131", "S-146"]
 until = "W9-03"
 note = "const の初期化式のスカラーのメソッドの panic（trunc_* の範囲外と NaN、div_euclid・rem_euclid の 0 と MIN / -1）が E0419 にならない（§6.6、W5-02 U4b/t）。今は onsa check で 0 件"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/convert_from_const_panic.onsa"
+reasons = ["S-131", "S-146", "S-231"]
+until = "W9-03"
+note = "const の初期化式の変換の関連関数の panic（trunc_from の範囲外と NaN、narrow_from の None の unwrap）が E0419 にならない（§6.6、scalar_method_const_panic.onsa と同じ原因）。今は onsa check で 0 件"
 
 # --- W2-05/t: C のランタイムの整数の文脈（2026-10-08）
 

@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§18.1"]
+
+// W5-14 S1/t: the error of a call of a pair that `as` writes is E0413 and only that, also where the result
+// would not fit the type that the place expects (spec 18.1: the first error of a unit stops the check, and the
+// call is checked before the place that takes its result). `narrow_from` gives an `Option` and the place wants the
+// integer; `round_from` gives an `F64` and the place wants an `F32`. One function for each place (P-01).
+
+fn take64(v: I64) -> I64 {
+  v
+}
+
+pub fn let_with_the_integer(n: I32) -> I64 {
+  let y: I64 = I64.narrow_from(n) //~ E0413
+  y
+}
+
+pub fn tail_of_the_integer(n: I32) -> I64 {
+  I64.narrow_from(n) //~ E0413
+}
+
+pub fn argument_of_the_integer(n: I32) -> I64 {
+  take64(I64.narrow_from(n)) //~ E0413
+}
+
+pub fn tail_of_the_float(y: F32) -> F32 {
+  F64.round_from(y) //~ E0413
+}

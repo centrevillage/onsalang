@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§11.2", "§11.3", "§11.5", "§11.6"]
+
+// W5-14 S1/t: the values of the flows of ops/convert_from_flow_clocks.onsa, through the generated `render` (spec
+// 11.6: `render` takes the `Config` of the `init` inputs and the `Params` of the `block` inputs only when the flow has
+// them, then the inputs, then the sample rate). The values are worked out by hand. A case in the form of 11.6 waits
+// for the generated API (W7-03: the render of today takes the `Config` and the `Params` always).
+
+const VOICES: U32 = 4
+
+pub flow scaled(x: F32 at sample, n: U32 at block) -> F32 at sample {
+  x * F32.round_from(n)
+}
+
+pub flow lifted(x: F32 at sample, n: U32 at block) -> F32 at sample {
+  let c = F32.round_from(n)
+  let k = c at sample
+  x + k
+}
+
+pub flow lifted_argument(x: F32 at sample, n: U32 at block) -> F32 at sample {
+  x + F32.round_from(n at sample)
+}
+
+pub flow offset(x: F32 at sample, k: I32 at init) -> F32 at sample {
+  x + F32.round_from(k)
+}
+
+pub flow quantized(x: F32 at sample) -> F32 at sample {
+  F32.round_from(I32.trunc_sat_from(x))
+}
+
+pub flow index_of(k: I32 at sample) -> U8 at sample {
+  match U8.narrow_from(k) {
+    Some(v) => v,
+    None => 255,
+  }
+}
+
+pub flow fan(x: F32 at sample) -> F32 at sample {
+  let ws = par~ i in 0 ..< VOICES {
+    x * F32.round_from(i)
+  }
+  ws[0] + ws[1] + ws[2] + ws[3]
+}
+
+pub flow wide(x: F64 at sample) -> F32 at sample {
+  F32.round_from(x)
+}
+
+test "a conversion of a block value is used in a sample expression" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o            = scaled.render(scaled.Params { n: 3 }, xs, 48000.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+  assert o.out[2] == 9.0
+}
+
+test "at lifts a name that holds a converted block value, and the argument of a conversion" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let a            = lifted.render(lifted.Params { n: 4 }, xs, 48000.0)
+  assert a.out[0] == 5.0
+  assert a.out[1] == 6.0
+  let b = lifted_argument.render(lifted_argument.Params { n: 4 }, xs, 48000.0)
+  assert b.out[0] == 5.0
+  assert b.out[1] == 6.0
+}
+
+test "a conversion of an init value is used in a sample expression" {
+  let xs: [F32; 2] = [0.5, 1.5]
+  let o            = offset.render(offset.Config { k: -3 }, xs, 48000.0)
+  assert o.out[0] == -2.5
+  assert o.out[1] == -1.5
+}
+
+test "a conversion of a sample value is evaluated at every sample" {
+  let xs: [F32; 4] = [2.7, -2.7, 3.0e10, F32.NAN]
+  let o            = quantized.render(xs, 48000.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == -2.0
+  assert o.out[2] == 2147483648.0
+  assert o.out[3] == 0.0
+}
+
+test "narrow_from in a flow body gives an Option that a match reads at every sample" {
+  let ks: [I32; 4] = [0, 255, 256, -1]
+  let o            = index_of.render(ks, 48000.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 255
+  assert o.out[2] == 255
+  assert o.out[3] == 255
+}
+
+test "a par~ copies a body that converts its index" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o            = fan.render(xs, 48000.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 12.0
+}
+
+test "round_from of an F64 sample is rounded to the nearest even binary32" {
+  let xs: [F64; 3] = [16777217.0, 16777219.0, 0.5]
+  let o            = wide.render(xs, 48000.0)
+  assert o.out[0] == 16777216.0
+  assert o.out[1] == 16777220.0
+  assert o.out[2] == 0.5
+}

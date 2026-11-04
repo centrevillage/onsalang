@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+
+// W5-14 S1/t: a float literal as the argument of a conversion function: its type is one of the floats and no rule
+// decides which (spec 4.7: a float literal that is still open at the end of the function is E0405, in the place of
+// the literal). `F32.round_from(2.5)` is the form (a source of F32 would be the same type and a source of F64 is a
+// conversion, so the type of the literal is open); the cut of a float has the same open type. One function for each
+// form (P-01).
+
+pub fn round_literal() -> F32 {
+  F32.round_from(2.5) //~ E0405
+}
+
+pub fn cut_literal() -> I32 {
+  I32.trunc_from(2.5) //~ E0405
+}
+
+pub fn cut_sat_literal() -> U8 {
+  U8.trunc_sat_from(0.5) //~ E0405
+}

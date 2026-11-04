@@ -129,10 +129,19 @@ impl<'a> Checker<'a> {
                 let params: Vec<(Mode, TyId)> =
                     f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, &targs))).collect();
                 let ret = self.a.types.subst(f.ret, &targs);
-                if let Some(exp) = expected {
+                // A conversion is judged by its source, which is not in its
+                // result, before the result meets `expected` (§3.3, S-231).
+                let conversion = crate::prim::conversion_target(self.a, d);
+                if let (Some(exp), None) = (expected, conversion) {
                     self.unify_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, span)?;
+                if let Some(to) = conversion {
+                    self.conversion_use(name.span, targs[0], to)?;
+                    if let Some(exp) = expected {
+                        self.unify_at(span, ret, exp)?;
+                    }
+                }
                 // Of std's `impl` of `Buf` (`Buf.zeroed`), the requirements
                 // are its element's (§4.5), as of a `Buf` written (R-351).
                 let element = self.a.self_ty_of(d).filter(|&t| matches!(self.ty(t), Ty::Builtin(BuiltinTy::Buf, _)));

@@ -1,0 +1,203 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4"]
+
+// W5-14 S1/t: the values of `narrow_from` for the integer pairs that `as` cannot write (spec 3.3: the same width
+// with the other sign, and every narrowing). The result is `Some(x)` when the value fits the target and `None`
+// when it does not (3.4). For each target the checked values are its two limits, the values just beyond them,
+// 0 and -1, and the limits of the source, each only when the source type can hold it. The helpers only give a
+// literal its type.
+
+fn s_i8(v: I8) -> I8 {
+  v
+}
+
+fn s_i16(v: I16) -> I16 {
+  v
+}
+
+fn s_i32(v: I32) -> I32 {
+  v
+}
+
+fn s_i64(v: I64) -> I64 {
+  v
+}
+
+fn s_u8(v: U8) -> U8 {
+  v
+}
+
+fn s_u16(v: U16) -> U16 {
+  v
+}
+
+fn s_u32(v: U32) -> U32 {
+  v
+}
+
+fn s_u64(v: U64) -> U64 {
+  v
+}
+
+test "I8.narrow_from" {
+  // from I16
+  assert I8.narrow_from(s_i16(127)) == Some(127)
+  assert I8.narrow_from(s_i16(128)) == None
+  assert I8.narrow_from(s_i16(-128)) == Some(-128)
+  assert I8.narrow_from(s_i16(-129)) == None
+  assert I8.narrow_from(s_i16(0)) == Some(0)
+  assert I8.narrow_from(s_i16(-1)) == Some(-1)
+  assert I8.narrow_from(s_i16(32767)) == None
+  assert I8.narrow_from(s_i16(-32768)) == None
+  // from U8
+  assert I8.narrow_from(s_u8(127)) == Some(127)
+  assert I8.narrow_from(s_u8(128)) == None
+  assert I8.narrow_from(s_u8(0)) == Some(0)
+  assert I8.narrow_from(s_u8(255)) == None
+  // from U32
+  assert I8.narrow_from(s_u32(127)) == Some(127)
+  assert I8.narrow_from(s_u32(128)) == None
+  assert I8.narrow_from(s_u32(0)) == Some(0)
+  assert I8.narrow_from(s_u32(4294967295)) == None
+  // from I64
+  assert I8.narrow_from(s_i64(127)) == Some(127)
+  assert I8.narrow_from(s_i64(128)) == None
+  assert I8.narrow_from(s_i64(-128)) == Some(-128)
+  assert I8.narrow_from(s_i64(-129)) == None
+  assert I8.narrow_from(s_i64(0)) == Some(0)
+  assert I8.narrow_from(s_i64(-1)) == Some(-1)
+  assert I8.narrow_from(s_i64(9223372036854775807)) == None
+  assert I8.narrow_from(s_i64(I64.MIN)) == None
+}
+
+test "I16.narrow_from" {
+  // from I32
+  assert I16.narrow_from(s_i32(32767)) == Some(32767)
+  assert I16.narrow_from(s_i32(32768)) == None
+  assert I16.narrow_from(s_i32(-32768)) == Some(-32768)
+  assert I16.narrow_from(s_i32(-32769)) == None
+  assert I16.narrow_from(s_i32(0)) == Some(0)
+  assert I16.narrow_from(s_i32(-1)) == Some(-1)
+  assert I16.narrow_from(s_i32(2147483647)) == None
+  assert I16.narrow_from(s_i32(-2147483648)) == None
+  // from U16
+  assert I16.narrow_from(s_u16(32767)) == Some(32767)
+  assert I16.narrow_from(s_u16(32768)) == None
+  assert I16.narrow_from(s_u16(0)) == Some(0)
+  assert I16.narrow_from(s_u16(65535)) == None
+  // from U64
+  assert I16.narrow_from(s_u64(32767)) == Some(32767)
+  assert I16.narrow_from(s_u64(32768)) == None
+  assert I16.narrow_from(s_u64(0)) == Some(0)
+  assert I16.narrow_from(s_u64(18446744073709551615)) == None
+}
+
+test "I32.narrow_from" {
+  // from I64
+  assert I32.narrow_from(s_i64(2147483647)) == Some(2147483647)
+  assert I32.narrow_from(s_i64(2147483648)) == None
+  assert I32.narrow_from(s_i64(-2147483648)) == Some(-2147483648)
+  assert I32.narrow_from(s_i64(-2147483649)) == None
+  assert I32.narrow_from(s_i64(0)) == Some(0)
+  assert I32.narrow_from(s_i64(-1)) == Some(-1)
+  assert I32.narrow_from(s_i64(9223372036854775807)) == None
+  assert I32.narrow_from(s_i64(I64.MIN)) == None
+  // from U32
+  assert I32.narrow_from(s_u32(2147483647)) == Some(2147483647)
+  assert I32.narrow_from(s_u32(2147483648)) == None
+  assert I32.narrow_from(s_u32(0)) == Some(0)
+  assert I32.narrow_from(s_u32(4294967295)) == None
+  // from U64
+  assert I32.narrow_from(s_u64(2147483647)) == Some(2147483647)
+  assert I32.narrow_from(s_u64(2147483648)) == None
+  assert I32.narrow_from(s_u64(0)) == Some(0)
+  assert I32.narrow_from(s_u64(18446744073709551615)) == None
+}
+
+test "I64.narrow_from" {
+  // from U64
+  assert I64.narrow_from(s_u64(9223372036854775807)) == Some(9223372036854775807)
+  assert I64.narrow_from(s_u64(9223372036854775808)) == None
+  assert I64.narrow_from(s_u64(0)) == Some(0)
+  assert I64.narrow_from(s_u64(18446744073709551615)) == None
+}
+
+test "U8.narrow_from" {
+  // from I8
+  assert U8.narrow_from(s_i8(0)) == Some(0)
+  assert U8.narrow_from(s_i8(-1)) == None
+  assert U8.narrow_from(s_i8(127)) == Some(127)
+  assert U8.narrow_from(s_i8(-128)) == None
+  // from I16
+  assert U8.narrow_from(s_i16(255)) == Some(255)
+  assert U8.narrow_from(s_i16(256)) == None
+  assert U8.narrow_from(s_i16(0)) == Some(0)
+  assert U8.narrow_from(s_i16(-1)) == None
+  assert U8.narrow_from(s_i16(32767)) == None
+  assert U8.narrow_from(s_i16(-32768)) == None
+  // from U16
+  assert U8.narrow_from(s_u16(255)) == Some(255)
+  assert U8.narrow_from(s_u16(256)) == None
+  assert U8.narrow_from(s_u16(0)) == Some(0)
+  assert U8.narrow_from(s_u16(65535)) == None
+  // from U64
+  assert U8.narrow_from(s_u64(255)) == Some(255)
+  assert U8.narrow_from(s_u64(256)) == None
+  assert U8.narrow_from(s_u64(0)) == Some(0)
+  assert U8.narrow_from(s_u64(18446744073709551615)) == None
+}
+
+test "U16.narrow_from" {
+  // from I16
+  assert U16.narrow_from(s_i16(0)) == Some(0)
+  assert U16.narrow_from(s_i16(-1)) == None
+  assert U16.narrow_from(s_i16(32767)) == Some(32767)
+  assert U16.narrow_from(s_i16(-32768)) == None
+  // from I32
+  assert U16.narrow_from(s_i32(65535)) == Some(65535)
+  assert U16.narrow_from(s_i32(65536)) == None
+  assert U16.narrow_from(s_i32(0)) == Some(0)
+  assert U16.narrow_from(s_i32(-1)) == None
+  assert U16.narrow_from(s_i32(2147483647)) == None
+  assert U16.narrow_from(s_i32(-2147483648)) == None
+  // from U32
+  assert U16.narrow_from(s_u32(65535)) == Some(65535)
+  assert U16.narrow_from(s_u32(65536)) == None
+  assert U16.narrow_from(s_u32(0)) == Some(0)
+  assert U16.narrow_from(s_u32(4294967295)) == None
+}
+
+test "U32.narrow_from" {
+  // from I32
+  assert U32.narrow_from(s_i32(0)) == Some(0)
+  assert U32.narrow_from(s_i32(-1)) == None
+  assert U32.narrow_from(s_i32(2147483647)) == Some(2147483647)
+  assert U32.narrow_from(s_i32(-2147483648)) == None
+  // from I64
+  assert U32.narrow_from(s_i64(4294967295)) == Some(4294967295)
+  assert U32.narrow_from(s_i64(4294967296)) == None
+  assert U32.narrow_from(s_i64(0)) == Some(0)
+  assert U32.narrow_from(s_i64(-1)) == None
+  assert U32.narrow_from(s_i64(9223372036854775807)) == None
+  assert U32.narrow_from(s_i64(I64.MIN)) == None
+  // from U64
+  assert U32.narrow_from(s_u64(4294967295)) == Some(4294967295)
+  assert U32.narrow_from(s_u64(4294967296)) == None
+  assert U32.narrow_from(s_u64(0)) == Some(0)
+  assert U32.narrow_from(s_u64(18446744073709551615)) == None
+}
+
+test "U64.narrow_from" {
+  // from I8
+  assert U64.narrow_from(s_i8(0)) == Some(0)
+  assert U64.narrow_from(s_i8(-1)) == None
+  assert U64.narrow_from(s_i8(127)) == Some(127)
+  assert U64.narrow_from(s_i8(-128)) == None
+  // from I64
+  assert U64.narrow_from(s_i64(0)) == Some(0)
+  assert U64.narrow_from(s_i64(-1)) == None
+  assert U64.narrow_from(s_i64(9223372036854775807)) == Some(9223372036854775807)
+  assert U64.narrow_from(s_i64(I64.MIN)) == None
+}

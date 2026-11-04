@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§3.3", "§6.1", "§4.7"]
+
+// W5-14 S1/t2 (S-885): the functions of the pairs that `as` cannot write are values like any associated function
+// (6.1), and the code is clean: `F32.round_from` takes `I32`, `F64` and `U32` (3.3: `I32` -> `F32`, `F64` -> `F32`,
+// `U32` -> `F32`). The mode is check because the run of an associated function as a value is E0200 in this version.
+// The pairs that `as` writes are in negative/convert_from_value_form.onsa.
+
+use std.array
+
+pub fn binding_called_later(k: I32) -> F32 {
+  let g = F32.round_from
+  g.(k)
+}
+
+pub fn typed_binding(x: F64) -> F32 {
+  let g: fn(F64) -> F32 = F32.round_from
+  g.(x)
+}
+
+pub fn parenthesized_value(k: I32) -> F32 {
+  (F32.round_from).(k)
+}
+
+pub fn passed_to_from_fn() -> [F32; 4] {
+  array.from_fn(F32.round_from)
+}
+
+pub fn narrow_value(n: I32) -> Option[I8] {
+  let g: fn(I32) -> Option[I8] = I8.narrow_from
+  g.(n)
+}

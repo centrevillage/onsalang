@@ -222,6 +222,12 @@ impl<'a> Checker<'a> {
                         if let Some(exp) = expected {
                             self.unify_at(name.span, fty, exp)?;
                         }
+                        // The value of a conversion function is judged as a
+                        // call of it is (`F64.round_from` at `fn(F32) -> F64`,
+                        // §3.3, S-885).
+                        if let Some(to) = crate::prim::conversion_target(self.a, d) {
+                            self.conversion_use(name.span, args[0], to)?;
+                        }
                         let inst = self.finish_instance(d, args, span)?;
                         self.info.targets.insert(e, Target::Fn { def: d, inst });
                         Ok(Some(fty))

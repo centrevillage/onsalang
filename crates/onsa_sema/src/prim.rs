@@ -241,8 +241,7 @@ impl Prim {
     /// The row of the `std` `target` declaration this primitive instantiates
     /// ([`PrimRow::instantiate`] the other way), without a `_`, so that a new
     /// primitive must say which declaration gives it. Of one Core makes
-    /// itself, the family, which may have no row (`U32` to `F64` of a flow's
-    /// rate, the float `%`).
+    /// itself, the family, which may have no row (the float `%`).
     pub fn row_prim(&self) -> PrimRow {
         match self {
             Prim::Math(f, _) => PrimRow::Math(*f),
@@ -254,9 +253,8 @@ impl Prim {
             Prim::FromBits(k) => PrimRow::FromBits(*k),
             Prim::NarrowParts { .. } => PrimRow::NarrowParts,
             Prim::Parts(op, _) => PrimRow::Parts(*op),
-            &Prim::IntToFloat { from, to } => PrimRow::IntToFloat { from, to },
-            &Prim::FloatToFloat { from, to } => PrimRow::FloatToFloat { from, to },
-            &Prim::TruncToInt { from, to, sat } => PrimRow::TruncToInt { from, to, sat },
+            &Prim::IntToFloat { to, .. } | &Prim::FloatToFloat { to, .. } => PrimRow::RoundFrom(to),
+            &Prim::TruncToInt { to, sat, .. } => PrimRow::TruncFrom { to, sat },
             Prim::ToBits(k) => PrimRow::ToBits(*k),
             Prim::DivEuclid(k) => PrimRow::DivEuclid(*k),
             Prim::RemEuclid(k) => PrimRow::RemEuclid(*k),
@@ -353,6 +351,15 @@ pub enum PrimRow {
     /// each type, so that a primitive leads back to its own
     /// ([`Prim::std_name`]); the `Self` a use passes is that type.
     FromBits(FloatKind),
+    /// `F32.round_from` / `F64.round_from` at any number: its `Self` is the
+    /// type of its row, its type argument the source (§3.3).
+    RoundFrom(FloatKind),
+    /// `I32.trunc_from` / `I32.trunc_sat_from` and the others of the integers
+    /// at a float.
+    TruncFrom {
+        to: IntKind,
+        sat: bool,
+    },
     /// The methods of the scalars (§3.3, §3.4), as their [`Prim`]s.
     IntToFloat {
         from: IntKind,
@@ -415,6 +422,15 @@ impl PrimRow {
             },
             // A member: its `Self` is the type of its row.
             PrimRow::FromBits(k) => own(args, Scalar::Float(k), Prim::FromBits(k)),
+            PrimRow::RoundFrom(to) => match *args {
+                [Scalar::Float(this), Scalar::Int(from)] if this == to => Some(Prim::IntToFloat { from, to }),
+                [Scalar::Float(this), Scalar::Float(from)] if this == to => Some(Prim::FloatToFloat { from, to }),
+                _ => None,
+            },
+            PrimRow::TruncFrom { to, sat } => match args {
+                &[Scalar::Int(this), Scalar::Float(from)] if this == to => Some(Prim::TruncToInt { from, to, sat }),
+                _ => None,
+            },
             PrimRow::IntToFloat { from, to } => own(args, Scalar::Int(from), Prim::IntToFloat { from, to }),
             PrimRow::FloatToFloat { from, to } => own(args, Scalar::Float(from), Prim::FloatToFloat { from, to }),
             PrimRow::TruncToInt { from, to, sat } => own(args, Scalar::Float(from), Prim::TruncToInt { from, to, sat }),
@@ -496,6 +512,7 @@ pub fn rows() -> &'static [Row] {
         for k in FLOATS {
             v.push(member(k.name(), "from_bits", PrimRow::FromBits(k), 1));
             v.push(member(k.name(), "to_bits", PrimRow::ToBits(k), 0));
+            v.push(member(k.name(), "round_from", PrimRow::RoundFrom(k), 1));
             for to in INTS {
                 for (sat, sfx) in [(false, ""), (true, "_sat")] {
                     let name = format!("trunc_{}{sfx}", to.name().to_lowercase());
@@ -508,6 +525,8 @@ pub fn rows() -> &'static [Row] {
         for k in INTS {
             v.push(member(k.name(), "div_euclid", PrimRow::DivEuclid(k), 1));
             v.push(member(k.name(), "rem_euclid", PrimRow::RemEuclid(k), 1));
+            v.push(member(k.name(), "trunc_from", PrimRow::TruncFrom { to: k, sat: false }, 1));
+            v.push(member(k.name(), "trunc_sat_from", PrimRow::TruncFrom { to: k, sat: true }, 1));
         }
         // The members of `Span[T]` (§5.3).
         let span = [
@@ -530,6 +549,17 @@ pub fn rows() -> &'static [Row] {
         }
         v
     })
+}
+
+/// The associated functions of the number types that convert to their `Self`
+/// (§3.3, S-231).
+const CONVERSIONS: [&str; 4] = ["round_from", "trunc_from", "trunc_sat_from", "narrow_from"];
+
+/// The type the `std` declaration `def` converts to, when it is one of
+/// [`CONVERSIONS`]: what `body/conversions.rs` judges a use of.
+pub(crate) fn conversion_target(a: &Analysis, def: DefId) -> Option<TyId> {
+    let d = a.def(def);
+    (a.modules.is_std(d.module) && CONVERSIONS.contains(&d.name.as_str())).then(|| row_self(a, def)).flatten()
 }
 
 /// The module `std.math` (§3.4), by the path of the rows of [`MathFn`]:

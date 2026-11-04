@@ -36,6 +36,10 @@ pub(crate) enum DeferredKind {
     /// type is decided (E0401 at the operator, §4.7, §6.3, S-235, R-55). The judgment is
     /// [`Checker::operator_verdict`], the same as for an operand decided at the operator.
     Operator { op: OpNeed },
+    /// The conversion function to `to` called on a value of the type `ty`, which a
+    /// statement decides (E0413, §3.3, S-231). The judgment is
+    /// [`Checker::conversion_verdict`], as of a source decided at the call.
+    Conversion { to: TyId },
     /// A float literal `lit`: its value once the type is known (E0408, §2.4,
     /// R-45, S-211: not finite, or a literal that is not 0 rounds to 0), and
     /// E0405 when its type is still open at the end.
@@ -70,12 +74,13 @@ pub(crate) enum OpNeed {
 const GENERIC_VIEW: &str =
     "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3)";
 
-/// What an operator requires of a type ([`Checker::operator_verdict`]).
+/// What an operator requires of a type ([`Checker::operator_verdict`]), and a
+/// conversion function ([`Checker::conversion_verdict`]).
 pub(crate) enum Verdict {
     Met,
     /// A variable is left whose type decides it.
     Wait,
-    /// The message of the E0401.
+    /// The message of the E0401, of the E0413.
     Unmet(String),
 }
 
@@ -268,7 +273,9 @@ impl<'a> Checker<'a> {
             DeferredKind::IntLit { .. } | DeferredKind::FloatLit { .. } => {
                 self.infer.is_unresolved(&self.a.types, item.ty)
             }
-            DeferredKind::Require { .. } | DeferredKind::Escape { .. } => self.infer.has_vars(&self.a.types, item.ty),
+            DeferredKind::Require { .. } | DeferredKind::Escape { .. } | DeferredKind::Conversion { .. } => {
+                self.infer.has_vars(&self.a.types, item.ty)
+            }
             // A literal variable itself is judged by its kind ([`Checker::operator_verdict`]).
             DeferredKind::Operator { .. } => {
                 !self.infer.is_unresolved(&self.a.types, item.ty) && self.infer.has_vars(&self.a.types, item.ty)
@@ -294,6 +301,15 @@ impl<'a> Checker<'a> {
                     // The statement that decided the type, as for E0416; not the default (its
                     // note speaks of a bound).
                     let shown = self.display(r);
+                    Look::Fail(self.decided_note(d, item.ty, &shown, false))
+                }
+            },
+            // As above: a variable left at the end is reported as a variable.
+            DeferredKind::Conversion { to } => match self.conversion_verdict(r, *to) {
+                Verdict::Met => Look::Done,
+                Verdict::Wait => Look::Wait,
+                Verdict::Unmet(why) => {
+                    let (d, shown) = (self.conversion_error(item.span, why), self.display(r));
                     Look::Fail(self.decided_note(d, item.ty, &shown, false))
                 }
             },

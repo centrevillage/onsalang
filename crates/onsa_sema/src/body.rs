@@ -36,6 +36,7 @@ use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 
 pub(crate) mod bounds;
 mod calls;
+mod conversions;
 mod entry;
 mod expressions;
 mod generics;

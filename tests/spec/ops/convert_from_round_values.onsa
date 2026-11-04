@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4"]
+
+// W5-14 S1/t: the values of `F32.round_from` and `F64.round_from` for every source that `as` cannot write (spec
+// 3.3: F64 -> F32, I32 U32 I64 U64 -> F32, I64 U64 -> F64), rounded to the nearest even value (3.4). The pairs `as`
+// writes have no `round_from` (negative/convert_from_as_pairs_round.onsa). Each expected value is worked out
+// from the rule: a value between two neighbours goes to the nearer one, and the exact middle goes to the neighbour
+// with the even last bit. The helpers only give a literal its type.
+
+fn s_f64(v: F64) -> F64 {
+  v
+}
+
+fn s_i32(v: I32) -> I32 {
+  v
+}
+
+fn s_u32(v: U32) -> U32 {
+  v
+}
+
+fn s_i64(v: I64) -> I64 {
+  v
+}
+
+fn s_u64(v: U64) -> U64 {
+  v
+}
+
+fn is_nan32(x: F32) -> Bool {
+  x != x
+}
+
+test "F32.round_from of an F64 rounds to the nearest even value" {
+  // 16777217.0: the middle of 2^24 and 2^24 + 2 goes to the even 2^24
+  assert F32.round_from(s_f64(16777217.0)) == 16777216.0
+  // 16777219.0: the middle of 16777218 and 16777220 goes to the even 16777220
+  assert F32.round_from(s_f64(16777219.0)) == 16777220.0
+  // 16777217.000000002: just above the middle goes up
+  assert F32.round_from(s_f64(16777217.000000002)) == 16777218.0
+  // 16777216.999999996: just below the middle goes down
+  assert F32.round_from(s_f64(16777216.999999996)) == 16777216.0
+  // -16777217.0: the sign is kept
+  assert F32.round_from(s_f64(-16777217.0)) == -16777216.0
+  // -16777219.0: the sign is kept
+  assert F32.round_from(s_f64(-16777219.0)) == -16777220.0
+}
+
+test "F32.round_from of an F64 that is not an integer keeps the nearest binary32" {
+  assert F32.round_from(s_f64(0.1)).to_bits() == 0x3DCCCCCD
+  assert F32.round_from(s_f64(-0.1)).to_bits() == 0xBDCCCCCD
+  assert F32.round_from(s_f64(0.5)) == 0.5
+  assert F32.round_from(s_f64(1.0)) == 1.0
+}
+
+test "F32.round_from of an F64 keeps the sign of a zero" {
+  assert F32.round_from(s_f64(0.0)).to_bits() == 0
+  assert F32.round_from(s_f64(-0.0)).to_bits() == 0x80000000
+}
+
+test "F32.round_from of an F64 beyond the range is an infinity, and a NaN stays a NaN" {
+  assert F32.round_from(s_f64(1.0e300)) == F32.INFINITY
+  assert F32.round_from(s_f64(-1.0e300)) == -F32.INFINITY
+  assert F32.round_from(F64.INFINITY) == F32.INFINITY
+  assert F32.round_from(-F64.INFINITY) == -F32.INFINITY
+  assert is_nan32(F32.round_from(F64.NAN))
+  assert F32.round_from(s_f64(1.0e39)) == F32.INFINITY
+}
+
+test "F32.round_from of the largest binary32 as an F64 is exact" {
+  let m: F64 = F32.MAX as F64
+  assert F32.round_from(m) == F32.MAX
+  assert F32.round_from(-m) == -F32.MAX
+}
+
+test "F32.round_from of an I32" {
+  assert F32.round_from(s_i32(0)) == 0.0 // zero is +0.0
+  assert F32.round_from(s_i32(16777216)) == 16777216.0
+  assert F32.round_from(s_i32(16777217)) == 16777216.0 // the middle goes to the even one
+  assert F32.round_from(s_i32(16777218)) == 16777218.0 // exact
+  assert F32.round_from(s_i32(16777219)) == 16777220.0 // the middle goes to the even one
+  assert F32.round_from(s_i32(-16777217)) == -16777216.0
+  assert F32.round_from(s_i32(-16777219)) == -16777220.0
+  assert F32.round_from(s_i32(2147483647)) == 2147483648.0   // I32.MAX is 2^31
+  assert F32.round_from(s_i32(-2147483648)) == -2147483648.0 // I32.MIN is exact
+}
+
+test "F32.round_from of the I32 zero is the positive zero" {
+  assert F32.round_from(s_i32(0)).to_bits() == 0
+}
+
+test "F32.round_from of a U32" {
+  assert F32.round_from(s_u32(0)) == 0.0
+  assert F32.round_from(s_u32(16777217)) == 16777216.0     // the middle goes to the even one
+  assert F32.round_from(s_u32(4294967040)) == 4294967040.0 // 2^32 - 256 is exact
+  assert F32.round_from(s_u32(4294967168)) == 4294967296.0 // the middle of 2^32 - 256 (odd) and 2^32 goes to 2^32
+  assert F32.round_from(s_u32(4294967295)) == 4294967296.0 // U32.MAX is 2^32
+}
+
+test "F32.round_from of an I64" {
+  assert F32.round_from(s_i64(1099511627777)) == 1099511627776.0               // below the middle
+  assert F32.round_from(s_i64(1099511693312)) == 1099511627776.0               // the middle goes to the even 2^40
+  assert F32.round_from(s_i64(1099511693313)) == 1099511758848.0               // above the middle goes up
+  assert F32.round_from(s_i64(1152921573326323713)) == 1152921642045800448.0   // above the middle of 2^60 and 2^60 + 2^37: the value of the integer, not of its F64
+  assert F32.round_from(s_i64(-1152921573326323713)) == -1152921642045800448.0 // the same with the sign
+  assert F32.round_from(s_i64(9223372036854775807)) == 9223372036854775808.0   // I64.MAX is 2^63
+  assert F32.round_from(s_i64(I64.MIN)) == -9223372036854775808.0              // I64.MIN is exact
+}
+
+test "F32.round_from of a U64" {
+  assert F32.round_from(s_u64(0)) == 0.0
+  assert F32.round_from(s_u64(1152921573326323712)) == 1152921504606846976.0   // the middle goes to the even 2^60
+  assert F32.round_from(s_u64(1152921573326323713)) == 1152921642045800448.0   // above the middle goes up
+  assert F32.round_from(s_u64(18446744073709551615)) == 18446744073709551616.0 // U64.MAX is 2^64
+}
+
+test "F64.round_from of an I64" {
+  assert F64.round_from(s_i64(0)) == 0.0
+  assert F64.round_from(s_i64(9007199254740993)) == 9007199254740992.0       // the middle goes to the even 2^53
+  assert F64.round_from(s_i64(9007199254740995)) == 9007199254740996.0       // the middle goes to the even 2^53 + 4
+  assert F64.round_from(s_i64(-9007199254740993)) == -9007199254740992.0     // the same with the sign
+  assert F64.round_from(s_i64(9223372036854775807)) == 9223372036854775808.0 // I64.MAX is 2^63
+  assert F64.round_from(s_i64(I64.MIN)) == -9223372036854775808.0            // I64.MIN is exact
+}
+
+test "F64.round_from of a U64" {
+  assert F64.round_from(s_u64(0)) == 0.0
+  assert F64.round_from(s_u64(9007199254740993)) == 9007199254740992.0         // the middle goes to the even 2^53
+  assert F64.round_from(s_u64(9223372036854776832)) == 9223372036854775808.0   // the middle goes to the even 2^63
+  assert F64.round_from(s_u64(9223372036854776833)) == 9223372036854777856.0   // above the middle goes up
+  assert F64.round_from(s_u64(18446744073709551615)) == 18446744073709551616.0 // U64.MAX is 2^64
+}
+
+test "F64.round_from of an integer zero is the positive zero" {
+  assert F64.round_from(s_i64(0)).to_bits() == 0
+  assert F64.round_from(s_u64(0)).to_bits() == 0
+}

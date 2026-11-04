@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.5", "§18.1"]
+
+// W5-14 S1/t2 (S-883): the judgement of a pair that `as` writes comes before the check of the declared bound
+// (`trunc_from[S: Float]`, `trunc_sat_from[S: Float]`, `narrow_from[S: Int]`, 4.5) and before the check of the
+// type of the result (3.3: "この判定は、宣言の境界（§4.5）と返り値の型の検査より前に行う"). So the code of each call is
+// E0413 and never E0416 (the bound) or E0401 (the place). One function for each call (P-01). This unit has no
+// candidate that the case compares, so `fixes` is not written.
+
+pub fn trunc_widening(n: I32) -> I64 {
+  I64.trunc_from(n) //~ E0413
+}
+
+pub fn trunc_sat_widening(n: I32) -> I64 {
+  I64.trunc_sat_from(n) //~ E0413
+}
+
+pub fn trunc_unsigned_widening(u: U16) -> U32 {
+  U32.trunc_from(u) //~ E0413
+}
+
+pub fn trunc_same_type(n: I32) -> I32 {
+  I32.trunc_from(n) //~ E0413
+}
+
+pub fn trunc_sat_same_type(b: U8) -> U8 {
+  U8.trunc_sat_from(b) //~ E0413
+}
+
+pub fn trunc_bound_and_place(n: I32) -> F32 {
+  I64.trunc_from(n) //~ E0413
+}
+
+pub fn trunc_in_a_binding(n: I32) -> F32 {
+  let y: F32 = I64.trunc_sat_from(n) //~ E0413
+  y
+}

@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§18.1"]
+
+// W5-14 S1/t: `narrow_from` has no form for a pair that `as` writes (spec 3.3: an integer widened to the same
+// sign, and an unsigned integer widened to a signed one). Every such pair of the table is a function of its own
+// (P-01); the same type is in convert_from_same_type.onsa. The narrowing pairs are in
+// ops/convert_from_narrow_values.onsa. This unit has no candidate, so `fixes` is not written.
+
+pub fn i16_from_i8(x: I8) -> Option[I16] {
+  I16.narrow_from(x) //~ E0413
+}
+
+pub fn i16_from_u8(x: U8) -> Option[I16] {
+  I16.narrow_from(x) //~ E0413
+}
+
+pub fn i32_from_i8(x: I8) -> Option[I32] {
+  I32.narrow_from(x) //~ E0413
+}
+
+pub fn i32_from_i16(x: I16) -> Option[I32] {
+  I32.narrow_from(x) //~ E0413
+}
+
+pub fn i32_from_u8(x: U8) -> Option[I32] {
+  I32.narrow_from(x) //~ E0413
+}
+
+pub fn i32_from_u16(x: U16) -> Option[I32] {
+  I32.narrow_from(x) //~ E0413
+}
+
+pub fn i64_from_i8(x: I8) -> Option[I64] {
+  I64.narrow_from(x) //~ E0413
+}
+
+pub fn i64_from_i16(x: I16) -> Option[I64] {
+  I64.narrow_from(x) //~ E0413
+}
+
+pub fn i64_from_i32(x: I32) -> Option[I64] {
+  I64.narrow_from(x) //~ E0413
+}
+
+pub fn i64_from_u8(x: U8) -> Option[I64] {
+  I64.narrow_from(x) //~ E0413
+}
+
+pub fn i64_from_u16(x: U16) -> Option[I64] {
+  I64.narrow_from(x) //~ E0413
+}
+
+pub fn i64_from_u32(x: U32) -> Option[I64] {
+  I64.narrow_from(x) //~ E0413
+}
+
+pub fn u16_from_u8(x: U8) -> Option[U16] {
+  U16.narrow_from(x) //~ E0413
+}
+
+pub fn u32_from_u8(x: U8) -> Option[U32] {
+  U32.narrow_from(x) //~ E0413
+}
+
+pub fn u32_from_u16(x: U16) -> Option[U32] {
+  U32.narrow_from(x) //~ E0413
+}
+
+pub fn u64_from_u8(x: U8) -> Option[U64] {
+  U64.narrow_from(x) //~ E0413
+}
+
+pub fn u64_from_u16(x: U16) -> Option[U64] {
+  U64.narrow_from(x) //~ E0413
+}
+
+pub fn u64_from_u32(x: U32) -> Option[U64] {
+  U64.narrow_from(x) //~ E0413
+}

@@ -1,0 +1,21 @@
+// W5-14 S1/t: the conversions of a module that main.onsa imports (spec 3.3, 15.1): generic and concrete
+// functions, an `rt` function and a constant that is a conversion of another constant.
+
+pub const CAP: F64 = 255.5
+pub const CAPPED: U8 = U8.trunc_from(CAP)
+
+pub fn to_steps[T: Float](x: T) -> U32 {
+  U32.trunc_sat_from(x)
+}
+
+pub fn widen(x: I64) -> F64 {
+  F64.round_from(x)
+}
+
+pub fn small(x: I32) -> Option[U8] {
+  U8.narrow_from(x)
+}
+
+pub rt fn cut(x: F32) -> I16 {
+  I16.trunc_sat_from(x)
+}

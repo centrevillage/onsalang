@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§18.1"]
+
+// W5-14 S1/t: the place of the E0413 of a pair that `as` writes: the name of the function (`round_from`, `narrow_from`
+// after the type and the dot). The columns are written with `@`. The spec of 3.3 does not say where the diagnostic
+// stands; this file is the only one that writes a column of the diagnostic of these pairs.
+
+pub fn position_round(y: F32) -> F64 {
+  F64.round_from(y) //~ E0413 @7
+}
+
+pub fn position_narrow(n: I32) -> Option[I64] {
+  I64.narrow_from(n) //~ E0413 @7
+}
+
+pub fn position_same(y: F32) -> F32 {
+  F32.round_from(y) //~ E0413 @7
+}
+
+type Sm = F64
+
+pub fn position_alias(y: F32) -> F64 {
+  Sm.round_from(y) //~ E0413 @6
+}
+
+fn take(v: F64) -> F64 {
+  v
+}
+
+pub fn position_argument(y: F32) -> F64 {
+  take(F64.round_from(y)) //~ E0413 @12
+}

@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§18.1"]
+
+// W5-14 S1/t: `round_from` has no form for a pair that `as` writes (spec 3.3: "変換元と変換先がどちらも具体的な型 ... で
+// `as` で書ける組には、変換の関連関数は無い (E0413)"). Every pair of the table is a function of its own (P-01):
+// the small integers into `F32` (I8 I16 U8 U16), and `F32` and the integers up to 32 bits into `F64`. The
+// call that is the error is the one of each function. The pairs `as` cannot write are in
+// ops/convert_from_round_values.onsa. This unit has no candidate, so `fixes` is not written.
+
+pub fn f32_from_i8(x: I8) -> F32 {
+  F32.round_from(x) //~ E0413
+}
+
+pub fn f32_from_i16(x: I16) -> F32 {
+  F32.round_from(x) //~ E0413
+}
+
+pub fn f32_from_u8(x: U8) -> F32 {
+  F32.round_from(x) //~ E0413
+}
+
+pub fn f32_from_u16(x: U16) -> F32 {
+  F32.round_from(x) //~ E0413
+}
+
+pub fn f64_from_f32(x: F32) -> F64 {
+  F64.round_from(x) //~ E0413
+}
+
+pub fn f64_from_i8(x: I8) -> F64 {
+  F64.round_from(x) //~ E0413
+}
+
+pub fn f64_from_i16(x: I16) -> F64 {
+  F64.round_from(x) //~ E0413
+}
+
+pub fn f64_from_i32(x: I32) -> F64 {
+  F64.round_from(x) //~ E0413
+}
+
+pub fn f64_from_u8(x: U8) -> F64 {
+  F64.round_from(x) //~ E0413
+}
+
+pub fn f64_from_u16(x: U16) -> F64 {
+  F64.round_from(x) //~ E0413
+}
+
+pub fn f64_from_u32(x: U32) -> F64 {
+  F64.round_from(x) //~ E0413
+}

@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§15.1"]
+
+// W5-14 S1/t: conversion functions across modules. `levels` converts and main converts what it returns:
+// F64 to F32 with `round_from` on the result of `widen`, an Option from another module read with `?`, and
+// a generic function of another module called with F32 and F64.
+
+use levels.{CAPPED, cut, small, to_steps, widen}
+
+fn through(n: I64) -> F32 {
+  F32.round_from(widen(n))
+}
+
+fn half(x: I32) -> Option[U8] {
+  let v = small(x)?
+  Some(v / 2)
+}
+
+test "a constant of another module is a conversion that was evaluated" {
+  assert CAPPED == 255
+}
+
+test "the result of a conversion of another module is converted again" {
+  // 2^60 + 2^36 + 1 is an F64 of 2^60 + 2^36 (the F64 spacing is 256 there), which is the middle of two binary32
+  // values, so the second rounding goes to the even 2^60: two roundings, as the code says
+  assert through(1152921573326323713) == 1152921504606846976.0
+  assert through(5) == 5.0
+}
+
+test "an Option of another module is read with a question mark" {
+  assert half(200) == Some(100)
+  assert half(300) == None
+}
+
+test "a generic function of another module converts an F32 and an F64" {
+  let a: F32 = 7.9
+  let b: F64 = 7.9
+  assert to_steps(a) == 7
+  assert to_steps(b) == 7
+  assert cut(-40000.5) == -32768
+  assert cut(1.5) == 1
+}

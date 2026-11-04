@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.4", "§18.1"]
+
+// W5-14 S1/t: a type alias is resolved before the pair is judged (spec 3.3: "型別名は解決した後の型で比べる"). A pair
+// that `as` writes is E0413 through an alias of the target, of the source, of both, and of the same type. One
+// function for each form (P-01).
+
+type Sm = F64
+type Idx = I32
+type Wide = I64
+type Tiny = I8
+type Same = Sm
+
+pub fn alias_target(y: F32) -> F64 {
+  Sm.round_from(y) //~ E0413
+}
+
+pub fn alias_source(n: Idx) -> Option[I64] {
+  I64.narrow_from(n) //~ E0413
+}
+
+pub fn alias_both(n: Idx) -> Option[Wide] {
+  Wide.narrow_from(n) //~ E0413
+}
+
+pub fn alias_same_type(y: Sm) -> F64 {
+  F64.round_from(y) //~ E0413
+}
+
+pub fn alias_of_an_alias(y: Same) -> Sm {
+  Same.round_from(y) //~ E0413
+}
+
+pub fn alias_small_source(n: Tiny) -> F32 {
+  F32.round_from(n) //~ E0413
+}

@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§2.4", "§4.5", "§4.7", "§18.1"]
+
+// W5-14 S1/t2 (S-884): the source of the call is an integer literal and its type is an open variable when the call
+// is checked. The pair is judged with the type that the end of the function gives it (3.3: "関数の終わりには既定を
+// 当てた後で判定する"), the default `I32`, so `F64.round_from(1)` is the pair `I32` -> `F64` that `as` writes: E0413.
+// The same for a literal that a `let` holds, and for the initializer of a `const`. A float literal has no default
+// (E0405, 4.7) and an integer literal that does not fit `I32` is E0408 (2.4, 4.7). One function for each form
+// (P-01). The forms that become a pair `as` cannot write are in ops/convert_from_literal_sources.onsa.
+
+pub fn float_from_the_literal() -> F64 {
+  F64.round_from(1) //~ E0413
+}
+
+pub fn float_from_the_negative_literal() -> F64 {
+  F64.round_from(-1) //~ E0413
+}
+
+pub fn narrow_into_i64() -> Option[I64] {
+  I64.narrow_from(1) //~ E0413
+}
+
+pub fn narrow_same_type() -> Option[I32] {
+  I32.narrow_from(1) //~ E0413
+}
+
+pub fn float_from_a_held_literal() -> F64 {
+  let k = 1
+  F64.round_from(k) //~ E0413
+}
+
+pub fn narrow_a_held_literal() -> Option[I64] {
+  let k = 7
+  I64.narrow_from(k) //~ E0413
+}
+
+const K: F64 = F64.round_from(1) //~ E0413
+
+pub fn float_literal_without_default() -> F64 {
+  F64.round_from(2.5) //~ E0405
+}
+
+pub fn float_literal_held() -> F64 {
+  let x = 2.5 //~ E0405
+  F64.round_from(x)
+}
+
+pub fn literal_beyond_the_default() -> F64 {
+  F64.round_from(3000000000) //~ E0408
+}
+
+pub fn narrow_literal_beyond_the_default() -> Option[I64] {
+  I64.narrow_from(4294967296) //~ E0408
+}

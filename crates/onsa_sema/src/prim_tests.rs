@@ -65,6 +65,8 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
         "F32.trunc_u8_sat",
         "F64.round_f32",
         "U64.round_f64",
+        "F64.round_from",
+        "U8.trunc_sat_from",
         "I8.div_euclid",
         "core.num.narrow_parts",
         "core.num.div_parts",
@@ -154,7 +156,12 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
             assert!(r.provides(&scalars), "`{key}` gives no primitive at {scalars:?}");
             // The primitive leads back to its row, and so to the declaration
             // an E0200 names.
-            if let Some(p) = r.instantiate(&scalars) {
+            // The rows of the conversion methods give the primitives of
+            // `round_from` and `trunc_from`, whose rows they lead back to,
+            // until W5-14 takes the methods out.
+            let method =
+                matches!(r, PrimRow::IntToFloat { .. } | PrimRow::FloatToFloat { .. } | PrimRow::TruncToInt { .. });
+            if let Some(p) = r.instantiate(&scalars).filter(|_| !method) {
                 assert_eq!(p.row_prim(), r, "`{key}` at {scalars:?}");
                 assert_eq!(p.std_name().as_deref(), Some(format!("std.{key}").as_str()));
             }
@@ -189,6 +196,17 @@ fn a_row_has_no_primitive_for_what_its_family_lacks() {
     assert!(PrimRow::Math(MathFn::Max).provides(&[Scalar::Int(IntKind::U8)]));
     assert!(PrimRow::FromFn.instantiate(&[Scalar::Other, Scalar::Other]).is_none());
     assert!(PrimRow::FromFn.provides(&[Scalar::Other, Scalar::Other]));
+    // A conversion reads its `Self`, then its source (§3.3).
+    let (f32, f64, i32) = (Scalar::Float(FloatKind::F32), Scalar::Float(FloatKind::F64), Scalar::Int(IntKind::I32));
+    let round = PrimRow::RoundFrom(FloatKind::F32);
+    assert_eq!(round.instantiate(&[f32, f32]), Some(Prim::FloatToFloat { from: FloatKind::F32, to: FloatKind::F32 }));
+    assert_eq!(round.instantiate(&[f32, i32]), Some(Prim::IntToFloat { from: IntKind::I32, to: FloatKind::F32 }));
+    assert!(!round.provides(&[f64, i32]));
+    assert!(!round.provides(&[f32, Scalar::Other]));
+    let trunc = PrimRow::TruncFrom { to: IntKind::I32, sat: true };
+    assert!(trunc.provides(&[i32, f64]));
+    assert!(!trunc.provides(&[i32, i32]));
+    assert!(!trunc.provides(&[Scalar::Int(IntKind::I8), f64]));
 }
 
 /// A std whose bound admits a type the row has no primitive for (none of the
@@ -257,7 +275,9 @@ fn the_conversion_methods_are_where_as_does_not_convert() {
                 assert!(table.contains_key(name), "`{m}` of `{}`", scalar_name(&a, from));
             }
         }
-        let conversion = |n: &str| ["narrow_", "round_", "trunc_"].iter().any(|p| n.starts_with(p));
+        // Not the associated functions, which W5-14 leaves when it takes the methods out.
+        let conversion =
+            |n: &str| !n.ends_with("_from") && ["narrow_", "round_", "trunc_"].iter().any(|p| n.starts_with(p));
         let found: BTreeMap<String, TyId> = table
             .iter()
             .filter(|(n, _)| conversion(n))
@@ -272,6 +292,37 @@ fn the_conversion_methods_are_where_as_does_not_convert() {
     }
     // 38 `narrow_*`, 7 `round_*`, 32 `trunc_*` (§3.3).
     assert_eq!((methods, casts), (77, 39));
+}
+
+/// The 26 conversion functions (§3.3, S-231): `round_from` of the floats and
+/// the three of the integers, none of them a method, each `rt`, each
+/// converting to its type; no other function of a number is one.
+#[test]
+fn the_conversion_functions_of_the_numbers_are_the_list_of_the_spec() {
+    let mut a = analyzed_std();
+    let ints: Vec<TyId> = INTS.iter().map(|&k| a.types.int(k)).collect();
+    let floats = [a.types.float(FloatKind::F32), a.types.float(FloatKind::F64)];
+    let mut found = 0;
+    for &to in ints.iter().chain(&floats) {
+        let want: &[&str] = match a.types.get(to) {
+            Ty::Float(_) => &["round_from"],
+            _ => &["narrow_from", "trunc_from", "trunc_sat_from"],
+        };
+        let table = a.modules.assoc_builtin.get(&to).expect("the members of a scalar");
+        let mut names: Vec<&str> = Vec::new();
+        for (n, &d) in table {
+            if crate::prim::conversion_target(&a, d).is_some() {
+                assert_eq!(crate::prim::conversion_target(&a, d), Some(to), "`{n}`");
+                let DefKind::Fn(f) = &a.def(d).kind else { panic!("`{n}` is no function") };
+                assert!(f.self_mode.is_none() && f.params.len() == 1 && f.rt, "the heading of `{n}`");
+                names.push(n);
+            }
+        }
+        names.sort();
+        assert_eq!(names, want, "the conversions to `{}`", scalar_name(&a, to));
+        found += names.len();
+    }
+    assert_eq!(found, 26);
 }
 
 fn scalar_name(a: &Analysis, t: TyId) -> &'static str {

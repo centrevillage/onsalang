@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.5", "§6.1"]
+
+// W5-14 S1: the value form of a conversion that `as` writes and that breaks the bound of the declaration too. The
+// pair is judged before the bound for a value as for a call (S-883, S-885). One function for each form (P-01).
+
+pub fn value_of_a_pair_against_the_bound(n: I32) -> I64 {
+  let g: fn(I32) -> I64 = I64.trunc_from //~ E0413
+  g.(n)
+}
+
+pub fn value_of_the_same_type_against_the_bound(n: I32) -> I32 {
+  let g: fn(I32) -> I32 = I32.trunc_from //~ E0413
+  g.(n)
+}

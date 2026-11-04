@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§15.1", "§18.1"]
+
+// W5-14 S1/t: a conversion function that the type does not have (spec 15.1: a name that is not found is E0302, as
+// `F32.MIN` is in 6.6). `round_from` is a function of the floats (3.3: `F32.round_from(x)` / `F64.round_from(x)`), and
+// `narrow_from`, `trunc_from` and `trunc_sat_from` are functions of the integers; the other types have no
+// such function. One function for each name (P-01).
+
+pub fn u32_round_from(x: F32) -> U32 {
+  U32.round_from(x) //~ E0302
+}
+
+pub fn i8_round_from(x: I32) -> I8 {
+  I8.round_from(x) //~ E0302
+}
+
+pub fn u64_round_from(x: I64) -> U64 {
+  U64.round_from(x) //~ E0302
+}
+
+pub fn i32_round_from(x: I64) -> I32 {
+  I32.round_from(x) //~ E0302
+}
+
+pub fn f32_trunc_from(x: F32) -> F32 {
+  F32.trunc_from(x) //~ E0302
+}
+
+pub fn f32_trunc_sat_from(x: F32) -> F32 {
+  F32.trunc_sat_from(x) //~ E0302
+}
+
+pub fn f64_trunc_from(x: F64) -> F64 {
+  F64.trunc_from(x) //~ E0302
+}
+
+pub fn f64_trunc_sat_from(x: F64) -> F64 {
+  F64.trunc_sat_from(x) //~ E0302
+}
+
+pub fn f32_narrow_from(x: I64) -> F32 {
+  F32.narrow_from(x) //~ E0302
+}
+
+pub fn f64_narrow_from(x: I64) -> F64 {
+  F64.narrow_from(x) //~ E0302
+}

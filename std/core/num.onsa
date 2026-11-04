@@ -3,6 +3,8 @@
 //! declares their members, those of the spec's lists and no other. A method
 //! converts only between the types `as` does not (§3.3); `abs`, `min`,
 //! `sqrt` and the like are the functions of `std.math`, not methods (§3.4).
+//! The associated functions `round_from`, `trunc_from`, `trunc_sat_from` and
+//! `narrow_from` convert to their `Self`, also from a type parameter (§3.3).
 //! `ZERO` and `ONE` come with the number traits (W5-05).
 //!
 //! The methods that return an `Option` are Onsa (S-71): a `target`
@@ -43,6 +45,9 @@ impl I8 {
   pub rt fn narrow_u64(self) -> Option[U64] { some_if(narrow_parts(self)) }
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -70,6 +75,9 @@ impl I16 {
   pub rt fn narrow_u64(self) -> Option[U64] { some_if(narrow_parts(self)) }
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -99,6 +107,9 @@ impl I32 {
   pub target rt fn round_f32(self) -> F32
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -130,6 +141,9 @@ impl I64 {
   pub target rt fn round_f64(self) -> F64
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -153,6 +167,9 @@ impl U8 {
   pub rt fn narrow_i8(self) -> Option[I8] { some_if(narrow_parts(self)) }
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -177,6 +194,9 @@ impl U16 {
   pub rt fn narrow_u8(self) -> Option[U8] { some_if(narrow_parts(self)) }
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -204,6 +224,9 @@ impl U32 {
   pub target rt fn round_f32(self) -> F32
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -234,6 +257,9 @@ impl U64 {
   pub target rt fn round_f64(self) -> F64
   pub target rt fn div_euclid(self, other: Self) -> Self
   pub target rt fn rem_euclid(self, other: Self) -> Self
+  pub rt fn narrow_from[S: Int](x: S) -> Option[Self] { some_if(narrow_parts(x)) }
+  pub target rt fn trunc_from[S: Float](x: S) -> Self
+  pub target rt fn trunc_sat_from[S: Float](x: S) -> Self
   pub rt fn checked_add(self, other: Self) -> Option[Self] { some_if(add_parts(self, other)) }
   pub rt fn checked_sub(self, other: Self) -> Option[Self] { some_if(sub_parts(self, other)) }
   pub rt fn checked_mul(self, other: Self) -> Option[Self] { some_if(mul_parts(self, other)) }
@@ -259,6 +285,7 @@ impl F32 {
   pub const NAN: F32 = 0.0 / 0.0
   /// The float of the bits `u` (§3.3), the inverse of `to_bits()`.
   pub target rt fn from_bits(u: U32) -> F32
+  pub target rt fn round_from[S: AnyNum](x: S) -> Self
   pub target rt fn to_bits(self) -> U32
   pub target rt fn trunc_i8(self) -> I8
   pub target rt fn trunc_i8_sat(self) -> I8
@@ -287,6 +314,7 @@ impl F64 {
   pub const NAN: F64 = 0.0 / 0.0
   /// The float of the bits `u` (§3.3), the inverse of `to_bits()`.
   pub target rt fn from_bits(u: U64) -> F64
+  pub target rt fn round_from[S: AnyNum](x: S) -> Self
   pub target rt fn round_f32(self) -> F32
   pub target rt fn to_bits(self) -> U64
   pub target rt fn trunc_i8(self) -> I8

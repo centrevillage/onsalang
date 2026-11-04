@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+
+// W5-14 S1/t: the type of the source is an open integer literal when the call is checked and a later statement
+// decides it (spec 4.7: the types go one statement after the other and a later one may decide a literal). The pair
+// is judged with the decided type: it is a pair that `as` writes, E0413 at the call. One function for each
+// statement that decides (P-01).
+
+fn take(k: I32) -> I32 {
+  k
+}
+
+pub fn decided_by_a_call() -> I32 {
+  let a = 3
+  let _ = F64.round_from(a) //~ E0413
+  take(a)
+}
+
+pub fn decided_by_a_comparison(s: I16) -> Bool {
+  let a = 3
+  let _ = F32.round_from(a) //~ E0413
+  a == s
+}
+
+pub fn decided_by_an_annotation() -> U8 {
+  let a     = 3
+  let _     = F64.round_from(a) //~ E0413
+  let b: U8 = a
+  b
+}

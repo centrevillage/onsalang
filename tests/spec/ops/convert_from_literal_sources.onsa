@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§4.7"]
+
+// W5-14 S1/t2 (S-884): a call whose source is a literal is judged with the type that a later statement decides (3.3,
+// 4.7: the types go one statement after the other and a later one may decide a literal), and the default `I32` is
+// given only at the end of the function when nothing decides it. The pairs here are pairs that `as` cannot write
+// (`I64` -> `F64`, `I32` -> `F32`), so they have the function and the code is clean. The forms where the default
+// makes a pair that `as` writes are in negative/convert_from_literal_pairs.onsa.
+
+pub fn decided_to_i64_later() -> F64 {
+  let k      = 1
+  let a      = F64.round_from(k)
+  let b: I64 = k
+  a + F64.round_from(b)
+}
+
+pub fn decided_to_i64_by_a_call() -> F64 {
+  let k = 5
+  let a = F64.round_from(k)
+  let b = need64(k)
+  a + F64.round_from(b)
+}
+
+fn need64(v: I64) -> I64 {
+  v
+}
+
+pub fn default_i32_to_f32() -> F32 {
+  let k = 1
+  F32.round_from(k)
+}
+
+pub fn literal_to_f32() -> F32 {
+  F32.round_from(2)
+}
+
+test "a literal decided as I64 later is an I64 for the call" {
+  assert decided_to_i64_later() == 2.0
+  assert decided_to_i64_by_a_call() == 10.0
+}
+
+test "a literal that nothing decides is an I32 and F32 has the function for it" {
+  assert default_i32_to_f32() == 1.0
+  assert literal_to_f32() == 2.0
+}

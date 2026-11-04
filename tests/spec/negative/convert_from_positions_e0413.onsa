@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.6", "§10", "§11.2", "§11.5", "§4.7", "§18.1"]
+
+// W5-14 S1/t: the E0413 of a pair that `as` writes in every place a conversion can be written (spec 3.3): the
+// initializer of a `const`, the body of a flow, the copy of a `par~`, an `rt` function, a closure that `array.from_fn`
+// runs, a member of an `impl`, an operand of `?`, the two branches of an `if`, an arm of a `match`, and a `test`.
+// Each place is a unit of its own with one error (P-01). The unit has no candidate, so `fixes` is not written.
+
+use std.array
+
+const Y: F32 = 1.5
+
+const WIDE: F64 = F64.round_from(Y) //~ E0413
+
+pub flow in_flow(y: F32 at sample) -> F64 at sample {
+  F64.round_from(y) //~ E0413
+}
+
+pub flow in_par(y: F32 at sample) -> F64 at sample {
+  let ws = par~ i in 0 ..< 2 {
+    F64.round_from(y) //~ E0413
+  }
+  ws[0] + ws[1]
+}
+
+pub rt fn in_rt(y: F32) -> F64 {
+  F64.round_from(y) //~ E0413
+}
+
+pub fn in_closure(y: F32) -> [F64; 2] {
+  array.from_fn(fn(i) { F64.round_from(y) + (i as F64) }) //~ E0413
+}
+
+pub struct Holder {
+  y: F32,
+}
+
+impl Holder {
+  pub fn wide(self) -> F64 {
+    F64.round_from(self.y) //~ E0413
+  }
+}
+
+pub fn in_question(n: I32) -> Option[I64] {
+  let v = I64.narrow_from(n)? //~ E0413
+  Some(v)
+}
+
+pub fn in_then_branch(c: Bool, n: I32) -> Option[I64] {
+  if c {
+    I64.narrow_from(n) //~ E0413
+  } else {
+    None
+  }
+}
+
+pub fn in_else_branch(c: Bool, n: I32) -> Option[I64] {
+  if c {
+    None
+  } else {
+    I64.narrow_from(n) //~ E0413
+  }
+}
+
+pub fn in_arm(o: Option[I32]) -> Option[I64] {
+  match o {
+    Some(n) => I64.narrow_from(n), //~ E0413
+    None => None,
+  }
+}
+
+test "a test body" {
+  let y: F32 = 1.5
+  let w      = F64.round_from(y) //~ E0413
+  assert w == 1.5
+}

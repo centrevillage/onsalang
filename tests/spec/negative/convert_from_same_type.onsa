@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§18.1"]
+
+// W5-14 S1/t: a conversion function called with the type it converts to is a call of a pair that `as` writes (spec
+// 3.3: "同じ型への `F32.round_from(y)` と `I32.narrow_from(n)`", the same type is `as`), E0413. One function for each
+// type (P-01). `trunc_from` and `trunc_sat_from` of the same type are not here (the integer one is undecided).
+
+pub fn f32_from_f32(y: F32) -> F32 {
+  F32.round_from(y) //~ E0413
+}
+
+pub fn f64_from_f64(y: F64) -> F64 {
+  F64.round_from(y) //~ E0413
+}
+
+pub fn i8_from_i8(n: I8) -> Option[I8] {
+  I8.narrow_from(n) //~ E0413
+}
+
+pub fn i16_from_i16(n: I16) -> Option[I16] {
+  I16.narrow_from(n) //~ E0413
+}
+
+pub fn i32_from_i32(n: I32) -> Option[I32] {
+  I32.narrow_from(n) //~ E0413
+}
+
+pub fn i64_from_i64(n: I64) -> Option[I64] {
+  I64.narrow_from(n) //~ E0413
+}
+
+pub fn u8_from_u8(n: U8) -> Option[U8] {
+  U8.narrow_from(n) //~ E0413
+}
+
+pub fn u16_from_u16(n: U16) -> Option[U16] {
+  U16.narrow_from(n) //~ E0413
+}
+
+pub fn u32_from_u32(n: U32) -> Option[U32] {
+  U32.narrow_from(n) //~ E0413
+}
+
+pub fn u64_from_u64(n: U64) -> Option[U64] {
+  U64.narrow_from(n) //~ E0413
+}

@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.1", "§4.7", "§18.1"]
+
+// W5-14 S1/t2 (S-885): taking the function of a pair that `as` writes as a value (6.1: an associated function is a
+// value) is E0413 like the call (3.3: "関連関数を値として取る形（§6.1）も同じ"). The source type comes from the expected
+// type, from a later call of the value, or from the element type of `array.from_fn` (`U32`). The error is at the
+// place where the function is taken, not at the later call of it. One function for each form (P-01). This unit has no
+// candidate (the note shows the closure form), so `fixes` is not written.
+
+use std.array
+
+pub fn typed_binding(y: F32) -> F64 {
+  let g: fn(F32) -> F64 = F64.round_from //~ E0413
+  g.(y)
+}
+
+pub fn untyped_binding_called_later(y: F32) -> F64 {
+  let g = F64.round_from //~ E0413
+  g.(y)
+}
+
+pub fn parenthesized_value(y: F32) -> F64 {
+  (F64.round_from).(y) //~ E0413
+}
+
+pub fn passed_to_from_fn() -> [F64; 4] {
+  array.from_fn(F64.round_from) //~ E0413
+}
+
+pub fn typed_binding_same_type(y: F32) -> F32 {
+  let g: fn(F32) -> F32 = F32.round_from //~ E0413
+  g.(y)
+}
+
+pub fn narrow_value_into_i64(n: I32) -> Option[I64] {
+  let g: fn(I32) -> Option[I64] = I64.narrow_from //~ E0413
+  g.(n)
+}
+
+pub fn narrow_value_same_type(n: I32) -> Option[I32] {
+  let g: fn(I32) -> Option[I32] = I32.narrow_from //~ E0413
+  g.(n)
+}
+
+pub fn round_value_from_an_integer(n: I16) -> F32 {
+  let g: fn(I16) -> F32 = F32.round_from //~ E0413
+  g.(n)
+}

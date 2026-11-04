@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§10", "§11.2", "§11.3", "§11.5"]
+
+// W5-14 S1/t: a conversion function in the body of a flow, with a value of every clock; the file only has to check
+// (the values are in ops/convert_from_flow_values.onsa). A conversion is a call of an `rt` function with no
+// effects, which the body of a flow may call (spec 11.2, 10: the conversions are `rt`), and the clock of its result
+// is the clock of its arguments (11.3), so a slower value is read in a faster expression without a change: the
+// `block` input `n` in an expression of `sample`, the `init` input `k`, and the index `i` of a `par~` copy (a
+// `U32` of the clock `init`, 11.5). `at` lifts a name that holds a converted value and lifts the argument of a conversion.
+
+const VOICES: U32 = 4
+
+pub flow scaled(x: F32 at sample, n: U32 at block) -> F32 at sample {
+  x * F32.round_from(n)
+}
+
+pub flow lifted(x: F32 at sample, n: U32 at block) -> F32 at sample {
+  let c = F32.round_from(n)
+  let k = c at sample
+  x + k
+}
+
+pub flow lifted_argument(x: F32 at sample, n: U32 at block) -> F32 at sample {
+  x + F32.round_from(n at sample)
+}
+
+pub flow offset(x: F32 at sample, k: I32 at init) -> F32 at sample {
+  x + F32.round_from(k)
+}
+
+pub flow quantized(x: F32 at sample) -> F32 at sample {
+  F32.round_from(I32.trunc_sat_from(x))
+}
+
+pub flow index_of(k: I32 at sample) -> U8 at sample {
+  match U8.narrow_from(k) {
+    Some(v) => v,
+    None => 255,
+  }
+}
+
+pub flow fan(x: F32 at sample) -> F32 at sample {
+  let ws = par~ i in 0 ..< VOICES {
+    x * F32.round_from(i)
+  }
+  ws[0] + ws[1] + ws[2] + ws[3]
+}
+
+pub flow wide(x: F64 at sample) -> F32 at sample {
+  F32.round_from(x)
+}

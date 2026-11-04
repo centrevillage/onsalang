@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.5", "§6.3", "§18.1"]
+
+// W5-14 S1/t: the source of a conversion function has to be of a type that the function can take. A value of a
+// type parameter with no bound (spec 3.3: "型パラメータは境界が与える操作しか持たず") is none of them, and neither is an
+// integer given to `trunc_from` or `trunc_sat_from` (a pair that `as` cannot write: the cut of a float). Each is
+// E0416 at the call. The pairs whose judgement is not decided yet are not here. One function for each form (P-01).
+
+pub fn unbounded_round[T](x: T) -> F32 {
+  F32.round_from(x) //~ E0416
+}
+
+pub fn unbounded_cut[T](x: T) -> U32 {
+  U32.trunc_from(x) //~ E0416
+}
+
+pub fn unbounded_cut_sat[T](x: T) -> I8 {
+  I8.trunc_sat_from(x) //~ E0416
+}
+
+pub fn unbounded_narrow[T](x: T) -> Option[U8] {
+  U8.narrow_from(x) //~ E0416
+}
+
+pub fn integer_cut(n: I32) -> I8 {
+  I8.trunc_from(n) //~ E0416
+}
+
+pub fn integer_cut_sat(n: I64) -> I16 {
+  I16.trunc_sat_from(n) //~ E0416
+}
+
+pub fn integer_cut_unsigned(n: I32) -> U16 {
+  U16.trunc_from(n) //~ E0416
+}

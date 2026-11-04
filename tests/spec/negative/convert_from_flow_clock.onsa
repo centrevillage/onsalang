@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§11.3", "§18.1"]
+
+// W5-14 S1/t: the clock of the result of a conversion in a flow is the clock of its argument (spec 11.3: the clock of
+// an expression comes from its operands, and the call of an `rt` function has no clock of its own), so `at` that
+// makes it slower than that is E0815 ("`k` が `e` の推論したクロックより速ければ昇格 ... 遅ければ E0815"). One flow for each
+// form (P-01).
+
+pub flow slow_cut(x: F32 at sample) -> F32 at sample {
+  let c = I32.trunc_sat_from(x) at block //~ E0815
+  x + F32.round_from(c)
+}
+
+pub flow slow_round(k: I32 at sample) -> F32 at sample {
+  let c = F32.round_from(k) at block //~ E0815
+  c
+}
+
+pub flow slow_narrow(k: I32 at block) -> U8 at sample {
+  let c = U8.narrow_from(k) at init //~ E0815
+  match c {
+    Some(v) => v,
+    None => 0,
+  }
+}

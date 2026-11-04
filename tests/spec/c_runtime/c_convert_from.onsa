@@ -1,0 +1,307 @@
+// onsa.toml
+// [package]
+// name = "c_convert_from"
+// edition = "2026"
+//
+// [export]
+// prefix = "ccf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§4.5", "§9.2", "§14.2", "§13.4"]
+//
+// [[test.host]]
+// name = "f32_to_f64"
+// target = "host"
+// fn = "c_convert_from.f32_to_f64"
+// steps = [
+//   { call = "fn", args = { x = 1.5 }, status = 0, result = 1.5 },
+//   { call = "fn", args = { x = 0.5 }, status = 0, result = 0.5 },
+//   { call = "fn", args = { x = 16777216.0 }, status = 0, result = 16777216.0 },
+//   { call = "fn", args = { x = 1.0e10 }, status = 0, result = 10000000000.0 },
+// ]
+//
+// [[test.host]]
+// name = "f64_to_f64"
+// target = "host"
+// fn = "c_convert_from.f64_to_f64"
+// steps = [
+//   { call = "fn", args = { x = 0.1 }, status = 0, result = 0.1 },
+//   { call = "fn", args = { x = -2.25 }, status = 0, result = -2.25 },
+// ]
+//
+// [[test.host]]
+// name = "i32_to_f64"
+// target = "host"
+// fn = "c_convert_from.i32_to_f64"
+// steps = [
+//   { call = "fn", args = { n = -2147483648 }, status = 0, result = -2147483648.0 },
+//   { call = "fn", args = { n = 7 }, status = 0, result = 7.0 },
+// ]
+//
+// [[test.host]]
+// name = "i64_to_f64"
+// target = "host"
+// fn = "c_convert_from.i64_to_f64"
+// steps = [
+//   { call = "fn", args = { n = 9007199254740993 }, status = 0, result = 9007199254740992.0 },
+//   { call = "fn", args = { n = 9007199254740995 }, status = 0, result = 9007199254740996.0 },
+//   { call = "fn", args = { n = 9223372036854775807 }, status = 0, result = 9223372036854775808.0 },
+// ]
+//
+// [[test.host]]
+// name = "f32_to_f32"
+// target = "host"
+// fn = "c_convert_from.f32_to_f32"
+// steps = [
+//   { call = "fn", args = { x = 1.5 }, status = 0, result = 1.5 },
+//   { call = "fn", args = { x = -0.25 }, status = 0, result = -0.25 },
+// ]
+//
+// [[test.host]]
+// name = "f64_to_f32"
+// target = "host"
+// fn = "c_convert_from.f64_to_f32"
+// steps = [
+//   { call = "fn", args = { x = 16777217.0 }, status = 0, result = 16777216.0 },
+//   { call = "fn", args = { x = 16777219.0 }, status = 0, result = 16777220.0 },
+//   { call = "fn", args = { x = 0.5 }, status = 0, result = 0.5 },
+// ]
+//
+// [[test.host]]
+// name = "i32_to_f32"
+// target = "host"
+// fn = "c_convert_from.i32_to_f32"
+// steps = [
+//   { call = "fn", args = { n = 16777217 }, status = 0, result = 16777216.0 },
+//   { call = "fn", args = { n = 16777219 }, status = 0, result = 16777220.0 },
+//   { call = "fn", args = { n = 2147483647 }, status = 0, result = 2147483648.0 },
+//   { call = "fn", args = { n = -16777217 }, status = 0, result = -16777216.0 },
+// ]
+//
+// [[test.host]]
+// name = "i64_to_f32"
+// target = "host"
+// fn = "c_convert_from.i64_to_f32"
+// steps = [
+//   { call = "fn", args = { n = 1152921573326323713 }, status = 0, result = 1152921642045800448.0 },
+//   { call = "fn", args = { n = 1099511693312 }, status = 0, result = 1099511627776.0 },
+// ]
+//
+// [[test.host]]
+// name = "f32_cut"
+// target = "host"
+// fn = "c_convert_from.f32_cut"
+// steps = [
+//   { call = "fn", args = { x = 2.5 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = -0.5 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 4294967040.0 }, status = 0, result = 4294967040 },
+//   { call = "fn", args = { x = -1.0 }, status = 1 },
+//   { call = "fn", args = { x = 4294967296.0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "f64_cut"
+// target = "host"
+// fn = "c_convert_from.f64_cut"
+// steps = [
+//   { call = "fn", args = { x = 4294967295.9 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { x = -0.9 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = -1.0 }, status = 1 },
+//   { call = "fn", args = { x = 4294967296.0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "f32_cut_sat"
+// target = "host"
+// fn = "c_convert_from.f32_cut_sat"
+// steps = [
+//   { call = "fn", args = { x = 300.5 }, status = 0, result = 127 },
+//   { call = "fn", args = { x = -300.5 }, status = 0, result = -128 },
+//   { call = "fn", args = { x = 2.5 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = -2.5 }, status = 0, result = -2 },
+// ]
+//
+// [[test.host]]
+// name = "f64_cut_sat"
+// target = "host"
+// fn = "c_convert_from.f64_cut_sat"
+// steps = [
+//   { call = "fn", args = { x = 300.5 }, status = 0, result = 127 },
+//   { call = "fn", args = { x = -300.5 }, status = 0, result = -128 },
+//   { call = "fn", args = { x = -2.9 }, status = 0, result = -2 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_or_neg"
+// target = "host"
+// fn = "c_convert_from.narrow_or_neg"
+// steps = [
+//   { call = "fn", args = { n = 200 }, status = 0, result = 200 },
+//   { call = "fn", args = { n = 255 }, status = 0, result = 255 },
+//   { call = "fn", args = { n = 256 }, status = 0, result = -1 },
+//   { call = "fn", args = { n = -1 }, status = 0, result = -1 },
+// ]
+
+// W5-14 S1/t: the conversion functions of spec 3.3 on a target that is built to C, called with a value of a type
+// parameter (3.3: "具体化した型の組で `as` が書けても書ける"). The generic functions `to_f32` and `to_f64`
+// (`T: Num`) and `to_u32` and `to_i8_sat` (`T: Float`) are instanced with F32 to F32, F32 to F64, F64 to F64,
+// F64 to F32, I32 to F32, I32 to F64, I64 to F32 and I64 to F64: the pairs that `as` writes (F32 to F64, I32 to
+// F64), the same type, and the pairs that it cannot write. Every export has one source type, so each argument is
+// an exact value of that type (a float with a short binary expansion, an integer inside the range of its type).
+// The interpreter (the test blocks) and the C target (the host scripts) give the same values. The values are
+// worked out by hand: a value in the middle of two neighbours goes to the even one (16777217 and 16777219,
+// the integers 2^53 + 1 and 2^53 + 3), 2^60 + 2^36 + 1 is above the middle of 2^60 and 2^60 + 2^37 in an
+// I64 to F32 conversion that rounds once.
+
+fn to_f32[T: Num](x: T) -> F32 {
+  F32.round_from(x)
+}
+
+fn to_f64[T: Num](x: T) -> F64 {
+  F64.round_from(x)
+}
+
+fn to_u32[T: Float](x: T) -> U32 {
+  U32.trunc_from(x)
+}
+
+fn to_i8_sat[T: Float](x: T) -> I8 {
+  I8.trunc_sat_from(x)
+}
+
+@export
+pub fn f32_to_f64(x: F32) -> F64 {
+  to_f64(x)
+}
+
+@export
+pub fn f64_to_f64(x: F64) -> F64 {
+  to_f64(x)
+}
+
+@export
+pub fn i32_to_f64(n: I32) -> F64 {
+  to_f64(n)
+}
+
+@export
+pub fn i64_to_f64(n: I64) -> F64 {
+  to_f64(n)
+}
+
+@export
+pub fn f32_to_f32(x: F32) -> F32 {
+  to_f32(x)
+}
+
+@export
+pub fn f64_to_f32(x: F64) -> F32 {
+  to_f32(x)
+}
+
+@export
+pub fn i32_to_f32(n: I32) -> F32 {
+  to_f32(n)
+}
+
+@export
+pub fn i64_to_f32(n: I64) -> F32 {
+  to_f32(n)
+}
+
+@export
+pub fn f32_cut(x: F32) -> U32 {
+  to_u32(x)
+}
+
+@export
+pub fn f64_cut(x: F64) -> U32 {
+  to_u32(x)
+}
+
+@export
+pub fn f32_cut_sat(x: F32) -> I8 {
+  to_i8_sat(x)
+}
+
+@export
+pub fn f64_cut_sat(x: F64) -> I8 {
+  to_i8_sat(x)
+}
+
+@export
+pub fn narrow_or_neg(n: I32) -> I32 {
+  match U8.narrow_from(n) {
+    Some(v) => v as I32,
+    None => -1,
+  }
+}
+
+test "F32 to F64, F64 to F64 and I32 to F64 keep the value" {
+  assert f32_to_f64(1.5) == 1.5
+  assert f32_to_f64(16777216.0) == 16777216.0
+  assert f32_to_f64(1.0e10) == 10000000000.0
+  assert f64_to_f64(0.1) == 0.1
+  assert i32_to_f64(-2147483648) == -2147483648.0
+}
+
+test "I64 to F64 rounds to the nearest even value" {
+  assert i64_to_f64(9007199254740993) == 9007199254740992.0
+  assert i64_to_f64(9007199254740995) == 9007199254740996.0
+  assert i64_to_f64(9223372036854775807) == 9223372036854775808.0
+}
+
+test "F32 to F32, F64 to F32, I32 to F32 and I64 to F32 round to the nearest even value" {
+  assert f32_to_f32(1.5) == 1.5
+  assert f64_to_f32(16777217.0) == 16777216.0
+  assert f64_to_f32(16777219.0) == 16777220.0
+  assert i32_to_f32(16777217) == 16777216.0
+  assert i32_to_f32(16777219) == 16777220.0
+  assert i32_to_f32(2147483647) == 2147483648.0
+  assert i32_to_f32(-16777217) == -16777216.0
+  assert i64_to_f32(1152921573326323713) == 1152921642045800448.0
+  assert i64_to_f32(1099511693312) == 1099511627776.0
+}
+
+test "trunc_from of a type parameter cuts toward zero" {
+  assert f32_cut(2.5) == 2
+  assert f32_cut(-0.5) == 0
+  assert f32_cut(4294967040.0) == 4294967040
+  assert f64_cut(4294967295.9) == 4294967295
+  assert f64_cut(-0.9) == 0
+}
+
+test "trunc_from of a type parameter panics out of the range" {
+  let n = f32_cut(4294967296.0) //~ PANIC "trunc_from of a type parameter panics out of the range"
+  assert n == 0
+}
+
+test "trunc_from of a type parameter panics below zero" {
+  let n = f64_cut(-1.0) //~ PANIC "trunc_from of a type parameter panics below zero"
+  assert n == 0
+}
+
+test "trunc_sat_from of a type parameter clamps" {
+  assert f32_cut_sat(300.5) == 127
+  assert f32_cut_sat(-300.5) == -128
+  assert f32_cut_sat(2.5) == 2
+  assert f32_cut_sat(-2.5) == -2
+  assert f64_cut_sat(300.5) == 127
+  assert f64_cut_sat(-300.5) == -128
+  assert f64_cut_sat(-2.9) == -2
+}
+
+test "narrow_from gives an Option that a match turns into a number" {
+  assert narrow_or_neg(200) == 200
+  assert narrow_or_neg(255) == 255
+  assert narrow_or_neg(256) == -1
+  assert narrow_or_neg(-1) == -1
+}

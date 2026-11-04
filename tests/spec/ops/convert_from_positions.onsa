@@ -1,0 +1,199 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§4.7", "§6.6", "§10", "§9.1"]
+
+// W5-14 S1/t: the places where a conversion function is called, in the positions of an expected type and the
+// others: the initializer of a `const` (6.6, the compile-time evaluation runs it), an operand of `?` and the two
+// branches of an `if` and the arms of a `match` (the type of the position is known), a binding with a type, a
+// struct field, a nested call, an operand, a loop, a closure that `array.from_fn` runs (4.7: `F32.round_from(i)`
+// with `i: U32`), an `rt` function (10: the conversions are `rt`), and a member of a user `impl`. Every value is
+// worked out by hand.
+
+use std.array
+
+const TIE: F64 = 16777217.0
+const LOUD: F32 = 300.5
+const NEG: F64 = -2.9
+const TWO_HUNDRED: I32 = 200
+const ROUNDED: F32 = F32.round_from(TIE)
+const SATURATED: I8 = I8.trunc_sat_from(LOUD)
+const CUT: I32 = I32.trunc_from(NEG)
+const FITS: Option[U8] = U8.narrow_from(TWO_HUNDRED)
+const MISSES: Option[I8] = I8.narrow_from(TWO_HUNDRED)
+
+test "a const initializer calls the conversions" {
+  assert ROUNDED == 16777216.0
+  assert SATURATED == 127
+  assert CUT == -2
+  assert FITS == Some(200)
+  assert MISSES == None
+}
+
+fn halve(x: I32) -> Option[U8] {
+  let v = U8.narrow_from(x)?
+  Some(v / 2)
+}
+
+fn pick(c: Bool, x: I32) -> Option[I8] {
+  if c {
+    I8.narrow_from(x)
+  } else {
+    None
+  }
+}
+
+fn other_branch(c: Bool, x: I32) -> Option[I8] {
+  if c {
+    None
+  } else {
+    I8.narrow_from(x)
+  }
+}
+
+fn blend(c: Bool, k: I32) -> F32 {
+  let y: F32 = if c {
+    F32.round_from(k)
+  } else {
+    0.5
+  }
+  y
+}
+
+fn arm(o: Option[I64]) -> F32 {
+  match o {
+    Some(v) => F32.round_from(v),
+    None => 0.0,
+  }
+}
+
+fn typed(x: I32) -> Option[I8] {
+  let o: Option[I8] = I8.narrow_from(x)
+  o
+}
+
+test "an operand of ?, the branches of an if and the arms of a match call the conversions" {
+  assert halve(200) == Some(100)
+  assert halve(256) == None
+  assert halve(-1) == None
+  assert pick(true, 127) == Some(127)
+  assert pick(true, 128) == None
+  assert pick(false, 1) == None
+  assert other_branch(false, -128) == Some(-128)
+  assert other_branch(false, -129) == None
+  assert blend(true, 16777217) == 16777216.0
+  assert blend(false, 16777217) == 0.5
+  assert arm(Some(1152921573326323713)) == 1152921642045800448.0
+  assert arm(None) == 0.0
+  assert typed(-128) == Some(-128)
+  assert typed(1000) == None
+}
+
+pub struct Level {
+  gain: F32,
+  steps: I8,
+  wide: I64,
+}
+
+fn make(n: I32, g: F64, w: I64) -> Level {
+  Level { gain: F32.round_from(n), steps: I8.trunc_sat_from(g), wide: w }
+}
+
+fn chain(n: I32) -> U8 {
+  U8.trunc_sat_from(F32.round_from(n))
+}
+
+fn mixed(n: I32, m: I64) -> F32 {
+  F32.round_from(n) * 0.5 + F32.round_from(m)
+}
+
+fn total(count: U32) -> F32 {
+  var acc: F32 = 0.0
+  for i in 0 ..< count {
+    acc = acc + F32.round_from(i)
+  }
+  acc
+}
+
+test "a struct field, a nested call, an operand and a loop call the conversions" {
+  let lv = make(16777217, -200.7, 0)
+  assert lv.gain == 16777216.0
+  assert lv.steps == -128
+  assert chain(77) == 77
+  assert chain(300) == 255
+  assert chain(-5) == 0
+  assert mixed(3, 5) == 6.5
+  assert total(5) == 10.0
+}
+
+test "a closure that array.from_fn runs calls the conversions" {
+  let xs: [F32; 4] = array.from_fn(fn(i) { F32.round_from(i) * 0.5 })
+  assert xs[0] == 0.0
+  assert xs[1] == 0.5
+  assert xs[2] == 1.0
+  assert xs[3] == 1.5
+  let k: F32       = 3.0
+  let ys: [F32; 3] = array.from_fn(fn(i) { k * F32.round_from(i) })
+  assert ys[2] == 6.0
+}
+
+pub rt fn quantize(x: F32) -> I32 {
+  I32.trunc_sat_from(x)
+}
+
+pub rt fn small(x: I32) -> Option[U8] {
+  U8.narrow_from(x)
+}
+
+pub rt fn exact(x: F64) -> I32 {
+  I32.trunc_from(x)
+}
+
+pub rt fn back(x: F32) -> F32 {
+  F32.round_from(quantize(x))
+}
+
+pub rt fn wide(n: I64) -> F64 {
+  F64.round_from(n)
+}
+
+test "an rt function calls every kind of conversion" {
+  assert quantize(2.7) == 2
+  assert quantize(-2.7) == -2
+  assert quantize(F32.NAN) == 0
+  assert small(255) == Some(255)
+  assert small(256) == None
+  assert exact(-2147483648.9) == -2147483648
+  assert back(3.9) == 3.0
+  assert wide(9007199254740993) == 9007199254740992.0
+}
+
+test "trunc_from in an rt function panics out of the range" {
+  let v = exact(2147483648.0) //~ PANIC "trunc_from in an rt function panics out of the range"
+  assert v == 0
+}
+
+impl Level {
+  pub fn bits(self) -> U32 {
+    U32.trunc_sat_from(self.gain)
+  }
+
+  pub fn fits_i32(self) -> Option[I32] {
+    I32.narrow_from(self.wide)
+  }
+
+  pub fn wide_f64(self) -> F64 {
+    F64.round_from(self.wide)
+  }
+}
+
+test "a member of a user impl calls the conversions" {
+  let lv = make(7, 0.0, 2147483648)
+  assert lv.bits() == 7
+  assert lv.fits_i32() == None
+  assert lv.wide_f64() == 2147483648.0
+  let edge = make(7, 0.0, -2147483648)
+  assert edge.fits_i32() == Some(-2147483648)
+  let odd = make(7, 0.0, 9007199254740995)
+  assert odd.wide_f64() == 9007199254740996.0
+}

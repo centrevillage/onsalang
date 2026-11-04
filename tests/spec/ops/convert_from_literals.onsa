@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§4.7"]
+
+// W5-14 S1/t: a literal as the argument of a conversion function whose pair is not one that `as` writes. An integer
+// literal is an `I32` when nothing else decides it (4.7), and `I32` to `F32` and `I32` to `I8` are not pairs of
+// `as`, so these calls are fine. A float literal (`F32.round_from(2.5)`) has no such default and is E0405 in
+// negative/convert_from_float_literal.onsa.
+
+test "an integer literal into F32.round_from is a conversion of an I32" {
+  assert F32.round_from(1) == 1.0
+  assert F32.round_from(-1) == -1.0
+  assert F32.round_from(16777217) == 16777216.0
+}
+
+test "an integer literal into narrow_from is a narrowing of an I32" {
+  assert I8.narrow_from(1) == Some(1)
+}

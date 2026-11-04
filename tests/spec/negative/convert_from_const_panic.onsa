@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.6", "§18.1"]
+
+// W5-14 S1/t: a conversion in the initializer of a `const` that panics is E0419, in the place of the expression
+// (spec 6.6: the compile-time evaluation that panics; 3.3: `trunc_from` panics out of the range and for a NaN;
+// `unwrap` of a `None` panics). The argument is a constant of a known type, so no literal is open. One
+// constant for each form (P-01).
+
+const BIG: F64 = 300.0
+const BELOW: F64 = -1.0
+const NOT_A_NUMBER: F32 = F32.NAN
+const WIDE: I32 = 200
+
+const OVER: U8 = U8.trunc_from(BIG) //~ E0419
+
+const NEGATIVE: U32 = U32.trunc_from(BELOW) //~ E0419
+
+const NAN_CUT: I32 = I32.trunc_from(NOT_A_NUMBER) //~ E0419
+
+const NARROWED: I8 = I8.narrow_from(WIDE).unwrap() //~ E0419
