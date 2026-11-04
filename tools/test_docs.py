@@ -877,6 +877,33 @@ class DocsLayout(DocsTree):
         self.assertOne("README.md", "[仕様](spec/README.md)", "[仕様](spec/README.md)、[無い](docs/none.md#x)", "README.md:3: the link docs/none.md#x is not found")
         self.assertOne("rules/README.md", "(common.md)", "(commons.md)", "rules/README.md:3: the link commons.md is not found")
 
+    def test_check_line_refs(self):
+        """rules/documents.md 5.3: a reference by a line number in an S or a living document warns, by a section, a file
+        or `path:line`; the position in a diagnostic's output, a count of lines, an R's place and a DONE work do not."""
+        self.layout()
+
+        def add(rel, text):
+            self.write(rel, self.read_(rel) + text)
+            return len(self.read_(rel).splitlines())
+
+        s, w, done, r = "decisions/S/S-1.md", "tasks/W/W1-02.md", "tasks/W/W1-01.md", "issues/R/R-1.md"
+        n1 = add(s, "- 空白: §2 の 202〜203 行と `spec/15-modules.md` 75 行。a.onsa:1:4 と約 300 行と §3 の表と §3（7 行の後）と仕様の 9 行\n")
+        n2 = add(w, "- 内容: `crates/a.rs` の 12 行、crates/b.rs:7-9、`t/c.onsa:3`\n")
+        add(done, "- 内容: crates/a.rs:12\n")
+        n3 = add(r, "- 場所: crates/a.rs:12\n- 内容: §3 の 3 行目\n")
+        what = "a reference by a line number; name a section, an ID, a function or a quote"
+        code, lines = self.check()
+        warned = [
+            f"warning: {w}:{n2}: `crates/a.rs の 12 行`: {what} (line-refs)",
+            f"warning: {w}:{n2}: `crates/b.rs:7-9`: {what} (line-refs)", f"warning: {w}:{n2}: `t/c.onsa:3`: {what} (line-refs)",
+            f"warning: {r}:{n3}: `§3 の 3 行`: {what} (line-refs)",
+            f"warning: {s}:{n1}: `§2 の 202〜203 行`: {what} (line-refs)",
+            f"warning: {s}:{n1}: `spec/15-modules.md 75 行`: {what} (line-refs)",
+            f"warning: {s}:{n1}: `§3（7 行`: {what} (line-refs)", f"warning: {s}:{n1}: `仕様の 9 行`: {what} (line-refs)",
+        ]  # fmt: skip
+        self.assertEqual(([x for x in lines if not x.endswith("(line-refs)") and not x.startswith("warning")], code), ([], 0))
+        self.assertEqual([x for x in lines if x.endswith("(line-refs)")], warned)
+
     def test_check_warnings(self):
         """W4-18 U10f: the warnings of `check` are shown with their count and never fail it: the decisions and the issues
         a work in progress or done does not name in its `単位`, the paths `crates/…` and the variables `P<n>/` of the living
@@ -884,7 +911,7 @@ class DocsLayout(DocsTree):
         self.layout()
         w1, w2, r1, r2 = "tasks/W/W1-01.md", "tasks/W/W1-02.md", "issues/R/R-1.md", "issues/R/R-2.md"
         self.write(w1, self.read_(w1) + "- 単位（表）: なし\n- 持ち越し: crates/gone.rs、P30/x\n")  # DONE: not living
-        self.write(w2, self.read_(w2) + "- 単位:\n  - U1: S-2\n  - U2: crates/a/x.rs:12、crates/a/y.rs、crates/a/*.rs、"
+        self.write(w2, self.read_(w2) + "- 単位:\n  - U1: S-2\n  - U2: crates/a/x.rs、crates/a/y.rs、crates/a/*.rs、"
                    "`crates/b.rs`。P91/t.md、XP91/、target/notes/91/\n- 持ち越し: R-1\n")  # fmt: skip
         self.write("crates/a/y.rs", "")
         self.write(r1, self.read_(r1) + "- 高・直す｜crates/old1.rs｜—\n- 場所: crates/old2.rs\n  - crates/old3.rs\n- 内容: crates/old4.rs、P80/\n")
@@ -903,7 +930,7 @@ class DocsLayout(DocsTree):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out):
             docs_tool.main(["check", "--root", str(self.root)])
-        self.assertEqual(out.getvalue().splitlines()[-2], "docs check: 8 warning(s), not failing it (units 2, paths 3, scratch 2, no-fix 1)")
+        self.assertEqual(out.getvalue().splitlines()[-2], "docs check: 8 warning(s), not failing it (units 2, paths 3, scratch 2, line-refs 0, no-fix 1)")
         self.edit(r1, 'status = "OPEN"', 'status = "DONE"')  # not living: no paths, no variables
         self.edit(w2, 'status = "DOING"', 'status = "PLAN"')  # not in progress: its `単位` not read; still living
         self.edit(w2, 'doing = ["U2/i"]', 'commit = "x"')  # the same lines

@@ -66,7 +66,8 @@ depth 0 with `-` for the type and from).
   warning, `(name, fn(ids) -> Findings)` to WARNINGS (W4-18 U10f: `warning: path:line: what (name)` and their
   count, never failing the check: `units`, the decisions and the issues of `ticket` a work DOING or DONE does not
   name in its `単位`; `paths`, `scratch`, the paths `crates/…` not there and the variables `P<n>/` of a ticket in
-  the living documents (LIVE; not an R's place); `no-fix`, an OPEN R with no `fix`); to add a
+  the living documents (LIVE; not an R's place); `line-refs`, a reference by a line number in those and the S;
+  `no-fix`, an OPEN R with no `fix`); to add a
   subcommand, add `name: repo.Command(add_arguments, run, roles, purpose, when, example)` to COMMANDS
   (its help, X9-7; `docs.py help`).
 
@@ -75,6 +76,7 @@ The head fields (DF-1) are read by `read_head` and written in the normal form by
 """
 import fnmatch
 import importlib.util
+import itertools
 import os
 import re
 import shlex
@@ -1135,6 +1137,14 @@ LIVE = {"W": ("DONE", False), "R": ("OPEN", True), "RF": ("OPEN", True)}  # the 
 CRATE_PATH = re.compile(r"(?<![A-Za-z0-9_./-])crates/[A-Za-z0-9_./-]*[A-Za-z0-9_/]")
 NOT_ONE_PATH = ("*", "{", "<", "…")  # after a path: a pattern or an elision, not a path to look for
 SCRATCH = re.compile(r"(?<![A-Za-z0-9_./-])P\d+/")  # a variable of a ticket: a session's scratchpad (`P102/`)
+# a reference by a line number (rules/documents.md 5.3): `§4.7 の 202〜203 行`, `§5.2（70 行の後）`, `仕様の 49 行`,
+# `` `a.rs` の 12 行 ``, `a.rs:12`; not `a.onsa:1:4`, the position in a diagnostic's output
+LINE_NUMBERS = r"\d+(?:\s*[〜～,、・-]\s*\d+)*\s*行"
+LINE_FILE = r"[A-Za-z0-9_./-]+\.(?:rs|onsa|md|toml|py|sh|c|h)"
+LINE_REF = re.compile(
+    rf"§\d+(?:\.\d+)*(?:\s*の\s*|（){LINE_NUMBERS}|仕様の\s*{LINE_NUMBERS}"
+    rf"|{LINE_FILE}`?\s*(?:の\s*)?{LINE_NUMBERS}|{LINE_FILE}:\d+(?:-\d+)?(?![:\d])"
+)
 
 
 def labelled(tree, rel):
@@ -1184,6 +1194,16 @@ def warn_scratch(ids):
             yield Finding(rel, n, f"`{m.group(0)}`: a variable of a ticket (a session's scratchpad)")
 
 
+def warn_line_refs(ids):
+    """The references by a line number (LINE_REF) of the S and the living documents: an edit moves the line, and
+    the reference then names another text with nothing to show it (the records of an R's place left)."""
+    decisions = ((rel, n, line, False) for _, rel, _ in ids.heads(["S"]) for n, line, _ in labelled(ids.tree, rel))
+    for rel, n, line, record in itertools.chain(live_lines(ids), decisions):
+        for m in [] if record else LINE_REF.finditer(line):
+            shown = m.group(0).replace("`", "")
+            yield Finding(rel, n, f"`{shown}`: a reference by a line number; name a section, an ID, a function or a quote")
+
+
 def warn_no_fix(ids):
     """The R that are OPEN with no `fix` (no work is to fix them)."""
     for _, rel, v in ids.heads(["R"]):
@@ -1192,7 +1212,13 @@ def warn_no_fix(ids):
 
 
 # the warnings of `check`: shown with their count, never failing it (W4-18 U10f)
-WARNINGS = [("units", warn_units), ("paths", warn_paths), ("scratch", warn_scratch), ("no-fix", warn_no_fix)]
+WARNINGS = [
+    ("units", warn_units),
+    ("paths", warn_paths),
+    ("scratch", warn_scratch),
+    ("line-refs", warn_line_refs),
+    ("no-fix", warn_no_fix),
+]
 
 
 CHECKS = [
@@ -2471,7 +2497,7 @@ COMMANDS = {
                "文書を編集する前に、スワップファイルが無いことを確かめる。確かめは、編集と別のコマンドで行う"
                "（`.claude/agents/` は見ないので、定義を開いているかは利用者に聞く）", "docs.py swaps"),
     "check": C(lambda p: None, cmd_check, EDITORS, "文書の表・頭の欄・ID と § の参照・関係・README のリンクを確かめる（gate の `docs`）。"
-               "警告（`warning:` の行。作業の `単位` に無い決定と R、生きている文書の無い経路と票の変数、`fix` の空の R）は終了コードを落とさない",
+               "警告（`warning:` の行。作業の `単位` に無い決定と R、生きている文書の無い経路と票の変数、S と生きている文書の行の番号の参照、`fix` の空の R）は終了コードを落とさない",
                "文書を編集した後に、`fmt` で行を整えてから通す。文書の点検の担当は始めに回し、落ちていれば、その出力を報告して止める",
                "docs.py check"),
     "due": C(lambda p: p.add_argument("--stage-end", metavar="STAGE"), cmd_due, ("parent",),
