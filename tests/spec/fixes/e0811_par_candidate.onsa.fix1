@@ -45,29 +45,29 @@ pub flow with_state_as_an_argument(f0: F32 at block) -> F32 at sample {
 }
 
 pub flow without_state_in_a_let(x: F32 at sample) -> [F32; 4] at sample {
-  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }   //~ E0811
+  let ys = par~ i in 0 ..< 4 { x * F32.round_from(i) }   //~ E0811
   ys
 }
 
 pub flow without_state_as_the_tail(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0 ..< 4 { x * i.round_f32() }            //~ E0811
+  par~ i in 0 ..< 4 { x * F32.round_from(i) }        //~ E0811
 }
 
 pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par~ j in 0 ..< 2 { prev~(x * (i + j).round_f32()) })  //~ E0811
+    pair_sum(par~ j in 0 ..< 2 { prev~(x * F32.round_from(i + j)) })  //~ E0811
   }
 }
 
 pub flow the_outer_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {                                //~ E0811
-    pair_sum(par~ j in 0 ..< 2 { prev~(x * (i + j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { prev~(x * F32.round_from(i + j)) })
   }
 }
 
 pub flow in_a_block_body(f0: F32 at block, detune: F32 at block) -> [F32; 4] at sample {
   let saws = par~ i in 0 ..< 4 {                     //~ E0811
-    saw~(f0 * (1.0 + detune * i.round_f32()))
+    saw~(f0 * (1.0 + detune * F32.round_from(i)))
   }
   saws
 }

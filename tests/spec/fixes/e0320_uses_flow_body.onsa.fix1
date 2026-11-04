@@ -51,6 +51,6 @@ pub flow pattern_in_a_match(
 ) -> F32 at sample {
   match k {
     0 => 0.0,
-    some_n => some_n.round_f32(), //~ E0320
+    some_n => F32.round_from(some_n), //~ E0320
   }
 }

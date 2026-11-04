@@ -63,7 +63,7 @@ pub flow gain(
 @export
 pub flow offset(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let k = 100 / n
-  x + k.round_f32()
+  x + F32.round_from(k)
 }
 
 // Not exported: it is called from the exported function and is not in the C API.

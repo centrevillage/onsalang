@@ -116,7 +116,7 @@ def named_cases(by_id):
     for x in (M.fenc_zero("f64", 1), M.fq("f64", -Fraction(1, 10 ** 300)), M.fq("f64", Fraction(1, 10 ** 300))):
         add("f64.round_f32", (x,), "S-207")        # a zero keeps its sign; a value that rounds to zero too
     add("f32.as_f64", (M.fenc_zero("f32", 1),), "S-207")
-    for it in INTS:     # an integer 0 is +0.0 as a float, by `as` and by `round_f32` / `round_f64`
+    for it in INTS:     # an integer 0 is +0.0 as a float, by `as` and by `round_from`
         for ft in FLOATS:
             add(f"{it}.{O.conv_forms(it, ft)[0]}_{ft}", (0,), "S-207")
     # S-210: `as` to the same type changes nothing (the sign of a zero, every kind of NaN, the ends of an integer)

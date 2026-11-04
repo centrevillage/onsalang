@@ -262,15 +262,15 @@ def expr_inputs(t, name):
 # --------------------------------------------------------------- registry
 def _vdelay_body(t, name):
     T = onsa_type(t)
-    mx = "top.round_f32()" if t == "f32" else "top as F64"
-    ki = "k.round_f32()" if t == "f32" else "(k as F64)"
+    mx = "F32.round_from(top)" if t == "f32" else "top as F64"
+    ki = "F32.round_from(k)" if t == "f32" else "(k as F64)"
     lets = [("m", mx), ("dc", "if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }")]
     if name == "vdelay_f":
-        lets.append(("k", "dc.trunc_u32()"))
+        lets.append(("k", "U32.trunc_from(dc)"))
     width = max(len(n) for n, _ in lets)  # `onsa fmt` aligns the `=` of consecutive lets
     head = f"pub fn {t}_{name}(d: {T}, top: U32) -> {'U32' if name == 'vdelay_k' else T} {{\n"
     body = "".join(f"  let {n.ljust(width)} = {v}\n" for n, v in lets)
-    return head + body + ("  dc.trunc_u32()\n}" if name == "vdelay_k" else f"  dc - {ki}\n}}")
+    return head + body + ("  U32.trunc_from(dc)\n}" if name == "vdelay_k" else f"  dc - {ki}\n}}")
 
 
 def registry():
@@ -342,15 +342,16 @@ def registry():
                     else:
                         model = lambda a, src=src, dst=dst: M.float_widen(src, dst, a[0])
                 elif form == "narrow":
-                    name, onsa, tok, ret = f"narrow_{dst}", f"a.narrow_{dst}()", ("narrow_<型>",), f"opt:{dst}"
+                    name, onsa, tok, ret = f"narrow_{dst}", f"{D}.narrow_from(a)", ("narrow_from",), f"opt:{dst}"
                     model = lambda a, dst=dst: M.int_narrow(dst, a[0])
                 elif form in ("trunc", "trunc_sat"):
                     sat = form == "trunc_sat"
                     name = f"trunc_{dst}" + ("_sat" if sat else "")
-                    onsa, tok, ret = f"a.{name}()", ("trunc_<型>_sat" if sat else "trunc_<型>",), dst
+                    fn = "trunc_sat_from" if sat else "trunc_from"
+                    onsa, tok, ret = f"{D}.{fn}(a)", (fn,), dst
                     model = lambda a, src=src, dst=dst, sat=sat: M.float_to_int(src, a[0], dst, sat)
                 else:
-                    name, onsa, tok, ret = f"round_{dst}", f"a.round_{dst}()", (f"round_{dst}",), dst
+                    name, onsa, tok, ret = f"round_{dst}", f"{D}.round_from(a)", ("round_from",), dst
                     if src in INTS:
                         model = lambda a, dst=dst: M.int_to_float(dst, a[0])
                     else:

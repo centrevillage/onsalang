@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn names_list_every_row() {
         let n = names();
-        for x in ["PI", "BITS", "from_bits", "narrow_u8", "trunc_i64_sat", "to_bits", "abs", "checked_add"] {
+        for x in ["PI", "BITS", "from_bits", "narrow_from", "trunc_sat_from", "to_bits", "abs", "checked_add"] {
             assert!(!n.iter().any(|y| y == x), "{x} is std's (§6.6, §3.3), in {n:?}");
         }
         // The sequences' but `len` of an array are std's (`std/core/seq.onsa`, D1).

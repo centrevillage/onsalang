@@ -252,13 +252,13 @@ pub fn rem_chain_i8(a: I8, b: I8) -> I8 {
 @export
 pub fn sat_u64_hi(k: F64) -> U32 {
   let x = TWO63 * k
-  part_of(x.trunc_u64_sat(), 0)
+  part_of(U64.trunc_sat_from(x), 0)
 }
 
 @export
 pub fn sat_u64_lo(k: F64) -> U32 {
   let x = TWO63 * k
-  part_of(x.trunc_u64_sat(), 1)
+  part_of(U64.trunc_sat_from(x), 1)
 }
 
 @export

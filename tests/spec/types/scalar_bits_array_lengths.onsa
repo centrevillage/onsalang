@@ -80,7 +80,7 @@ test "a const argument names BITS and has the value of BITS" {
 }
 
 test "a loop counts to BITS and indexes an array of that length" {
-  let a: [F32; U8.BITS] = array.from_fn(fn(i) { i.round_f32() })
+  let a: [F32; U8.BITS] = array.from_fn(fn(i) { F32.round_from(i) })
   var sum: F32          = 0.0
   for i in 0 ..< U8.BITS {
     sum = sum + a[i]

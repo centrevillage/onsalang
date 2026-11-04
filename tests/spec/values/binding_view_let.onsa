@@ -185,7 +185,7 @@ pub fn for_over_the_view_of_an_inout_argument(inout xs: Span[F32]) -> F32 {
 
 pub fn for_over_the_view_of_a_local_array(n: U32) -> F32 {
   var a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  a[0] = a[0] + n.round_f32()
+  a[0] = a[0] + F32.round_from(n)
   var total: F32 = 0.0
   for v in a.slice(0, 2) {
     total = total + v

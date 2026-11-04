@@ -44,7 +44,7 @@ test "PI of F64 is the mathematical value rounded to the nearest even, as a lite
 }
 
 test "the PI of F32 rounds from the PI of F64, and widening it is above the PI of F64" {
-  assert F64.PI.round_f32() == F32.PI
+  assert F32.round_from(F64.PI) == F32.PI
   let wide: F64 = F32.PI as F64
   assert wide > F64.PI
   assert wide != F64.PI
@@ -121,7 +121,7 @@ test "MAX of F64 is the largest finite value" {
 
 test "MAX of F64 is above MAX of F32, and rounding it to F32 overflows to infinity" {
   assert F64.MAX > (F32.MAX as F64)
-  assert F64.MAX.round_f32() == F32.INFINITY
+  assert F32.round_from(F64.MAX) == F32.INFINITY
 }
 
 // ---------------------------------------------------------------- INFINITY

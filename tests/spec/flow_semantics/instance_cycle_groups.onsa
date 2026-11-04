@@ -120,6 +120,6 @@ pub flow base(x: F32 at sample) -> F32 at sample {
 // A user of the cycles written last, with a `par`: the instances of the flows of the collections are
 // not a cycle for this flow.
 pub flow users(x: F32 at sample) -> F32 at sample {
-  let xs = par~ i in 0..<2 { x1~(x) * i.round_f32() }
+  let xs = par~ i in 0..<2 { x1~(x) * F32.round_from(i) }
   xs[0] + xs[1] + y2~(x) + h2~(x) + hub~(x)
 }

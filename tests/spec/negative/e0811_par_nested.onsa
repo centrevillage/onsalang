@@ -26,39 +26,39 @@ pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
 
 pub flow only_the_inner_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })  //~ E0811
+    pair_sum(par j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })  //~ E0811
   }
 }
 
 pub flow only_the_outer_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
   par i in 0 ..< 3 {                                //~ E0811
-    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })
   }
 }
 
 pub flow both_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
   par i in 0 ..< 3 {                                //~ E0811
-    pair_sum(par j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+    pair_sum(par j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })
   }
 }
 
 pub flow only_the_middle_of_three_without_the_tilde(x: F32 at sample) -> [F32; 2] at sample {
   par~ i in 0 ..< 2 {
     pair_sum(par j in 0 ..< 2 {                     //~ E0811
-      pair_sum(par~ k in 0 ..< 2 { lp~(x * (i + j + k).round_f32()) })
+      pair_sum(par~ k in 0 ..< 2 { lp~(x * F32.round_from(i + j + k)) })
     })
   }
 }
 
 pub flow the_inner_of_a_body_without_state(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par j in 0 ..< 2 { x * (i + j).round_f32() })  //~ E0811
+    pair_sum(par j in 0 ..< 2 { x * F32.round_from(i + j) })  //~ E0811
   }
 }
 
 pub flow the_inner_in_a_let_of_the_flow(x: F32 at sample) -> F32 at sample {
   let rows = par~ i in 0 ..< 3 {
-    pair_sum(par j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })  //~ E0811
+    pair_sum(par j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })  //~ E0811
   }
   rows[0] + rows[1] + rows[2]
 }
@@ -67,6 +67,6 @@ pub flow the_inner_in_a_let_of_the_flow(x: F32 at sample) -> F32 at sample {
 
 pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })
   }
 }

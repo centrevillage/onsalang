@@ -164,7 +164,7 @@ fn for_over_span_uses_len_prim() {
 #[test]
 fn from_fn_closure_is_inlined() {
     let d = text(
-        "use std.array\n\npub fn squares(k: F32) -> [F32; 3] {\n  array.from_fn(fn(i) { (i.round_f32()) * k })\n}\n",
+        "use std.array\n\npub fn squares(k: F32) -> [F32; 3] {\n  array.from_fn(fn(i) { (F32.round_from(i)) * k })\n}\n",
     );
     assert!(d.contains("let __arr: [F32; 3] = zeroed:[F32; 3]"), "{d}");
     assert!(d.contains("for __i in 0:U32..3:U32 {"), "{d}");
@@ -203,12 +203,12 @@ fn consts_and_assoc_consts() {
 #[test]
 fn methods_and_builtin_prims() {
     let d = text(
-        "pub fn f(x: F64, n: I64) -> I32 {\n  let a = x.trunc_i32_sat()\n  let b = n.narrow_i32().unwrap_or(0)\n  let _ = x.to_bits()\n  a + b\n}\n",
+        "pub fn f(x: F64, n: I64) -> I32 {\n  let a = I32.trunc_sat_from(x)\n  let b = I32.narrow_from(n).unwrap_or(0)\n  let _ = x.to_bits()\n  a + b\n}\n",
     );
     assert!(d.contains("trunc_sat.F64.I32(x)"), "{d}");
-    // `narrow_*` is Onsa over its primitive (S-71).
-    assert!(d.contains("std.core.num.I64.narrow_i32(n)"), "{d}");
-    assert!(d.contains("narrow_parts.I64.I32(self)"), "{d}");
+    // `narrow_from` is Onsa over its primitive (S-71).
+    assert!(d.contains("std.core.num.I32.narrow_from__I64(n)"), "{d}");
+    assert!(d.contains("narrow_parts.I64.I32(x)"), "{d}");
     assert!(d.contains("to_bits.F64(x)"), "{d}");
     assert!(d.contains("switch "), "{d}");
 }
@@ -554,7 +554,7 @@ fn sub_instances_are_wired_per_phase() {
 
 #[test]
 fn par_replicates_state_and_loops() {
-    let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: F32 at block) -> F32 at sample {\n  let saws = par~ i in 0..<N {\n    saw~(f0 * (1.0 + (i.round_f32() * 0.01)))\n  }\n  sum(saws)\n}\n";
+    let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: F32 at block) -> F32 at sample {\n  let saws = par~ i in 0..<N {\n    saw~(f0 * (1.0 + (F32.round_from(i) * 0.01)))\n  }\n  sum(saws)\n}\n";
     let d = text(src);
     assert!(
         d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], poisoned: Bool, initialized: Bool }"),

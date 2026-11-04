@@ -41,7 +41,7 @@ pub fn inout_receiver_and_the_same_element_in_an_argument(inout xs: [Span[F32]; 
 
 // A read in the argument is no change, and a change in a separate statement is not in the call.
 pub fn read_in_an_argument(inout xs: [Span[F32]; 2]) {
-  xs[0].fill!(xs[1].len().round_f32())
+  xs[0].fill!(F32.round_from(xs[1].len()))
 }
 
 pub fn change_then_use_in_two_calls(inout xs: [Span[F32]; 2]) {

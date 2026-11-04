@@ -18,43 +18,43 @@ pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
 }
 
 pub flow in_a_let(x: F32 at sample) -> [F32; 2] at sample {
-  let ys = ser~ i in 0 ..< 2 { x * i.round_f32() }  //~ E0200
+  let ys = ser~ i in 0 ..< 2 { x * F32.round_from(i) }  //~ E0200
   ys
 }
 
 pub flow as_the_tail(x: F32 at sample) -> [F32; 2] at sample {
-  ser~ i in 0 ..< 2 { x * i.round_f32() }           //~ E0200
+  ser~ i in 0 ..< 2 { x * F32.round_from(i) }       //~ E0200
 }
 
 pub flow as_an_argument(x: F32 at sample) -> F32 at sample {
-  pair_sum(ser~ i in 0 ..< 2 { x * i.round_f32() })  //~ E0200
+  pair_sum(ser~ i in 0 ..< 2 { x * F32.round_from(i) })  //~ E0200
 }
 
 pub flow with_state_in_the_body(x: F32 at sample) -> [F32; 2] at sample {
-  let ys = ser~ i in 0 ..< 2 { lp~(x * i.round_f32()) }  //~ E0200
+  let ys = ser~ i in 0 ..< 2 { lp~(x * F32.round_from(i)) }  //~ E0200
   ys
 }
 
 pub flow with_a_closed_range(x: F32 at sample) -> [F32; 3] at sample {
-  let ys = ser~ i in 0 ..= 2 { x * i.round_f32() }  //~ E0200
+  let ys = ser~ i in 0 ..= 2 { x * F32.round_from(i) }  //~ E0200
   ys
 }
 
 pub flow in_the_body_of_a_par(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(ser~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })  //~ E0200
+    pair_sum(ser~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })  //~ E0200
   }
 }
 
 pub flow around_a_par(x: F32 at sample) -> [F32; 3] at sample {
   ser~ i in 0 ..< 3 {                               //~ E0200
-    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })
   }
 }
 
 pub flow in_a_block_body(x: F32 at sample) -> [F32; 2] at sample {
   let ys = ser~ i in 0 ..< 2 {                      //~ E0200
-    lp~(x * i.round_f32())
+    lp~(x * F32.round_from(i))
   }
   ys
 }
@@ -62,5 +62,5 @@ pub flow in_a_block_body(x: F32 at sample) -> [F32; 2] at sample {
 // ---- Not errors: the replication is `par~` ----
 
 pub flow fine(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..< 2 { lp~(x * i.round_f32()) }
+  par~ i in 0 ..< 2 { lp~(x * F32.round_from(i)) }
 }

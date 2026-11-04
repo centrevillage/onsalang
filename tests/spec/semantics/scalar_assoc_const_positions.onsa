@@ -100,7 +100,7 @@ fn saturate_u8(x: U32) -> U8 {
   if x > (U8.MAX as U32) {
     U8.MAX
   } else {
-    val(x.narrow_u8(), U8.MAX)
+    val(U8.narrow_from(x), U8.MAX)
   }
 }
 
@@ -152,11 +152,11 @@ test "EPSILON is the unit of a comparison with a tolerance" {
 }
 
 test "a closure that array.from_fn runs reads an associated constant" {
-  let xs: [F32; 3] = array.from_fn(fn(i) { F32.PI * i.round_f32() })
+  let xs: [F32; 3] = array.from_fn(fn(i) { F32.PI * F32.round_from(i) })
   assert xs[0] == 0.0
   assert xs[1] == F32.PI
   assert xs[2] == TWO_PI
-  let ys: [U8; 3] = array.from_fn(fn(i) { U8.MAX - val(i.narrow_u8(), 0) })
+  let ys: [U8; 3] = array.from_fn(fn(i) { U8.MAX - val(U8.narrow_from(i), 0) })
   assert ys[0] == 255
   assert ys[2] == 253
 }

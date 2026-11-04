@@ -41,7 +41,7 @@ rt fn an_element_of_a_static_table(i: U32) -> U32 {
 
 rt fn a_static_struct() -> F32 {
   let p = Param { id: 3, value: 2.5 }
-  p.id.round_f32() + p.value
+  F32.round_from(p.id) + p.value
 }
 
 rt fn a_static_variant(v: U32) -> U32 {
@@ -64,7 +64,7 @@ fn plain_static_array() -> U32 {
 
 rt fn a_struct_with_an_argument(v: F32) -> F32 {
   let p = Param { id: 3, value: v }
-  p.value + p.id.round_f32()
+  p.value + F32.round_from(p.id)
 }
 
 rt fn a_tuple_with_an_operation(v: U32) -> U32 {
@@ -93,7 +93,7 @@ rt fn if_with_literal_tails(c: Bool, v: F32, w: F32) -> F32 {
 
 fn plain_struct_with_an_argument(v: F32) -> F32 {
   let p = Param { id: 4, value: v }
-  p.value * p.id.round_f32()
+  p.value * F32.round_from(p.id)
 }
 
 // ------------------------------------------------------------------------ names as elements
@@ -101,13 +101,13 @@ fn plain_struct_with_an_argument(v: F32) -> F32 {
 rt fn names_in_a_tuple(v: F32) -> F32 {
   let nm: U32 = 3
   let t       = (nm, v)
-  t.1 + t.0.round_f32()
+  t.1 + F32.round_from(t.0)
 }
 
 rt fn literal_binding_in_a_struct(v: F32) -> F32 {
   let p = Param { id: 3, value: v }
   let o = W { p: p, k: 2 }
-  o.p.value + o.k.round_f32() + o.p.id.round_f32()
+  o.p.value + F32.round_from(o.k) + F32.round_from(o.p.id)
 }
 
 rt fn derived_binding_in_a_tuple(v: F32) -> F32 {

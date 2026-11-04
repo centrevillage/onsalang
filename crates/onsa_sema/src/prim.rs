@@ -151,23 +151,23 @@ pub enum Prim {
     IntAbs(IntKind),
     IntMin(IntKind),
     IntMax(IntKind),
-    /// `narrow_parts` of `x.narrow_i32()`: whether `x` fits, and its value
+    /// `narrow_parts` of `I32.narrow_from(x)`: whether `x` fits, and its value
     /// there (0 when it does not), a `(Bool, I32)`.
     NarrowParts {
         from: IntKind,
         to: IntKind,
     },
-    /// `x.round_f32()` / `x.round_f64()` from an integer (round to nearest even).
+    /// `F32.round_from(x)` / `F64.round_from(x)` from an integer (round to nearest even).
     IntToFloat {
         from: IntKind,
         to: FloatKind,
     },
-    /// `x.round_f32()` on `F64`.
+    /// `F32.round_from(x)` / `F64.round_from(x)` from a float.
     FloatToFloat {
         from: FloatKind,
         to: FloatKind,
     },
-    /// `x.trunc_i32()` (panics out of range) / `x.trunc_i32_sat()` (saturates, NaN -> 0).
+    /// `I32.trunc_from(x)` (panics out of range) / `I32.trunc_sat_from(x)` (saturates, NaN -> 0).
     TruncToInt {
         from: FloatKind,
         to: IntKind,
@@ -361,19 +361,6 @@ pub enum PrimRow {
         sat: bool,
     },
     /// The methods of the scalars (§3.3, §3.4), as their [`Prim`]s.
-    IntToFloat {
-        from: IntKind,
-        to: FloatKind,
-    },
-    FloatToFloat {
-        from: FloatKind,
-        to: FloatKind,
-    },
-    TruncToInt {
-        from: FloatKind,
-        to: IntKind,
-        sat: bool,
-    },
     ToBits(FloatKind),
     DivEuclid(IntKind),
     RemEuclid(IntKind),
@@ -431,9 +418,6 @@ impl PrimRow {
                 &[Scalar::Int(this), Scalar::Float(from)] if this == to => Some(Prim::TruncToInt { from, to, sat }),
                 _ => None,
             },
-            PrimRow::IntToFloat { from, to } => own(args, Scalar::Int(from), Prim::IntToFloat { from, to }),
-            PrimRow::FloatToFloat { from, to } => own(args, Scalar::Float(from), Prim::FloatToFloat { from, to }),
-            PrimRow::TruncToInt { from, to, sat } => own(args, Scalar::Float(from), Prim::TruncToInt { from, to, sat }),
             PrimRow::ToBits(k) => own(args, Scalar::Float(k), Prim::ToBits(k)),
             PrimRow::DivEuclid(k) => own(args, Scalar::Int(k), Prim::DivEuclid(k)),
             PrimRow::RemEuclid(k) => own(args, Scalar::Int(k), Prim::RemEuclid(k)),
@@ -507,21 +491,13 @@ pub fn rows() -> &'static [Row] {
         ]);
         v.push(row("core.num.narrow_parts", PrimRow::NarrowParts, 1, true));
         v.extend(CheckedOp::ALL.map(|op| row(&format!("core.num.{}_parts", op.name()), PrimRow::Parts(op), 2, true)));
-        // The members of the scalars (§3.3, §3.4): `from_bits` and the methods.
+        // The members of the scalars (§3.3, §3.4).
         let member = |ty: &str, name: &str, prim, arity| row(&format!("{ty}.{name}"), prim, arity, true);
         for k in FLOATS {
             v.push(member(k.name(), "from_bits", PrimRow::FromBits(k), 1));
             v.push(member(k.name(), "to_bits", PrimRow::ToBits(k), 0));
             v.push(member(k.name(), "round_from", PrimRow::RoundFrom(k), 1));
-            for to in INTS {
-                for (sat, sfx) in [(false, ""), (true, "_sat")] {
-                    let name = format!("trunc_{}{sfx}", to.name().to_lowercase());
-                    v.push(member(k.name(), &name, PrimRow::TruncToInt { from: k, to, sat }, 0));
-                }
-            }
         }
-        let (from, to) = (FloatKind::F64, FloatKind::F32);
-        v.push(member(from.name(), "round_f32", PrimRow::FloatToFloat { from, to }, 0));
         for k in INTS {
             v.push(member(k.name(), "div_euclid", PrimRow::DivEuclid(k), 1));
             v.push(member(k.name(), "rem_euclid", PrimRow::RemEuclid(k), 1));
@@ -540,13 +516,6 @@ pub fn rows() -> &'static [Row] {
         // `Buf.zeroed` allocates (§12): no `rt`. `Str.len` (§4.2).
         v.push(row(&format!("{}.zeroed", BuiltinTy::Buf.name()), PrimRow::BufZeroed, 1, false));
         v.push(member(BuiltinTy::Str.name(), "len", PrimRow::StrLen, 0));
-        // The integers wider than the significand (§3.3's table; the unit
-        // test checks std's against `as`).
-        use {FloatKind::*, IntKind::*};
-        for (from, to) in [(I32, F32), (U32, F32), (I64, F32), (U64, F32), (I64, F64), (U64, F64)] {
-            let name = format!("round_{}", to.name().to_lowercase());
-            v.push(member(from.name(), &name, PrimRow::IntToFloat { from, to }, 0));
-        }
         v
     })
 }

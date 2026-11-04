@@ -12,7 +12,7 @@ const N: U32 = 1024
 fn make_sine() -> [F32; N] {
   var t: [F32; N] = [0.0; N]
   for i in 0..<N {
-    t[i] = sin((i.round_f32() / N.round_f32()) * 6.2831855)
+    t[i] = sin((F32.round_from(i) / F32.round_from(N)) * 6.2831855)
   }
   t
 }
@@ -21,5 +21,5 @@ const SINE: [F32; N] = make_sine()
 
 @export
 pub flow osc(@param(min: 0.0, max: 1.0, default: 0.0) idx: Ctl[F32]) -> Sig[F32] {
-  SINE[(idx * 1023.0).trunc_u32_sat()]
+  SINE[U32.trunc_sat_from(idx * 1023.0)]
 }

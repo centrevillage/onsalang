@@ -77,5 +77,5 @@ pub fn call_the_result_in_an_operand(x: I32) -> I32 {
 pub fn fine(s: Shaper, t: (fn(I32) -> I32, I32), x: F32) -> F32 {
   let a = t.0.(t.1)
   let b = pick(true).(a)
-  s.curve.(x) * s.gain + b.round_f32()
+  s.curve.(x) * s.gain + F32.round_from(b)
 }

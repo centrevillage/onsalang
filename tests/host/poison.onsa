@@ -88,8 +88,8 @@ pub flow boom(
   @param(min: 0.0, max: 10000000000.0, default: 1.0)
   k: F32 at block,
 ) -> F32 at sample {
-  let n = k.trunc_u32()
-  x * n.round_f32()
+  let n = U32.trunc_from(k)
+  x * F32.round_from(n)
 }
 
 @export
@@ -101,5 +101,5 @@ pub fn checked(a: I32, b: I32) -> I32 {
 @export
 pub flow fragile(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let m = n + 1
-  x * m.round_f32()
+  x * F32.round_from(m)
 }

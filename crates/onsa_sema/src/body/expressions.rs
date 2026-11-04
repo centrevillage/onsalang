@@ -164,10 +164,13 @@ impl<'a> Checker<'a> {
                     ),
                 )
                 .with_found(self.src(span));
-                if let Some(m) = crate::cast::cast_suggestion(&self.a.types, from, to) {
-                    // `as` and the type after the operand change, the operand stays (S-251).
-                    let rest = Span::new(span.file, self.expr(*inner).span.end, span.end);
-                    d = d.with_fix(Fix::replace(format!("call `{m}`"), rest, m));
+                // The call replaces the whole `as` expression; the operand stays, as
+                // written, as its argument (§3.3), and the edits go around it (S-251).
+                let rest = Span::new(span.file, self.expr(*inner).span.end, span.end);
+                for f in crate::cast::cast_suggestions(&self.a.types, from, to) {
+                    let head = onsa_diag::Edit::insert(span.file, span.start, format!("{f}("));
+                    let tail = onsa_diag::Edit::replace(rest, ")");
+                    d = d.with_fix(Fix::new(format!("call `{f}`"), vec![head, tail]));
                 }
                 Err(self.diag(d))
             }

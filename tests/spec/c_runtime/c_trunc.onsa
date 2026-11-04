@@ -251,8 +251,8 @@
 // ]
 
 // Float to integer conversion on a target that is built to C (spec §3.3, §3.4, §9.2, §14.2):
-// `trunc_<type>()` truncates toward zero and panics when the truncated value is outside the type and
-// for a NaN or an infinity; `trunc_<type>_sat()` clamps to the type and maps NaN to 0. The 64-bit
+// `trunc_from` truncates toward zero and panics when the truncated value is outside the type and
+// for a NaN or an infinity; `trunc_sat_from` clamps to the type and maps NaN to 0. The 64-bit
 // types are the point: 2^63 and 2^64 are exact floats whose conversion a host cast gets wrong, and a
 // value in (-1, 0) truncates to 0 for the unsigned types too (S-189: `-0.9` is 0, `-1.0` panics).
 // The vectors (tests/vectors) call one conversion on one literal; this file adds the places around it.
@@ -290,7 +290,7 @@ fn part_of(x: U64, part: U32) -> U32 {
     x & 4294967295
   }
   var r: U32 = 0
-  match y.narrow_u32() {
+  match U32.narrow_from(y) {
     Some(v) => {
       r = v
     },
@@ -305,10 +305,10 @@ fn trunc_arm(o: Option[F64], y: F64) -> I64 {
   var r: I64 = 5
   match o {
     Some(v) => {
-      r = v.trunc_i64()
+      r = I64.trunc_from(v)
     },
     None => {
-      r = y.trunc_i64_sat()
+      r = I64.trunc_sat_from(y)
     },
   }
   r
@@ -317,66 +317,66 @@ fn trunc_arm(o: Option[F64], y: F64) -> I64 {
 @export
 pub fn trunc_i64_f64(n: F64, d: F64) -> I64 {
   let x = n / d
-  x.trunc_i64()
+  I64.trunc_from(x)
 }
 
 @export
 pub fn trunc_sat_i64_f64(n: F64, d: F64) -> I64 {
   let x = n / d
-  x.trunc_i64_sat()
+  I64.trunc_sat_from(x)
 }
 
 @export
 pub fn trunc_u64_f64(n: F64, d: F64, part: U32) -> U32 {
   let x = n / d
-  let r = x.trunc_u64()
+  let r = U64.trunc_from(x)
   part_of(r, part)
 }
 
 @export
 pub fn trunc_sat_u64_f64(n: F64, d: F64, part: U32) -> U32 {
   let x = n / d
-  let r = x.trunc_u64_sat()
+  let r = U64.trunc_sat_from(x)
   part_of(r, part)
 }
 
 @export
 pub fn trunc_sat_u64_f32(n: F32, d: F32, part: U32) -> U32 {
   let x = n / d
-  let r = x.trunc_u64_sat()
+  let r = U64.trunc_sat_from(x)
   part_of(r, part)
 }
 
 @export
 pub fn trunc_u8_f64(n: F64, d: F64) -> U8 {
   let x = n / d
-  x.trunc_u8()
+  U8.trunc_from(x)
 }
 
 @export
 pub fn trunc_sat_u32_f32(n: F32, d: F32) -> U32 {
   let x = n / d
-  x.trunc_u32_sat()
+  U32.trunc_sat_from(x)
 }
 
 @export
 pub fn trunc_neg09_u32_f64(k: F64) -> Bool {
   let x: F64 = -0.9 * k
-  let r = x.trunc_u32()
+  let r = U32.trunc_from(x)
   r == 0
 }
 
 @export
 pub fn trunc_neg09_u64_f64(k: F64) -> Bool {
   let x: F64 = -0.9 * k
-  let r = x.trunc_u64()
+  let r = U64.trunc_from(x)
   r == 0
 }
 
 @export
 pub fn trunc_neg09_u64_f32(k: F32) -> Bool {
   let x: F32 = -0.9 * k
-  let r = x.trunc_u64()
+  let r = U64.trunc_from(x)
   r == 0
 }
 
@@ -385,7 +385,7 @@ pub fn trunc_sum_loop_i64(n: U32) -> I64 {
   var acc: I64 = 0
   for _ in 0..<n {
     let top: F64 = 2305843009213693952.0
-    acc = acc + top.trunc_i64()
+    acc = acc + I64.trunc_from(top)
   }
   acc
 }
@@ -395,14 +395,14 @@ pub fn trunc_sat_sum_loop_u64(n: U32, part: U32) -> U32 {
   var acc: U64 = 0
   for _ in 0..<n {
     let top: F64 = 9223372036854775808.0
-    acc = acc +| top.trunc_u64_sat()
+    acc = acc +| U64.trunc_sat_from(top)
   }
   part_of(acc, part)
 }
 
 @export
 pub fn parts_u_f64(x: F64) -> U32 {
-  let p = Parts { i: x.trunc_i64(), u: x.trunc_u32() }
+  let p = Parts { i: I64.trunc_from(x), u: U32.trunc_from(x) }
   p.u
 }
 
@@ -425,7 +425,7 @@ pub fn trunc_in_closure_i64(base: F64) -> I64 {
     } else {
       -base
     }
-    y.trunc_i64()
+    I64.trunc_from(y)
   })
   ys[2]
 }

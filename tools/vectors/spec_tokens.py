@@ -19,10 +19,12 @@ import repo  # noqa: E402
 
 # Spans of 3.3 / 3.4 that are not operations of the vectors.
 NOT_OPERATIONS = {
-    "a": "a name in an example", "b": "a name in an example", "n": "a name in an example",
+    "a": "a name in an example", "b": "a name in an example", "n": "a name in an example", "x": "a name in an example",
     "at": "the clock of a flow (11.3)", "process": "the host function (14.2)",
     "fmod": "the name of the meaning of `%` on floats",
     "std.math": "a module path", "rem_s": "the WASM instruction, named as a comparison",
+    "default": "the associated function of `Default` (6.3)",
+    "from_fn": "`array.from_fn` in an example of 3.3",
 }
 # Constants of the table of 6.6 that the vectors leave out (none: S-211 wrote the value of PI, W2-12).
 CONSTANTS_LEFT_OUT = {}
@@ -54,14 +56,11 @@ def spec_tokens(spec):
         if sp in ("-a", "!a"):
             toks.add(sp[0])
             continue
-        m = re.fullmatch(r"(?:[A-Za-z0-9]+\.)*([a-z_][a-z_0-9]*(?:_<型>(?:_sat)?)?)\(.*\)", sp)
+        m = re.fullmatch(r"(?:[A-Za-z0-9]+\.)*([a-z_][a-z_0-9]*)\(.*\)", sp)
         if not m:
-            m = re.fullmatch(r"([a-z_][a-z_0-9]*(?:_<型>(?:_sat)?)?)", sp)
+            m = re.fullmatch(r"([a-z_][a-z_0-9]*)", sp)
         if m:
-            name = m.group(1)
-            name = re.sub(r"^narrow_[iu]\d+$", "narrow_<型>", name)
-            name = re.sub(r"^trunc_[iu]\d+(_sat)?$", lambda m: "trunc_<型>" + (m.group(1) or ""), name)
-            toks.add(name)
+            toks.add(m.group(1))
     return toks - set(NOT_OPERATIONS)
 
 
@@ -93,11 +92,11 @@ def check(ops, spec):
         problems.append(f"the left-out constant {c!r} is no longer in the table of 6.6: remove it from CONSTANTS_LEFT_OUT")
     # 11.4: the formulas the registry writes out
     f114 = section(spec, "### 11.4 組込み", "### 11.5 呼び出しと複製")
-    for line in ("dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }", "k  = dc.trunc_u32()",
-                 "f  = dc - k  ", "y  = (1.0 - f) * a + f * b"):  # S-212: `k` is the value of `T`
+    for line in ("dc = if d >= T.ONE { if d <= m { d } else { m } } else { T.ONE }", "k  = U32.trunc_from(dc)",
+                 "f  = dc - T.round_from(k)", "y  = (T.ONE - f) * a + f * b"):
         if line not in f114:
             problems.append(f"11.4 no longer has the line {line!r} that the vdelay vectors are built on")
     for o in ops:
-        if o.name == "expr_interp" and o.onsa.replace("c", "f") != "(1.0 - f) * a + f * b":
+        if o.name == "expr_interp" and o.onsa.replace("c", "f").replace("1.0", "T.ONE") != "(T.ONE - f) * a + f * b":
             problems.append(f"{o.id}: the Onsa form is not the formula of 11.4")
     return problems

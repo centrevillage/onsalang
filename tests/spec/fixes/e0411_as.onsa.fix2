@@ -3,10 +3,10 @@
 // spec = ["§3.3", "§18.1"]
 // fixes = 2
 
-// E0411: `as` for a pair it cannot write. A reading with one meaning has the conversion method as
-// the candidate (integer to float and `F64` to `F32`: `round_f32()`). Float to integer reads
-// differently in other languages, so both are listed, `trunc_<type>_sat()` first and
-// `trunc_<type>()` second. An integer narrowing has no candidate (§3.3).
+// E0411: `as` for a pair it cannot write. A reading with one meaning has the conversion function of the
+// target type as the candidate, replacing the whole `as` expression (integer to float and `F64` to `F32`:
+// `F32.round_from(i)`). Float to integer reads differently in other languages, so both are listed,
+// `I32.trunc_sat_from(f)` first and `I32.trunc_from(f)` second. An integer narrowing has no candidate (§3.3).
 
 pub fn to_float(i: I32) -> F32 {
   i as F32                                          //~ E0411
@@ -21,7 +21,7 @@ pub fn long_to_double(n: I64) -> F64 {
 }
 
 pub fn float_to_int(f: F32) -> I32 {
-  f.trunc_i32()                                          //~ E0411
+  I32.trunc_from(f)                                          //~ E0411
 }
 
 pub fn narrowing(n: I64) -> I32 {

@@ -22,5 +22,5 @@ pub rt fn two(a: [F32; 2], b: F32) -> F32 {
 
 pub flow replicas(x: F32 at sample) -> F32 at sample {
   two(par
-    ~ i in 0 ..< 2 { lp~(x * i.round_f32()) }, 1.0)  //~ E0020
+    ~ i in 0 ..< 2 { lp~(x * F32.round_from(i)) }, 1.0)  //~ E0020
 }

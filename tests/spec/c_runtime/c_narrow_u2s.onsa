@@ -114,13 +114,13 @@
 //   { call = "fn", args = { base = 4294967294 }, status = 0, result = 1 },
 // ]
 
-// `narrow_<type>()` from unsigned to signed integers, on a target that is built to C (spec §3.3): `Some(v)` when the
+// `narrow_from` from unsigned to signed integers, on a target that is built to C (spec §3.3): `Some(v)` when the
 // value fits the destination type, `None` when it does not. The pairs that need the method are the ones `as`
 // cannot write: a narrower destination, the same width with the other sign, and a signed source to a
 // wider unsigned one.
 // The unsigned-to-signed pairs are the point of this file (R-11: a comparison of the unsigned source with
 // the signed lower bound converts the bound to the unsigned type and every value gets `None`):
-// `5u32.narrow_i32()` is `Some(5)`, `2147483648u32.narrow_i32()` and `4294967295u32.narrow_i32()` are `None`.
+// `I32.narrow_from(5u32)` is `Some(5)`, `I32.narrow_from(2147483648u32)` and `I32.narrow_from(4294967295u32)` are `None`.
 // A value fits when it is at most the signed MAX of the destination; the lower bound cannot be missed.
 // The vectors call each pair once on literals; this file adds the exported boundary with host-chosen
 // values, loops and an anonymous function. The same functions and expectations run on the interpreter
@@ -148,7 +148,7 @@ fn part_of(x: U64, part: U32) -> U32 {
     x & 4294967295
   }
   var r: U32 = 0
-  match y.narrow_u32() {
+  match U32.narrow_from(y) {
     Some(v) => {
       r = v
     },
@@ -162,7 +162,7 @@ fn part_of(x: U64, part: U32) -> U32 {
 @export
 pub fn narrow_u16_to_i16(x: U16) -> I64 {
   var r: I64 = I64.MIN
-  match x.narrow_i16() {
+  match I16.narrow_from(x) {
     Some(v) => {
       r = v as I64
     },
@@ -176,7 +176,7 @@ pub fn narrow_u16_to_i16(x: U16) -> I64 {
 @export
 pub fn narrow_u32_to_i32(x: U32) -> I64 {
   var r: I64 = I64.MIN
-  match x.narrow_i32() {
+  match I32.narrow_from(x) {
     Some(v) => {
       r = v as I64
     },
@@ -191,7 +191,7 @@ pub fn narrow_u32_to_i32(x: U32) -> I64 {
 pub fn narrow_u64_to_i64(xh: U32, xl: U32) -> I64 {
   let x      = join(xh, xl)
   var r: I64 = I64.MIN
-  match x.narrow_i64() {
+  match I64.narrow_from(x) {
     Some(v) => {
       r = v as I64
     },
@@ -207,7 +207,7 @@ pub fn count_fits_u32_i32(base: U32, n: U32) -> U32 {
   var x: U32 = base
   var c: U32 = 0
   for _ in 0 ..< n {
-    match x.narrow_i32() {
+    match I32.narrow_from(x) {
       Some(_) => {
         c = c + 1
       },
@@ -226,7 +226,7 @@ pub fn count_fits_u64_i64(bh: U32, bl: U32, n: U32) -> U32 {
   var c: U32 = 0
   var i: U32 = 0
   while i < n {
-    match x.narrow_i64() {
+    match I64.narrow_from(x) {
       Some(_) => {
         c = c + 1
       },
@@ -245,7 +245,7 @@ pub fn flags_in_closure_u32_i32(base: U32) -> U32 {
   let ys: [U32; 3] = array.from_fn(fn(i) {
     let x      = base +% i
     var r: U32 = 0
-    match x.narrow_i32() {
+    match I32.narrow_from(x) {
       Some(_) => {
         r = 1
       },

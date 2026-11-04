@@ -37,7 +37,7 @@ fn expr(n: U32) -> Str uses {Alloc} { "{n + 1}" }
 
 // 期待: E0001（呼び出し）。文面と note は `expr` と同じ。
 // 今: r102.onsa:40:38: error[E0001]: an interpolation holds a name path only: a name, then `.` and a field, a tuple index or a member (§2.4)。note「式は `let` に取る」。修正候補なし。
-fn call(p: P) -> Str uses {Alloc} { "{p.x.round_f32()}" }
+fn call(p: P) -> Str uses {Alloc} { "{F32.round_from(p.x)}" }
 
 // 期待: E0001（添字）。文面と note は `expr` と同じ。
 // 今: r102.onsa:44:47: error[E0001]: an interpolation holds a name path only: a name, then `.` and a field, a tuple index or a member (§2.4)。note「式は `let` に取る」。修正候補なし。

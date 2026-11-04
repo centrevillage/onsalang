@@ -374,29 +374,29 @@ test "narrow returns Some only when the value fits" {
   let top: I64 = 2147483647
   let low: I64 = -2147483648
   let below: I64 = -2147483649
-  assert is_none(big.narrow_i32())
-  assert val(top.narrow_i32(), 0) == 2147483647
-  assert val(low.narrow_i32(), 0) == -2147483648
-  assert is_none(below.narrow_i32())
-  assert !is_none(big.narrow_u32())
+  assert is_none(I32.narrow_from(big))
+  assert val(I32.narrow_from(top), 0) == 2147483647
+  assert val(I32.narrow_from(low), 0) == -2147483648
+  assert is_none(I32.narrow_from(below))
+  assert !is_none(U32.narrow_from(big))
   let neg: I64 = -1
-  assert is_none(neg.narrow_u32())
-  assert is_none(neg.narrow_u64())
+  assert is_none(U32.narrow_from(neg))
+  assert is_none(U64.narrow_from(neg))
   let imax: I64 = I64.MAX
-  assert val(imax.narrow_u64(), 0) == 9223372036854775807
+  assert val(U64.narrow_from(imax), 0) == 9223372036854775807
   let umax: U64 = U64.MAX
-  assert is_none(umax.narrow_i64())
-  assert is_none(umax.narrow_u32())
+  assert is_none(I64.narrow_from(umax))
+  assert is_none(U32.narrow_from(umax))
   let half: U64 = 9223372036854775807
-  assert val(half.narrow_i64(), 0) == 9223372036854775807
+  assert val(I64.narrow_from(half), 0) == 9223372036854775807
   let over: U64 = 9223372036854775808
-  assert is_none(over.narrow_i64())
+  assert is_none(I64.narrow_from(over))
   let b: U32 = 256
-  assert is_none(b.narrow_u8())
+  assert is_none(U8.narrow_from(b))
   let c: U32 = 255
-  assert val(c.narrow_u8(), 0) == 255
+  assert val(U8.narrow_from(c), 0) == 255
   let d: I32 = -129
-  assert is_none(d.narrow_i8())
+  assert is_none(I8.narrow_from(d))
 }
 
 // -------------------------------------------------- floating point to integer
@@ -404,23 +404,23 @@ test "narrow returns Some only when the value fits" {
 test "trunc rounds toward zero" {
   let a: F64 = 3.99
   let b: F64 = -3.99
-  assert a.trunc_i64() == 3
-  assert b.trunc_i64() == -3
+  assert I64.trunc_from(a) == 3
+  assert I64.trunc_from(b) == -3
   let c: F32 = 2147483520.0
-  assert c.trunc_i32() == 2147483520
+  assert I32.trunc_from(c) == 2147483520
   let d: F32 = -2147483648.0
-  assert d.trunc_i32() == -2147483648
+  assert I32.trunc_from(d) == -2147483648
   let e: F64 = 0.9
-  assert e.trunc_u64() == 0
+  assert U64.trunc_from(e) == 0
 }
 
 test "trunc at the largest and smallest F64 that fit a 64-bit integer" {
   let below_max: F64 = 9223372036854774784.0
-  assert below_max.trunc_i64() == 9223372036854774784
+  assert I64.trunc_from(below_max) == 9223372036854774784
   let min: F64 = -9223372036854775808.0
-  assert min.trunc_i64() == I64.MIN
+  assert I64.trunc_from(min) == I64.MIN
   let u_top: F64 = 18446744073709549568.0
-  assert u_top.trunc_u64() == 18446744073709549568
+  assert U64.trunc_from(u_top) == 18446744073709549568
 }
 
 test "trunc_sat clamps to the integer range and maps NaN to 0" {
@@ -428,71 +428,71 @@ test "trunc_sat clamps to the integer range and maps NaN to 0" {
   let nan  = zero / zero
   let inf  = 1.0 / zero
   let ninf = -1.0 / zero
-  assert nan.trunc_i64_sat() == 0
-  assert nan.trunc_u64_sat() == 0
-  assert inf.trunc_i64_sat() == I64.MAX
-  assert ninf.trunc_i64_sat() == I64.MIN
-  assert inf.trunc_u64_sat() == U64.MAX
-  assert ninf.trunc_u64_sat() == 0
+  assert I64.trunc_sat_from(nan) == 0
+  assert U64.trunc_sat_from(nan) == 0
+  assert I64.trunc_sat_from(inf) == I64.MAX
+  assert I64.trunc_sat_from(ninf) == I64.MIN
+  assert U64.trunc_sat_from(inf) == U64.MAX
+  assert U64.trunc_sat_from(ninf) == 0
   let past_i64: F64 = 9223372036854775808.0
-  assert past_i64.trunc_i64_sat() == I64.MAX
+  assert I64.trunc_sat_from(past_i64) == I64.MAX
   let before_i64: F64 = -9223372036854777856.0
-  assert before_i64.trunc_i64_sat() == I64.MIN
+  assert I64.trunc_sat_from(before_i64) == I64.MIN
   let past_u64: F64 = 18446744073709551616.0
-  assert past_u64.trunc_u64_sat() == U64.MAX
+  assert U64.trunc_sat_from(past_u64) == U64.MAX
   let negative: F64 = -5.5
-  assert negative.trunc_u64_sat() == 0
+  assert U64.trunc_sat_from(negative) == 0
   let big32: F32 = 1.0e10
-  assert big32.trunc_i32_sat() == I32.MAX
+  assert I32.trunc_sat_from(big32) == I32.MAX
   let neg32: F32 = -1.0e10
-  assert neg32.trunc_i32_sat() == I32.MIN
+  assert I32.trunc_sat_from(neg32) == I32.MIN
   let wide: F64 = 300.7
-  assert wide.trunc_u8_sat() == 255
+  assert U8.trunc_sat_from(wide) == 255
   let part: F64 = 200.9
-  assert part.trunc_u8_sat() == 200
+  assert U8.trunc_sat_from(part) == 200
 }
 
 // -------------------------------------------------- integer to floating point
 
-test "round_f64 rounds a 64-bit integer to the nearest even F64" {
+test "F64.round_from rounds a 64-bit integer to the nearest even F64" {
   let imax: I64 = I64.MAX
   let imin: I64 = I64.MIN
   let umax: U64 = U64.MAX
-  assert imax.round_f64() == 9223372036854775808.0
-  assert imin.round_f64() == -9223372036854775808.0
-  assert umax.round_f64() == 18446744073709551616.0
+  assert F64.round_from(imax) == 9223372036854775808.0
+  assert F64.round_from(imin) == -9223372036854775808.0
+  assert F64.round_from(umax) == 18446744073709551616.0
   let exact: I64 = 9007199254740992
-  assert exact.round_f64() == 9007199254740992.0
+  assert F64.round_from(exact) == 9007199254740992.0
   let tie_down: I64 = 9007199254740993
-  assert tie_down.round_f64() == 9007199254740992.0
+  assert F64.round_from(tie_down) == 9007199254740992.0
   let tie_up: I64 = 9007199254740995
-  assert tie_up.round_f64() == 9007199254740996.0
+  assert F64.round_from(tie_up) == 9007199254740996.0
   let above: I64 = 9007199254740994
-  assert above.round_f64() == 9007199254740994.0
+  assert F64.round_from(above) == 9007199254740994.0
 }
 
-test "round_f32 rounds to the nearest even F32" {
+test "F32.round_from rounds to the nearest even F32" {
   let a: I32 = 16777216
-  assert a.round_f32() == 16777216.0
+  assert F32.round_from(a) == 16777216.0
   let tie_down: I32 = 16777217
-  assert tie_down.round_f32() == 16777216.0
+  assert F32.round_from(tie_down) == 16777216.0
   let tie_up: I32 = 16777219
-  assert tie_up.round_f32() == 16777220.0
+  assert F32.round_from(tie_up) == 16777220.0
   let umax32: U32 = U32.MAX
-  assert umax32.round_f32() == 4294967296.0
+  assert F32.round_from(umax32) == 4294967296.0
   let imax: I64 = I64.MAX
-  assert imax.round_f32() == 9223372036854775808.0
+  assert F32.round_from(imax) == 9223372036854775808.0
 }
 
-test "round_f32 of an F64 overflows to infinity" {
+test "F32.round_from of an F64 overflows to infinity" {
   let a: F64 = 3.5e38
-  assert a.round_f32() == F32.INFINITY
+  assert F32.round_from(a) == F32.INFINITY
   let b: F64 = -3.5e38
-  assert b.round_f32() == -F32.INFINITY
+  assert F32.round_from(b) == -F32.INFINITY
   let c: F64 = 1.0e300
-  assert c.round_f32() == F32.INFINITY
+  assert F32.round_from(c) == F32.INFINITY
   let d: F64 = 3.4028234663852886e38
-  assert d.round_f32() == F32.MAX
+  assert F32.round_from(d) == F32.MAX
 }
 
 // ------------------------------------------------------------------ to_bits
@@ -650,34 +650,34 @@ test "shifting a U8 left by 7 does not panic" {
   assert b == 128
 }
 
-test "trunc_i64 just below -2^63 panics" {   //~ TESTFAIL "trunc_i64 just below -2^63 panics"
+test "I64.trunc_from just below -2^63 panics" {   //~ TESTFAIL "I64.trunc_from just below -2^63 panics"
   let a: F64 = -9223372036854777856.0
-  let _ = a.trunc_i64()
+  let _ = I64.trunc_from(a)
 }
 
-test "trunc_i32 of 2^31 panics" {   //~ TESTFAIL "trunc_i32 of 2^31 panics"
+test "I32.trunc_from of 2^31 panics" {   //~ TESTFAIL "I32.trunc_from of 2^31 panics"
   let a: F32 = 2147483648.0
-  let _ = a.trunc_i32()
+  let _ = I32.trunc_from(a)
 }
 
-test "trunc_i32 just below -2^31 panics" {   //~ TESTFAIL "trunc_i32 just below -2^31 panics"
+test "I32.trunc_from just below -2^31 panics" {   //~ TESTFAIL "I32.trunc_from just below -2^31 panics"
   let a: F32 = -2147483904.0
-  let _ = a.trunc_i32()
+  let _ = I32.trunc_from(a)
 }
 
-test "trunc_i64 of NaN panics" {   //~ TESTFAIL "trunc_i64 of NaN panics"
+test "I64.trunc_from of NaN panics" {   //~ TESTFAIL "I64.trunc_from of NaN panics"
   let z: F64 = 0.0
   let nan = z / z
-  let _   = nan.trunc_i64()
+  let _   = I64.trunc_from(nan)
 }
 
-test "trunc_i64 of infinity panics" {   //~ TESTFAIL "trunc_i64 of infinity panics"
+test "I64.trunc_from of infinity panics" {   //~ TESTFAIL "I64.trunc_from of infinity panics"
   let z: F64 = 0.0
   let inf = 1.0 / z
-  let _   = inf.trunc_i64()
+  let _   = I64.trunc_from(inf)
 }
 
-test "trunc_u64 of a value of at least 1 below zero panics" {   //~ TESTFAIL "trunc_u64 of a value of at least 1 below zero panics"
+test "U64.trunc_from of a value of at least 1 below zero panics" {   //~ TESTFAIL "U64.trunc_from of a value of at least 1 below zero panics"
   let a: F64 = -1.0
-  let _ = a.trunc_u64()
+  let _ = U64.trunc_from(a)
 }

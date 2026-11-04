@@ -2,164 +2,164 @@
 // [test]
 // spec = ["§3.3", "§15.1", "§18.1"]
 
-// E0413 (W5-02 U4b): a conversion method for a pair of types that `as` can write has no method form (spec §3.3:
-// "`as` で書ける組の変換メソッドは無い"; the same type, the wider integer of the same sign, the wider signed integer
+// E0413 (W5-02 U4b): a conversion function for a pair of types that `as` can write does not exist (spec §3.3:
+// "`as` で書ける組には、変換の関連関数は無い"; the same type, the wider integer of the same sign, the wider signed integer
 // from an unsigned one, `F32` to `F64`, the small integers into a float that holds them). Every such pair is a
 // function of its own (P-01). The candidates (the `as` form) are W5-14, so the markers do not count them. The
 // methods of the pairs that `as` cannot write are in ops/convert_methods_table.onsa.
 
 pub fn i8_narrow_i8(x: I8) -> Option[I8] {
-  x.narrow_i8()    //~ E0413
+  I8.narrow_from(x)    //~ E0413
 }
 
 pub fn i8_narrow_i16(x: I8) -> Option[I16] {
-  x.narrow_i16()    //~ E0413
+  I16.narrow_from(x)    //~ E0413
 }
 
 pub fn i8_narrow_i32(x: I8) -> Option[I32] {
-  x.narrow_i32()    //~ E0413
+  I32.narrow_from(x)    //~ E0413
 }
 
 pub fn i8_narrow_i64(x: I8) -> Option[I64] {
-  x.narrow_i64()    //~ E0413
+  I64.narrow_from(x)    //~ E0413
 }
 
 pub fn i8_round_f32(x: I8) -> F32 {
-  x.round_f32()    //~ E0413
+  F32.round_from(x)    //~ E0413
 }
 
 pub fn i8_round_f64(x: I8) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }
 
 pub fn i16_narrow_i16(x: I16) -> Option[I16] {
-  x.narrow_i16()    //~ E0413
+  I16.narrow_from(x)    //~ E0413
 }
 
 pub fn i16_narrow_i32(x: I16) -> Option[I32] {
-  x.narrow_i32()    //~ E0413
+  I32.narrow_from(x)    //~ E0413
 }
 
 pub fn i16_narrow_i64(x: I16) -> Option[I64] {
-  x.narrow_i64()    //~ E0413
+  I64.narrow_from(x)    //~ E0413
 }
 
 pub fn i16_round_f32(x: I16) -> F32 {
-  x.round_f32()    //~ E0413
+  F32.round_from(x)    //~ E0413
 }
 
 pub fn i16_round_f64(x: I16) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }
 
 pub fn i32_narrow_i32(x: I32) -> Option[I32] {
-  x.narrow_i32()    //~ E0413
+  I32.narrow_from(x)    //~ E0413
 }
 
 pub fn i32_narrow_i64(x: I32) -> Option[I64] {
-  x.narrow_i64()    //~ E0413
+  I64.narrow_from(x)    //~ E0413
 }
 
 pub fn i32_round_f64(x: I32) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }
 
 pub fn i64_narrow_i64(x: I64) -> Option[I64] {
-  x.narrow_i64()    //~ E0413
+  I64.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_narrow_i16(x: U8) -> Option[I16] {
-  x.narrow_i16()    //~ E0413
+  I16.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_narrow_i32(x: U8) -> Option[I32] {
-  x.narrow_i32()    //~ E0413
+  I32.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_narrow_i64(x: U8) -> Option[I64] {
-  x.narrow_i64()    //~ E0413
+  I64.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_narrow_u8(x: U8) -> Option[U8] {
-  x.narrow_u8()    //~ E0413
+  U8.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_narrow_u16(x: U8) -> Option[U16] {
-  x.narrow_u16()    //~ E0413
+  U16.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_narrow_u32(x: U8) -> Option[U32] {
-  x.narrow_u32()    //~ E0413
+  U32.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_narrow_u64(x: U8) -> Option[U64] {
-  x.narrow_u64()    //~ E0413
+  U64.narrow_from(x)    //~ E0413
 }
 
 pub fn u8_round_f32(x: U8) -> F32 {
-  x.round_f32()    //~ E0413
+  F32.round_from(x)    //~ E0413
 }
 
 pub fn u8_round_f64(x: U8) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }
 
 pub fn u16_narrow_i32(x: U16) -> Option[I32] {
-  x.narrow_i32()    //~ E0413
+  I32.narrow_from(x)    //~ E0413
 }
 
 pub fn u16_narrow_i64(x: U16) -> Option[I64] {
-  x.narrow_i64()    //~ E0413
+  I64.narrow_from(x)    //~ E0413
 }
 
 pub fn u16_narrow_u16(x: U16) -> Option[U16] {
-  x.narrow_u16()    //~ E0413
+  U16.narrow_from(x)    //~ E0413
 }
 
 pub fn u16_narrow_u32(x: U16) -> Option[U32] {
-  x.narrow_u32()    //~ E0413
+  U32.narrow_from(x)    //~ E0413
 }
 
 pub fn u16_narrow_u64(x: U16) -> Option[U64] {
-  x.narrow_u64()    //~ E0413
+  U64.narrow_from(x)    //~ E0413
 }
 
 pub fn u16_round_f32(x: U16) -> F32 {
-  x.round_f32()    //~ E0413
+  F32.round_from(x)    //~ E0413
 }
 
 pub fn u16_round_f64(x: U16) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }
 
 pub fn u32_narrow_i64(x: U32) -> Option[I64] {
-  x.narrow_i64()    //~ E0413
+  I64.narrow_from(x)    //~ E0413
 }
 
 pub fn u32_narrow_u32(x: U32) -> Option[U32] {
-  x.narrow_u32()    //~ E0413
+  U32.narrow_from(x)    //~ E0413
 }
 
 pub fn u32_narrow_u64(x: U32) -> Option[U64] {
-  x.narrow_u64()    //~ E0413
+  U64.narrow_from(x)    //~ E0413
 }
 
 pub fn u32_round_f64(x: U32) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }
 
 pub fn u64_narrow_u64(x: U64) -> Option[U64] {
-  x.narrow_u64()    //~ E0413
+  U64.narrow_from(x)    //~ E0413
 }
 
 pub fn f32_round_f32(x: F32) -> F32 {
-  x.round_f32()    //~ E0413
+  F32.round_from(x)    //~ E0413
 }
 
 pub fn f32_round_f64(x: F32) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }
 
 pub fn f64_round_f64(x: F64) -> F64 {
-  x.round_f64()    //~ E0413
+  F64.round_from(x)    //~ E0413
 }

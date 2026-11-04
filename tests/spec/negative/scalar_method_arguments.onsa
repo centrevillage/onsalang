@@ -3,7 +3,7 @@
 // spec = ["§3.3", "§3.4", "§6.2", "§15.1", "§18.1"]
 
 // E0412 and E0401 (W5-02 U4b): the number and the types of the arguments of the methods of the scalar types
-// (§3.3, §3.4, §6.2). A conversion method takes no argument; `div_euclid`, `rem_euclid` and the `checked_*` methods
+// (§3.3, §3.4, §6.2). A conversion function takes one argument; `div_euclid`, `rem_euclid` and the `checked_*` methods
 // take one, of the type of the receiver. A wrong number of arguments is E0412 (the same code as for a function) and
 // a wrong type is E0401. One error per function (P-01). The last function is fine.
 
@@ -12,15 +12,15 @@ pub fn bits_with_an_argument(x: F32) -> U32 {
 }
 
 pub fn trunc_with_an_argument(x: F32) -> I32 {
-  x.trunc_i32(x)                                    //~ E0412
+  I32.trunc_from(x, x)                              //~ E0412
 }
 
 pub fn narrow_with_an_argument(n: I32) -> Option[U8] {
-  n.narrow_u8(1)                                    //~ E0412
+  U8.narrow_from(n, 1)                              //~ E0412
 }
 
 pub fn round_with_an_argument(x: F64, y: F64) -> F32 {
-  x.round_f32(y)                                    //~ E0412
+  F32.round_from(x, y)                              //~ E0412
 }
 
 pub fn floor_division_without_one(a: I32) -> I32 {
@@ -60,5 +60,5 @@ pub fn checked_with_another_sign(a: I32, b: U32) -> Option[I32] {
 }
 
 pub fn fine(a: I32, b: I32, x: F32) -> I32 {
-  a.div_euclid(b).rem_euclid(3) + a.checked_add(b).unwrap() + x.trunc_i32_sat()
+  a.div_euclid(b).rem_euclid(3) + a.checked_add(b).unwrap() + I32.trunc_sat_from(x)
 }

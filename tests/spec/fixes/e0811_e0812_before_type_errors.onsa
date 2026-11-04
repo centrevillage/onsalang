@@ -49,7 +49,7 @@ pub flow type_error_in_the_argument_e0811(x: F32 at sample) -> F32 at sample {
 
 pub flow type_error_in_a_par_body_e0812(x: F32 at sample) -> F32 at sample {
   let ys = par~ i in 0 ..< 2 {
-    g~(x + 1) * i.round_f32()                       //~ E0812 @5
+    g~(x + 1) * F32.round_from(i)                   //~ E0812 @5
   }
   ys[0] + ys[1]
 }

@@ -6,7 +6,7 @@
 // `Unsigned`) is a name of the prelude (S-107) that is no bound in a program, so the bound of a type parameter of a function, a method, a
 // struct, an enum or an `impl` that is written with it is the E0200 of the name (the same as types/bounds_maybe_names.onsa, where the
 // name is next to a `?Dup`); the traits that are bounds (`Num`, `Float`, `PartialOrd`) are right. The standard library can be written with
-// these bounds (its own methods, such as `narrow_*`, are not a program's to write) and that does not change what a program is told. The
+// these bounds (its own methods, such as `narrow_from`, are not a program's to write) and that does not change what a program is told. The
 // right form of the program with `Int` is in prelude_bounds_number_traits.onsa, which waits for the work that makes the number traits
 // bounds. One error per item (P-01).
 

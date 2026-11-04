@@ -1,6 +1,6 @@
 @export
 pub fn sat(x: F32) -> I32 {
-  x.trunc_i32_sat()
+  I32.trunc_sat_from(x)
 }
 
 @export

@@ -479,11 +479,11 @@ ONSA_INLINE uint32_t onsa_idx(uint32_t i, uint32_t n, const char* file, uint32_t
   ONSA_INLINE T onsa_div_euclid_##N(T a, T b, const char* f, uint32_t l) { return onsa_div_##N(a, b, f, l); } \
   ONSA_INLINE T onsa_rem_euclid_##N(T a, T b, const char* f, uint32_t l) { return onsa_rem_##N(a, b, f, l); }
 
-/* `x.trunc_i32()` panics out of range or on NaN; `x.trunc_i32_sat()`
+/* `I32.trunc_from(x)` panics out of range or on NaN; `I32.trunc_sat_from(x)`
  * saturates and maps NaN to 0 (spec §3.3, §3.4). The value truncated toward
  * zero is compared in double against exactly representable limits: MIN, and
  * MAX + 1 (a power of two; MAX itself is not a double for 64 bits, R-19), so
- * `-0.9.trunc_u64()` is 0 (S-189). Above the range `_sat` returns the
+ * `U64.trunc_from(-0.9)` is 0 (S-189). Above the range `_sat` returns the
  * constant MAX: converting MAXP1 - 1.0, which is MAXP1 again for 64 bits,
  * would be out of range (R-10). */
 #define ONSA_TRUNC(N, T, MIN, MAX, MAXP1, F, FT)                                                          \
@@ -512,7 +512,7 @@ ONSA_INT_TYPES(ONSA_INT_OPS)
 ONSA_INT_TYPES(ONSA_INT_SIGNED)
 ONSA_INT_TYPES(ONSA_INT_TRUNC)
 
-/* `x.narrow_<to>()` (spec §3.3): onsa_narrow_<from>_<to>(x, &r) is true and
+/* `<to>.narrow_from(x)` (spec §3.3): onsa_narrow_<from>_<to>(x, &r) is true and
  * stores the value when it is in the range of the target type. The generated
  * file instantiates the pairs it uses with ONSA_DEFINE_NARROW(from, its C
  * type, its sign, to, its C type, its sign). The test of each pair of signs

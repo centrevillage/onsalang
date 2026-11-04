@@ -2041,7 +2041,7 @@ pub fn i8_as_i64(a: I8) -> I64 { a as I64 }
 
 @export
 pub fn i8_narrow_u8_some(a: I8) -> Bool {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2049,7 +2049,7 @@ pub fn i8_narrow_u8_some(a: I8) -> Bool {
 
 @export
 pub fn i8_narrow_u8_val(a: I8) -> U8 {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2057,7 +2057,7 @@ pub fn i8_narrow_u8_val(a: I8) -> U8 {
 
 @export
 pub fn i8_narrow_u16_some(a: I8) -> Bool {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2065,7 +2065,7 @@ pub fn i8_narrow_u16_some(a: I8) -> Bool {
 
 @export
 pub fn i8_narrow_u16_val(a: I8) -> U16 {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2073,7 +2073,7 @@ pub fn i8_narrow_u16_val(a: I8) -> U16 {
 
 @export
 pub fn i8_narrow_u32_some(a: I8) -> Bool {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2081,7 +2081,7 @@ pub fn i8_narrow_u32_some(a: I8) -> Bool {
 
 @export
 pub fn i8_narrow_u32_val(a: I8) -> U32 {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2089,7 +2089,7 @@ pub fn i8_narrow_u32_val(a: I8) -> U32 {
 
 @export
 pub fn i8_narrow_u64_some(a: I8) -> Bool {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2097,7 +2097,7 @@ pub fn i8_narrow_u64_some(a: I8) -> Bool {
 
 @export
 pub fn i8_narrow_u64_val(a: I8) -> U64 {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2111,7 +2111,7 @@ pub fn i8_as_f64(a: I8) -> F64 { a as F64 }
 
 @export
 pub fn i16_narrow_i8_some(a: I16) -> Bool {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2119,7 +2119,7 @@ pub fn i16_narrow_i8_some(a: I16) -> Bool {
 
 @export
 pub fn i16_narrow_i8_val(a: I16) -> I8 {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2136,7 +2136,7 @@ pub fn i16_as_i64(a: I16) -> I64 { a as I64 }
 
 @export
 pub fn i16_narrow_u8_some(a: I16) -> Bool {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2144,7 +2144,7 @@ pub fn i16_narrow_u8_some(a: I16) -> Bool {
 
 @export
 pub fn i16_narrow_u8_val(a: I16) -> U8 {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2152,7 +2152,7 @@ pub fn i16_narrow_u8_val(a: I16) -> U8 {
 
 @export
 pub fn i16_narrow_u16_some(a: I16) -> Bool {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2160,7 +2160,7 @@ pub fn i16_narrow_u16_some(a: I16) -> Bool {
 
 @export
 pub fn i16_narrow_u16_val(a: I16) -> U16 {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2168,7 +2168,7 @@ pub fn i16_narrow_u16_val(a: I16) -> U16 {
 
 @export
 pub fn i16_narrow_u32_some(a: I16) -> Bool {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2176,7 +2176,7 @@ pub fn i16_narrow_u32_some(a: I16) -> Bool {
 
 @export
 pub fn i16_narrow_u32_val(a: I16) -> U32 {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2184,7 +2184,7 @@ pub fn i16_narrow_u32_val(a: I16) -> U32 {
 
 @export
 pub fn i16_narrow_u64_some(a: I16) -> Bool {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2192,7 +2192,7 @@ pub fn i16_narrow_u64_some(a: I16) -> Bool {
 
 @export
 pub fn i16_narrow_u64_val(a: I16) -> U64 {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2206,7 +2206,7 @@ pub fn i16_as_f64(a: I16) -> F64 { a as F64 }
 
 @export
 pub fn i32_narrow_i8_some(a: I32) -> Bool {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2214,7 +2214,7 @@ pub fn i32_narrow_i8_some(a: I32) -> Bool {
 
 @export
 pub fn i32_narrow_i8_val(a: I32) -> I8 {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2222,7 +2222,7 @@ pub fn i32_narrow_i8_val(a: I32) -> I8 {
 
 @export
 pub fn i32_narrow_i16_some(a: I32) -> Bool {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2230,7 +2230,7 @@ pub fn i32_narrow_i16_some(a: I32) -> Bool {
 
 @export
 pub fn i32_narrow_i16_val(a: I32) -> I16 {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2244,7 +2244,7 @@ pub fn i32_as_i64(a: I32) -> I64 { a as I64 }
 
 @export
 pub fn i32_narrow_u8_some(a: I32) -> Bool {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2252,7 +2252,7 @@ pub fn i32_narrow_u8_some(a: I32) -> Bool {
 
 @export
 pub fn i32_narrow_u8_val(a: I32) -> U8 {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2260,7 +2260,7 @@ pub fn i32_narrow_u8_val(a: I32) -> U8 {
 
 @export
 pub fn i32_narrow_u16_some(a: I32) -> Bool {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2268,7 +2268,7 @@ pub fn i32_narrow_u16_some(a: I32) -> Bool {
 
 @export
 pub fn i32_narrow_u16_val(a: I32) -> U16 {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2276,7 +2276,7 @@ pub fn i32_narrow_u16_val(a: I32) -> U16 {
 
 @export
 pub fn i32_narrow_u32_some(a: I32) -> Bool {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2284,7 +2284,7 @@ pub fn i32_narrow_u32_some(a: I32) -> Bool {
 
 @export
 pub fn i32_narrow_u32_val(a: I32) -> U32 {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2292,7 +2292,7 @@ pub fn i32_narrow_u32_val(a: I32) -> U32 {
 
 @export
 pub fn i32_narrow_u64_some(a: I32) -> Bool {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2300,21 +2300,21 @@ pub fn i32_narrow_u64_some(a: I32) -> Bool {
 
 @export
 pub fn i32_narrow_u64_val(a: I32) -> U64 {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
 }
 
 @export
-pub fn i32_round_f32(a: I32) -> F32 { a.round_f32() }
+pub fn i32_round_f32(a: I32) -> F32 { F32.round_from(a) }
 
 @export
 pub fn i32_as_f64(a: I32) -> F64 { a as F64 }
 
 @export
 pub fn i64_narrow_i8_some(a: I64) -> Bool {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2322,7 +2322,7 @@ pub fn i64_narrow_i8_some(a: I64) -> Bool {
 
 @export
 pub fn i64_narrow_i8_val(a: I64) -> I8 {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2330,7 +2330,7 @@ pub fn i64_narrow_i8_val(a: I64) -> I8 {
 
 @export
 pub fn i64_narrow_i16_some(a: I64) -> Bool {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2338,7 +2338,7 @@ pub fn i64_narrow_i16_some(a: I64) -> Bool {
 
 @export
 pub fn i64_narrow_i16_val(a: I64) -> I16 {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2346,7 +2346,7 @@ pub fn i64_narrow_i16_val(a: I64) -> I16 {
 
 @export
 pub fn i64_narrow_i32_some(a: I64) -> Bool {
-  match a.narrow_i32() {
+  match I32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2354,7 +2354,7 @@ pub fn i64_narrow_i32_some(a: I64) -> Bool {
 
 @export
 pub fn i64_narrow_i32_val(a: I64) -> I32 {
-  match a.narrow_i32() {
+  match I32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2365,7 +2365,7 @@ pub fn i64_as_i64(a: I64) -> I64 { a as I64 }
 
 @export
 pub fn i64_narrow_u8_some(a: I64) -> Bool {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2373,7 +2373,7 @@ pub fn i64_narrow_u8_some(a: I64) -> Bool {
 
 @export
 pub fn i64_narrow_u8_val(a: I64) -> U8 {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2381,7 +2381,7 @@ pub fn i64_narrow_u8_val(a: I64) -> U8 {
 
 @export
 pub fn i64_narrow_u16_some(a: I64) -> Bool {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2389,7 +2389,7 @@ pub fn i64_narrow_u16_some(a: I64) -> Bool {
 
 @export
 pub fn i64_narrow_u16_val(a: I64) -> U16 {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2397,7 +2397,7 @@ pub fn i64_narrow_u16_val(a: I64) -> U16 {
 
 @export
 pub fn i64_narrow_u32_some(a: I64) -> Bool {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2405,7 +2405,7 @@ pub fn i64_narrow_u32_some(a: I64) -> Bool {
 
 @export
 pub fn i64_narrow_u32_val(a: I64) -> U32 {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2413,7 +2413,7 @@ pub fn i64_narrow_u32_val(a: I64) -> U32 {
 
 @export
 pub fn i64_narrow_u64_some(a: I64) -> Bool {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2421,21 +2421,21 @@ pub fn i64_narrow_u64_some(a: I64) -> Bool {
 
 @export
 pub fn i64_narrow_u64_val(a: I64) -> U64 {
-  match a.narrow_u64() {
+  match U64.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
 }
 
 @export
-pub fn i64_round_f32(a: I64) -> F32 { a.round_f32() }
+pub fn i64_round_f32(a: I64) -> F32 { F32.round_from(a) }
 
 @export
-pub fn i64_round_f64(a: I64) -> F64 { a.round_f64() }
+pub fn i64_round_f64(a: I64) -> F64 { F64.round_from(a) }
 
 @export
 pub fn u8_narrow_i8_some(a: U8) -> Bool {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2443,7 +2443,7 @@ pub fn u8_narrow_i8_some(a: U8) -> Bool {
 
 @export
 pub fn u8_narrow_i8_val(a: U8) -> I8 {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2478,7 +2478,7 @@ pub fn u8_as_f64(a: U8) -> F64 { a as F64 }
 
 @export
 pub fn u16_narrow_i8_some(a: U16) -> Bool {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2486,7 +2486,7 @@ pub fn u16_narrow_i8_some(a: U16) -> Bool {
 
 @export
 pub fn u16_narrow_i8_val(a: U16) -> I8 {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2494,7 +2494,7 @@ pub fn u16_narrow_i8_val(a: U16) -> I8 {
 
 @export
 pub fn u16_narrow_i16_some(a: U16) -> Bool {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2502,7 +2502,7 @@ pub fn u16_narrow_i16_some(a: U16) -> Bool {
 
 @export
 pub fn u16_narrow_i16_val(a: U16) -> I16 {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2516,7 +2516,7 @@ pub fn u16_as_i64(a: U16) -> I64 { a as I64 }
 
 @export
 pub fn u16_narrow_u8_some(a: U16) -> Bool {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2524,7 +2524,7 @@ pub fn u16_narrow_u8_some(a: U16) -> Bool {
 
 @export
 pub fn u16_narrow_u8_val(a: U16) -> U8 {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2547,7 +2547,7 @@ pub fn u16_as_f64(a: U16) -> F64 { a as F64 }
 
 @export
 pub fn u32_narrow_i8_some(a: U32) -> Bool {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2555,7 +2555,7 @@ pub fn u32_narrow_i8_some(a: U32) -> Bool {
 
 @export
 pub fn u32_narrow_i8_val(a: U32) -> I8 {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2563,7 +2563,7 @@ pub fn u32_narrow_i8_val(a: U32) -> I8 {
 
 @export
 pub fn u32_narrow_i16_some(a: U32) -> Bool {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2571,7 +2571,7 @@ pub fn u32_narrow_i16_some(a: U32) -> Bool {
 
 @export
 pub fn u32_narrow_i16_val(a: U32) -> I16 {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2579,7 +2579,7 @@ pub fn u32_narrow_i16_val(a: U32) -> I16 {
 
 @export
 pub fn u32_narrow_i32_some(a: U32) -> Bool {
-  match a.narrow_i32() {
+  match I32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2587,7 +2587,7 @@ pub fn u32_narrow_i32_some(a: U32) -> Bool {
 
 @export
 pub fn u32_narrow_i32_val(a: U32) -> I32 {
-  match a.narrow_i32() {
+  match I32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2598,7 +2598,7 @@ pub fn u32_as_i64(a: U32) -> I64 { a as I64 }
 
 @export
 pub fn u32_narrow_u8_some(a: U32) -> Bool {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2606,7 +2606,7 @@ pub fn u32_narrow_u8_some(a: U32) -> Bool {
 
 @export
 pub fn u32_narrow_u8_val(a: U32) -> U8 {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2614,7 +2614,7 @@ pub fn u32_narrow_u8_val(a: U32) -> U8 {
 
 @export
 pub fn u32_narrow_u16_some(a: U32) -> Bool {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2622,7 +2622,7 @@ pub fn u32_narrow_u16_some(a: U32) -> Bool {
 
 @export
 pub fn u32_narrow_u16_val(a: U32) -> U16 {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2635,14 +2635,14 @@ pub fn u32_as_u32(a: U32) -> U32 { a as U32 }
 pub fn u32_as_u64(a: U32) -> U64 { a as U64 }
 
 @export
-pub fn u32_round_f32(a: U32) -> F32 { a.round_f32() }
+pub fn u32_round_f32(a: U32) -> F32 { F32.round_from(a) }
 
 @export
 pub fn u32_as_f64(a: U32) -> F64 { a as F64 }
 
 @export
 pub fn u64_narrow_i8_some(a: U64) -> Bool {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2650,7 +2650,7 @@ pub fn u64_narrow_i8_some(a: U64) -> Bool {
 
 @export
 pub fn u64_narrow_i8_val(a: U64) -> I8 {
-  match a.narrow_i8() {
+  match I8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2658,7 +2658,7 @@ pub fn u64_narrow_i8_val(a: U64) -> I8 {
 
 @export
 pub fn u64_narrow_i16_some(a: U64) -> Bool {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2666,7 +2666,7 @@ pub fn u64_narrow_i16_some(a: U64) -> Bool {
 
 @export
 pub fn u64_narrow_i16_val(a: U64) -> I16 {
-  match a.narrow_i16() {
+  match I16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2674,7 +2674,7 @@ pub fn u64_narrow_i16_val(a: U64) -> I16 {
 
 @export
 pub fn u64_narrow_i32_some(a: U64) -> Bool {
-  match a.narrow_i32() {
+  match I32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2682,7 +2682,7 @@ pub fn u64_narrow_i32_some(a: U64) -> Bool {
 
 @export
 pub fn u64_narrow_i32_val(a: U64) -> I32 {
-  match a.narrow_i32() {
+  match I32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2690,7 +2690,7 @@ pub fn u64_narrow_i32_val(a: U64) -> I32 {
 
 @export
 pub fn u64_narrow_i64_some(a: U64) -> Bool {
-  match a.narrow_i64() {
+  match I64.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2698,7 +2698,7 @@ pub fn u64_narrow_i64_some(a: U64) -> Bool {
 
 @export
 pub fn u64_narrow_i64_val(a: U64) -> I64 {
-  match a.narrow_i64() {
+  match I64.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2706,7 +2706,7 @@ pub fn u64_narrow_i64_val(a: U64) -> I64 {
 
 @export
 pub fn u64_narrow_u8_some(a: U64) -> Bool {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2714,7 +2714,7 @@ pub fn u64_narrow_u8_some(a: U64) -> Bool {
 
 @export
 pub fn u64_narrow_u8_val(a: U64) -> U8 {
-  match a.narrow_u8() {
+  match U8.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2722,7 +2722,7 @@ pub fn u64_narrow_u8_val(a: U64) -> U8 {
 
 @export
 pub fn u64_narrow_u16_some(a: U64) -> Bool {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2730,7 +2730,7 @@ pub fn u64_narrow_u16_some(a: U64) -> Bool {
 
 @export
 pub fn u64_narrow_u16_val(a: U64) -> U16 {
-  match a.narrow_u16() {
+  match U16.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2738,7 +2738,7 @@ pub fn u64_narrow_u16_val(a: U64) -> U16 {
 
 @export
 pub fn u64_narrow_u32_some(a: U64) -> Bool {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(_) => true,
     None => false,
   }
@@ -2746,7 +2746,7 @@ pub fn u64_narrow_u32_some(a: U64) -> Bool {
 
 @export
 pub fn u64_narrow_u32_val(a: U64) -> U32 {
-  match a.narrow_u32() {
+  match U32.narrow_from(a) {
     Some(v) => v,
     None => 0,
   }
@@ -2756,58 +2756,58 @@ pub fn u64_narrow_u32_val(a: U64) -> U32 {
 pub fn u64_as_u64(a: U64) -> U64 { a as U64 }
 
 @export
-pub fn u64_round_f32(a: U64) -> F32 { a.round_f32() }
+pub fn u64_round_f32(a: U64) -> F32 { F32.round_from(a) }
 
 @export
-pub fn u64_round_f64(a: U64) -> F64 { a.round_f64() }
+pub fn u64_round_f64(a: U64) -> F64 { F64.round_from(a) }
 
 @export
-pub fn f32_trunc_i8(a: F32) -> I8 { a.trunc_i8() }
+pub fn f32_trunc_i8(a: F32) -> I8 { I8.trunc_from(a) }
 
 @export
-pub fn f32_trunc_i8_sat(a: F32) -> I8 { a.trunc_i8_sat() }
+pub fn f32_trunc_i8_sat(a: F32) -> I8 { I8.trunc_sat_from(a) }
 
 @export
-pub fn f32_trunc_i16(a: F32) -> I16 { a.trunc_i16() }
+pub fn f32_trunc_i16(a: F32) -> I16 { I16.trunc_from(a) }
 
 @export
-pub fn f32_trunc_i16_sat(a: F32) -> I16 { a.trunc_i16_sat() }
+pub fn f32_trunc_i16_sat(a: F32) -> I16 { I16.trunc_sat_from(a) }
 
 @export
-pub fn f32_trunc_i32(a: F32) -> I32 { a.trunc_i32() }
+pub fn f32_trunc_i32(a: F32) -> I32 { I32.trunc_from(a) }
 
 @export
-pub fn f32_trunc_i32_sat(a: F32) -> I32 { a.trunc_i32_sat() }
+pub fn f32_trunc_i32_sat(a: F32) -> I32 { I32.trunc_sat_from(a) }
 
 @export
-pub fn f32_trunc_i64(a: F32) -> I64 { a.trunc_i64() }
+pub fn f32_trunc_i64(a: F32) -> I64 { I64.trunc_from(a) }
 
 @export
-pub fn f32_trunc_i64_sat(a: F32) -> I64 { a.trunc_i64_sat() }
+pub fn f32_trunc_i64_sat(a: F32) -> I64 { I64.trunc_sat_from(a) }
 
 @export
-pub fn f32_trunc_u8(a: F32) -> U8 { a.trunc_u8() }
+pub fn f32_trunc_u8(a: F32) -> U8 { U8.trunc_from(a) }
 
 @export
-pub fn f32_trunc_u8_sat(a: F32) -> U8 { a.trunc_u8_sat() }
+pub fn f32_trunc_u8_sat(a: F32) -> U8 { U8.trunc_sat_from(a) }
 
 @export
-pub fn f32_trunc_u16(a: F32) -> U16 { a.trunc_u16() }
+pub fn f32_trunc_u16(a: F32) -> U16 { U16.trunc_from(a) }
 
 @export
-pub fn f32_trunc_u16_sat(a: F32) -> U16 { a.trunc_u16_sat() }
+pub fn f32_trunc_u16_sat(a: F32) -> U16 { U16.trunc_sat_from(a) }
 
 @export
-pub fn f32_trunc_u32(a: F32) -> U32 { a.trunc_u32() }
+pub fn f32_trunc_u32(a: F32) -> U32 { U32.trunc_from(a) }
 
 @export
-pub fn f32_trunc_u32_sat(a: F32) -> U32 { a.trunc_u32_sat() }
+pub fn f32_trunc_u32_sat(a: F32) -> U32 { U32.trunc_sat_from(a) }
 
 @export
-pub fn f32_trunc_u64(a: F32) -> U64 { a.trunc_u64() }
+pub fn f32_trunc_u64(a: F32) -> U64 { U64.trunc_from(a) }
 
 @export
-pub fn f32_trunc_u64_sat(a: F32) -> U64 { a.trunc_u64_sat() }
+pub fn f32_trunc_u64_sat(a: F32) -> U64 { U64.trunc_sat_from(a) }
 
 @export
 pub fn f32_as_f32(a: F32) -> F32 { a as F32 }
@@ -2816,55 +2816,55 @@ pub fn f32_as_f32(a: F32) -> F32 { a as F32 }
 pub fn f32_as_f64(a: F32) -> F64 { a as F64 }
 
 @export
-pub fn f64_trunc_i8(a: F64) -> I8 { a.trunc_i8() }
+pub fn f64_trunc_i8(a: F64) -> I8 { I8.trunc_from(a) }
 
 @export
-pub fn f64_trunc_i8_sat(a: F64) -> I8 { a.trunc_i8_sat() }
+pub fn f64_trunc_i8_sat(a: F64) -> I8 { I8.trunc_sat_from(a) }
 
 @export
-pub fn f64_trunc_i16(a: F64) -> I16 { a.trunc_i16() }
+pub fn f64_trunc_i16(a: F64) -> I16 { I16.trunc_from(a) }
 
 @export
-pub fn f64_trunc_i16_sat(a: F64) -> I16 { a.trunc_i16_sat() }
+pub fn f64_trunc_i16_sat(a: F64) -> I16 { I16.trunc_sat_from(a) }
 
 @export
-pub fn f64_trunc_i32(a: F64) -> I32 { a.trunc_i32() }
+pub fn f64_trunc_i32(a: F64) -> I32 { I32.trunc_from(a) }
 
 @export
-pub fn f64_trunc_i32_sat(a: F64) -> I32 { a.trunc_i32_sat() }
+pub fn f64_trunc_i32_sat(a: F64) -> I32 { I32.trunc_sat_from(a) }
 
 @export
-pub fn f64_trunc_i64(a: F64) -> I64 { a.trunc_i64() }
+pub fn f64_trunc_i64(a: F64) -> I64 { I64.trunc_from(a) }
 
 @export
-pub fn f64_trunc_i64_sat(a: F64) -> I64 { a.trunc_i64_sat() }
+pub fn f64_trunc_i64_sat(a: F64) -> I64 { I64.trunc_sat_from(a) }
 
 @export
-pub fn f64_trunc_u8(a: F64) -> U8 { a.trunc_u8() }
+pub fn f64_trunc_u8(a: F64) -> U8 { U8.trunc_from(a) }
 
 @export
-pub fn f64_trunc_u8_sat(a: F64) -> U8 { a.trunc_u8_sat() }
+pub fn f64_trunc_u8_sat(a: F64) -> U8 { U8.trunc_sat_from(a) }
 
 @export
-pub fn f64_trunc_u16(a: F64) -> U16 { a.trunc_u16() }
+pub fn f64_trunc_u16(a: F64) -> U16 { U16.trunc_from(a) }
 
 @export
-pub fn f64_trunc_u16_sat(a: F64) -> U16 { a.trunc_u16_sat() }
+pub fn f64_trunc_u16_sat(a: F64) -> U16 { U16.trunc_sat_from(a) }
 
 @export
-pub fn f64_trunc_u32(a: F64) -> U32 { a.trunc_u32() }
+pub fn f64_trunc_u32(a: F64) -> U32 { U32.trunc_from(a) }
 
 @export
-pub fn f64_trunc_u32_sat(a: F64) -> U32 { a.trunc_u32_sat() }
+pub fn f64_trunc_u32_sat(a: F64) -> U32 { U32.trunc_sat_from(a) }
 
 @export
-pub fn f64_trunc_u64(a: F64) -> U64 { a.trunc_u64() }
+pub fn f64_trunc_u64(a: F64) -> U64 { U64.trunc_from(a) }
 
 @export
-pub fn f64_trunc_u64_sat(a: F64) -> U64 { a.trunc_u64_sat() }
+pub fn f64_trunc_u64_sat(a: F64) -> U64 { U64.trunc_sat_from(a) }
 
 @export
-pub fn f64_round_f32(a: F64) -> F32 { a.round_f32() }
+pub fn f64_round_f32(a: F64) -> F32 { F32.round_from(a) }
 
 @export
 pub fn f64_as_f64(a: F64) -> F64 { a as F64 }
@@ -2898,17 +2898,17 @@ pub fn f32_expr_interp(a: F32, b: F32, c: F32) -> F32 { (1.0 - c) * a + c * b }
 
 @export
 pub fn f32_vdelay_k(d: F32, top: U32) -> U32 {
-  let m  = top.round_f32()
+  let m  = F32.round_from(top)
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
-  dc.trunc_u32()
+  U32.trunc_from(dc)
 }
 
 @export
 pub fn f32_vdelay_f(d: F32, top: U32) -> F32 {
-  let m  = top.round_f32()
+  let m  = F32.round_from(top)
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
-  let k  = dc.trunc_u32()
-  dc - k.round_f32()
+  let k  = U32.trunc_from(dc)
+  dc - F32.round_from(k)
 }
 
 @export
@@ -2930,14 +2930,14 @@ pub fn f64_expr_interp(a: F64, b: F64, c: F64) -> F64 { (1.0 - c) * a + c * b }
 pub fn f64_vdelay_k(d: F64, top: U32) -> U32 {
   let m  = top as F64
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
-  dc.trunc_u32()
+  U32.trunc_from(dc)
 }
 
 @export
 pub fn f64_vdelay_f(d: F64, top: U32) -> F64 {
   let m  = top as F64
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
-  let k  = dc.trunc_u32()
+  let k  = U32.trunc_from(dc)
   dc - (k as F64)
 }
 

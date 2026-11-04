@@ -139,15 +139,16 @@ pub flow one_pole(x: F32 at sample, p: F32 at block) -> F32 at sample {
 
 - `prev`: 状態は `T` 一つ。出力は保存値で、その後に `e` を保存する。
 - `delay`: 状態は `buf: [T; N]` と `w: U32`。各サンプルで、出力は `buf[w]`（= `e[n - N]`）、その後 `buf[w] = e`、`w = (w + 1) % N`。初期値は全要素 `init`、`w = 0`。
-- `vdelay`: 状態は `buf: [T; MAX + 1]` と `w: U32`。`L = MAX + 1` として、各サンプルで次の順に計算する。疑似コードの中で `MAX` と `k` を `T` の値として使う所（`d` との比較、`dc` の値、`f` の引き算）は、それを `T` に変換した値を表す（どちらの型でも正確に表せる。`F32` は `MAX <= 2^24` による）。
+- `vdelay`: 状態は `buf: [T; MAX + 1]` と `w: U32`。`L = MAX + 1` として、各サンプルで次の順に計算する。`T.round_from(MAX)` と `T.round_from(k)` は、どちらの型でも正確である（`F32` は `MAX <= 2^24` による）。
 
 ```
-dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }   // NaN は 1.0 になる
-k  = dc.trunc_u32()                                                  // 1 <= k <= MAX
-f  = dc - k                                                          // 0 <= f < 1。k <= dc < 2k なので正確
+m  = T.round_from(MAX)
+dc = if d >= T.ONE { if d <= m { d } else { m } } else { T.ONE }    // NaN は T.ONE になる
+k  = U32.trunc_from(dc)                                              // 1 <= k <= MAX
+f  = dc - T.round_from(k)                                            // 0 <= f < 1。k <= dc < 2k なので正確
 a  = buf[(w + L - k) % L]                                            // e[n - k]
 b  = buf[(w + L - k - 1) % L]                                        // e[n - k - 1]
-y  = (1.0 - f) * a + f * b
+y  = (T.ONE - f) * a + f * b
 buf[w] = e
 w = (w + 1) % L
 ```
@@ -206,7 +207,7 @@ pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {
 
 /// 0 ..< n を [-0.5, 0.5] に等間隔に並べる
 pub rt fn spread(i: U32, n: U32) -> F32 {
-  i.round_f32() / (n - 1).round_f32() - 0.5
+  F32.round_from(i) / F32.round_from(n - 1) - 0.5
 }
 ```
 
@@ -280,7 +281,7 @@ fn voice.Event.<入力の名前>(pos: U32, v: T) -> voice.Event   // イベン�
 - 遅れの宣言 `@latency(samples: n, seconds: t)` は、一番外の flow の遅れ（入力から出力までのサンプル数）をホストに報告するための情報で、C の `<p>_latency`（§14.2）とプラグインのラッパー（§14.3）が読む。宣言が無ければ遅れは 0 で、子の flow の宣言は合成しない。
   項は `samples`（`U32`）と `seconds`（`F32`）の閉じた一覧で、同じ項は一度だけ書け（一覧に無い項と同じ項の重複は E0809）、どちらか一方だけでもよい（`@latency(samples: 64)`、`@latency(seconds: 0.005)`）。
   項の値はコンパイル時の定数で、`@param` の値と同じく `const` の初期化式の規則で書き、評価する（§6.6、§11.7。型の合わない値は E0401、評価の panic は E0419）。`seconds` は有限で 0 以上でなければならず、項の無い `@latency()` も誤りである（E0809）。`init` の入力に依る遅れは書けない。
-  報告する値は、サンプルレート `sample_rate`（`F32`）での `samples +| (seconds * sample_rate).trunc_u32_sat()` である（積は `F32` で計算し、ゼロ方向に切り捨て、和は `U32` に飽和する）。どの変換先もこの式とビットで同じ値を出す。本体が自分の遅延の長さを同じ式で計算すれば、報告と実際が揃う。
+  報告する値は、サンプルレート `sample_rate`（`F32`）での `samples +| U32.trunc_sat_from(seconds * sample_rate)` である（積は `F32` で計算し、ゼロ方向に切り捨て、和は `U32` に飽和する）。どの変換先もこの式とビットで同じ値を出す。本体が自分の遅延の長さを同じ式で計算すれば、報告と実際が揃う。
   export する flow の C の `_init` は、本体の `init` の後にこの値を計算して自分の状態の隠れた欄（§12.4）に書き、`reset` は保つ。子として使う flow の欄は書かず、読まない。Onsa の `init`（インタプリタと `onsa test`）はこの欄に触れない。
   コンパイラは報告する値を本体から数えない（フィルタの群遅延は周波数と係数に依り、遅いレートで動く検出の経路の遅れは音の遅れでないので、機械では正しく決まらない）。構造から決まる遅れ（集めて配る N と子の宣言の、経路ごとの値）は解析の道具（`onsa audit`）が出す（形は未決定、§19.1）。
   std の `fir_up2`・`fir_down2` は `@latency` を持つ。

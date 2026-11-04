@@ -140,9 +140,9 @@ fn same_place_finds_a_diagnostic_left_where_the_candidate_was() {
     assert!(ok.internal.is_none());
     // No diagnostic: nothing to check.
     assert_eq!(same_place("pub fn f() -> I32 {\n  1\n}\n"), SamePlace::default());
-    // The candidate of the E0411 gives `x.narrow_i32()`, an `Option[I32]`: an E0401 of the
-    // same stage is left there (until W5-02).
-    let left = same_place("pub fn f(x: I64) -> I32 {\n  x as I32\n}\n");
+    // The candidate of the E0411 gives an `F32` where an `I32` is expected: an E0401 of the
+    // same stage is left there.
+    let left = same_place("pub fn f(x: I64) -> I32 {\n  x as F32\n}\n");
     assert_eq!(left.candidates, 1);
     let v: Vec<(&str, &str, Option<u32>)> =
         left.violations.iter().map(|v| (v.code.as_str(), v.left.as_str(), v.left_line)).collect();

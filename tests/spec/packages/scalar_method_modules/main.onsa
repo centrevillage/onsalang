@@ -46,11 +46,11 @@ test "a function of another module that calls a method, and a method on its resu
 test "the impl member of another module that calls a method" {
   let p = Packet.new(40000.7, 300)
   assert p.level() == 32767
-  assert is_none(p.words().unwrap().narrow_u8())
+  assert is_none(U8.narrow_from(p.words().unwrap()))
   assert val(p.words(), 0) == 300
   assert val(p.ratio(7), 0) == 42
   assert is_none(p.ratio(0))
-  assert p.gain.trunc_i32() == 40000
+  assert I32.trunc_from(p.gain) == 40000
   assert p.count.rem_euclid(7) == 6
 }
 

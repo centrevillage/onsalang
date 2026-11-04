@@ -170,7 +170,7 @@ fn tabulate(base: U32) -> [U32; 4] {
 
 test "a closure captures an outer value by copy" {
   let k: F32       = 2.0
-  let xs: [F32; 4] = array.from_fn(fn(i) { k * i.round_f32() })
+  let xs: [F32; 4] = array.from_fn(fn(i) { k * F32.round_from(i) })
   assert xs[0] == 0.0
   assert xs[1] == 2.0
   assert xs[2] == 4.0

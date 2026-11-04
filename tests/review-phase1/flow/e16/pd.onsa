@@ -1,5 +1,5 @@
 pub flow pi(@param(min: 0.0, max: 10.0, default: 2.7) n: Ctl[I32]) -> Sig[F32] {
-  n.round_f32()
+  F32.round_from(n)
 }
 test "pi default" {
   let p = pi.params_default()

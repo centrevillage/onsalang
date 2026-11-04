@@ -65,9 +65,9 @@
 //
 //   lcg        x' = x * 1664525 + 1013904223 modulo 2^32 (the numerical recipes generator), from `seed`;
 //              the output is the input plus the top 24 bits of the state, as a float (exact in F32)
-//   quantize   `trunc_i32_sat` toward zero, clamped to I32, NaN to 0; then the integer as a float: 2^31 - 1 is
+//   quantize   `I32.trunc_sat_from` toward zero, clamped to I32, NaN to 0; then the integer as a float: 2^31 - 1 is
 //              not an F32, so it rounds to nearest even, 2^31 (2147483648.0)
-//   strict     `trunc_u32`: -1.0 is out of range and panics; 4294967040.0 = 2^32 - 256 is the largest F32 below 2^32
+//   strict     `U32.trunc_from`: -1.0 is out of range and panics; 4294967040.0 = 2^32 - 256 is the largest F32 below 2^32
 //
 // With seed 1 the states are 1015568748, 1586005467, 2165703038, 3027450565, 217083232, 1587069247 (each is
 // the previous times 1664525 plus 1013904223, modulo 4294967296); the top 24 bits are the state shifted right by 8:
@@ -79,19 +79,19 @@
 pub flow lcg(x: F32 at sample, seed: U32 at init) -> F32 at sample {
   let s   = prev~(^s, seed) *% 1664525 +% 1013904223
   let top = s >> 8
-  x + top.round_f32()
+  x + F32.round_from(top)
 }
 
 @export
 pub flow quantize(x: F32 at sample) -> F32 at sample {
-  let q = x.trunc_i32_sat()
-  q.round_f32()
+  let q = I32.trunc_sat_from(x)
+  F32.round_from(q)
 }
 
 @export
 pub flow strict(x: F32 at sample) -> F32 at sample {
-  let q = x.trunc_u32()
-  q.round_f32()
+  let q = U32.trunc_from(x)
+  F32.round_from(q)
 }
 
 test "the generator steps through the recurrence" {

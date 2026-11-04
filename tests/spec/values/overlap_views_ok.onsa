@@ -180,7 +180,7 @@ pub fn borrowed_view_and_borrowed_whole(a: Span[F32]) -> F32 {
 
 pub fn the_value_made_by_reading_is_no_overlap() -> F32 {
   var a: [F32; 8] = [1.0; 8]
-  a.slice(0, 4).fill!(a.len().round_f32())
+  a.slice(0, 4).fill!(F32.round_from(a.len()))
   a.slice(0, 4).fill!(sum(a.slice(4, 8)))
   add_one(inout a.slice(0, 4), a[6] + 1.0)
   add_one(inout a.slice(4, 8), sum(a.slice(0, 4)) * 2.0)
@@ -252,12 +252,12 @@ pub fn element_receivers(inout xs: [Span[F32]; 2], other: Span[F32]) {
 pub fn element_views_in_a_loop(inout xs: [Span[F32]; 2], other: Span[F32]) {
   for k in 0 ..< 2 {
     xs[k].slice(0, 1).copy_from!(other.slice(0, 1))
-    xs[k].fill!(xs[k].len().round_f32())
+    xs[k].fill!(F32.round_from(xs[k].len()))
   }
 }
 
 pub fn element_with_its_own_length(inout xs: [Span[F32]; 2]) {
-  xs[0].fill!(xs[0].len().round_f32())
+  xs[0].fill!(F32.round_from(xs[0].len()))
   xs[1].slice(0, 2).fill!(sum(xs[0]))
 }
 

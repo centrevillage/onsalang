@@ -98,13 +98,13 @@ fn in_a_generic_function[T](x: T, n: U32) -> U32 {
 
 pub flow in_a_par(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 1..<4 {
-    x * i.round_f32()
+    x * F32.round_from(i)
   }
 }
 
 pub flow in_a_par_over_a_const(x: F32 at sample) -> [F32; 2] at sample {
   par~ i in 2..<N {
-    x * i.round_f32()
+    x * F32.round_from(i)
   }
 }
 

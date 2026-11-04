@@ -33,7 +33,7 @@ pub flow shaped(x: F32 at sample, g: F32 at block) -> F32 at sample {
   let c: Ctl      = Ctl { gain: 2.0 }
   let s: Sig[F32] = Sig { v: x }
   let i: Init     = Init { start: 1 }
-  unwrap(s) * scale(c, g) * i.start.round_f32()
+  unwrap(s) * scale(c, g) * F32.round_from(i.start)
 }
 
 test "a program may declare types named Sig, Ctl and Init" {

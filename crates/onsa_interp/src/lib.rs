@@ -15,7 +15,7 @@
 //! # Decisions recorded for the spec (S-25)
 //!
 //! - `round` is round-half-to-even (IEEE `roundToIntegralTiesToEven`, like
-//!   the `round_f32` conversions of §3.3, WASM `nearest`, C `rint` under the
+//!   the `round_from` conversions of §3.3, WASM `nearest`, C `rint` under the
 //!   default rounding mode). Half-away-from-zero is not available.
 //! - `min` / `max` return NaN when either operand is NaN (WASM / JS
 //!   semantics; the C backend must not use `fminf`), `min(-0.0, 0.0)` is

@@ -48,7 +48,7 @@ pub rt fn whole_binding_of_a_literal(v: F32) -> U32 {
 pub rt fn destructured_from_a_literal(v: F32) -> F32 {
   let (nm, x) = ("gain", v)
   x = 1.0 //~ E0701
-  x + nm.len().round_f32()
+  x + F32.round_from(nm.len())
 }
 
 pub rt fn derived_from_a_literal_binding(v: F32) -> F32 {

@@ -44,7 +44,7 @@ pub flow voice(
     let l = filters.resonator~(env, 500.0, 100.0)
     let r = filters.resonator~(env, 1500.0, 100.0)
   }
-  let xs = array.from_fn(fn(i: U32) -> F32 { l * i.round_f32() })
+  let xs = array.from_fn(fn(i: U32) -> F32 { l * F32.round_from(i) })
   let s = "voice {f0} {{x}}"   // string with interpolation
   (l + r)}
 

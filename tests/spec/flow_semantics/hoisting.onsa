@@ -10,7 +10,7 @@
 // not needed it is not evaluated, so p = 0 does not panic there.
 
 pub flow slow_in_branch(x: F32 at sample, p: I32 at block) -> F32 at sample {
-  if x > 0.0 { x * (100 / p).round_f32() } else { 0.0 }
+  if x > 0.0 { x * F32.round_from(100 / p) } else { 0.0 }
 }
 
 pub flow slow_in_and(x: F32 at sample, p: I32 at block) -> F32 at sample {

@@ -83,8 +83,12 @@ fn unresolved_integer_literal_defaults_to_i32() {
     assert_eq!(a.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0408]);
     assert!(a.diagnostics[0].message.contains("annotation"), "{}", a.diagnostics[0].message);
     // Mid-body operations still need the type (E0420): the default is not eager.
-    assert_eq!(codes("pub fn f() -> F32 {\n  0.round_f32()\n}\n"), vec![Code::E0420]);
-    assert_eq!(codes("pub fn f() -> F32 {\n  var acc = 0.0\n  acc.round_f32()\n}\n"), vec![Code::E0420]);
+    assert_eq!(codes("pub fn f() -> Option[I32] {\n  0.checked_add(1)\n}\n"), vec![Code::E0420]);
+    assert_eq!(codes("pub fn f() -> U32 {\n  var acc = 0.0\n  acc.to_bits()\n}\n"), vec![Code::E0420]);
+    // The argument of a conversion function does not (§4.7, S-231): an integer
+    // literal takes its default, a float one has no source (§2.4).
+    assert_eq!(codes("pub fn f() -> F32 {\n  F32.round_from(0)\n}\n"), vec![]);
+    assert_eq!(codes("pub fn f() -> F32 {\n  var acc = 0.0\n  F32.round_from(acc)\n}\n"), vec![Code::E0405]);
 }
 
 #[test]
@@ -132,8 +136,13 @@ fn param_values_out_of_the_type_are_e0408() {
 #[test]
 fn operations_need_known_types() {
     assert_eq!(
-        codes("pub fn f(x: F32) -> F32 {\n  var acc = 0.0\n  let r = acc.round_f32()\n  acc = x\n  r\n}\n"),
+        codes("pub fn f(x: F32) -> U32 {\n  var acc = 0.0\n  let r = acc.to_bits()\n  acc = x\n  r\n}\n"),
         vec![Code::E0420]
+    );
+    // A conversion function waits for its source: here the same type, decided later (§3.3).
+    assert_eq!(
+        codes("pub fn f(x: F32) -> F32 {\n  var acc = 0.0\n  let r = F32.round_from(acc)\n  acc = x\n  r\n}\n"),
+        vec![Code::E0413]
     );
     // The element type of `[]` may be decided later; left open, it is E0406 at `[]` (S-226).
     assert_eq!(codes("pub fn f() -> U32 {\n  let _ = []\n  1\n}\n"), vec![Code::E0406]);
@@ -245,7 +254,7 @@ fn match_exhaustiveness() {
 fn conversions() {
     // With std, which declares `F32.from_bits` (§3.3).
     ok_with_std(
-        "pub fn f(i: I32, x: F64, y: F32, n: U8) -> F64 {\n  let _ = i as I64\n  let _ = x.round_f32()\n  let _ = y.trunc_i32_sat()\n  let d = y.to_bits()\n  let _ = F32.from_bits(d)\n  let _ = n as F32\n  (i as F64) + x\n}\n",
+        "pub fn f(i: I32, x: F64, y: F32, n: U8) -> F64 {\n  let _ = i as I64\n  let _ = F32.round_from(x)\n  let _ = I32.trunc_sat_from(y)\n  let d = y.to_bits()\n  let _ = F32.from_bits(d)\n  let _ = n as F32\n  (i as F64) + x\n}\n",
     );
     assert_eq!(codes("pub fn f(x: I64) -> I32 { x as I32 }\n"), vec![Code::E0411]);
     assert_eq!(codes("pub fn f(x: I64) -> F64 { x as F64 }\n"), vec![Code::E0411]);
@@ -253,7 +262,7 @@ fn conversions() {
     let src = "pub fn f(x: F32) -> I32 { x as I32 }\n";
     let a = check(src);
     let d = &a.diagnostics[0];
-    assert!((0..d.fixes.len()).any(|k| crate::fixed_region(src, d, k) == "x.trunc_i32()"));
+    assert!((0..d.fixes.len()).any(|k| crate::fixed_region(src, d, k) == "I32.trunc_from(x)"));
 }
 
 #[test]

@@ -151,9 +151,9 @@
 // 0x40000000 = 1073741824.
 
 const HALF_UP: F64 = 2.5
-const CUT: I32 = HALF_UP.trunc_i32()
+const CUT: I32 = I32.trunc_from(HALF_UP)
 const TIE: F64 = 16777217.0
-const TIE_EVEN: F32 = TIE.round_f32()
+const TIE_EVEN: F32 = F32.round_from(TIE)
 const PI_BITS: U32 = F32.PI.to_bits()
 const NEG_SEVEN: I32 = -7
 const FLOOR_Q: I32 = NEG_SEVEN.div_euclid(2)
@@ -186,17 +186,17 @@ pub fn const_floor_r() -> I32 {
 
 @export
 pub fn trunc_sat(x: F32) -> I32 {
-  x.trunc_i32_sat()
+  I32.trunc_sat_from(x)
 }
 
 @export
 pub fn trunc_panic(x: F32) -> I32 {
-  x.trunc_i32()
+  I32.trunc_from(x)
 }
 
 @export
 pub fn narrow_or(n: I32) -> U8 {
-  match n.narrow_u8() {
+  match U8.narrow_from(n) {
     Some(b) => b,
     None => 255,
   }
@@ -227,7 +227,7 @@ pub fn bits_of(x: F32) -> U32 {
 
 @export
 pub fn round_wide(x: F64) -> F32 {
-  x.round_f32()
+  F32.round_from(x)
 }
 
 test "the interpreter agrees with the expectations of the C target" {

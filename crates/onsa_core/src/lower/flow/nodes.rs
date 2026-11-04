@@ -136,7 +136,7 @@ fn vdelay_read(
         },
     );
     let dc = let_(cx, "dc", dc);
-    // k = dc.trunc_u32()
+    // k = U32.trunc_from(dc)
     let k = Expr::new(
         Ty::u32(),
         span,
@@ -146,7 +146,7 @@ fn vdelay_read(
         },
     );
     let k = let_(cx, "k", k);
-    // f = dc - k.round_f32()
+    // f = dc - T.round_from(k)
     let kf = Expr::new(
         t.clone(),
         span,

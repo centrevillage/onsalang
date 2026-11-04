@@ -17,26 +17,26 @@ use std.array
 
 fn t_i64(o: Option[F64]) -> I64 {
   match o {
-    Some(v) => v.trunc_i64(),
+    Some(v) => I64.trunc_from(v),
     None => 0,
   }
 }
 
 fn t_u64(o: Option[F32]) -> U64 {
   match o {
-    Some(v) => v.trunc_u64(),
+    Some(v) => U64.trunc_from(v),
     None => 0,
   }
 }
 
 test "F32 2^63 -> I64 panics" {   //~ TESTFAIL "F32 2^63 -> I64 panics"
   let a: F32 = 9223372036854775808.0
-  let _ = a.trunc_i64()
+  let _ = I64.trunc_from(a)
 }
 
 test "F32 2^64 -> U64 panics" {   //~ TESTFAIL "F32 2^64 -> U64 panics"
   let a: F32 = 18446744073709551616.0
-  let _ = a.trunc_u64()
+  let _ = U64.trunc_from(a)
 }
 
 test "2^63 -> I64 inside a function panics" {   //~ TESTFAIL "2^63 -> I64 inside a function panics"
@@ -52,12 +52,12 @@ test "2^64 -> U64 in the arm of a match panics" {   //~ TESTFAIL "2^64 -> U64 in
 test "2^63 -> I64 inside an anonymous function panics" {   //~ TESTFAIL "2^63 -> I64 inside an anonymous function panics"
   let _: [I64; 2] = array.from_fn(fn(_) {
     let a: F64 = 9223372036854775808.0
-    a.trunc_i64()
+    I64.trunc_from(a)
   })
 }
 
 test "2^64 -> U64 in the middle of an expression panics" {   //~ TESTFAIL "2^64 -> U64 in the middle of an expression panics"
   let a: F64 = 18446744073709551616.0
-  let b = a.trunc_u64()
+  let b = U64.trunc_from(a)
   let _ = b +% 1
 }

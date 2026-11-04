@@ -117,9 +117,9 @@ impl Describe for Point {
   - `AnyNum` は、符号なしを含む全ての数を表す。`Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元。浮動小数では `+0.0` で、`-0.0 + ZERO` は `+0.0` になる、§3.4）を持つ。
     符号なし整数の引き算が 0 を下回ると、具体的な型と同じく実行時に panic する（§3.4）。`Copy` を含めるのは、数を値として扱い、総称の数値のコードで `Copy` を重ねて書かずに済むようにするためである（`Copy` の無い `T` の破棄は `Alloc` を要する、下記）。
   - `Num` は、負の数を持つ数（符号付き整数、浮動小数、固定小数点）を表す。`AnyNum` と `Neg` を満たす。符号なし整数は `Num` を満たさない。総称の数値のコードは負の値を前提にすることが多く（`a + (b - a) * t` は `b < a` でも成り立つと考えて書く）、符号なしを受け付けると、普通の入力で実行時に panic するからである。数の境界は `Num` を既定とし、符号なしも受けるときだけ `AnyNum` と書く（P10）。
-  - `Float` は、浮動小数を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）を持つ。`Float` を実装するのは組込みの浮動小数（`F32`、`F64`）だけで、利用者の型への `impl Float` は E0307（標準 trait の実装を書ける場所の規則、上記）。
+  - `Float` は、浮動小数を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）と、変換の関連関数 `round_from`（§3.3）を持つ。`Float` を実装するのは組込みの浮動小数（`F32`、`F64`）だけで、利用者の型への `impl Float` は E0307（標準 trait の実装を書ける場所の規則、上記）。
     超越関数（§13.4）と `vdelay`（§11.4）は、組込みの浮動小数のプリミティブで計算するからである。利用者の型に開くかは §19.1。
-  - `Int` は、全ての整数を表す。`AnyNum` `Eq` `Ord` `Hash` `BitAnd` `BitOr` `BitXor` `Shl` `Shr` `Not` と、ラップ・飽和の 6 つの演算子 trait を満たし、関連定数 `ONE` `MIN` `MAX`（`Self`）と `BITS`（`U32`）を持つ。符号付き整数は `Num` と `Int` を満たす。符号付き整数だけを受けるときは `T: Num + Int` と書く。
+  - `Int` は、全ての整数を表す。`AnyNum` `Eq` `Ord` `Hash` `BitAnd` `BitOr` `BitXor` `Shl` `Shr` `Not` と、ラップ・飽和の 6 つの演算子 trait を満たし、関連定数 `ONE` `MIN` `MAX`（`Self`）と `BITS`（`U32`）と、変換の関連関数 `narrow_from`・`trunc_from`・`trunc_sat_from`（§3.3）を持つ。型パラメータでは、変換も `T.ZERO` と同じく型の名前から呼ぶ（`T.round_from(k)`、`T.narrow_from(n)`）。符号付き整数は `Num` と `Int` を満たす。符号付き整数だけを受けるときは `T: Num + Int` と書く。
   - `Unsigned` は、符号なし整数を表す印で、`Int` を満たす。負の数を持たず、`>>` は論理シフトである（§3.4）。
   - `ONE` を `AnyNum` と `Num` に置かないのは、固定小数点（Q15 / Q31、範囲は `[-1, 1)`）が 1 を表せず、`Num` を実装できなくなるからである。利用者の型も `impl AnyNum for Q15 { const ZERO: Q15 = ... }` と `impl Num for Q15 {}` のように実装できる（演算子 trait も実装する）。
     `std.math` の `abs`（`Num`）と `min` / `max`（`AnyNum`）は、利用者の数の型では std の本体で計算される（§13.4）。

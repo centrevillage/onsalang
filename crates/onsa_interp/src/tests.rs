@@ -232,7 +232,7 @@ fn int_to_float_rounds_to_nearest_even() {
     })
 }
 
-/// The `(Bool, T)` of the parts of `narrow_*` and `checked_*` (S-71): the
+/// The `(Bool, T)` of the parts of `narrow_from` and `checked_*` (S-71): the
 /// value is 0 when it is not defined.
 fn parts_of(v: Value) -> (bool, i128) {
     let Value::Tuple(xs) = v else { panic!("{v:?} is no tuple") };
@@ -696,7 +696,7 @@ fn min_rem_minus_one_is_zero() {
     })
 }
 
-/// R-19, spec §3.3: the 64-bit `trunc_*` panic at 2^63 (`I64`) and 2^64
+/// R-19, spec §3.3: the 64-bit `trunc_from` panic at 2^63 (`I64`) and 2^64
 /// (`U64`), from `F32` and `F64`, and `_sat` gives the bound; the values
 /// just below fit.
 #[test]

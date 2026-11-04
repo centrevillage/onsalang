@@ -135,7 +135,7 @@ pub fn count_in_range(base: U32) -> U32 {
 @export
 pub fn wide_ok(x: I32) -> U32 {
   var r: U32 = 2
-  match x.narrow_i16() {
+  match I16.narrow_from(x) {
     Some(v) => {
       if in_range_i16(v) {
         r = 1

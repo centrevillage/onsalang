@@ -21,25 +21,25 @@ pub struct Voice {
 }
 
 pub fn in_a_let(x: F32) -> F32 {
-  let ys = par i in 0 ..< 4 { x * i.round_f32() }   //~ E0821
+  let ys = par i in 0 ..< 4 { x * F32.round_from(i) }   //~ E0821
   ys[0]
 }
 
 pub fn as_the_tail(x: F32) -> [F32; 2] {
-  par i in 0 ..< 2 { x * i.round_f32() }            //~ E0821
+  par i in 0 ..< 2 { x * F32.round_from(i) }        //~ E0821
 }
 
 pub fn as_an_argument(x: F32) -> F32 {
-  total(par i in 0 ..< 4 { x * i.round_f32() })     //~ E0821
+  total(par i in 0 ..< 4 { x * F32.round_from(i) })     //~ E0821
 }
 
 pub rt fn in_an_rt_fn(x: F32) -> [F32; 2] {
-  par i in 0 ..< 2 { x * i.round_f32() }            //~ E0821
+  par i in 0 ..< 2 { x * F32.round_from(i) }        //~ E0821
 }
 
 impl Voice {
   pub fn in_a_method(self, x: F32) -> [F32; 2] {
-    par i in 0 ..< 2 { x * i.round_f32() }          //~ E0821
+    par i in 0 ..< 2 { x * F32.round_from(i) }      //~ E0821
   }
 }
 
@@ -50,7 +50,7 @@ pub fn in_a_generic[T](x: T) -> T {
 
 pub fn in_a_branch(c: Bool, x: F32) -> F32 {
   if c {
-    let ys = par i in 0 ..< 2 { x * i.round_f32() }  //~ E0821
+    let ys = par i in 0 ..< 2 { x * F32.round_from(i) }  //~ E0821
     ys[0]
   } else {
     x
@@ -58,7 +58,7 @@ pub fn in_a_branch(c: Bool, x: F32) -> F32 {
 }
 
 pub fn in_a_closure(x: F32) -> F32 {
-  let g = fn(y: F32) -> [F32; 2] { par i in 0 ..< 2 { y * i.round_f32() } }  //~ E0821
+  let g = fn(y: F32) -> [F32; 2] { par i in 0 ..< 2 { y * F32.round_from(i) } }  //~ E0821
   g.(x)[0]
 }
 
@@ -71,23 +71,23 @@ pub fn with_an_instance_in_the_body(x: F32) -> F32 {
 
 pub fn nested_in_a_fn(x: F32) -> F32 {
   let rows = par i in 0 ..< 2 {                     //~ E0821
-    pair_total(par j in 0 ..< 2 { x * (i + j).round_f32() })
+    pair_total(par j in 0 ..< 2 { x * F32.round_from(i + j) })
   }
   rows[0]
 }
 
 pub fn with_a_type_error_before(x: F32) -> F32 {
   let a = x + 1
-  let ys = par i in 0 ..< 2 { x * i.round_f32() }   //~ E0821
+  let ys = par i in 0 ..< 2 { x * F32.round_from(i) }   //~ E0821
   a + ys[0]
 }
 
 test "in a test" {
-  let ys = par i in 0 ..< 2 { 1.0 * i.round_f32() }  //~ E0821
+  let ys = par i in 0 ..< 2 { 1.0 * F32.round_from(i) }  //~ E0821
   assert ys[0] == 0.0
 }
 
-pub const IN_A_CONST: [F32; 2] = par i in 0 ..< 2 { 1.0 * i.round_f32() }  //~ E0821
+pub const IN_A_CONST: [F32; 2] = par i in 0 ..< 2 { 1.0 * F32.round_from(i) }  //~ E0821
 
 // ---- Not errors: the same syntax in the body of a flow ----
 
@@ -100,5 +100,5 @@ pub rt fn total(xs: [F32; 4]) -> F32 {
 }
 
 pub flow right_form(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..< 2 { x * i.round_f32() }
+  par~ i in 0 ..< 2 { x * F32.round_from(i) }
 }

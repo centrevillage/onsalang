@@ -27,26 +27,26 @@ pub rt fn grand_total(rows: [[F32; 2]; 3]) -> F32 {
 
 pub flow inner_as_the_tail_of_the_body(x: F32 at sample) -> F32 at sample {
   let rows = par~ i in 0 ..< 3 {
-    par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) }
+    par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) }
   }
   grand_total(rows)
 }
 
 pub flow outer_as_an_argument(x: F32 at sample) -> F32 at sample {
   grand_total(par~ i in 0 ..< 3 {
-    par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) }
+    par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) }
   })
 }
 
 pub flow inner_as_an_argument_in_the_tail(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })
   }
 }
 
 pub flow inner_as_an_argument_in_a_let(x: F32 at sample) -> F32 at sample {
   let rows = par~ i in 0 ..< 3 {
-    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })
   }
   total(rows)
 }
@@ -54,26 +54,26 @@ pub flow inner_as_an_argument_in_a_let(x: F32 at sample) -> F32 at sample {
 pub flow three_deep(x: F32 at sample) -> [F32; 2] at sample {
   par~ i in 0 ..< 2 {
     pair_sum(par~ j in 0 ..< 2 {
-      pair_sum(par~ k in 0 ..< 2 { lp~(x * (i + j + k).round_f32()) })
+      pair_sum(par~ k in 0 ..< 2 { lp~(x * F32.round_from(i + j + k)) })
     })
   }
 }
 
 pub flow stateless_inside_stateful(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    lp~(pair_sum(par~ j in 0 ..< 2 { x * (i + j).round_f32() }))
+    lp~(pair_sum(par~ j in 0 ..< 2 { x * F32.round_from(i + j) }))
   }
 }
 
 pub flow stateful_inside_stateless(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par~ j in 0 ..< 2 { lp~(x) * j.round_f32() }) * i.round_f32()
+    pair_sum(par~ j in 0 ..< 2 { lp~(x) * F32.round_from(j) }) * F32.round_from(i)
   }
 }
 
 pub flow two_inner_in_one_body(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) }) +
-      pair_sum(par~ j in 0 ..< 2 { lp~(x * (i * j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) }) +
+      pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i * j)) })
   }
 }

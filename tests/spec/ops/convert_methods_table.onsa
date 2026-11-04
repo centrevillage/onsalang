@@ -2,249 +2,249 @@
 // [test]
 // spec = ["§3.3", "§18.1"]
 
-// W5-02 U4b: every conversion method of the table in spec §3.3 is accepted for its pair of types (a pair that
-// `as` cannot write): `narrow_<type>` between the integers, `trunc_<type>` and `trunc_<type>_sat` from a float to an
-// integer, `round_f32` / `round_f64` into a float, and `to_bits`. The complement, the pairs that `as` writes, is in
+// W5-02 U4b: every conversion function of the table in spec §3.3 is accepted for its pair of types (a pair that
+// `as` cannot write): `narrow_from` between the integers, `trunc_from` and `trunc_sat_from` from a float to an
+// integer, `F32.round_from` / `F64.round_from` into a float, and `to_bits`. The complement, the pairs that `as` writes, is in
 // negative/scalar_method_as_pairs.onsa. The file only has to check (the values are in the other cases).
 
 pub fn i8_narrow_u8(x: I8) -> Option[U8] {
-  x.narrow_u8()
+  U8.narrow_from(x)
 }
 
 pub fn i8_narrow_u16(x: I8) -> Option[U16] {
-  x.narrow_u16()
+  U16.narrow_from(x)
 }
 
 pub fn i8_narrow_u32(x: I8) -> Option[U32] {
-  x.narrow_u32()
+  U32.narrow_from(x)
 }
 
 pub fn i8_narrow_u64(x: I8) -> Option[U64] {
-  x.narrow_u64()
+  U64.narrow_from(x)
 }
 
 pub fn i16_narrow_i8(x: I16) -> Option[I8] {
-  x.narrow_i8()
+  I8.narrow_from(x)
 }
 
 pub fn i16_narrow_u8(x: I16) -> Option[U8] {
-  x.narrow_u8()
+  U8.narrow_from(x)
 }
 
 pub fn i16_narrow_u16(x: I16) -> Option[U16] {
-  x.narrow_u16()
+  U16.narrow_from(x)
 }
 
 pub fn i16_narrow_u32(x: I16) -> Option[U32] {
-  x.narrow_u32()
+  U32.narrow_from(x)
 }
 
 pub fn i16_narrow_u64(x: I16) -> Option[U64] {
-  x.narrow_u64()
+  U64.narrow_from(x)
 }
 
 pub fn i32_narrow_i8(x: I32) -> Option[I8] {
-  x.narrow_i8()
+  I8.narrow_from(x)
 }
 
 pub fn i32_narrow_i16(x: I32) -> Option[I16] {
-  x.narrow_i16()
+  I16.narrow_from(x)
 }
 
 pub fn i32_narrow_u8(x: I32) -> Option[U8] {
-  x.narrow_u8()
+  U8.narrow_from(x)
 }
 
 pub fn i32_narrow_u16(x: I32) -> Option[U16] {
-  x.narrow_u16()
+  U16.narrow_from(x)
 }
 
 pub fn i32_narrow_u32(x: I32) -> Option[U32] {
-  x.narrow_u32()
+  U32.narrow_from(x)
 }
 
 pub fn i32_narrow_u64(x: I32) -> Option[U64] {
-  x.narrow_u64()
+  U64.narrow_from(x)
 }
 
 pub fn i32_round_f32(x: I32) -> F32 {
-  x.round_f32()
+  F32.round_from(x)
 }
 
 pub fn i64_narrow_i8(x: I64) -> Option[I8] {
-  x.narrow_i8()
+  I8.narrow_from(x)
 }
 
 pub fn i64_narrow_i16(x: I64) -> Option[I16] {
-  x.narrow_i16()
+  I16.narrow_from(x)
 }
 
 pub fn i64_narrow_i32(x: I64) -> Option[I32] {
-  x.narrow_i32()
+  I32.narrow_from(x)
 }
 
 pub fn i64_narrow_u8(x: I64) -> Option[U8] {
-  x.narrow_u8()
+  U8.narrow_from(x)
 }
 
 pub fn i64_narrow_u16(x: I64) -> Option[U16] {
-  x.narrow_u16()
+  U16.narrow_from(x)
 }
 
 pub fn i64_narrow_u32(x: I64) -> Option[U32] {
-  x.narrow_u32()
+  U32.narrow_from(x)
 }
 
 pub fn i64_narrow_u64(x: I64) -> Option[U64] {
-  x.narrow_u64()
+  U64.narrow_from(x)
 }
 
 pub fn i64_round_f32(x: I64) -> F32 {
-  x.round_f32()
+  F32.round_from(x)
 }
 
 pub fn i64_round_f64(x: I64) -> F64 {
-  x.round_f64()
+  F64.round_from(x)
 }
 
 pub fn u8_narrow_i8(x: U8) -> Option[I8] {
-  x.narrow_i8()
+  I8.narrow_from(x)
 }
 
 pub fn u16_narrow_i8(x: U16) -> Option[I8] {
-  x.narrow_i8()
+  I8.narrow_from(x)
 }
 
 pub fn u16_narrow_i16(x: U16) -> Option[I16] {
-  x.narrow_i16()
+  I16.narrow_from(x)
 }
 
 pub fn u16_narrow_u8(x: U16) -> Option[U8] {
-  x.narrow_u8()
+  U8.narrow_from(x)
 }
 
 pub fn u32_narrow_i8(x: U32) -> Option[I8] {
-  x.narrow_i8()
+  I8.narrow_from(x)
 }
 
 pub fn u32_narrow_i16(x: U32) -> Option[I16] {
-  x.narrow_i16()
+  I16.narrow_from(x)
 }
 
 pub fn u32_narrow_i32(x: U32) -> Option[I32] {
-  x.narrow_i32()
+  I32.narrow_from(x)
 }
 
 pub fn u32_narrow_u8(x: U32) -> Option[U8] {
-  x.narrow_u8()
+  U8.narrow_from(x)
 }
 
 pub fn u32_narrow_u16(x: U32) -> Option[U16] {
-  x.narrow_u16()
+  U16.narrow_from(x)
 }
 
 pub fn u32_round_f32(x: U32) -> F32 {
-  x.round_f32()
+  F32.round_from(x)
 }
 
 pub fn u64_narrow_i8(x: U64) -> Option[I8] {
-  x.narrow_i8()
+  I8.narrow_from(x)
 }
 
 pub fn u64_narrow_i16(x: U64) -> Option[I16] {
-  x.narrow_i16()
+  I16.narrow_from(x)
 }
 
 pub fn u64_narrow_i32(x: U64) -> Option[I32] {
-  x.narrow_i32()
+  I32.narrow_from(x)
 }
 
 pub fn u64_narrow_i64(x: U64) -> Option[I64] {
-  x.narrow_i64()
+  I64.narrow_from(x)
 }
 
 pub fn u64_narrow_u8(x: U64) -> Option[U8] {
-  x.narrow_u8()
+  U8.narrow_from(x)
 }
 
 pub fn u64_narrow_u16(x: U64) -> Option[U16] {
-  x.narrow_u16()
+  U16.narrow_from(x)
 }
 
 pub fn u64_narrow_u32(x: U64) -> Option[U32] {
-  x.narrow_u32()
+  U32.narrow_from(x)
 }
 
 pub fn u64_round_f32(x: U64) -> F32 {
-  x.round_f32()
+  F32.round_from(x)
 }
 
 pub fn u64_round_f64(x: U64) -> F64 {
-  x.round_f64()
+  F64.round_from(x)
 }
 
 pub fn f32_trunc_i8(x: F32) -> I8 {
-  x.trunc_i8()
+  I8.trunc_from(x)
 }
 
 pub fn f32_trunc_i8_sat(x: F32) -> I8 {
-  x.trunc_i8_sat()
+  I8.trunc_sat_from(x)
 }
 
 pub fn f32_trunc_i16(x: F32) -> I16 {
-  x.trunc_i16()
+  I16.trunc_from(x)
 }
 
 pub fn f32_trunc_i16_sat(x: F32) -> I16 {
-  x.trunc_i16_sat()
+  I16.trunc_sat_from(x)
 }
 
 pub fn f32_trunc_i32(x: F32) -> I32 {
-  x.trunc_i32()
+  I32.trunc_from(x)
 }
 
 pub fn f32_trunc_i32_sat(x: F32) -> I32 {
-  x.trunc_i32_sat()
+  I32.trunc_sat_from(x)
 }
 
 pub fn f32_trunc_i64(x: F32) -> I64 {
-  x.trunc_i64()
+  I64.trunc_from(x)
 }
 
 pub fn f32_trunc_i64_sat(x: F32) -> I64 {
-  x.trunc_i64_sat()
+  I64.trunc_sat_from(x)
 }
 
 pub fn f32_trunc_u8(x: F32) -> U8 {
-  x.trunc_u8()
+  U8.trunc_from(x)
 }
 
 pub fn f32_trunc_u8_sat(x: F32) -> U8 {
-  x.trunc_u8_sat()
+  U8.trunc_sat_from(x)
 }
 
 pub fn f32_trunc_u16(x: F32) -> U16 {
-  x.trunc_u16()
+  U16.trunc_from(x)
 }
 
 pub fn f32_trunc_u16_sat(x: F32) -> U16 {
-  x.trunc_u16_sat()
+  U16.trunc_sat_from(x)
 }
 
 pub fn f32_trunc_u32(x: F32) -> U32 {
-  x.trunc_u32()
+  U32.trunc_from(x)
 }
 
 pub fn f32_trunc_u32_sat(x: F32) -> U32 {
-  x.trunc_u32_sat()
+  U32.trunc_sat_from(x)
 }
 
 pub fn f32_trunc_u64(x: F32) -> U64 {
-  x.trunc_u64()
+  U64.trunc_from(x)
 }
 
 pub fn f32_trunc_u64_sat(x: F32) -> U64 {
-  x.trunc_u64_sat()
+  U64.trunc_sat_from(x)
 }
 
 pub fn f32_to_bits(x: F32) -> U32 {
@@ -252,71 +252,71 @@ pub fn f32_to_bits(x: F32) -> U32 {
 }
 
 pub fn f64_trunc_i8(x: F64) -> I8 {
-  x.trunc_i8()
+  I8.trunc_from(x)
 }
 
 pub fn f64_trunc_i8_sat(x: F64) -> I8 {
-  x.trunc_i8_sat()
+  I8.trunc_sat_from(x)
 }
 
 pub fn f64_trunc_i16(x: F64) -> I16 {
-  x.trunc_i16()
+  I16.trunc_from(x)
 }
 
 pub fn f64_trunc_i16_sat(x: F64) -> I16 {
-  x.trunc_i16_sat()
+  I16.trunc_sat_from(x)
 }
 
 pub fn f64_trunc_i32(x: F64) -> I32 {
-  x.trunc_i32()
+  I32.trunc_from(x)
 }
 
 pub fn f64_trunc_i32_sat(x: F64) -> I32 {
-  x.trunc_i32_sat()
+  I32.trunc_sat_from(x)
 }
 
 pub fn f64_trunc_i64(x: F64) -> I64 {
-  x.trunc_i64()
+  I64.trunc_from(x)
 }
 
 pub fn f64_trunc_i64_sat(x: F64) -> I64 {
-  x.trunc_i64_sat()
+  I64.trunc_sat_from(x)
 }
 
 pub fn f64_trunc_u8(x: F64) -> U8 {
-  x.trunc_u8()
+  U8.trunc_from(x)
 }
 
 pub fn f64_trunc_u8_sat(x: F64) -> U8 {
-  x.trunc_u8_sat()
+  U8.trunc_sat_from(x)
 }
 
 pub fn f64_trunc_u16(x: F64) -> U16 {
-  x.trunc_u16()
+  U16.trunc_from(x)
 }
 
 pub fn f64_trunc_u16_sat(x: F64) -> U16 {
-  x.trunc_u16_sat()
+  U16.trunc_sat_from(x)
 }
 
 pub fn f64_trunc_u32(x: F64) -> U32 {
-  x.trunc_u32()
+  U32.trunc_from(x)
 }
 
 pub fn f64_trunc_u32_sat(x: F64) -> U32 {
-  x.trunc_u32_sat()
+  U32.trunc_sat_from(x)
 }
 
 pub fn f64_trunc_u64(x: F64) -> U64 {
-  x.trunc_u64()
+  U64.trunc_from(x)
 }
 
 pub fn f64_trunc_u64_sat(x: F64) -> U64 {
-  x.trunc_u64_sat()
+  U64.trunc_sat_from(x)
 }
 
 pub fn f64_round_f32(x: F64) -> F32 {
-  x.round_f32()
+  F32.round_from(x)
 }
 
 pub fn f64_to_bits(x: F64) -> U64 {

@@ -1,8 +1,8 @@
 format 1
 seed 0x4f4e5341
 operations 532
-data_sha256 eddbf27974b05b7291b4e577d67e79b2800f273f224337d17779bba5b7d4bec2
-file OPS.tsv sha256=e168d026cfdaa9b5cb621512c7ab7c5b1e940019dfd8828feb9c1b281e8f47f9 rows=0
+data_sha256 b278a68e8b1f7023de6aaa5e5f257953b30ce7b1554cfd72d394d2578d66def9
+file OPS.tsv sha256=298a2ef8ee47f990dd8bf21b32efccb84701fc9b57bfb1628bb5521f6564ad30 rows=0
 file const.tsv sha256=a5c69bda4b6b50dbfc18f66b25e2a128101af3979aa1da651d24fea608fd9634 rows=54 edge=54
 file conv-f32.tsv sha256=a87b81a5c21b389e7041bdaf25e7bd049c90b6c9d0a1e667430a2a952c4143c5 rows=4210 edge=3539 rand=671
 file conv-f64.tsv sha256=2b91c0a7836d8bdf7300ade27cc71457abe701866c885c5d226dd3925b314686 rows=4531 edge=3830 rand=701
@@ -17,7 +17,7 @@ file conv-u8.tsv sha256=31026a5c5e8f40f283b877809bcd9770e98d1d278c4bd5098739f05b
 file expr-f32.tsv sha256=f4b472c77e9df4eab876d9efd330651ba60b9eaf8306d1baea80f7280a670f41 rows=1481 edge=1353 rand=128
 file expr-f64.tsv sha256=e11a2b295f3511ac8ca8d9b41884ee06a9441fe771e4968d1e8ea3e6afe49e0a rows=1489 edge=1361 rand=128
 file fixture/scalar/onsa.toml sha256=146f4631f9b6ee803fba1a7e1f69fdc636cab3a4c72a805da6174b0b318feb77 rows=0
-file fixture/scalar/ops.onsa sha256=77f555d9821b1cb76ecb037db0429daa03c383953b66420b49a1e3a0e3dd8360 rows=0
+file fixture/scalar/ops.onsa sha256=c1977becfc6db97675c7140cf602915d29e0284f49697dbcf35eb3875c94014a rows=0
 file fixture/zero_one/onsa.toml sha256=0e2f7a2694e34fe2c3a05094b19f6300210691a693cceee843085dfd9d2681d4 rows=0
 file fixture/zero_one/ops.onsa sha256=4fd3863b0ea1d9cda9e0ef47a75af6fa8287604623695ee45bced1fe1424dba2 rows=0
 file float-f32.tsv sha256=7ea10493d5e2d7d3a118dab8ba29b1f6f1b5112dda7693062203fd124477078d rows=17133 edge=14599 rand=2534

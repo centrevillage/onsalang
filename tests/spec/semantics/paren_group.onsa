@@ -70,7 +70,7 @@ fn grouped_tuple(p: ((I32, F32))) -> I32 {
 
 fn grouped_elements_of_a_tuple(p: (I32, (F32))) -> F32 {
   let (a, (b)) = p
-  a.round_f32() + b
+  F32.round_from(a) + b
 }
 
 fn grouped_pattern_of_a_tuple_element(p: (I32, I32)) -> I32 {

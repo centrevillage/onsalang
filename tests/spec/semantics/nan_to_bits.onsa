@@ -270,14 +270,14 @@ test "F32: from_bits of a NaN pattern reads back as the canonical NaN" {
   assert e.to_bits() == 0x7FC0_0000
 }
 
-test "F32: a NaN made by round_f32 of an F64 NaN has the canonical F32 bits" {
+test "F32: a NaN made by F32.round_from of an F64 NaN has the canonical F32 bits" {
   let z: F64 = 0.0
   let n      = z / z
-  let m      = n.round_f32()
+  let m      = F32.round_from(n)
   assert m != m
   assert m.to_bits() == 0x7FC0_0000
   let bad = F64.from_bits(0xFFF0_0000_0000_0001)
-  let k   = bad.round_f32()
+  let k   = F32.round_from(bad)
   assert k.to_bits() == 0x7FC0_0000
 }
 

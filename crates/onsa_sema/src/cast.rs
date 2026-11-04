@@ -1,6 +1,6 @@
 //! The conversions with `as` (spec §3.3): the lossless widenings it
-//! writes, and the conversion method to suggest where it does not convert.
-//! The methods are std's (`std/core/num.onsa`); a unit test checks the
+//! writes, and the conversion functions to suggest where it does not convert.
+//! The functions are std's (`std/core/num.onsa`); a unit test checks the
 //! names suggested against them (`prim_tests.rs`). W5-14 decides the
 //! suggestions.
 
@@ -28,15 +28,13 @@ pub fn cast_allowed(types: &Types, from: TyId, to: TyId) -> bool {
     }
 }
 
-/// The method to suggest instead of a rejected `as` (§3.3).
-pub fn cast_suggestion(types: &Types, from: TyId, to: TyId) -> Option<String> {
+/// The conversion functions to call instead of a rejected `as` (§3.3): the
+/// one reading of a conversion to a float, the two of a float to an integer,
+/// and none of a narrowing, whose `Option` no `as` gives.
+pub fn cast_suggestions(types: &Types, from: TyId, to: TyId) -> Vec<String> {
     match (types.get(from), types.get(to)) {
-        (Ty::Int(_), Ty::Int(b)) => Some(format!(".narrow_{}()", b.name().to_lowercase())),
-        (Ty::Int(_), Ty::Float(FloatKind::F32)) | (Ty::Float(_), Ty::Float(FloatKind::F32)) => {
-            Some(".round_f32()".into())
-        }
-        (Ty::Int(_), Ty::Float(FloatKind::F64)) => Some(".round_f64()".into()),
-        (Ty::Float(_), Ty::Int(b)) => Some(format!(".trunc_{}()", b.name().to_lowercase())),
-        _ => None,
+        (Ty::Int(_) | Ty::Float(_), Ty::Float(k)) => vec![format!("{}.round_from", k.name())],
+        (Ty::Float(_), Ty::Int(k)) => vec![format!("{}.trunc_sat_from", k.name()), format!("{}.trunc_from", k.name())],
+        _ => Vec::new(),
     }
 }

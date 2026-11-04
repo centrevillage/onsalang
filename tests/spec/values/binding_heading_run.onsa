@@ -70,7 +70,7 @@ fn arm_moves_the_binding(v: F32) -> F32 uses {Alloc} {
 fn arm_reads_then_moves(v: F32) -> F32 uses {Alloc} {
   match make(v) {
     Some(z) => {
-      let n = z.len().round_f32()
+      let n = F32.round_from(z.len())
       n + value_of(move z)
     },
     None => -1.0,

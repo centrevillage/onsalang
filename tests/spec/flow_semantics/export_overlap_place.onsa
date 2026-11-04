@@ -330,7 +330,7 @@
 /// F32 in, U8 out.
 @export
 pub flow narrow(x: F32 at sample) -> U8 at sample {
-  x.trunc_u8()
+  U8.trunc_from(x)
 }
 
 /// U8 in, F32 out.
@@ -342,7 +342,7 @@ pub flow widen(x: U8 at sample) -> F32 at sample {
 /// F32 in, two planar U8 out.
 @export
 pub flow split2(x: F32 at sample) -> [U8; 2] at sample {
-  let n = x.trunc_u8()
+  let n = U8.trunc_from(x)
   [n, n + 1]
 }
 
@@ -367,7 +367,7 @@ pub flow names_r(xs: F32 at sample, x: U8 at sample) -> F32 at sample {
 /// F32 in, I32 out: the same size, another element type (S-403).
 @export
 pub flow cast32(x: F32 at sample) -> I32 at sample {
-  x.trunc_i32()
+  I32.trunc_from(x)
 }
 
 /// U8 in, Bool out: the same size, another element type (S-403).
@@ -390,7 +390,7 @@ pub struct FI {
 /// A struct output of an F32 field and an I32 field.
 @export
 pub flow fi(x: F32 at sample) -> FI at sample {
-  FI { f: x * 2.0, i: x.trunc_i32() }
+  FI { f: x * 2.0, i: I32.trunc_from(x) }
 }
 
 /// Two F32 inputs (S-409).

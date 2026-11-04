@@ -39,28 +39,28 @@ pub rt fn total(xs: [F32; 4]) -> F32 {
 
 pub flow type_error_then_par(x: F32 at sample) -> F32 at sample {
   let a = x + 1
-  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }   //~ E0811
+  let ys = par~ i in 0 ..< 4 { x * F32.round_from(i) }   //~ E0811
   a + total(ys)
 }
 
 pub flow par_then_a_name_not_found(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 4 { x * i.round_f32() }   //~ E0811
+  let ys = par~ i in 0 ..< 4 { x * F32.round_from(i) }   //~ E0811
   let z = nope
   total(ys)
 }
 
 pub flow a_name_not_found_then_par(x: F32 at sample) -> F32 at sample {
   let z = nope                                      //~ E0302
-  let ys = par i in 0 ..< 4 { x * i.round_f32() }
+  let ys = par i in 0 ..< 4 { x * F32.round_from(i) }
   total(ys)
 }
 
 pub flow a_name_not_found_in_the_body(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 4 { nope * i.round_f32() }  //~ E0811
+  let ys = par~ i in 0 ..< 4 { nope * F32.round_from(i) }  //~ E0811
   total(ys)
 }
 
 pub flow a_name_not_found_in_the_header(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< NOPE { x * i.round_f32() }  //~ E0811
+  let ys = par~ i in 0 ..< NOPE { x * F32.round_from(i) }  //~ E0811
   total(ys)
 }

@@ -132,7 +132,7 @@ pub fn borrowed_and_inout_literals_of_other_variables() -> F32 {
   let c: [F32; 2] = [1.0; 2]
   let d: [F32; 6] = [1.0; 6]
   fill_all(inout [a, b], 1.0)
-  a[0] + b[0] + lens([c, d]).round_f32()
+  a[0] + b[0] + F32.round_from(lens([c, d]))
 }
 
 // A length given by a const parameter is found from the literal or the value, as for any array (§4.5).

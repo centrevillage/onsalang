@@ -20,17 +20,17 @@ fn dive(n: U32) -> U32 {
 // ------------------------------------------------- the constant clock in a body
 
 pub flow clock_ok(x: F32 at sample) -> F32 at sample {
-  let k = dive(127).round_f32()
+  let k = F32.round_from(dive(127))
   x * k
 }
 
 pub flow clock_over(x: F32 at sample) -> F32 at sample {
-  let k = dive(128).round_f32()   //~ E0419
+  let k = F32.round_from(dive(128))   //~ E0419
   x * k
 }
 
 pub flow clock_far_over(x: F32 at sample) -> F32 at sample {
-  let k = dive(300).round_f32()   //~ E0419
+  let k = F32.round_from(dive(300))   //~ E0419
   x * k
 }
 
@@ -47,7 +47,7 @@ pub flow clock_cond_over(x: F32 at sample) -> F32 at sample {
 
 pub flow param_ok(
   x: F32 at sample,
-  @param(min: 0.0, max: 200.0, default: dive(127).round_f32())
+  @param(min: 0.0, max: 200.0, default: F32.round_from(dive(127)))
   level: F32 at block,
 ) -> F32 at sample {
   x * level
@@ -55,7 +55,7 @@ pub flow param_ok(
 
 pub flow param_default_over(
   x: F32 at sample,
-  @param(min: 0.0, max: 200.0, default: dive(128).round_f32())   //~ E0419
+  @param(min: 0.0, max: 200.0, default: F32.round_from(dive(128)))   //~ E0419
   level: F32 at block,
 ) -> F32 at sample {
   x * level
@@ -63,7 +63,7 @@ pub flow param_default_over(
 
 pub flow param_max_over(
   x: F32 at sample,
-  @param(min: 0.0, max: dive(300).round_f32(), default: 1.0)   //~ E0419
+  @param(min: 0.0, max: F32.round_from(dive(300)), default: 1.0)   //~ E0419
   level: F32 at block,
 ) -> F32 at sample {
   x * level

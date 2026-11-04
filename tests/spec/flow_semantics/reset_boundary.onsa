@@ -112,13 +112,13 @@ pub flow counter(x: F32 at sample, start: F32 at init) -> F32 at sample {
   y
 }
 
-// Panics for a NaN input or one outside I32 (`trunc_i32`): the instance is poisoned. The counter
+// Panics for a NaN input or one outside I32 (`I32.trunc_from`): the instance is poisoned. The counter
 // 1 2 3 ... is a sub-instance, so `reset` has to reach it.
 @export
 pub flow fragile(x: F32 at sample) -> F32 at sample {
-  let n = x.trunc_i32()
+  let n = I32.trunc_from(x)
   let c = counter~(1.0, 0.0)
-  c + n.round_f32()
+  c + F32.round_from(n)
 }
 
 // The input three samples late.
@@ -132,7 +132,7 @@ pub flow tap(x: F32 at sample) -> F32 at sample {
 pub flow guarded(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let k = 100 / n
   let y = x + prev~(^y)
-  y + k.round_f32()
+  y + F32.round_from(k)
 }
 
 test "reset puts the running sum back to the init input" {

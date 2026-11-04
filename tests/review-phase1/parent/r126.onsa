@@ -11,16 +11,16 @@ fn uint_min_method(a: U32, b: U32) -> U32 { a.min(b) }
 fn uint_min_fn(a: U32, b: U32) -> U32 { min(a, b) }
 
 // 2. `as` で書ける変換をメソッドでも書ける。今: 全て通る。期待: 全て E0413（修正候補は `x as F64` など。同じ型への変換は取り除く）。
-fn f32_to_f64(x: F32) -> F64 { x.round_f64() }           // `x as F64` と同じ
-fn f32_to_f32(x: F32) -> F32 { x.round_f32() }           // 何もしない
-fn i8_to_f64(x: I8) -> F64 { x.round_f64() }             // `x as F64` と同じ
-fn i32_narrow_i64(x: I32) -> Option[I64] { x.narrow_i64() } // 拡大なので常に `Some`
-fn i32_narrow_i32(x: I32) -> Option[I32] { x.narrow_i32() } // 同じ型
+fn f32_to_f64(x: F32) -> F64 { F64.round_from(x) }           // `x as F64` と同じ
+fn f32_to_f32(x: F32) -> F32 { F32.round_from(x) }           // 何もしない
+fn i8_to_f64(x: I8) -> F64 { F64.round_from(x) }             // `x as F64` と同じ
+fn i32_narrow_i64(x: I32) -> Option[I64] { I64.narrow_from(x) } // 拡大なので常に `Some`
+fn i32_narrow_i32(x: I32) -> Option[I32] { I32.narrow_from(x) } // 同じ型
 
 // 2. `as` で書けない変換。今: E0411 で、修正候補は一つだけ。
-//   `I32 as F32` は `x.round_f32()`。`F32 as I32` は `x.trunc_i32()`（Rust の `as` の読みの `trunc_i32_sat()` は出ない）。
-//   `I64 as U8` は `x.narrow_u8()`（`Option[U8]` を返すので、`U8` を期待する位置では型が合わない）。
-// 期待: E0411。`I32 as F32` は `round_f32()`、`F32 as I32` は `trunc_i32_sat()` と `trunc_i32()` の二つ、`I64 as U8` は候補なしで note に `narrow_u8()`。
+//   `I32 as F32` は `F32.round_from(x)`。`F32 as I32` は `I32.trunc_from(x)`（Rust の `as` の読みの `I32.trunc_sat_from` は出ない）。
+//   `I64 as U8` は `U8.narrow_from(x)`（`Option[U8]` を返すので、`U8` を期待する位置では型が合わない）。
+// 期待: E0411。`I32 as F32` は `F32.round_from`、`F32 as I32` は `I32.trunc_sat_from` と `I32.trunc_from` の二つ、`I64 as U8` は候補なしで note に `U8.narrow_from`。
 fn i32_as_f32(x: I32) -> F32 { x as F32 }
 fn f32_as_i32(x: F32) -> I32 { x as I32 }
 fn i64_as_u8(x: I64) -> U8 { x as U8 }

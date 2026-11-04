@@ -145,7 +145,7 @@
 
 [[pending]]
 kind = "spec-example"
-target = "§11.5 172cb751: use std.math.{sum}"
+target = "§11.5 eedd569a: use std.math.{sum}"
 reasons = ["R-23", "S-102", "S-45"]
 until = "W5-07"
 note = "std.math.sum、積和の括弧。写し flow/unison.onsa は std.dsp.sum（範囲は W3-18 で 0..<UNISON に、W3-11 で 0 ..< UNISON に書き換えた）"
@@ -167,13 +167,6 @@ target = "E0409"
 reasons = ["S-142", "R-100"]
 until = "W9-04"
 note = "型の大きさと状態の領域が U32 を超える（ターゲットの pass）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0411"
-reasons = ["S-98", "R-126"]
-until = "W5-14"
-note = "as で書けない組。修正候補を読みごとに"
 
 [[pending]]
 kind = "diag-code"
@@ -696,13 +689,6 @@ note = "s.f(x) の E0020（型の段）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0411_as.onsa"
-reasons = ["S-98", "R-126"]
-until = "W5-14"
-note = "E0411 の候補（読みごと）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0302_float_min.onsa"
 reasons = ["S-109", "S-46"]
 until = "W5-05"
@@ -1021,28 +1007,7 @@ until = "W5-08"
 note = "panic の値と呼び出しは W5-08 まで E0200（名前は prelude にある、§9.2・§15.1）。W5-08 の後、値を返す match の最後の腕が panic の C が R-145 の警告に落ちないかを確かめる"
 # --- W3-17: 修正候補の約束（§18.1、S-236）を破る候補。候補ごとに載せ、直す作業が外す（2026-10-08）
 
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0411_as.onsa:28:3 E0411 fix1"
-reasons = ["S-98", "S-236"]
-until = "W5-14"
-note = "整数の縮小の E0411 の候補 .narrow_i32() が Option を返し E0401（仕様 §3.3 は縮小に候補を出さず note で示す）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/types.onsa:60:3 E0411 fix1"
-reasons = ["S-98", "S-236"]
-until = "W5-14"
-note = "整数の縮小の E0411 の候補 .narrow_i32() が Option を返し E0401（仕様 §3.3 は候補を出さない）"
-
 # --- W3-17: ファズの修正候補の「同じ箇所」の近似が見つけた型を示す保存した入力（2026-10-08）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/1ee024dc.onsa"
-reasons = ["S-98", "S-236"]
-until = "W5-14"
-note = "fix-same-place: fix|E0411|call `…`|E0401。整数の縮小の候補 .narrow_u8() が Option を返す（仕様 §3.3 は候補を出さない）"
 
 
 # --- W2-09/i: 新しい種（tests/spec/c_runtime/ の W2-09/t の事例）で変異が変わり、ファズが見つけた修正候補の型（2026-10-08。親が R を登録して付け替える）

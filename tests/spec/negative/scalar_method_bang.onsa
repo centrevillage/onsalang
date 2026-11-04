@@ -12,15 +12,15 @@ pub fn bits_with_a_bang(x: F32) -> U32 {
 }
 
 pub fn trunc_with_a_bang(x: F32) -> I32 {
-  x.trunc_i32!()                                    //~ E0714
+  I32.trunc_from!(x)                                //~ E0714
 }
 
 pub fn narrow_with_a_bang(n: I32) -> Option[U8] {
-  n.narrow_u8!()                                    //~ E0714
+  U8.narrow_from!(n)                                //~ E0714
 }
 
 pub fn round_with_a_bang(x: F64) -> F32 {
-  x.round_f32!()                                    //~ E0714
+  F32.round_from!(x)                                //~ E0714
 }
 
 pub fn floor_division_with_a_bang(a: I32, b: I32) -> I32 {
@@ -32,5 +32,5 @@ pub fn checked_with_a_bang(a: U8, b: U8) -> Option[U8] {
 }
 
 pub fn fine(x: F32, a: I32, b: I32) -> U32 {
-  x.to_bits() + a.div_euclid(b).narrow_u32().unwrap()
+  x.to_bits() + U32.narrow_from(a.div_euclid(b)).unwrap()
 }

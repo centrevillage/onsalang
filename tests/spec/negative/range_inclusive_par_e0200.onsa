@@ -29,28 +29,28 @@ const N: U32 = 3
 @export
 pub flow literal_ends(x: F32 at sample) -> [F32; 4] at sample {
   par~ i in 0..=3 {                                  //~ E0200
-    x * i.round_f32()
+    x * F32.round_from(i)
   }
 }
 
 @export
 pub flow constant_end(x: F32 at sample) -> [F32; 4] at sample {
   par~ i in 0..=N {                                  //~ E0200
-    x * i.round_f32()
+    x * F32.round_from(i)
   }
 }
 
 @export
 pub flow sums_in_the_ends(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in N - 2..=N + 1 {                          //~ E0200
-    x * i.round_f32()
+    x * F32.round_from(i)
   }
 }
 
 @export
 pub flow bound_by_let(x: F32 at sample) -> [F32; 2] at sample {
   let rows = par~ i in 2..=3 {                       //~ E0200
-    x + i.round_f32()
+    x + F32.round_from(i)
   }
   rows
 }
@@ -60,6 +60,6 @@ pub flow bound_by_let(x: F32 at sample) -> [F32; 2] at sample {
 @export
 pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0..<N {
-    x * i.round_f32()
+    x * F32.round_from(i)
   }
 }

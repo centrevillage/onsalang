@@ -442,9 +442,8 @@ fn fix_contract_of_the_units_clean_before() {
 
 #[test]
 fn fix_contract() {
-    // The candidate of the E0411 gives `x.narrow_i32()`, an `Option[I32]`: an E0401 is left
-    // (until W5-02, a candidate that breaks the contract).
-    let breaks = "pub fn f(x: I64) -> I32 {\n  x as I32 //~ E0411\n}\n";
+    // The candidate of the E0411 gives an `F32` where an `I32` is expected: an E0401 is left.
+    let breaks = "pub fn f(x: I64) -> I32 {\n  x as F32 //~ E0411\n}\n";
     let keeps = "pub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n";
     // Two errors in one unit: the candidate of `i32` leaves the E0020 of `f32`.
     let two = |leaves: &str| {

@@ -5,7 +5,7 @@
 // E0420 stays for the operations whose answer depends on the type that a literal's type variable will get
 // (spec §4.7 "型ごとに有無や結果が決まる操作（メソッド呼び出し、`as` の左辺、`match` の対象）は E0420 のままである",
 // S-854). A method: `n.checked_add(1)` is there for the integer types only and `n.to_bits()` for the float types
-// only (§3.4, §3.3), and `0.round_f32()` is there for the integer types and `F64`, not for `F32` (§3.3). A
+// only (§3.4, §3.3). A
 // method that no number type has (`n.nope()`) is E0420 too, because whether some candidate type has the method
 // is told by the declarations of the types and not by the kind of the candidates (S-854). The left of `as`
 // (`1.5 as I32`, `1 as I64`: the conversion is chosen by the type). The subject of `match` (`match 17 { … }`).
@@ -59,8 +59,8 @@ pub fn method_that_no_number_has_on_a_bound_float() -> F32 {
   a
 }
 
-pub fn method_of_a_conversion_on_a_literal() -> F32 {
-  0.round_f32()                                     //~ E0420
+pub fn method_of_the_integer_types_on_a_sum_of_literals() -> I32 {
+  (1 + 2).div_euclid(2)                             //~ E0420
 }
 
 pub fn method_on_a_generic_result() -> I32 {

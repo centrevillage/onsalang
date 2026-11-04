@@ -26,7 +26,7 @@ pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
 
 次の場合は panic する。
 
-- 整数の演算と変換で、§3.4 の整数の表の「panic する場合」の欄に当たるとき（オーバーフロー、`-a` の `MIN`、ゼロ除算、ビット幅以上のシフト、`div_euclid` の結果が収まらないとき。`%` の `MIN % -1` は 0 で、panic しない）と、§3.3 の `trunc_<型>()` の範囲外と NaN。正はそれらの表で、ここは索引である。ラップは `+%`、飽和は `+|` で明示する（§3.4）
+- 整数の演算と変換で、§3.4 の整数の表の「panic する場合」の欄に当たるとき（オーバーフロー、`-a` の `MIN`、ゼロ除算、ビット幅以上のシフト、`div_euclid` の結果が収まらないとき。`%` の `MIN % -1` は 0 で、panic しない）と、§3.3 の `trunc_from` の範囲外と NaN。正はそれらの表で、ここは索引である。ラップは `+%`、飽和は `+|` で明示する（§3.4）
 - 範囲外の添字アクセス `xs[i]` と `xs.slice(from, to)`（範囲外を許す取得は `xs.get(i)` で、`Option` を返す）
 - `Alloc` の handler の領域が尽きたとき
 - `unwrap`、`assert` の失敗、`panic(msg)`

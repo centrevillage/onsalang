@@ -128,7 +128,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     }
 
     // 4. Register every type the unit needs (dependency order falls out),
-    //    and the pairs of `narrow_*` the runtime instantiates.
+    //    and the pairs of `narrow_from` the runtime instantiates.
     for c in &consts {
         cx.names.name(&m.const_(*c).ty);
     }
@@ -266,7 +266,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     }
     out.push('\n');
 
-    // The range checks of `narrow_*` (spec §3.3), from the runtime.
+    // The range checks of `narrow_from` (spec §3.3), from the runtime.
     if !narrows.is_empty() {
         let _ = writeln!(out, "/* ---- narrow ---- */");
         for (from, to) in &narrows {

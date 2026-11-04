@@ -42,12 +42,12 @@ test "assert failure is reported" {            //~ TESTFAIL "assert failure is r
 
 test "trunc panics out of range" {             //~ TESTFAIL "trunc panics out of range"
   let x: F32 = 1.0e10
-  assert x.trunc_i32() == 0
+  assert I32.trunc_from(x) == 0
 }
 
 test "saturating trunc" {
   let x: F32 = 1.0e10
-  assert x.trunc_i32_sat() == 2147483647
+  assert I32.trunc_sat_from(x) == 2147483647
   let nan: F32 = 0.0 / 0.0
-  assert nan.trunc_i32_sat() == 0
+  assert I32.trunc_sat_from(nan) == 0
 }

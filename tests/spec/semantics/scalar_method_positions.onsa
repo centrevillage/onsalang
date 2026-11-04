@@ -10,8 +10,8 @@
 // binding whose type is known, and the result of another method (a chain). Only the methods of the closed
 // list (§3.3's conversions, §3.4's `div_euclid`, `rem_euclid` and `checked_*`) are used. The value of each is
 // worked out by hand:
-//   2.5 cut toward zero is 2 and -2.5 is -2 (`trunc_i32`); 300.5 saturates to I8.MAX = 127; NaN is 0 (`_sat`);
-//   16777217 is the tie of 2^24 and 2^24 + 2 in F32, and the even one is 2^24 (`round_f32` of an F64);
+//   2.5 cut toward zero is 2 and -2.5 is -2 (`I32.trunc_from`); 300.5 saturates to I8.MAX = 127; NaN is 0 (`_sat`);
+//   16777217 is the tie of 2^24 and 2^24 + 2 in F32, and the even one is 2^24 (`F32.round_from` of an F64);
 //   F32.PI has the bits 0x40490FDB (§6.6), and -0.0 has the sign bit alone, 0x80000000 (`to_bits`, §3.4);
 //   -7 = (-4) * 2 + 1, so `div_euclid` is -4 and `rem_euclid` is 1 (§3.4: 0 <= r < |b|).
 
@@ -34,19 +34,19 @@ fn is_none[T](o: Option[T]) -> Bool {
 // ---------------------------------------------------------------- a const
 
 const HALF_UP: F64 = 2.5
-const CUT: I32 = HALF_UP.trunc_i32()
-const CUT_NEG: I32 = (-HALF_UP).trunc_i32()
+const CUT: I32 = I32.trunc_from(HALF_UP)
+const CUT_NEG: I32 = I32.trunc_from(-HALF_UP)
 const LOUD: F32 = 300.5
-const SATURATED: I8 = LOUD.trunc_i8_sat()
-const NAN_SAT: I32 = F32.NAN.trunc_i32_sat()
+const SATURATED: I8 = I8.trunc_sat_from(LOUD)
+const NAN_SAT: I32 = I32.trunc_sat_from(F32.NAN)
 const TIE: F64 = 16777217.0
-const TIE_EVEN: F32 = TIE.round_f32()
+const TIE_EVEN: F32 = F32.round_from(TIE)
 const PI_BITS: U32 = F32.PI.to_bits()
 const NEG_ZERO: F32 = -0.0
 const NEG_ZERO_BITS: U32 = NEG_ZERO.to_bits()
 const TWO_HUNDRED: I32 = 200
-const FITS: Option[U8] = TWO_HUNDRED.narrow_u8()
-const MISSES: Option[I8] = TWO_HUNDRED.narrow_i8()
+const FITS: Option[U8] = U8.narrow_from(TWO_HUNDRED)
+const MISSES: Option[I8] = I8.narrow_from(TWO_HUNDRED)
 const SUM: Option[I32] = TWO_HUNDRED.checked_add(100)
 const NEG_SEVEN: I32 = -7
 const FLOOR_Q: I32 = NEG_SEVEN.div_euclid(2)
@@ -86,31 +86,31 @@ fn doubled(x: F32) -> F32 {
 test "the receiver is a field, an index, a tuple index or the result of a call" {
   let lv = level()
   assert lv.gain.to_bits() == 0x3FC00000
-  assert lv.taps[1].trunc_i32() == -2
-  assert lv.taps[0].trunc_i32_sat() == 0
-  assert val(lv.steps.narrow_u8(), 99) == 99
-  assert val(lv.steps.narrow_u16(), 99) == 300
+  assert I32.trunc_from(lv.taps[1]) == -2
+  assert I32.trunc_sat_from(lv.taps[0]) == 0
+  assert val(U8.narrow_from(lv.steps), 99) == 99
+  assert val(U16.narrow_from(lv.steps), 99) == 300
   let t: (I32, F32) = (-1, 2.5)
-  assert val(t.0.narrow_u32(), 9) == 9
-  assert t.1.trunc_i32() == 2
-  assert doubled(lv.gain).trunc_i32() == 3
+  assert val(U32.narrow_from(t.0), 9) == 9
+  assert I32.trunc_from(t.1) == 2
+  assert I32.trunc_from(doubled(lv.gain)) == 3
   assert level().steps.rem_euclid(7) == 6
 }
 
 test "the receiver is parenthesized, a constant, a known binding or the result of a method" {
   let a: F32 = 1.25
   let b: F32 = 2.5
-  assert (a + b).trunc_i32() == 3
-  assert (-a).trunc_i32() == -1
+  assert I32.trunc_from(a + b) == 3
+  assert I32.trunc_from(-a) == -1
   assert (a * b).to_bits() == 0x40480000
-  assert is_none(I32.MAX.narrow_i8())
-  assert val(I64.MIN.narrow_i32(), 5) == 5
+  assert is_none(I8.narrow_from(I32.MAX))
+  assert val(I32.narrow_from(I64.MIN), 5) == 5
   assert is_none(I64.MAX.checked_add(1))
   let n: I32 = 300
-  assert val(n.narrow_u8(), 1) == 1
-  assert val(n.narrow_i16(), 0) == 300
-  assert val(n.narrow_i16().unwrap().narrow_u8(), 1) == 1
-  assert n.narrow_u64().unwrap() + 1 == 301
+  assert val(U8.narrow_from(n), 1) == 1
+  assert val(I16.narrow_from(n), 0) == 300
+  assert val(U8.narrow_from(I16.narrow_from(n).unwrap()), 1) == 1
+  assert U64.narrow_from(n).unwrap() + 1 == 301
   assert n.checked_mul(2).unwrap().div_euclid(7) == 85
 }
 
@@ -118,24 +118,24 @@ test "a method of the scalars sits in a branch, a loop and an operand" {
   let count: U32 = 4
   var total = 0
   for i in 0 ..< count {
-    let k: I32 = i.narrow_i32().unwrap() - 2
+    let k: I32 = I32.narrow_from(i).unwrap() - 2
     if k.rem_euclid(2) == 1 {
       total = total + k.div_euclid(2)
     }
   }
   assert total == -1
   let big: F32 = 3.0e10
-  let below = big.trunc_i32_sat().checked_sub(1)
+  let below = I32.trunc_sat_from(big).checked_sub(1)
   assert below.unwrap() == 2147483646
 }
 
 // ---------------------------------------------------------------- a closure and a user impl
 
 test "a closure given to from_fn calls the methods of a scalar" {
-  let ys: [I32; 3] = array.from_fn(fn(i: U32) -> I32 { i.narrow_i32().unwrap() - 1 })
+  let ys: [I32; 3] = array.from_fn(fn(i: U32) -> I32 { I32.narrow_from(i).unwrap() - 1 })
   assert ys[0] == -1
   assert ys[2] == 1
-  let bs: [U32; 3] = array.from_fn(fn(i: U32) -> U32 { i.round_f32().to_bits() })
+  let bs: [U32; 3] = array.from_fn(fn(i: U32) -> U32 { F32.round_from(i).to_bits() })
   assert bs[0] == 0
   assert bs[1] == 0x3F800000
   assert bs[2] == 0x40000000
@@ -143,7 +143,7 @@ test "a closure given to from_fn calls the methods of a scalar" {
 
 impl Level {
   pub fn quantized(self) -> I32 {
-    self.gain.trunc_i32_sat()
+    I32.trunc_sat_from(self.gain)
   }
 
   pub fn bits(self) -> U32 {
@@ -151,7 +151,7 @@ impl Level {
   }
 
   pub fn steps_as_u8(self) -> Option[U8] {
-    self.steps.narrow_u8()
+    U8.narrow_from(self.steps)
   }
 
   pub fn share(self, d: I32) -> Option[I32] {
@@ -171,7 +171,7 @@ test "the member of a user impl calls a method of a scalar" {
 // ---------------------------------------------------------------- a flow body
 
 pub flow quantize(x: F32 at sample) -> F32 at sample {
-  x.trunc_i32_sat().round_f32()
+  F32.round_from(I32.trunc_sat_from(x))
 }
 
 test "the body of a flow calls the methods in a chain" {
@@ -194,13 +194,13 @@ test "MIN rem_euclid -1 is 0 and the other edges keep their value" {
 
 test "a trunc of a NaN panics" {
   let nan = F32.NAN
-  let n = nan.trunc_i32()                           //~ PANIC "a trunc of a NaN panics"
+  let n = I32.trunc_from(nan)                       //~ PANIC "a trunc of a NaN panics"
   assert n == 0
 }
 
 test "a trunc out of the range panics" {
   let big: F64 = 2147483648.0
-  let n = big.trunc_i32()                           //~ PANIC "a trunc out of the range panics"
+  let n = I32.trunc_from(big)                       //~ PANIC "a trunc out of the range panics"
   assert n == 0
 }
 
@@ -219,6 +219,6 @@ test "rem_euclid by 0 panics" {
 
 test "an unwrap of a narrow that does not fit panics" {
   let n: I32 = 256
-  let v = n.narrow_u8().unwrap()                    //~ PANIC "an unwrap of a narrow that does not fit panics"
+  let v = U8.narrow_from(n).unwrap()                //~ PANIC "an unwrap of a narrow that does not fit panics"
   assert v == 0
 }

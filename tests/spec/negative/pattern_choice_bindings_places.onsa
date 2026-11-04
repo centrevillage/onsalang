@@ -75,7 +75,7 @@ test "a choice that differs in a test" {
 
 pub flow in_a_flow(x: F32 at sample, k: U32 at block) -> F32 at sample {
   match (k, k % 2) {
-    (n, 0) | (0, m) => x * n.round_f32() * m.round_f32(),   //~ E0314 @14
+    (n, 0) | (0, m) => x * F32.round_from(n) * F32.round_from(m),   //~ E0314 @14
     _ => x,
   }
 }
@@ -83,7 +83,7 @@ pub flow in_a_flow(x: F32 at sample, k: U32 at block) -> F32 at sample {
 pub flow in_par(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
   par~ i in 0 ..< 2 {
     match (i, k) {
-      (j, 0) | (0, h) => x * j.round_f32() * h.round_f32(),   //~ E0314 @16
+      (j, 0) | (0, h) => x * F32.round_from(j) * F32.round_from(h),   //~ E0314 @16
       _ => x,
     }
   }
@@ -91,7 +91,7 @@ pub flow in_par(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
 
 pub flow in_a_let_of_a_flow(x: F32 at sample, k: U32 at block) -> F32 at sample {
   let w = match (k, k + 1) {
-    (n, 0) | (0, m) => n.round_f32() * m.round_f32(),     //~ E0314 @14
+    (n, 0) | (0, m) => F32.round_from(n) * F32.round_from(m),     //~ E0314 @14
     _ => 0.0,
   }
   x * w
@@ -101,7 +101,7 @@ pub flow in_a_let_of_a_flow(x: F32 at sample, k: U32 at block) -> F32 at sample 
 pub flow with_a_type_error(x: F32 at sample, k: U32 at block) -> F32 at sample {
   let _: Bool = 1
   match (k, k % 2) {
-    (n, 0) | (0, m) => x * n.round_f32() * m.round_f32(),   //~ E0314 @14
+    (n, 0) | (0, m) => x * F32.round_from(n) * F32.round_from(m),   //~ E0314 @14
     _ => x,
   }
 }

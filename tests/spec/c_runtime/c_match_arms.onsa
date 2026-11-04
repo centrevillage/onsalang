@@ -163,7 +163,7 @@
 // uninitialized" for clang (`-Wsometimes-uninitialized`, R-145 (1)); the last arm must need no test. The
 // shapes: a value-giving `match` bound by `let` (Option, Result, an enum with four variants and one with
 // payloads, `Option[Option[_]]`), inside a loop, on the `Option` that
-// `narrow_*` returns, and an arm that is a block of statements. The values are the plain meaning (§7).
+// `narrow_from` returns, and an arm that is a block of statements. The values are the plain meaning (§7).
 //   opt_u8_or(sel, v)       Some(v) when sel is 0, else None; the value of the match, 7 for None
 //   turn_n(sel, n)          the direction `sel` (0 N, 1 E, 2 S, 3 W) turned n quarter turns, as its number
 //   shape_area(kind, k)     0 for Dot, k for Line(k), k * k (checked, as I64) for Sq(k)
@@ -307,7 +307,7 @@ pub fn loop_match(n: U32, v: I32) -> I32 {
 
 @export
 pub fn narrow_or_max(x: U32) -> U8 {
-  let r = match x.narrow_u8() {
+  let r = match U8.narrow_from(x) {
     Some(v) => v,
     None => 255,
   }

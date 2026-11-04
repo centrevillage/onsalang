@@ -607,7 +607,7 @@ fn the_generated_c_starts_with_the_flags_it_needs() {
 fn the_vector_fixture_compiles_without_a_warning_at_every_level() {
     need(&[GCC, CLANG]);
     // The package of the test vectors holds every integer and float operation and every conversion:
-    // the `narrow_*` range checks (R-145), the `match` of every `Option` (R-145), the helpers of the
+    // the `narrow_from` range checks (R-145), the `match` of every `Option` (R-145), the helpers of the
     // runtime (`-Wtype-limits`, R-67), the comparisons (R-142).
     let b = case_package("warn_vectors", "tests/vectors/fixture/scalar", "host");
     let c_name = b.c_name();

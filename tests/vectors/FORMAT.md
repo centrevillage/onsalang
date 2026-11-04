@@ -29,6 +29,7 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 演算は `<型>.<名前>`（型は小文字）。
 名前は、メソッド・関数の名前（§3.3、§3.4 の表）、演算子を脱糖した trait の名前（`add sub mul div rem neg not and or xor shl shr wadd wsub wmul sadd ssub smul eq ne lt le gt ge`）、式の名前（`expr_muladd` `expr_mulsub` `expr_add3_l` `expr_add3_r` `expr_interp` `vdelay_k` `vdelay_f`）、定数（`MIN` など）。
 変換は `<元の型>.<書き方>`: `as_<型>`（同じ型への `as_<元の型>` を含む。値を変えない。§3.3、S-210）、`narrow_<型>`、`trunc_<型>`、`trunc_<型>_sat`、`round_f32` / `round_f64`、`to_bits`、`from_bits`（型は浮動小数）。
+`narrow_<型>` などの綴りは ID の形で、Onsa の書き方は `OPS.tsv` の 9 列にある（`U8.narrow_from(a)`、S-231）。
 型の組と書き方の一対一は `OPS.tsv` と `tools/vectors/ops.py` の `conv_forms` が §3.3 の表から導く。
 
 **段**: `edge`（境界値の全組合せ）、`rand`（決まった種の乱数）、`held-<S 番号>`（下。期待を書かない）。

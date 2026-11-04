@@ -70,7 +70,7 @@ pub fn neg_bits(sel: U32) -> U32 {
   if sel == 0 {
     r = NEG_INF.to_bits()
   } else if sel == 1 {
-    r = val((NEG_INF_WIDE.to_bits() >> 32).narrow_u32(), 0)
+    r = val(U32.narrow_from(NEG_INF_WIDE.to_bits() >> 32), 0)
   } else if sel == 2 {
     let n: F32 = NEG_NAN
     if n != n {

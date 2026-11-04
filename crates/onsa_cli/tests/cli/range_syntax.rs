@@ -196,7 +196,7 @@ fn a_wrong_symbol_in_a_par_header_is_e0020_with_the_same_two_candidates() {
     ];
     let wrap = |header: &str| {
         format!(
-            "const N: U32 = 3\n\npub flow f(x: F32 at sample) -> [F32; 4] at sample {{\n  par~ i in {header} {{\n    x * i.round_f32()\n  }}\n}}\n"
+            "const N: U32 = 3\n\npub flow f(x: F32 at sample) -> [F32; 4] at sample {{\n  par~ i in {header} {{\n    x * F32.round_from(i)\n  }}\n}}\n"
         )
     };
     let d = Dir::bare("par");

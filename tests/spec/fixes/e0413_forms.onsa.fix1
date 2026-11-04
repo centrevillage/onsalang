@@ -3,22 +3,22 @@
 // spec = ["§3.3", "§3.4", "§4.2", "§4.7", "§18.1"]
 // fixes = 1
 
-// E0413: a method that does not exist because the spec gives another form. A conversion method
+// E0413: a method that does not exist because the spec gives another form. A conversion function
 // for a pair that `as` can write has the `as` form (§3.3); a computation that is a function of
 // `std.math` has the function form (§3.4); an empty test is `len() == 0` (§4.2).
 
 use std.math.{abs, max, sqrt}
 
 pub fn widen(x: F32) -> F64 {
-  x.round_f64()                                     //~ E0413
+  F64.round_from(x)                                 //~ E0413
 }
 
 pub fn widen_int(n: I32) -> I64 {
-  n.narrow_i64()                                    //~ E0413
+  I64.narrow_from(n)                                //~ E0413
 }
 
 pub fn same_type(x: F32) -> F32 {
-  x.round_f32()                                     //~ E0413
+  F32.round_from(x)                                 //~ E0413
 }
 
 pub fn magnitude(x: F32) -> F32 {
@@ -39,5 +39,5 @@ pub fn blank(s: Str) -> Bool {
 
 pub fn fine(a: F32, b: F32, s: Str) -> F32 {
   let w = a as F64
-  max(abs(a), sqrt(b)) + w.round_f32() + s.len().round_f32()
+  max(abs(a), sqrt(b)) + F32.round_from(w) + F32.round_from(s.len())
 }

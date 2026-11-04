@@ -179,7 +179,7 @@
 // (small integers and powers of two), because the result of a relaxed function is not promised (§15.5:
 // 再現性 "保証しない"); the strict functions have the two-rounding results (§3.4).
 //   rel_muladd_f32 / f64   (a * b) + c          rel_loop_f32      acc = (a * acc) + 1.0, n times
-//   rel_int_overflow       a + 1 on I32         rel_trunc         ((a * b) + 1.0).trunc_i32()
+//   rel_int_overflow       a + 1 on I32         rel_trunc         I32.trunc_from((a * b) + 1.0)
 //   rel_nan_check          1 when x != x        rel_inf           1 when a * 2.0 > F32.MAX
 
 @export
@@ -218,7 +218,7 @@ pub fn rel_int_overflow(a: I32) -> I32 {
 @fp(relaxed)
 @export
 pub fn rel_trunc(a: F32, b: F32) -> I32 {
-  ((a * b) + 1.0).trunc_i32()
+  I32.trunc_from((a * b) + 1.0)
 }
 
 @fp(relaxed)

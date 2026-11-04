@@ -16,8 +16,8 @@ pub fn make[T]() -> T {
   make()
 }
 
-pub fn literal_method() -> F32 {
-  0.round_f32()                 //~ E0420
+pub fn literal_method() -> Option[I32] {
+  0.checked_add(1)              //~ E0420
 }
 
 pub fn as_of_open_literal(n: U32) -> I64 {
@@ -37,9 +37,9 @@ pub fn match_on_open_literal(n: U32) -> U32 {
   r
 }
 
-pub fn method_in_branch(flag: Bool, x: F32) -> F32 {
+pub fn method_in_branch(flag: Bool, x: F32) -> U32 {
   var acc = 0.0
-  let r = if flag { acc.round_f32() } else { x }   //~ E0420
+  let r = if flag { acc.to_bits() } else { x.to_bits() }   //~ E0420
   acc = x
   r
 }
@@ -57,5 +57,5 @@ pub fn known_types(n: U32, xs: [F32; 2], flag: Bool) -> F32 {
     _ => xs[0],
   }
   acc = v.x + r
-  if flag { acc } else { w.round_f32() }
+  if flag { acc } else { F32.round_from(w) }
 }

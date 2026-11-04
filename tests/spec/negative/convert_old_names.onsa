@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§18.1"]
+// fixes = 0
+
+// E0413 (W5-14 S2, S-231): the old conversion methods are not members of the number types any more. The
+// conversions are associated functions of the target type (`F32.round_from(x)`, `I32.trunc_from(y)`,
+// `I32.trunc_sat_from(y)`, `I8.narrow_from(n)`, §3.3), and the methods of the number types are the closed list of
+// §3.4 (floor division, the checked operations and `to_bits()`). So `x.round_f32()`, `f.trunc_i32()`,
+// `f.trunc_i32_sat()` and `n.narrow_i8()` are a method that the type does not have: E0413, and no candidate
+// (S-231: an old name is not an object of the candidates), so `fixes = 0`. Each family has two integer types and two
+// float types as the receiver: `round_<float>` on integers and floats, `trunc_<int>` and `trunc_<int>_sat` on
+// floats, `narrow_<int>` on integers. The old names are in a branch, a closure, an arm, an operand and a chain too.
+// One error per function (P-01). The new forms are fine in the last function.
+use std.array
+
+pub fn round_f32_of_i32(n: I32) -> F32 {
+  n.round_f32()                                     //~ E0413
+}
+
+pub fn round_f32_of_u32(n: U32) -> F32 {
+  n.round_f32()                                     //~ E0413
+}
+
+pub fn round_f32_of_f64(y: F64) -> F32 {
+  y.round_f32()                                     //~ E0413
+}
+
+pub fn round_f64_of_i64(n: I64) -> F64 {
+  n.round_f64()                                     //~ E0413
+}
+
+pub fn round_f64_of_f32(x: F32) -> F64 {
+  x.round_f64()                                     //~ E0413
+}
+
+pub fn trunc_i32_of_f32(f: F32) -> I32 {
+  f.trunc_i32()                                     //~ E0413
+}
+
+pub fn trunc_u8_of_f64(f: F64) -> U8 {
+  f.trunc_u8()                                      //~ E0413
+}
+
+pub fn trunc_i32_sat_of_f32(f: F32) -> I32 {
+  f.trunc_i32_sat()                                 //~ E0413
+}
+
+pub fn trunc_u64_sat_of_f64(f: F64) -> U64 {
+  f.trunc_u64_sat()                                 //~ E0413
+}
+
+pub fn narrow_i8_of_i32(n: I32) -> Option[I8] {
+  n.narrow_i8()                                     //~ E0413
+}
+
+pub fn narrow_u8_of_i32(n: I32) -> Option[U8] {
+  n.narrow_u8()                                     //~ E0413
+}
+
+pub fn narrow_u32_of_u64(n: U64) -> Option[U32] {
+  n.narrow_u32()                                    //~ E0413
+}
+
+pub fn narrow_i32_of_i64(n: I64) -> Option[I32] {
+  n.narrow_i32()                                    //~ E0413
+}
+
+pub fn in_a_branch(flag: Bool, n: I32, x: F32) -> F32 {
+  if flag { n.round_f32() } else { x }              //~ E0413
+}
+
+pub fn in_a_closure() -> [F32; 4] {
+  array.from_fn(fn(i) { i.round_f32() })            //~ E0413
+}
+
+pub fn in_an_arm(o: Option[F32]) -> I32 {
+  match o {
+    Some(f) => f.trunc_i32(),                       //~ E0413
+    None => 0,
+  }
+}
+
+pub fn as_an_operand(n: I32) -> F32 {
+  n.round_f32() * 2.0                               //~ E0413
+}
+
+pub fn before_a_chain(n: I32) -> I8 {
+  n.narrow_i8().unwrap()                            //~ E0413
+}
+
+pub fn fine(n: I32, y: F64, f: F32) -> F32 {
+  let a = F32.round_from(n)
+  let b = F32.round_from(y)
+  let c = I32.trunc_from(f)
+  let d = I32.trunc_sat_from(f)
+  let e = I8.narrow_from(n).unwrap()
+  a + b + F32.round_from(c + d) + (e as F32)
+}

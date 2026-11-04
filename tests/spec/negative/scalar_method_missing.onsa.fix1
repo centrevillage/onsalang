@@ -4,14 +4,17 @@
 // fixes = 1
 
 // E0413 (W5-02 U4b): a method that the closed list of the scalar types does not have (§3.3, §3.4: "整数と浮動小数の
-// メソッドは、§3.3 の変換と、上の床除算と検査付きで全てである"). A method of the other family (a float has no
-// `div_euclid`, `rem_euclid` or `checked_*`, no `narrow_<type>`; an integer has no `to_bits`, no `trunc_<type>`), the
+// メソッドは、上の床除算と検査付きと、ビット表現の `to_bits()` で全てである"). A method of the other family (a float
+// has no `div_euclid`, `rem_euclid` or `checked_*`; an integer has no `to_bits`), the
 // `wrapping_*` and `saturating_*` methods ("メソッドは無い（演算子が唯一の書き方）"), and a name that no list has. The
 // type of the receiver is known in each function. One error per function (P-01). Only `x.sin()` is a
 // computation of `std.math` that is a function of a float (`sin`), and its candidate is `sin(x)` with
 // `use std.math.{sin}` added (the module has no `use`, and no binding of it is named `sin`). Every other call
 // has no candidate: `n.pow(2)` of an integer (`pow` is generic over `Float`), `x.clamp(0.0, 1.0)` and the names
-// of no list. The E0413 that have no candidate stay after the candidate is applied (`fixes = 1`).
+// of no list. The E0413 that have no candidate stay after the candidate is applied (`fixes = 1`). The conversions
+// are associated functions of the target type, not methods (§3.3); a source of the wrong family for one of them is
+// the bound of its declaration (`trunc_from[S: Float]`, `narrow_from[S: Int]`, E0416 at the call, §4.5) when the pair
+// is not one that `as` writes (the pairs that `as` writes are E0413 with a candidate, in fixes/).
 
 use std.math.{sin}
 pub fn int_to_bits(n: I32) -> U32 {
@@ -22,12 +25,12 @@ pub fn small_to_bits(n: U8) -> U8 {
   n.to_bits()                                       //~ E0413
 }
 
-pub fn int_trunc(n: I32) -> I32 {
-  n.trunc_i32()                                     //~ E0413
+pub fn int_trunc(n: I32) -> U32 {
+  U32.trunc_from(n)                                 //~ E0416
 }
 
 pub fn int_trunc_sat(n: U32) -> I32 {
-  n.trunc_i32_sat()                                 //~ E0413
+  I32.trunc_sat_from(n)                             //~ E0416
 }
 
 pub fn float_div_euclid(x: F32, y: F32) -> F32 {
@@ -47,11 +50,11 @@ pub fn float_checked_div(x: F64, y: F64) -> Option[F64] {
 }
 
 pub fn float_narrow(x: F32) -> Option[I8] {
-  x.narrow_i8()                                     //~ E0413
+  I8.narrow_from(x)                                 //~ E0416
 }
 
 pub fn double_narrow(x: F64) -> Option[U64] {
-  x.narrow_u64()                                    //~ E0413
+  U64.narrow_from(x)                                //~ E0416
 }
 
 pub fn wrapping(a: I32, b: I32) -> I32 {
@@ -87,5 +90,6 @@ pub fn count(n: U32) -> U32 {
 }
 
 pub fn fine(a: I32, b: I32, x: F32) -> U32 {
-  (a +% b).div_euclid(3).rem_euclid(5).checked_add(b).unwrap().narrow_u32().unwrap() + x.to_bits()
+  let n = (a +% b).div_euclid(3).rem_euclid(5).checked_add(b).unwrap()
+  U32.narrow_from(n).unwrap() + x.to_bits()
 }

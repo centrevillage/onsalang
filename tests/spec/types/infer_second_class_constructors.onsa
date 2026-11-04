@@ -145,6 +145,6 @@ pub fn method_type_parameter_of_a_length(p: P, s: Span[F32]) -> U32 {
 }
 
 pub fn from_fn_of_scalars() -> U32 {
-  let xs: [F32; 2] = array.from_fn(fn(i) { i.round_f32() })
+  let xs: [F32; 2] = array.from_fn(fn(i) { F32.round_from(i) })
   xs.len()
 }

@@ -78,7 +78,7 @@ pub flow variants(x: Sample at sample) -> Sample at sample {
 
 pub flow in_a_par(x: Sample at sample) -> Sample at sample {
   let ms = par~ i in 0 ..< 3 {
-    if i == 1 { M.Off } else { M.Gain((i + 1).round_f32()) }
+    if i == 1 { M.Off } else { M.Gain(F32.round_from(i + 1)) }
   }
   amount(ms[0], x) + amount(ms[1], x) + amount(ms[2], x)
 }

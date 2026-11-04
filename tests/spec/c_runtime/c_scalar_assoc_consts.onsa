@@ -266,11 +266,11 @@ pub fn shift_by_the_width(sel: U32) -> U32 {
   if sel == 0 {
     r = (a << U8.BITS) as U32
   } else if sel == 1 {
-    r = val((b << I16.BITS).narrow_u32(), 0)
+    r = val(U32.narrow_from(b << I16.BITS), 0)
   } else if sel == 2 {
     r = c << U32.BITS
   } else if sel == 3 {
-    r = val((d << U64.BITS).narrow_u32(), 0)
+    r = val(U32.narrow_from(d << U64.BITS), 0)
   }
   r
 }
@@ -308,7 +308,7 @@ pub fn limits_unsigned(sel: U32) -> U32 {
   } else if sel == 2 {
     r = U32.MAX
   } else if sel == 3 {
-    r = val((U64.MAX >> 32).narrow_u32(), 0)
+    r = val(U32.narrow_from(U64.MAX >> 32), 0)
   }
   r
 }
@@ -369,7 +369,7 @@ pub fn wide_float_bits(sel: U32) -> U32 {
   } else {
     x = x >> 32
   }
-  val(x.narrow_u32(), 0)
+  val(U32.narrow_from(x), 0)
 }
 
 test "BITS as the amount of a shift, and in a const" {

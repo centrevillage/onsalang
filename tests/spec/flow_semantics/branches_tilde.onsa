@@ -75,13 +75,13 @@ pub flow some_or_none(x: F32 at sample) -> F32 at sample {
 // The then-branch divides by d and is not taken when d <= 0.
 pub flow untaken_divides(d: I32 at sample) -> F32 at sample {
   let positive = d > 0
-  if~ positive { (100 / d).round_f32() } else { acc~(1.0) }
+  if~ positive { F32.round_from(100 / d) } else { acc~(1.0) }
 }
 
 // A plain `if` inside the branch keeps the division from running.
 pub flow guarded_divides(d: I32 at sample) -> F32 at sample {
   let positive = d > 0
-  if~ positive { acc~(1.0) } else { if d != 0 { (100 / d).round_f32() } else { 0.0 } }
+  if~ positive { acc~(1.0) } else { if d != 0 { F32.round_from(100 / d) } else { 0.0 } }
 }
 
 test "if~ advances the counter on the samples it is not chosen" {

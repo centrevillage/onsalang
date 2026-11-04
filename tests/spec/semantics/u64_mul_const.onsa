@@ -38,7 +38,7 @@ const REM: I32 = rem_min(-2147483648, -1)
 
 fn top_of_i64() -> I64 {
   let f: F64 = 9223372036854774784.0
-  f.trunc_i64()
+  I64.trunc_from(f)
 }
 
 // 2^63 - 1024 is the largest F64 below 2^63; it fits I64.

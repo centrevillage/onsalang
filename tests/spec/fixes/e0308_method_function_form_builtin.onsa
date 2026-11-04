@@ -75,7 +75,7 @@ pub fn as_an_argument(p: P) -> U32 {
 }
 
 pub fn in_a_chain(s: Str) -> F32 {
-  Str.len(s).round_f32()                            //~ E0308
+  F32.round_from(Str.len(s))                        //~ E0308
 }
 
 pub fn in_a_branch(flag: Bool, p: P) -> U32 {

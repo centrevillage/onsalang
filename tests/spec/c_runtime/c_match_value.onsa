@@ -120,7 +120,7 @@
 //   a % b      MIN % -1 is 0
 //   a * b      panics outside the type; a *% b wraps; a *| b clamps
 //   a >> n     arithmetic for the signed types; panics for n at or above the bit width
-//   x.trunc_i64()  toward zero, panics outside I64 and for NaN
+//   I64.trunc_from(x)  toward zero, panics outside I64 and for NaN
 
 pub enum Mode {
   Wrap,
@@ -151,7 +151,7 @@ fn shr_opt(o: Option[I8], n: U32) -> I8 {
 
 fn trunc_opt(o: Option[F64]) -> I64 {
   match o {
-    Some(v) => v.trunc_i64(),
+    Some(v) => I64.trunc_from(v),
     None => 5,
   }
 }

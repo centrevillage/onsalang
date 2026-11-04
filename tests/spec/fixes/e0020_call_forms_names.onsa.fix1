@@ -114,5 +114,5 @@ pub fn call_an_associated_function_of_a_built_in_type_as_a_value() -> F32 {
 }
 
 pub fn fine(f: fn(F32) -> F32, x: F32) -> F32 {
-  f.(x) + inc(1).round_f32()
+  f.(x) + F32.round_from(inc(1))
 }

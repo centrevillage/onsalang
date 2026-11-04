@@ -3,18 +3,18 @@
 // mode = "test"
 // spec = ["§3.3", "§3.4", "§9.2"]
 
-// `trunc_<type>()` panics when the truncated value is out of range (spec §3.3):
+// `trunc_from` panics when the truncated value is out of range (spec §3.3):
 // 2^63 does not fit I64 and 2^64 does not fit U64. These are the two points at
 // which a conversion that saturates or wraps instead (a bare host cast) goes
 // unnoticed, so they are in a file of their own: a test that is expected to
 // panic cannot also be listed as pending.
 
-test "trunc_i64 of 2^63 panics" {   //~ TESTFAIL "trunc_i64 of 2^63 panics"
+test "I64.trunc_from of 2^63 panics" {   //~ TESTFAIL "I64.trunc_from of 2^63 panics"
   let a: F64 = 9223372036854775808.0
-  let _ = a.trunc_i64()
+  let _ = I64.trunc_from(a)
 }
 
-test "trunc_u64 of 2^64 panics" {   //~ TESTFAIL "trunc_u64 of 2^64 panics"
+test "U64.trunc_from of 2^64 panics" {   //~ TESTFAIL "U64.trunc_from of 2^64 panics"
   let a: F64 = 18446744073709551616.0
-  let _ = a.trunc_u64()
+  let _ = U64.trunc_from(a)
 }

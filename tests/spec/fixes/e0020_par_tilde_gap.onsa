@@ -22,52 +22,52 @@ pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
 }
 
 pub flow both_sides(x: F32 at sample) -> [F32; 2] at sample {
-  let a = par ~ i in 0 ..< 2 { x * i.round_f32() }  //~ E0020
+  let a = par ~ i in 0 ..< 2 { x * F32.round_from(i) }  //~ E0020
   a
 }
 
 pub flow touching_the_name(x: F32 at sample) -> [F32; 2] at sample {
-  let a = par ~i in 0 ..< 2 { x * i.round_f32() }   //~ E0020
+  let a = par ~i in 0 ..< 2 { x * F32.round_from(i) }   //~ E0020
   a
 }
 
 pub flow wide_gap(x: F32 at sample) -> [F32; 2] at sample {
-  let a = par    ~ i in 0 ..< 2 { x * i.round_f32() }  //~ E0020
+  let a = par    ~ i in 0 ..< 2 { x * F32.round_from(i) }  //~ E0020
   a
 }
 
 pub flow as_the_tail(x: F32 at sample) -> [F32; 2] at sample {
-  par ~ i in 0 ..< 2 { x * i.round_f32() }          //~ E0020
+  par ~ i in 0 ..< 2 { x * F32.round_from(i) }      //~ E0020
 }
 
 pub flow as_the_tail_touching(x: F32 at sample) -> [F32; 2] at sample {
-  par ~i in 0 ..< 2 { x * i.round_f32() }           //~ E0020
+  par ~i in 0 ..< 2 { x * F32.round_from(i) }       //~ E0020
 }
 
 pub flow as_an_argument(x: F32 at sample) -> F32 at sample {
-  pair_sum(par ~ i in 0 ..< 2 { x * i.round_f32() })  //~ E0020
+  pair_sum(par ~ i in 0 ..< 2 { x * F32.round_from(i) })  //~ E0020
 }
 
 pub flow with_state_in_the_body(x: F32 at sample) -> [F32; 2] at sample {
-  let a = par ~ i in 0 ..< 2 { lp~(x * i.round_f32()) }  //~ E0020
+  let a = par ~ i in 0 ..< 2 { lp~(x * F32.round_from(i)) }  //~ E0020
   a
 }
 
 pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0 ..< 3 {
-    pair_sum(par ~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })  //~ E0020
+    pair_sum(par ~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })  //~ E0020
   }
 }
 
 pub flow the_outer_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {
   par ~ i in 0 ..< 3 {                              //~ E0020
-    pair_sum(par~ j in 0 ..< 2 { lp~(x * (i + j).round_f32()) })
+    pair_sum(par~ j in 0 ..< 2 { lp~(x * F32.round_from(i + j)) })
   }
 }
 
 // ---- Not errors ----
 
 pub flow fine(x: F32 at sample) -> [F32; 2] at sample {
-  let a = par~ i in 0 ..< 2 { x * i.round_f32() }
+  let a = par~ i in 0 ..< 2 { x * F32.round_from(i) }
   a
 }

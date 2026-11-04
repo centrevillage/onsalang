@@ -89,9 +89,9 @@ pub fn unsatisfied_bound() -> F32 {
   largest(1.0, 2.0)             //~ E0416
 }
 
-pub fn method_before_known(x: F32) -> F32 {
+pub fn method_before_known(x: F32) -> U32 {
   var acc = 0.0
-  let r = acc.round_f32()       //~ E0420
+  let r = acc.to_bits()         //~ E0420
   acc = x
   r
 }

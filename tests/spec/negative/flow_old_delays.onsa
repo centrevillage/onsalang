@@ -49,7 +49,7 @@ pub flow old_delay_in_an_expression(x: F32 at sample) -> F32 at sample {
 
 pub flow old_delay_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let xs = par~ i in 0..<2 {
-    prev(x, 0.0) * i.round_f32()   //~ E0811 @5
+    prev(x, 0.0) * F32.round_from(i)   //~ E0811 @5
   }
   xs[0]
 }

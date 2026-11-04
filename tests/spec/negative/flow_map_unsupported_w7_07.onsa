@@ -41,5 +41,5 @@ pub flow default_array(x: [F32; 2] at sample) -> [F32; 2] at sample {
 pub flow fine(x: F32 at sample, k: I32 at sample) -> F32 at sample {
   let a = prev~(lp~(x))
   let b = prev~(k)
-  a + b.round_f32()
+  a + F32.round_from(b)
 }

@@ -48,7 +48,7 @@ pub flow with_params(
 @export
 pub flow with_config(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let k = 100 / n
-  x + k.round_f32()
+  x + F32.round_from(k)
 }
 
 pub flow not_exported(x: F32 at sample, gain: F32 at block) -> F32 at sample {

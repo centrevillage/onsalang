@@ -334,7 +334,7 @@ fn continued_on_the_next_line(up: Bool) -> I32 {
 }
 
 fn inside_an_array_filler() -> [F32; 4] {
-  let step = fn(i: U32) -> F32 { i.round_f32() }
+  let step = fn(i: U32) -> F32 { F32.round_from(i) }
   array.from_fn(fn(i) { step.(i) })
 }
 
@@ -344,6 +344,6 @@ fn item_calls_keep_their_form(x: I32, s: Shaper) -> I32 {
   let a = inc(x)
   let b = on_argument(inc, a)
   let c = on_argument_twice(dec, b)
-  let d = s.run(1.0).trunc_i32()
+  let d = I32.trunc_from(s.run(1.0))
   a + b + c + d
 }

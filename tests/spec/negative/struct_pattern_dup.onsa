@@ -91,7 +91,7 @@ pub fn complete_in_any_order(p: P, l: Line, w: Wrap[F32], t: Three) -> F32 {
   let Wrap { n: _, v: wv } = w
   let Three { c: tc, a: ta, b: _ } = t
   match l {
-    Line { b: P { y: _, x: bx }, a: P { x: ax, y: _ } } => px + py + wv + bx + ax + (tc + ta).round_f32(),
+    Line { b: P { y: _, x: bx }, a: P { x: ax, y: _ } } => px + py + wv + bx + ax + F32.round_from(tc + ta),
   }
 }
 

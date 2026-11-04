@@ -133,7 +133,7 @@ fn in_a_loop(n: U32) -> F32 {
   var acc = P.ORIGIN
   for i in 0 ..< n {
     let P { x: a, y: b } = acc
-    acc = P { x: a + Sample.PI, y: b + i.round_f32() }
+    acc = P { x: a + Sample.PI, y: b + F32.round_from(i) }
   }
   acc.x
 }

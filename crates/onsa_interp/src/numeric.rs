@@ -191,7 +191,7 @@ fn arith(op: BinOp, overflow: Overflow, k: IntKind, x: i128, y: i128, span: Span
     Ok(int_value(k, r))
 }
 
-/// `trunc_<type>()` and `trunc_<type>_sat()` of `x` (spec §3.3, §3.4): toward
+/// `trunc_from(x)` and `trunc_sat_from(x)` of a type (spec §3.3, §3.4): toward
 /// zero; out of range or NaN is a panic, or the bound and 0 for `_sat`. The
 /// range is `lo <= t < above`, with `above` the power of two just past the
 /// type's maximum: both exact as `f64`, where the maximum of a 64-bit type is

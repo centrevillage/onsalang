@@ -143,11 +143,11 @@ pub fn enumerator_pattern_out_of_range() -> U32 {
 
 // ---------------------------------------------------------------- E0420
 
-pub fn method_on_the_binding() -> F32 {
+pub fn method_on_the_binding() -> Option[I32] {
   let p = None
   match p {
-    Some(v) => v.round_f32(),   //~ E0420
-    None => 0.0,
+    Some(v) => v.checked_add(1),   //~ E0420
+    None => None,
   }
 }
 

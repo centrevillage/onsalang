@@ -51,7 +51,7 @@ pub fn parenthesized(x: F32, flag: Bool, i: I32, xs: [F32; 2], k: U32) -> F32 {
   let d = -xs[k]
   let e = (-x) as F64
   let f = half(-(-x))
-  if b { a + d + e.round_f32() + f + c.round_f32() } else { 0.0 }
+  if b { a + d + F32.round_from(e) + f + F32.round_from(c) } else { 0.0 }
 }
 
 // A `--` or `++` with no space is an increment (E0020 or E0002, spec/foreign-forms.toml rows

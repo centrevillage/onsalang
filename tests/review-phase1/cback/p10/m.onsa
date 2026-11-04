@@ -1,21 +1,21 @@
 use std.dsp.test.{assert_near}
 
 fn narrow_any(x: I64) -> I32 {
-  match x.narrow_i32() {
+  match I32.narrow_from(x) {
     Some(v) => v,
     None => -7,
   }
 }
 
 fn u64_to_i64(x: U64) -> I32 {
-  match x.narrow_i64() {
+  match I64.narrow_from(x) {
     Some(_) => 1,
     None => 0,
   }
 }
 
 fn u32_to_i8(x: U32) -> I32 {
-  match x.narrow_i8() {
+  match I8.narrow_from(x) {
     Some(v) => v as I32,
     None => -7,
   }

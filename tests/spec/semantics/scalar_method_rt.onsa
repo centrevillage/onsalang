@@ -3,25 +3,25 @@
 // mode = "test"
 // spec = ["§3.3", "§3.4", "§10"]
 
-// W5-02 U4b: the conversion methods, `to_bits`, `div_euclid` and `rem_euclid` are callable in an `rt fn` (spec
-// §10 rule 4: an `rt fn` calls no function that is not `rt`; §3.3: "rt ではこちらを使う" for `trunc_<型>_sat`, and
+// W5-02 U4b: the conversion functions, `to_bits`, `div_euclid` and `rem_euclid` are callable in an `rt fn` (spec
+// §10 rule 4: an `rt fn` calls no function that is not `rt`; §3.3: "rt ではこちらを使う" for `trunc_sat_from`, and
 // the program of the audio thread converts, splits and reads the bits of its values). The expected values
 // are worked out by hand: 2.75 cut toward zero is 2; the bits of 1.0 are 0x3F800000; -7 = (-4) * 2 + 1.
 
 pub rt fn to_index(x: F32) -> I32 {
-  x.trunc_i32_sat()
+  I32.trunc_sat_from(x)
 }
 
 pub rt fn to_index_wide(x: F64) -> I64 {
-  x.trunc_i64_sat()
+  I64.trunc_sat_from(x)
 }
 
 pub rt fn to_single(x: F64) -> F32 {
-  x.round_f32()
+  F32.round_from(x)
 }
 
 pub rt fn to_double(n: U64) -> F64 {
-  n.round_f64()
+  F64.round_from(n)
 }
 
 pub rt fn single_bits(x: F32) -> U32 {
@@ -41,14 +41,14 @@ pub rt fn floor_div(i: I32, n: I32) -> I32 {
 }
 
 pub rt fn lane(i: U32) -> U8 {
-  match i.narrow_u8() {
+  match U8.narrow_from(i) {
     Some(b) => b,
     None => 255,
   }
 }
 
 pub rt fn chain_of_methods(x: F32) -> U32 {
-  x.trunc_i32_sat().round_f32().to_bits()
+  F32.round_from(I32.trunc_sat_from(x)).to_bits()
 }
 
 test "an rt fn calls the methods of the scalars" {

@@ -20,29 +20,29 @@ use util
 use util.{lp, pair_sum}
 
 pub flow qualified_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
-  par i in 0 ..< 3 { util.lp~(x * i.round_f32()) }  //~ E0811
+  par i in 0 ..< 3 { util.lp~(x * F32.round_from(i)) }  //~ E0811
 }
 
 pub flow imported_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
-  par i in 0 ..< 3 { lp~(x * i.round_f32()) }       //~ E0811
+  par i in 0 ..< 3 { lp~(x * F32.round_from(i)) }   //~ E0811
 }
 
 pub flow a_function_of_the_module_in_the_body(x: F32 at sample) -> [F32; 3] at sample {
-  par i in 0 ..< 3 { pair_sum([x, x]) * i.round_f32() }  //~ E0811
+  par i in 0 ..< 3 { pair_sum([x, x]) * F32.round_from(i) }  //~ E0811
 }
 
 pub flow the_call_in_the_body_without_the_tilde(x: F32 at sample) -> [F32; 3] at sample {
-  par i in 0 ..< 3 { lp(x * i.round_f32()) }        //~ E0811
+  par i in 0 ..< 3 { lp(x * F32.round_from(i)) }    //~ E0811
 }
 
 pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 2] at sample {
   par~ i in 0 ..< 2 {
-    pair_sum(par j in 0 ..< 2 { util.lp~(x * (i + j).round_f32()) })  //~ E0811
+    pair_sum(par j in 0 ..< 2 { util.lp~(x * F32.round_from(i + j)) })  //~ E0811
   }
 }
 
 // ---- Not errors ----
 
 pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
-  par~ i in 0 ..< 3 { util.lp~(x * i.round_f32()) }
+  par~ i in 0 ..< 3 { util.lp~(x * F32.round_from(i)) }
 }

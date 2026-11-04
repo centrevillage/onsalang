@@ -313,11 +313,11 @@ codes! {
     E0410 = 410, Types, [Types, Flow], Optional, Optional,
         "struct literal field error (missing, unknown, or duplicate field)";
     E0411 = 411, Types, [Types], Optional, Optional,
-        "`as` only widens; use a conversion method";
+        "`as` only widens; use a conversion function";
     E0412 = 412, Types, [Types, Flow], Optional, Optional,
         "wrong number of arguments";
     E0413 = 413, Types, [Types], Optional, Optional,
-        "no such field or method";
+        "no such field, method or conversion function";
     E0414 = 414, Types, [Types], Optional, Optional,
         "`?` needs a matching Option/Result return type";
     E0415 = 415, Types, [Types], Optional, Optional,

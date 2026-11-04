@@ -29,7 +29,7 @@ pub struct Pair: Default {
 
 pub flow one_struct(x: F32 at sample) -> F32 at sample {
   let q = prev~(Pair { a: x, b: 2 })
-  q.a + q.b.round_f32()
+  q.a + F32.round_from(q.b)
 }
 
 test "the default of a Bool signal is false" {

@@ -24,7 +24,7 @@ pub fn method_call(p: U32) -> Str uses {Alloc} {
 }
 
 pub fn path_then_call(p: U32) -> Str uses {Alloc} {
-  "{p.x.round_f32()}"           //~ E0001
+  "{F32.round_from(p.x)}"       //~ E0001
 }
 
 pub fn flow_call(p: U32) -> Str uses {Alloc} {

@@ -20,7 +20,7 @@ pub flow integer_with_a_float_min(
   @param(min: 2, max: 8, default: 4)                //~ E0401
   steps: I32 at block,
 ) -> F32 at sample {
-  x * steps.round_f32()
+  x * F32.round_from(steps)
 }
 
 pub flow integer_with_a_fraction(
@@ -28,7 +28,7 @@ pub flow integer_with_a_fraction(
   @param(min: 2.5, max: 8, default: 4)                //~ E0401
   steps: I32 at block,
 ) -> F32 at sample {
-  x * steps.round_f32()
+  x * F32.round_from(steps)
 }
 
 pub flow fine(

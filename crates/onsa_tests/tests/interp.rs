@@ -118,7 +118,7 @@ const HALF: F32 = half_of(3.0)
 fn make_table() -> [F32; 4] {
   var t: [F32; 4] = [0.0; 4]
   for i in 0..<N {
-    t[i] = i.round_f32() * 2.0
+    t[i] = F32.round_from(i) * 2.0
   }
   t
 }
@@ -167,11 +167,11 @@ pub flow saw(f0: F32 at block) -> F32 at sample {
 }
 
 pub rt fn wrap01(x: F32) -> F32 {
-  x - (x.trunc_i32_sat().round_f32())
+  x - (F32.round_from(I32.trunc_sat_from(x)))
 }
 
 pub rt fn spread(i: U32, n: U32) -> F32 {
-  (i.round_f32() / (n - 1).round_f32()) - 0.5
+  (F32.round_from(i) / F32.round_from(n - 1)) - 0.5
 }
 
 pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {

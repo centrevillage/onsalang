@@ -5,28 +5,10 @@
 // E0308 (W5-02 U4b): a method of the scalar types called in the function form (spec §15.1: the name of the type is
 // found and the member is a method, so it is E0308 and not E0302 or E0413; §6.2: the functions of an `impl` are called
 // with the dot only). `F32.to_bits(x)` is in fixes/e0308_method_function_form_builtin.onsa; these are the other
-// methods of the closed list. One error per function (P-01). The associated functions `F32.from_bits(b)` and
-// the constants are fine in the last function.
-
-pub fn trunc(x: F32) -> I32 {
-  F32.trunc_i32(x)                                  //~ E0308
-}
-
-pub fn trunc_saturating(x: F64) -> I8 {
-  F64.trunc_i8_sat(x)                               //~ E0308
-}
-
-pub fn round(x: F64) -> F32 {
-  F64.round_f32(x)                                  //~ E0308
-}
-
-pub fn round_from_an_integer(n: I32) -> F32 {
-  I32.round_f32(n)                                  //~ E0308
-}
-
-pub fn narrow(n: I32) -> Option[I8] {
-  I32.narrow_i8(n)                                  //~ E0308
-}
+// methods of the closed list (the conversions are associated functions of the target type, §3.3; the names of
+// the old conversion methods in this form are not found, in negative/scalar_method_function_form_missing.onsa).
+// One error per function (P-01). The associated functions `F32.from_bits(b)` and the constants are fine in the
+// last function.
 
 pub fn floor_division(a: I32, b: I32) -> I32 {
   I32.div_euclid(a, b)                              //~ E0308

@@ -180,7 +180,7 @@ pub struct Shaper {
 pub fn f(s: Shaper, ops: [fn(I32) -> I32; 2], t: (fn(I32) -> I32, I32), g: fn(I32) -> I32) -> I32 {
   let a = inc(1)
   let b = g.(a)
-  let c = s.curve.(1.0).trunc_i32()
+  let c = I32.trunc_from(s.curve.(1.0))
   let d = ops[0].(b) + ops[1].(c)
   let e = t.0.(t.1)
   let r = pick(true).(d)

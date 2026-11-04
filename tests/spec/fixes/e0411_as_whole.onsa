@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.1", "§18.1"]
+// fixes = 1
+
+// E0411: the candidate replaces the whole `as` expression with the call of the conversion function of the target
+// type (§3.3: "`as` の式の全体を変換の関連関数の呼び出しに置き換える"), not only the `as` and the type. The operand
+// of the `as` is the argument as it is written (`(a + b) as F32` is `F32.round_from((a + b))`),
+// and a prefix operator stays inside (`-a as F32` is `(-a) as F32`, §3.1, so `F32.round_from(-a)`). The positions
+// of the expression are an operand of an operator, an argument, the initializer of a `let`, a branch, a closure
+// and the end of a function. After the candidates are applied no error is left. One error per function (P-01).
+
+use std.array
+
+fn scaled(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub fn negated(a: I32) -> F32 {
+  -a as F32                                         //~ E0411
+}
+
+pub fn sum_in_parentheses(a: I32, b: I32) -> F32 {
+  (a + b) as F32                                    //~ E0411
+}
+
+pub fn left_operand(a: I32) -> F32 {
+  (a as F32) * 2.0                                  //~ E0411
+}
+
+pub fn right_operand(a: I32, x: F32) -> F32 {
+  x + (a as F32)                                    //~ E0411
+}
+
+pub fn as_an_argument(a: I32) -> F32 {
+  scaled(a as F32)                                  //~ E0411
+}
+
+pub fn as_a_let_initializer(a: I32) -> F32 {
+  let s = a as F32                                  //~ E0411
+  s * s
+}
+
+pub fn in_a_branch(flag: Bool, a: I32, x: F32) -> F32 {
+  if flag { a as F32 } else { x }                   //~ E0411
+}
+
+pub fn in_a_closure() -> [F32; 4] {
+  array.from_fn(fn(i) { i as F32 })                 //~ E0411
+}
+
+pub fn wide_integer(n: U64) -> F64 {
+  n as F64                                          //~ E0411
+}
+
+pub fn double_to_single(d: F64) -> F32 {
+  d as F32                                          //~ E0411
+}
+
+pub fn fine(i: I16, a: I32) -> F64 {
+  let x = F32.round_from(a)
+  ((i as F32) as F64) + (x as F64)
+}

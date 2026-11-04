@@ -29,8 +29,8 @@ def made_spec(ops):
             f"`{t}a`" if t == "!" else f"`{t}`"
     tokens = sorted({t for o in ops if o.group != "const" for t in o.tokens} - {"checked_add"})
     consts = sorted(o.name for o in ops if o.group == "const")
-    formula = ("dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }\nk  = dc.trunc_u32()\n"
-               "f  = dc - k  \ny  = (1.0 - f) * a + f * b\n")
+    formula = ("dc = if d >= T.ONE { if d <= m { d } else { m } } else { T.ONE }\nk  = U32.trunc_from(dc)\n"
+               "f  = dc - T.round_from(k)\ny  = (T.ONE - f) * a + f * b\n")
     return (f"### 3.3 変換\n\n{'、'.join(map(span, tokens))}。`a.checked_add(b)` など。\n\n### 3.5 評価順\n\n"
             f"### 6.6 コンパイル時定数\n\n| 種 | 名 |\n|---|---|\n| 整数 | {'、'.join(f'`{c}`' for c in consts)} |\n"
             f"\n---\n\n### 11.4 組込み\n\n```\n{formula}```\n\n### 11.5 呼び出しと複製\n")
@@ -136,7 +136,7 @@ class VectorsTools(unittest.TestCase):
         self.assertEqual(spec_tokens.check(O.registry(), self.spec), [])
 
     def test_a_changed_formula_in_11_4_is_found(self):
-        spec = self.spec.replace("y  = (1.0 - f) * a + f * b", "y  = a + f * (b - a)", 1)
+        spec = self.spec.replace("y  = (T.ONE - f) * a + f * b", "y  = a + f * (b - a)", 1)
         self.assertNotEqual(spec, self.spec)
         self.assertTrue(any("11.4" in x for x in spec_tokens.check(O.registry(), spec)))
 

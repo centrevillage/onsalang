@@ -73,7 +73,7 @@ fn fill_all(inout xs: [Span[F32]; 2], v: F32) {
 fn ramp_all(inout xs: [Span[F32]; 2]) {
   for k in 0 ..< 2 {
     for i in 0 ..< xs[k].len() {
-      xs[k][i] = ((k * 10) + i).round_f32()
+      xs[k][i] = F32.round_from((k * 10) + i)
     }
   }
 }

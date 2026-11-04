@@ -28,9 +28,9 @@ pub fn field_access() -> F32 {
   r
 }
 
-pub fn method_call() -> F32 {
+pub fn method_call() -> Option[I32] {
   let v = make()
-  let r = v.round_f32()         //~ E0420
+  let r = v.checked_add(1)      //~ E0420
   r
 }
 
@@ -100,7 +100,7 @@ pub fn decided_by_the_annotation() -> F32 {
 pub fn decided_by_an_argument(x: F32) -> F32 {
   let v = make()
   let _ = pass_f64(v)
-  let r = v.round_f32()
+  let r = F32.round_from(v)
   r + x
 }
 

@@ -89,12 +89,12 @@
 //    uninitialized instance zero-fills and returns 1, `reset` does nothing for it, and only `init`
 //    recovers it).
 
-/// A counter plus the truncated input. `trunc_i32` panics for NaN and for values outside I32.
+/// A counter plus the truncated input. `I32.trunc_from` panics for NaN and for values outside I32.
 @export
 pub flow boom(x: F32 at sample) -> F32 at sample {
-  let n = x.trunc_i32()
+  let n = I32.trunc_from(x)
   let c = acc~(1.0)
-  c + n.round_f32()
+  c + F32.round_from(n)
 }
 
 pub flow acc(x: F32 at sample) -> F32 at sample {
@@ -107,11 +107,11 @@ pub flow acc(x: F32 at sample) -> F32 at sample {
 @export
 pub flow init_boom(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let k = 100 / n
-  x + k.round_f32()
+  x + F32.round_from(k)
 }
 
 test "boom adds a counter to the truncated input" {
-  // counter 1 2 3; trunc_i32 of 1.5 2.5 3.5 is 1 2 3.
+  // counter 1 2 3; I32.trunc_from of 1.5 2.5 3.5 is 1 2 3.
   let xs: [F32; 3] = [1.5, 2.5, 3.5]
   let o = boom.render(boom.Config {}, boom.Params {}, xs, 8.0)
   assert o.out[0] == 2.0

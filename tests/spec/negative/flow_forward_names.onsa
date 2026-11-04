@@ -18,7 +18,7 @@ pub rt fn wrap(x: F32) -> F32 {
 
 pub flow forward_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let xs = par~ i in 0..<2 {
-    y * i.round_f32()                                             //~ E0801
+    y * F32.round_from(i)                                         //~ E0801
   }
   let y = x
   xs[0]

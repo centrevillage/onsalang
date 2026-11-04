@@ -38,5 +38,5 @@ pub rt fn pong(n: U32) -> U32 {
 
 pub rt fn fine(b: Buf[F32], g: rt fn(F32) -> F32) -> U32 {
   let y = g.(1.0)
-  b.len() + y.trunc_u32()
+  b.len() + U32.trunc_from(y)
 }

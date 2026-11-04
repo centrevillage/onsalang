@@ -100,14 +100,14 @@ pub flow guard_with_state_after_a_plain_arm(k: U32 at sample, x: F32 at sample) 
 
 pub flow if_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let xs = par~ i in 0..<2 {
-    if x > 0.0 { acc~(x) * i.round_f32() } else { 0.0 }           //~ E0811
+    if x > 0.0 { acc~(x) * F32.round_from(i) } else { 0.0 }       //~ E0811
   }
   xs[0]
 }
 
 pub flow match_in_a_par_body(k: U32 at sample, x: F32 at sample) -> F32 at sample {
   let xs = par~ i in 0..<2 {
-    match k { 0 => prev~(x) * i.round_f32(), _ => 0.0 }           //~ E0811
+    match k { 0 => prev~(x) * F32.round_from(i), _ => 0.0 }       //~ E0811
   }
   xs[1]
 }
@@ -140,7 +140,7 @@ pub flow right_side_state_in_an_if_tilde_condition(x: F32 at sample) -> F32 at s
 
 pub flow right_side_state_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let flags = par~ i in 0..<2 {
-    x > 0.0 && acc~(x) > i.round_f32()                            //~ E0806
+    x > 0.0 && acc~(x) > F32.round_from(i)                        //~ E0806
   }
   if flags[0] { 1.0 } else { 0.0 }
 }
@@ -151,7 +151,7 @@ pub flow right_side_state_in_a_par_body(x: F32 at sample) -> F32 at sample {
 // and takes only the branch it needs, so the division by `d` happens only when `d` is not 0
 // (the example of §11.5).
 pub flow if_tilde_with_a_plain_if(c: Bool at sample, d: I32 at sample, x: F32 at sample) -> F32 at sample {
-  if~ c { acc~(x) } else { if d != 0 { (100 / d).round_f32() } else { 0.0 } }
+  if~ c { acc~(x) } else { if d != 0 { F32.round_from(100 / d) } else { 0.0 } }
 }
 
 // The condition, the scrutinee and the left operand are always evaluated and may hold state.

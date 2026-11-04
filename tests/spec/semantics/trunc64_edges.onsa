@@ -3,10 +3,10 @@
 // mode = "test"
 // spec = ["§3.3", "§3.4", "§9.2"]
 
-// The edges of `trunc_i64()` `trunc_u64()` and their `_sat` forms, for both
-// F32 and F64 (spec §3.3, §3.4). `trunc_<type>()` truncates toward zero, and
+// The edges of `I64.trunc_from` `U64.trunc_from` and their `_sat` forms, for both
+// F32 and F64 (spec §3.3, §3.4). `trunc_from` truncates toward zero, and
 // panics when the truncated value does not fit the type and for a NaN or an
-// infinity; `trunc_<type>_sat()` clamps and maps NaN to 0. The ranges:
+// infinity; `trunc_sat_from` clamps and maps NaN to 0. The ranges:
 //
 //   I64: [-2^63, 2^63 - 1] = [-9223372036854775808, 9223372036854775807]
 //   U64: [0, 2^64 - 1]     = [0, 18446744073709551615]
@@ -36,14 +36,14 @@ use std.array
 
 fn t_i64(o: Option[F64]) -> I64 {
   match o {
-    Some(v) => v.trunc_i64(),
+    Some(v) => I64.trunc_from(v),
     None => 0,
   }
 }
 
 fn t_u64(o: Option[F32]) -> U64 {
   match o {
-    Some(v) => v.trunc_u64(),
+    Some(v) => U64.trunc_from(v),
     None => 0,
   }
 }
@@ -52,94 +52,94 @@ fn t_u64(o: Option[F32]) -> U64 {
 
 test "F32 -> I64: the largest F32 below 2^63 and -2^63 are exact" {
   let a: F32 = 9223371487098961920.0
-  assert a.trunc_i64() == 9223371487098961920
+  assert I64.trunc_from(a) == 9223371487098961920
   let b: F32 = -9223372036854775808.0
-  assert b.trunc_i64() == I64.MIN
+  assert I64.trunc_from(b) == I64.MIN
   let c: F32 = -9223371487098961920.0
-  assert c.trunc_i64() == -9223371487098961920
+  assert I64.trunc_from(c) == -9223371487098961920
 }
 
 test "F32 -> U64: 2^63 and the largest F32 below 2^64 are exact" {
   let a: F32 = 9223372036854775808.0
-  assert a.trunc_u64() == 9223372036854775808
+  assert U64.trunc_from(a) == 9223372036854775808
   let b: F32 = 18446742974197923840.0
-  assert b.trunc_u64() == 18446742974197923840
+  assert U64.trunc_from(b) == 18446742974197923840
 }
 
 test "F64 -> U64: 2^63 is exact and 2^63 does not fit I64" {
   let a: F64 = 9223372036854775808.0
-  assert a.trunc_u64() == 9223372036854775808
-  assert a.trunc_i64_sat() == I64.MAX
+  assert U64.trunc_from(a) == 9223372036854775808
+  assert I64.trunc_sat_from(a) == I64.MAX
 }
 
 test "trunc rounds toward zero on both sides of zero for the 64-bit types" {
   let a: F64 = 4503599627370495.5
-  assert a.trunc_i64() == 4503599627370495
-  assert a.trunc_u64() == 4503599627370495
+  assert I64.trunc_from(a) == 4503599627370495
+  assert U64.trunc_from(a) == 4503599627370495
   let b: F64 = -4503599627370495.5
-  assert b.trunc_i64() == -4503599627370495
+  assert I64.trunc_from(b) == -4503599627370495
   let c: F32 = 8388607.5
-  assert c.trunc_i64() == 8388607
-  assert c.trunc_u64() == 8388607
+  assert I64.trunc_from(c) == 8388607
+  assert U64.trunc_from(c) == 8388607
   let d: F32 = -8388607.5
-  assert d.trunc_i64() == -8388607
+  assert I64.trunc_from(d) == -8388607
   let e: F32 = -1.5
-  assert e.trunc_i64() == -1
+  assert I64.trunc_from(e) == -1
 }
 
 test "a value above -1 truncates to 0 even for the unsigned type" {
   // The F64 just below 1 is 1 - 2^-53 = 0x3FEFFFFFFFFFFFFF.
   let below_one = F64.from_bits(0x3FEF_FFFF_FFFF_FFFF)
-  assert below_one.trunc_u64() == 0
-  assert below_one.trunc_i64() == 0
+  assert U64.trunc_from(below_one) == 0
+  assert I64.trunc_from(below_one) == 0
   let neg_below_one = F64.from_bits(0xBFEF_FFFF_FFFF_FFFF)
-  assert neg_below_one.trunc_u64() == 0
-  assert neg_below_one.trunc_i64() == 0
+  assert U64.trunc_from(neg_below_one) == 0
+  assert I64.trunc_from(neg_below_one) == 0
   let nz: F64 = -0.0
-  assert nz.trunc_u64() == 0
-  assert nz.trunc_i64() == 0
+  assert U64.trunc_from(nz) == 0
+  assert I64.trunc_from(nz) == 0
   let f: F32 = -0.9
-  assert f.trunc_u64() == 0
+  assert U64.trunc_from(f) == 0
   let g: F32 = -0.0
-  assert g.trunc_u64() == 0
-  assert g.trunc_i64() == 0
+  assert U64.trunc_from(g) == 0
+  assert I64.trunc_from(g) == 0
 }
 
 // ------------------------------------------------------------- the _sat forms
 
 test "F32 trunc_sat at the edges of the 64-bit types" {
   let p63: F32 = 9223372036854775808.0
-  assert p63.trunc_i64_sat() == I64.MAX
-  assert p63.trunc_u64_sat() == 9223372036854775808
+  assert I64.trunc_sat_from(p63) == I64.MAX
+  assert U64.trunc_sat_from(p63) == 9223372036854775808
   let below63: F32 = 9223371487098961920.0
-  assert below63.trunc_i64_sat() == 9223371487098961920
+  assert I64.trunc_sat_from(below63) == 9223371487098961920
   let p64: F32 = 18446744073709551616.0
-  assert p64.trunc_u64_sat() == U64.MAX
-  assert p64.trunc_i64_sat() == I64.MAX
+  assert U64.trunc_sat_from(p64) == U64.MAX
+  assert I64.trunc_sat_from(p64) == I64.MAX
   let below64: F32 = 18446742974197923840.0
-  assert below64.trunc_u64_sat() == 18446742974197923840
+  assert U64.trunc_sat_from(below64) == 18446742974197923840
   let m63: F32 = -9223372036854775808.0
-  assert m63.trunc_i64_sat() == I64.MIN
-  assert m63.trunc_u64_sat() == 0
+  assert I64.trunc_sat_from(m63) == I64.MIN
+  assert U64.trunc_sat_from(m63) == 0
   let past: F32 = -9223373136366403584.0
-  assert past.trunc_i64_sat() == I64.MIN
+  assert I64.trunc_sat_from(past) == I64.MIN
 }
 
 test "trunc_sat of NaN is 0 and of the infinities is the bound, F32 and F64" {
   let z32: F32 = 0.0
   let n32 = z32 / z32
-  assert n32.trunc_i64_sat() == 0
-  assert n32.trunc_u64_sat() == 0
-  assert F32.INFINITY.trunc_i64_sat() == I64.MAX
-  assert F32.INFINITY.trunc_u64_sat() == U64.MAX
+  assert I64.trunc_sat_from(n32) == 0
+  assert U64.trunc_sat_from(n32) == 0
+  assert I64.trunc_sat_from(F32.INFINITY) == I64.MAX
+  assert U64.trunc_sat_from(F32.INFINITY) == U64.MAX
   let ni32 = -F32.INFINITY
-  assert ni32.trunc_i64_sat() == I64.MIN
-  assert ni32.trunc_u64_sat() == 0
+  assert I64.trunc_sat_from(ni32) == I64.MIN
+  assert U64.trunc_sat_from(ni32) == 0
   let ni64 = -F64.INFINITY
-  assert ni64.trunc_i64_sat() == I64.MIN
-  assert ni64.trunc_u64_sat() == 0
-  assert F64.INFINITY.trunc_i64_sat() == I64.MAX
-  assert F64.INFINITY.trunc_u64_sat() == U64.MAX
+  assert I64.trunc_sat_from(ni64) == I64.MIN
+  assert U64.trunc_sat_from(ni64) == 0
+  assert I64.trunc_sat_from(F64.INFINITY) == I64.MAX
+  assert U64.trunc_sat_from(F64.INFINITY) == U64.MAX
 }
 
 // ----------------------------------------------------------- in other places
@@ -154,7 +154,7 @@ test "a conversion in range inside a function, a closure and a match arm" {
   let ys: [I64; 2] = array.from_fn(fn(i) {
     let top: F64 = 9223372036854774784.0
     let m: F64 = -9223372036854775808.0
-    if i == 0 { top.trunc_i64() } else { m.trunc_i64() }
+    if i == 0 { I64.trunc_from(top) } else { I64.trunc_from(m) }
   })
   assert ys[0] == 9223372036854774784
   assert ys[1] == I64.MIN
@@ -165,7 +165,7 @@ test "a conversion in a loop adds up exactly" {
   var acc: I64 = 0
   for _ in 0..<3 {
     let top: F64 = 2305843009213693952.0
-    acc = acc + top.trunc_i64()
+    acc = acc + I64.trunc_from(top)
   }
   assert acc == 6917529027641081856
 }
@@ -174,53 +174,53 @@ test "a conversion in a loop adds up exactly" {
 
 test "F32 just below -2^63 -> I64 panics" {   //~ TESTFAIL "F32 just below -2^63 -> I64 panics"
   let a: F32 = -9223373136366403584.0
-  let _ = a.trunc_i64()
+  let _ = I64.trunc_from(a)
 }
 
 test "F32 -1.0 -> U64 panics" {   //~ TESTFAIL "F32 -1.0 -> U64 panics"
   let a: F32 = -1.0
-  let _ = a.trunc_u64()
+  let _ = U64.trunc_from(a)
 }
 
 test "F64 -2^63 -> U64 panics" {   //~ TESTFAIL "F64 -2^63 -> U64 panics"
   let a: F64 = -9223372036854775808.0
-  let _ = a.trunc_u64()
+  let _ = U64.trunc_from(a)
 }
 
 test "F64 NaN -> U64 panics" {   //~ TESTFAIL "F64 NaN -> U64 panics"
   let z: F64 = 0.0
   let n = z / z
-  let _ = n.trunc_u64()
+  let _ = U64.trunc_from(n)
 }
 
 test "F32 NaN -> I64 panics" {   //~ TESTFAIL "F32 NaN -> I64 panics"
   let z: F32 = 0.0
   let n = z / z
-  let _ = n.trunc_i64()
+  let _ = I64.trunc_from(n)
 }
 
 test "F32 NaN -> U64 panics" {   //~ TESTFAIL "F32 NaN -> U64 panics"
   let z: F32 = 0.0
   let n = z / z
-  let _ = n.trunc_u64()
+  let _ = U64.trunc_from(n)
 }
 
 test "F64 infinity -> U64 panics" {   //~ TESTFAIL "F64 infinity -> U64 panics"
-  let _ = F64.INFINITY.trunc_u64()
+  let _ = U64.trunc_from(F64.INFINITY)
 }
 
 test "F64 negative infinity -> I64 panics" {   //~ TESTFAIL "F64 negative infinity -> I64 panics"
   let a = -F64.INFINITY
-  let _ = a.trunc_i64()
+  let _ = I64.trunc_from(a)
 }
 
 test "F32 infinity -> I64 panics" {   //~ TESTFAIL "F32 infinity -> I64 panics"
-  let _ = F32.INFINITY.trunc_i64()
+  let _ = I64.trunc_from(F32.INFINITY)
 }
 
 test "F32 negative infinity -> U64 panics" {   //~ TESTFAIL "F32 negative infinity -> U64 panics"
   let a = -F32.INFINITY
-  let _ = a.trunc_u64()
+  let _ = U64.trunc_from(a)
 }
 
 test "a conversion in a loop panics when the sum stops fitting I64" {   //~ TESTFAIL "a conversion in a loop panics when the sum stops fitting I64"
@@ -228,6 +228,6 @@ test "a conversion in a loop panics when the sum stops fitting I64" {   //~ TEST
   var acc: I64 = 0
   for _ in 0..<4 {
     let top: F64 = 2305843009213693952.0
-    acc = acc + top.trunc_i64()
+    acc = acc + I64.trunc_from(top)
   }
 }

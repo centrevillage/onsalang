@@ -16,7 +16,7 @@ pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {
 
 /// 0 ..< n を [-0.5, 0.5] に等間隔に並べる
 pub rt fn spread(i: U32, n: U32) -> F32 {
-  (i.round_f32() / (n - 1).round_f32()) - 0.5
+  (F32.round_from(i) / F32.round_from(n - 1)) - 0.5
 }
 
 use std.math.{floor}

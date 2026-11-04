@@ -40,7 +40,7 @@ pub flow src(g: F32 at block) -> F32 at sample {
 }
 
 pub flow cvt(x: F32 at sample) -> Count at sample {
-  x.trunc_i32()
+  I32.trunc_from(x)
 }
 
 pub flow pass(x: Level at sample) -> F32 at sample {

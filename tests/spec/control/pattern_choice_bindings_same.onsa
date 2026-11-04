@@ -122,7 +122,7 @@ pub fn generic_option[T](o: Option[T], d: T) -> T {
 
 pub flow pick(x: F32 at sample, k: U32 at block) -> F32 at sample {
   match (k, k % 2) {
-    (n, 0) | (0, n) => x * n.round_f32(),
+    (n, 0) | (0, n) => x * F32.round_from(n),
     _ => x,
   }
 }
@@ -130,7 +130,7 @@ pub flow pick(x: F32 at sample, k: U32 at block) -> F32 at sample {
 pub flow in_par(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
   par~ i in 0 ..< 2 {
     match (i, k) {
-      (j, 0) | (0, j) => x * j.round_f32(),
+      (j, 0) | (0, j) => x * F32.round_from(j),
       _ => x,
     }
   }
@@ -138,7 +138,7 @@ pub flow in_par(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
 
 pub flow in_a_let(x: F32 at sample, k: U32 at block) -> F32 at sample {
   let w = match (k, 1) {
-    (n, 0) | (0, n) => n.round_f32(),
+    (n, 0) | (0, n) => F32.round_from(n),
     _ => 0.0,
   }
   x * w

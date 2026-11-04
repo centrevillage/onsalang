@@ -57,14 +57,11 @@ fn every_target_declaration_of_std_has_one_row_and_every_row_one_declaration() {
     assert_eq!(keys, row_keys);
     assert!(!keys.is_empty());
     // The members of the `impl`s of std, by their types (§6.6, §3.3, §3.4),
-    // and the helpers of `narrow_*` and `checked_*` (S-71).
+    // and the helpers of `narrow_from` and `checked_*` (S-71).
     for member in [
         "F32.from_bits",
         "F64.from_bits",
         "F64.to_bits",
-        "F32.trunc_u8_sat",
-        "F64.round_f32",
-        "U64.round_f64",
         "F64.round_from",
         "U8.trunc_sat_from",
         "I8.div_euclid",
@@ -135,7 +132,7 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
                     // A bound that keeps no builtin type out is no bound: the
                     // walk would try every type at it (D4).
                     assert!(bounds.is_empty() || met.len() < candidates.len(), "a bound of `{key}` keeps nothing out");
-                    // The helpers of `narrow_*` and `checked_*` take the integers (`Int`, D4).
+                    // The helpers of `narrow_from` and `checked_*` take the integers (`Int`, D4).
                     if key.starts_with("core.num.") {
                         assert_eq!(met, ints, "`{key}` at {:?}", g.name);
                     }
@@ -156,12 +153,7 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
             assert!(r.provides(&scalars), "`{key}` gives no primitive at {scalars:?}");
             // The primitive leads back to its row, and so to the declaration
             // an E0200 names.
-            // The rows of the conversion methods give the primitives of
-            // `round_from` and `trunc_from`, whose rows they lead back to,
-            // until W5-14 takes the methods out.
-            let method =
-                matches!(r, PrimRow::IntToFloat { .. } | PrimRow::FloatToFloat { .. } | PrimRow::TruncToInt { .. });
-            if let Some(p) = r.instantiate(&scalars).filter(|_| !method) {
+            if let Some(p) = r.instantiate(&scalars) {
                 assert_eq!(p.row_prim(), r, "`{key}` at {scalars:?}");
                 assert_eq!(p.std_name().as_deref(), Some(format!("std.{key}").as_str()));
             }
@@ -230,73 +222,41 @@ fn a_use_at_a_type_without_a_primitive_is_e0200() {
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
 }
 
-/// The conversion methods of the scalars against `as` (spec §3.3, memo 2.3):
-/// of every pair of number types, `narrow_<B>()` (an `Option[B]`) of the
-/// integers and `round_<B>()` to the floats where `as` does not convert, and
-/// `trunc_<B>()` and `trunc_<B>_sat()` of the floats to every integer; no
-/// other conversion method, and none where `as` converts.
+/// The calls the E0411 of a rejected `as` suggests, of every pair of number
+/// types (spec §3.3): std's conversion functions of the target type, none for
+/// a narrowing of the integers.
 #[test]
-fn the_conversion_methods_are_where_as_does_not_convert() {
+fn the_e0411_suggests_the_conversion_functions_of_std() {
     let mut a = analyzed_std();
     let ints: Vec<TyId> = INTS.iter().map(|&k| a.types.int(k)).collect();
     let floats = [a.types.float(FloatKind::F32), a.types.float(FloatKind::F64)];
     let numbers: Vec<TyId> = ints.iter().chain(&floats).copied().collect();
-    let (mut methods, mut casts) = (0, 0);
+    let (mut casts, mut narrowings, mut suggested) = (0, 0, 0);
     for &from in &numbers {
-        let mut want: BTreeMap<String, TyId> = BTreeMap::new();
         for &to in &numbers {
-            let lower = scalar_name(&a, to).to_lowercase();
             if crate::cast::cast_allowed(&a.types, from, to) {
                 casts += 1;
                 continue;
             }
-            match (a.types.get(from), a.types.get(to)) {
-                (Ty::Int(_), Ty::Int(_)) => {
-                    let opt = a.types.builtin(BuiltinTy::Option, vec![to]);
-                    want.insert(format!("narrow_{lower}"), opt);
-                }
-                (_, Ty::Float(_)) => {
-                    want.insert(format!("round_{lower}"), to);
-                }
-                (Ty::Float(_), Ty::Int(_)) => {
-                    want.insert(format!("trunc_{lower}"), to);
-                    want.insert(format!("trunc_{lower}_sat"), to);
-                }
-                other => panic!("no conversion of {other:?}"),
+            let names = crate::cast::cast_suggestions(&a.types, from, to);
+            narrowings += names.is_empty() as usize;
+            for f in &names {
+                let (ty, name) = f.split_once('.').expect("`Type.name`");
+                assert_eq!(ty, scalar_name(&a, to), "`{f}`");
+                let table = a.modules.assoc_builtin.get(&to).expect("the members of a scalar");
+                let d = *table.get(name).unwrap_or_else(|| panic!("`{f}`"));
+                assert_eq!(crate::prim::conversion_target(&a, d), Some(to), "`{f}`");
             }
+            suggested += names.len();
         }
-        let table = a.modules.assoc_builtin.get(&from).expect("the members of a scalar");
-        // The method the E0411 of a rejected `as` suggests is one of them
-        // (`crate::cast`, W5-14 decides the suggestions).
-        for &to in &numbers {
-            if !crate::cast::cast_allowed(&a.types, from, to) {
-                let m = crate::cast::cast_suggestion(&a.types, from, to).expect("a suggestion");
-                let name = m.strip_prefix('.').and_then(|m| m.strip_suffix("()")).expect("`.name()`");
-                assert!(table.contains_key(name), "`{m}` of `{}`", scalar_name(&a, from));
-            }
-        }
-        // Not the associated functions, which W5-14 leaves when it takes the methods out.
-        let conversion =
-            |n: &str| !n.ends_with("_from") && ["narrow_", "round_", "trunc_"].iter().any(|p| n.starts_with(p));
-        let found: BTreeMap<String, TyId> = table
-            .iter()
-            .filter(|(n, _)| conversion(n))
-            .map(|(n, &d)| {
-                let DefKind::Fn(f) = &a.def(d).kind else { panic!("`{n}` is no method") };
-                assert!(f.self_mode.is_some() && f.params.is_empty() && f.rt, "the heading of `{n}`");
-                (n.clone(), f.ret)
-            })
-            .collect();
-        assert_eq!(found, want, "the conversions of `{}`", scalar_name(&a, from));
-        methods += found.len();
     }
-    // 38 `narrow_*`, 7 `round_*`, 32 `trunc_*` (§3.3).
-    assert_eq!((methods, casts), (77, 39));
+    // 7 `round_from`, and 16 pairs of the two of a float to an integer.
+    assert_eq!((casts, narrowings, suggested), (39, 38, 39));
 }
 
 /// The 26 conversion functions (§3.3, S-231): `round_from` of the floats and
 /// the three of the integers, none of them a method, each `rt`, each
-/// converting to its type; no other function of a number is one.
+/// converting to its type; no other member of a number has such a name.
 #[test]
 fn the_conversion_functions_of_the_numbers_are_the_list_of_the_spec() {
     let mut a = analyzed_std();
@@ -311,7 +271,8 @@ fn the_conversion_functions_of_the_numbers_are_the_list_of_the_spec() {
         let table = a.modules.assoc_builtin.get(&to).expect("the members of a scalar");
         let mut names: Vec<&str> = Vec::new();
         for (n, &d) in table {
-            if crate::prim::conversion_target(&a, d).is_some() {
+            let old = ["narrow_", "round_", "trunc_"].iter().any(|p| n.starts_with(p));
+            if old || crate::prim::conversion_target(&a, d).is_some() {
                 assert_eq!(crate::prim::conversion_target(&a, d), Some(to), "`{n}`");
                 let DefKind::Fn(f) = &a.def(d).kind else { panic!("`{n}` is no function") };
                 assert!(f.self_mode.is_none() && f.params.len() == 1 && f.rt, "the heading of `{n}`");

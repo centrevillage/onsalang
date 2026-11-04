@@ -22,7 +22,7 @@ pub flow ctl_input(x: F32 at sample, p: Ctl[F32]) -> F32 at sample {   //~ E0020
 }
 
 pub flow init_input(x: F32 at sample, n: Init[U32]) -> F32 at sample {   //~ E0020 @42
-  x * n.round_f32()
+  x * F32.round_from(n)
 }
 
 pub flow sig_nested_array(x: Sig[[F32; 2]]) -> F32 at sample {   //~ E0020 @30
@@ -66,5 +66,5 @@ pub struct HasRate {
 // ---- Not errors ----
 
 pub flow fine(x: F32 at sample, p: F32 at block, n: U32 at init) -> F32 at sample {
-  x * p * n.round_f32()
+  x * p * F32.round_from(n)
 }

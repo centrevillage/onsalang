@@ -48,7 +48,7 @@ pub fn let_from_a_borrowed_argument(x: F32) -> F32 {
 pub fn let_destructured_from_a_borrowed_argument(p: (F32, U32)) -> F32 {
   let (a, n) = p
   a = 1.0                       //~ E0701
-  a + n.round_f32()
+  a + F32.round_from(n)
 }
 
 pub fn let_field_of_a_let() -> I32 {

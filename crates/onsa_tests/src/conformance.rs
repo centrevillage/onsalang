@@ -729,7 +729,7 @@ mod tests {
         onsa_driver::build_analyzed(&loaded, &analyzed, "host").unwrap_or_else(|_| panic!("the build failed"))
     }
 
-    const FLOWS: &str = "pub flow f(x: F32 at sample, n: I32 at init) -> F32 at sample {\n  x * n.round_f32()\n}\n";
+    const FLOWS: &str = "pub flow f(x: F32 at sample, n: I32 at init) -> F32 at sample {\n  x * F32.round_from(n)\n}\n";
 
     #[test]
     fn shapes_and_the_flows_that_are_skipped() {

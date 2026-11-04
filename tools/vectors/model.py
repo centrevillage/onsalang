@@ -340,7 +340,7 @@ def int_to_float(t, x):
 
 
 def float_to_int(t, bits, it, sat):
-    """trunc_<it>() / trunc_<it>_sat(): toward zero; out of range and NaN panic, or saturate (3.3, S-189)."""
+    """trunc_from / trunc_sat_from to <it>: toward zero; out of range and NaN panic, or saturate (3.3, S-189)."""
     lo, hi = int_range(it)
     d = fdec(t, bits)
     if d[0] == "nan":

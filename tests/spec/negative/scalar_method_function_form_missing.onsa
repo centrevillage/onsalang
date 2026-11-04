@@ -6,7 +6,10 @@
 // is not found is E0302; the E0308 of the function form is for a name that is found and is a method, as in
 // negative/scalar_method_function_form.onsa). The computations of `std.math` and the conversions that `as` writes
 // are not members of the scalar types (§3.3, §3.4), so `F32.sqrt(x)` is the same error as `F32.zz(x)` (and
-// `F32.MIN`, §6.6). One error per function (P-01). The last function is fine.
+// `F32.MIN`, §6.6). The names of the old conversion methods (`trunc_i32`, `trunc_i8_sat`, `round_f32`, `narrow_i8`)
+// are not members of the type either (the conversions are `round_from`, `trunc_from`, `trunc_sat_from` and
+// `narrow_from`, §3.3), so the function form of an old name is E0302 (the method form is E0413, in
+// convert_old_names.onsa). One error per function (P-01). The last function is fine.
 
 pub fn root(x: F32) -> F32 {
   F32.sqrt(x)                                       //~ E0302
@@ -38,6 +41,26 @@ pub fn widen_integer(n: I32) -> Option[I64] {
 
 pub fn not_a_number(x: F32) -> Bool {
   F32.is_nan(x)                                     //~ E0302
+}
+
+pub fn old_trunc(x: F32) -> I32 {
+  F32.trunc_i32(x)                                  //~ E0302
+}
+
+pub fn old_trunc_saturating(x: F64) -> I8 {
+  F64.trunc_i8_sat(x)                               //~ E0302
+}
+
+pub fn old_round(x: F64) -> F32 {
+  F64.round_f32(x)                                  //~ E0302
+}
+
+pub fn old_round_from_an_integer(n: I32) -> F32 {
+  I32.round_f32(n)                                  //~ E0302
+}
+
+pub fn old_narrow(n: I32) -> Option[I8] {
+  I32.narrow_i8(n)                                  //~ E0302
 }
 
 pub fn fine(u: U32) -> F32 {

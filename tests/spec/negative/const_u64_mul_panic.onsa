@@ -23,11 +23,11 @@ fn rem_i8(a: I8, b: I8) -> I8 {
 }
 
 fn to_i64(f: F64) -> I64 {
-  f.trunc_i64()
+  I64.trunc_from(f)
 }
 
 fn to_u64(f: F32) -> U64 {
-  f.trunc_u64()
+  U64.trunc_from(f)
 }
 
 // 2^32 * 2^32 = 2^64 is one above U64.MAX.
