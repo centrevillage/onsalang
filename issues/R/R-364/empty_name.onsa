@@ -1,0 +1,7 @@
+fn id[T: Num](x: T) -> T {
+  x
+}
+
+pub fn f() -> Bool {
+  (id).(true)
+}
