@@ -184,7 +184,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             x.span = span;
             return Ok(x);
         }
-        AK::Try(inner) => return lower_try(lw, cx, *inner, ty, span),
+        AK::Try(inner) => return lower_try(lw, cx, e, *inner, ty, span),
         AK::Range(_) => return Err(internal(span, "range outside a loop head")),
     };
     Ok(Expr::new(ty, span, kind))
@@ -310,31 +310,28 @@ fn lower_binary(
     Ok(out)
 }
 
-fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, inner: ExprId, ty: Ty, span: Span) -> R<Expr> {
+fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, inner: ExprId, ty: Ty, span: Span) -> R<Expr> {
     let v = lower_expr(lw, cx, inner)?;
     // `?` leaves the innermost function (S-192), as `return` does.
     if cx.inline_depth > 0 {
         return Err(unsupported(span, Feature::TryInFromFn, &[]));
     }
     let Ty::Enum(id) = v.ty.clone() else { return Err(internal(span, "`?` on a non-enum")) };
-    let variants = lw.enum_variants(id);
-    let is_option = variants.first().is_some_and(|(n, _)| n == "None");
+    let Some(&TryArms { keep, exit }) = cx.info.tries.get(&e) else {
+        return Err(internal(span, "a `?` the check did not record"));
+    };
     let Ty::Enum(ret_id) = cx.ret.clone() else {
         return Err(internal(span, "`?` in a function without Option / Result"));
     };
     let mut stmts = Vec::new();
     let tmp = materialize(cx, v, &mut stmts, "__try");
-    // Option: None -> return None; Some(x) -> x.   Result: Err(e) -> return Err(e); Ok(x) -> x.
-    let (good, bad) = if is_option { (1, 0) } else { (0, 1) };
-    let early = if is_option {
-        Expr::new(cx.ret.clone(), span, ExprKind::Variant { ty: ret_id, tag: 0, fields: Vec::new() })
-    } else {
-        let err = payload(lw, tmp.clone(), 1, 0)?;
-        Expr::new(cx.ret.clone(), span, ExprKind::Variant { ty: ret_id, tag: 1, fields: vec![err] })
-    };
+    // `exit` returns itself, with its elements; `keep` gives its element.
+    let n = lw.enum_variants(id)[exit as usize].1.len() as u32;
+    let fields = (0..n).map(|i| payload(lw, tmp.clone(), exit, i)).collect::<R<Vec<_>>>()?;
+    let early = Expr::new(cx.ret.clone(), span, ExprKind::Variant { ty: ret_id, tag: exit, fields });
     let bad_block = Block { stmts: vec![stmt(span, StmtKind::Return(Some(early)))], value: None };
-    let good_block = Block { stmts: Vec::new(), value: Some(Box::new(payload(lw, tmp.clone(), good, 0)?)) };
-    let mut arms = vec![(good, good_block), (bad, bad_block)];
+    let good_block = Block { stmts: Vec::new(), value: Some(Box::new(payload(lw, tmp.clone(), keep, 0)?)) };
+    let mut arms = vec![(keep, good_block), (exit, bad_block)];
     arms.sort_by_key(|(t, _)| *t);
     let sw = Expr::new(ty.clone(), span, ExprKind::Switch { scrutinee: Box::new(tmp), arms, default: None });
     Ok(if stmts.is_empty() {

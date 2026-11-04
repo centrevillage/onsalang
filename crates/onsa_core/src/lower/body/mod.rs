@@ -6,7 +6,7 @@
 
 use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
-use onsa_sema::body::{BodyInfo, Target};
+use onsa_sema::body::{BodyInfo, Target, TryArms};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
 use onsa_sema::resolve::Builtin;
 use onsa_sema::ty::TyId;

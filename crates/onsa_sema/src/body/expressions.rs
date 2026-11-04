@@ -19,6 +19,47 @@ impl<'a> Checker<'a> {
         Ok(self.record(e, t))
     }
 
+    /// The type of `e`, the `?` on `inner` (§9.1), with the constructors it
+    /// keeps and leaves by in [`BodyInfo::tries`].
+    fn check_try(&mut self, e: ExprId, inner: ExprId, span: Span) -> R<TyId> {
+        let it = self.check_expr(inner, None)?;
+        let it = self.known_shape(it, self.expr(inner).span, "operand of `?`")?;
+        let ret = self.frames.last().unwrap().ret;
+        let ret_s = self.shallow(ret);
+        match (self.ty(it), self.ty(ret_s)) {
+            (Ty::Builtin(BuiltinTy::Option, a), Ty::Builtin(BuiltinTy::Option, _)) => {
+                self.info.tries.insert(e, TRY_OPTION);
+                Ok(a[0])
+            }
+            (Ty::Builtin(BuiltinTy::Result, a), Ty::Builtin(BuiltinTy::Result, r)) => {
+                let cause = self.cause(span, None);
+                if self.infer.unify(&mut self.a.types, a[1], r[1], &cause).is_err() {
+                    let (ea, er) = (self.display(a[1]), self.display(r[1]));
+                    return Err(self.err(
+                        Code::E0414,
+                        span,
+                        format!("`?` needs the same error type as the function (`{er}`); found `{ea}`; convert it with `map_err` (§9.1)"),
+                    ));
+                }
+                self.info.tries.insert(e, TRY_RESULT);
+                Ok(a[0])
+            }
+            (Ty::Error, _) => Ok(it),
+            (Ty::Builtin(BuiltinTy::Option | BuiltinTy::Result, _), _) => {
+                let (shown, rs) = (self.display(it), self.display(ret));
+                Err(self.err(
+                    Code::E0414,
+                    span,
+                    format!("`?` on `{shown}` needs the function to return the same kind; it returns `{rs}` (§9.1)"),
+                ))
+            }
+            _ => {
+                let shown = self.described(it);
+                Err(self.err(Code::E0414, span, format!("`?` needs an `Option` or `Result`; found {shown}")))
+            }
+        }
+    }
+
     fn check_expr_inner(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
         let expr = self.expr(e);
         let span = expr.span;
@@ -189,42 +230,7 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            ExprKind::Try(inner) => {
-                let it = self.check_expr(*inner, None)?;
-                let it = self.known_shape(it, self.expr(*inner).span, "operand of `?`")?;
-                let ret = self.frames.last().unwrap().ret;
-                let ret_s = self.shallow(ret);
-                match (self.ty(it), self.ty(ret_s)) {
-                    (Ty::Builtin(BuiltinTy::Option, a), Ty::Builtin(BuiltinTy::Option, _)) => Ok(a[0]),
-                    (Ty::Builtin(BuiltinTy::Result, a), Ty::Builtin(BuiltinTy::Result, r)) => {
-                        let cause = self.cause(span, None);
-                        if self.infer.unify(&mut self.a.types, a[1], r[1], &cause).is_err() {
-                            let (ea, er) = (self.display(a[1]), self.display(r[1]));
-                            return Err(self.err(
-                                Code::E0414,
-                                span,
-                                format!("`?` needs the same error type as the function (`{er}`); found `{ea}`; convert it with `map_err` (§9.1)"),
-                            ));
-                        }
-                        Ok(a[0])
-                    }
-                    (Ty::Error, _) => Ok(it),
-                    (Ty::Builtin(BuiltinTy::Option | BuiltinTy::Result, _), _) => {
-                        let (shown, rs) = (self.display(it), self.display(ret));
-                        Err(self.err(
-                            Code::E0414,
-                            span,
-                            format!(
-                                "`?` on `{shown}` needs the function to return the same kind; it returns `{rs}` (§9.1)"
-                            ),
-                        ))
-                    }
-                    _ => {
-                        let shown = self.described(it);
-                        Err(self.err(Code::E0414, span, format!("`?` needs an `Option` or `Result`; found {shown}")))
-                    }
-                }
-            }
+            ExprKind::Try(inner) => self.check_try(e, *inner, span),
             // The parser makes a range only as a head; the words of the row
             // that finds one elsewhere (`range_outside_header`).
             ExprKind::Range(_) => {

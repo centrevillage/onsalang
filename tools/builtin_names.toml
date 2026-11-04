@@ -21,9 +21,6 @@
 "Bool" = 1
 "Char" = 1
 
-[allow."crates/onsa_core/src/lower/body/expr.rs"]
-"None" = 1
-
 [allow."crates/onsa_core/src/lower/flow/boundary.rs"]
 "cfg" = 1
 "frames" = 1

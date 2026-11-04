@@ -161,6 +161,19 @@ pub enum Target {
     Value,
 }
 
+/// The constructors of a `?` (§9.1), by their index: that of the value it
+/// takes out, and that of the early return, which keeps its elements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TryArms {
+    pub keep: u32,
+    pub exit: u32,
+}
+
+/// The `?` of `Option` and of `Result`: the one place of these numbers
+/// (W5-03 reads them from the declarations of std's enums).
+pub(crate) const TRY_OPTION: TryArms = TryArms { keep: 1, exit: 0 };
+pub(crate) const TRY_RESULT: TryArms = TryArms { keep: 0, exit: 1 };
+
 /// Typed body of one function, test, or `const` initializer.
 #[derive(Debug, Default, Clone)]
 pub struct BodyInfo {
@@ -185,6 +198,9 @@ pub struct BodyInfo {
     /// the `-` is a part of the literal's value (§4.7, S-184, S-227). The lowering
     /// folds exactly these (R-03); every other `-` negates a value.
     pub neg_literals: HashSet<ExprId>,
+    /// The `?` expressions that passed the check → their constructors: the
+    /// lowering reads them (S-71, D-15).
+    pub tries: HashMap<ExprId, TryArms>,
     /// What diverges (§7), as the names stage recorded it.
     pub diverging: onsa_syntax::tails::Diverging,
     /// The rows of the heads of the bindings (§5.4), and the marks of the
