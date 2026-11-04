@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// A `break` in the condition of a `while` or in the source of a `for` is outside the body of that loop (spec §7):
+// with no loop around that loop, it is the `break` outside a loop of §7, an E0002.
+
+fn in_a_condition(c: Bool) {
+  while ({
+    if c {
+      break //~ E0002
+    }
+    false
+  }) {}
+}
+
+fn in_a_source(c: Bool) {
+  for v in ({
+    if c {
+      break //~ E0002
+    }
+    [1, 2]
+  }) {
+    let _ = v
+  }
+}

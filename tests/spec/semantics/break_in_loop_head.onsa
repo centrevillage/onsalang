@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7"]
+
+// The condition of a `while` and the source of a `for`, with the ends of a range, are outside the body of that
+// loop (spec §7), so a `break` or a `continue` written there is of the loop around it. A `break` counts for a
+// `while true` around it: `leaves_a_while_true` has a statement after the loop, which only a `while true` that does
+// not diverge can have. With no loop around it the `break` is an E0002 (negative/break_in_loop_head.onsa).
+
+fn in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      if c {
+        break
+      }
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+fn in_a_source(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    for v in ({
+      if c {
+        break
+      }
+      [1, 2]
+    }) {
+      n = n + v
+    }
+    n = n + 10
+  }
+  n
+}
+
+fn in_an_end_of_a_range(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    for v in ({
+      if c {
+        break
+      }
+      0
+    }) ..< 2 {
+      n = n + v
+    }
+    n = n + 10
+  }
+  n
+}
+
+fn leaves_a_while_true(c: Bool) -> I32 {
+  while true {
+    while ({
+      if c {
+        break
+      }
+      false
+    }) {}
+  }
+  7
+}
+
+fn continue_in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      if c {
+        continue
+      }
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+fn in_a_condition_in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      while ({
+        if c {
+          break
+        }
+        false
+      }) {}
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+fn a_loop_in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      while c {
+        n = n + 100
+        break
+      }
+      if c {
+        continue
+      }
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+test "a break in a condition leaves the loop around it" {
+  assert in_a_condition(true) == 1
+  assert in_a_condition(false) == 11
+}
+
+test "a break in a source leaves the loop around it" {
+  assert in_a_source(true) == 1
+  assert in_a_source(false) == 14
+}
+
+test "a break in an end of a range leaves the loop around it" {
+  assert in_an_end_of_a_range(true) == 1
+  assert in_an_end_of_a_range(false) == 12
+}
+
+test "a continue in a condition continues the loop around it" {
+  assert continue_in_a_condition(true) == 3
+  assert continue_in_a_condition(false) == 11
+}
+
+test "a head in a head" {
+  assert in_a_condition_in_a_condition(true) == 1
+  assert in_a_condition_in_a_condition(false) == 11
+}
+
+test "a loop in a condition keeps its own break" {
+  assert a_loop_in_a_condition(true) == 101
+  assert a_loop_in_a_condition(false) == 11
+}
+
+test "a break in a condition leaves a while true around it" {
+  assert leaves_a_while_true(true) == 7
+}

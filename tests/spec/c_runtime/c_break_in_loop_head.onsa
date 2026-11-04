@@ -1,0 +1,214 @@
+// onsa.toml
+// [package]
+// name = "c_break_in_loop_head"
+// edition = "2026"
+//
+// [export]
+// prefix = "cbh_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§13.4"]
+//
+// [[test.host]]
+// name = "in_a_condition"
+// target = "host"
+// fn = "c_break_in_loop_head.in_a_condition"
+// steps = [
+//   { call = "fn", args = { c = true }, status = 0, result = 1 },
+//   { call = "fn", args = { c = false }, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "in_a_source"
+// target = "host"
+// fn = "c_break_in_loop_head.in_a_source"
+// steps = [
+//   { call = "fn", args = { c = true }, status = 0, result = 1 },
+//   { call = "fn", args = { c = false }, status = 0, result = 14 },
+// ]
+//
+// [[test.host]]
+// name = "in_an_end_of_a_range"
+// target = "host"
+// fn = "c_break_in_loop_head.in_an_end_of_a_range"
+// steps = [
+//   { call = "fn", args = { c = true }, status = 0, result = 1 },
+//   { call = "fn", args = { c = false }, status = 0, result = 12 },
+// ]
+//
+// [[test.host]]
+// name = "continue_in_a_condition"
+// target = "host"
+// fn = "c_break_in_loop_head.continue_in_a_condition"
+// steps = [
+//   { call = "fn", args = { c = true }, status = 0, result = 3 },
+//   { call = "fn", args = { c = false }, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "in_a_condition_in_a_condition"
+// target = "host"
+// fn = "c_break_in_loop_head.in_a_condition_in_a_condition"
+// steps = [
+//   { call = "fn", args = { c = true }, status = 0, result = 1 },
+//   { call = "fn", args = { c = false }, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "a_loop_in_a_condition"
+// target = "host"
+// fn = "c_break_in_loop_head.a_loop_in_a_condition"
+// steps = [
+//   { call = "fn", args = { c = true }, status = 0, result = 101 },
+//   { call = "fn", args = { c = false }, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "leaves_a_while_true"
+// target = "host"
+// fn = "c_break_in_loop_head.leaves_a_while_true"
+// steps = [
+//   { call = "fn", args = { c = true }, status = 0, result = 7 },
+// ]
+
+// A `break` or a `continue` in the condition of a `while` or in the source of a `for` is of the loop around that
+// loop (spec §7), in C too: the C of a condition that needs statements stands in a C loop of that `while`, which a
+// plain `break;` would leave. A loop written in the condition keeps its own `break`.
+
+@export
+pub fn in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      if c {
+        break
+      }
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+@export
+pub fn in_a_source(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    for v in ({
+      if c {
+        break
+      }
+      [1, 2]
+    }) {
+      n = n + v
+    }
+    n = n + 10
+  }
+  n
+}
+
+@export
+pub fn in_an_end_of_a_range(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    for v in ({
+      if c {
+        break
+      }
+      0
+    }) ..< 2 {
+      n = n + v
+    }
+    n = n + 10
+  }
+  n
+}
+
+@export
+pub fn leaves_a_while_true(c: Bool) -> I32 {
+  while true {
+    while ({
+      if c {
+        break
+      }
+      false
+    }) {}
+  }
+  7
+}
+
+@export
+pub fn continue_in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      if c {
+        continue
+      }
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+@export
+pub fn in_a_condition_in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      while ({
+        if c {
+          break
+        }
+        false
+      }) {}
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+@export
+pub fn a_loop_in_a_condition(c: Bool) -> I32 {
+  var n: I32 = 0
+  while n < 3 {
+    n = n + 1
+    while ({
+      while c {
+        n = n + 100
+        break
+      }
+      if c {
+        continue
+      }
+      false
+    }) {}
+    n = n + 10
+  }
+  n
+}
+
+test "the same in the interpreter" {
+  assert in_a_condition(true) == 1
+  assert in_a_source(true) == 1
+  assert in_an_end_of_a_range(true) == 1
+  assert continue_in_a_condition(true) == 3
+  assert in_a_condition_in_a_condition(true) == 1
+  assert a_loop_in_a_condition(true) == 101
+  assert leaves_a_while_true(true) == 7
+}

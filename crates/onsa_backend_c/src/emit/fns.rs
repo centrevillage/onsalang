@@ -27,6 +27,21 @@ pub(crate) struct FnEmitter<'a, 'm> {
     guarded: Option<String>,
     /// The locals the body reads ([`Self::unread_use`]).
     read: HashSet<LocalId>,
+    /// The loops around the statement being emitted, the innermost last.
+    loops: Vec<LoopC>,
+    /// How many loops the body has opened: the number of the next one.
+    loops_opened: u32,
+}
+
+/// A loop while its C is written. The C of the condition of a `while` can stand in a C loop of that
+/// `while`, and a `break` or a `continue` written there is of the loop around it (§7), which a plain
+/// `break;` would not reach: it jumps to a label of that loop, written only if something jumps to it.
+struct LoopC {
+    number: u32,
+    /// The statement being emitted is in the condition of this loop.
+    in_condition: bool,
+    breaks_to_label: bool,
+    continues_to_label: bool,
 }
 
 impl<'a, 'm> FnEmitter<'a, 'm> {
@@ -44,6 +59,8 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             nrvo: None,
             guarded: None,
             read: HashSet::new(),
+            loops: Vec::new(),
+            loops_opened: 0,
         }
     }
 
@@ -172,6 +189,44 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     /// place of that decision.
     fn unread_use(&self, l: LocalId, cname: &str) -> Option<String> {
         (!self.read.contains(&l)).then(|| format!("(void){cname};"))
+    }
+
+    fn enter_loop(&mut self, in_condition: bool) {
+        self.loops_opened += 1;
+        let number = self.loops_opened;
+        self.loops.push(LoopC { number, in_condition, breaks_to_label: false, continues_to_label: false });
+    }
+
+    /// The body of the innermost loop, whose opening brace is written, its closing brace and its labels.
+    fn loop_body(&mut self, body: &Block) -> R<()> {
+        if let Some(l) = self.loops.last_mut() {
+            l.in_condition = false;
+        }
+        self.block_into(body, None)?;
+        let this = self.loops.pop().expect("the loop `enter_loop` opened");
+        if this.continues_to_label {
+            self.line(&format!("onsa_continue_{}:;", this.number));
+        }
+        self.close("}");
+        if this.breaks_to_label {
+            self.line(&format!("onsa_break_{}:;", this.number));
+        }
+        Ok(())
+    }
+
+    /// A `break`, or a `continue`: of the innermost loop whose condition this is not in (§7).
+    fn leave_loop(&mut self, is_break: bool) {
+        let word = if is_break { "break" } else { "continue" };
+        let own = self.loops.iter().rposition(|l| !l.in_condition);
+        match own.filter(|&i| i + 1 < self.loops.len()) {
+            None => self.line(&format!("{word};")),
+            Some(i) => {
+                let l = &mut self.loops[i];
+                *(if is_break { &mut l.breaks_to_label } else { &mut l.continues_to_label }) = true;
+                let number = l.number;
+                self.line(&format!("goto onsa_{word}_{number};"));
+            }
+        }
     }
 
     fn fresh_local(&mut self, l: LocalId) -> String {
@@ -361,6 +416,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let mark = self.out.len();
                 let saved_indent = self.indent;
                 self.indent += 1;
+                self.enter_loop(true);
                 let cs = self.expr(c)?;
                 let cond_stmts = self.out.split_off(mark);
                 self.indent = saved_indent;
@@ -371,9 +427,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                     self.out.push_str(&cond_stmts);
                     self.line(&format!("{} break;", if_(&format!("!({cs})"))));
                 }
-                self.block_into(b, None)?;
-                self.close("}");
-                Ok(())
+                self.loop_body(b)
             }
             StmtKind::ForRange(l, lo, hi, b) => {
                 let los = self.materialize(lo)?;
@@ -386,16 +440,15 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let name = self.fresh_local(*l);
                 self.locals.insert(*l, LocalC { lvalue: name.clone() });
                 self.open(&format!("for ({tn} {name} = {los}; {name} < {his}; {name}++) {{"));
-                self.block_into(b, None)?;
-                self.close("}");
-                Ok(())
+                self.enter_loop(false);
+                self.loop_body(b)
             }
             StmtKind::Break => {
-                self.line("break;");
+                self.leave_loop(true);
                 Ok(())
             }
             StmtKind::Continue => {
-                self.line("continue;");
+                self.leave_loop(false);
                 Ok(())
             }
             StmtKind::Return(None) => {
