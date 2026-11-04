@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.2", "§18.1"]
+
+// E0704, W5-03 U1/t, S-872, R-361 (§5.2: "`move` の引数で移した変数は、その引数を評価した時点で使えなくなる（§3.5 の左からの評価）。
+// 同じ呼び出しの後の引数で読むと E0704"; "所有する値の Affine のフィールドを消費する位置に置くと … `s` 全体を消費する … 以後 `s` は
+// 使えない（E0704）"; §4.4: `f.(x)` は要素を値で受ける): a value that went into the payload through the function value of a
+// constructor (`f.(move b)`) is moved and cannot be used again. Before the work the call took a borrow, so the value
+// stayed alive and `b.len()` after it, or the same value wrapped twice, was accepted (R-361: `x_value_then_use`,
+// `x_value_twice`). A later use is an error, the same value given in a second call of the same line is one, and the field
+// of an owned struct moves the whole struct. One error per function (P-01).
+
+pub enum Hold {
+  B(Buf[F32]),
+  C(U32),
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn used_after_the_call(move b: Buf[F32]) -> Hold {
+  let f = Hold.B
+  let h = f.(move b)
+  let _ = b.len()                                                //~ E0704
+  h
+}
+
+pub fn wrapped_twice_in_a_tuple(move b: Buf[F32]) -> (Hold, Hold) {
+  let f = Hold.B
+  (f.(move b), f.(move b))                                       //~ E0704
+}
+
+pub fn wrapped_twice_in_two_statements(move b: Buf[F32]) -> (Hold, Hold) {
+  let f = Hold.B
+  let h = f.(move b)
+  let g = f.(move b)                                             //~ E0704
+  (h, g)
+}
+
+pub fn passed_on_after_the_call(move b: Buf[F32]) -> Hold uses {Alloc} {
+  let f = Hold.B
+  let h = f.(move b)
+  take(move b)                                                   //~ E0704
+  h
+}
+
+pub fn the_field_of_an_owned_struct_moves_the_whole_struct(move s: Holder) -> (Hold, F32) {
+  let f = Hold.B
+  let h = f.(move s.buf)
+  (move h, s.gain)                                               //~ E0704
+}
+
+pub fn used_after_the_call_of_the_prelude_variant(move b: Buf[F32]) -> Option[Buf[F32]] {
+  let f: fn(move Buf[F32]) -> Option[Buf[F32]] = Some
+  let h = f.(move b)
+  let _ = b.len()                                                //~ E0704
+  h
+}
+
+pub fn the_same_after_the_call_of_a_function_value_that_is_a_parameter(g: fn(move Buf[F32]) -> Hold, move b: Buf[F32]) -> Hold {
+  let h = g.(move b)
+  let _ = b.len()                                                //~ E0704
+  h
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn fine(move b: Buf[F32]) -> Hold {
+  let f = Hold.B
+  let h = f.(move b)
+  h
+}

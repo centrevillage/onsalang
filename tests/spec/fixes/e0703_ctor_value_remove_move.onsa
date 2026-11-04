@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "24:11"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// W5-03 U1/t, S-872 (§5.2: "`move` の印は、所有が移って前の値が以後使えなくなる所（Affine 値）にだけ付ける。`move` 引数に渡す Dup 値 … には
+// `move` を書かず"; §4.4: the function value of a constructor takes its parameters as `move`): a `move` on a Copy value in the call
+// through the function value of a constructor is an E0703 at the operand of the `move`, and the one candidate removes the
+// `move`. After it the file is clean (`clean`). One diagnostic in the file, because `clean` is about the whole file
+// (tests/README.md). The other forms are in negative/ctor_fn_value_call_candidates.onsa.
+
+pub enum Hold {
+  B(Buf[F32]),
+  C(U32),
+}
+
+pub fn wrap(n: U32) -> Hold {
+  let f = Hold.C
+  f.(move n) //~ E0703
+}

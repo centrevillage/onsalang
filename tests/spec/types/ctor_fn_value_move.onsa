@@ -1,0 +1,216 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.1", "§8.1", "§9.1", "§5.2"]
+
+// W5-03 U1/t, S-872 (§4.4: "タプル形の列挙子は、捕捉の無い関数値（`Circle` は `rt fn(move F32) -> Shape`）としても
+// 使える … 関数値の引数は `move` で、`f.(x)` は直接の呼び出し `Shape.Circle(x)` と同じく要素を値で受ける（§5.2）。
+// 確保も破棄もしないので `rt` である"): the constructor of a tuple-form variant is a function value whose parameters
+// are `move` and which is `rt`. So it fits a function type with `move` parameters (§8.1: the parameter types of the
+// two function types are equal, and an `rt` function is used where a function that is not `rt` is wanted, and in an
+// `rt` position) and does not fit one of the default mode (negative/ctor_fn_value_default_mode.onsa). The same for
+// the variants of the prelude (`Some`, `Ok`, `Err`, §4.1) and of a generic enum, and for a variant whose payload is
+// Affine (`Hold.B(Buf[F32])`). Used as an argument, in a `let` (with and without the annotation), in a field, as the
+// result of a function, in a branch, in `map_err` (§9.1), and inside an `rt` function. The calls through the value
+// write no `move` on a Copy payload (§5.2) and `move` on an owned Affine one.
+// Checked, not run (the lowering of a call through a function value is the work W8-09).
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Point,
+}
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub enum Top {
+  Failed(High),
+}
+
+pub enum Hold {
+  B(Buf[F32]),
+  C(U32),
+}
+
+pub enum Slot[T: ?Dup] {
+  Full(T),
+  Empty,
+}
+
+pub struct Maker {
+  make: fn(move F32) -> Shape,
+}
+
+pub struct RtMaker {
+  make: rt fn(move F32) -> Shape,
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn apply(f: fn(move F32) -> Shape, x: F32) -> Shape {
+  f.(x)
+}
+
+pub rt fn apply_rt(f: rt fn(move F32) -> Shape, x: F32) -> Shape {
+  f.(x)
+}
+
+pub fn apply_two(f: fn(move F32, move F32) -> Shape, x: F32, y: F32) -> Shape {
+  f.(x, y)
+}
+
+pub fn build_hold(f: fn(move Buf[F32]) -> Hold, move b: Buf[F32]) -> Hold {
+  f.(move b)
+}
+
+pub rt fn circle_item(move r: F32) -> Shape {
+  Shape.Circle(r)
+}
+
+// ---- the places of a function type with `move` parameters ----
+
+pub fn as_an_argument() -> Shape {
+  apply(Shape.Circle, 1.0)
+}
+
+pub fn as_an_argument_of_an_rt_parameter() -> Shape {
+  apply_rt(Shape.Circle, 1.0)
+}
+
+pub fn as_an_argument_with_two_payloads() -> Shape {
+  apply_two(Shape.Rect, 1.0, 2.0)
+}
+
+pub fn in_a_let_without_the_annotation() -> Shape {
+  let f = Shape.Circle
+  f.(2.0)
+}
+
+pub fn in_a_let_with_the_annotation() -> Shape {
+  let f: fn(move F32) -> Shape = Shape.Circle
+  f.(2.0)
+}
+
+pub fn in_a_let_with_the_rt_annotation() -> Shape {
+  let f: rt fn(move F32) -> Shape = Shape.Circle
+  f.(2.0)
+}
+
+pub fn with_two_payloads_in_a_let() -> Shape {
+  let f: fn(move F32, move F32) -> Shape = Shape.Rect
+  f.(1.0, 2.0)
+}
+
+pub fn in_a_field() -> Shape {
+  let m = Maker { make: Shape.Circle }
+  m.make.(3.0)
+}
+
+pub fn in_a_field_of_an_rt_type() -> Shape {
+  let m = RtMaker { make: Shape.Circle }
+  m.make.(3.0)
+}
+
+pub fn as_the_result_of_a_function() -> fn(move F32) -> Shape {
+  Shape.Circle
+}
+
+pub fn as_the_result_of_an_rt_function() -> rt fn(move F32) -> Shape {
+  Shape.Circle
+}
+
+pub fn the_result_called() -> Shape {
+  as_the_result_of_a_function().(4.0)
+}
+
+pub fn in_a_branch(c: Bool) -> Shape {
+  let f = if c { Shape.Circle } else { circle_item }
+  f.(5.0)
+}
+
+pub rt fn inside_an_rt_function(x: F32) -> Shape {
+  let f = Shape.Circle
+  f.(x)
+}
+
+// ---- the variants of the prelude ----
+
+pub fn some_in_a_let() -> Option[U32] {
+  let f: fn(move U32) -> Option[U32] = Some
+  f.(5)
+}
+
+pub fn some_in_a_let_without_the_annotation() -> Option[U32] {
+  let f = Some
+  f.(5)
+}
+
+pub fn ok_in_a_let() -> Result[U32, Low] {
+  let f: fn(move U32) -> Result[U32, Low] = Ok
+  f.(5)
+}
+
+pub fn err_in_a_let() -> Result[U32, Low] {
+  let f: fn(move Low) -> Result[U32, Low] = Err
+  f.(Low.Bad)
+}
+
+pub fn some_as_an_rt_value() -> Option[U32] {
+  let f: rt fn(move U32) -> Option[U32] = Some
+  f.(5)
+}
+
+// ---- a generic enum, and an Affine payload ----
+
+pub fn generic_variant_with_the_annotation() -> Slot[U32] {
+  let f: fn(move U32) -> Slot[U32] = Slot.Full
+  f.(3)
+}
+
+pub fn generic_variant_with_an_affine_type(move b: Buf[F32]) -> Slot[Buf[F32]] {
+  let f: fn(move Buf[F32]) -> Slot[Buf[F32]] = Slot.Full
+  f.(move b)
+}
+
+pub fn affine_variant_in_a_let(move b: Buf[F32]) -> Hold {
+  let f = Hold.B
+  f.(move b)
+}
+
+pub fn affine_variant_as_an_argument(move b: Buf[F32]) -> Hold {
+  build_hold(Hold.B, move b)
+}
+
+pub fn copy_variant_of_a_mixed_enum() -> Hold {
+  let f = Hold.C
+  f.(7)
+}
+
+// ---- the converter of `map_err` ----
+
+pub fn alone() -> Result[U32, High] {
+  read_low().map_err(High.Wrapped)
+}
+
+pub fn before_the_question_mark() -> Result[U32, High] {
+  let n = read_low().map_err(High.Wrapped)?
+  Ok(n + 1)
+}
+
+pub fn in_a_chain() -> Result[U32, Top] {
+  read_low().map_err(High.Wrapped).map_err(Top.Failed)
+}
+
+pub fn through_a_binding() -> Result[U32, High] {
+  let wrap = High.Wrapped
+  read_low().map_err(wrap)
+}

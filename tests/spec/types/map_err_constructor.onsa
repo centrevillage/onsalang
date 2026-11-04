@@ -2,16 +2,14 @@
 // [test]
 // spec = ["§9.1", "§4.4", "§5.2"]
 
-// W5-02 U6/t, S-143: the constructor of a tuple-form variant is a function value that captures nothing (§4.4: "タプル形の
-// 列挙子は、捕捉の無い関数値（`Circle` は `fn(F32) -> Shape`）としても使える（Rust と同じ。例: `map_err(ConfigError.Io)`）"),
-// and the example of §9.1 passes one to `map_err`: `Fs.read(path).map_err(ConfigError.Io)?`. So the conversion of an
-// error into a variant that holds it is written with the name of the variant. Used alone, before `?`, and in a
-// chain. Checked, not run (the lowering of a call through a function value is the work W8-09).
-//
-// The type of `ConfigError.Io` is written `fn(IoError) -> ConfigError` in §4.4 and the parameter of `map_err` is
-// `fn(move E) -> F` in §9.1; whether the first fits the second is a gap of the spec (reported as NEW in the report
-// of this work). The cases here are what the two sentences say together; the function whose parameter has the
-// default mode (`fn code(e: Low)`) in the place of a constructor is not written.
+// W5-02 U6/t, S-143, S-872 (W5-03 U1/t): the constructor of a tuple-form variant is a function value that captures nothing (§4.4: "タプル形の
+// 列挙子は、捕捉の無い関数値（`Circle` は `rt fn(move F32) -> Shape`）としても使える（Rust と同じ。例: `map_err(ConfigError.Io)`）。関数値の引数は
+// `move` で … 確保も破棄もしないので `rt` である"), and the example of §9.1 passes one to `map_err`: `Fs.read(path).map_err(ConfigError.Io)?`.
+// The parameter of `map_err` is `fn(move E) -> F` (§9.1) and the constructor is `rt fn(move E) -> F`, so it fits (§8.1: the parameter types are
+// equal, and an `rt` function is used where one that is not `rt` is wanted). So the conversion of an error into a variant that holds it is
+// written with the name of the variant. Used alone, before `?`, and in a chain. A function of the default mode (`fn code(e: Low)`) in the
+// place of a constructor is an E0401 (negative/ctor_fn_value_default_mode.onsa, negative/lambda_move_no_candidate.onsa). Checked, not run (the
+// lowering of a call through a function value is the work W8-09).
 
 pub enum Low {
   Bad,

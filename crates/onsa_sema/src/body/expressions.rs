@@ -2,6 +2,7 @@
 //! closures and operators.
 
 use super::*;
+use onsa_diag::Edit;
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ expressions
@@ -484,6 +485,8 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
+        // Read here: the body checks arguments of its own.
+        let is_arg = self.arg_closure == Some(e);
         let exp_fn: Option<FnTy> = expected.and_then(|t| match self.ty(self.shallow(t)) {
             Ty::Fn(f) => Some(f),
             _ => None,
@@ -558,7 +561,37 @@ impl<'a> Checker<'a> {
         })();
         self.frames.pop();
         r?;
-        Ok(self.a.types.intern(Ty::Fn(FnTy { rt, params: ptys, ret: ret_ty, effects })))
+        let t = self.a.types.intern(Ty::Fn(FnTy { rt, params: ptys, ret: ret_ty, effects }));
+        if is_arg && let (Some(f), Some(exp)) = (&exp_fn, expected) {
+            self.unify_arg_closure(span, params, t, f, exp)?;
+        }
+        Ok(t)
+    }
+
+    /// Unify the type `t` of an anonymous function written directly as an
+    /// argument with the expected `exp`, which is the function type `f`. Its
+    /// E0401 has a candidate when only the modes keep them apart, and each
+    /// difference is a parameter of the default mode where `move` is expected
+    /// (§8.1, S-872): the one fix adds `move` to all of them. A fix leaves
+    /// fewer such parameters, so the candidates end; §5.2 judges the result.
+    fn unify_arg_closure(&mut self, span: Span, params: &[Param], t: TyId, f: &FnTy, exp: TyId) -> R<()> {
+        let Some(d) = self.mismatch_at(span, t, exp) else { return Ok(()) };
+        let Ty::Fn(mut written) = self.ty(t) else { unreachable!("an anonymous function has a function type") };
+        let mut edits = Vec::new();
+        for ((p, (mode, _)), &(wanted, _)) in params.iter().zip(&mut written.params).zip(&f.params) {
+            match (*mode, wanted, &p.name) {
+                (m, w, _) if m == w => continue,
+                (Mode::Borrow, Mode::Move, ParamName::Ident(Ident { span: at, .. }) | ParamName::Wild(at)) => {
+                    edits.push(Edit::insert(at.file, at.start, "move "));
+                }
+                _ => return Err(self.diag(d)),
+            }
+            *mode = wanted;
+        }
+        let marked = self.a.types.intern(Ty::Fn(written));
+        let cause = self.cause(span, None);
+        let fits = self.infer.unify(&mut self.a.types, marked, exp, &cause).is_ok();
+        Err(self.diag(if fits { d.with_fix(Fix::new("add `move`", edits)) } else { d }))
     }
 
     /// One operator of a chain (the tree of §3.1): the left operand, the

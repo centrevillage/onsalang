@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§6.1", "§4.1", "§9.1", "§18.1"]
+// fixes = 0
+
+// E0401 with no candidate, W5-03 U1/t, S-872 (§8.1: the candidate that adds `move` is for "引数の位置に直接書いた無名関数が、期待する関数型と引数のモードだけ違う（引数の数と型は
+// 一致し、期待が `move` で、書いたのが既定のモード）" E0401; "`move` を消す向きと `inout`、項目・構築子・変数、注釈の位置（`let f: fn(move U32) -> H = fn(e: U32) …`）には候補を出さない"): the
+// error is the same E0401 and `fixes = 0` says there is no candidate when the expected type has the default mode and the written one `move`, when `inout` is in
+// either, when the value is the name of a function of the program (also one of the default mode given to `map_err`), a variable that holds an anonymous function,
+// or an anonymous function in the place of the annotation of a `let`, and when the type of the parameter is not the expected one (adding `move` would not make it fit).
+// The constructors are in negative/ctor_fn_value_default_mode.onsa. One error per function (P-01); the last functions are fine.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn call(f: fn(U32) -> U32, x: U32) -> U32 {
+  f.(x)
+}
+
+pub fn apply(f: fn(move U32) -> U32, x: U32) -> U32 {
+  f.(x)
+}
+
+pub fn call_inout(f: fn(inout U32), inout x: U32) {
+  f.(inout x)
+}
+
+pub fn convert_by_borrow(e: Low) -> High {
+  High.Wrapped(e)
+}
+
+pub fn convert(move e: Low) -> High {
+  High.Wrapped(e)
+}
+
+// ---------------------------------------------------------------- the direction and the modes
+
+pub fn move_where_the_default_is_expected() -> U32 {
+  call(fn(move k: U32) -> U32 { k + 1 }, 2)                      //~ E0401
+}
+
+pub fn inout_where_move_is_expected() -> U32 {
+  apply(fn(inout k: U32) -> U32 { k }, 2)                        //~ E0401
+}
+
+pub fn the_default_where_inout_is_expected(inout n: U32) {
+  call_inout(fn(k: U32) {}, inout n)                             //~ E0401
+}
+
+pub fn move_where_inout_is_expected(inout n: U32) {
+  call_inout(fn(move k: U32) {}, inout n)                        //~ E0401
+}
+
+// ---------------------------------------------------------------- what is not an anonymous function written as the argument
+
+pub fn a_function_of_the_default_mode_given_to_map_err() -> Result[U32, High] {
+  read_low().map_err(convert_by_borrow)                          //~ E0401
+}
+
+pub fn a_function_of_the_default_mode_given_to_a_function() -> U32 {
+  apply(call_one, 2)                                             //~ E0401
+}
+
+pub fn a_variable_that_holds_an_anonymous_function() -> Result[U32, High] {
+  let f = fn(e: Low) -> High { High.Wrapped(e) }
+  read_low().map_err(f)                                          //~ E0401
+}
+
+pub fn the_place_of_the_annotation_of_a_let() -> U32 {
+  let f: fn(move U32) -> U32 = fn(k: U32) -> U32 { k + 1 }       //~ E0401
+  f.(1)
+}
+
+pub fn call_one(k: U32) -> U32 {
+  k + 1
+}
+
+// ---------------------------------------------------------------- the type of the parameter is not the expected one
+
+pub fn another_parameter_type() -> Result[U32, High] {
+  read_low().map_err(fn(e: U32) -> High { High.Other })          //~ E0401
+}
+
+pub fn another_parameter_type_given_to_a_function() -> U32 {
+  apply(fn(k: Bool) -> U32 { 1 }, 2)                             //~ E0401
+}
+
+// ---------------------------------------------------------------- not written directly at the argument, or more than the modes differ
+
+pub fn in_parentheses() -> U32 {
+  apply((fn(k: U32) -> U32 { k + 1 }), 2)                        //~ E0401
+}
+
+pub fn another_result_type() -> U32 {
+  apply(fn(k: U32) -> Bool { true }, 2)                          //~ E0401
+}
+
+// ---------------------------------------------------------------- the forms that are fine
+
+pub fn fine_the_mode_that_is_expected() -> Result[U32, High] {
+  read_low().map_err(fn(move e: Low) -> High { High.Wrapped(e) })
+}
+
+pub fn fine_the_default_where_it_is_expected() -> U32 {
+  call(fn(k: U32) -> U32 { k + 1 }, 2)
+}
+
+pub fn fine_a_function_that_takes_move() -> Result[U32, High] {
+  read_low().map_err(convert)
+}

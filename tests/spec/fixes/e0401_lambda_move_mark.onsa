@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§6.1", "§5.2", "§9.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "33:22"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// W5-03 U1/t, S-872 (§8.1: "引数の位置に直接書いた無名関数が、期待する関数型と引数のモードだけ違う（引数の数と型は一致し、期待が `move` で、書いたのが
+// 既定のモード）E0401 は、その引数に `move` を足す修正候補を示す"; §6.1: 無名関数の引数のモードは期待する型から推論せず、書いた形で決まる): an anonymous function
+// written directly as the argument of `map_err`, whose parameter has the default mode where `f: fn(move E) -> F` expects `move` and whose number and type of
+// parameters are the same, is an E0401 with one candidate that adds `move` to the parameter. After it the parameter is an owned Copy value (§5.2) and the file
+// is clean (`clean`). One diagnostic in the file, because `clean` is about the whole file (tests/README.md). The other forms with a candidate (the types left
+// out, before `?`, in a chain, an argument of a function of the program, two parameters, a nested one) are in negative/lambda_move_candidates.onsa.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn lift() -> Result[U32, High] {
+  read_low().map_err(fn(e: Low) -> High { High.Wrapped(e) }) //~ E0401
+}

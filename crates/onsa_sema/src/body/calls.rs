@@ -427,6 +427,8 @@ impl<'a> Checker<'a> {
             let planar = matches!(coerce, Some((_, Some(_))));
             match coerce {
                 None => {
+                    let kind = &self.expr(arg.expr).kind;
+                    self.arg_closure = matches!(kind, ExprKind::Closure { .. }).then_some(arg.expr);
                     self.with_why(why.clone(), pt, |ck| ck.check_expr(arg.expr, Some(pt)))?;
                 }
                 Some((elem, planar)) => {

@@ -250,7 +250,7 @@ impl<'a> Checker<'a> {
                     enum_ty
                 } else {
                     let params: Vec<(Mode, TyId)> =
-                        variant.fields.iter().map(|&f| (Mode::Borrow, self.a.types.subst(f, &args))).collect();
+                        variant.fields.iter().map(|&f| (Mode::Move, self.a.types.subst(f, &args))).collect();
                     self.a.types.intern(Ty::Fn(FnTy { rt: true, params, ret: enum_ty, effects: Default::default() }))
                 };
                 if let Some(exp) = expected {
@@ -281,7 +281,7 @@ impl<'a> Checker<'a> {
                     };
                     let fty = self.a.types.intern(Ty::Fn(FnTy {
                         rt: true,
-                        params: vec![(Mode::Borrow, param)],
+                        params: vec![(Mode::Move, param)],
                         ret,
                         effects: Default::default(),
                     }));

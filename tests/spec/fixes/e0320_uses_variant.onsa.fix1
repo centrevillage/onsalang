@@ -35,7 +35,7 @@ impl Shape {
   }
 }
 
-fn apply(f: fn(F32) -> Shape, x: F32) -> Shape {
+fn apply(f: fn(move F32) -> Shape, x: F32) -> Shape {
   f.(x)
 }
 

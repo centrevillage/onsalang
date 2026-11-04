@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.1", "§8.1", "§18.1"]
+// fixes = 0
+
+// E0401, W5-03 U1/t, S-872 (§4.4: the constructor of a tuple-form variant is `rt fn(move F32) -> Shape`; §4.1: "関数型の
+// 引数のモード（`inout`、`move`）は型の一部"; §8.1: "引数と返り値の型が等しい"): the mode of a parameter is a part of the
+// function type, so the constructor does not fit a function type whose parameter has the default mode, or `inout`, or
+// another number or type of parameters. The places are those of §8.1 (an argument, an annotated `let`, the field of a
+// struct, the result of a function). The prelude variants (`Some`, `Ok`, `Err`) and the variant of a generic enum are the same.
+// The error has no candidate (`fixes = 0`: "項目・構築子・変数には出さない", §8.1): a constructor cannot be written
+// again with another mode. The right forms are in types/ctor_fn_value_move.onsa. One error per function (P-01); the
+// last function is fine.
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Point,
+}
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum Slot[T: ?Dup] {
+  Full(T),
+  Empty,
+}
+
+pub struct Maker {
+  make: fn(F32) -> Shape,
+}
+
+pub fn apply(f: fn(F32) -> Shape, x: F32) -> Shape {
+  f.(x)
+}
+
+pub fn apply_inout(f: fn(inout F32) -> Shape, inout x: F32) -> Shape {
+  f.(inout x)
+}
+
+pub fn apply_move(f: fn(move F32) -> Shape, x: F32) -> Shape {
+  f.(x)
+}
+
+// ---------------------------------------------------------------- the default mode
+
+pub fn as_an_argument() -> Shape {
+  apply(Shape.Circle, 1.0)                                       //~ E0401
+}
+
+pub fn in_an_annotated_let() -> Shape {
+  let f: fn(F32) -> Shape = Shape.Circle                         //~ E0401
+  f.(1.0)
+}
+
+pub fn with_two_payloads() -> Shape {
+  let f: fn(F32, F32) -> Shape = Shape.Rect                      //~ E0401
+  f.(1.0, 2.0)
+}
+
+pub fn with_one_of_two_payloads_in_the_default_mode() -> Shape {
+  let f: fn(move F32, F32) -> Shape = Shape.Rect                 //~ E0401
+  f.(1.0, 2.0)
+}
+
+pub fn in_a_field() -> Shape {
+  let m = Maker { make: Shape.Circle }                           //~ E0401
+  m.make.(1.0)
+}
+
+pub fn as_the_result_of_a_function() -> fn(F32) -> Shape {
+  Shape.Circle                                                   //~ E0401
+}
+
+pub fn some_in_an_annotated_let() -> Option[U32] {
+  let f: fn(U32) -> Option[U32] = Some                           //~ E0401
+  f.(1)
+}
+
+pub fn ok_in_an_annotated_let() -> Result[U32, Low] {
+  let f: fn(U32) -> Result[U32, Low] = Ok                        //~ E0401
+  f.(1)
+}
+
+pub fn err_in_an_annotated_let() -> Result[U32, Low] {
+  let f: fn(Low) -> Result[U32, Low] = Err                       //~ E0401
+  f.(Low.Bad)
+}
+
+pub fn a_generic_variant_in_an_annotated_let() -> Slot[U32] {
+  let f: fn(U32) -> Slot[U32] = Slot.Full                        //~ E0401
+  f.(1)
+}
+
+// ---------------------------------------------------------------- inout, and other types
+
+pub fn as_an_inout_argument(inout x: F32) -> Shape {
+  apply_inout(Shape.Circle, inout x)                             //~ E0401
+}
+
+pub fn with_another_number_of_parameters() -> Shape {
+  let f: fn(move F32, move F32) -> Shape = Shape.Circle          //~ E0401
+  f.(1.0, 2.0)
+}
+
+pub fn with_another_parameter_type() -> Shape {
+  let f: fn(move U32) -> Shape = Shape.Circle                    //~ E0401
+  f.(1)
+}
+
+pub fn with_another_result_type() -> Mode {
+  let f: fn(move F32) -> Mode = Shape.Circle                     //~ E0401
+  f.(1.0)
+}
+
+// ---------------------------------------------------------------- the right forms
+
+pub fn fine() -> Shape {
+  apply_move(Shape.Circle, 1.0)
+}

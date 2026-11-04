@@ -513,7 +513,7 @@ fn span_parameters_accept_arrays_and_bufs() {
 #[test]
 fn enums_options_results_and_try() {
     ok(
-        "pub enum Shape { Circle(F32), Unit }\npub fn g() -> Shape { Shape.Circle(1.0) }\npub fn h() -> Shape { Shape.Unit }\npub fn k() -> fn(F32) -> Shape { Shape.Circle }\n",
+        "pub enum Shape { Circle(F32), Unit }\npub fn g() -> Shape { Shape.Circle(1.0) }\npub fn h() -> Shape { Shape.Unit }\npub fn k() -> fn(move F32) -> Shape { Shape.Circle }\n",
     );
     ok(
         "pub fn f(o: Option[U8]) -> Option[U8] { let n = o?\n Some(n + 1) }\npub fn g(r: Result[U8, Str]) -> Result[U32, Str] { let n = r?\n Ok(n as U32) }\n",
@@ -784,6 +784,29 @@ fn the_note_of_an_argument_names_the_callee_it_can() {
     let chain = "pub struct W { }\nimpl W {\n  pub fn me(self, n: U32) -> W {\n    W { }\n  }\n  pub fn go[T: Num](self, x: T) -> U32 {\n    1\n  }\n}\n";
     ends(format!("{chain}pub fn f(w: W) -> U32 {{\n  w.me(1).go(true)\n}}\n"), "here as an argument of `go`");
     ends(format!("{chain}pub fn f(w: W) -> U32 {{\n  w.go(true)\n}}\n"), "here as an argument of `w.go`");
+    // The receiver is a call: the name is of the method, not of the receiver's
+    // callee (R-362), with a parameter that a function type decides.
+    let mapped = "pub struct R { }\nimpl R {\n  pub fn conv[F](self, f: fn(U32) -> F) -> U32 {\n    1\n  }\n}\n\
+        pub struct H {\n  b: Buf[F32],\n}\nfn mk() -> R {\n  R { }\n}\nfn full(n: U32) -> H {\n  full(n)\n}\n";
+    ends(format!("{mapped}pub fn f() -> U32 {{\n  mk().conv(full)\n}}\n"), "here as an argument of `conv`");
+    ends(format!("{mapped}pub fn f(r: R) -> U32 {{\n  r.conv(full)\n}}\n"), "here as an argument of `r.conv`");
+}
+
+/// The candidate of an anonymous function written as an argument (§8.1): of
+/// the outer one when its body has arguments of its own, of a `_` parameter;
+/// none when more than the modes differ.
+#[test]
+fn an_anonymous_function_at_an_argument_has_the_candidate_of_move() {
+    let candidates = |arg: &str| {
+        let ap = "fn ap(f: fn(move U32) -> U32, x: U32) -> U32 {\n  f.(x)\n}\n";
+        let src = format!("{ap}pub fn run() -> U32 {{\n  ap({arg}, 2)\n}}\n");
+        let d = check_in(&src, true).diagnostics.remove(0);
+        assert_eq!(d.code, Code::E0401, "{src}");
+        d.fixes.len()
+    };
+    assert_eq!(candidates("fn(k: U32) -> U32 { ap(fn(move j: U32) -> U32 { j }, k) }"), 1);
+    assert_eq!(candidates("fn(_: U32) -> U32 { 1 }"), 1);
+    assert_eq!(candidates("fn(k: U32) -> U32 uses {Alloc} { k }"), 0);
 }
 
 /// The messages of the requirements of a type a later statement decides show
@@ -806,14 +829,9 @@ fn a_requirement_shows_what_is_decided_and_what_can_be_done() {
         assert_eq!(d.message, "the element type of `Buf` must be Copy; `H` is not (§4.5)", "{body}");
     }
     // A parameter of std's is not one the user declares `?Dup`.
-    let of_std = check_in(
-        &format!(
-            "{held}fn conv(move s: Str) -> H {{\n  conv(s)\n}}\npub fn f(move r: Result[I32, Str]) {{\n  let _ = r.map_err(conv)\n}}\n"
-        ),
-        true,
-    );
-    let d = of_std.diagnostics.iter().rfind(|d| d.code == Code::E0416).expect("E0416");
-    assert_eq!(d.message, "`H` is not Copy or Shared, so it does not satisfy `F: Dup` of `map_err` (§4.5)");
+    let of_std = "use std.test.{Gen}\npub struct H {\n  b: Buf[F32],\n}\npub fn f(g: Gen[H]) {\n}\n";
+    let d = check_in(of_std, true).diagnostics.remove(0);
+    assert_eq!(d.message, "`H` is not Copy or Shared, so it does not satisfy `T: Dup` of `Gen` (§4.5)");
     let user = check_in(&format!("{held}fn own[T](x: T) {{ }}\npub fn f(move h: H) {{\n  own(h)\n}}\n"), true);
     let d = user.diagnostics.iter().rfind(|d| d.code == Code::E0416).expect("E0416");
     assert!(d.message.contains("unless it is declared `T: ?Dup`"), "{}", d.message);

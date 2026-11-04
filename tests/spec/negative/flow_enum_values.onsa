@@ -6,7 +6,7 @@
 // expressions of a flow body has "列挙子の構築（`Some(x)`、`None`、`Mode.Gain(g)`。列挙子を関数値として使う
 // 形は、関数値なので書けない）", and function values are not in the list ("関数値、クロージャ … は書け
 // ない（E0806）"). A tuple-form variant is a function value when it is written without its call
-// (§4.4: `Circle` is `fn(F32) -> Shape`); a unit variant is a value and `Mode.Off` is fine. One error
+// (§4.4: `Circle` is `rt fn(move F32) -> Shape`, S-872); a unit variant is a value and `Mode.Off` is fine. One error
 // per flow (P-01); the marker is on the line of the variant.
 
 pub enum Mode {
@@ -20,10 +20,10 @@ pub struct Config {
 }
 
 pub struct Maker {
-  make: fn(F32) -> Mode,
+  make: fn(move F32) -> Mode,
 }
 
-pub rt fn apply(f: fn(F32) -> Mode, x: F32) -> Mode {
+pub rt fn apply(f: fn(move F32) -> Mode, x: F32) -> Mode {
   Mode.Gain(x)
 }
 

@@ -4,8 +4,9 @@
 // spec = ["§4.4", "§6.1", "§5.2", "§9.1"]
 
 // A tuple-form variant is a function value in an ordinary function (§4.4: "タプル形の列挙子は、捕捉の
-// 無い関数値（`Circle` は `fn(F32) -> Shape`）としても使える"; §6.1: a function value is called with
-// `.(`), a unit variant is a value. This is the contrast to a flow body, where the variant as a
+// 無い関数値（`Circle` は `rt fn(move F32) -> Shape`）としても使える"; §6.1: a function value is called with
+// `.(`; S-872: the parameters of the value are `move`, so the function types that take it are written with
+// `move`), a unit variant is a value. This is the contrast to a flow body, where the variant as a
 // function value is E0806 (S-195, negative/flow_enum_values.onsa). The calls `Mode.Gain(x)` and
 // `Some(x)` are the construction in both worlds.
 
@@ -35,7 +36,7 @@ fn code(f: Failure) -> U32 {
   }
 }
 
-fn build(make: fn(F32) -> Mode, x: F32) -> Mode {
+fn build(make: fn(move F32) -> Mode, x: F32) -> Mode {
   make.(x)
 }
 
@@ -67,7 +68,7 @@ test "a variant with two payloads as a function value is a function of two argum
 }
 
 test "Some as a function value" {
-  let wrap: fn(U32) -> Option[U32] = Some
+  let wrap: fn(move U32) -> Option[U32] = Some
   assert wrap.(5).unwrap() == 5
 }
 

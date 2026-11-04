@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "25:6"
+// code = "E0703"
+// candidate = 1
+// clean = true
+
+// W5-03 U1/t, S-872, R-361 (§5.2: "`f(move x)`（Affine 値。Dup 値は `f(x)`）"; §4.4: the function value of a constructor takes its parameters as
+// `move` and `f.(x)` "は直接の呼び出し `Shape.Circle(x)` と同じく要素を値で受ける"): an owned Affine value without the mark in the
+// call through the function value of a constructor is an E0703 at the argument, and the one candidate inserts `move`. After it
+// the file is clean (`clean`): the value is moved into the payload. One diagnostic in the file, because `clean` is about the
+// whole file (tests/README.md). The same diagnostic of a call through the constructor, with the other forms, is in
+// negative/ctor_fn_value_call_candidates.onsa.
+
+pub enum Hold {
+  B(Buf[F32]),
+  C(U32),
+}
+
+pub fn wrap(move b: Buf[F32]) -> Hold uses {Alloc} {
+  let f = Hold.B
+  f.(b) //~ E0703
+}

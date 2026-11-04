@@ -445,9 +445,9 @@ note = "無名関数の中の ? と return の脱出（§6.1、§9.1、S-192）�
 [[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/try_map_err.onsa"
-reasons = ["S-71", "S-872"]
+reasons = ["S-191"]
 until = "W8-09"
-note = "構築子 Wrapped.Parse が map_err の f: fn(move E) -> F と合わない（E0401、S-872）。合う読みに決まった後は、map_err の本体の関数値の呼び出しの降下（E0200、W8-09）"
+note = "map_err の本体の関数値の呼び出しの降下（E0200、W8-09）"
 
 [[pending]]
 kind = "test-case"
@@ -629,9 +629,9 @@ note = "process_inplace の生成の条件と、flow の名前空間に無い項
 [[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/enum_variant_values.onsa"
-reasons = ["S-191", "S-71", "S-872"]
+reasons = ["S-191"]
 until = "W8-09"
-note = "構築子 Failure.Io が map_err の f: fn(move E) -> F と合わない（E0401、S-872）。合う読みに決まった後は、関数値の降下（E0200、W8-09）"
+note = "関数値の降下（E0200、W8-09）"
 
 # --- W3-02/t: 修正候補の期待値（tests/spec/fixes/、断片の fixes = N と事例の隣の .fixK。2026-10-08）。
 # 候補を当てた結果と .fixK は、空白の幅を無視し、空白以外の各トークン（改行とコメントを含む）の種類と字面と、
@@ -1499,13 +1499,6 @@ until = "W9-03"
 note = "BITS を含む演算の長さと計算した定数の長さが E0200（expressions as array lengths・constants computed by expressions）"
 
 # --- W5-02 U6（2026-11-03）
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/map_err_constructor.onsa"
-reasons = ["S-872"]
-until = "W5-03"
-note = "構築子を map_err に渡す形が f: fn(move E) -> F（§9.1 の宣言）と合わず E0401（S-872 の決定を待つ）"
 
 [[pending]]
 kind = "test-case"

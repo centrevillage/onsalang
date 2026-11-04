@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.2", "§5.4", "§18.1"]
+// fixes = 0
+
+// E0711, W5-03 U1/t, S-872, R-361 (§5.2: "Affine 値は所有していなければ `move` で渡せない。借用引数、借用束縛、`inout` 引数は所有
+// していない。その場所を `move` 引数に置くと、印の有無によらず修正候補の無い E0711"; §4.4: `f.(x)` "は直接の呼び出し
+// `Shape.Circle(x)` と同じく要素を値で受ける"): a borrowed (or `inout`) Affine value is not put in the payload through the
+// function value of a constructor, with the mark and without it, and the path of a field of a borrowed struct the same. The
+// error has no candidate (`fixes = 0`: what has to change is the mode of the parameter or the caller, §5.2). The direct
+// call `Hold.B(b)` and an anonymous function that builds the variant are the same error, and are the forms the function
+// value had to agree with (R-361: before the work, `f.(b)` gave a borrowed Buf to a value that is returned, and
+// `(f.(b), f.(b))` wrapped the same Buf twice; the pair is not written here because it is two errors). One error per
+// function (P-01).
+
+pub enum Hold {
+  B(Buf[F32]),
+  C(U32),
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn a_borrowed_value(b: Buf[F32]) -> Hold {
+  let f = Hold.B
+  f.(b)                                                          //~ E0711
+}
+
+pub fn a_borrowed_value_with_the_mark(b: Buf[F32]) -> Hold {
+  let f = Hold.B
+  f.(move b)                                                     //~ E0711
+}
+
+pub fn an_inout_value(inout b: Buf[F32]) -> Hold {
+  let f = Hold.B
+  f.(b)                                                          //~ E0711
+}
+
+pub fn the_field_of_a_borrowed_struct(s: Holder) -> Hold {
+  let f = Hold.B
+  f.(s.buf)                                                      //~ E0711
+}
+
+pub fn the_variant_of_the_prelude(b: Buf[F32]) -> Option[Buf[F32]] {
+  let f: fn(move Buf[F32]) -> Option[Buf[F32]] = Some
+  f.(b)                                                          //~ E0711
+}
+
+pub fn the_function_value_of_a_parameter(g: fn(move Buf[F32]) -> Hold, b: Buf[F32]) -> Hold {
+  g.(b)                                                          //~ E0711
+}
+
+pub fn the_direct_call(b: Buf[F32]) -> Hold {
+  Hold.B(b)                                                      //~ E0711
+}
+
+pub fn an_anonymous_function_that_builds_the_variant(b: Buf[F32]) -> Hold {
+  let f = fn(x: Buf[F32]) -> Hold { Hold.B(x) }                  //~ E0711
+  f.(b)
+}
+
+pub fn fine(move b: Buf[F32]) -> Hold {
+  let f = Hold.B
+  f.(move b)
+}

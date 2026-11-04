@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§4.1", "§4.5", "§5.2"]
+
+// W5-03 U1/t, S-872 (F2) (§9.1: "`map_err` は `pub fn map_err[F: ?Dup](move self, f: fn(move E) -> F) -> Result[T, F]` で（`f` の効果行は空。
+// 変換の先は Affine の型でもよい）"; §4.1: `Result` is declared with `T: ?Dup, E: ?Dup`): the type parameter `F` of `map_err` is `?Dup`,
+// so the converted error may be Affine, and so may the error that is converted (`E`) and the `Ok` value (`T`). The conversion
+// takes its argument with `move` and gives it on to the new error without copying; its effect row is empty, so it does not
+// allocate and does not destroy a Buf (the Buf goes into the result). Before the work, `F` had the implicit `Dup` of §4.5 and the
+// error that holds a Buf was E0416. The converter is a function, an anonymous function, and the constructor of a variant whose
+// payload is a Buf (types/ctor_fn_value_move.onsa); it is used alone, before `?`, in a chain, and in a generic function
+// whose own `E` and `F` are `?Dup` and which hands the converter on. The receiver is consumed (`move self`, negative/
+// map_err_receiver.onsa), so the Affine receiver is written without a mark. Checked, not run (the lowering of a call through a
+// function value is the work W8-09).
+
+pub enum Wrap {
+  W(Buf[F32]),
+  Empty,
+}
+
+pub struct Boxed {
+  buf: Buf[F32],
+  tag: U32,
+}
+
+pub fn submit(move b: Buf[F32]) -> Result[U32, Buf[F32]] {
+  Err(move b)
+}
+
+pub fn submit_buf(move b: Buf[F32]) -> Result[Buf[F32], Buf[F32]] {
+  Err(move b)
+}
+
+pub fn full(move r: Buf[F32]) -> Wrap {
+  Wrap.W(move r)
+}
+
+pub fn keep(move r: Buf[F32]) -> Buf[F32] {
+  r
+}
+
+pub fn boxed(move r: Buf[F32]) -> Boxed {
+  Boxed { buf: move r, tag: 1 }
+}
+
+pub fn lift[E: ?Dup, F: ?Dup](move r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
+  r.map_err(f)
+}
+
+// ---- an Affine error, converted to an Affine error ----
+
+pub fn by_a_function(move b: Buf[F32]) -> Result[U32, Wrap] {
+  submit(move b).map_err(full)
+}
+
+pub fn by_the_constructor(move b: Buf[F32]) -> Result[U32, Wrap] {
+  submit(move b).map_err(Wrap.W)
+}
+
+pub fn by_an_anonymous_function(move b: Buf[F32]) -> Result[U32, Wrap] {
+  submit(move b).map_err(fn(move r: Buf[F32]) -> Wrap { Wrap.W(move r) })
+}
+
+pub fn by_a_function_into_a_struct(move b: Buf[F32]) -> Result[U32, Boxed] {
+  submit(move b).map_err(boxed)
+}
+
+pub fn to_the_same_type(move b: Buf[F32]) -> Result[U32, Buf[F32]] {
+  submit(move b).map_err(keep)
+}
+
+pub fn to_the_same_type_by_an_anonymous_function(move b: Buf[F32]) -> Result[U32, Buf[F32]] {
+  submit(move b).map_err(fn(move r: Buf[F32]) -> Buf[F32] { r })
+}
+
+// ---- before `?`, in a chain, and with an Affine `Ok` value ----
+
+pub fn before_the_question_mark(move b: Buf[F32]) -> Result[U32, Wrap] {
+  let n = submit(move b).map_err(full)?
+  Ok(n)
+}
+
+pub fn before_the_question_mark_with_the_constructor(move b: Buf[F32]) -> Result[U32, Wrap] {
+  let n = submit(move b).map_err(Wrap.W)?
+  Ok(n + 1)
+}
+
+pub fn through_a_binding(move b: Buf[F32]) -> Result[U32, Wrap] {
+  let r = submit(move b)
+  let n = r.map_err(full)?
+  Ok(n)
+}
+
+pub fn in_a_chain(move b: Buf[F32]) -> Result[U32, Boxed] {
+  submit(move b).map_err(keep).map_err(boxed)
+}
+
+pub fn with_an_affine_ok_value(move b: Buf[F32]) -> Result[Buf[F32], Wrap] {
+  submit_buf(move b).map_err(full)
+}
+
+pub fn with_an_affine_ok_value_before_the_question_mark(move b: Buf[F32]) -> Result[Buf[F32], Wrap] {
+  let ok = submit_buf(move b).map_err(full)?
+  Ok(move ok)
+}
+
+// ---- a generic function whose type parameters are `?Dup` ----
+
+pub fn through_the_generic_function(move b: Buf[F32]) -> Result[U32, Wrap] {
+  lift(submit(move b), full)
+}
+
+pub fn through_the_generic_function_with_the_constructor(move b: Buf[F32]) -> Result[U32, Wrap] {
+  lift(submit(move b), Wrap.W)
+}

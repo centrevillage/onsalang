@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§4.1", "§5.2"]
+// fixes = 0
+
+// E0704, E0711, W5-03 U1/t, S-872 (F2) (§9.1: `map_err[F: ?Dup]` "変換の先は Affine の型でもよい"; §4.1: `Result` "中身に従う"; §9.1: "受け手の扱いは
+// `?` の被演算子と同じ（§5.2）"): the result of `map_err` whose converted error is Affine is Affine, so it is moved when it is
+// the receiver of the next `map_err`, and cannot be moved when it is a borrowed place. A second `map_err` on the same owned
+// result is E0704, and the result in a borrowed parameter is E0711 with no candidate (`fixes = 0`: what has to change is
+// the mode of the parameter or the caller, §5.2). Before the work the result was an E0416 at the first `map_err`. The
+// shapes of the receiver that are already tested with a Buf in the `Ok` value are in negative/map_err_receiver.onsa. One
+// error per function (P-01); the last function is fine.
+
+pub enum Wrap {
+  W(Buf[F32]),
+  Empty,
+}
+
+pub fn submit(move b: Buf[F32]) -> Result[U32, Buf[F32]] {
+  Err(move b)
+}
+
+pub fn full(move r: Buf[F32]) -> Wrap {
+  Wrap.W(move r)
+}
+
+pub fn again(move w: Wrap) -> Wrap {
+  w
+}
+
+pub fn twice(move b: Buf[F32]) uses {Alloc} {
+  let r = submit(move b).map_err(full)
+  let a = r.map_err(again)
+  let c = r.map_err(again)                    //~ E0704
+  let _ = move a
+  let _ = move c
+}
+
+pub fn read_after(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let r = submit(move b).map_err(full)
+  let a = r.map_err(again)
+  let _ = move a
+  match r {                                   //~ E0704
+    Ok(n) => n,
+    Err(_) => 0,
+  }
+}
+
+pub fn a_borrowed_result(r: Result[U32, Wrap]) -> Result[U32, Wrap] {
+  r.map_err(again)                            //~ E0711
+}
+
+pub fn fine(move b: Buf[F32]) -> Result[U32, Wrap] {
+  let r = submit(move b).map_err(full)
+  r.map_err(again)
+}

@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§6.1", "§5.2", "§9.1", "§18.1"]
+// fixes = 1
+
+// E0401 with a candidate, W5-03 U1/t, S-872 (§8.1: "引数の位置に直接書いた無名関数が、期待する関数型と引数のモードだけ違う（引数の数と型は一致し、期待が
+// `move` で、書いたのが既定のモード）E0401 は、その引数に `move` を足す修正候補を示す"; §6.1: "省略できるのは型で、引数のモード（`inout`・`move`）は書く（期待する型から推論しない。
+// `fn(e) { … }` の `e` は既定のモード）"): the anonymous function is written directly as an argument, the expected type has `move` where the written one has the
+// default mode, and the number and the types of the parameters are the same, so each of these has one candidate, which adds `move` to the parameter. The argument is of `map_err`
+// (with the types written, and left out: the mode is the default either way), before `?`, in a chain, and of a function of the program (also with two parameters, of
+// which only the first is `move`, and in the body of another anonymous function). All parameters are Copy values, so the candidate is the whole change (§5.2: a `move`
+// parameter of a Copy value is not marked at the call; the cases with a candidate that leaves another error are not written). The one case with `clean` is
+// fixes/e0401_lambda_move_mark.onsa. One error per function (P-01); the last function is fine.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub enum High {
+  Wrapped(Low),
+  Other,
+}
+
+pub enum Top {
+  Failed(High),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn apply(f: fn(move U32) -> U32, x: U32) -> U32 {
+  f.(x)
+}
+
+pub fn apply_two(f: fn(move U32, U32) -> U32, x: U32) -> U32 {
+  f.(x, x)
+}
+
+pub fn apply_both(f: fn(move U32, move U32) -> U32, x: U32) -> U32 {
+  f.(x, x)
+}
+
+pub fn lift_gen[E: ?Dup, F: ?Dup](move r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
+  r.map_err(f)
+}
+
+pub fn with_the_types_written() -> Result[U32, High] {
+  read_low().map_err(fn(e: Low) -> High { High.Wrapped(e) })     //~ E0401
+}
+
+pub fn with_the_types_left_out() -> Result[U32, High] {
+  read_low().map_err(fn(e) { High.Wrapped(e) })                  //~ E0401
+}
+
+pub fn before_the_question_mark() -> Result[U32, High] {
+  let n = read_low().map_err(fn(e: Low) -> High { High.Wrapped(e) })?   //~ E0401
+  Ok(n + 1)
+}
+
+pub fn in_a_chain() -> Result[U32, Top] {
+  read_low().map_err(fn(move e: Low) -> High { High.Wrapped(e) }).map_err(fn(h: High) -> Top { Top.Failed(h) })   //~ E0401
+}
+
+pub fn as_the_argument_of_a_function() -> U32 {
+  apply(fn(k: U32) -> U32 { k + 1 }, 2)                          //~ E0401
+}
+
+pub fn of_two_parameters_of_which_the_first_is_move() -> U32 {
+  apply_two(fn(k: U32, m: U32) -> U32 { k + m }, 2)              //~ E0401
+}
+
+pub fn in_the_body_of_another_anonymous_function() -> U32 {
+  apply(fn(move k: U32) -> U32 { apply(fn(j: U32) -> U32 { j + k }, 1) }, 2)   //~ E0401
+}
+
+pub fn of_two_parameters_that_are_both_move() -> U32 {
+  apply_both(fn(k: U32, m: U32) -> U32 { k + m }, 2)             //~ E0401
+}
+
+pub fn at_a_generic_function_type() -> Result[U32, High] {
+  lift_gen(read_low(), fn(e: Low) -> High { High.Wrapped(e) })   //~ E0401
+}
+
+pub fn fine() -> Result[U32, High] {
+  read_low().map_err(fn(move e: Low) -> High { High.Wrapped(e) })
+}

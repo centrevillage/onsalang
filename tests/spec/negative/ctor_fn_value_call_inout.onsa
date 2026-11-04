@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.2", "§18.1"]
+
+// E0703, W5-03 U1/t, S-872 (§5.2: "構築子（列挙子のペイロード。`Some(x)`、`E.A(x)`）の要素は … 値で受ける。`inout` の印は E0703 である"; §4.4: the
+// function value of a constructor takes its parameters as `move`, and `f.(x)` "は直接の呼び出し `Shape.Circle(x)` と同じく要素を値で
+// 受ける"): the mark `inout` on the argument of a call through the function value of a constructor does not match the
+// `move` parameter. The Copy value is taken by `inout` from a variable that is `var` or an `inout` parameter, so the mark is
+// the only error. Whether this error has a candidate is not written (the file has no `fixes`). One error per function (P-01).
+
+pub enum Hold {
+  B(Buf[F32]),
+  C(U32),
+}
+
+pub fn an_inout_parameter(inout n: U32) -> Hold {
+  let f = Hold.C
+  f.(inout n)                                                    //~ E0703
+}
+
+pub fn a_var() -> Hold {
+  var n = 1
+  n = n + 1
+  let f = Hold.C
+  f.(inout n)                                                    //~ E0703
+}
+
+pub fn the_variant_of_the_prelude(inout n: U32) -> Option[U32] {
+  let f: fn(move U32) -> Option[U32] = Some
+  f.(inout n)                                                    //~ E0703
+}
+
+pub fn the_same_with_a_function_value_that_is_a_parameter(g: fn(move U32) -> Hold, inout n: U32) -> Hold {
+  g.(inout n)                                                    //~ E0703
+}
+
+pub fn fine(n: U32) -> Hold {
+  let f = Hold.C
+  f.(n)
+}

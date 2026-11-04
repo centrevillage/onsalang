@@ -264,6 +264,9 @@ pub(crate) struct Checker<'a> {
     /// one unified (an argument, an annotation, the result, a field); every other
     /// binding gets a note with its position alone.
     why: Option<(String, TyId)>,
+    /// The anonymous function written directly as the argument being checked
+    /// (the one whose E0401 has a candidate, §8.1; not one in parentheses).
+    pub(crate) arg_closure: Option<ExprId>,
     /// The names of the body, which the names stage resolved (W4-04).
     pub(crate) names: crate::names::body::BodyNames,
     /// The local of each binding no pattern makes, by its [`Origin`].
@@ -359,6 +362,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             deferred_end: Vec::new(),
             deferred_count: 0,
             why: None,
+            arg_closure: None,
             flow: None,
             names,
             origins,
