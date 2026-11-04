@@ -823,6 +823,63 @@ impl Operand {
     }
 }
 
+/// The place of an operand under the operator it is the operand of (§3.1:
+/// "被演算子の位置は、二項演算子の左右、前置の被演算子、後置の受け手…、
+/// `as` / `at` の左である").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperandPlace {
+    Binary(BinOp, Side),
+    Prefix,
+    /// The receiver of a postfix (the callee of a call, the base of `.`,
+    /// `::[`, `[` and `?`).
+    Postfix,
+    AsAtLeft,
+}
+
+impl ExprKind {
+    /// The operands of this expression as an operator, with their places
+    /// (§3.1, S-537). The arguments, the index and the parts of the other
+    /// forms are no operands (they are whole expressions). The one list of
+    /// the operand positions: E0013 and the parentheses of the types
+    /// stage's candidates read it (D-15).
+    pub fn operands(&self) -> [Option<(ExprId, OperandPlace)>; 2] {
+        use ExprKind::*;
+        use OperandPlace as P;
+        match *self {
+            Binary { op, lhs, rhs, .. } => {
+                [Some((lhs, P::Binary(op, Side::Left))), Some((rhs, P::Binary(op, Side::Right)))]
+            }
+            Unary { expr, .. } => [Some((expr, P::Prefix)), None],
+            Cast { expr, .. } | At { expr, .. } => [Some((expr, P::AsAtLeft)), None],
+            Call { callee: base, .. }
+            | Field { base, .. }
+            | TypeArgs { base, .. }
+            | TupleIndex { base, .. }
+            | Index { base, .. }
+            | Try(base) => [Some((base, P::Postfix)), None],
+            Lit(_)
+            | Path(_)
+            | Hole
+            | Error
+            | Paren(_)
+            | Tuple(_)
+            | Array(_)
+            | Repeat { .. }
+            | Struct { .. }
+            | Block(_)
+            | If { .. }
+            | Match { .. }
+            | Closure { .. }
+            | Handle { .. }
+            | Unsafe(_)
+            | Par { .. }
+            | Feedback(_)
+            | Move(_)
+            | Range(_) => [None, None],
+        }
+    }
+}
+
 impl BinOp {
     /// Whether `operand` is written without parentheses on `side` of this
     /// operator (§3.1, §3.3; S-339, S-341): the one judgment of the

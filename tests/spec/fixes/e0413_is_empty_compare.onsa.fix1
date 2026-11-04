@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.2", "§18.1"]
+// fixes = 1
+
+// E0413 of `is_empty` as an operand of `==` or `!=` (§4.2, §3.1, S-98): the candidate `len() == 0` is a
+// comparison, a comparison does not chain (`a == b == c` is E0010), so on either side of `==` and `!=` the
+// candidate is in parentheses: `s.is_empty() == c` becomes `(s.len() == 0) == c`, and `c == s.is_empty()`
+// becomes `c == (s.len() == 0)`. The `&&` that joins a comparison is weaker than a comparison, so the
+// parentheses go around the candidate only, not around the comparison that the user wrote (`c && s.is_empty()
+// == d` becomes `c && (s.len() == 0) == d`). Only the call is edited. One error per function (P-01). The
+// function at the end is fine.
+
+pub fn left_of_equal(s: Str, c: Bool) -> Bool {
+  (s.len() == 0) == c                                 //~ E0413
+}
+
+pub fn right_of_equal(s: Str, c: Bool) -> Bool {
+  c == (s.len() == 0)                                 //~ E0413
+}
+
+pub fn left_of_not_equal(b: Buf[F32], c: Bool) -> Bool {
+  (b.len() == 0) != c                                 //~ E0413
+}
+
+pub fn right_of_not_equal(xs: Span[F32], c: Bool) -> Bool {
+  c != (xs.len() == 0)                                //~ E0413
+}
+
+pub fn against_a_literal(s: Str) -> Bool {
+  (s.len() == 0) == true                              //~ E0413
+}
+
+pub fn as_a_condition(a: [F32; 4], c: Bool) -> I32 {
+  if (a.len() == 0) == c { 1 } else { 0 }             //~ E0413
+}
+
+pub fn under_a_conjunction(s: Str, c: Bool, d: Bool) -> Bool {
+  c && (s.len() == 0) == d                            //~ E0413
+}
+
+pub fn on_an_element(xs: [Str; 2], c: Bool) -> Bool {
+  c == (xs[1].len() == 0)                             //~ E0413
+}
+
+pub fn fine(s: Str, c: Bool) -> Bool {
+  (s.len() == 0) == c
+}

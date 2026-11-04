@@ -191,29 +191,7 @@ impl<'a> Checker<'a> {
         kind: CallKind,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        // The members of the `impl`s of the head of the receiver's type: of a
-        // user type, of a scalar (std's, §3.3, §3.4) the same way (§6.2), of
-        // an array and of a generic builtin type (std's, §4.2, §5.3, §9.1).
-        let span_key = self.a.builtin_key.get(&BuiltinTy::Span).copied();
-        let (mut key, owner) = match self.ty(recv) {
-            Ty::Named(d, _) => (None, Some(d)),
-            Ty::Int(k) => (Some(self.a.types.int(k)), None),
-            Ty::Float(k) => (Some(self.a.types.float(k)), None),
-            Ty::Array(..) => (self.a.array_key, None),
-            Ty::Builtin(b, _) => (self.a.builtin_key.get(&b).copied(), None),
-            _ => (None, None),
-        };
-        // §5.3: an array and a `Buf` take from `Span[T]` the methods their
-        // own `impl`s (and the `len` of an array) have not, as a `Span` of
-        // their element `T`: one step, `Span` takes from none.
-        let mut this = recv;
-        if let Some(elem) = self.viewed_element(recv)
-            && !key.and_then(|k| self.a.modules.assoc_builtin.get(&k)).is_some_and(|t| t.contains_key(&name.name))
-            && builtin::method_self(&self.a.types, recv, &name.name).is_none()
-        {
-            key = span_key;
-            this = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
-        }
+        let (key, owner, this) = self.method_key(recv, &name.name);
         let table = match owner {
             Some(d) => self.a.modules.assoc.get(&d),
             None => key.and_then(|k| self.a.modules.assoc_builtin.get(&k)),
@@ -286,8 +264,7 @@ impl<'a> Checker<'a> {
             if self.traits_unknown(recv) {
                 return self.args_of_unknown_callee(args);
             }
-            let shown = self.display(recv);
-            return Err(self.err(Code::E0413, name.span, format!("`{shown}` has no method `{}`", name.name)));
+            return Err(self.removed_method(e, recv, name, args, expected, kind));
         };
         let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
         if let Some(exp) = expected {
@@ -297,6 +274,37 @@ impl<'a> Checker<'a> {
         let (self_mode, lazy_args) = (sig.self_mode, sig.lazy_args);
         self.info.targets.insert(e, Target::BuiltinMethod { name: name.name.clone(), self_mode, lazy_args });
         Ok(sig.ret)
+    }
+
+    /// Where the method `name` of a receiver of the type `recv` is looked
+    /// up: the key of the `impl`s of a builtin type, the owner of a user
+    /// type, and the type its `self` stands for. The one lookup of the
+    /// method calls and of the candidates of their E0413 (`removed.rs`).
+    pub(super) fn method_key(&mut self, recv: TyId, name: &str) -> (Option<TyId>, Option<DefId>, TyId) {
+        // The members of the `impl`s of the head of the receiver's type: of a
+        // user type, of a scalar (std's, §3.3, §3.4) the same way (§6.2), of
+        // an array and of a generic builtin type (std's, §4.2, §5.3, §9.1).
+        let span_key = self.a.builtin_key.get(&BuiltinTy::Span).copied();
+        let (mut key, owner) = match self.ty(recv) {
+            Ty::Named(d, _) => (None, Some(d)),
+            Ty::Int(k) => (Some(self.a.types.int(k)), None),
+            Ty::Float(k) => (Some(self.a.types.float(k)), None),
+            Ty::Array(..) => (self.a.array_key, None),
+            Ty::Builtin(b, _) => (self.a.builtin_key.get(&b).copied(), None),
+            _ => (None, None),
+        };
+        // §5.3: an array and a `Buf` take from `Span[T]` the methods their
+        // own `impl`s (and the `len` of an array) have not, as a `Span` of
+        // their element `T`: one step, `Span` takes from none.
+        let mut this = recv;
+        if let Some(elem) = self.viewed_element(recv)
+            && !key.and_then(|k| self.a.modules.assoc_builtin.get(&k)).is_some_and(|t| t.contains_key(name))
+            && builtin::method_self(&self.a.types, recv, name).is_none()
+        {
+            key = span_key;
+            this = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
+        }
+        (key, owner, this)
     }
 
     /// The element of an array or a `Buf` of the type `t`, which takes the

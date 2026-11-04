@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§6.2", "§18.1"]
+// fixes = 0
+
+// E0413 of `is_empty` on a type outside the family of §4.2 (S-98): the candidate `len() == 0` belongs to the
+// types of the closed list of §4.2 (`Str`, `Bytes`, `Span`, `Buf`, `[T; N]`, and `Array` `Map` `Set` of the
+// second phase). A user's struct that has its own `len` is not a length-holding type, so its `p.is_empty()`
+// is the E0413 of the method name and has no candidate; neither have `Option`, a tuple, a number and a generic
+// struct. The error is the E0413 alone. A struct that declares `is_empty` itself is fine, and so is the
+// family's own `len() == 0`. One error per function (P-01).
+
+pub struct Pile {
+  n: U32,
+}
+
+impl Pile {
+  pub fn len(self) -> U32 {
+    self.n
+  }
+}
+
+pub struct Bag[T] {
+  items: [T; 2],
+}
+
+impl[T] Bag[T] {
+  pub fn len(self) -> U32 {
+    2
+  }
+}
+
+pub struct Both {
+  n: U32,
+}
+
+impl Both {
+  pub fn len(self) -> U32 {
+    self.n
+  }
+
+  pub fn is_empty(self) -> Bool {
+    self.n == 0
+  }
+}
+
+pub fn user_struct(p: Pile) -> Bool {
+  p.is_empty()                                      //~ E0413
+}
+
+pub fn generic_struct(b: Bag[F32]) -> Bool {
+  b.is_empty()                                      //~ E0413
+}
+
+pub fn option_of_a_str(o: Option[Str]) -> Bool {
+  o.is_empty()                                      //~ E0413
+}
+
+pub fn tuple(t: (Str, I32)) -> Bool {
+  t.is_empty()                                      //~ E0413
+}
+
+pub fn number(n: U32) -> Bool {
+  n.is_empty()                                      //~ E0413
+}
+
+pub fn negated_user_struct(p: Pile) -> Bool {
+  !p.is_empty()                                     //~ E0413
+}
+
+pub fn fine_own_is_empty(b: Both) -> Bool {
+  b.is_empty() && b.len() == 0
+}
+
+pub fn fine_family(s: Str, p: Pile) -> Bool {
+  s.len() == 0 || p.len() == 0
+}

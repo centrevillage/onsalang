@@ -10,27 +10,27 @@
 use std.math.{abs, max, sqrt}
 
 pub fn widen(x: F32) -> F64 {
-  x as F64                                     //~ E0413
+  x.round_f64()                                     //~ E0413
 }
 
 pub fn widen_int(n: I32) -> I64 {
-  n as I64                                    //~ E0413
+  n.narrow_i64()                                    //~ E0413
 }
 
 pub fn same_type(x: F32) -> F32 {
-  x as F32                                     //~ E0413
+  x.round_f32()                                     //~ E0413
 }
 
 pub fn magnitude(x: F32) -> F32 {
-  abs(x)                                           //~ E0413
+  x.abs()                                           //~ E0413
 }
 
 pub fn root(x: F32) -> F32 {
-  sqrt(x)                                          //~ E0413
+  x.sqrt()                                          //~ E0413
 }
 
 pub fn bigger(a: F32, b: F32) -> F32 {
-  max(a, b)                                          //~ E0413
+  a.max(b)                                          //~ E0413
 }
 
 pub fn blank(s: Str) -> Bool {

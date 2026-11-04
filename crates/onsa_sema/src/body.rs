@@ -42,6 +42,8 @@ mod generics;
 mod named;
 mod patterns;
 mod receivers;
+mod removed;
+mod slot;
 mod statements;
 
 // ---------------------------------------------------------------- tables
@@ -261,6 +263,9 @@ pub(crate) struct Checker<'a> {
     /// The locals given their type so far (a branch of a choice after the
     /// first unifies with it, §7).
     typed: Vec<bool>,
+    /// The expression of the body, under which a candidate finds the place
+    /// of an expression (`slot.rs`).
+    root: ExprId,
 }
 
 /// The body of the def `id` the types stage checks, with the type `Self`
@@ -344,6 +349,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             names,
             origins,
             typed,
+            root: body,
         };
         let is_const = matches!(ck.a.def(id).kind, DefKind::Const(_));
         let is_flow = matches!(ck.a.def(id).kind, DefKind::Flow(_));

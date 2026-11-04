@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.2", "§4.7", "§18.1"]
+// fixes = 1
+
+// E0413 of `is_empty` as an operand of `&&` or `||` (§4.2, §3.1, §4.7, S-98): a comparison binds more
+// tightly than `&&` and `||` (§3.1: "比較は論理積より強い"), so the candidate `len() == 0` takes no
+// parentheses on either side: `c && s.is_empty()` becomes `c && s.len() == 0`, `s.is_empty() || c` becomes
+// `s.len() == 0 || c`. A user's parentheses around a group of `&&` stay as they are. Only the call is
+// edited. One error per function (P-01). The function at the end is fine.
+
+pub fn right_of_and(c: Bool, s: Str) -> Bool {
+  c && s.len() == 0                                 //~ E0413
+}
+
+pub fn left_of_and(s: Str, c: Bool) -> Bool {
+  s.len() == 0 && c                                 //~ E0413
+}
+
+pub fn right_of_or(c: Bool, b: Buf[F32]) -> Bool {
+  c || b.len() == 0                                 //~ E0413
+}
+
+pub fn left_of_or(xs: Span[F32], c: Bool) -> Bool {
+  xs.len() == 0 || c                                //~ E0413
+}
+
+pub fn in_a_chain_of_and(a: Bool, s: Str, b: Bool) -> Bool {
+  a && s.len() == 0 && b                            //~ E0413
+}
+
+pub fn between_comparisons(n: U32, s: Str, m: U32) -> Bool {
+  n < 3 && s.len() == 0 && m < 5                    //~ E0413
+}
+
+pub fn in_a_parenthesized_group(a: Bool, b: Bool, s: Str) -> Bool {
+  (a && b) || s.len() == 0                          //~ E0413
+}
+
+pub fn in_a_condition(a: [F32; 4], c: Bool) -> I32 {
+  if c && a.len() == 0 { 1 } else { 0 }             //~ E0413
+}
+
+pub fn fine(s: Str, c: Bool) -> Bool {
+  (c && s.len() == 0) || c
+}

@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§6.1", "§18.1"]
+// fixes = 0
+
+// E0413 of `is_empty` as a statement whose value is dropped (§4.2, §6.1, S-98): the call alone on a line in the
+// middle of a block, and the tail of a block of type `()` (a `fn` without a result, an `if` without an `else`, a
+// loop body, a `test`). The candidate `len() == 0` is a `Bool`, so as a statement it would be an E0418 (§6.1: a
+// statement in the middle of a block is `()`), and at the tail of a `()` block a mismatch of types (E0401): an
+// error of the same stage that the candidate would leave, so none is offered (§18.1: "この約束を満たす候補を作れなければ、
+// 候補を出さない"). The error is the E0413 of the method name alone, and `fixes = 0` says that no diagnostic of
+// the case has a candidate. What the user writes to drop the value is `let _ = s.len() == 0` (§6.1, the function
+// at the end). One error per function (P-01).
+
+pub fn in_the_middle(s: Str) -> I32 {
+  s.is_empty()                                      //~ E0413
+  1
+}
+
+pub fn tail_of_a_unit_function(s: Str) {
+  s.is_empty()                                      //~ E0413
+}
+
+pub fn in_the_middle_of_a_branch(s: Str, c: Bool) -> I32 {
+  if c {
+    s.is_empty()                                    //~ E0413
+  }
+  1
+}
+
+pub fn in_a_loop_body(b: Buf[F32]) -> I32 {
+  for i in 0 ..< 2 {
+    b.is_empty()                                    //~ E0413
+  }
+  1
+}
+
+pub fn on_a_span_in_the_middle(xs: Span[F32]) -> I32 {
+  xs.is_empty()                                     //~ E0413
+  1
+}
+
+test "a dropped is_empty in a test" {
+  let s = "gain"
+  s.is_empty()                                      //~ E0413
+  assert s.len() == 4
+}
+
+pub fn fine(s: Str) -> I32 {
+  let _ = s.len() == 0
+  1
+}

@@ -689,13 +689,6 @@ note = "s.f(x) の E0020（型の段）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0413_forms.onsa"
-reasons = ["S-98", "R-126"]
-until = "W5-14"
-note = "E0413 の候補"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0411_as.onsa"
 reasons = ["S-98", "R-126"]
 until = "W5-14"

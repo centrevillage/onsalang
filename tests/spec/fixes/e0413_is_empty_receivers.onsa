@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.5", "§6.2", "§18.1"]
+// fixes = 1
+
+// E0413 of `is_empty` for each receiver of the family of §4.2 (S-98): `Str`, `Span[T]`, `Buf[T]`, `[T; N]`.
+// The type of the receiver is what the checker knows at the call (§4.7), so the candidate `len() == 0` is
+// the same whatever gives the type: a type alias (resolved first), a literal (`"gain"` is a `Str`), the result of
+// a function or a method, a field and a field of a field, an element of an array (`xs[0]`) and of an array of
+// arrays, the `self` of a method, and a type parameter or a `const` parameter of the length (`[T; N]`,
+// `Span[T]`, `Buf[T]`). The candidate does not depend on the element type of the sequence. Only the call is
+// edited. One error per function (P-01). The function at the end is fine.
+
+type Name = Str
+type Frame = [F32; 4]
+type Delay = Buf[F32]
+
+pub struct Holder {
+  name: Str,
+  items: Buf[F32],
+}
+
+pub struct Outer {
+  h: Holder,
+}
+
+impl Holder {
+  pub fn label(self) -> Str {
+    self.name
+  }
+
+  pub fn blank(self) -> Bool {
+    self.name.is_empty()                            //~ E0413
+  }
+}
+
+pub fn name_of(h: Holder) -> Str {
+  h.name
+}
+
+pub fn through_a_str_alias(n: Name) -> Bool {
+  n.is_empty()                                      //~ E0413
+}
+
+pub fn through_an_array_alias(f: Frame) -> Bool {
+  f.is_empty()                                      //~ E0413
+}
+
+pub fn through_a_buf_alias(d: Delay) -> Bool {
+  d.is_empty()                                      //~ E0413
+}
+
+pub fn on_a_literal() -> Bool {
+  "gain".is_empty()                                 //~ E0413
+}
+
+pub fn on_a_function_result(h: Holder) -> Bool {
+  name_of(h).is_empty()                             //~ E0413
+}
+
+pub fn on_a_method_result(h: Holder) -> Bool {
+  h.label().is_empty()                              //~ E0413
+}
+
+pub fn on_a_field(h: Holder) -> Bool {
+  h.name.is_empty()                                 //~ E0413
+}
+
+pub fn on_a_buf_field(h: Holder) -> Bool {
+  h.items.is_empty()                                //~ E0413
+}
+
+pub fn on_a_field_of_a_field(o: Outer) -> Bool {
+  o.h.name.is_empty()                               //~ E0413
+}
+
+pub fn on_a_planar_element(xs: [Span[F32]; 2]) -> Bool {
+  xs[0].is_empty()                                  //~ E0413
+}
+
+pub fn on_an_inner_array(xs: [[F32; 2]; 2]) -> Bool {
+  xs[1].is_empty()                                  //~ E0413
+}
+
+pub fn on_a_slice(xs: Span[F32]) -> Bool {
+  xs.slice(0, 1).is_empty()                         //~ E0413
+}
+
+pub fn generic_array[T: ?Dup, const N: U32](xs: [T; N]) -> Bool {
+  xs.is_empty()                                     //~ E0413
+}
+
+pub fn generic_span[T: Copy](xs: Span[T]) -> Bool {
+  xs.is_empty()                                     //~ E0413
+}
+
+pub fn generic_buf[T: Copy](xs: Buf[T]) -> Bool {
+  xs.is_empty()                                     //~ E0413
+}
+
+pub fn fine(n: Name, f: Frame, d: Delay) -> Bool {
+  (n.len() == 0) || (f.len() == 0) || (d.len() == 0)
+}

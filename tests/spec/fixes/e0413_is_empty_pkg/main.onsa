@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 of `is_empty` across modules (§4.2, §15.1, S-98): the receiver comes from another module (a field of an
+// imported struct, the result of an imported function by its imported name and by its qualified name), and
+// the call is in another module (entries.onsa). The family of §4.2 is the types of the language and not of
+// the module, so each call has the one candidate `len() == 0` in the file of the call, with the parentheses
+// by the place (`!(e.name.len() == 0)` under a prefix `!`; none under a `&&`). One error per function (P-01).
+
+use entries
+use entries.{Entry, entry_name, make}
+
+pub fn field_of_an_imported_struct(e: Entry) -> Bool {
+  e.name.is_empty()                                 //~ E0413
+}
+
+pub fn result_of_an_imported_function(e: Entry) -> Bool {
+  entry_name(e).is_empty()                          //~ E0413
+}
+
+pub fn result_of_a_qualified_function(e: Entry) -> Bool {
+  entries.entry_name(e).is_empty()                  //~ E0413
+}
+
+pub fn negated_field(e: Entry) -> Bool {
+  !e.name.is_empty()                                //~ E0413
+}
+
+pub fn under_a_conjunction(c: Bool) -> Bool {
+  c && make().name.is_empty()                       //~ E0413
+}
+
+pub fn fine(e: Entry) -> Bool {
+  entries.blank(e) && (entry_name(e).len() == 0)
+}

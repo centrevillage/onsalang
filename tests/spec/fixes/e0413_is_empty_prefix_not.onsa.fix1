@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.2", "§18.1"]
+// fixes = 1
+
+// E0413 of `is_empty` as the operand of a prefix `!` (§4.2, §3.1, S-98): the candidate is the form
+// `len() == 0`, which is a comparison, and a prefix symbol binds more tightly than a comparison, so the
+// operand of `!` takes the candidate in parentheses: `!s.is_empty()` becomes `!(s.len() == 0)`, not
+// `!s.len() == 0` (that is `(!s.len()) == 0`, another value). The same for the nested `!(!x)` (the inner
+// operand), for `!x` as the operand of `&&`, as the condition of an `if`, and as the left of `==` (where
+// `!s.len() == 0 == c` would be a chain of comparisons, E0010). The candidate keeps the `!` and edits only
+// the call. One error per function (P-01). The function at the end is fine.
+
+pub fn keep(b: Bool) -> Bool {
+  b
+}
+
+pub fn negated(s: Str) -> Bool {
+  !(s.len() == 0)                                     //~ E0413
+}
+
+pub fn negated_twice(s: Str) -> Bool {
+  !(!(s.len() == 0))                                  //~ E0413
+}
+
+pub fn negated_in_a_conjunction(c: Bool, s: Str) -> Bool {
+  c && !(s.len() == 0)                                //~ E0413
+}
+
+pub fn negated_condition(b: Buf[F32]) -> I32 {
+  if !(b.len() == 0) { 1 } else { 0 }                 //~ E0413
+}
+
+pub fn negated_then_compared(xs: Span[F32], c: Bool) -> Bool {
+  !(xs.len() == 0) == c                               //~ E0413
+}
+
+pub fn negated_argument(a: [F32; 4]) -> Bool {
+  keep(!(a.len() == 0))                               //~ E0413
+}
+
+pub fn negated_on_an_element(xs: [Str; 2]) -> Bool {
+  !(xs[0].len() == 0)                                 //~ E0413
+}
+
+pub fn negated_in_an_arm(o: Option[Str]) -> Bool {
+  match o {
+    Some(s) => !(s.len() == 0),                       //~ E0413
+    None => false,
+  }
+}
+
+pub fn fine(s: Str, c: Bool) -> Bool {
+  !(s.len() == 0) && c
+}

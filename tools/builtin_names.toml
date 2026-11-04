@@ -82,6 +82,9 @@
 [allow."crates/onsa_driver/src/manifest/table.rs"]
 "Alloc" = 1
 
+[allow."crates/onsa_sema/src/body/removed.rs"]
+"len" = 1
+
 [allow."crates/onsa_sema/src/builtin.rs"]
 "is_err" = 1
 "is_none" = 1

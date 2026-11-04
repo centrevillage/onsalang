@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7", "§18.1"]
+// fixes = 0
+
+// E0413 of `is_empty` in a place whose expected type is known and is not `Bool` (§4.2, §4.7, S-98): the
+// candidate `len() == 0` is a `Bool`, so applied there it would leave a mismatch of types (E0401) in the unit,
+// and a candidate that leaves an error of the same stage is not offered (§18.1: "この約束を満たす候補を作れなければ、
+// 候補を出さない"). So the E0413 has no candidate in the tail of a function returning `I32`, an annotated
+// `let`, an argument and a field of another type, an assignment to a place of another type, the later branch
+// and the later arm (which take the type of the earlier one), the right of a shift (`U32`) and a type
+// parameter. The error is the E0413 of the method name alone. `fixes = 0` says that no diagnostic of the
+// case has a candidate. One error per function (P-01). The function at the end is fine.
+
+pub struct Count {
+  n: I32,
+}
+
+pub const NOT_A_FLAG: I32 = "".is_empty()           //~ E0413
+
+pub fn take(n: I32) -> I32 {
+  n
+}
+
+pub fn tail_of_an_i32(s: Str) -> I32 {
+  s.is_empty()                                      //~ E0413
+}
+
+pub fn annotated_let(s: Str) -> I32 {
+  let n: I32 = s.is_empty()                         //~ E0413
+  n
+}
+
+pub fn argument(s: Str) -> I32 {
+  take(s.is_empty())                                //~ E0413
+}
+
+pub fn field(s: Str) -> Count {
+  Count { n: s.is_empty() }                         //~ E0413
+}
+
+pub fn assignment(s: Str) -> I32 {
+  var n = 0
+  n = s.is_empty()                                  //~ E0413
+  n
+}
+
+pub fn returned_value(s: Str, c: Bool) -> I32 {
+  if c {
+    return s.is_empty()                             //~ E0413
+  }
+  0
+}
+
+pub fn later_branch(s: Str, c: Bool) -> I32 {
+  if c { 1 } else { s.is_empty() }                  //~ E0413
+}
+
+pub fn later_arm(o: Option[I32], s: Str) -> I32 {
+  match o {
+    Some(n) => n,
+    None => s.is_empty(),                           //~ E0413
+  }
+}
+
+pub fn right_of_a_shift(s: Str) -> U32 {
+  1 << s.is_empty()                                 //~ E0413
+}
+
+pub fn type_parameter[T: Default](s: Str) -> T {
+  s.is_empty()                                      //~ E0413
+}
+
+pub fn closure_returning_i32() -> fn(Str) -> I32 {
+  fn(s: Str) -> I32 { s.is_empty() }                //~ E0413
+}
+
+pub fn fine(s: Str) -> I32 {
+  take(if s.len() == 0 { 1 } else { 0 })
+}

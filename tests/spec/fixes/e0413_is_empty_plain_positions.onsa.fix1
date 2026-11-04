@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.2", "§4.7", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0413 of `is_empty` where the candidate `len() == 0` needs no parentheses (§4.2, §3.1, S-98): the places
+// that are not an operand of an operator (§3.1: "文、`let` と代入の右、引数、要素、フィールドの値、腕の値、
+// `return` の値、…には、括弧なしで書く"), the condition of an `if`, the target of a `match`, and the inside of
+// parentheses the user wrote. In every one the candidate is `s.len() == 0` as it is. Where the place has an
+// expected type (§4.7: an argument, a field, the tail of a function, an assignment, an annotated `let`) it is
+// `Bool`, which the candidate has; where it has none (a `let` without a type, `let _`, an element) the call
+// is an error of the method alone and the candidate is the same. Only the call is edited. One error per
+// function (P-01). The function at the end is fine.
+
+pub struct Flags {
+  empty: Bool,
+}
+
+pub fn take(b: Bool) -> Bool {
+  b
+}
+
+pub const BLANK: Bool = "".len() == 0               //~ E0413
+
+pub fn as_an_argument(s: Str) -> Bool {
+  take(s.len() == 0)                                //~ E0413
+}
+
+pub fn as_a_tail(s: Str) -> Bool {
+  s.len() == 0                                      //~ E0413
+}
+
+pub fn as_a_returned_value(s: Str, c: Bool) -> Bool {
+  if c {
+    return s.len() == 0                             //~ E0413
+  }
+  false
+}
+
+pub fn in_an_annotated_let(s: Str) -> Bool {
+  let b: Bool = s.len() == 0                        //~ E0413
+  b
+}
+
+pub fn in_a_let_without_a_type(s: Str) -> Bool {
+  let b = s.len() == 0                              //~ E0413
+  b
+}
+
+pub fn in_a_discarding_let(s: Str) -> I32 {
+  let _ = s.len() == 0                              //~ E0413
+  1
+}
+
+pub fn in_an_assignment(s: Str) -> Bool {
+  var b = false
+  b = s.len() == 0                                  //~ E0413
+  b
+}
+
+pub fn in_a_field(s: Str) -> Flags {
+  Flags { empty: s.len() == 0 }                     //~ E0413
+}
+
+pub fn in_a_tuple(s: Str) -> (Bool, I32) {
+  (s.len() == 0, 1)                                 //~ E0413
+}
+
+pub fn in_an_array(s: Str, c: Bool) -> [Bool; 2] {
+  [c, s.len() == 0]                                 //~ E0413
+}
+
+pub fn as_a_condition(s: Str) -> I32 {
+  if s.len() == 0 { 1 } else { 0 }                  //~ E0413
+}
+
+pub fn as_a_condition_after_else(s: Str, c: Bool) -> I32 {
+  if c { 1 } else if s.len() == 0 { 2 } else { 3 }  //~ E0413
+}
+
+pub fn as_a_match_target(s: Str) -> I32 {
+  match s.len() == 0 {                              //~ E0413
+    true => 1,
+    false => 0,
+  }
+}
+
+pub fn as_an_arm_value(o: Option[Str]) -> Bool {
+  match o {
+    Some(s) => s.len() == 0,                        //~ E0413
+    None => true,
+  }
+}
+
+pub fn inside_parentheses(s: Str) -> Bool {
+  (s.len() == 0)                                    //~ E0413
+}
+
+pub fn inside_parentheses_of_a_comparison(s: Str, c: Bool) -> Bool {
+  (s.len() == 0) == c                               //~ E0413
+}
+
+pub fn in_a_closure() -> fn(Str) -> Bool {
+  fn(s: Str) -> Bool { s.len() == 0 }               //~ E0413
+}
+
+pub fn in_a_closure_body_let() -> fn(Str) -> Bool {
+  fn(s: Str) -> Bool {
+    let e = s.len() == 0                            //~ E0413
+    e
+  }
+}
+
+pub fn through_an_alias(s: Str) -> Flag {
+  s.len() == 0                                      //~ E0413
+}
+
+type Flag = Bool
+
+test "is_empty in an assert" {
+  let s = "gain"
+  assert s.len() == 0                               //~ E0413
+}
+
+pub fn fine(s: Str, c: Bool) -> Bool {
+  take(s.len() == 0) && c
+}

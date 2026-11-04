@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§5.3", "§15.1", "§18.1"]
+// fixes = 1
+
+// §4.2: "長さを持つ型（`Str`、`Bytes`、`Span`、`Buf`、`[T; N]`、…）は `len()` だけを持ち、`is_empty` は無い（E0413）".
+// The test for empty is `len() == 0`. The array, `Buf` and `Span` have `len` and not `is_empty`, whatever the
+// element is (the number of the channels of a planar array and an Affine element too), so each call is the
+// E0413 of the method name, with the one candidate `len() == 0` (the text after it is `.fix1`; the places of the
+// parentheses are the case of tests/spec/fixes/e0413_is_empty_*.onsa). One error per function (P-01).
+
+pub fn array(xs: [F32; 4]) -> Bool {
+  xs.len() == 0 //~ E0413
+}
+
+pub fn array_of_buf(xs: [Buf[F32]; 2]) -> Bool {
+  xs.len() == 0 //~ E0413
+}
+
+pub fn planar_array(xs: [Span[F32]; 2]) -> Bool {
+  xs.len() == 0 //~ E0413
+}
+
+pub fn array_of_arrays(xs: [[F32; 2]; 2]) -> Bool {
+  xs.len() == 0 //~ E0413
+}
+
+pub fn buf(b: Buf[F32]) -> Bool {
+  b.len() == 0 //~ E0413
+}
+
+pub fn span(s: Span[F32]) -> Bool {
+  s.len() == 0 //~ E0413
+}
+
+pub fn view(xs: Span[F32]) -> Bool {
+  xs.slice(0, 1).len() == 0 //~ E0413
+}
+
+pub fn type_parameter_array[T: ?Dup, const N: U32](xs: [T; N]) -> Bool {
+  xs.len() == 0 //~ E0413
+}
+
+pub fn fine_the_len_test(xs: [F32; 4], b: Buf[F32], s: Span[F32]) -> Bool {
+  (xs.len() == 0) || (b.len() == 0) || (s.len() == 0)
+}

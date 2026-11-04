@@ -1,0 +1,25 @@
+// The module of the calls and the types that main.onsa uses.
+
+pub struct Entry {
+  name: Str,
+}
+
+pub fn entry_name(e: Entry) -> Str {
+  e.name
+}
+
+pub fn make() -> Entry {
+  Entry { name: "gain" }
+}
+
+pub fn blank(e: Entry) -> Bool {
+  e.name.len() == 0
+}
+
+pub fn blank_by_is_empty(e: Entry) -> Bool {
+  e.name.is_empty()                                 //~ E0413
+}
+
+pub fn not_blank(e: Entry, c: Bool) -> Bool {
+  (c && e.name.is_empty()) || c                     //~ E0413
+}

@@ -180,39 +180,9 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
     block_like_errors(ast, kind_of, limit, diagnostics);
 }
 
-/// The operands of `e` as an operator (§3.1, S-537): both sides of a binary
-/// operator, the operand of a prefix, `as` and `at`, and the receiver of a
-/// postfix (the callee of a call, the base of `.`, `::[`, `[` and `?`).
-/// The arguments, the index and the parts of the other forms are no operands
-/// (they are whole expressions).
-fn operands(kind: &ExprKind) -> [Option<ExprId>; 2] {
-    use ExprKind::*;
-    match *kind {
-        Binary { lhs, rhs, .. } => [Some(lhs), Some(rhs)],
-        Unary { expr, .. } | Cast { expr, .. } | At { expr, .. } | Call { callee: expr, .. } => [Some(expr), None],
-        Field { base, .. } | TypeArgs { base, .. } | TupleIndex { base, .. } | Index { base, .. } | Try(base) => {
-            [Some(base), None]
-        }
-        Lit(_)
-        | Path(_)
-        | Hole
-        | Error
-        | Paren(_)
-        | Tuple(_)
-        | Array(_)
-        | Repeat { .. }
-        | Struct { .. }
-        | Block(_)
-        | If { .. }
-        | Match { .. }
-        | Closure { .. }
-        | Handle { .. }
-        | Unsafe(_)
-        | Par { .. }
-        | Feedback(_)
-        | Move(_)
-        | Range(_) => [None, None],
-    }
+/// The operands of `kind` as an operator ([`ExprKind::operands`]).
+fn operands(kind: &ExprKind) -> impl Iterator<Item = ExprId> {
+    kind.operands().into_iter().flatten().map(|(o, _)| o)
 }
 
 /// The block-like operands of each expression that has some (§3.1, S-537):
@@ -223,7 +193,7 @@ fn operands(kind: &ExprKind) -> [Option<ExprId>; 2] {
 /// text first. The one judgment of the form: E0013 here, and the
 /// parentheses that the other candidates need (`crate::operands`).
 pub(crate) fn block_like_operands(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind) -> Vec<(Span, Vec<Span>)> {
-    let under: HashSet<ExprId> = ast.exprs.iter().flat_map(|e| operands(&e.kind)).flatten().collect();
+    let under: HashSet<ExprId> = ast.exprs.iter().flat_map(|e| operands(&e.kind)).collect();
     let mut out = Vec::new();
     for (i, expr) in ast.exprs.iter().enumerate() {
         if under.contains(&ExprId(i as u32)) {
@@ -231,12 +201,12 @@ pub(crate) fn block_like_operands(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKin
         }
         // Without recursion (a chain is up to 256 levels high).
         let mut found = Vec::new();
-        let mut todo: Vec<ExprId> = operands(&expr.kind).into_iter().flatten().collect();
+        let mut todo: Vec<ExprId> = operands(&expr.kind).collect();
         while let Some(o) = todo.pop() {
             if kind_of(o).block_like() {
                 found.push(ast.expr(o).span);
             } else {
-                todo.extend(operands(&ast.expr(o).kind).into_iter().flatten());
+                todo.extend(operands(&ast.expr(o).kind));
             }
         }
         if !found.is_empty() {
