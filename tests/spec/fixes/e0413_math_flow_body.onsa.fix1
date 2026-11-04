@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§11.5"]
+// fixes = 1
+
+// E0413 of a function of `std.math` in the body of a flow (§3.4, §11.5, §13.4, S-98): every function of `std.math`
+// is an `rt fn` with an empty effect row, which a flow body applies point by point (§11.5), so `abs(x)` is right
+// where `x.abs()` stood: as the tail, in a `let`, in the branch of an `if`, as the condition of an `if`, and in
+// the body of a `par~` over an element of an array input. The names are imported. One error per flow (P-01). The
+// flow at the end is fine.
+
+use std.math.{abs, is_nan}
+
+pub flow as_the_tail(x: F32 at sample) -> F32 at sample {
+  abs(x)                                           //~ E0413
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = abs(x)                                   //~ E0413
+  y * 0.5
+}
+
+pub flow in_a_branch(x: F32 at sample) -> F32 at sample {
+  if x < 0.0 { abs(x) } else { x }                 //~ E0413
+}
+
+pub flow as_a_condition(x: F32 at sample) -> F32 at sample {
+  if is_nan(x) { 0.0 } else { x }                  //~ E0413
+}
+
+pub flow in_a_par(xs: [F32; 2] at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { abs(xs[i]) }                 //~ E0413
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  abs(x) * 0.5
+}

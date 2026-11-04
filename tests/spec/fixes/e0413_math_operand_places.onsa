@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§3.1", "§4.7"]
+// fixes = 1
+
+// E0413 of a function of `std.math` where the call is an operand (§3.4, §3.1, §4.7, S-98): the candidate is a
+// call, which binds tighter than any operator, so it needs no parentheses wherever the method call stood
+// (`-x.abs()` is `-abs(x)`, `a + b.abs() * c` is `a + abs(b) * c`, `x.abs() < y` is `abs(x) < y`, `!x.is_nan()` is
+// `!is_nan(x)`, `x.is_nan() == c` is `is_nan(x) == c`). Where the place expects a type (an argument, a comparison
+// with a variable, a condition) the result of the function has it. The names are imported. One error per function
+// (P-01). The function at the end is fine.
+
+use std.math.{abs, is_nan}
+
+pub fn take(v: F32) -> F32 {
+  v
+}
+
+pub fn negated(x: F32) -> F32 {
+  -x.abs()                                          //~ E0413
+}
+
+pub fn a_term(a: F32, b: F32, c: F32) -> F32 {
+  a + b.abs() * c                                   //~ E0413
+}
+
+pub fn left_of_a_comparison(x: F32, y: F32) -> Bool {
+  x.abs() < y                                       //~ E0413
+}
+
+pub fn right_of_a_comparison(x: F32, y: F32) -> Bool {
+  y < x.abs()                                       //~ E0413
+}
+
+pub fn after_a_prefix_not(x: F32) -> Bool {
+  !x.is_nan()                                       //~ E0413
+}
+
+pub fn right_of_and(x: F32, c: Bool) -> Bool {
+  c && x.is_nan()                                   //~ E0413
+}
+
+pub fn left_of_equal(x: F32, c: Bool) -> Bool {
+  x.is_nan() == c                                   //~ E0413
+}
+
+pub fn as_an_argument(x: F32) -> F32 {
+  take(x.abs())                                     //~ E0413
+}
+
+pub fn fine(a: F32, b: F32, c: F32) -> F32 {
+  -abs(a) + take(abs(b)) * c
+}

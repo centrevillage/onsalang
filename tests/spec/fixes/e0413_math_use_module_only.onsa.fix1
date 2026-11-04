@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 when the module imports `std.math` itself and not the name (§3.4, §15.1, S-98): `use std.math` binds
+// `math` and not `floor`, so the name of the function is free and the candidate adds `use std.math.{floor}` beside
+// the existing `use` (§15.1: the two forms bind different names; the function at the end uses `math`). One error
+// in the case.
+
+use std.math
+use std.math.{floor}
+
+pub fn round_down(x: F32) -> F32 {
+  floor(x)                                         //~ E0413
+}
+
+pub fn fine(x: F32) -> F32 {
+  math.sqrt(x)
+}

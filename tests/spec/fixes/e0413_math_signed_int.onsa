@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 of a function of `std.math` on a signed integer (§3.4, §13.4, S-98): `abs[T: Num]`, `min` and `max` are
+// generic over the numbers, and a signed integer is a `Num` (§6.3), so `n.abs()` is `abs(n)` and `a.max(b)` is
+// `max(a, b)`. An integer literal as the argument takes the type of the receiver (`a.max(1)` of an `I64` is
+// `max(a, 1)`). The names are imported. One error per function (P-01). The function at the end is fine.
+
+use std.math.{abs, max, min}
+
+pub fn magnitude(n: I32) -> I32 {
+  n.abs()                                           //~ E0413
+}
+
+pub fn magnitude_wide(n: I64) -> I64 {
+  n.abs()                                           //~ E0413
+}
+
+pub fn bigger(a: I32, b: I32) -> I32 {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn bigger_than_a_literal(a: I64) -> I64 {
+  a.max(1)                                          //~ E0413
+}
+
+pub fn smaller(a: I8, b: I8) -> I8 {
+  a.min(b)                                          //~ E0413
+}
+
+pub fn fine(a: I32, b: I32) -> I32 {
+  max(abs(a), min(b, 3))
+}

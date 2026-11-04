@@ -1,12 +1,17 @@
 // onsa.toml
 // [test]
 // spec = ["§3.3", "§3.4", "§15.1", "§18.1"]
+// fixes = 1
 
 // E0413 (W5-02 U4b): a method that the closed list of the scalar types does not have (§3.3, §3.4: "整数と浮動小数の
 // メソッドは、§3.3 の変換と、上の床除算と検査付きで全てである"). A method of the other family (a float has no
 // `div_euclid`, `rem_euclid` or `checked_*`, no `narrow_<type>`; an integer has no `to_bits`, no `trunc_<type>`), the
 // `wrapping_*` and `saturating_*` methods ("メソッドは無い（演算子が唯一の書き方）"), and a name that no list has. The
-// type of the receiver is known in each function. One error per function (P-01).
+// type of the receiver is known in each function. One error per function (P-01). Only `x.sin()` is a
+// computation of `std.math` that is a function of a float (`sin`), and its candidate is `sin(x)` with
+// `use std.math.{sin}` added (the module has no `use`, and no binding of it is named `sin`). Every other call
+// has no candidate: `n.pow(2)` of an integer (`pow` is generic over `Float`), `x.clamp(0.0, 1.0)` and the names
+// of no list. The E0413 that have no candidate stay after the candidate is applied (`fixes = 1`).
 
 pub fn int_to_bits(n: I32) -> U32 {
   n.to_bits()                                       //~ E0413

@@ -1,0 +1,7 @@
+pub fn twice(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub fn max(a: F32, b: F32) -> F32 {
+  if a < b { b } else { a }
+}

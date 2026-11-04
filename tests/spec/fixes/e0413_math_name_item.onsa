@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§5.1"]
+// fixes = 0
+
+// E0413 of a function of `std.math` when the module has an item of its own with the name (§3.4, §5.1, §18.1,
+// S-98): `fn abs` and `fn max` of the module. The name is not free: the function form `abs(x)` would call the
+// function of the module and not the one of `std.math`, and a `use std.math.{abs}` would be E0304 (§5.1: no
+// shadowing, a `use` does not hide an item). So no candidate is offered, and the diagnostic is the E0413 of the
+// method name alone (`fixes = 0`). One error per function (P-01). The function at the end is fine.
+
+pub fn abs(x: F32) -> F32 {
+  if x < 0.0 { -x } else { x }
+}
+
+pub fn max(a: F32, b: F32) -> F32 {
+  if a < b { b } else { a }
+}
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn bigger(a: F32, b: F32) -> F32 {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  max(abs(a), b)
+}

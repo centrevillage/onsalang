@@ -1,0 +1,3 @@
+pub fn abs(x: F32) -> F32 {
+  if x < 0.0 { -x } else { x }
+}

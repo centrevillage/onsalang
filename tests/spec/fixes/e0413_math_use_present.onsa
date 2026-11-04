@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 of a computation that is a function of `std.math` when the module already imports the name (§3.4, §13.4,
+// §15.1, S-98): the candidate is the function form, with the receiver as the first argument and the other
+// arguments after it (`x.abs()` is `abs(x)`, `a.max(b)` is `max(a, b)`, `x.pow(y)` is `pow(x, y)`). The name is in
+// the `use` of the module, so no `use` is added and the candidate edits the call only. The receiver is an `F32` or
+// an `F64`, and an argument is a variable or a literal of the type of the receiver. One error per function (P-01).
+// The function at the end is fine.
+
+use std.math.{abs, is_nan, max, pow, sqrt}
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn root(x: F64) -> F64 {
+  x.sqrt()                                          //~ E0413
+}
+
+pub fn bigger(a: F32, b: F32) -> F32 {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn power(x: F32, y: F32) -> F32 {
+  x.pow(y)                                          //~ E0413
+}
+
+pub fn power_of_a_literal(x: F64) -> F64 {
+  x.pow(2.0)                                        //~ E0413
+}
+
+pub fn bigger_than_a_literal(a: F32) -> F32 {
+  a.max(1.0)                                        //~ E0413
+}
+
+pub fn not_a_number(x: F32) -> Bool {
+  x.is_nan()                                        //~ E0413
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  if is_nan(a) { b } else { max(abs(a), sqrt(pow(b, 2.0))) }
+}

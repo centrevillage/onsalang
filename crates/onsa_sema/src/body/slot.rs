@@ -24,14 +24,15 @@ pub(crate) enum Form {
     Binary(BinOp),
 }
 
-/// The slot of `e` under `root`, found from the root down with
-/// [`Ast::sub_exprs`] (each expression once; linear in the body, which the
-/// error stops, so once a body); `None` when `e` is not under `root`.
-pub(crate) fn slot_of(ast: &Ast, root: ExprId, e: ExprId) -> Option<Slot> {
-    let mut todo = vec![(root, Slot::Free)];
-    while let Some((x, slot)) = todo.pop() {
+/// The slot of `e` under `root` and its parent (none of the root), found
+/// from the root down with [`Ast::sub_exprs`] (each expression once; linear
+/// in the body, which the error stops, so once a body); `None` when `e` is
+/// not under `root`.
+pub(crate) fn slot_of(ast: &Ast, root: ExprId, e: ExprId) -> Option<(Slot, Option<ExprId>)> {
+    let mut todo = vec![(root, Slot::Free, None)];
+    while let Some((x, slot, parent)) = todo.pop() {
         if x == e {
-            return Some(slot);
+            return Some((slot, parent));
         }
         let kind = &ast.expr(x).kind;
         let operands = kind.operands();
@@ -52,7 +53,7 @@ pub(crate) fn slot_of(ast: &Ast, root: ExprId, e: ExprId) -> Option<Slot> {
                 None if dropped.contains(&c) => Slot::Discarded,
                 None => Slot::Free,
             };
-            todo.push((c, s));
+            todo.push((c, s, Some(x)));
         }
     }
     None

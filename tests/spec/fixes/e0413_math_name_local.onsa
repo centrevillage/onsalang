@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§5.1"]
+// fixes = 0
+
+// E0413 of a function of `std.math` when the name is a binding of the module (§3.4, §5.1, §18.1, S-98). The module
+// has no `use`, so the candidate would add `use std.math.{<name>}`, and a `use` binds the name in the whole
+// module: a local binding of the same name anywhere in the module, in the function of the call or in another one,
+// would be E0304 (§5.1: no shadowing; a `let`, a parameter, a binding of a `match` arm, a parameter of a closure,
+// the binding of a `for`). A function form that does not add the `use` is E0302. So no candidate is offered
+// (`fixes = 0`). The binding is in another function of the module for `abs`, `max`, `sqrt`, `floor` and `trunc`,
+// and in the function of the call for `ceil`. One error per function (P-01) for the call; the functions that hold
+// the binding are fine.
+
+pub fn scaled(x: F32) -> F32 {
+  let abs = x * 2.0
+  abs
+}
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn limited(max: F32) -> F32 {
+  max
+}
+
+pub fn bigger(a: F32, b: F32) -> F32 {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn unwrapped(o: Option[F32]) -> F32 {
+  match o {
+    Some(sqrt) => sqrt,
+    None => 0.0,
+  }
+}
+
+pub fn root(x: F32) -> F32 {
+  x.sqrt()                                          //~ E0413
+}
+
+pub fn adder() -> fn(F32) -> F32 {
+  fn(floor: F32) -> F32 { floor + 1.0 }
+}
+
+pub fn round_down(x: F32) -> F32 {
+  x.floor()                                         //~ E0413
+}
+
+pub fn total(xs: [F32; 2]) -> F32 {
+  var s: F32 = 0.0
+  for trunc in xs {
+    s = s + trunc
+  }
+  s
+}
+
+pub fn cut(x: F32) -> F32 {
+  x.trunc()                                         //~ E0413
+}
+
+pub fn in_the_same_function(x: F32) -> F32 {
+  let ceil = 1.0
+  x.ceil() + ceil                                   //~ E0413
+}

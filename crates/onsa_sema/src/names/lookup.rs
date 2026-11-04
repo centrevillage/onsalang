@@ -257,12 +257,29 @@ impl Modules {
             d.name == name && d.vis == Vis::Pub && matches!(d.kind, DefKind::Effect { .. }) && self.is_std(d.module)
         });
         let (Some((d, def)), None) = (found.next(), found.next()) else { return None };
-        let taken = Entity::Def(crate::DefId(d as u32));
-        if !self.free_in_body(from, name, prelude) || self.take_cycle(from, taken, Some(def.module)).is_some() {
+        let (added, edit) = self.std_use(from, (crate::DefId(d as u32), def), prelude)?;
+        Some(Fix::new(format!("add `use {added}`"), vec![edit]))
+    }
+
+    /// The `use` of the declaration `d` of std that a candidate adds to
+    /// `from` (§15.1, §18.1), as written after `use` and as the edit: none
+    /// when its name is not free in the body of `from`, when it closes a
+    /// cycle, or of a module with no file. The candidates of a missing
+    /// effect (S-659 (3)) and of the function form of `std.math` read it.
+    pub(crate) fn std_use(
+        &self,
+        from: ModId,
+        (d, def): (crate::DefId, &Def),
+        prelude: &HashMap<String, Entity>,
+    ) -> Option<(String, Edit)> {
+        let name = &def.name;
+        if !self.free_in_body(from, name, prelude) || self.take_cycle(from, Entity::Def(d), Some(def.module)).is_some()
+        {
             return None;
         }
         let added = format!("{}.{{{name}}}", self.abs_path(from, def.module).join("."));
-        Some(Fix::new(format!("add `use {added}`"), vec![self.use_edit(from, &added)?]))
+        let edit = self.use_edit(from, &added)?;
+        Some((added, edit))
     }
 
     /// The rule of a candidate kept back as its `use` of `form`, a dependency

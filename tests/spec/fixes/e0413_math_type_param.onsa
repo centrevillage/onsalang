@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§6.3"]
+// fixes = 1
+
+// E0413 of a function of `std.math` on a receiver whose type is a type parameter with the bound `Float` (§3.4,
+// §6.3, §13.4, S-98): `x.sqrt()` of `T: Float` is `sqrt(x)`, because the function is generic over `Float`
+// (`sqrt[T: Float](x: T) -> T`) and `T` satisfies it; `abs` and `max` are generic over the numbers, and `Float` is
+// a `Num`, so `x.abs()` and `a.max(b)` are `abs(x)` and `max(a, b)`. The receiver may also be a field of `self` in
+// an `impl` whose parameter has the bound. The names are imported. One error per function (P-01). The function at
+// the end is fine.
+
+use std.math.{abs, is_nan, max, pow, sqrt}
+
+pub struct Level[T] {
+  v: T,
+}
+
+impl[T: Float] Level[T] {
+  pub fn root(self) -> T {
+    self.v.sqrt()                                   //~ E0413
+  }
+}
+
+pub fn root[T: Float](x: T) -> T {
+  x.sqrt()                                          //~ E0413
+}
+
+pub fn magnitude[T: Float](x: T) -> T {
+  x.abs()                                           //~ E0413
+}
+
+pub fn bigger[T: Float](a: T, b: T) -> T {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn power[T: Float](x: T, y: T) -> T {
+  x.pow(y)                                          //~ E0413
+}
+
+pub fn not_a_number[T: Float](x: T) -> Bool {
+  x.is_nan()                                        //~ E0413
+}
+
+pub fn fine[T: Float](x: T, y: T) -> T {
+  if is_nan(x) { y } else { max(abs(x), sqrt(pow(y, y))) }
+}

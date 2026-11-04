@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 of a function of `std.math` across modules (§3.4, §15.1, S-98): a `use` binds a name in its own module
+// only, so each module decides alone whether the candidate adds one. `main.onsa` imports `abs` and the candidate
+// edits the call only; `inner.onsa` has no `use` and the candidate of `sqrt` adds `use std.math.{sqrt}` there;
+// `third.onsa` has no `use` either, and the name `max` is free in it although `util.onsa` declares a `max` (a
+// declaration of another module is not visible without a `use`, §5.1, §15.1), so its candidate adds
+// `use std.math.{max}` to `third.onsa` and `util.onsa` is not edited. One `use` is added to a module at most.
+// One error per function (P-01).
+
+use std.math.{abs}
+use util.{twice}
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn fine(x: F32) -> F32 {
+  twice(abs(x))
+}

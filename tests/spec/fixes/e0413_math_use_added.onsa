@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 of a computation that is a function of `std.math` when the module has no `use` (§3.4, §15.1, S-98): the
+// candidate is the function form and also adds `use std.math.{abs}`, since `abs(x)` alone would be E0302 (§18.1:
+// the candidate leaves no error of the same stage). The name `abs` is free in the module (nothing of the module
+// binds it), so the added `use` makes no other place an E0304 (§5.1). One error in the case.
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}

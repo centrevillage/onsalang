@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// E0413 of a function of `std.math` when the line has another call of the same kind, as the receiver or in the
+// arguments (§3.4, §13.4, §18.1, S-98). The method that is missing stops the check of its call, so the first one
+// is the only diagnostic of the function: the outer `min` of `a.min(b.max(c))` (the arguments are not checked),
+// the inner `abs` of `x.abs().sqrt()` (the receiver has no type for `sqrt`). The candidate of that one diagnostic
+// would leave a diagnostic of the same stage, the one that the first hid (`a.min(b.max(c))` is `min(a, b.max(c))`,
+// which is E0413 of `max`; `x.abs().sqrt()` is `abs(x).sqrt()`, E0413 of `sqrt`), so no candidate is offered
+// (`fixes = 0`, §18.1: 'この約束を満たす候補を作れなければ、候補を出さない'). The names are imported. One error per function (P-01). The
+// function at the end is fine.
+
+use std.math.{abs, max, min, sqrt}
+
+pub fn in_the_arguments(a: F32, b: F32, c: F32) -> F32 {
+  a.min(b.max(c))                                   //~ E0413
+}
+
+pub fn in_the_arguments_of_a_chain(a: F32, b: F32) -> F32 {
+  a.max(b.sqrt())                                   //~ E0413
+}
+
+pub fn as_the_receiver(x: F32) -> F32 {
+  x.abs().sqrt()                                    //~ E0413
+}
+
+pub fn fine(a: F32, b: F32, c: F32) -> F32 {
+  min(a, max(b, sqrt(abs(c))))
+}

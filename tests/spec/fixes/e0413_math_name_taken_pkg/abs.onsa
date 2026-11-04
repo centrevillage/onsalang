@@ -1,0 +1,3 @@
+pub fn twice(x: F32) -> F32 {
+  x * 2.0
+}

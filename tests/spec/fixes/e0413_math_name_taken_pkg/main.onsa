@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§5.1", "§18.1"]
+// fixes = 0
+
+// E0413 of a function of `std.math` when the name is taken by a `use` of the module (§3.4, §5.1, §15.1, §18.1,
+// S-98). `main.onsa` imports `abs` from `util.onsa` (`use util.{abs}`, another `abs`): the function form `abs(x)`
+// would call that one, and `use std.math.{abs}` would be E0304 (§5.1: a `use` does not hide a `use`). In
+// `via_module.onsa` the module `abs.onsa` is imported (`use abs`), which binds the name `abs` as well. So no
+// candidate is offered (`fixes = 0`). One error per function (P-01).
+
+use util.{abs}
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn fine(x: F32) -> F32 {
+  abs(x)
+}

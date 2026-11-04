@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§4.7"]
+// fixes = 0
+
+// E0413 of a function of `std.math` in a place that expects another type than the one of the result (§3.4, §13.4,
+// §4.7, §18.1, S-98): the tail of a function that returns an `F32` for `x.is_nan()` (a `Bool`), a `Bool` for
+// `x.sqrt()`, an `F64` for the `F32` of `x.abs()`, an `I32` for `let n: I32 = x.floor()`, an `if` on `x.abs()`, an
+// argument of a `Bool` parameter. The method has no result type to mismatch (the E0413 is all that is reported),
+// and the function form would be an E0401, an error of the same stage, so no candidate is offered (`fixes = 0`).
+// The names are imported. One error per function (P-01). The function at the end is fine.
+
+use std.math.{abs, is_nan, sqrt}
+
+pub fn want(b: Bool) -> Bool {
+  b
+}
+
+pub fn a_bool_for_a_float(x: F32) -> F32 {
+  x.is_nan()                                        //~ E0413
+}
+
+pub fn a_float_for_a_bool(x: F32) -> Bool {
+  x.sqrt()                                          //~ E0413
+}
+
+pub fn a_float_for_another_float(x: F32) -> F64 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn in_an_annotated_let(x: F32) -> I32 {
+  let n: I32 = x.abs()                              //~ E0413
+  n
+}
+
+pub fn as_a_condition(x: F32) -> F32 {
+  if x.abs() { 1.0 } else { 0.0 }                   //~ E0413
+}
+
+pub fn as_an_argument(x: F32) -> Bool {
+  want(x.sqrt())                                    //~ E0413
+}
+
+pub fn fine(x: F32) -> Bool {
+  is_nan(sqrt(abs(x)))
+}

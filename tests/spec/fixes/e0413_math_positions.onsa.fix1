@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§4.7", "§6.1", "§10"]
+// fixes = 1
+
+// E0413 of a function of `std.math` in each place where a method call can stand (§3.4, §4.7, §6.1, §13.4, S-98): a
+// `const` initializer, an argument, the value of a `return`, a `let` with and without a type, a discarding `let
+// _`, an assignment, a field of a struct literal, an element of a tuple and of an array, the condition of an `if`,
+// the target and an arm of a `match`, the body of a closure, a flow (every function of `std.math` is `rt`, §13.4),
+// an `rt fn` and the condition of an `assert` in a `test`. The type of the place is the type of the result of the
+// function, so the candidate `abs(x)` is right in each. The names are imported. Only the call is edited. One error
+// per function (P-01). The function at the end is fine.
+
+use std.math.{abs, is_nan, sqrt}
+
+pub struct Gain {
+  level: F32,
+}
+
+pub fn take(v: F32) -> F32 {
+  v
+}
+
+pub const BASE: F32 = 4.0
+pub const ROOT: F32 = sqrt(BASE)                   //~ E0413
+
+pub fn as_an_argument(x: F32) -> F32 {
+  take(abs(x))                                     //~ E0413
+}
+
+pub fn as_a_returned_value(x: F32, c: Bool) -> F32 {
+  if c {
+    return abs(x)                                  //~ E0413
+  }
+  0.0
+}
+
+pub fn in_an_annotated_let(x: F32) -> F32 {
+  let y: F32 = abs(x)                              //~ E0413
+  y
+}
+
+pub fn in_a_let_without_a_type(x: F32) -> F32 {
+  let y = abs(x)                                   //~ E0413
+  y
+}
+
+pub fn in_a_discarding_let(x: F32) -> F32 {
+  let _ = abs(x)                                   //~ E0413
+  1.0
+}
+
+pub fn in_an_assignment(x: F32) -> F32 {
+  var y: F32 = 0.0
+  y = abs(x)                                       //~ E0413
+  y
+}
+
+pub fn in_a_field(x: F32) -> Gain {
+  Gain { level: abs(x) }                           //~ E0413
+}
+
+pub fn in_a_tuple(x: F32) -> (F32, I32) {
+  (abs(x), 1)                                      //~ E0413
+}
+
+pub fn in_an_array(x: F32) -> [F32; 2] {
+  [abs(x), x]                                      //~ E0413
+}
+
+pub fn as_a_condition(x: F32) -> F32 {
+  if is_nan(x) { 0.0 } else { x }                  //~ E0413
+}
+
+pub fn as_a_match_target(x: F32) -> F32 {
+  match is_nan(x) {                                //~ E0413
+    true => 0.0,
+    false => x,
+  }
+}
+
+pub fn as_an_arm_value(o: Option[F32]) -> F32 {
+  match o {
+    Some(v) => abs(v),                             //~ E0413
+    None => 0.0,
+  }
+}
+
+pub fn in_a_closure() -> fn(F32) -> F32 {
+  fn(v: F32) -> F32 { abs(v) }                     //~ E0413
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  abs(x)                                           //~ E0413
+}
+
+pub rt fn in_an_rt_fn(x: F32) -> F32 {
+  abs(x)                                           //~ E0413
+}
+
+test "in an assert" {
+  let x: F32 = -2.0
+  assert abs(x) == 2.0                             //~ E0413
+}
+
+pub fn fine(x: F32) -> F32 {
+  sqrt(abs(x))
+}

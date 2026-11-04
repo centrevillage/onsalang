@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§2.5"]
+// fixes = 1
+
+// E0413 of a function of `std.math` where the call is written over several lines (§3.4, §2.5, S-98): the receiver,
+// a comment and the `.abs()` on the next line (a method chain continues on the line that starts with `.`), and a
+// comment between the parentheses of the arguments. The candidate keeps the comment, which is not in the range of
+// an edit, and the code that the edits leave reads as before (§18.1: the lexical reading of the text outside an
+// edit does not change). The names are imported. One error per function (P-01).
+
+use std.math.{abs, max}
+
+pub fn on_the_next_line(x: F32) -> F32 {
+  abs(x
+    )                                          //~ E0413
+}
+
+pub fn after_a_comment(x: F32) -> F32 {
+  abs(x // the input
+    )                                          //~ E0413
+}
+
+pub fn comment_in_the_arguments(a: F32, b: F32) -> F32 {
+  max(a,                                             //~ E0413
+    // the other one
+    b
+  )
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  max(abs(a), b)
+}

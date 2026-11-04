@@ -6,8 +6,11 @@
 // form (§3.4: the methods of the integers and the floats are the conversions of §3.3, the floor division and
 // the checked ones, "それ以外の計算 (abs, min, max, sqrt, floor, is_nan など) は std.math の関数で書き、メソッドの
 // 形は無い"). The type of the receiver is known in each function, so it is E0413 and not E0420. One error per
-// function (P-01). The candidates (the function form) are not counted here. The last function is fine: the
-// same computations in the function form.
+// function (P-01). The candidate of each is the function form (`x.abs()` is `abs(x)`, `(x * y).abs()` is
+// `abs((x * y))`), and where the name is not imported it adds the `use` as well. `is_nan` and `is_finite` are not
+// in the `use` of this case, so two of the candidates would add a `use` at the same place (the case runner reads two
+// edits at one place as overlapping), and `fixes` is not set here; tests/spec/fixes/e0413_math_*.onsa count the
+// candidates. The last function is fine: the same computations in the function form.
 
 use std.math.{abs, ceil, floor, max, min, round, sqrt, trunc}
 

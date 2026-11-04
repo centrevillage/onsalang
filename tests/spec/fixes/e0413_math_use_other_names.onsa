@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 when the module imports other names of `std.math` (§3.4, §15.1, S-98): `sin` and `sqrt` are imported and
+// `cos` is not, so the candidate `cos(x)` also adds the name `cos` to the imports of the module (`use
+// std.math.{cos}`). The names that were imported stay. One error in the case; the function at the end is fine.
+
+use std.math.{sin, sqrt}
+
+pub fn cosine(x: F32) -> F32 {
+  x.cos()                                           //~ E0413
+}
+
+pub fn fine(x: F32) -> F32 {
+  sin(x) + sqrt(x)
+}

@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§2.4", "§4.7"]
+// fixes = 0
+
+// E0413 of a function of `std.math` whose arguments do not fit the function (§3.4, §13.4, §4.7, §18.1, S-98). The
+// number of arguments is not the one of the function (`x.abs(1)` would be `abs(x, 1)`, `a.max()` would be
+// `max(a)`, `a.max(a, a)` would be `max(a, a, a)`), or an argument has not the type of the receiver (`a.max(1)` of
+// an `F32`: an integer literal is not a float (§2.4); `a.max(b)` of an `F32` and an `F64`; `x.pow(2)`; `x.pow(n)`
+// with an `I32`). The function form is then an error of the same stage (E0403, E0401), so no candidate is offered
+// (`fixes = 0`). The names are imported, so what is missing is not the `use`. One error per function (P-01). The
+// function at the end is fine.
+
+use std.math.{abs, max, pow}
+
+pub fn too_many(x: F32) -> F32 {
+  x.abs(1)                                          //~ E0413
+}
+
+pub fn too_few(a: F32) -> F32 {
+  a.max()                                           //~ E0413
+}
+
+pub fn three(a: F32) -> F32 {
+  a.max(a, a)                                       //~ E0413
+}
+
+pub fn an_integer_literal_for_a_float(a: F32) -> F32 {
+  a.max(1)                                          //~ E0413
+}
+
+pub fn two_floats(a: F32, b: F64) -> F32 {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn an_exponent_literal(x: F32) -> F32 {
+  x.pow(2)                                          //~ E0413
+}
+
+pub fn an_exponent_integer(x: F32, n: I32) -> F32 {
+  x.pow(n)                                          //~ E0413
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  max(abs(a), pow(b, 2.0))
+}

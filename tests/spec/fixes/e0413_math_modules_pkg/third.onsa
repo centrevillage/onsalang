@@ -1,0 +1,3 @@
+pub fn bigger(a: F32, b: F32) -> F32 {
+  a.max(b)                                          //~ E0413
+}

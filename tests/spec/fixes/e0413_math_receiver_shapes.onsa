@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§3.1"]
+// fixes = 1
+
+// E0413 of a function of `std.math` for each shape of the receiver (§3.4, §3.1, S-98): the candidate puts the
+// receiver, as it is written, first in the arguments. A receiver in parentheses keeps its parentheses (`(a -
+// b).abs()` is `abs((a - b))`), a receiver that is a call, a method call, a field, a tuple index or an element
+// needs none. The receiver may be a method call whose method exists (`xs.get(0).unwrap()`), and the result of the
+// function may be the receiver of a method that exists (`x.abs().to_bits()` is `abs(x).to_bits()`). The names are
+// imported. One error per function (P-01). The function at the end is fine.
+
+use std.math.{abs, max, sqrt}
+
+pub struct Pair {
+  lo: F32,
+  hi: F32,
+}
+
+pub struct Wrapper {
+  p: Pair,
+}
+
+pub fn twice(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub fn in_parentheses(a: F32, b: F32) -> F32 {
+  (a - b).abs()                                     //~ E0413
+}
+
+pub fn a_name_in_parentheses(x: F32) -> F32 {
+  (x).abs()                                         //~ E0413
+}
+
+pub fn a_negation_in_parentheses(x: F32) -> F32 {
+  (-x).abs()                                        //~ E0413
+}
+
+pub fn a_call(x: F32) -> F32 {
+  twice(x).abs()                                    //~ E0413
+}
+
+pub fn a_method_call(xs: Span[F32]) -> F32 {
+  xs.get(0).unwrap().abs()                          //~ E0413
+}
+
+pub fn a_field(p: Pair) -> F32 {
+  p.lo.sqrt()                                       //~ E0413
+}
+
+pub fn a_field_of_a_field(w: Wrapper) -> F32 {
+  w.p.hi.abs()                                      //~ E0413
+}
+
+pub fn a_tuple_index(t: (F32, F32)) -> F32 {
+  t.0.sqrt()                                        //~ E0413
+}
+
+pub fn an_element(xs: [F32; 2]) -> F32 {
+  xs[1].max(0.0)                                    //~ E0413
+}
+
+pub fn an_element_of_an_element(xs: [[F32; 2]; 2]) -> F32 {
+  xs[1][0].abs()                                    //~ E0413
+}
+
+pub fn a_receiver_of_a_method_that_exists(x: F32) -> U32 {
+  x.abs().to_bits()                                 //~ E0413
+}
+
+pub fn fine(a: F32, b: F32) -> F32 {
+  max(abs(a - b), sqrt(twice(a)))
+}

@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§6.3"]
+// fixes = 0
+
+// E0413 of a function of `std.math` whose receiver does not satisfy the bound of the function (§3.4, §13.4, §6.3,
+// S-98): `sqrt`, `floor`, `ceil`, `trunc`, `round`, `is_nan`, `is_finite`, `exp` and `pow` are generic over
+// `Float`, and an integer is not a `Float`. The method is not there and the function form `sqrt(n)` would be an
+// E0416 (§18.1: a candidate that leaves an error of the same stage is not offered), so there is no candidate
+// (`fixes = 0`). The type of the receiver is known in each function, so the code is E0413. One error per function
+// (P-01). The function at the end is fine.
+
+use std.math.{abs, sqrt}
+
+pub fn root(n: I32) -> I32 {
+  n.sqrt()                                          //~ E0413
+}
+
+pub fn root_of_a_small(n: U8) -> U8 {
+  n.sqrt()                                          //~ E0413
+}
+
+pub fn round_down(n: I64) -> I64 {
+  n.floor()                                         //~ E0413
+}
+
+pub fn round_up(n: U32) -> U32 {
+  n.ceil()                                          //~ E0413
+}
+
+pub fn cut(n: I16) -> I16 {
+  n.trunc()                                         //~ E0413
+}
+
+pub fn nearest(n: I32) -> I32 {
+  n.round()                                         //~ E0413
+}
+
+pub fn not_a_number(n: I32) -> Bool {
+  n.is_nan()                                        //~ E0413
+}
+
+pub fn finite(n: U64) -> Bool {
+  n.is_finite()                                     //~ E0413
+}
+
+pub fn exponential(n: I32) -> I32 {
+  n.exp()                                           //~ E0413
+}
+
+pub fn power(n: I32) -> I32 {
+  n.pow(2)                                          //~ E0413
+}
+
+pub fn fine(x: F32) -> F32 {
+  sqrt(abs(x))
+}

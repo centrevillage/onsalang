@@ -1,0 +1,9 @@
+use abs
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn fine(x: F32) -> F32 {
+  abs.twice(x)
+}

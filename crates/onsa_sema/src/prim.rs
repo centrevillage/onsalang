@@ -6,9 +6,13 @@
 
 use std::sync::OnceLock;
 
-use crate::Analysis;
 use crate::def::{DefId, DefKind};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
+use crate::{Analysis, ModId};
+
+/// The path under std of the module of the functions of [`MathFn`] (and of
+/// `is_nan`, `is_finite`): their rows' keys and [`math_module`] read it.
+const MATH: &str = "math";
 
 const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
 /// Every integer type, in the order of §3.4's table.
@@ -473,11 +477,11 @@ pub fn rows() -> &'static [Row] {
         let row = |key: &str, prim, arity, rt| Row { key: key.to_string(), prim, arity, rt };
         let mut v: Vec<Row> = MathFn::ALL
             .iter()
-            .map(|&f| row(&format!("math.{}", f.name()), PrimRow::Math(f), f.arity() as u8, true))
+            .map(|&f| row(&format!("{MATH}.{}", f.name()), PrimRow::Math(f), f.arity() as u8, true))
             .collect();
         v.extend([
-            row("math.is_nan", PrimRow::IsNan, 1, true),
-            row("math.is_finite", PrimRow::IsFinite, 1, true),
+            row(&format!("{MATH}.is_nan"), PrimRow::IsNan, 1, true),
+            row(&format!("{MATH}.is_finite"), PrimRow::IsFinite, 1, true),
             row("array.from_fn", PrimRow::FromFn, 1, false),
             row("dsp.test.assert_near", PrimRow::AssertNear, 3, false),
             row("test.check", PrimRow::Pending(PendingPrim::Check), 3, false),
@@ -526,6 +530,14 @@ pub fn rows() -> &'static [Row] {
         }
         v
     })
+}
+
+/// The module `std.math` (§3.4), by the path of the rows of [`MathFn`]:
+/// what the function form of a method of a number names (`body/removed.rs`).
+/// None when no std is loaded.
+pub(crate) fn math_module(a: &Analysis) -> Option<ModId> {
+    let std = a.modules.roles.iter().position(|&r| r == crate::PackageRole::Std)?;
+    MATH.split('.').try_fold(a.modules.roots[std], |m, seg| a.modules.get(m).children.get(seg).copied())
 }
 
 /// The row of the key `key`.

@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§13.4", "§15.1", "§18.1", "§6.1"]
+// fixes = 0
+
+// E0413 of a function of `std.math` as a statement whose value is dropped (§3.4, §6.1, §13.4, §18.1, S-98): the
+// call alone on a line in the middle of a block, in a branch of an `if` without an `else`, in a loop body, and the
+// tail of a block of type `()`. The result of the function form is a number or a `Bool`, so as a statement it
+// would be an E0418 (§6.1: a statement in the middle of a block is `()`), and at the tail of a `()` block a
+// mismatch of types (E0401), an error of the same stage that the candidate would leave, so none is offered (`fixes
+// = 0`). What the user writes to drop a value is `let _ = abs(x)` (§6.1). The names are imported. One error per
+// function (P-01). The function at the end is fine.
+
+use std.math.{abs, is_nan, max}
+
+pub fn in_the_middle(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+  1.0
+}
+
+pub fn tail_of_a_unit_function(x: F32) {
+  x.abs()                                           //~ E0413
+}
+
+pub fn in_a_branch(x: F32, c: Bool) -> F32 {
+  if c {
+    x.is_nan()                                      //~ E0413
+  }
+  1.0
+}
+
+pub fn in_a_loop(x: F32) -> F32 {
+  for _ in 0 ..< 2 {
+    x.abs()                                         //~ E0413
+  }
+  1.0
+}
+
+pub fn two_arguments(a: F32, b: F32) -> F32 {
+  a.max(b)                                          //~ E0413
+  1.0
+}
+
+pub fn fine(x: F32) -> F32 {
+  let _ = abs(x)
+  let _ = is_nan(x)
+  max(x, 1.0)
+}

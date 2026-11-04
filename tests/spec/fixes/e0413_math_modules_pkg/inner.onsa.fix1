@@ -1,0 +1,4 @@
+use std.math.{sqrt}
+pub fn root(x: F32) -> F32 {
+  sqrt(x)                                          //~ E0413
+}

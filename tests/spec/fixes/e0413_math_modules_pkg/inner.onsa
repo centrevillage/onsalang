@@ -1,0 +1,3 @@
+pub fn root(x: F32) -> F32 {
+  x.sqrt()                                          //~ E0413
+}
