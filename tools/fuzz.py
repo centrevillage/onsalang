@@ -68,11 +68,12 @@ mutants cut short at the end of a file often are. Every field is required:
 listed), `input` (a saved input `tests/fuzz/<name>.onsa`, not listed in
 `tests/pending.toml`; one entry each), `left` (the message of the
 diagnostic left after the candidate, as the class writes the title: quoted
-text `…`, numbers `#`), `reasons` (S numbers of `decisions/S/`, or R numbers of
+text `…`, code points `U+#`, numbers `#`), `reasons` (S numbers of `decisions/S/`, or R numbers of
 `issues/R/` for a low harm recorded there) and `note`. A mutant is known
 when it shows the class with that message (the class alone is too coarse a
 net); the input must show them on every run (when it no longer does, the
-entry goes), and nothing else. The net gets
+entry goes), and nothing else. Another saved input that shows only listed
+classes is a regression input, with no entry. The net gets
 coarser for such a class: the contract on the cases (`onsa_tests::fix_contract`)
 is what holds it.
 
@@ -317,9 +318,9 @@ class Runner:
 
 def normalized(text):
     """A title or a message as a class names it: its quoted text `…`, its
-    numbers `#`, its blanks one space, the first 80 characters with no blank
-    at the end."""
-    text = re.sub(r"`[^`]*`", "`…`", text)
+    code points `U+#`, its numbers `#`, its blanks one space, the first 80
+    characters with no blank at the end."""
+    text = re.sub(r"U\+[0-9A-F]+", "U+#", re.sub(r"`[^`]*`", "`…`", text))
     return re.sub(r"\d+", "#", re.sub(r"\s+", " ", text)).strip()[:80].rstrip()
 
 
@@ -780,10 +781,12 @@ def replay_saved(root, runner, fixer, jobs, deadline):
             for other, left in sorted(shown - {key}):
                 failures.append(f"{rel}: shows `{other}` with `{left}`, which is not the entry's in "
                                 f"{ALLOWED.as_posix()}")
-        elif crashes:
-            what = "breaks the contract of a fix candidate" if crashes[0].command == FIX_COMMAND else "crashes"
-            failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {crashes[0].command}: "
-                            f"{crashes[0].signature}")
+        else:
+            unknown = [c for c in crashes if (c.signature, c.left) not in allowed]
+            if unknown:
+                what = "breaks the contract of a fix candidate" if unknown[0].command == FIX_COMMAND else "crashes"
+                failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {unknown[0].command}: "
+                                f"{unknown[0].signature}")
     return Replay(saved, listed, allowed, known, errors, failures)
 
 

@@ -361,6 +361,16 @@ class Fuzz(TempRepo):
         code, text = self.go(per_seed=fuzz.FIX_EVERY)
         self.assertEqual(code, 0, text)
         self.assertIn("(0 listed, 1 allowed)", text)
+        # another saved input of the class is a regression input, with no entry of its own
+        self.repo.write("tests/fuzz/g.onsa", "BADCANDIDATE")
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 0, text)
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa", left="another"))
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn("tests/fuzz/g.onsa: breaks the contract of a fix candidate but is not listed", text)
+        (self.repo.root / "tests/fuzz/g.onsa").unlink()
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa"))
         # the input no longer shows the class: the entry goes
         self.repo.write("tests/fuzz/f.onsa", "ok")
         code, text = self.go()
@@ -434,6 +444,12 @@ class Fuzz(TempRepo):
         v = {"code": "E0320", "title": "rename `Foo1` to `foo1`", "left": "E0002"}
         self.assertEqual(fuzz.fix_signature(v), "fix|E0320|rename `…` to `…`|E0002")
         self.assertEqual(fuzz.fix_signature({**v, "title": "use 3 args"}), "fix|E0320|use # args|E0002")
+
+    def test_a_code_point_is_one_form(self):
+        # the letters of the number do not make another class
+        for point in ("U+304C", "U+FF08", "U+5473", "U+1F3B5"):
+            self.assertEqual(fuzz.normalized(f"`x` ({point}) cannot be written"), "`…` (U+#) cannot be written")
+        self.assertEqual(fuzz.normalized("U+#"), "U+#")
 
     def test_inputs_are_bytes(self):
         # a `\r` and invalid UTF-8 reach the compiler as they are
