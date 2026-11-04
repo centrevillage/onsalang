@@ -131,7 +131,6 @@ pub(crate) struct Lowerer<'a> {
     fn_ids: HashMap<(DefId, Vec<GenericArg>), FnId>,
     worklist: Vec<(DefId, Vec<GenericArg>, FnId)>,
     type_ids: HashMap<(DefId, Vec<GenericArg>), TypeId>,
-    named_types: HashMap<String, TypeId>,
     const_ids: HashMap<DefId, ConstId>,
     pub(crate) eq_fns: HashMap<Ty, FnId>,
     messages: HashMap<String, MsgId>,
@@ -197,7 +196,6 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         fn_ids: HashMap::new(),
         worklist: Vec::new(),
         type_ids: HashMap::new(),
-        named_types: HashMap::new(),
         const_ids: HashMap::new(),
         eq_fns: HashMap::new(),
         messages: HashMap::new(),
@@ -441,15 +439,6 @@ impl<'a> Lowerer<'a> {
                 }
             }
             STy::Builtin(b, targs) => match b {
-                BuiltinTy::Option => {
-                    let t = self.core_ty(targs[0], args, span)?;
-                    Ty::Enum(self.option_type(t))
-                }
-                BuiltinTy::Result => {
-                    let t = self.core_ty(targs[0], args, span)?;
-                    let e = self.core_ty(targs[1], args, span)?;
-                    Ty::Enum(self.result_type(t, e))
-                }
                 BuiltinTy::Span => Ty::Span(Box::new(self.core_ty(targs[0], args, span)?)),
                 BuiltinTy::Buf => Ty::Buf(Box::new(self.core_ty(targs[0], args, span)?)),
                 BuiltinTy::Ptr => return Err(unsupported(span, Feature::Ptr, &[])),
@@ -525,28 +514,6 @@ impl<'a> Lowerer<'a> {
         };
         self.m.types[id.0 as usize].kind = kind;
         Ok(id)
-    }
-
-    fn named_enum(&mut self, name: String, variants: Vec<(String, Vec<Ty>)>) -> TypeId {
-        if let Some(&id) = self.named_types.get(&name) {
-            return id;
-        }
-        let id = TypeId(self.m.types.len() as u32);
-        self.m.types.push(TypeDef { name: name.clone(), kind: TypeDefKind::Enum { variants } });
-        self.named_types.insert(name, id);
-        id
-    }
-
-    /// `Option[T]` as an enum `None | Some(T)` (tags 0 / 1, as in sema).
-    pub(crate) fn option_type(&mut self, t: Ty) -> TypeId {
-        let name = format!("Option__{}", self.mangle(&t));
-        self.named_enum(name, vec![("None".into(), vec![]), ("Some".into(), vec![t])])
-    }
-
-    /// `Result[T, E]` as an enum `Ok(T) | Err(E)` (tags 0 / 1).
-    pub(crate) fn result_type(&mut self, t: Ty, e: Ty) -> TypeId {
-        let name = format!("Result__{}__{}", self.mangle(&t), self.mangle(&e));
-        self.named_enum(name, vec![("Ok".into(), vec![t]), ("Err".into(), vec![e])])
     }
 
     pub(crate) fn enum_variants(&self, id: TypeId) -> Vec<(String, Vec<Ty>)> {

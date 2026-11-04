@@ -5,10 +5,11 @@
 
 use onsa_diag::{Code, FileId, Stage};
 
-use crate::{Analysis, DefId, Module, Package, analyze};
+use crate::tests::analyze;
+use crate::{Analysis, DefId, Module, Package};
 
 fn check(src: &str) -> Analysis {
-    check_in(src, Vec::new())
+    check_in(src, vec![crate::flow_tests::std_package()])
 }
 
 /// With std, whose `impl`s have the methods of the sequences (§5.3).
@@ -23,7 +24,7 @@ fn check_in(src: &str, deps: Vec<std::sync::Arc<Package>>) -> Analysis {
 }
 
 fn def(a: &Analysis, name: &str) -> DefId {
-    DefId(a.defs.iter().position(|d| d.name == name).unwrap_or_else(|| panic!("no def `{name}`")) as u32)
+    DefId(a.defs.iter().rposition(|d| d.name == name).unwrap_or_else(|| panic!("no def `{name}`")) as u32)
 }
 
 /// The codes and stages of the diagnostics on the line `line` (from 1).

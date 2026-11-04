@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.4", "§4.5", "§4.7", "§18.1"]
+// fixes = 0
+
+// W5-03 U4/t, S-71: a variant of the prelude that carries a decided value but leaves its own type variable open
+// (`Err(Some(1))` is `Result[?T, Option[{integer}]]`, `Ok(Some(1))` is `Result[Option[{integer}], ?E]`) is E0406 at the
+// variant itself, since the variable is the one that the variant made (spec §4.7: "その型変数を作った式の位置に E0406"); the
+// column is the start of the variant (`@N`). The forms with an open `None` inside are in infer_nested_variants_open.onsa,
+// where the position is the inner one. A nested value whose type is decided (by an annotation, a return type, an argument,
+// a later statement, a literal pattern) is no error (the functions at the end). One error per function (P-01).
+// `fixes = 0`: a type variable has no candidate.
+
+fn take_nested(o: Option[Option[U8]]) -> U8 {
+  0
+}
+
+fn take_err(r: Result[U8, Option[U8]]) -> U8 {
+  0
+}
+
+// ---------------------------------------------------------------- E0406
+
+pub fn err_of_a_some() {
+  let x = Err(Some(1))                      //~ E0406 @11
+  let _ = x
+}
+
+pub fn ok_of_a_some() {
+  let x = Ok(Some(1))                       //~ E0406 @11
+  let _ = x
+}
+
+// ---------------------------------------------------------------- no error: the type is decided
+
+pub fn decided_by_an_annotation_err() -> U8 {
+  let x: Result[U8, Option[U8]] = Err(None)
+  take_err(x)
+}
+
+pub fn decided_by_an_annotation_some() -> U8 {
+  let x: Option[Option[U8]] = Some(None)
+  take_nested(x)
+}
+
+pub fn decided_by_an_annotation_ok() -> Bool {
+  let x: Result[Option[U8], Bool] = Ok(None)
+  match x {
+    Ok(_) => true,
+    Err(e) => e,
+  }
+}
+
+pub fn decided_by_an_annotation_three_levels() -> U8 {
+  let x: Option[Option[Option[U8]]] = Some(Some(None))
+  match x {
+    Some(Some(None)) => 3,
+    _ => 0,
+  }
+}
+
+pub fn decided_by_the_return_type() -> Option[Option[U8]] {
+  Some(None)
+}
+
+pub fn decided_by_the_return_type_err() -> Result[U8, Option[U8]] {
+  Err(None)
+}
+
+pub fn decided_by_an_argument() -> U8 {
+  take_nested(Some(None))
+}
+
+pub fn decided_by_an_argument_of_a_binding() -> U8 {
+  let x = Err(None)
+  take_err(x)
+}
+
+pub fn decided_by_a_later_annotation() -> U8 {
+  let x = Some(None)
+  let y: Option[Option[U8]] = x
+  take_nested(y)
+}
+
+pub fn decided_by_a_literal_pattern() -> U8 {
+  let x = Some(None)
+  match x {
+    Some(Some(3)) => 1,
+    _ => 0,
+  }
+}
+
+pub fn decided_in_a_branch(c: Bool) -> Option[Option[U8]] {
+  if c {
+    Some(None)
+  } else {
+    None
+  }
+}
+
+pub fn err_of_none_as_an_argument() -> U8 {
+  take_err(Err(None))
+}

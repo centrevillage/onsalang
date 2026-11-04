@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§4.6", "§18.1"]
+
+// W5-03 U4/t, S-71: the kind of `Option[T]` and `Result[T, E]` follows the contents (spec §4.1 table: "標準 enum | … | 中身に従う",
+// §4.6: "Copy 要素の固定長配列・タプル・構造体・enum" are Copy). So the element of a `Buf` and of a `Span`, which is
+// `T: Copy` (§4.5: "`Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る（E0416）"), may be an `Option[U32]` (a Copy content) and not an
+// `Option[Str]` (a shared content, so a Shared enum, not Copy); the element of an `Array` and a `Set`, which is Dup, may be an
+// `Option[Str]` and not an `Option[Buf[F32]]` (an owned content, so an Affine enum). Each wrong element is E0416 at the type.
+// One error per function (P-01); the marker is on the line of the signature.
+
+// ---------------------------------------------------------------- Copy is wanted: a Shared content is no Copy
+
+pub fn buf_of_option_of_str(b: Buf[Option[Str]]) -> U32 uses {Alloc} {   //~ E0416
+  0
+}
+
+pub fn span_of_option_of_str(s: Span[Option[Str]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_of_result_of_str(b: Buf[Result[U32, Str]]) -> U32 uses {Alloc} {   //~ E0416
+  0
+}
+
+pub fn span_of_result_of_str(s: Span[Result[Str, U32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn span_of_option_of_option_of_str(s: Span[Option[Option[Str]]]) -> U32 {   //~ E0416
+  0
+}
+
+// ---------------------------------------------------------------- Dup is wanted: an Affine content is no Dup
+
+pub fn array_of_option_of_buf(a: Array[Option[Buf[F32]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_result_of_buf(a: Array[Result[Buf[F32], U32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn set_of_option_of_buf(a: Set[Option[Buf[F32]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn map_with_a_result_of_buf_value(m: Map[U32, Result[U32, Buf[F32]]]) -> U32 {   //~ E0416
+  0
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn buf_of_option_of_u32(b: Buf[Option[U32]]) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn span_of_option_of_u32(s: Span[Option[U32]]) -> U32 {
+  0
+}
+
+pub fn span_of_result_of_copy(s: Span[Result[U32, Bool]]) -> U32 {
+  0
+}
+
+pub fn span_of_option_of_option_of_u32(s: Span[Option[Option[U8]]]) -> U32 {
+  0
+}
+
+pub fn span_of_option_of_a_tuple(s: Span[Option[(U32, F32)]]) -> U32 {
+  0
+}
+
+pub fn array_of_option_of_str(a: Array[Option[Str]]) -> U32 {
+  0
+}
+
+pub fn array_of_result_of_str(a: Array[Result[Str, U32]]) -> U32 {
+  0
+}
+
+pub fn set_of_option_of_u32(a: Set[Option[U32]]) -> U32 {
+  0
+}
+
+pub fn map_of_options(m: Map[U32, Option[Str]]) -> U32 {
+  0
+}

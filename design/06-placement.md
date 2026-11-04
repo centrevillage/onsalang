@@ -13,7 +13,7 @@
 | std のモジュールの一覧 | build.rs で生成する | R-80 (4) |
 | 破棄の点 | modes が経路を見て列挙する | R-32 |
 | 効果の使用の記録 | 型付けと modes の後の一つの段。効果行は効果の宣言の ID の集合 | R-83、S-74 |
-| 組込み | std の `impl` / `target` 宣言。Rust に残すのは `Prim`、§6.3 の暫定の表、`as`、lang item、`from_fn` の展開だけ | R-79、S-71 |
+| 組込み | std の `impl` / `target` 宣言。Rust に残すのは `Prim`、§6.3 の暫定の表、`as`、lang item（`onsa_sema/src/lang.rs`）、`from_fn` の展開だけ | R-79、S-71 |
 | `Prim` の表（std の `target` 宣言ごとの行と、後端が実装する演算の分類） | `onsa_sema::prim`。署名の段の後に一度、宣言ごとの行を `Analysis.prims` に記録し、降下はそれを具体化する（後端は `onsa_core::prim` の再輸出で読む）。シグネチャ、rt と効果は std の宣言が正で、行の引数の数と rt は単体テストで突き合わせる写し。後端が与えるかは後端ごとの `supports` | R-79、R-81、S-69 |
 | `as` の表 | sema と検証器で共有する | R-81 |
 | 場所の重なり | 一つの関数 | R-81 (3)、E0702、E0715 |

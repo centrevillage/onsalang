@@ -261,59 +261,7 @@ impl<'a> Checker<'a> {
                 self.info.targets.insert(e, Target::Variant { def: d, index: i });
                 Ok(Some(t))
             }
-            Entity::Builtin(b) => match b {
-                Builtin::None => {
-                    let t = self.fresh();
-                    self.type_argument(name.span, t, "the type in `None`".into());
-                    let opt = self.a.types.builtin(BuiltinTy::Option, vec![t]);
-                    if let Some(exp) = expected {
-                        self.unify_at(name.span, opt, exp)?;
-                    }
-                    self.info.targets.insert(e, Target::Prelude(b));
-                    Ok(Some(opt))
-                }
-                Builtin::Some | Builtin::Ok | Builtin::Err => {
-                    let ret = self.prelude_ctor(b, name.span);
-                    let param = match self.ty(ret) {
-                        Ty::Builtin(BuiltinTy::Result, a) if b == Builtin::Err => a[1],
-                        Ty::Builtin(_, a) => a[0],
-                        _ => unreachable!("a prelude constructor makes an `Option` or a `Result`"),
-                    };
-                    let fty = self.a.types.intern(Ty::Fn(FnTy {
-                        rt: true,
-                        params: vec![(Mode::Move, param)],
-                        ret,
-                        effects: Default::default(),
-                    }));
-                    if let Some(exp) = expected {
-                        self.unify_at(name.span, fty, exp)?;
-                    }
-                    self.info.targets.insert(e, Target::Prelude(b));
-                    Ok(Some(fty))
-                }
-                _ => no_value(),
-            },
-            Entity::Module(_) => no_value(),
-        }
-    }
-
-    /// The type `Some(_)` / `Ok(_)` / `Err(_)` makes at `span`: the argument's
-    /// type, and an origin for the other type argument of `Result` (E0406, §4.7).
-    pub(super) fn prelude_ctor(&mut self, b: Builtin, span: Span) -> TyId {
-        let t = self.fresh();
-        self.type_argument(span, t, format!("the type in `{}`", self.src(span)));
-        match b {
-            Builtin::Some => self.a.types.builtin(BuiltinTy::Option, vec![t]),
-            Builtin::Ok => {
-                let e2 = self.fresh();
-                self.type_argument(span, e2, "the error type of `Ok`".into());
-                self.a.types.builtin(BuiltinTy::Result, vec![t, e2])
-            }
-            _ => {
-                let ok = self.fresh();
-                self.type_argument(span, ok, "the value type of `Err`".into());
-                self.a.types.builtin(BuiltinTy::Result, vec![ok, t])
-            }
+            Entity::Builtin(_) | Entity::Module(_) => no_value(),
         }
     }
 

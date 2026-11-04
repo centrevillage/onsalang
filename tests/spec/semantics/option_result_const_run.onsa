@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§4.1", "§4.6", "§9.1"]
+
+// W5-03 U4/t, S-71: a `const` of an `Option` or a `Result` of a Copy content (spec §6.6: the type of a constant is "静的に配置できる
+// 型" and a Copy enum is one, §4.6; `Option[Str]` and `Result[Str, U32]` hold a shared string and are E0200 in this version,
+// negative/const_type_shared.onsa). The initial value is the variant written by its name (`None`, `Some(1)`, `Ok(3)`), the
+// constant is read where a value of the type is wanted: a `match`, `==`, an argument, the receiver of `unwrap`
+// (a Copy value is copied, §5.2), the initial value of another constant, and an element of a constant tuple and array.
+// The values are worked out by hand.
+
+const NONE: Option[I32] = None
+const ONE: Option[I32] = Some(1)
+const OK3: Result[U32, Bool] = Ok(3)
+const BAD: Result[U32, Bool] = Err(true)
+const NESTED: Option[Option[U8]] = Some(None)
+const DEEP: Option[Option[U8]] = Some(Some(4))
+const PAIR: (Option[U32], U32) = (Some(2), 5)
+const SLOTS: [Option[U32]; 3] = [Some(1), None, Some(3)]
+const COPY_OF_ONE: Option[I32] = ONE
+
+fn or_zero(o: Option[I32]) -> I32 {
+  match o {
+    Some(n) => n,
+    None => 0,
+  }
+}
+
+fn code(r: Result[U32, Bool]) -> U32 {
+  match r {
+    Ok(n) => n,
+    Err(_) => 99,
+  }
+}
+
+fn inner_or(o: Option[U8], d: U8) -> U8 {
+  match o {
+    Some(n) => n,
+    None => d,
+  }
+}
+
+fn nested_or(o: Option[Option[U8]], d: U8) -> U8 {
+  match o {
+    Some(i) => inner_or(i, d),
+    None => d + 100,
+  }
+}
+
+test "a constant Option read by a match" {
+  assert or_zero(NONE) == 0
+  assert or_zero(ONE) == 1
+}
+
+test "a constant Option compared with the variants" {
+  assert NONE == None
+  assert ONE == Some(1)
+  assert ONE != NONE
+  assert COPY_OF_ONE == ONE
+}
+
+test "the receiver of unwrap is a constant" {
+  assert ONE.unwrap() == 1
+  assert ONE.unwrap() + ONE.unwrap() == 2
+}
+
+test "unwrap of a constant None panics" {
+  let x = NONE.unwrap() //~ PANIC "unwrap of a constant None panics"
+  assert x == 0
+}
+
+test "a constant Result" {
+  assert code(OK3) == 3
+  assert code(BAD) == 99
+  assert OK3 == Ok(3)
+  assert BAD == Err(true)
+  assert OK3.unwrap() == 3
+}
+
+test "unwrap of a constant Err panics" {
+  let x = BAD.unwrap() //~ PANIC "unwrap of a constant Err panics"
+  assert x == 0
+}
+
+test "a constant Option of an Option" {
+  assert nested_or(NESTED, 7) == 7
+  assert nested_or(DEEP, 7) == 4
+  assert nested_or(None, 7) == 107
+}
+
+test "a constant tuple and a constant array of Options" {
+  assert or_zero(NONE) + 1 == 1
+  assert PAIR.1 == 5
+  assert PAIR.0 == Some(2)
+  assert SLOTS[0] == Some(1)
+  assert SLOTS[1] == None
+  assert SLOTS[2].unwrap() == 3
+}

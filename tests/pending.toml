@@ -1530,6 +1530,13 @@ note = "`unwrap` の前の `map_err` と関数値の呼び出しは降下が E02
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/negative/option_result_show_interpolation.onsa"
+reasons = ["R-292"]
+until = "W5-06"
+note = "補間の `Show` の要求の E0416 が出ない（素の struct でも同じ。`Option`・`Result` の `Show` そのものは §6.3 のとおり）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/negative/flow_option_match_state_arm.onsa"
 reasons = ["S-110", "R-14"]
 until = "W7-06"

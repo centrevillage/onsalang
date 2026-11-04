@@ -2,10 +2,12 @@
 //! the unit tests of the crate share: a package of sources parsed in
 //! memory, its analysis, its codes and its declarations by name.
 
+use std::sync::{LazyLock, Mutex};
+
 use onsa_diag::{Code, FileId};
 
 use crate::ty::Ty;
-use crate::{Analysis, Module, Package, analyze};
+use crate::{Analysis, Base, Module, Package, analyze_on};
 
 pub(crate) fn pkg(files: &[(&str, &str)]) -> Package {
     let modules = files
@@ -18,7 +20,16 @@ pub(crate) fn pkg(files: &[(&str, &str)]) -> Package {
             parsed: onsa_syntax::parse(FileId(i as u32), text),
         })
         .collect();
-    Package::new("t", modules, Vec::new())
+    Package::new("t", modules, vec![crate::flow_tests::std_package()])
+}
+
+/// The one analysis of std the tests continue, which only a test of more than
+/// that makes again.
+static BASE: LazyLock<Mutex<Base>> = LazyLock::new(|| Mutex::new(Base::new(crate::flow_tests::std_package())));
+
+/// The analysis of `p`, on [`BASE`] when it depends on the std of the tests.
+pub(crate) fn analyze(p: &Package) -> Analysis {
+    analyze_on(p, &BASE)
 }
 
 pub(crate) fn check(src: &str) -> Analysis {
@@ -32,12 +43,12 @@ pub(crate) fn codes(a: &Analysis) -> Vec<Code> {
 }
 
 pub(crate) fn named(a: &Analysis, name: &str) -> crate::TyId {
-    let d = a.defs.iter().position(|d| d.name == name && d.owner.is_none()).unwrap_or_else(|| panic!("no def {name}"));
+    let d = a.defs.iter().rposition(|d| d.name == name && d.owner.is_none()).unwrap_or_else(|| panic!("no def {name}"));
     a.types.find(&Ty::Named(crate::DefId(d as u32), Vec::new())).unwrap_or_else(|| panic!("{name} not interned"))
 }
 
 pub(crate) fn def(a: &Analysis, name: &str) -> crate::DefId {
-    crate::DefId(a.defs.iter().position(|d| d.name == name && d.owner.is_none()).unwrap() as u32)
+    crate::DefId(a.defs.iter().rposition(|d| d.name == name && d.owner.is_none()).unwrap() as u32)
 }
 
 /// R-88 (1): `flatten` lists the dependencies first, depth-first, the package

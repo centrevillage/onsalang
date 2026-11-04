@@ -1,18 +1,19 @@
 //! The names in scope in every module (spec §15.1, §4.1, S-107, S-659): the
-//! compiler's (the builtin types, the variants of `Option` and `Result`,
-//! `panic`, the traits of §6.3, the kind constraints and `Escape`), and the
-//! items of `std.core` (`Alloc`, `Block`).
+//! compiler's (the builtin types, `panic`, the traits of §6.3, the kind
+//! constraints and `Escape`), and the items of `std.core` (`Alloc`, `Block`,
+//! `Option`, `Result`) with the variants of its lang items ([`crate::lang`]).
 
 use crate::Analysis;
 use crate::def::{Bound, TRAITS};
 use crate::resolve::{Builtin, Entity};
+use crate::sig::Sema;
 use crate::ty::BuiltinTy;
 
 /// The scalar types (§4.1), in the order of their `TyId`s.
 const SCALARS: [&str; 12] = ["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64", "Bool", "Char"];
 
 /// The generic builtin types (§4.1).
-const GENERICS: [BuiltinTy; 10] = [
+const GENERICS: [BuiltinTy; 8] = [
     BuiltinTy::Str,
     BuiltinTy::Bytes,
     BuiltinTy::Array,
@@ -21,25 +22,10 @@ const GENERICS: [BuiltinTy; 10] = [
     BuiltinTy::Buf,
     BuiltinTy::Span,
     BuiltinTy::Ptr,
-    BuiltinTy::Option,
-    BuiltinTy::Result,
 ];
 
-/// The variants of the prelude, with the type each is a variant of, and
-/// `panic`.
-const VALUES: [(&str, Builtin, Option<BuiltinTy>); 5] = [
-    ("Some", Builtin::Some, Some(BuiltinTy::Option)),
-    ("None", Builtin::None, Some(BuiltinTy::Option)),
-    ("Ok", Builtin::Ok, Some(BuiltinTy::Result)),
-    ("Err", Builtin::Err, Some(BuiltinTy::Result)),
-    ("panic", Builtin::Panic, None),
-];
-
-/// The type whose variant the name of the prelude `b` is (§4.1): `Option`
-/// of `None` and `Some`, `Result` of `Ok` and `Err`.
-pub(crate) fn variant_of(b: Builtin) -> Option<BuiltinTy> {
-    VALUES.iter().find(|&&(_, v, _)| v == b).and_then(|&(_, _, ty)| ty)
-}
+/// The name of the prelude that stops the program (§9.2).
+const PANIC: &str = "panic";
 
 /// The module of std whose `pub` items are in the prelude (§15.1, S-659).
 const CORE: &str = "core";
@@ -55,9 +41,7 @@ pub(super) fn build(a: &mut Analysis) {
     for (i, (name, _)) in TRAITS.iter().enumerate() {
         put(name, Builtin::Trait(i as u8));
     }
-    for (name, b, _) in VALUES {
-        put(name, b);
-    }
+    put(PANIC, Builtin::Panic);
     put(onsa_syntax::foreign::COPY, Builtin::Kind(Bound::Copy));
     put(onsa_syntax::foreign::DUP, Builtin::Kind(Bound::Dup));
     put(onsa_syntax::foreign::ESCAPE, Builtin::Kind(Bound::Escape));
@@ -77,11 +61,12 @@ pub(super) fn build(a: &mut Analysis) {
 }
 
 /// The items of `std.core` in the prelude, once the items are collected and
-/// before their clashes (§15.1): its `pub` items, of which `Alloc` is the
-/// lang item. The embedded std has them, so a `std.core` with no `Alloc` is
-/// a bug; a package analyzed with no std or an empty one (unit tests of this
-/// crate) has neither.
-pub(super) fn declared(a: &mut Analysis) {
+/// before their clashes (§15.1): its `pub` items, of which `Alloc` is a lang
+/// item, and the variants of its lang enums. The embedded std has them, so
+/// a `std.core` with no `Alloc` is a bug; a package analyzed with no std or
+/// an empty one (unit tests of this crate) has neither.
+pub(super) fn declared(s: &mut Sema<'_>) {
+    let a = &mut *s.a;
     let std = a.modules.roots.iter().copied().find(|&r| a.modules.is_std(r));
     let Some(core) = std.and_then(|r| a.modules.get(r).children.get(CORE).copied()) else { return };
     a.modules.core = Some(core);
@@ -97,4 +82,5 @@ pub(super) fn declared(a: &mut Analysis) {
         Some(&Entity::Def(d)) => a.alloc = Some(d),
         _ => onsa_diag::internal::bug(None, "`std.core` declares no `Alloc`"),
     }
+    crate::lang::declared(s);
 }

@@ -55,14 +55,10 @@ impl<'a> Checker<'a> {
     }
 
     /// The type argument `t` a use made at `span`, named `what`: its origin
-    /// (E0406 when still open at the end) and its implicit `Escape`, judged
-    /// before the other requirements made after it (§4.5, S-862).
-    pub(super) fn type_argument(&mut self, span: Span, t: TyId, what: String) {
-        self.type_argument_with(span, t, ArgumentName::Text(what), GENERIC_VIEW);
-    }
-
-    /// [`Self::type_argument`], with `rule` for its E0710.
-    fn type_argument_with(&mut self, span: Span, t: TyId, what: ArgumentName, rule: &'static str) {
+    /// (E0406 when still open at the end) and its implicit `Escape`, of the
+    /// rule `rule`, judged before the other requirements made after it (§4.5,
+    /// S-862).
+    fn type_argument(&mut self, span: Span, t: TyId, what: ArgumentName, rule: &'static str) {
         self.defer(span, t, DeferredKind::Origin { what: what.clone() });
         self.defer(span, t, DeferredKind::Escape { what, rule });
     }
@@ -117,7 +113,7 @@ impl<'a> Checker<'a> {
                 continue;
             };
             let of_seq = k < impl_count && matches!(element, Some(Required::SeqElement { .. }));
-            self.type_argument_with(span, arg, what, if of_seq { VIEW_OF_ARRAY } else { GENERIC_VIEW });
+            self.type_argument(span, arg, what, if of_seq { VIEW_OF_ARRAY } else { GENERIC_VIEW });
             let required = || match (&element, k < impl_count) {
                 (Some(e), true) => e.clone(),
                 _ => Required::Param { param: g.name.clone(), owner: owner.clone(), std },

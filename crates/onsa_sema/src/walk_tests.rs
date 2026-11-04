@@ -137,10 +137,12 @@ fn the_kinds_kept_do_not_grow_with_the_roots() {
     let a = check(&src);
     assert_eq!(codes(&a), []);
     let kinds = a.known.kinds.borrow();
-    let under = |u: fn(&crate::walk::Under) -> bool| kinds.keys().filter(|k| u(&k.2)).count();
+    // Those of std's declarations (the `Option` of the shapes) are one for each of its types.
+    let own = || kinds.keys().filter(|k| a.is_new(k.0));
+    let under = |u: fn(&crate::walk::Under) -> bool| own().filter(|k| u(&k.2)).count();
     assert_eq!(under(|u| matches!(u, crate::walk::Under::Body(_))), 20, "each root is kept");
     assert_eq!(under(|u| matches!(u, crate::walk::Under::Item(_))), 0);
-    assert!(kinds.len() <= 20 + 7, "{} kept", kinds.len());
+    assert!(own().count() <= 20 + 7, "{} kept", own().count());
 }
 
 /// The answer of a declaration is found from the depth 0, whatever depth

@@ -61,7 +61,7 @@ pub(crate) fn collect_names(s: &mut Sema<'_>) {
     }
     s.collect_items();
     if fresh {
-        prelude::declared(s.a);
+        prelude::declared(s);
     }
     s.check_item_clashes();
     for m in s.a.new_mods() {

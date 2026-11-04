@@ -51,8 +51,8 @@ pub(super) enum Place {
 pub(super) const PANIC: Entity = Entity::Builtin(Builtin::Panic);
 
 /// Whether the entity is a value at the place of a value: a function (of
-/// an `extern` block too, a value of the error type), a constant, a variant,
-/// a constructor of the prelude or `panic` ([`NameKind::is_value`]). The
+/// an `extern` block too, a value of the error type), a constant, a variant
+/// or `panic` ([`NameKind::is_value`]). The
 /// fields and methods of a value follow it; a name after what is neither a
 /// value nor a namespace has no members.
 pub(crate) fn is_value(a: &Analysis, e: Entity) -> bool {
@@ -232,11 +232,11 @@ impl<'a> Walker<'a> {
         let a = self.a;
         let name = &path.segments[at];
         let variant = a.prelude.get(&name.name).copied()?;
-        let (Entity::Builtin(Builtin::Generic(ty)), Entity::Builtin(b)) = (of, variant) else { return None };
-        if super::super::prelude::variant_of(b) != Some(ty) {
+        let (Entity::Def(ty), Entity::Variant(owner, _)) = (of, variant) else { return None };
+        if ty != owner {
             return None;
         }
-        let msg = format!("`{}` is a variant of the prelude, not a member of the type `{}`", name.name, ty.name());
+        let msg = format!("`{}` is a variant of the prelude, not a member of the type `{}`", name.name, a.def(ty).name);
         let d = Diagnostic::new(Stage::Names, Code::E0302, name.span, msg)
             .with_found(name.name.clone())
             .with_rule(format!("a variant of the prelude is written by its name alone (`{}`, §4.1)", name.name));

@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.1", "§9.1", "§9.2", "§4.4", "§4.7"]
+
+// W5-03 U4/t, S-71: the receiver of `unwrap` is a `Some` written in place (spec §4.1: `Option` and `Result` differ from the
+// other enums only in being seen with no `use`, the variants written by their names alone, and `?`; the receiver of a
+// method of a declared enum may be a variant, `M.S(1).get()`, §6.2). `Some(1).unwrap()` is a method call on an expression
+// whose head, `Option`, is known (§4.7), and the value is the content. An `Err` written as the receiver is a call of the same
+// kind (`Result[?T, {integer}]`, the `T` decided by the result, §9.1) and panics (§9.2: "`unwrap` … の失敗" panics, and in a test
+// "そのテストを失敗にする"); one statement panics in each test, and the part after it is not reached. The forms with `None` as
+// the receiver are in unwrap_variant_receiver_none_run.onsa (they do not check before S-71); the ones with no type
+// for a type argument are E0406 (negative/unwrap_variant_receiver_open.onsa and negative/unwrap_variant_receiver_open_none.onsa). The values are worked out by hand.
+
+pub struct Gain {
+  k: U32,
+}
+
+fn plus_one(n: U32) -> U32 {
+  n + 1
+}
+
+fn pick(c: Bool) -> U32 {
+  if c { Some(1).unwrap() } else { 2 }
+}
+
+fn wrap_and_unwrap[T](x: T) -> T {
+  Some(x).unwrap()
+}
+
+test "unwrap of a Some written as the receiver is its content" {
+  let x: U8 = Some(5).unwrap()
+  assert x == 5
+}
+
+test "the expected type of the let decides the content of the Some" {
+  let x: F32 = Some(1.5).unwrap()
+  assert x == 1.5
+}
+
+test "unwrap of a Some that holds a Some is the inner Some" {
+  assert Some(Some(3)).unwrap() == Some(3)
+}
+
+test "two unwraps in a chain on nested variants" {
+  assert Some(Some(2)).unwrap().unwrap() == 2
+}
+
+test "the receiver is a Some of a struct" {
+  let g = Some(Gain { k: 7 }).unwrap()
+  assert g.k == 7
+}
+
+test "the receiver is a Some of a tuple" {
+  let t = Some((1, true)).unwrap()
+  assert t.0 == 1
+  assert t.1
+}
+
+test "the receiver is a Some of an array" {
+  let a = Some([1, 2, 3]).unwrap()
+  assert a[2] == 3
+}
+
+test "unwrap of a Some in a branch" {
+  assert pick(true) == 1
+  assert pick(false) == 2
+}
+
+test "unwrap of a Some as an argument" {
+  assert plus_one(Some(9).unwrap()) == 10
+}
+
+test "unwrap of a Some in a generic function" {
+  assert wrap_and_unwrap(6) == 6
+  assert wrap_and_unwrap(true)
+}
+
+test "unwrap of an Err written as the receiver panics" {
+  let x: U32 = Err(1).unwrap() //~ PANIC "unwrap of an Err written as the receiver panics"
+  assert x == 0
+}
+
+test "unwrap of an Err of a struct panics" {
+  let x: F32 = Err(Gain { k: 1 }).unwrap() //~ PANIC "unwrap of an Err of a struct panics"
+  assert x == 0.0
+}

@@ -18,8 +18,8 @@ type voice.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay
 type voice.echo.Config = struct {}
 type voice.echo.Params = struct { time: F32, feedback: F32 }
 type voice.echo.Out = struct { out: Buf[F32] }
-type voice.Poly = struct { voices: [voice.voice.State; 8], params: [voice.voice.Params; 8], notes: [Option__U8; 8], next: U32 }
-type Option__U8 = enum { None, Some(U8) }
+type voice.Poly = struct { voices: [voice.voice.State; 8], params: [voice.voice.Params; 8], notes: [std.core.Option__U8; 8], next: U32 }
+type std.core.Option__U8 = enum { None, Some(U8) }
 const std.core.num.F32.PI: F32 = 3.1415927:F32
 const voice.resonator.SIZE: U32 = 28:U32
 const voice.resonator.BULK_SIZE: U32 = 0:U32
@@ -328,11 +328,11 @@ fn voice.Poly.new(sample_rate: F32) -> voice.Poly sret {
       __arr[__i] = voice.voice.init(voice.voice.Config {}, sample_rate)
     }
     __arr
-  }, params: [voice.voice.params_default(); 8], notes: [Option__U8.None; 8], next: 0:U32 }
+  }, params: [voice.voice.params_default(); 8], notes: [std.core.Option__U8.None; 8], next: 0:U32 }
 }
 rt fn voice.Poly.note_on(inout self: voice.Poly, note: U8, velocity: F32) -> () {
   let i: U32 = self.3
-  self.2[i] = Option__U8.Some(note)
+  self.2[i] = std.core.Option__U8.Some(note)
   self.1[i].0 = voice.midi_to_hz(note)
   self.1[i].3 = velocity
   voice.voice.reset(inout self.0[i])
@@ -340,8 +340,8 @@ rt fn voice.Poly.note_on(inout self: voice.Poly, note: U8, velocity: F32) -> () 
 }
 rt fn voice.Poly.note_off(inout self: voice.Poly, note: U8) -> () {
   for i in 0:U32..const voice.MAX_VOICES {
-    if __eq.Option__U8(self.2[i], Option__U8.Some(note)) {
-      self.2[i] = Option__U8.None
+    if __eq.std_core_Option__U8(self.2[i], std.core.Option__U8.Some(note)) {
+      self.2[i] = std.core.Option__U8.None
       self.1[i].3 = 0.0:F32
     }
   }
@@ -376,7 +376,7 @@ fn std.dsp.test.energy(xs: Span[F32], from: U32, to: U32) -> F64 {
   }
   acc
 }
-rt fn __eq.Option__U8(a: Option__U8, b: Option__U8) -> Bool {
+rt fn __eq.std_core_Option__U8(a: std.core.Option__U8, b: std.core.Option__U8) -> Bool {
   if (tag(a) != tag(b)) {
     return false
   }

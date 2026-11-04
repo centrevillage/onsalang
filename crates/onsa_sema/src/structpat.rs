@@ -200,7 +200,8 @@ impl<'a> Checker<'a> {
 mod tests {
     use onsa_diag::{Code, FileId};
 
-    use crate::{Module, Package, analyze};
+    use crate::tests::analyze;
+    use crate::{Module, Package};
 
     /// The code, the text and the start of the one diagnostic of `src`.
     fn first(src: &str) -> (Code, String, usize) {
@@ -210,7 +211,7 @@ mod tests {
             text: src.to_string(),
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
-        let a = analyze(&Package::new("t", modules, Vec::new()));
+        let a = analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let d = &a.diagnostics[0];
         let (from, to) = (d.span.start as usize, d.span.end as usize);
@@ -259,7 +260,7 @@ mod tests {
             text: src.to_string(),
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
-        let a = analyze(&Package::new("t", modules, Vec::new()));
+        let a = analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let fix = &a.diagnostics[0].fixes[0];
         let s = fix.edits()[0].span;

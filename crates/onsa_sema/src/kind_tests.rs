@@ -33,7 +33,7 @@ fn kinds_from_structure() {
     let f32 = a.types.float(FloatKind::F32);
     let arr = a.types.intern(Ty::Array(f32, Len::Const(4)));
     assert_eq!(a.kind_of(arr), Some(Kind::Copy));
-    let opt = a.types.builtin(BuiltinTy::Option, vec![s]);
+    let opt = a.types.intern(Ty::Named(def(&a, "Option"), vec![s]));
     assert_eq!(a.kind_of(opt), Some(Kind::Shared));
     let span = a.types.builtin(BuiltinTy::Span, vec![f32]);
     assert_eq!(a.kind_of(span), None);
@@ -116,7 +116,7 @@ fn kinds_of_generic_types_by_their_arguments() {
 fn a_kind_in_a_body_is_affine_only_past_the_steps() {
     let mut src = String::from("pub struct G0[T] { v: T }\n");
     for k in 1..=11 {
-        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[(T, T)] }}\n", k - 1));
+        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[(T, U8)], y: G{0}[(T, T)] }}\n", k - 1));
     }
     src.push_str("pub fn f(move h: G11[F32]) -> (G11[F32], G11[F32]) { (move h, move h) }\n");
     let mut a = check(&src);

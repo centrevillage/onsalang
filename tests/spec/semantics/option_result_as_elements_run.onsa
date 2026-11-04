@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.1", "§4.4", "§4.5", "§5.3", "§6.3"]
+
+// W5-03 U4/t, S-71: `Option[T]` and `Result[T, E]` are enums that differ from the others only in being seen with no `use`,
+// the variants written by their names alone, and `?` (spec §4.1), so they stand where any enum stands: the field of a struct,
+// the payload of an enum, an element of a tuple and of a fixed-length array, an element of a `Span` (§5.3: an `Option[U32]` is
+// a Copy enum, §4.6, so it is an element of a `Span`), a type argument of a generic struct, and the type that a type parameter
+// of a generic function is made. A value of each is built, read through a `match` and compared with `==`
+// (§6.3: `Option[T]` and `Result[T, E]` have `PartialEq` when the contents have it). The values are worked out by hand.
+
+pub struct Cell {
+  v: Option[U32],
+  w: Result[U32, Bool],
+}
+
+pub enum Msg {
+  Note(Option[U32]),
+  Done(Result[U32, Bool]),
+  Both(Option[U32], Result[U32, Bool]),
+}
+
+pub struct Twin[T] {
+  a: T,
+  b: T,
+}
+
+fn value_or(o: Option[U32], d: U32) -> U32 {
+  match o {
+    Some(n) => n,
+    None => d,
+  }
+}
+
+fn result_value(r: Result[U32, Bool]) -> U32 {
+  match r {
+    Ok(n) => n,
+    Err(_) => 1000,
+  }
+}
+
+fn msg_value(m: Msg) -> U32 {
+  match m {
+    Msg.Note(o) => value_or(o, 500),
+    Msg.Done(r) => result_value(r),
+    Msg.Both(o, r) => value_or(o, 0) + result_value(r),
+  }
+}
+
+fn sum_span(s: Span[Option[U32]]) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< s.len() {
+    total = total + value_or(s[i], 100)
+  }
+  total
+}
+
+fn sum_array(xs: [Option[U32]; 3]) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< 3 {
+    total = total + value_or(xs[i], 10)
+  }
+  total
+}
+
+fn first_of[T](t: Twin[T]) -> T {
+  t.a
+}
+
+fn same_type_twice[T](x: T, y: T) -> Twin[T] {
+  Twin { a: x, b: y }
+}
+
+test "an Option and a Result as the fields of a struct" {
+  let c = Cell { v: Some(3), w: Err(true) }
+  assert value_or(c.v, 0) == 3
+  assert result_value(c.w) == 1000
+  let d = Cell { v: None, w: Ok(4) }
+  assert value_or(d.v, 9) == 9
+  assert result_value(d.w) == 4
+  assert c.v != d.v
+  assert c.w != d.w
+}
+
+test "an Option and a Result as the payload of an enum" {
+  assert msg_value(Msg.Note(Some(2))) == 2
+  assert msg_value(Msg.Note(None)) == 500
+  assert msg_value(Msg.Done(Ok(7))) == 7
+  assert msg_value(Msg.Done(Err(false))) == 1000
+  assert msg_value(Msg.Both(Some(1), Ok(2))) == 3
+  assert msg_value(Msg.Both(None, Ok(2))) == 2
+}
+
+test "an Option as an element of a tuple" {
+  let t              = (Some(5), None)
+  let a: Option[U32] = t.0
+  let b: Option[U32] = t.1
+  assert value_or(a, 0) == 5
+  assert value_or(b, 8) == 8
+  let u: (Option[U32], Result[U32, Bool]) = (Some(1), Ok(2))
+  assert value_or(u.0, 0) + result_value(u.1) == 3
+}
+
+test "an Option as an element of a fixed-length array" {
+  let xs: [Option[U32]; 3] = [Some(1), None, Some(3)]
+  assert sum_array(xs) == 14
+  assert xs[0] == Some(1)
+  assert xs[1] == None
+  let ys: [Option[U32]; 2] = [None; 2]
+  assert ys[0] == ys[1]
+}
+
+test "an Option as the element of a Span" {
+  let xs: [Option[U32]; 3] = [Some(1), None, Some(3)]
+  assert sum_span(xs) == 104
+}
+
+test "a Twin of Options and a type parameter made an Option" {
+  let t: Twin[Option[U32]] = Twin { a: Some(6), b: None }
+  assert value_or(t.a, 0) == 6
+  assert value_or(t.b, 7) == 7
+  assert first_of(t) == Some(6)
+  let u                    = same_type_twice(Some(2), None)
+  let v: Twin[Option[U32]] = u
+  assert value_or(v.a, 0) == 2
+  assert first_of(v) == Some(2)
+}
+
+test "an Option of a Result and a Result of an Option" {
+  let a: Option[Result[U32, Bool]] = Some(Ok(1))
+  let b: Result[Option[U32], Bool] = Ok(Some(2))
+  assert a == Some(Ok(1))
+  assert a != Some(Err(false))
+  assert b == Ok(Some(2))
+  assert b != Ok(None)
+}

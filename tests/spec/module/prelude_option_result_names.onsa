@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§15.1", "§5.1", "§18.1"]
+
+// W5-03 U4/t, S-71: the names of `Option` and `Result` and of their variants are names of the prelude, and the prelude is not
+// hidden (spec §15.1: "prelude の名前は隠せないので（§5.1）、同じ名前の項目（型、trait、関数、定数、flow）を宣言するか `use` で
+// 取り込むと E0304 になる"; the names are "`Option Result Some None Ok Err panic Alloc Block`"). So a user cannot declare an
+// `Option` or a `Result` of his own, as a struct, an enum or a type alias, and cannot declare a type with the name of one of the
+// four variants either. It stays so when the two types are declarations of std (they are not the user's to redefine). The
+// declarations with other names are checked as usual. One E0304 for each declaration, with no candidate.
+
+pub struct Option {   //~ E0304
+  v: U32,
+}
+
+pub enum Result {   //~ E0304
+  Good,
+  Bad,
+}
+
+pub type Some = U32   //~ E0304
+
+pub struct None {   //~ E0304
+  v: U32,
+}
+
+pub enum Ok {   //~ E0304
+  Fine,
+}
+
+pub type Err = Bool   //~ E0304
+
+pub struct Maybe {
+  v: U32,
+}
+
+pub enum Outcome {
+  Good,
+  Bad,
+}
+
+pub fn fine(m: Maybe, o: Outcome) -> U32 {
+  match o {
+    Outcome.Good => m.v,
+    Outcome.Bad => 0,
+  }
+}

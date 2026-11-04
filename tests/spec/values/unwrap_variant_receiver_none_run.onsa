@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.1", "§9.1", "§9.2", "§4.7"]
+
+// W5-03 U4/t, S-71: the receiver of `unwrap` is a `None` written in place (spec §4.1: `Option` and `Result` are enums that
+// differ from the others only in being seen with no `use`, the variants written by their names alone, and `?`, so a variant is a
+// receiver as `M.S(1).get()` is for a declared enum, §6.2). The receiver has a known head (`Option[?T]`, §4.7) and the type
+// argument that nothing in the receiver decides is decided by the result: `unwrap` returns `T` (§9.1), so
+// `let x: U32 = None.unwrap()` makes `T` a `U32`. `unwrap` of a `None` panics (§9.2: "`unwrap`、`assert` の失敗" and, in a
+// test, "そのテストを失敗にする"). The marker is on the statement of the test that holds the panic: the line of the call, or of
+// the call of the function that holds it (tests/README.md; `@N` for the chain, where two calls start in the same column). One
+// statement panics in each test; the part after it is not reached. The first test has no panic: a `None` that is the content of
+// a `Some` is the value. Before S-71 the receiver `None.unwrap()` is an E0413 (the methods of the builtin enum are looked up by
+// the name of the first variant).
+
+fn none_to_u32() -> U32 {
+  None.unwrap()
+}
+
+fn none_in_a_branch(c: Bool) -> U32 {
+  if c { None.unwrap() } else { 2 }
+}
+
+test "a Some of a None gives the inner None" {
+  let o: Option[U32] = Some(None).unwrap()
+  assert o == None
+}
+
+test "unwrap of a None on the branch that is not taken is not reached" {
+  assert none_in_a_branch(false) == 2
+}
+
+test "unwrap of None panics" {
+  let x: U32 = None.unwrap() //~ PANIC "unwrap of None panics"
+  assert x == 0
+}
+
+test "unwrap of None in a function panics at the call of the function" {
+  let x = none_to_u32() //~ PANIC "unwrap of None in a function panics at the call of the function"
+  assert x == 0
+}
+
+test "unwrap of None on the taken branch panics at the call of the function" {
+  let x = none_in_a_branch(true) //~ PANIC "unwrap of None on the taken branch panics at the call of the function"
+  assert x == 0
+}
+
+test "unwrap of a None in a chain panics" {
+  let x: U32 = Some(None).unwrap().unwrap() //~ PANIC "unwrap of a None in a chain panics" @16
+  assert x == 0
+}

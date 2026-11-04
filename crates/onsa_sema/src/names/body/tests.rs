@@ -11,12 +11,13 @@ use onsa_syntax::ast::{ExprKind, Mode, PatKind};
 use super::{BindingId, BindingKind, BodyNames, Origin, PatRes, PathRes, ScopeId, StructRes};
 use crate::body::{LocalId, Target};
 use crate::resolve::Entity;
-use crate::{Analysis, DefId, Module, Package, analyze};
+use crate::tests::analyze;
+use crate::{Analysis, DefId, Module, Package};
 
 /// The analysis of `src`, one module with no syntax error (a case of a test
 /// here is read whole).
 fn analysis(src: &str) -> (Analysis, Module) {
-    analysis_in(src, Vec::new())
+    analysis_with_std(src)
 }
 
 /// [`analysis`] with std, which declares the members of the builtin types
@@ -38,7 +39,7 @@ fn analysis_in(src: &str, deps: Vec<std::sync::Arc<Package>>) -> (Analysis, Modu
 }
 
 fn def(a: &Analysis, name: &str) -> DefId {
-    DefId(a.defs.iter().position(|d| d.name == name).unwrap_or_else(|| panic!("no def {name}")) as u32)
+    DefId(a.defs.iter().rposition(|d| d.name == name).unwrap_or_else(|| panic!("no def {name}")) as u32)
 }
 
 fn names<'a>(a: &'a Analysis, name: &str) -> &'a BodyNames {
@@ -335,7 +336,7 @@ fn chains_record_the_namespaces_they_pass_and_the_item_they_end_at() {
     assert!(member(i32, "MAX").is_some() && member(i32, "BITS").is_some());
     assert!(member(i32, "PI").is_none() && member(f32, "MIN").is_none() && member(f32, "zeroed").is_none());
     assert_eq!(at("P.new"), item(Entity::Member(def(&a, "new"))));
-    assert_eq!(at("Some"), item(Entity::Builtin(crate::resolve::Builtin::Some)));
+    assert_eq!(at("Some"), item(Entity::Variant(def(&a, "Option"), 1)));
     assert_eq!(at("K"), item(entity_of(&a, "K")));
     // A field of a value is the types stage's; an alias stands for its type,
     // the owner of its members (§4.4).
@@ -389,14 +390,13 @@ fn the_paths_of_patterns_name_their_items() {
         })
         .collect();
     ctors.sort_by(|x, y| x.0.cmp(&y.0));
-    use crate::resolve::Builtin;
-    let shape = def(&a, "Shape");
+    let (shape, option) = (def(&a, "Shape"), def(&a, "Option"));
     let want = [
-        ("None", Entity::Builtin(Builtin::None)),
+        ("None", Entity::Variant(option, 0)),
         ("P { x: x }", Entity::Def(def(&a, "P"))),
         ("Shape.Circle(r)", Entity::Variant(shape, 0)),
         ("Shape.Dot", Entity::Variant(shape, 1)),
-        ("Some(v)", Entity::Builtin(Builtin::Some)),
+        ("Some(v)", Entity::Variant(option, 1)),
     ];
     assert_eq!(ctors, want.map(|(t, e)| (t.to_string(), e)));
 }

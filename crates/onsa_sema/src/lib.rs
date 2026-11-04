@@ -31,6 +31,7 @@ pub mod infer;
 pub mod kind;
 #[cfg(test)]
 mod kind_tests;
+pub mod lang;
 pub mod layout;
 #[cfg(test)]
 mod layout_tests;

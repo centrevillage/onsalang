@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§4.1", "§4.4", "§8.2"]
+
+// W5-03 U4/t, S-659 (B), S-71: `Option` and `Result` are `pub` items of the module `std.core` (§15.1: "`Option` と `Result`
+// （とその列挙子）、`Alloc`、`Block`、trait は std の宣言である。列挙子を除くこれらは、モジュール `std.core` の `pub` の項目
+// である"), so a type path through the module that a `use` bound names the same type as the name alone: after `use std.core`,
+// `core.Option[I32]` and `core.Result[I32, Str]` are the `Option[I32]` and the `Result[I32, Str]` of the prelude, and so are the
+// paths from the package (`use std`, then `std.core.Option[I32]`). They stand in every type position: a parameter, a return type,
+// a field, a payload of an enum, an annotation of a `let`, a type argument, an alias. The values
+// are made with the bare variants (the variants are no items of the module, negative/std_core_variant_paths.onsa) and the two
+// spellings of the type are interchangeable. Every test passes.
+
+use std
+use std.core
+
+type MaybeCount = core.Option[U32]
+
+pub struct Slot {
+  a: core.Option[U32],
+  b: std.core.Option[U32],
+}
+
+pub enum Event {
+  Value(core.Option[U32]),
+  Failed(core.Result[U32, Bool]),
+}
+
+fn through_module(o: core.Option[U32]) -> core.Option[U32] {
+  o
+}
+
+fn through_package(o: std.core.Option[U32]) -> std.core.Option[U32] {
+  o
+}
+
+fn result_through_module(r: core.Result[U32, Bool]) -> core.Result[U32, Bool] {
+  r
+}
+
+fn result_through_package(r: std.core.Result[U32, Bool]) -> std.core.Result[U32, Bool] {
+  r
+}
+
+fn plain_name(o: Option[U32]) -> Option[U32] {
+  o
+}
+
+fn count_of(m: MaybeCount) -> U32 {
+  match m {
+    Some(n) => n,
+    None => 0,
+  }
+}
+
+fn inner_count(o: core.Option[U32]) -> U32 {
+  match o {
+    Some(n) => n,
+    None => 0,
+  }
+}
+
+fn nested(o: core.Option[core.Option[U32]]) -> U32 {
+  match o {
+    Some(i) => inner_count(i),
+    None => 0,
+  }
+}
+
+test "a value of Option[U32] is accepted where core.Option[U32] is written, and the other way" {
+  let a: core.Option[U32] = Some(3)
+  let b: Option[U32]      = a
+  let c: core.Option[U32] = b
+  assert plain_name(a) == Some(3)
+  assert through_module(b) == Some(3)
+  assert through_package(c) == c
+}
+
+test "a Result written through the module is the Result of the prelude" {
+  let a: core.Result[U32, Bool] = Ok(4)
+  let b: Result[U32, Bool]      = a
+  assert result_through_module(b) == Ok(4)
+  assert result_through_package(a) == Ok(4)
+}
+
+test "an alias of a path type is the same type" {
+  let m: MaybeCount  = Some(8)
+  let o: Option[U32] = m
+  assert count_of(o) == 8
+  assert count_of(None) == 0
+}
+
+test "a field and a payload written through the module" {
+  let s = Slot { a: Some(1), b: None }
+  assert s.a == Some(1)
+  assert s.b == None
+  let e = Event.Value(Some(5))
+  let f = Event.Failed(Err(false))
+  assert event_code(e) == 5
+  assert event_code(f) == 100
+}
+
+fn failed_code(r: core.Result[U32, Bool]) -> U32 {
+  match r {
+    Ok(n) => n,
+    Err(_) => 100,
+  }
+}
+
+fn event_code(e: Event) -> U32 {
+  match e {
+    Event.Value(o) => inner_count(o),
+    Event.Failed(r) => failed_code(r),
+  }
+}
+
+test "a type argument written through the module" {
+  assert nested(Some(Some(6))) == 6
+  assert nested(Some(None)) == 0
+  assert nested(None) == 0
+}

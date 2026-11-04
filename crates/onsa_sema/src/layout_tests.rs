@@ -1,7 +1,7 @@
 //! Unit tests of the layouts (§12.4).
 
 use crate::tests::{check, def, named};
-use crate::ty::{BuiltinTy, FloatKind, IntKind, Len, Ty};
+use crate::ty::{FloatKind, IntKind, Len, Ty};
 
 #[test]
 fn layouts_follow_declaration_order() {
@@ -20,7 +20,7 @@ fn layouts_follow_declaration_order() {
     let delay = a.types.intern(Ty::Array(f32, Len::Const(96001)));
     assert_eq!(a.layout_of(delay).map(|l| (l.size, l.align)), Some((384004, 4)));
     let u8 = a.types.int(IntKind::U8);
-    let opt = a.types.builtin(BuiltinTy::Option, vec![u8]);
+    let opt = a.types.intern(Ty::Named(def(&a, "Option"), vec![u8]));
     assert_eq!(a.layout_of(opt).map(|l| (l.size, l.align)), Some((2, 1)));
     let e = a.types.intern(Ty::Named(def(&a, "E"), vec![]));
     assert_eq!(a.layout_of(e).map(|l| (l.size, l.align)), Some((2, 1)));

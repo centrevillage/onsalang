@@ -29,7 +29,6 @@ use super::{Bind, LitClass, Settle};
 use crate::body::{BodyInfo, Target};
 use crate::kind::{Kind, kind_in_body};
 use crate::names::body::PathRes;
-use crate::resolve::NameKind;
 use crate::ty::Ty;
 
 impl Settle<'_> {
@@ -120,12 +119,7 @@ fn parts(ast: &Ast, info: &BodyInfo, e: ExprId) -> Option<Vec<(ExprId, bool)>> {
     }
 }
 
-/// Whether `t` names a variant, of a user enum or of the prelude (`Some`,
-/// `None`, …, [`NameKind::of_builtin`]).
+/// Whether `t` names a variant.
 fn variant(t: Option<&Target>) -> bool {
-    match t {
-        Some(Target::Variant { .. }) => true,
-        Some(Target::Prelude(b)) => NameKind::of_builtin(*b) == NameKind::Variant,
-        _ => false,
-    }
+    matches!(t, Some(Target::Variant { .. }))
 }

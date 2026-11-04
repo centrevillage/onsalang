@@ -220,7 +220,7 @@ impl<'a> Rater<'a> {
         Ok(Some(match t {
             Target::Local(id) => self.rate_of_local(*id),
             Target::Const(_) | Target::ConstParam(_) | Target::Variant { .. } => FlowRate::Const,
-            Target::Prelude(_) => FlowRate::Const,
+            Target::Panic => FlowRate::Const,
             Target::Fn { .. } | Target::Method { .. } | Target::Value => {
                 let span = self.expr(e).span;
                 return Err(self.err(
@@ -392,7 +392,7 @@ impl<'a> Rater<'a> {
                 Ok(r.max(FlowRate::Init))
             }
             Some(Target::BuiltinMethod { .. }) => Ok(r.max(FlowRate::Init)),
-            Some(Target::Variant { .. }) | Some(Target::Prelude(_)) => Ok(r),
+            Some(Target::Variant { .. }) | Some(Target::Panic) => Ok(r),
             Some(Target::Value) => Err(self.err(
                 Code::E0806,
                 span,

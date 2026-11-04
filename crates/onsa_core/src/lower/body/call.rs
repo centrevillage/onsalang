@@ -160,28 +160,11 @@ pub(super) fn lower_call(
                 ExprKind::Variant { ty: id, tag: index, fields: cargs.into_iter().map(|a| a.expr).collect() },
             ))
         }
-        Target::Prelude(Builtin::Panic) => {
+        Target::Panic => {
             let text = args.first().and_then(|a| cx.ast.panic_message(a));
             let Some(text) = text else { return Err(internal(span, "panic without its message")) };
             let msg = lw.msg(&text);
             Ok(Expr::new(ty, span, ExprKind::Panic { msg, origin: PanicOrigin::Panic }))
-        }
-        Target::Prelude(b) => {
-            let Ty::Enum(id) = &ty else { return Err(internal(span, "prelude call type")) };
-            let id = *id;
-            let tag = match b {
-                Builtin::Some | Builtin::Err => 1,
-                Builtin::Ok => 0,
-                _ => return Err(internal(span, "prelude call")),
-            };
-            let fields = lw.enum_variants(id)[tag as usize].1.clone();
-            let params: Vec<(Mode, Ty)> = fields.into_iter().map(|t| (Mode::Borrow, t)).collect();
-            let cargs = lower_args(lw, cx, args, &params)?;
-            Ok(Expr::new(
-                ty,
-                span,
-                ExprKind::Variant { ty: id, tag, fields: cargs.into_iter().map(|a| a.expr).collect() },
-            ))
         }
         Target::Value => Err(unsupported(span, Feature::CallsThroughFnValues, &[])),
         _ => Err(internal(span, "call target")),

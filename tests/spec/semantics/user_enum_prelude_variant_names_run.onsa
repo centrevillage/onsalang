@@ -1,0 +1,143 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.1", "§4.4", "§15.1"]
+
+// W5-03 U4/t, S-71, S-607: `Option` and `Result` differ from the other enums only in being seen with no `use`, the variants
+// written by their names alone, and `?` (spec §4.1: "他の enum の列挙子は常に `Type.Variant` と書く"). So an enum of the user
+// may have variants that are called `None`, `Some`, `Ok` and `Err`: `Slot.None` is the variant of `Slot`, and the name `None`
+// alone is the variant of the prelude `Option`, in a value, in a pattern, in a method of the enum itself and in a
+// generic enum. The two are different values of different types, and neither hides the other. Every test passes (the
+// mixed-up forms are E0401, negative/user_enum_prelude_variant_names_mismatch.onsa). The values are worked out by hand.
+
+pub enum Slot {
+  None,
+  Some(U32),
+}
+
+pub enum Outcome {
+  Ok(U32),
+  Err(Bool),
+}
+
+pub enum Found[T] {
+  None,
+  Some(T),
+}
+
+impl Slot {
+  pub fn as_option(self) -> Option[U32] {
+    match self {
+      Slot.None => None,
+      Slot.Some(n) => Some(n),
+    }
+  }
+}
+
+impl Outcome {
+  pub fn as_result(self) -> Result[U32, Bool] {
+    match self {
+      Outcome.Ok(n) => Ok(n),
+      Outcome.Err(b) => Err(b),
+    }
+  }
+}
+
+fn slot_value(s: Slot) -> U32 {
+  match s {
+    Slot.None => 0,
+    Slot.Some(n) => n,
+  }
+}
+
+fn option_value(o: Option[U32]) -> U32 {
+  match o {
+    None => 0,
+    Some(n) => n,
+  }
+}
+
+fn outcome_value(o: Outcome) -> U32 {
+  match o {
+    Outcome.Ok(n) => n,
+    Outcome.Err(_) => 99,
+  }
+}
+
+fn result_value(r: Result[U32, Bool]) -> U32 {
+  match r {
+    Ok(n) => n,
+    Err(_) => 98,
+  }
+}
+
+fn found_value(f: Found[U32]) -> U32 {
+  match f {
+    Found.None => 0,
+    Found.Some(n) => n,
+  }
+}
+
+test "the variants of the user's enum are written with the enum" {
+  assert slot_value(Slot.Some(3)) == 3
+  assert slot_value(Slot.None) == 0
+  assert outcome_value(Outcome.Ok(4)) == 4
+  assert outcome_value(Outcome.Err(true)) == 99
+}
+
+test "the names alone are the variants of the prelude" {
+  assert option_value(Some(5)) == 5
+  assert option_value(None) == 0
+  assert result_value(Ok(6)) == 6
+  assert result_value(Err(false)) == 98
+}
+
+test "both in one function" {
+  let s = Slot.Some(1)
+  let o = Some(2)
+  assert slot_value(s) + option_value(o) == 3
+  let t              = Slot.None
+  let n: Option[U32] = None
+  assert slot_value(t) + option_value(n) == 0
+}
+
+test "the methods of the enum use the names alone for the prelude" {
+  assert option_value(Slot.Some(7).as_option()) == 7
+  assert option_value(Slot.None.as_option()) == 0
+  assert result_value(Outcome.Ok(8).as_result()) == 8
+  assert result_value(Outcome.Err(true).as_result()) == 98
+}
+
+test "a generic enum with the same names" {
+  let a: Found[U32] = Found.Some(9)
+  let b: Found[U32] = Found.None
+  assert found_value(a) == 9
+  assert found_value(b) == 0
+}
+
+fn slot_in_option(o: Option[Slot]) -> U32 {
+  match o {
+    Some(s) => slot_value(s),
+    None => 77,
+  }
+}
+
+fn ok_or_slot(r: Result[Outcome, Slot]) -> U32 {
+  match r {
+    Ok(o) => outcome_value(o),
+    Err(s) => slot_value(s),
+  }
+}
+
+test "an Option that holds the variants of the user's enum" {
+  assert slot_in_option(Some(Slot.None)) == 0
+  assert slot_in_option(Some(Slot.Some(3))) == 3
+  assert slot_in_option(None) == 77
+}
+
+test "a Result that holds the variants of the user's enum" {
+  assert ok_or_slot(Ok(Outcome.Err(false))) == 99
+  assert ok_or_slot(Ok(Outcome.Ok(5))) == 5
+  assert ok_or_slot(Err(Slot.Some(2))) == 2
+  assert ok_or_slot(Err(Slot.None)) == 0
+}

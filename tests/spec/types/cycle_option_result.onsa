@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.4", "§18.1"]
+
+// W5-03 U4/t, S-71: a type that holds itself through `Option` or `Result` is a cycle (spec §4.4: "総称の型の引数は、その定義で値として
+// 含む位置に現れるときに辿る（… prelude の `Option[Node]`・`Result[Node, E]` は `Node` を値として含み、`Array[Node]` は含まない）";
+// "値として含む位置（フィールド、列挙子の中身、タプル、固定長配列）を辿って同じ型に戻る定義は E0311"). `Option` and `Result` are
+// declared enums of std now, and they hold the argument as the payload of a variant, so `struct Node { next: Option[Node] }` is
+// E0311 as `enum List { Cons(I32, List), Nil }` is: through the one side of a `Result`, through nesting, through a tuple and a
+// fixed-length array, and through two types that hold each other. One E0311 for each collection, at the first declaration of
+// it (§18.1). A type that holds another type through an `Option` and does not come back is fine (the last ones).
+
+pub struct N1 {                                     //~ E0311
+  next: Option[N1],
+}
+
+pub struct N2 {                                     //~ E0311
+  r: Result[I32, N2],
+}
+
+pub struct N3 {                                     //~ E0311
+  r: Result[N3, I32],
+}
+
+pub struct N4 {                                     //~ E0311
+  deep: Option[Option[N4]],
+}
+
+pub struct N5 {                                     //~ E0311
+  both: Option[Result[N5, Bool]],
+}
+
+pub enum L1 {                                       //~ E0311
+  Cons(I32, Option[L1]),
+  Nil,
+}
+
+pub enum L2 {                                       //~ E0311
+  Item(Result[L2, I32]),
+  Nil,
+}
+
+pub struct T1 {                                     //~ E0311
+  p: (I32, Option[T1]),
+}
+
+pub struct R1 {                                     //~ E0311
+  xs: [Option[R1]; 2],
+}
+
+pub struct A1 {                                     //~ E0311
+  b: Option[B1],
+}
+
+pub struct B1 {
+  a: Option[A1],
+}
+
+pub struct A2 {                                     //~ E0311
+  b: Result[B2, I32],
+}
+
+pub struct B2 {
+  c: Option[C2],
+}
+
+pub struct C2 {
+  a: A2,
+}
+
+// Fine: the types do not come back.
+
+pub struct Leaf {
+  n: U32,
+}
+
+pub struct Branch {
+  left: Option[Leaf],
+  right: Result[Leaf, U32],
+  both: Option[Option[Leaf]],
+}
+
+pub struct Tree {
+  branch: Option[Branch],
+  other: Result[Branch, Leaf],
+}
+
+pub enum Shape {
+  Dot,
+  Pair(Option[Leaf], Option[Leaf]),
+  Group(Result[Tree, Leaf]),
+}

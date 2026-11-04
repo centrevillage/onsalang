@@ -209,11 +209,7 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
             let Ty::Enum(id) = &ty else { return Err(unsupported(span, Feature::VariantCtorValues, &[])) };
             ExprKind::Variant { ty: *id, tag: index, fields: Vec::new() }
         }
-        Target::Prelude(Builtin::None) => {
-            let Ty::Enum(id) = &ty else { return Err(internal(span, "None type")) };
-            ExprKind::Variant { ty: *id, tag: 0, fields: Vec::new() }
-        }
-        Target::Fn { .. } | Target::Prelude(_) => return Err(unsupported(span, Feature::FnValues, &[])),
+        Target::Fn { .. } | Target::Panic => return Err(unsupported(span, Feature::FnValues, &[])),
         Target::Method { .. } | Target::BuiltinMethod { .. } | Target::Value => {
             return Err(internal(span, "call target on a non-call"));
         }

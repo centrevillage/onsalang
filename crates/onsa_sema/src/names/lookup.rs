@@ -355,14 +355,10 @@ impl Modules {
                     });
                 }
                 // The names `std.core` declares that are the compiler's in
-                // this version (S-659 (C)): `Option`, `Result` and the traits;
-                // never a variant, `panic`, a kind constraint or a builtin type.
+                // this version (S-659 (C)): the traits; never a variant,
+                // `panic`, a kind constraint or a builtin type.
                 if Some(m) == self.core
-                    && let Some(
-                        &e @ Entity::Builtin(
-                            Builtin::Generic(BuiltinTy::Option | BuiltinTy::Result) | Builtin::Trait(_),
-                        ),
-                    ) = prelude.get(&name.name)
+                    && let Some(&e @ Entity::Builtin(Builtin::Trait(_))) = prelude.get(&name.name)
                 {
                     return Ok(e);
                 }
@@ -387,6 +383,9 @@ impl Modules {
                             return Ok(Entity::Member(*m));
                         }
                     }
+                    // The variants of a lang item are names of the prelude
+                    // alone, not members of the type (§4.1, S-607).
+                    DefKind::Enum(_) if self.lang.of(d).is_some() => {}
                     DefKind::Enum(e) => {
                         if let Some(i) = e.variants.iter().position(|v| v.name == name.name) {
                             return Ok(Entity::Variant(d, i as u32));

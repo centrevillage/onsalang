@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.4", "§4.5", "§4.7", "§18.1"]
+// fixes = 0
+
+// W5-03 U4/t, S-71: a variant of the prelude that carries another open variant (`Err(None)`, `Some(None)`, `Ok(None)`,
+// `Some(Some(None))`) leaves a type variable at the end of the function, and the E0406 is at the expression that made it
+// (spec §4.7: "その型変数を作った式の位置に E0406"). When two variables are open (`Err(None)` is `Result[?T, Option[?U]]`),
+// the report is the first item that the check made: "同じ時点で満たさない項目が複数あれば、検査が項目を作った順（被演算子が
+// 演算子より先）で先のものを報告する", so the inner `None`, the operand, and not the `Err` that holds it. Where only one variable
+// is open (`Some(None)`) it is the one that the inner `None` made. The column is written (`@N`, from 1, the start of the
+// expression), because the line alone does not tell the inner from the outer. The forms whose own variable is the open one
+// and the forms with a decided type are in infer_nested_variants_outer.onsa. Before S-71 the position is the outer variant.
+// One error per function (P-01). `fixes = 0`: a type variable has no candidate.
+
+// ---------------------------------------------------------------- E0406
+
+pub fn err_of_none() {
+  let x = Err(None)                         //~ E0406 @15
+  let _ = x
+}
+
+pub fn some_of_none() {
+  let x = Some(None)                        //~ E0406 @16
+  let _ = x
+}
+
+pub fn ok_of_none() {
+  let x = Ok(None)                          //~ E0406 @14
+  let _ = x
+}
+
+pub fn some_of_some_of_none() {
+  let x = Some(Some(None))                  //~ E0406 @21
+  let _ = x
+}
+
+pub fn ok_of_some_of_none() {
+  let x = Ok(Some(None))                    //~ E0406 @19
+  let _ = x
+}
+
+pub fn err_of_some_of_none() {
+  let x = Err(Some(None))                   //~ E0406 @20
+  let _ = x
+}
+
+pub fn some_of_err_of_none() {
+  let x = Some(Err(None))                   //~ E0406 @20
+  let _ = x
+}
+
+pub fn err_of_none_discarded() {
+  let _ = Err(None)                         //~ E0406 @15
+}
+
+pub fn err_of_none_in_a_branch(c: Bool) {
+  if c {
+    let _ = Err(None)                       //~ E0406 @17
+  }
+}
+
+pub fn err_of_none_in_a_loop() {
+  for _ in 0 ..< 2 {
+    let _ = Some(None)                      //~ E0406 @18
+  }
+}
+
+pub fn match_on_some_of_none() -> U8 {
+  let x = Some(None)                        //~ E0406 @16
+  match x {
+    Some(_) => 1,
+    None => 0,
+  }
+}

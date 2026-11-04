@@ -29,28 +29,18 @@ impl<'a> Checker<'a> {
         // the names stage tells `inc.(1)` of an item from it (E0020).
         if !matches!(kind, CallKind::Value { .. }) {
             // 1. A function (an associated one of a builtin type is std's,
-            // `Buf.zeroed`), a variant or a constructor of the prelude, as
-            // the names stage resolved the callee.
-            let cspan = self.expr(callee).span;
+            // `Buf.zeroed`) or a variant, as the names stage resolved the
+            // callee.
             if let Some(PathRes::Item { entity, owner }) = self.names.paths.get(&callee).cloned() {
                 let name = self.last_name(callee);
                 return match entity {
                     Entity::Builtin(Builtin::Panic) => self.check_panic(e, &name, args, expected),
-                    // `None`, which takes no value (what is neither a value
-                    // nor a flow is the names stage's E0308): the branch
-                    // of the builtin `None` until W5-03 makes it a variant.
-                    Entity::Builtin(Builtin::None) => Err(self.unit_variant_called(e, callee, kind, args)),
                     _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
                 };
             }
             // 2. A method `recv.name(...)` of the value before it.
             if let ExprKind::Field { base, name } = &self.expr(callee).kind {
                 let (base, name) = (*base, name.clone());
-                // After a constructor of the prelude (`Some.x()`): an
-                // associated function that is none.
-                if let Some(PathRes::Item { entity: Entity::Builtin(_), .. }) = self.names.paths.get(&base) {
-                    return Err(self.err(Code::E0413, name.span, format!("`{}` does not exist", self.src(cspan))));
-                }
                 let recv = self.check_expr(base, None)?;
                 let recv = self.known(recv, self.expr(base).span, "receiver")?;
                 return self.check_method_call(e, callee, recv, &name, args, expected, kind);
@@ -107,7 +97,7 @@ impl<'a> Checker<'a> {
             return Err(self.err(Code::E0417, arg.span, message));
         }
         self.check_expr(arg.expr, None)?;
-        self.info.targets.insert(e, Target::Prelude(Builtin::Panic));
+        self.info.targets.insert(e, Target::Panic);
         Ok(expected.unwrap_or_else(|| self.fresh()))
     }
 
@@ -189,21 +179,7 @@ impl<'a> Checker<'a> {
                 self.info.targets.insert(e, Target::Variant { def: d, index: i });
                 Ok(ret)
             }
-            Entity::Builtin(b) => {
-                let ret = self.prelude_ctor(b, span);
-                let t = match self.ty(ret) {
-                    Ty::Builtin(BuiltinTy::Result, a) if b == Builtin::Err => a[1],
-                    Ty::Builtin(_, a) => a[0],
-                    _ => unreachable!("a prelude constructor makes an `Option` or a `Result`"),
-                };
-                if let Some(exp) = expected {
-                    self.unify_at(span, ret, exp)?;
-                }
-                self.check_args(args, &[(Mode::Borrow, t)], e)?;
-                self.info.targets.insert(e, Target::Prelude(b));
-                Ok(ret)
-            }
-            Entity::Module(_) => unreachable!(),
+            Entity::Builtin(_) | Entity::Module(_) => unreachable!(),
         }
     }
 

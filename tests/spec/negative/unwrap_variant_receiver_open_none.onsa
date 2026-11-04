@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.7", "§9.1", "§18.1"]
+// fixes = 0
+
+// W5-03 U4/t, S-71: `None` and a variant that carries `None` (`Some(None)`, `Err(None)`, `Ok(None)`) as the receiver of
+// `unwrap`. The receiver has a known head (`Option[?T]`, §4.7), so `None.unwrap()` is a call of the method `unwrap` of `Option`
+// (§9.1) on the variant, as `M.S(1).get()` is for a declared enum, and the type argument that nothing decides is E0406 at the
+// expression that made the type variable (§4.7: "その型変数を作った式の位置に E0406"). A variant that carries an open `None`
+// is reported at that inner `None`, which is the first item that the check made (§4.7: "検査が項目を作った順（被演算子が演算子
+// より先）で先のものを報告する"). The column is the start of the expression (`@N`, from 1). A type that something decides is no
+// error (the functions at the end). One error per function (P-01). `fixes = 0`: a type variable has no candidate.
+// Before S-71 the receiver `None.unwrap()` is an E0413 and the position of the others is the outer variant.
+
+pub struct Holder {
+  n: U8,
+}
+
+fn take(n: U8) -> U8 {
+  n
+}
+
+// ---------------------------------------------------------------- E0406
+
+pub fn none_receiver() {
+  let x = None.unwrap()                 //~ E0406 @11
+  let _ = x
+}
+
+pub fn none_receiver_discarded() {
+  let _ = None.unwrap()                 //~ E0406 @11
+}
+
+pub fn some_of_none_receiver() {
+  let x = Some(None).unwrap()           //~ E0406 @16
+  let _ = x
+}
+
+pub fn err_of_none_receiver_with_a_decided_result() {
+  let x: U8 = Err(None).unwrap()        //~ E0406 @19
+  let _ = x
+}
+
+pub fn ok_of_none_receiver() {
+  let x = Ok(None).unwrap()             //~ E0406 @14
+  let _ = x
+}
+
+pub fn in_a_branch(c: Bool) -> U8 {
+  if c {
+    let x = None.unwrap()               //~ E0406 @13
+    let _ = x
+  }
+  0
+}
+
+impl Holder {
+  pub fn in_a_method(self) -> U8 {
+    let x = None.unwrap()               //~ E0406 @13
+    let _ = x
+    self.n
+  }
+}
+
+// ---------------------------------------------------------------- decided: no error
+
+pub fn decided_by_the_return_type() -> U32 {
+  None.unwrap()
+}
+
+pub fn decided_by_an_argument() -> U8 {
+  let y = None.unwrap()
+  take(y)
+}
+
+pub fn decided_by_a_later_annotation() -> U8 {
+  let y = None.unwrap()
+  let z: U8 = y
+  z
+}
+
+pub fn decided_inner_by_the_result() -> U8 {
+  let o: Option[U8] = Some(None).unwrap()
+  o.unwrap()
+}

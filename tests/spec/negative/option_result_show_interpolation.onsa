@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§6.3", "§4.1", "§18.1"]
+
+// W5-03 U4/t, S-71: a value that is interpolated in a string must have `Show` (spec §2.3: "補間される値は `Show` を実装して
+// いなければならない（E0416）"), and `Option` and `Result` have `Show` when the contents have it (§6.3: "`Option[T]`、`Result[T, E]` |
+// 中身が全て実装するとき `PartialEq` `Eq` `Hash` `Show`"). So `{o}` of an `Option[Plain]`, where `Plain` has no `Show`, is E0416, wherever
+// the content is (the `Ok` side, the `Err` side, nested), and the one with a content that has `Show` (a number, a float, a
+// `Bool`, a nested one) is fine. A string with an interpolation makes a new `Str`, so it needs `Alloc` (§2.3). The position is
+// the line. One error per function (P-01).
+
+pub struct Plain {
+  n: U32,
+}
+
+// ---------------------------------------------------------------- the content has no Show
+
+pub fn a_plain_struct_for_comparison(p: Plain) -> Str uses {Alloc} {
+  "{p}"                                 //~ E0416
+}
+
+pub fn option_of_a_plain_struct(o: Option[Plain]) -> Str uses {Alloc} {
+  "{o}"                                 //~ E0416
+}
+
+pub fn result_with_a_plain_ok(r: Result[Plain, U32]) -> Str uses {Alloc} {
+  "{r}"                                 //~ E0416
+}
+
+pub fn result_with_a_plain_err(r: Result[U32, Plain]) -> Str uses {Alloc} {
+  "{r}"                                 //~ E0416
+}
+
+pub fn nested(o: Option[Option[Plain]]) -> Str uses {Alloc} {
+  "{o}"                                 //~ E0416
+}
+
+pub fn in_a_longer_string(o: Option[Plain]) -> Str uses {Alloc} {
+  "value: {o}!"                         //~ E0416
+}
+
+// ---------------------------------------------------------------- fine: the content has Show
+
+pub fn option_of_a_number(o: Option[U32]) -> Str uses {Alloc} {
+  "{o}"
+}
+
+pub fn option_of_a_float(o: Option[F32]) -> Str uses {Alloc} {
+  "{o}"
+}
+
+pub fn result_of_a_bool_and_a_number(r: Result[Bool, I32]) -> Str uses {Alloc} {
+  "{r}"
+}
+
+pub fn nested_numbers(o: Option[Option[U8]]) -> Str uses {Alloc} {
+  "{o}"
+}
+
+pub fn option_of_a_tuple(o: Option[(U32, Bool)]) -> Str uses {Alloc} {
+  "{o}"
+}

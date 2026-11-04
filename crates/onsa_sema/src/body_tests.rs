@@ -4,29 +4,28 @@ use onsa_diag::{Code, FileId};
 
 use crate::body::{LocalKind, Target};
 use crate::consteval::ConstValue;
-use crate::ty::{BuiltinTy, FloatKind, IntKind, Len, Ty};
-use crate::{Analysis, Module, Package, analyze};
+use crate::tests::analyze;
+use crate::ty::{FloatKind, IntKind, Len, Ty};
+use crate::{Analysis, Module, Package};
 
-/// The analysis of `src` alone, with std when `with_std` (whose bodies are
-/// then in the tables too).
-fn check_in(src: &str, with_std: bool) -> Analysis {
+/// The analysis of `src` with std, whose bodies are in the tables too.
+fn check_in(src: &str) -> Analysis {
     let modules = vec![Module {
         segments: vec!["main".into()],
         file: FileId(0),
         text: src.to_string(),
         parsed: onsa_syntax::parse(FileId(0), src),
     }];
-    let deps = if with_std { vec![crate::flow_tests::std_package()] } else { Vec::new() };
-    analyze(&Package::new("t", modules, deps))
+    analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]))
 }
 
 fn check(src: &str) -> Analysis {
-    check_in(src, false)
+    check_in(src)
 }
 
 /// The codes, with std: its `Alloc` is in the prelude (S-659).
 fn codes(src: &str) -> Vec<Code> {
-    let a = check_in(src, true);
+    let a = check_in(src);
     let mut v: Vec<Code> = a.diagnostics.iter().map(|d| d.code).collect();
     v.sort();
     v
@@ -39,13 +38,13 @@ fn ok(src: &str) -> Analysis {
 }
 
 fn ok_with_std(src: &str) -> Analysis {
-    let a = check_in(src, true);
+    let a = check_in(src);
     assert!(a.diagnostics.is_empty(), "unexpected diagnostics: {:?}", a.diagnostics);
     a
 }
 
 fn def(a: &Analysis, name: &str) -> crate::DefId {
-    crate::DefId(a.defs.iter().position(|d| d.name == name).unwrap_or_else(|| panic!("no def {name}")) as u32)
+    crate::DefId(a.defs.iter().rposition(|d| d.name == name).unwrap_or_else(|| panic!("no def {name}")) as u32)
 }
 
 #[test]
@@ -75,7 +74,7 @@ fn unresolved_integer_literal_defaults_to_i32() {
     assert_eq!(codes("test \"t\" { assert 1 == 1 }\n"), vec![]);
     assert_eq!(codes("pub fn f() {\n  for _ in 0..<4 {\n  }\n}\n"), vec![]);
     let a = check("pub fn f() {\n  let a = 1\n}\n");
-    let body = a.bodies.values().next().unwrap();
+    let body = &a.bodies[&def(&a, "f")];
     let int = body.locals.iter().find(|l| l.name == "a").unwrap().ty;
     assert!(matches!(a.types.get(int), Ty::Int(IntKind::I32)));
     // Out of the I32 range: E0408 with the annotation hint.
@@ -612,7 +611,6 @@ fn tables_are_resolved() {
     assert!(matches!(a.types.get(xs.ty), Ty::Array(_, Len::Const(4))));
     assert_eq!(xs.kind, LocalKind::Param(onsa_syntax::ast::Mode::Borrow));
     assert!(body.targets.values().filter(|t| matches!(t, Target::Local(_))).count() >= 5);
-    let _ = BuiltinTy::Option;
 }
 
 /// The notes of E0416 (S-235): the reason of a binding is said only for the expected type it
@@ -740,7 +738,7 @@ fn for_ranges() {
 #[test]
 fn a_name_of_the_spec_this_version_has_not_is_its_e0200() {
     let one = |src: &str| {
-        let a = check_in(src, true);
+        let a = check_in(src);
         assert_eq!(a.diagnostics.len(), 1, "{src}: {:?}", a.diagnostics);
         (a.diagnostics[0].code, a.diagnostics[0].message.clone())
     };
@@ -800,7 +798,7 @@ fn an_anonymous_function_at_an_argument_has_the_candidate_of_move() {
     let candidates = |arg: &str| {
         let ap = "fn ap(f: fn(move U32) -> U32, x: U32) -> U32 {\n  f.(x)\n}\n";
         let src = format!("{ap}pub fn run() -> U32 {{\n  ap({arg}, 2)\n}}\n");
-        let d = check_in(&src, true).diagnostics.remove(0);
+        let d = check_in(&src).diagnostics.remove(0);
         assert_eq!(d.code, Code::E0401, "{src}");
         d.fixes.len()
     };
@@ -813,7 +811,7 @@ fn an_anonymous_function_at_an_argument_has_the_candidate_of_move() {
 /// it as it is decided, and the way out the user has (§18.1; W5-02 U5b, U6).
 #[test]
 fn a_requirement_shows_what_is_decided_and_what_can_be_done() {
-    let first = |src: &str| check_in(src, true).diagnostics.remove(0);
+    let first = |src: &str| check_in(src).diagnostics.remove(0);
     let late = first("pub fn f() {\n  let xs = []\n  let _ = xs.get(0)\n  let _: [Buf[F32]; 0] = xs\n}\n");
     assert!(late.message.starts_with("`[Buf[F32]; 0]` has `get` only with"), "{}", late.message);
     assert!(late.notes[0].message.contains("as the annotation"), "{:?}", late.notes);
@@ -823,16 +821,16 @@ fn a_requirement_shows_what_is_decided_and_what_can_be_done() {
     // `Buf.zeroed` called and as a value say the same.
     let held = "pub struct H {\n  b: Buf[F32],\n}\nfn eat(move b: Buf[H]) {\n}\n";
     for body in ["eat(Buf.zeroed(2))", "let g = Buf.zeroed\n  eat(g.(2))"] {
-        let a = check_in(&format!("{held}pub fn f() uses {{Alloc}} {{\n  {body}\n}}\n"), true);
+        let a = check_in(&format!("{held}pub fn f() uses {{Alloc}} {{\n  {body}\n}}\n"));
         // The first is of the heading of `eat`.
         let d = a.diagnostics.iter().rfind(|d| d.code == Code::E0416).expect("E0416");
         assert_eq!(d.message, "the element type of `Buf` must be Copy; `H` is not (§4.5)", "{body}");
     }
     // A parameter of std's is not one the user declares `?Dup`.
     let of_std = "use std.test.{Gen}\npub struct H {\n  b: Buf[F32],\n}\npub fn f(g: Gen[H]) {\n}\n";
-    let d = check_in(of_std, true).diagnostics.remove(0);
+    let d = check_in(of_std).diagnostics.remove(0);
     assert_eq!(d.message, "`H` is not Copy or Shared, so it does not satisfy `T: Dup` of `Gen` (§4.5)");
-    let user = check_in(&format!("{held}fn own[T](x: T) {{ }}\npub fn f(move h: H) {{\n  own(h)\n}}\n"), true);
+    let user = check_in(&format!("{held}fn own[T](x: T) {{ }}\npub fn f(move h: H) {{\n  own(h)\n}}\n"));
     let d = user.diagnostics.iter().rfind(|d| d.code == Code::E0416).expect("E0416");
     assert!(d.message.contains("unless it is declared `T: ?Dup`"), "{}", d.message);
 }
@@ -842,9 +840,9 @@ fn a_requirement_shows_what_is_decided_and_what_can_be_done() {
 #[test]
 fn the_text_of_function_types_and_of_an_open_literal() {
     let src = "fn c(g: fn(U32) -> Buf[F32]) -> U32 {\n  1\n}\npub fn f() -> U32 {\n  c(Buf.zeroed)\n}\n";
-    let d = check_in(src, true).diagnostics.remove(0);
+    let d = check_in(src).diagnostics.remove(0);
     assert_eq!(d.message, "expected `fn(U32) -> Buf[F32]`, found `fn(U32) -> Buf[F32] uses {Alloc}`");
-    let d = check_in("pub fn f() -> I32 {\n  I32.trunc_from(2.5)\n}\n", true).diagnostics.remove(0);
+    let d = check_in("pub fn f() -> I32 {\n  I32.trunc_from(2.5)\n}\n").diagnostics.remove(0);
     assert_eq!(d.code, Code::E0405);
     assert!(d.notes[0].message.contains("`let x: F32 = 2.5`"), "{:?}", d.notes);
 }
@@ -860,18 +858,18 @@ fn a_literal_in_a_part_of_the_types_is_the_text_of_the_types() {
     ];
     for (g, call, text) in cases {
         let src = format!("{g}{take}pub fn f() -> U32 {{\n  {call}\n}}\n");
-        let d = check_in(&src, true).diagnostics.remove(0);
+        let d = check_in(&src).diagnostics.remove(0);
         assert_eq!((d.code, d.message.as_str()), (Code::E0401, text), "{src}");
     }
     // A literal itself keeps its own text.
-    let d = check_in("pub fn f() -> Bool {\n  1\n}\n", true).diagnostics.remove(0);
+    let d = check_in("pub fn f() -> Bool {\n  1\n}\n").diagnostics.remove(0);
     assert!(d.message.contains("literal cannot have type `Bool`"), "{}", d.message);
 }
 
 #[test]
 fn the_receiver_of_an_e0710_shows_what_is_decided() {
     let src = "pub fn f() {\n  let xs = []\n  let _ = xs.get(0)\n  let _: [Span[F32]; 0] = xs\n}\n";
-    let d = check_in(src, true).diagnostics.remove(0);
+    let d = check_in(src).diagnostics.remove(0);
     assert_eq!(d.code, Code::E0710);
     assert!(d.message.contains("the element type of `get` of `[Span[F32]; 0]`"), "{}", d.message);
 }
@@ -885,7 +883,7 @@ fn a_path_over_lines_shows_its_names() {
         ("pub fn f(s: Str) -> Bytes {\n  Str // c\n    .as_bytes(s)\n}\n", Code::E0308, "`Str.as_bytes` is a method"),
     ];
     for (src, code, text) in cases {
-        let d = check_in(src, true).diagnostics.remove(0);
+        let d = check_in(src).diagnostics.remove(0);
         assert_eq!(d.code, code, "{src}");
         assert!(d.message.contains(text) && !d.message.contains('\n'), "{src}: {}", d.message);
     }
@@ -893,11 +891,11 @@ fn a_path_over_lines_shows_its_names() {
 
 #[test]
 fn only_a_call_of_a_missing_function_has_a_literal_to_write() {
-    let d = check_in("pub fn f() -> F32 {\n  F32.default()\n}\n", true).diagnostics.remove(0);
+    let d = check_in("pub fn f() -> F32 {\n  F32.default()\n}\n").diagnostics.remove(0);
     assert!(d.message.contains("the builtin value `F32.default`"), "{}", d.message);
     assert!(d.notes.iter().any(|n| n.message.contains("write the value as a literal")), "{:?}", d.notes);
     for src in ["pub fn f() {\n  let _ = F32.default\n}\n", "pub fn f(x: [F32; F32.default]) {\n}\n"] {
-        let d = check_in(src, true).diagnostics.remove(0);
+        let d = check_in(src).diagnostics.remove(0);
         assert_eq!(d.code, Code::E0200, "{src}");
         assert!(d.message.contains("the builtin name `F32.default`"), "{src}: {}", d.message);
         assert!(d.notes.is_empty(), "{src}: {:?}", d.notes);

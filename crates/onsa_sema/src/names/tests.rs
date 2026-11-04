@@ -3,8 +3,8 @@
 
 use onsa_diag::{Code, FileId};
 
-use crate::tests::{check, codes, pkg};
-use crate::{Analysis, Package, analyze};
+use crate::tests::{analyze, check, codes, pkg};
+use crate::{Analysis, Package};
 
 /// The guard-form candidates of the syntax stage bind names no identifier of
 /// the file spells (`onsa_syntax::foreign::guard_name`, S-253): visible

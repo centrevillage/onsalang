@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.1", "§18.1"]
+
+// W5-03 U4/t, S-659 (1), S-607: the variants of the prelude (`None`, `Some`, `Ok`, `Err`) are names of the prelude and no
+// items of the module `std.core` (spec §15.1: "`Option` と `Result`（とその列挙子）… は std の宣言である。列挙子を除くこれらは、
+// モジュール `std.core` の `pub` の項目である"; `use std.core.{Some}` is E0302, module/prelude_core_missing.onsa). A path that
+// reads a variant after the module (`core.Some(1)`, `core.None`) is a name that the module does not have: E0302 (§15.1:
+// "名前が見つからなければ E0302"), in a value, a call and a pattern, and also through the package (`std.core.None`).
+// It is the same code as the qualification by the type (`core.Option.None`, negative/prelude_variant_qualified_core.onsa).
+// The variants by their names alone are fine (the last functions). One error per function (P-01). The candidates are not
+// checked here (the text of §15.1 defines the candidate of a path only for a head that is the package or the module itself).
+
+use std
+use std.core
+
+pub fn a_value_of_none() -> Option[I32] {
+  core.None                                         //~ E0302
+}
+
+pub fn a_call_of_some() -> Option[I32] {
+  core.Some(1)                                      //~ E0302
+}
+
+pub fn a_call_of_ok() -> Result[I32, Bool] {
+  core.Ok(1)                                        //~ E0302
+}
+
+pub fn a_call_of_err() -> Result[I32, Bool] {
+  core.Err(true)                                    //~ E0302
+}
+
+pub fn a_value_through_the_package() -> Option[I32] {
+  std.core.None                                     //~ E0302
+}
+
+pub fn a_call_through_the_package() -> Option[I32] {
+  std.core.Some(1)                                  //~ E0302
+}
+
+pub fn a_function_value() -> Option[I32] {
+  let f = core.Some                                 //~ E0302
+  f.(2)
+}
+
+pub fn a_pattern_of_some(o: Option[I32]) -> I32 {
+  match o {
+    core.Some(x) => x,                              //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn a_pattern_of_none(o: Option[I32]) -> I32 {
+  match o {
+    core.None => 0,                                 //~ E0302
+    _ => 1,
+  }
+}
+
+pub fn a_pattern_of_err(r: Result[I32, I32]) -> I32 {
+  match r {
+    core.Err(e) => e,                               //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn a_pattern_through_the_type(o: Option[I32]) -> I32 {
+  match o {
+    core.Option.Some(x) => x,                       //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn a_let_pattern(o: Option[I32]) -> I32 {
+  let core.Some(x) = o                              //~ E0302
+  x
+}
+
+// ---------------------------------------------------------------- the names alone are fine
+
+pub fn names_alone_in_values() -> Option[I32] {
+  let a = Some(1)
+  let b: Option[I32] = None
+  if a == b { b } else { a }
+}
+
+pub fn names_alone_in_patterns(o: Option[I32], r: Result[I32, I32]) -> I32 {
+  let a = match o {
+    Some(x) => x,
+    None => 0,
+  }
+  let b = match r {
+    Ok(x) => x,
+    Err(e) => e,
+  }
+  a + b
+}
+
+pub fn the_type_through_the_module(o: core.Option[I32]) -> core.Option[I32] {
+  o
+}

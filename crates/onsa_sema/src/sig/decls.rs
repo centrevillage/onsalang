@@ -136,8 +136,8 @@ impl Graph<'_> {
                 // A constant here is no type (§18.1); in a const argument, `read`.
                 _ => {}
             },
-            Some(Entity::Builtin(Builtin::Generic(b))) => {
-                return args.iter().for_each(|&x| self.ty(w, x, value && b.holds_values(), under));
+            Some(Entity::Builtin(Builtin::Generic(_))) => {
+                return args.iter().for_each(|&x| self.ty(w, x, false, under));
             }
             _ => {}
         }
@@ -461,7 +461,9 @@ impl<'p> Sema<'p> {
         let mut variants: HashMap<DefId, HashMap<String, Span>> = HashMap::default();
         for ((def, builtin), sub) in subs {
             let (name, at) = (self.a.def(sub).name.clone(), self.a.def(sub).name_span);
-            let variant = def.and_then(|d| variants.entry(d).or_insert_with(|| self.variants(d)).get(&name).copied());
+            let variant = def.and_then(|d| {
+                variants.entry(d).or_insert_with(|| self.variants(d).into_iter().collect()).get(&name).copied()
+            });
             let Some(table) = self.assoc_table(def, builtin) else { continue };
             let first = *table.entry(name.clone()).or_insert(sub);
             let note = match variant {
@@ -478,10 +480,10 @@ impl<'p> Sema<'p> {
 
     /// The names of the variants of `d` when it is an enum, as written (the
     /// variants are lowered later).
-    fn variants(&self, d: DefId) -> HashMap<String, Span> {
+    pub(crate) fn variants(&self, d: DefId) -> Vec<(String, Span)> {
         let def = self.a.def(d);
-        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return HashMap::default() };
-        let Some(ItemKind::Enum(e)) = def.item.map(|i| item_kind(&ast.item(i).kind)) else { return HashMap::default() };
+        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return Vec::new() };
+        let Some(ItemKind::Enum(e)) = def.item.map(|i| item_kind(&ast.item(i).kind)) else { return Vec::new() };
         e.variants.iter().map(|v| (v.name.name.clone(), v.name.span)).collect()
     }
 

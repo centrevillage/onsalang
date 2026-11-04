@@ -13,16 +13,8 @@ use crate::ty::{BuiltinTy, TyId};
 pub enum Builtin {
     /// `I32`, `F32`, `Bool`, `Char`
     Scalar(TyId),
-    /// `Str`, `Array`, `Option`, `Span`, ...
+    /// `Str`, `Array`, `Buf`, `Span`, ...
     Generic(BuiltinTy),
-    /// `Some`
-    Some,
-    /// `None`
-    None,
-    /// `Ok`
-    Ok,
-    /// `Err`
-    Err,
     /// `panic` (§9.2).
     Panic,
     /// An operator trait or a standard trait (§6.3): its row of
@@ -103,7 +95,6 @@ impl NameKind {
     pub fn of_builtin(b: Builtin) -> NameKind {
         match b {
             Builtin::Scalar(_) | Builtin::Generic(_) => NameKind::Type,
-            Builtin::Some | Builtin::None | Builtin::Ok | Builtin::Err => NameKind::Variant,
             Builtin::Panic => NameKind::Function,
             Builtin::Trait(_) => NameKind::Trait,
             Builtin::Kind(_) => NameKind::KindConstraint,
@@ -537,6 +528,8 @@ pub struct Modules {
     /// The module `std.core`, where the names of the prelude std declares are
     /// (§15.1, S-659); set by `crate::names::prelude::declared`.
     pub core: Option<ModId>,
+    /// The enums of `std.core` the compiler knows (S-71); set with `core`.
+    pub lang: crate::lang::LangItems,
     /// The graph of the dependencies of the `use` (E0310), made once every
     /// `use` is resolved (`crate::names::cycles`).
     pub(crate) graph: Option<crate::names::ImportGraph>,

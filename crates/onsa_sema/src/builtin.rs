@@ -227,9 +227,6 @@ mod tests {
         assert!(method(&mut types, i32, "checked_add").is_none());
         assert!(method(&mut types, f32, "to_bits").is_none());
         assert!(method(&mut types, s, "fill").is_none());
-        // `Option`'s and `Result`'s are std's (§9.1).
-        let opt = types.builtin(BuiltinTy::Option, vec![f32]);
-        assert!(method(&mut types, opt, "unwrap").is_none());
         assert!(method(&mut types, s, "len").is_none(), "std's (`std/core/str.onsa`)");
         // `Buf[T]` and `Span[T]` take std's members (§5.3), and an array its
         // `len` only, with no `is_empty` (§4.2).

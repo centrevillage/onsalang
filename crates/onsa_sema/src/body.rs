@@ -142,8 +142,8 @@ pub enum Target {
         def: DefId,
         index: u32,
     },
-    /// `Some`, `None`, `Ok`, `Err`.
-    Prelude(Builtin),
+    /// `panic` (§9.2).
+    Panic,
     /// `x.m(...)` on a user type: the method def; the receiver is the callee's `base`.
     Method {
         def: DefId,
@@ -168,11 +168,6 @@ pub struct TryArms {
     pub keep: u32,
     pub exit: u32,
 }
-
-/// The `?` of `Option` and of `Result`: the one place of these numbers
-/// (W5-03 reads them from the declarations of std's enums).
-pub(crate) const TRY_OPTION: TryArms = TryArms { keep: 1, exit: 0 };
-pub(crate) const TRY_RESULT: TryArms = TryArms { keep: 0, exit: 1 };
 
 /// Typed body of one function, test, or `const` initializer.
 #[derive(Debug, Default, Clone)]

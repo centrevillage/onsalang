@@ -25,10 +25,10 @@ fn types_hold_their_depth_and_size() {
     assert_eq!((t.depth(arr), t.size(arr)), (1, 3));
     let mut deep = f32;
     for _ in 0..crate::ty::TYPE_DEPTH_LIMIT {
-        deep = t.builtin(BuiltinTy::Option, vec![deep]);
+        deep = t.builtin(BuiltinTy::Span, vec![deep]);
     }
     assert!(!t.over_limit(deep));
-    let deeper = t.builtin(BuiltinTy::Option, vec![deep]);
+    let deeper = t.builtin(BuiltinTy::Span, vec![deep]);
     assert!(t.over_limit(deeper) && t.depth(deeper) == crate::ty::TYPE_DEPTH_LIMIT + 1);
     let err = t.error();
     let with_err = t.intern(Ty::Tuple(vec![deeper, err]));

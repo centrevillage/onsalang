@@ -71,7 +71,7 @@ fn analyzed(src: &str) -> (crate::Analysis, onsa_syntax::ast::Ast) {
     assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
     let modules = vec![crate::Module { segments: vec!["main".into()], file: FileId(0), text: src.into(), parsed }];
     let pkg = crate::Package::new("t", modules, vec![crate::flow_tests::std_package()]);
-    (crate::analyze(&pkg), onsa_syntax::parse(FileId(0), src).ast)
+    (crate::tests::analyze(&pkg), onsa_syntax::parse(FileId(0), src).ast)
 }
 
 /// The bodies of the module of [`analyzed`].

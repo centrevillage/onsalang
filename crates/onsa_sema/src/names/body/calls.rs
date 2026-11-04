@@ -17,7 +17,7 @@ use super::{Fail, PathRes, W, Walker};
 use crate::Analysis;
 use crate::DefId;
 use crate::flow_names::FlowBuiltin;
-use crate::resolve::{Builtin, Callee, Entity, NameKind};
+use crate::resolve::{Callee, Entity, NameKind};
 
 /// What the record of a callee is, as the forms of a call read it: the one
 /// table of the values and the items of a call (§15.1, §6.1; A6, D-15).
@@ -50,7 +50,6 @@ impl Called {
 fn unit_variant(a: &Analysis, e: Entity) -> bool {
     match e {
         Entity::Variant(d, i) => a.def(d).as_enum().is_some_and(|en| en.variants[i as usize].fields.is_empty()),
-        Entity::Builtin(b) => b == Builtin::None,
         _ => false,
     }
 }

@@ -43,7 +43,7 @@ fn analyzed(src: &str) -> (crate::Package, crate::Analysis) {
     assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
     let modules = vec![crate::Module { segments: vec!["main".into()], file: FileId(0), text: src.into(), parsed }];
     let pkg = crate::Package::new("t", modules, vec![crate::flow_tests::std_package()]);
-    let a = crate::analyze(&pkg);
+    let a = crate::tests::analyze(&pkg);
     let modes = Stage::Modes.check_rank().expect("a check stage");
     let early: Vec<_> = (a.diagnostics.iter())
         .filter(|d| d.span.file == FileId(0) && d.stage.check_rank().is_none_or(|r| r < modes))

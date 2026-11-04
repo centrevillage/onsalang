@@ -111,18 +111,9 @@ pub enum BuiltinTy {
     Span,
     /// `Ptr[T]` (Copy, §14)
     Ptr,
-    /// `Option[T]`
-    Option,
-    /// `Result[T, E]`
-    Result,
 }
 
 impl BuiltinTy {
-    /// Whether its arguments are held as values, as of an enum (§4.4).
-    pub fn holds_values(self) -> bool {
-        matches!(self, BuiltinTy::Option | BuiltinTy::Result)
-    }
-
     pub fn name(self) -> &'static str {
         match self {
             BuiltinTy::Str => "Str",
@@ -133,8 +124,6 @@ impl BuiltinTy {
             BuiltinTy::Buf => "Buf",
             BuiltinTy::Span => "Span",
             BuiltinTy::Ptr => "Ptr",
-            BuiltinTy::Option => "Option",
-            BuiltinTy::Result => "Result",
         }
     }
 
@@ -148,8 +137,6 @@ impl BuiltinTy {
             "Buf" => BuiltinTy::Buf,
             "Span" => BuiltinTy::Span,
             "Ptr" => BuiltinTy::Ptr,
-            "Option" => BuiltinTy::Option,
-            "Result" => BuiltinTy::Result,
             _ => return None,
         })
     }
@@ -157,7 +144,7 @@ impl BuiltinTy {
     pub fn arity(self) -> usize {
         match self {
             BuiltinTy::Str | BuiltinTy::Bytes => 0,
-            BuiltinTy::Map | BuiltinTy::Result => 2,
+            BuiltinTy::Map => 2,
             _ => 1,
         }
     }

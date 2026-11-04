@@ -1,0 +1,187 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§6.3", "§18.1"]
+
+// W5-03 U4/t, S-71: the traits of `Option` and `Result` follow from the declaration of §4.1 (`pub enum Option[T: ?Dup]:
+// PartialEq + Eq + Hash + Show`), and §6.3 gives the table: "`Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq`
+// `Hash` `Show`", and no `PartialOrd`/`Ord`. So `Option[F32]` has `PartialEq` and `Show` (an `F32` has them) and has no `Eq` and
+// no `Hash` (an `F32` has none): `==` compiles, and a type parameter with the bound `Eq` or `Hash` takes it with E0416 at the call
+// (§4.5: a bound that the argument does not satisfy). The same for a `Result` (either side), a nested one, and a struct that
+// derives only `PartialEq`. A content that has no `PartialEq` (a struct that derives nothing, a type parameter `A` with no bound)
+// makes `==` an E0401 for `Option[A]` (negative/infer_compare_trait.onsa has the plain struct) and the bound `PartialEq` of a call
+// E0416. The order is no trait of the enum at all:
+// `Ord` is E0416 whatever the content. One error per function (P-01). The positions of the error are lines.
+
+pub struct Loose: PartialEq {
+  n: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub struct Full: PartialEq + Eq {
+  n: U32,
+}
+
+fn needs_partial_eq[T: PartialEq](x: T) -> T {
+  x
+}
+
+fn needs_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn needs_hash[T: Hash](x: T) -> T {
+  x
+}
+
+fn needs_show[T: Show](x: T) -> T {
+  x
+}
+
+fn needs_ord[T: Ord](x: T) -> T {
+  x
+}
+
+// ---------------------------------------------------------------- Eq: the content has only PartialEq
+
+pub fn eq_of_option_f32(o: Option[F32]) -> Option[F32] {
+  needs_eq(o)                           //~ E0416
+}
+
+pub fn eq_of_result_f32_ok(r: Result[F32, U32]) -> Result[F32, U32] {
+  needs_eq(r)                           //~ E0416
+}
+
+pub fn eq_of_result_f32_err(r: Result[U32, F32]) -> Result[U32, F32] {
+  needs_eq(r)                           //~ E0416
+}
+
+pub fn eq_of_nested(o: Option[Option[F32]]) -> Option[Option[F32]] {
+  needs_eq(o)                           //~ E0416
+}
+
+pub fn eq_of_option_of_a_partial_struct(o: Option[Loose]) -> Option[Loose] {
+  needs_eq(o)                           //~ E0416
+}
+
+pub fn eq_of_option_of_a_tuple(o: Option[(U32, F32)]) -> Option[(U32, F32)] {
+  needs_eq(o)                           //~ E0416
+}
+
+// ---------------------------------------------------------------- Hash
+
+pub fn hash_of_option_f32(o: Option[F32]) -> Option[F32] {
+  needs_hash(o)                         //~ E0416
+}
+
+pub fn hash_of_result_f32(r: Result[U32, F32]) -> Result[U32, F32] {
+  needs_hash(r)                         //~ E0416
+}
+
+pub fn hash_of_option_of_a_partial_struct(o: Option[Loose]) -> Option[Loose] {
+  needs_hash(o)                         //~ E0416
+}
+
+// ---------------------------------------------------------------- Show
+
+pub fn show_of_option_of_a_plain_struct(o: Option[Plain]) -> Option[Plain] {
+  needs_show(o)                         //~ E0416
+}
+
+pub fn show_of_result_of_a_plain_struct(r: Result[Plain, U32]) -> Result[Plain, U32] {
+  needs_show(r)                         //~ E0416
+}
+
+// ---------------------------------------------------------------- PartialEq of the content
+
+pub fn partial_eq_of_option_of_a_plain_struct(o: Option[Plain]) -> Option[Plain] {
+  needs_partial_eq(o)                   //~ E0416
+}
+
+pub fn partial_eq_of_result_of_a_plain_struct(r: Result[U32, Plain]) -> Result[U32, Plain] {
+  needs_partial_eq(r)                   //~ E0416
+}
+
+// ---------------------------------------------------------------- the order is no trait of Option and Result
+
+pub fn ord_of_option(o: Option[U32]) -> Option[U32] {
+  needs_ord(o)                          //~ E0416
+}
+
+pub fn ord_of_result(r: Result[U32, U32]) -> Result[U32, U32] {
+  needs_ord(r)                          //~ E0416
+}
+
+// ---------------------------------------------------------------- the content is a type parameter
+
+pub fn eq_of_a_parameter_without_the_bound[A](a: Option[A], b: Option[A]) -> Bool {
+  a == b                                //~ E0401
+}
+
+pub fn hash_of_a_parameter_without_the_bound[A](a: Option[A]) -> Option[A] {
+  needs_hash(a)                         //~ E0416
+}
+
+pub fn eq_of_a_parameter_with_partial_eq[A: PartialEq](a: Option[A]) -> Option[A] {
+  needs_eq(a)                           //~ E0416
+}
+
+pub fn show_of_a_parameter_without_the_bound[A](r: Result[A, U32]) -> Result[A, U32] {
+  needs_show(r)                         //~ E0416
+}
+
+// ---------------------------------------------------------------- fine: the content has the trait
+
+pub fn partial_eq_of_option_f32(a: Option[F32], b: Option[F32]) -> Bool {
+  a == b
+}
+
+pub fn partial_eq_of_result_f32(a: Result[F32, U32], b: Result[F32, U32]) -> Bool {
+  a != b
+}
+
+pub fn partial_eq_through_the_bound(o: Option[F32]) -> Option[F32] {
+  needs_partial_eq(o)
+}
+
+pub fn partial_eq_of_a_partial_struct(a: Option[Loose], b: Option[Loose]) -> Bool {
+  a == b
+}
+
+pub fn show_of_option_f32(o: Option[F32]) -> Option[F32] {
+  needs_show(o)
+}
+
+pub fn all_of_option_u32(o: Option[U32]) -> Option[U32] {
+  let a = needs_eq(o)
+  let b = needs_hash(a)
+  let c = needs_show(b)
+  needs_partial_eq(c)
+}
+
+pub fn eq_of_result_of_a_full_struct(r: Result[Full, U32]) -> Result[Full, U32] {
+  let a = needs_eq(r)
+  needs_partial_eq(a)
+}
+
+pub fn all_of_nested(o: Option[Option[Bool]]) -> Option[Option[Bool]] {
+  let a = needs_eq(o)
+  let b = needs_hash(a)
+  needs_show(b)
+}
+
+pub fn eq_of_a_parameter_with_the_bound[A: Eq](a: Option[A], b: Option[A]) -> Bool {
+  needs_eq(a) == b
+}
+
+pub fn all_of_a_parameter_with_the_bounds[A: Eq + Hash + Show](a: Option[A]) -> Option[A] {
+  let x = needs_eq(a)
+  let y = needs_hash(x)
+  needs_show(y)
+}
+
+pub fn partial_eq_of_a_parameter_with_partial_eq[A: PartialEq](a: Option[A], b: Option[A]) -> Bool {
+  a == b
+}

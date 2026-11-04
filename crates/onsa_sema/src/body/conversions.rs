@@ -11,10 +11,8 @@ use onsa_syntax::ast::{OperandPlace, TypeId, TypeKind};
 use super::slot::{Form, Slot, opens_a_brace};
 use super::*;
 use crate::cast::{Instead, cast_instead};
+use crate::lang;
 use crate::prim::NARROW_FROM;
-
-/// The constructor a `narrow_from` of a pair `as` converts always gives.
-const SOME: &str = "Some";
 
 /// The call a candidate replaces: the expression and the type expected of it
 /// (§4.7).
@@ -136,7 +134,7 @@ impl<'a> Checker<'a> {
         }
         let (source, form) = (self.display(from), self.as_text("k", from, to, ret));
         let literal = if matches!(self.ty(to), Ty::Float(_)) { "1.0" } else { "1" };
-        let literal = if ret == to { literal.to_string() } else { format!("{SOME}({literal})") };
+        let literal = if ret == to { literal.to_string() } else { format!("{}({literal})", lang::some(self.a)) };
         format!(
             "`as` takes the type of its operand where it is written (§4.7): give the operand a type first (`let k: {source} = …`, then `{form}`), or write the result as a literal (`{literal}`) (§3.3)"
         )
@@ -153,7 +151,7 @@ impl<'a> Checker<'a> {
     /// from `from` to `to` with the result `ret` stands for.
     fn as_text(&mut self, x: &str, from: TyId, to: TyId, ret: TyId) -> String {
         let cast = if from == to { x.to_string() } else { format!("{x} as {}", self.display(to)) };
-        if ret == to { cast } else { format!("{SOME}({cast})") }
+        if ret == to { cast } else { format!("{}({cast})", lang::some(self.a)) }
     }
 
     /// The note of a call with no candidate: the forms the pair has (§3.3).
@@ -167,7 +165,8 @@ impl<'a> Checker<'a> {
         if ret == to {
             return format!("write {value}, with no call (§3.3)");
         }
-        format!("write {value} where `{target}` is expected, or `{SOME}({cast})` where `{option}` is (§3.3)")
+        let some = lang::some(self.a);
+        format!("write {value} where `{target}` is expected, or `{some}({cast})` where `{option}` is (§3.3)")
     }
 
     /// The candidate of a call rejected at once (§3.3), else the rule of its
@@ -201,7 +200,8 @@ impl<'a> Checker<'a> {
         let under = if cast { Slot::Operand(OperandPlace::AsAtLeft) } else { place };
         let inner = under.wraps(form) || (!some && opens_a_brace(self.ast, arg));
         let written = self.src(self.expr(base).span);
-        let mut prefix = if some { format!("{SOME}(") } else { String::new() };
+        let ctor = lang::some(self.a);
+        let mut prefix = if some { format!("{ctor}(") } else { String::new() };
         prefix.push_str(&"(".repeat(around as usize + inner as usize));
         let mut suffix = ")".repeat(inner as usize);
         if cast {
@@ -211,9 +211,9 @@ impl<'a> Checker<'a> {
         let Some(edits) = self.around_arg(call.e, callee, arg, &prefix, &suffix) else { return Err(rule) };
         let title = match (cast, some) {
             (true, false) => format!("write `… as {written}`"),
-            (true, true) => format!("write `{SOME}(… as {written})`"),
+            (true, true) => format!("write `{ctor}(… as {written})`"),
             (false, false) => "remove the call".to_string(),
-            (false, true) => format!("write `{SOME}(…)`"),
+            (false, true) => format!("write `{ctor}(…)`"),
         };
         Ok(Fix::new(title, edits))
     }

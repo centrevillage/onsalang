@@ -147,24 +147,6 @@ impl<'a> Checker<'a> {
         let (entity, owner) = self.ctor_of(pat)?;
         // (constructor index, field types, number of constructors of the type)
         let (ctor, fields, nctors): (u32, Vec<TyId>, usize) = match entity {
-            Entity::Builtin(Builtin::None) => {
-                let t = self.fresh();
-                let opt = self.a.types.builtin(BuiltinTy::Option, vec![t]);
-                self.unify_at(span, opt, ty)?;
-                (0, vec![], 2)
-            }
-            Entity::Builtin(Builtin::Some) => {
-                let t = self.fresh();
-                let opt = self.a.types.builtin(BuiltinTy::Option, vec![t]);
-                self.unify_at(span, opt, ty)?;
-                (1, vec![t], 2)
-            }
-            Entity::Builtin(Builtin::Ok) | Entity::Builtin(Builtin::Err) => {
-                let (t, e2) = (self.fresh(), self.fresh());
-                let res = self.a.types.builtin(BuiltinTy::Result, vec![t, e2]);
-                self.unify_at(span, res, ty)?;
-                if matches!(entity, Entity::Builtin(Builtin::Ok)) { (0, vec![t], 2) } else { (1, vec![e2], 2) }
-            }
             Entity::Variant(d, i) => {
                 let args = self.fresh_args(d);
                 self.of_owner(d, &args, owner, span)?;

@@ -104,7 +104,7 @@ pub enum Mode {
 
 #[derive(Debug, Clone)]
 pub struct TypeDef {
-    /// `dsp.Point`, `Option__F32`, `Ring__F32__4`.
+    /// `dsp.Point`, `std.core.Option__F32`, `Ring__F32__4`.
     pub name: String,
     pub kind: TypeDefKind,
 }

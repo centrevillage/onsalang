@@ -14,8 +14,9 @@ use crate::cast::Instead;
 use crate::def::{DefId, DefKind, FnDef, GenericKind};
 use crate::flow_tests::std_package;
 use crate::prim::{INTS, MathFn, NARROW_FROM, Prim, PrimRow, Scalar, key_of, row, rows};
+use crate::tests::analyze;
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
-use crate::{Analysis, Module, Package, analyze};
+use crate::{Analysis, Module, Package};
 
 fn module(segments: &[&str], file: u32, src: &str) -> Module {
     Module {

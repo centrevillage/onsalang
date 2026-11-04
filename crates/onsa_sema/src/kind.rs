@@ -79,15 +79,13 @@ fn walk(w: &Walk, ty: TyId, env: Option<&Env>, at: At) -> Option<Kind> {
         Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit | Ty::Fn(_) | Ty::ConstVal(_) => Some(Kind::Copy),
         Ty::Array(t, _) => walk(w, *t, env, at),
         Ty::Tuple(ts) => all(w, ts, env, at),
-        // Of the arguments it holds as values, as of an enum (§4.4).
-        Ty::Builtin(b, args) if b.holds_values() => all(w, args, env, at),
         Ty::Builtin(b, _) => match b {
             BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set => {
                 Some(Kind::Shared)
             }
             BuiltinTy::Buf => Some(Kind::Affine),
             BuiltinTy::Ptr => Some(Kind::Copy),
-            BuiltinTy::Span | BuiltinTy::Option | BuiltinTy::Result => None,
+            BuiltinTy::Span => None,
         },
         Ty::Named(d, args) => named(w, *d, args, env, at),
         Ty::Param(_) | Ty::Var(_) | Ty::Error => None,
@@ -181,7 +179,6 @@ impl Place<'_> {
         match self.w.at(ty, None)?.0 {
             Ty::Builtin(BuiltinTy::Map | BuiltinTy::Set | BuiltinTy::Buf, ts) => all(ts).map(|_| Placed::Never),
             Ty::Builtin(BuiltinTy::Array, ts) => Some(all(ts)?.max(Placed::Later)),
-            Ty::Builtin(b, ts) if b.holds_values() => all(ts),
             Ty::Array(e, _) => self.of(*e, params, depth),
             Ty::Tuple(ts) => all(ts),
             Ty::Param(i) => params.get(*i as usize).copied().flatten(),

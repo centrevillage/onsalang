@@ -6,8 +6,8 @@ use std::collections::{BTreeSet, HashSet};
 
 use onsa_diag::{Code, FileId};
 
-use crate::analyze;
 use crate::def::DefKind;
+use crate::tests::analyze;
 use crate::tests::{check, codes, def, pkg};
 use crate::ty::{Len, Ty};
 

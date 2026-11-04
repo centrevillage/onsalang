@@ -2,7 +2,8 @@
 
 use onsa_diag::{Code, FileId};
 
-use crate::{Analysis, Module, Package, analyze};
+use crate::tests::analyze;
+use crate::{Analysis, Module, Package};
 
 fn check(src: &str) -> Analysis {
     let m = Module {

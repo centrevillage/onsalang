@@ -104,7 +104,7 @@ impl Walker<'_> {
                 _ => return None,
             },
             Target::BuiltinMethod { self_mode, .. } => (Some(*self_mode), vec![Takes::Param(Mode::Borrow, None); n]),
-            Target::Variant { .. } | Target::Prelude(_) => (None, vec![Takes::Element; n]),
+            Target::Variant { .. } | Target::Panic => (None, vec![Takes::Element; n]),
             _ => return None,
         })
     }

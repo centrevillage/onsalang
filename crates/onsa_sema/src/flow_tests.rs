@@ -1,17 +1,23 @@
 //! Unit tests for flow body checking (T3-1): rates, nodes, and E08xx.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use onsa_diag::{Code, FileId};
 
 use crate::body::LocalId;
 use crate::flow::{FlowInfo, FlowRate, InitArg, Node};
-use crate::{Analysis, DefId, Module, Package, analyze};
+use crate::tests::analyze;
+use crate::{Analysis, DefId, Module, Package};
 
 /// The embedded standard library (D-07, R-80 (4)), so that the spec examples
 /// (`use std.math.{exp, cos}`) check here as they do in the driver.
 pub(crate) fn std_package() -> Arc<Package> {
+    static STD: LazyLock<Arc<Package>> = LazyLock::new(parsed_std);
+    STD.clone()
+}
+
+fn parsed_std() -> Arc<Package> {
     let modules = crate::std_modules()
         .iter()
         .enumerate()

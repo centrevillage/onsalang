@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.4", "§4.7", "§18.1"]
+
+// W5-03 U4/t, S-71, S-607: a user's enum with variants called `None`, `Some`, `Ok` and `Err` is a type of its own, and its
+// variants are not the variants of `Option` and `Result` (spec §4.1: "他の enum の列挙子は常に `Type.Variant` と書く"; the
+// name alone is the prelude's). A value of the one is no value of the other: a mismatch of types is E0401 (§18.1), whichever
+// way it goes and wherever it stands: an annotation, an argument, a return value, a field, a branch. The right forms are in
+// semantics/user_enum_prelude_variant_names_run.onsa. One error per function (P-01).
+
+pub enum Slot {
+  None,
+  Some(U32),
+}
+
+pub enum Outcome {
+  Ok(U32),
+  Err(Bool),
+}
+
+pub struct Holder {
+  o: Option[U32],
+}
+
+fn take_option(o: Option[U32]) -> U32 {
+  0
+}
+
+fn take_slot(s: Slot) -> U32 {
+  0
+}
+
+fn take_result(r: Result[U32, Bool]) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- the prelude's variant where the user's enum is wanted
+
+pub fn none_for_slot() -> Slot {
+  let s: Slot = None                    //~ E0401
+  s
+}
+
+pub fn some_for_slot() -> Slot {
+  let s: Slot = Some(1)                 //~ E0401
+  s
+}
+
+pub fn ok_for_outcome() -> Outcome {
+  let o: Outcome = Ok(1)                //~ E0401
+  o
+}
+
+pub fn err_for_outcome() -> Outcome {
+  let o: Outcome = Err(true)            //~ E0401
+  o
+}
+
+pub fn as_an_argument() -> U32 {
+  take_slot(Some(1))                    //~ E0401
+}
+
+pub fn as_a_return_value() -> Slot {
+  None                                  //~ E0401
+}
+
+// ---------------------------------------------------------------- the user's variant where the prelude's type is wanted
+
+pub fn slot_none_for_option() -> Option[U32] {
+  let o: Option[U32] = Slot.None        //~ E0401
+  o
+}
+
+pub fn slot_some_for_option() -> Option[U32] {
+  let o: Option[U32] = Slot.Some(1)     //~ E0401
+  o
+}
+
+pub fn outcome_ok_for_result() -> Result[U32, Bool] {
+  let r: Result[U32, Bool] = Outcome.Ok(1)   //~ E0401
+  r
+}
+
+pub fn outcome_err_for_result() -> Result[U32, Bool] {
+  let r: Result[U32, Bool] = Outcome.Err(true)   //~ E0401
+  r
+}
+
+pub fn as_an_argument_of_option() -> U32 {
+  take_option(Slot.Some(1))             //~ E0401
+}
+
+pub fn as_an_argument_of_result() -> U32 {
+  take_result(Outcome.Ok(1))            //~ E0401
+}
+
+pub fn as_a_field() -> Holder {
+  Holder { o: Slot.None }               //~ E0401
+}
+
+pub fn in_a_branch(c: Bool) -> Option[U32] {
+  if c {
+    Some(1)
+  } else {
+    Slot.None                           //~ E0401
+  }
+}
+
+// ---------------------------------------------------------------- fine: each in its place
+
+pub fn each_in_its_place(c: Bool) -> U32 {
+  let s: Slot = Slot.None
+  let o: Option[U32] = None
+  let t = if c { Slot.Some(1) } else { s }
+  take_slot(t) + take_option(o)
+}
+
+pub fn the_user_variants_as_values() -> Slot {
+  let f = Slot.Some
+  f.(3)
+}

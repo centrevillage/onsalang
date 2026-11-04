@@ -1,11 +1,11 @@
 //! `match` exhaustiveness (spec §7, E0501): the usefulness algorithm over
 //! lowered patterns. Constructors come from the scrutinee type: `Bool`,
-//! enums, `Option` / `Result`, tuples and structs (one constructor); integer,
-//! `Char` and `Str` literals have an infinite domain and need `_`.
+//! enums, tuples and structs (one constructor); integer, `Char` and `Str`
+//! literals have an infinite domain and need `_`.
 
 use crate::body::Checker;
 use crate::def::{DefKind, Fields};
-use crate::ty::{BuiltinTy, Ty, TyId};
+use crate::ty::{Ty, TyId};
 
 /// A lowered pattern.
 #[derive(Debug, Clone, PartialEq)]
@@ -32,21 +32,17 @@ impl Checker<'_> {
             Ty::Bool => Some(Ctors { items: vec![("false".into(), vec![]), ("true".into(), vec![])] }),
             Ty::Unit => Some(Ctors { items: vec![("()".into(), vec![])] }),
             Ty::Tuple(ts) => Some(Ctors { items: vec![("(..)".into(), ts)] }),
-            Ty::Builtin(BuiltinTy::Option, a) => {
-                Some(Ctors { items: vec![("None".into(), vec![]), ("Some".into(), vec![a[0]])] })
-            }
-            Ty::Builtin(BuiltinTy::Result, a) => {
-                Some(Ctors { items: vec![("Ok".into(), vec![a[0]]), ("Err".into(), vec![a[1]])] })
-            }
             Ty::Named(d, args) => match self.a.def(d).kind.clone() {
                 DefKind::Enum(e) => {
+                    // A variant of a lang item is written by its name alone (§4.1).
                     let name = self.a.def(d).name.clone();
+                    let lang = self.a.modules.lang.of(d).is_some();
                     let items = e
                         .variants
                         .iter()
                         .map(|v| {
                             let fs: Vec<TyId> = v.fields.iter().map(|&f| self.a.types.subst(f, &args)).collect();
-                            (format!("{name}.{}", v.name), fs)
+                            (if lang { v.name.clone() } else { format!("{name}.{}", v.name) }, fs)
                         })
                         .collect();
                     Some(Ctors { items })

@@ -7,6 +7,7 @@ use onsa_diag::Edit;
 use onsa_syntax::ast::{OperandPlace, Vis};
 
 use crate::def::ParamSig;
+use crate::lang;
 
 use super::slot::{Form, Slot, slot_of};
 use super::*;
@@ -16,25 +17,21 @@ use super::*;
 enum Named {
     /// `is_empty` of a type with a length: `len() == 0` (§4.2).
     Length,
-    /// What `Option` or `Result` leaves to `match` (§9.1, R-96): on a
-    /// receiver of that type, a note of what it has and of the form. No
-    /// candidate: the arms are the writer's.
-    Match(BuiltinTy, &'static str, &'static str),
+    /// What `Option` or `Result` (the row of [`lang`]) leaves to `match`
+    /// (§9.1, R-96): on a receiver of that type, a note of what it has and
+    /// of the form. No candidate: the arms are the writer's.
+    Match(usize, &'static str),
 }
 
 /// The methods the spec leaves out, by name.
 const NAMED: &[(&str, Named)] = &[
     ("is_empty", Named::Length),
-    ("is_some", Named::Match(BuiltinTy::Option, OPTION_HAS, "match o { Some(_) => true, None => false }")),
-    ("is_none", Named::Match(BuiltinTy::Option, OPTION_HAS, "match o { Some(_) => false, None => true }")),
-    ("unwrap_or", Named::Match(BuiltinTy::Option, OPTION_HAS, "match o { Some(x) => x, None => d }")),
-    ("is_ok", Named::Match(BuiltinTy::Result, RESULT_HAS, "match r { Ok(_) => true, Err(_) => false }")),
-    ("is_err", Named::Match(BuiltinTy::Result, RESULT_HAS, "match r { Ok(_) => false, Err(_) => true }")),
+    ("is_some", Named::Match(lang::OPTION, "match o { Some(_) => true, None => false }")),
+    ("is_none", Named::Match(lang::OPTION, "match o { Some(_) => false, None => true }")),
+    ("unwrap_or", Named::Match(lang::OPTION, "match o { Some(x) => x, None => d }")),
+    ("is_ok", Named::Match(lang::RESULT, "match r { Ok(_) => true, Err(_) => false }")),
+    ("is_err", Named::Match(lang::RESULT, "match r { Ok(_) => false, Err(_) => true }")),
 ];
-
-/// The methods of `Option` and of `Result` (§9.1), for their notes.
-const OPTION_HAS: &str = "`Option` has `unwrap` only";
-const RESULT_HAS: &str = "`Result` has `unwrap` and `map_err` only";
 
 /// The one method of a type with a length (§4.2).
 const LEN: &str = "len";
@@ -58,12 +55,12 @@ impl<'a> Checker<'a> {
         let message = format!("`{shown}` has no method `{}`", name.name);
         let d = Diagnostic::new(Stage::Types, Code::E0413, name.span, message).with_found(self.src(name.span));
         // The family of the name: its candidate, or the rule of its note.
-        let found = match NAMED.iter().find(|(n, _)| *n == name.name) {
-            Some((_, Named::Length)) if self.has_method(recv, LEN) => {
+        let found = match (NAMED.iter().find(|(n, _)| *n == name.name), self.ty(recv)) {
+            (Some((_, Named::Length)), _) if self.has_method(recv, LEN) => {
                 Some(self.len_test(e, name, args, expected, kind).ok_or_else(|| LEN_RULE.to_string()))
             }
-            Some(&(_, Named::Match(of, has, form))) if matches!(self.ty(recv), Ty::Builtin(b, _) if b == of) => {
-                Some(Err(format!("{has}; write it with `match`: `{form}` (§9.1)")))
+            (Some(&(_, Named::Match(row, form))), Ty::Named(d, _)) if self.a.modules.lang.is(row, d) => {
+                Some(Err(format!("{}; write it with `match`: `{form}` (§9.1)", self.std_methods(d))))
             }
             _ => self.math_fn(recv, &name.name).map(|f| self.function_form(e, recv, name, args, expected, kind, f)),
         };
@@ -72,6 +69,16 @@ impl<'a> Checker<'a> {
             Some(Err(rule)) => d.with_rule(rule),
             None => d,
         })
+    }
+
+    /// What the enum `d` of std has, by the declarations of std (§9.1).
+    fn std_methods(&self, d: DefId) -> String {
+        let table = self.a.modules.assoc.get(&d).into_iter().flatten();
+        let mut methods: Vec<DefId> =
+            table.map(|(_, &m)| m).filter(|&m| self.a.modules.is_std(self.a.def(m).module)).collect();
+        methods.sort();
+        let names: Vec<String> = methods.iter().map(|&m| format!("`{}`", self.a.def(m).name)).collect();
+        format!("`{}` has {} only", self.a.def(d).name, names.join(" and "))
     }
 
     /// The `pub fn` of `std.math` of the name of the method `name` of a
@@ -283,9 +290,9 @@ impl<'a> Checker<'a> {
 
     /// Whether a value of the type `c` may be where the type `t` is expected
     /// (§4.7): `t` is `c`, a variable not of a literal or of a literal of
-    /// the kind of `c`, the error type, or `Option` of what fits. `c` has
-    /// no variable and is a number, `Bool`, a type parameter or an `Option`
-    /// of one: this is whether they unify.
+    /// the kind of `c`, the error type, or the same type of what fits. `c`
+    /// has no variable and is a number, `Bool`, a type parameter or an
+    /// `Option` of one: this is whether they unify.
     pub(super) fn may_fit(&self, t: TyId, c: TyId) -> bool {
         let t = self.shallow(t);
         match (self.ty(t), self.ty(c)) {
@@ -295,7 +302,7 @@ impl<'a> Checker<'a> {
                 Some(LitKind::Int) => matches!(c, Ty::Int(_)),
                 Some(LitKind::Float) => matches!(c, Ty::Float(_)),
             },
-            (Ty::Builtin(BuiltinTy::Option, t), Ty::Builtin(BuiltinTy::Option, c)) => self.may_fit(t[0], c[0]),
+            (Ty::Named(a, t), Ty::Named(b, c)) if a == b => t.iter().zip(&c).all(|(&t, &c)| self.may_fit(t, c)),
             _ => t == c,
         }
     }

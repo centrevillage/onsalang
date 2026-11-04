@@ -147,10 +147,6 @@ impl Bounds<'_> {
                 | Bound::Default,
             ) => ts.iter().all(|&x| self.satisfies(x, b)),
             (
-                Ty::Builtin(BuiltinTy::Option | BuiltinTy::Result, args),
-                Bound::PartialEq | Bound::Eq | Bound::Hash | Bound::Show | Bound::Copy | Bound::Dup,
-            ) => args.iter().all(|&x| self.satisfies(x, b)),
-            (
                 Ty::Builtin(BuiltinTy::Str | BuiltinTy::Bytes, _),
                 Bound::PartialEq
                 | Bound::Eq

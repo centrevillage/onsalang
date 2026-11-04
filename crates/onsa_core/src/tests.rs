@@ -101,11 +101,11 @@ fn float_rem_is_fmod_and_literals_keep_their_kind() {
 #[test]
 fn try_lowers_to_switch_with_early_return() {
     let d = text("pub fn f(x: Option[I32]) -> Option[I32] {\n  let v = x?\n  Some(v + 1)\n}\n");
-    assert!(d.contains("type Option__I32 = enum { None, Some(I32) }"), "{d}");
+    assert!(d.contains("type std.core.Option__I32 = enum { None, Some(I32) }"), "{d}");
     assert!(d.contains("switch x {"), "{d}");
-    assert!(d.contains("return Option__I32.None"), "{d}");
+    assert!(d.contains("return std.core.Option__I32.None"), "{d}");
     assert!(d.contains("payload(x, Some, 0)"), "{d}");
-    assert!(d.contains("Option__I32.Some((v + 1:I32))"), "{d}");
+    assert!(d.contains("std.core.Option__I32.Some((v + 1:I32))"), "{d}");
 }
 
 #[test]
@@ -157,8 +157,11 @@ fn match_with_guard_uses_if_chain() {
 #[test]
 fn option_equality_uses_generated_eq() {
     let d = text("pub fn f(a: Option[U8], b: U8) -> Bool {\n  a == Some(b)\n}\n");
-    assert!(d.contains("__eq.Option__U8(a, Option__U8.Some(b))"), "{d}");
-    assert!(d.contains("rt fn __eq.Option__U8(a: Option__U8, b: Option__U8) -> Bool"), "{d}");
+    assert!(d.contains("__eq.std_core_Option__U8(a, std.core.Option__U8.Some(b))"), "{d}");
+    assert!(
+        d.contains("rt fn __eq.std_core_Option__U8(a: std.core.Option__U8, b: std.core.Option__U8) -> Bool"),
+        "{d}"
+    );
     assert!(d.contains("if (tag(a) != tag(b)) {"), "{d}");
 }
 

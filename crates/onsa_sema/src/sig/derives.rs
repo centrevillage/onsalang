@@ -23,7 +23,9 @@ impl<'p> Sema<'p> {
             };
             match (DERIVABLE.iter().find(|(name, ..)| *name == n.name), kind_constraint(p)) {
                 (Some(&(_, d, now)), _) => {
-                    if !now {
+                    // std's `Option` and `Result` head as §4.1 writes them:
+                    // no code is made of these, which read as bounds alone.
+                    if !now && !self.a.modules.is_std(cx.m) {
                         self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]);
                     }
                     out.push(d);
