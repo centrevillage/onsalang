@@ -147,7 +147,7 @@ pub(super) fn lower_call(
             let fid = lw.fn_id(def, gargs);
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }
-        Target::BuiltinMethod { name, .. } => lower_builtin_method(lw, cx, e, callee, &name, args, ty),
+        Target::BuiltinMethod { name, .. } => lower_builtin_method(lw, cx, e, callee, &name),
         Target::Variant { index, .. } => {
             let Ty::Enum(id) = &ty else { return Err(internal(span, "variant call type")) };
             let id = *id;
@@ -306,82 +306,16 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
     Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(local_expr(cx, arr, span))) })))
 }
 
-fn lower_builtin_method(
-    lw: &mut Lowerer,
-    cx: &mut FnCx,
-    e: ExprId,
-    callee: ExprId,
-    name: &str,
-    args: &[ast::Arg],
-    ty: Ty,
-) -> R<Expr> {
+fn lower_builtin_method(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, callee: ExprId, name: &str) -> R<Expr> {
     let span = cx.expr(e).span;
     let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "builtin method shape")) };
-    let base = *base;
-    let mut lowered_args = Vec::new();
-    for a in args {
-        lowered_args.push(lower_expr(lw, cx, a.expr)?);
-    }
-    let recv = lower_expr(lw, cx, base)?;
+    let recv = lower_expr(lw, cx, *base)?;
     match &recv.ty {
         // The one method of the table of an array, `len` (§5.3; the others
         // are std's): its length.
         Ty::Array(_, n) => Ok(u32_lit(span, *n)),
-        &Ty::Enum(id) => lower_enum_method(lw, cx, id, recv, name, lowered_args, ty, span),
         // The stand-in `()` of a receiver of a type lowering does not support
         // (`v.len()` of a `[Str; 2]`, S-67): its hole is used.
         other => Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, other)])),
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn lower_enum_method(
-    lw: &mut Lowerer,
-    cx: &mut FnCx,
-    id: TypeId,
-    recv: Expr,
-    name: &str,
-    args: Vec<Expr>,
-    ty: Ty,
-    span: Span,
-) -> R<Expr> {
-    let variants = lw.enum_variants(id);
-    let is_option = variants.first().is_some_and(|(n, _)| n == "None");
-    let (good, bad) = if is_option { (1u32, 0u32) } else { (0, 1) };
-    let mut stmts = Vec::new();
-    let tmp = materialize(cx, recv, &mut stmts, "__opt");
-    let wrap = |stmts: Vec<Stmt>, e: Expr| -> Expr {
-        if stmts.is_empty() {
-            e
-        } else {
-            Expr::new(e.ty.clone(), span, ExprKind::Block(Block { stmts, value: Some(Box::new(e)) }))
-        }
-    };
-    let kind = match name {
-        "is_some" | "is_ok" | "is_none" | "is_err" => {
-            let want = if matches!(name, "is_some" | "is_ok") { good } else { bad };
-            return Ok(wrap(stmts, tag_test(lw, &tmp, want)?));
-        }
-        "unwrap" => {
-            let msg = lw.msg(if is_option { "called `unwrap()` on `None`" } else { "called `unwrap()` on `Err`" });
-            let good_block = Block { stmts: Vec::new(), value: Some(Box::new(payload(lw, tmp.clone(), good, 0)?)) };
-            let bad_block = Block {
-                stmts: Vec::new(),
-                value: Some(Box::new(Expr::new(ty.clone(), span, ExprKind::Panic { msg, origin: PanicOrigin::Panic }))),
-            };
-            let mut arms = vec![(good, good_block), (bad, bad_block)];
-            arms.sort_by_key(|(t, _)| *t);
-            ExprKind::Switch { scrutinee: Box::new(tmp), arms, default: None }
-        }
-        "unwrap_or" => {
-            let [d] = args.as_slice() else { return Err(internal(span, "unwrap_or arity")) };
-            let good_block = Block { stmts: Vec::new(), value: Some(Box::new(payload(lw, tmp.clone(), good, 0)?)) };
-            let bad_block = Block { stmts: Vec::new(), value: Some(Box::new(d.clone())) };
-            let mut arms = vec![(good, good_block), (bad, bad_block)];
-            arms.sort_by_key(|(t, _)| *t);
-            ExprKind::Switch { scrutinee: Box::new(tmp), arms, default: None }
-        }
-        _ => return Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, &Ty::Enum(id))])),
-    };
-    Ok(wrap(stmts, Expr::new(ty, span, kind)))
 }

@@ -7,7 +7,10 @@
 // §9.1: `unwrap` of `Option` and `Result` is a `move self` method), run in the interpreter: the receiver of `unwrap` and of
 // a user's `move self` method has no mark. A Dup receiver is copied, so it is read as often as the program wants; an owned
 // Affine receiver is moved once and the value is the one that was inside. The errors of the other cases (a second `unwrap` of
-// an owned Affine, a borrowed Affine receiver) are in negative/unwrap_receiver.onsa.
+// an owned Affine, a borrowed Affine receiver) are in negative/unwrap_receiver.onsa, and those of a field, an array element and a
+// `Result` with an Affine `Err` in negative/unwrap_receiver_places.onsa. The last tests (W5-03 U2/t) are the places of the receiver
+// that run: the `Ok` path of a `Result` whose `Err` is an owned `Buf`, and a field, an array element and a tuple element with a Dup
+// content (read as often as the program wants). Taking an Affine field out of a struct runs in semantics/take_out_run.onsa.
 
 pub struct Gain {
   k: U32,
@@ -82,4 +85,36 @@ test "an owned Affine receiver is moved once and the value is the one inside" {
   assert once_user(Wrap { b: Buf.zeroed(2) }) == 2
   assert once_in_a_branch(true, Some(Buf.zeroed(6))) == 6
   assert once_in_a_branch(false, Some(Buf.zeroed(6))) == 7
+}
+
+pub struct Plain {
+  o: Option[U32],
+  n: U32,
+}
+
+fn ok_path_once(move r: Result[U32, Buf[F32]]) -> U32 {
+  r.unwrap()
+}
+
+fn dup_field_twice(p: Plain) -> U32 {
+  p.o.unwrap() + p.o.unwrap() + p.n
+}
+
+fn dup_element_twice(xs: [Option[U32]; 2]) -> U32 {
+  xs[1].unwrap() + xs[1].unwrap()
+}
+
+fn dup_tuple_element_twice(t: (Result[U32, U32], U32)) -> U32 {
+  t.0.unwrap() + t.0.unwrap() + t.1
+}
+
+test "the Ok path of a Result whose Err is an owned Buf gives the number" {
+  let r: Result[U32, Buf[F32]] = Ok(11)
+  assert ok_path_once(move r) == 11
+}
+
+test "a Dup field, element and tuple element are read as often as the program wants" {
+  assert dup_field_twice(Plain { o: Some(3), n: 1 }) == 7
+  assert dup_element_twice([Some(1), Some(5)]) == 10
+  assert dup_tuple_element_twice((Ok(2), 3)) == 7
 }

@@ -149,15 +149,13 @@ pub enum Target {
         def: DefId,
         inst: Option<InstId>,
     },
-    /// A method of the compiler's table (`o.unwrap()`, `xs.len()` of an
-    /// array, `crate::builtin`).
+    /// A method of the compiler's table (`xs.len()` of an array,
+    /// `crate::builtin`).
     BuiltinMethod {
         name: String,
         /// The mode of `self`, as the types stage chose it (§5.2; the modes
         /// stage reads it, not the name).
         self_mode: Mode,
-        /// [`crate::builtin::MethodSig::lazy_args`].
-        lazy_args: bool,
     },
     /// A call through a function value (closure or `fn` value).
     Value,

@@ -14,7 +14,7 @@ use super::state::{Delta, LoopSum};
 use super::walk::Pos;
 use super::write::How;
 use crate::binding::{Head, HeadRow};
-use crate::body::{LocalId, Target};
+use crate::body::LocalId;
 use crate::names::body::Origin;
 
 /// A walk's state, the `break` and `continue` states of the innermost loop
@@ -102,7 +102,10 @@ impl Walker<'_> {
             }
             ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
                 self.expr(r, *lhs, Pos::Read);
-                self.lazily(r, e, |w, r| w.expr(r, *rhs, Pos::Read));
+                // The paths through the right and the paths that skip it, joined.
+                let skip = r.cur.clone();
+                self.expr(r, *rhs, Pos::Read);
+                r.cur.join(&skip);
             }
             // A new frame (`capture.rs`); it changes no state outside.
             ExprKind::Closure { body, .. } => {
@@ -113,23 +116,6 @@ impl Walker<'_> {
             _ => return false,
         }
         true
-    }
-
-    /// Walk what `f` walks on the paths through it and the paths that skip
-    /// it, joined: the right of `&&` and `||` (`e` the operator), and the
-    /// arguments of a builtin method that evaluates them on some paths
-    /// (`e` the call, [`Target::BuiltinMethod`]).
-    pub(super) fn lazily(&mut self, r: &mut Run, e: ExprId, f: impl FnOnce(&mut Self, &mut Run)) {
-        let lazy = match (&self.ast.expr(e).kind, self.info.targets.get(&e)) {
-            (ExprKind::Binary { .. }, _) => true,
-            (_, Some(Target::BuiltinMethod { lazy_args, .. })) => *lazy_args,
-            _ => false,
-        };
-        let skip = lazy.then(|| r.cur.clone());
-        f(self, r);
-        if let Some(s) = skip {
-            r.cur.join(&s);
-        }
     }
 
     fn stmt(&mut self, r: &mut Run, s: StmtId) {

@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§10", "§9.2", "§15.1"]
+
+// W5-03 U2/t, S-873: `unwrap` is `pub rt fn unwrap(move self) -> T` (spec §9.1: "`Option` と `Result` のメソッドは、両方の
+// `pub rt fn unwrap(move self) -> T` …"), so an `rt` function may call it (§10 rule 4: an `rt` function calls only `rt` functions)
+// and the call needs no `Alloc` (§10 rule 1). The panic that `unwrap` makes leaves the live values undropped, and that drop is no
+// `Alloc` (§9.2: "その破棄は `Alloc` に数えず"), so an `Err` that holds an owned `Buf` is no error for an `rt` function: the
+// `Result[Buf[F32], Buf[F32]]` below has no E0901, no E0601 and no E0902. `map_err` is no `rt` function, so the error of an `rt`
+// function is changed by a `match` (§9.1). The panic of an `rt` function is in semantics/unwrap_panics.onsa and the E0901 of `map_err`
+// in negative/rt_map_err.onsa. The values are worked out by hand.
+
+pub rt fn option_value(o: Option[U32]) -> U32 {
+  o.unwrap()
+}
+
+pub rt fn result_value(r: Result[U32, U32]) -> U32 {
+  r.unwrap()
+}
+
+pub rt fn float_value(o: Option[F32]) -> F32 {
+  o.unwrap() * 2.0
+}
+
+pub rt fn generic_value[T](o: Option[T]) -> T {
+  o.unwrap()
+}
+
+pub rt fn generic_result_value[T, E](r: Result[T, E]) -> T {
+  r.unwrap()
+}
+
+pub rt fn owned_option(move o: Option[Buf[F32]]) -> Buf[F32] {
+  o.unwrap()
+}
+
+pub rt fn owned_result(move r: Result[Buf[F32], U32]) -> Buf[F32] {
+  r.unwrap()
+}
+
+pub rt fn owned_error(move r: Result[Buf[F32], Buf[F32]]) -> Buf[F32] {
+  r.unwrap()
+}
+
+pub rt fn owned_generic[T: ?Dup, E: ?Dup](move r: Result[T, E]) -> T {
+  r.unwrap()
+}
+
+pub rt fn in_a_branch(c: Bool, o: Option[U32], r: Result[U32, U32]) -> U32 {
+  if c {
+    o.unwrap()
+  } else {
+    r.unwrap()
+  }
+}
+
+pub rt fn in_a_chain(oo: Option[Option[U32]]) -> U32 {
+  oo.unwrap().unwrap()
+}
+
+pub rt fn in_a_loop(xs: [Option[U32]; 3]) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< 3 {
+    total = total + xs[i].unwrap()
+  }
+  total
+}
+
+pub rt fn calls_an_rt_function(o: Option[U32]) -> U32 {
+  option_value(o) + 1
+}
+
+// The error of an `rt` function is changed by a `match`, not by `map_err`.
+pub rt fn change_the_error(r: Result[U32, U32]) -> Result[U32, F32] {
+  match r {
+    Ok(v) => Ok(v),
+    Err(_) => Err(0.5),
+  }
+}
+
+test "an rt function takes the value of a Some and of an Ok" {
+  assert option_value(Some(3)) == 3
+  assert result_value(Ok(4)) == 4
+  assert float_value(Some(1.5)) == 3.0
+  assert generic_value(Some(5)) == 5
+  let r: Result[U32, U32] = Ok(6)
+  assert generic_result_value(r) == 6
+}
+
+test "an rt function takes an owned content" {
+  assert owned_option(Some(Buf.zeroed(2))).len() == 2
+  assert owned_result(Ok(Buf.zeroed(3))).len() == 3
+  let r: Result[Buf[F32], Buf[F32]] = Ok(Buf.zeroed(4))
+  assert owned_error(move r).len() == 4
+  let q: Result[Buf[F32], U32] = Ok(Buf.zeroed(5))
+  assert owned_generic(move q).len() == 5
+}
+
+test "an rt function that holds unwrap is used in a branch, a chain, a loop and a call" {
+  assert in_a_branch(true, Some(1), Ok(2)) == 1
+  assert in_a_branch(false, Some(1), Ok(2)) == 2
+  assert in_a_chain(Some(Some(7))) == 7
+  assert in_a_loop([Some(1), Some(2), Some(3)]) == 6
+  assert calls_an_rt_function(Some(9)) == 10
+}
+
+test "the error of an rt function is changed by a match" {
+  let r: Result[U32, U32] = Err(3)
+  assert change_the_error(r) == Err(0.5)
+  let q: Result[U32, U32] = Ok(3)
+  assert change_the_error(q) == Ok(3)
+}

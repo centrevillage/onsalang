@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+
+// E0811, K-08 (W5-03 U2/t; spec §11.5: "`if c { a } else { b }` と `match` は点ごとの選択で、fn と同じく取る枝だけを評価する。枝と `match` のガードには、状態を
+// 持つもの（インスタンス、組込みの遅延、`par~`）を書けない（E0811 …）。条件と `match` の対象は常に評価されるので書ける"): the replacement
+// of `o.unwrap_or(acc~(1.0))`. The `Option` is matched, and the arm of `None` holds an instance, a delay or a `par~`. The arm is taken
+// only on the samples where the `Option` is `None`, so the node would advance on those samples only; the spec says E0811 for the
+// arm of a plain `match`, and `match~` is the form that evaluates every arm. The `Some` arm is the same, and the subject (always
+// evaluated) may hold a node (the last flow is right). One error per flow; the marker is on the line of the arm (the column is not
+// fixed by the spec). This was E0200 (K-08) while the arms of `if~` / `match~` were not checked; E0811 is the code of the spec.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow instance_in_the_none_arm(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match o {
+    Some(v) => v,
+    None => acc~(1.0),                                //~ E0811
+  }
+}
+
+pub flow delay_in_the_none_arm(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match o {
+    Some(v) => v,
+    None => prev~(x),                                 //~ E0811
+  }
+}
+
+pub flow par_in_the_none_arm(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match o {
+    Some(v) => v,
+    None => (par~ i in 0..<2 { x })[0],               //~ E0811
+  }
+}
+
+pub flow instance_in_the_some_arm(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match o {
+    Some(v) => acc~(v),                               //~ E0811
+    None => 0.0,
+  }
+}
+
+pub flow instance_in_one_line(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match o { Some(v) => v, None => acc~(1.0) }         //~ E0811
+}
+
+pub flow node_in_a_result_arm(x: F32 at sample) -> F32 at sample {
+  let r: Result[F32, F32] = if x > 2.0 { Ok(x) } else { Err(x) }
+  match r {
+    Ok(v) => v,
+    Err(e) => prev~(e),                               //~ E0811
+  }
+}

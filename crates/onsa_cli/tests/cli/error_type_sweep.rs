@@ -261,7 +261,7 @@ const BODIES: &[(&str, &str, Shape)] = &[
     ("m_chain", "let _ = x.abs().foo(1)", Plain),
     ("m_args", "let _ = x.foo(1, true, y)", Plain),
     ("m_unwrap", "let _ = x.unwrap()", Plain),
-    ("m_unwrap_or", "let _ = x.unwrap_or(0)", Plain),
+    ("m_map_err", "let _ = x.map_err(y)", Plain),
     // fields, elements, indexes, `?`, calls
     ("f_a", "let _ = x.a", Plain),
     ("f_ab", "let _ = x.a.b", Plain),

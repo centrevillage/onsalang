@@ -1,0 +1,187 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§9.1", "§5.4"]
+// fixes = 0
+
+// S-785, S-786 (W5-03 U2/t; the places of the receiver that negative/unwrap_receiver.onsa does not have; §9.1: "`unwrap` … は受け手を
+// 消費し、受け手の扱いは `?` の被演算子と同じ（§5.2）"; §9.1: "消費するかは被演算子の型の全体で決まり、`Result[U32, Buf[F32]]` の場所は `Ok` の
+// 道でも移る"; §5.2: "Affine のフィールドの経路は根の全体を消費し、配列の要素と、借用・`inout` の Affine の場所は E0711（修正候補なし）"):
+//   - a `Result` whose `Ok` is a number and whose `Err` is an owned `Buf` is Affine as a whole, so an owned place is moved by `unwrap`
+//     even on the `Ok` path (a later use is E0704) and a borrowed place is E0711;
+//   - the field of an owned struct (or the element of an owned tuple) that holds an Affine `Option` moves the whole root, so a later
+//     use of a field of the root is E0704, and the field of a borrowed or `inout` struct is E0711;
+//   - an element of an array is never taken out, owned or not: E0711 (`for x in move xs` is the way);
+//   - the receiver `self.o` of a method that borrows `self` is E0711, and in a `move self` method it is fine.
+// The same places with a Dup content are copied (the last part of the file). No candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Held {
+  o: Option[Buf[F32]],
+  n: U32,
+}
+
+pub struct Mixed {
+  r: Result[U32, Buf[F32]],
+  n: U32,
+}
+
+pub struct Plain {
+  o: Option[U32],
+  n: U32,
+}
+
+impl Held {
+  pub fn borrowing(self) -> U32 uses {Alloc} {
+    self.o.unwrap().len()                 //~ E0711
+  }
+
+  pub fn consuming(move self) -> U32 uses {Alloc} {
+    self.o.unwrap().len()
+  }
+}
+
+pub fn mk_result() -> Result[U32, Buf[F32]] uses {Alloc} {
+  Ok(3)
+}
+
+pub fn mk_array() -> [Option[Buf[F32]]; 2] uses {Alloc} {
+  [Some(Buf.zeroed(1)), None]
+}
+
+// ---- a Result with an Affine Err moves on the Ok path ----
+
+pub fn ok_path_twice() -> U32 uses {Alloc} {
+  let r = mk_result()
+  let a = r.unwrap()
+  a + r.unwrap()                          //~ E0704
+}
+
+pub fn ok_path_then_match(move r: Result[U32, Buf[F32]]) -> U32 uses {Alloc} {
+  let a = r.unwrap()
+  match r {                               //~ E0704
+    Ok(v) => a + v,
+    Err(_) => a,
+  }
+}
+
+pub fn ok_path_in_a_loop(move r: Result[U32, Buf[F32]], n: U32) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  for _ in 0 ..< n {
+    total = total + r.unwrap()            //~ E0704
+  }
+  total
+}
+
+pub fn ok_path_borrowed(r: Result[U32, Buf[F32]]) -> U32 {
+  r.unwrap()                              //~ E0711
+}
+
+pub fn ok_path_inout(inout r: Result[U32, Buf[F32]]) -> U32 {
+  r.unwrap()                              //~ E0711
+}
+
+// ---- the field of an owned struct, the element of an owned tuple ----
+
+pub fn field_then_sibling(move h: Held) -> U32 uses {Alloc} {
+  let b = h.o.unwrap()
+  b.len() + h.n                           //~ E0704
+}
+
+pub fn field_then_field_again(move h: Held) -> U32 uses {Alloc} {
+  let a = h.o.unwrap().len()
+  a + h.o.unwrap().len()                  //~ E0704
+}
+
+pub fn field_with_an_ok_path(move m: Mixed) -> U32 uses {Alloc} {
+  let a = m.r.unwrap()
+  a + m.n                                 //~ E0704
+}
+
+pub fn tuple_element_then_sibling(move t: (Option[Buf[F32]], U32)) -> U32 uses {Alloc} {
+  let b = t.0.unwrap()
+  b.len() + t.1                           //~ E0704
+}
+
+pub fn local_field_then_sibling() -> U32 uses {Alloc} {
+  let h = Held { o: Some(Buf.zeroed(2)), n: 1 }
+  let b = h.o.unwrap()
+  b.len() + h.n                           //~ E0704
+}
+
+pub fn field_in_a_branch(c: Bool, move h: Held) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  if c {
+    total = h.o.unwrap().len()
+  }
+  total + h.n                             //~ E0704
+}
+
+// ---- a field of a borrowed or an inout place, a tuple element of a borrowed tuple ----
+
+pub fn field_of_a_borrowed_struct(h: Held) -> U32 uses {Alloc} {
+  h.o.unwrap().len()                      //~ E0711
+}
+
+pub fn field_of_an_inout_struct(inout h: Held) -> U32 uses {Alloc} {
+  h.o.unwrap().len()                      //~ E0711
+}
+
+pub fn field_with_an_ok_path_borrowed(m: Mixed) -> U32 {
+  m.r.unwrap()                            //~ E0711
+}
+
+pub fn tuple_element_borrowed(t: (Option[Buf[F32]], U32)) -> U32 uses {Alloc} {
+  t.0.unwrap().len()                      //~ E0711
+}
+
+// ---- an element of an array is never taken out ----
+
+pub fn element_of_a_borrowed_array(xs: [Option[Buf[F32]]; 2]) -> U32 uses {Alloc} {
+  xs[0].unwrap().len()                    //~ E0711
+}
+
+pub fn element_of_an_owned_array(move xs: [Option[Buf[F32]]; 2]) -> U32 uses {Alloc} {
+  xs[0].unwrap().len()                    //~ E0711
+}
+
+pub fn element_of_a_local_array() -> U32 uses {Alloc} {
+  let xs = mk_array()
+  xs[1].unwrap().len()                    //~ E0711
+}
+
+pub fn element_of_an_inout_array(inout xs: [Option[Buf[F32]]; 2]) -> U32 uses {Alloc} {
+  xs[0].unwrap().len()                    //~ E0711
+}
+
+// ---- right: the places once, and the same places with a Dup content ----
+
+pub fn ok_path_once(move r: Result[U32, Buf[F32]]) -> U32 {
+  r.unwrap()
+}
+
+pub fn field_once(move h: Held) -> U32 uses {Alloc} {
+  h.o.unwrap().len()
+}
+
+pub fn tuple_element_once(move t: (Option[Buf[F32]], U32)) -> U32 uses {Alloc} {
+  t.0.unwrap().len()
+}
+
+pub fn dup_field_of_a_borrowed_struct(p: Plain) -> U32 {
+  p.o.unwrap() + p.o.unwrap() + p.n
+}
+
+pub fn dup_field_of_an_inout_struct(inout p: Plain) -> U32 {
+  p.o.unwrap() + p.o.unwrap()
+}
+
+pub fn dup_element_of_an_array(xs: [Option[U32]; 2]) -> U32 {
+  xs[0].unwrap() + xs[0].unwrap()
+}
+
+pub fn dup_tuple_element(t: (Option[U32], U32)) -> U32 {
+  t.0.unwrap() + t.0.unwrap() + t.1
+}
+
+pub fn dup_ok_path(r: Result[U32, U32]) -> U32 {
+  r.unwrap() + r.unwrap()
+}

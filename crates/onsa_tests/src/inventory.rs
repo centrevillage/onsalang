@@ -50,8 +50,8 @@ pub fn std_names() -> Result<Vec<String>, String> {
 }
 
 /// The names of the builtin methods std does not declare yet, from the one
-/// table of sema that holds them (`Option`, `Result` and the `len` of an
-/// array; W5-03 removes it). The other members are std's ([`std_names`]).
+/// table of sema that holds them (the `len` of an array; W5-17 removes it).
+/// The other members are std's ([`std_names`]).
 pub fn builtin_member_names() -> Vec<String> {
     onsa_sema::builtin_member_names()
 }

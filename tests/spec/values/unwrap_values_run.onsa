@@ -1,0 +1,281 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§5.2", "§4.1", "§6.1"]
+
+// W5-03 U2/t: the value of `unwrap` (spec §9.1: "`Option` と `Result` のメソッドは、両方の
+// `pub rt fn unwrap(move self) -> T` … と `Result` の `map_err` だけである"): `Some(v).unwrap()` and `Ok(v).unwrap()` are `v`,
+// whatever `v` is: a number, a tuple, a struct, an array, an `Option` itself, an owned `Buf`. The receiver is any expression
+// of the type: a local, a field, the result of a call, the result of another method. Where the call stands: a chain, the body of
+// a generic function (the contents are a type parameter, `T: ?Dup` too), a method of a user's type, a closure, a branch, a loop
+// and an argument. The receiver needs no mark (§5.2). The names `is_some`, `is_none`, `unwrap_or`, `is_ok` and `is_err` are no
+// method of `Option` and `Result` (R-96), so a user's type may have a method of the same name; it is its own. A `None` and an
+// `Err` that panic are in semantics/unwrap_panics.onsa, the receiver rules in negative/unwrap_receiver.onsa. The values are
+// worked out by hand.
+
+use std.array
+
+pub struct Pair {
+  a: U32,
+  b: F32,
+}
+
+pub struct Gain {
+  k: U32,
+}
+
+pub struct Slot {
+  o: Option[U32],
+  r: Result[U32, U32],
+}
+
+impl Gain {
+  pub fn is_some(self) -> Bool { self.k > 0 }
+  pub fn unwrap_or(self, d: U32) -> U32 { if self.k > 0 { self.k } else { d } }
+  pub fn lift(self) -> Option[U32] { Some(self.k) }
+}
+
+pub enum Level {
+  Low,
+  High,
+}
+
+fn some_pair(a: U32, b: F32) -> Option[Pair] {
+  Some(Pair { a: a, b: b })
+}
+
+fn ok_pair(a: U32, b: F32) -> Result[Pair, U32] {
+  Ok(Pair { a: a, b: b })
+}
+
+fn first[T](o: Option[T]) -> T {
+  o.unwrap()
+}
+
+fn first_ok[T, E](r: Result[T, E]) -> T {
+  r.unwrap()
+}
+
+fn first_owned[T: ?Dup](move o: Option[T]) -> T {
+  o.unwrap()
+}
+
+fn first_ok_owned[T: ?Dup, E: ?Dup](move r: Result[T, E]) -> T {
+  r.unwrap()
+}
+
+fn in_a_branch(c: Bool, o: Option[U32], r: Result[U32, U32]) -> U32 {
+  if c {
+    o.unwrap()
+  } else {
+    r.unwrap()
+  }
+}
+
+fn sum_in_a_loop(xs: [Option[U32]; 3]) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< 3 {
+    total = total + xs[i].unwrap()
+  }
+  total
+}
+
+fn add(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+fn at_an_argument(o: Option[U32], r: Result[U32, U32]) -> U32 {
+  add(o.unwrap(), r.unwrap())
+}
+
+fn buf_len_of(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  o.unwrap().len()
+}
+
+fn buf_from_ok(move r: Result[Buf[F32], U32]) -> Buf[F32] {
+  r.unwrap()
+}
+
+fn is_level_high(o: Option[Level]) -> Bool {
+  match o.unwrap() {
+    Level.Low => false,
+    Level.High => true,
+  }
+}
+
+// ---- the value, by the type of the contents ----
+
+test "the value of Some and of Ok is the content, for a number" {
+  assert Some(7).unwrap() == 7
+  let n: Result[U32, U32] = Ok(9)
+  assert n.unwrap() == 9
+  let o: Option[U32]      = Some(3)
+  let r: Result[U32, U32] = Ok(4)
+  assert o.unwrap() == 3
+  assert r.unwrap() == 4
+}
+
+test "the content may be a float, a bool and a character" {
+  let f: Option[F32] = Some(1.5)
+  assert f.unwrap() == 1.5
+  assert Some(true).unwrap()
+  assert !Some(false).unwrap()
+  let r: Result[Bool, U32] = Ok(true)
+  assert r.unwrap()
+}
+
+test "the content may be a tuple" {
+  let o: Option[(U32, F32)] = Some((2, 0.5))
+  let t                     = o.unwrap()
+  assert t.0 == 2
+  assert t.1 == 0.5
+  let r: Result[(U32, U32), U32] = Ok((5, 6))
+  let (a, b)                     = r.unwrap()
+  assert a + b == 11
+}
+
+test "the content may be a struct" {
+  let p = some_pair(3, 2.0).unwrap()
+  assert p.a == 3
+  assert p.b == 2.0
+  assert ok_pair(4, 1.0).unwrap().a == 4
+  assert some_pair(8, 0.25).unwrap().b == 0.25
+}
+
+test "the content may be an array" {
+  let o: Option[[U32; 3]] = Some([1, 2, 3])
+  let xs                  = o.unwrap()
+  assert xs[0] == 1
+  assert xs[2] == 3
+  let r: Result[[F32; 2], U32] = Ok([0.5, 1.5])
+  assert r.unwrap()[1] == 1.5
+}
+
+test "the content may be an Option or a Result, and the two are taken one at a time" {
+  let oo: Option[Option[U32]] = Some(Some(5))
+  assert oo.unwrap().unwrap() == 5
+  let ro: Result[Option[U32], U32] = Ok(Some(6))
+  assert ro.unwrap().unwrap() == 6
+  let or: Option[Result[U32, U32]] = Some(Ok(7))
+  assert or.unwrap().unwrap() == 7
+  let rr: Result[Result[U32, U32], U32] = Ok(Ok(8))
+  assert rr.unwrap().unwrap() == 8
+}
+
+test "the content may be None, and the inner None is the value" {
+  let oo: Option[Option[U32]] = Some(None)
+  assert oo.unwrap() == None
+  let er: Result[Option[U32], U32] = Ok(None)
+  assert er.unwrap() == None
+}
+
+test "the content may be a unit-like enum" {
+  assert is_level_high(Some(Level.High))
+  assert !is_level_high(Some(Level.Low))
+}
+
+test "the content may be an owned Buf, and it is the one that was inside" {
+  assert buf_len_of(Some(Buf.zeroed(3))) == 3
+  let b = buf_from_ok(Ok(Buf.zeroed(5)))
+  assert b.len() == 5
+}
+
+// ---- the receiver ----
+
+test "the receiver may be a field, an element, a call and a tuple element" {
+  let s = Slot { o: Some(2), r: Ok(3) }
+  assert s.o.unwrap() == 2
+  assert s.r.unwrap() == 3
+  let xs: [Option[U32]; 2] = [Some(4), Some(5)]
+  assert xs[1].unwrap() == 5
+  let t: (Option[U32], Result[U32, U32]) = (Some(6), Ok(7))
+  assert t.0.unwrap() + t.1.unwrap() == 13
+}
+
+test "the receiver may be a user's method result" {
+  let g = Gain { k: 4 }
+  assert g.lift().unwrap() == 4
+}
+
+test "a Dup receiver is read as often as the program wants" {
+  let o: Option[U32] = Some(8)
+  assert o.unwrap() == 8
+  assert o.unwrap() + o.unwrap() == 16
+  let r: Result[U32, U32] = Ok(2)
+  assert r.unwrap() * r.unwrap() == 4
+}
+
+// ---- where the call stands ----
+
+test "a chain of calls ends in unwrap, and unwrap ends a chain" {
+  assert Some(Some(Some(2))).unwrap().unwrap().unwrap() == 2
+  let g = Gain { k: 9 }
+  assert g.lift().unwrap() + 1 == 10
+  let e: Result[U32, U32] = Ok(6)
+  assert e.unwrap() == 6
+}
+
+test "a generic body unwraps a content that is a type parameter" {
+  assert first(Some(5)) == 5
+  assert first(Some(true))
+  let f: Option[F32] = Some(2.5)
+  assert first(f) == 2.5
+  let a: Result[U32, U32] = Ok(6)
+  assert first_ok(a) == 6
+  let b: Result[F32, U32] = Ok(1.5)
+  assert first_ok(b) == 1.5
+  let p = first(some_pair(3, 1.0))
+  assert p.a == 3
+}
+
+test "a generic body with the bound ?Dup takes an owned content" {
+  assert first_owned(Some(7)) == 7
+  let o: Option[Buf[F32]] = Some(Buf.zeroed(4))
+  let b                   = first_owned(move o)
+  assert b.len() == 4
+  let r: Result[Buf[F32], U32] = Ok(Buf.zeroed(2))
+  let c                        = first_ok_owned(move r)
+  assert c.len() == 2
+  let e: Result[U32, Buf[F32]] = Ok(8)
+  assert first_ok_owned(move e) == 8
+}
+
+test "unwrap in a branch, a loop and an argument" {
+  assert in_a_branch(true, Some(1), Ok(2)) == 1
+  assert in_a_branch(false, Some(1), Ok(2)) == 2
+  assert sum_in_a_loop([Some(1), Some(2), Some(3)]) == 6
+  assert at_an_argument(Some(10), Ok(20)) == 30
+}
+
+test "unwrap in an anonymous function" {
+  let xs: [U32; 3] = array.from_fn(fn(i: U32) -> U32 { Some(i + 1).unwrap() })
+  assert xs[0] == 1
+  assert xs[2] == 3
+  let ys: [U32; 2] = array.from_fn(fn(i: U32) -> U32 {
+    let r: Result[U32, U32] = Ok(i * 10)
+    r.unwrap()
+  })
+  assert ys[1] == 10
+}
+
+test "unwrap as an operand of an operator and in a condition" {
+  let o: Option[U32]      = Some(3)
+  let r: Result[U32, U32] = Ok(4)
+  assert o.unwrap() < r.unwrap()
+  if o.unwrap() == 3 {
+    assert true
+  }
+  let c: Option[Bool] = Some(true)
+  assert c.unwrap() && o.unwrap() == 3
+}
+
+// ---- the names that are no method of Option and Result are free for a user's type ----
+
+test "a method of a user's type may have a name that Option and Result do not have" {
+  let g = Gain { k: 5 }
+  assert g.is_some()
+  assert g.unwrap_or(1) == 5
+  let z = Gain { k: 0 }
+  assert !z.is_some()
+  assert z.unwrap_or(1) == 1
+}

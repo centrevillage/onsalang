@@ -109,7 +109,7 @@ features! {
     TildeBranches: Language, "`{}`, which evaluates every branch", None;
     /// K-08, S-110: what the branch does not evaluate holds state (W7-06).
     StatefulInBranch: Language,
-        "a flow instance, a delay or a `par~` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`, an argument a method evaluates on some paths)",
+        "a flow instance, a delay or a `par~` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`)",
         Some("bind it with a `let` before the expression that holds it");
     /// K-08, R-13: the store of the inner delay comes first (W7-07).
     NestedDelays: Language, "a delay inside the first argument of a delay",

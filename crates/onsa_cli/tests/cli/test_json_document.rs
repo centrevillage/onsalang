@@ -317,9 +317,10 @@ test \"loop and branch\" {
 }
 
 /// Spec §18.1: a panic inside a function of `std` has a `span.file` of the form
-/// `std/dsp/test.onsa`, and `calls` ends with the position of the call in the test. (`energy`
-/// over a range past the end of the span panics in std's own code; the spec writes the
-/// half-open range and not what happens past the end, see the report of W2-10/t.)
+/// `std/dsp/test.onsa`, and `calls` ends with the position of the call in the test; the text
+/// line shows that call (`spec/tools.md` §4, S-893). (`energy` over a range past the end of the
+/// span panics in std's own code; the spec writes the half-open range and not what happens past
+/// the end, see the report of W2-10/t.)
 #[test]
 fn a_panic_inside_std_is_in_a_file_of_std_with_the_call_in_the_test() {
     let src = "use std.dsp.test.{impulse, energy}
@@ -340,8 +341,8 @@ test \"std\" {
     assert_eq!((last.file.as_str(), last.line, last.col), ("m.onsa", 5, 11), "{f}");
 
     let text = run(d.root(), &["test", &d.arg()]);
-    let prefix = format!("test m \"std\" failed at std/dsp/test.onsa:{}: ", sp.line);
-    assert!(result_lines(&text).iter().any(|l| l.starts_with(&prefix)), "{}", text.stdout);
+    let prefix = "test m \"std\" failed at m.onsa:5: ";
+    assert!(result_lines(&text).iter().any(|l| l.starts_with(prefix)), "{}", text.stdout);
 }
 
 /// Spec §11.8: a failing `assert_near` is a panic at the position of its call. Called by the test

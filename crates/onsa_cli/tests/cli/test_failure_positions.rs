@@ -83,3 +83,123 @@ test \"write outer\" {
         assert_eq!(span_of(&f["span"]), want, "{name}: {f}");
     }
 }
+
+/// The result line of the test `name` of the module `m`, with its `failed at <file>:<line>:` head.
+fn failed_at(text: &Out, name: &str) -> String {
+    let head = format!("test m \"{name}\" failed at ");
+    let lines = result_lines(text);
+    let line = lines.iter().find(|l| l.starts_with(&head));
+    let line = line.unwrap_or_else(|| panic!("no failed line of {name}: {}", text.stdout));
+    line[head.len()..].to_string()
+}
+
+/// S-893: the panic of `unwrap` is the `panic` in the body of std. The JSON has it as it is, with
+/// the call first in `calls`; the text shows the innermost position out of std (`spec/tools.md`
+/// §4). The lines of std are not fixed here.
+#[test]
+fn a_failed_unwrap_is_in_std_in_the_json_and_at_the_call_in_the_text() {
+    let src = "fn get(o: Option[I32]) -> I32 {
+  o.unwrap()
+}
+
+fn id[T](move o: Option[T]) -> T {
+  o.unwrap()
+}
+
+fn nested() -> Option[Option[I32]] {
+  Some(None)
+}
+
+test \"none\" {
+  let o: Option[I32] = None
+  assert o.unwrap() == 0
+}
+
+test \"err\" {
+  let r: Result[I32, U32] = Err(1)
+  assert r.unwrap() == 0
+}
+
+test \"helper\" {
+  assert get(None) == 0
+}
+
+test \"generic\" {
+  let o: Option[U32] = None
+  assert id(o) == 0
+}
+
+test \"chain\" {
+  assert nested().unwrap().unwrap() == 0
+}
+";
+    let d = Dir::pkg("unwrap_std");
+    d.write("m.onsa", src);
+    let (out, doc) = test_json(d.root(), &[&d.arg()]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    let text = run(d.root(), &["test", &d.arg()]);
+    // The test, the message, the line of the text, and the start of each of `calls`.
+    let none = "called `unwrap()` on `None`";
+    let err = "called `unwrap()` on `Err`";
+    let cases = [
+        ("none", none, 15, &[(15u64, 10u64)][..]),
+        ("err", err, 20, &[(20, 10)]),
+        ("helper", none, 2, &[(2, 3), (24, 10)]),
+        ("generic", none, 6, &[(6, 3), (29, 10)]),
+        ("chain", none, 33, &[(33, 10)]),
+    ];
+    for (name, message, line, calls) in cases {
+        let f = failure_of(record(&doc, "m", name));
+        assert_eq!(span_of(&f["span"]).file, "std/core.onsa", "{name}: {f}");
+        assert_eq!(str_of(f, "kind"), "panic", "{name}: {f}");
+        let got: Vec<_> = call_spans(f).iter().map(|c| (c.file.clone(), c.line, c.col)).collect();
+        let want: Vec<_> = calls.iter().map(|&(l, c)| ("m.onsa".to_string(), l, c)).collect();
+        assert_eq!(got, want, "{name}: {f}");
+        assert_eq!(failed_at(&text, name), format!("m.onsa:{line}: {message}"), "{name}");
+    }
+}
+
+/// S-893: a failed `assert` in the Onsa body of std is shown at the call too, and of a helper
+/// that calls std, at the call in the helper. The position in std stays in the JSON.
+#[test]
+fn a_failed_assert_in_the_body_of_std_is_shown_at_the_call() {
+    let src = "use std.dsp.test.{impulse, energy}
+
+fn past() -> F64 uses {Alloc} {
+  let b = impulse(4)
+  energy(b, 0, 9)
+}
+
+test \"direct\" {
+  let b = impulse(4)
+  assert energy(b, 0, 9) == 1.0
+}
+
+test \"helper\" {
+  assert past() == 1.0
+}
+";
+    let d = Dir::pkg("energy_std");
+    d.write("m.onsa", src);
+    let (out, doc) = test_json(d.root(), &[&d.arg()]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    let text = run(d.root(), &["test", &d.arg()]);
+    for (name, line) in [("direct", 10), ("helper", 5)] {
+        let f = failure_of(record(&doc, "m", name));
+        assert_eq!(span_of(&f["span"]).file, "std/dsp/test.onsa", "{name}: {f}");
+        let shown = failed_at(&text, name);
+        assert!(shown.starts_with(&format!("m.onsa:{line}: ")), "{name}: {shown}");
+    }
+}
+
+/// S-893: what is out of std is told by the file, not by its name: a file of the user's in a
+/// directory `std` (a package cannot have that module, E0304, but a file alone can be there) is
+/// out of std, and the failure is shown there and not at the `panic` in `std/core.onsa`.
+#[test]
+fn a_file_in_a_directory_named_std_is_out_of_std() {
+    let d = Dir::bare("own_std_dir");
+    d.write("std/m.onsa", "test \"mine\" {\n  let o: Option[I32] = None\n  assert o.unwrap() == 0\n}\n");
+    let text = run(d.root(), &["test", "std/m.onsa"]);
+    assert_eq!(text.code, 1, "{}{}", text.stdout, text.stderr);
+    assert_eq!(failed_at(&text, "mine"), "std/m.onsa:3: called `unwrap()` on `None`");
+}

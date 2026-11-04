@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§18.1", "§6.2"]
+// fixes = 0
+
+// E0413, R-96 (W5-03 U2/t; spec §9.1: "`Option` と `Result` のメソッドは、両方の … `unwrap` … と `Result` の `map_err` だけである"): the list is closed, so
+// any other name on an `Option` or a `Result` is E0413, not only the five that were in the table of this version. The names of Rust
+// (`expect`, `map`, `and_then`, `ok_or`, `unwrap_or_else`, `unwrap_or_default`, `ok`, `err`, `or`, `take`, `filter`, `flatten`) and a
+// name that no language has. `map_err` of an `Option` is not a method of `Option` (it is the one of `Result`, in negative/map_err_option.onsa).
+// No candidate (`fixes = 0`). One error per function (P-01).
+
+fn double(x: U32) -> U32 {
+  x * 2
+}
+
+pub fn expect_on_option(o: Option[U32]) -> U32 {
+  o.expect("x")                        //~ E0413
+}
+
+pub fn expect_on_result(r: Result[U32, U32]) -> U32 {
+  r.expect("x")                        //~ E0413
+}
+
+pub fn map_on_option(o: Option[U32]) -> Option[U32] {
+  o.map(double)                        //~ E0413
+}
+
+pub fn map_on_result(r: Result[U32, U32]) -> Result[U32, U32] {
+  r.map(double)                        //~ E0413
+}
+
+pub fn and_then_on_option(o: Option[U32]) -> Option[U32] {
+  o.and_then(Some)                     //~ E0413
+}
+
+pub fn ok_or_on_option(o: Option[U32]) -> Result[U32, U32] {
+  o.ok_or(0)                           //~ E0413
+}
+
+pub fn unwrap_or_else_on_result(r: Result[U32, U32]) -> U32 {
+  r.unwrap_or_else(double)             //~ E0413
+}
+
+pub fn unwrap_or_default_on_option(o: Option[U32]) -> U32 {
+  o.unwrap_or_default()                //~ E0413
+}
+
+pub fn ok_on_result(r: Result[U32, U32]) -> Option[U32] {
+  r.ok()                               //~ E0413
+}
+
+pub fn err_on_result(r: Result[U32, U32]) -> Option[U32] {
+  r.err()                              //~ E0413
+}
+
+pub fn or_on_option(o: Option[U32]) -> Option[U32] {
+  o.or(None)                           //~ E0413
+}
+
+pub fn flatten_on_option(o: Option[Option[U32]]) -> Option[U32] {
+  o.flatten()                          //~ E0413
+}
+
+pub fn a_name_that_no_language_has(o: Option[U32]) -> U32 {
+  o.gain_or_zero()                     //~ E0413
+}

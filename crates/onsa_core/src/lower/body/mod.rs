@@ -33,7 +33,7 @@ use call::lower_call;
 pub(super) use expr::lower_expr;
 use expr::placeholder_ty;
 pub(super) use pat::bind_irrefutable;
-use pat::{lower_match, tag_test};
+use pat::lower_match;
 
 pub(crate) struct FnCx<'b> {
     pub args: Vec<GenericArg>,

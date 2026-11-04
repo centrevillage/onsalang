@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§6.1", "§4.1"]
+
+// W5-03 U2/t: `unwrap` after `map_err`, and in an anonymous function that is a value (spec §9.1: the methods of `Option` and
+// `Result` are `unwrap` and `map_err`, and both consume the receiver). The part of values/unwrap_values_run.onsa that goes
+// through a function value: `map_err` takes `f: fn(move E) -> F` and calls it, and a closure bound by `let` is called
+// with `.(`. This version says E0200 for a call through a function value (W8-09), so the cases here are a file of their own and
+// the other cases of `unwrap` run now. The values are worked out by hand.
+
+fn add_one(move e: U32) -> U32 {
+  e + 1
+}
+
+pub enum Wrapped {
+  In(U32),
+}
+
+test "unwrap after map_err is the Ok value" {
+  let r: Result[U32, U32] = Ok(3)
+  assert r.map_err(add_one).unwrap() == 3
+}
+
+test "map_err on an Err changes the error, and the Err stays an Err" {
+  let r: Result[U32, U32] = Err(5)
+  assert r.map_err(add_one).map_err(add_one).map_err(add_one) == Err(8)
+}
+
+test "map_err with a constructor, then unwrap" {
+  let r: Result[U32, U32]     = Ok(2)
+  let w: Result[U32, Wrapped] = r.map_err(Wrapped.In)
+  assert w.unwrap() == 2
+}
+
+test "unwrap in a closure that is bound by let" {
+  let f = fn(o: Option[U32]) -> U32 { o.unwrap() + 1 }
+  assert f.(Some(4)) == 5
+  let g = fn(r: Result[U32, U32]) -> U32 { r.unwrap() * 2 }
+  assert g.(Ok(4)) == 8
+}

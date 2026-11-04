@@ -223,3 +223,38 @@ fn the_prelude_names_written_with_no_use_pass() {
     assert_eq!(out.code, 0, "{doc}");
     assert!(diagnostics(&doc).is_empty(), "{doc}");
 }
+
+/// R-96: a name `Option` or `Result` leaves to `match` (§9.1) is an E0413 with no candidate; on a
+/// receiver of that type a note shows the `match`, on another receiver there is no note. The
+/// wording of the note is not fixed; it names `match`.
+#[test]
+fn an_e0413_of_a_test_of_option_or_result_shows_the_match_on_that_type_only() {
+    let src = "pub fn a(o: Option[I32]) -> Bool {
+  o.is_some()
+}
+
+pub fn b(r: Result[I32, U32]) -> Bool {
+  r.is_err()
+}
+
+pub fn c(o: Option[I32]) -> Bool {
+  o.is_ok()
+}
+
+pub fn d(x: I32) -> Bool {
+  x.is_some()
+}
+";
+    let d = Dir::pkg("r96_notes");
+    d.write("m.onsa", src);
+    let (out, doc) = check_json(d.root(), &[&d.arg()]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    let ds = diagnostics(&doc);
+    assert_eq!(ds.len(), 4, "{doc}");
+    let notes: Vec<bool> = ds.iter().map(|x| x["notes"].to_string().contains("`match")).collect();
+    assert_eq!(notes, [true, true, false, false], "{doc}");
+    for x in ds {
+        assert_eq!(str_of(x, "code"), "E0413", "{x}");
+        assert_eq!(fixes_of(x), 0, "{x}");
+    }
+}

@@ -38,8 +38,7 @@
 //!   the forms.
 //!
 //! The optional `init` of a delay (`NodeCall.init_expr`) stays: W7-07 gives
-//! the omitted one its value `T.default()`. The arguments a builtin evaluates
-//! lazily (`builtin.rs`, `lazy_args`) go with `unwrap_or` in W5-03.
+//! the omitted one its value `T.default()`.
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
@@ -179,8 +178,7 @@ impl Rater<'_> {
     }
 
     /// A stateful node at `span` (an instance, a delay, a `par`): E0200 in a
-    /// branch, a guard, the right side of `&&` / `||` or a lazily evaluated
-    /// argument of a builtin (K-08, W7-06).
+    /// branch, a guard or the right side of `&&` / `||` (K-08, W7-06).
     pub(super) fn stateful_here(&mut self, span: Span) -> Result<(), super::RStop> {
         if self.final_pass && self.branch > 0 {
             return Err(self.unsupported(span, Feature::StatefulInBranch, &[]));

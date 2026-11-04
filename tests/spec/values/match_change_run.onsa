@@ -83,7 +83,7 @@ fn copy_derived_keeps_the_value(inout o: Option[U32]) -> U32 {
 test "the copy binding of an arm keeps the value after the subject is changed" {
   var o: Option[U32] = Some(4)
   assert copy_binding_keeps_the_value(inout o) == 4
-  assert o.is_none()
+  assert o == None
   var p: Option[U32] = Some(5)
   assert copy_derived_keeps_the_value(inout p) == 10
   assert p.unwrap() == 6

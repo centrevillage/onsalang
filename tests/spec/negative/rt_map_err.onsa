@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§10", "§15.1"]
+// fixes = 0
+
+// E0901, S-873 (spec §9.1: "`map_err` は `rt` でないので、`rt` の関数のエラーの変換は `match` で書く（§10）"; §10 rule 4: "`rt` でない関数を呼ばない
+// （E0901）"): `map_err` of `Result` is no `rt` function, so an `rt` function that calls it has E0901, whatever the receiver holds, the
+// function that is the argument is (an `rt` function is no reason: the call of `map_err` is the one that is not `rt`), and wherever
+// the call stands (a body, a branch, a chain, a method of a user's type, a generic body). The same call in a function that is not `rt`
+// is fine (the last part of the file), and so is `unwrap` in an `rt` function (rt/unwrap_in_rt.onsa). No candidate: the candidate would
+// need a choice of the `match` that changes the error (`fixes = 0`). One error per function (P-01).
+
+pub struct Held {
+  r: Result[U32, U32],
+}
+
+pub enum Bad {
+  Code(U32),
+}
+
+pub rt fn to_code(move e: U32) -> Bad {
+  Bad.Code(e)
+}
+
+pub fn to_code_slow(move e: U32) -> Bad {
+  Bad.Code(e)
+}
+
+pub rt fn dup_receiver(r: Result[U32, U32]) -> Result[U32, Bad] {
+  r.map_err(to_code)                         //~ E0901
+}
+
+pub rt fn constructor_argument(r: Result[U32, U32]) -> Result[U32, Bad] {
+  r.map_err(Bad.Code)                        //~ E0901
+}
+
+pub rt fn owned_receiver(move r: Result[Buf[F32], U32]) -> Result[Buf[F32], Bad] {
+  r.map_err(to_code)                         //~ E0901
+}
+
+pub rt fn non_rt_argument(r: Result[U32, U32]) -> Result[U32, Bad] {
+  r.map_err(to_code_slow)                    //~ E0901
+}
+
+pub rt fn in_a_branch(c: Bool, r: Result[U32, U32]) -> Result[U32, Bad] {
+  if c {
+    r.map_err(to_code)                       //~ E0901
+  } else {
+    Err(Bad.Code(0))
+  }
+}
+
+pub rt fn in_a_chain(r: Result[U32, U32]) -> U32 {
+  r.map_err(to_code).unwrap()                //~ E0901
+}
+
+pub rt fn in_a_match_arm(r: Result[U32, U32]) -> Result[U32, Bad] {
+  match r {
+    Ok(v) => Ok(v),
+    Err(e) => Err(Bad.Code(e)),
+  }
+}
+
+pub rt fn through_a_field(h: Held) -> Result[U32, Bad] {
+  h.r.map_err(to_code)                       //~ E0901
+}
+
+impl Held {
+  pub rt fn convert(self) -> Result[U32, Bad] {
+    self.r.map_err(to_code)                  //~ E0901
+  }
+}
+
+pub rt fn generic_body[T, E, F: ?Dup](r: Result[T, E], f: rt fn(move E) -> F) -> Result[T, F] {
+  r.map_err(f)                               //~ E0901
+}
+
+// ---- fine: a function that is not rt calls map_err, and an rt function changes the error by a match ----
+
+pub fn not_rt(r: Result[U32, U32]) -> Result[U32, Bad] {
+  r.map_err(to_code)
+}
+
+pub fn not_rt_owned(move r: Result[Buf[F32], U32]) -> Result[Buf[F32], Bad] {
+  r.map_err(to_code)
+}

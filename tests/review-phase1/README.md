@@ -126,7 +126,7 @@
 | `parent/r13*.onsa` | R-13（`prev(prev(x))` を含む） |
 | `parent/r15*.onsa` | R-15 |
 | `parent/r17.onsa` | R-17 |
-| `parent/r18.onsa` | R-18。名指すテストは無い。A-02 で不採用にした `unwrap_or` は今も通り（W5-03 が E0413 にして取り除く、R-96）、`d` を遅延評価する。今: `check` は 19 行の E0309（`_` に直すと通る）、直すと `test` の 1 つ目は ok、2 つ目は 20 行の assert で失敗。W5-03 の後に期待値付きのテスト（E0413）へ移して消す |
+| `parent/r18.onsa` | R-18。名指すテストは無い。A-02 で不採用にした `unwrap_or` は W5-03 の U2 で E0413 になった（R-96。期待値付きのテストは `tests/spec/negative/option_methods_e0413.onsa`）。下の「今」は U2 の前の記録である。今: `check` は 19 行の E0309（`_` に直すと通る）、直すと `test` の 1 つ目は ok、2 つ目は 20 行の assert で失敗。W5-03 の後に期待値付きのテスト（E0413）へ移して消す |
 | `parent/r19.onsa` | R-19。W2-03 で期待値付きのテストへ移した: `tests/spec/semantics/trunc_range.onsa`・`trunc64_edges.onsa`・`trunc64_range_contexts.onsa`・`min_rem_neg1.onsa`、`crates/onsa_interp/src/tests.rs` の `trunc_to_64_bits_at_the_powers_of_two`。元の入力は旧い期待値のまま失敗するので消した（W2-06 のコミット、W2-03/b の F-6） |
 | `parent/r54.onsa`、`parent/r54_for.onsa` | R-54（S-41）。W4-16 U1a/t で期待値付きのテストへ写した: `tests/spec/values/binding_borrow_let.onsa`（`whole`・`field`・`destructured_tuple`・`for_element`）、実行は `binding_borrow_run.onsa`、使い方の否定例は `tests/spec/negative/binding_borrow_move.onsa`。W4-16 U1a で直した（今の `onsa check` は何も出さない）。R-54 を直したので消した（85 回目） |
 | `parent/r117.onsa` | R-117。W4-07 で期待値付きのテストへ移した: `tests/spec/negative/binding_inout_not_origin_no_candidate.onsa`（`let c = move b` の E0711）・`move_borrowed_place_no_candidate.onsa`。W4-07 U4b-2 で直したので消した（90 回目） |

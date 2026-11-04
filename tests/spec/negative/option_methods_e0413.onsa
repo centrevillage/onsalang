@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§18.1", "§6.2"]
+// fixes = 0
+
+// E0413, R-96 (W5-03 U2/t; spec §9.1: "`Option` と `Result` のメソッドは、両方の … `unwrap` … と `Result` の `map_err` だけである"; "値の取り出しや
+// 有無の判定は `match`、`?`、`==` で書く（P2）"): the receiver is an `Option`, and the name is one that `Option` does not have. The three
+// that Rust has (`is_some`, `is_none`, `unwrap_or`) and the two of `Result` (`is_ok`, `is_err`, which an `Option` has no more than a
+// `Result` has `is_some`). The kind of the receiver does not change it: a number, an owned `Buf` (an Affine receiver is no E0711, the
+// method is not there), a `move` parameter, a field, an element, the result of a call, a literal and a nested `Option`. A name that
+// is an unknown member is E0413, and the note shows the `match` form (the text of a diagnostic is not written here). No candidate:
+// the `match` or `==` form needs the arms to be chosen by the writer (`fixes = 0`). One error per function (P-01).
+
+pub struct Slot {
+  o: Option[U32],
+}
+
+pub struct Held {
+  b: Option[Buf[F32]],
+}
+
+pub fn mk() -> Option[U32] {
+  Some(1)
+}
+
+// ---- the five names on an Option ----
+
+pub fn is_some_on_option(o: Option[U32]) -> Bool {
+  o.is_some()                          //~ E0413
+}
+
+pub fn is_none_on_option(o: Option[U32]) -> Bool {
+  o.is_none()                          //~ E0413
+}
+
+pub fn unwrap_or_on_option(o: Option[U32]) -> U32 {
+  o.unwrap_or(0)                       //~ E0413
+}
+
+pub fn is_ok_on_option(o: Option[U32]) -> Bool {
+  o.is_ok()                            //~ E0413
+}
+
+pub fn is_err_on_option(o: Option[U32]) -> Bool {
+  o.is_err()                           //~ E0413
+}
+
+// ---- the kind of the receiver ----
+
+pub fn float_content(o: Option[F32]) -> Bool {
+  o.is_some()                          //~ E0413
+}
+
+pub fn unwrap_or_float(o: Option[F32]) -> F32 {
+  o.unwrap_or(0.0)                     //~ E0413
+}
+
+pub fn unwrap_or_with_a_computed_argument(o: Option[U32], k: U32) -> U32 {
+  o.unwrap_or(k + 1)                   //~ E0413
+}
+
+pub fn borrowed_affine_content(o: Option[Buf[F32]]) -> Bool {
+  o.is_some()                          //~ E0413
+}
+
+pub fn owned_affine_content(move o: Option[Buf[F32]]) -> Bool uses {Alloc} {
+  o.is_none()                          //~ E0413
+}
+
+pub fn inout_receiver(inout o: Option[U32]) -> Bool {
+  o.is_some()                          //~ E0413
+}
+
+pub fn field_receiver(s: Slot) -> Bool {
+  s.o.is_some()                        //~ E0413
+}
+
+pub fn affine_field_receiver(h: Held) -> Bool {
+  h.b.is_none()                        //~ E0413
+}
+
+pub fn element_receiver(xs: [Option[U32]; 2]) -> Bool {
+  xs[0].is_some()                      //~ E0413
+}
+
+pub fn tuple_element_receiver(t: (Option[U32], U32)) -> Bool {
+  t.0.is_none()                        //~ E0413
+}
+
+pub fn call_result_receiver() -> Bool {
+  mk().is_some()                       //~ E0413
+}
+
+pub fn literal_receiver() -> Bool {
+  Some(1).is_some()                    //~ E0413
+}
+
+pub fn nested_option_outer(oo: Option[Option[U32]]) -> Bool {
+  oo.is_some()                         //~ E0413
+}
+
+pub fn nested_option_inner(oo: Option[Option[U32]]) -> Bool {
+  oo.unwrap().is_none()                //~ E0413
+}
+
+pub fn local_receiver() -> Bool {
+  let o: Option[U32] = None
+  o.is_none()                          //~ E0413
+}
+
+pub fn unwrap_or_in_a_let(o: Option[U32]) -> U32 {
+  let v = o.unwrap_or(2)               //~ E0413
+  v + 1
+}

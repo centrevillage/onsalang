@@ -60,6 +60,15 @@ pub struct TestFailure {
     pub origin: onsa_core::PanicOrigin,
 }
 
+impl TestFailure {
+    /// The position the text shows (`spec/tools.md` §4, S-893): of `span`
+    /// and `calls`, the innermost out of std, the code that called std. The
+    /// `span` where every position is in std (the body of a test of std).
+    fn shown_at(&self) -> Span {
+        std::iter::once(&self.span).chain(&self.calls).find(|s| !s.file.is_shared()).copied().unwrap_or(self.span)
+    }
+}
+
 impl TestOutcome {
     /// The full name text (§11.8): `dsp.voice "decays"`.
     pub fn full_name(&self) -> String {
@@ -96,19 +105,21 @@ impl TestReport {
     /// The text (`spec/tools.md` §4): a line for each test, `test <full
     /// name text> ok` or `test <full name text> failed at <file>:<line>:
     /// <message>`, then a summary. The file and the line are those of the
-    /// `span` of the JSON record. A message of several lines (an `assert` of
-    /// an expression written on several lines, S-284) puts its first line on
-    /// the line of the test and each of the others on a line of its own,
-    /// indented, so that every line that starts with `test` is the line of a
-    /// test.
+    /// innermost position out of std of the `span` and the `calls` of the
+    /// JSON record (`TestFailure::shown_at`, S-893). A message of several
+    /// lines (an `assert` of an expression written on several lines, S-284)
+    /// puts its first line on the line of the test and each of the others on
+    /// a line of its own, indented, so that every line that starts with
+    /// `test` is the line of a test.
     pub fn render_text(&self, sources: &SourceMap) -> String {
         let mut out = String::new();
         for t in &self.tests {
             match &t.failure {
                 None => out.push_str(&format!("test {} ok\n", t.full_name())),
                 Some(f) => {
-                    let file = sources.file(f.span.file);
-                    let line = file.line_col(f.span.start).line;
+                    let at = f.shown_at();
+                    let file = sources.file(at.file);
+                    let line = file.line_col(at.start).line;
                     let mut lines = message_lines(&f.message);
                     let first = lines.next().unwrap_or_default();
                     out.push_str(&format!("test {} failed at {}:{line}: {first}\n", t.full_name(), file.name()));

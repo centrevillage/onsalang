@@ -1,0 +1,234 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§9.2", "§10", "§18.1"]
+
+// W5-03 U2/t: `unwrap` of a `None` and of an `Err` panics (spec §9.1: "`unwrap`（`None` / `Err` なら panic する、§9.2）"; §9.2: "`unwrap`、
+// `assert` の失敗、`panic(msg)`" make a panic, and in a test it "そのテストを失敗にする"). `unwrap` is a body of std (S-893), so the `panic` is
+// in `std`; the marker of the test (tests/README.md) is the line of the call that the body of the test holds: the line of
+// `.unwrap()` itself, or of the call of the function that holds the `unwrap`. The marker takes no column when the line has one
+// `unwrap` that panics. A path that does not panic is checked in the same file, so a panic is the `None` or the `Err` and not the
+// call. Each content of an `Err` and of a `Some` has no effect on the panic: a number, a struct, an owned `Buf` (the drop of the
+// `E` that the panic leaves is no `Alloc`, S-873, so an `rt` function that holds it has no error). The message is not checked.
+// One panic in a test; the part after it is not reached.
+
+pub struct Info {
+  code: U32,
+  gain: F32,
+}
+
+pub struct Gate {
+  slot: Option[U32],
+}
+
+impl Gate {
+  pub fn level(self) -> U32 {
+    self.slot.unwrap()
+  }
+}
+
+fn from_option(o: Option[U32]) -> U32 {
+  o.unwrap()
+}
+
+fn from_result(r: Result[U32, U32]) -> U32 {
+  r.unwrap()
+}
+
+fn generic_option[T](o: Option[T]) -> T {
+  o.unwrap()
+}
+
+fn generic_result[T, E](r: Result[T, E]) -> T {
+  r.unwrap()
+}
+
+fn generic_owned[T: ?Dup](move o: Option[T]) -> T {
+  o.unwrap()
+}
+
+pub rt fn in_an_rt_function(o: Option[U32]) -> U32 {
+  o.unwrap()
+}
+
+pub rt fn in_an_rt_function_owned(move r: Result[Buf[F32], Buf[F32]]) -> Buf[F32] {
+  r.unwrap()
+}
+
+fn sum_in_a_loop(xs: [Option[U32]; 3]) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..< 3 {
+    total = total + xs[i].unwrap()
+  }
+  total
+}
+
+fn two_levels(oo: Option[Option[U32]]) -> U32 {
+  oo.unwrap().unwrap()
+}
+
+fn on_one_branch(c: Bool, o: Option[U32]) -> U32 {
+  if c {
+    o.unwrap()
+  } else {
+    0
+  }
+}
+
+fn through_a_helper(o: Option[U32]) -> U32 {
+  from_option(o) + 1
+}
+
+// ---- a path that does not panic ----
+
+test "unwrap of a Some and of an Ok does not panic, in every place" {
+  assert from_option(Some(3)) == 3
+  assert from_result(Ok(4)) == 4
+  assert generic_option(Some(5)) == 5
+  let r: Result[U32, U32] = Ok(6)
+  assert generic_result(r) == 6
+  assert generic_owned(Some(7)) == 7
+  assert in_an_rt_function(Some(8)) == 8
+  assert sum_in_a_loop([Some(1), Some(2), Some(3)]) == 6
+  assert two_levels(Some(Some(9))) == 9
+  assert through_a_helper(Some(1)) == 2
+  assert Gate { slot: Some(2) }.level() == 2
+}
+
+test "a branch that is not taken does not evaluate its unwrap" {
+  assert on_one_branch(false, None) == 0
+  assert on_one_branch(true, Some(5)) == 5
+}
+
+test "the Ok of an rt function with an owned error type is returned" {
+  let r: Result[Buf[F32], Buf[F32]] = Ok(Buf.zeroed(3))
+  let b = in_an_rt_function_owned(move r)
+  assert b.len() == 3
+}
+
+// ---- the call stands in the body of the test ----
+
+test "unwrap of None in the body of a test panics" {
+  let o: Option[U32] = None
+  let v = o.unwrap() //~ PANIC "unwrap of None in the body of a test panics"
+  assert v == 0
+}
+
+test "unwrap of Err in the body of a test panics" {
+  let r: Result[U32, U32] = Err(5)
+  let v = r.unwrap() //~ PANIC "unwrap of Err in the body of a test panics"
+  assert v == 0
+}
+
+test "unwrap whose value is thrown away panics" {
+  let o: Option[U32] = None
+  let _ = o.unwrap() //~ PANIC "unwrap whose value is thrown away panics"
+}
+
+// ---- the content of the Err and of the Option ----
+
+test "unwrap of an Err that holds a struct panics" {
+  let r: Result[U32, Info] = Err(Info { code: 7, gain: 0.5 })
+  let v = r.unwrap() //~ PANIC "unwrap of an Err that holds a struct panics"
+  assert v == 0
+}
+
+test "unwrap of an Err that holds a tuple panics" {
+  let r: Result[U32, (U32, F32)] = Err((1, 2.0))
+  let v = r.unwrap() //~ PANIC "unwrap of an Err that holds a tuple panics"
+  assert v == 0
+}
+
+test "unwrap of an Err that holds an array panics" {
+  let r: Result[U32, [U32; 2]] = Err([1, 2])
+  let v = r.unwrap() //~ PANIC "unwrap of an Err that holds an array panics"
+  assert v == 0
+}
+
+test "unwrap of an Err that holds an owned Buf panics" {
+  let r: Result[U32, Buf[F32]] = Err(Buf.zeroed(2))
+  let v = r.unwrap() //~ PANIC "unwrap of an Err that holds an owned Buf panics"
+  assert v == 0
+}
+
+test "unwrap of a None of an owned Buf panics" {
+  let o: Option[Buf[F32]] = None
+  let b = o.unwrap() //~ PANIC "unwrap of a None of an owned Buf panics"
+  assert b.len() == 0
+}
+
+test "unwrap of an Err of an owned Buf when the Ok is an owned Buf panics" {
+  let r: Result[Buf[F32], Buf[F32]] = Err(Buf.zeroed(2))
+  let b = in_an_rt_function_owned(move r) //~ PANIC "unwrap of an Err of an owned Buf when the Ok is an owned Buf panics"
+  assert b.len() == 0
+}
+
+// ---- the call stands in a function that the body of the test calls ----
+
+test "unwrap of None in a function panics at the call of the function" {
+  let v = from_option(None) //~ PANIC "unwrap of None in a function panics at the call of the function"
+  assert v == 0
+}
+
+test "unwrap of Err in a function panics at the call of the function" {
+  let v = from_result(Err(2)) //~ PANIC "unwrap of Err in a function panics at the call of the function"
+  assert v == 0
+}
+
+test "unwrap of None in a generic body panics at the call of the function" {
+  let o: Option[U32] = None
+  let v = generic_option(o) //~ PANIC "unwrap of None in a generic body panics at the call of the function"
+  assert v == 0
+}
+
+test "unwrap of Err in a generic body panics at the call of the function" {
+  let r: Result[U32, U32] = Err(3)
+  let v = generic_result(r) //~ PANIC "unwrap of Err in a generic body panics at the call of the function"
+  assert v == 0
+}
+
+test "unwrap of None in a generic body with an owned content panics at the call" {
+  let o: Option[Buf[F32]] = None
+  let b = generic_owned(move o) //~ PANIC "unwrap of None in a generic body with an owned content panics at the call"
+  assert b.len() == 0
+}
+
+test "unwrap of None in an rt function panics at the call of the function" {
+  let v = in_an_rt_function(None) //~ PANIC "unwrap of None in an rt function panics at the call of the function"
+  assert v == 0
+}
+
+test "unwrap of None in a method of a user's type panics at the call of the method" {
+  let g = Gate { slot: None }
+  let v = g.level() //~ PANIC "unwrap of None in a method of a user's type panics at the call of the method"
+  assert v == 0
+}
+
+test "unwrap in a loop panics at the call of the function that holds the loop" {
+  let v = sum_in_a_loop([Some(1), None, Some(3)]) //~ PANIC "unwrap in a loop panics at the call of the function that holds the loop"
+  assert v == 0
+}
+
+test "unwrap on the taken branch panics at the call of the function" {
+  let v = on_one_branch(true, None) //~ PANIC "unwrap on the taken branch panics at the call of the function"
+  assert v == 0
+}
+
+test "unwrap two functions down panics at the outermost call of the body of the test" {
+  let v = through_a_helper(None) //~ PANIC "unwrap two functions down panics at the outermost call of the body of the test"
+  assert v == 0
+}
+
+// ---- a chain: the inner call gives a value and the outer one panics, or the inner panics ----
+
+test "the outer unwrap of a chain panics when the inner content is None" {
+  let oo: Option[Option[U32]] = Some(None)
+  let v = oo.unwrap().unwrap() //~ PANIC "the outer unwrap of a chain panics when the inner content is None"
+  assert v == 0
+}
+
+test "the inner unwrap of a chain panics when the outer is None" {
+  let oo: Option[Option[U32]] = None
+  let v = two_levels(oo) //~ PANIC "the inner unwrap of a chain panics when the outer is None"
+  assert v == 0
+}

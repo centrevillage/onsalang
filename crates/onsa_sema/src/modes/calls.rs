@@ -71,16 +71,14 @@ impl Walker<'_> {
             None => {}
         }
         let span = self.ast.expr(e).span;
-        self.lazily(r, e, |w, r| {
-            for (a, t) in args.iter().zip(takes) {
-                // The root of a place in it that is E0702's (a view, an element of a planar literal too).
-                let at = w.ast.expr(a.expr).span;
-                let excuse = later.iter().find(|(s, _)| at.start <= s.start && s.end <= at.end);
-                let outer = replace(&mut w.inside.excuse, excuse.map(|&(_, l)| (l, span)));
-                w.arg(r, a, t);
-                w.inside.excuse = outer;
-            }
-        });
+        for (a, t) in args.iter().zip(takes) {
+            // The root of a place in it that is E0702's (a view, an element of a planar literal too).
+            let at = self.ast.expr(a.expr).span;
+            let excuse = later.iter().find(|(s, _)| at.start <= s.start && s.end <= at.end);
+            let outer = replace(&mut self.inside.excuse, excuse.map(|&(_, l)| (l, span)));
+            self.arg(r, a, t);
+            self.inside.excuse = outer;
+        }
         self.inside.calls -= 1;
         self.changed_in_args(start, &passed);
         for (place, at) in replace(&mut self.inside.after_call, outer) {

@@ -150,13 +150,13 @@ test "the receiver of unwrap takes the field" {
 
 test "a postfix question mark takes the field on the Ok path" {
   let r = at_a_try(HolderR { r: Ok(Buf.zeroed(4)), n: 1 })
-  assert r.is_ok()
+  assert r == Ok(4)
   assert r.unwrap() == 4
 }
 
 test "a postfix question mark returns the error on the Err path" {
   let r = at_a_try(HolderR { r: Err(7), n: 1 })
-  assert r.is_err()
+  assert r == Err(7)
 }
 
 test "a Copy field read before the take-out keeps its value" {

@@ -365,13 +365,7 @@ impl<'a> Rater<'a> {
         {
             r = r.max(self.rate(*base)?);
         }
-        // The arguments a builtin evaluates on some paths only are a branch
-        // (`o.unwrap_or(d)`, K-08).
-        let lazy = matches!(self.body.targets.get(&e), Some(Target::BuiltinMethod { lazy_args: true, .. }));
-        self.branch += lazy as u32;
-        let rated = args.iter().try_fold(r, |r, a| Ok(r.max(self.rate(a.expr)?)));
-        self.branch -= lazy as u32;
-        r = rated?;
+        r = args.iter().try_fold(r, |r, a| Ok(r.max(self.rate(a.expr)?)))?;
         let target = self.body.targets.get(&e).cloned();
         match target {
             Some(Target::Fn { def, .. }) | Some(Target::Method { def, .. }) => {

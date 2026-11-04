@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§15.1", "§6.2", "§18.1"]
+// fixes = 0
+
+// E0302, R-96 (W5-03 U2/t): the five names written through the type, `Option.is_some(x)` and `Result.is_ok(r)`. `Option` and `Result` have no
+// member of these names (spec §9.1: the methods are `unwrap` and `map_err` only), so the name after `Option.` or `Result.` is not found
+// in the type, which is E0302 as for a member that does not exist in a type (spec §15.1: "型 … の中の名前を引く"; the name of the
+// type is a namespace of its associated functions, §6.6). This is not the E0413 of the method form `x.is_some()` (that is in
+// negative/option_methods_e0413.onsa), because the namespace of the type has no such name. The arguments are given right, so the
+// error is that of the name. No candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn is_some_through_option(o: Option[U32]) -> Bool {
+  Option.is_some(o)                    //~ E0302
+}
+
+pub fn is_none_through_option(o: Option[U32]) -> Bool {
+  Option.is_none(o)                    //~ E0302
+}
+
+pub fn unwrap_or_through_option(o: Option[U32]) -> U32 {
+  Option.unwrap_or(o, 0)               //~ E0302
+}
+
+pub fn is_ok_through_result(r: Result[U32, U32]) -> Bool {
+  Result.is_ok(r)                      //~ E0302
+}
+
+pub fn is_err_through_result(r: Result[U32, U32]) -> Bool {
+  Result.is_err(r)                     //~ E0302
+}
+
+pub fn unwrap_or_through_result(r: Result[U32, U32]) -> U32 {
+  Result.unwrap_or(r, 0)               //~ E0302
+}
+
+pub fn is_ok_through_option(o: Option[U32]) -> Bool {
+  Option.is_ok(o)                      //~ E0302
+}
+
+pub fn is_some_through_result(r: Result[U32, U32]) -> Bool {
+  Result.is_some(r)                    //~ E0302
+}
+
+pub fn in_a_chain(o: Option[Option[U32]]) -> Bool {
+  Option.is_none(o.unwrap())           //~ E0302
+}
+
+pub fn in_a_condition(o: Option[U32]) -> U32 {
+  if Option.is_some(o) {               //~ E0302
+    1
+  } else {
+    0
+  }
+}
+
+pub rt fn in_an_rt_function(o: Option[U32]) -> Bool {
+  Option.is_none(o)                    //~ E0302
+}
+
+pub fn in_a_generic_body[T](o: Option[T]) -> Bool {
+  Option.is_some(o)                    //~ E0302
+}

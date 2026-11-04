@@ -1520,3 +1520,17 @@ target = "tests/spec/semantics/panic_in_closures.onsa"
 reasons = ["S-40", "R-52"]
 until = "W8-09"
 note = "無名関数の本体の panic と while true が降下で E0200（Closures・CallsThroughFnValues。W8-09）。panic_positions.onsa などから分けた（W5-08 U1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/values/unwrap_fn_values_run.onsa"
+reasons = ["S-785", "S-872"]
+until = "W8-09"
+note = "`unwrap` の前の `map_err` と関数値の呼び出しは降下が E0200（関数値、W8-09）。§9.1 の形そのものは型の検査まで通る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_option_match_state_arm.onsa"
+reasons = ["S-110", "R-14"]
+until = "W7-06"
+note = "普通の `match` の腕の状態の E0811（§11.5）。今は K-08 の E0200（腕の検査は W7-06）"

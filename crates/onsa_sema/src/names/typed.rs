@@ -242,9 +242,9 @@ pub(crate) fn builtin_ty(a: &Analysis, of: Entity) -> Option<TyId> {
 }
 
 /// What the associated name `name` of the builtin type `of` is in the
-/// compiler's tables (§15.1): a method (`Option.unwrap`) or a name this
-/// version has not ([`builtin::missing`]); none of a name they have not
-/// (std's members, `F32.PI`, `Str.len`, are found before it is asked). The
+/// compiler's tables (§15.1): a method or a name this version has not
+/// ([`builtin::missing`]); none of a name they have not (std's members,
+/// `F32.PI`, `Str.len`, `Option.unwrap`, are found before it is asked). The
 /// one place of this question (D-15).
 pub(crate) fn builtin_member(a: &Analysis, of: Entity, name: &str) -> Option<BuiltinMember> {
     let ty = builtin_ty(a, of)?;

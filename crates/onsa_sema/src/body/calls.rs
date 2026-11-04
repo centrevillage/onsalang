@@ -304,8 +304,7 @@ impl<'a> Checker<'a> {
             self.unify_at(span, sig.ret, exp)?;
         }
         self.check_args(args, &params, e)?;
-        let (self_mode, lazy_args) = (sig.self_mode, sig.lazy_args);
-        self.info.targets.insert(e, Target::BuiltinMethod { name: name.name.clone(), self_mode, lazy_args });
+        self.info.targets.insert(e, Target::BuiltinMethod { name: name.name.clone(), self_mode: sig.self_mode });
         Ok(sig.ret)
     }
 

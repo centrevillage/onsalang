@@ -6,6 +6,14 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
 
+impl FileId {
+    /// Whether this is one of the [`SharedFiles`], the files of the embedded
+    /// std, whatever their names say: a user's package may have a `std/`.
+    pub fn is_shared(self) -> bool {
+        self.0 >= SHARED_BASE
+    }
+}
+
 /// 1-based line and column. The column counts Unicode scalar values from the
 /// start of the line (LSP conversion to UTF-16 happens in `onsa_lsp`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

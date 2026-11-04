@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§18.1", "§6.2"]
+// fixes = 0
+
+// E0413, R-96 (W5-03 U2/t; spec §9.1: "`Option` と `Result` のメソッドは、両方の … `unwrap` … と `Result` の `map_err` だけである"; "値の取り出しや
+// 有無の判定は `match`、`?`、`==` で書く（P2）"): the receiver is a `Result`, and the name is one that `Result` does not have: `is_ok`,
+// `is_err` and `unwrap_or`, and the two that belong to `Option` in Rust (`is_some`, `is_none`). The kind of the receiver does not change it:
+// a number, an owned `Buf` in the `Ok` or in the `Err` (a method that is not there is no E0711), a `move` parameter, a field, an element,
+// the result of a call and the result of `map_err`. No candidate (`fixes = 0`). One error per function (P-01).
+
+pub enum Bad {
+  Code(U32),
+}
+
+pub struct Held {
+  r: Result[U32, U32],
+}
+
+pub fn mk() -> Result[U32, U32] {
+  Ok(1)
+}
+
+pub fn to_bad(move e: U32) -> Bad {
+  Bad.Code(e)
+}
+
+// ---- the five names on a Result ----
+
+pub fn is_ok_on_result(r: Result[U32, U32]) -> Bool {
+  r.is_ok()                            //~ E0413
+}
+
+pub fn is_err_on_result(r: Result[U32, U32]) -> Bool {
+  r.is_err()                           //~ E0413
+}
+
+pub fn unwrap_or_on_result(r: Result[U32, U32]) -> U32 {
+  r.unwrap_or(0)                       //~ E0413
+}
+
+pub fn is_some_on_result(r: Result[U32, U32]) -> Bool {
+  r.is_some()                          //~ E0413
+}
+
+pub fn is_none_on_result(r: Result[U32, U32]) -> Bool {
+  r.is_none()                          //~ E0413
+}
+
+// ---- the kind of the receiver ----
+
+pub fn float_ok(r: Result[F32, U32]) -> Bool {
+  r.is_ok()                            //~ E0413
+}
+
+pub fn unwrap_or_float(r: Result[F32, U32]) -> F32 {
+  r.unwrap_or(0.5)                     //~ E0413
+}
+
+pub fn unwrap_or_with_a_computed_argument(r: Result[U32, U32], k: U32) -> U32 {
+  r.unwrap_or(k * 2)                   //~ E0413
+}
+
+pub fn borrowed_affine_ok(r: Result[Buf[F32], U32]) -> Bool {
+  r.is_ok()                            //~ E0413
+}
+
+pub fn borrowed_affine_err(r: Result[U32, Buf[F32]]) -> Bool {
+  r.is_err()                           //~ E0413
+}
+
+pub fn owned_affine_ok(move r: Result[Buf[F32], U32]) -> Bool uses {Alloc} {
+  r.is_ok()                            //~ E0413
+}
+
+pub fn inout_receiver(inout r: Result[U32, U32]) -> Bool {
+  r.is_err()                           //~ E0413
+}
+
+pub fn field_receiver(h: Held) -> Bool {
+  h.r.is_ok()                          //~ E0413
+}
+
+pub fn element_receiver(xs: [Result[U32, U32]; 2]) -> Bool {
+  xs[1].is_err()                       //~ E0413
+}
+
+pub fn call_result_receiver() -> Bool {
+  mk().is_ok()                         //~ E0413
+}
+
+pub fn literal_receiver() -> Bool {
+  let r: Result[U32, U32] = Ok(1)
+  r.is_ok()                            //~ E0413
+}
+
+pub fn map_err_result_receiver(r: Result[U32, U32]) -> Bool {
+  r.map_err(to_bad).is_ok()            //~ E0413
+}
+
+pub fn nested_result(rr: Result[Result[U32, U32], U32]) -> Bool {
+  rr.unwrap().is_err()                 //~ E0413
+}
+
+pub fn option_inside_a_result(r: Result[Option[U32], U32]) -> Bool {
+  r.unwrap().is_some()                 //~ E0413
+}

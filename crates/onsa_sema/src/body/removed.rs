@@ -16,10 +16,25 @@ use super::*;
 enum Named {
     /// `is_empty` of a type with a length: `len() == 0` (§4.2).
     Length,
+    /// What `Option` or `Result` leaves to `match` (§9.1, R-96): on a
+    /// receiver of that type, a note of what it has and of the form. No
+    /// candidate: the arms are the writer's.
+    Match(BuiltinTy, &'static str, &'static str),
 }
 
 /// The methods the spec leaves out, by name.
-const NAMED: &[(&str, Named)] = &[("is_empty", Named::Length)];
+const NAMED: &[(&str, Named)] = &[
+    ("is_empty", Named::Length),
+    ("is_some", Named::Match(BuiltinTy::Option, OPTION_HAS, "match o { Some(_) => true, None => false }")),
+    ("is_none", Named::Match(BuiltinTy::Option, OPTION_HAS, "match o { Some(_) => false, None => true }")),
+    ("unwrap_or", Named::Match(BuiltinTy::Option, OPTION_HAS, "match o { Some(x) => x, None => d }")),
+    ("is_ok", Named::Match(BuiltinTy::Result, RESULT_HAS, "match r { Ok(_) => true, Err(_) => false }")),
+    ("is_err", Named::Match(BuiltinTy::Result, RESULT_HAS, "match r { Ok(_) => false, Err(_) => true }")),
+];
+
+/// The methods of `Option` and of `Result` (§9.1), for their notes.
+const OPTION_HAS: &str = "`Option` has `unwrap` only";
+const RESULT_HAS: &str = "`Result` has `unwrap` and `map_err` only";
 
 /// The one method of a type with a length (§4.2).
 const LEN: &str = "len";
@@ -46,6 +61,9 @@ impl<'a> Checker<'a> {
         let found = match NAMED.iter().find(|(n, _)| *n == name.name) {
             Some((_, Named::Length)) if self.has_method(recv, LEN) => {
                 Some(self.len_test(e, name, args, expected, kind).ok_or_else(|| LEN_RULE.to_string()))
+            }
+            Some(&(_, Named::Match(of, has, form))) if matches!(self.ty(recv), Ty::Builtin(b, _) if b == of) => {
+                Some(Err(format!("{has}; write it with `match`: `{form}` (§9.1)")))
             }
             _ => self.math_fn(recv, &name.name).map(|f| self.function_form(e, recv, name, args, expected, kind, f)),
         };

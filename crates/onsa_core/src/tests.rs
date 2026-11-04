@@ -218,7 +218,7 @@ fn consts_and_assoc_consts() {
 #[test]
 fn methods_and_builtin_prims() {
     let d = text(
-        "pub fn f(x: F64, n: I64) -> I32 {\n  let a = I32.trunc_sat_from(x)\n  let b = I32.narrow_from(n).unwrap_or(0)\n  let _ = x.to_bits()\n  a + b\n}\n",
+        "pub fn f(x: F64, n: I64) -> I32 {\n  let a = I32.trunc_sat_from(x)\n  let b = match I32.narrow_from(n) {\n    Some(v) => v,\n    None => 0,\n  }\n  let _ = x.to_bits()\n  a + b\n}\n",
     );
     assert!(d.contains("trunc_sat.F64.I32(x)"), "{d}");
     // `narrow_from` is Onsa over its primitive (S-71).

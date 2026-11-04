@@ -21,15 +21,6 @@
 "Bool" = 1
 "Char" = 1
 
-[allow."crates/onsa_core/src/lower/body/call.rs"]
-"None" = 1
-"is_err" = 1
-"is_none" = 1
-"is_ok" = 2
-"is_some" = 2
-"unwrap" = 1
-"unwrap_or" = 1
-
 [allow."crates/onsa_core/src/lower/body/expr.rs"]
 "None" = 1
 
@@ -89,13 +80,7 @@
 "len" = 1
 
 [allow."crates/onsa_sema/src/builtin.rs"]
-"is_err" = 1
-"is_none" = 1
-"is_ok" = 1
-"is_some" = 1
 "len" = 2
-"unwrap" = 1
-"unwrap_or" = 1
 
 [allow."crates/onsa_sema/src/def.rs"]
 "Add" = 1
@@ -298,7 +283,6 @@
 
 [same_spelling."crates/onsa_driver/src/platform.rs"]
 "host" = { count = 1, note = "マニフェストの platform の値 \"host\"（§15.3。属性 @host とは別）" }
-"none" = { count = 1, note = "ターゲットの三つ組の OS の部分（contains で is_none の一部と同じ綴り）" }
 
 [same_spelling."crates/onsa_sema/src/sig/generated.rs"]
 "log" = { count = 1, note = "@param の scale の値（std.math.log と同じ綴り）" }

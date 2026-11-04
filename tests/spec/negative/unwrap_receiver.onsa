@@ -36,7 +36,7 @@ pub fn mk_wrap() -> Wrap uses {Alloc} {
 
 pub fn option_then_read(move o: Option[Buf[F32]]) -> Bool uses {Alloc} {
   let n = o.unwrap().len()
-  o.is_some() && n > 0           //~ E0704
+  match o { Some(_) => n > 0, None => false }   //~ E0704
 }
 
 pub fn option_twice(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
@@ -47,12 +47,12 @@ pub fn option_twice(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
 pub fn option_local_then_read() -> Bool uses {Alloc} {
   let o = mk()
   let n = o.unwrap().len()
-  o.is_some() && n > 0           //~ E0704
+  match o { Some(_) => n > 0, None => false }   //~ E0704
 }
 
 pub fn result_then_read(move r: Result[Buf[F32], U32]) -> Bool uses {Alloc} {
   let n = r.unwrap().len()
-  r.is_ok() && n > 0             //~ E0704
+  match r { Ok(_) => n > 0, Err(_) => false }   //~ E0704
 }
 
 pub fn result_local_twice() -> U32 uses {Alloc} {
@@ -77,7 +77,7 @@ pub fn moved_in_one_branch(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc
   if c {
     total = o.unwrap().len()
   }
-  if o.is_some() { total + 1 } else { total }   //~ E0704
+  match o { Some(_) => total + 1, None => total }   //~ E0704
 }
 
 pub fn moved_in_a_loop(move o: Option[Buf[F32]], n: U32) -> U32 uses {Alloc} {

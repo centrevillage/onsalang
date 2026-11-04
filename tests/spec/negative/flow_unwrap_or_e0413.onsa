@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§11.5", "§18.1"]
+// fixes = 0
+
+// E0413, R-96 and K-08 (W5-03 U2/t; spec §9.1: the methods of `Option` are `unwrap` only on it, "値の取り出しや有無の判定は `match`、`?`、`==` で書く"): `unwrap_or` is no
+// method of `Option`, so in a flow it is E0413 as in a function. This replaces negative/flow_map_unsupported_w5_03.onsa, in which the
+// argument of `unwrap_or` (evaluated only when the `Option` is `None`) held a flow instance, a delay or a `par~` and the version said
+// E0200 for it. The method is not there now, so the error is the one of the method, whatever the argument holds: an instance, a delay,
+// a `par~`, and a stateful node that is bound before (which the old file had as the right form). The right form is a `match` whose
+// arm holds no state (negative/flow_option_match_state_arm.onsa has the errors of a stateful arm, and
+// negative/flow_option_match_state_fine.onsa the right forms). One error per flow (P-01).
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow instance_in_unwrap_or(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  o.unwrap_or(acc~(1.0))                              //~ E0413
+}
+
+pub flow delay_in_unwrap_or(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  o.unwrap_or(prev~(x))                               //~ E0413
+}
+
+pub flow par_in_unwrap_or(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  o.unwrap_or((par~ i in 0..<2 { x })[0])             //~ E0413
+}
+
+pub flow bound_node_in_unwrap_or(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  let a = acc~(1.0)
+  o.unwrap_or(a)                                      //~ E0413
+}
+
+pub flow plain_argument_in_unwrap_or(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  o.unwrap_or(0.0)                                    //~ E0413
+}
+
+pub flow is_some_in_a_condition(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  if o.is_some() { x } else { 0.0 }                   //~ E0413
+}

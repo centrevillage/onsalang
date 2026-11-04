@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§18.1", "§15.1"]
+// fixes = 0
+
+// E0413, R-96 (W5-03 U2/t; spec §15.1: "値の後の `.` はそのフィールドとメソッドで、型の段が読む"; §18.1 E0413: the name is no field and no
+// method of the type of the value): the five names `is_some`, `is_none`, `unwrap_or`, `is_ok` and `is_err` on a value whose type is not an
+// `Option` or a `Result`. A number, a `Bool`, a `Str`, an owned `Buf`, an array, a tuple, a struct and an enum of the user's, and a
+// type of the user's that is named like `Option` but is no `Option` (`Maybe`). These were E0413 before the names left the table of
+// `Option`, and they stay (the E0413 of the other types does not depend on the table of `Option` and `Result`). A user's type may have a method
+// of the same name (values/unwrap_values_run.onsa), and then the call is its own. One error per function (P-01). No candidate.
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub enum Maybe {
+  Just(U32),
+  Nothing,
+}
+
+pub fn on_an_integer(x: I32) -> Bool {
+  x.is_some()                          //~ E0413
+}
+
+pub fn on_an_unsigned(x: U32) -> Bool {
+  x.is_none()                          //~ E0413
+}
+
+pub fn on_a_float(x: F32) -> F32 {
+  x.unwrap_or(0.0)                     //~ E0413
+}
+
+pub fn on_a_double(x: F64) -> Bool {
+  x.is_ok()                            //~ E0413
+}
+
+pub fn on_a_bool(b: Bool) -> Bool {
+  b.is_err()                           //~ E0413
+}
+
+pub fn on_a_string(s: Str) -> Bool {
+  s.is_some()                          //~ E0413
+}
+
+pub fn on_a_buf(b: Buf[F32]) -> Bool {
+  b.is_none()                          //~ E0413
+}
+
+pub fn on_an_owned_buf(move b: Buf[F32]) -> Bool uses {Alloc} {
+  b.is_some()                          //~ E0413
+}
+
+pub fn on_an_array(xs: [U32; 3]) -> Bool {
+  xs.is_some()                         //~ E0413
+}
+
+pub fn on_a_tuple(t: (U32, U32)) -> Bool {
+  t.is_none()                          //~ E0413
+}
+
+pub fn on_a_struct(p: Point) -> Bool {
+  p.is_ok()                            //~ E0413
+}
+
+pub fn on_a_user_enum(m: Maybe) -> Bool {
+  m.is_some()                          //~ E0413
+}
+
+pub fn on_a_user_enum_unwrap_or(m: Maybe) -> U32 {
+  m.unwrap_or(0)                       //~ E0413
+}
+
+pub fn on_a_field(p: Point) -> Bool {
+  p.x.is_some()                        //~ E0413
+}
+
+pub fn on_an_element(xs: [U32; 3]) -> Bool {
+  xs[0].is_none()                      //~ E0413
+}
+
+pub fn on_a_call_result() -> Bool {
+  make().is_ok()                       //~ E0413
+}
+
+pub fn on_a_generic_value[T](x: T) -> Bool {
+  x.is_some()                          //~ E0413
+}
+
+pub fn on_a_generic_value_unwrap_or[T](x: T) -> T {
+  x.unwrap_or(x)                       //~ E0413
+}
+
+pub fn on_a_bounded_generic_value[T: ?Dup](move x: T) -> Bool uses {Alloc} {
+  x.is_err()                           //~ E0413
+}
+
+fn make() -> U32 {
+  7
+}

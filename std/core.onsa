@@ -1,7 +1,7 @@
 //! The items of the prelude that std declares (spec §15.1, S-659): in scope
-//! everywhere with no `use`. `Option`, `Result` and the traits are the
-//! compiler's in this version, named as items of this module too (W5-03);
-//! the methods of `Result` but `map_err` are the compiler's table (W5-03).
+//! everywhere with no `use`. The types `Option` and `Result` and the traits
+//! are the compiler's in this version, named as items of this module too
+//! (W5-03); the methods of `Option` and `Result` are here (§9.1).
 
 /// Allocation on the heap (§8.2, §12): an explicit effect with no operations.
 pub effect Alloc {}
@@ -9,7 +9,25 @@ pub effect Alloc {}
 /// That an `extern` function may block (§8.2, §14.1). It has no operations.
 pub blocking effect Block {}
 
+impl[T: ?Dup] Option[T] {
+  /// The content, moved out; a `None` panics (§9.1).
+  pub rt fn unwrap(move self) -> T {
+    match move self {
+      None => panic("called `unwrap()` on `None`"),
+      Some(x) => move x,
+    }
+  }
+}
+
 impl[T: ?Dup, E: ?Dup] Result[T, E] {
+  /// The value, moved out; an `Err` panics (§9.1).
+  pub rt fn unwrap(move self) -> T {
+    match move self {
+      Ok(x) => move x,
+      Err(_) => panic("called `unwrap()` on `Err`"),
+    }
+  }
+
   /// The error converted by `f`, the value kept (§9.1): before `?`, to the
   /// error type of the function's result.
   pub fn map_err[F: ?Dup](move self, f: fn(move E) -> F) -> Result[T, F] {
