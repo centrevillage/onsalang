@@ -313,7 +313,7 @@ codes! {
     E0410 = 410, Types, [Types, Flow], Optional, Optional,
         "struct literal field error (missing, unknown, or duplicate field)";
     E0411 = 411, Types, [Types], Optional, Optional,
-        "`as` only widens; use a conversion function";
+        "`as` only writes a lossless conversion between number types";
     E0412 = 412, Types, [Types, Flow], Optional, Optional,
         "wrong number of arguments";
     E0413 = 413, Types, [Types], Optional, Optional,

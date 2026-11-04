@@ -6,10 +6,12 @@
 //! promise of §18.1; a use rejected later or as a value has the note.
 
 use onsa_diag::Edit;
-use onsa_syntax::ast::OperandPlace;
+use onsa_syntax::ast::{OperandPlace, TypeId, TypeKind};
 
 use super::slot::{Form, Slot, opens_a_brace};
 use super::*;
+use crate::cast::{Instead, cast_instead};
+use crate::prim::NARROW_FROM;
 
 /// The constructor a `narrow_from` of a pair `as` converts always gives.
 const SOME: &str = "Some";
@@ -22,6 +24,46 @@ pub(super) struct ConversionCall {
 }
 
 impl<'a> Checker<'a> {
+    /// The E0411 of `inner as ty` at `span`, a conversion from `from` to
+    /// `to` that `as` does not write (§3.3). Only the number types have
+    /// another way to convert, so only their text names one (`Char`, R-257).
+    /// A candidate keeps the operand as it is written and the target as `ty`
+    /// writes it. A type parameter as the target has none, other than the
+    /// same type: its functions are not found yet (`T.round_from`, W5-05).
+    pub(super) fn cast_error(&mut self, span: Span, inner: ExprId, ty: TypeId, from: TyId, to: TyId) -> Diagnostic {
+        let (source, target) = (self.display(from), self.display(to));
+        let (f, t) = (self.ty(from), self.ty(to));
+        let number = |t: &Ty| matches!(t, Ty::Int(_) | Ty::Float(_));
+        let text = if matches!(f, Ty::Param(_)) || matches!(t, Ty::Param(_)) {
+            format!("a type parameter has no `as`, which no trait gives: `{source}` to `{target}` (§3.3)")
+        } else if number(&f) && number(&t) {
+            format!(
+                "`as` only widens without losing information; `{source}` to `{target}` needs a conversion function (§3.3)"
+            )
+        } else {
+            format!("`as` only converts between number types; `{source}` to `{target}` is not such a conversion (§3.3)")
+        };
+        let d = Diagnostic::new(Stage::Types, Code::E0411, span, text).with_found(self.src(span));
+        let TypeKind::Path { path, .. } = &self.ast.ty(ty).kind else { return d };
+        let written = self.src(path.span);
+        // After the operand, the text the candidates replace; they go around
+        // the operand (S-251).
+        let rest = Span::new(span.file, self.expr(inner).span.end, span.end);
+        if from == to && matches!(f, Ty::Param(_)) {
+            return d.with_fix(Fix::new(format!("remove `as {written}`"), vec![Edit::delete(rest)]));
+        }
+        match cast_instead(&self.bounds(), from, to) {
+            Instead::Calls(names) => names.iter().fold(d, |d, name| {
+                let head = Edit::insert(span.file, span.start, format!("{written}.{name}("));
+                d.with_fix(Fix::new(format!("call `{written}.{name}`"), vec![head, Edit::replace(rest, ")")]))
+            }),
+            Instead::Narrowing => d.with_rule(format!(
+                "`{written}.{NARROW_FROM}(…)` gives an `Option[{target}]`, `None` out of range; it does not keep the low bits as `as` does in Rust or C (§3.3)"
+            )),
+            Instead::Nothing => d,
+        }
+    }
+
     /// A use at `span`, the name of the function, of the conversion to `to`
     /// from a value of `from`, with the result `ret`: an error now, or a
     /// check that waits for the source. It comes before the requirements of

@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0411 of `x as T` where `x: T` (S-210, §3.3): a type parameter has no `as`, because it has only the operations of
+// its bounds and no trait gives `as`. The one candidate takes the `as T` away and keeps the operand: `x`. The bound
+// does not matter (`T: Float`, `T: Num`, no bound). The parentheses of the place stay, as in the other candidates of
+// an `as` (`(x as T) + y` becomes `(x) + y`), and a prefix `-` stays inside because it binds stronger than `as`
+// (`-x as T` is `(-x) as T`, §3.1, so the candidate is `-x`). The positions are the end of a function, a `let`, an
+// argument, an operand, a branch, an arm, a closure and a method of an `impl` with a bounded parameter. One error in
+// each function (P-01), so no error is left after the candidate. The last function is fine.
+
+use std.array
+
+pub struct Level[T] {
+  v: T,
+}
+
+impl[T: Float] Level[T] {
+  pub fn same(self) -> T {
+    self.v                                     //~ E0411
+  }
+}
+
+fn keep[T](v: T) -> T {
+  v
+}
+
+pub fn tail_float[T: Float](x: T) -> T {
+  x                                            //~ E0411
+}
+
+pub fn tail_num[T: Num](x: T) -> T {
+  x                                            //~ E0411
+}
+
+pub fn tail_unbounded[T](x: T) -> T {
+  x                                            //~ E0411
+}
+
+pub fn in_a_let[T: Float](x: T) -> T {
+  let y = x                                    //~ E0411
+  y
+}
+
+pub fn in_an_annotated_let[T: Num](x: T) -> T {
+  let y: T = x                                 //~ E0411
+  y
+}
+
+pub fn in_a_return[T](x: T) -> T {
+  return x                                     //~ E0411
+}
+
+pub fn as_an_argument[T](x: T) -> T {
+  keep(x)                                      //~ E0411
+}
+
+pub fn left_operand[T: Float](x: T, y: T) -> T {
+  (x) + y                                      //~ E0411
+}
+
+pub fn right_operand[T: Num](x: T, y: T) -> T {
+  y * (x)                                      //~ E0411
+}
+
+pub fn negated_float[T: Float](x: T) -> T {
+  -x                                           //~ E0411
+}
+
+pub fn negated_num[T: Num](x: T) -> T {
+  -x                                           //~ E0411
+}
+
+pub fn negated_in_a_sum[T: Float](x: T, y: T) -> T {
+  y + (-x)                                     //~ E0411
+}
+
+pub fn in_a_branch[T](flag: Bool, x: T, y: T) -> T {
+  if flag { x } else { y }                     //~ E0411
+}
+
+pub fn in_an_arm[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,                              //~ E0411
+    None => d,
+  }
+}
+
+pub fn in_a_closure[T: Float](x: T) -> [T; 4] {
+  array.from_fn(fn(i) { x })                   //~ E0411
+}
+
+pub fn fine[T: Float](x: T, y: T) -> T {
+  keep(-x) + y
+}

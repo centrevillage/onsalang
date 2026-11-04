@@ -496,13 +496,13 @@ pub fn rows() -> &'static [Row] {
         for k in FLOATS {
             v.push(member(k.name(), "from_bits", PrimRow::FromBits(k), 1));
             v.push(member(k.name(), "to_bits", PrimRow::ToBits(k), 0));
-            v.push(member(k.name(), "round_from", PrimRow::RoundFrom(k), 1));
+            v.push(member(k.name(), ROUND_FROM, PrimRow::RoundFrom(k), 1));
         }
         for k in INTS {
             v.push(member(k.name(), "div_euclid", PrimRow::DivEuclid(k), 1));
             v.push(member(k.name(), "rem_euclid", PrimRow::RemEuclid(k), 1));
-            v.push(member(k.name(), "trunc_from", PrimRow::TruncFrom { to: k, sat: false }, 1));
-            v.push(member(k.name(), "trunc_sat_from", PrimRow::TruncFrom { to: k, sat: true }, 1));
+            v.push(member(k.name(), TRUNC_FROM, PrimRow::TruncFrom { to: k, sat: false }, 1));
+            v.push(member(k.name(), TRUNC_SAT_FROM, PrimRow::TruncFrom { to: k, sat: true }, 1));
         }
         // The members of `Span[T]` (§5.3).
         let span = [
@@ -522,7 +522,11 @@ pub fn rows() -> &'static [Row] {
 
 /// The associated functions of the number types that convert to their `Self`
 /// (§3.3, S-231).
-const CONVERSIONS: [&str; 4] = ["round_from", "trunc_from", "trunc_sat_from", "narrow_from"];
+const CONVERSIONS: [&str; 4] = [ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM, NARROW_FROM];
+pub(crate) const ROUND_FROM: &str = "round_from";
+pub(crate) const TRUNC_FROM: &str = "trunc_from";
+pub(crate) const TRUNC_SAT_FROM: &str = "trunc_sat_from";
+pub(crate) const NARROW_FROM: &str = "narrow_from";
 
 /// The type the `std` declaration `def` converts to, when it is one of
 /// [`CONVERSIONS`]: what `body/conversions.rs` judges a use of.

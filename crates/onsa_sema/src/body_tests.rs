@@ -265,6 +265,50 @@ fn conversions() {
     assert!((0..d.fixes.len()).any(|k| crate::fixed_region(src, d, k) == "I32.trunc_from(x)"));
 }
 
+/// The E0411 says what the pair is (spec §3.3): only the number types have
+/// another way to convert, so a type parameter's text says it has no `as`, and
+/// the text of another type names no way (R-159, R-257). An integer
+/// narrowing has no candidate; its note has the `Option` of `narrow_from`.
+#[test]
+fn the_text_of_the_e0411_goes_by_the_pair() {
+    let of = |src: &str| {
+        let a = check(src);
+        let [d] = a.diagnostics.as_slice() else { panic!("{:?}", a.diagnostics) };
+        assert_eq!(d.code, Code::E0411, "{src}");
+        (d.message.clone(), d.fixes.len(), d.notes.iter().map(|n| n.message.clone()).collect::<Vec<_>>())
+    };
+    let (number, fixes, _) = of("pub fn f(x: F32) -> I32 { x as I32 }\n");
+    assert!(number.contains("`F32` to `I32` needs a conversion function"), "{number}");
+    assert_eq!(fixes, 2);
+    let (param, fixes, _) = of("pub fn f[T: Float](x: T) -> T { x as T }\n");
+    assert!(param.starts_with("a type parameter has no `as`"), "{param}");
+    assert_eq!(fixes, 1);
+    let (target, fixes, _) = of("pub fn f[T: Float](x: F32) -> T { x as T }\n");
+    assert!(target.starts_with("a type parameter has no `as`"), "{target}");
+    assert_eq!(fixes, 0);
+    for src in ["pub fn f(c: Char) -> U8 { c as U8 }\n", "pub fn f(b: Bool) -> I32 { b as I32 }\n"] {
+        let (other, fixes, notes) = of(src);
+        assert!(other.contains("only converts between number types") && !other.contains("function"), "{other}");
+        assert_eq!((fixes, notes.len()), (0, 0), "{src}");
+    }
+    let (_, fixes, notes) = of("pub fn f(n: I64) -> I32 { n as I32 }\n");
+    assert_eq!(fixes, 0);
+    assert!(notes[0].starts_with("`I32.narrow_from(…)` gives an `Option[I32]`"), "{notes:?}");
+}
+
+/// A bound a failed `use` left unknown decides no conversion function
+/// (spec §3.3); the same type needs none.
+#[test]
+fn an_unknown_bound_gives_the_e0411_no_call() {
+    let fixes = |body: &str| {
+        let a = check(&format!("use nowhere.Nope\n\npub fn f[T: Nope](x: T) {body}\n"));
+        a.diagnostics.iter().find(|d| d.code == Code::E0411).expect("E0411").fixes.len()
+    };
+    assert_eq!(fixes("-> F32 { x as F32 }"), 0);
+    assert_eq!(fixes("-> I32 { x as I32 }"), 0);
+    assert_eq!(fixes("-> T { x as T }"), 1);
+}
+
 #[test]
 fn operators_and_groups() {
     ok("pub fn f(a: U32, b: U32, p: U32) -> U32 { ((a +% 1) % 8) + (b << 2) + (p & 3) }\n");

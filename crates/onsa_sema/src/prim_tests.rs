@@ -10,9 +10,10 @@ use std::sync::Arc;
 use onsa_diag::{Code, FileId};
 
 use crate::body::bounds::Bounds;
+use crate::cast::Instead;
 use crate::def::{DefId, DefKind, FnDef, GenericKind};
 use crate::flow_tests::std_package;
-use crate::prim::{INTS, MathFn, Prim, PrimRow, Scalar, key_of, row, rows};
+use crate::prim::{INTS, MathFn, NARROW_FROM, Prim, PrimRow, Scalar, key_of, row, rows};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, Module, Package, analyze};
 
@@ -222,9 +223,9 @@ fn a_use_at_a_type_without_a_primitive_is_e0200() {
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
 }
 
-/// The calls the E0411 of a rejected `as` suggests, of every pair of number
-/// types (spec §3.3): std's conversion functions of the target type, none for
-/// a narrowing of the integers.
+/// The functions the E0411 of a rejected `as` names, of every pair of number
+/// types (spec §3.3): std's conversion functions of the target type, and
+/// `narrow_from` in the note of a narrowing of the integers.
 #[test]
 fn the_e0411_suggests_the_conversion_functions_of_std() {
     let mut a = analyzed_std();
@@ -238,16 +239,21 @@ fn the_e0411_suggests_the_conversion_functions_of_std() {
                 casts += 1;
                 continue;
             }
-            let names = crate::cast::cast_suggestions(&a.types, from, to);
-            narrowings += names.is_empty() as usize;
-            for f in &names {
-                let (ty, name) = f.split_once('.').expect("`Type.name`");
-                assert_eq!(ty, scalar_name(&a, to), "`{f}`");
-                let table = a.modules.assoc_builtin.get(&to).expect("the members of a scalar");
-                let d = *table.get(name).unwrap_or_else(|| panic!("`{f}`"));
+            let table = a.modules.assoc_builtin.get(&to).expect("the members of a scalar");
+            let instead = crate::cast::cast_instead(&Bounds { a: &a, generics: &[] }, from, to);
+            let names = match instead {
+                Instead::Calls(names) => names,
+                Instead::Narrowing => &[NARROW_FROM],
+                Instead::Nothing => panic!("`{}` to `{}`", scalar_name(&a, from), scalar_name(&a, to)),
+            };
+            for f in names {
+                let d = *table.get(*f).unwrap_or_else(|| panic!("`{f}`"));
                 assert_eq!(crate::prim::conversion_target(&a, d), Some(to), "`{f}`");
             }
-            suggested += names.len();
+            match instead {
+                Instead::Narrowing => narrowings += 1,
+                _ => suggested += names.len(),
+            }
         }
     }
     // 7 `round_from`, and 16 pairs of the two of a float to an integer.

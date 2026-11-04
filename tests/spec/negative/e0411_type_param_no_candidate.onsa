@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.3", "§18.1"]
+// fixes = 0
+
+// E0411 of an `as` with a type parameter where no conversion function follows from the bounds (§3.3: "境界から変換の
+// 関連関数が決まらない型パラメータには候補を出さない"), so there is no candidate (`fixes = 0`). A conversion function
+// is given by a bound, and only when the source satisfies the bound of the function: `round_from` needs `AnyNum` (a
+// source without a numeric bound has none), `trunc_from` and `trunc_sat_from` need `Float` (`Num` is not one, and an
+// integer source has none), and `narrow_from` needs `Int` (no bound here is one). A target that is a type parameter
+// without a bound has no associated function at all. The two ends being type parameters of their own (`x: T` to `U`)
+// leaves no candidate when `U` has no bound. One error in each function (P-01). The last functions are fine.
+
+pub fn unbounded_to_float[T](x: T) -> F32 {
+  x as F32                                          //~ E0411
+}
+
+pub fn unbounded_to_double[T](x: T) -> F64 {
+  x as F64                                          //~ E0411
+}
+
+pub fn unbounded_to_integer[T](x: T) -> I32 {
+  x as I32                                          //~ E0411
+}
+
+pub fn num_to_integer[T: Num](x: T) -> I32 {
+  x as I32                                          //~ E0411
+}
+
+pub fn num_to_unsigned[T: Num](x: T) -> U8 {
+  x as U8                                           //~ E0411
+}
+
+pub fn num_to_integer_in_a_let[T: Num](x: T) -> I64 {
+  let n = x as I64                                  //~ E0411
+  n
+}
+
+pub fn num_to_integer_operand[T: Num](x: T, n: I32) -> I32 {
+  (x as I32) + n                                    //~ E0411
+}
+
+pub fn unbounded_to_other[T, U](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn float_to_unbounded_other[T: Float, U](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn num_to_unbounded_other[T: Num, U](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn other_in_a_let[T: Float, U](x: T) -> U {
+  let y = x as U                                    //~ E0411
+  y
+}
+
+pub fn unsigned_to_unbounded[T](k: U32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn single_to_unbounded[T](x: F32) -> T {
+  x as T                                            //~ E0411
+}
+
+pub fn unsigned_to_num[T: Num](k: U32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn single_to_num[T: Num](x: F32) -> T {
+  x as T                                            //~ E0411
+}
+
+pub fn fine_float[T: Float](x: T) -> F32 {
+  F32.round_from(x)
+}
+
+pub fn fine_num[T: Num](x: T) -> F64 {
+  F64.round_from(x)
+}
