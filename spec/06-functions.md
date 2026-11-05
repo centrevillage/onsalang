@@ -88,7 +88,7 @@ impl Point {
 対象の型引数の数が宣言と合わなければ E0412（§4.5）で、並びの規則は判定しない（`impl P[I32]` の `P` が型引数を取らないとき、`impl W[I32, I32]`）。引数に書いた別名は、別名そのものが誤りの型でもパラメータでないので E0307 で（§18.1）、見つからない名前の引数は判定しない（失敗した名前、§18.1）。
 対象の型引数は型の宣言の型パラメータの要求を満たさなければならず（E0416、§4.5）、`impl` の型パラメータが満たすかは `impl` の `[ ]` に書いた境界だけで決まる（`struct N[T: Num]` の後の `impl[T] N[T]` は E0416 で、`impl[T: Num] N[T]` と書く）。見出しの誤りである（§18.1）。
 一つの `impl` は常にその型の全ての具体化を覆うので、実装は重ならない（特殊化は無い、§6.3）。
-具体的な型だけのメソッドは、境界で書く（`impl[T: Float] Buf[T] { … }`）。境界の違う `impl` を同じ型に複数書いてよい。型の名前の後の `.` で引く名前（メソッド、関連定数、enum の列挙子）は一つの空間で、重なると E0304。
+具体的な型だけのメソッドは、境界で書く（`impl[T: Float] Buf[T] { … }`）。境界の違う `impl` を同じ型に複数書いてよい。型の名前の後の `.` で引く名前（メソッド、関連定数、enum の列挙子。trait の `impl` のメンバと derive が作るメンバ（`default`、`ordinal`、`from_ordinal`）を含む）は一つの空間で、重なると E0304。derive が作るメンバとの重なりは固有のメンバに付け、宣言の一覧を note で示す。
 列挙子との重なりは書いた順によらず `impl` のメンバに付けて列挙子を note で示し、メンバどうしはソースの順で後の宣言に付けて前を note で示す。見出しが誤り（E0307、E0412、E0416）の `impl` のメンバもこの空間に入る（§18.1）。
 
 ### 6.3 trait
@@ -117,6 +117,8 @@ impl Describe for Point {
   derive した実装と組込み型の実装はこれを満たす。利用者の `impl` もこれを守る（コンパイラは検査しない。破ると、ソートや `Map` / `Set` の結果が未規定になるが、メモリの安全は損なわない）。
 - trait の宣言の頭に `: trait + trait` と書くと、その trait を実装する型が先に満たすべき trait（上位の trait）になる（`pub trait Ord: PartialOrd + Eq`）。境界（§4.5）と derive（§6.4）と同じく「左の型が右の trait を満たす」と読む。上位の trait を満たさない型への `impl` は E0416。
   標準 trait の上位の trait は `Eq: PartialEq`、`PartialOrd: PartialEq`、`Ord: PartialOrd + Eq` である（数の trait は次の項）。`Hash` は上位の trait を持たない。`T: Ord` の境界からは、上位の trait（`PartialOrd`、`Eq`、`PartialEq`）も使える。
+- `impl Tr for Ty` は `Tr` の項目を一度ずつ書く。足りない項目と `Tr` に無いメンバは E0410 で、位置は足りなければ見出しの trait の名前、余計ならそのメンバの名前で、note に trait の項目の署名を示す。余計なメンバがあるときは足りない項目を報告しない。それらの `impl` を使う所には診断を出さない（§18.1）。
+  メンバの署名は trait の項目の関数型と同じに書く（`Self` と型の名前は同じ型である）。受け手、引数の数と型とモード、返り値、効果行、`rt`、型パラメータの違いは全て E0401 で、位置はメンバの名前で、note に trait の項目の署名を示す。`rt` の欠けだけなら、`rt` を足す修正候補を出す。
 - 数の trait は次の 5 つで、上位の trait の関係は `Num: AnyNum`、`Float: Num`、`Int: AnyNum`、`Unsigned: Int` である。
   - `AnyNum` は、符号なしを含む全ての数を表す。`Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元。浮動小数では `+0.0` で、`-0.0 + ZERO` は `+0.0` になる、§3.4）を持つ。
     符号なし整数の引き算が 0 を下回ると、具体的な型と同じく実行時に panic する（§3.4）。`Copy` を含めるのは、数を値として扱い、総称の数値のコードで `Copy` を重ねて書かずに済むようにするためである（`Copy` の無い `T` の破棄は `Alloc` を要する、下記）。
@@ -135,7 +137,7 @@ impl Describe for Point {
   比較と算術の演算子では、`==` `!=` は `PartialEq`、`<` `<=` `>` `>=` は `PartialOrd`、`+ - * / %` は `Num`（数の境界の既定）に絞る。既にある境界が候補の trait に含まれるときは置き換える（`T: PartialOrd` に `+` を使えば `T: Num`）。
   比較を数の trait に絞らないのは、数でない型も比較を持ち、`clamp` のような関数を誤った境界に導くからである。絞れないとき（`T: Unsigned` の否定、`T: Float` のビット演算）は候補を出さない。符号なし整数の否定の E0401 には、2 の補数の否定の書き方（`0 -% u`、`T.ZERO -% x`）を note で示す。
   数の trait の境界を満たさない型を渡した E0416 は、その型が満たす数の trait を note で示す（`U32` なら `AnyNum`、`Int`、`Unsigned`）。
-- `Default` は関連関数 `default() -> Self` を持つ。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ（§6.6 の `T.ZERO` と同じ形）。
+- `Default` は関連関数 `rt fn default() -> Self` を持ち、効果行は空である（手で実装するときも `rt fn default() -> Self` と書く）。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ（§6.6 の `T.ZERO` と同じ形）。`rt fn` の中と `const` の初期化式でも呼べる。
 - 組込み型が実装する標準 trait と演算子 trait は、次の表で全てである（閉じた一覧）。`PartialEq` と `PartialOrd` は演算子 trait でもあり、左の欄に書いた。足すときは、必要な実例を添えて議論する（[`decisions/A/`](../decisions/A/README.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
 
 | 型 | 実装する trait | 演算子 trait（`PartialEq` `PartialOrd` を除く） |
@@ -176,8 +178,8 @@ pub struct Key: PartialEq + Eq + Hash + Show {
 - 書く位置は、名前（と型パラメータ）の後で本体の `{` の前（`pub enum Shape: PartialEq {`、`pub struct Ring[T, const N: U32]: PartialEq {`）。
 - 書けるのは `PartialEq Eq PartialOrd Ord Hash Show Default Ordinal` の閉じた一覧だけ（一覧に無い trait は E0416 で、手で `impl` を書くことを note で示す。種の制約の `Copy` と `Dup` は E0020、§4.6）。
   並べた trait の上位の trait（§6.3）は、型がまだ満たしていなければ一緒に生成する（`struct P: Ord` は `PartialEq` `Eq` `PartialOrd` `Ord` を実装する。手で実装した上位の trait は生成しない）。上位の trait も並べてよい（境界の含意で重なる形と同じ、§4.5）。`onsa interface` は、上位の trait を含めて実装する trait の全てをこの一覧の順で表示する。
-  各フィールド（列挙子の中身）の型が生成する trait を満たさなければ E0416。struct の `Default` は、各フィールドの既定値を並べたものである。enum には `Default` を並べられない（E0416）。
-  どの列挙子を既定にするかを宣言の順に頼らず、`impl Default for Mode { fn default() -> Mode { Mode.Off } }` と手で書く。総称の型（`struct Pair[T]: PartialEq`）は、型引数が満たすときだけ満たす。
+  各フィールド（列挙子の中身）の型が生成する trait を満たさなければ E0416。struct の `Default` は、各フィールドの既定値を並べたものである（宣言に既定値を書いたフィールドはその値で、型の `Default` を要らない。他のフィールドは型の `default()`。`priv` のフィールドがあっても、他のモジュールから `P.default()` を呼べる）。enum には `Default` を並べられない（E0416）。
+  どの列挙子を既定にするかを宣言の順に頼らず、`impl Default for Mode { rt fn default() -> Mode { Mode.Off } }` と手で書く。総称の型（`struct Pair[T]: PartialEq`）は、型引数が満たすときだけ満たす。
 - 並べた trait は全て自動で生成する。手で実装するときは `impl Tr for Ty` と書き、宣言には並べない（両方に書くと E0304）。
 - 生成する実装の意味: `PartialEq` / `Eq` は、全てのフィールド（enum は列挙子と中身）が等しいとき等しい。`PartialOrd` / `Ord` は、struct ではフィールドの宣言順の辞書式（タプルと同じ規則で、NaN の扱いも同じ、§6.3）、enum では列挙子の宣言順（先に書いたものが小さい）で、同じ列挙子なら中身の辞書式である。
   struct のフィールドの順は配置（§12.4）と C の構造体でも、enum の列挙子の順は `Ordinal` の番号（下記）でも意味を持つ。`Hash` は §6.3 の約束を満たす。`Show` の書式は §6.3。
