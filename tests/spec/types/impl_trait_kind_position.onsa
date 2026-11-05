@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-895, S-713 (W5-04 U1): "名前は見つかったが、その位置に要る種類 ... でなければ、位置によらず E0308" (§15.1; the list has "型でないものを `impl` の
+// 対象にする" and "境界に trait でも種の制約でもない名前を書く", and the rule is the general one for every position, S-713), and "名前の種類の誤り
+// (E0308、§15.1)は版によらないので E0200 にせず E0308 にし" (§18.1) with the heading of an `impl Tr for P` read to the names stage. So a name that
+// is found and is not a trait, written as the trait of an `impl Tr for P`, is E0308: a struct, an enum, a constant, a function, a module (`core`, after
+// `use std.core`), an effect of the prelude and a declared effect (which is read by the keyword of its declaration, and is E0200 in the declaration),
+// an enum's variant, and a type parameter. A name that is found and is not a type, written as the target, is E0308 too: a trait (`Show`), a
+// function, a constant, an effect, a variant and a module. The inherent `impl` has the same forms in module/kind_impl_target.onsa. The error is in the
+// heading, so each `impl` is one unit with one E0308 and the members are not read. One error per unit (P-01).
+use std.core
+
+pub struct P {
+  x: F32,
+}
+
+pub struct Q {
+  y: F32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+const K: U32 = 4
+
+fn g() -> U32 {
+  1
+}
+
+pub effect Ef {                                     //~ E0200
+  fn op(x: I32) -> I32
+}
+
+impl P for Q {                                      //~ E0308
+}
+
+impl E for Q {                                      //~ E0308
+}
+
+impl K for P {                                      //~ E0308
+}
+
+impl g for P {                                      //~ E0308
+}
+
+impl core for P {                                   //~ E0308
+}
+
+impl Alloc for P {                                  //~ E0308
+}
+
+impl Ef for P {                                     //~ E0308
+}
+
+impl E.A for P {                                    //~ E0308
+}
+
+impl[T] T for W[T] {                                //~ E0308
+}
+
+impl Show for Show {                                //~ E0308
+}
+
+impl Show for g {                                   //~ E0308
+}
+
+impl Show for K {                                   //~ E0308
+}
+
+impl Show for Alloc {                               //~ E0308
+}
+
+impl Show for Ef {                                  //~ E0308
+}
+
+impl Show for E.B {                                 //~ E0308
+}
+
+impl Show for core {                                //~ E0308
+}

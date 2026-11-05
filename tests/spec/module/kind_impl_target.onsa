@@ -11,8 +11,9 @@
 // is found, so it is not E0302, and it is not the E0307 of a type that is not written by its declared name
 // (that is for an alias, in fixes/e0307_alias_forms.onsa). The error is in the heading, so the whole `impl`
 // is one unit and its members are not checked (§18.1): the members here have an error of the type stage,
-// and it is not reported. The `impl Tr for P` is a form that the version does not have (E0200 without reading
-// the names, §18.1), and is not here. One error per unit (§18.1), so each form is in its own unit; the fine
+// and it is not reported. The heading of an `impl Tr for P` is read to the names stage with the same rules (E0308
+// for a name that is not a trait in the trait position, or not a type in the target; E0302, E0307; S-895, §18.1), and
+// its forms are in types/impl_trait_kind_position.onsa; they are not here. One error per unit (§18.1), so each form is in its own unit; the fine
 // `impl` blocks (a struct, an enum, a generic struct with its parameters) are the fine units at the end of the file.
 
 pub struct P {

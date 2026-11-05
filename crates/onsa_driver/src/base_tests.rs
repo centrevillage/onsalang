@@ -275,3 +275,31 @@ fn the_seed_of_the_tables_leaves_the_output() {
     });
     eprintln!("the_seed_of_the_tables_leaves_the_output: {:?}", started.elapsed());
 }
+
+/// The codes a check of the single file `src` reports.
+fn reported(src: &str) -> Vec<onsa_diag::Code> {
+    let mut loaded = Loaded::from_input(PackageInput::single_file("m.onsa", src)).expect("the input loads");
+    check_loaded(&mut loaded).expect("no internal error").diagnostics.iter().map(|d| d.code).collect()
+}
+
+/// A user's `impl` of `Option` with a member of the name of a variant
+/// (W5-03 U4): the E0307 of the orphan rule alone (§6.3), the E0304 with the
+/// variant (S-737) and the E0320 of the name in its unit (§18.1, S-748). The
+/// parser reports the E0320 too, so a case cannot mark it.
+#[test]
+fn a_member_of_the_name_of_a_variant_of_std_is_in_the_unit_of_the_e0307() {
+    assert_eq!(reported("impl[T] Option[T] {\n  pub const None: U8 = 1\n}\n"), vec![onsa_diag::Code::E0307]);
+}
+
+/// A user's member of the name of one of std (S-748) comes after it whatever
+/// the name of its file (`a.onsa` sorts before `core/num.onsa`): the E0304 is
+/// of the user's member, in the unit of its E0307, and std has no diagnostic,
+/// though its own member is no name to its bodies either (§18.1).
+#[test]
+fn a_member_of_the_name_of_one_of_std_leaves_std_with_no_diagnostic() {
+    let src = "impl F32 {\n  pub const PI: F32 = 3.0\n  pub fn to_bits(self) -> U32 { 1 }\n}\n";
+    assert_eq!(reported(src), vec![onsa_diag::Code::E0307]);
+    let (pkg, _) = made(&[("a.onsa", src), ("b.onsa", src), ("main.onsa", "use a\n\nuse b\n")]);
+    let a = onsa_sema::analyze(&pkg);
+    assert!(a.diagnostics.iter().all(|d| pkg.modules.iter().any(|m| m.file == d.span.file)), "{:?}", a.diagnostics);
+}

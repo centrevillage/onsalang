@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§18.1"]
+//
+// [[test.fix]]
+// at = "57:15"
+// code = "E0307"
+// candidate = 1
+// leaves = ["57:1 E0200"]
+//
+// [[test.fix]]
+// at = "60:15"
+// code = "E0307"
+// candidate = 1
+// leaves = ["60:1 E0200"]
+//
+// [[test.fix]]
+// at = "66:15"
+// code = "E0307"
+// candidate = 1
+// leaves = ["66:1 E0200"]
+//
+// [[test.fix]]
+// at = "72:15"
+// code = "E0307"
+// candidate = 1
+// leaves = ["72:1 E0200"]
+
+// S-895, S-139 (W5-04 U1): "`impl` と `impl Tr for` の対象は型の宣言の名前で書き、別名は書けない(E0307 ...)" (§4.4), and the heading of `impl Tr for P`
+// is read to the names stage (§18.1), so the alias is the E0307 of the heading and not the E0200 of the form. The alias is of a struct, an enum, a
+// generic type with its argument, an alias of an alias, and it is written as the target and as the argument of the target (§18.1: "`impl` の見出しに
+// 書いた別名(対象と、対象の型引数)は ... E0307"). The original type is declared in this module, so §4.4 gives a candidate (the original name); the
+// number of candidates is not written (`fixes`), since the case has no `.fixK`, which the implementer's work makes. The error is in the heading, so
+// each `impl` is one unit with one E0307 and the members are not read. One error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+pub enum E {
+  A,
+  B,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+type AliasP = P
+
+type AliasE = E
+
+type AliasW = W[F32]
+
+type Chain = AliasP
+
+impl Show for AliasP {                              //~ E0307
+}
+
+impl Show for AliasE {                              //~ E0307
+}
+
+impl Show for AliasW {                              //~ E0307
+}
+
+impl Show for Chain {                               //~ E0307
+}
+
+impl Show for W[AliasP] {                           //~ E0307
+}
+
+impl Hash for AliasP {                              //~ E0307
+}

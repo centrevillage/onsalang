@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.1", "§18.1"]
+// fixes = 0
+
+// S-70, R-104 (W5-04 U1): "固有の `impl Ty` は `Ty` を定義したモジュールにしか書けず…組込み型（§4.1）は std で定義された
+// ものとして扱う" (§6.3, the orphan rule, E0307). A user's `impl` on a builtin type that has no type argument is E0307
+// at the heading: each integer, each float, `Bool`, `Char`, `Str` and `Bytes`. The error is in the heading, so each
+// `impl` is one unit with one E0307 (§18.1) and its members are not checked. (A tuple, an array and a function type are
+// not names of a declaration: module/impl_target_not_a_name.onsa. The generic builtin types are in
+// types/orphan_builtin_generics.onsa.) One error per unit (P-01).
+
+impl I8 {                                           //~ E0307
+  pub fn same(self) -> I8 { self }
+}
+
+impl I16 {                                          //~ E0307
+  pub fn same(self) -> I16 { self }
+}
+
+impl I32 {                                          //~ E0307
+  pub fn same(self) -> I32 { self }
+}
+
+impl I64 {                                          //~ E0307
+  pub fn same(self) -> I64 { self }
+}
+
+impl U8 {                                           //~ E0307
+  pub fn same(self) -> U8 { self }
+}
+
+impl U16 {                                          //~ E0307
+  pub fn same(self) -> U16 { self }
+}
+
+impl U32 {                                          //~ E0307
+  pub fn same(self) -> U32 { self }
+}
+
+impl U64 {                                          //~ E0307
+  pub fn same(self) -> U64 { self }
+}
+
+impl F32 {                                          //~ E0307
+  pub fn same(self) -> F32 { self }
+}
+
+impl F64 {                                          //~ E0307
+  pub fn same(self) -> F64 { self }
+}
+
+impl Bool {                                         //~ E0307
+  pub fn same(self) -> Bool { self }
+}
+
+impl Char {                                         //~ E0307
+  pub fn same(self) -> Char { self }
+}
+
+impl Str {                                          //~ E0307
+  pub fn same(self) -> Str { self }
+}
+
+impl Bytes {                                        //~ E0307
+  pub fn same(self) -> Bytes { self }
+}

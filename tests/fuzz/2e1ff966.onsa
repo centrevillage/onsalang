@@ -1,0 +1,2 @@
+impl Show for std.core.Option[2]{//
+}

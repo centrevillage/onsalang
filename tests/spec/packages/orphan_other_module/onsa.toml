@@ -1,0 +1,3 @@
+[package]
+name = "orphan_other_module"
+edition = "2026"

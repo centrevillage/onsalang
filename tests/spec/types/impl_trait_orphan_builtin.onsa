@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.1", "§18.1"]
+// fixes = 0
+
+// S-895, S-139, S-70 (W5-04 U1): "`impl Tr for Ty` は `Tr` か `Ty` を定義したモジュールにしか書けず ... (孤児規則、E0307)。... 組込み型(§4.1)は
+// std で定義されたものとして扱う" (§6.3), and "`impl Tr for P` の見出し(`Tr`、`P`、`impl` の `[ ]`)は、固有の `impl` と同じ規則で名前の段まで読む
+// (E0302、E0308、E0307)。名前の段の誤りがあればそれが単位の誤りで形の E0200 は出さず" (§18.1). A trait of the prelude (which std defines)
+// written for a builtin type (which std defines too) is the E0307 of the orphan rule, in the heading, and not the E0200 of the form of
+// `impl Tr for Ty`. The traits are those that the type has in the table of §6.3 (`Show`, `Hash`) and those that it has not (`Default` for an
+// integer is in the table, `Drop` and `Ordinal` for `Bytes` and `U8` are not); `Float` and `Ordinal` are also the trait's own E0307 rule, and
+// the error is the same E0307 (types/impl_trait_e0307_float_ordinal.onsa has them for a type of the module). The builtin type is written in
+// each form of §4.1: a float, a signed and an unsigned integer, `Bool`, `Str`, `Bytes`, and the generic `Option` and `Result`, with a
+// concrete argument (the rule of the target's arguments of §6.2 is another E0307 rule, and the heading still has one E0307) and with
+// parameters. The error is in the heading, so each `impl` is one unit with one E0307 and its members are not read. One error per unit (P-01).
+
+impl Show for F32 {                                 //~ E0307
+}
+
+impl Hash for F32 {                                 //~ E0307
+}
+
+impl Float for F32 {                                //~ E0307
+}
+
+impl Show for Str {                                 //~ E0307
+}
+
+impl Show for Option[F32] {                         //~ E0307
+}
+
+impl Show for Bool {                                //~ E0307
+}
+
+impl Hash for U32 {                                 //~ E0307
+}
+
+impl Default for I32 {                              //~ E0307
+}
+
+impl Drop for Bytes {                               //~ E0307
+}
+
+impl Ordinal for U8 {                               //~ E0307
+}
+
+impl[T] Show for Option[T] {                        //~ E0307
+}
+
+impl[T, E] Hash for Result[T, E] {                  //~ E0307
+}

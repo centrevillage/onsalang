@@ -1,0 +1,23 @@
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub enum Mode {
+  Fast,
+  Slow,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+// The types of this module are written in `impl Tr for Ty` by their own module: that is not the orphan rule.
+impl Show for Point {                               //~ E0200
+}
+
+impl Hash for Mode {                                //~ E0200
+}
+
+impl[T] Show for Wrap[T] {                          //~ E0200
+}

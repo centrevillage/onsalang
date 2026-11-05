@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-895 (W5-04 U1): "`impl` の見出し(`impl Tr for Ty`)に誤りがあれば `impl` 全体を一つの単位とし、メンバは検査しない" (§18.1), and the heading of an `impl Tr
+// for P` that has an error of the names stage (E0302, E0308, E0307) or that is the E0200 of the form ("誤りが無ければ形の E0200 で、メンバは読まない")
+// is one unit with that one error: an error in the signature of a member (E0412, the number of the arguments of a type) and in the body of a member
+// (E0401) is not reported, in each of the four headings. The members here have such an error each (one error to a member, P-01), and the one of
+// the form has a name that is not found in its body besides (E0302: the members are not read). The units that are next to the `impl` are checked
+// as they are: the function after it, the member of the inherent `impl` after it, and the `impl` whose members are fine. The `impl` with a heading
+// error does not hide the error of another unit, and a unit that is right has no error (the last function).
+
+pub struct P {
+  x: F32,
+}
+
+pub struct Q {
+  y: F32,
+}
+
+impl Show for F32 {                                 //~ E0307
+  fn signature(self, a: P[I32]) -> Str { "a" }
+  fn body(self) -> Str {
+    let z: Bool = 2
+    "a"
+  }
+}
+
+pub fn after_orphan() -> I32 {
+  let z: Bool = 2                                   //~ E0401
+  1
+}
+
+impl Nope for P {                                   //~ E0302
+  fn signature(self, a: P[I32]) -> Str { "a" }
+  fn body(self) -> Str {
+    let z: Bool = 2
+    "a"
+  }
+}
+
+pub fn after_not_found() -> I32 {
+  let z: Bool = 2                                   //~ E0401
+  1
+}
+
+impl P for Q {                                      //~ E0308
+  fn signature(self, a: P[I32]) -> Str { "a" }
+  fn body(self) -> Str {
+    let z: Bool = 2
+    "a"
+  }
+}
+
+pub fn after_kind() -> I32 {
+  let z: Bool = 2                                   //~ E0401
+  1
+}
+
+impl Show for P {                                   //~ E0200
+  fn signature(self, a: P[I32]) -> Str { "a" }
+  fn body(self) -> Str {
+    let z: Bool = 2
+    "a"
+  }
+  fn name(self) -> Str {
+    missing_name
+  }
+}
+
+pub fn after_form() -> I32 {
+  let z: Bool = 2                                   //~ E0401
+  1
+}
+
+impl P {
+  pub fn inherent_after(self) -> I32 {
+    let z: Bool = 2                                 //~ E0401
+    1
+  }
+
+  pub fn inherent_fine(self) -> I32 {
+    1
+  }
+}
+
+impl Show for Q {                                   //~ E0200
+}
+
+pub fn fine() -> I32 {
+  1
+}

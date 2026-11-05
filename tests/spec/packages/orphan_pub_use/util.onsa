@@ -1,0 +1,7 @@
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  pub fn new(x: F32) -> Point { Point { x: x } }
+}

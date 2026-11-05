@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-895, S-145, S-139 (W5-04 U1): "`impl Tr for Ty` は `Tr` か `Ty` を定義したモジュールにしか書けず ... (孤児規則、E0307)" (§6.3). A trait of the
+// prelude is defined by std, so an `impl` of it for the type of another module of the package is the E0307 of the heading, before the E0200 of
+// the form (§18.1: the heading is read to the names stage with the rules of the inherent `impl`, "名前の段の誤りがあればそれが単位の誤りで形の
+// E0200 は出さず"). The type is named by a `use` of the item (`Point`, `Mode`, `Wrap`) and by the path of the module (`util.Point`, after `use
+// util`), and `Float` and `Ordinal` are E0307 for a type of the module also (types/impl_trait_e0307_float_ordinal.onsa), so they are one E0307
+// here too. A child module writing the trait for its parent's type is the same (util/inner.onsa), and the types of a module written by
+// that module itself are not orphans and are the E0200 of the form (util.onsa and util/inner.onsa). The error is in the heading, so each
+// `impl` is one unit with one E0307 and its members are not read. One error per unit (P-01).
+use util
+use util.{Point, Mode, Wrap}
+
+impl Show for Point {                               //~ E0307
+}
+
+impl Hash for Point {                               //~ E0307
+}
+
+impl Float for Point {                              //~ E0307
+}
+
+impl Ordinal for Mode {                             //~ E0307
+}
+
+impl Show for util.Point {                          //~ E0307
+}
+
+impl Hash for util.Mode {                           //~ E0307
+}
+
+impl[T] Show for Wrap[T] {                          //~ E0307
+}
+
+impl[T] Show for util.Wrap[T] {                     //~ E0307
+}

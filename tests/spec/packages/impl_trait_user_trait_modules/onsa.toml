@@ -1,0 +1,3 @@
+[package]
+name = "impl_trait_user_trait_modules"
+edition = "2026"

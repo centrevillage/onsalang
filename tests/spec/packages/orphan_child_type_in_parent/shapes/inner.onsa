@@ -1,0 +1,7 @@
+pub struct Child {
+  n: I32,
+}
+
+impl Child {
+  pub fn n_of(self) -> I32 { self.n }
+}

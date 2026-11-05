@@ -340,14 +340,17 @@ impl<'a> Lower<'a> {
             return None;
         }
         let generics = self.generics(d);
-        let (trait_, self_ty) = if want == 2 {
+        let (trait_, trait_args, self_ty) = if want == 2 {
             let path = self.child(types[0], NodeKind::Path)?;
-            (Some(self.path(path)), self.ty(types[1]))
+            let list = self.child(types[0], NodeKind::TypeArgs);
+            let args = list.map_or(Vec::new(), |a| self.of_class(a, Class::Type));
+            let args = args.into_iter().map(|t| self.ty(t)).collect();
+            (Some(self.path(path)), args, self.ty(types[1]))
         } else {
-            (None, self.ty(types[0]))
+            (None, Vec::new(), self.ty(types[0]))
         };
         let items = self.item_list(d);
-        Some((ItemKind::Impl(ImplDecl { generics, trait_, self_ty, items }), true))
+        Some((ItemKind::Impl(ImplDecl { generics, trait_, trait_args, self_ty, items }), true))
     }
 
     fn read_effect(&mut self, d: NodeId) -> Option<(ItemKind, bool)> {

@@ -12,7 +12,8 @@
 //! `generated`; and of the lowering of a def, `heading` (the lists of
 //! parameters with their bounds, the values a heading binds and the effect
 //! rows), `derives` (the traits at the head of a struct or an enum) and
-//! `impls` (an inherent `impl`, and `impl Copy` and `impl Dup`).
+//! `impls` (an inherent `impl`, the heading of a trait `impl`, and `impl Copy`
+//! and `impl Dup`).
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::timing::{Phase, phase};

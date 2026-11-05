@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1", "§4.5"]
+// fixes = 0
+
+// S-70, S-756 (W5-04 U1; §18.1: "検査の段には依存の順がある(構文 → 名前 → 型 → …)。ある段が誤りを見つけた単位では、その結果に依存する
+// 後の段を行わない"; "見出しの誤りが型の段（型引数の数の E0412、型引数の要求の E0416）のとき…"): E0307 is the error of the names
+// stage (types/wellformed_stage_order.onsa has the `impl N[Bool]`, whose concrete argument is the E0307 of the target
+// and not the E0416), and the number of the type arguments (E0412) and the requirement of a type argument (E0416, §4.5)
+// are the types stage. So an `impl` of a builtin type, that is E0307 by the orphan rule, is that one error when the
+// target also has a wrong number of arguments (`Option[I32, F32]` for the two parameters of `Option`'s one, `F32[I32]`
+// for a type that takes none), or an argument that does not meet the requirement (`impl[T] Buf[T]` without `T: Copy`,
+// §4.5: "`Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る"), or a concrete argument that does not meet it (`Buf[Str]`).
+// The heading is one unit and has one error (§18.1). The `impl` of a user's type with the same wrong number of
+// arguments, in the module of the type, is the E0412 (types/impl_target_args_count.onsa). One error per unit (P-01).
+
+impl[T] Buf[T] {                                    //~ E0307
+  pub fn head(self) -> U32 { 0 }
+}
+
+impl Buf[Str] {                                     //~ E0307
+  pub fn head_of_strings(self) -> U32 { 0 }
+}
+
+impl Result[F32, U32] {                             //~ E0307
+  pub fn both_concrete(self) -> U32 { 0 }
+}
+
+impl[T] Result[T, U32] {                            //~ E0307
+  pub fn second_concrete(self) -> U32 { 0 }
+}
+
+impl Option[I32, F32] {                             //~ E0307
+  pub fn too_many(self) -> U32 { 0 }
+}
+
+impl[T, U] Option[T, U] {                           //~ E0307
+  pub fn too_many_parameters(self) -> U32 { 0 }
+}
+
+impl F32[I32] {                                     //~ E0307
+  pub fn scalar_with_an_argument(self) -> U32 { 0 }
+}
+
+impl[T] Result[T] {                                 //~ E0307
+  pub fn too_few(self) -> U32 { 0 }
+}

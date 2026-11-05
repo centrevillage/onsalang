@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-895, S-139 (W5-04 U1): the alias of §4.4 written in the heading of an `impl Tr for Ty` is E0307 (types/impl_trait_alias_target.onsa), and when
+// there is no candidate it is the same E0307: the alias is of a builtin type (§4.4: "元の型がそのモジュールで宣言されていれば、修正候補は元の名前"; a
+// builtin type is not declared in the module), or the alias is itself an error. An alias whose right side is a name that is not found (`type
+// Gone = Nope`) is the E0302 of the alias, and the heading that writes it is E0307 (§18.1: "`impl` の見出しに書いた別名は、別名そのものが誤りの型
+// (右辺が見つからない名前 ...)でも E0307 で、見出しの誤りである。別名は正しい宣言でも見出しに書けず、別名を直しても残る誤りなので、誤りの型を使う側の
+// 連鎖に数えない"). So there are two units with an error for each such alias: the alias (E0302) and the `impl` (E0307). The error is in the heading,
+// so each `impl` is one unit with one E0307 and the members are not read. One error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+type AliasF = F32
+
+type AliasO = Option[F32]
+
+type Gone = Nope                                    //~ E0302
+
+type GoneP = Nope2                                  //~ E0302
+
+impl Show for AliasF {                              //~ E0307
+}
+
+impl Show for AliasO {                              //~ E0307
+}
+
+impl Show for Gone {                                //~ E0307
+}
+
+impl Hash for Gone {                                //~ E0307
+}
+
+impl Show for Option[Gone] {                        //~ E0307
+}
+
+impl Show for GoneP {                               //~ E0307
+}

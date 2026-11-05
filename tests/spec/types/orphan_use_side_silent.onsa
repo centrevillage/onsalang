@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-748 (a), R-104 (W5-04 U1; §6.2: "見出しが誤り（E0307、E0412、E0416）の `impl` のメンバもこの空間に入る"; §18.1: "対象の型が
+// 決まれば…メンバをその型の名前の後の `.` の空間の名前に数え…使う所は他の `impl` のメンバと同じに引く"): the members of the
+// `impl` of a builtin type, whose heading is E0307, are the names after the name of the type, and the places that use
+// them are read as the places that use the members of any `impl` and have no diagnostic: the method `x.double()`, the
+// constant `F32.HALF` and the associated function `F32.make()` (the three that R-104 listed; today `x.double()` is
+// E0413 and `F32.HALF` is found). The only error of the file is the E0307 of the heading. The functions are
+// each right, so the file has no other error. One error per unit (P-01).
+
+impl F32 {                                          //~ E0307
+  pub const HALF: F32 = 0.5
+  pub fn double(self) -> F32 { self * 2.0 }
+  pub fn make() -> F32 { 1.0 }
+}
+
+pub fn method_is_found(x: F32) -> F32 {
+  x.double()
+}
+
+pub fn constant_is_found() -> F32 {
+  F32.HALF
+}
+
+pub fn function_is_found() -> F32 {
+  F32.make()
+}
+
+pub fn all_three(x: F32) -> F32 {
+  x.double() + F32.HALF + F32.make()
+}

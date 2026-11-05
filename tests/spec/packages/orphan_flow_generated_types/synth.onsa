@@ -1,0 +1,18 @@
+pub flow voice(
+  x: F32 at sample,
+  gain: F32 at block,
+) -> F32 at sample {
+  x * gain
+}
+
+impl voice.State {
+  pub fn helper(self) -> U32 {
+    1
+  }
+}
+
+impl voice.Params {
+  pub fn gain_of(self) -> F32 {
+    self.gain
+  }
+}

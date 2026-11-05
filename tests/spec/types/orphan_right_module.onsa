@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.2", "§4.4"]
+
+// S-70 (W5-04 U1; §6.3: "固有の `impl Ty` は `Ty` を定義したモジュールにしか書けず"): the `impl` of a type in the module that
+// declares the type is right, whatever its form: a struct with two blocks (a function and a constant in different
+// blocks, names that differ, §6.2), a generic struct with the blocks of different bounds (§6.2: "境界の違う `impl` を同じ型に複数
+// 書いてよい"), an enum, and a generic enum. The orphan rule must not reject any of them. The file has no diagnostic.
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub fn new(x: F32, y: F32) -> Point { Point { x: x, y: y } }
+}
+
+impl Point {
+  pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 }
+  pub fn norm1(self) -> F32 { self.x + self.y }
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn get(self) -> T { self.v }
+}
+
+impl[T: Num] Wrap[T] {
+  pub fn doubled(self) -> T { self.v + self.v }
+}
+
+impl[T: Float] Wrap[T] {
+  pub fn float_flag(self) -> Bool { true }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+}
+
+impl Shape {
+  pub fn area(self) -> F32 {
+    match self {
+      Shape.Circle(r) => 3.0 * r * r,
+      Shape.Rect(w, h) => w * h,
+    }
+  }
+}
+
+pub enum Either[A, B] {
+  Left(A),
+  Right(B),
+}
+
+impl[A, B] Either[A, B] {
+  pub fn is_left(self) -> Bool {
+    match self {
+      Either.Left(_) => true,
+      Either.Right(_) => false,
+    }
+  }
+}
+
+pub fn use_all(p: Point, w: Wrap[F32], s: Shape) -> F32 {
+  p.norm1() + w.doubled() + s.area() + Point.ORIGIN.x + w.get()
+}

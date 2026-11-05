@@ -591,3 +591,10 @@ left = "expected a declaration, found identifier"
 input = "tests/fuzz/05b80269.onsa"
 reasons = ["S-384"]
 note = "行頭の `?D` は誤りが二つある入力（行頭の `?` と、宣言の位置の `D`）。`?` を前の行へ移すと `D` が残る"
+
+[[allowed]]
+class = "fix|E0302|add `…`|E0307"
+left = "neither `…` nor `…` is defined in this module"
+input = "tests/fuzz/2e1ff966.onsa"
+reasons = ["S-384", "S-895"]
+note = "an impl Tr for Ty with a path with no use and an orphan target: two errors from the start, the second one seen once the path resolves (S-895)"

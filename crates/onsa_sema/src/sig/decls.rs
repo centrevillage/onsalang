@@ -443,10 +443,12 @@ impl<'p> Sema<'p> {
     /// any signature is lowered: a type and a constant read them in the
     /// order of the declarations (`Self.N`, `S.N`; §4.4). Those of an `impl`
     /// whose heading is an E0307 too (§18.1, S-748). In the order of the
-    /// source (§6.2, R-307): a member of the name of one before, or of a
-    /// variant of its enum, is an E0304 (S-134, S-737), and the first of the
-    /// name is no name where it is used (§18.1). A continued analysis falls
-    /// back at a table of std's: of a builtin type, or of a type of std.
+    /// source (§6.2, R-307), std's first: a member of the name of one before,
+    /// or of a variant of its enum, is an E0304 (S-134, S-737), and the first
+    /// of the name is no name where it is used (§18.1). The E0304 of a name of
+    /// std is so of the user's member, in the unit of its E0307 (§6.3). A
+    /// continued analysis falls back at a table of std's: of a builtin type,
+    /// or of a type of std.
     fn name_members(&mut self) -> Result<(), crate::base::Fallback> {
         let mut subs = Vec::new();
         for d in self.a.new_defs() {
@@ -457,7 +459,10 @@ impl<'p> Sema<'p> {
             }
             subs.extend(imp.fns.iter().chain(&imp.consts).map(|&sub| (key, sub)));
         }
-        subs.sort_by_cached_key(|&(_, d)| (self.file_key(self.a.def(d).module), self.a.def(d).name_span.start));
+        subs.sort_by_cached_key(|&(_, d)| {
+            let m = self.a.def(d).module;
+            (!self.a.modules.is_std(m), self.file_key(m), self.a.def(d).name_span.start)
+        });
         let mut variants: HashMap<DefId, HashMap<String, Span>> = HashMap::default();
         for ((def, builtin), sub) in subs {
             let (name, at) = (self.a.def(sub).name.clone(), self.a.def(sub).name_span);
@@ -494,7 +499,12 @@ impl<'p> Sema<'p> {
         if self.std_array_impl(id) {
             return Some((None, self.a.array_key));
         }
-        match self.impl_type(id)? {
+        self.type_key(self.impl_type(id)?)
+    }
+
+    /// The table of the members of the type `e` ([`Self::member_key`]).
+    pub(super) fn type_key(&self, e: Entity) -> Option<(Option<DefId>, Option<TyId>)> {
+        match e {
             Entity::Def(d) | Entity::Member(d)
                 if matches!(self.a.def(d).kind, DefKind::Struct(_) | DefKind::Enum(_)) =>
             {

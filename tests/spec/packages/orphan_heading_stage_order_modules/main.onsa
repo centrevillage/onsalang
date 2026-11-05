@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1", "§4.5"]
+// fixes = 0
+
+// S-70, S-756 (W5-04 U1; §18.1: "検査の段には依存の順がある(構文 → 名前 → 型 → …)"; the number of the type arguments (E0412) and the
+// requirement of a type argument (E0416) of the target of an `impl` are the types stage, and the E0307 is the names stage:
+// types/wellformed_stage_order.onsa, types/orphan_heading_stage_order.onsa): the `impl` of a type of another module
+// (`util`) whose target also has the wrong number of type arguments (`Point[I32]` for a type that takes none,
+// `Wrap[I32, I32]` for one parameter, `Pair[I32]` for two) or an argument that does not meet the requirement
+// (`impl[T] N[T]` without `T: Num`, §6.2) is the E0307 of the orphan rule alone, one error in the heading (§18.1). The
+// same headings in the module of the types (`util`) are the E0412 and the E0416 (types/impl_target_args_count.onsa,
+// types/wellformed_impl_heading.onsa). One error per unit (P-01).
+use util.{Point, Wrap, Pair, N}
+
+impl Point[I32] {                                   //~ E0307
+  pub fn scalar_with_an_argument(self) -> U32 { 0 }
+}
+
+impl Wrap[I32, I32] {                               //~ E0307
+  pub fn too_many(self) -> U32 { 0 }
+}
+
+impl[T, U] Wrap[T, U] {                             //~ E0307
+  pub fn too_many_parameters(self) -> U32 { 0 }
+}
+
+impl Pair[I32] {                                    //~ E0307
+  pub fn too_few(self) -> U32 { 0 }
+}
+
+impl[T] N[T] {                                      //~ E0307
+  pub fn without_the_requirement(self) -> U32 { 0 }
+}
+
+impl Wrap {                                         //~ E0307
+  pub fn no_arguments(self) -> U32 { 0 }
+}

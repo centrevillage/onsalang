@@ -1,0 +1,3 @@
+[package]
+name = "orphan_parent_type_in_child"
+edition = "2026"

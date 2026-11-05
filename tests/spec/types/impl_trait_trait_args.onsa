@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 0
+
+// S-895 A1 (W5-04 U1): "ジェネリック trait(`Iter[T]` など)は、一つの型について高々一つしか実装できない" (§6.3) is a form that the syntax stage reads,
+// so a trait of an `impl Tr for Ty` with the type arguments (`impl Iter[F32] for P`) is read and its heading is read to the names stage (§18.1): the
+// names that are found give the E0200 of the form, and today the same input is the E0002 of the syntax stage ("expected a trait name before `for`").
+// The traits are those of the prelude with an argument that the trait takes (`Iter`, `IntoIter`) and with one that it does not (`Show[F32]`: the number
+// of the arguments is a stage of the types, which is not reported), for a type of the module and for a generic type with a parameter of the `impl` as
+// the argument of the trait. A trait that is not found with an argument (`Nope[F32]`) is E0302, and a std trait with a builtin type as the target is
+// the orphan rule's E0307 (the argument of the trait does not change the rule). The members are not read. One error per unit (P-01).
+// The canonical form of the heading is in types/impl_trait_trait_args_fmt.onsa; a trait position that is not the name of a trait is the E0002 of
+// types/impl_trait_trait_position_e0002.onsa.
+
+pub struct P {
+  x: F32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl Iter[F32] for P {                              //~ E0200
+}
+
+impl Show[F32] for P {                              //~ E0200
+}
+
+impl IntoIter[F32] for P {                          //~ E0200
+}
+
+impl[T] Iter[T] for W[T] {                          //~ E0200
+}
+
+impl Nope[F32] for P {                              //~ E0302
+}
+
+impl[T] Nope[T] for W[T] {                          //~ E0302
+}
+
+impl Iter[F32] for F32 {                            //~ E0307
+}
+
+impl Iter[F32] for Str {                            //~ E0307
+}
+
+impl Iter[F32] for P[I32] {                         //~ E0200
+}

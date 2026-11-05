@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-895, S-139 (W5-04 U1): "対象の型引数は、`impl` の型パラメータを一度ずつ並べたものに限る(具体的な型の `impl Ring[F32, 4]`、同じパラメータの重複
+// `impl[T] Pair2[T, T]`、対象に現れないパラメータは E0307)" (§6.2), which §6.3 lists among the rules that are all E0307. The rule applies to
+// the target of an `impl Tr for Ty` as to the inherent `impl` (types/impl_target_args_e0307.onsa), and it is the error of the heading before the
+// E0200 of the form (§18.1). The forms: a concrete type for the argument (a primitive, and a concrete length next to a parameter), a parameter
+// twice, a parameter that does not appear in the target (a type parameter and a const parameter), and an argument that is not a parameter but has
+// one inside. The error is in the heading, so each `impl` is one unit with one E0307 and the members are not read. One error per unit (P-01).
+// The right lists of parameters (the same `impl` blocks, with the parameters once each) are the E0200 of the form in types/impl_trait_form_e0200.onsa.
+
+pub struct P {
+  x: F32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+impl Show for W[F32] {                              //~ E0307
+}
+
+impl[T] Show for Pair2[T, T] {                      //~ E0307
+}
+
+impl[T] Show for P {                                //~ E0307
+}
+
+impl Show for Ring[F32, 4] {                        //~ E0307
+}
+
+impl[T] Show for Ring[T, 4] {                       //~ E0307
+}
+
+impl[const N: U32] Show for Ring[F32, N] {          //~ E0307
+}
+
+impl[T, const N: U32] Show for Ring[T, 4] {         //~ E0307
+}
+
+impl[T] Show for W[Option[T]] {                     //~ E0307
+}
+
+impl[T] Show for W[W[T]] {                          //~ E0307
+}
+
+impl[const N: U32] Show for P {                     //~ E0307
+}

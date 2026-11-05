@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.1", "§6.2", "§18.1"]
+// fixes = 0
+
+// R-104, S-70 (W5-04 U1; the case that tests/review-phase1/types/orphan/ reproduced, moved here): a fixed `impl` is
+// written only in the module that declares the type (§6.3, E0307), and a builtin type is a type that std declares. The
+// three `impl`s are each E0307 at the heading: `impl Point` for the type of another module (`util`), `impl F32` and
+// `impl Option[F32]` (a builtin type, and for `Option` also the concrete type argument of §6.2). Each is one unit
+// (S-59, §18.1) that does not make a diagnostic in `run` and `run2`: `p.twice()`, `F32.HALF`, `F32.make()` and
+// `x.double()` have none (the members are names after the name of the type, §6.2, §18.1; today `x.double()` is E0413).
+// One error per unit (P-01).
+use util.{Point}
+
+impl Point {                                        //~ E0307
+  pub fn twice(self) -> F32 { self.x * 2.0 }
+}
+
+impl F32 {                                          //~ E0307
+  pub const HALF: F32 = 0.5
+  pub fn double(self) -> F32 { self * 2.0 }
+  pub fn make() -> F32 { 1.0 }
+}
+
+impl Option[F32] {                                  //~ E0307
+  pub fn zero() -> F32 { 0.0 }
+}
+
+pub fn run(p: Point) -> F32 {
+  p.twice() + F32.HALF + F32.make()
+}
+
+pub fn run2(x: F32) -> F32 {
+  x.double()
+}

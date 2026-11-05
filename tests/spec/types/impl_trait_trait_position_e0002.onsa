@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+
+// S-895 A1 (W5-04 U1): the trait position of an `impl Tr for Ty` that is not the name of a trait with arguments (the name, a path, or a name with
+// arguments) is not read by the syntax stage, and is the E0002 that it is today and stays when S-895 lets the type arguments of the trait be read
+// (types/impl_trait_trait_args.onsa): a parenthesised type, a tuple, an array and `()`. §18.1 reads an error of the syntax stage before the names
+// stage, so the heading of such an `impl` is not read and the form is not E0200. `fixes` is not written (the syntax error may have a candidate).
+// One error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+impl (U32) for P {                                  //~ E0002
+}
+
+impl (U32, U32) for P {                             //~ E0002
+}
+
+impl [U32; 2] for P {                               //~ E0002
+}
+
+impl () for P {                                     //~ E0002
+}

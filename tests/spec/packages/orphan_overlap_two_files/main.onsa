@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-748 (A1), W5-02 U4a (W5-04 U1; §6.2: the names after the name of a type are one space and a repeat is E0304; §18.1: the
+// members of an `impl` whose heading is E0307 are in the space, and the E0304 is in the unit of the E0307): two user
+// files write the same member of a builtin type (`to_bits` of `F32`, which std has too; `unwrap` of `Option`, which
+// std has too). Each `impl` is E0307 at its heading and nothing else: no E0304 on the member of the second file
+// (whichever file is read first, and wherever std's declaration sits in the order of the modules), and no
+// E0304 of the overlap with std. The markers are in `first.onsa` and `second.onsa`; this module has none. One error per
+// unit (P-01).
+pub fn run() -> I32 {
+  1
+}

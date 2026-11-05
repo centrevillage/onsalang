@@ -2,20 +2,21 @@
 // [test]
 // spec = ["§6.6", "§4.6", "§6.3", "§18.1"]
 
-// S-610, S-755, R-85 (W4-05 U4b; §6.6, §4.6: "Affine = `Buf`、`Drop` 実装型…、それらを含む型"; "Affine の型を含む型も置けない
-// (E0407)"; the judgement is of the declared type and is before the value): a `const` of a type that implements
-// `Drop` (so it is Affine, §4.6; `drop(move self)` may be `rt` or `uses {Alloc}`, §6.3), or of a type that holds one,
-// is E0407 at the declared type, and a value of a wrong type is not the E0401 of the value. The value is on the
-// next line in these cases and the marker is on the line of the type. This is the position of
-// negative/const_type_affine_position.onsa for the types that need a hand-written `impl Drop`; the same-line cases are
-// in negative/const_kind_drop.onsa. (A hand-written `impl Drop` is the E0200 of the form until W5-04.)
-// One error per item (P-01).
+// S-610, S-755, S-138, R-85 (W5-04 U1; the first-period form of the case of W4-05 U4b): the judgement of §6.6 ("Affine の型を含む型も
+// 置けない(E0407)…この判定は宣言の型だけで決まり、値の検査より先に行う") for a type that implements `Drop` (§4.6) needs a
+// hand-written `impl Drop`, which is the E0200 of the form in this version (§18.1: "形の全体がこの版に無いもの…は形の E0200 で、
+// 中の名前を読まない"; S-138; the second period opens it, tasks/phase2.md). The impl is not read, so the kind of the
+// type is that of its structure (Copy for a struct of Copy fields, §4.6) and the `const` of the type, of a type that holds
+// it and of `Option` of it, in a module and in an `impl`, are right with a right value: no E0407 is made from the failed
+// `impl` (a result of a stage that failed is not a premise of the next, §18.1). The E0407 of the types that are Affine
+// by their structure, with the value on the next line, is in negative/const_type_affine_position.onsa. The only error
+// of the file is the E0200.
 
 pub struct Handle {
   id: U32,
 }
 
-impl Drop for Handle {
+impl Drop for Handle {                          //~ E0200
   rt fn drop(move self) {}
 }
 
@@ -24,19 +25,16 @@ pub struct Pair {
   second: U32,
 }
 
-const DROP_TYPE_WITH_A_WRONG_VALUE: Handle =   //~ E0407
-  1
-
-const DROP_TYPE_WITH_A_RIGHT_VALUE: Handle =   //~ E0407
+const DROP_TYPE: Handle =
   Handle { id: 1 }
 
-const HOLDS_A_DROP_TYPE: Pair =   //~ E0407
-  1
+const HOLDS_A_DROP_TYPE: Pair =
+  Pair { first: Handle { id: 1 }, second: 2 }
 
-const OPTION_OF_A_DROP_TYPE: Option[Handle] =   //~ E0407
+const OPTION_OF_A_DROP_TYPE: Option[Handle] =
   None
 
 impl Handle {
-  const ASSOCIATED: Handle =   //~ E0407
-    1
+  const ASSOCIATED: Handle =
+    Handle { id: 3 }
 }

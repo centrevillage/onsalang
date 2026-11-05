@@ -1,0 +1,13 @@
+use util.{Point}
+
+pub struct Leaf {
+  n: I32,
+}
+
+// A child module writes a trait of the prelude for the type of its parent: the parent's type is not defined here (§6.3).
+impl Show for Point {                               //~ E0307
+}
+
+// The child's own type is fine to the orphan rule, and the form is the E0200 of this version.
+impl Show for Leaf {                                //~ E0200
+}

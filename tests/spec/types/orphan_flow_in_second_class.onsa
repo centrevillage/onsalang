@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§6.3", "§5.3"]
+// fixes = 0
+
+// S-70, R-104 (W5-04 U1; §11.6: "第二級の `In`・`Out` は `impl` の対象に書けず(E0710、§5.3)"; §11.6: `voice.In` is made "sample の入力が
+// 2 つ以上のときだけ"): the generated type `voice.In` of a flow with two inputs at `sample` holds a `Span` for each
+// input, so it is second-class, and an `impl` of it, in the module of the flow where the orphan rule lets the generated
+// types be written (§6.3), is E0710 at the heading (not E0307, and not E0302). The `impl` of `voice.State` is right.
+// (Today the generated `In` is not made, and the name is E0302; it waits for the work of the generated types of the
+// flow, as flow_semantics/in_out_field_receiver.onsa does.) One error per unit (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow voice(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+impl voice.In {   //~ E0710
+  pub fn h(self) -> U32 {
+    1
+  }
+}
+
+impl voice.State {
+  pub fn helper(self) -> U32 {
+    1
+  }
+}

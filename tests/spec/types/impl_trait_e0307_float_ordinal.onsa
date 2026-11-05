@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+// fixes = 0
+
+// S-145, S-139, S-70 (W5-04 U1; §6.3: "`impl` を書ける場所と対象の書き方の規則は、全て E0307 である: この孤児規則、宣言の名前で書くこと
+// (§4.4)、対象の型引数(§6.2)、組込み型だけが実装する trait(`Float`、下記)と derive でだけ実装する trait(`Ordinal`、§6.4)"): the
+// `impl Float for Ty` of a user's type is E0307 (`Float` is implemented by the builtin floats alone, §6.3), and the
+// hand-written `impl Ordinal for Ty` is E0307 (§6.4: "手書きの `impl Ordinal` は書けない(E0307)"). The type is declared in
+// the module of the `impl`, so it is not the orphan rule but the rule of the trait, and the error is the same E0307, in the
+// heading. It is for a struct, an enum with no payload (the type `Ordinal` is for), an enum with a payload, and a generic
+// type. The error is in the heading, so each `impl` is one unit with one E0307 and the members are not read (the form
+// is not E0200: S-145 puts the error in the heading). Today the form is the E0200 of the form of `impl Tr for Ty`. One
+// error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+pub enum E {
+  A,
+  B,
+}
+
+pub enum WithPayload {
+  A(F32),
+  B,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl Float for P {                                  //~ E0307
+}
+
+impl Float for E {                                  //~ E0307
+}
+
+impl Float for WithPayload {                        //~ E0307
+}
+
+impl[T] Float for W[T] {                            //~ E0307
+}
+
+impl Ordinal for E {                                //~ E0307
+}
+
+impl Ordinal for P {                                //~ E0307
+}
+
+impl Ordinal for WithPayload {                      //~ E0307
+}
+
+impl[T] Ordinal for W[T] {                          //~ E0307
+}

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.3", "§18.1"]
+
+// S-895 (W5-04 U1): "暗黙に見えるのは、自分のモジュールの項目、prelude、組込み型だけで、`use` の無い経路(`std.math.sqrt(x)`)は E0302" (§15.1).
+// The trait of an `impl Tr for P` written by a path of std without a `use` of the module is E0302, as the path of an expression is, and is the
+// error of the heading before the E0200 of the form (§18.1). The same path after `use std.core` is a name that is found, and is the E0200 of the
+// form (types/impl_trait_form_e0200.onsa). The fix of the E0302 is "`use` の追加" in the text of §15.1 for a path of the body; whether the
+// heading has it is not said, so `fixes` is not written. The same holds for the path of the target (`impl Show for std.core.Option[F32]`). The members are not read. One error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+impl std.core.Show for P {                          //~ E0302
+}
+
+impl std.core.Hash for P {                          //~ E0302
+}
+
+impl std.core.Default for P {                       //~ E0302
+}
+
+impl Show for std.core.Option[F32] {                //~ E0302
+}

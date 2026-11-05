@@ -552,6 +552,8 @@ pub struct ImplDecl {
     pub generics: Vec<GenericParam>,
     /// `impl Trait for Type`
     pub trait_: Option<Path>,
+    /// The type arguments of the trait (`impl Iter[F32] for P`).
+    pub trait_args: Vec<TypeId>,
     pub self_ty: TypeId,
     pub items: Vec<ItemId>,
 }

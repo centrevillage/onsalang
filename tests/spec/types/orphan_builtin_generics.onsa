@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.1", "§6.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-70, R-104 (W5-04 U1): the orphan rule (§6.3: "組込み型（§4.1）は std で定義されたものとして扱う") for the builtin types
+// that take type arguments, written with the parameters of the `impl` once each in the order of the type (the right
+// form of the target, §6.2): `Option`, `Result` (the enums of std, §4.1), `Buf`, `Array`, `Map`, `Set` and `Ptr`. Each
+// is E0307 at the heading and one unit with one error (§18.1), whose members are not checked (the `let z: Bool = 2`
+// of the first `impl` has no E0401, and the annotation `Option[I32, F32]` of the second has no E0412). `Span` is
+// second-class and its `impl` is the E0710 of §5.3, not this E0307 (§15.1: "第二級の型 `Span[T]` を対象にする固有の
+// `impl`…std の外では…E0710"; negative/seq_std_only_span.onsa); one is here to set the two apart. One error per unit
+// (P-01).
+
+impl[T] Option[T] {                                 //~ E0307
+  pub fn zero() -> U32 {
+    let z: Bool = 2
+    0
+  }
+}
+
+impl[T, E] Result[T, E] {                           //~ E0307
+  pub fn zero() -> U32 {
+    let wrong: Option[I32, F32] = None
+    0
+  }
+}
+
+impl[T: Copy] Buf[T] {                              //~ E0307
+  pub fn head(self) -> U32 { 0 }
+}
+
+impl[T] Array[T] {                                  //~ E0307
+  pub fn head(self) -> U32 { 0 }
+}
+
+impl[K, V] Map[K, V] {                              //~ E0307
+  pub fn head(self) -> U32 { 0 }
+}
+
+impl[T] Set[T] {                                    //~ E0307
+  pub fn head(self) -> U32 { 0 }
+}
+
+impl[T] Ptr[T] {                                    //~ E0307
+  pub fn head(self) -> U32 { 0 }
+}
+
+impl[T: Copy] Span[T] {                             //~ E0710
+  pub fn head(self) -> U32 { 0 }
+}

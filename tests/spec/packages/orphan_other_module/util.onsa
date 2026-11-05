@@ -1,0 +1,24 @@
+pub struct Point {
+  x: F32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl Point {
+  pub fn new(x: F32) -> Point { Point { x: x } }
+}
+
+impl Shape {
+  pub fn unit() -> Shape { Shape.Circle(1.0) }
+}
+
+impl[T] Wrap[T] {
+  pub fn get(self) -> T { self.v }
+}

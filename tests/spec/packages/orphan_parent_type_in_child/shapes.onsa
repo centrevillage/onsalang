@@ -1,0 +1,7 @@
+pub struct Parent {
+  n: I32,
+}
+
+impl Parent {
+  pub fn n_of(self) -> I32 { self.n }
+}

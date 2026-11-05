@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.2", "§18.1"]
+// fixes = 0
+
+// S-895, S-138 (W5-04 U1): "形の全体がこの版に無いもの(`impl Tr for P`、`trait` と `effect` の宣言)は形の E0200 で ... 誤りが無ければ形の E0200 で、
+// メンバは読まない。型の段の見出しの誤り(E0412、E0416)は、段の順で報告しない" (§18.1). When the heading has no error of the names stage, the
+// `impl Tr for Ty` is the E0200 of the form, and only that: the number of the arguments of the target that is wrong (`P[I32]` where `P` takes none,
+// `W[I32, I32]`, which is E0412 in the inherent `impl`; "並びの規則は判定しない" so the concrete arguments are not E0307, §6.2) and the requirement
+// of the target's argument that the parameter does not meet (`impl[T] Show for Needs[T]` with `struct Needs[T: Num]`, which is E0416 in the inherent
+// `impl`) are the errors of the stage of the types, and are not reported. An argument past the count is not read (types/impl_target_args_count.onsa,
+// S-762), so `P[Nope]` has no E0302 either, unlike `W[Nope]` (types/impl_trait_name_not_found.onsa). The traits are those of the prelude (`Show`, by a name and by a path
+// after `use std.core`), and a trait of this module (`trait Tr`, which is E0200 in its own declaration), for a type of the module and for
+// `F32` (the user's trait is defined here, so it is not an orphan: §6.3 "`Tr` か `Ty` を定義したモジュール"). The right lists of the parameters (once
+// each, with a bound of the `impl` that the target requires) are the E0200 of the form too: the heading has no error, and the types/impl_trait_target_args.onsa
+// has the lists that are E0307. The members are not read, so the one with a name that is not found is silent. One error per unit (P-01).
+use std.core
+
+pub struct P {
+  x: F32,
+}
+
+pub struct Needs[T: Num] {
+  v: T,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+pub enum E {
+  A,
+  B,
+}
+
+trait Tr {                                          //~ E0200
+  fn m(self) -> I32
+}
+
+impl Show for P[I32] {                              //~ E0200
+}
+
+impl Show for W[I32, I32] {                         //~ E0200
+}
+
+impl Show for P[Nope] {                             //~ E0200
+}
+
+impl[T] Show for Needs[T] {                         //~ E0200
+}
+
+impl Tr for P {                                     //~ E0200
+}
+
+impl Tr for F32 {                                   //~ E0200
+}
+
+impl Tr for E {                                     //~ E0200
+}
+
+impl core.Show for P {                              //~ E0200
+}
+
+impl[T] Show for W[T] {                             //~ E0200
+}
+
+impl[T: Show] Show for W[T] {                       //~ E0200
+}
+
+impl[T: Num] Show for Needs[T] {                    //~ E0200
+}
+
+impl[A, B] Show for Pair2[A, B] {                   //~ E0200
+}
+
+impl[T, const N: U32] Show for Ring[T, N] {         //~ E0200
+}
+
+impl[T] Tr for W[T] {                               //~ E0200
+}
+
+impl Show for P {                                   //~ E0200
+  fn show(self) -> Str {
+    missing_name
+  }
+}

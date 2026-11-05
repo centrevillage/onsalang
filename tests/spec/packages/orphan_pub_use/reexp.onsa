@@ -1,0 +1,5 @@
+pub use util.{Point}                                //~ E0200 @1
+
+impl Point {
+  pub fn thrice(self) -> F32 { self.x * 3.0 }
+}

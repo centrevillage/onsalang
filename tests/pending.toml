@@ -354,13 +354,6 @@ note = "E0710 の否定例 2 件。構造体のフィールドの pan.Out の E0
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/const_kind_drop.onsa"
-reasons = ["S-70", "S-138"]
-until = "W5-04"
-note = "E0407 の否定例 3 件（Drop 型の const）。手書きの impl Drop が今は E0200「does not support trait implementations」。S-138 が第 1 期に E0200 とするのは手書きの impl Hash だけ。X-23（2026-11-02）で手書きの `impl Drop` は第 2 期にした。W5-04 のテストの票で第 1 期の形（E0200）に書き直し、第 2 期の形は `tasks/phase2.md` に写す"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/build_provides_main.onsa"
 reasons = ["R-134"]
 until = "W6-03"
@@ -604,6 +597,13 @@ target = "tests/spec/flow_semantics/in_out_field_receiver.onsa"
 reasons = ["S-102", "S-181", "S-218"]
 until = "W7-03"
 note = "at と、生成型 In / Out を fn の引数の型に書けない（E0302。S-218 は W7-03 の前に決める）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/orphan_flow_in_second_class.onsa"
+reasons = ["S-70", "S-218"]
+until = "W7-03"
+note = "生成項目 In が無く E0302（期待は §11.6 の E0710）。W5-04 U1/t の事例"
 
 [[pending]]
 kind = "test-case"
@@ -1272,13 +1272,6 @@ note = "定数のパターン `Self.N =>`（S-595 の表の 9 行）。名前の
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/self/impl_trait.onsa"
-reasons = ["S-70", "S-138", "S-595"]
-until = "W5-04"
-note = "`impl Drop for` の本体の `Self`。手書きの trait の実装が今は E0200「does not support trait implementations」。X-23（2026-11-02）で手書きの `impl Drop` は第 2 期にした。W5-04 のテストの票で第 1 期の形（E0200）に書き直し、第 2 期の形は `tasks/phase2.md` に写す"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/control/pattern_choice_bindings_const_same.onsa"
 reasons = ["S-318", "S-185"]
 until = "W5-09"
@@ -1322,13 +1315,6 @@ note = "@latency が無い属性の E0005（W10-08）"
 # --- W4-05 U4a/t: 整形性の段。項目は U4a で外し、S-217 の 1 件は W4-07 で外した。
 
 # --- W4-05 U4b/t: `impl Drop` の型の `const`（S-755）。W5-04 で外す（2026-10-29）。
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_type_affine_drop.onsa"
-reasons = ["S-755", "S-70", "S-138"]
-until = "W5-04"
-note = "手書きの `impl Drop` の型の `const` の E0407 は `impl Drop` が入る W5-04（`const_kind_drop.onsa` と同じ）。X-23（2026-11-02）で手書きの `impl Drop` は第 2 期にした。W5-04 のテストの票で第 1 期の形（E0200）に書き直し、第 2 期の形は `tasks/phase2.md` に写す"
 
 # --- W4-16 U1a/t: 束縛の状態の土台と `let`（2026-10-29、84 回目）。
 

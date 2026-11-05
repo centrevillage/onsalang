@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.2", "§18.1"]
+// fixes = 0
+
+// S-70, S-59, R-104 (W5-04 U1; §18.1: "`impl` の見出しに誤りがあれば `impl` 全体を一つの単位とし、メンバは検査しない"): the
+// `impl` of a builtin type is E0307 once at the heading, and it is the only error of the unit. The errors of the
+// members are not reported: a body that does not type (`let z: Bool = 2`, E0401), a signature with the wrong number
+// of type arguments (E0412) and a signature whose type argument does not meet the requirement (E0416, `Buf[Str]`).
+// A second `impl` of the same type is a unit of its own and has its own E0307. One error per unit (P-01).
+
+impl F32 {                                          //~ E0307
+  pub fn in_the_body(self) -> Bool {
+    let z: Bool = 2
+    z
+  }
+}
+
+impl F64 {                                          //~ E0307
+  pub fn in_the_signature(self, o: Option[I32, F32]) -> U32 { 0 }
+}
+
+impl U8 {                                           //~ E0307
+  pub fn in_the_requirement(self, b: Buf[Str]) -> U32 { 0 }
+}
+
+impl F32 {                                          //~ E0307
+  pub fn a_second_block(self) -> F32 { self }
+}

@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+// fixes = 0
+
+// S-895 (W5-04 U1): a name that failed in the names stage and is written in the heading of an `impl Tr for Ty` is not an error of that heading:
+// "見出しに書いた失敗した名前は当たらない" (§18.1: the failed names are read as an error type / an unknown bound, and are not reported again where they are
+// used). So the heading has no error of the names stage, and "誤りが無ければ形の E0200" (§18.1): the `impl` is the E0200 of the form, in the unit of its
+// own, and the E0302 of the `use` that failed is the only report of the name. The failed name is the trait (`Gone`, from a `use` of a module that is not
+// found), the target, and a bound of the `impl`. One error per unit (P-01).
+use std.nope.{Gone}                                 //~ E0302
+
+pub struct P {
+  x: F32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl Gone for P {                                   //~ E0200
+}
+
+impl Show for Gone {                                //~ E0200
+}
+
+impl[T: Gone] Show for W[T] {                       //~ E0200
+}

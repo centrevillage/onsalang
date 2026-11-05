@@ -318,18 +318,13 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The def of an `impl` and the defs of its functions and constants. A
-    /// trait implementation is an E0200, and its members have no defs.
+    /// The def of an `impl` and the defs of its functions and constants, of
+    /// an `impl` whose members are read ([`reads_members`]).
     fn collect_impl(&mut self, at: &Place<'_>, decl: &ImplDecl) {
         let item = at.item;
         let empty = ImplDef { generics: Vec::new(), self_ty: at.error, fns: Vec::new(), consts: Vec::new() };
         let d = self.add_def(at.def("<impl>".into(), item.span, DefKind::Impl(empty)));
-        if decl.trait_.is_some() {
-            // `impl Copy for X` is no trait implementation: the signatures
-            // report it (`copy_impl`, §4.6, S-140).
-            if decl.trait_.as_ref().and_then(crate::sig::kind_constraint).is_none() {
-                self.unsupported(d, item.span, Feature::TraitImpls, &[]);
-            }
+        if !reads_members(decl) {
             return;
         }
         let (mut fns, mut consts) = (Vec::new(), Vec::new());
@@ -359,6 +354,13 @@ impl<'p> Sema<'p> {
             imp.consts = consts;
         }
     }
+}
+
+/// Whether the members of the `impl` `decl` are read, the one condition: of
+/// an `impl Tr for Ty` they are not (§18.1); its heading is read with the
+/// signatures (`Sema::lower_impl`).
+fn reads_members(decl: &ImplDecl) -> bool {
+    decl.trait_.is_none()
 }
 
 /// Where an item is: its module, its AST item, and the placeholder types.

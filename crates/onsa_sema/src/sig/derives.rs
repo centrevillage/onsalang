@@ -71,6 +71,11 @@ const DERIVABLE: [(&str, Derive, bool); 8] = [
     ("Ordinal", Derive::Ordinal, false),
 ];
 
+/// Whether `name` is the name of the derivable trait `d`.
+pub(super) fn names(name: &str, d: Derive) -> bool {
+    DERIVABLE.iter().any(|&(n, derive, _)| n == name && derive == d)
+}
+
 /// The candidate that takes the trait `k` of the head `paths` out (§4.6,
 /// `copy_bound`): with the `+` before it, or after it when it is the first,
 /// or with the `:` when it is the only one.

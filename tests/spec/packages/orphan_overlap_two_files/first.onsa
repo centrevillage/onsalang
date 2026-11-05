@@ -1,0 +1,7 @@
+impl F32 {                                          //~ E0307
+  pub fn to_bits(self) -> U32 { 1 }
+}
+
+impl[T] Option[T] {                                 //~ E0307
+  pub rt fn unwrap(move self) -> U32 { 1 }
+}

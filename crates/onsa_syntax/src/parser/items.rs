@@ -525,9 +525,9 @@ impl<'a> Parser<'a> {
         {
             return Err(self.unexpected("a type"));
         }
-        let (first, args) = self.parse_type_with(ClockAfter::Read)?;
+        let (first, _) = self.parse_type_with(ClockAfter::Read)?;
         if self.eat(TokenKind::KwFor).is_some() {
-            if !(first.kind == NodeKind::PathType && args == 0) {
+            if first.kind != NodeKind::PathType {
                 return Err(self.error(Code::E0002, first.span, "expected a trait name before `for`"));
             }
             self.parse_type()?;

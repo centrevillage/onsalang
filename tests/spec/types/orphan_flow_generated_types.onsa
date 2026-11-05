@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§6.3", "§5.3"]
+
+// S-70, R-104 (W5-04 U1; §11.6: "生成された型は flow を宣言したモジュールで定義されたものとして扱うので、同じモジュールに
+// `impl voice.State { ... }` で補助メソッドを書ける(孤児規則 §6.3 の通り)。第二級の `In`・`Out` は `impl` の対象に書けず
+// (E0710、§5.3)"): the types that the declaration of a flow makes are defined in the module of the flow, so the orphan
+// rule lets the `impl` of `voice.State` and `voice.Params` be written here (two blocks of `State`, and the constant and
+// the function of `Params`), and the orphan rule does not change the E0710 of the second-class type `voice.Out` (which
+// holds a `Span` for each field): it is the E0710 at the heading and not the E0307 (`voice.In` is in
+// types/orphan_flow_in_second_class.onsa, which waits for the generated `In`). The packages where the `impl` is in
+// another module than the flow are in packages/orphan_flow_generated_types. One error per unit
+// (P-01).
+
+pub struct St {
+  a: F32,
+}
+
+pub flow voice(
+  x: F32 at sample,
+  gain: F32 at block,
+) -> St at sample {
+  St { a: x * gain }
+}
+
+impl voice.State {
+  pub fn helper(self) -> U32 {
+    1
+  }
+}
+
+impl voice.State {
+  pub fn other_helper(self) -> U32 {
+    2
+  }
+}
+
+impl voice.Params {
+  pub const LOUD: F32 = 2.0
+  pub fn gain_of(self) -> F32 {
+    self.gain
+  }
+}
+
+impl voice.Out {   //~ E0710
+  pub fn h(self) -> U32 {
+    1
+  }
+}
+
+pub fn uses_state(s: voice.State) -> U32 {
+  s.helper() + s.other_helper()
+}
+
+pub fn uses_params(p: voice.Params) -> F32 {
+  p.gain_of() + voice.Params.LOUD
+}

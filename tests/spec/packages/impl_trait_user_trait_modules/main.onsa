@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-895, S-138 (W5-04 U1): "`impl Tr for Ty` は `Tr` か `Ty` を定義したモジュールにしか書けず" (§6.3): the user's own `trait Local` of this module (E0200 in its
+// declaration, §18.1) with the type of another module (`impl Local for Point`) or a builtin type (`impl Local for F32`) is not an orphan, and is the
+// E0200 of the form of the `impl`. The trait `Remote` of the other module (`util.onsa`, where it is E0200 in the declaration) with a type of this
+// module is not an orphan either. The trait of another module with a type of another module (`impl Remote for Point`) and with a builtin type
+// (`impl Remote for F32`) is the orphan rule's E0307 in the heading, before the E0200 of the form (§18.1). The trait is read by the keyword of its
+// declaration (§18.1: "宣言の形がこの版で E0200 の `trait` ... も、名前と宣言のキーワードの種類まで読めるので、その種類の名前として見せる"), so it
+// is found in both modules. The members are not read. One error per unit (P-01).
+use util.{Point, Remote}
+
+pub struct Mine {
+  n: I32,
+}
+
+trait Local {                                       //~ E0200
+  fn m(self) -> I32
+}
+
+impl Local for Mine {                               //~ E0200
+}
+
+impl Local for Point {                              //~ E0200
+}
+
+impl Local for F32 {                                //~ E0200
+}
+
+impl Remote for Mine {                              //~ E0200
+}
+
+impl Remote for Point {                             //~ E0307
+}
+
+impl Remote for F32 {                               //~ E0307
+}
+
+impl Remote for Option[Mine] {                      //~ E0307
+}

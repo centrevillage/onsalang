@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§6.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-70, R-104 (W5-04 U1; §11.6: "生成された型は flow を宣言したモジュールで定義されたものとして扱うので、同じモジュールに
+// `impl voice.State { ... }` で補助メソッドを書ける"): the generated types are defined in the module of the flow
+// (`synth.onsa`, which has the right `impl`s), so an `impl` of them in another module (`main`) is E0307 at the heading,
+// by the name that a `use` took (`use synth.{voice}`) and by the path of the module (`use synth`, `impl synth.voice.State`).
+// Each `impl` is one unit with one E0307. The places that use the members have no diagnostic (§18.1). One error per
+// unit (P-01).
+use synth
+use synth.{voice}
+
+impl voice.State {                                  //~ E0307
+  pub fn other_helper(self) -> U32 {
+    2
+  }
+}
+
+impl voice.Params {                                 //~ E0307
+  pub fn doubled_gain(self) -> F32 {
+    self.gain * 2.0
+  }
+}
+
+impl synth.voice.State {                            //~ E0307
+  pub fn third_helper(self) -> U32 {
+    3
+  }
+}
+
+pub fn uses_state(s: voice.State) -> U32 {
+  s.other_helper() + s.third_helper()
+}
+
+pub fn uses_params(p: voice.Params) -> F32 {
+  p.doubled_gain()
+}

@@ -2,11 +2,13 @@
 // [test]
 // spec = ["§2.2", "§6.3", "§4.4"]
 
-// S-595 (§2.2): `Self` is bound in the body of `impl Tr for Ty` as in a plain `impl`: "`impl`（固有の `impl` と
-// `impl Tr for Ty`）の本体の中で対象の型を指す". The trait that a program can implement in this version is
-// `Drop` of the prelude (§6.3; a user trait is E0200, and the other traits of the prelude can be implemented
-// by std only, E0307). Its `drop(move self)` may take `self` apart ("本体の中では `self` を分解でき"), and the
-// body reads `Self` in a pattern and in a path as the body of a plain `impl` does. Everything here is right.
+// S-595 (§2.2): `Self` is bound in the body of a plain `impl` as in the body of `impl Tr for Ty`: "`impl`（固有の `impl` と
+// `impl Tr for Ty`）の本体の中で対象の型を指す". In this version a hand-written `impl Tr for Ty` of a trait of the prelude is
+// not accepted (§6.3, S-138, S-145): `Hash`, `Show`, `Default` and `Drop` are the E0200 of the form, whose names are
+// not read (§18.1), `Float` and `Ordinal` are E0307 (the rule of the trait, §6.3), and a trait of the user is E0200 too.
+// So the case of `Self` in the body of `impl Drop for Ty` (a pattern `let Self { id: id } = self`, a path `Self.CLOSED`) is
+// the second period's (tasks/phase2.md); here the plain `impl` reads `Self` in a struct literal, a path and a type, and
+// the `impl Drop` is the E0200 of the form and has no other diagnostic from its body.
 
 pub struct Handle {
   id: U32,
@@ -24,7 +26,7 @@ impl Handle {
   }
 }
 
-impl Drop for Handle {
+impl Drop for Handle {                          //~ E0200
   rt fn drop(move self) {
     let Self { id: id } = self
     if id == Self.CLOSED {

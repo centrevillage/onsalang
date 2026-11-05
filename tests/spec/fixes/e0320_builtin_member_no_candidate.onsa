@@ -3,21 +3,26 @@
 // spec = ["§2.3", "§6.2", "§18.1"]
 // fixes = 0
 
-// S-652, S-737 (W4-05 U3a/i2): the space after the name of a builtin type holds the members of its `impl` as the
-// space of a user type does (§6.2), so the constant `a` of an `impl F32`, whose name by the naming rule (§2.3) is
-// the name of the constant `A` after it, has an E0320 with no candidate (the candidate would make `F32.a` read
-// `A` silently; the same as e0320_member_variant_no_candidate.onsa). The written `fixes = 0` checks that no
-// diagnostic of the file has a candidate.
+// S-652, S-737 (W4-05 U3a/i2; W5-04 U1 moved it to a type of the user, because the `impl` of a builtin type is the E0307 of
+// the orphan rule, §6.3, and its members are not checked, §18.1): the constant `a` of an `impl` of a type, whose name
+// by the naming rule (§2.3) is the name of the constant `A` after it in the same space (§6.2), has an E0320 with no
+// candidate (the candidate would make `Q.a` read `A` silently; the same as e0320_member_variant_no_candidate.onsa). The
+// written `fixes = 0` checks that no diagnostic of the file has a candidate. The type is in the module of the `impl`
+// (a struct, as a builtin type's members are in the same space as those of a user's type).
 
-impl F32 {
+pub struct Q {
+  x: F32,
+}
+
+impl Q {
   pub const a: F32 = 1.0                            //~ E0320
   pub const A: F32 = 2.0
 }
 
 pub fn u() -> F32 {
-  F32.a
+  Q.a
 }
 
 pub fn v() -> F32 {
-  F32.A
+  Q.A
 }

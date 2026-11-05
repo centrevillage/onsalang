@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§6.3", "§18.1"]
+
+// S-895 A1 (W5-04 U1): a trait with type arguments in the heading of an `impl Tr for Ty` (`Iter[F32]`) is read by the syntax stage (today it is the
+// E0002 "expected a trait name before `for`"), so the file has no diagnostic of the syntax stage, and `onsa fmt` leaves it unchanged (the file is
+// canonical; `fmt` does not write a file with an E0002, so the form is not checked until it is read). The arguments are written as the type arguments of
+// a type are (`Iter[F32]`, with no space), for a trait of the prelude, a path, and an `impl` with parameters (`impl[T: Copy] Iter[T] for Buf2[T]`).
+// `mode = "parse"` runs the syntax stage only, so the names and the form (E0200) of these headings are in types/impl_trait_trait_args.onsa.
+
+pub struct P {
+  x: F32,
+}
+
+pub struct Buf2[T] {
+  v: T,
+}
+
+impl Iter[F32] for P {
+  fn next(inout self) -> Option[F32] {
+    None
+  }
+}
+
+impl[T: Copy] IntoIter[T] for Buf2[T] {}
+
+impl std.core.Iter[F32] for P {}

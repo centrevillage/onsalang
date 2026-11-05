@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1", "§6.6"]
+// fixes = 0
+
+// S-748 (A1), S-675 (W5-04 U1; §6.2: "型の名前の後の `.` で引く名前…は一つの空間で、重なると E0304", §18.1: the members of an
+// `impl` whose heading is E0307 are in the space, and an E0304 in the unit of the E0307 is hidden by the rule of the
+// unit): a user's `impl` of a builtin type that has the name of a member of std (`PI` of `F32`, §6.6; `to_bits` of
+// `F32`, §6.6; `unwrap` of `Option`, §9.1; `zeroed` of `Buf`) is the E0307 of its heading and nothing else: the
+// E0304 of the overlap is not reported (one error per unit, §18.1), and a second `impl` that repeats a name of the first
+// one is its own unit and has its own E0307 only. The places that use the name (`F32.PI`, `x.to_bits()`) read the
+// name as a failed one (§18.1: "E0304・E0305 になった名前も、その空間では…どちらの宣言も引かず、その名前を誤りとして
+// 扱う…報告が同じ単位の先の誤りに隠れても、扱いは同じである") and have no diagnostic; a path of the name in the value
+// position stops the check of the rest of the unit (§18.1: "値の位置…ではその単位の以後を検査しない"), so the `let z: Bool = 1`
+// after `F32.PI` has no E0401. One error per unit (P-01).
+
+impl F32 {                                          //~ E0307
+  pub const PI: F32 = 3.0
+}
+
+impl F32 {                                          //~ E0307
+  pub fn to_bits(self) -> U32 { 1 }
+}
+
+impl F32 {                                          //~ E0307
+  pub fn to_bits(self) -> U32 { 2 }
+}
+
+impl[T] Option[T] {                                 //~ E0307
+  pub rt fn unwrap(move self) -> U32 { 0 }
+}
+
+impl[T: Copy] Buf[T] {                              //~ E0307
+  pub fn zeroed(n: U32) -> U32 { n }
+}
+
+pub fn the_constant_is_a_failed_name() -> F32 {
+  F32.PI
+}
+
+pub fn the_method_is_a_failed_name(x: F32) -> U32 {
+  x.to_bits()
+}
+
+pub fn the_rest_of_the_unit_is_not_checked() -> Bool {
+  let _ = F32.PI
+  let z: Bool = 1
+  z
+}

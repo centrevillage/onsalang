@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§6.3", "§18.1"]
+
+// S-895 (W5-04 U1): "種は構造で決まるので、`impl Copy for X` と宣言の `: Copy`(`Dup` も同じ)は書かない(E0020。修正候補は外す形 ...)" (§4.6). The
+// rule is about the kinds `Copy` and `Dup`, which are not traits (§6.3), so the `impl Copy for X` is E0020 whatever `X` is, also for a type that
+// the module does not define: the E0020 stays when S-895 reads the headings of the `impl Tr for Ty` to the names stage, and it is not the E0307
+// of the orphan rule. A builtin type (`F32`, `Str`, `Option[F32]`) for `Copy` and for `Dup`. The candidate is the removal of the `impl` (§4.6), and the number of candidates is not written (`fixes`) since the case has no
+// `.fixK`, which the implementer's work makes. One error per unit (P-01).
+
+impl Copy for F32 {                                 //~ E0020
+}
+
+impl Dup for Str {                                  //~ E0020
+}
+
+impl Copy for Option[F32] {                         //~ E0020
+}
+
+impl[T] Dup for Option[T] {                         //~ E0020
+}

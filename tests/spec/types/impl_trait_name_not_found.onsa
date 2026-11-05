@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-895 (W5-04 U1): "名前が見つからなければ E0302" (§15.1), and the heading of `impl Tr for P` is read to the names stage with the rules of the
+// inherent `impl` (§18.1: "`impl Tr for P` の見出し(`Tr`、`P`、`impl` の `[ ]`)は、固有の `impl` と同じ規則で名前の段まで読む(E0302、E0308、
+// E0307)"), so a name that is not found in it is E0302, and not the E0200 of the form. The names are the trait (`Nope`), the target (`Nope`), a
+// bound of the `impl` (`[T: Nope]`), `Self` (which is bound in the body of an `impl`, and is not a name of its heading, §2.2), and an argument of
+// the target (`W[Nope]`). With two names that are not found (`impl Nope for Nope2`) the unit has one error (§18.1: "一つの単位の中では、最初の
+// エラーで止める"), and a type-stage error of the heading after a name that is not found is not reported: `impl Nope for P[I32]` has the E0302 of
+// `Nope` and not the E0412 of the argument that `P` does not take (§6.2; the stage of the types is after the stage of the names, §18.1). The
+// members are not read. One error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl Nope for P {                                   //~ E0302
+}
+
+impl Show for Nope {                                //~ E0302
+}
+
+impl[T: Nope] Show for W[T] {                       //~ E0302
+}
+
+impl Show for Self {                                //~ E0302
+}
+
+impl Nope for Nope2 {                               //~ E0302
+}
+
+impl Nope for P[I32] {                              //~ E0302
+}
+
+impl Show for W[Nope] {                             //~ E0302
+}
+
+impl[T] Nope for W[T] {                             //~ E0302
+}

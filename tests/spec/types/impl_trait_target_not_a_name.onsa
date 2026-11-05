@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.4", "§18.1"]
+// fixes = 0
+
+// S-895, S-139 (W5-04 U1): "`Tr` と `Ty` は宣言の名前で書き" (§6.3), and the target of an `impl Tr for Ty` that is a type but is not written by the
+// name of a declaration (a tuple, `()`, an array, a function type, and a type parameter, with and without a parameter inside) is E0307, as it is
+// for the inherent `impl` (module/impl_target_not_a_name.onsa), and it is the error of the heading before the E0200 of the form (§18.1). It is a
+// type that is found, so it is not E0302, and not the E0308 of a name that is not a type (types/impl_trait_kind_position.onsa). The error is in the
+// heading, so each `impl` is one unit with one E0307 and the members are not read. One error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+impl Show for (U32, U32) {                          //~ E0307
+}
+
+impl Show for () {                                  //~ E0307
+}
+
+impl Show for [U32; 2] {                            //~ E0307
+}
+
+impl Show for fn(U32) -> U32 {                      //~ E0307
+}
+
+impl[T] Show for T {                                //~ E0307
+}
+
+impl Hash for (P, P) {                              //~ E0307
+}
+
+impl[T] Show for [T; 2] {                           //~ E0307
+}
+
+impl[T] Show for (T, P) {                           //~ E0307
+}

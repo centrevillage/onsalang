@@ -1,16 +1,20 @@
 // onsa.toml
 // [test]
-// spec = ["§6.6", "§4.6", "§6.3"]
+// spec = ["§6.6", "§4.6", "§6.3", "§18.1"]
 
-// E0407: a type that implements `Drop` is Affine (§4.6), so a `const` of that
-// type is rejected like a `Buf` (§6.6). The struct holds only Copy fields; the
-// kind comes from the `Drop` implementation (§6.3: `drop(move self)` may only
-// be `rt` or `uses {Alloc}`).
+// S-138, S-70, X23-8 (W5-04 U1; the first-period form): a hand-written `impl Drop for Ty` is the E0200 of the form
+// in this version (§18.1: "形の全体がこの版に無いもの(`impl Tr for P`…)は形の E0200 で、中の名前を読まない"; S-138; the
+// second period opens it, tasks/phase2.md). The impl is not read, so the type has no `Drop` implementation and its kind is
+// the one of its structure (§4.6: Copy for a struct of Copy fields), and a `const` of the type, or of a type that holds
+// it, is right: there is no E0407 from the failed impl (a result of a stage that failed is not a premise of the
+// next, §18.1). The E0407 of a `Drop` type (§4.6: "Affine = `Buf`、`Drop` 実装型") is in the second period. The E0407 of
+// the types that are Affine by their structure is in negative/const_type_affine_position.onsa. The only error of
+// the file is the E0200.
 pub struct Handle {
   id: U32,
 }
 
-impl Drop for Handle {
+impl Drop for Handle {                          //~ E0200
   rt fn drop(move self) {}
 }
 
@@ -19,10 +23,10 @@ pub struct Pair {
   second: U32,
 }
 
-const RESOURCE: Handle = Handle { id: 1 }       //~ E0407
+const RESOURCE: Handle = Handle { id: 1 }
 
-const WRAPPED: Pair = Pair { first: Handle { id: 2 }, second: 3 }   //~ E0407
+const WRAPPED: Pair = Pair { first: Handle { id: 2 }, second: 3 }
 
 impl Handle {
-  const SPARE: Handle = Handle { id: 0 }        //~ E0407
+  const SPARE: Handle = Handle { id: 0 }
 }

@@ -1,0 +1,11 @@
+use util.{Point}
+
+impl F32 {                                          //~ E0307
+  pub const HALF: F32 = 0.5
+  pub fn double(self) -> F32 { self * 2.0 }
+  pub fn make() -> F32 { 1.0 }
+}
+
+impl Point {                                        //~ E0307
+  pub fn twice(self) -> F32 { self.x * 2.0 }
+}

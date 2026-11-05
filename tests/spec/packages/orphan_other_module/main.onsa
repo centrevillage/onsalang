@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-70, R-104 (W5-04 U1; §6.3: "固有の `impl Ty` は `Ty` を定義したモジュールにしか書けず…(孤児規則、E0307)"): the types of `util` are
+// not declared in `main`, so an `impl` of them in `main` is E0307 at the heading, whatever the way the type is written:
+// the name that a `use` took (`impl Point`), the path of the module (`impl util.Point`, after `use util`), a generic type
+// (`impl[T] Wrap[T]`, and with the path `impl[T] util.Wrap[T]`) and an enum (`impl Shape`). Each `impl` is one unit with
+// one E0307 (§18.1), whose members are not checked (the `let z: Bool = 2` in `thrice` has no E0401). The places that
+// use the members have no diagnostic (§6.2, §18.1). The `impl` of a type of this module is right (`Local`), and the
+// `impl`s of the types in `util` are right in `util.onsa`. One error per unit (P-01).
+use util
+use util.{Point, Shape, Wrap}
+
+pub struct Local {
+  n: I32,
+}
+
+impl Local {
+  pub fn n_of(self) -> I32 { self.n }
+}
+
+impl Point {                                        //~ E0307
+  pub fn twice(self) -> F32 { self.x * 2.0 }
+}
+
+impl util.Point {                                   //~ E0307
+  pub fn thrice(self) -> F32 {
+    let z: Bool = 2
+    self.x * 3.0
+  }
+}
+
+impl[T] Wrap[T] {                                   //~ E0307
+  pub fn take(self) -> T { self.v }
+}
+
+impl[T] util.Wrap[T] {                              //~ E0307
+  pub fn take_again(self) -> T { self.v }
+}
+
+impl Shape {                                        //~ E0307
+  pub fn double_unit() -> F32 { 2.0 }
+}
+
+pub fn reads(p: Point, w: Wrap[F32]) -> F32 {
+  p.twice() + p.thrice() + w.take() + w.take_again() + Shape.double_unit()
+}

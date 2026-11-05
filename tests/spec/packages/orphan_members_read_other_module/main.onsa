@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-748 (a), R-104 (W5-04 U1; §18.1: "見出しが誤りの固有の `impl`(E0307 の…孤児規則…)も、対象の型が決まればメンバをその型の名前の後の
+// `.` の空間の名前に数え…使う所は他の `impl` のメンバと同じに引く(メンバは検査しない)"; S-748's list of the places: "他のモジュールの経路"):
+// the two `impl`s in `a.onsa` are E0307 by the orphan rule (`F32` is std's, `Point` is declared in `util.onsa`), and
+// the members of the two are names after the names of the types. The module `main` reads them with no diagnostic: the
+// method `x.double()`, the constant `F32.HALF` and the function `F32.make()` of the builtin type, and the method
+// `p.twice()` of the type of `util`. The E0307s are in `a.onsa`; this module has none. One error per unit (P-01).
+use a
+use util.{Point}
+
+pub fn the_method_of_a_builtin_type(x: F32) -> F32 {
+  x.double()
+}
+
+pub fn the_constant_of_a_builtin_type() -> F32 {
+  F32.HALF
+}
+
+pub fn the_function_of_a_builtin_type() -> F32 {
+  F32.make()
+}
+
+pub fn the_method_of_a_type_of_another_module(p: Point) -> F32 {
+  p.twice()
+}

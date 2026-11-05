@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-70, S-693 (W5-04 U1; §15.1: "この版の `pub use` は `pub` の位置の名前の段の E0200"; §18.1: "名前の段の E0200 の `pub use` の取り込む名前も
+// 失敗した名前で、他のモジュールがそれを取り込む `use` の名前も誤りとして扱い、診断を出さない"; §18.1: a failed name in the heading of an
+// `impl` is an error type): a type that is in the module only by a `pub use` is a failed name in this version, the
+// `pub use` is the E0200 (in `reexp.onsa`), and the `impl` that names it, in the module that wrote the `pub use` and in
+// the module that took the name from there (`use reexp.{Point}`), is not an E0307 of the orphan rule: the heading
+// is read as an error type and has no diagnostic. The type is declared in `util.onsa`, and the `impl` of it there is
+// right. When the second period opens `pub use` (§19.1), the type is a name of the module that is not declared there,
+// and the `impl` through it is E0307 as in packages/orphan_other_module. One error per unit (P-01).
+use reexp.{Point}
+
+impl Point {
+  pub fn twice(self) -> F32 { self.x * 2.0 }
+}

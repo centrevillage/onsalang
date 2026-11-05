@@ -1,0 +1,8 @@
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub trait Remote {                                  //~ E0200
+  fn m(self) -> I32
+}

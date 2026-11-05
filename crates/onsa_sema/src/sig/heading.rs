@@ -96,6 +96,20 @@ impl<'p> Sema<'p> {
         out
     }
 
+    /// The trait the path `p` of an `impl p for Ty` names (§6.3, S-895), read
+    /// as the path of a bound: none with its error (E0302, E0308), or of a
+    /// name held (§18.1).
+    pub(super) fn lower_trait(&mut self, cx: &Cx<'p>, p: &Path) -> Option<Entity> {
+        let listed = listed(&[], &cx.generics);
+        match heading_name(self.a, cx.m, p, (&listed, &cx.locals), None) {
+            Ok((NameKind::Trait, e)) => return e,
+            Ok((kind, _)) => self.report(cx.def, kind_error(p, kind, "a trait", p.span)),
+            Err(e) if self.a.unread_path(cx.def, cx.m, p, &e) => {}
+            Err(e) => self.report(cx.def, e.into_diagnostic()),
+        }
+        None
+    }
+
     /// The effects of a row of a signature or a function type
     /// ([`read_effects`]): its errors are reported, and the lowering goes on.
     pub(super) fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {

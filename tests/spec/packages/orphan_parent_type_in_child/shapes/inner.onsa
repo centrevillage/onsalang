@@ -1,0 +1,17 @@
+use shapes.{Parent}
+
+pub struct Child {
+  n: I32,
+}
+
+impl Child {
+  pub fn n_of(self) -> I32 { self.n }
+}
+
+impl Parent {                                       //~ E0307
+  pub fn doubled(self) -> I32 { self.n * 2 }
+}
+
+pub fn reads(p: Parent) -> I32 {
+  p.doubled()
+}
