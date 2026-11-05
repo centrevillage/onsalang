@@ -108,8 +108,6 @@
 "WrappingMul" = 1
 "WrappingSub" = 1
 
-[allow."crates/onsa_sema/src/exhaust.rs"]
-
 [allow."crates/onsa_sema/src/flow_names.rs"]
 "delay" = 1
 "prev" = 1
