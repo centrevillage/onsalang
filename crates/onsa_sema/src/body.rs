@@ -132,16 +132,20 @@ pub enum Target {
     Local(LocalId),
     /// A `const N` generic parameter used as a `U32` value.
     ConstParam(u32),
-    /// A function item (as a value, or the callee of a `Call`).
+    /// A function item (as a value, or the callee of a `Call`). `of`: see
+    /// [`Target::Method`].
     Fn {
         def: DefId,
+        of: Option<TyId>,
         inst: Option<InstId>,
     },
     /// A constant. `inst` holds the type arguments of a constant of a generic
     /// `impl`, read as a value (S-304); `None` for any other constant, and
-    /// where a length or a constant expression reads one by its value.
+    /// where a length or a constant expression reads one by its value. `of`:
+    /// see [`Target::Method`].
     Const {
         def: DefId,
+        of: Option<TyId>,
         inst: Option<InstId>,
     },
     /// A unit variant (value) or tuple variant (constructor / callee).
@@ -152,8 +156,19 @@ pub enum Target {
     /// `panic` (§9.2).
     Panic,
     /// `x.m(...)` on a user type: the method def; the receiver is the callee's `base`.
+    ///
+    /// `of` is the type parameter of a member of its bounds (`T.ZERO`,
+    /// `T.round_from(k)`, `x.checked_add(y)`). Then `def` is the member of the
+    /// representative type ([`crate::traits::MEMBERS`]), and only the form of
+    /// its declaration may be read (its kind, `self`, the modes, `rt`, the
+    /// effects), which is the same for every type of the bound. What depends
+    /// on the type (its value, its types, the type in a message) is not read
+    /// from it: the types stage reads the declaration at `of`, and lowering
+    /// binds the use to the member of the instantiated type
+    /// (`Lowerer::instance_target`).
     Method {
         def: DefId,
+        of: Option<TyId>,
         inst: Option<InstId>,
     },
     /// A method of the compiler's table (`xs.len()` of an array,

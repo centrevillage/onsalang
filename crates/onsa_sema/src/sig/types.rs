@@ -264,8 +264,11 @@ impl<'p> Sema<'p> {
                     _ if cx.is_local(&path.segments[0].name) => Err(local().into()),
                     Some((i, NameKind::ConstParam)) => Ok(Ty::Param(i)),
                     Some((_, kind)) => Err(crate::constarg::not_constant(kind, src(cx, path.span), path.span)),
-                    None => crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, path.span)
-                        .map(Ty::ConstVal),
+                    None => match crate::constarg::member_of_param(self.a, &cx.generics, cx.text, path, path.span) {
+                        Some(err) => Err(err),
+                        None => crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, path.span)
+                            .map(Ty::ConstVal),
+                    },
                 };
                 match named {
                     // A constant with type arguments (`K[F32]`).

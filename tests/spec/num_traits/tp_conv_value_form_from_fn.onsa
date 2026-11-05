@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§6.1", "§6.3"]
+
+// W5-05 U3 (spec §3.3: the value form of a conversion function has its source from the expected type, and the source of `array.from_fn` is the `U32` of the index;
+// `F32.round_from` of a `U32` is a pair that `as` does not write): `array.from_fn` with the conversion function of a type parameter and of a concrete type.
+// The function is a `target` declaration of std, which has no body to call. Every value is the index.
+
+use std.array
+
+fn via_from_fn[T: Float]() -> [T; 3] {
+  array.from_fn(T.round_from)
+}
+
+test "the value form of T.round_from as the argument of array.from_fn" {
+  let a: [F32; 3] = via_from_fn()
+  let b: [F64; 3] = via_from_fn()
+  assert a[0] == 0.0
+  assert a[1] == 1.0
+  assert a[2] == 2.0
+  assert b[2] == 2.0
+}
+
+test "the value form of F32.round_from as the argument of array.from_fn" {
+  let a: [F32; 3] = array.from_fn(F32.round_from)
+  assert a[0] == 0.0
+  assert a[2] == 2.0
+}
+
+test "the value form of U8.narrow_from as the argument of array.from_fn" {
+  let a: [Option[U8]; 2] = array.from_fn(U8.narrow_from)
+  assert a[0] == Some(0)
+  assert a[1] == Some(1)
+}

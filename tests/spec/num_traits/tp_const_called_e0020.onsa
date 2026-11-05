@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.1", "§6.6", "§18.1"]
+
+// W5-05 U3/t (spec §15.1, §6.1: a value called as `x(...)` is E0020; §6.6: `T.ZERO` is a constant, a value, and not a function): the
+// associated constant of a type parameter that is called with the call form of a function. The bounds give the name (`ZERO`
+// from `AnyNum`, `ONE` and `BITS` from `Int`, `PI` from `Float`), so the name is found and it is the form that is wrong. The case
+// kind_constant_called_type_param.onsa (module/) has the form for `T: Num`. One function for each form (P-01).
+
+pub fn zero_called[T: AnyNum](x: T) -> T {
+  x + T.ZERO() //~ E0020
+}
+
+pub fn one_called[T: Int](x: T) -> T {
+  x + T.ONE() //~ E0020
+}
+
+pub fn bits_called[T: Int](x: T) -> U32 {
+  T.BITS() //~ E0020
+}
+
+pub fn pi_called[T: Float](x: T) -> T {
+  x * T.PI() //~ E0020
+}
+
+pub fn max_called[T: Float](x: T) -> T {
+  T.MAX() //~ E0020
+}
+
+pub fn fine[T: Float](x: T) -> T {
+  x * T.PI + T.ONE
+}

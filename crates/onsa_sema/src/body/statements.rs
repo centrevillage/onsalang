@@ -150,6 +150,7 @@ impl<'a> Checker<'a> {
             let s = self.shallow(lt);
             match self.ty(s) {
                 Ty::Int(_) | Ty::Error => {}
+                Ty::Param(_) if self.satisfies(s, Bound::Int) => {}
                 Ty::Var(_) if self.infer.lit_of(&self.a.types, s) == Some(LitKind::Int) => {}
                 Ty::Var(_) => return Err(self.known(lt, span, "range bound").unwrap_err()),
                 _ => {

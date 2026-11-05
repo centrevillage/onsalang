@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.6", "§15.1", "§18.1"]
+
+// W5-05 U3/t (spec §15.1: a name that is not found is E0302; §6.3: a type parameter has the associated constants of its bounds,
+// `ZERO` from `AnyNum`, `ONE` `MIN` `MAX` `BITS` from `Int`, `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN` from `Float`; §6.6: "浮動小数に
+// `MIN` は無い (E0302)", and "`ONE` を `AnyNum` と `Num` に置かないのは、固定小数点 ... 1 を表せない"): a constant that the bounds of the
+// type parameter do not give is E0302, as for a name that is nowhere. The number of the candidates is not asked here. One function for each form (P-01).
+
+pub fn num_has_no_one[T: Num](x: T) -> T {
+  T.ONE //~ E0302
+}
+
+pub fn anynum_has_no_one[T: AnyNum](x: T) -> T {
+  T.ONE //~ E0302
+}
+
+pub fn anynum_has_no_min[T: AnyNum](x: T) -> T {
+  T.MIN //~ E0302
+}
+
+pub fn anynum_has_no_max[T: AnyNum](x: T) -> T {
+  T.MAX //~ E0302
+}
+
+pub fn float_has_no_min[T: Float](x: T) -> T {
+  T.MIN //~ E0302
+}
+
+pub fn float_has_no_bits[T: Float](x: T) -> U32 {
+  T.BITS //~ E0302
+}
+
+pub fn int_has_no_pi[T: Int](x: T) -> T {
+  T.PI //~ E0302
+}
+
+pub fn int_has_no_nan[T: Int](x: T) -> T {
+  T.NAN //~ E0302
+}
+
+pub fn int_has_no_epsilon[T: Int](x: T) -> T {
+  T.EPSILON //~ E0302
+}
+
+pub fn unsigned_has_no_infinity[T: Unsigned](x: T) -> T {
+  T.INFINITY //~ E0302
+}
+
+pub fn signed_has_no_pi[T: Num + Int](x: T) -> T {
+  T.PI //~ E0302
+}
+
+pub fn unbounded_has_no_zero[T](x: T) -> T {
+  T.ZERO //~ E0302
+}
+
+pub fn show_has_no_zero[T: Show](x: T) -> T {
+  T.ZERO //~ E0302
+}
+
+pub fn partial_eq_has_no_one[T: PartialEq](x: T) -> T {
+  T.ONE //~ E0302
+}
+
+pub fn a_name_nowhere[T: Float](x: T) -> T {
+  T.TAU //~ E0302
+}
+
+pub fn fine_in_the_chain[T: Float](x: T) -> T {
+  x + T.ZERO + T.ONE + T.PI + T.MAX + T.EPSILON + T.INFINITY
+}
+
+pub fn fine_in_int[T: Int](x: T) -> U32 {
+  let _ = T.ZERO + T.ONE + T.MIN + T.MAX
+  T.BITS
+}

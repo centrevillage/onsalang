@@ -1,0 +1,158 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§6.6", "§3.4"]
+
+// W5-05 U3/t (spec §6.3: `Float` has the associated constants `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN` of type `Self`; §6.6: the
+// values are the mathematical values rounded to nearest even, `PI` has the bits 0x40490FDB (F32) and 0x400921FB54442D18 (F64),
+// `EPSILON` is 2^-23 and 2^-52, `NAN` is a NaN with unspecified bits): the same generic function runs at F32 and at F64. The bits
+// are read outside the generic function (`to_bits()` is a method of the concrete types). The bits of the other values are worked
+// out from the layout: 1.0 is exponent 127 (1023) and no fraction; 2^-23 is the exponent 104 = 0x68 and 2^-52 is 971 = 0x3CB;
+// MAX is the largest exponent below the all-ones one and an all-ones fraction; INFINITY is the all-ones exponent.
+
+fn one_of[T: Float](x: T) -> T {
+  T.ONE
+}
+
+fn pi_of[T: Float](x: T) -> T {
+  T.PI
+}
+
+fn max_of[T: Float](x: T) -> T {
+  T.MAX
+}
+
+fn epsilon_of[T: Float](x: T) -> T {
+  T.EPSILON
+}
+
+fn infinity_of[T: Float](x: T) -> T {
+  T.INFINITY
+}
+
+fn nan_of[T: Float](x: T) -> T {
+  T.NAN
+}
+
+fn one_plus_epsilon[T: Float](x: T) -> T {
+  T.ONE + T.EPSILON
+}
+
+fn max_overflows[T: Float](x: T) -> Bool {
+  T.MAX + T.MAX == T.INFINITY
+}
+
+fn one_over_zero[T: Float](x: T) -> T {
+  T.ONE / T.ZERO
+}
+
+fn one_over_negative_zero[T: Float](x: T) -> T {
+  T.ONE / -T.ZERO
+}
+
+fn nan_compares[T: Float](x: T) -> U32 {
+  var n: U32 = 0
+  if T.NAN == T.NAN {
+    n = n + 1
+  }
+  if T.NAN != T.NAN {
+    n = n + 10
+  }
+  if T.NAN < T.ONE {
+    n = n + 100
+  }
+  if T.NAN > T.ONE {
+    n = n + 1000
+  }
+  n
+}
+
+fn infinity_minus_infinity[T: Float](x: T) -> T {
+  T.INFINITY - T.INFINITY
+}
+
+fn ordering[T: Float](x: T) -> Bool {
+  -T.INFINITY < -T.MAX && -T.MAX < T.ZERO && T.ZERO < T.EPSILON && T.EPSILON < T.ONE && T.ONE < T.PI && T.PI < T.MAX && T.MAX < T.INFINITY
+}
+
+test "T.ONE is 1.0" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert one_of(a).to_bits() == 0x3F800000
+  assert one_of(b).to_bits() == 0x3FF0000000000000
+}
+
+test "T.PI has the bits of the rounded pi" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert pi_of(a).to_bits() == 0x40490FDB
+  assert pi_of(b).to_bits() == 0x400921FB54442D18
+}
+
+test "T.MAX is the largest finite value" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert max_of(a).to_bits() == 0x7F7FFFFF
+  assert max_of(b).to_bits() == 0x7FEFFFFFFFFFFFFF
+}
+
+test "T.EPSILON is 2^-23 and 2^-52" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert epsilon_of(a).to_bits() == 0x34000000
+  assert epsilon_of(b).to_bits() == 0x3CB0000000000000
+}
+
+test "1 + T.EPSILON is the next value after 1" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert one_plus_epsilon(a).to_bits() == 0x3F800001
+  assert one_plus_epsilon(b).to_bits() == 0x3FF0000000000001
+}
+
+test "T.INFINITY is the positive infinity" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert infinity_of(a).to_bits() == 0x7F800000
+  assert infinity_of(b).to_bits() == 0x7FF0000000000000
+}
+
+test "T.NAN is a NaN, and its bits read as the positive quiet NaN" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  let na     = nan_of(a)
+  let nb     = nan_of(b)
+  assert na != na
+  assert nb != nb
+  assert na.to_bits() == 0x7FC00000
+  assert nb.to_bits() == 0x7FF8000000000000
+}
+
+test "the constants meet in the arithmetic of IEEE 754" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert max_overflows(a)
+  assert max_overflows(b)
+  assert one_over_zero(a) == F32.INFINITY
+  assert one_over_zero(b) == F64.INFINITY
+  assert one_over_negative_zero(a) == -F32.INFINITY
+  assert one_over_negative_zero(b) == -F64.INFINITY
+  let ia = infinity_minus_infinity(a)
+  let ib = infinity_minus_infinity(b)
+  assert ia != ia
+  assert ib != ib
+}
+
+test "every comparison with T.NAN is false but !=" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert nan_compares(a) == 10
+  assert nan_compares(b) == 10
+}
+
+test "the constants are in order" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert ordering(a)
+  assert ordering(b)
+}

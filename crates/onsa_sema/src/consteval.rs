@@ -63,7 +63,7 @@ pub(crate) fn eval(ck: &mut Checker<'_>, e: ExprId) -> Option<ConstValue> {
             }) {
                 Some(n) => n,
                 None => match ck.target_of(*len) {
-                    Some(Target::Const { def, .. }) => match &ck.a.def(def).kind {
+                    Some(Target::Const { def, of: None, .. }) => match &ck.a.def(def).kind {
                         crate::def::DefKind::Const(c) => c.int_value? as usize,
                         _ => return None,
                     },
@@ -86,7 +86,8 @@ pub(crate) fn eval(ck: &mut Checker<'_>, e: ExprId) -> Option<ConstValue> {
             Some(ConstValue::Struct(out))
         }
         ExprKind::Path(_) | ExprKind::Field { .. } => match ck.target_of(e) {
-            Some(Target::Const { def, .. }) => ck.a.const_values.get(&def).cloned(),
+            // A member of a type parameter has a value of its instantiation.
+            Some(Target::Const { def, of: None, .. }) => ck.a.const_values.get(&def).cloned(),
             _ => None,
         },
         _ => None,

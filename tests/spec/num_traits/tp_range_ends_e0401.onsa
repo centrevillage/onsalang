@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§6.3", "§6.6", "§18.1"]
+
+// W5-05 U3/t (spec §7: "端は整数の型である (違えば E0401)"; §6.3: `Num`, `AnyNum` and `Float` are not `Int`, and a type with no bound has no `ZERO`): the ends of a range that are
+// values of a type parameter that is not bounded by `Int` are E0401, as the ends that are floats are (negative/range_types.onsa). The start `T.ZERO` is found for `Num`,
+// `AnyNum` and `Float`, so the range is what is wrong; one diagnostic for each range. One function for each form (P-01).
+
+pub fn half_open_of_a_num[T: Num](n: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.ZERO ..< n { //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn closed_of_a_num[T: Num](n: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.ZERO ..= n { //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn half_open_of_an_anynum[T: AnyNum](n: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.ZERO ..< n { //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn half_open_of_a_float[T: Float](n: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.ZERO ..< n { //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn values_of_a_num[T: Num](a: T, b: T) -> U32 {
+  var c: U32 = 0
+  for _ in a ..< b { //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn values_of_a_parameter_with_no_bound[T](a: T, b: T) -> U32 {
+  var c: U32 = 0
+  for _ in a ..= b { //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn fine[T: Int](n: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.ZERO ..< n {
+    c = c + 1
+  }
+  c
+}

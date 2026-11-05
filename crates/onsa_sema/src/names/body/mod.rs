@@ -231,6 +231,14 @@ pub(crate) enum PathRes {
         entity: Entity,
         owner: Option<TyId>,
     },
+    /// A member the bounds of the type parameter `param` give (`T.ZERO`,
+    /// `T.round_from`, §15.1, §3.3): `member` is the declaration of the
+    /// representative type of its row ([`crate::traits::MEMBERS`]), and the
+    /// types stage reads it as a member of the parameter.
+    BoundMember {
+        param: u32,
+        member: DefId,
+    },
     /// A builtin name of a flow body (§2.2, §11.4), recorded where the flow
     /// stage reads it (the callee of a delay or of `sample_rate()`); anywhere
     /// else it is not found (S-720, `paths.rs`).

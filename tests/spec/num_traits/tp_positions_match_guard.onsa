@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.3", "§4.5"]
+
+// W5-05 U3/t (spec §6.6: an associated constant is read as `T.ZERO` where a type parameter is in scope): `T.ZERO` in the guard of a `match` arm. The same body
+// runs at several types. `-0.0 == T.ZERO` holds and every comparison with a NaN is false. Every value is worked out by hand.
+
+fn classify[T: AnyNum](x: T) -> U32 {
+  match x {
+    v if v == T.ZERO => 0,
+    v if v > T.ZERO => 1,
+    _ => 2,
+  }
+}
+
+test "the guard of a match arm" {
+  let a: I8  = 0
+  let b: I8  = -3
+  let c: U32 = 9
+  let d: F32 = -0.0
+  let e: F64 = F64.NAN
+  let f: F64 = 2.5
+  assert classify(a) == 0
+  assert classify(b) == 2
+  assert classify(c) == 1
+  assert classify(d) == 0
+  assert classify(e) == 2
+  assert classify(f) == 1
+}

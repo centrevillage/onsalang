@@ -2942,6 +2942,12 @@ pub fn f64_vdelay_f(d: F64, top: U32) -> F64 {
 }
 
 @export
+pub fn const_i8_zero() -> I8 { I8.ZERO }
+
+@export
+pub fn const_i8_one() -> I8 { I8.ONE }
+
+@export
 pub fn const_i8_min() -> I8 { I8.MIN }
 
 @export
@@ -2949,6 +2955,12 @@ pub fn const_i8_max() -> I8 { I8.MAX }
 
 @export
 pub fn const_i8_bits() -> U32 { I8.BITS }
+
+@export
+pub fn const_i16_zero() -> I16 { I16.ZERO }
+
+@export
+pub fn const_i16_one() -> I16 { I16.ONE }
 
 @export
 pub fn const_i16_min() -> I16 { I16.MIN }
@@ -2960,6 +2972,12 @@ pub fn const_i16_max() -> I16 { I16.MAX }
 pub fn const_i16_bits() -> U32 { I16.BITS }
 
 @export
+pub fn const_i32_zero() -> I32 { I32.ZERO }
+
+@export
+pub fn const_i32_one() -> I32 { I32.ONE }
+
+@export
 pub fn const_i32_min() -> I32 { I32.MIN }
 
 @export
@@ -2967,6 +2985,12 @@ pub fn const_i32_max() -> I32 { I32.MAX }
 
 @export
 pub fn const_i32_bits() -> U32 { I32.BITS }
+
+@export
+pub fn const_i64_zero() -> I64 { I64.ZERO }
+
+@export
+pub fn const_i64_one() -> I64 { I64.ONE }
 
 @export
 pub fn const_i64_min() -> I64 { I64.MIN }
@@ -2978,6 +3002,12 @@ pub fn const_i64_max() -> I64 { I64.MAX }
 pub fn const_i64_bits() -> U32 { I64.BITS }
 
 @export
+pub fn const_u8_zero() -> U8 { U8.ZERO }
+
+@export
+pub fn const_u8_one() -> U8 { U8.ONE }
+
+@export
 pub fn const_u8_min() -> U8 { U8.MIN }
 
 @export
@@ -2985,6 +3015,12 @@ pub fn const_u8_max() -> U8 { U8.MAX }
 
 @export
 pub fn const_u8_bits() -> U32 { U8.BITS }
+
+@export
+pub fn const_u16_zero() -> U16 { U16.ZERO }
+
+@export
+pub fn const_u16_one() -> U16 { U16.ONE }
 
 @export
 pub fn const_u16_min() -> U16 { U16.MIN }
@@ -2996,6 +3032,12 @@ pub fn const_u16_max() -> U16 { U16.MAX }
 pub fn const_u16_bits() -> U32 { U16.BITS }
 
 @export
+pub fn const_u32_zero() -> U32 { U32.ZERO }
+
+@export
+pub fn const_u32_one() -> U32 { U32.ONE }
+
+@export
 pub fn const_u32_min() -> U32 { U32.MIN }
 
 @export
@@ -3005,6 +3047,12 @@ pub fn const_u32_max() -> U32 { U32.MAX }
 pub fn const_u32_bits() -> U32 { U32.BITS }
 
 @export
+pub fn const_u64_zero() -> U64 { U64.ZERO }
+
+@export
+pub fn const_u64_one() -> U64 { U64.ONE }
+
+@export
 pub fn const_u64_min() -> U64 { U64.MIN }
 
 @export
@@ -3012,6 +3060,12 @@ pub fn const_u64_max() -> U64 { U64.MAX }
 
 @export
 pub fn const_u64_bits() -> U32 { U64.BITS }
+
+@export
+pub fn const_f32_zero() -> F32 { F32.ZERO }
+
+@export
+pub fn const_f32_one() -> F32 { F32.ONE }
 
 @export
 pub fn const_f32_pi() -> F32 { F32.PI }
@@ -3027,6 +3081,12 @@ pub fn const_f32_infinity() -> F32 { F32.INFINITY }
 
 @export
 pub fn const_f32_nan() -> F32 { F32.NAN }
+
+@export
+pub fn const_f64_zero() -> F64 { F64.ZERO }
+
+@export
+pub fn const_f64_one() -> F64 { F64.ONE }
 
 @export
 pub fn const_f64_pi() -> F64 { F64.PI }

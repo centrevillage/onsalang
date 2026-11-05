@@ -739,11 +739,10 @@ fn a_name_of_the_spec_this_version_has_not_is_its_e0200() {
         (a.diagnostics[0].code, a.diagnostics[0].message.clone())
     };
     let cases = [
-        ("pub fn f() -> F32 {\n  F32.ZERO\n}\n", "the builtin value `F32.ZERO`"),
-        ("type K = F32\npub fn f() -> F32 {\n  K.ONE\n}\n", "the builtin value `K.ONE`"),
+        ("pub fn f() -> F32 {\n  F32.default()\n}\n", "the builtin value `F32.default`"),
+        ("type K = F32\npub fn f() -> F32 {\n  K.default()\n}\n", "the builtin value `K.default`"),
         ("const Z: I32 = I32.default()\npub fn f() -> I32 { 1 }\n", "the builtin value `I32.default`"),
-        ("pub fn f(x: I32) -> I32 {\n  match x {\n    I32.ZERO => 1,\n    _ => 0,\n  }\n}\n", "`I32.ZERO`"),
-        ("pub fn f(x: [F32; U32.ONE]) -> F32 {\n  1.0\n}\n", "the builtin value `U32.ONE`"),
+        ("pub fn f(x: [F32; U32.default]) -> F32 {\n  1.0\n}\n", "`U32.default`"),
         ("pub fn f(b: Bytes) {\n  let _ = Str.from_utf8(b)\n}\n", "the builtin name `Str.from_utf8`"),
         ("pub fn f(s: Str) -> Bytes {\n  s.as_bytes()\n}\n", "the builtin name `Str.as_bytes`"),
         ("pub fn f(b: Bytes) -> U32 {\n  b.len()\n}\n", "the builtin name `Bytes.len`"),
@@ -873,8 +872,8 @@ fn the_receiver_of_an_e0710_shows_what_is_decided() {
 #[test]
 fn a_path_over_lines_shows_its_names() {
     let cases = [
-        ("pub fn f() -> F32 {\n  F32 // c\n    .ZERO\n}\n", Code::E0200, "the builtin value `F32.ZERO`"),
-        ("pub fn f(x: [F32; U32 // c\n  .ONE]) {\n}\n", Code::E0200, "the builtin value `U32.ONE`"),
+        ("pub fn f() -> F32 {\n  F32 // c\n    .default()\n}\n", Code::E0200, "the builtin value `F32.default`"),
+        ("pub fn f(x: [F32; U32 // c\n  .default]) {\n}\n", Code::E0200, "`U32.default`"),
         ("pub fn f() -> Str {\n  Str\n    .default()\n}\n", Code::E0200, "the builtin value `Str.default`"),
         ("pub fn f(s: Str) -> Bytes {\n  Str // c\n    .as_bytes(s)\n}\n", Code::E0308, "`Str.as_bytes` is a method"),
     ];
@@ -996,4 +995,41 @@ fn the_e0406_of_a_constant_says_how_to_give_the_arguments() {
 fn a_read_of_a_constant_of_a_bad_heading_is_not_held_to_its_arguments() {
     let src = "pub struct F[T, const N: U32] { a: [T; N] }\nimpl F[F32, 4] {\n  pub const X: U32 = 1\n}\ntype A = F[F32, 8]\npub fn g() -> U32 { A.X }\n";
     assert_eq!(codes(src), [Code::E0307]);
+}
+
+/// §4.5, S-898: `T.BITS` has no value before `T` is instantiated, in a
+/// signature as in a body; a name the bounds do not give is not found there too.
+#[test]
+fn a_member_of_a_type_parameter_is_no_constant_expression() {
+    let cases = [
+        ("pub fn f[T: Int](x: [F32; T.BITS]) {\n}\n", Code::E0417),
+        ("pub fn f[T: Int]() -> [F32; T.BITS + 1] {\n  [0.0; 1]\n}\n", Code::E0417),
+        ("pub fn f[T: Int]() {\n  let _ = [0.0; T.BITS]\n}\n", Code::E0417),
+        ("pub fn f[T: Int]() {\n  let _: [F32; T.BITS] = [0.0; 1]\n}\n", Code::E0417),
+        ("pub struct R[T: Int] {\n  a: [F32; T.BITS],\n}\n", Code::E0417),
+        ("pub fn f[T: Num](x: [F32; T.ONE]) {\n}\n", Code::E0302),
+        ("pub fn f[T: Num]() {\n  let _ = [0.0; T.ONE]\n}\n", Code::E0302),
+    ];
+    for (src, code) in cases {
+        let a = check_in(src);
+        assert_eq!(a.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), [code], "{src}");
+    }
+}
+
+/// S-238: the method a bound does not give says where it is, with no
+/// candidate: `checked_neg`, of the signed integers, gives the form of `Int`.
+#[test]
+fn a_method_of_a_number_trait_the_bounds_do_not_give() {
+    let cases = [
+        ("pub fn f[T: Int](x: T) -> Option[T] {\n  x.checked_neg()\n}\n", "`T.ZERO.checked_sub(x)`"),
+        ("pub fn f[T: Num + Int](x: T) -> Option[T] {\n  x.checked_neg()\n}\n", "`T.ZERO.checked_sub(x)`"),
+        ("pub fn f[T: Num](x: T) -> Option[T] {\n  x.checked_add(x)\n}\n", "of `Int`"),
+        ("pub fn f[T: Float](x: T) -> T {\n  x.div_euclid(x)\n}\n", "of `Int`"),
+    ];
+    for (src, text) in cases {
+        let d = check_in(src).diagnostics.remove(0);
+        assert_eq!(d.code, Code::E0413, "{src}");
+        assert!(d.fixes.is_empty(), "{src}: {:?}", d.fixes);
+        assert!(d.notes.iter().any(|n| n.message.contains(text)), "{src}: {:?}", d.notes);
+    }
 }

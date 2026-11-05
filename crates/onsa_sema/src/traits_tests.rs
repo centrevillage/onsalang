@@ -1,12 +1,12 @@
 //! The tables of the traits against §6.3 and against each other.
 
-use crate::Package;
 use crate::body::bounds::Bounds;
 use crate::def::{Bound, DefKind, Derive, TRAITS};
 use crate::flow_tests::std_package;
 use crate::tests::analyze;
-use crate::traits::{Class, IMPLS, SUPERS, implies};
-use crate::ty::{BuiltinTy, EffectSet, FloatKind, FnTy, IntKind, Len, Ty};
+use crate::traits::{Class, IMPLS, MEMBERS, Rep, SUPERS, implies, member, member_rep};
+use crate::ty::{BuiltinTy, EffectSet, FloatKind, FnTy, IntKind, Len, Ty, TyId};
+use crate::{Analysis, DefId, Package};
 
 const NUMBER_TRAITS: [Bound; 5] = [Bound::AnyNum, Bound::Num, Bound::Float, Bound::Int, Bound::Unsigned];
 
@@ -192,4 +192,73 @@ fn the_parts_decide_a_trait_of_a_tuple_and_an_array() {
     assert!(bounds.satisfies(of_floats, Bound::PartialOrd) && !bounds.satisfies(of_floats, Bound::Eq));
     assert!(!bounds.satisfies(of_ints, Bound::Add), "the operators of the numbers are not of the parts");
     assert!(bounds.satisfies(array, Bound::Eq) && !bounds.satisfies(array, Bound::Hash));
+}
+
+/// The numbers of a row of [`MEMBERS`]: every type whose row of [`IMPLS`] has
+/// the trait `b`.
+fn numbers_of(a: &mut Analysis, b: Bound) -> Vec<TyId> {
+    use IntKind::*;
+    let mut out: Vec<TyId> = [I8, I16, I32, I64, U8, U16, U32, U64].map(|k| a.types.int(k)).to_vec();
+    out.extend([FloatKind::F32, FloatKind::F64].map(|k| a.types.float(k)));
+    out.retain(|&t| Class::of(a.types.get(t)).is_some_and(|c| c.implements(b)));
+    out
+}
+
+/// The form of the declaration `d`, with `rep` read as `t`: all that a use of
+/// a member of a type parameter takes from the representative type.
+fn form_at(a: &mut Analysis, d: DefId, rep: TyId, t: TyId) -> String {
+    let def = a.def(d).clone();
+    match &def.kind {
+        DefKind::Const(c) => format!("const {:?}", a.types.replace(c.ty, rep, t)),
+        DefKind::Fn(f) => {
+            let params: Vec<_> = f.params.iter().map(|p| (p.mode, a.types.replace(p.ty, rep, t))).collect();
+            let ret = a.types.replace(f.ret, rep, t);
+            let own: Vec<_> = f.generics.iter().map(|g| format!("{:?}", g.kind)).collect();
+            format!("fn {:?} {} {:?} {own:?} {params:?} {ret:?}", f.self_mode, f.rt, f.effects)
+        }
+        other => panic!("{} is {other:?}", def.name),
+    }
+}
+
+/// The one comparison of [`MEMBERS`] with the declarations of std (D-15): a
+/// use reads the declaration of the representative type (`Target::Method`),
+/// so every type of a row declares the member, of the same form and, read at
+/// the type, of the same types. No representative is `U32`: `BITS: U32` would
+/// read as the parameter.
+#[test]
+fn a_row_of_members_is_declared_alike_by_every_type_of_it() {
+    let mut a = crate::prim_tests::analyzed_std();
+    let mut seen = 0;
+    for &(b, rep, names) in MEMBERS {
+        let key = a.types.find(&rep.ty()).expect("the representative type");
+        assert_eq!(a.types.find(&Ty::Int(IntKind::U32)).filter(|&u| u == key), None);
+        let types = numbers_of(&mut a, b);
+        assert!(types.contains(&key), "the representative of {b:?} is of the row");
+        for t in types {
+            for &name in names {
+                let shown = format!("{name} of {:?}", a.types.get(t));
+                let member_of = |ty: TyId| a.modules.assoc_builtin[&ty].get(name).copied();
+                let (there, first) = (member_of(t).expect(&shown), member_of(key).expect(&shown));
+                assert_eq!(form_at(&mut a, there, t, t), form_at(&mut a, first, key, t), "{shown}");
+                seen += 1;
+            }
+        }
+    }
+    assert_eq!(seen, 10 + 2 * 7 + 8 * 18, "the members of the rows at their types");
+}
+
+/// A name is of the first row of a trait a bound implies; the bounds decide
+/// it by what they imply, and a name of no row is none.
+#[test]
+fn a_member_of_a_type_parameter_is_of_its_bounds() {
+    let a = crate::prim_tests::analyzed_std();
+    assert_eq!(member_rep(&[Bound::Unsigned], "ZERO"), Some(Rep::I32));
+    assert_eq!(member_rep(&[Bound::Float], "ZERO"), Some(Rep::I32));
+    assert_eq!(member_rep(&[Bound::Float], "ONE"), Some(Rep::F32));
+    assert_eq!(member_rep(&[Bound::Num], "ONE"), None);
+    assert_eq!(member_rep(&[Bound::Show, Bound::Int], "checked_add"), Some(Rep::I32));
+    assert_eq!(member_rep(&[Bound::Int], "checked_neg"), None);
+    assert_eq!(member_rep(&[Bound::Int], "PI"), None);
+    assert!(member(&a, &[Bound::AnyNum], "ZERO").is_some());
+    assert!(member(&a, &[Bound::AnyNum], "ONE").is_none());
 }

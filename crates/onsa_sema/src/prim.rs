@@ -529,6 +529,8 @@ pub(crate) const ROUND_FROM: &str = "round_from";
 pub(crate) const TRUNC_FROM: &str = "trunc_from";
 pub(crate) const TRUNC_SAT_FROM: &str = "trunc_sat_from";
 pub(crate) const NARROW_FROM: &str = "narrow_from";
+/// The checked negation of the signed integers, no member of `Int` (S-238).
+pub(crate) const CHECKED_NEG: &str = "checked_neg";
 
 /// The type the `std` declaration `def` converts to, when it is one of
 /// [`CONVERSIONS`]: what `body/conversions.rs` judges a use of.

@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§6.3", "§6.6"]
+
+// W5-05 U3/t (spec §7: "`for i in a ..= b` は、`b` が型の最大値でも溢れずに終わる。始点が終点以上 (`a ..< b`) か終点より大きい (`a ..= b`) 範囲は空"): the closed range with the ends of a type
+// parameter `T: Int`: two ends that are values, the start `T.ZERO` and `T.ONE`, the empty range, and the end that is the largest value of the type.
+
+fn count_closed[T: Int](lo: T, hi: T) -> U32 {
+  var c: U32 = 0
+  for _ in lo ..= hi {
+    c = c + 1
+  }
+  c
+}
+
+fn sum_closed[T: Int](n: T) -> T {
+  var t = T.ZERO
+  for i in T.ZERO ..= n {
+    t = t + i
+  }
+  t
+}
+
+fn sum_from_one_closed[T: Int](n: T) -> T {
+  var t = T.ZERO
+  for i in T.ONE ..= n {
+    t = t + i
+  }
+  t
+}
+
+fn count_to_max_closed[T: Int](x: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.MAX ..= T.MAX {
+    c = c + 1
+  }
+  c
+}
+
+fn count_all[T: Int](x: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.ZERO ..= T.MAX {
+    c = c + 1
+  }
+  c
+}
+
+fn last_value[T: Int](lo: T, hi: T) -> T {
+  var t = lo
+  for i in lo ..= hi {
+    t = i
+  }
+  t
+}
+
+test "two ends that are values of T" {
+  let a: I32 = 3
+  let b: I32 = 7
+  assert count_closed(a, b) == 5
+  let c: U8 = 250
+  let d: U8 = 255
+  assert count_closed(c, d) == 6
+}
+
+test "the range of a signed type that starts below 0" {
+  let a: I8 = -3
+  let b: I8 = 3
+  assert count_closed(a, b) == 7
+  let c: I64 = -9223372036854775807
+  let d: I64 = -9223372036854775805
+  assert count_closed(c, d) == 3
+}
+
+test "a closed range that is empty runs the body 0 times" {
+  let a: I32 = 7
+  let b: I32 = 3
+  assert count_closed(a, b) == 0
+}
+
+test "the closed range that starts at T.ONE" {
+  let a: U8  = 5
+  let b: I32 = 11
+  assert sum_from_one_closed(a) == 15
+  assert sum_from_one_closed(b) == 66
+}
+
+test "the closed range with the same end runs once" {
+  let a: U64 = U64.MAX
+  assert count_closed(a, a) == 1
+  let b: I8 = -128
+  assert count_closed(b, b) == 1
+}
+
+test "the closed range from T.ZERO sums to the triangle number" {
+  let a: U8  = 10
+  let b: I64 = 100
+  let c: I16 = 0
+  assert sum_closed(a) == 55
+  assert sum_closed(b) == 5050
+  assert sum_closed(c) == 0
+}
+
+test "the closed range that ends at T.MAX does not overflow" {
+  let a: U8 = 0
+  let b: I8 = 0
+  assert count_to_max_closed(a) == 1
+  assert count_to_max_closed(b) == 1
+  assert count_all(a) == 256
+  assert count_all(b) == 128
+}
+
+test "the loop variable has the type T and the last value of the closed range is the end" {
+  let a: U8 = 250
+  let b: U8 = 255
+  assert last_value(a, b) == 255
+  let c: I16 = -5
+  let d: I16 = -2
+  assert last_value(c, d) == -2
+}

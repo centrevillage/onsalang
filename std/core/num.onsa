@@ -4,8 +4,7 @@
 //! associated functions `round_from`, `trunc_from`, `trunc_sat_from` and
 //! `narrow_from` convert to their `Self`, only between the types `as` does
 //! not, or from a type parameter (§3.3); `abs`, `min`, `sqrt` and the like
-//! are the functions of `std.math`, not methods (§3.4). `ZERO` and `ONE` come
-//! with the number traits (W5-05).
+//! are the functions of `std.math`, not methods (§3.4).
 //!
 //! The functions that return an `Option` are Onsa (S-71): a `target`
 //! declaration returns no `Option` (D-07), so their primitives return
@@ -36,6 +35,8 @@ rt fn is_defined[T](parts: (Bool, T)) -> Bool {
 }
 
 impl I8 {
+  pub const ZERO: I8 = 0
+  pub const ONE: I8 = 1
   pub const MIN: I8 = -128
   pub const MAX: I8 = 127
   pub const BITS: U32 = 8
@@ -61,6 +62,8 @@ impl I8 {
 }
 
 impl I16 {
+  pub const ZERO: I16 = 0
+  pub const ONE: I16 = 1
   pub const MIN: I16 = -32768
   pub const MAX: I16 = 32767
   pub const BITS: U32 = 16
@@ -86,6 +89,8 @@ impl I16 {
 }
 
 impl I32 {
+  pub const ZERO: I32 = 0
+  pub const ONE: I32 = 1
   pub const MIN: I32 = -2147483648
   pub const MAX: I32 = 2147483647
   pub const BITS: U32 = 32
@@ -111,6 +116,8 @@ impl I32 {
 }
 
 impl I64 {
+  pub const ZERO: I64 = 0
+  pub const ONE: I64 = 1
   pub const MIN: I64 = -9223372036854775808
   pub const MAX: I64 = 9223372036854775807
   pub const BITS: U32 = 64
@@ -136,6 +143,8 @@ impl I64 {
 }
 
 impl U8 {
+  pub const ZERO: U8 = 0
+  pub const ONE: U8 = 1
   pub const MIN: U8 = 0
   pub const MAX: U8 = 255
   pub const BITS: U32 = 8
@@ -160,6 +169,8 @@ impl U8 {
 }
 
 impl U16 {
+  pub const ZERO: U16 = 0
+  pub const ONE: U16 = 1
   pub const MIN: U16 = 0
   pub const MAX: U16 = 65535
   pub const BITS: U32 = 16
@@ -184,6 +195,8 @@ impl U16 {
 }
 
 impl U32 {
+  pub const ZERO: U32 = 0
+  pub const ONE: U32 = 1
   pub const MIN: U32 = 0
   pub const MAX: U32 = 4294967295
   pub const BITS: U32 = 32
@@ -208,6 +221,8 @@ impl U32 {
 }
 
 impl U64 {
+  pub const ZERO: U64 = 0
+  pub const ONE: U64 = 1
   pub const MIN: U64 = 0
   pub const MAX: U64 = 18446744073709551615
   pub const BITS: U32 = 64
@@ -234,6 +249,8 @@ impl U64 {
 /// The values are the mathematical ones rounded to the type, as a literal
 /// is (§6.6, §2.4); there is no `MIN` (`-F32.MAX`, §6.6).
 impl F32 {
+  pub const ZERO: F32 = 0.0
+  pub const ONE: F32 = 1.0
   pub const PI: F32 = 3.14159265358979323846264338327950288
   pub const MAX: F32 = 3.40282346638528859811704183484516925440e38
   pub const EPSILON: F32 = 1.1920928955078125e-7
@@ -247,6 +264,8 @@ impl F32 {
 
 /// As of `F32` (§6.6).
 impl F64 {
+  pub const ZERO: F64 = 0.0
+  pub const ONE: F64 = 1.0
   pub const PI: F64 = 3.14159265358979323846264338327950288
   pub const MAX: F64 = 1.7976931348623157081452742373170435679807056752584e308
   pub const EPSILON: F64 = 2.220446049250313080847263336181640625e-16

@@ -409,6 +409,27 @@ impl Types {
         }
     }
 
+    /// `ty` with `to` where it has `from`: one walk of its structure, which
+    /// does not go into `to`. A declaration of a representative type read at
+    /// a type parameter (`crate::traits::MEMBERS`).
+    pub fn replace(&mut self, ty: TyId, from: TyId, to: TyId) -> TyId {
+        if ty == from {
+            return to;
+        }
+        let t = match self.get(ty).clone() {
+            Ty::Array(e, len) => Ty::Array(self.replace(e, from, to), len),
+            Ty::Tuple(ts) => Ty::Tuple(ts.iter().map(|&t| self.replace(t, from, to)).collect()),
+            Ty::Named(d, ts) => Ty::Named(d, ts.iter().map(|&t| self.replace(t, from, to)).collect()),
+            Ty::Builtin(b, ts) => Ty::Builtin(b, ts.iter().map(|&t| self.replace(t, from, to)).collect()),
+            Ty::Fn(f) => {
+                let params = f.params.iter().map(|&(m, t)| (m, self.replace(t, from, to))).collect();
+                Ty::Fn(FnTy { rt: f.rt, params, ret: self.replace(f.ret, from, to), effects: f.effects })
+            }
+            _ => return ty,
+        };
+        self.intern(t)
+    }
+
     pub fn get(&self, id: TyId) -> &Ty {
         &self.tys[id.0 as usize]
     }

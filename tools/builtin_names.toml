@@ -176,6 +176,28 @@
 [allow."crates/onsa_sema/src/sig/heading.rs"]
 "U32" = 1
 
+[allow."crates/onsa_sema/src/traits.rs"]
+"BITS" = 1
+"EPSILON" = 1
+"INFINITY" = 1
+"MAX" = 2
+"MIN" = 1
+"NAN" = 1
+"ONE" = 2
+"PI" = 1
+"ZERO" = 1
+"checked_add" = 1
+"checked_div" = 1
+"checked_div_euclid" = 1
+"checked_mul" = 1
+"checked_rem" = 1
+"checked_rem_euclid" = 1
+"checked_shl" = 1
+"checked_shr" = 1
+"checked_sub" = 1
+"div_euclid" = 1
+"rem_euclid" = 1
+
 [allow."crates/onsa_sema/src/ty.rs"]
 "Alloc" = 1
 "Array" = 2

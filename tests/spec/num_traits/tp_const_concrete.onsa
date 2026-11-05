@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.3", "§4.4", "§3.4"]
+
+// W5-05 U3/t (spec §6.6 table: `ZERO` of the integers and the floats, `ONE` of the integers and the floats; the values are 0, 1, `+0.0`
+// and `1.0`): the constants of the concrete types, all eight integer types and both float types, and through a type alias, which is
+// the same as the type (§4.4: "型の名前を書ける全ての位置（… 関連関数と関連定数 …）で、元の型と同じに使える"). semantics/assoc_consts.onsa has
+// the other constants and a part of `ZERO` and `ONE`. The bits show the sign of the zero.
+
+type Sample = F32
+type Wide = F64
+type Index = U16
+type Offset = I8
+type Lane = Index
+
+test "ZERO of the eight integer types" {
+  let a: I8  = I8.ZERO
+  let b: I16 = I16.ZERO
+  let c: I32 = I32.ZERO
+  let d: I64 = I64.ZERO
+  let e: U8  = U8.ZERO
+  let f: U16 = U16.ZERO
+  let g: U32 = U32.ZERO
+  let h: U64 = U64.ZERO
+  assert a == 0
+  assert b == 0
+  assert c == 0
+  assert d == 0
+  assert e == 0
+  assert f == 0
+  assert g == 0
+  assert h == 0
+}
+
+test "ONE of the eight integer types" {
+  let a: I8  = I8.ONE
+  let b: I16 = I16.ONE
+  let c: I32 = I32.ONE
+  let d: I64 = I64.ONE
+  let e: U8  = U8.ONE
+  let f: U16 = U16.ONE
+  let g: U32 = U32.ONE
+  let h: U64 = U64.ONE
+  assert a == 1
+  assert b == 1
+  assert c == 1
+  assert d == 1
+  assert e == 1
+  assert f == 1
+  assert g == 1
+  assert h == 1
+}
+
+test "ZERO and ONE of the float types by their bits" {
+  assert F32.ZERO.to_bits() == 0
+  assert F64.ZERO.to_bits() == 0
+  assert F32.ONE.to_bits() == 0x3F800000
+  assert F64.ONE.to_bits() == 0x3FF0000000000000
+}
+
+test "the constants used in arithmetic at the limits" {
+  assert U8.MAX - U8.ONE == 254
+  assert I64.ZERO - I64.ONE == -1
+  assert U64.ZERO + U64.ONE == 1
+  assert F32.ONE + F32.ONE == 2.0
+  assert F64.ONE - F64.ONE == F64.ZERO
+}
+
+test "-0.0 + ZERO is +0.0" {
+  let a: F32 = -0.0
+  let b: F64 = -0.0
+  assert (a + F32.ZERO).to_bits() == 0
+  assert (b + F64.ZERO).to_bits() == 0
+  assert a == F32.ZERO
+}
+
+test "ZERO and ONE through a type alias" {
+  assert Sample.ZERO.to_bits() == 0
+  assert Sample.ONE.to_bits() == 0x3F800000
+  assert Wide.ZERO.to_bits() == 0
+  assert Wide.ONE.to_bits() == 0x3FF0000000000000
+  let a: U16 = Index.ZERO
+  let b: U16 = Index.ONE
+  let c: I8  = Offset.ZERO
+  let d: I8  = Offset.ONE
+  assert a == 0
+  assert b == 1
+  assert c == 0
+  assert d == 1
+}
+
+test "ZERO and ONE through a type alias of a type alias" {
+  let a: U16 = Lane.ZERO
+  let b: U16 = Lane.ONE
+  assert a == 0
+  assert b == 1
+}

@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.3", "§18.1"]
+// fixes = 1
+
+// W5-05 U3/t (spec §3.3: "同じ型パラメータへの `T.round_from(x)` (`x: T`) は同じ型への呼び出しで、E0413 (修正候補は呼び出しを外す形)"): the source has the type of the
+// target, the same type parameter. The candidate removes the call and keeps the argument alone (`x`), which has the type that the call gave.
+// The positions are the end of a function, a `let` with the type, an argument, an early `return`, an assignment, a field and a method of a generic
+// type. The parameter has the bound `Float` (the one that gives `round_from`) or a longer list that has it. One error in each function (P-01),
+// so no error is left after the candidate. The last function is fine. The arguments are names, so the positions need no parentheses.
+
+pub struct Cell[T: Float] {
+  v: T,
+}
+
+pub fn take[T: Float](v: T) -> T {
+  v
+}
+
+pub fn as_the_tail[T: Float](x: T) -> T {
+  T.round_from(x) //~ E0413
+}
+
+pub fn in_an_annotated_let[T: Float](x: T) -> T {
+  let a: T = T.round_from(x) //~ E0413
+  a
+}
+
+pub fn in_an_argument[T: Float](x: T) -> T {
+  take(T.round_from(x)) //~ E0413
+}
+
+pub fn in_an_early_return[T: Float](flag: Bool, x: T) -> T {
+  if flag {
+    return T.round_from(x) //~ E0413
+  }
+  x
+}
+
+pub fn in_an_assignment[T: Float](x: T) -> T {
+  var y: T = x
+  y = T.round_from(x) //~ E0413
+  y
+}
+
+pub fn in_a_field[T: Float](x: T) -> Cell[T] {
+  Cell { v: T.round_from(x) } //~ E0413
+}
+
+pub fn in_an_operand[T: Float](x: T, y: T) -> T {
+  y + T.round_from(x) //~ E0413
+}
+
+pub fn with_a_longer_bound_list[T: Float + Show](x: T) -> T {
+  T.round_from(x) //~ E0413
+}
+
+pub fn from_a_field_of_the_same_type[T: Float](c: Cell[T]) -> T {
+  T.round_from(c.v) //~ E0413
+}
+
+impl[T: Float] Cell[T] {
+  pub fn again(self) -> T {
+    T.round_from(self.v) //~ E0413
+  }
+}
+
+pub fn fine[T: Float](x: T) -> T {
+  take(x)
+}

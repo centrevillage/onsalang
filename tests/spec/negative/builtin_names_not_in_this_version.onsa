@@ -5,97 +5,13 @@
 // W5-14 U4/t (R-294, R-295; §18.1: "仕様にあってコンパイラがまだ扱えない形は E0200"): a name that the spec lists after a
 // built-in type and that this version does not handle is the E0200 of the feature, not the "cannot find" of a name that
 // does not exist (E0302, E0413). The names are those of the tables of the spec and no others:
-//   - the associated constants `ZERO` and `ONE` of every integer type and of `F32` and `F64` (§6.6 table; the other
-//     constants of the table, `MIN` `MAX` `BITS` `PI` `EPSILON` `INFINITY` `NAN`, are handled by this version),
 //   - `default()` of the types that §6.3 gives `Default` to: the integers, the floating-point types, `Bool`, `Str`
 //     and `Bytes` (the call and the value that is taken without a call; §6.1: an associated function is a value),
 //   - `Str.from_utf8(b)` and `s.as_bytes()` (§4.2 table) and `b.len()` of `Bytes` (§4.2: a type that has a length has
 //     `len()`; `s.len()` of `Str` is handled by this version, str_len.onsa).
 // The cases that pass today are in builtin_names_outside_the_spec.onsa (they are not pending, 8.5).
 // A name of the table that this version handles later is moved out of this file by the work that handles it
-// (ZERO and ONE: W5-05, `default`: W5-06, the members of `Str` and `Bytes`: not decided). One error per function (P-01).
-
-// the constants ZERO and ONE of every numeric type
-
-pub fn zero_of_i8() -> I8 {
-  I8.ZERO //~ E0200
-}
-
-pub fn one_of_i8() -> I8 {
-  I8.ONE //~ E0200
-}
-
-pub fn zero_of_i16() -> I16 {
-  I16.ZERO //~ E0200
-}
-
-pub fn one_of_i16() -> I16 {
-  I16.ONE //~ E0200
-}
-
-pub fn zero_of_i32() -> I32 {
-  I32.ZERO //~ E0200
-}
-
-pub fn one_of_i32() -> I32 {
-  I32.ONE //~ E0200
-}
-
-pub fn zero_of_i64() -> I64 {
-  I64.ZERO //~ E0200
-}
-
-pub fn one_of_i64() -> I64 {
-  I64.ONE //~ E0200
-}
-
-pub fn zero_of_u8() -> U8 {
-  U8.ZERO //~ E0200
-}
-
-pub fn one_of_u8() -> U8 {
-  U8.ONE //~ E0200
-}
-
-pub fn zero_of_u16() -> U16 {
-  U16.ZERO //~ E0200
-}
-
-pub fn one_of_u16() -> U16 {
-  U16.ONE //~ E0200
-}
-
-pub fn zero_of_u32() -> U32 {
-  U32.ZERO //~ E0200
-}
-
-pub fn one_of_u32() -> U32 {
-  U32.ONE //~ E0200
-}
-
-pub fn zero_of_u64() -> U64 {
-  U64.ZERO //~ E0200
-}
-
-pub fn one_of_u64() -> U64 {
-  U64.ONE //~ E0200
-}
-
-pub fn zero_of_f32() -> F32 {
-  F32.ZERO //~ E0200
-}
-
-pub fn one_of_f32() -> F32 {
-  F32.ONE //~ E0200
-}
-
-pub fn zero_of_f64() -> F64 {
-  F64.ZERO //~ E0200
-}
-
-pub fn one_of_f64() -> F64 {
-  F64.ONE //~ E0200
-}
+// (`default`: W5-06, the members of `Str` and `Bytes`: not decided). One error per function (P-01).
 
 // default() of the types that have Default
 
@@ -231,18 +147,18 @@ pub fn len_of_a_payload(o: Option[Bytes]) -> U32 {
 
 // the combinations: a const, an anonymous function, a branch, a generic function, a method, a flow, a test
 
-pub const START: I32 = I32.ZERO //~ E0200
+pub const START: I32 = I32.default() //~ E0200
 
-pub const FLOOR: F32 = F32.ONE //~ E0200
+pub const FLOOR: F32 = F32.default() //~ E0200
 
-pub fn zero_in_a_closure() -> I32 {
-  let _ = fn(x: I32) -> I32 { x + I32.ZERO } //~ E0200
+pub fn default_in_a_closure() -> I32 {
+  let _ = fn(x: I32) -> I32 { x + I32.default() } //~ E0200
   f.(1)
 }
 
 pub fn one_in_a_branch(flag: Bool) -> F64 {
   if flag {
-    F64.ONE //~ E0200
+    F64.default() //~ E0200
   } else {
     2.0
   }
@@ -255,12 +171,12 @@ pub fn default_in_a_match_arm(o: Option[U8]) -> U8 {
   }
 }
 
-pub fn zero_in_a_generic_function[T: Copy](x: T) -> T {
-  let _ = U32.ZERO //~ E0200
+pub fn default_in_a_generic_function[T: Copy](x: T) -> T {
+  let _ = U32.default() //~ E0200
   x
 }
 
-pub fn zero_in_a_nested_call() -> I64 {
+pub fn default_in_a_nested_call() -> I64 {
   I64.default().max(I64.MAX) //~ E0200
 }
 
@@ -270,7 +186,7 @@ pub struct Level {
 
 impl Level {
   pub fn unity() -> F32 {
-    F32.ONE //~ E0200
+    F32.default() //~ E0200
   }
 
   pub fn silent(self) -> F32 {
@@ -279,11 +195,11 @@ impl Level {
 }
 
 pub flow muted(x: F32 at sample) -> F32 at sample {
-  x * F32.ZERO //~ E0200
+  x * F32.default() //~ E0200
 }
 
-test "zero of a type in a test" {
-  assert I32.ZERO == 0 //~ E0200
+test "default of an integer type in a test" {
+  assert I32.default() == 0 //~ E0200
 }
 
 test "default of a type in a test" {

@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.1", "§4.5", "§18.1"]
+
+// W5-05 U3/t (spec §3.3: "関連関数を値として取る形 (§6.1) も同じ" for the type parameter as for the concrete types: the same type is E0413
+// ("同じ型パラメータへの `T.round_from(x)` は同じ型への呼び出しで、E0413"), a source that breaks the bound of the function is E0416
+// ("境界に反する変換元は E0416"), and "期待の型と合わない形は E0401"): the value form of a conversion function of a type parameter, with the
+// source and the result taken from the type of the binding. The candidates and the notes of the value forms are not asked here. One
+// function for each form (P-01).
+
+pub fn same_type_round[T: Float](x: T) -> T {
+  let g: fn(T) -> T = T.round_from //~ E0413
+  g.(x)
+}
+
+pub fn same_type_narrow[T: Int](x: T) -> Option[T] {
+  let g: fn(T) -> Option[T] = T.narrow_from //~ E0413
+  g.(x)
+}
+
+pub fn round_of_a_bool[T: Float](x: T, b: Bool) -> T {
+  let g: fn(Bool) -> T = T.round_from //~ E0416
+  g.(b)
+}
+
+pub fn narrow_of_a_float[T: Int](x: T, y: F32) -> Option[T] {
+  let g: fn(F32) -> Option[T] = T.narrow_from //~ E0416
+  g.(y)
+}
+
+pub fn trunc_of_an_integer[T: Int](x: T, n: I32) -> T {
+  let g: fn(I32) -> T = T.trunc_from //~ E0416
+  g.(n)
+}
+
+pub fn trunc_sat_of_an_integer[T: Int](x: T, n: I64) -> T {
+  let g: fn(I64) -> T = T.trunc_sat_from //~ E0416
+  g.(n)
+}
+
+pub fn round_with_a_result_that_is_not_t[T: Float](x: T, k: U32) -> Bool {
+  let g: fn(U32) -> Bool = T.round_from //~ E0401
+  g.(k)
+}
+
+pub fn narrow_with_a_result_that_is_not_an_option[T: Int](x: T, n: I32) -> T {
+  let g: fn(I32) -> T = T.narrow_from //~ E0401
+  g.(n)
+}
+
+pub fn fine[T: Float](x: T, k: U32) -> T {
+  let g: fn(U32) -> T = T.round_from
+  g.(k)
+}

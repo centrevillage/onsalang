@@ -100,6 +100,10 @@ impl Walker<'_> {
                 Some(k) => (k, Some(*entity)),
                 None => return Called::Other,
             },
+            PathRes::BoundMember { member, .. } => match NameKind::of(Entity::Member(*member), &a.defs) {
+                Some(k) => (k, None),
+                None => return Called::Other,
+            },
             _ => return Called::Other,
         };
         match (kind.at_callee(false), entity) {

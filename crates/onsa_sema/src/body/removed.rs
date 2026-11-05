@@ -21,6 +21,8 @@ enum Named {
     /// (§9.1, R-96): on a receiver of that type, a note of what it has and
     /// of the form. No candidate: the arms are the writer's.
     Match(usize, &'static str),
+    /// `checked_neg`, of the signed integers: no member of `Int` (S-238).
+    SignedOnly,
 }
 
 /// The methods the spec leaves out, by name.
@@ -31,6 +33,7 @@ const NAMED: &[(&str, Named)] = &[
     ("unwrap_or", Named::Match(lang::OPTION, "match o { Some(x) => x, None => d }")),
     ("is_ok", Named::Match(lang::RESULT, "match r { Ok(_) => true, Err(_) => false }")),
     ("is_err", Named::Match(lang::RESULT, "match r { Ok(_) => false, Err(_) => true }")),
+    (crate::prim::CHECKED_NEG, Named::SignedOnly),
 ];
 
 /// The one method of a type with a length (§4.2).
@@ -62,13 +65,29 @@ impl<'a> Checker<'a> {
             (Some(&(_, Named::Match(row, form))), Ty::Named(d, _)) if self.a.modules.lang.is(row, d) => {
                 Some(Err(format!("{}; write it with `match`: `{form}` (§9.1)", self.std_methods(d))))
             }
-            _ => self.math_fn(recv, &name.name).map(|f| self.function_form(e, recv, name, args, expected, kind, f)),
+            (Some((_, Named::SignedOnly)), Ty::Param(_)) if self.satisfies(recv, Bound::Int) => Some(Err(format!(
+                "`{}` is of the signed integers, no member of `Int`; write `{shown}.ZERO.checked_sub(x)` (§3.4, §6.3)",
+                name.name
+            ))),
+            _ => (self.math_fn(recv, &name.name))
+                .map(|f| self.function_form(e, recv, name, args, expected, kind, f))
+                .or_else(|| self.method_of_a_trait(recv, &name.name).map(Err)),
         };
         self.diag(match found {
             Some(Ok(fix)) => d.with_fix(fix),
             Some(Err(rule)) => d.with_rule(rule),
             None => d,
         })
+    }
+
+    /// The note of the method `name` of a number trait the bounds of the type
+    /// parameter `recv` do not give (S-238). No candidate: to narrow the bound
+    /// and to take the types it leaves out are two intents.
+    fn method_of_a_trait(&self, recv: TyId, name: &str) -> Option<String> {
+        let (Ty::Param(_), Some(b)) = (self.ty(recv), crate::traits::member_trait(name)) else { return None };
+        let d = crate::traits::member(self.a, &[b], name)?;
+        matches!(&self.a.def(d).kind, DefKind::Fn(f) if f.self_mode.is_some())
+            .then(|| format!("`{name}` is a method of the values of `{}` (§6.3)", b.name()))
     }
 
     /// What the enum `d` of std has, by the declarations of std (§9.1).

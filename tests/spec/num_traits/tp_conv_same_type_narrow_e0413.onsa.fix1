@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§6.3", "§18.1"]
+// fixes = 1
+
+// W5-05 U3 (spec §3.3: "同じ型パラメータへの `T.round_from(x)` (`x: T`) は同じ型への呼び出しで、E0413 (修正候補は呼び出しを外す形)"; "同じ型への呼び出しの修正候補は、
+// 呼び出しを外して引数の式だけを残す形である。`narrow_from` は結果が `Option` なので下の期待の型で選び、`x` か `Some(x)` である"): `T.narrow_from(x)` with `x: T` is a
+// call to the same type, and the candidate follows the expected type as it does for `I32.narrow_from(n)` (fixes/e0413_same_type_narrow.onsa): the
+// argument alone where `T` is expected, and `Some(x)` where `Option[T]` is expected. The positions without an expected type are in
+// tp_conv_same_type_narrow_no_candidate_e0413.onsa (`fixes = 0`). The last function is fine. One error in each function (P-01).
+
+pub fn narrow_to_an_option[T: Int](x: T) -> Option[T] {
+  Some(x) //~ E0413
+}
+
+pub fn narrow_to_the_value[T: Int](x: T) -> T {
+  x //~ E0413
+}
+
+pub fn narrow_in_a_let[T: Int](x: T) -> Option[T] {
+  let o: Option[T] = Some(x) //~ E0413
+  o
+}
+
+pub fn narrow_with_a_signed_parameter[T: Num + Int](x: T) -> Option[T] {
+  Some(x) //~ E0413
+}
+
+pub fn fine[T: Int, S: Int](x: S) -> Option[T] {
+  T.narrow_from(x)
+}

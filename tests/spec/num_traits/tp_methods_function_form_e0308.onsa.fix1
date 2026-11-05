@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§15.1", "§3.4", "§18.1"]
+// fixes = 1
+
+// W5-05 U3/t (spec §15.1: the name of the type is found and the member is a method, so a method called in the function form is E0308, "修正候補は `value.m(...)`"; §6.2: the
+// methods are called with the dot): the methods of `Int` called with the name of the type parameter and the value as the first argument, as `I32.checked_add(1, 2)`
+// is. The one candidate is the method form with the first argument as the receiver (`x.checked_add(y)`). One function for each form (P-01).
+
+pub fn checked_add_in_the_function_form[T: Int](x: T, y: T) -> Option[T] {
+  x.checked_add(y) //~ E0308
+}
+
+pub fn checked_sub_in_the_function_form[T: Int](x: T, y: T) -> Option[T] {
+  x.checked_sub(y) //~ E0308
+}
+
+pub fn div_euclid_in_the_function_form[T: Int](x: T, y: T) -> T {
+  x.div_euclid(y) //~ E0308
+}
+
+pub fn rem_euclid_in_the_function_form[T: Int](x: T, y: T) -> T {
+  x.rem_euclid(y) //~ E0308
+}
+
+pub fn checked_shl_in_the_function_form[T: Int](x: T, n: U32) -> Option[T] {
+  x.checked_shl(n) //~ E0308
+}
+
+pub fn fine[T: Int](x: T, y: T) -> Option[T] {
+  x.checked_add(y)
+}

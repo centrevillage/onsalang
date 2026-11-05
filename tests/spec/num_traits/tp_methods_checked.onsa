@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§6.3"]
+
+// W5-05 U3/t (spec §6.3: the checked methods are items of `Int`, `checked_add` `checked_sub` `checked_mul` `checked_div` `checked_rem` `checked_div_euclid`
+// `checked_rem_euclid` "(self, other: Self) -> Option[Self]" and `checked_shl` `checked_shr` "(self, n: U32) -> Option[Self]"; §3.4: the result is the
+// operation in a `Some`, and `None` where the operation panics: an overflow, a division by 0, `MIN / -1`, and a shift by the width or more; `MIN % -1` is
+// `Some(0)`): the methods of a value of the type parameter `T: Int`, at the integer types where the edge is worked out by hand. `1 << 7` of an 8 bit
+// type is the bit pattern 0x80, which is -128 for `I8`; the bits that are above the width are dropped, so `255 << 1` of `U8` is 254.
+
+fn c_add[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_add(b)
+}
+
+fn c_sub[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_sub(b)
+}
+
+fn c_mul[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_mul(b)
+}
+
+fn c_div[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_div(b)
+}
+
+fn c_rem[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_rem(b)
+}
+
+fn c_div_euclid[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_div_euclid(b)
+}
+
+fn c_rem_euclid[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_rem_euclid(b)
+}
+
+fn c_shl[T: Int](a: T, n: U32) -> Option[T] {
+  a.checked_shl(n)
+}
+
+fn c_shr[T: Int](a: T, n: U32) -> Option[T] {
+  a.checked_shr(n)
+}
+
+test "checked_add: the overflow of a signed type is None" {
+  let a: I8 = 127
+  let b: I8 = 1
+  let c: I8 = 126
+  let d: I8 = -128
+  let e: I8 = -1
+  assert c_add(a, b) == None
+  assert c_add(c, b) == Some(127)
+  assert c_add(d, e) == None
+  assert c_add(d, a) == Some(-1)
+}
+
+test "checked_add and checked_sub of an unsigned type, 0 - 1 is None" {
+  let a: U8 = 255
+  let b: U8 = 1
+  let z: U8 = 0
+  assert c_add(a, b) == None
+  assert c_add(z, a) == Some(255)
+  assert c_sub(z, b) == None
+  assert c_sub(a, a) == Some(0)
+  let m: U64   = U64.MAX
+  let one: U64 = 1
+  assert c_add(m, one) == None
+  assert c_sub(m, one) == Some(18446744073709551614)
+}
+
+test "checked_sub of a signed type" {
+  let a: I32 = I32.MIN
+  let b: I32 = 1
+  let c: I32 = -1
+  assert c_sub(a, b) == None
+  assert c_sub(a, c) == Some(-2147483647)
+  let d: I32 = I32.MAX
+  assert c_sub(d, c) == None
+}
+
+test "checked_mul" {
+  let a: I8 = 64
+  let b: I8 = 2
+  let c: I8 = -2
+  let d: I8 = -128
+  let e: I8 = -1
+  assert c_mul(a, b) == None
+  assert c_mul(a, c) == Some(-128)
+  assert c_mul(d, e) == None
+  let f: U8 = 16
+  let g: U8 = 15
+  let h: U8 = 17
+  assert c_mul(f, f) == None
+  assert c_mul(g, h) == Some(255)
+  let i: I64 = 4294967296
+  assert c_mul(i, i) == None
+}
+
+test "checked_div: a division by 0 and MIN / -1 are None, the quotient is cut toward zero" {
+  let min: I8 = -128
+  let m1: I8  = -1
+  let z: I8   = 0
+  let one: I8 = 1
+  assert c_div(min, m1) == None
+  assert c_div(min, one) == Some(-128)
+  assert c_div(one, z) == None
+  let a: I32 = 7
+  let b: I32 = -2
+  assert c_div(a, b) == Some(-3)
+  let u: U8 = 7
+  let v: U8 = 2
+  let w: U8 = 0
+  assert c_div(u, v) == Some(3)
+  assert c_div(u, w) == None
+}
+
+test "checked_rem: the sign of the dividend, MIN % -1 is Some(0), a division by 0 is None" {
+  let min: I8 = -128
+  let m1: I8  = -1
+  let z: I8   = 0
+  assert c_rem(min, m1) == Some(0)
+  assert c_rem(m1, z) == None
+  let a: I32 = -7
+  let b: I32 = 2
+  let c: I32 = 7
+  let d: I32 = -2
+  assert c_rem(a, b) == Some(-1)
+  assert c_rem(c, d) == Some(1)
+}
+
+test "checked_div_euclid and checked_rem_euclid" {
+  let min: I16 = -32768
+  let m1: I16  = -1
+  let z: I16   = 0
+  assert c_div_euclid(min, m1) == None
+  assert c_rem_euclid(min, m1) == Some(0)
+  assert c_div_euclid(m1, z) == None
+  assert c_rem_euclid(m1, z) == None
+  let a: I32 = -7
+  let b: I32 = 2
+  assert c_div_euclid(a, b) == Some(-4)
+  assert c_rem_euclid(a, b) == Some(1)
+  let u: U32 = 7
+  let v: U32 = 2
+  assert c_div_euclid(u, v) == Some(3)
+  assert c_rem_euclid(u, v) == Some(1)
+}
+
+test "checked_shl: a shift by the width or more is None, the bits above the width are dropped" {
+  let a: I8 = 1
+  assert c_shl(a, 7) == Some(-128)
+  assert c_shl(a, 8) == None
+  let b: U8 = 255
+  assert c_shl(b, 1) == Some(254)
+  assert c_shl(b, 7) == Some(128)
+  assert c_shl(b, 8) == None
+  let c: U16 = 1
+  assert c_shl(c, 15) == Some(32768)
+  assert c_shl(c, 16) == None
+  let d: U64 = 1
+  assert c_shl(d, 63) == Some(9223372036854775808)
+  assert c_shl(d, 64) == None
+  assert c_shl(d, 4294967295) == None
+}
+
+test "checked_shr: arithmetic for a signed type, logical for an unsigned type, the width or more is None" {
+  let a: I32 = -8
+  assert c_shr(a, 1) == Some(-4)
+  assert c_shr(a, 31) == Some(-1)
+  assert c_shr(a, 32) == None
+  let b: U32 = 2147483648
+  assert c_shr(b, 31) == Some(1)
+  assert c_shr(b, 32) == None
+  let c: I8 = -128
+  assert c_shr(c, 7) == Some(-1)
+  assert c_shr(c, 8) == None
+  let d: U8 = 255
+  assert c_shr(d, 7) == Some(1)
+}
+
+test "the shift by 0 is the value" {
+  let a: I16 = -300
+  let b: U8  = 9
+  assert c_shl(a, 0) == Some(-300)
+  assert c_shr(a, 0) == Some(-300)
+  assert c_shl(b, 0) == Some(9)
+}

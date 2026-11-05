@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.5", "§6.3", "§18.1"]
+// fixes = 1
+
+// W5-05 U3 (spec §3.3: "同じ型パラメータへの `T.round_from(x)` (`x: T`) は同じ型への呼び出しで、E0413 (修正候補は呼び出しを外す形)"; "この判定は、宣言の境界 (§4.5) と返り値の型の検査より前に
+// 行う"): `T.trunc_from(x)` and `T.trunc_sat_from(x)` with `x: T` and `T: Int` are calls to the same type, so the E0413 comes before the bound of the
+// source (`Float`, whose E0416 is for a different target, tp_conv_source_bounds_e0416.onsa), as `I64.trunc_from(n)` with `n: I32` is an E0413. The
+// candidate removes the call and keeps the argument alone. The last function has a different target, so it is the E0416. One error in each
+// function (P-01), and the candidates leave that E0416 alone.
+
+pub fn trunc_as_the_tail[T: Int](x: T) -> T {
+  x //~ E0413
+}
+
+pub fn trunc_in_a_let[T: Int](x: T) -> T {
+  let y: T = x //~ E0413
+  y
+}
+
+pub fn trunc_sat_as_the_tail[T: Int](x: T) -> T {
+  x //~ E0413
+}
+
+pub fn trunc_sat_in_a_let[T: Int](x: T) -> T {
+  let y: T = x //~ E0413
+  y
+}
+
+pub fn trunc_with_a_signed_parameter[T: Num + Int](x: T) -> T {
+  x //~ E0413
+}
+
+pub fn a_different_target[T: Int, S: Int](x: S) -> T {
+  T.trunc_from(x) //~ E0416
+}

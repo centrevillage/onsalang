@@ -1,0 +1,189 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§6.2", "§6.3", "§4.5"]
+
+// W5-05 U3/t (spec §6.3: the methods of `Int` are called on a value of the type parameter; §6.2: a method is called with the dot on any value of the
+// type; §6.3: "`checked_neg` は符号付きの整数だけが持つので項目でなく、総称では `T.ZERO.checked_sub(x)` と書く"): the receiver of the call is a binding, a field of a
+// struct, an element of an array, the result of a call, the associated constant `T.ZERO`, a value in parentheses, the result of another checked
+// method, or the `self` of a method of a generic type. The same body runs at a signed and an unsigned type.
+
+pub struct Pair[T: Int] {
+  x: T,
+  y: T,
+}
+
+impl[T: Int] Pair[T] {
+  pub fn sum(self) -> Option[T] {
+    self.x.checked_add(self.y)
+  }
+
+  pub fn quotient(self) -> T {
+    self.x.div_euclid(self.y)
+  }
+}
+
+fn identity[T: Int](v: T) -> T {
+  v
+}
+
+fn on_binding[T: Int](a: T, b: T) -> Option[T] {
+  let c = a
+  c.checked_add(b)
+}
+
+fn on_field[T: Int](p: Pair[T]) -> Option[T] {
+  p.x.checked_mul(p.y)
+}
+
+fn on_element[T: Int](xs: [T; 2]) -> Option[T] {
+  xs[0].checked_sub(xs[1])
+}
+
+fn on_call_result[T: Int](a: T, b: T) -> Option[T] {
+  identity(a).checked_add(b)
+}
+
+fn on_zero[T: Int](x: T) -> Option[T] {
+  T.ZERO.checked_sub(x)
+}
+
+fn on_one[T: Int](x: T) -> Option[T] {
+  T.ONE.checked_add(x)
+}
+
+fn on_parenthesized[T: Int](a: T, b: T, c: T) -> Option[T] {
+  (a + b).checked_mul(c)
+}
+
+fn on_max[T: Int](x: T) -> Option[T] {
+  T.MAX.checked_add(x)
+}
+
+fn on_min_floor[T: Int](x: T) -> T {
+  T.MIN.rem_euclid(x)
+}
+
+fn chained[T: Int](a: T, b: T, c: T) -> Option[T] {
+  match a.checked_add(b) {
+    Some(s) => s.checked_mul(c),
+    None => None,
+  }
+}
+
+fn floor_chain[T: Int](a: T, b: T, c: T) -> T {
+  a.div_euclid(b).rem_euclid(c)
+}
+
+fn in_a_condition[T: Int](a: T, b: T) -> Bool {
+  if a.checked_add(b) == None {
+    true
+  } else {
+    false
+  }
+}
+
+test "the receiver is a binding, a field or an element" {
+  let a: I8 = 100
+  let b: I8 = 27
+  assert on_binding(a, b) == Some(127)
+  let c: I8 = 28
+  assert on_binding(a, c) == None
+  let p: Pair[U8] = Pair { x: 16, y: 16 }
+  assert on_field(p) == None
+  let q: Pair[U8] = Pair { x: 15, y: 17 }
+  assert on_field(q) == Some(255)
+  let xs: [I16; 2] = [-32768, 1]
+  assert on_element(xs) == None
+  let ys: [U32; 2] = [5, 3]
+  assert on_element(ys) == Some(2)
+}
+
+test "the receiver is the result of a call" {
+  let a: U16 = 65535
+  let b: U16 = 1
+  assert on_call_result(a, b) == None
+  let c: I64 = -5
+  let d: I64 = 4
+  assert on_call_result(c, d) == Some(-1)
+}
+
+test "T.ZERO.checked_sub(x) is the checked negation of a signed type" {
+  let a: I8 = -128
+  let b: I8 = 5
+  let c: I8 = 0
+  assert on_zero(a) == None
+  assert on_zero(b) == Some(-5)
+  assert on_zero(c) == Some(0)
+  let d: I64 = I64.MIN
+  assert on_zero(d) == None
+}
+
+test "T.ZERO.checked_sub(x) of an unsigned type is Some only for 0" {
+  let a: U8  = 0
+  let b: U8  = 1
+  let c: U64 = U64.MAX
+  assert on_zero(a) == Some(0)
+  assert on_zero(b) == None
+  assert on_zero(c) == None
+}
+
+test "the receivers T.ONE, T.MAX and T.MIN" {
+  let a: U8 = 254
+  let b: U8 = 255
+  assert on_one(a) == Some(255)
+  assert on_one(b) == None
+  let c: I32 = 1
+  assert on_max(c) == None
+  let d: I32 = -1
+  assert on_max(d) == Some(2147483646)
+  let e: I8 = 3
+  assert on_min_floor(e) == 1
+}
+
+test "the receiver is a value in parentheses" {
+  let a: U8 = 10
+  let b: U8 = 15
+  let c: U8 = 11
+  assert on_parenthesized(a, b, c) == None
+  let d: U8 = 1
+  assert on_parenthesized(a, b, d) == Some(25)
+}
+
+test "the receiver is the result of another checked method" {
+  let a: I8 = 60
+  let b: I8 = 7
+  let c: I8 = 2
+  assert chained(a, b, c) == None
+  let d: I8 = 1
+  assert chained(a, b, d) == Some(67)
+  let e: I8 = 100
+  assert chained(e, e, d) == None
+}
+
+test "div_euclid and rem_euclid chained" {
+  let a: I32 = -100
+  let b: I32 = 7
+  let c: I32 = 4
+  // -100 div_euclid 7 = -15 (-100 = -15 * 7 + 5), and -15 rem_euclid 4 = 1.
+  assert floor_chain(a, b, c) == 1
+}
+
+test "the call is the condition of an if" {
+  let a: U8 = 200
+  let b: U8 = 100
+  let c: U8 = 55
+  assert in_a_condition(a, b)
+  assert !in_a_condition(a, c)
+}
+
+test "the methods in the impl of a generic type" {
+  let p: Pair[I8] = Pair { x: 100, y: 28 }
+  assert p.sum() == None
+  let q: Pair[I8] = Pair { x: -100, y: 28 }
+  assert q.sum() == Some(-72)
+  let r: Pair[I32] = Pair { x: -7, y: 2 }
+  assert r.quotient() == -4
+  let s: Pair[U16] = Pair { x: 65535, y: 2 }
+  assert s.quotient() == 32767
+}

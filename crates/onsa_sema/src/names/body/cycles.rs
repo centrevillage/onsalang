@@ -68,6 +68,8 @@ fn edges(a: &Analysis, d: DefId) -> Vec<DefId> {
         return n.instances.iter().map(|&(_, f, _)| f).collect();
     }
     let names = n.paths.values().chain(n.interp.values().flatten().map(|(_, r)| r));
+    // A [`PathRes::BoundMember`] is no edge: its member is a constant of std,
+    // which reads no constant of the user.
     let items = names.filter_map(|r| match r {
         PathRes::Item { entity: Entity::Def(c) | Entity::Member(c), .. } => Some(*c),
         _ => None,

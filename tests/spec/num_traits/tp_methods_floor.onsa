@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§6.3", "§9.2"]
+
+// W5-05 U3/t (spec §6.3: `div_euclid` and `rem_euclid` are items of `Int`, "`(self, other: Self) -> Self`", and "`T: Int` の値に呼べる"; §3.4: "`r = a.rem_euclid(b)` は
+// `0 <= r < |b|`、`q = a.div_euclid(b)` は `a == q * b + r` を満たす。`MIN.rem_euclid(-1)` は 0 / panic: `b` が 0。`div_euclid` の結果が型に収まらない
+// (`MIN.div_euclid(-1)`)"): the methods of a value of the type parameter `T: Int`, at the eight integer types. The result is the one of the concrete
+// type. -7 = (-4) * 2 + 1, 7 = (-3) * (-2) + 1, -7 = 4 * (-2) + 1, -128 = (-2) * 127 + 126 (the remainder is in [0, |b|)), and 200 = 28 * 7 + 4.
+
+fn floor_div[T: Int](a: T, b: T) -> T {
+  a.div_euclid(b)
+}
+
+fn floor_rem[T: Int](a: T, b: T) -> T {
+  a.rem_euclid(b)
+}
+
+fn floor_pair[T: Int](a: T, b: T) -> T {
+  // a == q * b + r
+  let q = a.div_euclid(b)
+  let r = a.rem_euclid(b)
+  q * b + r
+}
+
+test "div_euclid and rem_euclid of a signed T: Int, the sign of the operands" {
+  let a: I32 = -7
+  let b: I32 = 7
+  let c: I32 = 2
+  let d: I32 = -2
+  assert floor_div(a, c) == -4
+  assert floor_rem(a, c) == 1
+  assert floor_div(b, d) == -3
+  assert floor_rem(b, d) == 1
+  assert floor_div(a, d) == 4
+  assert floor_rem(a, d) == 1
+  assert floor_div(b, c) == 3
+  assert floor_rem(b, c) == 1
+}
+
+test "div_euclid and rem_euclid at I8, I16 and I64" {
+  let a: I8 = -128
+  let b: I8 = 127
+  assert floor_div(a, b) == -2
+  assert floor_rem(a, b) == 126
+  let c: I16 = -32768
+  let d: I16 = 3
+  assert floor_div(c, d) == -10923
+  assert floor_rem(c, d) == 1
+  let e: I64 = -9223372036854775807
+  let f: I64 = 10
+  assert floor_div(e, f) == -922337203685477581
+  assert floor_rem(e, f) == 3
+}
+
+test "a == q * b + r for the euclidean pair" {
+  let a: I8 = -100
+  let b: I8 = 7
+  assert floor_pair(a, b) == -100
+  let c: I64 = 123456789
+  let d: I64 = -1000
+  assert floor_pair(c, d) == 123456789
+}
+
+test "div_euclid and rem_euclid of an unsigned T: Int" {
+  let a: U8 = 200
+  let b: U8 = 7
+  assert floor_div(a, b) == 28
+  assert floor_rem(a, b) == 4
+  let c: U64 = U64.MAX
+  let d: U64 = 2
+  assert floor_div(c, d) == 9223372036854775807
+  assert floor_rem(c, d) == 1
+  let e: U16 = 5
+  let f: U16 = 9
+  assert floor_div(e, f) == 0
+  assert floor_rem(e, f) == 5
+  let g: U32 = 4294967295
+  assert floor_div(g, g) == 1
+  assert floor_rem(g, g) == 0
+}
+
+test "MIN.rem_euclid(-1) is 0 for every signed width" {
+  let m1: I8  = -1
+  let m2: I16 = -1
+  let m3: I32 = -1
+  let m4: I64 = -1
+  assert floor_rem(I8.MIN, m1) == 0
+  assert floor_rem(I16.MIN, m2) == 0
+  assert floor_rem(I32.MIN, m3) == 0
+  assert floor_rem(I64.MIN, m4) == 0
+}
+
+test "MIN.div_euclid by 1 and MAX.div_euclid by -1 fit the type" {
+  let one: I8 = 1
+  let neg: I8 = -1
+  assert floor_div(I8.MIN, one) == -128
+  assert floor_rem(I8.MIN, one) == 0
+  assert floor_div(I8.MAX, neg) == -127
+  let one64: I64 = 1
+  assert floor_div(I64.MIN, one64) == I64.MIN
+}
+
+test "I8.MIN.div_euclid(-1) panics" {
+  let m: I8 = -1
+  let q     = floor_div(I8.MIN, m) //~ PANIC "I8.MIN.div_euclid(-1) panics"
+  assert q == 0
+}
+
+test "I16.MIN.div_euclid(-1) panics" {
+  let m: I16 = -1
+  let q      = floor_div(I16.MIN, m) //~ PANIC "I16.MIN.div_euclid(-1) panics"
+  assert q == 0
+}
+
+test "I32.MIN.div_euclid(-1) panics" {
+  let m: I32 = -1
+  let q      = floor_div(I32.MIN, m) //~ PANIC "I32.MIN.div_euclid(-1) panics"
+  assert q == 0
+}
+
+test "I64.MIN.div_euclid(-1) panics" {
+  let m: I64 = -1
+  let q      = floor_div(I64.MIN, m) //~ PANIC "I64.MIN.div_euclid(-1) panics"
+  assert q == 0
+}
+
+test "div_euclid by 0 panics" {
+  let z: U32 = 0
+  let a: U32 = 5
+  let q      = floor_div(a, z) //~ PANIC "div_euclid by 0 panics"
+  assert q == 0
+}
+
+test "rem_euclid by 0 panics" {
+  let z: I16 = 0
+  let a: I16 = 5
+  let r      = floor_rem(a, z) //~ PANIC "rem_euclid by 0 panics"
+  assert r == 0
+}

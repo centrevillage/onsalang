@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§6.3", "§18.1"]
+
+// W5-05 U3/t (spec §6.3: "型パラメータでは、変換も `T.ZERO` と同じく型の名前から呼ぶ (`T.round_from(k)`、`T.narrow_from(n)`)"; §3.4: the methods of the numbers are the floor
+// division, the checked methods and `to_bits()`, "それ以外 ... は E0413"; negative/convert_from_method_form.onsa has the form for the concrete types): a conversion function
+// called on a value, with the dot and the value as the receiver, is not found, E0413, whatever the bounds of the type parameter. The candidates are not
+// asked here. One function for each form (P-01).
+
+pub fn narrow_from_on_a_value[T: Int, S: Int](x: T, n: S) -> Option[T] {
+  x.narrow_from(n) //~ E0413
+}
+
+pub fn round_from_on_a_value[T: Float, S: AnyNum](x: T, k: S) -> T {
+  x.round_from(k) //~ E0413
+}
+
+pub fn trunc_from_on_a_value[T: Int](x: T, y: F32) -> T {
+  x.trunc_from(y) //~ E0413
+}
+
+pub fn trunc_sat_from_on_a_value[T: Int](x: T, y: F64) -> T {
+  x.trunc_sat_from(y) //~ E0413
+}
+
+pub fn narrow_from_on_a_parameter_receiver[T: Int](n: T, m: T) -> Option[T] {
+  n.narrow_from(m) //~ E0413
+}
+
+pub fn fine[T: Int, S: Int](n: S) -> Option[T] {
+  T.narrow_from(n)
+}

@@ -43,7 +43,7 @@ pub(crate) enum PathEnd {
 /// What an associated name of a builtin type is in the compiler's tables:
 /// a method (`Option.unwrap`), called with `!` or not (the table has no
 /// associated function; std's are members, `Buf.zeroed`), or a name of the
-/// spec this version has not (`F32.ZERO`, the E0200 of `feature`, R-294;
+/// spec this version has not (`Str.from_utf8`, the E0200 of `feature`, R-294;
 /// of `called` at the callee of a call: `F32.default()` has a literal to
 /// write, the function `F32.default` as a value has not).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -257,6 +257,5 @@ pub(crate) fn builtin_member(a: &Analysis, of: Entity, name: &str) -> Option<Bui
         builtin::Form::Function => {
             BuiltinMember::Missing { kind: NameKind::Function, feature: Feature::BuiltinName, called: feature }
         }
-        builtin::Form::Constant => BuiltinMember::Missing { kind: NameKind::Constant, feature, called: feature },
     })
 }

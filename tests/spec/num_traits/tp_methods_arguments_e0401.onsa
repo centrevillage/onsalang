@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.6", "§3.4", "§18.1"]
+
+// W5-05 U3/t (spec §6.3: the argument of `div_euclid` and the checked methods is `Self`, of `checked_shl` and `checked_shr` the shift amount is `U32`; §6.6: "整数のリテラル ...
+// は E0401 ... これらの総称の関数では、0 を `T.ZERO` ... 1 を `T.ONE` で書く"): an argument that is not of the type that the method takes is E0401: an integer literal for the
+// `T` of the receiver, a value of another type, and a value of the type parameter for the shift amount. One function for each form (P-01).
+
+pub fn literal_for_checked_add[T: Int](x: T) -> Option[T] {
+  x.checked_add(1) //~ E0401
+}
+
+pub fn literal_for_div_euclid[T: Int](x: T) -> T {
+  x.div_euclid(2) //~ E0401
+}
+
+pub fn literal_for_checked_mul[T: Int](x: T) -> Option[T] {
+  x.checked_mul(3) //~ E0401
+}
+
+pub fn another_type_for_rem_euclid[T: Int](x: T, y: I32) -> T {
+  x.rem_euclid(y) //~ E0401
+}
+
+pub fn another_parameter_for_checked_sub[T: Int, S: Int](x: T, y: S) -> Option[T] {
+  x.checked_sub(y) //~ E0401
+}
+
+pub fn the_shift_amount_of_the_type_parameter[T: Int](x: T, n: T) -> Option[T] {
+  x.checked_shl(n) //~ E0401
+}
+
+pub fn the_shift_amount_of_i32[T: Int](x: T, n: I32) -> Option[T] {
+  x.checked_shr(n) //~ E0401
+}
+
+pub fn fine[T: Int](x: T) -> Option[T] {
+  x.checked_add(T.ONE)
+}

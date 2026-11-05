@@ -1,7 +1,7 @@
 # Written by tools/vectors/xcheck.py after generating the vectors. Not a norm (R-133): a record that the data was
 # recomputed by independent implementations. `rows` are the rows compared; `held` rows have no expected value.
 # Known divergences of Rust, counted (xcheck.rs): D1 MIN % -1 family, D2 min/max with a NaN, D3 to_bits of a NaN.
-data_sha256 b278a68e8b1f7023de6aaa5e5f257953b30ce7b1554cfd72d394d2578d66def9
+data_sha256 ffade0fc3493b6bb642317482ae6658a4ba4b03d3b2dc32bae381b91c572d40c
 run rust data :: rows 189303 mismatches 0 held 0 sections 972 D1 16 D2 689 D3 18 :: rustc 1.94.1 (e408947bf 2026-03-25)
 run rust exhaustive-8bit :: rows 4094208 mismatches 0 held 0 sections 95 D1 4 D2 0 D3 0 :: rustc 1.94.1 (e408947bf 2026-03-25)
 run rust float-sweep :: rows 1212416 mismatches 0 held 0 sections 74 D1 0 D2 2998 D3 71 :: rustc 1.94.1 (e408947bf 2026-03-25)

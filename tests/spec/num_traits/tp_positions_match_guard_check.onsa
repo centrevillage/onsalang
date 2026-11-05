@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.3", "§4.5"]
+
+// W5-05 U3 (spec §6.6): the body of tp_positions_match_guard.onsa, checked. That case runs it, which waits for the lowering of a value `match` (W8-06).
+
+pub fn classify[T: AnyNum](x: T) -> U32 {
+  match x {
+    v if v == T.ZERO => 0,
+    v if v > T.ZERO => 1,
+    _ => 2,
+  }
+}

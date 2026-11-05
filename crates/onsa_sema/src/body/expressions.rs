@@ -316,7 +316,7 @@ impl<'a> Checker<'a> {
                 match value {
                     crate::constarg::ConstU32::Value(v) => {
                         if let Some(d) = constant {
-                            self.info.targets.insert(len, Target::Const { def: d, inst: None });
+                            self.info.targets.insert(len, Target::Const { def: d, of: None, inst: None });
                         }
                         Ok(Some(Len::Const(v)))
                     }

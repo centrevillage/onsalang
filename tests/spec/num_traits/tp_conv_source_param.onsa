@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.3", "§4.5"]
+
+// W5-05 U3/t (spec §3.3: "変換元か変換先が型パラメータなら、変換は関連関数で書く (`U32.trunc_from(x)` (`x: T`)) ... 具体化した型の組で `as` が書けても書ける";
+// "変換元の型の境界は、`round_from` が `AnyNum`、`narrow_from` が `Int`、`trunc_from` と `trunc_sat_from` が `Float`"): the source is a value of
+// the type parameter and the target is a concrete type. ops/convert_from_generic_values.onsa has `round_from` with `T: Num` and
+// `trunc_from` with `T: Float` (the bounds as they were before the number traits were a bound of a program); this one has `round_from` with
+// `T: AnyNum`, which takes the unsigned integers too, and `narrow_from` with `T: Int`, which is none of the earlier ones, at every
+// type the bound takes, among them the instance that is the same type (`I32.narrow_from(x)` with `T = I32`, which `as` writes).
+
+fn to_f32[T: AnyNum](x: T) -> F32 {
+  F32.round_from(x)
+}
+
+fn to_f64[T: AnyNum](x: T) -> F64 {
+  F64.round_from(x)
+}
+
+fn to_i32[T: Int](x: T) -> Option[I32] {
+  I32.narrow_from(x)
+}
+
+fn to_u8[T: Int](x: T) -> Option[U8] {
+  U8.narrow_from(x)
+}
+
+fn to_i64[T: Int](x: T) -> Option[I64] {
+  I64.narrow_from(x)
+}
+
+fn to_u32_sat[T: Float](x: T) -> U32 {
+  U32.trunc_sat_from(x)
+}
+
+test "F32.round_from of a T: AnyNum at the integer types" {
+  let a: U8  = 200
+  let b: I8  = -128
+  let c: U32 = 4294967295
+  let d: I64 = I64.MIN
+  let e: U64 = U64.MAX
+  assert to_f32(a) == 200.0
+  assert to_f32(b) == -128.0
+  assert to_f32(c) == 4294967296.0
+  assert to_f32(d) == -9223372036854775808.0
+  assert to_f32(e) == 18446744073709551616.0
+}
+
+test "F32.round_from of a T: AnyNum at the float types, F32 being the same type" {
+  let a: F32 = -0.0
+  let b: F32 = 1.5
+  let c: F64 = 16777217.0
+  let d: F64 = 1.0e300
+  assert to_f32(a).to_bits() == 0x80000000
+  assert to_f32(b) == 1.5
+  assert to_f32(c) == 16777216.0
+  assert to_f32(d) == F32.INFINITY
+}
+
+test "F64.round_from of a T: AnyNum, F64 being the same type" {
+  let a: U64 = U64.MAX
+  let b: I64 = 9007199254740993
+  let c: U16 = 65535
+  let d: F64 = 0.1
+  let e: F32 = 0.1
+  assert to_f64(a) == 18446744073709551616.0
+  assert to_f64(b) == 9007199254740992.0
+  assert to_f64(c) == 65535.0
+  assert to_f64(d) == 0.1
+  assert to_f64(e) == (e as F64)
+}
+
+test "I32.narrow_from of a T: Int, the same type being I32" {
+  let a: I32 = I32.MIN
+  let b: I32 = I32.MAX
+  assert to_i32(a) == Some(I32.MIN)
+  assert to_i32(b) == Some(I32.MAX)
+  let c: I8  = -128
+  let d: U16 = 65535
+  assert to_i32(c) == Some(-128)
+  assert to_i32(d) == Some(65535)
+}
+
+test "I32.narrow_from of a T: Int, the values that do not fit" {
+  let a: I64 = 2147483648
+  let b: I64 = -2147483649
+  let c: U32 = 2147483648
+  let d: U64 = U64.MAX
+  let e: U32 = 2147483647
+  assert to_i32(a) == None
+  assert to_i32(b) == None
+  assert to_i32(c) == None
+  assert to_i32(d) == None
+  assert to_i32(e) == Some(2147483647)
+}
+
+test "U8.narrow_from and I64.narrow_from of a T: Int" {
+  let a: I32 = 255
+  let b: I32 = 256
+  let c: I32 = -1
+  let d: U8  = 255
+  assert to_u8(a) == Some(255)
+  assert to_u8(b) == None
+  assert to_u8(c) == None
+  assert to_u8(d) == Some(255)
+  let e: U64 = 9223372036854775807
+  let f: U64 = 9223372036854775808
+  let g: I8  = -1
+  assert to_i64(e) == Some(9223372036854775807)
+  assert to_i64(f) == None
+  assert to_i64(g) == Some(-1)
+}
+
+test "U32.trunc_sat_from of a T: Float" {
+  let a: F32 = 2.75
+  let b: F64 = -3.5
+  let c: F64 = 4294967296.0
+  let d: F32 = F32.NAN
+  assert to_u32_sat(a) == 2
+  assert to_u32_sat(b) == 0
+  assert to_u32_sat(c) == 4294967295
+  assert to_u32_sat(d) == 0
+}

@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.5", "§6.3", "§18.1"]
+
+// W5-05 U3/t (spec §3.3: "変換元の型の境界は、`round_from` が `AnyNum`、`narrow_from` が `Int`、`trunc_from` と `trunc_sat_from` が `Float` である。
+// 境界に反する変換元は E0416 (§4.5) である"): the target is a type parameter that has the function (`T: Float` for `round_from`, `T: Int` for the
+// others), and the source breaks the bound of the function. The same forms for a concrete target are in negative/convert_from_bounds.onsa. A `Bool`
+// and a `Str` are none of the number traits, a float is not an `Int`, an integer is not a `Float`, and a type parameter takes the bounds it
+// has. One function for each form (P-01).
+
+pub fn round_from_a_bool[T: Float](b: Bool) -> T {
+  T.round_from(b) //~ E0416
+}
+
+pub fn round_from_a_str[T: Float](s: Str) -> T {
+  T.round_from(s) //~ E0416
+}
+
+pub fn round_from_true[T: Float]() -> T {
+  T.round_from(true) //~ E0416
+}
+
+pub fn round_from_an_unbounded_parameter[T: Float, S](x: S) -> T {
+  T.round_from(x) //~ E0416
+}
+
+pub fn round_from_a_show_parameter[T: Float, S: Show](x: S) -> T {
+  T.round_from(x) //~ E0416
+}
+
+pub fn narrow_from_a_float[T: Int](y: F32) -> Option[T] {
+  T.narrow_from(y) //~ E0416
+}
+
+pub fn narrow_from_a_float_parameter[T: Int, S: Float](y: S) -> Option[T] {
+  T.narrow_from(y) //~ E0416
+}
+
+pub fn narrow_from_an_unbounded_parameter[T: Int, S](x: S) -> Option[T] {
+  T.narrow_from(x) //~ E0416
+}
+
+pub fn narrow_from_a_bool[T: Int](b: Bool) -> Option[T] {
+  T.narrow_from(b) //~ E0416
+}
+
+pub fn trunc_from_an_integer[T: Int](n: I32) -> T {
+  T.trunc_from(n) //~ E0416
+}
+
+pub fn trunc_from_an_int_parameter[T: Int, S: Int](n: S) -> T {
+  T.trunc_from(n) //~ E0416
+}
+
+pub fn trunc_sat_from_an_integer[T: Int](n: I64) -> T {
+  T.trunc_sat_from(n) //~ E0416
+}
+
+pub fn trunc_sat_from_an_anynum_parameter[T: Int, S: AnyNum](n: S) -> T {
+  T.trunc_sat_from(n) //~ E0416
+}
+
+pub fn fine[T: Float, S: AnyNum](n: S) -> T {
+  T.round_from(n)
+}

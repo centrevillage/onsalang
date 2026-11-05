@@ -26,8 +26,8 @@ impl<'a> Checker<'a> {
     /// `to` that `as` does not write (§3.3). Only the number types have
     /// another way to convert, so only their text names one (`Char`, R-257).
     /// A candidate keeps the operand as it is written and the target as `ty`
-    /// writes it. A type parameter as the target has none, other than the
-    /// same type: its functions are not found yet (`T.round_from`, W5-05).
+    /// writes it. A type parameter as the target has none yet, other than the
+    /// same type (`T.round_from`, W5-05 U5).
     pub(super) fn cast_error(&mut self, span: Span, inner: ExprId, ty: TypeId, from: TyId, to: TyId) -> Diagnostic {
         let (source, target) = (self.display(from), self.display(to));
         let (f, t) = (self.ty(from), self.ty(to));
@@ -98,7 +98,8 @@ impl<'a> Checker<'a> {
     /// Whether a conversion from `from` to `to` exists. The one question is
     /// [`cast_allowed`](crate::cast::cast_allowed), of every kind of the
     /// source: a type parameter, which `as` does not convert, passes (§3.3),
-    /// and so does a type that is no number, whose bound is its error. A
+    /// and so does a type that is no number, whose bound is its error; the
+    /// same type does not, a type parameter too (`T.round_from(x)`, `x: T`). A
     /// pair `as` converts is this error also when the source breaks the bound
     /// of the function (`I64.trunc_from(n)`, `n: I32`, S-883), and an integer
     /// literal is judged at the type of its default at the end of the body
@@ -108,7 +109,7 @@ impl<'a> Checker<'a> {
             return Verdict::Wait;
         }
         let from = self.infer.resolve(&mut self.a.types, from);
-        if !crate::cast::cast_allowed(&self.a.types, from, to) {
+        if from != to && !crate::cast::cast_allowed(&self.a.types, from, to) {
             return Verdict::Met;
         }
         let (source, target) = (self.display(from), self.display(to));
@@ -133,11 +134,16 @@ impl<'a> Checker<'a> {
             return self.as_in_a_function(from, to, ret);
         }
         let (source, form) = (self.display(from), self.as_text("k", from, to, ret));
+        let first = format!(
+            "`as` takes the type of its operand where it is written (§4.7): give the operand a type first (`let k: {source} = …`, then `{form}`)"
+        );
+        // No literal is a value of a type parameter (§6.6).
+        if matches!(self.ty(to), Ty::Param(_)) {
+            return format!("{first} (§3.3)");
+        }
         let literal = if matches!(self.ty(to), Ty::Float(_)) { "1.0" } else { "1" };
         let literal = if ret == to { literal.to_string() } else { format!("{}({literal})", lang::some(self.a)) };
-        format!(
-            "`as` takes the type of its operand where it is written (§4.7): give the operand a type first (`let k: {source} = …`, then `{form}`), or write the result as a literal (`{literal}`) (§3.3)"
-        )
+        format!("{first}, or write the result as a literal (`{literal}`) (§3.3)")
     }
 
     /// The note of the function taken as a value (S-885): its parameter

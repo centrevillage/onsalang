@@ -1,0 +1,176 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.3", "§4.4", "§4.5", "§15.1"]
+
+// W5-05 U3/t (spec §6.6: an associated constant is read as `T.ZERO` where a type parameter is in scope, and "初期化式の中の `T.ZERO`" is a constant expression of the
+// instantiated type): the places of `T.ZERO`, `T.ONE`, `T.MAX` and `T.BITS`: the body of a method of a generic type, the initial value of the field of a struct, the
+// initializer of an associated constant of a generic `impl` (read through an alias that fixes the type arguments, §4.4), the condition of an
+// `if` and of a `while`, the argument of a generic function of `std.math`, and a closure. The guard of a `match` arm is in tp_positions_match_guard.onsa. The same body runs at several types. Every value is worked out by hand.
+
+use std.array
+use std.math.{max}
+
+pub struct Acc[T: Int] {
+  total: T,
+  step: T,
+}
+
+fn fresh[T: Int](like: T) -> Acc[T] {
+  Acc { total: T.ZERO, step: T.ONE }
+}
+
+impl[T: Int] Acc[T] {
+  pub fn headroom(self) -> T {
+    T.MAX - self.total
+  }
+
+  pub fn is_empty(self) -> Bool {
+    self.total == T.ZERO
+  }
+
+  pub fn width(self) -> U32 {
+    T.BITS
+  }
+
+  pub fn next(self) -> T {
+    self.total + self.step
+  }
+}
+
+pub struct Zero[T: AnyNum] {
+  v: T,
+}
+
+impl[T: AnyNum] Zero[T] {
+  const Z: T = T.ZERO
+}
+
+pub struct Limits[T: Int] {
+  v: T,
+}
+
+impl[T: Int] Limits[T] {
+  const TOP: T = T.MAX
+  const ONE_UP: T = T.ONE
+  const WIDTH: U32 = T.BITS
+}
+
+type ZeroI32 = Zero[I32]
+type ZeroF32 = Zero[F32]
+type ZeroU8 = Zero[U8]
+type LimitsI8 = Limits[I8]
+type LimitsU64 = Limits[U64]
+
+fn sign_word[T: Num](x: T) -> U32 {
+  if x < T.ZERO {
+    0
+  } else if x == T.ZERO {
+    1
+  } else {
+    2
+  }
+}
+
+fn relu[T: Num](x: T) -> T {
+  max(x, T.ZERO)
+}
+
+fn zeros_of[T: AnyNum](x: T) -> [T; 3] {
+  array.from_fn(fn(i) { T.ZERO })
+}
+
+fn count_down[T: Int](from: T) -> U32 {
+  var v      = from
+  var n: U32 = 0
+  while v > T.ZERO {
+    v = v - T.ONE
+    n = n + 1
+  }
+  n
+}
+
+fn both_ends[T: Int](x: T) -> Bool {
+  x > T.ZERO && x < T.MAX
+}
+
+test "the initial value of a field of a struct is T.ZERO and T.ONE" {
+  let a = fresh(I16.ZERO)
+  assert a.total == 0
+  assert a.step == 1
+  let b = fresh(U8.ZERO)
+  assert b.total == 0
+  assert b.step == 1
+}
+
+test "T.MAX, T.ZERO and T.BITS in the methods of a generic type" {
+  let a: Acc[I8] = Acc { total: 100, step: 5 }
+  assert a.headroom() == 27
+  assert !a.is_empty()
+  assert a.width() == 8
+  assert a.next() == 105
+  let b: Acc[U64] = Acc { total: 0, step: 1 }
+  assert b.is_empty()
+  assert b.headroom() == U64.MAX
+  assert b.width() == 64
+}
+
+test "an associated constant of a generic impl that is T.ZERO" {
+  assert ZeroI32.Z == 0
+  assert ZeroU8.Z == 0
+  assert ZeroF32.Z.to_bits() == 0
+}
+
+test "associated constants of a generic impl that are T.MAX, T.ONE and T.BITS" {
+  assert LimitsI8.TOP == 127
+  assert LimitsU64.TOP == 18446744073709551615
+  assert LimitsI8.ONE_UP == 1
+  assert LimitsU64.ONE_UP == 1
+  assert LimitsI8.WIDTH == 8
+  assert LimitsU64.WIDTH == 64
+}
+
+test "the condition of an if and an else if" {
+  let a: I32 = -4
+  let b: I64 = 0
+  let c: F32 = 0.5
+  assert sign_word(a) == 0
+  assert sign_word(b) == 1
+  assert sign_word(c) == 2
+}
+
+test "T.ZERO as the argument of a generic function of std.math" {
+  let a: F32 = -3.5
+  let b: F64 = 2.0
+  let c: I16 = -7
+  let d: F32 = -0.0
+  assert relu(a).to_bits() == 0
+  assert relu(b) == 2.0
+  assert relu(c) == 0
+  assert relu(d).to_bits() == 0
+}
+
+test "T.ZERO in a closure" {
+  let a: F32 = 1.5
+  let b: U16 = 7
+  let za     = zeros_of(a)
+  let zb     = zeros_of(b)
+  assert za[2].to_bits() == 0
+  assert zb[1] == 0
+}
+
+test "T.ZERO and T.ONE in the condition of a while" {
+  let a: I8  = 100
+  let b: U64 = 0
+  assert count_down(a) == 100
+  assert count_down(b) == 0
+}
+
+test "T.ZERO and T.MAX in a condition with &&" {
+  let a: U8 = 255
+  let b: U8 = 254
+  let c: U8 = 0
+  assert !both_ends(a)
+  assert both_ends(b)
+  assert !both_ends(c)
+}

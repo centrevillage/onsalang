@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§6.3", "§6.6", "§3.5"]
+
+// W5-05 U3/t (spec §7: "端は整数の型である"; "`for i in a ..= b` は、`b` が型の最大値でも溢れずに終わる。始点が終点以上 (`a ..< b`) か終点より大きい (`a ..= b`) 範囲は空";
+// §6.3: a type parameter bounded by `Int` is an integer type, and `T.ZERO` `T.ONE` `T.MIN` `T.MAX` are its constants): the ends of a range are values of the type
+// parameter, and the loop variable has the type `T`. control/range_half_open_bounds.onsa has `T.ZERO ..< n`, the end `T.MAX` and `T.ZERO ..< n + T.ONE`; this one has the
+// start `T.ONE` and `T.MIN`, two ends that are values and the empty ranges. The closed range `..=` is in tp_range_ends_closed.onsa.
+
+fn count[T: Int](lo: T, hi: T) -> U32 {
+  var c: U32 = 0
+  for _ in lo ..< hi {
+    c = c + 1
+  }
+  c
+}
+
+fn sum_from_one[T: Int](n: T) -> T {
+  var t = T.ZERO
+  for i in T.ONE ..< n {
+    t = t + i
+  }
+  t
+}
+
+fn count_from_min[T: Int](x: T) -> U32 {
+  var c: U32 = 0
+  for _ in T.MIN ..< T.MIN + T.ONE {
+    c = c + 1
+  }
+  c
+}
+
+test "two ends that are values of T" {
+  let a: I32 = 3
+  let b: I32 = 7
+  assert count(a, b) == 4
+  let c: U8 = 250
+  let d: U8 = 255
+  assert count(c, d) == 5
+}
+
+test "the range of a signed type that starts below 0" {
+  let a: I8 = -3
+  let b: I8 = 3
+  assert count(a, b) == 6
+}
+
+test "a range that is empty runs the body 0 times" {
+  let a: I32 = 7
+  let b: I32 = 3
+  assert count(a, b) == 0
+  assert count(a, a) == 0
+  let c: U16 = 5
+  assert count(c, c) == 0
+}
+
+test "the range that starts at T.ONE" {
+  let a: U8  = 5
+  let b: I32 = 11
+  let c: U16 = 1
+  // 1 + 2 + 3 + 4 and 1 + ... + 10.
+  assert sum_from_one(a) == 10
+  assert sum_from_one(b) == 55
+  assert sum_from_one(c) == 0
+}
+
+test "the range that starts at T.MIN" {
+  let a: I8  = 0
+  let b: I32 = 0
+  let c: U64 = 0
+  assert count_from_min(a) == 1
+  assert count_from_min(b) == 1
+  assert count_from_min(c) == 1
+}

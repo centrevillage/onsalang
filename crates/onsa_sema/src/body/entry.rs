@@ -164,11 +164,20 @@ impl<'a> Checker<'a> {
     /// A use of a `std` `target` declaration at type arguments its row has no
     /// primitive for (spec §15.2, S-69): E0200 at the use, with the types.
     /// One whose arguments are still open (a type parameter of a generic
-    /// body) is not judged here: lowering instantiates it.
+    /// body) is not judged here, nor one of a member of a type parameter,
+    /// whose `def` is not of the type it calls: lowering instantiates them.
     fn check_prim_uses(&mut self) {
+        let of_param: HashSet<u32> = (self.info.targets.values())
+            .filter_map(|t| match t {
+                Target::Fn { of: Some(_), inst: Some(i), .. } | Target::Method { of: Some(_), inst: Some(i), .. } => {
+                    Some(i.0)
+                }
+                _ => None,
+            })
+            .collect();
         for i in 0..self.info.instances.len() {
             let Instance { def, args, span } = self.info.instances[i].clone();
-            let Some(&row) = self.a.prims.get(&def) else { continue };
+            let Some(&row) = self.a.prims.get(&def).filter(|_| !of_param.contains(&(i as u32))) else { continue };
             let args: Vec<TyId> = args.iter().map(|&t| self.infer.resolve(&mut self.a.types, t)).collect();
             let scalars = Scalar::of_use(self.a, def, &args);
             if scalars.is_some_and(|s| !row.provides(&s)) {

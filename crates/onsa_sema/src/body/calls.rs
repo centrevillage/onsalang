@@ -31,7 +31,8 @@ impl<'a> Checker<'a> {
             // 1. A function (an associated one of a builtin type is std's,
             // `Buf.zeroed`) or a variant, as the names stage resolved the
             // callee.
-            if let Some(PathRes::Item { entity, owner }) = self.names.paths.get(&callee).cloned() {
+            let record = self.names.paths.get(&callee).cloned().map(|r| self.item_record(r));
+            if let Some(PathRes::Item { entity, owner }) = record {
                 let name = self.last_name(callee);
                 return match entity {
                     Entity::Builtin(Builtin::Panic) => self.check_panic(e, &name, args, expected),
@@ -138,12 +139,11 @@ impl<'a> Checker<'a> {
                 }
                 let targs = self.fresh_args(d);
                 self.of_owner(d, &targs, owner, span)?;
-                let params: Vec<(Mode, TyId)> =
-                    f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, &targs))).collect();
-                let ret = self.a.types.subst(f.ret, &targs);
+                let of = self.param_of(owner);
+                let (params, ret) = self.member_sig(d, f, &targs, of);
                 // A conversion is judged by its source, which is not in its
                 // result, before the result meets `expected` (§3.3, S-231).
-                let conversion = crate::prim::conversion_target(self.a, d);
+                let conversion = self.conversion_to(d, of);
                 if let (Some(exp), None) = (expected, conversion) {
                     self.unify_at(span, ret, exp)?;
                 }
@@ -156,7 +156,7 @@ impl<'a> Checker<'a> {
                     }
                 }
                 let inst = self.instance(d, targs, span, self.buf_element(d))?;
-                self.info.targets.insert(e, Target::Fn { def: d, inst });
+                self.info.targets.insert(e, Target::Fn { def: d, of, inst });
                 let fty = self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }));
                 self.record(callee, fty);
                 Ok(ret)
@@ -235,26 +235,26 @@ impl<'a> Checker<'a> {
                     self.inout_receiver(callee)?;
                 }
                 let targs = self.fresh_args(md);
+                // The `Self` of a member of a type parameter is the receiver.
+                let of = matches!(self.ty(recv), Ty::Param(_)).then_some(recv);
                 // The impl's own generic arguments come from the receiver; of
                 // std's `impl` of a sequence, its element (S-853).
                 let mut element = None;
-                if let Some(st) = self.a.self_ty_of(md) {
+                if let Some(st) = self.a.self_ty_of(md).filter(|_| of.is_none()) {
                     if matches!(self.ty(st), Ty::Array(..) | Ty::Builtin(BuiltinTy::Span, _)) {
                         element = Some(Required::SeqElement { recv, method: name.name.clone() });
                     }
                     let st2 = self.a.types.subst(st, &targs);
                     self.unify_at(name.span, this, st2)?;
                 }
-                let params: Vec<(Mode, TyId)> =
-                    f.params.iter().map(|p| (p.mode, self.a.types.subst(p.ty, &targs))).collect();
-                let ret = self.a.types.subst(f.ret, &targs);
+                let (params, ret) = self.member_sig(md, f, &targs, of);
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, e)?;
                 let inst = self.instance(md, targs, span, element)?;
                 self.a.note_use(self.a.def(md).name_span, name.span);
-                self.info.targets.insert(e, Target::Method { def: md, inst });
+                self.info.targets.insert(e, Target::Method { def: md, of, inst });
                 let _ = kind;
                 return Ok(ret);
             }
@@ -284,9 +284,49 @@ impl<'a> Checker<'a> {
         Ok(sig.ret)
     }
 
+    /// The record `r` with a member of a type parameter as an item: the type
+    /// that stands before the name, as of an alias, is the parameter
+    /// ([`Self::param_of`]).
+    pub(super) fn item_record(&mut self, r: PathRes) -> PathRes {
+        let PathRes::BoundMember { param, member } = r else { return r };
+        let owner = Some(self.a.types.intern(Ty::Param(param)));
+        PathRes::Item { entity: Entity::Member(member), owner }
+    }
+
+    /// The type parameter a member is read at, of the `owner` of its record
+    /// ([`Self::item_record`]): an alias and `Self` stand for no type parameter.
+    pub(super) fn param_of(&self, owner: Option<TyId>) -> Option<TyId> {
+        owner.filter(|&t| matches!(self.ty(t), Ty::Param(_)))
+    }
+
+    /// The type `t` of the declaration of the member `d` at the type
+    /// arguments `args`, and at the type parameter `of`: there the `Self` of
+    /// a representative type, which its declaration has as that type, is `of`.
+    pub(super) fn member_ty(&mut self, d: DefId, t: TyId, args: &[TyId], of: Option<TyId>) -> TyId {
+        let t = self.a.types.subst(t, args);
+        match (of, self.a.self_ty_of(d)) {
+            (Some(of), Some(rep)) => self.a.types.replace(t, rep, of),
+            _ => t,
+        }
+    }
+
+    /// The parameters and the result of the function `f`, the member `d`,
+    /// as [`Self::member_ty`] reads its types.
+    fn member_sig(&mut self, d: DefId, f: &FnDef, args: &[TyId], of: Option<TyId>) -> (Vec<(Mode, TyId)>, TyId) {
+        let params = f.params.iter().map(|p| (p.mode, self.member_ty(d, p.ty, args, of))).collect();
+        (params, self.member_ty(d, f.ret, args, of))
+    }
+
+    /// The type the function `d` converts to, when it is a conversion
+    /// function: of a member of the type parameter `of`, `of`.
+    pub(super) fn conversion_to(&self, d: DefId, of: Option<TyId>) -> Option<TyId> {
+        crate::prim::conversion_target(self.a, d).map(|to| of.unwrap_or(to))
+    }
+
     /// Where the method `name` of a receiver of the type `recv` is looked
-    /// up: the key of the `impl`s of a builtin type, the owner of a user
-    /// type, and the type its `self` stands for. The one lookup of the
+    /// up: the key of the `impl`s of a builtin type (of a type parameter, of
+    /// the representative type of the member its bounds give), the owner of a
+    /// user type, and the type its `self` stands for. The one lookup of the
     /// method calls and of the candidates of their E0413 (`removed.rs`).
     pub(super) fn method_key(&mut self, recv: TyId, name: &str) -> (Option<TyId>, Option<DefId>, TyId) {
         // The members of the `impl`s of the head of the receiver's type: of a
@@ -299,6 +339,13 @@ impl<'a> Checker<'a> {
             Ty::Float(k) => (Some(self.a.types.float(k)), None),
             Ty::Array(..) => (self.a.array_key, None),
             Ty::Builtin(b, _) => (self.a.builtin_key.get(&b).copied(), None),
+            Ty::Param(i) => match self.generics.get(i as usize).map(|g| &g.kind) {
+                Some(GenericKind::Type { bounds, .. }) => {
+                    let rep = crate::traits::member_rep(bounds, name);
+                    (rep.and_then(|r| self.a.types.find(&r.ty())), None)
+                }
+                _ => (None, None),
+            },
             _ => (None, None),
         };
         // §5.3: an array and a `Buf` take from `Span[T]` the methods their

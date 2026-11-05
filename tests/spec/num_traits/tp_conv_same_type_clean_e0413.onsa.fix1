@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:5"
+// code = "E0413"
+// candidate = 1
+// clean = true
+
+// W5-05 U3/t (spec §3.3: "同じ型パラメータへの `T.round_from(x)` (`x: T`) は同じ型への呼び出しで、E0413 (修正候補は呼び出しを外す形)"): the one candidate leaves the
+// file without an error. The file has the one unit that has a candidate (the property `clean` asks for the whole file, so a file of the
+// positions is tp_conv_same_type_e0413.onsa). The place `at` is the name `round_from`, where the case of the same type of the concrete types
+// (fixes/e0413_same_type.onsa) is reported today; the spec does not fix the column of the diagnostic.
+
+pub fn as_the_tail[T: Float](x: T) -> T {
+  x //~ E0413
+}

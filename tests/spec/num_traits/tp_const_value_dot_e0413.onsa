@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.3", "§15.1", "§18.1"]
+
+// W5-05 U3/t (spec §6.6: an associated constant is read from the name of a type, "参照は `Point.ORIGIN`、`F32.PI`、型パラメータでは
+// `T.ZERO`"; §15.1: "値の後の `.` はそのフィールドとメソッド"): the constant read after a value is not found as a field, E0413,
+// whether the value has the type of a type parameter or a concrete type. One function for each form (P-01).
+
+pub fn one_after_a_value[T: Int](x: T) -> T {
+  x.ONE //~ E0413
+}
+
+pub fn zero_after_a_value[T: AnyNum](x: T) -> T {
+  x.ZERO //~ E0413
+}
+
+pub fn max_after_a_float_value[T: Float](x: T) -> T {
+  x.MAX //~ E0413
+}
+
+pub fn bits_after_an_unsigned_value[T: Unsigned](x: T) -> U32 {
+  x.BITS //~ E0413
+}
+
+pub fn pi_after_a_concrete_value(x: F32) -> F32 {
+  x.PI //~ E0413
+}
+
+pub fn max_after_an_integer(n: I32) -> I32 {
+  n.MAX //~ E0413
+}
+
+pub fn zero_after_a_field[T: AnyNum](p: Pair[T]) -> T {
+  p.a.ZERO //~ E0413
+}
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+pub fn fine(n: I32) -> I32 {
+  n + I32.MAX - I32.MAX
+}

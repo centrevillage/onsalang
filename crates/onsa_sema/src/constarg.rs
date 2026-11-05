@@ -9,7 +9,7 @@
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, ItemKind, Lit, Path};
 
-use crate::def::{DefKind, GenericDef};
+use crate::def::{DefKind, GenericDef, GenericKind};
 use crate::names::body::{Outside, instance_form, method_named, outside_flow, value_called};
 use crate::names::{BuiltinMember, PathEnd};
 use crate::resolve::{Callee, Entity, NameKind, ResolveError};
@@ -193,6 +193,9 @@ impl Reader<'_> {
     /// ([`named_def`]); a parameter of another kind is an error
     /// ([`not_constant`]).
     fn name(&self, a: &mut Analysis, path: &Path, span: Span) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
+        if let Some(err) = member_of_param(a, self.generics, self.text, path, span) {
+            return Err(err);
+        }
         match generic(a, self.generics, path) {
             Some((i, NameKind::ConstParam)) => Ok((ConstU32::Param(i), None)),
             Some((_, kind)) => Err(not_constant(kind, path.segments[0].name.clone(), span)),
@@ -202,6 +205,45 @@ impl Reader<'_> {
             }
         }
     }
+}
+
+/// The error of a member after a type parameter in `path` at `span`
+/// (`T.BITS`): a constant has its value at the instantiation, as a const
+/// parameter's in an expression (E0417, §4.5, S-898). A member of another
+/// kind is the error of the member of a type ([`named_def`]), and what the
+/// bounds do not give is not found, as in a body (§15.1).
+pub(crate) fn member_of_param(
+    a: &Analysis,
+    generics: &[GenericDef],
+    text: &str,
+    path: &Path,
+    span: Span,
+) -> Option<ConstErr> {
+    let [head, name, rest @ ..] = &path.segments[..] else { return None };
+    let g = generics.iter().find(|g| g.name == head.name)?;
+    let GenericKind::Type { bounds, unknown, .. } = &g.kind else { return None };
+    a.note_use(g.span, head.span);
+    let Some(member) = crate::traits::member(a, bounds, &name.name) else {
+        let err = ResolveError::NotFound { name: name.name.clone(), span: name.span };
+        return Some(if *unknown { ConstErr::Unknown } else { err.into_diagnostic().into() });
+    };
+    let shown = text[span.start as usize..span.end as usize].to_string();
+    let kind = NameKind::of_named(Entity::Member(member), &a.defs, span);
+    if matches!(&a.def(member).kind, DefKind::Fn(f) if f.self_mode.is_some()) {
+        return Some(method_named(shown, &name.name, span).into());
+    }
+    if let Some(next) = rest.first() {
+        let err = ResolveError::NotANamespace { name: name.name.clone(), span: next.span, kind: Some(kind) };
+        return Some(err.into_diagnostic().into());
+    }
+    if !matches!(a.def(member).kind, DefKind::Const(_)) {
+        return Some(not_constant(kind, shown, span));
+    }
+    let msg = format!(
+        "`{shown}` has no value before `{}` is instantiated: a constant expression names constants (§4.5)",
+        head.name
+    );
+    Some(Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into())
 }
 
 /// The parameter of `generics` a path of one name names, with its kind

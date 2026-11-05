@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§2.4", "§4.5", "§18.1"]
+
+// W5-05 U3/t (spec §3.3 and §4.5: the source of `T.round_from(k)` is a free type variable when it is a literal, "変換元がリテラルの型変数のままなら、型が決まった
+// 文で判定し、関数の終わりには既定を当てた後で判定する"; §4.5: "決まらないまま関数が終われば ... E0406 (浮動小数のリテラルなら E0405)", and the bound `AnyNum` of the source
+// does not make a float literal an `F32` or an `F64`): `T.round_from(0.5)` has a float literal for the source and nothing decides its type, so it is E0405.
+// The integer literal is the default `I32` (tp_conv_round.onsa). One function for each form (P-01).
+
+pub fn literal_at_the_tail[T: Float](x: T) -> T {
+  T.round_from(0.5) //~ E0405
+}
+
+pub fn literal_in_a_let[T: Float](x: T) -> T {
+  let y: T = T.round_from(0.25) //~ E0405
+  y
+}
+
+pub fn literal_in_an_operand[T: Float](x: T) -> T {
+  x + T.round_from(1.5) //~ E0405
+}
+
+pub fn literal_in_an_argument[T: Float](x: T) -> T {
+  max_of(x, T.round_from(2.5)) //~ E0405
+}
+
+pub fn max_of[T: Float](a: T, b: T) -> T {
+  if a > b {
+    a
+  } else {
+    b
+  }
+}
+
+pub fn fine[T: Float](x: T) -> T {
+  x + T.round_from(2)
+}

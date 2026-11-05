@@ -8,7 +8,7 @@ use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
 use onsa_sema::body::{BodyInfo, InstId, Target, TryArms};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
-use onsa_sema::ty::TyId;
+use onsa_sema::ty::{Ty as STy, TyId};
 use onsa_sema::{DefId, ModId};
 use onsa_syntax::ast::{
     self, Ast, BinOp as ABinOp, ExprId, ExprKind as AK, Lit as ALit, OpGroup, PatId, PatKind, RangeEnd, StmtId,
@@ -71,14 +71,6 @@ impl<'b> FnCx<'b> {
         Ok(FnCx { args, info, ast: &m.parsed.ast, text: &m.text, module, locals, ret, inline_depth: 0, flow: None })
     }
 
-    /// The arguments of the instance `inst` of a target, in this body.
-    fn target_args(&self, lw: &mut Lowerer, inst: Option<InstId>, span: Span) -> R<Vec<GenericArg>> {
-        match inst {
-            Some(i) => lw.generic_args(&self.info.instances[i.0 as usize].args, &self.args, span),
-            None => Ok(Vec::new()),
-        }
-    }
-
     pub(crate) fn temp(&mut self, name: &str, ty: Ty) -> LocalId {
         let id = LocalId(self.locals.len() as u32);
         self.locals.push(Local { name: name.to_string(), ty });
@@ -113,6 +105,37 @@ impl<'b> FnCx<'b> {
             .get(&p)
             .map(|l| LocalId(l.0))
             .ok_or_else(|| internal(self.ast.pat(p).span, "pattern without a local"))
+    }
+}
+
+impl Lowerer<'_> {
+    /// The declaration a use of `def` is of, and its type arguments in the
+    /// body of `cx`: of a member of the type parameter `of`, the member of the
+    /// same name of the type it is instantiated at, from where the use reads
+    /// as one of that type ([`Target::Method`]).
+    fn instance_target(
+        &mut self,
+        def: DefId,
+        of: Option<TyId>,
+        inst: Option<InstId>,
+        cx: &FnCx,
+        span: Span,
+    ) -> R<(DefId, Vec<GenericArg>)> {
+        let args = match inst {
+            Some(i) => self.generic_args(&cx.info.instances[i.0 as usize].args, &cx.args, span)?,
+            None => Vec::new(),
+        };
+        let Some(of) = of else { return Ok((def, args)) };
+        let key = match self.core_ty(of, &cx.args, span)? {
+            Ty::Int(k) => STy::Int(k),
+            Ty::Float(k) => STy::Float(k),
+            _ => return Err(internal(span, "a member of a type parameter at no number type")),
+        };
+        let table = self.a.types.find(&key).and_then(|k| self.a.modules.assoc_builtin.get(&k));
+        match table.and_then(|t| t.get(&self.a.def(def).name)) {
+            Some(&member) => Ok((member, args)),
+            None => Err(internal(span, "a member of a number type that std does not declare")),
+        }
     }
 }
 

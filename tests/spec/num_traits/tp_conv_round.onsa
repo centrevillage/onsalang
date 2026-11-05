@@ -1,0 +1,217 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§6.3", "§4.5"]
+
+// W5-05 U3/t (spec §3.3: "変換元か変換先が型パラメータなら、変換は関連関数で書く (`T.round_from(k)`) ... 型パラメータの関連関数は境界の
+// trait から引き (`Float` は `round_from`)、具体化した型の組で `as` が書けても書ける"; §3.3 and §3.4: `round_from` rounds to nearest even,
+// keeps the sign of a zero, and a `F64` that is too large for `F32` becomes an infinity): the target is the type parameter `T: Float`
+// and the source is a `U32`, an `I32`, an `F64`, a value of another type parameter `S: AnyNum`, or a literal. The same function runs at
+// F32 and F64, so it covers the pair that `as` writes (`U32` to `F64`, `F32` to `F64`) and the same type (`F64` to `F64`).
+// 16777217 = 2^24 + 1 is the tie of 2^24 and 2^24 + 2 and the even one wins; 16777219 is the tie of 16777218 and 16777220 and the even one is
+// 16777220; 2^53 + 1 is the tie of 2^53 and 2^53 + 2 and the even one is 2^53.
+// The functions `w_*` at the end fix the type arguments: a call does not write `name::[...]` in this version (W5-10).
+
+use std.array
+
+fn from_u32[T: Float](k: U32) -> T {
+  T.round_from(k)
+}
+
+fn from_i32[T: Float](k: I32) -> T {
+  T.round_from(k)
+}
+
+fn from_f64[T: Float](k: F64) -> T {
+  T.round_from(k)
+}
+
+fn from_param[T: Float, S: AnyNum](k: S) -> T {
+  T.round_from(k)
+}
+
+fn two[T: Float]() -> T {
+  T.round_from(2)
+}
+
+fn scaled[T: Float](k: U32, x: T) -> T {
+  T.round_from(k) * x
+}
+
+fn ramp[T: Float](step: T) -> [T; 4] {
+  array.from_fn(fn(i) { T.round_from(i) * step })
+}
+
+pub struct Meter[T: Float] {
+  gain: T,
+}
+
+impl[T: Float] Meter[T] {
+  pub fn level(self, k: U32) -> T {
+    T.round_from(k) * self.gain
+  }
+}
+
+test "T.round_from of a U32 rounds to the nearest even" {
+  assert w_from_u32_f32(16777217) == 16777216.0
+  assert w_from_u32_f32(16777219) == 16777220.0
+  assert w_from_u32_f32(4294967295) == 4294967296.0
+  assert w_from_u32_f64(16777217) == 16777217.0
+  assert w_from_u32_f64(4294967295) == 4294967295.0
+  assert w_from_u32_f32(0).to_bits() == 0
+  assert w_from_u32_f64(0).to_bits() == 0
+}
+
+test "T.round_from of an I32 keeps the sign and the value" {
+  assert w_from_i32_f32(-5) == -5.0
+  assert w_from_i32_f64(-5) == -5.0
+  assert w_from_i32_f32(I32.MIN) == -2147483648.0
+  assert w_from_i32_f64(I32.MIN) == -2147483648.0
+  assert w_from_i32_f32(16777217) == 16777216.0
+  assert w_from_i32_f32(-16777217) == -16777216.0
+  assert w_from_i32_f64(0).to_bits() == 0
+}
+
+test "T.round_from of an F64, to F32 and to the same type" {
+  assert w_from_f64_f32(16777217.0) == 16777216.0
+  assert w_from_f64_f32(0.1) == 0.1
+  assert w_from_f64_f64(16777217.0) == 16777217.0
+  assert w_from_f64_f64(0.1) == 0.1
+}
+
+test "T.round_from of an F64 keeps the sign of a zero" {
+  assert w_from_f64_f32(-0.0).to_bits() == 0x80000000
+  assert w_from_f64_f32(0.0).to_bits() == 0
+  assert w_from_f64_f64(-0.0).to_bits() == 0x8000000000000000
+}
+
+test "T.round_from of a large F64 is an infinity for F32 and the value for F64" {
+  assert w_from_f64_f32(1.0e300) == F32.INFINITY
+  assert w_from_f64_f32(-1.0e300) == -F32.INFINITY
+  assert w_from_f64_f64(1.0e300) == 1.0e300
+}
+
+test "T.round_from of a value of another type parameter" {
+  assert w_from_param_f32_i64(9007199254740993) == 9007199254740992.0
+  assert w_from_param_f64_i64(9007199254740993) == 9007199254740992.0
+  assert w_from_param_f32_u64(18446744073709551615) == 18446744073709551616.0
+  assert w_from_param_f64_u64(18446744073709551615) == 18446744073709551616.0
+  assert w_from_param_f32_u8(200) == 200.0
+  assert w_from_param_f64_i16(-300) == -300.0
+}
+
+test "T.round_from from the same type through another type parameter" {
+  assert w_from_param_f32_f32(1.5) == 1.5
+  assert w_from_param_f64_f64(1.0e300) == 1.0e300
+}
+
+test "T.round_from from F32 to F64 is the value of as" {
+  let x: F32 = 0.1
+  assert w_from_param_f64_f32(x) == (x as F64)
+  let y: F64 = 0.1
+  assert w_from_param_f32_f64(y) == 0.1
+}
+
+test "T.round_from takes the expected type of the binding" {
+  let a: F32 = from_u32(16777217)
+  let b: F64 = from_u32(16777217)
+  assert a == 16777216.0
+  assert b == 16777217.0
+}
+
+test "T.round_from of an integer literal is the default I32" {
+  assert w_two_f32() == 2.0
+  assert w_two_f64() == 2.0
+}
+
+test "T.round_from as an operand and in a closure" {
+  let x: F32 = 0.5
+  let y: F64 = 0.25
+  assert scaled(3, x) == 1.5
+  assert scaled(3, y) == 0.75
+  let r = ramp(x)
+  assert r[0] == 0.0
+  assert r[1] == 0.5
+  assert r[3] == 1.5
+  let s = ramp(y)
+  assert s[2] == 0.5
+}
+
+test "T.round_from in a method of a generic type" {
+  let a: Meter[F32] = Meter { gain: 1.0 }
+  let b: Meter[F64] = Meter { gain: 1.0 }
+  assert a.level(16777217) == 16777216.0
+  assert b.level(16777217) == 16777217.0
+}
+
+fn w_from_u32_f32(k: U32) -> F32 {
+  from_u32(k)
+}
+
+fn w_from_u32_f64(k: U32) -> F64 {
+  from_u32(k)
+}
+
+fn w_from_i32_f32(k: I32) -> F32 {
+  from_i32(k)
+}
+
+fn w_from_i32_f64(k: I32) -> F64 {
+  from_i32(k)
+}
+
+fn w_from_f64_f32(k: F64) -> F32 {
+  from_f64(k)
+}
+
+fn w_from_f64_f64(k: F64) -> F64 {
+  from_f64(k)
+}
+
+fn w_from_param_f32_i64(k: I64) -> F32 {
+  from_param(k)
+}
+
+fn w_from_param_f64_i64(k: I64) -> F64 {
+  from_param(k)
+}
+
+fn w_from_param_f32_u64(k: U64) -> F32 {
+  from_param(k)
+}
+
+fn w_from_param_f64_u64(k: U64) -> F64 {
+  from_param(k)
+}
+
+fn w_from_param_f32_u8(k: U8) -> F32 {
+  from_param(k)
+}
+
+fn w_from_param_f64_i16(k: I16) -> F64 {
+  from_param(k)
+}
+
+fn w_from_param_f32_f32(k: F32) -> F32 {
+  from_param(k)
+}
+
+fn w_from_param_f64_f64(k: F64) -> F64 {
+  from_param(k)
+}
+
+fn w_from_param_f64_f32(k: F32) -> F64 {
+  from_param(k)
+}
+
+fn w_from_param_f32_f64(k: F64) -> F32 {
+  from_param(k)
+}
+
+fn w_two_f32() -> F32 {
+  two()
+}
+
+fn w_two_f64() -> F64 {
+  two()
+}

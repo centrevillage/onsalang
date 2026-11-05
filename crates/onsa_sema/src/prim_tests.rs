@@ -43,7 +43,7 @@ fn std_targets(a: &Analysis) -> BTreeMap<String, (DefId, FnDef)> {
     out
 }
 
-fn analyzed_std() -> Analysis {
+pub(crate) fn analyzed_std() -> Analysis {
     let a = analyze(&Package::new("t", vec![module(&["main"], 0, "")], vec![std_package()]));
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     a
@@ -312,5 +312,5 @@ fn no_missing_name_is_a_member_of_std() {
         }
     }
     let of = a.types.float(FloatKind::F32);
-    assert!(crate::builtin::missing(&a.types, of, "ZERO").is_some());
+    assert!(crate::builtin::missing(&a.types, of, "default").is_some());
 }

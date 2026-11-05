@@ -1,15 +1,18 @@
 //! The provisional tables of the traits (§6.3, S-72, R-127): what the builtin
-//! types implement, what a trait requires, and the trait of each operator.
-//! In phase 2 they become the declarations of std: a row of [`IMPLS`] its
-//! `impl`s, a row of [`SUPERS`] the heading of a `trait`; the table of the
-//! operators stays. The judgments under the generics in scope are
-//! [`crate::body::bounds`], which reads these.
+//! types implement, what a trait requires, the names a trait gives a type
+//! parameter, and the trait of each operator. In phase 2 they become the
+//! declarations of std: a row of [`IMPLS`] its `impl`s, a row of [`SUPERS`]
+//! the heading of a `trait`, a row of [`MEMBERS`] the items of a `trait`; the
+//! table of the operators stays. The judgments under the generics in scope
+//! are [`crate::body::bounds`], which reads these.
 
 use onsa_syntax::ast::BinOp;
 
 use crate::def::Bound;
 use crate::deferred::OpNeed;
-use crate::ty::{BuiltinTy, Ty};
+use crate::prim::{NARROW_FROM, ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM};
+use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty};
+use crate::{Analysis, DefId};
 
 /// A row of the table of §6.3: the types that implement the same traits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +93,59 @@ pub(crate) const SUPERS: &[(Bound, &[Bound])] = {
         (Unsigned, &[Int]),
     ]
 };
+
+/// The type whose declarations stand for the members of a row of [`MEMBERS`]:
+/// a member of a type parameter is the member of this type, with this type
+/// read as the parameter (`crate::ty::Types::replace`; [`crate::body::Target`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rep {
+    I32,
+    F32,
+}
+
+impl Rep {
+    pub(crate) fn ty(self) -> Ty {
+        match self {
+            Rep::I32 => Ty::Int(IntKind::I32),
+            Rep::F32 => Ty::Float(FloatKind::F32),
+        }
+    }
+}
+
+/// The names the number traits give a type parameter (§3.3, §6.3, §6.6): the
+/// constants, the conversion functions and the methods. A row has no forms:
+/// those are the declarations of std, one place (D-15), held equal for every
+/// type of the row by a unit test.
+#[rustfmt::skip]
+pub(crate) const MEMBERS: &[(Bound, Rep, &[&str])] = &[
+    (Bound::AnyNum, Rep::I32, &["ZERO"]),
+    (Bound::Float, Rep::F32, &["ONE", "PI", "MAX", "EPSILON", "INFINITY", "NAN", ROUND_FROM]),
+    (Bound::Int, Rep::I32, &[
+        "ONE", "MIN", "MAX", "BITS", NARROW_FROM, TRUNC_FROM, TRUNC_SAT_FROM,
+        "div_euclid", "rem_euclid", "checked_add", "checked_sub", "checked_mul", "checked_div",
+        "checked_rem", "checked_div_euclid", "checked_rem_euclid", "checked_shl", "checked_shr",
+    ]),
+];
+
+/// The representative type of the member `name` of a type parameter of the
+/// bounds `bounds`: of the first row of [`MEMBERS`] with the name, of a trait
+/// a bound implies.
+pub(crate) fn member_rep(bounds: &[Bound], name: &str) -> Option<Rep> {
+    let gives = |b| bounds.iter().any(|&have| implies(have, b));
+    MEMBERS.iter().find(|(b, _, names)| names.contains(&name) && gives(*b)).map(|&(_, rep, _)| rep)
+}
+
+/// The declaration of the member `name` of a type parameter of the bounds
+/// `bounds`: none with no such member, or with no std loaded.
+pub(crate) fn member(a: &Analysis, bounds: &[Bound], name: &str) -> Option<DefId> {
+    let key = a.types.find(&member_rep(bounds, name)?.ty())?;
+    a.modules.assoc_builtin.get(&key)?.get(name).copied()
+}
+
+/// The trait of the first row of [`MEMBERS`] with the name `name`.
+pub(crate) fn member_trait(name: &str) -> Option<Bound> {
+    MEMBERS.iter().find(|(_, _, names)| names.contains(&name)).map(|&(b, _, _)| b)
+}
 
 impl Class {
     /// The row of a type, none for a type the table does not decide: a named

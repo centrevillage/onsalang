@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§6.6", "§3.4"]
+
+// W5-05 U3/t (spec §6.3: `AnyNum` has the associated constant `ZERO: Self`, "加法の単位元。浮動小数では `+0.0` で、`-0.0 + ZERO` は
+// `+0.0` になる"; §6.6: a type parameter reads it as `T.ZERO`): the same generic function runs at every integer type and at both
+// floating-point types, and the constant is the additive identity of the type it was instantiated with. The value of the float
+// ZERO is `+0.0`, which only the bits show (`-0.0 == 0.0` is true, §3.4).
+
+fn zero_of[T: AnyNum](x: T) -> T {
+  T.ZERO
+}
+
+fn plus_zero[T: AnyNum](x: T) -> T {
+  x + T.ZERO
+}
+
+fn is_zero[T: AnyNum](x: T) -> Bool {
+  x == T.ZERO
+}
+
+fn sum3[T: AnyNum](xs: [T; 3]) -> T {
+  var t = T.ZERO
+  for v in xs {
+    t = t + v
+  }
+  t
+}
+
+fn twice_zero[T: AnyNum](x: T) -> T {
+  zero_of(x) + zero_of(x)
+}
+
+test "T.ZERO of every integer type is 0" {
+  let a: I8  = 5
+  let b: I16 = 5
+  let c: I32 = 5
+  let d: I64 = 5
+  let e: U8  = 5
+  let f: U16 = 5
+  let g: U32 = 5
+  let h: U64 = 5
+  assert zero_of(a) == 0
+  assert zero_of(b) == 0
+  assert zero_of(c) == 0
+  assert zero_of(d) == 0
+  assert zero_of(e) == 0
+  assert zero_of(f) == 0
+  assert zero_of(g) == 0
+  assert zero_of(h) == 0
+}
+
+test "T.ZERO of the floating-point types is +0.0" {
+  let a: F32 = 1.5
+  let b: F64 = 1.5
+  assert zero_of(a).to_bits() == 0
+  assert zero_of(b).to_bits() == 0
+}
+
+test "-0.0 + T.ZERO is +0.0" {
+  let a: F32 = -0.0
+  let b: F64 = -0.0
+  assert a.to_bits() == 0x80000000
+  assert plus_zero(a).to_bits() == 0
+  assert plus_zero(b).to_bits() == 0
+}
+
+test "x + T.ZERO is x for the other values" {
+  let a: F32 = -2.5
+  let b: F64 = 1.0e300
+  let c: I64 = I64.MAX
+  let d: U64 = U64.MAX
+  let e: I8  = -128
+  assert plus_zero(a) == -2.5
+  assert plus_zero(b) == 1.0e300
+  assert plus_zero(c) == I64.MAX
+  assert plus_zero(d) == U64.MAX
+  assert plus_zero(e) == -128
+}
+
+test "a sum that starts at T.ZERO of two -0.0 is +0.0" {
+  let a: [F32; 3] = [-0.0, -0.0, -0.0]
+  let b: [F64; 3] = [-0.0, -0.0, -0.0]
+  assert sum3(a).to_bits() == 0
+  assert sum3(b).to_bits() == 0
+}
+
+test "a sum that starts at T.ZERO adds the elements" {
+  let a: [I16; 3] = [100, -30, 7]
+  let b: [U8; 3]  = [100, 100, 55]
+  let c: [F64; 3] = [0.5, 0.25, 0.125]
+  assert sum3(a) == 77
+  assert sum3(b) == 255
+  assert sum3(c) == 0.875
+}
+
+test "x == T.ZERO tells zero from the others, and -0.0 is equal to it" {
+  let a: I32 = 0
+  let b: U64 = 1
+  let c: F32 = -0.0
+  let d: F32 = F32.NAN
+  let e: F64 = 1.0e-300
+  assert is_zero(a)
+  assert !is_zero(b)
+  assert is_zero(c)
+  assert !is_zero(d)
+  assert !is_zero(e)
+}
+
+test "T.ZERO read through two generic calls" {
+  let a: U16 = 9
+  let b: F64 = 9.0
+  assert twice_zero(a) == 0
+  assert twice_zero(b).to_bits() == 0
+}

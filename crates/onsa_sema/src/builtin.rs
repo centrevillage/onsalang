@@ -112,8 +112,6 @@ fn sig_ty(types: &mut Types, t: T) -> TyId {
 /// What a name of [`MISSING`] is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Form {
-    /// Named through the type (`F32.ZERO`).
-    Constant,
     /// Named through the type (`I32.default()`), or as a value (§6.1).
     Function,
     /// Called on a value (`s.as_bytes()`); named through its type it is what
@@ -151,11 +149,8 @@ fn no_len_yet(t: &Ty) -> bool {
 /// Every name the spec gives a builtin type and this version has not: E0200
 /// where it is named (§18.1, R-294), not the error of a name that does not
 /// exist. The work that declares a name takes its row off (a self-test asks
-/// that no row names a member of std): `ZERO` and `ONE`, W5-05; `default`,
-/// W5-06.
+/// that no row names a member of std): `default`, W5-06.
 const MISSING: &[Missing] = &[
-    Missing { of: Ty::is_number, name: "ZERO", form: Form::Constant, feature: Feature::BuiltinValueName },
-    Missing { of: Ty::is_number, name: "ONE", form: Form::Constant, feature: Feature::BuiltinValueName },
     Missing { of: literal_default, name: "default", form: Form::Function, feature: Feature::BuiltinValueName },
     Missing { of: bytes, name: "default", form: Form::Function, feature: Feature::BuiltinName },
     Missing { of: str_ty, name: "from_utf8", form: Form::Function, feature: Feature::BuiltinName },

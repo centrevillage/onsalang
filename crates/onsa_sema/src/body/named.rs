@@ -37,7 +37,7 @@ impl<'a> Checker<'a> {
     /// name: a local, a const parameter, an item or an associated constant
     /// of a builtin type.
     fn value_of_record(&mut self, r: PathRes, e: ExprId, name: &Ident, span: Span, expected: Option<TyId>) -> R<TyId> {
-        match r {
+        match self.item_record(r) {
             PathRes::Local(b) => {
                 let id = LocalId(b.0);
                 if self.flow.is_some() {
@@ -57,7 +57,7 @@ impl<'a> Checker<'a> {
                     Err(self.err(Code::E0401, span, format!("`{shown}` is not a value")))
                 }
             },
-            PathRes::Namespace(_) | PathRes::TypeParam(_) | PathRes::FlowBuiltin(_) => {
+            PathRes::Namespace(_) | PathRes::TypeParam(_) | PathRes::BoundMember { .. } | PathRes::FlowBuiltin(_) => {
                 onsa_diag::internal::bug(Some(span), "a value of a name the names stage reports")
             }
         }
@@ -163,8 +163,9 @@ impl<'a> Checker<'a> {
     /// (the struct or the enum of a literal, a pattern or a variant; the
     /// type of the `impl` of an associated item) with `args` is the
     /// owner (`type Samples = Buf[F32]`, `Self` of `impl[T] G[T]` is `G[T]`).
+    /// A type parameter before a member decides none: [`Self::member_ty`].
     pub(crate) fn of_owner(&mut self, d: DefId, args: &[TyId], owner: Option<TyId>, span: Span) -> R<()> {
-        let Some(owner) = owner else { return Ok(()) };
+        let Some(owner) = owner.filter(|_| self.param_of(owner).is_none()) else { return Ok(()) };
         let def = self.a.def(d);
         let ty = match (&def.kind, def.owner.map(|o| &self.a.def(o).kind)) {
             (DefKind::Const(_), _) if self.const_unread(d) => return Ok(()),
@@ -219,19 +220,21 @@ impl<'a> Checker<'a> {
                         }
                         let args = self.fresh_args(d);
                         self.of_owner(d, &args, owner, span)?;
+                        let of = self.param_of(owner);
                         let fty = self.fn_type(f, &args);
+                        let fty = self.member_ty(d, fty, &[], of);
                         if let Some(exp) = expected {
                             self.unify_at(name.span, fty, exp)?;
                         }
                         // The value of a conversion function is judged as a
                         // call of it is (`F64.round_from` at `fn(F32) -> F64`,
                         // §3.3, S-885).
-                        if let Some(to) = crate::prim::conversion_target(self.a, d) {
-                            let ret = self.a.types.subst(f.ret, &args);
+                        if let Some(to) = self.conversion_to(d, of) {
+                            let ret = self.member_ty(d, f.ret, &args, of);
                             self.conversion_use(name.span, args[0], to, ret, None)?;
                         }
                         let inst = self.instance(d, args, span, self.buf_element(d))?;
-                        self.info.targets.insert(e, Target::Fn { def: d, inst });
+                        self.info.targets.insert(e, Target::Fn { def: d, of, inst });
                         Ok(Some(fty))
                     }
                     DefKind::Const(_) if self.a.heading_failed(d) => Ok(Some(self.a.types.error())),
@@ -241,9 +244,10 @@ impl<'a> Checker<'a> {
                     DefKind::Const(c) => {
                         let args = self.fresh_args(d);
                         self.of_owner(d, &args, owner, span)?;
-                        let t = self.a.types.subst(c.ty, &args);
+                        let of = self.param_of(owner);
+                        let t = self.member_ty(d, c.ty, &args, of);
                         let inst = self.finish_instance(d, args, span)?;
-                        self.info.targets.insert(e, Target::Const { def: d, inst });
+                        self.info.targets.insert(e, Target::Const { def: d, of, inst });
                         Ok(Some(t))
                     }
                     DefKind::Unsupported(_) => Ok(Some(self.a.types.error())),

@@ -6,8 +6,9 @@
 //! in a flow body, a builtin name of the flow (§2.2, §11.4), in that order;
 //! the elements after it are members of what the one before names
 //! (`Modules::members`), up to a value, whose fields and methods are the
-//! types stage's. The path of a pattern or a struct literal names an item
-//! of the module's names alone.
+//! types stage's; after a type parameter, the members its bounds give. The
+//! path of a pattern or a struct literal names an item of the module's names
+//! alone.
 //!
 //! A name that is not found, or whose kind the place does not take, is the
 //! error of the names stage that stops the walk of the body (§18.1); a name
@@ -102,13 +103,8 @@ impl<'a> Walker<'a> {
             return (Vec::new(), Some(Fail::Report(d.with_found(crate::names::SELF_VALUE))));
         }
         match self.heading(head) {
-            Some(r @ PathRes::ConstParam(_)) => return (vec![r], None),
-            // A type parameter is a type (§15.1), and no namespace of members
-            // (`T.ZERO` from W4-04 U6).
-            Some(r) => {
-                let kind = (segs.len() == 1).then(|| self.kind_fail(NameKind::Type, segs, place)).flatten();
-                return (vec![r], Some(kind.unwrap_or_else(|| self.not_found(segs.get(1).copied().unwrap_or(head)))));
-            }
+            Some(PathRes::TypeParam(i)) => return self.type_param(i, segs, place),
+            Some(r) => return (vec![r], None),
             None => {}
         }
         let a = self.a;
@@ -192,6 +188,34 @@ impl<'a> Walker<'a> {
             out.clear();
         }
         (out, fail)
+    }
+
+    /// The chain `segs` from the type parameter `param`, a type (§15.1): the
+    /// member after it is of its bounds (§3.3, [`crate::traits::member`]),
+    /// as the member of a type is; a name its bounds do not give is not
+    /// found, of a parameter whose bounds were all read (§18.1).
+    fn type_param(&self, param: u32, segs: &[&Ident], place: Place) -> (Vec<PathRes>, Option<Fail>) {
+        let head = vec![PathRes::TypeParam(param)];
+        let Some(name) = segs.get(1) else {
+            let kind = self.kind_fail(NameKind::Type, segs, place);
+            return (head, Some(kind.unwrap_or_else(|| self.not_found(segs[0]))));
+        };
+        let g = &self.generics[param as usize];
+        let GenericKind::Type { bounds, unknown, .. } = &g.kind else {
+            onsa_diag::internal::bug(Some(name.span), "a type parameter of another kind");
+        };
+        let Some(member) = crate::traits::member(self.a, bounds, &name.name) else {
+            return match unknown {
+                true => (Vec::new(), Some(Fail::Held)),
+                false => (head, Some(self.not_found(name))),
+            };
+        };
+        // Up to the member, a value, whose fields and methods may follow.
+        let (at, place) = if segs.len() == 2 { (segs, place) } else { (&segs[..2], Place::Value) };
+        let entity = Entity::Member(member);
+        let kind = NameKind::of(entity, &self.a.defs).and_then(|k| self.kind_fail(k, at, place));
+        let records = vec![head[0].clone(), PathRes::BoundMember { param, member }];
+        (records, kind.or_else(|| self.method_form(entity, at, place)))
     }
 
     /// E0308 for `panic` at the place of a value, or with a name after it

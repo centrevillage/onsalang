@@ -1,0 +1,176 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§6.6", "§4.5"]
+
+// W5-05 U3/t (spec §6.3: `Int` has the associated constants `ONE` `MIN` `MAX` of the type and `BITS: U32`; §6.6 table; a type
+// parameter reads them as `T.ONE` ...): the same generic functions run at the eight integer types and give the constants of
+// the type that was instantiated. `T: Unsigned` and `T: Num + Int` reach the same constants through the chain (`Unsigned: Int`,
+// `Int: AnyNum`). The checks of the signed minimum use the sum with `MAX` (`MIN + MAX == -1`) and the concrete `MIN`.
+
+fn one_of[T: Int](x: T) -> T {
+  T.ONE
+}
+
+fn min_of[T: Int](x: T) -> T {
+  T.MIN
+}
+
+fn max_of[T: Int](x: T) -> T {
+  T.MAX
+}
+
+fn bits_of[T: Int](x: T) -> U32 {
+  T.BITS
+}
+
+fn zero_of_int[T: Int](x: T) -> T {
+  T.ZERO
+}
+
+fn unsigned_top[T: Unsigned](x: T) -> T {
+  T.MAX - T.ONE
+}
+
+fn unsigned_bits[T: Unsigned](x: T) -> U32 {
+  T.BITS - 1
+}
+
+fn signed_min_plus_max[T: Num + Int](x: T) -> T {
+  T.MIN + T.MAX
+}
+
+fn signed_minus_one[T: Num + Int](x: T) -> T {
+  -T.ONE
+}
+
+fn highest_bit[T: Unsigned](x: T) -> U32 {
+  var v      = x
+  var n: U32 = 0
+  while v != T.ZERO {
+    v = v >> 1
+    n = n + 1
+  }
+  n
+}
+
+test "T.ONE of every integer type is 1" {
+  let a: I8  = 0
+  let b: I16 = 0
+  let c: I32 = 0
+  let d: I64 = 0
+  let e: U8  = 0
+  let f: U16 = 0
+  let g: U32 = 0
+  let h: U64 = 0
+  assert one_of(a) == 1
+  assert one_of(b) == 1
+  assert one_of(c) == 1
+  assert one_of(d) == 1
+  assert one_of(e) == 1
+  assert one_of(f) == 1
+  assert one_of(g) == 1
+  assert one_of(h) == 1
+  assert zero_of_int(h) == 0
+}
+
+test "T.MAX of every integer type" {
+  let a: I8  = 0
+  let b: I16 = 0
+  let c: I32 = 0
+  let d: I64 = 0
+  let e: U8  = 0
+  let f: U16 = 0
+  let g: U32 = 0
+  let h: U64 = 0
+  assert max_of(a) == 127
+  assert max_of(b) == 32767
+  assert max_of(c) == 2147483647
+  assert max_of(d) == 9223372036854775807
+  assert max_of(e) == 255
+  assert max_of(f) == 65535
+  assert max_of(g) == 4294967295
+  assert max_of(h) == 18446744073709551615
+}
+
+test "T.MIN of the signed integer types is the least value, of the unsigned 0" {
+  let a: I8  = 0
+  let b: I16 = 0
+  let c: I32 = 0
+  let d: I64 = 0
+  assert min_of(a) == -128
+  assert min_of(b) == -32768
+  assert min_of(c) == -2147483648
+  assert min_of(d) == I64.MIN
+  assert min_of(d) + I64.MAX == -1
+  let e: U8  = 7
+  let f: U16 = 7
+  let g: U32 = 7
+  let h: U64 = 7
+  assert min_of(e) == 0
+  assert min_of(f) == 0
+  assert min_of(g) == 0
+  assert min_of(h) == 0
+}
+
+test "T.BITS is the width, and it is a U32 whatever T is" {
+  let a: I8   = 0
+  let b: I16  = 0
+  let c: I32  = 0
+  let d: I64  = 0
+  let e: U8   = 0
+  let f: U16  = 0
+  let g: U32  = 0
+  let h: U64  = 0
+  let ba: U32 = bits_of(a)
+  let bb: U32 = bits_of(b)
+  let bc: U32 = bits_of(c)
+  let bd: U32 = bits_of(d)
+  let be: U32 = bits_of(e)
+  let bf: U32 = bits_of(f)
+  let bg: U32 = bits_of(g)
+  let bh: U32 = bits_of(h)
+  assert ba == 8
+  assert bb == 16
+  assert bc == 32
+  assert bd == 64
+  assert be == 8
+  assert bf == 16
+  assert bg == 32
+  assert bh == 64
+}
+
+test "the constants of T: Unsigned" {
+  let a: U8  = 0
+  let b: U64 = 0
+  assert unsigned_top(a) == 254
+  assert unsigned_top(b) == 18446744073709551614
+  assert unsigned_bits(a) == 7
+  assert unsigned_bits(b) == 63
+}
+
+test "the constants of T: Num + Int, the signed integers" {
+  let a: I8  = 0
+  let b: I32 = 0
+  let c: I64 = 0
+  assert signed_min_plus_max(a) == -1
+  assert signed_min_plus_max(b) == -1
+  assert signed_min_plus_max(c) == -1
+  assert signed_minus_one(a) == -1
+  assert signed_minus_one(c) == -1
+}
+
+test "highest bit of an unsigned value, the loop ends at T.ZERO" {
+  let a: U32 = 5
+  assert highest_bit(a) == 3
+  let b: U8 = 0
+  assert highest_bit(b) == 0
+  let c: U8 = 255
+  assert highest_bit(c) == 8
+  let d: U16 = 1
+  assert highest_bit(d) == 1
+  let e: U32 = 2147483648
+  assert highest_bit(e) == 32
+  let f: U64 = U64.MAX
+  assert highest_bit(f) == 64
+}

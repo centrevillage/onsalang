@@ -1,8 +1,8 @@
-pub fn zero() -> I32 {
-  I32.ZERO //~ E0200
+pub fn default_value() -> I32 {
+  I32.default() //~ E0200
 }
 
-pub const ONE: F32 = F32.ONE //~ E0200
+pub const ONE: F32 = F32.default() //~ E0200
 
 pub fn default_level() -> F32 {
   F32.default() //~ E0200

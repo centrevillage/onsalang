@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.7", "§18.1"]
+// fixes = 0
+
+// W5-05 U3 (spec §3.3: "期待の型が無いか、二つの形のどちらにも決まらない位置 (型を注釈しない束縛の初期化式、受け手、照合の対象、`?` の左) では候補を出さず"): `T.narrow_from(x)`
+// with `x: T` in a position that gives no expected type. `x` and `Some(x)` are both readings there, so no candidate is offered, as for
+// `I64.narrow_from(n)` in fixes/e0413_as_no_candidate_expected.onsa. One error in each function (P-01).
+
+pub fn in_a_let_without_annotation[T: Int](x: T) -> T {
+  let _ = T.narrow_from(x) //~ E0413
+  x
+}
+
+pub fn receiver_of_unwrap[T: Int](x: T) -> T {
+  T.narrow_from(x).unwrap() //~ E0413
+}
+
+pub fn target_of_a_match[T: Int](x: T) -> T {
+  match T.narrow_from(x) { //~ E0413
+    Some(v) => v,
+    None => T.ZERO,
+  }
+}
+
+pub fn left_of_a_try[T: Int](x: T) -> Option[T] {
+  let v = T.narrow_from(x)? //~ E0413
+  Some(v)
+}

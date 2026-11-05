@@ -1,0 +1,51 @@
+// onsa.toml
+// [package]
+// name = "c_generic_param_path_closed"
+// edition = "2026"
+//
+// [export]
+// prefix = "cgpc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§7", "§14.2"]
+//
+// [[test.host]]
+// name = "range_closed_count_i8"
+// target = "host"
+// fn = "c_generic_param_path_closed.range_closed_count_i8"
+// steps = [
+//   { call = "fn", args = { lo = -3, hi = 3 }, status = 0, result = 7 },
+//   { call = "fn", args = { lo = 126, hi = 127 }, status = 0, result = 2 },
+//   { call = "fn", args = { lo = 127, hi = 127 }, status = 0, result = 1 },
+//   { call = "fn", args = { lo = 3, hi = -3 }, status = 0, result = 0 },
+// ]
+
+// W5-05 U3/t (spec §7: "`for i in a ..= b` は、`b` が型の最大値でも溢れずに終わる"): the closed range with the ends of a type parameter `T: Int`, on a target that is built to C.
+// The other paths of a type parameter are in c_generic_param_path.onsa.
+
+fn count_closed[T: Int](lo: T, hi: T) -> U32 {
+  var c: U32 = 0
+  for _ in lo ..= hi {
+    c = c + 1
+  }
+  c
+}
+
+@export
+pub fn range_closed_count_i8(lo: I8, hi: I8) -> U32 {
+  count_closed(lo, hi)
+}
+
+test "the closed range with the ends of a type parameter: the values" {
+  assert range_closed_count_i8(-3, 3) == 7
+  assert range_closed_count_i8(127, 127) == 1
+  assert range_closed_count_i8(3, -3) == 0
+}

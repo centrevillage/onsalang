@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§6.1", "§6.3", "§4.5"]
+
+// W5-05 U3/t (spec §6.1: "関連関数と名前空間の関数は、項目の関数と同じく値として使える (`let mk = Point.new` の後に `mk.(1.0, 2.0)`)"; §3.3: the
+// conversion functions of a type parameter are taken from the bound, and "関連関数を値として取る形 (§6.1) も同じ": the source type of a value form comes
+// from the expected type): the value form of `T.round_from`, `T.narrow_from` and `T.trunc_from`, as a binding with the type of a function.
+// The argument of `array.from_fn` is in tp_conv_value_form_from_fn.onsa, and tp_conv_value_form_check.onsa checks these bodies without running them. The value form of the pair that `as` writes is allowed for a type parameter because the
+// pair is not known where the generic function is checked.
+
+fn via_binding[T: Float](k: U32) -> T {
+  let g: fn(U32) -> T = T.round_from
+  g.(k)
+}
+
+fn via_narrow[T: Int](n: I64) -> Option[T] {
+  let g: fn(I64) -> Option[T] = T.narrow_from
+  g.(n)
+}
+
+fn via_trunc[T: Int](y: F64) -> T {
+  let g: fn(F64) -> T = T.trunc_from
+  g.(y)
+}
+
+fn via_trunc_sat[T: Int](y: F32) -> T {
+  let g: fn(F32) -> T = T.trunc_sat_from
+  g.(y)
+}
+
+fn via_other_source[T: Float](k: I32) -> T {
+  let g: fn(I32) -> T = T.round_from
+  g.(k)
+}
+
+test "the value form of T.round_from, the source being U32" {
+  assert via_binding::[F32](16777217) == 16777216.0
+  assert via_binding::[F64](16777217) == 16777217.0
+  assert via_binding::[F32](0).to_bits() == 0
+}
+
+test "the value form of T.round_from, the source being I32" {
+  assert via_other_source::[F32](-7) == -7.0
+  assert via_other_source::[F64](I32.MIN) == -2147483648.0
+}
+
+test "the value form of T.narrow_from" {
+  assert via_narrow::[I8](127) == Some(127)
+  assert via_narrow::[I8](128) == None
+  assert via_narrow::[U32](-1) == None
+  assert via_narrow::[I64](-5) == Some(-5)
+}
+
+test "the value form of T.trunc_from and T.trunc_sat_from" {
+  assert via_trunc::[I32](2.75) == 2
+  assert via_trunc::[U8](255.5) == 255
+  assert via_trunc_sat::[I8](300.5) == 127
+  assert via_trunc_sat::[U16](-5.5) == 0
+}
+
+test "the value form of T.trunc_from panics out of the range" {
+  let n = via_trunc::[U8](256.0) //~ PANIC "the value form of T.trunc_from panics out of the range"
+  assert n == 0
+}

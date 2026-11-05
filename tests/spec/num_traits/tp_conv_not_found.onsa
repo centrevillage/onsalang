@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.3", "§15.1", "§18.1"]
+
+// W5-05 U3/t (spec §3.3: "型パラメータの関連関数は境界の trait から引き (`Float` は `round_from`、`Int` は `narrow_from`・`trunc_from`・`trunc_sat_from`、§6.3)";
+// §15.1: a name that is not found is E0302): a conversion function that the bounds of the type parameter do not give is not found. `Num` and
+// `AnyNum` have none (a fixed-point type is a `Num` and has no `round_from` here), `Int` has no `round_from`, `Float` has no `narrow_from`
+// `trunc_from` or `trunc_sat_from`. The number of the candidates is not asked here. One function for each form (P-01).
+
+pub fn num_has_no_round_from[T: Num](k: U32) -> T {
+  T.round_from(k) //~ E0302
+}
+
+pub fn anynum_has_no_round_from[T: AnyNum](k: U32) -> T {
+  T.round_from(k) //~ E0302
+}
+
+pub fn int_has_no_round_from[T: Int](k: U32) -> T {
+  T.round_from(k) //~ E0302
+}
+
+pub fn unsigned_has_no_round_from[T: Unsigned](k: U32) -> T {
+  T.round_from(k) //~ E0302
+}
+
+pub fn float_has_no_narrow_from[T: Float](n: I32) -> Option[T] {
+  T.narrow_from(n) //~ E0302
+}
+
+pub fn float_has_no_trunc_from[T: Float](y: F32) -> T {
+  T.trunc_from(y) //~ E0302
+}
+
+pub fn float_has_no_trunc_sat_from[T: Float](y: F64) -> T {
+  T.trunc_sat_from(y) //~ E0302
+}
+
+pub fn anynum_has_no_narrow_from[T: AnyNum](n: I32) -> Option[T] {
+  T.narrow_from(n) //~ E0302
+}
+
+pub fn num_has_no_trunc_sat_from[T: Num](y: F32) -> T {
+  T.trunc_sat_from(y) //~ E0302
+}
+
+pub fn unbounded_has_no_round_from[T](k: U32) -> T {
+  T.round_from(k) //~ E0302
+}
+
+pub fn show_has_no_narrow_from[T: Show](n: I32) -> Option[T] {
+  T.narrow_from(n) //~ E0302
+}
+
+pub fn fine_float[T: Float](k: U32) -> T {
+  T.round_from(k)
+}
+
+pub fn fine_int[T: Int](n: I64, y: F32) -> Option[T] {
+  let _: T = T.trunc_from(y)
+  let _: T = T.trunc_sat_from(y)
+  T.narrow_from(n)
+}

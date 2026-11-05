@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§6.3", "§6.2", "§18.1"]
+// fixes = 0
+
+// W5-05 U3/t (spec §6.3: the floor division and the checked methods are items of `Int`, so "`T: Int` の値に呼べる"; "`checked_neg` は符号付きの整数だけが持つので項目でなく、
+// 総称では `T.ZERO.checked_sub(x)` と書く"; a type parameter has only the operations of its bounds, §3.3): a method that the bounds do not give is not found on a
+// value, E0413: `checked_neg` of `T: Num + Int`, the checked methods of `T: Num`, `T: AnyNum` and `T: Float`, the floor division of `T: Float`, and the
+// methods of a type parameter with no bound. There is no function of `std.math` for these, so there is no candidate (`fixes = 0`). One function for each
+// form (P-01).
+
+pub fn checked_neg_of_a_signed[T: Num + Int](x: T) -> Option[T] {
+  x.checked_neg() //~ E0413
+}
+
+pub fn checked_neg_of_an_int[T: Int](x: T) -> Option[T] {
+  x.checked_neg() //~ E0413
+}
+
+pub fn checked_add_of_a_num[T: Num](x: T, y: T) -> Option[T] {
+  x.checked_add(y) //~ E0413
+}
+
+pub fn checked_mul_of_an_anynum[T: AnyNum](x: T, y: T) -> Option[T] {
+  x.checked_mul(y) //~ E0413
+}
+
+pub fn checked_div_of_a_float[T: Float](x: T, y: T) -> Option[T] {
+  x.checked_div(y) //~ E0413
+}
+
+pub fn rem_euclid_of_a_float[T: Float](x: T, y: T) -> T {
+  x.rem_euclid(y) //~ E0413
+}
+
+pub fn div_euclid_of_a_num[T: Num](x: T, y: T) -> T {
+  x.div_euclid(y) //~ E0413
+}
+
+pub fn div_euclid_of_an_anynum[T: AnyNum](x: T, y: T) -> T {
+  x.div_euclid(y) //~ E0413
+}
+
+pub fn checked_shl_of_a_num[T: Num](x: T) -> Option[T] {
+  x.checked_shl(1) //~ E0413
+}
+
+pub fn checked_sub_of_an_unbounded[T](x: T, y: T) -> Option[T] {
+  x.checked_sub(y) //~ E0413
+}
+
+pub fn a_method_that_is_nowhere[T: Int](x: T) -> T {
+  x.frobnicate(x) //~ E0413
+}
+
+pub fn fine[T: Num + Int](x: T) -> Option[T] {
+  T.ZERO.checked_sub(x)
+}

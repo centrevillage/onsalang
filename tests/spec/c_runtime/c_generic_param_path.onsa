@@ -1,0 +1,422 @@
+// onsa.toml
+// [package]
+// name = "c_generic_param_path"
+// edition = "2026"
+//
+// [export]
+// prefix = "cgp_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.3", "§6.6", "§7", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "neg_zero_plus_zero"
+// target = "host"
+// fn = "c_generic_param_path.neg_zero_plus_zero"
+// steps = [
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 2.5 }, status = 0, result = 3223322624 },
+// ]
+//
+// [[test.host]]
+// name = "max_i16"
+// target = "host"
+// fn = "c_generic_param_path.max_i16"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 32767 },
+// ]
+//
+// [[test.host]]
+// name = "min_i8"
+// target = "host"
+// fn = "c_generic_param_path.min_i8"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = -128 },
+// ]
+//
+// [[test.host]]
+// name = "bits_u16"
+// target = "host"
+// fn = "c_generic_param_path.bits_u16"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 16 },
+// ]
+//
+// [[test.host]]
+// name = "round_f32"
+// target = "host"
+// fn = "c_generic_param_path.round_f32"
+// steps = [
+//   { call = "fn", args = { k = 16777217 }, status = 0, result = 16777216.0 },
+//   { call = "fn", args = { k = 16777219 }, status = 0, result = 16777220.0 },
+//   { call = "fn", args = { k = 0 }, status = 0, result = 0.0 },
+// ]
+//
+// [[test.host]]
+// name = "round_f64_to_f32"
+// target = "host"
+// fn = "c_generic_param_path.round_f64_to_f32"
+// steps = [
+//   { call = "fn", args = { x = 16777217.0 }, status = 0, result = 16777216.0 },
+//   { call = "fn", args = { x = 1.5 }, status = 0, result = 1.5 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_same_i32"
+// target = "host"
+// fn = "c_generic_param_path.narrow_same_i32"
+// steps = [
+//   { call = "fn", args = { n = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { n = -2147483648 }, status = 0, result = -2147483648 },
+//   { call = "fn", args = { n = 2147483647 }, status = 0, result = 2147483647 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_u8_from_i32"
+// target = "host"
+// fn = "c_generic_param_path.narrow_u8_from_i32"
+// steps = [
+//   { call = "fn", args = { n = 255 }, status = 0, result = 255 },
+//   { call = "fn", args = { n = 256 }, status = 0, result = -1 },
+//   { call = "fn", args = { n = -1 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_i32_from_param"
+// target = "host"
+// fn = "c_generic_param_path.narrow_i32_from_param"
+// steps = [
+//   { call = "fn", args = { n = 2147483647 }, status = 0, result = 2147483647 },
+//   { call = "fn", args = { n = 2147483648 }, status = 0, result = -1 },
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_i8"
+// target = "host"
+// fn = "c_generic_param_path.trunc_sat_i8"
+// steps = [
+//   { call = "fn", args = { y = 2.5 }, status = 0, result = 2 },
+//   { call = "fn", args = { y = 300.5 }, status = 0, result = 127 },
+//   { call = "fn", args = { y = -300.5 }, status = 0, result = -128 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_u8"
+// target = "host"
+// fn = "c_generic_param_path.trunc_u8"
+// steps = [
+//   { call = "fn", args = { y = 255.5 }, status = 0, result = 255 },
+//   { call = "fn", args = { y = 256.0 }, status = 1 },
+//   { call = "fn", args = { y = -1.0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "checked_add_i8"
+// target = "host"
+// fn = "c_generic_param_path.checked_add_i8"
+// steps = [
+//   { call = "fn", args = { a = 127, b = 1 }, status = 0, result = 1000 },
+//   { call = "fn", args = { a = 100, b = 27 }, status = 0, result = 127 },
+//   { call = "fn", args = { a = -128, b = -1 }, status = 0, result = 1000 },
+// ]
+//
+// [[test.host]]
+// name = "checked_div_i8"
+// target = "host"
+// fn = "c_generic_param_path.checked_div_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = -1 }, status = 0, result = 1000 },
+//   { call = "fn", args = { a = 7, b = -2 }, status = 0, result = -3 },
+//   { call = "fn", args = { a = 5, b = 0 }, status = 0, result = 1000 },
+// ]
+//
+// [[test.host]]
+// name = "div_euclid_i32"
+// target = "host"
+// fn = "c_generic_param_path.div_euclid_i32"
+// steps = [
+//   { call = "fn", args = { a = -7, b = 2 }, status = 0, result = -4 },
+//   { call = "fn", args = { a = 7, b = -2 }, status = 0, result = -3 },
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 1 },
+//   { call = "fn", args = { a = 5, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "rem_euclid_i32"
+// target = "host"
+// fn = "c_generic_param_path.rem_euclid_i32"
+// steps = [
+//   { call = "fn", args = { a = -7, b = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = -7, b = -2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 5, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "checked_shl_u16"
+// target = "host"
+// fn = "c_generic_param_path.checked_shl_u16"
+// steps = [
+//   { call = "fn", args = { a = 1, n = 15 }, status = 0, result = 32768 },
+//   { call = "fn", args = { a = 1, n = 16 }, status = 0, result = 100000 },
+//   { call = "fn", args = { a = 65535, n = 1 }, status = 0, result = 65534 },
+// ]
+//
+// [[test.host]]
+// name = "range_sum_u8"
+// target = "host"
+// fn = "c_generic_param_path.range_sum_u8"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 20 }, status = 0, result = 190 },
+//   { call = "fn", args = { n = 23 }, status = 0, result = 253 },
+//   { call = "fn", args = { n = 24 }, status = 1 },
+// ]
+
+// The type parameter reaching its associated constants, conversions, methods and the ends of a range, on a target that is built to C (spec §3.3, §3.4, §6.3, §6.6,
+// §7): `T.ZERO` `T.ONE` `T.MIN` `T.MAX` `T.BITS`, `T.round_from(k)`, `T.narrow_from(n)` (also with `T` and the type of `n` the same, `I32`), `T.trunc_from(y)`,
+// `T.trunc_sat_from(y)`, the floor division and the checked methods of `T: Int`, and `T.ZERO ..< n`. A generic function is lowered once for
+// each type it is used with, so the same body has to give the value of each type. Every result is worked out by hand: `-0.0 + ZERO` is `+0.0` (bits 0); 16777217 is the tie of 2^24 and 2^24 + 2 and the even one, 2^24, wins; 16777219 is the tie of 16777218 and 16777220 and the
+// even one is 16777220; 0 + 1 + ... + 22 = 253 and the sum up to 23 is 276, which does not fit a `U8` and panics (status 1 on the poison target); `-7 = (-4) * 2 + 1`,
+// `7 = (-3) * (-2) + 1`, `-7 = 4 * (-2) + 1`; `MIN.rem_euclid(-1)` is 0 and `MIN.div_euclid(-1)` and a division by 0 panic; `checked_*` gives -1 or 1000 or 100000 as the
+// sentinel of `None` in the cases below. The bits of -2.5 as an F32 (`ZERO` added to it changes nothing): sign 1, exponent 128 = 0x80, fraction 0.25 = 0x200000, so 0xC0200000 = 3223322624.
+
+fn plus_zero[T: AnyNum](x: T) -> T {
+  x + T.ZERO
+}
+
+fn max_of[T: Int](x: T) -> T {
+  T.MAX
+}
+
+fn min_of[T: Int](x: T) -> T {
+  T.MIN
+}
+
+fn bits_of[T: Int](x: T) -> U32 {
+  T.BITS
+}
+
+fn round_to[T: Float](k: U32) -> T {
+  T.round_from(k)
+}
+
+fn round_from_f64[T: Float](x: F64) -> T {
+  T.round_from(x)
+}
+
+fn narrow[T: Int, S: Int](n: S) -> Option[T] {
+  T.narrow_from(n)
+}
+
+fn trunc[T: Int](y: F32) -> T {
+  T.trunc_from(y)
+}
+
+fn trunc_sat[T: Int](y: F32) -> T {
+  T.trunc_sat_from(y)
+}
+
+fn c_add[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_add(b)
+}
+
+fn c_div[T: Int](a: T, b: T) -> Option[T] {
+  a.checked_div(b)
+}
+
+fn c_shl[T: Int](a: T, n: U32) -> Option[T] {
+  a.checked_shl(n)
+}
+
+fn floor_div[T: Int](a: T, b: T) -> T {
+  a.div_euclid(b)
+}
+
+fn floor_rem[T: Int](a: T, b: T) -> T {
+  a.rem_euclid(b)
+}
+
+fn sum_to[T: Int](n: T) -> T {
+  var t = T.ZERO
+  for i in T.ZERO ..< n {
+    t = t + i
+  }
+  t
+}
+
+@export
+pub fn neg_zero_plus_zero(x: F32) -> U32 {
+  let n = -x
+  plus_zero(n).to_bits()
+}
+
+@export
+pub fn max_i16(x: I16) -> I16 {
+  max_of(x)
+}
+
+@export
+pub fn min_i8(x: I8) -> I8 {
+  min_of(x)
+}
+
+@export
+pub fn bits_u16(x: U16) -> U32 {
+  bits_of(x)
+}
+
+@export
+pub fn round_f32(k: U32) -> F32 {
+  round_to(k)
+}
+
+@export
+pub fn round_f64_to_f32(x: F64) -> F32 {
+  round_from_f64(x)
+}
+
+@export
+pub fn narrow_same_i32(n: I32) -> I32 {
+  let r: Option[I32] = narrow(n)
+  match r {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+@export
+pub fn narrow_u8_from_i32(n: I32) -> I32 {
+  let r: Option[U8] = narrow(n)
+  match r {
+    Some(v) => v as I32,
+    None => -1,
+  }
+}
+
+@export
+pub fn narrow_i32_from_param(n: U32) -> I32 {
+  let r: Option[I32] = narrow(n)
+  match r {
+    Some(v) => v,
+    None => -1,
+  }
+}
+
+@export
+pub fn trunc_sat_i8(y: F32) -> I8 {
+  trunc_sat(y)
+}
+
+@export
+pub fn trunc_u8(y: F32) -> U8 {
+  trunc(y)
+}
+
+@export
+pub fn checked_add_i8(a: I8, b: I8) -> I32 {
+  match c_add(a, b) {
+    Some(v) => v as I32,
+    None => 1000,
+  }
+}
+
+@export
+pub fn checked_div_i8(a: I8, b: I8) -> I32 {
+  match c_div(a, b) {
+    Some(v) => v as I32,
+    None => 1000,
+  }
+}
+
+@export
+pub fn div_euclid_i32(a: I32, b: I32) -> I32 {
+  floor_div(a, b)
+}
+
+@export
+pub fn rem_euclid_i32(a: I32, b: I32) -> I32 {
+  floor_rem(a, b)
+}
+
+@export
+pub fn checked_shl_u16(a: U16, n: U32) -> U32 {
+  match c_shl(a, n) {
+    Some(v) => v as U32,
+    None => 100000,
+  }
+}
+
+@export
+pub fn range_sum_u8(n: U8) -> U8 {
+  sum_to(n)
+}
+
+test "neg_zero_plus_zero: the values" {
+  assert neg_zero_plus_zero(0.0) == 0
+  assert neg_zero_plus_zero(2.5) == 3223322624
+}
+
+test "the constants: the values" {
+  assert max_i16(0) == 32767
+  assert min_i8(0) == -128
+  assert bits_u16(0) == 16
+}
+
+test "the conversions to a type parameter: the values" {
+  assert round_f32(16777217) == 16777216.0
+  assert round_f32(16777219) == 16777220.0
+  assert round_f64_to_f32(16777217.0) == 16777216.0
+  assert narrow_same_i32(-2147483648) == -2147483648
+  assert narrow_u8_from_i32(255) == 255
+  assert narrow_u8_from_i32(256) == -1
+  assert narrow_i32_from_param(2147483648) == -1
+  assert trunc_sat_i8(300.5) == 127
+  assert trunc_sat_i8(-300.5) == -128
+  assert trunc_u8(255.5) == 255
+}
+
+test "trunc_u8(256.0) panics" {
+  let n = trunc_u8(256.0) //~ PANIC "trunc_u8(256.0) panics"
+  assert n == 0
+}
+
+test "the checked methods: the values" {
+  assert checked_add_i8(127, 1) == 1000
+  assert checked_add_i8(100, 27) == 127
+  assert checked_div_i8(-128, -1) == 1000
+  assert checked_div_i8(7, -2) == -3
+  assert checked_shl_u16(1, 15) == 32768
+  assert checked_shl_u16(1, 16) == 100000
+}
+
+test "the floor division: the values" {
+  assert div_euclid_i32(-7, 2) == -4
+  assert div_euclid_i32(7, -2) == -3
+  assert rem_euclid_i32(-7, -2) == 1
+  assert rem_euclid_i32(I32.MIN, -1) == 0
+}
+
+test "div_euclid_i32(I32.MIN, -1) panics" {
+  let q = div_euclid_i32(I32.MIN, -1) //~ PANIC "div_euclid_i32(I32.MIN, -1) panics"
+  assert q == 0
+}
+
+test "the ranges with the ends of a type parameter: the values" {
+  assert range_sum_u8(20) == 190
+  assert range_sum_u8(23) == 253
+}
+
+test "range_sum_u8(24) panics" {
+  let s = range_sum_u8(24) //~ PANIC "range_sum_u8(24) panics"
+  assert s == 0
+}

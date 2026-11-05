@@ -97,8 +97,8 @@ pub(super) fn lower_call(
     let span = cx.expr(e).span;
     let Some(target) = cx.info.targets.get(&e).cloned() else { return Err(internal(span, "call without a target")) };
     match target {
-        Target::Fn { def, inst } => {
-            let gargs = cx.target_args(lw, inst, span)?;
+        Target::Fn { def, of, inst } => {
+            let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
             let d = lw.a.def(def).clone();
             let DefKind::Fn(f) = &d.kind else { return Err(internal(span, "call to a non-fn")) };
             if f.target {
@@ -109,8 +109,8 @@ pub(super) fn lower_call(
             let fid = lw.fn_id(def, gargs);
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }
-        Target::Method { def, inst } => {
-            let gargs = cx.target_args(lw, inst, span)?;
+        Target::Method { def, of, inst } => {
+            let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
             let d = lw.a.def(def).clone();
             let DefKind::Fn(f) = &d.kind else { return Err(internal(span, "method target")) };
             let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "method call shape")) };
@@ -192,6 +192,26 @@ fn lower_target_call(
     if row == PrimRow::FromFn {
         return lower_from_fn(lw, cx, args, ty, span);
     }
+    let (prim, own) = row_prim(lw, def, row, gargs, span)?;
+    let mut cargs = Vec::new();
+    if let Some((recv, mode)) = recv {
+        let Some(GenericArg::Ty(this)) = &own else { return Err(internal(span, "a `target` method of no type")) };
+        cargs.push(Arg { mode, expr: coerce(lw, cx, recv, this, mode)? });
+    }
+    let params = sig_params(lw, cx, f, gargs, span)?;
+    cargs.extend(lower_args(lw, cx, args, &params)?);
+    Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
+}
+
+/// The primitive of the row of a `target` declaration at `gargs`, and the
+/// `Self` of a member.
+fn row_prim(
+    lw: &mut Lowerer,
+    def: DefId,
+    row: PrimRow,
+    gargs: &[GenericArg],
+    span: Span,
+) -> R<(Prim, Option<GenericArg>)> {
     // The `Self` of a member first (`F32` of `F32.from_bits`), then the type
     // arguments, as sema reads them (`Scalar::of_use`).
     let own = match row_self(lw.a, def) {
@@ -204,14 +224,7 @@ fn lower_target_call(
     let Some(prim) = row.instantiate(&scalars) else {
         return Err(internal(span, "a `target` declaration without a primitive for its type arguments"));
     };
-    let mut cargs = Vec::new();
-    if let Some((recv, mode)) = recv {
-        let Some(GenericArg::Ty(this)) = &own else { return Err(internal(span, "a `target` method of no type")) };
-        cargs.push(Arg { mode, expr: coerce(lw, cx, recv, this, mode)? });
-    }
-    let params = sig_params(lw, cx, f, gargs, span)?;
-    cargs.extend(lower_args(lw, cx, args, &params)?);
-    Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
+    Ok((prim, own))
 }
 
 /// A type argument of a row as Core has it, read as [`Scalar::of`] reads
@@ -251,16 +264,17 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
             }
         }
         _ => {
-            let Some(Target::Fn { def, inst }) = cx.info.targets.get(&farg.expr).cloned() else {
+            let Some(Target::Fn { def, of, inst }) = cx.info.targets.get(&farg.expr).cloned() else {
                 return Err(unsupported(span, Feature::FromFnValue, &[]));
             };
-            let gargs = cx.target_args(lw, inst, span)?;
-            let fid = lw.fn_id(def, gargs);
-            Expr::new(
-                elem.clone(),
-                span,
-                ExprKind::Call { fn_: fid, args: vec![Arg { mode: Mode::Borrow, expr: local_expr(cx, i, span) }] },
-            )
+            let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
+            let args = vec![Arg { mode: Mode::Borrow, expr: local_expr(cx, i, span) }];
+            // A `target` declaration has no body to call (`F32.round_from`).
+            let kind = match lw.a.prims.get(&def).copied() {
+                Some(row) => ExprKind::Prim { prim: row_prim(lw, def, row, &gargs, span)?.0, args },
+                None => ExprKind::Call { fn_: lw.fn_id(def, gargs), args },
+            };
+            Expr::new(elem.clone(), span, kind)
         }
     };
     body.push(stmt(

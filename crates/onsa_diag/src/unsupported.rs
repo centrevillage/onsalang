@@ -159,7 +159,7 @@ features! {
     /// R-294: `{}`: a name the spec gives a builtin type (`Str.from_utf8`),
     /// of the table `MISSING` of `onsa_sema`'s `builtin.rs`.
     BuiltinName: Language, "the builtin name `{}`", None;
-    /// R-294: `{}`: such a name whose value a literal writes (`F32.ZERO`).
+    /// R-294: `{}`: such a name whose value a literal writes (`F32.default()`).
     BuiltinValueName: Language, "the builtin value `{}`", Some("write the value as a literal");
     /// S-239: the syntax reads `name::[…]` (W3-19); the name and type stages
     /// give the list to the item from W5-10.

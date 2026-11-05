@@ -1,0 +1,210 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.3", "§4.5"]
+
+// W5-05 U3/t (spec §3.3: `T.narrow_from(n)` with `T: Int` is the conversion of an integer to an integer, "具体化した型の組で `as` が書けても書ける";
+// §3.4: "`narrow_from` は、値が型に収まれば `Some`、収まらなければ `None`"): the target is the type parameter `T: Int` and the source is a value
+// of another type parameter `S: Int`. The pairs are the narrowing, the change of the sign at the same width, the widening that `as` writes,
+// and the same type (`T` and `S` both `I32`: the instance where the conversion is the identity). Each target type is there and each limit is
+// worked out from the width: the limits of `I8` are -128 and 127, of `U8` 0 and 255, of `I16` -32768 and 32767, of `U16` 65535, of `I32` and
+// `U32` 2147483647 and 4294967295, of `I64` 9223372036854775807, and of `U64` 18446744073709551615.
+// The functions `w_*` at the end fix the type arguments: a call does not write `name::[...]` in this version (W5-10).
+
+fn narrow[T: Int, S: Int](n: S) -> Option[T] {
+  T.narrow_from(n)
+}
+
+fn narrow_or_zero[T: Int, S: Int](n: S) -> T {
+  match T.narrow_from(n) {
+    Some(v) => v,
+    None => T.ZERO,
+  }
+}
+
+fn narrow_like[T: Int, S: Int](like: T, n: S) -> Option[T] {
+  T.narrow_from(n)
+}
+
+test "T.narrow_from to I8 and U8 from I32" {
+  assert w_narrow_i8_i32(127) == Some(127)
+  assert w_narrow_i8_i32(128) == None
+  assert w_narrow_i8_i32(-128) == Some(-128)
+  assert w_narrow_i8_i32(-129) == None
+  assert w_narrow_u8_i32(255) == Some(255)
+  assert w_narrow_u8_i32(256) == None
+  assert w_narrow_u8_i32(-1) == None
+  assert w_narrow_u8_i32(0) == Some(0)
+}
+
+test "T.narrow_from to the 16 bit types" {
+  assert w_narrow_i16_i64(32767) == Some(32767)
+  assert w_narrow_i16_i64(32768) == None
+  assert w_narrow_i16_i64(-32768) == Some(-32768)
+  assert w_narrow_i16_i64(-32769) == None
+  assert w_narrow_u16_i32(65535) == Some(65535)
+  assert w_narrow_u16_i32(65536) == None
+  assert w_narrow_u16_i32(-1) == None
+}
+
+test "T.narrow_from to the 32 bit types, the change of the sign at the same width" {
+  assert w_narrow_i32_u32(2147483647) == Some(2147483647)
+  assert w_narrow_i32_u32(2147483648) == None
+  assert w_narrow_i32_u32(0) == Some(0)
+  assert w_narrow_u32_i32(-1) == None
+  assert w_narrow_u32_i32(2147483647) == Some(2147483647)
+  assert w_narrow_u32_i64(4294967295) == Some(4294967295)
+  assert w_narrow_u32_i64(4294967296) == None
+  assert w_narrow_i32_i64(-2147483648) == Some(-2147483648)
+  assert w_narrow_i32_i64(-2147483649) == None
+}
+
+test "T.narrow_from to the 64 bit types" {
+  assert w_narrow_i64_u64(9223372036854775807) == Some(9223372036854775807)
+  assert w_narrow_i64_u64(9223372036854775808) == None
+  assert w_narrow_u64_i64(-1) == None
+  assert w_narrow_u64_i8(-1) == None
+  assert w_narrow_u64_i8(127) == Some(127)
+  assert w_narrow_u64_u32(4294967295) == Some(4294967295)
+}
+
+test "T.narrow_from of a pair that as writes is Some" {
+  assert w_narrow_i64_i8(-5) == Some(-5)
+  assert w_narrow_i32_u16(65535) == Some(65535)
+  assert w_narrow_u64_u8(255) == Some(255)
+  assert w_narrow_i16_u8(200) == Some(200)
+}
+
+test "T.narrow_from of the same type is Some of the value" {
+  assert w_narrow_i32_i32(5) == Some(5)
+  assert w_narrow_i32_i32(I32.MIN) == Some(I32.MIN)
+  assert w_narrow_i32_i32(I32.MAX) == Some(I32.MAX)
+  assert w_narrow_u8_u8(255) == Some(255)
+  assert w_narrow_i64_i64(I64.MIN) == Some(I64.MIN)
+  assert w_narrow_u64_u64(U64.MAX) == Some(U64.MAX)
+  assert w_narrow_i8_i8(-128) == Some(-128)
+  assert w_narrow_u16_u16(0) == Some(0)
+}
+
+test "T.narrow_from takes the type of the target from the expected type" {
+  let n: I32         = 300
+  let a: Option[U8]  = narrow(n)
+  let b: Option[U16] = narrow(n)
+  let c: Option[I8]  = narrow(n)
+  assert a == None
+  assert b == Some(300)
+  assert c == None
+}
+
+test "T.narrow_from takes the type of the target from another argument" {
+  let t: U8  = 0
+  let u: I16 = 0
+  assert narrow_like(t, 255) == Some(255)
+  assert narrow_like(t, 256) == None
+  assert narrow_like(u, 40000) == None
+  assert narrow_like(u, -40000) == None
+  assert narrow_like(u, 12345) == Some(12345)
+}
+
+test "T.narrow_from in a match with the default T.ZERO" {
+  assert w_narrow_or_zero_u8_i32(200) == 200
+  assert w_narrow_or_zero_u8_i32(300) == 0
+  assert w_narrow_or_zero_i8_i64(-129) == 0
+  assert w_narrow_or_zero_i8_i64(-128) == -128
+}
+
+fn w_narrow_i8_i32(n: I32) -> Option[I8] {
+  narrow(n)
+}
+
+fn w_narrow_u8_i32(n: I32) -> Option[U8] {
+  narrow(n)
+}
+
+fn w_narrow_i16_i64(n: I64) -> Option[I16] {
+  narrow(n)
+}
+
+fn w_narrow_u16_i32(n: I32) -> Option[U16] {
+  narrow(n)
+}
+
+fn w_narrow_i32_u32(n: U32) -> Option[I32] {
+  narrow(n)
+}
+
+fn w_narrow_u32_i32(n: I32) -> Option[U32] {
+  narrow(n)
+}
+
+fn w_narrow_u32_i64(n: I64) -> Option[U32] {
+  narrow(n)
+}
+
+fn w_narrow_i32_i64(n: I64) -> Option[I32] {
+  narrow(n)
+}
+
+fn w_narrow_i64_u64(n: U64) -> Option[I64] {
+  narrow(n)
+}
+
+fn w_narrow_u64_i64(n: I64) -> Option[U64] {
+  narrow(n)
+}
+
+fn w_narrow_u64_i8(n: I8) -> Option[U64] {
+  narrow(n)
+}
+
+fn w_narrow_u64_u32(n: U32) -> Option[U64] {
+  narrow(n)
+}
+
+fn w_narrow_i64_i8(n: I8) -> Option[I64] {
+  narrow(n)
+}
+
+fn w_narrow_i32_u16(n: U16) -> Option[I32] {
+  narrow(n)
+}
+
+fn w_narrow_u64_u8(n: U8) -> Option[U64] {
+  narrow(n)
+}
+
+fn w_narrow_i16_u8(n: U8) -> Option[I16] {
+  narrow(n)
+}
+
+fn w_narrow_i32_i32(n: I32) -> Option[I32] {
+  narrow(n)
+}
+
+fn w_narrow_u8_u8(n: U8) -> Option[U8] {
+  narrow(n)
+}
+
+fn w_narrow_i64_i64(n: I64) -> Option[I64] {
+  narrow(n)
+}
+
+fn w_narrow_u64_u64(n: U64) -> Option[U64] {
+  narrow(n)
+}
+
+fn w_narrow_i8_i8(n: I8) -> Option[I8] {
+  narrow(n)
+}
+
+fn w_narrow_u16_u16(n: U16) -> Option[U16] {
+  narrow(n)
+}
+
+fn w_narrow_or_zero_u8_i32(n: I32) -> U8 {
+  narrow_or_zero(n)
+}
+
+fn w_narrow_or_zero_i8_i64(n: I64) -> I8 {
+  narrow_or_zero(n)
+}

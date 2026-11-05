@@ -374,27 +374,6 @@ note = "入力名の予約名（sample_rate、poisoned、initialized、bulk）�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/assoc_consts.onsa"
-reasons = ["S-84"]
-until = "W5-05"
-note = "整数と浮動小数の ZERO / ONE（§6.6）が無い（E0302）。ZERO を足すと BITS が I32 以外で誤る（W2-03 の数値の端）ことも出る"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/generic_zero.onsa"
-reasons = ["S-84"]
-until = "W5-05"
-note = "T: AnyNum の境界が E0200（user-defined traits as bounds）。T.ZERO（§6.6）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/is_nan_is_finite_generic_constants.onsa"
-reasons = ["S-98", "R-126", "S-84"]
-until = "W5-05"
-note = "総称の本体の T.NAN・T.INFINITY などの関連定数が E0302（generic_zero.onsa と同じ。§6.6）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/match_general.onsa"
 reasons = ["R-06"]
 until = "W8-06"
@@ -579,13 +558,6 @@ note = "借用の Span に const の配列を渡すと const が外れ、-Werror
 
 [[pending]]
 kind = "test-case"
-target = "tests/vectors/fixture/zero_one"
-reasons = ["S-84"]
-until = "W5-05"
-note = "組込み型の関連定数 ZERO / ONE が無い（E0302、§6.6）。テストベクトルの 20 演算"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/enum_construct_match.onsa"
 reasons = ["S-102", "R-06"]
 until = "W8-06"
@@ -663,14 +635,14 @@ note = "s.f(x) の E0020（型の段）"
 kind = "test-case"
 target = "tests/spec/fixes/e0302_float_min.onsa"
 reasons = ["S-109", "S-46"]
-until = "W5-05"
+until = "W5-21"
 note = "F32.MIN の E0302 の候補"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/fixes/e0401_bounds.onsa"
 reasons = ["S-84"]
-until = "W5-05"
+until = "W5-21"
 note = "総称の演算子の境界を絞る E0401 の候補"
 
 [[pending]]
@@ -754,13 +726,6 @@ note = "at は W3-10 で通るが、出力の式の中の rt でない関数の�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/recursion_generic_num.onsa"
-reasons = ["S-84"]
-until = "W5-05"
-note = "T: Int の境界が E0200（user-defined traits as bounds）。再帰する総称の関数"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/const_recursion_panic.onsa"
 reasons = ["S-131", "S-146", "S-222"]
 until = "W9-03"
@@ -828,13 +793,6 @@ note = "関数値の呼び出し .( が未実装（E0002）。関数値と捕捉
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/numeric_generic_edges.onsa"
-reasons = ["S-84"]
-until = "W5-05"
-note = "T: Int / T: Num + Int の境界が E0200（§6.3）。総称の関数の中の U64 の *% *| * と、MIN % -T.ONE、MIN / -T.ONE（§3.4）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/const_u64_mul_panic.onsa"
 reasons = ["S-131", "S-146"]
 until = "W9-03"
@@ -857,13 +815,6 @@ note = "const の初期化式の変換の関連関数の panic（trunc_from の�
 # --- W2-05/t: C のランタイムの整数の文脈（2026-10-08）
 
 # --- W2-05/t: C のターゲットで走る整数の事例（2026-10-08）
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_generic_int.onsa"
-reasons = ["S-84"]
-until = "W5-05"
-note = "T: Int / T: Num + Int の境界が E0200（§6.3）。総称の関数の中の整数の端の C 側"
 
 # --- W2-05/t: 上の事例を C の検査（c-clang など）で -Werror にかけた結果（2026-10-08）
 
@@ -1042,13 +993,6 @@ note = "見えている名前への ^"
 
 # --- W3-18: 範囲の書き方 `..<` / `..=`。W3-18 で通らない事例（W3-18/t の事例。W3-18/i の報告）。
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/range_half_open_bounds.onsa"
-reasons = ["S-257", "S-84"]
-until = "W5-05"
-note = "型の最大値の端の範囲を総称の関数（T: Int）で書く。数の trait の境界が E0200（user-defined traits as bounds）"
-
 # --- W3-18 の gate のファズが見つけた入力（種を足してコーパスが変わり、既存の不具合が表に出た）
 
 
@@ -1168,13 +1112,6 @@ target = "tests/spec/control/kind_pattern_names_constants.onsa"
 reasons = ["S-185"]
 until = "W5-09"
 note = "定数のパターンの正例が E0302「is not a variant」（W4-04 U8a/t。定数のパターンは W5-09）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/module/kind_constant_called_type_param.onsa"
-reasons = ["R-56"]
-until = "W5-05"
-note = "型パラメータの関連定数 `T.ZERO` が E0302（R-56）。呼ぶ形の E0020 は W4-04 U8a で入った（`kind_constant_called.onsa` から分けた）"
 
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
 [[pending]]
@@ -1520,3 +1457,32 @@ target = "tests/spec/semantics/assoc_const_decided_by_arm.onsa"
 reasons = ["R-187", "R-06"]
 until = "W8-06"
 note = "値の match の降下の E0200（ValueMatch。W8-06）。他の形は semantics/assoc_const_decided_by_context"
+
+# --- W5-05 U3: 型パラメータの関連の名前の外の形で止まる部分を分けた事例（2026-11-05）。`*_check` が本体の検査を押さえる。
+[[pending]]
+kind = "test-case"
+target = "tests/spec/num_traits/tp_conv_value_form.onsa"
+reasons = ["S-231", "S-239"]
+until = "W8-09"
+note = "関数値 `g.(k)` の降下が E0200（W8-09、具体的な型も同じ）。呼ぶ側の `via_binding::[F32](…)` も E0200（`name::[…]`、W5-10）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/num_traits/tp_positions_match_guard.onsa"
+reasons = ["R-06", "S-46"]
+until = "W8-06"
+note = "ガードの値の match が降下で E0200（W8-06、`I32` でも同じ）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/num_traits/tp_range_ends_closed.onsa"
+reasons = ["S-257"]
+until = "W8-03"
+note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型も同じ）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_generic_param_path_closed.onsa"
+reasons = ["S-257"]
+until = "W8-03"
+note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型も同じ）"

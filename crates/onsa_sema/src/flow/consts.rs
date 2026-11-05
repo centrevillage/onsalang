@@ -61,7 +61,7 @@ impl<'a> Checker<'a> {
             [(l, Leaf::Value(v, d))] if !shape.ops => {
                 self.record(*l, u32);
                 if let Some(d) = d {
-                    self.info.targets.insert(*l, Target::Const { def: *d, inst: None });
+                    self.info.targets.insert(*l, Target::Const { def: *d, of: None, inst: None });
                 }
                 *v
             }
