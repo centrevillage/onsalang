@@ -605,3 +605,10 @@ left = "expected `…` (a function body), found `…`"
 input = "tests/fuzz/09c63014.onsa"
 reasons = ["S-384"]
 note = "a cut `enum Alloc` that hides the effect in a `uses {Alloc}` already written: two errors from the start, and the row gets a second `uses`"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "expected newline after the declaration, found identifier"
+input = "tests/fuzz/9d465f03.onsa"
+reasons = ["S-384"]
+note = "a line that starts with `-` and leaves a word after the join: two errors from the start"
