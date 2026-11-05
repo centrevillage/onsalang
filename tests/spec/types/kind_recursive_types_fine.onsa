@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§4.6", "§2.4"]
+
+// R-176 (W5-20; §4.4, §4.6): the right forms beside negative/kind_recursive_types.onsa and kind_recursive_generic.onsa. A type that
+// holds itself through an `Array` or a `Map` is Shared (§4.6), so it is `Dup`: it meets the implicit `Dup` of a type parameter and is
+// the element of `[e; N]`, whatever its content parameter is (`Rose[U]` with the implicit `Dup`, with `Copy`, closed with `Str`), and
+// so is the generic type in a tuple or an `Option`. The declaration with the content parameter that has the implicit `Dup` takes an
+// `Array` of itself (the element is `Dup`). The `Copy` requirement is not asked of these here.
+
+pub struct Tree {
+  v: I32,
+  kids: Array[Tree],
+}
+
+pub enum List {
+  Nil,
+  Cons(I32, Array[List]),
+}
+
+pub struct Dir {
+  kids: Map[Str, Dir],
+}
+
+pub struct Left {
+  rights: Array[Right],
+}
+
+pub struct Right {
+  n: I32,
+  lefts: Array[Left],
+}
+
+pub struct Rose[T] {
+  v: T,
+  kids: Array[Rose[T]],
+}
+
+pub enum Tagged[T] {
+  Leaf(T),
+  Node(Array[Tagged[T]]),
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn tree_for_dup(t: Tree) -> U32 {
+  need_dup(t)
+}
+
+pub fn tree_repeated(t: Tree) -> [Tree; 2] {
+  [t; 2]
+}
+
+pub fn list_for_dup(l: List) -> U32 {
+  need_dup(l)
+}
+
+pub fn dir_for_dup(d: Dir) -> U32 {
+  need_dup(d)
+}
+
+pub fn left_for_dup(l: Left) -> U32 {
+  need_dup(l)
+}
+
+pub fn right_repeated(r: Right) -> [Right; 2] {
+  [r; 2]
+}
+
+pub fn rose_of_a_dup_for_dup[U](r: Rose[U]) -> U32 {
+  need_dup(r)
+}
+
+pub fn rose_of_a_dup_repeated[U](r: Rose[U]) -> [Rose[U]; 2] {
+  [r; 2]
+}
+
+pub fn rose_of_a_copy_for_dup[U: Copy](r: Rose[U]) -> U32 {
+  need_dup(r)
+}
+
+pub fn rose_of_a_str_for_dup(r: Rose[Str]) -> U32 {
+  need_dup(r)
+}
+
+pub fn rose_of_a_float_for_dup(r: Rose[F32]) -> U32 {
+  need_dup(r)
+}
+
+pub fn tagged_of_a_dup_for_dup[U](t: Tagged[U]) -> U32 {
+  need_dup(t)
+}
+
+pub fn rose_in_a_tuple_for_dup[U](t: (U32, Rose[U])) -> U32 {
+  need_dup(t)
+}
+
+pub fn rose_in_an_option_for_dup[U](o: Option[Rose[U]]) -> U32 {
+  need_dup(o)
+}
+
+pub fn rose_in_an_array_for_dup[U](xs: [Rose[U]; 2]) -> U32 {
+  need_dup(xs)
+}
+
+pub fn array_of_roses[U](a: Array[Rose[U]]) -> U32 {
+  0
+}

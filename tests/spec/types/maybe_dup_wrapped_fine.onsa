@@ -1,0 +1,389 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§4.6", "§6.3", "§2.4"]
+
+// R-176 (W5-20; §4.5, §4.6): the right forms beside negative/maybe_dup_user_types.onsa, maybe_dup_wrapping_forms.onsa and
+// maybe_dup_repeat.onsa, which the fix must keep. The kind of a type that holds a type parameter comes from the bound of the
+// parameter in the function that names it, and the declaration of the type does not decide (`W[T: ?Dup]` takes any `T`):
+// - a parameter with the implicit `Dup` makes `W[U]` and the types that wrap it `Dup` (they meet the implicit `Dup` and `[e; N]`),
+//   and not `Copy` (it may be Shared, §4.6), so the `Copy` requirement is not asked of them here;
+// - a parameter with `Copy`, or with a bound that implies it (`Num` and `Float`: a number trait is `Copy + …`, §6.3), makes them
+//   `Copy` too;
+// - a type closed with a concrete type has its own kind (`W[F32]` is Copy, `W[Str]` is Shared, `W[Array[F32]]` is Shared);
+// - a requirement of `?Dup` (`T: ?Dup` asks nothing of the kind) takes any of them, a `?Dup` parameter's wrapper too, by a borrow
+//   or by a `move`;
+// - a `?Dup` parameter that none of the fields of the type holds does not make the type less than its fields (`Phantom[U]` is Copy);
+// - the type arguments written in a signature that the declaration asks for (`Array`, `Buf`, `Span`, `Map` elements and a user type
+//   with the implicit `Dup` or `T: Copy`) are met by the same kinds.
+// No function drops a value of a generic type (that needs `Alloc`, §12.2): the values are borrowed or moved out.
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub enum Slot[T: ?Dup] {
+  Empty,
+  Full(T),
+}
+
+pub struct Need[T] {
+  x: T,
+}
+
+pub struct NeedCopy[T: Copy] {
+  x: T,
+}
+
+// A type with a `?Dup` parameter that none of its fields holds: the kind is decided by the fields (§4.6), so it is Copy.
+pub struct Phantom[T: ?Dup] {
+  n: U32,
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub fn two[T](x: T) -> (T, T) {
+  (x, x)
+}
+
+pub fn keep[T: ?Dup](move x: T) -> T {
+  x
+}
+
+pub fn peek[T: ?Dup](x: T) {}
+
+pub fn measure[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+// ---- the implicit Dup: Dup, not Copy ----
+
+pub fn dup_struct_for_dup[U](w: W[U]) -> U32 {
+  need_dup(w)
+}
+
+pub fn dup_struct_repeated[U](w: W[U]) -> [W[U]; 2] {
+  [w; 2]
+}
+
+pub fn dup_struct_duplicated[U](w: W[U]) -> (W[U], W[U]) {
+  two(w)
+}
+
+pub fn dup_enum_for_dup[U](s: Slot[U]) -> U32 {
+  need_dup(s)
+}
+
+pub fn dup_enum_repeated[U](s: Slot[U]) -> [Slot[U]; 3] {
+  [s; 3]
+}
+
+pub fn dup_nested_for_dup[U](w: W[W[U]]) -> U32 {
+  need_dup(w)
+}
+
+pub fn dup_nested_repeated[U](w: W[Slot[U]]) -> [W[Slot[U]]; 2] {
+  [w; 2]
+}
+
+pub fn dup_tuple_for_dup[U](t: (U32, W[U])) -> U32 {
+  need_dup(t)
+}
+
+pub fn dup_array_for_dup[U](xs: [W[U]; 2]) -> U32 {
+  need_dup(xs)
+}
+
+pub fn dup_option_for_dup[U](o: Option[U]) -> U32 {
+  need_dup(o)
+}
+
+pub fn dup_result_value_for_dup[U](r: Result[U, I32]) -> U32 {
+  need_dup(r)
+}
+
+pub fn dup_result_error_for_dup[U](r: Result[I32, U]) -> U32 {
+  need_dup(r)
+}
+
+pub fn dup_option_of_the_wrapper_for_dup[U](o: Option[W[U]]) -> U32 {
+  need_dup(o)
+}
+
+pub fn dup_wrapper_of_an_array_for_dup[U](w: W[[U; 2]]) -> U32 {
+  need_dup(w)
+}
+
+pub fn dup_with_a_trait_for_dup[U: Show](w: W[U]) -> U32 {
+  need_dup(w)
+}
+
+// ---- Copy, and a bound that implies it: Copy ----
+
+pub fn copy_struct_for_copy[U: Copy](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn copy_struct_for_dup[U: Copy](w: W[U]) -> U32 {
+  need_dup(w)
+}
+
+pub fn copy_struct_repeated[U: Copy](w: W[U]) -> [W[U]; 2] {
+  [w; 2]
+}
+
+pub fn copy_enum_for_copy[U: Copy](s: Slot[U]) -> U32 {
+  need_copy(s)
+}
+
+pub fn copy_nested_for_copy[U: Copy](w: W[W[U]]) -> U32 {
+  need_copy(w)
+}
+
+pub fn copy_tuple_for_copy[U: Copy](t: (U32, W[U])) -> U32 {
+  need_copy(t)
+}
+
+pub fn copy_array_for_copy[U: Copy](xs: [W[U]; 2]) -> U32 {
+  need_copy(xs)
+}
+
+pub fn copy_option_for_copy[U: Copy](o: Option[U]) -> U32 {
+  need_copy(o)
+}
+
+pub fn copy_result_value_for_copy[U: Copy](r: Result[U, I32]) -> U32 {
+  need_copy(r)
+}
+
+pub fn copy_result_error_for_copy[U: Copy](r: Result[I32, U]) -> U32 {
+  need_copy(r)
+}
+
+pub fn copy_option_of_the_wrapper_for_copy[U: Copy](o: Option[W[U]]) -> U32 {
+  need_copy(o)
+}
+
+pub fn copy_wrapper_of_an_array_for_copy[U: Copy](w: W[[U; 2]]) -> U32 {
+  need_copy(w)
+}
+
+pub fn copy_duplicated[U: Copy](o: Option[W[U]]) -> (Option[W[U]], Option[W[U]]) {
+  two(o)
+}
+
+pub fn copy_with_a_trait_for_copy[U: Copy + Show](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn copy_with_the_trait_first_for_copy[U: Show + Copy](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn num_struct_for_copy[U: Num](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn num_option_for_copy[U: Num](o: Option[U]) -> U32 {
+  need_copy(o)
+}
+
+pub fn float_struct_for_copy[U: Float](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn float_nested_for_copy[U: Float](w: W[Slot[U]]) -> U32 {
+  need_copy(w)
+}
+
+pub fn num_repeated[U: Num](w: W[U]) -> [W[U]; 2] {
+  [w; 2]
+}
+
+// ---- closed with a concrete type ----
+
+pub fn closed_copy_for_copy(w: W[F32]) -> U32 {
+  need_copy(w)
+}
+
+pub fn closed_tuple_for_copy(w: W[(F32, I32)]) -> U32 {
+  need_copy(w)
+}
+
+pub fn closed_shared_for_dup(w: W[Str]) -> U32 {
+  need_dup(w)
+}
+
+pub fn closed_shared_array_for_dup(w: W[Array[F32]]) -> U32 {
+  need_dup(w)
+}
+
+pub fn closed_shared_repeated(w: W[Str]) -> [W[Str]; 2] {
+  [w; 2]
+}
+
+pub fn closed_option_for_copy(o: Option[F32]) -> U32 {
+  need_copy(o)
+}
+
+pub fn closed_result_for_copy(r: Result[F32, I32]) -> U32 {
+  need_copy(r)
+}
+
+pub fn closed_option_of_shared_for_dup(o: Option[Str]) -> U32 {
+  need_dup(o)
+}
+
+// ---- a requirement of ?Dup takes any of them ----
+
+pub fn maybe_dup_wrapper_kept[U: ?Dup](move w: W[U]) -> W[U] {
+  keep(move w)
+}
+
+pub fn maybe_dup_wrapper_peeked[U: ?Dup](w: W[U]) -> U32 {
+  peek(w)
+  peek(w)
+  measure(w)
+}
+
+pub fn maybe_dup_enum_kept[U: ?Dup](move s: Slot[U]) -> Slot[U] {
+  keep(move s)
+}
+
+pub fn maybe_dup_nested_kept[U: ?Dup](move w: W[W[U]]) -> W[W[U]] {
+  keep(move w)
+}
+
+pub fn maybe_dup_tuple_kept[U: ?Dup](move t: (U32, W[U])) -> (U32, W[U]) {
+  keep(move t)
+}
+
+pub fn maybe_dup_array_kept[U: ?Dup](move xs: [W[U]; 2]) -> [W[U]; 2] {
+  keep(move xs)
+}
+
+pub fn maybe_dup_option_kept[U: ?Dup](move o: Option[U]) -> Option[U] {
+  keep(move o)
+}
+
+pub fn maybe_dup_result_kept[U: ?Dup, E: ?Dup](move r: Result[U, E]) -> Result[U, E] {
+  keep(move r)
+}
+
+pub fn maybe_dup_bare_moved[U: ?Dup](move u: U) -> U {
+  keep(move u)
+}
+
+pub fn maybe_dup_moved_into_the_wrapper[U: ?Dup](move u: U) -> W[U] {
+  keep(W { x: move u })
+}
+
+pub fn maybe_dup_moved_into_a_tuple_of_the_wrapper[U: ?Dup](move u: U) -> (U32, W[U]) {
+  (1, W { x: move u })
+}
+
+pub fn maybe_dup_wrapper_peeked_beside_a_dup[U: ?Dup, V](w: W[U], v: V) -> U32 {
+  peek(w)
+  need_dup(v)
+}
+
+// ---- a ?Dup parameter that no field holds ----
+
+pub fn phantom_for_copy[U: ?Dup](p: Phantom[U]) -> U32 {
+  need_copy(p)
+}
+
+pub fn phantom_for_dup[U: ?Dup](p: Phantom[U]) -> U32 {
+  need_dup(p)
+}
+
+pub fn phantom_repeated[U: ?Dup](p: Phantom[U]) -> [Phantom[U]; 2] {
+  [p; 2]
+}
+
+pub fn phantom_duplicated[U: ?Dup](p: Phantom[U]) -> (Phantom[U], Phantom[U]) {
+  two(p)
+}
+
+// ---- the type arguments a declaration asks for ----
+
+pub fn array_of_the_wrapper[U](a: Array[W[U]]) -> U32 {
+  0
+}
+
+pub fn array_of_the_option[U](a: Array[Option[U]]) -> U32 {
+  0
+}
+
+pub fn array_of_the_result[Y](a: Array[Result[Y, I32]]) -> U32 {
+  0
+}
+
+pub fn map_of_the_wrapper[U](m: Map[Str, W[U]]) -> U32 {
+  0
+}
+
+pub fn buf_of_the_wrapper[U: Copy](b: Buf[W[U]]) -> U32 {
+  b.len()
+}
+
+pub fn buf_of_the_option[U: Num](b: Buf[Option[U]]) -> U32 {
+  b.len()
+}
+
+pub fn span_of_the_wrapper[U: Copy](s: Span[W[U]]) -> U32 {
+  s.len()
+}
+
+pub fn span_of_the_tuple[U: Float](s: Span[(U32, W[U])]) -> U32 {
+  s.len()
+}
+
+pub fn declared_dup_for_the_wrapper[U](n: Need[W[U]]) -> U32 {
+  0
+}
+
+pub fn declared_dup_for_the_option[U](n: Need[Option[U]]) -> U32 {
+  0
+}
+
+pub fn declared_copy_for_the_wrapper[U: Copy](n: NeedCopy[W[U]]) -> U32 {
+  0
+}
+
+pub fn declared_copy_for_the_option[U: Num](n: NeedCopy[Option[U]]) -> U32 {
+  0
+}
+
+pub fn declared_copy_for_the_tuple[U: Float](n: NeedCopy[(U32, W[U])]) -> U32 {
+  0
+}
+
+pub fn declared_copy_for_the_closed(n: NeedCopy[W[F32]]) -> U32 {
+  0
+}
+
+pub fn declared_dup_in_an_annotation[U](n: Option[U]) -> U32 {
+  let _: Option[Need[W[U]]] = None
+  0
+}
+
+pub struct FieldDup[U] {
+  n: Need[W[U]],
+  a: Array[Slot[U]],
+}
+
+pub struct FieldCopy[U: Copy] {
+  n: NeedCopy[W[U]],
+  b: Buf[Slot[U]],
+}
+
+pub enum VariantCopy[U: Num] {
+  One(NeedCopy[Option[U]]),
+  Two(Buf[W[U]], U32),
+}

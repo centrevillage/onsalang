@@ -1,0 +1,166 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6"]
+
+// R-176 (W5-20; §4.5: "型パラメータには、暗黙に `Dup`（複製できる = Copy か Shared）の制約が付く。Affine 型も受け付けるには
+// `[T: ?Dup]` と書いて、この制約を外す…その場合、`T` の値は複製できない"; §4.6: "種は構造で決まる", "Affine … それらを含む型"; §4.5:
+// "型パラメータの要求（境界と暗黙の `Dup`）は…満たさなければ、要求を生んだ式（呼び出し、`[e; N]`、演算子、メソッドの呼び出し）の位置に
+// E0416"): a user type that holds a type parameter declared `?Dup` is Affine when the parameter is not given more, so it meets neither
+// the implicit `Dup` of another type parameter nor `T: Copy`. The type is a struct or an enum, with the parameter in a field, in a
+// tuple in a field, in a variant, two fields of it, or through another such type (`W[W[U]]`, `W[Slot[U]]`); the value may be built in the
+// body, taken as an argument, or the `Self` of a method of an `impl[T: ?Dup]`; a variant with no content (`Slot.Empty`) is of the same
+// type as one with a content, so it is no different. A parameter with a trait beside the `?Dup` (`U: ?Dup + Show`) is no more than
+// `?Dup`. The type is not known to be Affine by a value but by its declaration, so a function that only has the type of the value
+// is the same. The call is the position of the error (a method call too), and the error is of the types stage, before the modes: no
+// `move` is asked for. One error per function (P-01).
+// The `[e; N]` forms are in negative/maybe_dup_repeat.onsa, the types that wrap a parameter without a user type in
+// negative/maybe_dup_wrapping_forms.onsa, the right forms in types/maybe_dup_wrapped_fine.onsa. The first three forms of
+// negative/dup_maybe_dup_param.onsa are not repeated here.
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub struct Pair[T: ?Dup] {
+  a: T,
+  b: T,
+}
+
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub enum Slot[T: ?Dup] {
+  Empty,
+  Full(T),
+}
+
+pub struct Tool {
+  n: U32,
+}
+
+impl Tool {
+  pub fn take[T](self, x: T) -> U32 {
+    0
+  }
+}
+
+impl[T: ?Dup] W[T] {
+  pub fn dup_self(self) -> U32 {
+    need_dup(self)   //~ E0416
+  }
+
+  pub fn copy_self(self) -> U32 {
+    need_copy(self)   //~ E0416
+  }
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+// ---- a struct ----
+
+pub fn struct_for_copy[U: ?Dup](move u: U) {
+  let w = W { x: move u }
+  let _ = need_copy(w)   //~ E0416
+}
+
+pub fn struct_argument_for_dup[U: ?Dup](w: W[U]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn struct_argument_for_copy[U: ?Dup](w: W[U]) -> U32 {
+  need_copy(w)   //~ E0416
+}
+
+pub fn struct_of_two_for_dup[U: ?Dup](move u: U, move v: U) {
+  let p = Pair { a: move u, b: move v }
+  let _ = need_dup(p)   //~ E0416
+}
+
+pub fn struct_with_a_tuple_field_for_dup[U: ?Dup](move u: U) {
+  let h = Holder { items: (move u, 1) }
+  let _ = need_dup(h)   //~ E0416
+}
+
+pub fn struct_with_a_tuple_field_for_copy[U: ?Dup](move u: U) {
+  let h = Holder { items: (move u, 1) }
+  let _ = need_copy(h)   //~ E0416
+}
+
+pub fn struct_with_a_trait_beside_the_off[U: ?Dup + Show](w: W[U]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn struct_with_the_trait_first[U: Show + ?Dup](w: W[U]) -> U32 {
+  need_copy(w)   //~ E0416
+}
+
+pub fn method_call_for_dup[U: ?Dup](t: Tool, move u: U) -> U32 {
+  let w = W { x: move u }
+  t.take(w)   //~ E0416
+}
+
+pub fn second_parameter_is_the_one[U: ?Dup, V](move u: U, v: V) -> U32 {
+  let w = W { x: move u }
+  let _ = need_dup(v)
+  need_dup(w)   //~ E0416
+}
+
+// ---- an enum ----
+
+pub fn enum_for_dup[U: ?Dup](move u: U) {
+  let s = Slot.Full(move u)
+  let _ = need_dup(s)   //~ E0416
+}
+
+pub fn enum_for_copy[U: ?Dup](move u: U) {
+  let s = Slot.Full(move u)
+  let _ = need_copy(s)   //~ E0416
+}
+
+pub fn enum_without_content_for_dup[U: ?Dup]() {
+  let s: Slot[U] = Slot.Empty
+  let _ = need_dup(s)   //~ E0416
+}
+
+pub fn enum_argument_for_dup[U: ?Dup](s: Slot[U]) -> U32 {
+  need_dup(s)   //~ E0416
+}
+
+// ---- one inside another ----
+
+pub fn nested_struct_for_dup[U: ?Dup](move u: U) {
+  let w = W { x: W { x: move u } }
+  let _ = need_dup(w)   //~ E0416
+}
+
+pub fn nested_struct_for_copy[U: ?Dup](move u: U) {
+  let w = W { x: W { x: move u } }
+  let _ = need_copy(w)   //~ E0416
+}
+
+pub fn nested_argument_for_dup[U: ?Dup](w: W[W[U]]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn enum_in_a_struct_for_dup[U: ?Dup](w: W[Slot[U]]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn struct_in_an_enum_for_dup[U: ?Dup](s: Slot[W[U]]) -> U32 {
+  need_dup(s)   //~ E0416
+}
+
+pub fn three_deep_for_dup[U: ?Dup](w: W[W[W[U]]]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn through_a_pair_for_dup[U: ?Dup](p: Pair[W[U]]) -> U32 {
+  need_dup(p)   //~ E0416
+}

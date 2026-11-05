@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§4.7"]
+
+// R-176 (W5-20; §4.5: "満たさなければ、要求を生んだ式…の位置に E0416"; §4.6: "Affine … それらを含む型", "Shared の部分と Affine の部分を両方含む型は
+// Affine"): the forms in which the missing check let a program through that duplicates a `Buf`, and the forms of the supplements of the
+// issue. `two[T](x: T) -> (T, T) { (x, x) }` duplicates its argument (`T` has the implicit `Dup`), so `bad[U: ?Dup](w: W[U])` that
+// gives it a `W[U]` is E0416 at the call, and so is an `Option[U]` given to `h[T: Copy]` (the program built the `W[Buf[F32]]`
+// twice, the one `Buf` twice). A type parameter in an array or a tuple in a user type (`W[[U; 2]]`, `W[(U32, U)]`) is Affine
+// too. One error per function (P-01).
+// The forms with a part that is Affine whatever the rest is (`C[(Y, Q)]`, `Array[Result[Y, Q]]`), which are E0416 already, are in
+// negative/affine_part_unknown_rest.onsa.
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub fn two[T](x: T) -> (T, T) {
+  (x, x)
+}
+
+pub fn h[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+// ---- the program that duplicates a Buf ----
+
+pub fn bad[U: ?Dup](w: W[U]) -> (W[U], W[U]) {
+  two(w)   //~ E0416
+}
+
+pub fn bad_with_an_owned_argument[U: ?Dup](move w: W[U]) -> (W[U], W[U]) {
+  two(w)   //~ E0416
+}
+
+pub fn option_for_copy[U: ?Dup](o: Option[U]) -> U32 {
+  h(o)   //~ E0416
+}
+
+pub fn option_duplicated[U: ?Dup](o: Option[U]) -> (Option[U], Option[U]) {
+  two(o)   //~ E0416
+}
+
+pub fn result_duplicated[U: ?Dup](r: Result[U, I32]) -> (Result[U, I32], Result[U, I32]) {
+  two(r)   //~ E0416
+}
+
+pub fn tuple_duplicated[U: ?Dup](t: (U32, W[U])) -> ((U32, W[U]), (U32, W[U])) {
+  two(t)   //~ E0416
+}
+
+// ---- the parameter in an array or a tuple in a user type ----
+
+pub fn wrapper_of_an_array[U: ?Dup](w: W[[U; 2]]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn wrapper_of_an_array_for_copy[U: ?Dup](w: W[[U; 2]]) -> U32 {
+  need_copy(w)   //~ E0416
+}
+
+pub fn wrapper_of_a_tuple[U: ?Dup](w: W[(U32, U)]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn wrapper_of_a_result[U: ?Dup](w: W[Result[U, I32]]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn wrapper_of_an_array_of_wrappers[U: ?Dup](w: W[[W[U]; 2]]) -> U32 {
+  need_dup(w)   //~ E0416
+}

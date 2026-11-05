@@ -76,6 +76,12 @@ pub const TRAITS: [(&str, Option<Bound>); 34] = [
 ];
 
 impl Bound {
+    /// Whether the bound is a kind constraint (§4.6): met by the structure of
+    /// a type, which no `impl` changes, and not a trait.
+    pub fn is_kind_constraint(self) -> bool {
+        matches!(self, Bound::Copy | Bound::Dup)
+    }
+
     /// The name of the bound: of its row of [`TRAITS`], of the kind
     /// constraint (§4.6), or `Escape` (§4.5).
     pub fn name(self) -> &'static str {

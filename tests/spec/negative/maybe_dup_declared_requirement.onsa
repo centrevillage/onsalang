@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§18.1"]
+
+// R-176 (W5-20; §4.5: "型の位置（署名…、別名の右辺…、`impl` の見出しの対象…、本体に書いた型…）に書いた型引数は、その型の宣言の型パラメータの要求（境界と暗黙の
+// `Dup`）を満たさなければならず、満たさなければ E0416 である", "推論で決まった型引数（項目の型パラメータと…）も同じ"): the requirement of a
+// declaration is met by the kind of the type argument, and a type argument that holds a `?Dup` parameter (`W[U]`, `U: ?Dup`) is not
+// `Dup` or `Copy`. `struct Need[T]` (the implicit `Dup`) does not take a `W[U]`, nor an `Option[U]`, a tuple, an array or a
+// `Result` that holds the `U`; `struct NeedCopy[T: Copy]` does not take a `W[U]` with the implicit `Dup` (Shared at most, §4.6),
+// nor one with `?Dup`. The places are those of the types stage: an argument, a return type, a type in a type (a tuple, an `Option`),
+// a field, a variant, the target of an `impl`, an annotation in a body, and the struct literal and the variant constructor that
+// decide the type argument (the position is the literal or the call). The error of a place of the types stage is at the type, so the
+// body is not read; the others are in the body. One error per item (P-01).
+// The right forms (a parameter that is `Dup` or `Copy`) are in types/maybe_dup_wrapped_fine.onsa.
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub struct Need[T] {
+  x: T,
+}
+
+pub struct NeedCopy[T: Copy] {
+  x: T,
+}
+
+pub enum NeedEnum[T] {
+  Full(T),
+  Empty,
+}
+
+// ---- in a signature ----
+
+pub fn argument[U: ?Dup](n: Need[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn returned[U: ?Dup](move w: W[U]) -> Need[W[U]] {   //~ E0416
+  Need { x: move w }
+}
+
+pub fn inout_argument[U: ?Dup](inout n: Need[W[U]]) {   //~ E0416
+}
+
+pub fn in_a_tuple[U: ?Dup](t: (U32, Need[W[U]])) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_an_option[U: ?Dup](o: Option[Need[W[U]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_a_function_type[U: ?Dup](f: fn(Need[W[U]]) -> U32) -> U32 {   //~ E0416
+  0
+}
+
+pub fn enum_argument[U: ?Dup](n: NeedEnum[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn option_inside[U: ?Dup](n: Need[Option[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn result_inside[U: ?Dup](n: Need[Result[U, I32]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn tuple_inside[U: ?Dup](n: Need[(U32, W[U])]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_inside[U: ?Dup](n: Need[[W[U]; 2]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn nested_inside[U: ?Dup](n: Need[W[W[U]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_asked_of_the_dup_wrapper[U](n: NeedCopy[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_asked_of_the_maybe_dup_wrapper[U: ?Dup](n: NeedCopy[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_asked_of_the_dup_option[U](n: NeedCopy[Option[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_asked_of_the_dup_tuple[U](n: NeedCopy[(U32, W[U])]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn copy_asked_of_the_dup_result[U](n: NeedCopy[Result[U, I32]]) -> U32 {   //~ E0416
+  0
+}
+
+// ---- in a field and a variant ----
+
+pub struct InAField[U: ?Dup] {
+  n: Need[W[U]],   //~ E0416
+}
+
+pub struct InAFieldCopy[U] {
+  n: NeedCopy[W[U]],   //~ E0416
+}
+
+pub enum InAVariant[U: ?Dup] {
+  One(Need[Option[U]]),   //~ E0416
+  Two,
+}
+
+// ---- in a body ----
+
+pub fn annotation[U: ?Dup](n: Option[U]) -> U32 {
+  let _: Option[Need[W[U]]] = None   //~ E0416
+  0
+}
+
+pub fn struct_literal[U: ?Dup](move w: W[U]) -> U32 {
+  let _ = Need { x: move w }   //~ E0416
+  0
+}
+
+pub fn struct_literal_asking_copy[U](w: W[U]) -> U32 {
+  let _ = NeedCopy { x: w }   //~ E0416
+  0
+}
+
+pub fn variant_constructor[U: ?Dup](move w: W[U]) -> U32 {
+  let _ = NeedEnum.Full(move w)   //~ E0416
+  0
+}
+
+pub fn variant_without_content[U: ?Dup](move w: W[U]) -> U32 {
+  let _: NeedEnum[W[U]] = NeedEnum.Empty   //~ E0416
+  0
+}

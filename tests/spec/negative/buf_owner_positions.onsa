@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§4.4", "§18.1"]
+
+// R-172 (W5-20; §4.5: "`Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る（E0416）", "型の位置（署名…、別名の右辺（§4.4）、…本体に書いた型
+// （注釈…））に書いた型引数は…満たさなければ E0416"; §4.7): a `Buf` of a type that is not Copy, written by the programmer, is E0416
+// in every place a type is written, not only where the element type is inferred (`Buf.zeroed(4)`, negative/infer_buf_element.onsa).
+// `Owner` holds a `Buf` (Affine) and `Names` holds a `Str` (Shared), and neither is Copy. The places are an argument (also `inout`), a
+// return type, a tuple, an array, an `Option` and a function type in a signature, a method's signature, a field, a variant, the
+// right side of an alias, and an annotation in a body. The error is at the type, and a use of the alias that is itself an error is
+// not reported (it is an error type, §4.4, §18.1). One error per item (P-01).
+// The `Buf` of a Copy type and the other places are in types/wellformed_element_copy_fine.onsa.
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+pub struct Names {
+  n: Str,
+}
+
+pub struct Pocket {
+  n: U32,
+}
+
+type Bad = Buf[Owner]   //~ E0416
+
+type BadShared = Buf[Names]   //~ E0416
+
+pub fn argument(b: Buf[Owner]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn inout_argument(inout b: Buf[Owner]) {   //~ E0416
+}
+
+pub fn argument_of_a_shared_struct(b: Buf[Names]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn returned() -> Buf[Owner] {   //~ E0416
+  Buf.zeroed(1)
+}
+
+pub fn in_a_tuple(t: (U32, Buf[Owner])) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_an_array(xs: [Buf[Owner]; 2]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_an_option(o: Option[Buf[Owner]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_a_function_type(f: fn(Buf[Owner]) -> U32) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_a_function_type_return(f: fn(U32) -> Buf[Owner]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_a_body_annotation() -> U32 {
+  let _: Option[Buf[Owner]] = None   //~ E0416
+  0
+}
+
+pub struct HoldsBufOfOwner {
+  b: Buf[Owner],   //~ E0416
+}
+
+pub enum VariantWithBufOfOwner {
+  One(Buf[Owner]),   //~ E0416
+  Two,
+}
+
+impl Pocket {
+  pub fn take(self, b: Buf[Owner]) -> U32 {   //~ E0416
+    0
+  }
+}
+
+// A use of an alias that is an error is an error type: no report where it is used.
+pub fn uses_the_alias(b: Bad) -> U32 {
+  0
+}
+
+pub fn uses_the_shared_alias(b: BadShared) -> U32 {
+  0
+}

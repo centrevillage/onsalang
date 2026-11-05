@@ -927,10 +927,10 @@ note = "定数の評価の途中の溢れ（-(-(-128))、-(-128) - 1）は、最
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/dup_maybe_dup_param.onsa"
-reasons = ["R-176"]
-until = "W5-16"
-note = "?Dup の型パラメータを含む利用者の型（Wrap[U]、U: ?Dup）が Dup の要求（暗黙の Dup、[e; N]）を通る。種が計算できないと通す（§4.5、§4.6）"
+target = "tests/spec/types/maybe_dup_number_bounds_fine.onsa"
+reasons = ["R-131"]
+until = "W5-05"
+note = "`AnyNum`・`Int`・`Unsigned` の境界が今は E0200。数の trait が入る W5-05 で通る。W5-20/t の事例（Copy を含む境界の `W[U]` の種）"
 
 # --- W3-14: 入れ子の深さの上限の事例のうち、上限の後もまだ通らないもの（W3-14/t・W3-14/t2 の案から、2026-10-08）
 

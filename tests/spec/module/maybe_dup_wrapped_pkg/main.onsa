@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§15.1"]
+
+// R-176 (W5-20): the kind of a generic type of another module is decided from its declaration there and the bound of the function
+// that names it here. `lib.W[T]` with `T: ?Dup` holds a `?Dup` parameter, so it is not `Dup` or `Copy` where this module names
+// it (§4.5, §4.6): E0416 for the requirement of a function of the other module (`lib.need_dup`, `lib.need_copy`), for the
+// implicit `Dup` of a declaration of the other module (`lib.Need[W[U]]`), and for `[e; N]`; the same error written in
+// `lib.onsa` is reported there. With the implicit `Dup` or `Copy` the same forms are right, and a callee that asks nothing of the
+// kind (`lib.keep`) takes the type. One error per item (P-01).
+
+use lib
+use lib.{Need, W, keep, need_copy, need_dup}
+
+pub fn for_dup[U: ?Dup](w: W[U]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+pub fn for_copy[U: ?Dup](w: W[U]) -> U32 {
+  need_copy(w)   //~ E0416
+}
+
+pub fn for_dup_by_the_path[U: ?Dup](w: W[U]) -> U32 {
+  lib.need_dup(w)   //~ E0416
+}
+
+pub fn repeated[U: ?Dup](w: W[U]) -> U32 {
+  let _ = [w; 2]   //~ E0416
+  0
+}
+
+pub fn declared_requirement[U: ?Dup](n: Need[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn declared_requirement_by_the_path[U: ?Dup](n: lib.Need[lib.W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn the_option_of_the_type[U: ?Dup](o: Option[W[U]]) -> U32 {
+  need_dup(o)   //~ E0416
+}
+
+pub fn dup_parameter_for_dup[U](w: W[U]) -> U32 {
+  need_dup(w)
+}
+
+pub fn dup_parameter_repeated[U](w: W[U]) -> [W[U]; 2] {
+  [w; 2]
+}
+
+pub fn copy_parameter_for_copy[U: Copy](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn declared_requirement_met[U](n: Need[W[U]]) -> U32 {
+  0
+}
+
+pub fn callee_that_asks_nothing[U: ?Dup](move w: W[U]) -> W[U] {
+  keep(move w)
+}

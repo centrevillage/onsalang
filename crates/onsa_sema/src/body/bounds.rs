@@ -33,20 +33,19 @@ impl Bounds<'_> {
         self.a.types.get(t).clone()
     }
 
+    /// The kind of `t` under the generics in scope (R-30, R-176): a type
+    /// parameter by its bounds wherever `t` holds it.
+    fn kind(&self, t: TyId) -> Option<Kind> {
+        crate::kind::kind_in_body(self.a, t, self.generics)
+    }
+
     /// Whether a decided type meets a requirement (the bounds of §6.3 and the
-    /// kind constraints `Copy` / `Dup` of §4.6).
+    /// kind constraints of §4.6). A type with no kind keeps a kind constraint
+    /// quiet (§18.1: what it holds was not read, whose own error is reported;
+    /// a second-class type has no kind, §4.6).
     pub(crate) fn meets(&self, t: TyId, b: Bound) -> bool {
-        if self.satisfies(t, b) {
-            return true;
-        }
-        // The kind of a user type that holds a type parameter of the body is not
-        // computed (`kind_of` is `None`): such a constraint is not decided here and passes.
-        // R-176 (W5-08): a `?Dup` parameter inside makes the type not `Dup`
-        // (`tests/spec/negative/dup_maybe_dup_param.onsa`, in the pending list).
-        if matches!(b, Bound::Dup | Bound::Copy) && !matches!(self.ty(t), Ty::Param(_)) && self.a.kind_of(t).is_none() {
-            return true;
-        }
-        false
+        self.satisfies(t, b)
+            || (b.is_kind_constraint() && !matches!(self.ty(t), Ty::Param(_)) && self.kind(t).is_none())
     }
 
     /// Whether the traits a (resolved) type meets are not known: of what is
@@ -74,10 +73,7 @@ impl Bounds<'_> {
     /// Whether a (resolved) type satisfies a builtin bound (§6.3). The kind
     /// is of the structure, which no `impl` changes (§4.6, S-850).
     pub(crate) fn satisfies(&self, t: TyId, b: Bound) -> bool {
-        let unknown = match b {
-            Bound::Copy | Bound::Dup => self.unknown(t),
-            _ => self.traits_unknown(t),
-        };
+        let unknown = if b.is_kind_constraint() { self.unknown(t) } else { self.traits_unknown(t) };
         if unknown {
             return true;
         }
@@ -198,8 +194,8 @@ impl Bounds<'_> {
                 let derived =
                     |d: crate::def::Derive| derives.is_none_or(|ds| ds.contains(&d) && *args_meet.get_or_init(of_args));
                 match b {
-                    Bound::Copy => self.a.kind_of(t) == Some(Kind::Copy),
-                    Bound::Dup => matches!(self.a.kind_of(t), Some(Kind::Copy | Kind::Shared)),
+                    Bound::Copy => self.kind(t) == Some(Kind::Copy),
+                    Bound::Dup => matches!(self.kind(t), Some(Kind::Copy | Kind::Shared)),
                     Bound::PartialEq => derived(crate::def::Derive::PartialEq) || derived(crate::def::Derive::Eq),
                     Bound::Eq => derived(crate::def::Derive::Eq),
                     Bound::PartialOrd => derived(crate::def::Derive::PartialOrd) || derived(crate::def::Derive::Ord),

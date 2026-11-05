@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§2.4"]
+
+// R-176 (W5-20; §4.5: "Affine 型も受け付けるには `[T: ?Dup]` と書いて、この制約を外す…その場合、`T` の値は複製できない"; §2.4: "`e` は
+// Dup 型（でなければ E0416）"): the guard of the forms that are E0416 before the fix. The kind of a bare type parameter is known from its
+// own bound, so a `U: ?Dup` meets neither the implicit `Dup` of another type parameter nor `T: Copy`, nor the element of `[e; N]`, and
+// that must stay when the kind of a type that holds a parameter is decided from the same bound (negative/maybe_dup_user_types.onsa).
+// A parameter with a trait beside the `?Dup` and one with only the implicit `Dup` (which is not Copy) are the same for `Copy`.
+// The type argument of a declaration with the implicit `Dup` (`Need[U]`, and the struct literal that decides it) is the same. One
+// error per function (P-01).
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub struct Need[T] {
+  x: T,
+}
+
+pub fn bare_for_dup[U: ?Dup](u: U) -> U32 {
+  need_dup(u)   //~ E0416
+}
+
+pub fn bare_for_copy[U: ?Dup](u: U) -> U32 {
+  need_copy(u)   //~ E0416
+}
+
+pub fn bare_repeated[U: ?Dup](u: U) -> U32 {
+  let _ = [u; 2]   //~ E0416
+  0
+}
+
+pub fn bare_with_a_trait_for_dup[U: ?Dup + Show](u: U) -> U32 {
+  need_dup(u)   //~ E0416
+}
+
+pub fn bare_with_the_trait_first_for_copy[U: Show + ?Dup](u: U) -> U32 {
+  need_copy(u)   //~ E0416
+}
+
+pub fn dup_parameter_for_copy[U](u: U) -> U32 {
+  need_copy(u)   //~ E0416
+}
+
+pub fn dup_parameter_with_a_trait_for_copy[U: Show](u: U) -> U32 {
+  need_copy(u)   //~ E0416
+}
+
+pub fn second_of_two[U: ?Dup, V](u: U, v: V) -> U32 {
+  let _ = need_dup(v)
+  need_dup(u)   //~ E0416
+}
+
+pub fn bare_as_the_type_argument_of_a_declaration[U: ?Dup](n: Need[U]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn bare_in_a_struct_literal[U: ?Dup](move u: U) -> U32 {
+  let _ = Need { x: move u }   //~ E0416
+  0
+}

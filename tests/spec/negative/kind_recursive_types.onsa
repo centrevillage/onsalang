@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§4.6"]
+
+// R-176 (W5-20; §4.4: "型は自分自身を値として含めない" and "`Array[Node]` は含まない"; §4.6: "Shared … `Array` `Map`、それらを含む型"; "種は構造で決まる"): a type
+// that holds itself only through an `Array` or a `Map` (the forms §4.4 allows) has a kind that is decided by the structure, and the
+// recursion does not make the kind unknown: `Tree { kids: Array[Tree] }` is Shared (it holds an `Array`), so it is `Dup` and not
+// `Copy`, and so are the enum, the mutual pair, the `Map` form and the generic one with a concrete content, in a tuple or an `Option`.
+// This is the guard of forms that are E0416 before the fix; the kind must stay when the kind of a type with a parameter is decided
+// from the bound (negative/kind_recursive_generic.onsa). The `Copy` requirement is E0416 at the call. One error per function (P-01).
+
+pub struct Tree {
+  v: I32,
+  kids: Array[Tree],
+}
+
+pub enum List {
+  Nil,
+  Cons(I32, Array[List]),
+}
+
+pub struct Dir {
+  kids: Map[Str, Dir],
+}
+
+pub struct Left {
+  rights: Array[Right],
+}
+
+pub struct Right {
+  n: I32,
+  lefts: Array[Left],
+}
+
+pub struct Rose[T] {
+  v: T,
+  kids: Array[Rose[T]],
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub fn tree_for_copy(t: Tree) -> U32 {
+  need_copy(t)   //~ E0416
+}
+
+pub fn list_for_copy(l: List) -> U32 {
+  need_copy(l)   //~ E0416
+}
+
+pub fn dir_for_copy(d: Dir) -> U32 {
+  need_copy(d)   //~ E0416
+}
+
+pub fn left_for_copy(l: Left) -> U32 {
+  need_copy(l)   //~ E0416
+}
+
+pub fn right_for_copy(r: Right) -> U32 {
+  need_copy(r)   //~ E0416
+}
+
+pub fn rose_of_a_float_for_copy(r: Rose[F32]) -> U32 {
+  need_copy(r)   //~ E0416
+}
+
+pub fn tree_in_a_tuple_for_copy(t: (U32, Tree)) -> U32 {
+  need_copy(t)   //~ E0416
+}
+
+pub fn tree_in_an_option_for_copy(o: Option[Tree]) -> U32 {
+  need_copy(o)   //~ E0416
+}

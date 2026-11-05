@@ -1,0 +1,202 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§4.6"]
+
+// R-176 (W5-20; §4.1: the kind of a tuple follows its elements, the kind of a fixed-length array follows `T`, and `Option`/`Result`
+// follow their content; §4.6: "Affine … それらを含む型"; §4.5: a type parameter declared `?Dup` is not `Dup`): a type that wraps a value of
+// a `?Dup` type parameter, or of a user type that holds one, is not known to be `Dup` or `Copy` whatever wraps it: a tuple (the
+// parameter in either place, three elements), a fixed-length array, an `Option` (and an `Option` of an `Option`), a `Result` with the
+// parameter as the value, as the error, or as both, and a user type in one of these. The wrapper does not change the answer:
+// `Option[W[U]]` is as `W[U]`. Where the parameter has only the implicit `Dup` the wrapper is `Dup` but not `Copy`, so `T: Copy` is
+// E0416 for it (a `Shared` content is not Copy, §4.6). A value is built in the body or taken as an argument. The error is E0416 at the
+// call of the types stage, before the modes. One error per function (P-01).
+// The parameter itself in a tuple or an array (`(U32, U)`, `[U; 2]`) is the first group. The bare parameter alone, which is E0416
+// already, is in negative/maybe_dup_bare_parameter.onsa.
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+// ---- the parameter itself in a tuple or an array ----
+
+pub fn bare_in_a_tuple[U: ?Dup](t: (U32, U)) -> U32 {
+  need_dup(t)   //~ E0416
+}
+
+pub fn bare_twice_in_a_tuple_for_copy[U: ?Dup](t: (U, U)) -> U32 {
+  need_copy(t)   //~ E0416
+}
+
+pub fn bare_in_a_tuple_in_a_tuple[U: ?Dup](t: (U32, (U32, U))) -> U32 {
+  need_dup(t)   //~ E0416
+}
+
+pub fn bare_in_an_array[U: ?Dup](xs: [U; 2]) -> U32 {
+  need_dup(xs)   //~ E0416
+}
+
+pub fn bare_in_an_array_for_copy[U: ?Dup](xs: [U; 2]) -> U32 {
+  need_copy(xs)   //~ E0416
+}
+
+pub fn bare_in_an_array_in_an_array[U: ?Dup](xs: [[U; 2]; 2]) -> U32 {
+  need_dup(xs)   //~ E0416
+}
+
+pub fn dup_parameter_in_a_tuple_for_copy[U](t: (U32, U)) -> U32 {
+  need_copy(t)   //~ E0416
+}
+
+pub fn dup_parameter_in_an_array_for_copy[U](xs: [U; 2]) -> U32 {
+  need_copy(xs)   //~ E0416
+}
+
+// ---- a tuple ----
+
+pub fn tuple_with_the_wrapper_second[U: ?Dup](t: (U32, W[U])) -> U32 {
+  need_dup(t)   //~ E0416
+}
+
+pub fn tuple_with_the_wrapper_first[U: ?Dup](t: (W[U], U32)) -> U32 {
+  need_dup(t)   //~ E0416
+}
+
+pub fn tuple_of_three[U: ?Dup](t: (U32, F32, W[U])) -> U32 {
+  need_dup(t)   //~ E0416
+}
+
+pub fn tuple_of_two_wrappers[U: ?Dup](t: (W[U], W[U])) -> U32 {
+  need_dup(t)   //~ E0416
+}
+
+pub fn tuple_for_copy[U: ?Dup](t: (U32, W[U])) -> U32 {
+  need_copy(t)   //~ E0416
+}
+
+pub fn tuple_built_with_the_wrapper_first[U: ?Dup](move u: U) {
+  let t = (W { x: move u }, 1)
+  let _ = need_dup(t)   //~ E0416
+}
+
+pub fn tuple_of_a_dup_parameter_for_copy[U](t: (U32, W[U])) -> U32 {
+  need_copy(t)   //~ E0416
+}
+
+// ---- a fixed-length array ----
+
+pub fn array_of_the_wrapper[U: ?Dup](xs: [W[U]; 2]) -> U32 {
+  need_dup(xs)   //~ E0416
+}
+
+pub fn array_of_the_wrapper_for_copy[U: ?Dup](xs: [W[U]; 3]) -> U32 {
+  need_copy(xs)   //~ E0416
+}
+
+pub fn array_built_of_two_wrappers[U: ?Dup](move u: U, move v: U) {
+  let xs = [W { x: move u }, W { x: move v }]
+  let _ = need_dup(xs)   //~ E0416
+}
+
+pub fn array_of_arrays[U: ?Dup](xs: [[W[U]; 2]; 2]) -> U32 {
+  need_dup(xs)   //~ E0416
+}
+
+pub fn array_of_a_dup_parameter_for_copy[U](xs: [W[U]; 2]) -> U32 {
+  need_copy(xs)   //~ E0416
+}
+
+// ---- Option ----
+
+pub fn option_of_the_parameter[U: ?Dup](o: Option[U]) -> U32 {
+  need_dup(o)   //~ E0416
+}
+
+pub fn option_of_the_parameter_for_copy[U: ?Dup](o: Option[U]) -> U32 {
+  need_copy(o)   //~ E0416
+}
+
+pub fn option_built_with_some[U: ?Dup](move u: U) {
+  let o = Some(move u)
+  let _ = need_dup(o)   //~ E0416
+}
+
+pub fn option_without_content[U: ?Dup]() {
+  let o: Option[U] = None
+  let _ = need_dup(o)   //~ E0416
+}
+
+pub fn option_of_a_dup_parameter_for_copy[U](o: Option[U]) -> U32 {
+  need_copy(o)   //~ E0416
+}
+
+pub fn option_of_the_wrapper[U: ?Dup](o: Option[W[U]]) -> U32 {
+  need_dup(o)   //~ E0416
+}
+
+pub fn option_of_an_option[U: ?Dup](o: Option[Option[U]]) -> U32 {
+  need_dup(o)   //~ E0416
+}
+
+pub fn option_of_a_tuple[U: ?Dup](o: Option[(U32, U)]) -> U32 {
+  need_dup(o)   //~ E0416
+}
+
+pub fn option_of_an_array[U: ?Dup](o: Option[[U; 2]]) -> U32 {
+  need_dup(o)   //~ E0416
+}
+
+pub fn wrapper_of_an_option[U: ?Dup](w: W[Option[U]]) -> U32 {
+  need_dup(w)   //~ E0416
+}
+
+// ---- Result ----
+
+pub fn result_with_the_value[U: ?Dup](r: Result[U, I32]) -> U32 {
+  need_dup(r)   //~ E0416
+}
+
+pub fn result_with_the_error[U: ?Dup](r: Result[I32, U]) -> U32 {
+  need_dup(r)   //~ E0416
+}
+
+pub fn result_with_both[U: ?Dup](r: Result[U, U]) -> U32 {
+  need_dup(r)   //~ E0416
+}
+
+pub fn result_with_the_value_for_copy[U: ?Dup](r: Result[U, I32]) -> U32 {
+  need_copy(r)   //~ E0416
+}
+
+pub fn result_with_the_error_for_copy[U: ?Dup](r: Result[I32, U]) -> U32 {
+  need_copy(r)   //~ E0416
+}
+
+pub fn result_built_with_ok[U: ?Dup](move u: U) {
+  let r: Result[U, I32] = Ok(move u)
+  let _ = need_dup(r)   //~ E0416
+}
+
+pub fn result_built_with_err[U: ?Dup](move u: U) {
+  let r: Result[I32, U] = Err(move u)
+  let _ = need_dup(r)   //~ E0416
+}
+
+pub fn result_of_a_dup_parameter_for_copy[U](r: Result[I32, U]) -> U32 {
+  need_copy(r)   //~ E0416
+}
+
+pub fn result_with_the_wrapper[U: ?Dup](r: Result[W[U], I32]) -> U32 {
+  need_dup(r)   //~ E0416
+}
+
+pub fn result_in_an_option[U: ?Dup](o: Option[Result[I32, U]]) -> U32 {
+  need_dup(o)   //~ E0416
+}

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§4.6"]
+
+// R-176 (W5-20; §4.4: "`Array[Node]` は含まない"; §4.6: "Shared … `Array`、それらを含む型", "種は構造で決まる"; §4.5: "`Array[T]`・`Set[T]` の要素…は Dup
+// （Copy か Shared）に限る（E0416）"): a generic type that holds itself through an `Array` has a kind that is decided by the structure
+// whatever its content parameter is. `Rose[T] { v: T, kids: Array[Rose[T]] }` is Shared (it holds an `Array`), so `Rose[U]` is not
+// `Copy` even when `U: Copy`, and it is `Dup` with the implicit `Dup` of `U` (the function that asks for `Dup` is in
+// types/kind_recursive_types_fine.onsa). A recursive generic type whose content parameter is declared `?Dup` is Affine by that content, so
+// an `Array` of itself in its own declaration is an element that is not `Dup`: E0416 at the field or the variant. The `Copy` requirement is E0416
+// at the call. One error per item (P-01).
+
+pub struct Rose[T] {
+  v: T,
+  kids: Array[Rose[T]],
+}
+
+pub struct Chain[T: ?Dup] {
+  v: T,
+  rest: Array[Chain[T]],   //~ E0416
+}
+
+pub enum Cons[T: ?Dup] {
+  Nil,
+  Link(T, Array[Cons[T]]),   //~ E0416
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub fn rose_of_a_copy_for_copy[U: Copy](r: Rose[U]) -> U32 {
+  need_copy(r)   //~ E0416
+}
+
+pub fn rose_of_a_dup_for_copy[U](r: Rose[U]) -> U32 {
+  need_copy(r)   //~ E0416
+}

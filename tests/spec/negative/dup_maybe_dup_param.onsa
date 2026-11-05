@@ -6,9 +6,9 @@
 // (spec §4.5: "Affine 型も受け付けるには `[T: ?Dup]` と書いて、この制約を外す…その場合、`T` の値は
 // 複製できない"; §4.6: the kind is computed from the structure). So a `Wrap[U]` with `U: ?Dup`
 // meets neither the implicit `Dup` of another type parameter nor the `Dup` of the element of
-// `[e; N]` (§2.4). Today the kind of such a type is not computed and the requirement passes
-// (R-176, W5-08). Written by the implementer of W2-06 from the cases W2-06/b found. One error
-// per function (P-01).
+// `[e; N]` (§2.4). The kind of such a type is decided from the bound of the parameter in the body,
+// so the requirement is E0416 (R-176, W5-20), and in `repeated` it comes before the modes, so no `move` is asked
+// for. Written by the implementer of W2-06 from the cases W2-06/b found. One error per function (P-01).
 
 fn need_dup[T](x: T) -> T {
   x

@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6"]
+
+// R-176 (W5-20; §4.6: "Shared の部分と Affine の部分を両方含む型は Affine", "Affine … それらを含む型"; §4.5: "`Array[T]`・`Set[T]` の要素…は Dup
+// （Copy か Shared）に限る（E0416）"): a type with a part that is Affine whatever the parameter beside it is (`C[(Y, Q)]`, `Q` a struct
+// with a `Buf`; `Array[Result[Y, Q]]`) is Affine: the part that is known to be Affine decides, and the unknown `Y` is no excuse, so
+// the error is the same with `Y` declared `?Dup`, with the implicit `Dup` and with `Copy`. This is the guard of the forms that are
+// E0416 before the fix (the part decides when the rest is not known), which must stay when the kind of a type that holds a
+// parameter is decided from the bound (negative/maybe_dup_harm_forms.onsa). The error of a signature (`Array[Result[Y, Q]]` as an
+// argument, in a field) is at the type, of the types stage, so the body is not read. One error per function (P-01).
+
+pub struct C[T: ?Dup] {
+  x: T,
+}
+
+pub struct Q {
+  b: Buf[F32],
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+// ---- a part that is Affine whatever the rest is ----
+
+pub fn wrapper_of_a_tuple_with_a_buf_owner_dup[Y](c: C[(Y, Q)]) -> U32 {
+  need_dup(c)   //~ E0416
+}
+
+pub fn wrapper_of_a_tuple_with_a_buf_owner_maybe[Y: ?Dup](c: C[(Y, Q)]) -> U32 {
+  need_dup(c)   //~ E0416
+}
+
+pub fn wrapper_of_a_tuple_with_a_buf_owner_copy[Y: Copy](c: C[(Y, Q)]) -> U32 {
+  need_dup(c)   //~ E0416
+}
+
+pub fn wrapper_of_a_tuple_with_a_buf_owner_for_copy[Y: Copy](c: C[(Y, Q)]) -> U32 {
+  need_copy(c)   //~ E0416
+}
+
+pub fn wrapper_of_an_option_of_a_buf_owner[Y](c: C[Option[(Y, Q)]]) -> U32 {
+  need_dup(c)   //~ E0416
+}
+
+pub fn array_of_results_in_a_signature[Y](a: Array[Result[Y, Q]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_results_in_a_signature_maybe[Y: ?Dup](a: Array[Result[Y, Q]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_results_in_a_signature_copy[Y: Copy](a: Array[Result[Y, Q]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_results_with_the_owner_first[Y](a: Array[Result[Q, Y]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_results_in_an_annotation[Y](a: Y) -> U32 {
+  let _: Option[Array[Result[Y, Q]]] = None   //~ E0416
+  0
+}
+
+pub struct HoldsArrayOfResults[Y] {
+  a: Array[Result[Y, Q]],   //~ E0416
+}

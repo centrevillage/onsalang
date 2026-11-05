@@ -12,7 +12,7 @@ impl<'a> Checker<'a> {
     /// meet `bound`: of `Dup` and `Copy` its kind and the forms that need
     /// neither; of a number trait, that it meets none (§6.3). No candidate.
     pub(crate) fn seq_element_notes(&self, d: Diagnostic, elem: TyId, shown: &str, bound: Bound) -> Diagnostic {
-        if !matches!(bound, Bound::Dup | Bound::Copy) {
+        if !bound.is_kind_constraint() {
             return d.with_rule(format!(
                 "`{shown}` meets no number trait (`{}`, §6.3); the numbers are the integer and float types",
                 bound.name()

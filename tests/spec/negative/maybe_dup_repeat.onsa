@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.5", "§4.6", "§18.1"]
+// fixes = 0
+
+// R-176 (W5-20; §2.4: "`[e; N]`（`e` を 1 回評価して N 個に複製する。`e` は Dup 型（でなければ E0416）、`N` は定数式、§4.5）"; §4.6): the
+// element of `[e; N]` is copied, so its type must be `Dup` whatever `N` is (`[e; 1]` and a named constant too), and a type that holds a
+// type parameter declared `?Dup` is not (`W[U]` with `U: ?Dup`, §4.5). The error is E0416 at the `[e; N]`, of the types stage: it
+// comes before the modes, which would ask for a `move` (E0711) that does not help, so `fixes = 0` (the repetition of a value that is
+// moved is not a form with a candidate, R-176). The element is a struct, an enum, one inside another, a tuple, an `Option` and a
+// `Result` that hold the parameter, and the repetition is also inside another repetition's element and in a nest of calls.
+// One error per function (P-01). The bare parameter (`[u; 2]`, which is E0416 already) is in
+// negative/maybe_dup_bare_parameter.onsa.
+// The type with the implicit `Dup`, `Copy` and the closed types repeat without an error (types/maybe_dup_wrapped_fine.onsa).
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub enum Slot[T: ?Dup] {
+  Empty,
+  Full(T),
+}
+
+const N: U32 = 3
+
+pub fn repeated_struct[U: ?Dup](move u: U) {
+  let w = W { x: move u }
+  let _ = [w; 2]   //~ E0416
+}
+
+pub fn repeated_struct_argument[U: ?Dup](w: W[U]) -> U32 {
+  let _ = [w; 4]   //~ E0416
+  0
+}
+
+pub fn repeated_once[U: ?Dup](w: W[U]) -> U32 {
+  let _ = [w; 1]   //~ E0416
+  0
+}
+
+pub fn repeated_by_a_constant[U: ?Dup](w: W[U]) -> U32 {
+  let _ = [w; N]   //~ E0416
+  0
+}
+
+pub fn repeated_enum[U: ?Dup](s: Slot[U]) -> U32 {
+  let _ = [s; 2]   //~ E0416
+  0
+}
+
+pub fn repeated_enum_without_content[U: ?Dup]() -> U32 {
+  let s: Slot[U] = Slot.Empty
+  let _ = [s; 2]   //~ E0416
+  0
+}
+
+pub fn repeated_nested[U: ?Dup](w: W[W[U]]) -> U32 {
+  let _ = [w; 2]   //~ E0416
+  0
+}
+
+pub fn repeated_tuple[U: ?Dup](w: (U32, W[U])) -> U32 {
+  let _ = [w; 2]   //~ E0416
+  0
+}
+
+pub fn repeated_option[U: ?Dup](o: Option[U]) -> U32 {
+  let _ = [o; 2]   //~ E0416
+  0
+}
+
+pub fn repeated_result_value[U: ?Dup](r: Result[U, U32]) -> U32 {
+  let _ = [r; 2]   //~ E0416
+  0
+}
+
+pub fn repeated_result_error[U: ?Dup](r: Result[U32, U]) -> U32 {
+  let _ = [r; 2]   //~ E0416
+  0
+}
+
+pub fn repeated_as_an_argument[U: ?Dup](w: W[U]) -> U32 {
+  count([w; 2])   //~ E0416
+}
+
+pub fn repeated_in_a_return[U: ?Dup](w: W[U]) -> [W[U]; 2] {
+  [w; 2]   //~ E0416
+}
+
+pub fn repeated_with_a_trait[U: ?Dup + Show](w: W[U]) -> U32 {
+  let _ = [w; 2]   //~ E0416
+  0
+}
+
+pub fn count[T: ?Dup](xs: [T; 2]) -> U32 {
+  2
+}

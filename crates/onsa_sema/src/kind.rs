@@ -40,7 +40,8 @@ pub fn kind_in(a: &Analysis, ty: TyId, env: Option<&Env>) -> Option<Kind> {
 }
 
 /// The kind a value of `ty` in a body with the type parameters `generics` is
-/// taken for by the questions of the modes (R-30): a type parameter by its
+/// taken for by the questions of the modes (R-30) and by the kind constraints
+/// of the types stage (R-176, [`Bounds::meets`]): a type parameter by its
 /// bounds wherever the walk meets it (`Pair[T]` too): Copy if it meets
 /// `Copy`, Shared if `Dup`, else Affine (`?Dup`). A walk past its steps is
 /// Affine; the other walks with no answer are none and keep quiet (§18.1:

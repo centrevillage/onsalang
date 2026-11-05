@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.3", "§18.1"]
+
+// R-176 (W5-20; §4.5: "第二級の型（§5.3）か、それを中に含む型を、`?Escape`（上記）の無い型パラメータの型引数に書いた所（`W[Span[F32]]`、
+// `C[(Span[F32], F32)]`、`N[[Span[F32]; 2]]`）は位置の E0710 だけで、その型引数の要求は判定しない（第二級の型と、それを含む型は種を持たない、§4.6）"): the
+// kind of a type that holds a `?Dup` parameter is now decided in the types stage, and a second-class type has no kind, so the type
+// argument that holds a `Span` is E0710 only, and the requirement of the declaration is not judged even when the same argument holds a
+// `?Dup` parameter that would fail it (`Need[(Span[F32], U)]` with `U: ?Dup` is E0710, not E0416), whether the requirement is the
+// implicit `Dup` or `Copy`. A type argument without a second-class type has E0416 for the same parameter
+// (negative/maybe_dup_declared_requirement.onsa). This is the guard of the order, which the new check must keep. One error per
+// item (P-01).
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub struct Need[T] {
+  x: T,
+}
+
+pub struct NeedCopy[T: Copy] {
+  x: T,
+}
+
+pub fn span_for_the_wrapper(w: W[Span[F32]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn span_and_the_parameter_for_dup[U: ?Dup](n: Need[(Span[F32], U)]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn span_and_the_parameter_for_copy[U: ?Dup](n: NeedCopy[(Span[F32], U)]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn span_and_the_wrapper_for_dup[U: ?Dup](n: Need[(Span[F32], W[U])]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn span_in_an_array_for_dup[U: ?Dup](n: Need[[Span[F32]; 2]]) -> U32 {   //~ E0710
+  0
+}
+
+pub fn span_in_an_option_beside_the_parameter[U: ?Dup](n: Need[Option[(Span[F32], U)]]) -> U32 {   //~ E0710
+  0
+}

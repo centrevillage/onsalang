@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§4.5", "§18.1"]
+
+// R-176 (W5-20; §18.1: "誤りのある宣言も、名前まで読めれば名前解決に見せる。読めなかった部分（引数の型、フィールドなど）は誤りの型として扱い、それを使う側には診断を出さない"): a type
+// that has a part that was not read (a field or a variant of a type that was not found, E0302) has no kind to judge, so a use of it
+// does not get an E0416 for the implicit `Dup`, for `T: Copy`, or for the element of `[e; N]`, and neither does a type that holds
+// it (a user type, a tuple, an array, an `Option`, a `Result`). The kind of a type that holds a `?Dup` parameter is decided in the
+// types stage now, and this silence must stay: the errors are the E0302 of the declarations and of the signature that names a type
+// that was not found (the unit of it stops), and the uses are silent. One error per item (P-01).
+// The types that hold a part that was not read and a `?Dup` parameter are not here (a gap, reported with the case).
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub struct Bad {
+  x: Gone,   //~ E0302
+}
+
+pub enum BadVariant {
+  A(Gone),   //~ E0302
+  B,
+}
+
+type BadAlias = Gone   //~ E0302
+
+pub fn from_a_name_that_is_not_found(x: Gone) -> U32 {   //~ E0302
+  0
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub fn struct_for_dup(b: Bad) -> U32 {
+  need_dup(b)
+}
+
+pub fn struct_for_copy(b: Bad) -> U32 {
+  need_copy(b)
+}
+
+pub fn struct_repeated(b: Bad) -> [Bad; 2] {
+  [b; 2]
+}
+
+pub fn enum_for_copy(b: BadVariant) -> U32 {
+  need_copy(b)
+}
+
+pub fn enum_repeated(b: BadVariant) -> [BadVariant; 2] {
+  [b; 2]
+}
+
+pub fn alias_for_copy(b: BadAlias) -> U32 {
+  need_copy(b)
+}
+
+pub fn in_the_wrapper_for_copy(w: W[Bad]) -> U32 {
+  need_copy(w)
+}
+
+pub fn in_a_tuple_for_copy(t: (U32, Bad)) -> U32 {
+  need_copy(t)
+}
+
+pub fn in_an_array_for_copy(xs: [Bad; 2]) -> U32 {
+  need_copy(xs)
+}
+
+pub fn in_an_option_for_copy(o: Option[Bad]) -> U32 {
+  need_copy(o)
+}
+
+pub fn in_a_result_for_copy(r: Result[Bad, I32]) -> U32 {
+  need_copy(r)
+}
+
+pub fn in_a_result_error_for_dup(r: Result[I32, BadVariant]) -> U32 {
+  need_dup(r)
+}
+
+pub fn in_a_wrapper_in_a_wrapper_for_copy(w: W[W[Bad]]) -> U32 {
+  need_copy(w)
+}

@@ -48,6 +48,13 @@ pub fn dump_type(ast: &Ast, id: TypeId) -> String {
     d.out
 }
 
+/// The type arguments of a heading in their brackets, nothing when there are none.
+pub fn dump_type_args(ast: &Ast, args: &[TypeId]) -> String {
+    let mut d = Dumper::compare(ast);
+    d.type_args(args);
+    d.out
+}
+
 /// How a dump writes a float literal: its text (`1.0e3`, the dump of the
 /// tests and of `onsa dump --ast`), or its exact value, one for every
 /// spelling of it (`spec/tools.md` §3.5, [`crate::literal::float_key`]).
@@ -418,7 +425,6 @@ impl<'a> Dumper<'a> {
         self.out.push_str(&")".repeat(n));
     }
 
-    /// A type with the parentheses written around it.
     fn type_args(&mut self, args: &[TypeId]) {
         if !args.is_empty() {
             self.out.push('[');
@@ -427,6 +433,7 @@ impl<'a> Dumper<'a> {
         }
     }
 
+    /// A type with the parentheses written around it.
     fn ty(&mut self, id: TypeId) {
         self.wrapped(self.ast.ty(id).parens, |d| d.ty_kind(id));
     }

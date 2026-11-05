@@ -15,7 +15,7 @@ use onsa_diag::Span;
 
 use crate::Parsed;
 use crate::ast::{Ast, Block, ExprKind, ImplDecl, ItemId, ItemKind};
-use crate::dump::{dump_item, dump_stmt, dump_type};
+use crate::dump::{dump_item, dump_stmt, dump_type, dump_type_args};
 use crate::fmt::rewrites::Choices;
 use crate::lexer::comment_text;
 
@@ -53,8 +53,7 @@ fn key(ast: &Ast, id: ItemId) -> String {
             ItemKind::Impl(ImplDecl { generics: _, trait_, trait_args, self_ty, items: _ }) => match trait_ {
                 Some(t) => {
                     let names: Vec<&str> = t.segments.iter().map(|s| s.name.as_str()).collect();
-                    let args: Vec<String> = trait_args.iter().map(|&a| dump_type(ast, a)).collect();
-                    let args = if args.is_empty() { String::new() } else { format!("[{}]", args.join(", ")) };
+                    let args = dump_type_args(ast, trait_args);
                     format!("impl {}{args} for {}", names.join("."), dump_type(ast, *self_ty))
                 }
                 None => format!("impl {}", dump_type(ast, *self_ty)),

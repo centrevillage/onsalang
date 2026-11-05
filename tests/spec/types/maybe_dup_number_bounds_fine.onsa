@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§6.3"]
+
+// R-176 (W5-20; §6.3: "`AnyNum` は…`Copy` `Add` … を満たし", "`Num: AnyNum`、`Float: Num`、`Int: AnyNum`、`Unsigned: Int`"; §4.5: "数の trait は全て `Copy` を要する"): a
+// type parameter whose bound is a number trait is Copy, so a user type that holds it is Copy (`W[U]` meets `T: Copy` and the
+// implicit `Dup`), through every number trait of §6.3: `AnyNum`, `Num`, `Float`, `Int`, `Unsigned`, and with a trait beside it. The
+// bounds `AnyNum`, `Int` and `Unsigned` are E0200 in this version (the number traits and their constants are W5-05), so this case
+// waits for it; `Num` and `Float` are in types/maybe_dup_wrapped_fine.onsa.
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 {
+  0
+}
+
+pub fn need_dup[T](x: T) -> U32 {
+  0
+}
+
+pub fn any_num_struct[U: AnyNum](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn any_num_option[U: AnyNum](o: Option[U]) -> U32 {
+  need_copy(o)
+}
+
+pub fn any_num_repeated[U: AnyNum](w: W[U]) -> [W[U]; 2] {
+  [w; 2]
+}
+
+pub fn int_struct[U: Int](w: W[U]) -> U32 {
+  need_copy(w)
+}
+
+pub fn int_tuple[U: Int](t: (U32, W[U])) -> U32 {
+  need_copy(t)
+}
+
+pub fn unsigned_result[U: Unsigned](r: Result[U, I32]) -> U32 {
+  need_copy(r)
+}
+
+pub fn unsigned_for_dup[U: Unsigned](w: W[U]) -> U32 {
+  need_dup(w)
+}
+
+pub fn any_num_with_a_trait[U: AnyNum + Show](w: W[U]) -> U32 {
+  need_copy(w)
+}

@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§18.1"]
+
+// R-176 (W5-20; §4.5: "`Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る（E0416）", "`Array[T]`・`Set[T]` の要素と `Map[K, V]` の鍵と値は Dup（Copy か Shared）に限る（E0416…）",
+// "型の位置…に書いた型引数は…満たさなければ E0416"): the element of a built-in container is checked by the kind of the element, and
+// an element that holds a `?Dup` parameter is not `Dup` (`Array`, `Map` value) or `Copy` (`Buf`, `Span`): a user type, a tuple, an
+// array, an `Option` and a `Result` that hold it. A parameter with the implicit `Dup` is `Dup` but not `Copy`, so the same user type
+// is right as an `Array` element and E0416 as a `Buf` or `Span` element (types/maybe_dup_wrapped_fine.onsa has it with `Copy`). The
+// error is at the type, in an argument, a return type, a type inside a type, a field, a variant and an annotation in a body, and
+// it is of the types stage, so the body is not read. One error per item (P-01).
+
+pub struct W[T: ?Dup] {
+  x: T,
+}
+
+pub fn array_of_the_wrapper[U: ?Dup](a: Array[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_the_option[U: ?Dup](a: Array[Option[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_a_tuple[U: ?Dup](a: Array[(U32, U)]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_an_array[U: ?Dup](a: Array[[U; 2]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_a_result[U: ?Dup](a: Array[Result[I32, U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_of_the_nested_wrapper[U: ?Dup](a: Array[W[W[U]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn array_returned[U: ?Dup](move w: W[U]) -> Array[W[U]] {   //~ E0416
+  panic("never")
+}
+
+pub fn map_value_is_the_wrapper[U: ?Dup](m: Map[Str, W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn map_value_is_the_option[U: ?Dup](m: Map[Str, Option[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_of_the_wrapper[U: ?Dup](b: Buf[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_of_the_wrapper_with_a_dup_parameter[U](b: Buf[W[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_of_the_option_with_a_dup_parameter[U](b: Buf[Option[U]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn buf_of_a_tuple_with_a_dup_parameter[U](b: Buf[(U32, U)]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn span_of_the_wrapper[U: ?Dup](s: Span[W[U]]) -> U32 {   //~ E0416
+  s.len()
+}
+
+pub fn span_of_the_wrapper_with_a_dup_parameter[U](s: Span[W[U]]) -> U32 {   //~ E0416
+  s.len()
+}
+
+pub fn inside_a_tuple[U: ?Dup](t: (U32, Array[W[U]])) -> U32 {   //~ E0416
+  0
+}
+
+pub fn inside_an_option[U: ?Dup](o: Option[Array[W[U]]]) -> U32 {   //~ E0416
+  0
+}
+
+pub fn in_a_body_annotation[U: ?Dup](o: Option[U]) -> U32 {
+  let _: Option[Array[W[U]]] = None   //~ E0416
+  0
+}
+
+pub struct HoldsArray[U: ?Dup] {
+  a: Array[W[U]],   //~ E0416
+}
+
+pub struct HoldsBuf[U] {
+  b: Buf[W[U]],   //~ E0416
+}
+
+pub enum VariantWithArray[U: ?Dup] {
+  One(Array[Option[U]]),   //~ E0416
+  Two,
+}
