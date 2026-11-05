@@ -32,6 +32,8 @@ macro_rules! phases {
 phases! {
     /// The lexer and the parser (CST and AST), of the user's files and std.
     Syntax "syntax",
+    /// The std embedded in the compiler read back, once in a process (W5-19).
+    Base "base",
     /// The names of the modules and of the bodies.
     Names "names",
     /// The signatures and the generated items.

@@ -205,6 +205,22 @@ fn bytes_that_are_no_base_are_an_error() {
     assert!(matches!(Base::decode(&more), Err(BaseError::Trailing(3))));
 }
 
+/// The head of the bytes, and the bytes that are a head alone (W5-19).
+#[test]
+fn the_head_tells_another_compiler_and_no_base() {
+    let mark = Base::unusable_bytes().expect("the head writes");
+    assert!(matches!(Base::decode(&mark), Err(BaseError::Unusable)));
+    let (_, base) = self::base();
+    let bytes = base.lock().unwrap().encode().expect("the base writes");
+    assert_eq!(bytes[..mark.len()], mark, "a base begins with the head");
+    for i in 0..mark.len() {
+        // The low bit of a byte of a varint: a head of another value.
+        let mut other = bytes.clone();
+        other[i] ^= 1;
+        assert!(matches!(Base::decode(&other), Err(BaseError::OtherHead)), "byte {i}");
+    }
+}
+
 #[test]
 fn a_package_that_is_not_the_embedded_std_is_not_written() {
     let (std, _) = base();

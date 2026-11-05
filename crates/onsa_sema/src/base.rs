@@ -5,13 +5,19 @@
 //! package writes in std's tables (an `impl` of a builtin type or of a std
 //! type): there it falls back to the fresh one ([`Fallback`]).
 
+use std::hash::BuildHasher;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use onsa_diag::FileId;
+use onsa_diag::hash::{FxBuild, with_seed};
+use onsa_diag::timing::{Phase, phase};
+use onsa_diag::{FileId, SharedFiles};
 use onsa_syntax::ParsedAst;
 use serde::{Deserialize, Serialize};
 
-use crate::{Analysis, DefId, DefKind, ModId, Module, Package, PackageRole, analyze, flatten, run, std_modules};
+use crate::{
+    Analysis, DefId, DefKind, ModId, Module, Package, PackageRole, STD_PACKAGE, analyze, flatten, parse_file, run,
+    std_modules,
+};
 
 /// Where the stages start in an analysis (D-15): what is before is of the
 /// base it continues, each stage done; all of a fresh one is after. Its
@@ -72,6 +78,28 @@ pub enum BaseError {
     Trailing(usize),
     /// The modules read are not those of the embedded std.
     OtherModules,
+    /// The head of the bytes is not this compiler's.
+    OtherHead,
+}
+
+/// The version of the form of the bytes, raised when what [`Base::encode`]
+/// writes changes other than through the derived `Serialize` of its types.
+const FORMAT: u32 = 1;
+
+/// What the bytes of a base begin with: the compiler that wrote them, as far
+/// as a reader can tell. A build writes them with the code and the std it
+/// compiles, so that another head is an error of the build.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Head {
+    format: u32,
+    /// The hash of the embedded std, with the seed 0.
+    std: u64,
+}
+
+impl Head {
+    fn now() -> Head {
+        Head { format: FORMAT, std: with_seed(0, || FxBuild::default().hash_one(std_modules())) }
+    }
 }
 
 /// std analyzed alone, which the analyses of the packages that depend on it
@@ -101,8 +129,8 @@ impl Base {
         Base { std, analysis: clean.then_some(a) }
     }
 
-    /// The bytes [`Base::decode`] reads: each module but its text and its
-    /// tree, and the analysis. A table is written in the order of its
+    /// The bytes [`Base::decode`] reads: a head, each module but its text
+    /// and its tree, and the analysis. A table is written in the order of its
     /// entries, so the bytes are the same from tables of the same seed
     /// ([`onsa_diag::hash::with_seed`]), and another seed reads them.
     pub fn encode(&self) -> Result<Vec<u8>, BaseError> {
@@ -111,7 +139,13 @@ impl Base {
         }
         let Some(analysis) = &self.analysis else { return Err(BaseError::Unusable) };
         let modules: Vec<_> = self.std.modules.iter().map(|m| (&m.segments, m.file, &m.parsed)).collect();
-        postcard::to_stdvec(&(modules, analysis)).map_err(BaseError::Format)
+        postcard::to_stdvec(&(Head::now(), modules, analysis)).map_err(BaseError::Format)
+    }
+
+    /// The bytes that say std alone gives no base, a head alone:
+    /// [`Base::decode`] answers [`BaseError::Unusable`] to them.
+    pub fn unusable_bytes() -> Result<Vec<u8>, BaseError> {
+        postcard::to_stdvec(&Head::now()).map_err(BaseError::Format)
     }
 
     /// The base [`Base::encode`] wrote and its std, the texts of the modules
@@ -120,7 +154,14 @@ impl Base {
     /// ([`Base::copy_for`]).
     pub fn decode(bytes: &[u8]) -> Result<(Arc<Package>, Base), BaseError> {
         type Written = (Vec<(Vec<String>, FileId, ParsedAst)>, Analysis);
-        let ((parts, analysis), rest): (Written, _) = postcard::take_from_bytes(bytes).map_err(BaseError::Format)?;
+        let (head, written): (Head, _) = postcard::take_from_bytes(bytes).map_err(BaseError::Format)?;
+        if head != Head::now() {
+            return Err(BaseError::OtherHead);
+        }
+        if written.is_empty() {
+            return Err(BaseError::Unusable);
+        }
+        let ((parts, analysis), rest): (Written, _) = postcard::take_from_bytes(written).map_err(BaseError::Format)?;
         if !rest.is_empty() {
             return Err(BaseError::Trailing(rest.len()));
         }
@@ -158,6 +199,47 @@ impl Base {
         let mut a = base.clone();
         a.start = Start { pkgs: a.modules.roots.len(), mods: a.modules.mods.len() as u32, defs: a.defs.len() as u32 };
         Some(a)
+    }
+}
+
+/// The files of the embedded std, the same in every analysis of a process.
+/// The ids in a base are theirs: [`SharedFiles::new`] numbers them in the
+/// order of [`std_modules`].
+pub fn std_files() -> SharedFiles {
+    SharedFiles::new(std_modules().iter().map(|m| (format!("{STD_PACKAGE}/{}", m.file), m.text.into())))
+}
+
+/// The embedded std of `files` parsed, and its base.
+pub fn fresh_std(files: &SharedFiles) -> (Arc<Package>, Base) {
+    let modules = files
+        .files()
+        .zip(std_modules())
+        .map(|((file, f), m)| {
+            let segments = m.segments.iter().map(|s| s.to_string()).collect();
+            Module::new(segments, file, m.text.to_string(), parse_file(file, f.text()))
+        })
+        .collect();
+    let std = Arc::new(Package::std(modules));
+    (std.clone(), Base::new(std))
+}
+
+/// The bytes a build embeds in the compiler (the build script of
+/// `onsa_driver`): those of the base of the embedded std. The seed 0 makes
+/// them the same in every build, and [`read_std`] reads them with any seed.
+pub fn std_bytes() -> Result<Vec<u8>, BaseError> {
+    with_seed(0, || fresh_std(&std_files()).1.encode())
+}
+
+/// The std embedded in the compiler and its base, from the bytes of a build
+/// ([`std_bytes`], [`Base::unusable_bytes`]). None when they say that std
+/// gives no base. Bytes of another build or that do not read are an internal
+/// error: [`fresh_std`] would work, and the compiler would stay wrong.
+pub fn read_std(bytes: &[u8]) -> Option<(Arc<Package>, Base)> {
+    let _base = phase(Phase::Base);
+    match Base::decode(bytes) {
+        Ok(read) => Some(read),
+        Err(BaseError::Unusable) => None,
+        Err(e) => onsa_diag::internal::bug(None, format!("the std embedded in the compiler does not read: {e:?}")),
     }
 }
 

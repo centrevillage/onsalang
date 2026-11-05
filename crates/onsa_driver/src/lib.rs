@@ -40,7 +40,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use onsa_diag::timing::{Phase, phase};
 use onsa_diag::{Diagnostic, FileId, SharedFiles, SourceMap, Span};
-use onsa_sema::{Module, Package};
+use onsa_sema::{Module, Package, parse_file};
 
 /// The embedded standard library: its package name, version and modules
 /// (generated from `std/`, R-80 (4)).
@@ -52,11 +52,16 @@ pub struct CheckResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// The embedded std parsed once in the process (X-20 E (i)): its files are
-/// the same [`SharedFiles`] in every check, so its parse, made with their
-/// ids, is valid in each. With it, its analysis alone, which every check
-/// continues (W5-18). The parse and that analysis are counted in the phases
-/// of the check that makes them, the first of the process.
+/// What the build made of the embedded std (`build.rs`, W5-19).
+const EMBEDDED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std_base.bin"));
+
+/// The embedded std made once in the process (X-20 E (i)): its files are the
+/// same [`SharedFiles`] in every check, so its modules, made with their ids,
+/// are valid in each. With it, its analysis alone, which every check
+/// continues (W5-18). Both are read back from what the build made, with no
+/// tree in the modules; when std has a diagnostic the build says so, and they
+/// are made here. The time is counted in the phases of the check that makes
+/// them, the first of the process.
 struct Std {
     files: SharedFiles,
     package: Arc<Package>,
@@ -69,25 +74,20 @@ const _: () = {
     shared::<Std>()
 };
 
-/// [`Std`], made by the first check of the process. A panic of the parse or
-/// of the analysis leaves it unmade (`OnceLock`): the next check makes it again.
+impl Std {
+    /// The std of `embedded`, the bytes of a build.
+    fn new(embedded: &[u8]) -> Std {
+        let files = onsa_sema::std_files();
+        let (package, base) = onsa_sema::read_std(embedded).unwrap_or_else(|| onsa_sema::fresh_std(&files));
+        Std { files, package, base: Mutex::new(base) }
+    }
+}
+
+/// [`Std`], made by the first check of the process. A panic while it is made
+/// leaves it unmade (`OnceLock`): the next check makes it again.
 fn std_parsed() -> &'static Std {
     static STD: OnceLock<Std> = OnceLock::new();
-    STD.get_or_init(|| {
-        let files =
-            SharedFiles::new(std_modules().iter().map(|m| (format!("{STD_PACKAGE}/{}", m.file), m.text.into())));
-        let modules = files
-            .files()
-            .zip(std_modules())
-            .map(|((file, f), m)| {
-                let segments = m.segments.iter().map(|s| s.to_string()).collect();
-                Module::new(segments, file, m.text.to_string(), parse_file(file, f.text()))
-            })
-            .collect();
-        let package = Arc::new(Package::std(modules));
-        let base = Mutex::new(onsa_sema::Base::new(package.clone()));
-        Std { files, package, base }
-    })
+    STD.get_or_init(|| Std::new(EMBEDDED))
 }
 
 /// The std of every check ([`std_parsed`]), its files attached to `sources`.
@@ -106,13 +106,6 @@ fn std_package(sources: &mut SourceMap) -> Arc<Package> {
 /// lists it once (it compares the `Arc`s).
 fn package_graph(name: &str, modules: Vec<Module>, std: &Arc<Package>) -> Package {
     Package::new(name, modules, vec![std.clone()])
-}
-
-/// Parse one file; a panic names the file (S-67).
-fn parse_file(file: FileId, text: &str) -> onsa_syntax::Parsed {
-    let _syntax = phase(Phase::Syntax);
-    let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
-    onsa_syntax::parse(file, text)
 }
 
 /// Check a loaded package. `std` is attached to `sources`. With a file passed

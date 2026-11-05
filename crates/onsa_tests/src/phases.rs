@@ -76,7 +76,8 @@ mod tests {
     use onsa_diag::timing::Phase;
 
     /// Every phase is entered by the check and the lowering of a package
-    /// with a flow, and the phases add up to at most the whole.
+    /// with a flow, and the phases add up to at most the whole. The std is
+    /// read back once in a process, maybe by another test.
     #[test]
     fn a_lowered_flow_enters_every_phase() {
         let src = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  let y = x + 0.5 * prev~(^y)\n  y\n}\n\n\
@@ -84,7 +85,8 @@ mod tests {
         let input = PackageInput::single_file("m.onsa", src);
         let (outcome, t) = measure(&input, true, 2).unwrap();
         assert_eq!(outcome, Outcome::Lowered);
-        let missed: Vec<&str> = t.phases.iter().filter(|p| p.2 == 0).map(|p| p.0.name()).collect();
+        let missed: Vec<&str> =
+            t.phases.iter().filter(|p| p.2 == 0 && p.0 != Phase::Base).map(|p| p.0.name()).collect();
         assert!(missed.is_empty(), "not entered: {missed:?}");
         assert_eq!(t.phases.iter().map(|p| p.0).collect::<Vec<_>>(), Phase::ALL);
         assert!(t.phases.iter().map(|p| p.1).sum::<Duration>() <= t.total, "{t:?}");

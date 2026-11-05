@@ -77,11 +77,12 @@ mod ty_tests;
 use std::sync::Arc;
 
 use onsa_diag::hash::{HashMap, HashSet};
-use onsa_diag::{Diagnostic, FileId};
+use onsa_diag::timing::{Phase, phase};
+use onsa_diag::{Diagnostic, FileId, Span};
 use onsa_syntax::{Parsed, ParsedAst, Tree};
 use serde::{Deserialize, Serialize};
 
-pub use base::{Base, BaseError, analyze_on};
+pub use base::{Base, BaseError, analyze_on, fresh_std, read_std, std_bytes, std_files};
 pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
 /// The names of the builtin methods and associated items (for the gate, Q-14).
 pub use builtin::names as builtin_member_names;
@@ -121,6 +122,13 @@ impl Module {
     pub fn path(&self) -> String {
         self.segments.join(".")
     }
+}
+
+/// Parse one file; a panic names the file (S-67).
+pub fn parse_file(file: FileId, text: &str) -> Parsed {
+    let _syntax = phase(Phase::Syntax);
+    let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
+    onsa_syntax::parse(file, text)
 }
 
 /// Which package the driver loaded: the embedded std or an ordinary one
@@ -169,7 +177,7 @@ pub const STD_PACKAGE: &str = "std";
 pub const STD_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// One module of the embedded std.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StdModule {
     /// The module path under `std`, a name for each part: `["dsp", "test"]`.
     pub segments: &'static [&'static str],

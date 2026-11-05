@@ -19,6 +19,13 @@ serde_json.workspace = true
 toml_edit.workspace = true
 serde.workspace = true
 
+# The build script makes the base of the embedded std with the analysis of the
+# compiler it builds (W5-19).
+[build-dependencies]
+onsa_workspace_hack.workspace = true
+onsa_diag.workspace = true
+onsa_sema.workspace = true
+
 [lints]
 workspace = true
 

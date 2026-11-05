@@ -146,6 +146,29 @@ fn compare(what: &str, pkg: &Package) -> bool {
     on.continues()
 }
 
+/// The std as it is without the bytes of the build: parsed here, as when
+/// std has a diagnostic (the mark the build embeds then).
+fn parsed_std() -> &'static Std {
+    static STD: OnceLock<Std> = OnceLock::new();
+    STD.get_or_init(|| Std::new(&onsa_sema::Base::unusable_bytes().expect("the head writes")))
+}
+
+/// `pkg` on the std read back and on the std parsed here give the same, the
+/// analysis fresh in both, as a package that falls back is (W5-19): the
+/// diagnostics, the defs, the exports and the Core.
+fn compare_stds(what: &str, pkg: &Package) {
+    let again = |m: &Module| Module::new(m.segments.clone(), m.file, m.text.clone(), parse_file(m.file, &m.text));
+    let modules = pkg.modules.iter().map(again).collect();
+    let parsed = Package::new(pkg.name.clone(), modules, vec![parsed_std().package.clone()]);
+    let (a, b) = (onsa_sema::analyze(pkg), onsa_sema::analyze(&parsed));
+    let shown = |a: &onsa_sema::Analysis| format!("{:?}", (&a.diagnostics, &a.path_diagnostics, &a.defs));
+    assert_eq!(shown(&a), shown(&b), "{what}");
+    assert_eq!(a.exports(), b.exports(), "{what}: the exports");
+    if pkg.modules.iter().all(|m| m.parsed.diagnostics.is_empty()) && a.diagnostics.is_empty() {
+        assert_eq!(core_text(pkg, &a), core_text(&parsed, &b), "{what}: the Core");
+    }
+}
+
 /// Every `.onsa` under `dir`, sorted.
 fn onsa_files(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
@@ -239,6 +262,70 @@ fn a_check_continues_the_base() {
     assert!(!analyzed.analysis.continues());
     let fresh = onsa_sema::analyze(&analyzed.pkg);
     assert_eq!(format!("{:?}", analyzed.analysis.diagnostics), format!("{:?}", fresh.diagnostics));
+}
+
+/// The bytes in the compiler are those the code and the std of this build
+/// make (W5-19): the build ran on them, with nothing of its own.
+#[test]
+fn the_embedded_bytes_are_those_made_now() {
+    let now = onsa_diag::stack::run(onsa_sema::std_bytes).expect("the base writes");
+    assert!(EMBEDDED == now.as_slice(), "{} bytes embedded, {} made now", EMBEDDED.len(), now.len());
+}
+
+/// A check reads std back, with no tree, and no parse of it (a tree is what
+/// [`onsa_sema::Base::decode`] alone leaves out). Its time is the phase.
+#[test]
+fn a_check_reads_std_back() {
+    let std = std_parsed();
+    assert!(!std.package.modules.is_empty() && std.package.modules.iter().all(|m| m.tree.is_none()));
+    let (_, times) = onsa_diag::timing::record(|| Std::new(EMBEDDED));
+    let entered = |phase| times.phases.iter().find(|p| p.0 == phase).map(|p| p.2);
+    assert_eq!((entered(Phase::Base), entered(Phase::Syntax)), (Some(1), Some(0)), "{times:?}");
+}
+
+/// The mark of a build whose std has a diagnostic: std is made here, parsed,
+/// and a check continues its base.
+#[test]
+fn with_the_mark_std_is_made_here() {
+    let std = parsed_std();
+    assert!(std.package.modules.iter().all(|m| m.tree.is_some()));
+    let (pkg, _) = made(&[("m.onsa", "pub fn f() -> I32 {\n  1\n}\n")]);
+    let on = Package::new("m", Vec::new(), vec![std.package.clone()]);
+    assert!(onsa_sema::analyze_on(&on, &std.base).continues());
+    compare_stds("no module", &on);
+    compare_stds("one module", &pkg);
+}
+
+/// Bytes of another build, or that do not read, are the compiler's error:
+/// no analysis of std here hides them.
+#[test]
+fn bytes_that_do_not_read_are_an_internal_error() {
+    let mut other = EMBEDDED.to_vec();
+    other[0] ^= 1;
+    for bytes in [other.as_slice(), &EMBEDDED[..EMBEDDED.len() / 2], &[]] {
+        let e = guard(|| Std::new(bytes)).err().expect("an internal error");
+        assert!(e.message.contains("does not read"), "{e:?}");
+    }
+}
+
+/// A package on the std read back is the one on std parsed, among them those
+/// that fall back, which run every stage on what was read (W5-19).
+#[test]
+fn a_std_read_back_is_the_one_parsed() {
+    let started = Instant::now();
+    onsa_diag::stack::run(|| {
+        for (what, pkg) in &drawn() {
+            compare_stds(what, pkg);
+        }
+        for (what, files, continues) in MADE {
+            let (pkg, _) = made(files);
+            let on = onsa_sema::analyze_on(&pkg, &std_parsed().base);
+            assert_eq!(on.continues(), *continues, "{what}: continues");
+            compare_stds(what, &pkg);
+        }
+        assert!(MADE.iter().any(|m| !m.2), "no input falls back");
+    });
+    eprintln!("a_std_read_back_is_the_one_parsed: {:?}", started.elapsed());
 }
 
 /// The seed of the hash of sema's tables (W5-18 B1, `onsa_diag::hash`)
