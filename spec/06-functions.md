@@ -116,7 +116,7 @@ impl Describe for Point {
 - 等値・順序・ハッシュの約束: `PartialEq` の `==` は対称で推移的（浮動小数の NaN は自分とも等しくない）。`Eq` は加えて反射的（`a == a`）。`PartialOrd` の大小は `==` と矛盾しない。`Ord` は `Eq` と矛盾しない全順序である。`Hash` は、`==` で等しい値に等しいハッシュを与える。
   derive した実装と組込み型の実装はこれを満たす。利用者の `impl` もこれを守る（コンパイラは検査しない。破ると、ソートや `Map` / `Set` の結果が未規定になるが、メモリの安全は損なわない）。
 - trait の宣言の頭に `: trait + trait` と書くと、その trait を実装する型が先に満たすべき trait（上位の trait）になる（`pub trait Ord: PartialOrd + Eq`）。境界（§4.5）と derive（§6.4）と同じく「左の型が右の trait を満たす」と読む。上位の trait を満たさない型への `impl` は E0416。
-  `T: Ord` の境界からは、上位の trait（`PartialOrd`、`Eq`、`PartialEq`）も使える。
+  標準 trait の上位の trait は `Eq: PartialEq`、`PartialOrd: PartialEq`、`Ord: PartialOrd + Eq` である（数の trait は次の項）。`Hash` は上位の trait を持たない。`T: Ord` の境界からは、上位の trait（`PartialOrd`、`Eq`、`PartialEq`）も使える。
 - 数の trait は次の 5 つで、上位の trait の関係は `Num: AnyNum`、`Float: Num`、`Int: AnyNum`、`Unsigned: Int` である。
   - `AnyNum` は、符号なしを含む全ての数を表す。`Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元。浮動小数では `+0.0` で、`-0.0 + ZERO` は `+0.0` になる、§3.4）を持つ。
     符号なし整数の引き算が 0 を下回ると、具体的な型と同じく実行時に panic する（§3.4）。`Copy` を含めるのは、数を値として扱い、総称の数値のコードで `Copy` を重ねて書かずに済むようにするためである（`Copy` の無い `T` の破棄は `Alloc` を要する、下記）。
@@ -175,7 +175,8 @@ pub struct Key: PartialEq + Eq + Hash + Show {
 
 - 書く位置は、名前（と型パラメータ）の後で本体の `{` の前（`pub enum Shape: PartialEq {`、`pub struct Ring[T, const N: U32]: PartialEq {`）。
 - 書けるのは `PartialEq Eq PartialOrd Ord Hash Show Default Ordinal` の閉じた一覧だけ（一覧に無い trait は E0416 で、手で `impl` を書くことを note で示す。種の制約の `Copy` と `Dup` は E0020、§4.6）。
-  `Eq` は `PartialEq` を、`Ord` は `PartialOrd` と `Eq` を要求する。各フィールド（列挙子の中身）の型がその trait を満たさなければ E0416。struct の `Default` は、各フィールドの既定値を並べたものである。enum には `Default` を並べられない（E0416）。
+  並べた trait の上位の trait（§6.3）は、型がまだ満たしていなければ一緒に生成する（`struct P: Ord` は `PartialEq` `Eq` `PartialOrd` `Ord` を実装する。手で実装した上位の trait は生成しない）。上位の trait も並べてよい（境界の含意で重なる形と同じ、§4.5）。`onsa interface` は、上位の trait を含めて実装する trait の全てをこの一覧の順で表示する。
+  各フィールド（列挙子の中身）の型が生成する trait を満たさなければ E0416。struct の `Default` は、各フィールドの既定値を並べたものである。enum には `Default` を並べられない（E0416）。
   どの列挙子を既定にするかを宣言の順に頼らず、`impl Default for Mode { fn default() -> Mode { Mode.Off } }` と手で書く。総称の型（`struct Pair[T]: PartialEq`）は、型引数が満たすときだけ満たす。
 - 並べた trait は全て自動で生成する。手で実装するときは `impl Tr for Ty` と書き、宣言には並べない（両方に書くと E0304）。
 - 生成する実装の意味: `PartialEq` / `Eq` は、全てのフィールド（enum は列挙子と中身）が等しいとき等しい。`PartialOrd` / `Ord` は、struct ではフィールドの宣言順の辞書式（タプルと同じ規則で、NaN の扱いも同じ、§6.3）、enum では列挙子の宣言順（先に書いたものが小さい）で、同じ列挙子なら中身の辞書式である。
