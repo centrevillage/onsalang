@@ -30,7 +30,8 @@ macro_rules! phases {
 }
 
 phases! {
-    /// The lexer and the parser (CST and AST), of the user's files and std.
+    /// The lexer and the parser (CST and AST), of the user's files, and of std
+    /// when no base of it is embedded.
     Syntax "syntax",
     /// The std embedded in the compiler read back, once in a process (W5-19).
     Base "base",
