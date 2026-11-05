@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): the type of a constant of a generic `impl` read by an alias is the declared type with the
+// arguments of the alias put in, and is checked against the expected type like any other (§4.7: "期待型があればそれに対して
+// 検査し"). `WF.Z` is an `Option[F32]`, so an `Option[I32]` is not the same type: E0401, as for any value. The
+// value `R4.CAP` is a `U32`, so an `I32` is not its type either. One error per function (P-01).
+
+pub struct W[T] {
+  x: T,
+}
+
+impl[T: Copy] W[T] {
+  pub const Z: Option[T] = None
+  pub const TAGGED: (Option[T], U32) = (None, 1)
+}
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+type WF = W[F32]
+type R4 = Rg[F32, 4]
+
+fn take_i32(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn other_option_in_a_let() {
+  let z: Option[I32] = WF.Z                         //~ E0401
+  let _ = z
+}
+
+pub fn other_option_as_an_argument() -> I32 {
+  take_i32(WF.Z)                                    //~ E0401
+}
+
+pub fn other_option_in_a_tuple() {
+  let t: (Option[I32], U32) = WF.TAGGED             //~ E0401
+  let _ = t
+}
+
+pub fn the_value_is_not_an_i32() {
+  let c: I32 = R4.CAP                               //~ E0401
+  let _ = c
+}

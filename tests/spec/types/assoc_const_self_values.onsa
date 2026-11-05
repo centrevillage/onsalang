@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§4.4", "§4.5", "§6.2", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): inside the `impl`, `Self` is the type with its arguments the parameters of the `impl`
+// (§2.2: "総称の `impl` では、型引数を `impl` の型パラメータに決めた型を指す"; §4.4: `Self.N` is the alias's path), so
+// `Self.CAP` is the `N` of the type of the value that the method is called on, and `Self.CAP + 1` is one more.
+// The same method gives different values for different arguments. Today `onsa test` stops with an internal error
+// on these (R-187). Every value is worked out by hand from the arguments.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const D: U32 = Self.CAP + 1
+
+  pub fn cap(self) -> U32 {
+    Self.CAP
+  }
+
+  pub fn one_more(self) -> U32 {
+    Self.CAP + 1
+  }
+
+  pub fn derived(self) -> U32 {
+    Self.D
+  }
+
+  // An associated function that takes no value: the arguments come from the alias it is called by.
+  pub fn cap_of_the_type() -> U32 {
+    Self.CAP
+  }
+}
+
+type R4 = Rg[F32, 4]
+type R8 = Rg[F32, 8]
+
+test "a method reads the N of its value" {
+  let r4: Rg[F32, 4] = Rg { a: [0.0; 4] }
+  let r8: Rg[F32, 8] = Rg { a: [0.0; 8] }
+  assert r4.cap() == 4
+  assert r8.cap() == 8
+}
+
+test "Self.CAP + 1" {
+  let r4: Rg[F32, 4] = Rg { a: [0.0; 4] }
+  let r8: Rg[F32, 8] = Rg { a: [0.0; 8] }
+  assert r4.one_more() == 5
+  assert r8.one_more() == 9
+}
+
+test "a constant of the impl that reads Self" {
+  let r4: Rg[F32, 4] = Rg { a: [0.0; 4] }
+  assert r4.derived() == 5
+}
+
+test "an associated function called by an alias" {
+  assert R4.cap_of_the_type() == 4
+  assert R8.cap_of_the_type() == 8
+}
+
+test "the method and the alias agree" {
+  let r8: Rg[F32, 8] = Rg { a: [0.0; 8] }
+  assert r8.cap() == R8.CAP
+}

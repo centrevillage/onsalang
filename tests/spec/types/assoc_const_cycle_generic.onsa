@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§18.1"]
+
+// S-304, R-187 (W5-05 U2), R-02 (the cycles of constants in types/cycle_const_assoc.onsa): the associated constants of a
+// generic `impl` take part in the cycles of constants (§6.6: "初期化式が、直接または他の定数を経由して自分自身を参照すると
+// E0312"), and now they are read with the arguments the path gives: `Self.A` (the type of the `impl` with its own
+// parameters) and `R.A` of an alias that fixes them (§4.4). The path through an alias must not escape the check.
+// One E0312 for each collection of constants that read each other, at the name of the first constant of the
+// collection in the source (§18.1: "最初の定数の名前"); the other constants of the `impl` are checked each by itself,
+// and the readers of the collections have no diagnostic (§6.6: "それを読む定数や型の中の長さには診断を出さない").
+
+// A constant that reads itself through `Self`.
+pub struct Sa[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Sa[T, N] {
+  pub const A: U32 = Self.A                         //~ E0312
+}
+
+// Two constants that read each other through `Self`.
+pub struct Sb[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Sb[T, N] {
+  pub const A: U32 = Self.B                         //~ E0312
+  pub const B: U32 = Self.A
+}
+
+// A constant that reads itself through an alias of the type.
+pub struct Sc[T, const N: U32] {
+  a: [T; N],
+}
+
+type Rc = Sc[F32, 4]
+
+impl[T, const N: U32] Sc[T, N] {
+  pub const A: U32 = Rc.A                           //~ E0312
+}
+
+// Two constants of the `impl`, one through an alias and one through `Self`.
+pub struct Sd[T, const N: U32] {
+  a: [T; N],
+}
+
+type Rd = Sd[F32, 4]
+
+impl[T, const N: U32] Sd[T, N] {
+  pub const A: U32 = Rd.B                           //~ E0312
+  pub const B: U32 = Self.A
+}
+
+// A constant of the file, read through an alias by the constant of the `impl` that it reads: the place is the one
+// that comes first in the source.
+pub struct Se[T, const N: U32] {
+  a: [T; N],
+}
+
+type Re = Se[F32, 4]
+
+const TOP: U32 = Re.A                               //~ E0312
+
+impl[T, const N: U32] Se[T, N] {
+  pub const A: U32 = TOP + 1
+}
+
+// The constants of two types that read each other through aliases.
+pub struct Sf[T, const N: U32] {
+  a: [T; N],
+}
+
+pub struct Sg[T, const N: U32] {
+  a: [T; N],
+}
+
+type Rf = Sf[F32, 4]
+type Rg = Sg[F32, 4]
+
+impl[T, const N: U32] Sf[T, N] {
+  pub const A: U32 = Rg.B                           //~ E0312
+}
+
+impl[T, const N: U32] Sg[T, N] {
+  pub const B: U32 = Rf.A
+}
+
+// Constants that read each other and are not a cycle: no diagnostic. The alias gives the arguments and the
+// readers outside have the values.
+pub struct Sh[T, const N: U32] {
+  a: [T; N],
+}
+
+type Rh = Sh[F32, 4]
+
+impl[T, const N: U32] Sh[T, N] {
+  pub const A: U32 = N
+  pub const B: U32 = Self.A + 1
+  pub const C: U32 = Rh.A + Self.B
+}
+
+// Readers of the collections above, by the aliases: no diagnostic.
+pub fn read_the_collections() -> U32 {
+  Rc.A + Rd.A + Rd.B + Re.A + Rf.A + Rg.B + Rh.A + Rh.B + Rh.C
+}

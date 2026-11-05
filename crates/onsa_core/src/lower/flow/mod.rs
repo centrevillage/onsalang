@@ -376,7 +376,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         let id = ConstId(lw.m.consts.len() as u32);
         let cname = lw.qual_name(d);
         lw.m.consts.push(ConstDef { name: cname, ty: Ty::u32(), init: lit(Ty::u32(), span, Lit::Int(value as i128)) });
-        lw.const_ids.insert(d, id);
+        lw.const_ids.insert((d, Vec::new()), id);
     }
     let mut params = Vec::new();
     let mut sig_inputs = Vec::new();

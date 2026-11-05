@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): the declared type of a constant of a generic `impl` may hold a type parameter
+// (`const Z: Option[T] = None`, §6.6). Read by the name of the type (`Rg.Z`), its type is `Option[?T]` with `?T` a type
+// variable of the `impl`; one that nothing decides at the end of the function is E0406 at the path (§4.5, §4.7: the
+// type variable is not the literal's, so the position is the expression that made it, `Rg.Z`). Today `let _ = Rg.Z`
+// passes the check and `onsa test` stops with an internal error ("unbound generic argument"). The forms that
+// something decides are in semantics/assoc_const_decided_by_context.onsa. No candidate (`fixes = 0`). One error
+// per function (P-01).
+
+pub struct Rg[T] {
+  x: T,
+}
+
+impl[T: Copy] Rg[T] {
+  pub const Z: Option[T] = None
+  pub const EMPTY: [T; 0] = []
+}
+
+// Thrown away: nothing decides `T`.
+pub fn thrown_away() {
+  let _ = Rg.Z                                      //~ E0406
+}
+
+// Bound to a name that no later statement decides.
+pub fn bound_and_never_decided() {
+  let z = Rg.Z                                      //~ E0406
+  let _ = z
+}
+
+// A `match` on a value whose head is known (`Option`) is not E0420 (§4.7); the arms do not decide `T`.
+pub fn matched_without_a_deciding_arm() -> U32 {
+  match Rg.Z {                                      //~ E0406
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+// The type parameters of the function are not the parameters of the `impl`, whether the function has one or
+// another one beside it.
+pub fn beside_a_parameter[A, U: Copy](a: A) {
+  let _ = a
+  let _ = Rg.Z                                      //~ E0406
+}
+
+// The array constant: the element type is the parameter.
+pub fn empty_array() {
+  let _ = Rg.EMPTY                                  //~ E0406
+}
+
+// An `Option[F32]` of the same function does not decide the type variable of `Rg.Z`: they are different ones.
+pub fn beside_a_none_that_is_decided() {
+  let o: Option[F32] = None
+  let _ = o
+  let _ = Rg.Z                                      //~ E0406
+}

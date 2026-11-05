@@ -137,7 +137,13 @@ pub enum Target {
         def: DefId,
         inst: Option<InstId>,
     },
-    Const(DefId),
+    /// A constant. `inst` holds the type arguments of a constant of a generic
+    /// `impl`, read as a value (S-304); `None` for any other constant, and
+    /// where a length or a constant expression reads one by its value.
+    Const {
+        def: DefId,
+        inst: Option<InstId>,
+    },
     /// A unit variant (value) or tuple variant (constructor / callee).
     Variant {
         def: DefId,

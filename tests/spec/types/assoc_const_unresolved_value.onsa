@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.2", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): the associated constant of a generic `impl`, read by the name of the type
+// (`Rg.CAP`), has the type parameters of the `impl` as type variables that are decided as a function's are
+// (§4.5: "総称の `impl` の関連定数を型の名前で読むときも、`impl` の型パラメータを同じに決める（型引数、別名、期待型の注釈、
+// 後の文）"), and one that nothing decides at the end of the function is E0406 at the path (§4.7: "総称の `impl` の関連定数
+// `Rg.CAP` の型パラメータ"). Here the value of the constant depends on a type parameter (`N`), which is the case that
+// R-187 found: the check passes today and `onsa test` stops with an internal error. There is no candidate
+// (`fixes = 0`). A type argument or an alias decides it (types/assoc_const_alias_values.onsa). One error per
+// function (P-01); each function reads one constant once.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const D: U32 = Self.CAP + 1
+}
+
+// The constant itself, as the value of the function.
+pub fn cap_is_the_value() -> U32 {
+  Rg.CAP                                            //~ E0406
+}
+
+// An expected type that is not the type of the parameters (`U32` is the type of the constant) decides nothing.
+pub fn cap_to_an_annotated_let() {
+  let c: U32 = Rg.CAP                               //~ E0406
+  let _ = c
+}
+
+// A constant of the `impl` that reads another through `Self` (inside the initializer `Self` is `Rg[T, N]`, and it is
+// no error there) is read by the name of the type here.
+pub fn derived_constant() -> U32 {
+  Rg.D                                              //~ E0406
+}
+
+// The initializer of another constant is a place where it is read like the body of a function.
+pub const K: U32 = Rg.CAP                           //~ E0406
+
+// The type parameter of the function (`V`) is not a parameter of the `impl`.
+pub fn inside_a_generic_function[V](v: V) -> U32 {
+  let _ = v
+  Rg.CAP                                            //~ E0406
+}
+
+// Inside an `impl` the name of the type without `Self` is the same: `Self` is what binds the parameters.
+pub struct Hold[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Hold[T, N] {
+  pub const CAP: U32 = N
+
+  pub fn by_the_name(self) -> U32 {
+    Hold.CAP                                        //~ E0406
+  }
+}
+
+// Two `impl` blocks of one type with different names of constants: each is its own read.
+pub struct Two[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Two[T, N] {
+  pub const FIRST: U32 = N
+}
+
+impl[T: Copy, const N: U32] Two[T, N] {
+  pub const SECOND: U32 = N + 1
+}
+
+pub fn first_of_two_impls() -> U32 {
+  Two.FIRST                                         //~ E0406
+}
+
+pub fn second_of_two_impls() -> U32 {
+  Two.SECOND                                        //~ E0406
+}
+
+// A type that has only a const parameter (no type parameter).
+pub struct Cp[const N: U32] {
+  a: [F32; N],
+}
+
+impl[const N: U32] Cp[N] {
+  pub const LEN: U32 = N
+}
+
+pub fn const_parameter_only() -> U32 {
+  Cp.LEN                                            //~ E0406
+}

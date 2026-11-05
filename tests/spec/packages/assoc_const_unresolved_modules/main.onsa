@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.6", "§15.1"]
+
+// S-304, R-187 (W5-05 U2): the generic type of another module (taken by a `use`) read by its name, without an alias or
+// an argument that decides the parameters of the `impl` of the other module, is E0406 at the path in this module's
+// function (§4.5, §4.7), whether the value depends on the parameter (`Rg.CAP`), does not (`Fixed.FOUR`), or the
+// declared type holds the parameter (`W.Z`). The other module has no diagnostic. No candidate (`fixes = 0`). One
+// error per function (P-01).
+use shapes.{Fixed, Rg, W}
+
+pub fn value_of_the_parameter() -> U32 {
+  Rg.CAP                                            //~ E0406
+}
+
+pub fn value_without_the_parameter() -> U32 {
+  Fixed.FOUR                                        //~ E0406
+}
+
+pub fn declared_type_with_the_parameter() {
+  let _ = W.Z                                       //~ E0406
+}
+
+pub fn inside_a_generic_function[V](v: V) -> U32 {
+  let _ = v
+  Rg.CAP                                            //~ E0406
+}

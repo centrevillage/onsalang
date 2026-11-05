@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§6.6", "§15.1"]
+
+// S-304, R-187 (W5-05 U2): the forms that pass before this work and stay: the associated constant of a non-generic
+// type of another module (`Point.ORIGIN`), and the constant of a generic type of another module whose value does
+// not depend on the parameters, read by an alias that fixes them (`R4.DEPTH`), and through `Self` in a method of the
+// other module. The values are worked out by hand. No diagnostic.
+use shapes.{Point, Ring}
+
+type R4 = Ring[F32, 4]
+
+test "a constant of a type of another module" {
+  assert Point.ORIGIN.x == 0.0
+  assert Point.ORIGIN.y == 0.0
+}
+
+test "the constant of a generic type of another module through an alias" {
+  assert R4.DEPTH == 2
+}
+
+test "Self.DEPTH in a method of the other module" {
+  let r: Ring[F32, 4] = Ring { a: [0.0; 4] }
+  assert r.depth() == 2
+}

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.6", "§18.1"]
+// fixes = 0
+
+// S-304 (W5-05 U2, §18.1): a constant of a generic `impl` whose heading could not be read is a failed name, as a function
+// of the same form is: what reads it by the name of the type gets no E0406 of the parameters of the `impl`. The two
+// E0002 are the errors of the program.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T: Copy, const N: U32] Rg[T, N] {
+  pub const A: = 3 //~ E0002
+  pub const C U32 = 3 //~ E0002
+}
+
+pub fn read_a() -> U32 {
+  Rg.A
+}
+
+pub fn read_c() -> U32 {
+  Rg.C
+}

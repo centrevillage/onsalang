@@ -47,8 +47,9 @@ pub(crate) enum DeferredKind {
     FloatLit { lit: ExprId },
     /// A type variable that an expression made (a type parameter of a call,
     /// `None`, `Buf.zeroed(4)`, `[]`): E0406 when it is still open at the end
-    /// (§4.5, §4.7). `what` names it in the message.
-    Origin { what: ArgumentName },
+    /// (§4.5, §4.7). `what` names it in the message; `rule`: the way out, if
+    /// the message does not say it.
+    Origin { what: ArgumentName, rule: Option<String> },
     /// A type argument a use made, of a type parameter or the element of a
     /// builtin generic type: E0710 when it is decided to a type with no kind
     /// (second-class, or one that holds it), before the requirements of the
@@ -374,7 +375,7 @@ impl<'a> Checker<'a> {
                 Ty::Float(k) => self.float_lit(item, k, *lit),
                 _ => Look::Done,
             },
-            DeferredKind::Origin { what } => {
+            DeferredKind::Origin { what, rule } => {
                 if !self.infer.has_vars(&self.a.types, r) {
                     return Look::Done;
                 }
@@ -386,15 +387,17 @@ impl<'a> Checker<'a> {
                     return Look::Done;
                 }
                 let what = what.text(|t| self.display(t));
-                Look::Fail(
-                    Diagnostic::new(
-                        Stage::Types,
-                        Code::E0406,
-                        item.span,
-                        format!("{what} cannot be determined by the end of the function; annotate it (§4.5, §4.7)"),
-                    )
-                    .with_found(self.src(item.span)),
+                let d = Diagnostic::new(
+                    Stage::Types,
+                    Code::E0406,
+                    item.span,
+                    format!("{what} cannot be determined by the end of the function; annotate it (§4.5, §4.7)"),
                 )
+                .with_found(self.src(item.span));
+                Look::Fail(match rule {
+                    Some(rule) => d.with_rule(rule.clone()),
+                    None => d,
+                })
             }
             DeferredKind::Escape { what, rule } => {
                 if self.infer.has_vars(&self.a.types, r) {

@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): an alias that fixes the arguments decides the type parameters of a generic `impl`
+// (§4.4: "型引数を決めた別名は、その型引数を決める"; §4.5: "別名の `R.CAP`（`type R = Rg[F32]`）のように型の名前で型引数が
+// 決まるものは、型引数を要らない"), so the constant read by the alias has the value of its arguments: `R4.CAP` is
+// 4 and `R8.CAP` is 8, and a constant that reads another through `Self` (`D = Self.CAP + 1`) follows. Today
+// `onsa test` stops with an internal error on these (R-187: "unbound const parameter"). Every value is worked
+// out by hand from the arguments of the alias.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const D: U32 = Self.CAP + 1
+  pub const E: U32 = Self.D * 2
+}
+
+const FIVE: U32 = 5
+
+type R4 = Rg[F32, 4]
+type R8 = Rg[F32, 8]
+
+// The same constant `N` with another type argument.
+type R4u = Rg[U8, 4]
+
+// An alias of an alias is the same type.
+type Same4 = R4
+
+// The argument written by the name of a constant.
+type R5 = Rg[F32, FIVE]
+
+test "the constant of an alias is the value of its argument" {
+  assert R4.CAP == 4
+  assert R8.CAP == 8
+}
+
+test "two aliases of one type have their own values" {
+  assert R4.CAP + R8.CAP == 12
+  assert R8.CAP != R4.CAP
+}
+
+test "a constant that reads another through Self follows the arguments" {
+  assert R4.D == 5
+  assert R8.D == 9
+  assert R4.E == 10
+  assert R8.E == 18
+}
+
+test "the type argument that is not the constant does not change it" {
+  assert R4u.CAP == 4
+  assert R4u.D == 5
+}
+
+test "an alias of an alias" {
+  assert Same4.CAP == 4
+  assert Same4.D == 5
+}
+
+test "an argument written by a constant" {
+  assert R5.CAP == 5
+  assert R5.D == 6
+}
+
+test "the value is a U32 in an expression" {
+  let n: U32 = R8.CAP * 2
+  assert n == 16
+  assert R4.CAP < R8.CAP
+}

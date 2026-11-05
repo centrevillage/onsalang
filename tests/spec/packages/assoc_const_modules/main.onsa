@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5", "§6.6", "§15.1"]
+
+// S-304, R-187 (W5-05 U2): the generic type of another module (taken by a `use`), with a `pub` associated constant
+// whose value is the const parameter of the `impl` or whose declared type holds the type parameter, is read by an
+// alias of this module that fixes the arguments: `R4.CAP` is 4, `R8.D` is 9, `WF.Z` is an `Option[F32]` (§4.4).
+// The `Self` of the `impl` in the other module is the type with the arguments of the alias. The values are worked
+// out by hand. No diagnostic.
+use shapes.{Rg, W}
+
+type R4 = Rg[F32, 4]
+type R8 = Rg[F32, 8]
+type WF = W[F32]
+
+test "the constant of the generic type of another module through an alias" {
+  assert R4.CAP == 4
+  assert R8.CAP == 8
+}
+
+test "a constant that reads another through Self" {
+  assert R4.D == 5
+  assert R8.D == 9
+}
+
+test "a method of the other module reads its Self.CAP" {
+  let r: Rg[F32, 4] = Rg { a: [0.0; 4] }
+  assert r.cap() == 4
+}
+
+test "the declared type holds the parameter" {
+  let z: Option[F32] = WF.Z
+  assert z == None
+}

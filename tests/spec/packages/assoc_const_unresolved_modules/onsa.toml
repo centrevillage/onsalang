@@ -1,0 +1,3 @@
+[package]
+name = "assoc_const_unresolved_modules"
+edition = "2026"

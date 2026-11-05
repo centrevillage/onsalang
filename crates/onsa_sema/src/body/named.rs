@@ -161,14 +161,15 @@ impl<'a> Checker<'a> {
     /// The type arguments `args` of the def `d` that a path names through
     /// an alias or `Self` (`owner`, §4.4, S-91, S-595): the type `d` is of
     /// (the struct or the enum of a literal, a pattern or a variant; the
-    /// type of the `impl` of an associated function) with `args` is the
+    /// type of the `impl` of an associated item) with `args` is the
     /// owner (`type Samples = Buf[F32]`, `Self` of `impl[T] G[T]` is `G[T]`).
     pub(crate) fn of_owner(&mut self, d: DefId, args: &[TyId], owner: Option<TyId>, span: Span) -> R<()> {
         let Some(owner) = owner else { return Ok(()) };
         let def = self.a.def(d);
         let ty = match (&def.kind, def.owner.map(|o| &self.a.def(o).kind)) {
+            (DefKind::Const(_), _) if self.const_unread(d) => return Ok(()),
             (DefKind::Struct(_) | DefKind::Enum(_), _) => self.a.types.intern(Ty::Named(d, args.to_vec())),
-            (DefKind::Fn(_), Some(&DefKind::Impl(crate::def::ImplDef { self_ty, .. }))) => {
+            (DefKind::Fn(_) | DefKind::Const(_), Some(&DefKind::Impl(crate::def::ImplDef { self_ty, .. }))) => {
                 self.a.types.subst(self_ty, args)
             }
             _ => return Ok(()),
@@ -233,9 +234,17 @@ impl<'a> Checker<'a> {
                         self.info.targets.insert(e, Target::Fn { def: d, inst });
                         Ok(Some(fty))
                     }
+                    DefKind::Const(_) if self.a.heading_failed(d) => Ok(Some(self.a.types.error())),
+                    // `check_expr` holds the type to the expected one, as of
+                    // any value: a parameter of the `impl` decided there is
+                    // decided as a function's is (§4.5, S-304).
                     DefKind::Const(c) => {
-                        self.info.targets.insert(e, Target::Const(d));
-                        Ok(Some(c.ty))
+                        let args = self.fresh_args(d);
+                        self.of_owner(d, &args, owner, span)?;
+                        let t = self.a.types.subst(c.ty, &args);
+                        let inst = self.finish_instance(d, args, span)?;
+                        self.info.targets.insert(e, Target::Const { def: d, inst });
+                        Ok(Some(t))
                     }
                     DefKind::Unsupported(_) => Ok(Some(self.a.types.error())),
                     _ => no_value(),

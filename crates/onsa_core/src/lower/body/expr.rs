@@ -204,7 +204,10 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
             Some(GenericArg::Const(n)) => ExprKind::Lit(Lit::Int(*n as i128)),
             _ => return Err(internal(span, "unbound const parameter")),
         },
-        Target::Const(d) => ExprKind::Const(lw.const_id(d)?),
+        Target::Const { def, inst } => {
+            let gargs = cx.target_args(lw, inst, span)?;
+            ExprKind::Const(lw.const_id(def, gargs)?)
+        }
         Target::Variant { index, .. } => {
             let Ty::Enum(id) = &ty else { return Err(unsupported(span, Feature::VariantCtorValues, &[])) };
             ExprKind::Variant { ty: *id, tag: index, fields: Vec::new() }

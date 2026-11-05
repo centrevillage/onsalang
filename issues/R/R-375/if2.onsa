@@ -1,0 +1,5 @@
+pub struct Rg[T, const N: U32] { a: [T; N] }
+impl[T: Copy, const N: U32] Rg[T, N] {
+  pub const NONE: Option[T] = None
+  pub fn f(self) -> Option[T] { None }
+}

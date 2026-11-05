@@ -6,7 +6,7 @@
 
 use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
-use onsa_sema::body::{BodyInfo, Target, TryArms};
+use onsa_sema::body::{BodyInfo, InstId, Target, TryArms};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
 use onsa_sema::ty::TyId;
 use onsa_sema::{DefId, ModId};
@@ -69,6 +69,14 @@ impl<'b> FnCx<'b> {
             locals.push(Local { name: l.name.clone(), ty });
         }
         Ok(FnCx { args, info, ast: &m.parsed.ast, text: &m.text, module, locals, ret, inline_depth: 0, flow: None })
+    }
+
+    /// The arguments of the instance `inst` of a target, in this body.
+    fn target_args(&self, lw: &mut Lowerer, inst: Option<InstId>, span: Span) -> R<Vec<GenericArg>> {
+        match inst {
+            Some(i) => lw.generic_args(&self.info.instances[i.0 as usize].args, &self.args, span),
+            None => Ok(Vec::new()),
+        }
     }
 
     pub(crate) fn temp(&mut self, name: &str, ty: Ty) -> LocalId {

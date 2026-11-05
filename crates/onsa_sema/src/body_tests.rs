@@ -467,7 +467,7 @@ fn methods_and_associated_items() {
     assert!(body.targets.values().any(|t| matches!(t, Target::Method { .. })));
     let consts: Vec<&str> = (body.targets.values())
         .filter_map(|t| match t {
-            Target::Const(d) => Some(a.def(*d).name.as_str()),
+            Target::Const { def, .. } => Some(a.def(*def).name.as_str()),
             _ => None,
         })
         .collect();
@@ -975,4 +975,25 @@ fn the_joined_return_keeps_the_comments() {
         let src = format!("{head}{rest}");
         assert_eq!(after_candidates(&src), [format!("{head}{joined}")], "{rest}");
     }
+}
+
+#[test]
+fn the_e0406_of_a_constant_says_how_to_give_the_arguments() {
+    let a = check_in(
+        "pub struct R[T] { x: T }\nimpl[T] R[T] {\n  pub const A: U32 = 1\n  pub fn f(self) -> U32 { R.A }\n}\npub fn g() -> U32 { R.A }\n",
+    );
+    let notes: Vec<Vec<&str>> = (a.diagnostics.iter())
+        .map(|d| {
+            assert_eq!((d.code, d.fixes.len()), (Code::E0406, 0), "{d:?}");
+            d.notes.iter().map(|n| n.message.as_str()).collect()
+        })
+        .collect();
+    let alias = "give the type its arguments by an alias: `type R = R[…]`, then `R.A`";
+    assert_eq!(notes, [vec![format!("{alias}; inside this `impl`, `Self.A`").as_str()], vec![alias]]);
+}
+
+#[test]
+fn a_read_of_a_constant_of_a_bad_heading_is_not_held_to_its_arguments() {
+    let src = "pub struct F[T, const N: U32] { a: [T; N] }\nimpl F[F32, 4] {\n  pub const X: U32 = 1\n}\ntype A = F[F32, 8]\npub fn g() -> U32 { A.X }\n";
+    assert_eq!(codes(src), [Code::E0307]);
 }

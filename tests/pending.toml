@@ -1506,3 +1506,17 @@ target = "tests/spec/negative/flow_option_match_state_arm.onsa"
 reasons = ["S-110", "R-14"]
 until = "W7-06"
 note = "普通の `match` の腕の状態の E0811（§11.5）。今は K-08 の E0200（腕の検査は W7-06）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/assoc_const_self_in_closure.onsa"
+reasons = ["R-187", "S-192"]
+until = "W8-09"
+note = "無名関数と関数値の呼び出しの降下の E0200（Closures。W8-09）。他の形は types/assoc_const_self_values"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/assoc_const_decided_by_arm.onsa"
+reasons = ["R-187", "R-06"]
+until = "W8-06"
+note = "値の match の降下の E0200（ValueMatch。W8-06）。他の形は semantics/assoc_const_decided_by_context"

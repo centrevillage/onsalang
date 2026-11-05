@@ -98,13 +98,7 @@ pub(super) fn lower_call(
     let Some(target) = cx.info.targets.get(&e).cloned() else { return Err(internal(span, "call without a target")) };
     match target {
         Target::Fn { def, inst } => {
-            let gargs = match inst {
-                Some(i) => {
-                    let inst = &cx.info.instances[i.0 as usize];
-                    lw.generic_args(&inst.args, &cx.args, span)?
-                }
-                None => Vec::new(),
-            };
+            let gargs = cx.target_args(lw, inst, span)?;
             let d = lw.a.def(def).clone();
             let DefKind::Fn(f) = &d.kind else { return Err(internal(span, "call to a non-fn")) };
             if f.target {
@@ -116,13 +110,7 @@ pub(super) fn lower_call(
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }
         Target::Method { def, inst } => {
-            let gargs = match inst {
-                Some(i) => {
-                    let inst = &cx.info.instances[i.0 as usize];
-                    lw.generic_args(&inst.args, &cx.args, span)?
-                }
-                None => Vec::new(),
-            };
+            let gargs = cx.target_args(lw, inst, span)?;
             let d = lw.a.def(def).clone();
             let DefKind::Fn(f) = &d.kind else { return Err(internal(span, "method target")) };
             let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "method call shape")) };
@@ -266,10 +254,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
             let Some(Target::Fn { def, inst }) = cx.info.targets.get(&farg.expr).cloned() else {
                 return Err(unsupported(span, Feature::FromFnValue, &[]));
             };
-            let gargs = match inst {
-                Some(ix) => lw.generic_args(&cx.info.instances[ix.0 as usize].args.clone(), &cx.args, span)?,
-                None => Vec::new(),
-            };
+            let gargs = cx.target_args(lw, inst, span)?;
             let fid = lw.fn_id(def, gargs);
             Expr::new(
                 elem.clone(),

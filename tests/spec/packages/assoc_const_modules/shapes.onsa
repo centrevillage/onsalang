@@ -1,0 +1,20 @@
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const D: U32 = Self.CAP + 1
+
+  pub fn cap(self) -> U32 {
+    Self.CAP
+  }
+}
+
+pub struct W[T] {
+  x: T,
+}
+
+impl[T: Copy] W[T] {
+  pub const Z: Option[T] = None
+}

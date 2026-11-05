@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§4.4", "§6.2", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): `Self.CAP` in a closure of a method is the `N` of the type of the value, as it is in the
+// method (types/assoc_const_self_values.onsa). Apart from that case because the closure and the call of the function
+// value wait for their lowering (W8-09).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+
+  pub fn in_a_closure(self) -> U32 {
+    let f = fn(k: U32) -> U32 { Self.CAP + k }
+    f.(10)
+  }
+}
+
+test "Self inside a closure of the method" {
+  let r4: Rg[F32, 4] = Rg { a: [0.0; 4] }
+  assert r4.in_a_closure() == 14
+}

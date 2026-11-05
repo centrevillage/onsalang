@@ -181,7 +181,7 @@ impl Analysis {
                 Target::Fn { def, .. }
                 | Target::Method { def, .. }
                 | Target::Variant { def, .. }
-                | Target::Const(def) => set.contains(def),
+                | Target::Const { def, .. } => set.contains(def),
                 _ => false,
             })
     }

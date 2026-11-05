@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): a constant whose declared type holds a type parameter (`const Z: Option[T] = None`) has,
+// read by an alias that fixes the arguments, the declared type with the arguments put in: `WF.Z` is an `Option[F32]`,
+// `WI.Z` an `Option[I32]`. The type does not leak (today `let z: Option[F32] = Rg.Z` is E0401 "`Option[<0>]`",
+// R-187), and the type of the same constant is the one of the alias that reads it. The declared type may be an
+// array of options, a tuple, or an empty array whose element is the parameter; the `T` must be `Copy` (§6.6:
+// without it the declaration is E0200, in types/const_type_param.onsa). Every value is worked out by hand from the
+// text of the declaration.
+
+pub struct W[T] {
+  x: T,
+}
+
+impl[T: Copy] W[T] {
+  pub const Z: Option[T] = None
+  pub const TWO: [Option[T]; 2] = [None, None]
+  pub const TAGGED: (Option[T], U32) = (None, 1)
+  pub const EMPTY: [T; 0] = []
+}
+
+// A bound that gives `Copy` (§6.6: "数の trait を含む").
+pub struct Fl[T] {
+  x: T,
+}
+
+impl[T: Float] Fl[T] {
+  pub const Z: Option[T] = None
+}
+
+pub struct Nm[T] {
+  x: T,
+}
+
+impl[T: Num] Nm[T] {
+  pub const Z: Option[T] = None
+}
+
+type WF = W[F32]
+type WI = W[I32]
+type WB = W[Bool]
+type FlD = Fl[F64]
+type NmI = Nm[I32]
+
+test "the option of the argument of the alias" {
+  let f: Option[F32]  = WF.Z
+  let i: Option[I32]  = WI.Z
+  let b: Option[Bool] = WB.Z
+  assert f == None
+  assert i == None
+  assert b == None
+}
+
+test "the constant read in a comparison with a typed value" {
+  let some: Option[F32] = Some(1.5)
+  assert WF.Z != some
+  assert WF.Z == None
+}
+
+test "an array of options" {
+  let two: [Option[F32]; 2] = WF.TWO
+  assert two.len() == 2
+  assert two[0] == None
+  assert two[1] == None
+}
+
+test "a tuple that holds the option" {
+  let t: (Option[I32], U32) = WI.TAGGED
+  assert t.0 == None
+  assert t.1 == 1
+}
+
+test "an empty array of the parameter" {
+  let e: [F32; 0]  = WF.EMPTY
+  let g: [Bool; 0] = WB.EMPTY
+  assert e.len() == 0
+  assert g.len() == 0
+}
+
+test "a bound that is a number trait" {
+  let d: Option[F64] = FlD.Z
+  let n: Option[I32] = NmI.Z
+  assert d == None
+  assert n == None
+}
+
+test "a match on the constant" {
+  let r = match WF.Z {
+    Some(_) => 1,
+    None => 0,
+  }
+  assert r == 0
+}

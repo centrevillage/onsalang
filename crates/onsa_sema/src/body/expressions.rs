@@ -125,7 +125,7 @@ impl<'a> Checker<'a> {
                         None => {
                             let el = self.fresh();
                             let what = ArgumentName::Text("the element type of `[]`".into());
-                            self.defer(span, el, DeferredKind::Origin { what });
+                            self.defer(span, el, DeferredKind::Origin { what, rule: None });
                             el
                         }
                     };
@@ -316,7 +316,7 @@ impl<'a> Checker<'a> {
                 match value {
                     crate::constarg::ConstU32::Value(v) => {
                         if let Some(d) = constant {
-                            self.info.targets.insert(len, Target::Const(d));
+                            self.info.targets.insert(len, Target::Const { def: d, inst: None });
                         }
                         Ok(Some(Len::Const(v)))
                     }

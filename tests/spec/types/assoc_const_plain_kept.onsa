@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§4.4", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): the constants whose type is not generic are read by the name of the type as before, and the
+// work that decides the type parameters of the `impl` of a constant changes nothing for them: the constant of an
+// `impl` that has no parameter (`Point.ORIGIN`), through `Self` and through an alias; the constants of the built-in
+// types (`F32.PI`, §6.6). Every value is worked out by hand from the declarations and §6.6.
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 }
+  pub const SCALE: F32 = 2.0
+  pub const DOUBLE: F32 = Self.SCALE * 2.0
+
+  pub fn scale() -> F32 {
+    Self.SCALE
+  }
+}
+
+type Pt = Point
+
+test "a constant of an impl without parameters" {
+  assert Point.ORIGIN.x == 0.0
+  assert Point.ORIGIN.y == 0.0
+  assert Point.SCALE == 2.0
+}
+
+test "through Self" {
+  assert Point.DOUBLE == 4.0
+  assert Point.scale() == 2.0
+}
+
+test "through an alias" {
+  assert Pt.SCALE == 2.0
+  assert Pt.ORIGIN.x == 0.0
+}
+
+test "the constants of the built-in types" {
+  assert F32.PI.to_bits() == 0x40490FDB
+  assert F32.EPSILON > 0.0
+}

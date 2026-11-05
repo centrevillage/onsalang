@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+// fixes = 0
+
+// S-899 (W5-05 U2, §6.6: "総称の `impl` の定数は宣言で判定し、型引数の違う具体化を経て値で終わる形も E0312"): the
+// constant `A` reads itself through the alias `R8`, so it is an E0312 although `R4.A` would end in the value of `A` at
+// 8. One error for the cycle (§18.1).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+type R8 = Rg[F32, 8]
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const A: U32 = if N == 8 { 1 } else { R8.A } //~ E0312
+}
+
+type R4 = Rg[F32, 4]
+
+pub fn read() -> U32 {
+  R4.A
+}

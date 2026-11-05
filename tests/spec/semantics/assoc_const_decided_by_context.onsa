@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): the type parameters of a generic `impl` that a constant read by the name of the type
+// (`Rg.Z`) leaves open are decided as a function's are (§4.5: "型引数、別名、期待型の注釈、後の文"; §4.7: a type variable
+// that a later statement, an expected type of the position or a type rule decides). The statements below decide
+// `T` of `Rg.Z` (`const Z: Option[T] = None`): the annotation of the `let`, a later statement that uses the value
+// as an `Option[F32]`, the argument position of a call, the branch of an `if` that follows another branch, the field
+// of a struct literal, the return type of the function and a comparison with a typed value. A function with
+// a type parameter beside the one of the `impl` (`fn f[A, U: Copy]`) is the same: the return type decides the `U`
+// that `T` is. Today these are E0401 ("`Option[<0>]`") or an internal error (R-187); the forms that nothing
+// decides are in types/assoc_const_unresolved_type.onsa. Every value is worked out by hand.
+
+pub struct Rg[T] {
+  x: T,
+}
+
+impl[T: Copy] Rg[T] {
+  pub const Z: Option[T] = None
+}
+
+pub struct Holder {
+  o: Option[F32],
+}
+
+fn take(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+fn through_the_return_type[U: Copy]() -> Option[U] {
+  Rg.Z
+}
+
+fn through_the_return_type_beside_a_parameter[A, U: Copy](a: A) -> Option[U] {
+  Rg.Z
+}
+
+test "the annotation of the let" {
+  let z: Option[F32] = Rg.Z
+  assert z == None
+}
+
+test "a later statement" {
+  let z              = Rg.Z
+  let w: Option[F32] = z
+  assert w == None
+}
+
+test "an argument position" {
+  assert take(Rg.Z) == 0
+}
+
+test "the second branch of an if takes the type of the first" {
+  let yes = 1 < 2
+  let no  = 2 < 1
+  let a   = if yes { Some(2) } else { Rg.Z }
+  let b   = if no { Some(2) } else { Rg.Z }
+  assert a == Some(2)
+  assert b == None
+}
+
+test "the first branch of an if takes the annotation" {
+  let yes            = 1 < 2
+  let no             = 2 < 1
+  let a: Option[F32] = if yes { Rg.Z } else { Some(1.5) }
+  let b: Option[F32] = if no { Rg.Z } else { Some(1.5) }
+  assert a == None
+  assert b == Some(1.5)
+}
+
+test "the field of a struct literal" {
+  let h = Holder { o: Rg.Z }
+  assert h.o == None
+}
+
+test "the return type of a generic function" {
+  let a: Option[F32] = through_the_return_type()
+  let b: Option[I32] = through_the_return_type()
+  let c: Option[U8]  = through_the_return_type_beside_a_parameter(5)
+  assert a == None
+  assert b == None
+  assert c == None
+}
+
+test "a comparison with a typed value" {
+  let f: Option[F32] = Some(1.5)
+  assert Rg.Z != f
+}

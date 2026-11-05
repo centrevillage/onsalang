@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.4", "§4.5", "§6.2", "§6.3"]
+
+// S-304, R-187 (W5-05 U2): once an alias decides the type arguments, the requirements of the `impl` (its bounds on the
+// type parameters, §6.2: "`impl` の型パラメータが満たすかは `impl` の `[ ]` に書いた境界だけで決まる") are checked,
+// and the argument that does not meet one is E0416 at the read (§4.5: "型パラメータの要求は、型パラメータが決まった文で
+// 検査し"), as for an associated function of the same `impl` (types/assoc_fn_bound_unmet.onsa). Today a constant of
+// such an `impl` is read without the check (R-187). The alias itself is fine: the declaration of the struct has no
+// bound. No candidate (`fixes = 0`). One error per function (P-01); a type for each bound.
+
+pub struct Sh[T] {
+  x: T,
+}
+
+impl[T: Show] Sh[T] {
+  pub const B: U32 = 2
+}
+
+// The declared type holds the parameter: `Copy` is for the declaration (§6.6), `Show` is the bound that is not met.
+pub struct ShZ[T] {
+  x: T,
+}
+
+impl[T: Show + Copy] ShZ[T] {
+  pub const Z: Option[T] = None
+}
+
+pub struct Nm[T] {
+  x: T,
+}
+
+impl[T: Num] Nm[T] {
+  pub const B: U32 = 2
+}
+
+pub struct Fl[T] {
+  x: T,
+}
+
+impl[T: Float] Fl[T] {
+  pub const B: U32 = 2
+}
+
+pub struct Ng[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T: Num, const N: U32] Ng[T, N] {
+  pub const CAP: U32 = N
+}
+
+// Two `impl` blocks of one struct: the constant of the one whose bound the argument does not meet.
+pub struct Pair[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T: Num, const N: U32] Pair[T, N] {
+  pub const NUM_CAP: U32 = N
+}
+
+impl[T: Float, const N: U32] Pair[T, N] {
+  pub const FLOAT_CAP: U32 = N * 2
+}
+
+// A function value has no `Show`.
+type ShFn = Sh[fn() -> I32]
+type ShZFn = ShZ[fn() -> I32]
+
+// A string is not a number.
+type NmStr = Nm[Str]
+
+// `Bool` is not a number.
+type NmBool = Nm[Bool]
+
+// An integer is not a `Float`.
+type FlInt = Fl[I32]
+
+// The bound is of the `impl`, and the value of the constant depends on the const parameter.
+type NgBool = Ng[Bool, 3]
+
+// An integer meets `Num`, not `Float`.
+type PairI = Pair[I32, 3]
+
+pub fn show_of_a_function() -> U32 {
+  ShFn.B                                            //~ E0416
+}
+
+pub fn num_of_a_string() -> U32 {
+  NmStr.B                                           //~ E0416
+}
+
+pub fn num_of_a_bool() -> U32 {
+  NmBool.B                                          //~ E0416
+}
+
+pub fn float_of_an_integer() -> U32 {
+  FlInt.B                                           //~ E0416
+}
+
+pub fn constant_of_the_declared_type_of_the_parameter() {
+  let z = ShZFn.Z                                    //~ E0416
+  let _ = z
+}
+
+pub fn const_parameter_beside_the_bound() -> U32 {
+  NgBool.CAP                                        //~ E0416
+}
+
+pub fn the_second_impl_of_a_struct() -> U32 {
+  PairI.FLOAT_CAP                                   //~ E0416
+}

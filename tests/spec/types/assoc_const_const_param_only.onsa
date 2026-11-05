@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§4.4", "§4.5", "§6.6"]
+
+// R-187 (W5-05 U2; the files alias_len, alias_derived and self_len of issues/R/R-187): a generic type that has
+// only a const parameter (`B2[const N: U32]`, no type parameter) has the associated constant `LEN = N`; the alias
+// that fixes the argument (`type B3 = B2[3]`) decides `N` (§4.4), so `B3.LEN` is 3, the constant that reads it
+// through `Self` (`D = Self.LEN + 1`) is 4 through the alias, and `Self.LEN` in a method is the `N` of the value's
+// type. Today `onsa test` stops with an internal error ("unbound const parameter"). The values are worked out
+// by hand from the arguments.
+
+pub struct B2[const N: U32] {
+  a: [F32; N],
+}
+
+impl[const N: U32] B2[N] {
+  pub const LEN: U32 = N
+  pub const D: U32 = Self.LEN + 1
+
+  pub fn len(self) -> U32 {
+    Self.LEN
+  }
+}
+
+type B3 = B2[3]
+
+test "the constant of the alias" {
+  assert B3.LEN == 3
+}
+
+test "the constant that reads another through Self" {
+  assert B3.D == 4
+}
+
+test "Self.LEN in a method" {
+  let b: B2[3] = B2 { a: [0.0; 3] }
+  assert b.len() == 3
+}

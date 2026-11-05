@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§6.6"]
+
+// S-304, R-187 (W5-05 U2): the literal of an arm decides the `T` of `Rg.Z` as it decides the one of a `None` (§4.7).
+// Apart from semantics/assoc_const_decided_by_context.onsa because the `match` on a value waits for its lowering (W8-06).
+
+pub struct Rg[T] {
+  x: T,
+}
+
+impl[T: Copy] Rg[T] {
+  pub const Z: Option[T] = None
+}
+
+test "the literal of an arm decides it as it decides a None" {
+  let r = match Rg.Z {
+    Some(3) => 1,
+    _ => 0,
+  }
+  assert r == 0
+}

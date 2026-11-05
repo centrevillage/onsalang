@@ -131,7 +131,7 @@ pub(crate) struct Lowerer<'a> {
     fn_ids: HashMap<(DefId, Vec<GenericArg>), FnId>,
     worklist: Vec<(DefId, Vec<GenericArg>, FnId)>,
     type_ids: HashMap<(DefId, Vec<GenericArg>), TypeId>,
-    const_ids: HashMap<DefId, ConstId>,
+    const_ids: HashMap<(DefId, Vec<GenericArg>), ConstId>,
     pub(crate) eq_fns: HashMap<Ty, FnId>,
     messages: HashMap<String, MsgId>,
     pub(crate) flow_fns: HashMap<DefId, flow::FlowFns>,
@@ -224,7 +224,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
             }
             DefKind::Flow(_) => lw.lower_item(def.span, |lw| lw.ensure_flow(id).map(drop))?,
             DefKind::Const(c) if c.value.is_some() && def.owner.is_none_or(|o| a.def(o).generics().is_empty()) => {
-                lw.lower_item(def.span, |lw| lw.const_id(id).map(drop))?
+                lw.lower_item(def.span, |lw| lw.const_id(id, Vec::new()).map(drop))?
             }
             _ => {}
         }
@@ -558,13 +558,18 @@ impl<'a> Lowerer<'a> {
         id
     }
 
-    pub(crate) fn const_id(&mut self, d: DefId) -> R<ConstId> {
-        if let Some(&id) = self.const_ids.get(&d) {
+    /// The Core constant of the constant `d` at the arguments of its `impl`
+    /// (one for each instance, §6.6, S-304). A `ConstValue` depends on no
+    /// parameter, and takes the type of the instance here. It stops: the
+    /// constants an initializer reads are a graph of defs with no cycle
+    /// (E0312), and a recursion goes down it, whatever the arguments.
+    pub(crate) fn const_id(&mut self, d: DefId, gargs: Vec<GenericArg>) -> R<ConstId> {
+        if let Some(&id) = self.const_ids.get(&(d, gargs.clone())) {
             return Ok(id);
         }
         let def = self.a.def(d).clone();
         let DefKind::Const(c) = &def.kind else { return Err(internal(def.span, "not a const")) };
-        let ty = self.core_ty(c.ty, &[], def.span)?;
+        let ty = self.core_ty(c.ty, &gargs, def.span)?;
         let init = match self.a.const_values.get(&d) {
             Some(v) => self.const_value_expr(v, &ty, def.span)?,
             None => {
@@ -573,7 +578,7 @@ impl<'a> Lowerer<'a> {
                     return Err(internal(def.span, "a `const` whose initializer was not checked"));
                 };
                 let Some(v) = c.value else { return Err(internal(def.span, "const without initializer")) };
-                let mut cx = body::FnCx::new(self, d, Vec::new(), body, ty.clone())?;
+                let mut cx = body::FnCx::new(self, d, gargs.clone(), body, ty.clone())?;
                 let e = body::lower_expr(self, &mut cx, v)?;
                 // A placeholder is a local of its own (S-67): not one of the initializer.
                 if !cx.locals.is_empty() && self.hole_spans.is_empty() {
@@ -583,8 +588,9 @@ impl<'a> Lowerer<'a> {
             }
         };
         let id = ConstId(self.m.consts.len() as u32);
-        self.m.consts.push(ConstDef { name: self.qual_name(d), ty, init });
-        self.const_ids.insert(d, id);
+        let name = format!("{}{}", self.qual_name(d), self.mangle_args(&gargs));
+        self.m.consts.push(ConstDef { name, ty, init });
+        self.const_ids.insert((d, gargs), id);
         Ok(id)
     }
 

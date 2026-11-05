@@ -1,0 +1,20 @@
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 }
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub const DEPTH: U32 = 2
+
+  pub fn depth(self) -> U32 {
+    Self.DEPTH
+  }
+}

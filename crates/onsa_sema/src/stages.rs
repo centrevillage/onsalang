@@ -104,6 +104,11 @@ impl Failures {
         self.by_def.get(&def).is_some_and(|s| s.check_rank() < stage.check_rank())
     }
 
+    /// A stage found an error in the unit of `def`.
+    pub(crate) fn failed(&self, def: DefId) -> bool {
+        self.by_def.contains_key(&def)
+    }
+
     /// The earliest stage that found an error in the unit of `def`.
     #[cfg(test)]
     pub(crate) fn of_def(&self, def: DefId) -> Option<Stage> {

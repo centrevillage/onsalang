@@ -1,0 +1,23 @@
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Fixed[T] {
+  x: T,
+}
+
+impl[T] Fixed[T] {
+  pub const FOUR: U32 = 4
+}
+
+pub struct W[T] {
+  x: T,
+}
+
+impl[T: Copy] W[T] {
+  pub const Z: Option[T] = None
+}

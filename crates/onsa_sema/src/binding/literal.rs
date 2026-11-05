@@ -62,7 +62,7 @@ impl Settle<'_> {
             ExprKind::Lit(Lit::Str(s)) => !s.pathless_hole && s.segments.iter().all(|x| matches!(x, StrSeg::Text(_))),
             ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. } | Lit::Bool(_) | Lit::Char(_)) => true,
             ExprKind::Path(_) | ExprKind::Field { .. } => match self.info.targets.get(&e) {
-                Some(Target::Const(_) | Target::ConstParam(_)) => true,
+                Some(Target::Const { .. } | Target::ConstParam(_)) => true,
                 // A variant with a payload named as a value is a function.
                 t if variant(t) => {
                     let ty = self.info.expr_types.get(&e).map(|&t| self.a.types.get(t));

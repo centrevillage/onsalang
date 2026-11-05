@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§6.2", "§18.1"]
+
+// S-304, S-764 (W5-05 U2, §18.1): the members of an `impl` whose heading is wrong (here E0416: `impl[T] N[T]` for
+// a struct that bounds its parameter, §6.2) are names after the name of the type, but they are not checked, and
+// a read of such a constant by the name of the type has no diagnostic of its own: the parameters of the `impl` are not
+// decided by the read (so no E0406, which the constants of a well-formed generic `impl` have,
+// types/assoc_const_unresolved_independent.onsa), and no bound is checked. The one error is the heading's
+// (the same as the members of the heading that is not read in module/failed_impl_generic.onsa and the
+// wrong number of type arguments in types/wellformed_impl_heading_count_members.onsa). One error per item (P-01).
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+impl[T] N[T] {   //~ E0416
+  pub const K: U32 = 1
+  pub const SCALE: F32 = 0.5
+}
+
+pub fn reads_a_constant_of_the_bad_heading() -> U32 {
+  N.K
+}
+
+pub fn reads_another_constant_of_the_same_heading() -> F32 {
+  N.SCALE
+}

@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.4", "§4.5", "§6.2", "§6.3"]
+
+// R-187 (W5-05 U2): the associated function of an `impl` whose bounds the argument of the alias does not meet is
+// E0416 at the call (§4.5: "型パラメータの要求（境界と暗黙の `Dup`）は、型パラメータが決まった文で検査し"; the alias decides
+// the arguments, §4.4). It is what the constant of the same `impl` follows (types/assoc_const_bound_unmet.onsa), and
+// it already holds, so these forms stay. No candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Sh[T] {
+  x: T,
+}
+
+impl[T: Show] Sh[T] {
+  pub fn b() -> U32 {
+    2
+  }
+}
+
+pub struct Nm[T] {
+  x: T,
+}
+
+impl[T: Num] Nm[T] {
+  pub fn b() -> U32 {
+    2
+  }
+}
+
+pub struct Fl[T] {
+  x: T,
+}
+
+impl[T: Float] Fl[T] {
+  pub fn b() -> U32 {
+    2
+  }
+}
+
+type ShFn = Sh[fn() -> I32]
+type NmBool = Nm[Bool]
+type FlInt = Fl[I32]
+
+pub fn show_of_a_function() -> U32 {
+  ShFn.b()                                          //~ E0416
+}
+
+pub fn num_of_a_bool() -> U32 {
+  NmBool.b()                                        //~ E0416
+}
+
+pub fn float_of_an_integer() -> U32 {
+  FlInt.b()                                         //~ E0416
+}

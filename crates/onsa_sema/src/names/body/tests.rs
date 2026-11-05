@@ -256,7 +256,7 @@ fn a_hole_of_a_string_is_resolved_and_reported_as_a_chain_of_an_expression() {
     let body = &a.bodies[&def(&a, "k")];
     assert!(k.complete && body.complete);
     // The targets of the holes are the holes' (`unread_users` reads them).
-    let targets: Vec<_> = body.hole_targets.values().filter(|t| matches!(t, crate::Target::Const(_))).collect();
+    let targets: Vec<_> = body.hole_targets.values().filter(|t| matches!(t, crate::Target::Const { .. })).collect();
     assert_eq!((targets.len(), body.targets.len()), (1, 0));
 }
 
