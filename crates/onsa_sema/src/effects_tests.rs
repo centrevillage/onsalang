@@ -6,12 +6,7 @@ use crate::tests::analyze;
 use crate::{Analysis, Module, Package};
 
 fn check(src: &str) -> Analysis {
-    let m = Module {
-        segments: vec!["main".into()],
-        file: FileId(0),
-        text: src.into(),
-        parsed: onsa_syntax::parse(FileId(0), src),
-    };
+    let m = Module::new(vec!["main".into()], FileId(0), src.into(), onsa_syntax::parse(FileId(0), src));
     analyze(&Package::new("t", vec![m], vec![crate::flow_tests::std_package()]))
 }
 

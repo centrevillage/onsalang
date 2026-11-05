@@ -19,12 +19,12 @@ use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, Module, Package};
 
 fn module(segments: &[&str], file: u32, src: &str) -> Module {
-    Module {
-        segments: segments.iter().map(|s| s.to_string()).collect(),
-        file: FileId(file),
-        text: src.to_string(),
-        parsed: onsa_syntax::parse(FileId(file), src),
-    }
+    Module::new(
+        segments.iter().map(|s| s.to_string()).collect(),
+        FileId(file),
+        src.to_string(),
+        onsa_syntax::parse(FileId(file), src),
+    )
 }
 
 /// The `target` declarations of std, by their keys.

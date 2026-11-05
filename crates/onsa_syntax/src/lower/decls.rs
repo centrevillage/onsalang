@@ -92,7 +92,31 @@ impl<'a> Lower<'a> {
             _ => {}
         }
         let span = self.span(n);
-        self.add_item(n, Item { span, attrs, vis, vis_span, kind, failed })
+        let mem_attr = self.first_mem(n);
+        self.add_item(n, Item { span, attrs, vis, vis_span, kind, failed, mem_attr })
+    }
+
+    /// [`Item::mem_attr`] of the item `n`: the first attribute of a `let`
+    /// that the table accepted.
+    fn first_mem(&self, n: NodeId) -> Option<Span> {
+        let cst = self.cst;
+        for i in cst.token_range(n) {
+            if cst.tokens()[i].kind != TokenKind::At {
+                continue;
+            }
+            let attr = cst.token_parent(TokenIdx(i as u32));
+            if cst.kind(attr) != NodeKind::Attr || !cst.is_complete(attr) {
+                continue;
+            }
+            if cst.parent(attr).is_none_or(|p| cst.kind(p) != NodeKind::LetStmt) {
+                continue;
+            }
+            if cst.ancestors(attr).take_while(|&a| a != n).any(|a| cst.kind(a) == NodeKind::Item) {
+                continue;
+            }
+            return Some(cst.span(attr));
+        }
+        None
     }
 
     /// The name of a declaration when it was read whole.

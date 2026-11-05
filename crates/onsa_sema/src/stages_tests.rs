@@ -14,12 +14,8 @@ fn check(src: &str) -> Analysis {
 
 /// With std, whose `impl`s have the methods of the sequences (§5.3).
 fn check_in(src: &str, deps: Vec<std::sync::Arc<Package>>) -> Analysis {
-    let modules = vec![Module {
-        segments: vec!["main".into()],
-        file: FileId(0),
-        text: src.to_string(),
-        parsed: onsa_syntax::parse(FileId(0), src),
-    }];
+    let modules =
+        vec![Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src))];
     analyze(&Package::new("t", modules, deps))
 }
 

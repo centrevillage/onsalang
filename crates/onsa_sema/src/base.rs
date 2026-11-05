@@ -8,7 +8,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use onsa_diag::FileId;
-use onsa_syntax::Parsed;
+use onsa_syntax::ParsedAst;
 use serde::{Deserialize, Serialize};
 
 use crate::{Analysis, DefId, DefKind, ModId, Module, Package, PackageRole, analyze, flatten, run, std_modules};
@@ -63,6 +63,9 @@ impl Analysis {
 pub enum BaseError {
     /// The package is not the embedded std, the one package read back.
     NotEmbedded,
+    /// std alone has a diagnostic: a fresh analysis reports it, which reads
+    /// the tree a std read back has not ([`Module::tree`]).
+    Unusable,
     /// The format's: a value that does not write, or bytes that do not read.
     Format(postcard::Error),
     /// Bytes are left after the base.
@@ -76,7 +79,7 @@ pub enum BaseError {
 /// analysis is then fresh.
 #[derive(Debug)]
 pub struct Base {
-    std: Arc<Package>,
+    pub(crate) std: Arc<Package>,
     pub(crate) analysis: Option<Analysis>,
 }
 
@@ -98,16 +101,17 @@ impl Base {
         Base { std, analysis: clean.then_some(a) }
     }
 
-    /// The bytes [`Base::decode`] reads: each module but its text, and the
-    /// analysis. A table is written in the order of its entries, so the bytes
-    /// are the same from tables of the same seed
+    /// The bytes [`Base::decode`] reads: each module but its text and its
+    /// tree, and the analysis. A table is written in the order of its
+    /// entries, so the bytes are the same from tables of the same seed
     /// ([`onsa_diag::hash::with_seed`]), and another seed reads them.
     pub fn encode(&self) -> Result<Vec<u8>, BaseError> {
         if !is_embedded(&self.std) {
             return Err(BaseError::NotEmbedded);
         }
+        let Some(analysis) = &self.analysis else { return Err(BaseError::Unusable) };
         let modules: Vec<_> = self.std.modules.iter().map(|m| (&m.segments, m.file, &m.parsed)).collect();
-        postcard::to_stdvec(&(modules, &self.analysis)).map_err(BaseError::Format)
+        postcard::to_stdvec(&(modules, analysis)).map_err(BaseError::Format)
     }
 
     /// The base [`Base::encode`] wrote and its std, the texts of the modules
@@ -115,7 +119,7 @@ impl Base {
     /// thread's seed. Its std is the one analyses continue it from
     /// ([`Base::copy_for`]).
     pub fn decode(bytes: &[u8]) -> Result<(Arc<Package>, Base), BaseError> {
-        type Written = (Vec<(Vec<String>, FileId, Parsed)>, Option<Analysis>);
+        type Written = (Vec<(Vec<String>, FileId, ParsedAst)>, Analysis);
         let ((parts, analysis), rest): (Written, _) = postcard::take_from_bytes(bytes).map_err(BaseError::Format)?;
         if !rest.is_empty() {
             return Err(BaseError::Trailing(rest.len()));
@@ -127,10 +131,16 @@ impl Base {
         let modules = parts
             .into_iter()
             .zip(table)
-            .map(|((segments, file, parsed), m)| Module { segments, file, text: m.text.to_string(), parsed })
+            .map(|((segments, file, parsed), m)| Module {
+                segments,
+                file,
+                text: m.text.to_string(),
+                parsed,
+                tree: None,
+            })
             .collect();
         let std = Arc::new(Package::std(modules));
-        Ok((std.clone(), Base { std, analysis }))
+        Ok((std.clone(), Base { std, analysis: Some(analysis) }))
     }
 
     /// Whether analyses continue it (std alone has no diagnostic).

@@ -22,7 +22,6 @@
 use std::collections::BTreeMap;
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use serde::{Deserialize, Serialize};
 
 use crate::cst::Cst;
 use crate::groups;
@@ -38,7 +37,7 @@ use crate::units::Units;
 /// candidate alone did, less the E0013 it takes away) and those kept as they
 /// are without a reading (no run of the units of one list,
 /// [`Units::reading`]). The tests see them.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct CandidateReads {
     pub bytes: usize,
     pub lexed: usize,

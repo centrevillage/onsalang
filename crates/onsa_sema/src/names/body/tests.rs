@@ -27,12 +27,7 @@ fn analysis_with_std(src: &str) -> (Analysis, Module) {
 }
 
 fn analysis_in(src: &str, deps: Vec<std::sync::Arc<Package>>) -> (Analysis, Module) {
-    let module = || Module {
-        segments: vec!["main".into()],
-        file: FileId(0),
-        text: src.into(),
-        parsed: onsa_syntax::parse(FileId(0), src),
-    };
+    let module = || Module::new(vec!["main".into()], FileId(0), src.into(), onsa_syntax::parse(FileId(0), src));
     let m = module();
     assert!(m.parsed.diagnostics.is_empty(), "a syntax error: {:?}", m.parsed.diagnostics);
     (analyze(&Package::new("t", vec![module()], deps)), m)
@@ -305,11 +300,13 @@ fn entity_of(a: &Analysis, name: &str) -> Entity {
 fn chains_record_the_namespaces_they_pass_and_the_item_they_end_at() {
     let main = "use util\npub enum Shape { Circle(F32), Dot }\npub struct P { x: I32 }\nimpl P {\n  pub fn new() -> P { P { x: 1 } }\n}\ntype Q = P\nconst K: I32 = 1\npub fn g[const N: U32]() -> U32 {\n  let a = util.f(N)\n  let s = Shape.Circle(F32.PI)\n  let p = P.new()\n  let q = Q.new()\n  let o = Some(K)\n  let b = F32.from_bits(a)\n  let t = \"{K} {util.C}\"\n  let y = p.x\n  a\n}\npub fn h[T](x: T) -> T {\n  let z = T.ZERO\n  x\n}\n";
     let util = "pub fn f(n: U32) -> U32 { n }\npub const C: I32 = 2\n";
-    let module = |segs: &[&str], file: u32, src: &str| Module {
-        segments: segs.iter().map(|s| s.to_string()).collect(),
-        file: FileId(file),
-        text: src.into(),
-        parsed: onsa_syntax::parse(FileId(file), src),
+    let module = |segs: &[&str], file: u32, src: &str| {
+        Module::new(
+            segs.iter().map(|s| s.to_string()).collect(),
+            FileId(file),
+            src.into(),
+            onsa_syntax::parse(FileId(file), src),
+        )
     };
     let m = module(&["main"], 0, main);
     // With std, which declares the members of the builtin types (§6.6).

@@ -270,7 +270,10 @@ impl<'p> Sema<'p> {
         if at.item.vis == Vis::Priv {
             diag = diag.with_rule("to export it, make it `pub`; to keep it in its module, remove `@export`");
         } else {
-            let Some(start) = self.module(at.m).and_then(|m| declaration_start(&m.parsed, at.id)) else {
+            let Some(tree) = self.module(at.m).and_then(|m| m.tree.as_ref()) else {
+                onsa_diag::internal::bug(Some(name.span), "E0303 in a module read back, whose base has no diagnostic")
+            };
+            let Some(start) = declaration_start(tree, at.id) else {
                 onsa_diag::internal::bug(Some(name.span), "an item with `@export` and no declaration node")
             };
             diag = diag.with_fix(Fix::insert("make it `pub`", name.span.file, start, "pub "));
@@ -442,11 +445,11 @@ impl Place<'_> {
 
 /// Where the declaration of the item `id` begins, after its attributes and
 /// visibility (the `rt` or the `fn` of a function, the `flow` of a flow).
-fn declaration_start(parsed: &onsa_syntax::Parsed, id: ItemId) -> Option<u32> {
+fn declaration_start(tree: &onsa_syntax::Tree, id: ItemId) -> Option<u32> {
     use onsa_syntax::cst::NodeKind;
-    let node = *parsed.map.items.get(id.index())?;
-    let decl = parsed.cst.child_nodes(node).find(|&c| matches!(parsed.cst.kind(c), NodeKind::Fn | NodeKind::Flow))?;
-    Some(parsed.cst.span(decl).start)
+    let node = *tree.map.items.get(id.index())?;
+    let decl = tree.cst.child_nodes(node).find(|&c| matches!(tree.cst.kind(c), NodeKind::Fn | NodeKind::Flow))?;
+    Some(tree.cst.span(decl).start)
 }
 
 /// The names a `use` takes: those of its list, or with none the last of its
@@ -484,7 +487,7 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
 /// Where a candidate adds a `use` in a file ([`UseAt`]): after the last `use`
 /// of the top level whose unit has no syntax error (a `use` cut in its list
 /// would read the new line in it), or else before the first unit.
-fn use_at(parsed: &onsa_syntax::Parsed) -> Option<UseAt> {
+fn use_at(parsed: &onsa_syntax::ParsedAst) -> Option<UseAt> {
     let top = || parsed.units.list.iter().filter(|u| u.parent.is_none());
     let is_use = |u: &&onsa_syntax::units::Unit| {
         !u.syntax_failed && u.item.is_some_and(|id| matches!(parsed.ast.item(id).kind, ItemKind::Use(_)))

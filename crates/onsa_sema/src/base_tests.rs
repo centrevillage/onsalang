@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use onsa_diag::FileId;
 use onsa_diag::hash::with_seed;
+use onsa_diag::internal::InternalBug;
 
 use crate::flow_tests::std_package;
 use crate::{Analysis, Base, BaseError, DefId, Module, Package, analyze, analyze_on};
@@ -70,7 +71,7 @@ fn a_continued_analysis_leaves_std_part_of_the_base() {
     drop(guard);
     for src in INPUTS {
         let parsed = onsa_syntax::parse(FileId(0), src);
-        let module = Module { segments: vec!["main".into()], file: FileId(0), text: src.to_string(), parsed };
+        let module = Module::new(vec!["main".into()], FileId(0), src.to_string(), parsed);
         let a = analyze_on(&Package::new("t", vec![module], vec![std.clone()]), base);
         assert!(a.continues(), "{src}");
         for ((what, was), (_, now)) in expected.iter().zip(std_part(&a, n)) {
@@ -155,7 +156,8 @@ fn parting(a: &str, b: &str) -> String {
     format!("at {at} of {} and {}:\n{}\n{}", a.len(), b.len(), around(a), around(b))
 }
 
-/// All of a base and of its std, in one order.
+/// All of a base and of its std, in one order, but the trees, which are not
+/// written ([`Module::tree`]): a field of [`onsa_syntax::ParsedAst`] is in it.
 fn whole(std: &Package, base: &Base) -> String {
     let modules: Vec<_> = std.modules.iter().map(|m| (&m.segments, m.file, &m.text, &m.parsed)).collect();
     canonical(&format!("{:?}", (std.name.as_str(), std.role, std.deps.len(), modules, &base.analysis)))
@@ -179,6 +181,7 @@ fn a_base_read_back_is_the_base_written() {
     let bytes = base.encode().expect("the base writes");
     let (read_std, read) = with_seed(2, || Base::decode(&bytes)).expect("the base reads back");
     assert!(read.usable(), "the base keeps its analysis");
+    assert!(read_std.modules.iter().all(|m| m.tree.is_none()), "no tree is read back");
     let (was, now) = (whole(&std, &base), whole(&read_std, &read));
     assert!(was == now, "{}", parting(&was, &now));
 }
@@ -205,16 +208,19 @@ fn bytes_that_are_no_base_are_an_error() {
 #[test]
 fn a_package_that_is_not_the_embedded_std_is_not_written() {
     let (std, _) = base();
-    let module = |text: &str| Module {
-        segments: vec!["main".into()],
-        file: FileId(0),
-        text: text.to_string(),
-        parsed: onsa_syntax::parse(FileId(0), text),
-    };
+    let module =
+        |text: &str| Module::new(vec!["main".into()], FileId(0), text.to_string(), onsa_syntax::parse(FileId(0), text));
     let other = Base::new(Arc::new(Package::std(vec![module("pub fn f() -> I32 {\n  1\n}\n")])));
     assert!(matches!(other.encode(), Err(BaseError::NotEmbedded)));
     let dep = Base::new(Arc::new(Package::new("t", vec![module("pub fn f() -> I32 {\n  1\n}\n")], vec![std.clone()])));
     assert!(matches!(dep.encode(), Err(BaseError::NotEmbedded)));
+}
+
+#[test]
+fn a_base_with_no_analysis_is_not_written() {
+    let (std, _) = base();
+    let unusable = Base { std: std.clone(), analysis: None };
+    assert!(matches!(unusable.encode(), Err(BaseError::Unusable)));
 }
 
 /// Inputs with a diagnostic of each stage, which a continued analysis reports as a fresh one.
@@ -229,25 +235,66 @@ const WRONG: &[&str] = &[
     "pub flow gain(x: F32 at sample, g: F32 at block) -> F32 at block {\n  x * g\n}\n",
 ];
 
+/// Inputs that write in std's tables: the analysis falls back to a fresh one,
+/// which runs every stage on the std it has, read back or parsed.
+const FALLS_BACK: &[&str] = &[
+    "impl I32 {\n  pub fn twice(self) -> I32 {\n    self * 2\n  }\n}\n\npub fn f() -> I32 {\n  let x: I32 = 3\n  x.twice()\n}\n",
+    "use std.test.{Gen}\n\ntype G = Gen[I32]\n\nimpl G {\n  pub fn n(self) -> I32 {\n    1\n  }\n}\n",
+];
+
 #[test]
 fn an_analysis_on_a_base_read_back_is_the_fresh_one() {
     // As a base made ahead: of the seed 0, and read with this process's.
-    let bytes = with_seed(0, || Base::new(std_package())).encode().expect("the base writes");
+    let parsed = std_package();
+    let bytes = with_seed(0, || Base::new(parsed.clone())).encode().expect("the base writes");
     let (std, read) = Base::decode(&bytes).expect("the base reads back");
     let read = Mutex::new(read);
-    for src in INPUTS.iter().chain(WRONG) {
-        let module = || Module {
-            segments: vec!["main".into()],
-            file: FileId(0),
-            text: src.to_string(),
-            parsed: onsa_syntax::parse(FileId(0), src),
-        };
+    for src in INPUTS.iter().chain(WRONG).chain(FALLS_BACK) {
+        let module =
+            || Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src));
         let continued = analyze_on(&Package::new("t", vec![module()], vec![std.clone()]), &read);
-        assert!(continued.continues(), "the std read back is the base's\n{src}");
-        let fresh = analyze(&Package::new("t", vec![module()], vec![std.clone()]));
+        assert_eq!(continued.continues(), !FALLS_BACK.contains(src), "the std read back is the base's\n{src}");
+        let fresh = analyze(&Package::new("t", vec![module()], vec![parsed.clone()]));
+        let on_read = analyze(&Package::new("t", vec![module()], vec![std.clone()]));
         let text = |a: &Analysis| format!("{:?}", (&a.diagnostics, &a.path_diagnostics));
         assert_eq!(text(&continued), text(&fresh), "{src}");
+        assert_eq!(text(&on_read), text(&fresh), "{src}");
         let reported = !fresh.diagnostics.is_empty() || !module().parsed.diagnostics.is_empty();
         assert!(reported || !WRONG.contains(src), "no diagnostic of\n{src}");
     }
+}
+
+/// `src` as the module of a package on std: with its tree, or without it as a
+/// module of a std read back.
+fn on_std(src: &str, tree: bool) -> Analysis {
+    let mut module = Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src));
+    if !tree {
+        module.tree = None;
+    }
+    analyze(&Package::new("t", vec![module], vec![std_package()]))
+}
+
+/// A module read back has `@mem` of a `let` on its AST: its E0200 is there
+/// without the tree, in a fresh analysis too.
+#[test]
+fn a_module_without_its_tree_reports_the_storage_attribute() {
+    let src = "pub flow g(x: F32 at sample) -> F32 at sample {\n  @mem(bulk) let d = delay~(x, 4800)\n  d\n}\n";
+    let text = |a: &Analysis| format!("{:?}", a.diagnostics);
+    let with_tree = on_std(src, true);
+    assert!(with_tree.diagnostics.iter().any(|d| d.code == onsa_diag::Code::E0200), "{}", text(&with_tree));
+    assert_eq!(text(&on_std(src, false)), text(&with_tree));
+}
+
+/// The candidate of an `@export` that is not `pub` reads the tree: without it
+/// the analysis stops with an internal error at the name, and gives no
+/// diagnostic with no candidate.
+#[test]
+fn a_module_without_its_tree_stops_at_what_reads_the_tree() {
+    let src = "@export\nfn f() -> I32 {\n  1\n}\n";
+    let with_tree = on_std(src, true);
+    assert!(with_tree.diagnostics.iter().any(|d| d.code == onsa_diag::Code::E0303 && !d.fixes.is_empty()));
+    let payload = std::panic::catch_unwind(|| on_std(src, false)).expect_err("an internal error");
+    let bug = payload.downcast::<InternalBug>().expect("an internal error of the compiler");
+    let span = bug.span.expect("at a position");
+    assert_eq!(&src[span.start as usize..span.end as usize], "f", "{}", bug.message);
 }

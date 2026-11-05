@@ -2,7 +2,6 @@
 
 use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
-use serde::{Deserialize, Serialize};
 
 use crate::ast::{BinOp, RangeEnd};
 
@@ -27,7 +26,7 @@ token_kinds! {
 /// (trivia), so the tokens cover every byte of the source and the CST holds
 /// all of them (R-86). The parser skips whitespace and comments and treats
 /// newlines by context (§2.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     // Trivia
     /// A run of spaces and tabs (§2.5).
@@ -549,7 +548,7 @@ pub const KEYWORDS: &[Keyword] = &[
 
 /// A token. What precedes it (a space, a newline or nothing) is read from the
 /// token list with [`gap_before`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,

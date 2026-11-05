@@ -190,16 +190,14 @@ impl<'p> Sema<'p> {
     // ------------------------------------------------------------ collection
 
     pub(crate) fn add_def(&mut self, def: Def) -> DefId {
-        let module = def.item.and_then(|i| self.module(def.module).map(|m| (i, m)));
-        let failed = module.and_then(|(i, m)| m.parsed.ast.item(i).failed);
+        let item = def.item.and_then(|i| self.module(def.module).map(|m| m.parsed.ast.item(i)));
+        let failed = item.and_then(|i| i.failed);
         self.a.defs.push(def);
         let id = DefId(self.a.defs.len() as u32 - 1);
         if let Some(f) = failed {
             self.a.failed.insert(id, f);
         }
-        if let Some(span) =
-            module.filter(|_| failed.is_none()).and_then(|(i, m)| crate::flow_syntax::first_mem(&m.parsed, i))
-        {
+        if let Some(span) = item.filter(|_| failed.is_none()).and_then(|i| i.mem_attr) {
             // `@mem` (§12.4) until W9-06: E0200, and the def is not checked
             // further (as a cut heading).
             self.unsupported(id, span, Feature::MemStorage, &[]);

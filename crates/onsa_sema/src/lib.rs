@@ -24,7 +24,6 @@ mod effects_tests;
 mod exhaust;
 pub mod flow;
 pub mod flow_names;
-mod flow_syntax;
 #[cfg(test)]
 mod flow_tests;
 pub mod infer;
@@ -79,7 +78,7 @@ use std::sync::Arc;
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Diagnostic, FileId};
-use onsa_syntax::Parsed;
+use onsa_syntax::{Parsed, ParsedAst, Tree};
 use serde::{Deserialize, Serialize};
 
 pub use base::{Base, BaseError, analyze_on};
@@ -105,10 +104,19 @@ pub struct Module {
     pub segments: Vec<String>,
     pub file: FileId,
     pub text: String,
-    pub parsed: Parsed,
+    pub parsed: ParsedAst,
+    /// None in a module of a std read back ([`Base::decode`], W5-19), whose
+    /// analysis has no diagnostic: what reads it is on the way to one.
+    pub tree: Option<Tree>,
 }
 
 impl Module {
+    /// The module of a file just parsed.
+    pub fn new(segments: Vec<String>, file: FileId, text: String, parsed: Parsed) -> Module {
+        let (parsed, tree) = parsed.split();
+        Module { segments, file, text, parsed, tree: Some(tree) }
+    }
+
     /// The module path as diagnostics show it: `dsp.voice`.
     pub fn path(&self) -> String {
         self.segments.join(".")

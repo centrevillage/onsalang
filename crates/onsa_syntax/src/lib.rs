@@ -102,7 +102,7 @@ pub fn diagnostic_contract(
 }
 
 /// Result of [`crate::parse`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Parsed {
     pub ast: Ast,
     /// The CST the AST was made from.
@@ -138,6 +138,29 @@ impl Parsed {
     pub fn first_syntax_error(&self) -> Option<&Diagnostic> {
         self.diagnostics.iter().find(|d| d.stage == Stage::Syntax)
     }
+
+    /// The two parts a module of a package keeps apart, the first being all
+    /// that a std compiled into the binary holds (W5-19).
+    pub fn split(self) -> (ParsedAst, Tree) {
+        let Parsed { ast, cst, map, diagnostics, units, .. } = self;
+        (ParsedAst { ast, diagnostics, units }, Tree { cst, map })
+    }
+}
+
+/// What the stages after the syntax stage read of a file ([`Parsed`] has the
+/// documents of the fields): the part of it that is written and read back.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ParsedAst {
+    pub ast: Ast,
+    pub diagnostics: Vec<Diagnostic>,
+    pub units: crate::units::Units,
+}
+
+/// The tree of a file, with the way from the AST to it ([`Parsed`]).
+#[derive(Debug)]
+pub struct Tree {
+    pub cst: Cst,
+    pub map: AstMap,
 }
 
 /// Lex and parse one file. Never fails: diagnostics are in `Parsed.diagnostics`

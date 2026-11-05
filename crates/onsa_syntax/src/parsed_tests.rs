@@ -1,22 +1,22 @@
-//! The result of the parser through `postcard`, the form of the std compiled
-//! into the binary (W5-19): what is read back is what the parser made, and
-//! the same input writes the same bytes (a build that can be repeated).
+//! What a module keeps of the parser's result ([`ParsedAst`]) through
+//! `postcard`, the form of the std compiled into the binary (W5-19): what is
+//! read back is what the parser made, and the same input writes the same
+//! bytes (a build that can be repeated).
 
 use onsa_diag::{FileId, SHARED_BASE};
 
-use crate::Parsed;
+use crate::ParsedAst;
 use crate::cst_tests::{onsa_files, root_dir};
 
-/// What the tests compare: every field of [`Parsed`] (its `Debug` holds the
-/// `Ast` and the CST).
-fn shown(p: &Parsed) -> String {
+/// What the tests compare: every field of [`ParsedAst`].
+fn shown(p: &ParsedAst) -> String {
     format!("{p:?}")
 }
 
 /// The bytes of `p`, read back whole: nothing of them is left unread.
-fn read_back(p: &Parsed) -> (Vec<u8>, Parsed) {
+fn read_back(p: &ParsedAst) -> (Vec<u8>, ParsedAst) {
     let bytes = postcard::to_stdvec(p).unwrap();
-    let (back, rest): (Parsed, &[u8]) = postcard::take_from_bytes(&bytes).unwrap();
+    let (back, rest): (ParsedAst, &[u8]) = postcard::take_from_bytes(&bytes).unwrap();
     assert!(rest.is_empty(), "{} bytes left unread", rest.len());
     (bytes, back)
 }
@@ -35,12 +35,11 @@ fn std_files() -> Vec<(FileId, String, String)> {
 fn the_parsed_std_reads_back_the_same_and_writes_the_same_bytes() {
     onsa_diag::stack::run(|| {
         for (file, name, text) in std_files() {
-            let parsed = crate::parse(file, &text);
+            let (parsed, _) = crate::parse(file, &text).split();
             assert!(parsed.diagnostics.is_empty(), "{name}: {:?}", parsed.diagnostics);
             let (bytes, back) = read_back(&parsed);
             assert_eq!(shown(&back), shown(&parsed), "{name}: not the same after reading back");
-            assert_eq!(back.cst.text(&text), text, "{name}: the CST read back does not give the source");
-            let (again, _) = read_back(&crate::parse(file, &text));
+            let (again, _) = read_back(&crate::parse(file, &text).split().0);
             assert!(bytes == again, "{name}: two writes of one input differ");
         }
     });
@@ -54,7 +53,7 @@ fn a_file_with_errors_reads_back_the_same() {
         ["fn f(a: I32 {\n", "fn f() {\n    let x = 1;\n    x = ;\n}\n", "if x { y } else z\n", "x = 1 + * 2\n"];
     let (mut with_fix, mut with_note) = (false, false);
     for src in sources {
-        let parsed = crate::parse(FileId(0), src);
+        let (parsed, _) = crate::parse(FileId(0), src).split();
         assert!(!parsed.diagnostics.is_empty(), "{src:?}: no diagnostic");
         with_fix |= parsed.diagnostics.iter().any(|d| !d.fixes.is_empty());
         with_note |= parsed.diagnostics.iter().any(|d| !d.notes.is_empty());

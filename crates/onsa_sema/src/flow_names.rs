@@ -2,8 +2,7 @@
 //! `at` (§11.3, S-359; the names are [`Rate::clock`]) and the built-in delays
 //! `prev~` / `delay~` / `vdelay~` and the other builtin names of a flow
 //! (§11.4, §2.2). The one table of each (plan
-//! D-15): the names stage, the flow checks, the gate of the flow syntax
-//! outside a flow (`crate::flow_syntax`), `onsa graph` and `onsa interface`
+//! D-15): the names stage, the flow checks, `onsa graph` and `onsa interface`
 //! read them from here.
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};

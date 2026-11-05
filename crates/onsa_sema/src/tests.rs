@@ -13,11 +13,13 @@ pub(crate) fn pkg(files: &[(&str, &str)]) -> Package {
     let modules = files
         .iter()
         .enumerate()
-        .map(|(i, (path, text))| Module {
-            segments: path.split('.').map(str::to_string).collect(),
-            file: FileId(i as u32),
-            text: text.to_string(),
-            parsed: onsa_syntax::parse(FileId(i as u32), text),
+        .map(|(i, (path, text))| {
+            Module::new(
+                path.split('.').map(str::to_string).collect(),
+                FileId(i as u32),
+                text.to_string(),
+                onsa_syntax::parse(FileId(i as u32), text),
+            )
         })
         .collect();
     Package::new("t", modules, vec![crate::flow_tests::std_package()])

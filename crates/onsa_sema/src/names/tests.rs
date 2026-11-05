@@ -58,12 +58,12 @@ fn a_use_takes_the_module_of_a_directory_only_and_goes_through_it() {
 
 /// A package of the modules `files`, their files numbered from `first`.
 fn pkg_at(name: &str, first: u32, files: &[(&str, &str)], deps: Vec<std::sync::Arc<Package>>) -> Package {
-    let mut p = pkg(files);
-    for (k, m) in p.modules.iter_mut().enumerate() {
-        m.file = FileId(first + k as u32);
-        m.parsed = onsa_syntax::parse(m.file, &m.text);
-    }
-    Package::new(name, p.modules, deps)
+    let p = pkg(files);
+    let file = |k: usize| FileId(first + k as u32);
+    let parsed = |(k, m): (usize, crate::Module)| {
+        crate::Module::new(m.segments, file(k), m.text.clone(), onsa_syntax::parse(file(k), &m.text))
+    };
+    Package::new(name, p.modules.into_iter().enumerate().map(parsed).collect(), deps)
 }
 
 /// R-39, R-88: a body names another module or a package through a `use`

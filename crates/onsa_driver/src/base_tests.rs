@@ -119,7 +119,7 @@ fn made(files: &[(&str, &str)]) -> (Package, SourceMap) {
 /// One module of the package `pkg`, parsed.
 fn module(sources: &mut SourceMap, pkg: &str, path: &str, src: &str) -> Module {
     let file = sources.add(format!("{pkg}/{path}.onsa"), src);
-    Module { segments: vec![path.into()], file, text: src.into(), parsed: parse_file(file, src) }
+    Module::new(vec![path.into()], file, src.into(), parse_file(file, src))
 }
 
 /// The Core of `a`, printed, or why there is none.

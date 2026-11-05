@@ -81,7 +81,7 @@ fn std_parsed() -> &'static Std {
             .zip(std_modules())
             .map(|((file, f), m)| {
                 let segments = m.segments.iter().map(|s| s.to_string()).collect();
-                Module { segments, file, text: m.text.to_string(), parsed: parse_file(file, f.text()) }
+                Module::new(segments, file, m.text.to_string(), parse_file(file, f.text()))
             })
             .collect();
         let package = Arc::new(Package::std(modules));
@@ -184,7 +184,7 @@ fn user_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, Vec<Str
         .map(|(file, path)| {
             let text = sources.file(*file).text().to_string();
             let parsed = parse_file(*file, &text);
-            Module { segments: path.clone(), file: *file, text, parsed }
+            Module::new(path.clone(), *file, text, parsed)
         })
         .collect();
     let std = std_package(sources);
@@ -355,7 +355,7 @@ mod tests {
         let std_modules_count = std.modules.len();
         let src = "use std.math.{sqrt}\n\npub fn half(x: F32) -> F32 {\n  sqrt(x) * 0.5\n}\n";
         let file = sources.add("mid/m.onsa", src);
-        let module = Module { segments: vec!["m".into()], file, text: src.to_string(), parsed: parse_file(file, src) };
+        let module = Module::new(vec!["m".into()], file, src.to_string(), parse_file(file, src));
         let mid = Arc::new(Package::new("mid", vec![module], vec![std.clone()]));
         let pkg = Package::new("user", Vec::new(), vec![std, mid]);
         let flat = onsa_sema::flatten(&pkg);
@@ -381,7 +381,7 @@ mod tests {
         let mut module = |pkg: &str, path: &[&str], src: &str| {
             let file = sources.add(format!("{pkg}/{}.onsa", path.join("/")), src);
             let segments = path.iter().map(|s| s.to_string()).collect();
-            Module { segments, file, text: src.into(), parsed: parse_file(file, src) }
+            Module::new(segments, file, src.into(), parse_file(file, src))
         };
         let mid = module("mid", &["m"], "@export\npub fn half(x: F32) -> F32 {\n  x * 0.5\n}\n");
         let fns = "@export\npub fn zed() -> I32 {\n  1\n}\n\npub fn not_out() -> I32 {\n  2\n}\n\n\

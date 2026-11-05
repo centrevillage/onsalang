@@ -22,7 +22,6 @@
 //! the expressions.
 
 use onsa_diag::Span;
-use serde::{Deserialize, Serialize};
 
 use crate::ast::*;
 use crate::cst::{Class, Cst, Elem, NodeId, NodeKind, TokenIdx};
@@ -36,7 +35,7 @@ mod items;
 /// From each AST node to the CST node it was made from (same indices as the
 /// arenas of [`Ast`]). The parts of the AST that are not arena nodes (`Ident`,
 /// `Path`, `Param`, ...) are found with [`Cst::covering_nodes`].
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone)]
 pub struct AstMap {
     pub items: Vec<NodeId>,
     pub exprs: Vec<NodeId>,

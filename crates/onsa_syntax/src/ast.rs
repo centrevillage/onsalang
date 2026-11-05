@@ -302,6 +302,11 @@ pub struct Item {
     /// unit has none. Set by [`crate::parse`] (an item the parser stopped in,
     /// and an item whose unit has a syntax diagnostic of another kind).
     pub failed: Option<Failed>,
+    /// The first storage attribute of a `let` in the item, not in the items
+    /// of its members (`@mem`, §12.4, S-43). The syntax stage reads it, and
+    /// its meaning (the bulk storage, E0818 to E0820) is W9-06: until then,
+    /// the item is E0200, once, and is not checked further (plan §8.2).
+    pub mem_attr: Option<Span>,
 }
 
 /// How far a failed item was read ([`Item::failed`]).

@@ -205,12 +205,8 @@ mod tests {
 
     /// The code, the text and the start of the one diagnostic of `src`.
     fn first(src: &str) -> (Code, String, usize) {
-        let modules = vec![Module {
-            segments: vec!["main".into()],
-            file: FileId(0),
-            text: src.to_string(),
-            parsed: onsa_syntax::parse(FileId(0), src),
-        }];
+        let modules =
+            vec![Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src))];
         let a = analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let d = &a.diagnostics[0];
@@ -254,12 +250,8 @@ mod tests {
 
     /// The title and the removed text of the candidate of the one diagnostic of `src`.
     fn removal(src: &str) -> (String, String) {
-        let modules = vec![Module {
-            segments: vec!["main".into()],
-            file: FileId(0),
-            text: src.to_string(),
-            parsed: onsa_syntax::parse(FileId(0), src),
-        }];
+        let modules =
+            vec![Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src))];
         let a = analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let fix = &a.diagnostics[0].fixes[0];
