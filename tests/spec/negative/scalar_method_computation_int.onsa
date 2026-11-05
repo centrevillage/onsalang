@@ -1,15 +1,16 @@
 // onsa.toml
 // [test]
 // spec = ["§3.4", "§15.1", "§18.1"]
+// fixes = 1
 
 // E0413 (W5-02 U4b): a computation of an integer that the spec writes as a function of `std.math` has no method
 // form either (§3.4: "整数と浮動小数のメソッドは、§3.3 の変換と、床除算と検査付きで全てである"), and a method that
 // is only for the floats (`sqrt`, `floor`, `is_nan`) is not one of an integer. The type of the receiver is known
 // in each function, so it is E0413. One error per function (P-01). The candidate of `abs`, `min` and `max` is the
 // function form (`n.abs()` is `abs(n)`); `sqrt`, `floor` and `is_nan` of an integer have none (the integer is
-// not a `Float`, §13.4). `fixes` is not set here: the case holds `min` and `max` of unsigned integers, and
-// tests/spec/fixes/e0413_math_*.onsa count the candidates. The last function is fine: the same computations in
-// the function form.
+// not a `Float`, §13.4). The candidates are of the first of each family, as the other cases have it; `min` and
+// `max` of unsigned integers have theirs too (`AnyNum`, §13.4). The last function is fine: the same computations
+// in the function form.
 
 use std.math.{abs, max, min}
 

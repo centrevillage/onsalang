@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:7"
+// code = "E0302"
+// candidate = 1
+// clean = true
+
+// E0302 for `F64.MIN` as the receiver of a method call: the same parentheses as for `F32` (§6.6), `(-F64.MAX).to_bits()`.
+// No diagnostic is left after it.
+
+pub fn lowest_bits() -> U64 {
+  F64.MIN.to_bits()                                 //~ E0302
+}

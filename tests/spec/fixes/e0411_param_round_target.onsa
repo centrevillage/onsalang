@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0411 of an `as` whose target is a type parameter with the bound `Float`: from a concrete number (`k as T`) or from another
+// type parameter (`x as U`) (§3.3: "型パラメータへの `as` と型パラメータからの `as` も、境界が与える関連関数で
+// 同じに選ぶ（`k as T` は、`T: Float` なら `T.round_from(k)`）"). One reading, so one candidate, which replaces the whole `as`
+// expression with the conversion function of the target: `T.round_from(k)` and `U.round_from(x)` (the target's name, the
+// operand as written: `-k as T` is `(-k) as T`, §3.1, so `T.round_from(-k)`). The source bound of `round_from` is `AnyNum`:
+// a concrete number of any type satisfies it, and so do the parameters `T: AnyNum`, `T: Num`, `T: Int` and `T: Float`. The
+// places are a function, a `let`, an operand, a closure, a branch and a method of an `impl` with a bounded parameter. One
+// error in each function (P-01), so no error is left after the candidate. The last function is fine.
+
+use std.array
+
+pub struct Level[T] {
+  v: T,
+}
+
+impl[T: Float] Level[T] {
+  pub fn from_count(self, k: U32) -> T {
+    k as T                                          //~ E0411
+  }
+}
+
+pub fn from_signed[T: Float](k: I32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn from_unsigned[T: Float](k: U32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn from_byte[T: Float](k: U8) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn from_single[T: Float](k: F32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn from_double[T: Float](k: F64) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn from_negated[T: Float](k: I32) -> T {
+  -k as T                                           //~ E0411
+}
+
+pub fn from_in_a_let[T: Float](k: I32) -> T {
+  let y = k as T                                    //~ E0411
+  y
+}
+
+pub fn from_operand[T: Float](k: I32, y: T) -> T {
+  (k as T) * y                                      //~ E0411
+}
+
+pub fn from_in_a_branch[T: Float](flag: Bool, k: I32, y: T) -> T {
+  if flag { k as T } else { y }                     //~ E0411
+}
+
+pub fn from_in_a_closure[T: Float](k: I32) -> [T; 4] {
+  array.from_fn(fn(i) { k as T })                   //~ E0411
+}
+
+pub fn between_floats[T: Float, U: Float](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn between_in_a_let[T: Float, U: Float](x: T) -> U {
+  let y = x as U                                    //~ E0411
+  y
+}
+
+pub fn between_num[T: Num, U: Float](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn between_any[T: AnyNum, U: Float](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn between_int[T: Int, U: Float](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn fine[T: Float](k: I32) -> T {
+  T.round_from(k)
+}

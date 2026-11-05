@@ -42,11 +42,12 @@ mod entry;
 mod expressions;
 mod generics;
 mod named;
+pub(crate) mod operator_fix;
 mod patterns;
 mod reach;
 mod receivers;
 mod removed;
-mod slot;
+pub(crate) mod slot;
 mod statements;
 
 // ---------------------------------------------------------------- tables

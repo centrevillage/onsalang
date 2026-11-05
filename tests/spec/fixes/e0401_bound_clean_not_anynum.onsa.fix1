@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:3"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `!x` where `T: AnyNum` (§6.3: `!` is `Int`, so `T: AnyNum` becomes `T: Int`). The one candidate replaces
+// the bound; no diagnostic is left after it.
+
+pub fn invert[T: Int](x: T) -> T {
+  !x                                                //~ E0401
+}

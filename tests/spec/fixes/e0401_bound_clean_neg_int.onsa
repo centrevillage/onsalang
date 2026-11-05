@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:3"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `-x` where `T: Int` (§6.3: `Int` is not `Num`, so the bound is joined: `T: Int + Num`, the signed integers).
+// The one candidate keeps `Int` and adds `Num`; no diagnostic is left after it.
+
+pub fn negate[T: Int](x: T) -> T {
+  -x                                                //~ E0401
+}

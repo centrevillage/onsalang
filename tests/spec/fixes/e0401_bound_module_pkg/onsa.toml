@@ -1,0 +1,3 @@
+[package]
+name = "e0401_bound_module_pkg"
+edition = "2026"

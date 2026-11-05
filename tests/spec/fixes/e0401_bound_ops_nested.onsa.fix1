@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§3.2", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0401 for an operator on a generic value, in the places an expression is written in (§6.3): a branch, an arm, a closure,
+// a loop body, a `let`, an argument, a `return`, inside a longer expression. The candidate is the same wherever the
+// operator is: it narrows the bound of the parameter in the signature of the function that has the operator (a closure
+// has no type parameters of its own). One error in each function (P-01). The last function is fine.
+
+use std.array
+
+fn keep[T](x: T) -> T {
+  x
+}
+
+pub fn in_a_branch[T: Num](flag: Bool, x: T) -> T {
+  if flag { -x } else { x }                         //~ E0401
+}
+
+pub fn in_an_else[T: Int](flag: Bool, x: T) -> T {
+  if flag { x } else { !x }                         //~ E0401
+}
+
+pub fn in_an_arm[T: Num](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => -v,                                  //~ E0401
+    None => d,
+  }
+}
+
+pub fn in_a_closure[T: Num](x: T) -> [T; 4] {
+  array.from_fn(fn(i) { -x })                       //~ E0401
+}
+
+pub fn in_a_loop[T: Num](x: T, n: U32) -> T {
+  var acc = x
+  for _ in 0 ..< n {
+    acc = acc - x                                   //~ E0401
+  }
+  acc
+}
+
+pub fn in_a_let[T: Num](a: T, b: T) -> T {
+  let s = a * b                                     //~ E0401
+  s
+}
+
+pub fn as_an_argument[T: Show + Num](a: T, b: T) -> T {
+  keep(a / b)                                       //~ E0401
+}
+
+pub fn in_a_return[T: Num + Int](a: T, b: T) -> T {
+  return a & b                                      //~ E0401
+}
+
+pub fn in_a_longer_expression[T: Num](a: T, b: T) -> T {
+  -a + b                                            //~ E0401
+}
+
+pub fn in_a_comparison[T: PartialOrd](flag: Bool, a: T, b: T) -> Bool {
+  flag && a < b                                     //~ E0401
+}
+
+pub fn fine[T: Num](flag: Bool, x: T) -> T {
+  if flag { -x } else { x }
+}

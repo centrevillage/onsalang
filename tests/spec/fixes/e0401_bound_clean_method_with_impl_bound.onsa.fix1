@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "21:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `!k` where `U: Num` is a type parameter of the method and the `impl` has its own bounded parameter `T: Float`
+// (§6.3): the operand is a `U`, so the candidate narrows the method's `[U: Num]` to `[U: Num + Int]` and leaves the
+// heading of the `impl` as it is. No diagnostic is left after it.
+
+pub struct Level[T] {
+  v: T,
+}
+
+impl[T: Float] Level[T] {
+  pub fn inverted[U: Num + Int](self, k: U) -> U {
+    !k                                              //~ E0401
+  }
+}

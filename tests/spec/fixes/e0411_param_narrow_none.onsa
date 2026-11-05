@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.3", "§18.1"]
+// fixes = 0
+
+// E0411 of an integer `as` that is a narrowing or may be one, where an end is a type parameter with the bound `Int` (§3.3:
+// "整数の縮小は…修正候補を出さず、note で `narrow_from` の形を示す"; "型パラメータへの `as` と型パラメータからの `as` も、
+// 境界が与える関連関数で同じに選ぶ"). `narrow_from` returns an `Option` and not the value, which is not what `as` of Rust and
+// C means (the low bits), so no candidate is offered (`fixes = 0`). The width of the parameter is not known in the
+// definition, so every integer pair with a parameter is read as a possible narrowing. The note is not asked here. One
+// error in each function (P-01). The last functions are fine.
+
+pub fn into_parameter[T: Int](n: I64) -> T {
+  n as T                                            //~ E0411
+}
+
+pub fn into_parameter_unsigned[T: Int](n: U32) -> T {
+  n as T                                            //~ E0411
+}
+
+pub fn into_parameter_small[T: Int](n: U8) -> T {
+  n as T                                            //~ E0411
+}
+
+pub fn into_unsigned_parameter[T: Unsigned](n: U16) -> T {
+  n as T                                            //~ E0411
+}
+
+pub fn from_parameter[T: Int](x: T) -> I32 {
+  x as I32                                          //~ E0411
+}
+
+pub fn from_parameter_byte[T: Int](x: T) -> U8 {
+  x as U8                                           //~ E0411
+}
+
+pub fn from_parameter_wide[T: Unsigned](x: T) -> I64 {
+  x as I64                                          //~ E0411
+}
+
+pub fn from_parameter_in_a_let[T: Int](x: T) -> I16 {
+  let n = x as I16                                  //~ E0411
+  n
+}
+
+pub fn between_parameters[T: Int, U: Int](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn fine_into[T: Int](n: I64) -> Option[T] {
+  T.narrow_from(n)
+}
+
+pub fn fine_from[T: Int](x: T) -> Option[I32] {
+  I32.narrow_from(x)
+}

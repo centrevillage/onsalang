@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§6.3", "§18.1"]
+// fixes = 2
+
+// E0411 of an `as` from a float to a type parameter with the bound `Int` (or `Unsigned`, which is an `Int`), from a
+// `Float` parameter to an `Int` parameter (§3.3: "型パラメータへの `as` と型パラメータからの `as` も、境界が与える関連関数で
+// 同じに選ぶ"). A float to an integer reads differently in other languages, so the candidates are listed by reading, as for a
+// concrete pair: `T.trunc_sat_from(y)` first (the meaning of Rust's `as`) and `T.trunc_from(y)` second. Each candidate
+// replaces the whole `as` expression, the operand stays as written (`-y as T` is `(-y) as T`, §3.1) and the parentheses of
+// the place stay. The source bound of both functions is `Float`: a concrete float or a `Float` parameter satisfies it. The
+// places are a function, a `let`, an operand, a branch and a method with a type parameter of its own. One error in
+// each function (P-01), so no error is left after either candidate. The last function is fine.
+
+pub fn from_single[T: Int](y: F32) -> T {
+  T.trunc_sat_from(y)                                            //~ E0411
+}
+
+pub fn from_double[T: Int](y: F64) -> T {
+  T.trunc_sat_from(y)                                            //~ E0411
+}
+
+pub fn into_unsigned[T: Unsigned](y: F32) -> T {
+  T.trunc_sat_from(y)                                            //~ E0411
+}
+
+pub fn from_negated[T: Int](y: F32) -> T {
+  T.trunc_sat_from(-y)                                           //~ E0411
+}
+
+pub fn from_in_a_let[T: Int](y: F64) -> T {
+  let n = T.trunc_sat_from(y)                                    //~ E0411
+  n
+}
+
+pub fn from_operand[T: Int](y: F32, n: T) -> T {
+  (T.trunc_sat_from(y)) + n                                      //~ E0411
+}
+
+pub fn from_in_a_branch[T: Int](flag: Bool, y: F32, n: T) -> T {
+  if flag { T.trunc_sat_from(y) } else { n }                     //~ E0411
+}
+
+pub fn between_float_and_int[T: Float, U: Int](x: T) -> U {
+  U.trunc_sat_from(x)                                            //~ E0411
+}
+
+pub fn between_float_and_unsigned[T: Float, U: Unsigned](x: T) -> U {
+  U.trunc_sat_from(x)                                            //~ E0411
+}
+
+pub fn between_in_a_let[T: Float, U: Int](x: T) -> U {
+  let n = U.trunc_sat_from(x)                                    //~ E0411
+  n
+}
+
+pub struct Wheel {
+  n: U32,
+}
+
+impl Wheel {
+  pub fn whole[U: Int](self, y: F64) -> U {
+    U.trunc_sat_from(y)                                          //~ E0411
+  }
+}
+
+pub fn fine[T: Int](y: F32) -> T {
+  T.trunc_sat_from(y)
+}

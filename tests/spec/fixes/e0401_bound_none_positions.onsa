@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// E0401 for an operator that no narrowing of the bound can give, with no candidate (`fixes = 0`), in places other than the
+// signature of a function (§6.3: "絞れないとき（`T: Unsigned` の否定、`T: Float` のビット演算）は候補を出さない"): the heading
+// of an `impl`, the type parameter of a method, a closure and a branch. `T: Unsigned` and a `-`: a type is not both unsigned
+// and negatable. `T: Float` and `!`, the shifts, `|`, and the wrapping and saturating operators `-%` `+|` `*|` (the others
+// are in ops_float_wrapping_e0401.onsa): a type is not both a float and an integer. One error in each function (P-01). The
+// last function is fine.
+
+use std.array
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T: Unsigned] Wrap[T] {
+  pub fn negated(self) -> T {
+    -self.v                                         //~ E0401
+  }
+}
+
+impl[T: Float] Wrap[T] {
+  pub fn inverted(self) -> T {
+    !self.v                                         //~ E0401
+  }
+
+  pub fn wrapped(self, k: T) -> T {
+    self.v -% k                                     //~ E0401
+  }
+
+  pub fn clamped(self, k: T) -> T {
+    self.v +| k                                     //~ E0401
+  }
+}
+
+pub struct Wheel {
+  n: U32,
+}
+
+impl Wheel {
+  pub fn negated_in_a_method[U: Unsigned](self, k: U) -> U {
+    -k                                              //~ E0401
+  }
+
+  pub fn shifted_in_a_method[U: Float](self, k: U, n: U32) -> U {
+    k << n                                          //~ E0401
+  }
+}
+
+pub fn negated_in_a_closure[T: Unsigned](x: T) -> [T; 4] {
+  array.from_fn(fn(i) { -x })                       //~ E0401
+}
+
+pub fn saturating_in_a_branch[T: Float](flag: Bool, a: T, b: T) -> T {
+  if flag { a *| b } else { a }                     //~ E0401
+}
+
+pub fn masked_in_a_branch[T: Float](flag: Bool, a: T, b: T) -> T {
+  if flag { a } else { a | b }                      //~ E0401
+}
+
+pub fn fine[T: Int](a: T, b: T) -> T {
+  a -% b
+}

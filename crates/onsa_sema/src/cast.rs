@@ -43,16 +43,20 @@ pub enum Instead {
 }
 
 /// The function a rejected `as` of a number or a type parameter `from`
-/// to the number `to` reads as (§3.3): the one of a conversion to a float,
-/// the two of a float to an integer. A bound of the source gives what it
-/// can be, so the source meets the bound of the function (`AnyNum`, `Float`,
-/// `Int`); a bound that is not known (§18.1, a failed `use`) gives nothing.
+/// to a number or a type parameter `to` reads as (§3.3): the one of a
+/// conversion to a float, the two of a float to an integer. A bound gives
+/// what a type parameter can be, so the target has the function (`Float`,
+/// `Int`) and the source meets its bound (`AnyNum`, `Float`, `Int`); a bound
+/// that is not known (§18.1, a failed `use`) gives nothing.
 pub fn cast_instead(bounds: &Bounds, from: TyId, to: TyId) -> Instead {
-    let source = |b| !bounds.traits_unknown(from) && bounds.satisfies(from, b);
-    match bounds.a.types.get(to) {
-        Ty::Float(_) if source(Bound::AnyNum) => Instead::Calls(&[ROUND_FROM]),
-        Ty::Int(_) if source(Bound::Float) => Instead::Calls(&[TRUNC_SAT_FROM, TRUNC_FROM]),
-        Ty::Int(_) if source(Bound::Int) => Instead::Narrowing,
-        _ => Instead::Nothing,
+    let is = |t, b| !bounds.traits_unknown(t) && bounds.satisfies(t, b);
+    if is(to, Bound::Float) && is(from, Bound::AnyNum) {
+        Instead::Calls(&[ROUND_FROM])
+    } else if is(to, Bound::Int) && is(from, Bound::Float) {
+        Instead::Calls(&[TRUNC_SAT_FROM, TRUNC_FROM])
+    } else if is(to, Bound::Int) && is(from, Bound::Int) {
+        Instead::Narrowing
+    } else {
+        Instead::Nothing
     }
 }

@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `a ^ b` where `T: Num` (§6.3: `Num` is not `Int`, so the bound is joined: `T: Num + Int`). The one
+// candidate keeps `Num` and adds `Int`; no diagnostic is left after it.
+
+pub fn toggle[T: Num](a: T, b: T) -> T {
+  a ^ b                                             //~ E0401
+}

@@ -36,6 +36,8 @@ pub mod layout;
 mod layout_tests;
 mod modes;
 mod names;
+#[cfg(test)]
+mod operator_fix_tests;
 /// The files of a package tree (§15.1): the driver reads packages with it, and
 /// `build.rs` includes the same file to generate the std table.
 pub mod package_tree;

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:7"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `a - b` where `U` has no bound and is a type parameter of the method itself (§6.3): the candidate gives the
+// method's own parameter the bound `Num`: `[U: Num]`. No diagnostic is left after it.
+
+pub struct Wheel {
+  n: U32,
+}
+
+impl Wheel {
+  pub fn difference[U](self, a: U, b: U) -> U {
+    a - b                                           //~ E0401
+  }
+}

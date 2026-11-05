@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.3", "§18.1"]
+// fixes = 0
+
+// E0401 for an operator on a value of `T: ?Dup`, with no candidate (§6.3: "絞れないとき…は候補を出さない"; §4.5: `?Dup` and a
+// bound that needs `Dup` (`Num`, `Int`, ...: all the number traits need `Copy`) side by side is an E0416 of its own). The
+// traits that a candidate would add (`Num` for `+` and `-x`, `Int` for the bit, wrapping and saturating operators) all
+// need `Copy`, so a candidate would write a signature that is another error: the bound cannot be narrowed (`fixes = 0`).
+// One error in each function (P-01). The last functions are fine: the bound without `?Dup`, which the candidate would give.
+
+pub fn negate_affine[T: ?Dup](x: T) -> T {
+  -x                                                //~ E0401
+}
+
+pub fn add_affine[T: ?Dup](a: T, b: T) -> T {
+  a + b                                             //~ E0401
+}
+
+pub fn mul_affine[T: ?Dup](a: T, b: T) -> T {
+  a * b                                             //~ E0401
+}
+
+pub fn mask_affine[T: ?Dup](a: T, b: T) -> T {
+  a & b                                             //~ E0401
+}
+
+pub fn invert_affine[T: ?Dup](x: T) -> T {
+  !x                                                //~ E0401
+}
+
+pub fn wrapping_affine[T: ?Dup](a: T, b: T) -> T {
+  a +% b                                            //~ E0401
+}
+
+pub fn saturating_affine[T: ?Dup](a: T, b: T) -> T {
+  a -| b                                            //~ E0401
+}
+
+pub struct Wheel {
+  n: U32,
+}
+
+impl Wheel {
+  pub fn negate_in_a_method[U: ?Dup](self, k: U) -> U {
+    -k                                              //~ E0401
+  }
+}
+
+pub fn fine_add[T: Num](a: T, b: T) -> T {
+  a + b
+}
+
+pub fn fine_mask[T: Int](a: T, b: T) -> T {
+  a & b
+}

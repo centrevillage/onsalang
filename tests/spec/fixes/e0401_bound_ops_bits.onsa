@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§3.2", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0401 for a bit operator on a generic value (§6.3: "ビット演算・`!`・ラップ・飽和は `Int`"): the one candidate narrows the
+// bound in the signature to the trait that has the operator. `T: AnyNum` becomes `T: Int` (`Int` contains `AnyNum`), and
+// `T: Num` becomes `T: Num + Int` (the signed integers, since `Int` does not contain `Num`). The operators are `|` `^`
+// `<<` `>>` `!`; `&` is in e0401_bounds.onsa. One error in each function (P-01), and the bound is the only thing a
+// candidate touches, so no function is touched by the candidate of another. The last function is fine.
+
+pub fn or_any[T: AnyNum](a: T, b: T) -> T {
+  a | b                                             //~ E0401
+}
+
+pub fn xor_any[T: AnyNum](a: T, b: T) -> T {
+  a ^ b                                             //~ E0401
+}
+
+pub fn shift_left_any[T: AnyNum](a: T, n: U32) -> T {
+  a << n                                            //~ E0401
+}
+
+pub fn shift_right_any[T: AnyNum](a: T, n: U32) -> T {
+  a >> n                                            //~ E0401
+}
+
+pub fn invert_any[T: AnyNum](x: T) -> T {
+  !x                                                //~ E0401
+}
+
+pub fn or_num[T: Num](a: T, b: T) -> T {
+  a | b                                             //~ E0401
+}
+
+pub fn xor_num[T: Num](a: T, b: T) -> T {
+  a ^ b                                             //~ E0401
+}
+
+pub fn shift_left_num[T: Num](a: T, n: U32) -> T {
+  a << n                                            //~ E0401
+}
+
+pub fn shift_right_num[T: Num](a: T, n: U32) -> T {
+  a >> n                                            //~ E0401
+}
+
+pub fn invert_num[T: Num](x: T) -> T {
+  !x                                                //~ E0401
+}
+
+pub fn fine[T: Int](a: T, b: T) -> T {
+  a | b
+}

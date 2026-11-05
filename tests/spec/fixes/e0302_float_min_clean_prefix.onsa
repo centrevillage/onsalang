@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:8"
+// code = "E0302"
+// candidate = 1
+// clean = true
+
+// E0302 for `F32.MIN` under a prefix `-` (§6.6): the candidate `-F32.MAX` inside the negation needs parentheses, because
+// the candidate is itself a prefix expression: `-(-F32.MAX)`. No diagnostic is left after it.
+
+pub fn highest() -> F32 {
+  -F32.MIN                                          //~ E0302
+}

@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0411 of an `as` from a type parameter with the bound `AnyNum`, `Int` or `Unsigned` to a concrete float (§3.3: "型パラメータ
+// からの `as` も、境界が与える関連関数で同じに選ぶ"; the source bound of `round_from` is `AnyNum`, which each of these bounds
+// satisfies, §6.3). One reading, so one candidate, which replaces the whole `as` expression: `F32.round_from(x)` or
+// `F64.round_from(x)`, the operand as written. The bounds `Num` and `Float` are in e0411_type_param_source.onsa. One error in
+// each function (P-01), so no error is left after the candidate. The last function is fine.
+
+pub fn any_to_single[T: AnyNum](x: T) -> F32 {
+  x as F32                                          //~ E0411
+}
+
+pub fn any_to_double[T: AnyNum](x: T) -> F64 {
+  x as F64                                          //~ E0411
+}
+
+pub fn int_to_single[T: Int](x: T) -> F32 {
+  x as F32                                          //~ E0411
+}
+
+pub fn int_to_double[T: Int](x: T) -> F64 {
+  x as F64                                          //~ E0411
+}
+
+pub fn unsigned_to_double[T: Unsigned](x: T) -> F64 {
+  x as F64                                          //~ E0411
+}
+
+pub fn any_in_a_let[T: AnyNum](x: T) -> F32 {
+  let y = x as F32                                  //~ E0411
+  y
+}
+
+pub fn int_operand[T: Int](x: T, y: F32) -> F32 {
+  (x as F32) * y                                    //~ E0411
+}
+
+pub fn fine[T: Float](x: T) -> F32 {
+  F32.round_from(x)
+}

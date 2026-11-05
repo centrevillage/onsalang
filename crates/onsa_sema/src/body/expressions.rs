@@ -709,7 +709,11 @@ impl<'a> Checker<'a> {
                 self.defer(span, t, DeferredKind::Operator { op });
                 Ok(())
             }
-            Verdict::Unmet(msg) => Err(self.err(Code::E0401, span, msg)),
+            Verdict::Unmet(msg) => {
+                let d = Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(self.src(span));
+                let d = self.with_bound_fix(d, op, t);
+                Err(self.diag(d))
+            }
         }
     }
 

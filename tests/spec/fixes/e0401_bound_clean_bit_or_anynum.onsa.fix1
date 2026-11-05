@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `a | b` where `T: AnyNum` (§6.3: the bit operators are `Int`, so `T: AnyNum` becomes `T: Int`, which
+// contains `AnyNum`). The one candidate replaces the bound; no diagnostic is left after it.
+
+pub fn merge[T: Int](a: T, b: T) -> T {
+  a | b                                             //~ E0401
+}

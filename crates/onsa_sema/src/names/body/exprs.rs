@@ -175,7 +175,7 @@ impl Walker<'_> {
     fn interp(&mut self, e: ExprId, s: &StrLit) -> W {
         for (k, seg) in (0..).zip(&s.segments) {
             if let StrSeg::Interp(p) = seg {
-                let (records, fail) = self.resolve(&p.segments.iter().collect::<Vec<_>>(), Place::Value);
+                let (records, fail) = self.resolve(&p.segments.iter().collect::<Vec<_>>(), &[], Place::Value);
                 match fail {
                     Some(Fail::Report(d)) => {
                         let d = self.in_literal(d, self.ast.expr(e).span);

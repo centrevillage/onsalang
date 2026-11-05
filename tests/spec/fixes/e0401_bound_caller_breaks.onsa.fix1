@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:3"
+// code = "E0401"
+// candidate = 1
+// leaves = ["21:3 E0416"]
+
+// E0401 for `-x` of `T: AnyNum`, whose candidate narrows the bound to `Num` (§6.3) though a caller passes `U32`, which
+// does not satisfy it: the promise of §18.1 is of the units the candidate touches, and the caller is not one of them, so
+// the candidate is offered. The E0416 of the caller, which held no error before it, is written in `leaves`.
+
+pub fn negate[T: Num](x: T) -> T {
+  -x                                                //~ E0401
+}
+
+pub fn caller() -> U32 {
+  let u: U32 = 5
+  negate(u)
+}

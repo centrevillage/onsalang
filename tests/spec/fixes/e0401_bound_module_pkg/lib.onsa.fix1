@@ -1,0 +1,19 @@
+// The generic functions of this module use an operator that the bound of the parameter does not give. Each is one error
+// with one candidate that narrows the bound in the signature of the function (§6.3), here in the file of the module, while
+// main.onsa calls them with `I32`, which satisfies every narrowed bound.
+
+pub fn negate[T: Num](x: T) -> T {
+  -x                                                //~ E0401
+}
+
+pub fn mask[T: Num + Int](a: T, b: T) -> T {
+  a & b                                             //~ E0401
+}
+
+pub fn below[T: PartialOrd](a: T, b: T) -> Bool {
+  a < b                                             //~ E0401
+}
+
+pub fn fine[T: Num](x: T) -> T {
+  -x
+}

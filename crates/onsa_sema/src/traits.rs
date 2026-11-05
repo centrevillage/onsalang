@@ -112,6 +112,12 @@ impl Rep {
     }
 }
 
+/// The constants of the ends of a type: a float type has no [`MIN`], which
+/// reads as two values in the languages it comes from, and writes the most
+/// negative value with [`MAX`] (§6.6).
+pub(crate) const MIN: &str = "MIN";
+pub(crate) const MAX: &str = "MAX";
+
 /// The names the number traits give a type parameter (§3.3, §6.3, §6.6): the
 /// constants, the conversion functions and the methods. A row has no forms:
 /// those are the declarations of std, one place (D-15), held equal for every
@@ -119,9 +125,9 @@ impl Rep {
 #[rustfmt::skip]
 pub(crate) const MEMBERS: &[(Bound, Rep, &[&str])] = &[
     (Bound::AnyNum, Rep::I32, &["ZERO"]),
-    (Bound::Float, Rep::F32, &["ONE", "PI", "MAX", "EPSILON", "INFINITY", "NAN", ROUND_FROM]),
+    (Bound::Float, Rep::F32, &["ONE", "PI", MAX, "EPSILON", "INFINITY", "NAN", ROUND_FROM]),
     (Bound::Int, Rep::I32, &[
-        "ONE", "MIN", "MAX", "BITS", NARROW_FROM, TRUNC_FROM, TRUNC_SAT_FROM,
+        "ONE", MIN, MAX, "BITS", NARROW_FROM, TRUNC_FROM, TRUNC_SAT_FROM,
         "div_euclid", "rem_euclid", "checked_add", "checked_sub", "checked_mul", "checked_div",
         "checked_rem", "checked_div_euclid", "checked_rem_euclid", "checked_shl", "checked_shr",
     ]),
@@ -183,6 +189,53 @@ impl Class {
 pub(crate) fn implies(have: Bound, want: Bound) -> bool {
     have == want
         || SUPERS.iter().find(|(b, _)| *b == have).is_some_and(|(_, supers)| supers.iter().any(|&s| implies(s, want)))
+}
+
+/// The trait a generic function narrows a bound to for the operator `op`
+/// (§6.3): its own trait for a comparison, else the number trait that has it.
+pub(crate) fn narrowed_bound(op: OpNeed) -> Bound {
+    match op_bound(op) {
+        b @ (Bound::PartialEq | Bound::PartialOrd) => b,
+        b if implies(Bound::Num, b) => Bound::Num,
+        _ => Bound::Int,
+    }
+}
+
+/// Whether a row of [`IMPLS`] has `want` and all of `bounds`: without one, no
+/// type meets them together (`Unsigned` and `Num`, §6.3). A kind constraint
+/// is in no row, and is decided by the kind.
+pub(crate) fn narrowable(bounds: &[Bound], want: Bound) -> bool {
+    let holds = |row: &[Bound]| row.contains(&want) && bounds.iter().all(|b| b.is_kind_constraint() || row.contains(b));
+    IMPLS.iter().any(|(_, row)| holds(row))
+}
+
+/// The number traits (§6.3), in the order a note names them.
+const NUMBER_TRAITS: [Bound; 5] = [Bound::AnyNum, Bound::Num, Bound::Float, Bound::Int, Bound::Unsigned];
+
+/// The note of the E0416 of the type `ty`, shown as `shown`, that does not
+/// meet `want` (§6.3): the number traits it does, of its row of [`IMPLS`];
+/// none of another trait, and of a type that meets no number trait.
+pub(crate) fn number_traits_note(ty: &Ty, shown: &str, want: Bound) -> Option<String> {
+    let row = Class::of(ty).filter(|_| NUMBER_TRAITS.contains(&want))?;
+    let met: Vec<Bound> = NUMBER_TRAITS.into_iter().filter(|&b| row.implements(b)).collect();
+    (!met.is_empty()).then(|| format!("`{shown}` satisfies the number traits {} (§6.3)", named(&met)))
+}
+
+/// The note of the E0302 of `param.name`, a name its bounds do not give
+/// (§6.3): the traits that do; none of a name of no row of [`MEMBERS`].
+pub(crate) fn member_note(param: &str, name: &str) -> Option<String> {
+    let rows: Vec<Bound> = MEMBERS.iter().filter(|(_, _, names)| names.contains(&name)).map(|&(b, ..)| b).collect();
+    (!rows.is_empty())
+        .then(|| format!("`{name}` is a member of {}, which the bounds of `{param}` do not imply (§6.3)", named(&rows)))
+}
+
+/// The bounds `bs`, for the text of a note: `` `A`, `B` and `C` ``.
+fn named(bs: &[Bound]) -> String {
+    let names: Vec<String> = bs.iter().map(|b| format!("`{}`", b.name())).collect();
+    match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+        _ => names.concat(),
+    }
 }
 
 /// The trait an operator needs of its operands (§3.2, §6.3), one for each.

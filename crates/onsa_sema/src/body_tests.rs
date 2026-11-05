@@ -305,8 +305,9 @@ fn conversions() {
 
 /// The E0411 says what the pair is (spec §3.3): only the number types have
 /// another way to convert, so a type parameter's text says it has no `as`, and
-/// the text of another type names no way (R-159, R-257). An integer
-/// narrowing has no candidate; its note has the `Option` of `narrow_from`.
+/// the text of another type names no way (R-159, R-257). A float to a
+/// `T: Float` has the candidate `T.round_from` (S-231). An integer narrowing
+/// has no candidate; its note has the `Option` of `narrow_from`.
 #[test]
 fn the_text_of_the_e0411_goes_by_the_pair() {
     let of = |src: &str| {
@@ -323,7 +324,7 @@ fn the_text_of_the_e0411_goes_by_the_pair() {
     assert_eq!(fixes, 1);
     let (target, fixes, _) = of("pub fn f[T: Float](x: F32) -> T { x as T }\n");
     assert!(target.starts_with("a type parameter has no `as`"), "{target}");
-    assert_eq!(fixes, 0);
+    assert_eq!(fixes, 1);
     for src in ["pub fn f(c: Char) -> U8 { c as U8 }\n", "pub fn f(b: Bool) -> I32 { b as I32 }\n"] {
         let (other, fixes, notes) = of(src);
         assert!(other.contains("only converts between number types") && !other.contains("function"), "{other}");

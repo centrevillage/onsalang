@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0401 in a generic function of another module (§6.3, §15.1): the signature that the candidate narrows is in lib.onsa, and
+// this module only calls the three functions with `I32`. The errors are in the body of the functions in lib.onsa, so the
+// names are the names of the module and this file has no diagnostic. One error in each function of lib.onsa (P-01).
+
+use lib.{negate, mask, below, fine}
+
+pub fn run(x: I32, y: I32) -> I32 {
+  if below(x, y) { negate(mask(x, y)) } else { fine(x) }
+}

@@ -26,8 +26,7 @@ impl<'a> Checker<'a> {
     /// `to` that `as` does not write (§3.3). Only the number types have
     /// another way to convert, so only their text names one (`Char`, R-257).
     /// A candidate keeps the operand as it is written and the target as `ty`
-    /// writes it. A type parameter as the target has none yet, other than the
-    /// same type (`T.round_from`, W5-05 U5).
+    /// writes it, a type parameter too (`T.round_from(k)`).
     pub(super) fn cast_error(&mut self, span: Span, inner: ExprId, ty: TypeId, from: TyId, to: TyId) -> Diagnostic {
         let (source, target) = (self.display(from), self.display(to));
         let (f, t) = (self.ty(from), self.ty(to));

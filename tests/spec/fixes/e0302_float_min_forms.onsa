@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.6", "§18.1"]
+// fixes = 1
+
+// E0302 for `MIN` of a float type, in the places an expression is written in (§6.6: "浮動小数に `MIN` は無い（E0302。修正候補は
+// `-F32.MAX`）。`T: Float` の `T.MIN` も同じで、修正候補は `-T.MAX`"). The one candidate is `-` and the same type and `MAX`,
+// whatever the place: a type written through an alias keeps the name that was written, the parameter keeps its name. The
+// places are an argument, an operand, a comparison, a `let`, a field, an element, a closure, a branch and a method of an
+// `impl` with a bounded parameter (the parentheses that a place needs are in e0302_float_min_clean_*.onsa). One error in
+// each function (P-01). The last functions are fine: `MIN` of an integer is the smallest value, and `T: Int` has it.
+
+use std.array
+
+type Sample = F64
+
+pub struct Cell {
+  v: F32,
+}
+
+pub struct Level[T] {
+  v: T,
+}
+
+impl[T: Float] Level[T] {
+  pub fn lowest(self) -> T {
+    T.MIN                                           //~ E0302
+  }
+
+  pub fn is_lowest(self) -> Bool {
+    self.v == T.MIN                                 //~ E0302
+  }
+}
+
+fn keep(x: F32) -> F32 {
+  x
+}
+
+pub fn as_an_argument() -> F32 {
+  keep(F32.MIN)                                     //~ E0302
+}
+
+pub fn left_operand(x: F32) -> F32 {
+  F32.MIN + x                                       //~ E0302
+}
+
+pub fn right_operand(x: F64) -> F64 {
+  x * F64.MIN                                       //~ E0302
+}
+
+pub fn in_a_comparison(x: F32) -> Bool {
+  x > F32.MIN                                       //~ E0302
+}
+
+pub fn through_an_alias() -> Sample {
+  Sample.MIN                                        //~ E0302
+}
+
+pub fn in_a_let(x: F64) -> F64 {
+  let m = F64.MIN                                   //~ E0302
+  m + x
+}
+
+pub fn in_a_field() -> Cell {
+  Cell { v: F32.MIN }                               //~ E0302
+}
+
+pub fn in_an_element() -> [F32; 2] {
+  [F32.MIN, 0.0]                                    //~ E0302
+}
+
+pub fn in_a_branch(flag: Bool, x: F32) -> F32 {
+  if flag { F32.MIN } else { x }                    //~ E0302
+}
+
+pub fn in_a_closure() -> [F32; 4] {
+  array.from_fn(fn(i) { F32.MIN })                  //~ E0302
+}
+
+pub fn parameter_in_a_let[T: Float](x: T) -> T {
+  let m = T.MIN                                     //~ E0302
+  m
+}
+
+pub fn parameter_in_a_closure[T: Float](x: T) -> [T; 4] {
+  array.from_fn(fn(i) { T.MIN })                    //~ E0302
+}
+
+pub fn parameter_in_a_comparison[T: Float](x: T) -> Bool {
+  x > T.MIN                                         //~ E0302
+}
+
+pub fn fine_integer() -> I32 {
+  I32.MIN
+}
+
+pub fn fine_parameter[T: Int](x: T) -> T {
+  T.MIN
+}
+
+pub fn fine_float() -> F32 {
+  -F32.MAX
+}

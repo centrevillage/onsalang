@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:6"
+// code = "E0302"
+// candidate = 1
+// clean = true
+
+// E0302 for `MIN` of a float type written through an alias (§6.6: "別名の型は書いた字"): the alias is a float, so `Al.MIN`
+// has no `MIN`, and the candidate keeps the name that was written: `-Al.MAX`. No diagnostic is left after it.
+
+type Al = F32
+
+pub fn lowest() -> Al {
+  Al.MIN                                            //~ E0302
+}

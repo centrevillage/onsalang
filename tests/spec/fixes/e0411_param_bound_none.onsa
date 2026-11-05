@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§6.3", "§18.1"]
+// fixes = 0
+
+// E0411 of an `as` with a type parameter whose bounds give no conversion function, so there is no candidate (§3.3: "境界から
+// 変換の関連関数が決まらない型パラメータには候補を出さない"). A bound gives a function only through the numeric trait that
+// has it: `round_from` is in `Float` (as a target) and needs a source of `AnyNum` or more; `trunc_from` and `trunc_sat_from`
+// are in `Int` (as a target) and need a source of `Float`; `narrow_from` is in `Int` and needs a source of `Int`. A target
+// parameter with no bound, with `Show` or with `AnyNum` has none of the functions; a source with no bound or with `Show`
+// is not an `AnyNum`; a source with `AnyNum` is neither a `Float` nor an `Int`. One error in each function (P-01). The last
+// functions are fine.
+
+pub fn show_target[T: Show](k: I32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn show_target_float[T: Show](k: F32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn unbounded_target_double[T](k: F64) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn anynum_target[T: AnyNum](k: I32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn anynum_target_float[T: AnyNum](k: F32) -> T {
+  k as T                                            //~ E0411
+}
+
+pub fn show_source[T: Show](x: T) -> F32 {
+  x as F32                                          //~ E0411
+}
+
+pub fn show_source_integer[T: Show](x: T) -> I32 {
+  x as I32                                          //~ E0411
+}
+
+pub fn anynum_source_integer[T: AnyNum](x: T) -> I32 {
+  x as I32                                          //~ E0411
+}
+
+pub fn anynum_source_unsigned[T: AnyNum](x: T) -> U8 {
+  x as U8                                           //~ E0411
+}
+
+pub fn show_source_for_float[T: Show, U: Float](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn unbounded_source_for_float[T, U: Float](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn float_source_for_show[T: Float, U: Show](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn anynum_source_for_int[T: AnyNum, U: Int](x: T) -> U {
+  x as U                                            //~ E0411
+}
+
+pub fn fine_float[T: Float](x: T) -> F32 {
+  F32.round_from(x)
+}
+
+pub fn fine_int[T: Int](x: T) -> F64 {
+  F64.round_from(x)
+}

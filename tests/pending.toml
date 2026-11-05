@@ -633,20 +633,6 @@ note = "s.f(x) の E0020（型の段）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0302_float_min.onsa"
-reasons = ["S-109", "S-46"]
-until = "W5-21"
-note = "F32.MIN の E0302 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0401_bounds.onsa"
-reasons = ["S-84"]
-until = "W5-21"
-note = "総称の演算子の境界を絞る E0401 の候補"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0601_alloc_row.onsa"
 reasons = ["S-82", "R-87"]
 until = "W6-03"

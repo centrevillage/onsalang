@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§3.2", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0401 for `- * / %` on a generic value (§6.3: "`+ - * / %` は `Num`（数の境界の既定）に絞る"): the one candidate gives the
+// parameter the bound `Num` in the signature. A bound that `Num` contains (`PartialEq`, `PartialOrd`) is replaced by it
+// (`T: PartialOrd` becomes `T: Num`, not `T: PartialOrd + Num`), and a bound that it does not contain (`Show`) stays, with
+// `Num` joined: `T: Show + Num`. `+` is in e0401_bounds.onsa. One error in each function (P-01). The last function
+// is fine.
+
+pub fn sub_unbounded[T](a: T, b: T) -> T {
+  a - b                                             //~ E0401
+}
+
+pub fn mul_unbounded[T](a: T, b: T) -> T {
+  a * b                                             //~ E0401
+}
+
+pub fn div_unbounded[T](a: T, b: T) -> T {
+  a / b                                             //~ E0401
+}
+
+pub fn rem_unbounded[T](a: T, b: T) -> T {
+  a % b                                             //~ E0401
+}
+
+pub fn add_partial_eq[T: PartialEq](a: T, b: T) -> T {
+  a + b                                             //~ E0401
+}
+
+pub fn div_partial_ord[T: PartialOrd](a: T, b: T) -> T {
+  a / b                                             //~ E0401
+}
+
+pub fn add_show[T: Show](a: T, b: T) -> T {
+  a + b                                             //~ E0401
+}
+
+pub fn mul_show[T: Show](a: T, b: T) -> T {
+  a * b                                             //~ E0401
+}
+
+pub fn rem_show[T: Show](a: T, b: T) -> T {
+  a % b                                             //~ E0401
+}
+
+pub fn fine[T: Num](a: T, b: T) -> T {
+  a - b
+}

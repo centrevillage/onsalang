@@ -337,7 +337,7 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         };
         // A panic names this declaration (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
-        let mut w = Walker::new(a, def.module, ast, &module.text, (generics, self_ty));
+        let mut w = Walker::new(a, def.module, ast, &module.text, (generics, self_ty, body));
         let flow = matches!(def.kind, DefKind::Flow(_));
         let done = match &def.kind {
             DefKind::Flow(f) => w.walk_flow(&f.inputs, body),
@@ -463,6 +463,9 @@ struct Walker<'a> {
     flow_types: VecDeque<(StmtId, Site)>,
     /// In a constant expression of §4.5 (`Walker::const_expr`).
     in_const: bool,
+    /// The expression of the body, under which a candidate finds the place
+    /// of an expression (`crate::body::slot`).
+    root: ExprId,
     /// The parameters of the anonymous function whose heading is walked,
     /// which the whole heading sees (§5.1, S-739).
     heading: HashMap<String, onsa_diag::Span>,
@@ -474,7 +477,7 @@ impl<'a> Walker<'a> {
         m: ModId,
         ast: &'a Ast,
         text: &'a str,
-        (generics, self_ty): (&'a [GenericDef], Option<TyId>),
+        (generics, self_ty, root): (&'a [GenericDef], Option<TyId>, ExprId),
     ) -> Walker<'a> {
         Walker {
             a,
@@ -493,6 +496,7 @@ impl<'a> Walker<'a> {
             flow_stop: None,
             flow_types: VecDeque::new(),
             in_const: false,
+            root,
             heading: HashMap::default(),
         }
     }

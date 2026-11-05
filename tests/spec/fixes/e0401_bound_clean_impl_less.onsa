@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:12"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `self.v < other` in a method of `impl[T] Wrap[T]` (§6.3): the parameter has no bound, so the candidate gives the
+// heading of the `impl` the bound `PartialOrd`: `impl[T: PartialOrd] Wrap[T]`. No diagnostic is left after it.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn below(self, other: T) -> Bool {
+    self.v < other                                  //~ E0401
+  }
+}

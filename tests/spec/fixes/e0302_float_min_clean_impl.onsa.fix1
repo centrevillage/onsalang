@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:7"
+// code = "E0302"
+// candidate = 1
+// clean = true
+
+// E0302 for `T.MIN` in a method of `impl[T: Float] Level[T]` (§6.6): the candidate is `-T.MAX`. No diagnostic is left
+// after it.
+
+pub struct Level[T] {
+  v: T,
+}
+
+impl[T: Float] Level[T] {
+  pub fn lowest(self) -> T {
+    -T.MAX                                           //~ E0302
+  }
+}

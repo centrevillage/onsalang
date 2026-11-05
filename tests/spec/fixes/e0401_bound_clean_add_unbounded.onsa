@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `a + b` where `T` has no bound (§6.3: `+ - * / %` are `Num`, the default of the numeric bounds). The one
+// candidate gives the parameter the bound `T: Num`; no diagnostic is left after it.
+
+pub fn total[T](a: T, b: T) -> T {
+  a + b                                             //~ E0401
+}

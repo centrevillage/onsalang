@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:7"
+// code = "E0302"
+// candidate = 1
+// clean = true
+
+// E0302 for `F32.MIN` as the receiver of a method call (§6.6): the candidate `-F32.MAX` would bind weaker than the call
+// (`-F32.MAX.to_bits()` is `-(F32.MAX.to_bits())`, a negation of a `U32`), so it gets parentheses:
+// `(-F32.MAX).to_bits()`. No diagnostic is left after it.
+
+pub fn lowest_bits() -> U32 {
+  F32.MIN.to_bits()                                 //~ E0302
+}

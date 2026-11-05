@@ -14,18 +14,20 @@
 //! error of the names stage that stops the walk of the body (§18.1); a name
 //! the names stage holds as an error stops it with no diagnostic (S-692).
 
-use onsa_diag::{Code, Diagnostic, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path};
 
 use super::kinds::Want;
 use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
 use crate::Analysis;
-use crate::def::GenericKind;
+use crate::body::slot::{Form, slot_of};
+use crate::def::{Bound, GenericKind};
 use crate::flow_names::FlowBuiltin;
-use crate::names::BuiltinMember;
+use crate::names::{BuiltinMember, builtin_ty};
 use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
-use crate::ty::TyId;
+use crate::traits::{MAX, MIN, implies, member_note};
+use crate::ty::{Ty, TyId};
 
 /// What the types stage does with the end of a chain of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,8 +84,8 @@ impl<'a> Walker<'a> {
                 _ => self.expr(e),
             };
         };
-        let names: Vec<&Ident> = chain.iter().map(|&(_, n)| n).collect();
-        let (records, fail) = self.resolve(&names, place);
+        let (nodes, names): (Vec<ExprId>, Vec<&Ident>) = chain.iter().copied().unzip();
+        let (records, fail) = self.resolve(&names, &nodes, place);
         for (&(e, _), r) in chain.iter().zip(records) {
             self.out.paths.insert(e, r);
         }
@@ -92,8 +94,9 @@ impl<'a> Walker<'a> {
 
     /// The records of the names of a chain, one for each element from its
     /// head to the last one the names stage resolves, and the error that
-    /// stopped it.
-    pub(super) fn resolve(&mut self, segs: &[&Ident], place: Place) -> (Vec<PathRes>, Option<Fail>) {
+    /// stopped it. `nodes`: the expression of each element, none in a hole
+    /// of a string (where a candidate writes no other form).
+    pub(super) fn resolve(&mut self, segs: &[&Ident], nodes: &[ExprId], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let head = segs[0];
         if let Some(b) = self.lookup(head) {
             return (vec![PathRes::Local(b)], None);
@@ -103,7 +106,7 @@ impl<'a> Walker<'a> {
             return (Vec::new(), Some(Fail::Report(d.with_found(crate::names::SELF_VALUE))));
         }
         match self.heading(head) {
-            Some(PathRes::TypeParam(i)) => return self.type_param(i, segs, place),
+            Some(PathRes::TypeParam(i)) => return self.type_param(i, segs, nodes, place),
             Some(r) => return (vec![r], None),
             None => {}
         }
@@ -180,7 +183,7 @@ impl<'a> Walker<'a> {
             }
             Some(ResolveError::NotFound { .. }) if variant.is_some() => variant.map(Fail::Report),
             Some(ResolveError::NotFound { .. }) if called.is_some() => called,
-            Some(err) => Some(self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner))),
+            Some(err) => Some(self.no_member(err, segs, nodes, place, (at, of, owner))),
         };
         // A chain held as an error has no record, as one held at its head
         // (`BodyNames`): the types stage stops at its head.
@@ -194,7 +197,7 @@ impl<'a> Walker<'a> {
     /// member after it is of its bounds (§3.3, [`crate::traits::member`]),
     /// as the member of a type is; a name its bounds do not give is not
     /// found, of a parameter whose bounds were all read (§18.1).
-    fn type_param(&self, param: u32, segs: &[&Ident], place: Place) -> (Vec<PathRes>, Option<Fail>) {
+    fn type_param(&self, param: u32, segs: &[&Ident], nodes: &[ExprId], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let head = vec![PathRes::TypeParam(param)];
         let Some(name) = segs.get(1) else {
             let kind = self.kind_fail(NameKind::Type, segs, place);
@@ -205,10 +208,20 @@ impl<'a> Walker<'a> {
             onsa_diag::internal::bug(Some(name.span), "a type parameter of another kind");
         };
         let Some(member) = crate::traits::member(self.a, bounds, &name.name) else {
-            return match unknown {
-                true => (Vec::new(), Some(Fail::Held)),
-                false => (head, Some(self.not_found(name))),
+            if *unknown {
+                return (Vec::new(), Some(Fail::Held));
+            }
+            let float = bounds.iter().any(|&b| implies(b, Bound::Float));
+            let d = ResolveError::NotFound { name: name.name.clone(), span: name.span }.into_diagnostic();
+            let d = match (
+                float.then(|| self.float_min(segs, 1, nodes, place)).flatten(),
+                member_note(&g.name, &name.name),
+            ) {
+                (Some(fix), _) => d.with_fix(fix),
+                (None, Some(note)) => d.with_rule(note),
+                (None, None) => d,
             };
+            return (head, Some(Fail::Report(d)));
         };
         // Up to the member, a value, whose fields and methods may follow.
         let (at, place) = if segs.len() == 2 { (segs, place) } else { (&segs[..2], Place::Value) };
@@ -216,6 +229,43 @@ impl<'a> Walker<'a> {
         let kind = NameKind::of(entity, &self.a.defs).and_then(|k| self.kind_fail(k, at, place));
         let records = vec![head[0].clone(), PathRes::BoundMember { param, member }];
         (records, kind.or_else(|| self.method_form(entity, at, place)))
+    }
+
+    /// The error `err` of `segs[at]`, no member of `of` as written (`owner`):
+    /// after a float type, with the candidate of `MIN`.
+    fn no_member(
+        &self,
+        err: ResolveError,
+        segs: &[&Ident],
+        nodes: &[ExprId],
+        place: Place,
+        (at, of, owner): (usize, Entity, Option<TyId>),
+    ) -> Fail {
+        let fail = self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner));
+        let float = builtin_ty(self.a, of).is_some_and(|t| matches!(self.a.types.get(t), Ty::Float(_)));
+        match (fail, float.then(|| self.float_min(segs, at, nodes, place)).flatten()) {
+            (Fail::Report(d), Some(fix)) => Fail::Report(d.with_fix(fix)),
+            (fail, _) => fail,
+        }
+    }
+
+    /// The candidate of the E0302 of `MIN` at `segs[at]` after a float type
+    /// or a `T: Float`, `-F32.MAX` (§6.6), in parentheses where a prefix form
+    /// takes them or after a `-` (`--` is no prefix, §3.1): none of another
+    /// name, at a place that takes no such form (a callee, a hole of a
+    /// string), and in a constant expression of §4.5, which has no float.
+    fn float_min(&self, segs: &[&Ident], at: usize, nodes: &[ExprId], place: Place) -> Option<Fix> {
+        let last = at + 1 == segs.len();
+        if segs[at].name != MIN || self.in_const || (last && place != Place::Value) {
+            return None;
+        }
+        let slot = slot_of(self.ast, self.root, *nodes.get(at)?)?.slot;
+        let (head, name) = (segs[0].span, segs[at].span);
+        let wraps = slot.wraps(Form::Prefix) || self.text[..head.start as usize].ends_with('-');
+        let (open, close) = if wraps { ("(-", ")") } else { ("-", "") };
+        let text = format!("{open}{}.{MAX}{close}", self.src(span_of(&segs[..at])));
+        let edits = vec![Edit::insert(head.file, head.start, open), Edit::replace(name, format!("{MAX}{close}"))];
+        Some(Fix::new(format!("write `{text}`"), edits))
     }
 
     /// E0308 for `panic` at the place of a value, or with a name after it
@@ -239,9 +289,8 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// E0302 for the head of a chain not found, or the member after a type
-    /// parameter: one form wherever the chain is (a value, a callee, a hole,
-    /// a constant expression).
+    /// E0302 for the head of a chain not found: one form wherever the chain
+    /// is (a value, a callee, a hole, a constant expression).
     fn not_found(&self, head: &Ident) -> Fail {
         Fail::Report(ResolveError::NotFound { name: head.name.clone(), span: head.span }.into_diagnostic())
     }

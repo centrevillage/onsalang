@@ -451,6 +451,9 @@ impl<'p> Sema<'p> {
             if let (Some(decl), Required::Param { param, owner, .. }) = (declared, &what) {
                 d = d.with_note(decl, format!("the parameter `{param}` of {owner} is declared here"));
             }
+            if let Some(note) = crate::traits::number_traits_note(self.a.types.get(arg), &self.shown(cx, shown), b) {
+                d = d.with_rule(note);
+            }
             return Err(d.with_found(src(cx, at)));
         }
         Ok(())

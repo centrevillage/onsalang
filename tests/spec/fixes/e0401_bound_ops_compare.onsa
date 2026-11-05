@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§3.2", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0401 for a comparison on a generic value (§6.3: "`==` `!=` は `PartialEq`、`<` `<=` `>` `>=` は `PartialOrd`"): the one
+// candidate gives the parameter that trait in the signature, and not a number trait, because a type that is not a number
+// is compared too (a `clamp` would be led to a wrong bound). A bound that the trait does not contain (`Show`) stays, with
+// the trait joined: `T: Show + PartialOrd`. `==` and `<` without a bound are in e0401_bounds.onsa. One error in each
+// function (P-01). The last function is fine.
+
+pub fn ne_show[T: Show](a: T, b: T) -> Bool {
+  a != b                                            //~ E0401
+}
+
+pub fn eq_show[T: Show](a: T, b: T) -> Bool {
+  a == b                                            //~ E0401
+}
+
+pub fn lt_show[T: Show](a: T, b: T) -> Bool {
+  a < b                                             //~ E0401
+}
+
+pub fn le_show[T: Show](a: T, b: T) -> Bool {
+  a <= b                                            //~ E0401
+}
+
+pub fn ge_unbounded[T](a: T, b: T) -> Bool {
+  a >= b                                            //~ E0401
+}
+
+pub fn gt_unbounded[T](a: T, b: T) -> Bool {
+  a > b                                             //~ E0401
+}
+
+pub fn fine[T: PartialOrd](a: T, b: T) -> Bool {
+  a < b
+}

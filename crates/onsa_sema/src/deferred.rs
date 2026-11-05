@@ -342,6 +342,7 @@ impl<'a> Checker<'a> {
                 Verdict::Wait => Look::Wait,
                 Verdict::Unmet(msg) => {
                     let d = Diagnostic::new(Stage::Types, Code::E0401, item.span, msg).with_found(self.src(item.span));
+                    let d = self.with_bound_fix(d, *op, r);
                     // The statement that decided the type, as for E0416; not the default (its
                     // note speaks of a bound).
                     let shown = self.display(r);
@@ -430,6 +431,9 @@ impl<'a> Checker<'a> {
                 let msg = what.unmet(&shown, *bound, &mut |t| self.display(t));
                 let mut d = Diagnostic::new(Stage::Types, Code::E0416, item.span, msg).with_found(self.src(item.span));
                 d = self.decided_note(d, item.ty, &shown, true);
+                if let Some(note) = crate::traits::number_traits_note(&self.ty(r), &shown, *bound) {
+                    d = d.with_rule(note);
+                }
                 if let Required::SeqElement { .. } = what {
                     d = self.seq_element_notes(d, r, &shown, *bound);
                 }
@@ -473,7 +477,8 @@ impl<'a> Checker<'a> {
                     item.span,
                     format!("`-` on the unsigned type `{}`; it has no unary `-`, also for `-0` (§3.4, §4.7)", k.name()),
                 )
-                .with_found(self.src(item.span)),
+                .with_found(self.src(item.span))
+                .with_rule(crate::body::operator_fix::UNSIGNED_NEGATION),
             );
         }
         let v = if neg { -(value as i128) } else { value as i128 };

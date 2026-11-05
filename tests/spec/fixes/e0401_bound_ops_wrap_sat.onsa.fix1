@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§3.2", "§6.3", "§18.1"]
+// fixes = 1
+
+// E0401 for a wrapping or saturating operator on a generic value (§6.3: "ビット演算・`!`・ラップ・飽和は `Int`"): the one
+// candidate narrows the bound in the signature to `Int`. `T: AnyNum` becomes `T: Int`, and `T: Num` becomes `T: Num + Int`
+// (the signed integers). All six operators are written, with both bounds. One error in each function (P-01). The last
+// function is fine.
+
+pub fn wrapping_add_any[T: Int](a: T, b: T) -> T {
+  a +% b                                            //~ E0401
+}
+
+pub fn wrapping_sub_any[T: Int](a: T, b: T) -> T {
+  a -% b                                            //~ E0401
+}
+
+pub fn wrapping_mul_any[T: Int](a: T, b: T) -> T {
+  a *% b                                            //~ E0401
+}
+
+pub fn saturating_add_any[T: Int](a: T, b: T) -> T {
+  a +| b                                            //~ E0401
+}
+
+pub fn saturating_sub_any[T: Int](a: T, b: T) -> T {
+  a -| b                                            //~ E0401
+}
+
+pub fn saturating_mul_any[T: Int](a: T, b: T) -> T {
+  a *| b                                            //~ E0401
+}
+
+pub fn wrapping_add_num[T: Num + Int](a: T, b: T) -> T {
+  a +% b                                            //~ E0401
+}
+
+pub fn wrapping_sub_num[T: Num + Int](a: T, b: T) -> T {
+  a -% b                                            //~ E0401
+}
+
+pub fn wrapping_mul_num[T: Num + Int](a: T, b: T) -> T {
+  a *% b                                            //~ E0401
+}
+
+pub fn saturating_add_num[T: Num + Int](a: T, b: T) -> T {
+  a +| b                                            //~ E0401
+}
+
+pub fn saturating_sub_num[T: Num + Int](a: T, b: T) -> T {
+  a -| b                                            //~ E0401
+}
+
+pub fn saturating_mul_num[T: Num + Int](a: T, b: T) -> T {
+  a *| b                                            //~ E0401
+}
+
+pub fn fine[T: Int](a: T, b: T) -> T {
+  a +% b
+}

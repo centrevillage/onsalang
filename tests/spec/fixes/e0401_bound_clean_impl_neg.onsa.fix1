@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `-self.v` in a method of `impl[T: AnyNum] Wrap[T]` (§6.3): the type parameter is bound in the heading of the
+// `impl`, so the candidate narrows the bound there: `impl[T: Num] Wrap[T]`. No diagnostic is left after it.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T: Num] Wrap[T] {
+  pub fn flipped(self) -> T {
+    -self.v                                         //~ E0401
+  }
+}

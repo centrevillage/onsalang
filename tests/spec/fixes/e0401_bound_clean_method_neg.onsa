@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `-k` where `U: AnyNum` is a type parameter of the method itself (§6.3): the candidate narrows the bound in the
+// heading of the method, `[U: Num]`, and nowhere else. No diagnostic is left after it.
+
+pub struct Wheel {
+  n: U32,
+}
+
+impl Wheel {
+  pub fn negated[U: AnyNum](self, k: U) -> U {
+    -k                                              //~ E0401
+  }
+}

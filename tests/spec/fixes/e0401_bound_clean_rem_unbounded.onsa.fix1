@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "14:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `a % b` where `T` has no bound: the same candidate as `+` (§6.3), `T: Num`, and no diagnostic is left after it.
+
+pub fn remainder[T: Num](a: T, b: T) -> T {
+  a % b                                             //~ E0401
+}

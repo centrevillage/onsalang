@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0413 (W5-02 U4b): a computation of an integer that the spec writes as a function of `std.math` has no method
+// form either (§3.4: "整数と浮動小数のメソッドは、§3.3 の変換と、床除算と検査付きで全てである"), and a method that
+// is only for the floats (`sqrt`, `floor`, `is_nan`) is not one of an integer. The type of the receiver is known
+// in each function, so it is E0413. One error per function (P-01). The candidate of `abs`, `min` and `max` is the
+// function form (`n.abs()` is `abs(n)`); `sqrt`, `floor` and `is_nan` of an integer have none (the integer is
+// not a `Float`, §13.4). The candidates are of the first of each family, as the other cases have it; `min` and
+// `max` of unsigned integers have theirs too (`AnyNum`, §13.4). The last function is fine: the same computations
+// in the function form.
+
+use std.math.{abs, max, min}
+
+pub fn absolute(n: I32) -> I32 {
+  abs(n)                                           //~ E0413
+}
+
+pub fn absolute_wide(n: I64) -> I64 {
+  abs(n)                                           //~ E0413
+}
+
+pub fn smaller(a: U8, b: U8) -> U8 {
+  min(a, b)                                          //~ E0413
+}
+
+pub fn bigger(a: I32, b: I32) -> I32 {
+  max(a, b)                                          //~ E0413
+}
+
+pub fn bigger_unsigned(a: U64, b: U64) -> U64 {
+  max(a, b)                                          //~ E0413
+}
+
+pub fn root(n: U32) -> U32 {
+  n.sqrt()                                          //~ E0413
+}
+
+pub fn round_down(n: I32) -> I32 {
+  n.floor()                                         //~ E0413
+}
+
+pub fn not_a_number(n: I16) -> Bool {
+  n.is_nan()                                        //~ E0413
+}
+
+pub fn finite(n: U16) -> Bool {
+  n.is_finite()                                     //~ E0413
+}
+
+pub fn in_a_chain(a: I32, b: I32) -> I32 {
+  abs((a - b))                                     //~ E0413
+}
+
+pub fn on_an_element(xs: [I32; 2]) -> I32 {
+  max(xs[0], 1)                                      //~ E0413
+}
+
+pub fn fine(a: I32, b: I32) -> I32 {
+  max(abs(a), min(b, 3))
+}

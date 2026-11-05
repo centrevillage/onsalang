@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:3"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `-x` where `T: AnyNum` (§6.3: the negation is `Num`, so `T: AnyNum` becomes `T: Num`). The one candidate
+// replaces the bound in the signature, and the file has no diagnostic after it.
+
+pub fn negate[T: Num](x: T) -> T {
+  -x                                                //~ E0401
+}

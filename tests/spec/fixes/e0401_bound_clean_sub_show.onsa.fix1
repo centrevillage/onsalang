@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// E0401 for `a - b` where `T: Show`, a bound that `Num` does not contain (§6.3: the bound stays and the candidate trait is
+// joined with `+`). The one candidate is `T: Show + Num`; no diagnostic is left after it.
+
+pub fn difference[T: Show + Num](a: T, b: T) -> T {
+  a - b                                             //~ E0401
+}
