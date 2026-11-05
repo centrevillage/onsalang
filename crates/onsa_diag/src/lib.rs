@@ -26,10 +26,10 @@ use std::collections::BTreeMap;
 pub use codes::{Category, Code, FixRule, NoteRule, Stage};
 pub use source::{FileId, LineCol, LineIndex, SHARED_BASE, SharedFiles, SourceFile, SourceMap};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// A byte range `[start, end)` in one file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Span {
     pub file: FileId,
     pub start: u32,
@@ -67,7 +67,7 @@ impl Span {
 }
 
 /// One edit of a fix candidate: the range `span` is replaced by `replace`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Edit {
     pub span: Span,
     pub replace: String,
@@ -90,7 +90,7 @@ impl Edit {
 
 /// A fix candidate: a short title and the edits applied together (§18.1).
 /// The edits are sorted by position and do not overlap (checked when made).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Fix {
     title: String,
     edits: Vec<Edit>,
@@ -163,7 +163,7 @@ pub fn overlap(edits: &[&Edit]) -> Option<(usize, usize)> {
 
 /// A note of a diagnostic: a related position ("bound here") or, without a
 /// position, the correct rule (S-114).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Note {
     pub span: Option<Span>,
     pub message: String,
@@ -180,7 +180,7 @@ impl Note {
 }
 
 /// One diagnostic. Errors only; Onsa has no warnings (lints are errors).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub code: Code,
     /// The stage that reported it (not in the JSON).

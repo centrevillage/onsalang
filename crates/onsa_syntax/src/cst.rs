@@ -36,19 +36,20 @@
 use std::ops::Range;
 
 use onsa_diag::{FileId, Span};
+use serde::{Deserialize, Serialize};
 
 use crate::token::{Token, TokenKind};
 
 /// Index of a node in [`Cst`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
 
 /// Index of a token in [`Cst::tokens`] (the full token list of the lexer).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TokenIdx(pub u32);
 
 /// A child of a node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Elem {
     Node(NodeId),
     Token(TokenIdx),
@@ -58,7 +59,7 @@ pub enum Elem {
 /// trivia may come between any two of them. Lists (`…List`, `…Args`,
 /// `…Params`, `…Fields`, `MatchArms`, `UseNames`) hold the opening token, the
 /// elements and their `,`, and the closing token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NodeKind {
     /// The file: `Item`, `Error`, then `Eof`.
     SourceFile,
@@ -514,7 +515,7 @@ impl NodeKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct NodeData {
     kind: NodeKind,
     parent: Option<NodeId>,
@@ -525,7 +526,7 @@ struct NodeData {
 }
 
 /// The CST of one file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cst {
     tokens: Vec<Token>,
     nodes: Vec<NodeData>,

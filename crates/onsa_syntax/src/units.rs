@@ -20,6 +20,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 
 use onsa_diag::{Diagnostic, Edit, FileId, Span, Stage};
+use serde::{Deserialize, Serialize};
 
 use crate::ast::{Ast, Failed, ItemId};
 use crate::cst::{Cst, Elem, NodeId, NodeKind};
@@ -28,7 +29,7 @@ use crate::parser::ItemCtx;
 use crate::token::TokenKind;
 
 /// One unit of the diagnostics.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Unit {
     /// From its first to its last token (doc comments and attributes
     /// included, and what is of the unit after the item on its line).
@@ -65,7 +66,7 @@ impl Unit {
 
 /// The units of a file, in the order of the file (a member after the unit of
 /// its item).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Units {
     pub list: Vec<Unit>,
     /// The top-level units, in the order of the file.

@@ -44,6 +44,7 @@
 //! of a binary chain. The tests are `parser_tests.rs`.
 
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
+use serde::{Deserialize, Serialize};
 
 use crate::attrs::Place;
 use crate::callee::Callee;
@@ -114,7 +115,7 @@ pub(crate) type PResult<T> = Result<T, ParseError>;
 
 /// What kind of declaration list we are inside; decides whether `fn` bodies
 /// are required / allowed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum ItemCtx {
     Top,
     Trait,

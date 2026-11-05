@@ -16,7 +16,8 @@ publish = false
 
 # The libraries the code links.
 [dependencies]
-serde.workspace = true
+# `alloc`: from `postcard`.
+serde = { workspace = true, features = ["alloc"] }
 toml_edit = { workspace = true, features = ["serde"] }
 
 # The libraries under the proc-macros (a build script is not needed for these

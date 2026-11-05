@@ -8,6 +8,10 @@ rust-version.workspace = true
 [dependencies]
 onsa_workspace_hack.workspace = true
 onsa_diag.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+postcard.workspace = true
 
 [lints]
 workspace = true

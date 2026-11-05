@@ -16,6 +16,8 @@
 //!
 //! [`crate::contract`] checks the last two on every diagnostic of the tests.
 
+use serde::{Deserialize, Serialize};
+
 /// The stage of the compiler that reports a diagnostic (S-78, plan D-04).
 ///
 /// `onsa fmt` and `onsa diff --ast` stop on the diagnostics of [`Stage::Syntax`]
@@ -23,7 +25,7 @@
 /// [`Stage::CHECK_ORDER`] (spec §18.1); the declaration order of this enum
 /// decides nothing. In a unit where a stage failed, the stages that depend on
 /// it are not run (`onsa_sema::stages`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Stage {
     /// The lexer, the parser, and the operator groups checked on its tree.
     Syntax,
@@ -187,7 +189,7 @@ impl Category {
 macro_rules! codes {
     ($( $name:ident = $num:literal, $cat:ident, [$($stage:ident),+], $fix:ident, $note:ident, $title:literal; )*) => {
         /// A stable diagnostic code.
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
         #[allow(clippy::upper_case_acronyms)]
         pub enum Code { $( $name, )* }
 

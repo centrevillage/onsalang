@@ -22,6 +22,9 @@ onsa_driver = { path = "crates/onsa_driver" }
 onsa_cli = { path = "crates/onsa_cli" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The format of the std compiled into the binary (W5-19). No default features: they only
+# add `heapless`, for targets without an allocator.
+postcard = { version = "1", default-features = false, features = ["use-std"] }
 clap = { version = "4", features = ["derive"] }
 toml = "0.8"
 toml_edit = "0.22"

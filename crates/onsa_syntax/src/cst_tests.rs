@@ -17,27 +17,29 @@ pub(crate) fn root_dir() -> PathBuf {
     FsPath::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// Every `.onsa` file under `tests/`, `std/` and `examples/`, sorted.
-pub(crate) fn repo_files() -> Vec<(String, String)> {
-    fn walk(dir: &FsPath, root: &FsPath, out: &mut Vec<(String, String)>) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
-        let mut paths: Vec<PathBuf> = entries.map(|e| e.unwrap().path()).collect();
-        paths.sort();
-        for p in paths {
-            if p.is_dir() {
-                walk(&p, root, out);
-            } else if p.extension().is_some_and(|x| x == "onsa") {
-                let rel = p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
-                if let Ok(text) = std::fs::read_to_string(&p) {
-                    out.push((rel, text));
-                }
+/// Every `.onsa` file under `dir`, sorted, with its path from `root`.
+pub(crate) fn onsa_files(dir: &FsPath, root: &FsPath, out: &mut Vec<(String, String)>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let mut paths: Vec<PathBuf> = entries.map(|e| e.unwrap().path()).collect();
+    paths.sort();
+    for p in paths {
+        if p.is_dir() {
+            onsa_files(&p, root, out);
+        } else if p.extension().is_some_and(|x| x == "onsa") {
+            let rel = p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
+            if let Ok(text) = std::fs::read_to_string(&p) {
+                out.push((rel, text));
             }
         }
     }
+}
+
+/// Every `.onsa` file under `tests/`, `std/` and `examples/`, sorted.
+pub(crate) fn repo_files() -> Vec<(String, String)> {
     let root = root_dir();
     let mut out = Vec::new();
     for d in ["tests", "std", "examples"] {
-        walk(&root.join(d), &root, &mut out);
+        onsa_files(&root.join(d), &root, &mut out);
     }
     out
 }

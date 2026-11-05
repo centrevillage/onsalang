@@ -2,8 +2,10 @@
 
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 /// Index of a file in a [`SourceMap`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct FileId(pub u32);
 
 impl FileId {

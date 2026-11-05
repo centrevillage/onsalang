@@ -4,10 +4,11 @@
 //! its operator groups (E0010) are checked after parsing.
 
 use onsa_diag::Span;
+use serde::{Deserialize, Serialize};
 
 macro_rules! id {
     ($name:ident) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
         pub struct $name(pub u32);
         impl $name {
             pub fn index(self) -> usize {
@@ -24,7 +25,7 @@ id!(TypeId);
 id!(PatId);
 
 /// One parsed file.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Ast {
     pub items: Vec<Item>,
     pub exprs: Vec<Expr>,
@@ -202,14 +203,14 @@ impl Ast {
 }
 
 /// An identifier with its span. Names are not interned in M1.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ident {
     pub name: String,
     pub span: Span,
 }
 
 /// `a.b.c`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Path {
     pub segments: Vec<Ident>,
     pub span: Span,
@@ -225,14 +226,14 @@ impl Path {
 /// `at name`: the clock of an input or output of a flow or a function, or of
 /// an expression (§11.3). `span` runs from `at` to the end of the name; the
 /// name is not resolved here (clocks are a namespace of their own, §11.3).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Clock {
     pub name: Ident,
     pub span: Span,
 }
 
 /// `"..."` with interpolation split out (§2.4).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrLit {
     pub segments: Vec<StrSeg>,
     pub span: Span,
@@ -241,7 +242,7 @@ pub struct StrLit {
     pub pathless_hole: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StrSeg {
     /// Literal text with escapes resolved.
     Text(String),
@@ -249,7 +250,7 @@ pub enum StrSeg {
     Interp(Path),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Lit {
     /// Value and source text (`1_000`, `0xFF`). Values above `u64::MAX` are E0408 at parse time.
     Int {
@@ -266,7 +267,7 @@ pub enum Lit {
 }
 
 /// Argument modes (§5.2). Also used on `self` and in function types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Mode {
     Borrow,
     Inout,
@@ -274,7 +275,7 @@ pub enum Mode {
 }
 
 /// The visibility of a declaration or a field (§15.1): three levels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Vis {
     /// No word: within the package (§15.1).
     Default,
@@ -286,7 +287,7 @@ pub enum Vis {
 
 // ---------------------------------------------------------------- items
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
     pub span: Span,
     pub attrs: Vec<Attr>,
@@ -304,7 +305,7 @@ pub struct Item {
 }
 
 /// How far a failed item was read ([`Item::failed`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Failed {
     /// The item was read whole, and its unit has a diagnostic of the syntax
     /// stage elsewhere (an E0010 in its body, a `;` after it, S-254): its body
@@ -325,7 +326,7 @@ pub enum Failed {
     Heading,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ItemKind {
     Fn(FnDecl),
     Flow(FlowDecl),
@@ -358,7 +359,7 @@ pub enum ItemKind {
 }
 
 /// `@name(args)` (§6.5, §11.7)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attr {
     pub name: Ident,
     pub args: Vec<AttrArg>,
@@ -393,7 +394,7 @@ impl Item {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttrArg {
     /// `min: -60.0`
     Named { key: Ident, value: ExprId },
@@ -403,7 +404,7 @@ pub enum AttrArg {
     Str(StrLit),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FnDecl {
     pub rt: bool,
     pub name: Ident,
@@ -417,7 +418,7 @@ pub struct FnDecl {
     pub body: Option<ExprId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GenericParam {
     /// `T`, `T: PartialOrd`, `T: ?Dup`
     Type { name: Ident, bounds: Vec<Bound> },
@@ -427,14 +428,14 @@ pub enum GenericParam {
     Effect { name: Ident },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bound {
     /// `?Dup`
     pub relaxed: bool,
     pub path: Path,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Param {
     pub attrs: Vec<Attr>,
     pub mode: Mode,
@@ -448,7 +449,7 @@ pub struct Param {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ParamName {
     Ident(Ident),
     /// `_`
@@ -458,13 +459,13 @@ pub enum ParamName {
 }
 
 /// `uses {A, B}`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectRow {
     pub effects: Vec<Path>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowDecl {
     pub name: Ident,
     pub params: Vec<Param>,
@@ -474,7 +475,7 @@ pub struct FlowDecl {
     pub body: ExprId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
@@ -486,7 +487,7 @@ pub struct StructDecl {
 }
 
 /// The traits written at the head of a struct or an enum (§6.4).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Derives {
     /// The traits as written (none for no `:`).
     Listed(Vec<Path>),
@@ -507,7 +508,7 @@ impl Derives {
 }
 
 /// The layout of a struct (§6.5, §12.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Repr {
     /// No `@repr`: the layout of Onsa.
     Onsa,
@@ -517,7 +518,7 @@ pub enum Repr {
     Unknown,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Field {
     pub vis: Vis,
     pub name: Ident,
@@ -525,7 +526,7 @@ pub struct Field {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnumDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
@@ -534,7 +535,7 @@ pub struct EnumDecl {
     pub variants: Vec<Variant>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Variant {
     pub name: Ident,
     /// Empty for unit variants.
@@ -542,7 +543,7 @@ pub struct Variant {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraitDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
@@ -550,7 +551,7 @@ pub struct TraitDecl {
     pub items: Vec<ItemId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImplDecl {
     pub generics: Vec<GenericParam>,
     /// `impl Trait for Type`
@@ -561,7 +562,7 @@ pub struct ImplDecl {
     pub items: Vec<ItemId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectDecl {
     pub blocking: bool,
     pub name: Ident,
@@ -569,7 +570,7 @@ pub struct EffectDecl {
     pub ops: Vec<ItemId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandlerDecl {
     pub name: Ident,
     pub params: Vec<Param>,
@@ -577,7 +578,7 @@ pub struct HandlerDecl {
     pub items: Vec<ItemId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstDecl {
     pub name: Ident,
     pub ty: TypeId,
@@ -585,14 +586,14 @@ pub struct ConstDecl {
     pub value: Option<ExprId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UseDecl {
     pub path: Path,
     /// `use a.b.{x, y}`; `None` for `use a.b`.
     pub names: Option<Vec<Ident>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternDecl {
     pub abi: StrLit,
     pub lib: StrLit,
@@ -602,7 +603,7 @@ pub struct ExternDecl {
 
 // ---------------------------------------------------------------- types
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeExpr {
     pub span: Span,
     pub kind: TypeKind,
@@ -612,7 +613,7 @@ pub struct TypeExpr {
     pub parens: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeKind {
     /// `F32`, `Sig[F32]`, `voice.State`, `Self`
     Path { path: Path, args: Vec<TypeId> },
@@ -637,13 +638,13 @@ pub enum TypeKind {
 
 // ---------------------------------------------------------------- statements
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stmt {
     pub span: Span,
     pub kind: StmtKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StmtKind {
     /// `@mem(bulk) let pat[: T] = e`
     Let {
@@ -684,14 +685,14 @@ pub enum StmtKind {
 
 // ---------------------------------------------------------------- expressions
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Expr {
     pub span: Span,
     pub kind: ExprKind,
 }
 
 /// Whether a range has its end (§7, S-257): `a..<b` does not, `a..=b` does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RangeEnd {
     /// `a..<b`
     Excluded,
@@ -720,14 +721,14 @@ impl RangeEnd {
 
 /// A range `lo..<hi` or `lo..=hi`: the head of a `for` ([`ExprKind::Range`])
 /// or of a `par` ([`ExprKind::Par`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RangeHead {
     pub lo: ExprId,
     pub hi: ExprId,
     pub end: RangeEnd,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinOp {
     Add,
     Sub,
@@ -799,7 +800,7 @@ impl OpGroup {
 /// The rest `..` of a struct pattern (§7, S-366): its span, and what a
 /// candidate removes when no field remains: the `,` before it and the
 /// blanks between them, or the `..` alone when a comment is between (S-251).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StructRest {
     pub span: Span,
     pub removal: Span,
@@ -1051,7 +1052,7 @@ impl<T: Copy, O: Copy> Chain<T, O> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnOp {
     /// `-`
     Neg,
@@ -1060,7 +1061,7 @@ pub enum UnOp {
 }
 
 /// Kind of call (§2.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CallKind {
     /// `f(x)`
     Plain,
@@ -1075,14 +1076,14 @@ pub enum CallKind {
     Value { dot: Span },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Arg {
     pub mode: Mode,
     pub expr: ExprId,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub stmts: Vec<StmtId>,
     /// The value of the block (last expression without a newline after it).
@@ -1091,13 +1092,13 @@ pub struct Block {
 
 /// The list of a `::[…]` in an expression (§4.5): its types and const
 /// arguments, and its span from `::` to `]`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeArgList {
     pub args: Vec<TypeId>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchArm {
     pub pat: PatId,
     pub guard: Option<ExprId>,
@@ -1105,7 +1106,7 @@ pub struct MatchArm {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
     Lit(Lit),
     /// `x`, `a.b.C`, `Type.CONST`, `Some`
@@ -1240,7 +1241,7 @@ pub enum ExprKind {
     Range(RangeHead),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HandlerRef {
     /// `with memory_fs`, `with arena(inout scratch)`
     Named { path: Path, args: Vec<Arg> },
@@ -1250,7 +1251,7 @@ pub enum HandlerRef {
 
 // ---------------------------------------------------------------- patterns
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pat {
     pub span: Span,
     pub kind: PatKind,
@@ -1260,7 +1261,7 @@ pub struct Pat {
     pub parens: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PatKind {
     /// `_`
     Wild,

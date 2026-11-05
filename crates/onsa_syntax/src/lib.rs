@@ -32,6 +32,8 @@ mod nesting;
 mod operands;
 #[cfg(test)]
 mod operands_tests;
+#[cfg(test)]
+mod parsed_tests;
 pub mod parser;
 #[cfg(test)]
 mod parser_tests;
@@ -43,6 +45,7 @@ pub mod token;
 pub mod units;
 
 use onsa_diag::{Diagnostic, FileId, Stage};
+use serde::{Deserialize, Serialize};
 
 use crate::ast::Ast;
 
@@ -99,7 +102,7 @@ pub fn diagnostic_contract(
 }
 
 /// Result of [`crate::parse`].
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Parsed {
     pub ast: Ast,
     /// The CST the AST was made from.
