@@ -80,12 +80,6 @@ export の境界は panic で状態の値 1 を返す（§14.2）ので、読み
 
 パッケージ `scalar` は今の実装が `onsa check` で受理する演算の全て。それ以外のパッケージは、まだ受理されない演算を原因ごとに分けたもので、原因の作業が終わったら `tools/vectors/ops.py` の `PENDING_PACKAGES` の規則を消し、生成し直す（関数の名前は変わらない）。
 
-| パッケージ | 演算 | 診断 | 待つ作業 |
-|---|---|---|---|
-| `checked` | `checked_rem` `checked_div_euclid` `checked_rem_euclid` `checked_shl` `checked_shr` `checked_neg` | E0413（メソッドが無い）| W5-02 |
-| `zero_one` | `T.ZERO` `T.ONE`（定数）| E0302 | W5-05 |
-| `predicates` | `is_nan` `is_finite` | E0302（`std.math` に無い）| W5-02 |
-
 ## 再生成と確認
 
 ```sh
