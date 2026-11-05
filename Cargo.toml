@@ -62,3 +62,23 @@ codegen-units = 1
 # evaluator keeps its own stack) is W9-03's.
 [profile.dev.package.onsa_interp]
 opt-level = 1
+
+# The front end is optimized a little in the dev profile too, for the time of
+# a check: every process that checks parses and analyzes the std again
+# (W5-19, X-20), and the tools and the test cases start thousands of them.
+# Measured on aarch64-apple-darwin (2026-11-05), before -> after, with
+# `tools/compare.py speed all` over 3785 files: `check` 60.1 -> 24.8 s,
+# `fmt --check` 13.7 -> 10.2 s, `dump --core` 12.4 -> 5.3 s; `onsa check` of an
+# empty file 14.5 -> 5.9 ms. The build pays for it: after a touch of
+# `onsa_sema` 5.2 -> 6.8 s, of `onsa_diag` 6.3 -> 8.7 s, and then
+# `cargo test --workspace --no-run` 6.2 -> 11.9 s. The frames get smaller, so
+# the stack is measured again (`onsa_diag::stack::STACK_SIZE`).
+# `overflow-checks` and `debug-assertions` are the profile's and stay on.
+[profile.dev.package.onsa_diag]
+opt-level = 1
+
+[profile.dev.package.onsa_syntax]
+opt-level = 1
+
+[profile.dev.package.onsa_sema]
+opt-level = 1

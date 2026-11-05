@@ -20,7 +20,7 @@ use crate::{Analysis, DefId};
 /// steps it stops with no answer, as at a type that holds itself. A
 /// generic type that holds itself with ever larger arguments
 /// (`R[T] { t: T, a: R[(T, T)] }`) needs steps exponential in its depth; a
-/// chain of declarations deeper than the stack holds (about 100 000) is
+/// chain of declarations deeper than the stack holds (about 70 000) is
 /// fewer.
 const STEPS: u32 = 1 << 20;
 

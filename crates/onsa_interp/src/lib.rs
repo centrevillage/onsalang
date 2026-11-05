@@ -158,21 +158,21 @@ fn internal(span: Span, msg: impl Into<String>) -> ! {
 /// before the net comes before the limit. What a call uses is its body's
 /// frames down to the next call: the expressions around that call nest up to
 /// 256 levels (spec §2.5, S-183). Measured on aarch64-apple-darwin
-/// (2026-10-08, again after W2-03), bytes of stack, with `onsa_interp` at
-/// `opt-level = 1` in the dev profile (`Cargo.toml`):
+/// (debug 2026-11-05, release 2026-10-08, again after W2-03), bytes of stack,
+/// with `onsa_interp` at `opt-level = 1` in the dev profile (`Cargo.toml`):
 ///
 /// | | debug | release |
 /// |---|---|---|
-/// | one call, no nesting (`1 + f(n - 1)`) | 1.0 K | 0.7 K |
+/// | one call, no nesting (`1 + f(n - 1)`) | 1.2 K | 0.7 K |
 /// | one level of `0 + (x)` | 0.3 K | 0.3 K |
-/// | one level of `(x, 0).0` | 0.7 K | 0.7 K |
-/// | one level of `match`, `[x][0]` (the most) | 0.8 K | 0.7–0.8 K |
+/// | one level of `(x, 0).0` | 0.8 K | 0.7 K |
+/// | one level of `match`, `[x][0]` (the most) | 0.9 K | 0.7–0.8 K |
 ///
 /// The arms of [`Interp::eval`] take the expression, not its span: a span
 /// passed by value kept `eval`'s frame under each level (W2-03 measured 0.6 K
 /// a level of `0 + (x)` that way).
 ///
-/// So 128 calls, each under 256 levels of the most expensive kind, use 27 MB
+/// So 128 calls, each under 256 levels of the most expensive kind, use 31 MB
 /// in debug and 27 MB in release, less than half of the 60 MiB (the unit
 /// tests `the_limit_comes_before_the_net_under_256_levels` and
 /// `measure_the_stack_of_calls_and_levels`). Without the `opt-level` the debug

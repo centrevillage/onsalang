@@ -28,11 +28,13 @@ use std::thread::{Builder, JoinHandle, Scope, ScopedJoinHandle};
 /// the aliases; the types a body infers are W5-08's). The walks through the
 /// declarations a type holds stop at a stack of their own, with an internal
 /// error (`onsa_sema::walk`). Measured on
-/// aarch64-apple-darwin in a debug build (2026-10-08, W3-14, the stack
-/// painted under the call): `check` of one function 256 levels deep uses at
-/// most 3.9 MiB (256 nested calls `id(id(...))`; parentheses 2.2 MiB, of
-/// which the parser takes most, about 8.5 K a level), and `build` of a package
-/// of such functions to C 8.3 MiB. The interpreter bounds its call depth well
+/// aarch64-apple-darwin in a debug build (2026-11-05, W5-19, the stack
+/// painted under the call, with the front end at `opt-level = 1` in the dev
+/// profile, `Cargo.toml`): `check` of one function 256 levels deep uses at
+/// most 0.6 MiB (255 nested calls `id(id(...))`; parentheses 0.3 MiB, of
+/// which the parser takes most, about 0.85 K a level), and `build` of such a
+/// function to C 7.2 MiB, most of it in the stages after the front end, which
+/// are not optimized. The interpreter bounds its call depth well
 /// inside the stack (`onsa_interp::MAX_CALL_DEPTH`, measured there).
 pub const STACK_SIZE: usize = 64 << 20;
 
