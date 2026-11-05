@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): an `impl` whose heading was not read (`impl S[ {`, E0002) makes the members and the traits
+// of the types of its module the parts that were not read, and what is not a member or a trait of such a type is
+// read as it was and reported: the fields of `S` (the struct is read, only its `impl` was not), the receivers of a
+// type that is not declared in the module (a builtin type, the `Option` and the `Result` of the prelude, an array,
+// a tuple) even when `S` stands inside them, the receivers that are a type parameter (with or without a bound),
+// the name after the name of a type parameter (`T.f`), and the body of a member of an `impl` that was read and the
+// use of its result. This case holds no use of the members of `S`: the uses that are silent are in the other
+// `failed_impl_*` cases. Each form is a function of its own with the one error (P-01).
+struct S {
+  a: I32,
+}
+
+struct Q {
+  c: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+}
+
+impl Q {
+  fn given(self) -> I32 {
+    self.c
+  }
+
+  fn bad_body(self) -> I32 {
+    let a: I32 = true                               //~ E0401
+    self.c
+  }
+}
+
+fn field_that_is_not_there(s: S) -> I32 {
+  s.nope                                            //~ E0413
+}
+
+fn field_that_is_there(s: S) -> I32 {
+  s.a
+}
+
+fn method_of_a_builtin(r: F32) -> F32 {
+  r.g()                                             //~ E0413
+}
+
+fn method_of_a_builtin_int(n: U32) -> U32 {
+  n.f()                                             //~ E0413
+}
+
+fn method_of_an_option(o: Option[S]) -> I32 {
+  o.f()                                             //~ E0413
+}
+
+fn method_of_a_result(r: Result[S, I32]) -> I32 {
+  r.f()                                             //~ E0413
+}
+
+fn method_of_an_array(xs: [S; 2]) -> I32 {
+  xs.f()                                            //~ E0413
+}
+
+fn method_of_a_tuple(t: (S, I32)) -> I32 {
+  t.f()                                             //~ E0413
+}
+
+fn method_of_a_type_parameter[T](x: T) -> I32 {
+  x.f()                                             //~ E0413
+}
+
+fn method_of_a_bounded_type_parameter[T: Show](x: T) -> I32 {
+  x.f()                                             //~ E0413
+}
+
+fn use_of_a_member_that_was_read(q: Q) -> I32 {
+  let a: Bool = q.given()                           //~ E0401
+  0
+}
+
+fn name_after_a_type_parameter[T: Show](x: T) -> I32 {
+  T.f()                                             //~ E0302
+}
+
+fn constant_after_a_type_parameter[T: Show](x: T) -> I32 {
+  T.NOPE                                            //~ E0302
+}

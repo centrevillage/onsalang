@@ -40,6 +40,17 @@ fn the_users_of_an_unknown_derive_list() {
 }
 
 #[test]
+fn the_users_of_a_type_with_an_impl_not_read() {
+    // S-850: the members of `S` and `R` are not known: `takes` declares `S`, `named` stops at `S.K`,
+    // and `plain` does neither. The types of another module are of the other tests.
+    let src = "struct S {\n  a: I32,\n}\n\nstruct R {\n  a: I32,\n}\n\nimpl S[ {\n}\n\n\
+               fn takes(s: S) -> I32 {\n  s.f()\n}\n\n\
+               fn named() -> I32 {\n  S.K\n}\n\n\
+               fn plain(x: I32) -> I32 {\n  x\n}\n";
+    assert_eq!(users(&check(src)), ["S", "R", "takes", "named"]);
+}
+
+#[test]
 fn the_users_of_a_type_that_failed_to_resolve() {
     // `Missng` is no type (E0302): `g` declares it, `caller` calls `g`, `other` does not.
     let src = "fn g(p: Missng) -> I32 {\n  1\n}\n\n\

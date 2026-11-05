@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-850, R-180 (§18.1): the heading of an `impl Tr for Ty` that was not read (`impl Show for S[ {`, E0002) is a heading
+// that was not read as the heading of a plain `impl` is: the module has an `impl` of this kind, so the members and
+// the traits of the types it declares are the parts that were not read. A bound `T: Show` and one of any other trait
+// (`PartialEq`), a method of a value of `S` and an operator are not reported. The syntax error is the one diagnostic:
+// the form of an `impl Tr for Ty` (E0200 in this version) is not reported for a heading that was not read (§18.1).
+struct S {
+  a: I32,
+}
+
+impl Show for S[ {                                  //~ E0002
+  fn show(self) -> Str {
+    "s"
+  }
+}
+
+fn needs_show[T: Show](x: T) -> I32 {
+  0
+}
+
+fn needs_equal[T: PartialEq](x: T) -> I32 {
+  1
+}
+
+fn bound_show(s: S) -> I32 {
+  needs_show(s)
+}
+
+fn bound_other_trait(s: S) -> I32 {
+  needs_equal(s)
+}
+
+fn method_of_the_trait(s: S) -> I32 {
+  s.show()
+}
+
+fn method_of_nothing(s: S) -> I32 {
+  s.nothing()
+}
+
+fn operator(p: S, q: S) -> Bool {
+  p == q
+}

@@ -326,6 +326,14 @@ impl Modules {
         Err(ResolveError::NotVisible { name: name.name.clone(), span: name.span, defined: member.name_span, why })
     }
 
+    /// Whether the members and the traits of the type `def` are not all read:
+    /// its module has an `impl` whose heading was not read, and only the module
+    /// of a type adds to it (§18.1, §6.3, S-850). Its uses get no diagnostic,
+    /// from whatever module. Of the module of the type, not of the use.
+    pub(crate) fn unread_members(&self, def: &Def) -> bool {
+        matches!(def.kind, DefKind::Struct(_) | DefKind::Enum(_)) && self.get(def.module).unread_impl
+    }
+
     /// A member `name` of `entity`, as seen from `from`. Of a module, its
     /// namespace: its items and its child modules, not the names its `use`
     /// bound (S-611, R-250). `builtin_key` maps a generic builtin to the
@@ -403,6 +411,9 @@ impl Modules {
                 }
                 if let Some(a) = assoc {
                     return self.member_reach(def, &defs[a.0 as usize], name, from).map(|()| Entity::Member(a));
+                }
+                if self.unread_members(def) {
+                    return Err(ResolveError::Failed);
                 }
                 Err(ResolveError::NotFound { name: format!("{}.{}", def.name, name.name), span: name.span })
             }

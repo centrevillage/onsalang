@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): the `impl` of a file that is being edited, with the name and nothing after it (`impl S` and
+// the end of the line: `{` is missing, E0002), has a heading that was not read, so the members and the traits of
+// the types of the module are the parts that were not read, and the uses of them are not reported, whether the use
+// stands before the `impl` in the file or after it. The file has the one diagnostic, the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+fn method_before(s: S) -> I32 {
+  s.f()
+}
+
+fn associated_before() -> S {
+  S.make()
+}
+
+fn constant_before() -> U32 {
+  S.K
+}
+
+fn operator_before(p: S, q: S) -> Bool {
+  p == q
+}
+
+fn bound_before(s: S) -> I32 {
+  needs_show(s)
+}
+
+impl S                                              //~ E0002
+
+fn method_after(s: S) -> I32 {
+  s.f()
+}
+
+fn associated_after() -> S {
+  S.make()
+}
+
+fn constant_after() -> U32 {
+  S.K
+}
+
+fn operator_after(p: S, q: S) -> Bool {
+  p == q
+}
+
+fn bound_after(s: S) -> I32 {
+  needs_show(s)
+}
+
+fn needs_show[T: Show](x: T) -> I32 {
+  0
+}

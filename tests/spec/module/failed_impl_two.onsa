@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): a module with two `impl` whose headings were not read (`impl S[ {` and `impl R[ {`, each an
+// E0002 of its own) has the parts that were not read for the types of both: a use of `S` and of `R` is not
+// reported, and a third type of the module is the same. Each heading is one diagnostic. The two stand in
+// order of the file, and one stands before the type it names is declared (`R` is declared after its `impl`).
+struct S {
+  a: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+}
+
+impl R[ {                                           //~ E0002
+  pub fn g(self) -> I32 {
+    self.b
+  }
+}
+
+struct R {
+  b: I32,
+}
+
+struct U {
+  c: I32,
+}
+
+fn method_of_the_first(s: S) -> I32 {
+  s.f()
+}
+
+fn method_of_the_second(r: R) -> I32 {
+  r.g()
+}
+
+fn method_of_the_third(u: U) -> I32 {
+  u.h()
+}
+
+fn associated_of_both() -> I32 {
+  let s = S.make()
+  let r = R.make()
+  0
+}
+
+fn bound_of_both(s: S, r: R) -> I32 {
+  needs_show(s) + needs_show(r)
+}
+
+fn needs_show[T: Show](x: T) -> I32 {
+  0
+}

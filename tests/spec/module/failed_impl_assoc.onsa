@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): a name after the name of `S` (`S.make`, `S.K`) that is not found is E0302 for a type
+// whose members were read, and it is not reported for a type of a module with an `impl` whose heading was not read
+// (`impl S[ {`, E0002): the associated functions and the associated constants of `S` are the parts that were not
+// read. The names `make` and `K` are in the `impl` below, and the `impl` is one unit that is not checked. The
+// one diagnostic of the file is the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn make() -> S {
+    S { a: 1 }
+  }
+
+  pub fn with(a: I32, b: I32) -> S {
+    S { a: a + b }
+  }
+
+  pub const K: U32 = 4
+}
+
+fn call_make() -> S {
+  S.make()
+}
+
+fn call_with() -> S {
+  S.with(1, 2)
+}
+
+fn read_k() -> U32 {
+  S.K
+}
+
+fn k_in_expression() -> U32 {
+  S.K * 2 + 1
+}
+
+fn k_in_branch(c: Bool) -> U32 {
+  if c {
+    S.K
+  } else {
+    0
+  }
+}
+
+fn k_in_let() -> I32 {
+  let n: U32 = S.K
+  let s = S.make()
+  s.a
+}
+
+const LEN: U32 = S.K
+
+fn the_const_beside() -> U32 {
+  LEN
+}
+
+fn make_in_a_loop() -> I32 {
+  var total = 0
+  for i in 0 ..< 3 {
+    let s = S.with(i, 1)
+    total = total + s.a
+  }
+  total
+}

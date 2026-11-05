@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): a file that ends with `impl` (nothing after it, not even a newline: the file is cut while it
+// is being written, E0002) has an `impl` whose heading was not read, so the members and the traits of the types of
+// the module are the parts that were not read, and the uses of them, which can only stand before it, are not
+// reported. The file has the one diagnostic, the E0002 of the end.
+struct S {
+  a: I32,
+}
+
+enum E {
+  A,
+  B,
+}
+
+fn method(s: S) -> I32 {
+  s.f()
+}
+
+fn associated() -> S {
+  S.make()
+}
+
+fn constant() -> U32 {
+  S.K
+}
+
+fn variant() -> E {
+  E.C
+}
+
+fn operator(p: S, q: S) -> Bool {
+  p == q
+}
+
+fn bound(s: S) -> I32 {
+  needs_show(s)
+}
+
+fn needs_show[T: Show](x: T) -> I32 {
+  0
+}
+
+impl                                                //~ E0002

@@ -11,7 +11,11 @@ impl<'a> Lower<'a> {
     /// failed `impl` heading (R-180: W5-04). A `use` cut keeps what it read.
     pub(super) fn failed_item(&mut self, n: NodeId) -> Option<ItemId> {
         let head = self.head(n);
-        let (kind, failed) = self.failed_kind(head.decl?)?;
+        let decl = head.decl?;
+        let Some((kind, failed)) = self.failed_kind(decl) else {
+            self.ast.unread_impl |= self.cst.kind(decl) == NodeKind::Impl;
+            return None;
+        };
         Some(self.add_head_item(n, head, kind, Some(failed)))
     }
 
@@ -202,7 +206,8 @@ impl<'a> Lower<'a> {
     /// both (D-15; a `read_*` reader of a part reads one read whole as it is).
     /// With whether the heading was read whole, which it is in a declaration
     /// read whole ([`Lower::item_kind`]). `None` when its name was not read,
-    /// for an `impl` heading that was cut (R-180: W5-04), and for no declaration.
+    /// for an `impl` heading that was cut ([`Ast::unread_impl`]), and for no
+    /// declaration.
     pub(super) fn read_kind(&mut self, d: NodeId, cut: bool) -> Option<(ItemKind, bool)> {
         match self.cst.kind(d) {
             NodeKind::Fn => self.read_fn(d, cut),
@@ -328,10 +333,12 @@ impl<'a> Lower<'a> {
     }
 
     fn read_impl(&mut self, d: NodeId) -> Option<(ItemKind, bool)> {
-        // R-180: the members of an `impl` whose heading was cut are not
-        // seen (the type they belong to is not known; W5-04).
+        // The members of an `impl` whose heading was cut are not seen: the
+        // type they belong to is not known. The heading ends at the `{`
+        // (§18.1, R-180, S-897).
         let g = self.child(d, NodeKind::GenericParams);
-        if g.is_some_and(|g| !self.cst.is_complete(g)) || self.child(d, NodeKind::ItemList).is_none() {
+        let list = self.child(d, NodeKind::ItemList);
+        if g.is_some_and(|g| !self.cst.is_complete(g)) || !list.is_some_and(|l| self.has(l, TokenKind::LBrace)) {
             return None;
         }
         let types = self.of_class(d, Class::Type);

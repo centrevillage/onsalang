@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.1"]
+
+// S-850, R-180 (§18.1): a name after the name of `S` that stands alone as a value (`S.f`, `S.make`, §6.1) is among
+// the parts that were not read when an `impl` of the module has a heading that was not read (`impl S[ {`, E0002):
+// no E0302 for `S.make`, and no E0308 for `S.f` (a read `impl` would make it E0308, a method is not a value,
+// §6.1). The value is of an error type that is bound, passed and called with `.(`, with no diagnostic. The file
+// has the one diagnostic, the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn make(a: I32) -> S {
+    S { a: a }
+  }
+
+  pub fn f(self) -> I32 {
+    self.a
+  }
+}
+
+fn bind_the_associated() -> I32 {
+  let mk = S.make
+  let s = mk.(1)
+  0
+}
+
+fn bind_the_method() -> I32 {
+  let m = S.f
+  m.(S { a: 2 })
+}
+
+fn apply(g: fn(I32) -> S, k: I32) -> I32 {
+  g.(k).a
+}
+
+fn pass_the_associated() -> I32 {
+  apply(S.make, 3)
+}
+
+fn return_the_associated() -> fn(I32) -> S {
+  S.make
+}

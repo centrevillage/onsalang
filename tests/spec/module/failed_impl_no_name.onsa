@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): an `impl` whose heading does not even name its type (`impl [ {`, E0002) is an `impl` of the
+// module, and the types of the module are the types whose members were not read: the type it was written for is not
+// known, so every type declared in the module has parts that were not read. A method, an associated function or
+// constant of any of them is not reported. The types of other modules and the builtin types are not among them (the
+// next cases). The file has the one diagnostic, the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+struct T {
+  b: I32,
+}
+
+enum E {
+  A,
+  B,
+}
+
+impl [ {                                            //~ E0002
+  pub fn f(self) -> I32 {
+    1
+  }
+}
+
+fn method_of_the_first(s: S) -> I32 {
+  s.f()
+}
+
+fn method_of_the_second(t: T) -> I32 {
+  t.g()
+}
+
+fn method_of_the_enum(e: E) -> I32 {
+  e.h()
+}
+
+fn associated_of_the_first() -> S {
+  S.make()
+}
+
+fn associated_of_the_enum() -> I32 {
+  E.K
+}
+
+fn bound_of_the_second(t: T) -> I32 {
+  needs_show(t)
+}
+
+fn needs_show[X: Show](x: X) -> I32 {
+  0
+}
+
+fn operator_of_the_first(p: S, q: S) -> Bool {
+  p == q
+}

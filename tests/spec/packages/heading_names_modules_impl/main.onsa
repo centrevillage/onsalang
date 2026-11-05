@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+// fixes = 0
+
+// S-144, S-665 (§15.1): a member of an inherent `impl` reaches as far as the narrower of the member and its type,
+// and the names written in its head cannot be narrower than that, wherever the type is declared. `Shared` has no
+// word in `util.onsa` and reaches the package, and a `pub` member of the `pub` type `P` here that names it is E0303
+// on the name, in the arguments, the result, the type of a constant and inside a type (`util.Wrap[Shared]`); a
+// member with no word and a `priv` member name it freely, and a `pub` member names `Open` and the aliases of
+// `Open` (an alias is judged by the type it stands for, §4.4). The heading_names_modules package has the same for
+// the other kinds of declaration. The error is on the name that was written and has no candidate. One error per
+// unit (§18.1), so each member is a unit of its own.
+use util
+use util.{Open, Shared, ShownAlias, SharedAlias, Wrap}
+
+pub struct P {
+  x: I32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+impl P {
+  pub fn open(self) -> Open {
+    Open { x: self.x }
+  }
+
+  pub fn shown_alias(self) -> ShownAlias {
+    Open { x: self.x }
+  }
+
+  pub fn shared_alias(self) -> SharedAlias {
+    Open { x: self.x }
+  }
+
+  pub fn wrap_open(self) -> Wrap[Open] {
+    Wrap { v: Open { x: self.x } }
+  }
+
+  pub const OPEN: Open = Open { x: 1 }
+
+  pub fn leak_result(self) -> Shared {              //~ E0303
+    Shared { x: self.x }
+  }
+
+  pub fn leak_argument(self, s: Shared) -> I32 {    //~ E0303
+    s.x
+  }
+
+  pub fn leak_by_path(self) -> util.Shared {        //~ E0303
+    util.Shared { x: self.x }
+  }
+
+  pub fn leak_in_a_type(self) -> Wrap[Shared] {     //~ E0303
+    Wrap { v: Shared { x: self.x } }
+  }
+
+  pub const LEAK: Shared = Shared { x: 1 }          //~ E0303
+
+  pub rt fn leak_rt(s: Shared) -> I32 {             //~ E0303
+    s.x
+  }
+
+  fn package_result(self) -> Shared {
+    Shared { x: self.x }
+  }
+
+  fn package_argument(self, s: Shared) -> I32 {
+    s.x
+  }
+
+  const PACKAGE: Shared = Shared { x: 2 }
+
+  priv fn module_result(self) -> Shared {
+    Shared { x: self.x }
+  }
+
+  priv const MODULE: Shared = Shared { x: 3 }
+}
+
+impl[T: Copy] Holder[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn leak(self) -> Shared {                     //~ E0303
+    Shared { x: 1 }
+  }
+
+  fn package(self) -> Shared {
+    Shared { x: 2 }
+  }
+}
+
+pub fn body_names_shared(p: P) -> I32 {
+  let s: Shared = p.package_result()
+  s.x
+}

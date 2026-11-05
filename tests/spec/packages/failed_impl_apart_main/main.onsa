@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-850, R-180 (§18.1): this module has the `impl` whose heading was not read (`impl L[ {`, E0002), and the types it
+// declares are the types whose members were not read. A type declared in `util` is not one of them: the `impl` of
+// this module cannot give it members (§6.3, the orphan rule), so a method of a value of it that `util` does not
+// give, the name after its name that is not there and the bound it does not satisfy are reported, as
+// they are without the `impl`. Each form is a function of its own with the one error (P-01). (The uses of the types
+// of this module that are silent are in `failed_impl_modules`, with the roles of the two modules changed.)
+use util.{U, V}
+
+struct L {
+  b: I32,
+}
+
+impl L[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.b
+  }
+}
+
+fn method_that_is_there(u: U) -> I32 {
+  u.given()
+}
+
+fn method_that_is_not_there(u: U) -> I32 {
+  u.f()                                             //~ E0413
+}
+
+fn field_that_is_not_there(u: U) -> I32 {
+  u.nope                                            //~ E0413
+}
+
+fn associated_that_is_there() -> U {
+  U.make()
+}
+
+fn associated_that_is_not_there() -> U {
+  U.build()                                         //~ E0302
+}
+
+fn constant_that_is_not_there() -> U32 {
+  U.LIMIT                                           //~ E0302
+}
+
+fn variant_that_is_not_there() -> V {
+  V.C                                               //~ E0302
+}
+
+fn method_of_the_enum(v: V) -> I32 {
+  v.h()                                             //~ E0413
+}
+
+fn bound_that_is_not_satisfied(u: U) -> I32 {
+  needs_show(u)                                     //~ E0416
+}
+
+fn needs_show[X: Show](x: X) -> I32 {
+  0
+}
+
+fn operator_that_is_not_there(p: U, q: U) -> Bool {
+  p == q                                            //~ E0401
+}
+
+fn method_of_a_type_of_util_inside(o: Option[U]) -> I32 {
+  o.f()                                             //~ E0413
+}

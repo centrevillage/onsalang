@@ -49,11 +49,19 @@ impl Bounds<'_> {
         false
     }
 
-    /// Whether the traits a (resolved) type meets are not known: the error
-    /// type, or a type parameter with an unknown bound (§18.1, S-692 A1).
-    /// Every check of whether it meets a trait keeps quiet then: the
-    /// operators, the methods and the bounds of other functions.
+    /// Whether the traits a (resolved) type meets are not known: of what is
+    /// not known itself ([`Self::unknown`]), or of a type whose members and
+    /// traits were not all read (§18.1, S-850). Every check of whether it
+    /// meets a trait keeps quiet then: the operators, the methods and the
+    /// bounds of other functions.
     pub(crate) fn traits_unknown(&self, t: TyId) -> bool {
+        self.unknown(t)
+            || matches!(self.a.types.get(t), Ty::Named(d, _) if self.a.modules.unread_members(self.a.def(*d)))
+    }
+
+    /// The error type, or a type parameter with an unknown bound (§18.1,
+    /// S-692 A1): nothing of it is known, its kind neither.
+    fn unknown(&self, t: TyId) -> bool {
         match self.ty(t) {
             Ty::Error => true,
             Ty::Param(i) => {
@@ -63,9 +71,14 @@ impl Bounds<'_> {
         }
     }
 
-    /// Whether a (resolved) type satisfies a builtin bound (§6.3).
+    /// Whether a (resolved) type satisfies a builtin bound (§6.3). The kind
+    /// is of the structure, which no `impl` changes (§4.6, S-850).
     pub(crate) fn satisfies(&self, t: TyId, b: Bound) -> bool {
-        if self.traits_unknown(t) {
+        let unknown = match b {
+            Bound::Copy | Bound::Dup => self.unknown(t),
+            _ => self.traits_unknown(t),
+        };
+        if unknown {
             return true;
         }
         let ty = self.ty(t);

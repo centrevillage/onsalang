@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§18.1", "§4.5"]
+
+// S-850, R-180 (§4.6, §18.1): the kind of a type is decided by its structure (`Copy`, `Shared`, `Affine`), and an
+// `impl` does not change it, so an `impl` whose heading was not read (`impl S[ {`, E0002) leaves the kind of every
+// type of its module as it was: the traits of `S` were not read, and its kind was. `Copy` and `Dup` are kind
+// constraints and not traits (§4.6), so the requirement of the implicit `Dup` on a type parameter and the bound
+// `T: Copy` are judged by the kind, and E0416 is reported as it is without the `impl` for the type that does not
+// satisfy it; the type that satisfies it passes. (A bound of a trait, `T: Show`, is not judged for `S`, in
+// failed_impl_bound.onsa.) Each form is a function of its own with the one error (P-01).
+struct S {
+  b: Buf[F32],
+}
+
+struct Plain {
+  a: I32,
+}
+
+struct Names {
+  n: Str,
+}
+
+struct Holds {
+  s: S,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    1
+  }
+}
+
+fn need_dup[T](x: T) -> I32 {
+  0
+}
+
+fn need_copy[T: Copy](x: T) -> I32 {
+  1
+}
+
+fn need_either[T: ?Dup](x: T) -> I32 {
+  2
+}
+
+fn need_copy_and_show[T: Copy + Show](x: T) -> I32 {
+  3
+}
+
+fn affine_for_the_implicit_dup(s: S) -> I32 {
+  need_dup(s)                                       //~ E0416
+}
+
+fn affine_for_copy(s: S) -> I32 {
+  need_copy(s)                                      //~ E0416
+}
+
+fn affine_for_copy_beside_a_trait(s: S) -> I32 {
+  need_copy_and_show(s)                             //~ E0416
+}
+
+fn affine_that_holds_one_for_the_implicit_dup(h: Holds) -> I32 {
+  need_dup(h)                                       //~ E0416
+}
+
+fn shared_for_copy(n: Names) -> I32 {
+  need_copy(n)                                      //~ E0416
+}
+
+fn affine_for_the_type_that_gives_up_dup(s: S) -> I32 {
+  need_either(s)
+}
+
+fn shared_for_the_implicit_dup(n: Names) -> I32 {
+  need_dup(n)
+}
+
+fn copy_for_the_implicit_dup(p: Plain) -> I32 {
+  need_dup(p)
+}
+
+fn copy_for_copy(p: Plain) -> I32 {
+  need_copy(p)
+}

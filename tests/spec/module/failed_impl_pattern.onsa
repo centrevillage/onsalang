@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§7"]
+
+// S-850, R-180 (§18.1): a constant of `S` named in a pattern (`S.K =>`, §7) is a name after the name of `S`, and it
+// is among the parts that were not read when an `impl` of the module has a heading that was not read (`impl S[ {`,
+// E0002): no E0302, in the arm of a `match`, in a tuple pattern and with a guard (the variant that an enum does not
+// declare is in failed_impl_enum.onsa). The file has the one diagnostic, the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub const K: U32 = 4
+
+  pub const MARK: Char = 'm'
+}
+
+fn constant_arm(n: U32) -> Bool {
+  match n {
+    S.K => true,
+    _ => false,
+  }
+}
+
+fn constant_char_arm(c: Char) -> I32 {
+  match c {
+    S.MARK => 1,
+    _ => 0,
+  }
+}
+
+fn constant_in_a_tuple(a: U32, b: U32) -> U32 {
+  match (a, b) {
+    (S.K, k) => k,
+    (_, _) => 0,
+  }
+}
+
+fn constant_in_a_guarded_arm(n: U32, c: Bool) -> I32 {
+  match n {
+    S.K if c => 1,
+    _ => 2,
+  }
+}

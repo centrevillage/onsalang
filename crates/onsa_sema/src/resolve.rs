@@ -282,6 +282,9 @@ pub struct ModInfo {
     /// A `use` of it was cut before its names were all read (R-180): a name
     /// of its body that is not found is an error.
     pub unread_use: bool,
+    /// It has an `impl` whose heading was not read: the members and the traits
+    /// of the types it declares are not all read ([`Modules::unread_members`]).
+    pub unread_impl: bool,
     /// Where a candidate adds a `use`; `None` for a module with no file.
     pub use_at: Option<UseAt>,
 }

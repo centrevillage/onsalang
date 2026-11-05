@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): a type with an `impl` that was read and an `impl` that was not (`impl S[ {`, E0002): the
+// members of the `impl` that was read are read (`ok`, `make`, `LIMIT`, and their uses are real uses), and a name that
+// is in neither is among the parts that were not read, so it is not reported. The generic `Holder` has the same two
+// kinds of `impl`: the one that was not read stands before the one that was read there, and after it in `S` (the
+// order does not change that).
+pub struct S {
+  a: I32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+impl S {
+  pub fn ok(self) -> I32 {
+    self.a
+  }
+
+  pub fn make() -> S {
+    S { a: 1 }
+  }
+
+  pub const LIMIT: U32 = 8
+}
+
+impl S[ {                                           //~ E0002
+  pub fn lost(self) -> I32 {
+    self.a
+  }
+}
+
+impl[T] Holder[ {                                   //~ E0002
+  pub fn lost(self) -> I32 {
+    1
+  }
+}
+
+impl[T] Holder[T] {
+  pub fn ok(self) -> T {
+    self.v
+  }
+}
+
+fn read_method(s: S) -> I32 {
+  s.ok()
+}
+
+fn read_associated() -> S {
+  S.make()
+}
+
+fn read_constant() -> U32 {
+  S.LIMIT
+}
+
+fn unread_method(s: S) -> I32 {
+  s.lost()
+}
+
+fn unread_name_of_nobody(s: S) -> I32 {
+  s.nowhere(1)
+}
+
+fn unread_associated() -> S {
+  S.nowhere()
+}
+
+fn unread_constant() -> U32 {
+  S.NOWHERE
+}
+
+fn holder_read_method(h: Holder[I32]) -> I32 {
+  h.ok()
+}
+
+fn holder_unread_method(h: Holder[I32]) -> I32 {
+  h.nowhere()
+}

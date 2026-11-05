@@ -88,6 +88,7 @@ impl<'p> Sema<'p> {
             let Some(module) = self.module(m) else { continue };
             let ast = &module.parsed.ast;
             self.a.modules.get_mut(m).use_at = use_at(&module.parsed);
+            self.a.modules.get_mut(m).unread_impl = ast.unread_impl;
             let mut tests: HashMap<String, DefId> = HashMap::default();
             for &id in &ast.root {
                 let item = ast.item(id);
@@ -475,6 +476,7 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
         deps: Vec::new(),
         clashed: Default::default(),
         unread_use: false,
+        unread_impl: false,
         use_at: None,
     }
 }

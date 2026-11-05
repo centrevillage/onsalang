@@ -235,7 +235,7 @@ pub(crate) fn read_effects(
 /// values `locals` the place sees, [`Cx::locals`]) and an
 /// associated name of a builtin type: through `Self` (`self_ty`) and the
 /// aliases ([`Analysis::path_end`]). A parameter of a list has no members
-/// (the E0302 of its head, as in a body), a local neither (its E0308).
+/// (the E0302 of its head), a local neither (its E0308).
 fn heading_name(
     a: &Analysis,
     from: ModId,

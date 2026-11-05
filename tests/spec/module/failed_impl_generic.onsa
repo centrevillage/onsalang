@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2", "§4.5"]
+
+// S-850, R-180 (§18.1): a generic struct is a type of the module, and the members of its `impl` are among the parts
+// that were not read when an `impl` of the module has a heading that was not read (`impl[T] W[ {`, E0002): a method
+// of a value of `W[F32]` or `W[T]` (a type parameter of the function is the type inside), the associated function
+// `W.make` and the associated constant `W.K` are not reported. The file has the one diagnostic, the E0002 of the
+// heading.
+struct W[T] {
+  v: T,
+}
+
+impl[T] W[ {                                        //~ E0002
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn make(v: T) -> W[T] {
+    W { v: v }
+  }
+
+  pub const K: U32 = 2
+}
+
+fn method_on_float(w: W[F32]) -> F32 {
+  w.get()
+}
+
+fn method_on_int(w: W[I32]) -> I32 {
+  w.get()
+}
+
+fn method_on_a_let() -> I32 {
+  let w = W { v: 1 }
+  w.get()
+}
+
+fn method_inside_a_generic_function[T](w: W[T]) -> I32 {
+  let g = w.get()
+  g
+}
+
+fn nested_receiver(w: W[W[F32]]) -> I32 {
+  let g = w.get()
+  g
+}
+
+fn associated_function() -> I32 {
+  let w = W.make(1)
+  0
+}
+
+fn associated_constant() -> U32 {
+  W.K
+}

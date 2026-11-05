@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): the members of `S` that a use inside another `impl` names are among the parts that were not
+// read, when an `impl` of the module has a heading that was not read (`impl S[ {`, E0002). The other `impl` here is
+// well made (`impl S`, and the `impl R` of another type of the module), its member `get` is read, and its body
+// calls a method of `S` on `self` and names a constant of `S` through `Self`, and `S.K` and `s.f()` of an
+// argument: none is reported. The file has the one diagnostic, the E0002 of the heading.
+pub struct S {
+  a: I32,
+}
+
+pub struct R {
+  s: S,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+
+  pub const K: U32 = 4
+}
+
+impl S {
+  pub fn on_self(self) -> I32 {
+    self.f()
+  }
+
+  pub fn on_self_class() -> U32 {
+    Self.K
+  }
+
+  pub fn on_other(self, t: S) -> I32 {
+    t.f() + self.a
+  }
+
+  pub fn by_name() -> U32 {
+    S.K
+  }
+
+  pub fn get(self) -> I32 {
+    self.a
+  }
+}
+
+impl R {
+  pub fn inner(self) -> I32 {
+    self.s.f()
+  }
+
+  pub fn constant() -> U32 {
+    S.K
+  }
+}
+
+fn call_the_read_member(s: S) -> I32 {
+  s.get()
+}
+
+fn call_the_unread_member(s: S) -> I32 {
+  s.on_self() + s.f()
+}

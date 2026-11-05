@@ -14,7 +14,7 @@ use std::fmt;
 use onsa_diag::Span;
 
 use crate::Parsed;
-use crate::ast::{Ast, Block, ExprKind, ItemId, ItemKind};
+use crate::ast::{Ast, Block, ExprKind, ImplDecl, ItemId, ItemKind};
 use crate::dump::{dump_item, dump_stmt, dump_type};
 use crate::fmt::rewrites::Choices;
 use crate::lexer::comment_text;
@@ -50,12 +50,14 @@ fn key(ast: &Ast, id: ItemId) -> String {
             ItemKind::Enum(e) => format!("enum {}", e.name.name),
             ItemKind::TypeAlias { name, .. } | ItemKind::OpaqueType { name } => format!("type {}", name.name),
             ItemKind::Trait(t) => format!("trait {}", t.name.name),
-            ItemKind::Impl(i) => match &i.trait_ {
+            ItemKind::Impl(ImplDecl { generics: _, trait_, trait_args, self_ty, items: _ }) => match trait_ {
                 Some(t) => {
                     let names: Vec<&str> = t.segments.iter().map(|s| s.name.as_str()).collect();
-                    format!("impl {} for {}", names.join("."), dump_type(ast, i.self_ty))
+                    let args: Vec<String> = trait_args.iter().map(|&a| dump_type(ast, a)).collect();
+                    let args = if args.is_empty() { String::new() } else { format!("[{}]", args.join(", ")) };
+                    format!("impl {}{args} for {}", names.join("."), dump_type(ast, *self_ty))
                 }
-                None => format!("impl {}", dump_type(ast, i.self_ty)),
+                None => format!("impl {}", dump_type(ast, *self_ty)),
             },
             ItemKind::Effect(e) => format!("effect {}", e.name.name),
             ItemKind::Handler(h) => format!("handler {}", h.name.name),
@@ -376,6 +378,22 @@ mod tests {
                 (Change::Removed, "struct A".into()),
             ]
         );
+    }
+
+    /// The type arguments of the trait are of the heading (W5-04 U1): the key
+    /// of the `impl` tells them, and the comparison of `fmt` reads them.
+    #[test]
+    fn the_type_arguments_of_the_trait_tell_two_impls_apart() {
+        let imp = |heading: &str| format!("pub struct P {{\n  x: F32,\n}}\n\n{heading} {{}}\n");
+        let (f32_, i32_, none) = (imp("impl Iter[F32] for P"), imp("impl Iter[I32] for P"), imp("impl Iter for P"));
+        let moved = [(Change::Added, "impl Iter[I32] for P"), (Change::Removed, "impl Iter[F32] for P")];
+        assert_eq!(d(&f32_, &i32_), moved.map(|(c, k)| (c, k.to_string())));
+        let dropped = [(Change::Added, "impl Iter for P"), (Change::Removed, "impl Iter[F32] for P")];
+        assert_eq!(d(&f32_, &none), dropped.map(|(c, k)| (c, k.to_string())));
+        assert!(d(&f32_, &f32_).is_empty());
+        let (pa, pb) = (crate::parse(FileId(0), &f32_), crate::parse(FileId(1), &i32_));
+        let item = |p: &Parsed| dump_item(&p.ast, p.ast.root[1]);
+        assert_ne!(item(&pa), item(&pb));
     }
 
     #[test]

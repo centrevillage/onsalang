@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): the `impl` of a file that is being edited, with the keyword and nothing after it (`impl` and
+// the end of the line, E0002), is an `impl` cut at `impl` (§18.1), so the heading was not read, and the members and
+// the traits of the types of the module are the parts that were not read: the uses of them are not reported,
+// whether the use stands before the `impl` or after it. The file has the one diagnostic, the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+enum E {
+  A,
+  B,
+}
+
+fn method_before(s: S) -> I32 {
+  s.f()
+}
+
+fn associated_before() -> S {
+  S.make()
+}
+
+fn constant_before() -> U32 {
+  S.K
+}
+
+fn variant_before() -> E {
+  E.C
+}
+
+fn operator_before(p: S, q: S) -> Bool {
+  p == q
+}
+
+impl                                                //~ E0002
+
+fn method_after(s: S) -> I32 {
+  s.f()
+}
+
+fn associated_after() -> S {
+  S.make()
+}
+
+fn constant_after() -> U32 {
+  S.K
+}
+
+fn variant_after() -> E {
+  E.C
+}
+
+fn operator_after(p: S, q: S) -> Bool {
+  p == q
+}
+
+fn method_of_the_enum(e: E) -> I32 {
+  e.f()
+}

@@ -1,0 +1,34 @@
+// The module with the `impl` whose heading was not read (E0002). The types it declares have parts that were not
+// read: the other modules that use them are not told about members or traits.
+pub struct S {
+  a: I32,
+}
+
+pub struct T {
+  b: I32,
+}
+
+pub enum E {
+  A,
+  B,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+
+  pub fn make() -> S {
+    S { a: 1 }
+  }
+
+  pub const K: U32 = 4
+}
+
+pub fn new_s() -> S {
+  S { a: 2 }
+}
+
+pub fn new_t() -> T {
+  T { b: 3 }
+}

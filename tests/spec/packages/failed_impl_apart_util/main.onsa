@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-850, R-180 (§18.1): the types that have parts that were not read are the types declared in the module that has the
+// `impl` whose heading was not read (`util.onsa`, `impl S[ {`, E0002). A type declared in this module is read as it
+// was, and the `impl` of `util` cannot give it members (§6.3, the orphan rule), so its method that is not there, the
+// name after its name that is not there, the field that is not there and the bound it does not satisfy are reported.
+// Each form is a function of its own with the one error (P-01). (The uses of the types of `util` that are silent
+// are in `failed_impl_modules`.)
+use util.{S}
+
+struct R {
+  b: I32,
+}
+
+enum E {
+  A,
+  B,
+}
+
+impl R {
+  fn given(self) -> I32 {
+    self.b
+  }
+}
+
+fn method_that_is_there(r: R) -> I32 {
+  r.given()
+}
+
+fn method_that_is_not_there(r: R) -> I32 {
+  r.g()                                             //~ E0413
+}
+
+fn field_that_is_not_there(r: R) -> I32 {
+  r.nope                                            //~ E0413
+}
+
+fn associated_that_is_not_there() -> R {
+  R.make()                                          //~ E0302
+}
+
+fn constant_that_is_not_there() -> I32 {
+  R.K                                               //~ E0302
+}
+
+fn variant_that_is_not_there() -> E {
+  E.C                                               //~ E0302
+}
+
+fn method_of_the_enum(e: E) -> I32 {
+  e.h()                                             //~ E0413
+}
+
+fn bound_that_is_not_satisfied(r: R) -> I32 {
+  needs_show(r)                                     //~ E0416
+}
+
+fn needs_show[X: Show](x: X) -> I32 {
+  0
+}
+
+fn operator_that_is_not_there(p: R, q: R) -> Bool {
+  p == q                                            //~ E0401
+}
+
+fn method_of_a_type_of_this_module_inside(o: Option[R]) -> I32 {
+  o.g()                                             //~ E0413
+}

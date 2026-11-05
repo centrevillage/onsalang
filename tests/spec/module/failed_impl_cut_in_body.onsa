@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): the heading of this `impl` was read (`impl S {`) and the body of a member of it was cut by a
+// syntax error (E0002, the `(` in `g` is not closed): the members this `impl` read before the cut (`f`) are names
+// after the name of `S`, and a name no member of it has is a real error (a method `s.zz()` that is not there is
+// E0413, and so are the name after the name of `S` that is not there and a field that is not there). These errors
+// stay when the `impl` whose heading was not read is silent (the other cases of `failed_impl_*`).
+pub struct S {
+  a: I32,
+}
+
+pub enum E {
+  A,
+  B,
+}
+
+impl S {
+  pub fn f(self) -> I32 {
+    self.a
+  }
+
+  pub fn g(self) -> I32 {
+    (
+  }                                                 //~ E0002
+}
+
+impl E {
+  pub fn is_a(self) -> Bool {
+    true
+  }
+}
+
+fn method_that_was_read(s: S) -> I32 {
+  s.f()
+}
+
+fn method_that_is_not_there(s: S) -> I32 {
+  s.zz()                                            //~ E0413
+}
+
+fn associated_that_is_not_there() -> S {
+  S.make()                                          //~ E0302
+}
+
+fn field_that_is_not_there(s: S) -> I32 {
+  s.nope                                            //~ E0413
+}
+
+fn method_of_a_type_with_a_whole_impl(e: E) -> Bool {
+  e.is_a()
+}
+
+fn method_of_a_type_with_a_whole_impl_not_there(e: E) -> Bool {
+  e.zz()                                            //~ E0413
+}

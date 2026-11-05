@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.2"]
+
+// S-850, R-180 (§18.1): a constant of `S` written as the length of an array type (`[F32; S.K]`) in a head or in a
+// body is a name after the name of `S`, and it is among the parts that were not read when an `impl` of the module
+// has a heading that was not read (`impl S[ {`, E0002): no E0302. The file has the one diagnostic, the E0002 of the
+// heading.
+struct S {
+  a: I32,
+}
+
+struct Frame {
+  samples: [F32; S.K],
+}
+
+impl S[ {                                           //~ E0002
+  pub const K: U32 = 4
+
+  pub const N: U32 = 2
+}
+
+fn length_in_an_argument(a: [F32; S.K]) -> F32 {
+  a[0]
+}
+
+fn length_in_a_result() -> [F32; S.N] {
+  [0.0; S.N]
+}
+
+fn length_in_an_annotation() -> F32 {
+  let a: [F32; S.K] = [0.0; S.K]
+  a[1]
+}
+
+fn length_of_a_nested_array(a: [[F32; S.K]; 2]) -> F32 {
+  a[0][0]
+}
+
+fn length_in_an_option(a: Option[[F32; S.K]]) -> I32 {
+  0
+}
+
+fn length_in_a_field(f: Frame) -> F32 {
+  f.samples[0]
+}

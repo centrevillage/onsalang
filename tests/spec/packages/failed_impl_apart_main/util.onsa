@@ -1,0 +1,21 @@
+// This module has no `impl` whose heading was not read: its types are read, with the members they have.
+pub struct U {
+  a: I32,
+}
+
+pub enum V {
+  A,
+  B,
+}
+
+impl U {
+  pub fn given(self) -> I32 {
+    self.a
+  }
+
+  pub fn make() -> U {
+    U { a: 1 }
+  }
+
+  pub const K: U32 = 3
+}

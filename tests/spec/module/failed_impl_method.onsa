@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): an `impl` whose heading was not read (`impl S[ {`, the `[` is never closed: E0002) cannot
+// say what members `S` has, so the members and the traits of `S` are the parts that were not read. A method called
+// on a value of `S` is not E0413, wherever the value comes from (an argument, a `let`, a field, an element, a
+// result), and the real error of the heading (the E0002) is the one diagnostic of the file. The `impl` is one unit,
+// and its members are not checked.
+struct S {
+  a: I32,
+}
+
+struct Holder {
+  s: S,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+
+  pub fn g(self, k: I32) -> I32 {
+    self.a + k
+  }
+}
+
+fn method_on_argument(s: S) -> I32 {
+  s.f()
+}
+
+fn method_with_arguments(s: S) -> I32 {
+  s.g(1)
+}
+
+fn method_on_let() -> I32 {
+  let s = S { a: 1 }
+  s.f()
+}
+
+fn method_on_var() -> I32 {
+  var s = S { a: 1 }
+  s.a = 2
+  s.f()
+}
+
+fn method_on_field(h: Holder) -> I32 {
+  h.s.f()
+}
+
+fn method_on_element(xs: [S; 2]) -> I32 {
+  xs[0].f()
+}
+
+fn make() -> S {
+  S { a: 3 }
+}
+
+fn method_on_result() -> I32 {
+  make().f()
+}
+
+fn method_chain(s: S) -> I32 {
+  s.f().g(2)
+}
+
+fn method_in_expression(s: S) -> I32 {
+  let k = s.f() + s.g(3)
+  k * 2
+}
+
+fn method_in_branch(s: S, c: Bool) -> I32 {
+  if c {
+    s.f()
+  } else {
+    s.g(4)
+  }
+}
+
+fn method_in_loop(s: S) -> I32 {
+  var total = 0
+  for i in 0 ..< 3 {
+    total = total + s.g(i)
+  }
+  total
+}
+
+fn apply_one(h: fn(I32) -> I32) -> I32 {
+  h.(1)
+}
+
+fn method_in_closure(s: S) -> I32 {
+  apply_one(fn(k: I32) -> I32 { s.g(k) })
+}

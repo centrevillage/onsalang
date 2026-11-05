@@ -233,6 +233,31 @@ fn an_error_leaves_incomplete_nodes_and_an_error_node() {
     assert_eq!(p.ast.exprs.len(), 2);
 }
 
+/// An `impl` cut before its `{` was read has no item, and the AST tells it
+/// (§18.1, S-850, S-897); one cut after its `{` is an item, read to the cut.
+#[test]
+fn an_impl_cut_in_its_heading_is_marked_and_one_cut_in_its_body_is_an_item() {
+    for src in [
+        "impl S[ {\n}\nfn f() {}\n",
+        "impl [ {\n}\nfn f() {}\n",
+        "impl\nfn f() {}\n",
+        "impl",
+        "impl[T\nfn f() {}\n",
+        "impl S\nfn f() {}\n",
+        "impl Show for S[ {\n}\nfn f() {}\n",
+        "impl Show for S\nfn f() {}\n",
+    ] {
+        let p = parse(src);
+        assert!(p.ast.unread_impl && crate::dump(&p.ast).contains("failed:heading impl"), "{src:?}");
+        assert!(!p.ast.root.iter().any(|&i| matches!(p.ast.item(i).kind, ItemKind::Impl(_))), "{src:?}");
+    }
+    for src in ["impl S {", "impl S {\n  fn f(\n}\n", "impl S {\n}\n"] {
+        let p = parse(src);
+        assert!(!p.ast.unread_impl, "{src:?}");
+        assert!(matches!(p.ast.item(p.ast.root[0]).kind, ItemKind::Impl(_)), "{src:?}");
+    }
+}
+
 #[test]
 fn junk_after_an_item_is_an_error_node_of_the_file() {
     let src = "fn f() {} junk\nfn g() {}\n";

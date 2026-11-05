@@ -1,0 +1,3 @@
+[package]
+name = "failed_impl_apart_util"
+edition = "2026"

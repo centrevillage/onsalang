@@ -13,6 +13,9 @@ pub fn dump(ast: &Ast) -> String {
         d.item(item);
         d.out.push('\n');
     }
+    if ast.unread_impl {
+        d.out.push_str("(failed:heading impl)\n");
+    }
     d.out
 }
 
@@ -203,16 +206,17 @@ impl<'a> Dumper<'a> {
                     self.nested(|d| d.item(i));
                 }
             }
-            ItemKind::Impl(i) => {
+            ItemKind::Impl(ImplDecl { generics, trait_, trait_args, self_ty, items }) => {
                 self.out.push_str("impl");
-                self.generics(&i.generics);
+                self.generics(generics);
                 self.out.push(' ');
-                if let Some(t) = &i.trait_ {
+                if let Some(t) = trait_ {
                     self.path(t);
+                    self.type_args(trait_args);
                     self.out.push_str(" for ");
                 }
-                self.ty(i.self_ty);
-                for &it in &i.items {
+                self.ty(*self_ty);
+                for &it in items {
                     self.nested(|d| d.item(it));
                 }
             }
@@ -415,6 +419,14 @@ impl<'a> Dumper<'a> {
     }
 
     /// A type with the parentheses written around it.
+    fn type_args(&mut self, args: &[TypeId]) {
+        if !args.is_empty() {
+            self.out.push('[');
+            self.comma(args, |d, t| d.ty(*t));
+            self.out.push(']');
+        }
+    }
+
     fn ty(&mut self, id: TypeId) {
         self.wrapped(self.ast.ty(id).parens, |d| d.ty_kind(id));
     }
@@ -424,11 +436,7 @@ impl<'a> Dumper<'a> {
             TypeKind::Error => self.out.push_str("<error>"),
             TypeKind::Path { path, args } => {
                 self.path(path);
-                if !args.is_empty() {
-                    self.out.push('[');
-                    self.comma(args, |d, t| d.ty(*t));
-                    self.out.push(']');
-                }
+                self.type_args(args);
             }
             TypeKind::Array { elem, len } => {
                 self.out.push('[');

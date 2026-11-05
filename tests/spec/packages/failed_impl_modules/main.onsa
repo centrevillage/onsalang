@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3", "§15.1"]
+
+// S-850, R-180 (§18.1): the module that declares a type is the module whose `impl` can give it members (the orphan
+// rule, §6.3), so when `util.onsa` has an `impl` whose heading was not read (`impl S[ {`, E0002), the members and the
+// traits of the types it declares are the parts that were not read for a use in any module, here this one:
+// the method `s.f()`, the associated function `S.make()`, the constant `S.K` (taken with a `use` or by the path
+// `util.S`), the bound `T: Show` and the operator `==` on values of `S`, and the same for the other types of
+// `util` (`T`, `E`). The package has the one diagnostic, the E0002 of the heading in `util.onsa`.
+use util
+use util.{S, T, E, new_s, new_t}
+
+fn method(s: S) -> I32 {
+  s.f()
+}
+
+fn method_by_path(s: util.S) -> I32 {
+  s.f()
+}
+
+fn method_on_result() -> I32 {
+  new_s().f()
+}
+
+fn associated() -> S {
+  S.make()
+}
+
+fn associated_by_path() -> S {
+  util.S.make()
+}
+
+fn constant() -> U32 {
+  S.K
+}
+
+fn constant_by_path() -> U32 {
+  util.S.K
+}
+
+fn bound(s: S) -> I32 {
+  needs_show(s)
+}
+
+fn needs_show[X: Show](x: X) -> I32 {
+  0
+}
+
+fn operator(p: S, q: S) -> Bool {
+  p == q
+}
+
+fn method_of_another_type(t: T) -> I32 {
+  t.g()
+}
+
+fn method_on_another_result() -> I32 {
+  new_t().g()
+}
+
+fn operator_of_another_type(p: T, q: T) -> Bool {
+  p == q
+}
+
+fn constant_of_the_enum() -> I32 {
+  E.K
+}
+
+fn method_of_the_enum(e: E) -> I32 {
+  e.h()
+}

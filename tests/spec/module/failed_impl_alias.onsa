@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4", "§6.2"]
+
+// S-850, R-180 (§18.1): a type alias is the type it stands for (§4.4), so a value whose type is written by an alias
+// of a type of the module (`type A = S`) is a value of `S`, and its methods are among the parts that were not read
+// when an `impl` of the module has a heading that was not read (`impl S[ {`, E0002): no E0413. The alias is not a
+// name an `impl` can be written for, and it is not used here for that. The file has the one diagnostic, the E0002 of
+// the heading.
+struct S {
+  a: I32,
+}
+
+type A = S
+
+type B = A
+
+type Pair = (S, S)
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+}
+
+fn method_on_the_alias(x: A) -> I32 {
+  x.f()
+}
+
+fn method_on_the_alias_of_an_alias(x: B) -> I32 {
+  x.f()
+}
+
+fn method_on_a_part_of_an_alias(p: Pair) -> I32 {
+  p.0.f()
+}
+
+fn method_on_a_value_of_the_type(s: S) -> I32 {
+  s.f()
+}

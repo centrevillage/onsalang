@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): a file that ends with `impl S {` has an `impl` whose heading was read and whose body was cut
+// at its start (the `{` is never closed, E0002): the heading is read, so the `impl` makes no part that was not read,
+// and it has read no member. A method `s.f()`, the name after the name of `S` and the field that are not there are
+// real errors, E0413 and E0302 as without the `impl`. These errors stay when the `impl` whose heading was not read
+// is silent (the other cases of `failed_impl_*`).
+struct S {
+  a: I32,
+}
+
+fn method_that_is_not_there(s: S) -> I32 {
+  s.f()                                             //~ E0413
+}
+
+fn associated_that_is_not_there() -> S {
+  S.make()                                          //~ E0302
+}
+
+fn constant_that_is_not_there() -> U32 {
+  S.K                                               //~ E0302
+}
+
+fn field_that_is_not_there(s: S) -> I32 {
+  s.nope                                            //~ E0413
+}
+
+impl S {                                            //~ E0002

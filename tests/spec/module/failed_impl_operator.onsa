@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3", "§3.2"]
+
+// S-850, R-180 (§18.1): the traits that `S` satisfies are among the parts that were not read when an `impl` of the
+// module has a heading that was not read (`impl S[ {`, E0002). An operator on values of `S` needs the trait of the
+// operator (`==` the `PartialEq`, `+` the `Add`, §3.2), and whether `S` satisfies it is not judged: no E0401. The
+// file has the one diagnostic, the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn zero() -> S {
+    S { a: 0 }
+  }
+}
+
+fn equal(p: S, q: S) -> Bool {
+  p == q
+}
+
+fn not_equal(p: S, q: S) -> Bool {
+  p != q
+}
+
+fn less(p: S, q: S) -> Bool {
+  p < q
+}
+
+fn add(p: S, q: S) -> S {
+  p + q
+}
+
+fn subtract(p: S, q: S) -> S {
+  p - q
+}
+
+fn negate(p: S) -> S {
+  -p
+}
+
+fn operators_together(p: S, q: S) -> Bool {
+  (p + q) == (q + p)
+}
+
+fn operator_in_condition(p: S, q: S) -> I32 {
+  if p == q {
+    1
+  } else {
+    2
+  }
+}
+
+fn operator_on_fresh_values() -> Bool {
+  let p = S { a: 1 }
+  let q = S { a: 2 }
+  p == q
+}

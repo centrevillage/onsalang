@@ -33,6 +33,9 @@ pub struct Ast {
     pub pats: Vec<Pat>,
     /// Top-level items in source order.
     pub root: Vec<ItemId>,
+    /// An `impl` of the file was cut before its `{` was read: it has no item,
+    /// and what it adds to the types of the module is not known (§18.1, S-850).
+    pub unread_impl: bool,
 }
 
 impl Ast {

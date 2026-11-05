@@ -1,0 +1,18 @@
+// The types of this module that the other module names in the heads of the members of its `impl`: `Open` is `pub`,
+// `Shared` has no word (the package's), `ShownAlias` is a `pub` alias of `Open` and `SharedAlias` an alias with no
+// word of `Open`.
+pub struct Open {
+  x: I32,
+}
+
+struct Shared {
+  x: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub type ShownAlias = Open
+
+type SharedAlias = Open

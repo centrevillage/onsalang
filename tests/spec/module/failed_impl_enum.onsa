@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2", "§4.4"]
+
+// S-850, R-180 (§18.1): an enum is a type of the module like a struct, and its members are the variants and also
+// the methods and the constants of its `impl`. When an `impl` of the module has a heading that was not read
+// (`impl E[ {`, E0002), a name after the name of the enum (`E.C`) that is not found, and a method of a value of the
+// enum, are among the parts that were not read: no E0302 or E0413. The variants the enum declares (`E.A`, `E.B`) are
+// read in any case. The file has the one diagnostic, the E0002 of the heading.
+enum E {
+  A,
+  B(I32),
+}
+
+impl E[ {                                           //~ E0002
+  pub fn is_a(self) -> Bool {
+    true
+  }
+
+  pub fn make() -> E {
+    E.A
+  }
+
+  pub const DEFAULT_PAYLOAD: I32 = 7
+}
+
+fn read_variant() -> E {
+  E.A
+}
+
+fn read_variant_with_payload() -> E {
+  E.B(1)
+}
+
+fn unread_name_as_a_value() -> E {
+  E.C
+}
+
+fn unread_name_as_a_call() -> E {
+  E.make()
+}
+
+fn unread_constant() -> I32 {
+  E.DEFAULT_PAYLOAD
+}
+
+fn unread_name_with_arguments() -> E {
+  E.D(1, 2)
+}
+
+fn method_on_a_value(e: E) -> Bool {
+  e.is_a()
+}
+
+fn method_on_a_variant() -> Bool {
+  E.A.is_a()
+}
+
+fn unread_variant_arm(e: E) -> I32 {
+  match e {
+    E.A => 1,
+    E.B(k) => k,
+    E.C => 3,
+  }
+}
+
+fn read_variants_arms(e: E) -> I32 {
+  match e {
+    E.A => 1,
+    E.B(k) => k,
+  }
+}
+
+fn method_after_a_match(e: E) -> Bool {
+  match e {
+    E.A => e.is_a(),
+    E.B(_) => e.is_a(),
+  }
+}

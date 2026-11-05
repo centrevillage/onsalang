@@ -46,7 +46,8 @@ impl Analysis {
     }
 
     /// The defs the unread reaches: those read in part (S-260), whose
-    /// derive list is not known (S-460), that read a name held as an error
+    /// derive list is not known (S-460), whose members and traits were not
+    /// all read (S-850), that read a name held as an error
     /// (whether their check was held or not, [`Analysis::read_held`]) or rt
     /// functions whose calls are not all edges of the rt recursion
     /// ([`Self::rt_unread`]), and those whose declared types hold
@@ -62,7 +63,11 @@ impl Analysis {
                     DefKind::Enum(e) => e.derives.is_none(),
                     _ => false,
                 };
-                derives || self.rt_unread(id) || self.partly_read(id) || self.read_held.contains(&id)
+                derives
+                    || self.rt_unread(id)
+                    || self.partly_read(id)
+                    || self.read_held.contains(&id)
+                    || self.modules.unread_members(self.def(id))
             })
             .collect();
         loop {

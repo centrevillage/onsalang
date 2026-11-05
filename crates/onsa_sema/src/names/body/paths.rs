@@ -107,7 +107,7 @@ impl<'a> Walker<'a> {
             // (`T.ZERO` from W4-04 U6).
             Some(r) => {
                 let kind = (segs.len() == 1).then(|| self.kind_fail(NameKind::Type, segs, place)).flatten();
-                return (vec![r], Some(kind.unwrap_or_else(|| self.not_found(head))));
+                return (vec![r], Some(kind.unwrap_or_else(|| self.not_found(segs.get(1).copied().unwrap_or(head)))));
             }
             None => {}
         }
@@ -215,8 +215,9 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// E0302 for the head `head` of a chain not found: one form wherever
-    /// the chain is (a value, a callee, a hole, a constant expression).
+    /// E0302 for the head of a chain not found, or the member after a type
+    /// parameter: one form wherever the chain is (a value, a callee, a hole,
+    /// a constant expression).
     fn not_found(&self, head: &Ident) -> Fail {
         Fail::Report(ResolveError::NotFound { name: head.name.clone(), span: head.span }.into_diagnostic())
     }

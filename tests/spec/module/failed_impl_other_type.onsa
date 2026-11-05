@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2"]
+
+// S-850, R-180 (§18.1): the types that have parts that were not read are the types declared in the module that has
+// the `impl` whose heading was not read, whichever type the heading names: here `impl S[ {` (E0002) names `S`, and
+// the members and the traits of `R` and of the enum `E`, which are declared in the same module, are not read
+// either, so a method of a value of them is not reported (the heading may have been meant for any of the types the
+// module declares, and the name is the thing that was not read). A type with its own `impl` that was read is the
+// same: the name the `impl` does not give is a part that was not read. The file has the one diagnostic, the E0002
+// of the heading.
+struct S {
+  a: I32,
+}
+
+struct R {
+  b: I32,
+}
+
+enum E {
+  A,
+  B,
+}
+
+pub struct Q {
+  c: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+}
+
+impl Q {
+  fn given(self) -> I32 {
+    self.c
+  }
+}
+
+fn method_of_the_named(s: S) -> I32 {
+  s.f()
+}
+
+fn method_of_the_other_struct(r: R) -> I32 {
+  r.g()
+}
+
+fn method_of_the_enum(e: E) -> I32 {
+  e.h()
+}
+
+fn associated_of_the_other_struct() -> R {
+  R.make()
+}
+
+fn constant_of_the_enum() -> I32 {
+  E.K
+}
+
+fn operator_of_the_other_struct(p: R, q: R) -> Bool {
+  p == q
+}
+
+fn method_of_a_type_with_a_read_impl(q: Q) -> I32 {
+  q.given() + q.other()
+}

@@ -146,10 +146,14 @@ impl<'a> Checker<'a> {
                 // The element is copied N times: a kind constraint that a later
                 // statement may decide (§2.4, §4.7, S-235).
                 self.defer(span, et, DeferredKind::Require { bound: Bound::Dup, what: Required::RepeatElement });
-                Ok(match n {
-                    Some(n) => self.a.types.intern(Ty::Array(et, n)),
-                    None => self.a.types.error(),
-                })
+                let Some(n) = n else {
+                    // An array that is the error type decides no element: one
+                    // left open is no error of its own (§18.1).
+                    let error = self.a.types.error();
+                    self.unify_at(span, et, error)?;
+                    return Ok(error);
+                };
+                Ok(self.a.types.intern(Ty::Array(et, n)))
             }
             // The names stage stops the body at a type argument (E0200 until W5-10).
             ExprKind::Struct { type_args, .. } if !type_args.is_empty() => {

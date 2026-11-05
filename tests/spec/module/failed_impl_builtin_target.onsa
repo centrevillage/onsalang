@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-850, R-180 (§18.1): an `impl` whose heading was not read and that was written for a builtin type
+// (`impl F32[ {`, E0002) does not make the builtin type a type of this module: the members of `F32` are the members
+// std gives it (§6.3, the orphan rule), so a method of a value of `F32`, of another builtin type or of the
+// `Option` of the prelude that std does not give is E0413 as it is without the `impl`. This case holds no type of
+// the module (the types of the module, with an `impl` like this, have parts that were not read, in the other
+// `failed_impl_*` cases). Each form is a function of its own with the one error (P-01).
+impl F32[ {                                         //~ E0002
+  pub fn f(self) -> F32 {
+    self
+  }
+}
+
+fn method_of_the_float(r: F32) -> F32 {
+  r.f()                                             //~ E0413
+}
+
+fn method_of_the_float_again(r: F32) -> F32 {
+  r.double()                                        //~ E0413
+}
+
+fn method_of_another_float(r: F64) -> F64 {
+  r.f()                                             //~ E0413
+}
+
+fn method_of_an_int(n: U32) -> U32 {
+  n.f()                                             //~ E0413
+}
+
+fn method_of_an_option(o: Option[F32]) -> F32 {
+  o.f()                                             //~ E0413
+}
+
+fn method_on_a_literal() -> F32 {
+  let r: F32 = 1.5
+  r.f()                                             //~ E0413
+}
+
+fn method_that_std_gives(r: F32) -> U32 {
+  r.to_bits()
+}

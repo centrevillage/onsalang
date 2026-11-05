@@ -1,0 +1,15 @@
+// This module has the `impl` whose heading was not read (E0002), and its types are the types whose members were not
+// read. A type of `main` is not one of them.
+pub struct S {
+  a: I32,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn f(self) -> I32 {
+    self.a
+  }
+}
+
+pub fn new_s() -> S {
+  S { a: 2 }
+}

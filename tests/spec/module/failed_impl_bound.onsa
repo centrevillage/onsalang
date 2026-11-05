@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3", "§4.5"]
+
+// S-850, R-180 (§18.1): whether `S` satisfies a trait is among the parts that were not read when an `impl` of the
+// module has a heading that was not read (`impl S[ {`, E0002), so a bound that `S` is given for is not E0416
+// (the E0416 of a trait bound, §4.5, §6.3), in a call of a generic function and in a type with a bound on its
+// parameter. The kind constraints `Copy` and `Dup` are not traits (§4.6) and are judged by the kind, which an `impl`
+// does not change (failed_impl_kind.onsa): in `T: Copy + Show` only the `Show` is not judged. The file has the one
+// diagnostic, the E0002 of the heading.
+struct S {
+  a: I32,
+}
+
+struct Shown[T: Show] {
+  v: T,
+}
+
+struct Both[T: Show + PartialEq] {
+  v: T,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn zero() -> S {
+    S { a: 0 }
+  }
+}
+
+fn show_one[T: Show](x: T) -> I32 {
+  0
+}
+
+fn equal_one[T: PartialEq](x: T, y: T) -> Bool {
+  x == y
+}
+
+fn show_and_equal[T: Show + PartialEq + Hash](x: T) -> I32 {
+  1
+}
+
+fn ordered[T: Ord](x: T) -> I32 {
+  2
+}
+
+fn copy_and_show[T: Copy + Show](x: T) -> I32 {
+  3
+}
+
+fn call_show(s: S) -> I32 {
+  show_one(s)
+}
+
+fn call_equal(s: S, t: S) -> Bool {
+  equal_one(s, t)
+}
+
+fn call_several(s: S) -> I32 {
+  show_and_equal(s)
+}
+
+fn call_copy_and_show(s: S) -> I32 {
+  copy_and_show(s)
+}
+
+fn call_ordered(s: S) -> I32 {
+  ordered(s)
+}
+
+fn call_on_fresh_value() -> I32 {
+  show_one(S { a: 1 })
+}
+
+fn call_in_branch(s: S, c: Bool) -> I32 {
+  if c {
+    show_one(s)
+  } else {
+    ordered(s)
+  }
+}
+
+fn type_with_a_bound(b: Shown[S]) -> I32 {
+  3
+}
+
+fn type_with_two_bounds(b: Both[S]) -> I32 {
+  4
+}
+
+fn type_with_a_bound_in_a_result() -> Option[Shown[S]] {
+  None
+}
