@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.5"]
+
+// A type parameter of a derive reads as meeting the trait the head generates: the judgment is of the type arguments, at the
+// use (§6.4, "総称の型…は、型引数が満たすときだけ満たす"). The bound of the parameter does not change that: `W[T: Float]: Eq` is
+// no error at the declaration, though no type argument can meet `Eq`, and the use is the E0416.
+
+pub struct W[T: Float]: Eq {
+  a: T,
+}
+
+pub struct V[T: Float]: Ord {
+  a: T,
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+pub fn use_w(w: W[F32]) -> W[F32] {
+  want_eq(w)                            //~ E0416
+}
+
+pub fn use_v(v: V[F32]) -> V[F32] {
+  want_eq(v)                            //~ E0416
+}

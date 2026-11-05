@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+// fixes = 0
+
+// W5-06 U1/t, R-35 (spec §6.4: "struct の `Default` は、各フィールドの既定値を並べたもの"; "各フィールドの型が生成する trait を満たさなければ E0416"; §6.3, the table
+// of the built-in types: `Char` has no `Default`, nor `Option` and `Result`, `Array`, `Map`, `Set`, `Buf`, a function value; the integers, the floats,
+// `Bool`, `Str`, `Bytes`, `()`, and a tuple or `[T; N]` of types that have it, do). A field of a type without `Default` in a struct that lists `Default`,
+// on the line of the type of the field. An enum field has none, because an enum cannot list `Default` (`impl Default` by hand is U4). One error in each
+// declaration (§18.1). The last declarations are fine.
+
+pub struct Plain {
+  n: U32,
+}
+
+pub enum Mode: PartialEq {
+  Off,
+  On,
+}
+
+pub struct OfChar: Default {
+  c: Char,                                          //~ E0416
+}
+
+pub struct OfOption: Default {
+  o: Option[U32],                                   //~ E0416
+}
+
+pub struct OfResult: Default {
+  r: Result[U32, Bool],                             //~ E0416
+}
+
+pub struct OfArray: Default {
+  a: Array[U32],                                    //~ E0416
+}
+
+pub struct OfMap: Default {
+  m: Map[U32, U32],                                 //~ E0416
+}
+
+pub struct OfBuf: Default {
+  b: Buf[U8],                                       //~ E0416
+}
+
+pub struct OfFunction: Default {
+  f: fn(U32) -> U32,                                //~ E0416
+}
+
+pub struct OfPlainStruct: Default {
+  p: Plain,                                         //~ E0416
+}
+
+pub struct OfEnum: Default {
+  m: Mode,                                          //~ E0416
+}
+
+pub struct CharInATuple: Default {
+  t: (U32, Char),                                   //~ E0416
+}
+
+pub struct CharInAnArray: Default {
+  cs: [Char; 4],                                    //~ E0416
+}
+
+pub struct AfterGoodFields: Default {
+  a: U32,
+  b: F32,
+  c: Char,                                          //~ E0416
+}
+
+// ---------------------------------------------------------------- fine: every field has a default
+
+pub struct Defaults: Default {
+  a: U32,
+  b: F32,
+  c: Bool,
+  d: Str,
+  e: Bytes,
+  f: (),
+  g: (U8, Bool, F64),
+  h: [I16; 4],
+}
+
+pub struct Outer: Default {
+  inner: Inner,
+  pair: (Inner, U8),
+}
+
+pub struct Inner: Default {
+  x: F32,
+}
+
+pub struct Empty: Default {}

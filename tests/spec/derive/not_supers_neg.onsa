@@ -1,0 +1,183 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+
+// W5-06 U1/t, S-900, S-902 (spec §6.4: the list gives "並べた trait の上位の trait" and no other; §6.3: "標準 trait の上位の trait は `Eq: PartialEq`、
+// `PartialOrd: PartialEq`、`Ord: PartialOrd + Eq` である。`Hash` は上位の trait を持たない"; "演算子の被演算子の型がその演算子の trait を満たさないと
+// E0401"; a type argument that does not meet the bound is E0416, §4.5). The direction that is not "above": a list that writes a trait gives
+// nothing below it, and `Hash` has nothing above it and nothing below it. `PartialEq` does not give `Eq` or `<`; `Eq` does not give `<` or
+// `PartialOrd`; `PartialOrd` does not give `Eq` or `Ord`; `Eq + PartialOrd` does not give `Ord`; `Hash` does not give `==`, and `Ord` does not
+// give `Hash`. The operator is E0401 on its line, the bound is E0416 on the line of the call. One error in each function (P-01).
+
+pub struct Named: PartialEq {
+  id: U32,
+}
+
+pub struct Keyed: Eq {
+  id: U32,
+}
+
+pub struct Sizing: PartialOrd {
+  size: U32,
+}
+
+pub struct Both: PartialOrd + Eq {
+  size: U32,
+}
+
+pub struct Digest: Hash {
+  id: U32,
+}
+
+pub struct Ranked: Ord {
+  rank: U32,
+}
+
+pub enum NamedMode: PartialEq {
+  Off,
+  On,
+}
+
+pub enum KeyedMode: Eq {
+  Off,
+  On,
+}
+
+pub enum DigestMode: Hash {
+  Off,
+  On,
+}
+
+fn want_partial_eq[T: PartialEq](x: T) -> T {
+  x
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn want_partial_ord[T: PartialOrd](x: T) -> T {
+  x
+}
+
+fn want_ord[T: Ord](x: T) -> T {
+  x
+}
+
+fn want_hash[T: Hash](x: T) -> T {
+  x
+}
+
+// ---------------------------------------------------------------- PartialEq gives neither Eq nor an order
+
+pub fn named_as_eq(n: Named) -> Named {
+  want_eq(n)                                        //~ E0416
+}
+
+pub fn named_as_partial_ord(n: Named) -> Named {
+  want_partial_ord(n)                               //~ E0416
+}
+
+pub fn named_as_ord(n: Named) -> Named {
+  want_ord(n)                                       //~ E0416
+}
+
+pub fn named_less(a: Named, b: Named) -> Bool {
+  a < b                                             //~ E0401
+}
+
+pub fn named_mode_as_eq(m: NamedMode) -> NamedMode {
+  want_eq(m)                                        //~ E0416
+}
+
+pub fn named_mode_less(a: NamedMode, b: NamedMode) -> Bool {
+  a <= b                                            //~ E0401
+}
+
+// ---------------------------------------------------------------- Eq gives PartialEq and no order
+
+pub fn keyed_less(a: Keyed, b: Keyed) -> Bool {
+  a < b                                             //~ E0401
+}
+
+pub fn keyed_greater(a: Keyed, b: Keyed) -> Bool {
+  a > b                                             //~ E0401
+}
+
+pub fn keyed_as_partial_ord(k: Keyed) -> Keyed {
+  want_partial_ord(k)                               //~ E0416
+}
+
+pub fn keyed_as_ord(k: Keyed) -> Keyed {
+  want_ord(k)                                       //~ E0416
+}
+
+pub fn keyed_mode_less(a: KeyedMode, b: KeyedMode) -> Bool {
+  a < b                                             //~ E0401
+}
+
+// ---------------------------------------------------------------- PartialOrd gives PartialEq and not Eq
+
+pub fn sizing_as_eq(s: Sizing) -> Sizing {
+  want_eq(s)                                        //~ E0416
+}
+
+pub fn sizing_as_ord(s: Sizing) -> Sizing {
+  want_ord(s)                                       //~ E0416
+}
+
+// ---------------------------------------------------------------- Eq and PartialOrd are not Ord
+
+pub fn both_as_ord(b: Both) -> Both {
+  want_ord(b)                                       //~ E0416
+}
+
+// ---------------------------------------------------------------- Hash has nothing above it and gives nothing
+
+pub fn digest_equal(a: Digest, b: Digest) -> Bool {
+  a == b                                            //~ E0401
+}
+
+pub fn digest_differ(a: Digest, b: Digest) -> Bool {
+  a != b                                            //~ E0401
+}
+
+pub fn digest_less(a: Digest, b: Digest) -> Bool {
+  a < b                                             //~ E0401
+}
+
+pub fn digest_as_partial_eq(d: Digest) -> Digest {
+  want_partial_eq(d)                                //~ E0416
+}
+
+pub fn digest_as_eq(d: Digest) -> Digest {
+  want_eq(d)                                        //~ E0416
+}
+
+pub fn digest_mode_equal(a: DigestMode, b: DigestMode) -> Bool {
+  a == b                                            //~ E0401
+}
+
+// ---------------------------------------------------------------- the traits below are not given by those above
+
+pub fn ranked_as_hash(r: Ranked) -> Ranked {
+  want_hash(r)                                      //~ E0416
+}
+
+pub fn keyed_as_hash(k: Keyed) -> Keyed {
+  want_hash(k)                                      //~ E0416
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn digest_as_hash(d: Digest) -> Digest {
+  want_hash(d)
+}
+
+pub fn keyed_as_partial_eq(k: Keyed) -> Keyed {
+  want_partial_eq(k)
+}
+
+pub fn named_equal(a: Named, b: Named) -> Bool {
+  a == b
+}

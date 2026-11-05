@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// W5-06 U1/t, R-35, S-900, S-774 (spec §6.4; §15.1). The derive across modules: the field of a type that another module declares meets what the list generates by that module's list (`Key: Ord` of `util`
+// is `Eq`, and its supers are generated there), and a type of the module that lists less is E0416 in the field of this one (`Loose` lists `PartialEq`, `Plain` lists nothing, `Mode` lists `Ordinal`,
+// which gives no `Eq`), also through a generic type of the other module (`Wrap[Plain]` needs `Plain: Eq`). The type is named by `use` of the item and by the path of the module. A type whose
+// list is wrong in `util.onsa` (`Bad`, the float field) is met as written where it is used here, so the functions that use it have no diagnostic. One error per declaration (P-01).
+use util
+use util.{Key, Loose, Plain, Mode, Wrap, Bad}
+
+pub struct Holder: Eq {
+  k: Key,
+  w: Wrap[Key],
+  p: util.Key,
+  inner: util.Inside,
+}
+
+pub struct HolderOfOrd: Ord {
+  k: Key,
+  p: util.Key,
+}
+
+pub struct FromLoose: Eq {
+  l: Loose,                                         //~ E0416
+}
+
+pub struct FromPath: PartialEq {
+  p: util.Plain,                                    //~ E0416
+}
+
+pub struct FromGeneric: Eq {
+  w: Wrap[Plain],                                   //~ E0416
+}
+
+pub struct FromGenericPath: Eq {
+  w: util.Wrap[util.Loose],                         //~ E0416
+}
+
+pub struct FromOrdinal: Ord {
+  m: Mode,                                          //~ E0416
+}
+
+pub struct FromBad: Eq {
+  b: Bad,
+}
+
+pub struct FromBadInTheWrap: Eq {
+  w: Wrap[Bad],
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn want_ord[T: Ord](x: T) -> T {
+  x
+}
+
+fn want_ordinal[T: Ordinal](x: T) -> T {
+  x
+}
+
+pub fn key_is_eq(k: Key) -> Key {
+  want_eq(k)
+}
+
+pub fn key_is_ord(k: util.Key) -> util.Key {
+  want_ord(k)
+}
+
+pub fn keys_are_equal(a: Key, b: Key) -> Bool {
+  a == b
+}
+
+pub fn keys_are_ordered(a: Key, b: Key) -> Bool {
+  a < b
+}
+
+pub fn wrap_of_a_key(w: Wrap[Key]) -> Wrap[Key] {
+  want_eq(w)
+}
+
+pub fn wrap_of_a_plain_struct(w: Wrap[Plain]) -> Wrap[Plain] {
+  want_eq(w)                                        //~ E0416
+}
+
+pub fn loose_is_not_eq(l: Loose) -> Loose {
+  want_eq(l)                                        //~ E0416
+}
+
+pub fn loose_is_equal(a: Loose, b: Loose) -> Bool {
+  a == b
+}
+
+pub fn mode_is_ordinal(m: Mode) -> Mode {
+  want_ordinal(m)
+}
+
+pub fn mode_is_not_eq(m: Mode) -> Mode {
+  want_eq(m)                                        //~ E0416
+}
+
+pub fn key_is_not_ordinal(k: Key) -> Key {
+  want_ordinal(k)                                   //~ E0416
+}
+
+pub fn bad_is_eq_as_written(b: Bad) -> Bad {
+  want_eq(b)
+}
+
+pub fn bad_is_equal(a: Bad, b: Bad) -> Bool {
+  a == b
+}
+
+pub fn bad_is_not_ord(b: Bad) -> Bad {
+  want_ord(b)                                       //~ E0416
+}

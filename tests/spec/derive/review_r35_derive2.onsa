@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+// fixes = 0
+
+// R-35, moved from tests/review-phase1/types/derive2.onsa (and the derive part of types/attrs.onsa: S3, S4, S5), written in the form of S-34 (`: trait` in the heading). The input showed
+// that a derive checked nothing: `Eq` over a float (`S3`), a field that has no `PartialEq` (`S5` over `NoEq`), and `Ord` alone (`S4`), which are the E0416 of the field, and the use of the
+// types. Now (spec §6.4: "各フィールド（列挙子の中身）の型が生成する trait を満たさなければ E0416"; "`struct P: Ord` は `PartialEq` `Eq` `PartialOrd` `Ord` を実装する"; §18.1: a list that
+// is wrong in a field is met as written, so the use of the type has no diagnostic that mending the declaration removes): the float field of `S3` and the field `NoEq` of `S5` are the
+// E0416, on the line of the type of the field; `S4` is right, and `Ord` alone is a list; and the functions that use them have no diagnostic: `t1` and `t3` take `S3` as `Eq` and
+// `PartialEq` as written, and `t2` takes `S5` as `PartialEq`.
+
+pub struct S3: Eq {
+  x: F32,                                           //~ E0416
+}
+
+pub struct S4: Ord {
+  x: I32,
+}
+
+pub struct NoEq {
+  x: I32,
+}
+
+pub struct S5: PartialEq {
+  n: NoEq,                                          //~ E0416
+}
+
+pub fn need_eq[T: Eq](a: T, b: T) -> Bool {
+  a == b
+}
+
+pub fn t1(a: S3, b: S3) -> Bool {
+  need_eq(a, b)
+}
+
+pub fn t2(a: S5, b: S5) -> Bool {
+  a == b
+}
+
+pub fn t3(a: S3, b: S3) -> Bool {
+  a == b
+}
+
+pub fn t4(a: S4, b: S4) -> Bool {
+  need_eq(a, b)
+}
+
+pub fn t5(a: S4, b: S4) -> Bool {
+  a < b
+}

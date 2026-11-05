@@ -23,8 +23,7 @@ fn takes_impl(_tr: Option<Entity>) -> bool {
 /// of (§6.3): the builtin floats alone are `Float`, and a derive alone makes
 /// `Ordinal` (§6.4).
 fn no_impl_trait(row: u8) -> bool {
-    let (name, bound) = TRAITS[row as usize];
-    bound == Some(Bound::Float) || derives::names(name, Derive::Ordinal)
+    matches!(TRAITS[row as usize].1, Some(Bound::Float | Bound::Ordinal))
 }
 
 impl<'p> Sema<'p> {

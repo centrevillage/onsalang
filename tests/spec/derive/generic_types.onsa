@@ -1,0 +1,242 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-06 U1/t, R-35 (spec §6.4: "総称の型（`struct Pair[T]: PartialEq`）は、型引数が満たすときだけ満たす"). In the check of the fields of a generic declaration a type
+// parameter is read as a type that meets the trait that the list generates, and the decision is taken where the type is used with a type argument: a field `T`,
+// `Option[T]`, `[T; 2]`, `(T, U32)`, `Result[T, U8]`, `Array[T]`, a const argument, and another generic type that is given the parameter, are fine; a field of a
+// concrete type that lacks the trait (`F32` under `Eq`), a type that lacks it whatever the element is (`Buf[T]`, `Option[T]` under `PartialOrd`, `Array[T]` under `Hash`,
+// `Map`), and another generic type that is given a concrete type that lacks it (`Two[T, F32]`, `Direct[Plain]`) are E0416 on the line of the type of the field. The
+// use is the E0416 of the call of a bound, where the argument is asked, and the trait is taken one by one (`Direct[F32]` meets `PartialEq`, and not `Eq`). A
+// type parameter with no bound does not meet a trait that a bound asks of it. One error in each unit (P-01).
+
+pub struct Plain {
+  n: U32,
+}
+
+pub struct Direct[T]: Eq {
+  a: T,
+}
+
+pub struct Two[A, B]: Eq {
+  a: A,
+  b: B,
+}
+
+pub struct InTuple[T]: Ord {
+  a: (T, U32),
+}
+
+pub struct Ring[T, const N: U32]: PartialEq {
+  d: [T; N],
+}
+
+// ---------------------------------------------------------------- fine: the parameter is read as meeting the trait
+
+pub struct InOption[T]: Eq {
+  a: Option[T],
+}
+
+pub struct InArray[T]: Eq {
+  a: [T; 2],
+}
+
+pub struct InResult[T]: Hash {
+  r: Result[T, U8],
+}
+
+pub struct InArrayType[T]: PartialEq {
+  a: Array[T],
+}
+
+pub struct InArrayTypeEq[T]: Eq {
+  a: Array[T],
+}
+
+pub struct AllTheTypeParameters[A, B, C]: Eq {
+  a: A,
+  b: Option[B],
+  c: (C, A),
+}
+
+pub struct GivenTheParameter[T]: Eq {
+  w: Direct[T],
+}
+
+pub struct GivenTheParameterDeep[T]: Ord {
+  w: InTuple[T],
+}
+
+pub struct GivenAConcreteType[T]: Eq {
+  p: Two[T, U32],
+}
+
+pub struct RingOfTheParameter[T]: PartialEq {
+  r: Ring[T, 4],
+}
+
+pub enum Slot[T]: Eq {
+  Empty,
+  Full(T),
+  Pair(T, Option[T]),
+}
+
+pub enum SlotOfWrapper[T]: Eq {
+  Wrapped(Direct[T]),
+  Many([T; 3]),
+}
+
+// ---------------------------------------------------------------- E0416: the field does not meet the trait whatever the parameter is
+
+pub struct InBuf[T: Copy]: Eq {
+  a: Buf[T],                                        //~ E0416
+}
+
+pub struct WithAFloatField[T]: Eq {
+  a: T,
+  b: F32,                                           //~ E0416
+}
+
+pub struct GivenAFloat[T]: Eq {
+  p: Two[T, F32],                                   //~ E0416
+}
+
+pub struct GivenAFloatInTheFirst[T]: Eq {
+  p: Two[F64, T],                                   //~ E0416
+}
+
+pub struct GivenAPlainStruct[T]: Eq {
+  w: Direct[Plain],                                 //~ E0416
+}
+
+pub struct NestedGivenAFloat[T]: Eq {
+  w: Direct[Direct[F32]],                           //~ E0416
+}
+
+pub struct OptionUnderPartialOrd[T]: PartialOrd {
+  a: Option[T],                                     //~ E0416
+}
+
+pub struct ArrayTypeUnderHash[T]: Hash {
+  a: Array[T],                                      //~ E0416
+}
+
+pub struct OptionUnderDefault[T]: Default {
+  a: Option[T],                                     //~ E0416
+}
+
+pub struct MapUnderPartialEq[T]: PartialEq {
+  m: Map[T, U32],                                   //~ E0416
+}
+
+pub struct RingOfBuffers[T: Copy, const N: U32]: PartialEq {
+  d: [Buf[T]; N],                                   //~ E0416
+}
+
+pub enum SlotWithAFloat[T]: Eq {
+  Full(T),
+  Level(F32),                                       //~ E0416
+}
+
+pub enum SlotGivenAFloat[T]: Eq {
+  Pair(T, Two[U8, F32]),                            //~ E0416
+}
+
+// ---------------------------------------------------------------- the use: the argument is asked
+
+fn want_partial_eq[T: PartialEq](x: T) -> T {
+  x
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn want_ord[T: Ord](x: T) -> T {
+  x
+}
+
+fn want_hash[T: Hash](x: T) -> T {
+  x
+}
+
+pub fn direct_of_an_integer(d: Direct[I32]) -> Direct[I32] {
+  want_eq(d)
+}
+
+pub fn direct_of_a_float_is_not_eq(d: Direct[F32]) -> Direct[F32] {
+  want_eq(d)                                        //~ E0416
+}
+
+pub fn direct_of_a_float_is_partial_eq(d: Direct[F32]) -> Direct[F32] {
+  want_partial_eq(d)
+}
+
+pub fn direct_of_a_float_has_equality(a: Direct[F32], b: Direct[F32]) -> Bool {
+  a == b
+}
+
+pub fn two_with_a_float_second(t: Two[I32, F64]) -> Two[I32, F64] {
+  want_eq(t)                                        //~ E0416
+}
+
+pub fn two_of_integers(t: Two[I32, U8]) -> Two[I32, U8] {
+  want_eq(t)
+}
+
+pub fn nested_given_a_float(d: Direct[Direct[F32]]) -> Direct[Direct[F32]] {
+  want_eq(d)                                        //~ E0416
+}
+
+pub fn nested_given_integers(d: Direct[Direct[Bool]]) -> Direct[Direct[Bool]] {
+  want_eq(d)
+}
+
+pub fn direct_of_a_parameter_with_the_bound[T: Eq](d: Direct[T]) -> Direct[T] {
+  want_eq(d)
+}
+
+pub fn direct_of_a_parameter_with_a_weaker_bound[T: PartialEq](d: Direct[T]) -> Direct[T] {
+  want_eq(d)                                        //~ E0416
+}
+
+pub fn direct_of_a_parameter_with_no_bound[T](d: Direct[T]) -> Direct[T] {
+  want_eq(d)                                        //~ E0416
+}
+
+pub fn in_tuple_of_an_integer(t: InTuple[I8]) -> InTuple[I8] {
+  want_ord(t)
+}
+
+pub fn in_tuple_of_a_bool(t: InTuple[Bool]) -> InTuple[Bool] {
+  want_ord(t)                                       //~ E0416
+}
+
+pub fn ring_of_floats_is_partial_eq(r: Ring[F32, 4]) -> Ring[F32, 4] {
+  want_partial_eq(r)
+}
+
+pub fn ring_of_integers_is_not_eq(r: Ring[I32, 4]) -> Ring[I32, 4] {
+  want_eq(r)                                        //~ E0416
+}
+
+pub fn ring_of_a_plain_struct(r: Ring[Plain, 4]) -> Ring[Plain, 4] {
+  want_partial_eq(r)                                //~ E0416
+}
+
+pub fn slot_of_integers(s: Slot[U8]) -> Slot[U8] {
+  want_eq(s)
+}
+
+pub fn slot_of_a_float(s: Slot[F32]) -> Slot[F32] {
+  want_eq(s)                                        //~ E0416
+}
+
+pub fn in_result_of_a_float_has_no_hash(r: InResult[F32]) -> InResult[F32] {
+  want_hash(r)                                      //~ E0416
+}
+
+pub fn in_result_of_a_string_has_hash(r: InResult[Str]) -> InResult[Str] {
+  want_hash(r)
+}

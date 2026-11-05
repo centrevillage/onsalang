@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+// fixes = 0
+
+// W5-06 U1/t, R-35 (spec §6.4: a field whose type does not meet a trait that the list generates is E0416; §6.3, the table of the built-in types:
+// `Buf`, `Span`, `Map`, `Set` and a function value have no trait at all, `Array[T]` has `PartialEq` and `Eq` when the element has them). A field of a
+// type that has no `PartialEq` in a declaration that lists `PartialEq` (and so in the lists that give it): `Buf[U8]`, a function value, a `Map`, a
+// `Set`, a type that holds one of them (a tuple, an array, an `Option`, a `Result`, an `Array`), in a struct and in the payload of an enum. The position is
+// the line of the type of the field. One error in each declaration (§18.1).
+
+pub struct OfBuf: PartialEq {
+  data: Buf[U8],                                    //~ E0416
+}
+
+pub struct OfFunction: PartialEq {
+  f: fn(U32) -> U32,                                //~ E0416
+}
+
+pub struct OfMap: PartialEq {
+  m: Map[U32, U32],                                 //~ E0416
+}
+
+pub struct OfSet: PartialEq {
+  s: Set[U32],                                      //~ E0416
+}
+
+pub struct OfBufUnderEq: Eq {
+  data: Buf[U8],                                    //~ E0416
+}
+
+pub struct OfBufUnderOrd: Ord {
+  data: Buf[U8],                                    //~ E0416
+}
+
+pub struct OfBufUnderHash: Hash {
+  data: Buf[U8],                                    //~ E0416
+}
+
+pub struct OfFunctionUnderPartialOrd: PartialOrd {
+  f: fn(U32) -> U32,                                //~ E0416
+}
+
+pub struct InATuple: PartialEq {
+  pair: (U32, Buf[U8]),                             //~ E0416
+}
+
+pub struct InAnArray: PartialEq {
+  bufs: [Buf[U8]; 2],                               //~ E0416
+}
+
+pub struct InAnOption: PartialEq {
+  o: Option[Buf[U8]],                               //~ E0416
+}
+
+pub struct InAResult: PartialEq {
+  r: Result[U32, Buf[U8]],                          //~ E0416
+}
+
+pub struct ArrayOfMaps: PartialEq {
+  a: Array[Map[U32, U32]],                          //~ E0416
+}
+
+pub struct AfterAGoodField: PartialEq {
+  id: U32,
+  m: Map[U32, U32],                                 //~ E0416
+}
+
+pub enum PayloadBuf: PartialEq {
+  Off,
+  Data(Buf[U8]),                                    //~ E0416
+}
+
+pub enum PayloadFunction: Eq {
+  Call(fn(U32) -> U32),                             //~ E0416
+  Off,
+}
+
+pub enum PayloadMap: PartialEq {
+  Off,
+  Table(U32, Map[U32, U32]),                        //~ E0416
+}
+
+// ---------------------------------------------------------------- fine: the element has the traits
+
+pub struct ArrayOfNumbers: PartialEq {
+  a: Array[U32],
+}
+
+pub struct ArrayUnderEq: Eq {
+  a: Array[Char],
+}
+
+pub struct ArrayOfTuples: Eq {
+  a: Array[(U32, Bool)],
+}

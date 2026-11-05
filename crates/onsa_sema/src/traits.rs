@@ -8,7 +8,7 @@
 
 use onsa_syntax::ast::BinOp;
 
-use crate::def::Bound;
+use crate::def::{Bound, Derive};
 use crate::deferred::OpNeed;
 use crate::prim::{NARROW_FROM, ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty};
@@ -79,7 +79,6 @@ pub(crate) const SUPERS: &[(Bound, &[Bound])] = {
     use Bound::*;
     &[
         (Eq, &[PartialEq]),
-        // SPEC-GAP(S-900): §6.3 and §6.4 give `PartialOrd` no requirement.
         (PartialOrd, &[PartialEq]),
         (Ord, &[PartialOrd, Eq]),
         (Copy, &[Dup]),
@@ -93,6 +92,33 @@ pub(crate) const SUPERS: &[(Bound, &[Bound])] = {
         (Unsigned, &[Int]),
     ]
 };
+
+/// The derivable traits (§6.4, S-34), in the order of the spec: the closed
+/// list, the bound of each, and whether this version derives it (`false`:
+/// E0200, S-13). The one table of the two.
+pub(crate) const DERIVABLE: [(Derive, Bound, bool); 8] = [
+    (Derive::PartialEq, Bound::PartialEq, true),
+    (Derive::Eq, Bound::Eq, true),
+    (Derive::PartialOrd, Bound::PartialOrd, true),
+    (Derive::Ord, Bound::Ord, true),
+    (Derive::Hash, Bound::Hash, true),
+    (Derive::Show, Bound::Show, false),
+    (Derive::Default, Bound::Default, true),
+    (Derive::Ordinal, Bound::Ordinal, true),
+];
+
+/// The trait a derive of a list makes of the bound `b`, none of a bound no
+/// list holds.
+pub(crate) fn derive_of(b: Bound) -> Option<Derive> {
+    DERIVABLE.iter().find(|row| row.1 == b).map(|row| row.0)
+}
+
+/// What the list `written` derives: its traits and what they require
+/// (§6.4, S-900), once each, in the order of the spec.
+pub(crate) fn derived(written: &[Bound]) -> Vec<Derive> {
+    let in_list = |b: Bound| written.iter().any(|&w| implies(w, b));
+    DERIVABLE.iter().filter(|row| in_list(row.1)).map(|row| row.0).collect()
+}
 
 /// The type whose declarations stand for the members of a row of [`MEMBERS`]:
 /// a member of a type parameter is the member of this type, with this type
@@ -201,12 +227,14 @@ pub(crate) fn narrowed_bound(op: OpNeed) -> Bound {
     }
 }
 
-/// Whether a row of [`IMPLS`] has `want` and all of `bounds`: without one, no
-/// type meets them together (`Unsigned` and `Num`, §6.3). A kind constraint
-/// is in no row, and is decided by the kind.
+/// Whether a type can meet `want` and all of `bounds`: a row of [`IMPLS`] has
+/// them, or the list of §6.4 does (`Ordinal` is in no row, and an enum derives
+/// it with the others). Without either, no type meets them together
+/// (`Unsigned` and `Num`, §6.3). A kind constraint is in no row, and is
+/// decided by the kind.
 pub(crate) fn narrowable(bounds: &[Bound], want: Bound) -> bool {
-    let holds = |row: &[Bound]| row.contains(&want) && bounds.iter().all(|b| b.is_kind_constraint() || row.contains(b));
-    IMPLS.iter().any(|(_, row)| holds(row))
+    let holds = |has: &dyn Fn(Bound) -> bool| has(want) && bounds.iter().all(|&b| b.is_kind_constraint() || has(b));
+    IMPLS.iter().any(|(_, row)| holds(&|b| row.contains(&b))) || holds(&|b| derive_of(b).is_some())
 }
 
 /// The number traits (§6.3), in the order a note names them.

@@ -60,6 +60,9 @@ fn a_list_no_row_holds_is_not_narrowed() {
     assert!(narrowable(&[Bound::Num], Bound::Int));
     assert!(narrowable(&[Bound::Show, Bound::Copy], Bound::Num));
     assert!(narrowable(&[], Bound::PartialEq));
+    // No row holds `Ordinal`: a type meets it by its derive, with the other derivable traits (§6.4).
+    assert!(narrowable(&[Bound::Ordinal], Bound::PartialEq));
+    assert!(!narrowable(&[Bound::Ordinal], Bound::Num));
 }
 
 #[test]

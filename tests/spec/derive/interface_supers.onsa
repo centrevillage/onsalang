@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§18.1"]
+// golden = ["interface"]
+
+// `onsa interface` shows every trait a type implements by its derive, the supers included, in the
+// order of the list of §6.4, however the head wrote them (S-900).
+
+pub struct Whole: Ord {
+  a: U32,
+}
+
+pub struct PartialOnly: PartialOrd {
+  a: F32,
+}
+
+pub struct EqOnly: Eq {
+  a: U32,
+}
+
+pub struct Written: PartialOrd + Ord + PartialEq + Eq {
+  a: U32,
+}
+
+pub struct Mixed: Default + Hash + Eq {
+  a: U32,
+}
+
+pub enum Mode: Ordinal + Ord {
+  Off,
+  On,
+}
+
+pub struct Plain {
+  a: U32,
+}

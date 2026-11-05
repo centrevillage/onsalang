@@ -58,12 +58,7 @@ impl Analysis {
         let mut set: HashSet<DefId> = (0..self.defs.len() as u32)
             .map(DefId)
             .filter(|&id| {
-                let derives = match &self.def(id).kind {
-                    DefKind::Struct(s) => s.derives.is_none(),
-                    DefKind::Enum(e) => e.derives.is_none(),
-                    _ => false,
-                };
-                derives
+                self.def(id).derives().is_none()
                     || self.rt_unread(id)
                     || self.partly_read(id)
                     || self.read_held.contains(&id)

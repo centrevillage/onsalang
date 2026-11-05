@@ -1,0 +1,243 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// W5-06 U1/t, R-292 (spec §2.4: "補間される値は `Show` を実装していなければならない（E0416）"; §6.3, the table of the built-in types: `Show` is for the integers, the floats, `Bool`, `Char`, `Str`,
+// tuples and arrays of types that have it, `Option` and `Result` of them; `Bytes`, `()`, `Array`, `Map`, `Set`, `Buf`, `Span` and a function value have none, and a user type has it only
+// by `: Show`, which is E0200 in this version). A hole whose value has no `Show` is E0416 on the line of the string: the value of a user struct or enum (with a derive list or without), a
+// local, a field and an element of a tuple, a constant, a function value, the constructor of a variant (a function value) and a variant with no payload, a type parameter that has no `Show`
+// (the bounds that are other traits do not give it), `self`, a built-in type with no `Show`, a tuple, an array and an `Option` that hold one, and the hole that is the second one of a
+// string. The names are those of §2.4: a name path, so the field and the element are paths. `option_result_show_interpolation.onsa` has `Option` and `Result` of a plain struct. One
+// error in each function (P-01). The last functions are fine, and the type whose `Show` is E0200 has no E0416 where it is interpolated (§18.1: met as written).
+
+pub struct Plain {
+  n: U32,
+}
+
+pub struct Derived: PartialEq + Eq {
+  n: U32,
+}
+
+pub enum Mode: PartialEq {
+  Off,
+  On,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Dot,
+}
+
+pub struct Holder {
+  inner: Plain,
+  n: U32,
+  pair: (Plain, U32),
+}
+
+pub struct Loud: Show {                             //~ E0200
+  n: U32,
+}
+
+const KP: Plain = Plain { n: 1 }
+
+const KN: U32 = 3
+
+fn g(x: I32) -> I32 {
+  x
+}
+
+impl Plain {
+  pub fn describe(self) -> Str uses {Alloc} {
+    "{self}"                                        //~ E0416
+  }
+
+  pub fn describe_the_field(self) -> Str uses {Alloc} {
+    "{self.n}"
+  }
+}
+
+// ---------------------------------------------------------------- the value of a user type
+
+pub fn a_struct_with_a_derive_list(d: Derived) -> Str uses {Alloc} {
+  "{d}"                                             //~ E0416
+}
+
+pub fn an_enum(m: Mode) -> Str uses {Alloc} {
+  "{m}"                                             //~ E0416
+}
+
+pub fn an_enum_with_a_payload(s: Shape) -> Str uses {Alloc} {
+  "{s}"                                             //~ E0416
+}
+
+pub fn a_local() -> Str uses {Alloc} {
+  let p = Plain { n: 1 }
+  "{p}"                                             //~ E0416
+}
+
+pub fn a_local_enum() -> Str uses {Alloc} {
+  let m = Mode.On
+  "{m}"                                             //~ E0416
+}
+
+pub fn the_second_hole(n: U32, p: Plain) -> Str uses {Alloc} {
+  "{n} and {p}"                                     //~ E0416
+}
+
+pub fn the_hole_in_a_longer_string(p: Plain) -> Str uses {Alloc} {
+  "the value is {p}, done"                          //~ E0416
+}
+
+// ---------------------------------------------------------------- the hole in a nested place
+
+pub fn in_a_branch(p: Plain, flag: Bool) -> Str uses {Alloc} {
+  if flag {
+    "{p}"                                           //~ E0416
+  } else {
+    "none"
+  }
+}
+
+pub fn in_the_other_branch(p: Plain, flag: Bool) -> Str uses {Alloc} {
+  if flag {
+    "none"
+  } else {
+    "{p}"                                           //~ E0416
+  }
+}
+
+pub fn in_a_let(p: Plain) -> Str uses {Alloc} {
+  let s = "{p}"                                     //~ E0416
+  s
+}
+
+pub fn in_an_argument(p: Plain) -> U32 uses {Alloc} {
+  "{p}".len()                                       //~ E0416
+}
+
+// ---------------------------------------------------------------- a field and an element of a tuple
+
+pub fn a_field_of_a_plain_type(h: Holder) -> Str uses {Alloc} {
+  "{h.inner}"                                       //~ E0416
+}
+
+pub fn a_field_that_is_a_tuple(h: Holder) -> Str uses {Alloc} {
+  "{h.pair}"                                        //~ E0416
+}
+
+pub fn an_element_of_a_tuple(t: (Plain, U32)) -> Str uses {Alloc} {
+  "{t.0}"                                           //~ E0416
+}
+
+pub fn a_field_of_a_field(h: Holder) -> Str uses {Alloc} {
+  "{h.pair.0}"                                      //~ E0416
+}
+
+// ---------------------------------------------------------------- a constant, a function value, a constructor
+
+pub fn a_constant() -> Str uses {Alloc} {
+  "{KP}"                                            //~ E0416
+}
+
+pub fn a_function_value() -> Str uses {Alloc} {
+  "{g}"                                             //~ E0416
+}
+
+pub fn the_constructor_of_a_variant() -> Str uses {Alloc} {
+  "{Shape.Circle}"                                  //~ E0416
+}
+
+pub fn a_variant_with_no_payload() -> Str uses {Alloc} {
+  "{Shape.Dot}"                                     //~ E0416
+}
+
+// ---------------------------------------------------------------- a type parameter that has no `Show`
+
+pub fn a_parameter_with_no_bound[T](x: T) -> Str uses {Alloc} {
+  "{x}"                                             //~ E0416
+}
+
+pub fn a_parameter_with_other_bounds[T: Eq + Hash](x: T) -> Str uses {Alloc} {
+  "{x}"                                             //~ E0416
+}
+
+pub fn a_parameter_with_an_order[T: Ord](x: T) -> Str uses {Alloc} {
+  "{x}"                                             //~ E0416
+}
+
+pub fn a_parameter_of_another_type_next_to_the_one_with_show[T: Show, U](x: T, y: U) -> Str uses {Alloc} {
+  "{x} {y}"                                         //~ E0416
+}
+
+// ---------------------------------------------------------------- the built-in types that have no `Show`
+
+pub fn bytes(b: Bytes) -> Str uses {Alloc} {
+  "{b}"                                             //~ E0416
+}
+
+pub fn unit(u: ()) -> Str uses {Alloc} {
+  "{u}"                                             //~ E0416
+}
+
+pub fn an_array_type(a: Array[U32]) -> Str uses {Alloc} {
+  "{a}"                                             //~ E0416
+}
+
+pub fn a_buffer(b: Buf[U8]) -> Str uses {Alloc} {
+  "{b}"                                             //~ E0416
+}
+
+pub fn a_map(m: Map[U32, U32]) -> Str uses {Alloc} {
+  "{m}"                                             //~ E0416
+}
+
+pub fn a_set(s: Set[U32]) -> Str uses {Alloc} {
+  "{s}"                                             //~ E0416
+}
+
+pub fn a_tuple_that_holds_bytes(t: (U32, Bytes)) -> Str uses {Alloc} {
+  "{t}"                                             //~ E0416
+}
+
+pub fn an_array_that_holds_bytes(a: [Bytes; 2]) -> Str uses {Alloc} {
+  "{a}"                                             //~ E0416
+}
+
+pub fn an_option_that_holds_unit(o: Option[()]) -> Str uses {Alloc} {
+  "{o}"                                             //~ E0416
+}
+
+pub fn a_result_that_holds_an_array_type(r: Result[U8, Array[U8]]) -> Str uses {Alloc} {
+  "{r}"                                             //~ E0416
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn in_a_branch_that_has_show(n: U32, flag: Bool) -> Str uses {Alloc} {
+  if flag {
+    "{n}"
+  } else {
+    "none"
+  }
+}
+
+pub fn a_field_that_has_show(h: Holder) -> Str uses {Alloc} {
+  "{h.n}"
+}
+
+pub fn an_element_that_has_show(t: (Plain, U32)) -> Str uses {Alloc} {
+  "{t.1}"
+}
+
+pub fn a_constant_that_has_show() -> Str uses {Alloc} {
+  "{KN}"
+}
+
+pub fn a_parameter_with_show[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn a_type_whose_show_is_e0200(l: Loud) -> Str uses {Alloc} {
+  "{l}"
+}

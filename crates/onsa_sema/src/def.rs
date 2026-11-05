@@ -51,12 +51,13 @@ pub enum Bound {
     SaturatingAdd,
     SaturatingSub,
     SaturatingMul,
+    Ordinal,
 }
 
 /// The operator traits and the standard traits (§6.3), names of the prelude
 /// (§15.1, S-107): the one table of their names. Each row has the bound the
 /// trait is in this version (S-72), or `None` when a bound of it is an E0200
-/// (`Iter`, `IntoIter`, `Drop` and `Ordinal`).
+/// (`Iter`, `IntoIter` and `Drop`).
 pub const TRAITS: [(&str, Option<Bound>); 34] = [
     ("Add", Some(Bound::Add)),
     ("Sub", Some(Bound::Sub)),
@@ -91,7 +92,7 @@ pub const TRAITS: [(&str, Option<Bound>); 34] = [
     ("Float", Some(Bound::Float)),
     ("Int", Some(Bound::Int)),
     ("Unsigned", Some(Bound::Unsigned)),
-    ("Ordinal", None),
+    ("Ordinal", Some(Bound::Ordinal)),
 ];
 
 impl Bound {
@@ -192,8 +193,8 @@ pub enum Fields {
     Opaque,
 }
 
-/// The traits derived at the head of a type (§6.4; S-13: `Hash`, `Show` and `Ordinal` are E0200 in phase 1,
-/// in the list still, so that its users read them as derived, §18.1, R-328).
+/// The traits derived at the head of a type (§6.4; S-13: `Show` is E0200 in phase 1, in the list still,
+/// so that its users read it as derived, §18.1, R-328).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Derive {
     PartialEq,
@@ -425,6 +426,16 @@ impl Def {
             DefKind::Enum(e) => &e.generics,
             DefKind::Impl(i) => &i.generics,
             _ => &[],
+        }
+    }
+
+    /// The traits it derives (§6.4): of a struct or an enum, none when the
+    /// list is not known (§18.1, S-460); of another item, no trait.
+    pub fn derives(&self) -> Option<&[Derive]> {
+        match &self.kind {
+            DefKind::Struct(s) => s.derives.as_deref(),
+            DefKind::Enum(e) => e.derives.as_deref(),
+            _ => Some(&[]),
         }
     }
 }

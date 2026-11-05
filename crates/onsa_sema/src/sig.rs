@@ -6,8 +6,9 @@
 //! tables of the one before: the names stage, the types of the signatures
 //! ([`Sema::lower_signatures`], here: every def in its order, a flow's
 //! inputs and output by `flow_sig`), the items flows generate and `@param`
-//! (`generated`), then the `use` of an item a flow does not generate
-//! ([`Sema::fail_ungenerated`]). The parts are in a module each, an `impl` of
+//! (`generated`), the `use` of an item a flow does not generate
+//! ([`Sema::fail_ungenerated`]), then the fields of the types that derive
+//! ([`Sema::derived_fields`]). The parts are in a module each, an `impl` of
 //! `Sema`: `types` (the types, also those written in a body), `flow_sig` and
 //! `generated`; and of the lowering of a def, `heading` (the lists of
 //! parameters with their bounds, the values a heading binds and the effect
@@ -134,6 +135,7 @@ pub(crate) fn collect_and_lower(pkg: &Package, mut a: Analysis) -> Result<Analys
     s.check_generated(flows, pairs);
     s.fail_ungenerated();
     s.name_non_copy_fields();
+    s.derived_fields(pkg);
     Ok(a)
 }
 
@@ -286,7 +288,7 @@ impl<'p> Sema<'p> {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &s.generics);
                 self.member_clashes(id, "field", s.fields.iter().map(|f| &f.name));
-                let derives = self.lower_derives(&cx, &s.derives);
+                let derives = self.lower_derives(&cx, &s.derives, None);
                 // A field has the visibility of its struct, narrowed by
                 // `priv` alone (§15.1, S-35, S-672).
                 // It is seen as far as it reaches (S-665).
@@ -309,7 +311,7 @@ impl<'p> Sema<'p> {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &e.generics);
                 self.member_clashes(id, "variant", e.variants.iter().map(|v| &v.name));
-                let derives = self.lower_derives(&cx, &e.derives);
+                let derives = self.lower_derives(&cx, &e.derives, Some(&e.variants));
                 let variants = e
                     .variants
                     .iter()

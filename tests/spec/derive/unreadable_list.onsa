@@ -1,0 +1,375 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§18.1", "§4.5", "§4.6"]
+// fixes = 0
+
+// W5-06 U1/t, S-774, S-900 (spec §18.1: "derive の一覧に閉じた一覧の外の名前（§6.4 の E0416）があるときも、一覧を読めなかった部分として扱い、一覧の 8 つの trait の判定、derive が作る
+// メンバ、手で書いた `impl` の重なりには診断を出さない（他の trait、種の制約、型パラメータの暗黙の `Dup` は判定する）。一覧の名前を型が満たさない E0416（`enum E: Default`、フィールドの
+// 型が満たさない形）とこの版の E0200 の trait は、書いた trait とその上位の trait として満たす"). A list with a name that is not in the closed list (`Gone`, `Clone`) is the E0416 of the
+// heading, and the type that it heads has no judgment for the eight traits where it is used: a type argument that has to meet a bound, a call of a function whose bound is the trait, an
+// operator, a field of another list, an interpolation. The other traits (`Num`), the kinds (`Copy`) and the `Dup` of the type parameters are judged, and a method that no derive
+// makes is still E0413. A list that is wrong in another way (a field that does not meet the trait, an enum with `Default`, `Show`) is met as written, with the traits above what is written
+// (`Ord` gives `Eq` and `PartialOrd`), and not as the traits that are not written. One error in each unit (P-01).
+
+pub struct Unknown: Gone {                          //~ E0416
+  v: U32,
+}
+
+pub struct OtherLanguage: Clone {                   //~ E0416
+  v: U32,
+}
+
+pub struct Mixed: Eq + Gone + Hash {                //~ E0416
+  v: U32,
+}
+
+pub enum UnknownEnum: Gone + PartialEq {            //~ E0416
+  A,
+  B,
+}
+
+pub struct UnknownGeneric[T]: Gone {                //~ E0416
+  a: T,
+}
+
+pub struct UnknownBuffer: Gone {                    //~ E0416
+  b: Buf[U8],
+}
+
+pub struct WPartialEq[T: PartialEq] {
+  a: T,
+}
+
+pub struct WEq[T: Eq] {
+  a: T,
+}
+
+pub struct WPartialOrd[T: PartialOrd] {
+  a: T,
+}
+
+pub struct WOrd[T: Ord] {
+  a: T,
+}
+
+pub struct WHash[T: Hash] {
+  a: T,
+}
+
+pub struct WShow[T: Show] {
+  a: T,
+}
+
+pub struct WDefault[T: Default] {
+  a: T,
+}
+
+pub struct WOrdinal[T: Ordinal] {
+  a: T,
+}
+
+pub struct WNum[T: Num] {
+  a: T,
+}
+
+fn want_partial_eq[T: PartialEq](x: T) -> T {
+  x
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn want_partial_ord[T: PartialOrd](x: T) -> T {
+  x
+}
+
+fn want_ord[T: Ord](x: T) -> T {
+  x
+}
+
+fn want_hash[T: Hash](x: T) -> T {
+  x
+}
+
+fn want_show[T: Show](x: T) -> T {
+  x
+}
+
+fn want_default[T: Default](x: T) -> T {
+  x
+}
+
+fn want_ordinal[T: Ordinal](x: T) -> T {
+  x
+}
+
+fn want_num[T: Num](x: T) -> T {
+  x
+}
+
+fn want_copy[T: Copy](x: T) -> T {
+  x
+}
+
+// ---------------------------------------------------------------- nothing is judged for the eight traits of a list that is not readable
+
+pub fn argument_partial_eq(w: WPartialEq[Unknown]) -> U32 {
+  0
+}
+
+pub fn argument_eq(w: WEq[Unknown]) -> U32 {
+  0
+}
+
+pub fn argument_partial_ord(w: WPartialOrd[Unknown]) -> U32 {
+  0
+}
+
+pub fn argument_ord(w: WOrd[Unknown]) -> U32 {
+  0
+}
+
+pub fn argument_hash(w: WHash[Unknown]) -> U32 {
+  0
+}
+
+pub fn argument_show(w: WShow[Unknown]) -> U32 {
+  0
+}
+
+pub fn argument_default(w: WDefault[Unknown]) -> U32 {
+  0
+}
+
+pub fn argument_ordinal(w: WOrdinal[Unknown]) -> U32 {
+  0
+}
+
+pub fn call_partial_eq(s: Unknown) -> Unknown {
+  want_partial_eq(s)
+}
+
+pub fn call_eq(s: Unknown) -> Unknown {
+  want_eq(s)
+}
+
+pub fn call_partial_ord(s: Unknown) -> Unknown {
+  want_partial_ord(s)
+}
+
+pub fn call_ord(s: Unknown) -> Unknown {
+  want_ord(s)
+}
+
+pub fn call_hash(s: Unknown) -> Unknown {
+  want_hash(s)
+}
+
+pub fn call_show(s: Unknown) -> Unknown {
+  want_show(s)
+}
+
+pub fn call_default(s: Unknown) -> Unknown {
+  want_default(s)
+}
+
+pub fn call_ordinal(s: Unknown) -> Unknown {
+  want_ordinal(s)
+}
+
+pub fn call_with_the_other_language(s: OtherLanguage) -> OtherLanguage {
+  want_ord(s)
+}
+
+pub fn call_with_the_mixed_list(s: Mixed) -> Mixed {
+  want_hash(s)
+}
+
+pub fn call_with_the_enum(e: UnknownEnum) -> UnknownEnum {
+  want_eq(e)
+}
+
+pub fn call_with_the_generic(g: UnknownGeneric[U8]) -> UnknownGeneric[U8] {
+  want_ordinal(g)
+}
+
+pub fn equal_operator(a: Unknown, b: Unknown) -> Bool {
+  a == b
+}
+
+pub fn order_operator(a: Mixed, b: Mixed) -> Bool {
+  a < b
+}
+
+pub fn interpolation(s: Unknown) -> Str uses {Alloc} {
+  "{s}"
+}
+
+pub struct FieldUnderEq: Eq {
+  inner: Unknown,
+}
+
+pub struct FieldUnderOrd: Ord {
+  inner: UnknownEnum,
+  more: (Unknown, Mixed),
+}
+
+pub struct FieldUnderDefault: Default {
+  inner: UnknownGeneric[U8],
+}
+
+pub struct FieldUnderHash: Hash {
+  inner: Option[Unknown],
+}
+
+// ---------------------------------------------------------------- the others are judged
+
+pub fn call_num(s: Unknown) -> Unknown {
+  want_num(s)                                       //~ E0416
+}
+
+pub fn argument_num(w: WNum[Unknown]) -> U32 {      //~ E0416
+  0
+}
+
+pub fn call_num_of_the_enum(e: UnknownEnum) -> UnknownEnum {
+  want_num(e)                                       //~ E0416
+}
+
+pub fn call_copy_of_a_copy_struct(s: Unknown) -> Unknown {
+  want_copy(s)
+}
+
+pub fn call_copy_of_an_affine_struct(s: UnknownBuffer) -> UnknownBuffer {
+  want_copy(s)                                      //~ E0416
+}
+
+pub fn dup_of_a_generic_argument(g: UnknownGeneric[Buf[U8]]) -> U32 { //~ E0416
+  0
+}
+
+pub fn dup_of_a_generic_argument_that_is_fine(g: UnknownGeneric[Str]) -> U32 {
+  0
+}
+
+pub fn a_method_that_no_derive_makes(s: Unknown) -> U32 {
+  s.nope()                                          //~ E0413
+}
+
+pub fn a_field_that_is_not_there(s: Unknown) -> U32 {
+  s.zz                                              //~ E0413
+}
+
+// ---------------------------------------------------------------- the list that is wrong in another way is met as written
+
+pub struct FieldFloat: Ord {
+  k: F32,                                           //~ E0416
+}
+
+pub struct ShowOnly: Show {                         //~ E0200
+  a: U32,
+}
+
+pub struct EqAndShow: Eq + Show {                   //~ E0200
+  a: F32,
+}
+
+pub enum DefaultEnum: Default {                     //~ E0416
+  A,
+  B,
+}
+
+pub enum PartialEqAndDefault: PartialEq + Default {        //~ E0416
+  A,
+  B,
+}
+
+pub struct OrdinalStruct: Ordinal {                 //~ E0416
+  n: U32,
+}
+
+pub fn float_field_equal(a: FieldFloat, b: FieldFloat) -> Bool {
+  a == b
+}
+
+pub fn float_field_eq(f: FieldFloat) -> FieldFloat {
+  want_eq(f)
+}
+
+pub fn float_field_partial_ord(f: FieldFloat) -> FieldFloat {
+  want_partial_ord(f)
+}
+
+pub fn float_field_ord(f: FieldFloat) -> FieldFloat {
+  want_ord(f)
+}
+
+pub fn float_field_argument(w: WEq[FieldFloat]) -> U32 {
+  0
+}
+
+pub fn float_field_is_not_hash(f: FieldFloat) -> FieldFloat {
+  want_hash(f)                                      //~ E0416
+}
+
+pub fn show_only_is_show(s: ShowOnly) -> ShowOnly {
+  want_show(s)
+}
+
+pub fn show_only_is_not_eq(s: ShowOnly) -> ShowOnly {
+  want_eq(s)                                        //~ E0416
+}
+
+pub fn eq_and_show_is_eq(s: EqAndShow) -> EqAndShow {
+  want_eq(s)
+}
+
+pub fn eq_and_show_is_partial_eq(a: EqAndShow, b: EqAndShow) -> Bool {
+  a == b
+}
+
+pub fn eq_and_show_is_show(s: EqAndShow) -> EqAndShow {
+  want_show(s)
+}
+
+pub fn eq_and_show_is_not_ord(s: EqAndShow) -> EqAndShow {
+  want_ord(s)                                       //~ E0416
+}
+
+pub fn default_enum_is_default(e: DefaultEnum) -> DefaultEnum {
+  want_default(e)
+}
+
+pub fn default_enum_is_not_eq(e: DefaultEnum) -> DefaultEnum {
+  want_eq(e)                                        //~ E0416
+}
+
+pub fn partial_eq_and_default_is_partial_eq(a: PartialEqAndDefault, b: PartialEqAndDefault) -> Bool {
+  a == b
+}
+
+pub fn partial_eq_and_default_is_default(e: PartialEqAndDefault) -> PartialEqAndDefault {
+  want_default(e)
+}
+
+pub fn partial_eq_and_default_is_not_eq(e: PartialEqAndDefault) -> PartialEqAndDefault {
+  want_eq(e)                                        //~ E0416
+}
+
+pub fn ordinal_struct_is_ordinal(s: OrdinalStruct) -> OrdinalStruct {
+  want_ordinal(s)
+}
+
+pub struct FieldOfTheWrongList: Eq {
+  inner: FieldFloat,
+  other: EqAndShow,
+}
+
+pub struct FieldOfTheShortList: Eq {
+  inner: ShowOnly,                                  //~ E0416
+}
+
+pub struct FieldOfTheListWithADefault: Default {
+  inner: DefaultEnum,
+}

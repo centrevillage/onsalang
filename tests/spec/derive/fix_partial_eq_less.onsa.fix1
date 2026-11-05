@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// S-900 (spec §6.3: "`<` `<=` `>` `>=` は `PartialOrd` に絞る。既にある境界が候補の trait に含まれるときは置き換える"): E0401 for `a < b` where
+// `T: PartialEq`. `PartialOrd` is above `PartialEq`, so it contains it, and the one candidate replaces the bound: `T: PartialOrd` (not
+// `T: PartialEq + PartialOrd`). No diagnostic is left after it.
+
+pub fn below[T: PartialOrd](a: T, b: T) -> Bool {
+  a < b                                             //~ E0401
+}

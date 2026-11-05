@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.5"]
+
+// A hole whose type is decided after it (spec §2.4: "補間される値は `Show` を実装していなければならない"): the requirement is
+// checked once the type is decided, at the end of the function at the latest, and the E0416 is at the expression that made the
+// requirement (§4.5), the hole. One error per function (P-01).
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn decided_after_the_hole() -> (Str, Option[Plain]) uses {Alloc} {
+  let o = None
+  let s = "{o}"                         //~ E0416
+  let q: Option[Plain] = o
+  (s, q)
+}
+
+pub fn decided_after_the_hole_with_show() -> (Str, Option[U32]) uses {Alloc} {
+  let o = None
+  let s = "{o}"
+  let q: Option[U32] = o
+  (s, q)
+}

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3"]
+
+// R-35, the `test "eq"` of tests/review-phase1/types/derive2.onsa, with the field type that the derive asks for (`NoEq` lists `PartialEq`, as spec §6.4 requires of a field of a list that
+// generates `PartialEq`): the derived `==` of a struct over a struct that is also derived. The values are worked out by hand: `1 != 2` in the inner field.
+
+pub struct NoEq: PartialEq {
+  x: I32,
+}
+
+pub struct S5: PartialEq {
+  n: NoEq,
+}
+
+test "eq" {
+  let a = S5 { n: NoEq { x: 1 } }
+  let b = S5 { n: NoEq { x: 2 } }
+  assert !(a == b)
+  assert a == S5 { n: NoEq { x: 1 } }
+}

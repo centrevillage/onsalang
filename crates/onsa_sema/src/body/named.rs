@@ -5,6 +5,7 @@
 //! flow stage reports after `^` (W7-04: `flow_map.rs`).
 
 use super::*;
+use crate::deferred::{DeferredKind, Required};
 use crate::names::body::PathRes;
 
 impl<'a> Checker<'a> {
@@ -88,6 +89,7 @@ impl<'a> Checker<'a> {
                 None => self.field_type(base, seg)?,
             };
         }
+        self.defer(path.span, t, DeferredKind::Require { bound: Bound::Show, what: Required::HoleValue });
         Ok(t)
     }
 

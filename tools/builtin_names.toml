@@ -146,16 +146,6 @@
 "core" = 1
 "panic" = 1
 
-[allow."crates/onsa_sema/src/sig/derives.rs"]
-"Default" = 1
-"Eq" = 1
-"Hash" = 1
-"Ord" = 1
-"Ordinal" = 1
-"PartialEq" = 1
-"PartialOrd" = 1
-"Show" = 1
-
 [allow."crates/onsa_sema/src/sig/generated.rs"]
 "BULK_SIZE" = 1
 "Config" = 1

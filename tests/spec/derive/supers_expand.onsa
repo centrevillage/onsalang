@@ -1,0 +1,237 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4"]
+
+// W5-06 U1/t, S-900, R-35 (spec §6.4: "並べた trait の上位の trait（§6.3）は、型がまだ満たしていなければ一緒に生成する（`struct P: Ord` は
+// `PartialEq` `Eq` `PartialOrd` `Ord` を実装する。…）。上位の trait も並べてよい"; §6.3: "標準 trait の上位の trait は `Eq: PartialEq`、
+// `PartialOrd: PartialEq`、`Ord: PartialOrd + Eq` である"). A derive list gives the traits that are written and the traits above them: a type
+// that lists `Ord` has `==` (`PartialEq`), meets `T: Eq`, `T: PartialOrd` and `T: Ord`, and the list that writes the traits above as well, in
+// any order, gives the same. A list gives no trait that is not above a trait of the list: `Eq` and `PartialOrd` together give `Ord` no more than
+// either does (not_supers_neg.onsa). The types here have fields that meet all the traits, so
+// nothing is reported. `<` is only checked here: the Core of the comparison is W8-10 (S-135). The values of `==` are in supers_values.onsa.
+
+pub struct Ranked: Ord {
+  rank: U32,
+}
+
+pub enum Level: Ord {
+  Low,
+  High,
+}
+
+pub enum Slot: Ord {
+  Empty,
+  Full(U32),
+}
+
+pub struct Keyed: Eq {
+  id: U32,
+}
+
+pub struct Sizing: PartialOrd {
+  size: U32,
+}
+
+pub struct Named: PartialEq {
+  id: U32,
+}
+
+pub struct Everything: PartialEq + Eq + PartialOrd + Ord {
+  rank: U32,
+}
+
+pub struct Reordered: Ord + PartialEq {
+  rank: U32,
+}
+
+pub struct Upside: Ord + PartialOrd + Eq + PartialEq {
+  rank: U32,
+}
+
+pub struct EqAndOrder: PartialOrd + Eq {
+  rank: U32,
+}
+
+pub struct Wrapped[T]: Ord {
+  a: T,
+}
+
+fn want_partial_eq[T: PartialEq](x: T) -> T {
+  x
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn want_partial_ord[T: PartialOrd](x: T) -> T {
+  x
+}
+
+fn want_ord[T: Ord](x: T) -> T {
+  x
+}
+
+// ---------------------------------------------------------------- `Ord` alone gives all four
+
+pub fn ranked_equal(a: Ranked, b: Ranked) -> Bool {
+  a == b
+}
+
+pub fn ranked_differ(a: Ranked, b: Ranked) -> Bool {
+  a != b
+}
+
+pub fn ranked_less(a: Ranked, b: Ranked) -> Bool {
+  a < b
+}
+
+pub fn ranked_partial_eq(r: Ranked) -> Ranked {
+  want_partial_eq(r)
+}
+
+pub fn ranked_eq(r: Ranked) -> Ranked {
+  want_eq(r)
+}
+
+pub fn ranked_partial_ord(r: Ranked) -> Ranked {
+  want_partial_ord(r)
+}
+
+pub fn ranked_ord(r: Ranked) -> Ranked {
+  want_ord(r)
+}
+
+pub fn level_equal(a: Level, b: Level) -> Bool {
+  a == b
+}
+
+pub fn level_less(a: Level, b: Level) -> Bool {
+  a < b
+}
+
+pub fn level_partial_eq(l: Level) -> Level {
+  want_partial_eq(l)
+}
+
+pub fn level_eq(l: Level) -> Level {
+  want_eq(l)
+}
+
+pub fn level_partial_ord(l: Level) -> Level {
+  want_partial_ord(l)
+}
+
+pub fn level_ord(l: Level) -> Level {
+  want_ord(l)
+}
+
+pub fn slot_equal(a: Slot, b: Slot) -> Bool {
+  a == b
+}
+
+pub fn slot_ord(s: Slot) -> Slot {
+  want_ord(s)
+}
+
+pub fn wrapped_all(w: Wrapped[U8]) -> Wrapped[U8] {
+  want_partial_eq(want_eq(want_partial_ord(want_ord(w))))
+}
+
+// ---------------------------------------------------------------- `Eq` gives `PartialEq`
+
+pub fn keyed_equal(a: Keyed, b: Keyed) -> Bool {
+  a == b
+}
+
+pub fn keyed_partial_eq(k: Keyed) -> Keyed {
+  want_partial_eq(k)
+}
+
+pub fn keyed_eq(k: Keyed) -> Keyed {
+  want_eq(k)
+}
+
+// ---------------------------------------------------------------- `PartialOrd` gives `PartialEq` (S-900)
+
+pub fn sized_equal(a: Sizing, b: Sizing) -> Bool {
+  a == b
+}
+
+pub fn sized_differ(a: Sizing, b: Sizing) -> Bool {
+  a != b
+}
+
+pub fn sized_less(a: Sizing, b: Sizing) -> Bool {
+  a < b
+}
+
+pub fn sized_partial_eq(s: Sizing) -> Sizing {
+  want_partial_eq(s)
+}
+
+pub fn sized_partial_ord(s: Sizing) -> Sizing {
+  want_partial_ord(s)
+}
+
+// ---------------------------------------------------------------- `PartialEq` is itself
+
+pub fn named_equal(a: Named, b: Named) -> Bool {
+  a == b
+}
+
+pub fn named_partial_eq(n: Named) -> Named {
+  want_partial_eq(n)
+}
+
+// ---------------------------------------------------------------- the list that writes the traits above too
+
+pub fn everything_equal(a: Everything, b: Everything) -> Bool {
+  a == b
+}
+
+pub fn everything_less(a: Everything, b: Everything) -> Bool {
+  a < b
+}
+
+pub fn everything_ord(e: Everything) -> Everything {
+  want_ord(e)
+}
+
+pub fn reordered_equal(a: Reordered, b: Reordered) -> Bool {
+  a == b
+}
+
+pub fn reordered_less(a: Reordered, b: Reordered) -> Bool {
+  a < b
+}
+
+pub fn reordered_all(r: Reordered) -> Reordered {
+  want_partial_eq(want_eq(want_partial_ord(want_ord(r))))
+}
+
+pub fn upside_equal(a: Upside, b: Upside) -> Bool {
+  a == b
+}
+
+pub fn upside_all(u: Upside) -> Upside {
+  want_partial_eq(want_eq(want_partial_ord(want_ord(u))))
+}
+
+// ---------------------------------------------------------------- `PartialOrd + Eq` gives both, and not `Ord`
+
+pub fn both_equal(a: EqAndOrder, b: EqAndOrder) -> Bool {
+  a == b
+}
+
+pub fn both_less(a: EqAndOrder, b: EqAndOrder) -> Bool {
+  a < b
+}
+
+pub fn both_eq(b: EqAndOrder) -> EqAndOrder {
+  want_eq(b)
+}
+
+pub fn both_partial_ord(b: EqAndOrder) -> EqAndOrder {
+  want_partial_ord(b)
+}

@@ -1,0 +1,25 @@
+package interface_supers
+
+module interface_supers
+
+pub struct Whole  // Copy; size 4, align 4; derive PartialEq, Eq, PartialOrd, Ord
+  a: U32  // offset 0
+
+pub struct PartialOnly  // Copy; size 4, align 4; derive PartialEq, PartialOrd
+  a: F32  // offset 0
+
+pub struct EqOnly  // Copy; size 4, align 4; derive PartialEq, Eq
+  a: U32  // offset 0
+
+pub struct Written  // Copy; size 4, align 4; derive PartialEq, Eq, PartialOrd, Ord
+  a: U32  // offset 0
+
+pub struct Mixed  // Copy; size 4, align 4; derive PartialEq, Eq, Hash, Default
+  a: U32  // offset 0
+
+pub enum Mode  // Copy; size 1, align 1; derive PartialEq, Eq, PartialOrd, Ord, Ordinal
+  Off
+  On
+
+pub struct Plain  // Copy; size 4, align 4
+  a: U32  // offset 0

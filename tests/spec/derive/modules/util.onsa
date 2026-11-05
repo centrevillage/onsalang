@@ -1,0 +1,33 @@
+pub struct Key: Ord {
+  id: U32,
+}
+
+pub struct Loose: PartialEq {
+  id: U32,
+}
+
+pub struct Plain {
+  id: U32,
+}
+
+pub enum Mode: Ordinal {
+  Fast,
+  Slow,
+}
+
+pub struct Wrap[T]: Eq {
+  v: T,
+}
+
+pub struct Bad: Eq {
+  gain: F32,                                        //~ E0416
+}
+
+pub struct Inside: Eq {
+  k: Key,
+  w: Wrap[Key],
+}
+
+pub struct InsideBad: Eq {
+  l: Loose,                                         //~ E0416
+}

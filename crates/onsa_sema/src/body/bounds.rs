@@ -4,8 +4,8 @@
 //! tables they read are [`crate::traits`].
 
 use super::*;
-use crate::traits::Class;
 pub(crate) use crate::traits::implies;
+use crate::traits::{Class, derive_of};
 
 /// The judgments of the bounds under the generics in scope `generics`.
 pub(crate) struct Bounds<'b> {
@@ -95,36 +95,21 @@ impl Bounds<'_> {
             (Ty::Param(i), _) => self.generics.get(*i as usize).is_some_and(|g| param_holds(g, b)),
             (Ty::Named(d, args), _) => {
                 let def = self.a.def(*d);
-                let derives = match &def.kind {
-                    DefKind::Struct(s) => s.derives.as_deref(),
-                    DefKind::Enum(e) => e.derives.as_deref(),
-                    _ => Some(&[][..]),
-                };
-                // A list that is not known derives every trait (§18.1, S-460):
-                // the uses that rely on it get no diagnostic. A generic type meets a
-                // derived trait only when its type arguments meet it (§6.4, R-355).
+                let derives = def.derives();
+                // A list that is not known derives every trait of the list of §6.4
+                // (§18.1, S-460, S-774): the uses that rely on it get no diagnostic. A
+                // generic type meets a derived trait only when its type arguments meet
+                // it (§6.4, R-355). `Show` is E0200 in this version: written, it is met
+                // (R-328).
                 let of_args = || {
                     def.generics()
                         .iter()
                         .zip(args)
                         .all(|(g, &a)| !matches!(g.kind, GenericKind::Type { .. }) || self.satisfies(a, b))
                 };
-                // Asked once: `PartialEq` asks the derives of `PartialEq` and of `Eq`, and a
-                // second walk of the arguments at each level would be exponential in the nesting.
-                let args_meet = std::cell::OnceCell::new();
-                let derived =
-                    |d: crate::def::Derive| derives.is_none_or(|ds| ds.contains(&d) && *args_meet.get_or_init(of_args));
-                match b {
-                    Bound::Copy | Bound::Dup => self.kind_meets(t, b),
-                    Bound::PartialEq => derived(crate::def::Derive::PartialEq) || derived(crate::def::Derive::Eq),
-                    Bound::Eq => derived(crate::def::Derive::Eq),
-                    Bound::PartialOrd => derived(crate::def::Derive::PartialOrd) || derived(crate::def::Derive::Ord),
-                    Bound::Ord => derived(crate::def::Derive::Ord),
-                    Bound::Default => derived(crate::def::Derive::Default),
-                    // `Hash` and `Show` are E0200 in this version (W5-06): written,
-                    // they are met (R-328).
-                    Bound::Hash => derived(crate::def::Derive::Hash),
-                    Bound::Show => derived(crate::def::Derive::Show),
+                match (b, derive_of(b)) {
+                    (Bound::Copy | Bound::Dup, _) => self.kind_meets(t, b),
+                    (_, Some(want)) => derives.is_none_or(|ds| ds.contains(&want) && of_args()),
                     _ => false,
                 }
             }

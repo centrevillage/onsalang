@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§18.1"]
+// fixes = 0
+
+// W5-06 U1/t, R-35 (spec §6.4: "enum には `Default` を並べられない（E0416）"; "`Ordinal` は、列挙子に中身の無い enum にだけ並べられる（それ以外は E0416）"). The traits that a
+// declaration cannot list: `Default` in an enum, whatever the payloads are, and `Ordinal` in a struct and in an enum that has a payload in one of its variants (the
+// payload need not be wrong in any other way). The position is the line of the name of the trait in the heading, also when it is in the middle of a list and when the list
+// goes on over lines, and a heading that is wrong is the one error of the unit: the fields are not checked after it, so the wrong payload of `Both` is not
+// reported. `Show` is the E0200 of the names stage and goes before them (§18.1), as it goes before the check of the fields. The declarations are used after the error, where nothing
+// is reported (§18.1: the traits that were written are met as written). One error in each unit (P-01).
+
+pub enum Mode: Default {                            //~ E0416
+  Off,
+  On,
+}
+
+pub enum WithPayload: Default {                     //~ E0416
+  Off,
+  Level(U32),
+}
+
+pub enum Generic[T]: Default {                      //~ E0416
+  Empty,
+  Full(T),
+}
+
+pub enum DefaultFirst: Default + PartialEq {        //~ E0416
+  Off,
+  On,
+}
+
+pub enum DefaultInTheMiddle: PartialEq + Default + Eq { //~ E0416
+  Off,
+  On,
+}
+
+pub enum DefaultLast: PartialEq + Eq + Default {    //~ E0416
+  Off,
+  On,
+}
+
+pub enum Spread: PartialEq +
+  Default {                                         //~ E0416
+  Off,
+  On,
+}
+
+pub enum DefaultAndOrdinal: Default + Ordinal {     //~ E0416
+  Off,
+  On,
+}
+
+pub enum Both: Eq + Default {                       //~ E0416
+  Off,
+  Level(F32),
+}
+
+pub struct Level: Ordinal {                         //~ E0416
+  n: U32,
+}
+
+pub struct Empty: Ordinal {}                        //~ E0416
+
+pub struct Generic2[T]: Ordinal {                   //~ E0416
+  a: T,
+}
+
+pub struct OrdinalInTheMiddle: PartialEq + Ordinal + Eq { //~ E0416
+  n: U32,
+}
+
+pub enum Payload: Ordinal {                         //~ E0416
+  Off,
+  Level(U32),
+}
+
+pub enum PayloadFirst: Ordinal {                    //~ E0416
+  Level(U32),
+  Off,
+}
+
+pub enum PayloadOfTwo: PartialEq + Ordinal {        //~ E0416
+  Pair(U8, Bool),
+  Off,
+}
+
+pub enum GenericPayload[T]: Ordinal {               //~ E0416
+  Empty,
+  Full(T),
+}
+
+// ---------------------------------------------------------------- `Show` is the E0200 of the names stage, before all of these (§18.1)
+
+pub enum ShowAndDefault: Show + Default {           //~ E0200
+  Off,
+  On,
+}
+
+pub struct ShowAndOrdinal: Ordinal + Show {         //~ E0200
+  n: U32,
+}
+
+pub struct ShowAndABuffer: Show {                   //~ E0200
+  data: Buf[U8],
+}
+
+// ---------------------------------------------------------------- fine: the forms that the traits do accept
+
+pub struct SettingsStruct: Default {
+  gain: F32,
+}
+
+pub enum Plain: Ordinal {
+  A,
+  B,
+  C,
+}
+
+pub enum PlainWithOthers: PartialEq + Eq + Ordinal {
+  A,
+  B,
+}
+
+// ---------------------------------------------------------------- after the error, the types are used where the list is met as written
+
+fn want_default[T: Default](x: T) -> T {
+  x
+}
+
+fn want_partial_eq[T: PartialEq](x: T) -> T {
+  x
+}
+
+pub fn equal_of_the_wrong_default_list(a: DefaultFirst, b: DefaultFirst) -> Bool {
+  a == b
+}
+
+pub fn middle_of_the_list(m: DefaultInTheMiddle) -> DefaultInTheMiddle {
+  want_partial_eq(m)
+}
+
+pub fn the_default_that_was_written(m: Mode) -> Mode {
+  want_default(m)
+}
+
+pub fn equal_of_the_spread_list(a: Spread, b: Spread) -> Bool {
+  a == b
+}

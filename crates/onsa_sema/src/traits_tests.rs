@@ -1,10 +1,10 @@
 //! The tables of the traits against §6.3 and against each other.
 
 use crate::body::bounds::Bounds;
-use crate::def::{Bound, DefKind, Derive, TRAITS};
+use crate::def::{Bound, DefKind, TRAITS};
 use crate::flow_tests::std_package;
 use crate::tests::analyze;
-use crate::traits::{Class, IMPLS, MEMBERS, Rep, SUPERS, implies, member, member_rep};
+use crate::traits::{Class, DERIVABLE, IMPLS, MEMBERS, Rep, SUPERS, derived, implies, member, member_rep};
 use crate::ty::{BuiltinTy, EffectSet, FloatKind, FnTy, IntKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Package};
 
@@ -73,11 +73,32 @@ fn the_number_traits_hold_as_section_6_3_says() {
 }
 
 #[test]
-fn only_four_traits_are_no_bound() {
+fn only_three_traits_are_no_bound() {
     let none: Vec<&str> = TRAITS.iter().filter(|(_, b)| b.is_none()).map(|(n, _)| *n).collect();
-    assert_eq!(none, ["Iter", "IntoIter", "Drop", "Ordinal"]);
+    assert_eq!(none, ["Iter", "IntoIter", "Drop"]);
     for (name, b) in TRAITS.iter().filter_map(|(n, b)| b.map(|b| (n, b))) {
         assert_eq!(b.name(), *name);
+    }
+}
+
+/// A list derives its traits and what they require, once each, in the order of §6.4 (S-900);
+/// `Hash` requires nothing (S-902), and neither do `Default` and `Ordinal`.
+#[test]
+fn a_list_is_closed_under_the_supers_in_the_order_of_the_spec() {
+    use crate::def::Derive as D;
+    let all = vec![D::PartialEq, D::Eq, D::PartialOrd, D::Ord];
+    assert_eq!(derived(&[Bound::Ord]), all);
+    assert_eq!(derived(&[Bound::Ord, Bound::PartialEq, Bound::Eq, Bound::PartialOrd]), all);
+    assert_eq!(derived(&[Bound::PartialOrd]), [D::PartialEq, D::PartialOrd]);
+    assert_eq!(derived(&[Bound::Eq]), [D::PartialEq, D::Eq]);
+    assert_eq!(derived(&[Bound::Ordinal, Bound::Hash, Bound::Default]), [D::Hash, D::Default, D::Ordinal]);
+    for (d, b, _) in DERIVABLE {
+        let supers = SUPERS.iter().filter(|(x, _)| *x == b).flat_map(|(_, s)| s.iter());
+        assert!(
+            supers.clone().all(|s| DERIVABLE.iter().any(|row| row.1 == *s)),
+            "{b:?} requires a trait no list holds"
+        );
+        assert_eq!(crate::traits::derive_of(b), Some(d));
     }
 }
 
@@ -86,21 +107,12 @@ fn only_four_traits_are_no_bound() {
 #[test]
 fn the_derived_row_is_the_derives_of_option_and_result() {
     let a = analyze(&Package::new("t", Vec::new(), vec![std_package()]));
-    let row: &[(Bound, Derive)] = &[
-        (Bound::PartialEq, Derive::PartialEq),
-        (Bound::Eq, Derive::Eq),
-        (Bound::PartialOrd, Derive::PartialOrd),
-        (Bound::Ord, Derive::Ord),
-        (Bound::Hash, Derive::Hash),
-        (Bound::Show, Derive::Show),
-        (Bound::Default, Derive::Default),
-    ];
     let mut found = 0;
     for name in ["Option", "Result"] {
         for d in a.defs.iter().filter(|d| d.name == name && a.modules.is_std(d.module)) {
             let DefKind::Enum(e) = &d.kind else { continue };
             let derives = e.derives.as_deref().unwrap_or(&[]);
-            for (b, x) in row {
+            for (x, b, _) in &DERIVABLE {
                 assert_eq!(Class::Derived.implements(*b), derives.contains(x), "{name} and {b:?}");
             }
             found += 1;

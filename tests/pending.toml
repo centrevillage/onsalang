@@ -1139,13 +1139,6 @@ note = "イベントの入出力の見出し。`at event` のクロックが読�
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/module/prelude_bounds_ordinal.onsa"
-reasons = ["S-107"]
-until = "W5-06"
-note = "Ordinal は prelude の名前（S-107）だが、境界としての意味は W5-06。今は E0200"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow/builtin_sample_tick_call.onsa"
 reasons = ["S-565"]
 until = "W7-09"
@@ -1415,13 +1408,6 @@ target = "tests/spec/values/unwrap_fn_values_run.onsa"
 reasons = ["S-785", "S-872"]
 until = "W8-09"
 note = "`unwrap` の前の `map_err` と関数値の呼び出しは降下が E0200（関数値、W8-09）。§9.1 の形そのものは型の検査まで通る"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/option_result_show_interpolation.onsa"
-reasons = ["R-292"]
-until = "W5-06"
-note = "補間の `Show` の要求の E0416 が出ない（素の struct でも同じ。`Option`・`Result` の `Show` そのものは §6.3 のとおり）"
 
 [[pending]]
 kind = "test-case"

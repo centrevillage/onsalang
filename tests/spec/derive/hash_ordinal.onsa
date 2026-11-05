@@ -1,0 +1,215 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§4.5", "§18.1"]
+
+// W5-06 U1/t, S-138, S-145, S-902 (spec §6.4: "`Hash` は §6.3 の約束を満たす"; "`Ordinal` は、列挙子に中身の無い enum にだけ並べられる"; §6.3: "`Hash` は上位の trait を持たない", the table of the
+// built-in types has no `Ordinal`). The derive of `Hash` is the check of the bound only (a hand-written `impl Hash` is E0200, impl_trait_e0200_hand_written.onsa), and `Ordinal` is a bound that an enum with no
+// payload meets by its list. `T: Hash` takes a type that lists `Hash` and a built-in type that has it; `T: Ordinal` takes an enum with no payload that lists `Ordinal`, and
+// no built-in type, no struct, no enum that does not list it (E0416 on the line of the call). `Ordinal` has no trait above it, so `T: Ordinal` gives no `==` (E0401), and
+// a type that lists `Ordinal` has no `==` either. `T: Ordinal` is written in a function, a method of an `impl`, the head of an `impl`, a struct and an enum. The members
+// that the derive makes (`m.ordinal()`, `M.from_ordinal(n)`) are U2 and are not here. One error in each function (P-01).
+
+pub struct Key: Hash {
+  id: U32,
+  name: Str,
+}
+
+pub struct KeyWithTheOthers: PartialEq + Eq + Hash {
+  data: Bytes,
+  c: Char,
+}
+
+pub enum Mode: Ordinal {
+  A,
+  B,
+  C,
+}
+
+pub enum ModeWithTheOthers: PartialEq + Eq + Ordinal + Hash {
+  Off,
+  On,
+}
+
+pub enum PartlyListed: PartialEq {
+  A,
+  B,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub struct Holder[T: Ordinal] {
+  a: T,
+}
+
+pub enum Choice[T: Ordinal] {
+  Nothing,
+  One(T),
+}
+
+pub struct HashedHolder[T: Hash + Ordinal] {
+  a: T,
+}
+
+impl[T: Ordinal] Holder[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+
+  pub fn method_bound[U: Ordinal](self, y: U) -> U32 {
+    1
+  }
+}
+
+fn want_hash[T: Hash](x: T) -> T {
+  x
+}
+
+fn want_ordinal[T: Ordinal](x: T) -> T {
+  x
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn hash_of_a_struct(k: Key) -> Key {
+  want_hash(k)
+}
+
+pub fn hash_of_the_long_list(k: KeyWithTheOthers) -> KeyWithTheOthers {
+  want_hash(k)
+}
+
+pub fn hash_of_an_enum(m: ModeWithTheOthers) -> ModeWithTheOthers {
+  want_hash(m)
+}
+
+pub fn hash_of_an_integer(n: U8) -> U8 {
+  want_hash(n)
+}
+
+pub fn hash_of_a_char(c: Char) -> Char {
+  want_hash(c)
+}
+
+pub fn hash_of_a_string(s: Str) -> Str {
+  want_hash(s)
+}
+
+pub fn hash_of_a_tuple(t: (U8, Bool)) -> (U8, Bool) {
+  want_hash(t)
+}
+
+pub fn ordinal_of_an_enum(m: Mode) -> Mode {
+  want_ordinal(m)
+}
+
+pub fn ordinal_of_an_enum_with_the_others(m: ModeWithTheOthers) -> ModeWithTheOthers {
+  want_ordinal(m)
+}
+
+pub fn both_of_an_enum(m: ModeWithTheOthers) -> ModeWithTheOthers {
+  want_ordinal(want_hash(m))
+}
+
+pub fn the_holder(h: Holder[Mode]) -> Holder[Mode] {
+  h
+}
+
+pub fn the_choice(c: Choice[ModeWithTheOthers]) -> Choice[ModeWithTheOthers] {
+  c
+}
+
+pub fn the_hashed_holder(h: HashedHolder[ModeWithTheOthers]) -> HashedHolder[ModeWithTheOthers] {
+  h
+}
+
+pub fn the_method(h: Holder[Mode]) -> U32 {
+  h.method_bound(Mode.A)
+}
+
+// ---------------------------------------------------------------- E0416: a type that does not list `Ordinal`
+
+pub fn ordinal_of_an_enum_that_lists_other_traits(m: PartlyListed) -> PartlyListed {
+  want_ordinal(m)                                   //~ E0416
+}
+
+pub fn ordinal_of_a_plain_struct(p: Plain) -> Plain {
+  want_ordinal(p)                                   //~ E0416
+}
+
+pub fn ordinal_of_a_struct_that_lists_hash(k: Key) -> Key {
+  want_ordinal(k)                                   //~ E0416
+}
+
+pub fn ordinal_of_an_integer(n: U32) -> U32 {
+  want_ordinal(n)                                   //~ E0416
+}
+
+pub fn ordinal_of_a_bool(b: Bool) -> Bool {
+  want_ordinal(b)                                   //~ E0416
+}
+
+pub fn ordinal_of_a_char(c: Char) -> Char {
+  want_ordinal(c)                                   //~ E0416
+}
+
+pub fn ordinal_of_an_option(o: Option[Mode]) -> Option[Mode] {
+  want_ordinal(o)                                   //~ E0416
+}
+
+pub fn ordinal_of_a_tuple(t: (Mode, Mode)) -> (Mode, Mode) {
+  want_ordinal(t)                                   //~ E0416
+}
+
+pub fn ordinal_of_a_parameter_with_no_bound[T](x: T) -> T {
+  want_ordinal(x)                                   //~ E0416
+}
+
+pub fn ordinal_of_a_parameter_with_other_bounds[T: Eq + Hash](x: T) -> T {
+  want_ordinal(x)                                   //~ E0416
+}
+
+pub fn the_holder_of_an_integer(h: Holder[U32]) -> Holder[U32] { //~ E0416
+  h
+}
+
+pub fn the_choice_of_a_struct(c: Choice[Plain]) -> Choice[Plain] { //~ E0416
+  c
+}
+
+// ---------------------------------------------------------------- E0416: `Hash` of a type that does not list it
+
+pub fn hash_of_a_plain_struct(p: Plain) -> Plain {
+  want_hash(p)                                      //~ E0416
+}
+
+pub fn hash_of_an_enum_that_lists_other_traits(m: PartlyListed) -> PartlyListed {
+  want_hash(m)                                      //~ E0416
+}
+
+pub fn hash_of_an_ordinal_enum(m: Mode) -> Mode {
+  want_hash(m)                                      //~ E0416
+}
+
+pub fn hash_of_a_float(f: F32) -> F32 {
+  want_hash(f)                                      //~ E0416
+}
+
+// ---------------------------------------------------------------- E0401: nothing is above `Ordinal` and `Hash`
+
+pub fn equal_of_an_ordinal_parameter[T: Ordinal](a: T, b: T) -> Bool {
+  a == b                                            //~ E0401
+}
+
+pub fn less_of_an_ordinal_parameter[T: Ordinal](a: T, b: T) -> Bool {
+  a < b                                             //~ E0401
+}
+
+pub fn equal_of_an_ordinal_enum(a: Mode, b: Mode) -> Bool {
+  a == b                                            //~ E0401
+}
+
+pub fn equal_of_a_hash_struct(a: Key, b: Key) -> Bool {
+  a == b                                            //~ E0401
+}

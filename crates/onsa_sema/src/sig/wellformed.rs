@@ -59,6 +59,23 @@ fn places(shape: &Ty, at: (Pos, u8)) -> Vec<(TyId, (Pos, u8))> {
     }
 }
 
+/// The fields of a struct and the payloads of the variants of an enum: each
+/// as written, as lowered, and its slot.
+pub(super) fn payloads(item: &ItemKind, def: &DefKind) -> Vec<(TypeId, TyId, Slot)> {
+    match (item, def) {
+        (ItemKind::Struct(s), DefKind::Struct(StructDef { fields: Fields::Named(fs), .. })) => {
+            s.fields.iter().zip(fs).enumerate().map(|(k, (f, l))| (f.ty, l.ty, Slot::Field(k))).collect()
+        }
+        (ItemKind::Enum(e), DefKind::Enum(ed)) => {
+            let variants = e.variants.iter().zip(&ed.variants).enumerate();
+            let fields =
+                variants.flat_map(|(n, (v, l))| v.fields.iter().zip(&l.fields).enumerate().map(move |f| (n, f)));
+            fields.map(|(n, (k, (&t, &l)))| (t, l, Slot::Variant(n, k))).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// Whether the head of `t` is second-class (§5.3): `Span`, a generated `Out`
 /// (§11.6; `In` from W7-03). The one place of the question.
 pub(crate) fn second_class(a: &Analysis, t: TyId) -> bool {
@@ -123,7 +140,7 @@ enum Written {
 
 /// Where the type lowered of a root is kept ([`Sema::unread`]).
 #[derive(Clone, Copy)]
-enum Slot {
+pub(super) enum Slot {
     Field(usize),
     Variant(usize, usize),
     Param(usize),
@@ -178,18 +195,8 @@ impl<'p> Sema<'p> {
         let std = self.a.modules.is_std(self.a.def(id).module);
         let roots: Vec<(TypeId, TyId, Pos, Slot)> =
             match (decls::item_kind(&cx.ast.item(item).kind), &self.a.def(id).kind) {
-                (ItemKind::Struct(s), DefKind::Struct(StructDef { fields: Fields::Named(fs), .. })) => s
-                    .fields
-                    .iter()
-                    .zip(fs)
-                    .enumerate()
-                    .map(|(k, (f, l))| (f.ty, l.ty, Pos::Other, Slot::Field(k)))
-                    .collect(),
-                (ItemKind::Enum(e), DefKind::Enum(ed)) => {
-                    let variants = e.variants.iter().zip(&ed.variants).enumerate();
-                    let fields = variants
-                        .flat_map(|(n, (v, l))| v.fields.iter().zip(&l.fields).enumerate().map(move |f| (n, f)));
-                    fields.map(|(n, (k, (&t, &l)))| (t, l, Pos::Other, Slot::Variant(n, k))).collect()
+                (kind @ (ItemKind::Struct(_) | ItemKind::Enum(_)), def) => {
+                    payloads(kind, def).into_iter().map(|(t, l, slot)| (t, l, Pos::Other, slot)).collect()
                 }
                 // `self` is not lowered with the parameters (`lower_params`).
                 (ItemKind::Fn(f), DefKind::Fn(fd)) => {
@@ -460,7 +467,7 @@ impl<'p> Sema<'p> {
     }
 
     /// `ty` as the diagnostics show it, its parameters by their names.
-    fn shown(&self, cx: &Cx<'p>, ty: TyId) -> String {
+    pub(super) fn shown(&self, cx: &Cx<'p>, ty: TyId) -> String {
         let param = |i: u32| cx.generics.get(i as usize).map_or_else(|| format!("<{i}>"), |g| g.name.clone());
         self.a.types.display(ty, &|d| self.a.shown_name(d), &param)
     }

@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3"]
+
+// W5-06 U1/t, R-35 (spec §6.4: "`PartialEq` / `Eq` は、全てのフィールド（enum は列挙子と中身）が等しいとき等しい"; §6.3: tuples, arrays, `Option` and `Result` are equal when
+// the elements are). The derived `==` of types whose fields are tuples, arrays, `Option`, `Result` and a user type that is declared after the type that holds it, and of an
+// enum with payloads of such types, once the check of the fields lets them through. The values are worked out by hand.
+
+pub struct Outer: Eq {
+  inner: Inner,
+  pair: (U32, Bool),
+  flags: [Bool; 2],
+  maybe: Option[Inner],
+  result: Result[U8, Inner],
+}
+
+pub struct Inner: Eq {
+  id: U32,
+  tag: Char,
+}
+
+pub enum Event: Eq {
+  Off,
+  Note(U8, Bool),
+  Named(Inner),
+  Keys(Option[Inner]),
+}
+
+fn make(id: U32, flag: Bool, maybe: Option[Inner]) -> Outer {
+  make_with(id, flag, maybe, Ok(3))
+}
+
+fn make_with(id: U32, flag: Bool, maybe: Option[Inner], result: Result[U8, Inner]) -> Outer {
+  Outer {
+    inner: Inner { id: id, tag: 'a' },
+    pair: (id, flag),
+    flags: [flag, true],
+    maybe: maybe,
+    result: result,
+  }
+}
+
+test "== of nested fields that are all equal" {
+  let a = make(1, true, Some(Inner { id: 2, tag: 'b' }))
+  let b = make(1, true, Some(Inner { id: 2, tag: 'b' }))
+  assert a == b
+  assert !(a != b)
+}
+
+test "== sees a difference in each kind of field" {
+  let a = make(1, true, Some(Inner { id: 2, tag: 'b' }))
+  assert a != make(2, true, Some(Inner { id: 2, tag: 'b' }))
+  assert a != make(1, false, Some(Inner { id: 2, tag: 'b' }))
+  assert a != make(1, true, None)
+  assert a != make(1, true, Some(Inner { id: 3, tag: 'b' }))
+  assert a != make(1, true, Some(Inner { id: 2, tag: 'c' }))
+}
+
+test "== of a Result field" {
+  let a = make_with(1, true, None, Ok(3))
+  assert a == make_with(1, true, None, Ok(3))
+  assert a != make_with(1, true, None, Ok(4))
+  assert a != make_with(1, true, None, Err(Inner { id: 9, tag: 'z' }))
+}
+
+test "== of an enum with payloads" {
+  assert Event.Off == Event.Off
+  assert Event.Note(1, true) == Event.Note(1, true)
+  assert Event.Note(1, true) != Event.Note(1, false)
+  assert Event.Named(Inner { id: 1, tag: 'a' }) == Event.Named(Inner { id: 1, tag: 'a' })
+  assert Event.Named(Inner { id: 1, tag: 'a' }) != Event.Named(Inner { id: 1, tag: 'b' })
+  assert Event.Keys(None) == Event.Keys(None)
+  assert Event.Keys(Some(Inner { id: 1, tag: 'a' })) != Event.Keys(None)
+  assert Event.Off != Event.Keys(None)
+}

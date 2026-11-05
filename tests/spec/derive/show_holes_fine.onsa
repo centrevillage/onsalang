@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.3"]
+
+// W5-06 U1/t, R-292 (spec §2.4: "補間される値は `Show` を実装していなければならない"; §6.3, the table of the built-in types: `Show` is for the integers, the floats, `Bool`, `Char`, `Str`, a tuple
+// and `[T; N]` of types that have it, and `Option` and `Result` of types that have it). The holes that are right: every built-in type of the table, the composite
+// forms of them, a type parameter that has `Show` (alone and with other bounds), a constant and the associated constant of a type, a field and an element of a tuple that have it, `self`
+// and a field of `self`, and a local whose type is decided after the hole (`let x = 1`). A string with a hole makes a new `Str`, so the functions have `Alloc` (§2.4). The
+// negative holes are in show_holes_neg.onsa.
+
+pub struct Holder {
+  n: U32,
+  gain: F32,
+  pair: (U8, Char),
+  name: Str,
+}
+
+pub struct Settings {
+  rate: F32,
+}
+
+const KN: U32 = 3
+
+const KF: F32 = 0.5
+
+impl Settings {
+  pub fn describe(self) -> Str uses {Alloc} {
+    "rate {self.rate}"
+  }
+}
+
+pub fn signed(a: I8, b: I16, c: I32, d: I64) -> Str uses {Alloc} {
+  "{a} {b} {c} {d}"
+}
+
+pub fn unsigned(a: U8, b: U16, c: U32, d: U64) -> Str uses {Alloc} {
+  "{a} {b} {c} {d}"
+}
+
+pub fn floats(a: F32, b: F64) -> Str uses {Alloc} {
+  "{a} {b}"
+}
+
+pub fn others(b: Bool, c: Char, s: Str) -> Str uses {Alloc} {
+  "{b} {c} {s}"
+}
+
+pub fn tuples_and_arrays(t: (U32, Bool), a: [U8; 2], n: ((U8, Char), [F32; 2])) -> Str uses {Alloc} {
+  "{t} {a} {n}"
+}
+
+pub fn options_and_results(o: Option[U32], r: Result[U8, Bool]) -> Str uses {Alloc} {
+  "{o} {r}"
+}
+
+pub fn nested(o: Option[Option[(U8, Char)]], r: Result[[U8; 2], Option[Str]]) -> Str uses {Alloc} {
+  "{o} {r}"
+}
+
+pub fn parameter_with_show[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn parameter_with_show_and_others[T: Show + Eq + Hash](x: T) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn parameter_with_show_and_a_number[T: Show + Num](x: T) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn parameter_in_an_option[T: Show](x: Option[T]) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn parameter_in_a_tuple[T: Show, U: Show](x: (T, U)) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn constants() -> Str uses {Alloc} {
+  "{KN} {KF}"
+}
+
+pub fn associated_constant() -> Str uses {Alloc} {
+  "{F32.PI} {U8.MAX}"
+}
+
+pub fn fields(h: Holder) -> Str uses {Alloc} {
+  "{h.n} {h.gain} {h.pair} {h.pair.0} {h.name}"
+}
+
+pub fn element_of_a_tuple(t: (Settings, U32)) -> Str uses {Alloc} {
+  "{t.1}"
+}
+
+pub fn type_decided_after_the_hole() -> Str uses {Alloc} {
+  let x = 1
+  "{x}"
+}
+
+pub fn escaped_braces(n: U32) -> Str uses {Alloc} {
+  "{{{n}}}"
+}

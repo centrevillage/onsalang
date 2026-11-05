@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+// fixes = 0
+
+// W5-06 U1/t, R-35 (spec §6.4: "各フィールド（列挙子の中身）の型が生成する trait を満たさなければ E0416"; §6.3: "`Eq`, `Ord`（全順序。…浮動小数は
+// 実装しない）", the table: a float has `PartialEq` `PartialOrd` `Show` `Default` and no `Eq`, `Ord` or `Hash`). A field of `F32` or `F64` in a
+// declaration that lists `Eq`, `Ord` or `Hash`, in a struct and in the payload of an enum: E0416 on the line of the type of the field (or of the payload).
+// A list is checked for all the traits that it generates (S-900), so `Ord` over a float is one error: the `Eq` that the list generates
+// is the one that the float does not meet, and it is not the `Ord` of the list. One error in each declaration (§18.1). The last
+// declarations are fine: a float has the other traits.
+
+pub struct EqOfF32: Eq {
+  a: F32,                                           //~ E0416
+}
+
+pub struct EqOfF64: Eq {
+  a: F64,                                           //~ E0416
+}
+
+pub struct OrdOfF32: Ord {
+  a: F32,                                           //~ E0416
+}
+
+pub struct OrdOfF64: Ord {
+  a: F64,                                           //~ E0416
+}
+
+pub struct HashOfF32: Hash {
+  a: F32,                                           //~ E0416
+}
+
+pub struct HashOfF64: Hash {
+  a: F64,                                           //~ E0416
+}
+
+pub struct EqAndHashOfF32: Eq + Hash {
+  a: F32,                                           //~ E0416
+}
+
+pub struct EveryTraitOfF64: PartialEq + Eq + PartialOrd + Ord {
+  a: F64,                                           //~ E0416
+}
+
+pub struct AfterAnOrdinaryField: Eq {
+  id: U32,
+  gain: F32,                                        //~ E0416
+}
+
+pub enum EqInThePayload: Eq {
+  Off,
+  Level(F32),                                       //~ E0416
+}
+
+pub enum OrdInThePayload: Ord {
+  Off,
+  Pair(U32, F64),                                   //~ E0416
+}
+
+pub enum HashInThePayload: Hash {
+  Rate(F32),                                        //~ E0416
+  Off,
+}
+
+// ---------------------------------------------------------------- fine: a float meets the traits that it has
+
+pub struct PartialEqOfF32: PartialEq {
+  a: F32,
+}
+
+pub struct PartialOrdOfF64: PartialOrd {
+  a: F64,
+}
+
+pub struct DefaultOfF32: Default {
+  a: F32,
+  b: F64,
+}
+
+pub enum PartialEqPayload: PartialEq {
+  Off,
+  Level(F32),
+}

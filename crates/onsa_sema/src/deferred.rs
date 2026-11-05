@@ -117,6 +117,8 @@ pub(crate) enum Required {
     /// The element of the receiver of the type `recv` of the method `method`
     /// of std's `impl` of a sequence: its bounds (§5.3, S-853).
     SeqElement { recv: TyId, method: String },
+    /// The value of a hole of a string (`Show`, §2.4, R-292).
+    HoleValue,
 }
 
 /// What the message of a type argument calls it.
@@ -148,6 +150,9 @@ impl Required {
     /// `show` shows another type, when the error is reported.
     pub(crate) fn unmet(&self, shown: &str, bound: Bound, show: &mut dyn FnMut(TyId) -> String) -> String {
         match self {
+            Required::HoleValue => {
+                format!("a hole of a string takes a value that implements `Show`; `{shown}` does not (§2.4)")
+            }
             Required::RepeatElement => format!(
                 "`[e; N]` repeats the value of `e`, so its type must be Copy or Shared (`Dup`); `{shown}` is not; make an Affine array with `array.from_fn` (§2.4)"
             ),

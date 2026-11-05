@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.3"]
+
+// The number traits do not hold `Show`: §6.3 lists what each of them meets, and `Show` is in no list. So a hole of a type
+// parameter with a number bound is E0416 (§2.4), and `T: Num + Show` is how the code asks for it. One error per function (P-01).
+
+pub fn any_num_hole[T: AnyNum](x: T) -> Str uses {Alloc} {
+  "{x}"                                 //~ E0416
+}
+
+pub fn num_hole[T: Num](x: T) -> Str uses {Alloc} {
+  "{x}"                                 //~ E0416
+}
+
+pub fn int_hole[T: Int](x: T) -> Str uses {Alloc} {
+  "{x}"                                 //~ E0416
+}
+
+pub fn unsigned_hole[T: Unsigned](x: T) -> Str uses {Alloc} {
+  "{x}"                                 //~ E0416
+}
+
+pub fn float_hole[T: Float](x: T) -> Str uses {Alloc} {
+  "{x}"                                 //~ E0416
+}
+
+pub fn num_and_show_hole[T: Num + Show](x: T) -> Str uses {Alloc} {
+  "{x}"
+}

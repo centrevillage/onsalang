@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// `Ordinal` has no trait above it (§6.3), so `==` of `T: Ordinal` is E0401. No built-in type has `Ordinal`, but an enum derives it
+// with `PartialEq` (§6.4), so a type meets the list: the one candidate gives the bound `PartialEq` besides the `Ordinal`
+// (§6.3: "`==` `!=` は `PartialEq`"), and no diagnostic is left.
+
+pub fn same[T: Ordinal + PartialEq](a: T, b: T) -> Bool {
+  a == b                                            //~ E0401
+}
