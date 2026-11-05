@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3"]
+
+// W5-05 U1/t (§6.3: "ビット演算 ... は `Int`"; the operator traits `BitAnd` `BitOr` `BitXor` and the table, which gives them to
+// every integer and to no float): `&`, `|` and `^` find their own trait, with no number trait asked, for the signed and the
+// unsigned integers of every width. The result is the bitwise one (§3.4); no case of them panics.
+
+fn and2[T: BitAnd](a: T, b: T) -> T {
+  a & b
+}
+
+fn or2[T: BitOr](a: T, b: T) -> T {
+  a | b
+}
+
+fn xor2[T: BitXor](a: T, b: T) -> T {
+  a ^ b
+}
+
+test "BitAnd on unsigned and signed integers" {
+  let a: U8  = 240
+  let b: U8  = 60
+  let c: I8  = -1
+  let d: I8  = 15
+  let e: U64 = 18446744073709551615
+  let f: U64 = 4294967296
+  assert and2(a, b) == 48
+  assert and2(c, d) == 15
+  assert and2(e, f) == 4294967296
+}
+
+test "BitOr on unsigned and signed integers" {
+  let a: U8  = 240
+  let b: U8  = 60
+  let c: I8  = -128
+  let d: I8  = 1
+  let e: U16 = 256
+  let f: U16 = 1
+  assert or2(a, b) == 252
+  assert or2(c, d) == -127
+  assert or2(e, f) == 257
+}
+
+test "BitXor on unsigned and signed integers" {
+  let a: U8  = 240
+  let b: U8  = 60
+  let c: I8  = -1
+  let d: I8  = 85
+  let e: I32 = 5
+  assert xor2(a, b) == 204
+  assert xor2(c, d) == -86
+  assert xor2(e, e) == 0
+}
+
+test "the bit operators of an instance are those of the type" {
+  let a: I16 = -12345
+  let b: I16 = 4660
+  assert and2(a, b) == (a & b)
+  assert or2(a, b) == (a | b)
+  assert xor2(a, b) == (a ^ b)
+}

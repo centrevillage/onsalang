@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.3", "§4.5", "§18.1"]
+
+// W5-05 U1/t (S-73; §6.6: "宣言の型が型パラメータを含み、その型パラメータが `Copy` の境界(数の trait を含む)を持たなければ、Shared でありうる
+// ので同じく E0200 である(`impl[T] W[T] { const Z: Option[T] = None }`。`T: ?Dup` も同じ)"): the contrast of copy_num_float_fine.onsa and
+// copy_anynum_int_fine.onsa. A `const` whose declared type holds a type parameter is E0200 (this version has no Shared type
+// in a constant) when the parameter has no bound that gives `Copy`: no bound, `?Dup`, a bound that is no number trait
+// (`Show`, `PartialOrd`); an operator trait is in const_shared_operator_trait_e0200.onsa. The position is the declared type. The same declaration
+// with a number trait is right. One error per item (P-01).
+
+pub struct Slot[T: ?Dup] {
+  a: T,
+}
+
+impl[T] Slot[T] {
+  const NONE: Option[T] = None //~ E0200
+}
+
+pub struct Slot2[T: ?Dup] {
+  a: T,
+}
+
+impl[T: ?Dup] Slot2[T] {
+  const NONE: Option[T] = None //~ E0200
+}
+
+pub struct Slot3[T: ?Dup] {
+  a: T,
+}
+
+impl[T: Show] Slot3[T] {
+  const NONE: Option[T] = None //~ E0200
+}
+
+pub struct Slot5[T: ?Dup] {
+  a: T,
+}
+
+impl[T: PartialOrd] Slot5[T] {
+  const NONE: Option[T] = None //~ E0200
+}
+
+// What is right next to them: the number traits.
+pub struct Slot6[T: ?Dup] {
+  a: T,
+}
+
+impl[T: Num] Slot6[T] {
+  const NONE: Option[T] = None
+}
+
+pub struct Slot7[T: ?Dup] {
+  a: T,
+}
+
+impl[T: Copy] Slot7[T] {
+  const NONE: Option[T] = None
+}

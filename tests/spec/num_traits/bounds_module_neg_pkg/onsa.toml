@@ -1,0 +1,3 @@
+[package]
+name = "bounds_module_neg_pkg"
+edition = "2026"

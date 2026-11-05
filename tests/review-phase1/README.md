@@ -35,7 +35,7 @@
 | `body/m6_closure_local.onsa` | R-33。W4-09 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/modes_moved_closure_local.onsa`（`m6` の `from_fn` の無名関数の中の二重移動、ほかの無名関数・使用・ループ）。W4-07 で直した |
 | `body/a1_tuple_arg.onsa` | R-34。W4-09 U3/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/move_arg_literal_elements.onsa`（`total((a, b))` と `total_arr([a, b])` の要素の E0711 と挿入の候補。通る形は同じファイルの `move` を付けた形と、平面の `[Span[T]; N]` の `total_planar([a, b])`）、`tests/spec/fixes/e0711_arg_tuple_element.onsa`・`e0711_arg_array_element.onsa`（候補を当てた後に誤りが 0 になる形）、`tests/spec/values/move_arg_literal_elements.onsa`（実行）。今の `onsa check` は `a1` の `a` に E0711（挿入の候補）で、事例は通る。R-34 を閉じるのは W4-09 U3 |
 | `body/c1_capture_assign.onsa` | R-25。W4-16 U1a で直した（今の `onsa check` は 6 行の E0701「captured by a closure, read-only」）。期待値付きのテストは `tests/spec/negative/closure_capture_write.onsa` |
-| `body/t2_neg_generic.onsa` | R-03、R-94 |
+| `body/t2_neg_generic.onsa` | R-03、R-94。W5-05 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/num_traits/neg_unsigned_through_num_test.onsa`（`tests/spec/num_traits/bounds_unsigned_not_num_neg.onsa` も同じ形） |
 | `body/l1_strpat.onsa` | R-03。W3-21/t で期待値付きのテストへ移した: `tests/spec/negative/pattern_str.onsa`（補間を含む文字列のパターン E0020。候補の形は `crates/onsa_cli/tests/cli/pattern_guard_candidates.rs`） |
 | `body/p1_pat_range.onsa`、`body/u1_unresolved.onsa` | R-03。W2-06 で期待値付きのテストへ移した: `tests/spec/negative/pattern_range.onsa`（パターンのリテラルの範囲 E0408 と符号なしの `-1` の E0401）、`tests/spec/negative/infer_unresolved.onsa`（関数の終わりに残る型変数の E0406。`Buf.zeroed(4)` と `None` は作った式に出す、S-226） |
 | `body/i1_generic_lit.onsa` | R-53。W5-01 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/semantics/infer_generic_literal_call.onsa`（`lit_to_generic` の `id(3)`、`lit_to_max` の `max(1, 2)`。今も通る）、`tests/spec/negative/infer_as_literal.onsa`（`later_decides` の `y + (1.0 as F32)` は §4.7 の「その場で既知を要する操作」の E0420。今も同じ） |
@@ -154,7 +154,7 @@
 | `parent/r87.onsa` | R-87（修正候補の形と診断を置く位置。`onsa check --json` で確かめる。期待値と今の出力は各関数の上のコメント。S-81、S-82）。候補の形（S-81、R-87 (1)(2)）は W3-02 で直した。E0320 の全ての使用箇所の改名は W4-04 U9 で直した（今の `onsa check --json` は複数の編集を持つ候補を出す。期待値は `tests/spec/fixes/e0320_rename.onsa`・`pkg_rename/`）。E0601 の位置は W6-03 で、期待値は `tests/spec/fixes/e0601_alloc_row.onsa`（実装待ち） |
 | `parent/r88/` | R-88（std の版の固定。期待値は `onsa.toml` の先頭のコメント。S-83） |
 | `parent/r93.onsa` | R-93、R-81（評価順。S-75 の期待値で書いたテストで、今の結果は各テストの上のコメント） |
-| `parent/r94/` | R-94、R-131（数の trait の形。`check.onsa` は `onsa check`、`run.onsa` は `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-84） |
+| `parent/r94/` | R-94、R-131（数の trait の形。`check.onsa` は `onsa check`、`run.onsa` は `onsa test` で確かめる。期待値は各項目の上のコメントで、「今:」の文は W5-05 U1 の前の出力。S-84）。W5-05 U1/t で U1 の形を `tests/spec/num_traits/` へ移した。候補を伴う E0401 と `T.ZERO` の形は U3・U5 |
 | `parent/r95.onsa` | R-95（Affine のフィールドの取り出し。S-85）。W4-09 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/values/take_out_consumes_root.onsa`（`take_ret`・`take_let`・`take_pair`・`take_tuple`・`take_nested`・`read_first`・`into_buf` の通る形。分解 `destructure` は `unit_stage_modes_stops_rt.onsa` の `via_let`）、`take_out_rest_copy.onsa`・`negative/take_out_rest_alloc.onsa`（残りの破棄の効果）、`negative/take_out_use_after.onsa`（`use_after`）、`negative/take_out_array_element.onsa`（`take_elem`）、`negative/take_out_not_owned.onsa`（`take_borrowed`）。`impl Drop` を実装する型の形（`Res`・`take_res`・`destructure_res`。`impl Drop` が E0200 で届かない）は第 2 期で、事例に移していない |
 | `parent/r98.onsa` | R-98（名前の無いノードの名前と配置。0.3 の草案の flow の書き方（`Sig[F32]`、`prev(…, 0.0)`）。今の実装は受け付けない。`onsa interface` と `onsa graph` で確かめる。期待値と今の出力は先頭のコメント。S-86） |
 | `parent/r99.onsa` | R-99（`@param` の値型と値。期待値と今の出力は各 flow の上のコメント。S-87） |
@@ -175,7 +175,7 @@
 | `parent/param_id/` | `impl-review-0.3.md` の §11.7 `id`（パラメータの ID の作り方。パッケージで、`onsa build --target host` の生成した C の表で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-104） |
 | `parent/strict_ftz/` | `impl-review-0.3.md` の §13.4 `strict-ftz`（FTZ / DAZ の設定。パッケージで、`onsa build --target host` の生成した C を確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-105） |
 | `parent/r133/` | R-133（NaN のビット表現。パッケージで、`onsa test` と、生成した C を arm64 / x86_64 / gcc-15 でコンパイルした `host.c` で確かめる。手順と期待値と今の出力は `m.onsa` の先頭のコメント。S-106）。W2-03（インタプリタ）と W2-05（C）で期待値付きのテストへ移した: テストベクトルの `f32.to_bits`・`f64.to_bits`（`vectors-interp`、`vectors-c` の clang・gcc-15・x86_64）、`tests/spec/c_runtime/c_nan_bits.onsa`、`crates/onsa_interp/src/tests.rs` の `to_bits_of_a_nan_is_the_positive_quiet_nan` |
-| `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73）。名指すテストは無い（近い形は `tests/spec/types/const_type_fine.onsa`）。今: 先頭のコメントのとおり |
+| `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。S-73）。W5-05 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/num_traits/copy_num_float_fine.onsa`（`via_num`・`via_float`）、`tests/spec/num_traits/copy_not_from_operator_traits_neg.onsa`（`via_eq`） |
 | `parent/r129.onsa` | R-129（効果の名前の解決、S-74）。W4-03 U5b で期待値付きのテストへ移して消した: `tests/spec/effects/names_r129.onsa`（72 回目） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |
 | （R-132） | 専用の入力は無い。レートを型の形で書いたときの診断は `parent/t5.onsa`（S-102） |

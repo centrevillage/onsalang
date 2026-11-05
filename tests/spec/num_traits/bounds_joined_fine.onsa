@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.3"]
+
+// W5-05 U1/t (§4.5: "境界を複数付けるときは `+` で並べる"; "含意で重なる形(`Float + Num`)は誤りでない"; §6.3: "符号付き整数だけを
+// 受けるときは `T: Num + Int` と書く"): the number traits joined with each other and with the other traits, in every place that
+// has a list of bounds: a function, a second parameter, a method, a struct, an enum and the `[ ]` of an `impl`. The lists whose
+// names overlap by implication (`Int + AnyNum`, `Unsigned + Int`, `Int + Add`, `Float + Num`) are not an error, and neither is
+// a list of two number traits that do not imply each other (`Num + Int`). All of them are right and used.
+
+pub fn signed_int[T: Num + Int](x: T) -> T {
+  x
+}
+
+pub fn int_then_num[T: Int + Num](x: T) -> T {
+  x
+}
+
+pub fn int_and_any_num[T: Int + AnyNum](x: T) -> T {
+  x
+}
+
+pub fn unsigned_and_int[T: Unsigned + Int](x: T) -> T {
+  x
+}
+
+pub fn int_and_unsigned[T: Int + Unsigned](x: T) -> T {
+  x
+}
+
+pub fn int_and_add[T: Int + Add](x: T) -> T {
+  x
+}
+
+pub fn float_and_num[T: Float + Num](x: T) -> T {
+  x
+}
+
+pub fn any_num_and_add[T: AnyNum + Add + PartialOrd](x: T) -> T {
+  x
+}
+
+pub fn int_and_show[T: Int + Show](x: T) -> T {
+  x
+}
+
+pub fn unsigned_and_ord[T: Unsigned + Ord + Show](x: T) -> T {
+  x
+}
+
+pub fn second_parameter[T: Float, U: Num + Int](x: T, y: U) -> U {
+  y
+}
+
+pub struct SignedPair[T: Num + Int] {
+  a: T,
+  b: T,
+}
+
+pub enum Joined[T: Int + AnyNum] {
+  One(T),
+  Nothing,
+}
+
+pub struct UnsignedAndInt[T: Unsigned + Int] {
+  a: T,
+}
+
+impl[T: Num + Int] SignedPair[T] {
+  pub fn first(self) -> T {
+    self.a
+  }
+}
+
+impl[T: Int + AnyNum] Joined[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn method_signed[U: Num + Int](self, y: U) -> U {
+    y
+  }
+
+  pub fn method_overlap[U: Float + Num](self, y: U) -> U {
+    y
+  }
+}
+
+pub fn uses_the_types(p: SignedPair[I16], j: Joined[U8], u: UnsignedAndInt[U64]) -> I16 {
+  p.first()
+}

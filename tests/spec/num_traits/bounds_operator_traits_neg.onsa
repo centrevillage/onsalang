@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3, the table of the operator traits that a built-in type implements, "閉じた一覧"): a type that the table gives no
+// such operator trait is E0416 at the call: `Add` and `Sub` to `Bool`, `Char`, `Str` (they have none), `Neg` to an unsigned
+// integer and to `Bool`, `Not` to a float and to `Str`, `BitAnd` and `Shl` to a float, `WrappingAdd` and `SaturatingMul`
+// to a float, and `PartialOrd` to a `Bool` (it has `PartialEq` only). One error per item (P-01).
+
+fn want_add[T: Add](x: T) -> T {
+  x
+}
+
+fn want_sub[T: Sub](x: T) -> T {
+  x
+}
+
+fn want_neg[T: Neg](x: T) -> T {
+  x
+}
+
+fn want_not[T: Not](x: T) -> T {
+  x
+}
+
+fn want_bit_and[T: BitAnd](x: T) -> T {
+  x
+}
+
+fn want_shl[T: Shl](x: T) -> T {
+  x
+}
+
+fn want_wrapping_add[T: WrappingAdd](x: T) -> T {
+  x
+}
+
+fn want_saturating_mul[T: SaturatingMul](x: T) -> T {
+  x
+}
+
+fn want_partial_ord[T: PartialOrd](x: T) -> T {
+  x
+}
+
+pub fn bool_to_add(b: Bool) -> Bool {
+  want_add(b) //~ E0416
+}
+
+pub fn char_to_add(c: Char) -> Char {
+  want_add(c) //~ E0416
+}
+
+pub fn str_to_add(s: Str) -> Str {
+  want_add(s) //~ E0416
+}
+
+pub fn char_to_sub(c: Char) -> Char {
+  want_sub(c) //~ E0416
+}
+
+pub fn u8_to_neg(u: U8) -> U8 {
+  want_neg(u) //~ E0416
+}
+
+pub fn u64_to_neg(u: U64) -> U64 {
+  want_neg(u) //~ E0416
+}
+
+pub fn bool_to_neg(b: Bool) -> Bool {
+  want_neg(b) //~ E0416
+}
+
+pub fn f32_to_not(f: F32) -> F32 {
+  want_not(f) //~ E0416
+}
+
+pub fn str_to_not(s: Str) -> Str {
+  want_not(s) //~ E0416
+}
+
+pub fn f64_to_bit_and(f: F64) -> F64 {
+  want_bit_and(f) //~ E0416
+}
+
+pub fn bool_to_bit_and(b: Bool) -> Bool {
+  want_bit_and(b) //~ E0416
+}
+
+pub fn f32_to_shl(f: F32) -> F32 {
+  want_shl(f) //~ E0416
+}
+
+pub fn f32_to_wrapping_add(f: F32) -> F32 {
+  want_wrapping_add(f) //~ E0416
+}
+
+pub fn f64_to_saturating_mul(f: F64) -> F64 {
+  want_saturating_mul(f) //~ E0416
+}
+
+pub fn bool_to_partial_ord(b: Bool) -> Bool {
+  want_partial_ord(b) //~ E0416
+}
+
+// What is right next to them.
+pub fn bool_to_not(b: Bool) -> Bool {
+  want_not(b)
+}
+
+pub fn u8_to_not(u: U8) -> U8 {
+  want_not(u)
+}
+
+pub fn f32_to_neg(f: F32) -> F32 {
+  want_neg(f)
+}
+
+pub fn f64_to_add(f: F64) -> F64 {
+  want_add(f)
+}
+
+pub fn u32_to_wrapping_add(u: U32) -> U32 {
+  want_wrapping_add(u)
+}

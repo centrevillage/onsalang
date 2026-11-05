@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5", "§13.4", "§3.4"]
+
+// W5-05 U1/t (S-84, R-169; §6.3: "`Num` は ... 符号なし整数は `Num` を満たさない"; §13.4: "`abs` は `Num`"): an unsigned integer, of
+// any width, is not `Num`: it is E0416 at the call that asks `Num` of it, whether the callee is a function of the program
+// (`T: Num`, and a `-x` in it that would have no value for an unsigned instance), the `abs` of `std.math`, or a function
+// of a type parameter whose bound is `Unsigned`. `Int` and `AnyNum` do not imply `Num` either (an integer can be unsigned),
+// so a parameter with only those is no `Num`. One error per item (P-01).
+
+use std.math.{abs}
+
+fn want_num[T: Num](x: T) -> T {
+  x
+}
+
+fn negated[T: Num](x: T) -> T {
+  -x
+}
+
+pub fn u8_to_num(u: U8) -> U8 {
+  want_num(u) //~ E0416
+}
+
+pub fn u16_to_num(u: U16) -> U16 {
+  want_num(u) //~ E0416
+}
+
+pub fn u32_to_num(u: U32) -> U32 {
+  want_num(u) //~ E0416
+}
+
+pub fn u64_to_num(u: U64) -> U64 {
+  want_num(u) //~ E0416
+}
+
+pub fn u32_negated_through_num(u: U32) -> U32 {
+  negated(u) //~ E0416
+}
+
+pub fn abs_of_u8(u: U8) -> U8 {
+  abs(u) //~ E0416
+}
+
+pub fn abs_of_u32(u: U32) -> U32 {
+  abs(u) //~ E0416
+}
+
+pub fn abs_of_u64(u: U64) -> U64 {
+  abs(u) //~ E0416
+}
+
+pub fn unsigned_parameter_to_num[T: Unsigned](x: T) -> T {
+  want_num(x) //~ E0416
+}
+
+pub fn unsigned_parameter_to_abs[T: Unsigned](x: T) -> T {
+  abs(x) //~ E0416
+}
+
+pub fn any_num_parameter_to_abs[T: AnyNum](x: T) -> T {
+  abs(x) //~ E0416
+}
+
+pub fn int_parameter_to_num[T: Int](x: T) -> T {
+  want_num(x) //~ E0416
+}
+
+pub fn int_parameter_to_abs[T: Int](x: T) -> T {
+  abs(x) //~ E0416
+}
+
+pub fn any_num_parameter_to_num[T: AnyNum](x: T) -> T {
+  want_num(x) //~ E0416
+}
+
+// What is right next to them: the signed integers and the floats are `Num`.
+pub fn i32_to_num(i: I32) -> I32 {
+  want_num(i)
+}
+
+pub fn f32_abs(f: F32) -> F32 {
+  abs(f)
+}
+
+pub fn num_parameter_to_abs[T: Num](x: T) -> T {
+  abs(x)
+}

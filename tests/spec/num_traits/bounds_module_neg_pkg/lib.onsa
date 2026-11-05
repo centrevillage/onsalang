@@ -1,0 +1,21 @@
+// Generic functions and a type of another module, bounded by the number traits (W5-05 U1/t, spec §6.3, §15.1).
+
+pub struct SignedBox[T: Num] {
+  a: T,
+}
+
+pub fn need_num[T: Num](x: T) -> T {
+  x
+}
+
+pub fn need_unsigned[T: Unsigned](x: T) -> T {
+  x
+}
+
+pub fn need_int[T: Int](x: T) -> T {
+  x
+}
+
+pub fn need_not[T: Not](x: T) -> T {
+  x
+}

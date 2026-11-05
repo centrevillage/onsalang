@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.3"]
+
+// W5-05 U1/t (S-747; §4.5: the list of the bounds that need `Dup` is `Dup`, `Copy`, `AnyNum`, `Num`, `Float`, `Int` and `Unsigned`, and
+// "含意で重なる形(`Float + Num`)は誤りでない"): the right forms beside bounds_maybe_dup_number_neg.onsa. A `?Dup` next to an
+// operator trait (`Add` is no number trait and does not need `Dup`) or `Show` says what it means, in either order; two
+// number traits that imply each other (`Int + AnyNum`, `Unsigned + Int`, `Int + Add`) are no overlap error; and the same
+// trait in two lists (a type and its `impl`) is two lists.
+
+pub fn add_then_maybe_dup[T: Add + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn maybe_dup_then_add[T: ?Dup + Add](x: T) -> U32 {
+  0
+}
+
+pub fn show_then_maybe_dup[T: Show + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn neg_then_maybe_dup[T: Neg + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn wrapping_add_then_maybe_dup[T: WrappingAdd + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn int_and_any_num[T: Int + AnyNum](x: T) -> U32 {
+  0
+}
+
+pub fn unsigned_and_int[T: Unsigned + Int](x: T) -> U32 {
+  0
+}
+
+pub fn int_and_add[T: Int + Add](x: T) -> U32 {
+  0
+}
+
+pub fn any_num_and_partial_ord[T: AnyNum + PartialOrd](x: T) -> U32 {
+  0
+}
+
+pub struct AddMaybeDup[T: Add + ?Dup] {
+  a: T,
+}
+
+pub enum NegMaybeDup[T: ?Dup + Neg] {
+  One(T),
+  Nothing,
+}
+
+impl[T: Add + ?Dup] AddMaybeDup[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub struct IntOnly[T: Int] {
+  a: T,
+}
+
+impl[T: Int] IntOnly[T] {
+  pub fn tag() -> U32 {
+    8
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn method_with_add[T: Add + ?Dup](self, x: T) -> U32 {
+    self.n
+  }
+}

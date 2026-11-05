@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§3.4"]
+
+// W5-05 U1/t (§6.3: "`AnyNum` ... 符号なし整数の引き算が 0 を下回ると、具体的な型と同じく実行時に panic する"; "`Unsigned` ... `>>` は
+// 論理シフトである"): the unsigned integers go through `T: AnyNum` (the subtraction below 0 panics, as it does for the type
+// itself) and `T: Unsigned` (the right shift is logical, whatever the width). The widths are U8, U16, U32 and U64.
+
+fn take_away[T: AnyNum](a: T, b: T) -> T {
+  a - b
+}
+
+fn halve[T: Unsigned](x: T) -> T {
+  x >> 1
+}
+
+test "AnyNum subtracts U8 and U16 inside the range" {
+  let a: U8  = 200
+  let b: U8  = 56
+  let c: U16 = 65535
+  let d: U16 = 1
+  assert take_away(a, b) == 144
+  assert take_away(c, d) == 65534
+}
+
+test "AnyNum subtracts U32 and U64 inside the range" {
+  let a: U32 = 4294967295
+  let b: U32 = 1
+  let c: U64 = 18446744073709551615
+  let d: U64 = 18446744073709551614
+  assert take_away(a, b) == 4294967294
+  assert take_away(c, d) == 1
+}
+
+test "AnyNum subtracts equal unsigned values to 0" {
+  let a: U8  = 5
+  let b: U64 = 7
+  assert take_away(a, a) == 0
+  assert take_away(b, b) == 0
+}
+
+test "AnyNum subtraction of U8 below 0 panics" {
+  let a: U8 = 3
+  let b: U8 = 4
+  let r     = take_away(a, b) //~ PANIC "AnyNum subtraction of U8 below 0 panics"
+  assert r == 0
+}
+
+test "AnyNum subtraction of U32 below 0 panics" {
+  let a: U32 = 3
+  let b: U32 = 5
+  let r      = take_away(a, b) //~ PANIC "AnyNum subtraction of U32 below 0 panics"
+  assert r == 0
+}
+
+test "AnyNum subtraction of U64 below 0 panics" {
+  let a: U64 = 0
+  let b: U64 = 1
+  let r      = take_away(a, b) //~ PANIC "AnyNum subtraction of U64 below 0 panics"
+  assert r == 0
+}
+
+test "Unsigned shifts right logically at every width" {
+  let a: U8  = 128
+  let b: U16 = 32768
+  let c: U32 = 2147483648
+  let d: U64 = 9223372036854775808
+  assert halve(a) == 64
+  assert halve(b) == 16384
+  assert halve(c) == 1073741824
+  assert halve(d) == 4611686018427387904
+}

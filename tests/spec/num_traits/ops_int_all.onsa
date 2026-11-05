@@ -1,0 +1,187 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3: "`Int` は ... `AnyNum` `Eq` `Ord` `Hash` `BitAnd` `BitOr` `BitXor` `Shl` `Shr` `Not` と、ラップ・飽和の 6 つの演算子
+// trait を満たし"): `T: Int` alone writes every operator of the integers, the arithmetic and the comparisons of `AnyNum`, the
+// bit operators, the shifts, the `!`, and the wrapping and saturating operators, and the instance (signed or unsigned, of
+// any width) gives the value of the operator on the type itself (§3.4). `-x` is not among them (`T: Num + Int` writes it,
+// the signed integers). One function for each operator; the same body is reached by U8 and I8, which differ at the sign.
+
+fn i_add[T: Int](a: T, b: T) -> T {
+  a + b
+}
+
+fn i_sub[T: Int](a: T, b: T) -> T {
+  a - b
+}
+
+fn i_mul[T: Int](a: T, b: T) -> T {
+  a * b
+}
+
+fn i_div[T: Int](a: T, b: T) -> T {
+  a / b
+}
+
+fn i_rem[T: Int](a: T, b: T) -> T {
+  a % b
+}
+
+fn i_and[T: Int](a: T, b: T) -> T {
+  a & b
+}
+
+fn i_or[T: Int](a: T, b: T) -> T {
+  a | b
+}
+
+fn i_xor[T: Int](a: T, b: T) -> T {
+  a ^ b
+}
+
+fn i_shl[T: Int](a: T, n: U32) -> T {
+  a << n
+}
+
+fn i_shr[T: Int](a: T, n: U32) -> T {
+  a >> n
+}
+
+fn i_not[T: Int](a: T) -> T {
+  !a
+}
+
+fn i_wadd[T: Int](a: T, b: T) -> T {
+  a +% b
+}
+
+fn i_wsub[T: Int](a: T, b: T) -> T {
+  a -% b
+}
+
+fn i_wmul[T: Int](a: T, b: T) -> T {
+  a *% b
+}
+
+fn i_sadd[T: Int](a: T, b: T) -> T {
+  a +| b
+}
+
+fn i_ssub[T: Int](a: T, b: T) -> T {
+  a -| b
+}
+
+fn i_smul[T: Int](a: T, b: T) -> T {
+  a *| b
+}
+
+fn i_less[T: Int](a: T, b: T) -> Bool {
+  a < b
+}
+
+fn i_equal[T: Int](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn s_neg[T: Num + Int](a: T) -> T {
+  -a
+}
+
+test "Int arithmetic of an unsigned and a signed instance" {
+  let a: U8 = 100
+  let b: U8 = 7
+  let c: I8 = -100
+  let d: I8 = 7
+  assert i_add(a, b) == 107
+  assert i_sub(a, b) == 93
+  assert i_mul(b, 9) == 63
+  assert i_div(a, b) == 14
+  assert i_rem(a, b) == 2
+  assert i_add(c, d) == -93
+  assert i_sub(c, d) == -107
+  assert i_div(c, d) == -14
+  assert i_rem(c, d) == -2
+}
+
+test "Int bit operators and shifts of an unsigned and a signed instance" {
+  let a: U8 = 170
+  let b: U8 = 15
+  let c: I8 = -86
+  let d: I8 = 15
+  assert i_and(a, b) == 10
+  assert i_or(a, b) == 175
+  assert i_xor(a, b) == 165
+  assert i_and(c, d) == 10
+  assert i_xor(c, d) == -91
+  assert i_shl(b, 4) == 240
+  assert i_shl(d, 4) == -16
+  assert i_shr(a, 4) == 10
+  assert i_shr(c, 4) == -6
+  assert i_not(a) == 85
+  assert i_not(c) == 85
+  assert i_not(b) == 240
+  assert i_not(d) == -16
+}
+
+test "Int wrapping and saturating operators of an unsigned and a signed instance" {
+  let a: U8 = 250
+  let b: U8 = 10
+  let c: I8 = 120
+  let d: I8 = 10
+  let e: I8 = -120
+  assert i_wadd(a, b) == 4
+  assert i_wsub(b, a) == 16
+  assert i_wmul(a, b) == 196
+  assert i_sadd(a, b) == 255
+  assert i_ssub(b, a) == 0
+  assert i_smul(a, b) == 255
+  assert i_wadd(c, d) == -126
+  assert i_wsub(e, d) == 126
+  assert i_sadd(c, d) == 127
+  assert i_ssub(e, d) == -128
+  assert i_smul(c, d) == 127
+  assert i_wmul(c, d) == -80
+}
+
+test "Int comparisons" {
+  let a: U8 = 200
+  let b: I8 = -1
+  assert i_less(b, 0)
+  assert !i_less(a, a)
+  assert i_equal(a, 200)
+  assert !i_equal(b, 1)
+}
+
+test "Num and Int negate a signed instance" {
+  let a: I16 = 300
+  assert s_neg(a) == -300
+}
+
+test "Int addition of an unsigned instance over the range panics" {
+  let a: U8 = 250
+  let b: U8 = 10
+  let r     = i_add(a, b) //~ PANIC "Int addition of an unsigned instance over the range panics"
+  assert r == 0
+}
+
+test "Int subtraction of an unsigned instance below 0 panics" {
+  let a: U16 = 1
+  let b: U16 = 2
+  let r      = i_sub(a, b) //~ PANIC "Int subtraction of an unsigned instance below 0 panics"
+  assert r == 0
+}
+
+test "Int shift by the bit width panics" {
+  let a: I8 = 1
+  let r     = i_shl(a, 8) //~ PANIC "Int shift by the bit width panics"
+  assert r == 0
+}
+
+test "Int division of the least signed value by -1 panics" {
+  let a: I8 = -128
+  let b: I8 = -1
+  let r     = i_div(a, b) //~ PANIC "Int division of the least signed value by -1 panics"
+  assert r == 0
+}

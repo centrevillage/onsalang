@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3"]
+
+// W5-05 U1/t (§3.2: "単項の `-` は `Neg.neg`"; §6.3: "`Num` は ... `AnyNum` と `Neg` を満たす"): the unary `-` finds `Neg`, so
+// `T: Neg` alone and `T: Num` (which has `Neg`) both write `-x`, for the signed integers and the floats. The value is that of
+// `-x` on the type itself (§3.4): `0 - a` for an integer, which panics for the least value, and the sign flip of a float
+// (`-0.0` from `0.0`).
+
+fn neg_trait[T: Neg](x: T) -> T {
+  -x
+}
+
+fn neg_num[T: Num](x: T) -> T {
+  -x
+}
+
+fn neg_then_add[T: Num](a: T, b: T) -> T {
+  -a + b
+}
+
+fn neg_signed_int[T: Num + Int](x: T) -> T {
+  -x
+}
+
+test "Neg negates the signed integers" {
+  let a: I8  = 5
+  let b: I16 = -7
+  let c: I32 = 0
+  let d: I64 = 9
+  assert neg_trait(a) == -5
+  assert neg_trait(b) == 7
+  assert neg_trait(c) == 0
+  assert neg_trait(d) == -9
+}
+
+test "Neg flips the sign of a float, zero included" {
+  let a: F32 = 0.0
+  let b: F64 = 2.5
+  assert neg_trait(a).to_bits() == 2147483648
+  assert neg_trait(b) == -2.5
+}
+
+test "Num negates signed integers and floats" {
+  let a: I32 = 5
+  let z: F32 = 0.0
+  assert neg_num(a) == -5
+  assert neg_num(z).to_bits() == 2147483648
+}
+
+test "the prefix minus binds tighter than the binary operator" {
+  let a: I32 = 5
+  let b: I32 = 8
+  assert neg_then_add(a, b) == 3
+}
+
+test "Num and Int negate the signed integers" {
+  let a: I8 = 100
+  assert neg_signed_int(a) == -100
+}
+
+test "Neg panics for the least signed integer" {
+  let a: I8 = -128
+  let r     = neg_trait(a) //~ PANIC "Neg panics for the least signed integer"
+  assert r == 0
+}
+
+test "Num negation panics for the least signed integer" {
+  let a: I64 = I64.MIN
+  let r      = neg_num(a) //~ PANIC "Num negation panics for the least signed integer"
+  assert r == 0
+}

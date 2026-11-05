@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§4.5", "§3.4"]
+
+// W5-05 U1/t (R-94, S-84; the review's t2_neg_generic; §6.3: "符号なし整数は `Num` を満たさない"): a generic `-x` with the bound `Num`
+// called with an unsigned integer is E0416 at the call, in a program with `test` blocks too: the program is stopped by
+// the check, and `onsa test` does not run the tests, so the instance of `-x` for an unsigned type (which has no meaning,
+// and was an internal error of the instantiation) is never made. The call with a signed value next to it is right.
+
+fn neg[T: Num](x: T) -> T {
+  -x
+}
+
+pub fn neg_of_unsigned(u: U32) -> U32 {
+  neg(u) //~ E0416
+}
+
+pub fn neg_of_signed(i: I32) -> I32 {
+  neg(i)
+}
+
+test "neg of a signed value" {
+  let i: I32 = 5
+  assert neg(i) == -5
+}
+
+test "neg of an unsigned value" {
+  let u: U32 = 5
+  let v      = neg(u) //~ E0416
+  assert v == 0
+}

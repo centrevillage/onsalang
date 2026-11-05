@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3"]
+
+// W5-05 U1/t (§3.2: "`+%` は `WrappingAdd.wrapping_add`"; §6.3: "ラップと飽和の trait", one trait for each operator): `+%`
+// finds `WrappingAdd`, `-%` `WrappingSub` and `*%` `WrappingMul`, for the signed and the unsigned integers, with no number trait
+// asked. The result is the mathematical one modulo 2^(bit width) (§3.4), and none of the cases panics.
+
+fn wadd[T: WrappingAdd](a: T, b: T) -> T {
+  a +% b
+}
+
+fn wsub[T: WrappingSub](a: T, b: T) -> T {
+  a -% b
+}
+
+fn wmul[T: WrappingMul](a: T, b: T) -> T {
+  a *% b
+}
+
+test "WrappingAdd wraps at the top of the range" {
+  let a: U8  = 250
+  let b: U8  = 10
+  let c: I8  = 127
+  let d: I8  = 1
+  let e: U64 = 18446744073709551615
+  assert wadd(a, b) == 4
+  assert wadd(c, d) == -128
+  assert wadd(e, e) == 18446744073709551614
+}
+
+test "WrappingAdd inside the range is the sum" {
+  let a: I32 = -5
+  let b: I32 = 3
+  assert wadd(a, b) == -2
+}
+
+test "WrappingSub wraps at the bottom of the range" {
+  let a: U8  = 0
+  let b: U8  = 1
+  let c: I8  = -128
+  let d: I8  = 1
+  let e: U16 = 5
+  let f: U16 = 7
+  assert wsub(a, b) == 255
+  assert wsub(c, d) == 127
+  assert wsub(e, f) == 65534
+}
+
+test "WrappingMul wraps the product" {
+  let a: U8  = 200
+  let b: U8  = 2
+  let c: I8  = 64
+  let d: I8  = 2
+  let e: U64 = 4294967296
+  assert wmul(a, b) == 144
+  assert wmul(c, d) == -128
+  assert wmul(e, e) == 0
+}
+
+test "the wrapping operators of an instance are those of the type" {
+  let a: I16 = 32000
+  let b: I16 = 1000
+  assert wadd(a, b) == a +% b
+  assert wsub(b, a) == b -% a
+  assert wmul(a, b) == a *% b
+}
+
+test "the wrapping negation of an unsigned integer is 0 -% u" {
+  let u: U32 = 1
+  let z: U32 = 0
+  assert (0 -% u) == U32.MAX
+  assert wsub(z, u) == U32.MAX
+}

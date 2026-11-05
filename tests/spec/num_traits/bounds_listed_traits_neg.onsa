@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3: the list of the traits that each number trait satisfies is closed): a type parameter with a number trait
+// is not an operator trait or a standard trait that the list leaves out. `AnyNum` has no `Neg`, bit operator, `Not`, shift,
+// wrapping or saturating operator, and no `Eq`; `Num` adds `Neg` and nothing else; `Float` has no `Eq`, `Ord`, `Hash` or
+// bit operator; `Int` has no `Neg`; `Unsigned` has no `Neg`. Each is E0416 at the call that asks the trait. One error per
+// item (P-01).
+
+fn want_neg[T: Neg](x: T) -> T {
+  x
+}
+
+fn want_bit_and[T: BitAnd](x: T) -> T {
+  x
+}
+
+fn want_not[T: Not](x: T) -> T {
+  x
+}
+
+fn want_shl[T: Shl](x: T) -> T {
+  x
+}
+
+fn want_wrapping_add[T: WrappingAdd](x: T) -> T {
+  x
+}
+
+fn want_saturating_sub[T: SaturatingSub](x: T) -> T {
+  x
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn want_ord[T: Ord](x: T) -> T {
+  x
+}
+
+fn want_hash[T: Hash](x: T) -> T {
+  x
+}
+
+pub fn any_to_neg[T: AnyNum](x: T) -> T {
+  want_neg(x) //~ E0416
+}
+
+pub fn any_to_bit_and[T: AnyNum](x: T) -> T {
+  want_bit_and(x) //~ E0416
+}
+
+pub fn any_to_not[T: AnyNum](x: T) -> T {
+  want_not(x) //~ E0416
+}
+
+pub fn any_to_wrapping[T: AnyNum](x: T) -> T {
+  want_wrapping_add(x) //~ E0416
+}
+
+pub fn any_to_eq[T: AnyNum](x: T) -> T {
+  want_eq(x) //~ E0416
+}
+
+pub fn num_to_not[T: Num](x: T) -> T {
+  want_not(x) //~ E0416
+}
+
+pub fn num_to_shl[T: Num](x: T) -> T {
+  want_shl(x) //~ E0416
+}
+
+pub fn float_to_bit_and[T: Float](x: T) -> T {
+  want_bit_and(x) //~ E0416
+}
+
+pub fn float_to_saturating[T: Float](x: T) -> T {
+  want_saturating_sub(x) //~ E0416
+}
+
+pub fn float_to_eq[T: Float](x: T) -> T {
+  want_eq(x) //~ E0416
+}
+
+pub fn float_to_ord[T: Float](x: T) -> T {
+  want_ord(x) //~ E0416
+}
+
+pub fn float_to_hash[T: Float](x: T) -> T {
+  want_hash(x) //~ E0416
+}
+
+pub fn int_to_neg[T: Int](x: T) -> T {
+  want_neg(x) //~ E0416
+}
+
+pub fn unsigned_to_neg[T: Unsigned](x: T) -> T {
+  want_neg(x) //~ E0416
+}

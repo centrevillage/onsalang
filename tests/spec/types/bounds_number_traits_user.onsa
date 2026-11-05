@@ -2,39 +2,35 @@
 // [test]
 // spec = ["§4.5", "§6.3", "§18.1"]
 
-// W5-02 U5a (the bound rows of the number traits, §6.3 and §4.5): in this version a number trait that needs `Copy` (`AnyNum`, `Int`,
-// `Unsigned`) is a name of the prelude (S-107) that is no bound in a program, so the bound of a type parameter of a function, a method, a
-// struct, an enum or an `impl` that is written with it is the E0200 of the name (the same as types/bounds_maybe_names.onsa, where the
-// name is next to a `?Dup`); the traits that are bounds (`Num`, `Float`, `PartialOrd`) are right. The standard library can be written with
-// these bounds (its own methods, such as `narrow_from`, are not a program's to write) and that does not change what a program is told. The
-// right form of the program with `Int` is in prelude_bounds_number_traits.onsa, which waits for the work that makes the number traits
-// bounds. One error per item (P-01).
+// W5-05 U1 (§6.3, §4.5): the number traits are bounds of a program, at every place that has a list of bounds: a
+// function, a method, a struct, an enum and the `[ ]` of an `impl` (they were the E0200 of the name until W5-05).
+// The other forms are in num_traits/.
 
-pub fn any_num_bound[T: AnyNum](x: T) -> T {   //~ E0200
+pub fn any_num_bound[T: AnyNum](x: T) -> T {
   x
 }
 
-pub fn int_bound[T: Int](x: T) -> T {   //~ E0200
+pub fn int_bound[T: Int](x: T) -> T {
   x
 }
 
-pub fn unsigned_bound[T: Unsigned](x: T) -> T {   //~ E0200
+pub fn unsigned_bound[T: Unsigned](x: T) -> T {
   x
 }
 
-pub fn num_and_int_bound[T: Num + Int](x: T) -> T {   //~ E0200
+pub fn num_and_int_bound[T: Num + Int](x: T) -> T {
   x
 }
 
-pub fn the_second_parameter[T, U: Int](x: T, y: U) -> U {   //~ E0200
+pub fn the_second_parameter[T, U: Int](x: T, y: U) -> U {
   y
 }
 
-pub struct IntRack[T: Int] {   //~ E0200
+pub struct IntRack[T: Int] {
   a: T,
 }
 
-pub enum IntShelf[T: AnyNum] {   //~ E0200
+pub enum IntShelf[T: AnyNum] {
   One(T),
   Nothing,
 }
@@ -44,7 +40,7 @@ pub struct Plain {
 }
 
 impl Plain {
-  pub fn method_int[U: Int](self, y: U) -> U {   //~ E0200
+  pub fn method_int[U: Int](self, y: U) -> U {
     y
   }
 }
@@ -53,7 +49,7 @@ pub struct Rack2[T] {
   a: T,
 }
 
-impl[T: Int] Rack2[T] {   //~ E0200
+impl[T: Int] Rack2[T] {
   pub fn tag() -> U32 {
     7
   }

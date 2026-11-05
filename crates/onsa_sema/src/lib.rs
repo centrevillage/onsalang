@@ -70,6 +70,9 @@ pub(crate) fn fixed_region(text: &str, d: &onsa_diag::Diagnostic, k: usize) -> S
 }
 #[cfg(test)]
 mod tails_tests;
+mod traits;
+#[cfg(test)]
+mod traits_tests;
 pub mod ty;
 #[cfg(test)]
 mod ty_tests;

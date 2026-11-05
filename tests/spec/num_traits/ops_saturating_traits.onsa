@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3"]
+
+// W5-05 U1/t (§3.2: "`+|` は `SaturatingAdd.saturating_add`"; §6.3): `+|` finds `SaturatingAdd`, `-|` `SaturatingSub` and `*|`
+// `SaturatingMul`, for the signed and the unsigned integers, with no number trait asked. The result is the mathematical one
+// clamped between the least and the greatest value of the type (§3.4), and none of the cases panics.
+
+fn sadd[T: SaturatingAdd](a: T, b: T) -> T {
+  a +| b
+}
+
+fn ssub[T: SaturatingSub](a: T, b: T) -> T {
+  a -| b
+}
+
+fn smul[T: SaturatingMul](a: T, b: T) -> T {
+  a *| b
+}
+
+test "SaturatingAdd stops at the greatest value" {
+  let a: U8  = 250
+  let b: U8  = 10
+  let c: I8  = 127
+  let d: I8  = 1
+  let e: I16 = -32768
+  let f: I16 = -1
+  assert sadd(a, b) == 255
+  assert sadd(c, d) == 127
+  assert sadd(e, f) == -32768
+}
+
+test "SaturatingSub stops at the least value" {
+  let a: U8  = 5
+  let b: U8  = 10
+  let c: I8  = -128
+  let d: I8  = 1
+  let e: U64 = 0
+  assert ssub(a, b) == 0
+  assert ssub(c, d) == -128
+  assert ssub(e, e) == 0
+}
+
+test "SaturatingMul stops at both ends" {
+  let a: U8 = 200
+  let b: U8 = 2
+  let c: I8 = -100
+  let d: I8 = 2
+  let e: I8 = 100
+  assert smul(a, b) == 255
+  assert smul(c, d) == -128
+  assert smul(e, d) == 127
+}
+
+test "the saturating operators inside the range are the plain ones" {
+  let a: I32 = 7
+  let b: I32 = -3
+  assert sadd(a, b) == 4
+  assert ssub(a, b) == 10
+  assert smul(a, b) == -21
+}
+
+test "the saturating operators of an instance are those of the type" {
+  let a: U16 = 65000
+  let b: U16 = 1000
+  assert sadd(a, b) == a +| b
+  assert ssub(b, a) == b -| a
+  assert smul(a, b) == a *| b
+}

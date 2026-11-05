@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3, the table of the traits that a built-in type implements; §4.5: "型パラメータの要求(境界と暗黙の `Dup`)... 満たさなければ
+// ... E0416"): a type that the table does not list for the number trait is E0416 at the call: a signed integer for `Unsigned`
+// (R-94), a float for `Int`, an integer for `Float`, a type that is no number (`Bool`, `Char`, `Str`) for `AnyNum`, and an
+// unsigned integer or a float for `Num + Int` (the signed integers only). The note that names the number traits that the
+// type does satisfy is not asked here. One error per item (P-01).
+
+fn want_unsigned[T: Unsigned](x: T) -> T {
+  x
+}
+
+fn want_int[T: Int](x: T) -> T {
+  x
+}
+
+fn want_float[T: Float](x: T) -> T {
+  x
+}
+
+fn want_any[T: AnyNum](x: T) -> T {
+  x
+}
+
+fn want_signed[T: Num + Int](x: T) -> T {
+  x
+}
+
+pub fn i32_to_unsigned(i: I32) -> I32 {
+  want_unsigned(i) //~ E0416
+}
+
+pub fn i8_to_unsigned(i: I8) -> I8 {
+  want_unsigned(i) //~ E0416
+}
+
+pub fn i64_to_unsigned(i: I64) -> I64 {
+  want_unsigned(i) //~ E0416
+}
+
+pub fn f32_to_int(f: F32) -> F32 {
+  want_int(f) //~ E0416
+}
+
+pub fn f64_to_int(f: F64) -> F64 {
+  want_int(f) //~ E0416
+}
+
+pub fn i32_to_float(i: I32) -> I32 {
+  want_float(i) //~ E0416
+}
+
+pub fn u8_to_float(u: U8) -> U8 {
+  want_float(u) //~ E0416
+}
+
+pub fn bool_to_any(b: Bool) -> Bool {
+  want_any(b) //~ E0416
+}
+
+pub fn str_to_any(s: Str) -> Str {
+  want_any(s) //~ E0416
+}
+
+pub fn char_to_any(c: Char) -> Char {
+  want_any(c) //~ E0416
+}
+
+pub fn u8_to_signed(u: U8) -> U8 {
+  want_signed(u) //~ E0416
+}
+
+pub fn f32_to_signed(f: F32) -> F32 {
+  want_signed(f) //~ E0416
+}
+
+pub fn u64_to_signed(u: U64) -> U64 {
+  want_signed(u) //~ E0416
+}
+
+pub fn literal_default_to_unsigned() -> I32 {
+  want_unsigned(3) //~ E0416
+}
+
+// What is right next to them.
+pub fn u16_to_unsigned(u: U16) -> U16 {
+  want_unsigned(u)
+}
+
+pub fn u8_to_any(u: U8) -> U8 {
+  want_any(u)
+}
+
+pub fn i16_to_signed(i: I16) -> I16 {
+  want_signed(i)
+}

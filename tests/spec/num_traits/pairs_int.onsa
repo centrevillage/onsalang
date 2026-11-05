@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3, the table): `T: Int` takes all the integers, the signed and the unsigned ones; `T: Unsigned` takes the
+// unsigned ones; `T: Num + Int` takes the signed ones ("符号付き整数は `Num` と `Int` を満たす"). The value comes back as it went
+// in, to the end of each range.
+
+fn int_same[T: Int](x: T) -> T {
+  x
+}
+
+fn unsigned_same[T: Unsigned](x: T) -> T {
+  x
+}
+
+fn signed_same[T: Num + Int](x: T) -> T {
+  x
+}
+
+test "Int takes the signed integers" {
+  let a: I8  = 127
+  let b: I16 = -32768
+  let c: I32 = 2147483647
+  let d: I64 = I64.MIN
+  assert int_same(a) == 127
+  assert int_same(b) == -32768
+  assert int_same(c) == 2147483647
+  assert int_same(d) == I64.MIN
+}
+
+test "Int takes the unsigned integers" {
+  let a: U8  = 255
+  let b: U16 = 65535
+  let c: U32 = 4294967295
+  let d: U64 = 18446744073709551615
+  assert int_same(a) == 255
+  assert int_same(b) == 65535
+  assert int_same(c) == 4294967295
+  assert int_same(d) == 18446744073709551615
+}
+
+test "Unsigned takes the unsigned integers" {
+  let a: U8  = 255
+  let b: U16 = 65535
+  let c: U32 = 4294967295
+  let d: U64 = 18446744073709551615
+  assert unsigned_same(a) == 255
+  assert unsigned_same(b) == 65535
+  assert unsigned_same(c) == 4294967295
+  assert unsigned_same(d) == 18446744073709551615
+}
+
+test "Num and Int together take the signed integers" {
+  let a: I8  = -128
+  let b: I16 = 32767
+  let c: I32 = -2147483648
+  let d: I64 = 9223372036854775807
+  assert signed_same(a) == -128
+  assert signed_same(b) == 32767
+  assert signed_same(c) == -2147483648
+  assert signed_same(d) == 9223372036854775807
+}

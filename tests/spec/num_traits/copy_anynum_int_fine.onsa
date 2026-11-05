@@ -1,0 +1,174 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§4.5", "§4.6", "§6.6"]
+
+// W5-05 U1/t (S-73, §6.3: "`AnyNum` は ... `Copy` ... を満たし"; §4.5: "数の trait は全て `Copy` を要する"): a value of a type parameter
+// with the bound `AnyNum`, `Int` or `Unsigned` is `Copy`, as `Num` and `Float` are (copy_num_float_fine.onsa): it is read twice,
+// it is the element of a `Buf[T]`, it is repeated in `[x; N]`, it goes where `Copy` is asked, a struct that holds it is `Copy`,
+// and a `const` whose declared type holds `T` is right, with no E0200 of a Shared type (§6.6).
+
+fn need_copy[U: Copy](x: U) -> U {
+  x
+}
+
+fn twice_any[T: AnyNum](x: T) -> (T, T) {
+  (x, x)
+}
+
+fn twice_int[T: Int](x: T) -> (T, T) {
+  (x, x)
+}
+
+fn twice_unsigned[T: Unsigned](x: T) -> (T, T) {
+  (x, x)
+}
+
+fn via_any[T: AnyNum](x: T) -> T {
+  need_copy(x)
+}
+
+fn via_int[T: Int](x: T) -> T {
+  need_copy(x)
+}
+
+fn via_unsigned[T: Unsigned](x: T) -> T {
+  need_copy(x)
+}
+
+fn head_any[T: AnyNum](b: Buf[T]) -> T {
+  b[0]
+}
+
+fn head_int[T: Int](b: Buf[T]) -> T {
+  b[0]
+}
+
+fn head_unsigned[T: Unsigned](b: Buf[T]) -> T {
+  b[0]
+}
+
+fn filled_any[T: AnyNum](x: T) -> [T; 3] {
+  [x; 3]
+}
+
+fn filled_int[T: Int](x: T) -> [T; 2] {
+  [x; 2]
+}
+
+fn filled_unsigned[T: Unsigned](x: T) -> [T; 2] {
+  [x; 2]
+}
+
+pub struct Holder[T: AnyNum] {
+  a: T,
+}
+
+fn holder_for_copy[T: AnyNum](h: Holder[T]) -> Holder[T] {
+  need_copy(h)
+}
+
+fn holder_read_twice[T: AnyNum](h: Holder[T]) -> (Holder[T], Holder[T]) {
+  (h, h)
+}
+
+pub struct Rack[T: Int] {
+  a: T,
+}
+
+impl[T: Int] Rack[T] {
+  const NONE: Option[T] = None
+
+  pub fn twice(self) -> (T, T) {
+    (self.a, self.a)
+  }
+}
+
+pub struct Unsigneds[T: Unsigned] {
+  a: T,
+}
+
+impl[T: Unsigned] Unsigneds[T] {
+  const NONE: Option[T] = None
+}
+
+pub struct AnyBox[T: AnyNum] {
+  a: T,
+}
+
+impl[T: AnyNum] AnyBox[T] {
+  const NONE: Option[T] = None
+}
+
+test "an AnyNum value is read twice" {
+  let a: U8    = 200
+  let b: F64   = 0.5
+  let (a1, a2) = twice_any(a)
+  let (b1, b2) = twice_any(b)
+  assert a1 == 200
+  assert a2 == 200
+  assert b1 == 0.5
+  assert b2 == 0.5
+}
+
+test "an Int value is read twice" {
+  let a: I16 = -300
+  let (x, y) = twice_int(a)
+  assert x == -300
+  assert y == -300
+}
+
+test "an Unsigned value is read twice" {
+  let a: U64 = 18446744073709551615
+  let (x, y) = twice_unsigned(a)
+  assert x == 18446744073709551615
+  assert y == 18446744073709551615
+}
+
+test "AnyNum, Int and Unsigned go where Copy is asked" {
+  let a: U16 = 9
+  let b: I8  = -9
+  let c: F32 = 1.5
+  assert via_any(a) == 9
+  assert via_any(c) == 1.5
+  assert via_int(b) == -9
+  assert via_unsigned(a) == 9
+}
+
+test "the element of a Buf is an AnyNum, an Int or an Unsigned" {
+  var a: Buf[F32] = Buf.zeroed(1)
+  a[0] = 2.5
+  var b: Buf[I16] = Buf.zeroed(1)
+  b[0] = -9
+  var c: Buf[U8] = Buf.zeroed(1)
+  c[0] = 250
+  assert head_any(a) == 2.5
+  assert head_int(b) == -9
+  assert head_unsigned(c) == 250
+}
+
+test "x repeated in an array is an AnyNum, an Int or an Unsigned" {
+  let a: U8  = 3
+  let b: I64 = -3
+  let c: U32 = 4
+  assert filled_any(a)[2] == 3
+  assert filled_int(b)[1] == -3
+  assert filled_unsigned(c)[1] == 4
+}
+
+test "a struct that holds an AnyNum is Copy" {
+  let h      = Holder { a: 7 }
+  let g      = holder_for_copy(h)
+  let (p, q) = holder_read_twice(h)
+  assert g.a == 7
+  assert p.a == 7
+  assert q.a == 7
+  assert h.a == 7
+}
+
+test "a method of a type with an Int parameter reads its field twice" {
+  let r      = Rack { a: 12 }
+  let (x, y) = r.twice()
+  assert x == 12
+  assert y == 12
+}

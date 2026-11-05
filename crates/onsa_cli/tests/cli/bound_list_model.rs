@@ -1,13 +1,13 @@
 //! A drawn sweep of the lists of bounds of a type parameter against a model of the spec (§4.5, §18.1, S-711,
 //! S-747; W4-05 U4b/i2, from the grid of the break side of U4b).
 //!
-//! The words are `Dup`, `Copy`, `Num`, `Float`, `Show`, `Add`, `Gone` and `I32`, each with and without `?`;
+//! The words are `Dup`, `Copy`, `Num`, `Float`, `Show`, `Iter`, `Gone` and `I32`, each with and without `?`;
 //! the lists of one to three words are drawn with a fixed seed, with the lists of an overlap before a
 //! contradiction (`Copy + Copy + ?Dup`) always in. Each list is a function `u` of its own line, with two users:
 //! `a`, which calls it with a `Buf[F32]` (Affine: it meets no word but `?Dup`), and `i`, which calls it with an
 //! integer literal (an `I32`: it meets every word but `Float`). What the model takes from the spec:
 //! - The names stage first (§18.1): a name not found (`Gone`, E0302), a type where a bound is written (`I32`,
-//!   E0308) and a trait this version does not take as a bound (`Add`, E0200), the first by its place.
+//!   E0308) and a trait this version does not take as a bound (`Iter`, E0200), the first by its place.
 //! - Else the types stage, from the front (§4.5): the first word that is `?` on a bound not `Dup` (E0416,
 //!   S-711), the same as one before it, or `?Dup` with one that requires `Dup` (`Dup`, `Copy`, `Num`,
 //!   `Float`) before it (E0416, S-747). A word with an error of its own is not compared. The position is the
@@ -16,9 +16,9 @@
 //!   with no diagnostic where it is used (§18.1, S-747 A5); an overlap alone is no such list. Else the call is
 //!   the E0416 when the argument does not meet the list (the implicit `Dup` too, unless `?Dup`).
 //!
-//! Not in the model, so not drawn for it: the order of a `?` on a bound not `Dup` and an `Add` (S-711 says
+//! Not in the model, so not drawn for it: the order of a `?` on a bound not `Dup` and an `Iter` (S-711 says
 //! only that the E0416 comes before the E0200 of the same word), and the users of a list with an `I32`, an
-//! `Add` or a `?` on a bound not `Dup` (the spec does not say whether they are unknown).
+//! `Iter` or a `?` on a bound not `Dup` (the spec does not say whether they are unknown).
 
 use crate::test_support;
 
@@ -33,12 +33,12 @@ enum W {
     Num,
     Float,
     Show,
-    Add,
+    Iter,
     Gone,
     I32,
 }
 
-const WORDS: [W; 8] = [W::Dup, W::Copy, W::Num, W::Float, W::Show, W::Add, W::Gone, W::I32];
+const WORDS: [W; 8] = [W::Dup, W::Copy, W::Num, W::Float, W::Show, W::Iter, W::Gone, W::I32];
 
 /// A word and whether it has `?`.
 type Word = (W, bool);
@@ -58,7 +58,7 @@ fn shown(list: &[Word]) -> String {
 
 /// The diagnostic of the unit of the list: its code and the index of its word.
 fn unit(list: &[Word]) -> Option<(&'static str, usize)> {
-    let named = list.iter().position(|&(w, r)| matches!(w, W::Gone | W::I32) || (w == W::Add && !r));
+    let named = list.iter().position(|&(w, r)| matches!(w, W::Gone | W::I32) || (w == W::Iter && !r));
     if let Some(i) = named {
         let code = match list[i].0 {
             W::Gone => "E0302",
@@ -79,7 +79,7 @@ fn unit(list: &[Word]) -> Option<(&'static str, usize)> {
 
 /// Whether the users of the list are out of the model (above).
 fn unsure(list: &[Word]) -> bool {
-    list.iter().any(|&(w, r)| matches!(w, W::I32 | W::Add) || r && w != W::Dup)
+    list.iter().any(|&(w, r)| matches!(w, W::I32 | W::Iter) || r && w != W::Dup)
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn a_list_of_bounds_is_judged_from_the_front_and_its_users_as_the_spec_says() {
     }
     lists.push(vec![(W::Dup, true), (W::Dup, true), (W::Copy, false)]);
     // The open order of S-711 and E0200 (above).
-    let open = |l: &Vec<Word>| l.contains(&(W::Add, false)) && l.iter().any(|&(w, r)| r && w != W::Dup);
+    let open = |l: &Vec<Word>| l.contains(&(W::Iter, false)) && l.iter().any(|&(w, r)| r && w != W::Dup);
     lists.retain(|l| !open(l));
 
     let mut text = String::new();

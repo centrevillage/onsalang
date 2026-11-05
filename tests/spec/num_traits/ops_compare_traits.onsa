@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§6.3", "§3.4"]
+
+// W5-05 U1/t (§3.2: "`<` は `PartialOrd.lt` など"; §6.3: "`==` `!=` は `PartialEq`、`<` `<=` `>` `>=` は `PartialOrd`"): the
+// comparison operators find `PartialEq` and `PartialOrd`, for the number types and for the others that the table lists (`Char`
+// has both, `Bool` has `PartialEq` only). A float compares as IEEE does: a NaN is equal to nothing and has no
+// order, so every comparison with it is false but `!=`, and `-0.0 == 0.0`.
+
+fn eq2[T: PartialEq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn ne2[T: PartialEq](a: T, b: T) -> Bool {
+  a != b
+}
+
+fn lt2[T: PartialOrd](a: T, b: T) -> Bool {
+  a < b
+}
+
+fn le2[T: PartialOrd](a: T, b: T) -> Bool {
+  a <= b
+}
+
+fn gt2[T: PartialOrd](a: T, b: T) -> Bool {
+  a > b
+}
+
+fn ge2[T: PartialOrd](a: T, b: T) -> Bool {
+  a >= b
+}
+
+test "PartialEq compares integers, Bool and Char" {
+  let a: I8  = -3
+  let b: U64 = 5
+  assert eq2(a, a)
+  assert !eq2(b, 6)
+  assert ne2(b, 6)
+  assert eq2(true, true)
+  assert ne2(true, false)
+  assert eq2('a', 'a')
+}
+
+test "PartialOrd orders integers and Char" {
+  let a: I8  = -3
+  let b: I8  = 4
+  let c: U32 = 9
+  assert lt2(a, b)
+  assert !lt2(b, a)
+  assert le2(a, a)
+  assert gt2(c, 8)
+  assert !gt2(c, 9)
+  assert ge2(c, 9)
+  assert lt2('a', 'b')
+}
+
+test "PartialEq and PartialOrd compare floats as IEEE does" {
+  let a: F32 = 1.5
+  let b: F32 = 2.5
+  let z: F64 = 0.0
+  let m: F64 = -0.0
+  assert lt2(a, b)
+  assert ge2(b, a)
+  assert eq2(z, m)
+  assert !lt2(m, z)
+}
+
+test "a NaN is equal to nothing and has no order" {
+  let n: F64   = F64.NAN
+  let one: F64 = 1.0
+  assert !eq2(n, n)
+  assert ne2(n, n)
+  assert ne2(n, one)
+  assert !lt2(n, one)
+  assert !le2(n, one)
+  assert !gt2(n, one)
+  assert !ge2(one, n)
+}

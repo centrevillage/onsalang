@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5", "§15.1"]
+
+// W5-05 U1/t (§6.3; §4.5; §15.1): a bound of another module is met or not met in this module the same as in its own: the
+// instance of this module is judged by the bound that `lib` declares. An unsigned integer for the `Num` of a function or
+// of a type of `lib`, a float for its `Int`, a signed integer for its `Unsigned`, and a float for its `Not`, by the path or
+// by an imported name, are E0416 at the call or at the type. One error per item (P-01).
+
+use lib
+use lib.{need_int, need_not, need_num, need_unsigned, SignedBox}
+
+pub fn unsigned_to_num_by_name(u: U32) -> U32 {
+  need_num(u) //~ E0416
+}
+
+pub fn unsigned_to_num_by_path(u: U8) -> U8 {
+  lib.need_num(u) //~ E0416
+}
+
+pub fn float_to_int(f: F32) -> F32 {
+  need_int(f) //~ E0416
+}
+
+pub fn signed_to_unsigned(i: I64) -> I64 {
+  need_unsigned(i) //~ E0416
+}
+
+pub fn float_to_not(f: F64) -> F64 {
+  need_not(f) //~ E0416
+}
+
+pub fn unsigned_in_the_type(b: SignedBox[U16]) -> U32 { //~ E0416
+  0
+}
+
+// What is right next to them.
+pub fn signed_to_num(i: I32) -> I32 {
+  need_num(i)
+}
+
+pub fn unsigned_to_int(u: U64) -> U64 {
+  need_int(u)
+}
+
+pub fn signed_in_the_type(b: SignedBox[F32]) -> U32 {
+  0
+}

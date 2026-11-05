@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§6.3", "§4.5"]
+
+// W5-05 U1/t (§13.4: "`min` / `max` は `AnyNum`"; §6.3: "`min` / `max`(`AnyNum`)"; R-354): `min` and `max` are called from a generic
+// function whose bound is a number trait that implies `AnyNum` (`AnyNum`, `Int`, `Unsigned`, `Num`, `Float`, and
+// `Num + Int`), with the unsigned integers among the instances. The call takes the bound of the caller (the unsigned
+// integers are not `Num`, so only the `AnyNum` of `min` and `max` lets `T: Unsigned` through).
+
+use std.math.{max, min}
+
+fn lower[T: AnyNum](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn upper[T: AnyNum](x: T, y: T) -> T {
+  max(x, y)
+}
+
+fn lower_int[T: Int](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn upper_unsigned[T: Unsigned](x: T, y: T) -> T {
+  max(x, y)
+}
+
+fn lower_unsigned[T: Unsigned](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn lower_float[T: Float](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn clamp_any[T: AnyNum](x: T, lo: T, hi: T) -> T {
+  min(max(x, lo), hi)
+}
+
+fn lower_signed[T: Num + Int](x: T, y: T) -> T {
+  min(x, y)
+}
+
+test "min and max from an AnyNum function, for every family" {
+  let a: U8  = 250
+  let b: U8  = 5
+  let c: I32 = -4
+  let d: I32 = 3
+  let e: F32 = 0.5
+  let f: F32 = -0.5
+  assert lower(a, b) == 5
+  assert upper(a, b) == 250
+  assert lower(c, d) == -4
+  assert upper(c, d) == 3
+  assert lower(e, f) == -0.5
+  assert upper(e, f) == 0.5
+}
+
+test "min and max from an Int and an Unsigned function" {
+  let a: U64 = 18446744073709551615
+  let b: U64 = 2
+  let c: U16 = 40000
+  let d: I8  = -128
+  let e: I8  = 127
+  assert lower_int(a, b) == 2
+  assert upper_unsigned(a, b) == 18446744073709551615
+  assert lower_unsigned(c, 7) == 7
+  assert lower_int(d, e) == -128
+}
+
+test "min from a Float function and from a Num with Int function" {
+  let a: F64 = 3.5
+  let b: F64 = 3.25
+  let c: I16 = -300
+  let d: I16 = -299
+  assert lower_float(a, b) == 3.25
+  assert lower_signed(c, d) == -300
+}
+
+test "min and max nested in one AnyNum function" {
+  let lo: U32     = 10
+  let hi: U32     = 20
+  let below: U32  = 3
+  let inside: U32 = 15
+  let above: U32  = 99
+  assert clamp_any(below, lo, hi) == 10
+  assert clamp_any(inside, lo, hi) == 15
+  assert clamp_any(above, lo, hi) == 20
+}

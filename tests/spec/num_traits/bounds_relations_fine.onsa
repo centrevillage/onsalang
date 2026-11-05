@@ -1,0 +1,218 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3: "上位の trait の関係は `Num: AnyNum`、`Float: Num`、`Int: AnyNum`、`Unsigned: Int`"): a value of a type
+// parameter whose bound is a number trait goes where a trait that it implies is asked, through every step of the chain
+// (`Unsigned` to `Int` to `AnyNum`, `Float` to `Num` to `AnyNum`), and a trait goes to itself. `T: Num + Int` (the signed
+// integers) goes to `Num`, `Int` and `AnyNum`. The traits that a number trait lists (§6.3) are asked too: `AnyNum` has
+// `Copy`, the arithmetic operators and the comparisons, `Num` has `Neg` besides, `Int` has `Eq` `Ord` `Hash` and the bit,
+// wrapping and saturating operators. The same chain of an `impl` and a method. All of them are right.
+
+fn want_any[T: AnyNum](x: T) -> T {
+  x
+}
+
+fn want_num[T: Num](x: T) -> T {
+  x
+}
+
+fn want_float[T: Float](x: T) -> T {
+  x
+}
+
+fn want_int[T: Int](x: T) -> T {
+  x
+}
+
+fn want_unsigned[T: Unsigned](x: T) -> T {
+  x
+}
+
+fn want_signed[T: Num + Int](x: T) -> T {
+  x
+}
+
+pub fn any_to_any[T: AnyNum](x: T) -> T {
+  want_any(x)
+}
+
+pub fn num_to_num[T: Num](x: T) -> T {
+  want_num(x)
+}
+
+pub fn num_to_any[T: Num](x: T) -> T {
+  want_any(x)
+}
+
+pub fn float_to_float[T: Float](x: T) -> T {
+  want_float(x)
+}
+
+pub fn float_to_num[T: Float](x: T) -> T {
+  want_num(x)
+}
+
+pub fn float_to_any[T: Float](x: T) -> T {
+  want_any(x)
+}
+
+pub fn int_to_int[T: Int](x: T) -> T {
+  want_int(x)
+}
+
+pub fn int_to_any[T: Int](x: T) -> T {
+  want_any(x)
+}
+
+pub fn unsigned_to_unsigned[T: Unsigned](x: T) -> T {
+  want_unsigned(x)
+}
+
+pub fn unsigned_to_int[T: Unsigned](x: T) -> T {
+  want_int(x)
+}
+
+pub fn unsigned_to_any[T: Unsigned](x: T) -> T {
+  want_any(x)
+}
+
+pub fn signed_to_num[T: Num + Int](x: T) -> T {
+  want_num(x)
+}
+
+pub fn signed_to_int[T: Num + Int](x: T) -> T {
+  want_int(x)
+}
+
+pub fn signed_to_any[T: Num + Int](x: T) -> T {
+  want_any(x)
+}
+
+pub fn signed_to_signed[T: Num + Int](x: T) -> T {
+  want_signed(x)
+}
+
+pub fn int_then_num_to_signed[T: Int + Num](x: T) -> T {
+  want_signed(x)
+}
+
+// ---- the traits that a number trait lists
+
+fn want_copy[T: Copy](x: T) -> T {
+  x
+}
+
+fn want_add[T: Add](x: T) -> T {
+  x
+}
+
+fn want_partial_eq[T: PartialEq](x: T) -> T {
+  x
+}
+
+fn want_partial_ord[T: PartialOrd](x: T) -> T {
+  x
+}
+
+fn want_neg[T: Neg](x: T) -> T {
+  x
+}
+
+fn want_eq[T: Eq](x: T) -> T {
+  x
+}
+
+fn want_ord[T: Ord](x: T) -> T {
+  x
+}
+
+fn want_hash[T: Hash](x: T) -> T {
+  x
+}
+
+fn want_bit_and[T: BitAnd](x: T) -> T {
+  x
+}
+
+fn want_not[T: Not](x: T) -> T {
+  x
+}
+
+fn want_wrapping_add[T: WrappingAdd](x: T) -> T {
+  x
+}
+
+fn want_saturating_mul[T: SaturatingMul](x: T) -> T {
+  x
+}
+
+pub fn any_lists_copy[T: AnyNum](x: T) -> T {
+  want_copy(x)
+}
+
+pub fn any_lists_add[T: AnyNum](x: T) -> T {
+  want_add(x)
+}
+
+pub fn any_lists_comparisons[T: AnyNum](x: T) -> T {
+  want_partial_ord(want_partial_eq(x))
+}
+
+pub fn num_lists_neg[T: Num](x: T) -> T {
+  want_neg(x)
+}
+
+pub fn float_lists_neg[T: Float](x: T) -> T {
+  want_neg(x)
+}
+
+pub fn int_lists_eq_ord_hash[T: Int](x: T) -> T {
+  want_hash(want_ord(want_eq(x)))
+}
+
+pub fn int_lists_bit_and[T: Int](x: T) -> T {
+  want_bit_and(x)
+}
+
+pub fn int_lists_not[T: Int](x: T) -> T {
+  want_not(x)
+}
+
+pub fn int_lists_wrapping[T: Int](x: T) -> T {
+  want_wrapping_add(x)
+}
+
+pub fn int_lists_saturating[T: Int](x: T) -> T {
+  want_saturating_mul(x)
+}
+
+pub fn unsigned_lists_what_int_lists[T: Unsigned](x: T) -> T {
+  want_not(want_ord(want_add(x)))
+}
+
+pub fn signed_lists_neg_and_not[T: Num + Int](x: T) -> T {
+  want_not(want_neg(x))
+}
+
+// ---- an `impl` and a method
+
+pub struct Rack[T: Int] {
+  a: T,
+}
+
+impl[T: Unsigned] Rack[T] {
+  pub fn as_int(self) -> T {
+    want_int(self.a)
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn method_chain[U: Unsigned](self, y: U) -> U {
+    want_any(want_int(y))
+  }
+}

@@ -2,6 +2,7 @@
 //! closures and operators.
 
 use super::*;
+use crate::traits::{Class, op_bound};
 use onsa_diag::Edit;
 
 impl<'a> Checker<'a> {
@@ -715,21 +716,16 @@ impl<'a> Checker<'a> {
     /// Whether the type `t` has what the operator `op` needs: the one judgment of the
     /// operators, at the operator and in a deferred item. A literal variable decides it
     /// by its kind (an integer literal has every trait of an operator but the `-` of an
-    /// unsigned type; a float literal has none of the integer operators). Any other
-    /// variable left waits for the statement that decides it.
+    /// unsigned type; a float literal has the traits of a float). Any other variable
+    /// left waits for the statement that decides it.
     pub(crate) fn operator_verdict(&mut self, op: OpNeed, t: TyId) -> Verdict {
         let s = self.shallow(t);
-        let int_only = match op {
-            OpNeed::Binary(b) => op_bound(b).is_none(),
-            OpNeed::Neg => false,
-            OpNeed::Not => true,
-        };
+        let need = op_bound(op);
         if matches!(self.ty(s), Ty::Var(_)) {
             return match self.infer.lit_of(&self.a.types, s) {
-                Some(LitKind::Float) if int_only => Verdict::Unmet(match op {
-                    OpNeed::Binary(b) => format!("`{}` is defined for integers only (§3.4)", b.symbol()),
-                    _ => not_unmet(LitKind::Float.words()),
-                }),
+                Some(LitKind::Float) if !Class::Float.implements(need) => {
+                    Verdict::Unmet(op_unmet(op, LitKind::Float.words()))
+                }
                 Some(LitKind::Int) if op == OpNeed::Neg => Verdict::Wait,
                 Some(_) => Verdict::Met,
                 None => Verdict::Wait,
@@ -740,56 +736,15 @@ impl<'a> Checker<'a> {
         }
         // The bounds look into the type: the variables bound in it are followed first.
         let r = self.infer.resolve(&mut self.a.types, s);
-        let ty = self.ty(r);
-        let met = self.traits_unknown(r)
-            || match op {
-                OpNeed::Binary(b) => match op_bound(b) {
-                    Some(bound) => self.satisfies(r, bound),
-                    None => matches!(ty, Ty::Int(_)),
-                },
-                OpNeed::Neg => match ty {
-                    Ty::Int(k) => k.signed(),
-                    Ty::Float(_) => true,
-                    Ty::Param(_) => self.satisfies(r, Bound::Num),
-                    _ => false,
-                },
-                OpNeed::Not => matches!(ty, Ty::Bool | Ty::Int(_)),
-            };
-        if met {
+        if self.satisfies(r, need) {
             return Verdict::Met;
         }
-        let shown = self.display(r);
-        Verdict::Unmet(match (op, ty) {
-            (OpNeed::Binary(b), _) => match op_bound(b) {
-                Some(bound) => {
-                    format!("`{}` is not defined for `{shown}` (it needs `{}`; §3.2)", b.symbol(), bound.name())
-                }
-                None => format!("`{}` is defined for integers only; found `{shown}` (§3.4)", b.symbol()),
-            },
-            (OpNeed::Neg, Ty::Int(k)) => format!("`-` on the unsigned type `{}`; it has no unary `-` (§3.4)", k.name()),
-            (OpNeed::Neg, _) => format!("`-` needs a signed integer or float; found `{shown}`"),
-            (OpNeed::Not, _) => not_unmet(&format!("`{shown}`")),
-        })
+        Verdict::Unmet(op_unmet(op, &format!("`{}`", self.display(r))))
     }
 }
 
-/// The trait a binary operator needs of its operands (§3.2, §6.3); `None` for the
-/// operators of the integers only (the bitwise ones, the wrapping and saturating
-/// ones, §3.4).
-fn op_bound(op: BinOp) -> Option<Bound> {
-    use BinOp::*;
-    match op {
-        Eq | Ne => Some(Bound::PartialEq),
-        Lt | Le | Gt | Ge => Some(Bound::PartialOrd),
-        Add | Sub | Mul | Div | Rem => Some(Bound::Num),
-        BitAnd | BitOr | BitXor | Shl | Shr | WrapAdd | WrapSub | WrapMul | SatAdd | SatSub | SatMul => None,
-        // `check_binary` gives them `Bool` and asks for no trait.
-        And | Or => onsa_diag::internal::bug(None, "the trait of `&&` / `||` asked"),
-    }
-}
-
-/// The E0401 of `!` on a type that is neither `Bool` nor an integer (`found`: the type
-/// in backquotes, or `a float` for a float literal whose type is still open).
-fn not_unmet(found: &str) -> String {
-    format!("`!` needs `Bool` or an integer; found {found}")
+/// The E0401 of the operator `op` on `found` (the type in backquotes, or `a float` for
+/// a float literal whose type is still open).
+fn op_unmet(op: OpNeed, found: &str) -> String {
+    format!("`{}` is not defined for {found} (it needs `{}`; §3.2)", op.symbol(), op_bound(op).name())
 }

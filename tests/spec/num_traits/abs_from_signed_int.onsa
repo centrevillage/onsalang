@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§6.3", "§4.5"]
+
+// W5-05 U1/t (§13.4: "`abs` は `Num`"; §6.3: "符号付き整数は `Num` と `Int` を満たす"): `abs` is called from a generic function whose
+// bound is `Num + Int` (the signed integers only), through the `Num` of the bound. The value is that of `abs` on the type
+// itself, the least value panics (§3.4).
+
+use std.math.{abs}
+
+fn abs_of_signed[T: Num + Int](x: T) -> T {
+  abs(x)
+}
+
+fn abs_then_negate[T: Num + Int](x: T) -> T {
+  -abs(x)
+}
+
+test "abs of Num and Int instances" {
+  let a: I8  = -100
+  let b: I16 = 300
+  let c: I64 = -9
+  assert abs_of_signed(a) == 100
+  assert abs_of_signed(b) == 300
+  assert abs_of_signed(c) == 9
+}
+
+test "abs then negate is never positive" {
+  let a: I32 = -7
+  let b: I32 = 7
+  assert abs_then_negate(a) == -7
+  assert abs_then_negate(b) == -7
+}
+
+test "abs of the least value of a Num and Int instance panics" {
+  let a: I16 = -32768
+  let r      = abs_of_signed(a) //~ PANIC "abs of the least value of a Num and Int instance panics"
+  assert r == 0
+}

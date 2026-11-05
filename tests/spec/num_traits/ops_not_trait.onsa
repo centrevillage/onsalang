@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3", "§2.6"]
+
+// W5-05 U1/t (§3.2: "`!` は `Not.not`"; §6.3, the table: `Not` is an operator trait of `Bool` and of every integer, and of no
+// float): the one trait `T: Not` takes a `Bool` (the negation) and an integer (the bit inversion), signed or unsigned, of every
+// width. `T: Int` has `Not` too.
+
+fn not1[T: Not](x: T) -> T {
+  !x
+}
+
+fn not_int[T: Int](x: T) -> T {
+  !x
+}
+
+test "Not negates a Bool" {
+  assert not1(false)
+  assert !not1(true)
+}
+
+test "Not inverts the bits of an unsigned integer" {
+  let a: U8  = 0
+  let b: U16 = 255
+  let c: U32 = 4294967295
+  let d: U64 = 0
+  assert not1(a) == 255
+  assert not1(b) == 65280
+  assert not1(c) == 0
+  assert not1(d) == 18446744073709551615
+}
+
+test "Not inverts the bits of a signed integer" {
+  let a: I8  = 5
+  let b: I32 = -1
+  let c: I64 = 0
+  assert not1(a) == -6
+  assert not1(b) == 0
+  assert not1(c) == -1
+}
+
+test "Int has Not" {
+  let a: U8  = 15
+  let b: I16 = 0
+  assert not_int(a) == 240
+  assert not_int(b) == -1
+}
+
+test "Not twice is the value" {
+  let a: I32 = 123456
+  assert not1(not1(a)) == a
+}

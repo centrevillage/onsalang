@@ -1,9 +1,11 @@
-//! The bounds (§6.3): whether a type satisfies a bound, and which builtin
-//! bound implies which. The judgments are of the types and the generics in
-//! scope ([`Bounds`]), shared by the body and the well-formedness of the
-//! types written (`sig::wellformed`, R-37).
+//! The bounds (§6.3): whether a type satisfies a bound. The judgments are of
+//! the types and the generics in scope ([`Bounds`]), shared by the body and
+//! the well-formedness of the types written (`sig::wellformed`, R-37); the
+//! tables they read are [`crate::traits`].
 
 use super::*;
+use crate::traits::Class;
+pub(crate) use crate::traits::implies;
 
 /// The judgments of the bounds under the generics in scope `generics`.
 pub(crate) struct Bounds<'b> {
@@ -88,90 +90,6 @@ impl Bounds<'_> {
                     _ => false,
                 }
             }
-            (
-                Ty::Int(_),
-                Bound::AnyNum
-                | Bound::Int
-                | Bound::Num
-                | Bound::PartialEq
-                | Bound::PartialOrd
-                | Bound::Eq
-                | Bound::Ord
-                | Bound::Copy
-                | Bound::Dup
-                | Bound::Hash
-                | Bound::Default
-                | Bound::Show,
-            ) => true,
-            (
-                Ty::Float(_),
-                Bound::AnyNum
-                | Bound::Num
-                | Bound::Float
-                | Bound::PartialEq
-                | Bound::PartialOrd
-                | Bound::Copy
-                | Bound::Dup
-                | Bound::Default
-                | Bound::Show,
-            ) => true,
-            (
-                Ty::Bool,
-                Bound::PartialEq | Bound::Eq | Bound::Hash | Bound::Copy | Bound::Dup | Bound::Default | Bound::Show,
-            ) => true,
-            (
-                Ty::Char,
-                Bound::PartialEq
-                | Bound::PartialOrd
-                | Bound::Eq
-                | Bound::Ord
-                | Bound::Hash
-                | Bound::Copy
-                | Bound::Dup
-                | Bound::Show,
-            ) => true,
-            (Ty::Unit, Bound::PartialEq | Bound::Eq | Bound::Copy | Bound::Dup | Bound::Default) => true,
-            (
-                Ty::Array(e, _),
-                Bound::PartialEq
-                | Bound::Eq
-                | Bound::PartialOrd
-                | Bound::Ord
-                | Bound::Hash
-                | Bound::Copy
-                | Bound::Dup
-                | Bound::Show
-                | Bound::Default,
-            ) => self.satisfies(*e, b),
-            (
-                Ty::Tuple(ts),
-                Bound::PartialEq
-                | Bound::Eq
-                | Bound::PartialOrd
-                | Bound::Ord
-                | Bound::Hash
-                | Bound::Copy
-                | Bound::Dup
-                | Bound::Show
-                | Bound::Default,
-            ) => ts.iter().all(|&x| self.satisfies(x, b)),
-            (
-                Ty::Builtin(BuiltinTy::Str | BuiltinTy::Bytes, _),
-                Bound::PartialEq
-                | Bound::Eq
-                | Bound::PartialOrd
-                | Bound::Ord
-                | Bound::Hash
-                | Bound::Dup
-                | Bound::Default,
-            ) => true,
-            (Ty::Builtin(BuiltinTy::Str, _), Bound::Show) => true,
-            (Ty::Builtin(BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set, _), Bound::Dup) => true,
-            (Ty::Builtin(BuiltinTy::Array, args), Bound::PartialEq | Bound::Eq) => {
-                args.iter().all(|&x| self.satisfies(x, b))
-            }
-            // `Ptr[T]` is Copy (§4.1, R-322).
-            (Ty::Fn(_) | Ty::Builtin(BuiltinTy::Ptr, _), Bound::Copy | Bound::Dup) => true,
             (Ty::Named(d, args), _) => {
                 let def = self.a.def(*d);
                 let derives = match &def.kind {
@@ -194,8 +112,7 @@ impl Bounds<'_> {
                 let derived =
                     |d: crate::def::Derive| derives.is_none_or(|ds| ds.contains(&d) && *args_meet.get_or_init(of_args));
                 match b {
-                    Bound::Copy => self.kind(t) == Some(Kind::Copy),
-                    Bound::Dup => matches!(self.kind(t), Some(Kind::Copy | Kind::Shared)),
+                    Bound::Copy | Bound::Dup => self.kind_meets(t, b),
                     Bound::PartialEq => derived(crate::def::Derive::PartialEq) || derived(crate::def::Derive::Eq),
                     Bound::Eq => derived(crate::def::Derive::Eq),
                     Bound::PartialOrd => derived(crate::def::Derive::PartialOrd) || derived(crate::def::Derive::Ord),
@@ -208,27 +125,31 @@ impl Bounds<'_> {
                     _ => false,
                 }
             }
-            _ => false,
+            _ => self.of_table(t, &ty, b),
         }
     }
-}
 
-/// `have` implies `want` among the builtin bounds (§6.3): `Ord` ⇒ `PartialOrd`, `Eq`;
-/// `Eq` ⇒ `PartialEq`; `Float` ⇒ `Num`; `Num` ⇒ `AnyNum`; `Int` ⇒ `AnyNum`, `Eq`, `Ord`,
-/// `Hash`; `AnyNum` ⇒ `PartialEq`, `PartialOrd`, `Copy` (every number trait requires `Copy`).
-pub(crate) fn implies(have: Bound, want: Bound) -> bool {
-    if have == want {
-        return true;
+    /// Whether `t`, of a kind (§4.6), meets the kind constraint `b`.
+    fn kind_meets(&self, t: TyId, b: Bound) -> bool {
+        matches!((self.kind(t), b), (Some(Kind::Copy), _) | (Some(Kind::Shared), Bound::Dup))
     }
-    match have {
-        Bound::Ord => matches!(want, Bound::PartialOrd | Bound::Eq | Bound::PartialEq),
-        Bound::Eq => want == Bound::PartialEq,
-        Bound::PartialOrd => want == Bound::PartialEq,
-        Bound::Float => want == Bound::Num || implies(Bound::Num, want),
-        Bound::Num => implies(Bound::AnyNum, want),
-        Bound::Int => matches!(want, Bound::Eq | Bound::Ord | Bound::Hash) || implies(Bound::AnyNum, want),
-        Bound::AnyNum => matches!(want, Bound::PartialEq | Bound::PartialOrd | Bound::Copy | Bound::Dup),
-        Bound::Copy => want == Bound::Dup,
-        _ => false,
+
+    /// Whether the type `t` (`ty`) of the table of §6.3 meets `b`: a trait of
+    /// its row, with its parts for a tuple, `[T; N]` and `Array[T]`; a kind
+    /// constraint by its kind (§6.3), which for a tuple and `[T; N]` is of
+    /// their parts (§4.6), each asked so that an unknown one keeps quiet.
+    fn of_table(&self, t: TyId, ty: &Ty, b: Bound) -> bool {
+        let Some(class) = Class::of(ty) else { return false };
+        let parts: &[TyId] = match ty {
+            Ty::Array(e, _) => std::slice::from_ref(e),
+            Ty::Tuple(ts) | Ty::Builtin(BuiltinTy::Array, ts) => ts,
+            _ => &[],
+        };
+        let of_parts = || parts.iter().all(|&x| self.satisfies(x, b));
+        match class {
+            Class::Parts if b.is_kind_constraint() => of_parts(),
+            _ if b.is_kind_constraint() => self.kind_meets(t, b),
+            _ => class.implements(b) && of_parts(),
+        }
     }
 }

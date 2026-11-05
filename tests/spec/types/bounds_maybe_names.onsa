@@ -6,9 +6,9 @@
 // has a `?` (§18.1: the stages go in the order of syntax, names, types; "名前の誤りがある単位では型検査をせず").
 // A name that is not found is E0302 (`?Nope`), a name that is found and is no bound is E0308 (`?I32`, `?Holder`,
 // §15.1), and a trait that cannot be a bound in this version is the E0200 of the name when it is not the one that
-// the `?` is on (`T: ?Show + Add`: the `?Show` is the E0416 of the types stage but the `Add` after it is the names
+// the `?` is on (`T: ?Show + Iter`: the `?Show` is the E0416 of the types stage but the `Iter` after it is the names
 // stage, and the names stage is first). The same holds for a list that overlaps or contradicts (S-747): the
-// compared bounds are the ones that are found and are bounds in this version, so `Add + Add` is the E0200 of the
+// compared bounds are the ones that are found and are bounds in this version, so `Iter + Iter` is the E0200 of the
 // name (twice), `Gone + Gone` the E0302, and `?Dup + Gone` the E0302 and no contradiction.
 // One error per unit, so each form is in its own unit; the right forms are the units at the end.
 
@@ -32,11 +32,11 @@ pub fn a_struct_is_not_a_bound[T: ?Holder](x: T) -> U32 {   //~ E0308
   0
 }
 
-pub fn maybe_then_a_trait_that_is_no_bound[T: ?Show + Add](x: T) -> U32 {   //~ E0200
+pub fn maybe_then_a_trait_that_is_no_bound[T: ?Show + Iter](x: T) -> U32 {   //~ E0200
   0
 }
 
-pub fn a_trait_that_is_no_bound_twice[T: Add + Add](x: T) -> U32 {   //~ E0200
+pub fn a_trait_that_is_no_bound_twice[T: Iter + Iter](x: T) -> U32 {   //~ E0200
   0
 }
 
@@ -63,17 +63,17 @@ impl[T: ?Nope] Holder {   //~ E0302
   }
 }
 
-// The numeric traits that need `Copy` but are no bound in this version (`AnyNum`, `Int`, `Unsigned`, §6.3; S-747
-// leaves them out of the comparison until they are bounds) are the E0200 of the name next to a `?Dup`.
-pub fn maybe_dup_then_int[T: ?Dup + Int](x: T) -> U32 {   //~ E0200
+// The number traits that need `Copy` are bounds since W5-05 (§6.3), so they are compared like the others: next to
+// a `?Dup` the list contradicts, and twice it overlaps (S-747).
+pub fn maybe_dup_then_int[T: ?Dup + Int](x: T) -> U32 {   //~ E0416
   0
 }
 
-pub fn any_num_then_maybe_dup[T: AnyNum + ?Dup](x: T) -> U32 {   //~ E0200
+pub fn any_num_then_maybe_dup[T: AnyNum + ?Dup](x: T) -> U32 {   //~ E0416
   0
 }
 
-pub fn unsigned_twice[T: Unsigned + Unsigned](x: T) -> U32 {   //~ E0200
+pub fn unsigned_twice[T: Unsigned + Unsigned](x: T) -> U32 {   //~ E0416
   0
 }
 

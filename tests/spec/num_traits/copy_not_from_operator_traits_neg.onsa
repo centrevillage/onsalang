@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5", "§4.6"]
+
+// W5-05 U1/t (R-128 of the review; §6.3: "`Copy` を含めるのは、数を値として扱い、... ため"; §4.5: "数の trait は全て `Copy` を要する"): `Copy`
+// comes with the number traits and with no other bound. An operator trait (`Add`, `Neg`, `BitAnd`), `PartialEq` and
+// `PartialOrd` alone leave the type parameter with the implicit `Dup` (it may be Shared) and not `Copy`, so a call that asks
+// `Copy` of it is E0416. The number traits that do give it are in copy_num_float_fine.onsa and copy_anynum_int_fine.onsa.
+// One error per item (P-01).
+
+fn need_copy[U: Copy](x: U) -> U {
+  x
+}
+
+pub fn from_partial_eq[T: PartialEq](x: T) -> T {
+  need_copy(x) //~ E0416
+}
+
+pub fn from_partial_ord[T: PartialOrd](x: T) -> T {
+  need_copy(x) //~ E0416
+}
+
+pub fn from_add[T: Add](x: T) -> T {
+  need_copy(x) //~ E0416
+}
+
+pub fn from_neg[T: Neg](x: T) -> T {
+  need_copy(x) //~ E0416
+}
+
+pub fn from_bit_and[T: BitAnd](x: T) -> T {
+  need_copy(x) //~ E0416
+}
+
+pub fn from_wrapping_add[T: WrappingAdd](x: T) -> T {
+  need_copy(x) //~ E0416
+}
+
+pub fn from_not[T: Not](x: T) -> T {
+  need_copy(x) //~ E0416
+}

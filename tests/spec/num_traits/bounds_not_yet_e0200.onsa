@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5", "§18.1"]
+
+// W5-05 U1/t (§6.3: the traits that can be a bound are the number traits and the operator traits of the table; "ユーザ定義型の反復は必要になるまで
+// 延期、§19.1" for `Iter` and `IntoIter`, and `Drop` and `Ordinal` are not bounds of a program yet): a bound that is `Iter`,
+// `IntoIter`, `Drop` or `Ordinal` stays E0200 once the number traits are bounds, whatever is next to it (`T: Int + Drop`
+// is the E0200 of `Drop` and the `Int` is not reported) and in every place that has a list of bounds. The note that is the
+// wording of the message is not asked here. One error per item (P-01).
+
+pub fn drop_bound[T: Drop](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn iter_bound[T: Iter](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn into_iter_bound[T: IntoIter](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn ordinal_bound[T: Ordinal](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn int_and_drop[T: Int + Drop](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn drop_and_int[T: Drop + Int](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn num_and_ordinal[T: Num + Ordinal](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn unsigned_and_iter[T: Unsigned + Iter](x: T) -> U32 { //~ E0200
+  0
+}
+
+pub fn the_second_parameter[T: Int, U: IntoIter](x: T, y: U) -> U32 { //~ E0200
+  0
+}
+
+pub struct DropBox[T: Int + Drop] { //~ E0200
+  a: T,
+}
+
+pub enum OrdinalSlot[T: AnyNum + Ordinal] { //~ E0200
+  One(T),
+  Nothing,
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[T: Float + Drop] Holder[T] { //~ E0200
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn method_drop[U: Int + Drop](self, y: U) -> U32 { //~ E0200
+    self.n
+  }
+}

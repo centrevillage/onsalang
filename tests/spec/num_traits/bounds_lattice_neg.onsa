@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3: "上位の trait の関係は `Num: AnyNum`、`Float: Num`、`Int: AnyNum`、`Unsigned: Int`"): a type parameter whose bound is a
+// number trait is not a stronger trait than the chain says. `AnyNum` is not `Num`, `Int` or `Float` (and so on up), `Num`
+// is not `Float`, `Int` or `Unsigned`, `Int` is not `Num` or `Unsigned`, `Float` is not `Int`, and `Unsigned` is not `Num`
+// or `Float`. Each is E0416 at the call that asks the stronger trait. The opposite directions are in bounds_relations_fine.onsa.
+// One error per item (P-01).
+
+fn want_any[T: AnyNum](x: T) -> T {
+  x
+}
+
+fn want_num[T: Num](x: T) -> T {
+  x
+}
+
+fn want_float[T: Float](x: T) -> T {
+  x
+}
+
+fn want_int[T: Int](x: T) -> T {
+  x
+}
+
+fn want_unsigned[T: Unsigned](x: T) -> T {
+  x
+}
+
+fn want_signed[T: Num + Int](x: T) -> T {
+  x
+}
+
+pub fn any_to_num[T: AnyNum](x: T) -> T {
+  want_num(x) //~ E0416
+}
+
+pub fn any_to_int[T: AnyNum](x: T) -> T {
+  want_int(x) //~ E0416
+}
+
+pub fn any_to_float[T: AnyNum](x: T) -> T {
+  want_float(x) //~ E0416
+}
+
+pub fn any_to_unsigned[T: AnyNum](x: T) -> T {
+  want_unsigned(x) //~ E0416
+}
+
+pub fn num_to_float[T: Num](x: T) -> T {
+  want_float(x) //~ E0416
+}
+
+pub fn num_to_int[T: Num](x: T) -> T {
+  want_int(x) //~ E0416
+}
+
+pub fn num_to_unsigned[T: Num](x: T) -> T {
+  want_unsigned(x) //~ E0416
+}
+
+pub fn int_to_unsigned[T: Int](x: T) -> T {
+  want_unsigned(x) //~ E0416
+}
+
+pub fn int_to_float[T: Int](x: T) -> T {
+  want_float(x) //~ E0416
+}
+
+pub fn int_to_signed[T: Int](x: T) -> T {
+  want_signed(x) //~ E0416
+}
+
+pub fn float_to_int[T: Float](x: T) -> T {
+  want_int(x) //~ E0416
+}
+
+pub fn float_to_unsigned[T: Float](x: T) -> T {
+  want_unsigned(x) //~ E0416
+}
+
+pub fn float_to_signed[T: Float](x: T) -> T {
+  want_signed(x) //~ E0416
+}
+
+pub fn unsigned_to_float[T: Unsigned](x: T) -> T {
+  want_float(x) //~ E0416
+}
+
+pub fn unsigned_to_signed[T: Unsigned](x: T) -> T {
+  want_signed(x) //~ E0416
+}
+
+pub fn signed_to_unsigned[T: Num + Int](x: T) -> T {
+  want_unsigned(x) //~ E0416
+}
+
+pub fn signed_to_float[T: Num + Int](x: T) -> T {
+  want_float(x) //~ E0416
+}

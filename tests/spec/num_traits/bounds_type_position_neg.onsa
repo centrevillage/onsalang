@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.3"]
+
+// W5-05 U1/t (§4.5: "型の位置 ... に書いた型引数は、その型の宣言の型パラメータの要求(境界と暗黙の `Dup`)を満たさなければならず、満たさなければ
+// E0416 である(`struct N[T: Num]` に対して `N[Bool]` と `fn f[T](x: N[T])` は E0416、`fn f[T: Float](x: N[T])` は正しい)"): the number traits
+// as the bounds of a struct and an enum, with the type written in a signature. An unsigned integer for `Num`, a float for
+// `Int`, a signed integer for `Unsigned`, a `Bool` for `AnyNum`, an integer for `Float`; a type parameter of the function
+// that has only a weaker trait than the declaration asks (`AnyNum` for `Num`) or none; an enum; and the target of an `impl` whose type parameter has only `AnyNum`.
+// The type parameter that has the trait is right. One error per item (P-01).
+
+pub struct NumBox[T: Num] {
+  a: T,
+}
+
+pub struct IntBox[T: Int] {
+  a: T,
+}
+
+pub struct UnsignedBox[T: Unsigned] {
+  a: T,
+}
+
+pub struct AnyBox[T: AnyNum] {
+  a: T,
+}
+
+pub struct FloatBox[T: Float] {
+  a: T,
+}
+
+pub enum NumSlot[T: Num] {
+  Full(T),
+  Empty,
+}
+
+pub fn unsigned_in_num_box(b: NumBox[U32]) -> U32 { //~ E0416
+  0
+}
+
+pub fn float_in_int_box(b: IntBox[F32]) -> U32 { //~ E0416
+  0
+}
+
+pub fn signed_in_unsigned_box(b: UnsignedBox[I8]) -> U32 { //~ E0416
+  0
+}
+
+pub fn bool_in_any_box(b: AnyBox[Bool]) -> U32 { //~ E0416
+  0
+}
+
+pub fn integer_in_float_box(b: FloatBox[I32]) -> U32 { //~ E0416
+  0
+}
+
+pub fn unsigned_in_num_slot(s: NumSlot[U8]) -> U32 { //~ E0416
+  0
+}
+
+pub fn any_parameter_in_num_box[T: AnyNum](b: NumBox[T]) -> U32 { //~ E0416
+  0
+}
+
+pub fn no_bound_in_any_box[T](b: AnyBox[T]) -> U32 { //~ E0416
+  0
+}
+
+pub fn int_parameter_in_unsigned_box[T: Int](b: UnsignedBox[T]) -> U32 { //~ E0416
+  0
+}
+
+pub fn result_holding_the_wrong_box(r: Result[IntBox[F64], U32]) -> U32 { //~ E0416
+  0
+}
+
+impl[T: AnyNum] NumBox[T] { //~ E0416
+  pub fn tag() -> U32 {
+    1
+  }
+}
+
+// What is right next to them.
+pub fn num_in_num_box(b: NumBox[I32]) -> I32 {
+  b.a
+}
+
+pub fn unsigned_in_int_box(b: IntBox[U64]) -> U64 {
+  b.a
+}
+
+pub fn signed_in_int_box(b: IntBox[I8]) -> I8 {
+  b.a
+}
+
+pub fn unsigned_in_any_box(b: AnyBox[U8]) -> U8 {
+  b.a
+}
+
+pub fn float_in_num_box(b: NumBox[F32]) -> F32 {
+  b.a
+}
+
+pub fn weaker_parameter[T: Float](b: NumBox[T], c: AnyBox[T]) -> T {
+  b.a
+}
+
+pub fn stronger_parameter[T: Unsigned](b: IntBox[T]) -> T {
+  b.a
+}
+
+pub fn num_in_a_slot(s: NumSlot[F64]) -> U32 {
+  0
+}

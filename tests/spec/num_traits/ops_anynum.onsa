@@ -1,0 +1,154 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3: "`AnyNum` は ... `Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし"): `T: AnyNum` writes
+// `+ - * / %` and the six comparisons, and nothing else of the operators, whatever the family of the instance (a signed or an
+// unsigned integer, a float). The subtraction of an unsigned instance that falls below 0 panics at run time, as it does for the
+// type itself. The generic code is nested in a call, a branch and a method of an `impl`.
+
+fn add_any[T: AnyNum](a: T, b: T) -> T {
+  a + b
+}
+
+fn sub_any[T: AnyNum](a: T, b: T) -> T {
+  a - b
+}
+
+fn mul_add[T: AnyNum](a: T, b: T, c: T) -> T {
+  a * b + c
+}
+
+fn div_any[T: AnyNum](a: T, b: T) -> T {
+  a / b
+}
+
+fn rem_any[T: AnyNum](a: T, b: T) -> T {
+  a % b
+}
+
+fn larger[T: AnyNum](a: T, b: T) -> T {
+  if a > b {
+    a
+  } else {
+    b
+  }
+}
+
+fn ordered[T: AnyNum](a: T, b: T, c: T) -> Bool {
+  a <= b && b < c
+}
+
+fn same_or_apart[T: AnyNum](a: T, b: T) -> U32 {
+  if a == b {
+    0
+  } else if a != b {
+    1
+  } else {
+    2
+  }
+}
+
+fn three_sum[T: AnyNum](a: T, b: T, c: T) -> T {
+  add_any(add_any(a, b), c)
+}
+
+pub struct Pair[T: AnyNum] {
+  a: T,
+  b: T,
+}
+
+impl[T: AnyNum] Pair[T] {
+  pub fn gap(self) -> T {
+    if self.a > self.b {
+      self.a - self.b
+    } else {
+      self.b - self.a
+    }
+  }
+}
+
+test "AnyNum computes with the signed integers" {
+  let a: I16 = -20
+  let b: I16 = 7
+  assert add_any(a, b) == -13
+  assert sub_any(a, b) == -27
+  assert mul_add(a, b, 3) == -137
+  assert div_any(a, b) == -2
+  assert rem_any(a, b) == -6
+}
+
+test "AnyNum computes with the unsigned integers" {
+  let a: U16 = 500
+  let b: U16 = 7
+  assert add_any(a, b) == 507
+  assert sub_any(a, b) == 493
+  assert mul_add(a, b, 3) == 3503
+  assert div_any(a, b) == 71
+  assert rem_any(a, b) == 3
+}
+
+test "AnyNum computes with the floats" {
+  let a: F32 = 7.5
+  let b: F32 = 2.0
+  assert add_any(a, b) == 9.5
+  assert sub_any(a, b) == 5.5
+  assert mul_add(a, b, 0.5) == 15.5
+  assert div_any(a, b) == 3.75
+  assert rem_any(a, b) == 1.5
+}
+
+test "AnyNum compares every family" {
+  let a: I32 = -1
+  let b: U8  = 200
+  let c: F64 = 0.5
+  assert larger(a, 3) == 3
+  assert larger(b, 7) == 200
+  assert larger(c, -0.5) == 0.5
+  assert ordered(a, 0, 1)
+  assert !ordered(b, b, b)
+  assert same_or_apart(c, c) == 0
+  assert same_or_apart(b, 0) == 1
+}
+
+test "AnyNum in a nested call and a method" {
+  let a: U32 = 10
+  let b: U32 = 20
+  let c: U32 = 30
+  assert three_sum(a, b, c) == 60
+  let x: F32 = 3.0
+  let y: F32 = 9.5
+  let p      = Pair { a: x, b: y }
+  assert p.gap() == 6.5
+  let q = Pair { a: a, b: 4 }
+  assert q.gap() == 6
+}
+
+test "AnyNum subtraction of unsigned below 0 panics" {
+  let a: U32 = 3
+  let b: U32 = 5
+  let r      = sub_any(a, b) //~ PANIC "AnyNum subtraction of unsigned below 0 panics"
+  assert r == 0
+}
+
+test "AnyNum addition of U8 over the range panics" {
+  let a: U8 = 200
+  let b: U8 = 100
+  let r     = add_any(a, b) //~ PANIC "AnyNum addition of U8 over the range panics"
+  assert r == 0
+}
+
+test "AnyNum division of an integer by 0 panics" {
+  let a: I16 = 9
+  let z: I16 = 0
+  let r      = div_any(a, z) //~ PANIC "AnyNum division of an integer by 0 panics"
+  assert r == 0
+}
+
+test "AnyNum remainder of an integer by 0 panics" {
+  let a: U64 = 9
+  let z: U64 = 0
+  let r      = rem_any(a, z) //~ PANIC "AnyNum remainder of an integer by 0 panics"
+  assert r == 0
+}

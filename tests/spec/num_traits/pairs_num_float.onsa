@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§4.5"]
+
+// W5-05 U1/t (§6.3, the table): `T: Num` takes the signed integers and the floats, and `T: Float` takes the floats. This is what
+// a program does today and keeps: the unsigned integers that `Num` does not take are in bounds_unsigned_not_num_neg.onsa.
+
+fn num_same[T: Num](x: T) -> T {
+  x
+}
+
+fn float_same[T: Float](x: T) -> T {
+  x
+}
+
+test "Num takes the signed integers" {
+  let a: I8  = -8
+  let b: I16 = -16
+  let c: I32 = -32
+  let d: I64 = -64
+  assert num_same(a) == -8
+  assert num_same(b) == -16
+  assert num_same(c) == -32
+  assert num_same(d) == -64
+}
+
+test "Num takes the floats" {
+  let a: F32 = -1.5
+  let b: F64 = 2.5
+  assert num_same(a) == -1.5
+  assert num_same(b) == 2.5
+}
+
+test "Float takes the floats" {
+  let a: F32 = -1.5
+  let b: F64 = 2.5
+  assert float_same(a) == -1.5
+  assert float_same(b) == 2.5
+}

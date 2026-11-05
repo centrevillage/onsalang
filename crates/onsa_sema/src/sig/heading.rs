@@ -42,13 +42,12 @@ impl<'p> Sema<'p> {
                             // trait this version does not take as a bound
                             // (E0200; with an E0308 in the unit, the first by
                             // its place, §18.1, S-731).
-                            // `AnyNum` and `Int` are bounds of std only until W5-05 (D4).
-                            Ok((NameKind::Trait, e)) => match e.and_then(prelude_bound) {
-                                Some(Bound::AnyNum | Bound::Int) if !self.a.modules.is_std(cx.m) => {
-                                    self.unsupported(cx.def, n.span, Feature::TraitBounds, &[])
-                                }
-                                Some(bound) => list.push((bound, false, n.span)),
-                                None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
+                            Ok((NameKind::Trait, e)) => match e {
+                                Some(Entity::Builtin(Builtin::Trait(i))) => match TRAITS[i as usize] {
+                                    (_, Some(bound)) => list.push((bound, false, n.span)),
+                                    (name, None) => self.unsupported(cx.def, n.span, Feature::PreludeBounds, &[name]),
+                                },
+                                _ => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             },
                             // A bound with an error of its name is a part of the
                             // declaration not read (§18.1): unknown to its users, its
@@ -258,15 +257,6 @@ fn heading_name(
         crate::names::PathEnd::Builtin { .. } => None,
     };
     Ok((end.kind(a, p.span), entity))
-}
-
-/// The bound a trait of the prelude `e` is ([`TRAITS`]); none for another
-/// name.
-fn prelude_bound(e: Entity) -> Option<Bound> {
-    match e {
-        Entity::Builtin(Builtin::Trait(i)) => TRAITS[i as usize].1,
-        _ => None,
-    }
 }
 
 /// The error of `next` after the local `head` (§15.1, S-729, S-741): a

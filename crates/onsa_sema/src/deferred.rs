@@ -71,6 +71,16 @@ pub(crate) enum OpNeed {
     Not,
 }
 
+impl OpNeed {
+    pub(crate) fn symbol(self) -> &'static str {
+        match self {
+            OpNeed::Binary(b) => b.symbol(),
+            OpNeed::Neg => "-",
+            OpNeed::Not => "!",
+        }
+    }
+}
+
 /// The rule of the E0710 of a type argument with no kind (§5.3, S-862).
 pub(crate) const GENERIC_VIEW: &str =
     "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3)";

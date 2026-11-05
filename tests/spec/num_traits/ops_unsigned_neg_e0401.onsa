@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// W5-05 U1/t (R-94; §6.3: "絞れないとき(`T: Unsigned` の否定、`T: Float` のビット演算)は候補を出さない"; §3.4: "符号なし整数に単項の `-`
+// は無い(E0401)"): the unary `-` of an unsigned value is E0401 whether the type is written (`U32`) or is a type parameter
+// whose bound is `Unsigned`, in a function, a method or an expression that holds it. No bound can be narrowed to give it a
+// `-`, so there is no candidate (`fixes = 0`). The note that shows `0 -% u` is not asked here. One error per item (P-01).
+
+pub fn negate_parameter[T: Unsigned](x: T) -> T {
+  -x //~ E0401
+}
+
+pub fn negate_concrete(u: U32) -> U32 {
+  -u //~ E0401
+}
+
+pub fn negate_in_an_expression[T: Unsigned](x: T, y: T) -> T {
+  -x + y //~ E0401
+}
+
+pub fn negate_a_binding[T: Unsigned](x: T) -> T {
+  let y = x
+  -y //~ E0401
+}
+
+pub fn negate_u8(u: U8) -> U8 {
+  -u //~ E0401
+}
+
+pub struct Wheel {
+  n: U32,
+}
+
+impl Wheel {
+  pub fn negate_in_a_method[T: Unsigned](self, x: T) -> T {
+    -x //~ E0401
+  }
+}
+
+// What is right next to them: the wrapping negation of the text of the note.
+pub fn wrapping_negation(u: U32) -> U32 {
+  0 -% u
+}

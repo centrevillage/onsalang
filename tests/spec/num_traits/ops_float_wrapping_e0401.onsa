@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// W5-05 U1/t (§6.3: "ビット演算・`!`・ラップ・飽和は `Int`"; the table: a float has no wrapping or saturating operator): the wrapping
+// and saturating operators of a value of a type parameter whose bound is `Float` are E0401, with no candidate: the bound
+// cannot be narrowed to `Int`, since no type is both (§6.3, the same as the bit operators of `Float`). One error per item
+// (P-01).
+
+pub fn wrapping_add_float[T: Float](a: T, b: T) -> T {
+  a +% b //~ E0401
+}
+
+pub fn wrapping_mul_float[T: Float](a: T, b: T) -> T {
+  a *% b //~ E0401
+}
+
+pub fn saturating_sub_float[T: Float](a: T, b: T) -> T {
+  a -| b //~ E0401
+}
+
+pub fn saturating_add_concrete(a: F64, b: F64) -> F64 {
+  a +| b //~ E0401
+}

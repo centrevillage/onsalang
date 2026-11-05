@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§4.5", "§4.6", "§6.6"]
+
+// W5-05 U1/t (S-73, §6.3: "`AnyNum` は ... `Copy` ... を満たし"; `Num: AnyNum`, `Float: Num`): a value of a type parameter with
+// the bound `Num` or `Float` is `Copy`, so it is read twice, it is the element of a `Buf[T]`, it is repeated in `[x; N]` and it
+// goes where `Copy` is asked. A `const` whose declared type holds `T` is right, with no E0200 of a Shared type (§6.6: "宣言の型が
+// 型パラメータを含み、その型パラメータが `Copy` の境界(数の trait を含む)を持たなければ ... E0200"). Reading that constant
+// is the work of the type arguments of a constant (S-304), not of this case. This is what a program does today and keeps (R-128
+// of the review): `Num` and `Float` here, `AnyNum` `Int` `Unsigned` in copy_anynum_int_fine.onsa.
+
+fn need_copy[U: Copy](x: U) -> U {
+  x
+}
+
+fn twice_num[T: Num](x: T) -> (T, T) {
+  (x, x)
+}
+
+fn twice_float[T: Float](x: T) -> (T, T) {
+  (x, x)
+}
+
+fn via_num[T: Num](x: T) -> T {
+  need_copy(x)
+}
+
+fn via_float[T: Float](x: T) -> T {
+  need_copy(x)
+}
+
+fn head_num[T: Num](b: Buf[T]) -> T {
+  b[0]
+}
+
+fn head_float[T: Float](b: Buf[T]) -> T {
+  b[0]
+}
+
+fn filled_num[T: Num](x: T) -> [T; 3] {
+  [x; 3]
+}
+
+fn filled_float[T: Float](x: T) -> [T; 2] {
+  [x; 2]
+}
+
+fn kept_in_a_pair[T: Num](x: T) -> (T, T) {
+  let p = (x, x)
+  let q = p
+  q
+}
+
+pub struct Hold[T: Num] {
+  a: T,
+}
+
+impl[T: Num] Hold[T] {
+  const NONE: Option[T] = None
+}
+
+pub struct W[T: Float] {
+  a: T,
+}
+
+impl[T: Float] W[T] {
+  const Z: Option[T] = None
+
+  pub fn twice(self) -> (T, T) {
+    (self.a, self.a)
+  }
+}
+
+test "a Num value is read twice" {
+  let a: I32 = -4
+  let (x, y) = twice_num(a)
+  assert x == -4
+  assert y == -4
+  assert kept_in_a_pair(a).0 == -4
+}
+
+test "a Float value is read twice" {
+  let a: F32 = 1.5
+  let (x, y) = twice_float(a)
+  assert x == 1.5
+  assert y == 1.5
+}
+
+test "Num and Float go where Copy is asked" {
+  let a: I64 = 12
+  let b: F64 = 0.5
+  assert via_num(a) == 12
+  assert via_float(b) == 0.5
+}
+
+test "the element of a Buf is a Num or a Float" {
+  var a: Buf[F32] = Buf.zeroed(2)
+  a[0] = 2.5
+  var b: Buf[I16] = Buf.zeroed(1)
+  b[0] = -9
+  assert head_float(a) == 2.5
+  assert head_num(b) == -9
+}
+
+test "x repeated in an array is a Num or a Float" {
+  let a: I8  = 3
+  let b: F32 = 0.25
+  assert filled_num(a)[2] == 3
+  assert filled_float(b)[1] == 0.25
+}
+
+test "a method of a type with a Float parameter reads its field twice" {
+  let h: F32 = 2.0
+  let w      = W { a: h }
+  let (x, y) = w.twice()
+  assert x == 2.0
+  assert y == 2.0
+}

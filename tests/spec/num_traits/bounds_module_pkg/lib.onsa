@@ -1,0 +1,37 @@
+// Generic functions and a type of another module, bounded by the number traits (W5-05 U1/t, spec §6.3, §15.1).
+
+pub struct Gain[T: Num] {
+  g: T,
+}
+
+pub fn double[T: AnyNum](x: T) -> T {
+  x + x
+}
+
+pub fn halve_bits[T: Unsigned](x: T) -> T {
+  x >> 1
+}
+
+pub fn flip[T: Num](x: T) -> T {
+  -x
+}
+
+pub fn low_bits[T: Int](x: T, m: T) -> T {
+  x & m
+}
+
+pub fn lower[T: AnyNum](x: T, y: T) -> T {
+  if x < y {
+    x
+  } else {
+    y
+  }
+}
+
+pub fn make_gain[T: Num](g: T) -> Gain[T] {
+  Gain { g: g }
+}
+
+pub fn gain_of[T: Num](g: Gain[T]) -> T {
+  g.g
+}

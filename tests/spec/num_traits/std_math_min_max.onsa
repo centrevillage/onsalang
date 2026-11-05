@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§6.3", "§3.4"]
+
+// W5-05 U1/t (§13.4: "`abs` は `Num`、`min` / `max` は `AnyNum`"; §6.3: "`std.math` の `abs`(`Num`)と `min` / `max`(`AnyNum`)"): `min` and `max`
+// take every number type, the unsigned integers included (R-354), with the value of the comparison: the smaller and the
+// larger of two integers; for the floats, a NaN in either side is a NaN, and `-0.0 < 0.0` (§3.4). This is what a program does
+// today and keeps; the generic functions that call them with an `AnyNum` bound are in min_max_from_generic.onsa.
+
+use std.math.{max, min}
+
+test "min and max of the unsigned integers" {
+  let a: U8  = 200
+  let b: U8  = 17
+  let c: U16 = 0
+  let d: U16 = 65535
+  let e: U32 = 4294967295
+  let f: U32 = 9
+  let g: U64 = 18446744073709551615
+  let h: U64 = 1
+  assert min(a, b) == 17
+  assert max(a, b) == 200
+  assert min(c, d) == 0
+  assert max(c, d) == 65535
+  assert min(e, f) == 9
+  assert max(e, f) == 4294967295
+  assert min(g, h) == 1
+  assert max(g, h) == 18446744073709551615
+}
+
+test "min and max of the signed integers" {
+  let a: I8  = -128
+  let b: I8  = 127
+  let c: I16 = -5
+  let d: I16 = -6
+  let e: I32 = 0
+  let f: I32 = -1
+  let g: I64 = I64.MIN
+  let h: I64 = 0
+  assert min(a, b) == -128
+  assert max(a, b) == 127
+  assert min(c, d) == -6
+  assert max(c, d) == -5
+  assert min(e, f) == -1
+  assert max(e, f) == 0
+  assert min(g, h) == I64.MIN
+  assert max(g, h) == 0
+}
+
+test "min and max of the floats" {
+  let a: F32 = 1.5
+  let b: F32 = -2.5
+  let c: F64 = 0.25
+  let d: F64 = 0.5
+  assert min(a, b) == -2.5
+  assert max(a, b) == 1.5
+  assert min(c, d) == 0.25
+  assert max(c, d) == 0.5
+}
+
+test "min and max of equal values are that value" {
+  let a: U32 = 7
+  let b: F64 = 0.5
+  assert min(a, a) == 7
+  assert max(a, a) == 7
+  assert max(b, b) == 0.5
+}
+
+test "min and max with a NaN are a NaN" {
+  let n: F64   = F64.NAN
+  let one: F64 = 1.0
+  assert !(min(n, one) == min(n, one))
+  assert !(max(one, n) == max(one, n))
+}
+
+test "min takes -0.0 before 0.0 and max takes 0.0 after it" {
+  let z: F32 = 0.0
+  let m: F32 = -0.0
+  assert min(z, m).to_bits() == 2147483648
+  assert min(m, z).to_bits() == 2147483648
+  assert max(z, m).to_bits() == 0
+  assert max(m, z).to_bits() == 0
+}

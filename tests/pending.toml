@@ -925,13 +925,6 @@ reasons = ["R-155", "S-227"]
 until = "W9-03"
 note = "定数の評価の途中の溢れ（-(-(-128))、-(-128) - 1）は、最終の値が範囲に入っても E0419（§6.6、§3.4）。W2-06 のつなぎは最終の値だけを見て、Option と列挙子の中も見ない"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/maybe_dup_number_bounds_fine.onsa"
-reasons = ["R-131"]
-until = "W5-05"
-note = "`AnyNum`・`Int`・`Unsigned` の境界が今は E0200。数の trait が入る W5-05 で通る。W5-20/t の事例（Copy を含む境界の `W[U]` の種）"
-
 # --- W3-14: 入れ子の深さの上限の事例のうち、上限の後もまだ通らないもの（W3-14/t・W3-14/t2 の案から、2026-10-08）
 
 [[pending]]
@@ -1221,20 +1214,6 @@ until = "W7-11"
 note = "イベントの入出力の見出し。`at event` のクロックが読めるのは W7-11（今は E0302）"
 
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
-[[pending]]
-kind = "test-case"
-target = "tests/spec/module/prelude_bounds_operator_traits.onsa"
-reasons = ["S-107"]
-until = "W5-05"
-note = "演算子 trait は prelude の名前（S-107）だが、境界としての意味は W5-05。今は E0200（user-defined traits as bounds）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/module/prelude_bounds_number_traits.onsa"
-reasons = ["S-107"]
-until = "W5-05"
-note = "数の trait（AnyNum・Int・Unsigned）は prelude の名前（S-107）だが、境界としての意味は W5-05。今は E0200"
-
 [[pending]]
 kind = "test-case"
 target = "tests/spec/module/prelude_bounds_ordinal.onsa"

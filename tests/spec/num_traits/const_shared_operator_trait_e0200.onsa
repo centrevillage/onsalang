@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.3", "§4.5", "§18.1"]
+
+// W5-05 U1/t (S-73; §6.6: "その型パラメータが `Copy` の境界(数の trait を含む)を持たなければ ... E0200"; §6.3: `Copy` is listed by the number
+// traits, and by no operator trait): a `const` whose declared type holds a type parameter that has only an operator trait
+// (`Add`, `Neg`, `BitAnd`) is E0200, as one with no bound is (const_shared_type_param_e0200.onsa), because the operator
+// traits do not give `Copy` and the value may be Shared. The position is the declared type. One error per item (P-01).
+
+pub struct SlotAdd[T: ?Dup] {
+  a: T,
+}
+
+impl[T: Add] SlotAdd[T] {
+  const NONE: Option[T] = None //~ E0200
+}
+
+pub struct SlotNeg[T: ?Dup] {
+  a: T,
+}
+
+impl[T: Neg] SlotNeg[T] {
+  const NONE: Option[T] = None //~ E0200
+}
+
+pub struct SlotBitAnd[T: ?Dup] {
+  a: T,
+}
+
+impl[T: BitAnd] SlotBitAnd[T] {
+  const NONE: Option[T] = None //~ E0200
+}
+
+pub struct SlotWrapping[T: ?Dup] {
+  a: T,
+}
+
+impl[T: WrappingAdd] SlotWrapping[T] {
+  const NONE: Option[T] = None //~ E0200
+}

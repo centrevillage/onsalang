@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.2", "§3.4", "§6.3"]
+
+// W5-05 U1/t (§3.4: "`a << n`、`a >> n` (`n` は `U32`)"; §6.3: "シフトの右辺は `U32`"): `<<` finds `Shl` and `>>` finds `Shr`, and
+// the right side is a `U32` for every width of the left side. `<<` fills with 0 and drops the bits that leave at the top,
+// `>>` is arithmetic for a signed type and logical for an unsigned one, and a shift by the bit width or more panics.
+
+fn shl2[T: Shl](x: T, n: U32) -> T {
+  x << n
+}
+
+fn shr2[T: Shr](x: T, n: U32) -> T {
+  x >> n
+}
+
+test "Shl shifts to the left and drops the bits that leave" {
+  let a: U8  = 1
+  let b: U8  = 3
+  let c: I8  = 1
+  let d: U64 = 1
+  assert shl2(a, 7) == 128
+  assert shl2(b, 7) == 128
+  assert shl2(c, 7) == -128
+  assert shl2(d, 63) == 9223372036854775808
+}
+
+test "Shr is arithmetic for a signed integer" {
+  let a: I32 = -8
+  let b: I8  = -128
+  let c: I64 = -1
+  assert shr2(a, 1) == -4
+  assert shr2(b, 7) == -1
+  assert shr2(c, 63) == -1
+}
+
+test "Shr is logical for an unsigned integer" {
+  let a: U32 = 2147483648
+  let b: U8  = 128
+  let c: U16 = 65535
+  assert shr2(a, 1) == 1073741824
+  assert shr2(b, 7) == 1
+  assert shr2(c, 8) == 255
+}
+
+test "a shift by 0 keeps the value" {
+  let a: I16 = -5
+  let b: U16 = 5
+  assert shl2(a, 0) == -5
+  assert shr2(b, 0) == 5
+}
+
+test "Shl panics where the count is the bit width" {
+  let a: U8 = 1
+  let r     = shl2(a, 8) //~ PANIC "Shl panics where the count is the bit width"
+  assert r == 0
+}
+
+test "Shr panics where the count is over the bit width" {
+  let a: I32 = -1
+  let r      = shr2(a, 33) //~ PANIC "Shr panics where the count is over the bit width"
+  assert r == 0
+}

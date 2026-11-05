@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§6.3", "§3.4"]
+
+// W5-05 U1/t (§13.4: "`abs` は `Num`"; §3.4: "`std.math` の `abs(a)` は、符号付き整数では `-a` と同じく、`a` が `MIN` なら panic する";
+// "`abs`(浮動小数では符号のビットを 0 にした値で、`abs(-0.0)` は `+0.0`)"): `abs` takes the signed integers and the floats,
+// directly and through a generic function whose bound is `Num` (which has `Neg`) or `Float`. This is what a program does today and
+// keeps; the unsigned integers, which `Num` does not take, are in bounds_unsigned_not_num_neg.onsa.
+
+use std.math.{abs}
+
+fn abs_of[T: Num](x: T) -> T {
+  abs(x)
+}
+
+fn abs_of_float[T: Float](x: T) -> T {
+  abs(x)
+}
+
+test "abs of the signed integers" {
+  let a: I8  = -127
+  let b: I16 = 300
+  let c: I32 = -1
+  let d: I64 = 0
+  assert abs(a) == 127
+  assert abs(b) == 300
+  assert abs(c) == 1
+  assert abs(d) == 0
+}
+
+test "abs of the floats" {
+  let a: F32 = -1.5
+  let b: F64 = 2.5
+  let z: F32 = -0.0
+  assert abs(a) == 1.5
+  assert abs(b) == 2.5
+  assert abs(z).to_bits() == 0
+}
+
+test "abs through the bounds Num and Float" {
+  let a: I32 = -8
+  let b: F64 = -0.125
+  assert abs_of(a) == 8
+  assert abs_of(b) == 0.125
+  assert abs_of_float(b) == 0.125
+}
+
+test "abs of the least signed integer panics" {
+  let a: I8 = -128
+  let r     = abs(a) //~ PANIC "abs of the least signed integer panics"
+  assert r == 0
+}
+
+test "abs of the least signed integer through Num panics" {
+  let a: I32 = I32.MIN
+  let r      = abs_of(a) //~ PANIC "abs of the least signed integer through Num panics"
+  assert r == 0
+}

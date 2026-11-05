@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// W5-05 U1/t (R-94; §6.3: "絞れないとき(`T: Unsigned` の否定、`T: Float` のビット演算)は候補を出さない"; the table: a float has no bit
+// operator, no shift and no `!`): the bit operators `&` `|` `^`, the shifts and `!` of a value of a type parameter whose bound
+// is `Float` are E0401, and no bound can be narrowed to give them (`Float` is not an integer), so there is no candidate
+// (`fixes = 0`). One error per item (P-01).
+
+pub fn and_floats[T: Float](a: T, b: T) -> T {
+  a & b //~ E0401
+}
+
+pub fn or_floats[T: Float](a: T, b: T) -> T {
+  a | b //~ E0401
+}
+
+pub fn xor_floats[T: Float](a: T, b: T) -> T {
+  a ^ b //~ E0401
+}
+
+pub fn shift_left_float[T: Float](a: T) -> T {
+  a << 1 //~ E0401
+}
+
+pub fn shift_right_float[T: Float](a: T) -> T {
+  a >> 1 //~ E0401
+}
+
+pub fn invert_float[T: Float](a: T) -> T {
+  !a //~ E0401
+}
+
+pub fn and_concrete_floats(a: F32, b: F32) -> F32 {
+  a & b //~ E0401
+}
+
+pub struct Wheel {
+  n: U32,
+}
+
+impl Wheel {
+  pub fn invert_in_a_method[T: Float](self, x: T) -> T {
+    !x //~ E0401
+  }
+}
