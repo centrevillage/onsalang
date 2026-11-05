@@ -38,6 +38,7 @@ use onsa_diag::hash::{HashMap, HashSet};
 use onsa_syntax::ast::{
     Ast, ExprId, ExprKind, Ident, ItemKind, Mode, Param, ParamName, PatId, StmtId, StmtKind, TypeId,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::def::{DefKind, FlowInput, GenericDef, ModId};
 use crate::flow_names::FlowBuiltin;
@@ -50,11 +51,11 @@ use crate::{Analysis, DefId, Package, flatten};
 /// walk declares them: the source order, except that a `let` and a `var`
 /// are declared after their value (`let x = { let y = 1; y }` declares `y`,
 /// then `x`). The types stage gives the binding `b` the local `LocalId(b.0)`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) struct BindingId(pub u32);
 
 /// A scope of a body: an index of [`BodyNames::scopes`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) struct ScopeId(pub u32);
 
 /// The names of one body, made once by the names stage. A name chain
@@ -69,7 +70,7 @@ pub(crate) struct ScopeId(pub u32);
 /// expression with no record is one the names stage does not decide (a
 /// literal, an operator, a field of a value), one of a chain held as an
 /// error, or one after the name that stopped the walk.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub(crate) struct BodyNames {
     /// The bindings, by [`BindingId`].
     pub bindings: Vec<Binding>,
@@ -138,7 +139,7 @@ impl BodyNames {
 }
 
 /// One binding of a body (§5.1).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Binding {
     pub name: String,
     /// The name where it is first bound.
@@ -164,7 +165,7 @@ pub(crate) struct Binding {
 
 /// What a binding is; one-to-one with [`crate::body::LocalKind`], except the
 /// bindings of a flow (an input, a `let`, the variable of a `par`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum BindingKind {
     Param(Mode),
     SelfParam(Mode),
@@ -180,7 +181,7 @@ pub(crate) enum BindingKind {
 
 /// The root of the value of a binding; of a binding no pattern makes, the
 /// one key the types stage finds it by.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum Origin {
     /// A parameter of the function, by its index in the parameters of the
     /// signature (`FnDef::params`, which `self` is not one of).
@@ -205,7 +206,7 @@ pub(crate) enum Origin {
 }
 
 /// What a node of a name chain resolves to.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum PathRes {
     Local(BindingId),
     /// A const parameter of the item, by its index.
@@ -237,7 +238,7 @@ pub(crate) enum PathRes {
 }
 
 /// What a pattern binds or names.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum PatRes {
     Bind(BindingId),
     /// The item the path of a pattern names (`None`, `Shape.Circle(r)`,
@@ -251,14 +252,14 @@ pub(crate) enum PatRes {
 
 /// The item the path of a struct literal names (a struct, or what the types
 /// stage reports as none), and the type the literal names it by.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StructRes {
     pub entity: Entity,
     pub owner: Option<TyId>,
 }
 
 /// A scope of a body: its parent, and the bindings declared in it in order.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct ScopeInfo {
     pub parent: Option<ScopeId>,
     pub bindings: Vec<BindingId>,

@@ -4,12 +4,13 @@
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{Ident, ItemId, Path, Vis};
+use serde::{Deserialize, Serialize};
 
 use crate::def::{Declared, DefId, DefKind, ModId};
 use crate::ty::{BuiltinTy, TyId};
 
 /// Names in scope everywhere (prelude, §15.1) and builtin types (§4.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Builtin {
     /// `I32`, `F32`, `Bool`, `Char`
     Scalar(TyId),
@@ -25,7 +26,7 @@ pub enum Builtin {
 }
 
 /// What a path resolves to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Entity {
     Module(ModId),
     Def(DefId),
@@ -174,7 +175,7 @@ pub enum Callee {
 /// A name a `use` bound in its module (§15.1): of the module's body only,
 /// never of the namespace other modules read (S-611). `span` is the name in
 /// the `use`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum UseBinding {
     Bound {
         entity: Entity,
@@ -206,7 +207,7 @@ impl UseBinding {
 /// Where a fix candidate adds a `use` in the file of a module (spec §15.1,
 /// R-39): after the last `use` of its top level read whole, or else before
 /// its first unit (its doc comments and attributes included).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UseAt {
     /// `"\nuse x"` at the end of the unit of the last `use`.
     After(u32),
@@ -214,7 +215,7 @@ pub enum UseAt {
     Before(u32),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Import {
     pub path: Path,
     pub names: Option<Vec<Ident>>,
@@ -225,7 +226,7 @@ pub struct Import {
 
 /// What a dependency of a `use` reaches (§15.1, S-594): the module of an
 /// item taken, or a module taken and every module below it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DepTarget {
     At(ModId),
     Below(ModId),
@@ -241,14 +242,14 @@ impl DepTarget {
 
 /// A dependency of a `use`: `name` is the name it takes (or the last
 /// element read), `span` the `use`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Dep {
     pub target: DepTarget,
     pub name: Span,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModInfo {
     /// `dsp.voice`; empty for a package root.
     pub path: String,
@@ -290,7 +291,7 @@ pub struct ModInfo {
 }
 
 /// The names of an E0304 or an E0305 in the spaces of a module (§15.1).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Clashed {
     pub body: HashSet<String>,
     pub namespace: HashSet<String>,
@@ -502,7 +503,7 @@ impl Owner {
 }
 
 /// The module graph and the tables of names. Owned by `Analysis`.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Modules {
     pub mods: Vec<ModInfo>,
     /// Package roots, by package index.

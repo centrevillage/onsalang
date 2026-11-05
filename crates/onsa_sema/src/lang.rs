@@ -4,6 +4,8 @@
 //! them (§9.1). The sema stages read [`LangItems`]; lowering and the backends
 //! read what the stages recorded.
 
+use serde::{Deserialize, Serialize};
+
 use crate::Analysis;
 use crate::def::DefId;
 use crate::resolve::Entity;
@@ -17,7 +19,7 @@ pub(crate) const OPTION: usize = 0;
 pub(crate) const RESULT: usize = 1;
 
 /// A row of [`ENUMS`] in the analysis: the enum and the indices of its variants.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LangEnum {
     pub def: DefId,
     pub keep: u32,
@@ -26,7 +28,7 @@ pub struct LangEnum {
 
 /// The rows of [`ENUMS`]: none with no `std.core` (unit tests of a package
 /// with no std). Of std alone, which [`crate::analyze_on`] does not read again.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LangItems {
     enums: [Option<LangEnum>; ENUMS.len()],
 }

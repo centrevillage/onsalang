@@ -3,13 +3,14 @@
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_syntax::ast::Mode;
+use serde::{Deserialize, Serialize};
 
 use crate::def::DefId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TyId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IntKind {
     I8,
     I16,
@@ -69,7 +70,7 @@ impl IntKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FloatKind {
     F32,
     F64,
@@ -93,7 +94,7 @@ impl FloatKind {
 }
 
 /// Builtin generic types (spec §4.1). The kind column of §4.1 is in `kind.rs`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BuiltinTy {
     /// `Str` (Shared, 0 args)
     Str,
@@ -152,7 +153,7 @@ impl BuiltinTy {
 
 /// Length of a fixed-length array (§4.1): a constant, or a const generic
 /// parameter of the enclosing item.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Len {
     Const(u32),
     Param(u32),
@@ -163,7 +164,7 @@ pub enum Len {
 /// Rates of flow signals (§11.3), the clocks `init`, `block`, `sample` of
 /// the inputs and the output of a flow.
 /// Constants have no rate (`None` elsewhere).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Rate {
     Init,
     Ctl,
@@ -196,7 +197,7 @@ impl Rate {
 }
 
 /// Function type (§4.1). Captures are not part of the type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FnTy {
     pub rt: bool,
     pub params: Vec<(Mode, TyId)>,
@@ -206,7 +207,7 @@ pub struct FnTy {
 
 /// Effect row (§8). Phase 1 recognizes `Alloc`; other names are kept so that
 /// `std` can declare them (D-08) and user code gets E0200 when it names them.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EffectSet {
     pub alloc: bool,
     /// Effects other than `Alloc`, by name (unsupported in phase 1).
@@ -221,7 +222,7 @@ impl EffectSet {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Ty {
     Int(IntKind),
     Float(FloatKind),
@@ -269,7 +270,7 @@ pub struct Env<'e> {
 }
 
 /// The interner.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Types {
     tys: Vec<Ty>,
     map: HashMap<Ty, TyId>,

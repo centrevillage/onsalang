@@ -80,8 +80,9 @@ use std::sync::Arc;
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Diagnostic, FileId};
 use onsa_syntax::Parsed;
+use serde::{Deserialize, Serialize};
 
-pub use base::{Base, analyze_on};
+pub use base::{Base, BaseError, analyze_on};
 pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
 /// The names of the builtin methods and associated items (for the gate, Q-14).
 pub use builtin::names as builtin_member_names;
@@ -117,7 +118,7 @@ impl Module {
 /// Which package the driver loaded: the embedded std or an ordinary one
 /// (R-88 (1)). The privileges of std (the effects phase 1 does not implement,
 /// D-08; `target` declarations, D-07) read this, not the package's name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PackageRole {
     Std,
     Ordinary,
@@ -198,7 +199,7 @@ pub fn flatten(pkg: &Package) -> Vec<&Package> {
 }
 
 /// Result of analysis (T2-1 .. T2-4). Everything the body checker needs.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Analysis {
     pub modules: Modules,
     pub defs: Vec<Def>,

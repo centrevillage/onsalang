@@ -9,6 +9,8 @@ rust-version.workspace = true
 onsa_workspace_hack.workspace = true
 onsa_diag.workspace = true
 onsa_syntax.workspace = true
+postcard.workspace = true
+serde.workspace = true
 
 [lints]
 workspace = true

@@ -3,6 +3,7 @@
 use std::cell::{Cell, RefCell};
 
 use onsa_diag::hash::{HashMap, HashSet};
+use serde::{Deserialize, Serialize};
 
 use crate::body::bounds::Bounds;
 use crate::def::{Bound, GenericDef, GenericKind};
@@ -10,7 +11,7 @@ use crate::ty::{BuiltinTy, Env, Ty, TyId};
 use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Kind {
     Copy,
     Shared,

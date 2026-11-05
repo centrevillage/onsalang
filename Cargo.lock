@@ -271,6 +271,8 @@ dependencies = [
  "onsa_diag",
  "onsa_syntax",
  "onsa_workspace_hack",
+ "postcard",
+ "serde",
 ]
 
 [[package]]

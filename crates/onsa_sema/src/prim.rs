@@ -6,6 +6,8 @@
 
 use std::sync::OnceLock;
 
+use serde::{Deserialize, Serialize};
+
 use crate::def::{DefId, DefKind};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
 use crate::{Analysis, ModId};
@@ -21,7 +23,7 @@ pub(crate) const INTS: [IntKind; 8] =
 
 /// `std.math` functions (`target rt fn`, generic over `Float`), and the
 /// float `%` (§3.4), which is no function of std.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MathFn {
     Exp,
     Exp2,
@@ -121,7 +123,7 @@ pub const NAN_BITS_F32: u32 = 0x7FC0_0000;
 /// The same for an `F64`.
 pub const NAN_BITS_F64: u64 = 0x7FF8_0000_0000_0000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CheckedOp {
     Add,
     Sub,
@@ -282,7 +284,7 @@ impl Prim {
 
 /// The declarations of `std.test` no backend provides until M5 (spec §15.2,
 /// S-69, R-79): a use is E0200 wherever it runs or is built.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PendingPrim {
     Check,
     GenF32,
@@ -339,7 +341,7 @@ pub fn row_self(a: &Analysis, def: DefId) -> Option<TyId> {
 
 /// The primitive of a `std` `target` declaration before its instantiation
 /// (S-69 (2)): the family of [`Prim`]s it stands for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PrimRow {
     /// On a float, [`Prim::Math`]; `abs` / `min` / `max` on an integer too.
     Math(MathFn),

@@ -59,6 +59,7 @@ use onsa_syntax::ast::{
     Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind,
     UnOp,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
 use crate::consteval::{self, ConstValue};
@@ -79,7 +80,7 @@ pub(crate) use rate::finish_flow;
 use rate::{RStop, Rater};
 
 /// Rates with constants as the bottom (§11.3: `定数 < Init < Ctl < Sig`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum FlowRate {
     Const,
     Init,
@@ -107,7 +108,7 @@ impl FlowRate {
 }
 
 /// A top-level `let` of a flow body.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowLet {
     pub pat: PatId,
     /// Locals bound by the pattern (one for `let y = ...`).
@@ -125,7 +126,7 @@ pub struct FlowLet {
 
 /// The `init` argument of `prev~` / `delay~` / `vdelay~` (§11.4), or the
 /// value of an omitted one (`map`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InitArg {
     /// A compile-time constant: no storage needed.
     Const(ConstValue),
@@ -134,7 +135,7 @@ pub enum InitArg {
 }
 
 /// A stateful node of a flow body (§11.4, §11.5).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Node {
     Prev { name: String, expr: ExprId, arg: ExprId, init: InitArg, ty: TyId },
     Delay { name: String, expr: ExprId, arg: ExprId, n: u32, init: InitArg, ty: TyId },
@@ -175,7 +176,7 @@ impl Node {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FlowInfo {
     pub body: BodyInfo,
     pub expr_rates: HashMap<ExprId, FlowRate>,

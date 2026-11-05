@@ -10,6 +10,7 @@ use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, PatId, PatKind, Path, StmtKind};
 use onsa_syntax::hole_tuple_index;
+use serde::{Deserialize, Serialize};
 
 use crate::binding::{Head, HeadRow};
 use crate::body::{BodyInfo, LocalId};
@@ -27,7 +28,7 @@ pub(super) struct Place {
 /// array at an index, and (a pattern's) into the payload of a variant, which
 /// stands for the whole of the enum value (§5.2, S-796): no step follows it.
 /// A path of fields taken out is of these too ([`crate::body::Taken`]).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum Proj {
     Field(String),
     Elem(u32),

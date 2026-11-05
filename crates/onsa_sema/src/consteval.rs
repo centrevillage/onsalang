@@ -3,11 +3,12 @@
 //! that call functions are evaluated by the interpreter in M3.
 
 use onsa_syntax::ast::{ExprId, ExprKind, Lit, UnOp};
+use serde::{Deserialize, Serialize};
 
 use crate::body::{Checker, Target};
 use crate::ty::Ty;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ConstValue {
     Int(i128),
     /// The value rounded once to its type (`onsa_syntax::float_value`): an

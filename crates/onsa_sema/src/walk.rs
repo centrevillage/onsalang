@@ -6,6 +6,7 @@
 use std::cell::{Cell, RefCell};
 
 use onsa_diag::hash::HashMap;
+use serde::{Deserialize, Serialize};
 
 use crate::def::{DefKind, FieldDef, Fields, FlowTy, VariantDef};
 use crate::kind::Kind;
@@ -31,7 +32,7 @@ const STACK_RESERVE: usize = 1 << 20;
 pub(crate) type Key = (DefId, Vec<TyId>, Under);
 
 /// How the arguments of a [`Key`] are read (R-317).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum Under {
     /// None is open.
     Closed,
@@ -54,7 +55,7 @@ pub(crate) enum Under {
 /// than the items being found hold, whatever the items found before. Kept
 /// from the end of the lowering of the declarations (`ready`), whose fields
 /// are not all lowered before.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub(crate) struct Known {
     pub(crate) ready: bool,
     /// The keys under each item being found, at its number.

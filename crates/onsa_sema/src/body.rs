@@ -20,6 +20,7 @@ use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
     PatId, PatKind, Path, RangeEnd, RangeHead, StmtId, StmtKind, StrSeg, UnOp,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::binding::{Bind, Head, HeadRow, LitClass};
 use crate::builtin;
@@ -50,10 +51,10 @@ mod statements;
 
 // ---------------------------------------------------------------- tables
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct LocalId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LocalKind {
     /// A function parameter with its mode.
     Param(Mode),
@@ -86,7 +87,7 @@ impl LocalKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalInfo {
     pub name: String,
     pub span: Span,
@@ -114,7 +115,7 @@ impl LocalInfo {
 }
 
 /// Instantiation of a generic def at a call site (for monomorphization).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Instance {
     pub def: DefId,
     /// One per generic parameter of the def (const parameters as `ConstVal`).
@@ -122,11 +123,11 @@ pub struct Instance {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct InstId(pub u32);
 
 /// What a path, field chain, or call resolved to.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Target {
     Local(LocalId),
     /// A `const N` generic parameter used as a `U32` value.
@@ -163,14 +164,14 @@ pub enum Target {
 
 /// The constructors of a `?` (§9.1), by their index: that of the value it
 /// takes out, and that of the early return, which keeps its elements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TryArms {
     pub keep: u32,
     pub exit: u32,
 }
 
 /// Typed body of one function, test, or `const` initializer.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BodyInfo {
     /// Type of every expression, fully resolved (variables substituted).
     pub expr_types: HashMap<ExprId, TyId>,
@@ -221,7 +222,7 @@ pub struct BodyInfo {
 }
 
 /// A path of fields taken out of the owned local `root` at `at` (S-85).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Taken {
     pub at: Span,
     pub root: LocalId,

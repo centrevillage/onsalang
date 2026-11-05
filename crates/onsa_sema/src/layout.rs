@@ -1,6 +1,8 @@
 //! Layout (spec §12.4): declaration order, natural alignment, no reordering.
 //! Enums: the smallest tag of `U8` / `U16` / `U32`, then the largest variant.
 
+use serde::{Deserialize, Serialize};
+
 use crate::ty::{BuiltinTy, Env, FloatKind, IntKind, Len, Ty, TyId};
 use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId};
@@ -8,7 +10,7 @@ use crate::{Analysis, DefId};
 /// Pointer width of the reference host, for `Ptr` and function values.
 pub const PTR_SIZE: u32 = 8;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Layout {
     pub size: u32,
     pub align: u32,

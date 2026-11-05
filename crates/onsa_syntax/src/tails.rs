@@ -6,6 +6,7 @@
 //! [`Diverging`], the table it makes once and every later stage reads.
 
 use onsa_diag::hash::HashSet;
+use serde::{Deserialize, Serialize};
 
 use crate::ast::{Arg, Ast, BinOp, Block, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
@@ -18,7 +19,7 @@ use crate::ast::{Arg, Ast, BinOp, Block, ExprId, ExprKind, Lit, Mode, StmtId, St
 /// the same place. [`Ast::leaves_loop`] is read by the names stage and a
 /// candidate of the types stage: a pure function of the tree, no second
 /// decision.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Diverging {
     /// The expressions of a diverging form.
     exprs: HashSet<ExprId>,

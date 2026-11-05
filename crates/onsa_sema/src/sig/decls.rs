@@ -25,12 +25,13 @@
 //! is as deep as a type written (§2.5).
 
 use onsa_syntax::ast::ExprId;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 use crate::names::builtin_ty;
 
 /// What the order of the declarations leaves to the later stages.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Decls {
     /// The declarations of a cycle: a name of one is the error type, and a
     /// constant of one has no value, with no diagnostic (§18.1).

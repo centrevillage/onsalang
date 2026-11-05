@@ -3,19 +3,20 @@
 
 use onsa_diag::Span;
 use onsa_syntax::ast::{ExprId, ItemId, Mode, Vis};
+use serde::{Deserialize, Serialize};
 
 use crate::ty::{EffectSet, Rate, TyId};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct DefId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ModId(pub u32);
 
 /// What a bound is in this version (§6.3, §4.6): a trait of the provisional
 /// rows of [`TRAITS`] (S-72; user traits are phase 2), a kind constraint, or
 /// the implicit `Escape` of a type parameter (§4.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Bound {
     AnyNum,
     Num,
@@ -97,7 +98,7 @@ impl Bound {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GenericKind {
     /// `T`, `T: Num`, `T: ?Dup` (`dup == false` lifts the implicit `Dup` bound, §4.5).
     /// `unknown`: a bound is a name the names stage holds as an error (§18.1,
@@ -111,14 +112,14 @@ pub enum GenericKind {
     Effect,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenericDef {
     pub name: String,
     pub span: Span,
     pub kind: GenericKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParamSig {
     pub name: String,
     pub mode: Mode,
@@ -126,7 +127,7 @@ pub struct ParamSig {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FnDef {
     pub generics: Vec<GenericDef>,
     /// `self` receiver mode, for methods.
@@ -146,7 +147,7 @@ pub struct FnDef {
 }
 
 /// Functions generated for a flow (§11.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FlowFn {
     Init,
     Reset,
@@ -156,7 +157,7 @@ pub enum FlowFn {
     ParamsDefault,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldDef {
     pub name: String,
     pub ty: TyId,
@@ -166,7 +167,7 @@ pub struct FieldDef {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Fields {
     Named(Vec<FieldDef>),
     /// `target type` / `extern` opaque types, and flow `State` until M3.
@@ -175,7 +176,7 @@ pub enum Fields {
 
 /// The traits derived at the head of a type (§6.4; S-13: `Hash`, `Show` and `Ordinal` are E0200 in phase 1,
 /// in the list still, so that its users read them as derived, §18.1, R-328).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Derive {
     PartialEq,
     Eq,
@@ -187,7 +188,7 @@ pub enum Derive {
     Ordinal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructDef {
     pub generics: Vec<GenericDef>,
     pub fields: Fields,
@@ -198,7 +199,7 @@ pub struct StructDef {
     pub flow_ty: Option<FlowTy>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FlowTy {
     State,
     Config,
@@ -217,14 +218,14 @@ impl FlowTy {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VariantDef {
     pub name: String,
     pub fields: Vec<TyId>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnumDef {
     pub generics: Vec<GenericDef>,
     pub variants: Vec<VariantDef>,
@@ -232,7 +233,7 @@ pub struct EnumDef {
     pub derives: Option<Vec<Derive>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstDef {
     pub ty: TyId,
     /// `None` inside a `trait`, and for generated `SIZE` / `BULK_SIZE` (M3).
@@ -241,7 +242,7 @@ pub struct ConstDef {
     pub int_value: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImplDef {
     pub generics: Vec<GenericDef>,
     pub self_ty: TyId,
@@ -253,7 +254,7 @@ pub struct ImplDef {
 /// `@param(...)` metadata (§11.7). Numeric values are evaluated from literals,
 /// as values of the input's type (`onsa_syntax::float_value`: an `F32` value
 /// is held exactly in the `f64`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParamMeta {
     /// The width of the input's type the numbers are values of (`F64` for
     /// an integer input, whose values every `f64` here holds).
@@ -286,7 +287,7 @@ impl ParamMeta {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowInput {
     pub name: String,
     pub rate: Rate,
@@ -298,7 +299,7 @@ pub struct FlowInput {
     pub name_span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowDef {
     pub inputs: Vec<FlowInput>,
     /// Output value type (rate is always `Sig`, §11.6).
@@ -308,7 +309,7 @@ pub struct FlowDef {
     pub members: Vec<(String, DefId)>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DefKind {
     Fn(FnDef),
     Flow(FlowDef),
@@ -339,7 +340,7 @@ pub enum DefKind {
 /// its keyword tells (§18.1): what is not read of it (the members of a
 /// trait or an effect, the signature of an `extern` function) is an error
 /// with no diagnostic where it is used.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Declared {
     Trait,
     Effect,
@@ -352,7 +353,7 @@ pub enum Declared {
     Block,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Def {
     pub name: String,
     pub module: ModId,

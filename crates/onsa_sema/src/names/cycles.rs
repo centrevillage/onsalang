@@ -17,6 +17,7 @@ use std::cell::RefCell;
 
 use onsa_diag::hash::HashMap;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
+use serde::{Deserialize, Serialize};
 
 use crate::def::ModId;
 use crate::resolve::{Dep, DepTarget, Entity, Modules};
@@ -25,7 +26,7 @@ use crate::{Analysis, DefId, Package};
 
 /// The edges of the graph of the dependencies of the `use`, by point: the
 /// module `m` is the point `m`, and S(m) the point `N + m`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ImportGraph {
     edges: Vec<Vec<usize>>,
     /// The component of each point, numbered sinks first (Tarjan): a point
@@ -38,7 +39,7 @@ pub(crate) struct ImportGraph {
 /// of each pair asked (the bodies ask for one path more than once), the
 /// number of the last walk, and the walk that last saw each point, before
 /// and after it passed a module (no array made per walk).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Walks {
     answers: HashMap<(usize, usize), bool>,
     count: u64,

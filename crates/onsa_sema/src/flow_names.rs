@@ -8,6 +8,7 @@
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::Clock;
+use serde::{Deserialize, Serialize};
 
 use crate::ty::Rate;
 
@@ -38,7 +39,7 @@ const SAMPLE_TICK: &str = "sample_tick";
 
 /// A builtin name of a flow (§2.2, §11.4), as the names stage records a
 /// flow body naming one (`prev~(x)`, `sample_rate()`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum FlowBuiltin {
     Delay(Delay),
     SampleRate,
@@ -91,7 +92,7 @@ pub(crate) fn is_builtin(name: &str) -> bool {
 }
 
 /// A built-in delay (§11.4): the one table of their names and arguments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Delay {
     /// `prev~`
     Prev,

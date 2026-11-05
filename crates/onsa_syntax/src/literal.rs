@@ -7,6 +7,7 @@
 //! and the table of the forms of other languages read alike (D-15).
 
 use onsa_diag::{Diagnostic, Span};
+use serde::{Deserialize, Serialize};
 
 use std::ops::Range;
 
@@ -699,7 +700,7 @@ fn shifted_exponent(exponent: &str, shift: i64) -> String {
 
 /// The width of a float type, for [`float_value`] (`onsa_syntax` knows no
 /// types: the types stage maps its own).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FloatWidth {
     F32,
     F64,

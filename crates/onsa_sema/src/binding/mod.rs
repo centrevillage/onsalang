@@ -19,6 +19,7 @@ use onsa_diag::Stage;
 use onsa_diag::hash::HashMap;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
 use onsa_syntax::tails::Tail;
+use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, LocalId, view_base};
 use crate::def::GenericDef;
@@ -33,7 +34,7 @@ mod tests;
 
 /// The state of a binding (§5.4, R-85 (1)): one of four, so that a borrow
 /// that can be written cannot be made.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Bind {
     Owned,
     /// Owned and written to: a `var`, a `move` parameter and `move self`
@@ -61,7 +62,7 @@ impl Bind {
 }
 
 /// A head whose bindings take the row of its value (§5.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Head {
     Let(StmtId),
     For(StmtId),
@@ -69,7 +70,7 @@ pub enum Head {
 }
 
 /// The row of a head (§5.4).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HeadRow {
     Owned,
     /// `sources`: the places of the value the bindings derive from (S-604:
@@ -83,7 +84,7 @@ pub enum HeadRow {
 
 /// What a literal is (§5.4): a static value (S-610), one that needs no drop
 /// (S-613), or owned with its first element that made it so.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LitClass {
     Static,
     NoDrop,
