@@ -612,3 +612,10 @@ left = "expected newline after the declaration, found identifier"
 input = "tests/fuzz/9d465f03.onsa"
 reasons = ["S-384"]
 note = "a line that starts with `-` and leaves a word after the join: two errors from the start"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0001"
+left = "a number has no suffix"
+input = "tests/fuzz/43d12127.onsa"
+reasons = ["S-384"]
+note = "`- 1n` は誤りが二つある入力（行頭の `- ` と、接尾辞の付いた数 `1n`）。つなぐ候補が `1n` ごと前の行へ移すので、残る誤りの位置が変わる。候補の約束は誤りが一つの単位に当たる（§18.1）"
