@@ -1,0 +1,3 @@
+enum Alloc
+pub fn k()->Buf[F32]uses{Alloc}{Buf.zeroed(2)
+}

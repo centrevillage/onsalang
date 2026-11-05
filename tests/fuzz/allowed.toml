@@ -598,3 +598,10 @@ left = "neither `…` nor `…` is defined in this module"
 input = "tests/fuzz/2e1ff966.onsa"
 reasons = ["S-384", "S-895"]
 note = "an impl Tr for Ty with a path with no use and an orphan target: two errors from the start, the second one seen once the path resolves (S-895)"
+
+[[allowed]]
+class = "fix|E0601|add `…`|E0002"
+left = "expected `…` (a function body), found `…`"
+input = "tests/fuzz/09c63014.onsa"
+reasons = ["S-384"]
+note = "a cut `enum Alloc` that hides the effect in a `uses {Alloc}` already written: two errors from the start, and the row gets a second `uses`"
