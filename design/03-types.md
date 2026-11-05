@@ -1,6 +1,6 @@
 ### 3.3 型と種（`onsa_sema`）
 
-- `Ty` はインターン（`TyId(u32)`）: `Int`・`Float`・`Bool`・`Char`・`Unit`・`Array(TyId, Len)`・`Tuple`・`Named(DefId, Vec<TyId>)`・`Builtin(BuiltinTy, Vec<TyId>)`（`Str`・`Bytes`・`Array`・`Map`・`Set`・`Buf`・`Span`・`Ptr`・`Option`・`Result`）・`Fn(FnTy)`・`Param`・`ConstVal`・`Var`（推論中）・`Error`。
+- `Ty` はインターン（`TyId(u32)`）: `Int`・`Float`・`Bool`・`Char`・`Unit`・`Array(TyId, Len)`・`Tuple`・`Named(DefId, Vec<TyId>)`・`Builtin(BuiltinTy, Vec<TyId>)`（`Str`・`Bytes`・`Array`・`Map`・`Set`・`Buf`・`Span`・`Ptr`）・`Fn(FnTy)`・`Param`・`ConstVal`・`Var`（推論中）・`Error`。
   intern は深さと大きさと「open か」を一度だけ計算して持つ（上限は `TYPE_DEPTH_LIMIT` 256・`TYPE_SIZE_LIMIT` 4096、§4.4、S-264）。型引数の代入は `Types::subst` の一つ（R-30）。
   クロックは型ではなく、flow の計画（§3.5）の属性である（S-102 で `Rate(Rate, TyId)` を取り除いた）。
 - 種（`Kind::{Copy, Shared, Affine}`）・配置・`rt` の破棄は、`walk.rs` の宣言を辿る一つの歩きが読み、宣言と閉じた引数の組ごとに一度だけ答える（`Known`、R-30）。
