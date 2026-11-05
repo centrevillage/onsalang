@@ -1,0 +1,5 @@
+struct Rg[T] { x: T }
+impl[T: Show] Rg[T] { fn b() -> U32 { 2 } }
+type RB = Rg[fn() -> I32]
+fn main() {}
+test "t" { assert(RB.b() == 2) }

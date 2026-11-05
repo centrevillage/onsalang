@@ -1,0 +1,6 @@
+struct Rg[T] { x: T }
+impl[T: Copy] Rg[T] { const Z: Option[T] = None }
+fn main() {}
+test "t" { let z = Rg.Z
+  let w: Option[F32] = z
+  assert(w == None) }

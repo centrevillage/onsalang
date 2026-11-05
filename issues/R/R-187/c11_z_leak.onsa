@@ -1,0 +1,4 @@
+struct Rg[T] { x: T }
+impl[T: Copy] Rg[T] { const Z: Option[T] = None }
+fn f[U: Copy]() -> Option[U] { Rg.Z }
+fn main() {}

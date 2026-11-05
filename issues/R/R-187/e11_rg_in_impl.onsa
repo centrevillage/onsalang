@@ -1,0 +1,6 @@
+struct Rg[T, const N: U32] { x: T }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = N
+  fn cap(self) -> U32 { Rg.CAP } }
+fn main() {}
+test "t" { let r: Rg[F32, 4] = Rg { x: 1.0 }
+  assert(r.cap() == 4) }

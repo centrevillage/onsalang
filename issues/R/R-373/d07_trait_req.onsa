@@ -1,0 +1,2 @@
+trait Tr: Dup {}
+fn main() {}

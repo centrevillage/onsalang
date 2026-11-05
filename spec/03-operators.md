@@ -127,7 +127,9 @@ let b = y.to_bits()              // F32 -> U32、ビット表現（F64 は U64�
 - 床除算は `div_euclid` / `rem_euclid` のメソッドで書く。
 - panic しうる整数の演算子とメソッドには、全て検査付きのメソッドがあり、panic の代わりに `None` を返す（`Option` を返す）: `checked_add` `checked_sub` `checked_mul` `checked_div` `checked_rem` `checked_neg`（符号付きだけ） `checked_shl` `checked_shr` `checked_div_euclid` `checked_rem_euclid`。
   panic しうる演算を足すときは、検査付きも足す。
-- 整数と浮動小数のメソッドは、上の床除算と検査付きと、ビット表現の `to_bits()`（§3.3）で全てである。関連関数は §3.3 の変換（`round_from`、`trunc_from`、`trunc_sat_from`、`narrow_from`、`from_bits`）と `default()`（§6.3）で全てである。それ以外の計算（`abs`、`min`、`max`、`sqrt`、`floor`、`is_nan` など）は `std.math` の関数で書き、メソッドの形は無い（E0413。修正候補は関数の形）。同じ計算に二つの呼び方を作らない（§6.2）。
+  床除算と、`checked_neg` を除く検査付きのメソッドは、総称の整数の型パラメータの値にも呼べる（§6.3）。
+- 整数と浮動小数のメソッドは、上の床除算と検査付きと、ビット表現の `to_bits()`（§3.3）で全てである。関連関数は §3.3 の変換（`round_from`、`trunc_from`、`trunc_sat_from`、`narrow_from`、`from_bits`）と `default()`（§6.3）で全てである。
+  それ以外の計算（`abs`、`min`、`max`、`sqrt`、`floor`、`is_nan` など）は `std.math` の関数で書き、メソッドの形は無い（E0413。修正候補は関数の形）。同じ計算に二つの呼び方を作らない（§6.2）。
 - 既定の `+ - *` を検査付きにするのは、非 DSP のコード（ボイス割り当て、MIDI の解析）の添字計算のバグを黙って通さないためで、Swift と Rust（デバッグ）と同じ意味である。DSP のラップの意図は演算子で書けるので panic にならず、panic は本当のバグだけになる。
 
 浮動小数（`F32` は IEEE 754 の binary32、`F64` は binary64）:

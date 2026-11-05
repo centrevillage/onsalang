@@ -1,0 +1,3 @@
+struct Rg[T] { x: T }
+impl[T: Copy] Rg[T] { const Z: Option[T] = None }
+fn main() { let _ = Rg.Z }
