@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.7", "§2.4"]
+// fixes = 0
+
+// E0401, W5-05 U4/t (spec §6.6: "他のリテラルは型パラメータの値にならない (整数のリテラルと、… E0401 …)。… 1 を `T.ONE` (`T: Int`) で書く"; §2.4: an integer literal and a float literal are two kinds
+// of literal, and the type of a literal is decided by the expected type): an integer literal is not a value of a type parameter, even when the bound is `Float`: the literal in an operand
+// on either side, in a comparison, under a `-`, in a `let` with the type `T`, as the tail, in an array and in a call argument. One literal in each function. No candidate (`fixes = 0`).
+// The same integer literals where the type is `U32` or `I32` are fine, and a function with a float literal is fine in the same module.
+
+fn right_operand[T: Float](x: T) -> T {
+  x * 2 //~ E0401
+}
+
+fn left_operand[T: Float](x: T) -> T {
+  2 * x //~ E0401
+}
+
+fn in_a_comparison[T: Float](x: T) -> Bool {
+  x > 1 //~ E0401
+}
+
+fn zero_literal[T: Float](x: T) -> T {
+  x + 0 //~ E0401
+}
+
+fn negative[T: Float](x: T) -> T {
+  x + (-1) //~ E0401
+}
+
+fn typed_let[T: Float](x: T) -> T {
+  let one: T = 1 //~ E0401
+  x + one
+}
+
+fn tail[T: Float](x: T) -> T {
+  1 //~ E0401
+}
+
+fn in_an_array[T: Float](x: T) -> [T; 2] {
+  [x, 1] //~ E0401
+}
+
+fn in_a_call[T: Float](x: T) -> T {
+  add(x, 3) //~ E0401
+}
+
+fn add[T: Float](x: T, y: T) -> T {
+  x + y
+}
+
+fn integer_with_a_concrete_type(n: U32) -> U32 {
+  n * 2 + 1
+}
+
+fn float_literal_is_fine[T: Float](x: T) -> T {
+  x * 2.0
+}

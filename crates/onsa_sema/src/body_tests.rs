@@ -116,6 +116,49 @@ fn float_literal_ranges() {
 }
 
 #[test]
+fn float_literal_of_a_type_parameter_notes() {
+    // §6.6, S-881: what the literal cannot be says why; the notes are of no case's
+    // expectation (the cases do not hold the words of a diagnostic).
+    let of = |src: &str| {
+        let a = check_in(src);
+        let [d] = &a.diagnostics[..] else { panic!("{src}: {:?}", a.diagnostics) };
+        (d.code, d.fixes.len(), d.notes.iter().map(|n| n.message.clone()).collect::<Vec<_>>())
+    };
+    let bound = "a float literal is a value of `T` only when the bounds of `T` include `Float` (§6.6)";
+    for src in [
+        "pub fn f[T: Num](x: T) -> T { x * 0.5 }\n",
+        "pub fn f[T: Num](x: T) -> T { 0.5 * x }\n",
+        "pub fn f[T: Int](x: T) -> Option[T] { Some(0.5) }\n",
+        "pub fn f[T](x: T) -> T { 0.5 }\n",
+    ] {
+        assert_eq!(of(src), (Code::E0401, 0, vec![bound.to_string()]), "{src}");
+    }
+    // The integer literal and a float type are not of this rule.
+    assert_eq!(of("pub fn f[T: Float](x: T) -> T { x * 2 }\n").2.len(), 0);
+    assert_eq!(of("pub fn f(x: U32) -> U32 { x * 0.5 }\n").2.len(), 0);
+    // The source of a conversion to `T`, as it is written; to a type that is not `T: Float`, the rule of a literal.
+    let to = |t: &str, lit: &str| {
+        format!(
+            "a float literal is a value of `{t}` by itself: write it where `{t}` is expected (`let x: {t} = {lit}`) (§6.6)"
+        )
+    };
+    for (src, t, lit) in
+        [("T.round_from(0.5)", "T", "0.5"), ("T.round_from(-0.5)", "T", "-0.5"), ("T.round_from((0.5))", "T", "0.5")]
+    {
+        let src = format!("pub fn f[T: Float](x: T) -> T {{ {src} }}\n");
+        assert_eq!(of(&src), (Code::E0405, 0, vec![to(t, lit)]), "{src}");
+    }
+    let plain = "a literal takes no annotation of its own: give it its type in a binding (`let x: F32 = 0.5`)";
+    let literal = of("pub fn f[T: Int](x: T) -> T { T.trunc_from(0.5) }\n");
+    assert_eq!(literal, (Code::E0405, 0, vec![plain.to_string()]));
+    // The candidate of a removed method reads the same rule as the unification (`may_fit`).
+    let removed =
+        |bound: &str| format!("pub fn f[T: {bound}](x: T, y: T) -> T {{\n  var k = 0.5\n  k = x.min(y)\n  k\n}}\n");
+    assert_eq!(of(&removed("Float")).1, 1);
+    assert_eq!(of(&removed("Num")).1, 0);
+}
+
+#[test]
 fn param_values_out_of_the_type_are_e0408() {
     // §11.7: a number of `@param` is a value of the input's type (§2.4).
     let src = |v: &str| {

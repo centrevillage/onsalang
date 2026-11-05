@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§4.7", "§6.1", "§7"]
+
+// W5-05 U4/t (spec §6.6: a float literal is a value of `T: Float`; §4.7: "`if` の後の枝と `match` の二つ目以降の腕には前の枝の型" is the expected type, and the type of the return
+// type, of an argument and of a `let` goes down into the expression): the float literal in the control flow of a body: the branches of an `if` (the one branch with a literal and the other
+// with a variable, and both with a literal), an `else if` chain, an early `return`, the arm of a `match` on an `Option`, the tail of a function that has only the literal, and a
+// function whose type parameter is decided by the type of the `let` that receives the result. The same body runs at `F32` and `F64`; every value is exact in binary.
+
+fn clamp_above[T: Float](x: T) -> T {
+  if x > 0.5 {
+    0.5
+  } else {
+    x
+  }
+}
+
+fn two_literals[T: Float](x: T) -> T {
+  if x > 0.0 {
+    0.25
+  } else {
+    0.75
+  }
+}
+
+fn three_ways[T: Float](x: T) -> T {
+  if x < 0.25 {
+    0.0
+  } else if x < 0.75 {
+    0.5
+  } else {
+    1.0
+  }
+}
+
+fn early_return[T: Float](x: T) -> T {
+  if x < 0.0 {
+    return 0.0
+  }
+  x * 0.5
+}
+
+fn early_return_second[T: Float](x: T) -> T {
+  if x > 4.0 {
+    return 4.0
+  }
+  x
+}
+
+fn literal_tail[T: Float](x: T) -> T {
+  0.5
+}
+
+fn only_the_return_type[T: Float]() -> T {
+  0.5
+}
+
+fn if_as_a_value[T: Float](x: T) -> T {
+  let y = if x > 1.0 { 0.5 } else { x }
+  y * 2.0
+}
+
+fn if_in_an_argument[T: Float](x: T) -> T {
+  add(x, if x > 1.0 { 0.5 } else { 0.25 })
+}
+
+fn add[T: Float](x: T, y: T) -> T {
+  x + y
+}
+
+test "one branch is a literal and the other is the variable" {
+  let a: F32 = 0.75
+  let b: F64 = 0.25
+  assert clamp_above(a) == 0.5
+  assert clamp_above(b) == 0.25
+}
+
+test "both branches are literals" {
+  let a: F32 = 2.0
+  let b: F64 = -2.0
+  assert two_literals(a) == 0.25
+  assert two_literals(b) == 0.75
+}
+
+test "an else if chain of literals" {
+  let a: F32 = 0.125
+  let b: F64 = 0.5
+  let c: F32 = 0.75
+  let d: F64 = 0.75
+  assert three_ways(a) == 0.0
+  assert three_ways(b) == 0.5
+  assert three_ways(c) == 1.0
+  assert three_ways(d) == 1.0
+}
+
+test "an early return of a literal" {
+  let a: F32 = -1.0
+  let b: F64 = 3.0
+  assert early_return(a) == 0.0
+  assert early_return(b) == 1.5
+  let c: F32 = 5.0
+  let d: F64 = 2.0
+  assert early_return_second(c) == 4.0
+  assert early_return_second(d) == 2.0
+}
+
+test "a function that is only a literal" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert literal_tail(a) == 0.5
+  assert literal_tail(b) == 0.5
+}
+
+test "the type parameter is decided by the type of the let" {
+  let a: F32 = only_the_return_type()
+  let b: F64 = only_the_return_type()
+  assert a == 0.5
+  assert b == 0.5
+}
+
+test "an if with literals as a value" {
+  let a: F32 = 4.0
+  let b: F64 = 0.5
+  assert if_as_a_value(a) == 1.0
+  assert if_as_a_value(b) == 1.0
+}
+
+test "an if with literals as an argument" {
+  let a: F32 = 2.0
+  let b: F64 = 0.5
+  assert if_in_an_argument(a) == 2.5
+  assert if_in_an_argument(b) == 0.75
+}

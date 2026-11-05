@@ -1,0 +1,362 @@
+// onsa.toml
+// [package]
+// name = "c_generic_float_literal"
+// edition = "2026"
+//
+// [export]
+// prefix = "cgf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§6.6", "§4.7", "§14.2"]
+//
+// [[test.host]]
+// name = "halve_f32"
+// target = "host"
+// fn = "c_generic_float_literal.halve_f32"
+// steps = [
+//   { call = "fn", args = { x = 3.0 }, status = 0, result = 1.5 },
+//   { call = "fn", args = { x = -5.0 }, status = 0, result = -2.5 },
+// ]
+//
+// [[test.host]]
+// name = "halve_f64"
+// target = "host"
+// fn = "c_generic_float_literal.halve_f64"
+// steps = [
+//   { call = "fn", args = { x = 3.0 }, status = 0, result = 1.5 },
+//   { call = "fn", args = { x = -5.0 }, status = 0, result = -2.5 },
+// ]
+//
+// [[test.host]]
+// name = "average_f32"
+// target = "host"
+// fn = "c_generic_float_literal.average_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0, b = 2.0 }, status = 0, result = 1.5 },
+//   { call = "fn", args = { a = -1.0, b = 0.5 }, status = 0, result = -0.25 },
+// ]
+//
+// [[test.host]]
+// name = "average_f64"
+// target = "host"
+// fn = "c_generic_float_literal.average_f64"
+// steps = [
+//   { call = "fn", args = { a = 1.0, b = 2.0 }, status = 0, result = 1.5 },
+//   { call = "fn", args = { a = -1.0, b = 0.5 }, status = 0, result = -0.25 },
+// ]
+//
+// [[test.host]]
+// name = "tenth_bits_f32"
+// target = "host"
+// fn = "c_generic_float_literal.tenth_bits_f32"
+// steps = [
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 1036831949 },
+// ]
+//
+// [[test.host]]
+// name = "tenth_bits_f64"
+// target = "host"
+// fn = "c_generic_float_literal.tenth_bits_f64"
+// steps = [
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 4591870180066957722 },
+// ]
+//
+// [[test.host]]
+// name = "times_tenth_bits_f32"
+// target = "host"
+// fn = "c_generic_float_literal.times_tenth_bits_f32"
+// steps = [
+//   { call = "fn", args = { x = 3.0 }, status = 0, result = 1050253722 },
+// ]
+//
+// [[test.host]]
+// name = "times_tenth_bits_f64"
+// target = "host"
+// fn = "c_generic_float_literal.times_tenth_bits_f64"
+// steps = [
+//   { call = "fn", args = { x = 3.0 }, status = 0, result = 4599075939470750516 },
+// ]
+//
+// [[test.host]]
+// name = "above_midpoint_bits_f32"
+// target = "host"
+// fn = "c_generic_float_literal.above_midpoint_bits_f32"
+// steps = [
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 1065353217 },
+// ]
+//
+// [[test.host]]
+// name = "below_midpoint_bits_f32"
+// target = "host"
+// fn = "c_generic_float_literal.below_midpoint_bits_f32"
+// steps = [
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 1065353217 },
+// ]
+//
+// [[test.host]]
+// name = "above_midpoint_bits_f64"
+// target = "host"
+// fn = "c_generic_float_literal.above_midpoint_bits_f64"
+// steps = [
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 4607182419068452864 },
+// ]
+//
+// [[test.host]]
+// name = "below_midpoint_bits_f64"
+// target = "host"
+// fn = "c_generic_float_literal.below_midpoint_bits_f64"
+// steps = [
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 4607182419605323776 },
+// ]
+//
+// [[test.host]]
+// name = "bucket_f32"
+// target = "host"
+// fn = "c_generic_float_literal.bucket_f32"
+// steps = [
+//   { call = "fn", args = { x = 0.25 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 0.5 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = 0.75 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = 2.0 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "accumulated_f64"
+// target = "host"
+// fn = "c_generic_float_literal.accumulated_f64"
+// steps = [
+//   { call = "fn", args = { x = 2.0 }, status = 0, result = 3.0 },
+//   { call = "fn", args = { x = -4.0 }, status = 0, result = -6.0 },
+// ]
+//
+// [[test.host]]
+// name = "repeated_sum_f32"
+// target = "host"
+// fn = "c_generic_float_literal.repeated_sum_f32"
+// steps = [
+//   { call = "fn", args = { x = 0.25 }, status = 0, result = 1.25 },
+// ]
+//
+// [[test.host]]
+// name = "gain_const_f32"
+// target = "host"
+// fn = "c_generic_float_literal.gain_const_f32"
+// steps = [
+//   { call = "fn", args = { x = 5.0 }, status = 0, result = 2.5 },
+// ]
+//
+// [[test.host]]
+// name = "gain_const_f64"
+// target = "host"
+// fn = "c_generic_float_literal.gain_const_f64"
+// steps = [
+//   { call = "fn", args = { x = 5.0 }, status = 0, result = 2.5 },
+// ]
+
+// A float literal as a value of `T: Float`, on a target that is built to C (spec §2.4, §6.6, §4.7): a generic function is lowered once for each type it is used with, and the literal in it must
+// be the literal of that type, rounded once from the digits. The same bodies at `F32` and `F64`, through exports that fix the type. The literals that are exact in binary (`halve`,
+// `average`, `bucket`, the associated constant `HALF`) and the ones that are not: `0.1` is 0x3DCCCCCD (1036831949) at `F32` and 0x3FB999999999999A (4591870180066957722) at `F64`;
+// `3.0 * 0.1` is 0x3E99999A (1050253722) at `F32` and 0x3FD3333333333334 (4599075939470750516) at `F64` (the exact product is the tie of two `F64` values, and the even one wins; see
+// tp_float_lit_round_bits.onsa); the two literals of tp_float_lit_round_once.onsa, next to the midpoints of two `F32` values: both are 0x3F800001 (1065353217) at `F32` (rounding through
+// `F64` would give 0x3F800000 and 0x3F800002), and the midpoints themselves 0x3FF0000010000000 (4607182419068452864) and 0x3FF0000030000000 (4607182419605323776) at `F64`. The values that
+// are exact: 3.0 * 0.5 = 1.5, -5.0 * 0.5 = -2.5, 0.5 * (-1.0 + 0.5) = -0.25, three times 2.0 * 0.5 is 3.0 and three times -4.0 * 0.5 is -6.0, [0.5; 2] summed with 0.25 is 1.25, 5.0 * 0.5 = 2.5.
+// The bucket is 0 below 0.5, 1 from 0.5 on below 0.75, and 2 from 0.75 on.
+
+pub struct Gain[T] {
+  v: T,
+}
+
+impl[T: Float] Gain[T] {
+  const HALF: T = 0.5
+}
+
+type GainF32 = Gain[F32]
+type GainF64 = Gain[F64]
+
+fn halve[T: Float](x: T) -> T {
+  x * 0.5
+}
+
+fn average[T: Float](a: T, b: T) -> T {
+  0.5 * (a + b)
+}
+
+fn tenth[T: Float](x: T) -> T {
+  0.1
+}
+
+fn times_tenth[T: Float](x: T) -> T {
+  x * 0.1
+}
+
+fn above_midpoint[T: Float](x: T) -> T {
+  1.0000000596046447753906250001
+}
+
+fn below_midpoint[T: Float](x: T) -> T {
+  1.0000001788139343261718749999
+}
+
+fn bucket[T: Float](x: T) -> U32 {
+  if x < 0.5 {
+    0
+  } else if x < 0.75 {
+    1
+  } else {
+    2
+  }
+}
+
+fn accumulated[T: Float](x: T) -> T {
+  var a      = 0.0
+  var i: U32 = 0
+  while i < 3 {
+    a = a + x * 0.5
+    i = i + 1
+  }
+  a
+}
+
+fn repeated_sum[T: Float](x: T) -> T {
+  let r = [0.5; 2]
+  r[0] + r[1] + x
+}
+
+@export
+pub fn halve_f32(x: F32) -> F32 {
+  halve(x)
+}
+
+@export
+pub fn halve_f64(x: F64) -> F64 {
+  halve(x)
+}
+
+@export
+pub fn average_f32(a: F32, b: F32) -> F32 {
+  average(a, b)
+}
+
+@export
+pub fn average_f64(a: F64, b: F64) -> F64 {
+  average(a, b)
+}
+
+@export
+pub fn tenth_bits_f32(x: F32) -> U32 {
+  tenth(x).to_bits()
+}
+
+@export
+pub fn tenth_bits_f64(x: F64) -> U64 {
+  tenth(x).to_bits()
+}
+
+@export
+pub fn times_tenth_bits_f32(x: F32) -> U32 {
+  times_tenth(x).to_bits()
+}
+
+@export
+pub fn times_tenth_bits_f64(x: F64) -> U64 {
+  times_tenth(x).to_bits()
+}
+
+@export
+pub fn above_midpoint_bits_f32(x: F32) -> U32 {
+  above_midpoint(x).to_bits()
+}
+
+@export
+pub fn below_midpoint_bits_f32(x: F32) -> U32 {
+  below_midpoint(x).to_bits()
+}
+
+@export
+pub fn above_midpoint_bits_f64(x: F64) -> U64 {
+  above_midpoint(x).to_bits()
+}
+
+@export
+pub fn below_midpoint_bits_f64(x: F64) -> U64 {
+  below_midpoint(x).to_bits()
+}
+
+@export
+pub fn bucket_f32(x: F32) -> U32 {
+  bucket(x)
+}
+
+@export
+pub fn accumulated_f64(x: F64) -> F64 {
+  accumulated(x)
+}
+
+@export
+pub fn repeated_sum_f32(x: F32) -> F32 {
+  repeated_sum(x)
+}
+
+@export
+pub fn gain_const_f32(x: F32) -> F32 {
+  x * GainF32.HALF
+}
+
+@export
+pub fn gain_const_f64(x: F64) -> F64 {
+  x * GainF64.HALF
+}
+
+test "halve: the values" {
+  assert halve_f32(3.0) == 1.5
+  assert halve_f32(-5.0) == -2.5
+  assert halve_f64(3.0) == 1.5
+  assert halve_f64(-5.0) == -2.5
+}
+
+test "average: the values" {
+  assert average_f32(1.0, 2.0) == 1.5
+  assert average_f32(-1.0, 0.5) == -0.25
+  assert average_f64(1.0, 2.0) == 1.5
+  assert average_f64(-1.0, 0.5) == -0.25
+}
+
+test "0.1 and a product with 0.1: the bits of each type" {
+  assert tenth_bits_f32(0.0) == 1036831949
+  assert tenth_bits_f64(0.0) == 4591870180066957722
+  assert times_tenth_bits_f32(3.0) == 1050253722
+  assert times_tenth_bits_f64(3.0) == 4599075939470750516
+}
+
+test "the literals next to the midpoints are rounded once" {
+  assert above_midpoint_bits_f32(0.0) == 1065353217
+  assert below_midpoint_bits_f32(0.0) == 1065353217
+  assert above_midpoint_bits_f64(0.0) == 4607182419068452864
+  assert below_midpoint_bits_f64(0.0) == 4607182419605323776
+}
+
+test "the comparisons with literals" {
+  assert bucket_f32(0.25) == 0
+  assert bucket_f32(0.5) == 1
+  assert bucket_f32(0.75) == 2
+  assert bucket_f32(2.0) == 2
+}
+
+test "a var from a literal and an array of a literal" {
+  assert accumulated_f64(2.0) == 3.0
+  assert accumulated_f64(-4.0) == -6.0
+  assert repeated_sum_f32(0.25) == 1.25
+}
+
+test "an associated constant that is a float literal" {
+  assert gain_const_f32(5.0) == 2.5
+  assert gain_const_f64(5.0) == 2.5
+}

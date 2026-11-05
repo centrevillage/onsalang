@@ -319,7 +319,7 @@ impl<'a> Checker<'a> {
             (Ty::Var(i), c) => match self.infer.var_lit(i) {
                 None => true,
                 Some(LitKind::Int) => matches!(c, Ty::Int(_)),
-                Some(LitKind::Float) => matches!(c, Ty::Float(_)),
+                Some(LitKind::Float) => self.infer.float_fits(&c),
             },
             (Ty::Named(a, t), Ty::Named(b, c)) if a == b => t.iter().zip(&c).all(|(&t, &c)| self.may_fit(t, c)),
             _ => t == c,

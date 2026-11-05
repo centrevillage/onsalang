@@ -1,0 +1,154 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§2.4", "§3.4", "§4.7"]
+
+// W5-05 U4/t (spec §6.6: "小数のリテラルは、境界が `Float` を含む型パラメータ `T` の値になる (`[T: Float]` の関数の中で `0.5 * (a + b)` と書ける)"): the places of a float literal
+// as an operand: the right and the left of a binary operator, inside a parenthesis, under a prefix `-`, in a comparison, and as a literal that meets only another literal
+// (`0.5 * 0.5 + x`, its type is decided by `x`). One function for each form, run at `F32` and `F64`. Every value is exact in binary and worked out by hand: 3.0 * 0.5 = 1.5,
+// 0.5 * (1.0 + 2.0) = 1.5, 1.0 - 0.25 = 0.75, 1.0 - 0.25 = 0.75, 3.0 / 4.0 = 0.75, -0.5 * 3.0 = -1.5, 1.0 + (-0.75) = 0.25, 0.5 * (1.0 + 0.25 * (2.0 - 0.5)) = 0.5 * 1.375 = 0.6875,
+// 0.5 * 2.0 + 0.25 * 2.0 = 1.5, 0.5 * 0.5 + 1.0 = 1.25.
+
+fn times_right[T: Float](x: T) -> T {
+  x * 0.5
+}
+
+fn times_left[T: Float](x: T) -> T {
+  0.5 * x
+}
+
+fn average[T: Float](a: T, b: T) -> T {
+  0.5 * (a + b)
+}
+
+fn minus_right[T: Float](x: T) -> T {
+  x - 0.25
+}
+
+fn minus_left[T: Float](x: T) -> T {
+  1.0 - x
+}
+
+fn divided[T: Float](x: T) -> T {
+  x / 4.0
+}
+
+fn negated_literal[T: Float](x: T) -> T {
+  -0.5 * x
+}
+
+fn negative_operand[T: Float](x: T) -> T {
+  x + (-0.75)
+}
+
+fn nested[T: Float](a: T, b: T) -> T {
+  0.5 * (a + 0.25 * (b - 0.5))
+}
+
+fn both_sides[T: Float](x: T) -> T {
+  0.5 * x + 0.25 * x
+}
+
+fn literals_meet_literals[T: Float](x: T) -> T {
+  0.5 * 0.5 + x
+}
+
+fn is_below[T: Float](x: T) -> Bool {
+  x < 0.5
+}
+
+fn is_half[T: Float](x: T) -> Bool {
+  x == 0.5
+}
+
+fn is_not_half[T: Float](x: T) -> Bool {
+  x != 0.5
+}
+
+fn is_at_least[T: Float](x: T) -> Bool {
+  0.5 <= x
+}
+
+fn is_inside[T: Float](x: T) -> Bool {
+  0.25 < x && x < 0.75
+}
+
+test "a literal on the right of a binary operator" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert times_right(a) == 1.5
+  assert times_right(b) == 1.5
+  let c: F32 = 1.0
+  let d: F64 = 1.0
+  assert minus_right(c) == 0.75
+  assert minus_right(d) == 0.75
+  assert divided(a) == 0.75
+  assert divided(b) == 0.75
+}
+
+test "a literal on the left of a binary operator" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert times_left(a) == 1.5
+  assert times_left(b) == 1.5
+  let c: F32 = 0.25
+  let d: F64 = 0.25
+  assert minus_left(c) == 0.75
+  assert minus_left(d) == 0.75
+}
+
+test "a literal inside a parenthesis" {
+  let a: F32 = 1.0
+  let b: F32 = 2.0
+  let c: F64 = 1.0
+  let d: F64 = 2.0
+  assert average(a, b) == 1.5
+  assert average(c, d) == 1.5
+  assert nested(a, b) == 0.6875
+  assert nested(c, d) == 0.6875
+}
+
+test "a literal under a prefix minus, alone and in a parenthesis" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert negated_literal(a) == -1.5
+  assert negated_literal(b) == -1.5
+  let c: F32 = 1.0
+  let d: F64 = 1.0
+  assert negative_operand(c) == 0.25
+  assert negative_operand(d) == 0.25
+}
+
+test "a literal on both sides of the same variable" {
+  let a: F32 = 2.0
+  let b: F64 = 2.0
+  assert both_sides(a) == 1.5
+  assert both_sides(b) == 1.5
+}
+
+test "a literal that meets only literals takes its type from the other operand" {
+  let a: F32 = 1.0
+  let b: F64 = 1.0
+  assert literals_meet_literals(a) == 1.25
+  assert literals_meet_literals(b) == 1.25
+}
+
+test "a literal in a comparison" {
+  let a: F32 = 0.25
+  let b: F32 = 0.5
+  let c: F64 = 0.75
+  assert is_below(a)
+  assert !is_below(b)
+  assert is_half(b)
+  assert !is_half(a)
+  assert is_not_half(a)
+  assert !is_not_half(b)
+  assert is_at_least(b)
+  assert !is_at_least(a)
+  assert is_inside(b)
+  assert !is_inside(a)
+  assert !is_inside(c)
+  assert !is_below(c)
+  let e: F64 = 0.5
+  assert is_half(e)
+}

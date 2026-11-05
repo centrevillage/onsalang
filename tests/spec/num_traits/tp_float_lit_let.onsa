@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§4.7", "§2.4"]
+
+// W5-05 U4/t (spec §6.6: a float literal is a value of `T: Float`; §4.7: "リテラルは `IntLit` / `FloatLit` の制約付きの型変数になる。`var acc = 0.0` の `acc` は、後の
+// `acc = acc + x` で `x` の型に決まる"; "`let` の注釈 ... が期待型になる"): a float literal bound by `let` (with and without a type), a `var` whose type is decided by a later statement,
+// and a variable that is read after the loop that changes it. The same body runs at `F32` and `F64`. The values are worked out by hand: 3.0 * 0.5 = 1.5, 0.5 * 0.5 * 3.0 = 0.75,
+// 0.5 - 0.25 = 0.25, 0.0 + 2.5 = 2.5, a loop that adds 2.0 * 0.5 = 1.0 three times is 3.0, 0.5 * 2.0 + 0.5 * 3.0 = 2.5, 8.0 -> 4.0 -> 2.0 -> 1.0 and 6.0 -> 3.0 -> 1.5 -> 0.75 (the loop
+// halves while the value is above 1.0), and `x` is returned when the `var` is assigned `x`: 0.25 then `x` = 2.0, times 0.5 = 1.0.
+
+fn named[T: Float](x: T) -> T {
+  let h = 0.5
+  x * h
+}
+
+fn named_twice[T: Float](x: T) -> T {
+  let h = 0.5
+  let q = h * h
+  q * x
+}
+
+fn annotated[T: Float](x: T) -> T {
+  let h: T = 0.5
+  x * h
+}
+
+fn annotated_left[T: Float](x: T) -> T {
+  let h: T = 0.5
+  h - x
+}
+
+fn used_twice[T: Float](x: T, y: T) -> T {
+  let h = 0.5
+  x * h + y * h
+}
+
+fn var_decided_later[T: Float](x: T) -> T {
+  var a = 0.0
+  a = a + x
+  a
+}
+
+fn var_decided_by_the_tail[T: Float](x: T) -> T {
+  var a = 0.25
+  a = x
+  a * 0.5
+}
+
+fn accumulated[T: Float](x: T) -> T {
+  var a      = 0.0
+  var i: U32 = 0
+  while i < 3 {
+    a = a + x * 0.5
+    i = i + 1
+  }
+  a
+}
+
+fn halved_while_big[T: Float](x: T) -> T {
+  var v = x
+  while v > 1.0 {
+    v = v * 0.5
+  }
+  v
+}
+
+fn literal_var_read_after_if[T: Float](x: T) -> T {
+  var s = 0.5
+  if x > 1.0 {
+    s = 0.25
+  }
+  s
+}
+
+test "a literal bound by let without a type" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert named(a) == 1.5
+  assert named(b) == 1.5
+  assert named_twice(a) == 0.75
+  assert named_twice(b) == 0.75
+  let c: F32 = 2.0
+  let d: F64 = 3.0
+  assert used_twice(a, c) == 2.5
+  assert used_twice(b, d) == 3.0
+}
+
+test "a literal bound by let with the type T" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert annotated(a) == 1.5
+  assert annotated(b) == 1.5
+  let c: F32 = 0.25
+  let d: F64 = 0.25
+  assert annotated_left(c) == 0.25
+  assert annotated_left(d) == 0.25
+}
+
+test "a var from a literal takes its type from a later assignment" {
+  let a: F32 = 2.5
+  let b: F64 = 2.5
+  assert var_decided_later(a) == 2.5
+  assert var_decided_later(b) == 2.5
+  let c: F32 = 2.0
+  let d: F64 = 2.0
+  assert var_decided_by_the_tail(c) == 1.0
+  assert var_decided_by_the_tail(d) == 1.0
+}
+
+test "a var from a literal that changes in a loop" {
+  let a: F32 = 2.0
+  let b: F64 = 2.0
+  assert accumulated(a) == 3.0
+  assert accumulated(b) == 3.0
+  let c: F32 = 8.0
+  let d: F64 = 6.0
+  assert halved_while_big(c) == 1.0
+  assert halved_while_big(d) == 0.75
+}
+
+test "a var from a literal assigned in a branch" {
+  let a: F32 = 2.0
+  let b: F64 = 0.5
+  assert literal_var_read_after_if(a) == 0.25
+  assert literal_var_read_after_if(b) == 0.5
+}

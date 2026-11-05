@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§6.6", "§4.7"]
+
+// W5-05 U4/t (spec §2.4: "型が決まった時点で、丸めた値が有限でないとき (`F32` の `1.0e40`) と、0 でない字面が 0 に丸まるとき (`F32` の `1.0e-50`) は E0408。非正規化数に丸まる字面
+// (`F32` の `1.0e-40`) は値が残るので書ける"; §6.6: the range is judged for `F32` and for `F64`, a literal in a function of `T: Float` that is right for both is right): the literals
+// next to the edges of the range of `F32`, which are right in both types, and the value of each. The edge of the largest value: 2^128 - 2^103 = 340282356779733661637539395458142568448
+// is the midpoint of the largest finite `F32` (2^128 - 2^104, an odd fraction) and 2^128, so it is the tie that goes to the even one, 2^128, which is infinite (E0408, in
+// tp_float_lit_range_function_e0408.onsa); the literal 340282356779733661637539395458142568447 (one less) is rounded to the largest finite value 0x7F7FFFFF. 3.4e38 is below it:
+// 0x7F7FC99E (3.4e38 / 2^127 = 1.99834, the fraction 0.99834 * 2^23 = 8374686.2 rounds to 8374686 = 0x7FC99E). The smallest `F32` is 2^-149 = 1.4013e-45 and its half is 7.0065e-46: 7.1e-46 is above the
+// half and rounds to 0x00000001, and 1.0e-45 too. 1.0e-40 is a subnormal, 1.0e-40 / 2^-149 = 71362.38 so 0x000116C2. The values at `F64` are the nearest `F64` of the digits. A literal 0
+// with a big exponent is 0, which is no underflow. Every `F32` bit pattern was worked out from the digits by rounding to the nearest even.
+
+fn near_largest[T: Float](x: T) -> T {
+  3.4e38
+}
+
+fn below_the_edge[T: Float](x: T) -> T {
+  3.40282356779733661637539395458142568447e38
+}
+
+fn subnormal[T: Float](x: T) -> T {
+  1.0e-40
+}
+
+fn smallest_by_digits[T: Float](x: T) -> T {
+  1.0e-45
+}
+
+fn above_half_of_smallest[T: Float](x: T) -> T {
+  7.1e-46
+}
+
+fn zero_with_exponent[T: Float](x: T) -> T {
+  0.0e-400
+}
+
+test "a literal near the largest F32 is right in both types" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert near_largest(a).to_bits() == 0x7F7FC99E
+  assert near_largest(b).to_bits() == 0x47EFF933C78CDFAD
+}
+
+test "the literal just below the edge is the largest finite F32" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert below_the_edge(a).to_bits() == 0x7F7FFFFF
+  assert below_the_edge(b).to_bits() == 0x47EFFFFFF0000000
+  assert below_the_edge(a) == F32.MAX
+}
+
+test "a literal that is a subnormal F32 keeps its value" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert subnormal(a).to_bits() == 0x000116C2
+  assert subnormal(b).to_bits() == 0x37A16C262777579C
+}
+
+test "a literal at the smallest F32 is the smallest F32" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert smallest_by_digits(a).to_bits() == 1
+  assert smallest_by_digits(b).to_bits() == 0x3696D601AD376AB9
+  assert above_half_of_smallest(a).to_bits() == 1
+  assert above_half_of_smallest(b).to_bits() == 0x369036AA2680F22C
+}
+
+test "a literal 0 with an exponent is 0 and not an underflow" {
+  let a: F32 = 1.0
+  let b: F64 = 1.0
+  assert zero_with_exponent(a).to_bits() == 0
+  assert zero_with_exponent(b).to_bits() == 0
+}

@@ -374,6 +374,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         let mut info = BodyInfo { locals, diverging, ..Default::default() };
         info.captures = names.captures.iter().map(|(e, bs)| (*e, bs.iter().map(|b| LocalId(b.0)).collect())).collect();
         let typed = vec![false; info.locals.len()];
+        let float_params =
+            (0..).zip(&generics).filter(|(_, g)| bounds::param_holds(g, Bound::Float)).map(|(i, _)| i).collect();
         let mut ck = Checker {
             a,
             ast: &module.parsed.ast,
@@ -382,7 +384,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             def: id,
             generics,
             self_ty,
-            infer: Infer::default(),
+            infer: Infer::new(float_params),
             frames: Vec::new(),
             blocks: Vec::new(),
             info,
@@ -652,7 +654,23 @@ impl<'a> Checker<'a> {
             // A literal in a part of the types (`fn({integer})`): neither is one.
             _ => format!("expected `{e}`, found `{a}`"),
         };
-        Some(Diagnostic::new(Stage::Types, Code::E0401, span, text).with_found(self.src(span)))
+        let d = Diagnostic::new(Stage::Types, Code::E0401, span, text).with_found(self.src(span));
+        // The other side of a float literal (§6.6, S-881).
+        let other = match (found, wanted) {
+            (Some(LitKind::Float), _) => expected,
+            (None, Some(LitKind::Float)) => actual,
+            _ => return Some(d),
+        };
+        let other = self.shallow(other);
+        Some(match self.ty(other) {
+            Ty::Param(_) => {
+                let t = self.display(other);
+                d.with_rule(format!(
+                    "a float literal is a value of `{t}` only when the bounds of `{t}` include `Float` (§6.6)"
+                ))
+            }
+            _ => d,
+        })
     }
 
     /// The cause of a binding made while unifying at `span` with `expected`.

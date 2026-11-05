@@ -267,7 +267,7 @@ impl<'a> Checker<'a> {
             Lit::Float { .. } => {
                 let t = self.infer.fresh(&mut self.a.types, Some(LitKind::Float));
                 let span = self.expr(e).span;
-                self.defer(span, t, DeferredKind::FloatLit { lit: e });
+                self.defer(span, t, DeferredKind::FloatLit { lit: e, rule: None });
                 Ok(t)
             }
             Lit::Char(_) => Ok(self.a.types.intern(Ty::Char)),

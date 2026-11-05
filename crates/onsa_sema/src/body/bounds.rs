@@ -30,6 +30,17 @@ impl<'a> Checker<'a> {
     }
 }
 
+/// Whether the type parameter `g` satisfies `b`: by its bounds, and any `b`
+/// when one of them is not known (§18.1).
+pub(crate) fn param_holds(g: &GenericDef, b: Bound) -> bool {
+    match &g.kind {
+        GenericKind::Type { bounds, dup, unknown } => {
+            *unknown || bounds.iter().any(|&have| implies(have, b)) || (b == Bound::Dup && *dup)
+        }
+        _ => false,
+    }
+}
+
 impl Bounds<'_> {
     fn ty(&self, t: TyId) -> Ty {
         self.a.types.get(t).clone()
@@ -81,15 +92,7 @@ impl Bounds<'_> {
         }
         let ty = self.ty(t);
         match (&ty, b) {
-            (Ty::Param(i), _) => {
-                let Some(g) = self.generics.get(*i as usize) else { return false };
-                match &g.kind {
-                    GenericKind::Type { bounds, dup, .. } => {
-                        bounds.iter().any(|&have| implies(have, b)) || (b == Bound::Dup && *dup)
-                    }
-                    _ => false,
-                }
-            }
+            (Ty::Param(i), _) => self.generics.get(*i as usize).is_some_and(|g| param_holds(g, b)),
             (Ty::Named(d, args), _) => {
                 let def = self.a.def(*d);
                 let derives = match &def.kind {

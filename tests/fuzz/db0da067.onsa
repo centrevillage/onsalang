@@ -1,0 +1,3 @@
+fn e[T:Float](x:T)->T{T.round_from(0.5)//5
+ (-0.5) //5
+}

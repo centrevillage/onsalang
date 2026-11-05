@@ -619,3 +619,10 @@ left = "a number has no suffix"
 input = "tests/fuzz/43d12127.onsa"
 reasons = ["S-384"]
 note = "`- 1n` は誤りが二つある入力（行頭の `- ` と、接尾辞の付いた数 `1n`）。つなぐ候補が `1n` ごと前の行へ移すので、残る誤りの位置が変わる。候補の約束は誤りが一つの単位に当たる（§18.1）"
+
+[[allowed]]
+class = "fix|E0418|discard the value with `…`|E0405"
+left = "the type of this float literal cannot be determined; annotate it (§#.#)"
+input = "tests/fuzz/db0da067.onsa"
+reasons = ["S-384"]
+note = "途中の文の `T.round_from(0.5)` は誤りが二つある入力（捨てる値と、型の決まらない小数のリテラル）。具体的な型の `F32.round_from(0.5)` も同じ。候補の約束は誤りが一つの単位に当たる（§18.1）"

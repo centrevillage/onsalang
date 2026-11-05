@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.7", "§6.6", "§13.4"]
+
+// E0408, W5-05 U4/t (spec §6.6: "どちらかの型で §2.4 の範囲に当たる字面 (`1.0e40`、`1.0e-50`) は、定義の位置で E0408 である"; §4.7: "小数のリテラルの型が境界に `Float` を含む型パラメータに決まったときは、
+// 実装する全ての型で判定する"): a literal out of the range of `F32` or `F64` where it is the argument of a call in a function of `T: Float`: the argument of a generic function of the module, of
+// `max` and `min` of `std.math`, of a method of an `impl[T: Float]`, and a literal inside the `Some(…)` that is given as the argument. One literal in each function. The literal
+// is an error at the definition: it is in the body of the caller, and the call is not what decides it. The arguments that are right for both types are in the last functions.
+
+use std.math.{max, min}
+
+pub struct Level[T] {
+  v: T,
+}
+
+impl[T: Float] Level[T] {
+  pub fn plus(self, y: T) -> T {
+    self.v + y
+  }
+}
+
+fn scale[T: Float](x: T, k: T) -> T {
+  x * k
+}
+
+fn take_option[T: Float](o: Option[T], x: T) -> T {
+  match o {
+    Some(v) => v,
+    None => x,
+  }
+}
+
+fn to_a_function[T: Float](x: T) -> T {
+  scale(x, 1.0e40) //~ E0408
+}
+
+fn to_a_function_first[T: Float](x: T) -> T {
+  scale(1.0e-50, x) //~ E0408
+}
+
+fn to_max[T: Float](x: T) -> T {
+  max(x, 1.0e309) //~ E0408
+}
+
+fn to_min[T: Float](x: T) -> T {
+  min(x, -1.0e40) //~ E0408
+}
+
+fn to_a_method[T: Float](x: T) -> T {
+  let l = Level { v: x }
+  l.plus(1.0e-400) //~ E0408
+}
+
+fn inside_some[T: Float](x: T) -> T {
+  take_option(Some(1.0e40), x) //~ E0408
+}
+
+fn right_arguments[T: Float](x: T) -> T {
+  let l = Level { v: x }
+  scale(x, 1.0e38) + max(x, 1.0e-40) + l.plus(3.4e38)
+}
+
+fn right_option[T: Float](x: T) -> T {
+  take_option(Some(1.0e-45), x)
+}

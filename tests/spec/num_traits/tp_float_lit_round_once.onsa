@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§6.6"]
+
+// W5-05 U4/t (spec §2.4: "値は、10 進の値を型へ最近接偶数で一度だけ丸めた値である (`F32` のリテラルを `F64` を経て二重に丸めない)"; §6.6: "値は具体化した型へ一度だけ丸める"):
+// a literal that rounds differently when it is rounded to `F64` first and to `F32` after that. Both literals lie next to the midpoint of two neighbouring `F32` values.
+//   1 + 2^-24 is the midpoint of 1.0 (0x3F800000) and 1 + 2^-23 (0x3F800001). The literal 1.0000000596046447753906250001 is that midpoint + 10^-28 (the midpoint is
+//   1.000000059604644775390625 exactly). Rounded once to `F32` it is above the midpoint, so 0x3F800001. Rounded to `F64` first the spacing near 1 is 2^-52 = 2.2 * 10^-16, which is
+//   far more than 10^-28, so the `F64` value is the midpoint itself (0x3FF0000010000000), and rounding that to `F32` is a tie that goes to the even fraction, 1.0 (0x3F800000).
+//   1 + 3 * 2^-24 is the midpoint of 1 + 2^-23 (0x3F800001, an odd fraction) and 1 + 2^-22 (0x3F800002, even). The literal 1.0000001788139343261718749999 is that midpoint
+//   (1.000000178813934326171875 exactly) - 10^-28. Rounded once it is below the midpoint, so 0x3F800001. Through `F64` it becomes the midpoint (0x3FF0000030000000) and the tie
+//   goes to the even one, 0x3F800002.
+// At `F64` the value is the nearest `F64` (the midpoints themselves). The instantiation at `F32` must not go through `F64`.
+
+fn above_midpoint[T: Float](x: T) -> T {
+  1.0000000596046447753906250001
+}
+
+fn below_midpoint[T: Float](x: T) -> T {
+  1.0000001788139343261718749999
+}
+
+fn above_midpoint_sum[T: Float](x: T) -> T {
+  x + 1.0000000596046447753906250001
+}
+
+fn above_midpoint_f32() -> F32 {
+  1.0000000596046447753906250001
+}
+
+fn below_midpoint_f32() -> F32 {
+  1.0000001788139343261718749999
+}
+
+test "the literal above a midpoint of F32 is rounded up, not through F64" {
+  let a: F32 = 0.0
+  assert above_midpoint(a).to_bits() == 0x3F800001
+}
+
+test "the literal below a midpoint of F32 is rounded down, not through F64" {
+  let a: F32 = 0.0
+  assert below_midpoint(a).to_bits() == 0x3F800001
+}
+
+test "the same literals at F64 are the nearest F64 value, which is the midpoint" {
+  let b: F64 = 0.0
+  assert above_midpoint(b).to_bits() == 0x3FF0000010000000
+  assert below_midpoint(b).to_bits() == 0x3FF0000030000000
+}
+
+test "the value of the type parameter is the value of the concrete F32 literal" {
+  let a: F32 = 0.0
+  assert above_midpoint(a).to_bits() == above_midpoint_f32().to_bits()
+  assert below_midpoint(a).to_bits() == below_midpoint_f32().to_bits()
+  assert above_midpoint_f32().to_bits() == 0x3F800001
+  assert below_midpoint_f32().to_bits() == 0x3F800001
+}
+
+test "the literal in an operand is rounded once too" {
+  let a: F32 = 0.0
+  assert above_midpoint_sum(a).to_bits() == 0x3F800001
+  let b: F32 = 0.5
+  assert above_midpoint_sum(b).to_bits() == 0x3FC00001
+}

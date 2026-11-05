@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§6.6", "§4.7"]
+
+// W5-05 U4/t (spec §6.6: "小数のリテラルは、境界が `Float` を含む型パラメータ `T` の値になる。値は具体化した型へ一度だけ丸める (§2.4)"; §2.4: "値は、10 進の値を型へ最近接偶数で一度だけ丸めた値である"):
+// the value of a float literal in a function of `T: Float` is the literal of the instantiated type. `0.1` is not exact in binary: worked out by hand, 0.1 = 1.6 * 2^-4 with a
+// fraction 0.6, so the 23 bits of an `F32` are 0.6 * 2^23 = 5033164.8, which rounds to 5033165 = 0x4CCCCD, with the exponent -4 + 127 = 0x7B: 0x3DCCCCCD; the 52 bits of an `F64` are
+// 0.6 * 2^52 = 2702159776422297.6, which rounds to ...298 = 0x999999999999A, with the exponent -4 + 1023 = 0x3FB: 0x3FB999999999999A. So the same function gives two different bits.
+// 0.3 is 0x3E99999A and 0x3FD3333333333333 (0.3 = 1.2 * 2^-2, the fraction 0.2 gives 1677721.6 -> 1677722 = 0x19999A and 0.2 * 2^52 = ...3.2 -> ...3 = 0x3333333333333, exponents 0x7D and 0x3FD),
+// 0.7 is 0x3F333333 and 0x3FE6666666666666 (0.7 = 1.4 * 2^-1, 0.4 * 2^23 = 3355443.2 -> 0x333333 and 0.4 * 2^52 = ...6.4 -> 0x6666666666666, exponents 0x7E and 0x3FE).
+// The bits are read outside the generic functions (`to_bits()` is a method of the concrete types) and are also compared with the literal of the concrete type. A product that is not exact
+// shows which literal was multiplied: `3.0 * 0.1` is the exact product 0.3000000044703484 at `F32` (the literal 0.1 of an `F32` is 0.100000001490116119384765625), which is nearer to
+// 0x3E99999A (0.30000001192092896) than to 0x3E999999 (0.29999998211860657); at `F64` the exact product is the tie of 0x3FD3333333333333 and 0x3FD3333333333334 and the even one is
+// 0x3FD3333333333334, so 3 * 0.1 is not 0.3 at `F64` (0x3FD3333333333333) and is at `F32`.
+
+fn tenth[T: Float](x: T) -> T {
+  0.1
+}
+
+fn three_tenths[T: Float](x: T) -> T {
+  0.3
+}
+
+fn seven_tenths[T: Float](x: T) -> T {
+  0.7
+}
+
+fn minus_tenth[T: Float](x: T) -> T {
+  -0.1
+}
+
+fn times_tenth[T: Float](x: T) -> T {
+  x * 0.1
+}
+
+fn tenth_exponent[T: Float](x: T) -> T {
+  1e-1
+}
+
+fn exact_values[T: Float](x: T) -> T {
+  0.5 + 0.25 + 0.125
+}
+
+fn tenth_f32() -> F32 {
+  0.1
+}
+
+fn tenth_f64() -> F64 {
+  0.1
+}
+
+test "0.1 is rounded to the nearest value of each type" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert tenth(a).to_bits() == 0x3DCCCCCD
+  assert tenth(b).to_bits() == 0x3FB999999999999A
+}
+
+test "0.3 and 0.7 are rounded to the nearest value of each type" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert three_tenths(a).to_bits() == 0x3E99999A
+  assert three_tenths(b).to_bits() == 0x3FD3333333333333
+  assert seven_tenths(a).to_bits() == 0x3F333333
+  assert seven_tenths(b).to_bits() == 0x3FE6666666666666
+}
+
+test "the literal of the type parameter has the bits of the literal of the concrete type" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert tenth(a).to_bits() == tenth_f32().to_bits()
+  assert tenth(b).to_bits() == tenth_f64().to_bits()
+}
+
+test "-0.1 has the bits of 0.1 and the sign" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert minus_tenth(a).to_bits() == 0xBDCCCCCD
+  assert minus_tenth(b).to_bits() == 0xBFB999999999999A
+}
+
+test "a product with 0.1 is rounded in the instantiated type" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert times_tenth(a).to_bits() == 0x3E99999A
+  assert times_tenth(b).to_bits() == 0x3FD3333333333334
+  let c: F32 = 0.25
+  let d: F64 = 0.25
+  assert times_tenth(c).to_bits() == 0x3CCCCCCD
+  assert times_tenth(d).to_bits() == 0x3F9999999999999A
+}
+
+test "the spelling with an exponent is the same value" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert tenth_exponent(a).to_bits() == 0x3DCCCCCD
+  assert tenth_exponent(b).to_bits() == 0x3FB999999999999A
+}
+
+test "the literals that are exact in binary are the same value in both types" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert exact_values(a) == 0.875
+  assert exact_values(b) == 0.875
+  assert exact_values(a).to_bits() == 0x3F600000
+  assert exact_values(b).to_bits() == 0x3FEC000000000000
+}

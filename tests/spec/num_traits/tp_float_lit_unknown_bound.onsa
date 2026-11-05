@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+
+// W5-05 U4 (spec §18.1: what relies on a name that failed keeps quiet; §6.6: a float literal is a value of `T` when its bounds include `Float`): a bound that
+// is a failed name may be `Float`, so a float literal of such a `T` has no diagnostic of its own, neither the E0401 of a type nor the E0408 of a range.
+// The one error is the `use`.
+
+use std.nope.Float2 //~ E0302
+
+pub fn alone[T: Float2](x: T) -> T {
+  x * 0.5
+}
+
+pub fn in_a_list[T: Num + Float2](x: T) -> T {
+  x * 0.5
+}
+
+pub fn out_of_the_range[T: Float2](x: T) -> T {
+  x * 1.0e40
+}

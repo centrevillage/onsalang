@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.7", "§6.6", "§18.1"]
+
+// E0408, W5-05 U4/t (spec §6.6: "どちらかの型で §2.4 の範囲に当たる字面 (`1.0e40`、`1.0e-50`) は、定義の位置で E0408 である"; §4.7: "小数のリテラルの型が境界に `Float` を含む型パラメータに決まったときは、
+// 実装する全ての型で判定する"; §2.4: "丸めた値が有限でないとき (`F32` の `1.0e40`) と、0 でない字面が 0 に丸まるとき (`F32` の `1.0e-50`) は E0408"): a literal in the body of a function of
+// `T: Float` that is out of the range of `F32` or of `F64` is an error at the definition, with no call of the function. One literal in each function. The literals that `F32`
+// alone cannot hold (`1.0e40`, `1.0e-50`) and the ones that `F64` cannot hold either (`1.0e309`, `1.0e-400`); the tie at the edge of the largest `F32` (2^128 - 2^103
+// = 340282356779733661637539395458142568448 is the midpoint of the largest finite value, whose fraction is odd, and 2^128, so the tie goes to 2^128, which is infinite); 7.0e-46
+// is below the half of the smallest `F32` (2^-149 = 1.4013e-45, the half is 7.0065e-46) and rounds to 0. The literals right next to the edges are fine
+// (tp_float_lit_range_edges_fine.onsa). The same literals of a concrete type are in the last functions: `F64` holds 1.0e40 and 1.0e-50, `F32` does not (E0408 with the concrete type).
+
+use std.array
+
+fn too_big_for_f32[T: Float](x: T) -> T {
+  x * 1.0e40 //~ E0408
+}
+
+fn too_small_for_f32[T: Float](x: T) -> T {
+  x * 1.0e-50 //~ E0408
+}
+
+fn too_big_for_f64[T: Float](x: T) -> T {
+  x * 1.0e309 //~ E0408
+}
+
+fn too_small_for_f64[T: Float](x: T) -> T {
+  x * 1.0e-400 //~ E0408
+}
+
+fn tie_at_the_largest[T: Float](x: T) -> T {
+  x + 3.40282356779733661637539395458142568448e38 //~ E0408
+}
+
+fn below_half_of_the_smallest[T: Float](x: T) -> T {
+  x + 7.0e-46 //~ E0408
+}
+
+fn negative_too_big[T: Float](x: T) -> T {
+  x + (-1.0e40) //~ E0408
+}
+
+fn in_a_let_with_the_type[T: Float](x: T) -> T {
+  let big: T = 1.0e40 //~ E0408
+  x + big
+}
+
+fn in_a_comparison[T: Float](x: T) -> Bool {
+  x < 1.0e-50 //~ E0408
+}
+
+fn in_a_branch[T: Float](x: T) -> T {
+  if x > 0.5 {
+    x
+  } else {
+    1.0e40 //~ E0408
+  }
+}
+
+fn in_a_closure[T: Float](x: T) -> [T; 2] {
+  array.from_fn(fn(i) { x * 1.0e40 }) //~ E0408
+}
+
+fn right_for_both[T: Float](x: T) -> T {
+  x * 1.0e38 + 1.0e-40
+}
+
+fn concrete_f64() -> F64 {
+  1.0e40
+}
+
+fn concrete_f64_small() -> F64 {
+  1.0e-50
+}
+
+fn concrete_f32() -> F32 {
+  1.0e40 //~ E0408
+}
+
+fn concrete_f32_small() -> F32 {
+  1.0e-50 //~ E0408
+}

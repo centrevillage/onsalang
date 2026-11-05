@@ -149,6 +149,7 @@ impl<'a> Checker<'a> {
                 }
                 self.check_args(args, &params, e)?;
                 if let Some(to) = conversion {
+                    self.literal_source(args, of);
                     let call = ConversionCall { e, expected };
                     self.conversion_use(name.span, targs[0], to, ret, Some(call))?;
                     if let Some(exp) = expected {
@@ -315,6 +316,29 @@ impl<'a> Checker<'a> {
     fn member_sig(&mut self, d: DefId, f: &FnDef, args: &[TyId], of: Option<TyId>) -> (Vec<(Mode, TyId)>, TyId) {
         let params = f.params.iter().map(|p| (p.mode, self.member_ty(d, p.ty, args, of))).collect();
         (params, self.member_ty(d, f.ret, args, of))
+    }
+
+    /// The way out of the E0405 of a float literal converted to the type
+    /// parameter `of`: the literal is a value of it by itself (§6.6, S-881).
+    fn literal_source(&mut self, args: &[Arg], of: Option<TyId>) {
+        let (Some(of), [arg]) = (of, args) else { return };
+        let source = self.ast.without_parens(arg.expr);
+        let lit = self.ast.negated_literal(source).unwrap_or(source);
+        let is_float = matches!(self.expr(lit).kind, ExprKind::Lit(Lit::Float { .. }));
+        if !is_float || !self.infer.float_fits(&self.ty(of)) {
+            return;
+        }
+        let (t, src) = (self.display(of), self.src(self.expr(source).span));
+        for item in self.deferred.iter_mut().rev() {
+            if let DeferredKind::FloatLit { lit: l, rule } = &mut item.kind
+                && *l == lit
+            {
+                *rule = Some(format!(
+                    "a float literal is a value of `{t}` by itself: write it where `{t}` is expected (`let x: {t} = {src}`) (§6.6)"
+                ));
+                return;
+            }
+        }
     }
 
     /// The type the function `d` converts to, when it is a conversion

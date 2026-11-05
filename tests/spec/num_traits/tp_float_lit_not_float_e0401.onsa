@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.3", "§4.7"]
+// fixes = 0
+
+// E0401, W5-05 U4/t (spec §6.6: "他のリテラルは型パラメータの値にならない (… 境界に `Float` を含まない `T` の小数のリテラルは E0401。`Num` と `AnyNum` は固定小数点が実装し、1 を表せない型がある)。
+// これらの総称の関数では、0 を `T.ZERO` (`T: AnyNum`)、1 を `T.ONE` (`T: Int`) で書く"): a float literal is not a value of a type parameter whose bound has no `Float`: `Num`, `AnyNum`,
+// `Int`, `Unsigned`, the bounds that are joined (`Num + Show`), a type parameter with no bound, and a type parameter that has no `Float` while another type parameter of the same
+// function has. The literal in an operand, as the tail, with a `let` type and in the initializer of an associated constant. One literal in each function. No candidate (`fixes = 0`): the
+// diagnostic does not change the bound. The functions that write the values with `T.ZERO` and `T.ONE` are fine.
+
+pub struct Box[T] {
+  v: T,
+}
+
+impl[T: Num] Box[T] {
+  const HALF: T = 0.5 //~ E0401
+}
+
+fn num_operand[T: Num](x: T) -> T {
+  x * 0.5 //~ E0401
+}
+
+fn anynum_operand[T: AnyNum](x: T) -> T {
+  x * 0.5 //~ E0401
+}
+
+fn int_operand[T: Int](x: T) -> T {
+  x * 0.5 //~ E0401
+}
+
+fn unsigned_operand[T: Unsigned](x: T) -> T {
+  x + 0.5 //~ E0401
+}
+
+fn num_joined[T: Num + Show](x: T) -> T {
+  x - 0.25 //~ E0401
+}
+
+fn num_tail[T: Num](x: T) -> T {
+  0.5 //~ E0401
+}
+
+fn no_bound_tail[T](x: T) -> T {
+  0.5 //~ E0401
+}
+
+fn no_bound_let[T](x: T) -> T {
+  let h: T = 0.5 //~ E0401
+  h
+}
+
+fn other_parameter_has_float[T: Num, S: Float](x: T, y: S) -> T {
+  x * 0.5 //~ E0401
+}
+
+fn zero_and_one_are_fine[T: Int](x: T) -> T {
+  x + T.ONE + T.ZERO
+}
+
+fn zero_is_fine[T: AnyNum](x: T) -> T {
+  x + T.ZERO
+}

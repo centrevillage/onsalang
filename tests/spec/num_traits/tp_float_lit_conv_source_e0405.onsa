@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§2.4", "§4.7", "§6.6"]
+
+// E0405, W5-05 U4/t (spec §6.6: "小数のリテラルは、境界が `Float` を含む型パラメータ `T` の値になる" - the literal is a value of the type parameter where the type is `T`; §2.4 and §4.7: "浮動小数
+// リテラルの型変数が残ればそのリテラルの位置に E0405"; §3.3: the source of `T.round_from(k)` is a free type variable, `S: AnyNum`, and a float literal has no default type): the source of
+// `T.round_from` does not make the type of a float literal `T`, so a float literal that is only the source of a conversion stays open and is E0405, as it was. The forms that
+// tp_conv_literal_float_e0405.onsa does not have: a literal bound by `let` and then converted, a negative literal, the conversion in a closure, the target that is the other type parameter,
+// and a conversion beside a literal that is `T` (the literal of the `T` is right, and only the literal of the conversion is open). The conversion of an integer literal gets `I32` as its
+// type and is fine (`T.round_from(2)`), and so is the conversion of a literal that another statement decides to be `F64`. One literal that is open in each function.
+
+use std.array
+
+pub fn let_then_converted[T: Float](x: T) -> T {
+  let h = 0.5 //~ E0405
+  T.round_from(h)
+}
+
+pub fn negative_source[T: Float](x: T) -> T {
+  T.round_from(-0.5) //~ E0405
+}
+
+pub fn in_a_closure[T: Float](x: T) -> [T; 2] {
+  array.from_fn(fn(i) { T.round_from(0.5) }) //~ E0405
+}
+
+pub fn other_target[T: Float, S: Float](x: T, y: S) -> S {
+  S.round_from(0.5) //~ E0405
+}
+
+pub fn beside_a_literal_that_is_t[T: Float](x: T) -> T {
+  if x > 0.5 {
+    T.round_from(0.25) //~ E0405
+  } else {
+    x
+  }
+}
+
+pub fn integer_literal_is_fine[T: Float](x: T) -> T {
+  x + T.round_from(2)
+}
+
+pub fn literal_decided_to_be_f64_is_fine[T: Float](x: T) -> T {
+  let h: F64 = 0.5
+  x + T.round_from(h)
+}

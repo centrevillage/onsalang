@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§4.7", "§6.5"]
+
+// W5-05 U4/t (spec §6.6: a float literal is a value of `T: Float`; §4.7: "返り値の推論は無名関数だけ。無名関数は本体を検査してから返り値の型を単一化する"; §6.5: a closure captures the values of
+// the outside by a copy): the float literal inside the body of a closure given to `array.from_fn`: the literal alone as the result (its type comes from the expected element type
+// `T`), the literal with a captured variable of the type `T`, a literal bound outside the closure and captured by it, and the literal with a conversion `T.round_from(i)` of the index.
+// The same body runs at `F32` and `F64`; every value is exact in binary: the index i is 0, 1, 2 and `T.round_from(i) * 0.25` is 0.0, 0.25, 0.5.
+
+use std.array
+
+fn constants[T: Float](x: T) -> [T; 3] {
+  array.from_fn(fn(i) { 0.5 })
+}
+
+fn halves[T: Float](x: T) -> [T; 3] {
+  array.from_fn(fn(i) { x * 0.5 })
+}
+
+fn captured_literal[T: Float](x: T) -> [T; 3] {
+  let h = 0.25
+  array.from_fn(fn(i) { x * h })
+}
+
+fn captured_typed_literal[T: Float](x: T) -> [T; 3] {
+  let h: T = 0.25
+  array.from_fn(fn(i) { x + h })
+}
+
+fn ramp[T: Float](x: T) -> [T; 3] {
+  array.from_fn(fn(i) { T.round_from(i) * 0.25 })
+}
+
+fn ramp_plus_offset[T: Float](x: T) -> [T; 3] {
+  array.from_fn(fn(i) { T.round_from(i) * 0.25 + x })
+}
+
+fn branch_in_closure[T: Float](x: T) -> [T; 3] {
+  array.from_fn(fn(i) { if i == 0 { 0.5 } else { x } })
+}
+
+test "a closure that returns a float literal" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  let ca     = constants(a)
+  let cb     = constants(b)
+  assert ca[0] == 0.5
+  assert ca[2] == 0.5
+  assert cb[1] == 0.5
+}
+
+test "a float literal next to a captured variable" {
+  let a: F32 = 3.0
+  let b: F64 = 5.0
+  let ha     = halves(a)
+  let hb     = halves(b)
+  assert ha[0] == 1.5
+  assert ha[2] == 1.5
+  assert hb[1] == 2.5
+}
+
+test "a float literal bound outside the closure and captured" {
+  let a: F32 = 4.0
+  let b: F64 = 8.0
+  let ca     = captured_literal(a)
+  let cb     = captured_literal(b)
+  assert ca[0] == 1.0
+  assert ca[1] == 1.0
+  assert cb[2] == 2.0
+}
+
+test "a float literal with the type T bound outside the closure" {
+  let a: F32 = 1.0
+  let b: F64 = 2.0
+  let ca     = captured_typed_literal(a)
+  let cb     = captured_typed_literal(b)
+  assert ca[2] == 1.25
+  assert cb[0] == 2.25
+}
+
+test "a float literal next to the conversion of the index" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  let ra     = ramp(a)
+  let rb     = ramp(b)
+  assert ra[0] == 0.0
+  assert ra[1] == 0.25
+  assert ra[2] == 0.5
+  assert rb[0] == 0.0
+  assert rb[1] == 0.25
+  assert rb[2] == 0.5
+  let c: F32 = 1.0
+  let d: F64 = 2.0
+  let pa     = ramp_plus_offset(c)
+  let pb     = ramp_plus_offset(d)
+  assert pa[2] == 1.5
+  assert pb[1] == 2.25
+}
+
+test "a float literal in a branch inside the closure" {
+  let a: F32 = 2.0
+  let b: F64 = 3.0
+  let ba     = branch_in_closure(a)
+  let bb     = branch_in_closure(b)
+  assert ba[0] == 0.5
+  assert ba[1] == 2.0
+  assert bb[0] == 0.5
+  assert bb[2] == 3.0
+}

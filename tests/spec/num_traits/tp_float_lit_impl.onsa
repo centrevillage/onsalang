@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.2", "§4.4", "§4.5"]
+
+// W5-05 U4/t (spec §6.6: "小数のリテラルは、境界が `Float` を含む型パラメータ `T` の値になる (… `impl[T: Float]` の `const HALF: T = 0.5`)"; §6.2: "具体的な型だけのメソッドは、境界で書く
+// (`impl[T: Float] Buf[T] { … }`)"; §4.4: an alias of a type is used in the place of the type, for an associated constant too, and it fixes the type arguments): the float literal in
+// `impl[T: Float]`: the body of a method that reads a field, the body of a method that takes an argument of the type `T`, a method that returns a `Bool`, and the initializer of an
+// associated constant: the literal alone, the literal times a literal, the literal next to `T.ONE`. The associated constants are read through the aliases `GainF32` and `GainF64`, which
+// fix `T`. The struct has no bound on `T` (`struct Gain[T]`) and the `impl` gives it: another `impl` of the same struct with another bound is right in the same file (§6.2). Every value is
+// exact in binary: `T.ONE - 0.25` = 0.75, 0.5 * 0.5 = 0.25, 3.0 * 0.5 + 1.0 * 0.5 = 2.0.
+
+pub struct Gain[T] {
+  g: T,
+}
+
+impl[T: Float] Gain[T] {
+  const HALF: T = 0.5
+  const QUARTER: T = 0.5 * 0.5
+  const THREE_QUARTERS: T = T.ONE - 0.25
+  const NEGATIVE_EIGHTH: T = -0.125
+
+  pub fn halved(self) -> T {
+    self.g * 0.5
+  }
+
+  pub fn offset_by(self, x: T) -> T {
+    x * self.g + 0.25
+  }
+
+  pub fn is_loud(self) -> Bool {
+    self.g > 0.75
+  }
+
+  pub fn blended(self, other: T) -> T {
+    self.g * 0.5 + other * 0.5
+  }
+}
+
+impl[T: Int] Gain[T] {
+  pub fn doubled(self) -> T {
+    self.g + self.g
+  }
+}
+
+type GainF32 = Gain[F32]
+type GainF64 = Gain[F64]
+
+test "an associated constant that is a float literal, read through an alias" {
+  assert GainF32.HALF == 0.5
+  assert GainF64.HALF == 0.5
+  assert GainF32.HALF.to_bits() == 0x3F000000
+  assert GainF64.HALF.to_bits() == 0x3FE0000000000000
+}
+
+test "an associated constant that is a product of literals" {
+  assert GainF32.QUARTER == 0.25
+  assert GainF64.QUARTER == 0.25
+}
+
+test "an associated constant that is T.ONE minus a literal" {
+  assert GainF32.THREE_QUARTERS == 0.75
+  assert GainF64.THREE_QUARTERS == 0.75
+}
+
+test "an associated constant that is a negative literal" {
+  assert GainF32.NEGATIVE_EIGHTH == -0.125
+  assert GainF64.NEGATIVE_EIGHTH.to_bits() == 0xBFC0000000000000
+}
+
+test "a method that multiplies a field by a literal" {
+  let a: Gain[F32] = Gain { g: 3.0 }
+  let b: Gain[F64] = Gain { g: 5.0 }
+  assert a.halved() == 1.5
+  assert b.halved() == 2.5
+}
+
+test "a method with an argument of the type T and a literal" {
+  let a: Gain[F32] = Gain { g: 2.0 }
+  let b: Gain[F64] = Gain { g: 4.0 }
+  assert a.offset_by(0.5) == 1.25
+  assert b.offset_by(0.5) == 2.25
+}
+
+test "a method that compares a field with a literal" {
+  let a: Gain[F32] = Gain { g: 1.0 }
+  let b: Gain[F64] = Gain { g: 0.75 }
+  assert a.is_loud()
+  assert !b.is_loud()
+}
+
+test "a method with literals on both operands" {
+  let a: Gain[F32] = Gain { g: 3.0 }
+  let b: Gain[F64] = Gain { g: 3.0 }
+  assert a.blended(1.0) == 2.0
+  assert b.blended(1.0) == 2.0
+}
+
+test "the other impl of the same struct with another bound is still right" {
+  let a: Gain[I32] = Gain { g: 21 }
+  assert a.doubled() == 42
+}

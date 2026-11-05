@@ -1,0 +1,199 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§2.4", "§4.7", "§4.1"]
+
+// W5-05 U4/t (spec §6.6: a float literal is a value of `T: Float`; §2.4: "配列: `[a, b, c]`、`[e; N]`" and "タプル: `(a, b)`"; §4.7: the expected type goes down into an expression, "struct のフィールドの型が期待型になる"):
+// a float literal that is a part of a value of a bigger shape: the payload of `Some(0.5)`, `[0.5; 2]`, an array literal (with and without another element of the type `T`), the field of a
+// struct, a tuple and a nested shape. The types come from the return type or from the other element. The same body runs at `F32` and `F64`; every value is exact in binary.
+
+pub struct Pair[T: Float] {
+  a: T,
+  b: T,
+}
+
+fn some_half[T: Float](x: T) -> Option[T] {
+  Some(0.5)
+}
+
+fn some_in_a_let[T: Float](x: T) -> Option[T] {
+  let o = Some(0.5)
+  o
+}
+
+fn some_sum[T: Float](x: T) -> Option[T] {
+  Some(x + 0.25)
+}
+
+fn repeated[T: Float](x: T) -> [T; 2] {
+  [0.5; 2]
+}
+
+fn listed_with_a_variable[T: Float](x: T) -> [T; 3] {
+  [0.25, x, 0.75]
+}
+
+fn listed_literals[T: Float](x: T) -> [T; 3] {
+  [0.25, 0.5, 0.75]
+}
+
+fn in_a_struct[T: Float](x: T) -> Pair[T] {
+  Pair { a: 0.5, b: x }
+}
+
+fn in_a_struct_both[T: Float](x: T) -> Pair[T] {
+  Pair { a: 0.5, b: 0.25 }
+}
+
+fn in_a_tuple[T: Float](x: T) -> (T, T) {
+  (0.5, x)
+}
+
+fn in_a_tuple_of_literals[T: Float](x: T) -> (T, T) {
+  (0.5, 0.25)
+}
+
+fn tuple_pattern[T: Float](x: T) -> T {
+  let (p, q) = (0.5, 0.25)
+  x * p + q
+}
+
+fn nested_shape[T: Float](x: T) -> Option[(T, [T; 2])] {
+  Some((0.5, [x, 0.25]))
+}
+
+fn or_default[T: Float](o: Option[T]) -> T {
+  match o {
+    Some(v) => v,
+    None => 0.5,
+  }
+}
+
+test "a float literal as the payload of Some" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  let sa = match some_half(a) {
+    Some(v) => v,
+    None => 9.0,
+  }
+  let sb = match some_half(b) {
+    Some(v) => v,
+    None => 9.0,
+  }
+  assert sa == 0.5
+  assert sb == 0.5
+}
+
+test "Some(0.5) bound by a let first" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  assert or_default(some_in_a_let(a)) == 0.5
+  assert or_default(some_in_a_let(b)) == 0.5
+}
+
+test "a float literal in an operand inside Some" {
+  let a: F32 = 1.0
+  let b: F64 = 2.0
+  assert or_default(some_sum(a)) == 1.25
+  assert or_default(some_sum(b)) == 2.25
+}
+
+test "a float literal as the element of an array repeated" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  let ra     = repeated(a)
+  let rb     = repeated(b)
+  assert ra[0] == 0.5
+  assert ra[1] == 0.5
+  assert rb[0] == 0.5
+  assert rb[1] == 0.5
+}
+
+test "float literals in an array literal with a variable of the type T" {
+  let a: F32 = 0.5
+  let b: F64 = 0.5
+  let la     = listed_with_a_variable(a)
+  let lb     = listed_with_a_variable(b)
+  assert la[0] == 0.25
+  assert la[1] == 0.5
+  assert la[2] == 0.75
+  assert lb[0] == 0.25
+  assert lb[1] == 0.5
+  assert lb[2] == 0.75
+}
+
+test "an array literal of float literals only takes its type from the return type" {
+  let a: F32 = 0.0
+  let b: F64 = 0.0
+  let la     = listed_literals(a)
+  let lb     = listed_literals(b)
+  assert la[0] == 0.25
+  assert la[2] == 0.75
+  assert lb[1] == 0.5
+  assert lb[2] == 0.75
+}
+
+test "a float literal as the field of a struct" {
+  let a: F32 = 2.0
+  let b: F64 = 3.0
+  let pa     = in_a_struct(a)
+  let pb     = in_a_struct(b)
+  assert pa.a == 0.5
+  assert pa.b == 2.0
+  assert pb.a == 0.5
+  assert pb.b == 3.0
+  let qa = in_a_struct_both(a)
+  let qb = in_a_struct_both(b)
+  assert qa.a == 0.5
+  assert qa.b == 0.25
+  assert qb.a == 0.5
+  assert qb.b == 0.25
+}
+
+test "a float literal in a tuple" {
+  let a: F32 = 2.0
+  let b: F64 = 3.0
+  let ta     = in_a_tuple(a)
+  let tb     = in_a_tuple(b)
+  assert ta.0 == 0.5
+  assert ta.1 == 2.0
+  assert tb.0 == 0.5
+  assert tb.1 == 3.0
+  let ua = in_a_tuple_of_literals(a)
+  let ub = in_a_tuple_of_literals(b)
+  assert ua.0 == 0.5
+  assert ua.1 == 0.25
+  assert ub.0 == 0.5
+  assert ub.1 == 0.25
+}
+
+test "float literals bound by a tuple pattern" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert tuple_pattern(a) == 1.75
+  assert tuple_pattern(b) == 1.75
+}
+
+test "a float literal in a nested shape" {
+  let a: F32 = 1.5
+  let b: F64 = 2.5
+  let na     = nested_shape(a)
+  let nb     = nested_shape(b)
+  let ca = match na {
+    Some(t) => t.0 + t.1[0] + t.1[1],
+    None => 0.0,
+  }
+  let cb = match nb {
+    Some(t) => t.0 + t.1[0] + t.1[1],
+    None => 0.0,
+  }
+  assert ca == 2.25
+  assert cb == 3.25
+}
+
+test "a float literal as the other arm of a match" {
+  let a: Option[F32] = None
+  let b: Option[F64] = Some(2.0)
+  assert or_default(a) == 0.5
+  assert or_default(b) == 2.0
+}

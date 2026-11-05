@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§4.5", "§4.7", "§13.4"]
+
+// W5-05 U4/t (spec §6.6: a float literal is a value of `T: Float`; §4.5: the type arguments of a call are decided by the arguments and the expected type; §13.4: `min` and `max` of
+// `std.math` are for `AnyNum`, `floor` for `Float`): a float literal given to a generic function from a generic function: to a function of the same bound, to a function of a looser
+// bound (`S: Num`, whose `S` becomes the `T` of the caller), as the first and as the second argument, to `max`, `min` and `floor` of `std.math`, and as the argument of a call that
+// is itself an argument. The same body runs at `F32` and `F64`; every value is exact in binary: scale(3.0, 0.5) = 1.5, lerp(1.0, 3.0, 0.5) = 1.0 + 2.0 * 0.5 = 2.0,
+// max(0.25, 0.5) = 0.5, min(2.0, 0.5) = 0.5, floor(2.5 + 0.5) = 3.0, floor(2.25 + 0.5) = 2.0, floor(-0.75 + 0.5) = floor(-0.25) = -1.0, min(max(1.5, 0.0), 1.0) = 1.0.
+
+use std.math.{floor, max, min}
+
+fn scale[T: Float](x: T, k: T) -> T {
+  x * k
+}
+
+fn lerp[S: Num](a: S, b: S, t: S) -> S {
+  a + (b - a) * t
+}
+
+fn halved_by_a_call[T: Float](x: T) -> T {
+  scale(x, 0.5)
+}
+
+fn literal_first[T: Float](x: T) -> T {
+  scale(0.5, x)
+}
+
+fn both_literals_in_a_call[T: Float](x: T) -> T {
+  x + scale(0.5, 0.25)
+}
+
+fn midpoint[T: Float](a: T, b: T) -> T {
+  lerp(a, b, 0.5)
+}
+
+fn lower_bound[T: Float](x: T) -> T {
+  max(x, 0.5)
+}
+
+fn upper_bound[T: Float](x: T) -> T {
+  min(x, 0.5)
+}
+
+fn rounded_half_up[T: Float](x: T) -> T {
+  floor(x + 0.5)
+}
+
+fn clamp_unit[T: Float](x: T) -> T {
+  min(max(x, 0.0), 1.0)
+}
+
+fn call_in_a_call[T: Float](x: T) -> T {
+  scale(scale(x, 0.5), 0.5)
+}
+
+test "a float literal as the second argument of a function of the same bound" {
+  let a: F32 = 3.0
+  let b: F64 = 3.0
+  assert halved_by_a_call(a) == 1.5
+  assert halved_by_a_call(b) == 1.5
+}
+
+test "a float literal as the first argument" {
+  let a: F32 = 3.0
+  let b: F64 = 5.0
+  assert literal_first(a) == 1.5
+  assert literal_first(b) == 2.5
+}
+
+test "a call whose arguments are all float literals" {
+  let a: F32 = 1.0
+  let b: F64 = 2.0
+  assert both_literals_in_a_call(a) == 1.125
+  assert both_literals_in_a_call(b) == 2.125
+}
+
+test "a float literal given to a function of a looser bound" {
+  let a: F32 = 1.0
+  let b: F32 = 3.0
+  let c: F64 = 1.0
+  let d: F64 = 3.0
+  assert midpoint(a, b) == 2.0
+  assert midpoint(c, d) == 2.0
+}
+
+test "a float literal as the argument of max and min" {
+  let a: F32 = 0.25
+  let b: F64 = 2.0
+  assert lower_bound(a) == 0.5
+  assert lower_bound(b) == 2.0
+  assert upper_bound(a) == 0.25
+  assert upper_bound(b) == 0.5
+}
+
+test "a float literal in the argument of floor" {
+  let a: F32 = 2.5
+  let b: F64 = 2.25
+  let c: F64 = -0.75
+  assert rounded_half_up(a) == 3.0
+  assert rounded_half_up(b) == 2.0
+  assert rounded_half_up(c) == -1.0
+}
+
+test "float literals as arguments of calls inside calls" {
+  let a: F32 = 1.5
+  let b: F64 = -2.0
+  let c: F64 = 0.5
+  assert clamp_unit(a) == 1.0
+  assert clamp_unit(b) == 0.0
+  assert clamp_unit(c) == 0.5
+  assert call_in_a_call(a) == 0.375
+  assert call_in_a_call(b) == -0.5
+}

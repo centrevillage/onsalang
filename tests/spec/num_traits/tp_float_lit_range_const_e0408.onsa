@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.6", "§4.7"]
+
+// E0408, W5-05 U4/t (spec §6.6: "小数のリテラルは、境界が `Float` を含む型パラメータ `T` の値になる (… `impl[T: Float]` の `const HALF: T = 0.5`)。… どちらかの型で §2.4 の範囲に当たる
+// 字面 (`1.0e40`、`1.0e-50`) は、定義の位置で E0408 である"): a literal out of the range of `F32` or `F64` in the initializer of an associated constant of `impl[T: Float]`. The error is at
+// the definition: no alias fixes `T` and the constant is read nowhere. One constant in each `impl` (each `impl` is a unit of its own). The literal alone, the literal in
+// an operation with `T.ONE`, a negative literal; and the constants that are right for both types in the last `impl`.
+
+pub struct Big[T] {
+  v: T,
+}
+
+impl[T: Float] Big[T] {
+  const TOO_BIG: T = 1.0e40 //~ E0408
+}
+
+pub struct Small[T] {
+  v: T,
+}
+
+impl[T: Float] Small[T] {
+  const TOO_SMALL: T = 1.0e-50 //~ E0408
+}
+
+pub struct Product[T] {
+  v: T,
+}
+
+impl[T: Float] Product[T] {
+  const TIMES: T = T.ONE * 1.0e40 //~ E0408
+}
+
+pub struct Negative[T] {
+  v: T,
+}
+
+impl[T: Float] Negative[T] {
+  const BELOW: T = -1.0e309 //~ E0408
+}
+
+pub struct Half[T] {
+  v: T,
+}
+
+impl[T: Float] Half[T] {
+  const BELOW_HALF: T = 7.0e-46 //~ E0408
+}
+
+pub struct Fine[T] {
+  v: T,
+}
+
+impl[T: Float] Fine[T] {
+  const HALF: T = 0.5
+  const NEAR_LARGEST: T = 3.4e38
+  const SUBNORMAL: T = 1.0e-40
+}

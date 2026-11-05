@@ -43,8 +43,9 @@ pub(crate) enum DeferredKind {
     Conversion { to: TyId, ret: TyId, value: bool },
     /// A float literal `lit`: its value once the type is known (E0408, §2.4,
     /// R-45, S-211: not finite, or a literal that is not 0 rounds to 0), and
-    /// E0405 when its type is still open at the end.
-    FloatLit { lit: ExprId },
+    /// E0405 when its type is still open at the end, with the way out `rule`
+    /// when the use of the literal has its own.
+    FloatLit { lit: ExprId, rule: Option<String> },
     /// A type variable that an expression made (a type parameter of a call,
     /// `None`, `Buf.zeroed(4)`, `[]`): E0406 when it is still open at the end
     /// (§4.5, §4.7). `what` names it in the message; `rule`: the way out, if
@@ -357,7 +358,7 @@ impl<'a> Checker<'a> {
                     Look::Fail(self.decided_note(d, item.ty, &shown, false))
                 }
             },
-            DeferredKind::FloatLit { lit } => match self.ty(r) {
+            DeferredKind::FloatLit { lit, rule } => match self.ty(r) {
                 Ty::Var(_) if end => Look::Fail(
                     Diagnostic::new(
                         Stage::Types,
@@ -366,13 +367,20 @@ impl<'a> Checker<'a> {
                         "the type of this float literal cannot be determined; annotate it (§2.4)",
                     )
                     .with_found(self.src(item.span))
-                    .with_rule(format!(
-                        "a literal takes no annotation of its own: give it its type in a binding (`let x: F32 = {}`)",
-                        self.src(item.span)
-                    )),
+                    .with_rule(rule.clone().unwrap_or_else(|| {
+                        format!(
+                            "a literal takes no annotation of its own: give it its type in a binding (`let x: F32 = {}`)",
+                            self.src(item.span)
+                        )
+                    })),
                 ),
                 Ty::Var(_) => Look::Wait,
                 Ty::Float(k) => self.float_lit(item, k, *lit),
+                // The literal is a value of every type of `Float` (§4.7, §6.6), so
+                // its place in the definition reports what does not fit: of `F32`,
+                // the narrower range. An unknown bound holds no such claim (§18.1).
+                Ty::Param(_) if self.traits_unknown(r) => Look::Done,
+                Ty::Param(_) => self.float_lit(item, FloatKind::F32, *lit),
                 _ => Look::Done,
             },
             DeferredKind::Origin { what, rule } => {

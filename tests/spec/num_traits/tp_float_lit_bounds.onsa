@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.3", "§4.5"]
+
+// W5-05 U4/t (spec §6.6: "小数のリテラルは、境界が `Float` を含む型パラメータ `T` の値になる"; §6.3: `Float` satisfies `Num`, which satisfies `AnyNum`, and the bounds of a type parameter are
+// joined with `+`): a bound that has `Float` among other traits, in either order, and with the traits it implies written beside it, and a type parameter with another name than `T`.
+// The same body runs at `F32` and `F64`; every value is exact in binary.
+
+fn float_and_show[T: Float + Show](x: T) -> T {
+  x * 0.5
+}
+
+fn show_and_float[T: Show + Float](x: T) -> T {
+  0.5 * x
+}
+
+fn num_and_float[T: Num + Float](x: T) -> T {
+  x + 0.25
+}
+
+fn float_and_num[T: Float + Num](x: T) -> T {
+  x - 0.25
+}
+
+fn three_traits[T: AnyNum + Num + Float](x: T) -> T {
+  0.5 * (x + 0.5)
+}
+
+fn float_and_partial_ord[T: Float + PartialOrd](x: T) -> Bool {
+  x < 0.5
+}
+
+fn another_name[Sample: Float](x: Sample) -> Sample {
+  x * 0.5
+}
+
+fn two_parameters[T: Float, S: Float](x: T, y: S) -> T {
+  x * 0.5
+}
+
+fn two_parameters_other[T: Float, S: Float](x: T, y: S) -> S {
+  y * 0.25
+}
+
+test "Float with Show in both orders" {
+  let a: F32 = 3.0
+  let b: F64 = 5.0
+  assert float_and_show(a) == 1.5
+  assert float_and_show(b) == 2.5
+  assert show_and_float(a) == 1.5
+  assert show_and_float(b) == 2.5
+}
+
+test "Float with Num in both orders" {
+  let a: F32 = 1.0
+  let b: F64 = 1.0
+  assert num_and_float(a) == 1.25
+  assert num_and_float(b) == 1.25
+  assert float_and_num(a) == 0.75
+  assert float_and_num(b) == 0.75
+}
+
+test "Float with the two traits it implies" {
+  let a: F32 = 1.5
+  let b: F64 = 2.5
+  assert three_traits(a) == 1.0
+  assert three_traits(b) == 1.5
+}
+
+test "Float with PartialOrd" {
+  let a: F32 = 0.25
+  let b: F64 = 0.75
+  assert float_and_partial_ord(a)
+  assert !float_and_partial_ord(b)
+}
+
+test "a type parameter with another name" {
+  let a: F32 = 3.0
+  let b: F64 = 5.0
+  assert another_name(a) == 1.5
+  assert another_name(b) == 2.5
+}
+
+test "each of two type parameters takes the literal of its own type" {
+  let a: F32 = 3.0
+  let b: F64 = 8.0
+  assert two_parameters(a, b) == 1.5
+  assert two_parameters(b, a) == 4.0
+  assert two_parameters_other(a, b) == 2.0
+  assert two_parameters_other(b, a) == 0.75
+}

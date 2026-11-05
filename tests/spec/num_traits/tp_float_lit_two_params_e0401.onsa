@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.7", "§4.5"]
+// fixes = 0
+
+// E0401, W5-05 U4/t (spec §6.6: a float literal is a value of the type parameter `T: Float` that its type is decided to be; §4.5: two type parameters are two different types, so a value of `T`
+// and a value of `S` are not mixed even when both have the bound `Float`): the literal has the type of the one that decides it, and the other one is a mismatch. A literal bound
+// by `let` and used with `x: T` and with `y: S`, a `var` from a literal that is added to `x` and then to `y`, an operation of `x` and `y`, a literal in a call argument that a function
+// takes as `S` after `T`, and a literal that is compared with both. One mismatch in each function. No candidate (`fixes = 0`: `T` and `S` are not turned into one type). The
+// functions that use each of the two types with its own literal are fine.
+
+fn let_used_with_both[T: Float, S: Float](x: T, y: S) -> T {
+  let h = 0.5
+  let a = x * h
+  let _ = y * h //~ E0401
+  a
+}
+
+fn var_added_to_both[T: Float, S: Float](x: T, y: S) -> T {
+  var a = 0.0
+  a = a + x
+  a = a + y //~ E0401
+  a
+}
+
+fn operation_of_both[T: Float, S: Float](x: T, y: S) -> T {
+  x * 0.5 + y //~ E0401
+}
+
+fn literal_given_as_the_other[T: Float, S: Float](x: T, y: S) -> S {
+  let h: T = 0.5
+  scale_second(y, h) //~ E0401
+}
+
+fn scale_second[S: Float](y: S, k: S) -> S {
+  y * k
+}
+
+fn compared_with_both[T: Float, S: Float](x: T, y: S) -> Bool {
+  let h = 0.5
+  x > h && y > h //~ E0401
+}
+
+fn each_has_its_own_literal[T: Float, S: Float](x: T, y: S) -> T {
+  let a = x * 0.5
+  let b = y * 0.25
+  a + T.round_from(b)
+}

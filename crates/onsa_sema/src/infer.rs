@@ -55,6 +55,8 @@ pub struct Infer {
     /// For each bound variable, the order of the binding and its cause.
     causes: Vec<Option<(u32, Cause)>>,
     seq: u32,
+    /// The type parameters of the body whose bounds hold `Float`.
+    float_params: Vec<u32>,
 }
 
 /// Why two types did not unify (for messages).
@@ -67,6 +69,21 @@ pub enum Mismatch {
 }
 
 impl Infer {
+    /// The state of a body with the type parameters `float_params`, those whose bounds hold `Float`.
+    pub fn new(float_params: Vec<u32>) -> Infer {
+        Infer { float_params, ..Infer::default() }
+    }
+
+    /// Whether a float literal can have the type `ty`: a float type, or a type
+    /// parameter whose bounds hold `Float` (§6.6, S-881).
+    pub fn float_fits(&self, ty: &Ty) -> bool {
+        match ty {
+            Ty::Float(_) => true,
+            Ty::Param(p) => self.float_params.contains(p),
+            _ => false,
+        }
+    }
+
     pub fn fresh(&mut self, types: &mut Types, lit: Option<LitKind>) -> TyId {
         let i = self.vars.len() as u32;
         self.vars.push(VarState::Unbound(lit));
@@ -179,7 +196,8 @@ impl Infer {
                 };
                 self.vars[j as usize] = VarState::Unbound(merged);
             }
-            (Some(LitKind::Int), Ty::Int(_)) | (Some(LitKind::Float), Ty::Float(_)) | (None, _) => {}
+            (Some(LitKind::Int), Ty::Int(_)) | (None, _) => {}
+            (Some(LitKind::Float), t) if self.float_fits(t) => {}
             (Some(_), Ty::Error) => {}
             (Some(_), _) => return Err(Mismatch::Literal),
         }

@@ -1,0 +1,3 @@
+[package]
+name = "tp_float_lit_module_pkg"
+edition = "2026"

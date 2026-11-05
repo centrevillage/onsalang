@@ -1,0 +1,29 @@
+// Generic items of a module with float literals in them (W5-05 U4/t, spec §6.6, §15.1). The module has no test: `main` uses the items at `F32` and `F64`.
+
+pub struct Mix[T: Float] {
+  dry: T,
+}
+
+impl[T: Float] Mix[T] {
+  pub const HALF: T = 0.5
+
+  pub fn wet(self) -> T {
+    self.dry * 0.25
+  }
+}
+
+pub fn halve[T: Float](x: T) -> T {
+  x * 0.5
+}
+
+pub fn tenth[T: Float](x: T) -> T {
+  0.1
+}
+
+pub fn quarter_of_half[T: Float](x: T) -> T {
+  halve(x) * 0.5
+}
+
+pub fn make_mix[T: Float](x: T) -> Mix[T] {
+  Mix { dry: x * 0.5 }
+}
