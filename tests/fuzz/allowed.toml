@@ -626,3 +626,10 @@ left = "the type of this float literal cannot be determined; annotate it (§#.#)
 input = "tests/fuzz/db0da067.onsa"
 reasons = ["S-384"]
 note = "途中の文の `T.round_from(0.5)` は誤りが二つある入力（捨てる値と、型の決まらない小数のリテラル）。具体的な型の `F32.round_from(0.5)` も同じ。候補の約束は誤りが一つの単位に当たる（§18.1）"
+
+[[allowed]]
+class = "fix|E0401|narrow the bound of `…` to `…`|E0418"
+left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
+input = "tests/fuzz/c5a02c37.onsa"
+reasons = ["S-384"]
+note = "途中の文の `-x`（`T: AnyNum`）は誤りが二つある入力（捨てない値と、`Neg` の無い否定）。候補で否定が通ると、隠れていた E0418 が見える。候補の約束は誤りが一つの単位に当たる（§18.1）"
