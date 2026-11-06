@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§11.5", "§18.1"]
+
+// S-187 (U2 of W5-09): `match~` is exhaustive by the same rules as `match` (§7: "`match~`（§11.5）も同じである"; §11.5: "腕は `match` と同じく、パターンとガードで選ぶ"). The literal arms
+// are not counted for the exhaustiveness (E0501), nor are the missing `false`, `None` and variant. The unreachable arms are in match_cover_tilde_unreachable.onsa. The inputs of the flows
+// are scalars (E0810 otherwise, §11.3), so the `Option` and the enum are made in the body. One error per flow (P-01).
+
+pub enum Color {
+  Red,
+  Green,
+}
+
+pub flow literals_only(k: U32 at sample) -> F32 at sample {
+  match~ k {                                        //~ E0501
+    0 => 1.0,
+    1 => 2.0,
+  }
+}
+
+pub flow bool_without_false(b: Bool at sample) -> F32 at sample {
+  match~ b {                                        //~ E0501
+    true => 1.0,
+  }
+}
+
+pub flow option_without_none(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  match~ o {                                        //~ E0501
+    Some(v) => v,
+  }
+}
+
+pub flow enum_without_a_variant(k: U32 at sample) -> F32 at sample {
+  let c = if k > 0 { Color.Red } else { Color.Green }
+  match~ c {                                        //~ E0501
+    Color.Red => 1.0,
+  }
+}

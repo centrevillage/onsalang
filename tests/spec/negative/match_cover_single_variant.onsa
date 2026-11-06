@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-177 (U2 of W5-09): a `let` and a `for` take only a pattern that cannot fail (§7: "分解は反駁不能なパターン（タプル・構造体）だけ"), and "enum のパターンは、列挙子が一つでも
+// E0502 である（列挙子を一つ足しただけで、離れた `let` が壊れる性質を持ち込まない）". So an enum of one variant with a payload (`One.Only(x)`) or without (`Solo.Only`), written in a
+// `let`, in a `for` header, or inside a tuple or a struct, is E0502, as `let Some(x) = o` is (match_cover_refutable_let.onsa, which passes today). The `match` on such an enum is exhaustive with one arm and is no error
+// (match_cover_irrefutable.onsa). The marker is on the line of the `let` or the `for`. One error per function (P-01).
+
+pub enum One {
+  Only(I32),
+}
+
+pub enum Solo {
+  Only,
+}
+
+pub struct Wrapper {
+  inner: One,
+  n: I32,
+}
+
+pub fn let_with_one_variant(v: One) -> I32 {
+  let One.Only(x) = v                               //~ E0502
+  x
+}
+
+pub fn let_with_a_variant_without_a_payload(s: Solo) -> I32 {
+  let Solo.Only = s                                 //~ E0502
+  1
+}
+
+pub fn let_with_one_variant_inside_a_tuple(p: (One, I32)) -> I32 {
+  let (One.Only(a), b) = p                          //~ E0502
+  a + b
+}
+
+pub fn let_with_one_variant_inside_a_struct(w: Wrapper) -> I32 {
+  let Wrapper { inner: One.Only(a), n: b } = w      //~ E0502
+  a + b
+}
+
+pub fn for_with_one_variant(xs: [One; 2]) -> I32 {
+  var t = 0
+  for One.Only(x) in xs {                           //~ E0502
+    t = t + x
+  }
+  t
+}

@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// S-187, S-932 (U2 of W5-09): the arms that look as if an earlier arm covered them and are still chosen by some value, so that there is no E0503 (§7:
+// "前の腕で覆われて、どの値でも選ばれない腕は E0503"). A literal covers only its own value, so a `_` after it is chosen by the others. An arm with a guard
+// covers nothing, whatever its pattern (`_ if c` is followed by a reachable `_`). The unit of the reachability is the arm: a choice whose branches overlap
+// (`1 | 1 =>`) is not an error (S-932), nor is one branch that another covers. The forms with a constant (it covers nothing, because its value is not read) are in
+// match_cover_reachable_constants.onsa (U1a). No diagnostic.
+
+pub enum Color {
+  Red,
+  Green,
+  Blue,
+}
+
+pub fn wildcard_after_a_literal(n: I32) -> I32 {
+  match n {
+    1 => 1,
+    _ => 0,
+  }
+}
+
+pub fn guard_does_not_cover_a_wildcard(n: I32, c: Bool) -> I32 {
+  match n {
+    _ if c => 1,
+    _ => 0,
+  }
+}
+
+pub fn guard_does_not_cover_the_same_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) if x > 0 => x,
+    Some(y) => y + 1,
+    None => 0,
+  }
+}
+
+pub fn guard_on_true_before_true(b: Bool, c: Bool) -> I32 {
+  match b {
+    true if c => 1,
+    true => 2,
+    false => 3,
+  }
+}
+
+pub fn binding_with_a_guard_before_a_literal(n: I32) -> I32 {
+  match n {
+    k if k > 3 => k,
+    1 => 1,
+    _ => 0,
+  }
+}
+
+pub fn choice_with_the_same_literal_twice(n: I32) -> I32 {
+  match n {
+    1 | 1 => 1,
+    _ => 0,
+  }
+}
+
+pub fn choice_with_a_branch_that_another_covers(o: Option[I32]) -> I32 {
+  match o {
+    Some(_) | Some(1) => 1,
+    None => 0,
+  }
+}
+
+pub fn overlapping_choices(n: I32) -> I32 {
+  match n {
+    1 | 2 => 1,
+    2 | 3 => 2,
+    _ => 0,
+  }
+}
+
+pub fn partial_cover_in_a_tuple(a: Bool, n: I32) -> I32 {
+  match (a, n) {
+    (true, 1) => 1,
+    (true, _) => 2,
+    (false, _) => 3,
+  }
+}
+
+pub fn variants_one_by_one_then_a_binding_in_a_tuple(c: Color, b: Bool) -> I32 {
+  match (c, b) {
+    (Color.Red, true) => 1,
+    (Color.Red, false) => 2,
+    (_, true) => 3,
+    (_, false) => 4,
+  }
+}
+
+pub fn second_arm_is_the_part_the_first_leaves(c: Color) -> I32 {
+  match c {
+    Color.Red => 1,
+    Color.Green | Color.Blue => 2,
+  }
+}

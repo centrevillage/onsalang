@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1"]
+// fixes = 0
+
+// S-185 (U1a of W5-09), §7: "束縛かどうかは字面で決まる（§2.3）ので、定数の名前を書き誤っても束縛にはならず、E0302 になる". A name in upper
+// case is resolved, and one that is not found is E0302 whether it is a plain name (`LIMT` for `LIMIT`), the associated constant of
+// a built-in type (`I64.MAXX`) or of a type of the program (`Item.CAPP`). No candidate: a misspelled name does not have one intended
+// name (§15.1). The unit stops at the failed name, so the `_` after it and the exhaustiveness are not reported. One error per
+// function (P-01).
+
+const LIMIT: I32 = 5
+
+pub struct Item {
+  x: I32,
+}
+
+impl Item {
+  pub const CAP: I32 = 9
+}
+
+pub fn misspelled_constant(n: I32) -> I32 {
+  match n {
+    LIMT => 1,                                      //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn constant_never_declared(n: I32) -> I32 {
+  match n {
+    UNDECLARED => 1,                                //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn associated_constant_of_a_built_in_type(n: I64) -> I32 {
+  match n {
+    I64.MAXX => 1,                                  //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn associated_constant_of_a_type_of_the_program(n: I32) -> I32 {
+  match n {
+    Item.CAPP => 1,                                 //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn misspelled_constant_in_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (LIMT, b) => b,                                 //~ E0302
+    _ => 0,
+  }
+}

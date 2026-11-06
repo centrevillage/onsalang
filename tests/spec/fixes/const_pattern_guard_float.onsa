@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-185, S-252, S-253, S-319 (U1b of W5-09): the constant of a floating-point type is E0020 as a pattern (§7: "浮動小数の定数は、浮動小数のリテラルと
+// 同じ理由で書けない"), in the stage of the types because the type of the constant is needed (the float literal is in the syntax stage). The
+// candidate is the guard form (`x if x == LIMIT`): one candidate for the arm, with a binding that the spec does not name (S-253), so the text
+// is not written here and the contract of §18.1 checks that nothing is left after it. The constant is `F32`, `F64` or an associated
+// constant of a float type (`F32.PI`), alone, in a tuple, in `Some`, and two in one arm (one error, one candidate). One error per function (P-01).
+
+const LIMIT: F32 = 1.0
+const OTHER: F32 = 2.0
+const HALF: F64 = 0.5
+
+pub fn f32_constant(x: F32) -> I32 {
+  match x {
+    LIMIT => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn f64_constant(x: F64) -> I32 {
+  match x {
+    HALF => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn associated_constant_of_a_float_type(x: F32) -> I32 {
+  match x {
+    F32.PI => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn associated_constant_max(x: F64) -> I32 {
+  match x {
+    F64.MAX => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn element_of_a_tuple(t: (F32, I32)) -> I32 {
+  match t {
+    (LIMIT, n) => n,                                //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn content_of_some(o: Option[F32]) -> I32 {
+  match o {
+    Some(LIMIT) => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_constants_in_one_arm(t: (F32, F32)) -> I32 {
+  match t {
+    (LIMIT, OTHER) => 1,                            //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn constant_in_a_match_inside_an_arm(x: F32, n: I32) -> I32 {
+  match n {
+    0 => 1,
+    _ => match x {
+      LIMIT => 2,                                   //~ E0020
+      _ => 3,
+    },
+  }
+}

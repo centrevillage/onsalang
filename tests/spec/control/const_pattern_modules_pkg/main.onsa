@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§15.1"]
+
+// S-185 (U1a of W5-09): a constant of another module is a pattern when it is written as an expression writes it (§7: "定数を指す名前
+// （§4.5 と同じ。`LIMIT`、`cfg.LIMIT`、関連定数の `I64.MAX`）"): with the module's name (`cfg.LIMIT`), by the name that a `use`
+// takes (`LIMIT`, `SHARED`), and as the associated constant of a type that a `use` takes (`Slot.FULL`). The same constant written
+// two ways is two arms that the check accepts (the value of a constant is not read, §7). Every value is worked out by hand.
+use cfg
+use cfg.{LIMIT, SHARED, Slot}
+
+fn with_the_module_name(n: I32) -> I32 {
+  var r = 0
+  match n {
+    cfg.LIMIT => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn with_the_name_of_a_use(n: I32) -> I32 {
+  var r = 0
+  match n {
+    LIMIT => { r = 1 },
+    SHARED => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+fn associated_constant_of_an_imported_type(n: I32) -> I32 {
+  var r = 0
+  match n {
+    Slot.FULL => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn char_and_bool_of_the_module(c: Char, b: Bool) -> I32 {
+  var r = 0
+  match c {
+    cfg.MODE => { r = 1 },
+    _ => { r = 2 },
+  }
+  match b {
+    cfg.ENABLED => { r = r + 10 },
+    _ => { r = r + 20 },
+  }
+  r
+}
+
+fn two_spellings_of_one_constant(n: I32) -> I32 {
+  var r = 0
+  match n {
+    cfg.LIMIT => { r = 1 },
+    LIMIT => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+test "a constant of another module as a pattern" {
+  assert with_the_module_name(7) == 1
+  assert with_the_module_name(6) == 2
+  assert with_the_name_of_a_use(7) == 1
+  assert with_the_name_of_a_use(11) == 2
+  assert with_the_name_of_a_use(0) == 3
+  assert associated_constant_of_an_imported_type(3) == 1
+  assert associated_constant_of_an_imported_type(4) == 2
+  assert char_and_bool_of_the_module('m', true) == 11
+  assert char_and_bool_of_the_module('m', false) == 21
+  assert char_and_bool_of_the_module('x', true) == 12
+  assert two_spellings_of_one_constant(7) == 1
+  assert two_spellings_of_one_constant(8) == 3
+}

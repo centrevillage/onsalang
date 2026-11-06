@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§15.1"]
+
+// S-185 (U1a of W5-09): a constant stands wherever a literal stands in a pattern (§7: "定数: 定数を指す名前は、その値と `==` で比べる"):
+// an element of a tuple, a field of a struct, the content of `Some` and of a variant, a branch of a choice (`p | q`, without a binding: a choice that binds waits for W8-06 to run), a nested
+// pattern, and an arm with a guard. The constant is compared, and the elements that the pattern binds keep their values. Every
+// value is worked out by hand. The matches are statements (a `match` that gives a value waits for W8-06).
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub enum Mode {
+  Gain(I32),
+  Pitch(I32),
+  Off,
+}
+
+const LIMIT: I32 = 5
+const FLAG: Bool = true
+const CH: Char = 'z'
+
+fn tuple_element(t: (I32, I32)) -> I32 {
+  var r = 0
+  match t {
+    (LIMIT, b) => { r = b },
+    (a, LIMIT) => { r = a + 100 },
+    _ => { r = -1 },
+  }
+  r
+}
+
+fn struct_fields(it: Item) -> I32 {
+  var r = 0
+  match it {
+    Item { x: LIMIT, y: b, z: _ } => { r = b },
+    Item { x: _, y: _, z: LIMIT } => { r = 100 },
+    Item { _ } => { r = 0 },
+  }
+  r
+}
+
+fn in_some(o: Option[I32]) -> I32 {
+  var r = 0
+  match o {
+    Some(LIMIT) => { r = 1 },
+    Some(_) => { r = 2 },
+    None => { r = 3 },
+  }
+  r
+}
+
+fn in_a_variant(m: Mode) -> I32 {
+  var r = 0
+  match m {
+    Mode.Gain(LIMIT) => { r = 1 },
+    Mode.Gain(g) => { r = g + 10 },
+    Mode.Pitch(_) => { r = 2 },
+    Mode.Off => { r = 3 },
+  }
+  r
+}
+
+fn choice_of_a_literal_and_a_constant(n: I32) -> I32 {
+  var r = 0
+  match n {
+    0 | LIMIT => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn choice_in_a_tuple(t: (I32, Bool)) -> I32 {
+  var r = 0
+  match t {
+    (LIMIT | 0, FLAG) => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn nested(o: Option[(I32, Char)]) -> I32 {
+  var r = 0
+  match o {
+    Some((LIMIT, CH)) => { r = 1 },
+    Some((LIMIT, _)) => { r = 2 },
+    Some(_) => { r = 3 },
+    None => { r = 4 },
+  }
+  r
+}
+
+fn constant_with_a_guard(n: I32, c: Bool) -> I32 {
+  var r = 0
+  match n {
+    LIMIT if c => { r = 1 },
+    LIMIT => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+// A constant is not counted for the exhaustiveness (§7), but `Some(LIMIT | _)` is covered by its `_`: the branch with the
+// constant is not removed, and the `_` covers the whole of `Some`.
+fn constant_and_wildcard_in_a_choice(o: Option[I32]) -> I32 {
+  var r = 0
+  match o {
+    Some(LIMIT | _) => { r = 1 },
+    None => { r = 2 },
+  }
+  r
+}
+
+test "a constant in a tuple, a struct, Some and a variant" {
+  assert tuple_element((5, 7)) == 7
+  assert tuple_element((3, 5)) == 103
+  assert tuple_element((5, 5)) == 5
+  assert tuple_element((1, 2)) == -1
+  assert struct_fields(Item { x: 5, y: 2, z: 9 }) == 2
+  assert struct_fields(Item { x: 1, y: 2, z: 5 }) == 100
+  assert struct_fields(Item { x: 5, y: 2, z: 5 }) == 2
+  assert struct_fields(Item { x: 1, y: 2, z: 3 }) == 0
+  assert in_some(Some(5)) == 1
+  assert in_some(Some(4)) == 2
+  assert in_some(None) == 3
+  assert in_a_variant(Mode.Gain(5)) == 1
+  assert in_a_variant(Mode.Gain(7)) == 17
+  assert in_a_variant(Mode.Pitch(1)) == 2
+  assert in_a_variant(Mode.Off) == 3
+}
+
+test "a constant in a choice and in a nested pattern" {
+  assert choice_of_a_literal_and_a_constant(0) == 1
+  assert choice_of_a_literal_and_a_constant(5) == 1
+  assert choice_of_a_literal_and_a_constant(4) == 2
+  assert choice_in_a_tuple((5, true)) == 1
+  assert choice_in_a_tuple((0, true)) == 1
+  assert choice_in_a_tuple((5, false)) == 2
+  assert choice_in_a_tuple((1, true)) == 2
+  assert nested(Some((5, 'z'))) == 1
+  assert nested(Some((5, 'a'))) == 2
+  assert nested(Some((4, 'z'))) == 3
+  assert nested(None) == 4
+}
+
+test "a constant with a guard, and a constant next to a wildcard in a choice" {
+  assert constant_with_a_guard(5, true) == 1
+  assert constant_with_a_guard(5, false) == 2
+  assert constant_with_a_guard(4, true) == 3
+  assert constant_and_wildcard_in_a_choice(Some(5)) == 1
+  assert constant_and_wildcard_in_a_choice(Some(6)) == 1
+  assert constant_and_wildcard_in_a_choice(None) == 2
+}

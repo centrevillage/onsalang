@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-876 (U3 of W5-09): the type of the match is open (a float literal in every arm), so neither candidate is made: the deletion leaves the float literal without a type, and the move leaves the same
+// (the check at the end of the function reports E0405 for it, in the stage of the E0503, §18.1), so there is no candidate whatever the order. `fixes = 0` is the promise that no candidate is
+// made. The files that write the number of candidates (match_unreachable_fix_*.onsa) have the types decided, because an open type would remove the candidates there. One error per function (P-01).
+
+pub fn float_literals_in_every_arm(x: I32) -> I32 {
+  let k = match x {
+    _ => 0.0,
+    2 => 1.0,                                       //~ E0503
+  }
+  0
+}
+
+pub fn float_literal_in_a_statement_match(x: I32) -> I32 {
+  var acc = 0.0
+  match x {
+    _ => { acc = 1.0 },
+    2 => { acc = 2.0 },                             //~ E0503
+  }
+  0
+}

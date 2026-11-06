@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// S-187, S-185 (U1a and U2 of W5-09): a constant is not counted for the exhaustiveness (§7: "網羅の判定に数えるのは、`Bool` の `true` と `false`、enum の列挙子、それらを要素に持つタプルと
+// struct のパターンだけである"), so a match with a constant has a `_` or a binding next to it, and `Some(LIMIT | _)` is covered by its `_`. The forms without a constant are in
+// match_cover_exhaustive.onsa, which passes today. No diagnostic.
+
+const LIMIT: I32 = 5
+const ON: Bool = true
+
+pub fn constant_next_to_a_wildcard(n: I32, b: Bool) -> I32 {
+  let a = match n {
+    LIMIT => 1,
+    _ => 0,
+  }
+  let c = match b {
+    ON => 1,
+    _ => 0,
+  }
+  a + c
+}
+
+pub fn constant_and_a_wildcard_in_a_choice(o: Option[I32]) -> I32 {
+  match o {
+    Some(LIMIT | _) => 1,
+    None => 0,
+  }
+}

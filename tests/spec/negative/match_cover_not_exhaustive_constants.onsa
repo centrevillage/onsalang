@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// S-187, S-185 (U1a and U2 of W5-09): a constant is not counted for the exhaustiveness (§7: "整数・`Char`・`Str`・`FixedStr` のリテラル、定数のパターン（下記）、ガードの付いた腕は数えない"; "`ON` と `false` の腕
+// だけの `Bool` の `match` は網羅にならず"), so a match with only constants and the values that are counted but not all of them is E0501. The forms without a constant are in
+// match_cover_not_exhaustive.onsa, which passes today. The marker is on the line of the `match`. One error per function (P-01).
+
+const LIMIT: I32 = 5
+const ON: Bool = true
+
+pub fn bool_constant_and_false(b: Bool) -> I32 {
+  match b {                                        //~ E0501
+    ON => 1,
+    false => 0,
+  }
+}
+
+pub fn integer_constant_and_a_literal(n: I32) -> I32 {
+  match n {                                        //~ E0501
+    LIMIT => 1,
+    0 => 2,
+  }
+}
+
+pub fn constant_inside_some(o: Option[I32]) -> I32 {
+  match o {                                        //~ E0501
+    Some(LIMIT) => 1,
+    None => 0,
+  }
+}

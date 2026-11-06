@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§11.5", "§18.1"]
+
+// S-187 (U2 of W5-09): an arm of a `match~` that an earlier arm covers is E0503, as in `match` (§7: "`match~`（§11.5）も同じである"): an arm after a `_`, a duplicate literal, a `_` after `true` and
+// `false`, a `_` after every variant, and the arm of a constant after a binding. The exhaustiveness is in match_cover_tilde.onsa; the candidates are U3
+// (tests/spec/fixes/match_unreachable_fix_tilde.onsa). The inputs of the flows are scalars (E0810 otherwise, §11.3). One error per flow (P-01).
+
+pub enum Color {
+  Red,
+  Green,
+}
+
+const LIMIT: U32 = 3
+
+pub flow arm_after_a_wildcard(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    _ => 1.0,
+    0 => 2.0,                                       //~ E0503
+  }
+}
+
+pub flow duplicate_literal(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => 1.0,
+    0 => 2.0,                                       //~ E0503
+    _ => 3.0,
+  }
+}
+
+pub flow wildcard_after_true_and_false(b: Bool at sample) -> F32 at sample {
+  match~ b {
+    true => 1.0,
+    false => 2.0,
+    _ => 3.0,                                       //~ E0503
+  }
+}
+
+pub flow wildcard_after_every_variant(k: U32 at sample) -> F32 at sample {
+  let c = if k > 0 { Color.Red } else { Color.Green }
+  match~ c {
+    Color.Red => 1.0,
+    Color.Green => 2.0,
+    _ => 3.0,                                       //~ E0503
+  }
+}
+
+pub flow constant_after_a_binding(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    n => 1.0,
+    LIMIT => 2.0,                                   //~ E0503
+  }
+}

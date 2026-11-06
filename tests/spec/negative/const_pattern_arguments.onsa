@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1"]
+// fixes = 0
+
+// S-185, S-931 (U1a of W5-09): a constant with arguments or fields written after it in a pattern (`LIMIT(y) =>`, `LIMIT { x: 1 } =>`) is
+// E0308 (§7: "定数に引数を付けた形（`LIMIT(y) =>`）は E0308 である（§15.1）"; §15.1: the name is found, and it is not the kind that
+// the place needs: a variant or a struct is). The associated constant of a type (`Item.CAP(y)`) and the constant inside another
+// pattern (`Some(LIMIT(y))`, a tuple) are the same. No candidate. One error per function (P-01).
+
+const LIMIT: I32 = 5
+
+pub struct Item {
+  x: I32,
+}
+
+impl Item {
+  pub const CAP: I32 = 9
+}
+
+pub fn constant_with_a_tuple_argument(n: I32) -> I32 {
+  match n {
+    LIMIT(y) => y,                                  //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn associated_constant_with_an_argument(n: I32) -> I32 {
+  match n {
+    Item.CAP(y) => y,                               //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn constant_with_an_argument_inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(LIMIT(y)) => y,                            //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn constant_with_an_argument_in_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (LIMIT(y), b) => y + b,                         //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn constant_with_fields(n: I32) -> I32 {
+  match n {
+    LIMIT { x: 1 } => 1,                            //~ E0308
+    _ => 0,
+  }
+}

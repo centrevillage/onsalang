@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-319 (U1b of W5-09), §7: "候補を当てた後に型の段の誤りが残るとき（定数の型が `PartialEq` を満たさない）と、置き換えた後も選択の枝の形が違うときは、候補を出さず、規則を
+// note で示す（E0020 のまま、§18.1）". The error is E0020 without a candidate in two kinds of form. A constant of a struct that does not satisfy `PartialEq` (`x == RAW`
+// would be E0401 after the guard form is applied), alone, in `Some` and in a tuple (the tuple satisfies `PartialEq` only when its elements do). A choice
+// of constants whose branches have different shapes once the constants are replaced by bindings (`(A, 1) | (B, 2)`: the guard could not tell which branch was
+// taken, so the values that match would change). One error per function (P-01).
+
+pub struct Raw {
+  x: I32,
+}
+
+const RAW: Raw = Raw { x: 0 }
+const A: F32 = 1.0
+const B: F32 = 2.0
+
+pub fn struct_without_partial_eq(r: Raw) -> I32 {
+  match r {
+    RAW => 1,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn struct_without_partial_eq_in_some(o: Option[Raw]) -> I32 {
+  match o {
+    Some(RAW) => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn struct_without_partial_eq_in_a_tuple(t: (Raw, I32)) -> I32 {
+  match t {
+    (RAW, n) => n,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn branches_differ_in_a_literal(t: (F32, I32)) -> I32 {
+  match t {
+    (A, 1) | (B, 2) => 1,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn branches_differ_in_the_place_of_the_constant(t: (F32, F32)) -> I32 {
+  match t {
+    (A, _) | (_, A) => 1,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn branch_without_a_constant(o: Option[F32]) -> I32 {
+  match o {
+    Some(A) | None => 1,                            //~ E0020
+    _ => 0,
+  }
+}

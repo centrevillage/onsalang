@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-185, S-933 (U1a of W5-09): a constant of a type that is not the type of the subject is E0401, as `x == LIMIT` is (§7: "定数の型が対象の型と
+// 違えば E0401（`x == LIMIT` の式と同じ。候補なし）"). The integer types are different types (`U8` and `I32`, `I64` and `I32`), and so are
+// `Char`, `Bool` and the integers. The subject can be a part of a larger value (a tuple, `Some`). The candidate of the guard
+// `v if v == LIMIT` would leave the same E0401, so there is none. One error per function (P-01).
+
+const LIMIT: I32 = 5
+const WIDE: I64 = 7
+const BYTE: U8 = 200
+const LETTER: Char = 'q'
+const ON: Bool = true
+
+pub fn u8_subject_with_an_i32_constant(x: U8) -> I32 {
+  match x {
+    LIMIT => 1,                                     //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn i32_subject_with_a_u8_constant(x: I32) -> I32 {
+  match x {
+    BYTE => 1,                                      //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn i32_subject_with_an_i64_constant(x: I32) -> I32 {
+  match x {
+    WIDE => 1,                                      //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn char_subject_with_an_integer_constant(c: Char) -> I32 {
+  match c {
+    LIMIT => 1,                                     //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn integer_subject_with_a_bool_constant(x: I32) -> I32 {
+  match x {
+    ON => 1,                                        //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn bool_subject_with_a_char_constant(b: Bool) -> I32 {
+  match b {
+    LETTER => 1,                                    //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn element_of_a_tuple(t: (U8, Bool)) -> I32 {
+  match t {
+    (LIMIT, ON) => 1,                               //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn content_of_some(o: Option[Char]) -> I32 {
+  match o {
+    Some(LIMIT) => 1,                               //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn associated_constant_of_another_type(x: I32) -> I32 {
+  match x {
+    I64.MAX => 1,                                   //~ E0401
+    _ => 0,
+  }
+}

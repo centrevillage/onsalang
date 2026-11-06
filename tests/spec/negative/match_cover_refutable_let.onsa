@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-177 (U2 of W5-09), the part that holds today: a `let` takes only a pattern that cannot fail (§7: "反駁可能な `let` は無い（E0502）。分解は反駁不能なパターン（タプル・構造体）だけ"). The enum
+// pattern of `Option` and `Result` (more than one variant) is E0502, and so is a pattern that compares an element with a literal (the value may not be equal; this follows from
+// "反駁不能"). The enum of one variant is in match_cover_single_variant.onsa, the constant in const_pattern_refutable_let.onsa. The marker is on the line of the `let`. One error per function (P-01).
+
+pub fn let_with_the_variant_of_option(o: Option[I32]) -> I32 {
+  let Some(x) = o                                   //~ E0502
+  x
+}
+
+pub fn let_with_the_variant_of_result(r: Result[I32, Bool]) -> I32 {
+  let Ok(x) = r                                     //~ E0502
+  x
+}
+
+pub fn let_that_compares_with_a_literal(t: (I32, I32)) -> I32 {
+  let (0, b) = t                                    //~ E0502
+  b
+}
+
+pub fn let_that_compares_with_a_literal_in_a_struct(p: Pt) -> I32 {
+  let Pt { x: 1, y: b } = p                         //~ E0502
+  b
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}

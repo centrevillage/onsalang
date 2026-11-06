@@ -1,0 +1,13 @@
+// The constants of main.onsa's patterns: `priv` ones that only this module sees, and `pub` ones that main.onsa may name.
+
+priv const HIDDEN: I32 = 3
+pub const SHOWN: I32 = 4
+
+pub struct Box2 {
+  x: I32,
+}
+
+impl Box2 {
+  priv const SECRET: I32 = 2
+  pub const OPEN: I32 = 6
+}

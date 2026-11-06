@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-319 (U1b of W5-09): the rule of the candidate for a choice (`p | q`) is the one of S-317, here with the constant of an unwritable type: when every branch has
+// the same shape after the constants are replaced by bindings, the branches are one pattern and the conditions are joined with `||` (§7: "置き換えた後に
+// 選択の全ての枝が同じ形になるときだけ候補を作り、枝を一つにまとめ、枝ごとの条件を `||` で結ぶ"; `0.5 | 1.5 =>` is `v if v == 0.5 || v == 1.5`). Here
+// the constants are of type `F32`. A choice of two constants, a choice in a tuple that shares the other element, a choice inside `Some`, a choice of
+// three, and the choice of two arms of the same shape. One candidate for the arm, its text not written (S-253). One error per function (P-01).
+// The choices whose branches differ after the replacement have no candidate and are in negative/const_pattern_guard_none.onsa.
+
+const A: F32 = 1.0
+const B: F32 = 2.0
+const C: F32 = 3.0
+
+pub fn two_constants(x: F32) -> I32 {
+  match x {
+    A | B => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_constants(x: F32) -> I32 {
+  match x {
+    A | B | C => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn shared_binding_in_a_tuple(t: (F32, I32)) -> I32 {
+  match t {
+    (A, n) | (B, n) => n,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_inside_some(o: Option[F32]) -> I32 {
+  match o {
+    Some(A | B) => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_of_pairs_of_constants(t: (F32, F32)) -> I32 {
+  match t {
+    (A, B) | (B, C) => 1,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_with_a_guard(x: F32, c: Bool) -> I32 {
+  match x {
+    A | B if c => 1,                                //~ E0020
+    _ => 0,
+  }
+}

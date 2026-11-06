@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// S-187, S-185, S-932 (U1a and U2 of W5-09): a constant covers nothing, as an arm with a guard does, because its value is not read (§7: "網羅と到達しない腕の判定では値を見ない（ガードの付いた腕と同じ扱い）"),
+// so the same constant written twice, a literal with the value of the constant and the constant with the value of a literal, and a choice of constants followed by one of them, are all
+// reachable. The forms without a constant are in match_cover_reachable.onsa, which passes today. No diagnostic.
+
+const LIMIT: I32 = 5
+const OTHER: I32 = 6
+
+pub fn the_same_constant_twice(n: I32) -> I32 {
+  match n {
+    LIMIT => 1,
+    LIMIT => 2,
+    _ => 0,
+  }
+}
+
+pub fn literal_and_a_constant_in_either_order(n: I32) -> I32 {
+  let a = match n {
+    5 => 1,
+    LIMIT => 2,
+    _ => 0,
+  }
+  let b = match n {
+    LIMIT => 1,
+    5 => 2,
+    _ => 0,
+  }
+  a + b
+}
+
+pub fn two_constants_and_a_choice(n: I32) -> I32 {
+  match n {
+    LIMIT | OTHER => 1,
+    OTHER => 2,
+    _ => 0,
+  }
+}
+
+pub fn constant_inside_some_after_a_literal(o: Option[I32]) -> I32 {
+  match o {
+    Some(1) => 1,
+    Some(LIMIT) => 2,
+    Some(_) => 3,
+    None => 0,
+  }
+}
+
+pub fn constant_before_a_wildcard_inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(LIMIT) => 1,
+    Some(_) => 2,
+    None => 0,
+  }
+}

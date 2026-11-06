@@ -1,0 +1,15 @@
+// The constants that main.onsa uses as patterns: a constant of the module, one of a type of the module, and one that
+// another module of the package can take (no visibility word, §15.1).
+
+pub const LIMIT: I32 = 7
+pub const MODE: Char = 'm'
+pub const ENABLED: Bool = true
+const SHARED: I32 = 11
+
+pub struct Slot {
+  n: I32,
+}
+
+impl Slot {
+  pub const FULL: I32 = 3
+}

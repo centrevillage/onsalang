@@ -1,0 +1,164 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§15.1"]
+
+// S-185 (U1a of W5-09): a constant is a pattern when its type is an integer, `Char` or `Bool` (§7: "書ける型は整数、`Char`、`Bool`、
+// `Str` の具体的な型"), and the arm is chosen when the subject is `==` to the value of the constant. A constant of `Str` is the same
+// rule, but a `const` of `Str` is E0200 in this version (it holds a Share, §6.6), so it cannot be written here. The matches
+// are statements that assign a `var` in each arm: the value of a `match` that gives a value waits for W8-06. Every value is
+// worked out by hand from the spec text. A constant is not counted for the exhaustiveness, so each `match` ends with a `_`.
+
+const LIMIT: I32 = 5
+const NEG: I32 = -3
+const WIDE: I64 = 4000000000
+const BYTE: U8 = 200
+const LETTER: Char = 'q'
+const ON: Bool = true
+const OFF: Bool = false
+
+fn int_arms(n: I32) -> I32 {
+  var r = 0
+  match n {
+    LIMIT => { r = 1 },
+    NEG => { r = 2 },
+    0 => { r = 3 },
+    _ => { r = 4 },
+  }
+  r
+}
+
+fn wide_arms(n: I64) -> I32 {
+  var r = 0
+  match n {
+    WIDE => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn byte_arms(b: U8) -> I32 {
+  var r = 0
+  match b {
+    BYTE => { r = 1 },
+    0 => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+fn char_arms(c: Char) -> I32 {
+  var r = 0
+  match c {
+    LETTER => { r = 1 },
+    'a' => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+fn bool_arms(b: Bool, c: Bool) -> I32 {
+  var r = 0
+  match b {
+    ON => { r = 1 },
+    _ => { r = 2 },
+  }
+  match c {
+    OFF => { r = r + 10 },
+    _ => { r = r + 20 },
+  }
+  r
+}
+
+// The value of a constant is not read for the reachability (§7), so a literal and a constant with the same value, or one
+// constant twice, are arms that the check accepts; the first arm that matches at run time is the one that is chosen.
+fn literal_then_constant(n: I32) -> I32 {
+  var r = 0
+  match n {
+    5 => { r = 1 },
+    LIMIT => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+fn constant_then_literal(n: I32) -> I32 {
+  var r = 0
+  match n {
+    LIMIT => { r = 1 },
+    5 => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+fn same_constant_twice(n: I32) -> I32 {
+  var r = 0
+  match n {
+    LIMIT => { r = 1 },
+    LIMIT => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+// A guard does not cover, so an arm with the constant stays reachable after it, and the guard is read in the order of the arms.
+fn guard_then_constant(n: I32) -> I32 {
+  var r = 0
+  match n {
+    k if k > 3 => { r = 1 },
+    LIMIT => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+fn constant_then_guard(n: I32) -> I32 {
+  var r = 0
+  match n {
+    LIMIT => { r = 1 },
+    k if k > 3 => { r = 2 },
+    _ => { r = 3 },
+  }
+  r
+}
+
+test "a constant of an integer type is compared with ==" {
+  assert int_arms(5) == 1
+  assert int_arms(-3) == 2
+  assert int_arms(0) == 3
+  assert int_arms(7) == 4
+  assert wide_arms(4000000000) == 1
+  assert wide_arms(4) == 2
+  assert byte_arms(200) == 1
+  assert byte_arms(0) == 2
+  assert byte_arms(199) == 3
+}
+
+test "a constant of Char and of Bool" {
+  assert char_arms('q') == 1
+  assert char_arms('a') == 2
+  assert char_arms('b') == 3
+  assert bool_arms(true, false) == 11
+  assert bool_arms(true, true) == 21
+  assert bool_arms(false, false) == 12
+  assert bool_arms(false, true) == 22
+}
+
+test "the value of a constant is not read for the reachability, the first arm that matches is chosen" {
+  assert literal_then_constant(5) == 1
+  assert literal_then_constant(6) == 3
+  assert constant_then_literal(5) == 1
+  assert constant_then_literal(6) == 3
+  assert same_constant_twice(5) == 1
+  assert same_constant_twice(4) == 3
+}
+
+test "a guard does not cover the arm of a constant after it" {
+  assert guard_then_constant(5) == 1
+  assert guard_then_constant(6) == 1
+  assert guard_then_constant(3) == 3
+  assert constant_then_guard(5) == 1
+  assert constant_then_guard(6) == 2
+  assert constant_then_guard(3) == 3
+}

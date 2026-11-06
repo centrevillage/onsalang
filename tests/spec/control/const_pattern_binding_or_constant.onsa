@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.3"]
+
+// S-185 (U1a of W5-09): whether a name in a pattern is a binding or a constant is decided by its spelling (§7: "`snake_case` の名前は束縛
+// である。それ以外の名前は解決し、定数か列挙子でなければ E0308"; §2.3). A name in upper case (`K`, `LIMIT`, `STEP_2`) is resolved and is a
+// constant here, and a name in lower case is a binding even when a constant has the same name in upper case (`limit` next to
+// `LIMIT`): it takes every value and is read. No diagnostic: the constants are compared and the bindings are read.
+
+const K: I32 = 2
+const LIMIT: I32 = 5
+const STEP_2: I32 = 7
+
+pub fn single_letter_is_a_constant(n: I32) -> I32 {
+  match n {
+    K => 1,
+    other => other,
+  }
+}
+
+pub fn digits_in_the_name(n: I32) -> I32 {
+  match n {
+    STEP_2 => 1,
+    0 => 2,
+    other => other,
+  }
+}
+
+pub fn lower_case_is_a_binding(n: I32) -> I32 {
+  match n {
+    limit => limit + 1,
+  }
+}
+
+pub fn constant_and_a_binding_of_the_same_letters(n: I32) -> I32 {
+  match n {
+    LIMIT => 0,
+    limit => limit,
+  }
+}
+
+pub fn binding_in_a_tuple_next_to_a_constant(t: (I32, I32)) -> I32 {
+  match t {
+    (K, k) => k,
+    (k, _) => k,
+  }
+}

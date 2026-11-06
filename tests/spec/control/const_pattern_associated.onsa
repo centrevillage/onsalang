@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§6.6", "§15.1"]
+
+// S-185 (U1a of W5-09): an associated constant is a constant name (§7: "関連定数の `I64.MAX`"), of a built-in type (the table of §6.6) and
+// of a type of the program (`Item.CAP`). The integer types have `MIN`, `MAX` and `BITS` (the last is a `U32`), and the value is compared
+// with `==`. The matches are statements; every value is worked out by hand.
+
+pub struct Item {
+  x: I32,
+}
+
+impl Item {
+  pub const CAP: I32 = 9
+  pub const NEG: I32 = -9
+}
+
+fn ends_of_i64(n: I64) -> I32 {
+  var r = 0
+  match n {
+    I64.MAX => { r = 1 },
+    I64.MIN => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn ends_of_u8(b: U8) -> I32 {
+  var r = 0
+  match b {
+    U8.MIN => { r = 1 },
+    U8.MAX => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn bits_of_i32(n: U32) -> I32 {
+  var r = 0
+  match n {
+    I32.BITS => { r = 1 },
+    U8.BITS => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn constants_of_a_type_of_the_program(n: I32) -> I32 {
+  var r = 0
+  match n {
+    Item.CAP => { r = 1 },
+    Item.NEG => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn in_a_tuple_and_a_choice(t: (I32, I64)) -> I32 {
+  var r = 0
+  match t {
+    (Item.CAP | Item.NEG, I64.MAX) => { r = 1 },
+    (_, I64.MAX) => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "the associated constants of the integer types" {
+  assert ends_of_i64(I64.MAX) == 1
+  assert ends_of_i64(I64.MIN) == 2
+  assert ends_of_i64(0) == 0
+  assert ends_of_u8(0) == 1
+  assert ends_of_u8(255) == 2
+  assert ends_of_u8(7) == 0
+  assert bits_of_i32(32) == 1
+  assert bits_of_i32(8) == 2
+  assert bits_of_i32(16) == 0
+}
+
+test "the associated constants of a type of the program" {
+  assert constants_of_a_type_of_the_program(9) == 1
+  assert constants_of_a_type_of_the_program(-9) == 2
+  assert constants_of_a_type_of_the_program(1) == 0
+  assert in_a_tuple_and_a_choice((9, I64.MAX)) == 1
+  assert in_a_tuple_and_a_choice((-9, I64.MAX)) == 1
+  assert in_a_tuple_and_a_choice((1, I64.MAX)) == 2
+  assert in_a_tuple_and_a_choice((9, 0)) == 0
+}

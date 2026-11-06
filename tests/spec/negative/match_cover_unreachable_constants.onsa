@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// S-187, S-185 (U1a and U2 of W5-09): the arm of a constant after a `_` or a binding is covered by it, so it is E0503 (§7: "`_` や束縛の後の腕"). The forms without a constant are in
+// match_cover_unreachable.onsa. The candidates are U3 (match_unreachable_fix_constant.onsa), so no `fixes` is written here. One error per function (P-01).
+
+const LIMIT: I32 = 5
+
+pub fn constant_after_a_wildcard(n: I32) -> I32 {
+  match n {
+    _ => 0,
+    LIMIT => 1,                                     //~ E0503
+  }
+}
+
+pub fn constant_after_a_binding(n: I32) -> I32 {
+  match n {
+    k => k,
+    LIMIT => 1,                                     //~ E0503
+  }
+}

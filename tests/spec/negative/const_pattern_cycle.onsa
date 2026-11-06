@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§7", "§18.1"]
+
+// S-185 (U1a of W5-09): a constant that a pattern names is a constant that is read, so a cycle of constants through the
+// pattern of a `match` in an initializer is E0312 as a cycle through an expression is (§6.6: "初期化式が、直接または他の定数を経由して自分自身を
+// 参照すると E0312"). The name in the pattern is "定数を指す名前" (§7), the same name an expression writes. The error is one per
+// collection, at the first constant of it (§18.1), and the other constants of the collection are checked on their own. The subject of each `match` is the constant `ONE`
+// because the type of a bare literal as a subject is not known there (E0420, §4.7). A constant
+// that a pattern names and that is not in a cycle is no error.
+
+const LIMIT: I32 = 5
+const ONE: I32 = 1
+
+// A constant that names itself in the pattern of its own initializer.
+const SELF_NAMED: I32 = match ONE {                   //~ E0312
+  SELF_NAMED => 1,
+  _ => 0,
+}
+
+// Two constants: the first reads the second in a pattern, the second reads the first as an expression.
+const FIRST: I32 = match ONE {                        //~ E0312
+  SECOND => 1,
+  _ => 0,
+}
+
+const SECOND: I32 = FIRST + 1
+
+// Two constants that read each other in patterns.
+const LEFT: I32 = match ONE {                         //~ E0312
+  RIGHT => 1,
+  _ => 0,
+}
+
+const RIGHT: I32 = match ONE {
+  LEFT => 1,
+  _ => 0,
+}
+
+// A pattern that names a constant that comes later in the file and does not read this one: no cycle.
+const READS_LATER: I32 = match ONE {
+  LIMIT => 1,
+  LATER => 2,
+  _ => 0,
+}
+
+const LATER: I32 = 3

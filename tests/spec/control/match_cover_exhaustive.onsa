@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// S-187 (U2 of W5-09): the matches that are exhaustive (§7: "網羅の判定に数えるのは、`Bool` の `true` と `false`、enum の列挙子、それらを要素に持つタプルと
+// struct のパターンだけである"). The arms that cover are the two values of `Bool`, every variant of an enum (`Option`, `Result` and an enum of the
+// program), and the tuples and structs of them; a literal and an arm with a guard are not counted, so each of them has a `_` or a binding next
+// to it ("リテラルの後の `_` は常に到達する"). The forms with a constant are in match_cover_exhaustive_constants.onsa (U1a). No diagnostic.
+
+pub enum Color {
+  Red,
+  Green,
+  Blue,
+}
+
+pub enum Mode {
+  Gain(I32),
+  Pitch(Bool),
+  Off,
+}
+
+pub struct Flag {
+  on: Bool,
+  level: I32,
+}
+
+pub fn both_bool_values(b: Bool) -> I32 {
+  match b {
+    true => 1,
+    false => 0,
+  }
+}
+
+pub fn every_variant(c: Color) -> I32 {
+  match c {
+    Color.Red => 1,
+    Color.Green => 2,
+    Color.Blue => 3,
+  }
+}
+
+pub fn option_and_result(o: Option[I32], r: Result[I32, Bool]) -> I32 {
+  let a = match o {
+    Some(x) => x,
+    None => 0,
+  }
+  let b = match r {
+    Ok(x) => x,
+    Err(true) => 1,
+    Err(false) => 2,
+  }
+  a + b
+}
+
+pub fn variants_with_a_payload_that_is_a_bool(m: Mode) -> I32 {
+  match m {
+    Mode.Gain(g) => g,
+    Mode.Pitch(true) => 1,
+    Mode.Pitch(false) => 2,
+    Mode.Off => 3,
+  }
+}
+
+pub fn tuple_of_bools(a: Bool, b: Bool) -> I32 {
+  match (a, b) {
+    (true, true) => 1,
+    (true, false) => 2,
+    (false, _) => 3,
+  }
+}
+
+pub fn tuple_of_a_bool_and_an_enum(t: (Bool, Color)) -> I32 {
+  match t {
+    (true, Color.Red) => 1,
+    (true, Color.Green) => 2,
+    (true, Color.Blue) => 3,
+    (false, _) => 4,
+  }
+}
+
+pub fn struct_with_a_bool_field(f: Flag) -> I32 {
+  match f {
+    Flag { on: true, level: _ } => 1,
+    Flag { on: false, level: n } => n,
+  }
+}
+
+pub fn option_of_a_bool(o: Option[Bool]) -> I32 {
+  match o {
+    Some(true) => 1,
+    Some(false) => 2,
+    None => 3,
+  }
+}
+
+pub fn literal_next_to_a_wildcard(n: I32) -> I32 {
+  match n {
+    1 => 1,
+    2 => 2,
+    _ => 0,
+  }
+}
+
+pub fn literal_next_to_a_binding(n: I32) -> I32 {
+  match n {
+    1 => 1,
+    k => k,
+  }
+}
+
+pub fn char_and_str_literals_next_to_a_wildcard(c: Char, s: Str) -> I32 {
+  let a = match c {
+    'a' => 1,
+    _ => 0,
+  }
+  let b = match s {
+    "a" => 1,
+    _ => 0,
+  }
+  a + b
+}
+
+pub fn guard_arms_and_the_arms_that_cover(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) if x > 0 => x,
+    Some(_) => 0,
+    None => 0,
+  }
+}
+
+pub fn literal_and_wildcard_in_a_tuple(n: I32, b: Bool) -> I32 {
+  match (n, b) {
+    (0, true) => 1,
+    (_, true) => 2,
+    (_, false) => 3,
+  }
+}
+
+pub fn nested_option_of_a_tuple(o: Option[(Bool, Color)]) -> I32 {
+  match o {
+    Some((true, _)) => 1,
+    Some((false, Color.Red)) => 2,
+    Some((false, _)) => 3,
+    None => 4,
+  }
+}

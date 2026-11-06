@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-876, S-934 (U3 of W5-09): the body of an unreachable arm is not checked (S-876: the E0503 of the arm is reported before its body is checked, as the statements after a divergence are not,
+// S-268), so an error of the stage of the types in it is not reported. The move of the covering arm would make the arm reachable and its body checked, and the error
+// would be reported by the check after the candidate, in the stage of the E0503 (§18.1: a candidate does not leave a diagnostic of its own stage). So the move is not made, and the one candidate is the deletion of the
+// unreachable arms. This follows from §18.1 and S-876; the text of the spec on the move is §7's "覆っている腕が `_` か束縛だけのときは、それを最後へ移す形". The text after the candidate
+// is not written. One error per function (P-01).
+
+pub fn type_error_in_the_unreachable_arm(n: I32) -> I32 {
+  match n {
+    _ => 0,
+    1 => 1 + "s",                                   //~ E0503
+  }
+}
+
+pub fn call_with_a_wrong_type_in_the_unreachable_arm(n: I32, b: Bool) -> I32 {
+  match n {
+    k => k,
+    1 => k_plus(b),                                 //~ E0503
+  }
+}
+
+pub fn k_plus(n: I32) -> I32 {
+  n + 1
+}
+
+pub fn wrong_return_type_in_a_block_arm(n: I32) -> I32 {
+  match n {
+    _ => 0,
+    1 => {                                          //~ E0503
+      let s: Str = 1
+      2
+    },
+  }
+}

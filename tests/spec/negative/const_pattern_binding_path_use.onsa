@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.4"]
+// fixes = 0
+
+// S-803 (carried to W5-09, §7): "分解する `let` の右辺と `match` の見出しに置いた束縛かその経路は、パターンが読む要素の経路の使用である。読むのは
+// 束縛する要素と、リテラル・定数と比べる要素で、`_` は読まない". negative/binding_path_use.onsa has the elements that a pattern compares with a
+// literal; with a constant in the pattern (S-185) the element that it is compared with is read the same way. A binding `hh` of a `match` arm that is
+// not Copy is unusable after a change of a place that overlaps what the use names (E0704), so a `match` on `hh` whose pattern compares the changed
+// element with a constant is E0704 at the `match`, and one that compares another element, or has `_` at the changed element, is usable. The
+// constants: a constant of the module, an associated constant, and a constant inside `Some`. The error is at the use (P-01, one per function); the
+// position is not promised, so no column is written. No candidate.
+
+const LIMIT: I32 = 5
+
+pub struct Holder {
+  buf: Buf[F32],
+  m: I32,
+  n: I32,
+  o: Option[I32],
+}
+
+impl Holder {
+  pub const CAP: I32 = 7
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+pub fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+// ---- the changed element is the one that the constant is compared with ----
+
+pub fn constant_against_the_changed_element(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      match hh { Holder { buf: bb, m: _, n: LIMIT, o: _ } => len_of(bb), _ => 0 } //~ E0704
+    },
+  }
+}
+
+pub fn associated_constant_against_the_changed_element(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.m = 5
+      match hh { Holder { buf: bb, m: Holder.CAP, n: _, o: _ } => len_of(bb), _ => 0 } //~ E0704
+    },
+  }
+}
+
+pub fn constant_inside_some_at_the_changed_element(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.o = None
+      match hh.o { Some(LIMIT) => 1, _ => 0 } //~ E0704
+    },
+  }
+}
+
+pub fn constant_against_the_changed_path_itself(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      match hh.n { LIMIT => 1, _ => 0 } //~ E0704
+    },
+  }
+}
+
+// ---- the elements that are not read, and the element that is not changed ----
+
+pub fn constant_against_an_element_that_is_not_changed(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.m = 5
+      match hh { Holder { buf: bb, m: _, n: LIMIT, o: _ } => len_of(bb), _ => 0 }
+    },
+  }
+}
+
+pub fn changed_element_is_a_wildcard(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      w.h.n = 5
+      match hh { Holder { buf: bb, m: LIMIT, n: _, o: _ } => len_of(bb), _ => 0 }
+    },
+  }
+}

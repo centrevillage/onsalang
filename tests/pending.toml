@@ -1577,3 +1577,248 @@ target = "tests/fuzz/596f9321.onsa"
 reasons = ["S-239", "S-256"]
 until = "W5-10"
 note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0200。`self.conv[I32](x)` の候補 `self.conv::[I32](x)` の先が W5-10 まで E0200"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/const_pattern_scalars.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/const_pattern_positions.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/const_pattern_associated.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/const_pattern_modules_pkg"
+reasons = ["S-185"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/const_pattern_binding_or_constant.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_pattern_cycle.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_pattern_invisible_pkg"
+reasons = ["S-185"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_pattern_arguments.onsa"
+reasons = ["S-185", "S-931"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_pattern_type_mismatch.onsa"
+reasons = ["S-185", "S-933"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_pattern_binding_path_use.onsa"
+reasons = ["S-185", "S-803"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_pattern_refutable_let.onsa"
+reasons = ["S-185", "S-177"]
+until = "W5-09"
+note = "U1a 書ける定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/const_pattern_guard_and.onsa"
+reasons = ["S-185", "S-252", "S-253", "S-319"]
+until = "W5-09"
+note = "U1b 書けない定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/const_pattern_guard_choice.onsa"
+reasons = ["S-185", "S-252", "S-253", "S-319"]
+until = "W5-09"
+note = "U1b 書けない定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/const_pattern_guard_float.onsa"
+reasons = ["S-185", "S-252", "S-253", "S-319"]
+until = "W5-09"
+note = "U1b 書けない定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/const_pattern_guard_generic.onsa"
+reasons = ["S-185", "S-252", "S-253", "S-319"]
+until = "W5-09"
+note = "U1b 書けない定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/const_pattern_guard_names.onsa"
+reasons = ["S-185", "S-252", "S-253", "S-319"]
+until = "W5-09"
+note = "U1b 書けない定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/const_pattern_guard_types.onsa"
+reasons = ["S-185", "S-252", "S-253", "S-319"]
+until = "W5-09"
+note = "U1b 書けない定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_pattern_guard_none.onsa"
+reasons = ["S-185", "S-252", "S-253", "S-319"]
+until = "W5-09"
+note = "U1b 書けない定数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/match_cover_exhaustive_constants.onsa"
+reasons = ["S-185", "S-187"]
+until = "W5-09"
+note = "U2 網羅と到達"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/match_cover_reachable_constants.onsa"
+reasons = ["S-185", "S-187"]
+until = "W5-09"
+note = "U2 網羅と到達"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/match_cover_not_exhaustive_constants.onsa"
+reasons = ["S-185", "S-187"]
+until = "W5-09"
+note = "U2 網羅と到達"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/match_cover_unreachable_constants.onsa"
+reasons = ["S-185", "S-187"]
+until = "W5-09"
+note = "U2 網羅と到達"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/match_cover_unreachable.onsa"
+reasons = ["S-187"]
+until = "W5-09"
+note = "U2 網羅と到達"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/match_cover_tilde_unreachable.onsa"
+reasons = ["S-187"]
+until = "W5-09"
+note = "U2 網羅と到達"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/match_cover_single_variant.onsa"
+reasons = ["S-177"]
+until = "W5-09"
+note = "U2 網羅と到達"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_delete.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_delete_move.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_constant.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_move_blocked.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_unused_binding.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_type_variable.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_type_open.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_body_error.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_layout.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/match_unreachable_fix_tilde.onsa"
+reasons = ["S-187", "S-292", "S-876", "S-934"]
+until = "W5-09"
+note = "U3 E0503 の候補"

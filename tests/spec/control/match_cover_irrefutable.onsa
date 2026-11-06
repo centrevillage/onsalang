@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-177 (U2 of W5-09): what a `let` and a `for` take without E0502 (§7: "分解は反駁不能なパターン（タプル・構造体）だけ: `let (a, b) = pair`. 全ての要素を `_` にした分解
+// （`let (_, _) = pair`）も値の形を確かめるパターンで、`let _ = pair` とは別の書き方である"): a tuple, a struct, nested tuples and structs, and a binding or `_`
+// at every place. An enum of one variant is fine in a `match`, where one arm is exhaustive; only the `let` and the `for` take it as E0502 (negative/match_cover_single_variant.onsa).
+// No diagnostic.
+
+pub enum One {
+  Only(I32),
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Wrapper {
+  inner: Pt,
+  n: I32,
+}
+
+pub fn let_tuple(p: (I32, I32)) -> I32 {
+  let (a, b) = p
+  a + b
+}
+
+pub fn let_tuple_of_wildcards(p: (I32, I32)) -> I32 {
+  let (_, _) = p
+  1
+}
+
+pub fn let_nested_tuples(p: ((I32, I32), I32)) -> I32 {
+  let ((a, b), c) = p
+  a + b + c
+}
+
+pub fn let_struct(p: Pt) -> I32 {
+  let Pt { x: a, y: b } = p
+  a + b
+}
+
+pub fn let_struct_inside_a_struct(w: Wrapper) -> I32 {
+  let Wrapper { inner: Pt { x: a, y: _ }, n: c } = w
+  a + c
+}
+
+pub fn for_tuple(xs: [(I32, I32); 2]) -> I32 {
+  var t = 0
+  for (a, b) in xs {
+    t = t + a + b
+  }
+  t
+}
+
+pub fn match_with_the_one_variant(v: One) -> I32 {
+  match v {
+    One.Only(x) => x,
+  }
+}

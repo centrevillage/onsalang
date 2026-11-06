@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1"]
+
+// S-185 (U1a of W5-09): a constant that is not visible from here (`priv`, §15.1) is E0303 as a pattern as it is as an expression: written with the
+// module's name (`lib.HIDDEN`), as the associated constant of a type (`Box2.SECRET`, the visibility of a member is its own), and taken by a
+// `use` (the `use` is the error, E0303, and the name is a failed name, so the pattern that writes it has no diagnostic, §18.1). The visible
+// constants of the same module are no error. One error per function (P-01).
+use lib
+use lib.{Box2, SHOWN}
+use lib.{HIDDEN}                                    //~ E0303
+
+pub fn qualified_hidden(n: I32) -> I32 {
+  match n {
+    lib.HIDDEN => 1,                                //~ E0303
+    _ => 0,
+  }
+}
+
+pub fn associated_hidden(n: I32) -> I32 {
+  match n {
+    Box2.SECRET => 1,                               //~ E0303
+    _ => 0,
+  }
+}
+
+pub fn hidden_inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(lib.HIDDEN) => 1,                          //~ E0303
+    _ => 0,
+  }
+}
+
+pub fn name_taken_by_a_failed_use(n: I32) -> I32 {
+  match n {
+    HIDDEN => 1,
+    _ => 0,
+  }
+}
+
+pub fn visible_constants(n: I32) -> I32 {
+  match n {
+    lib.SHOWN => 1,
+    SHOWN => 2,
+    Box2.OPEN => 3,
+    _ => 0,
+  }
+}

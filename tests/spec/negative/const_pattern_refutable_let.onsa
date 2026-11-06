@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-185, S-177 (U1a of W5-09): a pattern that compares an element with a constant can fail (the value may not be equal), so a `let` with it is E0502 as one with a literal is (§7: "反駁可能な `let` は無い
+// （E0502）。分解は反駁不能なパターン（タプル・構造体）だけ"; this follows from "反駁不能"). The constant is a constant of the module, an associated constant, and one inside `Some`. The marker is on the
+// line of the `let`. One error per function (P-01).
+
+const LIMIT: I32 = 5
+
+pub fn let_that_compares_with_a_constant(t: (I32, I32)) -> I32 {
+  let (LIMIT, b) = t                                //~ E0502
+  b
+}
+
+pub fn let_that_compares_with_an_associated_constant(t: (I64, I32)) -> I32 {
+  let (I64.MAX, b) = t                              //~ E0502
+  b
+}
+
+pub fn let_that_compares_with_a_constant_inside_a_struct(p: Pt) -> I32 {
+  let Pt { x: LIMIT, y: b } = p                     //~ E0502
+  b
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}

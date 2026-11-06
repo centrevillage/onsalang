@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-319 (U1b of W5-09): the conditions of the candidate are joined with `&&` (§7: "条件を `&&` で結ぶ（`(0.0, 1.0) =>` は `(v, v2) if v == 0.0 && v2 == 1.0 =>`）"),
+// and an arm that has a guard already keeps it: "腕に元からガード `if g` があれば、作った条件と `g` を `&&` で結ぶ". The constants are of type `F32` and the check after the
+// candidate reports nothing; the text is not written (S-253). A guard that uses a name of the pattern (`n`) stays valid after the replacement. One error
+// per function (P-01).
+
+const A: F32 = 1.0
+const B: F32 = 2.0
+
+pub fn constant_and_a_guard(x: F32, c: Bool) -> I32 {
+  match x {
+    A if c => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn guard_uses_a_binding_of_the_pattern(t: (F32, I32)) -> I32 {
+  match t {
+    (A, n) if n > 0 => n,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_constants_and_a_guard(t: (F32, F32), c: Bool) -> I32 {
+  match t {
+    (A, B) if c => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn constant_before_an_arm_with_a_guard(x: F32, c: Bool) -> I32 {
+  match x {
+    A => 1,                                         //~ E0020
+    _ if c => 2,
+    _ => 0,
+  }
+}
