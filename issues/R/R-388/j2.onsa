@@ -1,0 +1,11 @@
+pub fn g(x: I64) {}
+
+pub fn f(c: Bool) {
+  let n = 5
+  if c {
+    return
+    g(n)
+  }
+  let k = n as I32
+  let _ = k
+}

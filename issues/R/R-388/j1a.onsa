@@ -1,0 +1,7 @@
+pub fn f(c: Bool) -> I64 {
+  let n = 5
+  if c {
+    return n
+  }
+  (n as I32) as I64
+}
