@@ -1,0 +1,11 @@
+package interface_impl_method_params
+
+module interface_impl_method_params
+
+pub struct Rack[T]
+  n: U32
+
+impl[T] Rack[T]
+  pub fn peek[U](self, y: U) -> U32
+  pub fn both[U](self, x: T, y: U) -> U
+  pub fn run[e](self, f: fn() uses {e}) uses {e}

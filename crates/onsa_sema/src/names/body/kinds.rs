@@ -33,7 +33,7 @@ impl Walker<'_> {
         let (name, member) = (segs[segs.len() - 2], segs[segs.len() - 1]);
         let span = span_of(segs);
         let d = no_members(&name.name, kind, span).with_found(self.src(span));
-        if !matches!(kind, NameKind::Trait | NameKind::KindConstraint) {
+        if !matches!(kind, NameKind::Trait | NameKind::KindConstraint | NameKind::Escape) {
             return d;
         }
         d.with_note(

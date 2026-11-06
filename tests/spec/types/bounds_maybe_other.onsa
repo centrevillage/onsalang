@@ -5,7 +5,7 @@
 
 // S-711 (W4-05 U4b, S-862; §4.5: "`?` を付けられるのは `Dup` と `Escape`(下記)だけで、他の境界(`?Copy`、`?Show`)に付けると E0416(暗黙に
 // 付く要求は `Dup` と `Escape` だけなので外すものが無い。note で規則を示す)"; §4.6: "Affine も受けるのは `?Dup`"): the `?` of a
-// bound takes off the implicit `Dup` (or `Escape`, E0200 in this version) and only those, so a `?` on any other bound is an error of the bound, E0416, with
+// bound takes off the implicit `Dup` (or `Escape`) and only those, so a `?` on any other bound is an error of the bound, E0416, with
 // no candidate (`fixes = 0`: `?Copy` can mean `?Dup` or no bound at all). The kind constraint (`?Copy`), a trait of
 // the prelude (`?Show`), a numeric trait that does take the kind (`?Num`) and a trait that cannot be a bound in this
 // version (`?Add`, which is the E0416 and not the E0200 of the name: the `?` is judged first, S-711) are all the same.

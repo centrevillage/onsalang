@@ -12,6 +12,7 @@
 //!   S-711), the same as one before it, or `?Dup` with one that requires `Dup` (`Dup`, `Copy`, `Num`,
 //!   `Float`) before it (E0416, S-747). A word with an error of its own is not compared. The position is the
 //!   name of the word.
+//! - A list with none of these: its first `Dup` with no `?` is the E0020 of the implicit requirement written (S-751).
 //! - The users: a parameter whose list has a name not found or a contradiction anywhere is an unknown bound,
 //!   with no diagnostic where it is used (§18.1, S-747 A5); an overlap alone is no such list. Else the call is
 //!   the E0416 when the argument does not meet the list (the implicit `Dup` too, unless `?Dup`).
@@ -74,7 +75,7 @@ fn unit(list: &[Word]) -> Option<(&'static str, usize)> {
         }
         read.push(x);
     }
-    None
+    list.iter().position(|&x| x == (W::Dup, false)).map(|i| ("E0020", i))
 }
 
 /// Whether the users of the list are out of the model (above).

@@ -30,6 +30,6 @@ pub fn twice(p: P) -> I32 {
   a.x + b.x
 }
 
-pub fn use_bounds[T: Copy, U: Dup](x: T, y: U) -> T {
+pub fn use_bounds[T: Copy, U](x: T, y: U) -> T {
   x
 }

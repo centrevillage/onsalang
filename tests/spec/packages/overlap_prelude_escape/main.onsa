@@ -10,7 +10,7 @@
 // a type alias (`alias.onsa`). The `use` lines here take the item `Escape` of each of these modules, which is another E0304 in this
 // file (the item is the E0304 in its own file). A function, a constant or a flow named `Escape` is not written: the name is also
 // an E0320 (the names of those items are snake_case or UPPER_SNAKE, §2.3), which the syntax stage reports and the cases cannot
-// pair with the E0304. The error has no candidate (`fixes = 0`). The bound `?Escape` is the E0200 of types/bounds_maybe_escape.onsa.
+// pair with the E0304. The error has no candidate (`fixes = 0`). The bound `?Escape` is in types/bounds_maybe_escape.onsa.
 use structure.{Escape} //~ E0304
 use enumeration.{Escape} //~ E0304
 use alias.{Escape} //~ E0304

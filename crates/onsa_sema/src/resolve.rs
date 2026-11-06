@@ -50,6 +50,9 @@ pub enum NameKind {
     Flow,
     Trait,
     KindConstraint,
+    /// `Escape`: a property of a value, no kind (§4.5, §4.6), written with
+    /// the `?` that lifts it.
+    Escape,
     Effect,
     Handler,
     /// A const parameter, a value and a constant (§15.1) that a pattern does
@@ -98,6 +101,7 @@ impl NameKind {
             Builtin::Scalar(_) | Builtin::Generic(_) => NameKind::Type,
             Builtin::Panic => NameKind::Function,
             Builtin::Trait(_) => NameKind::Trait,
+            Builtin::Kind(crate::def::Bound::Escape) => NameKind::Escape,
             Builtin::Kind(_) => NameKind::KindConstraint,
         }
     }
@@ -147,6 +151,7 @@ impl NameKind {
             NameKind::Flow => "a flow",
             NameKind::Trait => "a trait",
             NameKind::KindConstraint => "a kind constraint",
+            NameKind::Escape => "the implicit requirement of a type parameter",
             NameKind::Effect => "an effect",
             NameKind::Handler => "a handler",
             NameKind::ConstParam => "a const parameter",

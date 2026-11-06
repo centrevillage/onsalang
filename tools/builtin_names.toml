@@ -70,7 +70,7 @@
 "len" = 1
 
 [allow."crates/onsa_sema/src/builtin.rs"]
-"len" = 2
+"len" = 1
 
 [allow."crates/onsa_sema/src/def.rs"]
 "Add" = 1

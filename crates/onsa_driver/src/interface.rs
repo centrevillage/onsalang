@@ -85,6 +85,8 @@ pub enum Item {
         /// The trait of `impl Tr for Ty`.
         #[serde(rename = "trait", skip_serializing_if = "Option::is_none")]
         of: Option<String>,
+        /// The parameters of the `impl`, which its methods see (§18.2).
+        generics: Vec<String>,
         ty: String,
         fns: Vec<FnIface>,
         consts: Vec<Item>,
@@ -285,11 +287,14 @@ impl Builder<'_> {
     fn generics(&self, gs: &[onsa_sema::def::GenericDef]) -> Vec<String> {
         gs.iter()
             .map(|g| match &g.kind {
-                GenericKind::Type { bounds, dup, .. } => {
+                GenericKind::Type { bounds, dup, escape, .. } => {
                     let mut s = g.name.clone();
                     let mut bs: Vec<String> = bounds.iter().map(|b| format!("{b:?}")).collect();
                     if !*dup {
                         bs.push("?Dup".into());
+                    }
+                    if !*escape {
+                        bs.push("?Escape".into());
                     }
                     if !bs.is_empty() {
                         s.push_str(": ");
@@ -306,14 +311,12 @@ impl Builder<'_> {
     fn fn_item(&self, d: DefId, display: &str) -> FnIface {
         let def = self.a.def(d);
         let f = def.as_fn().expect("fn def");
-        // Methods see the impl's generics before their own (sig.rs).
-        let generics: Vec<onsa_sema::def::GenericDef> = match def.owner {
-            Some(o) if matches!(self.a.def(o).kind, DefKind::Impl(_)) => {
-                let mut g = self.a.def(o).generics().to_vec();
-                g.extend(f.generics.iter().cloned());
-                g
-            }
-            _ => f.generics.clone(),
+        // A method's generics start with its impl's (sig.rs), which the
+        // heading of the `impl` shows (R-382).
+        let generics = &f.generics;
+        let of_impl = match def.owner {
+            Some(o) if matches!(self.a.def(o).kind, DefKind::Impl(_)) => self.a.def(o).generics().len(),
+            _ => 0,
         };
         let mut params: Vec<ParamIface> = Vec::new();
         if let Some(m) = f.self_mode {
@@ -322,9 +325,9 @@ impl Builder<'_> {
         params.extend(f.params.iter().map(|p| ParamIface {
             mode: mode_str(p.mode).into(),
             name: p.name.clone(),
-            ty: self.ty(p.ty, &generics),
+            ty: self.ty(p.ty, generics),
         }));
-        let ret = self.ty(f.ret, &generics);
+        let ret = self.ty(f.ret, generics);
         let mut effects = Vec::new();
         if f.effects.alloc {
             effects.push("Alloc".to_string());
@@ -333,7 +336,7 @@ impl Builder<'_> {
         effects.extend(
             f.effects.vars.iter().map(|&v| generics.get(v as usize).map(|g| g.name.clone()).unwrap_or_default()),
         );
-        let own_generics = self.generics(&f.generics);
+        let own_generics = self.generics(&generics[of_impl.min(generics.len())..]);
         // A member of a trait's `impl` has no word (§15.1).
         let of_trait = def.owner.and_then(|o| self.a.def(o).as_impl()).is_some_and(|i| i.of.is_some());
         let vis = if of_trait { Vis::Default } else { def.vis };
@@ -356,7 +359,7 @@ impl Builder<'_> {
             .self_mode
             .map(|m| format!("{}self", mode_prefix(m)))
             .into_iter()
-            .chain(f.params.iter().map(|p| format!("{}{}: {}", mode_prefix(p.mode), p.name, self.ty(p.ty, &generics))))
+            .chain(f.params.iter().map(|p| format!("{}{}: {}", mode_prefix(p.mode), p.name, self.ty(p.ty, generics))))
             .collect();
         let _ = write!(sig, "({})", ps.join(", "));
         if self.a.types.parens_before_uses(f.ret, !effects.is_empty()) {
@@ -621,7 +624,8 @@ impl Builder<'_> {
                         .collect();
                     if !fns.is_empty() || !consts.is_empty() {
                         let of = i.of.map(|b| b.name().to_string());
-                        items.push(Item::Impl { of, ty: self.ty(i.self_ty, &i.generics), fns, consts });
+                        let generics = self.generics(&i.generics);
+                        items.push(Item::Impl { of, generics, ty: self.ty(i.self_ty, &i.generics), fns, consts });
                     }
                 }
                 _ => {}
@@ -746,9 +750,10 @@ fn render_item(item: &Item, out: &mut String, indent: &str) {
                 }
             }
         }
-        Item::Impl { of, ty, fns, consts } => {
+        Item::Impl { of, generics, ty, fns, consts } => {
             let of = of.as_ref().map_or(String::new(), |t| format!("{t} for "));
-            let _ = writeln!(out, "{indent}impl {of}{ty}");
+            let params = if generics.is_empty() { String::new() } else { format!("[{}]", generics.join(", ")) };
+            let _ = writeln!(out, "{indent}impl{params} {of}{ty}");
             for c in consts {
                 render_item(c, out, &format!("{indent}  "));
             }

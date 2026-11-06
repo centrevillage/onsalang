@@ -26,11 +26,8 @@ impl<'p> Sema<'p> {
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => {
                                 list.push((Bound::Dup, true, n.span));
                             }
-                            // SPEC-GAP(S-868): `?Escape` is an E0200 (S-862), and the
-                            // parameter is read as one without it: its users get the
-                            // E0710 of a second-class type argument (b1).
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Escape))))) if b.relaxed => {
-                                self.unsupported(cx.def, n.span, Feature::RelaxedEscape, &[]);
+                                list.push((Bound::Escape, true, n.span));
                             }
                             // `?` on another trait or kind constraint (S-711).
                             Ok((NameKind::Trait | NameKind::KindConstraint, _)) if b.relaxed => {
@@ -66,12 +63,17 @@ impl<'p> Sema<'p> {
                         }
                     }
                     // A list with a contradiction is unknown to its users (S-747).
-                    unknown |= self.bound_list(cx.def, &list);
-                    // SPEC-GAP(S-868): `T: Escape` is the implicit requirement
-                    // written, met as `T: Dup` is (a1); every parameter has it.
+                    unknown |= self.bound_list(cx, bounds, &list, unknown);
+                    // `Dup` and `Escape` written are the implicit requirements
+                    // (S-751), which every parameter has but with its `?`.
                     let bs = list.iter().filter(|b| !b.1 && b.0 != Bound::Escape).map(|b| b.0).collect();
-                    let dup = !list.iter().any(|b| b.1);
-                    let kind = GenericKind::Type { bounds: bs, dup, unknown };
+                    let lifted = |bound| list.iter().any(|&(b, relaxed, _)| relaxed && b == bound);
+                    let kind = GenericKind::Type {
+                        bounds: bs,
+                        dup: !lifted(Bound::Dup),
+                        escape: !lifted(Bound::Escape),
+                        unknown,
+                    };
                     GenericDef { name: name.name.clone(), span: name.span, kind }
                 }
                 GenericParam::Const { name, ty } => {

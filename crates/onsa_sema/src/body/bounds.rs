@@ -34,7 +34,7 @@ impl<'a> Checker<'a> {
 /// when one of them is not known (§18.1).
 pub(crate) fn param_holds(g: &GenericDef, b: Bound) -> bool {
     match &g.kind {
-        GenericKind::Type { bounds, dup, unknown } => {
+        GenericKind::Type { bounds, dup, unknown, .. } => {
             *unknown || bounds.iter().any(|&have| implies(have, b)) || (b == Bound::Dup && *dup)
         }
         _ => false,
@@ -129,7 +129,7 @@ impl Bounds<'_> {
         let (Ty::Named(_, written), Ty::Named(_, args)) = (self.ty(imp.self_ty), self.ty(t)) else { return true };
         let param = |w: TyId| if let Ty::Param(k) = self.ty(w) { imp.generics.get(k as usize) } else { None };
         written.iter().zip(&args).all(|(&w, &arg)| match param(w).map(|g| &g.kind) {
-            Some(GenericKind::Type { bounds, dup, unknown: false }) => {
+            Some(GenericKind::Type { bounds, dup, unknown: false, .. }) => {
                 bounds.iter().copied().chain(dup.then_some(Bound::Dup)).all(|b| self.meets(arg, b))
             }
             _ => true,

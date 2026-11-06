@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// S-747 with ?Escape (W5-17, §4.5: "同じ並びに同じ境界を二度書く形（`T: Copy + Copy`、`T: ?Dup + ?Dup`）…は E0416 で、並びを前から読んで前の要素と
+// 重なるか矛盾する最初の要素に付け、前の要素を note で示す"): `?Escape` written twice in one list is the same error as `?Dup` written twice, the
+// E0416 of the second `?Escape` with no candidate (`fixes = 0`: which of the two to drop is the writer's), whether the two are next to each other or
+// apart, and in every place that has a list: a function, a method of its own, a struct, an enum and the `[ ]` of an `impl`. Two type parameters that
+// have a `?Escape` each are two lists and are fine (types/maybe_escape_bounds_fine.onsa). One error per item (P-01).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn twice[T: ?Escape + ?Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn twice_apart[T: ?Escape + Show + ?Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn twice_beside_maybe_dup[T: ?Dup + ?Escape + ?Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn twice_in_the_second_parameter[T, U: ?Escape + ?Escape](x: T, y: U) -> U32 {   //~ E0416
+  0
+}
+
+pub struct RackTwice[T: ?Escape + ?Escape] {   //~ E0416
+  n: U32,
+}
+
+pub enum ShelfTwice[T: ?Escape + ?Escape] {   //~ E0416
+  One(U32),
+  Nothing,
+}
+
+impl[T: ?Escape + ?Escape] Held[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl Plain {
+  pub fn method_twice[U: ?Escape + ?Escape](self, y: U) -> U32 {   //~ E0416
+    self.n
+  }
+}
+
+pub fn two_lists[T: ?Escape, U: ?Escape](x: T, y: U) -> U32 {
+  0
+}

@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§18.1"]
+
+// S-862 K (W5-17, §4.5: "`T` を第二級の型を置けない位置（返り値、フィールドなど）に書いた宣言も E0710 である"; §5.3: "返り値、構造体のフィールドにはできない
+// (E0710)"): the type parameter with `?Escape` may be a `Span`, so a type that holds it is the E0710 of the position, at the type, in a return type
+// (`-> T`, and a type that has `T` in it: an `Option`, a tuple, an array), in the field of a struct and in the contents of a variant, as a `Span`
+// is (types/wellformed_second_class_positions.onsa). It is an error of the signature, so the body is not read (the bodies return the value
+// that the signature forbids). `?Dup + ?Escape` is the same (the field `HoldsDupOff`). The positions that take a `T` are at the end: the root of the type of an argument
+// (borrowed and `inout`), the element of an array argument and an argument of a function type (§5.3, §4.5). One error per item (P-01).
+
+fn touch[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+// ------------------------------------------------------------------------------------ return types
+
+pub fn returns_t[T: ?Escape](x: T) -> T {   //~ E0710
+  x
+}
+
+pub fn returns_option[T: ?Escape](x: T) -> Option[T] {   //~ E0710
+  Some(x)
+}
+
+pub fn returns_tuple[T: ?Escape](x: T) -> (T, U32) {   //~ E0710
+  (x, 1)
+}
+
+pub fn returns_array[T: ?Escape, const N: U32](xs: [T; N]) -> [T; N] {   //~ E0710
+  xs
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn gives[T: ?Escape](self, x: T) -> T {   //~ E0710
+    x
+  }
+}
+
+// ------------------------------------------------------------------- the field of a struct, a variant
+
+pub struct HoldsT[T: ?Escape] {
+  a: T,   //~ E0710
+}
+
+pub struct HoldsOption[T: ?Escape] {
+  a: Option[T],   //~ E0710
+}
+
+pub struct HoldsArray[T: ?Escape] {
+  a: [T; 2],   //~ E0710
+}
+
+pub struct HoldsDupOff[T: ?Dup + ?Escape] {
+  a: T,   //~ E0710
+}
+
+pub enum VariantT[T: ?Escape] {
+  Held(T),   //~ E0710
+  Empty,
+}
+
+// --------------------------------------------------------------------------------- what is right
+
+pub fn root_of_an_argument[T: ?Escape](x: T) -> U32 {
+  touch(x)
+}
+
+pub fn inout_argument[T: ?Escape](inout x: T) -> U32 {
+  touch(x)
+}
+
+pub fn array_argument[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn inout_array_argument[T: ?Escape, const N: U32](inout xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn function_argument[T: ?Escape](f: fn(T) -> U32) -> U32 {
+  0
+}
+
+pub fn inout_function_argument[T: ?Escape](f: fn(inout T)) -> U32 {
+  0
+}
+
+pub struct Phantom[T: ?Escape] {
+  n: U32,
+}

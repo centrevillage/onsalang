@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3"]
+// fixes = 0
+
+// S-927 (§4.5: "`?Escape` の型パラメータの型引数には `Span` と平面の配列を書ける"): a type argument of a `?Escape` parameter is a `Span`
+// or a planar array, written or inferred; a type that holds a `Span` otherwise is the E0710 of the position, as it is for a parameter
+// without the mark. `Rack[Span[F32]]` and `Rack[[Span[F32]; 2]]` are types/maybe_escape_written_args.onsa. One error per function (P-01).
+
+pub struct Rack[T: ?Escape] {
+  n: U32,
+}
+
+pub fn a_tuple(r: Rack[(Span[F32], F32)]) -> U32 {  //~ E0710
+  r.n
+}
+
+pub fn an_option(r: Rack[Option[Span[F32]]]) -> U32 {  //~ E0710
+  r.n
+}
+
+pub fn a_nested_array(r: Rack[[[Span[F32]; 2]; 2]]) -> U32 {  //~ E0710
+  r.n
+}

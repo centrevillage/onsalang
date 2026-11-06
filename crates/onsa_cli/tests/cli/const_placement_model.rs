@@ -88,7 +88,6 @@ const BOUNDS: &[(&str, C)] = &[
     ("Copy + Show", C::Static),
     ("", C::Later),
     ("Show", C::Later),
-    ("Dup", C::Later),
     ("?Dup", C::Later),
     ("Eq", C::Later),
 ];

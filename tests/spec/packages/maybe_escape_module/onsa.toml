@@ -1,0 +1,3 @@
+[package]
+name = "maybe_escape_module"
+edition = "2026"

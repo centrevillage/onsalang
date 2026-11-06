@@ -240,7 +240,8 @@ fn span_coercions_and_bang_methods() {
     // `fill` of a `Span` is a primitive, of an array std's Onsa (§5.3, S-853).
     assert!(d.contains("fill(inout out, 0.0:F32)"), "{d}");
     assert!(d.contains("std.core.seq.[T; N].fill__F32__8(inout buf, 1.0:F32)"), "{d}");
-    assert!(d.contains("let n: U32 = 8:U32"), "{d}");
+    // `len` of an array is std's Onsa too (S-862).
+    assert!(d.contains("let n: U32 = std.core.seq.[T; N].len__F32__8(buf)"), "{d}");
 }
 
 #[test]

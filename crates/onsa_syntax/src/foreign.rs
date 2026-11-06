@@ -526,6 +526,7 @@ pub enum RowId {
     ExportC,
     CopyBound,
     CopyImpl,
+    ImplicitBound,
     TypeArgsTurbofish,
     TypeArgsAngle,
     TypeArgsSquareComma,

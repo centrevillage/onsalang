@@ -267,36 +267,24 @@ impl<'a> Checker<'a> {
                 return Ok(self.a.types.error());
             }
         }
-        let Some(sig) = builtin::method(&mut self.a.types, recv, &name.name) else {
-            // A receiver of the error type, or of a type parameter with an
-            // unknown bound (§18.1, S-689, R-271): an unknown method.
-            let held = owner.is_some_and(|d| self.a.modules.holds_member(d, &name.name));
-            if self.traits_unknown(recv) || held {
-                return self.args_of_unknown_callee(args);
-            }
-            // A method of the spec this version has not (R-294).
-            if let Some((builtin::Form::Method, feature)) = builtin::missing(&self.a.types, recv, &name.name) {
-                let shown = format!("{}.{}", self.type_head(recv), name.name);
-                return Err(self.unsupported(name.span, feature, &[&shown]));
-            }
-            if written.is_some() {
-                return self.field_type(recv, name);
-            }
-            if let Some(called) = self.field_called(e, callee, recv, name, args, expected, kind) {
-                return called;
-            }
-            return Err(self.removed_method(e, recv, name, args, expected, kind));
-        };
+        // A receiver of the error type, or of a type parameter with an
+        // unknown bound (§18.1, S-689, R-271): an unknown method.
+        let held = owner.is_some_and(|d| self.a.modules.holds_member(d, &name.name));
+        if self.traits_unknown(recv) || held {
+            return self.args_of_unknown_callee(args);
+        }
+        // A method of the spec this version has not (R-294).
+        if let Some((builtin::Form::Method, feature)) = builtin::missing(&self.a.types, recv, &name.name) {
+            let shown = format!("{}.{}", self.type_head(recv), name.name);
+            return Err(self.unsupported(name.span, feature, &[&shown]));
+        }
         if written.is_some() {
-            return Err(self.brackets_on_method(callee, Vec::new()));
+            return self.field_type(recv, name);
         }
-        let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
-        if let Some(exp) = expected {
-            self.unify_at(span, sig.ret, exp)?;
+        if let Some(called) = self.field_called(e, callee, recv, name, args, expected, kind) {
+            return called;
         }
-        self.check_args(args, &params, e)?;
-        self.info.targets.insert(e, Target::BuiltinMethod { name: name.name.clone(), self_mode: sig.self_mode });
-        Ok(sig.ret)
+        Err(self.removed_method(e, recv, name, args, expected, kind))
     }
 
     /// The record `r` with a member of a type parameter as an item: the type
@@ -387,12 +375,11 @@ impl<'a> Checker<'a> {
             _ => (None, None),
         };
         // §5.3: an array and a `Buf` take from `Span[T]` the methods their
-        // own `impl`s (and the `len` of an array) have not, as a `Span` of
+        // own `impl`s have not, as a `Span` of
         // their element `T`: one step, `Span` takes from none.
         let mut this = recv;
         if let Some(elem) = self.viewed_element(recv)
             && !key.and_then(|k| self.a.modules.assoc_builtin.get(&k)).is_some_and(|t| t.contains_key(name))
-            && builtin::method_self(&self.a.types, recv, name).is_none()
         {
             key = span_key;
             this = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));

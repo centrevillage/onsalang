@@ -3,8 +3,8 @@
 // spec = ["§6.3", "§15.1", "§4.5"]
 
 // The standard traits are in the prelude (§6.3, S-107): they are written in a bound with no `use`. The
-// example of §6.3 (`clamp[T: PartialOrd]`), two bounds joined by `+`, and the kind constraints `Copy` and
-// `Dup` (§4.6).
+// example of §6.3 (`clamp[T: PartialOrd]`), two bounds joined by `+`, the kind constraint `Copy` beside a trait, and the `?Dup`
+// that takes off the implicit `Dup` (§4.5, §4.6). A `Dup` written in a bound is the E0020 of fixes/maybe_escape_e0020_*.onsa.
 
 pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
   if x < lo {
@@ -24,7 +24,7 @@ pub fn joined[T: Eq + Ord](x: T) -> T {
   x
 }
 
-pub fn kinds[T: Copy + Dup](x: T) -> T {
+pub fn kinds[T: Copy + Show](x: T) -> T {
   x
 }
 
@@ -68,6 +68,6 @@ pub fn takes_copy[T: Copy](x: T) -> T {
   x
 }
 
-pub fn takes_dup[T: Dup](x: T) -> T {
-  x
+pub fn takes_maybe_dup[T: ?Dup](x: T) -> U32 {
+  0
 }

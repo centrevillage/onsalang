@@ -82,7 +82,6 @@ features! {
     /// `{}`: the trait of the prelude that is not a bound in this version (R-312).
     PreludeBounds: Language, "the trait `{}` as a bound", None;
     /// S-862: the name is reserved in the prelude (W5-17).
-    RelaxedEscape: Language, "the bound `?Escape`, which lets a type parameter take second-class types", None;
     EffectDefinitions: Language, "effect definitions", None;
     HandlerDefinitions: Language, "handler declarations", None;
     EffectHandlers: Language, "effect handlers (`handle ... with`)", None;

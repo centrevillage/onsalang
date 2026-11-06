@@ -11,6 +11,7 @@ use super::flow::Run;
 use super::place::place_of;
 use super::walk::Pos;
 use crate::binding::Bind;
+use crate::body::bounds::Bounds;
 use crate::body::{LocalId, Target, view_base};
 use crate::sig::second_class;
 use crate::ty::{BuiltinTy, Ty, TyId};
@@ -24,6 +25,9 @@ const KEEP_FN: &str = "to keep a function value, declare the parameter `move f: 
 pub(super) enum SecondClass {
     /// A `Span` (an element of a planar array, a view) or an array of them.
     View,
+    /// A value of a `?Escape` type parameter or an array of them (§4.5),
+    /// which may be a `Span`: it is read as a [`Self::View`] is (S-928).
+    Lifted,
     /// An anonymous function that captures.
     Closure,
     /// A function-type parameter of the default mode (S-190).
@@ -56,15 +60,22 @@ impl Walker<'_> {
     }
 
     /// The second-class values of the type `ty` (an array of them too), by
-    /// the head of [`second_class`]. A generated `Out` is not one here until
+    /// the head of [`second_class`]: a `Span`, or a `?Escape` type parameter
+    /// (§4.5), which may be one. A generated `Out` is not one here until
     /// W7-03 makes `Rendered` apart from it (R-334): `render` returns the
     /// type `Out` now, and its result binds (§11.6).
     pub(super) fn class_of(&self, mut ty: TyId) -> Option<SecondClass> {
         while let Ty::Array(t, _) = self.a.types.get(ty) {
             ty = *t;
         }
-        let view = matches!(self.a.types.get(ty), Ty::Builtin(BuiltinTy::Span, _));
-        (view && second_class(self.a, ty)).then_some(SecondClass::View)
+        if !second_class(&Bounds { a: self.a, generics: &self.generics }, ty) {
+            return None;
+        }
+        match self.a.types.get(ty) {
+            Ty::Builtin(BuiltinTy::Span, _) => Some(SecondClass::View),
+            Ty::Param(_) => Some(SecondClass::Lifted),
+            _ => None,
+        }
     }
 
     /// The E0710 of a second-class `e` out of its place at `pos` (§5.3):
@@ -76,7 +87,7 @@ impl Walker<'_> {
         let Some(how) = pos.out() else { return false };
         let class = match self.second_class(e) {
             None => return false,
-            Some(SecondClass::View) if matches!(pos, Pos::Bind | Pos::Kept) => return false,
+            Some(SecondClass::View | SecondClass::Lifted) if matches!(pos, Pos::Bind | Pos::Kept) => return false,
             Some(class) => class,
         };
         self.report(self.second_class_error(class, how, self.ast.expr(e).span));
@@ -110,6 +121,7 @@ impl Walker<'_> {
     pub(super) fn second_class_error(&self, class: SecondClass, how: &str, at: Span) -> Diagnostic {
         let what = match class {
             SecondClass::View => "a `Span` (or an array of them)",
+            SecondClass::Lifted => "a value of a `?Escape` type parameter (or an array of them)",
             SecondClass::Closure => "an anonymous function that captures",
             SecondClass::FnParam => "a function-type parameter of the default mode (it may capture)",
         };

@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.3", "§18.1"]
+
+// S-862 K (W5-17, §4.5: "第二級の型で具体化したときは種の制約（暗黙の `Dup`、`Copy`）を満たすものとして扱い、trait の境界は判定する（`T: ?Escape +
+// Show` に `Span[F32]` は E0416）"; "第一級の型には暗黙の `Dup` が残り、Affine も受けるには `?Dup + ?Escape` と書く"): the requirement that the argument
+// does not meet is the E0416 of the expression that decided the type (the call), as in §4.5. A `Span` (or the planar array, as the element or as the
+// whole type) has no `Show`, no `Num` and no `PartialEq`, so the list with the trait is not met, and it is the E0416 and not the E0710 of a type
+// parameter that has no `?Escape` (the `?Escape` takes that error off). A first-class type that is Affine (a `Buf[F32]`, a struct that has one, a tuple
+// that has one) keeps the implicit `Dup` that `?Escape` alone does not take off, and a kind constraint (`Copy`) of the list is not met either. The
+// lists that the arguments meet are in types/maybe_escape_bounds_fine.onsa. One error per function (P-01).
+
+fn show_it[T: ?Escape + Show](x: T) -> U32 {
+  0
+}
+
+fn number_it[T: ?Escape + Num](x: T) -> U32 {
+  0
+}
+
+fn equal_it[T: ?Escape + PartialEq](x: T) -> U32 {
+  0
+}
+
+fn show_array[T: ?Escape + Show, const N: U32](xs: [T; N]) -> U32 {
+  0
+}
+
+fn alone[T: ?Escape](x: T) -> U32 {
+  0
+}
+
+fn alone_array[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+fn copy_it[T: ?Escape + Copy](x: T) -> U32 {
+  0
+}
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+// ------------------------------------------------------------------------- a trait, a Span
+
+pub fn span_is_not_show(s: Span[F32]) -> U32 {
+  show_it(s)   //~ E0416
+}
+
+pub fn span_is_not_a_number(s: Span[F32]) -> U32 {
+  number_it(s)   //~ E0416
+}
+
+pub fn span_is_not_comparable(s: Span[F32]) -> U32 {
+  equal_it(s)   //~ E0416
+}
+
+pub fn channels_are_not_show(xs: [Span[F32]; 2]) -> U32 {
+  show_array(xs)   //~ E0416
+}
+
+pub fn planar_as_one_type_is_not_show(xs: [Span[F32]; 2]) -> U32 {
+  show_it(xs)   //~ E0416
+}
+
+// -------------------------------------------------------------------- the implicit Dup, Affine
+
+pub fn buffer_is_not_dup(b: Buf[F32]) -> U32 {
+  alone(b)   //~ E0416
+}
+
+pub fn owner_is_not_dup(o: Owner) -> U32 {
+  alone(o)   //~ E0416
+}
+
+pub fn tuple_with_a_buffer_is_not_dup(t: (Buf[F32], U32)) -> U32 {
+  alone(t)   //~ E0416
+}
+
+pub fn buffers_are_not_dup(xs: [Buf[F32]; 2]) -> U32 {
+  alone_array(xs)   //~ E0416
+}
+
+pub fn buffer_is_not_copy(b: Buf[F32]) -> U32 {
+  copy_it(b)   //~ E0416
+}

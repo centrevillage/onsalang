@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§0.5.1", "§18.1"]
+// fixes = 1
+
+// S-751 (c), S-868 (W5-17, §4.5: "修正候補は要素を外す形（隣の `+`、残りが無ければ `:` ごと）"; S-751's decision): the `Dup` or the `Escape` that is the last element of a
+// list, with a trait before it: the candidate takes out the element and the `+` before it (`T: Show + Dup` is `T: Show`). One candidate (`fixes
+// = 1`). Every place that has a list. The lists with the element first are fixes/maybe_escape_e0020_first.onsa. One error per item (P-01).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn show_then_dup[T: Show + Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn show_then_escape[T: Show + Escape](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn eq_then_dup[T: PartialEq + Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub struct RackDup[T: Show + Dup] {   //~ E0020
+  n: U32,
+}
+
+pub enum ShelfEscape[T: Show + Escape] {   //~ E0020
+  One(U32),
+  Nothing,
+}
+
+impl[T: Show + Dup] Held[T] {   //~ E0020
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl Plain {
+  pub fn method_show_then_escape[U: Show + Escape](self, y: U) -> U32 {   //~ E0020
+    self.n
+  }
+}

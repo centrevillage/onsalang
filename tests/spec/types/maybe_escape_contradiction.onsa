@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// S-747, S-926 (W5-17, §4.5: "`?Dup` を Dup を要する境界…と並べる形…は E0416"; the reading that `Escape` beside `?Escape` is the same
+// contradiction as `Dup` beside `?Dup`): a list that requires `Escape` (written without the `?`, the requirement that every type parameter has) and
+// takes it off with `?Escape` in the same list is the E0416 of the element that contradicts the one before it, in either order, with no candidate
+// (`fixes = 0`; the note shows the rule), as `Dup + ?Dup` is (types/bounds_contradiction.onsa). This reading is waiting for the confirmation of
+// S-926, so the case is apart from the others of `?Escape`: if the reading changes, only this file goes. The places are a function, a method of its
+// own, a struct, an enum and an `impl`. A `Show` between the two does not change it. One error per item (P-01).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn escape_then_maybe[T: Escape + ?Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn maybe_then_escape[T: ?Escape + Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn apart[T: Escape + Show + ?Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub struct RackContradiction[T: Escape + ?Escape] {   //~ E0416
+  n: U32,
+}
+
+pub enum ShelfContradiction[T: ?Escape + Escape] {   //~ E0416
+  One(U32),
+  Nothing,
+}
+
+impl[T: Escape + ?Escape] Held[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl Plain {
+  pub fn method_contradiction[U: ?Escape + Escape](self, y: U) -> U32 {   //~ E0416
+    self.n
+  }
+}

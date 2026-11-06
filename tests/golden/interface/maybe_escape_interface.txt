@@ -1,0 +1,23 @@
+package maybe_escape_interface
+
+module maybe_escape_interface
+
+pub fn each[T: ?Escape, const N: U32](xs: [T; N], f: fn(T))
+
+pub fn count_any[T: ?Dup + ?Escape, const N: U32](xs: [T; N]) -> U32
+
+pub fn shown[T: Show + ?Escape](x: T) -> U32
+
+pub fn shown_after[T: Show + ?Escape](x: T) -> U32
+
+pub fn second_parameter[T, U: ?Escape](x: T, y: U) -> U32
+
+pub struct Rack[T: ?Escape]
+  n: U32
+
+pub enum Shelf[T: ?Dup + ?Escape]
+  One(U32)
+  Nothing
+
+impl[T: ?Escape] Rack[T]
+  pub fn count(self) -> U32

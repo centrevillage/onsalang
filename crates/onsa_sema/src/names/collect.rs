@@ -423,7 +423,7 @@ impl Place<'_> {
         let one = |g: &GenericParam| {
             let (name, kind) = match g {
                 GenericParam::Type { name, .. } => {
-                    (name, GenericKind::Type { bounds: Vec::new(), dup: true, unknown: false })
+                    (name, GenericKind::Type { bounds: Vec::new(), dup: true, escape: true, unknown: false })
                 }
                 GenericParam::Const { name, .. } => (name, GenericKind::Const(self.error)),
                 GenericParam::Effect { name } => (name, GenericKind::Effect),

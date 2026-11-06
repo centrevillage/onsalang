@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§0.5.1", "§18.1"]
+// fixes = 1
+
+// S-751 (c), S-868 (W5-17, §4.5: "重なりも矛盾も無い並びの、`?` の無い `Dup` と `Escape` は E0020 である。型パラメータに暗黙に付く要求をそのまま書いた形で、
+// `T: Dup` は `T` と同じ意味であり、書き手が既定を誤解していることを示しうる（§0.5.1）。修正候補は要素を外す形（`T: Dup` は `T`…）で、note で暗黙の要求を示す"):
+// the bound list of one element, `Dup` or `Escape` written without the `?`, is the requirement that the type parameter has already. The candidate takes the
+// element out, and as it is the only one of the list, the `:` with it (`T: Dup` is `T`). One candidate (`fixes = 1`). Every place that has a list: a
+// function, a struct, an enum, the `[ ]` of an `impl` and a method of its own. The lists with more elements are in fixes/maybe_escape_e0020_first.onsa,
+// _middle and _last, the kind constraints in _kind_overlap and the lists with a `?` in _beside_maybe. The position of the error is not written
+// here (§18.1 says the range of a foreign form; the element or the list is for the implementation). One error per item (P-01).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn dup_alone[T: Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn escape_alone[T: Escape](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn dup_in_the_second_parameter[T, U: Dup](x: T, y: U) -> U32 {   //~ E0020
+  0
+}
+
+pub struct RackDup[T: Dup] {   //~ E0020
+  n: U32,
+}
+
+pub struct RackEscape[T: Escape] {   //~ E0020
+  n: U32,
+}
+
+pub enum ShelfDup[T: Dup] {   //~ E0020
+  One(U32),
+  Nothing,
+}
+
+pub enum ShelfEscape[T: Escape] {   //~ E0020
+  One(U32),
+  Nothing,
+}
+
+impl[T: Dup] Held[T] {   //~ E0020
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl Plain {
+  pub fn method_escape[U: Escape](self, y: U) -> U32 {   //~ E0020
+    self.n
+  }
+}

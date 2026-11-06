@@ -1,9 +1,14 @@
 //! The list of the bounds of a type parameter (§4.5): `?` on a bound that
-//! is neither `Dup` nor `Escape` (S-711), the same bound twice and `?Dup`
-//! with a bound that requires `Dup` (S-747). Each an E0416 of the types stage, after the names
-//! of the list are read (an error of a name, or a trait this version does
-//! not take as a bound, is not compared).
+//! is neither `Dup` nor `Escape` (S-711), the same bound twice, `?Dup` with
+//! a bound that requires `Dup` and `?Escape` with `Escape` (S-747, S-926).
+//! Each an E0416 of the types stage, after the names of the list are read
+//! (an error of a name, or a trait this version does not take as a bound,
+//! is not compared). In a list with none of these, `Dup` or `Escape` with no
+//! `?` is the E0020 of the implicit requirement written (S-751).
 
+use onsa_syntax::ast::Bound as Written;
+
+use super::derives::drop_element;
 use super::*;
 use crate::body::bounds::implies;
 
@@ -18,6 +23,16 @@ pub(super) fn relaxed(n: &Ident) -> Diagnostic {
     Diagnostic::new(Stage::Types, Code::E0416, n.span, msg).with_found(n.name.clone()).with_rule(RELAXED_RULE)
 }
 
+/// The span of the element `b` of a list, with its `?`.
+fn element_span(cx: &Cx<'_>, b: &Written) -> Span {
+    let p = b.path.span;
+    let before = cx.text[..p.start as usize].trim_end();
+    match before.strip_suffix('?').filter(|_| b.relaxed) {
+        Some(head) => Span::new(p.file, head.len() as u32, p.end),
+        None => p,
+    }
+}
+
 /// How a bound is written: `?Dup` or the name.
 fn shown(b: (Bound, bool)) -> String {
     format!("{}{}", if b.1 { "?" } else { "" }, b.0.name())
@@ -27,14 +42,22 @@ impl<'p> Sema<'p> {
     /// The E0416 of the list `list` of `def` (the bounds read, with their `?`
     /// and the span of the name), at its first element the same as one
     /// before it or in a contradiction with one (`?Dup` with a bound that
-    /// requires `Dup`), that one in a note (S-747). A bound implied by
-    /// another (`Float + Num`) is no error. Whether the list has a
-    /// contradiction, reported or after the one reported (A5): then the users
-    /// of the parameter read its bounds as unknown (§18.1).
-    pub(super) fn bound_list(&mut self, def: DefId, list: &[(Bound, bool, Span)]) -> bool {
+    /// requires `Dup`, `?Escape` with `Escape`), that one in a note (S-747,
+    /// S-926). A bound implied by another (`Float + Num`) is no error. Whether
+    /// the list has a contradiction, reported or after the one reported (A5):
+    /// then the users of the parameter read its bounds as unknown (§18.1).
+    /// A list with none of these has the E0020 of [`Self::implicit_bound`],
+    /// but one with an error of its own (`unknown`).
+    pub(super) fn bound_list(
+        &mut self,
+        cx: &Cx<'p>,
+        bounds: &[Written],
+        list: &[(Bound, bool, Span)],
+        unknown: bool,
+    ) -> bool {
         let clash = |a: (Bound, bool), b: (Bound, bool)| match (a.1, b.1) {
-            (true, false) => implies(b.0, Bound::Dup),
-            (false, true) => implies(a.0, Bound::Dup),
+            (true, false) => implies(b.0, a.0),
+            (false, true) => implies(a.0, b.0),
             _ => false,
         };
         let any = list.iter().any(|x| list.iter().any(|y| clash((x.0, x.1), (y.0, y.1))));
@@ -44,22 +67,41 @@ impl<'p> Sema<'p> {
             let (this, prev) = (shown((b, r)), shown((pb, pr)));
             let contradiction = (pb, pr) != (b, r);
             let d = if contradiction {
+                let lifted = if r { b } else { pb }.name();
                 let msg = format!(
-                    "`{this}` and `{prev}` contradict: `?Dup` lifts the implicit `Dup`, and the other requires it (§4.5)"
+                    "`{this}` and `{prev}` contradict: `?{lifted}` lifts the implicit `{lifted}`, and the other requires it (§4.5)"
                 );
                 Diagnostic::new(Stage::Types, Code::E0416, at, msg)
                     .with_note(pat, format!("`{prev}` is written here"))
-                    .with_rule(
+                    .with_rule(if b == Bound::Escape || pb == Bound::Escape {
+                        "to take second-class types too, take out `Escape`; if first-class types are enough, take out `?Escape`"
+                    } else {
                         "to take Affine types too, take out the bounds that require `Dup`; if Copy types are enough, \
-                         take out `?Dup`",
-                    )
+                         take out `?Dup`"
+                    })
             } else {
                 Diagnostic::new(Stage::Types, Code::E0416, at, format!("the bound `{this}` is written twice (§4.5)"))
                     .with_note(pat, format!("`{prev}` is first written here"))
             };
-            self.report(def, d.with_found(b.name()));
+            self.report(cx.def, d.with_found(b.name()));
             return any;
         }
+        if !unknown {
+            self.implicit_bound(cx, bounds, list);
+        }
         false
+    }
+
+    /// The E0020 of the first `Dup` or `Escape` with no `?` of the list
+    /// `list` read of `bounds` (§4.5, S-751): the requirement every type
+    /// parameter has, written. The candidate takes the element out.
+    fn implicit_bound(&mut self, cx: &Cx<'p>, bounds: &[Written], list: &[(Bound, bool, Span)]) {
+        let Some(&(_, _, at)) = list.iter().find(|x| !x.1 && matches!(x.0, Bound::Dup | Bound::Escape)) else { return };
+        let Some(k) = bounds.iter().position(|b| b.path.segments.last().unwrap().span == at) else { return };
+        let spans: Vec<Span> = bounds.iter().map(|b| element_span(cx, b)).collect();
+        self.report(
+            cx.def,
+            foreign::report(RowId::ImplicitBound, cx.text, spans[k], vec![drop_element(cx, &spans, k)]),
+        );
     }
 }

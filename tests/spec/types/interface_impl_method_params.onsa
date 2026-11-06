@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§18.2"]
+// golden = ["interface"]
+
+// R-382 (W5-17, §18.2: "シグネチャの型は、読み直すと同じ型になる形で書く"): the type parameters of an `impl` are of its heading, and a
+// method's own are of the method. A type of a method names the parameter it names: a parameter of the method stays one (`y: U`, not `y: T`), a
+// parameter of the `impl` stays one (`x: T`), and an effect variable of the method is named too. The golden file is written from §18.2, not from the output.
+
+pub struct Rack[T] {
+  n: U32,
+}
+
+impl[T] Rack[T] {
+  pub fn peek[U](self, y: U) -> U32 {
+    self.n
+  }
+
+  pub fn both[U](self, x: T, y: U) -> U {
+    y
+  }
+
+  pub fn run[e](self, f: fn() uses {e}) uses {e} {
+    f.()
+  }
+}

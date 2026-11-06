@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§5.3", "§6.3"]
+// fixes = 0
+
+// S-862 K (W5-17, §4.5: "第二級の型で具体化したときは種の制約（暗黙の `Dup`、`Copy`）を満たすものとして扱い、trait の境界は判定する"; "第一級の型には
+// 暗黙の `Dup` が残り、Affine も受けるには `?Dup + ?Escape` と書く"): the lists with `?Escape` that are right, and the arguments that meet them. The
+// `?Escape` is in any place of a list (alone, before or after a trait, beside `?Dup` in either order, with a kind constraint) and the list
+// is read the same. A `Span[F32]` meets the kind constraints of the list (`Copy`), and so does a planar array as the whole type `T`
+// (`[Span[F32]; 2]`, passed as one argument); a `Buf[F32]`, which is Affine, meets `?Dup + ?Escape`; a scalar meets any list. The traits
+// are judged: they are met by the scalars here. The lists that an argument does not meet are in types/maybe_escape_bound_unmet.onsa.
+// No diagnostic is expected anywhere in this file.
+
+fn alone[T: ?Escape](x: T) -> U32 {
+  0
+}
+
+fn trait_after[T: ?Escape + Show](x: T) -> U32 {
+  0
+}
+
+fn trait_before[T: Show + ?Escape](x: T) -> U32 {
+  0
+}
+
+fn kind_after[T: ?Escape + Copy](x: T) -> U32 {
+  0
+}
+
+fn number_after[T: ?Escape + Num](x: T) -> U32 {
+  0
+}
+
+fn both[T: ?Dup + ?Escape](x: T) -> U32 {
+  0
+}
+
+fn both_reversed[T: ?Escape + ?Dup](x: T) -> U32 {
+  0
+}
+
+fn both_and_a_trait[T: ?Dup + ?Escape + Show](x: T) -> U32 {
+  0
+}
+
+fn two_parameters[T: ?Escape, U: ?Escape](x: T, y: U) -> U32 {
+  0
+}
+
+fn one_of_two[T: ?Escape, U](x: T, y: U) -> U32 {
+  0
+}
+
+// ----------------------------------------------------------------------------- a Span as T
+
+pub fn span_alone(s: Span[F32]) -> U32 {
+  alone(s)
+}
+
+pub fn span_with_a_kind(s: Span[F32]) -> U32 {
+  kind_after(s)
+}
+
+pub fn span_with_both(s: Span[F32]) -> U32 {
+  both(s) + both_reversed(s)
+}
+
+pub fn spans_in_two_parameters(s: Span[F32], t: Span[U8]) -> U32 {
+  two_parameters(s, t)
+}
+
+pub fn span_beside_a_scalar(s: Span[F32], x: F32) -> U32 {
+  one_of_two(s, x)
+}
+
+pub fn planar_as_one_type(xs: [Span[F32]; 2]) -> U32 {
+  alone(xs) + kind_after(xs) + both(xs)
+}
+
+pub fn inout_span_as_t(inout s: Span[F32]) -> U32 {
+  alone(s)
+}
+
+// ------------------------------------------------------------------------ a first-class type as T
+
+pub fn scalar_meets_each(x: F32) -> U32 {
+  alone(x) + trait_after(x) + trait_before(x) + kind_after(x) + number_after(x) + both(x) + both_and_a_trait(x)
+}
+
+pub fn array_and_tuple(xs: [F32; 3], t: (F32, U32)) -> U32 {
+  alone(xs) + alone(t) + kind_after(xs) + both(t)
+}
+
+pub fn affine_with_both(b: Buf[F32]) -> U32 {
+  both(b) + both_reversed(b)
+}
+
+pub fn affine_in_a_tuple_with_both(b: (Buf[F32], U32)) -> U32 {
+  both(b)
+}

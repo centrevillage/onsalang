@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§0.5.1", "§18.1"]
+// fixes = 0
+
+// S-751 (c), S-747 (W5-17, §4.5: "重なりも矛盾も無い並びの、`?` の無い `Dup` と `Escape` は E0020"): the E0020 of an explicit `Dup` or `Escape` is for the
+// list that has no overlap and no contradiction. A list that writes the same bound twice (`Dup + Dup`, `Escape + Escape`, with a bound between them or
+// not) has the overlap, so it is the E0416 of the second one, with no candidate (`fixes = 0`), and the first `Dup` or `Escape` is not another error:
+// the list is read from the front for the overlap first, and the E0020 comes only to the list without one. Every place that has a list: a
+// function, a struct, an enum, an `impl` and a method of its own. The lists that have one `Dup` or `Escape` and no overlap are the E0020 of
+// fixes/maybe_escape_e0020_*.onsa. One error per item (P-01).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn dup_twice[T: Dup + Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn escape_twice[T: Escape + Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn dup_apart[T: Dup + Show + Dup](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn escape_apart[T: Escape + Show + Escape](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub struct RackDupTwice[T: Dup + Dup] {   //~ E0416
+  n: U32,
+}
+
+pub enum ShelfEscapeTwice[T: Escape + Escape] {   //~ E0416
+  One(U32),
+  Nothing,
+}
+
+impl[T: Dup + Dup] Held[T] {   //~ E0416
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl Plain {
+  pub fn method_escape_twice[U: Escape + Escape](self, y: U) -> U32 {   //~ E0416
+    self.n
+  }
+}

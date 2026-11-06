@@ -29,6 +29,6 @@ pub fn twice_shared(q: Q) -> U32 {
   a.name.len() + b.name.len()
 }
 
-pub fn use_bounds[T: Copy, U: Dup](x: T, y: U) -> T {
+pub fn use_bounds[T: Copy, U](x: T, y: U) -> T {
   x
 }

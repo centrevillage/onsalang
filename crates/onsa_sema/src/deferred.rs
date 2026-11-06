@@ -55,8 +55,10 @@ pub(crate) enum DeferredKind {
     /// builtin generic type: E0710 when it is decided to a type with no kind
     /// (second-class, or one that holds it), before the requirements of the
     /// same argument, which are then not judged (§4.5, the implicit `Escape`;
-    /// S-862, S-766). `what` names it as its origin does; `rule`: the way out.
-    Escape { what: ArgumentName, rule: &'static str },
+    /// S-862, S-766). `what` names it as its origin does; `rule`: the way out;
+    /// `lifted`: its parameter is `?Escape`, which takes a `Span` and a planar
+    /// array (S-927).
+    Escape { what: ArgumentName, rule: &'static str, lifted: bool },
     /// A requirement on a type (a bound, the implicit `Dup`, a kind constraint):
     /// E0416 when the decided type does not meet it (§4.5, §4.6).
     Require { bound: Bound, what: Required },
@@ -84,8 +86,11 @@ impl OpNeed {
 }
 
 /// The rule of the E0710 of a type argument with no kind (§5.3, S-862).
-pub(crate) const GENERIC_VIEW: &str =
-    "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3)";
+pub(crate) const GENERIC_VIEW: &str = "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3), or give the type parameter `?Escape` (§4.5)";
+
+/// The rule of that E0710 of a `?Escape` parameter (S-927).
+pub(crate) const LIFTED_VIEW: &str =
+    "a `?Escape` type parameter takes a `Span` and a planar array, no other second-class type (§4.5)";
 
 /// The rule of that E0710 of the element of a method of an array.
 pub(crate) const VIEW_OF_ARRAY: &str = "call the method on one view of the array (`xs[k].get(i)`, §5.3)";
@@ -413,11 +418,11 @@ impl<'a> Checker<'a> {
                     None => d,
                 })
             }
-            DeferredKind::Escape { what, rule } => {
+            DeferredKind::Escape { what, rule, lifted } => {
                 if self.infer.has_vars(&self.a.types, r) {
                     return Look::Wait;
                 }
-                if !crate::sig::no_kind_argument(self.a, r) {
+                if !crate::sig::no_kind_argument(&self.bounds(), r, *lifted) {
                     return Look::Done;
                 }
                 let (shown, what) = (self.display(r), what.text(|t| self.display(t)));

@@ -8434,6 +8434,47 @@ impl Dup for P {
 property = ["clean"]
 candidates = 1
 
+# 型パラメータに暗黙に付く要求をそのまま書いた境界（S-751）。重なりも矛盾も無い並びだけに当たる（S-747、S-926）。
+# 候補は要素を外す形で、隣の `+`、残りが無ければ `:` ごと外す。trait の上位の trait は対象でない。
+[[form]]
+id = "implicit_bound"
+kind = "redundant"
+origin = "Rust"
+stage = "types"
+code = "E0020"
+spec = ["4.5", "0.5.1", "18.1"]
+rule = "型パラメータに暗黙に付く要求をそのまま書いた形で、`T: Dup` は `T` と同じ意味である。要素を外す"
+
+[[form.example]]
+source = '''
+pub fn f[T: Dup](x: T) -> U32 {
+  0
+}
+'''
+at = "1:13"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f[T: Dup + Show](x: T) -> U32 {
+  0
+}
+'''
+at = "1:13"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f[T: Show + Escape](x: T) -> U32 {
+  0
+}
+'''
+at = "1:20"
+property = ["clean"]
+candidates = 1
+
 # 候補は外す形。struct と enum の宣言の頭の `: Copy` と `: Dup`（§4.6、S-34）。`+` で並べた中の種の制約は、隣の
 # `+` と一緒に外す。境界の `[T: Copy]`・`[T: ?Dup]` は §4.6 が書ける形と定める正しい書き方で、この行の対象ではない
 # （tests/spec/flow_semantics/infer_generic.onsa などが正例）。

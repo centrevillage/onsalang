@@ -190,7 +190,7 @@ fn apply(f: fn(I32) -> I32) -> I32 { f.(1) }
 fn gid[U](v: U) -> U { v }
 fn gadd[U: Num](p: U, q: U) -> U { p + q }
 fn gnum[U: Num](p: U) -> U { p }
-fn gdup[U: Dup](p: U) -> U { p }
+fn gdup[U](p: U) -> U { p }
 fn geq[U: Eq](p: U, q: U) -> Bool { p == q }
 fn gord[U: Ord](p: U, q: U) -> Bool { p < q }
 fn garr[U](p: U) -> [U; 2] { [p, p] }
@@ -442,7 +442,7 @@ fn gplain[U](p: U) -> U { p }
 fn gadd[U: Num](p: U, q: U) -> U { p + q }
 fn geq[U: Eq](p: U, q: U) -> Bool { p == q }
 fn gord[U: Ord](p: U, q: U) -> Bool { p < q }
-fn gdup[U: Dup](p: U) -> U { p }
+fn gdup[U](p: U) -> U { p }
 fn gnodup[U: ?Dup](p: U) -> I32 { 0 }
 
 ";

@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.2"]
+// golden = ["interface"]
+
+// S-862 K (W5-17, §4.5: "`onsa interface` に境界を出す"; §18.2: "シグネチャの型は、読み直すと同じ型になる形で書く"): the `?Escape` of a bound is in
+// the output of `onsa interface`, in the signature of a function (alone, beside `?Dup` and beside a trait), and in
+// the heading of a struct and an enum and in the methods of an `impl` of the parameter, the way `?Dup` is. The text is read again to the same type, so the `?` is not dropped, and the
+// bounds are not rewritten to the implicit ones. The expected text is the
+// golden file `golden/interface/maybe_escape_interface.txt`; it is made by the implementation (the case has no text of its own to
+// compare with) and the spec says what must be in it: each `?Escape` and `?Dup` as written, in the order written.
+
+pub fn each[T: ?Escape, const N: U32](xs: [T; N], f: fn(T)) {
+  for i in 0 ..< N {
+    f.(xs[i])
+  }
+}
+
+pub fn count_any[T: ?Dup + ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn shown[T: ?Escape + Show](x: T) -> U32 {
+  0
+}
+
+pub fn shown_after[T: Show + ?Escape](x: T) -> U32 {
+  0
+}
+
+pub fn second_parameter[T, U: ?Escape](x: T, y: U) -> U32 {
+  0
+}
+
+pub struct Rack[T: ?Escape] {
+  n: U32,
+}
+
+pub enum Shelf[T: ?Dup + ?Escape] {
+  One(U32),
+  Nothing,
+}
+
+impl[T: ?Escape] Rack[T] {
+  pub fn count(self) -> U32 {
+    self.n
+  }
+}

@@ -1,0 +1,43 @@
+pub fn touch[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+pub fn n_of[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn touched[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  var n: U32 = 0
+  for i in 0 ..< N {
+    let y = xs[i]
+    n = n + touch(y)
+  }
+  n
+}
+
+pub fn touched_any[T: ?Dup + ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  var n: U32 = 0
+  for i in 0 ..< N {
+    let y = xs[i]
+    n = n + touch_any(y)
+  }
+  n
+}
+
+pub fn touch_any[T: ?Dup + ?Escape](x: T) -> U32 {
+  1
+}
+
+pub struct Rack[T: ?Escape] {
+  n: U32,
+}
+
+impl[T: ?Escape] Rack[T] {
+  pub fn count(self) -> U32 {
+    self.n
+  }
+
+  pub fn tag(self, x: T) -> U32 {
+    touch(x)
+  }
+}

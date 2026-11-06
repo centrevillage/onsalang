@@ -2,38 +2,39 @@
 // [test]
 // spec = ["§4.5", "§15.1", "§18.1"]
 
-// S-862 (W5-02 U5a, §4.5: "`[T: ?Escape]` と書いてこの要求を外す（Swift の `~Escapable` と同じ形）。この版では、境界の `?Escape` は E0200 である"; "`?` を付けられるのは
-// `Dup` と `Escape` だけで、他の境界（`?Copy`、`?Show`）に付けると E0416"): the bound `?Escape` of a type parameter is a feature that the version
-// does not have, the E0200 of the bound, whatever the list around it is (`?Escape` alone, after `?Dup`, before a trait) and wherever the type parameter is
-// (a function, a method of its own, a struct, an enum, an `impl`). The name is the prelude's (`Escape`, §15.1), so it is not the E0302 of a
-// name that is not found. The `?` on any other bound is still the E0416 of types/bounds_maybe_other.onsa (the units at the end). The type parameter
-// is not used by a call in this file: the call of a function with such a parameter is not written (S-868). One error per item (P-01).
+// S-862 K (W5-17, §4.5: "`[T: ?Escape]` と書いてこの要求を外す（Swift の `~Escapable` と同じ形）"; "`?` を付けられるのは `Dup` と `Escape` だけで、
+// 他の境界（`?Copy`、`?Show`）に付けると E0416"): the bound `?Escape` of a type parameter is right, in whatever the list around it is (`?Escape`
+// alone, after `?Dup`, before a trait, after a trait) and wherever the type parameter is (a function, a method of its own, a struct, an
+// enum, an `impl`). The name is the prelude's (`Escape`, §15.1), so it is not the E0302 of a name that is not found. The version before
+// W5-17 had the E0200 of these headings (the same headings were this file). The `?` on any other bound is still the E0416 of
+// types/bounds_maybe_other.onsa (the units at the end). The type parameter is not used by a call in this file (the uses are in
+// types/maybe_escape_items_fine.onsa and types/maybe_escape_bounds_fine.onsa). One error per item (P-01).
 
-pub fn maybe_escape[T: ?Escape](x: T) -> U32 {   //~ E0200
+pub fn maybe_escape[T: ?Escape](x: T) -> U32 {
   0
 }
 
-pub fn maybe_dup_and_escape[T: ?Dup + ?Escape](x: T) -> U32 {   //~ E0200
+pub fn maybe_dup_and_escape[T: ?Dup + ?Escape](x: T) -> U32 {
   0
 }
 
-pub fn escape_then_a_trait[T: ?Escape + Show](x: T) -> U32 {   //~ E0200
+pub fn escape_then_a_trait[T: ?Escape + Show](x: T) -> U32 {
   0
 }
 
-pub fn a_trait_then_escape[T: Show + ?Escape](x: T) -> U32 {   //~ E0200
+pub fn a_trait_then_escape[T: Show + ?Escape](x: T) -> U32 {
   0
 }
 
-pub fn the_second_parameter[T, U: ?Escape](x: T, y: U) -> U32 {   //~ E0200
+pub fn the_second_parameter[T, U: ?Escape](x: T, y: U) -> U32 {
   0
 }
 
-pub struct Rack[T: ?Escape] {   //~ E0200
+pub struct Rack[T: ?Escape] {
   a: U32,
 }
 
-pub enum Shelf[T: ?Escape] {   //~ E0200
+pub enum Shelf[T: ?Escape] {
   One(U32),
   Nothing,
 }
@@ -43,16 +44,16 @@ pub struct Plain {
 }
 
 impl Plain {
-  pub fn method_escape[U: ?Escape](self, y: U) -> U32 {   //~ E0200
+  pub fn method_escape[U: ?Escape](self, y: U) -> U32 {
     self.n
   }
 }
 
-pub struct Box2[T] {
-  a: T,
+pub struct Box2[T: ?Escape] {
+  a: U32,
 }
 
-impl[T: ?Escape] Box2[T] {   //~ E0200
+impl[T: ?Escape] Box2[T] {
   pub fn tag() -> U32 {
     7
   }

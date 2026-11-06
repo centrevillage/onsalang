@@ -44,14 +44,23 @@ const ROOT: u8 = 0;
 const PLANAR: u8 = 1;
 const INSIDE: u8 = 2;
 
+/// The place of a type argument of a `?Escape` parameter (§4.5, S-927): a
+/// `Span` or a planar array stands there, as at a borrow binding.
+const LIFTED: (Pos, u8) = (Pos::Bind, ROOT);
+
 /// The parts of the type `shape` at `at`, each at its place: the element of
 /// an array at the root is planar, the parameters of a function type are
-/// arguments (in the right side of an alias, every part is of the alias).
-fn places(shape: &Ty, at: (Pos, u8)) -> Vec<(TyId, (Pos, u8))> {
+/// arguments, a type argument of a `?Escape` parameter is [`LIFTED`] (in the
+/// right side of an alias, every part is of the alias).
+fn places(a: &Analysis, shape: &Ty, at: (Pos, u8)) -> Vec<(TyId, (Pos, u8))> {
     let inner = if at.0 == Pos::Alias { (Pos::Alias, INSIDE) } else { (Pos::Other, INSIDE) };
     match shape {
         Ty::Array(e, _) if at.1 == ROOT => vec![(*e, (at.0, PLANAR))],
         Ty::Array(e, _) => vec![(*e, inner)],
+        Ty::Named(d, ts) if at.0 != Pos::Alias => {
+            let lifted = |k| a.def(*d).generics().get(k).is_some_and(GenericDef::lifts_escape);
+            ts.iter().enumerate().map(|(k, &t)| (t, if lifted(k) { LIFTED } else { inner })).collect()
+        }
         Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => ts.iter().map(|&t| (t, inner)).collect(),
         Ty::Fn(f) if at.0 == Pos::Alias => f.params.iter().map(|p| (p.1, inner)).chain([(f.ret, inner)]).collect(),
         Ty::Fn(f) => f.params.iter().map(|&(m, t)| (t, (Pos::Arg(m), ROOT))).chain([(f.ret, inner)]).collect(),
@@ -77,20 +86,23 @@ pub(super) fn payloads(item: &ItemKind, def: &DefKind) -> Vec<(TypeId, TyId, Slo
 }
 
 /// Whether the head of `t` is second-class (§5.3): `Span`, a generated `Out`
-/// (§11.6; `In` from W7-03). The one place of the question.
-pub(crate) fn second_class(a: &Analysis, t: TyId) -> bool {
-    match a.types.get(t) {
+/// (§11.6; `In` from W7-03), a `?Escape` type parameter in scope (§4.5). The
+/// one place of the question.
+pub(crate) fn second_class(under: &Bounds, t: TyId) -> bool {
+    match under.a.types.get(t) {
         Ty::Builtin(BuiltinTy::Span, _) => true,
-        Ty::Named(d, _) => matches!(&a.def(*d).kind, DefKind::Struct(s) if s.flow_ty == Some(FlowTy::Out)),
+        Ty::Param(i) => under.generics.get(*i as usize).is_some_and(GenericDef::lifts_escape),
+        Ty::Named(d, _) => matches!(&under.a.def(*d).kind, DefKind::Struct(s) if s.flow_ty == Some(FlowTy::Out)),
         _ => false,
     }
 }
 
 /// Whether the second-class `ty` stands in its place `at` (§5.3, §5.4):
 /// an argument not `move` (S-758), the element of a planar one, a borrow
-/// binding of a body.
+/// binding of a body. A `?Escape` type parameter stands where a `Span` does
+/// (S-928).
 fn fits(a: &Analysis, ty: TyId, at: (Pos, u8)) -> bool {
-    let span = matches!(a.types.get(ty), Ty::Builtin(BuiltinTy::Span, _));
+    let span = matches!(a.types.get(ty), Ty::Builtin(BuiltinTy::Span, _) | Ty::Param(_));
     match at {
         (Pos::Alias, _) => true,
         (Pos::Arg(m), ROOT) => m != Mode::Move,
@@ -105,23 +117,25 @@ fn fits(a: &Analysis, ty: TyId, at: (Pos, u8)) -> bool {
 /// Whether a second-class part of `ty` stands out of its place, `ty` at
 /// `at`: what its E0710 is (a type is a graph of shared parts: each is
 /// looked at once, `seen`).
-fn holds(a: &Analysis, seen: &mut HashMap<(TyId, Pos, u8), bool>, ty: TyId, at: (Pos, u8)) -> bool {
+fn holds(under: &Bounds, seen: &mut HashMap<(TyId, Pos, u8), bool>, ty: TyId, at: (Pos, u8)) -> bool {
     if let Some(&h) = seen.get(&(ty, at.0, at.1)) {
         return h;
     }
-    let shape = a.types.get(ty);
-    let h =
-        second_class(a, ty) && !fits(a, ty, at) || places(shape, at).into_iter().any(|(t, at)| holds(a, seen, t, at));
+    let a = under.a;
+    let parts = places(a, a.types.get(ty), at);
+    let h = second_class(under, ty) && !fits(a, ty, at) || parts.into_iter().any(|(t, at)| holds(under, seen, t, at));
     seen.insert((ty, at.0, at.1), h);
     h
 }
 
-/// Whether the type argument `t`, written or decided by the inference, is a
-/// second-class type or holds one out of the arguments of a function type:
-/// it has no kind, and a type parameter takes it only as `?Escape` (§4.5,
-/// §4.6; S-766, S-771, S-862). The one judgment of both.
-pub(crate) fn no_kind_argument(a: &Analysis, t: TyId) -> bool {
-    holds(a, &mut HashMap::default(), t, ARGUMENT)
+/// Whether the type argument `t`, written or decided by the inference, of a
+/// parameter `?Escape` or not (`lifted`), stands out of its place: a parameter
+/// with no mark takes no second-class type and none that holds one out of the
+/// arguments of a function type, a type with no kind; a `?Escape` one takes
+/// a `Span` and a planar array (§4.5, §4.6; S-766, S-771, S-862, S-927). The
+/// one judgment of both.
+pub(crate) fn no_kind_argument(under: &Bounds, t: TyId, lifted: bool) -> bool {
+    holds(under, &mut HashMap::default(), t, if lifted { LIFTED } else { ARGUMENT })
 }
 
 /// The place of a type argument: inside another type.
@@ -312,15 +326,15 @@ impl<'p> Sema<'p> {
             Written::Elsewhere => (None, span, ty),
         };
         // Where it is not written, only its second-class parts are judged.
-        if here.is_none() && !self.holds(ty, at) {
+        if here.is_none() && !self.holds(cx, ty, at) {
             return Ok(ty);
         }
-        if second_class(self.a, ty) && !fits(self.a, ty, at) {
+        if second_class(&Bounds { a: self.a, generics: &cx.generics }, ty) && !fits(self.a, ty, at) {
             return Err(self.misplaced(cx, ty, at, span));
         }
         let shape = self.a.types.get(ty).clone();
         let kids = self.kids(cx, here, &shape);
-        let parts = places(&shape, at);
+        let parts = places(self.a, &shape, at);
         // The parts are read first (each, so that none is judged as lowered),
         // the requirements judged of them; its own error comes first, then the
         // first of its parts.
@@ -355,8 +369,15 @@ impl<'p> Sema<'p> {
         Ok(self.a.types.intern(shape))
     }
 
-    fn holds(&mut self, ty: TyId, at: (Pos, u8)) -> bool {
-        holds(self.a, &mut self.misfit, ty, at)
+    /// [`holds`] under the generics of `cx`. The answers kept are of no
+    /// scope: a scope with a `?Escape` parameter, which answers of its own
+    /// `Ty::Param`, keeps none.
+    fn holds(&mut self, cx: &Cx<'p>, ty: TyId, at: (Pos, u8)) -> bool {
+        let under = Bounds { a: self.a, generics: &cx.generics };
+        if cx.generics.iter().any(GenericDef::lifts_escape) {
+            return holds(&under, &mut HashMap::default(), ty, at);
+        }
+        holds(&under, &mut self.misfit, ty, at)
     }
 
     /// The parts of the type `shape` as written at `here`, in the order of
@@ -432,7 +453,7 @@ impl<'p> Sema<'p> {
                 let owner = format!("`{}`", self.a.shown_name(*d));
                 let std = self.a.modules.is_std(self.a.def(*d).module);
                 let want = |g: &GenericDef| match &g.kind {
-                    GenericKind::Type { bounds, dup, unknown: false } => {
+                    GenericKind::Type { bounds, dup, unknown: false, .. } => {
                         let all = bounds.iter().copied().chain(dup.then_some(Bound::Dup)).collect();
                         (all, Required::Param { param: g.name.clone(), owner: owner.clone(), std }, Some(g.span))
                     }
@@ -442,12 +463,16 @@ impl<'p> Sema<'p> {
             }
             _ => return Ok(()),
         };
-        for ((bounds, what, declared), ((&arg, &shown), w)) in wants.into_iter().zip(read.iter().zip(args).zip(kids)) {
+        let at = places(self.a, shape, ARGUMENT);
+        for (((bounds, what, declared), ((&arg, &shown), w)), (_, place)) in
+            wants.into_iter().zip(read.iter().zip(args).zip(kids)).zip(at)
+        {
             // A second-class argument has no kind: its E0710 alone (§4.6, S-766).
             // S-771: so is an argument that holds one out of its place
             // (`C[(Span[F32], F32)]`, `N[[Span[F32]; 2]]`), not one at the
-            // argument of a function type (`N[fn(Span[F32]) -> F32]`).
-            if self.holds(arg, ARGUMENT) {
+            // argument of a function type (`N[fn(Span[F32]) -> F32]`). A
+            // `?Escape` parameter takes a `Span`, and judges its bounds (S-927).
+            if self.holds(cx, arg, place) {
                 continue;
             }
             let under = Bounds { a: self.a, generics: &cx.generics };

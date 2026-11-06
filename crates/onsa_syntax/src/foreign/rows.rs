@@ -800,6 +800,15 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Reported,
     },
     Row {
+        id: RowId::ImplicitBound,
+        name: "implicit_bound",
+        phase: Phase::Types,
+        code: Code::E0020,
+        message: "this requirement is implicit: every type parameter has it",
+        rule: "a type parameter requires `Dup` and `Escape` with no bound written: `T: Dup` is `T`, and `?Dup` or `?Escape` lifts them (§4.5)",
+        detect: Detect::Reported,
+    },
+    Row {
         id: RowId::TypeArgsTurbofish,
         name: "type_args_turbofish",
         phase: Phase::Syntax,

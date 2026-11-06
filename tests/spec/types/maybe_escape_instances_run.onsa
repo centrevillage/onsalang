@@ -1,0 +1,180 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§5.3", "§5.4", "§4.6"]
+
+// S-862 K (W5-17, §4.5: "第二級の型でも具体化できるようにするには `[T: ?Escape]` と書いて、この要求を外す"; "借用の行の束縛（§5.4）は
+// `Span` と同じく書ける"; "第一級の型には暗黙の `Dup` が残り、Affine も受けるには `?Dup + ?Escape`"), run in the interpreter: the values that
+// the instances of a type parameter with `?Escape` give. `T` is decided by the argument (the inference of §4.7), and is a `Span[F32]`
+// (the element of a planar argument), a scalar, an array, a tuple, a struct, or, with `?Dup + ?Escape`, a `Buf[F32]` that is Affine.
+// The body of each function reads the array through `N`, binds an element (`let y = xs[i]`, a borrow, §5.4), and passes it on to a
+// function of the same kind (a borrowed argument); a branch and a loop are in the bodies. The call of a function value (the other use of
+// `T` in a body) cannot run in this version (W8-09), so it is in the check case types/maybe_escape_each_spec.onsa.
+
+pub struct P {
+  x: F32,
+}
+
+fn touch[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+fn touch_any[T: ?Dup + ?Escape](x: T) -> U32 {
+  1
+}
+
+fn n_of[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+fn n_of_any[T: ?Dup + ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+fn n_of_inout[T: ?Escape, const N: U32](inout xs: [T; N]) -> U32 {
+  N
+}
+
+fn n_of_inout_any[T: ?Dup + ?Escape, const N: U32](inout xs: [T; N]) -> U32 {
+  N
+}
+
+fn touched[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  var n: U32 = 0
+  for i in 0 ..< N {
+    let y = xs[i]
+    n = n + touch(y)
+  }
+  n
+}
+
+fn touched_any[T: ?Dup + ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  var n: U32 = 0
+  for i in 0 ..< N {
+    let y = xs[i]
+    n = n + touch_any(y)
+  }
+  n
+}
+
+fn pick[T: ?Escape, const N: U32](xs: [T; N], k: U32) -> U32 {
+  if k < N {
+    touch(xs[k])
+  } else {
+    0
+  }
+}
+
+fn pass_on[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  (n_of(xs) * 10) + touched(xs)
+}
+
+fn pair_n[T: ?Escape, U: ?Escape, const N: U32](a: [T; N], b: [U; N]) -> U32 {
+  (n_of(a) * 10) + n_of(b)
+}
+
+// ----------------------------------------------------------------------------------- T is a Span
+
+fn planar_n(xs: [Span[F32]; 2]) -> U32 {
+  n_of(xs)
+}
+
+fn planar_touched(xs: [Span[F32]; 3]) -> U32 {
+  touched(xs)
+}
+
+fn planar_pick(xs: [Span[F32]; 2], k: U32) -> U32 {
+  pick(xs, k)
+}
+
+fn planar_pass_on(xs: [Span[F32]; 2]) -> U32 {
+  pass_on(xs)
+}
+
+fn planar_any(xs: [Span[F32]; 2]) -> U32 {
+  n_of_any(xs) + touched_any(xs)
+}
+
+fn planar_inout(inout xs: [Span[F32]; 3]) -> U32 {
+  n_of_inout(inout xs)
+}
+
+fn planar_and_scalars(xs: [Span[F32]; 2], ys: [F32; 2]) -> U32 {
+  pair_n(xs, ys)
+}
+
+// ------------------------------------------------------------------------------ T is a first-class type
+
+fn scalars_n(xs: [F32; 4]) -> U32 {
+  n_of(xs) + touched(xs)
+}
+
+fn rows_n(xs: [[F32; 3]; 2]) -> U32 {
+  (n_of(xs) * 10) + touched(xs)
+}
+
+fn tuples_n(xs: [(F32, U32); 3]) -> U32 {
+  n_of(xs)
+}
+
+fn structs_n(xs: [P; 2]) -> U32 {
+  touched(xs)
+}
+
+fn buffers_n(xs: [Buf[F32]; 2]) -> U32 {
+  n_of_any(xs) + touched_any(xs)
+}
+
+fn buffers_inout(inout xs: [Buf[F32]; 3]) -> U32 {
+  n_of_inout_any(inout xs)
+}
+
+test "N and the loop over the channels of a planar array, where T is a Span" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b: [F32; 2] = [0.5; 2]
+  let c: [F32; 7] = [0.0; 7]
+  assert planar_n([a, b]) == 2
+  assert planar_touched([a, b, c]) == 3
+  assert planar_pass_on([c, a]) == 22
+}
+
+test "the branch of a function over the channels takes the element or the other arm" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b: [F32; 2] = [0.5; 2]
+  assert planar_pick([a, b], 0) == 1
+  assert planar_pick([a, b], 1) == 1
+  assert planar_pick([a, b], 2) == 0
+}
+
+test "the planar array as an inout argument" {
+  var a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var b: [F32; 2] = [0.5; 2]
+  var c: [F32; 3] = [0.0; 3]
+  assert planar_inout(inout [a, b, c]) == 3
+}
+
+test "?Dup + ?Escape takes a Span as well" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b: [F32; 2] = [0.5; 2]
+  assert planar_any([a, b]) == 4
+}
+
+test "two type parameters, one a Span and one a scalar, share the length" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b: [F32; 2] = [0.5; 2]
+  assert planar_and_scalars([a, b], [1.0, 2.0]) == 22
+}
+
+test "T is a scalar, an array, a tuple or a struct, which are first class" {
+  assert scalars_n([1.0, 2.0, 3.0, 4.0]) == 8
+  assert rows_n([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) == 22
+  assert tuples_n([(1.0, 1), (2.0, 2), (3.0, 3)]) == 3
+  assert structs_n([P { x: 1.0 }, P { x: 2.0 }]) == 2
+}
+
+test "an Affine element is taken with ?Dup + ?Escape" {
+  var bufs: [Buf[F32]; 2] = [Buf.zeroed(2), Buf.zeroed(5)]
+  assert buffers_n(bufs) == 4
+  var more: [Buf[F32]; 3] = [Buf.zeroed(1), Buf.zeroed(1), Buf.zeroed(1)]
+  assert buffers_inout(inout more) == 3
+}

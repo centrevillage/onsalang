@@ -239,9 +239,6 @@ pub(crate) fn builtin_ty(a: &Analysis, of: Entity) -> Option<TyId> {
 /// one place of this question (D-15).
 pub(crate) fn builtin_member(a: &Analysis, of: Entity, name: &str) -> Option<BuiltinMember> {
     let ty = builtin_ty(a, of)?;
-    if let Some(bang) = builtin::method_bang(&a.types, ty, name) {
-        return Some(BuiltinMember::Method { bang });
-    }
     let (form, feature) = builtin::missing(&a.types, ty, name)?;
     Some(match form {
         builtin::Form::Method => BuiltinMember::Method { bang: false },

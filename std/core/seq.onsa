@@ -4,10 +4,15 @@
 //! are the conditions of the elements (S-853): `get` and `fill` of an array
 //! need a Dup element (the implicit `Dup` of `T`), the others a Copy one
 //! (`Span[T]`), `add_from` a number (`AnyNum`, S-855). `len` of an array is
-//! the compiler's, of any element (W5-17 declares it here).
+//! of any element, `Span`s too (S-862).
 //!
 //! An `impl` of an array, of `Span[T]` and a `target fn` that returns a
 //! `Span` are std's alone (§15.2).
+
+impl[T: ?Dup + ?Escape, const N: U32] [T; N] {
+  /// The number of the elements.
+  pub rt fn len(self) -> U32 { N }
+}
 
 impl[T, const N: U32] [T; N] {
   /// `Some` of the element at `i`, `None` past the end.

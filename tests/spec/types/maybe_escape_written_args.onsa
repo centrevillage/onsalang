@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.6"]
+// fixes = 0
+
+// S-862 K (W5-17, §4.5: "第二級の型（§5.3）か、それを中に含む型を、`?Escape`（上記）の無い型パラメータの型引数に書いた所（`W[Span[F32]]`、
+// `C[(Span[F32], F32)]`、`N[[Span[F32]; 2]]`）は位置の E0710 だけ"): the same types written as the type argument of a type whose parameter has `?Escape` are
+// not that error (this is the written form of the argument; `::[…]` is E0200 until W5-10, so the written type argument is in the type
+// position of an argument). The `impl` of the type takes the `Span` as `T` of its methods: `r.tag(s)` passes a `Span[F32]` where `T` is
+// that `Span[F32]`. S-927: the value of such a type stays first-class, its kind comes from its fields (§4.5, §4.6): it is returned and
+// held. The written argument is a `Span` or a planar array; the others are types/maybe_escape_type_arg_neg.onsa. No diagnostic is expected anywhere in this file.
+// The same types as the argument of a type parameter with no `?Escape` are the E0710 of types/wellformed_second_class_type_arg.onsa and
+// types/wellformed_second_class_inside_type_arg.onsa.
+
+fn touch[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+pub struct Rack[T: ?Escape] {
+  n: U32,
+}
+
+impl[T: ?Escape] Rack[T] {
+  pub fn tag(self, x: T) -> U32 {
+    touch(x)
+  }
+
+  pub fn count(self) -> U32 {
+    self.n
+  }
+}
+
+pub fn a_span_rack(r: Rack[Span[F32]], s: Span[F32]) -> U32 {
+  r.tag(s)
+}
+
+pub fn a_planar_rack(r: Rack[[Span[F32]; 2]]) -> U32 {
+  r.count()
+}
+
+pub fn an_inout_span_rack(inout r: Rack[Span[F32]]) -> U32 {
+  r.count()
+}
+
+pub fn a_rack_returned(r: Rack[Span[F32]]) -> Rack[Span[F32]] {
+  r
+}
+
+pub struct RackHolder {
+  r: Rack[Span[F32]],
+}
+
+pub fn a_rack_in_an_option(r: Option[Rack[Span[F32]]]) -> U32 {
+  match r {
+    Some(x) => x.count(),
+    None => 0,
+  }
+}

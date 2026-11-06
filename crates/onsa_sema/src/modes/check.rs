@@ -68,7 +68,7 @@ pub(super) struct Walker<'a> {
     pub(super) text: &'a str,
     pub(super) names: &'a BodyNames,
     pub(super) info: &'a BodyInfo,
-    generics: Vec<GenericDef>,
+    pub(super) generics: Vec<GenericDef>,
     /// The local of each binding no pattern makes (a `var`).
     pub(super) origins: HashMap<Origin, LocalId>,
     /// The walk reports: the one of the body, not one that makes a loop's

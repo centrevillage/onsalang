@@ -10,7 +10,7 @@
 // declared type (the value is on the next line, and the marker is on the line of the type); with `T: Copy`, `T: Num`
 // or `T: Float` it is Copy and the type is fine (types/const_type_fine.onsa). A type parameter that holds
 // a Shared value is the same in a tuple, an array and an `Option`, and for the bounds that do not give `Copy`
-// (`T: Show`, `T: Dup`). One error per unit: each constant is its own.
+// (`T: Show`, `T: PartialEq`). One error per unit: each constant is its own.
 // One error per item (P-01).
 
 pub struct Holder[T] {
@@ -35,8 +35,8 @@ impl[T: Show] Holder[T] {
     None
 }
 
-impl[T: Dup] Holder[T] {
-  pub const NONE_OF_A_DUP: Option[T] =   //~ E0200
+impl[T: PartialEq] Holder[T] {
+  pub const NONE_OF_A_PARTIAL_EQ: Option[T] =   //~ E0200
     None
 }
 

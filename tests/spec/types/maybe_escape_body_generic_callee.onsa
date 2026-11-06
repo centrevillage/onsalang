@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§5.2"]
+
+// S-862 K (W5-17, §4.5: "`T` の値は本体の中で第二級で、…保存する…`move` の引数へ渡すと E0710"): a value of a `?Escape` type parameter put into the field of a
+// struct literal, into the constructor of an `Option`, and given to a `move` parameter, where the struct, the `Option` and the callee are declared with a type
+// parameter that has no `?Escape` (the implicit `Escape`, so its `U` is the `T` of the caller). The three keep the value (a stored field, the payload of
+// an `Option`, the argument of a `move`), and the expected error is the E0710 of the expression, the same as for the stores of
+// types/maybe_escape_body_second_class.onsa. This file takes the reading that a `?Escape` type parameter given where the parameter has no `?Escape`
+// is the E0710 and not the E0416 of an unmet `Escape`: the spec writes it for the stores (§4.5) and not for the type argument that the call
+// decides; the report of the case lists it. If that reading changes, only this file goes. The mark is of the line only: the line may carry
+// the E0710 of the type argument and the E0710 of the store, which the case does not tell apart. One error per function (P-01).
+
+fn sink[U](move y: U) -> U32 {
+  1
+}
+
+pub struct Slot[U] {
+  v: U,
+}
+
+pub fn stored_in_a_field[T: ?Escape](x: T) -> U32 {
+  let _ = Slot { v: x }   //~ E0710
+  0
+}
+
+pub fn stored_in_an_option[T: ?Escape](x: T) -> U32 {
+  let _ = Some(x)   //~ E0710
+  0
+}
+
+pub fn passed_to_move[T: ?Escape](x: T) -> U32 {
+  sink(x)   //~ E0710
+}

@@ -18,5 +18,5 @@ impl Default for Mode
 pub struct Held[T]  // derive PartialEq
   value: T
 
-impl Default for Held[T]
-  rt fn default[T: Default]() -> Held[T]
+impl[T: Default] Default for Held[T]
+  rt fn default() -> Held[T]

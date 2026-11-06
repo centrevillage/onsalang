@@ -154,7 +154,8 @@ impl<'p> Sema<'p> {
                     written.push(b);
                 }
                 (None, Some(dup)) => {
-                    let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_derive(cx, paths, k)]);
+                    let spans: Vec<Span> = paths.iter().map(|p| p.span).collect();
+                    let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_element(cx, &spans, k)]);
                     if let Some(at) = self.keep(cx.def, d) {
                         self.kind_heads.push((at, cx.def, dup));
                     }
@@ -272,15 +273,16 @@ fn unfit(b: Bound, variants: Option<&[Variant]>) -> Option<(&'static str, &'stat
     }
 }
 
-/// The candidate that takes the trait `k` of the head `paths` out (§4.6,
-/// `copy_bound`): with the `+` before it, or after it when it is the first,
-/// or with the `:` when it is the only one.
-fn drop_derive(cx: &Cx<'_>, paths: &[onsa_syntax::ast::Path], k: usize) -> Fix {
-    let p = paths[k].span;
+/// The candidate that takes the element `k` of a `+` list of the spans
+/// `list` out (a trait of a head, §4.6, `copy_bound`; a bound of a type
+/// parameter, §4.5, `implicit_bound`): with the `+` before it, or after it
+/// when it is the first, or with the `:` when it is the only one.
+pub(super) fn drop_element(cx: &Cx<'_>, list: &[Span], k: usize) -> Fix {
+    let p = list[k];
     let span = if k > 0 {
-        Span::new(p.file, paths[k - 1].span.end, p.end)
-    } else if paths.len() > 1 {
-        Span::new(p.file, p.start, paths[1].span.start)
+        Span::new(p.file, list[k - 1].end, p.end)
+    } else if list.len() > 1 {
+        Span::new(p.file, p.start, list[1].start)
     } else {
         // The `:` before the only trait (blanks may be between them).
         let before = cx.text[..p.start as usize].trim_end();

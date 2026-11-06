@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.5", "§4.2"]
+
+// S-862 K (W5-17, §5.3: "`[T; N]` は `len()` を要素によらず持ち"; §4.5): the `len()` of an array, called on an array whose element type is
+// a type parameter with `?Escape` (and `?Dup + ?Escape` for an Affine element). The method is there whatever the element is, so it is there for
+// `T` of the second class too: the planar array of a `Span[F32]` and the array of scalars give the length, and so does the array of `Buf[F32]`
+// with `?Dup`. This is the generic form of values/seq_len_any_element.onsa, which has the arrays of a written element type (`[Span[F32]; 3]`,
+// `[Buf[F32]; 2]`; they run today). The `len()` of the body is the method of the array and not the const parameter `N`; the two agree.
+
+fn len_of[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+fn len_of_any[T: ?Dup + ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+fn len_of_inout[T: ?Escape, const N: U32](inout xs: [T; N]) -> U32 {
+  xs.len()
+}
+
+fn len_and_n[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  if xs.len() == N {
+    1
+  } else {
+    0
+  }
+}
+
+fn len_planar(xs: [Span[F32]; 3]) -> U32 {
+  len_of(xs)
+}
+
+fn len_planar_any(xs: [Span[F32]; 2]) -> U32 {
+  len_of_any(xs)
+}
+
+fn len_planar_inout(inout xs: [Span[F32]; 2]) -> U32 {
+  len_of_inout(inout xs)
+}
+
+fn len_planar_and_n(xs: [Span[F32]; 2]) -> U32 {
+  len_and_n(xs)
+}
+
+fn len_scalars(xs: [F32; 4]) -> U32 {
+  len_of(xs)
+}
+
+fn len_buffers(xs: [Buf[F32]; 2]) -> U32 {
+  len_of_any(xs)
+}
+
+fn len_buffers_inout(inout xs: [Buf[F32]; 3]) -> U32 {
+  len_of_any(xs)
+}
+
+test "the len of an array of channels, where T is a Span" {
+  let a: [F32; 4] = [0.0; 4]
+  let b: [F32; 2] = [0.0; 2]
+  let c: [F32; 7] = [0.0; 7]
+  assert len_planar([a, b, c]) == 3
+  assert len_planar_any([a, b]) == 2
+  assert len_planar_and_n([c, b]) == 1
+}
+
+test "the len of an inout planar argument" {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 2] = [0.0; 2]
+  assert len_planar_inout(inout [a, b]) == 2
+}
+
+test "the len of an array of scalars through ?Escape" {
+  assert len_scalars([1.0, 2.0, 3.0, 4.0]) == 4
+}
+
+test "the len of an array of Buf, which is Affine, through ?Dup + ?Escape" {
+  var bufs: [Buf[F32]; 2] = [Buf.zeroed(2), Buf.zeroed(5)]
+  assert len_buffers(bufs) == 2
+  var more: [Buf[F32]; 3] = [Buf.zeroed(1), Buf.zeroed(1), Buf.zeroed(1)]
+  assert len_buffers_inout(inout more) == 3
+  assert bufs[1].len() == 5
+}

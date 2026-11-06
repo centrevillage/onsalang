@@ -278,7 +278,7 @@ impl<'a> Checker<'a> {
         };
         match self.a.modules.assoc_member(table, name) {
             Ok(Some(md)) => matches!(&self.a.def(md).kind, DefKind::Fn(f) if f.self_mode.is_some()),
-            Ok(None) => builtin::method(&mut self.a.types, recv, name).is_some(),
+            Ok(None) => false,
             // Two declarations clash on it: no method a candidate can call.
             Err(_) => false,
         }

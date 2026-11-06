@@ -4,6 +4,7 @@
 //! Dup` (§4.6).
 
 use super::*;
+use crate::body::bounds::Bounds;
 use crate::names::collect::reads_members;
 use crate::traits::no_impl;
 
@@ -128,7 +129,7 @@ impl<'p> Sema<'p> {
     /// E0710 (§5.3, §15.2), and a name not read none.
     fn orphan_impl(&mut self, cx: &Cx<'p>, i: &ImplDecl, self_ty: TyId) -> bool {
         let Some(e) = self.target_type(cx, i.self_ty) else { return false };
-        if self.defines(cx.m, e) || second_class(self.a, self_ty) {
+        if self.defines(cx.m, e) || second_class(&Bounds { a: self.a, generics: &cx.generics }, self_ty) {
             return false;
         }
         let shown = one_line(&src(cx, cx.ast.ty(i.self_ty).span));

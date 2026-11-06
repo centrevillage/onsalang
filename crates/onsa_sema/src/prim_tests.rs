@@ -123,7 +123,7 @@ fn every_row_gives_a_primitive_at_every_builtin_type_its_bounds_admit() {
         let mut choices: Vec<Vec<TyId>> = Vec::new();
         for g in &f.generics {
             choices.push(match &g.kind {
-                GenericKind::Type { bounds, dup, unknown: false } => {
+                GenericKind::Type { bounds, dup, unknown: false, .. } => {
                     let met: Vec<TyId> = candidates
                         .iter()
                         .copied()

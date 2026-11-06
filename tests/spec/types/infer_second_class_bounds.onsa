@@ -6,7 +6,7 @@
 // S-862 (1') (W5-02 U5a, §4.5: a type argument that is decided by inference to a second-class type, or a type that holds one, is the
 // E0710 of the expression that made it, "その型引数の要求は判定しない" (the same as for the written type argument of S-766, "第二級の型と、それを
 // 含む型は種を持たない、§4.6")): the bound of the type parameter does not change the error. A trait (`PartialEq`, `Show`, `Num`), the
-// kind constraint `Copy` and the explicit `Dup`, and the `?Dup` that takes the implicit `Dup` off are all E0710, and none of them is the
+// kind constraint `Copy`, and the `?Dup` that takes the implicit `Dup` off are all E0710, and none of them is the
 // E0416 of a requirement that a `Span` could not meet (a `Span` has no kind to meet it with). A first-class type that does not meet
 // the bound is still the E0416 (negative/kind_dup_requirement.onsa). The error has no candidate (`fixes = 0`). One error per function (P-01).
 
@@ -28,10 +28,6 @@ pub fn copied[T: Copy](x: T) -> U32 {
 
 pub fn copied_planar[T: Copy, const N: U32](xs: [T; N]) -> U32 {
   N
-}
-
-pub fn dupped[T: Dup](x: T) -> U32 {
-  0
 }
 
 pub fn maybe_dupped[T: ?Dup](x: T) -> U32 {
@@ -66,10 +62,6 @@ pub fn copy_constraint_on_a_planar_argument(xs: [Span[F32]; 2]) -> U32 {
   copied_planar(xs) //~ E0710 @3
 }
 
-pub fn explicit_dup(s: Span[F32]) -> U32 {
-  dupped(s) //~ E0710 @3
-}
-
 pub fn maybe_dup(s: Span[F32]) -> U32 {
   maybe_dupped(s) //~ E0710 @3
 }
@@ -81,7 +73,7 @@ pub fn a_trait_and_a_kind(s: Span[F32]) -> U32 {
 // -------------------------------------------------------------------------------- what is right
 
 pub fn scalar_meets_the_bounds(x: F32) -> U32 {
-  numeric(x) + copied(x) + dupped(x) + shown(x)
+  numeric(x) + copied(x) + shown(x)
 }
 
 pub fn affine_is_right_for_maybe_dup(b: Buf[F32]) -> U32 {

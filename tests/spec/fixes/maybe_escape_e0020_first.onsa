@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§0.5.1", "§18.1"]
+// fixes = 1
+
+// S-751 (c), S-868 (W5-17, §4.5: "修正候補は要素を外す形（`T: Dup` は `T`、`T: Dup + Show` は `T: Show`）で、note で暗黙の要求を示す"): the `Dup` or the `Escape`
+// that is the first element of a list of two, with a trait after it: the candidate takes out the element and the `+` after it (`T: Dup + Show`
+// is `T: Show`). One candidate (`fixes = 1`). Every place that has a list. The trait `Show` and the other bounds that do not overlap with the
+// element are fine; the lists with the element in another place are fixes/maybe_escape_e0020_last.onsa and _middle. One error per item (P-01).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub fn dup_then_show[T: Dup + Show](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn escape_then_show[T: Escape + Show](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn dup_then_eq[T: Dup + PartialEq](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub struct RackDup[T: Dup + Show] {   //~ E0020
+  n: U32,
+}
+
+pub enum ShelfEscape[T: Escape + Show] {   //~ E0020
+  One(U32),
+  Nothing,
+}
+
+impl[T: Dup + Show] Held[T] {   //~ E0020
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl Plain {
+  pub fn method_escape_then_show[U: Escape + Show](self, y: U) -> U32 {   //~ E0020
+    self.n
+  }
+}

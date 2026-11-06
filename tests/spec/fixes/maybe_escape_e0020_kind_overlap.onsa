@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§0.5.1", "§6.3", "§18.1"]
+// fixes = 1
+
+// S-751 (c), S-747 (W5-17, §4.5: "含意で重なる形（`Float + Num`）は誤りでない。… 重なりも矛盾も無い並びの、`?` の無い `Dup` と `Escape` は E0020 である"):
+// `Dup` written beside a bound that implies it (`Copy` is a kind that is Dup; `Num`, `Float`, `Int` and the number traits all need `Copy`, §6.3) is not
+// the overlap of S-747, which is the same bound twice, so the list has no overlap and the `Dup` is the E0020 of the explicit requirement, in either
+// order. The candidate takes out the `Dup` (`T: Copy + Dup` is `T: Copy`; `T: Dup + Num` is `T: Num`). One candidate (`fixes = 1`). The explicit
+// `Escape` beside a kind constraint is the same (`Copy + Escape`). One error per item (P-01).
+
+pub fn copy_then_dup[T: Copy + Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn dup_then_copy[T: Dup + Copy](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn num_then_dup[T: Num + Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn dup_then_float[T: Dup + Float](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn copy_then_escape[T: Copy + Escape](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn escape_then_int[T: Escape + Int](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub struct RackCopyDup[T: Copy + Dup] {   //~ E0020
+  n: U32,
+}
+
+pub enum ShelfDupNum[T: Dup + Num] {   //~ E0020
+  One(U32),
+  Nothing,
+}

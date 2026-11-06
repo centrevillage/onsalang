@@ -119,12 +119,13 @@ impl Bound {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GenericKind {
-    /// `T`, `T: Num`, `T: ?Dup` (`dup == false` lifts the implicit `Dup` bound, §4.5).
+    /// `T`, `T: Num`, `T: ?Dup` (`dup == false` lifts the implicit `Dup` bound,
+    /// `escape == false` the implicit `Escape`, `?Escape`, §4.5).
     /// `unknown`: a bound is a name the names stage holds as an error (§18.1,
     /// S-689), or the list has an error of its name, its `?` or a
     /// contradiction (S-768, S-711, S-747): `T` satisfies every bound, the
     /// implicit `Dup` too, and its methods are not known.
-    Type { bounds: Vec<Bound>, dup: bool, unknown: bool },
+    Type { bounds: Vec<Bound>, dup: bool, escape: bool, unknown: bool },
     /// `const N: U32`
     Const(TyId),
     /// `e` (effect-row variable)
@@ -136,6 +137,14 @@ pub struct GenericDef {
     pub name: String,
     pub span: Span,
     pub kind: GenericKind,
+}
+
+impl GenericDef {
+    /// Whether it is a type parameter marked `?Escape` (§4.5): it takes
+    /// second-class types, and its values are second-class in a body.
+    pub fn lifts_escape(&self) -> bool {
+        matches!(self.kind, GenericKind::Type { escape: false, .. })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2,7 +2,7 @@
 //! instances.
 
 use super::*;
-use crate::deferred::{GENERIC_VIEW, VIEW_OF_ARRAY};
+use crate::deferred::{GENERIC_VIEW, LIFTED_VIEW, VIEW_OF_ARRAY};
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ generics
@@ -66,10 +66,18 @@ impl<'a> Checker<'a> {
     /// The type argument `t` a use made at `span`, named `what`: its origin
     /// (E0406 when still open at the end) and its implicit `Escape`, of the
     /// rule `rule`, judged before the other requirements made after it (§4.5,
-    /// S-862). `way`: the note of the E0406.
-    fn type_argument(&mut self, span: Span, t: TyId, what: ArgumentName, way: Option<String>, rule: &'static str) {
+    /// S-862). `way`: the note of the E0406; `lifted`: its parameter is
+    /// `?Escape`.
+    fn type_argument(
+        &mut self,
+        span: Span,
+        t: TyId,
+        what: ArgumentName,
+        way: Option<String>,
+        (rule, lifted): (&'static str, bool),
+    ) {
         self.defer(span, t, DeferredKind::Origin { what: what.clone(), rule: way });
-        self.defer(span, t, DeferredKind::Escape { what, rule });
+        self.defer(span, t, DeferredKind::Escape { what, rule, lifted });
     }
 
     /// How the parameters of the `impl` of the type `head` of the constant
@@ -139,12 +147,20 @@ impl<'a> Checker<'a> {
                 _ => ArgumentName::Text(format!("the type parameter `{}` of {owner}", g.name)),
             };
             // A parameter with an unknown bound requires nothing of its users (§18.1, S-768).
-            let GenericKind::Type { bounds, dup, unknown: false } = &g.kind else {
+            let GenericKind::Type { bounds, dup, unknown: false, .. } = &g.kind else {
                 self.defer(span, arg, DeferredKind::Origin { what, rule: way.clone() });
                 continue;
             };
             let of_seq = k < impl_count && matches!(element, Some(Required::SeqElement { .. }));
-            self.type_argument(span, arg, what, way.clone(), if of_seq { VIEW_OF_ARRAY } else { GENERIC_VIEW });
+            let lifted = g.lifts_escape();
+            let rule = if lifted {
+                LIFTED_VIEW
+            } else if of_seq {
+                VIEW_OF_ARRAY
+            } else {
+                GENERIC_VIEW
+            };
+            self.type_argument(span, arg, what, way.clone(), (rule, lifted));
             let required = || match (&element, k < impl_count) {
                 (Some(e), true) => e.clone(),
                 _ => Required::Param { param: g.name.clone(), owner: owner.clone(), std },

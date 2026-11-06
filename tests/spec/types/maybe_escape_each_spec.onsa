@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§5.2", "§5.4"]
+// fixes = 0
+
+// S-862 K, S-868 (W5-17, §4.5: "第二級の型（§5.3）でも具体化できるようにするには `[T: ?Escape]` と書いて、この要求を外す"; "借用の行の束縛
+// （§5.4）は `Span` と同じく書ける（`fn each[T: ?Escape, const N: U32](xs: [T; N], f: fn(T))` の本体の `f.(xs[i])`）"): the example of the
+// spec, in the one definition that takes the array of channels (`[Span[F32]; 2]`, the element is a `Span[F32]`) and the array of scalars
+// (`[F32; 4]`) alike. In the body `xs[i]` is a value of the second class when `T` is a `Span`, and it is passed to the function value `f`
+// at the place of a borrowed argument, which is the row of §5.4 that a `Span` has too. The `inout` version passes `inout xs[i]`.
+// A named function is a function value too (the argument of `fn(Span[F32])`), and so is a function with an `inout` argument.
+// No diagnostic is expected anywhere in this file, and the call of a function value runs only after W8-09, so the run is not here
+// (`mode = "check"`): the values that these instances give are in types/maybe_escape_instances_run.odd (the `N` and the loops).
+
+pub fn each[T: ?Escape, const N: U32](xs: [T; N], f: fn(T)) {
+  for i in 0 ..< N {
+    f.(xs[i])
+  }
+}
+
+pub fn each_inout[T: ?Escape, const N: U32](inout xs: [T; N], f: fn(inout T)) {
+  for i in 0 ..< N {
+    f.(inout xs[i])
+  }
+}
+
+pub fn count_if[T: ?Escape, const N: U32](xs: [T; N], f: fn(T) -> Bool) -> U32 {
+  var n: U32 = 0
+  for i in 0 ..< N {
+    if f.(xs[i]) {
+      n = n + 1
+    }
+  }
+  n
+}
+
+pub fn look(ch: Span[F32]) {
+  let _ = ch.len()
+}
+
+pub fn look_scalar(x: F32) {
+  let _ = x
+}
+
+// --------------------------------------------------------------------------- the array of channels
+
+pub fn each_channel(xs: [Span[F32]; 2]) {
+  each(xs, look)
+}
+
+pub fn each_channel_closure(xs: [Span[F32]; 2]) {
+  each(xs, fn(ch) {
+    let _ = ch.len()
+  })
+}
+
+pub fn silence_channels(inout xs: [Span[F32]; 2]) {
+  each_inout(inout xs, fn(inout ch) {
+    ch.fill!(0.0)
+  })
+}
+
+pub fn long_channels(xs: [Span[F32]; 2]) -> U32 {
+  count_if(xs, fn(ch) { ch.len() > 2 })
+}
+
+// ------------------------------------------------------------------------------ the array of scalars
+
+pub fn each_scalar(xs: [F32; 4]) {
+  each(xs, look_scalar)
+}
+
+pub fn double_scalars(inout xs: [F32; 4]) {
+  each_inout(inout xs, fn(inout x) {
+    x = x * 2.0
+  })
+}
+
+pub fn loud_scalars(xs: [F32; 4]) -> U32 {
+  count_if(xs, fn(x) { x > 0.5 })
+}
+
+// ----------------------------------------------------------------- an array of arrays, a first-class type
+
+pub fn each_row(xs: [[F32; 3]; 2]) -> U32 {
+  count_if(xs, fn(row) { row[0] > 0.0 })
+}

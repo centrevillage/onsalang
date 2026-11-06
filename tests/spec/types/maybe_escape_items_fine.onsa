@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§6.2"]
+// fixes = 0
+
+// S-862 K, S-868 (W5-17, §4.5: "`[T: ?Escape]`"; the file types/bounds_maybe_escape.onsa had these headings as the E0200 of the version before):
+// the `?Escape` on the type parameter of every item that has a list of bounds: a struct, an enum, the `[ ]` of an `impl` (the type parameter of
+// the target), a method of its own (`U`), the second parameter of a function. The declaration is right, the value of the parameter that is
+// not a field (the struct has no `T` field here: a field of type `T` is the E0710 of types/maybe_escape_second_class_decl.onsa), and the
+// uses with a first-class argument are right. A method of the `impl` takes `x: T` as a borrowed argument and passes it on to a function
+// that has `?Escape` too. The uses with a `Span` as the written type argument are in types/maybe_escape_written_args.onsa.
+// No diagnostic is expected anywhere in this file.
+
+fn touch[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+pub struct Rack[T: ?Escape] {
+  n: U32,
+}
+
+pub enum Shelf[T: ?Escape] {
+  One(U32),
+  Nothing,
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+pub struct Pair[T: ?Escape, U: ?Escape] {
+  n: U32,
+}
+
+impl[T: ?Escape] Rack[T] {
+  pub fn tag(self, x: T) -> U32 {
+    touch(x)
+  }
+
+  pub fn count(self) -> U32 {
+    self.n
+  }
+
+  pub fn make(n: U32) -> Rack[T] {
+    Rack { n: n }
+  }
+}
+
+impl[T: ?Escape] Shelf[T] {
+  pub fn tag(x: T) -> U32 {
+    touch(x)
+  }
+}
+
+impl Plain {
+  pub fn with_one[U: ?Escape](self, y: U) -> U32 {
+    self.n + touch(y)
+  }
+}
+
+impl[T: ?Escape, U: ?Escape] Pair[T, U] {
+  pub fn both(self, x: T, y: U) -> U32 {
+    touch(x) + touch(y)
+  }
+}
+
+pub fn second_parameter[T, U: ?Escape](x: T, y: U) -> U32 {
+  touch(y)
+}
+
+pub fn use_rack(r: Rack[F32], x: F32) -> U32 {
+  r.tag(x) + r.count()
+}
+
+pub fn use_rack_of_arrays(r: Rack[[F32; 3]], x: [F32; 3]) -> U32 {
+  r.tag(x)
+}
+
+pub fn use_enum_tag(x: F32) -> U32 {
+  Shelf.tag(x)
+}
+
+pub fn use_shelf_value() -> Shelf[F32] {
+  Shelf.One(3)
+}
+
+pub fn use_plain(p: Plain, s: Span[F32]) -> U32 {
+  p.with_one(s)
+}
+
+pub fn use_plain_scalar(p: Plain, x: F32) -> U32 {
+  p.with_one(x)
+}
+
+pub fn use_pair(p: Pair[F32, U8], x: F32, y: U8) -> U32 {
+  p.both(x, y)
+}
+
+pub fn use_second(s: Span[F32], x: F32) -> U32 {
+  second_parameter(x, s)
+}
+
+pub fn made() -> U32 {
+  let r: Rack[F32] = Rack.make(4)
+  r.count()
+}

@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§5.4", "§5.2"]
+
+// S-862 K (W5-17, §4.5: "`T` の値は本体の中で第二級で、返す・保存する・捕捉する・`move` の引数へ渡すと E0710"; "借用の行の束縛（§5.4）は `Span`
+// と同じく書ける"): in the body of a function with a `?Escape` type parameter, a value of `T` is of the second class, because `T` may be a
+// `Span`. It is the E0710 of the expression that keeps it: the initializer of a `var` (the value, or an element of the array argument, is stored),
+// an element of an array literal and the capture of an anonymous function. The field of a struct literal and the argument of a `move` parameter
+// are in types/maybe_escape_body_generic_callee.onsa (they call a function whose type parameter has no `?Escape`). A `T` returned is the E0710 of
+// the declaration `-> T` and is in types/maybe_escape_second_class_decl.onsa. The right forms are at the end: the `let` of §5.4 (a borrow),
+// the binding of a `for` over the array, and the value passed on to a function that has `?Escape` too (a borrowed argument). The capture is of a
+// `T` that is `Copy` too (`T: ?Escape + Copy`), so that the capture is not the E0200 of a value that may be Shared (this version does not
+// capture one); the other bodies have the plain `?Escape`. The mark is of the line only. One error per function (P-01).
+
+fn touch[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+fn run(f: fn() -> U32) -> U32 {
+  f.()
+}
+
+// ---------------------------------------------------------------------------------- the E0710
+
+pub fn stored_in_a_var[T: ?Escape](x: T) -> U32 {
+  var y = x   //~ E0710
+  touch(y)
+}
+
+pub fn stored_in_an_array[T: ?Escape](x: T) -> U32 {
+  let _ = [x, x]   //~ E0710
+  0
+}
+
+pub fn captured[T: ?Escape + Copy](x: T) -> U32 {
+  run(fn() -> U32 { touch(x) })   //~ E0710
+}
+
+pub fn element_stored[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  var y = xs[0]   //~ E0710
+  touch(y)
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn bound_with_let[T: ?Escape](x: T) -> U32 {
+  let y = x
+  touch(y)
+}
+
+pub fn bound_again[T: ?Escape](x: T) -> U32 {
+  let y = x
+  let z = y
+  touch(z)
+}
+
+pub fn element_bound[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  let y = xs[0]
+  touch(y)
+}
+
+pub fn walked[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  var n: U32 = 0
+  for y in xs {
+    n = n + touch(y)
+  }
+  n
+}
+
+pub fn passed_on[T: ?Escape](x: T) -> U32 {
+  touch(x) + touch(x)
+}
+
+pub fn branch_binds[T: ?Escape](x: T, k: U32) -> U32 {
+  if k == 0 {
+    let y = x
+    touch(y)
+  } else {
+    0
+  }
+}
