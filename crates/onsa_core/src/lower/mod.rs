@@ -96,9 +96,11 @@ pub(crate) fn unsupported(span: Span, feature: Feature, details: &[&str]) -> Fai
 /// Why [`lower`] produced no Core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LowerFailure {
-    /// Every unsupported feature the program uses (E0200), in the order
-    /// found. The driver removes the duplicates and orders them (S-67).
-    Unsupported(Vec<Diagnostic>),
+    /// The diagnostics of lowering, in the order found: every unsupported
+    /// feature the program uses (E0200), and every recursion of the `rt`
+    /// functions that the instances close (E0903, `rt_cycles`). The
+    /// driver removes the duplicates and orders them (S-67).
+    Diagnostics(Vec<Diagnostic>),
     /// An internal error (S-67): the command stops. `span` is the source
     /// lowering was at.
     Internal { span: Span, message: String },
@@ -237,8 +239,11 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         let span = a.def(def).span;
         lw.lower_item(span, |lw| lw.lower_fn(def, &args, fid))?;
     }
-    if !lw.unsupported.is_empty() {
-        return Err(LowerFailure::Unsupported(lw.unsupported));
+    // A placeholder is no call: what an E0200 hides is no edge of a cycle (S-911).
+    let mut diagnostics = std::mem::take(&mut lw.unsupported);
+    diagnostics.extend(crate::rt_cycles::rt_cycles(&lw.m, a, &flat));
+    if !diagnostics.is_empty() {
+        return Err(LowerFailure::Diagnostics(diagnostics));
     }
     let mut module = lw.m;
     // The comparisons the types decide and the assignments of a place to
@@ -343,21 +348,7 @@ impl<'a> Lowerer<'a> {
         if !info.path.is_empty() {
             parts.push(info.path.clone());
         }
-        if let Some(o) = def.owner {
-            match &self.a.def(o).kind {
-                DefKind::Impl(i) => {
-                    if let STy::Named(d, _) = self.a.types.get(i.self_ty) {
-                        parts.push(self.a.def(*d).name.clone());
-                    } else {
-                        // `[T; N]`, `Span[T]` of std (§5.3): by the names of the parameters.
-                        let param =
-                            |k: u32| i.generics.get(k as usize).map_or_else(|| format!("<{k}>"), |g| g.name.clone());
-                        parts.push(self.a.types.display(i.self_ty, &|d| self.a.def(d).name.clone(), &param));
-                    }
-                }
-                _ => parts.push(self.a.def(o).name.clone()),
-            }
-        }
+        parts.extend(def.owner.map(|o| self.a.owner_name(o)));
         match &def.kind {
             // `test dsp.voice "decays"`: the full name text (§11.8) after
             // `test `, so that the tests of two modules, and a test and a
@@ -557,6 +548,7 @@ impl<'a> Lowerer<'a> {
             span,
             fp_relaxed,
             test: None,
+            decl: Some(d),
         });
         self.fn_ids.insert((d, args.clone()), id);
         self.worklist.push((d, args, id));

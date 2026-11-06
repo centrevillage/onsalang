@@ -50,6 +50,7 @@ fn one_fn(ty: Ty, body: Expr, extra_types: Vec<TypeDef>) -> Module {
             span: sp(),
             fp_relaxed: false,
             test: None,
+            decl: None,
         }],
         messages: Vec::new(),
         flows: Vec::new(),
@@ -220,6 +221,7 @@ fn array_wrappers_are_shared_and_enums_switch() {
         span: sp(),
         fp_relaxed: false,
         test: None,
+        decl: None,
     });
     let opts = EmitOptions { prefix: Some("t_".into()), export_fns: vec!["m.g".into()], ..Default::default() };
     let c = emit(&m2, &opts).unwrap_or_else(|d| panic!("{d:?}")).source;
@@ -463,6 +465,7 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
                 span: sp(),
                 fp_relaxed: false,
                 test: None,
+                decl: None,
             }],
             messages: Vec::new(),
             flows: Vec::new(),

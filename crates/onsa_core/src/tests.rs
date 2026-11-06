@@ -47,7 +47,7 @@ fn core_err(src: &str) -> Vec<onsa_diag::Diagnostic> {
     let a = onsa_sema::analyze(&pkg);
     assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
     match lower(&pkg, &a) {
-        Err(crate::LowerFailure::Unsupported(d)) => d,
+        Err(crate::LowerFailure::Diagnostics(d)) => d,
         Err(f) => panic!("expected E0200:\n{}", failure_text(&sources, &f)),
         Ok(_) => panic!("expected a lowering error"),
     }
@@ -70,7 +70,7 @@ fn an_rt_function_value_at_a_function_type_is_not_supported_yet() {
 
 fn failure_text(sources: &onsa_diag::SourceMap, f: &crate::LowerFailure) -> String {
     match f {
-        crate::LowerFailure::Unsupported(d) => onsa_diag::to_text(sources, d),
+        crate::LowerFailure::Diagnostics(d) => onsa_diag::to_text(sources, d),
         crate::LowerFailure::Internal { message, .. } => format!("internal: {message}"),
     }
 }
@@ -327,6 +327,98 @@ fn unsupported_features_are_e0200() {
     assert_eq!(diags[0].code, onsa_diag::Code::E0200, "{diags:?}");
 }
 
+const CYCLE_MK: &str = "rt fn mk[T: Default]() -> T {\n  T.default()\n}\n";
+
+/// One E0903 with the note of the way by the declarations: the names of the
+/// instances and of what lowering makes are not shown (§18.1).
+#[test]
+fn a_cycle_of_the_instances_is_one_e0903_with_its_way_by_the_declarations() {
+    let q = "pub struct Q {\n  n: I32,\n}\nimpl Default for Q {\n  rt fn default() -> Q {\n    let q: Q = mk()\n    q\n  }\n}\n";
+    let src = format!("{q}{CYCLE_MK}");
+    let diags = core_err(&src);
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert_eq!(diags[0].code, onsa_diag::Code::E0903);
+    let at = diags[0].span.start as usize;
+    assert!(src[at..].starts_with("mk()"), "the first call written: {diags:?}");
+    assert!(diags[0].message.contains("`Q.default` recurses through `mk`"), "{diags:?}");
+    assert_eq!(diags[0].notes.len(), 1, "{diags:?}");
+    assert!(diags[0].notes[0].message.ends_with("cycle: Q.default -> mk -> Q.default"), "{diags:?}");
+}
+
+/// The way goes through what a derive makes, by the declaration of its type.
+#[test]
+fn the_way_of_a_cycle_through_a_derive_names_the_type_of_the_derive() {
+    let src = "pub struct P: Default {\n  q: Q,\n}\npub struct Q {\n  n: I32,\n}\nimpl Default for Q {\n  rt fn default() -> Q {\n    P.default().q\n  }\n}\n";
+    let diags = core_err(src);
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert!(diags[0].notes[0].message.ends_with("cycle: Q.default -> P.default -> Q.default"), "{diags:?}");
+}
+
+/// Two instances of one call have the same position and text: the driver
+/// keeps one (§18.1). Two types through one `mk` differ in the text: two.
+#[test]
+fn the_text_of_an_e0903_tells_two_cycles_and_not_two_instances() {
+    let w = "pub struct W[T] {\n  v: T,\n}\nimpl[T: Default] Default for W[T] {\n  rt fn default() -> W[T] {\n    let w: W[T] = mk()\n    w\n  }\n}\n";
+    let uses = "pub rt fn a() -> W[I32] {\n  W.default()\n}\npub rt fn b() -> W[U8] {\n  W.default()\n}\n";
+    let diags = core_err(&format!("{CYCLE_MK}{w}{uses}"));
+    assert_eq!(diags.len(), 2, "one for each instance: {diags:?}");
+    assert_eq!(diags[0].message, diags[1].message);
+    assert_eq!(diags[0].span, diags[1].span);
+    let q = |n: u32| {
+        format!(
+            "pub struct Q{n} {{\n  n: I32,\n}}\nimpl Default for Q{n} {{\n  rt fn default() -> Q{n} {{\n    let q: Q{n} = mk()\n    q\n  }}\n}}\n"
+        )
+    };
+    let diags = core_err(&format!("{CYCLE_MK}{}{}", q(1), q(2)));
+    assert_eq!(diags.len(), 2, "{diags:?}");
+    assert_ne!(diags[0].message, diags[1].message);
+}
+
+/// An unsupported feature and a cycle are reported at once, and a placeholder
+/// is no call: the cycle it would close is not a cycle yet (S-911).
+#[test]
+fn a_placeholder_is_no_edge_and_the_e0200_goes_with_the_e0903() {
+    let q = "pub struct Q {\n  n: I32,\n}\nimpl Default for Q {\n  rt fn default() -> Q {\n    let q: Q = mk()\n    q\n  }\n}\n";
+    let hole = "pub fn f() -> Str {\n  \"abc\"\n}\n";
+    let codes: Vec<_> = core_err(&format!("{q}{CYCLE_MK}{hole}")).iter().map(|d| d.code).collect();
+    assert_eq!(codes, [onsa_diag::Code::E0200, onsa_diag::Code::E0903]);
+    let app = "rt fn app(f: rt fn() -> Q) -> Q {\n  f.()\n}\npub struct Q {\n  n: I32,\n}\nimpl Default for Q {\n  rt fn default() -> Q {\n    app(Q.default)\n  }\n}\n";
+    assert!(core_err(app).iter().all(|d| d.code == onsa_diag::Code::E0200), "the value is no call");
+}
+
+/// What lowering alone makes may recur on a recursive type (S-914): a cycle
+/// with no function written in the source is not reported, and one with
+/// such a function is, at its call. The modules are made by hand: no program
+/// of this version closes the first (`Array` is not lowered).
+#[test]
+fn a_cycle_of_what_lowering_makes_is_not_reported() {
+    let (_, pkg) = package("rt fn w() -> U32 {\n  1\n}\n");
+    let a = onsa_sema::analyze(&pkg);
+    let flat = onsa_sema::flatten(&pkg);
+    let span = onsa_diag::Span::new(FileId(0), 0, 0);
+    let call = |to: u32| Expr::new(Ty::u32(), span, ExprKind::Call { fn_: FnId(to), args: Vec::new() });
+    let generated = FnDef {
+        name: "__eq.L".into(),
+        params: Vec::new(),
+        ret: Ty::u32(),
+        sret: false,
+        rt: true,
+        locals: Vec::new(),
+        body: Some(Block { stmts: Vec::new(), value: Some(Box::new(call(0))) }),
+        span,
+        fp_relaxed: false,
+        test: None,
+        decl: None,
+    };
+    let mut m = Module { fns: vec![generated], ..Module::default() };
+    assert!(crate::rt_cycles::rt_cycles(&m, &a, &flat).is_empty());
+    let w = a.defs.iter().position(|d| d.name == "w").expect("the function");
+    m.fns[0].decl = Some(onsa_sema::DefId(w as u32));
+    let diags = crate::rt_cycles::rt_cycles(&m, &a, &flat);
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert!(diags[0].notes[0].message.ends_with("cycle: w -> w"), "{diags:?}");
+}
+
 #[test]
 fn verifier_rejects_bad_modules() {
     let span = onsa_diag::Span::new(FileId(0), 0, 0);
@@ -345,6 +437,7 @@ fn verifier_rejects_bad_modules() {
         span,
         fp_relaxed: false,
         test: None,
+        decl: None,
     });
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("read before definition"), "{err}");

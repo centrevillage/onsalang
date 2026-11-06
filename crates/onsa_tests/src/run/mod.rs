@@ -240,7 +240,7 @@ impl std::fmt::Debug for Built {
 pub struct Stages {
     pub lower_core: fn(&Analyzed) -> Result<onsa_core::Module, LowerError>,
     pub build: fn(&Loaded, &Analyzed, &str) -> Result<BuildOutput, BuildError>,
-    pub interface: fn(&Analyzed) -> Result<Interface, InternalError>,
+    pub interface: fn(&Analyzed) -> Result<Interface, LowerError>,
 }
 
 impl Stages {
@@ -255,12 +255,11 @@ impl Stages {
 /// compared with the markers).
 #[derive(Debug, Clone, Copy)]
 pub enum StageFailure<'a> {
-    /// `lower_core`, for the Core golden and the `test` blocks.
+    /// `lower_core`, for the Core golden and the `test` blocks, and
+    /// `interface` on it, for its golden.
     Lower(&'a LowerError),
     /// The build of a target.
     Build { target: &'a str, error: &'a BuildError },
-    /// `interface`, for its golden.
-    Interface(&'a InternalError),
 }
 
 /// The problem of the case for a failed stage: the one place every arm of
@@ -272,7 +271,7 @@ pub fn stage_problem(sources: &SourceMap, failure: StageFailure<'_>) -> Problem 
         StageFailure::Lower(LowerError::Diagnostics(diags)) => {
             Problem::Failed(format!("lowering failed:\n{}", onsa_diag::to_text(sources, diags).replace('\n', "\n  ")))
         }
-        StageFailure::Lower(LowerError::Internal(e)) | StageFailure::Interface(e) => internal_problem(sources, e, None),
+        StageFailure::Lower(LowerError::Internal(e)) => internal_problem(sources, e, None),
         StageFailure::Build { target, error: BuildError::Internal { sources, error } } => {
             internal_problem(sources, error, Some(target))
         }
@@ -704,7 +703,7 @@ fn outputs(
                     Err(e) => run.problems.push(Problem::Failed(format!("interface JSON does not parse: {e}"))),
                 }
             }
-            Err(v) => run.problems.push(stage_problem(&loaded.sources, StageFailure::Interface(&v))),
+            Err(e) => run.problems.push(stage_problem(&loaded.sources, StageFailure::Lower(&e))),
         }
     }
     for flow in &t.golden_graph {

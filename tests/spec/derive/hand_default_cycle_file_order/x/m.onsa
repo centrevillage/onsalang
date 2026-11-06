@@ -1,0 +1,12 @@
+use x.mk
+
+pub struct Q {
+  n: I32,
+}
+
+impl Default for Q {
+  rt fn default() -> Q {
+    let q: Q = mk()
+    q
+  }
+}

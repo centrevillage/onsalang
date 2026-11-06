@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§12.5", "§15.1", "§18.1"]
+
+// W5-06 U5, S-911, S-313 (spec §18.1: the E0903 of the lowering is on "循環の中の手で書いた呼び出しのうちソースの順で最初のもの"; the order of the files is the one of the diagnostics, the path of the file in its package). The
+// two files of each cycle are `x.onsa` and the file `x/m.onsa` of the module under it: the path `x.onsa` sorts before `x/m.onsa`, and the order the files are read in is the other. `x` has the generic function and `x.m` the
+// `impl`, so the first call is the `T.default()` in `x.onsa`; `y` has the `impl` and `y.m` the generic function, so the first call is the call of `mk` in `y.onsa`. No call in `x/m.onsa` and `y/m.onsa` has a marker. `onsa check` has no
+// diagnostic in the package (no name closes a cycle).
+
+@export
+pub fn anchor() -> U32 {
+  1
+}

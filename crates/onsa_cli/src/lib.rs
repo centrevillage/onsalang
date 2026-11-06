@@ -613,7 +613,7 @@ fn analyzed(
     Ok((loaded, analyzed))
 }
 
-/// Lower to Core; print the E0200 and return the outcome when it does not lower.
+/// Lower to Core; print its diagnostics and return the outcome when it does not lower.
 fn lowered(
     io: &mut Io<'_>,
     form: Form,
@@ -682,14 +682,21 @@ fn dump(io: &mut Io<'_>, core: bool, paths: &[PathBuf]) -> Done {
 fn interface(io: &mut Io<'_>, json: bool, paths: &[PathBuf]) -> Done {
     let (loaded, analyzed) = analyzed(io, Form::json(json), paths)?;
     let narrowed = onsa_driver::interface(&analyzed).and_then(|mut iface| {
-        onsa_driver::guard(|| {
+        let narrowed = onsa_driver::guard(|| {
             if let Some(module) = loaded.focus_module() {
                 iface.narrow(&module);
             }
             iface
-        })
+        });
+        Ok(narrowed?)
     });
-    let iface = narrowed.map_err(|e| internal(io, &loaded.sources, &e))?;
+    let iface = match narrowed {
+        Ok(iface) => iface,
+        Err(onsa_driver::LowerError::Diagnostics(d)) => {
+            return Ok(print_diagnostics(io, Form::json(json), &loaded.sources, &d, Outcome::Problems));
+        }
+        Err(onsa_driver::LowerError::Internal(e)) => return Err(internal(io, &loaded.sources, &e)),
+    };
     if json {
         outln!(io, "{}", onsa_driver::render_json(&iface));
     } else {

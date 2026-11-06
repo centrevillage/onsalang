@@ -141,7 +141,6 @@ fn every_kind_of_stage_failure_is_an_internal_error() {
     for (failure, at) in [
         (StageFailure::Lower(&lower), None),
         (StageFailure::Build { target: "host", error: &build }, Some("build of `host`")),
-        (StageFailure::Interface(&internal), None),
     ] {
         let Problem::Internal(text) = stage_problem(sources, failure) else {
             panic!("not an internal error: {failure:?}")

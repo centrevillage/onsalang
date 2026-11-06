@@ -24,6 +24,7 @@ pub(crate) fn eq_fn(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<FnId> {
         span,
         fp_relaxed: false,
         test: None,
+        decl: None,
     });
     lw.eq_fns.insert(ty.clone(), id);
     let mut locals = vec![Local { name: "a".into(), ty: ty.clone() }, Local { name: "b".into(), ty: ty.clone() }];

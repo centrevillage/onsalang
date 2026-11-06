@@ -97,6 +97,7 @@ pub use flow::{FlowInfo, FlowLet, FlowRate, InitArg, Node};
 pub use kind::Kind;
 pub use layout::Layout;
 pub use names::rename::rename_fixes;
+pub use names::{cyclic, file_key};
 pub use resolve::{Builtin, Entity, ModInfo, Modules, ResolveError};
 pub use ty::{Ty, TyId, Types};
 
@@ -291,6 +292,18 @@ pub struct Analysis {
 impl Analysis {
     pub fn def(&self, id: DefId) -> &Def {
         &self.defs[id.0 as usize]
+    }
+
+    /// The name of `owner` in the path of its member: the type of an `impl`.
+    pub fn owner_name(&self, owner: DefId) -> String {
+        let def = self.def(owner);
+        let DefKind::Impl(i) = &def.kind else { return def.name.clone() };
+        if let Ty::Named(d, _) = self.types.get(i.self_ty) {
+            return self.def(*d).name.clone();
+        }
+        // `[T; N]`, `Span[T]` of std (§5.3): by the names of the parameters.
+        let param = |k: u32| i.generics.get(k as usize).map_or_else(|| format!("<{k}>"), |g| g.name.clone());
+        self.types.display(i.self_ty, &|d| self.def(d).name.clone(), &param)
     }
 
     pub fn defs_of_module(&self, m: ModId) -> impl Iterator<Item = (DefId, &Def)> {

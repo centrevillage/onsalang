@@ -1,0 +1,3 @@
+pub rt fn mk[T: Default]() -> T {
+  T.default()                                       //~ E0903
+}

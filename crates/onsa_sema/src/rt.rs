@@ -68,9 +68,9 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
                     let start_idx = cycle_edges.iter().position(|(f, _, _)| *f == from).unwrap_or(0);
                     let mut path: Vec<String> = Vec::new();
                     for k in 0..cycle_edges.len() {
-                        path.push(a.def(cycle_edges[(start_idx + k) % cycle_edges.len()].0).name.clone());
+                        path.push(a.shown_name(cycle_edges[(start_idx + k) % cycle_edges.len()].0));
                     }
-                    path.push(a.def(from).name.clone());
+                    path.push(a.shown_name(from));
                     let what = if cycle.len() == 1 { "calls itself" } else { "is mutually recursive" };
                     let d = Diagnostic::new(
                         Stage::Effects,
@@ -78,7 +78,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
                         at,
                         format!(
                             "`{}` {what}: `rt` functions cannot recurse (§10); cycle: {}",
-                            a.def(from).name,
+                            a.shown_name(from),
                             path.join(" -> ")
                         ),
                     )

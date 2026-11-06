@@ -231,14 +231,14 @@ pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> R
         let _lower = phase(Phase::Lower);
         let mut r = onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts);
         // Every diagnostic names the offending source (§18.1).
-        if let Err(onsa_core::LowerFailure::Unsupported(d)) = &mut r {
+        if let Err(onsa_core::LowerFailure::Diagnostics(d)) = &mut r {
             fill_found_with(d, |file| package_text(&analyzed.pkg, file));
         }
         r
     })?;
     let module = match lowered {
         Ok(m) => m,
-        Err(onsa_core::LowerFailure::Unsupported(d)) => return Err(LowerError::reported(d)),
+        Err(onsa_core::LowerFailure::Diagnostics(d)) => return Err(LowerError::reported(d)),
         Err(onsa_core::LowerFailure::Internal { span, message }) => {
             return Err(LowerError::Internal(InternalError::lowering(span, message)));
         }

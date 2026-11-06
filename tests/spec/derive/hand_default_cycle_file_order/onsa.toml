@@ -1,0 +1,13 @@
+[package]
+name = "hand_default_cycle_file_order"
+edition = "2026"
+
+[export]
+prefix = "hdcfo_"
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "trap"
+provides = []

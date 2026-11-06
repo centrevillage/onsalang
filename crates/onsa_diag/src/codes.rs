@@ -424,7 +424,7 @@ codes! {
         "`rt` function calls a non-`rt` function";
     E0902 = 902, Rt, [Effects], Optional, Optional,
         "`rt` function has `Alloc` in its effect row";
-    E0903 = 903, Rt, [Effects], Optional, Optional,
+    E0903 = 903, Rt, [Effects, Build], Optional, Optional,
         "`rt` function is recursive";
     E0904 = 904, Rt, [Effects], Optional, Optional,
         "`rt` function has a `blocking` effect in its effect row";

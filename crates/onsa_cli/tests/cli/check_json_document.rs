@@ -750,6 +750,24 @@ fn interface_json_of_a_clean_package_has_an_empty_diagnostics_array_beside_its_r
 }
 
 #[test]
+fn interface_stops_at_the_e0903_of_lowering_and_not_at_an_e0200() {
+    // §10 rule 5, S-911: a cycle of the instances is a diagnostic of lowering, which every command
+    // that lowers reports. An unsupported feature leaves the sizes of the flows out, as before.
+    let d = Dir::pkg("iface_e0903");
+    let q = "pub struct Q {\n  n: I32,\n}\nimpl Default for Q {\n  rt fn default() -> Q {\n    let q: Q = mk()\n    q\n  }\n}\n";
+    d.write("main.onsa", &format!("{q}rt fn mk[T: Default]() -> T {{\n  T.default()\n}}\n"));
+    let (code, doc) = interface_json(d.root(), &["."]);
+    assert_eq!(code, 1, "{doc}");
+    let ds = diagnostics(&doc);
+    assert_eq!(ds.len(), 1, "{doc}");
+    assert_eq!(ds[0]["code"], "E0903", "{doc}");
+    assert_eq!(check_json(d.root(), &["."]).0, 0, "`check` does not lower");
+    let e = Dir::pkg("iface_e0200");
+    e.write("main.onsa", "pub fn f() -> Str {\n  \"abc\"\n}\n");
+    assert_eq!(interface_json(e.root(), &["."]).0, 0);
+}
+
+#[test]
 fn interface_json_with_diagnostics_is_the_document_of_check_and_exits_with_1() {
     let d = nested_package("iface_diags");
     let (code, doc) = interface_json(d.root(), &["."]);

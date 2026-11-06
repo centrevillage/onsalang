@@ -1123,21 +1123,6 @@ until = "W7-11"
 note = "イベントの入出力の見出し。`at event` のクロックが読めるのは W7-11（今は E0302）"
 
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
-# --- W5-06 U4/t: 具体化で決まる `rt` の循環（S-911）。検査は U5（2026-11-06）。
-[[pending]]
-kind = "test-case"
-target = "tests/spec/derive/hand_default_cycle_derive.onsa"
-reasons = ["S-911"]
-until = "W5-06"
-note = "derive を経る循環の E0903。Core の検査は U5"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/derive/hand_default_cycle_bound.onsa"
-reasons = ["S-911"]
-until = "W5-06"
-note = "境界を経る循環の E0903。Core の検査は U5"
-
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow/builtin_sample_tick_call.onsa"

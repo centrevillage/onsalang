@@ -11,6 +11,7 @@
 //!   module keeps per-flow metadata in [`Module::flows`].
 
 use onsa_diag::Span;
+use onsa_sema::DefId;
 pub use onsa_sema::ty::{FloatKind, IntKind};
 
 use crate::prim::Prim;
@@ -164,6 +165,10 @@ pub struct FnDef {
     /// §11.8, S-55, R-68). `onsa test` runs the functions with this mark;
     /// the name of the function decides nothing.
     pub test: Option<TestMark>,
+    /// The declaration this function is an instance of, which a diagnostic
+    /// names (§18.1). `None`: only lowering makes it (`__eq`, what a flow
+    /// generates). No later stage reads it.
+    pub decl: Option<DefId>,
 }
 
 /// The mark of the function of a `test` block (spec §11.8, S-55): a test is

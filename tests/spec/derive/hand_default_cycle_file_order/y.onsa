@@ -1,0 +1,12 @@
+use y.m.mk
+
+pub struct R {
+  n: I32,
+}
+
+impl Default for R {
+  rt fn default() -> R {
+    let r: R = mk()                                 //~ E0903
+    r
+  }
+}

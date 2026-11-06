@@ -622,16 +622,23 @@ impl Builder<'_> {
 }
 
 /// Build the interface of the user package of an analyzed build. Flow state
-/// layouts come from Core lowering (T3-6); when lowering reports diagnostics
-/// (phase-2 features), the flow sizes are simply absent. An internal error
-/// (a Core the verifier rejects, R-82) is the error (S-67).
-pub fn interface(analyzed: &Analyzed) -> Result<Interface, crate::InternalError> {
+/// layouts come from Core lowering (T3-6); when lowering reports features this
+/// version does not have (phase-2 features), the flow sizes are simply absent.
+/// Its other diagnostics are errors of the program (E0903, S-911) and stop the
+/// command, and so does an internal error (a Core the verifier rejects, R-82; S-67).
+pub fn interface(analyzed: &Analyzed) -> Result<Interface, crate::LowerError> {
     let core = match crate::lower_core(analyzed) {
         Ok(m) => Some(m),
-        Err(crate::LowerError::Diagnostics(_)) => None,
-        Err(crate::LowerError::Internal(e)) => return Err(e),
+        Err(crate::LowerError::Diagnostics(mut d)) => {
+            d.retain(|d| !onsa_diag::unsupported::is_unsupported(d));
+            if !d.is_empty() {
+                return Err(crate::LowerError::Diagnostics(d));
+            }
+            None
+        }
+        Err(e) => return Err(e),
     };
-    crate::guard(|| interface_of(analyzed, core))
+    Ok(crate::guard(|| interface_of(analyzed, core))?)
 }
 
 fn interface_of(analyzed: &Analyzed, core: Option<onsa_core::Module>) -> Interface {

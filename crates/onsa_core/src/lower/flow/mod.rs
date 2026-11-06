@@ -412,6 +412,7 @@ fn push_fn(lw: &mut Lowerer, name: String, rt: bool, span: Span) -> FnId {
         span,
         fp_relaxed: false,
         test: None,
+        decl: None,
     });
     id
 }

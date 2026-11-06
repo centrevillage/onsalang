@@ -241,7 +241,7 @@ impl<'p> Sema<'p> {
 
 /// The key of the file of `m` in the order of the diagnostics: the path
 /// of the file in its package (S-313).
-pub(crate) fn file_key(flat: &[&Package], modules: &Modules, m: ModId) -> String {
+pub fn file_key(flat: &[&Package], modules: &Modules, m: ModId) -> String {
     match modules.source(flat, m) {
         Some(module) => format!("{}.onsa", module.segments.join("/")),
         None => String::new(),
@@ -276,7 +276,7 @@ pub(crate) fn cycle_diagnostic(
 /// The strongly connected component of each point of `adj` ([`components`]),
 /// and whether the point is in a cycle: in a component of two points or
 /// more, or with an edge to itself (§18.1, S-734).
-pub(crate) fn cyclic(adj: &[Vec<usize>]) -> (Vec<usize>, Vec<bool>) {
+pub fn cyclic(adj: &[Vec<usize>]) -> (Vec<usize>, Vec<bool>) {
     let comp = components(adj);
     let mut size = vec![0; adj.len()];
     comp.iter().for_each(|&c| size[c] += 1);

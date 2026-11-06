@@ -313,6 +313,12 @@ impl Feature {
     }
 }
 
+/// Whether `d` is an E0200: a feature this version does not have, which a
+/// command that can go on without the stage leaves out.
+pub fn is_unsupported(d: &Diagnostic) -> bool {
+    d.code == Code::E0200
+}
+
 /// The long explanation of E0200: the text of `explain/E0200.md` and the
 /// list of every feature, by group.
 pub fn explain() -> String {
