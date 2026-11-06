@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§13.4", "§10", "§3.4"]
+
+// W5-07 U1/t (§11.5: `par~` gives a value of type `[T; N]`, and `sum(saws)` of it is in the example of the unison; §13.4: `sum` folds from
+// `xs[0]`; §11.5: an `rt fn` with an empty effect row is applied point by point): `sum` in a flow, with the array of a `par~`
+// (also of integers), with a `par~` inside a `par~`, with an array literal of the values of the flow, and
+// through an `rt fn`. The sum of a one-element `par~` keeps a negative zero (R-23), which a fold that starts at `0.0` would turn
+// into `+0.0`. The sums of the delayed values are worked out by hand from the input `[1.0, 2.0, 3.0, 4.0]` (`prev~(x)` is
+// 0.0 at the first sample, then the input one sample back).
+
+use std.math.{sum}
+
+pub flow weighted(x: F32 at sample) -> F32 at sample {
+  let ks = par~ i in 0 ..< 4 {
+    x * F32.round_from(i)
+  }
+  sum(ks)
+}
+
+pub flow single_replica(x: F32 at sample) -> F32 at sample {
+  sum(par~ i in 0 ..< 1 { x * 0.0 })
+}
+
+pub flow nested_stateless(x: F32 at sample) -> F32 at sample {
+  let rows = par~ i in 0 ..< 2 {
+    sum(par~ j in 0 ..< 3 { x * F32.round_from(3 * i + j + 1) })
+  }
+  sum(rows)
+}
+
+pub flow nested_delays(x: F32 at sample) -> F32 at sample {
+  sum(par~ i in 0 ..< 2 {
+    sum(par~ j in 0 ..< 2 { prev~(x) * F32.round_from(i + j + 1) })
+  })
+}
+
+pub flow of_integers(x: F32 at sample) -> U32 at sample {
+  sum(par~ i in 0 ..< 5 { i * i })
+}
+
+rt fn total4(a: F32, b: F32, c: F32, d: F32) -> F32 {
+  sum([a, b, c, d])
+}
+
+pub flow through_rt(x: F32 at sample) -> F32 at sample {
+  total4(x, prev~(x), 1.0, 2.0)
+}
+
+pub flow of_a_literal(x: F32 at sample) -> F32 at sample {
+  sum([x, prev~(x)])
+}
+
+test "sum of the replicas of a par" {
+  // x * (0 + 1 + 2 + 3) = 6 * x.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o            = weighted.render(weighted.Config {}, weighted.Params {}, xs, 8.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 12.0
+  assert o.out[2] == 18.0
+  assert o.out[3] == 24.0
+}
+
+test "sum of one replica keeps the negative zero" {
+  // x * 0.0 is -0.0 for a negative x and +0.0 for a positive one, and the sum of one element is that element.
+  let xs: [F32; 4] = [-1.0, 2.0, -3.0, 0.0]
+  let o            = single_replica.render(single_replica.Config {}, single_replica.Params {}, xs, 8.0)
+  assert o.out[0].to_bits() == 2147483648
+  assert o.out[1].to_bits() == 0
+  assert o.out[2].to_bits() == 2147483648
+  assert o.out[3].to_bits() == 0
+}
+
+test "sum of the sums of a par inside a par" {
+  // x * (1 + 2 + 3 + 4 + 5 + 6) = 21 * x.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o            = nested_stateless.render(nested_stateless.Config {}, nested_stateless.Params {}, xs, 8.0)
+  assert o.out[0] == 21.0
+  assert o.out[1] == 42.0
+  assert o.out[3] == 84.0
+}
+
+test "sum of the sums of a par inside a par with a delay in each replica" {
+  // (1 + 2 + 2 + 3) * x[n-1] = 8 * x[n-1].
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o            = nested_delays.render(nested_delays.Config {}, nested_delays.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 8.0
+  assert o.out[2] == 16.0
+  assert o.out[3] == 24.0
+}
+
+test "sum of the replicas of a par of integers" {
+  // 0 + 1 + 4 + 9 + 16 = 30 at every sample.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o            = of_integers.render(of_integers.Config {}, of_integers.Params {}, xs, 8.0)
+  assert o.out[0] == 30
+  assert o.out[3] == 30
+}
+
+test "sum in an rt function that a flow applies point by point" {
+  // x + x[n-1] + 1.0 + 2.0.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o            = through_rt.render(through_rt.Config {}, through_rt.Params {}, xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 6.0
+  assert o.out[2] == 8.0
+  assert o.out[3] == 10.0
+}
+
+test "sum of an array literal of the values of a flow" {
+  // x + x[n-1].
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o            = of_a_literal.render(of_a_literal.Config {}, of_a_literal.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 5.0
+  assert o.out[3] == 7.0
+}

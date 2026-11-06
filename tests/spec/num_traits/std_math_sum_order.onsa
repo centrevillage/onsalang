@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.4"]
+
+// W5-07 U1/t (§13.4: "`xs[0]` から順に左へ畳む(演算順を固定し、ビット一致させる)"): the sum is `((xs[0] + xs[1]) + xs[2]) + ...`, so the
+// result depends on the order of the elements in a way that a fold from the right, a tree of pairs or a wider accumulator would
+// not reproduce. Each value is worked out by hand: the F32 values from 2^26 to 2^27 are 8 apart (100000000.0 is one of them),
+// so `100000000.0 + 1.0` is 100000000.0 and `100000000.0 + 5.0` is 100000008.0; the F64 values from 2^56 to 2^57 are 16 apart
+// (1.0e17 is one of them). For the integers the order shows only in a step that does not fit the type: `I8` 100 + 100 panics
+// in the first step although the whole sum, 100, fits.
+
+use std.math.{sum}
+
+test "F32: a large value that cancels first leaves the small one" {
+  let a: [F32; 3] = [100000000.0, -100000000.0, 1.0]
+  let b: [F32; 3] = [1.0, 100000000.0, -100000000.0]
+  assert sum(a) == 1.0
+  assert sum(b) == 0.0
+}
+
+test "F32: small values added one by one to a large one are lost" {
+  let a: [F32; 6] = [100000000.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let b: [F32; 6] = [1.0, 1.0, 1.0, 1.0, 1.0, 100000000.0]
+  assert sum(a) == 100000000.0
+  assert sum(b) == 100000008.0
+}
+
+test "F64: a large value that cancels first leaves the small one" {
+  let a: [F64; 3] = [1.0e17, -1.0e17, 1.0]
+  let b: [F64; 3] = [1.0, 1.0e17, -1.0e17]
+  assert sum(a) == 1.0
+  assert sum(b) == 0.0
+}
+
+test "I8: a sum whose steps all fit, taken from the left, is exact" {
+  let a: [I8; 3] = [100, -100, 100]
+  let b: [I8; 3] = [-100, 100, 100]
+  assert sum(a) == 100
+  assert sum(b) == 100
+}
+
+test "I8: the first step that does not fit panics although the whole sum fits" {
+  let a: [I8; 3] = [100, 100, -100]
+  let r = sum(a) //~ PANIC "I8: the first step that does not fit panics although the whole sum fits"
+  assert r == 100
+}

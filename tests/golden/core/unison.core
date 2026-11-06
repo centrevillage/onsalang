@@ -12,6 +12,7 @@ const unison.saw.SIZE: U32 = 16:U32
 const unison.saw.BULK_SIZE: U32 = 0:U32
 const unison.unison.SIZE: U32 = 68:U32
 const unison.unison.BULK_SIZE: U32 = 0:U32
+const std.core.num.F32.ZERO: F32 = 0.0:F32
 rt fn unison.saw.ctl(inout s: unison.saw.State, p: unison.saw.Params) -> () {
   s.1 = p.0
 }
@@ -73,7 +74,7 @@ rt fn unison.unison.tick(inout s: unison.unison.State) -> F32 {
     }
     saws@5
   }
-  let __out: F32 = (std.dsp.sum__4(saws@2) * 0.25:F32)
+  let __out: F32 = (std.math.sum__F32__4(saws@2) * 0.25:F32)
   __out
 }
 fn unison.unison.init(cfg: unison.unison.Config, sample_rate: F32) -> unison.unison.State sret {
@@ -109,9 +110,12 @@ fn unison.unison.render(cfg: unison.unison.Config, params: unison.unison.Params,
 rt fn unison.spread(i: U32, n: U32) -> F32 {
   ((round.U32.F32(i) / round.U32.F32((n - 1:U32))) - 0.5:F32)
 }
-rt fn std.dsp.sum__4(xs: [F32; 4]) -> F32 {
-  let acc: F32 = 0.0:F32
-  for i in 0:U32..4:U32 {
+rt fn std.math.sum__F32__4(xs: [F32; 4]) -> F32 {
+  if (4:U32 == 0:U32) {
+    return const std.core.num.F32.ZERO
+  }
+  let acc: F32 = xs[0:U32]
+  for i in 1:U32..4:U32 {
     acc = (acc + xs[i])
   }
   acc

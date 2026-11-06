@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§15.1"]
+
+// W5-07 U1/t (§13.4: `std.math.sum`; §15.1: "他のモジュールとパッケージは、`use` で取り込んだ名前でだけ参照できる(`use std.math` の後の `math.sqrt(x)`)"):
+// `sum` is a function of the module `std.math`, so the module is imported with `use std.math` and the function is called by
+// the path `math.sum`. It is the same function as the one imported by name (std_math_sum_values.onsa): the sum of a float
+// array keeps a negative zero, and the sum of an empty array is `ZERO`.
+
+use std.math
+
+fn total_by_path[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  math.sum(xs)
+}
+
+test "sum by the path of the module std.math" {
+  let a: [F64; 2] = [0.25, 0.5]
+  let b: [I16; 3] = [-3, 10, -4]
+  assert math.sum(a) == 0.75
+  assert math.sum(b) == 3
+}
+
+test "sum by the path of the module keeps a negative zero and the empty sum" {
+  let a: [F32; 1] = [-0.0]
+  let b: [U32; 0] = []
+  let c: [F64; 0] = []
+  assert math.sum(a).to_bits() == 2147483648
+  assert math.sum(b) == 0
+  assert math.sum(c).to_bits() == 0
+}
+
+test "sum by the path of the module from a generic function" {
+  let a: [U8; 3]  = [1, 2, 3]
+  let b: [F32; 2] = [1.5, 2.0]
+  assert total_by_path(a) == 6
+  assert total_by_path(b) == 3.5
+}

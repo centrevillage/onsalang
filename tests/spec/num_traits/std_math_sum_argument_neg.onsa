@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§13.4", "§4.5"]
+
+// W5-07 U1/t (§13.4: the parameter of `sum` is `xs: [T; N]`, an array of a fixed length): an argument that is not an array of
+// a fixed length is a mismatch of types, E0401: a number, a tuple, a `Buf`, a `Span`, an `Array` (the array whose length is
+// not in its type) and an `Option`. An array of a fixed length whose elements are not numbers is E0416
+// (std_math_sum_element_neg.onsa). One error per function (P-01).
+
+use std.math.{sum}
+
+pub fn of_number(x: F32) -> F32 {
+  sum(x) //~ E0401
+}
+
+pub fn of_integer_literal() -> I32 {
+  sum(5) //~ E0401
+}
+
+pub fn of_tuple(t: (F32, F32)) -> F32 {
+  sum(t) //~ E0401
+}
+
+pub fn of_buf(b: Buf[F32]) -> F32 {
+  sum(b) //~ E0401
+}
+
+pub fn of_span(s: Span[F32]) -> F32 {
+  sum(s) //~ E0401
+}
+
+pub fn of_array(a: Array[F32]) -> F32 {
+  sum(a) //~ E0401
+}
+
+pub fn of_option(o: Option[F32]) -> F32 {
+  sum(o) //~ E0401
+}

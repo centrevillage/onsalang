@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§10", "§6.3"]
+
+// W5-07 U1/t (§13.4: "`std.math` の関数は ... 全て `rt` である(§10)"; `sum` is a function of `std.math`): `sum` can be called from an
+// `rt` function, because it is `rt` itself and has an empty effect row, with a type of the array that the `rt` function names
+// or with a parameter of the `rt` function, and from an `rt` function that is called by another `rt` function and by a
+// function that is not `rt`. The sum of the array is the same in all of them, the negative zero and the empty sum included.
+
+use std.math.{sum}
+
+rt fn rt_total_f32(xs: [F32; 4]) -> F32 {
+  sum(xs)
+}
+
+rt fn rt_total_i16(xs: [I16; 3]) -> I16 {
+  sum(xs)
+}
+
+rt fn rt_total[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+rt fn rt_chain(xs: [U32; 3], ys: [U32; 2]) -> U32 {
+  rt_total(xs) + rt_total(ys)
+}
+
+rt fn rt_loop(n: U32) -> U32 {
+  var acc: U32 = 0
+  for i in 0 ..< n {
+    let row: [U32; 2] = [i, 1]
+    acc = acc + sum(row)
+  }
+  acc
+}
+
+fn plain_total(xs: [F64; 2]) -> F64 {
+  rt_total(xs)
+}
+
+test "sum in an rt function with a named type" {
+  let a: [F32; 4] = [0.5, 1.5, 2.0, -1.0]
+  let b: [I16; 3] = [-300, 200, 50]
+  assert rt_total_f32(a) == 3.0
+  assert rt_total_i16(b) == -50
+}
+
+test "sum in a generic rt function" {
+  let a: [U8; 3]  = [10, 20, 30]
+  let b: [F64; 2] = [0.25, 0.5]
+  let c: [I64; 0] = []
+  assert rt_total(a) == 60
+  assert rt_total(b) == 0.75
+  assert rt_total(c) == 0
+}
+
+test "sum in an rt function that calls another rt function, and in a loop" {
+  let a: [U32; 3] = [1, 2, 3]
+  let b: [U32; 2] = [4, 5]
+  assert rt_chain(a, b) == 15
+  assert rt_loop(4) == 10
+  assert rt_loop(0) == 0
+}
+
+test "an rt function that is called from a function that is not rt" {
+  let a: [F64; 2] = [1.25, 2.5]
+  assert plain_total(a) == 3.75
+}
+
+test "the negative zero and the empty sum in an rt function" {
+  let a: [F32; 1] = [-0.0]
+  let b: [F32; 0] = []
+  assert rt_total(a).to_bits() == 2147483648
+  assert rt_total(b).to_bits() == 0
+}

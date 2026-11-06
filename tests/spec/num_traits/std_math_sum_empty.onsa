@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§6.3", "§6.6"]
+
+// W5-07 U1/t (§13.4: "`N = 0` なら `T.ZERO`(空の和は加法の単位元)"; §6.3: `ZERO` of a float is `+0.0`): the sum of an empty array
+// is the `ZERO` of the element type, for every number type, directly and through generic functions whose bound is `AnyNum`
+// or any trait below it. The type of an empty array comes from an annotation, `let e: [F32; 0] = []`. The bits of the float
+// zero are looked at: the empty sum is `+0.0`, never `-0.0`.
+
+use std.math.{sum}
+
+fn total[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_float[T: Float, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_int[T: Int, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn empty_of[T: AnyNum](like: T) -> T {
+  let e: [T; 0] = []
+  sum(e)
+}
+
+test "the empty sum of the floats is +0.0" {
+  let a: [F32; 0] = []
+  let b: [F64; 0] = []
+  assert sum(a).to_bits() == 0
+  assert sum(b).to_bits() == 0
+}
+
+test "the empty sum of the signed integers is 0" {
+  let a: [I8; 0]  = []
+  let b: [I16; 0] = []
+  let c: [I32; 0] = []
+  let d: [I64; 0] = []
+  assert sum(a) == 0
+  assert sum(b) == 0
+  assert sum(c) == 0
+  assert sum(d) == 0
+}
+
+test "the empty sum of the unsigned integers is 0" {
+  let a: [U8; 0]  = []
+  let b: [U16; 0] = []
+  let c: [U32; 0] = []
+  let d: [U64; 0] = []
+  assert sum(a) == 0
+  assert sum(b) == 0
+  assert sum(c) == 0
+  assert sum(d) == 0
+}
+
+test "the empty sum through an AnyNum function" {
+  let a: [F32; 0] = []
+  let b: [U8; 0]  = []
+  let c: [I64; 0] = []
+  assert total(a).to_bits() == 0
+  assert total(b) == 0
+  assert total(c) == 0
+}
+
+test "the empty sum through a Float and an Int function" {
+  let a: [F64; 0] = []
+  let b: [U32; 0] = []
+  let c: [I16; 0] = []
+  assert total_float(a).to_bits() == 0
+  assert total_int(b) == 0
+  assert total_int(c) == 0
+}
+
+test "the empty sum with an element type given by a parameter" {
+  let a: F32 = -0.0
+  let b: I8  = -5
+  let c: U16 = 9
+  assert empty_of(a).to_bits() == 0
+  assert empty_of(b) == 0
+  assert empty_of(c) == 0
+}

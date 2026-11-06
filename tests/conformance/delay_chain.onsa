@@ -18,7 +18,7 @@
 
 // Conformance (T4-7): `delay`, nested instances, `par`, a struct output and a
 // planar output. No transcendental function: bit-exact.
-use std.dsp.{sum}
+use std.math.{sum}
 
 pub struct Stereo {
   l: F32,

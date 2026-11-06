@@ -1,5 +1,7 @@
-//! Mathematical primitives (spec §13.4, D-07, S-09). Every function is a
-//! `target` declaration: each backend (interpreter, C, WASM, JS) provides it.
+//! Mathematical functions (spec §13.4, D-07, S-09). All but `sum` are
+//! `target` declarations: each backend (interpreter, C, WASM, JS) provides
+//! them for the builtin types, and `abs`, `min` and `max` have an `else` body
+//! for the other numeric types (§15.2, S-669). `sum` is written in Onsa.
 //! The IEEE-exact set (`sqrt`, `floor`, `ceil`, `trunc`, `round`, `abs`,
 //! `min`, `max`, `is_nan`, `is_finite`) is bit-exact on every target; the
 //! transcendental set matches within the precision target (2 ULP). The
@@ -19,8 +21,42 @@ pub target rt fn floor[T: Float](x: T) -> T
 pub target rt fn ceil[T: Float](x: T) -> T
 pub target rt fn trunc[T: Float](x: T) -> T
 pub target rt fn round[T: Float](x: T) -> T
-pub target rt fn abs[T: Num](x: T) -> T
-pub target rt fn min[T: AnyNum](x: T, y: T) -> T
-pub target rt fn max[T: AnyNum](x: T, y: T) -> T
+
+/// The absolute value. A builtin float goes to the primitive, which clears the
+/// sign bit (`abs(-0.0)` is `+0.0`, §3.4), not to this body: the body is for
+/// the user's numeric types (S-208).
+pub target rt fn abs[T: Num](x: T) -> T else {
+  if x < T.ZERO { -x } else { x }
+}
+
+/// The smaller of the two. A builtin type goes to the primitive, whose NaN and
+/// sign of zero (§3.4, §13.4) are not those of this body.
+pub target rt fn min[T: AnyNum](x: T, y: T) -> T else {
+  if y < x { y } else { x }
+}
+
+/// The larger of the two. A builtin type goes to the primitive, whose NaN and
+/// sign of zero (§3.4, §13.4) are not those of this body.
+pub target rt fn max[T: AnyNum](x: T, y: T) -> T else {
+  if x < y { y } else { x }
+}
+
 pub target rt fn is_nan[T: Float](x: T) -> Bool
 pub target rt fn is_finite[T: Float](x: T) -> Bool
+
+/// Sum of a fixed-length array: `T.ZERO` for `N = 0` (the empty sum is the
+/// additive identity), otherwise folded from `xs[0]` left to right so that the
+/// order of operations, and therefore the result, is the same on every target.
+/// Inside a call of a function or flow marked `@fp(relaxed)`, this order and
+/// exactness do not hold: the relaxation reaches the operations of the
+/// functions it calls (spec §15.5).
+pub rt fn sum[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  if N == 0 {
+    return T.ZERO
+  }
+  var acc = xs[0]
+  for i in 1 ..< N {
+    acc = acc + xs[i]
+  }
+  acc
+}

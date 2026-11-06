@@ -318,6 +318,12 @@ pub(crate) fn narrowable(bounds: &[Bound], want: Bound) -> bool {
     IMPLS.iter().any(|(_, row)| holds(&|b| row.contains(&b))) || holds(&|b| derive_of(b).is_some())
 }
 
+/// Whether `b` is a trait no `impl` is written of (§6.3): the builtin floats
+/// alone are `Float`, and a derive alone makes `Ordinal` (§6.4).
+pub(crate) fn no_impl(b: Bound) -> bool {
+    matches!(b, Bound::Float | Bound::Ordinal)
+}
+
 /// The number traits (§6.3), in the order a note names them.
 const NUMBER_TRAITS: [Bound; 5] = [Bound::AnyNum, Bound::Num, Bound::Float, Bound::Int, Bound::Unsigned];
 

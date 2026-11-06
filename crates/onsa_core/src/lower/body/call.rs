@@ -226,8 +226,10 @@ fn row_prim(
         None => None,
     };
     let scalars: Vec<Scalar> = own.iter().chain(gargs).map(scalar).collect();
-    // Sema reports the closed uses without a primitive (E0200); one through
-    // a generic body is W5-07's (the `else` bodies).
+    // Sema reports the closed uses without a primitive (E0200). A use through
+    // a generic body at such a type needs a user's number type, which this
+    // version has not (`impl Num` is an E0200): the `else` bodies are not
+    // called here (`tasks/phase2.md`, S-669).
     let Some(prim) = row.instantiate(&scalars) else {
         return Err(internal(span, "a `target` declaration without a primitive for its type arguments"));
     };

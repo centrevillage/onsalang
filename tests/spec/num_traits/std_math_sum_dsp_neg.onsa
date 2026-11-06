@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§13.4", "§15.1", "§11.5"]
+
+// W5-07 U1/t (§13.4: "`std.math` の関数は次で全てである(閉じた一覧。名の無い関数は E0302 ...)、Onsa で書いた `sum`"; R-23): `sum` moved from `std.dsp` to
+// `std.math`, so `std.dsp` has no function of that name: the name in a list of `use`, the path by the module that is
+// imported, and the path of the full name without a `use` are each E0302 (§15.1: "名前が見つからなければ E0302"). The import
+// from `std.math` is in the other files. One error per item (P-01).
+
+use std.dsp
+use std.dsp.{db_to_amp, sum} //~ E0302
+
+pub fn by_module(xs: [F32; 4]) -> F32 {
+  dsp.sum(xs) //~ E0302
+}
+
+pub fn by_full_path(xs: [F32; 4]) -> F32 {
+  std.dsp.sum(xs) //~ E0302
+}
+
+pub fn the_rest_of_dsp_stays(db: F32) -> F32 {
+  dsp.db_to_amp(db) + db_to_amp(db)
+}

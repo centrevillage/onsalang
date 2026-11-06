@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§6.3", "§4.5", "§6.1"]
+
+// W5-07 U1/t (§13.4: `sum[T: AnyNum, const N: U32](xs: [T; N]) -> T`; §6.3: `Num: AnyNum`, `Float: Num`, `Int: AnyNum`, `Unsigned: Int`;
+// §4.5: a type argument is written `name::[…]`): `sum` is called from generic functions whose bound is `AnyNum` or a trait
+// below it (`Num`, `Float`, `Int`, `Unsigned`, `Num + Int`), with the length of the array a `const N` of the caller, a fixed
+// length, or the length of an array literal of the caller's values;
+// from a closure that captures a value. The unsigned integers are among the instances of `AnyNum`, `Int` and `Unsigned`
+// (they are not `Num`). The sum comes out the same as the direct call, the zero signs and the empty sum included. The path of
+// the module (`math.sum`) is in std_math_sum_path.onsa.
+
+use std.array
+use std.math.{sum}
+
+fn total_any[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_num[T: Num, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_float[T: Float, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_int[T: Int, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_unsigned[T: Unsigned, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_signed[T: Num + Int, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_four[T: AnyNum](xs: [T; 4]) -> T {
+  sum(xs)
+}
+
+fn pair_sum[T: AnyNum](a: T, b: T) -> T {
+  sum([a, b])
+}
+
+fn triple_sum[T: Num](a: T, b: T, c: T) -> T {
+  sum([a, b, c])
+}
+
+fn sum_of_squares[T: Num, const N: U32](xs: [T; N]) -> T {
+  var sq = xs
+  for i in 0 ..< N {
+    sq[i] = xs[i] * xs[i]
+  }
+  sum(sq)
+}
+
+fn scaled_total[T: Num, const N: U32](xs: [T; N], k: T) -> T {
+  sum(xs) * k
+}
+
+fn nested_total[T: AnyNum](a: [T; 2], b: [T; 2]) -> T {
+  sum([sum(a), sum(b)])
+}
+
+test "sum from an AnyNum function, for every family" {
+  let a: [F32; 3] = [0.5, 0.25, 0.125]
+  let b: [I16; 3] = [-3, 10, -4]
+  let c: [U8; 3]  = [250, 3, 2]
+  assert total_any(a) == 0.875
+  assert total_any(b) == 3
+  assert total_any(c) == 255
+}
+
+test "sum from a Num and a Float function" {
+  let a: [I32; 4] = [-2, -3, 10, 1]
+  let b: [F64; 2] = [1.5, -0.25]
+  let c: [F32; 2] = [0.5, 0.75]
+  assert total_num(a) == 6
+  assert total_num(b) == 1.25
+  assert total_float(b) == 1.25
+  assert total_float(c) == 1.25
+}
+
+test "sum from an Int, an Unsigned and a Num with Int function" {
+  let a: [U64; 3] = [18446744073709551610, 3, 2]
+  let b: [I8; 3]  = [-100, 50, -28]
+  let c: [U16; 2] = [40000, 25535]
+  assert total_int(a) == 18446744073709551615
+  assert total_int(b) == -78
+  assert total_unsigned(a) == 18446744073709551615
+  assert total_unsigned(c) == 65535
+  assert total_signed(b) == -78
+}
+
+test "sum from a function with a fixed length and from arrays built of the values" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let x: F32      = 1.5
+  let y: F32      = 2.5
+  let m: I64      = 7
+  let n: I64      = 8
+  let z: F64      = -1.5
+  let w: F64      = 0.5
+  assert total_four(a) == 10.0
+  assert pair_sum(x, y) == 4.0
+  assert pair_sum(m, n) == 15
+  assert triple_sum(z, w, 4.0) == 3.0
+}
+
+test "sum from a function of the length N that builds an array first" {
+  let a: [I32; 3] = [1, -2, 3]
+  let b: [F64; 2] = [1.5, 2.0]
+  assert sum_of_squares(a) == 14
+  assert sum_of_squares(b) == 6.25
+  assert scaled_total(b, 2.0) == 7.0
+}
+
+test "sum of sums, with a sum in an element of the array" {
+  let a: [U8; 2] = [100, 20]
+  let b: [U8; 2] = [30, 5]
+  assert nested_total(a, b) == 155
+  assert sum([sum(a), 1]) == 121
+}
+
+test "the zero signs and the empty sum through a generic function" {
+  let a: [F32; 2] = [-0.0, -0.0]
+  let b: [F64; 1] = [-0.0]
+  let c: [F32; 0] = []
+  let z: F32      = -0.0
+  assert total_any(a).to_bits() == 2147483648
+  assert (total_float(b).to_bits() >> 32) == 2147483648
+  assert total_num(c).to_bits() == 0
+  assert pair_sum(z, z).to_bits() == 2147483648
+}
+
+test "sum from a closure that captures a value" {
+  let k: F32      = 2.0
+  let xs: [I8; 3] = [1, 2, 3]
+  let a: [F32; 3] = array.from_fn(fn(i) { sum([F32.round_from(i), k]) })
+  let b: [I8; 2]  = array.from_fn(fn(_) { sum(xs) })
+  assert a[0] == 2.0
+  assert a[1] == 3.0
+  assert a[2] == 4.0
+  assert b[0] == 6
+  assert b[1] == 6
+}

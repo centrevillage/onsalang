@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
-// mode = "parse"
-// spec = ["§6.1"]
+// mode = "test"
+// spec = ["§6.1", "§13.4"]
 
 use std.math.{sum}
 
@@ -10,4 +10,25 @@ pub fn mean[const N: U32](xs: [F64; N]) -> Option[F64] {
     return None
   }
   Some(sum(xs) / (xs.len() as F64))
+}
+
+// W5-07 U1/t (§6.1, the example above; §13.4: `std.math.sum`): the example is checked and run. The sum is divided by the number of
+// elements; an empty array is `None`, which the `if` before the division decides (the sum of an empty array, `ZERO`, is not
+// divided by 0.0).
+
+test "the mean of some values" {
+  let a: [F64; 3] = [1.0, 2.0, 6.0]
+  let b: [F64; 2] = [-1.5, 0.5]
+  assert mean(a) == Some(3.0)
+  assert mean(b) == Some(-0.5)
+}
+
+test "the mean of one value is that value" {
+  let a: [F64; 1] = [2.5]
+  assert mean(a) == Some(2.5)
+}
+
+test "the mean of no values is None" {
+  let a: [F64; 0] = []
+  assert mean(a) == None
 }

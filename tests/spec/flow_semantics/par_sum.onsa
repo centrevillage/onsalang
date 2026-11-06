@@ -8,7 +8,7 @@
 // in `e` is a separate instance in each replica. `par` is a replication of structure, not a loop:
 // a delay's `^name` inside the body still means the later `let` of the same sample.
 //
-// Needs `std.math.sum` (§13.4).
+// `sum` of the replicas is `std.math.sum` (§13.4).
 
 use std.math.{sum}
 

@@ -203,10 +203,10 @@ fn generics_are_monomorphized_and_deduplicated() {
 
 #[test]
 fn const_generics_name_instances() {
-    let d = text("use std.dsp.{sum}\n\npub fn f(xs: [F32; 4]) -> F32 {\n  sum(xs)\n}\n");
-    assert!(d.contains("std.dsp.sum__4(xs)"), "{d}");
-    assert!(d.contains("rt fn std.dsp.sum__4(xs: [F32; 4]) -> F32"), "{d}");
-    assert!(d.contains("for i in 0:U32..4:U32 {"), "{d}");
+    let d = text("use std.math.{sum}\n\npub fn f(xs: [F32; 4]) -> F32 {\n  sum(xs)\n}\n");
+    assert!(d.contains("std.math.sum__F32__4(xs)"), "{d}");
+    assert!(d.contains("rt fn std.math.sum__F32__4(xs: [F32; 4]) -> F32"), "{d}");
+    assert!(d.contains("for i in 1:U32..4:U32 {"), "{d}");
 }
 
 #[test]
@@ -665,7 +665,7 @@ fn sub_instances_are_wired_per_phase() {
 
 #[test]
 fn par_replicates_state_and_loops() {
-    let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: F32 at block) -> F32 at sample {\n  let saws = par~ i in 0..<N {\n    saw~(f0 * (1.0 + (F32.round_from(i) * 0.01)))\n  }\n  sum(saws)\n}\n";
+    let src = "use std.math.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: F32 at block) -> F32 at sample {\n  let saws = par~ i in 0..<N {\n    saw~(f0 * (1.0 + (F32.round_from(i) * 0.01)))\n  }\n  sum(saws)\n}\n";
     let d = text(src);
     assert!(
         d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], poisoned: Bool, initialized: Bool }"),
@@ -679,7 +679,7 @@ fn par_replicates_state_and_loops() {
     );
     assert!(d.contains("= t.saw.tick(inout s.0[i].0)"), "{d}");
     assert!(d.contains("t.saw.reset(inout s.0[i].0)"), "{d}");
-    assert!(d.contains("std.dsp.sum__4("), "{d}");
+    assert!(d.contains("std.math.sum__F32__4("), "{d}");
 }
 
 #[test]

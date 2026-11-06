@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§13.4", "§15.1"]
+
+// W5-07 U1/t (§13.4: `sum` is a function of `std.math`; R-23): the single name `sum` imported from `std.dsp`, where the function
+// was before it moved to `std.math`, is E0302 (§15.1: "名前が見つからなければ E0302"). The use of the name in the body is
+// not asked for here: the program calls nothing by it.
+
+use std.dsp.{sum} //~ E0302
+
+pub fn nothing() -> F32 {
+  1.0
+}

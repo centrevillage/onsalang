@@ -4,7 +4,7 @@
 //! Roots are every non-generic function, method, `test` and `const` of the
 //! user package. Generic functions are instantiated on demand from the
 //! `Instance` tables of the bodies that call them, deduplicated by
-//! `(def, generic args)` and named `name__F32` / `sum__4`. Types are
+//! `(def, generic args)` and named `name__F32` / `sum__F32__4`. Types are
 //! instantiated the same way (`Ring__F32__4`); `Option[T]` / `Result[T, E]`
 //! become ordinary enums (`Option__F32`).
 //!

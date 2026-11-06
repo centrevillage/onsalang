@@ -1,12 +1,16 @@
+const std.core.num.F32.ZERO: F32 = 0.0:F32
 fn generics_use.pick(a: I32, b: I32) -> I32 {
   generics_use.clamp__I32(a, 0:I32, b)
 }
 fn generics_use.mix(xs: [F32; 4], g: F32) -> F32 {
-  generics_use.clamp__F32((std.dsp.sum__4(xs) * g), -1.0:F32, 1.0:F32)
+  generics_use.clamp__F32((std.math.sum__F32__4(xs) * g), -1.0:F32, 1.0:F32)
 }
-rt fn std.dsp.sum__4(xs: [F32; 4]) -> F32 {
-  let acc: F32 = 0.0:F32
-  for i in 0:U32..4:U32 {
+rt fn std.math.sum__F32__4(xs: [F32; 4]) -> F32 {
+  if (4:U32 == 0:U32) {
+    return const std.core.num.F32.ZERO
+  }
+  let acc: F32 = xs[0:U32]
+  for i in 1:U32..4:U32 {
     acc = (acc + xs[i])
   }
   acc

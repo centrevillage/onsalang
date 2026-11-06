@@ -156,7 +156,7 @@ fn flows_render_through_the_generated_api() {
     all_pass(
         r#"
 use std.math.{exp, cos}
-use std.dsp.{sum}
+use std.math.{sum}
 use std.dsp.test.{impulse, energy}
 
 const UNISON: U32 = 4

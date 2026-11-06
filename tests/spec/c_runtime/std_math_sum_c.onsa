@@ -1,0 +1,245 @@
+// onsa.toml
+// [package]
+// name = "std_math_sum_c"
+// edition = "2026"
+//
+// [export]
+// prefix = "smsc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.4", "§6.3", "§9.2"]
+//
+// [[test.host]]
+// name = "the empty sum of an F32"
+// target = "host"
+// fn = "std_math_sum_c.empty_bits_f32"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "the empty sum of an F64"
+// target = "host"
+// fn = "std_math_sum_c.empty_bits_f64"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "the empty sum of the integers"
+// target = "host"
+// fn = "std_math_sum_c.empty_i8"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "the empty sum of an unsigned integer through a generic function"
+// target = "host"
+// fn = "std_math_sum_c.generic_empty_u64"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "the bits of the sum of one F32"
+// target = "host"
+// fn = "std_math_sum_c.one_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1.5 }, status = 0, result = 1069547520 },
+// ]
+//
+// [[test.host]]
+// name = "the bits of the sum of two F32"
+// target = "host"
+// fn = "std_math_sum_c.two_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = -0.0, b = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1.0, b = -1.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "the bits of the sum of two F64 through a generic function"
+// target = "host"
+// fn = "std_math_sum_c.generic_two_high_bits_f64"
+// steps = [
+//   { call = "fn", args = { a = -0.0, b = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "the bits of a sum of negative zeros read from a const"
+// target = "host"
+// fn = "std_math_sum_c.const_bits_f32"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 2147483648 },
+// ]
+//
+// [[test.host]]
+// name = "the order of the fold of three F32"
+// target = "host"
+// fn = "std_math_sum_c.three_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0e8, b = -1.0e8, c = 1.0 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { a = 1.0, b = 1.0e8, c = -1.0e8 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 0.5, b = 0.25, c = 0.125 }, status = 0, result = 0.875 },
+// ]
+//
+// [[test.host]]
+// name = "the sum of three I8 panics at the first step that does not fit"
+// target = "host"
+// fn = "std_math_sum_c.three_i8"
+// steps = [
+//   { call = "fn", args = { a = 100, b = -100, c = 100 }, status = 0, result = 100 },
+//   { call = "fn", args = { a = 100, b = 100, c = -100 }, status = 1 },
+//   { call = "fn", args = { a = -50, b = 20, c = 3 }, status = 0, result = -27 },
+//   { call = "fn", args = { a = -100, b = -100, c = 100 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "the sum of two U8 panics above the maximum"
+// target = "host"
+// fn = "std_math_sum_c.two_u8"
+// steps = [
+//   { call = "fn", args = { a = 200, b = 55 }, status = 0, result = 255 },
+//   { call = "fn", args = { a = 200, b = 56 }, status = 1 },
+//   { call = "fn", args = { a = 255, b = 0 }, status = 0, result = 255 },
+// ]
+//
+// [[test.host]]
+// name = "the bits of the sum of two F32 on a reset target"
+// target = "fw"
+// fn = "std_math_sum_c.two_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = -0.0, b = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1.0, b = -1.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "the empty sum and the order of the fold on a reset target"
+// target = "fw"
+// fn = "std_math_sum_c.three_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0e8, b = -1.0e8, c = 1.0 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { a = 1.0, b = 1.0e8, c = -1.0e8 }, status = 0, result = 0.0 },
+// ]
+
+// `std.math.sum` built to C (spec §13.4: "`N = 0` なら `T.ZERO`、それ以外は `xs[0]` から順に左へ畳む(演算順を固定し、ビット一致させる)"; §3.4: the sum of
+// two zeros is `-0.0` only when both are; R-23): the generated code of the monomorphized `sum` has to give the values of the
+// interpreter, in the bits. The empty sum is `ZERO` of the type; a sum of `-0.0` is `-0.0`; the fold goes from the first
+// element, so the order shows in the values of the F32 rounded one step at a time and in the first step of the integers
+// that does not fit (a panic, `status = 1`, on the target that poisons). The float bits are read by `to_bits()`; the bits of
+// the F64 are read by the half that holds the sign (the whole is above the largest literal that the steps can hold). The
+// reset target runs the steps that do not panic. The values in the F32 steps are the ones of std_math_sum_order.onsa.
+
+use std.math.{sum}
+
+const NEGATIVE_ZEROS: [F32; 2] = [-0.0, -0.0]
+const NEGATIVE_ZEROS_SUM: F32 = sum(NEGATIVE_ZEROS)
+
+fn total[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+@export
+pub fn empty_bits_f32() -> U32 {
+  let e: [F32; 0] = []
+  sum(e).to_bits()
+}
+
+@export
+pub fn empty_bits_f64() -> U64 {
+  let e: [F64; 0] = []
+  sum(e).to_bits()
+}
+
+@export
+pub fn empty_i8() -> I8 {
+  let e: [I8; 0] = []
+  sum(e)
+}
+
+@export
+pub fn generic_empty_u64() -> U64 {
+  let e: [U64; 0] = []
+  total(e)
+}
+
+@export
+pub fn one_bits_f32(a: F32) -> U32 {
+  sum([a]).to_bits()
+}
+
+@export
+pub fn two_bits_f32(a: F32, b: F32) -> U32 {
+  sum([a, b]).to_bits()
+}
+
+@export
+pub fn generic_two_high_bits_f64(a: F64, b: F64) -> U64 {
+  total([a, b]).to_bits() >> 32
+}
+
+@export
+pub fn const_bits_f32() -> U32 {
+  NEGATIVE_ZEROS_SUM.to_bits()
+}
+
+@export
+pub fn three_f32(a: F32, b: F32, c: F32) -> F32 {
+  sum([a, b, c])
+}
+
+@export
+pub fn three_i8(a: I8, b: I8, c: I8) -> I8 {
+  sum([a, b, c])
+}
+
+@export
+pub fn two_u8(a: U8, b: U8) -> U8 {
+  sum([a, b])
+}
+
+test "the interpreter gives the bits that the steps read" {
+  assert empty_bits_f32() == 0
+  assert empty_bits_f64() == 0
+  assert one_bits_f32(-0.0) == 2147483648
+  assert two_bits_f32(-0.0, 0.0) == 0
+  assert two_bits_f32(1.0, -1.0) == 0
+  assert generic_two_high_bits_f64(-0.0, -0.0) == 2147483648
+  assert const_bits_f32() == 2147483648
+}
+
+test "the interpreter gives the order of the fold" {
+  assert three_f32(100000000.0, -100000000.0, 1.0) == 1.0
+  assert three_f32(1.0, 100000000.0, -100000000.0) == 0.0
+}
+
+test "the interpreter gives the sums of the integers that fit" {
+  assert empty_i8() == 0
+  assert generic_empty_u64() == 0
+  assert three_i8(100, -100, 100) == 100
+  assert three_i8(-50, 20, 3) == -27
+  assert two_u8(200, 55) == 255
+}

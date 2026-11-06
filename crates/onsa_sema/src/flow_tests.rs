@@ -287,7 +287,7 @@ fn read_at_lets() {
 #[test]
 fn read_at_par_variables() {
     let a = ok(
-        "use std.dsp.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { g~(c + F32.round_from(i)) }\n  let q = par~ j in 0..<2 { x * F32.round_from(j) }\n  sum(p) + sum(q)\n}\n",
+        "use std.math.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { g~(c + F32.round_from(i)) }\n  let q = par~ j in 0..<2 { x * F32.round_from(j) }\n  sum(p) + sum(q)\n}\n",
     );
     let f = flow(&a, "f");
     // `i` in an argument of an instance whose input is at `block`.

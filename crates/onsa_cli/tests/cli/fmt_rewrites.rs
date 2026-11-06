@@ -2053,7 +2053,6 @@ fn x_combinations() -> Case {
 
 /// The example of the spec (§6.1) written with the `return` at the end, in a file with a `use`, and a public
 /// function with a unit return type: the module in which the items are, and the `use` that brings the names.
-/// `std.math.sum` is not in the std of this version (E0302), so the syntax stage only.
 fn x_module() -> Case {
     case(
         "a use, public items and the rewrites in one module",

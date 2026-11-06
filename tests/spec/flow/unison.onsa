@@ -3,20 +3,20 @@
 // spec = ["§11.5"]
 // golden = ["core"]
 
-use std.dsp.{sum}
+use std.math.{sum}
 
 const UNISON: U32 = 4
 
 pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {
   let saws = par~ i in 0 ..< UNISON {
-    saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
+    saw~(f0 * (1.0 + detune * spread(i, UNISON)))
   }
   sum(saws) * 0.25
 }
 
 /// 0 ..< n を [-0.5, 0.5] に等間隔に並べる
 pub rt fn spread(i: U32, n: U32) -> F32 {
-  (F32.round_from(i) / F32.round_from(n - 1)) - 0.5
+  F32.round_from(i) / F32.round_from(n - 1) - 0.5
 }
 
 use std.math.{floor}

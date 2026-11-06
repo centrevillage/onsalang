@@ -1,8 +1,9 @@
 //! The table of the `std` `target` declarations against the embedded std
 //! (S-69 (2), W5-02 U3a): one row per declaration and one declaration per
 //! row, with the same arity and `rt`; a primitive at every builtin type the
-//! bounds of the declaration admit; and the E0200 of a use at a type the row
-//! has no primitive for (spec §15.2).
+//! bounds of the declaration admit; the E0200 of a use at a type the row
+//! has no primitive for (spec §15.2); and the `else` bodies of std, checked as
+//! generic functions, at `Num` and `AnyNum`, which a user's type can meet (S-669).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -11,10 +12,11 @@ use onsa_diag::{Code, FileId};
 
 use crate::body::bounds::Bounds;
 use crate::cast::Instead;
-use crate::def::{DefId, DefKind, FnDef, GenericKind};
+use crate::def::{Bound, DefId, DefKind, FnDef, GenericKind};
 use crate::flow_tests::std_package;
 use crate::prim::{INTS, MathFn, NARROW_FROM, Prim, PrimRow, Scalar, key_of, row, rows};
 use crate::tests::analyze;
+use crate::traits::no_impl;
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, Module, Package};
 
@@ -313,4 +315,79 @@ fn no_missing_name_is_a_member_of_std() {
     }
     let of = a.builtin_key[&BuiltinTy::Str];
     assert!(crate::builtin::missing(&a.types, of, "from_utf8").is_some());
+}
+
+/// The `else` body of `abs` in the embedded std.
+const ABS: &str = "pub target rt fn abs[T: Num](x: T) -> T else {\n  if x < T.ZERO { -x } else { x }\n}\n";
+
+/// The codes of the embedded std with `ABS` replaced by `abs`.
+fn codes_of_abs(abs: &str) -> Vec<Code> {
+    let modules = (crate::std_modules().iter().enumerate()).map(|(i, m)| {
+        let text = if m.segments == ["math"] { m.text.replacen(ABS, abs, 1) } else { m.text.to_string() };
+        assert!(m.segments != ["math"] || m.text.contains(ABS), "no `abs` to replace");
+        module(m.segments, 100 + i as u32, &text)
+    });
+    let std = Arc::new(Package::std(modules.collect()));
+    let a = analyze(&Package::new("t", vec![module(&["main"], 0, "")], vec![std]));
+    a.diagnostics.iter().map(|d| d.code).collect()
+}
+
+/// The `else` bodies are checked as the bodies of generic functions: the
+/// three of the embedded std at every stage, without an error; and the
+/// stages report an error of such a body (spec §15.2, S-669).
+#[test]
+fn the_else_bodies_of_std_are_checked_as_generic_functions() {
+    let a = analyzed_std();
+    let decls = std_targets(&a);
+    for key in ["math.abs", "math.min", "math.max"] {
+        let def = decls[key].0;
+        let body = a.bodies.get(&def).unwrap_or_else(|| panic!("no body of `{key}`"));
+        assert!(body.complete, "the body of `{key}` is cut");
+    }
+    assert_eq!(codes_of_abs(ABS), [], "the embedded `abs`");
+    let abs =
+        |bound: &str, value: &str| format!("pub target rt fn abs[T: {bound}](x: T) -> T else {{\n  {value}\n}}\n");
+    // The types: `AnyNum` has no `Neg`, and `T` no integer literal.
+    assert_eq!(codes_of_abs(&abs("AnyNum", "-x")), [Code::E0401]);
+    assert_eq!(codes_of_abs(&abs("Num", "1")), [Code::E0401]);
+    // The names, `rt`, and the modes of a value that does not `Dup`.
+    assert_eq!(codes_of_abs(&abs("Num", "y")), [Code::E0302]);
+    let plain = format!("fn plain[T: Num](x: T) -> T {{\n  x\n}}\n\n{}", abs("Num", "plain(x)"));
+    assert_eq!(codes_of_abs(&plain), [Code::E0901]);
+    assert_eq!(codes_of_abs("pub target rt fn abs[T: ?Dup](x: T) -> (T, T) else {\n  (x, x)\n}\n"), [Code::E0711]);
+    // The effects: a body out of its declared row.
+    let alloc = "pub target fn abs[T: Num](x: T) -> T else {\n  let b: Buf[T] = Buf.zeroed(1)\n  b[0] + x\n}\n";
+    assert_eq!(codes_of_abs(alloc), [Code::E0601]);
+}
+
+/// The number traits §6.3 opens to a user's type, which the E0307 of
+/// [`no_impl`] leaves open. It leaves `Int` and `Unsigned` too, of which §6.3
+/// shows no user's type: the declarations bounded by them are not read here.
+const OPEN_NUMBERS: [Bound; 2] = [Bound::AnyNum, Bound::Num];
+
+/// The `target` declarations with an open bound and no `else` body. §15.2
+/// says such a declaration is usable at every type of its bound as a
+/// principle, no strong promise: opening the user's number types adds an
+/// E0200 or a body to each (`tasks/phase2.md`, S-669).
+const NO_ELSE_BODY: [&str; 3] = ["F32.round_from", "F64.round_from", "Span.add_from"];
+
+/// The bounds of a declaration not closed against the user's types have an
+/// `else` body (S-669): those of its parameters and of those of its `impl`.
+#[test]
+fn a_target_declaration_with_an_open_bound_has_an_else_body() {
+    assert!(OPEN_NUMBERS.into_iter().all(|b| !no_impl(b)) && no_impl(Bound::Float));
+    let a = analyzed_std();
+    let (mut bodies, mut missing) = (Vec::new(), Vec::new());
+    for (key, (def, f)) in std_targets(&a) {
+        let owner = a.def(def).owner.map(|o| a.def(o).generics()).unwrap_or_default();
+        let open = |g: &crate::def::GenericDef| match &g.kind {
+            GenericKind::Type { bounds, .. } => bounds.iter().any(|b| OPEN_NUMBERS.contains(b)),
+            _ => false,
+        };
+        if f.generics.iter().chain(owner).any(open) {
+            if f.body.is_some() { bodies.push(key) } else { missing.push(key) }
+        }
+    }
+    assert_eq!(bodies, ["math.abs", "math.max", "math.min"]);
+    assert_eq!(missing, NO_ELSE_BODY, "an item that left the list leaves it here too");
 }

@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.4", "§6.3"]
+
+// W5-07 U1/t (§13.4: "`xs[0]` から順に左へ畳む"; §3.4: "ちょうど 0 になる和は、両方の被演算子が `-0.0` のときだけ `-0.0` で、それ以外は `+0.0`
+// である"; R-23): the fold starts at `xs[0]`, not at a `0.0` that it adds to the first element, so a sum of `-0.0` values is
+// `-0.0`. A sum that is exactly zero because of a cancellation is `+0.0`. The bits are looked at with `to_bits()`: the bits of
+// `+0.0` are 0, those of the F32 `-0.0` are 2147483648 (0x80000000), and the high half of those of the F64 `-0.0` is
+// 2147483648 as well (the whole is 0x8000000000000000, which no literal below 2^63 writes).
+
+use std.math.{sum}
+
+test "the F32 sum of a single negative zero is a negative zero" {
+  let xs: [F32; 1] = [-0.0]
+  assert sum(xs).to_bits() == 2147483648
+}
+
+test "the F32 sum of negative zeros is a negative zero" {
+  let a: [F32; 2] = [-0.0, -0.0]
+  let b: [F32; 3] = [-0.0, -0.0, -0.0]
+  assert sum(a).to_bits() == 2147483648
+  assert sum(b).to_bits() == 2147483648
+}
+
+test "the F64 sum of negative zeros is a negative zero" {
+  let a: [F64; 1] = [-0.0]
+  let b: [F64; 2] = [-0.0, -0.0]
+  assert (sum(a).to_bits() >> 32) == 2147483648
+  assert (sum(b).to_bits() >> 32) == 2147483648
+  assert (sum(a).to_bits() << 32) == 0
+}
+
+test "a positive zero among the zeros makes a positive zero" {
+  let a: [F32; 2] = [-0.0, 0.0]
+  let b: [F32; 2] = [0.0, -0.0]
+  let c: [F32; 1] = [0.0]
+  let d: [F64; 2] = [-0.0, 0.0]
+  assert sum(a).to_bits() == 0
+  assert sum(b).to_bits() == 0
+  assert sum(c).to_bits() == 0
+  assert sum(d).to_bits() == 0
+}
+
+test "a sum that cancels to zero is a positive zero" {
+  let a: [F32; 2] = [1.0, -1.0]
+  let b: [F32; 3] = [-1.0, 1.0, -0.0]
+  let c: [F64; 3] = [-0.0, 0.5, -0.5]
+  assert sum(a).to_bits() == 0
+  assert sum(b).to_bits() == 0
+  assert sum(c).to_bits() == 0
+}
+
+test "a negative zero first is absorbed by a value that is not zero" {
+  let a: [F32; 2] = [-0.0, 1.5]
+  let b: [F64; 2] = [-0.0, -2.5]
+  assert sum(a) == 1.5
+  assert sum(b) == -2.5
+}

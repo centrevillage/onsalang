@@ -1,0 +1,258 @@
+// onsa.toml
+// [package]
+// name = "std_math_prim_c"
+// edition = "2026"
+//
+// [export]
+// prefix = "smpc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.4", "§15.2", "§6.3", "§9.2"]
+//
+// [[test.host]]
+// name = "abs of the F32 zeros, a NaN and ordinary values"
+// target = "host"
+// fn = "std_math_prim_c.abs_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = -0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -1.5 }, status = 0, result = 1069547520 },
+//   { call = "fn", args = { a = 1.5 }, status = 0, result = 1069547520 },
+//   { call = "fn", args = { a = nan }, status = 0, result = 2143289344 },
+// ]
+//
+// [[test.host]]
+// name = "abs of the F64 zeros, a NaN and an ordinary value"
+// target = "host"
+// fn = "std_math_prim_c.abs_bits_f64"
+// steps = [
+//   { call = "fn", args = { a = -0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -1.5 }, status = 0, result = 4609434218613702656 },
+//   { call = "fn", args = { a = nan }, status = 0, result = 9221120237041090560 },
+// ]
+//
+// [[test.host]]
+// name = "abs of a negative zero through a Num function"
+// target = "host"
+// fn = "std_math_prim_c.abs_num_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = -0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -1.5 }, status = 0, result = 1069547520 },
+// ]
+//
+// [[test.host]]
+// name = "abs of the least I8 panics"
+// target = "host"
+// fn = "std_math_prim_c.abs_i8"
+// steps = [
+//   { call = "fn", args = { a = -127 }, status = 0, result = 127 },
+//   { call = "fn", args = { a = -128 }, status = 1 },
+//   { call = "fn", args = { a = 5 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "abs of the least I64 through a Num function panics"
+// target = "host"
+// fn = "std_math_prim_c.abs_num_i64"
+// steps = [
+//   { call = "fn", args = { a = -9223372036854775807 }, status = 0, result = 9223372036854775807 },
+//   { call = "fn", args = { a = -9223372036854775808 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "min of the F32 zeros and a NaN"
+// target = "host"
+// fn = "std_math_prim_c.min_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = 1.5, b = nan }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { a = nan, b = 1.5 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { a = 1.5, b = -2.5 }, status = 0, result = 3223322624 },
+// ]
+//
+// [[test.host]]
+// name = "max of the F32 zeros and a NaN"
+// target = "host"
+// fn = "std_math_prim_c.max_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1.5, b = nan }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { a = nan, b = 1.5 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { a = 1.5, b = -2.5 }, status = 0, result = 1069547520 },
+// ]
+//
+// [[test.host]]
+// name = "min of the F64 zeros and a NaN"
+// target = "host"
+// fn = "std_math_prim_c.min_high_bits_f64"
+// steps = [
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = 1.5, b = nan }, status = 0, result = 2146959360 },
+//   { call = "fn", args = { a = nan, b = 1.5 }, status = 0, result = 2146959360 },
+// ]
+//
+// [[test.host]]
+// name = "max of the F64 zeros and a NaN"
+// target = "host"
+// fn = "std_math_prim_c.max_high_bits_f64"
+// steps = [
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1.5, b = nan }, status = 0, result = 2146959360 },
+//   { call = "fn", args = { a = nan, b = 1.5 }, status = 0, result = 2146959360 },
+// ]
+//
+// [[test.host]]
+// name = "min of the zeros and a NaN through an AnyNum function"
+// target = "host"
+// fn = "std_math_prim_c.lower_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = 1.5, b = nan }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { a = nan, b = 1.5 }, status = 0, result = 2143289344 },
+// ]
+//
+// [[test.host]]
+// name = "max of the zeros and a NaN through an AnyNum function"
+// target = "host"
+// fn = "std_math_prim_c.upper_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1.5, b = nan }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { a = nan, b = 1.5 }, status = 0, result = 2143289344 },
+// ]
+//
+// [[test.host]]
+// name = "min and max of the F64 zeros and a NaN through a Float function"
+// target = "host"
+// fn = "std_math_prim_c.lower_upper_high_bits_f64"
+// steps = [
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = -0.0, b = 0.0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { a = 1.5, b = nan }, status = 0, result = 4293918720 },
+//   { call = "fn", args = { a = nan, b = 1.5 }, status = 0, result = 4293918720 },
+// ]
+
+// `abs`, `min` and `max` of the built-in number types built to C (spec §13.4: "組込み型では本体の代わりにプリミティブを使い、浮動小数の 0 の符号と NaN は §3.4 の規則に
+// 従い、整数の `abs(MIN)` は panic する"; S-208, S-669): the C that is generated for an instance of a built-in type has to be the primitive, not the `else` body of
+// the declaration in std. A body written with a comparison would give `-0.0` for `abs(-0.0)`, `x` for `min(x, NaN)`, `0.0` for
+// `min(0.0, -0.0)` and `-0.0` for `max(-0.0, 0.0)`. The bits are read by `to_bits()`, which makes every NaN the quiet NaN
+// (0x7FC00000 is 2143289344; the high half of the F64 one, 0x7FF80000, is 2146959360 and the whole 9221120237041090560). The F64
+// zeros are read by the high half, because the bits of `-0.0` are above the largest literal that a step can hold. The last
+// step of the Float function adds the two halves so that one export shows `min` and `max` together: the high half of `min` plus
+// that of `max` (a NaN gives 2146959360 twice, 0x7FF80000 + 0x7FF80000 = 4293918720; `-0.0` and `0.0` give 2147483648 + 0).
+
+use std.math.{abs, max, min}
+
+fn abs_num[T: Num](x: T) -> T {
+  abs(x)
+}
+
+fn lower[T: AnyNum](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn upper[T: AnyNum](x: T, y: T) -> T {
+  max(x, y)
+}
+
+fn lower_float[T: Float](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn upper_float[T: Float](x: T, y: T) -> T {
+  max(x, y)
+}
+
+@export
+pub fn abs_bits_f32(a: F32) -> U32 {
+  abs(a).to_bits()
+}
+
+@export
+pub fn abs_bits_f64(a: F64) -> U64 {
+  abs(a).to_bits()
+}
+
+@export
+pub fn abs_num_bits_f32(a: F32) -> U32 {
+  abs_num(a).to_bits()
+}
+
+@export
+pub fn abs_i8(a: I8) -> I8 {
+  abs(a)
+}
+
+@export
+pub fn abs_num_i64(a: I64) -> I64 {
+  abs_num(a)
+}
+
+@export
+pub fn min_bits_f32(a: F32, b: F32) -> U32 {
+  min(a, b).to_bits()
+}
+
+@export
+pub fn max_bits_f32(a: F32, b: F32) -> U32 {
+  max(a, b).to_bits()
+}
+
+@export
+pub fn min_high_bits_f64(a: F64, b: F64) -> U64 {
+  min(a, b).to_bits() >> 32
+}
+
+@export
+pub fn max_high_bits_f64(a: F64, b: F64) -> U64 {
+  max(a, b).to_bits() >> 32
+}
+
+@export
+pub fn lower_bits_f32(a: F32, b: F32) -> U32 {
+  lower(a, b).to_bits()
+}
+
+@export
+pub fn upper_bits_f32(a: F32, b: F32) -> U32 {
+  upper(a, b).to_bits()
+}
+
+@export
+pub fn lower_upper_high_bits_f64(a: F64, b: F64) -> U64 {
+  (lower_float(a, b).to_bits() >> 32) + (upper_float(a, b).to_bits() >> 32)
+}
+
+test "the interpreter gives the bits that the steps read" {
+  assert abs_bits_f32(-0.0) == 0
+  assert abs_bits_f64(-0.0) == 0
+  assert abs_num_bits_f32(-0.0) == 0
+  assert min_bits_f32(0.0, -0.0) == 2147483648
+  assert max_bits_f32(-0.0, 0.0) == 0
+  assert min_high_bits_f64(0.0, -0.0) == 2147483648
+  assert max_high_bits_f64(-0.0, 0.0) == 0
+  assert lower_bits_f32(-0.0, 0.0) == 2147483648
+  assert upper_bits_f32(0.0, -0.0) == 0
+}
+
+test "the interpreter gives the bits of a NaN" {
+  assert min_bits_f32(1.5, F32.NAN) == 2143289344
+  assert max_bits_f32(F32.NAN, 1.5) == 2143289344
+  assert min_high_bits_f64(1.5, F64.NAN) == 2146959360
+  assert abs_bits_f64(F64.NAN) == 9221120237041090560
+}

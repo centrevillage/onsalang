@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§13.4", "§15.2", "§6.3"]
+
+// W5-07 U1/t (S-208, S-669; §13.4: "`min` / `max` はどちらかが NaN なら NaN を返し ..., `min(-0.0, 0.0)` は `-0.0`、`max(-0.0, 0.0)` は `0.0`", "組込み型では本体の代わりに
+// プリミティブを使い"; §3.4: "`min` / `max`(どちらかが NaN なら NaN、`-0.0 < 0.0`)"): the `else` bodies that the declarations of `min` and `max` in std get
+// (`if b < a { b } else { a }` and `if a < b { b } else { a }`) are not what a built-in type runs. For the floats those bodies
+// would give `x` for `min(x, NaN)` and `max(x, NaN)` (the comparison with a NaN is false), `0.0` for `min(0.0, -0.0)` and `-0.0`
+// for `max(-0.0, 0.0)`; the primitives give a NaN, `-0.0` and `0.0`. The same holds in a generic function whose bound is `AnyNum`
+// or `Float`, for F32 and F64, with the NaN in either argument. This is what a program does today and keeps (std_math_min_max.onsa
+// has the F64 NaN in the first argument of `min` and the second of `max` and the F32 zeros; min_max_from_generic.onsa has the
+// ordinary values through the bounds).
+
+use std.math.{is_nan, max, min}
+
+fn lower[T: AnyNum](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn upper[T: AnyNum](x: T, y: T) -> T {
+  max(x, y)
+}
+
+fn lower_float[T: Float](x: T, y: T) -> T {
+  min(x, y)
+}
+
+fn upper_float[T: Float](x: T, y: T) -> T {
+  max(x, y)
+}
+
+fn clamp_any[T: AnyNum](x: T, lo: T, hi: T) -> T {
+  min(max(x, lo), hi)
+}
+
+test "min and max with a NaN in the second argument are a NaN, for F32 and F64" {
+  let a: F32 = 1.5
+  let b: F64 = -2.5
+  assert is_nan(min(a, F32.NAN))
+  assert is_nan(max(a, F32.NAN))
+  assert is_nan(min(b, F64.NAN))
+  assert is_nan(max(b, F64.NAN))
+}
+
+test "min and max with a NaN in the first argument are a NaN, for F32 and F64" {
+  let a: F32 = 1.5
+  let b: F64 = -2.5
+  assert is_nan(min(F32.NAN, a))
+  assert is_nan(max(F32.NAN, a))
+  assert is_nan(min(F64.NAN, b))
+  assert is_nan(max(F64.NAN, b))
+}
+
+test "min and max of two NaNs are a NaN" {
+  assert is_nan(min(F32.NAN, F32.NAN))
+  assert is_nan(max(F64.NAN, F64.NAN))
+}
+
+test "min and max with an infinity and a NaN" {
+  assert is_nan(min(F32.INFINITY, F32.NAN))
+  assert is_nan(max(-F64.INFINITY, F64.NAN))
+  assert min(F32.INFINITY, 1.0) == 1.0
+  assert max(-F64.INFINITY, 1.0) == 1.0
+}
+
+test "min and max of the F64 zeros take the negative zero before the positive one" {
+  let z: F64 = 0.0
+  let m: F64 = -0.0
+  assert (min(z, m).to_bits() >> 32) == 2147483648
+  assert (min(m, z).to_bits() >> 32) == 2147483648
+  assert max(z, m).to_bits() == 0
+  assert max(m, z).to_bits() == 0
+}
+
+test "min and max with a NaN through an AnyNum function" {
+  let a: F32 = 4.0
+  let b: F64 = -4.0
+  assert is_nan(lower(a, F32.NAN))
+  assert is_nan(lower(F32.NAN, a))
+  assert is_nan(upper(a, F32.NAN))
+  assert is_nan(upper(F32.NAN, a))
+  assert is_nan(lower(b, F64.NAN))
+  assert is_nan(upper(F64.NAN, b))
+}
+
+test "min and max with a NaN through a Float function" {
+  let a: F32 = 4.0
+  let b: F64 = -4.0
+  assert is_nan(lower_float(a, F32.NAN))
+  assert is_nan(lower_float(F64.NAN, b))
+  assert is_nan(upper_float(a, F32.NAN))
+  assert is_nan(upper_float(F64.NAN, b))
+}
+
+test "min and max of the zeros through an AnyNum function" {
+  let z: F32 = 0.0
+  let m: F32 = -0.0
+  assert lower(z, m).to_bits() == 2147483648
+  assert lower(m, z).to_bits() == 2147483648
+  assert upper(z, m).to_bits() == 0
+  assert upper(m, z).to_bits() == 0
+}
+
+test "min and max of the zeros through a Float function, F64" {
+  let z: F64 = 0.0
+  let m: F64 = -0.0
+  assert (lower_float(z, m).to_bits() >> 32) == 2147483648
+  assert (lower_float(m, z).to_bits() >> 32) == 2147483648
+  assert upper_float(z, m).to_bits() == 0
+  assert upper_float(m, z).to_bits() == 0
+}
+
+test "a NaN passes through a clamp made of min and max" {
+  let lo: F32    = -1.0
+  let hi: F32    = 1.0
+  let above: F32 = 2.5
+  let below: F32 = -2.5
+  assert is_nan(clamp_any(F32.NAN, lo, hi))
+  assert clamp_any(above, lo, hi) == 1.0
+  assert clamp_any(below, lo, hi) == -1.0
+}

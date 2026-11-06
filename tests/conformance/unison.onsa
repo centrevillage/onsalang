@@ -17,9 +17,8 @@
 // spec = ["§11.5"]
 // conformance = true
 
-// Conformance (T4-7): spec §11.5 unison (`par`, `std.dsp.sum`).
-use std.dsp.{sum}
-use std.math.{floor}
+// Conformance (T4-7): spec §11.5 unison (`par`, `std.math.sum`).
+use std.math.{floor, sum}
 
 const UNISON: U32 = 4
 

@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§13.4", "§15.2", "§6.3"]
+
+// W5-07 U1/t (S-208, S-669; §3.4: "`abs`(浮動小数では符号のビットを 0 にした値で、`abs(-0.0)` は `+0.0`)", "`std.math` の `abs(a)` は、符号付き整数では `-a` と同じく、
+// `a` が `MIN` なら panic する(... §13.4 のプリミティブも std の本体も同じ)"; §13.4: "組込み型では本体の代わりにプリミティブを使い"): the `else` body that the
+// declaration of `abs` in std gets (`if x < T.ZERO { -x } else { x }`) is not what a built-in type runs. For the floats the
+// result of that body would be `-0.0` for `abs(-0.0)` (the comparison `-0.0 < 0.0` is false), and the primitive gives `+0.0`; the
+// same holds when the call is made inside a generic function whose bound is `Num` or `Float`, because the primitive is chosen for
+// the instance. A NaN stays a NaN, an infinity becomes the positive one. For the signed integers the least value panics at
+// every width, directly and through a generic function; the value next to it does not. This is what a program does today and
+// keeps (std_math_abs.onsa has the cases of the ordinary values, the F32 `-0.0` and the I8 and I32 panics).
+
+use std.math.{abs, is_nan}
+
+fn abs_num[T: Num](x: T) -> T {
+  abs(x)
+}
+
+fn abs_float[T: Float](x: T) -> T {
+  abs(x)
+}
+
+fn abs_signed[T: Num + Int](x: T) -> T {
+  abs(x)
+}
+
+test "abs of the F64 negative zero is the positive zero" {
+  let z: F64 = -0.0
+  assert abs(z).to_bits() == 0
+  assert abs(z) == 0.0
+}
+
+test "abs of a negative zero through a Num and a Float function" {
+  let a: F32 = -0.0
+  let b: F64 = -0.0
+  assert abs_num(a).to_bits() == 0
+  assert abs_num(b).to_bits() == 0
+  assert abs_float(a).to_bits() == 0
+  assert abs_float(b).to_bits() == 0
+}
+
+test "abs of a NaN is a NaN, of an infinity is the positive one, of the largest value is itself" {
+  let a: F32 = F32.NAN
+  let b: F64 = -F64.NAN
+  let c: F32 = -F32.INFINITY
+  let d: F64 = -F64.MAX
+  assert is_nan(abs(a))
+  assert is_nan(abs(b))
+  assert abs(c) == F32.INFINITY
+  assert abs(d) == F64.MAX
+}
+
+test "abs of a NaN and an infinity through a Float function" {
+  let a: F32 = -F32.NAN
+  let b: F64 = -F64.INFINITY
+  assert is_nan(abs_float(a))
+  assert abs_float(b) == F64.INFINITY
+}
+
+test "abs of the value next to the least signed integer does not panic" {
+  let a: I8  = -127
+  let b: I16 = -32767
+  let c: I32 = -2147483647
+  let d: I64 = -9223372036854775807
+  assert abs(a) == 127
+  assert abs(b) == 32767
+  assert abs(c) == 2147483647
+  assert abs(d) == 9223372036854775807
+  assert abs_signed(d) == 9223372036854775807
+}
+
+test "abs of the least I16 panics" {
+  let a: I16 = -32768
+  let r      = abs(a) //~ PANIC "abs of the least I16 panics"
+  assert r == 0
+}
+
+test "abs of the least I32 panics" {
+  let a: I32 = I32.MIN
+  let r      = abs(a) //~ PANIC "abs of the least I32 panics"
+  assert r == 0
+}
+
+test "abs of the least I64 panics" {
+  let a: I64 = I64.MIN
+  let r      = abs(a) //~ PANIC "abs of the least I64 panics"
+  assert r == 0
+}
+
+test "abs of the least I8 through a Num and Int function panics" {
+  let a: I8 = I8.MIN
+  let r     = abs_signed(a) //~ PANIC "abs of the least I8 through a Num and Int function panics"
+  assert r == 0
+}
+
+test "abs of the least I16 through a Num function panics" {
+  let a: I16 = I16.MIN
+  let r      = abs_num(a) //~ PANIC "abs of the least I16 through a Num function panics"
+  assert r == 0
+}
+
+test "abs of the least I64 through a Num and Int function panics" {
+  let a: I64 = I64.MIN
+  let r      = abs_signed(a) //~ PANIC "abs of the least I64 through a Num and Int function panics"
+  assert r == 0
+}

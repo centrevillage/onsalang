@@ -1,0 +1,23 @@
+// Functions of another module that call `std.math.sum` (W5-07 U1/t, spec §13.4, §15.1).
+
+use std.math.{sum}
+
+pub struct Bag[T: AnyNum] {
+  items: [T; 3],
+}
+
+pub fn total[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+pub rt fn total_rt[T: Num, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+pub fn bag_total[T: AnyNum](b: Bag[T]) -> T {
+  sum(b.items)
+}
+
+pub fn make_bag[T: AnyNum](a: T, b: T, c: T) -> Bag[T] {
+  Bag { items: [a, b, c] }
+}

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§13.4", "§3.4"]
+
+// W5-07 U1/t (§6.6: "コンパイル時の評価(定数式、`const` の初期化式、`@param` の値)が panic すると(溢れ、...)、その式の位置で E0419"; §13.4: `sum` folds
+// from `xs[0]`): a `sum` in the initializer of a `const` whose step leaves the range of the element type panics in the
+// compile-time evaluation, and the initializer is E0419. A sum whose steps all fit is not (std_math_sum_const.onsa).
+// One error per `const` (P-01).
+
+use std.math.{sum}
+
+const SIGNED_HIGH: [I8; 2] = [100, 100]
+const SIGNED_LOW: [I8; 2] = [-100, -100]
+const UNSIGNED: [U8; 3] = [200, 50, 6]
+const WIDE: [I64; 2] = [9223372036854775807, 1]
+const CANCELLING: [I8; 3] = [100, 100, -100]
+
+const A: I8 = sum(SIGNED_HIGH) //~ E0419
+const B: I8 = sum(SIGNED_LOW) //~ E0419
+const C: U8 = sum(UNSIGNED) //~ E0419
+const D: I64 = sum(WIDE) //~ E0419
+const E: I8 = sum(CANCELLING) //~ E0419

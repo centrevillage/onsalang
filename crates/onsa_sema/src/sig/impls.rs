@@ -5,13 +5,7 @@
 
 use super::*;
 use crate::names::collect::reads_members;
-
-/// Whether the trait of the row `row` of [`TRAITS`] is one no `impl` is written
-/// of (§6.3): the builtin floats alone are `Float`, and a derive alone makes
-/// `Ordinal` (§6.4).
-fn no_impl_trait(row: u8) -> bool {
-    matches!(TRAITS[row as usize].1, Some(Bound::Float | Bound::Ordinal))
-}
+use crate::traits::no_impl;
 
 impl<'p> Sema<'p> {
     /// The `impl` `i` (the def `id` of the item `item`): its heading and, of
@@ -89,7 +83,7 @@ impl<'p> Sema<'p> {
         let target = self.target_type(cx, i.self_ty);
         let shown = one_line(&src(cx, cx.ast.ty(i.self_ty).span));
         match (named, target) {
-            (Some(Entity::Builtin(Builtin::Trait(row))), _) if no_impl_trait(row) => {
+            (Some(Entity::Builtin(Builtin::Trait(row))), _) if TRAITS[row as usize].1.is_some_and(no_impl) => {
                 let what = format!("`{}` has no `impl` but the ones of the language", TRAITS[row as usize].0);
                 let d = Diagnostic::new(Stage::Names, Code::E0307, tr.span, what).with_found(src(cx, tr.span));
                 let rule = "the builtin floats alone are `Float`, and a derive alone makes `Ordinal` (§6.3, §6.4)";

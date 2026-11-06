@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§13.4", "§15.2"]
+
+// W5-07 U1/t (§6.6: "初期化式から呼べるのは、効果行が空か `{Alloc}` だけの関数"; §13.4: `sum` is a function written in Onsa, so it is evaluated by the
+// compile-time evaluator like any function with an empty effect row): `sum` is called in the initializer of a `const`, with an
+// array that is another `const` or the argument of a `const` function. The value is the same as the run-time call: the fold
+// from `xs[0]`, the negative zero kept, and `ZERO` for an empty array. An overflow in the initializer is E0419
+// (std_math_sum_const_neg.onsa).
+
+use std.math.{sum}
+
+const WEIGHTS: [F32; 4] = [0.5, 0.25, 0.125, 0.125]
+const TOTAL: F32 = sum(WEIGHTS)
+
+const NEGATIVE_ZERO: [F32; 2] = [-0.0, -0.0]
+const NEGATIVE_ZERO_SUM: F32 = sum(NEGATIVE_ZERO)
+
+const NO_ELEMENTS: [F64; 0] = []
+const EMPTY_SUM: F64 = sum(NO_ELEMENTS)
+
+const STEPS: [U8; 3] = [100, 100, 55]
+const STEPS_SUM: U8 = sum(STEPS)
+
+const SIGNED: [I16; 3] = [-30000, 30000, 7]
+const SIGNED_SUM: I16 = sum(SIGNED)
+
+fn total_of(xs: [I32; 2]) -> I32 {
+  sum(xs)
+}
+
+const FROM_FUNCTION: I32 = total_of([40, 2])
+
+test "sum in the initializer of a const" {
+  assert TOTAL == 1.0
+  assert STEPS_SUM == 255
+  assert SIGNED_SUM == 7
+}
+
+test "sum in a const keeps the negative zero and the empty sum" {
+  assert NEGATIVE_ZERO_SUM.to_bits() == 2147483648
+  assert EMPTY_SUM.to_bits() == 0
+}
+
+test "sum in a const through a function" {
+  assert FROM_FUNCTION == 42
+}

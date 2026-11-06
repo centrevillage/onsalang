@@ -11,7 +11,7 @@
 //   期待: 枠 cluster_m の中に "m.i" と、入れ子の枠 cluster_m.par_0（"m.par_0.j" と "m.par_0.acc_0"。名前は R-98、S-86）。
 //         辺は "x" / "m.i" / "m.par_0.j" -> "m.par_0.acc_0"、"m.par_0.acc_0" -> "m.par_0"、"m.par_0" -> "m"、"m" -> "out"。実線の閉路は無い。
 
-use std.dsp.{sum}
+use std.math.{sum}
 use std.math.{floor}
 
 const UNISON: U32 = 4

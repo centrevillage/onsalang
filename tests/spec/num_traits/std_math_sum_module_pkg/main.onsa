@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§15.1", "§6.3"]
+
+// W5-07 U1/t (§13.4: `std.math.sum`; §15.1: a name of another module is used through a `use`): a module that imports `sum` by
+// name and a module that calls it by the path of the module `std.math` meet in one package. The generic functions of `lib`
+// call `sum` with their own parameters (`AnyNum`, `Num`), a type of `lib` holds the array that is summed, and this module
+// calls them with a float, a signed and an unsigned instance. The result is the same as the direct call, the zero sign
+// of an all-negative-zero sum and the empty sum included.
+
+use lib
+use lib.{bag_total, make_bag, total}
+use std.math
+
+fn local_total(xs: [F32; 3]) -> F32 {
+  math.sum(xs) + total(xs)
+}
+
+test "a generic function of another module that calls sum" {
+  let a: [F32; 3] = [0.5, 0.25, 0.125]
+  let b: [I8; 2]  = [-5, 3]
+  let c: [U16; 2] = [60000, 5535]
+  assert total(a) == 0.875
+  assert lib.total(b) == -2
+  assert total(c) == 65535
+}
+
+test "a Num function and a type of another module" {
+  let a: [F64; 2] = [1.5, 2.5]
+  let x: F64      = 1.5
+  let y: F64      = 2.0
+  let z: F64      = 0.5
+  let m: I32      = 7
+  let n: I32      = 8
+  let p: I32      = 9
+  let g           = make_bag(x, y, z)
+  let h           = make_bag(m, n, p)
+  assert lib.total_rt(a) == 4.0
+  assert bag_total(g) == 4.0
+  assert bag_total(h) == 24
+}
+
+test "the zero sign and the empty sum across the modules" {
+  let a: [F32; 2] = [-0.0, -0.0]
+  let b: [F32; 0] = []
+  assert total(a).to_bits() == 2147483648
+  assert total(b).to_bits() == 0
+  assert math.sum(a).to_bits() == 2147483648
+}
+
+test "the path of std.math and the import by name meet" {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  assert local_total(a) == 12.0
+}

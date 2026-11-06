@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§13.4", "§9.2"]
+
+// W5-07 U1/t (§3.4: "`a + b` ... 結果が型に収まらない(符号なしの引き算が 0 を下回る場合を含む)"は panic する; §13.4: `sum` は `xs[0]` から左へ畳む):
+// an integer sum that leaves the range of the element type in any step panics, the same as the `+` that it is made of, for the
+// signed and the unsigned widths, directly and through a generic function. A sum whose last step lands on the edge of the
+// range does not panic.
+
+use std.math.{sum}
+
+fn total[T: AnyNum, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+fn total_int[T: Int, const N: U32](xs: [T; N]) -> T {
+  sum(xs)
+}
+
+rt fn rt_total(xs: [U8; 3]) -> U8 {
+  sum(xs)
+}
+
+test "sums that end on the edge of the range do not panic" {
+  let a: [I8; 2]  = [127, 0]
+  let b: [I8; 2]  = [-100, -28]
+  let c: [U8; 2]  = [255, 0]
+  let d: [U8; 3]  = [100, 100, 55]
+  let e: [I64; 2] = [9223372036854775806, 1]
+  assert sum(a) == 127
+  assert sum(b) == -128
+  assert sum(c) == 255
+  assert sum(d) == 255
+  assert sum(e) == 9223372036854775807
+}
+
+test "an I8 sum above the maximum panics" {
+  let a: [I8; 2] = [127, 1]
+  let r = sum(a) //~ PANIC "an I8 sum above the maximum panics"
+  assert r == 0
+}
+
+test "an I8 sum below the minimum panics" {
+  let a: [I8; 3] = [-100, -20, -9]
+  let r = sum(a) //~ PANIC "an I8 sum below the minimum panics"
+  assert r == 0
+}
+
+test "a U8 sum above the maximum panics" {
+  let a: [U8; 2] = [200, 56]
+  let r = sum(a) //~ PANIC "a U8 sum above the maximum panics"
+  assert r == 0
+}
+
+test "a U8 sum of many small values above the maximum panics" {
+  let a: [U8; 5] = [60, 60, 60, 60, 16]
+  let r = sum(a) //~ PANIC "a U8 sum of many small values above the maximum panics"
+  assert r == 0
+}
+
+test "an I16 sum above the maximum panics" {
+  let a: [I16; 2] = [32767, 1]
+  let r = sum(a) //~ PANIC "an I16 sum above the maximum panics"
+  assert r == 0
+}
+
+test "a U32 sum above the maximum panics" {
+  let a: [U32; 2] = [4294967295, 1]
+  let r = sum(a) //~ PANIC "a U32 sum above the maximum panics"
+  assert r == 0
+}
+
+test "an I64 sum above the maximum panics" {
+  let a: [I64; 2] = [9223372036854775807, 1]
+  let r = sum(a) //~ PANIC "an I64 sum above the maximum panics"
+  assert r == 0
+}
+
+test "a U64 sum above the maximum panics" {
+  let a: [U64; 2] = [18446744073709551615, 1]
+  let r = sum(a) //~ PANIC "a U64 sum above the maximum panics"
+  assert r == 0
+}
+
+test "an overflowing sum through an AnyNum function panics" {
+  let a: [I8; 2] = [100, 100]
+  let r = total(a) //~ PANIC "an overflowing sum through an AnyNum function panics"
+  assert r == 0
+}
+
+test "an overflowing sum through an Int function panics" {
+  let a: [U16; 2] = [65535, 1]
+  let r = total_int(a) //~ PANIC "an overflowing sum through an Int function panics"
+  assert r == 0
+}
+
+test "an overflowing sum in an rt function panics" {
+  let a: [U8; 3] = [200, 50, 6]
+  let r = rt_total(a) //~ PANIC "an overflowing sum in an rt function panics"
+  assert r == 0
+}

@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§13.4", "§6.3", "§4.5"]
+
+// W5-07 U1/t (§13.4: `sum[T: AnyNum, const N: U32](xs: [T; N]) -> T`; §6.3: the table of the traits that a built-in type implements; §4.5: "満たさなければ
+// ... E0416"): an array whose element type is not a number type does not satisfy the bound `AnyNum` of `sum`, so the call is
+// E0416: `Bool`, `Char`, `Str`, a struct, a tuple, an `Option`, the unit and an array. The note that names the number
+// traits is not asked here. One error per function (P-01).
+
+use std.math.{sum}
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+pub fn of_bool(xs: [Bool; 2]) -> Bool {
+  sum(xs) //~ E0416
+}
+
+pub fn of_char(xs: [Char; 2]) -> Char {
+  sum(xs) //~ E0416
+}
+
+pub fn of_str(xs: [Str; 2]) -> Str {
+  sum(xs) //~ E0416
+}
+
+pub fn of_struct(xs: [Pair; 2]) -> Pair {
+  sum(xs) //~ E0416
+}
+
+pub fn of_tuple(xs: [(F32, F32); 2]) -> (F32, F32) {
+  sum(xs) //~ E0416
+}
+
+pub fn of_option(xs: [Option[F32]; 2]) -> Option[F32] {
+  sum(xs) //~ E0416
+}
+
+pub fn of_unit(xs: [(); 2]) {
+  sum(xs) //~ E0416
+}
+
+pub fn of_array(xs: [[F32; 2]; 2]) -> [F32; 2] {
+  sum(xs) //~ E0416
+}
+
+pub fn of_empty_bool() -> Bool {
+  let e: [Bool; 0] = []
+  sum(e) //~ E0416
+}
