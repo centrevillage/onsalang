@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "19:5"
+// code = "E0401"
+// candidate = 1
+// clean = true
+//
+
+// S-876, S-886 (U4b of W5-09; R-388): the joined form `return n` decides the type of `n` (`I64`), and the cast after the block accepts it, so the joined form is the one candidate, and the file after it has no diagnostic (`clean`).
+// The pin makes a lost candidate a failure.
+
+pub fn joined_decides_a_type_that_a_later_cast_accepts(c: Bool) -> I64 {
+  let n = 5
+  if c {
+    return                                          //~ E0401
+    n
+  }
+  n as I64
+}

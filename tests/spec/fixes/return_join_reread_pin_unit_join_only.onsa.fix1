@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "23:5"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+
+// S-876, S-886 (U4b of W5-09; R-388): the deletion would leave `n` without its type for the cast after the block (E0420), and the joined form `return need_u8(n)` decides it, so the joined form is the one candidate, and the file after it has no
+// diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn need_u8(x: U8) {
+}
+
+pub fn deletion_leaves_what_a_later_cast_reads(c: Bool) {
+  let n = 5
+  if c {
+    return need_u8(n)                                      //~ E0503
+  }
+  let w = n as F64
+  let _ = w
+}

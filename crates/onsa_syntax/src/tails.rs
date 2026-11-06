@@ -16,9 +16,8 @@ use crate::ast::{Arg, Ast, BinOp, Block, ExprId, ExprKind, Lit, MatchArm, Mode, 
 /// `Ast::sub_exprs` and that walk go in one order (R-91), and the types stage
 /// reads the children in it too. So in a body where the walk stopped with no
 /// report (S-692), every child the types stage reads is recorded: it stops at
-/// the same place. [`Ast::leaves_loop`] is read by the names stage and a
-/// candidate of the types stage: a pure function of the tree, no second
-/// decision.
+/// the same place. A candidate is read with the table of its form
+/// ([`Diverging::patched`]): a pure function of that form, no second decision.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Diverging {
     /// The expressions of a diverging form.
@@ -137,12 +136,19 @@ impl Diverging {
     /// Record the expression `e`, after its children; `panic`: it is a call
     /// of `panic`, which the walk knows by the name.
     pub fn note_expr(&mut self, ast: &Ast, e: ExprId, panic: bool) {
+        self.read_expr(ast, e, panic, None);
+    }
+
+    fn read_expr(&mut self, ast: &Ast, e: ExprId, panic: bool, patch: Option<&Patch>) {
         let diverges = panic
             || match &ast.expr(e).kind {
                 ExprKind::Paren(x) => self.expr(*x),
-                ExprKind::Block(b) => self.block(ast, b),
+                ExprKind::Block(b) => self.block(ast, Patch::block(patch, e, b)),
                 ExprKind::If { then, else_: Some(other), .. } => self.expr(*then) && self.expr(*other),
-                ExprKind::Match { arms, .. } => !arms.is_empty() && arms.iter().all(|a| self.expr(a.body)),
+                ExprKind::Match { arms, .. } => {
+                    let arms = Patch::arms(patch, e, arms);
+                    !arms.is_empty() && arms.iter().all(|a| self.expr(a.body))
+                }
                 _ => false,
             };
         if diverges {
@@ -154,11 +160,43 @@ impl Diverging {
     /// at the loops inside, so an expression is searched for its innermost
     /// loop alone: O(n) over a body.
     pub fn note_while(&mut self, ast: &Ast, s: StmtId) {
+        self.read_while(ast, s, None);
+    }
+
+    fn read_while(&mut self, ast: &Ast, s: StmtId, patch: Option<&Patch>) {
         let StmtKind::While { cond, body } = ast.stmt(s).kind else { return };
         // A parenthesis is the same as none (`fmt` takes it off, §18.2).
         let forever = matches!(ast.expr(ast.without_parens(cond)).kind, ExprKind::Lit(Lit::Bool(true)));
-        if forever && !ast.leaves_loop(body) {
+        if forever && !ast.leaves_loop(body, patch) {
             self.loops.insert(s);
+        }
+    }
+
+    /// The table of the body `root` with `patch` in it, made as the walk of
+    /// the names stage makes it, child before parent, with the same reading
+    /// of each node. A `panic` stays as it is: no form changes one, and only
+    /// that walk knows it by the name. What a form takes away is read too and
+    /// nothing asks for it. Linear in the body, whose reads are few.
+    pub fn patched(&self, ast: &Ast, root: ExprId, patch: &Patch) -> Diverging {
+        let mut table = self.clone();
+        table.read_again(ast, root, patch);
+        table
+    }
+
+    fn read_again(&mut self, ast: &Ast, e: ExprId, patch: &Patch) {
+        for x in ast.sub_exprs(e) {
+            self.read_again(ast, x, patch);
+        }
+        let kind = &ast.expr(e).kind;
+        if let ExprKind::Block(b) = kind {
+            for &s in &b.stmts {
+                self.loops.remove(&s);
+                self.read_while(ast, s, Some(patch));
+            }
+        }
+        if matches!(kind, ExprKind::Paren(_) | ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::Match { .. }) {
+            self.exprs.remove(&e);
+            self.read_expr(ast, e, false, Some(patch));
         }
     }
 }
@@ -172,6 +210,36 @@ pub enum Patch {
     Block(ExprId, Block),
     /// The `match` has these arms, in this order.
     Arms(ExprId, Vec<MatchArm>),
+    /// The block reads as this one, which has lost its last expression, and
+    /// that expression is the value of the `return` statement: `return`, then
+    /// `x` on the next line, read as `return x` (§7, S-886).
+    Joined(ExprId, Block, StmtId, ExprId),
+}
+
+impl Patch {
+    /// The block `b` of the node `e` in the form `patch` has of it.
+    pub fn block<'x>(patch: Option<&'x Patch>, e: ExprId, b: &'x Block) -> &'x Block {
+        match patch {
+            Some(Patch::Block(id, patched) | Patch::Joined(id, patched, ..)) if *id == e => patched,
+            _ => b,
+        }
+    }
+
+    /// The arms `arms` of the `match` `e` in the form `patch` has of them.
+    pub fn arms<'x>(patch: Option<&'x Patch>, e: ExprId, arms: &'x [MatchArm]) -> &'x [MatchArm] {
+        match patch {
+            Some(Patch::Arms(id, patched)) if *id == e => patched,
+            _ => arms,
+        }
+    }
+
+    /// The value `patch` gives the `return` statement `s`, which has none.
+    pub fn joined(patch: Option<&Patch>, s: StmtId) -> Option<ExprId> {
+        match patch {
+            Some(Patch::Joined(_, _, at, x)) if *at == s => Some(*x),
+            _ => None,
+        }
+    }
 }
 
 /// A tail of a value.
@@ -217,29 +285,38 @@ impl Ast {
     /// Whether `e`, in the body of a loop, holds a `break` of that loop (§7):
     /// not one in the body of a loop inside it (the head of such a loop is
     /// evaluated in this one, so a `break` there counts) or in an anonymous
-    /// function. By the structure alone: one that is not reached counts.
-    pub fn leaves_loop(&self, e: ExprId) -> bool {
+    /// function. By the structure alone, of the form `patch` has of it: one
+    /// that is not reached counts.
+    pub fn leaves_loop(&self, e: ExprId, patch: Option<&Patch>) -> bool {
+        let leaves = |x: ExprId| self.leaves_loop(x, patch);
         match &self.expr(e).kind {
             ExprKind::Closure { .. } => false,
             ExprKind::Block(b) => {
-                b.stmts.iter().any(|&s| self.stmt_leaves_loop(s)) || b.tail.is_some_and(|t| self.leaves_loop(t))
+                let b = Patch::block(patch, e, b);
+                b.stmts.iter().any(|&s| self.stmt_leaves_loop(s, patch)) || b.tail.is_some_and(leaves)
             }
-            _ => self.sub_exprs(e).into_iter().any(|x| self.leaves_loop(x)),
+            ExprKind::Match { scrutinee, arms, .. } => {
+                let mut arms = Patch::arms(patch, e, arms).iter();
+                leaves(*scrutinee) || arms.any(|a| a.guard.is_some_and(leaves) || leaves(a.body))
+            }
+            _ => self.sub_exprs(e).into_iter().any(leaves),
         }
     }
 
     /// [`Ast::leaves_loop`] of a statement.
-    pub fn stmt_leaves_loop(&self, s: StmtId) -> bool {
+    fn stmt_leaves_loop(&self, s: StmtId, patch: Option<&Patch>) -> bool {
+        let leaves = |x: ExprId| self.leaves_loop(x, patch);
         match &self.stmt(s).kind {
             StmtKind::Break => true,
-            StmtKind::Continue | StmtKind::Return(None) => false,
-            StmtKind::While { cond: head, .. } | StmtKind::For { iter: head, .. } => self.leaves_loop(*head),
+            StmtKind::Continue => false,
+            StmtKind::Return(None) => Patch::joined(patch, s).is_some_and(leaves),
+            StmtKind::While { cond: head, .. } | StmtKind::For { iter: head, .. } => leaves(*head),
             StmtKind::Let { init: x, .. }
             | StmtKind::Var { init: x, .. }
             | StmtKind::Return(Some(x))
             | StmtKind::Assert(x)
-            | StmtKind::Expr(x) => self.leaves_loop(*x),
-            StmtKind::Assign { target, value } => self.leaves_loop(*target) || self.leaves_loop(*value),
+            | StmtKind::Expr(x) => leaves(*x),
+            StmtKind::Assign { target, value } => leaves(*target) || leaves(*value),
         }
     }
 

@@ -61,16 +61,8 @@ impl<'a> Checker<'a> {
     /// (§18.1). A binding only they read is the E0309 of a later stage (S-292).
     fn deleted_arms(&mut self, m: &Arms<'_>, k: usize, seen: &mut Seen) -> Option<Try> {
         let never = self.arms_never_chosen(m, k, seen)?;
-        let leaves_loop =
-            |a: &MatchArm| a.guard.is_some_and(|g| self.ast.leaves_loop(g)) || self.ast.leaves_loop(a.body);
-        if never.iter().any(|&i| leaves_loop(&m.arms[i])) {
-            return None;
-        }
         let rest = (0..m.arms.len()).filter(|i| never.binary_search(i).is_err());
         let rest: Vec<MatchArm> = rest.map(|i| m.arms[i].clone()).collect();
-        if rest.iter().all(|a| self.info.diverging.expr(a.body)) && !self.stays_reached(m.expr) {
-            return None;
-        }
         let edits = never.iter().map(|&i| Edit::delete(self.arm_with_comma(&m.arms[i]))).collect();
         let fix = Fix::new("remove the arms that no value chooses", edits);
         Some(Try { fix, patch: Patch::Arms(m.expr, rest) })

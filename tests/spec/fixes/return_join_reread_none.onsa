@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 0
+
+// S-876, S-886 (U4b of W5-09; R-388): a `return` without a value in a function that gives a value is E0401 on the `return`, and the candidate is the joined form `return x` (§7), made "ブロックの最後の項目で、返り値の型に合うときだけ".
+// The joined form puts the next line where the type of the function is the expected type, which decides the type of a variable (`let n = 5`, `n` is an `I64`). The body read again with the joined form applied has an error of the stage of
+// the types in a later statement that reads the variable with another type, and in a body that has another error of its own, so no candidate is made (§18.1). `fixes = 0` is the promise that none is made. One error per function (P-01);
+// the marker is on the `return`.
+
+pub fn need_u8(x: U8) {
+}
+
+pub fn joined_decides_a_cast_that_cannot_be_written(c: Bool) -> I64 {
+  let n = 5
+  if c {
+    return                                          //~ E0401
+    n
+  }
+  (n as I32) as I64
+}
+
+pub fn joined_decides_a_type_that_a_later_let_does_not_accept(c: Bool) -> I64 {
+  let n = 5
+  if c {
+    return                                          //~ E0401
+    n
+  }
+  let k: U8 = n
+  0
+}
+
+pub fn joined_decides_a_type_that_a_later_call_does_not_accept(c: Bool) -> I64 {
+  let n = 5
+  if c {
+    return                                          //~ E0401
+    n
+  }
+  need_u8(n)
+  0
+}
+
+pub fn joined_float_decides_a_type_that_a_later_let_does_not_accept(c: Bool) -> F32 {
+  let x = 1.5
+  if c {
+    return                                          //~ E0401
+    x
+  }
+  let y: F64 = x
+  0.0
+}
+
+pub fn type_error_in_a_later_statement(c: Bool, x: I32) -> I32 {
+  if c {
+    return                                          //~ E0401
+    x
+  }
+  let z: Str = 5
+  x
+}
+
+pub fn unresolved_variable_before_the_return(c: Bool, x: I32) -> I32 {
+  let xs = []
+  if c {
+    return                                          //~ E0401
+    x
+  }
+  x
+}
+
+pub fn joined_in_a_loop_body(count: I32) -> I64 {
+  let n = 5
+  for i in 0 ..< count {
+    return                                          //~ E0401
+    n
+  }
+  (n as I32) as I64
+}
+
+pub fn joined_in_a_closure(x: I32) -> I64 {
+  let n = 5
+  let f = fn(a: I32) -> I64 {
+    return                                          //~ E0401
+    n
+  }
+  let _ = f.(x)
+  (n as I32) as I64
+}

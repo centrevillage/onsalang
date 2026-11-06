@@ -86,9 +86,9 @@ impl<'a> Checker<'a> {
             }
             StmtKind::Return(value) => {
                 let ret = self.frames.last().unwrap().ret;
-                match value {
+                match value.or(self.joined_value(s)) {
                     Some(v) => {
-                        self.with_why("the result of the function".into(), ret, |ck| ck.check_expr(*v, Some(ret)))?;
+                        self.with_why("the result of the function".into(), ret, |ck| ck.check_expr(v, Some(ret)))?;
                     }
                     None => self.bare_return(stmt.span, ret)?,
                 }

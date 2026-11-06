@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-876, S-934 (U4b of W5-09): the unreachable arm has the `break` that leaves a `while true`, and a statement follows the loop. The deletion of the arm makes the loop divergent (§7) and the statement after it unreachable
+// (a diagnostic of the stage of the E0503), and the move is not made because the covering arm is not a `_` or a binding itself (S-934), or the move makes the arm reachable and the body of it, which is checked then, has an
+// error of its own. `fixes = 0` is the promise that none is made. One error per function (P-01).
+
+pub fn covering_arm_is_a_tuple_of_wildcards(a: I32, b: I32) -> I32 {
+  var r = 0
+  while true {
+    match (a, b) {
+      (_, _) => { r = r + 1 },
+      (1, 2) => { break },                          //~ E0503
+    }
+  }
+  r
+}
+
+pub fn covering_arm_is_a_variant(o: Option[I32]) -> I32 {
+  var r = 0
+  while true {
+    match o {
+      Some(x) => { r = r + x },
+      Some(1) => { break },                         //~ E0503
+      None => { r = r + 1 },
+    }
+  }
+  r
+}
+
+pub fn the_arm_with_the_break_has_an_error(n: I32) -> I32 {
+  var r = 0
+  while true {
+    match n {
+      _ => { r = r + 1 },
+      1 => {                                        //~ E0503
+        let z: Str = 5
+        break
+      },
+    }
+  }
+  r
+}

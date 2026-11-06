@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 2
+
+// S-876, S-886 (U4b of W5-09; R-388): in a function of `()`, the line after a `return` without a value is E0503 with two candidates, the deletion of the unreachable items and the joined form `return g(n)` (§7), when the body read again
+// with each of them applied has no error of the stage of the types (§18.1): the variable that the call decides is decided again by a later statement to the same type, or is not read again (the deletion leaves it unused, which is an E0309
+// of a later stage: S-292). The contexts: a loop body and a closure. The text after the candidates is not written here. One error per function (P-01); the marker is on the line of the first unreachable item.
+
+pub fn need_i64(x: I64) {
+}
+
+pub fn decided_again_by_a_later_let(c: Bool) {
+  let n = 5
+  if c {
+    return
+                                         //~ E0503
+  }
+  let k: I64 = n
+  let _ = k
+}
+
+pub fn decided_again_by_a_later_call(c: Bool) {
+  let n = 5
+  if c {
+    return
+                                         //~ E0503
+  }
+  need_i64(n)
+}
+
+pub fn variable_is_not_read_again(c: Bool) {
+  let n = 5
+  if c {
+    return
+                                         //~ E0503
+  }
+}
+
+pub fn decided_before_the_return(c: Bool) {
+  let n = 5
+  need_i64(n)
+  if c {
+    return
+                                         //~ E0503
+  }
+  let w = n as I64
+  let _ = w
+}
+
+pub fn in_a_loop_body(count: I32) {
+  let n = 5
+  for i in 0 ..< count {
+    return
+                                         //~ E0503
+  }
+  need_i64(n)
+}
+
+pub fn in_a_closure(x: I32) {
+  let f = fn(a: I32) {
+    let n = 5
+    return
+                                         //~ E0503
+  }
+  f.(x)
+}

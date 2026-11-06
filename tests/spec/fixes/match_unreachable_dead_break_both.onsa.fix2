@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+
+// S-876 (U4b of W5-09): a `break` (or `continue`) in an unreachable arm of a loop. Whether a loop ends is read from the loop as it is after the candidate: a `for` and a `while cond` always end, and a `while true`
+// is divergent when it has no `break` that leaves it (§7: "そのループを抜ける `break` を含まない `while true`"). The deletion of the unreachable arm takes the `break` away, and the move of the covering `_` makes the arm reachable.
+// Both candidates are made when the loop read again with either leaves no error of the stage of the types: a `for` or a `while cond` loop, a `while true` that is the last statement (a diverging last statement is not an error),
+// and a `while true` that keeps another `break` that leaves it. The text after the candidates is not written here. One error per function (P-01).
+
+pub fn break_in_a_for_body(n: I32) -> I32 {
+  var r = 0
+  for i in 0 ..< 3 {
+    match n {
+      
+      1 => { break },
+      _ => { r = 1 },                               //~ E0503
+    }
+  }
+  r
+}
+
+pub fn continue_in_a_for_body(n: I32) -> I32 {
+  var r = 0
+  for i in 0 ..< 3 {
+    match n {
+      
+      1 => { continue },
+      _ => { r = 1 },                            //~ E0503
+    }
+  }
+  r
+}
+
+pub fn break_in_a_while_body(n: I32) -> I32 {
+  var r = 0
+  while r < 3 {
+    match n {
+      
+      1 => { break },
+      _ => { r = r + 1 },                               //~ E0503
+    }
+  }
+  r
+}
+
+pub fn break_in_a_for_body_with_a_binding_as_the_covering_arm(n: I32) -> I32 {
+  var r = 0
+  for i in 0 ..< 3 {
+    match n {
+      
+      1 => { break },
+      k => { r = k },                               //~ E0503
+    }
+  }
+  r
+}
+
+pub fn break_in_a_while_true_that_is_the_last_statement(n: I32) {
+  var r = 0
+  while true {
+    match n {
+      
+      1 => { break },
+      _ => { r = r + 1 },                               //~ E0503
+    }
+  }
+}
+
+pub fn break_in_a_while_true_that_keeps_a_reachable_break(n: I32) -> I32 {
+  var r = 0
+  while true {
+    if r > 3 {
+      break
+    }
+    match n {
+      
+      1 => { break },
+      _ => { r = r + 1 },                               //~ E0503
+    }
+  }
+  r
+}
+
+pub fn break_of_an_inner_loop_in_a_while_true(n: I32) {
+  var r = 0
+  while true {
+    for i in 0 ..< 3 {
+      match n {
+        
+        1 => { break },
+        _ => { r = r + 1 },                             //~ E0503
+      }
+    }
+  }
+}
+
+pub fn break_in_the_arm_of_a_nested_match_in_a_for_body(n: I32, m: I32) -> I32 {
+  var r = 0
+  for i in 0 ..< 3 {
+    match n {
+      0 => match m {
+        
+        1 => { break },
+        _ => { r = 1 },                             //~ E0503
+      },
+      _ => { r = 2 },
+    }
+  }
+  r
+}
+
+pub fn break_in_an_arm_of_a_closure_loop(n: I32) -> I32 {
+  let f = fn(a: I32) -> I32 {
+    var r = 0
+    for i in 0 ..< 3 {
+      match a {
+        
+        1 => { break },
+        _ => { r = 1 },                             //~ E0503
+      }
+    }
+    r
+  }
+  f.(n)
+}
+
+test "break in a for body of a test" {
+  var r = 0
+  let n: I32 = 2
+  for i in 0 ..< 3 {
+    match n {
+      
+      2 => { break },
+      _ => { r = 1 },                               //~ E0503
+    }
+  }
+  assert r == 1
+}

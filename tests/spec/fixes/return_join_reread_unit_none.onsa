@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 0
+
+// S-876, S-886 (U4b of W5-09; R-388): in a function of `()`, the line after a `return` without a value is E0503 and has two candidates, the deletion of the unreachable items and the joined form `return g(n)` (§7). Each is made only when the
+// body read again with it applied has no error of the stage of the types (§18.1). Here both fail: the deletion leaves a variable without its type for a later cast (E0420), and the joined form decides the type of the variable in a way that
+// the cast cannot accept (E0411: a cast that narrows), or the body has another error that stays whatever the candidate does. `fixes = 0` is the promise that none is made. One error per function (P-01);
+// the marker is on the line of the first unreachable item.
+
+pub fn need_i64(x: I64) {
+}
+
+pub fn need_u8(x: U8) {
+}
+
+pub fn join_decides_a_type_that_a_later_cast_cannot_accept(c: Bool) {
+  let n = 5
+  if c {
+    return
+    need_i64(n)                                     //~ E0503
+  }
+  let k = n as I32
+  let _ = k
+}
+
+pub fn join_decides_an_unsigned_type_that_a_later_cast_cannot_accept(c: Bool) {
+  let n = 5
+  if c {
+    return
+    need_u8(n)                                      //~ E0503
+  }
+  let k = n as I8
+  let _ = k
+}
+
+pub fn type_error_in_a_later_statement(c: Bool) {
+  if c {
+    return
+    need_i64(1)                                     //~ E0503
+  }
+  let z: Str = 5
+}
+
+pub fn unresolved_variable_before_the_return(c: Bool) {
+  let xs = []
+  if c {
+    return
+    need_i64(1)                                     //~ E0503
+  }
+}
+
+pub fn in_a_loop_body(count: I32) {
+  let n = 5
+  for i in 0 ..< count {
+    return
+    need_i64(n)                                     //~ E0503
+  }
+  let k = n as I32
+  let _ = k
+}
+
+pub fn in_a_closure(x: I32) {
+  let n = 5
+  let f = fn(a: I32) {
+    return
+    need_i64(n)                                     //~ E0503
+  }
+  f.(x)
+  let k = n as I32
+  let _ = k
+}

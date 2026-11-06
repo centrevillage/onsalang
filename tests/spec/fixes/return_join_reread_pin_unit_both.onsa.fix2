@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "29:5"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+// [[test.fix]]
+// at = "29:5"
+// code = "E0503"
+// candidate = 2
+// clean = true
+//
+
+// S-876, S-886 (U4b of W5-09; R-388): in a function of `()`, the deletion of the line after the `return` and the joined form `return need_i64(n)` are both made when the later `let` decides the same type, and the file after each of them has no
+// diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn need_i64(x: I64) {
+}
+
+pub fn decided_again_by_a_later_let(c: Bool) {
+  let n = 5
+  if c {
+    return need_i64(n)                                     //~ E0503
+  }
+  let k: I64 = n
+  let _ = k
+}

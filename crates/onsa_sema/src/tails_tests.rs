@@ -2,8 +2,8 @@
 //! (`onsa_syntax::tails`, §5.2, §5.4, §7), on the table of the names stage.
 
 use onsa_diag::FileId;
-use onsa_syntax::ast::{ExprId, ExprKind, ItemKind};
-use onsa_syntax::tails::Tail;
+use onsa_syntax::ast::{ExprId, ExprKind, ItemKind, StmtId};
+use onsa_syntax::tails::{Patch, Tail};
 
 use crate::tests::{check, def};
 
@@ -108,6 +108,57 @@ fn a_while_diverges_by_its_condition_and_its_breaks() {
         let src = whole(body);
         assert!(matches!(&tails_of(&src)[..], [t] if t.starts_with("() of ")), "{body}");
     }
+}
+
+/// Whether `Diverging::patched` of a form that changes no node gives the
+/// table of every body of `src` back: it is the table of the names stage,
+/// read again in the same order with the same readings. What a form changes
+/// is in the cases `tests/spec/fixes/match_unreachable_dead_break_*`.
+fn same_table_again(src: &str) -> usize {
+    let p = onsa_syntax::parse(FileId(0), src);
+    let a = check(src);
+    let no_node = Patch::Arms(ExprId(u32::MAX), Vec::new());
+    let (main, mut read) = (a.defs.last().expect("a def").module, 0);
+    let walked = |id: &crate::DefId| a.def(*id).module == main && a.names.get(id).is_some_and(|n| n.complete);
+    for (&id, info) in a.bodies.iter().filter(|(id, _)| walked(id)) {
+        let Some(root) = crate::body::root_of(&a, id) else { continue };
+        let table = info.diverging.patched(&p.ast, root, &no_node);
+        for e in (0..p.ast.exprs.len() as u32).map(ExprId) {
+            assert_eq!(info.diverging.expr(e), table.expr(e), "{}", p.ast.expr(e).span.start);
+        }
+        for s in (0..p.ast.stmts.len() as u32).map(StmtId) {
+            assert_eq!(info.diverging.forever(s), table.forever(s), "{}", p.ast.stmt(s).span.start);
+        }
+        read += 1;
+    }
+    read
+}
+
+#[test]
+fn a_form_that_changes_no_node_gives_the_table_of_the_names_stage() {
+    let src = r#"
+fn a(c: Bool) -> I32 {
+  while true {
+    while c { break }
+    if c { return 1 } else { panic("x") }
+  }
+}
+fn b(c: Bool, n: I32) -> I32 {
+  while (true) {
+    match n {
+      0 => { break },
+      _ => { return 1 },
+    }
+  }
+  let g = fn() -> I32 { while true { return 2 } }
+  (panic("y"))
+}
+fn d(n: I32) -> I32 {
+  let k = if n > 0 { { return 1 } } else { (panic("z")) }
+  k
+}
+"#;
+    assert_eq!(same_table_again(src), 3);
 }
 
 /// The always evaluated part of `whole`, the last expression of a function

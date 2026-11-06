@@ -2,11 +2,10 @@
 //! statement in a block (E0418, §6.1, S-127, S-848), what follows a statement
 //! that diverges (E0503, §7, S-128, S-268) and a form that diverges in a part
 //! that is always evaluated (E0503, S-291, S-889). The candidates that take
-//! the rest of a block away ask [`Checker::may_end_here`] and are read in
+//! the rest of a block away or join it to a `return` are read in
 //! [`super::reread`] (§18.1, S-876). The E0503 of an arm is in `arms.rs`.
 
 use onsa_diag::Edit;
-use onsa_diag::hash::HashMap;
 
 use super::reread::Try;
 use super::*;
@@ -148,7 +147,7 @@ impl<'a> Checker<'a> {
             d = d.with_note(stmt.span, RETURN_ENDS_ITS_LINE);
         }
         let mut tries = Vec::new();
-        if let Some(rest) = self.rest_of(b, i).filter(|_| self.may_end_here()) {
+        if let Some(rest) = self.rest_of(b, i).filter(|_| self.makes_candidates()) {
             let (stmts, tail) = match stmt.kind {
                 StmtKind::Expr(e) => (&b.stmts[..i], Some(e)),
                 _ => (&b.stmts[..=i], None),
@@ -156,10 +155,7 @@ impl<'a> Checker<'a> {
             let patch = Patch::Block(id, Block { stmts: stmts.to_vec(), tail });
             tries.push(Try { fix: Fix::delete("remove what is never reached", rest), patch });
         }
-        let ret = self.frames.last().unwrap().ret;
-        if let Some(fix) = self.joined_return(ret) {
-            d = d.with_fix(fix);
-        }
+        tries.extend(self.joined_return());
         self.stop_with(d, tries)
     }
 
@@ -172,7 +168,7 @@ impl<'a> Checker<'a> {
         let d = Diagnostic::new(Stage::Types, Code::E0503, binding, msg).with_found(self.src(binding));
         let d = d.with_note(value, "this does not come back");
         let mut tries = Vec::new();
-        if self.may_end_here() {
+        if self.makes_candidates() {
             let head = Span::new(value.file, self.ast.stmt(b.stmts[i]).span.start, value.start);
             let edits = [Some(head), self.rest_of(b, i)].into_iter().flatten().map(Edit::delete).collect();
             let patch = Patch::Block(id, Block { stmts: b.stmts[..i].to_vec(), tail: Some(init) });
@@ -191,89 +187,27 @@ impl<'a> Checker<'a> {
         if self.item(b, i + 1).is_some() {
             d = d.with_note(span, RETURN_ENDS_ITS_LINE);
         }
-        if let Some(fix) = self.joined_return(ret) {
-            d = d.with_fix(fix);
-        }
-        Err(self.diag(d))
+        let tries = self.joined_return().into_iter().collect();
+        Err(self.stop_with(d, tries))
     }
 
     /// The candidate that joins the `return` with no value the open block is
-    /// at and its last expression `x` into `return x`, when `x` fits `ret`
-    /// (§7, §2.5, S-886). No statement goes, so no type waits (S-876 is not
-    /// asked), but the block now diverges.
-    fn joined_return(&mut self, ret: TyId) -> Option<Fix> {
+    /// at and its last expression `x` into `return x` (§7, §2.5, S-886). None
+    /// when `x` diverges: `return x` is an E0503 at the statement, which a read
+    /// of the form does not find, for the statement has no value in the tree.
+    fn joined_return(&self) -> Option<Try> {
         let (id, b, i) = self.open_block();
         let stmt = self.ast.stmt(b.stmts[i]);
         let x = b.tail.filter(|_| i + 1 == b.stmts.len())?;
-        let fits = self.makes_candidates()
-            && matches!(stmt.kind, StmtKind::Return(None))
-            && !self.info.diverging.expr(x)
-            && self.stays_reached(id);
+        let fits =
+            self.makes_candidates() && matches!(stmt.kind, StmtKind::Return(None)) && !self.info.diverging.expr(x);
         if !fits {
             return None;
         }
-        self.quietly(|ck| {
-            ck.check_expr(x, Some(ret))?;
-            ck.check_deferred_now()
-        })?;
         let at = self.expr(x).span;
-        Some(self.join_edits("join it to the `return`", stmt.span.end, at, at, " "))
-    }
-
-    /// Whether a candidate may end the open block at the item it is at, by
-    /// its form (§18.1): none of the rest is the `break` that makes a loop
-    /// come back (it would become a `while true` that diverges), and what is
-    /// around the block is reached when the block diverges.
-    fn may_end_here(&self) -> bool {
-        let (id, b, i) = self.open_block();
-        let breaks = b.stmts[i + 1..].iter().any(|&s| self.ast.stmt_leaves_loop(s))
-            || b.tail.is_some_and(|t| self.ast.leaves_loop(t));
-        self.makes_candidates() && !breaks && self.stays_reached(id)
-    }
-
-    /// Whether what is around the block `block` stays reached when it ends
-    /// in a diverging form (`let k = { return 1` and `2 }` would be an E0503
-    /// at `k`). Up the parents, a table made once for each candidate, linear
-    /// in a body the error stops. What gives the block's end to its parent
-    /// goes on up; a branch stops at one that comes back; the rest is a part
-    /// of something, or an item with others after it, which it stops.
-    pub(super) fn stays_reached(&self, block: ExprId) -> bool {
-        let mut parents: HashMap<ExprId, ExprId> = HashMap::default();
-        let mut todo = vec![self.root];
-        while let Some(x) = todo.pop() {
-            for c in self.ast.sub_exprs(x) {
-                parents.insert(c, x);
-                todo.push(c);
-            }
-        }
-        let diverging = &self.info.diverging;
-        let mut at = block;
-        while let Some(&parent) = parents.get(&at) {
-            match &self.expr(parent).kind {
-                ExprKind::Paren(_) => {}
-                ExprKind::Closure { .. } => return true,
-                ExprKind::Block(b) if b.tail == Some(at) => {}
-                ExprKind::Block(b) => return b.stmts.iter().any(|&s| self.is_loop_body(s, at)),
-                ExprKind::If { then, else_, .. } if at == *then || Some(at) == *else_ => {
-                    let other = if at == *then { *else_ } else { Some(*then) };
-                    if !other.is_some_and(|x| diverging.expr(x)) {
-                        return true;
-                    }
-                }
-                ExprKind::Match { arms, .. } if arms.iter().any(|a| a.body == at) => {
-                    if !arms.iter().all(|a| a.body == at || diverging.expr(a.body)) {
-                        return true;
-                    }
-                }
-                _ => return false,
-            }
-            at = parent;
-        }
-        true
-    }
-
-    fn is_loop_body(&self, s: StmtId, e: ExprId) -> bool {
-        matches!(self.ast.stmt(s).kind, StmtKind::For { body, .. } | StmtKind::While { body, .. } if body == e)
+        let fix = self.join_edits("join it to the `return`", stmt.span.end, at, at, " ");
+        let patch = Patch::Joined(id, Block { stmts: b.stmts.clone(), tail: None }, b.stmts[i], x);
+        Some(Try { fix, patch })
     }
 
     /// Whether the end of the body has no error with what has been checked

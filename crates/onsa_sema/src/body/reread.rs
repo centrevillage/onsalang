@@ -1,6 +1,7 @@
-//! The candidates of an E0503 (§7, §18.1, S-876): the first read makes them
-//! at the error, where it has not read what follows, so each is judged by
-//! reading the body again with it applied, from a new state. A candidate
+//! The candidates of an E0503, and the one of `return` of an E0401 (§7, §18.1,
+//! S-876): the first read makes them at the error, where it has not read what
+//! follows, so each is judged by reading the body again with it applied, from
+//! a new state, with the table of what diverges of that form. A candidate
 //! stays when that read has no error of the types stage or of one before it.
 //!
 //! Each read goes once over a finite tree and none asks for another, for only
@@ -10,7 +11,7 @@
 use super::removed::Marks;
 use super::*;
 
-/// A candidate of the E0503 a read stopped at, and the form of the body with
+/// A candidate of the error a read stopped at, and the form of the body with
 /// it applied.
 pub(super) struct Try {
     pub(super) fix: Fix,
@@ -39,25 +40,31 @@ impl<'a> Checker<'a> {
         self.diag(d)
     }
 
+    fn patch(&self) -> Option<&'a Patch> {
+        match self.how {
+            How::Applied(patch) => Some(patch),
+            How::First => None,
+        }
+    }
+
     /// The block `b` of the node `e`, in the form this read has of it.
     pub(super) fn block_of(&self, e: ExprId, b: &'a Block) -> &'a Block {
-        match self.how {
-            How::Applied(Patch::Block(id, patched)) if *id == e => patched,
-            _ => b,
-        }
+        Patch::block(self.patch(), e, b)
     }
 
     /// The arms `arms` of the `match` `e`, in the form this read has of them.
     pub(super) fn arms_of(&self, e: ExprId, arms: &'a [MatchArm]) -> &'a [MatchArm] {
-        match self.how {
-            How::Applied(Patch::Arms(id, patched)) if *id == e => patched,
-            _ => arms,
-        }
+        Patch::arms(self.patch(), e, arms)
+    }
+
+    /// The value this read has of the `return` statement `s`, which has none.
+    pub(super) fn joined_value(&self, s: StmtId) -> Option<ExprId> {
+        Patch::joined(self.patch(), s)
     }
 }
 
-/// Give the E0503 of `tries` the candidates that read clean, before the ones
-/// it has that are not judged here. `diverging` is the table of the first read.
+/// Give the diagnostic of `tries` the candidates that read clean, in their
+/// order. `diverging` is the table of the first read.
 pub(super) fn read_again(
     a: &mut Analysis,
     bound: &mut HashMap<ModId, HashSet<String>>,
@@ -72,7 +79,7 @@ pub(super) fn read_again(
             fixes.push(t.fix);
         }
     }
-    a.diagnostics[tries.at].fixes.splice(0..0, fixes);
+    a.diagnostics[tries.at].fixes.extend(fixes);
 }
 
 /// Whether the body reads with `patch` applied and no error up to the types
@@ -88,8 +95,8 @@ fn reads_clean(
     patch: &Patch,
 ) -> bool {
     let (mark, marks) = (a.diagnostics.len(), Marks::of(a, job.id));
-    let how = How::Applied(patch);
-    let mut ck = read_body(a, bound, job, std::mem::take(names), diverging.clone(), how);
+    let table = diverging.patched(&job.module.parsed.ast, job.body, patch);
+    let mut ck = read_body(a, bound, job, std::mem::take(names), table, How::Applied(patch));
     ck.end_checks();
     let stopped = ck.failed;
     *names = std::mem::take(&mut ck.names);

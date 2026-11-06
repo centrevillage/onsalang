@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "26:7"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+// [[test.fix]]
+// at = "26:7"
+// code = "E0503"
+// candidate = 2
+// clean = true
+//
+
+// S-876 (U4b of W5-09; R-387): the `break` in the unreachable arm of a `for` body. Both candidates are made, and the file after each of them has no diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn break_in_a_for_body(n: I32) -> I32 {
+  var r = 0
+  for i in 0 ..< 3 {
+    match n {
+      _ => { r = r + i },
+      1 => { break },                               //~ E0503
+    }
+  }
+  r
+}

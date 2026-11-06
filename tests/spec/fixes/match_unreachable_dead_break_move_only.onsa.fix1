@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-876 (U4b of W5-09): the unreachable arm has the `break` that leaves a `while true`. The loop is divergent when it has no such `break` (§7), so the deletion of the arm makes the loop divergent and the statement after it unreachable (E0503, a
+// diagnostic of the stage of the E0503): it is not made. The move of the covering `_` to the end makes the arm reachable, the `break` stays, the loop ends, and the move is the one candidate (§18.1: the loop is read as it is after the candidate).
+// The second form is the same for an arm that diverges (a `break`) before the unreachable one in a `for` body: the deletion leaves the arms that all diverge, so the statement after the `match` is not reached.
+// The text after the candidate is not written here. One error per function (P-01).
+
+pub fn statement_after_a_while_true(n: I32) -> I32 {
+  var r = 0
+  while true {
+    match n {
+      
+      1 => { break },
+      _ => { r = r + 1 },                               //~ E0503
+    }
+  }
+  r
+}
+
+pub fn statement_after_a_while_true_in_a_branch(c: Bool, n: I32) -> I32 {
+  var r = 0
+  if c {
+    while true {
+      match n {
+        
+        1 => { break },
+        k => { r = r + k },                             //~ E0503
+      }
+    }
+    r = r + 1
+  }
+  r
+}
+
+pub fn return_after_a_while_true(n: I32) -> I32 {
+  var r = 0
+  while true {
+    match n {
+      
+      1 => { break },
+      _ => { r = r + 1 },                               //~ E0503
+    }
+  }
+  return r
+}
+
+pub fn deletion_makes_the_body_of_a_for_diverge(n: I32) -> I32 {
+  var r = 0
+  for i in 0 ..< 3 {
+    match n {
+      
+      1 => { r = 1 },
+      _ => { break },                               //~ E0503
+    }
+    r = r + 1
+  }
+  r
+}

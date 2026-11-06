@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "21:7"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+
+// S-876 (U4b of W5-09; R-387): the `break` in the unreachable arm of a `while true` followed by a statement. The deletion would make the loop divergent and the `r` after it unreachable, so the one candidate is the move of the covering `_` to
+// the end, and the file after it has no diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn statement_after_a_while_true(n: I32) -> I32 {
+  var r = 0
+  while true {
+    match n {
+      
+      1 => { break },
+      _ => { r = r + 1 },                               //~ E0503
+    }
+  }
+  r
+}

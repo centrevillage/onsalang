@@ -1,0 +1,10 @@
+pub fn f(c: Bool, r: I64) -> I32 {
+  let n = 5
+  let v = if c {
+    r
+    -n
+  } else {
+    3
+  }
+  v
+}

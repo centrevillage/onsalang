@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5", "§18.1"]
+// fixes = 1
+
+// S-876, S-886 (U4b of W5-09; R-388): in a function of `()`, the line after a `return` without a value is E0503 with the deletion of the unreachable items and the joined form `return g(n)` as the candidates (§7), and each is made only
+// when the body read again with it applied has no error of the stage of the types (§18.1). Here one of them is. The joined form decides the type of a variable which a later `let` takes as another type (the deletion is the one candidate),
+// or the deletion leaves a variable without its type for a later cast (E0420) which the joined form decides (the joined form is the one candidate). The text after the candidate is not written here.
+// One error per function (P-01); the marker is on the line of the first unreachable item.
+
+pub fn need_i64(x: I64) {
+}
+
+pub fn need_u8(x: U8) {
+}
+
+// ------------------------------------------------------------------------------ the deletion is the one candidate
+
+pub fn join_decides_a_type_that_a_later_let_does_not_accept(c: Bool) {
+  let n = 5
+  if c {
+    return
+    need_i64(n)                                     //~ E0503
+  }
+  let k: I32 = n
+  let _ = k
+}
+
+pub fn join_decides_a_type_that_a_later_call_does_not_accept(c: Bool) {
+  let n = 5
+  if c {
+    return
+    need_i64(n)                                     //~ E0503
+  }
+  need_u8(n)
+}
+
+pub fn join_in_a_loop_body(count: I32) {
+  let n = 5
+  for i in 0 ..< count {
+    return
+    need_i64(n)                                     //~ E0503
+  }
+  let k: I32 = n
+  let _ = k
+}
+
+// ------------------------------------------------------------------------------ the joined form is the one candidate
+
+pub fn deletion_leaves_what_a_later_cast_reads(c: Bool) {
+  let n = 5
+  if c {
+    return
+    need_u8(n)                                      //~ E0503
+  }
+  let w = n as F64
+  let _ = w
+}
+
+pub fn deletion_leaves_what_a_later_match_reads(c: Bool) {
+  let n = 5
+  if c {
+    return
+    need_u8(n)                                      //~ E0503
+  }
+  match n {
+    0 => { },
+    _ => { },
+  }
+}
+
+pub fn deletion_leaves_what_a_later_method_call_reads(c: Bool) {
+  let n = 5
+  if c {
+    return
+    need_u8(n)                                      //~ E0503
+  }
+  let r = n.checked_add(1)
+  let _ = r
+}
