@@ -1,0 +1,28 @@
+// onsa.toml
+// [package]
+// name = "e"
+// edition = "2026"
+//
+// [export]
+// prefix = "e_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§6.3"]
+// conformance = true
+
+rt fn z() -> U32 {
+  let a: [I32; 0] = [1; 0]
+  a.len()
+}
+
+@export
+pub flow f(x: U32 at sample) -> U32 at sample {
+  x + z()
+}

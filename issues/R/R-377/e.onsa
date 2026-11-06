@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "e"
+// edition = "2026"
+//
+// [export]
+// prefix = "e_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§6.3"]
+// conformance = true
+
+pub struct Empty {}
+pub struct P { x: F32, e: Empty }
+
+rt fn mk() -> P { P { x: 0.0, e: Empty {} } }
+
+@export
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let p = mk()
+  x + p.x
+}
