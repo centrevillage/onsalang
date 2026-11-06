@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§18.1"]
+// fixes = 0
+
+// R-372 (§18.1): the names of the `use` lines below are not found (E0302 on each), so they are failed names,
+// and a value or a type written with one is a part that was not read (§18.1: "失敗した名前…は…読めなかった
+// 部分として読み"). A call whose callee is such a value, or a method of a value of such a type, is the call
+// of an error: its arguments are not checked for their modes and moves ("誤りの型の値を呼ぶときは引数の
+// モードと移動を検査せず"), so an array literal of `Span`s or of `Buf`s given to it has no E0710 and no
+// E0711. The diagnostics of the file are the three E0302 of the `use` lines and no more. The callee is a
+// parameter of a failed type, the head of a path of a failed type (`Gone.make(…)`), a failed function (`helper(…)`)
+// and a field of a parameter of a failed type.
+
+use std.math.{Gone}                                 //~ E0302
+use std.math.{Missing}                              //~ E0302
+use std.math.{helper}                               //~ E0302
+
+pub struct Holder {
+  m: Gone,
+}
+
+pub fn a_parameter_of_a_failed_type(m: Gone, a: Span[F32], b: Span[F32]) -> F32 {
+  m.total([a, b])
+}
+
+pub fn a_field_of_a_failed_type(h: Holder, a: Span[F32], b: Span[F32]) -> F32 {
+  h.m.total([a, b])
+}
+
+pub fn the_head_of_a_path(a: Span[F32], b: Span[F32]) -> F32 {
+  Missing.total([a, b])
+}
+
+pub fn a_failed_function(a: Span[F32], b: Span[F32]) -> F32 {
+  helper([a, b])
+}
+
+pub fn bufs_to_a_parameter_of_a_failed_type(m: Gone) -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  m.total([a, b])
+}
+
+pub fn bufs_to_a_failed_function() -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  helper([a, b])
+}
+
+pub fn bufs_to_the_head_of_a_path() -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  Missing.total([a, b])
+}

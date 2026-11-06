@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// A field that holds no function, called with `!(` (§5.2, §15.1, S-811, S-812): `x!(...)` of a value that
+// is no function is E0401 ("関数でない値は E0401"), and the error of a value that cannot be called comes
+// before the E0714 of the mark (S-811: "呼べない値の誤り（E0401、E0412）は E0714 より先"). The error is of
+// the type stage, and nothing can be put in place of the `!` that makes a call, so there is no candidate
+// (`fixes = 0` checks that no error of the file has one). Compare
+// tests/spec/fixes/call_forms_field_call_bang.onsa, where the field holds a function value and the
+// candidate is `.(`. The fields here hold a number, a tuple and an array. One error per function (P-01).
+
+pub struct Gauge {
+  level: F32,
+  pair: (I32, I32),
+  taps: [I32; 2],
+}
+
+pub struct Rack {
+  gauge: Gauge,
+}
+
+pub fn mk() -> Gauge {
+  Gauge { level: 1.0, pair: (1, 2), taps: [3, 4] }
+}
+
+pub const KG: Gauge = Gauge { level: 1.0, pair: (1, 2), taps: [3, 4] }
+
+pub fn a_number_field(g: Gauge, x: F32) -> F32 {
+  g.level!(x)                                       //~ E0401
+}
+
+pub fn a_tuple_field(g: Gauge) -> I32 {
+  g.pair!(1)                                        //~ E0401
+}
+
+pub fn an_array_field(g: Gauge) -> I32 {
+  g.taps!(1)                                        //~ E0401
+}
+
+pub fn a_field_of_a_field(r: Rack, x: F32) -> F32 {
+  r.gauge.level!(x)                                 //~ E0401
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  mk().level!(x)                                    //~ E0401
+}
+
+pub fn a_constant(x: F32) -> F32 {
+  KG.level!(x)                                      //~ E0401
+}
+
+pub fn in_a_closure(g: Gauge) -> F32 {
+  let h = fn(k: Gauge, x: F32) -> F32 { k.level!(x) }   //~ E0401
+  h.(g, 1.0)
+}
+
+test "a number field called with a bang" {
+  let g = mk()
+  let y = g.level!(1.0)                             //~ E0401
+  assert y == 1.0
+}
+
+pub fn fine(g: Gauge) -> F32 {
+  g.level
+}

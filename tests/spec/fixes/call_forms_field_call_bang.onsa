@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0714 for a field of a function type called with `!(` (§5.2, §2.6, S-811, S-812): `!` marks the call of
+// a method that takes `inout self`, and the value of a field is called with `.(` (§6.1), so the mark does
+// not suit the callee. The type stage knows that the field holds a function value; the error is not the
+// E0020 of `s.f(x)` (that error is for a call written with `(` only). The one candidate puts the mark of
+// the kind in place of the written one: `s.curve!(x)` becomes `s.curve.(x)`, one character replaced. The
+// head of the field is any value: an argument, an `inout` argument, a local binding, a field of a field, an
+// element of an array field, `self`, the result of a function, a constant. One error per function
+// (P-01). A field that holds no function is in call_forms_field_call_bang_value.onsa.
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub struct Rig {
+  shaper: Shaper,
+  list: [Shaper; 2],
+}
+
+pub struct Wrap[T] {
+  f: fn(T) -> T,
+}
+
+pub fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub fn make(g: F32) -> Shaper {
+  Shaper { gain: g, curve: soft_clip }
+}
+
+pub const KS: Shaper = Shaper { gain: 1.0, curve: soft_clip }
+
+impl Shaper {
+  pub fn apply(self, x: F32) -> F32 {
+    self.curve!(x)                                  //~ E0714
+  }
+}
+
+pub fn an_argument(s: Shaper, x: F32) -> F32 {
+  s.curve!(x)                                       //~ E0714
+}
+
+pub fn an_inout_argument(inout s: Shaper, x: F32) -> F32 {
+  s.curve!(x)                                       //~ E0714
+}
+
+pub fn a_local_binding(x: F32) -> F32 {
+  let s = make(0.5)
+  s.curve!(x)                                       //~ E0714
+}
+
+pub fn a_field_of_a_field(r: Rig, x: F32) -> F32 {
+  r.shaper.curve!(x)                                //~ E0714
+}
+
+pub fn an_element_of_an_array_field(r: Rig, x: F32) -> F32 {
+  r.list[1].curve!(x)                               //~ E0714
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  make(2.0).curve!(x)                               //~ E0714
+}
+
+pub fn a_constant(x: F32) -> F32 {
+  KS.curve!(x)                                      //~ E0714
+}
+
+pub fn a_generic_struct(w: Wrap[I32], n: I32) -> I32 {
+  w.f!(n)                                           //~ E0714
+}
+
+pub fn in_a_generic_function[T](w: Wrap[T], v: T) -> T {
+  w.f!(v)                                           //~ E0714
+}
+
+pub fn in_a_closure(s: Shaper) -> F32 {
+  let g = fn(h: Shaper, x: F32) -> F32 { h.curve!(x) }   //~ E0714
+  g.(s, 1.0)
+}
+
+pub fn in_an_operand(s: Shaper, x: F32) -> F32 {
+  x * 0.5 + s.curve!(x)                             //~ E0714
+}
+
+test "a function field called with a bang" {
+  let s = make(1.0)
+  let y = s.curve!(0.0)                             //~ E0714
+  assert y == 0.0
+}
+
+pub fn fine(s: Shaper, x: F32) -> F32 {
+  s.curve.(x)
+}

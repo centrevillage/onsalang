@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§6.2", "§18.1"]
+// fixes = 1
+
+// E0020 for the type arguments of a method written with `[…]` (§4.5, S-239, S-256): in an expression the
+// type arguments are `名前::[…]` (`v.conv::[I32](x)`), and `[` alone is an index, so `v.conv[I32](x)` is the
+// form of another language (Scala). The `[…]` after a method is decided by the type stage, which knows that
+// `conv` is a method of the type of `v` (§4.5: "メソッドに付けた `[…]` は型の段"). The one candidate puts
+// `::` before the `[` and keeps the type arguments (a syntactic edit that does not read the declaration of
+// the callee): `v.conv::[I32](1)`; several type arguments are kept in one list (`v.pair::[I32, F32](1, 2.0)`;
+// a list of two or more is no index, so the syntax stage reports it, with the same code and candidate).
+// The head of the method is any value: an argument, a local binding, a field of a field, an element of an
+// array, `self`, the result of a function, a constant. The right form is an error of the names stage until
+// the type arguments are put in (E0200, W5-10), so the file does not name a right form and `clean` is not
+// asked. One error per function (P-01).
+
+pub struct V {
+  n: I32,
+}
+
+pub struct Holder {
+  v: V,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn pair[A, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn through_self(self, x: I32) -> I32 {
+    self.conv[I32](x)                               //~ E0020
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, x: U) -> U {
+    x
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub const KV: V = V { n: 2 }
+
+pub fn an_argument(v: V) -> I32 {
+  v.conv[I32](1)                                    //~ E0020
+}
+
+pub fn a_local_binding() -> I32 {
+  let v = mk()
+  v.conv[I32](2)                                    //~ E0020
+}
+
+pub fn a_field_of_a_field(h: Holder) -> I32 {
+  h.v.conv[I32](3)                                  //~ E0020
+}
+
+pub fn an_element_of_an_array(vs: [V; 2]) -> I32 {
+  vs[0].conv[I32](4)                                //~ E0020
+}
+
+pub fn the_result_of_a_function() -> I32 {
+  mk().conv[I32](5)                                 //~ E0020
+}
+
+pub fn a_constant() -> I32 {
+  KV.conv[I32](6)                                   //~ E0020
+}
+
+pub fn two_type_arguments(v: V) -> I32 {
+  v.pair[I32, F32](7, 2.0)                          //~ E0020
+}
+
+pub fn a_method_of_a_generic_struct(w: W[F32]) -> U8 {
+  w.conv[U8](250)                                   //~ E0020
+}
+
+pub fn in_a_generic_function[T](w: W[T], x: I32) -> I32 {
+  w.conv[I32](x)                                    //~ E0020
+}
+
+pub fn in_a_closure(v: V) -> I32 {
+  let g = fn(u: V, x: I32) -> I32 { u.conv[I32](x) }   //~ E0020
+  g.(v, 8)
+}
+
+pub fn in_an_operand(v: V, x: I32) -> I32 {
+  x + v.conv[I32](x) * 2                            //~ E0020
+}
+
+test "the type arguments of a method in square brackets" {
+  let v = mk()
+  let y = v.conv[I32](9)                            //~ E0020
+  assert y == 9
+}

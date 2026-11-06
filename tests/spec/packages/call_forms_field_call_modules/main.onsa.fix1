@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§6.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// The call of a field of a function type, written with `(`, when the struct comes from another module
+// (§6.2, §6.1, §15.1, S-191): the module a path starts from does not change the form. The type stage knows
+// the fields of an imported struct as it knows those of one in the same file, so `s.curve(x)` is the
+// E0020 whose one candidate is `s.curve.(x)`, for an imported type, for the result of an imported
+// function (`make(1.0).curve(x)`, `util.make(1.0).curve(x)`) and for a constant of the module
+// (`KS.curve(x)`, `util.KS.curve(x)`); and an element of a field that holds function values
+// (`b.ops[0](1)`, `util.KB.ops[1](2)`, `util.mk_bank().ops[0](41)`) is the E0020 whose candidate puts the
+// `.` before the `(`. One error per function (P-01).
+
+use util
+use util.{Shaper, Bank, make, KS}
+
+pub fn an_imported_type(s: Shaper, x: F32) -> F32 {
+  s.curve.(x)                                        //~ E0020
+}
+
+pub fn the_result_of_an_imported_function(x: F32) -> F32 {
+  make(1.0).curve.(x)                                //~ E0020
+}
+
+pub fn the_result_of_a_function_of_a_module(x: F32) -> F32 {
+  util.make(1.0).curve.(x)                           //~ E0020
+}
+
+pub fn an_imported_constant(x: F32) -> F32 {
+  KS.curve.(x)                                       //~ E0020
+}
+
+pub fn a_constant_of_a_module(x: F32) -> F32 {
+  util.KS.curve.(x)                                  //~ E0020
+}
+
+pub fn an_element_of_an_imported_type(b: Bank) -> I32 {
+  b.ops[0].(1)                                       //~ E0020
+}
+
+pub fn an_element_of_a_constant_of_a_module() -> I32 {
+  util.KB.ops[1].(2)                                 //~ E0020
+}
+
+pub fn an_element_of_the_result_of_a_function_of_a_module() -> I32 {
+  util.mk_bank().ops[0].(41)                         //~ E0020
+}
+
+pub fn fine(s: Shaper, b: Bank, x: F32) -> F32 {
+  let n = b.ops[0].(1) + util.KB.ops[1].(2) + util.mk_bank().ops[0].(3)
+  s.curve.(x) + make(1.0).curve.(x) + util.KS.curve.(x) + F32.round_from(n)
+}

@@ -530,9 +530,11 @@ pub enum RowId {
     TypeArgsAngle,
     TypeArgsSquareComma,
     TypeArgsOnExpression,
+    TypeArgsMethodSquare,
     ValueCall,
     ItemDotCall,
     IndexedValueCall,
+    FieldCall,
     TypePositionPath,
     SpaceInTypeArgsMark,
     RangeDots,
@@ -599,6 +601,12 @@ pub fn row(id: RowId) -> &'static Row {
 /// message and the note are the row's. No candidate keeps its code (§18.1, R-301).
 pub fn report(id: RowId, text: &str, span: Span, fixes: Vec<Fix>) -> Diagnostic {
     diagnostic(text, id, Hit::new(span, fixes))
+}
+
+/// [`report`] from `stage`, a later one than its row's, which finds the same
+/// form where the row's stage cannot (`q.ops[0](1)` of the types stage, §15.1).
+pub fn report_from(stage: Stage, id: RowId, text: &str, span: Span, fixes: Vec<Fix>) -> Diagnostic {
+    Diagnostic { stage, ..report(id, text, span, fixes) }
 }
 
 fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
@@ -1005,6 +1013,12 @@ mod paths;
 mod ranges;
 mod rows;
 mod semicolons;
+
+/// The title of the candidate that calls a value with `.(`, of every stage.
+pub const CALL_WITH_DOT: &str = "call the function value with `.(`";
+/// The title of the candidate that writes type arguments with `::[`, of every
+/// stage.
+pub const TYPE_ARGS_WITH_COLONS: &str = "write the type arguments as `::[…]`";
 
 pub use guard::guard_name;
 use guard::guard_pattern;

@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for an element of a field that holds function values, called with `(` (§6.1, S-191, S-256): a
+// function value is called with `.(`, whatever stands before the `[…]` of its place. The `ops[i](x)` of
+// a local binding is in e0020_call_forms_names.onsa; here the array is a field, so the head is an
+// argument, a field of a field, an element of an array of structs, `self`, the result of a function, a
+// constant and a local binding (`q.ops[0](1)`, `KB.ops[0](1)`, `mk().ops[0](41)`). The index may be any
+// expression (a name, an arithmetic expression, a call), and an element of an element of a field has the
+// same form (`q.grid[0][1](x)`). The one candidate puts `.` before the `(` (`q.ops[0].(1)`, the form of
+// the right functions at the end). One error per function (P-01).
+
+pub struct Bank {
+  ops: [fn(I32) -> I32; 2],
+  grid: [[fn(I32) -> I32; 2]; 2],
+}
+
+pub struct Rack {
+  bank: Bank,
+  banks: [Bank; 2],
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn dec(x: I32) -> I32 {
+  x - 1
+}
+
+pub fn mk() -> Bank {
+  Bank { ops: [inc, dec], grid: [[inc, dec], [dec, inc]] }
+}
+
+pub fn which(k: U32) -> U32 {
+  k % 2
+}
+
+pub const KB: Bank = Bank { ops: [inc, dec], grid: [[inc, dec], [dec, inc]] }
+
+impl Bank {
+  pub fn first(self, x: I32) -> I32 {
+    self.ops[0](x)                                  //~ E0020
+  }
+}
+
+pub fn an_argument(q: Bank) -> I32 {
+  q.ops[0](1)                                       //~ E0020
+}
+
+pub fn a_local_binding() -> I32 {
+  let q = mk()
+  q.ops[1](5)                                       //~ E0020
+}
+
+pub fn a_field_of_a_field(r: Rack, x: I32) -> I32 {
+  r.bank.ops[1](x)                                  //~ E0020
+}
+
+pub fn an_element_of_an_array_of_structs(r: Rack, x: I32) -> I32 {
+  r.banks[0].ops[1](x)                              //~ E0020
+}
+
+pub fn the_result_of_a_function() -> I32 {
+  mk().ops[0](41)                                   //~ E0020
+}
+
+pub fn a_constant() -> I32 {
+  KB.ops[0](1)                                      //~ E0020
+}
+
+pub fn an_index_that_is_a_name(q: Bank, i: U32, x: I32) -> I32 {
+  q.ops[i](x)                                       //~ E0020
+}
+
+pub fn an_index_that_is_arithmetic(q: Bank, i: U32, x: I32) -> I32 {
+  q.ops[i + 1](x)                                   //~ E0020
+}
+
+pub fn an_index_that_is_a_call(q: Bank, k: U32, x: I32) -> I32 {
+  q.ops[which(k)](x)                                //~ E0020
+}
+
+pub fn an_element_of_an_element(q: Bank, x: I32) -> I32 {
+  q.grid[0][1](x)                                   //~ E0020
+}
+
+pub fn in_a_closure(q: Bank) -> I32 {
+  let g = fn(b: Bank, x: I32) -> I32 { b.ops[0](x) }   //~ E0020
+  g.(q, 2)
+}
+
+pub fn in_an_operand(q: Bank, x: I32) -> I32 {
+  x + q.ops[1](x) * 2                               //~ E0020
+}
+
+test "an element of a field called with a parenthesis" {
+  let q = mk()
+  let y = q.ops[0](1)                               //~ E0020
+  assert y == 2
+}
+
+pub fn fine(q: Bank, r: Rack, x: I32) -> I32 {
+  q.ops[0].(x) + r.bank.ops[1].(x) + r.banks[0].ops[1].(x) + mk().ops[0].(x) + KB.ops[0].(x) + q.grid[0][1].(x)
+}

@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// An element of a `priv` field that holds function values, called with `(`, from another module (§15.1,
+// §18.1). The `[…]` after `g.ops` is an index of the field, so the field is read, and it is not visible
+// here: the E0303 of the names stage is reported (§18.1: "見えない名前・フィールド・メンバの E0303…は
+// 名前の段である" and "ある段が誤りを見つけた単位では、その結果に依存する後の段を行わない"), before the
+// E0020 that the type stage would report for the call form. The candidate of that (`.(`) would be an
+// E0303 itself, so there is none (`fixes = 0` checks it). The same calls of a field that is visible are in
+// tests/spec/fixes/call_forms_indexed_field_call.onsa. `g.curve(x)`, the call of a hidden field written as a
+// method call, has no expectation (see the report of W5-15 U1/t). One error per function (P-01).
+
+use util
+use util.{Gate, make_gate}
+
+pub fn an_element_called_with_a_parenthesis(g: Gate, x: F32) -> F32 {
+  g.ops[0](x)                                       //~ E0303
+}
+
+pub fn an_element_with_an_expression_index(g: Gate, i: U32, x: F32) -> F32 {
+  g.ops[i + 1](x)                                   //~ E0303
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  make_gate().ops[1](x)                             //~ E0303
+}
+
+pub fn in_a_closure(g: Gate) -> F32 {
+  let h = fn(k: Gate, x: F32) -> F32 { k.ops[0](x) }   //~ E0303
+  h.(g, 1.0)
+}
+
+pub fn fine(g: Gate, x: F32) -> F32 {
+  g.level + util.run(g, x)
+}

@@ -1,0 +1,3 @@
+struct V{}
+impl V{fn conv[T](self, x: T) -> T {
+self.conv[I32](x)  }

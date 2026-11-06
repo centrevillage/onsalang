@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§6.2", "§18.1"]
+// fixes = 1
+
+// E0020 for `s.f(x)` when the type of `s` has no method `f` and has a field `f` of a function type (§6.2,
+// S-191): the type stage decides, so what stands before the `.f` can be any value. The head here is a
+// local binding, an argument, an `inout` argument, a field of a field, an element of a tuple field, an
+// element of an array field, `self`, the result of a function, the result of a method, a constant, a
+// binding of a `match` arm and the binding of a loop over indices. The one candidate is `s.curve.(x)` for
+// each (§6.2: "修正候補は `s.f.(x)`"). One error per function (P-01). The right forms are the last
+// function.
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub struct Rig {
+  shaper: Shaper,
+  pair: (Shaper, I32),
+  list: [Shaper; 2],
+}
+
+pub fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub fn make(g: F32) -> Shaper {
+  Shaper { gain: g, curve: soft_clip }
+}
+
+pub const KS: Shaper = Shaper { gain: 1.0, curve: soft_clip }
+
+impl Rig {
+  pub fn pick(self) -> Shaper {
+    make(1.0)
+  }
+
+  pub fn run(self, x: F32) -> F32 {
+    self.shaper.curve(x)                            //~ E0020
+  }
+
+  pub fn run_the_whole(self, x: F32) -> F32 {
+    self.pick().curve(x)                            //~ E0020
+  }
+}
+
+impl Shaper {
+  pub fn apply(self, x: F32) -> F32 {
+    self.curve(x)                                   //~ E0020
+  }
+}
+
+pub fn a_local_binding(x: F32) -> F32 {
+  let s = make(0.5)
+  s.curve(x)                                        //~ E0020
+}
+
+pub fn an_argument(s: Shaper, x: F32) -> F32 {
+  s.curve(x)                                        //~ E0020
+}
+
+pub fn an_inout_argument(inout s: Shaper, x: F32) -> F32 {
+  s.curve(x)                                        //~ E0020
+}
+
+pub fn a_field_of_a_field(r: Rig, x: F32) -> F32 {
+  r.shaper.curve(x)                                 //~ E0020
+}
+
+pub fn an_element_of_a_tuple_field(r: Rig, x: F32) -> F32 {
+  r.pair.0.curve(x)                                 //~ E0020
+}
+
+pub fn an_element_of_an_array_field(r: Rig, x: F32) -> F32 {
+  r.list[1].curve(x)                                //~ E0020
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  make(2.0).curve(x)                                //~ E0020
+}
+
+pub fn a_constant(x: F32) -> F32 {
+  KS.curve(x)                                       //~ E0020
+}
+
+pub fn the_binding_of_a_match_arm(o: Option[Shaper], x: F32) -> F32 {
+  match o {
+    Some(s) => s.curve(x),                          //~ E0020
+    None => x,
+  }
+}
+
+pub fn a_loop_over_indices(r: Rig, x: F32) -> F32 {
+  var acc = x
+  for i in 0 ..< 2 {
+    acc = r.list[i].curve(acc)                      //~ E0020
+  }
+  acc
+}
+
+pub fn fine(r: Rig, s: Shaper, x: F32) -> F32 {
+  s.curve.(x) + r.shaper.curve.(x) + r.pair.0.curve.(x) + r.list[0].curve.(x) + KS.curve.(x) + make(1.0).curve.(x)
+}

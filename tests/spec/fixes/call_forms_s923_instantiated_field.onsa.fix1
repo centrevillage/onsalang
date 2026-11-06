@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§18.1"]
+// fixes = 1
+
+// S-923 (§6.2: "関数型かは受け手で具体化した型で決める（`f: T` の `t: T2[fn(I32) -> I32]`）"): the field
+// `f: T` of `T2[T]` has the type `T` where it is declared and `fn(I32) -> I32` at the receiver `t:
+// T2[fn(I32) -> I32]`, and it is the type at the receiver that decides, so `t.f(1)` is the E0020 of
+// `s.f(x)` with the one candidate `t.f.(1)` (§6.2: "修正候補は `s.f.(x)`"). The receiver is any value of
+// an instance of a generic struct: an argument, a local binding, a field of a field, an element of an
+// array, the result of a function, a constant, a binding of a `match` arm, a closure and a `test`. The
+// type argument is written with a name of a type (`type Step = fn(I32) -> I32`), or is a nested generic
+// struct (`Outer[fn(I32) -> I32]` holds a `T2[T]`, so the field of `o.inner` is a function), a second
+// parameter (`P2[I32, fn(I32) -> I32]`, whose field `b: B` is the function and whose field `a: A` is
+// not), or comes from the type parameter of a struct that holds the instance (`Twin[T]` with the fields `x:
+// T2[T]`, `Twin[Step]`). The generic body, where `T` is not known, is E0413 and is in
+// tests/spec/negative/call_forms_s923_generic_body.onsa. One error per function (P-01).
+
+pub struct T2[T] {
+  f: T,
+}
+
+pub struct Outer[T] {
+  inner: T2[T],
+}
+
+pub struct P2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Twin[T] {
+  x: T2[T],
+  y: T2[T],
+}
+
+pub struct Rack {
+  slot: T2[fn(I32) -> I32],
+  slots: [T2[fn(I32) -> I32]; 2],
+}
+
+pub type Step = fn(I32) -> I32
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn mk() -> T2[fn(I32) -> I32] {
+  T2 { f: inc }
+}
+
+pub const KT: T2[fn(I32) -> I32] = T2 { f: inc }
+
+pub fn an_argument(t: T2[fn(I32) -> I32]) -> I32 {
+  t.f.(1)                                            //~ E0020
+}
+
+pub fn a_local_binding() -> I32 {
+  let t = mk()
+  t.f.(2)                                            //~ E0020
+}
+
+pub fn the_result_of_a_function() -> I32 {
+  mk().f.(3)                                         //~ E0020
+}
+
+pub fn a_constant() -> I32 {
+  KT.f.(4)                                           //~ E0020
+}
+
+pub fn a_field_of_a_field(r: Rack) -> I32 {
+  r.slot.f.(5)                                       //~ E0020
+}
+
+pub fn an_element_of_an_array_field(r: Rack) -> I32 {
+  r.slots[1].f.(6)                                   //~ E0020
+}
+
+pub fn a_type_with_a_name(t: T2[Step]) -> I32 {
+  t.f.(7)                                            //~ E0020
+}
+
+pub fn a_nested_generic_struct(o: Outer[fn(I32) -> I32]) -> I32 {
+  o.inner.f.(8)                                      //~ E0020
+}
+
+pub fn the_second_type_parameter(p: P2[I32, fn(I32) -> I32]) -> I32 {
+  p.b.(9)                                            //~ E0020
+}
+
+pub fn the_first_type_parameter(p: P2[fn(I32) -> I32, I32]) -> I32 {
+  p.a.(10)                                           //~ E0020
+}
+
+pub fn a_type_parameter_of_the_holder(w: Twin[fn(I32) -> I32]) -> I32 {
+  w.y.f.(11)                                         //~ E0020
+}
+
+pub fn the_binding_of_a_match_arm(o: Option[T2[fn(I32) -> I32]]) -> I32 {
+  match o {
+    Some(t) => t.f.(12),                             //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_closure(t: T2[fn(I32) -> I32]) -> I32 {
+  let g = fn(u: T2[fn(I32) -> I32], x: I32) -> I32 { u.f.(x) }   //~ E0020
+  g.(t, 13)
+}
+
+test "a field that is a function by the instance, called like a method" {
+  let t = mk()
+  let y = t.f.(14)                                   //~ E0020
+  assert y == 15
+}
+
+pub fn fine(t: T2[fn(I32) -> I32], o: Outer[Step], p: P2[I32, Step], r: Rack) -> I32 {
+  t.f.(1) + mk().f.(2) + KT.f.(3) + o.inner.f.(4) + p.b.(5) + p.a + r.slot.f.(6) + r.slots[0].f.(7)
+}

@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§18.1"]
+// fixes = 0
+
+// S-923 (§6.2: "`s.f(x)` は常にメソッドの呼び出しで、メソッドが無く関数型のフィールドがあれば E0020 …
+// 関数型かは受け手で具体化した型で決める"): the type at the receiver decides, so where it is not a function type
+// `s.f(x)` is the E0413 of an unknown member, with no candidate (`fixes = 0` checks it). In the body of a
+// generic function, in the body of the `impl` of a generic struct and in a generic struct that holds one,
+// `T` is not known, so the field `f: T` of `t: T2[T]` is no function type even if the function is only
+// called with a function type (tests/spec/fixes/call_forms_s923_instantiated_field.onsa). An instance whose
+// type argument is no function type (a number, a tuple, an array or an `Option` of functions) has no field of
+// a function type either. One error per function (P-01).
+
+pub struct T2[T] {
+  f: T,
+}
+
+pub struct Outer[T] {
+  inner: T2[T],
+}
+
+impl[T] T2[T] {
+  pub fn through_self(self, x: I32) -> I32 {
+    self.f(x)                                       //~ E0413
+  }
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn in_a_generic_function[T](t: T2[T], x: I32) -> I32 {
+  t.f(x)                                            //~ E0413
+}
+
+pub fn in_a_generic_function_with_a_nested_struct[T](o: Outer[T], x: I32) -> I32 {
+  o.inner.f(x)                                      //~ E0413
+}
+
+pub fn in_a_closure_of_a_generic_function[T](t: T2[T]) -> I32 {
+  let g = fn(u: T2[T], x: I32) -> I32 { u.f(x) }   //~ E0413
+  g.(t, 1)
+}
+
+pub fn called_with_a_function_type() -> I32 {
+  in_a_generic_function(T2 { f: inc }, 2)
+}
+
+pub fn a_number(t: T2[I32]) -> I32 {
+  t.f(3)                                            //~ E0413
+}
+
+pub fn a_tuple(t: T2[(fn(I32) -> I32, I32)]) -> I32 {
+  t.f(4)                                            //~ E0413
+}
+
+pub fn an_array_of_functions(t: T2[[fn(I32) -> I32; 2]]) -> I32 {
+  t.f(5)                                            //~ E0413
+}
+
+pub fn an_option_of_a_function(t: T2[Option[fn(I32) -> I32]]) -> I32 {
+  t.f(6)                                            //~ E0413
+}
+
+pub fn a_name_the_struct_does_not_have(t: T2[fn(I32) -> I32]) -> I32 {
+  t.g(7)                                            //~ E0413
+}
+
+test "a field of a type parameter called like a method" {
+  let t = T2 { f: inc }
+  let y = in_a_generic_function(t, 8)
+  assert y == 9
+}
+
+pub fn fine(t: T2[I32]) -> I32 {
+  t.f
+}

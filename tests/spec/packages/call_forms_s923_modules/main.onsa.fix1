@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-923 (§6.2: "関数型かは受け手で具体化した型で決める"; "見えないフィールド（§15.1）は数えず、E0413 のままである")
+// with the generic struct of another module: `util.T2[T]` has the visible field `f: T`, so the call `t.f(1)`
+// of an instance with a function type is the E0020 with the one candidate `t.f.(1)`, for an imported type, the
+// result of a function of the module and a type written with the path of the module. The field `g: T` of
+// `H2[T]` is `priv`, so the same call is the E0413 of an unknown member whatever the instance is, and has
+// no candidate (so only the first three errors have the one candidate). One error per function (P-01).
+
+use util
+use util.{T2, H2, mk, mk_h}
+
+pub fn an_imported_type(t: T2[fn(I32) -> I32]) -> I32 {
+  t.f.(1)                                            //~ E0020
+}
+
+pub fn the_result_of_a_function_of_a_module() -> I32 {
+  util.mk().f.(2)                                    //~ E0020
+}
+
+pub fn a_type_with_the_path_of_the_module(t: util.T2[fn(I32) -> I32]) -> I32 {
+  t.f.(3)                                            //~ E0020
+}
+
+pub fn a_hidden_field_of_an_instance(h: H2[fn(I32) -> I32]) -> I32 {
+  h.g(4)                                            //~ E0413
+}
+
+pub fn a_hidden_field_of_the_result_of_a_function() -> I32 {
+  mk_h().g(5)                                       //~ E0413
+}
+
+pub fn fine(t: T2[fn(I32) -> I32], h: H2[fn(I32) -> I32]) -> I32 {
+  t.f.(1) + mk().f.(2) + util.run(h, 3)
+}

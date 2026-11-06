@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§6.2", "§18.1"]
+// fixes = 0
+
+// A method of a value taken as a value, not called (§6.1, S-205): "メソッドと効果の操作は値にできない。
+// `p.norm` は E0413（`norm` というフィールドが無い）". A method is used only in a call, so the name after
+// the `.` of a value is looked for among the fields, and the method is no field. The error is the same
+// whatever the method is (a method that reads `self`, one that takes `inout self`, one that takes more
+// arguments), whatever stands before the `.` (an argument, a field of a field, `self`, the result of a
+// function, an element of an array) and whatever the place of the value is (a `let`, an argument, an
+// element of an array, a field of a struct literal, a closure, a `test`). The note that shows that a
+// method is used only in a call is not compared, and there is no candidate (`fixes = 0` checks it).
+// The method named through its type (`Point.norm`) is E0308 and is in
+// tests/spec/fixes/e0308_method_function_form_no_receiver.onsa. One error per function (P-01).
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub struct Holder {
+  p: Point,
+}
+
+pub struct Hook {
+  f: fn(Point) -> F32,
+}
+
+pub struct Cell[T] {
+  v: T,
+}
+
+impl Point {
+  pub fn new(x: F32, y: F32) -> Point {
+    Point { x: x, y: y }
+  }
+
+  pub fn norm(self) -> F32 {
+    self.x * self.x + self.y * self.y
+  }
+
+  pub fn scale(inout self, k: F32) {
+    self.x = self.x * k
+    self.y = self.y * k
+  }
+
+  pub fn dot(self, o: Point) -> F32 {
+    self.x * o.x + self.y * o.y
+  }
+
+  pub fn as_value(self) -> F32 {
+    let g = self.norm                               //~ E0413
+    g.(self)
+  }
+}
+
+impl[T] Cell[T] {
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub fn apply(f: fn(Point) -> F32, p: Point) -> F32 {
+  f.(p)
+}
+
+pub fn bound_by_a_let(p: Point) -> F32 {
+  let g = p.norm                                    //~ E0413
+  g.(p)
+}
+
+pub fn passed_as_an_argument(p: Point) -> F32 {
+  apply(p.norm, p)                                  //~ E0413
+}
+
+pub fn an_element_of_an_array(p: Point) -> F32 {
+  let fs = [p.norm]                                 //~ E0413
+  fs[0].(p)
+}
+
+pub fn a_field_of_a_struct_literal(p: Point) -> F32 {
+  let h = Hook { f: p.norm }                        //~ E0413
+  h.f.(p)
+}
+
+pub fn a_method_with_an_inout_receiver(p: Point) -> F32 {
+  let g = p.scale                                   //~ E0413
+  0.0
+}
+
+pub fn a_method_with_more_arguments(p: Point) -> F32 {
+  let g = p.dot                                     //~ E0413
+  0.0
+}
+
+pub fn through_a_field_of_a_field(h: Holder) -> F32 {
+  let g = h.p.norm                                  //~ E0413
+  g.(h.p)
+}
+
+pub fn through_the_result_of_a_function() -> F32 {
+  let g = Point.new(1.0, 2.0).norm                  //~ E0413
+  g.(Point.new(3.0, 4.0))
+}
+
+pub fn through_an_element(ps: [Point; 2]) -> F32 {
+  let g = ps[0].norm                                //~ E0413
+  g.(ps[1])
+}
+
+pub fn of_a_generic_struct(c: Cell[F32]) -> F32 {
+  let g = c.get                                     //~ E0413
+  g.(c)
+}
+
+pub fn in_a_closure(p: Point) -> F32 {
+  let h = fn(q: Point) -> F32 {
+    let g = q.norm                                  //~ E0413
+    g.(q)
+  }
+  h.(p)
+}
+
+test "a method taken as a value" {
+  let p = Point.new(1.0, 2.0)
+  let g = p.norm                                    //~ E0413
+  assert g.(p) == 5.0
+}
+
+pub fn fine(p: Point) -> F32 {
+  let g = Point.new
+  let q = g.(1.0, 2.0)
+  p.norm() + q.norm()
+}

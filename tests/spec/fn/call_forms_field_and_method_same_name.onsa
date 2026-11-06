@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§6.2"]
+
+// A field of a function type and a method of the same name (§6.2): "`s.f(x)` は常にメソッドの呼び出し
+// で、メソッドが無く関数型のフィールドがあれば E0020". Here the method exists, so `g.open(x)` is the call of
+// the method (no E0020), and the field is called with `.(` (`g.open.(x)`). The two calls differ in type
+// (the method gives a `Bool`, the field a `F32`), so the types of the bindings show which one is called. The
+// fields and the methods are different names (§4.4: only the fields of a struct share a space), the
+// same for a generic struct, and the field of a field. The error-free file has no marks.
+
+pub struct Gate {
+  open: fn(F32) -> F32,
+  level: F32,
+}
+
+pub struct Holder {
+  gate: Gate,
+}
+
+pub struct Wrap[T] {
+  run: fn(T) -> T,
+  seed: T,
+}
+
+pub fn identity(x: F32) -> F32 {
+  x
+}
+
+pub fn same(x: I32) -> I32 {
+  x
+}
+
+impl Gate {
+  pub fn new(level: F32) -> Gate {
+    Gate { open: identity, level: level }
+  }
+
+  pub fn open(self, x: F32) -> Bool {
+    x > self.level
+  }
+}
+
+impl[T] Wrap[T] {
+  pub fn run(self, x: T) -> Bool {
+    true
+  }
+}
+
+pub fn calls_the_method(g: Gate, x: F32) -> Bool {
+  g.open(x)
+}
+
+pub fn calls_the_field(g: Gate, x: F32) -> F32 {
+  g.open.(x)
+}
+
+pub fn calls_the_field_and_then_the_method(g: Gate, x: F32) -> Bool {
+  let y: F32 = g.open.(x)
+  g.open(y)
+}
+
+pub fn calls_through_a_field(h: Holder, x: F32) -> Bool {
+  let y: F32 = h.gate.open.(x)
+  h.gate.open(y)
+}
+
+pub fn calls_the_method_of_the_result(x: F32) -> Bool {
+  Gate.new(0.5).open(x)
+}
+
+pub fn calls_a_generic_method(w: Wrap[I32], x: I32) -> Bool {
+  w.run(x)
+}
+
+pub fn calls_a_generic_field(w: Wrap[I32], x: I32) -> I32 {
+  w.run.(x)
+}

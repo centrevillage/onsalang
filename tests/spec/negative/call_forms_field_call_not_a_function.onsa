@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§6.2", "§18.1"]
+// fixes = 0
+
+// `s.f(x)` is always the call of a method (§6.2). When the type of `s` has no method `f` and no field `f`
+// of a function type, it is not E0020: a field that holds no function, or no member at all, is E0413 (the
+// unknown member, with no candidate), and only a field of a function type gets the E0020 of
+// tests/spec/fixes/call_forms_field_call_heads.onsa. So a field of a number, a tuple, an array, an
+// `Option` of a function (a function inside another type is not a function type) and a name that the type
+// does not have are E0413, whatever stands before the `.` (an argument, a field of a field, `self`, the
+// result of a function). `fixes = 0` checks that no error has a candidate. One error per function (P-01).
+
+pub struct Gauge {
+  level: F32,
+  pair: (I32, I32),
+  taps: [I32; 2],
+  hook: Option[fn(F32) -> F32],
+}
+
+pub struct Rack {
+  gauge: Gauge,
+}
+
+pub fn mk() -> Gauge {
+  Gauge { level: 1.0, pair: (1, 2), taps: [3, 4], hook: None }
+}
+
+impl Gauge {
+  pub fn run(self, x: F32) -> F32 {
+    self.level(x)                                   //~ E0413
+  }
+}
+
+pub fn a_number_field(g: Gauge, x: F32) -> F32 {
+  g.level(x)                                        //~ E0413
+}
+
+pub fn a_tuple_field(g: Gauge) -> I32 {
+  g.pair(1)                                         //~ E0413
+}
+
+pub fn an_array_field(g: Gauge) -> I32 {
+  g.taps(1)                                         //~ E0413
+}
+
+pub fn an_option_of_a_function(g: Gauge, x: F32) -> F32 {
+  g.hook(x)                                         //~ E0413
+}
+
+pub fn a_name_the_type_does_not_have(g: Gauge, x: F32) -> F32 {
+  g.missing(x)                                      //~ E0413
+}
+
+pub fn a_field_of_a_field(r: Rack, x: F32) -> F32 {
+  r.gauge.level(x)                                  //~ E0413
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  mk().level(x)                                     //~ E0413
+}
+
+pub fn a_missing_name_after_a_field(r: Rack, x: F32) -> F32 {
+  r.gauge.missing(x)                                //~ E0413
+}
+
+pub fn in_a_closure(g: Gauge) -> F32 {
+  let h = fn(k: Gauge, x: F32) -> F32 { k.level(x) }   //~ E0413
+  h.(g, 1.0)
+}
+
+test "a number field called like a method" {
+  let g = mk()
+  let y = g.level(1.0)                              //~ E0413
+  assert y == 1.0
+}
+
+pub fn fine(g: Gauge) -> F32 {
+  g.level
+}

@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// The type arguments of a method, written with `[…]`, when the type comes from another module (§4.5,
+// S-239, S-256): the type stage knows the methods of an imported type as it knows those of one in the same
+// file, so `v.conv[I32](1)` is the E0020 whose one candidate is `v.conv::[I32](1)`, for an imported type,
+// for the result of an imported function, for a constant of a module and for an imported generic type.
+// The right form is an error of the names stage until the type arguments are put in (E0200, W5-10), so
+// `clean` is not asked. One error per function (P-01).
+
+use util
+use util.{V, W, mk}
+
+pub fn an_imported_type(v: V) -> I32 {
+  v.conv[I32](1)                                    //~ E0020
+}
+
+pub fn the_result_of_an_imported_function() -> I32 {
+  mk().conv[I32](2)                                 //~ E0020
+}
+
+pub fn the_result_of_a_function_of_a_module() -> I32 {
+  util.mk().conv[I32](3)                            //~ E0020
+}
+
+pub fn a_constant_of_a_module() -> I32 {
+  util.KV.conv[I32](4)                              //~ E0020
+}
+
+pub fn an_imported_generic_type(w: W[F32]) -> U8 {
+  w.conv[U8](250)                                   //~ E0020
+}

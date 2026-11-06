@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-921 (§15.1: "フィールドの鎖を頭にした要素（`q.ops[0](1)`）は型の段で見つけ、関数でない要素
+// （`q.taps[0](1)`）には修正候補を出さない（当てた後に同じ段の E0401 が残る、§18.1）"): an element of a
+// field that holds no function, called with `(`, is the E0020 of the type stage and has no candidate,
+// because `.(` would make it an E0401 of the same stage (§18.1: "後の段で見つける形は E0020 のまま候補を
+// 出さない"). `fixes = 0` checks that no error has a candidate. The elements that are functions are in
+// tests/spec/fixes/call_forms_indexed_field_call.onsa. Whatever stands before the field is any value (the
+// type stage decides): an argument, a local binding, `self`, a field of a field, an element of an array of
+// structs, the result of a function, the result of a method, a constant, a binding of a `match` arm, a
+// closure and a `test`. The element is a number, an element of an element, and an `Option` of a function
+// (a function inside another type is no function). One error per function (P-01).
+
+pub struct Q {
+  taps: [I32; 2],
+  grid: [[I32; 2]; 2],
+  hooks: [Option[fn(I32) -> I32]; 2],
+}
+
+pub struct Rack {
+  q: Q,
+  qs: [Q; 2],
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn mk() -> Q {
+  Q { taps: [1, 2], grid: [[1, 2], [3, 4]], hooks: [None, Some(inc)] }
+}
+
+pub const KQ: Q = Q { taps: [5, 6], grid: [[1, 2], [3, 4]], hooks: [None, None] }
+
+impl Q {
+  pub fn me(self) -> Q {
+    mk()
+  }
+
+  pub fn first(self) -> I32 {
+    self.taps[0](1)                                 //~ E0020
+  }
+}
+
+pub fn an_argument(q: Q) -> I32 {
+  q.taps[0](1)                                      //~ E0020
+}
+
+pub fn a_local_binding() -> I32 {
+  let q = mk()
+  q.taps[1](1)                                      //~ E0020
+}
+
+pub fn a_field_of_a_field(r: Rack) -> I32 {
+  r.q.taps[0](1)                                    //~ E0020
+}
+
+pub fn an_element_of_an_array_of_structs(r: Rack) -> I32 {
+  r.qs[1].taps[0](1)                                //~ E0020
+}
+
+pub fn the_result_of_a_function() -> I32 {
+  mk().taps[0](1)                                   //~ E0020
+}
+
+pub fn the_result_of_a_method(q: Q) -> I32 {
+  q.me().taps[0](1)                                 //~ E0020
+}
+
+pub fn a_constant() -> I32 {
+  KQ.taps[1](1)                                     //~ E0020
+}
+
+pub fn an_index_that_is_a_name(q: Q, i: U32) -> I32 {
+  q.taps[i](1)                                      //~ E0020
+}
+
+pub fn an_element_of_an_element(q: Q) -> I32 {
+  q.grid[0][1](1)                                   //~ E0020
+}
+
+pub fn an_option_of_a_function(q: Q) -> I32 {
+  q.hooks[1](1)                                     //~ E0020
+}
+
+pub fn the_binding_of_a_match_arm(o: Option[Q]) -> I32 {
+  match o {
+    Some(q) => q.taps[0](1),                        //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_closure(q: Q) -> I32 {
+  let g = fn(b: Q, x: I32) -> I32 { b.taps[0](x) }   //~ E0020
+  g.(q, 2)
+}
+
+pub fn in_an_operand(q: Q, x: I32) -> I32 {
+  x + q.taps[1](x) * 2                              //~ E0020
+}
+
+test "an element that is no function called with a parenthesis" {
+  let q = mk()
+  let y = q.taps[0](1)                              //~ E0020
+  assert y == 1
+}
+
+pub fn fine(q: Q, r: Rack) -> I32 {
+  q.taps[0] + r.q.taps[1] + r.qs[0].grid[1][0] + KQ.taps[0]
+}

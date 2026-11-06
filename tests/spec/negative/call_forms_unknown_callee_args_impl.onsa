@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§6.2", "§18.1"]
+// fixes = 0
+
+// R-372 (§18.1): the `impl` of `M` below has a heading that was not read (`impl M[ {`, the `[` is never
+// closed: E0002), so the methods of `M` are parts that were not read, and a method called on a value of `M`
+// is not an error of its own (§18.1: "その型の値のメソッドの探索の失敗…には…診断を出さない"). The callee of
+// such a call is not known, so the arguments are not checked for their modes and moves ("誤りの型の値を呼ぶ
+// ときは引数のモードと移動を検査せず（呼ぶ先のモードが分からないため）"): an array literal of `Span`s
+// (E0710 if it were a value that is stored) and an array literal of `Buf`s (E0711 if it were consumed
+// without `move`) are passed to the unknown method with no error. The one diagnostic of the file is the
+// E0002 of the heading. The receiver is an argument, a field, the result of a function; the arguments
+// are one literal, two uses of the same element, a literal in an operand and in a `let`. A `Buf` passed
+// plainly, with `move` and with `inout` is the control: no error either. One error per function would be
+// P-01; here no function has one.
+
+pub struct M {
+  g: F32,
+}
+
+pub struct Holder {
+  m: M,
+}
+
+impl M[ {                                           //~ E0002
+  pub fn total(self, xs: [Span[F32]; 2]) -> F32 { 1.0 }
+  pub fn take(self, b: Buf[F32]) -> F32 { 1.0 }
+  pub fn put(self, inout b: Buf[F32]) -> F32 { 1.0 }
+}
+
+pub fn make() -> M {
+  M { g: 1.0 }
+}
+
+pub fn spans_in_a_literal(m: M, a: Span[F32], b: Span[F32]) -> F32 {
+  m.total([a, b])
+}
+
+pub fn spans_of_one_element(m: M, a: Span[F32]) -> F32 {
+  m.total([a, a])
+}
+
+pub fn spans_in_an_operand(m: M, a: Span[F32], b: Span[F32]) -> F32 {
+  1.0 + m.total([a, b]) * 2.0
+}
+
+pub fn spans_in_a_let(m: M, a: Span[F32], b: Span[F32]) -> F32 {
+  let r = m.total([a, b])
+  r
+}
+
+pub fn spans_to_a_field(h: Holder, a: Span[F32], b: Span[F32]) -> F32 {
+  h.m.total([a, b])
+}
+
+pub fn spans_to_the_result_of_a_function(a: Span[F32], b: Span[F32]) -> F32 {
+  make().total([a, b])
+}
+
+pub fn bufs_in_a_literal(m: M) -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  m.total([a, b])
+}
+
+pub fn bufs_in_an_operand(m: M) -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  m.total([a, b]) + 1.0
+}
+
+pub fn bufs_to_a_field(h: Holder) -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  let b: Buf[F32] = Buf.zeroed(3)
+  h.m.total([a, b])
+}
+
+pub fn a_buf_plainly(m: M) -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  m.take(a)
+}
+
+pub fn a_buf_with_move(m: M) -> F32 uses {Alloc} {
+  let a: Buf[F32] = Buf.zeroed(2)
+  m.take(move a)
+}
+
+pub fn a_buf_with_inout(m: M) -> F32 uses {Alloc} {
+  var a: Buf[F32] = Buf.zeroed(2)
+  m.put(inout a)
+}

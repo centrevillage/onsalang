@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::deferred::{DeferredKind, Required};
-use crate::names::body::PathRes;
+use crate::names::body::{METHOD_IS_CALLED, PathRes};
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ names
@@ -18,11 +18,7 @@ impl<'a> Checker<'a> {
     pub(super) fn check_name(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
         let Some(r) = self.names.paths.get(&e).cloned() else {
             let ExprKind::Field { base, name } = &self.expr(e).kind else { return Err(self.held_stop()) };
-            // The span of the operand: of the chain so far when it is one of
-            // names (`p.x.y`), else of the value (`f().x`).
-            let at = if self.of_names(*base) { e } else { *base };
-            let bt = self.check_expr(*base, None)?;
-            let bt = self.known_shape(bt, self.expr(at).span, "value")?;
+            let bt = self.field_base(e, *base)?;
             return self.field_type(bt, name);
         };
         if matches!(r, PathRes::Item { .. }) {
@@ -31,6 +27,15 @@ impl<'a> Checker<'a> {
         let name = self.last_name(e);
         let t = self.value_of_record(r, e, &name, self.expr(e).span, expected)?;
         Ok(self.record(e, t))
+    }
+
+    /// The type of `base`, the value before the field `e`, in its shape.
+    pub(super) fn field_base(&mut self, e: ExprId, base: ExprId) -> R<TyId> {
+        // The span of the operand: of the chain so far when it is one of
+        // names (`p.x.y`), else of the value (`f().x`).
+        let at = if self.of_names(base) { e } else { base };
+        let bt = self.check_expr(base, None)?;
+        self.known_shape(bt, self.expr(at).span, "value")
     }
 
     /// The type of the value the record `r` of the name `name` names, at the
@@ -306,13 +311,22 @@ impl<'a> Checker<'a> {
                     return Ok(self.a.types.error());
                 }
                 let shown = self.display(base);
-                Err(self.err(Code::E0413, name.span, format!("`{shown}` has no field `{}`", name.name)))
+                Err(self.no_field(base, name, format!("`{shown}`")))
             }
             Ty::Error => Ok(base),
             _ => {
                 let shown = self.described(base);
-                Err(self.err(Code::E0413, name.span, format!("{shown} has no field `{}`", name.name)))
+                Err(self.no_field(base, name, shown))
             }
         }
+    }
+
+    /// E0413 for the field `name` that `base`, shown as `shown`, has not; a
+    /// method of that name is no value, as the note says (§6.1, S-205).
+    fn no_field(&mut self, base: TyId, name: &Ident, shown: String) -> Stop {
+        let message = format!("{shown} has no field `{}`", name.name);
+        let d = Diagnostic::new(Stage::Types, Code::E0413, name.span, message).with_found(self.src(name.span));
+        let of_method = self.is_method(base, &name.name);
+        self.diag(if of_method { d.with_rule(METHOD_IS_CALLED) } else { d })
     }
 }

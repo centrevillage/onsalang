@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-921 (§15.1): an element of a field that holds no function, called with `(`, is the E0020 of the type stage
+// with no candidate (`fixes = 0`), whatever the module of the struct is: the type stage knows the fields of
+// an imported struct as it knows those of one in the same file, for an imported type, the result of an
+// imported function, a function of a module and a constant of a module (the elements that are
+// functions are in tests/spec/packages/call_forms_field_call_modules). One error per function (P-01).
+
+use util
+use util.{Q, mk, KQ}
+
+pub fn an_imported_type(q: Q) -> I32 {
+  q.taps[0](1)                                      //~ E0020
+}
+
+pub fn the_result_of_an_imported_function() -> I32 {
+  mk().taps[1](1)                                   //~ E0020
+}
+
+pub fn the_result_of_a_function_of_a_module() -> I32 {
+  util.mk().taps[0](1)                              //~ E0020
+}
+
+pub fn an_imported_constant() -> I32 {
+  KQ.taps[0](1)                                     //~ E0020
+}
+
+pub fn a_constant_of_a_module() -> I32 {
+  util.KQ.taps[1](1)                                //~ E0020
+}
+
+pub fn an_element_of_an_element(q: util.Q) -> I32 {
+  q.grid[1][0](1)                                   //~ E0020
+}
+
+pub fn fine(q: Q) -> I32 {
+  q.taps[0] + util.KQ.taps[1] + util.mk().grid[0][1]
+}

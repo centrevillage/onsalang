@@ -266,11 +266,16 @@ impl<'a> Checker<'a> {
     /// whether it is a type with a length (§4.2), as far as this version
     /// gives it `len`. A method of a user type is none.
     fn has_method(&mut self, recv: TyId, name: &str) -> bool {
+        self.method_key(recv, name).1.is_none() && self.is_method(recv, name)
+    }
+
+    /// Whether `recv` has the method `name`, declared or builtin.
+    pub(super) fn is_method(&mut self, recv: TyId, name: &str) -> bool {
         let (key, owner, _) = self.method_key(recv, name);
-        if owner.is_some() {
-            return false;
-        }
-        let table = key.and_then(|k| self.a.modules.assoc_builtin.get(&k));
+        let table = match owner {
+            Some(d) => self.a.modules.assoc.get(&d),
+            None => key.and_then(|k| self.a.modules.assoc_builtin.get(&k)),
+        };
         match self.a.modules.assoc_member(table, name) {
             Ok(Some(md)) => matches!(&self.a.def(md).kind, DefKind::Fn(f) if f.self_mode.is_some()),
             Ok(None) => builtin::method(&mut self.a.types, recv, name).is_some(),

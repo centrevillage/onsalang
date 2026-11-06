@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-922 (§6.2: "`s.f(x)` は常にメソッドの呼び出しで、メソッドが無く関数型のフィールドがあれば E0020 …
+// 見えないフィールド（§15.1）は数えず、E0413 のままである"): a `priv` field of a function type of a struct of
+// another module is not counted, so `g.curve(x)` and `g.curve!(x)` are the E0413 of an unknown member, with
+// no candidate (`fixes = 0` checks it), whatever stands before the `.` (an argument, a field of a field,
+// the result of a function, a closure and a `test`). A hidden field that is no function (`g.count(1)`)
+// is E0413 as well. The visible field of the same struct is in call_forms_s922_visible, where the call
+// is E0020 with a candidate. `g.curve.(x)` and `g.ops[0](x)` read the hidden field (E0303) and are in
+// call_forms_field_call_hidden. One error per function (P-01).
+
+use util
+use util.{Gate, Rig, make_gate}
+
+pub fn a_method_call(g: Gate, x: F32) -> F32 {
+  g.curve(x)                                        //~ E0413
+}
+
+pub fn a_call_with_the_receiver_changed(g: Gate, x: F32) -> F32 {
+  g.curve!(x)                                       //~ E0413
+}
+
+pub fn a_hidden_field_that_is_no_function(g: Gate) -> I32 {
+  g.count(1)                                        //~ E0413
+}
+
+pub fn a_field_of_a_field(r: Rig, x: F32) -> F32 {
+  r.gate.curve(x)                                   //~ E0413
+}
+
+pub fn a_field_of_a_field_with_the_receiver_changed(r: Rig, x: F32) -> F32 {
+  r.gate.curve!(x)                                  //~ E0413
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  make_gate().curve(x)                              //~ E0413
+}
+
+pub fn the_result_of_a_function_of_a_module(x: F32) -> F32 {
+  util.make_gate().curve(x)                         //~ E0413
+}
+
+pub fn in_a_closure(g: Gate) -> F32 {
+  let h = fn(k: Gate, x: F32) -> F32 { k.curve(x) }   //~ E0413
+  h.(g, 1.0)
+}
+
+test "a hidden field of a function type called like a method" {
+  let g = make_gate()
+  let y = g.curve(1.0)                              //~ E0413
+  assert y > 0.0
+}
+
+pub fn fine(g: Gate, x: F32) -> F32 {
+  g.level + util.run(g, x)
+}

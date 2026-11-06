@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§11.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// E0020 with no candidate for `s.f(x)` and for an element of a field called with `(`, in the body of a flow
+// (§11.2, §18.1, S-811, R-314): the form is the same E0020 as in a function (a field of a function type
+// that is no method, §6.2; an element of a field that holds function values, §6.1), found by the type
+// stage, but the one candidate `.(` would put a function-value call `.(` into a flow body, and that is
+// an E0806 (§11.2: "同じく、flow の本体で値を `x(...)` の形で呼ぶ E0020（§15.1）は、候補 `x.(...)` が
+// E0806 を作るので候補を出さない"). §18.1: "候補を作れないときは…後の段で見つける形は E0020 のまま候補を
+// 出さない". So the error stays E0020 and `fixes = 0` checks that it has no candidate. The head is a constant,
+// a field of a constant, the result of an `rt` function, and the element of an array field; the place is
+// the output, a `let`, an operand, a branch and the body of a `par~`. One error per flow (P-01). The same
+// forms in a function, with the candidate, are in tests/spec/fixes/call_forms_field_call_heads.onsa and
+// call_forms_indexed_field_call.onsa.
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+  list: [fn(F32) -> F32; 2],
+}
+
+pub struct Rig {
+  shaper: Shaper,
+}
+
+pub rt fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub rt fn make(g: F32) -> Shaper {
+  Shaper { gain: g, curve: soft_clip, list: [soft_clip, soft_clip] }
+}
+
+pub const KS: Shaper = Shaper { gain: 1.0, curve: soft_clip, list: [soft_clip, soft_clip] }
+
+pub const KR: Rig = Rig { shaper: KS }
+
+pub flow a_constant(x: F32 at sample) -> F32 at sample {
+  KS.curve(x)                                       //~ E0020
+}
+
+pub flow a_field_of_a_constant(x: F32 at sample) -> F32 at sample {
+  KR.shaper.curve(x)                                //~ E0020
+}
+
+pub flow the_result_of_an_rt_function(x: F32 at sample) -> F32 at sample {
+  make(0.5).curve(x)                                //~ E0020
+}
+
+pub flow an_element_of_a_field(x: F32 at sample) -> F32 at sample {
+  KS.list[0](x)                                     //~ E0020
+}
+
+pub flow an_element_of_a_field_of_a_field(x: F32 at sample) -> F32 at sample {
+  KR.shaper.list[1](x)                              //~ E0020
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = KS.curve(x)                               //~ E0020
+  y * 0.5
+}
+
+pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - KS.curve(x)                                   //~ E0020
+}
+
+pub flow in_a_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    KS.curve(x)                                     //~ E0020
+  } else {
+    0.0
+  }
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    KS.curve(x) * F32.round_from(i)                 //~ E0020
+  }
+  ys[0] + ys[1]
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = x * KS.gain
+  y
+}

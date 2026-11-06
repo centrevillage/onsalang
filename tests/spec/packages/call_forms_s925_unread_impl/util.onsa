@@ -1,0 +1,28 @@
+// The module with the `impl` whose heading was not read (E0002). The types it declares have members that were
+// not read: a call `s.f(x)` of a value of them is a lookup of a method that fails without a diagnostic.
+pub struct S {
+  f: fn(I32) -> I32,
+  n: I32,
+}
+
+pub struct Holder {
+  s: S,
+}
+
+impl S[ {                                           //~ E0002
+  pub fn total(self) -> I32 {
+    self.n
+  }
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn make() -> S {
+  S { f: inc, n: 1 }
+}
+
+pub fn in_the_module_of_the_impl(s: S, x: I32) -> I32 {
+  s.f(x)
+}

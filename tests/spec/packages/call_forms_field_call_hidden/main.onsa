@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// A `priv` field of a function type, called in the right form (`.(`) from another module (§15.1: "見えない
+// フィールドを読み書きすると E0303"): the field is not visible there, so reading it is E0303 of the names
+// stage whatever follows it, and there is no candidate (`fixes = 0`). A field that has no word is read as
+// usual, and the module of the struct reads its own `priv` fields (`util.run`). The forms written with the
+// call forms of the wrong kind (`g.curve(x)`) are in call_forms_field_call_hidden_forms. One error per
+// function (P-01).
+
+use util
+use util.{Gate, make_gate}
+
+pub fn a_function_field(g: Gate, x: F32) -> F32 {
+  g.curve.(x)                                       //~ E0303
+}
+
+pub fn an_element_of_an_array_field(g: Gate, x: F32) -> F32 {
+  g.ops[0].(x)                                      //~ E0303
+}
+
+pub fn a_field_bound_by_a_let(g: Gate, x: F32) -> F32 {
+  let f = g.curve                                   //~ E0303
+  f.(x)
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  make_gate().curve.(x)                             //~ E0303
+}
+
+pub fn in_a_closure(g: Gate) -> F32 {
+  let h = fn(k: Gate, x: F32) -> F32 { k.curve.(x) }   //~ E0303
+  h.(g, 1.0)
+}
+
+pub fn fine(g: Gate, x: F32) -> F32 {
+  g.level + util.run(g, x)
+}

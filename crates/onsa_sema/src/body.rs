@@ -36,6 +36,7 @@ use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId, Types};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 
 pub(crate) mod bounds;
+mod call_forms;
 mod calls;
 mod conversions;
 mod entry;

@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// `~` on a field of a function type (§2.6, S-811): a field is a value, so `s.f~(x)` is the E0812 of a `~`
+// on what is not a flow, with no candidate and with the rule in the note (§2.6: "受け手か呼び先が値（…、
+// フィールド、…）なら候補を出さず"). The field holds a function value, and that does not make it a flow or
+// a built-in delay; the mark of its call is `.(`, but the candidate would put a `.(` into a flow body, an
+// E0806, so none is offered (`fixes = 0` checks it). The same lines with a field that holds a number
+// are in e0812_tilde_on_value.onsa. Outside a flow the callee is not looked up (§11.1), so the same call is
+// the E0821 of e0821_callee_not_looked_up.onsa whatever the field holds. The head is a constant, a field of
+// a constant, the result of an `rt` function. One error per flow (P-01).
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub struct Rig {
+  shaper: Shaper,
+}
+
+pub rt fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub rt fn make(g: F32) -> Shaper {
+  Shaper { gain: g, curve: soft_clip }
+}
+
+pub const KS: Shaper = Shaper { gain: 1.0, curve: soft_clip }
+
+pub const KR: Rig = Rig { shaper: KS }
+
+pub flow a_constant(x: F32 at sample) -> F32 at sample {
+  KS.curve~(x)                                      //~ E0812
+}
+
+pub flow a_field_of_a_constant(x: F32 at sample) -> F32 at sample {
+  KR.shaper.curve~(x)                               //~ E0812
+}
+
+pub flow the_result_of_an_rt_function(x: F32 at sample) -> F32 at sample {
+  make(0.5).curve~(x)                               //~ E0812
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = KS.curve~(x)                              //~ E0812
+  y * 0.5
+}
+
+pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - KS.curve~(x)                                  //~ E0812
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = x * KS.gain
+  y
+}

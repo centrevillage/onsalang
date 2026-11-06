@@ -1,0 +1,27 @@
+pub struct Gate {
+  visible: fn(F32) -> F32,
+  priv hidden: fn(F32) -> F32,
+  level: F32,
+}
+
+pub struct Rig {
+  gate: Gate,
+}
+
+pub fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub fn make_gate() -> Gate {
+  Gate { visible: soft_clip, hidden: soft_clip, level: 1.0 }
+}
+
+impl Gate {
+  pub fn through_hidden(self, x: F32) -> F32 {
+    self.hidden(x)                                  //~ E0020
+  }
+}
+
+pub fn run(g: Gate, x: F32) -> F32 {
+  g.hidden.(x) + g.visible.(x)
+}

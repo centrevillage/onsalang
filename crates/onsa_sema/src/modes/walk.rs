@@ -91,6 +91,9 @@ impl<'a> Walker<'a> {
             self.used(r, &place, ast.expr(e).span, None);
             return;
         }
+        // An element is where a value is put, but for a literal passed to a
+        // callee that is not known, which is not checked (§18.1, R-372).
+        let element = if pos == Pos::Unknown { Pos::Unknown } else { Pos::Value };
         match &ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => {
                 for (i, seg) in s.segments.iter().enumerate() {
@@ -100,11 +103,11 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
-            ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.iter().for_each(|&x| self.expr(r, x, Pos::Value)),
-            ExprKind::Struct { fields, .. } => fields.iter().for_each(|&(_, x)| self.expr(r, x, Pos::Value)),
+            ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.iter().for_each(|&x| self.expr(r, x, element)),
+            ExprKind::Struct { fields, .. } => fields.iter().for_each(|&(_, x)| self.expr(r, x, element)),
             ExprKind::Try(x) => self.expr(r, *x, Pos::Extract),
             ExprKind::Repeat { elem, len } => {
-                self.expr(r, *elem, Pos::Value);
+                self.expr(r, *elem, element);
                 self.expr(r, *len, Pos::Read);
             }
             ExprKind::Index { base, index } => {

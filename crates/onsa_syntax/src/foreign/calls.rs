@@ -19,7 +19,7 @@ pub(super) fn value_call(c: &Cursor, callee: (NodeKind, u32), first: usize, last
         edits.push(Edit::delete(c.span(before)));
     }
     let span = c.file_span(callee.1, c.span(last + 1).end);
-    (!too_deep(c, span, &edits)).then(|| Fix::new("call the function value with `.(`", edits))
+    (!too_deep(c, span, &edits)).then(|| Fix::new(CALL_WITH_DOT, edits))
 }
 
 /// Whether the candidate `edits` of `.(` for the call at `span` (from the
@@ -105,5 +105,5 @@ pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
     if too_deep(c, span, &edits) {
         return hit(span, Vec::new());
     }
-    hit(span, vec![Fix::new("call the function value with `.(`", edits)])
+    hit(span, vec![Fix::new(CALL_WITH_DOT, edits)])
 }

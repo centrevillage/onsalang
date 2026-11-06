@@ -229,23 +229,7 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Index { base, index } => {
                 let bt = self.check_expr(*base, None)?;
-                let bt = self.known_shape(bt, self.expr(*base).span, "value")?;
-                let u32 = self.u32();
-                self.check_expr(*index, Some(u32))?;
-                match self.ty(bt) {
-                    Ty::Array(el, _) => Ok(el),
-                    Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, args) => Ok(args[0]),
-                    Ty::Builtin(BuiltinTy::Str, _) => Err(self.err(
-                        Code::E0413,
-                        span,
-                        "`Str` has no index; use `.bytes()` / `.chars()` or `.substr(from, to)` (§4.2)",
-                    )),
-                    Ty::Error => Ok(bt),
-                    _ => {
-                        let shown = self.described(bt);
-                        Err(self.err(Code::E0413, span, format!("{shown} cannot be indexed")))
-                    }
-                }
+                self.element(e, *base, bt, *index)
             }
             ExprKind::Try(inner) => self.check_try(e, *inner, span),
             // The parser makes a range only as a head; the words of the row
@@ -253,6 +237,28 @@ impl<'a> Checker<'a> {
             ExprKind::Range(_) => {
                 let row = onsa_syntax::foreign::row(onsa_syntax::foreign::RowId::RangeOutsideHeader);
                 Err(self.diag(Diagnostic::new(Stage::Syntax, Code::E0002, span, row.message).with_rule(row.rule)))
+            }
+        }
+    }
+
+    /// The type of `e`, `base[index]`, where `base` has the type `bt`.
+    pub(super) fn element(&mut self, e: ExprId, base: ExprId, bt: TyId, index: ExprId) -> R<TyId> {
+        let span = self.expr(e).span;
+        let bt = self.known_shape(bt, self.expr(base).span, "value")?;
+        let u32 = self.u32();
+        self.check_expr(index, Some(u32))?;
+        match self.ty(bt) {
+            Ty::Array(el, _) => Ok(el),
+            Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, args) => Ok(args[0]),
+            Ty::Builtin(BuiltinTy::Str, _) => Err(self.err(
+                Code::E0413,
+                span,
+                "`Str` has no index; use `.bytes()` / `.chars()` or `.substr(from, to)` (§4.2)",
+            )),
+            Ty::Error => Ok(bt),
+            _ => {
+                let shown = self.described(bt);
+                Err(self.err(Code::E0413, span, format!("{shown} cannot be indexed")))
             }
         }
     }

@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§6.2", "§4.5", "§10", "§18.1"]
+// fixes = 1
+
+// E0020 for `s.f(x)` and for an element of a field called with `(`, in the places and the kinds of
+// function around the call (§6.2, §6.1, S-191): the form is the same wherever it stands. The functions
+// here are an `rt` function (whose field type is an `rt fn` type), a generic function and a method of a
+// generic `impl` (the field holds a function of the type parameter), a function with a constant
+// parameter (the array of function values has a length that is the parameter), a closure inside a
+// closure, a `while` loop, a branch of an `if`, an arm of a `match`, an argument of another call and a
+// `test`. The one candidate is `.(` after the field (`s.curve.(x)`) or after the element
+// (`t.fs[0].(x)`). One error per function (P-01); the right forms are the last function.
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub struct RtShaper {
+  curve: rt fn(F32) -> F32,
+}
+
+pub struct Wrap[T] {
+  f: fn(T) -> T,
+}
+
+pub struct Table[const N: U32] {
+  fs: [fn(F32) -> F32; N],
+}
+
+pub rt fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub fn identity(x: F32) -> F32 {
+  x
+}
+
+impl[T] Wrap[T] {
+  pub fn run(self, x: T) -> T {
+    self.f.(x)                                       //~ E0020
+  }
+}
+
+pub rt fn in_an_rt_function(s: RtShaper, x: F32) -> F32 {
+  s.curve.(x)                                        //~ E0020
+}
+
+pub fn in_a_generic_function[T](w: Wrap[T], x: T) -> T {
+  w.f.(x)                                            //~ E0020
+}
+
+pub fn in_a_function_with_a_constant_parameter[const N: U32](t: Table[N], x: F32) -> F32 {
+  t.fs[0].(x)                                        //~ E0020
+}
+
+pub fn in_a_closure_in_a_closure(s: Shaper, x: F32) -> F32 {
+  let outer = fn(a: Shaper, y: F32) -> F32 {
+    let inner = fn(b: Shaper, z: F32) -> F32 { b.curve.(z) }   //~ E0020
+    inner.(a, y)
+  }
+  outer.(s, x)
+}
+
+pub fn in_a_while_loop(s: Shaper, x: F32) -> F32 {
+  var acc = x
+  var i: U32 = 0
+  while i < 3 {
+    acc = s.curve.(acc)                              //~ E0020
+    i = i + 1
+  }
+  acc
+}
+
+pub fn in_a_branch(s: Shaper, c: Bool, x: F32) -> F32 {
+  if c {
+    s.curve.(x)                                      //~ E0020
+  } else {
+    x
+  }
+}
+
+pub fn in_an_arm(s: Shaper, k: U32, x: F32) -> F32 {
+  match k {
+    0 => s.curve.(x),                                //~ E0020
+    _ => x,
+  }
+}
+
+pub fn in_an_argument(s: Shaper, x: F32) -> F32 {
+  identity(s.curve.(x))                              //~ E0020
+}
+
+test "a function field called like a method" {
+  let s = Shaper { gain: 1.0, curve: identity }
+  let y = s.curve.(0.5)                              //~ E0020
+  assert y == 0.5
+}
+
+pub fn fine(s: Shaper, r: RtShaper, w: Wrap[I32], t: Table[2], x: F32) -> F32 {
+  let n = w.f.(1)
+  s.curve.(x) + r.curve.(x) + t.fs[0].(x) + F32.round_from(n)
+}

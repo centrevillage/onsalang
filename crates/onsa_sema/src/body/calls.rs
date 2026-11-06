@@ -46,32 +46,27 @@ impl<'a> Checker<'a> {
                 let recv = self.known(recv, self.expr(base).span, "receiver")?;
                 return self.check_method_call(e, callee, recv, &name, args, expected, kind);
             }
+            // 3. `….f[…](...)`, an element of a field or the type arguments
+            // of a method (§4.5, §6.1).
+            if let Some(head) = self.member_head(callee) {
+                return self.check_member_brackets(e, callee, head, args, expected, kind);
+            }
         }
-        // 3. A function value.
+        // 4. A function value.
         let ft = self.check_expr(callee, None)?;
+        self.call_value(e, callee, ft, args, kind)
+    }
+
+    /// The call `e` of the value `callee` of the type `ft`.
+    pub(super) fn call_value(&mut self, e: ExprId, callee: ExprId, ft: TyId, args: &[Arg], kind: CallKind) -> R<TyId> {
         let ft = self.known_shape(ft, self.expr(callee).span, "callee")?;
         // A value of the error type: an unknown callee (§18.1, R-271).
         if matches!(self.ty(ft), Ty::Error) {
             return self.args_of_unknown_callee(args);
         }
-        let Ty::Fn(f) = self.ty(ft) else {
-            let shown = self.described(ft);
-            return Err(self.err(
-                Code::E0401,
-                self.expr(callee).span,
-                format!("{shown} is not a function and cannot be called"),
-            ));
-        };
+        let Ty::Fn(f) = self.ty(ft) else { return Err(self.not_callable(callee, ft)) };
         if kind == CallKind::Bang {
-            // The `!` comes right after the callee (`h!(`, §2.6), and a
-            // function value is called with `.(` (§5.2, S-812).
-            let at = self.expr(callee).span.end;
-            let dot = onsa_diag::Edit::replace(Span::new(span.file, at, at + 1), ".");
-            return Err(self.diag(
-                Diagnostic::new(Stage::Types, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
-                    .with_found(self.src(span))
-                    .with_fix(Fix::new("call the function value with `.(`", vec![dot])),
-            ));
+            return Err(self.bang_on_value(e, callee));
         }
         self.info.targets.insert(e, Target::Value);
         self.check_args(args, &f.params, e)?;
@@ -185,7 +180,7 @@ impl<'a> Checker<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn check_method_call(
+    pub(super) fn check_method_call(
         &mut self,
         e: ExprId,
         callee: ExprId,
@@ -196,6 +191,11 @@ impl<'a> Checker<'a> {
         kind: CallKind,
     ) -> R<TyId> {
         let span = self.expr(e).span;
+        // `recv.name[index](...)` ([`Self::check_member_brackets`]).
+        let written = match self.expr(callee).kind {
+            ExprKind::Index { index, .. } => Some(index),
+            _ => None,
+        };
         let (key, owner, this) = self.method_key(recv, &name.name);
         let table = match owner {
             Some(d) => self.a.modules.assoc.get(&d),
@@ -234,6 +234,9 @@ impl<'a> Checker<'a> {
                         ),
                     ));
                 }
+                if let Some(index) = written {
+                    return Err(self.method_brackets(callee, md, index));
+                }
                 if f.self_mode == Some(Mode::Inout) {
                     self.inout_receiver(callee)?;
                 }
@@ -258,7 +261,6 @@ impl<'a> Checker<'a> {
                 let inst = self.instance(md, targs, span, element)?;
                 self.a.note_use(self.a.def(md).name_span, name.span);
                 self.info.targets.insert(e, Target::Method { def: md, of, inst });
-                let _ = kind;
                 return Ok(ret);
             }
             if owner.is_some_and(|d| !matches!(self.a.def(d).kind, DefKind::Struct(_) | DefKind::Enum(_))) {
@@ -277,8 +279,17 @@ impl<'a> Checker<'a> {
                 let shown = format!("{}.{}", self.type_head(recv), name.name);
                 return Err(self.unsupported(name.span, feature, &[&shown]));
             }
+            if written.is_some() {
+                return self.field_type(recv, name);
+            }
+            if let Some(called) = self.field_called(e, callee, recv, name, args, expected, kind) {
+                return called;
+            }
             return Err(self.removed_method(e, recv, name, args, expected, kind));
         };
+        if written.is_some() {
+            return Err(self.brackets_on_method(callee, Vec::new()));
+        }
         let params: Vec<(Mode, TyId)> = sig.params.iter().map(|&t| (Mode::Borrow, t)).collect();
         if let Some(exp) = expected {
             self.unify_at(span, sig.ret, exp)?;

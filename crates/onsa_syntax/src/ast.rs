@@ -88,6 +88,19 @@ impl Ast {
         }
     }
 
+    /// The head of the callee `c` of `ops[i](x)` and the indices after it,
+    /// in the order of the text; none when `c` is no `[…]`.
+    pub fn indexed(&self, c: ExprId) -> Option<(ExprId, Vec<ExprId>)> {
+        let mut indices = Vec::new();
+        let mut head = c;
+        while let ExprKind::Index { base, index } = &self.expr(head).kind {
+            indices.push(*index);
+            head = *base;
+        }
+        indices.reverse();
+        (!indices.is_empty()).then_some((head, indices))
+    }
+
     /// `e` without the parentheses around it (`((x))` is `x`; §3.1: a
     /// parenthesis only groups). The one walk through them on the tree.
     pub fn without_parens(&self, mut e: ExprId) -> ExprId {

@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 0
+
+// A `[…]` after a name that is no method (§4.5, §6.1; same reading as callee_member_index.onsa): "メソッドに
+// 付けた `[…]` は型の段" needs a method, so when the type of the receiver has no member of that name the
+// unknown member comes first, E0413 of the type stage, and no type argument is read. The receiver is an
+// argument, a local binding, a field of a field, `self`, an element of an array, the result of a function,
+// a constant, a closure and a `test`. Only a single type argument is written: a list of two or more
+// (`v.none[I32, F32](x)`) is no index, so the syntax alone reads it as type arguments (§4.5) and its
+// E0020 comes first. `fixes = 0` checks that no error has a candidate. The method that exists is in
+// tests/spec/fixes/call_forms_method_type_args.onsa. One error per function (P-01).
+
+pub struct V {
+  n: I32,
+}
+
+pub struct Holder {
+  v: V,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn through_self(self, x: I32) -> I32 {
+    self.none[I32](x)                               //~ E0413
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub const KV: V = V { n: 2 }
+
+pub fn an_argument(v: V) -> I32 {
+  v.none[I32](1)                                    //~ E0413
+}
+
+pub fn a_local_binding() -> I32 {
+  let v = mk()
+  v.none[I32](2)                                    //~ E0413
+}
+
+pub fn a_field_of_a_field(h: Holder) -> I32 {
+  h.v.none[I32](3)                                  //~ E0413
+}
+
+pub fn an_element_of_an_array(vs: [V; 2]) -> I32 {
+  vs[1].none[I32](4)                                //~ E0413
+}
+
+pub fn the_result_of_a_function() -> I32 {
+  mk().none[I32](5)                                 //~ E0413
+}
+
+pub fn a_constant() -> I32 {
+  KV.none[I32](6)                                   //~ E0413
+}
+
+pub fn in_a_closure(v: V) -> I32 {
+  let g = fn(u: V, x: I32) -> I32 { u.none[I32](x) }   //~ E0413
+  g.(v, 7)
+}
+
+test "a name the type does not have, with a type argument" {
+  let v = mk()
+  let y = v.none[I32](8)                            //~ E0413
+  assert y == 8
+}
+
+pub fn fine(v: V) -> I32 {
+  v.n
+}

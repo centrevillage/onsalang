@@ -25,7 +25,7 @@ mod kinds;
 mod paths;
 pub(crate) use exprs::heads;
 pub(crate) use flow::{Outside, clock_after, instance_form, outside_flow};
-pub(crate) use kinds::{method_named, value_called};
+pub(crate) use kinds::{METHOD_IS_CALLED, method_named, value_called};
 pub(crate) use paths::is_value;
 mod scope;
 #[cfg(test)]

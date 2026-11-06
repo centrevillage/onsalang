@@ -1028,6 +1028,26 @@ pub static ROWS: &[Row] = &[
         rule: "an element of a value is called with `.(`, whatever its type (`ops[i].(x)`); `f(x)` is the call of an item declared with `fn` (§6.1, §15.1)",
         detect: Detect::Reported,
     },
+    // Found by the types stage at a method that is not there (§6.2, W5-15).
+    Row {
+        id: RowId::FieldCall,
+        name: "field_call",
+        phase: Phase::Types,
+        code: Code::E0020,
+        message: "a field of a function type is called as `s.f.(x)`; `s.f(x)` calls a method",
+        rule: "the value of a field of a function type is called with `.(` (`s.f.(x)`); `s.f(x)` is always the call of a method (§6.1, §6.2)",
+        detect: Detect::Reported,
+    },
+    // Found by the types stage at a method with `[…]` called (§4.5, W5-15).
+    Row {
+        id: RowId::TypeArgsMethodSquare,
+        name: "type_args_method_square",
+        phase: Phase::Types,
+        code: Code::E0020,
+        message: "type arguments of a method are written `v.m::[T](x)`; `[` alone is an index",
+        rule: TYPE_ARGS_RULE,
+        detect: Detect::Reported,
+    },
     // Found by the names stage at a name of `RATE_TYPES` not found (S-120).
     Row {
         id: RowId::RateAsType,
@@ -1043,10 +1063,8 @@ pub static ROWS: &[Row] = &[
 /// The rows of the data file that no work has made yet (the later works
 /// of W3 to W7; [`Waiting`]).
 pub static WAITING: &[Waiting] = &[
-    Waiting { name: "field_call", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "float_constant_pattern", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "type_args_method_square", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 },
 ];
 

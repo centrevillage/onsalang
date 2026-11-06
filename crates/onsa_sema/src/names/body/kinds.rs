@@ -195,14 +195,16 @@ pub(crate) fn value_called(text: &str, span: Span) -> Diagnostic {
 
 /// The candidate of the E0020 of a value at `span` called as `x(...)`: `.(`.
 pub(super) fn value_call_fix(span: Span) -> Fix {
-    Fix::new("call the function value with `.(`", vec![Edit::replace(Span { start: span.end, ..span }, ".")])
+    Fix::new(foreign::CALL_WITH_DOT, vec![Edit::replace(Span { start: span.end, ..span }, ".")])
 }
+
+/// The note that a method is no value (§6.1, S-205).
+pub(crate) const METHOD_IS_CALLED: &str = "a method is only called, on a value; it is no value of its own (§6.1)";
 
 /// E0308 for the method `shown`, whose name is `name`, named through its
 /// type at `span` (§15.1), with no candidate; a note says that a method is
 /// only called (§6.1, S-205).
 pub(crate) fn method_named(shown: String, name: &str, span: Span) -> Diagnostic {
     let msg = format!("`{shown}` is a method, which is called on a value (`value.{name}(…)`, §6.2, §15.1)");
-    let rule = "a method is only called, on a value; it is no value of its own (§6.1)";
-    Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(shown).with_rule(rule)
+    Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(shown).with_rule(METHOD_IS_CALLED)
 }

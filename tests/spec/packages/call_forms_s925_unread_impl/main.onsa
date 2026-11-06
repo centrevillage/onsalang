@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§18.1"]
+// fixes = 0
+
+// S-925 (§18.1: "見出しを読めなかった構文の段の誤りの `impl` … があるモジュールで宣言した型は、メンバ … が
+// 読めなかった部分である。… その型の値のメソッドの探索の失敗（関数型のフィールドがあるときの §6.2 の
+// E0020 も）… には、使う所のモジュールによらず診断を出さない"): `util.onsa` has the `impl` whose heading was not
+// read (`impl S[ {`, E0002), so `S` may have a method `f` that was not read, and the call `s.f(x)` of its field
+// `f` of a function type is not the E0020 of §6.2 ("メソッドが無く" cannot be said). It is silent in this module
+// and in `util` itself, whatever stands before the `.f` (an argument, a field of a field, the result of
+// a function, a closure, a `test`), and so are the failures of the lookup of a method that is not there
+// (`s.missing(x)`), of a field that is no function (`s.n(x)`) and of the form with the receiver
+// changed (`s.f!(x)`). The fields themselves are known: `s.f.(x)` and `s.n` are read. The package has the one
+// diagnostic, the E0002 of the heading in `util.onsa`, and no candidate (`fixes = 0`).
+use util
+use util.{S, Holder, make}
+
+pub fn an_argument(s: S, x: I32) -> I32 {
+  s.f(x)
+}
+
+pub fn a_field_of_a_field(h: Holder, x: I32) -> I32 {
+  h.s.f(x)
+}
+
+pub fn the_result_of_a_function(x: I32) -> I32 {
+  make().f(x)
+}
+
+pub fn the_result_of_a_function_of_a_module(x: I32) -> I32 {
+  util.make().f(x)
+}
+
+pub fn a_type_with_the_path_of_the_module(s: util.S, x: I32) -> I32 {
+  s.f(x)
+}
+
+pub fn a_call_with_the_receiver_changed(s: S, x: I32) -> I32 {
+  s.f!(x)
+}
+
+pub fn a_name_the_type_does_not_have(s: S, x: I32) -> I32 {
+  s.missing(x)
+}
+
+pub fn a_field_that_is_no_function(s: S, x: I32) -> I32 {
+  s.n(x)
+}
+
+pub fn in_a_closure(s: S) -> I32 {
+  let h = fn(k: S, x: I32) -> I32 { k.f(x) }
+  h.(s, 1)
+}
+
+test "a field of a function type called like a method, with an unread impl" {
+  let s = make()
+  let y = s.f(1)
+  assert y == 2
+}
+
+pub fn fine(s: S, x: I32) -> I32 {
+  s.f.(x) + s.n
+}

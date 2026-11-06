@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-922 (§6.2): a field of a function type that is visible where the call stands is counted, so `g.visible(x)` is
+// the E0020 of `s.f(x)` with the one candidate `g.visible.(x)`, whatever the module of the struct is (an imported
+// type, a field of a field, the result of a function). The module of the struct reads its own `priv` field
+// `hidden` (§15.1: "`priv` のフィールドは、モジュールの中に届く"), so in `util.onsa` `self.hidden(x)` is the
+// same E0020 with a candidate; the same call of `hidden` from this module is the E0413 of
+// call_forms_s922_hidden. Each of the five errors (four here, one in `util`) has the one candidate. One error
+// per function (P-01).
+
+use util
+use util.{Gate, Rig, make_gate}
+
+pub fn an_argument(g: Gate, x: F32) -> F32 {
+  g.visible(x)                                      //~ E0020
+}
+
+pub fn a_field_of_a_field(r: Rig, x: F32) -> F32 {
+  r.gate.visible(x)                                 //~ E0020
+}
+
+pub fn the_result_of_a_function(x: F32) -> F32 {
+  make_gate().visible(x)                            //~ E0020
+}
+
+pub fn the_result_of_a_function_of_a_module(x: F32) -> F32 {
+  util.make_gate().visible(x)                       //~ E0020
+}
+
+pub fn fine(g: Gate, x: F32) -> F32 {
+  g.visible.(x) + g.level + util.run(g, x)
+}

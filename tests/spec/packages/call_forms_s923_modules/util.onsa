@@ -1,0 +1,23 @@
+pub struct T2[T] {
+  f: T,
+}
+
+pub struct H2[T] {
+  priv g: T,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn mk() -> T2[fn(I32) -> I32] {
+  T2 { f: inc }
+}
+
+pub fn mk_h() -> H2[fn(I32) -> I32] {
+  H2 { g: inc }
+}
+
+pub fn run(h: H2[fn(I32) -> I32], x: I32) -> I32 {
+  h.g.(x)
+}

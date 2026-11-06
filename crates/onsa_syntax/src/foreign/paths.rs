@@ -331,7 +331,7 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
     if !Link::of(callee.0).names_a_path() {
         return None;
     }
-    let mut fixes = vec![Fix::new("write the type arguments as `::[…]`", edits)];
+    let mut fixes = vec![Fix::new(TYPE_ARGS_WITH_COLONS, edits)];
     let single = is_place(c, open + 1, close - 1)
         || (open + 2 == close
             && matches!(

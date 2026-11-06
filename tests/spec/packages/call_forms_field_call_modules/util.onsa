@@ -1,0 +1,32 @@
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub struct Bank {
+  ops: [fn(I32) -> I32; 2],
+}
+
+pub fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn dec(x: I32) -> I32 {
+  x - 1
+}
+
+pub fn make(g: F32) -> Shaper {
+  Shaper { gain: g, curve: soft_clip }
+}
+
+pub fn mk_bank() -> Bank {
+  Bank { ops: [inc, dec] }
+}
+
+pub const KS: Shaper = Shaper { gain: 1.0, curve: soft_clip }
+
+pub const KB: Bank = Bank { ops: [inc, dec] }

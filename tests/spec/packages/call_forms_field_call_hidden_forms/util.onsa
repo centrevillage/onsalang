@@ -1,0 +1,17 @@
+pub struct Gate {
+  priv curve: fn(F32) -> F32,
+  priv ops: [fn(F32) -> F32; 2],
+  level: F32,
+}
+
+pub fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+pub fn make_gate() -> Gate {
+  Gate { curve: soft_clip, ops: [soft_clip, soft_clip], level: 1.0 }
+}
+
+pub fn run(g: Gate, x: F32) -> F32 {
+  g.curve.(x) + g.ops[0].(x)
+}

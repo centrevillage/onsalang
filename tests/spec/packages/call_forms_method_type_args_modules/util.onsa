@@ -1,0 +1,25 @@
+pub struct V {
+  n: I32,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, x: U) -> U {
+    x
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub const KV: V = V { n: 2 }

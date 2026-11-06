@@ -66,7 +66,7 @@ impl Walker<'_> {
             CallKind::Flow => Place::Instance(e),
             _ => Place::Callee(e),
         };
-        match self.indexed(callee) {
+        match self.ast.indexed(callee) {
             Some((head, indices)) if place != Place::DotCallee => self.indexed_callee(callee, kind, head, &indices)?,
             _ => {
                 self.name_at(callee, place)?;
@@ -149,20 +149,6 @@ impl Walker<'_> {
         }
     }
 
-    /// The head of the callee `c` of `ops[i](x)` (a chain of names: the form
-    /// (ii)) and the indices after it, in the order of the text; none when
-    /// `c` is no `[…]`.
-    fn indexed(&self, c: ExprId) -> Option<(ExprId, Vec<ExprId>)> {
-        let mut indices = Vec::new();
-        let mut head = c;
-        while let ExprKind::Index { base, index } = &self.ast.expr(head).kind {
-            indices.push(*index);
-            head = *base;
-        }
-        indices.reverse();
-        (!indices.is_empty()).then_some((head, indices))
-    }
-
     /// The callee `ops[i]` whose head is `head`: a value there (the form
     /// (ii), a chain of names) called as `f(x)` is the E0020 of the row
     /// `indexed_value_call`, whose candidate calls it with `.(`; an item or
@@ -172,7 +158,7 @@ impl Walker<'_> {
     fn indexed_callee(&mut self, callee: ExprId, kind: CallKind, head: ExprId, indices: &[ExprId]) -> W {
         self.name_at(head, Place::Value)?;
         let span = self.ast.expr(callee).span;
-        let fix = Fix::insert("call the function value with `.(`", span.file, span.end, ".");
+        let fix = Fix::insert(foreign::CALL_WITH_DOT, span.file, span.end, ".");
         if kind == CallKind::Plain
             && self.out.paths.get(&head).is_some_and(|r| self.called(r).is_value())
             && let Some(d) = self.call_form(RowId::IndexedValueCall, span, fix)
