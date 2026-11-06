@@ -654,3 +654,10 @@ left = "the type of this statement is `…`, not `…`; a statement gives no val
 input = "tests/fuzz/087eb621.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a statement that keeps its value, and an `as` from a type parameter, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|write a doc comment `…`|E0004"
+left = "this doc comment documents no declaration; `…` goes right before an item, a memb"
+input = "tests/fuzz/76102d39.onsa"
+reasons = ["S-384"]
+note = "閉じない `{` と切れた項目の中の `/*!*///` は誤りが二つ以上ある入力（`///` の候補の後に、切れた `pub fn` の前の E0004 が残る）。候補の約束は誤りが一つの単位に当たる（§18.1）。前からの類で、事例を足して変異が変わって出た"
