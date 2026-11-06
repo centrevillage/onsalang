@@ -46,7 +46,7 @@ struct Ctors {
 /// The arms of a `match` read so far, as rows: the arms without a guard
 /// (§7), sorted by their heads so that an arm meets only the rows that share
 /// one, and the steps its search has taken.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub(crate) struct Seen {
     rows: Vec<P>,
     /// The rows by the head of a constructor (with no fields) or a literal.

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "22:5"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+
+// S-876 (U4a of W5-09; R-387): the pattern `(LIM, _)` of the unreachable arm is what decides the type of `n.0` (`U8`), which the cast after the `match` reads (E0420 when the arm is gone). The one candidate is the move of the covering `_` to the end,
+// and the file after it has no diagnostic at all (`clean`, which is why this file has this one function). The pin makes a lost candidate a failure: `fixes` alone does not (it checks that no diagnostic has more, and that one has the number).
+
+pub const LIM: U8 = 5
+
+pub fn constant_decides_a_tuple_field() -> F64 {
+  let n = (5, 1)
+  match n {
+    
+    (LIM, _) => { },
+    _ => { },                                //~ E0503
+  }
+  n.0 as F64
+}

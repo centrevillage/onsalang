@@ -84,31 +84,6 @@ impl Infer {
         }
     }
 
-    /// Back to `earlier`, a state of this body before this one, after a
-    /// trial: what was bound since is not. The variables made since stay,
-    /// open, for the tables of the body name them, and no later one takes
-    /// their numbers.
-    pub fn back_to(&mut self, mut earlier: Infer) {
-        earlier.vars.resize(self.vars.len(), VarState::Unbound(None));
-        earlier.causes.resize(self.causes.len(), None);
-        earlier.seq = self.seq + 1;
-        *self = earlier;
-    }
-
-    /// Whether a variable open in `earlier`, a state of this body before this
-    /// one, has a type now: one made the same as another open one has none.
-    pub fn decided_since(&self, types: &Types, earlier: &Infer) -> bool {
-        let mut opened = earlier.vars.iter().enumerate().filter(|(_, v)| matches!(v, VarState::Unbound(_)));
-        opened.any(|(i, _)| {
-            let mut at = &self.vars[i];
-            while let VarState::Bound(t) = at {
-                let Ty::Var(next) = types.get(*t) else { return true };
-                at = &self.vars[*next as usize];
-            }
-            false
-        })
-    }
-
     pub fn fresh(&mut self, types: &mut Types, lit: Option<LitKind>) -> TyId {
         let i = self.vars.len() as u32;
         self.vars.push(VarState::Unbound(lit));

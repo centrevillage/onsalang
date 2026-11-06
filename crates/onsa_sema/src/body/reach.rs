@@ -2,63 +2,21 @@
 //! statement in a block (E0418, §6.1, S-127, S-848), what follows a statement
 //! that diverges (E0503, §7, S-128, S-268) and a form that diverges in a part
 //! that is always evaluated (E0503, S-291, S-889). The candidates that take
-//! the rest of a block away ask [`Checker::may_end_here`] (§18.1, S-876).
-//! The E0503 of an arm is in `arms.rs`.
+//! the rest of a block away ask [`Checker::may_end_here`] and are read in
+//! [`super::reread`] (§18.1, S-876). The E0503 of an arm is in `arms.rs`.
 
 use onsa_diag::Edit;
 use onsa_diag::hash::HashMap;
 
+use super::reread::Try;
 use super::*;
 
 const RETURN_ENDS_ITS_LINE: &str = "`return` ends at the end of its line; a value is written on the same line (§2.5)";
 
-/// What a trial of a candidate decides of the body, for it to be undone. The
-/// tables of the body stay as they are: it stops at the error, and the last
-/// trial writes all of them that the end of the body looks at.
-pub(super) struct Kept {
-    infer: Infer,
-    deferred: Vec<Deferred>,
-    deferred_end: Vec<Deferred>,
-    typed: Vec<bool>,
-}
-
 impl<'a> Checker<'a> {
     /// The block being checked: its node, itself and the item it is at.
     pub(super) fn open_block(&self) -> (ExprId, &'a Block, usize) {
-        let &(id, b, i, _) = self.blocks.last().unwrap();
-        (id, b, i)
-    }
-
-    pub(super) fn keep(&self) -> Kept {
-        Kept {
-            infer: self.infer.clone(),
-            deferred: self.deferred.clone(),
-            deferred_end: self.deferred_end.clone(),
-            typed: self.typed.clone(),
-        }
-    }
-
-    pub(super) fn put_back(&mut self, kept: Kept) {
-        self.infer.back_to(kept.infer);
-        (self.deferred, self.deferred_end, self.typed) = (kept.deferred, kept.deferred_end, kept.typed);
-    }
-
-    /// Whether the code a candidate takes away decides a type that was open
-    /// (S-876): what is left may read it there, and the end of the body
-    /// cannot tell. Each of `parts` is read with nothing reported, once, and
-    /// an error stops that part only. What it decides is undone.
-    pub(super) fn parts_decide<T>(
-        &mut self,
-        parts: impl IntoIterator<Item = T>,
-        mut read: impl FnMut(&mut Self, T) -> R<()>,
-    ) -> bool {
-        let kept = self.keep();
-        for part in parts {
-            self.quietly(|ck| read(ck, part));
-        }
-        let decides = self.infer.decided_since(&self.a.types, &kept.infer);
-        self.put_back(kept);
-        decides
+        *self.blocks.last().unwrap()
     }
 
     /// The span of the item `k` of `b`, a statement or the last expression.
@@ -108,7 +66,7 @@ impl<'a> Checker<'a> {
         d = if self.infer.has_undefaulted_vars(&self.a.types, t) {
             let written = Some(self.src(span)).filter(|s| !s.contains('\n')).unwrap_or_else(|| "…".to_string());
             d.with_note(span, format!("discard it with its type written: `let _: T = {written}`"))
-        } else if literal && !self.end_is_clean(None) {
+        } else if literal && !self.end_is_clean() {
             d
         } else {
             d.with_fix(Fix::insert("discard the value with `let _`", span.file, span.start, "let _ = "))
@@ -181,7 +139,7 @@ impl<'a> Checker<'a> {
     /// block is at (§7, S-128): one in a body, as the check stops here
     /// (§18.1), so the candidate takes all the items after the statement.
     fn unreached(&mut self, next: Span) -> Stop {
-        let (_, b, i) = self.open_block();
+        let (id, b, i) = self.open_block();
         let stmt = self.ast.stmt(b.stmts[i]);
         let msg = "this is never reached: the statement before it does not come back (§7)";
         let d = Diagnostic::new(Stage::Types, Code::E0503, next, msg).with_found(self.src(next));
@@ -189,34 +147,38 @@ impl<'a> Checker<'a> {
         if matches!(stmt.kind, StmtKind::Return(None)) {
             d = d.with_note(stmt.span, RETURN_ENDS_ITS_LINE);
         }
-        let own = match stmt.kind {
-            StmtKind::Expr(e) => Some((self.info.expr_types[&e], next)),
-            _ => None,
-        };
-        if let Some(rest) = self.rest_of(b, i).filter(|_| self.may_end_here(own)) {
-            d = d.with_fix(Fix::delete("remove what is never reached", rest));
+        let mut tries = Vec::new();
+        if let Some(rest) = self.rest_of(b, i).filter(|_| self.may_end_here()) {
+            let (stmts, tail) = match stmt.kind {
+                StmtKind::Expr(e) => (&b.stmts[..i], Some(e)),
+                _ => (&b.stmts[..=i], None),
+            };
+            let patch = Patch::Block(id, Block { stmts: stmts.to_vec(), tail });
+            tries.push(Try { fix: Fix::delete("remove what is never reached", rest), patch });
         }
         let ret = self.frames.last().unwrap().ret;
         if let Some(fix) = self.joined_return(ret) {
             d = d.with_fix(fix);
         }
-        self.diag(d)
+        self.stop_with(d, tries)
     }
 
     /// E0503 at `binding`, of the `let` or `var` the open block is at, whose
-    /// whole initializer `init` of type `own` diverges (§7, S-268).
-    pub(super) fn never_bound(&mut self, binding: Span, init: ExprId, own: TyId) -> Stop {
-        let (_, b, i) = self.open_block();
+    /// whole initializer `init` diverges (§7, S-268).
+    pub(super) fn never_bound(&mut self, binding: Span, init: ExprId) -> Stop {
+        let (id, b, i) = self.open_block();
         let value = self.expr(init).span;
         let msg = "this is never bound: its initializer does not come back (§7)";
         let d = Diagnostic::new(Stage::Types, Code::E0503, binding, msg).with_found(self.src(binding));
-        let mut d = d.with_note(value, "this does not come back");
-        if self.may_end_here(Some((own, binding))) {
+        let d = d.with_note(value, "this does not come back");
+        let mut tries = Vec::new();
+        if self.may_end_here() {
             let head = Span::new(value.file, self.ast.stmt(b.stmts[i]).span.start, value.start);
             let edits = [Some(head), self.rest_of(b, i)].into_iter().flatten().map(Edit::delete).collect();
-            d = d.with_fix(Fix::new("keep the initializer as a statement", edits));
+            let patch = Patch::Block(id, Block { stmts: b.stmts[..i].to_vec(), tail: Some(init) });
+            tries.push(Try { fix: Fix::new("keep the initializer as a statement", edits), patch });
         }
-        self.diag(d)
+        self.stop_with(d, tries)
     }
 
     /// A `return` with no value, of the function that returns `ret`: E0401
@@ -243,7 +205,7 @@ impl<'a> Checker<'a> {
         let (id, b, i) = self.open_block();
         let stmt = self.ast.stmt(b.stmts[i]);
         let x = b.tail.filter(|_| i + 1 == b.stmts.len())?;
-        let fits = !self.failed
+        let fits = self.makes_candidates()
             && matches!(stmt.kind, StmtKind::Return(None))
             && !self.info.diverging.expr(x)
             && self.stays_reached(id);
@@ -258,29 +220,15 @@ impl<'a> Checker<'a> {
         Some(self.join_edits("join it to the `return`", stmt.span.end, at, at, " "))
     }
 
-    /// Whether the open block can end at the item it is at (§18.1): none of
-    /// the rest is the `break` that makes a loop come back (it would become
-    /// a `while true` that diverges), what is around the block is reached
-    /// when the block diverges, and the end of the body has no error without
-    /// the rest and the rest decides no type. `own` is the type of the item
-    /// when it has one, and where.
-    fn may_end_here(&mut self, own: Option<(TyId, Span)>) -> bool {
+    /// Whether a candidate may end the open block at the item it is at, by
+    /// its form (§18.1): none of the rest is the `break` that makes a loop
+    /// come back (it would become a `while true` that diverges), and what is
+    /// around the block is reached when the block diverges.
+    fn may_end_here(&self) -> bool {
         let (id, b, i) = self.open_block();
         let breaks = b.stmts[i + 1..].iter().any(|&s| self.ast.stmt_leaves_loop(s))
             || b.tail.is_some_and(|t| self.ast.leaves_loop(t));
-        let tried = !self.failed && !self.trying_arms;
-        tried && !breaks && self.stays_reached(id) && self.end_is_clean(own) && !self.rest_decides(b, i)
-    }
-
-    /// [`Checker::parts_decide`] of the items of `b`, the open block, after
-    /// the item `i`.
-    fn rest_decides(&mut self, b: &'a Block, i: usize) -> bool {
-        let expected = self.blocks.last().and_then(|at| at.3);
-        self.parts_decide(i + 1..=b.stmts.len(), |ck, k| match (b.stmts.get(k), b.tail) {
-            (Some(&s), _) => ck.check_stmt(s),
-            (None, Some(t)) => ck.check_expr(t, expected).map(drop),
-            (None, None) => Ok(()),
-        })
+        self.makes_candidates() && !breaks && self.stays_reached(id)
     }
 
     /// Whether what is around the block `block` stays reached when it ends
@@ -329,26 +277,21 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether the end of the body has no error with what has been checked
-    /// so far (S-876): `own`, the type of a form that diverges and is the
-    /// last item then, waits for nothing else. A trial, as [`Checker::quietly`]:
-    /// what it decides and looks at is undone, for a later trial to read.
-    pub(super) fn end_is_clean(&mut self, own: Option<(TyId, Span)>) -> bool {
+    /// so far. A trial, as [`Checker::quietly`], which the end of the body
+    /// leaves nothing in the tables of: what it decides and looks at is undone.
+    pub(super) fn end_is_clean(&mut self) -> bool {
         if self.failed {
             return false;
         }
-        let kept = self.keep();
+        let kept = (self.infer.clone(), self.deferred.clone(), self.deferred_end.clone());
         let mark = self.a.diagnostics.len();
         let clean = self.quietly(|ck| {
-            if let Some((t, at)) = own.filter(|&(t, _)| matches!(ck.ty(ck.shallow(t)), Ty::Var(_))) {
-                let unit = ck.unit();
-                ck.unify_at(at, t, unit)?;
-            }
             ck.failed = false;
             ck.end_checks();
             if ck.failed { Err(Stop) } else { Ok(()) }
         });
         self.a.diagnostics.truncate(mark);
-        self.put_back(kept);
+        (self.infer, self.deferred, self.deferred_end) = kept;
         clean.is_some()
     }
 

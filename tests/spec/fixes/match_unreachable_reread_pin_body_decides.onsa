@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "23:5"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+
+// S-876 (U4a of W5-09; R-387): the body of the unreachable arm decides the type of `n` (`need_u8(n)`), which the cast after the `match` reads (E0420 when the arm is gone). The one candidate is the move of the covering `_` to the end, and the file
+// after it has no diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn need_u8(x: U8) {
+}
+
+pub fn body_decides_what_a_cast_reads(m: I32) -> F64 {
+  let n = 5
+  match m {
+    _ => { },
+    1 => {                                          //~ E0503
+      need_u8(n)
+    },
+  }
+  n as F64
+}

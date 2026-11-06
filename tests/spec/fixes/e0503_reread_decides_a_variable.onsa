@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-876 (U4a of W5-09): the candidate that deletes the unreachable items is not made when the body read again without them leaves an error of the stage of the types (§7: "到達しない文を消す候補は、当てた後に同じ型の段の誤りが出る形
+// （消す文だけが前の文の型を決めていた形）では出さない"; §18.1). The deleted statement is the one that decides the type of a variable (`let n = 5`, `let o = None`, `var acc = 0.0`, `let xs = []`), which a later
+// statement reads where the type must be known (E0420: a cast, a `match`, a method call) or which is left open at the end of the body (E0405, E0406). A body that has another error gets no candidate, whatever the deletion does.
+// `fixes = 0` is the promise that none is made. The forms with a candidate are in e0503_reread_candidate_kept.onsa. One error per function (P-01).
+
+pub fn need_u8(x: U8) {
+}
+
+pub fn id(n: I32) -> I32 {
+  n
+}
+
+pub struct P {
+  x: I32,
+}
+
+// ------------------------------------------------------------------------------ what a later statement reads
+
+pub fn statement_decides_what_a_cast_reads(c: Bool) -> F64 {
+  let n = 5
+  if c {
+    return 1.0
+    need_u8(n)                                      //~ E0503
+  }
+  n as F64
+}
+
+pub fn statement_decides_what_a_match_reads(c: Bool) -> I32 {
+  let n = 5
+  if c {
+    return 1
+    need_u8(n)                                      //~ E0503
+  }
+  match n {
+    0 => 2,
+    _ => 3,
+  }
+}
+
+pub fn statement_decides_what_a_method_call_reads(c: Bool) -> Option[U8] {
+  let n = 5
+  if c {
+    return None
+    need_u8(n)                                      //~ E0503
+  }
+  n.checked_add(1)
+}
+
+pub fn statement_in_a_for_body(count: I32) -> F64 {
+  let k = 5
+  for i in 0 ..< count {
+    return 1.0
+    need_u8(k)                                      //~ E0503
+  }
+  k as F64
+}
+
+pub fn statement_after_a_break(count: I32) -> F64 {
+  let k = 5
+  for i in 0 ..< count {
+    break
+    need_u8(k)                                      //~ E0503
+  }
+  k as F64
+}
+
+pub fn statement_in_a_closure_decides_a_captured_variable(x: I32) -> F64 {
+  let k = 5
+  let f = fn(a: I32) -> I32 {
+    return a
+    need_u8(k)                                      //~ E0503
+    0
+  }
+  let _ = f.(x)
+  k as F64
+}
+
+pub fn statement_after_a_panic(c: Bool) -> F64 {
+  let k = 5
+  if c {
+    panic("x")
+    need_u8(k)                                      //~ E0503
+  }
+  k as F64
+}
+
+pub fn statement_after_a_diverging_let_decides(c: Bool) -> F64 {
+  let n = 5
+  if c {
+    let a = { return 1.0 }                          //~ E0503
+    need_u8(n)
+  }
+  n as F64
+}
+
+// ------------------------------------------------------------------------------ what the end of the body leaves open
+
+pub fn deleted_statement_decides_the_type_of_none() -> I32 {
+  let o = None
+  return 1
+  let z: Option[I32] = o                            //~ E0503
+  0
+}
+
+pub fn deleted_statement_decides_the_type_of_a_float_var(x: F32) -> F32 {
+  var acc = 0.0
+  return 1.0
+  acc = acc + x                                     //~ E0503
+  acc
+}
+
+pub fn deleted_statement_decides_the_type_of_an_empty_array() -> U32 {
+  let xs = []
+  return 1
+  let ys: [I32; 0] = xs                             //~ E0503
+  0
+}
+
+// ------------------------------------------------------------------------------ another error in the same body
+
+pub fn type_error_in_a_later_statement(c: Bool) -> I32 {
+  if c {
+    return 1
+    id(2)                                           //~ E0503
+  }
+  let z: Str = 5
+  0
+}
+
+pub fn unresolved_variable_before_the_block(c: Bool) -> I32 {
+  let xs = []
+  if c {
+    return 1
+    id(2)                                           //~ E0503
+  }
+  0
+}

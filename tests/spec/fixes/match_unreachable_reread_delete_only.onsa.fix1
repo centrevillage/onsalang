@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-876, S-934 (U4a of W5-09): the deletion of the unreachable arms is the one candidate of the E0503 of an arm. The move is not made when the covering arm is not a `_` or a binding itself (`(_, _)`, `(_, x)`, `Some(x)` and a literal
+// cover but are not moved: S-934), or when the arm that the move would make reachable has an error of its own, which the body read again with the move applied reports (§7, §18.1). The arms before the unreachable one may
+// diverge: the deletion leaves arms that are still chosen, so the statements after the `match` stay reached. The text after the candidate is not written here. One error per function (P-01).
+
+pub fn id(n: I32) -> I32 {
+  n
+}
+
+// ------------------------------------------------------------------------------ the covering arm is not a `_` or a binding itself
+
+pub fn arm_before_diverges_and_a_later_arm_stays(n: Option[I32]) -> I32 {
+  var r = 0
+  match n {
+    Some(x) => { return 10 },
+                               //~ E0503
+    k => { r = 2 },
+  }
+  r
+}
+
+pub fn arm_before_does_not_diverge(n: Option[I32]) -> I32 {
+  var r = 0
+  match n {
+    Some(x) => { r = 3 },
+                               //~ E0503
+    k => { r = 2 },
+  }
+  r
+}
+
+pub fn arm_before_panics_and_a_later_arm_stays(n: Option[I32]) -> I32 {
+  var r = 0
+  match n {
+    Some(x) => { panic("p") },
+                               //~ E0503
+    k => { r = 2 },
+  }
+  r
+}
+
+pub fn tuple_of_wildcards_covers(a: I32, b: I32) -> I32 {
+  match (a, b) {
+    (_, _) => 0,
+                                        //~ E0503
+  }
+}
+
+pub fn tuple_with_a_binding_covers(a: I32, b: I32) -> I32 {
+  match (a, b) {
+    (_, x) => x,
+                                        //~ E0503
+  }
+}
+
+pub fn repeated_literal(n: I32) -> I32 {
+  match n {
+    1 => 1,
+                                             //~ E0503
+    _ => 3,
+  }
+}
+
+pub fn repeated_variant(o: Option[I32]) -> I32 {
+  match o {
+    None => 0,
+    Some(x) => x,
+                                          //~ E0503
+  }
+}
+
+pub fn wildcard_covered_by_several_arms(a: Option[I32], b: Option[I32]) -> I32 {
+  match (a, b) {
+    (Some(x), _) => x,
+    (None, Some(y)) => y,
+    (None, None) => 0,
+                                             //~ E0503
+  }
+}
+
+pub fn bool_covered_by_true_and_false(b: Bool) -> I32 {
+  match b {
+    true => 1,
+    false => 2,
+                                             //~ E0503
+  }
+}
+
+// ------------------------------------------------------------------------------ the arm that the move would make reachable has an error of its own
+
+pub fn body_of_the_arm_has_a_type_error(n: I32) -> I32 {
+  match n {
+    _ => 0,
+                                       //~ E0503
+  }
+}
+
+pub fn body_of_the_arm_calls_with_a_wrong_type(n: I32, b: Bool) -> I32 {
+  match n {
+    k => k,
+                                         //~ E0503
+  }
+}
+
+pub fn body_of_the_block_arm_has_a_wrong_result(n: I32) -> I32 {
+  match n {
+    _ => 0,
+    
+  }
+}

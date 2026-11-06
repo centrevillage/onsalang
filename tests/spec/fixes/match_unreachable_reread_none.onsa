@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-876 (U4a of W5-09): no candidate of the E0503 of an arm is made when reading the body again with it applied leaves an error of the stage of the types (§7, §18.1). `fixes = 0` is the promise that none is made.
+// Both candidates fail in each function: the deletion leaves a variable without its type for a later cast (E0420), or makes the statements after the `match` unreachable (E0503); the move
+// makes the arm reachable, so that its body is checked (the error of its own, or a type that a later statement does not accept), or leaves another unreachable arm after the move. A body that has another error
+// gets no candidate whatever the candidate does (§7: the body is read again, and the error stays). The unit reports the first error only (§18.1), which is the E0503 of the marker. One error per function (P-01).
+
+pub const LIM: U8 = 5
+
+pub fn need_u8(x: U8) {
+}
+
+pub fn need_i64(x: I64) {
+}
+
+// ------------------------------------------------------------------------------ the arm that decides has an error of its own, or decides a type that a later statement does not accept
+
+pub fn error_before_the_decision(m: I32) -> F64 {
+  let n = 5
+  match m {
+    _ => { },
+    1 => {                                          //~ E0503
+      let z: Str = 5
+      need_u8(n)
+    },
+  }
+  n as F64
+}
+
+pub fn move_exposes_a_later_cast(m: I32) -> F64 {
+  let n = 5
+  match m {
+    _ => { },
+    1 => {                                          //~ E0503
+      need_i64(n)
+    },
+  }
+  (n as I32) as F64
+}
+
+pub fn pattern_decides_and_the_body_has_an_error() -> F64 {
+  let n = (5, 1)
+  match n {
+    _ => { },
+    (LIM, _) => {                                   //~ E0503
+      let z: Str = 5
+    },
+  }
+  n.0 as F64
+}
+
+// ------------------------------------------------------------------------------ the deletion and the move are both unsafe in one match
+
+pub fn deletion_diverges_and_move_exposes_an_error(n: I32) -> I32 {
+  match n {
+    _ => { return 1 },
+    2 => {                                          //~ E0503
+      let z: Str = 5
+    },
+  }
+  3
+}
+
+pub fn move_leaves_another_unreachable_arm(b: Bool) -> F64 {
+  let n = 5
+  match b {
+    _ => { },
+    true => {                                       //~ E0503
+      need_u8(n)
+    },
+    false => { },
+  }
+  n as F64
+}
+
+// ------------------------------------------------------------------------------ another error in the same body
+
+pub fn another_unreachable_arm_after_it(n: I32, m: I32) -> I32 {
+  let a = match n {
+    _ => 0,
+    1 => 1,                                         //~ E0503
+  }
+  let b = match m {
+    _ => 0,
+    2 => 1,
+  }
+  a + b
+}
+
+pub fn type_error_in_a_statement_after_it(n: I32) -> I32 {
+  match n {
+    _ => 0,
+    1 => 1,                                         //~ E0503
+  }
+  let z: Str = 5
+  0
+}
+
+pub fn unresolved_type_variable_before_it(n: I32) -> I32 {
+  let xs = []
+  match n {
+    _ => 0,
+    1 => 1,                                         //~ E0503
+  }
+}
+
+pub fn unresolved_float_before_it(n: I32) -> I32 {
+  var acc = 0.0
+  match n {
+    _ => { acc = 1.0 },
+    1 => { acc = 2.0 },                             //~ E0503
+  }
+  0
+}
+
+pub fn unresolved_float_in_the_result_of_the_match(n: I32) -> I32 {
+  let k = match n {
+    _ => 0.0,
+    2 => 1.0,                                       //~ E0503
+  }
+  0
+}

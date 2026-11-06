@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "29:5"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+// [[test.fix]]
+// at = "29:5"
+// code = "E0503"
+// candidate = 2
+// clean = true
+//
+
+// S-876 (U4a of W5-09; R-387): both candidates are made when the result of the `match` is a variable that a later statement reads (`let q = match n { _ => 0, 1 => id(3) }` and `q + 1`), and the file after each of them has no
+// diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn id(n: I32) -> I32 {
+  n
+}
+
+pub fn result_of_the_match_is_a_variable(n: I32) -> I32 {
+  let q = match n {
+    _ => 0,
+    1 => id(3),                                     //~ E0503
+  }
+  q + 1
+}

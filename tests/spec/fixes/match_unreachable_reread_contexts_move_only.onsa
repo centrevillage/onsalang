@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§11.5", "§18.1"]
+// fixes = 1
+
+// S-876 (U4a of W5-09): in the places where a body stands, the body of the unreachable arm decides the type of a variable (`let n = 5`, `need_u8(n)`) that a statement after the `match` reads where the type must be known
+// (E0420, §4.7). Reading the body again with the deletion applied leaves that error, and reading it with the move applied leaves none, so the move of the covering `_` to the end is the one candidate (§7, §18.1).
+// The places: a closure that decides a variable it captures, the arm of another `match`, a loop, a `test`, a method, a generic function and the body of a flow (`match~`, §11.5). The text after the candidate is not written here.
+// One error per function (P-01).
+
+pub fn need_u8(x: U8) {
+}
+
+pub struct P {
+  x: I32,
+}
+
+pub fn in_a_closure_that_reads_a_local_variable(x: I32) -> F64 {
+  let f = fn(a: I32) -> F64 {
+    let n = 5
+    match a {
+      _ => { },
+      1 => {                                        //~ E0503
+        need_u8(n)
+      },
+    }
+    n as F64
+  }
+  f.(x)
+}
+
+pub fn closure_decides_a_captured_variable(m: I32) -> F64 {
+  let n = 5
+  let f = fn(a: I32) -> I32 {
+    match a {
+      _ => 0,
+      1 => {                                        //~ E0503
+        need_u8(n)
+        1
+      },
+    }
+  }
+  let _ = f.(m)
+  n as F64
+}
+
+pub fn in_the_arm_of_another_match(m: I32, o: Option[I32]) -> F64 {
+  let n = 5
+  match o {
+    Some(x) => match m {
+      _ => { },
+      1 => { need_u8(n) },                          //~ E0503
+    },
+    None => { },
+  }
+  n as F64
+}
+
+pub fn in_a_for_body(count: I32) -> F64 {
+  let n = 5
+  for i in 0 ..< count {
+    match i {
+      _ => { },
+      1 => { need_u8(n) },                          //~ E0503
+    }
+  }
+  n as F64
+}
+
+pub fn in_a_while_body(count: I32) -> F64 {
+  let n = 5
+  var i = 0
+  while i < count {
+    match i {
+      _ => { },
+      1 => { need_u8(n) },                          //~ E0503
+    }
+    i = i + 1
+  }
+  n as F64
+}
+
+test "in a test" {
+  let n = 5
+  let m: I32 = 3
+  match m {
+    _ => { },
+    3 => { need_u8(n) },                            //~ E0503
+  }
+  let w = n as F64
+  assert w > 0.0
+}
+
+impl P {
+  pub fn weight(self) -> F64 {
+    let n = 5
+    match self.x {
+      _ => { },
+      1 => { need_u8(n) },                          //~ E0503
+    }
+    n as F64
+  }
+}
+
+fn pick[T: Num](x: T, m: I32) -> T {
+  let n = 5
+  match m {
+    _ => { },
+    1 => { need_u8(n) },                            //~ E0503
+  }
+  let _ = n as F64
+  x
+}
+
+pub flow in_a_match_tilde(k: U32 at sample, x: F32 at sample) -> F64 at sample {
+  let g = 1.0
+  let a = match~ k {
+    _ => x,
+    0 => g * x,                                     //~ E0503
+  }
+  (a as F64) + (g as F64)
+}

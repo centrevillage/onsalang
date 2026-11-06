@@ -167,7 +167,7 @@ impl<'a> Checker<'a> {
             ExprKind::TypeArgs { .. } => {
                 onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
             }
-            ExprKind::Block(b) => self.check_block(e, b, expected),
+            ExprKind::Block(b) => self.check_block(e, self.block_of(e, b), expected),
             // What only a flow body holds is the names stage's E0821 outside
             // one (§11.1). In a flow body, `if~` and `match~` are typed as
             // `if` and `match`, and the flow checks read the `~`
@@ -201,7 +201,7 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            ExprKind::Match { scrutinee, arms, .. } => self.check_match(e, *scrutinee, arms, expected),
+            ExprKind::Match { scrutinee, arms, .. } => self.check_match(e, *scrutinee, self.arms_of(e, arms), expected),
             ExprKind::Closure { params, ret, ret_clock: None, effects, body } => {
                 self.check_closure(e, params, *ret, effects.as_ref(), *body, expected)
             }
@@ -421,7 +421,7 @@ impl<'a> Checker<'a> {
         if let Some(f) = &mut self.flow {
             f.depth += 1;
         }
-        self.blocks.push((id, b, 0, expected));
+        self.blocks.push((id, b, 0));
         let r = (|| -> R<TyId> {
             for (i, &s) in b.stmts.iter().enumerate() {
                 self.blocks.last_mut().unwrap().2 = i;
@@ -451,7 +451,7 @@ impl<'a> Checker<'a> {
         r
     }
 
-    fn check_match(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm], expected: Option<TyId>) -> R<TyId> {
+    fn check_match(&mut self, e: ExprId, scrutinee: ExprId, arms: &'a [MatchArm], expected: Option<TyId>) -> R<TyId> {
         let span = self.expr(e).span;
         let st = self.check_expr(scrutinee, None)?;
         let st = self.known(st, self.expr(scrutinee).span, "`match` operand")?;
@@ -484,20 +484,14 @@ impl<'a> Checker<'a> {
         !self.mentions_failed(st) && !matches!(self.ty(self.shallow(st)), Ty::Error)
     }
 
-    /// The arms in turn, against a value of type `st`: the pattern, then
-    /// whether the arms before it leave it a value (§7, E0503, before its
-    /// body, S-876), then the guard and the body. An arm with a guard is
-    /// asked about but covers nothing. Stops at an arm that gets no value and
-    /// gives it back, with nothing reported ([`Self::read_arms`]).
-    pub(super) fn check_arms<'x>(
-        &mut self,
-        arms: impl Iterator<Item = &'x MatchArm>,
-        st: TyId,
-        seen: &mut Seen,
-        result: &mut Option<TyId>,
-        expected: Option<TyId>,
-    ) -> R<Option<&'x MatchArm>> {
-        for arm in arms {
+    /// The arms of `m` in turn: the pattern, then whether the arms before it
+    /// leave it a value (§7, E0503, before its body, S-876), then the guard
+    /// and the body. An arm with a guard is asked about but covers nothing.
+    /// Stops at an arm that gets no value and gives its index, with nothing
+    /// reported ([`Self::read_arms`]).
+    pub(super) fn check_arms(&mut self, m: &Arms<'_>, seen: &mut Seen, result: &mut Option<TyId>) -> R<Option<usize>> {
+        let (st, expected) = (m.st, m.expected);
+        for (k, arm) in m.arms.iter().enumerate() {
             let waiting = (self.deferred.len(), self.deferred_end.len());
             let p = self.bind_pat(arm.pat, st, false);
             let bad = std::mem::take(&mut self.bad_consts);
@@ -508,7 +502,7 @@ impl<'a> Checker<'a> {
                 // What a literal of the pattern waits for goes with the arm.
                 self.deferred.truncate(waiting.0);
                 self.deferred_end.truncate(waiting.1);
-                return Ok(Some(arm));
+                return Ok(Some(k));
             }
             if !bad.is_empty() {
                 return Err(self.reject_constants(arm, bad));

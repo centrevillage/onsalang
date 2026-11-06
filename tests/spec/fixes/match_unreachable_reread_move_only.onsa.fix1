@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-876 (U4a of W5-09): the candidates of the E0503 of an arm are judged by reading the body again with each of them applied (§7: a candidate is made only when no error of the stage of the types is left; §18.1).
+// Here the deletion of the unreachable arms leaves an error of that stage in a later statement (E0420: a cast, a `match` or a method call reads a variable whose type was decided by the arm that is deleted), and the move of the covering
+// `_` to the end leaves none, so the move is the one candidate. The text after the candidate is not written here (the contract of §18.1 reads it). One error per function (P-01).
+
+pub const LIM: U8 = 5
+
+pub fn need_u8(x: U8) {
+}
+
+// ------------------------------------------------------------------------------ the pattern of the arm decides the type
+
+pub fn constant_decides_a_tuple_field() -> F64 {
+  let n = (5, 1)
+  match n {
+    
+    (LIM, _) => { },
+    _ => { },                                //~ E0503
+  }
+  n.0 as F64
+}
+
+pub fn constant_decides_the_payload_of_some() -> F64 {
+  let o = Some(5)
+  match o {
+    
+    Some(LIM) => { },
+    _ => { },                               //~ E0503
+  }
+  match o {
+    Some(v) => v as F64,
+    None => 0.0,
+  }
+}
+
+pub fn constant_in_a_choice_branch(m: I32) -> F64 {
+  let n = 5
+  match (m, n) {
+    
+    (0, LIM) | (1, 7) => { },
+    _ => { },                       //~ E0503
+  }
+  n as F64
+}
+
+pub fn constant_in_an_arm_with_a_guard(flag: Bool) -> F64 {
+  let n = (5, 1)
+  match n {
+    
+    (LIM, _) if flag => { },
+    _ => { },                        //~ E0503
+  }
+  n.0 as F64
+}
+
+pub fn constant_decides_a_var() -> F64 {
+  var n = (5, 1)
+  match n {
+    
+    (LIM, _) => { },
+    _ => { },                                //~ E0503
+  }
+  n = (6, 2)
+  n.0 as F64
+}
+
+// ------------------------------------------------------------------------------ the body of the arm decides the type
+
+pub fn body_decides_what_a_cast_reads(m: I32) -> F64 {
+  let n = 5
+  match m {
+    
+    1 => {                                          //~ E0503
+      need_u8(n)
+    },
+    _ => { },
+  }
+  n as F64
+}
+
+pub fn body_decides_what_a_match_reads(m: I32) -> I32 {
+  let n = 5
+  match m {
+    
+    1 => {                                          //~ E0503
+      need_u8(n)
+    },
+    _ => { },
+  }
+  match n {
+    0 => 1,
+    _ => 2,
+  }
+}
+
+pub fn body_decides_what_a_method_call_reads(m: I32) -> Option[U8] {
+  let n = 5
+  match m {
+    
+    1 => {                                          //~ E0503
+      need_u8(n)
+    },
+    _ => { },
+  }
+  n.checked_add(1)
+}
+
+pub fn body_decides_with_a_binding_as_the_covering_arm(m: I32) -> F64 {
+  let n = 5
+  match m {
+    
+    1 => {                                          //~ E0503
+      need_u8(n)
+    },
+    k => { },
+  }
+  let w = 2.5
+  w * (n as F64)
+}
+
+// ------------------------------------------------------------------------------ the deletion makes the statements after the match unreachable
+
+pub fn deletion_makes_the_match_diverge(n: I32) -> I32 {
+  match n {
+    
+    2 => { },
+    _ => { return 1 },                                       //~ E0503
+  }
+  3
+}
+
+pub fn deletion_makes_the_match_diverge_in_a_branch(c: Bool, n: I32) -> I32 {
+  if c {
+    match n {
+      
+      2 => { },
+      _ => { return 1 },                                     //~ E0503
+    }
+    return 0
+  }
+  3
+}

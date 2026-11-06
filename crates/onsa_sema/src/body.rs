@@ -20,6 +20,7 @@ use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
     PatId, PatKind, Path, RangeEnd, RangeHead, StmtId, StmtKind, StrSeg, UnOp,
 };
+use onsa_syntax::tails::{Diverging, Patch};
 use serde::{Deserialize, Serialize};
 
 use crate::binding::{Bind, Head, HeadRow, LitClass};
@@ -50,6 +51,7 @@ mod patterns;
 mod reach;
 mod receivers;
 mod removed;
+mod reread;
 pub(crate) mod slot;
 mod statements;
 
@@ -279,18 +281,19 @@ pub(crate) struct Checker<'a> {
     self_ty: Option<TyId>,
     pub(crate) infer: Infer,
     pub(crate) frames: Vec<Frame>,
-    /// The blocks being checked, innermost last: the node, the block, the
-    /// item it is at and the type expected of it ([`Checker::open_block`];
-    /// what stops at a statement reads what follows it here, §7).
-    pub(crate) blocks: Vec<(ExprId, &'a Block, usize, Option<TyId>)>,
+    /// The blocks being checked, innermost last: the node, the block and the
+    /// item it is at ([`Checker::open_block`]; what stops at a statement reads
+    /// what follows it here, §7).
+    pub(crate) blocks: Vec<(ExprId, &'a Block, usize)>,
     pub(crate) info: BodyInfo,
     pub(crate) failed: bool,
     /// The constants of a type no pattern compares found in the pattern
     /// being bound, with their types ([`Checker::bind_pat`]).
     bad_consts: Vec<(Span, TyId)>,
-    /// Reading the arms of a `match` in another order: what is found fails
-    /// the trial, and an E0503 of an arm gets no candidate ([`arms`]).
-    trying_arms: bool,
+    /// How this read of the body goes.
+    how: How<'a>,
+    /// The candidates of the E0503 the read stopped at, to be read ([`reread`]).
+    tries: Option<reread::Tries>,
     /// Flow mode (T3-1, `flow.rs`): set while checking a flow body.
     pub(crate) flow: Option<crate::flow::FlowCx>,
     /// Checks that wait for a type a later statement decides (`deferred.rs`).
@@ -345,6 +348,82 @@ fn body_of(a: &mut Analysis, id: DefId) -> Option<(Option<TyId>, ExprId, TyId)> 
     })
 }
 
+/// A body to read, as often as its candidates ask.
+struct Job<'p> {
+    module: &'p crate::Module,
+    m: ModId,
+    id: DefId,
+    self_ty: Option<TyId>,
+    body: ExprId,
+    ret: TyId,
+    generics: Vec<GenericDef>,
+}
+
+/// How a read of a body goes.
+#[derive(Clone, Copy)]
+pub(crate) enum How<'x> {
+    /// The read of the body as it is written, the one that makes candidates.
+    First,
+    /// The read of its form with a candidate applied ([`reread`]).
+    Applied(&'x Patch),
+}
+
+/// One read of the body of `job`, from a new state; the checks of the end
+/// are the caller's. The tables of the [`Checker`] it gives back are the
+/// read's, with the record of the names in them.
+fn read_body<'c>(
+    a: &'c mut Analysis,
+    bound: &'c mut HashMap<ModId, HashSet<String>>,
+    job: &Job<'c>,
+    names: BodyNames,
+    diverging: Diverging,
+    how: How<'c>,
+) -> Checker<'c> {
+    let (locals, origins) = locals_of(a, &names);
+    let mut info = BodyInfo { locals, diverging, ..Default::default() };
+    info.captures = names.captures.iter().map(|(e, bs)| (*e, bs.iter().map(|b| LocalId(b.0)).collect())).collect();
+    let typed = vec![false; info.locals.len()];
+    let generics = job.generics.clone();
+    let float_params =
+        (0..).zip(&generics).filter(|(_, g)| bounds::param_holds(g, Bound::Float)).map(|(i, _)| i).collect();
+    let mut ck = Checker {
+        a,
+        ast: &job.module.parsed.ast,
+        text: &job.module.text,
+        m: job.m,
+        def: job.id,
+        generics,
+        self_ty: job.self_ty,
+        infer: Infer::new(float_params),
+        frames: Vec::new(),
+        blocks: Vec::new(),
+        info,
+        failed: false,
+        bad_consts: Vec::new(),
+        how,
+        tries: None,
+        deferred: Vec::new(),
+        deferred_seen: 0,
+        deferred_generation: 0,
+        deferred_end: Vec::new(),
+        deferred_count: 0,
+        why: None,
+        arg_closure: None,
+        flow: None,
+        names,
+        origins,
+        typed,
+        root: job.body,
+        bound,
+    };
+    match ck.a.def(job.id).kind {
+        DefKind::Const(_) => ck.check_const(job.body, job.ret),
+        DefKind::Flow(_) => ck.check_flow_body(job.body, job.ret),
+        _ => ck.check_fn_body(job.body, job.ret),
+    }
+    ck
+}
+
 /// Check every body of the package and its dependencies.
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
@@ -382,56 +461,21 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         // for a signature (`Analysis::unread_path`, `record_if_held`); it is
         // moved to the body below.
         let held = a.read_held.contains(&id);
-        let (locals, origins) = locals_of(a, &names);
         let diverging = std::mem::take(&mut names.diverging);
-        let mut info = BodyInfo { locals, diverging, ..Default::default() };
-        info.captures = names.captures.iter().map(|(e, bs)| (*e, bs.iter().map(|b| LocalId(b.0)).collect())).collect();
-        let typed = vec![false; info.locals.len()];
-        let float_params =
-            (0..).zip(&generics).filter(|(_, g)| bounds::param_holds(g, Bound::Float)).map(|(i, _)| i).collect();
-        let mut ck = Checker {
-            a,
-            ast: &module.parsed.ast,
-            text: &module.text,
-            m,
-            def: id,
-            generics,
-            self_ty,
-            infer: Infer::new(float_params),
-            frames: Vec::new(),
-            blocks: Vec::new(),
-            info,
-            failed: false,
-            bad_consts: Vec::new(),
-            trying_arms: false,
-            deferred: Vec::new(),
-            deferred_seen: 0,
-            deferred_generation: 0,
-            deferred_end: Vec::new(),
-            deferred_count: 0,
-            why: None,
-            arg_closure: None,
-            flow: None,
-            names,
-            origins,
-            typed,
-            root: body,
-            bound: &mut bound,
-        };
-        let is_const = matches!(ck.a.def(id).kind, DefKind::Const(_));
-        let is_flow = matches!(ck.a.def(id).kind, DefKind::Flow(_));
-        if is_const {
-            ck.check_const(body, ret);
-        } else if is_flow {
-            ck.check_flow_body(body, ret);
-        } else {
-            ck.check_fn_body(body, ret);
-        }
+        let job = Job { module, m, id, self_ty, body, ret, generics };
+        let mut ck = read_body(a, &mut bound, &job, names, diverging, How::First);
         let fcx = ck.flow.take();
-        let names = std::mem::take(&mut ck.names);
+        let mut names = std::mem::take(&mut ck.names);
+        let tries = ck.tries.take();
         let mut info = ck.finish();
         if (!held && a.read_held.remove(&id)) || names.read_unread {
             info.read_unread = true;
+        }
+        // The types stage stops where the walk of the names stopped (`Diverging`,
+        // S-692), and a candidate can take that place away: a read of its form
+        // would go on into code with no record, so a partial record has no read.
+        if let Some(tries) = tries.filter(|_| names.complete) {
+            reread::read_again(a, &mut bound, &job, &mut names, &info.diverging, tries);
         }
         a.names.insert(id, names);
         match fcx {

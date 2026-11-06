@@ -126,7 +126,7 @@ impl<'a> Checker<'a> {
             None => self.check_expr(init, None)?,
         };
         if self.info.diverging.expr(init) {
-            return Err(self.never_bound(binding, init, it));
+            return Err(self.never_bound(binding, init));
         }
         Ok(it)
     }

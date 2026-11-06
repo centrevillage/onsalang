@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "20:5"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+
+// S-876, S-934 (U4a of W5-09; R-387): the arm before the unreachable one diverges (`Some(_) => { return 10 }`) and the covering arm is not a `_` or a binding itself, so the deletion of the unreachable arm is the one candidate, and the file after
+// it has no diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn arm_before_diverges_and_a_later_arm_stays(n: Option[I32]) -> I32 {
+  var r = 0
+  match n {
+    Some(_) => { return 10 },
+    Some(1) => { r = 1 },                           //~ E0503
+    _ => { r = 2 },
+  }
+  r
+}

@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-876, S-692 (U4a of W5-09): a body that reads a name held as an error (`dup`, declared twice) in a place that is not reached has no record of its names after that place, and no candidate of its E0503 is made:
+// the candidate would take that place away, and what follows it has not been through the names stage (§18.1). `fixes = 0` is the promise that none is made, and the forms after the place are ones the names stage
+// stops at, which a read past it would meet. The unit of `dup` reports its E0304, and each function its E0503. One error per function (P-01).
+
+pub fn dup() -> I32 {
+  1
+}
+
+pub fn dup() -> I32 {                               //~ E0304
+  2
+}
+
+pub struct S[T] {
+  x: T,
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+// ------------------------------------------------------------------------------ an arm that no value chooses
+
+pub fn then_a_call_with_type_arguments(a: I32) -> I32 {
+  match a {
+    1 => 0,
+    1 => dup(),                                     //~ E0503
+    2 => id::[I32](1),
+    _ => 3,
+  }
+}
+
+pub fn then_a_struct_with_type_arguments(a: I32) -> I32 {
+  match a {
+    1 => 0,
+    1 => dup(),                                     //~ E0503
+    2 => S::[I32] { x: 1 }.x,
+    _ => 3,
+  }
+}
+
+pub fn then_an_if_of_a_flow(a: I32) -> I32 {
+  match a {
+    1 => 0,
+    1 => dup(),                                     //~ E0503
+    2 => if~ a == 1 { 1 } else { 2 },
+    _ => 3,
+  }
+}
+
+pub fn then_a_plain_arm(a: I32) -> I32 {
+  match a {
+    1 => 0,
+    1 => dup(),                                     //~ E0503
+    2 => a,
+    _ => 3,
+  }
+}
+
+// ------------------------------------------------------------------------------ the statements after a `return`
+
+pub fn after_a_return_then_a_call_with_type_arguments(a: I32) -> I32 {
+  if a == 0 {
+    return 1
+    dup()                                           //~ E0503
+  }
+  id::[I32](1)
+}
+
+pub fn after_a_return_then_an_if_of_a_flow(a: I32) -> I32 {
+  if a == 0 {
+    return 1
+    dup()                                           //~ E0503
+  }
+  if~ a == 1 { 1 } else { 2 }
+}
+
+pub fn after_an_initializer_that_diverges_then_a_call_with_type_arguments(a: I32) -> I32 {
+  if a == 0 {
+    let b = { return 1 }                            //~ E0503
+    dup()
+  }
+  id::[I32](1)
+}

@@ -68,7 +68,9 @@ impl<'a> Checker<'a> {
         if !self.failed {
             self.check_deferred_end();
         }
+        // Only the first read has a value: a candidate's form reads no `const_values`.
         if !self.failed
+            && matches!(self.how, How::First)
             && let Some(v) = crate::consteval::eval(self, value)
         {
             // A negation of a value is evaluated, not folded into a literal (S-227), so it can

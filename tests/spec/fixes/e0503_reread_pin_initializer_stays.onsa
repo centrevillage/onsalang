@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "21:7"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+
+// S-876 (U4a of W5-09; R-387): the initializer of the `let` that diverges stays as a statement, and it is what decides the type of `n` that the cast after it reads: the statements after the `let` go with it, and the file after the candidate has
+// no diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn need_u8(x: U8) {
+}
+
+pub fn diverging_initializer_decides_what_the_deleted_statements_read() -> F64 {
+  let n = 5
+  let a = {                                         //~ E0503
+    need_u8(n)
+    return 1.0
+  }
+  n as F64
+}

@@ -42,6 +42,24 @@ const LEN: &str = "len";
 /// The note of an `is_empty` with no candidate.
 const LEN_RULE: &str = "a type with a length has `len()` only, and an empty test is `len() == 0` (§4.2)";
 
+/// Where what a read that is not kept leaves in the analysis starts.
+pub(super) struct Marks {
+    held: bool,
+    uses: usize,
+}
+
+impl Marks {
+    pub(super) fn of(a: &Analysis, def: DefId) -> Marks {
+        Marks { held: a.read_held.contains(&def), uses: a.uses.borrow().len() }
+    }
+
+    /// Undo it: whether the read read what the check does not read.
+    pub(super) fn undo(self, a: &mut Analysis, def: DefId) -> bool {
+        a.uses.borrow_mut().truncate(self.uses);
+        !self.held && a.read_held.remove(&def)
+    }
+}
+
 impl<'a> Checker<'a> {
     /// E0413 for the method `name` that `recv` has not, called by `e` with
     /// `args`, where the type `expected` is expected (§4.7).
@@ -253,12 +271,11 @@ impl<'a> Checker<'a> {
     /// `uses`) is undone. Of what reads what the check does not, an error is
     /// elsewhere (§18.1): none.
     pub(super) fn quietly<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> Option<T> {
-        let (failed, held, uses) = (self.failed, self.a.read_held.contains(&self.def), self.a.uses.borrow().len());
+        let (failed, marks) = (self.failed, Marks::of(self.a, self.def));
         self.failed = true;
         let out = f(self);
         self.failed = failed;
-        self.a.uses.borrow_mut().truncate(uses);
-        let read_unread = !held && self.a.read_held.remove(&self.def);
+        let read_unread = marks.undo(self.a, self.def);
         out.ok().filter(|_| !read_unread)
     }
 

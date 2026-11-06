@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§18.1"]
+// fixes = 1
+
+// S-876, S-292 (U4a of W5-09): the candidate that deletes the unreachable items is made when the body read again without them has no error of the stage of the types (§7, §18.1). The deleted statement decides the type of a variable
+// that nothing else reads (it only leaves the variable unused, which is an E0309 of a later stage: S-292), or the type is decided again by a later statement or by the diverging initializer that stays. The `let` whose initializer
+// diverges as a whole leaves the initializer as a statement (§7), which is the last item of the block and a value of it. The contexts of the body: a loop, a closure, a `test`, a method and a generic function.
+// The text after the candidate is not written here. One error per function (P-01).
+
+pub fn need_u8(x: U8) {
+}
+
+pub struct P {
+  x: I32,
+}
+
+// ------------------------------------------------------------------------------ the type is decided without the deleted statement, or not read
+
+pub fn decided_by_the_deleted_statement_and_not_read_again(c: Bool) -> F64 {
+  let n = 5
+  if c {
+    return 1.0
+    need_u8(n)                                      //~ E0503
+  }
+  2.0
+}
+
+pub fn decided_again_by_a_later_statement(c: Bool) -> F64 {
+  let n = 5
+  if c {
+    return 1.0
+    need_u8(n)                                      //~ E0503
+  }
+  need_u8(n)
+  n as F64
+}
+
+pub fn decided_before_the_block(c: Bool) -> F64 {
+  let n = 5
+  need_u8(n)
+  if c {
+    return 1.0
+    need_u8(n)                                      //~ E0503
+  }
+  n as F64
+}
+
+pub fn several_deleted_statements_that_nothing_reads(c: Bool) -> F64 {
+  let n = 5
+  let m = 6
+  if c {
+    return 1.0
+    need_u8(n)                                      //~ E0503
+    need_u8(m)
+  }
+  2.0
+}
+
+// ------------------------------------------------------------------------------ the initializer that diverges stays
+
+pub fn diverging_initializer_decides_what_the_deleted_statements_read() -> F64 {
+  let n = 5
+  let a = {                                         //~ E0503
+    need_u8(n)
+    return 1.0
+  }
+  n as F64
+}
+
+pub fn diverging_initializer_as_the_last_expression() -> I32 {
+  let x = { return 1 }                              //~ E0503
+  x + 1
+}
+
+pub fn diverging_initializer_in_a_branch_that_has_a_value(c: Bool) -> I32 {
+  let r: I32 = if c {
+    let x = { return 1 }                            //~ E0503
+    x
+  } else {
+    2
+  }
+  r
+}
+
+// ------------------------------------------------------------------------------ the contexts of the body
+
+pub fn after_a_break_in_a_for_body(count: I32) -> F64 {
+  let k = 5
+  for i in 0 ..< count {
+    break
+    need_u8(k)                                      //~ E0503
+  }
+  2.0
+}
+
+pub fn after_a_continue_in_a_while_body(count: I32) -> I32 {
+  var i = 0
+  let k = 5
+  while i < count {
+    i = i + 1
+    continue
+    need_u8(k)                                      //~ E0503
+  }
+  i
+}
+
+pub fn in_a_closure(x: I32) -> I32 {
+  let f = fn(a: I32) -> I32 {
+    let k = 5
+    return a
+    need_u8(k)                                      //~ E0503
+    0
+  }
+  f.(x)
+}
+
+test "in a test" {
+  let k = 5
+  panic("x")
+  need_u8(k)                                        //~ E0503
+}
+
+impl P {
+  pub fn get(self) -> I32 {
+    let k = 5
+    return self.x
+    need_u8(k)                                      //~ E0503
+    0
+  }
+}
+
+fn pick[T: Num](x: T) -> T {
+  let k = 5
+  return x
+  need_u8(k)                                        //~ E0503
+  x
+}

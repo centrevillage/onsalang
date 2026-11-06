@@ -8,7 +8,7 @@
 use onsa_diag::hash::HashSet;
 use serde::{Deserialize, Serialize};
 
-use crate::ast::{Arg, Ast, BinOp, Block, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
+use crate::ast::{Arg, Ast, BinOp, Block, ExprId, ExprKind, Lit, MatchArm, Mode, StmtId, StmtKind, StrSeg};
 
 /// What diverges in a body (§7): the table the walk of the names stage
 /// fills, child before parent, and the later stages read (D-15).
@@ -161,6 +161,17 @@ impl Diverging {
             self.loops.insert(s);
         }
     }
+}
+
+/// A candidate of an E0503 as a form of the body (§7, §18.1): one node read
+/// as another, so a body is read with it applied and no copy of the tree.
+#[derive(Debug, Clone)]
+pub enum Patch {
+    /// The block reads as this one: as the parser reads what is left, the
+    /// last item an expression is its `tail`.
+    Block(ExprId, Block),
+    /// The `match` has these arms, in this order.
+    Arms(ExprId, Vec<MatchArm>),
 }
 
 /// A tail of a value.

@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "19:5"
+// code = "E0503"
+// candidate = 1
+// clean = true
+//
+
+// S-876 (U4a of W5-09; R-387): the deletion of the arm `2 => { }` leaves `_ => { return 1 }` only, so the `match` diverges and the `3` after it is unreachable (E0503). The one candidate is the move of the covering `_` to the end,
+// and the file after it has no diagnostic (`clean`). The pin makes a lost candidate a failure.
+
+pub fn deletion_makes_the_match_diverge(n: I32) -> I32 {
+  match n {
+    
+    2 => { },
+    _ => { return 1 },                                       //~ E0503
+  }
+  3
+}

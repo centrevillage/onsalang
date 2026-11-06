@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-876 (U4a of W5-09): in the places where a body stands (a closure, a loop, a `test`, a method, a generic function), no candidate of the E0503 of an arm is made when reading the body again leaves an error
+// of the stage of the types with either of them applied (§7, §18.1): the deletion leaves a variable without its type for a later cast (E0420), and the move makes the arm reachable, so that the error of its body is
+// reported. `fixes = 0` is the promise that none is made. One error per function (P-01).
+
+pub fn need_u8(x: U8) {
+}
+
+pub struct P {
+  x: I32,
+}
+
+pub fn in_a_closure(x: I32) -> F64 {
+  let f = fn(a: I32) -> F64 {
+    let n = 5
+    match a {
+      _ => { },
+      1 => {                                        //~ E0503
+        let z: Str = 5
+        need_u8(n)
+      },
+    }
+    n as F64
+  }
+  f.(x)
+}
+
+pub fn in_a_for_body(count: I32) -> F64 {
+  let n = 5
+  for i in 0 ..< count {
+    match i {
+      _ => { },
+      1 => {                                        //~ E0503
+        let z: Str = 5
+        need_u8(n)
+      },
+    }
+  }
+  n as F64
+}
+
+test "in a test" {
+  let n = 5
+  let m: I32 = 3
+  match m {
+    _ => { },
+    3 => {                                          //~ E0503
+      let z: Str = 5
+      need_u8(n)
+    },
+  }
+  let w = n as F64
+  assert w > 0.0
+}
+
+impl P {
+  pub fn weight(self) -> F64 {
+    let n = 5
+    match self.x {
+      _ => { },
+      1 => {                                        //~ E0503
+        let z: Str = 5
+        need_u8(n)
+      },
+    }
+    n as F64
+  }
+}
+
+fn pick[T: Num](x: T, m: I32) -> T {
+  let n = 5
+  match m {
+    _ => { },
+    1 => {                                          //~ E0503
+      let z: Str = 5
+      need_u8(n)
+    },
+  }
+  let _ = n as F64
+  x
+}
+
+pub fn closure_with_another_error_after_the_match(x: I32) -> I32 {
+  let f = fn(a: I32) -> I32 {
+    match a {
+      _ => 0,
+      1 => 1,                                       //~ E0503
+    }
+    let z: Str = 5
+    0
+  }
+  f.(x)
+}
