@@ -39,7 +39,7 @@ pub fn a_constant_next_to_the_rest(it: Item) -> I32 {
 pub fn a_constant_and_a_literal_and_a_binding(it: Item) -> I32 {
   var r = 0
   match it {
-    Item { z: LIMIT, x: 0, y: b, _ } => {
+    Item { z: LIMIT, x: 0, y: b } => {
       r = b
     },
     Item { _ } => {

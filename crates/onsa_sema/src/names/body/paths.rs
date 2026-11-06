@@ -397,8 +397,9 @@ impl<'a> Walker<'a> {
     /// before it stands for; a path that ends at an alias or at `Self` names
     /// the type (`P { x }`, `Self { x }`). A name of a kind the place does
     /// not take (`want`) is E0308 (§15.1, §7): a struct literal and a struct
-    /// pattern name a type, the path of any other pattern a variant or a
-    /// constant (the form of each is the types stage's).
+    /// pattern name a type, a path with fields after it a variant, and one
+    /// with nothing after it a variant or a constant (the form of each is the
+    /// types stage's).
     fn item(&self, path: &Path, want: Want) -> Result<(Entity, Option<TyId>), Fail> {
         let a = self.a;
         let segs: Vec<&Ident> = path.segments.iter().collect();

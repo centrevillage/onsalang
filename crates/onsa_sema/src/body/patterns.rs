@@ -157,16 +157,10 @@ impl<'a> Checker<'a> {
                     en.variants[i as usize].fields.iter().map(|&f| self.a.types.subst(f, &args)).collect();
                 (i, fields, en.variants.len())
             }
-            _ => {
-                let shown = self.src(path.span);
-                return Err(self.name_err(
-                    Code::E0302,
-                    path.span,
-                    format!(
-                        "`{shown}` is not a variant; patterns are literals, bindings, variants, tuples and structs (§7)"
-                    ),
-                ));
+            Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Const(_)) => {
+                return self.bind_const_pat(pat, path, (d, owner), ty, irrefutable);
             }
+            _ => return Err(self.not_a_pattern(path)),
         };
         self.info.pat_ctors.insert(pat, ctor);
         if irrefutable && nctors > 1 {
@@ -199,5 +193,55 @@ impl<'a> Checker<'a> {
             subs.push(self.bind_pat(el, t, irrefutable)?);
         }
         Ok(P::Ctor(ctor, subs))
+    }
+
+    /// The constant `d` as a pattern, which is compared with `==` (§7,
+    /// S-185): a pattern that can fail (E0502), of the type of the value it
+    /// is compared with (E0401, S-933). No value is read here.
+    fn bind_const_pat(
+        &mut self,
+        pat: PatId,
+        path: &Path,
+        (d, owner): (DefId, Option<TyId>),
+        ty: TyId,
+        irrefutable: bool,
+    ) -> R<P> {
+        let span = self.ast.pat(pat).span;
+        if irrefutable {
+            return Err(self.err(
+                Code::E0502,
+                span,
+                "a constant pattern can fail to match; `let` takes only tuple and struct patterns (§7)",
+            ));
+        }
+        // A constant of no known type: the arms after it would report what
+        // follows from that (§18.1).
+        // SPEC-GAP(S-935): the unit stops here, as at a failed name; an
+        // expression goes on with the error type.
+        if self.a.heading_failed(d) {
+            return Err(self.held_stop());
+        }
+        let (t, target) = self.const_value(d, owner, span)?;
+        self.unify_at(span, t, ty)?;
+        match self.ty(self.shallow(t)) {
+            Ty::Int(_) | Ty::Char | Ty::Bool | Ty::Builtin(BuiltinTy::Str, _) => {
+                self.info.pat_consts.insert(pat, target);
+                Ok(P::Const)
+            }
+            Ty::Error => Err(self.held_stop()),
+            // The E0020 of W5-09 U1b (S-252).
+            _ => Err(self.not_a_pattern(path)),
+        }
+    }
+
+    /// E0302 for the path of a pattern that names none of what a pattern
+    /// takes.
+    fn not_a_pattern(&mut self, path: &Path) -> Stop {
+        let shown = self.src(path.span);
+        self.name_err(
+            Code::E0302,
+            path.span,
+            format!("`{shown}` is not a variant; patterns are literals, bindings, variants, tuples and structs (§7)"),
+        )
     }
 }

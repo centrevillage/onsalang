@@ -248,13 +248,9 @@ impl<'a> Checker<'a> {
                     // `check_expr` holds the type to the expected one, as of
                     // any value: a parameter of the `impl` decided there is
                     // decided as a function's is (§4.5, S-304).
-                    DefKind::Const(c) => {
-                        let args = self.fresh_args(d);
-                        self.of_owner(d, &args, owner, span)?;
-                        let of = self.param_of(owner);
-                        let t = self.member_ty(d, c.ty, &args, of);
-                        let inst = self.finish_instance(d, args, span)?;
-                        self.info.targets.insert(e, Target::Const { def: d, of, inst });
+                    DefKind::Const(_) => {
+                        let (t, target) = self.const_value(d, owner, span)?;
+                        self.info.targets.insert(e, target);
                         Ok(Some(t))
                     }
                     DefKind::Unsupported(_) => Ok(Some(self.a.types.error())),
@@ -283,6 +279,21 @@ impl<'a> Checker<'a> {
             }
             Entity::Builtin(_) | Entity::Module(_) => no_value(),
         }
+    }
+
+    /// The type of the constant `d` read at `span` and what reads it there,
+    /// by an expression or a pattern (§7), with the type an alias or `Self`
+    /// names it by ([`Self::of_owner`]).
+    pub(super) fn const_value(&mut self, d: DefId, owner: Option<TyId>, span: Span) -> R<(TyId, Target)> {
+        let DefKind::Const(c) = self.a.def(d).kind.clone() else {
+            onsa_diag::internal::bug(Some(span), "the value of a constant that is none");
+        };
+        let args = self.fresh_args(d);
+        self.of_owner(d, &args, owner, span)?;
+        let of = self.param_of(owner);
+        let t = self.member_ty(d, c.ty, &args, of);
+        let inst = self.finish_instance(d, args, span)?;
+        Ok((t, Target::Const { def: d, of, inst }))
     }
 
     pub(crate) fn fn_type(&mut self, f: &FnDef, args: &[TyId]) -> TyId {

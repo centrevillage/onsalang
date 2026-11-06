@@ -1,8 +1,9 @@
 //! The cycles of the constants (E0312, §6.6) and of the flow instances
 //! (E0817, §11.5), from the records of the bodies alone (D-15): a constant
-//! reads the constants its initializer names ([`super::BodyNames::paths`]
-//! and [`super::BodyNames::interp`]) and every default of the structs its
-//! `...` fills ([`super::BodyNames::filled`], §4.4, S-919), a flow makes
+//! reads the constants its initializer names ([`super::BodyNames::paths`],
+//! [`super::BodyNames::interp`] and, in a pattern, [`super::BodyNames::pats`],
+//! §7) and every default of the structs its `...` fills
+//! ([`super::BodyNames::filled`], §4.4, S-919), a flow makes
 //! instances of the flows of [`super::BodyNames::instances`]. No edge goes from a flow to a
 //! constant, so one graph holds both, and each cycle is of one kind. One
 //! report per collection (§18.1, S-734, S-742), at the name of its first
@@ -13,7 +14,7 @@
 use onsa_diag::Code;
 use onsa_diag::hash::HashMap;
 
-use super::PathRes;
+use super::{PatRes, PathRes};
 use crate::def::{DefKind, ModId};
 use crate::resolve::Entity;
 use crate::{Analysis, DefId, Package};
@@ -76,5 +77,9 @@ fn edges(a: &Analysis, d: DefId) -> Vec<DefId> {
         PathRes::Item { entity: Entity::Def(c) | Entity::Member(c), .. } => Some(*c),
         _ => None,
     });
-    items.chain(n.filled.iter().flat_map(|&s| a.def(s).field_defaults())).collect()
+    let compared = n.pats.values().filter_map(|r| match r {
+        PatRes::Ctor { entity: Entity::Def(c) | Entity::Member(c), .. } => Some(*c),
+        _ => None,
+    });
+    items.chain(compared).chain(n.filled.iter().flat_map(|&s| a.def(s).field_defaults())).collect()
 }

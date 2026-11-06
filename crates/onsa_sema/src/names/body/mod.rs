@@ -253,8 +253,8 @@ pub(crate) enum PathRes {
 pub(crate) enum PatRes {
     Bind(BindingId),
     /// The item the path of a pattern names (`None`, `Shape.Circle(r)`,
-    /// `Point { x, y }`): a constructor, or what the types stage reports as
-    /// none; `owner` as of [`PathRes::Item`].
+    /// `Point { x, y }`, `LIMIT`): a constructor, a constant, or what the
+    /// types stage reports as neither; `owner` as of [`PathRes::Item`].
     Ctor {
         entity: Entity,
         owner: Option<TyId>,

@@ -20,8 +20,11 @@ use crate::resolve::{Callee, Entity, NameKind, ResolveError, no_members};
 pub(super) enum Want {
     /// A struct literal and a struct pattern.
     Type,
-    /// The path of a pattern of a variant, with fields or not.
+    /// The path of a pattern with nothing after it.
     VariantOrConstant,
+    /// The path of a pattern with fields after it (`Some(x)`): a constant
+    /// takes none (`LIMIT(y)`, §7, S-931).
+    Variant,
 }
 
 impl Walker<'_> {
@@ -181,6 +184,7 @@ impl Walker<'_> {
             Want::VariantOrConstant => {
                 (matches!(kind, NameKind::Variant | NameKind::Constant), "a variant or a constant")
             }
+            Want::Variant => (kind == NameKind::Variant, "a variant"),
         };
         (!takes).then(|| self.kind_error(kind, segs, noun))
     }

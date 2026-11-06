@@ -111,10 +111,13 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
                 ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(place.clone()), rhs: Box::new(rhs) },
             )))
         }
-        PatKind::Path(_) => {
-            let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
-            Ok(Some(tag_test(lw, place, tag)?))
-        }
+        PatKind::Path(_) => match cx.info.pat_consts.get(&pat).cloned() {
+            Some(target) => const_test(lw, cx, target, place, span).map(Some),
+            None => {
+                let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
+                Ok(Some(tag_test(lw, place, tag)?))
+            }
+        },
         PatKind::TupleStruct { elems, .. } => {
             let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
             let mut t = Some(tag_test(lw, place, tag)?);
@@ -162,6 +165,15 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
             Ok(t)
         }
     }
+}
+
+/// The test of a constant of a pattern against a place: `==` to its value
+/// (§7, S-185). A place of `Str` is none: its type stops the lowering first.
+fn const_test(lw: &mut Lowerer, cx: &mut FnCx, target: Target, place: &Expr, span: Span) -> R<Expr> {
+    let Target::Const { def, of, inst } = target else { return Err(internal(span, "pattern of no constant")) };
+    let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
+    let rhs = Expr::new(place.ty.clone(), span, ExprKind::Const(lw.const_id(def, gargs)?));
+    Ok(Expr::new(Ty::Bool, span, ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(place.clone()), rhs: Box::new(rhs) }))
 }
 
 pub(super) fn tag_test(lw: &Lowerer, place: &Expr, tag: u32) -> R<Expr> {

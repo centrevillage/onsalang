@@ -1,7 +1,8 @@
 //! `match` exhaustiveness (spec §7, E0501): the usefulness algorithm over
 //! lowered patterns. Constructors come from the scrutinee type: `Bool`,
 //! enums, tuples and structs (one constructor); integer, `Char` and `Str`
-//! literals have an infinite domain and need `_`.
+//! literals have an infinite domain and need `_`. A constant is not counted,
+//! whatever its type (§7): only `_` covers what it compares with.
 
 use crate::body::Checker;
 use crate::def::{DefKind, Fields};
@@ -16,6 +17,8 @@ pub enum P {
     /// Integer / char literal.
     Lit(i128),
     Str(String),
+    /// A constant (`LIMIT`): its value is not read (§7, S-185).
+    Const,
     Or(Vec<P>),
 }
 

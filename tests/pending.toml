@@ -1043,20 +1043,6 @@ reasons = ["S-112", "S-570", "S-625"]
 until = "W7-03"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/naming_pattern_constants.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "定数のパターン `OK =>` が E0302「is not a variant」（定数のパターンは W5-09）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/kind_pattern_names_constants.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "定数のパターンの正例が E0302「is not a variant」（W4-04 U8a/t。定数のパターンは W5-09）"
-
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
 [[pending]]
 kind = "test-case"
@@ -1122,13 +1108,6 @@ target = "tests/spec/self/const_pattern.onsa"
 reasons = ["S-446", "S-595", "S-185"]
 until = "W5-09"
 note = "定数のパターン `Self.N =>`（S-595 の表の 9 行）。名前の段は W4-04 U6 で解決し、定数のパターンの型付けは W5-09"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/pattern_choice_bindings_const_same.onsa"
-reasons = ["S-318", "S-185"]
-until = "W5-09"
-note = "定数を含む選択の枝で名前の集合が揃う正例。定数のパターンが今は E0302「is not a variant」（W5-09）"
 
 [[pending]]
 kind = "test-case"
@@ -1419,13 +1398,6 @@ note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/control/struct_rest_const.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "定数のパターンが E0302（W5-09）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/struct_rest_unreachable.onsa"
 reasons = ["S-187", "S-903"]
 until = "W5-09"
@@ -1580,83 +1552,6 @@ note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0200。`sel
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/control/const_pattern_scalars.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/const_pattern_positions.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/const_pattern_associated.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/const_pattern_modules_pkg"
-reasons = ["S-185"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/const_pattern_binding_or_constant.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_pattern_cycle.onsa"
-reasons = ["S-185"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_pattern_invisible_pkg"
-reasons = ["S-185"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_pattern_arguments.onsa"
-reasons = ["S-185", "S-931"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_pattern_type_mismatch.onsa"
-reasons = ["S-185", "S-933"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_pattern_binding_path_use.onsa"
-reasons = ["S-185", "S-803"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_pattern_refutable_let.onsa"
-reasons = ["S-185", "S-177"]
-until = "W5-09"
-note = "U1a 書ける定数"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/const_pattern_guard_and.onsa"
 reasons = ["S-185", "S-252", "S-253", "S-319"]
 until = "W5-09"
@@ -1703,27 +1598,6 @@ target = "tests/spec/negative/const_pattern_guard_none.onsa"
 reasons = ["S-185", "S-252", "S-253", "S-319"]
 until = "W5-09"
 note = "U1b 書けない定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/match_cover_exhaustive_constants.onsa"
-reasons = ["S-185", "S-187"]
-until = "W5-09"
-note = "U2 網羅と到達"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/match_cover_reachable_constants.onsa"
-reasons = ["S-185", "S-187"]
-until = "W5-09"
-note = "U2 網羅と到達"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/match_cover_not_exhaustive_constants.onsa"
-reasons = ["S-185", "S-187"]
-until = "W5-09"
-note = "U2 網羅と到達"
 
 [[pending]]
 kind = "test-case"
@@ -1822,3 +1696,17 @@ target = "tests/spec/fixes/match_unreachable_fix_tilde.onsa"
 reasons = ["S-187", "S-292", "S-876", "S-934"]
 until = "W5-09"
 note = "U3 E0503 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/naming_pattern_constants.onsa"
+reasons = ["S-185"]
+until = "W8-06"
+note = "定数のパターン `OK =>` が E0302「is not a variant」（定数のパターンは W5-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/kind_pattern_names_constants.onsa"
+reasons = ["S-185"]
+until = "W8-06"
+note = "定数のパターンの正例が E0302「is not a variant」（W4-04 U8a/t。定数のパターンは W5-09）"

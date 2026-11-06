@@ -207,6 +207,9 @@ pub struct BodyInfo {
     /// `None`) → the index of the constructor they name, as the names stage
     /// resolved their path: the lowering reads it (D-15).
     pub pat_ctors: HashMap<PatId, u32>,
+    /// The constants of the patterns (`LIMIT`, `cfg.LIMIT`, `I64.MAX`), each
+    /// a [`Target::Const`]: the lowering compares with them (§7, S-185).
+    pub pat_consts: HashMap<PatId, Target>,
     pub instances: Vec<Instance>,
     /// Closure expression → outer locals it captures (by copy, §5.3).
     pub captures: HashMap<ExprId, Vec<LocalId>>,

@@ -369,7 +369,7 @@ impl Walker<'_> {
             }
             PatKind::Tuple(ps) => return ps.iter().try_for_each(|&q| self.pattern(q, kind, origin)),
             PatKind::TupleStruct { path, elems } => {
-                self.ctor(p, path, Want::VariantOrConstant)?;
+                self.ctor(p, path, Want::Variant)?;
                 return elems.iter().try_for_each(|&q| self.pattern(q, kind, origin));
             }
             PatKind::Struct { path, fields, .. } => {
