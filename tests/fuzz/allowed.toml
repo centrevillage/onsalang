@@ -633,3 +633,10 @@ left = "the type of this statement is `…`, not `…`; a statement gives no val
 input = "tests/fuzz/c5a02c37.onsa"
 reasons = ["S-384"]
 note = "途中の文の `-x`（`T: AnyNum`）は誤りが二つある入力（捨てない値と、`Neg` の無い否定）。候補で否定が通ると、隠れていた E0418 が見える。候補の約束は誤りが一つの単位に当たる（§18.1）"
+
+[[allowed]]
+class = "fix|E0002|remove the line break|E0002"
+left = "expected `…` or `…`, found identifier"
+input = "tests/fuzz/6ae4b399.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a line break before the `[I]` in the payload of a variant, and an `e` after the `]`, which the input has before the candidate"
