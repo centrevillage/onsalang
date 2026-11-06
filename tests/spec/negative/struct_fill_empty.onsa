@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:7"
+// code = "E0410"
+// candidate = 1
+// clean = true
+
+// W5-22 U4/t, S-697 (spec §4.4: "全てのフィールドを書いた `...` は E0410(修正候補は `...` を外す形)"; the struct with no field has all its fields written by the empty list). `E { ... }` of a struct with no field
+// is E0410 on the `...`, and the candidate removes it: the `...` has nothing to fill.
+
+pub struct E {}
+
+pub fn made() -> E {
+  E { ... }                                                   //~ E0410
+}
+
+pub fn fine() -> E {
+  E {}
+}

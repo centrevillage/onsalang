@@ -1,0 +1,3 @@
+[package]
+name = "struct_fill_hidden_neg"
+edition = "2026"

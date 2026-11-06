@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§18.1"]
+
+// W5-22 U4/t, S-697, S-919 (spec §4.4: "`...` は定数の循環の判定に数える(既定値が読む定数が同じ struct を `...` で作る形は、そのフィールドを書いていても E0312、§6.6)"; §6.6: "初期化式が、直接または他の定数を経由して自分自身を
+// 参照すると E0312"; §18.1: "宣言をまたぐ循環 … は、互いに辿り合う宣言の集まりごとに一つ報告する。位置は、集まりの宣言のうち診断の並べ方で最初のものの名前 … 集まりの外からそれらを使う宣言には出さず、誤りの値として扱う").
+// A default that reads a constant whose value is a literal of the same struct that ends with `...` is a cycle: the `...` counts every default of the struct as read, the ones that are written too (S-919). The cycle is
+// one error on the first of its members, which is the default of the field in each case here (the struct is written before the constants): directly, through a chain of constants (more than three), through a type alias, through
+// `Self` in an `impl`, through an associated constant of the `impl` that is read by the name of the type, with the field that reads written beside the `...` (S-919), and through two structs. A literal that does not end with `...`
+// reads no default, so the same shapes with every field written are fine (the last declarations), and a constant that only reads a constant of a cycle gets no error of its own. The constants of a cycle are not evaluated.
+// The cycle through a constant of another module is the E0310 of §18.1 (a cycle of `use`) and is not here.
+
+pub struct Direct {
+  x: U32 = DIRECT.y,                                          //~ E0312
+  y: U32 = 0,
+}
+
+const DIRECT: Direct = Direct { y: 1, ... }
+
+pub struct Chain {
+  a: U32 = LINK1,                                             //~ E0312
+}
+
+const LINK1: U32 = LINK2
+
+const LINK2: U32 = LINK3 + 1
+
+const LINK3: U32 = CHAIN_ROOT.a
+
+const CHAIN_ROOT: Chain = Chain { ... }
+
+type Alias = ViaAlias
+
+pub struct ViaAlias {
+  x: U32 = ALIASED.x,                                         //~ E0312
+}
+
+const ALIASED: ViaAlias = Alias { ... }
+
+pub struct WithSelf {
+  x: U32 = WithSelf.BASE.x,                                   //~ E0312
+}
+
+impl WithSelf {
+  const BASE: WithSelf = Self { ... }
+}
+
+pub struct ViaImpl {
+  x: U32 = ViaImpl.START.y,                                   //~ E0312
+  y: U32 = 3,
+}
+
+impl ViaImpl {
+  const START: ViaImpl = ViaImpl { x: 1, ... }
+}
+
+pub struct LeftOut {
+  x: U32 = LEFT_OUT.y,                                        //~ E0312
+  y: U32 = 0,
+}
+
+const LEFT_OUT: LeftOut = LeftOut { x: 1, ... }
+
+pub struct First {
+  x: U32 = SECOND_V.y,                                        //~ E0312
+}
+
+pub struct Second {
+  y: U32 = FIRST_V.x,
+}
+
+const FIRST_V: First = First { ... }
+
+const SECOND_V: Second = Second { ... }
+
+// reads a constant of a cycle: no error of its own
+const READER: U32 = DIRECT.y
+
+const READER_OF_THE_CHAIN: U32 = LINK1 + 1
+
+// fine: every field is written, so no default is read
+pub struct NoDots {
+  x: U32 = NO_DOTS.y,
+  y: U32 = 0,
+}
+
+const NO_DOTS: NoDots = NoDots { x: 1, y: 2 }
+
+// fine: the defaults read constants that do not come back
+pub struct Reads {
+  x: U32 = FAR,
+  y: U32 = NEAR + 1,
+}
+
+const NEAR: U32 = 5
+
+const FAR: U32 = NEAR * 2
+
+const FROM_READS: Reads = Reads { ... }
+
+pub struct ReadsAFine {
+  z: U32 = FROM_READS.y,
+}
+
+const FROM_READS_FROM: ReadsAFine = ReadsAFine { ... }
+
+// A default that reads a parameter is judged at its declaration, as a constant of a generic `impl` is (§6.6).
+pub struct OfAnInstance[const N: U32] {
+  k: U32 = ONE_INSTANCE.j + N,                                //~ E0312
+  j: U32 = 0,
+}
+
+pub const ONE_INSTANCE: OfAnInstance[1] = OfAnInstance { ... }

@@ -1,0 +1,29 @@
+// The module `ring` of the case in main.onsa: a struct with a `priv` field that has no default, one with two `priv` fields of which one has a default, one whose `priv` field has a default, and a
+// struct whose fields are all seen.
+
+pub struct Strict {
+  a: U32,
+  priv h: U32,
+}
+
+pub struct Partly {
+  a: U32,
+  priv x: U32 = 1,
+  priv y: U32,
+}
+
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32 = 0,
+}
+
+pub struct Open {
+  a: U32,
+  b: U32,
+}
+
+impl Strict {
+  pub fn make(a: U32, h: U32) -> Strict {
+    Strict { a: a, h: h }
+  }
+}

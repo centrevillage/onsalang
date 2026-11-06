@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "26:28"
+// code = "E0410"
+// candidate = 1
+// clean = true
+
+// W5-22 U4/t, S-697 (spec §4.4: "全てのフィールドを書いた `...` は E0410(修正候補は `...` を外す形)"). The same when the struct has no default at all: the `...` of a literal that writes every field is E0410, whether the
+// struct has defaults or not, and the candidate removes it. The literal here is in a generic struct, written in the order of the fields that is not the order of the declaration, and
+// is the argument of a call.
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+fn first(p: Pair[U8]) -> U8 {
+  p.a
+}
+
+pub fn all_written() -> U8 {
+  first(Pair { b: 2, a: 1 })                             //~ E0410
+}

@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§11.6", "§18.1"]
+// fixes = 0
+
+// W5-22 U4/t, S-697 (spec §4.4: "`...` の後に既定値の無いフィールドが残る形は E0410(残るフィールドを挙げ、候補なし) … `Item { x: 1 }` の残りのフィールドに全て既定値があれば、E0410 の note で `...` を示す";
+// "印の無いリテラルは、既定値のあるフィールドも全て書く"; §11.6: `voice.Config` and `voice.Params` are generated structs whose fields are the inputs of the flow, and have no default; §18.1: "足りない項目の E0410"
+// is of the unit). The E0410 that has no candidate: a `...` after which a field that has no default is left (the only one, one of two, in a generic struct, in an argument); a literal without the `...` that leaves fields that
+// have a default (the note shows the `...`, no candidate is made: the writer may have meant to write them); the same in the module of the declaration for a `priv` field that has a default (in another module that
+// is the E0303 of negative/struct_fill_hidden_neg/); and the generated `Params` and `Config` of a flow, whose fields have no default. One error in each function (P-01). The
+// forms with a candidate are in struct_fill_all_written.onsa, struct_fill_empty.onsa and struct_fill_no_fields_flow.onsa.
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.5,
+  z: I32 = -3,
+}
+
+pub struct Both {
+  a: U32,
+  b: U32,
+  c: U32 = 1,
+}
+
+pub struct Gen[T] {
+  t: T,
+  n: U32 = 0,
+}
+
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32 = 0,
+}
+
+pub struct Nested {
+  item: Item,
+  k: U32 = 2,
+}
+
+fn take(i: Item) -> U32 {
+  i.x
+}
+
+pub fn only_the_dots() -> Item {
+  Item { ... }                                                //~ E0410
+}
+
+pub fn one_field_remains() -> Item {
+  Item { y: 1.0, ... }                                        //~ E0410
+}
+
+pub fn one_of_two_remains() -> Both {
+  Both { c: 2, ... }                                          //~ E0410
+}
+
+pub fn two_remain_in_the_middle() -> Both {
+  Both { b: 2, ... }                                          //~ E0410
+}
+
+pub fn a_generic_struct() -> Gen[U8] {
+  Gen { n: 1, ... }                                           //~ E0410
+}
+
+pub fn in_an_argument() -> U32 {
+  take(Item { z: 1, ... })                                    //~ E0410
+}
+
+pub fn inside_a_literal() -> Nested {
+  Nested { item: Item { y: 1.0, ... }, ... }                  //~ E0410
+}
+
+pub fn no_dots_and_defaults_remain() -> Item {
+  Item { x: 1 }                                               //~ E0410
+}
+
+pub fn no_dots_two_defaults_remain() -> Item {
+  Item { x: 1, y: 1.0 }                                       //~ E0410
+}
+
+pub fn no_dots_only_defaults_remain(xs: [F32; 4]) -> Ring {
+  Ring { data: xs }                                           //~ E0410
+}
+
+pub fn no_dots_nothing_written() -> Item {
+  Item {}                                                     //~ E0410
+}
+
+// the flows of the generated structs have no default in them
+pub flow with_block(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+pub flow with_init(x: F32 at sample, s: F32 at init) -> F32 at sample {
+  prev~(x, s)
+}
+
+test "the Params of a flow" {
+  let xs: [F32; 1] = [1.0]
+  let o = with_block.render(with_block.Config {}, with_block.Params { ... }, xs, 8.0)   //~ E0410
+  assert o.out[0] == 1.0
+}
+
+test "the Config of a flow" {
+  let xs: [F32; 1] = [1.0]
+  let o = with_init.render(with_init.Config { ... }, with_init.Params {}, xs, 8.0)      //~ E0410
+  assert o.out[0] == 1.0
+}
+
+// the forms that are fine
+pub fn fine_all_written() -> Item {
+  Item { x: 1, y: 2.0, z: 3 }
+}
+
+pub fn fine_with_the_dots() -> Item {
+  Item { x: 1, ... }
+}
+
+pub fn fine_with_the_dots_and_one_more() -> Both {
+  Both { a: 1, b: 2, ... }
+}

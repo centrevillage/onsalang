@@ -1,0 +1,169 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§11.2", "§6.6", "§10"]
+
+// W5-22 U4/t, S-697 (spec §4.4: "`Default` は呼ばず、実行時の効果も確保も足さないので、`rt` の中でも書ける"; §11.2: the closed list of the expressions of a flow body has "struct / タプル / 配列リテラル(struct リテラルの `...`
+// を含む、§4.4)"; §6.6: the default is a `const` initializer, and a `const` initializer can be a literal). The places where a literal that ends with `...` is written: an `rt fn`, a `fn` that has no `Alloc`, the
+// initializer of a `const`, a `test`, the default of another field (`struct A { b: B = B { ... } }`, which fills in two levels), the `let` and the last expression of a flow body, and the argument of an instance
+// (`f~(x, (Mix { v: 5.0, ... }).k)`). The `...` adds no effect and no allocation, so every function here has an empty row. The value of each is the declared default.
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.5,
+  z: I32 = -3,
+}
+
+pub struct Hold {
+  item: Item = Item { x: 9, ... },
+  n: U32 = 1,
+}
+
+pub struct Chain {
+  a: Hold = Hold { ... },
+  b: U32 = 2,
+}
+
+pub struct Mix {
+  v: F32,
+  k: F32 = 3.0,
+}
+
+pub struct Pan {
+  l: F32,
+  r: F32 = 0.25,
+}
+
+// ---------------------------------------------------------------- functions
+
+rt fn in_an_rt_fn(x: U32) -> Item {
+  Item { x: x, ... }
+}
+
+rt fn y_in_an_rt_fn(x: U32) -> F32 {
+  let i = Item { x: x, ... }
+  i.y
+}
+
+fn with_no_alloc(x: U32) -> I32 {
+  let i = Item { x: x, ... }
+  i.z
+}
+
+fn in_a_branch(c: Bool) -> F32 {
+  if c {
+    Item { x: 1, ... }.y
+  } else {
+    Item { x: 1, y: 2.0, ... }.y
+  }
+}
+
+impl Item {
+  pub rt fn rt_made(x: U32) -> Self {
+    Self { x: x, ... }
+  }
+}
+
+const CONST_ITEM: Item = Item { x: 4, ... }
+
+const CONST_HOLD: Hold = Hold { ... }
+
+const CONST_Y: F32 = Item { x: 1, y: 6.0, ... }.y
+
+// ---------------------------------------------------------------- flows
+
+pub flow mix_let(x: F32 at sample) -> F32 at sample {
+  let m = Mix { v: x, ... }
+  m.v * m.k
+}
+
+pub flow pan_tail(a: F32 at sample) -> Pan at sample {
+  Pan { l: a * 2.0, ... }
+}
+
+pub flow held(x: F32 at sample, s: F32 at init) -> F32 at sample {
+  prev~(x, s)
+}
+
+pub flow wired(x: F32 at sample) -> F32 at sample {
+  held~(x, (Mix { v: 5.0, ... }).k)
+}
+
+// ---------------------------------------------------------------- tests
+
+test "in an rt fn, with no effect and no allocation" {
+  let i = in_an_rt_fn(3)
+  assert i.x == 3
+  assert i.y == 0.5
+  assert i.z == -3
+  assert y_in_an_rt_fn(1) == 0.5
+  let j = Item.rt_made(8)
+  assert j.x == 8
+  assert j.y == 0.5
+}
+
+test "in a fn that has no Alloc" {
+  assert with_no_alloc(2) == -3
+  assert in_a_branch(true) == 0.5
+  assert in_a_branch(false) == 2.0
+}
+
+test "in the initializer of a const" {
+  assert CONST_ITEM.x == 4
+  assert CONST_ITEM.y == 0.5
+  assert CONST_ITEM.z == -3
+  assert CONST_HOLD.item.x == 9
+  assert CONST_HOLD.n == 1
+  assert CONST_Y == 6.0
+}
+
+test "in a test" {
+  let i = Item { x: 5, ... }
+  assert i.x == 5
+  assert i.y == 0.5
+  assert (Item { x: 6, ... }).x == 6
+}
+
+test "in the default of another field, in one level and in two" {
+  let h = Hold { ... }
+  assert h.item.x == 9
+  assert h.item.y == 0.5
+  assert h.item.z == -3
+  assert h.n == 1
+  let c = Chain { ... }
+  assert c.a.item.x == 9
+  assert c.a.item.z == -3
+  assert c.a.n == 1
+  assert c.b == 2
+  let d = Chain { b: 7, ... }
+  assert d.a.item.y == 0.5
+  assert d.b == 7
+  let e = Hold { item: Item { x: 1, y: 2.0, z: 3 }, ... }
+  assert e.item.x == 1
+  assert e.n == 1
+}
+
+test "in the let of a flow body" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o            = mix_let.render(mix_let.Config {}, mix_let.Params {}, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}
+
+test "as the last expression of a flow body" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let o           = pan_tail.render(pan_tail.Config {}, pan_tail.Params {}, a, 8.0)
+  assert o.l[0] == 2.0
+  assert o.l[1] == 4.0
+  assert o.r[0] == 0.25
+  assert o.r[1] == 0.25
+}
+
+test "as the argument of an instance" {
+  // held~: the first sample is the init value 3.0 (the default of k), then the input one sample late.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o            = wired.render(wired.Config {}, wired.Params {}, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+}

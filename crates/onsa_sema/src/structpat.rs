@@ -4,7 +4,9 @@
 //! fields it does not name, the ones not visible here too (S-903); a `_` that
 //! ignores nothing is E0410. The rest `..` of other languages is E0020 here,
 //! where the fields are known, and its candidate writes the remaining ones
-//! with `_`, or the last `_` when one of them is not visible.
+//! with `_`, or the last `_` when one of them is not visible. The last `...`
+//! of a struct literal is judged here too ([`Checker::literal_rest`], §4.4,
+//! S-697).
 //!
 //! The order of the errors is the order of reading: the fields as written,
 //! each name checked and then its sub-pattern (through the caller), and the
@@ -23,7 +25,10 @@ use crate::ty::{Ty, TyId};
 /// What names the fields of a struct (`Checker::whole_reach`).
 #[derive(Clone, Copy)]
 pub(crate) enum Whole {
-    Literal,
+    /// With or without the last `...`.
+    Literal {
+        filled: bool,
+    },
     Pattern,
 }
 
@@ -173,7 +178,9 @@ impl<'a> Checker<'a> {
     /// is an E0303 at the name of the struct (§15.1, §7, S-35, S-366): here
     /// the struct is made, and its fields read, by the functions of its
     /// module. A pattern with a rest leaves fields out freely, and has
-    /// [`Self::written_reach`] alone.
+    /// [`Self::written_reach`] alone; the `...` of a literal leaves out those
+    /// with a default, visible or not (§15.1), which the note of the E0303
+    /// shows when it would fill all that is left.
     pub(crate) fn whole_reach(
         &mut self,
         d: DefId,
@@ -184,13 +191,18 @@ impl<'a> Checker<'a> {
     ) -> R<()> {
         self.written_reach(d, defs, written)?;
         let left_out = |f: &&FieldDef| !written.iter().any(|w| w.name == f.name);
-        let Some(f) = defs.iter().filter(left_out).find(|f| !self.field_visible(d, f)) else {
+        let unfilled = |f: &&FieldDef| !matches!(whole, Whole::Literal { filled: true }) || f.default.is_none();
+        let hidden = defs.iter().filter(left_out).filter(unfilled).find(|f| !self.field_visible(d, f));
+        let Some(f) = hidden else {
             return Ok(());
         };
         let def = self.a.def(d);
         let why = self.a.modules.hidden_why(f.vis, Some((Owner::Struct, def)), self.m);
         let (form, through) = match whole {
-            Whole::Literal => {
+            Whole::Literal { filled: false } if defs.iter().filter(left_out).all(|f| f.default.is_some()) => {
+                ("made by a struct literal", format!("the fields left out have defaults: {FILL_NOTE}"))
+            }
+            Whole::Literal { .. } => {
                 ("made by a struct literal", format!("`{}` is made by a function of its module", def.name))
             }
             Whole::Pattern => {
@@ -202,6 +214,45 @@ impl<'a> Checker<'a> {
         let note = format!("the field `{}`, not visible here: {through}", f.name);
         let diag =
             Diagnostic::new(Stage::Names, Code::E0303, path, msg).with_found(self.src(path)).with_note(f.span, note);
+        Err(self.diag(diag))
+    }
+
+    /// The end of the check of a struct literal of `d` with the fields `defs`,
+    /// at `path`, that wrote the fields `seen` and ends in `rest` or not
+    /// (§4.4, S-697): `...` fills the fields left with their defaults and has
+    /// something to fill, and a literal with no `...` names every field.
+    pub(crate) fn literal_rest(
+        &mut self,
+        d: DefId,
+        (defs, seen): (&[FieldDef], &[&str]),
+        rest: Option<StructRest>,
+        path: Span,
+    ) -> R<()> {
+        let shown = &self.a.def(d).name;
+        let list = |left: &[&FieldDef]| left.iter().map(|f| format!("`{}`", f.name)).collect::<Vec<_>>().join(", ");
+        let missing: Vec<&FieldDef> = defs.iter().filter(|f| !seen.contains(&f.name.as_str())).collect();
+        let bare: Vec<&FieldDef> = missing.iter().copied().filter(|f| f.default.is_none()).collect();
+        let e0410 = |at, msg| Diagnostic::new(Stage::Types, Code::E0410, at, msg).with_found(self.src(at));
+        let diag = match rest {
+            None if missing.is_empty() => return Ok(()),
+            Some(_) if !missing.is_empty() && bare.is_empty() => return Ok(()),
+            Some(rest) if missing.is_empty() => {
+                let msg = format!("every field of `{shown}` is written: the `...` fills nothing");
+                e0410(rest.span, msg).with_fix(rest_removal(rest))
+            }
+            Some(_) => {
+                let names = list(&bare);
+                e0410(path, format!("missing field(s) {names} of `{shown}`: they have no default to fill (§4.4)"))
+            }
+            None => {
+                let names = list(&missing);
+                let msg = format!("missing field(s) {names} of `{shown}`; struct literals name every field (§4.4)");
+                match bare.is_empty() {
+                    true => e0410(path, msg).with_note(missing[0].span, format!("these have defaults: {FILL_NOTE}")),
+                    false => e0410(path, msg),
+                }
+            }
+        };
         Err(self.diag(diag))
     }
 
@@ -220,6 +271,10 @@ impl<'a> Checker<'a> {
         self.diag(Diagnostic::new(stage, code, span, msg).with_found(self.src(span)))
     }
 }
+
+/// What a note says of a literal that leaves out fields with defaults alone:
+/// no candidate, as the writer may have meant to write them (§4.4).
+const FILL_NOTE: &str = "a last `...` fills them (§4.4)";
 
 /// The candidate that takes off a rest with no field left for it.
 fn rest_removal(rest: StructRest) -> Fix {

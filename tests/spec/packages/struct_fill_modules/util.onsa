@@ -1,0 +1,77 @@
+// The module `util` of the case in main.onsa: structs with `priv` fields that all have a default (so the other module can fill them with `...`), a default that reads a `priv` constant, a
+// generic struct and a struct with hand-written `Default`.
+
+priv const SECRET: U32 = 41
+
+priv const SCALE: F32 = 4.0
+
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32 = SECRET + 1,
+  priv gain: F32 = 0.5,
+  label: U8 = 9,
+}
+
+impl Ring {
+  pub fn head(self) -> U32 {
+    self.head
+  }
+
+  pub fn gain(self) -> F32 {
+    self.gain
+  }
+}
+
+pub struct Wrap[T] {
+  inner: T,
+  priv extra: U8 = 5,
+  tag: U8 = 1,
+}
+
+impl[T: Copy] Wrap[T] {
+  pub fn inner(self) -> T {
+    self.inner
+  }
+
+  pub fn extra(self) -> U8 {
+    self.extra
+  }
+}
+
+// every field is `priv` and has a default: the other module makes it by `Fixed { ... }`
+pub struct Fixed {
+  priv a: U32 = SECRET,
+  priv b: F32 = SCALE * 2.0,
+}
+
+impl Fixed {
+  pub fn a(self) -> U32 {
+    self.a
+  }
+
+  pub fn b(self) -> F32 {
+    self.b
+  }
+}
+
+// the `...` does not call this `Default`
+pub struct Hand {
+  priv n: U32 = 5,
+  m: U32 = 6,
+}
+
+impl Default for Hand {
+  rt fn default() -> Hand {
+    Hand { n: 50, m: 60 }
+  }
+}
+
+impl Hand {
+  pub fn n(self) -> U32 {
+    self.n
+  }
+}
+
+pub fn ring_here(xs: [F32; 4]) -> Ring {
+  Ring { data: xs, ... }
+}

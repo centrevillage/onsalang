@@ -362,7 +362,8 @@ impl<'a> Lowerer<'a> {
                 parts.push(def.name.clone());
                 // A default has the name of its field, which a member of the
                 // type may have too (`Voice.count`, `fn count(self)`).
-                if def.owner.is_some_and(|o| matches!(self.a.def(o).kind, DefKind::Struct(_))) {
+                let of_struct = def.owner.is_some_and(|o| matches!(self.a.def(o).kind, DefKind::Struct(_)));
+                if of_struct && matches!(def.kind, DefKind::Const(_)) {
                     parts.push(DerivedFn::Default.name().to_string());
                 }
                 parts.join(".")
@@ -564,8 +565,10 @@ impl<'a> Lowerer<'a> {
     /// or of the struct of a default (one for each instance, §6.6, S-304,
     /// S-918). A `ConstValue` depends on no
     /// parameter, and takes the type of the instance here. It stops: the
-    /// constants an initializer reads are a graph of defs with no cycle
-    /// (E0312), and a recursion goes down it, whatever the arguments.
+    /// constants an initializer reads, by a name or by the `...` of a struct
+    /// literal, are a graph of defs with no cycle (E0312; the `...` is an edge
+    /// to every default of its struct, `names/body/cycles.rs`), and a
+    /// recursion goes down it, whatever the arguments.
     pub(crate) fn const_id(&mut self, d: DefId, gargs: Vec<GenericArg>) -> R<ConstId> {
         if let Some(&id) = self.const_ids.get(&(d, gargs.clone())) {
             return Ok(id);

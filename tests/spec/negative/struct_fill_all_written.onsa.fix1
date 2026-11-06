@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "23:30"
+// code = "E0410"
+// candidate = 1
+// clean = true
+
+// W5-22 U4/t, S-697 (spec §4.4: "全てのフィールドを書いた `...` は E0410(修正候補は `...` を外す形)"). A literal that writes every field of a struct that has defaults and ends with `...` has nothing for the `...` to fill:
+// E0410 on the `...`, and the candidate removes it. The candidate leaves the file with no error (`clean`), so this file has this one error; the other forms of this error with a candidate are in
+// struct_fill_all_written_no_defaults.onsa, struct_fill_empty.onsa and struct_fill_no_fields_flow.onsa.
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.5,
+  z: I32 = -3,
+}
+
+pub fn all_written() -> Item {
+  Item { x: 1, y: 2.0, z: 3 }                            //~ E0410
+}
+
+pub fn fine() -> Item {
+  Item { x: 1, y: 2.0, z: 3 }
+}

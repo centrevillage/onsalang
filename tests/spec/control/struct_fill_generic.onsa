@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5", "§6.6"]
+
+// W5-22 U4/t, S-697, S-918 (spec §4.4: "型引数を持つ struct の他のフィールドには書ける"; the literal that ends with `...` fills the fields that are not written with their declared default; §4.5: the type arguments of a
+// struct are given by the annotation or by the fields that are written). The values of `...` for a generic struct: the type argument comes from the annotation of the `let`, from the return type, from the
+// field that is written (`W { t: true, ... }` is a `W[Bool]`), and from the argument of a generic function; a struct with a const parameter; two parameters; a generic struct inside a generic
+// struct. The field with a default takes the declared value for every argument. The error of an argument that the literal does not give is in negative/struct_fill_generic_neg.onsa.
+
+pub struct W[T] {
+  t: T,
+  n: U32 = 3,
+  tag: (U8, Bool) = (1, true),
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+  head: U32 = 2,
+}
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+  k: F32 = 0.5,
+}
+
+pub struct Two[A, B] {
+  a: A,
+  b: B,
+  gain: F32 = 0.25,
+}
+
+fn wrap[T: Copy](t: T) -> W[T] {
+  W { t: t, ... }
+}
+
+fn wrap_with[T: Copy](t: T, n: U32) -> W[T] {
+  W { n: n, t: t, ... }
+}
+
+fn made() -> W[F32] {
+  W { t: 1.5, ... }
+}
+
+fn count_of(w: W[U8]) -> U32 {
+  w.n
+}
+
+test "the type argument comes from the annotation" {
+  let w: W[U8] = W { t: 1, ... }
+  assert w.t == 1
+  assert w.n == 3
+  assert w.tag.0 == 1
+  assert w.tag.1
+  let v: W[F32] = W { t: 2.5, n: 9, ... }
+  assert v.t == 2.5
+  assert v.n == 9
+  assert v.tag.0 == 1
+}
+
+test "the type argument comes from the field that is written" {
+  let w = W { t: true, ... }
+  assert w.t
+  assert w.n == 3
+  let v = W { t: 'a', ... }
+  assert v.t == 'a'
+  assert v.tag.1
+}
+
+test "the type argument comes from the return type and from an argument" {
+  let w = made()
+  assert w.t == 1.5
+  assert w.n == 3
+  assert count_of(W { t: 1, ... }) == 3
+  assert count_of(W { t: 1, n: 8, ... }) == 8
+}
+
+test "in a generic function" {
+  let a: W[U32] = wrap(7)
+  assert a.t == 7
+  assert a.n == 3
+  let b: W[Bool] = wrap_with(true, 5)
+  assert b.t
+  assert b.n == 5
+  assert b.tag.0 == 1
+}
+
+test "a const parameter" {
+  let r: Ring[F32, 2] = Ring { d: [1.0, 2.0], ... }
+  assert r.d[0] == 1.0
+  assert r.d[1] == 2.0
+  assert r.head == 2
+  let s: Ring[U8, 3] = Ring { d: [4, 5, 6], head: 0 }
+  assert s.d[2] == 6
+  assert s.head == 0
+}
+
+test "a generic struct inside a generic struct" {
+  let p: Pair[Pair[U8]] = Pair { a: Pair { a: 1, b: 2, ... }, b: Pair { a: 3, b: 4, k: 2.0 }, ... }
+  assert p.a.a == 1
+  assert p.a.b == 2
+  assert p.a.k == 0.5
+  assert p.b.a == 3
+  assert p.b.k == 2.0
+  assert p.k == 0.5
+  let w: Pair[W[U8]] = Pair { a: W { t: 1, ... }, b: W { t: 2, n: 4, ... }, ... }
+  assert w.a.n == 3
+  assert w.b.n == 4
+  assert w.b.t == 2
+  assert w.k == 0.5
+}
+
+test "two parameters" {
+  let t: Two[U8, Bool] = Two { a: 1, b: true, ... }
+  assert t.a == 1
+  assert t.b
+  assert t.gain == 0.25
+  let u: Two[W[F32], (U8, Bool)] = Two { a: W { t: 1.0, ... }, b: (1, false), ... }
+  assert u.a.n == 3
+  assert u.b.0 == 1
+  assert !u.b.1
+  assert u.gain == 0.25
+}

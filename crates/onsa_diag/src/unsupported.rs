@@ -101,8 +101,6 @@ features! {
     /// S-697, §4.4: `{}`: the type of the field, which holds a parameter of
     /// its struct.
     ParamFieldDefaults: Language, "the default of a field of the type `{}`, which depends on a parameter of its struct", None;
-    /// S-697: `...` fills the fields from W5-22 U4.
-    StructLitRest: Language, "`...` at the end of a struct literal", None;
     /// `{}`: the derived trait.
     Derive: Language, "deriving `{}` at the head of a type", None;
     /// S-43: the placing of a delay line in the bulk storage, with E0818 to

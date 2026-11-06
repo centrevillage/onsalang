@@ -143,8 +143,13 @@ pub(super) fn leading_range(c: &Cursor) -> Option<Hit> {
 /// A range after an expression outside the head of a `for` or a `par~`
 /// (`let r = 0..<4`, `xs[1..<3]`, `for i in (0..<4)`): E0002 with the note,
 /// whatever its symbol (a candidate for `..` would leave the range where
-/// none goes, §18.1).
+/// none goes, §18.1). A `...` on its line before the `}` of a struct literal
+/// is its last `...` with the `,` left out: the general E0002 of the list.
 pub(super) fn range_outside_header(c: &Cursor) -> Option<Hit> {
+    let closes = c.kind(c.at) == TokenKind::DotDotDot && c.kind(c.sig_after(c.at)) == TokenKind::RBrace;
+    if c.want == Want::Separator(NodeKind::StructLitFields) && c.lines.at_line_head(c.at) && closes {
+        return None;
+    }
     let at = match range_symbol(c) {
         Some(head) => (!head).then_some(c.at),
         // A symbol at the head of a line after a statement (`let r = 0` and

@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5"]
+
+// W5-22 U4, S-918 (spec §4.4): the `...` of a generic struct fills a default that reads a parameter of the struct with the value of the instance of the literal.
+
+pub struct Sized[const N: U32] {
+  d: [U8; N],
+  k: U32 = N,
+  m: U32 = N * 2 + 1,
+}
+
+pub struct Width[T: Int] {
+  v: T,
+  bits: U32 = T.BITS,
+}
+
+test "the instance comes from the written field" {
+  let a = Sized { d: [0, 0], ... }
+  let b = Sized { d: [0, 0, 0], m: 1, ... }
+  assert a.k == 2
+  assert a.m == 5
+  assert b.k == 3
+  assert b.m == 1
+}
+
+test "the instance comes from the expected type" {
+  let a: Width[U8]  = Width { v: 0, ... }
+  let b: Width[I32] = Width { v: 0, ... }
+  assert a.bits == 8
+  assert b.bits == 32
+}

@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// W5-22 U4/t, S-697 (spec §15.1: "見えないフィールドを持つ struct は、そのフィールドが見えない場所では struct リテラルで作れず(E0303。位置はリテラルとパターンの型の名前 …)。ただし、見えないフィールドに全て既定値があれば
+// `...` で埋めて作れ(§4.4)"; §4.4: the `Ring { data: xs }` that leaves a field with a default is E0410 where the field is seen, with a note that shows the `...`, and no candidate). In another module the
+// literal that has no `...` and leaves a `priv` field that has a default is E0303 on the name of the type, with no candidate: the `...` that would make it is not offered, because the writer may not mean the
+// field to be filled (`Ring { data: xs }` is the E0410 of ring.onsa in the module of the declaration, where the field is seen). The same for a struct whose fields are all `priv`. The literal that
+// ends with `...` is fine (the last functions). One error in each function (P-01).
+use ring.{Ring, Tagged, AllHidden}
+
+pub fn no_dots(xs: [F32; 4]) -> Ring {
+  Ring { data: xs }                                           //~ E0303
+}
+
+pub fn no_dots_two_fields_remain(a: U32) -> Tagged {
+  Tagged { a: a }                                             //~ E0303
+}
+
+pub fn no_dots_all_seen_written(a: U32) -> Tagged {
+  Tagged { a: a, b: 2 }                                       //~ E0303
+}
+
+pub fn no_dots_nothing_written() -> AllHidden {
+  AllHidden {}                                                //~ E0303
+}
+
+// fine: the fields that are not seen all have a default
+pub fn fine(xs: [F32; 4]) -> Ring {
+  Ring { data: xs, ... }
+}
+
+pub fn fine_tagged(a: U32) -> Tagged {
+  Tagged { a: a, ... }
+}
+
+pub fn fine_all_hidden() -> AllHidden {
+  AllHidden { ... }
+}

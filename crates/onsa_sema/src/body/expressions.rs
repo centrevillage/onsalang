@@ -362,9 +362,6 @@ impl<'a> Checker<'a> {
                 format!("`{name}` is not built with a field list; it has no named fields"),
             ));
         };
-        if let Some(rest) = rest {
-            return Err(self.unsupported(rest.span, Feature::StructLitRest, &[]));
-        }
         let args = self.fresh_args(d);
         self.of_owner(d, &args, owner, span)?;
         // The expected type decides the generic arguments first (§4.7: expected
@@ -384,7 +381,8 @@ impl<'a> Checker<'a> {
         // missing field.
         let failed = self.a.partly_read(d);
         let written: Vec<&Ident> = fields.iter().map(|(n, _)| n).collect();
-        self.whole_reach(d, defs, &written, path.span, crate::structpat::Whole::Literal)?;
+        let whole = crate::structpat::Whole::Literal { filled: rest.is_some() };
+        self.whole_reach(d, defs, &written, path.span, whole)?;
         let mut seen: Vec<&str> = Vec::new();
         for (name, value) in fields {
             if seen.contains(&name.name.as_str()) {
@@ -404,17 +402,8 @@ impl<'a> Checker<'a> {
             let ft = self.a.types.subst(f.ty, &args);
             self.with_why(format!("the field `{}`", name.name), ft, |ck| ck.check_expr(*value, Some(ft)))?;
         }
-        let missing: Vec<&str> = defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.contains(n)).collect();
-        if !missing.is_empty() && !failed {
-            let shown = self.a.def(d).name.clone();
-            return Err(self.err(
-                Code::E0410,
-                path.span,
-                format!(
-                    "missing field(s) {} of `{shown}`; struct literals name every field (§4.4)",
-                    missing.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
-                ),
-            ));
+        if !failed {
+            self.literal_rest(d, (defs, &seen), rest.copied(), path.span)?;
         }
         let t = self.a.types.intern(Ty::Named(d, args.clone()));
         self.finish_instance(d, args, span)?;

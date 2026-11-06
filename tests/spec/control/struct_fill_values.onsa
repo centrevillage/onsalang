@@ -1,0 +1,236 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§6.3", "§6.4"]
+
+// W5-22 U4/t, S-697 (spec §4.4: "リテラルの並びの最後の `...`(`Item { x: 1, ... }`。後ろに `,` を置かない)は、書かないフィールドを宣言の既定値で埋める。`Default` は呼ばず"; "印の無いリテラルは、既定値のあるフィールドも全て書く";
+// "型別名 … struct リテラル、パターン、列挙子 … 元の型と同じに使える"; "`impl` の本体の中の `Self`(§2.2)も、対象の型を右辺にした別名と同じである(`Self { x: 0.0 }`)"). The values of a literal that ends with `...`: the fields that are
+// not written take the declared default, the ones that are written take what is written (in the order of the declaration or not), a struct whose fields all have a default is made by `Flags { ... }`, a
+// struct inside a struct, a literal through a type alias and through `Self`, a default that reads a constant and calls a function, and a struct that has a hand-written `impl Default` whose `...` does not call it
+// (`Hand { ... }` is the declared defaults and `Hand.default()` is the hand-written one). Two literals make two values. The syntax is in U2's cases; the errors are in negative/struct_fill_*.onsa.
+
+const BASE: U32 = 100
+
+fn plus_one(x: U32) -> U32 {
+  x + 1
+}
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.5,
+  z: I32 = -3,
+}
+
+pub struct Flags {
+  on: Bool = true,
+  n: U32 = 4,
+  ratio: F32 = 1.5,
+}
+
+pub struct Mixed {
+  a: U32 = 1,
+  b: U32 = 2,
+  c: U32 = 3,
+}
+
+pub struct Inner {
+  a: U32,
+  b: U32 = 10,
+}
+
+pub struct Outer {
+  inner: Inner,
+  scale: F32 = 2.0,
+  pair: (U8, Bool) = (1, true),
+}
+
+pub struct Calc {
+  v: U32 = BASE + 1,
+  w: U32 = plus_one(BASE),
+  s: F32 = F32.PI,
+  keep: U32,
+}
+
+pub enum Mode: PartialEq {
+  Off,
+  On,
+}
+
+pub struct Odd {
+  c: Char = 'q',
+  some: Option[U32] = Some(8),
+  mode: Mode = Mode.On,
+  taps: [F32; 2] = [1.0, 2.0],
+  keep: U32,
+}
+
+pub struct Hand {
+  n: U32 = 5,
+  m: U32 = 6,
+}
+
+impl Default for Hand {
+  rt fn default() -> Hand {
+    Hand { n: 50, m: 60 }
+  }
+}
+
+type ItemAlias = Item
+
+impl Item {
+  pub fn made(x: U32) -> Self {
+    Self { x: x, ... }
+  }
+
+  pub fn made_with(x: U32, z: I32) -> Item {
+    Self { z: z, x: x, ... }
+  }
+}
+
+fn mode_number(m: Mode) -> U32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On => 1,
+  }
+}
+
+fn option_or(o: Option[U32], other: U32) -> U32 {
+  match o {
+    Some(v) => v,
+    None => other,
+  }
+}
+
+test "the fields that are not written take the declared default" {
+  let it = Item { x: 1, ... }
+  assert it.x == 1
+  assert it.y == 0.5
+  assert it.z == -3
+}
+
+test "a written field takes what is written, the others the default" {
+  let it = Item { x: 1, y: 9.0, ... }
+  assert it.x == 1
+  assert it.y == 9.0
+  assert it.z == -3
+  let jt = Item { x: 2, z: 7, ... }
+  assert jt.y == 0.5
+  assert jt.z == 7
+}
+
+test "the order of the written fields is free" {
+  let m = Mixed { c: 30, a: 10, ... }
+  assert m.a == 10
+  assert m.b == 2
+  assert m.c == 30
+  let n = Mixed { b: 20, ... }
+  assert n.a == 1
+  assert n.b == 20
+  assert n.c == 3
+  let o = Mixed { c: 9, b: 8, ... }
+  assert o.a == 1
+  assert o.b == 8
+  assert o.c == 9
+}
+
+test "a struct whose fields all have a default is made by an empty list and a ..." {
+  let f = Flags { ... }
+  assert f.on
+  assert f.n == 4
+  assert f.ratio == 1.5
+  let g = Flags { n: 5, ... }
+  assert g.on
+  assert g.n == 5
+  assert g.ratio == 1.5
+}
+
+test "a written field that is equal to its default is still written" {
+  let it = Item { x: 4, y: 0.5, ... }
+  assert it.y == 0.5
+  assert it.z == -3
+}
+
+test "a struct inside a struct" {
+  let o = Outer { inner: Inner { a: 5, ... }, ... }
+  assert o.inner.a == 5
+  assert o.inner.b == 10
+  assert o.scale == 2.0
+  assert o.pair.0 == 1
+  assert o.pair.1
+  let p = Outer { inner: Inner { a: 1, b: 2 }, scale: 3.0, ... }
+  assert p.inner.b == 2
+  assert p.scale == 3.0
+  assert p.pair.0 == 1
+}
+
+test "a type alias is the type" {
+  let it = ItemAlias { x: 7, ... }
+  assert it.x == 7
+  assert it.y == 0.5
+  assert it.z == -3
+}
+
+test "Self in an impl" {
+  let a = Item.made(3)
+  assert a.x == 3
+  assert a.y == 0.5
+  assert a.z == -3
+  let b = Item.made_with(4, 8)
+  assert b.x == 4
+  assert b.y == 0.5
+  assert b.z == 8
+}
+
+test "a default that reads a constant and calls a function" {
+  let c = Calc { keep: 1, ... }
+  assert c.v == 101
+  assert c.w == 101
+  assert c.s == F32.PI
+  assert c.keep == 1
+}
+
+test "a default of a type that has no Default" {
+  let o = Odd { keep: 2, ... }
+  assert o.c == 'q'
+  assert option_or(o.some, 0) == 8
+  assert mode_number(o.mode) == 1
+  assert o.taps[0] == 1.0
+  assert o.taps[1] == 2.0
+  assert o.keep == 2
+}
+
+test "the ... does not call the hand-written Default" {
+  let h = Hand { ... }
+  assert h.n == 5
+  assert h.m == 6
+  let d = Hand.default()
+  assert d.n == 50
+  assert d.m == 60
+  let part = Hand { m: 1, ... }
+  assert part.n == 5
+  assert part.m == 1
+}
+
+test "two literals make two values" {
+  var a = Item { x: 1, ... }
+  a.y = 4.0
+  let b = Item { x: 1, ... }
+  assert a.y == 4.0
+  assert b.y == 0.5
+}
+
+test "the value is the one the full literal makes" {
+  let it = Item { x: 6, ... }
+  assert it.x == Item { x: 6, y: 0.5, z: -3 }.x
+  assert it.y == Item { x: 6, y: 0.5, z: -3 }.y
+  assert it.z == Item { x: 6, y: 0.5, z: -3 }.z
+}
+
+fn sum_of(m: Mixed) -> U32 {
+  m.a + m.b + m.c
+}
+
+test "the literal is an argument and a returned value" {
+  assert sum_of(Mixed { a: 10, ... }) == 15
+  assert sum_of(Mixed { ... }) == 6
+}

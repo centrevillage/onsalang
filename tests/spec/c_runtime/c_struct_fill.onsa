@@ -1,0 +1,90 @@
+// onsa.toml
+// [package]
+// name = "c_struct_fill"
+// edition = "2026"
+//
+// [export]
+// prefix = "csf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§6.6", "§13.4"]
+//
+// [[test.host]]
+// name = "plain"
+// target = "host"
+// fn = "c_struct_fill.plain"
+// steps = [
+//   { call = "fn", args = { x = 5 }, status = 0, result = 25 },
+// ]
+//
+// [[test.host]]
+// name = "generic"
+// target = "host"
+// fn = "c_struct_fill.generic"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 14 },
+// ]
+//
+// [[test.host]]
+// name = "in_a_constant"
+// target = "host"
+// fn = "c_struct_fill.in_a_constant"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 13 },
+// ]
+
+// W5-22 U4 (spec §4.4: the last `...` fills the fields that are not written with their declared
+// default, one value for each instance, S-918): the values in the C of the host, as the `test`
+// blocks say them in the interpreter. The default reads a parameter of its struct, and a literal
+// in a `const` is burnt in.
+
+const BASE: U32 = 10
+
+pub struct Item {
+  x: U32,
+  y: U32 = BASE * 2,
+}
+
+pub struct Sized[T: Int] {
+  v: T,
+  bits: U32 = T.BITS,
+}
+
+pub struct Ring[const N: U32] {
+  head: U32 = N + 1,
+  tail: U32 = 0,
+}
+
+const MADE: Item = Item { x: 3, ... }
+
+@export
+pub fn plain(x: U32) -> U32 {
+  let it = Item { x: x, ... }
+  it.x + it.y
+}
+
+@export
+pub fn generic() -> U32 {
+  let s: Sized[U8] = Sized { v: 1, ... }
+  let r: Ring[5]   = Ring { tail: 0, ... }
+  s.bits + r.head
+}
+
+@export
+pub fn in_a_constant() -> U32 {
+  MADE.x + MADE.y - 10
+}
+
+test "the values in the interpreter" {
+  assert plain(5) == 25
+  assert generic() == 14
+  assert in_a_constant() == 13
+}

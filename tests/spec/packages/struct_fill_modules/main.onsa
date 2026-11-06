@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§15.1", "§6.6"]
+
+// W5-22 U4/t, S-697 (spec §15.1: "見えないフィールドを持つ struct は、そのフィールドが見えない場所では struct リテラルで作れず … ただし、見えないフィールドに全て既定値があれば `...` で埋めて作れ(§4.4)";
+// "見えないフィールドに既定値を書くのは、外から既定値で作ってよいという struct の側の選択である"; §4.4: "読むモジュールは宣言のモジュールで、見えない定数も読める"). A struct of another module with `priv`
+// fields that all have a default is made here by `Ring { data: xs, ... }` (through `use` and through the path), also when every field is `priv` (`Fixed { ... }`), and a generic one. The
+// default reads a constant that this module cannot see (`SECRET` in util.onsa), and the `priv` fields are read through the functions of util.onsa. The `...` does not call the hand-written `Default` of the
+// other module. A field that is seen can be written beside the `...`. The `priv` field is read here only through the functions. The errors (a `priv` field with no default, a `priv` field that is written, and
+// the literal without `...`) are in negative/struct_fill_hidden_neg/.
+use util
+use util.{Ring, Wrap, Fixed, Hand}
+
+fn xs() -> [F32; 4] {
+  [1.0, 2.0, 3.0, 4.0]
+}
+
+test "the priv fields take their defaults, the constant they read is not seen here" {
+  let r = Ring { data: xs(), ... }
+  assert r.data[0] == 1.0
+  assert r.data[3] == 4.0
+  assert r.head() == 42
+  assert r.gain() == 0.5
+  assert r.label == 9
+}
+
+test "through the path of the module" {
+  let r = util.Ring { data: xs(), ... }
+  assert r.head() == 42
+  assert r.label == 9
+}
+
+test "a field that is seen can be written beside the ..." {
+  let r = Ring { data: xs(), label: 3, ... }
+  assert r.label == 3
+  assert r.head() == 42
+  assert r.gain() == 0.5
+}
+
+test "a struct whose fields are all priv" {
+  let f = Fixed { ... }
+  assert f.a() == 41
+  assert f.b() == 8.0
+}
+
+test "a generic struct with priv fields" {
+  let w: Wrap[U8] = Wrap { inner: 7, ... }
+  assert w.inner() == 7
+  assert w.extra() == 5
+  assert w.tag == 1
+  let v: Wrap[F32] = Wrap { inner: 1.5, tag: 2, ... }
+  assert v.inner() == 1.5
+  assert v.extra() == 5
+  assert v.tag == 2
+}
+
+test "the ... does not call the hand-written Default of the other module" {
+  let h = Hand { ... }
+  assert h.n() == 5
+  assert h.m == 6
+  let d = Hand.default()
+  assert d.n() == 50
+  assert d.m == 60
+}
+
+rt fn ring_in_an_rt_fn() -> Ring {
+  Ring { data: [0.0; 4], ... }
+}
+
+test "in an rt fn of this module and through a function of the other" {
+  assert ring_in_an_rt_fn().head() == 42
+  assert util.ring_here(xs()).head() == 42
+  assert util.ring_here(xs()).data[2] == 3.0
+}
+
+const START: Ring = Ring { data: [1.0, 2.0, 3.0, 4.0], ... }
+
+test "in the initializer of a const" {
+  assert START.head() == 42
+  assert START.gain() == 0.5
+  assert START.data[1] == 2.0
+}

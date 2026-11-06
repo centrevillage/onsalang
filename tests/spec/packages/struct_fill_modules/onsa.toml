@@ -1,0 +1,3 @@
+[package]
+name = "struct_fill_modules"
+edition = "2026"

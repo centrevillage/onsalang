@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4"]
+
+// W5-22 U4/b, S-697 (spec §18.1): a struct that was read whole and has a diagnostic of the syntax stage elsewhere in its unit (a `;` after it, a
+// `pub` on a field, an old attribute) keeps its fields as they are written, their defaults too. The `...` of its uses is right, and nothing is reported there.
+
+pub struct AfterIt {
+  x: U32,
+  y: U32 = 4,
+};                                                            //~ E0020
+
+pub struct OnAField {
+  pub x: U32,                                                 //~ E0020
+  y: U32 = 4,
+}
+
+@derive(PartialEq)                                            //~ E0020
+pub struct OldAttribute {
+  x: U32,
+  y: U32 = 4,
+}
+
+pub fn a() -> AfterIt {
+  AfterIt { x: 1, ... }
+}
+
+pub fn b() -> OnAField {
+  OnAField { x: 1, ... }
+}
+
+pub fn c() -> OldAttribute {
+  OldAttribute { x: 1, ... }
+}

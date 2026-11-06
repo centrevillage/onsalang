@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+
+// W5-22 U4/t, S-697 (spec §15.1: "見えないフィールドを持つ struct は、そのフィールドが見えない場所では struct リテラルで作れず(E0303 …)。ただし、見えないフィールドに全て既定値があれば `...` で埋めて作れ(§4.4)"; §4.4: "`...` の後に
+// 既定値の無いフィールドが残る形は E0410"; §18.1: the name stage (E0303) is before the type stage). A `priv` field with no default that the `...` leaves is E0303 on the name of the type, and it is before the E0410 of a
+// field that is seen and has none (`Strict { ... }` has both: E0303). One of two `priv` fields with no default for the other is E0303. A `priv` field that is written, with the `...` or without, is E0303 on the field
+// (the `...` fills the fields that are not written and does not let the writer name the field that is not seen). A struct whose fields are all seen is the E0410 that it has been (the last function). One
+// error in each function (P-01). The forms with no error are in struct_fill_hidden_left/ and in struct_fill_modules/.
+use ring.{Strict, Partly, Ring, Open}
+
+pub fn dots_hidden_without_default(a: U32) -> Strict {
+  Strict { a: a, ... }                                        //~ E0303
+}
+
+pub fn dots_one_hidden_without_default(a: U32) -> Partly {
+  Partly { a: a, ... }                                        //~ E0303
+}
+
+pub fn dots_both_missing() -> Strict {
+  Strict { ... }                                              //~ E0303
+}
+
+pub fn dots_the_hidden_field_is_written(xs: [F32; 4]) -> Ring {
+  Ring { data: xs, head: 3, ... }                             //~ E0303
+}
+
+pub fn the_hidden_field_is_written(xs: [F32; 4]) -> Ring {
+  Ring { data: xs, head: 3 }                                  //~ E0303
+}
+
+pub fn the_hidden_field_is_written_alone(h: U32) -> Strict {
+  Strict { h: h, ... }                                        //~ E0303
+}
+
+pub fn through_the_function(a: U32) -> Strict {
+  Strict.make(a, 1)
+}
+
+pub fn all_seen_and_one_left() -> Open {
+  Open { a: 1, ... }                                          //~ E0410
+}

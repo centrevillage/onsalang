@@ -434,6 +434,15 @@ impl Def {
         }
     }
 
+    /// The constants of the defaults of the fields, of a struct (§4.4).
+    pub(crate) fn field_defaults(&self) -> impl Iterator<Item = DefId> + '_ {
+        let fields = match self.as_struct().map(|s| &s.fields) {
+            Some(Fields::Named(fields)) => &fields[..],
+            _ => &[],
+        };
+        fields.iter().filter_map(|f| f.default)
+    }
+
     pub fn as_enum(&self) -> Option<&EnumDef> {
         match &self.kind {
             DefKind::Enum(e) => Some(e),

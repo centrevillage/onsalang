@@ -43,6 +43,20 @@ fn declared_default(lw: &mut Lowerer, d: DefId, ty: Ty, args: &[GenericArg], spa
     Ok(Expr::new(ty, span, ExprKind::Const(lw.const_id(d, args.to_vec())?)))
 }
 
+/// The value of the field `name`, of the type `ty`, of the struct `id` that a
+/// struct literal leaves to its last `...`: the default it declares at the
+/// arguments of the type of the literal (§4.4, S-918), with no `default()`
+/// (a hand-written `impl Default` is not called). The checks left no other.
+pub(super) fn filled_field(lw: &mut Lowerer, id: TypeId, name: &str, ty: Ty, span: Span) -> R<Expr> {
+    let (d, args) = lw.type_decl(id, span)?;
+    let fields = lw.a.def(d).as_struct().map(|s| &s.fields);
+    let Some(Fields::Named(fields)) = fields else { return Err(internal(span, "a literal of no named fields")) };
+    let Some(default) = fields.iter().find(|f| f.name == name).and_then(|f| f.default) else {
+        return Err(internal(span, "missing field"));
+    };
+    declared_default(lw, default, ty, &args, span)
+}
+
 /// The value of the field `f` in a `default()`: the default it declares, else
 /// the default of its type (§6.4).
 // SPEC-GAP(S-173): the default of a field that reads a constant made by this

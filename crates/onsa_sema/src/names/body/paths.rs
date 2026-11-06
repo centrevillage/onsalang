@@ -463,9 +463,12 @@ impl<'a> Walker<'a> {
     }
 
     /// The item the path of the struct literal `e` names.
-    pub(super) fn struct_lit(&mut self, e: ExprId, path: &Path) -> W {
+    pub(super) fn struct_lit(&mut self, e: ExprId, path: &Path, filled: bool) -> W {
         let (entity, owner) = self.item(path, Want::Type).map_err(|f| self.fail(f))?;
         self.out.structs.insert(e, StructRes { entity, owner });
+        if let (true, Entity::Def(d) | Entity::Member(d)) = (filled, entity) {
+            self.out.filled.insert(d);
+        }
         Ok(())
     }
 }

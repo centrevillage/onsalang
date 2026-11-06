@@ -105,11 +105,11 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             let id = *id;
             let defs = lw.struct_fields(id);
             let mut out = Vec::new();
-            for (name, _) in &defs {
-                let Some((_, v)) = fields.iter().find(|(n, _)| n.name == *name) else {
-                    return Err(internal(span, "missing field"));
-                };
-                out.push(lower_expr(lw, cx, *v)?);
+            for (name, field_ty) in &defs {
+                out.push(match fields.iter().find(|(n, _)| n.name == *name) {
+                    Some((_, v)) => lower_expr(lw, cx, *v)?,
+                    None => crate::lower::derived::filled_field(lw, id, name, field_ty.clone(), span)?,
+                });
             }
             ExprKind::Struct { ty: id, fields: out }
         }

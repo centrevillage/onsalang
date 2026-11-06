@@ -22,8 +22,8 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
-    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ImplDecl, ItemId, ItemKind, Lit, Mode,
-    Param, ParamName, Path, TypeId, TypeKind, UnOp, Vis,
+    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, Failed, GenericParam, Ident, ImplDecl, ItemId, ItemKind, Lit,
+    Mode, Param, ParamName, Path, TypeId, TypeKind, UnOp, Vis,
 };
 use onsa_syntax::foreign::{self, RowId};
 
@@ -296,9 +296,10 @@ impl<'p> Sema<'p> {
                 // `priv` alone (§15.1, S-35, S-672).
                 // It is seen as far as it reaches (S-665).
                 let inherited = self.a.def(id).vis;
-                // A struct with an error of the syntax stage has no default
-                // checked (§18.1): that error is the one of its fields.
-                let read = cx.ast.item(item_id).failed.is_none();
+                // A struct the syntax stage cut has no default checked: that
+                // error is the one of its fields (§18.1). One read whole keeps
+                // them, for the `...` of its uses (`Failed::Unit`).
+                let read = matches!(cx.ast.item(item_id).failed, None | Some(Failed::Unit));
                 let mut fields = Vec::new();
                 for f in &s.fields {
                     let vis = if f.vis == Vis::Priv { Vis::Priv } else { inherited };

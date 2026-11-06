@@ -1,0 +1,33 @@
+// The module `ring` of the case in main.onsa: structs whose `priv` fields all have a default, and one whose fields are all `priv`.
+
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32 = 0,
+}
+
+pub struct Tagged {
+  a: U32,
+  b: U32 = 1,
+  priv tag: U8 = 7,
+  priv size: U8 = 8,
+}
+
+pub struct AllHidden {
+  priv a: U32 = 1,
+  priv b: U32 = 2,
+}
+
+impl Ring {
+  pub fn head(self) -> U32 {
+    self.head
+  }
+}
+
+// in the module of the declaration the `priv` fields are seen, and the literal without the `...` leaves one that has a default: E0410
+pub fn here(xs: [F32; 4]) -> Ring {
+  Ring { data: xs }                                           //~ E0410
+}
+
+pub fn here_with_the_dots(xs: [F32; 4]) -> Ring {
+  Ring { data: xs, ... }
+}

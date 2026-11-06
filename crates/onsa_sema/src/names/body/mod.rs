@@ -31,7 +31,7 @@ mod scope;
 #[cfg(test)]
 mod tests;
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
 use onsa_diag::Diagnostic;
 use onsa_diag::hash::{HashMap, HashSet};
@@ -80,6 +80,9 @@ pub(crate) struct BodyNames {
     pub pats: HashMap<PatId, PatRes>,
     /// A struct literal (`P { … }`, `Self { … }`, through an alias).
     pub structs: HashMap<ExprId, StructRes>,
+    /// What the struct literals with a last `...` make (§4.4, S-919), each
+    /// once: the body reads all the defaults of each of them.
+    pub filled: BTreeSet<DefId>,
     /// A hole of a string literal (§2.4): the literal and the index of the
     /// hole in its [`onsa_syntax::ast::StrLit::segments`], to the names of
     /// the hole the names stage resolves (the index of the name in the path

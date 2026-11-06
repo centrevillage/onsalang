@@ -94,8 +94,8 @@ impl Walker<'_> {
             // `Feature::TypeArgsInExpressions`, neither dropped nor read, R-81).
             ExprKind::TypeArgs { args, .. } => Err(self.type_args(args.span)),
             ExprKind::Struct { type_args, .. } if !type_args.is_empty() => Err(self.type_args(type_args[0].1.span)),
-            ExprKind::Struct { path, .. } => {
-                self.struct_lit(e, path)?;
+            ExprKind::Struct { path, rest, .. } => {
+                self.struct_lit(e, path, rest.is_some())?;
                 self.exprs(ast.sub_exprs(e))
             }
             ExprKind::Block(b) => self.block(b),

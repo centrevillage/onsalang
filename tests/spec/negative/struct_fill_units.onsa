@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4"]
+
+// W5-22 U4/t, S-697 (spec §18.1: "struct のフィールドの既定値も、フィールドごとに一つの単位である … 単位どうしは独立に検査し"; "誤りのある宣言も、名前まで読めれば名前解決に見せる。読めなかった部分は誤りの型として扱い、
+// それを使う側には診断を出さない"; §4.4). The `...` that reads a default which is itself an error says nothing about it: the wrong default is reported once, where it is written (E0401 here), and the places that
+// read it are silent (a `...` that leaves the field out, in a function, in a `const`, in the argument of a call, with the struct derived or not). The rest of the literal is checked as ever: a field that is
+// left out and has no default is E0410, a written field of a wrong type is E0401, and the `...` of a literal that writes the field with the wrong default reads nothing (it is E0410 as every `...` that has
+// nothing to fill is). A struct whose defaults are fine, next to the wrong one, is made by `...` with no error. The same without `...` is in field_default_units.onsa.
+
+pub struct Broken {
+  a: U32,
+  b: U32 = true,                                              //~ E0401
+  c: U32 = 3,
+}
+
+pub struct Der: Default {
+  a: U32,
+  b: U32 = "x",                                               //~ E0401
+}
+
+pub struct Good {
+  a: U32,
+  b: U32 = 2,
+}
+
+fn take(b: Broken) -> U32 {
+  b.a
+}
+
+// the places that read the wrong default are silent
+pub fn leaves_it_out() -> Broken {
+  Broken { a: 1, ... }
+}
+
+pub fn leaves_it_out_and_another() -> Broken {
+  Broken { a: 1, c: 5, ... }
+}
+
+pub fn as_an_argument() -> U32 {
+  take(Broken { a: 1, ... })
+}
+
+pub fn derived_with_the_dots() -> Der {
+  Der { a: 1, ... }
+}
+
+pub fn derived() -> Der {
+  Der.default()
+}
+
+const FROM_DOTS: Broken = Broken { a: 1, ... }
+
+const DER_FROM_DOTS: Der = Der { a: 1, ... }
+
+// the rest of the literal is checked as ever
+pub fn a_remains() -> Broken {
+  Broken { ... }                                              //~ E0410
+}
+
+pub fn a_written_field_of_a_wrong_type() -> Broken {
+  Broken { a: true, ... }                                     //~ E0401
+}
+
+pub fn a_field_that_does_not_exist() -> Broken {
+  Broken { a: 1, d: 2, ... }                                  //~ E0410
+}
+
+pub fn the_default_is_written_too() -> Broken {
+  Broken { a: 1, b: 2, c: 3, ... }                            //~ E0410
+}
+
+pub fn a_wrong_use_of_the_result() -> U32 {
+  let b = Broken { a: 1, ... }
+  b.a + true                                                  //~ E0401
+}
+
+// the struct next to it is fine
+pub fn good() -> Good {
+  Good { a: 1, ... }
+}

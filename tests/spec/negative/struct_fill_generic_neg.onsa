@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// W5-22 U4/t, S-697 (spec §4.4: the `...` fills the fields that are not written with their default, and a field whose type depends on a type parameter has no default, so the `...` never gives a type argument; §4.5 and
+// the E0406 of the register: "型パラメータが決まらない。関数の終わりに残る型変数も含む"). A generic struct made with `...` whose type argument no written field gives, and no annotation or use gives, is the E0406 that the
+// literal without `...` is (`Lazy { o: None, n: 0 }`): the argument is left open at the end of the function. The annotation, a use, and a written field that holds the type settle it, as they do without `...`
+// (the functions at the end). One error in each function (P-01).
+
+pub struct Lazy[T] {
+  o: Option[T],
+  n: U32 = 0,
+}
+
+pub struct Two[A, B] {
+  a: A,
+  b: Option[B],
+  n: U32 = 0,
+}
+
+pub struct Held[T] {
+  p: (Option[T], U32),
+  k: F32 = 0.5,
+}
+
+pub fn open_from_none() -> U32 {
+  let l = Lazy { o: None, ... }                               //~ E0406
+  l.n
+}
+
+pub fn open_second_argument() -> U32 {
+  let t = Two { a: 1, b: None, ... }                          //~ E0406
+  t.n
+}
+
+pub fn open_in_a_tuple() -> F32 {
+  let h = Held { p: (None, 1), ... }                          //~ E0406
+  h.k
+}
+
+pub fn open_with_the_default_written() -> U32 {
+  let l = Lazy { o: None, n: 3 }                              //~ E0406
+  l.n
+}
+
+// settled
+pub fn by_annotation() -> U32 {
+  let l: Lazy[U8] = Lazy { o: None, ... }
+  l.n
+}
+
+pub fn by_the_second_annotation() -> U32 {
+  let t: Two[U8, Bool] = Two { a: 1, b: None, ... }
+  t.n
+}
+
+pub fn by_a_value() -> U32 {
+  let l = Lazy { o: Some(true), ... }
+  l.n
+}
+
+pub fn by_the_return_type() -> Lazy[F32] {
+  Lazy { o: None, ... }
+}
+
+pub fn by_a_parameter(l: Lazy[U8]) -> U32 {
+  l.n
+}
+
+pub fn by_a_call() -> U32 {
+  by_a_parameter(Lazy { o: None, ... })
+}

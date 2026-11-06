@@ -1,8 +1,9 @@
 //! The cycles of the constants (E0312, §6.6) and of the flow instances
 //! (E0817, §11.5), from the records of the bodies alone (D-15): a constant
 //! reads the constants its initializer names ([`super::BodyNames::paths`]
-//! and [`super::BodyNames::interp`]), a flow makes instances of the flows
-//! of [`super::BodyNames::instances`]. No edge goes from a flow to a
+//! and [`super::BodyNames::interp`]) and every default of the structs its
+//! `...` fills ([`super::BodyNames::filled`], §4.4, S-919), a flow makes
+//! instances of the flows of [`super::BodyNames::instances`]. No edge goes from a flow to a
 //! constant, so one graph holds both, and each cycle is of one kind. One
 //! report per collection (§18.1, S-734, S-742), at the name of its first
 //! declaration, whose unit stops in the names stage; the units of the
@@ -61,7 +62,8 @@ pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
 }
 
 /// The declarations the body of `d` depends on: of a flow, the flows it
-/// makes instances of; else the items its names stop at.
+/// makes instances of; else the items its names stop at and the defaults of
+/// what its `...` fills.
 fn edges(a: &Analysis, d: DefId) -> Vec<DefId> {
     let n = &a.names[&d];
     if matches!(a.def(d).kind, DefKind::Flow(_)) {
@@ -74,5 +76,5 @@ fn edges(a: &Analysis, d: DefId) -> Vec<DefId> {
         PathRes::Item { entity: Entity::Def(c) | Entity::Member(c), .. } => Some(*c),
         _ => None,
     });
-    items.collect()
+    items.chain(n.filled.iter().flat_map(|&s| a.def(s).field_defaults())).collect()
 }

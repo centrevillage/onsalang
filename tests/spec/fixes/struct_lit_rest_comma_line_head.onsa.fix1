@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 1
+
+// W5-22 U4 (spec §4.4: the last `...` of a struct literal; §18.1: a candidate is made when the
+// intent is one): a `...` at the head of a line before the `}` of a struct literal, after a field
+// with no `,`, is that `...` with its `,` left out: E0002 of the list, whose candidate writes the
+// `,`. The rows of the ranges keep the same line (`Item { x: 1 ... }`) and any other place.
+
+pub struct Item {
+  x: U32,
+  y: U32 = 2,
+}
+
+pub fn make() -> Item {
+  Item {
+    x: 1,
+    ...                                                       //~ E0002
+  }
+}

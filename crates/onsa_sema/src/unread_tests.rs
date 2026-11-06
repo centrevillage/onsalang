@@ -47,6 +47,20 @@ fn the_users_of_a_type_with_an_impl_not_read() {
 }
 
 #[test]
+fn the_users_of_a_default_are_those_of_its_struct() {
+    // The type of a default is the type of its field: a `...` reaches what a default holds through
+    // the type of the literal, and `unread_users` has no need of `filled`. What the initializer of
+    // a default reads is that default's alone, as for a `const` (`read_unread`).
+    let src = "struct P {\n  a: Missng = 1,\n}\n\n\
+               fn fills() -> I32 {\n  let p = P { ... }\n  1\n}\n\n\
+               fn other() -> I32 {\n  2\n}\n";
+    assert_eq!(users(&check(src)), ["P", "fills", "a"]);
+    let src = "use nope.X\n\nstruct P {\n  a: U32 = X,\n}\n\n\
+               fn fills() -> P {\n  P { ... }\n}\n";
+    assert_eq!(users(&check(src)), ["a"]);
+}
+
+#[test]
 fn the_users_of_a_type_that_failed_to_resolve() {
     // `Missng` is no type (E0302): `g` declares it, `caller` calls `g`, `other` does not.
     let src = "fn g(p: Missng) -> I32 {\n  1\n}\n\n\
