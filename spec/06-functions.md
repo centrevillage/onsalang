@@ -118,7 +118,7 @@ impl Describe for Point {
 - trait の宣言の頭に `: trait + trait` と書くと、その trait を実装する型が先に満たすべき trait（上位の trait）になる（`pub trait Ord: PartialOrd + Eq`）。境界（§4.5）と derive（§6.4）と同じく「左の型が右の trait を満たす」と読む。上位の trait を満たさない型への `impl` は E0416。
   標準 trait の上位の trait は `Eq: PartialEq`、`PartialOrd: PartialEq`、`Ord: PartialOrd + Eq` である（数の trait は次の項）。`Hash` は上位の trait を持たない。`T: Ord` の境界からは、上位の trait（`PartialOrd`、`Eq`、`PartialEq`）も使える。
 - `impl Tr for Ty` は `Tr` の項目を一度ずつ書く。足りない項目と `Tr` に無いメンバは E0410 で、位置は足りなければ見出しの trait の名前、余計ならそのメンバの名前で、note に trait の項目の署名を示す。余計なメンバがあるときは足りない項目を報告しない。それらの `impl` を使う所には診断を出さない（§18.1）。
-  メンバの署名は trait の項目の関数型と同じに書く（`Self` と型の名前は同じ型である）。受け手、引数の数と型とモード、返り値、効果行、`rt`、型パラメータの違いは全て E0401 で、位置はメンバの名前で、note に trait の項目の署名を示す。`rt` の欠けだけなら、`rt` を足す修正候補を出す。
+  メンバの署名は trait の項目の関数型と同じに書く（`Self` と型の名前は同じ型である）。受け手、引数の数と型とモード、返り値、効果行、`rt`、型パラメータの違いは全て E0401 で、位置はメンバの名前で、note に trait の項目の署名を示す。`rt` の欠けだけなら、`rt` を足す修正候補を出す。この `impl` を使う所にも診断を出さない（§18.1）。
 - 数の trait は次の 5 つで、上位の trait の関係は `Num: AnyNum`、`Float: Num`、`Int: AnyNum`、`Unsigned: Int` である。
   - `AnyNum` は、符号なしを含む全ての数を表す。`Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元。浮動小数では `+0.0` で、`-0.0 + ZERO` は `+0.0` になる、§3.4）を持つ。
     符号なし整数の引き算が 0 を下回ると、具体的な型と同じく実行時に panic する（§3.4）。`Copy` を含めるのは、数を値として扱い、総称の数値のコードで `Copy` を重ねて書かずに済むようにするためである（`Copy` の無い `T` の破棄は `Alloc` を要する、下記）。
