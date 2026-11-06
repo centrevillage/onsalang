@@ -1,0 +1,2 @@
+pub fn i[T:Int](x:T)->F32{x as F32
+ x as F32 }

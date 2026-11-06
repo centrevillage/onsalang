@@ -640,3 +640,17 @@ left = "expected `…` or `…`, found identifier"
 input = "tests/fuzz/6ae4b399.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a line break before the `[I]` in the payload of a variant, and an `e` after the `]`, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0020"
+left = "a `…` that opens a list is written right after the token before it"
+input = "tests/fuzz/a187ec10.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a `^` at the head of a line, and a `(` apart from the name before it on that line, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0411|call `…`|E0418"
+left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
+input = "tests/fuzz/087eb621.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a statement that keeps its value, and an `as` from a type parameter, which the input has before the candidate"
