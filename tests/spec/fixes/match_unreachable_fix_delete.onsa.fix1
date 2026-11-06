@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-187, S-934 (U3 of W5-09): the candidate is only the deletion of the unreachable arms when the arm that covers is not a `_` or a binding itself, so that there is nothing
+// to move (§7: "覆っている腕が `_` か束縛だけのときは、それを最後へ移す形"; S-934: "移す候補を出すのは、覆う腕のパターンが `_` か束縛そのものの形だけである（`(_, _)`・`(_, x)`・
+// `Item { _ }` には消す候補だけを出す）"). The patterns that cover are `(_, _)`, `(_, x)`, `Item { _ }`, `Some(_)`, a literal that is written twice, the choice `1 | 2`, and
+// the arms that cover together (`true` and `false`, every variant of an enum, the cover of a tuple of `Bool`). One candidate (the deletion), the text not written here
+// (the contract of §18.1 checks it). One error per function (P-01).
+
+pub enum Color {
+  Red,
+  Green,
+}
+
+pub struct Item {
+  x: I32,
+  y: I32,
+}
+
+pub fn tuple_of_wildcards(t: (Bool, I32)) -> I32 {
+  match t {
+    (_, _) => 0,
+                                     //~ E0503
+  }
+}
+
+pub fn tuple_with_a_binding(t: (Bool, I32)) -> I32 {
+  match t {
+    (_, x) => x,
+                                     //~ E0503
+  }
+}
+
+pub fn struct_that_writes_nothing(it: Item) -> I32 {
+  match it {
+    Item { _ } => 0,
+                              //~ E0503
+  }
+}
+
+pub fn some_with_a_wildcard(o: Option[I32]) -> I32 {
+  match o {
+    Some(_) => 1,
+                                       //~ E0503
+    None => 0,
+  }
+}
+
+pub fn literal_written_twice(n: I32) -> I32 {
+  match n {
+    1 => 1,
+                                             //~ E0503
+    _ => 0,
+  }
+}
+
+pub fn choice_that_covers(n: I32) -> I32 {
+  match n {
+    1 | 2 => 1,
+                                             //~ E0503
+    _ => 0,
+  }
+}
+
+pub fn wildcard_after_true_and_false(b: Bool) -> I32 {
+  match b {
+    true => 1,
+    false => 0,
+                                             //~ E0503
+  }
+}
+
+pub fn wildcard_after_every_variant(c: Color) -> I32 {
+  match c {
+    Color.Red => 1,
+    Color.Green => 2,
+                                             //~ E0503
+  }
+}
+
+pub fn wildcard_after_a_tuple_of_bools(a: Bool, b: Bool) -> I32 {
+  match (a, b) {
+    (true, true) => 1,
+    (true, false) => 2,
+    (false, _) => 3,
+                                             //~ E0503
+  }
+}

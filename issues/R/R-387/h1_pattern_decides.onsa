@@ -1,0 +1,10 @@
+pub const LIM: U8 = 5
+
+pub fn f(flag: Bool) -> F64 {
+  let n = (5, 1)
+  match n {
+    _ => { },
+    (LIM, _) => { },
+  }
+  n.0 as F64
+}

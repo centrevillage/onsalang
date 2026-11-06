@@ -35,6 +35,7 @@ use crate::structpat::Written;
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId, Types};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 
+mod arms;
 pub(crate) mod bounds;
 mod call_forms;
 mod calls;
@@ -278,15 +279,18 @@ pub(crate) struct Checker<'a> {
     self_ty: Option<TyId>,
     pub(crate) infer: Infer,
     pub(crate) frames: Vec<Frame>,
-    /// The blocks being checked, innermost last: the node, the block and the
-    /// item it is at ([`Checker::open_block`]; what stops at a statement
-    /// reads what follows it here, §7).
-    pub(crate) blocks: Vec<(ExprId, &'a Block, usize)>,
+    /// The blocks being checked, innermost last: the node, the block, the
+    /// item it is at and the type expected of it ([`Checker::open_block`];
+    /// what stops at a statement reads what follows it here, §7).
+    pub(crate) blocks: Vec<(ExprId, &'a Block, usize, Option<TyId>)>,
     pub(crate) info: BodyInfo,
     pub(crate) failed: bool,
     /// The constants of a type no pattern compares found in the pattern
     /// being bound, with their types ([`Checker::bind_pat`]).
     bad_consts: Vec<(Span, TyId)>,
+    /// Reading the arms of a `match` in another order: what is found fails
+    /// the trial, and an E0503 of an arm gets no candidate ([`arms`]).
+    trying_arms: bool,
     /// Flow mode (T3-1, `flow.rs`): set while checking a flow body.
     pub(crate) flow: Option<crate::flow::FlowCx>,
     /// Checks that wait for a type a later statement decides (`deferred.rs`).
@@ -399,6 +403,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             info,
             failed: false,
             bad_consts: Vec::new(),
+            trying_arms: false,
             deferred: Vec::new(),
             deferred_seen: 0,
             deferred_generation: 0,

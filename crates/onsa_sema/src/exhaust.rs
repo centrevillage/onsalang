@@ -46,7 +46,7 @@ struct Ctors {
 /// The arms of a `match` read so far, as rows: the arms without a guard
 /// (§7), sorted by their heads so that an arm meets only the rows that share
 /// one, and the steps its search has taken.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Seen {
     rows: Vec<P>,
     /// The rows by the head of a constructor (with no fields) or a literal.
@@ -291,7 +291,7 @@ impl Checker<'_> {
         } {
             let tails: Vec<u32> = match s.mode {
                 Mode::Cover => rows.iter().map(|&r| s.cells[r as usize].tail).collect(),
-                // SPEC-GAP(S-936): §18.1 reads such a part for the cover alone.
+                // §18.1, S-936: an arm with such a part is reached.
                 Mode::Reach => Vec::new(),
             };
             return self.useful_rest(s, &tails, rest, rest_tys, "_".into());

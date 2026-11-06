@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-187, S-934 (U3 of W5-09): the covering arm is a `_` or a binding, but the candidate that moves it to the end is not made when the order after the move still has an arm of the stage of
+// the E0503 (§18.1 comes before the two candidates of §7: a candidate does not leave a diagnostic of its own stage). `_ => 0, true => 1, false => 2` moved is `true => 1,
+// false => 2, _ => 0`, where the `_` is unreachable; `_ => 0, 1 => 1, 1 => 2` moved has the second `1` unreachable; the same for the variants of an enum, `Some` and `None`, and for a
+// binding. The deletion of the unreachable arms is the one candidate. The text is not written here (the contract of §18.1 checks that nothing is left). One error per
+// function (P-01).
+
+pub enum Color {
+  Red,
+  Green,
+}
+
+pub fn wildcard_then_true_and_false(b: Bool) -> I32 {
+  match b {
+    _ => 0,
+                                          //~ E0503
+    
+  }
+}
+
+pub fn wildcard_then_a_literal_twice(n: I32) -> I32 {
+  match n {
+    _ => 0,
+                                             //~ E0503
+    
+  }
+}
+
+pub fn binding_then_a_literal_twice(n: I32) -> I32 {
+  match n {
+    k => k,
+                                             //~ E0503
+    
+  }
+}
+
+pub fn wildcard_then_every_variant(c: Color) -> I32 {
+  match c {
+    _ => 0,
+                                     //~ E0503
+    
+  }
+}
+
+pub fn wildcard_then_some_and_none(o: Option[I32]) -> I32 {
+  match o {
+    _ => 0,
+                                       //~ E0503
+    
+  }
+}

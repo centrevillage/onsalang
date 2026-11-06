@@ -1,0 +1,11 @@
+// F3: no deletion candidate when the unreachable arm has a `break` of a `for` loop (or `while r < 3`)
+pub fn a(n: I32) -> I32 {
+  var r = 0
+  for i in 0 ..< 3 {
+    match n {
+      _ => { r = 1 },
+      1 => { break },
+    }
+  }
+  r
+}

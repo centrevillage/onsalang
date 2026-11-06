@@ -1,0 +1,21 @@
+// F2: no deletion candidate when an arm before the unreachable one diverges (the same with `panic("p")`).
+pub fn a(n: Option[I32]) -> I32 {
+  var r = 0
+  match n {
+    Some(x) => { return 10 },
+    Some(1) => { r = 1 },
+    k => { r = 2 },
+  }
+  r
+}
+
+// the same without the `return`: the deletion is offered
+pub fn b(n: Option[I32]) -> I32 {
+  var r = 0
+  match n {
+    Some(x) => { r = 3 },
+    Some(1) => { r = 1 },
+    k => { r = 2 },
+  }
+  r
+}

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§11.5", "§18.1"]
+// fixes = 2
+
+// S-187 (U3 of W5-09): `match~` has the same candidates as `match` (§7: "`match~`（§11.5）も同じである"): the deletion of the unreachable arms and the move of the covering `_` or binding to the end, in the
+// body of a flow. The inputs of the flows are scalars (E0810 otherwise, §11.3). The text after the candidates is not written here. One error per flow (P-01).
+
+pub flow wildcard_then_a_literal(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    
+    0 => 2.0,
+    _ => 1.0,                                       //~ E0503
+  }
+}
+
+pub flow binding_then_a_literal(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    
+    0 => 2.0,
+    n => 1.0,                                       //~ E0503
+  }
+}
+
+pub flow wildcard_then_two_arms(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    
+    0 => 2.0,                                       //~ E0503
+    1 => 3.0,
+    _ => 1.0,
+  }
+}

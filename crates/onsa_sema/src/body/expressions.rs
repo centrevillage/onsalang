@@ -1,6 +1,7 @@
 //! The expressions: the literals, struct literals, blocks, `match`,
 //! closures and operators.
 
+use super::arms::Arms;
 use super::*;
 use crate::traits::{Class, op_bound};
 use onsa_diag::Edit;
@@ -200,7 +201,7 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            ExprKind::Match { scrutinee, arms, .. } => self.check_match(*scrutinee, arms, expected, span),
+            ExprKind::Match { scrutinee, arms, .. } => self.check_match(e, *scrutinee, arms, expected),
             ExprKind::Closure { params, ret, ret_clock: None, effects, body } => {
                 self.check_closure(e, params, *ret, effects.as_ref(), *body, expected)
             }
@@ -420,7 +421,7 @@ impl<'a> Checker<'a> {
         if let Some(f) = &mut self.flow {
             f.depth += 1;
         }
-        self.blocks.push((id, b, 0));
+        self.blocks.push((id, b, 0, expected));
         let r = (|| -> R<TyId> {
             for (i, &s) in b.stmts.iter().enumerate() {
                 self.blocks.last_mut().unwrap().2 = i;
@@ -450,12 +451,13 @@ impl<'a> Checker<'a> {
         r
     }
 
-    fn check_match(&mut self, scrutinee: ExprId, arms: &[MatchArm], expected: Option<TyId>, span: Span) -> R<TyId> {
+    fn check_match(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm], expected: Option<TyId>) -> R<TyId> {
+        let span = self.expr(e).span;
         let st = self.check_expr(scrutinee, None)?;
         let st = self.known(st, self.expr(scrutinee).span, "`match` operand")?;
         let mut result: Option<TyId> = expected;
         let mut seen = Seen::default();
-        self.check_arms(arms.iter(), st, &mut seen, &mut result, expected)?;
+        self.read_arms(&Arms { expr: e, arms, st, expected }, &mut seen, &mut result)?;
         if self.judges_arms(st)
             && let Some(missing) = self.missing_pattern(&mut seen, st)
         {
@@ -478,30 +480,35 @@ impl<'a> Checker<'a> {
     // SPEC-GAP(S-260): the variants of an enum whose unit failed in the
     // syntax stage are not all known; its `match` is not judged. Nor is the
     // `match` of a value of the error type (§18.1, R-271).
-    fn judges_arms(&self, st: TyId) -> bool {
+    pub(super) fn judges_arms(&self, st: TyId) -> bool {
         !self.mentions_failed(st) && !matches!(self.ty(self.shallow(st)), Ty::Error)
     }
 
     /// The arms in turn, against a value of type `st`: the pattern, then
     /// whether the arms before it leave it a value (§7, E0503, before its
     /// body, S-876), then the guard and the body. An arm with a guard is
-    /// asked about but covers nothing.
-    fn check_arms<'x>(
+    /// asked about but covers nothing. Stops at an arm that gets no value and
+    /// gives it back, with nothing reported ([`Self::read_arms`]).
+    pub(super) fn check_arms<'x>(
         &mut self,
         arms: impl Iterator<Item = &'x MatchArm>,
         st: TyId,
         seen: &mut Seen,
         result: &mut Option<TyId>,
         expected: Option<TyId>,
-    ) -> R<()> {
+    ) -> R<Option<&'x MatchArm>> {
         for arm in arms {
+            let waiting = (self.deferred.len(), self.deferred_end.len());
             let p = self.bind_pat(arm.pat, st, false);
             let bad = std::mem::take(&mut self.bad_consts);
             let p = p?;
             // Before the E0020: the guard form of an arm that is covered is
             // an E0503 of this stage (§18.1), and the arm is one to delete.
             if self.judges_arms(st) && !self.reachable(seen, &p, st) {
-                return Err(self.unreachable_arm(arm.pat, seen.whole));
+                // What a literal of the pattern waits for goes with the arm.
+                self.deferred.truncate(waiting.0);
+                self.deferred_end.truncate(waiting.1);
+                return Ok(Some(arm));
             }
             if !bad.is_empty() {
                 return Err(self.reject_constants(arm, bad));
@@ -522,7 +529,7 @@ impl<'a> Checker<'a> {
                 *result = Some(t);
             }
         }
-        Ok(())
+        Ok(None)
     }
 
     fn check_closure(

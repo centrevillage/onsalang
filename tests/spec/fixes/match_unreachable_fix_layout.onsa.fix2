@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+
+// S-187 (U3 of W5-09): the layouts of the arms around the candidates of the E0503. A comment at the end of the line of the covering arm and a comment line between the arms, the last arm
+// without a `,`, the arms that are blocks on several lines, and a `match` written on one line. The deletion and the move leave a text that is read without a diagnostic of the stage of the E0503
+// or before it, whatever happens to the comma of the last arm (the contract of §18.1 reads the text after each candidate). The comments are not promised to stay where they are
+// (the candidate may move them with the arm or leave them), only that they stay comments. The text after the candidates is not written here. One error per function (P-01).
+
+pub fn comment_at_the_end_of_the_covering_arm(n: I32) -> I32 {
+  match n {
+     // everything
+    1 => 1,
+    _ => 0,                                         //~ E0503
+  }
+}
+
+pub fn comment_line_between_the_arms(n: I32) -> I32 {
+  match n {
+    
+    // the arm for one
+    1 => 1,
+    _ => 0,                                         //~ E0503
+  }
+}
+
+pub fn unreachable_arm_is_the_last_without_a_comma(n: I32) -> I32 {
+  match n {
+    
+    1 => 1,
+    _ => 0,                                          //~ E0503
+  }
+}
+
+pub fn blocks_on_several_lines(n: I32) -> I32 {
+  var r = 0
+  match n {
+    
+    1 => {                                          //~ E0503
+      r = 2
+    },
+    _ => {
+      r = 1
+    },
+  }
+  r
+}
+
+pub fn last_block_arm_without_a_comma(n: I32) -> I32 {
+  var r = 0
+  match n {
+    
+    1 => {                                          //~ E0503
+      r = 2
+    },
+    _ => {
+      r = 1
+    },
+  }
+  r
+}
+
+pub fn match_on_one_line(n: I32) -> I32 {
+  match n {  1 => 1, _ => 0 }                        //~ E0503
+}

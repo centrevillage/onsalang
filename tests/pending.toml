@@ -1531,69 +1531,6 @@ note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0200。`sel
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_delete.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_delete_move.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_constant.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_move_blocked.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_unused_binding.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_type_variable.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_body_error.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_layout.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_tilde.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/naming_pattern_constants.onsa"
 reasons = ["S-185"]
 until = "W8-06"

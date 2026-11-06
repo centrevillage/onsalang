@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-876 (U3 of W5-09): what the unreachable arm decides or waits for goes with it. The pattern of the arm is the one that decides the type of `o`, so the deletion is not made (E0406 for `None`, in the stage of
+// the E0503) and the move is the one candidate. The literal `300` of a `U8` waits for a check of its range (E0408 once it is read): the deletion takes it away and is the one candidate, as the move would read it.
+// The body of the arm is what decides the type of `n`, which a later statement reads where its type must be known (E0420, in the stage of the E0503, §4.7), and a literal variable passes the check of the end of the
+// body at the arm: the deletion is not made, and the move is the one candidate. The text is not written here. One error per function (P-01).
+
+pub fn pattern_decides_the_type_of_none(x: I32) -> I32 {
+  let o = None
+  match o {
+    
+    Some(1) => 1,
+    _ => 0,                                   //~ E0503
+  }
+}
+
+pub fn literal_out_of_range_in_the_unreachable_arm(n: U8) -> I32 {
+  match n {
+    _ => 0,
+                                           //~ E0503
+  }
+}
+
+pub fn arm_decides_what_a_cast_reads(m: I32) -> F64 {
+  let n = 5
+  match m {
+    
+    1 => {                                          //~ E0503
+      let y: U8 = n
+      let _ = y
+    },
+    _ => { },
+  }
+  n as F64
+}
+
+pub fn arm_decides_what_a_match_reads(m: I32) -> F64 {
+  let n = 5
+  match m {
+    
+    1 => {                                          //~ E0503
+      let y: U8 = n
+      let _ = y
+    },
+    _ => { },
+  }
+  match n {
+    _ => 1.0,
+  }
+}

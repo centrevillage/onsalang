@@ -1,0 +1,11 @@
+pub fn id(n: I32) -> I32 {
+  n
+}
+
+pub fn f(n: I32) -> I32 {
+  let q = match n {
+    _ => 0,
+    1 => id(3),
+  }
+  q + 1
+}

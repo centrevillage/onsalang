@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+
+// S-187, S-934, S-185 (U1a and U3 of W5-09): the arm of a constant after a `_` is unreachable, and the two candidates of match_unreachable_fix_delete_move.onsa are made: the deletion of the arm and the move of the
+// `_` to the end, where the constant is compared first. The text after the candidates is not written here. One error per function (P-01).
+
+const LIMIT: I32 = 5
+
+pub fn binding_then_a_constant(n: I32) -> I32 {
+  match n {
+    
+    LIMIT => 1,
+    k => k,                                     //~ E0503
+  }
+}
+
+pub fn wildcard_then_a_constant(n: I32) -> I32 {
+  match n {
+    
+    LIMIT => 1,
+    _ => 0,                                     //~ E0503
+  }
+}

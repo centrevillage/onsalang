@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-876 (U3 of W5-09): the deletion of what is never reached is not made when that code is what decides the type of a variable before it, which a later statement reads where its type must be known (E0420,
+// §4.7, in the stage of the E0503, §18.1). A literal variable passes the check of the end of the body at the error, so that check does not tell: the code is read to see. `fixes = 0` is the promise that no candidate
+// is made. One error per function (P-01).
+
+pub fn statement_decides_what_a_cast_reads(c: Bool) -> F64 {
+  let n = 5
+  if c {
+    return 1.0
+    let y: U8 = n                                   //~ E0503
+  }
+  n as F64
+}
+
+pub fn last_expression_decides_what_a_cast_reads(c: Bool) -> F64 {
+  let n = 5
+  let r: U8 = if c {
+    return 1.0
+    n                                               //~ E0503
+  } else {
+    2
+  }
+  let _ = r
+  n as F64
+}
+
+pub fn statement_after_a_let_that_diverges(c: Bool) -> F64 {
+  let n = 5
+  if c {
+    let k = { return 1.0 }                          //~ E0503
+    let y: U8 = n
+  }
+  n as F64
+}

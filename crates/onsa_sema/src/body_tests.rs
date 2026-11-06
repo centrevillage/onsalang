@@ -1018,11 +1018,13 @@ fn the_rest_of_the_block_goes_from_its_first_token() {
 
 /// S-876: the look at the end of the body leaves no trace. A later trial
 /// reads the literal as it was (`n` is a `U8` after the join), and a trial
-/// around the E0503 keeps it to itself (§18.1: one diagnostic).
+/// around the E0503 keeps it to itself (§18.1: one diagnostic). The join is
+/// the one candidate: `g(n)` decides `n`, so it is not taken away.
 #[test]
 fn the_look_at_the_end_of_the_body_is_undone() {
-    let src = "fn g(x: U8) {}\nfn f() {\n  let n = 1\n  return\n  g(n)\n}\n";
-    assert_eq!(after_candidates(src).len(), 2);
+    let (head, tail) = ("fn g(x: U8) {}\nfn f() {\n  let n = 1\n  return", "\n}\n");
+    let src = format!("{head}\n  g(n){tail}");
+    assert_eq!(after_candidates(&src), [format!("{head} g(n){tail}")]);
     let src = "fn f(a: I32) -> I32 {\n  a\n  -({ return 1\n    2 })\n}\n";
     assert_eq!(codes(src), [Code::E0418]);
 }

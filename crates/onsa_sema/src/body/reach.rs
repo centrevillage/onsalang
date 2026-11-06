@@ -3,6 +3,7 @@
 //! that diverges (E0503, §7, S-128, S-268) and a form that diverges in a part
 //! that is always evaluated (E0503, S-291, S-889). The candidates that take
 //! the rest of a block away ask [`Checker::may_end_here`] (§18.1, S-876).
+//! The E0503 of an arm is in `arms.rs`.
 
 use onsa_diag::Edit;
 use onsa_diag::hash::HashMap;
@@ -11,10 +12,53 @@ use super::*;
 
 const RETURN_ENDS_ITS_LINE: &str = "`return` ends at the end of its line; a value is written on the same line (§2.5)";
 
+/// What a trial of a candidate decides of the body, for it to be undone. The
+/// tables of the body stay as they are: it stops at the error, and the last
+/// trial writes all of them that the end of the body looks at.
+pub(super) struct Kept {
+    infer: Infer,
+    deferred: Vec<Deferred>,
+    deferred_end: Vec<Deferred>,
+    typed: Vec<bool>,
+}
+
 impl<'a> Checker<'a> {
     /// The block being checked: its node, itself and the item it is at.
     pub(super) fn open_block(&self) -> (ExprId, &'a Block, usize) {
-        *self.blocks.last().unwrap()
+        let &(id, b, i, _) = self.blocks.last().unwrap();
+        (id, b, i)
+    }
+
+    pub(super) fn keep(&self) -> Kept {
+        Kept {
+            infer: self.infer.clone(),
+            deferred: self.deferred.clone(),
+            deferred_end: self.deferred_end.clone(),
+            typed: self.typed.clone(),
+        }
+    }
+
+    pub(super) fn put_back(&mut self, kept: Kept) {
+        self.infer.back_to(kept.infer);
+        (self.deferred, self.deferred_end, self.typed) = (kept.deferred, kept.deferred_end, kept.typed);
+    }
+
+    /// Whether the code a candidate takes away decides a type that was open
+    /// (S-876): what is left may read it there, and the end of the body
+    /// cannot tell. Each of `parts` is read with nothing reported, once, and
+    /// an error stops that part only. What it decides is undone.
+    pub(super) fn parts_decide<T>(
+        &mut self,
+        parts: impl IntoIterator<Item = T>,
+        mut read: impl FnMut(&mut Self, T) -> R<()>,
+    ) -> bool {
+        let kept = self.keep();
+        for part in parts {
+            self.quietly(|ck| read(ck, part));
+        }
+        let decides = self.infer.decided_since(&self.a.types, &kept.infer);
+        self.put_back(kept);
+        decides
     }
 
     /// The span of the item `k` of `b`, a statement or the last expression.
@@ -218,12 +262,25 @@ impl<'a> Checker<'a> {
     /// the rest is the `break` that makes a loop come back (it would become
     /// a `while true` that diverges), what is around the block is reached
     /// when the block diverges, and the end of the body has no error without
-    /// the rest. `own` is the type of the item when it has one, and where.
+    /// the rest and the rest decides no type. `own` is the type of the item
+    /// when it has one, and where.
     fn may_end_here(&mut self, own: Option<(TyId, Span)>) -> bool {
         let (id, b, i) = self.open_block();
         let breaks = b.stmts[i + 1..].iter().any(|&s| self.ast.stmt_leaves_loop(s))
             || b.tail.is_some_and(|t| self.ast.leaves_loop(t));
-        !self.failed && !breaks && self.stays_reached(id) && self.end_is_clean(own)
+        let tried = !self.failed && !self.trying_arms;
+        tried && !breaks && self.stays_reached(id) && self.end_is_clean(own) && !self.rest_decides(b, i)
+    }
+
+    /// [`Checker::parts_decide`] of the items of `b`, the open block, after
+    /// the item `i`.
+    fn rest_decides(&mut self, b: &'a Block, i: usize) -> bool {
+        let expected = self.blocks.last().and_then(|at| at.3);
+        self.parts_decide(i + 1..=b.stmts.len(), |ck, k| match (b.stmts.get(k), b.tail) {
+            (Some(&s), _) => ck.check_stmt(s),
+            (None, Some(t)) => ck.check_expr(t, expected).map(drop),
+            (None, None) => Ok(()),
+        })
     }
 
     /// Whether what is around the block `block` stays reached when it ends
@@ -232,7 +289,7 @@ impl<'a> Checker<'a> {
     /// in a body the error stops. What gives the block's end to its parent
     /// goes on up; a branch stops at one that comes back; the rest is a part
     /// of something, or an item with others after it, which it stops.
-    fn stays_reached(&self, block: ExprId) -> bool {
+    pub(super) fn stays_reached(&self, block: ExprId) -> bool {
         let mut parents: HashMap<ExprId, ExprId> = HashMap::default();
         let mut todo = vec![self.root];
         while let Some(x) = todo.pop() {
@@ -275,11 +332,11 @@ impl<'a> Checker<'a> {
     /// so far (S-876): `own`, the type of a form that diverges and is the
     /// last item then, waits for nothing else. A trial, as [`Checker::quietly`]:
     /// what it decides and looks at is undone, for a later trial to read.
-    fn end_is_clean(&mut self, own: Option<(TyId, Span)>) -> bool {
+    pub(super) fn end_is_clean(&mut self, own: Option<(TyId, Span)>) -> bool {
         if self.failed {
             return false;
         }
-        let kept = (self.infer.clone(), self.deferred.clone(), self.deferred_end.clone());
+        let kept = self.keep();
         let mark = self.a.diagnostics.len();
         let clean = self.quietly(|ck| {
             if let Some((t, at)) = own.filter(|&(t, _)| matches!(ck.ty(ck.shallow(t)), Ty::Var(_))) {
@@ -291,20 +348,8 @@ impl<'a> Checker<'a> {
             if ck.failed { Err(Stop) } else { Ok(()) }
         });
         self.a.diagnostics.truncate(mark);
-        (self.infer, self.deferred, self.deferred_end) = kept;
+        self.put_back(kept);
         clean.is_some()
-    }
-
-    /// The E0503 of the arm of the pattern `pat`, which the arms before it
-    /// cover (§7). `whole` is the arm of a `_` or a binding among them.
-    pub(super) fn unreachable_arm(&mut self, pat: PatId, whole: Option<Span>) -> Stop {
-        let span = self.ast.pat(pat).span;
-        let msg = "no value chooses this arm: the arms before it cover what it takes (§7)";
-        let d = Diagnostic::new(Stage::Types, Code::E0503, span, msg).with_found(self.src(span));
-        self.diag(match whole {
-            Some(at) => d.with_note(at, "this arm takes every value"),
-            None => d,
-        })
     }
 
     /// The E0503 of the expression or statement at `span`, whose part `part`

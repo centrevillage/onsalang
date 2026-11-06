@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.1", "§18.1"]
+// fixes = 2
+
+// S-292 (U3 of W5-09): the candidates of the E0503 of an arm only delete the unreachable arms or move the covering arm; they do not change anything else (the decision of S-292:
+// "E0503 の候補は到達しない部分を消すだけで、使われなくなった束縛は次の検査の E0309 が報告する"). A binding that only the unreachable arm read is then a binding that is never read
+// after the deletion, and the check after the candidate reports it as E0309, the last stage (§18.1: E0309 is reported for the unit only when no other stage has an error), which
+// is after the stage of the E0503, so the promise of §18.1 holds and both candidates are made. After the move the binding is read again. The text is not written here. One
+// error per function (P-01).
+
+pub fn let_read_only_by_the_unreachable_arm(o: Option[I32], k: I32) -> I32 {
+  let a = k + 1
+  match o {
+    
+    Some(_) => a,
+    _ => 0,                                   //~ E0503
+  }
+}
+
+pub fn var_changed_only_by_the_unreachable_arm(o: Option[I32]) -> I32 {
+  var n = 0
+  match o {
+    
+    Some(_) => { n = 1 },
+    _ => { },                           //~ E0503
+  }
+  0
+}
+
+pub fn binder_of_a_for_read_only_by_the_unreachable_arm(c: Bool) -> I32 {
+  var t = 0
+  for i in 0 ..< 3 {
+    match c {
+      
+      true => { t = t + i },
+      _ => { t = t + 1 },                        //~ E0503
+    }
+  }
+  t
+}

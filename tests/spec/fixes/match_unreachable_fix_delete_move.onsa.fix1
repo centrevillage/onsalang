@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+
+// S-187, S-934 (U3 of W5-09): the candidates of the E0503 of an arm are "腕を消す形と、覆っている腕が `_` か束縛だけのときは、それを最後へ移す形" (§7), two candidates when the
+// arm that covers is a `_` or a binding itself and the order after the move has no unreachable arm (match_unreachable_fix_move_blocked.onsa has the others). The first candidate
+// deletes the unreachable arms (all of them, so that nothing of the same stage is left, §18.1), the second moves the covering arm to the end, where it covers what is left.
+// The covering arm is first or in the middle, and the arm after it is a literal, an arm with a guard, a variant and a block that assigns; the match is a value
+// or a statement, or is inside the arm of another. The text after the candidates (`.fix1`, `.fix2`) is not written here; the contract of §18.1 checks that the unit is
+// left without a diagnostic of the stage of the E0503 or before it. One error per function (P-01).
+
+pub fn wildcard_then_a_literal(n: I32) -> I32 {
+  match n {
+    _ => 0,
+                                             //~ E0503
+  }
+}
+
+pub fn binding_then_a_literal(n: I32) -> I32 {
+  match n {
+    k => k,
+                                             //~ E0503
+  }
+}
+
+pub fn wildcard_then_an_arm_with_a_guard(n: I32) -> I32 {
+  match n {
+    _ => 0,
+                                    //~ E0503
+  }
+}
+
+pub fn wildcard_then_a_variant(o: Option[I32]) -> I32 {
+  match o {
+    _ => 0,
+                                          //~ E0503
+  }
+}
+
+pub fn covering_arm_in_the_middle(n: I32) -> I32 {
+  match n {
+    1 => 1,
+    _ => 0,
+                                             //~ E0503
+  }
+}
+
+pub fn two_arms_after_the_covering_arm(n: I32) -> I32 {
+  match n {
+    _ => 0,
+                                             //~ E0503
+    
+  }
+}
+
+pub fn statement_that_assigns(n: I32) -> I32 {
+  var r = 0
+  match n {
+    _ => { r = 1 },
+                                     //~ E0503
+  }
+  r
+}
+
+pub fn inside_the_arm_of_another_match(n: I32, o: Option[I32]) -> I32 {
+  match n {
+    0 => match o {
+      _ => 1,
+                                       //~ E0503
+    },
+    _ => 2,
+  }
+}

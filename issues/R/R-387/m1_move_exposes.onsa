@@ -1,0 +1,10 @@
+pub fn f(m: I32) -> F64 {
+  let n = 5
+  match m {
+    _ => { },
+    1 => {
+      let y: I64 = n
+    },
+  }
+  (n as I32) as F64
+}
