@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§6.6", "§18.2"]
+
+// The default of a field (spec §4.4) that is a bigger expression, the forms a `const` takes (§6.6): a
+// call, a call of an associated function, operators of several groups with parentheses, `as`, a struct
+// literal, the two array literals, a tuple, a call of a variant, and an `if` expression. The `,` after
+// the last one ends the field, and the `}` of the `if` branches does not end the struct. The file is
+// canonical. The file is read by the syntax stage only (`mode = "parse"`).
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub struct Exprs {
+  a: F32 = scale(0.5),
+  b: F32 = F32.sqrt(2.0),
+  c: U32 = 2 + 3 * 4,
+  d: U32 = (1 + 2) * 3,
+  e: Bool = 1 < 2 && 2 < 3,
+  f: F32 = 3 as F32,
+  g: Point = Point { x: 1.0, y: 2.0 },
+  h: [F32; 3] = [0.0, 1.0, 2.0],
+  i: [F32; 3] = [0.0; 3],
+  j: (U32, U32) = (1, 2),
+  k: Option[U32] = Some(3),
+  l: F32 = if true { 1.0 } else { 2.0 },
+}

@@ -122,7 +122,7 @@ fn sign_comma(a: &After) -> Option<Fix> {
 /// of an array; in the arms, not before an opener after a gap when no `=>`
 /// follows (the gap taken out is then the one candidate, when it reads,
 /// §2.5: `0 => t.0 (x), _ => 1` has none); not after the rest of a struct
-/// pattern, which is last (§7).
+/// pattern or literal, which is last (§7, §4.4).
 fn comma_goes(a: &After) -> bool {
     let c = a.c;
     let declaration = declares_a_function(a.kind, c.kind(c.sig_after(c.at)));
@@ -132,13 +132,21 @@ fn comma_goes(a: &After) -> bool {
             && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
     let gap = c.detached.is_some_and(|d| d.at == c.at);
     let comma = !(a.arms && gap && !arm_ahead(c.tokens, c.at));
-    let after_rest = c.closed.iter().any(|n| n.0 == NodeKind::StructPatRest);
+    let after_rest = c.closed.iter().any(|n| matches!(n.0, NodeKind::StructPatRest | NodeKind::StructLitRest));
     a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma && !after_rest
 }
 
 fn comma_fix(a: &After) -> Option<Fix> {
     let edit = Edit::insert(a.c.file, a.c.span(a.prev).end, ",");
     Some(Fix::new("write the `,` between the elements", vec![edit]))
+}
+
+/// A `..` where a field of a struct literal starts (`Item { x: 1, .. }`,
+/// `Item { ..v }`; §4.4, S-697): no candidate, as the writer's intent does not
+/// say what fills the fields.
+pub(super) fn struct_lit_base(c: &Cursor) -> Option<super::Hit> {
+    let field = c.open_at(0).filter(|o| o.0 == NodeKind::StructLitField && o.1 == c.span(c.at).start);
+    (c.kind(c.at) == TokenKind::DotDot && field.is_some()).then(|| super::Hit::new(c.span(c.at), Vec::new()))
 }
 
 /// Two string literals next to each other in a list (S-388).

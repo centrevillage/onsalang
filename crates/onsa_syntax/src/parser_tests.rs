@@ -257,6 +257,45 @@ fn struct_pattern_rest_keeps_its_mark() {
 }
 
 #[test]
+fn a_literal_and_a_field_keep_their_rest_and_default() {
+    // The dump prints them (§4.4, S-697): the comparison of `diff` reads it.
+    assert_eq!(body("P { x: 1, ... }"), "(block tail (struct P x: 1 ...))");
+    assert_eq!(body("P { ... }"), "(block tail (struct P ...))");
+    let p = parse("struct P {\n  x: U32 = 1 + 2,\n  y: F32,\n}\n");
+    assert_eq!(codes_of(&p), []);
+    assert!(crate::dump::dump(&p.ast).contains("x: U32 = (+ 1 2)\n"), "{}", crate::dump::dump(&p.ast));
+}
+
+#[test]
+fn no_comma_goes_after_a_struct_literal_rest() {
+    // The `,` would leave an E0002 (§4.4): the mark is last. `x: 1 ...` reads
+    // the `...` of an expression, which has no candidate.
+    let fixes = |list: &str| {
+        let p = parse(&format!("fn f() -> P {{\n  P {{\n    {list}\n  }}\n}}"));
+        assert_eq!(codes_of(&p), [Code::E0002], "{list}");
+        p.diagnostics[0].fixes.len()
+    };
+    assert_eq!(fixes("x: 1, ... y: 2"), 0);
+    assert_eq!(fixes("... ..."), 0);
+    assert_eq!(fixes("x: 1 ..."), 0);
+}
+
+#[test]
+fn the_base_of_a_literal_is_read_where_a_field_starts() {
+    // `..` as an element is the row; as a value of a field it is no base.
+    let note = |list: &str| {
+        let p = parse(&format!("fn f() -> P {{\n  P {{ {list} }}\n}}"));
+        assert_eq!(codes_of(&p), [Code::E0002], "{list}");
+        p.diagnostics[0].notes.iter().any(|n| n.message.contains("`...`"))
+    };
+    for list in ["..", "x: 1, ..", "..v", "x: 1, ..v", "..Default::default()"] {
+        assert!(note(list), "{list}");
+    }
+    assert!(!note("x: ..v"));
+    assert!(!note("x: 1 .. v"));
+}
+
+#[test]
 fn precedence() {
     assert_eq!(body("-x.abs()"), "(block tail (neg (call (. x abs) ())))");
     assert_eq!(body("-x as F64"), "(block tail (as (neg x) F64))");

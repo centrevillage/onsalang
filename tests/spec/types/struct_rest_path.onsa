@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§4.5", "§15.1", "§18.2"]
+
+// The `...` in a literal whose type is written with a path (spec §4.4, §4.5, §15.1): a module in front of
+// the name (`shapes.Item { ... }`), type arguments (`W::[U32] { ... }`), both, `Self` in an `impl`, and
+// the name of a type alias. The `{` after the `]` of the type arguments or after the name is the start of
+// the literal. The file is canonical. The file is read by the syntax stage only (`mode = "parse"`).
+
+pub fn through_a_module() -> shapes.Item {
+  shapes.Item { x: 1, ... }
+}
+
+pub fn through_a_module_alone() -> shapes.Item {
+  shapes.Item { ... }
+}
+
+pub fn with_type_arguments() -> W[U32] {
+  W::[U32] { v: 1, ... }
+}
+
+pub fn with_type_arguments_alone() -> W[U32] {
+  W::[U32] { ... }
+}
+
+pub fn with_two_type_arguments() -> Pair[U32, F32] {
+  Pair::[U32, F32] { a: 1, ... }
+}
+
+pub fn through_a_module_with_type_arguments() -> shapes.W[U32] {
+  shapes.W::[U32] { v: 1, ... }
+}
+
+pub struct Item { x: U32, y: F32 = 0.0 }
+
+type Alias = Item
+
+impl Item {
+  pub fn make(x: U32) -> Self {
+    Self { x: x, ... }
+  }
+
+  pub fn make_alone() -> Self {
+    Self { ... }
+  }
+}
+
+pub fn through_an_alias() -> Alias {
+  Alias { x: 1, ... }
+}

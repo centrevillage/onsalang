@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§18.2"]
+
+// How `onsa fmt` leaves a literal with `...` in the block form (spec/tools.md §3.2, spec §4.4): the `...` is
+// not an element, so the `,` after the last element is kept as in every block, no `,` is put after the
+// `...`, and the `...` stays on the line the writer put it: on a line of its own, or on the line of the
+// last element after its `,`. The file is canonical, so `onsa fmt` leaves it unchanged (a fixed point). The
+// file is read by the syntax stage only (`mode = "parse"`).
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0,
+  z: F32 = 1.0,
+}
+
+pub fn on_a_line_of_its_own() -> Item {
+  Item {
+    x: 1,
+    y: 2.0,
+    ...
+  }
+}
+
+pub fn on_the_line_of_the_last_field() -> Item {
+  Item {
+    x: 1,
+    y: 2.0, ...
+  }
+}
+
+pub fn one_field_on_its_line() -> Item {
+  Item {
+    x: 1, ...
+  }
+}

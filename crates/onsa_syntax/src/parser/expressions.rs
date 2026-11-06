@@ -365,6 +365,14 @@ impl<'a> Parser<'a> {
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RBrace) {
+                            // The rest, last (§4.4): what follows it is an
+                            // E0002 of the list, as for a pattern's.
+                            if p.at(TokenKind::DotDotDot) {
+                                let r = p.start(NodeKind::StructLitRest)?;
+                                p.bump();
+                                p.complete(r, NodeKind::StructLitRest);
+                                break;
+                            }
                             let f = p.start(NodeKind::StructLitField)?;
                             p.parse_ident("field name")?;
                             p.expect(TokenKind::Colon)?;

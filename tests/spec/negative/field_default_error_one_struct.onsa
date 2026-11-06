@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// A struct with two bad defaults is one report (spec §18.1: the struct is the unit of the recovery, and a
+// unit reports one error): the first bad default, not the second. A bad default between good fields does not
+// stop the next struct from being read.
+
+pub struct Item {
+  x: U32,
+  y: F32 = 1.0 + ,  //~ E0002
+  z: F32 = * 2.0,
+  w: U32,
+}
+
+pub struct Next {
+  a: U32,
+  b: F32,
+}

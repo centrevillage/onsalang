@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§4.4", "§18.2"]
+
+// The `...` on a line of its own (spec §4.4, §2.5, spec/tools.md §3.2): in the block form of the literal
+// the `...` is the last line. A line that starts with `...` is not the start of a range (a range symbol at
+// the head of a line is E0020, §2.5); here it follows a `,` in the braces of a literal. The `...` on the
+// line of the last field is in fmt/struct_rest_fmt_block.onsa. The file is canonical. The file is read by
+// the syntax stage only (`mode = "parse"`).
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0,
+  z: F32 = 1.0,
+}
+
+pub fn after_a_field() -> Item {
+  Item {
+    x: 1,
+    ...
+  }
+}
+
+pub fn after_fields() -> Item {
+  Item {
+    x: 1,
+    y: 2.0,
+    ...
+  }
+}
+
+pub fn in_a_let() -> Item {
+  let v = Item {
+    x: 1,
+    ...
+  }
+  v
+}
+
+pub fn as_an_argument() -> U32 {
+  take(Item {
+    x: 1,
+    ...
+  })
+}
+
+pub fn the_value_of_a_return(c: Bool) -> Item {
+  if c {
+    return Item {
+      x: 1,
+      ...
+    }
+  }
+  Item { x: 2, ... }
+}

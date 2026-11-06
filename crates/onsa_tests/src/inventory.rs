@@ -76,7 +76,11 @@ fn item_names(kind: &ItemKind, out: &mut Vec<String>) {
         ItemKind::Handler(h) => out.push(h.name.name.clone()),
         ItemKind::Const(c) => out.push(c.name.name.clone()),
         ItemKind::Target(inner) => item_names(inner, out),
-        ItemKind::Impl(_) | ItemKind::Use(_) | ItemKind::Extern(_) | ItemKind::Test { .. } => {}
+        ItemKind::FieldDefault { .. }
+        | ItemKind::Impl(_)
+        | ItemKind::Use(_)
+        | ItemKind::Extern(_)
+        | ItemKind::Test { .. } => {}
     }
 }
 

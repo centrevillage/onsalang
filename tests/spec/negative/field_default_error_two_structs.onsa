@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// The unit of a syntax error is the declaration (spec §18.1: "after a syntax error, the recovery is by the
+// unit of the declaration"; a unit reports one error). The struct is the unit for a syntax error in the
+// default of a field; a struct without error between them is checked on its own. Two structs that each have
+// a bad default are two reports.
+
+pub struct First {
+  x: U32,
+  y: F32 = 1.0 + ,  //~ E0002
+}
+
+pub struct Between {
+  x: U32,
+  y: F32,
+}
+
+pub struct Second {
+  x: U32,
+  y: F32 = * 2.0,  //~ E0002
+}

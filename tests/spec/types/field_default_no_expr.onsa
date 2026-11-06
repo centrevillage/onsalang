@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// A `=` with no expression (`y: F32 = ,` and `y: F32 = }`) is E0002 (spec §4.4). Each struct is a unit.
+
+pub struct Comma {
+  x: U32,
+  y: F32 = ,  //~ E0002
+  z: U32,
+}
+
+pub struct Brace { x: U32, y: F32 = }  //~ E0002

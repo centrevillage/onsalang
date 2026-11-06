@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// The `...` with an expression after it, and no field before it, is E0002 (spec §4.4).
+
+pub struct Item {
+  x: U32,
+  y: F32,
+}
+
+pub fn make(v: Item) -> Item {
+  Item { ...v }  //~ E0002
+}

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§4.4", "§18.2"]
+
+// The spaces round the `=` of a default written the other way (spec/tools.md §3.2, spec §4.4): none, more
+// than one, a tab, and the default of a field in a list on one line with the spaces broken in the braces.
+// The language reads all of them, and `onsa fmt` writes the forms of field_default_spaces.onsa. The file
+// is not canonical on purpose (`canonical = false`) and has tabs.
+
+pub struct Tight {x: U32,y: F32=0.0,z: Bool=true}
+
+pub struct Wide { x: U32,   y: F32  =  0.0 ,  z: Bool   =   true }
+
+pub struct Tabs {
+  x: U32,
+  y: F32	=	0.0,
+  z: Bool	= true,
+}
+
+pub struct Mixed {
+  a: U32=1,
+  b: F32 =0.5,
+  c: F32= 0.25,
+}

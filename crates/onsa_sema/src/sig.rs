@@ -334,7 +334,7 @@ impl<'p> Sema<'p> {
                 self.alias_ty(id);
             }
             // A constant is lowered in the order of the declarations.
-            ItemKind::OpaqueType { .. } | ItemKind::Const(_) => {}
+            ItemKind::OpaqueType { .. } | ItemKind::Const(_) | ItemKind::FieldDefault { .. } => {}
             ItemKind::Impl(i) => self.lower_impl(cx, id, item_id, i),
             ItemKind::Test { .. } => {}
             _ => {}

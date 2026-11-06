@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// A `=` in what a variant holds is E0002 (spec §4.4: only a field of a struct has a default). The
+// element of a variant is a type, with or without a name; each enum is a unit.
+
+pub enum Unnamed {
+  A(U32 = 0),  //~ E0002
+}
+
+pub enum Named {
+  A(x: U32 = 0),  //~ E0002
+}
+
+pub enum Outside {
+  A(U32) = 0,  //~ E0002
+}

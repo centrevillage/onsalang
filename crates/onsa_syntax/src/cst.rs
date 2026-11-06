@@ -104,6 +104,8 @@ pub enum NodeKind {
     FieldList,
     /// `Vis? name: Type`
     Field,
+    /// `= Expr`: the default of a field (§4.4), an item of its own
+    FieldDefault,
     /// `: Bound + Bound` at the head of a struct or an enum (§6.4)
     Derives,
     /// `enum name GenericParams? Derives? VariantList`
@@ -270,10 +272,12 @@ pub enum NodeKind {
     TryExpr,
     /// `(PathExpr | FieldExpr | TypeArgsExpr) StructLitFields`
     StructLit,
-    /// `{ StructLitField, ... }`
+    /// `{ StructLitField, ... }`, with `StructLitRest` last
     StructLitFields,
     /// `name : Expr`
     StructLitField,
+    /// `...`: the rest of a struct literal, the fields not written (§4.4)
+    StructLitRest,
 
     // ------------------------------------------------------------ patterns
     /// `_`
@@ -327,12 +331,13 @@ impl NodeKind {
             WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat
             | OrPat => Class::Pat,
             SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
-            | Struct | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias
-            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
-            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
-            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
-            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
-            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
+            | Struct | FieldList | Field | FieldDefault | Derives | Enum | VariantList | Variant | VariantFields
+            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
+            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
+            | Param | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt
+            | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm
+            | ArgList | Arg | StructLitFields | StructLitField | StructLitRest | StructPatField | StructPatRest
+            | Clock => Class::Other,
         }
     }
 
@@ -362,12 +367,13 @@ impl NodeKind {
             PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType | WildPat | LitPat
             | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => false,
             SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
-            | Struct | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias
-            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
-            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
-            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
-            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
-            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => false,
+            | Struct | FieldList | Field | FieldDefault | Derives | Enum | VariantList | Variant | VariantFields
+            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
+            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
+            | Param | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt
+            | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm
+            | ArgList | Arg | StructLitFields | StructLitField | StructLitRest | StructPatField | StructPatRest
+            | Clock => false,
         }
     }
 
@@ -389,12 +395,12 @@ impl NodeKind {
             | PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType | WildPat | LitPat
             | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat | OrPat | SourceFile
             | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
-            | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias | OpaqueType
-            | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target | Test
-            | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | FieldList | Field | FieldDefault | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias
+            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
+            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
             | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
             | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
-            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => None,
+            | StructLitFields | StructLitField | StructLitRest | StructPatField | StructPatRest | Clock => None,
         }
     }
 
@@ -416,6 +422,7 @@ impl NodeKind {
             Struct => "Struct",
             FieldList => "FieldList",
             Field => "Field",
+            FieldDefault => "FieldDefault",
             Derives => "Derives",
             Enum => "Enum",
             VariantList => "VariantList",
@@ -498,6 +505,7 @@ impl NodeKind {
             StructLit => "StructLit",
             StructLitFields => "StructLitFields",
             StructLitField => "StructLitField",
+            StructLitRest => "StructLitRest",
             WildPat => "WildPat",
             LitPat => "LitPat",
             NegLitPat => "NegLitPat",

@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§6.5", "§18.2"]
+
+// The default of a field of a struct with `@repr(c)` (spec §4.4, §6.5): the attribute stands on a line of
+// its own in front of the declaration. The file is canonical. The file is read by the syntax stage only.
+
+@repr(c)
+pub struct Frame {
+  left: F32 = 0.0,
+  right: F32 = 0.0,
+}
+
+@repr(c)
+priv struct Hidden {
+  count: I32 = 0,
+}

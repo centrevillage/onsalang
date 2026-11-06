@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§4.4", "§18.2"]
+
+// Fields with a default written unevenly (spec §4.4, spec/tools.md §3.2): a `,` after the last field of a
+// list on one line, no `,` after the last field of a block, more than one space or a tab round the `=`,
+// none, and fields that are not one level deep. The language reads all of them, and `onsa fmt` writes the
+// forms of field_default_lines.onsa. The file is not canonical on purpose (`canonical = false`) and has
+// tabs.
+
+pub struct TrailingComma { x: U32, y: F32 = 0.0, }
+
+pub struct NoTrailingComma {
+  x: U32,
+  y: F32 = 0.0
+}
+
+pub struct Spaces {
+  a: U32 =   1,
+  b: F32= 0.5,
+  c: F32 =0.25,
+  d: F32	=	0.125,
+}
+
+pub struct Uneven {
+      x: U32,
+  y: F32 = 0.0,
+          z: F32 = 1.0,
+}

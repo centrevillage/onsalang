@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// The `...` with a call after it is E0002 (spec §4.4: the `...` fills from the declared defaults only).
+
+pub struct Item {
+  x: U32,
+  y: F32,
+}
+
+pub fn make() -> Item {
+  Item { x: 1, ...Item.default() }  //~ E0002
+}

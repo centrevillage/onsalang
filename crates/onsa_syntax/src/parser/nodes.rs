@@ -109,10 +109,10 @@ impl<'a> Parser<'a> {
         let level = match kind {
             // The file, the items and their headers: a unit starts from 0.
             SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
-            | Struct | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias
-            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
-            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
-            | EffectRow | Path => 0,
+            | Struct | FieldList | Field | FieldDefault | Derives | Enum | VariantList | Variant | VariantFields
+            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
+            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
+            | Param | EffectRow | Path => 0,
             // Types: a type with arguments counts at its `[` (the `TypeArgs`), a name none.
             PathType | ConstArg | FnTypeParams => 0,
             TypeArgs | UnitType | TupleType | ParenType | ArrayType | FnType => 1,
@@ -123,7 +123,7 @@ impl<'a> Parser<'a> {
             // the one of the tree of §3.1, one level per operator ([`ChainHeight`]).
             // A `::[…]` counts at its `[` (the `TypeArgs`), as a type with arguments.
             Literal | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg | StructLitFields
-            | StructLitField | TypeArgsExpr | FeedbackExpr => 0,
+            | StructLitField | StructLitRest | TypeArgsExpr | FeedbackExpr => 0,
             // SPEC-GAP(S-361): the clock of an input or output counts no level
             // (the heading counts none); in an expression it is in an `AtExpr`.
             Clock => 0,

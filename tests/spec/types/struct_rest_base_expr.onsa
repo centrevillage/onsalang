@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// A `...` with an expression after it (the Rust `..base` written with three dots) is E0002: the `...`
+// fills with the defaults declared in the struct and takes no value (spec §4.4).
+
+pub struct Item {
+  x: U32,
+  y: F32,
+}
+
+pub fn make(v: Item) -> Item {
+  Item { x: 1, ...v }  //~ E0002
+}

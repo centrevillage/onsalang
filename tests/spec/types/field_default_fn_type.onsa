@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§6.1", "§18.2"]
+
+// The default of a field whose type is a function type (spec §4.4, §6.1). The type has `->` and may have
+// `uses`, and it ends before the `=`; the type does not read the `=`. The file is canonical. The file is
+// read by the syntax stage only (`mode = "parse"`).
+
+pub struct Callbacks {
+  a: fn() -> U32 = make_one,
+  b: fn(U32) -> U32 = double,
+  c: fn(U32, U32) -> U32 = add,
+  d: fn(U32) = sink,
+  e: rt fn(F32) -> F32 = scale,
+  f: fn(U32) -> U32 uses {Alloc} = grow,
+  g: fn() -> Option[U32] = nothing,
+  h: [fn(U32) -> U32; 2] = [double, double],
+}

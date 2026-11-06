@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§9.2", "§18.2"]
+
+// The literal with `...` in a `test` (spec §4.4, §9.2) and in a function with `rt`: the literal is read
+// as it is in a function. The file is canonical. The file is read by the syntax stage only
+// (`mode = "parse"`).
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0,
+}
+
+pub rt fn in_an_rt_fn() -> Item {
+  Item { x: 1, ... }
+}
+
+test "the literal in a test" {
+  let v = Item { x: 1, ... }
+  assert v.x == 1
+  assert v.y == 0.0
+}

@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§6.4", "§18.2"]
+
+// The default of a field of a struct with traits in its head (spec §4.4, §6.4): `: Default`, and a list of
+// traits with `+`. The `:` of the head and the `:` of a field are different. The file is canonical. The
+// file is read by the syntax stage only (`mode = "parse"`).
+
+pub struct Settings: Default {
+  rate: U32 = 48000,
+  gain: F32 = 1.0,
+}
+
+pub struct Key: PartialEq + Eq {
+  id: U32,
+  salt: U32 = 7,
+}
+
+pub struct Wrapped[T]: Default {
+  value: T,
+  count: U32 = 0,
+}

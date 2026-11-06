@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§18.2"]
+
+// The places a struct literal with `...` may stand (spec §4.4): an argument, the value of a `return`, a
+// branch of an `if`, the arm of a `match`, the body of a closure, an element of a tuple and of an array,
+// a `let` with a type, the receiver of a field, and the default of a field. A literal in these places is
+// read as it is anywhere else. The file is canonical. The file is read by the syntax stage only.
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0,
+}
+
+pub fn as_an_argument() -> U32 {
+  take(Item { x: 1, ... })
+}
+
+pub fn as_two_arguments() -> U32 {
+  pair(Item { ... }, Item { x: 2, ... })
+}
+
+pub fn as_the_value_of_a_return(c: Bool) -> Item {
+  if c {
+    return Item { x: 1, ... }
+  }
+  Item { x: 2, ... }
+}
+
+pub fn in_branches(c: Bool) -> Item {
+  if c {
+    Item { x: 1, ... }
+  } else {
+    Item { ... }
+  }
+}
+
+pub fn in_arms(o: Option[U32]) -> Item {
+  match o {
+    Some(n) => Item { x: n, ... },
+    None => Item { ... },
+  }
+}
+
+pub fn in_a_closure() -> Item {
+  let f = fn(n: U32) -> Item {
+    Item { x: n, ... }
+  }
+  f.(1)
+}
+
+pub fn in_a_tuple() -> U32 {
+  let t = (Item { x: 1, ... }, Item { ... })
+  t.0.x
+}
+
+pub fn in_an_array() -> U32 {
+  let a = [Item { x: 1, ... }, Item { ... }]
+  a[0].x
+}
+
+pub fn with_a_type() -> U32 {
+  let v: Item = Item { x: 1, ... }
+  v.x
+}
+
+pub fn the_field_of_a_literal() -> U32 {
+  let k = Item { x: 1, ... }.x
+  k
+}
+
+pub struct Holder {
+  item: Item = Item { x: 5, ... },
+  n: U32 = 0,
+}

@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§15.1", "§18.2"]
+
+// The default of a field that is `priv` (spec §4.4, §15.1): the default goes after the type, as for a
+// field that is not `priv`. The file is canonical. The file is read by the syntax stage only.
+
+pub struct Ring {
+  data: [F32; 4] = [0.0; 4],
+  priv head: U32 = 0,
+  priv count: U32,
+}
+
+struct Hidden {
+  priv a: U32 = 1,
+}

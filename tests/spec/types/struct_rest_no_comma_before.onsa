@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// A field and the `...` with no `,` between them (`x: 1 ...`) is E0002: the `,` before the `...` separates
+// it from the last field (spec §4.4).
+
+pub struct Item {
+  x: U32,
+  y: F32,
+}
+
+pub fn make() -> Item {
+  Item { x: 1 ... }  //~ E0002
+}

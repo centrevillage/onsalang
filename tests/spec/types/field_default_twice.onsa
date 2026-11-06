@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// Two defaults for one field (`y: F32 = 0.0 = 1.0`) is E0002: a field has one `=` and one expression
+// (spec §4.4), and an assignment is not an expression (§5.1).
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0 = 1.0,  //~ E0002
+}

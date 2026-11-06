@@ -11,6 +11,9 @@
 //! - a top-level item, and each member of an `impl`, `trait`, `effect`,
 //!   `handler` or `extern` (a unit whose `parent` is the item's unit; the
 //!   item's own unit is then its heading and its braces);
+//! - each default of a field of a struct read whole (a unit whose `parent` is
+//!   the struct's unit, which has no heading: a default that the parser did
+//!   not finish is an error of the struct's unit);
 //! - with the item, the `;` and the other tokens after it on the line where it
 //!   ends (`const A: I32 = 1;`, S-254, S-274);
 //! - a run of tokens that belong to no item, up to the next item, over lines
@@ -342,6 +345,9 @@ impl Builder<'_> {
                             self.ctx = outer;
                             self.list[u].members = first..self.list.len();
                         }
+                        if self.cst.kind(decl) == NodeKind::Struct {
+                            self.field_defaults(decl, u);
+                        }
                     }
                     None => self.stray(self.cst.span(n), parent, &mut last),
                 },
@@ -365,6 +371,19 @@ impl Builder<'_> {
                 }
             }
         }
+    }
+
+    /// The units of the defaults of the fields of the struct `decl`, whose
+    /// unit is `parent` (§18.1).
+    fn field_defaults(&mut self, decl: NodeId, parent: usize) {
+        let first = self.list.len();
+        let cst = self.cst;
+        let of_kind = |n, kind| cst.child_nodes(n).filter(move |&c| cst.kind(c) == kind);
+        let fields = of_kind(decl, NodeKind::FieldList).flat_map(|l| of_kind(l, NodeKind::Field));
+        for d in fields.flat_map(|f| of_kind(f, NodeKind::FieldDefault)).filter(|&d| cst.is_complete(d)) {
+            self.push(cst.span(d), self.item_of.get(&d).copied(), Some(parent));
+        }
+        self.list[parent].members = first..self.list.len();
     }
 
     /// The span of an item, its doc comments included.
@@ -440,6 +459,21 @@ mod tests {
                 s("const C: I32 = 1", Some(1)),
             ]
         );
+    }
+
+    #[test]
+    fn each_default_read_whole_is_a_unit_in_its_struct() {
+        // §18.1: the struct's unit keeps its fields and has no heading.
+        let src = "struct P {\n  x: U32 = 1,\n  y: F32,\n  z: F32 = 2.0 + 3.0,\n}\nfn a() {}\n";
+        let list = "struct P {\n  x: U32 = 1,\n  y: F32,\n  z: F32 = 2.0 + 3.0,\n}";
+        let want = [s(list, None), s("= 1", Some(0)), s("= 2.0 + 3.0", Some(0)), s("fn a() {}", None)];
+        assert_eq!(units(src), want);
+        assert_eq!(crate::parse(FileId(0), src).units.list[0].heading, None);
+        // A default that the parser did not finish is an error of the struct.
+        let src = "struct P {\n  x: U32 = 1,\n  y: F32 = 2.0 +,\n}\n";
+        let p = crate::parse(FileId(0), src);
+        assert_eq!(p.units.list.len(), 2);
+        assert!(p.units.list[0].syntax_failed && !p.units.list[1].syntax_failed);
     }
 
     #[test]

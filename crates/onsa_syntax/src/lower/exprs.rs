@@ -223,7 +223,7 @@ impl<'a> Lower<'a> {
                 let (path, type_args) = self.struct_lit_path(callee);
                 let list = self.need(n, NodeKind::StructLitFields);
                 let fields = self
-                    .nodes(list)
+                    .of_kind(list, NodeKind::StructLitField)
                     .into_iter()
                     .map(|f| {
                         let name = self.first_ident(f);
@@ -231,7 +231,8 @@ impl<'a> Lower<'a> {
                         (name, value)
                     })
                     .collect();
-                ExprKind::Struct { path, type_args, fields }
+                let rest = self.of_kind(list, NodeKind::StructLitRest).first().map(|&r| self.struct_rest(list, r));
+                ExprKind::Struct { path, type_args, fields, rest }
             }
             _ => self.bug(n, "the kind of an expression"),
         };

@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.1", "§3.4", "§4.4", "§18.2"]
+
+// Comments at fields with a default (spec/tools.md §3.4): a doc comment before a field, a comment at the
+// end of the line after the `,`, in one column for consecutive lines (one space after the longest code),
+// and a line of a comment before the last field. The default does not change where the comment goes. The
+// file is canonical, so `onsa fmt` leaves it unchanged. The file is read by the syntax stage only
+// (`mode = "parse"`).
+
+pub struct Voice {
+  /// the pitch
+  pitch: F32 = 440.0, // in hertz
+  gain: F32 = 1.0,    // from 0 to 1
+  // the last field
+  pan: F32 = 0.0,
+}

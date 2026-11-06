@@ -61,6 +61,7 @@ fn key(ast: &Ast, id: ItemId) -> String {
             ItemKind::Effect(e) => format!("effect {}", e.name.name),
             ItemKind::Handler(h) => format!("handler {}", h.name.name),
             ItemKind::Const(c) => format!("const {}", c.name.name),
+            ItemKind::FieldDefault { .. } => "field default".to_string(),
             ItemKind::Use(u) => {
                 let names: Vec<&str> = u.path.segments.iter().map(|s| s.name.as_str()).collect();
                 format!("use {}", names.join("."))

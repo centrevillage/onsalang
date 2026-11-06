@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§3.4", "§4.4", "§18.2"]
+
+// A comment before the `...` of a literal (spec/tools.md §3.4, §3.2; spec §4.4): the line of a comment stays
+// before the `...`, between the last field and the `...`, and before the first field. The comment does not
+// give the `...` a `,`, and does not move it. The file is canonical, so `onsa fmt` leaves it unchanged. The
+// file is read by the syntax stage only (`mode = "parse"`).
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0,
+}
+
+pub fn before_the_rest() -> Item {
+  Item {
+    x: 1,
+    // the rest is filled from the defaults
+    ...
+  }
+}
+
+pub fn before_the_rest_alone() -> Item {
+  Item {
+    // everything is the default
+    ...
+  }
+}
+
+pub fn between_fields_and_rest() -> Item {
+  Item {
+    // the field that is not the default
+    x: 1,
+    // the others
+    ...
+  }
+}

@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§6.6", "§18.2"]
+
+// The default of a field (spec §4.4, S-697): `= expr` after the type of the field. The expression is the
+// one a `const` takes (§6.6). Here the expression is a literal: an integer, a negative number, a float,
+// a Bool, a Char, a Str, a hexadecimal and a number with `_` and an exponent. The file is canonical, so
+// `onsa fmt` leaves it unchanged. The file is read by the syntax stage only (`mode = "parse"`): what the
+// default means is not asked here.
+
+pub struct Literals {
+  a: U32 = 1,
+  b: I32 = -1,
+  c: F32 = 0.5,
+  d: F32 = -0.5,
+  e: Bool = true,
+  f: Char = 'a',
+  g: Str = "text",
+  h: U32 = 0x1F,
+  i: U32 = 1_000,
+  j: F32 = 1e3,
+}

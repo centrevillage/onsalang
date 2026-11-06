@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// A default with no type (`y = 0.0`) is E0002 (spec §4.4: the `=` and the expression follow the type
+// of the field).
+
+pub struct Item {
+  x: U32,
+  y = 0.0,  //~ E0002
+}

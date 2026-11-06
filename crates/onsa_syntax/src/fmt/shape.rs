@@ -169,7 +169,7 @@ pub(crate) fn pairs(cst: &Cst, n: NodeId) -> Vec<(TokenIdx, TokenIdx)> {
 }
 
 /// A part of a list between its brackets and its `,`: the range of its code
-/// tokens, and whether it is the rest of a struct pattern.
+/// tokens, and whether it is the rest of a struct pattern or literal.
 struct Part {
     tokens: Range<TokenIdx>,
     rest: bool,
@@ -193,7 +193,7 @@ fn parts(cst: &Cst, n: NodeId) -> Vec<Part> {
             Elem::Token(t) => (t, t, false),
             Elem::Node(c) if cst.token_range(c).start <= open.index() => continue,
             Elem::Node(c) => match cst.significant_tokens(c) {
-                Some((first, last)) => (first, last, cst.kind(c) == N::StructPatRest),
+                Some((first, last)) => (first, last, matches!(cst.kind(c), N::StructPatRest | N::StructLitRest)),
                 None => continue,
             },
         };
@@ -206,14 +206,14 @@ fn parts(cst: &Cst, n: NodeId) -> Vec<Part> {
 
 /// The elements of the list `n`, each as the range of its code tokens (from
 /// the first to the last that is no trivia, the `,` after it not included).
-/// Empty for a node that is no list. The rest of a struct pattern is no
-/// element (S-500: no `,` goes after it, also in the block form; [`rest`]);
+/// Empty for a node that is no list. The rest of a struct pattern or literal
+/// is no element (S-500: no `,` goes after it, also in the block form; [`rest`]);
 /// a line break before it still makes the form ([`form`]).
 pub(crate) fn elements(cst: &Cst, n: NodeId) -> Vec<Range<TokenIdx>> {
     parts(cst, n).into_iter().filter(|p| !p.rest).map(|p| p.tokens).collect()
 }
 
-/// The rest of the struct pattern `n`, if it has one.
+/// The rest of the struct pattern or literal list `n`, if it has one.
 pub(crate) fn rest(cst: &Cst, n: NodeId) -> Option<Range<TokenIdx>> {
     parts(cst, n).into_iter().find(|p| p.rest).map(|p| p.tokens)
 }

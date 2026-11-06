@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§18.2"]
+
+// The literal with `...` in the head of an `if`, a `while`, a `match` and a `for` (spec §4.4): a literal and a
+// block are not written in the head outside the parentheses, so the literal is in parentheses, and the
+// `{` after the `)` is the start of the body. The `...` in the literal does not end the head. The file is
+// canonical. The file is read by the syntax stage only (`mode = "parse"`).
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0,
+}
+
+pub fn in_an_if() -> U32 {
+  if (Item { x: 1, ... }).x == 0 {
+    return 1
+  }
+  2
+}
+
+pub fn in_a_while() -> U32 {
+  while (Item { x: 1, ... }).x > 0 {
+    break
+  }
+  3
+}
+
+pub fn in_a_match() -> U32 {
+  match (Item { ... }).x {
+    0 => 1,
+    _ => 2,
+  }
+}
+
+pub fn in_a_for() -> U32 {
+  var s = 0
+  for i in 0 ..< (Item { x: 3, ... }).x {
+    s = s + i
+  }
+  s
+}
+
+pub fn the_literal_alone_in_a_head() -> U32 {
+  let v = Item { x: 4, ... }
+  if v.x == 4 {
+    return 1
+  }
+  2
+}

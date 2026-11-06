@@ -155,11 +155,11 @@ impl ItemCtx {
             Extern => Some(ItemCtx::Extern),
             Fn | Flow | Struct | Enum | TypeAlias | OpaqueType | Const | Use | Target | Test => None,
             SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | FieldList
-            | Field | Derives | VariantList | Variant | VariantFields | UseTree | UseNames | ItemList
-            | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param | EffectRow | Path
-            | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt | ContinueStmt
-            | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
-            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => None,
+            | Field | FieldDefault | Derives | VariantList | Variant | VariantFields | UseTree | UseNames
+            | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
+            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField | StructLitRest | StructPatField | StructPatRest | Clock => None,
             Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr
             | MatchExpr | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr
             | CastExpr | AtExpr | FeedbackExpr | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr

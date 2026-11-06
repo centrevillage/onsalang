@@ -181,6 +181,10 @@ impl<'a> Dumper<'a> {
                         d.vis(f.vis);
                         let _ = write!(d.out, "{}: ", f.name.name);
                         d.ty(f.ty);
+                        if let Some(default) = f.default {
+                            d.out.push(' ');
+                            d.item_kind(&d.ast.item(default).kind);
+                        }
                     });
                 }
             }
@@ -246,6 +250,10 @@ impl<'a> Dumper<'a> {
                 for &i in &h.items {
                     self.nested(|d| d.item(i));
                 }
+            }
+            ItemKind::FieldDefault { value } => {
+                self.out.push_str("= ");
+                self.expr(*value);
             }
             ItemKind::Const(c) => {
                 let _ = write!(self.out, "const {}: ", c.name.name);
@@ -651,7 +659,7 @@ impl<'a> Dumper<'a> {
                 self.expr(*len);
                 self.out.push(']');
             }
-            ExprKind::Struct { path, type_args, fields } => {
+            ExprKind::Struct { path, type_args, fields, rest } => {
                 self.out.push_str("(struct ");
                 self.path(path);
                 for (at, l) in type_args {
@@ -662,6 +670,9 @@ impl<'a> Dumper<'a> {
                 for (name, value) in fields {
                     let _ = write!(self.out, " {}: ", name.name);
                     self.expr(*value);
+                }
+                if let Some(rest) = rest {
+                    let _ = write!(self.out, " {}", rest.mark.text());
                 }
                 self.out.push(')');
             }

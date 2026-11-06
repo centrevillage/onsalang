@@ -160,7 +160,9 @@ impl<'a> Checker<'a> {
             ExprKind::Struct { type_args, .. } if !type_args.is_empty() => {
                 onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
             }
-            ExprKind::Struct { path, fields, .. } => self.check_struct_lit(e, path, fields, expected, span),
+            ExprKind::Struct { path, fields, rest, .. } => {
+                self.check_struct_lit(e, path, fields, rest.as_ref(), expected, span)
+            }
             ExprKind::TypeArgs { .. } => {
                 onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
             }
@@ -342,6 +344,7 @@ impl<'a> Checker<'a> {
         e: ExprId,
         path: &Path,
         fields: &[(Ident, ExprId)],
+        rest: Option<&onsa_syntax::ast::StructRest>,
         expected: Option<TyId>,
         span: Span,
     ) -> R<TyId> {
@@ -359,6 +362,9 @@ impl<'a> Checker<'a> {
                 format!("`{name}` is not built with a field list; it has no named fields"),
             ));
         };
+        if let Some(rest) = rest {
+            return Err(self.unsupported(rest.span, Feature::StructLitRest, &[]));
+        }
         let args = self.fresh_args(d);
         self.of_owner(d, &args, owner, span)?;
         // The expected type decides the generic arguments first (§4.7: expected

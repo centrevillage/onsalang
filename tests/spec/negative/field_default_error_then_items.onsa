@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// After a struct with a bad default, the items that follow are read and checked on their own (spec §18.1):
+// a syntax error in the next function is reported, and so is a type error in the one after it.
+
+pub struct First {
+  x: U32,
+  y: F32 = 1.0 + ,  //~ E0002
+}
+
+pub fn second() -> U32 {
+  let = 2  //~ E0002
+  1
+}
+
+pub fn third() -> U32 {
+  let a: Bool = 1  //~ E0401
+  1
+}

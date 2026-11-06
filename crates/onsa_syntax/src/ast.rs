@@ -336,6 +336,11 @@ pub enum ItemKind {
     Fn(FnDecl),
     Flow(FlowDecl),
     Struct(StructDecl),
+    /// `= value`, the default of a field (§4.4), which is a unit of its own
+    /// (§18.1); only [`Field::default`] holds it.
+    FieldDefault {
+        value: ExprId,
+    },
     Enum(EnumDecl),
     /// `type Name = Type`
     TypeAlias {
@@ -528,6 +533,8 @@ pub struct Field {
     pub vis: Vis,
     pub name: Ident,
     pub ty: TypeId,
+    /// `= value` (§4.4): an [`ItemKind::FieldDefault`] outside [`Ast::root`].
+    pub default: Option<ItemId>,
     pub span: Span,
 }
 
@@ -802,10 +809,10 @@ impl OpGroup {
     }
 }
 
-/// The rest of a struct pattern, last in its list (§7): its mark, its span,
-/// and what a candidate removes when no field remains: the `,` before it and
-/// the blanks between them, or the mark alone when a comment is between
-/// (S-251).
+/// The rest of a struct pattern (§7) or a struct literal (§4.4), last in its
+/// list: its mark, its span, and what a candidate removes when no field
+/// remains: the `,` before it and the blanks between them, or the mark alone
+/// when a comment is between (S-251).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StructRest {
     pub mark: RestMark,
@@ -813,13 +820,16 @@ pub struct StructRest {
     pub removal: Span,
 }
 
-/// The mark of the rest of a struct pattern.
+/// The mark of the rest of a struct pattern or a struct literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RestMark {
     /// `_`: ignores the fields not written (S-903).
     Underscore,
     /// `..`: read, and an E0020 where the fields are counted (S-366).
     Dots,
+    /// `...` of a literal: fills the fields not written with their declared
+    /// defaults (§4.4, S-697).
+    Fill,
 }
 
 impl RestMark {
@@ -828,6 +838,7 @@ impl RestMark {
         match self {
             RestMark::Underscore => "_",
             RestMark::Dots => "..",
+            RestMark::Fill => "...",
         }
     }
 }
@@ -1162,6 +1173,8 @@ pub enum ExprKind {
         /// §4.5): the index of that segment and the list.
         type_args: Vec<(usize, TypeArgList)>,
         fields: Vec<(Ident, ExprId)>,
+        /// The last `...` (§4.4).
+        rest: Option<StructRest>,
     },
     Block(Block),
     /// `if c { a } else { b }`; `else if` nests another `If` in `else_`.

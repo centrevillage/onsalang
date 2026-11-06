@@ -393,6 +393,13 @@ impl<'a> Parser<'a> {
                 p.parse_name("field name")?;
                 p.expect(TokenKind::Colon)?;
                 p.parse_type()?;
+                // A `=` at the head of a line is the table's (§2.5).
+                if p.at(TokenKind::Eq) && p.peek_gap() != Gap::Newline {
+                    let d = p.start(NodeKind::FieldDefault)?;
+                    p.bump();
+                    p.parse_expr()?;
+                    p.complete(d, NodeKind::FieldDefault);
+                }
                 p.complete(f, NodeKind::Field);
                 if p.eat(TokenKind::Comma).is_none() {
                     break;

@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§11.2", "§11.5", "§18.2"]
+
+// The literal with `...` in the body of a flow (spec §4.4, §11.2: a struct literal, the `...` included, is
+// one of the expressions a flow body takes), as a tail, in a `let`, in the body of a `par~`, and as an
+// argument of an instance. The file is canonical. The file is read by the syntax stage only
+// (`mode = "parse"`).
+
+pub struct Stereo {
+  l: F32,
+  r: F32 = 0.0,
+}
+
+pub flow as_the_tail(x: F32 at sample) -> Stereo at sample {
+  Stereo { l: x, ... }
+}
+
+pub flow in_a_let(x: F32 at sample) -> Stereo at sample {
+  let o = Stereo { l: x, ... }
+  o
+}
+
+pub flow in_a_par(x: F32 at block) -> [Stereo; 4] at sample {
+  par~ i in 0 ..< 4 { Stereo { l: x * F32.round_from(i), ... } }
+}
+
+pub flow as_an_argument(x: F32 at sample) -> F32 at sample {
+  total~(Stereo { l: x, ... })
+}

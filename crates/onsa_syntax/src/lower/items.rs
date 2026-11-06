@@ -68,7 +68,19 @@ impl<'a> Lower<'a> {
         let vis = self.child(f, NodeKind::Vis).map_or(Vis::Default, |v| self.vis(v));
         let name = self.name(f);
         let ty = self.first_type(f).unwrap_or_else(|| self.bug(f, "a type"));
-        Field { vis, name, ty, span: self.span(f) }
+        let default = self.child(f, NodeKind::FieldDefault).map(|d| self.field_default(d));
+        Field { vis, name, ty, default, span: self.span(f) }
+    }
+
+    /// The default `d` of a field: an item, for its unit (§18.1), that is in
+    /// no list of items ([`Ast::root`]). The parser finishes a `Field` right
+    /// after it, so that a field read whole has its default read whole.
+    fn field_default(&mut self, d: NodeId) -> ItemId {
+        let value = self.need_expr(d);
+        let kind = ItemKind::FieldDefault { value };
+        let span = self.span(d);
+        let vis = Vis::Default;
+        self.add_item(d, Item { span, attrs: Vec::new(), vis, vis_span: None, kind, failed: None, mem_attr: None })
     }
 
     pub(super) fn variant(&mut self, v: NodeId) -> Variant {
@@ -154,12 +166,17 @@ impl<'a> Lower<'a> {
             .collect()
     }
 
-    /// The rest `r` of the struct pattern `n`, with the `,` before it when
-    /// only blanks are between them ([`StructRest`]).
+    /// The rest `r` of the struct pattern or the fields of a literal `n`,
+    /// with the `,` before it when only blanks are between them
+    /// ([`StructRest`]).
     pub(super) fn struct_rest(&self, n: NodeId, r: NodeId) -> StructRest {
         let span = self.span(r);
-        let dots = self.cst.child_tokens(r).any(|t| self.cst.token(t).kind == TokenKind::DotDot);
-        let mark = if dots { RestMark::Dots } else { RestMark::Underscore };
+        let of_token = |t| match self.cst.token(t).kind {
+            TokenKind::DotDot => RestMark::Dots,
+            TokenKind::DotDotDot => RestMark::Fill,
+            _ => RestMark::Underscore,
+        };
+        let mark = self.cst.child_tokens(r).next().map_or(RestMark::Underscore, of_token);
         let before = self.cst.children(n).iter().take_while(|&&e| e != Elem::Node(r));
         let mut removal = span;
         for e in before.collect::<Vec<_>>().into_iter().rev() {

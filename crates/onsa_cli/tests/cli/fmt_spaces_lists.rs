@@ -427,6 +427,7 @@ fn a_comma_and_a_colon_get_one_space_after_and_none_before() {
             &["fn g(a: I32, b: I32) -> I32 {", "  a", "}"],
         ),
         case("fields", &["struct P {", "  x:F32,", "  y :F32,", "}"], &["struct P {", "  x: F32,", "  y: F32,", "}"]),
+        case("field defaults", &["struct P {", "  y:F32=0.0,", "}"], &["struct P {", "  y: F32 = 0.0,", "}"]),
         case("a tuple type", &["type T=(I32,F32)"], &["type T = (I32, F32)"]),
         case("a type with arguments", &["type T=Result[Str,IoError]"], &["type T = Result[Str, IoError]"]),
         case(

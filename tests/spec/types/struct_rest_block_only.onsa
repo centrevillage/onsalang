@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§4.4", "§18.2"]
+
+// The block form of a literal that has nothing but the `...` (spec §4.4, spec/tools.md §3.2): the `{` is
+// the last token of its line, the `...` stands on a line of its own and the `}` on the next. The `...` is
+// not an element, so the list has none, and no `,` is added. The file is canonical. The file is read by
+// the syntax stage only (`mode = "parse"`).
+
+pub struct Item {
+  x: U32 = 0,
+  y: F32 = 0.0,
+}
+
+pub fn only_the_rest() -> Item {
+  Item {
+    ...
+  }
+}
+
+pub fn in_a_let() -> Item {
+  let v = Item {
+    ...
+  }
+  v
+}

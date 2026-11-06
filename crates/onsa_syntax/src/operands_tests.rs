@@ -175,7 +175,8 @@ fn no_candidate_of_a_file_of_the_repository_is_dropped() {
 /// diagnostic of the syntax stage in the file (nor its members) has none
 /// alone, and its tree
 /// lowers (every member form of an `impl`, `trait`, `effect`, `handler` and
-/// `extern`).
+/// `extern`). A default of a field is read with its struct, which has no
+/// heading ([`crate::units::Units::reading`]), and is not read alone.
 #[test]
 fn every_unit_of_the_repository_reads_alone_in_the_context_of_its_list() {
     let (members, problems) = onsa_diag::stack::run(|| {
@@ -186,6 +187,9 @@ fn every_unit_of_the_repository_reads_alone_in_the_context_of_its_list() {
             for (u, unit) in p.units.list.iter().enumerate() {
                 let failed = |v: &crate::units::Unit| v.syntax_failed;
                 if failed(unit) || p.units.list[unit.members.clone()].iter().any(failed) || unit.item.is_none() {
+                    continue;
+                }
+                if unit.parent.is_some_and(|o| p.units.list[o].heading.is_none()) {
                     continue;
                 }
                 let own = &text[unit.span.start as usize..unit.span.end as usize];

@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// A `,` after the `...` (spec §4.4: the `...` is the last in the list and no `,` follows it) is E0002.
+// The literal is a single unit, so one error is reported.
+
+pub struct Item {
+  x: U32,
+  y: F32,
+}
+
+pub fn make() -> Item {
+  Item { x: 1, ..., }  //~ E0002
+}

@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§18.2"]
+
+// Literals with `...` inside each other (spec §4.4): the inner has it, the outer has it, both have it, and
+// the inner has nothing but the `...`. A `...` ends the literal it stands in; the `}` of the inner literal
+// is followed by the `,` of the outer. The block form is nested as well. The file is canonical. The file
+// is read by the syntax stage only (`mode = "parse"`).
+
+pub struct Inner { a: U32, b: F32 = 0.0 }
+
+pub struct Outer { inner: Inner, c: U32 = 0 }
+
+pub struct Outer3 { o: Outer, d: U32 = 0 }
+
+pub fn inner_rest() -> Outer {
+  Outer { inner: Inner { a: 1, ... }, c: 2 }
+}
+
+pub fn outer_rest() -> Outer {
+  Outer { inner: Inner { a: 1, b: 2.0 }, ... }
+}
+
+pub fn both_rest() -> Outer {
+  Outer { inner: Inner { a: 1, ... }, ... }
+}
+
+pub fn inner_nothing_but_the_rest() -> Outer {
+  Outer { inner: Inner { ... }, c: 3 }
+}
+
+pub fn three_deep() -> Outer3 {
+  Outer3 { o: Outer { inner: Inner { ... }, ... }, ... }
+}
+
+pub fn block_form() -> Outer {
+  Outer {
+    inner: Inner {
+      a: 1,
+      ...
+    },
+    ...
+  }
+}

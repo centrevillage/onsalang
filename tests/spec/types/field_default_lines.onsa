@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§18.2"]
+
+// The default of a field (spec §4.4) in the three forms of the body of a struct (spec/tools.md §3.2): on
+// one line, in a block (the field with a default is the first, a middle one and the last) and as a
+// continuation. The struct whose only field has a default, and the field in the middle of a list. The
+// file is canonical: one space on each side of the `=`, none before the `,`.
+
+pub struct OneLine { x: U32, y: F32 = 0.0 }
+
+pub struct OnlyDefault { y: F32 = 0.0 }
+
+pub struct Block {
+  x: U32,
+  y: F32 = 0.0,
+  z: F32 = 1.0,
+}
+
+pub struct FirstInBlock {
+  a: F32 = 0.0,
+  b: U32,
+  c: U32,
+}
+
+pub struct Middle {
+  a: U32,
+  b: F32 = 0.0,
+  c: U32,
+  d: F32 = 1.0,
+  e: U32,
+}
+
+pub struct Continuation { x: U32,
+                          y: F32 = 0.0 }

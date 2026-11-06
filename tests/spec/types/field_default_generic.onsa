@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§4.5", "§18.2"]
+
+// The default of a field of a struct that has type parameters (spec §4.4): the field whose type does not
+// depend on the parameter, in the list with a field that does. The file is canonical. The file is read by
+// the syntax stage only (`mode = "parse"`).
+
+pub struct Level[T] {
+  value: T,
+  count: U32 = 0,
+  gain: F32 = 1.0,
+}
+
+pub struct Both[T, U] { a: T, b: U, n: U32 = 0 }
+
+pub struct Slots[T, const N: U32] {
+  items: [T; N],
+  used: U32 = 0,
+  first: Option[U32] = None,
+}

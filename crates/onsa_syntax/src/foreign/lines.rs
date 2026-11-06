@@ -164,8 +164,8 @@ fn leading_arrow(c: &Cursor) -> bool {
 
 /// A `=` at the head of a line (S-374): of a binding or a definition waiting
 /// for it, after a statement after which it goes on to an assignment (not
-/// one that has its `=` already: `x = 2` and `= 3` on the next line), or the
-/// value of a constant of a trait.
+/// one that has its `=` already: `x = 2` and `= 3` on the next line), the
+/// value of a constant of a trait, or the default of a field that has none.
 fn leading_eq(c: &Cursor, prev: usize) -> bool {
     if c.kind(c.at) == TokenKind::Newline {
         return matches!(
@@ -175,6 +175,7 @@ fn leading_eq(c: &Cursor, prev: usize) -> bool {
     }
     (c.want == Want::Expr && c.closed.is_empty() && c.end_at(prev).is_none())
         || (c.closed.iter().any(|n| n.0 == NodeKind::Const) && closed_expr(c).is_none())
+        || (c.want == Want::Separator(NodeKind::FieldList) && closed_expr(c).is_none())
 }
 
 /// A binary operator at the head of a line (S-124, S-370), or the `|` of a

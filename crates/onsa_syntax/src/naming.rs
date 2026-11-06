@@ -306,7 +306,12 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
                 params(&h.params, &mut check);
             }
             ItemKind::Const(c) => check(&c.name, Shape::UpperSnake, "constant", false),
-            ItemKind::Use(_) | ItemKind::Extern(_) | ItemKind::Target(_) | ItemKind::Test { .. } => {}
+            // A default has no name of its own.
+            ItemKind::FieldDefault { .. }
+            | ItemKind::Use(_)
+            | ItemKind::Extern(_)
+            | ItemKind::Target(_)
+            | ItemKind::Test { .. } => {}
         }
     }
     for stmt in &ast.stmts {

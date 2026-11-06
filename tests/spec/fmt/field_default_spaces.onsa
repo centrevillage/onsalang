@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§18.2"]
+
+// How `onsa fmt` leaves a field with a default (spec/tools.md §3.2, spec §4.4): one space before the `=`
+// and one after it, in the list on one line and in the block form, and for each kind of default
+// expression. The file is canonical, so `onsa fmt` leaves it unchanged (it is a fixed point). The file is
+// read by the syntax stage only (`mode = "parse"`).
+
+pub struct OneLine { x: U32, y: F32 = 0.0, z: Bool = true }
+
+pub struct Block {
+  x: U32,
+  y: F32 = 0.0,
+  z: [F32; 2] = [0.0, 1.0],
+  w: Option[U32] = Some(1),
+  v: F32 = if true { 1.0 } else { 2.0 },
+}

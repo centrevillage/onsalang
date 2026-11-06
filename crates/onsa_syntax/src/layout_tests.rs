@@ -1118,3 +1118,13 @@ fn a_blank_before_a_postfix_symbol_after_a_block_like_expression() {
         &[&body("  let o = [{ xs }, [0]]\n  0"), &body("  let o = [({ xs })[0]]\n  0")],
     );
 }
+
+#[test]
+fn the_eq_of_a_default_at_the_head_of_a_line_moves_up_when_the_field_has_none() {
+    // §2.5, §4.4: inside the braces too. A field with its default has no
+    // second one: `=` there is the general E0002, with no candidate.
+    let field = |body: &str| format!("struct P {{\n  x: U32,\n{body}\n}}\n");
+    check(&field("  y: F32\n    = 0.0,"), Code::E0020, "=", &[&field("  y: F32 =\n    0.0,")]);
+    let (d, fixed) = one(&field("  y: F32 = 0.0\n    = 1.0,"));
+    assert_eq!((d.code, fixed.len()), (Code::E0002, 0), "{d:?}");
+}

@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§4.4", "§18.2"]
+
+// A literal with `...` with the spaces and the indentation broken (spec/tools.md §3.2, spec §4.4): no
+// space inside the braces, more than one, the fields of a block that are not one level deep, and the `...`
+// not under the fields. The language reads all of them, and `onsa fmt` writes the forms of
+// struct_rest_fmt_one_line.onsa and struct_rest_fmt_block.onsa; the `...` stays on its line and gets no
+// `,`. The file is not canonical on purpose (`canonical = false`).
+
+pub struct Item {
+  x: U32,
+  y: F32 = 0.0,
+}
+
+pub fn tight() -> Item {
+  Item {x: 1, ...}
+}
+
+pub fn wide() -> Item {
+  Item {   x: 1  ,    ...   }
+}
+
+pub fn tight_alone() -> Item {
+  Item {...}
+}
+
+pub fn uneven_block() -> Item {
+Item {
+        x: 1,
+   ...
+    }
+}
+
+pub fn uneven_block_same_line() -> Item {
+  Item {
+x: 1, ...
+        }
+}

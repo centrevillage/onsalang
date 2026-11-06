@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.5", "§4.4", "§18.2"]
+
+// The `=` of a default at the end of a line (spec §2.5: a line that ends with `=` goes on, as does one that
+// ends with a binary operator). The expression is on the next line. `onsa fmt` writes the continuation line
+// (spec/tools.md §3.2); the file is not canonical on purpose (`canonical = false`).
+
+pub struct Item {
+  x: U32,
+  y: F32 =
+    0.0,
+  z: F32 = 1.0 +
+    2.0,
+  w: U32 =
+  3,
+}

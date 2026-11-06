@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.4", "§6.6", "§18.2"]
+
+// The default of a field (spec §4.4) that is a name: a constant, a negated constant, an associated
+// constant of a type (`F32.ZERO`, `U32.MAX`) and a constant of another module (`limits.GAIN`). The file is
+// canonical. The file is read by the syntax stage only (`mode = "parse"`).
+
+const GAIN: F32 = 0.5
+
+pub struct Names {
+  a: F32 = GAIN,
+  b: F32 = -GAIN,
+  c: F32 = F32.ZERO,
+  d: U32 = U32.MAX,
+  e: F32 = limits.GAIN,
+  f: F32 = F32.PI,
+}
