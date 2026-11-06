@@ -71,7 +71,7 @@ impl<'p> Sema<'p> {
     pub(super) fn fill_derived(&mut self) {
         for id in self.a.new_defs() {
             let def = self.a.def(id);
-            let (DefKind::Impl(imp), None, Some(ty)) = (&def.kind, def.item, def.owner) else { continue };
+            let (DefKind::Impl(imp), Some(ty)) = (&def.kind, def.derived_impl_of()) else { continue };
             let fns = imp.fns.clone();
             let mut generics = self.a.def(ty).generics().to_vec();
             let made = |&f: &DefId| self.a.def(f).as_fn()?.derived;

@@ -98,6 +98,11 @@ pub(super) fn lower_call(
     let Some(target) = cx.info.targets.get(&e).cloned() else { return Err(internal(span, "call without a target")) };
     match target {
         Target::Fn { def, of, inst } => {
+            // `T.default()` at a type with no declaration (§6.3): no other
+            // bound with members holds of it.
+            if let Some(of) = of.map(|t| lw.core_ty(t, &cx.args, span)).transpose()?.filter(derived::structural) {
+                return derived::default_value(lw, &of, span);
+            }
             let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
             let d = lw.a.def(def).clone();
             let DefKind::Fn(f) = &d.kind else { return Err(internal(span, "call to a non-fn")) };

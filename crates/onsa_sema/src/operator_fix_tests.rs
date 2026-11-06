@@ -127,6 +127,8 @@ fn a_member_the_bounds_do_not_give_names_the_traits_that_do() {
     let d = one("pub fn f[T: Float]() -> U32 {\n  T.BITS\n}\n");
     assert_eq!(notes(&d), ["`BITS` is a member of `Int`, which the bounds of `T` do not imply (§6.3)"]);
     assert_eq!(member_note("T", "ZERO").as_deref().map(|n| n.contains("`AnyNum`")), Some(true));
+    assert_eq!(member_note("T", "default").as_deref().map(|n| n.ends_with("(§6.3)")), Some(true));
+    assert_eq!(member_note("T", "from_ordinal").as_deref().map(|n| n.ends_with("(§6.4)")), Some(true));
     assert!(notes(&one("pub fn f[T: Num]() -> T {\n  T.PIE\n}\n")).is_empty());
 }
 

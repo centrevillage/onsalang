@@ -4,7 +4,9 @@ use crate::body::bounds::Bounds;
 use crate::def::{Bound, DefKind, TRAITS};
 use crate::flow_tests::std_package;
 use crate::tests::analyze;
-use crate::traits::{Class, DERIVABLE, IMPLS, MEMBERS, Rep, SUPERS, TRAIT_ITEMS, derived, implies, member, member_rep};
+use crate::traits::{
+    Class, DERIVABLE, IMPLS, MEMBERS, Rep, SUPERS, TRAIT_ITEMS, derive_of, derived, implies, member, member_rep,
+};
 use crate::ty::{BuiltinTy, EffectSet, FloatKind, FnTy, IntKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Package};
 
@@ -282,6 +284,20 @@ fn the_members_of_the_lists_are_declared() {
         assert!(Class::of(a.types.get(key)).is_some_and(|c| c.implements(Bound::Default)));
         assert!(a.modules.assoc_builtin[&key].contains_key("default"), "{:?}", a.types.get(key));
     }
+}
+
+/// What a list makes and what a bound gives are one set of pairs of a trait
+/// and a name: a list not known holds the rows of [`TRAIT_ITEMS`] (§18.1,
+/// S-460), and a use reads the rows of [`MEMBERS`], so a pair in one alone
+/// is a use of a member a list held that reads as a fault.
+#[test]
+fn what_a_list_makes_is_what_its_bound_gives() {
+    let mut made: Vec<_> = TRAIT_ITEMS.iter().map(|i| (i.name, i.bound)).collect();
+    let rows = MEMBERS.iter().filter(|row| derive_of(row.0).is_some());
+    let mut given: Vec<_> = rows.flat_map(|&(b, _, names)| names.iter().map(move |&n| (n, b))).collect();
+    made.sort_by_key(|pair| pair.0);
+    given.sort_by_key(|pair| pair.0);
+    assert_eq!(made, given);
 }
 
 /// A name is of the first row of a trait a bound implies; the bounds decide

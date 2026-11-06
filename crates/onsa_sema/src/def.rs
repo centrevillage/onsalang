@@ -401,6 +401,12 @@ pub struct Def {
 }
 
 impl Def {
+    /// The type whose derive made this `impl` (`Sema::derived_defs`): the
+    /// one `impl` no item wrote.
+    pub(crate) fn derived_impl_of(&self) -> Option<DefId> {
+        (matches!(self.kind, DefKind::Impl(_)) && self.item.is_none()).then_some(self.owner).flatten()
+    }
+
     pub fn as_fn(&self) -> Option<&FnDef> {
         match &self.kind {
             DefKind::Fn(f) => Some(f),

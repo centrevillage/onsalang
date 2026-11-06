@@ -1130,28 +1130,6 @@ until = "W7-11"
 note = "イベントの入出力の見出し。`at event` のクロックが読めるのは W7-11（今は E0302）"
 
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
-# --- W5-06 U2・U3/t: derive が作るメンバの値。型の段は U2、Core は U3（2026-11-06）。
-[[pending]]
-kind = "test-case"
-target = "tests/spec/derive/default_values.onsa"
-reasons = ["S-49", "S-905"]
-until = "W5-06"
-note = "`default()` の値。Core は U3"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/derive/ordinal_values.onsa"
-reasons = ["S-145", "S-907"]
-until = "W5-06"
-note = "`ordinal`・`from_ordinal` の値。Core は U3"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/derive/members_modules_values"
-reasons = ["S-905"]
-until = "W5-06"
-note = "他のモジュールからの `default()` の値。Core は U3"
-
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow/builtin_sample_tick_call.onsa"

@@ -30,6 +30,7 @@
 
 mod body;
 mod build;
+mod derived;
 mod eq;
 pub mod flow;
 pub mod fold;
@@ -131,6 +132,8 @@ pub(crate) struct Lowerer<'a> {
     fn_ids: HashMap<(DefId, Vec<GenericArg>), FnId>,
     worklist: Vec<(DefId, Vec<GenericArg>, FnId)>,
     type_ids: HashMap<(DefId, Vec<GenericArg>), TypeId>,
+    /// The reverse of `type_ids`: the state type of a flow has no row.
+    type_defs: HashMap<TypeId, (DefId, Vec<GenericArg>)>,
     const_ids: HashMap<(DefId, Vec<GenericArg>), ConstId>,
     pub(crate) eq_fns: HashMap<Ty, FnId>,
     messages: HashMap<String, MsgId>,
@@ -196,6 +199,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         fn_ids: HashMap::new(),
         worklist: Vec::new(),
         type_ids: HashMap::new(),
+        type_defs: HashMap::new(),
         const_ids: HashMap::new(),
         eq_fns: HashMap::new(),
         messages: HashMap::new(),
@@ -487,6 +491,7 @@ impl<'a> Lowerer<'a> {
         let id = TypeId(self.m.types.len() as u32);
         self.m.types.push(TypeDef { name, kind: TypeDefKind::Opaque });
         self.type_ids.insert((d, gargs.clone()), id);
+        self.type_defs.insert(id, (d, gargs.clone()));
         let def = self.a.def(d).clone();
         let kind = match &def.kind {
             DefKind::Struct(s) => match &s.fields {
@@ -651,9 +656,8 @@ impl<'a> Lowerer<'a> {
                     self.ensure_flow(owner)?;
                     return Ok(());
                 }
-                // U3: the bodies of what a derive makes.
-                if f.derived.is_some() {
-                    return Err(unsupported(def.name_span, Feature::DerivedMembers, &[&def.name]));
+                if let Some(made) = f.derived {
+                    return self.lower_derived(d, f, made, args, fid);
                 }
                 let ret = self.core_ty(f.ret, args, def.span)?;
                 if f.body.is_none() {

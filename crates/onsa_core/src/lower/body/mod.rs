@@ -8,7 +8,7 @@ use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
 use onsa_sema::body::{BodyInfo, InstId, Target, TryArms};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
-use onsa_sema::ty::{Ty as STy, TyId};
+use onsa_sema::ty::TyId;
 use onsa_sema::{DefId, ModId};
 use onsa_syntax::ast::{
     self, Ast, BinOp as ABinOp, ExprId, ExprKind as AK, Lit as ALit, OpGroup, PatId, PatKind, RangeEnd, StmtId,
@@ -26,7 +26,7 @@ mod call;
 mod expr;
 mod pat;
 
-use super::{eq, flow};
+use super::{derived, eq, flow};
 pub(super) use call::coerce;
 use call::lower_call;
 pub(super) use expr::lower_expr;
@@ -126,17 +126,11 @@ impl Lowerer<'_> {
             None => Vec::new(),
         };
         let Some(of) = of else { return Ok((def, args)) };
-        let key = match self.core_ty(of, &cx.args, span)? {
-            Ty::Int(k) => STy::Int(k),
-            Ty::Float(k) => STy::Float(k),
-            // U3: `T.default()` and `x.ordinal()` at the types with no member of std.
-            _ => return Err(unsupported(span, Feature::DerivedMembers, &[&self.a.def(def).name])),
-        };
-        let table = self.a.types.find(&key).and_then(|k| self.a.modules.assoc_builtin.get(&k));
-        match table.and_then(|t| t.get(&self.a.def(def).name)) {
-            Some(&member) => Ok((member, args)),
-            None => Err(internal(span, "a member of a number type that std does not declare")),
-        }
+        let ty = self.core_ty(of, &cx.args, span)?;
+        // The arguments of its `impl`, then its own.
+        let (member, mut gargs) = self.member_of(&ty, &self.a.def(def).name, span)?;
+        gargs.extend(args);
+        Ok((member, gargs))
     }
 }
 

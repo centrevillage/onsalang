@@ -456,7 +456,7 @@ impl<'p> Sema<'p> {
             let DefKind::Impl(imp) = &self.a.def(d).kind else { continue };
             // What a derive makes goes first: an overlap is the fault of the
             // member written, wherever it is (§6.2, S-851).
-            if let (None, Some(ty)) = (self.a.def(d).item, self.a.def(d).owner) {
+            if let Some(ty) = self.a.def(d).derived_impl_of() {
                 let members = imp.fns.iter().map(|&f| (self.a.def(f).name.clone(), f)).collect::<Vec<_>>();
                 self.a.modules.assoc.entry(ty).or_default().extend(members);
                 continue;

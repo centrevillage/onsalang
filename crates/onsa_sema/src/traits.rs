@@ -216,6 +216,11 @@ impl DerivedFn {
     pub(crate) fn item(self) -> &'static TraitItem {
         &TRAIT_ITEMS[self as usize]
     }
+
+    /// The name of the member.
+    pub fn name(self) -> &'static str {
+        self.item().name
+    }
 }
 
 /// The representative type of the member `name` of a type parameter of the
@@ -315,8 +320,10 @@ pub(crate) fn number_traits_note(ty: &Ty, shown: &str, want: Bound) -> Option<St
 /// (§6.3): the traits that do; none of a name of no row of [`MEMBERS`].
 pub(crate) fn member_note(param: &str, name: &str) -> Option<String> {
     let rows: Vec<Bound> = MEMBERS.iter().filter(|(_, _, names)| names.contains(&name)).map(|&(b, ..)| b).collect();
-    (!rows.is_empty())
-        .then(|| format!("`{name}` is a member of {}, which the bounds of `{param}` do not imply (§6.3)", named(&rows)))
+    let section = if rows.contains(&Bound::Ordinal) { "§6.4" } else { "§6.3" };
+    (!rows.is_empty()).then(|| {
+        format!("`{name}` is a member of {}, which the bounds of `{param}` do not imply ({section})", named(&rows))
+    })
 }
 
 /// The bounds `bs`, for the text of a note: `` `A`, `B` and `C` ``.

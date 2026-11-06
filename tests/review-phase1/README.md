@@ -67,7 +67,7 @@
 | `core/constf.onsa` | R-20。W3-05 で直し、期待値付きのテストへ移した: `crates/onsa_sema/src/body_tests.rs` の `float_literal_ranges`（R-20 のコメントの `pub const K: F32 = 1.0000000596046447753906250001` が一度だけ丸めた値）、`tests/spec/semantics/float_literal_rounding.onsa`（"a const of F32 is rounded once" ほか）。今: `check`・`test` とも通る（"f32 const literal is rounded once" ok） |
 | `core/order*.onsa`、`core/cpkg/` | R-93 |
 | `core/fnmangle.onsa`、`core/mangle/` | R-48 |
-| `core/derive*.onsa`（推定） | R-60 |
+| `core/derive*.onsa`（推定） | R-60。W5-06 U2・U3/t で期待値付きのテストへ移した: `tests/spec/derive/default_types.onsa`、`default_values.onsa`、`default_neg.onsa`、`eq_nan_field.onsa` |
 | `cback/p1/` | R-10、R-11、R-48、R-93。R-10 と R-11 の部分（`narrow_u32`、`shr_i8` / `shr_i16`、`wmul_u16` / `wmul_i16`、`cmul_u32`、`sat_i64` / `sat_u64`）は W2-05 で期待値付きのテストへ移した: テストベクトル（`tests/vectors/` の `u32.narrow_i32`、`i8.shr`、`i16.shr`、`u16.wmul`、`i16.wmul`、`u32.checked_mul`、`f64.trunc_i64_sat`、`f64.trunc_u64_sat` などを gate の `vectors-c` が全てのツールチェーンで）、`tests/spec/c_runtime/` の `c_narrow_u2s.onsa`・`c_shift.onsa`・`c_mul.onsa`・`c_trunc.onsa`・`c_int_modules/` |
 | `cback/p2/` | R-09、R-48 |
 | `cback/p3/` | R-47、R-64 |
