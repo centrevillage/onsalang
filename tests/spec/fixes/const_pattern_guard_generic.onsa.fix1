@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§6.6", "§18.1"]
+// fixes = 1
+
+// S-185, S-253, S-319 (U1b of W5-09): the associated constant of a type parameter (`T.ZERO`, `T.MAX`, `T.PI`) is E0020 as a pattern (§7: "型パラメータの型の
+// `T.MAX` など"): the type is `T`, not a concrete type. The candidate is the guard form `x if x == T.ZERO`; `T: AnyNum` and the traits above it
+// satisfy `PartialEq` (§6.3), so the candidate is made, and the check after it reports nothing. The bounds are `AnyNum` (for `ZERO`), `Int` (for `MAX`) and `Float`
+// (for `PI`). One candidate for the arm; its text is not written here (S-253). One error per function (P-01).
+
+pub fn zero_of_a_number[T: AnyNum](x: T) -> I32 {
+  match x {
+    v if v == T.ZERO => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn max_of_an_integer[T: Int](x: T) -> I32 {
+  match x {
+    v if v == T.MAX => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn pi_of_a_float[T: Float](x: T) -> I32 {
+  match x {
+    v if v == T.PI => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn constant_of_the_parameter_in_a_tuple[T: Int](t: (T, I32)) -> I32 {
+  match t {
+    (v, n) if v == T.MIN => n,                                //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn constant_of_the_parameter_in_some[T: AnyNum](o: Option[T]) -> I32 {
+  match o {
+    Some(v) if v == T.ZERO => 1,                              //~ E0020
+    _ => 0,
+  }
+}

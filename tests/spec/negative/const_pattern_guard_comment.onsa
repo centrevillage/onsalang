@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-319 (U1b of W5-09): a candidate makes the smallest edits and loses no comment (§18.1, S-251), so the branches of a choice that the guard form removes hold none:
+// a comment between them makes no candidate, and the E0020 of a form of the stage of the types stays (§18.1: "後の段で見つける形は E0020 のまま候補を出さない"). One error
+// per function (P-01).
+
+const A: F32 = 1.0
+const B: F32 = 2.0
+
+pub fn comment_between_the_branches(x: F32) -> I32 {
+  match x {
+    A | //~ E0020
+      B => 1,
+    _ => 0,
+  }
+}

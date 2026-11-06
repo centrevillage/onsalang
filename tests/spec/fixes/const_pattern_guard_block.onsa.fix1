@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§7", "§18.1"]
+// fixes = 1
+
+// S-319 (U1b of W5-09): an arm with a guard of its own keeps it (§7: "腕に元からガード `if g` があれば、作った条件と `g` を `&&` で結ぶ"), also when the guard is a
+// block-like expression, which as an operand of `&&` is written in parentheses (E0013, §3.1): a `match`, a block and an `if`. The `=>` of the arm is the one after
+// the guard, not one in the guard. A guard in parentheses stays as it is. The syntax stage is in float_pattern_block_guard.onsa. One error per function (P-01).
+
+const LIMIT: F32 = 1.0
+
+pub fn match_as_the_guard(c: Bool, x: F32) -> I32 {
+  match x {
+    v if v == LIMIT && (match c { true => true, _ => false }) => 1, //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn block_as_the_guard(c: Bool, x: F32) -> I32 {
+  match x {
+    v if v == LIMIT && ({ c }) => 1,                            //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn if_as_the_guard(c: Bool, x: F32) -> I32 {
+  match x {
+    v if v == LIMIT && (if c { true } else { false }) => 1,     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn guard_in_parentheses(c: Bool, x: F32) -> I32 {
+  match x {
+    v if v == LIMIT && ({ c }) => 1,                          //~ E0020
+    _ => 0,
+  }
+}

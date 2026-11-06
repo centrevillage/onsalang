@@ -38,6 +38,7 @@ use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 pub(crate) mod bounds;
 mod call_forms;
 mod calls;
+mod const_patterns;
 mod conversions;
 mod entry;
 mod expressions;
@@ -283,6 +284,9 @@ pub(crate) struct Checker<'a> {
     pub(crate) blocks: Vec<(ExprId, &'a Block, usize)>,
     pub(crate) info: BodyInfo,
     pub(crate) failed: bool,
+    /// The constants of a type no pattern compares found in the pattern
+    /// being bound, with their types ([`Checker::bind_pat`]).
+    bad_consts: Vec<(Span, TyId)>,
     /// Flow mode (T3-1, `flow.rs`): set while checking a flow body.
     pub(crate) flow: Option<crate::flow::FlowCx>,
     /// Checks that wait for a type a later statement decides (`deferred.rs`).
@@ -394,6 +398,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             blocks: Vec::new(),
             info,
             failed: false,
+            bad_consts: Vec::new(),
             deferred: Vec::new(),
             deferred_seen: 0,
             deferred_generation: 0,

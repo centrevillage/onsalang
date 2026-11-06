@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.1", "§18.1"]
+// fixes = 1
+
+// S-253, S-319 (U1b of W5-09): the binding that the guard form puts in the place of the constant has a name that the spec does not fix, and it must not be a name that is
+// visible there (E0304, §5.1) or one that an interpolation in the arm uses (§7: "その位置で見えている名前と、範囲の端や補間の中の名前と重ならない名前で、当てた後に
+// E0304 を残さない"). The names that the examples of the spec use (`x`, `v`) and the usual next ones (`v1`, `v2`, `k`, `value`, `n`) are all taken here: as
+// parameters, as a local, as an item of the module (`fn v`), and by the interpolation in the body of the arm. The candidate is made and the check after it
+// reports nothing. The text is not written. One error per function (P-01).
+
+const LIMIT: F32 = 1.0
+
+fn v() -> I32 {
+  1
+}
+
+fn value() -> I32 {
+  2
+}
+
+pub fn parameters_take_the_names(x: F32, v1: I32, v2: I32, k: I32, w: I32) -> I32 {
+  match x {
+    v3 if v3 == LIMIT => v1 + v2 + k + w,                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn locals_take_the_names(x: F32) -> I32 {
+  let n = 1
+  let y = 2
+  match x {
+    v3 if v3 == LIMIT => n + y,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn items_take_the_names(x: F32) -> I32 {
+  match x {
+    v3 if v3 == LIMIT => v() + value(),                         //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn interpolation_uses_the_names(x: F32, v1: I32, v2: I32) -> Str uses {Alloc} {
+  match x {
+    v3 if v3 == LIMIT => "{v1}-{v2}",                           //~ E0020
+    _ => "none",
+  }
+}
+
+pub fn two_constants_need_two_names(t: (F32, F32), v1: I32) -> I32 {
+  match t {
+    (v3, v4) if v3 == LIMIT && v4 == LIMIT => v1,                           //~ E0020
+    _ => 0,
+  }
+}

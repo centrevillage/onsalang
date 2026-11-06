@@ -259,6 +259,13 @@ pub(crate) enum PatRes {
         entity: Entity,
         owner: Option<TyId>,
     },
+    /// The member of a type parameter (`T.ZERO`, §7), as of
+    /// [`PathRes::BoundMember`]: this stage cannot make the type `T`, which
+    /// its signature may not name.
+    BoundMember {
+        param: u32,
+        member: DefId,
+    },
 }
 
 /// The item the path of a struct literal names (a struct, or what the types

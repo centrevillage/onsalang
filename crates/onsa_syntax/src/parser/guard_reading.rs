@@ -123,6 +123,17 @@ pub(crate) enum Guarded {
     At,
 }
 
+/// `f` on a cursor over the tokens `lexed` of `text`, at no failure: what a
+/// later stage, which keeps no tokens, reads with the guard forms' reader.
+pub(crate) fn with_cursor<T>(
+    file: FileId,
+    text: &str,
+    lexed: crate::Lexed,
+    f: impl FnOnce(&crate::foreign::Cursor) -> T,
+) -> T {
+    f(&Parser::new(file, text, lexed).cursor(0, Want::Other))
+}
+
 /// The guard reading of a pattern (§7, §18.1): the tokens `tokens` of a
 /// file (a run of its full list) read by the parser's own grammar, the guard
 /// forms read as `Error` nodes ([`Guarded`]) where the parser fails at them.

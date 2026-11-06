@@ -76,7 +76,7 @@ pub(crate) use declarations::declaration_node;
 use declarations::{Declaration, declaration, is_declaration_keyword, starts_heading};
 pub(crate) use expressions::reads_as_expr;
 use failure::Own;
-pub(crate) use guard_reading::{Guarded, reads_as_pattern};
+pub(crate) use guard_reading::{Guarded, reads_as_pattern, with_cursor};
 use statements::MoveAs;
 use types::ClockAfter;
 pub(crate) use types::{reads_as_type, reads_as_type_list};

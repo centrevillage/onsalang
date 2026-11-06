@@ -921,13 +921,6 @@ note = "使用の位置の E0200 は出る。`Buf` の型の E0200 が位置 1:1
 
 [[pending]]
 kind = "foreign-form"
-target = "float_constant_pattern"
-reasons = ["S-185", "S-252"]
-until = "W5-09"
-note = "書けない型の定数のパターン（型の段）"
-
-[[pending]]
-kind = "foreign-form"
 target = "type_args_square"
 reasons = ["S-239", "S-256"]
 until = "W5-10"
@@ -1101,13 +1094,6 @@ target = "tests/spec/type_names/const_exprs_arith.onsa"
 reasons = ["S-50", "S-91"]
 until = "W9-03"
 note = "`Al.N * 2`・計算した定数・`Word.BITS` を長さに書く形。別名の解決（W4-04 U6）の後も、計算で決まる長さは W9-03 まで E0200（K-05 の (a)）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/self/const_pattern.onsa"
-reasons = ["S-446", "S-595", "S-185"]
-until = "W5-09"
-note = "定数のパターン `Self.N =>`（S-595 の表の 9 行）。名前の段は W4-04 U6 で解決し、定数のパターンの型付けは W5-09"
 
 [[pending]]
 kind = "test-case"
@@ -1549,55 +1535,6 @@ target = "tests/fuzz/596f9321.onsa"
 reasons = ["S-239", "S-256"]
 until = "W5-10"
 note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0200。`self.conv[I32](x)` の候補 `self.conv::[I32](x)` の先が W5-10 まで E0200"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/const_pattern_guard_and.onsa"
-reasons = ["S-185", "S-252", "S-253", "S-319"]
-until = "W5-09"
-note = "U1b 書けない定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/const_pattern_guard_choice.onsa"
-reasons = ["S-185", "S-252", "S-253", "S-319"]
-until = "W5-09"
-note = "U1b 書けない定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/const_pattern_guard_float.onsa"
-reasons = ["S-185", "S-252", "S-253", "S-319"]
-until = "W5-09"
-note = "U1b 書けない定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/const_pattern_guard_generic.onsa"
-reasons = ["S-185", "S-252", "S-253", "S-319"]
-until = "W5-09"
-note = "U1b 書けない定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/const_pattern_guard_names.onsa"
-reasons = ["S-185", "S-252", "S-253", "S-319"]
-until = "W5-09"
-note = "U1b 書けない定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/const_pattern_guard_types.onsa"
-reasons = ["S-185", "S-252", "S-253", "S-319"]
-until = "W5-09"
-note = "U1b 書けない定数"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/const_pattern_guard_none.onsa"
-reasons = ["S-185", "S-252", "S-253", "S-319"]
-until = "W5-09"
-note = "U1b 書けない定数"
 
 [[pending]]
 kind = "test-case"

@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§7", "§15.1", "§18.1"]
+
+// S-185, S-931, S-933 (U1b of W5-09): a member of a type parameter in a pattern is named as in an expression, then read as any constant (§7). Its type is that of
+// the parameter, also of one that the signature does not name, so against another type it is E0401 and no E0020. With arguments or fields it is E0308 (§15.1), in
+// a `let` E0502, and a name that the bounds do not give E0302 (§15.1). The type of a constant of a generic `impl` that nothing decides is E0420 (§4.7). One error per function (P-01).
+
+pub struct G[T] {
+  x: I32,
+}
+
+impl[T: AnyNum] G[T] {
+  pub const Z: T = T.ZERO
+}
+
+pub fn parameter_only_in_the_pattern[T: AnyNum](x: I32) -> I32 {
+  match x {
+    T.ZERO => 1, //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn with_arguments[T: AnyNum](x: T) -> I32 {
+  match x {
+    T.ZERO(y) => 1, //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn with_fields[T: AnyNum](x: T) -> I32 {
+  match x {
+    T.ZERO { y: 1 } => 1, //~ E0308
+    _ => 0,
+  }
+}
+
+pub fn not_a_member[T: AnyNum](x: T) -> I32 {
+  match x {
+    T.NOPE => 1, //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn in_a_let[T: AnyNum](x: T) -> I32 {
+  let T.ZERO = x //~ E0502
+  0
+}
+
+pub fn nothing_decides_the_type() -> I32 {
+  let o = None
+  match o {
+    Some(G.Z) => 1, //~ E0420
+    _ => 0,
+  }
+}

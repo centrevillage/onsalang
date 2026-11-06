@@ -452,11 +452,33 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// The member of the type parameter that the path `segs` of two names
+    /// starts at, read as an expression reads it ([`Self::type_param`]), of
+    /// the kind `want` takes. `None` for another path.
+    fn bound_member(&self, segs: &[&Ident], want: Want) -> Option<Result<PatRes, Fail>> {
+        let [head, _] = segs else { return None };
+        let Some(PathRes::TypeParam(i)) = self.heading(head) else { return None };
+        let (records, fail) = self.type_param(i, segs, &[], Place::Value);
+        let Some(&PathRes::BoundMember { param, member }) = records.last() else {
+            return fail.map(Err);
+        };
+        let kind = NameKind::of(Entity::Member(member), &self.a.defs);
+        Some(match kind.and_then(|k| self.want(k, segs, want)) {
+            Some(f) => Err(f),
+            None => Ok(PatRes::BoundMember { param, member }),
+        })
+    }
+
     /// The item the path of the pattern `p` names (§7).
     pub(super) fn ctor(&mut self, p: PatId, path: &Path, want: Want) -> W {
-        match self.item(path, want) {
-            Ok((entity, owner)) => {
-                self.out.pats.insert(p, PatRes::Ctor { entity, owner });
+        let segs: Vec<&Ident> = path.segments.iter().collect();
+        let found = match self.bound_member(&segs, want) {
+            Some(found) => found,
+            None => self.item(path, want).map(|(entity, owner)| PatRes::Ctor { entity, owner }),
+        };
+        match found {
+            Ok(r) => {
+                self.out.pats.insert(p, r);
                 Ok(())
             }
             Err(f) => self.fail_at_let(f),

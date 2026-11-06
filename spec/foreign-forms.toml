@@ -24,7 +24,9 @@
 #     stage    検出の段（§18.1 の段の順）: "lexical" | "syntax" | "names" | "types" | "flow"。
 #              "lexical" は字句の段で、構文の段の一部として fmt を止める（§18.2）。
 #              後の段で出る行は、その段の診断のある単位の前の段の結果を前提にする
-#     code     "E0020"（候補を作れる形）| "E0002"（候補を作れない形。Onsa での書き方を note で示す）
+#     code     "E0020"（候補を作れる形）| "E0002"（候補を作れない形。Onsa での書き方を note で示す）。
+#              後の段（stage が "names" | "types" | "flow"）の行は、候補を作れない文脈でも E0020 のままで（§18.1）、
+#              その例を `candidates = 0` で約束する（`property` と `fixed` は書かない）
 #     spec     拠る仕様の節（"2.5" の形）
 #     rule     note が示す正しい規則の要約（note の文面は約束しないので比べない）
 #
@@ -5031,6 +5033,24 @@ pub fn f(x: F32) -> I32 {
 at = "5:5"
 property = ["clean"]
 candidates = 1
+
+[[form.example]]
+source = '''
+pub struct Raw {
+  x: I32,
+}
+
+const RAW: Raw = Raw { x: 0 }
+
+pub fn f(r: Raw) -> I32 {
+  match r {
+    RAW => 1,
+    _ => 0,
+  }
+}
+'''
+at = "9:5"
+candidates = 0
 
 [[form]]
 id = "negated_constant_pattern"

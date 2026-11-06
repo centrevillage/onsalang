@@ -1035,3 +1035,20 @@ fn the_call_of_a_value_for_type_arguments_keeps_within_the_limit() {
         }
     });
 }
+
+/// The candidate of the types stage counts the levels of what it writes
+/// (§2.5, §18.1): none past the limit, by the `&&` before a guard at it.
+#[test]
+fn constants_in_guard_stops_at_the_nesting_limit() {
+    let candidate = |n: usize| {
+        let (open, close) = ("(".repeat(n), ")".repeat(n));
+        let text =
+            format!("pub fn d(k: Bool, x: F32) -> I32 {{\n  match x {{\n    L if {open}k{close} => 1,\n  }}\n}}\n");
+        let at = text.find('L').unwrap() as u32;
+        crate::foreign::guard::constants_in_guard(FileId(0), &text, at, &[at], false).is_ok()
+    };
+    onsa_diag::stack::run(move || {
+        assert!(candidate(1) && candidate(250));
+        assert!(!candidate(254));
+    });
+}

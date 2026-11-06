@@ -457,7 +457,12 @@ impl<'a> Checker<'a> {
         let mut rows: Vec<Vec<P>> = Vec::new();
         for arm in arms {
             let r = (|| -> R<()> {
-                let p = self.bind_pat(arm.pat, st, false)?;
+                let p = self.bind_pat(arm.pat, st, false);
+                let bad = std::mem::take(&mut self.bad_consts);
+                let p = p?;
+                if !bad.is_empty() {
+                    return Err(self.reject_constants(arm, bad));
+                }
                 if let Some(g) = arm.guard {
                     let bool_ = self.bool_();
                     self.check_expr(g, Some(bool_))?;

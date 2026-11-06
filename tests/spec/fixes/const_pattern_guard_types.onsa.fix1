@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-185, S-253, S-319 (U1b of W5-09): a constant of a type other than an integer, `Char`, `Bool` and `Str` is E0020 as a pattern (§7: "それ以外の型の定数
+// （浮動小数、struct、型パラメータの型の `T.MAX` など）は E0020（修正候補はガードの形 `x if x == LIMIT`）"): a struct, a tuple, an array,
+// an `Option` and an enum of the program. The candidate is the guard form when the type satisfies `PartialEq` (the types here do: the struct and the enum
+// derive it, §6.4, and the tuple, the array and `Option` of `I32` have it from their elements, §6.4's table), and the check after it
+// reports nothing (§18.1). One candidate for the arm; its text is not written here (S-253). One error per function (P-01).
+
+pub struct Pt: PartialEq {
+  x: I32,
+  y: I32,
+}
+
+pub enum Mode: PartialEq {
+  Fast,
+  Slow,
+}
+
+const ORIGIN: Pt = Pt { x: 0, y: 0 }
+const PAIR: (I32, I32) = (1, 2)
+const TABLE: [I32; 2] = [1, 2]
+const NOTHING: Option[I32] = None
+const FIRST: Mode = Mode.Fast
+
+pub fn struct_constant(p: Pt) -> I32 {
+  match p {
+    v if v == ORIGIN => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn tuple_constant(t: (I32, I32)) -> I32 {
+  match t {
+    v if v == PAIR => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn array_constant(a: [I32; 2]) -> I32 {
+  match a {
+    v if v == TABLE => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn option_constant(o: Option[I32]) -> I32 {
+  match o {
+    v if v == NOTHING => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn enum_constant(m: Mode) -> I32 {
+  match m {
+    v if v == FIRST => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn struct_constant_in_a_tuple(t: (Pt, I32)) -> I32 {
+  match t {
+    (v, n) if v == ORIGIN => n,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn struct_constant_in_some(o: Option[Pt]) -> I32 {
+  match o {
+    Some(v) if v == ORIGIN => 1,                              //~ E0020
+    _ => 0,
+  }
+}

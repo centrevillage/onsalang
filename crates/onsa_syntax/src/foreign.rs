@@ -489,6 +489,7 @@ pub enum RowId {
     StringDelimiter,
     FloatPattern,
     FloatPatternChoice,
+    FloatConstantPattern,
     InterpolatedStringPattern,
     NegatedConstantPattern,
     AtBinding,

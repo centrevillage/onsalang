@@ -9,8 +9,9 @@
 //! replaces each hole with a new
 //! binding, an `@` binding with its name, and merges the alternatives of
 //! one skeleton; the condition ([`Cond`]) is written with the parentheses
-//! the groups of §3.1 need ([`BinOp::bare`]). The type stage (W5-09) is to
-//! read its constants of other types through the same reader and shape.
+//! the groups of §3.1 need ([`BinOp::bare`]). The types stage reads its
+//! constants of other types through the same reader and shape
+//! ([`constants_in_guard`]).
 
 use super::*;
 use crate::ast::{BinOp, Operand, RangeEnd, Side};
@@ -24,6 +25,9 @@ enum Form {
     Str,
     Negated,
     At,
+    /// A constant of a type no pattern compares (§7): only the types stage
+    /// knows one ([`mark`]).
+    Constant,
 }
 
 impl Form {
@@ -36,6 +40,7 @@ impl Form {
             Form::Str => RowId::InterpolatedStringPattern,
             Form::Negated => RowId::NegatedConstantPattern,
             Form::At => RowId::AtBinding,
+            Form::Constant => RowId::FloatConstantPattern,
         }
     }
 
@@ -46,7 +51,7 @@ impl Form {
             Form::Float => RowId::FloatPatternChoice,
             Form::Range => RowId::RangePatternChoice,
             Form::At => RowId::AtBindingComplex,
-            Form::Str | Form::Negated => self.row(),
+            Form::Str | Form::Negated | Form::Constant => self.row(),
         }
     }
 }
@@ -180,8 +185,7 @@ impl<'c, 'a> Toks<'c, 'a> {
 
     /// The text of the tokens `a..=b` of `toks`.
     fn text(&self, a: usize, b: usize) -> String {
-        let c = self.c;
-        c.text[c.span(self.toks[a]).start as usize..c.span(self.toks[b]).end as usize].to_string()
+        written(self.c, &self.toks, a, b)
     }
 
     /// A comment between the tokens `a` and `b` of `toks` (S-251: an edit
@@ -252,6 +256,11 @@ impl<'c, 'a> Toks<'c, 'a> {
             _ => PatKind::Bad(Form::Range),
         }
     }
+}
+
+/// The text of the tokens `a..=b` of `toks`.
+fn written(c: &Cursor, toks: &[usize], a: usize, b: usize) -> String {
+    c.text[c.span(toks[a]).start as usize..c.span(toks[b]).end as usize].to_string()
 }
 
 /// What a condition compares: a new binding (a hole, by its index) or the
@@ -510,8 +519,7 @@ fn at_cond(c: &Cursor, toks: &[usize], name: &str, rhs: &Pat) -> Option<Cond> {
     match &rhs.kind {
         PatKind::Hole(_, t) => Some(Cond::Test(subject(), t.clone())),
         PatKind::Leaf(Leaf::Lit | Leaf::Const) => {
-            let text = c.text[c.span(toks[rhs.lo]).start as usize..c.span(toks[rhs.hi]).end as usize].to_string();
-            Some(Cond::Test(subject(), Test::Equal(text)))
+            Some(Cond::Test(subject(), Test::Equal(written(c, toks, rhs.lo, rhs.hi))))
         }
         PatKind::Paren(inner) => at_cond(c, toks, name, inner),
         PatKind::Or(alts) => alts.iter().map(|a| at_cond(c, toks, name, a)).collect::<Option<_>>().map(Cond::Or),
@@ -618,6 +626,57 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     }
 }
 
+/// Why [`constants_in_guard`] makes no candidate at the limit of §2.5.
+const TOO_DEEP: &str = "no candidate: the guard form would nest over the limit (§2.5); simplify the arm";
+
+/// The names of `p` that start at `constants` (sorted) made holes of the
+/// constant they name; how many.
+fn mark(c: &Cursor, toks: &[usize], p: &mut Pat, constants: &[u32]) -> usize {
+    match &mut p.kind {
+        PatKind::Leaf(_) if constants.binary_search(&c.span(toks[p.lo]).start).is_ok() => {
+            p.kind = PatKind::Hole(Form::Constant, Test::Equal(written(c, toks, p.lo, p.hi)));
+            1
+        }
+        PatKind::Leaf(_) | PatKind::Hole(..) | PatKind::Bad(_) => 0,
+        PatKind::Paren(q) | PatKind::At { rhs: q, .. } => mark(c, toks, q, constants),
+        PatKind::Node(v) | PatKind::Or(v) => v.iter_mut().map(|q| mark(c, toks, q, constants)).sum(),
+    }
+}
+
+/// The candidate of the E0020 of the types stage (§7, S-319): the constants
+/// at `constants` (sorted) of the pattern of the arm at `arm_start` in the
+/// guard, by the rules of the forms of the syntax stage; `block_guard` is
+/// whether the arm's own guard is block-like. Without one, the note that
+/// says why, if a reason does. The tokens are read again: this is the path
+/// of an error, and no later stage keeps them.
+pub fn constants_in_guard(
+    file: FileId,
+    text: &str,
+    arm_start: u32,
+    constants: &[u32],
+    block_guard: bool,
+) -> Result<Fix, Option<&'static str>> {
+    crate::parser::with_cursor(file, text, crate::lexer::lex(file, text), |c| {
+        let (mut arm, why) = Arm::read(c, arm_start).ok_or(None)?;
+        if let Some(why) = why {
+            return Err(why.note());
+        }
+        if mark(c, &arm.toks, &mut arm.pat, constants) != constants.len() {
+            return Err(None);
+        }
+        arm.wrap_guard = block_guard;
+        // One: a constant is no range, read two ways.
+        let fix = arm.candidates(c).map_err(|why| why.note())?.pop().ok_or(None)?;
+        // No completion counts its levels ([`crate::operands`], §18.1).
+        let edits: Vec<&Edit> = fix.edits().iter().collect();
+        let after = onsa_diag::apply_text(text, &edits).map_err(|_| None)?;
+        let end = c.span(arm.arrow).end + after.len().saturating_sub(text.len()) as u32;
+        let read = crate::parse(file, &after);
+        let deep = read.diagnostics.iter().any(|d| d.code == Code::E0006 && (arm_start..end).contains(&d.span.start));
+        if deep { Err(Some(TOO_DEEP)) } else { Ok(fix) }
+    })
+}
+
 /// The `n`-th name (from 1) the guard-form candidates may bind: `v`, `v2`,
 /// `v3`, ... (S-253). A candidate takes the first ones no identifier of the
 /// file spells: a name visible at the arm is declared or imported in the
@@ -638,6 +697,10 @@ struct Arm {
     if_tok: Option<usize>,
     arrow: usize,
     last_pat: usize,
+    /// Whether its own guard takes parentheses as an operand of `&&` (it is
+    /// block-like): of the types stage, which no completion follows
+    /// ([`crate::operands`]).
+    wrap_guard: bool,
 }
 
 impl Arm {
@@ -672,10 +735,16 @@ impl Arm {
                 TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
                 TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => depth -= 1,
                 TokenKind::KwIf if depth == 0 => {
+                    // Its `=>` is outside the brackets of the guard (`if { c } =>`).
                     let mut j = i + 1;
-                    while c.kind(j) != TokenKind::FatArrow {
-                        if matches!(c.kind(j), TokenKind::Eof | TokenKind::RBrace) {
-                            return Err(false);
+                    while depth > 0 || c.kind(j) != TokenKind::FatArrow {
+                        match c.kind(j) {
+                            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+                            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace if depth > 0 => depth -= 1,
+                            TokenKind::Eof | TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                                return Err(false);
+                            }
+                            _ => {}
                         }
                         j += 1;
                     }
@@ -697,7 +766,7 @@ impl Arm {
         let last_pat = *toks.last().ok_or(false)?;
         let commented = toks.iter().any(|&t| c.kind(t) == TokenKind::BlockComment);
         let (t, pat) = Toks::read(c, toks, true, skip_blocks).ok_or(commented)?;
-        Ok(Arm { toks: t.toks, pat, if_tok, arrow, last_pat })
+        Ok(Arm { toks: t.toks, pat, if_tok, arrow, last_pat, wrap_guard: false })
     }
 
     /// The candidates: one, or two when a range is written `..` or `...`
@@ -754,7 +823,7 @@ impl Arm {
                     let g_last = c.sig_before(self.arrow).ok_or(Why::GuardEnd)?;
                     let g = operand(&(g_first..=g_last).map(|i| c.kind(i)).collect::<Vec<_>>());
                     let cond = if BinOp::And.bare(Side::Left, top) { cond } else { format!("({cond})") };
-                    if BinOp::And.bare(Side::Left, g) {
+                    if BinOp::And.bare(Side::Left, g) && !self.wrap_guard {
                         edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{cond} && ")));
                     } else {
                         edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{cond} && (")));

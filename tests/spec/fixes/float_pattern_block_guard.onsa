@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§7", "§18.1"]
+// fixes = 1
+
+// S-317: the form of the syntax stage in an arm whose own guard is block-like: the condition and the guard are joined with `&&` (§7), the guard in parentheses
+// (E0013, §3.1). The `=>` of the arm is the one after the guard, not one in it. The same rule of the types stage is in const_pattern_guard_block.onsa.
+
+pub fn float_in_front_of_a_block(c: Bool, x: F32) -> I32 {
+  match x {
+    1.5 if { c } => 1,                              //~ E0020
+    _ => 0,
+  }
+}

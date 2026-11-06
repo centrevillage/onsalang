@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "22:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-253 (U1b of W5-09): the property of the candidate that the spec fixes without naming the binding: after the candidate of the E0020 of a constant of a type that
+// cannot be a pattern, the check of the whole file reports nothing (`clean`). The file has this one error, and names that a new binding could take are
+// visible (`x` is the subject, `v` and `v2` a parameter and a local). The main position is the constant, the first token of the form (the same as the examples of
+// spec/foreign-forms.toml).
+
+const LIMIT: F32 = 1.0
+
+pub fn the_one_arm(x: F32, v: I32) -> I32 {
+  let v2 = v + 1
+  match x {
+    LIMIT => v2,                                    //~ E0020
+    _ => 0,
+  }
+}

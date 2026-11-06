@@ -160,7 +160,11 @@ impl<'a> Checker<'a> {
     /// `Self` names it by.
     pub(crate) fn ctor_of(&mut self, pat: PatId) -> R<(Entity, Option<TyId>)> {
         match self.names.pats.get(&pat) {
-            Some(crate::names::body::PatRes::Ctor { entity, owner }) => Ok((*entity, *owner)),
+            Some(PatRes::Ctor { entity, owner }) => Ok((*entity, *owner)),
+            // The type before a member stands as an alias does ([`Self::item_record`]).
+            Some(&PatRes::BoundMember { param, member }) => {
+                Ok((Entity::Member(member), Some(self.a.types.intern(Ty::Param(param)))))
+            }
             _ => Err(self.held_stop()),
         }
     }

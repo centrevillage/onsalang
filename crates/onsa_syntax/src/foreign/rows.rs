@@ -493,6 +493,16 @@ pub static ROWS: &[Row] = &[
         rule: "a pattern holds no float literal; alternatives of other shapes are split into arms, or written in a guard (§7)",
         detect: Detect::Syntax,
     },
+    // Found by the types stage, which knows the type of the constant (S-252).
+    Row {
+        id: RowId::FloatConstantPattern,
+        name: "float_constant_pattern",
+        phase: Phase::Types,
+        code: Code::E0020,
+        message: "a constant of this type cannot be a pattern; compare in a guard",
+        rule: "a pattern compares only constants of the integer types, `Char`, `Bool` and `Str`; any other constant, and IEEE equality, is written in a guard, `x if x == LIMIT` (§7)",
+        detect: Detect::Reported,
+    },
     Row {
         id: RowId::InterpolatedStringPattern,
         name: "interpolated_string_pattern",
@@ -1072,7 +1082,6 @@ pub static ROWS: &[Row] = &[
 /// The rows of the data file that no work has made yet (the later works
 /// of W3 to W7; [`Waiting`]).
 pub static WAITING: &[Waiting] = &[
-    Waiting { name: "float_constant_pattern", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 },
 ];

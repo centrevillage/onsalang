@@ -223,14 +223,19 @@ impl<'a> Checker<'a> {
         }
         let (t, target) = self.const_value(d, owner, span)?;
         self.unify_at(span, t, ty)?;
-        match self.ty(self.shallow(t)) {
+        let t = self.known(t, span, "constant of a pattern")?;
+        match self.ty(t) {
             Ty::Int(_) | Ty::Char | Ty::Bool | Ty::Builtin(BuiltinTy::Str, _) => {
                 self.info.pat_consts.insert(pat, target);
                 Ok(P::Const)
             }
             Ty::Error => Err(self.held_stop()),
-            // The E0020 of W5-09 U1b (S-252).
-            _ => Err(self.not_a_pattern(path)),
+            // Any other type (§7, S-252): the arm reports them as one
+            // ([`Self::reject_constants`]).
+            _ => {
+                self.bad_consts.push((path.span, t));
+                Ok(P::Const)
+            }
         }
     }
 
