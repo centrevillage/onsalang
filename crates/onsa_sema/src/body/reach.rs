@@ -295,6 +295,18 @@ impl<'a> Checker<'a> {
         clean.is_some()
     }
 
+    /// The E0503 of the arm of the pattern `pat`, which the arms before it
+    /// cover (§7). `whole` is the arm of a `_` or a binding among them.
+    pub(super) fn unreachable_arm(&mut self, pat: PatId, whole: Option<Span>) -> Stop {
+        let span = self.ast.pat(pat).span;
+        let msg = "no value chooses this arm: the arms before it cover what it takes (§7)";
+        let d = Diagnostic::new(Stage::Types, Code::E0503, span, msg).with_found(self.src(span));
+        self.diag(match whole {
+            Some(at) => d.with_note(at, "this arm takes every value"),
+            None => d,
+        })
+    }
+
     /// The E0503 of the expression or statement at `span`, whose part `part`
     /// diverges (§7).
     pub(super) fn never_carried_out(&mut self, span: Span, part: ExprId) -> Stop {

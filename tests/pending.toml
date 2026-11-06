@@ -1384,13 +1384,6 @@ note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/struct_rest_unreachable.onsa"
-reasons = ["S-187", "S-903"]
-until = "W5-09"
-note = "到達しない腕の E0503 が未実装（W5-09）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/struct_pattern_rest_match.onsa"
 reasons = ["S-110", "S-903"]
 until = "W7-06"
@@ -1538,34 +1531,6 @@ note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0200。`sel
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/match_cover_unreachable_constants.onsa"
-reasons = ["S-185", "S-187"]
-until = "W5-09"
-note = "U2 網羅と到達"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/match_cover_unreachable.onsa"
-reasons = ["S-187"]
-until = "W5-09"
-note = "U2 網羅と到達"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/match_cover_tilde_unreachable.onsa"
-reasons = ["S-187"]
-until = "W5-09"
-note = "U2 網羅と到達"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/match_cover_single_variant.onsa"
-reasons = ["S-177"]
-until = "W5-09"
-note = "U2 網羅と到達"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/match_unreachable_fix_delete.onsa"
 reasons = ["S-187", "S-292", "S-876", "S-934"]
 until = "W5-09"
@@ -1602,13 +1567,6 @@ note = "U3 E0503 の候補"
 [[pending]]
 kind = "test-case"
 target = "tests/spec/fixes/match_unreachable_fix_type_variable.onsa"
-reasons = ["S-187", "S-292", "S-876", "S-934"]
-until = "W5-09"
-note = "U3 E0503 の候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/match_unreachable_fix_type_open.onsa"
 reasons = ["S-187", "S-292", "S-876", "S-934"]
 until = "W5-09"
 note = "U3 E0503 の候補"

@@ -26,7 +26,7 @@ use crate::binding::{Bind, Head, HeadRow, LitClass};
 use crate::builtin;
 use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
 use crate::deferred::{ArgumentName, Deferred, DeferredKind, OpNeed, Required, Verdict};
-use crate::exhaust::P;
+use crate::exhaust::{Missing, P, Seen};
 use crate::infer::{Cause, Infer, LitKind, Mismatch};
 use crate::modes::Proj;
 use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes, StructRes};

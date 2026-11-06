@@ -343,7 +343,7 @@ codes! {
     E0502 = 502, Exhaustiveness, [Types, Flow], Optional, Optional,
         "refutable pattern in `let`";
     E0503 = 503, Exhaustiveness, [Types], Optional, Optional,
-        "unreachable statement after a diverging one";
+        "unreachable statement after a diverging one, or `match` arm the arms before it cover";
     E0601 = 601, Effects, [Effects], Optional, Optional,
         "effect used but not in the function's effect row";
     E0610 = 610, Effects, [Effects, Build], Optional, Optional,

@@ -288,6 +288,45 @@ fn match_exhaustiveness() {
     ok("pub struct P { x: F32, y: F32 }\npub fn f(p: P) -> F32 { let P { x: a, y: _ } = p\n a }\n");
 }
 
+/// S-930: the columns of one arm that branch into more ways than any limit
+/// takes. The search stops, E0501 says so and names no value, and a `_` arm
+/// or the arm of `_` columns ends it all the same.
+#[test]
+fn the_search_of_a_match_stops_at_its_limit() {
+    let run = || {
+        let tys = ["Bool"; 64].join(", ");
+        let arm = format!("({}) => 1", ["true | false"; 64].join(", "));
+        let source = |arms: String| format!("pub fn f(x: ({tys})) -> I32 {{ match x {{ {arms} }} }}\n");
+        let over = check(&source(arm.clone()));
+        let [d] = &over.diagnostics[..] else { panic!("{:?}", over.diagnostics) };
+        assert_eq!(d.code, Code::E0501);
+        assert!(!d.message.contains("not covered"), "{}", d.message);
+        assert!(d.notes.iter().any(|n| n.message.contains("write a `_` arm")), "{:?}", d.notes);
+        ok(&source(format!("{arm}, _ => 0")));
+        ok(&source(format!("{arm}, ({}) => 0", ["_"; 64].join(", "))));
+    };
+    onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+}
+
+/// S-930: the limit is 4096 steps (§7), and a variant of an enum whose every
+/// variant is named is one step: the arms of 4096 variants are read, those of
+/// 4097 are not, and a `_` arm ends it all the same.
+#[test]
+fn the_limit_of_a_match_is_4096_steps() {
+    let source = |n: usize, last: &str| {
+        let vs: Vec<String> = (0..n).map(|i| format!("V{i}")).collect();
+        let arms: Vec<String> = (0..n).map(|i| format!("E.V{i} => 1")).collect();
+        let (vs, arms) = (vs.join(", "), arms.join(", "));
+        format!("pub enum E {{ {vs} }}\npub fn f(x: E) -> I32 {{ match x {{ {arms}{last} }} }}\n")
+    };
+    ok(&source(4096, ""));
+    let over = check(&source(4097, ""));
+    let [d] = &over.diagnostics[..] else { panic!("{:?}", over.diagnostics) };
+    assert_eq!(d.code, Code::E0501);
+    assert!(d.notes.iter().any(|n| n.message.contains("write a `_` arm")), "{:?}", d.notes);
+    ok(&source(4097, ", _ => 0"));
+}
+
 #[test]
 fn conversions() {
     // With std, which declares `F32.from_bits` (§3.3).

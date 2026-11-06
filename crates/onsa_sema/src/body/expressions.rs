@@ -454,52 +454,75 @@ impl<'a> Checker<'a> {
         let st = self.check_expr(scrutinee, None)?;
         let st = self.known(st, self.expr(scrutinee).span, "`match` operand")?;
         let mut result: Option<TyId> = expected;
-        let mut rows: Vec<Vec<P>> = Vec::new();
-        for arm in arms {
-            let r = (|| -> R<()> {
-                let p = self.bind_pat(arm.pat, st, false);
-                let bad = std::mem::take(&mut self.bad_consts);
-                let p = p?;
-                if !bad.is_empty() {
-                    return Err(self.reject_constants(arm, bad));
-                }
-                if let Some(g) = arm.guard {
-                    let bool_ = self.bool_();
-                    self.check_expr(g, Some(bool_))?;
-                } else {
-                    rows.push(vec![p]);
-                }
-                // The arms after the first are merged with it (not the outer reason).
-                let t = if result == expected {
-                    self.check_expr(arm.body, result)?
-                } else {
-                    self.without_why(|ck| ck.check_expr(arm.body, result))?
-                };
-                if result.is_none() {
-                    result = Some(t);
-                }
-                Ok(())
-            })();
-            r?;
-        }
-        // SPEC-GAP(S-260): the variants of an enum whose unit failed in the
-        // syntax stage are not all known; its `match` is not counted. Nor is
-        // the `match` of a value of the error type (§18.1, R-271).
-        if !self.mentions_failed(st)
-            && !matches!(self.ty(self.shallow(st)), Ty::Error)
-            && let Some(missing) = self.missing_pattern(&rows, st)
+        let mut seen = Seen::default();
+        self.check_arms(arms.iter(), st, &mut seen, &mut result, expected)?;
+        if self.judges_arms(st)
+            && let Some(missing) = self.missing_pattern(&mut seen, st)
         {
-            return Err(self.diag(
-                Diagnostic::new(
-                    Stage::Types,
-                    Code::E0501,
-                    span,
-                    format!("`match` is not exhaustive; `{missing}` is not covered (§7)"),
-                )
-                .with_found(self.src(self.expr(scrutinee).span)),
-            ));
+            let message = match &missing {
+                Missing::Value(value) => format!("`match` is not exhaustive; `{value}` is not covered (§7)"),
+                Missing::OverLimit => "`match` is not known to be exhaustive (§7)".to_string(),
+            };
+            let d = Diagnostic::new(Stage::Types, Code::E0501, span, message)
+                .with_found(self.src(self.expr(scrutinee).span));
+            return Err(self.diag(match missing {
+                Missing::Value(_) => d,
+                Missing::OverLimit => d.with_rule("the arms are too many ways to read through; write a `_` arm"),
+            }));
         }
         Ok(result.unwrap_or_else(|| self.unit()))
+    }
+
+    /// Whether the arms of a `match` of a value of type `st` are judged, for
+    /// exhaustiveness and for reachability alike.
+    // SPEC-GAP(S-260): the variants of an enum whose unit failed in the
+    // syntax stage are not all known; its `match` is not judged. Nor is the
+    // `match` of a value of the error type (§18.1, R-271).
+    fn judges_arms(&self, st: TyId) -> bool {
+        !self.mentions_failed(st) && !matches!(self.ty(self.shallow(st)), Ty::Error)
+    }
+
+    /// The arms in turn, against a value of type `st`: the pattern, then
+    /// whether the arms before it leave it a value (§7, E0503, before its
+    /// body, S-876), then the guard and the body. An arm with a guard is
+    /// asked about but covers nothing.
+    fn check_arms<'x>(
+        &mut self,
+        arms: impl Iterator<Item = &'x MatchArm>,
+        st: TyId,
+        seen: &mut Seen,
+        result: &mut Option<TyId>,
+        expected: Option<TyId>,
+    ) -> R<()> {
+        for arm in arms {
+            let p = self.bind_pat(arm.pat, st, false);
+            let bad = std::mem::take(&mut self.bad_consts);
+            let p = p?;
+            // Before the E0020: the guard form of an arm that is covered is
+            // an E0503 of this stage (§18.1), and the arm is one to delete.
+            if self.judges_arms(st) && !self.reachable(seen, &p, st) {
+                return Err(self.unreachable_arm(arm.pat, seen.whole));
+            }
+            if !bad.is_empty() {
+                return Err(self.reject_constants(arm, bad));
+            }
+            if let Some(g) = arm.guard {
+                let bool_ = self.bool_();
+                self.check_expr(g, Some(bool_))?;
+            } else {
+                seen.add(p, self.ast.pat(arm.pat).span);
+            }
+            // The arms after the first are merged with it (not the outer reason).
+            let t = if *result == expected {
+                self.check_expr(arm.body, *result)?
+            } else {
+                self.without_why(|ck| ck.check_expr(arm.body, *result))?
+            };
+            if result.is_none() {
+                *result = Some(t);
+            }
+        }
+        Ok(())
     }
 
     fn check_closure(

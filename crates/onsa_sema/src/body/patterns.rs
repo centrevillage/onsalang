@@ -145,17 +145,15 @@ impl<'a> Checker<'a> {
     ) -> R<P> {
         let span = self.ast.pat(pat).span;
         let (entity, owner) = self.ctor_of(pat)?;
-        // (constructor index, field types, number of constructors of the type)
-        let (ctor, fields, nctors): (u32, Vec<TyId>, usize) = match entity {
+        let (ctor, fields): (u32, Vec<TyId>) = match entity {
             Entity::Variant(d, i) => {
                 let args = self.fresh_args(d);
                 self.of_owner(d, &args, owner, span)?;
-                let en = self.a.def(d).as_enum().unwrap().clone();
                 let named = self.a.types.intern(Ty::Named(d, args.clone()));
                 self.unify_at(span, named, ty)?;
-                let fields: Vec<TyId> =
-                    en.variants[i as usize].fields.iter().map(|&f| self.a.types.subst(f, &args)).collect();
-                (i, fields, en.variants.len())
+                let written = self.a.def(d).as_enum().unwrap().variants[i as usize].fields.clone();
+                let fields: Vec<TyId> = written.iter().map(|&f| self.a.types.subst(f, &args)).collect();
+                (i, fields)
             }
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Const(_)) => {
                 return self.bind_const_pat(pat, path, (d, owner), ty, irrefutable);
@@ -163,12 +161,11 @@ impl<'a> Checker<'a> {
             _ => return Err(self.not_a_pattern(path)),
         };
         self.info.pat_ctors.insert(pat, ctor);
-        if irrefutable && nctors > 1 {
-            return Err(self.err(
-                Code::E0502,
-                span,
-                "this pattern can fail to match; `let` takes only tuple and struct patterns; use `match` (§7)",
-            ));
+        // Even of one variant: a variant more would break a far `let` (§7, S-177).
+        if irrefutable {
+            let msg = "this pattern can fail to match; `let` takes only tuple and struct patterns; use `match` (§7)";
+            let d = Diagnostic::new(Stage::Types, Code::E0502, span, msg).with_found(self.src(span));
+            return Err(self.diag(d.with_rule("a type that holds one value is written as a struct (§4.4)")));
         }
         if !with_parens && !fields.is_empty() {
             return Err(self.err(
