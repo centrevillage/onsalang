@@ -1,0 +1,42 @@
+package field_default_interface
+
+module field_default_interface
+
+pub const LIMIT: U32 = 16
+
+const SCALE: F32 = 2.0
+
+pub fn double(x: U32) -> U32
+
+pub struct Point  // Copy; size 8, align 4
+  x: F32  // offset 0
+  y: F32  // offset 4
+
+pub struct Folded  // Copy; size 40, align 4
+  a: F32 = 0.0  // offset 0
+  b: I32 = -3  // offset 4
+  c: U32 = 16  // offset 8
+  d: F32 = 0.0  // offset 12
+  e: Bool = true  // offset 16
+  f: Point = Point { x: 1.0, y: 2.0 }  // offset 20
+  g: F32 = 2.0  // offset 28
+  priv h: F32 = 1.5  // offset 32
+  i: U32  // offset 36
+
+pub struct NotFolded  // Copy; size 24, align 4
+  a: U32  // offset 0
+  b: U32  // offset 4
+  c: F32  // offset 8
+  priv d: U32  // offset 12
+  e: U32 = 7  // offset 16
+  f: U32  // offset 20
+
+pub struct Generic[T]
+  t: T
+  n: U32 = 4
+  priv m: U32
+
+pub struct OfTheInstance[const N: U32]
+  d: [U8; N]
+  n: U32
+  k: U32 = 4

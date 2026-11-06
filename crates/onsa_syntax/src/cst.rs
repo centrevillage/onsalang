@@ -317,6 +317,12 @@ pub(crate) enum Class {
 }
 
 impl NodeKind {
+    /// The mark that ends the fields of a struct pattern or literal (§7,
+    /// §4.4): nothing comes after it, a `,` neither.
+    pub(crate) fn is_field_rest(self) -> bool {
+        matches!(self, NodeKind::StructPatRest | NodeKind::StructLitRest)
+    }
+
     /// What an AST node made from a CST node of this kind is (the parser, the
     /// lowering and the table of the forms of other languages read it).
     #[inline]

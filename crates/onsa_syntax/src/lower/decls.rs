@@ -97,8 +97,9 @@ impl<'a> Lower<'a> {
     }
 
     /// [`Item::mem_attr`] of the item `n`: the first attribute of a `let`
-    /// that the table accepted.
-    fn first_mem(&self, n: NodeId) -> Option<Span> {
+    /// that the table accepted, of no item inside it (a default of a field
+    /// is one).
+    pub(super) fn first_mem(&self, n: NodeId) -> Option<Span> {
         let cst = self.cst;
         for i in cst.token_range(n) {
             if cst.tokens()[i].kind != TokenKind::At {
@@ -111,7 +112,8 @@ impl<'a> Lower<'a> {
             if cst.parent(attr).is_none_or(|p| cst.kind(p) != NodeKind::LetStmt) {
                 continue;
             }
-            if cst.ancestors(attr).take_while(|&a| a != n).any(|a| cst.kind(a) == NodeKind::Item) {
+            let items = |a: NodeId| matches!(cst.kind(a), NodeKind::Item | NodeKind::FieldDefault);
+            if cst.ancestors(attr).take_while(|&a| a != n).any(items) {
                 continue;
             }
             return Some(cst.span(attr));

@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§4.4", "§15.1"]
+
+// W5-22 U3/t, S-697 (spec §6.4: "`priv` のフィールドがあっても、他のモジュールから `P.default()` を呼べる"; "宣言に既定値を書いたフィールドはその値で、型の `Default` を要らない"; §4.4: "読むモジュールは宣言のモジュールで、
+// 見えない定数も読める"; §15.1: the fields that are not seen cannot be read here). The value of `P.default()` of a type of another module whose fields are `priv`: the `priv` field with a default takes it, even when
+// the default reads a constant or a function that this module cannot see (`SECRET` in util.onsa), the `priv` field without a default takes the `Default` of its type, and the fields that are seen take theirs. The type is
+// used through `use` and through the path, as an element of a generic type (`Wrap[Hidden]`), as the field of a derive in this module, in a tuple and an array, in an `rt fn` and in the initializer of a `const`.
+// The `priv` fields are read through the functions of util.onsa. The values are not the `Default` of the types (`42`, `0.5` and not `0`).
+use util
+use util.{Hidden, Quiet, Wrap, Reads}
+
+rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub struct Holder: Default {
+  h: Hidden,
+  q: Quiet,
+  n: U32 = 6,
+}
+
+test "the priv fields with a default take it, and the constant they read is not seen here" {
+  let h = Hidden.default()
+  assert h.gain() == 0.5
+  assert h.steps() == 42
+  assert h.tag == 0
+  assert h.ready
+}
+
+test "the call through the path of the module" {
+  let h = util.Hidden.default()
+  assert h.steps() == 42
+  assert h.gain() == 0.5
+}
+
+test "a priv field without a default takes the default of its type" {
+  let q = Quiet.default()
+  assert q.level().to_bits() == 0
+  assert q.count() == 0
+  assert q.name_len == 3
+}
+
+test "a generic type with a priv field" {
+  let w: Wrap[U8] = Wrap.default()
+  assert w.inner() == 0
+  assert w.extra == 5
+  let f: Wrap[F32] = Wrap.default()
+  assert f.inner().to_bits() == 0
+  assert f.extra == 5
+}
+
+test "the default reads a priv function and a priv constant" {
+  let r = Reads.default()
+  assert r.a() == 43
+  assert r.b == 8.0
+  assert r.hidden_steps() == 7
+}
+
+test "a derive in this module uses the default of the other module" {
+  let x = Holder.default()
+  assert x.h.steps() == 42
+  assert x.h.gain() == 0.5
+  assert x.h.ready
+  assert x.q.name_len == 3
+  assert x.q.count() == 0
+  assert x.n == 6
+}
+
+test "the type is an element of a tuple and of an array" {
+  let t: (Hidden, U8) = zero_of()
+  assert t.0.steps() == 42
+  assert t.1 == 0
+  let a: [Hidden; 2] = zero_of()
+  assert a[0].steps() == 42
+  assert a[1].gain() == 0.5
+}
+
+test "the bound gives the default of the other module" {
+  let h: Hidden = zero_of()
+  assert h.steps() == 42
+  let w: Wrap[Hidden] = zero_of()
+  assert w.inner().steps() == 42
+  assert w.extra == 5
+}
+
+test "the call in an rt fn" {
+  assert util.hidden_here().steps() == 42
+  assert util.local_default() == 42
+}
+
+rt fn here() -> Hidden {
+  Hidden.default()
+}
+
+test "the call in an rt fn of this module" {
+  assert here().steps() == 42
+}
+
+const START: Hidden = Hidden.default()
+
+const QUIET: Quiet = Quiet.default()
+
+test "the call in the initializer of a const" {
+  assert START.steps() == 42
+  assert START.gain() == 0.5
+  assert QUIET.name_len == 3
+}

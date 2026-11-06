@@ -195,6 +195,9 @@ pub struct FieldDef {
     /// struct's (§15.1, S-35).
     pub vis: Vis,
     pub span: Span,
+    /// The constant of its default (§4.4): a def no path finds, whose owner
+    /// is the struct.
+    pub default: Option<DefId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

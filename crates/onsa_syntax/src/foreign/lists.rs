@@ -132,7 +132,7 @@ fn comma_goes(a: &After) -> bool {
             && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
     let gap = c.detached.is_some_and(|d| d.at == c.at);
     let comma = !(a.arms && gap && !arm_ahead(c.tokens, c.at));
-    let after_rest = c.closed.iter().any(|n| matches!(n.0, NodeKind::StructPatRest | NodeKind::StructLitRest));
+    let after_rest = c.closed.iter().any(|n| n.0.is_field_rest());
     a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma && !after_rest
 }
 

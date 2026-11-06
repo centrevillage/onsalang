@@ -1467,8 +1467,8 @@ until = "W7-06"
 note = "flow の `match~` が E0200（W7-06）"
 
 [[pending]]
-kind = "fix-contract"
-target = "tests/spec/types/field_default_eq_line_head.onsa:11:5 E0020 fix1"
-reasons = ["S-697"]
-until = "W5-22"
-note = "候補を当てた後の新しい既定値の単位に U2 の止める E0200 が残る（U3 で E0200 を消すと外れる）"
+kind = "test-case"
+target = "tests/spec/negative/field_default_panics.onsa"
+reasons = ["S-131", "S-697"]
+until = "W9-03"
+note = "フィールドの既定値の式の panic（桁あふれ、呼び出しの中の panic）が `const` と同じく E0419 にならない（§6.6）。今は onsa check で 0 件"

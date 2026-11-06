@@ -37,10 +37,25 @@ fn default_value(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<Expr> {
     Ok(Expr::new(ty.clone(), span, ExprKind::Call { fn_: lw.fn_id(member, args), args: Vec::new() }))
 }
 
-/// The value of the field `f` in a `default()`.
+/// The read of the default `d` of a field of the type `ty` of a struct at
+/// `args` (§4.4): the constant of the instance, burnt in once (S-918).
+fn declared_default(lw: &mut Lowerer, d: DefId, ty: Ty, args: &[GenericArg], span: Span) -> R<Expr> {
+    Ok(Expr::new(ty, span, ExprKind::Const(lw.const_id(d, args.to_vec())?)))
+}
+
+/// The value of the field `f` in a `default()`: the default it declares, else
+/// the default of its type (§6.4).
+// SPEC-GAP(S-173): the default of a field that reads a constant made by this
+// `default()` (`struct P: Default { x: U32 = A.x }`, `const A: P = P.default()`)
+// is no E0312: `const_id` follows no call, so it stops, and the evaluation
+// panics at the cycle (`const_cycle`), as for `const A: U32 = f()` through a
+// function.
 fn field_default(lw: &mut Lowerer, f: &FieldDef, args: &[GenericArg], span: Span) -> R<Expr> {
     let ty = lw.core_ty(f.ty, args, span)?;
-    default_value(lw, &ty, span)
+    match f.default {
+        Some(d) => declared_default(lw, d, ty, args, span),
+        None => default_value(lw, &ty, span),
+    }
 }
 
 /// A block of the value `e` alone.

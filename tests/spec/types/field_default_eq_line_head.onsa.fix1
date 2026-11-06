@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§18.1"]
+// fixes = 1
+
+// The `=` of a default at the start of a line is E0020 (spec §2.5: a `=` is put at the end of the line it
+// continues from, also inside braces; the candidate moves it to the end of the previous line).
+
+pub struct Item {
+  x: U32,
+  y: F32 =
+    0.0,  //~ E0020
+}

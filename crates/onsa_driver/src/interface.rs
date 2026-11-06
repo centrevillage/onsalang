@@ -16,7 +16,8 @@
 //!       "ret": "F32", "effects": [], "signature": "pub rt fn wrap01(x: F32) -> F32" },
 //!     { "kind": "struct", "name": "Poly", "vis": "pub", "value_kind": "Affine",
 //!       "size": 1234, "align": 8, "generics": [],
-//!       "fields": [ { "name": "voices", "vis": "", "ty": "[voice.State; 8]", "offset": 0 } ] },
+//!       "fields": [ { "name": "voices", "vis": "", "ty": "[voice.State; 8]", "offset": 0 },
+//!                   { "name": "gain", "vis": "", "ty": "F32", "offset": 1024, "default": "0.5" } ] },
 //!     { "kind": "enum", "name": "Shape", ..., "variants": [ { "name": "Circle", "fields": ["F32"] } ] },
 //!     { "kind": "const", "name": "MAX_VOICES", "ty": "U32", "value": "8" },
 //!     { "kind": "alias", "name": "Samples", "ty": "Buf[F32]" },
@@ -142,6 +143,11 @@ pub struct FieldIface {
     pub vis: String,
     pub ty: String,
     pub offset: Option<u32>,
+    /// The value of its default (§4.4) when the compile-time evaluation
+    /// folds it (S-920): none of a default it does not, and of one that reads
+    /// a parameter of the struct, which has a value for each instance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -412,6 +418,7 @@ impl Builder<'_> {
                                 vis: vis.into(),
                                 ty: self.ty(f.ty, &generics),
                                 offset,
+                                default: f.default.and_then(|d| self.const_text(d)),
                             });
                         }
                     }
@@ -438,13 +445,15 @@ impl Builder<'_> {
     fn const_item(&self, d: DefId, display: &str) -> Item {
         let def = self.a.def(d);
         let DefKind::Const(c) = &def.kind else { unreachable!() };
-        let value = self
-            .a
-            .const_values
-            .get(&d)
-            .map(|v| self.value_text(v, Some(c.ty), None))
-            .or_else(|| c.int_value.map(|v| v.to_string()));
+        let value = self.const_text(d);
         Item::Const { name: display.to_string(), vis: vis_str(def.vis).into(), ty: self.ty(c.ty, &[]), value }
+    }
+
+    /// The value of the constant `d` as it is written, when it is folded.
+    fn const_text(&self, d: DefId) -> Option<String> {
+        let DefKind::Const(c) = &self.a.def(d).kind else { unreachable!() };
+        let value = self.a.const_values.get(&d).map(|v| self.value_text(v, Some(c.ty), None));
+        value.or_else(|| c.int_value.map(|v| v.to_string()))
     }
 
     /// The value `v` of the type `ty` as it is written in the source (§2.4,
@@ -537,6 +546,7 @@ impl Builder<'_> {
                                 vis: String::new(),
                                 ty: format!("{} bytes, align {}, {region}", f.size, f.align),
                                 offset: Some(f.offset),
+                                default: None,
                             })
                             .collect();
                     }
@@ -695,12 +705,13 @@ fn render_type(t: &TypeIface, keyword: &str, out: &mut String, indent: &str) {
     type_header(t, keyword, out, indent);
     for f in &t.fields {
         let v = if f.vis.is_empty() { String::new() } else { format!("{} ", f.vis) };
+        let d = f.default.as_ref().map_or(String::new(), |d| format!(" = {d}"));
         match f.offset {
             Some(o) => {
-                let _ = writeln!(out, "{indent}  {v}{}: {}  // offset {o}", f.name, f.ty);
+                let _ = writeln!(out, "{indent}  {v}{}: {}{d}  // offset {o}", f.name, f.ty);
             }
             None => {
-                let _ = writeln!(out, "{indent}  {v}{}: {}", f.name, f.ty);
+                let _ = writeln!(out, "{indent}  {v}{}: {}{d}", f.name, f.ty);
             }
         }
     }

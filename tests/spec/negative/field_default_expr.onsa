@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§4.7", "§3.4", "§18.1"]
+
+// W5-22 U3/t, S-697, S-918 (spec §4.4: "既定値の式は `const` の初期化式の規則(§6.6)に従い、コンパイル時に一度だけ評価して焼き込む。読むモジュールは宣言のモジュール"; §6.6: "コンパイル時の評価が panic すると(溢れ、ゼロ除算、添字の範囲外 …)、その式の位置で E0419"). The default of a field is checked like the initializer of a
+// `const`, on its own line (one field in a line, the unit of a default is the field, §18.1): the value of a wrong type is E0401, a panic of the evaluation is E0419, and a name that is not seen is
+// E0302: a name that is nowhere, `Self`, and another field of the struct (a default does
+// not see the fields). The parameters of the struct are seen (field_default_params.onsa). The field with a default is the only error of its struct, and the other fields are fine. A type parameter in the type of the field is E0200 and not this E0302
+// (field_default_type_first.onsa). The effect row of a callee outside `{}` and `{Alloc}` cannot be written in this version (any effect other than `Alloc` is itself E0200), so it has no case here.
+
+pub struct Wrong {
+  a: U32 = 1.5,                                               //~ E0401
+  b: Bool = 1,                                                //~ E0401
+  c: F32 = true,                                              //~ E0401
+  d: Option[U32] = Some(true),                                //~ E0401
+  e: (U32, Bool) = (1, 2),                                    //~ E0401
+  f: U32 = "a",                                               //~ E0401
+  g: [F32; 2] = [0.0; 3],                                     //~ E0401
+  h: U32 = 1 + true,                                          //~ E0401
+  ok: U32 = 1,
+}
+
+pub struct Panics {
+  a: I32 = -(-2147483648),                                    //~ E0419
+  ok: I32 = -(-2147483647),
+}
+
+pub struct Names {
+  a: U32 = nowhere,                                           //~ E0302
+  b: U32 = nowhere(1),                                        //~ E0302
+  c: U32 = Nowhere.LIMIT,                                     //~ E0302
+  d: F32 = F32.NOWHERE,                                       //~ E0302
+  ok: U32 = 1,
+}
+
+pub struct H[T: Float] {
+  v: T,
+  one: F32 = T.ONE,                                           //~ E0401
+}
+
+pub struct UsesSelf {
+  a: U32 = 1,
+  b: U32 = Self.LIMIT,                                        //~ E0302
+}
+
+impl UsesSelf {
+  const LIMIT: U32 = 4
+}
+
+pub struct UsesAField {
+  x: U32,
+  y: U32 = x,                                                 //~ E0302
+  z: U32 = 1,
+}
+
+pub struct UsesTheStruct {
+  x: U32 = 1,
+  y: U32 = UsesTheStruct.nothing,                             //~ E0302
+}
+
+// a name seen is fine: a constant of the module, an associated constant of a type, a function
+const LIMIT: U32 = 8
+
+pub struct Seen {
+  a: U32 = LIMIT,
+  b: F32 = F32.PI,
+  c: U32 = UsesSelf.LIMIT,
+  d: U32 = U32.MAX,
+}
+
+// the first error of a default is the only one: the name is before the type (§18.1)
+pub struct First {
+  a: U32 = nowhere + true,                                    //~ E0302
+  b: U32 = (nowhere, 1.5).1,                                  //~ E0302
+}

@@ -1,0 +1,222 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3", "§4.4", "§6.6", "§3.4"]
+
+// W5-22 U3/t, S-697 (spec §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである(宣言に既定値を書いたフィールドはその値で、型の `Default` を要らない。他のフィールドは型の `default()`)"; §6.3's table for
+// the types of the fields without a default: an integer is `0`, a float is `+0.0`, `Bool` is `false`, a tuple and a `[T; N]` by element, `()`; §4.4: the default is evaluated once at compile time; §3.4 for
+// the sign of a zero, seen through `to_bits()`). The value of `P.default()` of a struct that has fields with a default and fields without one: the first take the value that is declared (not the
+// `Default` of the type: `0.5` and not `0.0`, `true` and not `false`), the others take the `Default` of their type. A default that reads a constant (an `rt` function and a `fn`
+// too), a default of a tuple, an array, `Some`, a struct literal, an enum variant and a type that has no `Default` (`Char`, `Option`, an enum, a struct): the value is the declared one.
+// A struct inside a struct (a field of a type that lists `Default` takes its default with the defaults inside), a tuple and an array of such a type, the call in an `rt fn` and in the initializer of a `const`.
+// The struct whose fields have defaults all. The derive is made once for each call, so a value that is changed (`var`) does not change the next call. Values of `Str` and `Bytes` are not run by
+// `onsa test` in this version (R-332), so they are not here. The check of the types is in types/field_default_accepts.onsa.
+
+const GAIN: F32 = 0.75
+const STEPS: U32 = 8
+
+rt fn base() -> U32 {
+  100
+}
+
+pub struct Plain: PartialEq {
+  n: I32,
+}
+
+pub enum Mode: PartialEq {
+  Off,
+  On,
+}
+
+pub struct Voice: Default + PartialEq {
+  gain: F32 = 0.5,
+  steps: U32,
+  on: Bool = true,
+  level: F32,
+  from_const: F32 = GAIN,
+  count: U32 = STEPS + 1,
+  offset: I32 = -4,
+  quiet: Bool,
+}
+
+pub struct Odd: Default {
+  c: Char = 'z',
+  some: Option[U32] = Some(4),
+  none: Option[U32] = None,
+  plain: Plain = Plain { n: 7 },
+  mode: Mode = Mode.On,
+  pair: (U8, Bool) = (3, true),
+  taps: [F32; 2] = [1.0, 2.0],
+  nothing: () = (),
+  start: U32 = base() + 1,
+}
+
+pub struct Outer: Default {
+  inner: Voice,
+  voices: [Voice; 2],
+  pair: (Voice, U8),
+  n: U32 = 6,
+}
+
+pub struct AllDefaults: Default + PartialEq {
+  a: U32 = 3,
+  b: F32 = 1.5,
+}
+
+pub struct Zeros: Default {
+  i: I8,
+  f: F32,
+  d: F64,
+  b: Bool,
+  t: (U8, Bool),
+  a: [I16; 3],
+  u: (),
+  w: U64 = 0,
+}
+
+fn mode_number(m: Mode) -> U32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On => 1,
+  }
+}
+
+fn option_or(o: Option[U32], other: U32) -> U32 {
+  match o {
+    Some(v) => v,
+    None => other,
+  }
+}
+
+test "a field with a default takes it, the others take the default of their type" {
+  let v = Voice.default()
+  assert v.gain == 0.5
+  assert v.steps == 0
+  assert v.on
+  assert v.level == 0.0
+  assert v.level.to_bits() == 0
+  assert v.from_const == 0.75
+  assert v.count == 9
+  assert v.offset == -4
+  assert !v.quiet
+}
+
+test "the declared default is not the default of the type" {
+  let v = Voice.default()
+  assert v.gain != F32.default()
+  assert v.on != Bool.default()
+  assert v.count != U32.default()
+}
+
+test "a field of a type that has no Default takes the declared value" {
+  let o = Odd.default()
+  assert o.c == 'z'
+  assert option_or(o.some, 0) == 4
+  assert option_or(o.none, 9) == 9
+  assert o.plain.n == 7
+  assert mode_number(o.mode) == 1
+  assert o.pair.0 == 3
+  assert o.pair.1
+  assert o.taps[0] == 1.0
+  assert o.taps[1] == 2.0
+  assert o.start == 101
+}
+
+test "a struct inside a struct takes its own defaults" {
+  let o = Outer.default()
+  assert o.inner.gain == 0.5
+  assert o.inner.on
+  assert o.inner.steps == 0
+  assert o.inner.count == 9
+  assert o.n == 6
+}
+
+test "the elements of an array and a tuple of such a struct take their defaults" {
+  let o = Outer.default()
+  assert o.voices[0].gain == 0.5
+  assert o.voices[1].count == 9
+  assert o.voices[1].on
+  assert o.pair.0.from_const == 0.75
+  assert o.pair.0.offset == -4
+  assert o.pair.1 == 0
+}
+
+test "a struct whose fields all have a default" {
+  let a = AllDefaults.default()
+  assert a.a == 3
+  assert a.b == 1.5
+  assert a == AllDefaults { a: 3, b: 1.5 }
+}
+
+test "the fields without a default take the default of the table of the types" {
+  let z = Zeros.default()
+  assert z.i == 0
+  assert z.f.to_bits() == 0
+  assert z.d.to_bits() == 0
+  assert !z.b
+  assert z.t.0 == 0
+  assert !z.t.1
+  assert z.a[0] == 0
+  assert z.a[2] == 0
+  assert z.w == 0
+}
+
+test "the default is equal to the literal that writes the same values" {
+  let v = Voice.default()
+  assert v == Voice { gain: 0.5, steps: 0, on: true, level: 0.0, from_const: 0.75, count: 9, offset: -4, quiet: false }
+}
+
+test "a call makes a value of its own" {
+  var v = Voice.default()
+  v.steps = 5
+  v.gain = 2.0
+  let w = Voice.default()
+  assert v.steps == 5
+  assert w.steps == 0
+  assert w.gain == 0.5
+}
+
+rt fn make_voice() -> Voice {
+  Voice.default()
+}
+
+rt fn make_odd() -> Odd {
+  Odd.default()
+}
+
+rt fn count_of_default() -> U32 {
+  Voice.default().count
+}
+
+test "the call in an rt fn" {
+  let v = make_voice()
+  assert v.gain == 0.5
+  assert v.count == 9
+  assert make_odd().c == 'z'
+  assert count_of_default() == 9
+}
+
+const START: Voice = Voice.default()
+
+const START_ODD: Odd = Odd.default()
+
+test "the call in the initializer of a const" {
+  assert START.gain == 0.5
+  assert START.on
+  assert START.count == 9
+  assert START.steps == 0
+  assert START_ODD.start == 101
+  assert START_ODD.pair.0 == 3
+}
+
+pub flow fixed_gain(x: F32 at sample) -> F32 at sample {
+  let v = Voice.default()
+  x * v.gain
+}
+
+test "the call in a flow" {
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o            = fixed_gain.render(fixed_gain.Config {}, fixed_gain.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}

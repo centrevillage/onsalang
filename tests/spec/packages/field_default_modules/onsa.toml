@@ -1,0 +1,3 @@
+[package]
+name = "field_default_modules"
+edition = "2026"

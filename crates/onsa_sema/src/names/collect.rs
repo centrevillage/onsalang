@@ -206,23 +206,9 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// E0200 for each default of the fields of `s`, each of its own unit
-    /// (§18.1), until W5-22 U3 checks them; none in a struct that has its
-    /// error of the syntax stage.
-    fn defaults_unsupported(&mut self, at: &Place<'_>, s: &onsa_syntax::ast::StructDecl) {
-        let read = at.item.failed.is_none();
-        for default in s.fields.iter().filter_map(|f| f.default.filter(|_| read)) {
-            let ItemKind::FieldDefault { value } = at.ast.item(default).kind else { continue };
-            self.report_mod(Feature::FieldDefaults.diagnostic(Stage::Names, at.ast.expr(value).span, &[]));
-        }
-    }
-
     /// The def of an item with a name, in the items of its module.
     fn collect_named(&mut self, at: &Place<'_>, kind: &ItemKind) -> Option<DefId> {
         let item = at.item;
-        if let ItemKind::Struct(s) = kind {
-            self.defaults_unsupported(at, s);
-        }
         let list = match kind {
             ItemKind::Struct(s) => Some(&s.derives),
             ItemKind::Enum(e) => Some(&e.derives),

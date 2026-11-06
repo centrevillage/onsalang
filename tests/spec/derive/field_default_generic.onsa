@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§4.4", "§4.5", "§6.3"]
+
+// W5-22 U3/t, S-697, S-918 (spec §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである … 総称の型(`struct Pair[T]: PartialEq`)は、型引数が満たすときだけ満たす"; §4.4: "型引数を持つ struct の他の
+// フィールドには書ける"; §6.3: "総称の関数では `T.default()`(`T: Default`)"). The value of `default()` of a generic struct whose field with a default does not depend on the parameter: the field that
+// depends on `T` takes `T.default()` for the type that is given (the annotation of the `let`, the return type, an argument, an element of a tuple or an array), and the field with a default takes the declared value for every
+// `T`. A struct with a const parameter (`Ring[T, const N: U32]`), two parameters, and a generic struct inside a generic struct. `T.default()` of a generic function that is given such a type takes the same value,
+// in a function, in an `rt fn` and in a `const`. The field with a default does not ask `Default` of anything: the parameter of the struct is the only part that does.
+
+pub struct W[T]: Default {
+  t: T,
+  n: U32 = 3,
+  tag: (U8, Bool) = (1, true),
+}
+
+pub struct Ring[T, const N: U32]: Default {
+  d: [T; N],
+  head: U32 = 2,
+}
+
+pub struct Pair[T]: Default {
+  a: T,
+  b: T,
+  n: U32 = 4,
+}
+
+pub struct Two[A, B]: Default {
+  a: A,
+  b: B,
+  gain: F32 = 0.25,
+}
+
+fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+rt fn rt_zero_of[T: Default]() -> T {
+  T.default()
+}
+
+fn make_w[T: Default]() -> W[T] {
+  W.default()
+}
+
+fn n_of_w[T: Default](w: W[T]) -> U32 {
+  w.n
+}
+
+test "the field with a default takes it for each argument of the type" {
+  let p: W[I32] = W.default()
+  assert p.t == 0
+  assert p.n == 3
+  assert p.tag.0 == 1
+  assert p.tag.1
+  let q: W[F32] = W.default()
+  assert q.t.to_bits() == 0
+  assert q.n == 3
+  let r: W[Bool] = W.default()
+  assert !r.t
+  assert r.n == 3
+}
+
+test "a generic struct inside a generic struct" {
+  let pp: Pair[Pair[U8]] = Pair.default()
+  assert pp.a.a == 0
+  assert pp.a.b == 0
+  assert pp.a.n == 4
+  assert pp.b.n == 4
+  assert pp.n == 4
+  let pw: Pair[W[F32]] = Pair.default()
+  assert pw.a.n == 3
+  assert pw.b.t.to_bits() == 0
+}
+
+test "two parameters" {
+  let t: Two[U8, Bool] = Two.default()
+  assert t.a == 0
+  assert !t.b
+  assert t.gain == 0.25
+  let u: Two[W[U32], (U8, F32)] = Two.default()
+  assert u.a.n == 3
+  assert u.b.0 == 0
+  assert u.b.1 == 0.0
+  assert u.gain == 0.25
+}
+
+test "a const parameter" {
+  let r: Ring[F32, 3] = Ring.default()
+  assert r.d[0].to_bits() == 0
+  assert r.d[2].to_bits() == 0
+  assert r.head == 2
+  let s: Ring[U8, 2] = Ring.default()
+  assert s.d[1] == 0
+  assert s.head == 2
+}
+
+test "T.default() of a generic function takes the same value" {
+  let a: W[U32] = zero_of()
+  assert a.t == 0
+  assert a.n == 3
+  let b: Ring[F32, 2] = zero_of()
+  assert b.head == 2
+  assert b.d[1] == 0.0
+  let c: Pair[Bool] = zero_of()
+  assert c.n == 4
+  assert !c.a
+}
+
+test "a generic function that makes the struct" {
+  let w: W[I8] = make_w()
+  assert w.t == 0
+  assert w.n == 3
+  let v: W[U8] = make_w()
+  assert n_of_w(v) == 3
+}
+
+test "the type comes from the argument" {
+  let w: W[U16] = W.default()
+  assert n_of_w(w) == 3
+}
+
+test "the type comes from an element of a tuple and of an array" {
+  let t: (W[U8], Pair[F32]) = zero_of()
+  assert t.0.n == 3
+  assert t.1.n == 4
+  let a: [W[U8]; 2] = zero_of()
+  assert a[0].n == 3
+  assert a[1].tag.0 == 1
+}
+
+test "in an rt fn" {
+  let w: W[U32] = rt_zero_of()
+  assert w.n == 3
+  assert w.t == 0
+}
+
+const START: W[U8] = W.default()
+
+const RING: Ring[U8, 2] = Ring.default()
+
+test "in the initializer of a const" {
+  assert START.n == 3
+  assert START.t == 0
+  assert START.tag.0 == 1
+  assert RING.head == 2
+  assert RING.d[0] == 0
+}

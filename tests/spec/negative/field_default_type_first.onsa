@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§18.1"]
+
+// W5-22 U3/t, S-697 (spec §6.6: "この判定(E0407 と、Shared を含む型の E0200)は宣言の型だけで決まり、値の検査より先に行う"; §4.4 for the default of a field, whose place is the
+// default and not the type). The type is judged before the value: a value of a wrong type, a panic and a type parameter the value does not fit are not reported, the E0407 comes before the
+// E0200 of a Shared type and before the E0200 of a type that depends on a parameter. `(Str, Buf[F32])` is the E0407 and not the E0200 of its Shared part. A field whose type is fine has its
+// value judged. One field in each line.
+
+pub struct Order {
+  b: Buf[F32] = true,                                         //~ E0407
+  c: Buf[F32] = 1 / 0,                                        //~ E0407
+  e: Str = 1,                                                 //~ E0200
+  g: (Str, Buf[F32]) = ("a", 1),                              //~ E0407
+  h: Option[Map[U32, U32]] = 1,                               //~ E0407
+  i: Bytes = -(-2147483648),                                  //~ E0200
+  ok: U32 = 0,
+}
+
+pub struct Param[T] {
+  a: T = 1,                                                   //~ E0200
+  c: Option[T] = Some(1),                                     //~ E0200
+  d: [T; 2] = [true, false],                                  //~ E0200
+  ok: U32 = 0,
+}
+
+pub struct ParamCopy[T: Copy] {
+  a: Buf[T] = 1,                                              //~ E0407
+  b: (Str, Buf[T]) = ("a", 1),                                //~ E0407
+  c: Buf[T] = Buf.zeroed(1),                                  //~ E0407
+  ok: U32 = 0,
+}
+
+pub struct ConstParam[const N: U32] {
+  a: [F32; N] = 1,                                            //~ E0200
+  ok: U32 = 0,
+}
+
+// the type is fine: the value is judged
+pub struct Values {
+  a: U32 = true,                                              //~ E0401
+  b: U32 = missing,                                           //~ E0302
+  c: I32 = -(-2147483648),                                    //~ E0419
+}
+
+// A name that is not found is an error of the names stage (§18.1: 構文 → 名前 → 型, and a unit stops at its first error), as in
+// a `const`: the type of the field is not judged. The failed name of §6.6 is a name that has no diagnostic where it is
+// used, a failed `use` (S-755, field_default_failed_names.onsa).
+pub struct NotFound[T] {
+  a: Buf[F32] = missing,                                      //~ E0302
+  b: Str = missing,                                           //~ E0302
+  c: T = T.ZERO,                                              //~ E0302
+}

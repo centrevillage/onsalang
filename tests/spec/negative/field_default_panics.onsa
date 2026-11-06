@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§3.4"]
+
+// W5-22 U3, S-697 (spec §4.4, §6.6: "コンパイル時の評価が panic すると、その式の位置で E0419"). The panics of the evaluation of a default that this version
+// finds at no `onsa check`, as in a `const` (tests/spec/negative/const_u64_mul_panic.onsa): W9-03 makes them E0419.
+
+fn mul_checked(a: U64, b: U64) -> U64 {
+  a * b
+}
+
+fn div_i8(a: I8, b: I8) -> I8 {
+  a / b
+}
+
+fn to_i64(f: F64) -> I64 {
+  I64.trunc_from(f)
+}
+
+pub struct Panics {
+  b: U8 = U8.MAX + 1,                                         //~ E0419
+  c: U64 = mul_checked(4294967296, 4294967296),               //~ E0419
+  d: I8 = div_i8(-128, -1),                                   //~ E0419
+  e: I64 = to_i64(9223372036854775808.0),                     //~ E0419
+  f: I8 = -(-(-128)),                                         //~ E0419
+  ok: I32 = -(-2147483647),
+}

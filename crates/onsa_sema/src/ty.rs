@@ -503,6 +503,30 @@ impl Types {
         out
     }
 
+    /// Whether `id` holds a type or a const parameter, its types within types
+    /// included. Each type is visited once, as in [`Self::named`].
+    pub fn mentions_param(&self, id: TyId) -> bool {
+        self.param_in(id, &mut HashSet::default())
+    }
+
+    fn param_in(&self, id: TyId, seen: &mut HashSet<TyId>) -> bool {
+        if !seen.insert(id) {
+            return false;
+        }
+        let mut any = |ts: &[TyId]| ts.iter().any(|&t| self.param_in(t, seen));
+        match self.get(id) {
+            Ty::Param(_) | Ty::Array(_, Len::Param(_)) => true,
+            Ty::Named(_, ts) | Ty::Tuple(ts) | Ty::Builtin(_, ts) => any(ts),
+            Ty::Array(t, _) => any(&[*t]),
+            Ty::Fn(f) => {
+                let ts: Vec<TyId> = f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect();
+                any(&ts)
+            }
+            Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit => false,
+            Ty::ConstVal(_) | Ty::Var(_) | Ty::Error => false,
+        }
+    }
+
     fn named_in(&self, id: TyId, seen: &mut HashSet<TyId>, out: &mut Vec<DefId>) {
         if !seen.insert(id) {
             return;

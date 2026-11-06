@@ -189,7 +189,7 @@ fn every_unit_of_the_repository_reads_alone_in_the_context_of_its_list() {
                 if failed(unit) || p.units.list[unit.members.clone()].iter().any(failed) || unit.item.is_none() {
                     continue;
                 }
-                if unit.parent.is_some_and(|o| p.units.list[o].heading.is_none()) {
+                if unit.item.is_some_and(|i| matches!(p.ast.item(i).kind, crate::ast::ItemKind::FieldDefault { .. })) {
                     continue;
                 }
                 let own = &text[unit.span.start as usize..unit.span.end as usize];

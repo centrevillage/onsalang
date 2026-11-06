@@ -1,0 +1,95 @@
+// onsa.toml
+// [package]
+// name = "c_field_default_member_name"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfd_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§6.4"]
+//
+// [[test.host]]
+// name = "a_method_of_the_name_of_a_field"
+// target = "host"
+// fn = "c_field_default_member_name.a_method"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 42 },
+// ]
+//
+// [[test.host]]
+// name = "a_field_named_default"
+// target = "host"
+// fn = "c_field_default_member_name.a_field_named_default"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "one_constant_for_each_instance"
+// target = "host"
+// fn = "c_field_default_member_name.of_the_instances"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 610 },
+// ]
+
+// W5-22 U3/i, S-697, S-918 (spec §4.4: a default is evaluated once and burnt in; "struct のパラメータを読む式は、`impl` の定数と同じく具体化ごとに一度"). The constant of a default in the C unit: a field can
+// have the name of a method of its type, or the name `default` of the method a derive makes, and these are two things in the C unit too. A default that reads a function is evaluated at build time.
+
+const K: U32 = 40
+
+rt fn plus(n: U32) -> U32 {
+  n + 2
+}
+
+pub struct Voice: Default {
+  steps: U32,
+  count: U32 = plus(K),
+}
+
+impl Voice {
+  pub rt fn count(self) -> U32 {
+    self.count
+  }
+}
+
+pub struct Named: Default {
+  default: U32 = 7,
+}
+
+pub struct Sized[const N: U32]: Default {
+  d: [U8; N],
+  k: U32 = N * 2,
+}
+
+@export
+pub rt fn a_method() -> U32 {
+  Voice.default().count()
+}
+
+@export
+pub rt fn a_field_named_default() -> U32 {
+  let n = Named.default()
+  n.default
+}
+
+@export
+pub rt fn of_the_instances() -> U32 {
+  let a: Sized[3] = Sized.default()
+  let b: Sized[5] = Sized.default()
+  a.k * 100 + b.k
+}
+
+test "the same values in the interpreter" {
+  assert a_method() == 42
+  assert a_field_named_default() == 7
+  assert of_the_instances() == 610
+}

@@ -79,8 +79,8 @@ impl<'a> Lower<'a> {
         let value = self.need_expr(d);
         let kind = ItemKind::FieldDefault { value };
         let span = self.span(d);
-        let vis = Vis::Default;
-        self.add_item(d, Item { span, attrs: Vec::new(), vis, vis_span: None, kind, failed: None, mem_attr: None })
+        let (vis, mem_attr) = (Vis::Default, self.first_mem(d));
+        self.add_item(d, Item { span, attrs: Vec::new(), vis, vis_span: None, kind, failed: None, mem_attr })
     }
 
     pub(super) fn variant(&mut self, v: NodeId) -> Variant {

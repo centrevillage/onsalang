@@ -396,12 +396,14 @@ impl Analysis {
     }
 
     /// The name of a def as its module writes it: of an item a flow
-    /// generates, with the flow (`voice.State`); of a member of an `impl`,
-    /// with its type (`P.K`).
+    /// generates, with the flow (`voice.State`); of a default, with its
+    /// struct (`S.x`); of a member of an `impl`, with its type (`P.K`).
     pub fn shown_name(&self, id: DefId) -> String {
         let def = self.def(id);
         match def.owner.map(|o| &self.def(o).kind) {
-            Some(DefKind::Flow(_)) => format!("{}.{}", self.def(def.owner.unwrap()).name, def.name),
+            Some(DefKind::Flow(_) | DefKind::Struct(_)) => {
+                format!("{}.{}", self.def(def.owner.unwrap()).name, def.name)
+            }
             Some(DefKind::Impl(i)) => match self.types.get(i.self_ty) {
                 Ty::Named(d, _) => format!("{}.{}", self.def(*d).name, def.name),
                 Ty::Error => def.name.clone(),

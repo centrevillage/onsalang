@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§18.1"]
+
+// W5-22 U3/t, S-697 (spec §4.4: "既定値の式は `const` の初期化式の規則(§6.6)に従い…`Buf` のように静的に置けない型は E0407"; §6.6: the result of a `const` must be a type that is placed
+// statically, and "`Map` / `Set` は表の配置が実装に依存するので対象外で、Affine の型を含む型も置けない"; "この判定(E0407 と、Shared を含む型の E0200)は宣言の型だけで決まり"). A field whose type
+// cannot be placed statically (`Buf`, `Map`, `Set`, and a type that holds one: an `Option`, a tuple, an array, an alias, a struct) has no default: E0407 on the line of the default (one
+// field in a line). A `Shared` part with one of these parts is the E0407 of every version and not an E0200 (`(Str, Buf[F32])`, §18.1). The default of each field is a unit of its own (§18.1), so every field
+// here is reported. The fields that can be placed are fine, in the same struct. The order of this judgement and the value is in field_default_type_first.onsa.
+
+type Samples = Buf[F32]
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Mp {
+  m: Option[Map[U32, U32]],
+}
+
+pub struct Bare {
+  b: Buf[F32] = Buf.zeroed(2),                                //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct InOption {
+  o: Option[Buf[F32]] = None,                                 //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct InTuple {
+  t: (U32, Buf[F32]) = (1, Buf.zeroed(1)),                    //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct InArray {
+  a: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(1)],          //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct ByAlias {
+  s: Samples = Buf.zeroed(4),                                 //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct OfStruct {
+  h: Holder = Holder { buf: Buf.zeroed(1), gain: 1.0 },       //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct OfMap {
+  m: Option[Map[U32, U32]] = None,                            //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct OfSet {
+  s: Option[Set[U32]] = None,                                 //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct OfMapStruct {
+  m: Mp = Mp { m: None },                                     //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct SharedWithBuf {
+  p: (Str, Buf[F32]) = ("a", Buf.zeroed(1)),                  //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct TwoOfThem {
+  a: Buf[F32] = Buf.zeroed(1),                                //~ E0407
+  b: Buf[F32] = Buf.zeroed(2),                                //~ E0407
+  fine: F32 = 1.0,
+}
+
+pub struct Generic[T] {
+  t: T,
+  b: Buf[F32] = Buf.zeroed(1),                                //~ E0407
+  n: U32 = 0,
+}
+
+pub struct Derived: Default {
+  b: Buf[F32] = Buf.zeroed(1),                                //~ E0407
+  n: U32,
+}
+
+// the fields that can be placed
+pub struct Fine {
+  gain: F32 = 1.0,
+  pair: (U32, F32) = (1, 2.0),
+  nothing: Option[Buf[F32]],
+}

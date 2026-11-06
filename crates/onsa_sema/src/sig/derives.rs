@@ -204,7 +204,10 @@ impl<'p> Sema<'p> {
         let Some(cx) = self.cx_for(id, params, None) else { return };
         let under = Bounds { a: self.a, generics: &cx.generics };
         let roots = payloads(decls::item_kind(&cx.ast.item(item).kind), &def.kind);
-        let found = roots.iter().find_map(|&(t, ty, slot)| Some((t, ty, slot, unmet_trait(&under, ty, derives)?)));
+        // A field with a default does not need the `Default` of its type (§6.4).
+        let declared: Vec<Derive> = derives.iter().copied().filter(|&d| d != Derive::Default).collect();
+        let asked = |slot| if has_default(&def.kind, slot) { &declared[..] } else { derives };
+        let found = roots.iter().find_map(|&(t, ty, slot)| Some((t, ty, slot, unmet_trait(&under, ty, asked(slot))?)));
         let Some((t, ty, slot, b)) = found else { return };
         let span = cx.ast.ty(t).span;
         let (owner, part) = (self.a.shown_name(id), part_name(&self.a.def(id).kind, slot));
@@ -229,6 +232,14 @@ fn list_known(paths: &[Path]) -> bool {
 /// of the type `ty` does not meet.
 fn unmet_trait(under: &Bounds<'_>, ty: TyId, derives: &[Derive]) -> Option<Bound> {
     DERIVABLE.iter().filter(|row| derives.contains(&row.0)).map(|row| row.1).find(|&b| !under.satisfies(ty, b))
+}
+
+/// Whether `slot` is a field of a struct with a default of its own (§4.4).
+fn has_default(def: &DefKind, slot: Slot) -> bool {
+    let (DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }), Slot::Field(k)) = (def, slot) else {
+        return false;
+    };
+    fs[k].default.is_some()
 }
 
 /// What a message calls the field or the payload at `slot` of `def`.

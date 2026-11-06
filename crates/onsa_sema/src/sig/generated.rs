@@ -387,7 +387,7 @@ impl<'p> Sema<'p> {
     /// (§11.6, S-36).
     fn generated_field(&self, flow: DefId, name: &str, ty: TyId) -> FieldDef {
         let d = self.a.def(flow);
-        FieldDef { name: name.to_string(), ty, vis: d.vis, span: d.name_span }
+        FieldDef { name: name.to_string(), ty, vis: d.vis, span: d.name_span, default: None }
     }
 
     fn generated_ty(&mut self, flow: DefId, t: FlowTy) -> TyId {

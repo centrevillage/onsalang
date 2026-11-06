@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§6.4", "§6.6"]
+
+// W5-22 U3, S-918 (spec §4.4: "struct のパラメータを読む式は、`impl` の定数と同じく具体化ごとに一度"; "他のフィールドの既定値の式は、struct の型パラメータと
+// const パラメータを読める"). The default of a field whose type does not depend on a parameter reads the parameters of its struct, and it has one value for each instance.
+
+pub struct Sized[const N: U32]: Default {
+  d: [U8; N],
+  k: U32 = N,
+  m: U32 = N * 2 + 1,
+}
+
+pub struct Width[T: Int]: Default {
+  v: T,
+  bits: U32 = T.BITS,
+}
+
+pub struct Both[T: Int, const N: U32]: Default {
+  d: [T; N],
+  total: U32 = T.BITS * N,
+}
+
+fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+const FOUR: Sized[4] = Sized.default()
+
+test "a const parameter has the value of the instance" {
+  let a: Sized[2] = Sized.default()
+  let b: Sized[3] = Sized.default()
+  assert a.k == 2
+  assert a.m == 5
+  assert b.k == 3
+  assert b.m == 7
+}
+
+test "a type parameter has the value of the instance" {
+  let a: Width[U8]  = Width.default()
+  let b: Width[I32] = Width.default()
+  assert a.bits == 8
+  assert b.bits == 32
+}
+
+test "both parameters" {
+  let a: Both[U16, 3] = Both.default()
+  assert a.total == 48
+}
+
+test "through a generic function" {
+  let a: Sized[5] = zero_of()
+  assert a.k == 5
+}
+
+test "in the initializer of a const" {
+  assert FOUR.k == 4
+  assert FOUR.m == 9
+}

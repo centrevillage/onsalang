@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.2", "§6.6"]
+// golden = ["interface"]
+
+// W5-22 U3/t, S-697, S-920 (spec §18.2: `onsa interface` writes "struct のフィールドの既定値(§4.4)"; "並べる struct の `priv` のフィールドは `priv` の語を付けて出す"; S-920: until the evaluation is rebuilt (W9-03) a default that the
+// compile-time evaluation folds is shown as `y: F32 = 0.0`, and one that it does not fold (`y: U32 = 1 + 2`, a call) is shown without a value, as `y: U32`, the same as a `const` is). The input of the
+// listing: the defaults that fold (a literal, a negative number, a read of a constant, `F32.ZERO`, a struct literal), the ones that do not (an operation, a call), a `priv` field of each kind, a field
+// without a default, and a generic struct. The copy in golden/interface/ is the implementer's.
+
+pub const LIMIT: U32 = 16
+
+const SCALE: F32 = 2.0
+
+pub fn double(x: U32) -> U32 {
+  x * 2
+}
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub struct Folded {
+  a: F32 = 0.0,
+  b: I32 = -3,
+  c: U32 = LIMIT,
+  d: F32 = F32.ZERO,
+  e: Bool = true,
+  f: Point = Point { x: 1.0, y: 2.0 },
+  g: F32 = SCALE,
+  priv h: F32 = 1.5,
+  i: U32,
+}
+
+pub struct NotFolded {
+  a: U32 = 1 + 2,
+  b: U32 = double(2),
+  c: F32 = SCALE * 2.0,
+  priv d: U32 = 1 + 2,
+  e: U32 = 7,
+  f: U32,
+}
+
+pub struct Generic[T] {
+  t: T,
+  n: U32 = 4,
+  priv m: U32 = 1 + 1,
+}
+
+pub struct OfTheInstance[const N: U32] {
+  d: [U8; N],
+  n: U32 = N,
+  k: U32 = 4,
+}

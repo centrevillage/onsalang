@@ -257,7 +257,14 @@ impl<'p> Sema<'p> {
             }
         }
         match (&mut self.a.defs[id.0 as usize].kind, slot) {
-            (DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }), Slot::Field(k)) => fs[k].ty = error,
+            (DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }), Slot::Field(k)) => {
+                fs[k].ty = error;
+                // The type of its default is the field's (§4.4).
+                let default = fs[k].default;
+                if let Some(DefKind::Const(c)) = default.map(|d| &mut self.a.defs[d.0 as usize].kind) {
+                    c.ty = error;
+                }
+            }
             (DefKind::Enum(e), Slot::Variant(n, k)) => e.variants[n].fields[k] = error,
             (DefKind::Fn(f), Slot::Param(k)) => f.params[k].ty = error,
             (DefKind::Fn(f), Slot::Ret) => f.ret = error,

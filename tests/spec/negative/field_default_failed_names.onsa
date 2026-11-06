@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.4", "§18.1", "§12.4"]
+
+// W5-22 U3/i, S-755, S-697 (spec §6.6: "この判定(E0407 と、Shared を含む型の E0200)は宣言の型だけで決まり、値の検査より先に行う。位置は宣言の型で、値に失敗した名前があっても報告する";
+// §18.1 for the failed names: a name of a `use` with an error has no diagnostic where it is used). The value of a default that reads a failed name does not stop the judgement of the type, as a
+// `const`, and it is silent when the type is fine. The unit of each default holds what is inside it: an `@mem` of a `let` in a default is the E0200 of that default and not of its struct, and a default
+// read whole with an error of the lexer is one unit, with the next default checked. A struct with an error of the syntax stage has no default checked.
+
+use nowhere.KK                                                //~ E0302
+
+pub struct Failed {
+  a: Buf[F32] = KK,                                           //~ E0407
+  b: Str = KK,                                                //~ E0200
+  c: U32 = KK,
+}
+
+pub struct Param[T] {
+  t: T,
+  a: T = KK,                                                  //~ E0200
+  b: U32 = KK,
+}
+
+pub struct Mem {
+  a: U32 = {
+    @mem(bulk) let x = 1                                      //~ E0200
+    x
+  },
+  b: U32 = true,                                              //~ E0401
+}
+
+pub struct Lex {
+  y: Str = "\q",                                              //~ E0001
+  z: U32 = true,                                              //~ E0401
+}
+
+pub struct Cut {
+  a: U32 = true,
+  b:
+}                                                             //~ E0002

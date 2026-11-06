@@ -22,8 +22,8 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
-    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ImplDecl, ItemKind, Lit, Mode, Param,
-    ParamName, Path, TypeId, TypeKind, UnOp, Vis,
+    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ImplDecl, ItemId, ItemKind, Lit, Mode,
+    Param, ParamName, Path, TypeId, TypeKind, UnOp, Vis,
 };
 use onsa_syntax::foreign::{self, RowId};
 
@@ -296,12 +296,16 @@ impl<'p> Sema<'p> {
                 // `priv` alone (§15.1, S-35, S-672).
                 // It is seen as far as it reaches (S-665).
                 let inherited = self.a.def(id).vis;
+                // A struct with an error of the syntax stage has no default
+                // checked (§18.1): that error is the one of its fields.
+                let read = cx.ast.item(item_id).failed.is_none();
                 let mut fields = Vec::new();
                 for f in &s.fields {
                     let vis = if f.vis == Vis::Priv { Vis::Priv } else { inherited };
                     cx.reach = Some(vis);
                     let ty = self.lower_type(&cx, f.ty);
-                    fields.push(FieldDef { name: f.name.name.clone(), ty, vis, span: f.span });
+                    let default = f.default.filter(|_| read).map(|d| self.field_default(&cx, f, d, (ty, vis)));
+                    fields.push(FieldDef { name: f.name.name.clone(), ty, vis, span: f.span, default });
                 }
                 let fields = Fields::Named(fields);
                 if let DefKind::Struct(sd) = &mut self.a.defs[id.0 as usize].kind {
@@ -340,6 +344,28 @@ impl<'p> Sema<'p> {
             _ => {}
         }
         None
+    }
+
+    /// The def of the default `item` of the field `f` of the struct `cx.def`,
+    /// of the type and the visibility `(ty, vis)`: a constant of its own unit
+    /// (§4.4, §18.1). It is declared in no scope, so no path finds it, and its
+    /// type is the field's, lowered here. Both its spans are the default's:
+    /// what is reported of it stays in its unit.
+    fn field_default(
+        &mut self,
+        cx: &Cx<'p>,
+        f: &onsa_syntax::ast::Field,
+        item: ItemId,
+        (ty, vis): (TyId, Vis),
+    ) -> DefId {
+        let at = cx.ast.item(item);
+        let ItemKind::FieldDefault { value } = at.kind else {
+            onsa_diag::internal::bug(Some(at.span), "a default that is no default item")
+        };
+        let kind = DefKind::Const(ConstDef { ty, value: Some(value), int_value: None });
+        let (name, module, owner) = (f.name.name.clone(), cx.m, Some(cx.def));
+        let span = at.span;
+        self.add_def(Def { name, module, vis, span, name_span: span, kind, item: Some(item), owner, export: None })
     }
 
     /// The associated items of the type of an `impl`: of a user type by its

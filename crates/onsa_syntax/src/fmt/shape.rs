@@ -193,7 +193,7 @@ fn parts(cst: &Cst, n: NodeId) -> Vec<Part> {
             Elem::Token(t) => (t, t, false),
             Elem::Node(c) if cst.token_range(c).start <= open.index() => continue,
             Elem::Node(c) => match cst.significant_tokens(c) {
-                Some((first, last)) => (first, last, matches!(cst.kind(c), N::StructPatRest | N::StructLitRest)),
+                Some((first, last)) => (first, last, cst.kind(c).is_field_rest()),
                 None => continue,
             },
         };

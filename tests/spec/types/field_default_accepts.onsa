@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§6.4"]
+
+// W5-22 U3/t, S-697, S-918 (spec §4.4: "struct のフィールドの宣言には既定値を書ける(`y: F32 = 0.0`)。既定値の式は `const` の初期化式の規則(§6.6)に従い、
+// コンパイル時に一度だけ評価して焼き込む。読むモジュールは宣言のモジュールで、見えない定数も読める"; "型引数を持つ struct の他のフィールドには書ける"; §6.6: "初期化式から呼べるのは、
+// 効果行が空か `{Alloc}` だけの関数"). The default of a field is a `const` initializer, so every form of a `const` initializer is a default: a literal, a negative number, a read of a constant, an associated constant
+// (`F32.ZERO`, `U8.MAX`), an operator, a call of a `fn`, of an `rt fn` and of a function whose row is `{Alloc}`, a tuple, an array and the repeat of one, `Some` and `None`, a struct literal, a variant of an
+// enum, a comparison, and a type alias as the type of the field. A generic struct, and one with a const parameter, can have a default on a field whose type does not hold a type
+// parameter. A field without a default stays a field that every literal writes. A struct whose literal writes every field is fine whatever its defaults are. Nothing is reported; the values are
+// in derive/field_default_values.onsa, the errors in negative/field_default_*.onsa. One field in each line (the unit of a default is the field, §18.1).
+
+pub struct Plain {
+  n: I32,
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+type Gainish = F32
+
+const SCALE: F32 = 2.0
+const COUNT: U32 = 4
+
+fn double(x: U32) -> U32 {
+  x * 2
+}
+
+rt fn twice(x: U32) -> U32 {
+  x + x
+}
+
+fn with_alloc() -> U32 uses {Alloc} {
+  7
+}
+
+pub struct Forms {
+  lit: F32 = 0.5,
+  neg: I32 = -3,
+  big: U64 = 4294967296,
+  flag: Bool = true,
+  ch: Char = 'a',
+  from_const: U32 = COUNT,
+  assoc: F32 = F32.ZERO,
+  top: U8 = U8.MAX,
+  calc: U32 = COUNT * 2 + 1,
+  scaled: F32 = F32.PI * SCALE,
+  call: U32 = double(COUNT),
+  rt_call: U32 = twice(3),
+  alloc_call: U32 = with_alloc(),
+  pair: (U32, Bool) = (1, false),
+  taps: [F32; 3] = [0.0; 3],
+  list: [U8; 3] = [1, 2, 3],
+  some: Option[U32] = Some(5),
+  none: Option[U32] = None,
+  nested: Plain = Plain { n: 9 },
+  mode: Mode = Mode.On,
+  alias: Gainish = 0.25,
+  cmp: Bool = COUNT > 3,
+  conv: F32 = F32.round_from(COUNT),
+  unit: () = (),
+}
+
+pub struct W[T] {
+  t: T,
+  n: U32 = 0,
+  tag: (U8, Bool) = (1, true),
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32 = 0,
+}
+
+pub struct Held[T: Copy]: PartialEq {
+  value: T,
+  count: U32 = 1,
+}
+
+pub struct Wide: PartialEq + Default {
+  a: U32 = 1,
+  b: F32,
+  c: Bool = true,
+}
+
+// every field is written, whatever the defaults are
+pub fn all_written() -> Forms {
+  Forms {
+    lit: 1.0,
+    neg: 1,
+    big: 2,
+    flag: false,
+    ch: 'b',
+    from_const: 1,
+    assoc: 1.0,
+    top: 1,
+    calc: 1,
+    scaled: 1.0,
+    call: 1,
+    rt_call: 1,
+    alloc_call: 1,
+    pair: (2, true),
+    taps: [1.0, 2.0, 3.0],
+    list: [4, 5, 6],
+    some: None,
+    none: Some(1),
+    nested: Plain { n: 1 },
+    mode: Mode.Off,
+    alias: 1.0,
+    cmp: false,
+    conv: 1.0,
+    unit: (),
+  }
+}
+
+pub fn generic_written() -> W[U8] {
+  W { t: 1, n: 2, tag: (3, false) }
+}
+
+pub fn const_param_written() -> Ring[F32, 2] {
+  Ring { data: [0.0; 2], head: 1 }
+}
+
+pub fn held_written(x: Held[U32]) -> U32 {
+  let h = Held { value: 3, count: 4 }
+  if h == x { 1 } else { 0 }
+}
+
+pub fn wide_written() -> Wide {
+  Wide { a: 1, b: 2.0, c: false }
+}
+
+pub fn wide_default() -> Wide {
+  Wide.default()
+}

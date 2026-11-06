@@ -319,7 +319,8 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         let Some(module) = a.modules.source(&flat, def.module) else { continue };
         let ast = &module.parsed.ast;
         // The type and const parameters a body sees: of the function, or of
-        // the `impl` of an associated `const`; `Self` of an `impl`.
+        // the `impl` of an associated `const` or the struct of a default of a
+        // field (S-918); `Self` of an `impl`.
         let owner_generics = || def.owner.map_or(&[][..], |o| a.def(o).generics());
         let self_ty = a.self_ty_of(id);
         let (body, params, generics): (ExprId, &[Param], &[GenericDef]) = match &def.kind {

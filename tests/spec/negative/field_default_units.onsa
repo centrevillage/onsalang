@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4", "§6.4"]
+
+// W5-22 U3/t, S-697 (spec §18.1: "struct のフィールドの既定値も、フィールドごとに一つの単位である"; "一つの単位の中では、最初のエラーで検査を止める。単位どうしは独立に検査し、全ての単位のエラーを一度に報告する";
+// "誤りのある宣言も、名前まで読めれば名前解決に見せる。読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない"; §4.4; §6.4 for the `Default` that a struct lists). The default of a field is
+// a unit of its own, apart from the other fields, from the type of the field, and from the struct: two wrong defaults are two diagnostics (in one struct and in two), and the wrong type of a field
+// (`a: Missing`) is its own unit beside a wrong default. A wrong default silences only the places that read it: the derive of `Default` (`Der.default()`, a field of another derive, a `const`
+// initializer) says nothing about it. Every other use of the struct is checked as it is: a literal that writes every field is fine, and a mistake next to it is reported
+// (a wrong field in a literal, a wrong use of a field). The `...` that reads a wrong default is in struct_fill_units.onsa.
+
+pub struct TwoWrong {
+  a: U32 = true,                                              //~ E0401
+  b: U32 = "a",                                               //~ E0401
+  c: U32 = 1,
+}
+
+pub struct FirstOfTwo {
+  a: U32 = 1.5,                                               //~ E0401
+}
+
+pub struct SecondOfTwo {
+  b: Bool = 1,                                                //~ E0401
+}
+
+pub struct TypeAndDefault {
+  a: Missing,                                                 //~ E0302
+  b: U32 = true,                                              //~ E0401
+  c: U32 = 1,
+}
+
+pub struct TypeAndNameDefault {
+  a: Missing,                                                 //~ E0302
+  b: U32 = nowhere,                                           //~ E0302
+}
+
+pub struct Broken {
+  a: U32,
+  b: U32 = true,                                              //~ E0401
+}
+
+pub struct Der: Default {
+  a: U32,
+  b: U32 = true,                                              //~ E0401
+}
+
+pub struct Holds: Default {
+  d: Der,
+  n: U32,
+}
+
+// the literal that writes every field does not read the default
+pub fn full() -> U32 {
+  let s = Broken { a: 1, b: 2 }
+  s.a + s.b
+}
+
+// the other uses of the struct are checked as ever
+pub fn wrong_literal() -> Broken {
+  Broken { a: 1, b: true }                                    //~ E0401
+}
+
+pub fn wrong_use() -> U32 {
+  let s = Broken { a: 1, b: 2 }
+  s.a + true                                                  //~ E0401
+}
+
+pub fn missing_field() -> Broken {
+  Broken { a: 1 }                                             //~ E0410
+}
+
+pub fn unknown_field() -> U32 {
+  let s = Broken { a: 1, b: 2 }
+  s.c                                                         //~ E0413
+}
+
+// the derive that reads the wrong default is silent
+pub fn derived() -> Der {
+  Der.default()
+}
+
+pub fn derived_field() -> U32 {
+  let d: Der = Der.default()
+  d.a + d.b
+}
+
+pub fn derived_inside() -> Holds {
+  Holds.default()
+}
+
+pub fn derived_through_a_bound[T: Default]() -> T {
+  T.default()
+}
+
+pub fn derived_by_a_bound() -> Der {
+  derived_through_a_bound()
+}
+
+const FROM_DEFAULT: Der = Der.default()
+
+// and the derive is still checked in the places that are not the default
+pub fn derived_wrong() -> U32 {
+  let d: Der = Der.default()
+  d.a + true                                                  //~ E0401
+}

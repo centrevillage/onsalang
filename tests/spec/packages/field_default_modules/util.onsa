@@ -1,0 +1,79 @@
+// The module `util` of the case in main.onsa: the structs whose fields are `priv`, with defaults that read a `priv` constant of this module.
+
+priv const SECRET: U32 = 41
+
+priv const SCALE: F32 = 4.0
+
+priv rt fn secret_plus(n: U32) -> U32 {
+  SECRET + n
+}
+
+pub struct Hidden: Default {
+  priv gain: F32 = 0.5,
+  priv steps: U32 = SECRET + 1,
+  tag: U8,
+  ready: Bool = true,
+}
+
+impl Hidden {
+  pub fn gain(self) -> F32 {
+    self.gain
+  }
+
+  pub fn steps(self) -> U32 {
+    self.steps
+  }
+}
+
+// the `priv` field has no default: it takes the `Default` of its type
+pub struct Quiet: Default {
+  priv level: F32,
+  priv count: U32,
+  name_len: U32 = 3,
+}
+
+impl Quiet {
+  pub fn level(self) -> F32 {
+    self.level
+  }
+
+  pub fn count(self) -> U32 {
+    self.count
+  }
+}
+
+pub struct Wrap[T]: Default {
+  priv inner: T,
+  extra: U8 = 5,
+}
+
+impl[T: Copy] Wrap[T] {
+  pub fn inner(self) -> T {
+    self.inner
+  }
+}
+
+// a default that reads a `priv` function and a `priv` constant, and a struct of this module that has priv fields
+pub struct Reads: Default {
+  priv a: U32 = secret_plus(2),
+  b: F32 = SCALE * 2.0,
+  priv hidden: Hidden = Hidden { gain: 2.0, steps: 7, tag: 1, ready: false },
+}
+
+impl Reads {
+  pub fn a(self) -> U32 {
+    self.a
+  }
+
+  pub fn hidden_steps(self) -> U32 {
+    self.hidden.steps
+  }
+}
+
+pub fn local_default() -> U32 {
+  Hidden.default().steps
+}
+
+pub rt fn hidden_here() -> Hidden {
+  Hidden.default()
+}

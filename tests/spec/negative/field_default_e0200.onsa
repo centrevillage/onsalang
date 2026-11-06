@@ -1,0 +1,132 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.6", "§18.1"]
+
+// W5-22 U3/t, S-697 (spec §4.4: "Shared を含む型は E0200 である。型引数に頼る型のフィールドの既定値は E0200 で、型引数を持つ struct の他のフィールドには書ける"; §6.6: "この版では、Shared を含む型の
+// `const` は E0200 である(第 2 期)。宣言の型が型パラメータを含み、その型パラメータが `Copy` の境界(数の trait を含む)を持たなければ、Shared でありうるので同じく E0200 である"; "この判定は宣言の型だけで決まり").
+// E0200 of the default of a field, on the line of the default (one field in a line), in two kinds. A type that holds a Shared value (`Str`, `Bytes`, `Array`, and a tuple, an array, an `Option`,
+// a struct or an enum that has one, and an alias). A type that depends on a type parameter of the struct: `T`, `Option[T]`, `[T; 2]`, a length that reads the const parameter (`[F32; N]`), and also `T: Copy`
+// (the default of such a field is E0200 in this version too: "型引数に頼る型"). The other fields of a generic struct are fine (`n: U32 = 0`). The default of each field is a unit of its own
+// (§18.1). The order with the E0407 and with the value is in field_default_type_first.onsa.
+
+type Text = Str
+
+pub struct Named {
+  text: Str,
+}
+
+pub enum Label {
+  Named(Str),
+  Anonymous,
+}
+
+pub struct Shared {
+  s: Str = "a",                                               //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedBytes {
+  b: Bytes = Bytes.default(),                                 //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedArray {
+  a: Array[F32] = 1,                                          //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedTuple {
+  t: (Str, U32) = ("a", 1),                                   //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedOption {
+  o: Option[Str] = None,                                      //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedList {
+  l: [Str; 2] = ["a", "b"],                                   //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedStruct {
+  n: Named = Named { text: "a" },                             //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedEnum {
+  e: Label = Label.Anonymous,                                 //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedAlias {
+  t: Text = "a",                                              //~ E0200
+  fine: U32 = 0,
+}
+
+pub struct SharedAndNot {
+  a: Str = "a",                                               //~ E0200
+  b: Bytes = Bytes.default(),                                 //~ E0200
+  c: U32 = 0,
+}
+
+pub struct OfParam[T: Default] {
+  t: T = T.default(),                                         //~ E0200
+  n: U32 = 0,
+}
+
+pub struct OfParamBounded[T: Default + Copy] {
+  t: T = T.default(),                                         //~ E0200
+  n: U32 = 0,
+}
+
+pub struct OfParamOption[T] {
+  o: Option[T] = None,                                        //~ E0200
+  n: U32 = 0,
+}
+
+pub struct OfParamArray[T: Default] {
+  a: [T; 2] = [T.default(), T.default()],                     //~ E0200
+  n: U32 = 0,
+}
+
+pub struct OfParamTuple[T: Default] {
+  p: (U32, T) = (1, T.default()),                             //~ E0200
+  n: U32 = 0,
+}
+
+pub struct OfConstParam[const N: U32] {
+  a: [F32; N] = [0.0; 4],                                     //~ E0200
+  n: U32 = 0,
+}
+
+pub struct OfBothParams[T: Default, const N: U32] {
+  a: [T; N] = [T.default(); 4],                               //~ E0200
+  n: U32 = 0,
+}
+
+pub struct OfParamCopy[T: Copy + Default] {
+  x: T = T.default(),                                         //~ E0200
+  n: U32 = 0,
+}
+
+pub struct SharedOnAGeneric[T] {
+  t: T,
+  s: Str = "a",                                               //~ E0200
+  n: U32 = 0,
+}
+
+pub struct Derived: Default {
+  s: Str = "a",                                               //~ E0200
+  n: U32,
+}
+
+// the fields whose types do not depend on a type parameter are fine, in the same generic structs
+pub struct Fine[T, const N: U32] {
+  t: T,
+  a: [T; N],
+  gain: F32 = 1.0,
+  count: U32 = 4,
+  fixed: [F32; 2] = [0.0; 2],
+}

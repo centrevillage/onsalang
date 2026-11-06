@@ -40,7 +40,7 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Diagnostic, Span, Stage};
-use onsa_sema::def::{DefKind, Fields, GenericKind};
+use onsa_sema::def::{DefKind, DerivedFn, Fields, GenericKind};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy, TyId};
 use onsa_sema::{Analysis, DefId, ModId, Package};
 use onsa_syntax::ast::{ExprId, PatId};
@@ -360,6 +360,11 @@ impl<'a> Lowerer<'a> {
             }
             _ => {
                 parts.push(def.name.clone());
+                // A default has the name of its field, which a member of the
+                // type may have too (`Voice.count`, `fn count(self)`).
+                if def.owner.is_some_and(|o| matches!(self.a.def(o).kind, DefKind::Struct(_))) {
+                    parts.push(DerivedFn::Default.name().to_string());
+                }
                 parts.join(".")
             }
         }
@@ -555,8 +560,9 @@ impl<'a> Lowerer<'a> {
         id
     }
 
-    /// The Core constant of the constant `d` at the arguments of its `impl`
-    /// (one for each instance, §6.6, S-304). A `ConstValue` depends on no
+    /// The Core constant of the constant `d` at the arguments of its `impl`,
+    /// or of the struct of a default (one for each instance, §6.6, S-304,
+    /// S-918). A `ConstValue` depends on no
     /// parameter, and takes the type of the instance here. It stops: the
     /// constants an initializer reads are a graph of defs with no cycle
     /// (E0312), and a recursion goes down it, whatever the arguments.

@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§4.4", "§18.1"]
+// fixes = 0
+
+// W5-22 U3/t, S-697 (spec §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである(宣言に既定値を書いたフィールドはその値で、型の `Default` を要らない。他のフィールドは型の `default()`)";
+// "各フィールド(列挙子の中身)の型が生成する trait を満たさなければ E0416"; §6.3: `Char`, `Option`, a struct that does not list `Default` have no `Default`, and a float has no `Eq`, `Ord` or `Hash`). A default
+// takes away the need of the `Default` of the type of that field, and only that: the field next to it that has no default is still E0416 if its type has no `Default` (on the line of the type of
+// that field), and the traits other than `Default` that the list generates are still wanted of the type of a field that has a default (`Eq`, `Ord`, `Hash` of a float with a default, `Eq` of a struct that does not list it). One error in each declaration (§18.1). The structs at the end are fine: the field with a default, and the traits that the types meet.
+
+pub struct Plain {
+  n: U32,
+}
+
+pub enum Mode: PartialEq {
+  Off,
+  On,
+}
+
+pub struct NextToAPlain: Default {
+  a: Plain = Plain { n: 1 },
+  b: Plain,                                         //~ E0416
+}
+
+pub struct AfterADefault: Default {
+  a: U32 = 1,
+  c: Char,                                          //~ E0416
+  d: Char = 'x',
+}
+
+pub struct BeforeADefault: Default {
+  o: Option[U32],                                   //~ E0416
+  p: Option[U32] = Some(1),
+}
+
+pub struct EnumField: Default {
+  a: Mode = Mode.On,
+  b: Mode,                                          //~ E0416
+}
+
+pub struct TupleWithChar: Default {
+  a: (U32, Char) = (1, 'a'),
+  b: (U32, Char),                                   //~ E0416
+}
+
+pub struct EqOfADefault: Eq {
+  a: F32 = 0.0,                                     //~ E0416
+}
+
+pub struct OrdOfADefault: Ord {
+  a: F32 = 1.0,                                     //~ E0416
+}
+
+pub struct HashOfADefault: Hash {
+  a: F64 = 1.0,                                     //~ E0416
+}
+
+pub struct EqAndDefault: Eq + Default {
+  a: F32 = 0.0,                                     //~ E0416
+}
+
+pub struct EqOfAPlain: Eq + Default {
+  a: Plain = Plain { n: 1 },                        //~ E0416
+}
+
+// fine
+pub struct DefaultOfChar: Default {
+  c: Char = 'a',
+}
+
+pub struct DefaultOfAnOption: Default + PartialEq {
+  o: Option[U32] = None,
+  p: Option[U32] = Some(2),
+}
+
+pub struct DefaultOfEverything: Default {
+  a: Plain = Plain { n: 1 },
+  b: Mode = Mode.Off,
+  c: (U32, Char) = (1, 'a'),
+}
+
+pub struct FloatTraitsItMeets: PartialEq + PartialOrd + Default {
+  a: F32 = 0.5,
+}
+
+pub struct EqWithATypeThatHasIt: Eq + Hash + Default {
+  a: U32 = 2,
+  b: Bool,
+  c: Char = 'z',
+}

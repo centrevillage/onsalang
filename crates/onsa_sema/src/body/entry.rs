@@ -91,18 +91,27 @@ impl<'a> Checker<'a> {
     /// The E0407 of a `const` whose declared type `ty` is never placed
     /// statically, or the E0200 of one placed from the second phase (a Shared
     /// value, a type parameter not `Copy`; §6.6, S-610, R-85, W4-05 table 5),
-    /// at the type written (S-755).
+    /// at the type written (S-755). Of the default of a field, also the E0200
+    /// of a type with a parameter of the struct (§4.4), all at the default:
+    /// the type is in the unit of the struct, and each default has its own
+    /// (§18.1).
     fn const_type(&mut self, ty: TyId) -> Option<Diagnostic> {
         let params = 0..self.generics.len() as u32;
         let params: Vec<TyId> = params.map(|i| self.a.types.intern(Ty::Param(i))).collect();
         let copy: Vec<bool> = params.into_iter().map(|p| self.satisfies(p, Bound::Copy)).collect();
         let placed = crate::kind::placed(self.a, ty, &copy)?;
-        let item = self.a.def(self.def).item?;
-        let onsa_syntax::ast::ItemKind::Const(c) = crate::sig::item_kind(&self.ast.item(item).kind) else {
-            return None;
+        let (span, field) = match crate::sig::item_kind(&self.ast.item(self.a.def(self.def).item?).kind) {
+            onsa_syntax::ast::ItemKind::Const(c) => (self.ast.ty(c.ty).span, None),
+            onsa_syntax::ast::ItemKind::FieldDefault { value } => {
+                (self.expr(*value).span, Some(self.declared_field_type()))
+            }
+            _ => return None,
         };
-        let (span, shown) = (self.ast.ty(c.ty).span, self.display(ty));
+        let shown = self.display(ty);
         let d = match placed {
+            Placed::Static if field.is_some() && self.a.types.mentions_param(ty) => {
+                Feature::ParamFieldDefaults.diagnostic(Stage::Types, span, &[&shown])
+            }
             Placed::Static => return None,
             Placed::Later => Feature::SharedConsts.diagnostic(Stage::Types, span, &[&shown]),
             Placed::Never => {
@@ -112,7 +121,24 @@ impl<'a> Checker<'a> {
                 Diagnostic::new(Stage::Types, Code::E0407, span, msg)
             }
         };
-        Some(d.with_found(self.src(span)))
+        let d = d.with_found(self.src(span));
+        Some(match field {
+            Some(at) => d.with_note(at, "the default of a field is a `const` of the type of the field (§4.4)"),
+            None => d,
+        })
+    }
+
+    /// The place of the type written of the field whose default is the def
+    /// being checked.
+    fn declared_field_type(&self) -> Span {
+        let def = self.a.def(self.def);
+        let of_struct = def.owner.and_then(|o| self.a.def(o).item).map(|i| &self.ast.item(i).kind);
+        let fields = match of_struct.map(crate::sig::item_kind) {
+            Some(onsa_syntax::ast::ItemKind::Struct(s)) => &s.fields[..],
+            _ => &[],
+        };
+        let field = fields.iter().find(|f| f.default == def.item);
+        field.map_or(def.span, |f| self.ast.ty(f.ty).span)
     }
 
     /// E0406 at the first expression whose type still has a variable that is not a

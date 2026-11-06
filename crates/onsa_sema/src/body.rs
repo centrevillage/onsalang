@@ -430,7 +430,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
 }
 
 /// The generic parameters a body sees: a function's own, those of the owner
-/// of an associated `const`; a test and a flow have none.
+/// of an associated `const` or of a default of a field; a test and a flow have
+/// none.
 pub(crate) fn generics_of(a: &Analysis, def: DefId) -> Vec<GenericDef> {
     let d = a.def(def);
     match &d.kind {
