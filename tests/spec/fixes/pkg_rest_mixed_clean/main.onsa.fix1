@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "main.onsa:20:13"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-903 (§7, §15.1, §18.1): the candidate of a `..` that leaves a field this module can see (`a`) and two it cannot
+// (`b` and `c` of `Mixed`, `priv` in `shapes`) puts the last `_` in place of the `..` (`Mixed { _ }`), and the file is clean
+// after it. The main position is the `..`. This file has this one error. The form that writes a field before the `..` is
+// in ../pkg_rest_hidden_clean/.
+
+use shapes.Mixed
+
+pub fn first(m: Mixed) -> F32 {
+  match m {
+    Mixed { _ } => 0.0,                            //~ E0020
+  }
+}

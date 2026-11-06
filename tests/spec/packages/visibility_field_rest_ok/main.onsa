@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§15.1"]
+
+// S-903 (§7, §15.1): a struct that has a field this module cannot see (`priv`, in `shapes`) is taken apart here by a
+// pattern that ends with a `_`: "見えないフィールドが残ってもよく（§15.1）、フィールドを一つも書かない `Item { _ }` も
+// 書ける". The fields that are written are the visible ones. The forms are the `let`, the arms of a `match`, a generic
+// struct, a pattern nested in another and in `Some` and in a tuple. The same patterns without the `_` are E0303
+// (visibility_field_rest_hidden/), the `..` is E0020 (visibility_field_rest/). The values are run.
+
+use shapes.{Ring, Mixed, Wrapped, Frame, new_ring, new_mixed, new_wrapped, new_wrapped_u32, new_frame, head_of}
+
+fn data_of(r: Ring) -> F32 {
+  let Ring { data: d, _ } = r
+  d[0] + d[3]
+}
+
+fn nothing_is_written(r: Ring) -> U32 {
+  let Ring { _ } = r
+  1
+}
+
+fn the_visible_field_of_several(m: Mixed) -> F32 {
+  let Mixed { a: x, _ } = m
+  x
+}
+
+fn a_generic_struct_of_a_float(w: Wrapped[F32]) -> F32 {
+  let Wrapped { value: v, _ } = w
+  v
+}
+
+fn a_generic_struct_of_an_integer(w: Wrapped[U32]) -> U32 {
+  let Wrapped { value: v, _ } = w
+  v + 1
+}
+
+fn nested_in_a_visible_field(f: Frame) -> F32 {
+  let Frame { ring: Ring { data: d, _ }, _ } = f
+  d[1]
+}
+
+fn nested_and_a_field_beside(f: Frame) -> F32 {
+  let Frame { ring: Ring { data: d, _ }, id: i } = f
+  d[2] + F32.round_from(i)
+}
+
+fn nested_with_nothing_written(f: Frame) -> U32 {
+  let Frame { ring: Ring { _ }, id: i } = f
+  i
+}
+
+fn in_some(o: Option[Ring]) -> F32 {
+  var r = 0.0
+  match o {
+    Some(Ring { data: d, _ }) => {
+      r = d[1]
+    },
+    None => {
+      r = -1.0
+    },
+  }
+  r
+}
+
+fn in_a_tuple(t: (Ring, U32)) -> F32 {
+  let (Ring { data: d, _ }, n) = t
+  d[0] + F32.round_from(n)
+}
+
+fn in_a_match_arm(r: Ring) -> F32 {
+  var out = 0.0
+  match r {
+    Ring { data: d, _ } => {
+      out = d[2]
+    },
+  }
+  out
+}
+
+fn in_a_match_arm_with_a_literal(w: Wrapped[U32]) -> U32 {
+  var out: U32 = 0
+  match w {
+    Wrapped { value: 41, _ } => {
+      out = 1
+    },
+    Wrapped { _ } => {
+      out = 2
+    },
+  }
+  out
+}
+
+test "a pattern with a last _ takes apart a struct with hidden fields" {
+  assert data_of(new_ring()) == 5.0
+  assert nothing_is_written(new_ring()) == 1
+  assert the_visible_field_of_several(new_mixed()) == 1.5
+  assert in_a_match_arm(new_ring()) == 3.0
+}
+
+test "a generic struct with a hidden field" {
+  assert a_generic_struct_of_a_float(new_wrapped(0.5)) == 0.5
+  assert a_generic_struct_of_an_integer(new_wrapped_u32(41)) == 42
+  assert in_a_match_arm_with_a_literal(new_wrapped_u32(41)) == 1
+  assert in_a_match_arm_with_a_literal(new_wrapped_u32(40)) == 2
+}
+
+test "nested, in Some and in a tuple" {
+  assert nested_in_a_visible_field(new_frame()) == 2.0
+  assert nested_and_a_field_beside(new_frame()) == 12.0
+  assert nested_with_nothing_written(new_frame()) == 9
+  assert in_some(Some(new_ring())) == 2.0
+  assert in_some(None) == -1.0
+  assert in_a_tuple((new_ring(), 4)) == 5.0
+}
+
+test "the module of the struct reads the hidden field with the same pattern" {
+  assert head_of(new_ring()) == 2
+}

@@ -11,7 +11,7 @@
 //!   form; a `,` at the head of a line, which moves to the end of the element
 //!   before it (the comment at the end of that line goes after it, §3.4).
 //! - **Added `,`:** after the last element of a list in the block form. The
-//!   `..` of a struct pattern is no element and gets none (S-500).
+//!   rest of a struct pattern is no element and gets none (S-500).
 //! - **Respelled tokens:** the numbers (S-62, S-126; not the index of a
 //!   tuple, S-508).
 //! - **Forms:** the form of each list and enclosure (`shape::forms`), by its

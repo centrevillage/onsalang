@@ -1444,3 +1444,24 @@ target = "tests/spec/c_runtime/c_generic_param_path_closed.onsa"
 reasons = ["S-257"]
 until = "W8-03"
 note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型も同じ）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/struct_rest_const.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "定数のパターンが E0302（W5-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/struct_rest_unreachable.onsa"
+reasons = ["S-187", "S-903"]
+until = "W5-09"
+note = "到達しない腕の E0503 が未実装（W5-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/struct_pattern_rest_match.onsa"
+reasons = ["S-110", "S-903"]
+until = "W7-06"
+note = "flow の `match~` が E0200（W7-06）"

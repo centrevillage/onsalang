@@ -802,13 +802,34 @@ impl OpGroup {
     }
 }
 
-/// The rest `..` of a struct pattern (§7, S-366): its span, and what a
-/// candidate removes when no field remains: the `,` before it and the
-/// blanks between them, or the `..` alone when a comment is between (S-251).
+/// The rest of a struct pattern, last in its list (§7): its mark, its span,
+/// and what a candidate removes when no field remains: the `,` before it and
+/// the blanks between them, or the mark alone when a comment is between
+/// (S-251).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StructRest {
+    pub mark: RestMark,
     pub span: Span,
     pub removal: Span,
+}
+
+/// The mark of the rest of a struct pattern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RestMark {
+    /// `_`: ignores the fields not written (S-903).
+    Underscore,
+    /// `..`: read, and an E0020 where the fields are counted (S-366).
+    Dots,
+}
+
+impl RestMark {
+    /// The mark as it is written.
+    pub fn text(self) -> &'static str {
+        match self {
+            RestMark::Underscore => "_",
+            RestMark::Dots => "..",
+        }
+    }
 }
 
 /// The side of an operand of a binary operator.

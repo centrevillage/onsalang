@@ -1,0 +1,203 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7"]
+
+// S-903 (§7): the last `_` of a struct pattern in the places where a pattern is nested or sits in another form:
+// as a field of a struct pattern (the inner and the outer pattern each end with a `_`), in the payload of `Some`
+// and of an enum variant, in a tuple pattern, in a generic struct, in a method with `self`, in a closure and in the
+// element of a `for`. The patterns are run in the interpreter; each `match` is a statement that assigns a `var`
+// (struct_rest_forms.onsa says why).
+
+use std.array
+
+pub struct Inner {
+  a: I32,
+  b: I32,
+  c: I32,
+}
+
+pub struct Outer {
+  inner: Inner,
+  tag: I32,
+  extra: I32,
+}
+
+pub struct Pair[T] {
+  first: T,
+  second: T,
+  third: T,
+}
+
+pub enum Shape {
+  Dot(Inner),
+  Empty,
+}
+
+type Alias = Inner
+
+impl Inner {
+  pub fn a_plus_c(self) -> I32 {
+    let Inner { a: x, c: z, _ } = self
+    x + z
+  }
+
+  pub fn b_of_self(self) -> I32 {
+    let Self { b: y, _ } = self
+    y
+  }
+}
+
+pub fn both_levels_end_with_a_rest(o: Outer) -> I32 {
+  let Outer { inner: Inner { a: x, _ }, _ } = o
+  x
+}
+
+pub fn the_inner_rest_and_a_field_of_the_outer(o: Outer) -> I32 {
+  let Outer { inner: Inner { b: y, _ }, tag: t, _ } = o
+  y * 10 + t
+}
+
+pub fn the_outer_rest_and_a_whole_inner(o: Outer) -> I32 {
+  let Outer { inner: Inner { a: x, b: y, c: z }, _ } = o
+  x + y + z
+}
+
+pub fn an_inner_that_writes_nothing(o: Outer) -> I32 {
+  let Outer { inner: Inner { _ }, extra: e, _ } = o
+  e
+}
+
+pub fn in_some(o: Option[Inner]) -> I32 {
+  var r = 0
+  match o {
+    Some(Inner { a: x, _ }) => {
+      r = x
+    },
+    None => {
+      r = -1
+    },
+  }
+  r
+}
+
+pub fn in_a_variant(s: Shape) -> I32 {
+  var r = 0
+  match s {
+    Shape.Dot(Inner { b: y, _ }) => {
+      r = y
+    },
+    Shape.Empty => {
+      r = -1
+    },
+  }
+  r
+}
+
+pub fn in_a_tuple(t: (Inner, I32)) -> I32 {
+  let (Inner { c: z, _ }, n) = t
+  z + n
+}
+
+pub fn two_in_a_tuple(t: (Inner, Inner)) -> I32 {
+  let (Inner { a: x, _ }, Inner { b: y, _ }) = t
+  x * 10 + y
+}
+
+pub fn in_a_tuple_in_an_arm(t: (Inner, Option[Inner])) -> I32 {
+  var r = 0
+  match t {
+    (Inner { a: x, _ }, Some(Inner { b: y, _ })) => {
+      r = x * 10 + y
+    },
+    (Inner { c: z, _ }, None) => {
+      r = z
+    },
+  }
+  r
+}
+
+pub fn int_pair(p: Pair[I32]) -> I32 {
+  let Pair { second: s, _ } = p
+  s
+}
+
+pub fn float_pair(p: Pair[F32]) -> F32 {
+  let Pair { third: t, first: f, _ } = p
+  t + f
+}
+
+pub fn pair_of_structs(p: Pair[Inner]) -> I32 {
+  let Pair { second: Inner { b: y, _ }, _ } = p
+  y
+}
+
+pub fn through_a_method(i: Inner) -> I32 {
+  i.a_plus_c()
+}
+
+pub fn in_a_closure(items: [Inner; 3]) -> [I32; 3] {
+  array.from_fn(fn(i) {
+    let Inner { b: y, _ } = items[i]
+    y * 10
+  })
+}
+
+pub fn through_a_type_alias(i: Alias) -> I32 {
+  let Alias { c: z, _ } = i
+  z
+}
+
+pub fn in_a_for(items: [Inner; 3]) -> I32 {
+  var sum: I32 = 0
+  for it in items {
+    let Inner { a: x, _ } = it
+    sum = sum + x
+  }
+  sum
+}
+
+fn inner(a: I32, b: I32, c: I32) -> Inner {
+  Inner { a: a, b: b, c: c }
+}
+
+fn outer() -> Outer {
+  Outer { inner: inner(1, 2, 3), tag: 4, extra: 5 }
+}
+
+test "an inner and an outer rest" {
+  assert both_levels_end_with_a_rest(outer()) == 1
+  assert the_inner_rest_and_a_field_of_the_outer(outer()) == 24
+  assert the_outer_rest_and_a_whole_inner(outer()) == 6
+  assert an_inner_that_writes_nothing(outer()) == 5
+}
+
+test "a rest in the payload of Some and of a variant" {
+  assert in_some(Some(inner(7, 8, 9))) == 7
+  assert in_some(None) == -1
+  assert in_a_variant(Shape.Dot(inner(7, 8, 9))) == 8
+  assert in_a_variant(Shape.Empty) == -1
+}
+
+test "a rest inside a tuple pattern" {
+  assert in_a_tuple((inner(7, 8, 9), 100)) == 109
+  assert two_in_a_tuple((inner(1, 2, 3), inner(4, 5, 6))) == 15
+  assert in_a_tuple_in_an_arm((inner(1, 2, 3), Some(inner(4, 5, 6)))) == 15
+  assert in_a_tuple_in_an_arm((inner(1, 2, 3), None)) == 3
+}
+
+test "a rest in a generic struct" {
+  assert int_pair(Pair { first: 1, second: 2, third: 3 }) == 2
+  assert float_pair(Pair { first: 0.5, second: 2.0, third: 4.0 }) == 4.5
+  assert pair_of_structs(Pair { first: inner(1, 1, 1), second: inner(1, 6, 1), third: inner(1, 1, 1) }) == 6
+}
+
+test "a rest in a method, a closure and a for" {
+  assert through_a_method(inner(7, 8, 9)) == 16
+  assert inner(7, 8, 9).b_of_self() == 8
+  assert through_a_type_alias(inner(7, 8, 9)) == 9
+  let ys = in_a_closure([inner(1, 2, 3), inner(4, 5, 6), inner(7, 8, 9)])
+  assert ys[0] == 20
+  assert ys[2] == 80
+  assert in_a_for([inner(1, 0, 0), inner(2, 0, 0), inner(3, 0, 0)]) == 6
+}

@@ -1,0 +1,46 @@
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32,
+}
+
+pub struct Mixed {
+  a: F32,
+  priv b: F32,
+  priv c: F32,
+}
+
+pub struct Wrapped[T] {
+  value: T,
+  priv count: U32,
+}
+
+pub struct Frame {
+  ring: Ring,
+  id: U32,
+}
+
+pub fn new_ring() -> Ring {
+  Ring { data: [1.0, 2.0, 3.0, 4.0], head: 2 }
+}
+
+pub fn new_mixed() -> Mixed {
+  Mixed { a: 1.5, b: 2.5, c: 3.5 }
+}
+
+pub fn new_wrapped(v: F32) -> Wrapped[F32] {
+  Wrapped { value: v, count: 7 }
+}
+
+pub fn new_wrapped_u32(v: U32) -> Wrapped[U32] {
+  Wrapped { value: v, count: 8 }
+}
+
+pub fn new_frame() -> Frame {
+  Frame { ring: new_ring(), id: 9 }
+}
+
+// In the module that declares the struct every field is visible, and the last `_` leaves out any of them.
+pub fn head_of(r: Ring) -> U32 {
+  let Ring { head: h, _ } = r
+  h
+}

@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§11.2"]
+
+// S-903 (§7) in the body of a flow (§11.2): the last `_` of a struct pattern in the destructuring `let` of a flow, whose
+// value is a struct that a delay (`prev~`, with its `init`) gives or that the body makes. A field that `_` leaves out
+// is not read. The `match~` is in struct_pattern_rest_match.onsa (it waits for W7-06). The values are worked out by hand.
+
+pub struct Pair: Default {
+  l: F32,
+  r: F32,
+  k: U32,
+}
+
+// The delay gives the struct of the sample before (the default at the first sample), and only `l` is read.
+pub flow left_of_the_last(x: F32 at sample) -> F32 at sample {
+  let Pair { l: a, _ } = prev~(Pair { l: x, r: x * 2.0, k: 1 }, Pair { l: 0.0, r: 0.0, k: 0 })
+  a + 1.0
+}
+
+// The struct is made in the body, and two fields are read in another order.
+pub flow two_fields(x: F32 at sample) -> F32 at sample {
+  let Pair { k: n, l: a, _ } = Pair { l: x, r: 100.0, k: 3 }
+  a * F32.round_from(n)
+}
+
+test "a destructuring let with a last _ in a flow" {
+  // prev~ gives l = 0 1 2 at the samples of 1 2 3: out = 1 2 3.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o            = left_of_the_last.render(left_of_the_last.Config {}, left_of_the_last.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+}
+
+test "the fields of a struct made in the body, in another order" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o            = two_fields.render(two_fields.Config {}, two_fields.Params {}, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}

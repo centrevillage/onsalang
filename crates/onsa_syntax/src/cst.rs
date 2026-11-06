@@ -296,8 +296,8 @@ pub enum NodeKind {
     StructPat,
     /// `name : Pat`
     StructPatField,
-    /// `..`: the rest of a struct pattern (§7: E0020 where the fields are
-    /// counted, S-109, S-366)
+    /// `_`, or `..`: the rest of a struct pattern (§7, S-903; the `..` is an
+    /// E0020 where the fields are counted, S-109, S-366)
     StructPatRest,
     /// `Pat | Pat ...`
     OrPat,

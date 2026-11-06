@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "23:32"
+// code = "E0410"
+// candidate = 1
+// clean = true
+
+// S-903 (§7): the one candidate of the E0410 of a last `_` that leaves no field out takes the `_` off with the `,` before it, and the file
+// is clean after it (`clean`: the pattern is a pattern that names every field, and nothing else is reported). The main
+// position is taken to be the `_` (the position of this error is not in the spec; the line is what the marker
+// promises). This file has this one error; the forms are in e0410_pattern_rest_nothing_left.onsa.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn in_a_let(it: Item) -> I32 {
+  let Item { x: a, y: b, z: c, _ } = it             //~ E0410
+  a + b + c
+}

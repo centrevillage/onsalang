@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "main.onsa:20:21"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-903 (§7, §15.1, §18.1): the candidate of the `..` of a struct pattern that leaves a field this module cannot see
+// (`head` of `Ring`, `priv` in `shapes`) puts the last `_` in place of the `..`, and the file is clean after it
+// (`clean`: the pattern is not E0303 any more, and nothing else is reported). The main position is the `..`.
+// This file has this one error. The form that leaves a visible and a hidden field is in ../pkg_rest_mixed_clean/.
+
+use shapes.Ring
+
+pub fn first(r: Ring) -> F32 {
+  match r {
+    Ring { data: d, .. } => d[0],                   //~ E0020
+  }
+}

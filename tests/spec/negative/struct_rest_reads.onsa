@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§5.4"]
+
+// S-903 (§7, §5.4), the other side of values/struct_rest_reads.onsa: the last `_` of a struct pattern leaves a field out
+// and does not read it, but the fields that are written are read. So a field that is bound or compared with a literal is
+// read, and after `w.h.n = 5` that read of `hh` is E0704 when the written field is the changed one (`Holder { n: nn, _ }`,
+// `Holder { n: 1, _ }`), the same as with `n: nn` and the others written `_`. A `move` takes the written field and drops
+// the rest at once, so the value is not usable after it, whichever fields `_` leaves out ("取り出したフィールド以外は
+// その場で破棄され、以後 `s` は使えない"). One error per function (P-01); the marker is on the use, and no column is written.
+
+pub struct Holder {
+  buf: Buf[F32],
+  m: U32,
+  n: U32,
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+pub fn the_written_field_is_the_changed_one(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, _ } => {
+      w.h.n = 5
+      let Holder { n: nn, _ } = hh //~ E0704
+      nn
+    },
+  }
+}
+
+pub fn the_changed_field_is_compared_with_a_literal(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, _ } => {
+      w.h.n = 5
+      match hh { Holder { n: 1, _ } => 1, _ => 0 } //~ E0704
+    },
+  }
+}
+
+pub fn a_derived_binding_reads_the_changed_field(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, _ } => {
+      let g = hh
+      w.h.n = 5
+      let Holder { n: nn, _ } = g //~ E0704
+      nn
+    },
+  }
+}
+
+pub fn the_written_field_is_the_buffer_that_was_filled(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, _ } => {
+      w.h.buf.fill!(0.0)
+      let Holder { buf: b, _ } = hh //~ E0704
+      b.len()
+    },
+  }
+}
+
+pub fn the_value_after_a_move_that_leaves_out_a_copy_field(move h: Holder) -> U32 uses {Alloc} {
+  let Holder { buf: b, _ } = move h
+  b.len() + h.m //~ E0704
+}
+
+pub fn the_value_after_a_move_match(move w: Wrap) -> U32 uses {Alloc} {
+  var r: U32 = 0
+  match move w {
+    Wrap { h: Holder { buf: b, _ }, _ } => {
+      r = b.len()
+    },
+  }
+  r + w.k //~ E0704
+}
+
+pub fn the_value_after_a_move_that_writes_nothing(move h: Holder) -> U32 uses {Alloc} {
+  let Holder { _ } = move h
+  h.n //~ E0704
+}
+
+// The right forms: a field that `_` leaves out is not read, and a borrowed value is not consumed.
+
+pub fn the_field_left_out_is_the_changed_one(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, _ } => {
+      w.h.n = 5
+      let Holder { m: mm, _ } = hh
+      r = mm
+    },
+  }
+  r
+}
+
+pub fn a_pattern_that_writes_nothing_reads_nothing(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, _ } => {
+      w.h.n = 5
+      let Holder { _ } = hh
+      1
+    },
+  }
+}

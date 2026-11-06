@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7"]
+
+// S-903 (§7), with a constant: the last `_` of a struct pattern next to a field that is compared with a constant
+// (`LIMIT`, `Item.CAP`) and with a literal. A constant is compared with `==` (§7). The typing of a constant in
+// a pattern waits for W5-09 (control/kind_pattern_names_constants.onsa is on the list for the same reason), so
+// the forms with a constant are in this file and not in struct_rest_forms.onsa, whose forms hold with S-903 alone.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+impl Item {
+  pub const CAP: I32 = 9
+}
+
+const LIMIT: I32 = 5
+
+pub fn a_constant_next_to_the_rest(it: Item) -> I32 {
+  var r = 0
+  match it {
+    Item { x: LIMIT, _ } => {
+      r = 1
+    },
+    Item { y: Item.CAP, z: c, _ } => {
+      r = c
+    },
+    Item { _ } => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn a_constant_and_a_literal_and_a_binding(it: Item) -> I32 {
+  var r = 0
+  match it {
+    Item { z: LIMIT, x: 0, y: b, _ } => {
+      r = b
+    },
+    Item { _ } => {
+      r = -1
+    },
+  }
+  r
+}
+
+test "a field compared with a constant is read, the others are not" {
+  assert a_constant_next_to_the_rest(Item { x: 5, y: 0, z: 0 }) == 1
+  assert a_constant_next_to_the_rest(Item { x: 4, y: 9, z: 6 }) == 6
+  assert a_constant_next_to_the_rest(Item { x: 4, y: 8, z: 6 }) == 0
+  assert a_constant_and_a_literal_and_a_binding(Item { x: 0, y: 3, z: 5 }) == 3
+  assert a_constant_and_a_literal_and_a_binding(Item { x: 1, y: 3, z: 5 }) == -1
+}

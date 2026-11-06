@@ -158,6 +158,8 @@ impl<'a> Lower<'a> {
     /// only blanks are between them ([`StructRest`]).
     pub(super) fn struct_rest(&self, n: NodeId, r: NodeId) -> StructRest {
         let span = self.span(r);
+        let dots = self.cst.child_tokens(r).any(|t| self.cst.token(t).kind == TokenKind::DotDot);
+        let mark = if dots { RestMark::Dots } else { RestMark::Underscore };
         let before = self.cst.children(n).iter().take_while(|&&e| e != Elem::Node(r));
         let mut removal = span;
         for e in before.collect::<Vec<_>>().into_iter().rev() {
@@ -172,7 +174,7 @@ impl<'a> Lower<'a> {
                 _ => break,
             }
         }
-        StructRest { span, removal }
+        StructRest { mark, span, removal }
     }
 
     pub(super) fn of_kind(&self, n: NodeId, kind: NodeKind) -> Vec<NodeId> {

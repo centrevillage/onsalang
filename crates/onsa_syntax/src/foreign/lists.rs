@@ -121,7 +121,8 @@ fn sign_comma(a: &After) -> Option<Fix> {
 /// in a list of types, a `[` holds a `;` (S-419); not in the repetition
 /// of an array; in the arms, not before an opener after a gap when no `=>`
 /// follows (the gap taken out is then the one candidate, when it reads,
-/// §2.5: `0 => t.0 (x), _ => 1` has none).
+/// §2.5: `0 => t.0 (x), _ => 1` has none); not after the rest of a struct
+/// pattern, which is last (§7).
 fn comma_goes(a: &After) -> bool {
     let c = a.c;
     let declaration = declares_a_function(a.kind, c.kind(c.sig_after(c.at)));
@@ -131,7 +132,8 @@ fn comma_goes(a: &After) -> bool {
             && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
     let gap = c.detached.is_some_and(|d| d.at == c.at);
     let comma = !(a.arms && gap && !arm_ahead(c.tokens, c.at));
-    a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma
+    let after_rest = c.closed.iter().any(|n| n.0 == NodeKind::StructPatRest);
+    a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma && !after_rest
 }
 
 fn comma_fix(a: &After) -> Option<Fix> {

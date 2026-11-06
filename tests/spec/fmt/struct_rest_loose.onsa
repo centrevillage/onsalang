@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§7", "§18.2"]
+
+// The last `_` of a struct pattern written loosely (spec/tools.md §3.2, §3.3; S-903, §7): `onsa fmt` changes this file, and
+// what it makes is readable and the same again when it runs over it (`canonical = false` checks that, not the text). The spaces
+// around the braces, the `,` and the `_`, the `_` on a line of its own after a `,` that has a space before it, and the
+// block form with only the `_` in it. The `_` is not an element, so `fmt` never gives it a `,`: a `,` after it would make
+// the pattern unreadable (E0002), which the second run of `fmt` would find. The file is read by the syntax stage only.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn tight(it: Item) -> I32 {
+  let Item{x:a,_} = it
+  a
+}
+
+pub fn wide(it: Item) -> I32 {
+  let Item {   x: a  ,   y: b ,  _   } = it
+  a + b
+}
+
+pub fn the_rest_alone_tight(it: Item) -> I32 {
+  let Item{_} = it
+  1
+}
+
+pub fn the_rest_alone_in_a_block(it: Item) -> I32 {
+  let Item {
+    _
+  } = it
+  1
+}
+
+pub fn block_with_the_comma_before_the_rest_far(it: Item) -> I32 {
+  let Item {
+    x: a
+    , y: b
+    , _
+  } = it
+  a + b
+}
+
+pub fn in_an_arm(it: Item) -> I32 {
+  match it {
+    Item{x:0,y:b,_}=>b,
+    Item{_}=>0,
+  }
+}

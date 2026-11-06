@@ -124,7 +124,7 @@ enum What {
     Container,
     /// Any other enclosure: the indentation of the line where its content starts.
     Enclosure { content: Option<usize> },
-    /// A list: its form, the first tokens of its elements (and of the `..`
+    /// A list: its form, the first tokens of its elements (and of the rest
     /// of a struct pattern), the indentation of the line where the current
     /// element starts, and the column of the first element.
     List { form: Form, starts: Vec<TokenIdx>, element: Option<usize>, first_col: Option<usize> },

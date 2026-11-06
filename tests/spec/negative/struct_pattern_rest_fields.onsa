@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.4", "§18.1"]
+
+// S-903 (§7): the last `_` of a struct pattern does not take away the check of the fields that are written: a name that
+// is not a field of the struct and a field that is written twice are E0410 (the same as in a struct literal and in
+// a pattern without the `_`, §4.4, negative/struct_fields.onsa and negative/struct_pattern_dup.onsa).
+// The `_` of a pattern that leaves nothing out is in fixes/e0410_pattern_rest_nothing_left.onsa. One error per function
+// (P-01); the marker is on the line of the pattern.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+  n: U32,
+  k: U32,
+}
+
+pub fn a_name_that_is_not_a_field(p: Pt) -> I32 {
+  let Pt { z: a, _ } = p                            //~ E0410
+  a
+}
+
+pub fn a_name_that_is_not_a_field_after_a_field(it: Item) -> I32 {
+  let Item { x: a, w: b, _ } = it                   //~ E0410
+  a + b
+}
+
+pub fn a_name_that_is_not_a_field_in_an_arm(it: Item) -> I32 {
+  match it {
+    Item { w: a, _ } => a,                          //~ E0410
+  }
+}
+
+pub fn a_name_that_is_not_a_field_in_a_nested_pattern(o: Option[Item]) -> I32 {
+  var r = 0
+  match o {
+    Some(Item { y: b, q: a, _ }) => {               //~ E0410
+      r = a + b
+    },
+    None => {
+      r = 1
+    },
+  }
+  r
+}
+
+pub fn a_name_that_is_not_a_field_of_a_generic_struct(w: Wrap[F32]) -> U32 {
+  let Wrap { m: a, _ } = w                          //~ E0410
+  a
+}
+
+pub fn a_field_written_twice(it: Item) -> I32 {
+  let Item { x: a, x: b, _ } = it                   //~ E0410
+  a + b
+}
+
+pub fn a_field_written_twice_with_the_wildcard(it: Item) -> I32 {
+  let Item { x: a, x: _, _ } = it                   //~ E0410
+  a
+}
+
+pub fn a_field_written_twice_in_an_arm(it: Item) -> I32 {
+  match it {
+    Item { y: a, z: _, y: b, _ } => a + b,          //~ E0410
+  }
+}
+
+pub fn a_field_written_twice_in_a_generic_struct(w: Wrap[F32]) -> U32 {
+  let Wrap { n: a, n: b, _ } = w                    //~ E0410
+  a + b
+}
+
+pub fn a_field_written_twice_in_a_nested_pattern(o: Option[Item]) -> I32 {
+  var r = 0
+  match o {
+    Some(Item { x: a, x: b, _ }) => {               //~ E0410
+      r = a + b
+    },
+    None => {
+      r = 1
+    },
+  }
+  r
+}
+
+// The right forms: each field once, in any order.
+
+pub fn fine(p: Pt, it: Item, w: Wrap[F32]) -> I32 {
+  let Pt { y: b, _ } = p
+  let Item { z: c, x: a, _ } = it
+  let Wrap { k: _, _ } = w
+  b + c + a
+}

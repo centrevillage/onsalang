@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§7", "§18.2"]
+
+// The last `_` of a struct pattern in the three forms of a list (spec/tools.md §3.2; S-903, §7): `onsa fmt` does not count the `_`
+// as an element and puts no `,` after it, the same as the `..` of a struct pattern. The one-line form is `Item { x: a, _ }`
+// with the `_` after the `, ` of the last element, the block form has the closing bracket on a line of its own and a `,`
+// after every element but not after the `_`, which stays on the line where the writer put it (on a line of its own,
+// or with the last element), and the continuation form puts the elements under the first one and the `_` last, with the
+// closing bracket after it. The `_` that is the only thing in the braces is `Item { _ }`. The comments are in
+// struct_rest_comments.onsa. The file is read by the syntax stage only (`mode = "parse"`), and it is in the form that
+// `onsa fmt` leaves as it is.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn one_line(it: Item) -> I32 {
+  let Item { x: a, _ } = it
+  match it {
+    Item { x: 0, y: b, _ } => a + b,
+    Item { _ } => 0,
+  }
+}
+
+pub fn one_line_with_nothing_else(it: Item) -> I32 {
+  let Item { _ } = it
+  1
+}
+
+pub fn block_with_the_rest_on_its_own_line(it: Item) -> I32 {
+  let Item {
+    x: a,
+    y: b,
+    _
+  } = it
+  a + b
+}
+
+pub fn block_with_the_rest_after_the_last_element(it: Item) -> I32 {
+  let Item {
+    x: a,
+    y: b, _
+  } = it
+  a + b
+}
+
+pub fn block_in_an_arm(it: Item) -> I32 {
+  match it {
+    Item {
+      x: 0,
+      y: b,
+      _
+    } => b,
+    Item { _ } => 0,
+  }
+}
+
+pub fn continuation(it: Item) -> I32 {
+  let Item { x: a,
+             y: b,
+             _ } = it
+  a + b
+}
+
+pub fn continuation_in_an_arm(it: Item) -> I32 {
+  match it {
+    Item { x: 0,
+           y: b,
+           _ } => b,
+    Item { _ } => 0,
+  }
+}
+
+pub fn nested(o: Option[Item]) -> I32 {
+  match o {
+    Some(Item { x: a, _ }) => a,
+    None => 0,
+  }
+}

@@ -3,8 +3,10 @@
 // spec = ["§7", "§18.1"]
 // fixes = 1
 
-// E0020 for the rest `..` in a struct pattern (§7): every field is written, the unwanted ones as
-// `_`. The candidate lists the remaining fields with `_`, in the order of the declaration.
+// E0020 for the rest `..` in a struct pattern (§7): a pattern names the fields it reads, and the rest is ignored by
+// the last `_` (S-903, control/struct_rest_forms.onsa) or each field is written as `_`. The fields left here are all
+// visible, so the candidate lists the remaining fields with `_`, in the order of the declaration (a field that is
+// not visible makes the candidate the last `_` in place of the `..`, packages/visibility_field_rest/).
 
 pub struct P3 {
   x: I32,

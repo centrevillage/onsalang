@@ -1,0 +1,24 @@
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32,
+}
+
+pub struct Mixed {
+  a: F32,
+  priv b: F32,
+  priv c: F32,
+}
+
+pub struct Wrapped[T] {
+  value: T,
+  priv count: U32,
+}
+
+pub struct Frame {
+  ring: Ring,
+  id: U32,
+}
+
+pub fn new_ring() -> Ring {
+  Ring { data: [1.0, 2.0, 3.0, 4.0], head: 2 }
+}

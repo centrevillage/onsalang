@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§7", "§18.2"]
+
+// A comment on a line of its own before the last `_` of a struct pattern (spec/tools.md §3.4; S-903, §7): the comment stays
+// where the writer put it, before the `_`. The rule of the comment on a line of its own is "次の要素の前に、次の要素が
+// 無ければ閉じ括弧の前に" and the `_` is not an element, so it can be read two ways: the comment goes before the `_`
+// (the line of the `_` is the writer's own, "書き手が置いた行に残す"), or after the `_`, before the closing bracket. This file
+// holds the first reading and is the one that a change of reading is made in. The file is read by the syntax stage only.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn a_comment_before_the_rest(it: Item) -> I32 {
+  let Item {
+    x: a,
+    // the others are not read
+    _
+  } = it
+  a
+}

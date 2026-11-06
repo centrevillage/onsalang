@@ -1,0 +1,10 @@
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32,
+}
+
+pub struct Mixed {
+  a: F32,
+  priv b: F32,
+  priv c: F32,
+}

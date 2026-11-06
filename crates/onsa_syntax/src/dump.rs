@@ -862,8 +862,9 @@ impl<'a> Dumper<'a> {
                     let _ = write!(self.out, " {}: ", name.name);
                     self.pat(*p);
                 }
-                if rest.is_some() {
-                    self.out.push_str(if fields.is_empty() { " .." } else { ", .." });
+                if let Some(rest) = rest {
+                    self.out.push_str(if fields.is_empty() { " " } else { ", " });
+                    self.out.push_str(rest.mark.text());
                 }
                 self.out.push_str(" }");
             }

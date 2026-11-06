@@ -1,47 +1,70 @@
 // onsa.toml
 // [test]
 // spec = ["§7", "§15.1"]
-// fixes = 0
+// fixes = 1
 
-// S-366, S-35 (§7, §15.1): a `..` in a struct pattern is E0020 whose candidate lists the rest of the fields,
-// and when a field that this module cannot see is left, the struct is not taken apart by a pattern here: the
-// error is E0303 at the name of the struct, with a note and no candidate (it would name the field).
-// `fixes = 0` checks that there is none.
-// Every form is in a function of its own, with one or more fields that `shapes` hides left out by the `..`.
+// S-366, S-35, S-903 (§7, §15.1): a `..` in a struct pattern is E0020 whatever the fields it leaves are. When a field
+// that this module cannot see is left, the struct is not taken apart by a `..` here, and the candidate puts the
+// last `_` (§7) in place of the `..` (the candidate does not name the field that it cannot name). It is one candidate
+// in each error (`fixes = 1`); that the file is clean after it is in fixes/pkg_rest_hidden_clean/ and
+// fixes/pkg_rest_mixed_clean/, and the contract of a candidate (no new error in any unit after it) is checked
+// for each of these. The patterns with the last `_` are in visibility_field_rest_ok/, the E0303 of a field that is
+// written but hidden in visibility_field_rest_hidden/.
+// Every form is in a function of its own, with one or more fields that `shapes` hides left out by the `..`; `Ring`,
+// `Mixed` and `Wrapped` also leave a field that is visible when nothing is written before the `..`.
+
 use shapes.{Ring, Mixed, Wrapped, new_ring}
 
 fn rest_after_a_visible_field(r: Ring) -> F32 {
   match r {
-    Ring { data: d, .. } => d[0],                   //~ E0303
+    Ring { data: d, .. } => d[0],                   //~ E0020
   }
 }
 
 fn rest_with_nothing_else(r: Ring) -> U32 {
   match r {
-    Ring { .. } => 0,                               //~ E0303
+    Ring { .. } => 0,                               //~ E0020
   }
 }
 
 fn rest_after_two_hidden_fields(m: Mixed) -> F32 {
   match m {
-    Mixed { a: x, .. } => x,                        //~ E0303
+    Mixed { a: x, .. } => x,                        //~ E0020
   }
 }
 
 fn rest_in_a_generic_struct(w: Wrapped[F32]) -> F32 {
   match w {
-    Wrapped { value: v, .. } => v,                  //~ E0303
+    Wrapped { value: v, .. } => v,                  //~ E0020
   }
 }
 
 fn rest_in_a_nested_pattern(o: Option[Ring]) -> F32 {
   match o {
-    Some(Ring { data: d, .. }) => d[0],             //~ E0303
+    Some(Ring { data: d, .. }) => d[0],             //~ E0020
     None => 0.0,
   }
 }
 
 fn rest_in_a_binding(r: Ring) -> F32 {
-  let Ring { data: d, .. } = r                      //~ E0303
+  let Ring { data: d, .. } = r                      //~ E0020
   d[0]
+}
+
+fn rest_leaves_a_visible_and_a_hidden_field(m: Mixed) -> U32 {
+  match m {
+    Mixed { .. } => 0,                              //~ E0020
+  }
+}
+
+fn rest_leaves_a_visible_and_a_hidden_field_of_a_generic(w: Wrapped[F32]) -> U32 {
+  match w {
+    Wrapped { .. } => 0,                            //~ E0020
+  }
+}
+
+fn rest_in_a_tuple(t: (Ring, U32)) -> F32 {
+  match t {
+    (Ring { data: d, .. }, n) => d[0] + F32.round_from(n), //~ E0020
+  }
 }

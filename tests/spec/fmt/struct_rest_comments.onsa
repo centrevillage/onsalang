@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§7", "§18.2"]
+
+// The comments around the last `_` of a struct pattern (spec/tools.md §3.4; S-903, §7): a comment at the end of the line of
+// an element, or of the `_`, stays on that line, and the comments of consecutive lines of the block form are lined up
+// in a column like the others of a list (the `_` is a line of the list for that, though it is not an element and has no `,`).
+// The file is read by the syntax stage only, and it is in the form that `onsa fmt` leaves as it is.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn at_the_end_of_the_lines(it: Item) -> I32 {
+  let Item {
+    x: a, // the first
+    y: b, // the second
+    _     // the rest
+  } = it
+  a + b
+}
+
+pub fn only_the_last_element_and_the_rest(it: Item) -> I32 {
+  match it {
+    Item {
+      x: 0,
+      y: b, // the one that is read
+      _     // the others
+    } => b,
+    Item { _ } => 0,
+  }
+}

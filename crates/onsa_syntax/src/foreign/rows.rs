@@ -868,7 +868,7 @@ pub static ROWS: &[Row] = &[
         phase: Phase::Types,
         code: Code::E0020,
         message: "a struct pattern names every field; Onsa has no `..`",
-        rule: "a struct pattern names every field once, the unused ones `_`, so that a field added later makes every pattern of the struct an error (§7)",
+        rule: "a struct pattern names every field once, the unused ones `_`, or ends in a `_` that ignores the rest; a pattern without that `_` fails when a field is added (§7)",
         detect: Detect::Reported,
     },
     Row {

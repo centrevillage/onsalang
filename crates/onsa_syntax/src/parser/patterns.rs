@@ -245,9 +245,9 @@ impl<'a> Parser<'a> {
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RBrace) {
-                            // The rest `..`, last (§7: the stage that counts the
-                            // fields reports it, S-109, S-366).
-                            if p.at(TokenKind::DotDot) {
+                            // The rest, last: `_` (§7, S-903), or `..` (the stage
+                            // that counts the fields reports it, S-109, S-366).
+                            if p.at(TokenKind::Underscore) || p.at(TokenKind::DotDot) {
                                 let r = p.start(NodeKind::StructPatRest)?;
                                 p.bump();
                                 p.complete(r, NodeKind::StructPatRest);

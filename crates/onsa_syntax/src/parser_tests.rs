@@ -213,17 +213,47 @@ fn operand_starts() {
 }
 
 #[test]
-fn struct_pattern_rest_dots() {
-    // `..` last is read (S-366: the stage that counts the fields reports it);
-    // `...`, and `..` before another field, are no struct pattern.
-    let p = parse("struct P { x: U32, y: U32 }\nfn f(p: P) -> U32 {\n  match p {\n    P { x: a, .. } => a\n  }\n}");
-    assert_eq!(codes_of(&p), [], "{:?}", p.diagnostics);
-    for rest in ["x: a, ...", ".., x: a", "x: a, ..,"] {
+fn struct_pattern_rest_marks() {
+    // `_` and `..` last are read (S-903; S-366: the stage that counts the
+    // fields reports the `..`); `...`, a mark before another field and a `,`
+    // after one are no struct pattern.
+    for rest in ["x: a, ..", "..", "x: a, _", "_"] {
+        let p = parse(&format!(
+            "struct P {{ x: U32, y: U32 }}\nfn f(p: P) -> U32 {{\n  match p {{\n    P {{ {rest} }} => a\n  }}\n}}"
+        ));
+        assert_eq!(codes_of(&p), [], "{rest}: {:?}", p.diagnostics);
+    }
+    let bad = ["x: a, ...", ".., x: a", "x: a, ..,", "_, x: a", "x: a, _,", "_: a", "_ x: a", "_, _", "_, ..", ".., _"];
+    for rest in bad {
         let p = parse(&format!(
             "struct P {{ x: U32, y: U32 }}\nfn f(p: P) -> U32 {{\n  match p {{\n    P {{ {rest} }} => a\n  }}\n}}"
         ));
         assert_eq!(codes_of(&p), [Code::E0002], "{rest}");
     }
+}
+
+#[test]
+fn no_comma_goes_after_a_struct_pattern_rest() {
+    // The `,` would leave an E0002 (§7, S-903): the mark is last.
+    let fixes = |rest: &str| {
+        let p =
+            parse(&format!("struct P {{ x: U32, y: U32 }}\nfn f(p: P) -> U32 {{\n  let P {{ {rest} }} = p\n  1\n}}"));
+        assert_eq!(codes_of(&p), [Code::E0002], "{rest}");
+        p.diagnostics[0].fixes.len()
+    };
+    for rest in ["_ x: a", ".. x: a", "_ _", "_ ..", ".. _"] {
+        assert_eq!(fixes(rest), 0, "{rest}");
+    }
+    // Before the mark it goes.
+    assert_eq!(fixes("x: a _"), 1);
+}
+
+#[test]
+fn struct_pattern_rest_keeps_its_mark() {
+    // The dump prints the mark as written (S-903).
+    assert_eq!(body("let P { x: a, _ } = p"), "(block (let P { x: a, _ } = p))");
+    assert_eq!(body("let P { _ } = p"), "(block (let P { _ } = p))");
+    assert_eq!(body("let P { x: a, .. } = p"), "(block (let P { x: a, .. } = p))");
 }
 
 #[test]

@@ -107,7 +107,7 @@ fn element_starts(list: NodeKind) -> Option<fn(TokenKind) -> bool> {
         NodeKind::TupleType | NodeKind::VariantFields => starts_type,
         NodeKind::FnTypeParams => |k| starts_type(k) || matches!(k, KwInout | KwMove),
         NodeKind::TuplePat | NodeKind::TupleStructPat | NodeKind::MatchArms => starts_pattern,
-        NodeKind::StructPat => |k| matches!(k, Ident | DotDot),
+        NodeKind::StructPat => |k| matches!(k, Ident | Underscore | DotDot),
         NodeKind::AttrArgs => |k| matches!(k, Ident | Str),
         _ => return None,
     })

@@ -1,16 +1,18 @@
 //! The fields of a struct pattern against its declaration (spec §7, §4.4;
 //! S-109, S-366): the one check of a struct pattern, for the bodies and the
-//! flows. A pattern names every field once (E0410); the rest `..` of other
-//! languages is E0020 here, where the fields are known, and its candidate
-//! writes the remaining ones with `_`.
+//! flows. A pattern names every field once, or ends in a `_` that ignores the
+//! fields it does not name, the ones not visible here too (S-903); a `_` that
+//! ignores nothing is E0410. The rest `..` of other languages is E0020 here,
+//! where the fields are known, and its candidate writes the remaining ones
+//! with `_`, or the last `_` when one of them is not visible.
 //!
 //! The order of the errors is the order of reading: the fields as written,
 //! each name checked and then its sub-pattern (through the caller), and the
-//! fields that are missing (or the `..`) last. An inner pattern's error is
+//! fields that are missing (or the rest) last. An inner pattern's error is
 //! so reported before an outer one's `..`.
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use onsa_syntax::ast::{Ident, PatId, Path, StructRest};
+use onsa_syntax::ast::{Ident, PatId, Path, RestMark, StructRest};
 use onsa_syntax::foreign::{self, RowId};
 
 use crate::body::{Checker, R, Stop};
@@ -74,7 +76,10 @@ impl<'a> Checker<'a> {
         // SPEC-GAP(S-260): as for the fields of a struct literal.
         let failed = self.a.partly_read(d);
         let written: Vec<&Ident> = fields.iter().map(|(f, _)| f).collect();
-        self.whole_reach(d, &defs, &written, path.span, Whole::Pattern)?;
+        match rest {
+            Some(_) => self.written_reach(d, &defs, &written)?,
+            None => self.whole_reach(d, &defs, &written, path.span, Whole::Pattern)?,
+        }
         let mut seen: Vec<&str> = Vec::new();
         for (field, fp) in fields {
             let Some(i) = defs.iter().position(|f| f.name == field.name) else {
@@ -98,17 +103,26 @@ impl<'a> Checker<'a> {
         if failed {
             return Ok(defs.len());
         }
-        // The fields left are visible here: a field not visible that the
-        // pattern leaves out is the E0303 above (§15.1, §7, S-366).
         let missing: Vec<&FieldDef> = defs.iter().filter(|f| !seen.contains(&f.name.as_str())).collect();
         match rest {
+            // The last `_` ignores what is left (§7, S-903).
+            Some(StructRest { mark: RestMark::Underscore, .. }) if !missing.is_empty() => Ok(defs.len()),
+            Some(rest @ StructRest { mark: RestMark::Underscore, .. }) => {
+                let msg = format!("every field of `{name}` is written: the `_` ignores nothing");
+                let diag = Diagnostic::new(stage, Code::E0410, rest.span, msg)
+                    .with_found(self.src(rest.span))
+                    .with_fix(rest_removal(rest));
+                Err(self.diag(diag))
+            }
             // `..`: the remaining fields with `_`, in the order of the
-            // declaration; none left, the `, ..` goes (§7, S-109).
+            // declaration, or the last `_` when one is not visible here; none
+            // left, the `, ..` goes (§7, S-109, S-903).
             Some(rest) => {
                 let fix = if missing.is_empty() {
-                    // A title is one line: the removal may hold newlines.
-                    let title = if rest.removal.start < rest.span.start { "remove `, ..`" } else { "remove `..`" };
-                    Fix::new(title, vec![Edit::delete(rest.removal)])
+                    rest_removal(rest)
+                } else if missing.iter().any(|f| !self.field_visible(d, f)) {
+                    let mark = RestMark::Underscore.text();
+                    Fix::new("ignore the remaining fields with `_`", vec![Edit::replace(rest.span, mark)])
                 } else {
                     let list = missing.iter().map(|f| format!("{}: _", f.name)).collect::<Vec<_>>().join(", ");
                     Fix::new("write the remaining fields with `_`", vec![Edit::replace(rest.span, list)])
@@ -117,12 +131,14 @@ impl<'a> Checker<'a> {
                 d.stage = stage;
                 Err(self.diag(d))
             }
-            _ if !missing.is_empty() => {
+            // The fields left are visible here: a field not visible that the
+            // pattern leaves out is the E0303 above (§15.1, §7, S-366).
+            None if !missing.is_empty() => {
                 let names = missing.iter().map(|f| format!("`{}`", f.name)).collect::<Vec<_>>().join(", ");
                 let msg = format!("struct patterns name every field; missing {names} (use `_`, §7)");
                 Err(self.diag(Diagnostic::new(stage, Code::E0410, span, msg).with_found(self.src(span))))
             }
-            _ => Ok(defs.len()),
+            None => Ok(defs.len()),
         }
     }
 
@@ -153,10 +169,11 @@ impl<'a> Checker<'a> {
     /// of the struct `d` with the fields `defs`, at `path`: an E0303 when one
     /// is not visible here, before the other errors of the literal or the
     /// pattern, which are of a later stage (§18.1). The first written field
-    /// not visible is the E0303 of [`Self::field_reach`]; else one left out
+    /// not visible is the E0303 of [`Self::written_reach`]; else one left out
     /// is an E0303 at the name of the struct (§15.1, §7, S-35, S-366): here
     /// the struct is made, and its fields read, by the functions of its
-    /// module.
+    /// module. A pattern with a rest leaves fields out freely, and has
+    /// [`Self::written_reach`] alone.
     pub(crate) fn whole_reach(
         &mut self,
         d: DefId,
@@ -165,11 +182,7 @@ impl<'a> Checker<'a> {
         path: Span,
         whole: Whole,
     ) -> R<()> {
-        for w in written {
-            if let Some(f) = defs.iter().find(|f| f.name == w.name && !self.field_visible(d, f)) {
-                return self.field_reach(d, f, w.span);
-            }
-        }
+        self.written_reach(d, defs, written)?;
         let left_out = |f: &&FieldDef| !written.iter().any(|w| w.name == f.name);
         let Some(f) = defs.iter().filter(left_out).find(|f| !self.field_visible(d, f)) else {
             return Ok(());
@@ -181,7 +194,8 @@ impl<'a> Checker<'a> {
                 ("made by a struct literal", format!("`{}` is made by a function of its module", def.name))
             }
             Whole::Pattern => {
-                ("taken apart by a struct pattern", "its fields are read through the functions of its module".into())
+                let through = "its fields are read through the functions of its module, or ignored by a last `_`";
+                ("taken apart by a struct pattern", through.into())
             }
         };
         let msg = format!("`{}` is not {form} here, as its field `{}` is not visible: {why}", def.name, f.name);
@@ -191,9 +205,28 @@ impl<'a> Checker<'a> {
         Err(self.diag(diag))
     }
 
+    /// The first of the fields `written` of the struct `d` that is not visible
+    /// here: the E0303 of [`Self::field_reach`].
+    fn written_reach(&mut self, d: DefId, defs: &[FieldDef], written: &[&Ident]) -> R<()> {
+        for w in written {
+            if let Some(f) = defs.iter().find(|f| f.name == w.name && !self.field_visible(d, f)) {
+                return self.field_reach(d, f, w.span);
+            }
+        }
+        Ok(())
+    }
+
     fn pattern_err(&mut self, stage: Stage, code: Code, span: Span, msg: impl Into<String>) -> Stop {
         self.diag(Diagnostic::new(stage, code, span, msg).with_found(self.src(span)))
     }
+}
+
+/// The candidate that takes off a rest with no field left for it.
+fn rest_removal(rest: StructRest) -> Fix {
+    let mark = rest.mark.text();
+    // A title is one line: the removal may hold newlines.
+    let comma = if rest.removal.start < rest.span.start { ", " } else { "" };
+    Fix::new(format!("remove `{comma}{mark}`"), vec![Edit::delete(rest.removal)])
 }
 
 #[cfg(test)]
@@ -279,6 +312,23 @@ mod tests {
                 assert!(r.starts_with(',') && r.ends_with(".."), "{pattern}: {r:?}");
             }
         }
+    }
+
+    #[test]
+    fn a_last_underscore_with_nothing_left_goes_with_its_comma() {
+        let cases = [
+            ("P { x: _, y: _, _ }", "remove `, _`", ", _"),
+            ("P {\n      x: _,\n      y: _,\n      _\n    }", "remove `, _`", ",\n      _"),
+            // A comment that ends with `,` before the `_`: the `_` alone goes.
+            ("P {\n      x: _,\n      y: _, // the last,\n      _\n    }", "remove `_`", "_"),
+        ];
+        for (pattern, title, removed) in cases {
+            assert_eq!(first(&arm(pattern)).0, Code::E0410, "{pattern}");
+            assert_eq!(removal(&arm(pattern)), (title.to_string(), removed.to_string()), "{pattern}");
+        }
+        assert_eq!(first(&arm("P { x: _, y: _, _ }")).1, "_");
+        // A written field is checked first: the `_` is no error of its own.
+        assert_eq!(first(&arm("P { x: _, x: _, y: _, _ }")).1, "x");
     }
 
     #[test]

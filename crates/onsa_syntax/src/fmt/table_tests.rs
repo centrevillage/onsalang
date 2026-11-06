@@ -16,7 +16,7 @@
 //!   (block: a `,` after every element and the closing bracket on a line of
 //!   its own; one line and continuation: no `,` after the last element;
 //!   continuation: an element that starts a line starts at the column of the
-//!   first). The `..` of a struct pattern
+//!   first). The rest of a struct pattern
 //!   is last and has no `,` after it (S-500).
 //! - Every row of both tables is met, and no row that says one space meets a
 //!   row that says none, except at `{}` and at a `{` right inside a round or
@@ -248,7 +248,7 @@ fn check_list(name: &str, text: &str, cst: &Cst, n: NodeId, tally: &mut Tally) {
     if let Some(r) = &rest
         && next_code(cst, r.end.index()) != Some(cst.token(close).kind)
     {
-        fail("the `..` is not last, or has a `,` after it");
+        fail("the rest is not last, or has a `,` after it");
     }
     match form {
         Form::Block => {

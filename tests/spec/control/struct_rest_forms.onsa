@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7"]
+
+// S-903 (§7): the last `_` of a struct pattern ignores the fields that are not written. It is written after
+// the fields, with no `,` after it, in a `let` and in the arms of a `match`. Some of the fields can be left out
+// of the middle, the fields can be written in any order, and `Item { _ }` writes none. A field that `_` leaves
+// out is not read and binds nothing, the same as `y: _`. The patterns are run in the interpreter. A `match`
+// whose value is used is E0200 in this version when its patterns are not a plain switch on one enum, so each
+// `match` here is a statement that assigns a `var`. The forms that are an error are in negative/struct_rest_*.onsa,
+// the nested forms in struct_rest_nested.onsa, a choice that binds in struct_rest_check.onsa and the comparison
+// with a constant in struct_rest_const.onsa.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn first_of(it: Item) -> I32 {
+  let Item { x: a, _ } = it
+  a
+}
+
+pub fn middle_of(it: Item) -> I32 {
+  let Item { y: b, _ } = it
+  b
+}
+
+pub fn last_of(it: Item) -> I32 {
+  let Item { z: c, _ } = it
+  c
+}
+
+pub fn two_of_three(it: Item) -> I32 {
+  let Item { x: a, z: c, _ } = it
+  a * 10 + c
+}
+
+pub fn in_another_order(it: Item) -> I32 {
+  let Item { z: c, x: a, _ } = it
+  c * 10 + a
+}
+
+pub fn the_last_two_in_reverse(it: Item) -> I32 {
+  let Item { z: c, y: b, _ } = it
+  c * 10 + b
+}
+
+pub fn no_field_is_written(it: Item) -> I32 {
+  let Item { _ } = it
+  7
+}
+
+pub fn match_with_an_arm(it: Item) -> I32 {
+  var r = 0
+  match it {
+    Item { y: b, _ } => {
+      r = b + 1
+    },
+  }
+  r
+}
+
+pub fn match_with_literals(it: Item) -> I32 {
+  var r = 0
+  match it {
+    Item { x: 0, _ } => {
+      r = 100
+    },
+    Item { x: 1, y: b, _ } => {
+      r = b
+    },
+    Item { z: 2, x: a, _ } => {
+      r = a
+    },
+    Item { _ } => {
+      r = -1
+    },
+  }
+  r
+}
+
+pub fn match_with_a_guard(it: Item) -> I32 {
+  var r = 0
+  match it {
+    Item { x: a, _ } if a > 5 => {
+      r = a
+    },
+    Item { y: b, _ } if b > 5 => {
+      r = b
+    },
+    Item { _ } => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn a_choice_of_patterns(it: Item) -> I32 {
+  var r = 0
+  match it {
+    Item { x: 0, _ } | Item { x: 1, _ } => {
+      r = 1
+    },
+    Item { x: 2, _ } | Item { y: 2, _ } => {
+      r = 2
+    },
+    Item { _ } => {
+      r = 3
+    },
+  }
+  r
+}
+
+test "a field that is written is read, a field left out is not" {
+  let it = Item { x: 1, y: 2, z: 3 }
+  assert first_of(it) == 1
+  assert middle_of(it) == 2
+  assert last_of(it) == 3
+  assert two_of_three(it) == 13
+}
+
+test "the fields can be written in any order" {
+  let it = Item { x: 1, y: 2, z: 3 }
+  assert in_another_order(it) == 31
+  assert the_last_two_in_reverse(it) == 32
+}
+
+test "a pattern that writes no field takes any value" {
+  assert no_field_is_written(Item { x: 1, y: 2, z: 3 }) == 7
+  assert no_field_is_written(Item { x: 0, y: 0, z: 0 }) == 7
+}
+
+test "the arms of a match choose by the fields that are written" {
+  assert match_with_an_arm(Item { x: 1, y: 2, z: 3 }) == 3
+  assert match_with_literals(Item { x: 0, y: 8, z: 9 }) == 100
+  assert match_with_literals(Item { x: 1, y: 8, z: 9 }) == 8
+  assert match_with_literals(Item { x: 4, y: 8, z: 2 }) == 4
+  assert match_with_literals(Item { x: 4, y: 8, z: 9 }) == -1
+}
+
+test "a guard sees the bindings, and the field left out is not part of the choice" {
+  assert match_with_a_guard(Item { x: 6, y: 9, z: 0 }) == 6
+  assert match_with_a_guard(Item { x: 1, y: 9, z: 0 }) == 9
+  assert match_with_a_guard(Item { x: 1, y: 1, z: 9 }) == 0
+}
+
+test "a choice of patterns that end with a _" {
+  assert a_choice_of_patterns(Item { x: 0, y: 9, z: 9 }) == 1
+  assert a_choice_of_patterns(Item { x: 1, y: 9, z: 9 }) == 1
+  assert a_choice_of_patterns(Item { x: 2, y: 9, z: 9 }) == 2
+  assert a_choice_of_patterns(Item { x: 5, y: 2, z: 9 }) == 2
+  assert a_choice_of_patterns(Item { x: 5, y: 5, z: 9 }) == 3
+}

@@ -1,0 +1,3 @@
+[package]
+name = "rest_hidden_clean"
+edition = "2026"

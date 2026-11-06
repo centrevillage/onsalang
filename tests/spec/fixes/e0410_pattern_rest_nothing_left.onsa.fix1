@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-903 (§7): a last `_` of a struct pattern that leaves no field out is E0410 ("残るフィールドの無い `_` は E0410
+// （修正候補は外す形）"): every field is written already, so the `_` ignores nothing, and a `_` that is kept would go on
+// hiding the field that is added later. The candidate takes the `_` off, with the `,` before it. It is the one
+// candidate of each error (`fixes = 1`); the file is clean after it in e0410_pattern_rest_nothing_left_clean*.onsa. The
+// forms are the `let`, an arm of a `match`, a nested pattern, `Some`, a generic struct, a struct without fields, and a
+// struct with a `priv` field in the module that declares it (the field is visible there, so nothing is left; seen from
+// another module the `priv` field is left out and the `_` is fine, packages/visibility_field_rest_ok/). One error per
+// function (P-01); the marker is on the line of the pattern.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub struct Outer {
+  inner: Item,
+  tag: I32,
+}
+
+pub struct Pair[T] {
+  first: T,
+  second: T,
+}
+
+pub struct Ring {
+  data: [F32; 4],
+  priv head: U32,
+}
+
+pub struct E {}
+
+pub fn in_a_let(it: Item) -> I32 {
+  let Item { x: a, y: b, z: c } = it             //~ E0410
+  a + b + c
+}
+
+pub fn in_an_arm(it: Item) -> I32 {
+  match it {
+    Item { x: a, y: b, z: c } => a + b + c,      //~ E0410
+  }
+}
+
+pub fn the_fields_in_another_order(it: Item) -> I32 {
+  let Item { z: c, x: a, y: b } = it             //~ E0410
+  a + b + c
+}
+
+pub fn in_a_nested_pattern(o: Outer) -> I32 {
+  let Outer { inner: Item { x: a, y: b, z: c }, _ } = o   //~ E0410
+  a + b + c
+}
+
+pub fn in_the_outer_pattern(o: Outer) -> I32 {
+  let Outer { inner: _, tag: t } = o             //~ E0410
+  t
+}
+
+pub fn in_some(o: Option[Item]) -> I32 {
+  var r = 0
+  match o {
+    Some(Item { x: a, y: b, z: c }) => {         //~ E0410
+      r = a + b + c
+    },
+    None => {
+      r = -1
+    },
+  }
+  r
+}
+
+pub fn in_a_generic_struct(p: Pair[F32]) -> F32 {
+  let Pair { first: a, second: b } = p           //~ E0410
+  a + b
+}
+
+pub fn in_a_struct_without_fields(e: E) -> I32 {
+  let E {  } = e                                   //~ E0410
+  1
+}
+
+pub fn in_the_module_of_a_priv_field(r: Ring) -> U32 {
+  let Ring { data: _, head: h } = r              //~ E0410
+  h
+}
+
+// The patterns that leave a field out are fine.
+
+pub fn fine(it: Item, o: Outer, p: Pair[I32], r: Ring) -> I32 {
+  let Item { x: a, y: b, _ } = it
+  let Outer { inner: _, _ } = o
+  let Pair { first: f, _ } = p
+  let Ring { data: _, _ } = r
+  a + b + f
+}

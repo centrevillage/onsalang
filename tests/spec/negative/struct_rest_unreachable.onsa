@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-903 (§7): an arm after a struct pattern that ends with a `_` is E0503 when the earlier arms cover every value it
+// could take ("前の腕で覆われて、どの値でも選ばれない腕は E0503"). `Item { _ }` covers every `Item`, `Flag { on: true, _ }`
+// and `Flag { on: false, _ }` together cover every `Flag`. The unreachable arm of a `match` is S-187, which waits for
+// W5-09 (no arm is reported today, so this file is on the list of what is not yet implemented until then), and the
+// exhaustiveness (E0501) is in struct_rest_match.onsa. One error per function (P-01); the marker is on the arm.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub struct Flag {
+  on: Bool,
+  level: I32,
+}
+
+pub fn an_arm_after_the_pattern_that_writes_nothing(it: Item) -> I32 {
+  match it {
+    Item { _ } => 1,
+    Item { x: 0, _ } => 2,                          //~ E0503
+  }
+}
+
+pub fn the_pattern_that_writes_nothing_after_true_and_false(f: Flag) -> I32 {
+  match f {
+    Flag { on: true, _ } => 1,
+    Flag { on: false, _ } => 0,
+    Flag { _ } => 2,                                //~ E0503
+  }
+}
+
+pub fn the_same_bool_value_twice(f: Flag) -> I32 {
+  match f {
+    Flag { on: true, _ } => 1,
+    Flag { on: true, _ } => 2,                      //~ E0503
+    Flag { on: false, _ } => 0,
+  }
+}
+
+pub fn an_arm_after_a_wildcard_in_some(o: Option[Flag]) -> I32 {
+  match o {
+    Some(Flag { _ }) => 1,
+    None => 0,
+    Some(Flag { on: true, _ }) => 2,                //~ E0503
+  }
+}
+
+// The right form: each arm can still be chosen.
+
+pub fn each_arm_is_reachable(f: Flag, it: Item) -> I32 {
+  let a = match f {
+    Flag { on: true, _ } => 1,
+    Flag { _ } => 0,
+  }
+  let b = match it {
+    Item { x: 0, _ } => 1,
+    Item { y: 0, _ } => 2,
+    Item { _ } => 3,
+  }
+  a + b
+}

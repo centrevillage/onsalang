@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:11"
+// code = "E0410"
+// candidate = 1
+// clean = true
+
+// S-903 (§7): the same as e0410_pattern_rest_nothing_left_clean.onsa for a struct without fields: `E { _ }` leaves nothing out, the
+// candidate takes the `_` off (what is left is a pattern of a struct without fields, `E {}`), and the file is clean
+// after it. This file has this one error.
+
+pub struct E {}
+
+pub fn in_a_let(e: E) -> I32 {
+  let E { _ } = e                                   //~ E0410
+  1
+}

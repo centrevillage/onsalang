@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-903 (§7): a struct pattern that ends with a `_` counts in the exhaustiveness of a `match` (E0501) as the pattern
+// that writes the left-out fields as `y: _` does: the fields that a `_` leaves out cover every value of their type, and
+// a literal of an integer is not counted ("網羅の判定に数えるのは、`Bool` の `true` と `false`、enum の列挙子、それらを
+// 要素に持つタプルと struct のパターンだけ"). The arms that cannot be reached are in struct_rest_unreachable.onsa.
+// One error per function (P-01). The right forms are at the end.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub struct Flag {
+  on: Bool,
+  level: I32,
+}
+
+pub struct Two {
+  a: Bool,
+  b: Bool,
+  n: I32,
+}
+
+pub enum Mode {
+  Low,
+  High,
+}
+
+pub struct Cfg {
+  mode: Mode,
+  n: I32,
+  m: I32,
+}
+
+// ---- E0501: an arm is missing
+
+pub fn one_bool_value_only(f: Flag) -> I32 {
+  match f {                                         //~ E0501
+    Flag { on: true, _ } => 1,
+  }
+}
+
+pub fn two_bool_fields_one_pair_missing(t: Two) -> I32 {
+  match t {                                         //~ E0501
+    Two { a: true, b: true, _ } => 1,
+    Two { a: false, _ } => 2,
+  }
+}
+
+pub fn one_variant_of_a_field_only(c: Cfg) -> I32 {
+  match c {                                         //~ E0501
+    Cfg { mode: Mode.Low, _ } => 1,
+  }
+}
+
+pub fn the_bool_is_inside_some_and_none_is_there(o: Option[Flag]) -> I32 {
+  match o {                                         //~ E0501
+    Some(Flag { on: true, _ }) => 1,
+    None => 0,
+  }
+}
+
+pub fn a_literal_of_an_integer_is_not_counted(it: Item) -> I32 {
+  match it {                                        //~ E0501
+    Item { x: 0, _ } => 1,
+  }
+}
+
+// ---- the right forms: every value is covered, and no arm is covered by an earlier one
+
+pub fn bool_values_cover(f: Flag) -> I32 {
+  match f {
+    Flag { on: true, _ } => 1,
+    Flag { on: false, _ } => 0,
+  }
+}
+
+pub fn two_bool_fields_cover(t: Two) -> I32 {
+  match t {
+    Two { a: true, b: true, _ } => 1,
+    Two { a: true, b: false, _ } => 2,
+    Two { a: false, _ } => 3,
+  }
+}
+
+pub fn variants_of_a_field_cover(c: Cfg) -> I32 {
+  match c {
+    Cfg { mode: Mode.Low, _ } => 1,
+    Cfg { mode: Mode.High, _ } => 2,
+  }
+}
+
+pub fn a_pattern_that_writes_nothing_last(it: Item) -> I32 {
+  match it {
+    Item { x: 0, _ } => 1,
+    Item { y: 0, _ } => 2,
+    Item { _ } => 3,
+  }
+}
+
+pub fn some_and_none_cover(o: Option[Flag]) -> I32 {
+  match o {
+    Some(Flag { on: true, _ }) => 1,
+    Some(Flag { on: false, _ }) => 2,
+    None => 0,
+  }
+}

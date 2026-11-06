@@ -139,20 +139,20 @@ fn what_a_module_took_with_a_use_is_not_seen_by_another_module() {
 
 /// The operations on a field `f` of a struct `S` that has the fields `a` and `f`, as the text of a function
 /// `op`: a read, a write, a struct literal that names both fields, a pattern that names both, and a pattern
-/// that ends in `..` with the field `f` left out.
-const FIELD_OPS: [(&str, &str); 5] = [
+/// that ends in `..` or in `_` with the field `f` left out.
+const FIELD_OPS: [(&str, &str); 6] = [
     ("read", "fn op(s: S) -> I32 {\n  s.f\n}\n"),
     ("write", "fn op(inout s: S) {\n  s.f = 1\n}\n"),
     ("literal", "fn op() -> S {\n  S { a: 1, f: 2 }\n}\n"),
     ("pattern", "fn op(s: S) -> I32 {\n  match s {\n    S { a: _, f: y } => y,\n  }\n}\n"),
     ("rest", "fn op(s: S) -> I32 {\n  match s {\n    S { a: x, .. } => x,\n  }\n}\n"),
+    ("last", "fn op(s: S) -> I32 {\n  match s {\n    S { a: x, _ } => x,\n  }\n}\n"),
 ];
 
-/// §15.1 (S-35), §7 (S-366): for a struct that is `pub` or has no word, and a field that is `priv` or has no word,
-/// each operation is checked in the module that declares the struct and in another module. The `priv` field
-/// is E0303 in another module for the four operations that name it; `..` is E0303 there too when the field
-/// that is left cannot be seen (no candidate and a note), and E0020 otherwise (the candidate names the fields
-/// left).
+/// §15.1 (S-35), §7 (S-366, S-903): for a struct that is `pub` or has no word, and a field that is `priv` or has no
+/// word, each operation is checked in the module that declares the struct and in another module. The `priv`
+/// field is E0303 in another module for the four operations that name it; `..` is E0020 everywhere, and the last
+/// `_` leaves the field out everywhere.
 #[test]
 fn a_priv_field_is_the_modules_and_a_field_with_no_word_follows_the_struct() {
     let mut problems: Vec<String> = Vec::new();
@@ -172,8 +172,8 @@ fn a_priv_field_is_the_modules_and_a_field_with_no_word_follows_the_struct() {
                     };
                     let hidden = other_module && field_label == "priv";
                     let want: Vec<(String, String)> = match (op_label, hidden) {
-                        ("rest", true) => vec![pair("E0303", file)],
-                        ("rest", false) => vec![pair("E0020", file)],
+                        ("rest", _) => vec![pair("E0020", file)],
+                        ("last", _) => vec![],
                         (_, true) => vec![pair("E0303", file)],
                         (_, false) => vec![],
                     };
@@ -216,10 +216,10 @@ fn the_fields_of_a_priv_struct_take_priv_and_no_word_alike() {
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
-/// §7, §15.1 (S-366): a `..` that leaves a field that the module cannot see is one E0303 with at least one note
-/// and no candidate, and the same `..` with every field seen is one E0020 with exactly one candidate.
+/// §7, §15.1 (S-366, S-903): a `..` that leaves a field that the module cannot see is one E0020 whose one candidate
+/// is the last `_`, and the same `..` with every field seen is one E0020 whose one candidate names the fields left.
 #[test]
-fn a_rest_pattern_that_leaves_a_hidden_field_has_a_note_and_no_candidate() {
+fn the_candidate_of_a_rest_that_leaves_a_hidden_field_is_the_last_underscore() {
     let shapes =
         "pub struct Ring {\n  data: [F32; 4],\n  priv head: U32,\n}\n\npub struct Open {\n  x: F32,\n  y: F32,\n}\n";
     let other = "use shapes.{Ring, Open}\n\n\
@@ -238,13 +238,17 @@ fn a_rest_pattern_that_leaves_a_hidden_field_has_a_note_and_no_candidate() {
             .find(|x| span_of(&x["span"]).line == line)
             .unwrap_or_else(|| panic!("no diagnostic on line {line}: {doc}"))
     };
+    let edit = |d: &Value| -> String {
+        let fixes = array_of(d, "fixes");
+        assert_eq!(fixes.len(), 1, "{doc}");
+        str_of(&array_of(&fixes[0], "edits")[0], "replace").to_string()
+    };
     let hidden = by_line(5);
-    assert_eq!(str_of(hidden, "code"), "E0303", "{doc}");
-    assert!(array_of(hidden, "fixes").is_empty(), "no candidate: {doc}");
-    assert!(!array_of(hidden, "notes").is_empty(), "a note: {doc}");
+    assert_eq!(str_of(hidden, "code"), "E0020", "{doc}");
+    assert_eq!(edit(hidden), "_", "{doc}");
     let seen = by_line(11);
     assert_eq!(str_of(seen, "code"), "E0020", "{doc}");
-    assert_eq!(array_of(seen, "fixes").len(), 1, "{doc}");
+    assert_eq!(edit(seen), "y: _", "{doc}");
 }
 
 /// §15.1: a field of a generic struct is as hidden as any other (`Ring[T, const N: U32]` with a `priv head`),

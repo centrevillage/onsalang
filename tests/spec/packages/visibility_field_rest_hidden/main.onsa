@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1"]
+// fixes = 0
+
+// S-903 (§7, §15.1): the last `_` of a struct pattern lets the fields that this module cannot see be left out
+// (visibility_field_rest_ok/), but a field that is written and cannot be seen is still E0303 ("書いたフィールドが
+// 見えなければそのフィールド"), and so is a pattern without the `_` that leaves a hidden field out ("見えないフィールドを
+// 持つ struct は、そのフィールドが見えない場所では ... struct のパターンで分解できない"). Neither has a candidate (it
+// would name the field that cannot be named), which `fixes = 0` checks. One error in each function (P-01); the marker is
+// on the line of the pattern, and no column is written (the position of the name of the type or of the field is
+// not promised by the markers).
+
+use shapes.{Ring, Mixed, Wrapped, Frame}
+
+// ---- the hidden field is written, with the `_` after it
+
+fn the_hidden_field_is_written(r: Ring) -> U32 {
+  match r {
+    Ring { head: h, _ } => h,                       //~ E0303
+  }
+}
+
+fn the_hidden_field_beside_a_visible_one(m: Mixed) -> F32 {
+  let Mixed { a: x, b: y, _ } = m                   //~ E0303
+  x + y
+}
+
+fn the_hidden_field_of_a_generic_struct(w: Wrapped[F32]) -> U32 {
+  let Wrapped { count: c, _ } = w                   //~ E0303
+  c
+}
+
+fn the_hidden_field_in_a_nested_pattern(f: Frame) -> U32 {
+  let Frame { ring: Ring { head: h, _ }, _ } = f    //~ E0303
+  h
+}
+
+fn the_hidden_field_in_some(o: Option[Ring]) -> U32 {
+  match o {
+    Some(Ring { head: h, _ }) => h,                 //~ E0303
+    None => 0,
+  }
+}
+
+// ---- no `_`: the pattern leaves out a hidden field
+
+fn no_rest_with_the_hidden_field_left_out(r: Ring) -> F32 {
+  match r {
+    Ring { data: d } => d[0],                       //~ E0303
+  }
+}
+
+fn no_rest_in_a_generic_struct(w: Wrapped[F32]) -> F32 {
+  let Wrapped { value: v } = w                      //~ E0303
+  v
+}
+
+fn no_rest_in_a_nested_pattern(f: Frame) -> F32 {
+  let Frame { ring: Ring { data: d }, id: _ } = f   //~ E0303
+  d[0]
+}
+
+// ---- the right forms: the hidden fields are left out by the `_`
+
+fn the_rest_leaves_the_hidden_field(r: Ring, f: Frame) -> F32 {
+  let Ring { data: d, _ } = r
+  let Frame { ring: Ring { _ }, id: _ } = f
+  d[0]
+}

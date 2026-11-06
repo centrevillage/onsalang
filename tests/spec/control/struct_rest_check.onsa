@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-903 (§7), checked only: the last `_` of a struct pattern in the forms that this version does not run
+// (control/struct_rest_forms.onsa runs the others). A `match` whose value is used, with struct patterns, literals,
+// a guard and a choice that binds the same name in every alternative (`Item { x: 0, y: b, _ } | Item { x: 1, y: b, _ }`).
+// A `let` is bound by a pattern whose `_` leaves a field out, and the anonymous function that is bound to a name.
+// No diagnostic is expected anywhere in this file.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub struct Flag {
+  on: Bool,
+  level: I32,
+}
+
+pub fn value_of_a_match(it: Item) -> I32 {
+  match it {
+    Item { x: 0, _ } => 100,
+    Item { x: 1, y: b, _ } => b,
+    Item { z: c, _ } if c > 5 => c,
+    Item { _ } => -1,
+  }
+}
+
+pub fn a_choice_that_binds(it: Item) -> I32 {
+  match it {
+    Item { x: 0, y: b, _ } | Item { x: 1, y: b, _ } => b,
+    Item { z: c, _ } => c,
+  }
+}
+
+pub fn a_choice_that_binds_in_a_variant(o: Option[Item]) -> I32 {
+  match o {
+    Some(Item { x: 0, z: c, _ }) | Some(Item { y: 0, z: c, _ }) => c,
+    Some(Item { _ }) => 1,
+    None => 0,
+  }
+}
+
+pub fn a_bool_field_and_the_rest(f: Flag) -> I32 {
+  match f {
+    Flag { on: true, _ } => 1,
+    Flag { on: false, _ } => 0,
+  }
+}
+
+pub fn an_anonymous_function(i: Item) -> I32 {
+  let f = fn(q: Item) -> I32 {
+    let Item { y: b, _ } = q
+    b
+  }
+  f.(i)
+}

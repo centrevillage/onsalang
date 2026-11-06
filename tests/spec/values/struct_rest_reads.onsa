@@ -1,0 +1,160 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§5.2", "§5.4"]
+
+// S-903 (§7, §5.4): the fields that the last `_` of a struct pattern leaves out are not read, as the fields written
+// `n: _` are not ("読むのは束縛する要素と、リテラル・定数と比べる要素で、`_` は読まず"). So a destructuring whose `_`
+// leaves out the field that was changed is still usable (values/binding_path_use.onsa has the same programs with
+// `n: _` written). Nothing is moved by the fields left out: a borrowed value is still whole after `let Holder { m: mm, _ } = h`,
+// and the Affine field that `_` leaves out of a `move` is dropped with the value. The programs are run in the
+// interpreter; negative/struct_rest_reads.onsa has the other side.
+
+pub struct Holder {
+  buf: Buf[F32],
+  m: U32,
+  n: U32,
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+fn len_of(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+fn mk_wrap() -> Wrap uses {Alloc} {
+  Wrap { h: Holder { buf: Buf.zeroed(3), m: 7, n: 1 }, k: 2 }
+}
+
+fn the_left_out_field_was_changed(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, _ } => {
+      w.h.n = 5
+      let Holder { buf: bb, m: mm, _ } = hh
+      r = len_of(bb) + mm
+    },
+  }
+  r
+}
+
+fn the_nested_pattern_left_it_out(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: Holder { buf: bb, m: mm, _ }, _ } => {
+      w.h.n = 5
+      r = len_of(bb) + mm
+    },
+  }
+  r
+}
+
+fn a_match_on_the_binding_leaves_it_out(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, _ } => {
+      w.h.n = 5
+      match hh {
+        Holder { buf: bb, _ } => {
+          r = len_of(bb)
+        },
+      }
+    },
+  }
+  r
+}
+
+fn a_derived_binding_leaves_it_out(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: hh, _ } => {
+      let g = hh
+      w.h.n = 5
+      let Holder { m: mm, _ } = g
+      r = mm
+    },
+  }
+  r
+}
+
+fn a_copy_binding_keeps_its_value(inout w: Wrap) -> U32 {
+  var r: U32 = 0
+  match w {
+    Wrap { h: Holder { m: mm, _ }, _ } => {
+      w.h.m = 9
+      r = mm
+    },
+  }
+  r
+}
+
+fn the_buffer_left_out_stays(h: Holder) -> U32 {
+  let Holder { m: mm, _ } = h
+  mm + len_of(h.buf)
+}
+
+fn the_whole_stays_after_a_pattern_that_writes_nothing(h: Holder) -> U32 {
+  let Holder { _ } = h
+  len_of(h.buf) + h.m + h.n
+}
+
+fn the_buffer_is_taken_and_the_rest_is_dropped(move h: Holder) -> U32 uses {Alloc} {
+  let Holder { buf: b, _ } = move h
+  b.len()
+}
+
+fn a_move_match_takes_the_buffer(move w: Wrap) -> U32 uses {Alloc} {
+  var r: U32 = 0
+  match move w {
+    Wrap { h: Holder { buf: b, _ }, _ } => {
+      r = b.len()
+    },
+  }
+  r
+}
+
+test "the destructuring that leaves out the changed field is usable" {
+  var w = mk_wrap()
+  assert the_left_out_field_was_changed(inout w) == 10
+  assert w.h.n == 5
+  assert w.h.m == 7
+}
+
+test "the pattern that left the field out when the arm was entered" {
+  var w = mk_wrap()
+  assert the_nested_pattern_left_it_out(inout w) == 10
+  assert w.h.n == 5
+}
+
+test "a match on the binding that leaves the field out" {
+  var w = mk_wrap()
+  assert a_match_on_the_binding_leaves_it_out(inout w) == 3
+  assert w.h.n == 5
+}
+
+test "a binding derived from the binding" {
+  var w = mk_wrap()
+  assert a_derived_binding_leaves_it_out(inout w) == 7
+  assert w.h.n == 5
+}
+
+test "a Copy binding is the value at the time it was bound" {
+  var w = mk_wrap()
+  assert a_copy_binding_keeps_its_value(inout w) == 7
+  assert w.h.m == 9
+}
+
+test "a field left out of a borrowed value is not moved" {
+  let w = mk_wrap()
+  assert the_buffer_left_out_stays(w.h) == 10
+  assert the_whole_stays_after_a_pattern_that_writes_nothing(w.h) == 11
+  assert w.h.buf.len() == 3
+}
+
+test "a move takes the field that is written and drops the rest" {
+  assert the_buffer_is_taken_and_the_rest_is_dropped(mk_wrap().h) == 3
+  assert a_move_match_takes_the_buffer(mk_wrap()) == 3
+}
