@@ -81,6 +81,9 @@ pub enum Item {
         value: Option<String>,
     },
     Impl {
+        /// The trait of `impl Tr for Ty`.
+        #[serde(rename = "trait", skip_serializing_if = "Option::is_none")]
+        of: Option<String>,
         ty: String,
         fns: Vec<FnIface>,
         consts: Vec<Item>,
@@ -325,9 +328,12 @@ impl Builder<'_> {
             f.effects.vars.iter().map(|&v| generics.get(v as usize).map(|g| g.name.clone()).unwrap_or_default()),
         );
         let own_generics = self.generics(&f.generics);
+        // A member of a trait's `impl` has no word (§15.1).
+        let of_trait = def.owner.and_then(|o| self.a.def(o).as_impl()).is_some_and(|i| i.of.is_some());
+        let vis = if of_trait { Vis::Default } else { def.vis };
         let mut sig = String::new();
-        if def.vis == Vis::Pub {
-            sig.push_str(vis_str(def.vis));
+        if vis == Vis::Pub {
+            sig.push_str(vis_str(vis));
             sig.push(' ');
         }
         if f.target {
@@ -357,7 +363,7 @@ impl Builder<'_> {
         }
         FnIface {
             name: display.to_string(),
-            vis: vis_str(def.vis).into(),
+            vis: vis_str(vis).into(),
             rt: f.rt,
             generics: own_generics,
             params,
@@ -604,7 +610,8 @@ impl Builder<'_> {
                         .map(|&c| self.const_item(c, &self.a.def(c).name))
                         .collect();
                     if !fns.is_empty() || !consts.is_empty() {
-                        items.push(Item::Impl { ty: self.ty(i.self_ty, &i.generics), fns, consts });
+                        let of = i.of.map(|b| b.name().to_string());
+                        items.push(Item::Impl { of, ty: self.ty(i.self_ty, &i.generics), fns, consts });
                     }
                 }
                 _ => {}
@@ -721,8 +728,9 @@ fn render_item(item: &Item, out: &mut String, indent: &str) {
                 }
             }
         }
-        Item::Impl { ty, fns, consts } => {
-            let _ = writeln!(out, "{indent}impl {ty}");
+        Item::Impl { of, ty, fns, consts } => {
+            let of = of.as_ref().map_or(String::new(), |t| format!("{t} for "));
+            let _ = writeln!(out, "{indent}impl {of}{ty}");
             for c in consts {
                 render_item(c, out, &format!("{indent}  "));
             }

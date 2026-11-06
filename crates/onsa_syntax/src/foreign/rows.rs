@@ -741,8 +741,8 @@ pub static ROWS: &[Row] = &[
         name: "impl_member_pub",
         phase: Phase::Names,
         code: Code::E0020,
-        message: "a member of an inherent `impl` reaches no farther than its type; `pub` on it is redundant",
-        rule: "a member of an inherent `impl` does not reach beyond the visibility of its type: `pub` is written on the members of a `pub` type, and the members with no word follow their type (§15.1)",
+        message: "a member of an `impl` reaches no farther than its type; the word on it is redundant",
+        rule: "a member of an `impl` does not reach beyond the visibility of its type: `pub` is written on the members of a `pub` inherent `impl`, the members with no word follow their type, and a member of `impl Tr for Ty` has no word (§15.1)",
         detect: Detect::Reported,
     },
     Row {

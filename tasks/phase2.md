@@ -81,3 +81,5 @@
   順は `spec/20-order.md` の第 2 期の 10（`interface` / `audit` / `primer`）。S-51 の「`onsa primer` は T5-7」は旧い ID で、担う作業が無かった（W4-03 U4b/t が見つけた）。`--std` が `pub` の項目だけなのは、`onsa interface` が無指定の項目も並べる S-660 の後も変わらない。
 - **借用束縛の経路の捕捉（89 回目、2026-10-30、S-803 の独立のレビュー）:** 無名関数が借用束縛の Copy のフィールドだけを読む形（`fn(x) { x + hh.m }`、`hh` は `match w` の腕の束縛）は、変数 `hh` の全体を捕捉するので E0712（S-722。dev も同じ）。書き手は `let m2 = hh.m` を先に置く。
   第 2 期に捕捉の形を増やすとき、経路の捕捉を許すかを決める（入力は `target/notes/89/s803/probe/g12_capture.onsa`）。
+- **`impl Tr for Ty` を開く述語（117 回目、2026-11-06、W5-06 U4）:** `names/collect.rs` の `opens_impl` は経路の最後の綴りが `Default` かを読み、`ImplDef.of` は `Bound::Default` に固定である（利用者の `m.Default` も std の `Default` と読む。第 1 期は利用者の trait の宣言が E0200 なので害が無い）。
+  第 2 期に利用者の trait と他の標準 trait を開くときは、解決した実体から決める形にする。

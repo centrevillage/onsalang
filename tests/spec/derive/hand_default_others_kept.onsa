@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 0
+
+// W5-06 U4/t, X23-8 (spec §18.1: "形の全体がこの版に無いもの（`impl Tr for P`、`trait` と `effect` の宣言）は形の E0200 で、中の名前を読まない"; W5-06 opens the `impl Default for Ty` only: "`Drop` と他の標準 trait の手書きの実装は
+// 第 2 期"). The `impl Tr for Ty` of every other trait of the table of §6.3 stays the E0200 of the form when the heading has no error of the names stage: the operator traits (`Add`, `Neg`, `PartialEq`, `PartialOrd`), the
+// comparison traits (`Eq`, `Ord`), the number traits (`AnyNum`, `Num`, `Int`, `Unsigned`), `Iter[T]`, with and without members, a generic type, an enum. `Hash`, `Show` and `Drop` are in impl_trait_e0200_hand_written.onsa and
+// `Float` and `Ordinal` (E0307) in impl_trait_e0307_float_ordinal.onsa, and none of them changes. An `impl Default` of the same type in the same file is right (the case would be a hand-written `Default` next to the
+// forms that stay closed). One error per unit (P-01).
+
+pub struct P {
+  x: F32,
+}
+
+pub enum E {
+  A,
+  B,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl Default for P {
+  rt fn default() -> P {
+    P { x: 0.5 }
+  }
+}
+
+impl Add for P {                                    //~ E0200
+}
+
+impl Neg for P {                                    //~ E0200
+}
+
+impl PartialEq for P {                              //~ E0200
+}
+
+impl PartialOrd for E {                             //~ E0200
+}
+
+impl Eq for E {                                     //~ E0200
+}
+
+impl Ord for E {                                    //~ E0200
+}
+
+impl AnyNum for P {                                 //~ E0200
+}
+
+impl Num for P {                                    //~ E0200
+}
+
+impl Int for E {                                    //~ E0200
+}
+
+impl Unsigned for E {                               //~ E0200
+}
+
+impl Iter[F32] for P {                              //~ E0200
+}
+
+impl[T] Add for W[T] {                              //~ E0200
+}
+
+impl[T] PartialEq for W[T] {                        //~ E0200
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {
+    W { v: T.default() }
+  }
+}

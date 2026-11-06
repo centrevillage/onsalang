@@ -1,0 +1,88 @@
+// onsa.toml
+// [package]
+// name = "hand_default_cycle_derive"
+// edition = "2026"
+//
+// [export]
+// prefix = "hdcd_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§10", "§12.5", "§6.3", "§6.4", "§18.1"]
+
+// W5-06 U4/t, S-911 (spec §10 rule 5: "再帰しない（直接・相互とも、E0903）。… 境界のメンバ（`T.default()`）と derive が作る関数を経る循環は、具体化した呼び出しで決まるので、手で書いた `rt` の関数を含むものを Core への降下の診断
+// （§18.1）として報告する"; §18.1: "具体化した呼び出しの循環の E0903（§10）もこの診断で、循環の中の手で書いた呼び出しのうちソースの順で最初のものに付け … 循環ごとに一つ報告する"). The cycle through a function that a derive makes: the
+// `default` of a type that a derive of `Default` makes calls the `default` of its field, and the hand-written `default` of the field's type calls the `default` of the type. `onsa check` does not find it (no name closes the
+// cycle), and the lowering does: an E0903 on the hand-written call, on the build of the target (`[host]`). The field is a struct, a field of a generic derived type, an element of a tuple and of an array. One cycle gives one
+// diagnostic (P-01). `onsa check` has no diagnostic in this file. The forms that are not cycles are in hand_default_cycle_fine.onsa.
+
+@export
+pub fn anchor() -> U32 {
+  1
+}
+
+pub struct P1: Default {
+  q: Q1,
+}
+
+pub struct Q1 {
+  n: I32,
+}
+
+impl Default for Q1 {
+  rt fn default() -> Q1 {
+    let p = P1.default()                            //~ E0903
+    Q1 { n: p.q.n }
+  }
+}
+
+pub struct Wd[T]: Default {
+  v: T,
+}
+
+pub struct Q2 {
+  n: I32,
+}
+
+impl Default for Q2 {
+  rt fn default() -> Q2 {
+    let w: Wd[Q2] = Wd.default()                    //~ E0903
+    Q2 { n: w.v.n }
+  }
+}
+
+pub struct P3: Default {
+  t: (Q3, U8),
+}
+
+pub struct Q3 {
+  n: I32,
+}
+
+impl Default for Q3 {
+  rt fn default() -> Q3 {
+    let p = P3.default()                            //~ E0903
+    Q3 { n: p.t.0.n }
+  }
+}
+
+pub struct P4: Default {
+  a: [Q4; 2],
+}
+
+pub struct Q4 {
+  n: I32,
+}
+
+impl Default for Q4 {
+  rt fn default() -> Q4 {
+    let p = P4.default()                            //~ E0903
+    Q4 { n: p.a[0].n }
+  }
+}

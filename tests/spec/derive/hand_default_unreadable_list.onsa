@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.4", "§6.2"]
+
+// W5-06 U4/t, S-460, S-774, S-851 (spec §18.1: "誤りの属性の付いた struct・enum では、derive の一覧と `@repr` の値を読めなかった部分として扱い（属性の中身は読まない）、それに頼る使う側（… derive が作るメソッド、
+// §6.4 の derive と手で書いた `impl` の重なり、FFI の配置）には診断を出さない。derive の一覧に閉じた一覧の外の名前（§6.4 の E0416）があるときも、一覧を読めなかった部分として扱い、一覧の 8 つの trait の判定、
+// derive が作るメンバ、手で書いた `impl` の重なりには診断を出さない"). The derive list that was not read could have been `Default`, so the hand-written `impl Default` of the type is not an E0304 with it: a list with a name that
+// is no derivable trait (`Gone`, `Clone`, alone, with `Default` in the same list, next to `Ordinal` in an enum, in a generic struct), and an attribute of another language (`#[derive(Default)]`, E0020). The `impl` is
+// read as any other: it is right, it has no diagnostic, and the type has the E0416 or the E0020 of its own declaration only. The type is a unit of its own, so the one error is in the declaration (P-01). A list that is
+// read but not met (`enum E: Default`) is not here: the spec does not say whether the hand-written `impl Default` of that enum clashes with it.
+
+pub struct Gone1: Gone { //~ E0416
+  v: U32,
+}
+
+impl Default for Gone1 {
+  rt fn default() -> Gone1 {
+    Gone1 { v: 1 }
+  }
+}
+
+pub struct Clone1: Clone { //~ E0416
+  v: U32,
+}
+
+impl Default for Clone1 {
+  rt fn default() -> Clone1 {
+    Clone1 { v: 2 }
+  }
+}
+
+pub struct Mixed: Eq + Gone + Default { //~ E0416
+  v: U32,
+}
+
+impl Default for Mixed {
+  rt fn default() -> Mixed {
+    Mixed { v: 3 }
+  }
+}
+
+pub enum GoneEnum: Gone + Ordinal { //~ E0416
+  A,
+  B,
+}
+
+impl Default for GoneEnum {
+  rt fn default() -> GoneEnum {
+    GoneEnum.B
+  }
+}
+
+pub struct GoneGeneric[T]: Gone { //~ E0416
+  a: T,
+}
+
+impl[T: Default] Default for GoneGeneric[T] {
+  rt fn default() -> GoneGeneric[T] {
+    GoneGeneric { a: T.default() }
+  }
+}
+
+#[derive(Default)]                                  //~ E0020
+pub struct OldAttribute {
+  v: U32,
+}
+
+impl Default for OldAttribute {
+  rt fn default() -> OldAttribute {
+    OldAttribute { v: 4 }
+  }
+}
+
+@derive(Default)                                    //~ E0020
+pub struct OldAt {
+  v: U32,
+}
+
+impl Default for OldAt {
+  rt fn default() -> OldAt {
+    OldAt { v: 5 }
+  }
+}
+
+// the impl before the declaration of the type
+impl Default for Early {
+  rt fn default() -> Early {
+    Early { v: 6 }
+  }
+}
+
+pub struct Early: Gone { //~ E0416
+  v: U32,
+}

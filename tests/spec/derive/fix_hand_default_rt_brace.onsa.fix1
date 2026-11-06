@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:24"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// S-905 (spec §6.3: "`rt` の欠けだけなら、`rt` を足す修正候補を出す"): the `rt` goes right before the `fn`, with no blank before
+// that `fn` too, and the one candidate leaves no diagnostic.
+
+pub struct P { n: I32 }
+
+impl Default for P {rt fn default() -> P { P { n: 1 } }} //~ E0401

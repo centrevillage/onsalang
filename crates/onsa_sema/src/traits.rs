@@ -211,6 +211,20 @@ pub(crate) const TRAIT_ITEMS: [TraitItem; 3] = [
     },
 ];
 
+impl TraitItem {
+    /// Its signature, as the notes show it (§6.3, §6.4).
+    pub(crate) fn signature(&self) -> String {
+        let shown = |t| match t {
+            ItemTy::SelfTy => "Self",
+            ItemTy::U32 => IntKind::U32.name(),
+            ItemTy::OptionSelf => "Option[Self]",
+        };
+        let params = self.params.iter().map(|&(name, t)| format!("{name}: {}", shown(t)));
+        let params: Vec<String> = self.recv.map(|_| "self".to_string()).into_iter().chain(params).collect();
+        format!("rt fn {}({}) -> {}", self.name, params.join(", "), shown(self.ret))
+    }
+}
+
 impl DerivedFn {
     /// Its row of [`TRAIT_ITEMS`].
     pub(crate) fn item(self) -> &'static TraitItem {

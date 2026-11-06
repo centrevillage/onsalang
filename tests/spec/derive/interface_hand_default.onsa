@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§15.1", "§18.2"]
+// golden = ["interface"]
+
+// W5-06 U4, S-904, S-905: `onsa interface` shows a hand-written `impl Default` as an `impl` of the trait, its member with no word (§15.1), and not in the `derive` of the type,
+// which lists what the head of the type derives (§6.4): a struct, an enum, and a generic type with a derive of another trait.
+
+pub struct Gain {
+  amount: F32,
+}
+
+impl Default for Gain {
+  rt fn default() -> Gain {
+    Gain { amount: 1.0 }
+  }
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+impl Default for Mode {
+  rt fn default() -> Mode {
+    Mode.Off
+  }
+}
+
+pub struct Held[T]: PartialEq {
+  value: T,
+}
+
+impl[T: Default] Default for Held[T] {
+  rt fn default() -> Held[T] {
+    Held { value: T.default() }
+  }
+}

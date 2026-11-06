@@ -315,3 +315,11 @@ fn a_member_of_a_type_parameter_is_of_its_bounds() {
     assert!(member(&a, &[Bound::AnyNum], "ZERO").is_some());
     assert!(member(&a, &[Bound::AnyNum], "ONE").is_none());
 }
+
+/// The signatures the notes of an `impl` show are those of §6.3 and §6.4.
+#[test]
+fn the_signature_of_an_item_is_that_of_the_spec() {
+    let shown: Vec<String> = TRAIT_ITEMS.iter().map(|i| i.signature()).collect();
+    let spec = ["rt fn default() -> Self", "rt fn ordinal(self) -> U32", "rt fn from_ordinal(n: U32) -> Option[Self]"];
+    assert_eq!(shown, spec);
+}

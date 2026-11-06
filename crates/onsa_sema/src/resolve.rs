@@ -533,6 +533,10 @@ pub struct Modules {
     /// known (§18.1, S-460, S-774). A use of a name of the trait is an error
     /// with no diagnostic ([`Self::holds_member`]).
     pub held: HashSet<(DefId, crate::def::Bound)>,
+    /// The `impl` written of a trait for a type, the first in the source: a
+    /// row is one `impl` (R-127), of the same trait key as `held` and the
+    /// members of the bounds.
+    pub trait_impls: HashMap<(crate::def::Bound, DefId), DefId>,
     /// The module `std.core`, where the names of the prelude std declares are
     /// (§15.1, S-659); set by `crate::names::prelude::declared`.
     pub core: Option<ModId>,

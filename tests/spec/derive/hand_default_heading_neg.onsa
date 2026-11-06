@@ -1,0 +1,233 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.2", "§5.3", "§4.4", "§18.1"]
+
+// W5-06 U4/t, S-895, S-851 (spec §6.3: the orphan rule, the alias that cannot be written, the target's arguments (§6.2) and the traits that only std implements are all E0307; §6.2: "対象の型引数の数が宣言と合わなければ
+// E0412 … 対象の型引数は型の宣言の型パラメータの要求を満たさなければならず（E0416、§4.5）… 見出しの誤りである（§18.1）"; §5.3: the second-class type is not the target of an `impl`, E0710; §18.1: "`impl Tr for P`
+// の見出し … は、固有の `impl` と同じ規則で名前の段まで読む（E0302、E0308、E0307）"; "見出しが誤りの trait の `impl` のメンバも、同じように数える"). The heading of an `impl Default` is read as the heading of an inherent
+// `impl` is, now that the `impl` is accepted: a built-in type (an orphan, with a member that is not read, and without), an alias, the arguments of the target that are not the parameters once each, an argument count that
+// is wrong (E0412), a requirement of the type that the parameter does not meet (E0416), a name that is not found (E0302, also as the argument), a name that is no type (E0308: a function, a constant, a trait), and the second-class
+// generated types of the flows (E0710). The error is in the heading, so each `impl` is a unit with one error, and its members are not read. The members of the `impl` whose target is known are names after the type's name: the use of
+// `P.default()` has no E0302, and in an E0304 with a derive the use is silent (a `Bool` result would be an E0401 if the call were read as the derive's). One error in each unit (P-01).
+
+pub struct P1 {
+  n: I32,
+}
+
+pub struct P2 {
+  n: I32,
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+pub struct Pair2[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Needs[T: Num] {
+  v: T,
+}
+
+pub struct Wants[T: Default] {
+  v: T,
+}
+
+pub struct Plain {
+  n: I32,
+}
+
+pub struct St {
+  a: F32,
+}
+
+pub flow voice(x: F32 at sample, gain: F32 at block) -> St at sample {
+  St { a: x * gain }
+}
+
+pub flow tone(x: F32 at sample) -> St at sample {
+  St { a: x }
+}
+
+pub flow wave(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+type Al1 = P1
+
+type Float32 = F32
+
+fn helper() -> I32 {
+  1
+}
+
+const LIMIT: I32 = 3
+
+// ---------------------------------------------------------------- E0307: a built-in type, an alias, the arguments of the target
+
+impl Default for F64 {                              //~ E0307
+}
+
+impl Default for Bool {                             //~ E0307
+  rt fn default() -> Bool {
+    false
+  }
+}
+
+impl Default for Str {                              //~ E0307
+}
+
+impl Default for Bytes {                            //~ E0307
+}
+
+impl[T] Default for Option[T] {                     //~ E0307
+}
+
+impl Default for Al1 {                              //~ E0307
+}
+
+impl Default for Float32 {                          //~ E0307
+}
+
+impl Default for W[F32] {                           //~ E0307
+}
+
+impl[T] Default for Pair2[T, T] {                   //~ E0307
+}
+
+impl[T] Default for Plain {                         //~ E0307
+}
+
+impl[T] Default for W[Option[T]] {                  //~ E0307
+}
+
+// ---------------------------------------------------------------- E0412: the number of the arguments of the target
+
+impl Default for P2[I32] {                          //~ E0412
+}
+
+impl Default for W[I32, I32] {                      //~ E0412
+}
+
+impl[T] Default for W[T, T] {                       //~ E0412
+}
+
+impl Default for Pair2[I32] {                       //~ E0412
+}
+
+// ---------------------------------------------------------------- E0416: the requirement of the type
+
+impl[T] Default for Needs[T] {                      //~ E0416
+}
+
+impl[T: Show] Default for Needs[T] {                //~ E0416
+}
+
+impl[T] Default for Wants[T] {                      //~ E0416
+}
+
+// ---------------------------------------------------------------- E0302: a name that is not found
+
+impl Default for Nope {                             //~ E0302
+}
+
+impl[T] Default for Nope2[T] {                      //~ E0302
+}
+
+impl Default for W[Nope] {                          //~ E0302
+}
+
+impl Default for Nope3 {                            //~ E0302
+  rt fn default() -> I32 {
+    0
+  }
+}
+
+// ---------------------------------------------------------------- E0308: a name that is no type
+
+impl Default for helper {                           //~ E0308
+}
+
+impl Default for LIMIT {                            //~ E0308
+}
+
+impl Default for Show {                             //~ E0308
+}
+
+// ---------------------------------------------------------------- E0710: a second-class type (the generated `Out` of a flow, which holds a `Span`; the `Span[T]` itself is also an orphan, and which of the two codes it has is not in the spec)
+
+impl Default for voice.Out {                        //~ E0710
+}
+
+impl Default for wave.Out {                         //~ E0710
+}
+
+impl Default for tone.Out {                         //~ E0710
+  rt fn default() -> tone.Out {
+    panic("not made")
+  }
+}
+
+// ---------------------------------------------------------------- the members of an impl with a heading error are names after the type's name
+
+pub struct Q1 {
+  n: I32,
+}
+
+type AlQ1 = Q1
+
+impl Default for AlQ1 {                             //~ E0307
+  rt fn default() -> Q1 {
+    Q1 { n: 1 }
+  }
+}
+
+pub fn the_member_of_the_alias_impl() -> Q1 {
+  Q1.default()
+}
+
+pub struct Q2: Default {
+  n: I32,
+}
+
+type AlQ2 = Q2
+
+impl Default for AlQ2 {                             //~ E0307
+  rt fn default() -> Q2 {
+    Q2 { n: 2 }
+  }
+}
+
+pub fn the_clash_is_an_error_name() -> Bool {
+  Q2.default()
+}
+
+pub struct Q3[T] {
+  v: T,
+}
+
+impl Default for Q3[I32, I32] {                     //~ E0412
+  rt fn default() -> Q3[I32] {
+    Q3 { v: 3 }
+  }
+}
+
+pub fn the_member_of_the_count_impl() -> Q3[I32] {
+  Q3.default()
+}
+
+pub struct Q4[T: Num] {
+  v: T,
+}
+
+impl[T] Default for Q4[T] {                         //~ E0416
+  rt fn default() -> Q4[T] {
+    panic("not made")
+  }
+}
+
+pub fn the_member_of_the_requirement_impl() -> Q4[I32] {
+  Q4.default()
+}

@@ -1,0 +1,3 @@
+[package]
+name = "derive_hand_default_modules_values"
+edition = "2026"

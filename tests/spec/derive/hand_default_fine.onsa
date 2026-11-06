@@ -1,0 +1,332 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§6.2", "§6.6", "§15.1"]
+// fixes = 0
+
+// W5-06 U4/t, S-851, S-904, S-905 (spec §6.4: "`impl Default for Mode { rt fn default() -> Mode { Mode.Off } }` と手で書く"; §6.3: "`Default` は関連関数 `rt fn default() -> Self` を持ち、
+// 効果行は空である（手で実装するときも `rt fn default() -> Self` と書く）。… `rt fn` の中と `const` の初期化式でも呼べる"; "`Self` と型の名前は同じ型である"; §6.2: "対象の型引数は、`impl`
+// の型パラメータを一度ずつ並べたもの" so the order of the parameters of the `impl` is free). The `impl Default for Ty` that is right is accepted: an enum (the example of §6.4), a struct, the return
+// type written as `Self` and as the name of the type, a body that calls other defaults, a generic type (`impl[T: Default] Default for W[T]`, a bound on the type, the parameters of the `impl` in another
+// order than the arguments of the target). The type with the `impl` meets `T: Default`, so each of the uses below is clean: `M.default()`, a function with `T: Default` given the type, `T.default()` for the
+// type, the field of a derive of `Default`, an element of a tuple and of a `[T; N]`, the initializer of a `const` and of an associated constant, an `rt fn`, `Self.default()` in an `impl`, and a generic
+// type of such a type (`W[W[I32]]`). A type that lists no `Default` in its heading may have the `impl`, and so may one that lists other traits. The values are in hand_default_values.onsa and the other module is in
+// hand_default_modules/. The `impl` of a type does not clash with the `impl` of another. No diagnostic is expected.
+
+pub enum Mode: PartialEq {
+  Off,
+  On,
+}
+
+impl Default for Mode {
+  rt fn default() -> Mode {
+    Mode.Off
+  }
+}
+
+pub struct Gain {
+  amount: F32,
+  steps: U32,
+}
+
+impl Default for Gain {
+  rt fn default() -> Gain {
+    Gain { amount: 1.0, steps: 8 }
+  }
+}
+
+pub struct SelfForm {
+  n: I32,
+}
+
+impl Default for SelfForm {
+  rt fn default() -> Self {
+    SelfForm { n: 3 }
+  }
+}
+
+pub struct Bank {
+  gain: Gain,
+  mode: Mode,
+  taps: [F32; 2],
+}
+
+impl Default for Bank {
+  rt fn default() -> Bank {
+    Bank { gain: Gain.default(), mode: Mode.default(), taps: [0.5, 0.5] }
+  }
+}
+
+pub struct Empty {}
+
+impl Default for Empty {
+  rt fn default() -> Empty {
+    Empty {}
+  }
+}
+
+// ---------------------------------------------------------------- a generic type
+
+pub struct W[T] {
+  v: T,
+  tag: U8,
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {
+    W { v: T.default(), tag: 7 }
+  }
+}
+
+pub struct Pair[T, U] {
+  a: T,
+  b: U,
+}
+
+impl[U: Default, T: Default] Default for Pair[T, U] {
+  rt fn default() -> Pair[T, U] {
+    Pair { a: T.default(), b: U.default() }
+  }
+}
+
+pub struct Slot[T: Default] {
+  value: T,
+}
+
+impl[T: Default] Default for Slot[T] {
+  rt fn default() -> Slot[T] {
+    Slot { value: T.default() }
+  }
+}
+
+pub struct Tagged[T] {
+  v: T,
+}
+
+impl[T: Default + Copy] Default for Tagged[T] {
+  rt fn default() -> Self {
+    Tagged { v: T.default() }
+  }
+}
+
+// ---------------------------------------------------------------- a type that lists other traits, or none
+
+pub struct Listed: PartialEq + Eq {
+  n: I32,
+}
+
+impl Default for Listed {
+  rt fn default() -> Listed {
+    Listed { n: 1 }
+  }
+}
+
+pub enum Shade: Ordinal + PartialEq {
+  Dark,
+  Light,
+}
+
+impl Default for Shade {
+  rt fn default() -> Shade {
+    Shade.Light
+  }
+}
+
+// ---------------------------------------------------------------- the uses
+
+pub rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub fn mode_default() -> Mode {
+  Mode.default()
+}
+
+pub fn gain_default() -> Gain {
+  Gain.default()
+}
+
+pub fn self_form_default() -> SelfForm {
+  SelfForm.default()
+}
+
+pub fn bank_default() -> Bank {
+  Bank.default()
+}
+
+pub fn field_of_the_default() -> F32 {
+  Gain.default().amount
+}
+
+pub fn through_the_bound() -> Gain {
+  zero_of()
+}
+
+pub fn through_the_bound_mode() -> Mode {
+  zero_of()
+}
+
+pub fn through_the_bound_of_a_listed_type() -> Listed {
+  zero_of()
+}
+
+pub fn shade_default() -> Shade {
+  Shade.default()
+}
+
+pub struct Holder: Default {
+  m: Mode,
+  g: Gain,
+  n: U32,
+  b: Bank,
+}
+
+pub fn holder_default() -> Holder {
+  Holder.default()
+}
+
+pub struct HolderOfGenerics: Default {
+  w: W[Gain],
+  p: Pair[Mode, Gain],
+  s: Slot[Mode],
+}
+
+pub fn holder_of_generics() -> HolderOfGenerics {
+  HolderOfGenerics.default()
+}
+
+pub fn in_a_tuple() -> (Mode, Gain, I32) {
+  zero_of()
+}
+
+pub fn in_a_nested_tuple() -> ((Mode, Bank), U8) {
+  zero_of()
+}
+
+pub fn in_an_array() -> [Gain; 3] {
+  zero_of()
+}
+
+pub fn in_an_array_of_tuples() -> [(Mode, Gain); 2] {
+  zero_of()
+}
+
+pub const START: Gain = Gain.default()
+
+pub const START_MODE: Mode = Mode.default()
+
+pub const START_BANK: Bank = Bank.default()
+
+pub const START_W: W[Mode] = W.default()
+
+pub const MIXED: (Mode, Gain, U8) = (Mode.default(), Gain.default(), U8.default())
+
+pub const SEVERAL: [Gain; 2] = [Gain.default(), Gain.default()]
+
+impl Gain {
+  pub const HOME: Gain = Gain.default()
+
+  pub fn reset() -> Gain {
+    Self.default()
+  }
+
+  pub fn is_home(self) -> Bool {
+    self.steps == Self.default().steps
+  }
+}
+
+pub rt fn in_an_rt_fn() -> Gain {
+  Gain.default()
+}
+
+pub rt fn the_mode_in_an_rt_fn() -> Mode {
+  Mode.default()
+}
+
+pub rt fn the_bound_in_an_rt_fn() -> Bank {
+  zero_of()
+}
+
+pub rt fn in_an_rt_branch(flag: Bool) -> Gain {
+  if flag {
+    Gain.default()
+  } else {
+    Gain { amount: 2.0, steps: 1 }
+  }
+}
+
+pub flow scaled(x: F32 at sample) -> F32 at sample {
+  x * Gain.default().amount
+}
+
+pub fn the_value_of_the_function() -> Gain {
+  let make = Gain.default
+  make.()
+}
+
+// ---------------------------------------------------------------- a generic type of such a type
+
+pub fn w_of_gain() -> W[Gain] {
+  W.default()
+}
+
+pub fn w_of_an_integer() -> W[I32] {
+  W.default()
+}
+
+pub fn w_of_w() -> W[W[I32]] {
+  W.default()
+}
+
+pub fn w_of_w_of_w() -> W[W[W[U8]]] {
+  zero_of()
+}
+
+pub fn w_of_a_derive() -> W[Holder] {
+  W.default()
+}
+
+pub fn pair_of_the_types() -> Pair[Gain, Mode] {
+  Pair.default()
+}
+
+pub fn pair_of_the_types_swapped() -> Pair[Mode, Gain] {
+  Pair.default()
+}
+
+pub fn pair_of_the_same_type() -> Pair[Gain, Gain] {
+  zero_of()
+}
+
+pub fn pair_of_generics() -> Pair[W[Mode], Slot[Gain]] {
+  Pair.default()
+}
+
+pub fn slot_of_a_hand_written() -> Slot[Gain] {
+  Slot.default()
+}
+
+pub fn slot_through_the_bound() -> Slot[Mode] {
+  zero_of()
+}
+
+pub fn tagged_of_a_float() -> Tagged[F32] {
+  Tagged.default()
+}
+
+pub struct Boxed[T: Default] {
+  inner: T,
+}
+
+impl[T: Default] Boxed[T] {
+  pub fn fresh() -> T {
+    T.default()
+  }
+
+  pub fn make() -> Boxed[T] {
+    Boxed { inner: T.default() }
+  }
+
+  pub fn made_of_a_wrapper() -> W[T] {
+    W.default()
+  }
+}

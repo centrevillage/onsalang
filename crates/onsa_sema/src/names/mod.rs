@@ -13,7 +13,7 @@
 
 pub(crate) mod body;
 mod clash;
-mod collect;
+pub(crate) mod collect;
 mod cycles;
 mod heading;
 mod imports;

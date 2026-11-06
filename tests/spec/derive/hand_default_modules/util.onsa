@@ -1,0 +1,90 @@
+// The module `util` of the case in main.onsa: the types with a hand-written `impl Default` that the other module uses.
+
+pub struct Hidden {
+  priv gain: F32,
+  priv steps: U32,
+  tag: U8,
+}
+
+impl Default for Hidden {
+  rt fn default() -> Hidden {
+    Hidden { gain: 0.5, steps: 4, tag: 9 }
+  }
+}
+
+impl Hidden {
+  pub fn gain(self) -> F32 {
+    self.gain
+  }
+
+  pub fn steps(self) -> U32 {
+    self.steps
+  }
+}
+
+pub struct Wrap[T] {
+  priv inner: T,
+  extra: U8,
+}
+
+impl[T: Default] Default for Wrap[T] {
+  rt fn default() -> Wrap[T] {
+    Wrap { inner: T.default(), extra: 5 }
+  }
+}
+
+pub enum Mode: PartialEq {
+  Off,
+  On,
+  Auto,
+}
+
+impl Default for Mode {
+  rt fn default() -> Mode {
+    Mode.Auto
+  }
+}
+
+// no `pub`: the type is visible in the package, and so is the `impl` (its members have the visibility of the type)
+struct Internal {
+  n: I32,
+}
+
+impl Default for Internal {
+  rt fn default() -> Internal {
+    Internal { n: 6 }
+  }
+}
+
+// `priv`: the type, and the member of its `impl`, are seen in this module only
+priv struct Local {
+  n: I32,
+}
+
+impl Default for Local {
+  rt fn default() -> Local {
+    Local { n: 2 }
+  }
+}
+
+// types without `Default`, for the orphan rule of the other module
+pub struct Plain {
+  n: I32,
+}
+
+pub struct PlainW[T] {
+  v: T,
+}
+
+pub enum Choice {
+  A,
+  B,
+}
+
+pub fn local_default() -> I32 {
+  Local.default().n
+}
+
+pub rt fn hidden_in_this_module() -> Hidden {
+  Hidden.default()
+}

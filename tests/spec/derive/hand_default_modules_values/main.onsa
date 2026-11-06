@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§6.4", "§15.1"]
+
+// W5-06 U4/t, S-851, S-905 (spec §15.1: the members of the `impl` of a trait have the visibility of their owner; §6.4: "`priv` のフィールドがあっても、他のモジュールから `P.default()` を呼べる"). The
+// values of the hand-written `default` of a type of another module: the value of its body, with `priv` fields read by the functions of its module, through `use` and through the path, for a generic type
+// (`T.default()` inside, in the other module), for the enum, for a type without `pub`, for a priv type in its own module, and as the field of a derive of `Default` made in this module, an element of a
+// tuple and of an array through a bound. The values are not 0 or the first variant. The types are checked in hand_default_modules/.
+use util
+use util.{Hidden, Wrap, Mode, Internal}
+
+rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub struct Holder: Default {
+  h: Hidden,
+  m: Mode,
+  w: Wrap[Mode],
+  n: U32,
+}
+
+fn mode_number(m: Mode) -> U32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On => 1,
+    Mode.Auto => 2,
+  }
+}
+
+test "default of a type with priv fields, from another module" {
+  let h = Hidden.default()
+  assert h.gain() == 0.5
+  assert h.steps() == 4
+  assert h.tag == 9
+}
+
+test "default through the path of the module" {
+  let h = util.Hidden.default()
+  assert h.gain() == 0.5
+  assert h.steps() == 4
+  assert h.tag == 9
+}
+
+test "default of a generic type of the other module" {
+  let w: Wrap[U8] = Wrap.default()
+  assert w.inner() == 0
+  assert w.extra == 5
+  let f: Wrap[F32] = Wrap.default()
+  assert f.inner().to_bits() == 0
+  let h: Wrap[Hidden] = Wrap.default()
+  assert h.inner().steps() == 4
+  assert h.extra == 5
+}
+
+test "default of the enum of the other module" {
+  assert mode_number(Mode.default()) == 2
+  assert mode_number(util.Mode.default()) == 2
+  assert Mode.default() == Mode.Auto
+}
+
+test "default of a type that has no pub" {
+  let i = Internal.default()
+  assert i.n == 6
+}
+
+test "default of a priv type, in its module" {
+  assert util.local_default() == 2
+}
+
+test "the hand-written default in an rt fn of the other module" {
+  assert util.hidden_in_this_module().steps() == 4
+}
+
+test "the bound gives the hand-written default of the other module" {
+  let h: Hidden = zero_of()
+  assert h.gain() == 0.5
+  let m: Mode = zero_of()
+  assert m == Mode.Auto
+  let w: Wrap[Mode] = zero_of()
+  assert w.inner() == Mode.Auto
+  assert w.extra == 5
+}
+
+test "a derive of Default in this module uses the hand-written default of the other module" {
+  let x = Holder.default()
+  assert x.h.steps() == 4
+  assert x.h.tag == 9
+  assert x.m == Mode.Auto
+  assert x.w.inner() == Mode.Auto
+  assert x.w.extra == 5
+  assert x.n == 0
+}
+
+test "the elements of a tuple and of an array are the hand-written defaults of the other module" {
+  let t: (Hidden, Mode, I32) = zero_of()
+  assert t.0.steps() == 4
+  assert t.1 == Mode.Auto
+  assert t.2 == 0
+  let a: [Hidden; 2] = zero_of()
+  assert a[0].tag == 9
+  assert a[1].tag == 9
+}
+
+const START: Mode = Mode.default()
+
+const HIDDEN_START: Hidden = Hidden.default()
+
+test "the hand-written default of the other module in the initializer of a const" {
+  assert START == Mode.Auto
+  assert HIDDEN_START.steps() == 4
+  assert HIDDEN_START.tag == 9
+}

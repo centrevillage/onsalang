@@ -1,0 +1,218 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1", "§10", "§15.1"]
+// fixes = 0
+
+// W5-06 U4/t, S-904, S-905, S-913 (spec §6.3: "メンバの署名は trait の項目の関数型と同じに書く（`Self` と型の名前は同じ型である）。受け手、引数の数と型とモード、返り値、効果行、`rt`、型パラメータの違いは
+// 全て E0401 で、位置はメンバの名前で … `rt` の欠けだけなら、`rt` を足す修正候補を出す。この `impl` を使う所にも診断を出さない（§18.1）"; `Default` is `rt fn default() -> Self`, with an empty effect row, §6.3). The
+// member of an `impl Default` whose signature is not that of the trait: it takes a receiver, it takes one or two arguments, its result is another type (`I32`, `Option[Self]`), its effect row is not empty (`uses {Alloc}`: the
+// signature is read before the `rt` and the effects of the body, so it is the E0401 and not an E0902), it has a type parameter, a generic `impl` whose result is another instance of the type, and the forms with no `rt` that
+// differ in another way too (no `rt` and an argument, a result, a row): the only candidate of the spec is `rt` alone (fix_hand_default_rt_*.onsa), so these have none (`fixes = 0`). The uses, `M.default()` and
+// `M.default(1)` (the call that the member would take), a function with `T: Default`, a tuple, the field of a derive, and a `const`, have no diagnostic after each of these `impl` (S-913: both of the readings
+// of a call with the arguments of the member are silent). One error in each unit (P-01).
+
+pub struct M1 {
+  n: I32,
+}
+
+pub struct M2 {
+  n: I32,
+}
+
+pub struct M3 {
+  n: I32,
+}
+
+pub struct M4 {
+  n: I32,
+}
+
+pub struct M5 {
+  n: I32,
+}
+
+pub struct M6 {
+  n: I32,
+}
+
+pub struct M7 {
+  n: I32,
+}
+
+pub struct M8 {
+  n: I32,
+}
+
+pub struct M9 {
+  n: I32,
+}
+
+pub struct M10 {
+  n: I32,
+}
+
+pub struct G1[T] {
+  v: T,
+}
+
+pub struct G2[T] {
+  v: T,
+}
+
+// ---------------------------------------------------------------- the receiver and the arguments
+
+impl Default for M1 {
+  rt fn default(self) -> M1 {                       //~ E0401
+    M1 { n: 0 }
+  }
+}
+
+impl Default for M2 {
+  rt fn default(n: I32) -> M2 {                     //~ E0401
+    M2 { n: n }
+  }
+}
+
+impl Default for M3 {
+  rt fn default(a: I32, b: I32) -> M3 {             //~ E0401
+    M3 { n: a + b }
+  }
+}
+
+// ---------------------------------------------------------------- the result
+
+impl Default for M4 {
+  rt fn default() -> I32 {                          //~ E0401
+    0
+  }
+}
+
+impl Default for M5 {
+  rt fn default() -> Option[M5] {                   //~ E0401
+    Some(M5 { n: 0 })
+  }
+}
+
+// ---------------------------------------------------------------- the effect row
+
+impl Default for M6 {
+  rt fn default() -> M6 uses {Alloc} {              //~ E0401
+    M6 { n: 0 }
+  }
+}
+
+// ---------------------------------------------------------------- no `rt` and another difference: no candidate
+
+impl Default for M7 {
+  fn default(n: I32) -> M7 {                        //~ E0401
+    M7 { n: n }
+  }
+}
+
+impl Default for M8 {
+  fn default() -> I32 {                             //~ E0401
+    0
+  }
+}
+
+impl Default for M9 {
+  fn default() -> M9 uses {Alloc} {                 //~ E0401
+    M9 { n: 0 }
+  }
+}
+
+// ---------------------------------------------------------------- a type parameter
+
+impl Default for M10 {
+  rt fn default[T]() -> M10 {                       //~ E0401
+    M10 { n: 0 }
+  }
+}
+
+// ---------------------------------------------------------------- a generic impl
+
+impl[T: Default] Default for G1[T] {
+  rt fn default() -> G1[I32] {                      //~ E0401
+    G1 { v: 0 }
+  }
+}
+
+impl[T: Default] Default for G2[T] {
+  rt fn default(self) -> G2[T] {                    //~ E0401
+    G2 { v: T.default() }
+  }
+}
+
+// ---------------------------------------------------------------- the uses are silent
+
+pub rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub fn use_with_a_receiver() -> M1 {
+  M1.default()
+}
+
+pub fn use_with_the_argument_of_the_member() -> M2 {
+  M2.default(1)
+}
+
+pub fn use_without_the_argument_of_the_member() -> M2 {
+  M2.default()
+}
+
+pub fn use_with_the_arguments_of_the_member() -> M3 {
+  M3.default(1, 2)
+}
+
+pub fn use_with_the_result_of_the_member() -> I32 {
+  M4.default()
+}
+
+pub fn use_with_the_type() -> M4 {
+  M4.default()
+}
+
+pub fn use_m5() -> M5 {
+  M5.default()
+}
+
+pub fn use_m6() -> M6 {
+  M6.default()
+}
+
+pub fn use_by_the_bound() -> M7 {
+  zero_of()
+}
+
+pub fn use_m8_by_the_bound() -> M8 {
+  zero_of()
+}
+
+pub fn use_in_a_tuple() -> (M9, I32) {
+  zero_of()
+}
+
+pub fn use_in_an_array() -> [M10; 2] {
+  zero_of()
+}
+
+pub fn use_generic_1() -> G1[U8] {
+  G1.default()
+}
+
+pub fn use_generic_2() -> G2[U8] {
+  zero_of()
+}
+
+pub const M5_START: M5 = M5.default()
+
+pub struct Holder: Default {
+  a: M1,
+  b: M4,
+  c: G1[U8],
+}
+
+pub fn use_holder() -> Holder {
+  Holder.default()
+}

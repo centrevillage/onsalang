@@ -1,23 +1,10 @@
-//! An inherent `impl` (§6.3): its members and their context, the type it
-//! names (E0307) and how far a member reaches; the heading of `impl Tr for
-//! Ty` (§18.1, S-895); and `impl Copy` and `impl Dup` (§4.6).
+//! An `impl` (§6.3): its members and their context, the type it names
+//! (E0307) and how far a member reaches; the heading of `impl Tr for Ty`
+//! (§18.1, S-895), whose items are `impl_items`; and `impl Copy` and `impl
+//! Dup` (§4.6).
 
 use super::*;
-
-/// What the heading of an `impl Tr for Ty` comes to (§18.1, S-895).
-enum TraitHeading {
-    /// An error of the names stage, the error of the unit.
-    Failed,
-    /// No such error: the trait it names, or none of a name held (§18.1), whose
-    /// error is elsewhere.
-    Read(Option<Entity>),
-}
-
-/// Whether this version has the `impl` of the trait `tr`: none yet (the one
-/// place W5-06 opens `impl Default` at, with `reads_members`).
-fn takes_impl(_tr: Option<Entity>) -> bool {
-    false
-}
+use crate::names::collect::reads_members;
 
 /// Whether the trait of the row `row` of [`TRAITS`] is one no `impl` is written
 /// of (§6.3): the builtin floats alone are `Float`, and a derive alone makes
@@ -27,28 +14,27 @@ fn no_impl_trait(row: u8) -> bool {
 }
 
 impl<'p> Sema<'p> {
-    /// The inherent `impl` `i` (the def `id` of the item `item`): its
-    /// heading and its members; of `impl Tr for Ty`, its heading, and of
-    /// `impl Copy` and `impl Dup`, their E0020.
+    /// The `impl` `i` (the def `id` of the item `item`): its heading and, of
+    /// one whose members are read, its members; of `impl Tr for Ty`, its
+    /// heading, and of `impl Copy` and `impl Dup`, their E0020.
     pub(super) fn lower_impl(&mut self, cx: Cx<'p>, id: DefId, item: onsa_syntax::ast::ItemId, i: &ImplDecl) {
-        if let Some(tr) = &i.trait_ {
-            match kind_constraint(tr) {
-                Some(dup) => self.copy_impl(&cx, item, i, dup),
-                // The form this version does not have, whatever the trait
-                // (S-895): a name held stays an E0200 once it is fixed (X-23).
-                None => {
-                    if let TraitHeading::Read(tr) = self.trait_heading(cx, i, tr)
-                        && !takes_impl(tr)
-                    {
-                        self.unsupported(id, self.a.def(id).span, Feature::TraitImpls, &[]);
-                    }
-                }
-            }
-            return;
+        if let Some(dup) = i.trait_.as_ref().and_then(kind_constraint) {
+            return self.copy_impl(&cx, item, i, dup);
         }
         let cx = self.impl_cx(cx, i);
         let aliased = self.alias_impl(&cx, i.self_ty);
         let self_ty = cx.self_ty.unwrap_or_else(|| self.a.types.error());
+        if let Some(tr) = &i.trait_ {
+            self.trait_heading(&cx, i, tr, aliased, self_ty);
+            // The form this version does not have, whatever the trait
+            // (S-895): a name held stays an E0200 once it is fixed (X-23).
+            if !reads_members(i) {
+                if !self.name_reported(id) {
+                    self.unsupported(id, self.a.def(id).span, Feature::TraitImpls, &[]);
+                }
+                return;
+            }
+        }
         let (fns, consts) = match &self.a.defs[id.0 as usize].kind {
             DefKind::Impl(imp) => (imp.fns.clone(), imp.consts.clone()),
             _ => unreachable!(),
@@ -60,7 +46,7 @@ impl<'p> Sema<'p> {
         let (key_def, key_builtin) = self.member_key(id).unwrap_or((None, None));
         // The E0307 of an alias is the error of the heading; std's `impl`
         // of the arrays has none (§15.2, S-861).
-        if !aliased && !self.std_array_impl(id) && !self.orphan_impl(&cx, i, self_ty) {
+        if i.trait_.is_none() && !aliased && !self.std_array_impl(id) && !self.orphan_impl(&cx, i, self_ty) {
             self.impl_heading(&cx, i, self_ty, key_def.is_some() || key_builtin.is_some());
         }
         // A name the heading reads and the check does not (§18.1,
@@ -75,7 +61,7 @@ impl<'p> Sema<'p> {
                 self.a.read_held.insert(sub);
             }
             let sub_item = self.a.defs[sub.0 as usize].item.unwrap();
-            let reach = self.type_vis((key_def, key_builtin)).map(|t| self.member_reach(&cx, sub, t));
+            let reach = self.type_vis((key_def, key_builtin)).map(|t| self.member_reach(&cx, i, sub, t));
             // `item_kind`: a `target fn` member too (S-661).
             if let ItemKind::Fn(f) = decls::item_kind(&cx.ast.item(sub_item).kind) {
                 self.lower_fn(Cx { def: sub, reach, ..cx_clone(&cx) }, sub, f);
@@ -83,7 +69,7 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The context of the members of the inherent `impl` `i` (its `cx`): its
+    /// The context of the members of the `impl` `i` (its `cx`): its
     /// generics, and its type as `Self` (§2.2). Its heading has no
     /// visibility (§15.1).
     pub(super) fn impl_cx(&mut self, cx: Cx<'p>, i: &ImplDecl) -> Cx<'p> {
@@ -94,35 +80,31 @@ impl<'p> Sema<'p> {
     }
 
     /// The heading of `impl tr for Ty`, read as that of an inherent `impl` up
-    /// to the names stage (§18.1, S-895). What it gets of the types stage
-    /// (E0412) goes out with the E0200 of the form, and its E0416 is not
-    /// judged (`Sema::wellformed`).
-    fn trait_heading(&mut self, cx: Cx<'p>, i: &ImplDecl, tr: &Path) -> TraitHeading {
-        let cx = self.impl_cx(cx, i);
-        let named = self.lower_trait(&cx, tr);
-        i.trait_args.iter().for_each(|&t| _ = self.lower_type(&cx, t));
-        let aliased = self.alias_impl(&cx, i.self_ty);
-        let self_ty = cx.self_ty.unwrap_or_else(|| self.a.types.error());
-        let target = self.target_type(&cx, i.self_ty);
-        let shown = one_line(&src(&cx, cx.ast.ty(i.self_ty).span));
+    /// to the names stage (§18.1, S-895). Of a trait this version does not
+    /// open, what it gets of the types stage (E0412) goes out with the E0200
+    /// of the form, and its E0416 is not judged (`Sema::wellformed`).
+    fn trait_heading(&mut self, cx: &Cx<'p>, i: &ImplDecl, tr: &Path, aliased: bool, self_ty: TyId) {
+        let named = self.lower_trait(cx, tr);
+        i.trait_args.iter().for_each(|&t| _ = self.lower_type(cx, t));
+        let target = self.target_type(cx, i.self_ty);
+        let shown = one_line(&src(cx, cx.ast.ty(i.self_ty).span));
         match (named, target) {
             (Some(Entity::Builtin(Builtin::Trait(row))), _) if no_impl_trait(row) => {
                 let what = format!("`{}` has no `impl` but the ones of the language", TRAITS[row as usize].0);
-                let d = Diagnostic::new(Stage::Names, Code::E0307, tr.span, what).with_found(src(&cx, tr.span));
+                let d = Diagnostic::new(Stage::Names, Code::E0307, tr.span, what).with_found(src(cx, tr.span));
                 let rule = "the builtin floats alone are `Float`, and a derive alone makes `Ordinal` (§6.3, §6.4)";
                 self.report(cx.def, d.with_rule(rule));
             }
             (Some(t), Some(e)) if !aliased && !self.defines(cx.m, t) && !self.defines(cx.m, e) => {
-                let what = format!("neither `{}` nor `{shown}` is defined in this module", src(&cx, tr.span));
-                self.orphan(&cx, i, what);
+                let what = format!("neither `{}` nor `{shown}` is defined in this module", src(cx, tr.span));
+                self.orphan(cx, i, what);
             }
             _ if !aliased => {
                 let keyed = target.is_some_and(|e| self.type_key(e).is_some());
-                self.impl_heading(&cx, i, self_ty, keyed);
+                self.impl_heading(cx, i, self_ty, keyed);
             }
             _ => {}
         }
-        if self.name_reported(cx.def) { TraitHeading::Failed } else { TraitHeading::Read(named) }
     }
 
     /// Whether the unit `def` has a diagnostic out of the types stage.
@@ -284,18 +266,19 @@ impl<'p> Sema<'p> {
         true
     }
 
-    /// How far the member `sub` of an inherent `impl` of a type of `ty_vis`
+    /// How far the member `sub` of the `impl` `i` of a type of `ty_vis`
     /// reaches: the narrower of its visibility and its type's (§15.1, S-665).
-    /// A `pub` on it wider than the type is redundant (E0020, S-662).
+    /// A `pub` on it wider than the type is redundant (E0020, S-662), and any
+    /// word on a member of a trait's `impl`, which has its type's (S-904).
     // The E0020, reported first, is the one error of the member; an E0303 of
     // a name in its heading comes once it is fixed (S-698).
-    pub(super) fn member_reach(&mut self, cx: &Cx<'p>, sub: DefId, ty_vis: Vis) -> Vis {
+    pub(super) fn member_reach(&mut self, cx: &Cx<'p>, i: &ImplDecl, sub: DefId, ty_vis: Vis) -> Vis {
         let own = self.a.def(sub).vis;
         let at = self.a.def(sub).item.and_then(|i| cx.ast.item(i).vis_span);
-        if let (Vis::Pub, Vis::Default | Vis::Priv, Some(at)) = (own, ty_vis, at) {
+        if let (true, Some(at)) = (i.trait_.is_some() || (own == Vis::Pub && ty_vis != Vis::Pub), at) {
             let blanks =
                 cx.text[at.end as usize..].len() - cx.text[at.end as usize..].trim_start_matches([' ', '\t']).len();
-            let fix = Fix::delete("remove `pub`", Span { end: at.end + blanks as u32, ..at });
+            let fix = Fix::delete(format!("remove `{}`", src(cx, at)), Span { end: at.end + blanks as u32, ..at });
             self.report(sub, foreign::report(RowId::ImplMemberPub, cx.text, at, vec![fix]));
         }
         crate::resolve::narrower(own, ty_vis)

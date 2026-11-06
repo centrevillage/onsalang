@@ -29,6 +29,7 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 use crate::names::builtin_ty;
+use crate::names::collect::reads_members;
 
 /// What the order of the declarations leaves to the later stages.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -396,10 +397,19 @@ impl<'p> Sema<'p> {
     /// The type of the `impl` `id` names by its declaration, as written.
     fn impl_target(&self, id: DefId) -> Option<Entity> {
         let def = self.a.def(id);
-        let ast = &self.module(def.module)?.parsed.ast;
-        let Some(ItemKind::Impl(i)) = def.item.map(|it| item_kind(&ast.item(it).kind)) else { return None };
+        let (ast, i) = self.impl_decl(id)?;
         let TypeKind::Path { path, .. } = &ast.ty(i.self_ty).kind else { return None };
-        i.trait_.is_none().then(|| self.a.resolve_path(def.module, path).ok()).flatten()
+        reads_members(i).then(|| self.a.resolve_path(def.module, path).ok()).flatten()
+    }
+
+    /// The AST of the `impl` `id`: none of what a derive makes.
+    pub(super) fn impl_decl(&self, id: DefId) -> Option<(&'p Ast, &'p ImplDecl)> {
+        let def = self.a.def(id);
+        let ast = &self.module(def.module)?.parsed.ast;
+        match item_kind(&ast.item(def.item?).kind) {
+            ItemKind::Impl(i) => Some((ast, i)),
+            _ => None,
+        }
     }
 
     /// What the head of the right side of each alias names ([`Decls::heads`]),
@@ -439,7 +449,7 @@ impl<'p> Sema<'p> {
         (!self.a.heading_failed(d)).then(|| self.a.resolve_path(def.module, path).ok()).flatten()
     }
 
-    /// The names of the members of every inherent `impl` (the one place,
+    /// The names of the members of every `impl` read (the one place,
     /// D-15), each in the table of its type ([`Sema::member_key`]), before
     /// any signature is lowered: a type and a constant read them in the
     /// order of the declarations (`Self.N`, `S.N`; §4.4). Those of an `impl`
@@ -451,7 +461,7 @@ impl<'p> Sema<'p> {
     /// continued analysis falls back at a table of std's: of a builtin type,
     /// or of a type of std.
     fn name_members(&mut self) -> Result<(), crate::base::Fallback> {
-        let mut subs = Vec::new();
+        let (mut subs, mut trait_impls) = (Vec::new(), Vec::new());
         for d in self.a.new_defs() {
             let DefKind::Impl(imp) = &self.a.def(d).kind else { continue };
             // What a derive makes goes first: an overlap is the fault of the
@@ -466,6 +476,7 @@ impl<'p> Sema<'p> {
                 return Err(crate::base::Fallback);
             }
             subs.extend(imp.fns.iter().chain(&imp.consts).map(|&sub| (key, sub)));
+            trait_impls.extend(imp.of.zip(key.0).map(|(b, ty)| (d, b, ty)));
         }
         subs.sort_by_cached_key(|&(_, d)| {
             let m = self.a.def(d).module;
@@ -488,11 +499,12 @@ impl<'p> Sema<'p> {
             let msg = format!("`{name}` is defined twice for this type");
             self.report(sub, Diagnostic::new(Stage::Names, Code::E0304, at, msg).with_note(note.0, note.1));
         }
+        self.name_trait_impls(trait_impls);
         Ok(())
     }
 
     /// The note of the member `first` an E0304 of another is the overlap of.
-    fn first_defined(&self, first: DefId) -> String {
+    pub(super) fn first_defined(&self, first: DefId) -> String {
         match self.a.def(first).as_fn().and_then(|f| f.derived) {
             Some(made) => format!("the derive of `{}` makes `{}`", made.item().bound.name(), made.item().name),
             None => "first defined here".to_string(),
@@ -533,12 +545,10 @@ impl<'p> Sema<'p> {
     /// Whether the inherent `impl` `id` is std's of the arrays (`impl[T,
     /// const N: U32] [T; N]`), which std alone writes (§15.2, S-861).
     pub(super) fn std_array_impl(&self, id: DefId) -> bool {
-        let def = self.a.def(id);
-        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return false };
-        let Some(ItemKind::Impl(i)) = def.item.map(|it| item_kind(&ast.item(it).kind)) else { return false };
+        let Some((ast, i)) = self.impl_decl(id) else { return false };
         i.trait_.is_none()
             && matches!(ast.ty(i.self_ty).kind, TypeKind::Array { .. })
-            && self.a.modules.is_std(def.module)
+            && self.a.modules.is_std(self.a.def(id).module)
     }
 
     /// The type the inherent `impl` `id` is of: what it names, and of an
@@ -576,12 +586,12 @@ impl<'p> Sema<'p> {
     }
 
     /// The context of the constant `id`, a member of the `impl` `o`: none
-    /// of a trait's `impl` (`Sema::lower_def`). How far it reaches is
+    /// of an `impl` not read (`Sema::lower_def`). How far it reaches is
     /// reported (E0020) with the `impl`.
     fn member_cx(&mut self, o: DefId, id: DefId) -> Option<Cx<'p>> {
         let cx = self.cx_for(o, Vec::new(), None)?;
-        let Some(ItemKind::Impl(i)) = self.a.def(o).item.map(|i| item_kind(&cx.ast.item(i).kind)) else { return None };
-        if i.trait_.is_some() {
+        let (_, i) = self.impl_decl(o)?;
+        if !reads_members(i) {
             return None;
         }
         let cx = self.impl_cx(cx, i);

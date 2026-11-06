@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// W5-06 U4/t, S-904 (spec §15.1: the `pub` of a member of a trait's `impl` is redundant, E0020 with the candidate that takes the word off). The one candidate takes the `pub` off and the file has no
+// diagnostic after it: the member is read on after the word, and its signature (`rt fn default() -> Gain`) is the one of the trait.
+
+pub struct Gain {
+  amount: F32,
+}
+
+impl Default for Gain {
+  pub rt fn default() -> Gain {                     //~ E0020 @3
+    Gain { amount: 1.0 }
+  }
+}
+
+pub fn the_default() -> F32 {
+  Gain.default().amount
+}

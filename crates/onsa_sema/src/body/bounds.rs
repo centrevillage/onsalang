@@ -93,6 +93,9 @@ impl Bounds<'_> {
         let ty = self.ty(t);
         match (&ty, b) {
             (Ty::Param(i), _) => self.generics.get(*i as usize).is_some_and(|g| param_holds(g, b)),
+            (Ty::Named(d, _), _) if self.a.modules.trait_impls.contains_key(&(b, *d)) => {
+                self.impl_covers(self.a.modules.trait_impls[&(b, *d)], t)
+            }
             (Ty::Named(d, args), _) => {
                 let def = self.a.def(*d);
                 let derives = def.derives();
@@ -115,6 +118,22 @@ impl Bounds<'_> {
             }
             _ => self.of_table(t, &ty, b),
         }
+    }
+
+    /// Whether the `impl` `id` of a trait covers the instance `t` of its type
+    /// (§6.2): the arguments of `t` meet the bounds of the parameters of the
+    /// `impl` they stand at, in any order. A place that is no parameter is the
+    /// error of the heading (E0307), not judged, nor is a type not read.
+    fn impl_covers(&self, id: DefId, t: TyId) -> bool {
+        let Some(imp) = self.a.def(id).as_impl() else { return true };
+        let (Ty::Named(_, written), Ty::Named(_, args)) = (self.ty(imp.self_ty), self.ty(t)) else { return true };
+        let param = |w: TyId| if let Ty::Param(k) = self.ty(w) { imp.generics.get(k as usize) } else { None };
+        written.iter().zip(&args).all(|(&w, &arg)| match param(w).map(|g| &g.kind) {
+            Some(GenericKind::Type { bounds, dup, unknown: false }) => {
+                bounds.iter().copied().chain(dup.then_some(Bound::Dup)).all(|b| self.meets(arg, b))
+            }
+            _ => true,
+        })
     }
 
     /// Whether `t`, of a kind (§4.6), meets the kind constraint `b`.

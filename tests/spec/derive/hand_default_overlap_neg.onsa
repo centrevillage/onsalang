@@ -1,0 +1,271 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§6.4", "§18.1"]
+
+// W5-06 U4/t, S-851, S-910 (spec §6.2: "型の名前の後の `.` で引く名前（メソッド、関連定数、enum の列挙子。trait の `impl` のメンバと derive が作るメンバ（`default`、`ordinal`、`from_ordinal`）を含む）は一つの空間で、
+// 重なると E0304。derive が作るメンバとの重なりは固有のメンバに付け、…メンバどうしはソースの順で後の宣言に付けて前を note で示す"; §6.4: "手で実装するときは `impl Tr for Ty` と書き、宣言には並べない（両方に書くと
+// E0304）"; §6.3: "同じ型への同じ trait の `impl` が二つあると E0304"; §18.1: the name of an E0304 is an error name where it is used, in the space of the names after a type name too). The member `default` of
+// an `impl Default` and (1) the `default` of an inherent `impl` of the type: the later of the two in the source has the E0304, whichever order, and an `impl` before the type; (2) the `default` that the list `: Default` of
+// the type makes: the E0304 is on the hand-written member whatever the order of the source is; (3) the `impl Default` with no member that overlaps the derive, or a second `impl Default` of the same type, with
+// members or none: the E0304 is on the name of the trait in the heading of the later `impl` (the `impl` is one unit, so the member is not a second error, and the missing `default` of the empty `impl` is not an E0410 here). A
+// generic type and an enum. The uses of the name after the clash have no diagnostic: each `Bool` result below would be an E0401 if the call were read as the member of either declaration. One error in each unit (P-01).
+
+// ---------------------------------------------------------------- an inherent `default` and the `impl Default`
+
+pub struct A1 {
+  n: I32,
+}
+
+impl A1 {
+  pub fn default() -> A1 {
+    A1 { n: 1 }
+  }
+}
+
+impl Default for A1 {
+  rt fn default() -> A1 {                           //~ E0304
+    A1 { n: 2 }
+  }
+}
+
+pub struct A2 {
+  n: I32,
+}
+
+impl Default for A2 {
+  rt fn default() -> A2 {
+    A2 { n: 2 }
+  }
+}
+
+impl A2 {
+  pub fn default() -> A2 {                          //~ E0304
+    A2 { n: 1 }
+  }
+}
+
+pub enum A3 {
+  X,
+  Y,
+}
+
+impl Default for A3 {
+  rt fn default() -> A3 {
+    A3.X
+  }
+}
+
+impl A3 {
+  pub fn default() -> I32 {                         //~ E0304
+    0
+  }
+}
+
+pub struct A4[T] {
+  v: T,
+}
+
+impl[T] A4[T] {
+  pub fn default(v: T) -> A4[T] {
+    A4 { v: v }
+  }
+}
+
+impl[T: Default] Default for A4[T] {
+  rt fn default() -> A4[T] {                        //~ E0304
+    A4 { v: T.default() }
+  }
+}
+
+impl Default for A5 {
+  rt fn default() -> A5 {
+    A5 { n: 2 }
+  }
+}
+
+impl A5 {
+  fn default() -> A5 {                              //~ E0304
+    A5 { n: 1 }
+  }
+}
+
+pub struct A5 {
+  n: I32,
+}
+
+// ---------------------------------------------------------------- the `default` that the list makes
+
+pub struct B1: Default {
+  n: I32,
+}
+
+impl Default for B1 {
+  rt fn default() -> B1 {                           //~ E0304
+    B1 { n: 3 }
+  }
+}
+
+impl Default for B2 {
+  rt fn default() -> B2 {                           //~ E0304
+    B2 { n: 3 }
+  }
+}
+
+pub struct B2: Default {
+  n: I32,
+}
+
+pub struct B3: PartialEq + Default + Eq {
+  n: I32,
+}
+
+impl Default for B3 {
+  rt fn default() -> B3 {                           //~ E0304
+    B3 { n: 3 }
+  }
+}
+
+pub struct B4[T]: Default {
+  v: T,
+}
+
+impl[T: Default] Default for B4[T] {
+  rt fn default() -> B4[T] {                        //~ E0304
+    B4 { v: T.default() }
+  }
+}
+
+// ---------------------------------------------------------------- the `impl` with no member, and the second `impl Default`
+
+pub struct C1: Default {
+  n: I32,
+}
+
+impl Default for C1 {                               //~ E0304
+}
+
+pub struct C2: Default {
+  n: I32,
+}
+
+impl Default for C2 {                               //~ E0304
+}
+
+impl[T] Default for C3[T] {                         //~ E0304
+}
+
+pub struct C3[T]: Default {
+  v: T,
+}
+
+pub struct C4 {
+  n: I32,
+}
+
+impl Default for C4 {
+  rt fn default() -> C4 {
+    C4 { n: 1 }
+  }
+}
+
+impl Default for C4 {                               //~ E0304
+  rt fn default() -> C4 {
+    C4 { n: 2 }
+  }
+}
+
+pub struct C5 {
+  n: I32,
+}
+
+impl Default for C5 {
+  rt fn default() -> C5 {
+    C5 { n: 1 }
+  }
+}
+
+impl Default for C5 {                               //~ E0304
+}
+
+pub struct C6[T] {
+  v: T,
+}
+
+impl[T: Default] Default for C6[T] {
+  rt fn default() -> C6[T] {
+    C6 { v: T.default() }
+  }
+}
+
+impl[U: Default] Default for C6[U] {                //~ E0304
+  rt fn default() -> C6[U] {
+    C6 { v: U.default() }
+  }
+}
+
+pub enum C7 {
+  P,
+  Q,
+}
+
+impl Default for C7 {
+  rt fn default() -> C7 {
+    C7.P
+  }
+}
+
+impl Default for C7 {                               //~ E0304
+  rt fn default() -> C7 {
+    C7.Q
+  }
+}
+
+// ---------------------------------------------------------------- the uses of the name after the clash
+
+pub fn use_a1() -> Bool {
+  A1.default()
+}
+
+pub fn use_a2() -> Bool {
+  A2.default()
+}
+
+pub fn use_a3() -> Bool {
+  A3.default()
+}
+
+pub fn use_a4() -> Bool {
+  A4.default()
+}
+
+pub fn use_a5() -> Bool {
+  A5.default()
+}
+
+pub fn use_b1() -> Bool {
+  B1.default()
+}
+
+pub fn use_b2() -> Bool {
+  B2.default()
+}
+
+pub fn use_b3() -> Bool {
+  B3.default()
+}
+
+pub fn use_b4() -> Bool {
+  B4.default()
+}
+
+pub fn use_c1() -> Bool {
+  C1.default()
+}
+
+pub fn use_c4() -> Bool {
+  C4.default()
+}
+
+pub fn use_c7() -> Bool {
+  C7.default()
+}

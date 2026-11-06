@@ -100,8 +100,10 @@ pub(super) fn lower_call(
         Target::Fn { def, of, inst } => {
             // `T.default()` at a type with no declaration (§6.3): no other
             // bound with members holds of it.
-            if let Some(of) = of.map(|t| lw.core_ty(t, &cx.args, span)).transpose()?.filter(derived::structural) {
-                return derived::default_value(lw, &of, span);
+            if let Some(of) = of.map(|t| lw.core_ty(t, &cx.args, span)).transpose()?
+                && let Some(value) = derived::structural_default(lw, &of, span)
+            {
+                return value;
             }
             let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
             let d = lw.a.def(def).clone();

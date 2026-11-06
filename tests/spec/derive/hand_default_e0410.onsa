@@ -1,0 +1,275 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1", "§6.4"]
+
+// W5-06 U4/t, S-852 (spec §6.3: "`impl Tr for Ty` は `Tr` の項目を一度ずつ書く。足りない項目と `Tr` に無いメンバは E0410 で、位置は足りなければ見出しの trait の名前、余計ならそのメンバの名前 …
+// 余計なメンバがあるときは足りない項目を報告しない。それらの `impl` を使う所には診断を出さない（§18.1）"; S-852: "足りない形は見出しの誤りで `impl` 全体が一つの単位、余計はそのメンバの単位で他のメンバは検査する").
+// The `impl Default` with no `default` is an E0410 on the name of the trait in the heading (a struct, an enum, a generic type, an empty body, a body with a comment only); a member that `Default` does not have is an
+// E0410 on the name of the member (a function, a method that takes `self`, a constant, `rt` or not, one or two of them next to the right `default`), and the missing `default` is not reported next to
+// it (a misspelled `defualt` is one error on the misspelled member). The extra member is a unit of its own, so the other member of the same `impl` is still checked (a wrong signature is an E0401, a name that
+// is not found in a body is an E0302). The uses of the type, `M.default()` and a function with `T: Default` given the type, have no diagnostic after each of these `impl`. That `default` written twice is
+// not here: the spec does not say whether it is an E0410 or an E0304. One error in each unit (P-01).
+
+pub struct Missing1 {
+  n: I32,
+}
+
+pub enum Missing2 {
+  A,
+  B,
+}
+
+pub struct Missing3[T] {
+  v: T,
+}
+
+pub struct Missing4 {
+  n: I32,
+}
+
+pub struct Missing5 {
+  n: I32,
+}
+
+pub struct Extra1 {
+  n: I32,
+}
+
+pub struct Extra2 {
+  n: I32,
+}
+
+pub struct Extra3 {
+  n: I32,
+}
+
+pub struct Extra4 {
+  n: I32,
+}
+
+pub struct Extra5 {
+  n: I32,
+}
+
+pub struct Extra6 {
+  n: I32,
+}
+
+pub struct Extra7[T] {
+  v: T,
+}
+
+pub struct Typo1 {
+  n: I32,
+}
+
+pub struct Typo2 {
+  n: I32,
+}
+
+pub struct Typo3 {
+  n: I32,
+}
+
+pub struct Both1 {
+  n: I32,
+}
+
+pub struct Both2 {
+  n: I32,
+}
+
+// ---------------------------------------------------------------- missing: the name of the trait in the heading
+
+impl Default for Missing1 {                         //~ E0410
+}
+
+impl Default for Missing2 {                         //~ E0410
+}
+
+impl[T] Default for Missing3[T] {                   //~ E0410
+}
+
+impl Default for Missing4 {                         //~ E0410
+  // nothing here
+}
+
+impl Default for Missing5 { }                       //~ E0410
+
+// ---------------------------------------------------------------- extra: the name of the member
+
+impl Default for Extra1 {
+  rt fn default() -> Extra1 {
+    Extra1 { n: 0 }
+  }
+
+  rt fn other() -> I32 {                            //~ E0410
+    1
+  }
+}
+
+impl Default for Extra2 {
+  rt fn default() -> Extra2 {
+    Extra2 { n: 0 }
+  }
+
+  fn other(self) -> I32 {                           //~ E0410
+    self.n
+  }
+}
+
+impl Default for Extra3 {
+  rt fn default() -> Extra3 {
+    Extra3 { n: 0 }
+  }
+
+  const LIMIT: I32 = 3                              //~ E0410
+}
+
+impl Default for Extra4 {
+  fn first() -> I32 {                               //~ E0410
+    1
+  }
+
+  rt fn default() -> Extra4 {
+    Extra4 { n: 0 }
+  }
+}
+
+impl Default for Extra5 {
+  rt fn default() -> Extra5 {
+    Extra5 { n: 0 }
+  }
+
+  fn one() -> I32 {                                 //~ E0410
+    1
+  }
+
+  fn two() -> I32 {                                 //~ E0410
+    2
+  }
+}
+
+impl Default for Extra6 {
+  rt fn new() -> Extra6 {                           //~ E0410
+    Extra6 { n: 0 }
+  }
+}
+
+impl[T: Default] Default for Extra7[T] {
+  rt fn default() -> Extra7[T] {
+    Extra7 { v: T.default() }
+  }
+
+  rt fn other(self) -> T {                          //~ E0410
+    self.v
+  }
+}
+
+// ---------------------------------------------------------------- extra and missing: only the extra is reported
+
+impl Default for Typo1 {
+  rt fn defualt() -> Typo1 {                        //~ E0410
+    Typo1 { n: 0 }
+  }
+}
+
+impl Default for Typo2 {
+  rt fn default_value() -> Typo2 {                  //~ E0410
+    Typo2 { n: 0 }
+  }
+}
+
+impl Default for Typo3 {
+  rt fn defaults() -> Typo3 {                       //~ E0410
+    Typo3 { n: 0 }
+  }
+}
+
+// ---------------------------------------------------------------- the other member of the same impl is still checked
+
+impl Default for Both1 {
+  rt fn default() -> I32 {                          //~ E0401
+    0
+  }
+
+  fn other() -> I32 {                               //~ E0410
+    1
+  }
+}
+
+impl Default for Both2 {
+  rt fn default() -> Both2 {
+    Both2 { n: missing_name }                       //~ E0302
+  }
+
+  fn other() -> I32 {                               //~ E0410
+    1
+  }
+}
+
+// ---------------------------------------------------------------- the uses are silent
+
+pub rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub fn use_missing_1() -> Missing1 {
+  Missing1.default()
+}
+
+pub fn use_missing_2() -> Missing2 {
+  Missing2.default()
+}
+
+pub fn use_missing_3() -> Missing3[U8] {
+  Missing3.default()
+}
+
+pub fn use_missing_by_the_bound() -> Missing4 {
+  zero_of()
+}
+
+pub fn use_missing_in_a_tuple() -> (Missing5, I32) {
+  zero_of()
+}
+
+pub fn use_extra_1() -> Extra1 {
+  Extra1.default()
+}
+
+pub fn use_extra_by_the_bound() -> Extra2 {
+  zero_of()
+}
+
+pub fn use_extra_with_a_missing_default() -> Extra6 {
+  Extra6.default()
+}
+
+pub fn use_typo() -> Typo1 {
+  Typo1.default()
+}
+
+pub fn use_typo_by_the_bound() -> Typo2 {
+  zero_of()
+}
+
+pub fn use_typo_in_an_array() -> [Typo3; 2] {
+  zero_of()
+}
+
+pub fn use_extra_7() -> Extra7[U8] {
+  Extra7.default()
+}
+
+pub const MISSING_START: Missing1 = Missing1.default()
+
+pub struct Holder: Default {
+  a: Missing1,
+  b: Extra1,
+  c: Typo1,
+}
+
+pub fn use_holder() -> Holder {
+  Holder.default()
+}

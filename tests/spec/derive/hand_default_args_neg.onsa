@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.2", "§4.5", "§6.4", "§18.1"]
+// fixes = 0
+
+// W5-06 U4/t, S-851 (spec §6.2: "一つの `impl` は常にその型の全ての具体化を覆う" and the bounds of the `impl` decide which instances it covers: "`impl` の型パラメータが満たすかは `impl` の `[ ]` に書いた境界だけで決まる"; §4.5: the
+// requirement of a type parameter that the argument does not meet is E0416 at the expression that made it; §6.4: "総称の型は、型引数が満たすときだけ満たす"; "各フィールド … の型が生成する trait を満たさなければ E0416"). The
+// `impl[T: Default] Default for W[T]` covers `W[X]` for the `X` that has `Default` only: `W[Char]` (a `Char` has no `Default`, §6.3), `W[Option[U8]]` and the type of the module that has none, with the call
+// `W.default()`, with a function that wants `T: Default`, as the field of a derive of `Default`, and as an element of a tuple and of an array that a bound makes. The bound that the `impl` has more
+// (`T: Default + Copy`) is a requirement too (a `Str` is not `Copy`). The instances that are covered are in hand_default_fine.onsa. An annotation on the same line as the call decides the argument; one error in
+// each unit (P-01).
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {
+    W { v: T.default() }
+  }
+}
+
+pub struct Pair[T, U] {
+  a: T,
+  b: U,
+}
+
+impl[U: Default, T: Default] Default for Pair[T, U] {
+  rt fn default() -> Pair[T, U] {
+    Pair { a: T.default(), b: U.default() }
+  }
+}
+
+pub struct Tagged[T] {
+  v: T,
+}
+
+impl[T: Default + Copy] Default for Tagged[T] {
+  rt fn default() -> Tagged[T] {
+    Tagged { v: T.default() }
+  }
+}
+
+pub struct Plain {
+  n: I32,
+}
+
+pub rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+// ---------------------------------------------------------------- the call of default
+
+pub fn char_by_the_call() -> U8 {
+  let w: W[Char] = W.default()                      //~ E0416
+  1
+}
+
+pub fn option_by_the_call() -> U8 {
+  let w: W[Option[U8]] = W.default()                //~ E0416
+  1
+}
+
+pub fn plain_by_the_call() -> U8 {
+  let w: W[Plain] = W.default()                     //~ E0416
+  1
+}
+
+pub fn first_of_a_pair_by_the_call() -> U8 {
+  let p: Pair[Char, I32] = Pair.default()           //~ E0416
+  1
+}
+
+pub fn second_of_a_pair_by_the_call() -> U8 {
+  let p: Pair[I32, Char] = Pair.default()           //~ E0416
+  1
+}
+
+pub fn nested_by_the_call() -> U8 {
+  let w: W[W[Char]] = W.default()                   //~ E0416
+  1
+}
+
+pub fn not_copy_by_the_call() -> U8 {
+  let t: Tagged[Str] = Tagged.default()             //~ E0416
+  1
+}
+
+// ---------------------------------------------------------------- a function that wants T: Default
+
+pub fn char_by_the_bound() -> U8 {
+  let w: W[Char] = zero_of()                        //~ E0416
+  1
+}
+
+pub fn plain_by_the_bound() -> U8 {
+  let w: W[Plain] = zero_of()                       //~ E0416
+  1
+}
+
+pub fn tuple_by_the_bound() -> U8 {
+  let t: (W[Char], I32) = zero_of()                 //~ E0416
+  1
+}
+
+pub fn array_by_the_bound() -> U8 {
+  let a: [W[Option[U8]]; 2] = zero_of()             //~ E0416
+  1
+}
+
+// ---------------------------------------------------------------- the field of a derive
+
+pub struct HolderOfChar: Default {
+  w: W[Char],                                       //~ E0416
+}
+
+pub struct HolderOfPair: Default {
+  n: U8,
+  p: Pair[I32, Plain],                              //~ E0416
+}
+
+pub struct HolderOfNested: Default {
+  w: W[W[Option[U8]]],                              //~ E0416
+}
+
+// ---------------------------------------------------------------- the covered instances are not errors
+
+pub struct HolderFine: Default {
+  a: W[I32],
+  b: Pair[Bool, F32],
+  c: W[W[U8]],
+  d: Tagged[F64],
+}
+
+pub fn the_covered() -> (W[I32], Pair[Bool, F32], Tagged[U8]) {
+  (W.default(), Pair.default(), Tagged.default())
+}

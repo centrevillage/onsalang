@@ -1,0 +1,22 @@
+package interface_hand_default
+
+module interface_hand_default
+
+pub struct Gain  // Copy; size 4, align 4
+  amount: F32  // offset 0
+
+impl Default for Gain
+  rt fn default() -> Gain
+
+pub enum Mode  // Copy; size 1, align 1
+  Off
+  On
+
+impl Default for Mode
+  rt fn default() -> Mode
+
+pub struct Held[T]  // derive PartialEq
+  value: T
+
+impl Default for Held[T]
+  rt fn default[T: Default]() -> Held[T]

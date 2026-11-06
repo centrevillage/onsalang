@@ -276,6 +276,9 @@ pub struct ConstDef {
 pub struct ImplDef {
     pub generics: Vec<GenericDef>,
     pub self_ty: TyId,
+    /// The trait of an `impl Tr for Ty` whose members are read; none of an
+    /// inherent `impl`, and of what a derive makes.
+    pub of: Option<Bound>,
     /// Methods and associated functions, in order.
     pub fns: Vec<DefId>,
     pub consts: Vec<DefId>,
@@ -405,6 +408,13 @@ impl Def {
     /// one `impl` no item wrote.
     pub(crate) fn derived_impl_of(&self) -> Option<DefId> {
         (matches!(self.kind, DefKind::Impl(_)) && self.item.is_none()).then_some(self.owner).flatten()
+    }
+
+    pub fn as_impl(&self) -> Option<&ImplDef> {
+        match &self.kind {
+            DefKind::Impl(i) => Some(i),
+            _ => None,
+        }
     }
 
     pub fn as_fn(&self) -> Option<&FnDef> {

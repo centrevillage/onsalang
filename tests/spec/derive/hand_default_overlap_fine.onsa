@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.3", "§6.4"]
+// fixes = 0
+
+// W5-06 U4/t, S-851 (spec §6.2: the names after a type name are one space, and the member of an `impl` of a trait and the members that a derive makes are in it; §6.4: "並べた trait は全て自動で生成する"; the list makes the
+// members of the traits that it names: `Default` makes `default`, `Ordinal` makes `ordinal` and `from_ordinal`, the others make none). The forms that are not an overlap with a hand-written `impl Default`: a derive of
+// other traits in the list (`Eq`, `Ord`, `Hash`, `PartialEq`, `Ordinal`), another name in an inherent `impl` (`new`, `defaults`, `default_value`, `ordinal`), a field named `default`, the `default` of an inherent
+// `impl` of another type, a free function `default`, and a type with a derive of `Default` and no `impl` (`D7`). And the derive still works next to them. No diagnostic is expected.
+
+pub struct D1: Eq + Ord {
+  n: I32,
+}
+
+impl Default for D1 {
+  rt fn default() -> D1 {
+    D1 { n: 1 }
+  }
+}
+
+pub enum D2: Ordinal + PartialEq {
+  A,
+  B,
+}
+
+impl Default for D2 {
+  rt fn default() -> D2 {
+    D2.B
+  }
+}
+
+pub struct D3: Hash {
+  n: I32,
+}
+
+impl Default for D3 {
+  rt fn default() -> D3 {
+    D3 { n: 3 }
+  }
+}
+
+pub struct D4 {
+  n: I32,
+  default: I32,
+}
+
+impl Default for D4 {
+  rt fn default() -> D4 {
+    D4 { n: 4, default: 5 }
+  }
+}
+
+pub struct D5 {
+  n: I32,
+}
+
+impl D5 {
+  pub rt fn new() -> D5 {
+    D5 { n: 5 }
+  }
+
+  pub fn defaults() -> I32 {
+    0
+  }
+
+  pub fn default_value(self) -> I32 {
+    self.n
+  }
+
+  pub fn ordinal(self) -> U32 {
+    1
+  }
+}
+
+impl Default for D5 {
+  rt fn default() -> D5 {
+    D5.new()
+  }
+}
+
+pub struct D6 {
+  n: I32,
+}
+
+pub struct D7: Default {
+  n: I32,
+}
+
+impl D6 {
+  pub fn default() -> I32 {
+    0
+  }
+}
+
+pub fn default() -> I32 {
+  0
+}
+
+pub fn the_uses() -> (D1, D2, D3, D4, D5, I32, D7) {
+  (D1.default(), D2.default(), D3.default(), D4.default(), D5.default(), D6.default(), D7.default())
+}

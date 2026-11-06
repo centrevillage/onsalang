@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§15.1", "§6.2"]
+
+// W5-06 U4/t, S-851, S-905 (spec §15.1: "trait の実装、… 持ち主の可視性を継ぐメンバ（trait・effect のメンバ、trait の実装と handler のメンバ）"; §6.3: "`impl Tr for Ty` は `Tr` か `Ty` を定義したモジュール
+// にしか書けず … （孤児規則、E0307）"; §6.4: "`priv` のフィールドがあっても、他のモジュールから `P.default()` を呼べる"). The hand-written `impl Default` of a type of another module: the member is seen as far
+// as the type is, so another module calls `P.default()` of a type with `priv` fields, of a generic type, of a type that has no `pub` (seen in the package), through `use` of the type and through the path of the
+// module (`util.Hidden.default()`); the type meets `T: Default` there, is the field of a derive of `Default`, and is an element of a tuple and an array. The orphan rule: the `impl Default` of a type of
+// the other module (one that has no `Default` there) is an E0307 whatever the form of the type (a name from `use`, the path of the module, a generic type with parameters), as an `impl Default` of a built-in type is. The members of these `impl` are
+// none, so the heading is the one error. The functions that return a type without `pub` have no `pub` (E0303). One error in each unit (P-01). The values are in hand_default_modules_values/.
+use util
+
+use util.{Hidden, Wrap, Mode, Internal, Plain, PlainW}
+
+pub fn hidden_by_use() -> Hidden {
+  Hidden.default()
+}
+
+pub fn hidden_by_path() -> util.Hidden {
+  util.Hidden.default()
+}
+
+pub fn hidden_as_a_let() -> Hidden {
+  let h: Hidden = Hidden.default()
+  h
+}
+
+pub fn hidden_through_the_accessors() -> F32 {
+  Hidden.default().gain() + F32.default()
+}
+
+pub fn the_visible_field() -> U8 {
+  Hidden.default().tag
+}
+
+pub rt fn hidden_in_an_rt_fn() -> Hidden {
+  Hidden.default()
+}
+
+pub fn wrap_of_a_hidden_field() -> Wrap[U8] {
+  Wrap.default()
+}
+
+pub fn wrap_by_path() -> util.Wrap[Hidden] {
+  util.Wrap.default()
+}
+
+pub fn wrap_of_a_hand_written_argument() -> Wrap[Mode] {
+  Wrap.default()
+}
+
+pub fn the_mode_default() -> Mode {
+  Mode.default()
+}
+
+pub fn the_mode_by_path() -> util.Mode {
+  util.Mode.default()
+}
+
+pub const MODE_START: Mode = Mode.default()
+
+pub const HIDDEN_START: Hidden = Hidden.default()
+
+pub rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub fn through_the_bound() -> Hidden {
+  zero_of()
+}
+
+pub fn through_the_bound_by_path() -> util.Mode {
+  zero_of()
+}
+
+pub fn through_the_bound_of_a_generic() -> Wrap[Hidden] {
+  zero_of()
+}
+
+pub struct Holder: Default {
+  h: Hidden,
+  m: Mode,
+  w: Wrap[Mode],
+  n: U32,
+}
+
+pub fn the_holder() -> Holder {
+  Holder.default()
+}
+
+pub fn in_a_tuple() -> (Hidden, Mode, I32) {
+  zero_of()
+}
+
+pub fn in_an_array() -> [Hidden; 2] {
+  zero_of()
+}
+
+fn the_package_visible_type() -> Internal {
+  Internal.default()
+}
+
+fn the_package_visible_type_through_the_bound() -> Internal {
+  zero_of()
+}
+
+pub fn the_private_field() -> F32 {
+  Hidden.default().gain                             //~ E0303
+}
+
+pub fn the_package_visible_type_in_a_pub_signature() -> Internal { //~ E0303
+  Internal.default()
+}
+
+// ---------------------------------------------------------------- the orphan rule
+
+impl Default for Plain {                            //~ E0307
+}
+
+impl Default for util.Choice {                      //~ E0307
+}
+
+impl[T] Default for PlainW[T] {                     //~ E0307
+}

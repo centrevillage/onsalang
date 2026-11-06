@@ -40,7 +40,7 @@ impl<'p> Sema<'p> {
             owner: Some(owner),
             export: None,
         };
-        let imp = ImplDef { generics: Vec::new(), self_ty: error, fns: Vec::new(), consts: Vec::new() };
+        let imp = ImplDef { generics: Vec::new(), self_ty: error, of: None, fns: Vec::new(), consts: Vec::new() };
         let imp = self.add_def(def("<impl>", first, DefKind::Impl(imp), ty));
         let fns = rows.into_iter().map(|(row, at)| {
             let f = FnDef {
@@ -107,7 +107,7 @@ impl<'p> Sema<'p> {
 
     /// The type `t` of a [`TraitItem`] of the type `self_ty`. With no std
     /// (unit tests) there is no `Option`, and it is the error type.
-    fn item_ty(&mut self, t: ItemTy, self_ty: TyId) -> TyId {
+    pub(super) fn item_ty(&mut self, t: ItemTy, self_ty: TyId) -> TyId {
         match (t, self.a.modules.lang.option()) {
             (ItemTy::SelfTy, _) => self_ty,
             (ItemTy::U32, _) => self.a.types.int(IntKind::U32),

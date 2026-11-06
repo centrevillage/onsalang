@@ -1,0 +1,173 @@
+// onsa.toml
+// [package]
+// name = "hand_default_cycle_bound"
+// edition = "2026"
+//
+// [export]
+// prefix = "hdcb_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§10", "§12.5", "§6.3", "§18.1"]
+
+// W5-06 U4/t, S-911 (spec §10 rule 5: "境界のメンバ（`T.default()`）… を経る循環は、具体化した呼び出しで決まるので、手で書いた `rt` の関数を含むものを Core への降下の診断として報告する"; §18.1: the E0903 of the
+// lowering is on "循環の中の手で書いた呼び出しのうちソースの順で最初のもの"; "循環ごとに一つ報告する"; the argument of the type is written in an annotation, `mk::[Q]()` is not in this version, W5-10). The cycle through a bound:
+// a generic `rt fn mk[T: Default]() -> T { T.default() }` is called by the hand-written `default` of the type that it makes, and the `T.default()` reaches that `default` once `T` is the type. `onsa check` has
+// no diagnostic (the call of `mk` does not name the `default`), and the lowering has an E0903 on the first of the two hand-written calls in the source order: the call of `mk` when the `impl` is above `mk`, the
+// `T.default()` in `mk` when `mk` is above the `impl`. The cycle through a generic type with a hand-written `default` (`W[T]` calls `T.default()`), through a tuple and an array (the types that the structure makes), and
+// through two types that call a generic function for each other (one cycle, so one diagnostic), and a generic type that holds the type and is made through the bound. Each cycle has a generic function or type of its own, so that the first call in the source order is not a call that another cycle has too (the same position, code and text would be one diagnostic, §18.1). One cycle gives one diagnostic (P-01). `onsa check` has no diagnostic in this file.
+
+@export
+pub fn anchor() -> U32 {
+  1
+}
+
+// ---------------------------------------------------------------- the impl is above mk: the call of mk is the first
+
+pub struct Q1 {
+  n: I32,
+}
+
+impl Default for Q1 {
+  rt fn default() -> Q1 {
+    let q: Q1 = mk()                                //~ E0903
+    q
+  }
+}
+
+rt fn mk[T: Default]() -> T {
+  T.default()
+}
+
+// ---------------------------------------------------------------- mk is above the impl: the T.default() is the first
+
+rt fn mk2[T: Default]() -> T {
+  T.default()                                       //~ E0903
+}
+
+pub struct Q2 {
+  n: I32,
+}
+
+impl Default for Q2 {
+  rt fn default() -> Q2 {
+    let q: Q2 = mk2()
+    q
+  }
+}
+
+// ---------------------------------------------------------------- a generic type with a hand-written default, above the impl: the T.default() is the first
+
+pub struct W3[T] {
+  v: T,
+}
+
+impl[T: Default] Default for W3[T] {
+  rt fn default() -> W3[T] {
+    W3 { v: T.default() }                           //~ E0903
+  }
+}
+
+pub struct Q3 {
+  n: I32,
+}
+
+impl Default for Q3 {
+  rt fn default() -> Q3 {
+    let w: W3[Q3] = W3.default()
+    w.v
+  }
+}
+
+// ---------------------------------------------------------------- a tuple and an array
+
+pub struct Q4 {
+  n: I32,
+}
+
+impl Default for Q4 {
+  rt fn default() -> Q4 {
+    let t: (Q4, I32) = mk4()                        //~ E0903
+    Q4 { n: t.1 }
+  }
+}
+
+rt fn mk4[T: Default]() -> T {
+  T.default()
+}
+
+pub struct Q5 {
+  n: I32,
+}
+
+impl Default for Q5 {
+  rt fn default() -> Q5 {
+    let a: [Q5; 2] = mk5()                          //~ E0903
+    Q5 { n: a[0].n }
+  }
+}
+
+rt fn mk5[T: Default]() -> T {
+  T.default()
+}
+
+// ---------------------------------------------------------------- two types that call a generic function for each other: one cycle
+
+pub struct Q6 {
+  n: I32,
+}
+
+pub struct R6 {
+  n: I32,
+}
+
+impl Default for Q6 {
+  rt fn default() -> Q6 {
+    let r: R6 = mk6()                               //~ E0903
+    Q6 { n: r.n }
+  }
+}
+
+impl Default for R6 {
+  rt fn default() -> R6 {
+    let q: Q6 = mk6()
+    R6 { n: q.n }
+  }
+}
+
+rt fn mk6[T: Default]() -> T {
+  T.default()
+}
+
+// ---------------------------------------------------------------- a generic type that holds the type, made through the bound
+
+pub struct Q7 {
+  n: I32,
+}
+
+impl Default for Q7 {
+  rt fn default() -> Q7 {
+    let w: W7[Q7] = mk7()                           //~ E0903
+    w.v
+  }
+}
+
+pub struct W7[T] {
+  v: T,
+}
+
+impl[T: Default] Default for W7[T] {
+  rt fn default() -> W7[T] {
+    W7 { v: T.default() }
+  }
+}
+
+rt fn mk7[T: Default]() -> T {
+  T.default()
+}

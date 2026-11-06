@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:6"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// W5-06 U4/t, S-904, S-905 (spec §6.3: "`rt` の欠けだけなら、`rt` を足す修正候補を出す"). The `impl[T: Default] Default for W[T]` whose `default` has no `rt`: the one difference is the `rt`, so the one
+// candidate adds it (`T.default()` in the body is in an `rt fn` after it), and the file has no diagnostic after it.
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {                            //~ E0401
+    W { v: T.default() }
+  }
+}
+
+pub fn the_default() -> W[U8] {
+  W.default()
+}

@@ -334,7 +334,8 @@ impl<'p> Sema<'p> {
     /// an `impl` whose members are read ([`reads_members`]).
     fn collect_impl(&mut self, at: &Place<'_>, decl: &ImplDecl) {
         let item = at.item;
-        let empty = ImplDef { generics: Vec::new(), self_ty: at.error, fns: Vec::new(), consts: Vec::new() };
+        let of = decl.trait_.as_ref().filter(|_| reads_members(decl)).map(|_| Bound::Default);
+        let empty = ImplDef { generics: Vec::new(), self_ty: at.error, of, fns: Vec::new(), consts: Vec::new() };
         let d = self.add_def(at.def("<impl>".into(), item.span, DefKind::Impl(empty)));
         if !reads_members(decl) {
             return;
@@ -355,6 +356,9 @@ impl<'p> Sema<'p> {
             };
             let is_fn = matches!(kind, DefKind::Fn(_));
             let def = Def { owner: Some(d), ..member.def(name.name.clone(), name.span, kind) };
+            // A member of a trait's `impl` has the visibility of its owner
+            // (§15.1), whatever word it has (E0020).
+            let def = Def { vis: if of.is_some() { Vis::Pub } else { def.vis }, ..def };
             let sub_def = self.add_def(def);
             if target {
                 self.user_target(at.m, sub_def, sub.span);
@@ -368,11 +372,20 @@ impl<'p> Sema<'p> {
     }
 }
 
-/// Whether the members of the `impl` `decl` are read, the one condition: of
-/// an `impl Tr for Ty` they are not (§18.1); its heading is read with the
-/// signatures (`Sema::lower_impl`).
-fn reads_members(decl: &ImplDecl) -> bool {
-    decl.trait_.is_none()
+/// Whether the members of the `impl` `decl` are read: of an `impl Tr for Ty`
+/// of a trait this version does not open they are not (§18.1); its heading
+/// is read with the signatures (`Sema::lower_impl`).
+pub(crate) fn reads_members(decl: &ImplDecl) -> bool {
+    // `impl Default[I32] for P` is no form this version opens (X-23, S-895).
+    decl.trait_.as_ref().is_none_or(opens_impl) && decl.trait_args.is_empty()
+}
+
+/// Whether this version has the `impl` of the trait the path `p` names: of
+/// `Default` alone (X-23), the one test of the names and the signatures. Names
+/// are not resolved here, and a name of the prelude is bound to no other
+/// item (§5.1): the last name is `Default`, or the error of the path.
+fn opens_impl(p: &onsa_syntax::ast::Path) -> bool {
+    p.segments.last().is_some_and(|n| n.name == Bound::Default.name())
 }
 
 /// Where an item is: its module, its AST item, and the placeholder types.

@@ -13,27 +13,28 @@ use super::build::{cmp, stmt, tag_of, u32_lit};
 use super::{GenericArg, Lowerer, R, core_mode, internal};
 use crate::ir::*;
 
-/// Whether the default of `ty` comes of its structure, with no declaration
-/// to call (§6.3).
-pub(super) fn structural(ty: &Ty) -> bool {
-    matches!(ty, Ty::Unit | Ty::Tuple(_) | Ty::Array(..))
+/// The default of `ty` when it comes of its structure, with no declaration to
+/// call (§6.3), the one judgment of that: the element of an array is one
+/// value, evaluated once and copied.
+pub(super) fn structural_default(lw: &mut Lowerer, ty: &Ty, span: Span) -> Option<R<Expr>> {
+    let kind = match ty {
+        Ty::Unit => Ok(ExprKind::Lit(Lit::Unit)),
+        Ty::Tuple(ts) => ts.iter().map(|t| default_value(lw, t, span)).collect::<R<_>>().map(ExprKind::Tuple),
+        Ty::Array(elem, n) => default_value(lw, elem, span).map(|e| ExprKind::Repeat { elem: Box::new(e), n: *n }),
+        _ => return None,
+    };
+    Some(kind.map(|kind| Expr::new(ty.clone(), span, kind)))
 }
 
-/// The default value of `ty` (§6.3): the one path of `T.default()`, of a field
-/// and of an element. It recurs on the structure of the type, and a struct is
-/// a call: its fields are lowered once, for its function. The element of an
-/// array is one value, evaluated once and copied.
-pub(super) fn default_value(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<Expr> {
-    let kind = match ty {
-        Ty::Unit => ExprKind::Lit(Lit::Unit),
-        Ty::Tuple(ts) => ExprKind::Tuple(ts.iter().map(|t| default_value(lw, t, span)).collect::<R<_>>()?),
-        Ty::Array(elem, n) => ExprKind::Repeat { elem: Box::new(default_value(lw, elem, span)?), n: *n },
-        _ => {
-            let (member, args) = lw.member_of(ty, DerivedFn::Default.name(), span)?;
-            ExprKind::Call { fn_: lw.fn_id(member, args), args: Vec::new() }
-        }
-    };
-    Ok(Expr::new(ty.clone(), span, kind))
+/// The default value of `ty` (§6.3): the one path of a field and of an
+/// element. It recurs on the structure of the type, and a struct is a call:
+/// its fields are lowered once, for its function.
+fn default_value(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<Expr> {
+    if let Some(value) = structural_default(lw, ty, span) {
+        return value;
+    }
+    let (member, args) = lw.member_of(ty, DerivedFn::Default.name(), span)?;
+    Ok(Expr::new(ty.clone(), span, ExprKind::Call { fn_: lw.fn_id(member, args), args: Vec::new() }))
 }
 
 /// The value of the field `f` in a `default()`.
@@ -100,7 +101,8 @@ impl Lowerer<'_> {
             Ty::Struct(id) | Ty::Enum(id) => {
                 let (d, args) = self.type_decl(*id, span)?;
                 let member = self.a.modules.assoc.get(&d).and_then(|t| t.get(name));
-                return member.map(|&m| (m, args)).ok_or_else(|| internal(span, "a member its type does not have"));
+                let of = |&m: &DefId| (m, self.impl_args(m, args));
+                return member.map(of).ok_or_else(|| internal(span, "a member its type does not have"));
             }
             Ty::Int(k) => STy::Int(*k),
             Ty::Float(k) => STy::Float(*k),
@@ -110,6 +112,16 @@ impl Lowerer<'_> {
         let table = self.a.types.find(&key).and_then(|k| self.a.modules.assoc_builtin.get(&k));
         let member = table.and_then(|t| t.get(name));
         member.map(|&m| (m, Vec::new())).ok_or_else(|| internal(span, "a member std does not declare"))
+    }
+
+    /// The generic arguments of the `impl` of the member `m`, of the arguments
+    /// `args` of its type: its heading names its parameters in any order (§6.2).
+    fn impl_args(&self, m: DefId, args: Vec<GenericArg>) -> Vec<GenericArg> {
+        let types = &self.a.types;
+        let imp = self.a.def(m).owner.and_then(|o| self.a.def(o).as_impl());
+        let Some((imp, STy::Named(_, written))) = imp.map(|i| (i, types.get(i.self_ty))) else { return args };
+        let at = |k: usize| written.iter().position(|&w| matches!(types.get(w), STy::Param(p) if *p as usize == k));
+        (0..imp.generics.len()).filter_map(at).map(|k| args[k].clone()).collect()
     }
 
     /// Fill the function `fid` of `d`, the member `made` a derive makes, at

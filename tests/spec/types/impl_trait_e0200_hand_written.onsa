@@ -6,9 +6,9 @@
 // S-138, S-108, S-145 (W5-04 U1; §18.1: "形の全体がこの版に無いもの(`impl Tr for P`、`trait` と `effect` の宣言)は形の E0200 で、中の
 // 名前を読まない"; S-138: a hand-written `impl Hash` is E0200 in the first period): the hand-written `impl Tr for Ty`
 // of a trait that the first period does not open is the E0200 of the form, in the heading, for a type of the same module
-// (the orphan rule does not apply to it): `Hash`, `Show`, `Drop`, and `Default` (it is opened by W5-06; until then
-// it is E0200, and the case moves to the right form when it is opened). The `impl Float` and the `impl Ordinal` are the
-// E0307 of types/impl_trait_e0307_float_ordinal.onsa. The heading is read to the names stage and has no error here (S-895); the members are not read, so the members here (none, or
+// (the orphan rule does not apply to it): `Hash`, `Show` and `Drop`. `Default` is the one standard trait that W5-06 opens: its `impl` is accepted and
+// is in derive/hand_default_fine.onsa (the hand-written `impl Default` that was here was moved there; the other traits stay closed, derive/hand_default_others_kept.onsa).
+// The `impl Float` and the `impl Ordinal` are the E0307 of types/impl_trait_e0307_float_ordinal.onsa. The heading is read to the names stage and has no error here (S-895); the members are not read, so the members here (none, or
 // the function that a trait would have) have no other diagnostic. A struct, an enum and a generic type each, and no
 // type has two `impl` of one trait. One error per unit (P-01).
 
@@ -41,17 +41,6 @@ impl Show for E {                                   //~ E0200
 }
 
 impl[T] Show for W[T] {                             //~ E0200
-}
-
-impl Default for P {                                //~ E0200
-  fn default() -> P { P { x: 0.0 } }
-}
-
-impl Default for E {                                //~ E0200
-  fn default() -> E { E.A }
-}
-
-impl[T] Default for W[T] {                          //~ E0200
 }
 
 impl Drop for P {                                   //~ E0200

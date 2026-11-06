@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:6"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// W5-06 U4/t, S-904, S-905 (spec §6.3: "`rt` の欠けだけなら、`rt` を足す修正候補を出す"; "`Self` と型の名前は同じ型である"). A struct whose `default` is written with `Self` and without `rt`: the
+// one difference is the `rt`, so the one candidate adds it, and the file has no diagnostic after it.
+
+pub struct Gain {
+  amount: F32,
+}
+
+impl Default for Gain {
+  fn default() -> Self {                            //~ E0401
+    Gain { amount: 1.0 }
+  }
+}
+
+pub fn the_default() -> F32 {
+  Gain.default().amount
+}

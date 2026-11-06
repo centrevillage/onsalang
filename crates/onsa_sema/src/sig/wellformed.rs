@@ -215,10 +215,10 @@ impl<'p> Sema<'p> {
                     let inputs = inputs.map(|(k, (t, i))| (t, i.ty, Pos::Other, Slot::Input(k)));
                     inputs.chain([(f.ret, fd.out, Pos::Other, Slot::Out)]).collect()
                 }
-                // The target of an inherent `impl` (S-756): an error of it is of
+                // The target of an `impl` whose members are read (S-756): an error of it is of
                 // the heading, the whole `impl` one unit (§18.1).
                 // S-769: it is a place of a type, not an argument: `impl voice.Out` is an E0710.
-                (ItemKind::Impl(i), DefKind::Impl(imp)) if i.trait_.is_none() => {
+                (ItemKind::Impl(i), DefKind::Impl(imp)) if crate::names::collect::reads_members(i) => {
                     vec![(i.self_ty, imp.self_ty, if std { view } else { Pos::Other }, Slot::Target)]
                 }
                 _ => Vec::new(),

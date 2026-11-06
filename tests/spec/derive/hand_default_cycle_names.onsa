@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§12.5", "§6.3", "§18.1"]
+
+// W5-06 U4/t, S-911, S-778 (spec §10 rule 5: "再帰しない（直接・相互とも、E0903）。呼び先が名前で決まる呼び出しの循環は検査で報告し"; S-911: "呼び先が名前で決まる循環は今のまま検査で報告", at "循環の中の手で書いた呼び出しのうちソースの順で
+// 最初のもの"). A hand-written `default` is a function that a call by its name reaches (`Q.default()`), so a cycle that the names close is an E0903 of `onsa check`, as the cycle of two functions is: the `default` that calls
+// a function that calls the `default` (the function above the `impl` or below it, so the first call in the source order is in the function or in the `default`), the `default` that calls itself, the `defaults` of two types
+// that call each other, and one that goes through two functions. The diagnostic is on the first call of the cycle in the source order. One cycle gives one diagnostic (P-01). The cycles that need the instance of a bound or
+// a derive to be closed are in hand_default_cycle_derive.onsa and hand_default_cycle_bound.onsa (not found by `check`).
+
+// ---------------------------------------------------------------- the function is above the impl
+
+pub struct QA {
+  n: I32,
+}
+
+rt fn make_a() -> QA {
+  QA.default()                                      //~ E0903
+}
+
+impl Default for QA {
+  rt fn default() -> QA {
+    make_a()
+  }
+}
+
+// ---------------------------------------------------------------- the function is below the impl
+
+pub struct QB {
+  n: I32,
+}
+
+impl Default for QB {
+  rt fn default() -> QB {
+    make_b()                                        //~ E0903
+  }
+}
+
+rt fn make_b() -> QB {
+  QB.default()
+}
+
+// ---------------------------------------------------------------- the default calls itself
+
+pub struct QC {
+  n: I32,
+}
+
+impl Default for QC {
+  rt fn default() -> QC {
+    QC.default()                                    //~ E0903
+  }
+}
+
+// ---------------------------------------------------------------- the defaults of two types call each other
+
+pub struct QD {
+  n: I32,
+}
+
+pub struct QE {
+  n: I32,
+}
+
+impl Default for QD {
+  rt fn default() -> QD {
+    let e = QE.default()                            //~ E0903
+    QD { n: e.n }
+  }
+}
+
+impl Default for QE {
+  rt fn default() -> QE {
+    let d = QD.default()
+    QE { n: d.n }
+  }
+}
+
+// ---------------------------------------------------------------- through two functions
+
+pub struct QF {
+  n: I32,
+}
+
+impl Default for QF {
+  rt fn default() -> QF {
+    first_f()                                       //~ E0903
+  }
+}
+
+rt fn first_f() -> QF {
+  second_f()
+}
+
+rt fn second_f() -> QF {
+  QF.default()
+}
+
+// ---------------------------------------------------------------- the generic type's default that calls itself by name
+
+pub struct QG[T] {
+  v: T,
+}
+
+impl[T: Default] Default for QG[T] {
+  rt fn default() -> QG[T] {
+    let inner: QG[T] = QG.default()                 //~ E0903
+    inner
+  }
+}

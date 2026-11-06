@@ -1,0 +1,127 @@
+// onsa.toml
+// [package]
+// name = "hand_default_cycle_fine"
+// edition = "2026"
+//
+// [export]
+// prefix = "hdcf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§10", "§12.5", "§6.3", "§6.4", "§18.1"]
+
+// W5-06 U4/t, S-911 (spec §10 rule 5: only "再帰" is E0903; S-911: the cycle is made of the instances that the calls reach, so a call that reaches another instance of the same function is not one). The forms that look
+// like the cycles of hand_default_cycle_derive.onsa and hand_default_cycle_bound.onsa and are not: a `default` that calls `mk` for another type whose `default` does not call back (the `T.default()` of `mk` is
+// reached with another `T`), a generic type whose `default` calls `T.default()` with the nested instances (`W[W[I32]]`: the instance for `W[I32]`, then the one for `I32`), a hand-written `default` that calls the derived `default`
+// of another type that has no path back, a chain of types that call the next, and a derive over a type with a hand-written `default` that does not call the derive. There is no diagnostic in `onsa check` or
+// in the build of the target `[host]`.
+
+@export
+pub fn anchor() -> U32 {
+  1
+}
+
+rt fn mk[T: Default]() -> T {
+  T.default()
+}
+
+pub struct O1 {
+  n: I32,
+}
+
+impl Default for O1 {
+  rt fn default() -> O1 {
+    O1 { n: 1 }
+  }
+}
+
+pub struct A1 {
+  n: I32,
+}
+
+impl Default for A1 {
+  rt fn default() -> A1 {
+    let o: O1 = mk()
+    A1 { n: o.n }
+  }
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {
+    W { v: T.default() }
+  }
+}
+
+pub rt fn nested() -> W[W[W[I32]]] {
+  W.default()
+}
+
+pub rt fn nested_by_the_bound() -> W[W[O1]] {
+  mk()
+}
+
+pub struct D1: Default {
+  o: O1,
+  a: A1,
+}
+
+pub struct A2 {
+  n: I32,
+}
+
+impl Default for A2 {
+  rt fn default() -> A2 {
+    let d = D1.default()
+    A2 { n: d.o.n + d.a.n }
+  }
+}
+
+pub struct A3 {
+  n: I32,
+}
+
+impl Default for A3 {
+  rt fn default() -> A3 {
+    let a: A2 = mk()
+    A3 { n: a.n }
+  }
+}
+
+pub struct A4 {
+  n: I32,
+}
+
+impl Default for A4 {
+  rt fn default() -> A4 {
+    let t: (A3, [A2; 2]) = mk()
+    A4 { n: t.0.n + t.1[1].n }
+  }
+}
+
+pub struct D2: Default {
+  t: (A4, U8),
+  a: [A3; 2],
+}
+
+pub rt fn the_derived() -> D2 {
+  D2.default()
+}
+
+pub rt fn the_chain() -> A4 {
+  A4.default()
+}
+
+pub rt fn the_bound_of_a_chain() -> A3 {
+  let a: A3 = mk()
+  a
+}

@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+
+// W5-06 U4: `Default` has no type parameters, so the heading `impl Default[I32] for P` is no `impl Default for P`: it stays the E0200 of the form that it was, and its members are not read
+// (a gap of the spec, reported with the case: the first period has no heading of a trait with type arguments, §18.1). One error per unit (P-01).
+
+pub struct P {
+  n: I32,
+}
+
+impl Default[I32] for P {                           //~ E0200
+  rt fn default() -> P {
+    P { n: 0 }
+  }
+}

@@ -1,0 +1,330 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§6.4", "§6.6", "§10"]
+
+// W5-06 U4/t, S-851, S-905 (spec §6.4: "`impl Default for Mode { rt fn default() -> Mode { Mode.Off } }` と手で書く"; §6.3: the table, `Default` of the integers is 0 and of the floats `+0.0`; "要素が全て実装するとき"
+// for the tuples and the `[T; N]`; §6.4: "struct の `Default` は、各フィールドの既定値を並べたもの"). The value of a hand-written `default` is the value of its body, in every use: `M.default()`, `T.default()` through a
+// bound, the field of a derive of `Default` (the hand-written value, not a 0), every element of a tuple and of an array, a generic type (`W[T]` with the value of `T` inside, nested), the initializer of a `const` and of an
+// associated constant, and an `rt fn`. The values are chosen not to be a 0 or the first variant (a default of `1.5`, `8`, the middle variant `Mid`), so a use that went round the `impl` and made the derived value
+// would show. Each call makes a value of its own. `Str` and `Bytes` are not here (a value of a Shared type is not run by `onsa test` in this version, R-332). The values are worked out by hand; the types are checked in
+// hand_default_fine.onsa.
+
+pub enum Level: PartialEq {
+  Low,
+  Mid,
+  High,
+}
+
+impl Default for Level {
+  rt fn default() -> Level {
+    Level.Mid
+  }
+}
+
+pub struct Gain: PartialEq {
+  amount: F32,
+  steps: U32,
+}
+
+impl Default for Gain {
+  rt fn default() -> Gain {
+    Gain { amount: 1.5, steps: 8 }
+  }
+}
+
+pub struct SelfForm {
+  n: I32,
+}
+
+impl Default for SelfForm {
+  rt fn default() -> Self {
+    SelfForm { n: 3 }
+  }
+}
+
+pub struct Doubled {
+  steps: U32,
+  mode: Level,
+}
+
+impl Default for Doubled {
+  rt fn default() -> Doubled {
+    Doubled { steps: Gain.default().steps * 2, mode: Level.default() }
+  }
+}
+
+pub struct Hundred {
+  n: I32,
+}
+
+impl Default for Hundred {
+  rt fn default() -> Hundred {
+    Hundred { n: 100 }
+  }
+}
+
+pub struct Seven {
+  n: I32,
+}
+
+impl Default for Seven {
+  rt fn default() -> Seven {
+    Seven { n: 7 }
+  }
+}
+
+pub struct W[T] {
+  v: T,
+  tag: U8,
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {
+    W { v: T.default(), tag: 7 }
+  }
+}
+
+pub struct Pair[T, U] {
+  a: T,
+  b: U,
+}
+
+impl[U: Default, T: Default] Default for Pair[T, U] {
+  rt fn default() -> Pair[T, U] {
+    Pair { a: T.default(), b: U.default() }
+  }
+}
+
+pub struct Bank: Default {
+  gain: Gain,
+  level: Level,
+  n: U32,
+  taps: [Gain; 2],
+  pair: (Level, U8),
+}
+
+rt fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+// ---------------------------------------------------------------- M.default()
+
+test "default of a hand-written struct is the value of its body" {
+  let g = Gain.default()
+  assert g.amount == 1.5
+  assert g.steps == 8
+}
+
+test "default of a hand-written enum is the variant of its body, not the first" {
+  assert Level.default() == Level.Mid
+  assert Level.default() != Level.Low
+  assert Level.default() != Level.High
+}
+
+test "default with Self as the return type" {
+  assert SelfForm.default().n == 3
+}
+
+test "default that calls other defaults" {
+  let d = Doubled.default()
+  assert d.steps == 16
+  assert d.mode == Level.Mid
+}
+
+test "every call makes a value of its own" {
+  var g = Gain.default()
+  g.steps = 1
+  g.amount = 2.5
+  let h = Gain.default()
+  assert g.steps == 1
+  assert h.steps == 8
+  assert h.amount == 1.5
+}
+
+// ---------------------------------------------------------------- T.default() through a bound
+
+test "T.default() of a hand-written type" {
+  let g: Gain = zero_of()
+  assert g.amount == 1.5
+  assert g.steps == 8
+  let l: Level = zero_of()
+  assert l == Level.Mid
+  let s: SelfForm = zero_of()
+  assert s.n == 3
+}
+
+test "T.default() of a type that calls other defaults" {
+  let d: Doubled = zero_of()
+  assert d.steps == 16
+  assert d.mode == Level.Mid
+}
+
+// ---------------------------------------------------------------- the field of a derive
+
+test "a derive of Default uses the hand-written default of the field" {
+  let b = Bank.default()
+  assert b.gain.amount == 1.5
+  assert b.gain.steps == 8
+  assert b.level == Level.Mid
+  assert b.n == 0
+}
+
+test "a derive of Default uses the hand-written default in each element of an array and in a tuple" {
+  let b = Bank.default()
+  assert b.taps[0].amount == 1.5
+  assert b.taps[0].steps == 8
+  assert b.taps[1].amount == 1.5
+  assert b.taps[1].steps == 8
+  assert b.pair.0 == Level.Mid
+  assert b.pair.1 == 0
+}
+
+// ---------------------------------------------------------------- an element of a tuple and of an array
+
+test "the elements of a tuple are the hand-written defaults" {
+  let t: (Level, Gain, I32) = zero_of()
+  assert t.0 == Level.Mid
+  assert t.1.steps == 8
+  assert t.2 == 0
+  let n: ((Level, Seven), Hundred) = zero_of()
+  let first                        = n.0
+  assert first.0 == Level.Mid
+  assert first.1.n == 7
+  assert n.1.n == 100
+}
+
+test "every element of an array is the hand-written default" {
+  let a: [Gain; 3] = zero_of()
+  assert a[0].steps == 8
+  assert a[1].steps == 8
+  assert a[2].steps == 8
+  assert a[0].amount == 1.5
+  assert a[2].amount == 1.5
+  let l: [Level; 2] = zero_of()
+  assert l[0] == Level.Mid
+  assert l[1] == Level.Mid
+}
+
+test "the elements of an array of tuples" {
+  let a: [(Level, Seven); 2] = zero_of()
+  assert a[0].0 == Level.Mid
+  assert a[0].1.n == 7
+  assert a[1].0 == Level.Mid
+  assert a[1].1.n == 7
+}
+
+// ---------------------------------------------------------------- a generic type
+
+test "default of a generic type holds the default of the argument" {
+  let w: W[Gain] = W.default()
+  assert w.v.steps == 8
+  assert w.tag == 7
+  let i: W[I32] = W.default()
+  assert i.v == 0
+  assert i.tag == 7
+  let m: W[Level] = W.default()
+  assert m.v == Level.Mid
+}
+
+test "default of a generic type, nested" {
+  let n: W[W[I32]] = W.default()
+  assert n.v.v == 0
+  assert n.v.tag == 7
+  assert n.tag == 7
+  let g: W[W[Gain]] = zero_of()
+  assert g.v.v.amount == 1.5
+  assert g.v.tag == 7
+  let t: W[W[W[Hundred]]] = zero_of()
+  assert t.v.v.v.n == 100
+  assert t.v.v.tag == 7
+}
+
+test "the parameters of the impl are in another order than the arguments of the target" {
+  let p: Pair[Hundred, Seven] = Pair.default()
+  assert p.a.n == 100
+  assert p.b.n == 7
+  let q: Pair[Seven, Hundred] = Pair.default()
+  assert q.a.n == 7
+  assert q.b.n == 100
+  let r: Pair[Seven, Seven] = zero_of()
+  assert r.a.n == 7
+  assert r.b.n == 7
+}
+
+test "a generic type of a generic type with two parameters" {
+  let p: Pair[W[Level], W[Hundred]] = Pair.default()
+  assert p.a.v == Level.Mid
+  assert p.a.tag == 7
+  assert p.b.v.n == 100
+}
+
+test "a generic type next to the hand-written struct in a derive" {
+  let w: W[Bank] = zero_of()
+  assert w.v.gain.steps == 8
+  assert w.v.n == 0
+  assert w.tag == 7
+}
+
+// ---------------------------------------------------------------- rt fn and const
+
+rt fn rt_gain() -> Gain {
+  Gain.default()
+}
+
+rt fn rt_level() -> Level {
+  Level.default()
+}
+
+rt fn rt_generic() -> W[Hundred] {
+  zero_of()
+}
+
+rt fn rt_sum() -> U32 {
+  Gain.default().steps + Doubled.default().steps
+}
+
+test "the hand-written default in an rt fn" {
+  assert rt_gain().steps == 8
+  assert rt_level() == Level.Mid
+  assert rt_generic().v.n == 100
+  assert rt_sum() == 24
+}
+
+const START: Gain = Gain.default()
+
+const START_LEVEL: Level = Level.default()
+
+const START_W: W[Seven] = W.default()
+
+const MIXED: (Level, Gain, U8) = (Level.default(), Gain.default(), U8.default())
+
+const SEVERAL: [Gain; 2] = [Gain.default(), Gain.default()]
+
+const STEPS_PLUS: U32 = Gain.default().steps + 1
+
+impl Gain {
+  const HOME: Gain = Gain.default()
+}
+
+test "the hand-written default in the initializer of a const" {
+  assert START.amount == 1.5
+  assert START.steps == 8
+  assert START_LEVEL == Level.Mid
+  assert START_W.v.n == 7
+  assert START_W.tag == 7
+  assert STEPS_PLUS == 9
+}
+
+test "the hand-written default in the initializer of a const of a tuple and an array" {
+  assert MIXED.0 == Level.Mid
+  assert MIXED.1.steps == 8
+  assert MIXED.2 == 0
+  assert SEVERAL[0].steps == 8
+  assert SEVERAL[1].amount == 1.5
+}
+
+test "the hand-written default in the initializer of an associated const" {
+  assert Gain.HOME.steps == 8
+  assert Gain.HOME.amount == 1.5
+}

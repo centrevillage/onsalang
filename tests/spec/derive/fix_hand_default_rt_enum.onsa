@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:6"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// W5-06 U4/t, S-904, S-905 (spec §6.3: "メンバの署名は trait の項目の関数型と同じに書く。… `rt` の欠けだけなら、`rt` を足す修正候補を出す"; §6.4: the example is `rt fn default() -> Mode`). The example of §6.4
+// without the `rt`: the one difference from the signature of the trait is the `rt`, so the one candidate adds it and nothing is left after it (the use of `Mode.default()` is silent before and fine after).
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+impl Default for Mode {
+  fn default() -> Mode {                            //~ E0401
+    Mode.Off
+  }
+}
+
+pub fn the_default() -> Mode {
+  Mode.default()
+}

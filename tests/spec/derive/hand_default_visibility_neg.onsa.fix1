@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.3", "§18.1"]
+// fixes = 1
+
+// W5-06 U4/t, S-904 (spec §15.1: "trait の実装、`test`、持ち主の可視性を継ぐメンバ（trait・effect のメンバ、trait の実装と handler のメンバ）、列挙子に書いた語は冗長で E0020（修正候補は外すこと）。どちらも、語の後ろから
+// 宣言を読み続ける（§18.1）"; S-904: "`pub`・`priv` は §15.1 の決定どおり E0020（外す候補）"). The member of an `impl Default` has the visibility of its owner (the type), so a `pub` or a `priv` on it is redundant: an
+// E0020 on the word, with the one candidate that takes it off (`fixes = 1`: one candidate for each of the four). The declaration is read on after the word, and its signature is right, so the word is the one error in the unit
+// (P-01); a `pub` on a member whose signature is also wrong would be two errors and is not here. A type of any visibility (`pub`, no word, `priv`), a generic `impl`, and an enum. The same `impl` without the word is in
+// hand_default_fine.onsa. The case with one word and the check that the file is clean after the candidate is fix_hand_default_pub.onsa.
+
+pub struct P1 {
+  n: I32,
+}
+
+impl Default for P1 {
+  rt fn default() -> P1 {                       //~ E0020 @3
+    P1 { n: 0 }
+  }
+}
+
+struct P2 {
+  n: I32,
+}
+
+impl Default for P2 {
+  rt fn default() -> P2 {                      //~ E0020 @3
+    P2 { n: 0 }
+  }
+}
+
+priv struct P3 {
+  n: I32,
+}
+
+impl Default for P3 {
+  rt fn default() -> P3 {                      //~ E0020 @3
+    P3 { n: 0 }
+  }
+}
+
+pub struct P4[T] {
+  v: T,
+}
+
+impl[T: Default] Default for P4[T] {
+  rt fn default() -> P4[T] {                    //~ E0020 @3
+    P4 { v: T.default() }
+  }
+}
+
+pub enum P5 {
+  A,
+  B,
+}
+
+impl Default for P5 {
+  rt fn default() -> P5 {
+    P5.B
+  }
+}
+
+priv fn the_uses() -> (P1, P2, P3, P4[U8], P5) {
+  (P1.default(), P2.default(), P3.default(), P4.default(), P5.default())
+}

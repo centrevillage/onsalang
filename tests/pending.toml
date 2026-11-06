@@ -218,13 +218,6 @@ reasons = ["S-112", "S-52", "R-64"]
 until = "W10-02"
 note = "C の名前の重なり。名前の集合は W10-01（S-112）、C の名前の形は W10-02（S-52、R-64）"
 
-[[pending]]
-kind = "diag-code"
-target = "E0903"
-reasons = ["R-83"]
-until = "W6-03"
-note = "rt の再帰。判定を効果の使用の記録の上に作り直す（R-83）"
-
 # 規則 2: どの W の作業も規則を作らず変えない実装済みのコード。W1-10 が否定例を足す
 
 # 規則 3: 第 2 期のコード
@@ -1130,6 +1123,21 @@ until = "W7-11"
 note = "イベントの入出力の見出し。`at event` のクロックが読めるのは W7-11（今は E0302）"
 
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
+# --- W5-06 U4/t: 具体化で決まる `rt` の循環（S-911）。検査は U5（2026-11-06）。
+[[pending]]
+kind = "test-case"
+target = "tests/spec/derive/hand_default_cycle_derive.onsa"
+reasons = ["S-911"]
+until = "W5-06"
+note = "derive を経る循環の E0903。Core の検査は U5"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/derive/hand_default_cycle_bound.onsa"
+reasons = ["S-911"]
+until = "W5-06"
+note = "境界を経る循環の E0903。Core の検査は U5"
+
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow/builtin_sample_tick_call.onsa"
