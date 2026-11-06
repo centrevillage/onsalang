@@ -166,7 +166,7 @@ pub struct Ring[T, const N: U32] {
   `fn id[T](x: T) -> T` の `id(s)`（`s: Span[F32]`）、`fn wrap[T](x: T) -> W[T]` の `wrap(s)`、平面の配列を `xs: [T; N]` に渡す形は E0710 である。修正候補は無く、note で `Span` を総称で受ける形（`xs: Span[T]`、`xs: [Span[T]; N]`）を示す。
   関数型の引数の並びの `Span`（`W[fn(Span[F32]) -> F32]`）は引数の位置なので第二級の位置の誤りでなく、その関数型に要求を判定する。
 - 境界を複数付けるときは `+` で並べる（`[T: Num + Default]`）。
-  同じ並びに同じ境界を二度書く形（`T: Copy + Copy`、`T: ?Dup + ?Dup`）と、`?Dup` を Dup を要する境界（`Dup`、`Copy`、`AnyNum`、`Num`、`Float`、`Int`、`Unsigned`。数の trait は全て `Copy` を要する、§6.3）と並べる形（`T: Copy + ?Dup`。外すものが無い）は E0416 で、並びを前から読んで前の要素と重なるか矛盾する最初の要素に付け、前の要素を note で示す（矛盾では規則も示す）。
+  同じ並びに同じ境界を二度書く形（`T: Copy + Copy`、`T: ?Dup + ?Dup`）と、`?Dup` を Dup を要する境界（`Dup`、`Copy`、`AnyNum`、`Num`、`Float`、`Int`、`Unsigned`。数の trait は全て `Copy` を要する、§6.3）と並べる形（`T: Copy + ?Dup`。外すものが無い）と、`?Escape` を `Escape` と並べる形（`T: Escape + ?Escape`）は E0416 で、並びを前から読んで前の要素と重なるか矛盾する最初の要素に付け、前の要素を note で示す（矛盾では規則も示す）。
   含意で重なる形（`Float + Num`）は誤りでない。矛盾のある並びと、`?` を `Dup`・`Escape` 以外に付けた並びの型パラメータを使う側には、暗黙の `Dup` を含めてその境界による診断を出さない（§18.1）。
   重なりも矛盾も無い並びの、`?` の無い `Dup` と `Escape` は E0020 である。型パラメータに暗黙に付く要求をそのまま書いた形で、`T: Dup` は `T` と同じ意味であり、書き手が既定を誤解していることを示しうる（§0.5.1）。修正候補は要素を外す形（`T: Dup` は `T`、`T: Dup + Show` は `T: Show`）で、note で暗黙の要求を示す。trait の上位の trait は暗黙の要求でないので、この規則に当たらない。
 
