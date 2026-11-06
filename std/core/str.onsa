@@ -1,8 +1,14 @@
-//! The members of `Str` (spec §4.2): `len` alone in this version. `as_bytes`
+//! The members of `Str` (spec §4.2): `len` and `default` in this version. `as_bytes`
 //! and `Str.from_utf8` come with `Bytes` (`builtin::MISSING`); there is no `is_empty`
 //! (`s.len() == 0`, §4.2).
 
 impl Str {
   /// The number of the bytes.
   pub target rt fn len(self) -> U32
+  pub rt fn default() -> Str { "" }
+}
+
+impl Bytes {
+  /// The empty sequence: `Bytes` has no literal.
+  pub target rt fn default() -> Bytes
 }

@@ -129,7 +129,8 @@ impl Lowerer<'_> {
         let key = match self.core_ty(of, &cx.args, span)? {
             Ty::Int(k) => STy::Int(k),
             Ty::Float(k) => STy::Float(k),
-            _ => return Err(internal(span, "a member of a type parameter at no number type")),
+            // U3: `T.default()` and `x.ordinal()` at the types with no member of std.
+            _ => return Err(unsupported(span, Feature::DerivedMembers, &[&self.a.def(def).name])),
         };
         let table = self.a.types.find(&key).and_then(|k| self.a.modules.assoc_builtin.get(&k));
         match table.and_then(|t| t.get(&self.a.def(def).name)) {

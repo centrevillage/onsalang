@@ -5,19 +5,19 @@
 // W5-14 U4/t (R-294): the E0200 of a name that the spec lists and this version does not handle, across modules (the
 // single-file cases are in negative/builtin_names_not_in_this_version.onsa). The error is at the use of the name, in
 // the module of the use (the markers are in `lib.onsa` and here), and not at the call of a function that has it in
-// its body: a function whose body has the error keeps its signature, so `lib.default_value()` is used with no other
-// diagnostic. A module's constant that has the error is the same for a module that reads it (`lib.ONE`). A name that
+// its body: a function whose body has the error keeps its signature, so `lib.name_length()` is used with no other
+// diagnostic. A module's constant that has the error is the same for a module that reads it (`lib.LENGTH`). A name that
 // the module imports with `use` is a name of the module as it is of the file. One error per function (P-01).
 // The unit that does not use a name outside the table (`lib.max_level()`) is fine.
 
 use lib
 
-pub fn default_of_the_module() -> I32 {
-  lib.default_value()
+pub fn length_of_the_module() -> U32 {
+  lib.name_length()
 }
 
-pub fn constant_of_the_module() -> F32 {
-  lib.ONE
+pub fn constant_of_the_module() -> U32 {
+  lib.LENGTH
 }
 
 pub fn calls_of_the_module(s: Str, b: Bytes) -> U32 {
@@ -28,12 +28,12 @@ pub fn the_module_function_that_is_fine() -> F32 {
   lib.max_level()
 }
 
-pub fn default_of_u64_here() -> U64 {
-  U64.default() //~ E0200
+pub fn name_length_here() -> U32 {
+  "main".as_bytes().len() //~ E0200
 }
 
-pub fn default_here() -> Bool {
-  Bool.default() //~ E0200
+pub fn len_of_bytes_here(b: Bytes) -> U32 {
+  b.len() //~ E0200
 }
 
 pub fn from_utf8_here(b: Bytes) {

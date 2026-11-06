@@ -43,23 +43,11 @@ pub(crate) enum PathEnd {
 /// What an associated name of a builtin type is in the compiler's tables:
 /// a method (`Option.unwrap`), called with `!` or not (the table has no
 /// associated function; std's are members, `Buf.zeroed`), or a name of the
-/// spec this version has not (`Str.from_utf8`, the E0200 of `feature`, R-294;
-/// of `called` at the callee of a call: `F32.default()` has a literal to
-/// write, the function `F32.default` as a value has not).
+/// spec this version has not (`Str.from_utf8`, the E0200 of `feature`, R-294).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuiltinMember {
     Method { bang: bool },
-    Missing { kind: NameKind, feature: Feature, called: Feature },
-}
-
-impl BuiltinMember {
-    /// Its kind (§15.1): a method is a function.
-    pub(crate) fn kind(self) -> NameKind {
-        match self {
-            BuiltinMember::Method { .. } => NameKind::Function,
-            BuiltinMember::Missing { kind, .. } => kind,
-        }
-    }
+    Missing { feature: Feature },
 }
 
 impl PathEnd {
@@ -67,7 +55,8 @@ impl PathEnd {
     pub(crate) fn kind(self, a: &Analysis, span: onsa_diag::Span) -> NameKind {
         match self {
             PathEnd::Entity(e) => NameKind::of_named(e, &a.defs, span),
-            PathEnd::Builtin { member, .. } => member.kind(),
+            // Of the kind of §15.1: a method is a function.
+            PathEnd::Builtin { .. } => NameKind::Function,
         }
     }
 
@@ -100,6 +89,8 @@ impl Analysis {
     /// struct, an enum or a type a flow generates by its def, a builtin type;
     /// none for a type with no members (a tuple, an array, a function, a
     /// type parameter) and for the error type.
+    // SPEC-GAP(S-912): an alias of a tuple, an array or `()` has no members,
+    // so its `A.default()` is an E0302.
     fn type_namespace(&self, ty: TyId) -> Option<Entity> {
         match self.types.get(ty) {
             Ty::Named(d, _) => Some(Entity::Def(*d)),
@@ -213,9 +204,9 @@ impl Analysis {
                 Some(member) if at + 1 == path.segments.len() => return Ok(PathEnd::Builtin { of: typed.at, member }),
                 // A member with a name after it (`Str.len.zz`),
                 // as `P.get.zz` and `P.N.x`.
-                Some(member) => {
+                Some(_) => {
                     let (name, span) = (path.segments[at].name.clone(), path.segments[at + 1].span);
-                    return Err(ResolveError::NotANamespace { name, span, kind: Some(member.kind()) });
+                    return Err(ResolveError::NotANamespace { name, span, kind: Some(NameKind::Function) });
                 }
                 None => {}
             }
@@ -254,8 +245,6 @@ pub(crate) fn builtin_member(a: &Analysis, of: Entity, name: &str) -> Option<Bui
     let (form, feature) = builtin::missing(&a.types, ty, name)?;
     Some(match form {
         builtin::Form::Method => BuiltinMember::Method { bang: false },
-        builtin::Form::Function => {
-            BuiltinMember::Missing { kind: NameKind::Function, feature: Feature::BuiltinName, called: feature }
-        }
+        builtin::Form::Function => BuiltinMember::Missing { feature },
     })
 }

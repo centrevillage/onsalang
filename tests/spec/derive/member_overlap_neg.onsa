@@ -1,0 +1,206 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.4", "§18.1"]
+
+// W5-06 U2/t, S-851 (spec §6.2: "型の名前の後の `.` で引く名前（メソッド、関連定数、enum の列挙子。trait の `impl` のメンバと derive が作るメンバ（`default`、`ordinal`、`from_ordinal`）を含む）は
+// 一つの空間で、重なると E0304。derive が作るメンバとの重なりは固有のメンバに付け、宣言の一覧を note で示す"; §6.4: "並べた trait は全て自動で生成する"). A member of an `impl` of the type whose name
+// is one that the list of the type makes is an E0304 on the name of the member, whatever the signature is (a function with no argument, a method that takes `self`, other
+// arguments or another result, a function that is private or `rt`), in whatever `impl` of the type it is (the second, a generic one), and whatever the order of the two is (the `impl` before the declaration
+// of the type or after it). `Default` makes `default`, `Ordinal` makes `ordinal` and `from_ordinal`; the list may name other traits too. Each member is a unit of its own, so a file can hold many
+// of them. The uses of the name are not written next to the overlap (what the use of an overlapping name refers to is not in the spec). One error in each member (P-01).
+
+pub struct Point: Default {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub fn default() -> Point {                       //~ E0304
+    Point { x: 1.0, y: 1.0 }
+  }
+}
+
+pub struct Rt: Default {
+  n: I32,
+}
+
+impl Rt {
+  pub rt fn default() -> Rt {                       //~ E0304
+    Rt { n: 1 }
+  }
+}
+
+pub struct Private: Default {
+  n: I32,
+}
+
+impl Private {
+  fn default() -> Private {                         //~ E0304
+    Private { n: 1 }
+  }
+}
+
+pub struct Method: Default {
+  n: I32,
+}
+
+impl Method {
+  pub fn default(self) -> I32 {                     //~ E0304
+    self.n
+  }
+}
+
+pub struct Arguments: Default {
+  n: I32,
+}
+
+impl Arguments {
+  pub fn default(n: I32) -> Arguments {             //~ E0304
+    Arguments { n: n }
+  }
+}
+
+pub struct OtherResult: Default {
+  n: I32,
+}
+
+impl OtherResult {
+  pub fn default() -> I32 {                         //~ E0304
+    0
+  }
+}
+
+pub struct SecondImpl: Default {
+  n: I32,
+}
+
+impl SecondImpl {
+  pub fn make() -> SecondImpl {
+    SecondImpl { n: 0 }
+  }
+}
+
+impl SecondImpl {
+  pub fn default() -> SecondImpl {                  //~ E0304
+    SecondImpl { n: 2 }
+  }
+}
+
+pub struct WithOthers: PartialEq + Default + Eq {
+  n: I32,
+}
+
+impl WithOthers {
+  pub fn default() -> WithOthers {                  //~ E0304
+    WithOthers { n: 3 }
+  }
+}
+
+pub struct Pair[T]: Default {
+  a: T,
+  b: T,
+}
+
+impl[T] Pair[T] {
+  pub fn default() -> I32 {                         //~ E0304
+    0
+  }
+}
+
+pub struct Ring[T, const N: U32]: Default {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn default(self) -> U32 {                     //~ E0304
+    N
+  }
+}
+
+impl Early {
+  pub fn default() -> Early {                       //~ E0304
+    Early { n: 4 }
+  }
+}
+
+pub struct Early: Default {
+  n: I32,
+}
+
+// ---------------------------------------------------------------- Ordinal: ordinal and from_ordinal
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+}
+
+impl Mode {
+  pub fn ordinal(self) -> U32 {                     //~ E0304
+    0
+  }
+}
+
+pub enum Wave: Ordinal {
+  Sine,
+  Saw,
+}
+
+impl Wave {
+  pub fn from_ordinal(n: U32) -> Option[Wave] {     //~ E0304
+    None
+  }
+}
+
+pub enum Shape: Ordinal {
+  Circle,
+  Square,
+}
+
+impl Shape {
+  pub fn ordinal(self) -> I32 {                     //~ E0304
+    1
+  }
+
+  pub fn from_ordinal(n: I32) -> Shape {            //~ E0304
+    Shape.Circle
+  }
+}
+
+pub enum Level: Eq + Ordinal + Hash {
+  Low,
+  High,
+}
+
+impl Level {
+  pub rt fn ordinal(self) -> U32 {                  //~ E0304
+    7
+  }
+}
+
+impl Late {
+  pub fn from_ordinal(n: U32) -> Option[Late] {     //~ E0304
+    None
+  }
+}
+
+pub enum Late: Ordinal {
+  First,
+  Second,
+}
+
+pub enum Another: Ordinal {
+  First,
+  Second,
+}
+
+impl Another {
+  pub fn make() -> Another {
+    Another.First
+  }
+}
+
+impl Another {
+  pub fn ordinal(self) -> U32 {                     //~ E0304
+    9
+  }
+}

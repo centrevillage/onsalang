@@ -6,12 +6,12 @@
 //! table of the operators stays. The judgments under the generics in scope
 //! are [`crate::body::bounds`], which reads these.
 
-use onsa_syntax::ast::BinOp;
+use onsa_syntax::ast::{BinOp, Mode};
 
-use crate::def::{Bound, Derive};
+use crate::def::{Bound, Derive, DerivedFn};
 use crate::deferred::OpNeed;
 use crate::prim::{NARROW_FROM, ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM};
-use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty};
+use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, DefId};
 
 /// A row of the table of §6.3: the types that implement the same traits.
@@ -127,14 +127,20 @@ pub(crate) fn derived(written: &[Bound]) -> Vec<Derive> {
 pub(crate) enum Rep {
     I32,
     F32,
+    /// `AnyOrdinal` of std: no builtin type has `Ordinal` (§6.4).
+    Ordinal,
 }
 
 impl Rep {
-    pub(crate) fn ty(self) -> Ty {
-        match self {
+    /// The key of its table of members in `assoc_builtin`, or its def in
+    /// `assoc`: none with no std loaded.
+    pub(crate) fn table(self, a: &Analysis) -> (Option<TyId>, Option<DefId>) {
+        let ty = match self {
             Rep::I32 => Ty::Int(IntKind::I32),
             Rep::F32 => Ty::Float(FloatKind::F32),
-        }
+            Rep::Ordinal => return (None, a.modules.lang.any_ordinal()),
+        };
+        (a.types.find(&ty), None)
     }
 }
 
@@ -143,6 +149,11 @@ impl Rep {
 /// negative value with [`MAX`] (§6.6).
 pub(crate) const MIN: &str = "MIN";
 pub(crate) const MAX: &str = "MAX";
+
+/// The members of `Default` and `Ordinal` (§6.3, §6.4).
+pub(crate) const DEFAULT: &str = "default";
+const ORDINAL: &str = "ordinal";
+const FROM_ORDINAL: &str = "from_ordinal";
 
 /// The names the number traits give a type parameter (§3.3, §6.3, §6.6): the
 /// constants, the conversion functions and the methods. A row has no forms:
@@ -157,7 +168,55 @@ pub(crate) const MEMBERS: &[(Bound, Rep, &[&str])] = &[
         "div_euclid", "rem_euclid", "checked_add", "checked_sub", "checked_mul", "checked_div",
         "checked_rem", "checked_div_euclid", "checked_rem_euclid", "checked_shl", "checked_shr",
     ]),
+    (Bound::Default, Rep::I32, &[DEFAULT]),
+    (Bound::Ordinal, Rep::Ordinal, &[ORDINAL, FROM_ORDINAL]),
 ];
+
+/// A type of the signature of a [`TraitItem`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ItemTy {
+    SelfTy,
+    U32,
+    OptionSelf,
+}
+
+/// A member of a trait with the form every type gives it (§6.3, §6.4): `rt`,
+/// with an empty effect row (S-905, S-907). In phase 2, an item of a `trait`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TraitItem {
+    pub bound: Bound,
+    pub name: &'static str,
+    pub made: DerivedFn,
+    /// The mode of `self`, none of an associated function.
+    pub recv: Option<Mode>,
+    pub params: &'static [(&'static str, ItemTy)],
+    pub ret: ItemTy,
+}
+
+/// The members of the traits a list makes (§6.4), in the order of [`DerivedFn`]:
+/// the one form of what a derive makes and of what an `impl` writes.
+#[rustfmt::skip]
+pub(crate) const TRAIT_ITEMS: [TraitItem; 3] = [
+    TraitItem {
+        bound: Bound::Default, name: DEFAULT, made: DerivedFn::Default,
+        recv: None, params: &[], ret: ItemTy::SelfTy,
+    },
+    TraitItem {
+        bound: Bound::Ordinal, name: ORDINAL, made: DerivedFn::Ordinal,
+        recv: Some(Mode::Borrow), params: &[], ret: ItemTy::U32,
+    },
+    TraitItem {
+        bound: Bound::Ordinal, name: FROM_ORDINAL, made: DerivedFn::FromOrdinal,
+        recv: None, params: &[("n", ItemTy::U32)], ret: ItemTy::OptionSelf,
+    },
+];
+
+impl DerivedFn {
+    /// Its row of [`TRAIT_ITEMS`].
+    pub(crate) fn item(self) -> &'static TraitItem {
+        &TRAIT_ITEMS[self as usize]
+    }
+}
 
 /// The representative type of the member `name` of a type parameter of the
 /// bounds `bounds`: of the first row of [`MEMBERS`] with the name, of a trait
@@ -170,8 +229,11 @@ pub(crate) fn member_rep(bounds: &[Bound], name: &str) -> Option<Rep> {
 /// The declaration of the member `name` of a type parameter of the bounds
 /// `bounds`: none with no such member, or with no std loaded.
 pub(crate) fn member(a: &Analysis, bounds: &[Bound], name: &str) -> Option<DefId> {
-    let key = a.types.find(&member_rep(bounds, name)?.ty())?;
-    a.modules.assoc_builtin.get(&key)?.get(name).copied()
+    let table = match member_rep(bounds, name)?.table(a) {
+        (_, Some(d)) => a.modules.assoc.get(&d)?,
+        (key, None) => a.modules.assoc_builtin.get(&key?)?,
+    };
+    table.get(name).copied()
 }
 
 /// The trait of the first row of [`MEMBERS`] with the name `name`.

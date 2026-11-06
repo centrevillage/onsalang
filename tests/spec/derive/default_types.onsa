@@ -1,0 +1,388 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§4.5", "§6.2"]
+// fixes = 0
+
+// W5-06 U2/t, S-49, S-851 (spec §6.3: "`Default` は関連関数 `rt fn default() -> Self` を持ち、効果行は空である。具体的な型では `P.default()`、総称の関数では
+// `T.default()`（`T: Default`）と呼ぶ"; §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである"). The type of the call of `default` is the type that is named: a struct
+// with a flat list of fields, a struct that nests another, an empty struct, a generic struct and one with a const parameter, and the built-in types of the table of §6.3
+// (the integers, the floats, `Bool`, `Str`, `Bytes`, `()`). It is a `let` with an annotation, an argument, a return value, the receiver of a field access, and the type that a generic function
+// gives to `T.default()`, in a function, in a method and in an `impl[T: Default]`. A call whose type is wrong would be an E0401, so every function here is clean.
+// `Self.default()` is the same call in an `impl`. A type that meets `T: Default` by its list or by the table is a type argument of such a function. The value of the call is in
+// default_values.onsa.
+
+pub struct Point: Default {
+  x: F32,
+  y: F32,
+}
+
+pub struct Line: Default {
+  a: Point,
+  b: Point,
+  name: Str,
+}
+
+pub struct Unit: Default {}
+
+pub struct Wide: Default {
+  count: U64,
+  flag: Bool,
+  data: Bytes,
+  pair: (U8, F64),
+  taps: [I16; 3],
+  unit: (),
+}
+
+pub struct Pair[T]: Default {
+  a: T,
+  b: T,
+}
+
+pub struct Ring[T, const N: U32]: Default {
+  d: [T; N],
+}
+
+pub struct Wrapper[T]: Default {
+  inner: Pair[T],
+  extra: (T, U8),
+}
+
+fn take_point(p: Point) -> F32 {
+  p.x
+}
+
+fn take_pair(p: Pair[I32]) -> I32 {
+  p.a
+}
+
+// ---------------------------------------------------------------- the type of P.default()
+
+pub fn as_a_return_value() -> Point {
+  Point.default()
+}
+
+pub fn as_a_let_with_a_type() -> Point {
+  let p: Point = Point.default()
+  p
+}
+
+pub fn as_a_let_without_a_type() -> Point {
+  let p = Point.default()
+  p
+}
+
+pub fn as_an_argument() -> F32 {
+  take_point(Point.default())
+}
+
+pub fn as_a_receiver() -> F32 {
+  Point.default().y
+}
+
+pub fn nested_struct() -> Line {
+  Line.default()
+}
+
+pub fn the_field_of_a_nested_struct() -> Point {
+  Line.default().b
+}
+
+pub fn empty_struct() -> Unit {
+  Unit.default()
+}
+
+pub fn wide_struct() -> Wide {
+  Wide.default()
+}
+
+pub fn a_field_of_a_wide_struct() -> Bool {
+  Wide.default().flag
+}
+
+pub fn in_a_branch(flag: Bool) -> Point {
+  if flag {
+    Point.default()
+  } else {
+    Line.default().a
+  }
+}
+
+pub fn in_a_match(o: Option[Point]) -> Point {
+  match o {
+    Some(p) => p,
+    None => Point.default(),
+  }
+}
+
+pub fn in_a_closure() -> Point {
+  let f = fn() -> Point { Point.default() }
+  f.()
+}
+
+pub fn in_a_tuple() -> (Point, Unit) {
+  (Point.default(), Unit.default())
+}
+
+pub fn in_an_array() -> [Point; 2] {
+  [Point.default(), Point.default()]
+}
+
+pub fn in_a_struct_literal() -> Line {
+  Line { a: Point.default(), b: Point { x: 1.0, y: 2.0 }, name: "line" }
+}
+
+// ---------------------------------------------------------------- a generic struct: the type argument comes from the type that is expected
+
+pub fn generic_as_a_return_value() -> Pair[I32] {
+  Pair.default()
+}
+
+pub fn generic_as_a_let() -> Pair[U8] {
+  let p: Pair[U8] = Pair.default()
+  p
+}
+
+pub fn generic_as_an_argument() -> I32 {
+  take_pair(Pair.default())
+}
+
+pub fn generic_of_a_struct() -> Pair[Point] {
+  Pair.default()
+}
+
+pub fn generic_of_a_generic() -> Pair[Pair[Bool]] {
+  Pair.default()
+}
+
+pub fn generic_with_a_const_parameter() -> Ring[F32, 4] {
+  Ring.default()
+}
+
+pub fn generic_that_holds_a_generic() -> Wrapper[Str] {
+  Wrapper.default()
+}
+
+// ---------------------------------------------------------------- the built-in types of the table of §6.3
+
+pub fn default_of_i8() -> I8 {
+  I8.default()
+}
+
+pub fn default_of_i16() -> I16 {
+  I16.default()
+}
+
+pub fn default_of_i32() -> I32 {
+  I32.default()
+}
+
+pub fn default_of_i64() -> I64 {
+  I64.default()
+}
+
+pub fn default_of_u8() -> U8 {
+  U8.default()
+}
+
+pub fn default_of_u16() -> U16 {
+  U16.default()
+}
+
+pub fn default_of_u32() -> U32 {
+  U32.default()
+}
+
+pub fn default_of_u64() -> U64 {
+  U64.default()
+}
+
+pub fn default_of_f32() -> F32 {
+  F32.default()
+}
+
+pub fn default_of_f64() -> F64 {
+  F64.default()
+}
+
+pub fn default_of_bool() -> Bool {
+  Bool.default()
+}
+
+pub fn default_of_str() -> Str {
+  Str.default()
+}
+
+pub fn default_of_bytes() -> Bytes {
+  Bytes.default()
+}
+
+pub fn default_as_a_let(x: F32) -> F32 {
+  let zero: F32 = F32.default()
+  x + zero
+}
+
+pub fn default_as_an_operand(x: I32) -> I32 {
+  x + I32.default()
+}
+
+pub fn default_in_a_comparison(x: U8) -> Bool {
+  x == U8.default()
+}
+
+pub fn default_as_a_method_receiver() -> U32 {
+  Str.default().len()
+}
+
+// ---------------------------------------------------------------- T.default() with T: Default
+
+pub fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub fn first_and_zero[T: Default](x: T) -> (T, T) {
+  (x, T.default())
+}
+
+pub fn in_a_let[T: Default]() -> T {
+  let d: T = T.default()
+  d
+}
+
+pub fn in_a_branch_of_a_generic[T: Default + Copy](flag: Bool, x: T) -> T {
+  if flag {
+    x
+  } else {
+    T.default()
+  }
+}
+
+pub fn into_a_generic_struct[T: Default]() -> Pair[T] {
+  Pair { a: T.default(), b: T.default() }
+}
+
+pub fn with_more_bounds[T: Default + Eq + Copy](x: T) -> Bool {
+  x == T.default()
+}
+
+pub fn with_a_bound_that_includes_it[T: Default + Show](x: T) -> Str uses {Alloc} {
+  let d = T.default()
+  "{x} {d}"
+}
+
+pub fn with_two_parameters[A: Default, B: Default]() -> (A, B) {
+  (A.default(), B.default())
+}
+
+pub fn through_another_generic[T: Default]() -> T {
+  zero_of()
+}
+
+pub struct Slot[T: Default] {
+  value: T,
+}
+
+impl[T: Default] Slot[T] {
+  pub fn empty() -> Slot[T] {
+    Slot { value: T.default() }
+  }
+
+  pub fn other_default[U: Default](self, extra: U) -> U {
+    U.default()
+  }
+
+  pub fn make_one(self) -> T {
+    T.default()
+  }
+}
+
+// ---------------------------------------------------------------- T: Default is met by a type of the list, and by a type of the table
+
+pub fn zero_of_a_struct() -> Point {
+  zero_of()
+}
+
+pub fn zero_of_a_nested_struct() -> Line {
+  zero_of()
+}
+
+pub fn zero_of_a_generic_struct() -> Pair[F32] {
+  zero_of()
+}
+
+pub fn zero_of_an_integer() -> I16 {
+  zero_of()
+}
+
+pub fn zero_of_a_float() -> F64 {
+  zero_of()
+}
+
+pub fn zero_of_a_bool() -> Bool {
+  zero_of()
+}
+
+pub fn zero_of_a_str() -> Str {
+  zero_of()
+}
+
+pub fn zero_of_a_tuple() -> (I32, Bool) {
+  zero_of()
+}
+
+pub fn zero_of_an_array() -> [U8; 4] {
+  zero_of()
+}
+
+pub fn zero_of_unit() -> () {
+  zero_of()
+}
+
+pub fn slot_of_a_struct() -> Slot[Point] {
+  Slot.empty()
+}
+
+pub fn slot_of_a_float() -> Slot[F32] {
+  Slot.empty()
+}
+
+pub fn slot_default_of_a_float(s: Slot[F32]) -> F32 {
+  s.make_one()
+}
+
+pub fn first_and_zero_of_a_struct(p: Point) -> (Point, Point) {
+  first_and_zero(p)
+}
+
+pub fn zeros_of_the_instance() -> Pair[I32] {
+  Pair.zeros()
+}
+
+// ---------------------------------------------------------------- Self.default() in an impl
+
+pub struct Gain: Default {
+  amount: F32,
+}
+
+impl Gain {
+  pub fn reset() -> Gain {
+    Self.default()
+  }
+
+  pub fn fresh(self) -> Gain {
+    Self.default()
+  }
+
+  pub fn is_default(self) -> Bool {
+    self.amount == Self.default().amount
+  }
+}
+
+impl[T: Default] Pair[T] {
+  pub fn zeros() -> Pair[T] {
+    Pair { a: T.default(), b: T.default() }
+  }
+
+  pub fn cleared(self) -> Pair[T] {
+    Self.default()
+  }
+}

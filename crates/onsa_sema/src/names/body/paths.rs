@@ -426,9 +426,9 @@ impl<'a> Walker<'a> {
                     let member = (at + 1 == segs.len())
                         .then(|| crate::names::builtin_member(a, typed.at, &segs[at].name))
                         .flatten();
-                    match (member.and_then(|k| self.want(k.kind(), &segs, want)), member) {
+                    match (member.and_then(|_| self.want(NameKind::Function, &segs, want)), member) {
                         (Some(f), _) => Err(f),
-                        (None, Some(BuiltinMember::Missing { feature, .. })) => {
+                        (None, Some(BuiltinMember::Missing { feature })) => {
                             Err(Fail::Report(self.missing_name(feature, &segs)))
                         }
                         (None, _) => Err(error(self.written(err, &segs[..=at], typed.owner))),

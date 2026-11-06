@@ -8,9 +8,114 @@ use super::wellformed::{Slot, payloads};
 use super::*;
 use crate::body::bounds::Bounds;
 use crate::stages::Failures;
-use crate::traits::{DERIVABLE, derived};
+use crate::traits::{DERIVABLE, ItemTy, TRAIT_ITEMS, TraitItem, derived};
 
 impl<'p> Sema<'p> {
+    /// The members the list `derives` of the struct or the enum `ty` makes
+    /// (§6.2, §6.4, S-851), made with it in the names stage, so that the paths
+    /// and the E0304 of `Sema::name_members` find them: the functions of an
+    /// `impl` of no item, a member of `ty`, with no types until
+    /// [`Self::fill_derived`] fills them. Seen as far as the type is (§15.1,
+    /// S-905). A list not known makes none, and what it would make is held
+    /// (§18.1, S-460).
+    pub(crate) fn derived_defs(&mut self, ty: DefId, derives: &Derives) {
+        let paths = match derives {
+            Derives::Listed(paths) if list_known(paths) => paths,
+            _ => return self.a.modules.held.extend(TRAIT_ITEMS.iter().map(|row| (ty, row.bound))),
+        };
+        let names = |p: &Path, b: Bound| matches!(p.segments.as_slice(), [n] if n.name == b.name());
+        let in_list = |row: &'static TraitItem| Some((row, paths.iter().find(|p| names(p, row.bound))?.span));
+        let rows: Vec<(&TraitItem, Span)> = TRAIT_ITEMS.iter().filter_map(in_list).collect();
+        let Some((_, first)) = rows.first().copied() else { return };
+        let (module, span) = (self.a.def(ty).module, self.a.def(ty).span);
+        let (error, unit) = (self.a.types.error(), self.a.types.unit());
+        let def = |name: &str, name_span, kind, owner| Def {
+            name: name.to_string(),
+            module,
+            vis: Vis::Pub,
+            span,
+            name_span,
+            kind,
+            item: None,
+            owner: Some(owner),
+            export: None,
+        };
+        let imp = ImplDef { generics: Vec::new(), self_ty: error, fns: Vec::new(), consts: Vec::new() };
+        let imp = self.add_def(def("<impl>", first, DefKind::Impl(imp), ty));
+        let fns = rows.into_iter().map(|(row, at)| {
+            let f = FnDef {
+                generics: Vec::new(),
+                self_mode: row.recv,
+                params: Vec::new(),
+                ret: unit,
+                rt: true,
+                effects: EffectSet::default(),
+                body: None,
+                target: false,
+                flow_fn: None,
+                derived: Some(row.made),
+                fp_relaxed: false,
+            };
+            self.add_def(def(row.name, at, DefKind::Fn(f), imp))
+        });
+        let fns = fns.collect();
+        if let DefKind::Impl(i) = &mut self.a.defs[imp.0 as usize].kind {
+            i.fns = fns;
+        }
+    }
+
+    /// The signatures of what [`Self::derived_defs`] made, of the traits of
+    /// [`TRAIT_ITEMS`], once the generics of every type are lowered: the
+    /// `impl` is of the type at its own parameters, each with the traits the
+    /// `impl` is of, so that a use meets them (§6.4: "型引数が満たすときだけ").
+    pub(super) fn fill_derived(&mut self) {
+        for id in self.a.new_defs() {
+            let def = self.a.def(id);
+            let (DefKind::Impl(imp), None, Some(ty)) = (&def.kind, def.item, def.owner) else { continue };
+            let fns = imp.fns.clone();
+            let mut generics = self.a.def(ty).generics().to_vec();
+            let made = |&f: &DefId| self.a.def(f).as_fn()?.derived;
+            let items: Vec<&TraitItem> = fns.iter().filter_map(made).map(|m| m.item()).collect();
+            for g in &mut generics {
+                let GenericKind::Type { bounds, .. } = &mut g.kind else { continue };
+                for row in &items {
+                    if !bounds.contains(&row.bound) {
+                        bounds.push(row.bound);
+                    }
+                }
+            }
+            let args = (0..generics.len() as u32).map(|k| self.a.types.intern(Ty::Param(k))).collect();
+            let self_ty = self.a.types.intern(Ty::Named(ty, args));
+            for (&f, row) in fns.iter().zip(items) {
+                let params = row.params.iter().map(|&(name, t)| ParamSig {
+                    name: name.to_string(),
+                    mode: Mode::Borrow,
+                    ty: self.item_ty(t, self_ty),
+                    span: self.a.def(f).name_span,
+                });
+                let params = params.collect();
+                let ret = self.item_ty(row.ret, self_ty);
+                if let DefKind::Fn(d) = &mut self.a.defs[f.0 as usize].kind {
+                    (d.generics, d.params, d.ret) = (generics.clone(), params, ret);
+                }
+            }
+            if let DefKind::Impl(i) = &mut self.a.defs[id.0 as usize].kind {
+                (i.generics, i.self_ty) = (generics, self_ty);
+            }
+        }
+    }
+
+    /// The type `t` of a [`TraitItem`] of the type `self_ty`. With no std
+    /// (unit tests) there is no `Option`, and it is the error type.
+    fn item_ty(&mut self, t: ItemTy, self_ty: TyId) -> TyId {
+        match (t, self.a.modules.lang.option()) {
+            (ItemTy::SelfTy, _) => self_ty,
+            (ItemTy::U32, _) => self.a.types.int(IntKind::U32),
+            (ItemTy::OptionSelf, Some(d)) => self.a.types.intern(Ty::Named(d, vec![self_ty])),
+            (ItemTy::OptionSelf, None) => self.a.types.error(),
+        }
+    }
+
     /// The traits a struct or an enum (of the variants `variants`) derives
     /// by its head (§6.4), with what they require (S-900): the closed list
     /// of the derivable ones ([`DERIVABLE`]); `Show` is E0200 in this version
@@ -58,9 +163,7 @@ impl<'p> Sema<'p> {
             }
         }
         // A name held as an error: the list is not known (§18.1).
-        let (held, underivable): (Vec<&Path>, Vec<&Path>) =
-            underivable.into_iter().partition(|p| self.a.record_if_held(cx.def, cx.m, p));
-        let known = held.is_empty() && underivable.is_empty();
+        underivable.retain(|p| !self.a.record_if_held(cx.def, cx.m, p));
         for span in underivable.into_iter().map(|p| p.span) {
             let name = src(cx, span);
             let list: Vec<String> = DERIVABLE.iter().map(|(_, b, _)| format!("`{}`", b.name())).collect();
@@ -72,7 +175,7 @@ impl<'p> Sema<'p> {
                     .with_rule(format!("the traits a type derives are {}", list.join(", "))),
             );
         }
-        known.then(|| derived(&written))
+        list_known(paths).then(|| derived(&written))
     }
 
     /// Whether the fields of the declarations meet the traits they derive
@@ -112,6 +215,14 @@ impl<'p> Sema<'p> {
         );
         self.report(id, Diagnostic::new(Stage::Types, Code::E0416, span, msg).with_found(src(&cx, span)));
     }
+}
+
+/// Whether the list `paths` is known (§18.1, S-774): all its names are in the
+/// closed list of §6.4 or kind constraints, by their spelling alone, so that
+/// the names stage asks it too.
+fn list_known(paths: &[Path]) -> bool {
+    let in_list = |p: &Path| matches!(p.segments.as_slice(), [n] if DERIVABLE.iter().any(|row| row.1.name() == n.name));
+    paths.iter().all(|p| in_list(p) || kind_constraint(p).is_some())
 }
 
 /// The first trait of the list `derives`, in the order of §6.4, that a field

@@ -70,6 +70,7 @@ impl<'p> Sema<'p> {
                     body: None,
                     target: false,
                     flow_fn: Some(which),
+                    derived: None,
                     fp_relaxed: false,
                 }),
             };
@@ -542,6 +543,7 @@ impl<'p> Sema<'p> {
             body: None,
             target: false,
             flow_fn: Some(which),
+            derived: None,
             fp_relaxed: false,
         };
         self.fill_generated(flow, Generated::Fn(which), DefKind::Fn(f));

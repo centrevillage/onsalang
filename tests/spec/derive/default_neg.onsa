@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§4.5", "§6.2", "§6.1", "§18.1"]
+
+// W5-06 U2/t, S-49 (spec §6.3: "`Default` は関連関数 `rt fn default() -> Self` を持ち、効果行は空である。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ";
+// §6.4: "総称の型は、型引数が満たすときだけ満たす"; §6.3's table is the closed list of the built-in types that have `Default`; §18.1: one error in a unit). The calls of
+// `default` that are errors. A name that is not found after a type name is E0302: a struct or an enum that does not list `Default` (a list of `Eq`, `Ordinal`, none), a generic
+// struct without it, `Char` (not in the table), and `T.default()` where `T` has no bound, where `T` has other bounds (`Eq`, `Ordinal`) and where `T: Num` (the bound of the number
+// does not include `Default`). The call takes no argument (E0412), and the name after a value is the method `default` that a value does not have (E0413, as for
+// any associated function: `p.make()`). A call whose type does not fit the place is E0401. A type argument that does not meet `Default` where the call asks for it is
+// E0416 (a function with `T: Default` called with such a type, a generic struct whose list has `Default`, a struct whose parameter has the bound). The function value `P.default`
+// is a name after a type name too. One error in each function (P-01).
+
+pub struct Plain {
+  n: I32,
+}
+
+pub struct JustEq: Eq {
+  n: I32,
+}
+
+pub struct Point: Default {
+  x: F32,
+  y: F32,
+}
+
+pub struct Line: Default {
+  a: Point,
+}
+
+pub struct Pair[T]: Default {
+  a: T,
+  b: T,
+}
+
+pub struct Generic[T] {
+  a: T,
+}
+
+pub struct Slot[T: Default] {
+  v: T,
+}
+
+pub enum Colour {
+  Red,
+  Green,
+}
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+}
+
+fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+fn take_point(p: Point) -> F32 {
+  p.x
+}
+
+// ---------------------------------------------------------------- E0412: the call takes no argument
+
+pub fn struct_with_an_argument() -> Point {
+  Point.default(1)                                  //~ E0412
+}
+
+pub fn struct_with_two_arguments() -> Point {
+  Point.default(1.0, 2.0)                           //~ E0412
+}
+
+pub fn struct_with_the_value_of_the_type() -> Point {
+  Point.default(Point { x: 1.0, y: 1.0 })           //~ E0412
+}
+
+pub fn integer_with_an_argument() -> I32 {
+  I32.default(0)                                    //~ E0412
+}
+
+pub fn bool_with_an_argument() -> Bool {
+  Bool.default(true)                                //~ E0412
+}
+
+pub fn parameter_with_an_argument[T: Default](x: T) -> T {
+  T.default(x)                                      //~ E0412
+}
+
+pub fn generic_struct_with_an_argument() -> Pair[I32] {
+  Pair.default(1)                                   //~ E0412
+}
+
+pub fn after_a_call() -> Point {
+  Point.default().default()                         //~ E0413
+}
+
+// ---------------------------------------------------------------- E0401: the type of the call is the type that is named
+
+pub fn integer_where_a_struct_is_wanted() -> Point {
+  I32.default()                                     //~ E0401
+}
+
+pub fn struct_where_an_integer_is_wanted() -> I32 {
+  Point.default()                                   //~ E0401
+}
+
+pub fn let_with_another_type() -> I32 {
+  let x: I32 = Point.default()                      //~ E0401
+  x
+}
+
+pub fn let_of_a_float_as_an_integer() -> I32 {
+  let x: I32 = F32.default()                        //~ E0401
+  x
+}
+
+pub fn another_struct() -> Point {
+  Line.default()                                    //~ E0401
+}
+
+pub fn as_an_argument_of_another_type() -> F32 {
+  take_point(Line.default())                        //~ E0401
+}
+
+pub fn bool_as_an_integer() -> U8 {
+  Bool.default()                                    //~ E0401
+}
+
+pub fn str_as_bytes() -> Bytes {
+  Str.default()                                     //~ E0401
+}
+
+pub fn of_the_parameter_as_another_type[T: Default]() -> I32 {
+  T.default()                                       //~ E0401
+}
+
+pub fn of_one_parameter_as_another[T: Default, U: Default]() -> U {
+  T.default()                                       //~ E0401
+}
+
+pub fn generic_struct_of_a_plain_struct() -> Pair[Plain] {
+  Pair.default()                                    //~ E0416
+}
+
+pub fn generic_struct_of_an_enum() -> Pair[Colour] {
+  Pair.default()                                    //~ E0416
+}
+
+pub fn generic_struct_of_a_pair_of_plain_structs() -> Pair[Pair[Plain]] {
+  Pair.default()                                    //~ E0416
+}

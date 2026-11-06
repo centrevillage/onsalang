@@ -1,0 +1,158 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§6.1", "§6.2", "§4.5", "§15.1"]
+
+// W5-06 U2/t, S-145 (spec §6.4: "`m.ordinal() -> U32` と `Mode.from_ordinal(n: U32) -> Option[Mode]`（範囲外は `None`）"; "手書きの `impl Ordinal` は書けない（E0307）"; §6.2: "`impl` 内の関数は
+// ドット記法でのみ呼ぶ（`p.norm()`, `Point.new(1.0, 2.0)`）"; §15.1: a method written as a function is E0308, an unknown name after a type is E0302). The members that the derive makes, used wrongly:
+// an argument that is not a `U32` (E0401, also `I32`, `U8`, a float, the enum itself, a string), a result whose type is another type (`Mode` for the `Option`, `I32` for the `U32`),
+// the number of arguments (E0412), the name after a type of an enum that does not list `Ordinal` (E0302: a plain enum, an enum with another list, `from_ordinal` of a parameter with no bound), the name
+// after a value of such an enum or of a type that is no enum (E0413), an associated function called on a value and a method called as a function (E0413 and E0308, the same as for the
+// members that are written by hand), and a type that does not meet `T: Ordinal` where a function asks for it (E0416). One error in each function (P-01).
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+  Auto,
+}
+
+pub enum Plain {
+  A,
+  B,
+}
+
+pub enum JustEq: Eq {
+  A,
+  B,
+}
+
+pub struct Point {
+  x: I32,
+}
+
+fn number_of[T: Ordinal + Copy](x: T) -> U32 {
+  x.ordinal()
+}
+
+fn from_number[T: Ordinal](n: U32) -> Option[T] {
+  T.from_ordinal(n)
+}
+
+// ---------------------------------------------------------------- E0401: the arguments and the results
+
+pub fn from_ordinal_of_a_signed_integer(n: I32) -> Option[Mode] {
+  Mode.from_ordinal(n)                              //~ E0401
+}
+
+pub fn from_ordinal_of_a_small_integer(n: U8) -> Option[Mode] {
+  Mode.from_ordinal(n)                              //~ E0401
+}
+
+pub fn from_ordinal_of_a_wide_integer(n: U64) -> Option[Mode] {
+  Mode.from_ordinal(n)                              //~ E0401
+}
+
+pub fn from_ordinal_of_a_float() -> Option[Mode] {
+  Mode.from_ordinal(1.5)                            //~ E0401
+}
+
+pub fn from_ordinal_of_a_bool() -> Option[Mode] {
+  Mode.from_ordinal(true)                           //~ E0401
+}
+
+pub fn from_ordinal_of_a_string() -> Option[Mode] {
+  Mode.from_ordinal("1")                            //~ E0401
+}
+
+pub fn from_ordinal_of_the_enum(m: Mode) -> Option[Mode] {
+  Mode.from_ordinal(m)                              //~ E0401
+}
+
+pub fn from_ordinal_of_a_parameter_with_an_integer[T: Ordinal](n: I64) -> Option[T] {
+  T.from_ordinal(n)                                 //~ E0401
+}
+
+pub fn ordinal_as_a_signed_integer(m: Mode) -> I32 {
+  m.ordinal()                                       //~ E0401
+}
+
+pub fn ordinal_as_the_enum(m: Mode) -> Mode {
+  m.ordinal()                                       //~ E0401
+}
+
+pub fn ordinal_as_a_float(m: Mode) -> F32 {
+  m.ordinal()                                       //~ E0401
+}
+
+pub fn ordinal_as_a_small_integer(m: Mode) -> U8 {
+  m.ordinal()                                       //~ E0401
+}
+
+pub fn ordinal_as_a_let_of_a_signed_integer(m: Mode) -> I32 {
+  let n: I32 = m.ordinal()                          //~ E0401
+  n
+}
+
+pub fn from_ordinal_as_the_enum(n: U32) -> Mode {
+  Mode.from_ordinal(n)                              //~ E0401
+}
+
+pub fn from_ordinal_as_a_let_of_the_enum(n: U32) -> Mode {
+  let m: Mode = Mode.from_ordinal(n)                //~ E0401
+  m
+}
+
+pub fn from_ordinal_as_a_number(n: U32) -> U32 {
+  Mode.from_ordinal(n)                              //~ E0401
+}
+
+pub fn from_ordinal_as_an_option_of_a_number(n: U32) -> Option[U32] {
+  Mode.from_ordinal(n)                              //~ E0401
+}
+
+pub fn from_ordinal_as_an_option_of_another_enum(n: U32) -> Option[Plain] {
+  Mode.from_ordinal(n)                              //~ E0401
+}
+
+pub fn parameter_ordinal_as_a_signed_integer[T: Ordinal + Copy](x: T) -> I32 {
+  x.ordinal()                                       //~ E0401
+}
+
+// ---------------------------------------------------------------- E0412: the number of arguments
+
+pub fn from_ordinal_without_an_argument() -> Option[Mode] {
+  Mode.from_ordinal()                               //~ E0412
+}
+
+pub fn from_ordinal_with_two_arguments() -> Option[Mode] {
+  Mode.from_ordinal(1, 2)                           //~ E0412
+}
+
+pub fn ordinal_with_an_argument(m: Mode) -> U32 {
+  m.ordinal(1)                                      //~ E0412
+}
+
+pub fn ordinal_with_the_enum_as_an_argument(m: Mode) -> U32 {
+  m.ordinal(m)                                      //~ E0412
+}
+
+pub fn parameter_from_ordinal_without_an_argument[T: Ordinal]() -> Option[T] {
+  T.from_ordinal()                                  //~ E0412
+}
+
+pub fn parameter_ordinal_with_an_argument[T: Ordinal + Copy](x: T) -> U32 {
+  x.ordinal(0)                                      //~ E0412
+}
+
+// ---------------------------------------------------------------- E0308: a method written as a function
+
+pub fn ordinal_called_on_the_type(m: Mode) -> U32 {
+  Mode.ordinal(m)                                   //~ E0308
+}
+
+pub fn ordinal_called_on_the_type_without_the_value() -> U32 {
+  Mode.ordinal()                                    //~ E0308
+}
+
+pub fn ordinal_taken_as_a_value_of_the_type() {
+  let _ = Mode.ordinal                              //~ E0308
+}

@@ -529,6 +529,10 @@ pub struct Modules {
     /// The members first of a name that is an E0304 in their table (§6.2,
     /// S-737): no name where it is used, of either (§18.1).
     pub clashed_assoc: HashSet<DefId>,
+    /// The types whose members of a trait are not read: their list is not
+    /// known (§18.1, S-460, S-774). A use of a name of the trait is an error
+    /// with no diagnostic ([`Self::holds_member`]).
+    pub held: HashSet<(DefId, crate::def::Bound)>,
     /// The module `std.core`, where the names of the prelude std declares are
     /// (§15.1, S-659); set by `crate::names::prelude::declared`.
     pub core: Option<ModId>,
@@ -540,6 +544,12 @@ pub struct Modules {
 }
 
 impl Modules {
+    /// Whether the name `name` is one a trait gives the type `d` and is not
+    /// read of it ([`Self::held`]).
+    pub(crate) fn holds_member(&self, d: DefId, name: &str) -> bool {
+        crate::traits::member_trait(name).is_some_and(|b| self.held.contains(&(d, b)))
+    }
+
     /// The member `name` of the table `t` of an `impl` (`assoc`,
     /// `assoc_builtin`): `Failed` of an E0304 (§18.1, S-737). The one test of
     /// the readers of a table (D-15).

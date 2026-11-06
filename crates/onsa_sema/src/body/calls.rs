@@ -211,8 +211,10 @@ impl<'a> Checker<'a> {
                     return self.args_of_unknown_callee(args);
                 }
                 let mdef = self.a.def(md).clone();
-                let reach = match owner {
+                // The representative of a bound is no type of the program.
+                let reach = match owner.filter(|_| !matches!(self.ty(recv), Ty::Param(_))) {
                     Some(d) => self.a.modules.member_reach(self.a.def(d), &mdef, name, self.m),
+                    None if owner.is_some() => Ok(()),
                     None => self.a.modules.builtin_reach(&mdef, name, self.m),
                 };
                 if let Err(err) = reach {
@@ -266,7 +268,8 @@ impl<'a> Checker<'a> {
         let Some(sig) = builtin::method(&mut self.a.types, recv, &name.name) else {
             // A receiver of the error type, or of a type parameter with an
             // unknown bound (§18.1, S-689, R-271): an unknown method.
-            if self.traits_unknown(recv) {
+            let held = owner.is_some_and(|d| self.a.modules.holds_member(d, &name.name));
+            if self.traits_unknown(recv) || held {
                 return self.args_of_unknown_callee(args);
             }
             // A method of the spec this version has not (R-294).
@@ -366,7 +369,7 @@ impl<'a> Checker<'a> {
             Ty::Param(i) => match self.generics.get(i as usize).map(|g| &g.kind) {
                 Some(GenericKind::Type { bounds, .. }) => {
                     let rep = crate::traits::member_rep(bounds, name);
-                    (rep.and_then(|r| self.a.types.find(&r.ty())), None)
+                    rep.map_or((None, None), |r| r.table(self.a))
                 }
                 _ => (None, None),
             },

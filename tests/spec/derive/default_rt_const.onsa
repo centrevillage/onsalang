@@ -1,0 +1,168 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.6", "§10", "§6.1", "§6.4"]
+// fixes = 0
+
+// W5-06 U2/t, S-905 (spec §6.3: "`Default` は関連関数 `rt fn default() -> Self` を持ち、効果行は空である。… `rt fn` の中と `const` の初期化式でも呼べる"; §6.6: "初期化式から呼べるのは、
+// 効果行が空か `{Alloc}` だけの関数"; §10: "`rt fn` の型の位置には `rt` の関数しか置けない"). `default` is `rt` with an empty effect row, so it is called in an `rt fn` (`P.default()`, `T.default()`, the
+// built-in types), in the initializer of a `const` (a struct, a built-in type, a tuple, an array, a generic struct) and of an associated constant, in a flow, and the function value
+// `P.default` is accepted where a `rt fn() -> P` is wanted. A `const` of a type that has no `Default` is the same E0302 as in a function. The value of each is in default_values.onsa; the errors of a `const` are in default_const_neg.onsa.
+
+pub struct Level: Default {
+  gain: F32,
+  steps: U32,
+  name: Str,
+}
+
+pub struct Gain: Default {
+  amount: F32,
+  steps: U32,
+}
+
+pub struct Pair[T]: Default {
+  a: T,
+  b: T,
+}
+
+// ---------------------------------------------------------------- rt fn
+
+pub rt fn in_an_rt_fn() -> Level {
+  Level.default()
+}
+
+pub rt fn builtin_in_an_rt_fn() -> F32 {
+  F32.default()
+}
+
+pub rt fn parameter_in_an_rt_fn[T: Default]() -> T {
+  T.default()
+}
+
+pub rt fn field_of_the_default() -> F32 {
+  Level.default().gain
+}
+
+pub rt fn generic_struct_in_an_rt_fn() -> Pair[U8] {
+  Pair.default()
+}
+
+pub rt fn in_an_rt_branch(flag: Bool) -> Level {
+  if flag {
+    Level.default()
+  } else {
+    Level { gain: 1.0, steps: 1, name: "one" }
+  }
+}
+
+pub rt fn an_rt_fn_calls_an_rt_fn() -> Level {
+  in_an_rt_fn()
+}
+
+pub rt fn the_instance_of_a_parameter() -> Pair[Bool] {
+  parameter_in_an_rt_fn()
+}
+
+pub rt fn str_in_an_rt_fn() -> Str {
+  Str.default()
+}
+
+pub rt fn array_in_an_rt_fn() -> [Level; 2] {
+  [Level.default(), Level.default()]
+}
+
+pub struct Voice {
+  level: Level,
+}
+
+impl Voice {
+  pub rt fn fresh() -> Voice {
+    Voice { level: Level.default() }
+  }
+
+  pub rt fn reset_level(self) -> Level {
+    Level.default()
+  }
+}
+
+pub flow scaled(x: F32 at sample) -> F32 at sample {
+  x * Gain.default().amount
+}
+
+// ---------------------------------------------------------------- the initializer of a const
+
+pub const GAIN: Gain = Gain.default()
+
+pub const ZERO_F32: F32 = F32.default()
+
+pub const ZERO_U64: U64 = U64.default()
+
+pub const OFF: Bool = Bool.default()
+
+pub const MIXED: (U8, F64, Bool) = (U8.default(), F64.default(), Bool.default())
+
+pub const GAINS: [Gain; 2] = [Gain.default(), Gain.default()]
+
+pub const PAIR: Pair[I32] = Pair.default()
+
+pub const NESTED: Pair[Pair[F32]] = Pair.default()
+
+pub const GAIN_OF_THE_DEFAULT: F32 = Gain.default().amount
+
+pub const THE_CONST_READ: Gain = GAIN
+
+pub const SUM: I32 = I32.default() + 3
+
+impl Voice {
+  pub const START: Gain = Gain.default()
+
+  pub const SILENT: F32 = F32.default()
+}
+
+pub fn the_associated_constants() -> F32 {
+  Voice.START.amount + Voice.SILENT
+}
+
+pub fn the_constants_in_a_function() -> F32 {
+  GAIN.amount + ZERO_F32
+}
+
+// ---------------------------------------------------------------- the function value
+
+fn make_level_with(f: rt fn() -> Level) -> Level {
+  f.()
+}
+
+fn make_with(f: fn() -> Level) -> Level {
+  f.()
+}
+
+pub rt fn make_level_with_an_rt_fn_in_an_rt_fn(f: rt fn() -> Level) -> Level {
+  f.()
+}
+
+pub fn the_value_as_an_rt_argument() -> Level {
+  make_level_with(Level.default)
+}
+
+pub fn the_value_as_a_plain_argument() -> Level {
+  make_with(Level.default)
+}
+
+pub fn the_value_in_a_let() -> Level {
+  let mk = Level.default
+  mk.()
+}
+
+pub fn the_value_of_a_builtin() -> F32 {
+  let mk = F32.default
+  mk.()
+}
+
+pub fn the_value_with_an_annotation() -> I32 {
+  let mk: rt fn() -> I32 = I32.default
+  mk.()
+}
+
+pub rt fn the_value_in_an_rt_fn() -> Level {
+  make_level_with_an_rt_fn_in_an_rt_fn(Level.default)
+}

@@ -18,6 +18,10 @@ const ENUMS: [(&str, &str, &str); 2] = [("Option", "Some", "None"), ("Result", "
 pub(crate) const OPTION: usize = 0;
 pub(crate) const RESULT: usize = 1;
 
+/// The representative of the type parameters with `Ordinal` (`traits::Rep`):
+/// of `std.core`, with no `pub`, so that no program names it.
+const ANY_ORDINAL: &str = "AnyOrdinal";
+
 /// A row of [`ENUMS`] in the analysis: the enum and the indices of its variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LangEnum {
@@ -31,6 +35,7 @@ pub struct LangEnum {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LangItems {
     enums: [Option<LangEnum>; ENUMS.len()],
+    any_ordinal: Option<DefId>,
 }
 
 impl LangItems {
@@ -42,6 +47,16 @@ impl LangItems {
     /// Whether `d` is the enum of the row `row`.
     pub(crate) fn is(&self, row: usize, d: DefId) -> bool {
         self.enums[row].is_some_and(|l| l.def == d)
+    }
+
+    /// The enum `Option`.
+    pub(crate) fn option(&self) -> Option<DefId> {
+        self.enums[OPTION].map(|l| l.def)
+    }
+
+    /// [`ANY_ORDINAL`].
+    pub(crate) fn any_ordinal(&self) -> Option<DefId> {
+        self.any_ordinal
     }
 }
 
@@ -74,4 +89,8 @@ pub(crate) fn declared(s: &mut Sema<'_>) {
             s.a.prelude.insert(name, Entity::Variant(def, i as u32));
         }
     }
+    let Some(&any) = s.a.modules.core.and_then(|m| s.a.modules.get(m).items.get(ANY_ORDINAL)) else {
+        onsa_diag::internal::bug(None, format!("`std.core` declares no `{ANY_ORDINAL}`"))
+    };
+    s.a.modules.lang.any_ordinal = Some(any);
 }

@@ -454,6 +454,13 @@ impl<'p> Sema<'p> {
         let mut subs = Vec::new();
         for d in self.a.new_defs() {
             let DefKind::Impl(imp) = &self.a.def(d).kind else { continue };
+            // What a derive makes goes first: an overlap is the fault of the
+            // member written, wherever it is (§6.2, S-851).
+            if let (None, Some(ty)) = (self.a.def(d).item, self.a.def(d).owner) {
+                let members = imp.fns.iter().map(|&f| (self.a.def(f).name.clone(), f)).collect::<Vec<_>>();
+                self.a.modules.assoc.entry(ty).or_default().extend(members);
+                continue;
+            }
             let Some(key) = self.member_key(d) else { continue };
             if self.a.continues() && (key.1.is_some() || key.0.is_some_and(|t| !self.a.is_new(t))) {
                 return Err(crate::base::Fallback);
@@ -474,7 +481,7 @@ impl<'p> Sema<'p> {
             let first = *table.entry(name.clone()).or_insert(sub);
             let note = match variant {
                 Some(v) => (v, format!("the variant `{name}`")),
-                None if first != sub => (self.a.def(first).name_span, "first defined here".to_string()),
+                None if first != sub => (self.a.def(first).name_span, self.first_defined(first)),
                 None => continue,
             };
             self.a.modules.clashed_assoc.insert(first);
@@ -482,6 +489,14 @@ impl<'p> Sema<'p> {
             self.report(sub, Diagnostic::new(Stage::Names, Code::E0304, at, msg).with_note(note.0, note.1));
         }
         Ok(())
+    }
+
+    /// The note of the member `first` an E0304 of another is the overlap of.
+    fn first_defined(&self, first: DefId) -> String {
+        match self.a.def(first).as_fn().and_then(|f| f.derived) {
+            Some(made) => format!("the derive of `{}` makes `{}`", made.item().bound.name(), made.item().name),
+            None => "first defined here".to_string(),
+        }
     }
 
     /// The names of the variants of `d` when it is an enum, as written (the

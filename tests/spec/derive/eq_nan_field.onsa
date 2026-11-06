@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3"]
+
+// W5-06 U3/t, R-60 (the `test "eq with nan"` of tests/review-phase1/core/derive.onsa; spec §6.4: "`PartialEq` / `Eq` は、全てのフィールド（enum は列挙子と中身）が等しいとき等しい"; §6.3: a
+// float is compared by IEEE, "NaN は何とも等しくない"). The derived `==` keeps the rule of its fields: a struct with a NaN field is not equal to itself, and `!=` is the other answer. This passes in
+// the version before W5-06 as well (the derive of `PartialEq` and its value are W5-03), so it is not pending; the `Default` of the same struct is in default_values.onsa.
+
+pub struct Sample: PartialEq {
+  x: I32,
+  y: F32,
+}
+
+test "a struct with a NaN field is not equal to itself" {
+  let a = Sample { x: 1, y: F32.NAN }
+  assert a != a
+  assert !(a == a)
+}
+
+test "a struct with a number in the float field is equal to itself" {
+  let a = Sample { x: 1, y: 2.5 }
+  assert a == a
+  assert !(a != a)
+}
+
+test "the integer field decides when the float fields are equal" {
+  let a = Sample { x: 1, y: 2.5 }
+  let b = Sample { x: 2, y: 2.5 }
+  assert a != b
+  assert !(a == b)
+}

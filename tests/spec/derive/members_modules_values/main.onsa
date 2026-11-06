@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3", "§15.1"]
+
+// W5-06 U3/t, S-905 (spec §6.4: "`priv` のフィールドがあっても、他のモジュールから `P.default()` を呼べる"; §6.3's table: integers 0, floats `+0.0`). The values of the members that the derive
+// makes of a type of another module: the default of a type with `priv` fields is the value of every field (read by the functions of its module; the sign of a float is seen through `to_bits()`), of a
+// generic type with a `priv` field, of a type without `pub` and of a `priv` type used in its own module; `ordinal` and `from_ordinal` of enums of the module, through `use` and through the path. The
+// types are checked in members_modules/. The values are worked out by hand.
+use util
+use util.{Hidden, Wrap, Mode, Internal, Phase}
+
+test "default of a type with priv fields, from another module" {
+  let h = Hidden.default()
+  assert h.gain_bits() == 0
+  assert h.steps() == 0
+  assert h.tag == 0
+}
+
+test "default through the path of the module" {
+  let h = util.Hidden.default()
+  assert h.gain_bits() == 0
+  assert h.steps() == 0
+  assert h.tag == 0
+}
+
+test "default of a generic type with a priv field" {
+  let w: Wrap[U8] = Wrap.default()
+  assert w.inner() == 0
+  assert w.extra == 0
+  let f: Wrap[F32] = Wrap.default()
+  assert f.inner().to_bits() == 0
+  let b: Wrap[Bool] = Wrap.default()
+  assert b.inner() == false
+}
+
+test "default of a type that has no pub" {
+  let i = Internal.default()
+  assert i.n == 0
+  assert i.f.to_bits() == 0
+}
+
+test "default of a priv type, in its module" {
+  assert util.local_default() == 0
+}
+
+test "ordinal of the enum of the module" {
+  assert Mode.Off.ordinal() == 0
+  assert Mode.On.ordinal() == 1
+  assert Mode.Auto.ordinal() == 2
+}
+
+fn mode_number_or_99(n: U32) -> U32 {
+  match Mode.from_ordinal(n) {
+    Some(m) => m.ordinal(),
+    None => 99,
+  }
+}
+
+fn path_mode_number_or_99(n: U32) -> U32 {
+  match util.Mode.from_ordinal(n) {
+    Some(m) => m.ordinal(),
+    None => 99,
+  }
+}
+
+fn phase_number_or_99(n: U32) -> U32 {
+  match Phase.from_ordinal(n) {
+    Some(p) => p.ordinal(),
+    None => 99,
+  }
+}
+
+test "from_ordinal of the enum of the module" {
+  assert mode_number_or_99(0) == 0
+  assert mode_number_or_99(2) == 2
+  assert mode_number_or_99(3) == 99
+  assert path_mode_number_or_99(1) == 1
+  assert path_mode_number_or_99(7) == 99
+}
+
+test "ordinal of an enum that has no pub" {
+  assert Phase.Release.ordinal() == 1
+  assert phase_number_or_99(0) == 0
+  assert phase_number_or_99(1) == 1
+  assert phase_number_or_99(2) == 99
+}
+
+test "ordinal of a priv enum, in its module" {
+  assert util.local_step(0) == 0
+  assert util.local_step(1) == 1
+  assert util.local_step(2) == 99
+}

@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.4", "§6.3"]
+// fixes = 0
+
+// W5-06 U2/t, S-851 (spec §6.2: the names after a type name are one space, and "derive が作るメンバ（`default`、`ordinal`、`from_ordinal`）" are in it; §6.4: the list makes the members of the traits that
+// it names, and the traits above them are generated too (`Ord` gives `Eq`, but `Default` has no trait above it and none of these members belongs to a trait above another). The forms that are not an overlap:
+// a field named `default` (a field is not in the space of the members), a free function and a local named like a member, a type that does not list the trait that makes the name (`Eq`, `Ord`, `Hash`,
+// no list; an enum that lists `Ordinal` has no `default`, a struct that lists `Default` has no `ordinal`), a member of another name (`defaults`, `new_default`, `ordinals`), the same name in the `impl` of another
+// type, and the derive still works next to them (`P.default()`, `m.ordinal()`). The traits above a trait do not make a member: `Ord` gives `Eq`, `PartialOrd`, `PartialEq`, none of which makes one.
+
+pub struct HasFieldDefault: Default {
+  default: I32,
+}
+
+pub struct HasFieldOrdinal: Default {
+  ordinal: U32,
+  from_ordinal: U32,
+}
+
+pub struct EqOnly: Eq {
+  n: I32,
+}
+
+pub struct OrdOnly: Ord {
+  n: I32,
+}
+
+pub struct HashOnly: Hash {
+  n: I32,
+}
+
+pub struct NoList {
+  n: I32,
+}
+
+pub enum PlainEnum {
+  A,
+  B,
+}
+
+pub enum EqEnum: Eq {
+  A,
+  B,
+}
+
+// `Ordinal` makes `ordinal` and `from_ordinal` only; `default` is free.
+pub enum OrdinalEnum: Ordinal {
+  A,
+  B,
+}
+
+// `Default` makes `default` only; `ordinal` and `from_ordinal` are free.
+pub struct DefaultStruct: Default {
+  n: I32,
+}
+
+// Other names that look like the members.
+pub struct Names: Default {
+  n: I32,
+}
+
+pub enum Names2: Ordinal {
+  A,
+  B,
+}
+
+// The same name in the `impl` of another type than the one that lists the trait.
+pub struct Maker: Default {
+  n: I32,
+}
+
+pub struct Other {
+  n: I32,
+}
+
+pub enum OtherEnum {
+  A,
+}
+
+// A generic type that does not list the trait, and one that lists it.
+pub struct Plain[T] {
+  a: T,
+}
+
+pub struct Listed[T]: Eq {
+  a: T,
+}
+
+// The derive still works next to all of these.
+pub fn the_default_next_to_the_field() -> HasFieldDefault {
+  HasFieldDefault.default()
+}
+
+pub fn the_default_next_to_the_other_names() -> Names {
+  Names.default()
+}
+
+pub fn the_default_of_the_maker() -> Maker {
+  Maker.default()
+}
+
+pub fn the_ordinal_of_the_enum_with_the_other_name(e: Names2) -> U32 {
+  e.ordinal()
+}
+
+pub fn the_from_ordinal_of_the_enum_with_the_other_name(n: U32) -> Option[Names2] {
+  Names2.from_ordinal(n)
+}
+
+pub fn the_default_of_the_struct_with_hand_written_ordinal() -> DefaultStruct {
+  DefaultStruct.default()
+}

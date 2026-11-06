@@ -1,0 +1,271 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§6.6", "§4.5", "§10"]
+// fixes = 0
+
+// W5-06 U2/t, S-145, S-907 (spec §6.4: "`Ordinal` は、列挙子に中身の無い enum にだけ並べられる。列挙子と、宣言順の 0 始まりの番号を変換する: `m.ordinal() -> U32` と
+// `Mode.from_ordinal(n: U32) -> Option[Mode]`（範囲外は `None`）"). The types of the two members that the derive makes: `ordinal` is a method that gives a `U32`, `from_ordinal` is an associated
+// function that takes a `U32` and gives an `Option` of the enum, for an enum with one, three or more enumerators, one whose list has other traits, and one that is declared after its use. They
+// are called in an `rt fn` and in the initializer of a `const` (S-907 reads them as `rt` with an empty effect row, as `default` is, S-905), through `Self` in an `impl` of the enum,
+// and through a type parameter `T: Ordinal` (`x.ordinal()` and `T.from_ordinal(n)`) in a function and in a method of an `impl[T: Ordinal]`. A call whose type is wrong would be an E0401,
+// so every function here is clean. The values are in ordinal_values.onsa.
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+  Auto,
+}
+
+pub enum Wave: Eq + Hash + Ordinal {
+  Sine,
+  Saw,
+}
+
+pub enum Single: Ordinal {
+  Only,
+}
+
+pub enum Many: Eq + Ordinal {
+  A,
+  B,
+  C,
+  D,
+  E,
+  F,
+}
+
+// ---------------------------------------------------------------- the types
+
+pub fn ordinal_of_a_value(m: Mode) -> U32 {
+  m.ordinal()
+}
+
+pub fn ordinal_of_a_literal() -> U32 {
+  Mode.Auto.ordinal()
+}
+
+pub fn ordinal_of_a_field(h: Holder) -> U32 {
+  h.mode.ordinal()
+}
+
+pub fn ordinal_as_a_let(m: Mode) -> U32 {
+  let n: U32 = m.ordinal()
+  n
+}
+
+pub fn ordinal_in_arithmetic(m: Mode) -> U32 {
+  m.ordinal() * 2 + 1
+}
+
+pub fn ordinal_in_a_comparison(m: Mode) -> Bool {
+  m.ordinal() < 2
+}
+
+pub fn ordinal_of_the_other_lists(w: Wave, s: Single, m: Many) -> U32 {
+  w.ordinal() + s.ordinal() + m.ordinal()
+}
+
+pub fn from_ordinal_of_a_variable(n: U32) -> Option[Mode] {
+  Mode.from_ordinal(n)
+}
+
+pub fn from_ordinal_of_a_literal() -> Option[Mode] {
+  Mode.from_ordinal(1)
+}
+
+pub fn from_ordinal_of_the_other_lists(n: U32) -> (Option[Wave], Option[Single], Option[Many]) {
+  (Wave.from_ordinal(n), Single.from_ordinal(n), Many.from_ordinal(n))
+}
+
+pub fn from_ordinal_in_a_match(n: U32) -> Mode {
+  match Mode.from_ordinal(n) {
+    Some(m) => m,
+    None => Mode.Off,
+  }
+}
+
+pub fn from_ordinal_then_ordinal(n: U32) -> U32 {
+  match Mode.from_ordinal(n) {
+    Some(m) => m.ordinal(),
+    None => 0,
+  }
+}
+
+pub fn from_ordinal_with_unwrap(n: U32) -> Mode {
+  Mode.from_ordinal(n).unwrap()
+}
+
+pub fn from_ordinal_of_an_expression(m: Mode) -> Option[Mode] {
+  Mode.from_ordinal(m.ordinal() + 1)
+}
+
+pub fn the_round_trip(m: Mode) -> Option[Mode] {
+  Mode.from_ordinal(m.ordinal())
+}
+
+pub fn from_ordinal_in_a_closure() -> Option[Wave] {
+  let f = fn(n: U32) -> Option[Wave] { Wave.from_ordinal(n) }
+  f.(0)
+}
+
+pub fn from_ordinal_as_a_value() -> Option[Mode] {
+  let g = Mode.from_ordinal
+  g.(2)
+}
+
+pub struct Holder {
+  mode: Mode,
+}
+
+// ---------------------------------------------------------------- rt fn and const
+
+pub rt fn ordinal_in_an_rt_fn(m: Mode) -> U32 {
+  m.ordinal()
+}
+
+pub rt fn from_ordinal_in_an_rt_fn(n: U32) -> Option[Mode] {
+  Mode.from_ordinal(n)
+}
+
+pub rt fn both_in_an_rt_fn(n: U32) -> U32 {
+  match Mode.from_ordinal(n) {
+    Some(m) => m.ordinal(),
+    None => 0,
+  }
+}
+
+pub rt fn from_ordinal_as_an_rt_value(f: rt fn(U32) -> Option[Mode]) -> Option[Mode] {
+  f.(1)
+}
+
+pub fn the_value_as_an_rt_argument() -> Option[Mode] {
+  from_ordinal_as_an_rt_value(Mode.from_ordinal)
+}
+
+pub const AUTO_NUMBER: U32 = Mode.Auto.ordinal()
+
+pub const FIRST: Option[Mode] = Mode.from_ordinal(0)
+
+pub const BEYOND: Option[Mode] = Mode.from_ordinal(9)
+
+pub const SECOND_WAVE: Option[Wave] = Wave.from_ordinal(1)
+
+pub const LAST_NUMBER: U32 = Many.F.ordinal() + AUTO_NUMBER
+
+pub struct Table {
+  n: U32,
+}
+
+impl Table {
+  pub const OF_THE_MODE: U32 = Mode.On.ordinal()
+
+  pub const THE_MODE: Option[Mode] = Mode.from_ordinal(2)
+}
+
+// ---------------------------------------------------------------- Self
+
+impl Mode {
+  pub fn number(self) -> U32 {
+    self.ordinal()
+  }
+
+  pub fn next(self) -> Option[Self] {
+    Self.from_ordinal(self.ordinal() + 1)
+  }
+
+  pub fn first() -> Option[Self] {
+    Self.from_ordinal(0)
+  }
+
+  pub fn nth(n: U32) -> Option[Mode] {
+    Self.from_ordinal(n)
+  }
+
+  pub rt fn is_last(self) -> Bool {
+    self.ordinal() == 2
+  }
+}
+
+pub fn through_the_methods(m: Mode) -> Option[Mode] {
+  Mode.nth(m.number())
+}
+
+// ---------------------------------------------------------------- T: Ordinal
+
+pub fn number_of[T: Ordinal + Copy](x: T) -> U32 {
+  x.ordinal()
+}
+
+pub fn from_number[T: Ordinal](n: U32) -> Option[T] {
+  T.from_ordinal(n)
+}
+
+pub fn round_trip[T: Ordinal + Copy](x: T) -> Option[T] {
+  T.from_ordinal(x.ordinal())
+}
+
+pub fn bound_with_more[T: Ordinal + Hash + Copy](x: T) -> U32 {
+  x.ordinal()
+}
+
+pub fn parameter_in_a_match[T: Ordinal + Copy](n: U32) -> U32 {
+  match T.from_ordinal(n) {
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub rt fn number_of_in_an_rt_fn[T: Ordinal + Copy](x: T) -> U32 {
+  x.ordinal()
+}
+
+pub rt fn from_number_in_an_rt_fn[T: Ordinal](n: U32) -> Option[T] {
+  T.from_ordinal(n)
+}
+
+pub struct Slot[T: Ordinal] {
+  value: T,
+}
+
+impl[T: Ordinal + Copy] Slot[T] {
+  pub fn number(self) -> U32 {
+    self.value.ordinal()
+  }
+
+  pub fn nth(n: U32) -> Option[T] {
+    T.from_ordinal(n)
+  }
+
+  pub fn next(self) -> Option[T] {
+    T.from_ordinal(self.value.ordinal() + 1)
+  }
+}
+
+pub fn the_instance_with_a_mode(s: Slot[Mode]) -> U32 {
+  s.number()
+}
+
+pub fn the_instance_with_a_wave() -> Option[Wave] {
+  Slot.nth(1)
+}
+
+pub fn a_parameter_instantiated_with_an_enum(m: Mode) -> U32 {
+  number_of(m)
+}
+
+pub fn another_parameter_instantiated(w: Wave) -> Option[Wave] {
+  round_trip(w)
+}
+
+pub fn from_number_with_an_enum() -> Option[Many] {
+  from_number(4)
+}
+
+pub fn from_number_with_a_let() -> Option[Single] {
+  let o: Option[Single] = from_number(0)
+  o
+}
+
+pub fn bound_with_more_with_a_wave(w: Wave) -> U32 {
+  bound_with_more(w)
+}

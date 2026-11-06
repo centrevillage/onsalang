@@ -209,6 +209,11 @@ impl<'p> Sema<'p> {
     /// The def of an item with a name, in the items of its module.
     fn collect_named(&mut self, at: &Place<'_>, kind: &ItemKind) -> Option<DefId> {
         let item = at.item;
+        let list = match kind {
+            ItemKind::Struct(s) => Some(&s.derives),
+            ItemKind::Enum(e) => Some(&e.derives),
+            _ => None,
+        };
         let (name, kind, feature) = match kind {
             ItemKind::Fn(f) => (&f.name, DefKind::Fn(at.fn_def(f)), None),
             ItemKind::Flow(f) => (
@@ -247,6 +252,9 @@ impl<'p> Sema<'p> {
         let d = self.add_def(at.def(name.name.clone(), name.span, kind));
         if self.a.def(d).as_flow().is_some() {
             self.generated_defs(d);
+        }
+        if let Some(list) = list {
+            self.derived_defs(d, list);
         }
         if let Some(export) = self.a.def(d).export
             && item.vis != Vis::Pub
@@ -438,6 +446,7 @@ impl Place<'_> {
             body,
             target: self.target,
             flow_fn: None,
+            derived: None,
             fp_relaxed: self.item.attrs.iter().any(|a| a.is_fp_relaxed()),
         }
     }

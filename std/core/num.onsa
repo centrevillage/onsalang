@@ -36,6 +36,7 @@ rt fn is_defined[T](parts: (Bool, T)) -> Bool {
 
 impl I8 {
   pub const ZERO: I8 = 0
+  pub rt fn default() -> I8 { 0 }
   pub const ONE: I8 = 1
   pub const MIN: I8 = -128
   pub const MAX: I8 = 127
@@ -63,6 +64,7 @@ impl I8 {
 
 impl I16 {
   pub const ZERO: I16 = 0
+  pub rt fn default() -> I16 { 0 }
   pub const ONE: I16 = 1
   pub const MIN: I16 = -32768
   pub const MAX: I16 = 32767
@@ -90,6 +92,7 @@ impl I16 {
 
 impl I32 {
   pub const ZERO: I32 = 0
+  pub rt fn default() -> I32 { 0 }
   pub const ONE: I32 = 1
   pub const MIN: I32 = -2147483648
   pub const MAX: I32 = 2147483647
@@ -117,6 +120,7 @@ impl I32 {
 
 impl I64 {
   pub const ZERO: I64 = 0
+  pub rt fn default() -> I64 { 0 }
   pub const ONE: I64 = 1
   pub const MIN: I64 = -9223372036854775808
   pub const MAX: I64 = 9223372036854775807
@@ -144,6 +148,7 @@ impl I64 {
 
 impl U8 {
   pub const ZERO: U8 = 0
+  pub rt fn default() -> U8 { 0 }
   pub const ONE: U8 = 1
   pub const MIN: U8 = 0
   pub const MAX: U8 = 255
@@ -170,6 +175,7 @@ impl U8 {
 
 impl U16 {
   pub const ZERO: U16 = 0
+  pub rt fn default() -> U16 { 0 }
   pub const ONE: U16 = 1
   pub const MIN: U16 = 0
   pub const MAX: U16 = 65535
@@ -196,6 +202,7 @@ impl U16 {
 
 impl U32 {
   pub const ZERO: U32 = 0
+  pub rt fn default() -> U32 { 0 }
   pub const ONE: U32 = 1
   pub const MIN: U32 = 0
   pub const MAX: U32 = 4294967295
@@ -222,6 +229,7 @@ impl U32 {
 
 impl U64 {
   pub const ZERO: U64 = 0
+  pub rt fn default() -> U64 { 0 }
   pub const ONE: U64 = 1
   pub const MIN: U64 = 0
   pub const MAX: U64 = 18446744073709551615
@@ -250,6 +258,7 @@ impl U64 {
 /// is (§6.6, §2.4); there is no `MIN` (`-F32.MAX`, §6.6).
 impl F32 {
   pub const ZERO: F32 = 0.0
+  pub rt fn default() -> F32 { 0.0 }
   pub const ONE: F32 = 1.0
   pub const PI: F32 = 3.14159265358979323846264338327950288
   pub const MAX: F32 = 3.40282346638528859811704183484516925440e38
@@ -265,6 +274,7 @@ impl F32 {
 /// As of `F32` (§6.6).
 impl F64 {
   pub const ZERO: F64 = 0.0
+  pub rt fn default() -> F64 { 0.0 }
   pub const ONE: F64 = 1.0
   pub const PI: F64 = 3.14159265358979323846264338327950288
   pub const MAX: F64 = 1.7976931348623157081452742373170435679807056752584e308
@@ -275,4 +285,8 @@ impl F64 {
   pub target rt fn from_bits(u: U64) -> F64
   pub target rt fn round_from[S: AnyNum](x: S) -> Self
   pub target rt fn to_bits(self) -> U64
+}
+
+impl Bool {
+  pub rt fn default() -> Bool { false }
 }

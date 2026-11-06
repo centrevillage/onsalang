@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§6.3", "§18.1"]
+
+// W5-06 U2/t, S-905 (spec §6.6: "この版では、Shared を含む型の `const` は E0200 である（第 2 期）"; "この判定（E0407 と、Shared を含む型の E0200）は宣言の型だけで決まり、値の検査より先に行う"; §6.3: `default`
+// is the member of a type that has `Default`). The initializer of a `const` that calls `default`: a type with no `Default` is the E0302 of the call, as in a function (a struct, in a tuple, in an associated
+// constant); a type that holds a `Str` or a `Bytes` (`Str`, `Bytes`, a struct with a `Str` field, an array of such structs) is the E0200 of this version on the declared type, before the value is looked at, so
+// `Level.default()` of a struct that has `Default` is not an E0302 or a pass. The other limit of a `const`, E0407 (`Map`, `Set`, an Affine type), cannot be reached through `default`: no type that has
+// `Default` is of those. The positive consts are in default_rt_const.onsa. One error in each declaration (P-01).
+
+pub struct Level: Default {
+  gain: F32,
+  steps: U32,
+  name: Str,
+}
+
+pub struct Plain {
+  n: I32,
+}
+
+pub struct Holder {
+  n: I32,
+}
+
+pub const LEVEL: Level = Level.default()            //~ E0200
+
+pub const LEVELS: [Level; 2] = [Level.default(), Level.default()] //~ E0200
+
+pub const NO_DEFAULT_IN_A_TUPLE: (I32, Plain) = (I32.default(), Plain.default()) //~ E0302

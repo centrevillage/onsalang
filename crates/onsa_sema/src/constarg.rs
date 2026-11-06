@@ -369,11 +369,11 @@ fn named_def(
             }
         }
         // A name of the spec this version has not (R-294).
-        Ok(PathEnd::Builtin { member: BuiltinMember::Missing { feature, .. }, .. }) => {
+        Ok(PathEnd::Builtin { member: BuiltinMember::Missing { feature }, .. }) => {
             let shown = path.dotted();
             Err(feature.diagnostic(Stage::Names, span, &[&shown]).with_found(shown).into())
         }
-        Ok(PathEnd::Builtin { member, .. }) => Err(not_constant(member.kind(), shown, span)),
+        Ok(PathEnd::Builtin { .. }) => Err(not_constant(NameKind::Function, shown, span)),
         // A name held as an error (§18.1, S-462, S-675): no diagnostic, and
         // the check goes on (S-689).
         Err(ResolveError::Failed) => Err(ConstErr::Unknown),

@@ -305,12 +305,12 @@ fn scalar_name(a: &Analysis, t: TyId) -> &'static str {
 /// the work that declares one takes its row off (R-294).
 #[test]
 fn no_missing_name_is_a_member_of_std() {
-    let mut a = analyzed_std();
+    let a = analyzed_std();
     for (&key, members) in &a.modules.assoc_builtin {
         for name in members.keys() {
             assert_eq!(crate::builtin::missing(&a.types, key, name), None, "{name} of {:?}", a.types.get(key));
         }
     }
-    let of = a.types.float(FloatKind::F32);
-    assert!(crate::builtin::missing(&a.types, of, "default").is_some());
+    let of = a.builtin_key[&BuiltinTy::Str];
+    assert!(crate::builtin::missing(&a.types, of, "from_utf8").is_some());
 }

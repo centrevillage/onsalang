@@ -4,7 +4,7 @@ use crate::body::bounds::Bounds;
 use crate::def::{Bound, DefKind, TRAITS};
 use crate::flow_tests::std_package;
 use crate::tests::analyze;
-use crate::traits::{Class, DERIVABLE, IMPLS, MEMBERS, Rep, SUPERS, derived, implies, member, member_rep};
+use crate::traits::{Class, DERIVABLE, IMPLS, MEMBERS, Rep, SUPERS, TRAIT_ITEMS, derived, implies, member, member_rep};
 use crate::ty::{BuiltinTy, EffectSet, FloatKind, FnTy, IntKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Package};
 
@@ -236,13 +236,14 @@ fn form_at(a: &mut Analysis, d: DefId, rep: TyId, t: TyId) -> String {
 /// use reads the declaration of the representative type (`Target::Method`),
 /// so every type of a row declares the member, of the same form and, read at
 /// the type, of the same types. No representative is `U32`: `BITS: U32` would
-/// read as the parameter.
+/// read as the parameter. `Ordinal` is of no builtin type: its row is the next
+/// test's.
 #[test]
 fn a_row_of_members_is_declared_alike_by_every_type_of_it() {
     let mut a = crate::prim_tests::analyzed_std();
     let mut seen = 0;
-    for &(b, rep, names) in MEMBERS {
-        let key = a.types.find(&rep.ty()).expect("the representative type");
+    for &(b, rep, names) in MEMBERS.iter().filter(|row| row.1 != Rep::Ordinal) {
+        let key = rep.table(&a).0.expect("the representative type");
         assert_eq!(a.types.find(&Ty::Int(IntKind::U32)).filter(|&u| u == key), None);
         let types = numbers_of(&mut a, b);
         assert!(types.contains(&key), "the representative of {b:?} is of the row");
@@ -256,7 +257,31 @@ fn a_row_of_members_is_declared_alike_by_every_type_of_it() {
             }
         }
     }
-    assert_eq!(seen, 10 + 2 * 7 + 8 * 18, "the members of the rows at their types");
+    assert_eq!(seen, 10 + 2 * 7 + 8 * 18 + 10, "the members of the rows at their types");
+}
+
+/// `Ordinal` reads its members from the enum of std, which its derive makes
+/// them of, of the forms of [`TRAIT_ITEMS`]; every type of the row of
+/// `Default` that is no number declares `default` too.
+#[test]
+fn the_members_of_the_lists_are_declared() {
+    let mut a = crate::prim_tests::analyzed_std();
+    let row = |name: &str| *TRAIT_ITEMS.iter().find(|i| i.name == name).expect("a row");
+    for name in ["ordinal", "from_ordinal"] {
+        let d = member(&a, &[Bound::Ordinal], name).expect(name);
+        let f = a.def(d).as_fn().expect(name);
+        assert_eq!(f.derived, Some(row(name).made), "{name}");
+        assert_eq!((f.self_mode, f.rt, f.effects.alloc), (row(name).recv, true, false), "{name}");
+    }
+    for &i in &TRAIT_ITEMS {
+        assert_eq!(i.made.item(), &i, "the rows are in the order of `DerivedFn`");
+    }
+    let str_key = a.builtin_key[&BuiltinTy::Str];
+    let keys = [a.types.intern(Ty::Bool), str_key, a.builtin_key[&BuiltinTy::Bytes]];
+    for key in keys {
+        assert!(Class::of(a.types.get(key)).is_some_and(|c| c.implements(Bound::Default)));
+        assert!(a.modules.assoc_builtin[&key].contains_key("default"), "{:?}", a.types.get(key));
+    }
 }
 
 /// A name is of the first row of a trait a bound implies; the bounds decide

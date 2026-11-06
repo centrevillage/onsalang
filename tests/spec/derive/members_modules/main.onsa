@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§15.1", "§6.2"]
+
+// W5-06 U2/t, S-905, S-851 (spec §6.4: "`priv` のフィールドがあっても、他のモジュールから `P.default()` を呼べる"; §15.1: "`priv` のフィールドは、struct の可視性によらずモジュールの中に届く"; "見えない
+// フィールドを持つ struct は、そのフィールドが見えない場所では struct リテラルで作れず…（E0303）"; the members of a type are seen as far as the type is). The members that the derive makes, used by
+// another module: `P.default()` of a type with `priv` fields (the literal that sets the same fields is E0303 and so is a read of the field), of a generic type with a `priv` field, of a type that has no `pub` (seen in
+// the package), through `use` of the item and through the path of the module (`util.Hidden.default()`), and `ordinal` and `from_ordinal` of an enum of the module. A type that lists no derive has no
+// `default` in the other module either (E0302). The functions that return a type without `pub` have no `pub` (E0303). One error in each function (P-01). The values are in members_modules_values/.
+use util
+
+use util.{Hidden, Wrap, Plain, Mode, Internal, Phase}
+
+pub fn hidden_by_use() -> Hidden {
+  Hidden.default()
+}
+
+pub fn hidden_by_path() -> util.Hidden {
+  util.Hidden.default()
+}
+
+pub fn hidden_as_a_let() -> Hidden uses {Alloc} {
+  let h: Hidden = Hidden.default()
+  h
+}
+
+pub fn hidden_through_the_accessors() -> F32 {
+  Hidden.default().gain() + F32.default()
+}
+
+pub fn the_visible_field() -> Str {
+  Hidden.default().name
+}
+
+pub rt fn hidden_in_an_rt_fn() -> Hidden {
+  Hidden.default()
+}
+
+pub fn wrap_of_a_hidden_field() -> Wrap[U8] {
+  Wrap.default()
+}
+
+pub fn wrap_by_path() -> util.Wrap[Hidden] {
+  util.Wrap.default()
+}
+
+pub fn the_mode_ordinal(m: Mode) -> U32 {
+  m.ordinal()
+}
+
+pub fn the_mode_from_ordinal(n: U32) -> Option[Mode] {
+  Mode.from_ordinal(n)
+}
+
+pub fn the_mode_by_path(n: U32) -> Option[util.Mode] {
+  util.Mode.from_ordinal(n)
+}
+
+pub fn the_mode_of_a_parameter[T: Ordinal + Copy](x: T) -> U32 {
+  x.ordinal()
+}
+
+pub const MODE_NUMBER: U32 = Mode.Auto.ordinal()
+
+fn the_package_visible_type() -> Internal {
+  Internal.default()
+}
+
+fn the_package_visible_enum(p: Phase) -> Option[Phase] {
+  Phase.from_ordinal(p.ordinal() + 1)
+}
+
+fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+pub fn the_private_field() -> F32 {
+  Hidden.default().gain                             //~ E0303
+}
+
+pub fn the_package_visible_type_in_a_pub_signature() -> Internal { //~ E0303
+  Internal.default()
+}
+
+pub fn the_package_visible_enum_in_a_pub_signature(n: U32) -> Option[Phase] { //~ E0303
+  Phase.from_ordinal(n)
+}

@@ -1,85 +1,20 @@
 // onsa.toml
 // [test]
-// spec = ["§6.6", "§6.3", "§4.2", "§6.1", "§18.1"]
+// spec = ["§4.2", "§6.1", "§18.1"]
 
 // W5-14 U4/t (R-294, R-295; §18.1: "仕様にあってコンパイラがまだ扱えない形は E0200"): a name that the spec lists after a
 // built-in type and that this version does not handle is the E0200 of the feature, not the "cannot find" of a name that
 // does not exist (E0302, E0413). The names are those of the tables of the spec and no others:
-//   - `default()` of the types that §6.3 gives `Default` to: the integers, the floating-point types, `Bool`, `Str`
-//     and `Bytes` (the call and the value that is taken without a call; §6.1: an associated function is a value),
 //   - `Str.from_utf8(b)` and `s.as_bytes()` (§4.2 table) and `b.len()` of `Bytes` (§4.2: a type that has a length has
 //     `len()`; `s.len()` of `Str` is handled by this version, str_len.onsa).
+// `default()` of the types that §6.3 gives `Default` to was in this list; W5-06 handles it (the cases are in derive/default_types.onsa
+// and the others of that directory), so it was moved out of this file as this comment says. A line that uses `Bytes.default()` to get a
+// `Bytes` is fine before and after (the E0200 of the other name on the line is the one that is expected).
 // The cases that pass today are in builtin_names_outside_the_spec.onsa (they are not pending, 8.5).
 // A name of the table that this version handles later is moved out of this file by the work that handles it
-// (`default`: W5-06, the members of `Str` and `Bytes`: not decided). One error per function (P-01).
+// (the members of `Str` and `Bytes`: not decided). One error per function (P-01).
 
-// default() of the types that have Default
-
-pub fn default_of_i8() -> I8 {
-  I8.default() //~ E0200
-}
-
-pub fn default_of_i16() -> I16 {
-  I16.default() //~ E0200
-}
-
-pub fn default_of_i32() -> I32 {
-  I32.default() //~ E0200
-}
-
-pub fn default_of_i64() -> I64 {
-  I64.default() //~ E0200
-}
-
-pub fn default_of_u8() -> U8 {
-  U8.default() //~ E0200
-}
-
-pub fn default_of_u16() -> U16 {
-  U16.default() //~ E0200
-}
-
-pub fn default_of_u32() -> U32 {
-  U32.default() //~ E0200
-}
-
-pub fn default_of_u64() -> U64 {
-  U64.default() //~ E0200
-}
-
-pub fn default_of_f32() -> F32 {
-  F32.default() //~ E0200
-}
-
-pub fn default_of_f64() -> F64 {
-  F64.default() //~ E0200
-}
-
-pub fn default_of_bool() -> Bool {
-  Bool.default() //~ E0200
-}
-
-pub fn default_of_str() -> Str {
-  Str.default() //~ E0200
-}
-
-pub fn default_of_bytes() -> Bytes {
-  Bytes.default() //~ E0200
-}
-
-// the value of an associated function, taken without a call (§6.1)
-
-pub fn default_as_a_value() {
-  let _ = I32.default //~ E0200
-}
-
-pub fn default_of_a_float_as_a_value() {
-  let _ = F32.default //~ E0200
-}
-
-pub fn default_of_str_as_a_value() {
-  let _ = Str.default //~ E0200
-}
+// an associated function, taken without a call (§6.1)
 
 pub fn from_utf8_as_a_value() {
   let _ = Str.from_utf8 //~ E0200
@@ -147,37 +82,35 @@ pub fn len_of_a_payload(o: Option[Bytes]) -> U32 {
 
 // the combinations: a const, an anonymous function, a branch, a generic function, a method, a flow, a test
 
-pub const START: I32 = I32.default() //~ E0200
+pub const NAME_LENGTH: U32 = "gain".as_bytes().len() //~ E0200
 
-pub const FLOOR: F32 = F32.default() //~ E0200
-
-pub fn default_in_a_closure() -> I32 {
-  let _ = fn(x: I32) -> I32 { x + I32.default() } //~ E0200
-  f.(1)
+pub fn name_length_in_a_closure() -> U32 {
+  let f = fn(s: Str) -> U32 { s.as_bytes().len() } //~ E0200
+  f.("gain")
 }
 
-pub fn one_in_a_branch(flag: Bool) -> F64 {
+pub fn from_utf8_in_a_branch(b: Bytes, flag: Bool) -> U32 {
   if flag {
-    F64.default() //~ E0200
+    Str.from_utf8(b).unwrap().len() //~ E0200
   } else {
-    2.0
+    2
   }
 }
 
-pub fn default_in_a_match_arm(o: Option[U8]) -> U8 {
+pub fn len_in_a_match_arm(o: Option[Bytes]) -> U32 {
   match o {
-    Some(v) => v,
-    None => U8.default(), //~ E0200
+    Some(b) => b.len(), //~ E0200
+    None => 0,
   }
 }
 
-pub fn default_in_a_generic_function[T: Copy](x: T) -> T {
-  let _ = U32.default() //~ E0200
+pub fn from_utf8_in_a_generic_function[T: Copy](x: T, b: Bytes) -> T {
+  let _ = Str.from_utf8(b) //~ E0200
   x
 }
 
-pub fn default_in_a_nested_call() -> I64 {
-  I64.default().max(I64.MAX) //~ E0200
+pub fn as_bytes_in_a_nested_call(s: Str) -> U32 {
+  s.as_bytes().len() + 1 //~ E0200
 }
 
 pub struct Level {
@@ -185,25 +118,22 @@ pub struct Level {
 }
 
 impl Level {
-  pub fn unity() -> F32 {
-    F32.default() //~ E0200
+  pub fn name_length() -> U32 {
+    "level".as_bytes().len() //~ E0200
   }
 
-  pub fn silent(self) -> F32 {
-    F32.default() //~ E0200
+  pub fn bytes_of(self, s: Str) -> Bytes {
+    s.as_bytes() //~ E0200
   }
 }
 
 pub flow muted(x: F32 at sample) -> F32 at sample {
-  x * F32.default() //~ E0200
+  let _ = "gain".as_bytes() //~ E0200
+  x
 }
 
-test "default of an integer type in a test" {
-  assert I32.default() == 0 //~ E0200
-}
-
-test "default of a type in a test" {
-  assert Bool.default() == false //~ E0200
+test "as_bytes in a test" {
+  assert "a".as_bytes().len() == 1 //~ E0200
 }
 
 test "from_utf8 in a test" {

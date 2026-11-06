@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::def::{DefId, DefKind};
+use crate::traits::DEFAULT;
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId, Types};
 use crate::{Analysis, ModId};
 
@@ -283,13 +284,15 @@ impl Prim {
 }
 
 /// The declarations of `std.test` no backend provides until M5 (spec §15.2,
-/// S-69, R-79): a use is E0200 wherever it runs or is built.
+/// S-69, R-79), and `Bytes.default`, which `Bytes` opens with (W8): a use is
+/// E0200 wherever it runs or is built.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PendingPrim {
     Check,
     GenF32,
     GenU32,
     GenPair,
+    BytesDefault,
 }
 
 /// A type argument of a `target` declaration, as its row reads it: a
@@ -518,6 +521,7 @@ pub fn rows() -> &'static [Row] {
         // `Buf.zeroed` allocates (§12): no `rt`. `Str.len` (§4.2).
         v.push(row(&format!("{}.zeroed", BuiltinTy::Buf.name()), PrimRow::BufZeroed, 1, false));
         v.push(member(BuiltinTy::Str.name(), "len", PrimRow::StrLen, 0));
+        v.push(member(BuiltinTy::Bytes.name(), DEFAULT, PrimRow::Pending(PendingPrim::BytesDefault), 0));
         v
     })
 }

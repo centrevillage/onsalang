@@ -783,10 +783,8 @@ fn a_name_of_the_spec_this_version_has_not_is_its_e0200() {
         (a.diagnostics[0].code, a.diagnostics[0].message.clone())
     };
     let cases = [
-        ("pub fn f() -> F32 {\n  F32.default()\n}\n", "the builtin value `F32.default`"),
-        ("type K = F32\npub fn f() -> F32 {\n  K.default()\n}\n", "the builtin value `K.default`"),
-        ("const Z: I32 = I32.default()\npub fn f() -> I32 { 1 }\n", "the builtin value `I32.default`"),
-        ("pub fn f(x: [F32; U32.default]) -> F32 {\n  1.0\n}\n", "`U32.default`"),
+        ("type K = Str\npub fn f(b: Bytes) {\n  let _ = K.from_utf8(b)\n}\n", "the builtin name `K.from_utf8`"),
+        ("pub fn f(x: [F32; Str.from_utf8]) -> F32 {\n  1.0\n}\n", "`Str.from_utf8`"),
         ("pub fn f(b: Bytes) {\n  let _ = Str.from_utf8(b)\n}\n", "the builtin name `Str.from_utf8`"),
         ("pub fn f(s: Str) -> Bytes {\n  s.as_bytes()\n}\n", "the builtin name `Str.as_bytes`"),
         ("pub fn f(b: Bytes) -> U32 {\n  b.len()\n}\n", "the builtin name `Bytes.len`"),
@@ -916,28 +914,14 @@ fn the_receiver_of_an_e0710_shows_what_is_decided() {
 #[test]
 fn a_path_over_lines_shows_its_names() {
     let cases = [
-        ("pub fn f() -> F32 {\n  F32 // c\n    .default()\n}\n", Code::E0200, "the builtin value `F32.default`"),
-        ("pub fn f(x: [F32; U32 // c\n  .default]) {\n}\n", Code::E0200, "`U32.default`"),
-        ("pub fn f() -> Str {\n  Str\n    .default()\n}\n", Code::E0200, "the builtin value `Str.default`"),
+        ("pub fn f(b: Bytes) {\n  let _ = Str // c\n    .from_utf8(b)\n}\n", Code::E0200, "`Str.from_utf8`"),
+        ("pub fn f(x: [F32; Str // c\n  .from_utf8]) {\n}\n", Code::E0200, "`Str.from_utf8`"),
         ("pub fn f(s: Str) -> Bytes {\n  Str // c\n    .as_bytes(s)\n}\n", Code::E0308, "`Str.as_bytes` is a method"),
     ];
     for (src, code, text) in cases {
         let d = check_in(src).diagnostics.remove(0);
         assert_eq!(d.code, code, "{src}");
         assert!(d.message.contains(text) && !d.message.contains('\n'), "{src}: {}", d.message);
-    }
-}
-
-#[test]
-fn only_a_call_of_a_missing_function_has_a_literal_to_write() {
-    let d = check_in("pub fn f() -> F32 {\n  F32.default()\n}\n").diagnostics.remove(0);
-    assert!(d.message.contains("the builtin value `F32.default`"), "{}", d.message);
-    assert!(d.notes.iter().any(|n| n.message.contains("write the value as a literal")), "{:?}", d.notes);
-    for src in ["pub fn f() {\n  let _ = F32.default\n}\n", "pub fn f(x: [F32; F32.default]) {\n}\n"] {
-        let d = check_in(src).diagnostics.remove(0);
-        assert_eq!(d.code, Code::E0200, "{src}");
-        assert!(d.message.contains("the builtin name `F32.default`"), "{src}: {}", d.message);
-        assert!(d.notes.is_empty(), "{src}: {:?}", d.notes);
     }
 }
 

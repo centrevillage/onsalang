@@ -412,7 +412,7 @@ impl Modules {
                 if let Some(a) = assoc {
                     return self.member_reach(def, &defs[a.0 as usize], name, from).map(|()| Entity::Member(a));
                 }
-                if self.unread_members(def) {
+                if self.unread_members(def) || self.holds_member(d, &name.name) {
                     return Err(ResolveError::Failed);
                 }
                 Err(ResolveError::NotFound { name: format!("{}.{}", def.name, name.name), span: name.span })

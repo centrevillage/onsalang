@@ -1,0 +1,368 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.3", "§6.4", "§6.6", "§3.4"]
+
+// W5-06 U3/t, S-49, S-905 (spec §6.3's table: "`Default`（0）" for the integers, "`Default`（`+0.0`）" for the floats, `Bool` is `false`, "`()`", and the tuples and the
+// `[T; N]` "要素が全て実装するとき" by element; §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである"; §3.4: the sign of a zero is seen through `to_bits()`). The values of `default()`: the
+// built-in types of the table, a struct (each field, nested, with a tuple and an array), a generic struct and one with a const parameter, `T.default()` for the same types, the calls in an `rt fn` and
+// the initializer of a `const`, and that each call makes a value of its own. The values are worked out by hand: an integer is `0`, a float has the bits `0` (not `0x80000000` or `0x8000000000000000`,
+// the bits of `-0.0`). `Str` and `Bytes` are not here: a value of a Shared type is not run by `onsa test` in this version (E0200; R-332), so their defaults are held to the types in
+// default_types.onsa. The types of the calls are in default_types.onsa.
+
+pub struct Point: Default + PartialEq {
+  x: F32,
+  y: F32,
+}
+
+pub struct Line: Default {
+  a: Point,
+  b: Point,
+}
+
+pub struct Counts: Default + Eq {
+  n: U64,
+  flag: Bool,
+  pair: (U8, Bool),
+  taps: [I16; 3],
+}
+
+pub struct Signal: Default {
+  gain: F32,
+  phase: F64,
+  offsets: [F32; 2],
+  mixed: (F32, I8, F64),
+}
+
+pub struct Pair[T]: Default {
+  a: T,
+  b: T,
+}
+
+pub struct Ring[T, const N: U32]: Default {
+  d: [T; N],
+}
+
+pub struct Slot[T: Default] {
+  value: T,
+}
+
+impl[T: Default] Slot[T] {
+  pub fn empty() -> Slot[T] {
+    Slot { value: T.default() }
+  }
+
+  pub fn reset_value(self) -> T {
+    T.default()
+  }
+}
+
+fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+fn is_default[T: Default + Eq](x: T) -> Bool uses {Alloc} {
+  x == T.default()
+}
+
+// ---------------------------------------------------------------- the built-in types of the table
+
+test "default of each integer type is 0" {
+  assert I8.default() == 0
+  assert I16.default() == 0
+  assert I32.default() == 0
+  assert I64.default() == 0
+  assert U8.default() == 0
+  assert U16.default() == 0
+  assert U32.default() == 0
+  assert U64.default() == 0
+}
+
+test "default of a float type is +0.0" {
+  assert F32.default().to_bits() == 0
+  assert F64.default().to_bits() == 0
+  assert F32.default() == 0.0
+  assert F64.default() == 0.0
+}
+
+test "default of Bool is false" {
+  assert Bool.default() == false
+  assert !Bool.default()
+}
+
+test "default of a type is not the default of another" {
+  assert I32.default() == 0
+  assert I32.default() != 1
+  assert Bool.default() != true
+}
+
+// ---------------------------------------------------------------- a struct
+
+test "default of a struct of floats has +0.0 in each field" {
+  let p = Point.default()
+  assert p.x.to_bits() == 0
+  assert p.y.to_bits() == 0
+}
+
+test "default of a struct equals the literal of zeros" {
+  assert Point.default() == Point { x: 0.0, y: 0.0 }
+  assert Point.default() != Point { x: 1.0, y: 0.0 }
+}
+
+test "default of a nested struct" {
+  let l = Line.default()
+  assert l.a.x.to_bits() == 0
+  assert l.a.y.to_bits() == 0
+  assert l.b.x.to_bits() == 0
+  assert l.b.y.to_bits() == 0
+}
+
+test "default of a struct with each kind of field" {
+  let c = Counts.default()
+  assert c.n == 0
+  assert c.flag == false
+  assert c.pair.0 == 0
+  assert c.pair.1 == false
+  assert c.taps[0] == 0
+  assert c.taps[1] == 0
+  assert c.taps[2] == 0
+}
+
+test "default of a struct equals itself" {
+  assert Counts.default() == Counts.default()
+  assert is_default(Counts.default())
+}
+
+test "default of a struct is not a changed value" {
+  var c = Counts.default()
+  c.n = 1
+  assert !is_default(c)
+}
+
+test "default of a struct with floats, an array and a tuple" {
+  let s = Signal.default()
+  assert s.gain.to_bits() == 0
+  assert s.phase.to_bits() == 0
+  assert s.offsets[0].to_bits() == 0
+  assert s.offsets[1].to_bits() == 0
+  assert s.mixed.0.to_bits() == 0
+  assert s.mixed.1 == 0
+  assert s.mixed.2.to_bits() == 0
+}
+
+test "every call makes a value of its own" {
+  var a = Point.default()
+  a.x = 1.5
+  a.y = -2.0
+  let b = Point.default()
+  assert a.x == 1.5
+  assert b.x.to_bits() == 0
+  assert b.y.to_bits() == 0
+}
+
+// ---------------------------------------------------------------- a generic struct
+
+test "default of a generic struct with integers" {
+  let p: Pair[I32] = Pair.default()
+  assert p.a == 0
+  assert p.b == 0
+}
+
+test "default of a generic struct with floats" {
+  let p: Pair[F32] = Pair.default()
+  assert p.a.to_bits() == 0
+  assert p.b.to_bits() == 0
+  let q: Pair[F64] = Pair.default()
+  assert q.a.to_bits() == 0
+}
+
+test "default of a generic struct with other types" {
+  let b: Pair[Bool] = Pair.default()
+  assert b.a == false
+  assert b.b == false
+  let t: Pair[(U8, Bool)] = Pair.default()
+  assert t.a.0 == 0
+  assert t.b.1 == false
+  let u: Pair[U8] = Pair.default()
+  assert u.b == 0
+}
+
+test "default of a generic struct of a struct and of a generic struct" {
+  let p: Pair[Point] = Pair.default()
+  assert p.a == Point.default()
+  assert p.b.y.to_bits() == 0
+  let n: Pair[Pair[U8]] = Pair.default()
+  assert n.a.a == 0
+  assert n.a.b == 0
+  assert n.b.a == 0
+  assert n.b.b == 0
+}
+
+test "default of a struct with a const parameter" {
+  let r: Ring[F32, 4] = Ring.default()
+  assert r.d[0].to_bits() == 0
+  assert r.d[1].to_bits() == 0
+  assert r.d[2].to_bits() == 0
+  assert r.d[3].to_bits() == 0
+  let s: Ring[U8, 2] = Ring.default()
+  assert s.d[0] == 0
+  assert s.d[1] == 0
+  let t: Ring[Bool, 1] = Ring.default()
+  assert t.d[0] == false
+}
+
+// ---------------------------------------------------------------- T.default()
+
+test "T.default() of the integers and the floats" {
+  let a: I8 = zero_of()
+  assert a == 0
+  let b: U64 = zero_of()
+  assert b == 0
+  let c: F32 = zero_of()
+  assert c.to_bits() == 0
+  let d: F64 = zero_of()
+  assert d.to_bits() == 0
+}
+
+test "T.default() of Bool" {
+  let a: Bool = zero_of()
+  assert a == false
+}
+
+test "T.default() of a struct" {
+  let p: Point = zero_of()
+  assert p == Point { x: 0.0, y: 0.0 }
+  let l: Line = zero_of()
+  assert l.a.x.to_bits() == 0
+  assert l.b.y.to_bits() == 0
+  let c: Counts = zero_of()
+  assert c.n == 0
+  let q: Pair[F32] = zero_of()
+  assert q.b.to_bits() == 0
+}
+
+test "T.default() of a tuple" {
+  let t: (I32, Bool, F32) = zero_of()
+  assert t.0 == 0
+  assert t.1 == false
+  assert t.2.to_bits() == 0
+  let n: ((U8, Bool), (I8, F64)) = zero_of()
+  let first                      = n.0
+  let second                     = n.1
+  assert first.0 == 0
+  assert first.1 == false
+  assert second.0 == 0
+  assert second.1.to_bits() == 0
+}
+
+test "T.default() of an array" {
+  let a: [U8; 4] = zero_of()
+  assert a[0] == 0
+  assert a[1] == 0
+  assert a[2] == 0
+  assert a[3] == 0
+  let f: [F32; 2] = zero_of()
+  assert f[0].to_bits() == 0
+  assert f[1].to_bits() == 0
+  let n: [(I8, Bool); 2] = zero_of()
+  assert n[1].0 == 0
+  assert n[1].1 == false
+}
+
+test "T.default() in a method of an impl" {
+  let s: Slot[F32] = Slot.empty()
+  assert s.value.to_bits() == 0
+  let t: Slot[Point] = Slot.empty()
+  assert t.value == Point.default()
+  let u: Slot[(I8, Bool)] = Slot.empty()
+  assert u.value.0 == 0
+  assert s.reset_value().to_bits() == 0
+}
+
+test "T.default() with the bound of a comparison" {
+  let five: I32 = 5
+  assert is_default(I32.default())
+  assert is_default(I64.default())
+  assert is_default(false)
+  assert !is_default(true)
+  assert !is_default(five)
+  assert is_default(Counts.default())
+}
+
+// ---------------------------------------------------------------- rt fn and const
+
+rt fn rt_point() -> Point {
+  Point.default()
+}
+
+rt fn rt_float() -> F64 {
+  F64.default()
+}
+
+rt fn rt_generic[T: Default]() -> T {
+  T.default()
+}
+
+rt fn rt_sum() -> I32 {
+  I32.default() + (U8.default() as I32) + 7
+}
+
+test "default in an rt fn" {
+  assert rt_point() == Point.default()
+  assert rt_float().to_bits() == 0
+  let n: Pair[U8] = rt_generic()
+  assert n.a == 0
+  let b: Bool = rt_generic()
+  assert b == false
+  assert rt_sum() == 7
+}
+
+const ORIGIN: Point = Point.default()
+
+const ZERO_I64: I64 = I64.default()
+
+const ZERO_F32: F32 = F32.default()
+
+const FLAGGED: Bool = Bool.default()
+
+const MIXED: (U8, F64, Bool) = (U8.default(), F64.default(), Bool.default())
+
+const TABLE: [Point; 2] = [Point.default(), Point.default()]
+
+const PAIR: Pair[I32] = Pair.default()
+
+const COUNT_PLUS: U32 = U32.default() + 5
+
+const X_OF_THE_DEFAULT: F32 = Point.default().x
+
+const AGAIN: Point = ORIGIN
+
+impl Point {
+  const START: Point = Point.default()
+}
+
+test "default in the initializer of a const" {
+  assert ORIGIN == Point.default()
+  assert ORIGIN.x.to_bits() == 0
+  assert ZERO_I64 == 0
+  assert ZERO_F32.to_bits() == 0
+  assert FLAGGED == false
+  assert COUNT_PLUS == 5
+  assert X_OF_THE_DEFAULT.to_bits() == 0
+  assert AGAIN == Point.default()
+}
+
+test "default in the initializer of a const of a tuple, an array and a generic struct" {
+  assert MIXED.0 == 0
+  assert MIXED.1.to_bits() == 0
+  assert MIXED.2 == false
+  assert TABLE[0] == Point.default()
+  assert TABLE[1].y.to_bits() == 0
+  assert PAIR.a == 0
+  assert PAIR.b == 0
+}
+
+test "default in the initializer of an associated const" {
+  assert Point.START == Point.default()
+  assert Point.START.x.to_bits() == 0
+}

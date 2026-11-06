@@ -1,0 +1,67 @@
+// The module `util` of the case in main.onsa: the types whose members the other module uses.
+
+pub struct Hidden: Default {
+  priv gain: F32,
+  priv steps: U32,
+  name: Str,
+}
+
+impl Hidden {
+  pub fn gain(self) -> F32 {
+    self.gain
+  }
+
+  pub fn steps(self) -> U32 {
+    self.steps
+  }
+}
+
+pub struct Wrap[T]: Default {
+  priv inner: T,
+  extra: U8,
+}
+
+pub struct Plain {
+  n: I32,
+}
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+  Auto,
+}
+
+// no `pub`: the type is visible in the package, and so are the members that the derive makes
+struct Internal: Default {
+  n: I32,
+}
+
+enum Phase: Ordinal {
+  Attack,
+  Release,
+}
+
+// `priv`: the type, and the members that the derive makes, are seen in this module only
+priv struct Local: Default {
+  n: I32,
+}
+
+priv enum Step: Ordinal {
+  First,
+  Second,
+}
+
+pub fn local_default() -> I32 {
+  Local.default().n
+}
+
+pub fn local_step(n: U32) -> U32 {
+  match Step.from_ordinal(n) {
+    Some(s) => s.ordinal(),
+    None => 99,
+  }
+}
+
+pub rt fn hidden_in_this_module() -> Hidden {
+  Hidden.default()
+}

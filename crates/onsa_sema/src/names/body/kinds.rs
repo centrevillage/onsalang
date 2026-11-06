@@ -97,10 +97,7 @@ impl Walker<'_> {
     pub(super) fn builtin_called(&self, of: Entity, segs: &[&Ident], place: Place) -> Option<Fail> {
         Some(Fail::Report(match crate::names::builtin_member(self.a, of, &segs[segs.len() - 1].name)? {
             BuiltinMember::Method { bang } => self.method_at(place, segs, bang),
-            BuiltinMember::Missing { called, .. } if matches!(place, Place::Callee(_)) => {
-                self.missing_name(called, segs)
-            }
-            BuiltinMember::Missing { feature, .. } => self.missing_name(feature, segs),
+            BuiltinMember::Missing { feature } => self.missing_name(feature, segs),
         }))
     }
 

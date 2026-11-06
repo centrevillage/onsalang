@@ -1,0 +1,356 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3", "§6.6"]
+
+// W5-06 U3/t, S-145, S-907 (spec §6.4: "`Ordinal` は、列挙子に中身の無い enum にだけ並べられる。列挙子と、宣言順の 0 始まりの番号を変換する: `m.ordinal() -> U32` と
+// `Mode.from_ordinal(n: U32) -> Option[Mode]`（範囲外は `None`）… 番号の値を指定する書き方は無い"). The values: the number of an enumerator is its place in the declaration, counted from 0, whatever its
+// name (`Zed`, `Alpha`, `Mid` are 0, 1, 2) and whatever else the list names; `from_ordinal` gives the enumerator in range, `None` at the first number beyond the last (the end of the range) and far beyond it
+// (`U32.MAX`); the two undo each other; the same through `T: Ordinal` (`x.ordinal()`, `T.from_ordinal(n)`), in an `rt fn`, in the initializer of a `const`, through `Self` in an `impl`. An enum that lists
+// only `Ordinal` has no `==` (§6.3), so what `from_ordinal` gives is read by `ordinal()` through a `match` (the helpers with the sentinel `99`), and the one that lists `Eq` is compared with `Some(…)`.
+// The values are worked out by hand. The types are in ordinal_types.onsa.
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+  Auto,
+}
+
+pub enum Wave: Eq + Hash + Ordinal {
+  Sine,
+  Saw,
+}
+
+pub enum Single: Ordinal {
+  Only,
+}
+
+pub enum Unsorted: Ordinal {
+  Zed,
+  Alpha,
+  Mid,
+}
+
+pub enum Many: Ordinal {
+  A,
+  B,
+  C,
+  D,
+  E,
+  F,
+  G,
+  H,
+  I,
+  J,
+}
+
+fn mode_number_or_99(n: U32) -> U32 {
+  match Mode.from_ordinal(n) {
+    Some(m) => m.ordinal(),
+    None => 99,
+  }
+}
+
+fn single_number_or_99(n: U32) -> U32 {
+  match Single.from_ordinal(n) {
+    Some(s) => s.ordinal(),
+    None => 99,
+  }
+}
+
+fn unsorted_number_or_99(n: U32) -> U32 {
+  match Unsorted.from_ordinal(n) {
+    Some(u) => u.ordinal(),
+    None => 99,
+  }
+}
+
+fn many_number_or_99(n: U32) -> U32 {
+  match Many.from_ordinal(n) {
+    Some(m) => m.ordinal(),
+    None => 99,
+  }
+}
+
+fn number_of[T: Ordinal + Copy](x: T) -> U32 {
+  x.ordinal()
+}
+
+fn number_from[T: Ordinal + Copy](like: T, n: U32) -> U32 {
+  match T.from_ordinal(n) {
+    Some(v) => v.ordinal(),
+    None => 99,
+  }
+}
+
+fn round_trip[T: Ordinal + Copy](x: T) -> U32 {
+  match T.from_ordinal(x.ordinal()) {
+    Some(v) => v.ordinal(),
+    None => 99,
+  }
+}
+
+fn make[T: Ordinal](n: U32) -> Option[T] {
+  T.from_ordinal(n)
+}
+
+fn is_none[T: Ordinal + Copy](like: T, n: U32) -> Bool {
+  match T.from_ordinal(n) {
+    Some(_) => false,
+    None => true,
+  }
+}
+
+// ---------------------------------------------------------------- the number of an enumerator
+
+test "the number of an enumerator is its place in the declaration" {
+  assert Mode.Off.ordinal() == 0
+  assert Mode.On.ordinal() == 1
+  assert Mode.Auto.ordinal() == 2
+}
+
+test "the number does not depend on the name" {
+  assert Unsorted.Zed.ordinal() == 0
+  assert Unsorted.Alpha.ordinal() == 1
+  assert Unsorted.Mid.ordinal() == 2
+}
+
+test "the number does not depend on the other traits of the list" {
+  assert Wave.Sine.ordinal() == 0
+  assert Wave.Saw.ordinal() == 1
+}
+
+test "an enum with one enumerator" {
+  assert Single.Only.ordinal() == 0
+}
+
+test "the number of each of ten enumerators" {
+  assert Many.A.ordinal() == 0
+  assert Many.B.ordinal() == 1
+  assert Many.C.ordinal() == 2
+  assert Many.D.ordinal() == 3
+  assert Many.E.ordinal() == 4
+  assert Many.F.ordinal() == 5
+  assert Many.G.ordinal() == 6
+  assert Many.H.ordinal() == 7
+  assert Many.I.ordinal() == 8
+  assert Many.J.ordinal() == 9
+}
+
+test "the number of a value that is held" {
+  let m = Mode.On
+  assert m.ordinal() == 1
+  let w = Wave.Saw
+  assert w.ordinal() == 1
+}
+
+test "the number is a U32 that is used in arithmetic" {
+  assert Mode.Auto.ordinal() * 2 + 1 == 5
+  assert Many.J.ordinal() - Many.C.ordinal() == 7
+}
+
+// ---------------------------------------------------------------- from_ordinal: in the range, at its end, beyond it
+
+test "from_ordinal gives the enumerator at each number in the range" {
+  assert mode_number_or_99(0) == 0
+  assert mode_number_or_99(1) == 1
+  assert mode_number_or_99(2) == 2
+}
+
+test "from_ordinal gives the enumerator itself" {
+  assert Wave.from_ordinal(0) == Some(Wave.Sine)
+  assert Wave.from_ordinal(1) == Some(Wave.Saw)
+  assert Wave.from_ordinal(0) != Some(Wave.Saw)
+}
+
+test "from_ordinal is None at the first number beyond the last" {
+  assert mode_number_or_99(3) == 99
+  assert Wave.from_ordinal(2) == None
+  assert single_number_or_99(1) == 99
+  assert many_number_or_99(10) == 99
+}
+
+test "from_ordinal is None far beyond the range" {
+  assert mode_number_or_99(4) == 99
+  assert mode_number_or_99(100) == 99
+  assert mode_number_or_99(65536) == 99
+  assert mode_number_or_99(U32.MAX) == 99
+  assert Wave.from_ordinal(U32.MAX) == None
+}
+
+test "from_ordinal of the last number of the range" {
+  assert many_number_or_99(9) == 9
+  assert many_number_or_99(0) == 0
+}
+
+test "from_ordinal of an enum with one enumerator" {
+  assert single_number_or_99(0) == 0
+  assert single_number_or_99(2) == 99
+  assert single_number_or_99(U32.MAX) == 99
+}
+
+test "from_ordinal follows the order of the declaration" {
+  assert unsorted_number_or_99(0) == 0
+  assert unsorted_number_or_99(1) == 1
+  assert unsorted_number_or_99(2) == 2
+  assert unsorted_number_or_99(3) == 99
+}
+
+// ---------------------------------------------------------------- the round trip
+
+test "from_ordinal of the ordinal gives the same enumerator" {
+  assert Wave.from_ordinal(Wave.Sine.ordinal()) == Some(Wave.Sine)
+  assert Wave.from_ordinal(Wave.Saw.ordinal()) == Some(Wave.Saw)
+}
+
+test "the ordinal of from_ordinal gives the same number" {
+  assert mode_number_or_99(Mode.Off.ordinal()) == 0
+  assert mode_number_or_99(Mode.On.ordinal()) == 1
+  assert mode_number_or_99(Mode.Auto.ordinal()) == 2
+  assert many_number_or_99(0) == Many.A.ordinal()
+  assert many_number_or_99(5) == Many.F.ordinal()
+  assert many_number_or_99(9) == Many.J.ordinal()
+}
+
+test "a cycle through the numbers" {
+  assert cycle(Mode.Off).ordinal() == 1
+  assert cycle(Mode.On).ordinal() == 2
+  assert cycle(Mode.Auto).ordinal() == 0
+}
+
+fn cycle(m: Mode) -> Mode {
+  match Mode.from_ordinal(m.ordinal() + 1) {
+    Some(next) => next,
+    None => Mode.Off,
+  }
+}
+
+// ---------------------------------------------------------------- T: Ordinal
+
+test "x.ordinal() of a parameter" {
+  assert number_of(Mode.Auto) == 2
+  assert number_of(Wave.Saw) == 1
+  assert number_of(Single.Only) == 0
+  assert number_of(Many.H) == 7
+}
+
+test "T.from_ordinal(n) of a parameter" {
+  assert number_from(Mode.Off, 2) == 2
+  assert number_from(Mode.Off, 3) == 99
+  assert number_from(Wave.Sine, 1) == 1
+  assert number_from(Wave.Sine, 2) == 99
+  assert number_from(Single.Only, 0) == 0
+  assert number_from(Many.A, 9) == 9
+  assert number_from(Many.A, U32.MAX) == 99
+}
+
+test "the round trip of a parameter" {
+  assert round_trip(Mode.On) == 1
+  assert round_trip(Many.J) == 9
+  assert round_trip(Unsorted.Alpha) == 1
+}
+
+test "T.from_ordinal(n) gives the type that is expected" {
+  let w: Option[Wave] = make(1)
+  assert w == Some(Wave.Saw)
+  let none: Option[Wave] = make(2)
+  assert none == None
+}
+
+test "T.from_ordinal(n) is None beyond the range of each type" {
+  assert !is_none(Mode.Off, 2)
+  assert is_none(Mode.Off, 3)
+  assert !is_none(Single.Only, 0)
+  assert is_none(Single.Only, 1)
+  assert is_none(Many.A, 10)
+  assert is_none(Many.A, U32.MAX)
+}
+
+// ---------------------------------------------------------------- Self, rt fn, const
+
+impl Mode {
+  pub fn number(self) -> U32 {
+    self.ordinal()
+  }
+
+  pub fn after(self) -> U32 {
+    match Self.from_ordinal(self.ordinal() + 1) {
+      Some(m) => m.ordinal(),
+      None => 99,
+    }
+  }
+
+  pub fn at_number(n: U32) -> U32 {
+    match Self.from_ordinal(n) {
+      Some(m) => m.ordinal(),
+      None => 99,
+    }
+  }
+}
+
+test "Self.from_ordinal in an impl" {
+  assert Mode.Off.after() == 1
+  assert Mode.On.after() == 2
+  assert Mode.Auto.after() == 99
+  assert Mode.at_number(2) == 2
+  assert Mode.at_number(3) == 99
+  assert Mode.Auto.number() == 2
+}
+
+rt fn rt_number(m: Mode) -> U32 {
+  m.ordinal()
+}
+
+rt fn rt_from(n: U32) -> U32 {
+  match Mode.from_ordinal(n) {
+    Some(m) => m.ordinal(),
+    None => 99,
+  }
+}
+
+rt fn rt_generic[T: Ordinal + Copy](x: T) -> U32 {
+  x.ordinal()
+}
+
+test "ordinal and from_ordinal in an rt fn" {
+  assert rt_number(Mode.Auto) == 2
+  assert rt_from(1) == 1
+  assert rt_from(3) == 99
+  assert rt_generic(Many.G) == 6
+}
+
+const AUTO_NUMBER: U32 = Mode.Auto.ordinal()
+
+const LAST_WAVE: Option[Wave] = Wave.from_ordinal(1)
+
+const BEYOND_WAVE: Option[Wave] = Wave.from_ordinal(2)
+
+const FAR: Option[Wave] = Wave.from_ordinal(U32.MAX)
+
+const SUM: U32 = Mode.On.ordinal() + Many.J.ordinal() + Unsorted.Mid.ordinal()
+
+const MODE_AT: Option[Mode] = Mode.from_ordinal(2)
+
+const MODE_BEYOND: Option[Mode] = Mode.from_ordinal(3)
+
+impl Wave {
+  const NUMBER_OF_SAW: U32 = Wave.Saw.ordinal()
+}
+
+fn number_of_option(o: Option[Mode]) -> U32 {
+  match o {
+    Some(m) => m.ordinal(),
+    None => 99,
+  }
+}
+
+test "ordinal and from_ordinal in the initializer of a const" {
+  assert AUTO_NUMBER == 2
+  assert LAST_WAVE == Some(Wave.Saw)
+  assert BEYOND_WAVE == None
+  assert FAR == None
+  assert SUM == 1 + 9 + 2
+  assert number_of_option(MODE_AT) == 2
+  assert number_of_option(MODE_BEYOND) == 99
+  assert Wave.NUMBER_OF_SAW == 1
+}

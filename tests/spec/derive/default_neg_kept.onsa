@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§4.5", "§6.2", "§6.1", "§18.1"]
+
+// W5-06 U2/t, S-49 (spec §6.3: "`Default` は関連関数 `rt fn default() -> Self` を持ち、効果行は空である。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ";
+// §6.4: "総称の型は、型引数が満たすときだけ満たす"; §6.3's table is the closed list of the built-in types that have `Default`; §18.1: one error in a unit). The calls of
+// `default` that are errors. A name that is not found after a type name is E0302: a struct or an enum that does not list `Default` (a list of `Eq`, `Ordinal`, none), a generic
+// struct without it, `Char` (not in the table), and `T.default()` where `T` has no bound, where `T` has other bounds (`Eq`, `Ordinal`) and where `T: Num` (the bound of the number
+// does not include `Default`). The call takes no argument (E0412), and the name after a value is the method `default` that a value does not have (E0413, as for
+// any associated function: `p.make()`). A call whose type does not fit the place is E0401. A type argument that does not meet `Default` where the call asks for it is
+// E0416 (a function with `T: Default` called with such a type, a generic struct whose list has `Default`, a struct whose parameter has the bound). The function value `P.default`
+// is a name after a type name too. One error in each function (P-01).
+
+
+// This file is the part of default_neg.onsa that already passes before W5-06 (the names that are not found after a type that has no Default, the name after a value, the type arguments that a bound refuses); the part that waits for W5-06 is in default_neg.onsa (8.5).
+
+pub struct Plain {
+  n: I32,
+}
+
+pub struct JustEq: Eq {
+  n: I32,
+}
+
+pub struct Point: Default {
+  x: F32,
+  y: F32,
+}
+
+pub struct Line: Default {
+  a: Point,
+}
+
+pub struct Pair[T]: Default {
+  a: T,
+  b: T,
+}
+
+pub struct Generic[T] {
+  a: T,
+}
+
+pub struct Slot[T: Default] {
+  v: T,
+}
+
+pub enum Colour {
+  Red,
+  Green,
+}
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+}
+
+fn zero_of[T: Default]() -> T {
+  panic("not called")
+}
+
+fn take_point(p: Point) -> F32 {
+  p.x
+}
+
+// ---------------------------------------------------------------- E0302: a type that does not have Default
+
+pub fn plain_struct() -> Plain {
+  Plain.default()                                   //~ E0302
+}
+
+pub fn struct_with_another_list() -> JustEq {
+  JustEq.default()                                  //~ E0302
+}
+
+pub fn plain_enum() -> Colour {
+  Colour.default()                                  //~ E0302
+}
+
+pub fn ordinal_enum() -> Mode {
+  Mode.default()                                    //~ E0302
+}
+
+pub fn generic_struct_without_the_list() -> Generic[I32] {
+  Generic.default()                                 //~ E0302
+}
+
+pub fn char_is_not_in_the_table() -> Char {
+  Char.default()                                    //~ E0302
+}
+
+pub fn default_taken_as_a_value_of_a_plain_struct() {
+  let _ = Plain.default                             //~ E0302
+}
+
+pub fn no_bound[T]() -> I32 {
+  let _ = T.default()                               //~ E0302
+  1
+}
+
+pub fn bound_of_eq[T: Eq]() -> I32 {
+  let _ = T.default()                               //~ E0302
+  1
+}
+
+pub fn bound_of_ordinal[T: Ordinal]() -> I32 {
+  let _ = T.default()                               //~ E0302
+  1
+}
+
+pub fn bound_of_a_number[T: Num]() -> I32 {
+  let _ = T.default()                               //~ E0302
+  1
+}
+
+pub fn bound_of_a_float[T: Float]() -> I32 {
+  let _ = T.default()                               //~ E0302
+  1
+}
+
+// ---------------------------------------------------------------- E0413: the name after a value
+
+pub fn after_a_struct_value(p: Point) -> Point {
+  p.default()                                       //~ E0413
+}
+
+pub fn after_a_nested_struct_value(l: Line) -> Point {
+  l.a.default()                                     //~ E0413
+}
+
+pub fn after_an_integer(n: I32) -> I32 {
+  n.default()                                       //~ E0413
+}
+
+pub fn after_a_float(x: F32) -> F32 {
+  x.default()                                       //~ E0413
+}
+
+pub fn after_a_bool(b: Bool) -> Bool {
+  b.default()                                       //~ E0413
+}
+
+pub fn after_a_str(s: Str) -> Str {
+  s.default()                                       //~ E0413
+}
+
+pub fn after_a_value_of_a_parameter[T: Default + Copy](x: T) -> T {
+  x.default()                                       //~ E0413
+}
+
+// ---------------------------------------------------------------- E0416: a type argument that does not meet Default
+
+pub fn function_asked_for_a_plain_struct() -> Plain {
+  zero_of()                                         //~ E0416
+}
+
+pub fn function_asked_for_a_char() -> Char {
+  zero_of()                                         //~ E0416
+}
+
+pub fn function_asked_for_an_enum() -> Colour {
+  zero_of()                                         //~ E0416
+}
+
+pub fn function_asked_for_an_option() -> Option[I32] {
+  zero_of()                                         //~ E0416
+}
+
+pub fn function_asked_for_a_tuple_with_a_char() -> (I32, Char) {
+  zero_of()                                         //~ E0416
+}
+
+pub fn slot_of_a_plain_struct(s: Slot[Plain]) -> I32 { //~ E0416
+  1
+}
+
+pub fn slot_of_a_char(s: Slot[Char]) -> I32 {       //~ E0416
+  1
+}

@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.4", "§6.2"]
+
+// W5-06 U2/t, S-460, S-774, S-851 (spec §18.1: "誤りの属性の付いた struct・enum では、derive の一覧と `@repr` の値を読めなかった部分として扱い、それに頼る使う側（trait を満たすかの判定、derive が作る
+// メソッド、§6.4 の derive と手で書いた `impl` の重なり、FFI の配置）には診断を出さない。derive の一覧に閉じた一覧の外の名前（§6.4 の E0416）があるときも、一覧を読めなかった部分として扱い、…
+// derive が作るメンバ、手で書いた `impl` の重なりには診断を出さない"; "一覧の名前を型が満たさない E0416（`enum E: Default`、フィールドの型が満たさない形）… は、書いた trait とその上位の trait として満たす").
+// What the unreadable list would have made is not looked for: `S.default()`, `s.ordinal()`, `S.from_ordinal(n)` are silent after a list with a name that is no derivable trait (`Gone`, `Clone`, also in a
+// list with the others), after an attribute of another language (E0020), and a member of an `impl` with the name of one of them is not an overlap (E0304). A name that no derive makes is still an
+// error (`s.nope()` E0413, `S.nope()` E0302, a field that is not there E0413). A list that is wrong in another way is read as it is written: the types of `enum E: Default`, `enum E: Ordinal { A(I32) }`
+// and `struct S: Ordinal` are E0416 and keep their list, so what the list makes is silent, and what it does not make is not (`E.ordinal()` is E0413 for `enum E: Default`, `E.default()` is E0302 for
+// the payload enum). What an unreadable list makes has no type, so the result is used as any type. The other tests of the attribute forms are in negative/continue_derive_methods.onsa. One error in each unit (P-01).
+
+// ---------------------------------------------------------------- a name outside the closed list
+
+pub struct Gone1: Gone { //~ E0416
+  v: U32,
+}
+
+pub struct Clone1: Clone { //~ E0416
+  v: U32,
+}
+
+pub struct Mixed: Eq + Gone + Default { //~ E0416
+  v: U32,
+}
+
+pub enum GoneEnum: Gone + Ordinal { //~ E0416
+  A,
+  B,
+}
+
+pub struct GoneGeneric[T]: Gone { //~ E0416
+  a: T,
+}
+
+pub fn default_of_a_struct() -> Gone1 {
+  Gone1.default()
+}
+
+pub fn default_of_the_other_language() -> Clone1 {
+  Clone1.default()
+}
+
+pub fn default_of_the_mixed_list() -> Mixed {
+  Mixed.default()
+}
+
+pub fn default_of_a_generic_struct() -> GoneGeneric[U8] {
+  GoneGeneric.default()
+}
+
+pub fn ordinal_of_a_struct(s: Gone1) -> U32 {
+  s.ordinal()
+}
+
+pub fn ordinal_of_an_enum(e: GoneEnum) -> U32 {
+  e.ordinal()
+}
+
+pub fn ordinal_of_the_mixed_list(s: Mixed) -> U32 {
+  s.ordinal()
+}
+
+pub fn from_ordinal_of_an_enum(n: U32) -> Option[GoneEnum] {
+  GoneEnum.from_ordinal(n)
+}
+
+pub fn from_ordinal_of_a_struct(n: U32) -> Option[Gone1] {
+  Gone1.from_ordinal(n)
+}
+
+pub fn the_result_is_used_as_any_type(s: Gone1) -> Bool {
+  s.ordinal()
+}
+
+pub fn default_used_as_any_type() -> Bool {
+  Clone1.default()
+}
+
+pub fn from_ordinal_used_as_any_type(n: U32) -> I32 {
+  GoneEnum.from_ordinal(n)
+}
+
+pub fn through_a_function_value() -> Bool {
+  let f = Mixed.default
+  f.()
+}
+
+// an `impl` that has the name of a member is not an overlap (these types are not used here: what a use of an overlapping name refers to is not in the spec)
+
+pub struct OverlapStruct: Gone { //~ E0416
+  v: U32,
+}
+
+pub struct OverlapOther: Clone { //~ E0416
+  v: U32,
+}
+
+pub struct OverlapMixed: Eq + Gone + Default { //~ E0416
+  v: U32,
+}
+
+pub enum OverlapEnum: Gone + Ordinal { //~ E0416
+  A,
+  B,
+}
+
+pub struct OverlapGeneric[T]: Gone { //~ E0416
+  a: T,
+}
+
+pub struct OverlapOldAttribute {
+  v: U32,
+}
+
+pub enum OverlapOldDerive {
+  A,
+  B,
+}
+
+// ---------------------------------------------------------------- a list that is not met is read as it is written
+
+pub enum DefaultEnum: Default { //~ E0416
+  A,
+  B,
+}
+
+pub enum Payload: Ordinal { //~ E0416
+  A(I32),
+  B,
+}
+
+pub struct OrdinalStruct: Ordinal { //~ E0416
+  n: U32,
+}
+
+pub fn default_of_the_default_enum() -> DefaultEnum {
+  DefaultEnum.default()
+}
+
+pub fn ordinal_of_the_payload_enum(e: Payload) -> U32 {
+  e.ordinal()
+}
+
+pub fn from_ordinal_of_the_payload_enum(n: U32) -> Option[Payload] {
+  Payload.from_ordinal(n)
+}
+
+pub fn ordinal_of_the_struct(s: OrdinalStruct) -> U32 {
+  s.ordinal()
+}
+
+pub fn from_ordinal_of_the_struct(n: U32) -> Option[OrdinalStruct] {
+  OrdinalStruct.from_ordinal(n)
+}

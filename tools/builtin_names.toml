@@ -119,6 +119,7 @@
 "Copy" = 1
 
 [allow."crates/onsa_sema/src/lang.rs"]
+"AnyOrdinal" = 1
 "Err" = 1
 "None" = 1
 "Ok" = 1
@@ -185,6 +186,7 @@
 "checked_shl" = 1
 "checked_shr" = 1
 "checked_sub" = 1
+"default" = 1
 "div_euclid" = 1
 "rem_euclid" = 1
 
@@ -262,6 +264,7 @@
 [same_spelling."crates/onsa_backend_c/src/names.rs"]
 "INFINITY" = { count = 1, note = "C の予約された名前の表" }
 "NAN" = { count = 1, note = "C の予約された名前の表" }
+"default" = { count = 1, note = "C の予約された名前の表（switch の default）" }
 "f32" = { count = 1, note = "C の名前の部品にする型の接尾辞（std.test.gen の f32 と同じ綴り）" }
 "u32" = { count = 1, note = "C の名前の部品にする型の接尾辞（std.test.gen の u32 と同じ綴り）" }
 
@@ -283,6 +286,7 @@
 "host" = { count = 1, note = "マニフェストの platform の値 \"host\"（§15.3。属性 @host とは別）" }
 
 [same_spelling."crates/onsa_sema/src/sig/generated.rs"]
+"default" = { count = 2, note = "@param のキー（`default` のメンバと同じ綴り）" }
 "log" = { count = 1, note = "@param の scale の値（std.math.log と同じ綴り）" }
 "max" = { count = 2, note = "@param のキー（std.math.max と同じ綴り）" }
 "min" = { count = 2, note = "@param のキー（std.math.min と同じ綴り）" }

@@ -51,3 +51,9 @@ impl[T: ?Dup, E: ?Dup] Result[T, E] {
     }
   }
 }
+
+/// What a type parameter with `Ordinal` reads its members from: no builtin
+/// type has them (§6.4), and with no `pub` it is no name of the prelude.
+enum AnyOrdinal: Ordinal {
+  Only,
+}

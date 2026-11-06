@@ -1,0 +1,159 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§6.1", "§6.2", "§4.5", "§15.1"]
+
+// W5-06 U2/t, S-145 (spec §6.4: "`m.ordinal() -> U32` と `Mode.from_ordinal(n: U32) -> Option[Mode]`（範囲外は `None`）"; "手書きの `impl Ordinal` は書けない（E0307）"; §6.2: "`impl` 内の関数は
+// ドット記法でのみ呼ぶ（`p.norm()`, `Point.new(1.0, 2.0)`）"; §15.1: a method written as a function is E0308, an unknown name after a type is E0302). The members that the derive makes, used wrongly:
+// an argument that is not a `U32` (E0401, also `I32`, `U8`, a float, the enum itself, a string), a result whose type is another type (`Mode` for the `Option`, `I32` for the `U32`),
+// the number of arguments (E0412), the name after a type of an enum that does not list `Ordinal` (E0302: a plain enum, an enum with another list, `from_ordinal` of a parameter with no bound), the name
+// after a value of such an enum or of a type that is no enum (E0413), an associated function called on a value and a method called as a function (E0413 and E0308, the same as for the
+// members that are written by hand), and a type that does not meet `T: Ordinal` where a function asks for it (E0416). One error in each function (P-01).
+
+
+// This file is the part of ordinal_neg.onsa that already passes before W5-06 (the names that are not found after an enum or a type that does not list Ordinal, the name after its values, the types that a bound refuses); the part that waits for W5-06 is in ordinal_neg.onsa (8.5).
+
+pub enum Mode: Ordinal {
+  Off,
+  On,
+  Auto,
+}
+
+pub enum Plain {
+  A,
+  B,
+}
+
+pub enum JustEq: Eq {
+  A,
+  B,
+}
+
+pub struct Point {
+  x: I32,
+}
+
+fn number_of[T: Ordinal + Copy](x: T) -> U32 {
+  0
+}
+
+fn from_number[T: Ordinal](n: U32) -> Option[T] {
+  panic("not called")
+}
+
+// ---------------------------------------------------------------- E0302: the name after a type that does not list Ordinal
+
+pub fn from_ordinal_of_a_plain_enum() -> Option[Plain] {
+  Plain.from_ordinal(0)                             //~ E0302
+}
+
+pub fn from_ordinal_of_an_enum_with_another_list() -> Option[JustEq] {
+  JustEq.from_ordinal(0)                            //~ E0302
+}
+
+pub fn from_ordinal_of_a_struct() -> Option[Point] {
+  Point.from_ordinal(0)                             //~ E0302
+}
+
+pub fn from_ordinal_of_an_integer() -> Option[U32] {
+  U32.from_ordinal(0)                               //~ E0302
+}
+
+pub fn from_ordinal_of_the_bool_type() -> Option[Bool] {
+  Bool.from_ordinal(0)                              //~ E0302
+}
+
+pub fn from_ordinal_of_a_parameter_with_no_bound[T](n: U32) -> Option[T] {
+  T.from_ordinal(n)                                 //~ E0302
+}
+
+pub fn from_ordinal_of_a_parameter_with_other_bounds[T: Eq + Hash](n: U32) -> Option[T] {
+  T.from_ordinal(n)                                 //~ E0302
+}
+
+pub fn ordinal_taken_as_a_value_of_a_plain_enum() {
+  let _ = Plain.from_ordinal                        //~ E0302
+}
+
+pub fn a_name_the_derive_does_not_make() -> Option[Mode] {
+  Mode.from_index(0)                                //~ E0302
+}
+
+pub fn a_name_the_derive_does_not_make_on_a_parameter[T: Ordinal](n: U32) -> Option[T] {
+  T.from_index(n)                                   //~ E0302
+}
+
+// ---------------------------------------------------------------- E0413: the name after a value
+
+pub fn ordinal_of_a_plain_enum(m: Plain) -> U32 {
+  m.ordinal()                                       //~ E0413
+}
+
+pub fn ordinal_of_an_enum_with_another_list(m: JustEq) -> U32 {
+  m.ordinal()                                       //~ E0413
+}
+
+pub fn ordinal_of_a_struct(p: Point) -> U32 {
+  p.ordinal()                                       //~ E0413
+}
+
+pub fn ordinal_of_an_integer(n: U32) -> U32 {
+  n.ordinal()                                       //~ E0413
+}
+
+pub fn ordinal_of_a_bool(b: Bool) -> U32 {
+  b.ordinal()                                       //~ E0413
+}
+
+pub fn ordinal_of_a_parameter_with_no_bound[T](x: T) -> U32 {
+  x.ordinal()                                       //~ E0413
+}
+
+pub fn ordinal_of_a_parameter_with_other_bounds[T: Eq + Hash + Copy](x: T) -> U32 {
+  x.ordinal()                                       //~ E0413
+}
+
+pub fn from_ordinal_on_a_value(m: Mode) -> Option[Mode] {
+  m.from_ordinal(1)                                 //~ E0413
+}
+
+pub fn from_ordinal_on_a_literal() -> Option[Mode] {
+  Mode.On.from_ordinal(1)                           //~ E0413
+}
+
+pub fn from_ordinal_on_a_parameter[T: Ordinal + Copy](x: T) -> Option[T] {
+  x.from_ordinal(1)                                 //~ E0413
+}
+
+pub fn a_method_the_derive_does_not_make(m: Mode) -> U32 {
+  m.index()                                         //~ E0413
+}
+
+pub fn the_method_taken_as_a_value(m: Mode) {
+  let _ = m.ordinal                                 //~ E0413
+}
+
+// ---------------------------------------------------------------- E0416: a type that does not meet the bound
+
+pub fn number_of_a_plain_enum(m: Plain) -> U32 {
+  number_of(m)                                      //~ E0416
+}
+
+pub fn number_of_an_enum_with_another_list(m: JustEq) -> U32 {
+  number_of(m)                                      //~ E0416
+}
+
+pub fn number_of_an_integer(n: U32) -> U32 {
+  number_of(n)                                      //~ E0416
+}
+
+pub fn number_of_a_struct(p: Point) -> U32 {
+  number_of(p)                                      //~ E0416
+}
+
+pub fn from_number_of_a_plain_enum() -> Option[Plain] {
+  from_number(1)                                    //~ E0416
+}
+
+pub fn from_number_of_a_bool() -> Option[Bool] {
+  from_number(1)                                    //~ E0416
+}

@@ -112,7 +112,7 @@ fn sig_ty(types: &mut Types, t: T) -> TyId {
 /// What a name of [`MISSING`] is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Form {
-    /// Named through the type (`I32.default()`), or as a value (§6.1).
+    /// Named through the type (`Str.from_utf8(b)`), or as a value (§6.1).
     Function,
     /// Called on a value (`s.as_bytes()`); named through its type it is what
     /// any method is there (E0308, §15.1).
@@ -131,15 +131,6 @@ fn str_ty(t: &Ty) -> bool {
     matches!(t, Ty::Builtin(BuiltinTy::Str, _))
 }
 
-/// What has `Default` with a literal for its value (§6.3).
-fn literal_default(t: &Ty) -> bool {
-    t.is_number() || str_ty(t) || *t == Ty::Bool
-}
-
-fn bytes(t: &Ty) -> bool {
-    matches!(t, Ty::Builtin(BuiltinTy::Bytes, _))
-}
-
 /// What has a length (§4.2) this version does not give: `Bytes`, and `Array`,
 /// `Map` and `Set`, of phase 2.
 fn no_len_yet(t: &Ty) -> bool {
@@ -149,10 +140,8 @@ fn no_len_yet(t: &Ty) -> bool {
 /// Every name the spec gives a builtin type and this version has not: E0200
 /// where it is named (§18.1, R-294), not the error of a name that does not
 /// exist. The work that declares a name takes its row off (a self-test asks
-/// that no row names a member of std): `default`, W5-06.
+/// that no row names a member of std).
 const MISSING: &[Missing] = &[
-    Missing { of: literal_default, name: "default", form: Form::Function, feature: Feature::BuiltinValueName },
-    Missing { of: bytes, name: "default", form: Form::Function, feature: Feature::BuiltinName },
     Missing { of: str_ty, name: "from_utf8", form: Form::Function, feature: Feature::BuiltinName },
     Missing { of: str_ty, name: "as_bytes", form: Form::Method, feature: Feature::BuiltinName },
     Missing { of: no_len_yet, name: "len", form: Form::Method, feature: Feature::BuiltinName },

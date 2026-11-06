@@ -1,11 +1,11 @@
-pub fn default_value() -> I32 {
-  I32.default() //~ E0200
+pub fn name_length() -> U32 {
+  "lib".as_bytes().len() //~ E0200
 }
 
-pub const ONE: F32 = F32.default() //~ E0200
+pub const LENGTH: U32 = "lib".as_bytes().len() //~ E0200
 
-pub fn default_level() -> F32 {
-  F32.default() //~ E0200
+pub fn name_bytes() -> Bytes {
+  "lib".as_bytes() //~ E0200
 }
 
 pub fn bytes_of(s: Str) -> Bytes {

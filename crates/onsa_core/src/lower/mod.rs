@@ -651,6 +651,10 @@ impl<'a> Lowerer<'a> {
                     self.ensure_flow(owner)?;
                     return Ok(());
                 }
+                // U3: the bodies of what a derive makes.
+                if f.derived.is_some() {
+                    return Err(unsupported(def.name_span, Feature::DerivedMembers, &[&def.name]));
+                }
                 let ret = self.core_ty(f.ret, args, def.span)?;
                 if f.body.is_none() {
                     // `target`: declaration only.

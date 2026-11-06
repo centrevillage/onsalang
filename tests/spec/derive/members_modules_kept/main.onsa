@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.3", "§15.1", "§6.2"]
+
+// W5-06 U2/t, S-905, S-851 (spec §6.4: "`priv` のフィールドがあっても、他のモジュールから `P.default()` を呼べる"; §15.1: "`priv` のフィールドは、struct の可視性によらずモジュールの中に届く"; "見えない
+// フィールドを持つ struct は、そのフィールドが見えない場所では struct リテラルで作れず…（E0303）"; the members of a type are seen as far as the type is). The members that the derive makes, used by
+// another module: `P.default()` of a type with `priv` fields (the literal that sets the same fields is E0303 and so is a read of the field), of a generic type with a `priv` field, of a type that has no `pub` (seen in
+// the package), through `use` of the item and through the path of the module (`util.Hidden.default()`), and `ordinal` and `from_ordinal` of an enum of the module. A type that lists no derive has no
+// `default` in the other module either (E0302). The functions that return a type without `pub` have no `pub` (E0303). One error in each function (P-01). The values are in members_modules_values/.
+use util
+
+use util.{Hidden, Wrap, Plain, Mode, Internal, Phase}
+
+// ---------------------------------------------------------------- not made, and not seen
+
+pub fn a_type_with_no_derive() -> Plain {
+  Plain.default()                                   //~ E0302
+}
+
+pub fn a_type_with_no_derive_by_path() -> util.Plain {
+  util.Plain.default()                              //~ E0302
+}
+
+pub fn the_enum_has_no_default() -> Mode {
+  Mode.default()                                    //~ E0302
+}
+
+pub fn the_struct_has_no_ordinal(h: Hidden) -> U32 {
+  h.ordinal()                                       //~ E0413
+}
+
+pub fn the_private_field_of_a_parameter(h: Hidden) -> U32 {
+  h.steps                                           //~ E0303
+}
+
+pub fn the_literal_of_the_private_fields() -> Hidden {
+  Hidden { gain: 1.0, steps: 1, name: "one" }       //~ E0303
+}
