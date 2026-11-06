@@ -5,7 +5,7 @@
 
 // S-862 (1') (W5-02 U5a, §4.5: "推論で決まった型引数（項目の型パラメータと、`Buf.zeroed(4)` などの組込みの総称型の要素の型）も同じで、
 // 第二級の型か、それを含む型に決まれば、その型引数を作った式（呼び出し、メソッドの呼び出し、struct リテラル、列挙子、組込みの関連関数）の
-// 位置に E0710"; §5.3: "総称の項目の型パラメータと組込みの総称型の要素の型は、`?Escape` の型パラメータ（この版では E0200）の他は第二級の
+// 位置に E0710"; §5.3: "総称の項目の型パラメータと組込みの総称型の要素の型は、`?Escape` の型パラメータの他は第二級の
 // 型にならない"): a type parameter of an item that is decided by the argument to a `Span`, or to a type that holds one, is the E0710 of the
 // call that made the type argument, in the types stage. `fn id[T](x: T) -> T` with `id(s)` (`s: Span[F32]`) is the example of the
 // section. The value is not what the error is about (the result, a part of it, or nothing of it is used), so the forms of the argument are the
