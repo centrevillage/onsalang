@@ -7,6 +7,7 @@ pub struct FnDef {
     params: Vec<Param>,                   // Param { local, mode: Borrow|Inout|Move, ty }
     ret: Ty, sret: bool,                  // 集成体を返すなら sret = true（§12.7）
     rt: bool, locals: Vec<Local>, body: Block,
+    decl: Option<DefId>,                  // 元の宣言。`__eq` と flow の生成する関数は None（S-911）
 }
 pub enum Stmt { Let(LocalId, Expr), Assign(Place, Expr), Expr(Expr),
                 If(Expr, Block, Block), While(Expr, Block), ForRange(LocalId, Expr, Expr, Block),
