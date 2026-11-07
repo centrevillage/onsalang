@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5", "§6.2"]
+
+// In an `impl`, a `{` that is never closed in a member ends at the next start of a member on a
+// line with the same or a shallower indentation than the line of the `{` (§18.1), and the E0002
+// points at the `{` of the member (the `{` of the `impl` is closed by the last `}`). A member at
+// a shallower indentation than the line of the member ends the `impl` as well: it is an item.
+// One error in each unit; the member that stopped the unit is read and its name is seen by the
+// users at the end of the file.
+
+pub struct Gadget {
+  v: I32,
+}
+
+impl Gadget {
+  fn open_before_fn(self) -> I32 {                  //~ E0002
+    self.v
+  fn after_fn(self) -> I32 {
+    let x: Bool = 1                                 //~ E0401
+    self.v
+  }
+
+  fn open_before_pub_fn(self) -> I32 {              //~ E0002
+    self.v
+  pub fn after_pub_fn(self) -> I32 { self.v }
+
+  fn open_before_rt_fn(self) -> I32 {               //~ E0002
+    self.v
+  rt fn after_rt_fn(self) -> I32 { self.v }
+
+  fn open_before_const(self) -> I32 {               //~ E0002
+    self.v
+  const AFTER_CONST: I32 = 1
+
+  fn open_before_doc(self) -> I32 {                 //~ E0002
+    self.v
+  /// Documents the next member.
+  fn after_doc(self) -> I32 { self.v }
+
+  fn open_before_attribute_line(self) -> I32 {      //~ E0002
+    self.v
+  @fp(relaxed)
+  fn after_attribute_line(x: F32) -> F32 { x }
+
+  fn last(self) -> I32 { self.v }
+}
+
+// The `{` of an `impl` that is never closed ends at the next item of the first column.
+pub struct Second {
+  v: I32,
+}
+
+impl Second {                                       //~ E0002
+  fn kept(self) -> I32 { self.v }
+pub fn after_impl() -> I32 { 1 }
+
+pub struct Third {
+  v: I32,
+}
+
+impl Third {                                        //~ E0002
+  fn kept(self) -> I32 { self.v }
+  fn open_member(self) -> I32 { self.v }
+const AFTER_THIRD: I32 = 2
+
+fn users(g: Gadget, s: Second, t: Third) -> I32 {
+  let a = g.open_before_fn() + g.after_fn() + g.after_pub_fn() + g.after_rt_fn()
+  let b = g.after_doc() + g.last() + Gadget.AFTER_CONST + after_impl() + AFTER_THIRD
+  a + b + s.kept() + t.kept() + t.open_member()
+}
+
+fn users_of_floats() -> F32 {
+  Gadget.after_attribute_line(1.0)
+}

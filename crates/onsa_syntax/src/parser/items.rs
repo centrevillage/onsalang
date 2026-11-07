@@ -381,6 +381,9 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RBrace) {
+                if p.unit_ends_unclosed() {
+                    return Err(ParseError);
+                }
                 let docs = p.element_docs();
                 let f = p.start(NodeKind::Field)?;
                 p.attach_docs(docs);
@@ -448,6 +451,9 @@ impl<'a> Parser<'a> {
                 return Err(p.error(Code::E0002, name.span, "an enum has at least one variant (§4.4)"));
             }
             while !p.at(TokenKind::RBrace) {
+                if p.unit_ends_unclosed() {
+                    return Err(ParseError);
+                }
                 let docs = p.element_docs();
                 let v = p.start(NodeKind::Variant)?;
                 p.attach_docs(docs);
@@ -603,13 +609,12 @@ impl<'a> Parser<'a> {
             if self.at(TokenKind::LBrace) {
                 let n = self.start(NodeKind::UseNames)?;
                 self.bump();
-                let base = self.braces.len();
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
                         // The `{` is never closed and an item starts the line:
                         // the top-level recovery reports the `{` (§18.1), before
                         // a keyword is read as a name.
-                        if p.list_ends_unclosed(base) {
+                        if p.unit_ends_unclosed() {
                             return Err(ParseError);
                         }
                         // An element that is not a name (`3`, `g as h`, `_`) cuts the list here.
@@ -802,13 +807,19 @@ impl<'a> Parser<'a> {
                 // the list ends there, and the item is the next of the file
                 // (§18.1). The top-level recovery reports the `{`. A correct
                 // program closes every `{`, so its reading does not change.
-                if ctx != ItemCtx::InlineHandler && p.list_ends_unclosed(base) {
+                if ctx != ItemCtx::InlineHandler && p.unit_ends_unclosed() {
                     return Err(ParseError);
                 }
                 let start = p.peek().span.start;
                 let depth = p.open.len();
                 let item = p.start_item(doc);
-                if let Err(e) = p.parse_item(ctx, item) {
+                let around = p.unit_brackets;
+                if ctx != ItemCtx::InlineHandler {
+                    p.unit_brackets = base;
+                }
+                let read = p.parse_item(ctx, item);
+                p.unit_brackets = around;
+                if let Err(e) = read {
                     // A member is a unit of its own (spec §18.1, S-59): the
                     // list goes on after it. The handler written inside an
                     // expression is part of the unit around it.

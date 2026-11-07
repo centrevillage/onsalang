@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§18.1", "§2.5", "§12.4", "§6.5"]
+// canonical = false
+
+// The attribute of a `let` is a statement of the body, not the start of an item, in a file whose
+// every `{` is closed: the lines are at the first column, at a shallower indentation than the
+// line that opened the `{`, and the reading does not change (§2.5, §18.1). Only the syntax is
+// read (`mode = "parse"`), as in flow_syntax/mem_attribute.onsa.
+
+pub flow echo(x: F32 at sample) -> F32 at sample {
+@mem(bulk) let d = delay~(x, 4800)
+d
+}
+
+pub flow echo_nested(x: F32 at sample) -> F32 at sample {
+let a = x
+    @mem(bulk) let line = delay~(a, 4800)
+@mem(bulk) let other = delay~(line, 64)
+  other
+}
+
+pub flow echo_after_item(x: F32 at sample) -> F32 at sample {
+let y = x
+@mem(bulk) let d = delay~(y, 4800)
+d + y
+}

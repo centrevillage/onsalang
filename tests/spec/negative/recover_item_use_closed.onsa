@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// The indentation ends a `{` only where the `{` is not closed (§18.1). Every `{` below is closed,
+// so a line that starts an item in a body at the first column ends nothing: it is the one error
+// of its unit, the statement that cannot be read there, and the `}` of the unit closes the unit.
+// No E0002 says that a `{` is never closed. The units after them are read.
+
+fn use_in_body() -> I32 {
+use std.math                                        //~ E0002
+}
+
+fn use_after_statement() -> I32 {
+  1
+use std.math                                        //~ E0002
+  2
+}
+
+fn const_in_body() -> I32 {
+const X: I32 = 1                                    //~ E0002
+X
+}
+
+fn use_in_inner_block(c: Bool) -> I32 {
+  if c {
+use std.math                                        //~ E0002
+  }
+  1
+}
+
+pub struct Gadget {
+  v: I32,
+}
+
+impl Gadget {
+  fn use_in_member(self) -> I32 {
+use std.math                                        //~ E0002
+  }
+
+  fn kept(self) -> I32 { self.v }
+}
+
+fn after(g: Gadget) -> I32 {
+  let x: Bool = 1                                   //~ E0401
+  g.use_in_member() + g.kept() + use_in_body() + use_after_statement()
+}

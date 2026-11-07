@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// The same as recover_item_nested.onsa when the item that follows starts with a run of words
+// before a head, or with an attribute and its head on one line (S-487, R-281): the closed blocks
+// in the body, and a `}` at the first column that closes an inner block, do not hide the start of
+// the item, and the E0002 of the unit points at the `{` of the unit.
+
+fn open_after_if(c: Bool) -> I32 {                  //~ E0002
+  if c {
+    1
+  } else {
+    2
+  }
+export fn after_if() -> I32 { 1 }                   //~ E0002
+
+fn open_after_shifted_close(c: Bool) -> I32 {       //~ E0002
+  if c {
+    1
+  } else {
+    2
+}
+static fn after_shifted_close() -> I32 { 2 }        //~ E0002
+
+fn open_after_match(x: I32) -> I32 {                //~ E0002
+  match x {
+    0 => 1,
+    _ => 2,
+  }
+@fp(relaxed) fn after_match(y: F32) -> F32 { y }
+
+fn open_after_closure(x: I32) -> I32 {              //~ E0002
+  let f = fn(a: I32) -> I32 { a + 1 }
+  f.(x)
+public fn after_closure() -> I32 { 4 }              //~ E0002
+
+// A chain: the units that are never closed in a row, the last one stopped by a run of words.
+fn open_first() -> I32 {                            //~ E0002
+  1
+fn open_second() -> I32 {                           //~ E0002
+  2
+fn open_third() -> I32 {                            //~ E0002
+  3
+static pub fn closed_last() -> I32 { 4 }            //~ E0002
+
+fn users() -> I32 {
+  let a = after_if() + after_shifted_close() + after_closure()
+  a + open_first() + open_second() + open_third() + closed_last()
+}
+
+fn users_of_floats() -> F32 {
+  after_match(1.0)
+}

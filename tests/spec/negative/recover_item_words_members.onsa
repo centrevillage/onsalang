@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5", "§6.2"]
+
+// In an `impl`, a `{` that is never closed in a member ends at the run of words before a head
+// (the words of the other languages, as in recover_item_words.onsa) and at the start of an
+// attribute, on a line with the same or a shallower indentation than the line of the `{` of the
+// member (§18.1, S-487, S-593 row 28). The E0002 points at the `{` of the member; the `{` of the
+// `impl` is closed by the last `}`. The run of words is one more error, in the unit of the member
+// that it starts. The member that follows is read: its name is seen by the users at the end of
+// the file (no E0302).
+
+pub struct Gadget {
+  v: I32,
+}
+
+impl Gadget {
+  fn open_before_static(self) -> I32 {              //~ E0002
+    self.v
+  static fn make() -> Gadget {                      //~ E0002
+    Gadget { v: 1 }
+  }
+
+  fn open_before_public(self) -> I32 {              //~ E0002
+    self.v
+  public fn get(self) -> I32 {                      //~ E0002
+    self.v
+  }
+
+  fn open_before_two_words(self) -> I32 {           //~ E0002
+    self.v
+  public static fn two() -> I32 { 2 }               //~ E0002
+
+  fn open_before_word_pub(self) -> I32 {            //~ E0002
+    self.v
+  export pub fn pub_one(self) -> I32 { self.v }     //~ E0002
+
+  fn open_before_const(self) -> I32 {               //~ E0002
+    self.v
+  export const LIMIT: I32 = 9                       //~ E0002
+
+  fn open_before_attribute(self) -> I32 {           //~ E0002
+    self.v
+  @fp(relaxed) fn fast(x: F32) -> F32 { x }
+
+  fn open_before_doc_attribute(self) -> I32 {       //~ E0002
+    self.v
+  /// Documents the next member.
+  @fp(relaxed) pub fn faster(x: F32) -> F32 { x }
+
+  fn last(self) -> I32 { self.v }
+}
+
+fn users(g: Gadget) -> I32 {
+  let a = Gadget.make().get() + Gadget.two() + g.pub_one() + Gadget.LIMIT
+  a + g.open_before_static() + g.last()
+}
+
+fn users_of_floats() -> F32 {
+  Gadget.fast(1.0) + Gadget.faster(2.0)
+}

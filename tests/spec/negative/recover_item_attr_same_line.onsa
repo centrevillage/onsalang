@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§2.1", "§2.5"]
+
+// A `{` that is never closed ends at the start of an attribute (`@` and `#[`) on a line with the
+// same or a shallower indentation than the line of the `{`, and the E0002 points at the `{`
+// (§18.1). The attribute and the head are on the same line here: the line is the start of an
+// item, not a statement of the body that fails with E0005 (the attribute `@fp` goes on a function
+// or a flow). One error in each unit; the item after is read and checked, and its name is seen by
+// the users at the end of the file.
+
+fn open_before_fp() -> I32 {                        //~ E0002
+  1
+@fp(relaxed) fn after_fp(x: F32) -> F32 {
+  let y: Bool = 1                                   //~ E0401
+  x
+}
+
+fn open_before_fp_pub() -> I32 {                    //~ E0002
+  1
+@fp(relaxed) pub fn after_fp_pub(x: F32) -> F32 { x }
+
+fn open_before_fp_rt() -> I32 {                     //~ E0002
+  1
+@fp(relaxed) rt fn after_fp_rt(x: F32) -> F32 { x }
+
+fn open_before_two_attributes() -> I32 {            //~ E0002
+  1
+@export @fp(relaxed) pub fn after_two_attributes(x: F32) -> F32 { x }
+
+fn open_before_doc_and_attribute() -> I32 {         //~ E0002
+  1
+/// Documents the next function.
+@fp(relaxed) fn after_doc_and_attribute(x: F32) -> F32 { x }
+
+fn open_before_repr() -> I32 {                      //~ E0002
+  1
+@repr(c) struct AfterRepr {
+  v: I32,
+}
+
+fn open_before_derive() -> I32 {                    //~ E0002
+  1
+@derive(Eq) struct AfterDerive { v: I32 }           //~ E0020
+
+fn open_before_derive_enum() -> I32 {               //~ E0002
+  1
+@derive(Eq) enum AfterDeriveEnum { A, B }           //~ E0020
+
+fn open_before_derive_line() -> I32 {               //~ E0002
+  1
+@derive(Eq)                                         //~ E0020
+struct AfterDeriveLine { v: I32 }
+
+// The attribute of another language on the line of the head: the unit that is cut, and the
+// attribute that is an error of the item that it starts.
+fn open_before_hash_attribute() -> I32 {            //~ E0002
+  1
+#[inline] fn after_hash_attribute() -> I32 { 2 }    //~ E0002
+
+// An attribute on the line that follows a statement of the body, at a deeper indentation than
+// the line of the `{`, is not a start of an item of the module: see recover_item_not_start.onsa.
+
+fn users() -> F32 {
+  let a = after_fp(1.0) + after_fp_pub(1.0) + after_fp_rt(1.0)
+  a + after_two_attributes(1.0) + after_doc_and_attribute(1.0)
+}
+
+fn users_of_int() -> I32 {
+  after_hash_attribute()
+}
+
+fn users_of_types(r: AfterRepr, d: AfterDerive, l: AfterDeriveLine, e: AfterDeriveEnum) -> I32 {
+  r.v + d.v + l.v
+}

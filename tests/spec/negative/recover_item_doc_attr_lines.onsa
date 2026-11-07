@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.1", "§6.5", "§2.5"]
+
+// The start of an item is also a doc comment and the start of an attribute (§18.1), so a `{` that
+// is never closed ends at them as well. These are the forms where the line of the doc comment or
+// of the attribute holds no head (the head is on the next line; a line ends an item only where
+// the line is not an attribute, §2.5). A line of an attribute and the head on the same line is in
+// recover_item_attr_same_line.onsa. One error in each unit; the item after is read.
+
+fn open_before_doc() -> I32 {                       //~ E0002
+  1
+/// Documents the next function.
+fn after_doc() -> I32 {
+  let x: Bool = 1                                   //~ E0401
+  1
+}
+
+fn open_before_doc_lines() -> I32 {                 //~ E0002
+  1
+/// Documents the next function,
+/// in two lines.
+pub fn after_doc_lines() -> I32 { 2 }
+
+fn open_before_attribute_line() -> I32 {            //~ E0002
+  1
+@fp(relaxed)
+fn after_attribute_line(x: F32) -> F32 { x }
+
+fn open_before_two_attribute_lines() -> I32 {       //~ E0002
+  1
+@export
+@fp(relaxed)
+pub fn after_two_attribute_lines(x: F32) -> F32 { x }
+
+fn open_before_doc_and_attribute() -> I32 {         //~ E0002
+  1
+/// Documents the next function.
+@fp(relaxed)
+fn after_doc_and_attribute(x: F32) -> F32 { x }
+
+fn open_before_repr_line() -> I32 {                 //~ E0002
+  1
+@repr(c)
+struct AfterReprLine { v: I32 }
+
+// The attribute of another language: the unit that is cut is reported, and the attribute is
+// one more error, of the item that it starts (§18.1, row `#[` of the list of other languages).
+fn open_before_hash_attribute() -> I32 {            //~ E0002
+  1
+#[inline]                                           //~ E0002
+fn after_hash_attribute() -> I32 { 2 }
+
+fn users() -> I32 {
+  after_doc() + after_doc_lines() + after_hash_attribute()
+}
+
+fn users_of_floats() -> F32 {
+  after_attribute_line(1.0) + after_two_attribute_lines(2.0) + after_doc_and_attribute(3.0)
+}
+
+fn users_of_types(r: AfterReprLine) -> I32 {
+  r.v
+}

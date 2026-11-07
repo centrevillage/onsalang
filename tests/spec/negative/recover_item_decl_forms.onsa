@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§18.1", "§14.1", "§8.3"]
+
+// The same as recover_item_keywords.onsa for the items that this version reads only as far as
+// the syntax and that the check refuses with E0200 (`trait`, `effect`, `handler`, `extern`): the
+// case reads the syntax only (`mode = "parse"`), so it does not depend on how far this version
+// goes. A `{` that is never closed ends at the keyword of such an item on a line with the same
+// or a shallower indentation than the line of the `{` (§18.1), and the E0002 points at the `{`.
+
+fn open_before_trait() -> I32 {                     //~ E0002
+  1
+trait AfterTrait {
+  fn name(self) -> I32
+}
+
+fn open_before_pub_trait() -> I32 {                 //~ E0002
+  1
+pub trait AfterPubTrait {
+  fn name(self) -> I32
+}
+
+fn open_before_effect() -> I32 {                    //~ E0002
+  1
+effect AfterEffect {
+  fn ask() -> I32
+}
+
+fn open_before_extern() -> I32 {                    //~ E0002
+  1
+extern "C" lib "m" {
+  fn sin(x: F64) -> F64
+}
+
+fn open_before_pub_extern_fn() -> I32 {             //~ E0002
+  1
+pub fn after_pub_extern_fn() -> I32 { 2 }
+
+// The members of the items after the stop are read: an unclosed `{` inside a trait is a unit
+// of its own that ends at the next item.
+trait Wide {
+  fn first(self) -> I32 {                           //~ E0002
+    1
+  fn second(self) -> I32
+}
+
+fn last() -> I32 { 3 }

@@ -985,13 +985,6 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 
 # --- 71 回目: gate の自動の掃引（9357676）が見つけた修正候補の型（74c0608 でも出る）
 
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/a872709d.onsa"
-reasons = ["R-281"]
-until = "W5-11"
-note = "fix-same-place: fix|E0020|write the attribute with `…`|E0005。閉じない { の回復が、属性で始まる行を次の項目と読まず本体の文として読むので、@ の候補を当てると E0005 が残る"
-
 # --- W4-04 U5 の gate のファズが見つけた修正候補の型（事例を足してコーパスが変わった。e741747 でも出る）
 
 [[pending]]

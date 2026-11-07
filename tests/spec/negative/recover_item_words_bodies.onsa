@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5", "§4.4"]
+
+// The `{` of a `struct` or an `enum` that is never closed ends at the run of words before a head
+// (as in recover_item_words.onsa), on a line with the same or a shallower indentation than the
+// line of the `{` (§18.1, S-487): the rule is for every `{`, not for the body of a function.
+// The E0002 points at the `{`; the run of words is one more error, in the unit of the item that
+// it starts, and the item is read on (its name is seen by the users at the end of the file).
+
+struct OpenStruct {                                 //~ E0002
+  v: I32,
+  w: I32,
+export fn after_struct() -> I32 { 1 }               //~ E0002
+
+enum OpenEnum {                                     //~ E0002
+  A,
+  B(I32),
+static fn after_enum() -> I32 { 2 }                 //~ E0002
+
+struct OpenStructAttribute {                        //~ E0002
+  v: I32,
+@fp(relaxed) fn after_struct_attribute(x: F32) -> F32 { x }
+
+enum OpenEnumAttribute {                            //~ E0002
+  A,
+  B,
+@fp(relaxed) fn after_enum_attribute(x: F32) -> F32 { x }
+
+fn users() -> I32 {
+  after_struct() + after_enum()
+}
+
+fn users_of_floats() -> F32 {
+  after_struct_attribute(1.0) + after_enum_attribute(2.0)
+}

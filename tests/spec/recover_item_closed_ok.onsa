@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// canonical = false
+
+// The indentation is looked at only to recover from an error (§2.5, §18.1): when every `{` of
+// the file is closed, the reading of the program does not depend on it. The bodies and the
+// members below are at the first column, at a shallower indentation than the line that opened
+// the `{`, with the items of an `impl` that start with `pub`, `rt`, `const`, a doc comment and an
+// attribute, and with names that are words of the other languages. The file has no diagnostic.
+
+pub struct Gadget {
+v: I32,
+}
+
+impl Gadget {
+pub fn get(self) -> I32 {
+self.v
+}
+rt fn rt_get(self) -> I32 { self.v }
+const K: I32 = 1
+/// Documents the next member.
+fn doc_member(self) -> I32 {
+self.v
+}
+@fp(relaxed)
+fn fast(x: F32) -> F32 { x }
+@fp(relaxed) pub fn faster(x: F32) -> F32 { x }
+}
+
+fn low_statements(c: Bool) -> I32 {
+let a = 1
+if c {
+let b = 2
+a + b
+} else {
+a
+}
+}
+
+fn low_match(x: I32) -> I32 {
+match x {
+0 => 1,
+_ => 2,
+}
+}
+
+fn low_loop(n: I32) -> I32 {
+var i = 0
+while i < n {
+i = i + 1
+}
+i
+}
+
+fn low_closure(x: I32) -> I32 {
+let f = fn(a: I32) -> I32 {
+a + 1
+}
+f.(x)
+}
+
+// Names that are words of the other languages are names here: the line that starts with one is
+// a statement, whatever follows on the line except a head.
+fn names_of_words(x: I32) -> I32 {
+let export = x
+let public = 2
+export + public
+}
+
+fn low_literal() -> Gadget {
+Gadget {
+v: 1,
+}
+}
+
+// A body with a statement at the first column, between lines at a deeper indentation.
+pub fn mixed(c: Bool) -> I32 {
+        let a = 1
+let b = 2
+    if c {
+  a
+} else {
+            b
+    }
+}

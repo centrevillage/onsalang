@@ -365,6 +365,9 @@ impl<'a> Parser<'a> {
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RBrace) {
+                            if p.unit_ends_unclosed() {
+                                return Err(ParseError);
+                            }
                             // The rest, last (§4.4): what follows it is an
                             // E0002 of the list, as for a pattern's.
                             if p.at(TokenKind::DotDotDot) {
@@ -534,6 +537,9 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::LBrace)?;
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
+                        if p.unit_ends_unclosed() {
+                            return Err(ParseError);
+                        }
                         let a = p.start(NodeKind::MatchArm)?;
                         p.parse_pattern()?;
                         if p.eat(TokenKind::KwIf).is_some() {

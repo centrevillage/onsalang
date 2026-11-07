@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// Blocks inside the body that are closed do not change which `{` is never closed: the E0002
+// points at the `{` of the unit (§18.1), whatever the closed blocks in the body hold, and a
+// `}` that closes an inner block (even at the first column, on the line of the item that
+// follows) does not close the `{` of the unit. The unit ends at the next start of an item on a
+// line with the same or a shallower indentation than the line of the `{`.
+
+pub struct Gadget {
+  v: I32,
+}
+
+fn open_after_if(c: Bool) -> I32 {                  //~ E0002
+  if c {
+    1
+  } else {
+    2
+  }
+fn after_if() -> I32 { 1 }
+
+// A `}` at the first column closes the inner block, and the `{` of the function is still open.
+fn open_after_shifted_close(c: Bool) -> I32 {       //~ E0002
+  if c {
+    1
+  } else {
+    2
+}
+fn after_shifted_close() -> I32 { 2 }
+
+fn open_after_match(x: I32) -> I32 {                //~ E0002
+  match x {
+    0 => 1,
+    _ => 2,
+  }
+fn after_match() -> I32 { 3 }
+
+fn open_after_closure(x: I32) -> I32 {              //~ E0002
+  let f = fn(a: I32) -> I32 { a + 1 }
+  f.(x)
+fn after_closure() -> I32 { 4 }
+
+fn open_after_literal() -> Gadget {                 //~ E0002
+  let g = Gadget { v: 1 }
+  Gadget { v: g.v }
+fn after_literal() -> I32 { 5 }
+
+fn open_after_while(n: I32) -> I32 {                //~ E0002
+  var i = 0
+  while i < n {
+    i = i + 1
+  }
+  i
+pub fn after_while() -> I32 { 6 }
+
+// Two units in a row, each with a `{` that is never closed: one E0002 for each.
+fn open_first() -> I32 {                            //~ E0002
+  1
+fn open_second() -> I32 {                           //~ E0002
+  2
+fn open_third() -> I32 {                            //~ E0002
+  3
+fn closed_last() -> I32 { 4 }
+
+// A unit with an error inside its closed body, then a unit that is never closed: the first
+// error is the unit's own, and the next unit is read.
+fn bad_body() -> I32 {
+  let x: Bool = 1                                   //~ E0401
+  1
+}
+
+fn open_after_bad_body() -> I32 {                   //~ E0002
+  let y = 1
+fn after_bad_body() -> I32 {
+  let z: Bool = 1                                   //~ E0401
+  1
+}
+
+fn users() -> I32 {
+  let a = after_if() + after_shifted_close() + after_match() + after_closure()
+  let b = after_literal() + after_while() + closed_last() + after_bad_body()
+  a + b + open_first() + open_second() + open_third() + open_after_bad_body()
+}

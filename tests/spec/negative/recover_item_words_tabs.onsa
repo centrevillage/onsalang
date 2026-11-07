@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// The same as recover_item_tabs.onsa for the run of words before a head and the start of an
+// attribute with the head on its line (as in recover_item_words_members.onsa): a `{` that is never
+// closed in a member ends at the line with the same number of tabs.
+
+pub struct Gadget {
+	v: I32,
+}
+
+impl Gadget {
+	fn open_before_static(self) -> I32 {              //~ E0002
+		self.v
+	static fn make() -> Gadget {                      //~ E0002
+		Gadget { v: 1 }
+	}
+
+	fn open_before_export(self) -> I32 {              //~ E0002
+		self.v
+	export const LIMIT: I32 = 9                       //~ E0002
+
+	fn open_before_attribute(self) -> I32 {           //~ E0002
+		self.v
+	@fp(relaxed) fn fast(x: F32) -> F32 { x }
+
+	fn last(self) -> I32 { self.v }
+}
+
+fn open_tab_body() -> I32 {                         //~ E0002
+	let a = 1
+export fn after_tab_body() -> I32 { 1 }             //~ E0002
+
+fn users(g: Gadget) -> I32 {
+	let a = Gadget.make().last() + Gadget.LIMIT + after_tab_body()
+	a + g.open_before_static() + g.open_before_export()
+}
+
+fn users_of_floats() -> F32 {
+	Gadget.fast(1.0)
+}

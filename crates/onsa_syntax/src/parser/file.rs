@@ -74,18 +74,18 @@ impl<'a> Parser<'a> {
     /// in the open node. `base` is the number of brackets open around the
     /// unit (0 for a top-level item, the list's for a `member`). The unit ends:
     ///
-    /// - at a token that may start an item at the beginning of a line, once
-    ///   the brackets of the unit are closed;
+    /// - at the start of an item at the beginning of a line, once the
+    ///   brackets of the unit are closed ([`Parser::starts_an_item`]);
     /// - for a member, before the `}` that closes the list;
-    /// - at a keyword that starts an item at the beginning of a line indented
-    ///   as much as or less than every line that opened a bracket of the unit
-    ///   still open: that bracket is never closed, and the innermost of them
-    ///   gets the E0002 (§18.1 for `{`; `(` and `[` alike, S-280). The
-    ///   indentation is read only here, in a file with an error. At the end
-    ///   of the file, likewise when the reading stopped there (`expected `}`,
-    ///   found end of file`); when another error stopped it earlier (E0006,
-    ///   ...), the open brackets follow from that error and get no diagnostic
-    ///   (2026-10-08, the parent's decision).
+    /// - at such a start on a line no deeper than the brackets of the unit
+    ///   still open ([`Parser::not_deeper`]): the innermost of them gets the
+    ///   E0002 (§18.1 for `{`; `(` and `[` alike, S-280). A `{` that a `}`
+    ///   closes does not end there, and the unit reads on to its `}`; `(` and
+    ///   `[` have no such record. At the end of the file,
+    ///   likewise when the reading stopped there (`expected `}`, found end of
+    ///   file`); when another error stopped it earlier (E0006, ...), the open
+    ///   brackets follow from that error and get no diagnostic (2026-10-08,
+    ///   the parent's decision).
     ///
     /// With `line`, the unit is a finished item and the tokens after it on
     /// its line (S-274): the skip also ends at the end of that line, outside
@@ -95,6 +95,9 @@ impl<'a> Parser<'a> {
         let from = self.peek_index();
         let mut i = from;
         let mut unclosed = None;
+        // Where in `braces` the lowest bracket that may stay open is, kept
+        // as they change: reading them at every item is quadratic.
+        let mut stays_open = braces.iter().position(|&b| !self.brace_closed[b]);
         loop {
             let t = self.tokens[i];
             if t.kind == TokenKind::Eof {
@@ -108,29 +111,22 @@ impl<'a> Parser<'a> {
             if line && t.kind == TokenKind::Newline && braces.len() <= base {
                 break;
             }
-            // SPEC-GAP(S-487): a line that starts with words before a head
-            // (`export "C" fn h`, S-459) starts a declaration too, once the
-            // brackets of the unit are closed; the head is read on after
-            // the words.
-            if t.span.start > unit_start
-                && braces.len() <= base
-                && self.starts_a_line(i)
-                && self.words_before_head_at(i).is_some()
-            {
-                break;
-            }
-            if t.span.start > unit_start && self.starts_a_line(i) && is_item_start(t.kind) {
+            if t.span.start > unit_start && self.starts_a_line(i) && self.starts_an_item(i) {
                 if braces.len() <= base {
                     break;
                 }
-                let indent = self.indent(t.span.start);
-                if braces[base..].iter().all(|&b| self.indent(self.tokens[b].span.start) >= indent) {
+                if stays_open.is_some() && self.not_deeper(i, &braces[base..]) {
+                    // SPEC-GAP(S-943): which of two brackets never closed gets
+                    // the E0002: the innermost, one for all of them.
                     unclosed = braces.last().copied();
                     break;
                 }
             }
             // A `}` that closes no `{` of the member closes the list.
             let closed = crate::scan::pair(&mut braces, &self.tokens, i, base);
+            stays_open = stays_open
+                .filter(|&k| k < braces.len())
+                .or_else(|| (braces.last() == Some(&i) && !self.brace_closed[i]).then(|| braces.len() - 1));
             if closed.is_none() && t.kind == TokenKind::RBrace && member {
                 break;
             }
@@ -185,17 +181,38 @@ impl<'a> Parser<'a> {
         self.no_struct_lit = false;
     }
 
-    /// The next token starts an item at the beginning of a line indented as
-    /// much as or less than the line of the `{` of the list of members open
-    /// around it (`base` brackets), and that `{` is never closed.
-    pub(super) fn list_ends_unclosed(&self, base: usize) -> bool {
+    /// Whether the next token ends the unit being read where a `{` is never
+    /// closed, at a statement or an element of a list (§18.1, S-487, S-593):
+    /// the unit fails there with no diagnostic of its own, for the recovery
+    /// stops at the same token ([`Parser::skip_unit`]) and reports the `{`.
+    /// Any `{` open counts, of the list around too: a `}` closes the
+    /// innermost, so the `{` that lacks one is often not the unit's. A
+    /// correct program closes every `{`, so its reading does not change.
+    pub(super) fn unit_ends_unclosed(&self) -> bool {
         let i = self.peek_index();
-        let t = self.tokens[i];
-        let Some(&brace) = self.braces[..base].last() else { return false };
         self.starts_a_line(i)
-            && is_item_start(t.kind)
-            && !self.brace_closed[brace]
-            && self.indent(t.span.start) <= self.indent(self.tokens[brace].span.start)
+            && self.starts_an_item(i)
+            && self.braces.iter().any(|&b| self.tokens[b].kind == TokenKind::LBrace && !self.brace_closed[b])
+            && self.not_deeper(i, &self.braces[self.unit_brackets..])
+    }
+
+    /// Whether the line of `tokens[i]` is indented as much as or less than
+    /// every line that opened a bracket of `open`, those of the unit (§18.1).
+    /// The indentation is read only to recover, in a file with an error.
+    // SPEC-GAP(S-943): a deeper line that starts an item ends nothing, and
+    // what it gets is what the statement or the element there reads.
+    fn not_deeper(&self, i: usize, open: &[usize]) -> bool {
+        let indent = self.indent(self.tokens[i].span.start);
+        open.iter().all(|&b| self.indent(self.tokens[b].span.start) >= indent)
+    }
+
+    /// Whether `tokens[i]` starts an item, the one definition of it (§18.1,
+    /// S-593): what starts its head ([`starts_heading`]), a doc comment, or
+    /// the words before a head on the line, whatever else is read at the
+    /// token.
+    fn starts_an_item(&self, i: usize) -> bool {
+        let kind = self.tokens[i].kind;
+        starts_heading(kind) || kind.is_doc() || self.words_before_head_at(i).is_some()
     }
 
     /// Whether the next token is `kind` written at the end of a line, not at
@@ -214,6 +231,7 @@ impl<'a> Parser<'a> {
     }
 
     /// The number of blanks before the first token of the line of `at`.
+    // SPEC-GAP(S-943): a tab counts as one blank, as a space does.
     fn indent(&self, at: u32) -> usize {
         crate::lexer::indent(self.text, at).len()
     }
@@ -249,9 +267,4 @@ impl<'a> Parser<'a> {
         }
         self.report(d);
     }
-}
-
-/// A token that starts an item: what starts its head ([`starts_heading`]) or a doc comment.
-fn is_item_start(kind: TokenKind) -> bool {
-    starts_heading(kind) || kind.is_doc()
 }

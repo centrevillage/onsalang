@@ -84,6 +84,9 @@ impl<'a> Parser<'a> {
             if self.at(TokenKind::Eof) {
                 return Err(self.unexpected("`}`"));
             }
+            if self.unit_ends_unclosed() {
+                return Err(ParseError);
+            }
             self.parse_stmt()?;
             match self.peek_kind() {
                 TokenKind::Newline | TokenKind::RBrace => {}

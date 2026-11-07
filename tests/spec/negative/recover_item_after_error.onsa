@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// The recovery of an error stops at the start of an item (§18.1, S-487) where the brackets of the
+// unit are closed, whatever the head holds: the keyword of an item, an attribute, or the run of
+// words before a head. These forms keep their reading when the rule of the `{` that is never
+// closed (recover_item_words.onsa) is in. One error in each unit; the head that follows is read,
+// and its name is seen by the users at the end of the file.
+
+const A1: I32 = )                                   //~ E0002
+export fn h1() -> I32 { 1 }                         //~ E0002
+
+const A2: I32 = )                                   //~ E0002
+export "C" fn h2() -> I32 { 2 }                     //~ E0002
+
+const A3: I32 = )                                   //~ E0002
+unsafe fn h3() -> I32 { 3 }                         //~ E0002
+
+const A4: I32 = )                                   //~ E0002
+static pub fn h4() -> I32 { 4 }                     //~ E0002
+
+const A5: I32 = )                                   //~ E0002
+pub fn h5() -> I32 { 5 }
+
+const A6: I32 = )                                   //~ E0002
+@fp(relaxed) fn h6(x: F32) -> F32 { x }
+
+// The extra tokens that no item holds are one unit to the next start of an item, over lines.
+junk junk                                           //~ E0002
+export fn h7() -> I32 { 7 }                         //~ E0002
+
+junk                                                //~ E0002
+more junk
+and more junk
+fn h8() -> I32 { 8 }
+
+// An error in a member of an `impl`: the recovery of the member stops at the run of words of the
+// next member.
+struct Gadget {
+  v: I32,
+}
+
+impl Gadget {
+  const BAD: I32 = )                                //~ E0002
+  static fn make() -> Gadget {                      //~ E0002
+    Gadget { v: 1 }
+  }
+
+  const WORSE: I32 = )                              //~ E0002
+  public fn get(self) -> I32 {                      //~ E0002
+    self.v
+  }
+
+  const WORST: I32 = )                              //~ E0002
+  fn plain(self) -> I32 { self.v }
+}
+
+// A `{` that is never closed, and a visibility before a word: the visibility is the start of the
+// item, and the word is the error of the item.
+fn open_before_pub_word() -> I32 {                  //~ E0002
+  1
+pub export fn h9() -> I32 { 9 }                     //~ E0002
+
+fn users() -> I32 {
+  let a = h1() + h2() + h3() + h4() + h5() + h7() + h8() + h9()
+  a + Gadget.make().get() + Gadget.make().plain()
+}
+
+fn users_of_floats() -> F32 {
+  h6(1.0)
+}

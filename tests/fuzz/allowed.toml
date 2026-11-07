@@ -178,13 +178,6 @@ reasons = ["S-236", "R-219"]
 note = "the U+0091 (a control character, shown by its number) against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (low harm, the form of 44fc0733)"
 
 [[allowed]]
-class = "fix|E0020|write the attribute with `…`|E0005"
-left = "`…` cannot be attached to a statement other than `…`; it goes on a struct"
-input = "tests/fuzz/5dcc3cd1.onsa"
-reasons = ["S-236", "R-223"]
-note = "a `#[repr(C)]struct` cut at the end of the file in a body: the place is read as a statement; the whole struct gets the E0002 without a candidate (low harm)"
-
-[[allowed]]
 class = "fix|E0020|move it to the end of the line before|E0002"
 left = "expected a type, found `…`"
 input = "tests/fuzz/c2f67890.onsa"
@@ -548,3 +541,10 @@ left = "a callee that is no path of names is a function value; it is called with
 input = "tests/fuzz/f7c3b7b9.onsa"
 reasons = ["R-393"]
 note = "`^` at the end of a line before `x()`: the candidate makes `^x()`, an error at the same place; low, the writer still sees an error"
+
+[[allowed]]
+class = "fix|E0020|move it to the end of the line before|E0020"
+left = "a float literal needs digits on both sides of the point"
+input = "tests/fuzz/2a9aeb10.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a `*` at the head of a line, and `2.` with no digits after the point"

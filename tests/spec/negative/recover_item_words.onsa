@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// A `{` that is never closed ends at the run of words before a head, on a line with the same or
+// a shallower indentation than the line of the `{` (§18.1, S-487): the words of the other
+// languages (`export`, `public`, `static`, `async`, `unsafe`, and a name that the table of
+// keywords does not hold) before a head that can start (a visibility, `@` or `#[`, the keyword of
+// an item), as in continue_foreign_words.onsa. The E0002 of the `{` is one error and the run
+// of words is another (one for the run, whatever its length); each is in a unit of its own. The
+// item that follows the run is read on, so its name is seen by the users at the end of the file.
+
+fn open_before_export() -> I32 {                    //~ E0002
+  1
+export fn after_export() -> I32 {                   //~ E0002
+  2
+}
+
+fn open_before_static() -> I32 {                    //~ E0002
+  1
+static fn after_static() -> I32 { 3 }               //~ E0002
+
+fn open_before_public() -> I32 {                    //~ E0002
+  1
+public fn after_public() -> I32 { 4 }               //~ E0002
+
+fn open_before_async() -> I32 {                     //~ E0002
+  1
+async fn after_async() -> I32 { 5 }                 //~ E0002
+
+fn open_before_unsafe() -> I32 {                    //~ E0002
+  1
+unsafe fn after_unsafe() -> I32 { 6 }               //~ E0002
+
+fn open_before_name() -> I32 {                      //~ E0002
+  1
+inline fn after_name() -> I32 { 7 }                 //~ E0002
+
+// A run of two words, a word and a string, a word and a visibility, a word and `rt`.
+fn open_before_two_words() -> I32 {                 //~ E0002
+  1
+public static fn after_two_words() -> I32 { 8 }     //~ E0002
+
+fn open_before_word_string() -> I32 {               //~ E0002
+  1
+export "C" fn after_word_string() -> I32 { 9 }      //~ E0002
+
+fn open_before_word_pub() -> I32 {                  //~ E0002
+  1
+export pub fn after_word_pub() -> I32 { 10 }        //~ E0002
+
+fn open_before_word_rt() -> I32 {                   //~ E0002
+  1
+export rt fn after_word_rt() -> I32 { 11 }          //~ E0002
+
+// A word before the start of an attribute.
+fn open_before_word_attribute() -> I32 {            //~ E0002
+  1
+export @fp(relaxed) fn after_word_attribute(x: F32) -> F32 { x }   //~ E0002
+
+// The kinds of item after the words.
+fn open_before_word_const() -> I32 {                //~ E0002
+  1
+export const AFTER_WORD_CONST: I32 = 12             //~ E0002
+
+fn open_before_word_struct() -> I32 {               //~ E0002
+  1
+export struct AfterWordStruct {                     //~ E0002
+  v: I32,
+}
+
+fn open_before_word_enum() -> I32 {                 //~ E0002
+  1
+public enum AfterWordEnum { A, B }                  //~ E0002
+
+fn open_before_word_type() -> I32 {                 //~ E0002
+  1
+export type AfterWordType = F32                     //~ E0002
+
+// The unit of the run has a syntax error, so its body is not checked (as in
+// continue_foreign_words.onsa); a use of the item is checked against the head that was read.
+fn open_before_word_checked() -> I32 {              //~ E0002
+  1
+export fn after_word_checked(a: I32) -> I32 {       //~ E0002
+  let x: Bool = 1
+  a
+}
+
+fn wrong_use_of_word_checked() -> I32 {
+  after_word_checked(true)                          //~ E0401
+}
+
+// The users: every name above is a name of the module.
+fn users() -> I32 {
+  let a = after_export() + after_static() + after_public() + after_async() + after_unsafe()
+  let b = after_name() + after_two_words() + after_word_string() + after_word_pub()
+  let c = after_word_rt() + AFTER_WORD_CONST + after_word_checked(1)
+  a + b + c
+}
+
+fn users_of_floats() -> F32 {
+  after_word_attribute(1.0)
+}
+
+fn users_of_types(s: AfterWordStruct, e: AfterWordEnum, t: AfterWordType) -> I32 {
+  s.v
+}

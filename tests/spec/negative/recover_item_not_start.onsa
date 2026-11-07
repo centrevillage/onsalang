@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// What is not the start of an item does not end a `{` that is never closed, even on a line with
+// the same or a shallower indentation than the line of the `{` (§18.1): a statement, a word that
+// is on a line of its own, a word that is not before a head, and an attribute of a `let` on a
+// line that is indented deeper than the line of the `{`. Each unit below has one error, the
+// E0002 at the `{`, and ends at the next item of the file.
+
+// A statement at the first column: the lines of the body.
+fn open_low_statements() -> I32 {                   //~ E0002
+let a = 1
+let b = a + 1
+b
+fn after_low_statements() -> I32 { 1 }
+
+// A word of the other languages that is a name here (`export`, `public`): it ends the unit only
+// before a head on its line (recover_item_words.onsa).
+fn open_name_statements() -> I32 {                  //~ E0002
+let export = 1
+export + 1
+fn after_name_statements() -> I32 { 2 }
+
+// A word on a line of its own: the line ends the statement (§2.5), `fn` on the next line is the
+// start of the item that ends the unit.
+fn open_word_line() -> I32 {                        //~ E0002
+  1
+export
+fn after_word_line() -> I32 { 3 }
+
+fn open_word_line_public() -> I32 {                 //~ E0002
+  1
+public
+fn after_word_line_public() -> I32 { 4 }
+
+// `unsafe` before `{` is a block of the body, not a word before a head.
+fn open_unsafe_block() -> I32 {                     //~ E0002
+  1
+unsafe { 2 }
+fn after_unsafe_block() -> I32 { 5 }
+
+// The attribute of a `let` on a line deeper than the `{`: a statement of the body, and the body
+// ends at the next item of the first column.
+pub flow open_mem(x: F32 at sample) -> F32 at sample {   //~ E0002
+  @mem(bulk) let d = delay~(x, 4800)
+  d
+fn after_open_mem() -> I32 { 6 }
+
+pub flow open_mem_nested(x: F32 at sample) -> F32 at sample {   //~ E0002
+  let y = x
+    @mem(bulk) let d = delay~(y, 4800)
+    d
+pub fn after_open_mem_nested() -> I32 { 7 }
+
+// The same at the end of the file: a `{` that is never closed ends at the end of the file.
+fn users() -> I32 {
+  let a = after_low_statements() + after_name_statements() + after_word_line()
+  let b = after_word_line_public() + after_unsafe_block() + after_open_mem()
+  a + b + after_open_mem_nested()
+}
+
+fn open_at_end() -> I32 {                           //~ E0002
+  let x = 1
+let y = 2

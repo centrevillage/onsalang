@@ -5,8 +5,8 @@ use super::*;
 
 /// A token that starts the head of a declaration (§18.1): a visibility, an
 /// attribute (`@`, and `#[` of other languages, S-321) or a keyword of a
-/// declaration ([`DECLARATIONS`]). The one list (the recovery's item starts
-/// add the doc comments, `file::is_item_start`).
+/// declaration ([`DECLARATIONS`]). The one list (the start of an item adds
+/// to it, [`Parser::starts_an_item`]).
 pub(super) fn starts_heading(kind: TokenKind) -> bool {
     is_declaration_keyword(kind)
         || matches!(kind, TokenKind::KwPub | TokenKind::KwPriv | TokenKind::At | TokenKind::Hash)
@@ -95,8 +95,8 @@ pub(super) struct Declaration {
 /// The keywords that start a declaration, with the node of the declaration,
 /// how to parse it and where it may be written: the one list. `parse_item`
 /// dispatches on it and refuses a declaration out of its places, and the
-/// recovery's item starts (`file::is_item_start`) are these keywords and
-/// what may come before them.
+/// start of an item ([`Parser::starts_an_item`]) is these keywords and what
+/// may come before them.
 pub(super) const DECLARATIONS: &[Declaration] = &[
     Declaration { keyword: TokenKind::KwFn, node: NodeKind::Fn, parse: |p, c| p.parse_fn(c), places: FUNCTION_PLACES },
     Declaration { keyword: TokenKind::KwRt, node: NodeKind::Fn, parse: |p, c| p.parse_fn(c), places: FUNCTION_PLACES },

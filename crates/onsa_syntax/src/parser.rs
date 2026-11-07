@@ -235,9 +235,12 @@ pub(crate) struct Parser<'a> {
     /// indices in `tokens` (the recovery, [`Parser::skip_unit`]).
     braces: Vec<usize>,
     /// For each `{` of `tokens`, whether a `}` closes it when the brackets of
-    /// the file are paired in order (the recovery of a list of members whose
-    /// `{` is never closed, [`Parser::parse_item_body`]).
+    /// the file are paired in order (the recovery where a `{` is never
+    /// closed, [`Parser::unit_ends_unclosed`]).
     brace_closed: Vec<bool>,
+    /// How many of `braces` are open around the unit being read: what its
+    /// recovery takes as `base` ([`Parser::skip_unit`]).
+    unit_brackets: usize,
     /// The token where the recovery reported an unclosed bracket: the units
     /// around that end there too and do not report it again.
     reported_stop: Option<usize>,
@@ -336,6 +339,7 @@ impl<'a> Parser<'a> {
             no_struct_lit: false,
             braces: Vec::new(),
             brace_closed,
+            unit_brackets: 0,
             reported_stop: None,
             events: Vec::new(),
             open: Vec::new(),

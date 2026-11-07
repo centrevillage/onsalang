@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// The same as recover_item_words_bodies.onsa for the `{` of the arms of a `match` and of the fields
+// of a struct literal: a `{` that is never closed ends at the run of words before a head on a line
+// with the same or a shallower indentation than the line of the `{` (§18.1, S-487). The E0002
+// points at the `{`, and the run of words is one more error, of the item that it starts.
+
+pub struct Gadget {
+  v: I32,
+}
+
+const OPEN_ARMS: I32 = match 1 {                    //~ E0002
+  0 => 1,
+export fn after_arms() -> I32 { 1 }                 //~ E0002
+
+const OPEN_LITERAL: Gadget = Gadget {               //~ E0002
+  v: 1,
+static fn after_literal() -> I32 { 2 }              //~ E0002
+
+const OPEN_ARMS_ATTRIBUTE: I32 = match 1 {          //~ E0002
+  0 => 1,
+@fp(relaxed) fn after_arms_attribute(y: F32) -> F32 { y }
+
+fn users() -> I32 {
+  after_arms() + after_literal()
+}
+
+fn users_of_floats() -> F32 {
+  after_arms_attribute(1.0)
+}

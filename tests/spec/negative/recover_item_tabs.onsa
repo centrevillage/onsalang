@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// The indentation of a line is the tabs and spaces before its first token, and a file that uses
+// tabs only compares the lines by their number of tabs (§2.5 does not say how a tab is counted
+// against spaces, so a line of tabs is never compared with a line of spaces here). A `{` that is
+// never closed ends at the next start of an item on a line with the same or a shallower
+// indentation than the line of the `{` (§18.1). One error in each unit.
+
+pub struct Gadget {
+	v: I32,
+}
+
+impl Gadget {
+	fn open_before_fn(self) -> I32 {                   //~ E0002
+		self.v
+	fn after_fn(self) -> I32 {
+		let x: Bool = 1                                 //~ E0401
+		self.v
+	}
+
+	fn open_before_pub_fn(self) -> I32 {               //~ E0002
+		self.v
+	pub fn after_pub_fn(self) -> I32 { self.v }
+
+	fn open_before_const(self) -> I32 {                //~ E0002
+		self.v
+	const AFTER_CONST: I32 = 1
+
+	fn open_before_doc(self) -> I32 {                  //~ E0002
+		self.v
+	/// Documents the next member.
+	fn after_doc(self) -> I32 { self.v }
+
+	fn open_before_attribute_line(self) -> I32 {       //~ E0002
+		self.v
+	@fp(relaxed)
+	fn after_attribute_line(x: F32) -> F32 { x }
+
+	fn last(self) -> I32 { self.v }
+}
+
+// The body of a function, with tabs, and the next item at the first column.
+fn open_tab_body() -> I32 {                         //~ E0002
+	let a = 1
+		let b = a
+	b
+fn after_tab_body() -> I32 { 1 }
+
+fn users(g: Gadget) -> I32 {
+	let a = g.open_before_fn() + g.after_fn() + g.after_pub_fn() + g.after_doc() + g.last()
+	a + Gadget.AFTER_CONST + after_tab_body()
+}
+
+fn users_of_floats() -> F32 {
+	Gadget.after_attribute_line(1.0)
+}
