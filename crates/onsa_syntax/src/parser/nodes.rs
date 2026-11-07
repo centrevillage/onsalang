@@ -47,6 +47,45 @@ impl<'a> Parser<'a> {
         self.guard.iter_mut().for_each(|g| g.forms.truncate(s.guarded));
     }
 
+    /// Undo the reading of the tokens from `tokens[h]` on, all closed nodes
+    /// and none of them a bracket, after a failure (the recovery,
+    /// [`Parser::skip_unit`]): the nodes that opened at them go; those around
+    /// them stay, closed as not read whole. `first` is the first token of the
+    /// unit.
+    pub(super) fn unread_from(&mut self, h: usize, first: usize) {
+        let (from, first) = (self.full[h], self.full[first]);
+        let Some(cut) = self.events.iter().rposition(|e| matches!(*e, Event::Token(t) if t < from)) else {
+            return;
+        };
+        let mut opened = 0;
+        let kept: Vec<Event> = (self.events.drain(cut + 1..))
+            .filter(|e| match e {
+                Event::Start { .. } => {
+                    opened += 1;
+                    false
+                }
+                Event::Finish { .. } if opened > 0 => {
+                    opened -= 1;
+                    false
+                }
+                e => matches!(e, Event::Finish { .. }),
+            })
+            .map(|_| Event::Finish { complete: false })
+            .collect();
+        // A node of the unit that a node opened after the cut wrapped (`precede`).
+        for e in self.events.iter_mut().rev().take_while(|e| !matches!(**e, Event::Token(t) if t < first)) {
+            if let Event::Start { forward_parent, .. } = e {
+                *forward_parent = forward_parent.filter(|&p| (p as usize) <= cut);
+            }
+        }
+        self.events.extend(kept);
+        if let Event::Token(t) = self.events[cut] {
+            self.last_end = self.all[t as usize].span.end;
+        }
+        self.ends.truncate(self.ends.partition_point(|&(k, _)| k < h)); // in order
+        self.pos = h;
+    }
+
     /// Keep the reading since the snapshot.
     pub(super) fn end_trial(&mut self) {
         self.trials -= 1;

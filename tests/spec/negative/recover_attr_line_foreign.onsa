@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// (S-947 (b).) The line after a line that goes on starts with the attribute of another language (`#[inline]`, which
+// §18.1 counts as the start of an item). It ends the unit that was cut: the `{` that is never closed is
+// one error, the attribute is the other (it has no Onsa form, and no candidate, hash_attribute_no_candidate
+// in spec/foreign-forms.toml), and the item after it is read, so its user finds it (no E0302).
+
+fn f_hash() -> I32 {                                //~ E0002
+  let y = x *
+#[inline]                                           //~ E0002
+fn z_hash() -> I32 { 1 }
+fn w_hash() -> I32 { z_hash() }

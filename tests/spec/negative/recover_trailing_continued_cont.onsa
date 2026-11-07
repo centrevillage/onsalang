@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-950 (3), S-947 (b).) The tokens after the end of an item on the same line (`1 2 +`, `I32 =`) are in the unit of the item
+// (§18.1), and the line of them is a line that goes on (§2.5: it ends with `+` or `=`). The next line is the
+// continued line, so it is a part of the same unit unless it starts an item. The lines below do not start
+// an item (`3 + 4`, and `fn(` which is no start of an item): the extra tokens are one error, and not one
+// more error for each line. The unit of each item ends at the item that follows it.
+
+const K_NUMBERS: I32 = 1 2 +                        //~ E0002
+  3 + 4
+
+pub type OpTrail = I32 =                            //~ E0002
+  fn(I32) -> I32
+
+pub const K_CLOSURE: I32 = 1 2 +                    //~ E0002
+  fn(x: I32) -> I32 { x }.(1)
+
+pub fn w_trail() -> I32 { 1 }

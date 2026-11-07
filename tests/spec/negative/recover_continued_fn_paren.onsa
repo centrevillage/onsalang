@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-47.) `fn` and `rt fn` followed on the same line by `(` (a function type or an anonymous function; a
+// declaration has a name, the space and the comments between are not looked at) is not the start of an
+// item (§18.1), so the line head after a line that goes on, which a function type or an anonymous
+// function may start (§2.5), is read over by the recovery: one error in each unit (the one that is
+// there), and the item on the line after it is read, so its users find it (no E0302).
+
+fn f_closure() -> I32 {                             //~ E0002
+  let y = x *
+fn(a: I32) -> I32 { a }
+fn z_closure() -> I32 { 1 }
+fn w_closure() -> I32 { z_closure() }
+
+fn f_rt_closure() -> I32 {                          //~ E0002
+  let y: rt fn(I32) -> I32 =
+rt fn(a: I32) -> I32 { a }
+fn z_rt_closure() -> I32 { 1 }
+fn w_rt_closure() -> I32 { z_rt_closure() }
+
+fn f_space() -> I32 {                               //~ E0002
+  let y = x *
+fn (a: I32) -> I32 { a }
+fn z_space() -> I32 { 1 }
+fn w_space() -> I32 { z_space() }
+
+// The type of an alias is cut by `?` and the function type after it is read over. The error is
+// the `?` (a type is expected).
+
+type OpAlias = ? =                                  //~ E0002
+fn(I32) -> I32
+fn g_alias() -> I32 { 1 }
+fn w_alias() -> I32 { g_alias() }
+
+type OpAliasDeep = ? =                              //~ E0002
+  fn(I32) -> I32
+fn g_alias_deep() -> I32 { 1 }
+fn w_alias_deep() -> I32 { g_alias_deep() }
+
+const K_CUT: I32 = ? +                              //~ E0002
+fn(a: I32) -> I32 { a }.(1)
+fn z_const() -> I32 { 1 }
+fn w_const() -> I32 { z_const() }

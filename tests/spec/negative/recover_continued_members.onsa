@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b).) The body of a member is cut by a continuing token (`self.v +`) and its `}` is forgotten; the next
+// line starts the next member, at the indentation of the member that was cut. The line head after a line
+// that goes on is a line head (§18.1), and the bracket that is never closed ends at an item start on a
+// line indented as much as or less than the line that opened it, so the next member ends the unit of the
+// one that was cut. The error is the one that is there: the `{` of the member that was cut (one error,
+// whatever the reading stopped at), and not the `{` of the `impl`, which the final `}` closes. The next member is
+// read, so `.b()` is found (no E0413), whatever its head is (`fn`, `pub fn`, a doc comment), and a
+// member with a name close to it does not change that.
+
+struct SPlain { v: I32 }
+
+impl SPlain {
+  fn a(self) -> I32 {                               //~ E0002
+    self.v +
+  fn b(self) -> I32 { 2 }
+}
+
+fn u_plain(s: SPlain) -> I32 { s.b() }
+
+pub struct SPub { v: I32 }
+
+impl SPub {
+  pub fn a(self) -> I32 {                           //~ E0002
+    self.v +
+  pub fn b(self) -> I32 { 2 }
+}
+
+fn u_pub(s: SPub) -> I32 { s.b() }
+
+struct SDoc { v: I32 }
+
+impl SDoc {
+  fn a(self) -> I32 {                               //~ E0002
+    self.v +
+  /// the doc comment starts the member
+  fn b(self) -> I32 { 2 }
+}
+
+fn u_doc(s: SDoc) -> I32 { s.b() }
+
+struct SNear { v: I32 }
+
+impl SNear {
+  fn bb(self) -> I32 { 3 }
+  fn a(self) -> I32 {                               //~ E0002
+    self.v +
+  fn b(self) -> I32 { 2 }
+}
+
+fn u_near(s: SNear) -> I32 { s.b() }

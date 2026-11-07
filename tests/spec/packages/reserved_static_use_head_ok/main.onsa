@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1"]
+
+// (S-615, S-674.) The module whose file is named `static.onsa` (at the root, and under the directory `kp/`) is fine,
+// because the element of a `use` path before the name it takes is read as the name of a module, a keyword and
+// a reserved word too (§15.1: `use static.tick` takes `tick`; S-594). So the body names the item by the name
+// that the `use` took (`tick()`), or by the module before it (`kp.static.beat()`), and it is not E0200
+// (negative: packages/reserved_static_body_head/, where `static.tick()` stands at the head of a path of
+// a body). A `use` that takes the name `static` is E0200 (use_reserved_static/).
+
+use kp
+use kp.static.beat
+use static.tick
+
+pub fn through_the_path() -> U32 {
+  kp.static.beat() + kp.static.TICKS
+}
+
+pub fn through_the_names() -> U32 {
+  tick() + beat()
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+//
+// [[test.fix]]
+// at = "17:24"
+// code = "E0020"
+// candidate = 1
+// leaves = ["17:30 E0002"]
+
+// (S-950 (3), S-947 (b).) The type of the alias is a form of another language (`Fn<I32>`, E0020), and `=` follows it on the
+// same line. The line of the extra token goes on (§2.5), and the next line (`fn(I32) -> I32`) does not
+// start an item, so it is in the unit. What the unit has besides the E0020 of the form is the one error
+// of the extra token: the candidate (the brackets `[ ]`) leaves the E0002 of `=` (one error, and not one
+// more for the line after it).
+
+pub type OpForeign = Fn<I32> =                      //~ E0020
+  fn(I32) -> I32
+
+pub fn w_foreign() -> I32 { 1 }

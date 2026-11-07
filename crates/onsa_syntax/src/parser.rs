@@ -53,7 +53,7 @@ use crate::foreign::{self, Detached, End, Want};
 use crate::layout::Lines;
 use crate::literal::Literals;
 use crate::scan::pattern_alternative;
-use crate::starts::{declares_a_function, starts_operand};
+use crate::starts::{declares_a_function, opens_a_function_value, starts_operand};
 use crate::token::{Gap, NotAName, Token, TokenKind};
 
 mod chain;
@@ -245,6 +245,10 @@ pub(crate) struct Parser<'a> {
     /// the file are paired in order (the recovery where a `{` is never
     /// closed, [`Parser::unit_ends_unclosed`]).
     brace_closed: Vec<bool>,
+    /// The last run of lines of attributes alone the recovery walked, from
+    /// its first token to the first of the line of its item
+    /// ([`Parser::item_line`]).
+    attribute_lines: std::cell::Cell<(usize, usize)>,
     /// How many of `braces` are open around the unit being read: what its
     /// recovery takes as `base` ([`Parser::skip_unit`]).
     unit_brackets: usize,
@@ -356,6 +360,7 @@ impl<'a> Parser<'a> {
             no_struct_lit: false,
             braces: Vec::new(),
             brace_closed,
+            attribute_lines: std::cell::Cell::new((0, 0)),
             unit_brackets: 0,
             reported_stop: None,
             events: Vec::new(),

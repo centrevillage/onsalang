@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// (S-947 (b), S-459.) The line after a line that goes on starts with a run of words before a head (`export fn`,
+// §18.1): the head of the run is the start of an item, so it ends the unit that was cut. The run is one
+// E0002 (`export` is no part of the head of a declaration), and the item after it is read, so the
+// user finds `z_export`. One error in each unit: the `{` that is never closed, and the run of words.
+
+fn f_export() -> I32 {                              //~ E0002
+  let y = x *
+export fn z_export() -> I32 { 1 }                   //~ E0002
+fn w_export() -> I32 { z_export() }
+
+fn f_export_eq() -> I32 {                           //~ E0002
+  let y =
+export "C" fn z_export_c() -> I32 { 1 }             //~ E0002
+fn w_export_eq() -> I32 { z_export_c() }

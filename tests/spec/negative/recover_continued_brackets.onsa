@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-943, S-948.) A `(` or a `[` that is never closed, with a cut inside it (`1 +`, `1 *`), and an item that starts
+// the next line at the indentation of the line that opened the unit. The line head after a line that goes on is
+// a line head, so the item ends the unit; the E0002 points at the innermost bracket that is not closed at
+// the place the unit stops (the `(` or the `[`, not the `{` of the body, which a note shows), and the item
+// is read, so its users find it (no E0302).
+
+fn f_paren() -> I32 {
+  g(1 +                                             //~ E0002
+fn z_paren() -> I32 { 1 }
+fn w_paren() -> I32 { z_paren() }
+
+fn f_bracket() -> I32 {
+  let a = [1 *                                      //~ E0002
+fn z_bracket() -> I32 { 1 }
+fn w_bracket() -> I32 { z_bracket() }
+
+fn f_struct() -> I32 {
+  g(1 +                                             //~ E0002
+struct KStruct { a: I32 }
+fn w_struct(k: KStruct) -> I32 { k.a }
+
+const K_TOP: I32 = g(1 +                            //~ E0002
+fn z_top() -> I32 { 1 }
+fn w_top() -> I32 { z_top() }

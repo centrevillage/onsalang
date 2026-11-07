@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// (S-615, S-674.) The module `static.onsa` is at the root of the package, and a body names it by `static` at the head
+// of a path. `static` is a reserved word (§2.2), like `clock` and `ser`: a reserved word at the head of the
+// path of a body is E0200 in the syntax stage, at the word (not the E0302 of a name that no `use` took,
+// §15.1), and there is no fix candidate: a `use` that would take the name `static` is E0200 again
+// (use_reserved_static/), so the report has no `use` to add (`fixes = 0`). The module is reached by a
+// `use` of a name inside it (packages/reserved_static_use_head_ok/). One error in each function.
+
+pub fn call_through_the_head() -> U32 {
+  static.tick()                                     //~ E0200 @3
+}
+
+pub fn value_through_the_head() -> U32 {
+  static.TICKS                                      //~ E0200 @3
+}
+
+pub fn function_value_through_the_head() -> U32 {
+  let f = static.tick                               //~ E0200 @11
+  f.()
+}
+
+pub fn operand_through_the_head() -> U32 {
+  1 + static.tick()                                 //~ E0200 @7
+}
+
+pub fn argument_through_the_head() -> U32 {
+  twice(static.tick())                              //~ E0200 @9
+}
+
+pub fn twice(x: U32) -> U32 {
+  x + x
+}

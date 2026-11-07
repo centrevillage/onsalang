@@ -136,7 +136,7 @@ impl Lines {
 /// line of attributes goes on too, which the tokens do not show
 /// (`Parser::parse_attrs`, S-121). The one judgement, which [`code_tokens`]
 /// makes for every newline: the parser (`Parser::peek_index`), its recovery
-/// (S-47) and the table read [`Lines::goes_on`].
+/// (the tokens after an item, S-950) and the table read [`Lines::goes_on`].
 pub fn continues(before: Option<TokenKind>, prev: TokenKind, next: TokenKind) -> bool {
     use TokenKind::*;
     let binary = match prev {

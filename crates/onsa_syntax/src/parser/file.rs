@@ -75,8 +75,9 @@ impl<'a> Parser<'a> {
     /// in the open node. `base` is the number of brackets open around the
     /// unit (0 for a top-level item, the list's for a `member`). The unit ends:
     ///
-    /// - at the start of an item at the beginning of a line, once the
-    ///   brackets of the unit are closed ([`Parser::starts_an_item`]);
+    /// - at the start of an item at the head of a line, also of one that goes
+    ///   on with the line before it (S-947), once the brackets of the unit
+    ///   are closed ([`Parser::starts_an_item`]);
     /// - for a member, before the `}` that closes the list;
     /// - with a bracket that may stay open, at such a start on a line no deeper
     ///   than the brackets of the unit open there ([`Parser::ends_open`]); a
@@ -91,24 +92,52 @@ impl<'a> Parser<'a> {
     ///
     /// With `line`, the unit is a finished item and the tokens after it on
     /// its line (S-274): the skip also ends at the end of that line, outside
-    /// the brackets it opens.
+    /// the brackets it opens, the line going on as §2.5 reads (S-950).
     pub(super) fn skip_unit(&mut self, unit_start: u32, base: usize, member: bool, line: bool) {
         let mut braces = self.braces.clone();
-        let from = self.peek_index();
-        let mut i = from;
         // Where in `braces` the lowest bracket that may stay open is, kept
         // as they change: reading them at every item is quadratic.
         let mut stays_open = braces.iter().position(|&b| !self.brace_closed[b]);
+        // An item that starts at the head of the line of the failure, or of
+        // the lines of its doc comments and attributes alone right before it,
+        // which the reading read on from (`export` of `export fn h`, S-947),
+        // on a line that goes on with the one before or in a bracket (not the
+        // line of the head after its attributes): the unit ends there, the
+        // reading of it undone.
+        let first = self.tokens.partition_point(|t| t.span.start < unit_start);
+        let mut head = (first..=self.peek_index()).rev().find(|&k| self.lines.at_line_head(k));
+        while let Some(line) = head.and_then(|h| self.line_before(h, first))
+            && (self.tokens[line].kind.is_doc() || self.attributes_alone(line).is_some())
+        {
+            head = Some(line);
+        }
+        if let Some(head) = head.filter(|&h| h < self.pos)
+            && crate::scan::balanced(&self.tokens[head..self.pos])
+            && self.unit_ends_at(head, unit_start, base, &braces, stays_open.is_some())
+            && (braces.len() > base || self.lines.goes_on(head - 1))
+        {
+            self.unread_from(head, first);
+        }
+        // From the cursor: a doc comment that the reading passed as trivia
+        // (on a line that goes on with the one before) starts an item (S-947).
+        let from = self.pos;
+        let mut i = from;
+        // The last attribute that closes on its line: a line that ends with
+        // it goes on (§2.5).
+        let mut attribute = None;
         loop {
             let t = self.tokens[i];
-            if t.kind == TokenKind::Eof || (line && t.kind == TokenKind::Newline && braces.len() <= base) {
+            let line_ends = t.kind == TokenKind::Newline
+                && braces.len() <= base
+                && !self.lines.goes_on(i)
+                && !attribute.is_some_and(|e: usize| self.tokens[e + 1..i].iter().all(|c| c.kind.is_comment()));
+            if t.kind == TokenKind::Eof || (line && line_ends) {
                 break;
             }
-            if t.span.start > unit_start
-                && self.starts_a_line(i)
-                && self.starts_an_item(i)
-                && (braces.len() <= base || (stays_open.is_some() && self.ends_open(i, &braces[base..])))
-            {
+            if line && matches!(t.kind, TokenKind::At | TokenKind::Hash) {
+                attribute = self.attribute_end(i);
+            }
+            if self.unit_ends_at(i, unit_start, base, &braces, stays_open.is_some()) {
                 break;
             }
             // A `}` that closes no `{` of the member closes the list.
@@ -141,9 +170,8 @@ impl<'a> Parser<'a> {
             }
         } else if self.tokens[i].kind != TokenKind::Eof {
             // It is reported where the unit stops (`fn f(` before the next
-            // `fn`), so that it is of the unit (`crate::units`).
-            // SPEC-GAP(S-276): the position of an error found at the token that
-            // starts the next item: the end of the unit, as an empty span.
+            // `fn`), so that it is of the unit (`crate::units`): at the end of
+            // the unit, as an empty span (§18.1, S-276).
             let end = Span::new(self.file, self.last_end, self.last_end);
             for d in &mut self.diagnostics[first_at_stop..] {
                 d.span = end;
@@ -168,6 +196,23 @@ impl<'a> Parser<'a> {
         self.no_struct_lit = false;
     }
 
+    /// The first token of the line of code before the line of `tokens[h]`
+    /// (blank lines passed), from `first` on.
+    fn line_before(&self, h: usize, first: usize) -> Option<usize> {
+        let last = (first..h).rev().find(|&k| self.tokens[k].kind != TokenKind::Newline)?;
+        (first..=last).rev().find(|&k| self.lines.at_line_head(k))
+    }
+
+    /// Whether the unit from `unit_start` ends at `tokens[i]`, with `braces`
+    /// open there, `base` of them around the unit, and one that may stay
+    /// open among them if `stays_open` ([`Parser::skip_unit`]).
+    fn unit_ends_at(&self, i: usize, unit_start: u32, base: usize, braces: &[usize], stays_open: bool) -> bool {
+        self.tokens[i].span.start > unit_start
+            && self.lines.at_line_head(i)
+            && self.starts_an_item(i)
+            && (braces.len() <= base || (stays_open && self.ends_open(i, &braces[base..])))
+    }
+
     /// Whether the next token ends the unit being read where a `{` is never
     /// closed, at a statement or an element of a list (§18.1, S-487, S-593):
     /// the unit fails there with no diagnostic of its own, for the recovery
@@ -175,10 +220,20 @@ impl<'a> Parser<'a> {
     /// A correct program closes every `{`, so its reading does not change.
     pub(super) fn unit_ends_unclosed(&self) -> bool {
         let i = self.peek_index();
-        self.starts_a_line(i)
+        self.lines.at_line_head(i)
             && self.starts_an_item(i)
             && self.braces.iter().any(|&b| self.tokens[b].kind == TokenKind::LBrace && !self.brace_closed[b])
             && self.ends_open(i, &self.braces[self.unit_brackets..])
+    }
+
+    /// [`Parser::unit_ends_unclosed`] with the brackets of the unit around
+    /// the member read (those of the file: a list of members is of a
+    /// top-level item), as the list asks it at the start of a member.
+    pub(super) fn list_ends_unclosed(&mut self) -> bool {
+        let member = std::mem::replace(&mut self.unit_brackets, 0);
+        let ends = self.unit_ends_unclosed();
+        self.unit_brackets = member;
+        ends
     }
 
     /// Whether an item that starts `tokens[i]` ends a unit with the brackets
@@ -187,8 +242,38 @@ impl<'a> Parser<'a> {
     /// The one judgment of the reading and the recovery; the indentation is
     /// read only in a file with an error, and never to pair the brackets (S-948).
     fn ends_open(&self, i: usize, open: &[usize]) -> bool {
-        let indent = self.indent(self.tokens[i].span.start);
+        let indent = self.indent(self.tokens[self.item_line(i)].span.start);
         open.iter().all(|&b| self.indent(self.tokens[b].span.start) >= indent)
+    }
+
+    /// The first token of the line that an item starting at `tokens[i]`, at
+    /// the head of a line, is measured at (§18.1, S-947): past the lines of
+    /// attributes alone (`@name`, `@name(…)` and `#[…]`, closed on their
+    /// line), that of the item they are of. The last run walked is kept, so
+    /// a skip asks at each of its lines in linear time.
+    fn item_line(&self, i: usize) -> usize {
+        let (from, line) = self.attribute_lines.get();
+        if (from..line).contains(&i) {
+            return line;
+        }
+        let mut line = i;
+        while let Some(end) = self.attributes_alone(line) {
+            line = self.next_code(end);
+        }
+        self.attribute_lines.set((i, line));
+        line
+    }
+
+    /// The last token of the line of `tokens[k]` when from `k` on it has
+    /// attributes alone, each closed on the line ([`Parser::attribute_end`]).
+    fn attributes_alone(&self, mut k: usize) -> Option<usize> {
+        loop {
+            let end = self.attribute_end(k)?;
+            match self.on_line_after(end) {
+                Some(next) => k = next,
+                None => return Some(end),
+            }
+        }
     }
 
     /// Whether the brackets of the unit from `from` to `to` cannot be
@@ -211,12 +296,20 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether `tokens[i]` starts an item, the one definition of it (§18.1,
-    /// S-593): what starts its head ([`starts_heading`]), a doc comment, or
-    /// the words before a head on the line, whatever else is read at the
-    /// token.
+    /// S-593): what starts its head ([`starts_heading`]) but `fn(` and `rt
+    /// fn(` (S-947), a doc comment, or the words before a head on the line,
+    /// whatever else is read at the token.
     fn starts_an_item(&self, i: usize) -> bool {
         let kind = self.tokens[i].kind;
-        starts_heading(kind) || kind.is_doc() || self.words_before_head_at(i).is_some()
+        (starts_heading(kind) && !self.function_value_at(i)) || kind.is_doc() || self.words_before_head_at(i).is_some()
+    }
+
+    /// Whether `fn` at `tokens[i]`, or after the `rt` there on its line, opens
+    /// a function type or an anonymous function ([`opens_a_function_value`]).
+    fn function_value_at(&self, i: usize) -> bool {
+        let f = if self.tokens[i].kind == TokenKind::KwRt { self.on_line_after(i) } else { Some(i) };
+        let next = |f| self.on_line_after(f).map(|n| self.tokens[n].kind);
+        f.is_some_and(|f| opens_a_function_value(self.tokens[f].kind, next(f)))
     }
 
     /// Whether the next token is `kind` written at the end of a line, not at
@@ -225,13 +318,6 @@ impl<'a> Parser<'a> {
     pub(super) fn at_line_end(&self, kind: TokenKind) -> bool {
         let i = self.peek_index();
         self.tokens[i].kind == kind && !self.lines.at_line_head(i)
-    }
-
-    /// Whether `tokens[i]` starts a line that does not go on with the line
-    /// before it: the recovery takes an item keyword there as the start of
-    /// the next unit (S-47: `fn(I32) -> I32` after `type Op =` does not start one).
-    fn starts_a_line(&self, i: usize) -> bool {
-        i == 0 || (self.tokens[i - 1].kind == TokenKind::Newline && !self.lines.goes_on(i - 1))
     }
 
     /// The number of blanks before the first token of the line of `at`; a

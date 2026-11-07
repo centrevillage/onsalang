@@ -105,10 +105,25 @@ impl<'a> Parser<'a> {
         let noted = noted.or(value_bang.then_some((t, super::expressions::MARK_RULE)));
         // A reserved word, where nothing of this version takes it: its E0200
         // where it is read, instead of the general E0002 (§2.2, S-169, S-371).
+        // SPEC-GAP(S-620): `static NAME: T = e` of other languages is this
+        // E0200 at `static`, as §2.2 reads.
         let shown = noted.map_or(t, |(found, _)| found);
         if let Some(feature) = shown.kind.reserved() {
             let word = self.token_text(shown);
-            let d = feature.diagnostic(Stage::Syntax, shown.span, &[]).with_found(word.to_string());
+            let mut d = feature.diagnostic(Stage::Syntax, shown.span, &[]).with_found(word.to_string());
+            // A path of a body that starts with it, where an operand is read
+            // (`static.tick()`, S-674): a module of that name is read through
+            // a `use` of its first name, and the path goes on from that name.
+            let is = |k: Option<usize>, kind| k.filter(|&k| self.tokens[k].kind == kind);
+            let link =
+                |k| is(is(self.on_line_after(k), TokenKind::Dot).and_then(|d| self.on_line_after(d)), TokenKind::Ident);
+            if let Some(name) = link(at).filter(|_| shown == t && want == Want::Expr) {
+                let last = std::iter::successors(Some(name), |&k| link(k)).last().unwrap_or(name);
+                let call = if is(self.on_line_after(last), TokenKind::LParen).is_some() { "()" } else { "" };
+                let (first, path) =
+                    (self.token_text(self.tokens[name]), self.src(self.tokens[name].span.to(self.tokens[last].span)));
+                d = d.with_rule(format!("a path in a body does not start with the reserved word `{word}`; a module of that name is reached through a `use`: `use {word}.{first}`, then `{path}{call}` (§2.2, §15.1)"));
+            }
             self.report(d);
             return resume;
         }

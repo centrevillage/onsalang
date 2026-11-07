@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b).) The cut is in the value of an arm of a `match`, and in the default value of a field of a `struct`; the
+// next line starts an item at the indentation of the line that opened the unit. The line head after a
+// line that goes on is a line head, so the item ends the unit; the E0002 points at the innermost bracket
+// that is never closed at the place the unit stops (the `{` of the `match`, the `{` of the `struct`), and the
+// item is read, so its users find it (no E0302).
+
+fn f_match(x: I32) -> I32 {
+  match x {                                         //~ E0002
+    0 => 1 +
+fn z_match() -> I32 { 1 }
+fn w_match() -> I32 { z_match() }
+
+struct PDefault {                                   //~ E0002
+  v: I32 =
+fn z_default() -> I32 { 1 }
+fn w_default() -> I32 { z_default() }

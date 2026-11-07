@@ -540,17 +540,166 @@ fn an_unclosed_brace_ends_at_an_item_keyword_indented_as_its_line() {
 }
 
 #[test]
-fn the_recovery_does_not_start_a_unit_on_a_continued_line() {
-    // S-47: after a line that ends with `=`, a line that starts with `fn`
-    // goes on with it (a function type), so the skip of the unit with the
-    // error does not end there; it ends at `fn g`.
-    let p = parse("type Op = ? =\nfn(I32) -> I32\nfn g() {}\n");
+fn the_recovery_does_not_start_a_unit_at_fn_and_a_parenthesis() {
+    // S-947: `fn(` and `rt fn(` (a function type, an anonymous function) have
+    // no name and start no item, on a line that goes on with the one before
+    // or not, `fn (` too: the skip of the unit with the error ends at `fn g`.
+    for src in [
+        "type Op = ? =\nfn(I32) -> I32\nfn g() {}\n",
+        "type Op = ?\nfn(I32) -> I32\nfn g() {}\n",
+        "type Op = ? =\nfn (I32) -> I32\nfn g() {}\n",
+        "type Op = ?\nrt fn /* c */ (I32) -> I32\nfn g() {}\n",
+    ] {
+        let p = parse(src);
+        assert_eq!(codes_of(&p), [Code::E0002], "{src:?}: {:?}", p.diagnostics);
+        assert!(dump(&p.ast).contains("(fn g()"), "{src:?}");
+    }
+    // A line that does not go on is the next unit, as before, and so is one
+    // that goes on, at an item (`fn z`, S-947).
+    for src in ["type Op = ?\nfn g() {}\n", "type Op = ? =\nfn g() {}\n"] {
+        let p = parse(src);
+        assert_eq!(codes_of(&p), [Code::E0002], "{src:?}");
+        assert!(dump(&p.ast).contains("(fn g()"), "{src:?}");
+    }
+}
+
+#[test]
+fn the_recovery_ends_at_an_item_on_a_continued_line_and_after_a_type_cut() {
+    // S-947, R-396, S-950: an item at the head of a line that goes on with
+    // the line before ends the unit with the error; the reading of a type
+    // fails at the `fn` (`rt`) of `fn z`; the tokens after an item end at
+    // the end of a line that goes on there too. One E0002, and `z` is read.
+    for src in [
+        "fn f() -> I32 {\n  let y = x *\nfn z() -> I32 { 1 }\n",
+        "fn f() -> I32 {\n  let g = fn(x: I32) ->\nfn z() -> I32 { 1 }\n",
+        "struct P {\n  v:\nrt fn z() -> I32 { 1 }\n",
+        "type Op =\nfn z() -> I32 { 1 }\n",
+        "pub type Op = I32 =\nfn(I32) -> I32\nfn z() -> I32 { 1 }\n",
+        "pub type Op = I32 =\nfn z() -> I32 { 1 }\n",
+    ] {
+        let p = parse(src);
+        assert_eq!(codes_of(&p), [Code::E0002], "{src:?}: {:?}", p.diagnostics);
+        assert!(dump(&p.ast).contains("fn z()"), "{src:?}: {}", dump(&p.ast));
+    }
+}
+
+/// A sample of the grid of the breaking side of W5-11 U9 (S-947, R-396,
+/// S-950): a unit cut at the end of a line, after a token that goes on (§2.5)
+/// or a `,` in a bracket, in one of the contexts, and at the head of the next
+/// line the head of an item `z`, then an item `w` that uses it. The unit ends
+/// at the head of `z` (a run of words before a head, an attribute or a doc
+/// comment included, the first of their lines, §18.1), so `z` and `w` are
+/// items of the file, and the tree holds the text as it is. The pairs
+/// of a context and a head are fixed; the whole grid is the breaking side's.
+#[test]
+fn an_item_after_a_cut_line_is_read_on_a_sample_of_contexts_and_heads() {
+    let contexts = [
+        "fn f() -> I32 {\n  let y = x {T}\n",
+        "fn f() -> I32 {\n  x {T}\n",
+        "fn f(a: I32) -> I32 {\n  match a {\n    A |\n",
+        "fn f() -> I32 {\n  let (x |\n",
+        "fn f(a: I32) -> I32 {\n  match a {\n    A => x {T}\n",
+        "fn f(a: I32) -> I32 {\n  match a {\n    A if b {T}\n",
+        "pub type Op = I32 {T}\n",
+        "fn f(a: I32 {T}\n",
+        "fn f() -> I32 {T}\n",
+        "struct S {\n  a: I32 {T}\n",
+        "const K: I32 = 1 {T}\n",
+        "fn f() -> I32 {\n  if a {T}\n",
+        "fn f() -> I32 {\n  for i in 0 {T}\n",
+        "impl P {\n  fn m(self) -> I32 {\n    x {T}\n",
+        "fn f() -> I32 {\n  let y = [1,\n",
+        "fn f() -> I32 {\n  let y = g(1,\n",
+    ];
+    let tokens = ["*", "|", "=", "->", "..<", "&&", "+%", ">>", "==", "&"];
+    let heads = [
+        "export fn z() {}",
+        "unsafe fn z() {}",
+        "export \"C\" fn z() {}",
+        "foo fn z() {}",
+        "foo bar fn z() {}",
+        "static fn z() {}",
+        "pub fn z() {}",
+        "fn z() {}",
+        "rt fn z() {}",
+        "/// d\nfn z() {}",
+        "@fp(relaxed)\nfn z() {}",
+        "/// d\n@fp(relaxed)\nfn z() {}",
+        "@fp(relaxed)\n@fp(relaxed)\nfn z() {}",
+    ];
+    let mut cases = 0;
+    for (c, context) in contexts.iter().enumerate() {
+        for (h, head) in heads.iter().enumerate().filter(|(h, _)| (c + h) % 2 == 0) {
+            let src =
+                format!("{}{head}\nfn w() {{ z() }}\n", context.replace("{T}", tokens[(3 * c + h) % tokens.len()]));
+            let p = parse(&src);
+            let items: Vec<(&str, usize)> = (p.ast.root.iter())
+                .filter_map(|&id| match &p.ast.item(id).kind {
+                    crate::ast::ItemKind::Fn(f) => Some((f.name.name.as_str(), p.ast.item(id).attrs.len())),
+                    _ => None,
+                })
+                .collect();
+            // `z` with its attributes, and its doc comment documents it (no E0004).
+            let z = (items.iter()).any(|&(name, attrs)| name == "z" && attrs == head.matches('@').count());
+            let documented = !p.diagnostics.iter().any(|d| d.code == Code::E0004);
+            assert!(z && documented && items.iter().any(|i| i.0 == "w"), "{src:?}: {items:?} {:?}", p.diagnostics);
+            // The tree holds the text as it is (what the reading undone left).
+            assert_eq!(p.cst.text(&src), src);
+            p.cst.validate(&src).unwrap_or_else(|e| panic!("{src:?}: {e:?}"));
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 104);
+}
+
+#[test]
+fn the_recovery_does_not_end_a_unit_at_the_line_of_the_head_it_read() {
+    // S-947: the line of the head after its attributes does not go on with
+    // the line before (§2.5): it is of the unit read, which ends at the next
+    // item, two units in all.
+    for src in ["@fp(relaxed)\npub fn z( {\nfn w() {}\n", "#[derive(Eq)]\npub struct {\n  id: U32,\n}\nfn w() {}\n"] {
+        let p = parse(src);
+        assert_eq!(p.units.list.len(), 2, "{src:?}: {:?} {:?}", p.units.list, p.diagnostics);
+    }
+}
+
+#[test]
+fn an_item_after_the_attributes_of_a_member_ends_a_list_never_closed() {
+    // §18.1, §2.5: the line after a member line that ends with attributes
+    // goes on, and an item at its head as deep as the `{` ends the list of
+    // the `{` never closed (an attribute over two lines too, whose unit has
+    // an error of its own); a deeper one is a member.
+    let canary = |p: &crate::Parsed| {
+        (p.ast.root.iter())
+            .any(|&id| matches!(&p.ast.item(id).kind, crate::ast::ItemKind::Fn(f) if f.name.name == "canary"))
+    };
+    for list in
+        ["impl S {\n  fn n(self) -> I32 { 1 }\n", "trait T {\n  fn n(self) -> I32\n", "effect E {\n  fn n() -> I32\n"]
+    {
+        for line in ["  x @a\n", "  x @fp(relaxed)\n", "  @fp(\n    relaxed)\n"] {
+            let src = format!("{list}{line}fn canary() -> I32 {{ 1 }}\n");
+            let p = parse(&src);
+            assert!(canary(&p), "{src:?}: {:?}", p.diagnostics);
+            let deeper = format!("{list}{line}  fn canary() -> I32 {{ 1 }}\n");
+            assert!(!canary(&parse(&deeper)), "{deeper:?}");
+        }
+    }
+}
+
+#[test]
+fn a_line_of_attributes_alone_is_measured_at_the_line_of_its_item() {
+    // §18.1, S-947 (947-2): the lines `@fp(relaxed)` and `#[inline]` start
+    // the item `canary` of the file, at the indentation of its `fn`: the
+    // members' `{` and the `impl`'s end there, the innermost reported.
+    let src = "impl S {\n  fn a(self) -> I32 {\n    1\n  @fp(relaxed)\n  @fp(relaxed)\nfn canary() {}\n";
+    let p = parse(src);
     assert_eq!(codes_of(&p), [Code::E0002], "{:?}", p.diagnostics);
-    assert!(dump(&p.ast).contains("(fn g()"));
-    // A line that does not go on is the next unit, as before.
-    let p = parse("type Op = ?\nfn g() {}\n");
-    assert_eq!(codes_of(&p), [Code::E0002]);
-    assert!(dump(&p.ast).contains("(fn g()"));
+    assert_eq!(p.diagnostics[0].span.start, src.find("{\n    1").unwrap() as u32);
+    assert!(dump(&p.ast).contains("\n(@fp(relaxed) @fp(relaxed) fn canary()"), "{}", dump(&p.ast));
+    // Measured at the line of `fn b`, as deep as the member: it is one.
+    let src = "impl S {\n  fn a(self) -> I32 {\n    1\n@fp(relaxed)\n  fn b(self) {}\n}\n";
+    let d = dump(&parse(src).ast);
+    assert!(d.contains("fn b(self)") && !d.contains("\n(@fp"), "{d}");
 }
 
 #[test]

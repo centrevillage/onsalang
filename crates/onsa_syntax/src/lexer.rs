@@ -1201,8 +1201,8 @@ mod tests {
 
     #[test]
     fn the_reserved_words_are_keywords() {
-        assert_eq!(kinds("clock when reset_if ser").0, vec![KwClock, KwWhen, KwResetIf, KwSer, Eof]);
-        assert!(KwClock.reserved().is_some() && KwSer.reserved().is_some());
+        assert_eq!(kinds("clock when reset_if ser static").0, vec![KwClock, KwWhen, KwResetIf, KwSer, KwStatic, Eof]);
+        assert!(KwClock.reserved().is_some() && KwSer.reserved().is_some() && KwStatic.reserved().is_some());
     }
 
     #[test]

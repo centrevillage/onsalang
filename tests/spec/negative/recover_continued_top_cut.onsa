@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-276.) The top-level item whose expression or type is cut (the line ends with `+`, `*`, `=`) and
+// the line after it starts an item. The line head after a line that goes on is a line head (§18.1), so
+// the item ends the unit: the cut expression is one E0002 (on the last token of the unit, where the
+// expression is missing, S-276), and the item is read, so the names it declares are seen by the users
+// below (no E0302). The brackets of the unit are closed, so the indentation is not looked at.
+
+const K_PLUS: I32 = 1 +                             //~ E0002
+fn z_plus() -> I32 { 1 }
+fn w_plus() -> I32 { z_plus() }
+
+const K_STRUCT: I32 = 1 +                           //~ E0002
+struct PStruct { a: I32 }
+fn w_struct(p: PStruct) -> I32 { p.a }
+
+const K_DOC: I32 = 1 *                              //~ E0002
+/// the doc comment starts the item
+fn z_doc() -> I32 { 1 }
+fn w_doc() -> I32 { z_doc() }
+
+const K_EQ: I32 =                                   //~ E0002
+pub fn z_eq() -> I32 { 1 }
+fn w_eq() -> I32 { z_eq() }
+
+type OpAliasTop =                                   //~ E0002
+struct KAlias { a: I32 }
+fn w_alias(k: KAlias) -> I32 { k.a }
+
+fn g_arrow() ->                                     //~ E0002
+struct KArrow { a: I32 }
+fn w_arrow(k: KArrow) -> I32 { k.a }

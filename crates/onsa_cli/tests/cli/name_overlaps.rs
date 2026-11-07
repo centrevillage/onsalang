@@ -461,6 +461,57 @@ fn heads_have_no_use_candidate(tag: &str, heads: &[&str]) {
     }
 }
 
+/// §2.2, S-674: a body path whose head is a reserved word (`static.tick()`, `clock.tick()`,
+/// `ser.tick()`) is the E0200 of the syntax stage at the word, with no candidate, and its note shows
+/// the `use` that reaches a module of that name, `use static.tick`, and then the call `tick()`: of the
+/// first name after the word, with the rest of the path kept (`static.a.b()`), a comment passed. Only
+/// where an operand is read: the name of a declaration, a field, a parameter, a pattern or a type has
+/// no such note, nor a word whose `.` has no name after it.
+#[test]
+fn a_body_path_whose_head_is_a_reserved_word_notes_the_use_that_reaches_it() {
+    let notes = |text: &str| {
+        let out = test_support::sweep::check_input_out(&onsa_driver::PackageInput::single_file("main.onsa", text));
+        assert_eq!(out.code, 1, "{text}: {}{}", out.stdout, out.stderr);
+        let doc: Value = serde_json::from_str(&out.stdout).expect("a document");
+        let ds = diagnostics(&doc).to_vec();
+        assert!(ds.iter().any(|d| str_of(d, "code") == "E0200" && fixes_of(d) == 0), "{text}: {doc}");
+        let notes = ds.iter().flat_map(|d| d["notes"].as_array().cloned().into_iter().flatten());
+        notes
+            .filter_map(|n| n["message"].as_str().map(str::to_string))
+            .filter(|n| n.contains("`use "))
+            .collect::<Vec<_>>()
+    };
+    let body = |line: &str| format!("pub fn f(a: I32) -> I32 {{\n  {line}\n}}\n");
+    for word in ["static", "clock", "ser"] {
+        for (line, shown) in [
+            (format!("{word}.tick()"), format!("`use {word}.tick`, then `tick()`")),
+            (format!("g({word}.tick())"), format!("`use {word}.tick`, then `tick()`")),
+            (format!("{word}.a.b()"), format!("`use {word}.a`, then `a.b()`")),
+            (format!("{word}./* c */tick()"), format!("`use {word}.tick`, then `tick()`")),
+            (format!("1 + {word}.rate"), format!("`use {word}.rate`, then `rate`")),
+        ] {
+            let found = notes(&body(&line));
+            assert!(found.len() == 1 && found[0].contains(&shown), "{line}: {found:?}");
+        }
+        for text in [
+            body(&format!("{word} + 1")),
+            body(&format!("{word}.1")),
+            body(&format!("{word}.\"a\"")),
+            body(&format!("let {word}.x = 1")),
+            body(&format!("match a {{\n    {word}.A => 1\n  }}")),
+            format!("pub fn {word}.init() -> I32 {{ 1 }}\n"),
+            format!("enum E {{ {word}.A }}\n"),
+            format!("pub fn f({word}.x: I32) -> I32 {{ 1 }}\n"),
+            format!("struct S {{ {word}.x: I32 }}\n"),
+            format!("impl {word}.T {{}}\n"),
+            format!("pub fn f(a: {word}.T) -> I32 {{ 1 }}\n"),
+            format!("{word}.f()\n"),
+        ] {
+            assert_eq!(notes(&text), Vec::<String>::new(), "{text}");
+        }
+    }
+}
+
 // ---- the name of an E0304 or an E0305 is drawn from neither declaration (S-675, S-677, S-680) ---------
 
 /// A function that has a statement for each of `exprs`, each of which gives a `Bool` where the name

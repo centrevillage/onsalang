@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-950 (3).) The tokens after the end of an item on the same line are in the unit of the item (§18.1), and a
+// line that ends with an attribute goes on (§2.5: "行末が…属性…の場合…は継続する"), so the next line is a
+// part of the same unit unless it starts an item. The extra tokens are one error, and not one more for the
+// next line.
+
+pub type OpAttr = I32 @fp(relaxed)                  //~ E0002
+  x + 1
+
+pub fn w_attr() -> I32 { 1 }

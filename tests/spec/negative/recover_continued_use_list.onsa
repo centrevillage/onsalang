@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b).) The list of a `use` is cut after a `,` (no continuing token, §2.5) and the next line starts an item
+// at the indentation of the `use`: the item ends the unit (§18.1) and is read, so its user finds it. The
+// `{` of the list is the one error. (A `use` that failed hides the names it might have taken, so this case
+// has no other unit.)
+
+use std.math.{sin,                                  //~ E0002
+fn z_use() -> I32 { 1 }
+fn w_use() -> I32 { z_use() }

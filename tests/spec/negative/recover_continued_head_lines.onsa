@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.1", "§6.5"]
+// fixes = 0
+
+// (S-947 (b), W5-11 U9 の壊す側の再確認の F-A.) A list in a bracket that is never closed is cut after a `,`, and
+// the item after it has its doc comment and attributes on lines of their own. The first of those lines is
+// at the head of a line and starts the item (§18.1: "項目の始まりは、…属性の始まり…、doc コメント"),
+// and it is indented as much as the line of the `(`, so the unit that was cut ends there. The doc comment
+// and the attributes belong to the item and are read with it: the attribute that is not one (`@a`) and the
+// one that does not go on a function (`@repr(c)`) are the E0005 of the item, as they are when nothing is cut,
+// and a doc comment before them documents the item (no E0004). One error in the unit that was cut: the `(`
+// that is never closed.
+
+fn f_doc_attr(a: F32 ,                              //~ E0002
+/// the doc comment of z_doc_attr
+@a                                                  //~ E0005
+fn z_doc_attr() -> F32 { 1.0 }
+
+fn f_attrs(a: F32 ,                                 //~ E0002
+@fp(relaxed)
+@repr(c)                                            //~ E0005
+fn z_attrs() -> F32 { 1.0 }

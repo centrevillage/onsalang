@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b).) Between the line that goes on and the item there are lines that §2.5 reads over: a line with only a
+// comment and a blank line (the judgement is by tokens). The line that has the item is the head of the
+// line that is continued, so it ends the unit: one E0002 for the `{` that is never closed, and the item
+// is read, so its users find it (no E0302).
+
+fn f_comment() -> I32 {                             //~ E0002
+  let y = x *
+// a line with only a comment
+fn z_comment() -> I32 { 1 }
+fn w_comment() -> I32 { z_comment() }
+
+fn f_blank() -> I32 {                               //~ E0002
+  let y = x *
+
+fn z_blank() -> I32 { 1 }
+fn w_blank() -> I32 { z_blank() }
+
+fn f_both() -> I32 {                                //~ E0002
+  let y = x *
+// a comment
+
+/* a block comment */
+fn z_both() -> I32 { 1 }
+fn w_both() -> I32 { z_both() }

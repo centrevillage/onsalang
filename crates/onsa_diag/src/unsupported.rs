@@ -196,8 +196,7 @@ features! {
     ConditionalInstances: Language, "running an instance on a condition (the reserved word `when`)", None;
     ResetInstances: Language, "resetting an instance to its initial state (the reserved word `reset_if`)", None;
     SerialFlows: Language, "the serial copies of a flow, `ser~` (the reserved word `ser`)", None;
-    /// Not yet a keyword of the lexer (W5-11): read where a name is
-    /// declared or taken (`onsa_sema`).
+    /// S-615.
     StaticMarks: Language, "the mark of what is static only (the reserved word `static`)", None;
     /// S-96, R-122: the role of the root's `tests/` is the second phase's
     /// (§15.1, §19.1); each `.onsa` file there is one, at its head.

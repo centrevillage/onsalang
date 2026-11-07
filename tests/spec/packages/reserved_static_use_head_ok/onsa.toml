@@ -1,0 +1,3 @@
+[package]
+name = "reserved_static_use_head_ok"
+edition = "2026"

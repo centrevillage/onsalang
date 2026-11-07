@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-47.) The line after a line that goes on (§2.5: the line ends with a binary operator, a range
+// sign, `=` or `->`) is a line head for the recovery (§18.1: "前の行が続く行の頭も行頭である"), so an item
+// that starts there ends the unit that was cut. The unit has the one error that is really there
+// (the `{` that is never closed, which the body of `f…` left open), and the item that follows is read: the
+// names it declares are seen by the users below, so no E0302 / E0413 appears for them. The head of
+// each cut unit and the item after it are at the same indentation (0), so the item ends the unit.
+// The items are tried one by one: each unit is independent of the others (P1).
+
+// ---- a `fn`, after the continuing tokens `*`, `=`, `..<` and `&&`
+
+fn f_star() -> I32 {                                //~ E0002
+  let y = x *
+fn z_star() -> I32 { 1 }
+fn w_star() -> I32 { z_star() }
+
+fn f_eq() -> I32 {                                  //~ E0002
+  let y =
+fn z_eq() -> I32 { 1 }
+fn w_eq() -> I32 { z_eq() }
+
+fn f_range() -> I32 {                               //~ E0002
+  for i in 0 ..<
+fn z_range() -> I32 { 1 }
+fn w_range() -> I32 { z_range() }
+
+fn f_and() -> Bool {                                //~ E0002
+  let y = true &&
+fn z_and() -> I32 { 1 }
+fn w_and() -> I32 { z_and() }
+
+flow flow_cut(x: F32 at sample) -> F32 at sample {  //~ E0002
+  let y = x *
+fn z_flow_cut() -> I32 { 1 }
+fn w_flow_cut() -> I32 { z_flow_cut() }
+
+// ---- the other starts of an item
+
+fn f_struct() -> I32 {                              //~ E0002
+  let y = x *
+struct KStruct { a: I32 }
+fn w_struct(k: KStruct) -> I32 { k.a }
+
+fn f_const() -> I32 {                               //~ E0002
+  let y = x *
+const Z_CONST: I32 = 1
+fn w_const() -> I32 { Z_CONST }
+
+fn f_pub() -> I32 {                                 //~ E0002
+  let y = x *
+pub fn z_pub() -> I32 { 1 }
+fn w_pub() -> I32 { z_pub() }
+
+fn f_priv() -> I32 {                                //~ E0002
+  let y = x *
+priv fn z_priv() -> I32 { 1 }
+fn w_priv() -> I32 { z_priv() }
+
+fn f_rt() -> I32 {                                  //~ E0002
+  let y = x *
+rt fn z_rt() -> I32 { 1 }
+fn w_rt() -> I32 { z_rt() }
+
+fn f_doc() -> I32 {                                 //~ E0002
+  let y = x *
+/// the doc comment starts the item
+fn z_doc() -> I32 { 1 }
+fn w_doc() -> I32 { z_doc() }
+
+fn f_enum() -> I32 {                                //~ E0002
+  let y = x *
+enum EEnum { A, B }
+fn w_enum() -> EEnum { EEnum.A }
+
+fn f_type() -> I32 {                                //~ E0002
+  let y = x *
+type ZType = I32
+fn w_type(a: ZType) -> I32 { a }
+
+fn f_use() -> I32 {                                 //~ E0002
+  let y = x *
+use std.math.{sin}
+fn w_use() -> F32 { sin(1.0) }
+
+fn f_flow() -> I32 {                                //~ E0002
+  let y = x *
+flow z_flow(x: F32 at sample) -> F32 at sample { x }
+flow w_flow(x: F32 at sample) -> F32 at sample { z_flow~(x) }
+
+struct SImpl { v: I32 }
+
+fn f_impl() -> I32 {                                //~ E0002
+  let y = x *
+impl SImpl {
+  fn z(self) -> I32 { 1 }
+}
+fn w_impl(s: SImpl) -> I32 { s.z() }
+
+// The `test` block is read: the error inside it is reported (it would be lost if the block were part of
+// the unit that was cut).
+fn f_test() -> I32 {                                //~ E0002
+  let y = x *
+test "t" {
+  assert nope == 1                                  //~ E0302
+}

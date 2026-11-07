@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (R-396, S-947 (b).) The type is cut and the next line starts with `fn` and a name (or `rt fn` and a name). The
+// reading of a type stops at the `fn` (as the reading of an expression does, §18.1: a name after `fn`
+// makes it the start of an item), so the `fn` line head ends the unit and the function is read. The unit
+// has the one error that is there: the bracket that is never closed (the innermost one, S-948), and the
+// users of the function below find it (no E0302).
+
+// ---- a cut that does not continue: the type after `v:` or in the `B(` of a variant
+
+struct PField {                                     //~ E0002
+  v:
+fn z_field() -> I32 { 1 }
+fn w_field() -> I32 { z_field() }
+
+enum EVariant {
+  A,
+  B(                                                //~ E0002
+fn z_variant() -> I32 { 1 }
+fn w_variant() -> I32 { z_variant() }
+
+struct PFieldRt {                                   //~ E0002
+  v:
+rt fn z_field_rt() -> I32 { 1 }
+fn w_field_rt() -> I32 { z_field_rt() }
+
+// ---- a cut that goes on (the line ends with `->`): the type of a closure in a body
+
+fn f_closure() -> I32 {                             //~ E0002
+  let g = fn(x: I32) ->
+fn z_closure() -> I32 { 1 }
+fn w_closure() -> I32 { z_closure() }
+
+fn f_closure_rt() -> I32 {                          //~ E0002
+  let g = fn(x: I32) ->
+rt fn z_closure_rt() -> I32 { 1 }
+fn w_closure_rt() -> I32 { z_closure_rt() }

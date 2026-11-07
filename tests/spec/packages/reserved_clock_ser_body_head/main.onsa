@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// (S-674.) The modules `clock.onsa` and `ser.onsa` are at the root of the package, and a body names them by the
+// word at the head of a path. A reserved word at the head of the path of a body is E0200 in the syntax stage,
+// at the word (not the E0302 of a name that no `use` took, §15.1), and there is no fix candidate: a `use` that
+// would take the name is E0200 again (`fixes = 0`). The same as packages/reserved_static_body_head/ for
+// `static`. One error in each function.
+
+pub fn clock_call_through_the_head() -> U32 {
+  clock.tick()                                      //~ E0200 @3
+}
+
+pub fn ser_call_through_the_head() -> U32 {
+  ser.tick()                                        //~ E0200 @3
+}
+
+pub fn clock_operand_through_the_head() -> U32 {
+  1 + clock.tick()                                  //~ E0200 @7
+}
+
+pub fn ser_argument_through_the_head() -> U32 {
+  twice(ser.tick())                                 //~ E0200 @9
+}
+
+pub fn twice(x: U32) -> U32 {
+  x + x
+}

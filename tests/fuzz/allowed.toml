@@ -463,3 +463,17 @@ left = "this declaration has no visibility of its own; the word on it is redunda
 input = "tests/fuzz/f67ff637.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: an `rt` before `test`, and a visibility on a `test`; the candidate of the run leaves the word, whose own candidate takes it out"
+
+[[allowed]]
+class = "fix|E0020|write a line comment|E0002"
+left = "expected newline or `…`, found identifier"
+input = "tests/fuzz/3fbf4bd0.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a block comment, and two names with no operator between them (`x y`) on its sides, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|remove the `…`|E0002"
+left = "Onsa has no string of this delimiter"
+input = "tests/fuzz/60db9ab2.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a `&` before a type (the default borrow), and a backquote right after it, a delimiter of a string that Onsa has not got, which the input has before the candidate"

@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (R-396, S-947 (b), S-276.) The type of a top-level item or of a member is cut by the continuing token `=` or `->`,
+// and the next line starts with `fn` and a name (or `rt fn` and a name): the reading of a type stops at
+// the `fn`, the line head ends the unit and the function is read, so its users find it (no E0302 /
+// E0413). The error is the one that is there (a type is missing), on the last token of the unit (S-276).
+// The brackets of the unit are closed, so the indentation is not looked at.
+
+fn g_arrow() ->                                     //~ E0002
+fn z_arrow() -> I32 { 1 }
+fn w_arrow() -> I32 { z_arrow() }
+
+type OpAlias =                                      //~ E0002
+fn z_alias() -> I32 { 1 }
+fn w_alias() -> I32 { z_alias() }
+
+type OpAliasRt =                                    //~ E0002
+rt fn z_alias_rt() -> I32 { 1 }
+fn w_alias_rt() -> I32 { z_alias_rt() }
+
+struct SMember { v: I32 }
+impl SMember {
+  fn a(self) ->                                     //~ E0002
+  fn b(self) -> I32 { 2 }
+}
+fn u_member(s: SMember) -> I32 { s.b() }

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-943 (3), R-371, S-947.) Lines that stay as they are when the line head after a line that goes on is a line head. The `,`
+// is no continuing token (§2.5), so the line after it is a line head of its own, and the item there ends
+// the unit and is read. An item that stands deeper than the line that opened the unit does not end the
+// unit that has a bracket never closed (§18.1: "同じか浅い字下げ"): it is part of the unit and is not
+// declared, and its user is E0302. A line that starts with `.` goes on (§2.5), and the item after it is read.
+
+fn f_comma() -> I32 {
+  g(1,                                              //~ E0002
+fn z_comma() -> I32 { 1 }
+fn w_comma() -> I32 { z_comma() }
+
+fn f_deep() -> I32 {                                //~ E0002
+  let y = x *
+  fn z_deep() -> I32 { 1 }
+fn w_deep() -> I32 { z_deep() }                     //~ E0302
+
+fn f_dot() -> I32 {                                 //~ E0002
+  let y = x
+    .abs()
+fn z_dot() -> I32 { 1 }
+fn w_dot() -> I32 { z_dot() }

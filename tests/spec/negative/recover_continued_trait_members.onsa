@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b).) The same as recover_continued_members.onsa, for the member of a `trait`: the default body of `a` is cut
+// (`1 +`), its `}` is forgotten, and the next member starts the next line at the same indentation. The
+// line head after a line that goes on is a line head (§18.1), so the member ends the unit of `a`. The
+// error is the `{` of `a` (the innermost bracket that is never closed at the place the unit stops, S-948),
+// and not the `{` of the `trait`. The trait itself is not reported as unsupported: its unit has a syntax error.
+
+trait Tr {
+  fn a(self) -> I32 {                               //~ E0002
+    1 +
+  fn b(self) -> I32
+}
+
+fn u() -> I32 { 1 }

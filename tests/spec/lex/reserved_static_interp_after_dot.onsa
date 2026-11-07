@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.2", "§2.4"]
+
+// (S-615.) A keyword after a `.` is read as a name (§2.2: "パスの `.` の直後と `use` の経路の頭は、他のキーワードと同じく名前として読む"),
+// and the path of a hole is a path like the one of an expression (§2.4), so `static` after a `.` in a hole
+// is read by the lexer and the parser, as `clock` and `ser` are (lex/interp_keywords_after_dot.onsa).
+// The names stage then says there is no such field (E0413: the word cannot be declared as a name of a
+// field). The case reads the syntax only (`mode = "parse"`). The same word in the head of a hole is E0200
+// (negative/reserved_static_words.onsa).
+
+pub struct Holder {
+  a: I32,
+}
+
+pub fn static_after_a_dot(o: Holder) -> Str uses {Alloc} {
+  "{o.static}"
+}
+
+pub fn static_after_a_field_after_a_dot(o: Holder) -> Str uses {Alloc} {
+  "{o.a.static}"
+}
+
+pub fn static_with_the_other_reserved_words(o: Holder) -> Str uses {Alloc} {
+  "{o.clock} {o.ser} {o.static}"
+}

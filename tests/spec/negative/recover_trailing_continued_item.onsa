@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-950 (3), S-947 (b).) The tokens after the end of an item on the same line end with a continuing token (`+`, `=`), and
+// the next line starts an item (`fn z`, an attribute and `fn z`). The continued line is a line head that
+// starts an item, so the unit ends there (§18.1: "継続した行の頭が項目の始まりならそこで終わり"): the
+// extra tokens are one error, and the item after is read, so its user finds it (no E0302).
+
+pub const K_PLUS: I32 = 1 2 +                       //~ E0002
+fn z_plus() -> I32 { 1 }
+fn w_plus() -> I32 { z_plus() }
+
+pub type OpEq = I32 =                               //~ E0002
+fn z_eq() -> I32 { 1 }
+fn w_eq() -> I32 { z_eq() }
+
+pub type OpAttr = I32 =                             //~ E0002
+@fp(relaxed)
+fn z_attr() -> F32 { 1.0 }
+fn w_attr() -> F32 { z_attr() }

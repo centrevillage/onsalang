@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b).) A line head `fn(` that no line goes on to: `fn` followed on the same line by `(` is not the start of an
+// item (§18.1), whether or not the line before it goes on. The type of the alias is cut by `?` (a type is
+// expected: the one error that is there), the line `fn(I32) -> I32` after it (which no continuing token
+// leads to) is read over by the recovery, and the item on the line after it is read, so its users find it.
+
+type OpAlias = ?                                    //~ E0002
+fn(I32) -> I32
+fn g_alias() -> I32 { 1 }
+fn w_alias() -> I32 { g_alias() }

@@ -103,6 +103,7 @@ pub enum TokenKind {
     KwWhen,
     KwResetIf,
     KwSer,
+    KwStatic,
 
     // Operators (§3.1)
     Plus,
@@ -392,6 +393,7 @@ impl TokenKind {
             KwWhen => "`when`",
             KwResetIf => "`reset_if`",
             KwSer => "`ser`",
+            KwStatic => "`static`",
             Plus => "`+`",
             Minus => "`-`",
             Star => "`*`",
@@ -470,17 +472,10 @@ pub enum NotAName {
     Reserved(Feature),
 }
 
-/// The reserved word the lexer does not read as one yet (§2.2, S-615):
-/// W5-11 adds it to [`KEYWORDS`], and this goes.
-const UNLEXED_RESERVED: (&str, Feature) = ("static", Feature::StaticMarks);
-
 /// Whether the word `text` is no name of a declaration, and why: the one
 /// table of the names a `use` takes (§15.1, R-266, R-275), which the syntax
 /// stage reads and `onsa_sema`'s names stage reads after it.
 pub fn not_a_name(text: &str) -> Option<NotAName> {
-    if text == UNLEXED_RESERVED.0 {
-        return Some(NotAName::Reserved(UNLEXED_RESERVED.1));
-    }
     let kind = TokenKind::keyword(text)?;
     Some(kind.reserved().map_or(NotAName::Keyword, NotAName::Reserved))
 }
@@ -544,6 +539,7 @@ pub const KEYWORDS: &[Keyword] = &[
     reserved("when", TokenKind::KwWhen, Feature::ConditionalInstances),
     reserved("reset_if", TokenKind::KwResetIf, Feature::ResetInstances),
     reserved("ser", TokenKind::KwSer, Feature::SerialFlows),
+    reserved("static", TokenKind::KwStatic, Feature::StaticMarks),
 ];
 
 /// A token. What precedes it (a space, a newline or nothing) is read from the
@@ -613,7 +609,7 @@ mod tests {
             assert!(KEYWORDS[..i].iter().all(|k| k.text != text && k.kind != kind), "{text} twice");
         }
         let reserved: Vec<&str> = KEYWORDS.iter().filter(|k| k.reserved.is_some()).map(|k| k.text).collect();
-        assert_eq!(reserved, ["clock", "when", "reset_if", "ser"]);
+        assert_eq!(reserved, ["clock", "when", "reset_if", "ser", "static"]);
         assert_eq!(TokenKind::KwIf.reserved(), None);
         for not in [TokenKind::Ident, TokenKind::Underscore, TokenKind::Plus, TokenKind::Eof, TokenKind::Semi] {
             assert!(!not.is_keyword(), "{not:?}");

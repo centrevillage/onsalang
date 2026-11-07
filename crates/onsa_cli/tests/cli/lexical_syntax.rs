@@ -19,7 +19,8 @@
 //!   and strings included.
 //! - §2.1: a `///` with no declaration to document, and a `//!` after the first item, are E0004
 //!   (syntax stage: `fmt` stops with the exit code 2, §18.2).
-//! - §2.2: `clock`, `when`, `reset_if` and `ser` are E0200 where they stand as names (syntax stage).
+//! - §2.2: `clock`, `when`, `reset_if`, `ser` and `static` are E0200 where they stand as names (syntax
+//!   stage).
 //!
 //! The reserved word's own fmt stop is also in `syntax_units.rs` (`fmt_stops_for_a_reserved_word`),
 //! for `clock`.
@@ -387,7 +388,7 @@ pub fn h() -> I32 {
 fn a_reserved_word_where_a_name_stands_is_e0200_and_stops_fmt() {
     // §2.2: "宣言の名前には使えず、この版では構文としても受け付けない（現れた位置で E0200 …）"; §18.2: the
     // reserved word's E0200 is a diagnostic of the syntax stage, so `fmt` stops.
-    for word in ["clock", "when", "reset_if", "ser"] {
+    for word in ["clock", "when", "reset_if", "ser", "static"] {
         let cases: [(&str, String, u64); 6] = [
             ("a let", format!("pub fn f(a: I32) -> I32 {{\n  let {word} = a\n  a\n}}\n"), 2),
             ("a parameter", format!("pub fn f({word}: I32) -> I32 {{\n  1\n}}\n"), 1),
@@ -418,12 +419,12 @@ fn a_reserved_word_where_a_name_stands_is_e0200_and_stops_fmt() {
 
 #[test]
 fn names_that_start_with_a_reserved_word_are_ordinary_names() {
-    // §2.2 reserves the four words, not the names that start with them.
+    // §2.2 reserves the words, not the names that start with them.
     let d = Dir::bare("prefix");
     let src = "\
-pub fn clock_rate(serial: I32, whenever: I32) -> I32 {
+pub fn clock_rate(serial: I32, whenever: I32, statics: I32) -> I32 {
   let reset_ifx = serial
-  reset_ifx + whenever
+  reset_ifx + whenever + statics
 }
 ";
     let path = d.file("prefix.onsa", src.as_bytes());
@@ -437,7 +438,7 @@ pub fn clock_rate(serial: I32, whenever: I32) -> I32 {
 fn a_reserved_word_after_a_dot_is_a_name_and_not_an_e0200() {
     // §2.2: "パスの `.` の直後 … は、他のキーワードと同じく名前として読む（`s.clock` は後の段の
     // E0413 …）". The syntax stage reads `s.clock`; the type stage says there is no such field.
-    for word in ["clock", "when", "reset_if", "ser"] {
+    for word in ["clock", "when", "reset_if", "ser", "static"] {
         let d = Dir::bare("after_dot");
         let src = format!("pub struct S {{\n  a: I32,\n}}\n\npub fn f(s: S) -> I32 {{\n  s.{word}\n}}\n");
         let path = d.file("after_dot.onsa", src.as_bytes());

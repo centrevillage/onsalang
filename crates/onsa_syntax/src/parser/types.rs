@@ -93,6 +93,15 @@ impl<'a> Parser<'a> {
                 self.complete(m, NodeKind::ArrayType)
             }
             TokenKind::KwRt | TokenKind::KwFn => {
+                // `fn name` declares a function, which no type is: the error
+                // is at the `fn` (its `rt`), so that the recovery may start
+                // the next unit there (§18.1, S-947, R-396).
+                let f = if self.at(TokenKind::KwRt) { self.peek2_index() } else { self.peek_index() };
+                if self.tokens[f].kind == TokenKind::KwFn
+                    && declares_a_function(TokenKind::KwFn, self.tokens[self.skip_trivia(f + 1)].kind)
+                {
+                    return Err(self.unexpected("a type (a function is declared at the top level)"));
+                }
                 let m = self.start(NodeKind::FnType)?;
                 self.eat(TokenKind::KwRt);
                 self.expect(TokenKind::KwFn)?;

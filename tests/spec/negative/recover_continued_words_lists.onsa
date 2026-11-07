@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), W5-11 U9 の壊す側の F1・F2.) A run of words before a head (`export fn`, `unsafe fn`, §18.1) at the
+// head of a line starts an item wherever the unit before it was cut: after the `|` of a pattern that goes
+// on (§2.5), and after a `,` of a list in a bracket that is never closed (the `,` does not go on, but the
+// bracket makes the newline a blank, and the unit of a bracket that is never closed ends at an item at the
+// head of a line indented as much as or less than the line of the bracket). The run is one E0002, and the
+// item after it is read, so its user finds it (no E0302). One error in each unit: the innermost bracket that
+// is open where the unit ends, and the run of words.
+
+fn f_pattern(a: I32) -> I32 {
+  match a {                                         //~ E0002
+    A |
+export fn z_pattern() -> I32 { 1 }                  //~ E0002
+fn w_pattern() -> I32 { z_pattern() }
+
+fn f_tuple_pattern() -> I32 {
+  let (x |                                          //~ E0002
+export fn z_tuple_pattern() -> I32 { 1 }            //~ E0002
+fn w_tuple_pattern() -> I32 { z_tuple_pattern() }
+
+fn f_array() -> I32 {
+  let y = [1,                                       //~ E0002
+export fn z_array() -> I32 { 1 }                    //~ E0002
+fn w_array() -> I32 { z_array() }
+
+fn f_call() -> I32 {
+  let y = g(1,                                      //~ E0002
+unsafe fn z_call() -> I32 { 1 }                     //~ E0002
+fn w_call() -> I32 { z_call() }

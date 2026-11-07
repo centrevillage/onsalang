@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), W5-11 U9 の壊す側の再確認の F-B.) In the list of members of an `impl` whose `{` is never closed, a
+// member line ends with an attribute (`x @a`), so the next line goes on with it (§2.5: a line that ends with an
+// attribute goes on). The head of that next line is a line head all the same (§18.1: the head of a line that goes
+// on with the line before is a line head), and an item starts there, indented as much as the line of the `{`:
+// the unit of the `{` ends there, and the item after it is the next of the file, so its user finds it (no E0302).
+// One error in each unit: the `{` that is never closed, and the member line, a unit of its own, whose `x` is no
+// part of the head of a declaration (the run of words before a head, §18.1), as when nothing is cut.
+
+struct SImpl { v: I32 }
+
+impl SImpl {                                        //~ E0002
+  fn n(self) -> I32 { 1 }
+  x @a                                              //~ E0002
+fn canary_impl() -> I32 { 1 }
+fn user_impl() -> I32 { canary_impl() }
+
+struct SArgs { v: I32 }
+
+impl SArgs {                                        //~ E0002
+  fn n(self) -> I32 { 1 }
+  x @fp(relaxed)                                    //~ E0002
+fn canary_args() -> I32 { 1 }
+fn user_args() -> I32 { canary_args() }

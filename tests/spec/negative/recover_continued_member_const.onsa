@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-276.) The associated constant of an `impl` is cut (`1 +`), and the next line starts a member. The
+// line head after a line that goes on is a line head, so the member ends the unit of the constant: the
+// cut expression is one E0002 (on the last token of the unit, S-276), the brackets of the `impl` are closed,
+// and the member is read, so `.b()` is found (no E0413).
+
+struct SConst { v: I32 }
+
+impl SConst {
+  const K: I32 = 1 +                                //~ E0002
+  fn b(self) -> I32 { 2 }
+}
+
+fn u_const(s: SConst) -> I32 { s.b() }
+
+pub struct SConstDoc { v: I32 }
+
+impl SConstDoc {
+  const K: I32 = 1 *                                //~ E0002
+  /// the doc comment starts the member
+  pub fn b(self) -> I32 { 2 }
+}
+
+fn u_const_doc(s: SConstDoc) -> I32 { s.b() }

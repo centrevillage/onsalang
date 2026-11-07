@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-121, 947-2.) The `}` of the member `a` and of the `impl` are forgotten, and a line of only an attribute,
+// indented as the members are, stands before an item at the first column. An attribute never ends a line
+// (§2.5), so the line after it is a line head for the recovery (§18.1), and the unit that starts with an
+// attribute-only line is measured at the line of the item the attribute belongs to ("属性だけの行で始まる
+// 項目は、属性が付く項目の行の字下げで比べる"): the item is at the first column, the same as the line of the
+// `impl`, so it ends the unit of the `impl` (and the unit of `a`, which is deeper). Both units end at the
+// attribute, so the one E0002 there points at the innermost `{` that is open, that of `a`, and shows the
+// `{` of the `impl` in a note (§18.1), and `canary` is read as an item of the file, so its user finds it
+// (no E0302).
+
+struct S { v: I32 }
+
+impl S {
+  fn a(self) -> I32 {                               //~ E0002
+    self.v
+  @fp(relaxed)
+fn canary() -> F32 { 1.0 }
+fn u() -> F32 { canary() }

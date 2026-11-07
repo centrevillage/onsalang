@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-121, 947-2.) The `}` of the member `a` is forgotten, and a line of only an attribute stands before the
+// next member at the same indentation. The attribute-only line is the start of the item and is measured
+// at the line of the item (the same indentation, 2), the same as the line of `a`, so it ends the unit of
+// `a`: one error (the `{` of `a`), and the member is read with its attribute, so its user finds it. The
+// `}` after it closes the `impl`.
+
+pub struct S { v: I32 }
+
+impl S {
+  fn a(self) -> I32 {                               //~ E0002
+    self.v
+  @fp(relaxed)
+  fn canary() -> I32 { 1 }
+}
+
+fn u() -> I32 { S.canary() }

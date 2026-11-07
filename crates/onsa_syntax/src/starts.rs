@@ -91,6 +91,18 @@ pub(crate) fn declares_a_function(first: TokenKind, second: TokenKind) -> bool {
     first == TokenKind::KwFn && second == TokenKind::Ident
 }
 
+/// Whether the token `first` and the token after it on its line (`next`,
+/// `None` at its end; blanks and comments passed) open a function type or an
+/// anonymous function (`fn(`): no declaration, which has a name, so no item
+/// starts there, nor at an `rt` before it (§18.1, S-947). The one test of a
+/// form that starts with the keyword of an item and is no item, next to that
+/// of a declaration ([`declares_a_function`]), which the readings of an
+/// expression and of a type tell apart: such a new type or expression (an
+/// `extern "C" fn(…)` type) is added to both.
+pub(crate) fn opens_a_function_value(first: TokenKind, next: Option<TokenKind>) -> bool {
+    first == TokenKind::KwFn && next == Some(TokenKind::LParen)
+}
+
 /// What starts an element of a list whose elements are separated with `,`
 /// (§2.5), for each such list: the one table of those lists (none for a
 /// node of another kind).

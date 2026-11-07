@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
     /// reads it no more (§6.5, D-15).
     pub(super) fn parse_heading(&mut self, ctx: ItemCtx) -> PResult<Heading> {
         let mut hashes = Vec::new();
-        let read = self.read_heading(&mut hashes, ctx != ItemCtx::Top);
+        let read = self.read_heading(&mut hashes, ctx);
         let place = read.as_ref().ok().map(|h| h.place);
         let keyword = read.is_ok().then(|| self.peek_index());
         let failed = matches!(read, Err(Unread::Failed));
@@ -92,15 +92,23 @@ impl<'a> Parser<'a> {
     }
 
     /// The head of [`Parser::parse_heading`]; the `#` of each attribute of
-    /// another language read on go to `hashes`; `member` when it is read in
-    /// the list of a declaration (the place of its attributes, §6.5).
-    fn read_heading(&mut self, hashes: &mut Vec<usize>, member: bool) -> Result<Heading, Unread> {
+    /// another language read on go to `hashes`; a member when `ctx` is the
+    /// list of a declaration (the place of its attributes, §6.5).
+    fn read_heading(&mut self, hashes: &mut Vec<usize>, ctx: ItemCtx) -> Result<Heading, Unread> {
+        let member = ctx != ItemCtx::Top;
         let mut attrs = Vec::new();
         let mut vis = None;
         loop {
             let read = self.parse_attrs(true)?;
             if !read.is_empty() {
                 self.skip_newlines();
+                // The line after them goes on (§2.5): an item at its head
+                // ends the list of a `{` never closed, as at a member (§18.1;
+                // `x @a`, then `fn f`), and the attributes have none.
+                if ctx != ItemCtx::InlineHandler && self.list_ends_unclosed() {
+                    self.unexpected("the declaration of the attributes");
+                    return Err(Unread::NoDeclaration);
+                }
             }
             attrs.extend(read);
             if self.modifiers_out_of_order() {
@@ -186,8 +194,8 @@ impl<'a> Parser<'a> {
         crate::scan::closing_on_line(&self.tokens, bracket)
     }
 
-    /// The words before a head on its line (S-459): names, and `unsafe`,
-    /// which starts no item, with the strings after them (the old
+    /// The words before a head on its line (S-459): names, and the keywords
+    /// `unsafe` and `static` (§18.1, S-615), which start no item, with the strings after them (the old
     /// `export "C" fn`, S-464), right before a token that starts a head
     /// ([`starts_heading`]). The run is one E0002 (or the row of its form,
     /// `export_c`), and the head is read on after it, the run in an `Error`
@@ -347,13 +355,20 @@ impl<'a> Parser<'a> {
     /// The last token of the form `@name` or `@name(…)` at `at`, when its `(`
     /// closes on its line and the head goes on after it on that line (§18.1).
     fn late_attribute_end(&self, at: usize) -> Option<usize> {
-        let name = self.on_line_after(at).filter(|&n| self.tokens[n].kind == TokenKind::Ident)?;
-        let next = self.on_line_after(name)?;
-        let last = match self.tokens[next].kind {
-            TokenKind::LParen => crate::scan::closing_on_line(&self.tokens, next)?,
-            _ => name,
-        };
+        let last = self.attribute_end(at)?;
         self.on_line_after(last).filter(|&n| self.head_goes_on(n)).map(|_| last)
+    }
+
+    /// The last token of the attribute at `at` that closes on its line: of the
+    /// form `@name` or `@name(…)`, or `#[…]` of other languages.
+    pub(super) fn attribute_end(&self, at: usize) -> Option<usize> {
+        if self.tokens[at].kind == TokenKind::Hash {
+            return self.hash_end(at);
+        }
+        let at_name = |n: &usize| self.tokens[at].kind == TokenKind::At && self.tokens[*n].kind == TokenKind::Ident;
+        let name = self.on_line_after(at).filter(at_name)?;
+        let open = self.on_line_after(name).filter(|&o| self.tokens[o].kind == TokenKind::LParen);
+        open.map_or(Some(name), |o| crate::scan::closing_on_line(&self.tokens, o))
     }
 
     /// The head of an `extern` block at the cursor, when it does not read
@@ -415,14 +430,15 @@ impl<'a> Parser<'a> {
     /// ([`Parser::words_before_head`]): its last token, and the token after
     /// it that starts the head.
     pub(super) fn words_before_head_at(&self, first: usize) -> Option<(usize, usize)> {
-        if !matches!(self.tokens[first].kind, TokenKind::Ident | TokenKind::KwUnsafe) {
+        let word = |k: TokenKind| matches!(k, TokenKind::Ident | TokenKind::KwUnsafe | TokenKind::KwStatic);
+        if !word(self.tokens[first].kind) {
             return None;
         }
         let mut last = first;
         loop {
             let n = self.on_line_after(last)?;
             match self.tokens[n].kind {
-                TokenKind::Ident | TokenKind::KwUnsafe | TokenKind::Str => last = n,
+                k if word(k) || k == TokenKind::Str => last = n,
                 k if starts_heading(k) => return Some((last, n)),
                 _ => return None,
             }

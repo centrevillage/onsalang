@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b), S-121.) An attribute (or a doc comment and an attribute) on the line after a line that goes on starts
+// an item (§18.1), so the item ends the unit that was cut and is read: the error is the `{` that is never
+// closed, and the item has the checks of its own (the name that is missing in the body of `z_body` is
+// seen, E0302), as it is when no line goes on.
+
+fn f_attr() -> F32 {                                //~ E0002
+  let y = x *
+@fp(relaxed)
+fn z_attr() -> F32 { 1.0 }
+fn w_attr() -> F32 { z_attr() }
+
+fn f_attr_doc() -> F32 {                            //~ E0002
+  let y = x *
+/// the doc comment stands before the attribute (§2.1)
+@fp(relaxed)
+fn z_attr_doc() -> F32 { 1.0 }
+fn w_attr_doc() -> F32 { z_attr_doc() }
+
+fn f_attr_body() -> F32 {                           //~ E0002
+  let y = x *
+@fp(relaxed)
+fn z_body() -> F32 { nope }                         //~ E0302

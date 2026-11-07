@@ -100,6 +100,19 @@ pub(crate) fn pair(open: &mut Vec<usize>, tokens: &[Token], i: usize, base: usiz
     Some(opener)
 }
 
+/// Whether the brackets of `tokens` close among themselves, in order.
+pub(crate) fn balanced(tokens: &[Token]) -> bool {
+    let mut open = Vec::new();
+    let closes = |k| [TokenKind::LParen, TokenKind::LBracket, TokenKind::LBrace].iter().any(|&o| closer(o) == Some(k));
+    tokens.iter().all(|t| match closer(t.kind) {
+        Some(c) => {
+            open.push(c);
+            true
+        }
+        None => !closes(t.kind) || open.pop() == Some(t.kind),
+    }) && open.is_empty()
+}
+
 /// The closer of an opening bracket.
 fn closer(kind: TokenKind) -> Option<TokenKind> {
     match kind {

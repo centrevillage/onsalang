@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// (S-947 (b).) The line after a line that goes on starts with `trait`, `effect` or `extern`, which this version
+// reads and does not support (E0200, the feature is named). The item starts a unit there, so it is read
+// and the E0200 is reported on its line, as it is when no line goes on. One error in each unit: the `{`
+// that is never closed, and the E0200 of the item.
+
+fn f_trait() -> I32 {                               //~ E0002
+  let y = x *
+trait Tr {                                          //~ E0200
+  fn z(self) -> I32
+}
+
+fn f_effect() -> I32 {                              //~ E0002
+  let y = x *
+effect Ef {                                         //~ E0200
+  fn ask() -> I32
+}
+
+fn f_extern() -> I32 {                              //~ E0002
+  let y = x *
+extern "C" lib "m" {                                //~ E0200
+  fn c_sin(x: F64) -> F64
+}
