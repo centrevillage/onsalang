@@ -275,6 +275,8 @@ pub(crate) struct Checker<'a> {
     pub(crate) a: &'a mut Analysis,
     pub(crate) ast: &'a Ast,
     pub(crate) text: &'a str,
+    /// The module of the body (its tree, for a candidate read from its tokens).
+    pub(crate) module: &'a crate::Module,
     pub(crate) m: ModId,
     pub(crate) def: DefId,
     generics: Vec<GenericDef>,
@@ -390,6 +392,7 @@ fn read_body<'c>(
         a,
         ast: &job.module.parsed.ast,
         text: &job.module.text,
+        module: job.module,
         m: job.m,
         def: job.id,
         generics,

@@ -87,6 +87,13 @@ pub(crate) fn complete(
     reads
 }
 
+/// `fix`, a candidate of a later stage at `span`, whose unit has no
+/// diagnostic of the syntax stage, with the parentheses it needs
+/// ([`completed`]).
+pub(crate) fn completed_later(text: &str, units: &Units, span: Span, fix: Fix) -> Option<Fix> {
+    completed(text, units, &Failed(Vec::new()), span, fix, &mut CandidateReads::default())
+}
+
 /// The starts of the units of the diagnostics of the syntax stage of a file,
 /// one for each diagnostic, in order.
 struct Failed(Vec<u32>);

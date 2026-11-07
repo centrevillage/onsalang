@@ -21,8 +21,10 @@ impl Checker<'_> {
         let compared = |ck: &mut Self, t| matches!(ck.operator_verdict(OpNeed::Binary(BinOp::Eq), t), Verdict::Met);
         let guarded = if bad.iter().all(|&(_, t)| compared(self, t)) {
             let starts: Vec<u32> = bad.iter().map(|(at, _)| at.start).collect();
-            let block_guard = arm.guard.is_some_and(|g| self.expr(g).kind.block_like());
-            guard::constants_in_guard(span.file, self.text, arm.span.start, &starts, block_guard)
+            let Some(tree) = &self.module.tree else {
+                onsa_diag::internal::bug(Some(span), "a guard candidate in a module read back, with no diagnostic")
+            };
+            guard::constants_in_guard(tree, &self.module.parsed.units, self.text, arm.span, &starts)
         } else {
             Err(Some(NO_EQUALITY))
         };

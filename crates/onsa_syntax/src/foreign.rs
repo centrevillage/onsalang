@@ -209,6 +209,8 @@ pub struct Cursor<'a> {
     /// The holes of the string literals and the lexer's errors in them
     /// ([`crate::literal::Literals`]).
     pub(crate) literals: &'a crate::literal::Literals,
+    /// The names of the file, once made ([`guard::file_names`]).
+    pub(crate) names: &'a std::cell::OnceCell<guard::Names>,
     /// The token the parser failed at (an index of `tokens`).
     pub at: usize,
     /// The open nodes, outermost first, and where each starts.

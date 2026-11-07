@@ -214,6 +214,13 @@ struct Open {
 /// level above it is E0006 ([`Parser::too_deep`]).
 pub const NESTING_LIMIT: u32 = 256;
 
+#[cfg(test)]
+thread_local! {
+    /// The bytes of the texts that the parsers of this thread read (from
+    /// their first token to their last): the tests bound what is read again.
+    pub(crate) static PARSED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 pub(crate) struct Parser<'a> {
     file: FileId,
     text: &'a str,
@@ -259,6 +266,9 @@ pub(crate) struct Parser<'a> {
     /// The holes of the string literals and the lexer's errors in them
     /// ([`Literals`]).
     literals: Literals,
+    /// The names of the file that the guard candidates take no new name
+    /// from, made at the first that wants them ([`foreign::Cursor::names`]).
+    names: std::cell::OnceCell<foreign::guard::Names>,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
     /// The height of each item node closed ([`ParseOutput::items`]).
@@ -322,6 +332,8 @@ struct Snapshot {
 impl<'a> Parser<'a> {
     pub(crate) fn new(file: FileId, text: &'a str, lexed: crate::Lexed) -> Parser<'a> {
         let crate::Lexed { tokens: all, diagnostics, literals } = lexed;
+        #[cfg(test)]
+        PARSED.set(PARSED.get() + all.first().zip(all.last()).map_or(0, |(a, b)| (b.span.end - a.span.start) as usize));
         let (tokens, full, lines) = crate::layout::code_tokens(&all);
         // Whether each `{` is ever closed, the braces paired among themselves.
         let mut brace_closed = vec![false; tokens.len()];
@@ -353,6 +365,7 @@ impl<'a> Parser<'a> {
             lexed: diagnostics.len(),
             diagnostics,
             literals,
+            names: std::cell::OnceCell::new(),
             levels: Vec::new(),
             items: Vec::new(),
             trials: 0,

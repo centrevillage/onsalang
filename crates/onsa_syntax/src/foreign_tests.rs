@@ -5,7 +5,7 @@
 //! and check every candidate against the contract of §18.1, are the tests of
 //! `onsa_tests` (D-15); these are the unit tests of the matchers.
 
-use onsa_diag::{Code, FileId};
+use onsa_diag::{Code, FileId, Span};
 
 use crate::foreign::{ROWS, RowId, WAITING};
 
@@ -1045,10 +1045,76 @@ fn constants_in_guard_stops_at_the_nesting_limit() {
         let text =
             format!("pub fn d(k: Bool, x: F32) -> I32 {{\n  match x {{\n    L if {open}k{close} => 1,\n  }}\n}}\n");
         let at = text.find('L').unwrap() as u32;
-        crate::foreign::guard::constants_in_guard(FileId(0), &text, at, &[at], false).is_ok()
+        let (parsed, tree) = parse(&text).split();
+        let arm = Span::new(FileId(0), at, text.find("1,").unwrap() as u32 + 1);
+        crate::foreign::guard::constants_in_guard(&tree, &parsed.units, &text, arm, &[at]).is_ok()
     };
     onsa_diag::stack::run(move || {
         assert!(candidate(1) && candidate(250));
         assert!(!candidate(254));
     });
+}
+
+/// What the guard candidates read again is at most this many times the
+/// file: the names of the file once, and the unit of each arm a few times.
+const AT_MOST: usize = 4;
+
+/// The names that the guard candidates take no new name from are made once
+/// for a file (R-209): a file of many arms with a guard form, an E0020 with
+/// a candidate each, goes through its tokens once for them.
+#[test]
+fn the_names_of_a_file_are_made_once_for_its_guard_forms() {
+    let n = 200;
+    let arms = ["1..<3 => 1,", "0.5 => 1,", "\"a{s}\" => 1,"];
+    let src: String = (0..n)
+        .map(|k| {
+            let subject = ["x", "y", "s"][k % 3];
+            let arm = arms[k % 3];
+            format!(
+                "fn f{k}(x: I32, y: F32, s: Str) -> I32 {{\n  match {subject} {{\n    {arm}\n    _ => 0,\n  }}\n}}\n"
+            )
+        })
+        .collect();
+    let tokens = crate::lex(FileId(0), &src).tokens.len();
+    let before = crate::foreign::guard::NAMED.get();
+    let p = parse(&src);
+    let named = crate::foreign::guard::NAMED.get() - before;
+    assert_eq!(p.diagnostics.len(), n, "{:?}", p.diagnostics.first());
+    assert!(p.diagnostics.iter().all(|d| d.code == Code::E0020 && d.fixes.len() == 1), "{:?}", p.diagnostics.first());
+    assert!(0 < named && named <= tokens, "went through {named} tokens for the names of a file of {tokens}");
+}
+
+/// The candidate of the types stage reads the unit of its arm again, not
+/// the file (R-385): for a file of many arms with a constant of a type no
+/// pattern compares, the texts the parsers read for all of them, and the
+/// tokens gone through for the names, are bounded by the file. Every other
+/// arm has a block-like guard of its own, which the completion
+/// parenthesizes (a second reading of its unit).
+#[test]
+fn the_candidates_of_the_types_stage_read_the_units_of_their_arms() {
+    let n = 200;
+    let src: String = "const L: F32 = 1.0\n".to_string()
+        + &(0..n)
+            .map(|k| {
+                let guard = if k % 2 == 0 { "" } else { " if if b { true } else { false }" };
+                format!("fn f{k}(x: F32, b: Bool) -> I32 {{\n  match x {{\n    L{guard} => 1,\n    _ => 0,\n  }}\n}}\n")
+            })
+            .collect::<String>();
+    let (parsed, tree) = parse(&src).split();
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics.first());
+    let tokens = tree.cst.tokens().len();
+    let (read, named) = (crate::parser::PARSED.get(), crate::foreign::guard::NAMED.get());
+    let mut wrapped = 0;
+    for (at, _) in src.match_indices("    L") {
+        let at = at as u32 + 4;
+        let end = at + src[at as usize..].find("=> 1").unwrap() as u32 + 4;
+        let fix =
+            crate::foreign::guard::constants_in_guard(&tree, &parsed.units, &src, Span::new(FileId(0), at, end), &[at]);
+        let fix = fix.unwrap_or_else(|note| panic!("no candidate at {at}: {note:?}"));
+        wrapped += usize::from(fix.edits().iter().any(|e| e.replace.ends_with("&& (")));
+    }
+    let (read, named) = (crate::parser::PARSED.get() - read, crate::foreign::guard::NAMED.get() - named);
+    assert_eq!(wrapped, n / 2);
+    assert!(0 < read && read <= AT_MOST * src.len(), "read {read} bytes of a file of {}", src.len());
+    assert!(0 < named && named <= tokens, "went through {named} tokens for the names of a file of {tokens}");
 }

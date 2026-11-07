@@ -616,7 +616,9 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
         _ => (form, alone),
     };
     let outcome = match read {
-        Some((arm, None)) if !in_arm.is_empty() => arm.candidates(c),
+        Some((arm, None)) if !in_arm.is_empty() => {
+            arm.candidates(c, c.names.get_or_init(|| file_names(c.all, c.text, c.literals)))
+        }
         Some((_, Some(why))) => Err(why),
         Some((_, None)) | None => Err(Why::Unread),
     };
@@ -644,37 +646,47 @@ fn mark(c: &Cursor, toks: &[usize], p: &mut Pat, constants: &[u32]) -> usize {
 }
 
 /// The candidate of the E0020 of the types stage (§7, S-319): the constants
-/// at `constants` (sorted) of the pattern of the arm at `arm_start` in the
-/// guard, by the rules of the forms of the syntax stage; `block_guard` is
-/// whether the arm's own guard is block-like. Without one, the note that
-/// says why, if a reason does. The tokens are read again: this is the path
-/// of an error, and no later stage keeps them.
+/// at `constants` (sorted) of the pattern of the arm `arm` in the guard, by
+/// the rules of the forms of the syntax stage. Without one, the note that
+/// says why, if a reason does. The tokens of the arm's unit are read again
+/// from the CST of the file (`tree`, with its `units`): this is the path of
+/// an error, and no later stage keeps the parser.
 pub fn constants_in_guard(
-    file: FileId,
+    tree: &crate::Tree,
+    units: &crate::units::Units,
     text: &str,
-    arm_start: u32,
+    arm: Span,
     constants: &[u32],
-    block_guard: bool,
 ) -> Result<Fix, Option<&'static str>> {
-    crate::parser::with_cursor(file, text, crate::lexer::lex(file, text), |c| {
-        let (mut arm, why) = Arm::read(c, arm_start).ok_or(None)?;
+    let Some(within) = units.reading(&[arm]) else {
+        onsa_diag::internal::bug(Some(arm), "an arm of the types stage in no unit")
+    };
+    let run = tree.cst.tokens()[tree.cst.tokens_in(within.span)].to_vec();
+    let Some(made) = crate::parser::with_cursor(arm.file, text, run, &tree.literals, |c| {
+        let (mut read, why) = Arm::read(c, arm.start).ok_or(None)?;
         if let Some(why) = why {
             return Err(why.note());
         }
-        if mark(c, &arm.toks, &mut arm.pat, constants) != constants.len() {
+        if mark(c, &read.toks, &mut read.pat, constants) != constants.len() {
             return Err(None);
         }
-        arm.wrap_guard = block_guard;
+        let names = tree.names.get_or_init(|| file_names(tree.cst.tokens(), text, &tree.literals));
         // One: a constant is no range, read two ways.
-        let fix = arm.candidates(c).map_err(|why| why.note())?.pop().ok_or(None)?;
-        // No completion counts its levels ([`crate::operands`], §18.1).
-        let edits: Vec<&Edit> = fix.edits().iter().collect();
-        let after = onsa_diag::apply_text(text, &edits).map_err(|_| None)?;
-        let end = c.span(arm.arrow).end + after.len().saturating_sub(text.len()) as u32;
-        let read = crate::parse(file, &after);
-        let deep = read.diagnostics.iter().any(|d| d.code == Code::E0006 && (arm_start..end).contains(&d.span.start));
-        if deep { Err(Some(TOO_DEEP)) } else { Ok(fix) }
-    })
+        let fix = read.candidates(c, names).map_err(|why| why.note())?.pop().ok_or(None)?;
+        Ok((fix, Span::new(arm.file, arm.start, c.span(read.arrow).end)))
+    }) else {
+        onsa_diag::internal::bug(Some(arm), "the unit of an arm of the types stage has no token")
+    };
+    let (fix, window) = made?;
+    // The parentheses of a block-like guard after the `&&` (§3.1), as for
+    // the candidates of the syntax stage: the unit has no error of that
+    // stage, so the completion drops one only over the limit.
+    let fix = crate::operands::completed_later(text, units, window, fix).ok_or(Some(TOO_DEEP))?;
+    // Each level it adds is of a token it writes (an operator of the guard
+    // too, §2.5): a byte at least.
+    let written = fix.edits().iter().map(|e| e.replace.len() as u32).sum();
+    let limit = crate::nesting::Limit { text, units };
+    if limit.exceeded(window, fix.edits(), written) { Err(Some(TOO_DEEP)) } else { Ok(fix) }
 }
 
 /// The `n`-th name (from 1) the guard-form candidates may bind: `v`, `v2`,
@@ -689,6 +701,29 @@ pub fn guard_name(n: usize) -> String {
     if n <= 1 { "v".to_string() } else { format!("v{n}") }
 }
 
+/// The names of a file that no new name of the guard candidates is (S-253):
+/// its identifiers, and the names in the holes of its string literals
+/// (S-319: a new name that a misspelt `{v}` names would hide its E0302).
+pub(crate) type Names = std::collections::HashSet<Box<str>>;
+
+/// The [`Names`] of the file of the tokens `all` (all of its tokens) and
+/// `literals`: the one place that makes them, once for a file (the parser's
+/// [`Cursor::names`], the types stage's `crate::Tree`).
+pub(crate) fn file_names(all: &[Token], text: &str, literals: &crate::literal::Literals) -> Names {
+    #[cfg(test)]
+    NAMED.set(NAMED.get() + all.len());
+    let idents = all.iter().filter(|t| t.kind == TokenKind::Ident).map(|t| t.span);
+    let in_holes = literals.holes().iter().flat_map(|h| h.path.iter().flatten().copied());
+    idents.chain(in_holes).map(|s| text[s.start as usize..s.end as usize].into()).collect()
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The tokens [`file_names`] went through on this thread: the tests see
+    /// that a file of many guard forms makes its names once.
+    pub(crate) static NAMED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// The pattern of an arm, read: its tokens (indexes of `tokens`), its tree,
 /// its own guard (`if` and `=>`) and its last token.
 struct Arm {
@@ -697,10 +732,6 @@ struct Arm {
     if_tok: Option<usize>,
     arrow: usize,
     last_pat: usize,
-    /// Whether its own guard takes parentheses as an operand of `&&` (it is
-    /// block-like): of the types stage, which no completion follows
-    /// ([`crate::operands`]).
-    wrap_guard: bool,
 }
 
 impl Arm {
@@ -766,28 +797,17 @@ impl Arm {
         let last_pat = *toks.last().ok_or(false)?;
         let commented = toks.iter().any(|&t| c.kind(t) == TokenKind::BlockComment);
         let (t, pat) = Toks::read(c, toks, true, skip_blocks).ok_or(commented)?;
-        Ok(Arm { toks: t.toks, pat, if_tok, arrow, last_pat, wrap_guard: false })
+        Ok(Arm { toks: t.toks, pat, if_tok, arrow, last_pat })
     }
 
     /// The candidates: one, or two when a range is written `..` or `...`
-    /// (the end excluded, then included).
-    fn candidates(&self, c: &Cursor) -> Result<Vec<Fix>, Why> {
+    /// (the end excluded, then included). The new names are none of `used`,
+    /// the names of the file ([`file_names`]).
+    fn candidates(&self, c: &Cursor, used: &Names) -> Result<Vec<Fix>, Why> {
         let shape = shape(c, &self.toks, &self.pat)?;
         if shape.holes.is_empty() && matches!(shape.cond, Cond::True) {
             return Err(Why::NoForm);
         }
-        // New names: none that the file has (S-253), the names in the holes
-        // of the string literals too (S-319): a new name that a misspelt
-        // `{v}` names would hide its E0302.
-        let in_holes = c.literals.holes().iter().flat_map(|h| h.path.iter().flatten());
-        let in_holes = in_holes.map(|s| &c.text[s.start as usize..s.end as usize]);
-        let used: std::collections::HashSet<&str> = c
-            .all
-            .iter()
-            .filter(|t| t.kind == TokenKind::Ident)
-            .map(|t| &c.text[t.span.start as usize..t.span.end as usize])
-            .chain(in_holes)
-            .collect();
         let mut n = 0;
         let mut names = Vec::new();
         while names.len() < shape.holes.len() {
@@ -825,7 +845,7 @@ impl Arm {
                     let cond = if BinOp::And.bare(Side::Left, top) { cond } else { format!("({cond})") };
                     // A guard against its `if` (`if(c)`) stays apart from the word (§18.1, R-235).
                     let lead = if c.gap_after(t) == Gap::None { " " } else { "" };
-                    if BinOp::And.bare(Side::Left, g) && !self.wrap_guard {
+                    if BinOp::And.bare(Side::Left, g) {
                         edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{lead}{cond} && ")));
                     } else {
                         edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{lead}{cond} && (")));

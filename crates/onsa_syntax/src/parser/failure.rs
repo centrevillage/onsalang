@@ -181,6 +181,7 @@ impl<'a> Parser<'a> {
             full: &self.full,
             lines: &self.lines,
             literals: &self.literals,
+            names: &self.names,
             at,
             open: self
                 .open

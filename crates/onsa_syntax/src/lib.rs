@@ -121,6 +121,8 @@ pub struct Parsed {
     pub levels: Vec<u32>,
     /// What the completion of the candidates read again (`crate::operands`).
     pub candidate_reads: crate::operands::CandidateReads,
+    /// The facts of the literals, from the lexer ([`Tree::literals`]).
+    pub(crate) literals: literal::Literals,
 }
 
 impl Parsed {
@@ -142,8 +144,8 @@ impl Parsed {
     /// The two parts a module of a package keeps apart, the first being all
     /// that a std compiled into the binary holds (W5-19).
     pub fn split(self) -> (ParsedAst, Tree) {
-        let Parsed { ast, cst, map, diagnostics, units, .. } = self;
-        (ParsedAst { ast, diagnostics, units }, Tree { cst, map })
+        let Parsed { ast, cst, map, diagnostics, units, literals, .. } = self;
+        (ParsedAst { ast, diagnostics, units }, Tree { cst, map, literals, names: Default::default() })
     }
 }
 
@@ -161,6 +163,12 @@ pub struct ParsedAst {
 pub struct Tree {
     pub cst: Cst,
     pub map: AstMap,
+    /// The facts of the literals, which the guard candidates of the types
+    /// stage read with the tokens of the CST (`foreign::guard::constants_in_guard`).
+    pub(crate) literals: literal::Literals,
+    /// The names of the file, made once for those candidates
+    /// (`foreign::guard::file_names`).
+    pub(crate) names: std::sync::OnceLock<foreign::guard::Names>,
 }
 
 /// Lex and parse one file. Never fails: diagnostics are in `Parsed.diagnostics`
@@ -173,7 +181,8 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     // What the judgment of whether two tokens join lexes for the file
     // (`CandidateReads::lexed`): the rows' and the candidates' reported.
     let lexed = edits::lexed();
-    let Read { mut ast, cst, map, mut diagnostics, levels, mut units, apart } = read(file, text, parser::ItemCtx::Top);
+    let Read { mut ast, cst, map, mut diagnostics, levels, mut units, apart, literals } =
+        read(file, text, parser::ItemCtx::Top);
     naming::check(&ast, &mut diagnostics);
     naming::check_exported(&ast, &mut diagnostics);
     units.mark_failed(&diagnostics, &mut ast);
@@ -182,7 +191,7 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     // syntax stage. It reads units again with `read` only.
     let mut candidate_reads = operands::complete(text, &cst, &units, &apart, &mut diagnostics);
     candidate_reads.lexed = edits::lexed() - lexed;
-    Parsed { ast, cst, map, diagnostics, units, levels, candidate_reads }
+    Parsed { ast, cst, map, diagnostics, units, levels, candidate_reads, literals }
 }
 
 /// What [`read`] makes of a text.
@@ -198,6 +207,7 @@ pub(crate) struct Read {
     /// The insertions of the candidates that go apart from the tokens round
     /// them ([`edits::apart`]).
     pub apart: edits::Insertions,
+    pub literals: literal::Literals,
 }
 
 /// The text lexed and parsed as the declarations of a list of `ctx` (a
@@ -227,5 +237,5 @@ pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     groups::check(&ast, &|e| map.expr_kind(&cst, e), limit, &mut diagnostics);
     let mut apart = edits::Insertions::default();
     foreign::clocks(&cst, limit, &mut diagnostics, &mut apart);
-    Read { ast, cst, map, diagnostics, levels: out.levels, units, apart }
+    Read { ast, cst, map, diagnostics, levels: out.levels, units, apart, literals: out.literals }
 }

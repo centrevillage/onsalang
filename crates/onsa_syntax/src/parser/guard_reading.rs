@@ -123,15 +123,28 @@ pub(crate) enum Guarded {
     At,
 }
 
-/// `f` on a cursor over the tokens `lexed` of `text`, at no failure: what a
-/// later stage, which keeps no tokens, reads with the guard forms' reader.
+/// `f` on a cursor over `tokens`, a run of the full list of the tokens of
+/// `text` ([`lexed_run`]), at no failure: what a later stage reads with the
+/// guard forms' reader, from the tokens of its CST.
 pub(crate) fn with_cursor<T>(
     file: FileId,
     text: &str,
-    lexed: crate::Lexed,
+    tokens: Vec<Token>,
+    literals: &Literals,
     f: impl FnOnce(&crate::foreign::Cursor) -> T,
-) -> T {
-    f(&Parser::new(file, text, lexed).cursor(0, Want::Other))
+) -> Option<T> {
+    Some(f(&Parser::new(file, text, lexed_run(file, tokens, literals)?).cursor(0, Want::Other)))
+}
+
+/// The run `tokens` of the full list of the tokens of a file, with the facts
+/// of `literals` in it, as a lexer's output that ends at an `Eof` (its
+/// positions are those of the file); `None` for no token.
+fn lexed_run(file: FileId, mut tokens: Vec<Token>, literals: &Literals) -> Option<crate::Lexed> {
+    let (first, end) = (tokens.first()?.span.start, tokens.last()?.span.end);
+    if tokens.last().is_some_and(|t| t.kind != TokenKind::Eof) {
+        tokens.push(Token { kind: TokenKind::Eof, span: Span::new(file, end, end) });
+    }
+    Some(crate::Lexed { tokens, diagnostics: Vec::new(), literals: literals.within(first, end) })
 }
 
 /// The guard reading of a pattern (§7, §18.1): the tokens `tokens` of a
@@ -143,14 +156,12 @@ pub(crate) fn with_cursor<T>(
 pub(crate) fn reads_as_pattern(
     file: FileId,
     text: &str,
-    mut tokens: Vec<Token>,
+    tokens: Vec<Token>,
     literals: &Literals,
     whole: bool,
 ) -> Option<(crate::cst::Cst, Vec<(u32, Guarded)>)> {
-    let (first, end) = (tokens.first()?.span.start, tokens.last()?.span.end);
-    tokens.push(Token { kind: TokenKind::Eof, span: Span::new(file, end, end) });
-    let literals = literals.within(first, end);
-    let mut p = Parser::new(file, text, crate::Lexed { tokens, diagnostics: Vec::new(), literals });
+    let first = tokens.first()?.span.start;
+    let mut p = Parser::new(file, text, lexed_run(file, tokens, literals)?);
     p.nl = vec![false];
     p.guard = Some(GuardReading::default());
     let root = p.enter_unit(NodeKind::SourceFile, first);
