@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§15.1"]
+
+// An `extern` head that cannot be read, after something else that is an error (W5-11 U4). The
+// unit reports the first error, and the head is read on past both, so the members are names of
+// the module either way (§18.1, S-477, S-459, S-460):
+// - `unsafe extern "C" {` (Rust 2024): `unsafe` is a word that is no part of the head, one E0002;
+//   the `extern "C" {` that follows is the error of the next round (continue_extern_head_forms
+//   .onsa), so the unit has one.
+// - `#[link(name = "m")]` on a line of its own and then `extern "C" {`: the attribute of another
+//   language is one E0002, and the block that follows is read on, with its members.
+// No `fixes` is written: whether the attribute of `#[link(…)]` has a candidate (S-601, the
+// library `m` is known) is not decided here. One error in each unit.
+
+unsafe extern "C" {                                 //~ E0002 @1
+  fn c_unsafe(x: I32) -> I32
+  type RawUnsafe
+}
+
+#[link(name = "m")]                                 //~ E0002 @1
+extern "C" {
+  fn c_linked(x: I32) -> I32
+  type RawLinked
+}
+
+pub unsafe extern "C" {                             //~ E0002 @5
+  fn c_pub_unsafe(x: I32) -> I32
+}
+
+fn calls() -> I32 {
+  c_unsafe(1) + c_linked(2) + c_pub_unsafe(3)
+}
+
+fn takes(a: RawUnsafe, b: RawLinked) -> I32 {
+  c_unsafe(1) + c_linked(2)
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { c_unsafe(x) + c_linked(x) }
+  if c { f.(1) } else { c_pub_unsafe(c_linked(2)) }
+}
+
+// A real error of the module is still reported.
+fn own_error() -> I32 {
+  c_unsafe(1) + zz                                  //~ E0302 @17
+}
+
+fn too_many_arguments(a: RawUnsafe, b: RawLinked) -> I32 {
+  takes(a, b, a)                                    //~ E0412
+}

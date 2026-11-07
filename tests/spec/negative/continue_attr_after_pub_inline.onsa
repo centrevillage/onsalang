@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§15.1"]
+// fixes = 0
+
+// An attribute of another language after a visibility (`pub #[inline] fn`) is read on today
+// (§18.1, S-435; W5-11 U4 must not change it): one E0002 at the `#[`, and the head is read on
+// from the end of the attribute, so the function is a name of the module and its users are
+// checked against the head. The unit has a syntax error, so its body is not checked. One error in
+// each unit.
+
+pub #[inline] fn pub_inline(x: I32) -> I32 {        //~ E0002 @5
+  x + 1
+}
+
+priv #[inline] fn priv_inline(x: I32) -> I32 {      //~ E0002 @6
+  x + 2
+}
+
+pub #[inline] fn body_not_checked() -> I32 {        //~ E0002 @5
+  zz
+}
+
+fn calls() -> I32 {
+  pub_inline(1) + priv_inline(2) + body_not_checked()
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { pub_inline(x) + priv_inline(x) }
+  if c { f.(1) } else { pub_inline(priv_inline(2)) }
+}
+
+fn too_many_arguments() -> I32 {
+  pub_inline(1, 2)                                  //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  priv_inline(true)                                 //~ E0401
+}
+
+fn own_error() -> I32 {
+  pub_inline(1) + zz                                //~ E0302 @19
+}

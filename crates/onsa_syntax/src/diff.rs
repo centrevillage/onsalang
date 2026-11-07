@@ -69,8 +69,8 @@ fn key(ast: &Ast, id: ItemId) -> String {
             ItemKind::Extern(e) => {
                 let lib: String = e
                     .lib
-                    .segments
                     .iter()
+                    .flat_map(|l| &l.segments)
                     .map(|s| match s {
                         crate::ast::StrSeg::Text(t) => t.clone(),
                         crate::ast::StrSeg::Interp(_) => String::new(),

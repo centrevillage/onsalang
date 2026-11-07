@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.2", "§6.5", "§10", "§15.1"]
+// fixes = 0
+
+// An attribute after a visibility or after `rt` on a member of an `impl` (W5-11 U4;
+// `pub @fp(relaxed) fn a(self)`, `rt @fp(relaxed) fn b(self)`): one E0002 at the `@`, without a
+// candidate (§18.1, S-593), in the unit of the member. The head is read on, so the member is a
+// name after the name of the type (§6.2) with the visibility and the `rt` that were written:
+// the method call finds it, a call of `b` from an `rt` function gets no E0901 and a call of `a`
+// does. The unit has a syntax error, so the body of the member is not checked. One error in each
+// unit.
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  pub @fp(relaxed) fn a(self) -> F32 {              //~ E0002 @7
+    self.x
+  }
+
+  rt @fp(relaxed) fn b(self) -> F32 {               //~ E0002 @6
+    self.x
+  }
+
+  pub rt @fp(relaxed) fn c(self, k: F32) -> F32 {   //~ E0002 @10
+    self.x * k
+  }
+
+  pub @fp(relaxed) fn make(x: F32) -> Pt {          //~ E0002 @7
+    Pt { x: x }
+  }
+
+  pub @fp(relaxed) fn body_not_checked(self) -> F32 {   //~ E0002 @7
+    zz
+  }
+}
+
+fn calls(p: Pt) -> F32 {
+  p.a() + p.b() + p.c(2.0) + Pt.make(1.0).a() + p.body_not_checked()
+}
+
+fn nested(c: Bool, p: Pt) -> F32 {
+  let f = fn(q: Pt) -> F32 { q.a() + q.b() }
+  if c { f.(p) } else { Pt.make(p.c(1.0)).b() }
+}
+
+rt fn calls_rt_ones(p: Pt) -> F32 {
+  p.b() + p.c(2.0)
+}
+
+rt fn calls_a(p: Pt) -> F32 {
+  p.a()                                             //~ E0901
+}
+
+rt fn calls_make() -> Pt {
+  Pt.make(1.0)                                      //~ E0901
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments(p: Pt) -> F32 {
+  p.c(1.0, 2.0)                                     //~ E0412
+}
+
+fn wrong_argument_type(p: Pt) -> F32 {
+  p.c(true)                                         //~ E0401
+}
+
+fn no_such_method(p: Pt) -> F32 {
+  p.missing()                                       //~ E0413
+}
+
+fn own_error(p: Pt) -> F32 {
+  p.a() + zz                                        //~ E0302 @11
+}

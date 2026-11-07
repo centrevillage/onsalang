@@ -1,16 +1,18 @@
 //! The head of a declaration before its keyword (§18.1): its attributes, its
 //! visibility and its modifiers, and the reading on after a form that the
-//! head does not take (S-435, S-459, S-464, S-481).
+//! head does not take (S-435, S-459, S-464, S-481, S-492, S-593).
 //!
 //! What was not read stays in the head, before the declaration's node: an
 //! incomplete `Attr` (an attribute that was not read, S-460) or `Vis` node
 //! (a visibility of another language), or an `Error` node (a run of words, a
-//! keyword before a keyword, the modifiers out of order), whose `pub`,
-//! `priv` and `rt` are the modifiers written ([`crate::lower`]). The unit has
+//! keyword before a keyword, the modifiers out of order, an `rt` before a
+//! form), whose `pub`, `priv` and `rt` are the modifiers written
+//! ([`crate::lower`]). The tokens of a head of an `extern` block that does
+//! not read stay in its node (S-477). The unit has
 //! the syntax error, so the declaration is a read one whose body is not
 //! checked (`crate::units`, `Failed::Unit`).
 
-use onsa_diag::Edit;
+use onsa_diag::{Edit, Note};
 
 use super::items::{SeenAttr, VisRead};
 use super::*;
@@ -56,8 +58,9 @@ impl<'a> Parser<'a> {
     /// ([`Parser::foreign_attribute`]) or one whose arguments do not read
     /// ([`Parser::parse_attrs`]), the words before the head
     /// ([`Parser::words_before_head`]), a keyword before a keyword
-    /// ([`Parser::keyword_before_keyword`]) and the modifiers out of order
-    /// ([`Parser::modifiers_out_of_order`]). Any other token is the failure of
+    /// ([`Parser::keyword_before_keyword`]), the modifiers out of order
+    /// ([`Parser::modifiers_out_of_order`]) and an attribute after a
+    /// visibility or `rt` ([`Parser::late_attribute`]). Any other token is the failure of
     /// the head. The attributes of other languages read on are asked about
     /// at the place of the declaration read, as those of Onsa are
     /// ([`Parser::check_attrs`]): the parser read the head, and the table
@@ -69,11 +72,20 @@ impl<'a> Parser<'a> {
         let keyword = read.is_ok().then(|| self.peek_index());
         let failed = matches!(read, Err(Unread::Failed));
         for at in hashes {
+            // After `rt` it is the error of its place (§18.1): asked with no
+            // place, it has no candidate.
+            let before = self.tokens[..at].iter().rev().find(|t| !t.kind.is_comment());
+            let after_rt = before.is_some_and(|t| t.kind == TokenKind::KwRt);
             let mut cursor = self.cursor(at, Want::Other);
-            (cursor.place, cursor.declaration) = (place, keyword);
-            let d = foreign::at_heading_hash(&cursor, failed).unwrap_or_else(|| {
+            if !after_rt {
+                (cursor.place, cursor.declaration) = (place, keyword);
+            }
+            let mut d = foreign::at_heading_hash(&cursor, failed).unwrap_or_else(|| {
                 onsa_diag::internal::bug(Some(self.tokens[at].span), "a `#[` read on that the table does not name")
             });
+            if after_rt {
+                d.notes = vec![Note::rule(ATTRIBUTE_RULE)];
+            }
             self.report(d);
         }
         read.map_err(|_| ParseError)
@@ -98,6 +110,11 @@ impl<'a> Parser<'a> {
                 VisRead::ReadOn => continue,
                 VisRead::Word(w) => vis = Some(w),
                 VisRead::Absent => {}
+            }
+            // In this order: the attribute after `rt` is not for `parse_attrs`.
+            let rt = self.rt_before_form();
+            if self.late_attribute()? || rt {
+                continue;
             }
             let t = self.peek();
             if let Some(declaration) = declaration(t.kind) {
@@ -152,9 +169,8 @@ impl<'a> Parser<'a> {
         }
         let at = self.peek_index();
         self.start(NodeKind::Attr)?;
-        let close = Some(at + 1)
-            .filter(|&b| self.tokens[b].kind == TokenKind::LBracket)
-            .and_then(|b| crate::scan::closing_on_line(&self.tokens, b))
+        let close = self
+            .hash_end(at)
             .filter(|&e| !matches!(self.tokens[self.next_code(e)].kind, TokenKind::RBrace | TokenKind::Eof));
         let Some(close) = close else { return Err(self.fail(Want::Other, "a declaration")) };
         self.read_on(close + 1);
@@ -162,6 +178,12 @@ impl<'a> Parser<'a> {
         self.skip_newlines();
         hashes.push(at);
         Ok(true)
+    }
+
+    /// The `]` on its line of the `#[` at `at`.
+    fn hash_end(&self, at: usize) -> Option<usize> {
+        let bracket = Some(at + 1).filter(|&b| self.tokens[b].kind == TokenKind::LBracket)?;
+        crate::scan::closing_on_line(&self.tokens, bracket)
     }
 
     /// The words before a head on its line (S-459): names, and `unsafe`,
@@ -217,13 +239,16 @@ impl<'a> Parser<'a> {
         Ok(true)
     }
 
-    /// The modifiers `pub`, `priv` and `rt` on the line at the cursor before
-    /// the keyword of a declaration, twice or out of order (`pub pub fn`,
-    /// `rt pub fn`, S-464): one E0002 whose candidate writes the right order
-    /// (the visibility, then `rt`, each once; none when `pub` and `priv` are
-    /// both written), and the head is read on from the keyword, the
-    /// modifiers in an `Error` node. An `rt` before a keyword other than `fn`
-    /// is the grammar's failure at the keyword, as are the modifiers in order.
+    /// The modifiers `pub`, `priv` and `rt` on the line at the cursor, twice or
+    /// out of order before the head goes on (`pub pub fn`, `rt pub fn`, `pub
+    /// pub export fn`, S-464), or with an `rt` before the keyword of a
+    /// declaration other than `fn` (`rt struct P`, `pub rt impl P {`, S-492):
+    /// one E0002, and the head is read on from the token after, the modifiers
+    /// in an `Error` node. Its candidate writes the right order (the
+    /// visibility, then `rt` before `fn`, each once), and there is none when
+    /// `pub` and `priv` are both written, or when no keyword is next: whether
+    /// an `rt` stays is not known at the run. An `rt` in order before a form
+    /// that is no keyword is left to [`Parser::rt_before_form`].
     fn modifiers_out_of_order(&mut self) -> bool {
         use TokenKind::{KwFn, KwPriv, KwPub, KwRt};
         let first = self.peek_index();
@@ -238,17 +263,18 @@ impl<'a> Parser<'a> {
         let vis: Vec<TokenKind> = kinds.iter().copied().filter(|&k| k != KwRt).collect();
         let rt = kinds.len() - vis.len();
         let ordered = vis.len() <= 1 && rt <= 1 && (vis.is_empty() || kinds[0] != KwRt);
-        let keyword = self.tokens[next].kind;
-        // SPEC-GAP(S-492): `rt` before the keyword of a declaration other than
-        // `fn` (`rt pub struct P`) is not read as the modifiers out of order:
-        // no order of them makes the head right, and the grammar fails at it.
-        if ordered || !is_declaration_keyword(keyword) || (rt > 0 && keyword != KwFn) {
+        let keyword = is_declaration_keyword(self.tokens[next].kind).then_some(self.tokens[next].kind);
+        // S-492: `rt` has a place only before `fn` (§10), so no order makes the
+        // head right; the `rt` is not recorded ([`crate::lower`]).
+        let no_place = rt > 0 && keyword.is_some_and(|k| k != KwFn);
+        if (ordered && !no_place) || !self.head_goes_on(next) {
             return false;
         }
-        let fixes = if vis.contains(&KwPub) && vis.contains(&KwPriv) {
+        let fixes = if keyword.is_none() || (vis.contains(&KwPub) && vis.contains(&KwPriv)) {
             Vec::new()
         } else {
-            let right: Vec<TokenKind> = vis.first().copied().into_iter().chain((rt > 0).then_some(KwRt)).collect();
+            let keep_rt = rt > 0 && !no_place;
+            let right: Vec<TokenKind> = vis.first().copied().into_iter().chain(keep_rt.then_some(KwRt)).collect();
             let edits = run
                 .iter()
                 .enumerate()
@@ -258,14 +284,131 @@ impl<'a> Parser<'a> {
                     None => Some(Edit::delete(self.with_blank_after(k))),
                 })
                 .collect();
-            vec![Fix::new("write the visibility, then `rt`, once each", edits)]
+            let title =
+                if no_place { "write the head without `rt`" } else { "write the visibility, then `rt`, once each" };
+            vec![Fix::new(title, edits)]
         };
         let last = *run.last().unwrap_or(&first);
         let span = Span::new(self.file, self.tokens[first].span.start, self.tokens[last].span.end);
-        let message =
-            format!("`{}` is no head of a declaration: a visibility and then `rt`, once each", self.src(span));
+        let right = if no_place { "`rt` is written only before `fn`" } else { "a visibility and then `rt`, once each" };
+        let message = format!("`{}` is no head of a declaration: {right}", self.src(span));
         self.read_into_error(first, Own { span, message, rule: MODIFIERS_RULE, fixes, resume: next });
         true
+    }
+
+    /// `rt` at the cursor, right before a form on its line that the head is
+    /// read on after (`rt @fp(relaxed) fn h`, `rt #[inline] fn h`, `rt export
+    /// fn h`, S-593): it goes into an `Error` node, a modifier written
+    /// ([`crate::lower`]) with no report of its own: the form is the error,
+    /// reported in this round of [`Parser::read_heading`]. Before any other
+    /// token, `rt` is the head of a function, which fails there.
+    fn rt_before_form(&mut self) -> bool {
+        let rt = self.peek_index();
+        if self.tokens[rt].kind != TokenKind::KwRt {
+            return false;
+        }
+        let form = self.on_line_after(rt).filter(|&next| match self.tokens[next].kind {
+            TokenKind::At => self.late_attribute_end(next).is_some(),
+            TokenKind::Hash => {
+                self.hash_end(next).and_then(|e| self.on_line_after(e)).is_some_and(|n| self.head_goes_on(n))
+            }
+            _ => self.words_before_head_at(next).is_some(),
+        });
+        let Some(form) = form else { return false };
+        let m = self.enter_unit(NodeKind::Error, self.tokens[rt].span.start);
+        self.read_on(form);
+        self.complete(m, NodeKind::Error);
+        true
+    }
+
+    /// An attribute at the cursor after a visibility or `rt`, where the head
+    /// takes none (`pub @fp(relaxed) fn h`, S-593), when
+    /// [`Parser::late_attribute_end`] finds its end: one E0002 for its place,
+    /// and the head is read on after it. Its node is incomplete, an attribute
+    /// that was not read (S-460): what is in it is not looked at.
+    // S-949: an old attribute here (`pub @derive(Eq) struct P`, `pub @relaxed
+    // fn h`) is this E0002 too, whatever its name: its place is the first error.
+    fn late_attribute(&mut self) -> PResult<bool> {
+        let at = self.peek_index();
+        if self.tokens[at].kind != TokenKind::At {
+            return Ok(false);
+        }
+        let Some(last) = self.late_attribute_end(at) else { return Ok(false) };
+        self.start(NodeKind::Attr)?;
+        let span = Span::new(self.file, self.tokens[at].span.start, self.tokens[last].span.end);
+        let message = format!("`{}` cannot be written here: attributes come first in a head", self.src(span));
+        let own = Own { span, message, rule: ATTRIBUTE_RULE, fixes: Vec::new(), resume: last + 1 };
+        self.fail_at(Want::Other, "a declaration", None, Some(own));
+        self.read_on(last + 1);
+        self.finish(None, false);
+        Ok(true)
+    }
+
+    /// The last token of the form `@name` or `@name(…)` at `at`, when its `(`
+    /// closes on its line and the head goes on after it on that line (§18.1).
+    fn late_attribute_end(&self, at: usize) -> Option<usize> {
+        let name = self.on_line_after(at).filter(|&n| self.tokens[n].kind == TokenKind::Ident)?;
+        let next = self.on_line_after(name)?;
+        let last = match self.tokens[next].kind {
+            TokenKind::LParen => crate::scan::closing_on_line(&self.tokens, next)?,
+            _ => name,
+        };
+        self.on_line_after(last).filter(|&n| self.head_goes_on(n)).map(|_| last)
+    }
+
+    /// The head of an `extern` block at the cursor, when it does not read
+    /// before the `{` on its line (`extern "C" {`, `extern {`, S-477): from
+    /// `extern` to before the `{` is one E0002 at the token the grammar fails
+    /// at (a row of that token, a run of a literal, is the error instead), and
+    /// `true`, the members being read on. The name of the library is the
+    /// writer's: no candidate.
+    pub(super) fn extern_head_read_on(&mut self) -> bool {
+        let first = self.peek_index();
+        let Some((head, brace)) = self.extern_head_on_line(first) else { return false };
+        let string = |&t: &usize| self.tokens[t].kind == TokenKind::Str;
+        let fits =
+            |k: usize, t: &usize| if k == 1 { self.is_ident(self.tokens[*t], "lib") } else { k < 3 && string(t) };
+        let failing = head.iter().enumerate().find(|&(k, t)| !fits(k, t)).map(|(k, _)| k);
+        if failing.is_none() && head.len() == 3 {
+            return false;
+        }
+        let end = self.tokens[*head.last().unwrap_or(&first)].span.end;
+        let span = Span::new(self.file, self.tokens[first].span.start, end);
+        let message = format!("`{}` is no head of an `extern` block", self.src(span));
+        let at = failing.map_or(brace, |k| head[k]);
+        while self.peek_index() < at {
+            self.bump();
+        }
+        let own = Own { span, message, rule: EXTERN_RULE, fixes: Vec::new(), resume: brace };
+        self.fail_at(Want::Other, "a declaration", None, Some(own));
+        self.read_on(brace);
+        true
+    }
+
+    /// The tokens between `extern` at `first` and the first `{` on its line,
+    /// and that `{`; `None` when there is none, or when the brackets before
+    /// it do not close (the range of the form closes on its line, §18.1).
+    fn extern_head_on_line(&self, first: usize) -> Option<(Vec<usize>, usize)> {
+        let (mut head, mut open) = (Vec::new(), Vec::new());
+        let mut at = first;
+        loop {
+            at = self.on_line_after(at)?;
+            let kind = self.tokens[at].kind;
+            if kind == TokenKind::LBrace {
+                return open.is_empty().then_some((head, at));
+            }
+            let closed = crate::scan::pair(&mut open, &self.tokens, at, 0);
+            if closed.is_none() && matches!(kind, TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace) {
+                return None;
+            }
+            head.push(at);
+        }
+    }
+
+    /// Whether the head goes on at `tokens[i]`: a token that starts a head,
+    /// or the words before one (§18.1, S-593).
+    fn head_goes_on(&self, i: usize) -> bool {
+        starts_heading(self.tokens[i].kind) || self.words_before_head_at(i).is_some()
     }
 
     /// The run of words from token `first` before a head on its line
@@ -320,6 +463,13 @@ const WORDS_RULE: &str = "the head of a declaration starts with its visibility (
 /// The note of a keyword before a keyword (S-464).
 const KEYWORD_RULE: &str =
     "the keyword of a declaration is followed by its name, not by the keyword of another declaration (§18.1)";
+
+/// The note of an attribute after a visibility or `rt` (S-593).
+const ATTRIBUTE_RULE: &str = "the attributes of a declaration are written before its visibility and `rt`: `@fp(relaxed) pub rt fn h` (§6.5, §18.1)";
+
+/// The note of the head of an `extern` block that does not read (S-477).
+const EXTERN_RULE: &str =
+    "an `extern` block is written `extern \"C\" lib \"…\" {`, with the name of its library (§14.1)";
 
 /// The note of the modifiers out of order (S-464).
 const MODIFIERS_RULE: &str = "the head of a declaration is its visibility (`pub` or `priv`, or none), then `rt` before `fn`, each written once, then its keyword (§10, §15.1, §18.1)";

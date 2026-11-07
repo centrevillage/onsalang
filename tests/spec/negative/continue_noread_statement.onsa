@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§2.5"]
+// fixes = 0
+
+// `rt` before a declaration keyword in the place of a statement (W5-11 U4 must not change this):
+// the family of the head of an item (§18.1, S-492) is for the places where an item can start,
+// and a block has none. In a statement `rt` starts an anonymous function (`rt fn(x: I32) -> I32
+// { … }`, whose `rt` comes from the expected type), so `rt struct P` is one E0002 and the
+// reading of the statement stops there, as before.
+
+fn in_a_block() -> I32 {
+  rt struct P { x: I32 }                            //~ E0002 @3
+  1
+}
+
+fn after_a_statement() -> I32 {
+  let a = 1
+  rt enum E { A }                                   //~ E0002 @3
+  a
+}
+
+fn own_error() -> I32 {
+  zz                                                //~ E0302
+}

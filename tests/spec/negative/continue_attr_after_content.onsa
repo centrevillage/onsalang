@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§12.4", "§15.1"]
+// fixes = 0
+
+// An attribute after a visibility (W5-11 U4) is one E0002 for its place, whatever it holds: the
+// contents of the attribute are not read (§18.1, S-593), so an attribute that is unknown
+// (`@nope`), one whose arguments are not well formed (`@fp(relaxed, 1 +)`), and two in a row are
+// each one E0002, at the first `@`, and no E0005 or other error about the contents is reported.
+// A good attribute before the visibility stays where it is: `@fp(relaxed) pub @mem(bulk) fn`
+// is one E0002 at the second `@`. The head is read on from the end of the last attribute that
+// is on the line, so each function is a name of the module and its users are checked against the
+// head. The unit has a syntax error, so its body is not checked. One error in each unit.
+
+pub @fp(relaxed, 1 +) fn bad_arguments(x: F32) -> F32 {   //~ E0002 @5
+  x
+}
+
+pub @nope fn unknown_attribute(x: F32) -> F32 {     //~ E0002 @5
+  x
+}
+
+pub @fp(relaxed) @mem(bulk) fn two_attributes(x: F32) -> F32 {   //~ E0002 @5
+  x
+}
+
+@fp(relaxed) pub @mem(bulk) fn good_then_late(x: F32) -> F32 {   //~ E0002 @18
+  x
+}
+
+pub @fp(relaxed) fn body_not_checked() -> F32 {     //~ E0002 @5
+  zz
+}
+
+fn calls() -> F32 {
+  bad_arguments(1.0) + unknown_attribute(1.0) + two_attributes(1.0) + good_then_late(1.0)
+}
+
+fn calls_more() -> F32 {
+  body_not_checked()
+}
+
+fn nested(c: Bool) -> F32 {
+  let f = fn(x: F32) -> F32 { bad_arguments(x) + two_attributes(x) }
+  if c { f.(1.0) } else { unknown_attribute(good_then_late(2.0)) }
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> F32 {
+  unknown_attribute(1.0, 2.0)                       //~ E0412
+}
+
+fn wrong_argument_type() -> F32 {
+  good_then_late(true)                              //~ E0401
+}
+
+fn own_error() -> F32 {
+  two_attributes(1.0) + zz                          //~ E0302 @25
+}

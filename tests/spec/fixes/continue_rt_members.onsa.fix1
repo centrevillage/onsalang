@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§6.2", "§6.3", "§15.1"]
+// fixes = 1
+
+// `rt` before an `impl`, and before a member of an `impl` that is not a function (W5-11 U4;
+// `rt` is for functions, §10). The `rt` is one E0002 (§18.1, S-492) whose candidate removes it
+// and whose main position is the `rt`. The head is read on, so the type has the members that
+// were written, and the `rt` has no place to be recorded: the members of `rt impl` are not
+// `rt` (an `rt` function that calls one gets E0901, and the candidate does not move the `rt` to
+// the members), and `Level.MAX` finds the constant. An `impl` whose head is an error is one unit
+// whose members are not checked (§18.1), so a member with an error in its body raises none.
+// One error in each unit.
+
+pub struct Pt {
+  x: I32,
+}
+
+pub struct Level {
+  n: I32,
+}
+
+impl Pt {                                        //~ E0002 @1
+  fn read(self) -> I32 {
+    self.x
+  }
+
+  pub fn make(x: I32) -> Pt {
+    Pt { x: x }
+  }
+
+  fn body_not_checked(self) -> I32 {
+    zz
+  }
+}
+
+impl Level {
+  const MAX: I32 = 8                             //~ E0002 @3
+
+  pub fn get(self) -> I32 {
+    self.n
+  }
+}
+
+fn reads(p: Pt) -> I32 {
+  p.read() + p.body_not_checked() + Pt.make(1).read()
+}
+
+fn constant() -> I32 {
+  Level.MAX
+}
+
+// The `rt` was not recorded for the members: they are not `rt`.
+pub rt fn calls_member(p: Pt) -> I32 {
+  p.read()                                          //~ E0901
+}
+
+pub rt fn calls_make() -> Pt {
+  Pt.make(1)                                        //~ E0901
+}
+
+fn nested(c: Bool, p: Pt) -> I32 {
+  let f = fn(q: Pt) -> I32 { q.read() + Level.MAX }
+  if c { f.(p) } else { Pt.make(Level.MAX).read() }
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn no_such_method(l: Level) -> I32 {
+  l.missing()                                       //~ E0413
+}
+
+fn too_many_arguments() -> Pt {
+  Pt.make(1, 2)                                     //~ E0412
+}
+
+fn wrong_argument_type() -> Pt {
+  Pt.make(true)                                     //~ E0401
+}
+
+fn wrong_type_for_constant() -> Bool {
+  Level.MAX                                         //~ E0401
+}
+
+fn no_such_constant() -> I32 {
+  Level.MIN                                         //~ E0302
+}
+
+fn own_error(p: Pt) -> I32 {
+  p.read() + zz                                     //~ E0302 @14
+}

@@ -435,3 +435,17 @@ left = "ranges cannot be patterns; compare in a guard"
 input = "tests/fuzz/4c857f74.onsa"
 reasons = ["S-281", "S-236"]
 note = "`read it as decimal` の許可（`76db4720`）と同じ入力の形の、二番目の候補。範囲の誤りが別にある入力"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected `…` or `…`, found identifier"
+input = "tests/fuzz/11bce631.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: the `if` after `else` on the next line, and a `(` never closed before them"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "empty brackets are not written here"
+input = "tests/fuzz/9bfbd754.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: the space before `(`, and `let o ()` that has no `=` and empty brackets where a value goes"

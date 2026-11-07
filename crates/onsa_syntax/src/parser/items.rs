@@ -680,14 +680,16 @@ impl<'a> Parser<'a> {
 
     pub(super) fn parse_extern(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Extern)?;
-        self.expect(TokenKind::KwExtern)?;
-        self.expect(TokenKind::Str)?;
-        let t = self.peek();
-        if !self.is_ident(t, "lib") {
-            return Err(self.unexpected("`lib`"));
+        if !self.extern_head_read_on() {
+            self.expect(TokenKind::KwExtern)?;
+            self.expect(TokenKind::Str)?;
+            let t = self.peek();
+            if !self.is_ident(t, "lib") {
+                return Err(self.unexpected("`lib`"));
+            }
+            self.bump();
+            self.expect(TokenKind::Str)?;
         }
-        self.bump();
-        self.expect(TokenKind::Str)?;
         self.parse_members(NodeKind::Extern)?;
         self.complete(m, NodeKind::Extern);
         Ok(())

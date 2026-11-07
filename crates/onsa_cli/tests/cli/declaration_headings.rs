@@ -134,6 +134,62 @@ fn a_restricted_visibility_and_a_pub_struct_field_have_no_candidate_and_have_a_n
     }
 }
 
+/// The texts of the notes of `diag`.
+fn rule_notes(diag: &Value) -> Vec<String> {
+    let notes = diag["notes"].as_array().unwrap_or_else(|| panic!("no `notes` in {diag}"));
+    notes.iter().map(|n| n["message"].as_str().expect("a note has a message").to_string()).collect()
+}
+
+#[test]
+fn an_attribute_after_the_visibility_or_rt_says_where_attributes_go() {
+    // §18.1 (S-593): the note shows that the attributes come before the visibility and `rt`, and the form is
+    // the range, the attribute of Onsa from its `@` to its name or `)`, whatever is in it (S-949 for an old one).
+    // The note of `pub #[inline] fn` is the row's, about the form of an attribute: not this one.
+    let forms = [
+        ("vis", "pub @fp(relaxed) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed)"),
+        ("rt", "rt @fp(relaxed) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed)"),
+        ("vis_rt", "pub rt @fp(relaxed) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed)"),
+        ("contents", "pub @fp(relaxed, 1 +) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed, 1 +)"),
+        ("name_only", "pub @nope fn f() -> I32 {\n  1\n}\n", "@nope"),
+        ("old_derive", "pub @derive(Eq) struct P {\n  x: I32,\n}\n", "@derive(Eq)"),
+        ("old_relaxed", "pub @relaxed fn f() -> I32 {\n  1\n}\n", "@relaxed"),
+        ("foreign_rt", "rt #[inline] fn f() -> I32 {\n  1\n}\n", "#[inline]"),
+        ("foreign_candidate", "rt #[fp(relaxed)] fn f() -> I32 {\n  1\n}\n", "#[fp(relaxed)]"),
+    ];
+    let d = Dir::bare("lateattr");
+    let says = "before its visibility and `rt`";
+    for (name, src, found) in forms {
+        let diag = one(&d, name, src, "E0002");
+        assert_eq!(found_of(&diag), found, "{name}: {diag}");
+        assert_eq!(count(&diag, "fixes"), 0, "{name}: no candidate: {diag}");
+        let notes = rule_notes(&diag);
+        assert!(notes.len() == 1 && notes[0].contains(says), "{name}: the note: {notes:?}");
+    }
+    let diag = one(&d, "foreign_vis", "pub #[inline] fn f() -> I32 {\n  1\n}\n", "E0002");
+    assert!(rule_notes(&diag).iter().all(|n| !n.contains(says)), "{diag}");
+}
+
+#[test]
+fn a_head_of_an_extern_block_that_does_not_read_shows_the_form_of_the_head() {
+    // §18.1 (S-477): `extern` to before the `{` is the range, with no candidate (the library is the writer's), and
+    // the note shows the head.
+    let forms = [
+        ("no_lib", "extern \"C\" {\n  fn f() -> I32\n}\n", "extern \"C\""),
+        ("bare", "extern {\n  fn f() -> I32\n}\n", "extern"),
+        ("word", "extern \"C\" lib fastconv {\n  fn f() -> I32\n}\n", "extern \"C\" lib fastconv"),
+        ("extra", "extern \"C\" lib \"m\" \"x\" {\n  fn f() -> I32\n}\n", "extern \"C\" lib \"m\" \"x\""),
+        ("vis", "pub extern \"C\" {\n  fn f() -> I32\n}\n", "extern \"C\""),
+    ];
+    let d = Dir::bare("externhead");
+    for (name, src, found) in forms {
+        let diag = one(&d, name, src, "E0002");
+        assert_eq!(found_of(&diag), found, "{name}: {diag}");
+        assert_eq!(count(&diag, "fixes"), 0, "{name}: no candidate: {diag}");
+        let notes = rule_notes(&diag);
+        assert!(notes.iter().any(|n| n.contains("`extern \"C\" lib \"…\" {`")), "{name}: the note: {notes:?}");
+    }
+}
+
 #[test]
 fn a_spelling_only_difference_and_a_tuple_of_one_keep_their_candidate() {
     // `#[repr(C)]` is written `@repr(c)` (the same concept spelled otherwise), and a

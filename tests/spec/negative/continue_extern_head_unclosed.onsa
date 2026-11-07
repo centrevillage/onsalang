@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§15.1"]
+// fixes = 0
+
+// An `extern` block whose head cannot be read (W5-11 U4; `extern "C" {`) and whose `}` is
+// missing, with an item at the start of a line after it. The unit ends at the item whose line
+// starts as far out as the line of the `extern` (§18.1: an unclosed `{` ends the unit there, and
+// the rule of the item start), and it reports its first error, the head: one E0002 at the
+// `extern` (the error about the `{` that is never closed is a second error of the unit). The
+// members are read on, so they are names of the module, and the items after the block are read
+// as items of their own: their uses are checked, and a real error in them is reported.
+// (The file that ends inside the block: continue_extern_head_unclosed_eof.onsa.)
+
+fn before() -> I32 {
+  1
+}
+
+extern "C" {                                        //~ E0002 @1
+  fn c_open(x: I32) -> I32
+  type RawOpen
+
+fn after_block() -> I32 {
+  c_open(1) + before()
+}
+
+fn takes(r: RawOpen) -> I32 {
+  c_open(2)
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { c_open(x) + before() }
+  if c { f.(1) } else { after_block() }
+}
+
+fn too_many_arguments() -> I32 {
+  after_block(1)                                    //~ E0412
+}
+
+fn own_error() -> I32 {
+  c_open(1) + zz                                    //~ E0302 @15
+}

@@ -1,0 +1,38 @@
+// The declarations of this module have an attribute after the visibility or after `rt` (W5-11 U4).
+// Each head is one E0002 without a candidate (§18.1, S-593). The visibility that was written is
+// recorded (and `rt` too), and the attribute is not, so the declaration is a name of the module
+// with that visibility for the module that brings it in with `use`.
+
+pub @fp(relaxed) fn kept_pub(x: F32) -> F32 {       //~ E0002 @5
+  x * 2.0
+}
+
+priv @fp(relaxed) fn kept_priv(x: F32) -> F32 {     //~ E0002 @6
+  x * 3.0
+}
+
+rt @fp(relaxed) fn kept_none_rt(x: F32) -> F32 {    //~ E0002 @4
+  x * 4.0
+}
+
+pub rt @fp(relaxed) fn kept_pub_rt(x: F32) -> F32 { //~ E0002 @8
+  x * 5.0
+}
+
+pub @repr(c) struct KeptPubStruct {                 //~ E0002 @5
+  x: F32,
+}
+
+priv @repr(c) struct KeptPrivStruct {               //~ E0002 @6
+  x: F32,
+}
+
+rt #[inline] fn kept_none_foreign(x: F32) -> F32 {  //~ E0002 @4
+  x
+}
+
+// A name of the module is a name in its own module too.
+fn local(s: KeptPubStruct) -> F32 {
+  let t = KeptPrivStruct { x: 1.0 }
+  kept_pub(1.0) + kept_priv(2.0) + kept_none_rt(3.0) + kept_pub_rt(4.0) + s.x + t.x
+}

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5", "§15.1"]
+// fixes = 0
+
+// The forms after a visibility or `rt` that do not close on their line are not read on (W5-11
+// U4 must not change this; §18.1, S-435): the attribute `@fp(relaxed` or `#[inline` has no `)`
+// or `]`, so the end of the form is not known. They keep the reading they have: one E0002 for
+// each (the first error of the unit, the head), and the item is not a name of the module, so
+// its user gets E0302. A form that does not close ends at the next item that starts a line.
+
+fn uses_a() -> I32 {
+  a()                                               //~ E0302
+}
+
+fn uses_b() -> I32 {
+  b()                                               //~ E0302
+}
+
+fn uses_c() -> I32 {
+  c()                                               //~ E0302
+}
+
+pub @fp(relaxed fn a() -> I32 {                     //~ E0002 @5
+  1
+}
+
+rt @fp(relaxed fn b() -> I32 {                      //~ E0002 @4
+  1
+}
+
+rt #[inline fn c() -> I32 {                         //~ E0002 @4
+  1
+}
+
+fn own_error() -> I32 {
+  zz                                                //~ E0302
+}

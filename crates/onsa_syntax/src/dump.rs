@@ -273,9 +273,9 @@ impl<'a> Dumper<'a> {
             }
             ItemKind::Extern(e) => {
                 self.out.push_str("extern ");
-                self.str_lit(&e.abi);
+                self.unread_str(&e.abi);
                 self.out.push_str(" lib ");
-                self.str_lit(&e.lib);
+                self.unread_str(&e.lib);
                 for &i in &e.items {
                     self.nested(|d| d.item(i));
                 }
@@ -484,6 +484,14 @@ impl<'a> Dumper<'a> {
                     self.effects(e);
                 }
             }
+        }
+    }
+
+    /// A string of a head, `?` when it was not read (S-477).
+    fn unread_str(&mut self, s: &Option<StrLit>) {
+        match s {
+            Some(s) => self.str_lit(s),
+            None => self.out.push('?'),
         }
     }
 

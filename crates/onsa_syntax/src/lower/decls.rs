@@ -427,13 +427,14 @@ impl<'a> Lower<'a> {
     }
 
     fn read_extern(&mut self, d: NodeId) -> Option<(ItemKind, bool)> {
+        // A head cut before its block is no declaration; one read on to the
+        // `{` has what it read, and the rest is unknown (§18.1, S-477).
+        self.child(d, NodeKind::ItemList)?;
         let mut heading = true;
-        let strs: Vec<TokenIdx> = self.toks(d).into_iter().filter(|&t| self.kind_of(t) == TokenKind::Str).collect();
-        if strs.len() != 2 {
-            return None;
-        }
-        let abi = self.str_lit(strs[0]);
-        let lib = self.str_lit(strs[1]);
+        let toks = self.toks(d);
+        let string = |k: usize| toks.get(k).filter(|&&t| self.kind_of(t) == TokenKind::Str).map(|&t| self.str_lit(t));
+        let abi = string(1);
+        let lib = toks.iter().position(|&t| self.text_of(t) == "lib").and_then(|k| string(k + 1));
         let items = self.read_members(d, &mut heading);
         Some((ItemKind::Extern(ExternDecl { abi, lib, items }), heading))
     }

@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§15.1"]
+// fixes = 0
+
+// `rt` before a declaration that is not a function, together with `pub` and `priv` at once (W5-11
+// U4; `rt priv pub struct`): one E0002 (§18.1, S-492, S-464) without a candidate, because the two
+// visibilities disagree and there is no way to know which one the writer meant. The main
+// position is the first modifier. The head is read on from the keyword of the declaration, so
+// the declaration is a name of the module (its visibility is unspecified), and the places that
+// use the name get no E0302 and are checked against the head. The unit has a syntax error, so
+// its body is not checked. One error in each unit.
+
+rt priv pub struct Pt {                             //~ E0002 @1
+  x: I32,
+}
+
+priv rt pub struct Rs {                             //~ E0002 @1
+  x: I32,
+}
+
+pub priv rt enum Mode {                             //~ E0002 @1
+  Off,
+  On(I32),
+}
+
+rt pub priv const K: I32 = 1                        //~ E0002 @1
+
+priv pub rt type Al = I32                           //~ E0002 @1
+
+rt priv pub const BODY: I32 = zz                    //~ E0002 @1
+
+fn uses_structs(a: Pt, b: Rs) -> I32 {
+  a.x + b.x
+}
+
+fn makes() -> Pt {
+  Pt { x: 1 }
+}
+
+fn uses_enum(m: Mode) -> I32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On(n) => n + K,
+  }
+}
+
+fn uses_alias(a: Al) -> I32 {
+  a
+}
+
+fn nested(c: Bool, p: Pt) -> I32 {
+  let f = fn(q: Rs) -> I32 { q.x + K }
+  if c { f.(Rs { x: p.x }) } else { uses_enum(Mode.On(1)) }
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn no_such_field(p: Pt) -> I32 {
+  p.zz                                              //~ E0413
+}
+
+fn missing_variant(m: Mode) -> I32 {
+  match m {                                         //~ E0501
+    Mode.Off => 0,
+  }
+}
+
+fn wrong_type_for_alias() -> Al {
+  true                                              //~ E0401
+}
+
+fn wrong_type_for_const() -> Bool {
+  K                                                 //~ E0401
+}
+
+fn own_error() -> I32 {
+  K + zz                                            //~ E0302 @7
+}

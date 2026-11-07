@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§10", "§15.1"]
+// fixes = 0
+
+// The names of util.onsa whose heads have an attribute after the visibility or after `rt` (W5-11
+// U4; every one is one error in util.onsa, without a candidate). The visibility that was
+// written decides (§18.1, S-593, S-482): a name recorded `pub` or none (the package, for the
+// declaration that has only an `rt`) is taken and used here without a diagnostic (a name of the
+// module, so no E0302 either), and a name recorded `priv` is E0303 in the `use`, and its uses
+// are silent (the names of a failed `use` are, S-462). The `rt` that was written is recorded: an
+// `rt` function of this module may call `kept_pub_rt` and `kept_none_rt`, and gets E0901 for
+// `kept_pub`. What was read is checked here: a call with too many arguments, a field that is
+// not there.
+
+use util.{kept_pub, kept_none_rt, kept_pub_rt, KeptPubStruct, kept_none_foreign}
+use util.{kept_priv}                                //~ E0303
+use util.{KeptPrivStruct}                           //~ E0303
+
+fn reads(s: KeptPubStruct) -> F32 {
+  kept_pub(1.0) + kept_none_rt(2.0) + kept_pub_rt(3.0) + kept_none_foreign(4.0) + s.x
+}
+
+fn nested(c: Bool) -> F32 {
+  let f = fn(x: F32) -> F32 { kept_pub(x) + kept_none_rt(x) }
+  if c { f.(1.0) } else { kept_pub_rt(kept_pub(2.0)) }
+}
+
+fn silent_names(s: KeptPrivStruct) -> F32 {
+  kept_priv(1.0) + s.x
+}
+
+rt fn calls_rt_ones(x: F32) -> F32 {
+  kept_none_rt(kept_pub_rt(x))
+}
+
+rt fn calls_pub(x: F32) -> F32 {
+  kept_pub(x)                                       //~ E0901
+}
+
+fn too_many_arguments() -> F32 {
+  kept_pub(1.0, 2.0)                                //~ E0412
+}
+
+fn no_such_field(s: KeptPubStruct) -> F32 {
+  s.zz                                              //~ E0413
+}
+
+fn own_error() -> F32 {
+  kept_pub(1.0) + zz                                //~ E0302 @19
+}

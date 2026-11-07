@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§15.1"]
+// fixes = 0
+
+// The names of util.onsa whose heads have an `rt` in front of a declaration that is not a
+// function, together with `pub` and `priv` at once (W5-11 U4; every one is one error in
+// util.onsa, without a candidate). The visibility of a declaration that was read on after such a
+// head is the default, which is the package (§15.1: an unspecified visibility is visible in the
+// package; §18.1, S-482), so the names are taken and used here without a diagnostic: no E0303,
+// and no E0302 either, because they are names of the module. What was read is checked here: a
+// field that is not there, a variant that is not covered. A real error of this module is still
+// reported.
+
+use util.{Both, Other, BOTH_CONST, BothMode}
+
+fn reads(b: Both, o: Other) -> I32 {
+  b.x + o.x + BOTH_CONST
+}
+
+fn uses_mode(m: BothMode) -> I32 {
+  match m {
+    BothMode.Off => 0,
+    BothMode.On(n) => n,
+  }
+}
+
+fn makes() -> Both {
+  Both { x: BOTH_CONST }
+}
+
+fn nested(c: Bool, b: Both) -> I32 {
+  let f = fn(p: Both) -> I32 { p.x + BOTH_CONST }
+  if c { f.(b) } else { uses_mode(BothMode.On(1)) }
+}
+
+fn no_such_field(b: Both) -> I32 {
+  b.zz                                              //~ E0413
+}
+
+fn missing_variant(m: BothMode) -> I32 {
+  match m {                                         //~ E0501
+    BothMode.Off => 0,
+  }
+}
+
+fn own_error() -> I32 {
+  BOTH_CONST + zz                                   //~ E0302 @16
+}

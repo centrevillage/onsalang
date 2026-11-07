@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§15.1"]
+// fixes = 1
+
+// The names of util.onsa whose heads have an `rt` in front of a declaration that is not a
+// function (W5-11 U4; every one is one error in util.onsa, with a candidate). The visibility
+// that was written decides (§18.1, S-492, S-482): a name recorded `pub` is taken and used here
+// without a diagnostic (a name of the module, so no E0302 either), and a name recorded `priv` is
+// E0303 in the `use`, and its uses are silent (the names of a failed `use` are, S-462). The
+// `rt` is not recorded, and what was read is checked here: a field that is not there, a value
+// of the wrong type.
+
+use util.{PubRt, PUB_RT, PubRtMode, PubRtAlias}
+use util.{PrivRt}                                   //~ E0303
+use util.{PRIV_RT}                                  //~ E0303
+
+fn uses_pub(a: PubRtAlias) -> I32 {
+  let p = PubRt { x: PUB_RT }
+  p.x + a
+}
+
+fn uses_mode(m: PubRtMode) -> I32 {
+  match m {
+    PubRtMode.Off => 0,
+    PubRtMode.On(n) => n,
+  }
+}
+
+fn nested(c: Bool, p: PubRt) -> I32 {
+  let f = fn(q: PubRt) -> I32 { q.x + PUB_RT }
+  if c { f.(p) } else { uses_mode(PubRtMode.On(1)) }
+}
+
+fn silent_names(q: PrivRt) -> I32 {
+  q.x + PRIV_RT
+}
+
+fn no_such_field(p: PubRt) -> I32 {
+  p.zz                                              //~ E0413
+}
+
+fn wrong_type() -> Bool {
+  PUB_RT                                            //~ E0401
+}
+
+fn own_error() -> I32 {
+  PUB_RT + zz                                       //~ E0302 @12
+}

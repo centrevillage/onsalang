@@ -1,0 +1,37 @@
+// The declarations of this module have an `rt` in front of a declaration that is not a function
+// (W5-11 U4). Each head is one E0002 with a candidate (§18.1, S-492): the run of modifiers without
+// the `rt`, with one visibility. The visibility that was written is recorded, and the `rt` is
+// not (it has no place to be), so the declaration is a name of the module with that visibility
+// for the module that brings it in with `use`.
+
+pub struct PubRt {                               //~ E0002 @1
+  x: I32,
+}
+
+priv struct PrivRt {                             //~ E0002 @1
+  x: I32,
+}
+
+pub const PUB_RT: I32 = 1                        //~ E0002 @1
+
+priv const PRIV_RT: I32 = 2                      //~ E0002 @1
+
+pub enum PubRtMode {                             //~ E0002 @1
+  Off,
+  On(I32),
+}
+
+pub type PubRtAlias = I32                        //~ E0002 @1
+
+// A name of the module is a name in its own module too.
+fn local(p: PubRt, a: PubRtAlias) -> I32 {
+  let q = PrivRt { x: 3 }
+  p.x + q.x + PUB_RT + PRIV_RT + a
+}
+
+fn local_mode(m: PubRtMode) -> I32 {
+  match m {
+    PubRtMode.Off => 0,
+    PubRtMode.On(n) => n,
+  }
+}

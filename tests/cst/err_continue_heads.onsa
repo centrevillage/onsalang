@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§18.1"]
+
+// Heads of items that the parser reads on after one error (W5-11 U4, §18.1, S-492, S-593, S-477):
+// an `rt` before a declaration that is not a function, an attribute after a visibility or after
+// `rt`, and an `extern` head that cannot be read before its `{`. Whatever the recovery does with
+// the text of the head and with what follows, the round trip of the CST gives the file back byte
+// for byte (R-86). An input of the CST round trip; fmt refuses it (syntax diagnostics), as it
+// must. The forms that are not read on (the ones that do not close, the ones a line break cuts)
+// are at the end.
+
+rt struct A1 { x: I32 }
+rt pub struct A2 { x: I32 }
+pub rt struct A3 { x: I32 }
+priv rt struct A4 { x: I32 }
+rt rt struct A5 { x: I32 }
+rt priv pub struct A6 { x: I32 }
+rt enum A7 { Off, On(I32) }
+rt impl A1 {
+  fn read(self) -> I32 { self.x }
+  rt const K: I32 = 1
+}
+rt extern "C" lib "m" {
+  rt type Raw
+  fn c_abs(x: I32) -> I32
+}
+rt flow lp(x: F32 at sample) -> F32 at sample { x }
+rt test "t" { assert true }
+rt const A8: I32 = 1
+rt use std.math.{sqrt}
+rt trait A9 { fn m(self) -> I32 }
+rt handler ha: Ef { fn op() -> I32 { 1 } }
+rt effect Ef { fn op() -> I32 }
+rt type A10 = I32
+export rt struct A11 { x: I32 }
+
+pub @fp(relaxed) fn b1(x: F32) -> F32 { x }
+priv @fp(relaxed) fn b2(x: F32) -> F32 { x }
+rt @fp(relaxed) fn b3(x: F32) -> F32 { x }
+pub rt @fp(relaxed) fn b4(x: F32) -> F32 { x }
+pub @fp(relaxed) rt fn b5(x: F32) -> F32 { x }
+pub @repr(c) struct B6 { x: I32 }
+pub @fp(relaxed) @mem(bulk) fn b7(x: F32) -> F32 { x }
+@fp(relaxed) pub @mem(bulk) fn b8(x: F32) -> F32 { x }
+pub @fp(relaxed, 1 +) fn b9(x: F32) -> F32 { x }
+pub @nope fn b10(x: F32) -> F32 { x }
+pub @derive(Eq) struct B11 { x: I32 }
+rt #[inline] fn b12(x: I32) -> I32 { x }
+pub rt #[inline] fn b13(x: I32) -> I32 { x }
+rt #[inline] struct B14 { x: I32 }
+impl B6 {
+  pub @fp(relaxed) fn a(self) -> F32 { 1.0 }
+  rt @fp(relaxed) fn b(self) -> F32 { 1.0 }
+}
+
+extern "C" {
+  fn c1(x: I32) -> I32
+  type R1
+}
+extern "C++" { fn c2(x: I32) -> I32 }
+pub extern "C" { fn c3(x: I32) -> I32 }
+extern { fn c4(x: I32) -> I32 }
+extern C { fn c5(x: I32) -> I32 }
+extern "C" lib { fn c6(x: I32) -> I32 }
+extern "C" lib fastconv { fn c7(x: I32) -> I32 }
+extern "C" "m" { fn c8(x: I32) -> I32 }
+extern "C" lib "m" "x" { fn c9(x: I32) -> I32 }
+unsafe extern "C" {
+  fn c10(x: I32) -> I32
+}
+#[link(name = "m")]
+extern "C" {
+  fn c11(x: I32) -> I32
+}
+extern "C" {
+  fn c12(x: ) -> I32
+  fn c13(x: I32) -> I32
+}
+
+rt export fn d1(x: I32) -> I32 { x }
+rt pub @fp(relaxed) fn d2(x: F32) -> F32 { x }
+rt rt @fp(relaxed) fn d3(x: F32) -> F32 { x }
+pub pub @fp(relaxed) fn d4(x: F32) -> F32 { x }
+pub pub export fn d5(x: I32) -> I32 { x }
+pub @fp(relaxed) pub fn d6(x: F32) -> F32 { x }
+pub @fp(relaxed) #[inline] fn d7(x: F32) -> F32 { x }
+
+pub @fp(relaxed)
+fn e1(x: F32) -> F32 { x }
+rt @fp(relaxed)
+fn e2(x: F32) -> F32 { x }
+rt
+fn e3(x: F32) -> F32 { x }
+extern "C"
+{
+  fn e4(x: I32) -> I32
+}
+pub @fp(relaxed) let e5 = 1
+rt @fp(relaxed) e6
+pub @ fn e7() -> I32 { 1 }
+rt
+rt e8()
+fn e9() -> I32 {
+  rt struct P { x: I32 }
+  1
+}
+
+pub @fp(relaxed fn f1(x: F32) -> F32 { x }
+rt @fp(relaxed fn f2(x: F32) -> F32 { x }
+rt #[inline fn f3(x: I32) -> I32 { x }
+extern "C" {
+  fn f4(x: I32) -> I32

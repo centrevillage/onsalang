@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§10", "§15.1"]
+// fixes = 0
+
+// An attribute of another language after `rt` (W5-11 U4; `rt #[inline] fn`): one E0002 at the
+// `#[`, without a candidate (§18.1, S-593; an attribute goes before the visibility and `rt`).
+// The form closes on its line, so the head is read on from the end of it: the function is a
+// name of the module, an `rt` stays an `rt` (an `rt` function that calls it gets no E0901),
+// and its users are checked against the head. The unit has a syntax error, so its body is not
+// checked. One error in each unit. (After a visibility alone, the same form is read on today:
+// continue_attr_after_pub_inline.onsa.)
+
+rt #[inline] fn rt_inline(x: I32) -> I32 {          //~ E0002 @4
+  x + 1
+}
+
+pub rt #[inline] fn pub_rt_inline(x: I32) -> I32 {  //~ E0002 @8
+  x + 2
+}
+
+rt #[inline] fn body_not_checked() -> I32 {         //~ E0002 @4
+  zz
+}
+
+fn calls() -> I32 {
+  rt_inline(1) + pub_rt_inline(2) + body_not_checked()
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { rt_inline(x) + pub_rt_inline(x) }
+  if c { f.(1) } else { rt_inline(pub_rt_inline(2)) }
+}
+
+// What was written `rt` is `rt`: it may be called from an `rt` function.
+rt fn calls_from_rt(x: I32) -> I32 {
+  rt_inline(pub_rt_inline(x)) + body_not_checked()
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> I32 {
+  rt_inline(1, 2)                                   //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  pub_rt_inline(true)                               //~ E0401
+}
+
+fn own_error() -> I32 {
+  rt_inline(1) + zz                                 //~ E0302 @18
+}

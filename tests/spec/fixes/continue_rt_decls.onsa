@@ -1,0 +1,136 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§4.4", "§6.6", "§11.1", "§15.1"]
+// fixes = 1
+
+// `rt` before a declaration that is not a function (W5-11 U4; `rt` is for functions, §10). The
+// run of modifiers (`rt`, `rt pub`, `pub rt`, `priv rt`, `rt rt`) is one E0002 (§18.1, S-492)
+// whose candidate is the run without the `rt` and with one visibility (`struct`, `pub struct`,
+// `pub struct`, `priv struct`, `struct`). The main position is the first modifier. The head is
+// read on from the keyword of the declaration, so the declaration is a name of the module,
+// what it was written, and a `rt` that has no place is not recorded: the places that use the name
+// get no E0302, and are checked against the head (a real error of a use is reported). The unit
+// has a syntax error, so its body is not checked. One error in each unit.
+// (`rt priv pub`, which has no candidate, is in negative/continue_rt_no_candidate.onsa.)
+
+rt use std.math.{sqrt}                              //~ E0002 @1
+
+rt struct Pt {                                      //~ E0002 @1
+  x: I32,
+  y: I32,
+}
+
+rt pub struct PubFirst {                            //~ E0002 @1
+  x: I32,
+}
+
+pub rt struct PubThenRt {                           //~ E0002 @1
+  x: I32,
+}
+
+priv rt struct PrivThenRt {                         //~ E0002 @1
+  x: I32,
+}
+
+rt rt struct Twice {                                //~ E0002 @1
+  x: I32,
+}
+
+rt enum Mode {                                      //~ E0002 @1
+  Off,
+  On(I32),
+}
+
+rt const K: I32 = 1                                 //~ E0002 @1
+
+pub rt const PK: I32 = zz                           //~ E0002 @1
+
+rt type Al = I32                                    //~ E0002 @1
+
+rt flow lp(x: F32 at sample) -> F32 at sample {     //~ E0002 @1
+  x * 0.5
+}
+
+rt test "not checked" {                             //~ E0002 @1
+  zz
+}
+
+fn uses_structs(a: Pt, b: PubFirst, c: PubThenRt, e: Twice) -> I32 {
+  a.x + a.y + b.x + c.x + e.x
+}
+
+fn uses_priv() -> I32 {
+  let d = PrivThenRt { x: 1 }
+  d.x
+}
+
+fn makes() -> Pt {
+  Pt { x: 1, y: 2 }
+}
+
+fn uses_enum(m: Mode) -> I32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On(n) => n,
+  }
+}
+
+fn makes_mode() -> Mode {
+  Mode.On(K)
+}
+
+fn uses_const_and_type(a: Al) -> I32 {
+  a + K + PK
+}
+
+fn uses_use() -> F64 {
+  sqrt(2.0)
+}
+
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  lp~(lp~(x))
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(p: Pt) -> I32 { p.x + K }
+  if c { f.(makes()) } else { uses_enum(Mode.Off) }
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn no_such_field(p: Pt) -> I32 {
+  p.zz                                              //~ E0413
+}
+
+fn missing_field() -> Pt {
+  Pt { x: 1 }                                       //~ E0410
+}
+
+fn wrong_field_type() -> PubFirst {
+  PubFirst { x: true }                              //~ E0401
+}
+
+fn wrong_type_for_const() -> Bool {
+  K                                                 //~ E0401
+}
+
+fn wrong_type_for_alias() -> Al {
+  true                                              //~ E0401
+}
+
+fn too_many_arguments() -> F64 {
+  sqrt(1.0, 2.0)                                    //~ E0412
+}
+
+fn missing_variant(m: Mode) -> I32 {
+  match m {                                         //~ E0501
+    Mode.Off => 0,
+  }
+}
+
+pub flow wrong_flow_call(x: F32 at sample) -> F32 at sample {
+  lp(x)                                             //~ E0811
+}
+
+fn own_error() -> I32 {
+  K + zz                                            //~ E0302 @7
+}

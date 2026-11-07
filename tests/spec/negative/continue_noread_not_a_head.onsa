@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5", "§15.1"]
+// fixes = 0
+
+// What follows a visibility or `rt` is no continuation of a head (W5-11 U4 must not change this;
+// §18.1, S-435): an attribute and then a `let` or a name (`pub @fp(relaxed) let x = 1`,
+// `rt @fp(relaxed) x`), an `@` with nothing after it (`pub @ fn d`), `rt` alone on a line, and
+// `rt` before a call (`rt e()`). The tokens after the attribute are no head, so they are not
+// read on. They keep the reading they have: one E0002 for each, and no name is added to the
+// module (the users of `x`, `d` and `e` get E0302).
+
+fn uses_x() -> I32 {
+  x                                                 //~ E0302
+}
+
+fn uses_d() -> I32 {
+  d()                                               //~ E0302
+}
+
+fn uses_e() -> I32 {
+  e()                                               //~ E0302
+}
+
+pub @fp(relaxed) let x = 1                          //~ E0002 @5
+
+rt @fp(relaxed) x                                   //~ E0002 @4
+
+pub @ fn d() -> I32 {                               //~ E0002 @5
+  1
+}
+
+rt                                                  //~ E0002 @3
+
+rt e()                                              //~ E0002 @4
+
+fn own_error() -> I32 {
+  zz                                                //~ E0302
+}

@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§15.1"]
+// fixes = 0
+
+// An `extern` head that cannot be read before the `{` on the same line (W5-11 U4): the ABI is
+// not a string or the head has no `lib "…"`, the library is not a string, or there is one word
+// too many. The ligature of Rust and C++ (`extern "C" {`, `extern "C++" {`) is the common
+// case. `extern` up to the `{` (not including it) is one E0002 without a candidate (§18.1,
+// S-477; the name of the library is known to the writer only), and the main position is the
+// `extern` (the column of `extern` after a visibility). The members are read on: the block is
+// one unit, whose members are not checked, and each is a name of the module of its kind (a
+// `fn` is a function, a `type` is a type), so the places that use them get no E0302. The ABI
+// and the library are parts that were not read. One error in each unit.
+// (The members whose own text is wrong: continue_extern_head_members.onsa.)
+
+extern "C" {                                        //~ E0002 @1
+  fn c_a(x: I32) -> I32
+  type RawA
+}
+
+extern "C++" {                                      //~ E0002 @1
+  fn c_b(x: I32) -> I32
+}
+
+pub extern "C" {                                    //~ E0002 @5
+  fn c_c(x: I32) -> I32
+  type RawC
+}
+
+extern "C" { fn c_d(x: I32) -> I32 }                //~ E0002 @1
+
+extern {                                            //~ E0002 @1
+  fn c_e(x: I32) -> I32
+}
+
+extern C {                                          //~ E0002 @1
+  fn c_f(x: I32) -> I32
+}
+
+extern "C" lib {                                    //~ E0002 @1
+  fn c_g(x: I32) -> I32
+}
+
+extern "C" lib fastconv {                           //~ E0002 @1
+  fn c_h(x: I32) -> I32
+}
+
+extern "C" "m" {                                    //~ E0002 @1
+  fn c_i(x: I32) -> I32
+  type RawI
+}
+
+extern "C" lib "m" "x" {                            //~ E0002 @1
+  fn c_j(x: I32) -> I32
+}
+
+fn calls() -> I32 {
+  c_a(1) + c_b(1) + c_c(1) + c_d(1) + c_e(1)
+}
+
+fn calls_more() -> I32 {
+  c_f(1) + c_g(1) + c_h(1) + c_i(1) + c_j(1)
+}
+
+fn takes_raw(a: RawA, c: RawC, i: RawI) -> I32 {
+  c_a(1) + c_c(2) + c_i(3)
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { c_a(x) + c_d(x) }
+  if c { f.(1) } else { c_j(c_b(2)) }
+}
+
+// A real error of the module is still reported.
+fn own_error() -> I32 {
+  c_a(1) + zz                                       //~ E0302 @12
+}
+
+fn too_many_arguments(a: RawA) -> I32 {
+  takes_raw(a, a, a, a)                             //~ E0412
+}

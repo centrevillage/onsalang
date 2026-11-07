@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§10", "§15.1"]
+// fixes = 0
+
+// An attribute of Onsa written after a visibility or after `rt` (W5-11 U4; the attributes come
+// first, `@fp(relaxed) pub rt fn h`, §6.5): the attribute is one E0002 without a candidate
+// (§18.1, S-593; the main position is the `@`). The form closes on its line, so the head is read
+// on from the end of the attribute: the function is a name of the module, with the visibility
+// and the `rt` that were written (a `pub` stays a `pub`; an `rt` stays an `rt`, so an `rt`
+// function that calls it gets no E0901, which is for a call of a function that is not `rt`),
+// and the callers are checked against the head. The attribute is not recorded (it is the error),
+// and an attribute does not change the type of a function (§6.5), so nothing else is unknown.
+// The unit has a syntax error, so its body is not checked. One error in each unit.
+
+pub @fp(relaxed) fn pub_attr(x: F32) -> F32 {       //~ E0002 @5
+  x * 2.0
+}
+
+priv @fp(relaxed) fn priv_attr(x: F32) -> F32 {     //~ E0002 @6
+  x * 3.0
+}
+
+rt @fp(relaxed) fn rt_attr(x: F32) -> F32 {         //~ E0002 @4
+  x * 4.0
+}
+
+pub rt @fp(relaxed) fn pub_rt_attr(x: F32) -> F32 { //~ E0002 @8
+  x * 5.0
+}
+
+pub @fp(relaxed) rt fn pub_attr_rt(x: F32) -> F32 { //~ E0002 @5
+  x * 6.0
+}
+
+pub @fp(relaxed) fn body_not_checked() -> F32 {     //~ E0002 @5
+  zz
+}
+
+fn calls() -> F32 {
+  pub_attr(1.0) + priv_attr(1.0) + rt_attr(1.0) + pub_rt_attr(1.0) + pub_attr_rt(1.0) + body_not_checked()
+}
+
+fn nested(c: Bool) -> F32 {
+  let f = fn(x: F32) -> F32 { pub_attr(x) + rt_attr(x) }
+  if c { f.(1.0) } else { priv_attr(pub_rt_attr(2.0)) }
+}
+
+// What was written `rt` is `rt`: it may be called from an `rt` function.
+rt fn calls_rt_ones(x: F32) -> F32 {
+  rt_attr(pub_rt_attr(x))
+}
+
+// What was not written `rt` is not.
+rt fn calls_pub_attr(x: F32) -> F32 {
+  pub_attr(x)                                       //~ E0901
+}
+
+rt fn calls_priv_attr(x: F32) -> F32 {
+  priv_attr(x)                                      //~ E0901
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> F32 {
+  pub_attr(1.0, 2.0)                                //~ E0412
+}
+
+fn wrong_argument_type() -> F32 {
+  rt_attr(true)                                     //~ E0401
+}
+
+fn own_error() -> F32 {
+  pub_attr(1.0) + zz                                //~ E0302 @19
+}

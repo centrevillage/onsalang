@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§15.1"]
+
+// A word of another language, and then `rt` before a declaration that is not a function (W5-11
+// U4; `export rt struct`). The unit reports the first error, the word (§18.1, S-459): one E0002
+// at the first word, and the head is read on past the `rt` too (which has no place, S-492; once
+// the word is removed, the next round reports it as the form of continue_rt_decls.onsa). So the
+// declaration is a name of the module, the places that use it get no E0302 and are checked
+// against the head. The unit has a syntax error, so its body is not checked. One error in each
+// unit.
+
+export rt struct Pt {                               //~ E0002 @1
+  x: I32,
+}
+
+public rt enum Mode {                               //~ E0002 @1
+  Off,
+  On(I32),
+}
+
+static rt const K: I32 = 1                          //~ E0002 @1
+
+export rt type Al = I32                             //~ E0002 @1
+
+export rt const BODY: I32 = zz                      //~ E0002 @1
+
+fn reads(p: Pt) -> I32 {
+  p.x
+}
+
+fn makes() -> Pt {
+  Pt { x: 1 }
+}
+
+fn uses_enum(m: Mode) -> I32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On(n) => n + K,
+  }
+}
+
+fn uses_alias(a: Al) -> I32 {
+  a + BODY
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(p: Pt) -> I32 { p.x + K }
+  if c { f.(makes()) } else { uses_enum(Mode.On(1)) }
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn no_such_field(p: Pt) -> I32 {
+  p.zz                                              //~ E0413
+}
+
+fn missing_variant(m: Mode) -> I32 {
+  match m {                                         //~ E0501
+    Mode.Off => 0,
+  }
+}
+
+fn wrong_type_for_alias() -> Al {
+  true                                              //~ E0401
+}
+
+fn own_error() -> I32 {
+  K + zz                                            //~ E0302 @7
+}

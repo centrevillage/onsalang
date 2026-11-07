@@ -1,0 +1,25 @@
+// The declarations of this module have an `rt` in front of a declaration that is not a function
+// (W5-11 U4), and `pub` and `priv` together. The head is one E0002 without a candidate, and is read
+// on from the keyword of the declaration. The visibility is the default (unspecified, the
+// package, §15.1), so the declaration is a name of the module for the module that brings it in
+// with `use`.
+
+rt priv pub struct Both {                           //~ E0002 @1
+  x: I32,
+}
+
+pub priv rt struct Other {                          //~ E0002 @1
+  x: I32,
+}
+
+priv pub rt const BOTH_CONST: I32 = 1               //~ E0002 @1
+
+pub priv rt enum BothMode {                         //~ E0002 @1
+  Off,
+  On(I32),
+}
+
+// A name of the module is a name in its own module too.
+fn local(b: Both, o: Other) -> I32 {
+  b.x + o.x + BOTH_CONST
+}

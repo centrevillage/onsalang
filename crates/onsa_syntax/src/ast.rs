@@ -620,8 +620,10 @@ pub struct UseDecl {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternDecl {
-    pub abi: StrLit,
-    pub lib: StrLit,
+    /// The string right after `extern`; `None`: not read (§18.1, S-477).
+    pub abi: Option<StrLit>,
+    /// The string right after the word `lib`; `None`: not read.
+    pub lib: Option<StrLit>,
     /// `OpaqueType` and `Fn` without body.
     pub items: Vec<ItemId>,
 }

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§15.1"]
+// fixes = 0
+
+// An `extern` block whose head cannot be read (W5-11 U4; `extern "C" {`) and whose `}` is
+// missing, at the end of the file. The unit ends at the end of the file and reports its first
+// error, the head: one E0002 at the `extern` (§18.1; the error about the `{` that is never
+// closed is a second error of the unit). The members are read on, so they are names of the
+// module for the items before the block. The block is the last item because an open brace takes
+// the lines after it. (With an item after the block: continue_extern_head_unclosed.onsa.)
+
+fn calls() -> I32 {
+  c_open(1) + c_other(2)
+}
+
+fn takes(r: RawOpen) -> I32 {
+  c_open(2)
+}
+
+fn too_many_arguments(r: RawOpen) -> I32 {
+  takes(r, r)                                       //~ E0412
+}
+
+fn own_error() -> I32 {
+  c_open(1) + zz                                    //~ E0302 @15
+}
+
+extern "C" {                                        //~ E0002 @1
+  fn c_open(x: I32) -> I32
+  fn c_other(x: I32) -> I32
+  type RawOpen
