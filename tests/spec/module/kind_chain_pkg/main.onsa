@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.6", "§5.2", "§12.2", "§15.1"]
+// mode = "check"
+
+// S-782 (§4.6: the kind of a type is found from its structure, and a type of another module is found from its declaration there and the bound of the
+// function that names it here): the chain of `lib.onsa` at the depth 11 (where the first implementation stopped finding the kind) is Copy
+// for an `F32` and for `T: Copy`, Shared for a `Str`, and the struct that holds a `Str` next to it needs `Alloc` to be dropped. The Affine side of
+// the same declarations is `types/kind_chain_a_affine.onsa`. `mode = "check"` only.
+
+use lib.{G11, Holder, borrow_it}
+
+pub fn dup_it(g: G11[F32]) -> (G11[F32], G11[F32]) { (g, g) }
+
+pub fn dup_open_copy[T: Copy](g: G11[T]) -> (G11[T], G11[T]) { (g, g) }
+
+pub fn dup_shared_leaf(g: G11[Str]) -> (G11[Str], G11[Str]) { (g, g) }
+
+pub fn dup_holder(h: Holder) -> (Holder, Holder) { (h, h) }
+
+pub fn borrow_twice(h: Holder) -> U32 { borrow_it(h) + borrow_it(h) }
+
+pub rt fn drop_holder_rt(move h: Holder) -> U32 { 0 }   //~ E0901
+
+pub fn drop_holder(move h: Holder) -> U32 { 0 }   //~ E0601

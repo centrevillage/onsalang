@@ -116,7 +116,8 @@ impl Base {
     /// defs a flow makes are numbered after the user's in a fresh analysis,
     /// so a std with a flow needs another order (`ModId`, `DefId` the same).
     pub fn new(std: Arc<Package>) -> Base {
-        let a = analyze(&std);
+        let mut a = analyze(&std);
+        a.known.summaries.get_mut().clear();
         if let Some(f) = a.defs.iter().find(|d| matches!(d.kind, DefKind::Flow(_))) {
             onsa_diag::internal::bug(
                 Some(f.span),

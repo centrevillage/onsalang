@@ -1,7 +1,8 @@
-//! The one walk through the declarations a type holds, read by the kinds
-//! (§4.6), the layouts (§12.4) and the drops of `rt` (§12.2): what a
-//! declaration holds, the arguments it is read under (R-30), and where the
-//! walk stops (D-15).
+//! The one walk through the declarations a type holds, read by the layouts
+//! (§12.4) and the placements of a `const` (§6.6): what a declaration holds,
+//! the arguments it is read under (R-30), and where the walk stops (D-15).
+//! The kinds and the drops read what a declaration holds from here too, once
+//! for each ([`crate::summary`]), with no steps.
 
 use std::cell::{Cell, RefCell};
 
@@ -9,8 +10,8 @@ use onsa_diag::hash::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::def::{DefKind, FieldDef, Fields, FlowTy, VariantDef};
-use crate::kind::Kind;
 use crate::layout::Layout;
+use crate::summary::Summaries;
 use crate::ty::{Env, TYPE_DEPTH_LIMIT, Ty, TyId};
 use crate::{Analysis, DefId};
 
@@ -36,8 +37,6 @@ pub(crate) type Key = (DefId, Vec<TyId>, Under);
 pub(crate) enum Under {
     /// None is open.
     Closed,
-    /// As written, in a body whose type parameters are of the kinds numbered ([`Walk::in_body`]).
-    Body(u32),
     /// As written, under the environment of the item being found numbered ([`Known`]).
     Item(u32),
 }
@@ -51,7 +50,7 @@ pub(crate) enum Under {
 /// a walk that holds one takes one step for it. And of one used with open
 /// arguments under the environment of an item being found (R-317: `G_k[T]`
 /// of two `G_{k-1}[Option[T]]`), found within that item: none but it asks
-/// them, so they go when it is found (`items`), and the tables keep no more
+/// them, so they go when it is found (`items`), and the table keeps no more
 /// than the items being found hold, whatever the items found before. Kept
 /// from the end of the lowering of the declarations (`ready`), whose fields
 /// are not all lowered before.
@@ -60,16 +59,13 @@ pub(crate) struct Known {
     pub(crate) ready: bool,
     /// The keys under each item being found, at its number.
     items: RefCell<Vec<Vec<Key>>>,
-    /// The kinds of the type parameters of a body, numbered ([`Walk::in_body`]).
-    bodies: RefCell<HashMap<Vec<Option<Kind>>, u32>>,
-    pub(crate) kinds: RefCell<HashMap<Key, Found<Kind>>>,
-    pub(crate) layouts: RefCell<HashMap<Key, Found<Layout>>>,
-    pub(crate) drops: RefCell<HashMap<Key, Found<bool>>>,
+    pub(crate) layouts: RefCell<HashMap<Key, Option<Layout>>>,
+    /// What each declaration asked holds: before `ready`, of no use to the
+    /// next question ([`crate::summary::Read::new`]). Not in the base of
+    /// std: each is read again when a package asks it, once.
+    #[serde(skip)]
+    pub(crate) summaries: RefCell<Summaries>,
 }
-
-/// An answer kept, and whether it is none as its walk went past [`STEPS`]
-/// ([`Walk::spent`]).
-pub(crate) type Found<T> = (Option<T>, bool);
 
 /// What a declaration a walk enters holds.
 /// `state`: a struct a flow made for its state (§11.6).
@@ -104,78 +100,49 @@ impl Holds<'_> {
 pub(crate) struct Walk<'a> {
     pub a: &'a Analysis,
     steps: Cell<u32>,
-    spent: Cell<bool>,
-    /// The number of the type parameters of the body the walk is in, the
-    /// environment of the types read under none (`kind::kind_in_body`).
-    body: Option<u32>,
 }
 
 impl<'a> Walk<'a> {
     pub(crate) fn new(a: &'a Analysis) -> Self {
-        Walk { a, steps: Cell::new(STEPS), spent: Cell::new(false), body: None }
-    }
-
-    /// A walk in a body whose type parameters are of the kinds `params`: so
-    /// one of `G_k[T]` keeps what it finds of each step (R-317), as a kind
-    /// depends on the kinds of the parameters only.
-    pub(crate) fn in_body(a: &'a Analysis, params: &[Option<Kind>]) -> Self {
-        let mut bodies = a.known.bodies.borrow_mut();
-        let next = bodies.len() as u32;
-        let body = Some(*bodies.entry(params.to_vec()).or_insert(next));
-        Walk { body, ..Walk::new(a) }
+        Walk { a, steps: Cell::new(STEPS) }
     }
 
     fn step(&self) -> Option<()> {
-        let left = self.steps.get().checked_sub(1);
-        self.spent.set(self.spent.get() || left.is_none());
-        self.steps.set(left?);
+        self.steps.set(self.steps.get().checked_sub(1)?);
         Some(())
     }
 
-    /// Whether the walk went past [`STEPS`], its own or those of an item it
-    /// holds ([`Walk::remember`]): its no answer is of the steps, not of an
-    /// error, nor of a type that holds itself (R-30, §18.1).
-    pub(crate) fn spent(&self) -> bool {
-        self.spent.get()
-    }
-
-    /// The answer in `table` of `d` used with `args` under `env` ([`Known`]):
-    /// one step, and the one kept or the one `find` finds, given the number
-    /// of the item for [`Walk::enter`]. With closed arguments, or open ones
-    /// of the parameters of the body of the walk, from the depth 0 with
-    /// [`STEPS`] of its own, which the walk around does not spend; with open
-    /// ones under a numbered environment, from `depth` with the steps of the
-    /// walk (only the item of that number reaches it). One
-    /// being found and entered again holds itself (through `Ptr`, `Span`):
-    /// no answer. Else `find` from `depth`, with no number. A walk past its
-    /// steps is kept with the answer, so one that holds it is too.
-    pub(crate) fn remember<T: Clone>(
+    /// The layout of `d` used with `args` under `env` ([`Known`]): one step,
+    /// and the one kept or the one `find` finds, given the number of the
+    /// item for [`Walk::enter`]. With closed arguments, from the depth 0
+    /// with [`STEPS`] of its own, which the walk around does not spend; with
+    /// open ones under a numbered environment, from `depth` with the steps
+    /// of the walk (only the item of that number reaches it). One being
+    /// found and entered again holds itself (through `Ptr`, `Span`): no
+    /// answer. Else `find` from `depth`, with no number.
+    pub(crate) fn remember(
         &self,
-        table: &RefCell<HashMap<Key, Found<T>>>,
         (d, args, env, depth): (DefId, &[TyId], Option<&Env>, u32),
-        find: impl FnOnce(u32, Option<u32>) -> Option<T>,
-    ) -> Option<T> {
+        find: impl FnOnce(u32, Option<u32>) -> Option<Layout>,
+    ) -> Option<Layout> {
         let types = &self.a.types;
         let closed = |&t: &TyId| Some(types.resolve(t, env).0).filter(|&t| !types.open(t));
-        let under = |e: Option<&Env>| e.map_or(self.body.map(Under::Body), |e| e.key.map(Under::Item));
         let key = self.a.known.ready.then(|| match args.iter().map(closed).collect::<Option<Vec<TyId>>>() {
             Some(args) => Some((d, args, Under::Closed)),
-            None => under(env).map(|u| (d, args.to_vec(), u)),
+            None => env.and_then(|e| e.key).map(|m| (d, args.to_vec(), Under::Item(m))),
         });
         let Some(key) = key.flatten() else { return find(depth, None) };
         self.step()?;
-        if let Some((t, spent)) = table.borrow().get(&key) {
-            self.spent.set(self.spent.get() || *spent);
+        let known = &self.a.known;
+        if let Some(t) = known.layouts.borrow().get(&key) {
             return t.clone();
         }
-        let known = &self.a.known;
         if let Under::Item(m) = key.2 {
             known.items.borrow_mut()[m as usize].push(key.clone());
         }
         let n = known.items.borrow().len() as u32;
         known.items.borrow_mut().push(Vec::new());
-        table.borrow_mut().insert(key.clone(), (None, false));
-        let was = self.spent.replace(false);
+        known.layouts.borrow_mut().insert(key.clone(), None);
         // Read under the environment of an item: only that item reaches it.
         let found = if let Under::Item(_) = key.2 {
             find(depth, Some(n))
@@ -185,14 +152,10 @@ impl<'a> Walk<'a> {
             self.steps.set(around);
             found
         };
-        let spent = self.spent.get();
-        self.spent.set(was || spent);
-        table.borrow_mut().insert(key, (found.clone(), spent && found.is_none()));
+        known.layouts.borrow_mut().insert(key, found.clone());
         // The keys under it: none asks them now.
         for k in known.items.borrow_mut().pop().into_iter().flatten() {
-            known.kinds.borrow_mut().remove(&k);
             known.layouts.borrow_mut().remove(&k);
-            known.drops.borrow_mut().remove(&k);
         }
         found
     }

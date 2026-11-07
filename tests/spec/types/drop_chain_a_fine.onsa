@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§8.1", "§10", "§12.2"]
+// mode = "check"
+
+// S-782 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る", "Copy 値…の生成と破棄: 要らない"; §10: a drop in an `rt fn` is an
+// E0901 in this version, §8.1: a drop in a function without `uses {Alloc}` is an E0601): whether a value needs `Alloc` to be
+// dropped is found from its structure and does not change with the number of declarations on the way. The chain is
+// `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }` (declared `[T: ?Dup]`), at the depth 11. Types that hold only Copy values (and borrowed parameters of any kind, which are not dropped) need nothing to be dropped: no E0901 and no E0601 at any depth. `mode = "check"` only.
+
+pub struct M0[T: ?Dup] {
+  v: T,
+}
+
+pub struct M1[T: ?Dup] {
+  x: M0[(T, T)],
+  y: M0[(T, U8)],
+}
+
+pub struct M2[T: ?Dup] {
+  x: M1[(T, T)],
+  y: M1[(T, U8)],
+}
+
+pub struct M3[T: ?Dup] {
+  x: M2[(T, T)],
+  y: M2[(T, U8)],
+}
+
+pub struct M4[T: ?Dup] {
+  x: M3[(T, T)],
+  y: M3[(T, U8)],
+}
+
+pub struct M5[T: ?Dup] {
+  x: M4[(T, T)],
+  y: M4[(T, U8)],
+}
+
+pub struct M6[T: ?Dup] {
+  x: M5[(T, T)],
+  y: M5[(T, U8)],
+}
+
+pub struct M7[T: ?Dup] {
+  x: M6[(T, T)],
+  y: M6[(T, U8)],
+}
+
+pub struct M8[T: ?Dup] {
+  x: M7[(T, T)],
+  y: M7[(T, U8)],
+}
+
+pub struct M9[T: ?Dup] {
+  x: M8[(T, T)],
+  y: M8[(T, U8)],
+}
+
+pub struct M10[T: ?Dup] {
+  x: M9[(T, T)],
+  y: M9[(T, U8)],
+}
+
+pub struct M11[T: ?Dup] {
+  x: M10[(T, T)],
+  y: M10[(T, U8)],
+}
+
+pub struct HStr {
+  g: M11[F32],
+  s: Str,
+}
+
+pub struct HBuf {
+  g: M11[F32],
+  b: Buf[F32],
+}
+
+pub struct HCopy {
+  g: M11[F32],
+  n: U32,
+}
+
+pub rt fn drop_copy_rt(move h: HCopy) -> U32 { 0 }
+
+pub fn drop_copy(move h: HCopy) -> U32 { 0 }
+
+pub rt fn drop_copy_leaf_rt(move g: M11[F32]) -> U32 { 0 }
+
+pub rt fn drop_open_copy_rt[T: Copy](move g: M11[T]) -> U32 { 0 }
+
+pub rt fn borrowed_str_rt(h: HStr) -> U32 { 0 }
+
+pub rt fn borrowed_buf_rt(h: HBuf) -> U32 { 0 }
+
+pub rt fn borrowed_buf_leaf_rt(g: M11[Buf[F32]]) -> U32 { 0 }
+
+pub rt fn hand_on_rt(move h: HBuf) -> HBuf { h }
+
+pub fn drop_str_alloc(move h: HStr) -> U32 uses {Alloc} { 0 }
+
+pub fn drop_buf_alloc(move h: HBuf) -> U32 uses {Alloc} { 0 }

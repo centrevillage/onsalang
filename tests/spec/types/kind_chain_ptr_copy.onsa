@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§4.6", "§12.2"]
+// mode = "check"
+
+// S-782 (§4.6, §12.2): A `Ptr[T]` and the arguments of a function type are not values that a type holds (§4.1: `Ptr[T]` is Copy; §4.6: the arguments of a function type are left out), so a chain that ends in `R_0[T: ?Dup] { p: Ptr[T], f: fn(T) -> U32, n: U32 }` is Copy whatever the argument is (a `Buf`, a `Str`, a `T: ?Dup`): a copy is right, and the drop of it needs nothing (no E0901, no E0601). The depth is 11, in a chain `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }`; `mode = "check"` only.
+
+pub struct R0[T: ?Dup] {
+  p: Ptr[T],
+  f: fn(T) -> U32,
+  n: U32,
+}
+
+pub struct R1[T: ?Dup] {
+  x: R0[(T, T)],
+  y: R0[(T, U8)],
+}
+
+pub struct R2[T: ?Dup] {
+  x: R1[(T, T)],
+  y: R1[(T, U8)],
+}
+
+pub struct R3[T: ?Dup] {
+  x: R2[(T, T)],
+  y: R2[(T, U8)],
+}
+
+pub struct R4[T: ?Dup] {
+  x: R3[(T, T)],
+  y: R3[(T, U8)],
+}
+
+pub struct R5[T: ?Dup] {
+  x: R4[(T, T)],
+  y: R4[(T, U8)],
+}
+
+pub struct R6[T: ?Dup] {
+  x: R5[(T, T)],
+  y: R5[(T, U8)],
+}
+
+pub struct R7[T: ?Dup] {
+  x: R6[(T, T)],
+  y: R6[(T, U8)],
+}
+
+pub struct R8[T: ?Dup] {
+  x: R7[(T, T)],
+  y: R7[(T, U8)],
+}
+
+pub struct R9[T: ?Dup] {
+  x: R8[(T, T)],
+  y: R8[(T, U8)],
+}
+
+pub struct R10[T: ?Dup] {
+  x: R9[(T, T)],
+  y: R9[(T, U8)],
+}
+
+pub struct R11[T: ?Dup] {
+  x: R10[(T, T)],
+  y: R10[(T, U8)],
+}
+
+pub fn dup_buf_arg(g: R11[Buf[F32]]) -> (R11[Buf[F32]], R11[Buf[F32]]) { (g, g) }
+
+pub fn dup_str_arg(g: R11[Str]) -> (R11[Str], R11[Str]) { (g, g) }
+
+pub fn dup_maybe_dup[T: ?Dup](g: R11[T]) -> (R11[T], R11[T]) { (g, g) }
+
+pub rt fn drop_buf_arg_rt(move g: R11[Buf[F32]]) -> U32 { 0 }
+
+pub rt fn drop_str_arg_rt(move g: R11[Str]) -> U32 { 0 }
+
+pub fn drop_buf_arg(move g: R11[Buf[F32]]) -> U32 { 0 }
+
+pub struct HoldsBuf {
+  a: Buf[R11[Buf[F32]]],
+}

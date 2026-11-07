@@ -133,7 +133,11 @@ pub(crate) fn collect_and_lower(pkg: &Package, mut a: Analysis) -> Result<Analys
     s.fill_derived();
     let pairs = s.lower_generated(&flows);
     s.a.known.ready = true;
+    s.a.known.summaries.get_mut().clear();
     s.wellformed();
+    // `wellformed` reads kinds, and turns the fields in error to the error type
+    // after: what it read is of the fields before that (§18.1).
+    s.a.known.summaries.get_mut().clear();
     s.check_trait_impls();
     s.check_generated(flows, pairs);
     s.fail_ungenerated();

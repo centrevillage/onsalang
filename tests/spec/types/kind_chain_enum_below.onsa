@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.6", "§5.2", "§10", "§12.2"]
+
+// S-782 (§4.6: the kind of an `enum` is found from its payloads like a struct's; §12.2: the drop of what holds a `Str` or a `Buf` needs `Alloc`): the answer for a chain of enums does not depend on its depth.
+// The chain is `E_k[T] { A(E_(k-1)[(T, T)]), B(E_(k-1)[(T, U8)]) }` with `E_0[T] { V(T) }` (all declared `[T: ?Dup]`), at the depth 10. One below the depth 11 where the first implementation stopped finding the kind; the same forms at that depth are `kind_chain_enum_copy.onsa` (Copy and Shared, right), `kind_chain_enum_affine.onsa`, `drop_chain_enum_leaf.onsa` and `drop_chain_enum_needs.onsa`.
+
+pub enum E0[T: ?Dup] {
+  V(T),
+}
+
+pub enum E1[T: ?Dup] {
+  A(E0[(T, T)]),
+  B(E0[(T, U8)]),
+}
+
+pub enum E2[T: ?Dup] {
+  A(E1[(T, T)]),
+  B(E1[(T, U8)]),
+}
+
+pub enum E3[T: ?Dup] {
+  A(E2[(T, T)]),
+  B(E2[(T, U8)]),
+}
+
+pub enum E4[T: ?Dup] {
+  A(E3[(T, T)]),
+  B(E3[(T, U8)]),
+}
+
+pub enum E5[T: ?Dup] {
+  A(E4[(T, T)]),
+  B(E4[(T, U8)]),
+}
+
+pub enum E6[T: ?Dup] {
+  A(E5[(T, T)]),
+  B(E5[(T, U8)]),
+}
+
+pub enum E7[T: ?Dup] {
+  A(E6[(T, T)]),
+  B(E6[(T, U8)]),
+}
+
+pub enum E8[T: ?Dup] {
+  A(E7[(T, T)]),
+  B(E7[(T, U8)]),
+}
+
+pub enum E9[T: ?Dup] {
+  A(E8[(T, T)]),
+  B(E8[(T, U8)]),
+}
+
+pub enum E10[T: ?Dup] {
+  A(E9[(T, T)]),
+  B(E9[(T, U8)]),
+}
+
+pub fn dup_it(g: E10[F32]) -> (E10[F32], E10[F32]) { (g, g) }
+
+pub fn dup_in_a_branch(c: Bool, g: E10[F32]) -> (E10[F32], E10[F32]) { if c { (g, g) } else { (g, g) } }
+
+pub fn dup_shared_leaf(g: E10[Str]) -> (E10[Str], E10[Str]) { (g, g) }
+
+pub fn dup_open_copy[T: Copy](g: E10[T]) -> (E10[T], E10[T]) { (g, g) }
+
+pub fn dup_into_a_match(g: E10[F32]) -> U32 { match g { E10.A(_) => 1, E10.B(_) => 2 } }
+
+pub struct HoldsBuf {
+  a: Buf[E10[F32]],
+}
+
+pub fn repeat(g: E10[F32]) -> [E10[F32]; 3] { [g; 3] }
+
+pub fn dup_buf_leaf(g: E10[Buf[F32]]) -> (E10[Buf[F32]], E10[Buf[F32]]) { (g, g) }   //~ E0711
+
+pub fn dup_maybe_dup[T: ?Dup](g: E10[T]) -> (E10[T], E10[T]) { (g, g) }   //~ E0711
+
+pub struct HoldsBufToo {
+  g: E10[F32],
+  b: Buf[F32],
+}
+
+pub fn dup_struct_with_buf(h: HoldsBufToo) -> (HoldsBufToo, HoldsBufToo) { (h, h) }   //~ E0711
+
+pub rt fn drop_str_leaf_rt(move g: E10[Str]) -> U32 { 0 }   //~ E0901
+
+pub fn drop_str_leaf(move g: E10[Str]) -> U32 { 0 }   //~ E0601
+
+pub rt fn drop_buf_leaf_rt(move g: E10[Buf[F32]]) -> U32 { 0 }   //~ E0901
+
+pub fn drop_buf_leaf(move g: E10[Buf[F32]]) -> U32 { 0 }   //~ E0601
+
+pub rt fn drop_copy_leaf_rt(move g: E10[F32]) -> U32 { 0 }
+
+pub rt fn borrowed_buf_leaf_rt(g: E10[Buf[F32]]) -> U32 { 0 }

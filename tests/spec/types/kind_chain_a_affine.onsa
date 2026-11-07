@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§4.6", "§5.2", "§5.3"]
+// mode = "check"
+
+// S-782 (§4.6: "Affine: `Buf`、…、それらを含む型"; §4.5: a `?Dup` parameter lets an Affine type in): the other side of
+// `kind_chain_a_copy.onsa`. A chain of `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }` at the depth 11 whose bottom holds a
+// `Buf` (as a field, as the argument `Buf[F32]` at the leaf, through an alias, or through a parameter `T: ?Dup`) is
+// Affine, and a value of it cannot be copied (E0711), used again after a `move` (E0704) or captured (E0712). The answer is the
+// same at every depth, so it is also the one this file gives at the depth where the first implementation
+// stopped finding the kind and took an unfound kind for Affine (R-30): the errors here do not change. The
+// chain is declared `[T: ?Dup]` so that a `Buf` can be its argument. `mode = "check"` only. One error per function (P-01).
+
+pub struct M0[T: ?Dup] {
+  v: T,
+}
+
+pub struct M1[T: ?Dup] {
+  x: M0[(T, T)],
+  y: M0[(T, U8)],
+}
+
+pub struct M2[T: ?Dup] {
+  x: M1[(T, T)],
+  y: M1[(T, U8)],
+}
+
+pub struct M3[T: ?Dup] {
+  x: M2[(T, T)],
+  y: M2[(T, U8)],
+}
+
+pub struct M4[T: ?Dup] {
+  x: M3[(T, T)],
+  y: M3[(T, U8)],
+}
+
+pub struct M5[T: ?Dup] {
+  x: M4[(T, T)],
+  y: M4[(T, U8)],
+}
+
+pub struct M6[T: ?Dup] {
+  x: M5[(T, T)],
+  y: M5[(T, U8)],
+}
+
+pub struct M7[T: ?Dup] {
+  x: M6[(T, T)],
+  y: M6[(T, U8)],
+}
+
+pub struct M8[T: ?Dup] {
+  x: M7[(T, T)],
+  y: M7[(T, U8)],
+}
+
+pub struct M9[T: ?Dup] {
+  x: M8[(T, T)],
+  y: M8[(T, U8)],
+}
+
+pub struct M10[T: ?Dup] {
+  x: M9[(T, T)],
+  y: M9[(T, U8)],
+}
+
+pub struct M11[T: ?Dup] {
+  x: M10[(T, T)],
+  y: M10[(T, U8)],
+}
+
+// ---- K5: really Affine ----
+
+pub struct HoldsBufToo {
+  g: M11[F32],
+  b: Buf[F32],
+}
+
+pub fn dup_struct_with_buf(h: HoldsBufToo) -> (HoldsBufToo, HoldsBufToo) { (h, h) }   //~ E0711
+
+pub fn dup_buf_leaf(g: M11[Buf[F32]]) -> (M11[Buf[F32]], M11[Buf[F32]]) { (g, g) }   //~ E0711
+
+type Samples = Buf[F32]
+
+pub fn dup_alias_buf_leaf(g: M11[Samples]) -> (M11[Samples], M11[Samples]) { (g, g) }   //~ E0711
+
+pub fn dup_maybe_dup[T: ?Dup](g: M11[T]) -> (M11[T], M11[T]) { (g, g) }   //~ E0711
+
+pub fn move_twice(move g: M11[Buf[F32]]) -> (M11[Buf[F32]], M11[Buf[F32]]) {
+  let a = move g
+  let b = move g   //~ E0704
+  (a, b)
+}
+
+pub fn run_fn(f: fn(U32) -> U32) -> U32 { f.(1) }
+
+pub fn peek(a: M11[Buf[F32]]) -> U32 { 0 }
+
+pub fn capture_buf_leaf(g: M11[Buf[F32]]) -> U32 { run_fn(fn(x: U32) -> U32 { peek(g) + x }) }   //~ E0712
+

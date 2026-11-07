@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§18.1"]
+
+// `S3` has an error in a field, so the code that uses it gets no diagnostic of
+// it, whether or not a declaration before asks its kind (`H`, read while the
+// bounds are checked, before the field is the error type).
+pub struct OD[T] { t: T }
+
+pub struct H {
+  h: OD[S3[F32]],
+}
+
+pub struct S3[T1: ?Dup] {
+  a: I32,
+  w: Array[T1], //~ E0416
+}
+
+pub rt fn r(move x: S3[F32]) -> I32 {
+  0
+}

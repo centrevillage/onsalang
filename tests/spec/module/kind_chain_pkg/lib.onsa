@@ -1,0 +1,68 @@
+// The chain of generic declarations of S-782 (`G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }`, declared `[T: ?Dup]`) at the depth 11, and a
+// struct that holds it, in another module than the functions that name them (main.onsa).
+
+pub struct G0[T: ?Dup] {
+  v: T,
+}
+
+pub struct G1[T: ?Dup] {
+  x: G0[(T, T)],
+  y: G0[(T, U8)],
+}
+
+pub struct G2[T: ?Dup] {
+  x: G1[(T, T)],
+  y: G1[(T, U8)],
+}
+
+pub struct G3[T: ?Dup] {
+  x: G2[(T, T)],
+  y: G2[(T, U8)],
+}
+
+pub struct G4[T: ?Dup] {
+  x: G3[(T, T)],
+  y: G3[(T, U8)],
+}
+
+pub struct G5[T: ?Dup] {
+  x: G4[(T, T)],
+  y: G4[(T, U8)],
+}
+
+pub struct G6[T: ?Dup] {
+  x: G5[(T, T)],
+  y: G5[(T, U8)],
+}
+
+pub struct G7[T: ?Dup] {
+  x: G6[(T, T)],
+  y: G6[(T, U8)],
+}
+
+pub struct G8[T: ?Dup] {
+  x: G7[(T, T)],
+  y: G7[(T, U8)],
+}
+
+pub struct G9[T: ?Dup] {
+  x: G8[(T, T)],
+  y: G8[(T, U8)],
+}
+
+pub struct G10[T: ?Dup] {
+  x: G9[(T, T)],
+  y: G9[(T, U8)],
+}
+
+pub struct G11[T: ?Dup] {
+  x: G10[(T, T)],
+  y: G10[(T, U8)],
+}
+
+pub struct Holder {
+  g: G11[F32],
+  s: Str,
+}
+
+pub rt fn borrow_it(h: Holder) -> U32 { 0 }

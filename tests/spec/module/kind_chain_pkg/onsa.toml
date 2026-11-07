@@ -1,0 +1,3 @@
+[package]
+name = "kind_chain_pkg"
+edition = "2026"

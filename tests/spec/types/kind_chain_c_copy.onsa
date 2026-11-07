@@ -1,0 +1,165 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§4.6", "§5.2", "§5.3"]
+// mode = "check"
+
+// S-782 (§4.6: "全ての型は構造から次のどれかに分類される"; "Copy: スカラ、Copy 要素の固定長配列・タプル・構造体・enum"): the kind
+// of a type is found from its structure and does not change with the number of declarations on the way. The chain is
+// `G_k[T] { x: G_(k-1)[Option[T]], y: G_(k-1)[(T, U8)] }` with `G_0[T] { v: T }`, 'G16[F32]' holds only `F32`s, so it is Copy and a value of it
+// is copied where it is used twice (§5.2), is an element of a `Buf` and of `[g; 3]`, and satisfies `T: Copy` (§4.5). A
+// `Str` in place of the `F32` makes it Shared, which is copied too (§4.6). The depth is 16: the depth 16 where the first implementation stopped finding the kind. The
+// same forms one below it are in `kind_chain_c_below.onsa`. (The value of the limit and its shape belong to that
+// implementation; this file says only that the answer does not depend on the depth.) The case is `mode = "check"`
+// only, the chain is not meant to go through lowering.
+
+pub struct G0[T] {
+  v: T,
+}
+
+pub struct G1[T] {
+  x: G0[Option[T]],
+  y: G0[(T, U8)],
+}
+
+pub struct G2[T] {
+  x: G1[Option[T]],
+  y: G1[(T, U8)],
+}
+
+pub struct G3[T] {
+  x: G2[Option[T]],
+  y: G2[(T, U8)],
+}
+
+pub struct G4[T] {
+  x: G3[Option[T]],
+  y: G3[(T, U8)],
+}
+
+pub struct G5[T] {
+  x: G4[Option[T]],
+  y: G4[(T, U8)],
+}
+
+pub struct G6[T] {
+  x: G5[Option[T]],
+  y: G5[(T, U8)],
+}
+
+pub struct G7[T] {
+  x: G6[Option[T]],
+  y: G6[(T, U8)],
+}
+
+pub struct G8[T] {
+  x: G7[Option[T]],
+  y: G7[(T, U8)],
+}
+
+pub struct G9[T] {
+  x: G8[Option[T]],
+  y: G8[(T, U8)],
+}
+
+pub struct G10[T] {
+  x: G9[Option[T]],
+  y: G9[(T, U8)],
+}
+
+pub struct G11[T] {
+  x: G10[Option[T]],
+  y: G10[(T, U8)],
+}
+
+pub struct G12[T] {
+  x: G11[Option[T]],
+  y: G11[(T, U8)],
+}
+
+pub struct G13[T] {
+  x: G12[Option[T]],
+  y: G12[(T, U8)],
+}
+
+pub struct G14[T] {
+  x: G13[Option[T]],
+  y: G13[(T, U8)],
+}
+
+pub struct G15[T] {
+  x: G14[Option[T]],
+  y: G14[(T, U8)],
+}
+
+pub struct G16[T] {
+  x: G15[Option[T]],
+  y: G15[(T, U8)],
+}
+
+// ---- K1: the kind is Copy by the structure; a value used twice is copied ----
+
+pub fn dup_it(g: G16[F32]) -> (G16[F32], G16[F32]) { (g, g) }
+
+pub fn dup_in_a_branch(c: Bool, g: G16[F32]) -> (G16[F32], G16[F32]) { if c { (g, g) } else { (g, g) } }
+
+pub fn dup_into_a_field(g: G16[F32]) -> Pair2 { Pair2 { a: g, b: g } }
+
+pub struct Pair2 {
+  a: G16[F32],
+  b: G16[F32],
+}
+
+pub fn dup_through_a_binding(g: G16[F32]) -> (G16[F32], G16[F32]) {
+  let a = g
+  let b = g
+  (a, b)
+}
+
+pub fn dup_with_a_move_head(move g: G16[F32]) -> (G16[F32], G16[F32]) {
+  let a = move g
+  let b = move g
+  (a, b)
+}
+
+// ---- K2: Copy elements ----
+
+pub struct HoldsBuf {
+  a: Buf[G16[F32]],
+}
+
+pub fn need_copy[T: Copy](x: T) -> U32 { 0 }
+
+pub fn pass_to_copy(g: G16[F32]) -> U32 { need_copy(g) }
+
+pub fn repeat(g: G16[F32]) -> [G16[F32]; 3] { [g; 3] }
+
+// ---- a Shared argument can be copied too ----
+
+pub fn dup_shared_leaf(g: G16[Str]) -> (G16[Str], G16[Str]) { (g, g) }
+
+pub struct SharedHolder {
+  g: G16[F32],
+  s: Str,
+}
+
+pub fn dup_shared_holder(h: SharedHolder) -> (SharedHolder, SharedHolder) { (h, h) }
+
+// ---- forms of the argument ----
+
+type Sc = F32
+
+pub fn dup_alias_leaf(g: G16[Sc]) -> (G16[Sc], G16[Sc]) { (g, g) }
+
+pub fn dup_open_copy[T: Copy](g: G16[T]) -> (G16[T], G16[T]) { (g, g) }
+
+pub fn dup_open_plain[T](g: G16[T]) -> (G16[T], G16[T]) { (g, g) }
+
+pub fn call_open(g: G16[F32]) -> (G16[F32], G16[F32]) { dup_open_copy(g) }
+
+// ---- a capture of a Copy value ----
+
+pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }
+
+pub fn pick(a: G16[F32], b: G16[F32]) -> U32 { 0 }
+
+pub fn capture(g: G16[F32]) -> U32 { apply(fn(x: U32) -> U32 { pick(g, g) + x }) }

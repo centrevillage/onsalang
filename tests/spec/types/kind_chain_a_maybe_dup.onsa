@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§4.6", "§5.2", "§5.3"]
+// mode = "check"
+
+// S-782 (§4.5: a type parameter without a bound is `Dup`, `[T: ?Dup]` lets an Affine type in; §4.6): the kind of a generic
+// type is decided from the declaration down to the parameter at its bottom and by the bound of the parameter of the
+// function that names it (types/kind_dup_contrast.onsa). The chain `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }` is declared `[T: ?Dup]`, and at the depth 11
+// a Copy argument (`M11[F32]`) or a `T: Copy` bound makes it Copy, as it does at a shallow depth: `(g, g)` is right. The
+// Affine side of the same declarations is `kind_chain_a_affine.onsa`. `mode = "check"` only.
+
+pub struct M0[T: ?Dup] {
+  v: T,
+}
+
+pub struct M1[T: ?Dup] {
+  x: M0[(T, T)],
+  y: M0[(T, U8)],
+}
+
+pub struct M2[T: ?Dup] {
+  x: M1[(T, T)],
+  y: M1[(T, U8)],
+}
+
+pub struct M3[T: ?Dup] {
+  x: M2[(T, T)],
+  y: M2[(T, U8)],
+}
+
+pub struct M4[T: ?Dup] {
+  x: M3[(T, T)],
+  y: M3[(T, U8)],
+}
+
+pub struct M5[T: ?Dup] {
+  x: M4[(T, T)],
+  y: M4[(T, U8)],
+}
+
+pub struct M6[T: ?Dup] {
+  x: M5[(T, T)],
+  y: M5[(T, U8)],
+}
+
+pub struct M7[T: ?Dup] {
+  x: M6[(T, T)],
+  y: M6[(T, U8)],
+}
+
+pub struct M8[T: ?Dup] {
+  x: M7[(T, T)],
+  y: M7[(T, U8)],
+}
+
+pub struct M9[T: ?Dup] {
+  x: M8[(T, T)],
+  y: M8[(T, U8)],
+}
+
+pub struct M10[T: ?Dup] {
+  x: M9[(T, T)],
+  y: M9[(T, U8)],
+}
+
+pub struct M11[T: ?Dup] {
+  x: M10[(T, T)],
+  y: M10[(T, U8)],
+}
+
+// ---- a Copy argument or a Copy bound makes the chain Copy (the parameter of the declaration is not what decides) ----
+
+pub fn dup_copy_arg_m(g: M11[F32]) -> (M11[F32], M11[F32]) { (g, g) }
+
+pub fn dup_copy_bound_m[T: Copy](g: M11[T]) -> (M11[T], M11[T]) { (g, g) }
+
+pub fn call_copy_bound_m(g: M11[F32]) -> (M11[F32], M11[F32]) { dup_copy_bound_m(g) }

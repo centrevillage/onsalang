@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§4.6", "§12.2"]
+
+// S-782 (§4.6, §12.2): An `Array[T]` is Shared whatever its argument (§4.1), so a chain that ends in `S_0[T] { a: Array[T], n: U32 }` is Shared. A copy is right, dropping it needs `Alloc` (an E0901 in an `rt fn`, an E0601 otherwise), and it is not an element of a `Buf` (E0416, §4.5). The depth is 10, in a chain `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }`; one below 11; the same forms are in `kind_chain_array_shared.onsa` (right) and `drop_chain_array_errors.onsa` (the errors).
+
+pub struct S0[T] {
+  a: Array[T],
+  n: U32,
+}
+
+pub struct S1[T] {
+  x: S0[(T, T)],
+  y: S0[(T, U8)],
+}
+
+pub struct S2[T] {
+  x: S1[(T, T)],
+  y: S1[(T, U8)],
+}
+
+pub struct S3[T] {
+  x: S2[(T, T)],
+  y: S2[(T, U8)],
+}
+
+pub struct S4[T] {
+  x: S3[(T, T)],
+  y: S3[(T, U8)],
+}
+
+pub struct S5[T] {
+  x: S4[(T, T)],
+  y: S4[(T, U8)],
+}
+
+pub struct S6[T] {
+  x: S5[(T, T)],
+  y: S5[(T, U8)],
+}
+
+pub struct S7[T] {
+  x: S6[(T, T)],
+  y: S6[(T, U8)],
+}
+
+pub struct S8[T] {
+  x: S7[(T, T)],
+  y: S7[(T, U8)],
+}
+
+pub struct S9[T] {
+  x: S8[(T, T)],
+  y: S8[(T, U8)],
+}
+
+pub struct S10[T] {
+  x: S9[(T, T)],
+  y: S9[(T, U8)],
+}
+
+pub fn dup_it(g: S10[F32]) -> (S10[F32], S10[F32]) { (g, g) }
+
+pub fn dup_str_arg(g: S10[Str]) -> (S10[Str], S10[Str]) { (g, g) }
+
+pub fn dup_open_plain[T](g: S10[T]) -> (S10[T], S10[T]) { (g, g) }
+
+pub rt fn drop_it_rt(move g: S10[F32]) -> U32 { 0 }   //~ E0901
+
+pub fn drop_it(move g: S10[F32]) -> U32 { 0 }   //~ E0601
+
+pub struct HoldsBuf {
+  a: Buf[S10[F32]],   //~ E0416
+}

@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§4.6", "§5.2", "§5.3"]
+// mode = "check"
+
+// S-782 (§4.5: a type parameter without a bound is `Dup`, `[T: ?Dup]` lets an Affine type in; §4.6): the kind of a generic
+// type is decided from the declaration down to the parameter at its bottom and by the bound of the parameter of the
+// function that names it (types/kind_dup_contrast.onsa). The chain `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[Option[T]] }` is declared `[T: ?Dup]`, and at the depth 14
+// a Copy argument (`M14[F32]`) or a `T: Copy` bound makes it Copy, as it does at a shallow depth: `(g, g)` is right. The
+// Affine side of the same declarations is `kind_chain_b_affine.onsa`. `mode = "check"` only.
+
+pub struct M0[T: ?Dup] {
+  v: T,
+}
+
+pub struct M1[T: ?Dup] {
+  x: M0[(T, T)],
+  y: M0[Option[T]],
+}
+
+pub struct M2[T: ?Dup] {
+  x: M1[(T, T)],
+  y: M1[Option[T]],
+}
+
+pub struct M3[T: ?Dup] {
+  x: M2[(T, T)],
+  y: M2[Option[T]],
+}
+
+pub struct M4[T: ?Dup] {
+  x: M3[(T, T)],
+  y: M3[Option[T]],
+}
+
+pub struct M5[T: ?Dup] {
+  x: M4[(T, T)],
+  y: M4[Option[T]],
+}
+
+pub struct M6[T: ?Dup] {
+  x: M5[(T, T)],
+  y: M5[Option[T]],
+}
+
+pub struct M7[T: ?Dup] {
+  x: M6[(T, T)],
+  y: M6[Option[T]],
+}
+
+pub struct M8[T: ?Dup] {
+  x: M7[(T, T)],
+  y: M7[Option[T]],
+}
+
+pub struct M9[T: ?Dup] {
+  x: M8[(T, T)],
+  y: M8[Option[T]],
+}
+
+pub struct M10[T: ?Dup] {
+  x: M9[(T, T)],
+  y: M9[Option[T]],
+}
+
+pub struct M11[T: ?Dup] {
+  x: M10[(T, T)],
+  y: M10[Option[T]],
+}
+
+pub struct M12[T: ?Dup] {
+  x: M11[(T, T)],
+  y: M11[Option[T]],
+}
+
+pub struct M13[T: ?Dup] {
+  x: M12[(T, T)],
+  y: M12[Option[T]],
+}
+
+pub struct M14[T: ?Dup] {
+  x: M13[(T, T)],
+  y: M13[Option[T]],
+}
+
+// ---- a Copy argument or a Copy bound makes the chain Copy (the parameter of the declaration is not what decides) ----
+
+pub fn dup_copy_arg_m(g: M14[F32]) -> (M14[F32], M14[F32]) { (g, g) }
+
+pub fn dup_copy_bound_m[T: Copy](g: M14[T]) -> (M14[T], M14[T]) { (g, g) }
+
+pub fn call_copy_bound_m(g: M14[F32]) -> (M14[F32], M14[F32]) { dup_copy_bound_m(g) }

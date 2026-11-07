@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::body::bounds::Bounds;
 use crate::def::{Bound, GenericDef, GenericKind};
-use crate::ty::{BuiltinTy, Env, Ty, TyId};
+use crate::summary::{Facts, Read};
+use crate::ty::{BuiltinTy, Ty, TyId};
 use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId};
 
@@ -29,26 +30,19 @@ impl Kind {
 }
 
 /// Kind of a type; `None` when it depends on a generic parameter, or for
-/// second-class types (`Span`). A type that holds itself stops with `None`
-/// ([`Walk`]).
+/// second-class types (`Span`), and for a type that holds itself ([`Facts`]).
 pub fn kind_of(a: &Analysis, ty: TyId) -> Option<Kind> {
-    kind_in(a, ty, None)
-}
-
-/// Kind of `ty` read under the arguments `env` (R-30).
-pub fn kind_in(a: &Analysis, ty: TyId, env: Option<&Env>) -> Option<Kind> {
-    walk(&Walk::new(a), ty, env, (0, None))
+    Read::new(a, Vec::new()).of(ty).kind
 }
 
 /// The kind a value of `ty` in a body with the type parameters `generics` is
 /// taken for by the questions of the modes (R-30) and by the kind constraints
 /// of the types stage (R-176, [`Bounds::meets`]): a type parameter by its
-/// bounds wherever the walk meets it (`Pair[T]` too): Copy if it meets
-/// `Copy`, Shared if `Dup`, else Affine (`?Dup`). A walk past its steps is
-/// Affine; the other walks with no answer are none and keep quiet (§18.1:
-/// the error type, a type parameter with an unknown bound, whose kind each
-/// answer would claim, a declaration a syntax error cut, a type that holds
-/// itself; a second-class type has no kind, §4.6).
+/// bounds wherever `ty` holds it (`Pair[T]` too): Copy if it meets `Copy`,
+/// Shared if `Dup`, else Affine (`?Dup`). With no answer it is none and
+/// keeps quiet (§18.1: the error type, a type parameter with an unknown
+/// bound, whose kind each answer would claim, a declaration a syntax error
+/// cut, a type that holds itself; a second-class type has no kind, §4.6).
 pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Option<Kind> {
     let bounds = Bounds { a, generics };
     let param = |(i, g): (usize, &GenericDef)| {
@@ -58,70 +52,12 @@ pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> O
         let kinds = [(Bound::Copy, Kind::Copy), (Bound::Dup, Kind::Shared)];
         Some(kinds.into_iter().find(|&(b, _)| meets(b)).map_or(Kind::Affine, |(_, k)| k))
     };
-    let params: Vec<Option<Kind>> = generics.iter().enumerate().map(param).collect();
-    let w = Walk::in_body(a, &params);
-    walk(&w, ty, None, (0, Some(&params))).or_else(|| w.spent().then_some(Kind::Affine))
+    Read::new(a, generics.iter().enumerate().map(|g| Facts::param(param(g))).collect()).of(ty).kind
 }
 
 /// Kind of a user type by its def (`onsa interface`), without interning its `TyId`.
 pub fn kind_of_named(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Kind> {
-    named(&Walk::new(a), d, args, None, (0, None))
-}
-
-/// `depth`: the named types entered on the way ([`Walk::enter`]); `params[i]`:
-/// in a body ([`kind_in_body`]), the kind of its type parameter `i`, met with
-/// no argument around. One it does not have is of a declaration a syntax
-/// error cut (§18.1): none, as one with an unknown bound.
-type At<'p> = (u32, Option<&'p [Option<Kind>]>);
-
-fn walk(w: &Walk, ty: TyId, env: Option<&Env>, at: At) -> Option<Kind> {
-    let (ty, env) = w.at(ty, env)?;
-    match ty {
-        Ty::Param(i) if env.is_none() => at.1?.get(*i as usize).copied().flatten(),
-        Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit | Ty::Fn(_) | Ty::ConstVal(_) => Some(Kind::Copy),
-        Ty::Array(t, _) => walk(w, *t, env, at),
-        Ty::Tuple(ts) => all(w, ts, env, at),
-        Ty::Builtin(b, _) => match b {
-            BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set => {
-                Some(Kind::Shared)
-            }
-            BuiltinTy::Buf => Some(Kind::Affine),
-            BuiltinTy::Ptr => Some(Kind::Copy),
-            BuiltinTy::Span => None,
-        },
-        Ty::Named(d, args) => named(w, *d, args, env, at),
-        Ty::Param(_) | Ty::Var(_) | Ty::Error => None,
-    }
-}
-
-/// The kind of an aggregate of the parts `ts` (§4.6: the greatest): Affine
-/// if a part is, whatever the kind of a part with none would be; else none
-/// if a part has none.
-fn all(w: &Walk, ts: &[TyId], env: Option<&Env>, at: At) -> Option<Kind> {
-    let mut kind = Some(Kind::Copy);
-    for &t in ts {
-        match walk(w, t, env, at) {
-            Some(Kind::Affine) => return Some(Kind::Affine),
-            k => kind = kind.zip(k).map(|(a, b)| a.max(b)),
-        }
-    }
-    kind
-}
-
-/// The answer kept of an item hangs on `params` only as its key does: its
-/// arguments are closed, of the parameters of a body numbered by their
-/// kinds, or read under the environment of an item being found
-/// ([`Walk::remember`]).
-fn named(w: &Walk, d: DefId, args: &[TyId], env: Option<&Env>, (depth, params): At) -> Option<Kind> {
-    w.remember(&w.a.known.kinds, (d, args, env, depth), |depth, key| {
-        let (holds, env, depth) = w.enter(d, args, env, (depth, key))?;
-        match holds {
-            _ if holds.is_state() => Some(Kind::Affine), // §4.6: flow state is Affine
-            Holds::Opaque(_) => Some(Kind::Copy),
-            Holds::Nothing => None,
-            _ => all(w, &holds.parts(), env.as_ref(), (depth, params)),
-        }
-    })
+    Read::new(a, Vec::new()).named(d, args).kind
 }
 
 /// Where the result of a `const` of a type can be placed (§6.6, S-610), in
@@ -206,7 +142,7 @@ impl Place<'_> {
                 Some(now)
             }
             // The leaves as their kinds.
-            _ => Some(match kind_in(self.w.a, ty, None)? {
+            _ => Some(match kind_of(self.w.a, ty)? {
                 Kind::Copy => Placed::Static,
                 Kind::Shared => Placed::Later,
                 Kind::Affine => Placed::Never,

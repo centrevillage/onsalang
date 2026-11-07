@@ -1202,6 +1202,13 @@ note = "取り出しの残りの破棄の E0601 を最初の使用（取り出�
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/types/drop_chain_a_rest_let.onsa"
+reasons = ["S-85", "R-87", "S-82"]
+until = "W6-03"
+note = "取り出しの残りの破棄の診断を最初の使用の行に出す（`take_out_rest_alloc_position` と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/negative/drop_on_the_other_path.onsa"
 reasons = ["R-32", "S-85"]
 until = "W6-02"

@@ -51,6 +51,7 @@ mod stages;
 #[cfg(test)]
 mod stages_tests;
 mod structpat;
+mod summary;
 #[cfg(test)]
 mod tests;
 mod unread;

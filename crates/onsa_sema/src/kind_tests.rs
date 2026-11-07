@@ -106,24 +106,25 @@ fn kinds_of_generic_types_by_their_arguments() {
     }
 }
 
-/// The kind in a body asked by the modes (R-30): a walk past its steps is
-/// Affine (`G11` holds the one before with arguments of two forms, each
-/// kept, about 3^11 steps), so `(move h, move h)` is an E0704; a walk with no answer
-/// of an error keeps quiet (§18.1): a field whose type is not found, a type
-/// that holds itself, a field of a declaration whose type parameters a
-/// syntax error cut.
+/// The kind in a body asked by the modes (R-30) is of the structure whatever
+/// the forms of arguments of a chain (S-782; `G11` holds the one before with
+/// arguments of two forms, so a walk through it takes about 3^11 steps), so
+/// the `move` of an element of `(move h, move h)` is of a Dup value (§5.2,
+/// the one diagnostic of a unit, §18.1); a question with no answer of an error keeps quiet (§18.1): a field whose
+/// type is not found, a type that holds itself, a field of a declaration
+/// whose type parameters a syntax error cut.
 #[test]
-fn a_kind_in_a_body_is_affine_only_past_the_steps() {
+fn a_kind_in_a_body_is_of_the_structure_and_an_error_keeps_quiet() {
     let mut src = String::from("pub struct G0[T] { v: T }\n");
     for k in 1..=11 {
         src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[(T, U8)], y: G{0}[(T, T)] }}\n", k - 1));
     }
     src.push_str("pub fn f(move h: G11[F32]) -> (G11[F32], G11[F32]) { (move h, move h) }\n");
     let mut a = check(&src);
-    assert_eq!(codes(&a), [Code::E0704]);
+    assert_eq!(codes(&a), [Code::E0703]);
     let f32 = a.types.float(FloatKind::F32);
     let g11 = a.types.intern(Ty::Named(def(&a, "G11"), vec![f32]));
-    assert_eq!((a.kind_of(g11), crate::kind::kind_in_body(&a, g11, &[])), (None, Some(Kind::Affine)));
+    assert_eq!((a.kind_of(g11), crate::kind::kind_in_body(&a, g11, &[])), (Some(Kind::Copy), Some(Kind::Copy)));
     let quiet = [
         ("pub struct S { a: Nope }\npub fn f(s: S) -> S { s }\n", vec![Code::E0302]),
         ("pub struct Node { v: I32, next: Node }\npub fn f(n: Node) -> Node { n }\n", vec![Code::E0311]),
@@ -132,4 +133,22 @@ fn a_kind_in_a_body_is_affine_only_past_the_steps() {
     for (src, want) in quiet {
         assert_eq!(codes(&check(src)), want, "{src}");
     }
+}
+
+/// A chain as long as the kind is asked of (S-782; K4 of the decision): 22
+/// steps, of 3^22 steps for a walk, are a kind of the structure and no
+/// error. This is of `check`: lowering makes each of the types of the chain,
+/// so the cases of `tests/` keep to shorter ones.
+#[test]
+fn a_long_chain_has_the_kind_of_its_structure() {
+    let mut src = String::from("pub struct G0[T] { v: T }\n");
+    for k in 1..=22 {
+        src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[(T, T)], y: G{0}[(T, U8)] }}\n", k - 1));
+    }
+    src.push_str("pub fn f(g: G22[F32]) -> (G22[F32], G22[F32]) { (g, g) }\n");
+    let mut a = check(&src);
+    assert_eq!(codes(&a), []);
+    let f32 = a.types.float(FloatKind::F32);
+    let g22 = a.types.intern(Ty::Named(def(&a, "G22"), vec![f32]));
+    assert_eq!(a.kind_of(g22), Some(Kind::Copy));
 }

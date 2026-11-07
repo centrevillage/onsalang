@@ -1,0 +1,13 @@
+pub struct G0[T] { v: T }
+pub struct HBuf { g: G0[F32], b: Buf[F32] }
+pub struct HStr { g: G0[F32], s: Str }
+pub rt fn use_it(g: G0[F32]) -> U32 { 0 }
+pub rt fn m_buf(move h: HBuf) -> U32 {
+  match move h { HBuf { g: gg, b: _ } => use_it(gg) }
+}
+pub rt fn m_str(move h: HStr) -> U32 {
+  match move h { HStr { g: gg, s: _ } => use_it(gg) }
+}
+pub fn m_buf2(move h: HBuf) -> U32 {
+  match move h { HBuf { g: gg, b: _ } => use_it(gg) }
+}

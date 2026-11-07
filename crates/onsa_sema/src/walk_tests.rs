@@ -1,7 +1,9 @@
-//! Unit tests of the walk the kinds, the layouts and the drops read
-//! (`walk.rs`): generic fields under their arguments, a type that holds
-//! itself, the steps of a walk and the answers it keeps.
+//! Unit tests of the walk of the layouts (`walk.rs`) and of the summaries
+//! of the kinds and the drops (`summary.rs`): generic fields under their
+//! arguments, a type that holds itself, and the answers each keeps.
 
+use crate::def::DefKind;
+use crate::summary::Read;
 use crate::tests::{check, codes, def};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty};
 use crate::{Analysis, Kind};
@@ -62,10 +64,10 @@ fn a_type_that_holds_itself_has_no_kind_and_no_layout() {
 /// A chain whose every step holds the step before twice (R-313), of
 /// declarations with no parameter (`A_k`) and with one (`G_k[T]`): each walk
 /// finds what a declaration used with closed arguments holds once
-/// (`walk::Known`), so the kind, the layout and the drops of the 64th have an
-/// answer, where a walk that expands the chain stops past its steps at about
-/// 20. A size past `U32` (from the 30th) is no layout (S-88), so the layout
-/// is of the 29th.
+/// (`walk::Known`), and the kinds and the drops read each declaration once,
+/// so the kind, the layout and the drops of the 64th have an answer, where a
+/// walk that expands the chain stops past its steps at about 20. A size past
+/// `U32` (from the 30th) is no layout (S-88), so the layout is of the 29th.
 #[test]
 fn a_chain_that_doubles_each_step_has_its_answers() {
     let mut src = String::from("pub struct A0 { v: F32 }\npub struct G0[T] { v: T }\n");
@@ -81,25 +83,18 @@ fn a_chain_that_doubles_each_step_has_its_answers() {
             let d = def(&a, &format!("{name}{k}"));
             let t = a.types.intern(Ty::Named(d, args.clone()));
             assert_eq!(a.kind_of(t), Some(Kind::Copy), "{name}{k}");
-            assert!(!crate::rt::needs_alloc_drop(&a, t));
-            assert_eq!(
-                a.known.drops.borrow().get(&(d, args, crate::walk::Under::Closed)),
-                Some(&(Some(false), false)),
-                "{name}{k}: the drops are found"
-            );
+            assert_eq!(Read::new(&a, Vec::new()).of(t).drops, Some(false), "{name}{k}: the drops are found");
             assert_eq!(a.layout_of(t).map(|l| l.size), (k == 29).then_some(4 << 29), "{name}{k}");
         }
     };
     onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
 }
 
-/// A kind found near the steps of a walk is the same whichever declaration
-/// is asked first (§18.1; W4-05 U2b/b): `Z` holds three expansions of about
-/// a third of the steps each (each step holds the one before with arguments
-/// of two forms, so none is kept twice, R-317), `Q` holds `Z` and two more,
-/// so `Q` has its answer only if `Z`'s is found with steps of its own.
+/// A kind is the same whichever declaration is asked first (§18.1; W4-05
+/// U2b/b, S-782): each step holds the one before with arguments of two forms,
+/// so a walk would keep none of them twice, and `Q` holds five such chains.
 #[test]
-fn a_kind_near_the_steps_does_not_hang_on_the_order() {
+fn a_kind_does_not_hang_on_the_order() {
     let mut src = String::from("pub struct G0[T] { v: T }\n");
     for k in 1..=10 {
         src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[(T, T)] }}\n", k - 1));
@@ -120,11 +115,12 @@ fn a_kind_near_the_steps_does_not_hang_on_the_order() {
 }
 
 /// The items read under the environment of an item go when it is found
-/// (R-317, `walk::Known`): after 20 bodies ask `G6` of 20 arguments, each
-/// walk keeping about 2^7 such items, the tables keep the answers of the
-/// roots and of the closed types only, not more for each root.
+/// (R-317, `walk::Known`): after the layouts of `G6` of 20 arguments, each
+/// walk keeping about 2^7 such items, the table keeps the answers of the
+/// roots and of the closed types only, not more for each root. The kinds of
+/// 20 bodies keep one summary for each declaration (S-782).
 #[test]
-fn the_kinds_kept_do_not_grow_with_the_roots() {
+fn what_is_kept_does_not_grow_with_the_roots() {
     let mut src = String::from("pub struct G0[T] { v: T }\n");
     for k in 1..=6 {
         src.push_str(&format!("pub struct G{k}[T] {{ x: G{0}[Option[T]], y: G{0}[[T; 2]] }}\n", k - 1));
@@ -133,36 +129,49 @@ fn the_kinds_kept_do_not_grow_with_the_roots() {
     for n in 0..20 {
         shape = if n % 2 == 0 { format!("Option[{shape}]") } else { format!("({shape}, U8)") };
         src.push_str(&format!("pub fn f{n}[T: Copy](g: G6[{shape}]) -> (G6[{shape}], G6[{shape}]) {{ (g, g) }}\n"));
+        src.push_str(&format!("type L{n} = G6[{}]\n", shape.replace('T', "F32")));
     }
     let a = check(&src);
     assert_eq!(codes(&a), []);
-    let kinds = a.known.kinds.borrow();
+    let kept = a.known.summaries.borrow().keys().filter(|&&d| a.is_new(d)).count();
+    assert!(kept <= 7, "{kept} summaries kept");
+    for n in 0..20 {
+        let DefKind::Alias(ty) = a.def(def(&a, &format!("L{n}"))).kind else { panic!("L{n}") };
+        assert!(a.layout_of(ty).is_some(), "L{n}");
+    }
+    let layouts = a.known.layouts.borrow();
     // Those of std's declarations (the `Option` of the shapes) are one for each of its types.
-    let own = || kinds.keys().filter(|k| a.is_new(k.0));
+    let own = || layouts.keys().filter(|k| a.is_new(k.0));
     let under = |u: fn(&crate::walk::Under) -> bool| own().filter(|k| u(&k.2)).count();
-    assert_eq!(under(|u| matches!(u, crate::walk::Under::Body(_))), 20, "each root is kept");
+    assert_eq!(under(|u| matches!(u, crate::walk::Under::Closed)), 20, "each root is kept");
     assert_eq!(under(|u| matches!(u, crate::walk::Under::Item(_))), 0);
-    assert!(own().count() <= 20 + 7, "{} kept", own().count());
 }
 
-/// The answer of a declaration is found from the depth 0, whatever depth
-/// the walk that asks it is at (W4-05 U2b/i3): a chain of 300 asked from its
-/// top finds the kind of each (each step is `W` and a `P`, so the chain is
-/// past the depth of a walk). A type that holds itself through a `Ptr` has
-/// no answer as it is entered again, so its drops end at once.
+/// A type that holds itself and a part that needs `Alloc`, or is Affine, has
+/// the answer of that part whichever is written first (S-782; the type is an
+/// E0311), and the kind does not hang on which declaration of a chain of
+/// arguments of two forms is read (the `Facts` of a declaration, its parameter
+/// held through both).
 #[test]
-fn an_answer_does_not_hang_on_the_depth_it_is_asked_at() {
-    let mut src = String::from("pub struct W[T] { t: T }\npub struct P0 { v: F32 }\n");
-    for k in (1..=300).rev() {
-        src.push_str(&format!("pub struct P{k} {{ w: W[P{}] }}\n", k - 1));
+fn a_part_with_an_answer_outweighs_a_type_that_holds_itself() {
+    for src in ["pub struct N { n: N, s: Buf[F32] }\n", "pub struct N { s: Buf[F32], n: N }\n"] {
+        let run = move || {
+            let mut a = check(src);
+            let n = a.types.intern(Ty::Named(def(&a, "N"), vec![]));
+            (a.kind_of(n), crate::rt::needs_alloc_drop(&a, n))
+        };
+        assert_eq!(onsa_diag::stack::spawn("t", run).unwrap().join().unwrap(), (Some(Kind::Affine), true), "{src}");
     }
-    src.push_str("pub struct N { p: Ptr[N] }\n");
-    let run = move || {
-        let mut a = check(&src);
-        let ty = |a: &mut Analysis, name| a.types.intern(Ty::Named(def(a, name), vec![]));
-        let (p300, p20, n) = (ty(&mut a, "P300"), ty(&mut a, "P20"), ty(&mut a, "N"));
-        assert_eq!((a.kind_of(p300), a.kind_of(p20)), (Some(Kind::Copy), Some(Kind::Copy)));
-        assert!(!crate::rt::needs_alloc_drop(&a, n));
-    };
-    onsa_diag::stack::spawn("t", run).unwrap().join().unwrap();
+}
+
+/// A question reads each type once (`Read::seen`): a type made from the one
+/// before it twice has 2^40 parts and 40 `TyId`s, with no steps to stop it.
+#[test]
+fn a_type_made_from_one_type_twice_is_read_once() {
+    let mut a = check("");
+    let mut t = a.types.float(FloatKind::F32);
+    for _ in 0..40 {
+        t = a.types.intern(Ty::Tuple(vec![t, t]));
+    }
+    assert_eq!((a.kind_of(t), crate::rt::needs_alloc_drop(&a, t)), (Some(Kind::Copy), false));
 }
