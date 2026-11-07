@@ -132,7 +132,7 @@
   extern の見出しが `{` の前で読めず、`{` が同じ行にあるとき（`extern "C" {`、`extern {`）は、`extern` から `{` の前までを一つの E0002 にし（ライブラリの名前は書き手しか知らないので修正候補は無く、`extern "C" lib "…" {` の形を note で示す）、メンバを読み続ける。
   ブロックは一つの単位でメンバは検査せず（`impl` の見出しの誤りと同じ）、ABI とライブラリは、読めなければ未知である。
   項目の頭の `pub`・`priv`・`rt` の重なりと順の誤り（`pub pub fn h`、`rt pub fn h`）と、`fn` 以外の宣言の前の `rt`（`rt struct P`、`pub rt struct P`、`rt impl P {`）は一つの E0002 にし、修正候補は正しい並び（可視性を一つ、`fn` の前だけ `rt` の順で、重なりを除いた形。`pub` と `priv` が両方あれば候補なし）で、読み続ける。
-  `impl`・`extern`・`trait`・`handler` の前の `rt` も同じで、メンバへ写す候補は作らない。可視性か `rt` の後ろに書いた Onsa の属性（`pub @fp(relaxed) fn h`、`rt @fp(relaxed) fn h`）と `rt` の後ろの他言語の属性（`rt #[inline] fn h`）は、属性を一つの E0002 にし（属性は可視性と `rt` より前に書くと note で示す）、読み続ける。
+  `impl`・`extern`・`trait`・`handler` の前の `rt` も同じで、メンバへ写す候補は作らない。可視性か `rt` の後ろに書いた `@` の属性（`pub @fp(relaxed) fn h`、`rt @fp(relaxed) fn h`。旧版の `pub @derive(Eq) struct P` も同じ）と `rt` の後ろの他言語の属性（`rt #[inline] fn h`）は、属性を一つの E0002 にし（属性は可視性と `rt` より前に書くと note で示す）、読み続ける。
   可視性を書けない位置の `pub`・`priv`（§15.1。`pub impl P {`、`pub test "a" {`、trait のメンバの `pub fn`、列挙子の `pub A`）も、語を一つの誤りにして、語の後ろから読み続ける。
   それ以外の語で止まった項目と、閉じない形（`pub(crate fn h()`）、改行を挟む形（`extern "C"` 改行 `{` を含む）は読み続けず、名前解決に見せない。
 - 構文エラーの後は、宣言の単位で回復する。本体の誤りは対応する `}` まで読み飛ばしてシグネチャを残し、`impl` / `trait` の中ではメンバの単位で回復する。
